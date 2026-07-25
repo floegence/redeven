@@ -131,6 +131,13 @@ verify_third_party_notices() {
 
   ui_pkg_log ""
   ui_pkg_log "Third-party notices: verifying..."
+  (
+    local dir="$ROOT_DIR/desktop"
+    cd "$dir"
+    if ui_pkg_need_install "$dir"; then
+      ui_pkg_run_pnpm install --frozen-lockfile
+    fi
+  )
   node "$script" --check
   ui_pkg_log "Third-party notices: done."
 }

@@ -4,6 +4,8 @@ import {
   collectJavaScriptLockInventory,
   packageCoordinate,
   parsePnpmPackageKey,
+  parsePnpmLock,
+  resolvePackageLicense,
 } from './javascript_lock_inventory.mjs';
 
 test('parsePnpmPackageKey supports scoped packages and strips peer context', () => {
@@ -28,6 +30,7 @@ test('collectJavaScriptLockInventory retains npm and pnpm mismatches and pnpm-on
       },
     },
     pnpmLock: {
+      lockfileVersion: '9.0',
       packages: {
         '@electron/rebuild@4.0.4': {},
         'seroval@1.5.4': {},
@@ -60,7 +63,7 @@ test('collectJavaScriptLockInventory merges lock provenance without duplicating 
     {
       label: 'Desktop shell',
       packageLock: { packages: { 'node_modules/shared': { version: '1.0.0', license: 'MIT' } } },
-      pnpmLock: { packages: { 'shared@1.0.0': {} } },
+      pnpmLock: { lockfileVersion: '9.0', packages: { 'shared@1.0.0': {} } },
     },
     {
       label: 'Env App UI',
@@ -75,4 +78,67 @@ test('collectJavaScriptLockInventory merges lock provenance without duplicating 
     scopes: ['Desktop shell', 'Env App UI'],
     lockKinds: ['npm', 'pnpm'],
   }]);
+});
+
+test('parsePnpmLock accepts only the supported pnpm v9 package schema', () => {
+  assert.deepEqual(parsePnpmLock({ lockfileVersion: '9.0', packages: {} }), []);
+  assert.throws(
+    () => parsePnpmLock({ lockfileVersion: '8.0', packages: {} }),
+    /unsupported pnpm lockfileVersion/u,
+  );
+  assert.throws(
+    () => parsePnpmLock({ lockfileVersion: '9.0' }),
+    /packages must be an object/u,
+  );
+  assert.throws(
+    () => parsePnpmLock({ lockfileVersion: '9.0', packages: [] }),
+    /packages must be an object/u,
+  );
+  assert.throws(
+    () => parsePnpmLock({ lockfileVersion: '9.0', packages: { 'invalid@1.0.0': null } }),
+    /package metadata must be an object/u,
+  );
+});
+
+test('resolvePackageLicense fails closed without exact evidence or an audited override', () => {
+  assert.deepEqual(resolvePackageLicense({ name: 'unknown', version: '1.0.0', licenses: [] }), {
+    license: 'UNKNOWN',
+    notes: [],
+  });
+});
+
+test('resolvePackageLicense validates override conflicts and prefers coordinate audit notes', () => {
+  const packageOverrides = new Map([['shared', { license: 'MIT', note: 'package audit' }]]);
+  const coordinateOverrides = new Map([['shared@1.0.0', { license: 'MIT', note: 'coordinate audit' }]]);
+  assert.deepEqual(
+    resolvePackageLicense(
+      { name: 'shared', version: '1.0.0', licenses: [] },
+      { packageOverrides, coordinateOverrides },
+    ),
+    { license: 'MIT', notes: ['coordinate audit'] },
+  );
+  assert.throws(
+    () => resolvePackageLicense(
+      { name: 'shared', version: '1.0.0', licenses: [] },
+      {
+        packageOverrides,
+        coordinateOverrides: new Map([['shared@1.0.0', { license: 'Apache-2.0' }]]),
+      },
+    ),
+    /conflicting audited license overrides/u,
+  );
+  assert.throws(
+    () => resolvePackageLicense(
+      { name: 'shared', version: '1.0.0', licenses: ['Apache-2.0'] },
+      { coordinateOverrides },
+    ),
+    /override conflicts with exact metadata/u,
+  );
+});
+
+test('resolvePackageLicense rejects conflicting exact-coordinate metadata', () => {
+  assert.throws(
+    () => resolvePackageLicense({ name: 'shared', version: '1.0.0', licenses: ['MIT', 'ISC'] }),
+    /conflicting exact license metadata/u,
+  );
 });

@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import {
   collectJavaScriptLockInventory,
   packageCoordinate,
+  resolvePackageLicense,
 } from './javascript_lock_inventory.mjs';
 import { verifyBundledIconIntegrity } from './terminal_agent_icon_integrity.mjs';
 
@@ -50,6 +51,27 @@ const npmLicenseOverrides = new Map([
 const npmCoordinateLicenseOverrides = new Map([
   ['@asamuzakjp/generational-cache@1.0.1', { license: 'MIT', note: 'License verified from the pnpm-installed package manifest.' }],
   ['@humanfs/types@0.15.0', { license: 'Apache-2.0', note: 'License verified from the pnpm-installed package manifest.' }],
+  ['@napi-rs/canvas-android-arm64@0.1.100', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
+  ['@napi-rs/canvas-darwin-x64@0.1.100', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
+  ['@napi-rs/canvas-linux-arm-gnueabihf@0.1.100', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
+  ['@napi-rs/canvas-linux-arm64-gnu@0.1.100', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
+  ['@napi-rs/canvas-linux-arm64-musl@0.1.100', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
+  ['@napi-rs/canvas-linux-riscv64-gnu@0.1.100', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
+  ['@napi-rs/canvas-linux-x64-gnu@0.1.100', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
+  ['@napi-rs/canvas-linux-x64-musl@0.1.100', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
+  ['@napi-rs/canvas-win32-arm64-msvc@0.1.100', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
+  ['@napi-rs/canvas-win32-x64-msvc@0.1.100', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
+  ['@tailwindcss/oxide-android-arm64@4.3.0', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
+  ['@tailwindcss/oxide-darwin-x64@4.3.0', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
+  ['@tailwindcss/oxide-freebsd-x64@4.3.0', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
+  ['@tailwindcss/oxide-linux-arm-gnueabihf@4.3.0', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
+  ['@tailwindcss/oxide-linux-arm64-gnu@4.3.0', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
+  ['@tailwindcss/oxide-linux-arm64-musl@4.3.0', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
+  ['@tailwindcss/oxide-linux-x64-gnu@4.3.0', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
+  ['@tailwindcss/oxide-linux-x64-musl@4.3.0', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
+  ['@tailwindcss/oxide-wasm32-wasi@4.3.0', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
+  ['@tailwindcss/oxide-win32-arm64-msvc@4.3.0', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
+  ['@tailwindcss/oxide-win32-x64-msvc@4.3.0', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
   ['lru-cache@11.5.0', { license: 'BlueOak-1.0.0', note: 'License verified from the pnpm-installed package manifest.' }],
 ]);
 
@@ -94,6 +116,53 @@ const javascriptLockSources = [
 
 function readJSON(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+}
+
+function recordInstalledPackageLicense(evidence, packageJSONPath) {
+  if (!fs.existsSync(packageJSONPath)) return;
+  const manifest = readJSON(packageJSONPath);
+  const name = String(manifest.name ?? '').trim();
+  const version = String(manifest.version ?? '').trim();
+  const license = normalizeLicense(manifest.license);
+  if (!name || !version || license === 'UNKNOWN') return;
+  const coordinate = packageCoordinate(name, version);
+  const licenses = evidence.get(coordinate) ?? new Set();
+  licenses.add(license);
+  evidence.set(coordinate, licenses);
+}
+
+function scanInstalledNodeModules(evidence, nodeModulesRoot) {
+  if (!fs.existsSync(nodeModulesRoot)) return;
+  for (const entry of fs.readdirSync(nodeModulesRoot, { withFileTypes: true })) {
+    if (entry.name.startsWith('.')) continue;
+    const entryPath = path.join(nodeModulesRoot, entry.name);
+    if (entry.name.startsWith('@')) {
+      if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
+      for (const scopedEntry of fs.readdirSync(entryPath, { withFileTypes: true })) {
+        if (!scopedEntry.isDirectory() && !scopedEntry.isSymbolicLink()) continue;
+        recordInstalledPackageLicense(evidence, path.join(entryPath, scopedEntry.name, 'package.json'));
+      }
+      continue;
+    }
+    if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
+    recordInstalledPackageLicense(evidence, path.join(entryPath, 'package.json'));
+  }
+}
+
+function collectInstalledJavaScriptLicenseEvidence() {
+  const evidence = new Map();
+  for (const source of javascriptLockSources.filter(({ pnpmLock }) => pnpmLock)) {
+    const packageRoot = path.dirname(path.join(repoRoot, source.pnpmLock));
+    const nodeModulesRoot = path.join(packageRoot, 'node_modules');
+    const virtualStoreRoot = path.join(nodeModulesRoot, '.pnpm');
+    scanInstalledNodeModules(evidence, nodeModulesRoot);
+    if (!fs.existsSync(virtualStoreRoot)) continue;
+    for (const storeEntry of fs.readdirSync(virtualStoreRoot, { withFileTypes: true })) {
+      if (!storeEntry.isDirectory()) continue;
+      scanInstalledNodeModules(evidence, path.join(virtualStoreRoot, storeEntry.name, 'node_modules'));
+    }
+  }
+  return evidence;
 }
 
 function sha256File(filePath) {
@@ -270,39 +339,28 @@ function collectJavaScriptEntries() {
       ? parseYAML(fs.readFileSync(path.join(repoRoot, source.pnpmLock), 'utf8'))
       : undefined,
   })));
-  const licensesByName = new Map();
-  for (const pkg of inventory) {
-    for (const license of pkg.licenses) {
-      const licenses = licensesByName.get(pkg.name) ?? new Set();
-      licenses.add(normalizeLicense(license));
-      licensesByName.set(pkg.name, licenses);
-    }
-  }
+  const installedLicenseEvidence = collectInstalledJavaScriptLicenseEvidence();
 
   for (const pkg of inventory) {
-    const override = npmLicenseOverrides.get(pkg.name);
-    const coordinateOverride = npmCoordinateLicenseOverrides.get(packageCoordinate(pkg.name, pkg.version));
-    const exactLicenses = Array.from(new Set(pkg.licenses.map(normalizeLicense)));
-    if (exactLicenses.length > 1) {
-      throw new Error(`conflicting npm license metadata for ${packageCoordinate(pkg.name, pkg.version)}: ${exactLicenses.join(', ')}`);
-    }
-    const samePackageLicenses = [...(licensesByName.get(pkg.name) ?? [])];
-    const inheritedLicense = samePackageLicenses.length === 1 ? samePackageLicenses[0] : undefined;
-    const license = normalizeLicense(
-      override?.license ?? coordinateOverride?.license ?? exactLicenses[0] ?? inheritedLicense,
+    const coordinate = packageCoordinate(pkg.name, pkg.version);
+    const resolution = resolvePackageLicense(
+      {
+        ...pkg,
+        licenses: [...pkg.licenses, ...(installedLicenseEvidence.get(coordinate) ?? [])],
+      },
+      {
+        packageOverrides: npmLicenseOverrides,
+        coordinateOverrides: npmCoordinateLicenseOverrides,
+      },
     );
-    const notes = [];
-    if (override?.note) notes.push(override.note);
-    if (coordinateOverride?.note) notes.push(coordinateOverride.note);
-    if (!override && !coordinateOverride && exactLicenses.length === 0 && inheritedLicense) {
-      notes.push('License metadata inherited from another npm-locked version of the same package.');
-    }
+    const license = normalizeLicense(resolution.license);
+    const notes = [...resolution.notes];
     if (license.includes('GPL') && /\bMIT\b/.test(license)) {
       notes.push('Redeven uses this dual-licensed package under the MIT option.');
     }
 
     mergeEntry(entries, {
-      key: `npm:${packageCoordinate(pkg.name, pkg.version)}`,
+      key: `npm:${coordinate}`,
       ecosystem: 'npm',
       name: pkg.name,
       version: pkg.version,

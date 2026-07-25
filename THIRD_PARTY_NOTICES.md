@@ -133,9 +133,9 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @antfu/install-pkg | 1.1.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40antfu%2Finstall-pkg/v/1.1.0 |  |
 | @asamuzakjp/css-color | 3.2.0 | MIT | Env App UI | https://www.npmjs.com/package/%40asamuzakjp%2Fcss-color/v/3.2.0 |  |
 | @asamuzakjp/css-color | 5.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40asamuzakjp%2Fcss-color/v/5.1.1 |  |
-| @asamuzakjp/css-color | 5.1.11 | MIT | Desktop shell | https://www.npmjs.com/package/%40asamuzakjp%2Fcss-color/v/5.1.11 | License metadata inherited from another npm-locked version of the same package. |
+| @asamuzakjp/css-color | 5.1.11 | MIT | Desktop shell | https://www.npmjs.com/package/%40asamuzakjp%2Fcss-color/v/5.1.11 |  |
 | @asamuzakjp/dom-selector | 7.0.4 | MIT | Desktop shell | https://www.npmjs.com/package/%40asamuzakjp%2Fdom-selector/v/7.0.4 |  |
-| @asamuzakjp/dom-selector | 7.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40asamuzakjp%2Fdom-selector/v/7.1.1 | License metadata inherited from another npm-locked version of the same package. |
+| @asamuzakjp/dom-selector | 7.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40asamuzakjp%2Fdom-selector/v/7.1.1 |  |
 | @asamuzakjp/generational-cache | 1.0.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40asamuzakjp%2Fgenerational-cache/v/1.0.1 | License verified from the pnpm-installed package manifest. |
 | @asamuzakjp/nwsapi | 2.3.9 | MIT | Desktop shell | https://www.npmjs.com/package/%40asamuzakjp%2Fnwsapi/v/2.3.9 |  |
 | @babel/code-frame | 7.29.7 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40babel%2Fcode-frame/v/7.29.7 |  |
@@ -148,14 +148,14 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @babel/helper-module-imports | 7.29.7 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40babel%2Fhelper-module-imports/v/7.29.7 |  |
 | @babel/helper-module-transforms | 7.29.7 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40babel%2Fhelper-module-transforms/v/7.29.7 |  |
 | @babel/helper-plugin-utils | 7.28.6 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40babel%2Fhelper-plugin-utils/v/7.28.6 |  |
-| @babel/helper-plugin-utils | 7.29.7 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40babel%2Fhelper-plugin-utils/v/7.29.7 | License metadata inherited from another npm-locked version of the same package. |
+| @babel/helper-plugin-utils | 7.29.7 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40babel%2Fhelper-plugin-utils/v/7.29.7 |  |
 | @babel/helper-string-parser | 7.29.7 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40babel%2Fhelper-string-parser/v/7.29.7 |  |
 | @babel/helper-validator-identifier | 7.29.7 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40babel%2Fhelper-validator-identifier/v/7.29.7 |  |
 | @babel/helper-validator-option | 7.29.7 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40babel%2Fhelper-validator-option/v/7.29.7 |  |
 | @babel/helpers | 7.29.7 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40babel%2Fhelpers/v/7.29.7 |  |
 | @babel/parser | 7.29.7 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40babel%2Fparser/v/7.29.7 |  |
 | @babel/plugin-syntax-jsx | 7.28.6 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40babel%2Fplugin-syntax-jsx/v/7.28.6 |  |
-| @babel/plugin-syntax-jsx | 7.29.7 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40babel%2Fplugin-syntax-jsx/v/7.29.7 | License metadata inherited from another npm-locked version of the same package. |
+| @babel/plugin-syntax-jsx | 7.29.7 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40babel%2Fplugin-syntax-jsx/v/7.29.7 |  |
 | @babel/template | 7.29.7 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40babel%2Ftemplate/v/7.29.7 |  |
 | @babel/traverse | 7.29.7 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40babel%2Ftraverse/v/7.29.7 |  |
 | @babel/types | 7.29.7 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40babel%2Ftypes/v/7.29.7 |  |
@@ -168,14 +168,14 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @csstools/color-helpers | 6.0.2 | MIT-0 | Desktop shell | https://www.npmjs.com/package/%40csstools%2Fcolor-helpers/v/6.0.2 |  |
 | @csstools/css-calc | 2.1.4 | MIT | Env App UI | https://www.npmjs.com/package/%40csstools%2Fcss-calc/v/2.1.4 |  |
 | @csstools/css-calc | 3.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40csstools%2Fcss-calc/v/3.1.1 |  |
-| @csstools/css-calc | 3.2.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40csstools%2Fcss-calc/v/3.2.1 | License metadata inherited from another npm-locked version of the same package. |
+| @csstools/css-calc | 3.2.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40csstools%2Fcss-calc/v/3.2.1 |  |
 | @csstools/css-color-parser | 3.1.0 | MIT | Env App UI | https://www.npmjs.com/package/%40csstools%2Fcss-color-parser/v/3.1.0 |  |
 | @csstools/css-color-parser | 4.0.2 | MIT | Desktop shell | https://www.npmjs.com/package/%40csstools%2Fcss-color-parser/v/4.0.2 |  |
-| @csstools/css-color-parser | 4.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40csstools%2Fcss-color-parser/v/4.1.1 | License metadata inherited from another npm-locked version of the same package. |
+| @csstools/css-color-parser | 4.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40csstools%2Fcss-color-parser/v/4.1.1 |  |
 | @csstools/css-parser-algorithms | 3.0.5 | MIT | Env App UI | https://www.npmjs.com/package/%40csstools%2Fcss-parser-algorithms/v/3.0.5 |  |
 | @csstools/css-parser-algorithms | 4.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40csstools%2Fcss-parser-algorithms/v/4.0.0 |  |
 | @csstools/css-syntax-patches-for-csstree | 1.1.2 | MIT-0 | Desktop shell | https://www.npmjs.com/package/%40csstools%2Fcss-syntax-patches-for-csstree/v/1.1.2 |  |
-| @csstools/css-syntax-patches-for-csstree | 1.1.4 | MIT-0 | Desktop shell | https://www.npmjs.com/package/%40csstools%2Fcss-syntax-patches-for-csstree/v/1.1.4 | License metadata inherited from another npm-locked version of the same package. |
+| @csstools/css-syntax-patches-for-csstree | 1.1.4 | MIT-0 | Desktop shell | https://www.npmjs.com/package/%40csstools%2Fcss-syntax-patches-for-csstree/v/1.1.4 |  |
 | @csstools/css-tokenizer | 3.0.4 | MIT | Env App UI | https://www.npmjs.com/package/%40csstools%2Fcss-tokenizer/v/3.0.4 |  |
 | @csstools/css-tokenizer | 4.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40csstools%2Fcss-tokenizer/v/4.0.0 |  |
 | @electron/asar | 3.4.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40electron%2Fasar/v/3.4.1 |  |
@@ -184,7 +184,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @electron/get | 3.1.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40electron%2Fget/v/3.1.0 |  |
 | @electron/notarize | 2.5.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40electron%2Fnotarize/v/2.5.0 |  |
 | @electron/osx-sign | 1.3.3 | BSD-2-Clause | Desktop shell | https://www.npmjs.com/package/%40electron%2Fosx-sign/v/1.3.3 |  |
-| @electron/rebuild | 4.0.4 | MIT | Desktop shell | https://www.npmjs.com/package/%40electron%2Frebuild/v/4.0.4 | License metadata inherited from another npm-locked version of the same package. |
+| @electron/rebuild | 4.0.4 | MIT | Desktop shell | https://www.npmjs.com/package/%40electron%2Frebuild/v/4.0.4 |  |
 | @electron/rebuild | 4.2.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40electron%2Frebuild/v/4.2.0 |  |
 | @electron/universal | 2.0.3 | MIT | Desktop shell | https://www.npmjs.com/package/%40electron%2Funiversal/v/2.0.3 |  |
 | @electron/windows-sign | 1.2.2 | BSD-2-Clause | Desktop shell | https://www.npmjs.com/package/%40electron%2Fwindows-sign/v/1.2.2 |  |
@@ -230,7 +230,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @eslint/object-schema | 2.1.7 | Apache-2.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40eslint%2Fobject-schema/v/2.1.7 |  |
 | @eslint/plugin-kit | 0.4.1 | Apache-2.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40eslint%2Fplugin-kit/v/0.4.1 |  |
 | @exodus/bytes | 1.15.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40exodus%2Fbytes/v/1.15.0 |  |
-| @exodus/bytes | 1.15.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40exodus%2Fbytes/v/1.15.1 | License metadata inherited from another npm-locked version of the same package. |
+| @exodus/bytes | 1.15.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40exodus%2Fbytes/v/1.15.1 |  |
 | @fast-csv/format | 4.3.5 | MIT | Env App UI | https://www.npmjs.com/package/%40fast-csv%2Fformat/v/4.3.5 |  |
 | @fast-csv/parse | 4.3.6 | MIT | Env App UI | https://www.npmjs.com/package/%40fast-csv%2Fparse/v/4.3.6 |  |
 | @floegence/beamterm-renderer | 1.0.1 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fbeamterm-renderer/v/1.0.1 |  |
@@ -245,15 +245,15 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @fontsource-variable/inter | 5.2.8 | OFL-1.1 | Desktop shell | https://www.npmjs.com/package/%40fontsource-variable%2Finter/v/5.2.8 |  |
 | @fontsource/iosevka | 5.2.5 | OFL-1.1 | Desktop shell, Env App UI | https://www.npmjs.com/package/%40fontsource%2Fiosevka/v/5.2.5 |  |
 | @humanfs/core | 0.19.1 | Apache-2.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40humanfs%2Fcore/v/0.19.1 |  |
-| @humanfs/core | 0.19.2 | Apache-2.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/%40humanfs%2Fcore/v/0.19.2 | License metadata inherited from another npm-locked version of the same package. |
+| @humanfs/core | 0.19.2 | Apache-2.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/%40humanfs%2Fcore/v/0.19.2 |  |
 | @humanfs/node | 0.16.7 | Apache-2.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40humanfs%2Fnode/v/0.16.7 |  |
-| @humanfs/node | 0.16.8 | Apache-2.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/%40humanfs%2Fnode/v/0.16.8 | License metadata inherited from another npm-locked version of the same package. |
+| @humanfs/node | 0.16.8 | Apache-2.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/%40humanfs%2Fnode/v/0.16.8 |  |
 | @humanfs/types | 0.15.0 | Apache-2.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/%40humanfs%2Ftypes/v/0.15.0 | License verified from the pnpm-installed package manifest. |
 | @humanwhocodes/module-importer | 1.0.1 | Apache-2.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40humanwhocodes%2Fmodule-importer/v/1.0.1 |  |
 | @humanwhocodes/retry | 0.4.3 | Apache-2.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40humanwhocodes%2Fretry/v/0.4.3 |  |
 | @iconify/types | 2.0.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40iconify%2Ftypes/v/2.0.0 |  |
 | @iconify/utils | 3.1.0 | MIT | Env App UI | https://www.npmjs.com/package/%40iconify%2Futils/v/3.1.0 |  |
-| @iconify/utils | 3.1.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40iconify%2Futils/v/3.1.3 | License metadata inherited from another npm-locked version of the same package. |
+| @iconify/utils | 3.1.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40iconify%2Futils/v/3.1.3 |  |
 | @iconify/utils | 3.1.4 | MIT | Desktop shell | https://www.npmjs.com/package/%40iconify%2Futils/v/3.1.4 |  |
 | @isaacs/fs-minipass | 4.0.1 | ISC | Desktop shell | https://www.npmjs.com/package/%40isaacs%2Ffs-minipass/v/4.0.1 |  |
 | @jridgewell/gen-mapping | 0.3.13 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40jridgewell%2Fgen-mapping/v/0.3.13 |  |
@@ -263,7 +263,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @jridgewell/trace-mapping | 0.3.31 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40jridgewell%2Ftrace-mapping/v/0.3.31 |  |
 | @malept/cross-spawn-promise | 2.0.0 | Apache-2.0 | Desktop shell | https://www.npmjs.com/package/%40malept%2Fcross-spawn-promise/v/2.0.0 |  |
 | @malept/flatpak-bundler | 0.4.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40malept%2Fflatpak-bundler/v/0.4.0 |  |
-| @mermaid-js/parser | 1.1.1 | MIT | Env App UI | https://www.npmjs.com/package/%40mermaid-js%2Fparser/v/1.1.1 | License metadata inherited from another npm-locked version of the same package. |
+| @mermaid-js/parser | 1.1.1 | MIT | Env App UI | https://www.npmjs.com/package/%40mermaid-js%2Fparser/v/1.1.1 |  |
 | @mermaid-js/parser | 1.2.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40mermaid-js%2Fparser/v/1.2.0 |  |
 | @motionone/animation | 10.18.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40motionone%2Fanimation/v/10.18.0 |  |
 | @motionone/dom | 10.18.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40motionone%2Fdom/v/10.18.0 |  |
@@ -271,29 +271,29 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @motionone/generators | 10.18.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40motionone%2Fgenerators/v/10.18.0 |  |
 | @motionone/types | 10.17.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40motionone%2Ftypes/v/10.17.1 |  |
 | @motionone/utils | 10.18.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40motionone%2Futils/v/10.18.0 |  |
-| @napi-rs/canvas-android-arm64 | 0.1.100 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-android-arm64/v/0.1.100 | License metadata inherited from another npm-locked version of the same package. |
+| @napi-rs/canvas-android-arm64 | 0.1.100 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-android-arm64/v/0.1.100 | License audited from the exact registry package manifest. |
 | @napi-rs/canvas-android-arm64 | 0.1.99 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-android-arm64/v/0.1.99 |  |
-| @napi-rs/canvas-darwin-arm64 | 0.1.100 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-darwin-arm64/v/0.1.100 | License metadata inherited from another npm-locked version of the same package. |
+| @napi-rs/canvas-darwin-arm64 | 0.1.100 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-darwin-arm64/v/0.1.100 |  |
 | @napi-rs/canvas-darwin-arm64 | 0.1.99 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-darwin-arm64/v/0.1.99 |  |
-| @napi-rs/canvas-darwin-x64 | 0.1.100 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-darwin-x64/v/0.1.100 | License metadata inherited from another npm-locked version of the same package. |
+| @napi-rs/canvas-darwin-x64 | 0.1.100 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-darwin-x64/v/0.1.100 | License audited from the exact registry package manifest. |
 | @napi-rs/canvas-darwin-x64 | 0.1.99 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-darwin-x64/v/0.1.99 |  |
-| @napi-rs/canvas-linux-arm-gnueabihf | 0.1.100 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-linux-arm-gnueabihf/v/0.1.100 | License metadata inherited from another npm-locked version of the same package. |
+| @napi-rs/canvas-linux-arm-gnueabihf | 0.1.100 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-linux-arm-gnueabihf/v/0.1.100 | License audited from the exact registry package manifest. |
 | @napi-rs/canvas-linux-arm-gnueabihf | 0.1.99 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-linux-arm-gnueabihf/v/0.1.99 |  |
-| @napi-rs/canvas-linux-arm64-gnu | 0.1.100 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-linux-arm64-gnu/v/0.1.100 | License metadata inherited from another npm-locked version of the same package. |
+| @napi-rs/canvas-linux-arm64-gnu | 0.1.100 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-linux-arm64-gnu/v/0.1.100 | License audited from the exact registry package manifest. |
 | @napi-rs/canvas-linux-arm64-gnu | 0.1.99 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-linux-arm64-gnu/v/0.1.99 |  |
-| @napi-rs/canvas-linux-arm64-musl | 0.1.100 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-linux-arm64-musl/v/0.1.100 | License metadata inherited from another npm-locked version of the same package. |
+| @napi-rs/canvas-linux-arm64-musl | 0.1.100 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-linux-arm64-musl/v/0.1.100 | License audited from the exact registry package manifest. |
 | @napi-rs/canvas-linux-arm64-musl | 0.1.99 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-linux-arm64-musl/v/0.1.99 |  |
-| @napi-rs/canvas-linux-riscv64-gnu | 0.1.100 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-linux-riscv64-gnu/v/0.1.100 | License metadata inherited from another npm-locked version of the same package. |
+| @napi-rs/canvas-linux-riscv64-gnu | 0.1.100 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-linux-riscv64-gnu/v/0.1.100 | License audited from the exact registry package manifest. |
 | @napi-rs/canvas-linux-riscv64-gnu | 0.1.99 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-linux-riscv64-gnu/v/0.1.99 |  |
-| @napi-rs/canvas-linux-x64-gnu | 0.1.100 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-linux-x64-gnu/v/0.1.100 | License metadata inherited from another npm-locked version of the same package. |
+| @napi-rs/canvas-linux-x64-gnu | 0.1.100 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-linux-x64-gnu/v/0.1.100 | License audited from the exact registry package manifest. |
 | @napi-rs/canvas-linux-x64-gnu | 0.1.99 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-linux-x64-gnu/v/0.1.99 |  |
-| @napi-rs/canvas-linux-x64-musl | 0.1.100 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-linux-x64-musl/v/0.1.100 | License metadata inherited from another npm-locked version of the same package. |
+| @napi-rs/canvas-linux-x64-musl | 0.1.100 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-linux-x64-musl/v/0.1.100 | License audited from the exact registry package manifest. |
 | @napi-rs/canvas-linux-x64-musl | 0.1.99 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-linux-x64-musl/v/0.1.99 |  |
-| @napi-rs/canvas-win32-arm64-msvc | 0.1.100 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-win32-arm64-msvc/v/0.1.100 | License metadata inherited from another npm-locked version of the same package. |
+| @napi-rs/canvas-win32-arm64-msvc | 0.1.100 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-win32-arm64-msvc/v/0.1.100 | License audited from the exact registry package manifest. |
 | @napi-rs/canvas-win32-arm64-msvc | 0.1.99 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-win32-arm64-msvc/v/0.1.99 |  |
-| @napi-rs/canvas-win32-x64-msvc | 0.1.100 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-win32-x64-msvc/v/0.1.100 | License metadata inherited from another npm-locked version of the same package. |
+| @napi-rs/canvas-win32-x64-msvc | 0.1.100 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-win32-x64-msvc/v/0.1.100 | License audited from the exact registry package manifest. |
 | @napi-rs/canvas-win32-x64-msvc | 0.1.99 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-win32-x64-msvc/v/0.1.99 |  |
-| @napi-rs/canvas | 0.1.100 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas/v/0.1.100 | License metadata inherited from another npm-locked version of the same package. |
+| @napi-rs/canvas | 0.1.100 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas/v/0.1.100 |  |
 | @napi-rs/canvas | 0.1.99 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas/v/0.1.99 |  |
 | @napi-rs/wasm-runtime | 1.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40napi-rs%2Fwasm-runtime/v/1.1.1 |  |
 | @napi-rs/wasm-runtime | 1.1.5 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fwasm-runtime/v/1.1.5 |  |
@@ -374,49 +374,49 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @standard-schema/spec | 1.1.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40standard-schema%2Fspec/v/1.1.0 |  |
 | @szmarczak/http-timer | 4.0.6 | MIT | Desktop shell | https://www.npmjs.com/package/%40szmarczak%2Fhttp-timer/v/4.0.6 |  |
 | @tailwindcss/node | 4.2.2 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Fnode/v/4.2.2 |  |
-| @tailwindcss/node | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Fnode/v/4.3.0 | License metadata inherited from another npm-locked version of the same package. |
+| @tailwindcss/node | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Fnode/v/4.3.0 |  |
 | @tailwindcss/node | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Fnode/v/4.3.1 |  |
 | @tailwindcss/oxide-android-arm64 | 4.2.2 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-android-arm64/v/4.2.2 |  |
-| @tailwindcss/oxide-android-arm64 | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-android-arm64/v/4.3.0 | License metadata inherited from another npm-locked version of the same package. |
+| @tailwindcss/oxide-android-arm64 | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-android-arm64/v/4.3.0 | License audited from the exact registry package manifest. |
 | @tailwindcss/oxide-android-arm64 | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Foxide-android-arm64/v/4.3.1 |  |
 | @tailwindcss/oxide-darwin-arm64 | 4.2.2 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-darwin-arm64/v/4.2.2 |  |
-| @tailwindcss/oxide-darwin-arm64 | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-darwin-arm64/v/4.3.0 | License metadata inherited from another npm-locked version of the same package. |
+| @tailwindcss/oxide-darwin-arm64 | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-darwin-arm64/v/4.3.0 |  |
 | @tailwindcss/oxide-darwin-arm64 | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Foxide-darwin-arm64/v/4.3.1 |  |
 | @tailwindcss/oxide-darwin-x64 | 4.2.2 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-darwin-x64/v/4.2.2 |  |
-| @tailwindcss/oxide-darwin-x64 | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-darwin-x64/v/4.3.0 | License metadata inherited from another npm-locked version of the same package. |
+| @tailwindcss/oxide-darwin-x64 | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-darwin-x64/v/4.3.0 | License audited from the exact registry package manifest. |
 | @tailwindcss/oxide-darwin-x64 | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Foxide-darwin-x64/v/4.3.1 |  |
 | @tailwindcss/oxide-freebsd-x64 | 4.2.2 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-freebsd-x64/v/4.2.2 |  |
-| @tailwindcss/oxide-freebsd-x64 | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-freebsd-x64/v/4.3.0 | License metadata inherited from another npm-locked version of the same package. |
+| @tailwindcss/oxide-freebsd-x64 | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-freebsd-x64/v/4.3.0 | License audited from the exact registry package manifest. |
 | @tailwindcss/oxide-freebsd-x64 | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Foxide-freebsd-x64/v/4.3.1 |  |
 | @tailwindcss/oxide-linux-arm-gnueabihf | 4.2.2 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-linux-arm-gnueabihf/v/4.2.2 |  |
-| @tailwindcss/oxide-linux-arm-gnueabihf | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-linux-arm-gnueabihf/v/4.3.0 | License metadata inherited from another npm-locked version of the same package. |
+| @tailwindcss/oxide-linux-arm-gnueabihf | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-linux-arm-gnueabihf/v/4.3.0 | License audited from the exact registry package manifest. |
 | @tailwindcss/oxide-linux-arm-gnueabihf | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Foxide-linux-arm-gnueabihf/v/4.3.1 |  |
 | @tailwindcss/oxide-linux-arm64-gnu | 4.2.2 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-linux-arm64-gnu/v/4.2.2 |  |
-| @tailwindcss/oxide-linux-arm64-gnu | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-linux-arm64-gnu/v/4.3.0 | License metadata inherited from another npm-locked version of the same package. |
+| @tailwindcss/oxide-linux-arm64-gnu | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-linux-arm64-gnu/v/4.3.0 | License audited from the exact registry package manifest. |
 | @tailwindcss/oxide-linux-arm64-gnu | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Foxide-linux-arm64-gnu/v/4.3.1 |  |
 | @tailwindcss/oxide-linux-arm64-musl | 4.2.2 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-linux-arm64-musl/v/4.2.2 |  |
-| @tailwindcss/oxide-linux-arm64-musl | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-linux-arm64-musl/v/4.3.0 | License metadata inherited from another npm-locked version of the same package. |
+| @tailwindcss/oxide-linux-arm64-musl | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-linux-arm64-musl/v/4.3.0 | License audited from the exact registry package manifest. |
 | @tailwindcss/oxide-linux-arm64-musl | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Foxide-linux-arm64-musl/v/4.3.1 |  |
 | @tailwindcss/oxide-linux-x64-gnu | 4.2.2 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-linux-x64-gnu/v/4.2.2 |  |
-| @tailwindcss/oxide-linux-x64-gnu | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-linux-x64-gnu/v/4.3.0 | License metadata inherited from another npm-locked version of the same package. |
+| @tailwindcss/oxide-linux-x64-gnu | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-linux-x64-gnu/v/4.3.0 | License audited from the exact registry package manifest. |
 | @tailwindcss/oxide-linux-x64-gnu | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Foxide-linux-x64-gnu/v/4.3.1 |  |
 | @tailwindcss/oxide-linux-x64-musl | 4.2.2 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-linux-x64-musl/v/4.2.2 |  |
-| @tailwindcss/oxide-linux-x64-musl | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-linux-x64-musl/v/4.3.0 | License metadata inherited from another npm-locked version of the same package. |
+| @tailwindcss/oxide-linux-x64-musl | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-linux-x64-musl/v/4.3.0 | License audited from the exact registry package manifest. |
 | @tailwindcss/oxide-linux-x64-musl | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Foxide-linux-x64-musl/v/4.3.1 |  |
 | @tailwindcss/oxide-wasm32-wasi | 4.2.2 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-wasm32-wasi/v/4.2.2 |  |
-| @tailwindcss/oxide-wasm32-wasi | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-wasm32-wasi/v/4.3.0 | License metadata inherited from another npm-locked version of the same package. |
+| @tailwindcss/oxide-wasm32-wasi | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-wasm32-wasi/v/4.3.0 | License audited from the exact registry package manifest. |
 | @tailwindcss/oxide-wasm32-wasi | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Foxide-wasm32-wasi/v/4.3.1 |  |
 | @tailwindcss/oxide-win32-arm64-msvc | 4.2.2 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-win32-arm64-msvc/v/4.2.2 |  |
-| @tailwindcss/oxide-win32-arm64-msvc | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-win32-arm64-msvc/v/4.3.0 | License metadata inherited from another npm-locked version of the same package. |
+| @tailwindcss/oxide-win32-arm64-msvc | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-win32-arm64-msvc/v/4.3.0 | License audited from the exact registry package manifest. |
 | @tailwindcss/oxide-win32-arm64-msvc | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Foxide-win32-arm64-msvc/v/4.3.1 |  |
 | @tailwindcss/oxide-win32-x64-msvc | 4.2.2 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-win32-x64-msvc/v/4.2.2 |  |
-| @tailwindcss/oxide-win32-x64-msvc | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-win32-x64-msvc/v/4.3.0 | License metadata inherited from another npm-locked version of the same package. |
+| @tailwindcss/oxide-win32-x64-msvc | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-win32-x64-msvc/v/4.3.0 | License audited from the exact registry package manifest. |
 | @tailwindcss/oxide-win32-x64-msvc | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Foxide-win32-x64-msvc/v/4.3.1 |  |
 | @tailwindcss/oxide | 4.2.2 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide/v/4.2.2 |  |
-| @tailwindcss/oxide | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide/v/4.3.0 | License metadata inherited from another npm-locked version of the same package. |
+| @tailwindcss/oxide | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide/v/4.3.0 |  |
 | @tailwindcss/oxide | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Foxide/v/4.3.1 |  |
 | @tailwindcss/vite | 4.2.2 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Fvite/v/4.2.2 |  |
-| @tailwindcss/vite | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Fvite/v/4.3.0 | License metadata inherited from another npm-locked version of the same package. |
+| @tailwindcss/vite | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Fvite/v/4.3.0 |  |
 | @tailwindcss/vite | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Fvite/v/4.3.1 |  |
 | @tybys/wasm-util | 0.10.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40tybys%2Fwasm-util/v/0.10.1 |  |
 | @tybys/wasm-util | 0.10.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40tybys%2Fwasm-util/v/0.10.2 |  |
@@ -475,9 +475,9 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @types/node | 14.18.63 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fnode/v/14.18.63 |  |
 | @types/node | 20.19.31 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fnode/v/20.19.31 |  |
 | @types/node | 20.19.37 | MIT | Desktop shell | https://www.npmjs.com/package/%40types%2Fnode/v/20.19.37 |  |
-| @types/node | 20.19.41 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fnode/v/20.19.41 | License metadata inherited from another npm-locked version of the same package. |
+| @types/node | 20.19.41 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fnode/v/20.19.41 |  |
 | @types/node | 24.12.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40types%2Fnode/v/24.12.0 |  |
-| @types/node | 24.12.4 | MIT | Desktop shell | https://www.npmjs.com/package/%40types%2Fnode/v/24.12.4 | License metadata inherited from another npm-locked version of the same package. |
+| @types/node | 24.12.4 | MIT | Desktop shell | https://www.npmjs.com/package/%40types%2Fnode/v/24.12.4 |  |
 | @types/responselike | 1.0.3 | MIT | Desktop shell | https://www.npmjs.com/package/%40types%2Fresponselike/v/1.0.3 |  |
 | @types/semver | 7.7.1 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fsemver/v/7.7.1 |  |
 | @types/trusted-types | 2.0.7 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Ftrusted-types/v/2.0.7 |  |
@@ -485,36 +485,36 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @types/yauzl | 2.10.3 | MIT | Desktop shell | https://www.npmjs.com/package/%40types%2Fyauzl/v/2.10.3 |  |
 | @typescript-eslint/eslint-plugin | 8.57.0 | MIT | Code App UI, Env App UI | https://www.npmjs.com/package/%40typescript-eslint%2Feslint-plugin/v/8.57.0 |  |
 | @typescript-eslint/eslint-plugin | 8.57.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40typescript-eslint%2Feslint-plugin/v/8.57.1 |  |
-| @typescript-eslint/eslint-plugin | 8.60.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40typescript-eslint%2Feslint-plugin/v/8.60.0 | License metadata inherited from another npm-locked version of the same package. |
+| @typescript-eslint/eslint-plugin | 8.60.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40typescript-eslint%2Feslint-plugin/v/8.60.0 |  |
 | @typescript-eslint/parser | 8.57.0 | MIT | Code App UI, Env App UI | https://www.npmjs.com/package/%40typescript-eslint%2Fparser/v/8.57.0 |  |
 | @typescript-eslint/parser | 8.57.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40typescript-eslint%2Fparser/v/8.57.1 |  |
-| @typescript-eslint/parser | 8.60.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40typescript-eslint%2Fparser/v/8.60.0 | License metadata inherited from another npm-locked version of the same package. |
+| @typescript-eslint/parser | 8.60.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40typescript-eslint%2Fparser/v/8.60.0 |  |
 | @typescript-eslint/project-service | 8.57.0 | MIT | Code App UI, Env App UI | https://www.npmjs.com/package/%40typescript-eslint%2Fproject-service/v/8.57.0 |  |
 | @typescript-eslint/project-service | 8.57.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40typescript-eslint%2Fproject-service/v/8.57.1 |  |
-| @typescript-eslint/project-service | 8.60.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40typescript-eslint%2Fproject-service/v/8.60.0 | License metadata inherited from another npm-locked version of the same package. |
+| @typescript-eslint/project-service | 8.60.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40typescript-eslint%2Fproject-service/v/8.60.0 |  |
 | @typescript-eslint/scope-manager | 8.57.0 | MIT | Code App UI, Env App UI | https://www.npmjs.com/package/%40typescript-eslint%2Fscope-manager/v/8.57.0 |  |
 | @typescript-eslint/scope-manager | 8.57.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40typescript-eslint%2Fscope-manager/v/8.57.1 |  |
-| @typescript-eslint/scope-manager | 8.60.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40typescript-eslint%2Fscope-manager/v/8.60.0 | License metadata inherited from another npm-locked version of the same package. |
+| @typescript-eslint/scope-manager | 8.60.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40typescript-eslint%2Fscope-manager/v/8.60.0 |  |
 | @typescript-eslint/tsconfig-utils | 8.57.0 | MIT | Code App UI, Env App UI | https://www.npmjs.com/package/%40typescript-eslint%2Ftsconfig-utils/v/8.57.0 |  |
 | @typescript-eslint/tsconfig-utils | 8.57.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40typescript-eslint%2Ftsconfig-utils/v/8.57.1 |  |
-| @typescript-eslint/tsconfig-utils | 8.60.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40typescript-eslint%2Ftsconfig-utils/v/8.60.0 | License metadata inherited from another npm-locked version of the same package. |
+| @typescript-eslint/tsconfig-utils | 8.60.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40typescript-eslint%2Ftsconfig-utils/v/8.60.0 |  |
 | @typescript-eslint/type-utils | 8.57.0 | MIT | Code App UI, Env App UI | https://www.npmjs.com/package/%40typescript-eslint%2Ftype-utils/v/8.57.0 |  |
 | @typescript-eslint/type-utils | 8.57.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40typescript-eslint%2Ftype-utils/v/8.57.1 |  |
-| @typescript-eslint/type-utils | 8.60.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40typescript-eslint%2Ftype-utils/v/8.60.0 | License metadata inherited from another npm-locked version of the same package. |
+| @typescript-eslint/type-utils | 8.60.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40typescript-eslint%2Ftype-utils/v/8.60.0 |  |
 | @typescript-eslint/types | 8.57.0 | MIT | Code App UI, Env App UI | https://www.npmjs.com/package/%40typescript-eslint%2Ftypes/v/8.57.0 |  |
 | @typescript-eslint/types | 8.57.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40typescript-eslint%2Ftypes/v/8.57.1 |  |
-| @typescript-eslint/types | 8.60.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40typescript-eslint%2Ftypes/v/8.60.0 | License metadata inherited from another npm-locked version of the same package. |
+| @typescript-eslint/types | 8.60.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40typescript-eslint%2Ftypes/v/8.60.0 |  |
 | @typescript-eslint/typescript-estree | 8.57.0 | MIT | Code App UI, Env App UI | https://www.npmjs.com/package/%40typescript-eslint%2Ftypescript-estree/v/8.57.0 |  |
 | @typescript-eslint/typescript-estree | 8.57.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40typescript-eslint%2Ftypescript-estree/v/8.57.1 |  |
-| @typescript-eslint/typescript-estree | 8.60.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40typescript-eslint%2Ftypescript-estree/v/8.60.0 | License metadata inherited from another npm-locked version of the same package. |
+| @typescript-eslint/typescript-estree | 8.60.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40typescript-eslint%2Ftypescript-estree/v/8.60.0 |  |
 | @typescript-eslint/utils | 8.57.0 | MIT | Code App UI, Env App UI | https://www.npmjs.com/package/%40typescript-eslint%2Futils/v/8.57.0 |  |
 | @typescript-eslint/utils | 8.57.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40typescript-eslint%2Futils/v/8.57.1 |  |
-| @typescript-eslint/utils | 8.60.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40typescript-eslint%2Futils/v/8.60.0 | License metadata inherited from another npm-locked version of the same package. |
+| @typescript-eslint/utils | 8.60.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40typescript-eslint%2Futils/v/8.60.0 |  |
 | @typescript-eslint/visitor-keys | 8.57.0 | MIT | Code App UI, Env App UI | https://www.npmjs.com/package/%40typescript-eslint%2Fvisitor-keys/v/8.57.0 |  |
 | @typescript-eslint/visitor-keys | 8.57.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40typescript-eslint%2Fvisitor-keys/v/8.57.1 |  |
-| @typescript-eslint/visitor-keys | 8.60.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40typescript-eslint%2Fvisitor-keys/v/8.60.0 | License metadata inherited from another npm-locked version of the same package. |
+| @typescript-eslint/visitor-keys | 8.60.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40typescript-eslint%2Fvisitor-keys/v/8.60.0 |  |
 | @ungap/structured-clone | 1.3.0 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/%40ungap%2Fstructured-clone/v/1.3.0 |  |
-| @ungap/structured-clone | 1.3.1 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/%40ungap%2Fstructured-clone/v/1.3.1 | License metadata inherited from another npm-locked version of the same package. |
+| @ungap/structured-clone | 1.3.1 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/%40ungap%2Fstructured-clone/v/1.3.1 |  |
 | @upsetjs/venn.js | 2.0.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40upsetjs%2Fvenn.js/v/2.0.0 |  |
 | @vitest/browser-playwright | 4.1.10 | MIT | Env App UI | https://www.npmjs.com/package/%40vitest%2Fbrowser-playwright/v/4.1.10 |  |
 | @vitest/browser | 4.1.10 | MIT | Env App UI | https://www.npmjs.com/package/%40vitest%2Fbrowser/v/4.1.10 |  |
@@ -533,14 +533,14 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @vitest/utils | 4.1.10 | MIT | Env App UI | https://www.npmjs.com/package/%40vitest%2Futils/v/4.1.10 |  |
 | @vitest/utils | 4.1.8 | MIT | Code App UI, Desktop shell | https://www.npmjs.com/package/%40vitest%2Futils/v/4.1.8 |  |
 | @xmldom/xmldom | 0.8.13 | MIT | Desktop shell | https://www.npmjs.com/package/%40xmldom%2Fxmldom/v/0.8.13 |  |
-| @xmldom/xmldom | 0.9.10 | MIT | Desktop shell | https://www.npmjs.com/package/%40xmldom%2Fxmldom/v/0.9.10 | License metadata inherited from another npm-locked version of the same package. |
+| @xmldom/xmldom | 0.9.10 | MIT | Desktop shell | https://www.npmjs.com/package/%40xmldom%2Fxmldom/v/0.9.10 |  |
 | abbrev | 4.0.0 | ISC | Desktop shell | https://www.npmjs.com/package/abbrev/v/4.0.0 |  |
 | acorn-jsx | 5.3.2 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/acorn-jsx/v/5.3.2 |  |
 | acorn | 8.15.0 | MIT | Env App UI | https://www.npmjs.com/package/acorn/v/8.15.0 |  |
 | acorn | 8.16.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/acorn/v/8.16.0 |  |
 | agent-base | 7.1.4 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/agent-base/v/7.1.4 |  |
 | ajv | 6.14.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/ajv/v/6.14.0 |  |
-| ajv | 6.15.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/ajv/v/6.15.0 | License metadata inherited from another npm-locked version of the same package. |
+| ajv | 6.15.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/ajv/v/6.15.0 |  |
 | ajv | 8.20.0 | MIT | Desktop shell | https://www.npmjs.com/package/ajv/v/8.20.0 |  |
 | ansi-regex | 5.0.1 | MIT | Desktop shell | https://www.npmjs.com/package/ansi-regex/v/5.0.1 |  |
 | ansi-styles | 4.3.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/ansi-styles/v/4.3.0 |  |
@@ -559,13 +559,13 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | axe-core | 4.12.1 | MPL-2.0 | Env App UI | https://www.npmjs.com/package/axe-core/v/4.12.1 |  |
 | babel-plugin-jsx-dom-expressions | 0.40.3 | MIT | Env App UI | https://www.npmjs.com/package/babel-plugin-jsx-dom-expressions/v/0.40.3 |  |
 | babel-plugin-jsx-dom-expressions | 0.40.6 | MIT | Desktop shell | https://www.npmjs.com/package/babel-plugin-jsx-dom-expressions/v/0.40.6 |  |
-| babel-plugin-jsx-dom-expressions | 0.40.7 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/babel-plugin-jsx-dom-expressions/v/0.40.7 | License metadata inherited from another npm-locked version of the same package. |
+| babel-plugin-jsx-dom-expressions | 0.40.7 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/babel-plugin-jsx-dom-expressions/v/0.40.7 |  |
 | babel-preset-solid | 1.9.10 | MIT | Env App UI | https://www.npmjs.com/package/babel-preset-solid/v/1.9.10 |  |
 | babel-preset-solid | 1.9.12 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/babel-preset-solid/v/1.9.12 |  |
 | balanced-match | 1.0.2 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/balanced-match/v/1.0.2 |  |
 | balanced-match | 4.0.4 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/balanced-match/v/4.0.4 |  |
 | base64-js | 1.5.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/base64-js/v/1.5.1 |  |
-| baseline-browser-mapping | 2.10.32 | Apache-2.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/baseline-browser-mapping/v/2.10.32 | License metadata inherited from another npm-locked version of the same package. |
+| baseline-browser-mapping | 2.10.32 | Apache-2.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/baseline-browser-mapping/v/2.10.32 |  |
 | baseline-browser-mapping | 2.10.37 | Apache-2.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/baseline-browser-mapping/v/2.10.37 |  |
 | bidi-js | 1.0.3 | MIT | Desktop shell | https://www.npmjs.com/package/bidi-js/v/1.0.3 |  |
 | bl | 4.1.0 | MIT | Env App UI | https://www.npmjs.com/package/bl/v/4.1.0 |  |
@@ -585,7 +585,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | cacheable-request | 7.0.4 | MIT | Desktop shell | https://www.npmjs.com/package/cacheable-request/v/7.0.4 |  |
 | call-bind-apply-helpers | 1.0.2 | MIT | Desktop shell | https://www.npmjs.com/package/call-bind-apply-helpers/v/1.0.2 |  |
 | callsites | 3.1.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/callsites/v/3.1.0 |  |
-| caniuse-lite | 1.0.30001793 | CC-BY-4.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/caniuse-lite/v/1.0.30001793 | License metadata inherited from another npm-locked version of the same package. |
+| caniuse-lite | 1.0.30001793 | CC-BY-4.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/caniuse-lite/v/1.0.30001793 |  |
 | caniuse-lite | 1.0.30001799 | CC-BY-4.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/caniuse-lite/v/1.0.30001799 |  |
 | ccount | 2.0.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/ccount/v/2.0.1 |  |
 | chai | 6.2.2 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/chai/v/6.2.2 |  |
@@ -612,7 +612,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | concat-map | 0.0.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/concat-map/v/0.0.1 |  |
 | confbox | 0.1.8 | MIT | Env App UI | https://www.npmjs.com/package/confbox/v/0.1.8 |  |
 | convert-source-map | 2.0.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/convert-source-map/v/2.0.0 |  |
-| core-util-is | 1.0.2 | MIT | Desktop shell | https://www.npmjs.com/package/core-util-is/v/1.0.2 | License metadata inherited from another npm-locked version of the same package. |
+| core-util-is | 1.0.2 | MIT | Desktop shell | https://www.npmjs.com/package/core-util-is/v/1.0.2 |  |
 | core-util-is | 1.0.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/core-util-is/v/1.0.3 |  |
 | cose-base | 1.0.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/cose-base/v/1.0.3 |  |
 | cose-base | 2.2.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/cose-base/v/2.2.0 |  |
@@ -625,7 +625,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | csstype | 3.2.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/csstype/v/3.2.3 |  |
 | cytoscape-cose-bilkent | 4.1.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/cytoscape-cose-bilkent/v/4.1.0 |  |
 | cytoscape-fcose | 2.2.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/cytoscape-fcose/v/2.2.0 |  |
-| cytoscape | 3.33.4 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/cytoscape/v/3.33.4 | License metadata inherited from another npm-locked version of the same package. |
+| cytoscape | 3.33.4 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/cytoscape/v/3.33.4 |  |
 | cytoscape | 3.34.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/cytoscape/v/3.34.0 |  |
 | d3-array | 2.12.1 | BSD-3-Clause | Desktop shell, Env App UI | https://www.npmjs.com/package/d3-array/v/2.12.1 |  |
 | d3-array | 3.2.4 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/d3-array/v/3.2.4 |  |
@@ -665,7 +665,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | dagre-d3-es | 7.0.14 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/dagre-d3-es/v/7.0.14 |  |
 | data-urls | 5.0.0 | MIT | Env App UI | https://www.npmjs.com/package/data-urls/v/5.0.0 |  |
 | data-urls | 7.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/data-urls/v/7.0.0 |  |
-| dayjs | 1.11.20 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/dayjs/v/1.11.20 | License metadata inherited from another npm-locked version of the same package. |
+| dayjs | 1.11.20 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/dayjs/v/1.11.20 |  |
 | dayjs | 1.11.21 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/dayjs/v/1.11.21 |  |
 | debug | 4.4.3 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/debug/v/4.4.3 |  |
 | decimal.js | 10.6.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/decimal.js/v/10.6.0 |  |
@@ -694,7 +694,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | electron-builder-squirrel-windows | 26.15.3 | MIT | Desktop shell | https://www.npmjs.com/package/electron-builder-squirrel-windows/v/26.15.3 |  |
 | electron-builder | 26.15.3 | MIT | Desktop shell | https://www.npmjs.com/package/electron-builder/v/26.15.3 |  |
 | electron-publish | 26.15.3 | MIT | Desktop shell | https://www.npmjs.com/package/electron-publish/v/26.15.3 |  |
-| electron-to-chromium | 1.5.361 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/electron-to-chromium/v/1.5.361 | License metadata inherited from another npm-locked version of the same package. |
+| electron-to-chromium | 1.5.361 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/electron-to-chromium/v/1.5.361 |  |
 | electron-to-chromium | 1.5.373 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/electron-to-chromium/v/1.5.373 |  |
 | electron-winstaller | 5.4.0 | MIT | Desktop shell | https://www.npmjs.com/package/electron-winstaller/v/5.4.0 |  |
 | electron | 41.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/electron/v/41.3.0 |  |
@@ -702,9 +702,9 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | end-of-stream | 1.4.5 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/end-of-stream/v/1.4.5 |  |
 | enhanced-resolve | 5.20.1 | MIT | Desktop shell | https://www.npmjs.com/package/enhanced-resolve/v/5.20.1 |  |
 | enhanced-resolve | 5.21.6 | MIT | Env App UI | https://www.npmjs.com/package/enhanced-resolve/v/5.21.6 |  |
-| enhanced-resolve | 5.22.0 | MIT | Desktop shell | https://www.npmjs.com/package/enhanced-resolve/v/5.22.0 | License metadata inherited from another npm-locked version of the same package. |
+| enhanced-resolve | 5.22.0 | MIT | Desktop shell | https://www.npmjs.com/package/enhanced-resolve/v/5.22.0 |  |
 | entities | 6.0.1 | BSD-2-Clause | Desktop shell, Env App UI | https://www.npmjs.com/package/entities/v/6.0.1 |  |
-| entities | 8.0.0 | BSD-2-Clause | Desktop shell | https://www.npmjs.com/package/entities/v/8.0.0 | License metadata inherited from another npm-locked version of the same package. |
+| entities | 8.0.0 | BSD-2-Clause | Desktop shell | https://www.npmjs.com/package/entities/v/8.0.0 |  |
 | env-paths | 2.2.1 | MIT | Desktop shell | https://www.npmjs.com/package/env-paths/v/2.2.1 |  |
 | err-code | 2.0.3 | MIT | Desktop shell | https://www.npmjs.com/package/err-code/v/2.0.3 |  |
 | es-define-property | 1.0.1 | MIT | Desktop shell | https://www.npmjs.com/package/es-define-property/v/1.0.1 |  |
@@ -713,7 +713,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | es-object-atoms | 1.1.2 | MIT | Desktop shell | https://www.npmjs.com/package/es-object-atoms/v/1.1.2 |  |
 | es-set-tostringtag | 2.1.0 | MIT | Desktop shell | https://www.npmjs.com/package/es-set-tostringtag/v/2.1.0 |  |
 | es-toolkit | 1.46.1 | MIT | Env App UI | https://www.npmjs.com/package/es-toolkit/v/1.46.1 |  |
-| es-toolkit | 1.47.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/es-toolkit/v/1.47.0 | License metadata inherited from another npm-locked version of the same package. |
+| es-toolkit | 1.47.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/es-toolkit/v/1.47.0 |  |
 | es-toolkit | 1.49.0 | MIT | Desktop shell | https://www.npmjs.com/package/es-toolkit/v/1.49.0 |  |
 | es6-error | 4.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/es6-error/v/4.1.1 |  |
 | esbuild | 0.28.1 | MIT | Code App UI, Desktop shell | https://www.npmjs.com/package/esbuild/v/0.28.1 |  |
@@ -773,7 +773,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | global-agent | 3.0.0 | BSD-3-Clause | Desktop shell | https://www.npmjs.com/package/global-agent/v/3.0.0 |  |
 | globals | 14.0.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/globals/v/14.0.0 |  |
 | globals | 17.4.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/globals/v/17.4.0 |  |
-| globals | 17.6.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/globals/v/17.6.0 | License metadata inherited from another npm-locked version of the same package. |
+| globals | 17.6.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/globals/v/17.6.0 |  |
 | globalthis | 1.0.4 | MIT | Desktop shell | https://www.npmjs.com/package/globalthis/v/1.0.4 |  |
 | gopd | 1.2.0 | MIT | Desktop shell | https://www.npmjs.com/package/gopd/v/1.2.0 |  |
 | got | 11.8.6 | MIT | Desktop shell | https://www.npmjs.com/package/got/v/11.8.6 |  |
@@ -830,7 +830,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | js-yaml | 4.3.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/js-yaml/v/4.3.0 |  |
 | jsdom | 26.1.0 | MIT | Env App UI | https://www.npmjs.com/package/jsdom/v/26.1.0 |  |
 | jsdom | 29.0.1 | MIT | Desktop shell | https://www.npmjs.com/package/jsdom/v/29.0.1 |  |
-| jsdom | 29.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/jsdom/v/29.1.1 | License metadata inherited from another npm-locked version of the same package. |
+| jsdom | 29.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/jsdom/v/29.1.1 |  |
 | jsesc | 3.1.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/jsesc/v/3.1.0 |  |
 | json-buffer | 3.0.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/json-buffer/v/3.0.1 |  |
 | json-schema-traverse | 0.4.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/json-schema-traverse/v/0.4.1 |  |
@@ -902,7 +902,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | mdast-util-to-hast | 13.2.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/mdast-util-to-hast/v/13.2.1 |  |
 | mdn-data | 2.27.1 | CC0-1.0 | Desktop shell | https://www.npmjs.com/package/mdn-data/v/2.27.1 |  |
 | merge-anything | 5.1.7 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/merge-anything/v/5.1.7 |  |
-| mermaid | 11.15.0 | MIT | Env App UI | https://www.npmjs.com/package/mermaid/v/11.15.0 | License metadata inherited from another npm-locked version of the same package. |
+| mermaid | 11.15.0 | MIT | Env App UI | https://www.npmjs.com/package/mermaid/v/11.15.0 |  |
 | mermaid | 11.16.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/mermaid/v/11.16.0 |  |
 | micromark-util-character | 2.1.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/micromark-util-character/v/2.1.1 |  |
 | micromark-util-encode | 2.0.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/micromark-util-encode/v/2.0.1 |  |
@@ -929,14 +929,14 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | ms | 2.1.3 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/ms/v/2.1.3 |  |
 | nanoid | 3.3.16 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/nanoid/v/3.3.16 |  |
 | natural-compare | 1.4.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/natural-compare/v/1.4.0 |  |
-| node-abi | 4.31.0 | MIT | Desktop shell | https://www.npmjs.com/package/node-abi/v/4.31.0 | License metadata inherited from another npm-locked version of the same package. |
+| node-abi | 4.31.0 | MIT | Desktop shell | https://www.npmjs.com/package/node-abi/v/4.31.0 |  |
 | node-abi | 4.33.0 | MIT | Desktop shell | https://www.npmjs.com/package/node-abi/v/4.33.0 |  |
 | node-api-version | 0.2.1 | MIT | Desktop shell | https://www.npmjs.com/package/node-api-version/v/0.2.1 |  |
-| node-gyp | 12.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/node-gyp/v/12.3.0 | License metadata inherited from another npm-locked version of the same package. |
+| node-gyp | 12.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/node-gyp/v/12.3.0 |  |
 | node-gyp | 12.4.0 | MIT | Desktop shell | https://www.npmjs.com/package/node-gyp/v/12.4.0 |  |
 | node-int64 | 0.4.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/node-int64/v/0.4.0 |  |
 | node-readable-to-web-readable-stream | 0.4.2 | MIT | Env App UI | https://www.npmjs.com/package/node-readable-to-web-readable-stream/v/0.4.2 |  |
-| node-releases | 2.0.46 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/node-releases/v/2.0.46 | License metadata inherited from another npm-locked version of the same package. |
+| node-releases | 2.0.46 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/node-releases/v/2.0.46 |  |
 | node-releases | 2.0.47 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/node-releases/v/2.0.47 |  |
 | nopt | 9.0.0 | ISC | Desktop shell | https://www.npmjs.com/package/nopt/v/9.0.0 |  |
 | normalize-path | 3.0.0 | MIT | Env App UI | https://www.npmjs.com/package/normalize-path/v/3.0.0 |  |
@@ -946,10 +946,10 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | obug | 2.1.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/obug/v/2.1.1 |  |
 | once | 1.4.0 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/once/v/1.4.0 |  |
 | oniguruma-parser | 0.12.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/oniguruma-parser/v/0.12.1 |  |
-| oniguruma-parser | 0.12.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/oniguruma-parser/v/0.12.2 | License metadata inherited from another npm-locked version of the same package. |
+| oniguruma-parser | 0.12.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/oniguruma-parser/v/0.12.2 |  |
 | oniguruma-to-es | 4.3.4 | MIT | Env App UI | https://www.npmjs.com/package/oniguruma-to-es/v/4.3.4 |  |
 | oniguruma-to-es | 4.3.5 | MIT | Desktop shell | https://www.npmjs.com/package/oniguruma-to-es/v/4.3.5 |  |
-| oniguruma-to-es | 4.3.6 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/oniguruma-to-es/v/4.3.6 | License metadata inherited from another npm-locked version of the same package. |
+| oniguruma-to-es | 4.3.6 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/oniguruma-to-es/v/4.3.6 |  |
 | optionator | 0.9.4 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/optionator/v/0.9.4 |  |
 | p-cancelable | 2.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/p-cancelable/v/2.1.1 |  |
 | p-limit | 3.1.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/p-limit/v/3.1.0 |  |
@@ -960,14 +960,14 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | parent-module | 1.0.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/parent-module/v/1.0.1 |  |
 | parse5 | 7.3.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/parse5/v/7.3.0 |  |
 | parse5 | 8.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/parse5/v/8.0.0 |  |
-| parse5 | 8.0.1 | MIT | Desktop shell | https://www.npmjs.com/package/parse5/v/8.0.1 | License metadata inherited from another npm-locked version of the same package. |
+| parse5 | 8.0.1 | MIT | Desktop shell | https://www.npmjs.com/package/parse5/v/8.0.1 |  |
 | path-data-parser | 0.1.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/path-data-parser/v/0.1.0 |  |
 | path-exists | 4.0.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/path-exists/v/4.0.0 |  |
 | path-is-absolute | 1.0.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/path-is-absolute/v/1.0.1 |  |
 | path-key | 3.1.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/path-key/v/3.1.1 |  |
 | pathe | 2.0.3 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/pathe/v/2.0.3 |  |
 | pdfjs-dist | 5.6.205 | Apache-2.0 | Env App UI | https://www.npmjs.com/package/pdfjs-dist/v/5.6.205 |  |
-| pdfjs-dist | 5.7.284 | Apache-2.0 | Env App UI | https://www.npmjs.com/package/pdfjs-dist/v/5.7.284 | License metadata inherited from another npm-locked version of the same package. |
+| pdfjs-dist | 5.7.284 | Apache-2.0 | Env App UI | https://www.npmjs.com/package/pdfjs-dist/v/5.7.284 |  |
 | pe-library | 0.4.1 | MIT | Desktop shell | https://www.npmjs.com/package/pe-library/v/0.4.1 |  |
 | pend | 1.2.0 | MIT | Desktop shell | https://www.npmjs.com/package/pend/v/1.2.0 |  |
 | picocolors | 1.1.1 | ISC | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/picocolors/v/1.1.1 |  |
@@ -975,11 +975,11 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | pkg-types | 1.3.1 | MIT | Env App UI | https://www.npmjs.com/package/pkg-types/v/1.3.1 |  |
 | pkijs | 3.4.0 | BSD-3-Clause | Desktop shell | https://www.npmjs.com/package/pkijs/v/3.4.0 |  |
 | playwright-core | 1.58.2 | Apache-2.0 | Env App UI | https://www.npmjs.com/package/playwright-core/v/1.58.2 |  |
-| playwright-core | 1.60.0 | Apache-2.0 | Env App UI | https://www.npmjs.com/package/playwright-core/v/1.60.0 | License metadata inherited from another npm-locked version of the same package. |
+| playwright-core | 1.60.0 | Apache-2.0 | Env App UI | https://www.npmjs.com/package/playwright-core/v/1.60.0 |  |
 | playwright | 1.58.2 | Apache-2.0 | Env App UI | https://www.npmjs.com/package/playwright/v/1.58.2 |  |
-| playwright | 1.60.0 | Apache-2.0 | Env App UI | https://www.npmjs.com/package/playwright/v/1.60.0 | License metadata inherited from another npm-locked version of the same package. |
+| playwright | 1.60.0 | Apache-2.0 | Env App UI | https://www.npmjs.com/package/playwright/v/1.60.0 |  |
 | plist | 3.1.0 | MIT | Desktop shell | https://www.npmjs.com/package/plist/v/3.1.0 |  |
-| plist | 3.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/plist/v/3.1.1 | License metadata inherited from another npm-locked version of the same package. |
+| plist | 3.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/plist/v/3.1.1 |  |
 | pngjs | 7.0.0 | MIT | Env App UI | https://www.npmjs.com/package/pngjs/v/7.0.0 |  |
 | points-on-curve | 0.2.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/points-on-curve/v/0.2.0 |  |
 | points-on-path | 0.2.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/points-on-path/v/0.2.1 |  |
@@ -1026,7 +1026,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | safe-buffer | 5.2.1 | MIT | Env App UI | https://www.npmjs.com/package/safe-buffer/v/5.2.1 |  |
 | safer-buffer | 2.1.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/safer-buffer/v/2.1.2 |  |
 | sanitize-filename | 1.6.4 | WTFPL OR ISC | Desktop shell | https://www.npmjs.com/package/sanitize-filename/v/1.6.4 |  |
-| sax | 1.6.0 | BlueOak-1.0.0 | Desktop shell | https://www.npmjs.com/package/sax/v/1.6.0 | License metadata inherited from another npm-locked version of the same package. |
+| sax | 1.6.0 | BlueOak-1.0.0 | Desktop shell | https://www.npmjs.com/package/sax/v/1.6.0 |  |
 | sax | 1.6.1 | BlueOak-1.0.0 | Desktop shell | https://www.npmjs.com/package/sax/v/1.6.1 |  |
 | saxes | 5.0.1 | ISC | Env App UI | https://www.npmjs.com/package/saxes/v/5.0.1 |  |
 | saxes | 6.0.0 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/saxes/v/6.0.0 |  |
@@ -1035,12 +1035,12 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | semver | 5.7.2 | ISC | Desktop shell | https://www.npmjs.com/package/semver/v/5.7.2 |  |
 | semver | 6.3.1 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/semver/v/6.3.1 |  |
 | semver | 7.7.4 | ISC | Code App UI, Desktop shell | https://www.npmjs.com/package/semver/v/7.7.4 |  |
-| semver | 7.8.1 | ISC | Desktop shell | https://www.npmjs.com/package/semver/v/7.8.1 | License metadata inherited from another npm-locked version of the same package. |
+| semver | 7.8.1 | ISC | Desktop shell | https://www.npmjs.com/package/semver/v/7.8.1 |  |
 | semver | 7.8.5 | ISC | Env App UI | https://www.npmjs.com/package/semver/v/7.8.5 |  |
 | serialize-error | 7.0.1 | MIT | Desktop shell | https://www.npmjs.com/package/serialize-error/v/7.0.1 |  |
-| seroval-plugins | 1.5.4 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/seroval-plugins/v/1.5.4 | License metadata inherited from another npm-locked version of the same package. |
+| seroval-plugins | 1.5.4 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/seroval-plugins/v/1.5.4 |  |
 | seroval-plugins | 1.5.6 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/seroval-plugins/v/1.5.6 |  |
-| seroval | 1.5.4 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/seroval/v/1.5.4 | License metadata inherited from another npm-locked version of the same package. |
+| seroval | 1.5.4 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/seroval/v/1.5.4 |  |
 | seroval | 1.5.6 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/seroval/v/1.5.6 |  |
 | setimmediate | 1.0.5 | MIT | Env App UI | https://www.npmjs.com/package/setimmediate/v/1.0.5 |  |
 | shebang-command | 2.0.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/shebang-command/v/2.0.0 |  |
@@ -1053,7 +1053,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | sirv | 3.0.2 | MIT | Env App UI | https://www.npmjs.com/package/sirv/v/3.0.2 |  |
 | solid-js | 1.9.11 | MIT | Env App UI | https://www.npmjs.com/package/solid-js/v/1.9.11 |  |
 | solid-js | 1.9.12 | MIT | Desktop shell | https://www.npmjs.com/package/solid-js/v/1.9.12 |  |
-| solid-js | 1.9.13 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/solid-js/v/1.9.13 | License metadata inherited from another npm-locked version of the same package. |
+| solid-js | 1.9.13 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/solid-js/v/1.9.13 |  |
 | solid-motionone | 1.0.4 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/solid-motionone/v/1.0.4 |  |
 | solid-refresh | 0.6.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/solid-refresh/v/0.6.3 |  |
 | source-map-js | 1.2.1 | BSD-3-Clause | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/source-map-js/v/1.2.1 |  |
@@ -1078,9 +1078,9 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | symbol-tree | 3.2.4 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/symbol-tree/v/3.2.4 |  |
 | tailwind-merge | 3.4.0 | MIT | Env App UI | https://www.npmjs.com/package/tailwind-merge/v/3.4.0 |  |
 | tailwind-merge | 3.5.0 | MIT | Desktop shell | https://www.npmjs.com/package/tailwind-merge/v/3.5.0 |  |
-| tailwind-merge | 3.6.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/tailwind-merge/v/3.6.0 | License metadata inherited from another npm-locked version of the same package. |
+| tailwind-merge | 3.6.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/tailwind-merge/v/3.6.0 |  |
 | tailwindcss | 4.2.2 | MIT | Desktop shell | https://www.npmjs.com/package/tailwindcss/v/4.2.2 |  |
-| tailwindcss | 4.3.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/tailwindcss/v/4.3.0 | License metadata inherited from another npm-locked version of the same package. |
+| tailwindcss | 4.3.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/tailwindcss/v/4.3.0 |  |
 | tailwindcss | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/tailwindcss/v/4.3.1 |  |
 | tapable | 2.3.2 | MIT | Desktop shell | https://www.npmjs.com/package/tapable/v/2.3.2 |  |
 | tapable | 2.3.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/tapable/v/2.3.3 |  |
@@ -1091,18 +1091,18 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | tiny-async-pool | 1.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/tiny-async-pool/v/1.3.0 |  |
 | tinybench | 2.9.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/tinybench/v/2.9.0 |  |
 | tinyexec | 1.0.2 | MIT | Env App UI | https://www.npmjs.com/package/tinyexec/v/1.0.2 |  |
-| tinyexec | 1.2.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/tinyexec/v/1.2.2 | License metadata inherited from another npm-locked version of the same package. |
+| tinyexec | 1.2.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/tinyexec/v/1.2.2 |  |
 | tinyexec | 1.2.4 | MIT | Code App UI, Desktop shell | https://www.npmjs.com/package/tinyexec/v/1.2.4 |  |
 | tinyglobby | 0.2.15 | MIT | Code App UI | https://www.npmjs.com/package/tinyglobby/v/0.2.15 |  |
-| tinyglobby | 0.2.16 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/tinyglobby/v/0.2.16 | License metadata inherited from another npm-locked version of the same package. |
+| tinyglobby | 0.2.16 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/tinyglobby/v/0.2.16 |  |
 | tinyglobby | 0.2.17 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/tinyglobby/v/0.2.17 |  |
 | tinyrainbow | 3.1.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/tinyrainbow/v/3.1.0 |  |
 | tldts-core | 6.1.86 | MIT | Env App UI | https://www.npmjs.com/package/tldts-core/v/6.1.86 |  |
 | tldts-core | 7.0.27 | MIT | Desktop shell | https://www.npmjs.com/package/tldts-core/v/7.0.27 |  |
-| tldts-core | 7.4.0 | MIT | Desktop shell | https://www.npmjs.com/package/tldts-core/v/7.4.0 | License metadata inherited from another npm-locked version of the same package. |
+| tldts-core | 7.4.0 | MIT | Desktop shell | https://www.npmjs.com/package/tldts-core/v/7.4.0 |  |
 | tldts | 6.1.86 | MIT | Env App UI | https://www.npmjs.com/package/tldts/v/6.1.86 |  |
 | tldts | 7.0.27 | MIT | Desktop shell | https://www.npmjs.com/package/tldts/v/7.0.27 |  |
-| tldts | 7.4.0 | MIT | Desktop shell | https://www.npmjs.com/package/tldts/v/7.4.0 | License metadata inherited from another npm-locked version of the same package. |
+| tldts | 7.4.0 | MIT | Desktop shell | https://www.npmjs.com/package/tldts/v/7.4.0 |  |
 | tmp-promise | 3.0.3 | MIT | Desktop shell | https://www.npmjs.com/package/tmp-promise/v/3.0.3 |  |
 | tmp | 0.2.7 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/tmp/v/0.2.7 |  |
 | totalist | 3.0.1 | MIT | Env App UI | https://www.npmjs.com/package/totalist/v/3.0.1 |  |
@@ -1113,7 +1113,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | trim-lines | 3.0.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/trim-lines/v/3.0.1 |  |
 | truncate-utf8-bytes | 1.0.2 | WTFPL | Desktop shell | https://www.npmjs.com/package/truncate-utf8-bytes/v/1.0.2 |  |
 | ts-api-utils | 2.4.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/ts-api-utils/v/2.4.0 |  |
-| ts-api-utils | 2.5.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/ts-api-utils/v/2.5.0 | License metadata inherited from another npm-locked version of the same package. |
+| ts-api-utils | 2.5.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/ts-api-utils/v/2.5.0 |  |
 | ts-dedent | 2.2.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/ts-dedent/v/2.2.0 |  |
 | ts-dedent | 2.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/ts-dedent/v/2.3.0 |  |
 | tslib | 2.8.1 | 0BSD | Desktop shell, Env App UI | https://www.npmjs.com/package/tslib/v/2.8.1 |  |
