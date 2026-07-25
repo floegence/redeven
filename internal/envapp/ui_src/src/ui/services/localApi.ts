@@ -97,8 +97,10 @@ export async function prepareLocalApiRequestInit(init: RequestInit): Promise<Req
     headers.set('Content-Type', 'application/json');
   }
 
+  let localRuntimeAvailable = false;
   try {
-    if (await getLocalRuntime()) {
+    localRuntimeAvailable = Boolean(await getLocalRuntime());
+    if (localRuntimeAvailable) {
       applyLocalAccessResumeHeader(headers);
     }
   } catch {
@@ -108,7 +110,7 @@ export async function prepareLocalApiRequestInit(init: RequestInit): Promise<Req
   return {
     ...init,
     headers,
-    credentials: init.credentials ?? (await localApiRequestCredentials()),
+    credentials: init.credentials ?? (localRuntimeAvailable ? 'same-origin' : 'omit'),
     cache: 'no-store',
   };
 }

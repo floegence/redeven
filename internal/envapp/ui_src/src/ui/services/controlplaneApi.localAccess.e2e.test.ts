@@ -88,6 +88,82 @@ describe('controlplaneApi local access flow', () => {
     });
   });
 
+  it('shares one runtime load across concurrent first reads', async () => {
+    let resolveAccess!: (response: Response) => void;
+    const accessResponse = new Promise<Response>((resolve) => {
+      resolveAccess = resolve;
+    });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === '/api/local/access/status') return accessResponse;
+      if (String(input) === '/api/local/runtime') {
+        return jsonResponse({ mode: 'local', env_public_id: 'env_local' });
+      }
+      throw new Error(`unexpected request: ${String(input)}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const mod = await import('./controlplaneApi');
+    const first = mod.getLocalRuntime();
+    const second = mod.getLocalRuntime();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    resolveAccess(jsonResponse({ password_required: false, unlocked: true }));
+    await expect(Promise.all([first, second])).resolves.toHaveLength(2);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries runtime discovery after an in-flight load fails', async () => {
+    let runtimeRequests = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === '/api/local/access/status') {
+        return jsonResponse({ password_required: false, unlocked: true });
+      }
+      if (String(input) === '/api/local/runtime') {
+        runtimeRequests += 1;
+        if (runtimeRequests === 1) throw new Error('runtime unavailable');
+        return jsonResponse({ mode: 'local', env_public_id: 'env_local' });
+      }
+      throw new Error(`unexpected request: ${String(input)}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const mod = await import('./controlplaneApi');
+    await expect(mod.getLocalRuntime()).rejects.toThrow('runtime unavailable');
+    await expect(mod.getLocalRuntime()).resolves.toMatchObject({ mode: 'local' });
+    expect(runtimeRequests).toBe(2);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it('does not let an older first read overwrite a refreshed runtime', async () => {
+    let resolveInitialRuntime!: (response: Response) => void;
+    const initialRuntimeResponse = new Promise<Response>((resolve) => {
+      resolveInitialRuntime = resolve;
+    });
+    let runtimeRequests = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === '/api/local/access/status') {
+        return jsonResponse({ password_required: false, unlocked: true });
+      }
+      if (String(input) === '/api/local/runtime') {
+        runtimeRequests += 1;
+        if (runtimeRequests === 1) return initialRuntimeResponse;
+        return jsonResponse({ mode: 'local', env_public_id: 'env_refreshed' });
+      }
+      throw new Error(`unexpected request: ${String(input)}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const mod = await import('./controlplaneApi');
+    const initial = mod.getLocalRuntime();
+    await vi.waitFor(() => expect(runtimeRequests).toBe(1));
+
+    await expect(mod.refreshLocalRuntime()).resolves.toMatchObject({ env_public_id: 'env_refreshed' });
+    resolveInitialRuntime(jsonResponse({ mode: 'local', env_public_id: 'env_initial' }));
+    await expect(initial).resolves.toMatchObject({ env_public_id: 'env_initial' });
+    await expect(mod.getLocalRuntime()).resolves.toMatchObject({ env_public_id: 'env_refreshed' });
+    expect(runtimeRequests).toBe(2);
+  });
+
   it('posts unlock with same-origin credentials so the local session cookie can be stored', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       expect(String(input)).toBe('/api/local/access/unlock');
