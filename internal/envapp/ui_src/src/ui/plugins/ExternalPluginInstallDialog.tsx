@@ -700,16 +700,19 @@ function InspectionReview(props: {
         <DecisionFact
           icon={<Shield class="h-4 w-4" />}
           primary={signatureReviewLabel(signature(), i18n)}
-          secondary={`signature=${signature()}`}
+          technical={[
+            `signature=${signature()}`,
+            ...props.inspection.signature_assessment.reason_codes,
+          ]}
           tone={blocked() ? 'blocked' : signature() === 'verified' ? 'positive' : 'caution'}
         />
         <DecisionFact
           icon={blocked() ? <AlertTriangle class="h-4 w-4" /> : <Check class="h-4 w-4" />}
           primary={executionApprovalReviewLabel(props.inspection.execution_approval.state, i18n)}
-          secondary={[
+          technical={[
             `execution_approval=${props.inspection.execution_approval.state}`,
             ...props.inspection.execution_approval.reason_codes,
-          ].join(' · ')}
+          ]}
           tone={blocked() ? 'blocked' : 'neutral'}
         />
         <DecisionFact
@@ -717,7 +720,10 @@ function InspectionReview(props: {
           primary={props.inspection.update_eligibility.state === 'automatic_eligible'
             ? i18n.t('uiCopy.plugin.external.automaticUpdates')
             : i18n.t('uiCopy.plugin.external.manualUpdates')}
-          secondary={`update_eligibility=${props.inspection.update_eligibility.state}`}
+          technical={[
+            `update_eligibility=${props.inspection.update_eligibility.state}`,
+            ...props.inspection.update_eligibility.reason_codes,
+          ]}
           tone={props.inspection.update_eligibility.state === 'automatic_eligible' ? 'positive' : 'neutral'}
         />
       </div>
@@ -762,7 +768,7 @@ function InspectionReview(props: {
         </Show>
         <For each={declarations()}>
           {(declaration) => (
-            <details open={Boolean(declaration.change)} class={cn(
+            <details class={cn(
               'group rounded-md border border-l-2 bg-background',
               declaration.change === 'added' || declaration.change === 'changed'
                 ? 'border-l-[var(--redeven-status-warning-foreground)]'
@@ -808,12 +814,15 @@ function InspectionReview(props: {
           <Show when={props.inspection.execution_approval.state === 'policy_blocked'}>
             <div class="mt-1 font-medium">{i18n.t('uiCopy.plugin.managedByPolicy')}</div>
           </Show>
-          <For each={[
-            ...props.inspection.signature_assessment.reason_codes,
-            ...props.inspection.execution_approval.reason_codes,
-          ]}>
-            {(reason) => <code class="mt-1 block break-all text-[11px]">{reason}</code>}
-          </For>
+          <details class="mt-2 text-xs">
+            <summary class="cursor-pointer font-medium">{i18n.t('uiCopy.plugin.technicalDetails')}</summary>
+            <For each={[
+              ...props.inspection.signature_assessment.reason_codes,
+              ...props.inspection.execution_approval.reason_codes,
+            ]}>
+              {(reason) => <code class="mt-1 block break-all text-[11px]">{reason}</code>}
+            </For>
+          </details>
         </div>
       </Show>
       <details class="group border-t pt-3 text-xs">
@@ -861,9 +870,10 @@ function executionApprovalReviewLabel(
 function DecisionFact(props: {
   icon: JSX.Element;
   primary: string;
-  secondary?: string;
+  technical?: readonly string[];
   tone: 'positive' | 'caution' | 'blocked' | 'neutral';
 }): JSX.Element {
+  const i18n = useI18n();
   return (
     <div class={cn(
       'flex min-h-20 items-start gap-2 rounded-md border bg-background p-3 text-sm',
@@ -874,8 +884,13 @@ function DecisionFact(props: {
       <span class="mt-0.5 shrink-0">{props.icon}</span>
       <span class="min-w-0">
         <span class="block font-medium leading-5">{props.primary}</span>
-        <Show when={props.secondary}>
-          {(secondary) => <code class="mt-1 block break-all text-[10px] text-muted-foreground">{secondary()}</code>}
+        <Show when={props.technical && props.technical.length > 0}>
+          <details data-decision-technical-details class="mt-1 text-[10px] text-muted-foreground">
+            <summary class="cursor-pointer font-medium text-foreground">{i18n.t('uiCopy.plugin.technicalDetails')}</summary>
+            <For each={props.technical}>
+              {(fact) => <code class="mt-1 block break-all">{fact}</code>}
+            </For>
+          </details>
         </Show>
       </span>
     </div>
@@ -925,7 +940,7 @@ function CommitProgress(props: { inspection: ExternalPluginInspection | null }):
             <DecisionFact
               icon={<Shield class="h-4 w-4" />}
               primary={signatureReviewLabel(current().signature_assessment.state, i18n)}
-              secondary={`signature=${current().signature_assessment.state}`}
+              technical={[`signature=${current().signature_assessment.state}`]}
               tone={current().signature_assessment.state === 'verified' ? 'positive' : 'caution'}
             />
             <DecisionFact
@@ -933,7 +948,7 @@ function CommitProgress(props: { inspection: ExternalPluginInspection | null }):
               primary={current().update_eligibility.state === 'automatic_eligible'
                 ? i18n.t('uiCopy.plugin.external.automaticUpdates')
                 : i18n.t('uiCopy.plugin.external.manualUpdates')}
-              secondary={`update_eligibility=${current().update_eligibility.state}`}
+              technical={[`update_eligibility=${current().update_eligibility.state}`]}
               tone="neutral"
             />
           </div>
@@ -1116,11 +1131,14 @@ function securityCategorySummaries(
     { category: 'intents', count: summary.intents.length },
     { category: 'surfaces', count: summary.surfaces.length },
   ];
-  return categories.filter((category) => category.count > 0).map((category) => ({
-    ...category,
-    purpose: securityCategoryPurpose(category.category, i18n),
-    risk: securityCategoryIsSensitive(category.category, summary) ? 'sensitive' : 'standard',
-  }));
+  return categories
+    .filter((category) => category.count > 0)
+    .map((category) => ({
+      ...category,
+      purpose: securityCategoryPurpose(category.category, i18n),
+      risk: securityCategoryIsSensitive(category.category, summary) ? 'sensitive' as const : 'standard' as const,
+    }))
+    .sort((left, right) => Number(right.risk === 'sensitive') - Number(left.risk === 'sensitive'));
 }
 
 function securityCategoryPurpose(category: SecurityCategory, i18n: ReturnType<typeof useI18n>): string {

@@ -689,9 +689,12 @@ describe('PluginCenterView', () => {
     expect(readSwitch.getAttribute('aria-label')).toBe('Change Workspace read permission');
     expect(writeSwitch.getAttribute('aria-label')).toBe('Change Workspace write permission');
     expect(mount.textContent).toContain('Optional');
+    const permissionNames = mount.querySelectorAll<HTMLElement>('[data-plugin-permission-name]');
+    expect([...permissionNames].map((name) => name.textContent)).toEqual(['Workspace read', 'Workspace write']);
     const technicalDetails = mount.querySelectorAll<HTMLDetailsElement>('[data-plugin-permission-technical-details]');
     expect(technicalDetails).toHaveLength(2);
     expect([...technicalDetails].every((details) => !details.open)).toBe(true);
+    expect([...technicalDetails].every((details) => !details.querySelector('summary')?.textContent?.includes('workspace.'))).toBe(true);
     expect(technicalDetails[1].textContent).toContain('workspace.write');
     writeSwitch.click();
     await new Promise((resolve) => setTimeout(resolve, 0));

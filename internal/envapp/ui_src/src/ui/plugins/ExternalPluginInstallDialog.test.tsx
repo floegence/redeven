@@ -323,6 +323,8 @@ describe('ExternalPluginInstallDialog', () => {
     expect(copy).not.toContain('user:secret');
     expect(copy).not.toContain('top-secret');
     expect(copy).not.toContain('#fragment');
+    const technicalDetails = document.querySelector<HTMLDetailsElement>('[role="alert"] details');
+    expect(technicalDetails?.open).toBe(false);
   });
 
   it('requires a selected local package and sends the exact File for inspection', async () => {
@@ -396,8 +398,12 @@ describe('ExternalPluginInstallDialog', () => {
     const confirmation = document.querySelector<HTMLElement>('[data-external-plugin-confirmation]')!;
     const consentCopy = 'I approve this exact inspected package and its declared access.';
     expect(trustReview.textContent).toContain('Waiting for your approval');
-    expect(trustReview.textContent).toContain('execution_approval=pending');
-    expect(trustReview.textContent).toContain('unsigned_package_requires_user_confirmation');
+    const trustTechnicalDetails = trustReview.querySelectorAll<HTMLDetailsElement>('[data-decision-technical-details]');
+    expect(trustTechnicalDetails).toHaveLength(3);
+    expect([...trustTechnicalDetails].every((details) => !details.open)).toBe(true);
+    expect([...trustTechnicalDetails].every((details) => !details.querySelector('summary')?.textContent?.includes('execution_approval'))).toBe(true);
+    expect(trustTechnicalDetails[1].textContent).toContain('execution_approval=pending');
+    expect(trustTechnicalDetails[1].textContent).toContain('unsigned_package_requires_user_confirmation');
     expect(trustReview.textContent).not.toContain(consentCopy);
     expect(confirmation.querySelector('input[type="checkbox"]')).not.toBeNull();
     expect(confirmation.textContent).toContain(consentCopy);
@@ -533,6 +539,12 @@ describe('ExternalPluginInstallDialog', () => {
     expect(copy).toContain('Changed');
     expect(copy).toContain('Removed');
     expect(copy).toContain('Previous');
+    const declarations = document.querySelectorAll<HTMLDetailsElement>('[data-external-plugin-security-declarations] > details');
+    expect(declarations.length).toBeGreaterThan(0);
+    expect([...declarations].every((details) => !details.open)).toBe(true);
+    expect([...declarations].some((details) => details.querySelector('summary')?.textContent?.includes('Added'))).toBe(true);
+    expect([...declarations].some((details) => details.querySelector('summary')?.textContent?.includes('Changed'))).toBe(true);
+    expect([...declarations].some((details) => details.querySelector('summary')?.textContent?.includes('Removed'))).toBe(true);
   });
 
   it('explains declared capability purposes before collapsed technical evidence', async () => {
@@ -559,8 +571,12 @@ describe('ExternalPluginInstallDialog', () => {
     expect(purposeSummary.textContent).toContain('permissions the plugin may ask');
     expect(purposeSummary.textContent).toContain('declared external destinations');
     expect(purposeSummary.textContent).toContain('Review carefully');
+    const purposeCards = purposeSummary.querySelectorAll(':scope > div');
+    expect(purposeCards[0].textContent).toContain('Network rules');
+    expect(purposeCards[0].textContent).toContain('Review carefully');
+    expect(purposeCards[1].textContent).toContain('Permissions');
     expect(document.body.textContent).toContain('Installation grants no permissions');
-    const permissionDisclosure = document.querySelector<HTMLDetailsElement>('details:not([data-plugin-technical-details])');
+    const permissionDisclosure = document.querySelector<HTMLDetailsElement>('[data-external-plugin-security-declarations] > details');
     expect(permissionDisclosure?.open).toBe(false);
     expect(permissionDisclosure?.querySelector('summary')?.textContent).toContain('Workspace read');
     expect(permissionDisclosure?.querySelector('summary')?.textContent).not.toContain('workspace.read');
@@ -586,6 +602,9 @@ describe('ExternalPluginInstallDialog', () => {
     if (approvalState === 'policy_blocked') {
       expect(document.body.textContent).toContain('Managed by policy');
       expect(document.body.textContent).toContain('enterprise_source_policy');
+      const blockedTechnicalDetails = document.querySelector<HTMLDetailsElement>('[role="alert"] details');
+      expect(blockedTechnicalDetails?.open).toBe(false);
+      expect(blockedTechnicalDetails?.querySelector('summary')?.textContent).not.toContain('enterprise_source_policy');
     }
     expect(props.onCommit).not.toHaveBeenCalled();
   });
