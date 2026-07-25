@@ -17,6 +17,7 @@ import {
 import type { PluginConfirmationIntent, PluginSurfaceHost } from '@floegence/redevplugin-ui';
 
 import { I18nProvider, SUPPORTED_LOCALES, type RedevenLocale } from '../i18n';
+import { loadEnvAppDictionary } from '../i18n/locales';
 import { REDEVEN_LANGUAGE_PREFERENCE_STORAGE_KEY } from '../i18n/storageKey';
 import { redevenWorkbenchWidgets } from '../workbench/redevenWorkbenchWidgets';
 import { ActivityPluginSurfaceWindow } from './ActivityPluginSurfaceWindow';
@@ -217,8 +218,9 @@ function mountPluginCenter(): HTMLElement {
   return host;
 }
 
-function mountLocalizedPluginCenter(locale: RedevenLocale): HTMLElement {
+async function mountLocalizedPluginCenter(locale: RedevenLocale): Promise<HTMLElement> {
   localStorage.setItem(REDEVEN_LANGUAGE_PREFERENCE_STORAGE_KEY, locale);
+  await loadEnvAppDictionary(locale);
   const host = fixedHost();
   const localizedProjection: PluginInventoryProjection = {
     items: [{
@@ -634,8 +636,7 @@ describe('plugin management browser geometry and interaction', () => {
     'keeps the 320 px Plugin Center contained for %s long copy',
     async (locale) => {
       await page.viewport(320, 720);
-      const host = mountLocalizedPluginCenter(locale);
-      await settle();
+      const host = await mountLocalizedPluginCenter(locale);
       await settle();
       const view = host.querySelector<HTMLElement>('[data-plugin-center-view]')!;
       expect(view).not.toBeNull();
