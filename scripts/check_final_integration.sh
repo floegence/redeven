@@ -74,7 +74,7 @@ check_shell_syntax() {
   bash -n scripts/build_desktop_bundled_runtime.sh
   bash -n scripts/build_desktop_bundled_agent.sh
   bash -n scripts/check_desktop.sh
-  bash -n scripts/test_dev_desktop_process_ownership.sh
+  bash -n scripts/check_desktop_electron_test_runtime.sh
   bash -n scripts/check_docker_runtime_e2e.sh
   bash -n scripts/check_final_integration.sh
   bash -n scripts/check_gateway_protocol_contract.sh

@@ -49,7 +49,6 @@ main() {
   ui_pkg_log "Checking Redeven Desktop package..."
   ui_pkg_log "MODE: $mode"
   ui_pkg_log "ROOT_DIR: $ROOT_DIR"
-  bash "$SCRIPT_DIR/test_dev_desktop_process_ownership.sh"
 
   (
     cd "$dir"
@@ -64,6 +63,7 @@ main() {
     # commits stay fast, while the focused Runtime compatibility matrix always
     # runs because it protects the open boundary.
     if [ "$mode" = "full" ]; then
+      "$SCRIPT_DIR/check_desktop_electron_test_runtime.sh" "$dir"
       npm run test
     fi
     npm run build

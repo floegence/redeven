@@ -35,8 +35,6 @@ function getElectronRuntimeLaunch(
 ): { command: string; args: string[] } {
   const isolatedProfileArg = `--user-data-dir=${userDataDir}`;
   const isolatedRuntimeArgs = [
-    '--headless',
-    '--disable-gpu',
     isolatedProfileArg,
     `${electronRuntimeOwnerSwitch}=${ownerMarker}`,
   ];
@@ -272,8 +270,6 @@ describe('desktop preload runtime', () => {
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
-        '--headless',
-        '--disable-gpu',
         '--user-data-dir=/tmp/runtime-profile',
         '--redeven-electron-integration-test=owner-a',
         'runtime.js',
@@ -289,8 +285,6 @@ describe('desktop preload runtime', () => {
         'electron',
         '--no-sandbox',
         '--disable-setuid-sandbox',
-        '--headless',
-        '--disable-gpu',
         '--user-data-dir=/tmp/runtime-profile',
         '--redeven-electron-integration-test=owner-b',
         'runtime.js',
@@ -302,8 +296,6 @@ describe('desktop preload runtime', () => {
     expect(getElectronRuntimeLaunch('darwin', 'electron', 'runtime.js', false, '/tmp/runtime-profile', 'owner-c')).toEqual({
       command: 'electron',
       args: [
-        '--headless',
-        '--disable-gpu',
         '--user-data-dir=/tmp/runtime-profile',
         '--redeven-electron-integration-test=owner-c',
         'runtime.js',
@@ -477,6 +469,9 @@ function createBrowserWindow() {
     },
   });
 }
+
+app.commandLine.appendSwitch('headless');
+app.commandLine.appendSwitch('disable-gpu');
 
 app.whenReady().then(async () => {
   try {
