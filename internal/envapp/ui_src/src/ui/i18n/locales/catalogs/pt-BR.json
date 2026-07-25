@@ -4352,8 +4352,8 @@
         "intents": "Intenções",
         "surfaces": "Interfaces",
         "declaredAccess": "Acesso declarado",
-        "declaredAccessGuidance": "A instalação não concede permissões e mantém o plugin desativado. Revise o que ele poderá solicitar após ser ativado, especialmente capacidades, código dos processos auxiliares do plugin, conexões externas, segredos e operações de gravação.",
-        "noDeclaredAccess": "Este pacote não declara recursos nem acessos de plugin.",
+        "declaredAccessGuidance": "A instalação não concede permissões e mantém o plugin desativado. Revise o que ele poderá solicitar após ser ativado, especialmente código dos processos auxiliares do plugin, conexões externas, segredos e operações de gravação.",
+        "noDeclaredAccess": "Este pacote não declara capacidades nem acessos de plugin.",
         "reviewCarefully": "Revisar com atenção",
         "declaredCapability": "Capacidade declarada",
         "purpose": {
