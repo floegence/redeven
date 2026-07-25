@@ -169,6 +169,21 @@ update eligibility, but signature status never grants permissions. Redeven does
 not add a new official key, signing ledger, or authorization workflow; the
 existing official release-ref verification remains unchanged.
 
+## Capability confirmation plans
+
+ReDevPlugin validates a capability preflight result against the signed
+capability response schema before it becomes a confirmation plan. A validated
+ordinary domain object may be displayed and included in the exact plan hash.
+Values in the reserved `redevplugin.capability.risk_plan.*` namespace must match
+the strict v1 risk-plan contract; an unknown or malformed reserved version fails
+closed instead of falling back to a generic object.
+
+Redeven renders the validated plan as review context only. It does not parse the
+plan to mint authority or treat visible content as proof that an operation was
+approved. The decision remains bound to the exact queue entry, request hash,
+plan hash, confirmation token, plugin, capability method, and owner session.
+Replacing or replaying any of those values requires a new confirmation.
+
 ## Runtime trust
 
 Runtime descriptors bind version, target, IPC, WASM ABI, and artifact hash.
@@ -219,3 +234,5 @@ tokens, weaken route policy, edit opaque state, or replace released brokers.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts:1` - Reads grants and policies and submits revision-fenced permission mutations through the released client.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginInventoryProjection.ts:1` - Keeps grants, allowlist caps, denied methods, and required-to-open methods distinct.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/ExternalPluginInstallDialog.tsx:1` - Presents immutable source, trust, security, and confirmation evidence before commit.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginConfirmationQueue.test.tsx:211` - Proves strict risk-plan rendering and complete validated Containers domain-plan review without granting authority from display content.
+- `redeven:internal/redevpluginintegration/containers_capability_test.go:78` - Proves Containers preflight output satisfies the released capability response contract before confirmation.

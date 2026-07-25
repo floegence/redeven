@@ -47,8 +47,8 @@ importers:
         specifier: ^0.27.0
         version: 0.27.0
       '@floegence/redevplugin-ui':
-        specifier: 0.6.16
-        version: 0.6.16
+        specifier: 0.6.17
+        version: 0.6.17
       '@fontsource/iosevka':
         specifier: ^5.2.5
         version: 5.2.5
@@ -392,11 +392,11 @@ packages:
     resolution: {integrity: sha512-iSKC7vQUMVzYOWbgNGFo+Hz4rTOuqCn+UGRj2lLiuT5vBqXo1GwImMf7+1h8GaKrahAv9t3EtiD4TglCwwTjhQ==}
     engines: {node: '>=24.0.0'}
 
-  '@floegence/redevplugin-contracts@0.6.16':
-    resolution: {integrity: sha512-nmCfyzxOIVjfg8Qwx1bAqrKr0ZvsFQfZ3iSKxkVOszi9cLstbKEz16BItqkF5Anniw8EGlLFUzdVFh1wv5WQjQ==}
+  '@floegence/redevplugin-contracts@0.6.17':
+    resolution: {integrity: sha512-gFOcQomTLftVIeqrJ1p6chBP98ZH/5grgV9SSEJiZaIuyTXyKZV0NtxQQf546xZSqYo59yeLi3is1DB7U44qaw==}
 
-  '@floegence/redevplugin-ui@0.6.16':
-    resolution: {integrity: sha512-okhJu4snJdOQNQjzmUOQRkYYw7yvKJZ+MMX64L5Iecqzm8GaX6Gp3tMaX2VMieKddya5b7OIsLdjeLtVVckrpw==}
+  '@floegence/redevplugin-ui@0.6.17':
+    resolution: {integrity: sha512-LOJI4nYUdr7WxxMU1JzbDywkYrRnGnmjOsCOAhjzJl1WrhfTb/g0uyN96cqirQxV//exdD4yhSmRVS6/ZfBtGw==}
 
   '@fontsource/iosevka@5.2.5':
     resolution: {integrity: sha512-Zv/UHJodDug1LcnWv2u2+GPp3oWP3U6Xp16cJOsqqZQNsCu8sA/ttT331N0NypxBZ+7c8szlSRlYDcy9liZ8pw==}
@@ -2893,11 +2893,11 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@floegence/redevplugin-contracts@0.6.16': {}
+  '@floegence/redevplugin-contracts@0.6.17': {}
 
-  '@floegence/redevplugin-ui@0.6.16':
+  '@floegence/redevplugin-ui@0.6.17':
     dependencies:
-      '@floegence/redevplugin-contracts': 0.6.16
+      '@floegence/redevplugin-contracts': 0.6.17
 
   '@fontsource/iosevka@5.2.5': {}
 
