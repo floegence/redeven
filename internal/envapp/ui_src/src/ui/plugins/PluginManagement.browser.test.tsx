@@ -678,6 +678,22 @@ describe('plugin management browser geometry and interaction', () => {
     expect(document.activeElement).toBe(back);
   });
 
+  it('moves desktop keyboard focus into details for shell navigation requests', async () => {
+    await page.viewport(1440, 900);
+    const navigation = mountPluginCenterNavigation();
+    const staleTrigger = document.createElement('button');
+    staleTrigger.textContent = 'View issue';
+    document.body.append(staleTrigger);
+    staleTrigger.focus();
+    expect(document.activeElement).toBe(staleTrigger);
+
+    navigation.openDetails('instance:containers');
+    await settle();
+    const heading = navigation.host.querySelector<HTMLHeadingElement>('[data-plugin-center-detail-heading]')!;
+    expect(heading.textContent).toBe('Containers');
+    expect(document.activeElement).toBe(heading);
+  });
+
   it.each(viewportCases)('keeps the external install source step contained at $width px', async (viewport) => {
     await page.viewport(viewport.width, viewport.height);
     mountExternalDialog();

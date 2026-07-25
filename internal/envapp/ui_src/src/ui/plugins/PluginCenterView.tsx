@@ -50,6 +50,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   let commandController: AbortController | undefined;
   let pluginCenterPanelRef: HTMLDivElement | undefined;
   let mobileDetailBackButton: HTMLButtonElement | undefined;
+  let detailHeadingRef: HTMLHeadingElement | undefined;
   let mobileDetailReturnTarget: HTMLButtonElement | undefined;
   let handledDetailFocusRequest: number | undefined;
 
@@ -100,6 +101,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
             pluginCenterPanelRef?.querySelectorAll<HTMLButtonElement>('[data-plugin-center-item]') ?? [],
           ).find((button) => button.dataset.pluginCenterItem === requestedItem.inventoryKey);
           if (window.innerWidth < 640) mobileDetailBackButton?.focus({ preventScroll: true });
+          else detailHeadingRef?.focus({ preventScroll: true });
         });
       }
     }
@@ -281,6 +283,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
           item={selectedItem()}
           mobileOpen={mobileDetailOpen()}
           mobileBackRef={(element) => { mobileDetailBackButton = element; }}
+          detailHeadingRef={(element) => { detailHeadingRef = element; }}
           onMobileBack={closeMobileDetails}
           canManage={canManage()}
           canOpenSurfaces={canOpenSurfaces()}
@@ -422,6 +425,7 @@ export function PluginCenterDetails(props: {
   item?: PluginInventoryItem;
   mobileOpen?: boolean;
   mobileBackRef?: (element: HTMLButtonElement) => void;
+  detailHeadingRef?: (element: HTMLHeadingElement) => void;
   onMobileBack?: () => void;
   canManage: boolean;
   canOpenSurfaces: boolean;
@@ -459,7 +463,7 @@ export function PluginCenterDetails(props: {
               <PluginIcon item={item()} size="lg" />
               <div class="min-w-0">
                 <div class="flex flex-wrap items-center gap-2">
-                  <h2 class="truncate text-xl font-semibold">{item().displayName}</h2>
+                  <h2 ref={props.detailHeadingRef} tabIndex={-1} data-plugin-center-detail-heading class="truncate text-xl font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{item().displayName}</h2>
                   <TrustBadge item={item()} />
                   <span class={statusPillClass(item())}>{statusLabel(item(), i18n)}</span>
                 </div>
@@ -568,8 +572,13 @@ function PluginPermissionInventory(props: {
                 const granted = () => permission.granted && !permission.deniedByGrant;
                 const disabled = () => props.commandPending || (permission.grantBlockedByPolicy && !permission.granted);
                 const permissionName = () => permission.group === 'other'
-                  ? permission.permissionID
+                  ? humanizePermissionIdentifier(permission.permissionID)
                   : permissionLabel(permission.group, i18n);
+                const disabledReason = () => permission.grantBlockedByPolicy && !permission.granted
+                  ? i18n.t('uiCopy.plugin.permissionDisabledByPolicy')
+                  : props.commandPending
+                    ? i18n.t('uiCopy.plugin.permissionChangeInProgress')
+                    : undefined;
                 return (
                   <div class="py-3" data-plugin-permission={permission.permissionID}>
                     <div class="flex items-start justify-between gap-4">
@@ -581,14 +590,36 @@ function PluginPermissionInventory(props: {
                               {i18n.t('uiCopy.plugin.requiredToOpen')}
                             </span>
                           </Show>
+                          <Show when={!permission.requiredToOpen}>
+                            <span class="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                              {i18n.t('uiCopy.plugin.optionalPermission')}
+                            </span>
+                          </Show>
                           <Show when={permission.blockedByPolicy}>
                             <span class="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
                               {i18n.t('uiCopy.plugin.managedByPolicy')}
                             </span>
                           </Show>
+                          <span class="rounded-full border px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                            {effective() ? i18n.t('uiCopy.plugin.permissionGranted') : i18n.t('uiCopy.plugin.permissionNotGranted')}
+                          </span>
                         </div>
                         <p class="mt-1 text-xs leading-5 text-muted-foreground">{permissionDescription(permission.group, i18n)}</p>
-                        <code class="mt-1 block text-[11px] text-muted-foreground">{permission.permissionID}</code>
+                        <Show when={disabledReason()}>
+                          {(reason) => <p class="mt-1 text-xs font-medium text-[var(--redeven-status-warning-foreground)]">{reason()}</p>}
+                        </Show>
+                        <details class="mt-1 text-xs text-muted-foreground" data-plugin-permission-technical-details>
+                          <summary class="min-h-8 cursor-pointer py-1 font-medium text-foreground">{i18n.t('uiCopy.plugin.technicalDetails')}</summary>
+                          <code class="mt-1 block break-all text-[11px]">{permission.permissionID}</code>
+                          <Show when={permission.methods.length > 0}>
+                            <div class="mt-2">
+                              <div class="text-[10px] font-semibold uppercase">{i18n.t('uiCopy.plugin.external.methods')}</div>
+                              <For each={permission.methods}>
+                                {(method) => <code class="mt-1 block break-all text-[11px]">{method}</code>}
+                              </For>
+                            </div>
+                          </Show>
+                        </details>
                       </div>
                       <Show
                         when={props.canManage}
@@ -630,7 +661,7 @@ function PluginPermissionInventory(props: {
               const permissionName = () => {
                 const current = permission();
                 return !current || current.group === 'other'
-                  ? pending().permissionID
+                  ? humanizePermissionIdentifier(pending().permissionID)
                   : permissionLabel(current.group, i18n);
               };
               return (
@@ -751,6 +782,16 @@ function pluginSourceEvidence(item: PluginInventoryItem): readonly string[] {
     ].filter(Boolean);
   }
   return [provenance.upload_id];
+}
+
+function humanizePermissionIdentifier(permissionID: string): string {
+  const normalized = permissionID
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[._:/@-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!normalized) return permissionID;
+  return normalized.charAt(0).toLocaleUpperCase() + normalized.slice(1);
 }
 
 function permissionLabel(group: 'read' | 'execute' | 'delete' | 'images_write' | 'other', i18n: I18nHelpers): string {

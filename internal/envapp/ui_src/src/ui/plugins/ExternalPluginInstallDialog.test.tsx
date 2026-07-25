@@ -2,7 +2,7 @@
 
 import { render } from 'solid-js/web';
 import type { JSX } from 'solid-js';
-import { PluginTransportError } from '@floegence/redevplugin-ui';
+import { PluginPlatformRequestError, PluginTransportError } from '@floegence/redevplugin-ui';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ExternalPluginInstallDialog } from './ExternalPluginInstallDialog';
@@ -265,7 +265,7 @@ describe('ExternalPluginInstallDialog', () => {
     packageURL.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
     expect(packageURL.getAttribute('aria-invalid')).toBe('true');
     expect(button('Review package').disabled).toBe(true);
-    expect(document.body.textContent).toContain('Check the source and try again');
+    expect(document.body.textContent).toContain('Enter a valid HTTPS package URL');
 
     button('GitHub').click();
     const githubURL = inputWithPlaceholder('https://github.com/owner/repository');
@@ -290,6 +290,39 @@ describe('ExternalPluginInstallDialog', () => {
       tag: 'v1.2.3',
       intent: { action: 'install' },
     }, expect.any(AbortSignal));
+  });
+
+  it.each([
+    [
+      new PluginPlatformRequestError(
+        'PLUGIN_PACKAGE_INVALID',
+        'Package at https://user:secret@plugins.example.com/bad.redevplugin?token=top-secret#fragment is invalid',
+      ),
+      'PLUGIN_PACKAGE_INVALID',
+      'Use a valid, compatible ReDevPlugin package',
+    ],
+    [
+      new PluginPlatformRequestError('PLUGIN_RELEASE_REF_POLICY_DENIED', 'This release source is blocked by policy'),
+      'PLUGIN_RELEASE_REF_POLICY_DENIED',
+      'conflicts with host trust policy',
+    ],
+    [
+      new PluginTransportError('Plugin package request failed', new TypeError('offline')),
+      undefined,
+      'Check the network connection and source availability',
+    ],
+  ] as const)('preserves safe inspection error evidence and gives a recovery action', async (inspectionError, code, recovery) => {
+    renderDialog({ onInspect: vi.fn(async () => { throw inspectionError; }) });
+    typeInto(inputWithPlaceholder('https://example.com/plugin.redevplugin'), 'https://plugins.example.com/toolbox.redevplugin');
+    button('Review package').click();
+    await flush();
+
+    const copy = document.body.textContent ?? '';
+    if (code) expect(copy).toContain(code);
+    expect(copy).toContain(recovery);
+    expect(copy).not.toContain('user:secret');
+    expect(copy).not.toContain('top-secret');
+    expect(copy).not.toContain('#fragment');
   });
 
   it('requires a selected local package and sends the exact File for inspection', async () => {
@@ -500,6 +533,38 @@ describe('ExternalPluginInstallDialog', () => {
     expect(copy).toContain('Changed');
     expect(copy).toContain('Removed');
     expect(copy).toContain('Previous');
+  });
+
+  it('explains declared capability purposes before collapsed technical evidence', async () => {
+    const inspected = inspection('absent');
+    inspected.security_summary = {
+      ...inspected.security_summary,
+      permissions: [{ permission_id: 'workspace.read', methods: ['workspace.list'] }],
+      network: [{
+        connector_id: 'github-api',
+        transport: 'http',
+        scope: 'user',
+        destinations: ['api.github.com:443'],
+        auth_declared: true,
+        tls_declared: true,
+        method_access: [{ method: 'github.repositories', operations: ['http'], http_methods: ['GET'] }],
+      }],
+    };
+    renderDialog({ onInspect: vi.fn(async () => inspected) });
+    typeInto(inputWithPlaceholder('https://example.com/plugin.redevplugin'), 'https://plugins.example.com/toolbox.redevplugin');
+    button('Review package').click();
+    await flush();
+
+    const purposeSummary = document.querySelector<HTMLElement>('[data-external-plugin-purpose-summary]')!;
+    expect(purposeSummary.textContent).toContain('permissions the plugin may ask');
+    expect(purposeSummary.textContent).toContain('declared external destinations');
+    expect(purposeSummary.textContent).toContain('Review carefully');
+    expect(document.body.textContent).toContain('Installation grants no permissions');
+    const permissionDisclosure = document.querySelector<HTMLDetailsElement>('details:not([data-plugin-technical-details])');
+    expect(permissionDisclosure?.open).toBe(false);
+    expect(permissionDisclosure?.querySelector('summary')?.textContent).toContain('Workspace read');
+    expect(permissionDisclosure?.querySelector('summary')?.textContent).not.toContain('workspace.read');
+    expect(permissionDisclosure?.querySelector('code')?.textContent).toBe('workspace.read');
   });
 
   it.each([
