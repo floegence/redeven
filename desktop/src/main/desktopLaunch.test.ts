@@ -60,6 +60,19 @@ describe('desktopLaunch', () => {
     expect(() => buildDesktopRuntimeArgs(staleReview)).toThrow('Review network exposure');
   });
 
+  it('still rejects a configured-but-empty password for network access', () => {
+    const environment = testLocalEnvironment({
+      access: testLocalAccess({
+        local_ui_bind: '0.0.0.0:24000',
+        local_ui_password: '',
+        local_ui_password_configured: true,
+        plaintext_network_exposure_acknowledgement: { version: 1, bind: '0.0.0.0:24000' },
+      }),
+    });
+
+    expect(() => buildDesktopRuntimeArgs(environment)).toThrow('requires a configured password');
+  });
+
   it('adds one-shot bootstrap metadata and a private stdin envelope to the spawn plan', () => {
     const environment = testProviderBoundLocalEnvironment(
       'https://redeven.test',
@@ -220,5 +233,19 @@ describe('desktopLaunch', () => {
       stateDir: '/Users/tester/.redeven/local-environment',
       runtimeControlSocket: '/Users/tester/.redeven/local-environment/runtime/control.sock',
     }));
+  });
+
+  it('omits a stale configured-but-empty loopback password from the runtime envelope', () => {
+    const environment = testLocalEnvironment({
+      access: testLocalAccess({
+        local_ui_bind: '127.0.0.1:0',
+        local_ui_password: '',
+        local_ui_password_configured: true,
+      }),
+    });
+
+    const plan = buildDesktopRuntimeLaunchPlan(environment, { HOME: '/Users/tester' });
+
+    expect(JSON.parse(plan.startup_secrets_stdin)).toEqual({ version: 1 });
   });
 });

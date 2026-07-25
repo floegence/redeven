@@ -153,8 +153,9 @@ function buildDesktopRuntimePlan(
     local_ui_password?: string;
     bootstrap_ticket?: string;
   } = { version: 1 };
-  if (access.local_ui_password_configured) {
-    envelope.local_ui_password = String(access.local_ui_password ?? '');
+  const localUIPassword = String(access.local_ui_password ?? '');
+  if (access.local_ui_password_configured && localUIPassword !== '') {
+    envelope.local_ui_password = localUIPassword;
   }
   if (bootstrap && String(bootstrap.bootstrap_ticket ?? '').trim() !== '') {
     envelope.bootstrap_ticket = String(bootstrap.bootstrap_ticket);
