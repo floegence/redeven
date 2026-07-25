@@ -43,17 +43,12 @@ Windows process tree while its spawned leader remains addressable. Timeout,
 output overflow, and POSIX abnormal-close cleanup target only that spawned group
 and wait for it to drain. An unexplained external
 `SIGKILL` remains a gate failure and is never converted to success by retry or
-name-based process substitution. Dev Desktop launches use a distinct
-user-data directory, serialized transition lock, and atomic owner record in the
-current worktree's Git admin directory. Stop and force-stop authority requires
-the exact recorded PID and random launch marker to match again before each signal;
-signal failure or a process that remains alive blocks the next launch. Application names,
-bundle ids, generic Electron commands, working directories, and other
-worktrees are never discovery or termination authority. A fast simulated shell
-contract covers stale records, PID reuse, marker changes, and TERM/KILL ordering
-without touching real processes. A live child whose expected marker cannot be
-verified creates a worktree launch block rather than signal authority; the next
-transition remains blocked until that exact PID exits or exposes the marker.
+name-based process substitution. Before real Electron coverage, the full gate
+runs a non-mutating, non-interactive execution preflight against the exact npm
+Electron binary. Signal termination or macOS AMFI rejection fails as an explicit
+environment error. Tests and gates never sign Electron, use developer signing
+identities, or mutate `node_modules` to change the host trust decision. These
+test-runtime rules do not change Dev Desktop launch or shutdown behavior.
 
 ## Documentation and generated assets
 
@@ -218,7 +213,7 @@ not become a fallback, shim, or local artifact path.
 - `redeven:.githooks/pre-commit:1` - Defines the fast staged gate.
 - `redeven:.githooks/pre-push:1` - Binds full validation to the exact main push.
 - `redeven:scripts/check_final_integration.sh:1` - Defines the complete local integration gate.
-- `redeven:scripts/test_dev_desktop_process_ownership.sh:1` - Proves worktree-scoped Dev Desktop signal authority without inspecting real processes.
+- `redeven:scripts/check_desktop_electron_test_runtime.sh:1` - Fails closed when the exact npm Electron runtime cannot execute without modifying host trust.
 - `redeven:desktop/src/build/desktopPreloadRuntime.test.ts:1` - Runs real Electron preload bridges in isolated working and user-data directories.
 - `redeven:scripts/check_plugin_integration.sh:1` - Defines focused ReDevPlugin integration coverage.
 - `redeven:scripts/check_redevplugin_dependency_boundary.sh:1` - Rejects maintained local source wiring and fails closed on scan errors.
