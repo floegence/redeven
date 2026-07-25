@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const FLOE_WEBAPP_DEPENDENCIES = [
+  '@floegence/floe-webapp-boot',
   '@floegence/floe-webapp-core',
   '@floegence/floe-webapp-protocol',
 ] as const;
@@ -73,7 +74,7 @@ function expectedTarballUrl(packageName: string, version: string): string {
 }
 
 describe('published npm dependency policy', () => {
-  it('keeps floe-webapp core and protocol aligned to the same released version', () => {
+  it('keeps floe-webapp boot, core, and protocol aligned to the same released version', () => {
     const dependencies = readDependencySpecifiers();
     const versions = FLOE_WEBAPP_DEPENDENCIES.map((dependencyName) =>
       extractVersionSpecifier(getDependencySpecifier(dependencies, dependencyName)),
