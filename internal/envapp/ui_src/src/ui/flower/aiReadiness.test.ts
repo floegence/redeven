@@ -389,6 +389,95 @@ describe('createAIReadinessController', () => {
     controller.dispose();
   });
 
+  it('pauses an in-flight generation and prevents its late result from scheduling polls', async () => {
+    const firstResponse = deferred<AIReadinessSnapshot>();
+    const request = vi.fn()
+      .mockImplementationOnce(() => firstResponse.promise)
+      .mockResolvedValue(ready());
+    const controller = createAIReadinessController({
+      request,
+      visibilitySource: null,
+      foregroundDelayMs: 10,
+      autoStart: false,
+      initialPaused: true,
+    });
+
+    const firstRefresh = controller.resume();
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(controller.loading()).toBe(true);
+
+    controller.pause();
+    expect(controller.loading()).toBe(false);
+    expect(controller.nextCheckAt()).toBeNull();
+    expect(controller.snapshot().state).toBe('unavailable');
+    await controller.refresh();
+    await controller.retry();
+    expect(request).toHaveBeenCalledTimes(1);
+
+    firstResponse.resolve(inspecting());
+    await firstRefresh;
+    await vi.advanceTimersByTimeAsync(100);
+    await flushAsync();
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(controller.snapshot().state).toBe('unavailable');
+
+    await controller.resume();
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(controller.snapshot()).toEqual(ready());
+    controller.dispose();
+  });
+
+  it('blocks manual requests until an initially paused controller is resumed', async () => {
+    const request = vi.fn().mockResolvedValue(ready());
+    const controller = createAIReadinessController({
+      request,
+      visibilitySource: null,
+      initialPaused: true,
+    });
+
+    expect(controller.loading()).toBe(false);
+    await controller.refresh();
+    await controller.retry();
+    expect(request).not.toHaveBeenCalled();
+
+    await controller.resume();
+    await controller.resume();
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(controller.snapshot()).toEqual(ready());
+    controller.dispose();
+  });
+
+  it('clears a scheduled automatic retry while paused and resumes with one GET', async () => {
+    const request = vi.fn()
+      .mockResolvedValueOnce(busy())
+      .mockResolvedValue(ready());
+    const controller = createAIReadinessController({
+      request,
+      visibilitySource: null,
+      foregroundDelayMs: 10,
+      maxAutomaticRetries: 2,
+      initialPaused: true,
+    });
+    await controller.resume();
+    expect(controller.nextCheckAt()).toBe(Date.now() + 10);
+
+    controller.pause();
+    await vi.advanceTimersByTimeAsync(100);
+    await controller.retry();
+    expect(request.mock.calls).toEqual([
+      ['/_redeven_proxy/api/ai/readiness', { method: 'GET' }],
+    ]);
+    expect(controller.nextCheckAt()).toBeNull();
+
+    await controller.resume();
+    expect(request.mock.calls).toEqual([
+      ['/_redeven_proxy/api/ai/readiness', { method: 'GET' }],
+      ['/_redeven_proxy/api/ai/readiness', { method: 'GET' }],
+    ]);
+    expect(controller.snapshot()).toEqual(ready());
+    controller.dispose();
+  });
+
   it('stops timers, listeners, and late publications when disposed', async () => {
     const visibilitySource = new TestVisibilitySource();
     const response = deferred<AIReadinessSnapshot>();

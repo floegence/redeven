@@ -97,6 +97,18 @@ files, Settings, or any shared ancestor. Only the visible Flower placement may
 move or restore focus; a retained Activity placement cannot compete with the
 active Workbench placement.
 
+Env App begins readiness inspection only after the HTTP access status has been
+checked and access is granted. The readiness HTTP route remains available while
+the encrypted direct RPC transport connects, resumes, or reconnects, so
+readiness refresh must not wait for RPC or access-resume UI state. Initial lock
+and every later grant revocation pause the controller, invalidate in-flight
+publication, clear polling and automatic retry state, and reject manual refresh
+or retry without issuing HTTP requests. A later grant resumes exactly one fresh
+inspection. When a Runtime restart invalidates local access, the password gate
+replaces the recovery presentation while the existing Activity Flower component
+remains mounted and inert; a successful regrant may complete the prior failed
+recovery generation.
+
 Transient inspection waits briefly before presenting progress, does not invent
 a percentage, and shows the next bounded check without announcing a countdown
 every second. Automatic retries are limited to typed safe temporary or I/O
@@ -143,6 +155,7 @@ closed for unknown outcomes. Readiness history is not recovery authority.
 - `redeven:internal/codeapp/appserver/ai_readiness_test.go:78` - Covers unified unavailable responses, optional Settings projection, exact permission ordering, invalid leases, and secrets-only routes.
 - `redeven:internal/ai/rpc_readiness_test.go:15` - Covers dynamic recovery, generation lease counts, invalid leases, and concurrent connection cleanup.
 - `redeven:internal/envapp/ui_src/src/ui/flower/aiReadiness.ts:1` - Strictly normalizes the sanitized wire facts and owns bounded, permission-aware polling and retry state.
+- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx:1` - Verifies initial lock, grant, revocation, stable Activity ownership, and one fresh readiness request after local or remote regrant.
 - `redeven:internal/envapp/ui_src/src/ui/flower/AIReadinessBoundary.tsx:1` - Keeps maintenance presentation local to Flower with focus restoration and same-source diagnostics.
 - `redeven:internal/envapp/ui_src/src/ui/pages/settings/AIReadinessSettingsSection.tsx:1` - Groups store owners without claiming health for stores outside the readiness check.
 - `redeven:internal/envapp/ui_src/src/ui/flower/AIReadinessBoundary.browser.test.tsx:1` - Verifies narrow reflow, zoom, forced colors, reduced motion, overflow, and local interaction behavior in Chromium.

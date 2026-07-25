@@ -189,6 +189,33 @@ describe('createRuntimeReconnectController', () => {
     dispose();
   });
 
+  it('accepts a successful manual access regrant after an authentication failure', () => {
+    vi.useFakeTimers();
+    let controller!: RuntimeReconnectController;
+    const dispose = createRoot((disposeRoot) => {
+      controller = createRuntimeReconnectController({
+        enabled: () => true,
+        desktopTransport: () => null,
+        probeAvailability: async () => ({ status: 'online', access: 'ready' }),
+        reconnect: async () => undefined,
+        requestDesktopRecoveryNow: async () => false,
+      });
+      return disposeRoot;
+    });
+
+    controller.activateWaiting({
+      code: 'authentication_failed',
+      retryable: false,
+      technical_detail: 'The access grant expired.',
+    });
+    expect(controller.snapshot()).toMatchObject({ state: 'failed', secure_session: 'failed' });
+
+    controller.noteProtocolConnected();
+    controller.noteSecureSession('ready');
+    expect(controller.snapshot()).toMatchObject({ state: 'succeeded', phase: 'completed' });
+    dispose();
+  });
+
   it('hands exhausted Flowersec fast reconnect into the outer runtime probe loop', async () => {
     vi.useFakeTimers();
     const probeAvailability = vi.fn().mockResolvedValue({ status: 'offline', access: 'unknown' });

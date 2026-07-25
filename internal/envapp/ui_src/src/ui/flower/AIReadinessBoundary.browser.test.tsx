@@ -91,6 +91,8 @@ function mountHarness(
       setRetryPending(false);
       return next;
     },
+    pause: () => undefined,
+    resume: async () => snapshot(),
     dispose: () => undefined,
   };
   const host = document.createElement('div');

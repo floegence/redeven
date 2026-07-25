@@ -58,6 +58,8 @@ function mount(
     nextCheckAt: () => options.nextCheckAt ?? null,
     refresh: async () => current(),
     retry,
+    pause: vi.fn(),
+    resume: async () => current(),
     dispose: vi.fn(),
   };
   const openUpdate = vi.fn();
