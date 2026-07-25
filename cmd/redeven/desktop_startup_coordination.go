@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/redevpluginintegration"
 	"github.com/floegence/redeven/internal/runtimemanagement"
 	"github.com/floegence/redeven/internal/runtimeservice"
 )
@@ -19,6 +20,18 @@ const (
 
 func desktopLaunchReportEnabled(mode runMode, desktopManaged bool, reportPath string) bool {
 	return mode == runModeDesktop && desktopManaged && strings.TrimSpace(reportPath) != ""
+}
+
+func writeDesktopPluginStateRecoveryLaunchReport(
+	reportPath string,
+	plan redevpluginintegration.OwnerScopeRecoveryPlan,
+) error {
+	return writeDesktopLaunchReport(reportPath, desktopLaunchReport{
+		Status:              desktopLaunchStatusBlocked,
+		Code:                desktopLaunchCodePluginStateRecoveryRequired,
+		Message:             "Plugin state recovery requires explicit review.",
+		PluginStateRecovery: &plan,
+	})
 }
 
 func writeDesktopBlockedLaunchReport(

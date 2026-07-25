@@ -22,7 +22,6 @@ import (
 	"github.com/floegence/redevplugin/pkg/installstage"
 	rpobservability "github.com/floegence/redevplugin/pkg/observability"
 	"github.com/floegence/redevplugin/pkg/operation"
-	"github.com/floegence/redevplugin/pkg/ownerscope"
 	"github.com/floegence/redevplugin/pkg/plugindata"
 	"github.com/floegence/redevplugin/pkg/pluginpkg"
 	"github.com/floegence/redevplugin/pkg/registry"
@@ -82,15 +81,11 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 		return nil, err
 	}
 
-	root := filepath.Join(stateAbs, "apps", "redevplugin")
-	if err := os.MkdirAll(root, 0o700); err != nil {
-		return nil, err
-	}
-	generation, err := ownerscope.PrepareOwnerScopeGeneration(ctx, root)
+	generation, err := PrepareOwnerScopeGeneration(ctx, stateAbs)
 	if err != nil {
 		return nil, err
 	}
-	root = generation.Path
+	root := generation.Path
 	dbRoot := filepath.Join(root, "db")
 	if err := os.MkdirAll(dbRoot, 0o700); err != nil {
 		return nil, err

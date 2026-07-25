@@ -727,6 +727,8 @@
     "attention": "atención"
   },
   "issue": {
+    "pluginStateRecoveryTitle": "Revisar la recuperación del estado de los plugins",
+    "pluginStateRecoveryMessage": "Redeven ha detectado un estado de plugins copiado que debe conservarse en un archivo de recuperación antes de que Redeven pueda iniciarse de forma segura.",
     "remoteEnvironmentInvalidTitle": "Verifique el entorno URL",
     "remoteEnvironmentOpenTitle": "No se puede abrir ese entorno",
     "sshEnvironmentOpenTitle": "No se puede abrir ese entorno SSH",
@@ -742,6 +744,22 @@
     "startupInvalidTitle": "El inicio del entorno local necesita una configuración",
     "startupFailedTitle": "Error al iniciar el entorno local",
     "localEnvironmentAttentionTitle": "El entorno local necesita atención"
+  },
+  "pluginStateRecovery": {
+    "title": "Revisar la recuperación del estado de los plugins",
+    "summary": "Este estado de plugins se copió o restauró desde otra identidad del sistema de archivos. Redeven lo conservará para su recuperación y después iniciará una generación de plugins nueva y vacía.",
+    "archiveTitle": "Conservar el estado anterior",
+    "archiveBody": "Todo el estado de origen se trasladará a un archivo de recuperación inactivo.",
+    "freshTitle": "Empezar desde cero",
+    "freshBody": "Los plugins instalados, los permisos concedidos, los ajustes, los secretos y los datos almacenados del archivo no se activarán.",
+    "retentionTitle": "Conservar la evidencia de recuperación",
+    "retentionBody": "Redeven nunca elimina automáticamente el archivo de recuperación.",
+    "entriesLabel": "Entradas de origen",
+    "sizeLabel": "Bytes de origen",
+    "planLabel": "Plan de recuperación",
+    "confirm": "Archivar el estado y reiniciar",
+    "failed": "La recuperación del estado de los plugins ha fallado.",
+    "completed": "El estado de los plugins se ha archivado y el entorno local se ha reiniciado con una generación de plugins nueva."
   },
   "blockedPage": {
     "stateDirLockedAttachTitle": "Redeven ya se está iniciando en otro lugar",

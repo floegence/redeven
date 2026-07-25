@@ -1,13 +1,13 @@
 ---
 type: Architecture Contract
 title: Plugin platform integration
-description: Redeven mounts ReDevPlugin v0.6.15 and adds authenticated host modules, external-source policy, product placement, and business adapters.
+description: Redeven mounts ReDevPlugin v0.6.16 and adds authenticated host modules, copied-root recovery, external-source policy, product placement, and business adapters.
 tags: [architecture, plugins, local-ui, redevplugin]
-timestamp: 2026-07-24T00:00:00Z
+timestamp: 2026-07-25T00:00:00Z
 ---
 # Summary
 
-Redeven integrates ReDevPlugin `v0.6.15` through one Go Host, one canonical HTTP
+Redeven integrates ReDevPlugin `v0.6.16` through one Go Host, one canonical HTTP
 namespace, one Env App `PluginPlatformClient`, one shared surface scope, and the
 released ProcessManager over a verified Redeven-built Linux runtime. Redeven
 adds authenticated session mapping, public-source admission policy, product
@@ -38,6 +38,30 @@ surfaces, operations, streams, handles, confirmations, and tokens bind the full
 active owner-session, owner-user, owner-environment, and channel audience.
 Session close uses the released durable four-hash coordinator and authentication
 state is removed only after exact drain acknowledgement.
+
+## Copied owner-scope recovery
+
+Automatic owner-scope preparation remains the only normal startup path. When a
+supported copied root has a migration journal bound to another filesystem
+identity, Redeven invokes the released read-only recovery inspection only after
+normal preparation fails. Unknown, corrupt, ambiguous, tampered, unsupported,
+or future state still returns the original startup failure without a recovery
+proposal.
+
+An eligible Desktop startup report contains only the exact recovery-plan digest,
+root-identity digest, source-snapshot digest, source entry and byte counts, and
+retained-state flags. Desktop binds that proposal to the exact Local Environment
+and does not expose root or archive paths. Cancel performs no operation. Confirm
+runs the bundled `redeven plugin-state-recovery recover` command under the same
+Local Environment runtime lock and supplies the reviewed plan digest plus an
+explicit retained-archive/fresh-generation acknowledgement.
+
+The released recovery atomically retains the complete source tree as an inactive
+archive and commits a new empty active generation. Redeven verifies the returned
+plan, archive outcome, fresh generation, and restart reuse before opening stores.
+Archived plugins, grants, settings, secrets, and storage never become active. A
+stale plan triggers a new startup inspection and a new user review; it is never
+silently accepted or retried with broader authority.
 
 ## Package sources and lifecycle
 
@@ -83,7 +107,7 @@ user pin.
 ## Runtime and Containers
 
 The runtime module binds the canonical sibling executable, target, ReDevPlugin
-`0.6.15`, released Rust IPC and WASM ABI, exact product-build descriptor, lease
+`0.6.16`, released Rust IPC and WASM ABI, exact product-build descriptor, lease
 replay storage, and released limits. Linux runtime bytes are built with Rust
 1.88.0 from the attested package set and travel with SBOM, provenance, notices,
 and signature evidence. Missing, non-canonical, wrong-target, unsigned, or
@@ -149,7 +173,7 @@ disposal alone is not revocation evidence.
 # Boundaries
 
 Canonical ownership is defined by [ReDevPlugin host integration boundary](redevplugin-boundary.md).
-This concept owns only Redeven's concrete `v0.6.15` assembly.
+This concept owns only Redeven's concrete `v0.6.16` assembly.
 
 Manifest surfaces remain `view|command|background` with semantic roles. Activity,
 Workbench, window, widget, inventory key, navigation, settings, and product layout
@@ -158,6 +182,9 @@ never become manifest fields.
 # Evidence
 
 - `redeven:internal/redevpluginintegration/integration.go:1` - Opens Host modules and the canonical handler.
+- `redeven:internal/redevpluginintegration/owner_scope_recovery.go:1` - Projects released copied-root inspection and exact-plan recovery without editing opaque state.
+- `redeven:cmd/redeven/plugin_state_recovery.go:1` - Requires the Local Environment lock and explicit retained-archive confirmation.
+- `redeven:desktop/src/main/pluginStateRecovery.ts:1` - Validates the bundled recovery command result and preserves stale-plan outcomes.
 - `redeven:internal/redevpluginintegration/external_package_test.go:24` - Exercises upload inspect, confirmed commit, query, disabled state, and staged-artifact cleanup.
 - `redeven:spec/redevplugin/artifacts.go:1` - Binds the unsigned catalog package to the exact verified Containers release content.
 - `redeven:internal/redevpluginintegration/session_adapter.go:340` - Maps read and admin external-package actions to explicit product permissions.

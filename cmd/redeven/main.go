@@ -18,6 +18,7 @@ import (
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/localui"
 	"github.com/floegence/redeven/internal/lockfile"
+	"github.com/floegence/redeven/internal/redevpluginintegration"
 	"github.com/floegence/redeven/internal/runtimemanagement"
 	"github.com/floegence/redeven/internal/runtimepresentation"
 )
@@ -81,6 +82,8 @@ func (c *cli) run(args []string) int {
 		return c.desktopRuntimeStopCmd(args[1:])
 	case "desktop-model-source":
 		return c.desktopModelSourceCmd(args[1:])
+	case "plugin-state-recovery":
+		return c.pluginStateRecoveryCmd(args[1:])
 	case "env":
 		return c.envCmd(args[1:])
 	case "search":
@@ -736,6 +739,15 @@ func (c *cli) runCmd(args []string) int {
 		AccessGate: accessGate,
 	})
 	if err != nil {
+		var recoveryRequired *redevpluginintegration.OwnerScopeRecoveryRequiredError
+		if errors.As(err, &recoveryRequired) && desktopLaunchReportEnabled(mode, *desktopManaged, *startupReportFile) {
+			if reportErr := writeDesktopPluginStateRecoveryLaunchReport(*startupReportFile, recoveryRequired.Plan); reportErr != nil {
+				fmt.Fprintf(c.stderr, "failed to write desktop plugin state recovery report: %v\n", reportErr)
+				return 1
+			}
+			fmt.Fprintln(c.stderr, "plugin state recovery requires explicit review")
+			return 1
+		}
 		return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to init runtime: %v", err))
 	}
 	presentationRenderer.SetController(&runtimePresentationController{agent: a})

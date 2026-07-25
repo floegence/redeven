@@ -727,6 +727,8 @@
     "attention": "atenção"
   },
   "issue": {
+    "pluginStateRecoveryTitle": "Revisar a recuperação do estado dos plugins",
+    "pluginStateRecoveryMessage": "O Redeven encontrou um estado de plugins copiado que exige a retenção do estado anterior em um arquivo de recuperação inativo antes que a inicialização possa prosseguir com segurança.",
     "remoteEnvironmentInvalidTitle": "Verifique o ambiente URL",
     "remoteEnvironmentOpenTitle": "Não é possível abrir esse ambiente",
     "sshEnvironmentOpenTitle": "Não é possível abrir esse ambiente SSH",
@@ -742,6 +744,22 @@
     "startupInvalidTitle": "A inicialização do ambiente local precisa de uma configuração",
     "startupFailedTitle": "A inicialização do ambiente local falhou",
     "localEnvironmentAttentionTitle": "O ambiente local precisa de atenção"
+  },
+  "pluginStateRecovery": {
+    "title": "Revisar a recuperação do estado dos plugins",
+    "summary": "Este estado de plugins foi copiado ou restaurado a partir de outra identidade do sistema de arquivos. O Redeven o preservará em um arquivo de recuperação e, em seguida, iniciará com uma nova geração vazia de plugins.",
+    "archiveTitle": "Preservar o estado anterior",
+    "archiveBody": "Todo o estado de origem é movido para um arquivo de recuperação inativo e preservado.",
+    "freshTitle": "Começar do zero",
+    "freshBody": "Os plugins instalados, as concessões de acesso, as configurações, os segredos e os dados armazenados no arquivo de recuperação não serão ativados.",
+    "retentionTitle": "Preservar as evidências da recuperação",
+    "retentionBody": "O Redeven nunca exclui automaticamente o arquivo de recuperação preservado.",
+    "entriesLabel": "Entradas de origem",
+    "sizeLabel": "Bytes de origem",
+    "planLabel": "Plano de recuperação",
+    "confirm": "Arquivar o estado e reiniciar",
+    "failed": "Falha ao recuperar o estado dos plugins.",
+    "completed": "O estado dos plugins foi arquivado, e o ambiente local foi reiniciado com uma nova geração limpa de plugins."
   },
   "blockedPage": {
     "stateDirLockedAttachTitle": "Redeven já está iniciando em outro lugar",

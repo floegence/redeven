@@ -3,7 +3,7 @@ package redevpluginintegration
 import "testing"
 
 func TestOfficialRuntimeVersionMatchesReleasedPlatform(t *testing.T) {
-	if officialRuntimeVersion != "0.6.15" {
-		t.Fatalf("official runtime version = %q, want 0.6.15", officialRuntimeVersion)
+	if officialRuntimeVersion != "0.6.16" {
+		t.Fatalf("official runtime version = %q, want 0.6.16", officialRuntimeVersion)
 	}
 }

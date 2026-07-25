@@ -727,6 +727,8 @@
     "attention": "Aufmerksamkeit"
   },
   "issue": {
+    "pluginStateRecoveryTitle": "Wiederherstellung des Plugin-Zustands prüfen",
+    "pluginStateRecoveryMessage": "Redeven hat einen kopierten Plugin-Zustand gefunden. Für einen sicheren Start muss der vollständige Zustand in einem beibehaltenen Wiederherstellungsarchiv gesichert werden.",
     "remoteEnvironmentInvalidTitle": "Überprüfen Sie die Umgebung. URL",
     "remoteEnvironmentOpenTitle": "Diese Umgebung kann nicht geöffnet werden",
     "sshEnvironmentOpenTitle": "Die SSH-Umgebung kann nicht geöffnet werden",
@@ -742,6 +744,22 @@
     "startupInvalidTitle": "Für den Start der lokalen Umgebung ist eine Einstellung erforderlich",
     "startupFailedTitle": "Der Start der lokalen Umgebung ist fehlgeschlagen",
     "localEnvironmentAttentionTitle": "Die lokale Umwelt braucht Aufmerksamkeit"
+  },
+  "pluginStateRecovery": {
+    "title": "Wiederherstellung des Plugin-Zustands prüfen",
+    "summary": "Dieser Plugin-Zustand wurde aus einer Umgebung mit einer anderen Dateisystemidentität kopiert oder wiederhergestellt. Redeven sichert ihn in einem Wiederherstellungsarchiv und startet anschließend mit einer neuen, leeren Plugin-Generation.",
+    "archiveTitle": "Alten Plugin-Zustand aufbewahren",
+    "archiveBody": "Der vollständige ursprüngliche Plugin-Zustand wird in ein inaktives Wiederherstellungsarchiv verschoben.",
+    "freshTitle": "Neu beginnen",
+    "freshBody": "Installierte Plugins, erteilte Berechtigungen, Einstellungen, Secrets und gespeicherte Plugin-Daten aus dem Archiv werden nicht aktiviert.",
+    "retentionTitle": "Wiederherstellungsnachweis aufbewahren",
+    "retentionBody": "Redeven löscht das aufbewahrte Archiv niemals automatisch.",
+    "entriesLabel": "Einträge im Quellzustand",
+    "sizeLabel": "Größe des Quellzustands (Bytes)",
+    "planLabel": "Wiederherstellungsplan",
+    "confirm": "Plugin-Zustand archivieren und mit leerem Zustand neu starten",
+    "failed": "Die Wiederherstellung des Plugin-Zustands ist fehlgeschlagen.",
+    "completed": "Der Plugin-Zustand wurde archiviert und die lokale Umgebung mit einer neuen Plugin-Generation neu gestartet."
   },
   "blockedPage": {
     "stateDirLockedAttachTitle": "Redeven startet bereits an anderer Stelle",

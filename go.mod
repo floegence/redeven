@@ -8,13 +8,14 @@ require (
 	github.com/floegence/floeterm/terminal-go v0.6.3
 	github.com/floegence/floret v0.27.1
 	github.com/floegence/flowersec/flowersec-go v0.27.0
-	github.com/floegence/redevplugin v0.6.15
+	github.com/floegence/redevplugin v0.6.16
 	github.com/gorilla/websocket v1.5.3
 	github.com/openai/openai-go v1.12.0
 	github.com/shirou/gopsutil/v4 v4.25.12
 	golang.org/x/mod v0.37.0
 	golang.org/x/sys v0.46.0
 	golang.org/x/term v0.44.0
+	golang.org/x/text v0.40.0
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.53.0
 )
@@ -43,7 +44,6 @@ require (
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	golang.org/x/image v0.44.0 // indirect
 	golang.org/x/net v0.56.0 // indirect
-	golang.org/x/text v0.40.0 // indirect
 	modernc.org/libc v1.73.4 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
