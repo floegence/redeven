@@ -81,7 +81,7 @@ export function buildPluginPanelModel(
 ): PluginPanelModel {
   const tiles: PluginPanelTile[] = [
     { kind: 'open_center', id: 'plugin-center', label: 'Plugin Center' },
-    ...projection.items.map((item): PluginPanelTile => ({
+    ...projection.items.filter((item) => Boolean(item.pluginInstanceID)).map((item): PluginPanelTile => ({
       kind: 'plugin',
       item,
       action: options.canOpenSurfaces && item.lifecycleState === 'enabled' && item.defaultLaunchTarget ? 'open_surface' : 'open_details',

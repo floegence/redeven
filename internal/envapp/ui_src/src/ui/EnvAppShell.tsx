@@ -1051,6 +1051,7 @@ export function EnvAppShell() {
   const [settingsFocusSection, setSettingsFocusSection] = createSignal<EnvSettingsSection | null>(null);
   const [settingsOrigin, setSettingsOrigin] = createSignal<EnvSettingsOrigin>(null);
   const [pluginsPanelOpen, setPluginsPanelOpen] = createSignal(false);
+  const [pluginsPanelTrigger, setPluginsPanelTrigger] = createSignal<HTMLButtonElement | null>(null);
   const [pluginCenterSelectedInventoryKey, setPluginCenterSelectedInventoryKey] = createSignal<string | undefined>();
   const [pluginCenterFocusRequest, setPluginCenterFocusRequest] = createSignal(0);
   const [activityPluginWindows, setActivityPluginWindows] = createSignal<readonly ActivityPluginWindow[]>([]);
@@ -1258,23 +1259,23 @@ export function EnvAppShell() {
     }
     setPluginsPanelOpen(false);
     setPluginCenterSelectedInventoryKey(undefined);
-    if (target.preferredPlacement === 'workbench') {
+    if (currentTarget.preferredPlacement === 'workbench') {
       setViewMode('workbench', { surfaceId: lastActivitySurface() });
       const controller = await resolveWorkbenchPluginSurfaceController();
-      await closeMatchingActivityPluginWindows(target);
-      await controller.open(target);
+      await closeMatchingActivityPluginWindows(currentTarget);
+      await controller.open(currentTarget);
       return;
     }
     if (workbenchPluginSurfaceController) {
-      await workbenchPluginSurfaceController.close(target);
+      await workbenchPluginSurfaceController.close(currentTarget);
     }
     const staleActivityWindow = activityPluginWindows().find((window) => (
-      window.target().pluginInstanceID === target.pluginInstanceID
-      && window.target().surfaceID === target.surfaceID
-      && window.target().expectedManagementRevision !== target.expectedManagementRevision
+      window.target().pluginInstanceID === currentTarget.pluginInstanceID
+      && window.target().surfaceID === currentTarget.surfaceID
+      && window.target().expectedManagementRevision !== currentTarget.expectedManagementRevision
     ));
-    if (staleActivityWindow) await closeMatchingActivityPluginWindows(target);
-    const targetKey = pluginSurfaceTargetKey(target);
+    if (staleActivityWindow) await closeMatchingActivityPluginWindows(currentTarget);
+    const targetKey = pluginSurfaceTargetKey(currentTarget);
     const existingWindow = activityPluginWindows().find((window) => window.targetKey === targetKey);
     if (!existingWindow && activityPluginWindows().length >= MAX_ACTIVITY_PLUGIN_WINDOWS) {
       const leastRecentlyActive = activityPluginWindows()[0];
@@ -1285,12 +1286,12 @@ export function EnvAppShell() {
       const existing = windows.find((window) => window.targetKey === targetKey);
       if (existing) {
         existingInstanceID = existing.instanceID;
-        existing.setTarget({ ...target });
+        existing.setTarget({ ...currentTarget });
         return windows;
       }
       const instanceID = `activity_plugin_surface_${++nextActivityPluginWindowID}`;
       setActivityPluginFocusRequests((requests) => ({ ...requests, [instanceID]: 1 }));
-      return [...windows, createActivityPluginWindow(instanceID, targetKey, target)];
+      return [...windows, createActivityPluginWindow(instanceID, targetKey, currentTarget)];
     });
     if (existingInstanceID) {
       activatePluginSurfaceWindow(existingInstanceID);
@@ -3429,9 +3430,14 @@ export function EnvAppShell() {
         icon: Grid3x3,
         label: i18n.t('uiCopy.plugin.panelTitle'),
         collapseBehavior: 'preserve',
+        buttonRef: setPluginsPanelTrigger,
+        ariaExpanded: pluginsPanelOpen,
+        ariaControls: 'redeven-plugin-switcher',
+        ariaHasPopup: 'dialog',
         onClick: () => {
-          setPluginsPanelOpen((open) => !open);
-          void refetchPluginInventory();
+          const nextOpen = !pluginsPanelOpen();
+          setPluginsPanelOpen(nextOpen);
+          if (nextOpen) void refetchPluginInventory();
         },
     });
     if (canUseFlower()) {
@@ -4435,7 +4441,10 @@ export function EnvAppShell() {
       </Show>
       <Show when={pluginsPanelOpen()}>
         <PluginPanel
+          id="redeven-plugin-switcher"
           open
+          mobile={layout.isMobile()}
+          trigger={pluginsPanelTrigger()}
           model={pluginPanelModel()}
           onClose={() => setPluginsPanelOpen(false)}
           onOpenCenter={() => void openPluginCenter().catch(reportPluginNavigationFailure)}
@@ -4463,6 +4472,7 @@ export function EnvAppShell() {
               confirmationQueue: pluginConfirmationQueue,
               workbenchVisible: () => viewMode() === 'workbench',
               resolveTarget: resolveCurrentPluginSurfaceTarget,
+              onOpenPluginDetails: (inventoryKey) => void openPluginCenter(inventoryKey).catch(reportPluginNavigationFailure),
               onRetirementError: reportPluginSurfaceRetirementError,
             }}
             registerPluginSurfaceController={(controller) => {

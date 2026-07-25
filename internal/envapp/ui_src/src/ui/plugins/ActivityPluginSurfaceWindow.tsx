@@ -1,11 +1,13 @@
 import { useLayout } from '@floegence/floe-webapp-core';
-import { AlertTriangle } from '@floegence/floe-webapp-core/icons';
-import { Dialog } from '@floegence/floe-webapp-core/ui';
+import { AlertTriangle, Refresh } from '@floegence/floe-webapp-core/icons';
+import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
 import { Show, createEffect, createSignal, onCleanup, type JSX } from 'solid-js';
 
 import { useI18n } from '../i18n';
 import { PersistentFloatingWindow } from '../widgets/PersistentFloatingWindow';
 import { PluginSurfaceBody } from './PluginSurfaceFrame';
+import { isolateDocumentBranch } from './modalIsolation';
+import { PLUGIN_MOBILE_TOUCH_TARGET_CLASS } from './pluginPresentation';
 import type { PluginConfirmationQueue } from './PluginConfirmationQueue';
 import type { PluginSurfacePlacementCoordinator } from './pluginPlatform';
 import type { PluginSurfaceLaunchTarget } from './pluginTypes';
@@ -41,11 +43,17 @@ export function ActivityPluginSurfaceWindow(props: ActivityPluginSurfaceWindowPr
   const i18n = useI18n();
   const layout = useLayout();
   const [closing, setClosing] = createSignal(false);
+  const [closeQueued, setCloseQueued] = createSignal(false);
   const [closeFailed, setCloseFailed] = createSignal(false);
   const [endSessionConfirmationOpen, setEndSessionConfirmationOpen] = createSignal(false);
   const [endingSession, setEndingSession] = createSignal(false);
   const [surface, setSurface] = createSignal<HTMLElement | null>(null);
   let closeBody: (() => Promise<boolean>) | null = null;
+  let closeAttempt: Promise<void> | null = null;
+  let continueQueuedClose: (() => void) | null = null;
+  let settleQueuedClose: (() => void) | null = null;
+  let disposed = false;
+  let recoveryLayer: HTMLDivElement | undefined;
   let recoveryButton: HTMLButtonElement | undefined;
   const restoreFocus = typeof document !== 'undefined' && document.activeElement instanceof HTMLElement
     ? document.activeElement
@@ -59,21 +67,65 @@ export function ActivityPluginSurfaceWindow(props: ActivityPluginSurfaceWindowPr
   });
   const windowVisible = () => props.visible && (!layout.isMobile() || props.active);
 
-  const retire = async () => {
-    if (closing()) return;
-    if (!closeBody) return;
+  const retire = (): Promise<void> => {
+    if (closeAttempt) return closeAttempt;
     setClosing(true);
-    try {
-      if (await closeBody()) {
-        props.onClosed(props.instanceID);
-      } else {
-        setCloseFailed(true);
-      }
-    } finally {
-      setClosing(false);
-    }
+    setCloseQueued(!closeBody);
+    closeAttempt = new Promise<void>((resolve) => {
+      let settled = false;
+      const settle = () => {
+        if (settled) return;
+        settled = true;
+        continueQueuedClose = null;
+        settleQueuedClose = null;
+        closeAttempt = null;
+        setCloseQueued(false);
+        setClosing(false);
+        resolve();
+      };
+      settleQueuedClose = settle;
+      const run = async () => {
+        if (disposed) {
+          settle();
+          return;
+        }
+        const close = closeBody;
+        if (!close) {
+          setCloseQueued(true);
+          continueQueuedClose = () => { void run(); };
+          return;
+        }
+        continueQueuedClose = null;
+        setCloseQueued(false);
+        try {
+          const closed = await close();
+          if (disposed) return;
+          if (closed) {
+            props.onClosed(props.instanceID);
+          } else {
+            setCloseFailed(true);
+          }
+        } catch (error) {
+          setCloseFailed(true);
+          props.onRetirementError(error);
+        } finally {
+          settle();
+        }
+      };
+      void run();
+    });
+    return closeAttempt;
   };
   const requestClose = () => props.serializeClose ? props.serializeClose(retire) : retire();
+
+  const registerCloseBody = (close: (() => Promise<boolean>) | null) => {
+    closeBody = close;
+    if (close && continueQueuedClose) {
+      const continueClose = continueQueuedClose;
+      continueQueuedClose = null;
+      continueClose();
+    }
+  };
 
   props.registerRequestClose?.(props.instanceID, retire);
 
@@ -95,6 +147,7 @@ export function ActivityPluginSurfaceWindow(props: ActivityPluginSurfaceWindowPr
   }
 
   function handleKeyDown(event: KeyboardEvent) {
+    if (closeFailed()) return;
     if (!layout.isMobile() || !props.active) return;
     if (event.key === 'Escape') {
       event.preventDefault();
@@ -113,6 +166,32 @@ export function ActivityPluginSurfaceWindow(props: ActivityPluginSurfaceWindowPr
     if (focusable.length === 0) {
       event.preventDefault();
       windowSurface.focus();
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  function handleRecoveryKeyDown(event: KeyboardEvent) {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    if (event.key !== 'Tab' || !recoveryLayer) return;
+    const focusable = [...recoveryLayer.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)]
+      .filter((element) => !element.hidden && element.getAttribute('aria-hidden') !== 'true');
+    event.stopPropagation();
+    if (focusable.length === 0) {
+      event.preventDefault();
+      recoveryLayer.focus();
       return;
     }
     const first = focusable[0];
@@ -161,8 +240,27 @@ export function ActivityPluginSurfaceWindow(props: ActivityPluginSurfaceWindowPr
   });
 
   createEffect(() => {
-    if (!closeFailed() || !props.active) return;
+    const windowSurface = surface();
+    if (!windowSurface || !layout.isMobile() || !props.active || !windowVisible()) return;
+    const restoreIsolation = isolateDocumentBranch(windowSurface);
+    onCleanup(restoreIsolation);
+  });
+
+  createEffect(() => {
+    if (!closeFailed() || !props.active || !windowVisible()) return;
     queueMicrotask(() => recoveryButton?.focus());
+  });
+
+  createEffect(() => {
+    if (
+      !closeFailed()
+      || !props.active
+      || !windowVisible()
+      || endSessionConfirmationOpen()
+      || !recoveryLayer
+    ) return;
+    const restoreIsolation = isolateDocumentBranch(recoveryLayer);
+    onCleanup(restoreIsolation);
   });
 
   let handledFocusRequest = 0;
@@ -182,6 +280,8 @@ export function ActivityPluginSurfaceWindow(props: ActivityPluginSurfaceWindowPr
   });
 
   onCleanup(() => {
+    disposed = true;
+    settleQueuedClose?.();
     props.registerRequestClose?.(props.instanceID, null);
     bindSurface(null);
     if (props.active && restoreFocus?.isConnected) restoreFocus.focus();
@@ -213,7 +313,7 @@ export function ActivityPluginSurfaceWindow(props: ActivityPluginSurfaceWindowPr
         confirmationQueue={props.confirmationQueue}
         target={props.target}
         visible={windowVisible() && !closeFailed()}
-        registerClose={(close) => { closeBody = close; }}
+        registerClose={registerCloseBody}
         onInteraction={(event) => {
           if (event.kind === 'activation' || event.kind === 'focus' || event.kind === 'action') {
             props.onActivate(props.instanceID);
@@ -221,28 +321,62 @@ export function ActivityPluginSurfaceWindow(props: ActivityPluginSurfaceWindowPr
         }}
         onRetirementError={props.onRetirementError}
       />
+      <Show when={closeQueued()}>
+        <div
+          role="status"
+          aria-live="polite"
+          class="absolute inset-0 z-20 flex items-center justify-center bg-background/95 px-6 text-center text-sm text-muted-foreground"
+          data-plugin-surface-close-queued
+        >
+          {i18n.t('uiCopy.plugin.closingSurface')}
+        </div>
+      </Show>
       <Show when={closeFailed()}>
         <div
+          ref={(element) => { recoveryLayer = element; }}
           role="alertdialog"
-          aria-modal="true"
+          aria-modal={props.active && windowVisible() && !endSessionConfirmationOpen() ? 'true' : undefined}
+          aria-hidden={!windowVisible() || endSessionConfirmationOpen() ? 'true' : undefined}
+          inert={endSessionConfirmationOpen()}
+          tabIndex={-1}
           aria-labelledby={`plugin-surface-recovery-title-${props.instanceID}`}
           aria-describedby={`plugin-surface-recovery-description-${props.instanceID}`}
           class="absolute inset-0 z-20 flex items-center justify-center bg-background p-6"
           data-plugin-surface-recovery
+          onKeyDown={handleRecoveryKeyDown}
         >
           <div class="max-w-md text-center">
             <AlertTriangle class="mx-auto h-6 w-6 text-destructive" />
             <h2 id={`plugin-surface-recovery-title-${props.instanceID}`} class="mt-3 text-sm font-semibold">{i18n.t('uiCopy.plugin.needsAttention')}</h2>
             <p id={`plugin-surface-recovery-description-${props.instanceID}`} class="mt-2 text-sm leading-6 text-muted-foreground">{i18n.t('uiCopy.plugin.surfaceCleanupFailed')}</p>
-            <button
-              ref={recoveryButton}
-              type="button"
-              class="mt-4 inline-flex cursor-pointer items-center gap-2 rounded-md bg-destructive px-3 py-2 text-sm font-medium text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => setEndSessionConfirmationOpen(true)}
-            >
-              <AlertTriangle class="h-4 w-4" />
-              {i18n.t('uiCopy.plugin.endPluginSession')}
-            </button>
+            <div class="mt-5 flex flex-col-reverse items-stretch justify-center gap-2 sm:flex-row">
+              <Button
+                type="button"
+                size="sm"
+                class={PLUGIN_MOBILE_TOUCH_TARGET_CLASS}
+                variant="ghost-destructive"
+                icon={AlertTriangle}
+                disabled={closing()}
+                data-plugin-surface-end-session
+                onClick={() => setEndSessionConfirmationOpen(true)}
+              >
+                {i18n.t('uiCopy.plugin.endPluginSession')}
+              </Button>
+              <Button
+                ref={recoveryButton}
+                type="button"
+                size="sm"
+                class={PLUGIN_MOBILE_TOUCH_TARGET_CLASS}
+                variant="default"
+                icon={Refresh}
+                loading={closing()}
+                disabled={closing()}
+                data-plugin-surface-retry
+                onClick={() => void requestClose()}
+              >
+                {i18n.t('common.actions.retry')}
+              </Button>
+            </div>
           </div>
         </div>
       </Show>
@@ -259,23 +393,28 @@ export function ActivityPluginSurfaceWindow(props: ActivityPluginSurfaceWindowPr
         description={i18n.t('uiCopy.plugin.endPluginSessionDescription')}
         footer={(
           <div class="flex w-full justify-end gap-2">
-            <button
+            <Button
               type="button"
-              class="cursor-pointer rounded-md border px-3 py-1.5 text-sm hover:bg-muted"
+              size="sm"
+              class={PLUGIN_MOBILE_TOUCH_TARGET_CLASS}
+              variant="outline"
               disabled={endingSession()}
               onClick={() => setEndSessionConfirmationOpen(false)}
             >
               {i18n.t('common.actions.cancel')}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              class="inline-flex cursor-pointer items-center gap-2 rounded-md bg-destructive px-3 py-1.5 text-sm font-medium text-destructive-foreground hover:bg-destructive/90 disabled:cursor-not-allowed disabled:opacity-50"
+              size="sm"
+              class={PLUGIN_MOBILE_TOUCH_TARGET_CLASS}
+              variant="destructive"
+              icon={AlertTriangle}
+              loading={endingSession()}
               disabled={endingSession()}
               onClick={() => void endPluginSession()}
             >
-              <AlertTriangle class="h-4 w-4" />
               {i18n.t('uiCopy.plugin.endPluginSession')}
-            </button>
+            </Button>
           </div>
         )}
       >

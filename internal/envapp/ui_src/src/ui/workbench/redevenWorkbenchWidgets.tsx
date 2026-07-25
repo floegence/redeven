@@ -4,7 +4,7 @@ import type {
   WorkbenchWidgetType,
 } from '@floegence/floe-webapp-core/workbench';
 import { DockCpu, DockFolder, DockLayers, DockTerminal, Search } from '@floegence/floe-webapp-core/icons';
-import { WORKBENCH_WIDGET_ACTIVATION_SURFACE_ATTR } from '@floegence/floe-webapp-core/ui';
+import { Button, WORKBENCH_WIDGET_ACTIVATION_SURFACE_ATTR } from '@floegence/floe-webapp-core/ui';
 import { Show, createMemo, lazy, type JSX } from 'solid-js';
 
 import { CodexWorkbenchIcon } from '../icons/CodexIcon';
@@ -14,6 +14,7 @@ import { useI18n, type I18nHelpers } from '../i18n';
 import { useEnvContext } from '../pages/EnvContext';
 import { hasRWXPermissions } from '../pages/aiPermissions';
 import { PluginSurfaceBody } from '../plugins/PluginSurfaceFrame';
+import { PLUGIN_MOBILE_TOUCH_TARGET_CLASS } from '../plugins/pluginPresentation';
 import { useEnvWorkbenchInstancesContext } from './EnvWorkbenchInstancesContext';
 import { useWorkbenchPluginSurfaceContext } from './WorkbenchPluginSurfaceContext';
 import { WorkbenchFilePreviewWidget } from './WorkbenchFilePreviewWidget';
@@ -135,6 +136,10 @@ function PluginWidget(props: RedevenWorkbenchWidgetBodyProps) {
   const workbench = useEnvWorkbenchInstancesContext();
   const pluginHost = useWorkbenchPluginSurfaceContext();
   const state = () => workbench.pluginSurfaceState(props.widgetId);
+  const inventoryKey = createMemo(() => {
+    const persisted = state();
+    return persisted ? `instance:${persisted.plugin_instance_id}` : null;
+  });
   const currentTarget = createMemo(() => {
     const current = state();
     if (!current || !pluginHost) return null;
@@ -169,6 +174,22 @@ function PluginWidget(props: RedevenWorkbenchWidgetBodyProps) {
           eyebrow={state()?.display_name ?? props.title}
           title={i18n.t('uiCopy.plugin.needsAttention')}
           description={i18n.t('uiCopy.plugin.unavailable')}
+          action={pluginHost && inventoryKey() ? (
+            <Button
+              {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS}
+              data-plugin-workbench-view-issue
+              size="sm"
+              class={PLUGIN_MOBILE_TOUCH_TARGET_CLASS}
+              variant="default"
+              icon={DockLayers}
+              onClick={() => {
+                const currentInventoryKey = inventoryKey();
+                if (currentInventoryKey) pluginHost.onOpenPluginDetails(currentInventoryKey);
+              }}
+            >
+              {i18n.t('uiCopy.plugin.centerTitle')}
+            </Button>
+          ) : undefined}
         />
       )}
     >

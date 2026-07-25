@@ -5,7 +5,24 @@ import { describe, expect, it } from 'vitest';
 
 type Finding = Readonly<{
   file: string;
-  kind: 'text' | 'expression' | 'title' | 'aria-label' | 'placeholder' | 'alt';
+  kind:
+    | 'text'
+    | 'expression'
+    | 'title'
+    | 'aria-label'
+    | 'placeholder'
+    | 'alt'
+    | 'label'
+    | 'message'
+    | 'description'
+    | 'detail'
+    | 'tooltip'
+    | 'eyebrow'
+    | 'loadingLabel'
+    | 'loadingStatus'
+    | 'buttonLabel'
+    | 'confirmLabel'
+    | 'cancelLabel';
   text: string;
 }>;
 
@@ -56,6 +73,14 @@ const EXCEPTIONS: readonly Exception[] = [
   { file: 'src/ui/pages/settings/sections/SkillsSection.tsx', kind: 'placeholder', text: 'openai/skills', reason: 'Repository identifier example.' },
   { file: 'src/ui/pages/settings/sections/SkillsSection.tsx', kind: 'placeholder', text: 'main', reason: 'Git branch name example.' },
   { file: 'src/ui/pages/settings/sections/SkillsSection.tsx', kind: 'placeholder', text: 'incident-response', reason: 'Skill identifier example.' },
+  { file: 'src/ui/plugins/PluginConfirmationQueue.tsx', kind: 'label', text: 'plugin_id', reason: 'Wire-protocol field name shown in technical details.' },
+  { file: 'src/ui/plugins/PluginConfirmationQueue.tsx', kind: 'label', text: 'plugin_instance_id', reason: 'Wire-protocol field name shown in technical details.' },
+  { file: 'src/ui/plugins/PluginConfirmationQueue.tsx', kind: 'label', text: 'surface_id', reason: 'Wire-protocol field name shown in technical details.' },
+  { file: 'src/ui/plugins/PluginConfirmationQueue.tsx', kind: 'label', text: 'request_id', reason: 'Wire-protocol field name shown in technical details.' },
+  { file: 'src/ui/plugins/PluginConfirmationQueue.tsx', kind: 'label', text: 'confirmation_token_id', reason: 'Wire-protocol field name shown in technical details.' },
+  { file: 'src/ui/plugins/PluginConfirmationQueue.tsx', kind: 'label', text: 'method', reason: 'Wire-protocol field name shown in technical details.' },
+  { file: 'src/ui/plugins/PluginConfirmationQueue.tsx', kind: 'label', text: 'request_hash', reason: 'Wire-protocol field name shown in technical details.' },
+  { file: 'src/ui/plugins/PluginConfirmationQueue.tsx', kind: 'label', text: 'plan_hash', reason: 'Wire-protocol field name shown in technical details.' },
   { file: 'src/ui/widgets/PdfPreviewPane.tsx', kind: 'text', text: 'PDF', reason: 'Standard document-format acronym.' },
   { file: 'src/ui/widgets/GitWorkbench.tsx', kind: 'expression', text: 'HEAD', reason: 'Git symbolic reference name.' },
   { file: 'src/ui/widgets/RemoteFileBrowser.tsx', kind: 'expression', text: 'new-folder', reason: 'Literal default folder-name value, not interface copy.' },

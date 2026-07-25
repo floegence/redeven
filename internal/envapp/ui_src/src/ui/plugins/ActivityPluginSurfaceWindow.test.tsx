@@ -11,18 +11,47 @@ import type { PluginSurfaceLaunchTarget } from './pluginTypes';
 
 const harness = vi.hoisted(() => ({
   closeBody: vi.fn<() => Promise<boolean>>(),
+  mobile: true,
   onInteraction: undefined as ((event: { kind: string }) => void) | undefined,
+  registerClose: undefined as ((close: (() => Promise<boolean>) | null) => void) | undefined,
+  registerCloseImmediately: true,
 }));
 
 vi.mock('@floegence/floe-webapp-core', () => ({
-  useLayout: () => ({ isMobile: () => true }),
+  useLayout: () => ({ isMobile: () => harness.mobile }),
 }));
 
 vi.mock('@floegence/floe-webapp-core/icons', () => ({
   AlertTriangle: () => <span aria-hidden="true" />,
+  Refresh: () => <span aria-hidden="true" />,
 }));
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
+  Button: (props: {
+    children?: JSX.Element;
+    disabled?: boolean;
+    loading?: boolean;
+    class?: string;
+    onClick?: () => void;
+    ref?: (element: HTMLButtonElement) => void;
+    variant?: string;
+    'data-plugin-surface-retry'?: boolean;
+    'data-plugin-surface-end-session'?: boolean;
+  }) => (
+    <button
+      ref={(element) => props.ref?.(element)}
+      type="button"
+      disabled={props.disabled}
+      class={props.class}
+      data-loading={String(Boolean(props.loading))}
+      data-variant={props.variant}
+      data-plugin-surface-retry={props['data-plugin-surface-retry'] ? '' : undefined}
+      data-plugin-surface-end-session={props['data-plugin-surface-end-session'] ? '' : undefined}
+      onClick={() => props.onClick?.()}
+    >
+      {props.children}
+    </button>
+  ),
   Dialog: (props: { open: boolean; footer?: JSX.Element }) => (
     <Show when={props.open}><div data-session-dialog>{props.footer}</div></Show>
   ),
@@ -69,7 +98,8 @@ vi.mock('./PluginSurfaceFrame', () => ({
     visible: boolean;
     onInteraction?: (event: { kind: string }) => void;
   }) => {
-    props.registerClose?.(harness.closeBody);
+    harness.registerClose = props.registerClose;
+    if (harness.registerCloseImmediately) props.registerClose?.(harness.closeBody);
     harness.onInteraction = props.onInteraction;
     return <div data-plugin-surface-stage data-body-visible={String(props.visible)}><iframe title="Plugin content" /></div>;
   },
@@ -90,7 +120,10 @@ let dispose: (() => void) | undefined;
 beforeEach(() => {
   harness.closeBody.mockReset();
   harness.closeBody.mockResolvedValue(true);
+  harness.mobile = true;
   harness.onInteraction = undefined;
+  harness.registerClose = undefined;
+  harness.registerCloseImmediately = true;
 });
 
 afterEach(() => {
@@ -124,6 +157,10 @@ function mountWindow(overrides: Partial<Parameters<typeof ActivityPluginSurfaceW
 
 describe('ActivityPluginSurfaceWindow', () => {
   it('binds modal semantics and moves initial focus into the plugin iframe', async () => {
+    const shell = document.createElement('main');
+    const preExistingInert = document.createElement('aside');
+    preExistingInert.inert = true;
+    document.body.append(shell, preExistingInert);
     const { mount } = mountWindow();
     await Promise.resolve();
 
@@ -137,6 +174,13 @@ describe('ActivityPluginSurfaceWindow', () => {
     expect(mount.querySelector('[data-floating-interaction-surface]')?.classList)
       .toContain('redeven-plugin-activity-window');
     expect(document.activeElement).toBe(iframe);
+    expect(shell.inert).toBe(true);
+    expect(preExistingInert.inert).toBe(true);
+
+    dispose?.();
+    dispose = undefined;
+    expect(Boolean(shell.inert)).toBe(false);
+    expect(preExistingInert.inert).toBe(true);
   });
 
   it('targets the marked geometry root for the mobile full-screen contract', () => {
@@ -162,6 +206,35 @@ describe('ActivityPluginSurfaceWindow', () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(props.onClosed).toHaveBeenCalledWith('activity_plugin_surface_1');
+  });
+
+  it('queues close visibly until the opening surface registers its exact close handler', async () => {
+    harness.registerCloseImmediately = false;
+    const serializeClose = vi.fn(async (close: () => Promise<void>) => close());
+    const { mount, props } = mountWindow({ serializeClose });
+
+    (mount.querySelector('[data-window-close]') as HTMLButtonElement).click();
+    await Promise.resolve();
+
+    expect(serializeClose).toHaveBeenCalledOnce();
+    expect(harness.closeBody).not.toHaveBeenCalled();
+    expect(props.onClosed).not.toHaveBeenCalled();
+    expect(mount.querySelector('[data-plugin-surface-close-queued]')?.getAttribute('role')).toBe('status');
+    const serializedClose = serializeClose.mock.results[0]?.value;
+    let closeSettled = false;
+    void serializedClose.then(() => { closeSettled = true; });
+    await Promise.resolve();
+    expect(closeSettled).toBe(false);
+
+    harness.registerClose?.(harness.closeBody);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(harness.closeBody).toHaveBeenCalledOnce();
+    expect(props.onClosed).toHaveBeenCalledWith('activity_plugin_surface_1');
+    expect(mount.querySelector('[data-plugin-surface-close-queued]')).toBeNull();
+    expect(closeSettled).toBe(true);
   });
 
   it('routes user close through the Shell placement serializer', async () => {
@@ -250,8 +323,8 @@ describe('ActivityPluginSurfaceWindow', () => {
     expect(props.onActivate).toHaveBeenNthCalledWith(1, 'activity_plugin_surface_1');
   });
 
-  it('retains a cleanup error shell and requires confirmation before ending the plugin session', async () => {
-    harness.closeBody.mockResolvedValue(false);
+  it('retries the same exact surface after close failure and closes only after retry succeeds', async () => {
+    harness.closeBody.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
     const { mount, props } = mountWindow();
 
     (mount.querySelector('[data-window-close]') as HTMLButtonElement).click();
@@ -264,14 +337,97 @@ describe('ActivityPluginSurfaceWindow', () => {
     expect(recovery.getAttribute('aria-labelledby')).toBe('plugin-surface-recovery-title-activity_plugin_surface_1');
     expect(mount.querySelector('[data-plugin-surface-stage]')?.getAttribute('data-body-visible')).toBe('false');
 
-    const recoveryButton = mount.querySelector('[data-plugin-surface-recovery] button') as HTMLButtonElement;
+    const recoveryButton = mount.querySelector('[data-plugin-surface-retry]') as HTMLButtonElement;
     await Promise.resolve();
     expect(document.activeElement).toBe(recoveryButton);
     recoveryButton.click();
     await Promise.resolve();
+    await Promise.resolve();
+
+    expect(harness.closeBody).toHaveBeenCalledTimes(2);
+    expect(props.onClosed).toHaveBeenCalledOnce();
+    expect(props.onEndPluginSession).not.toHaveBeenCalled();
+  });
+
+  it.each([true, false])('traps recovery focus and isolates non-dialog content when mobile is %s', async (mobile) => {
+    harness.mobile = mobile;
+    harness.closeBody.mockResolvedValue(false);
+    const external = document.createElement('button');
+    document.body.append(external);
+    const { mount } = mountWindow();
+
+    (mount.querySelector('[data-window-close]') as HTMLButtonElement).click();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const recovery = mount.querySelector('[data-plugin-surface-recovery]') as HTMLElement;
+    const retry = mount.querySelector('[data-plugin-surface-retry]') as HTMLButtonElement;
+    const endSession = mount.querySelector('[data-plugin-surface-end-session]') as HTMLButtonElement;
+    expect((mount.querySelector('[data-plugin-surface-stage]') as HTMLElement).inert).toBe(true);
+    expect((mount.querySelector('[data-window-close]') as HTMLElement).inert).toBe(true);
+    expect(external.inert).toBe(true);
+    expect(recovery.inert).toBe(false);
+
+    retry.focus();
+    const forward = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    retry.dispatchEvent(forward);
+    expect(forward.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(endSession);
+
+    const backward = new KeyboardEvent('keydown', {
+      key: 'Tab',
+      shiftKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    endSession.dispatchEvent(backward);
+    expect(backward.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(retry);
+  });
+
+  it('does not let a hidden Activity recovery layer block the visible Shell after placement changes', async () => {
+    harness.closeBody.mockResolvedValue(false);
+    const external = document.createElement('button');
+    document.body.append(external);
+    const { mount } = mountWindow({ visible: false, active: false });
+
+    (mount.querySelector('[data-window-close]') as HTMLButtonElement).click();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const surface = mount.querySelector('[data-floating-window]') as HTMLElement;
+    const recovery = mount.querySelector('[data-plugin-surface-recovery]') as HTMLElement;
+    expect(surface.inert).toBe(true);
+    expect(surface.style.display).toBe('none');
+    expect(recovery.getAttribute('aria-modal')).toBeNull();
+    expect(recovery.getAttribute('aria-hidden')).toBe('true');
+    expect(Boolean(external.inert)).toBe(false);
+  });
+
+  it('keeps session teardown secondary and requires explicit destructive confirmation', async () => {
+    harness.closeBody.mockResolvedValue(false);
+    const { mount, props } = mountWindow();
+
+    (mount.querySelector('[data-window-close]') as HTMLButtonElement).click();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const retryButton = mount.querySelector('[data-plugin-surface-retry]') as HTMLButtonElement;
+    const endSessionButton = mount.querySelector('[data-plugin-surface-end-session]') as HTMLButtonElement;
+    expect(retryButton.getAttribute('data-variant')).toBe('default');
+    expect(endSessionButton.getAttribute('data-variant')).toBe('ghost-destructive');
+    expect(retryButton.className).toContain('min-h-[46px]');
+    expect(endSessionButton.className).toContain('min-h-[46px]');
+    expect(props.onEndPluginSession).not.toHaveBeenCalled();
+
+    endSessionButton.click();
+    await Promise.resolve();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(document.querySelector('[data-session-dialog]')).not.toBeNull();
     const confirmationButtons = document.querySelectorAll<HTMLButtonElement>('[data-session-dialog] button');
+    expect([...confirmationButtons].every((button) => button.className.includes('min-h-[46px]'))).toBe(true);
     confirmationButtons[confirmationButtons.length - 1].click();
     await Promise.resolve();
     expect(props.onEndPluginSession).toHaveBeenCalledOnce();

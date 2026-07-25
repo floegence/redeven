@@ -138,6 +138,7 @@ const officialContainersCatalog = {
   minReDevPluginVersion: '0.6.5',
   rolloutState: 'stable',
   defaultSurfaceID: 'containers.dashboard',
+  defaultSurfaceDisplayNameKey: 'uiCopy.plugin.containersDashboardSurface',
   iconFallback: 'containers',
   trustedSigningKeyIDs: ['redeven-official-signing-2026'],
   distribution: {
@@ -175,6 +176,8 @@ function officialContainersProjection(
           pluginID: officialContainersCatalog.pluginID,
           pluginInstanceID: officialContainersCatalog.pluginInstanceID,
           surfaceID: officialContainersCatalog.defaultSurfaceID,
+          displayName: officialContainersCatalog.displayName,
+          surfaceDisplayNameKey: officialContainersCatalog.defaultSurfaceDisplayNameKey,
           expectedManagementRevision: 11,
           preferredPlacement: 'activity' as const,
         },
@@ -208,6 +211,7 @@ function activityPluginProjection(count: number): PluginInventoryProjection {
           pluginID,
           pluginInstanceID,
           surfaceID,
+          displayName: `Activity plugin ${ordinal}`,
           expectedManagementRevision: 1,
           preferredPlacement: 'activity' as const,
         },
@@ -1816,6 +1820,8 @@ describe('EnvAppShell environment entry affordances', () => {
         pluginID: officialContainersCatalog.pluginID,
         pluginInstanceID: officialContainersCatalog.pluginInstanceID,
         surfaceID: officialContainersCatalog.defaultSurfaceID,
+        displayName: officialContainersCatalog.displayName,
+        surfaceDisplayNameKey: officialContainersCatalog.defaultSurfaceDisplayNameKey,
         expectedManagementRevision: 11,
         preferredPlacement: 'workbench',
       });
@@ -2005,6 +2011,8 @@ describe('EnvAppShell environment entry affordances', () => {
         pluginID: officialContainersCatalog.pluginID,
         pluginInstanceID: officialContainersCatalog.pluginInstanceID,
         surfaceID: officialContainersCatalog.defaultSurfaceID,
+        displayName: officialContainersCatalog.displayName,
+        surfaceDisplayNameKey: officialContainersCatalog.defaultSurfaceDisplayNameKey,
         expectedManagementRevision: 11,
         preferredPlacement: 'activity',
       });
@@ -2459,6 +2467,8 @@ describe('EnvAppShell environment entry affordances', () => {
         pluginID: target.pluginID,
         pluginInstanceID: target.pluginInstanceID,
         surfaceID: target.surfaceID,
+        displayName: officialContainersCatalog.displayName,
+        surfaceDisplayNameKey: officialContainersCatalog.defaultSurfaceDisplayNameKey,
         expectedManagementRevision: 11,
         preferredPlacement: 'workbench',
       });
@@ -2469,6 +2479,8 @@ describe('EnvAppShell environment entry affordances', () => {
         pluginID: target.pluginID,
         pluginInstanceID: target.pluginInstanceID,
         surfaceID: target.surfaceID,
+        displayName: officialContainersCatalog.displayName,
+        surfaceDisplayNameKey: officialContainersCatalog.defaultSurfaceDisplayNameKey,
         expectedManagementRevision: 11,
         preferredPlacement: 'activity',
       });

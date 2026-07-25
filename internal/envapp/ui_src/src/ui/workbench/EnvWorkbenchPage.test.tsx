@@ -4077,6 +4077,7 @@ describe('EnvWorkbenchPage', () => {
           displayName: 'Containers current',
           expectedManagementRevision: 8,
         }),
+        onOpenPluginDetails: vi.fn(),
         onRetirementError: vi.fn(),
       }} />
     ), host);

@@ -56,6 +56,15 @@ main() {
       src/ui/flower/SubagentDetailWindow.test.tsx \
       src/ui/flower/envLocalFlowerSurfaceAdapter.test.ts \
       src/ui/flower/linkedContextNavigation.test.ts \
+      src/ui/plugins/ActivityPluginSurfaceWindow.test.tsx \
+      src/ui/plugins/ExternalPluginInstallDialog.test.tsx \
+      src/ui/plugins/PluginCenterView.test.tsx \
+      src/ui/plugins/PluginConfirmationQueue.test.tsx \
+      src/ui/plugins/PluginPanel.test.tsx \
+      src/ui/plugins/PluginSurfaceFrame.test.tsx \
+      src/ui/plugins/pluginPlatform.test.ts \
+      src/ui/plugins/pluginPresentation.test.ts \
+      src/ui/workbench/redevenWorkbenchWidgets.test.tsx \
       src/ui/widgets/FlowerTurnLauncherWindow.test.tsx \
       src/ui/chat/blocks/ShellBlock.test.tsx \
       src/ui/chat/message-list/VirtualMessageList.test.tsx
@@ -113,6 +122,7 @@ main() {
         src/ui/widgets/FlowerTurnLauncherWindow.browser.test.tsx \
         src/ui/widgets/TerminalCoreDependencyContract.browser.test.tsx \
         src/ui/widgets/TerminalWorkbenchInputPlane.browser.test.tsx \
+        src/ui/plugins/PluginManagement.browser.test.tsx \
         src/ui/flower/SubagentDetailWindow.boundary.browser.test.tsx
     fi
   )
