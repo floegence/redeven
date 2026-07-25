@@ -273,9 +273,14 @@ export function createRuntimeReconnectController(args: CreateRuntimeReconnectCon
     });
   };
 
+  const isRecoverableAuthenticationFailure = (current: ConnectionRecoverySnapshot): boolean => (
+    current.state === 'failed' && current.failure?.code === 'authentication_failed'
+  );
+
   const completeRecovery = () => {
     const current = snapshot();
     if (current.state === 'idle' || current.state === 'succeeded') return;
+    if (current.state === 'failed' && !isRecoverableAuthenticationFailure(current)) return;
     clearWaitTimer();
     clearSuccessTimer();
     publish({
@@ -464,8 +469,9 @@ export function createRuntimeReconnectController(args: CreateRuntimeReconnectCon
       publish({ ...current, phase: desktopTransportBlocksProbe() ? 'desktop_transport' : 'protocol_connect' });
     },
     noteProtocolConnected: () => {
-      if (snapshot().state === 'idle') return;
       const current = snapshot();
+      if (current.state === 'idle') return;
+      if (current.state === 'failed' && !isRecoverableAuthenticationFailure(current)) return;
       publish({
         ...current,
         phase: current.secure_session === 'ready' ? 'completed' : 'secure_session',
@@ -476,7 +482,9 @@ export function createRuntimeReconnectController(args: CreateRuntimeReconnectCon
       if (snapshot().secure_session === 'ready') completeRecovery();
     },
     noteSecureSession: (state, failure) => {
-      if (snapshot().state === 'idle') return;
+      const beforeUpdate = snapshot();
+      if (beforeUpdate.state === 'idle') return;
+      if (beforeUpdate.state === 'failed' && !isRecoverableAuthenticationFailure(beforeUpdate)) return;
       if (state === 'failed') {
         failRecovery(failure ?? {
           code: 'secure_session_failed',

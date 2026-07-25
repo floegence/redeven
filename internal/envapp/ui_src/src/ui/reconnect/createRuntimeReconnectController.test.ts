@@ -275,6 +275,42 @@ describe('createRuntimeReconnectController', () => {
       desktop_transport: { phase: 'failed', attempt_count: 2 },
       failure: { error_code: 'process_identity_changed' },
     });
+    const terminalSnapshot = controller.snapshot();
+    controller.noteProtocolConnected();
+    controller.noteSecureSession('ready');
+    expect(controller.snapshot()).toBe(terminalSnapshot);
+    dispose();
+  });
+
+  it('ignores late connected and secure-ready events after missing environment context', () => {
+    let controller!: RuntimeReconnectController;
+    const dispose = createRoot((disposeRoot) => {
+      controller = createRuntimeReconnectController({
+        enabled: () => true,
+        desktopTransport: () => null,
+        probeAvailability: async () => ({ status: 'unknown' }),
+        reconnect: async () => undefined,
+        requestDesktopRecoveryNow: async () => false,
+      });
+      return disposeRoot;
+    });
+
+    controller.activateWaiting({
+      code: 'missing_environment_context',
+      retryable: false,
+      technical_detail: 'Environment context is unavailable.',
+      error_code: 'MISSING_ENV_CONTEXT',
+    });
+    const terminalSnapshot = controller.snapshot();
+    expect(terminalSnapshot).toMatchObject({
+      state: 'failed',
+      phase: 'failed',
+      failure: { code: 'missing_environment_context' },
+    });
+
+    controller.noteProtocolConnected();
+    controller.noteSecureSession('ready');
+    expect(controller.snapshot()).toBe(terminalSnapshot);
     dispose();
   });
 });
