@@ -6,6 +6,16 @@ ROOT_DIR=$(cd -- "$SCRIPT_DIR/.." &> /dev/null && pwd)
 
 source "$SCRIPT_DIR/ui_package_common.sh"
 
+skip_browser=false
+if [ "${1:-}" = "--skip-browser" ]; then
+  skip_browser=true
+  shift
+fi
+if [ "$#" -ne 0 ]; then
+  echo "usage: ./scripts/check_flower_ui.sh [--skip-browser]" >&2
+  exit 2
+fi
+
 main() {
   local dir="$ROOT_DIR/internal/envapp/ui_src"
   if [ ! -d "$dir" ]; then
@@ -90,19 +100,21 @@ main() {
         -c eslint.config.mjs "src/**/*.{ts,tsx}" --max-warnings=0
     )
 
-    ui_pkg_log ""
-    ui_pkg_log "Flower UI: Chromium interaction contracts..."
-    ui_pkg_run_pnpm run test:browser -- \
-      src/ui/EnvAppShell.flowerCompanion.browser.test.tsx \
-      src/ui/flowerCompanionTailMotion.browser.test.tsx \
-      src/ui/FlowerSurface.canonicalReferences.browser.test.tsx \
-      src/ui/FlowerSurface.approvalRefresh.browser.test.tsx \
-      src/ui/FlowerSurface.activityDisclosure.browser.test.tsx \
-      src/ui/FlowerSurface.setupGuide.browser.test.tsx \
-      src/ui/widgets/FlowerTurnLauncherWindow.browser.test.tsx \
-      src/ui/widgets/TerminalCoreDependencyContract.browser.test.tsx \
-      src/ui/widgets/TerminalWorkbenchInputPlane.browser.test.tsx \
-      src/ui/flower/SubagentDetailWindow.boundary.browser.test.tsx
+    if [ "$skip_browser" = false ]; then
+      ui_pkg_log ""
+      ui_pkg_log "Flower UI: Chromium interaction contracts..."
+      ui_pkg_run_pnpm run test:browser -- \
+        src/ui/EnvAppShell.flowerCompanion.browser.test.tsx \
+        src/ui/flowerCompanionTailMotion.browser.test.tsx \
+        src/ui/FlowerSurface.canonicalReferences.browser.test.tsx \
+        src/ui/FlowerSurface.approvalRefresh.browser.test.tsx \
+        src/ui/FlowerSurface.activityDisclosure.browser.test.tsx \
+        src/ui/FlowerSurface.setupGuide.browser.test.tsx \
+        src/ui/widgets/FlowerTurnLauncherWindow.browser.test.tsx \
+        src/ui/widgets/TerminalCoreDependencyContract.browser.test.tsx \
+        src/ui/widgets/TerminalWorkbenchInputPlane.browser.test.tsx \
+        src/ui/flower/SubagentDetailWindow.boundary.browser.test.tsx
+    fi
   )
 
   ui_pkg_log "Flower UI behavior checks passed."

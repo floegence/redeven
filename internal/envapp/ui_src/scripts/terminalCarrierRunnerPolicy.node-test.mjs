@@ -9,7 +9,7 @@ const ciSource = await readFile(new URL('../../../../.github/workflows/ci-check.
 const prePushSource = await readFile(new URL('../../../../scripts/check_renderer_e2e.sh', import.meta.url), 'utf8');
 const releaseSource = await readFile(new URL('../../../../.github/workflows/release.yml', import.meta.url), 'utf8');
 
-test('keeps the supported terminal carriers explicit in pre-push and release gates', () => {
+test('keeps the supported terminal carriers explicit in the exact-main pre-push gate', () => {
   assert.match(carrierSource, /chromium\.launch\(\{\s*headless: false,/u);
   assert.match(carrierSource, /installReDevPluginRuntimeFixture\(tempDir\)/u);
 
@@ -25,13 +25,7 @@ test('keeps the supported terminal carriers explicit in pre-push and release gat
   assert.match(prePushSource, /^run_terminal_carrier 65536$/mu);
   assert.match(prePushSource, /^run_terminal_carrier 458752$/mu);
 
-  const releaseCarrierCommands = releaseSource.match(/^\s*run: .*test:terminal-carrier.*$/gmu) ?? [];
-  assert.equal(releaseCarrierCommands.length, 2);
-  for (const command of releaseCarrierCommands) {
-    assert.match(command, /run: xvfb-run -a corepack pnpm run test:terminal-carrier/u);
-  }
-  assert.match(releaseCarrierCommands[0] ?? '', /--fixture-bytes 65536/u);
-  assert.match(releaseCarrierCommands[1] ?? '', /--fixture-bytes 458752/u);
+  assert.doesNotMatch(releaseSource, /test:terminal-carrier/u);
 
   assert.doesNotMatch(prePushSource, /--fixture-bytes 8388608/u);
   assert.doesNotMatch(releaseSource, /--fixture-bytes 8388608/u);
