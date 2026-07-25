@@ -46,7 +46,7 @@ export type AIReadinessController = Readonly<{
   dispose: () => void;
 }>;
 
-type ReadinessRequest = (url: string, init: RequestInit) => Promise<unknown>;
+type ReadinessRequest = (url: string, init: RequestInit) => unknown | PromiseLike<unknown>;
 
 type VisibilitySource = Readonly<{
   visibilityState: DocumentVisibilityState;
@@ -282,6 +282,14 @@ export function createAIReadinessController(args: CreateAIReadinessControllerArg
     aiReadinessFromLocalApiError(error) ?? contractErrorSnapshot
   );
 
+  const invokeRequest = (url: string, init: RequestInit): Promise<unknown> => {
+    try {
+      return Promise.resolve(request(url, init));
+    } catch (error) {
+      return Promise.reject(error);
+    }
+  };
+
   refresh = (): Promise<AIReadinessSnapshot> => {
     if (disposed || paused) return Promise.resolve(snapshot());
     if (retryInFlight) return retryInFlight;
@@ -290,7 +298,7 @@ export function createAIReadinessController(args: CreateAIReadinessControllerArg
     loadingGeneration = requestGeneration;
     setLoading(true);
 
-    return request(READINESS_URL, { method: 'GET' })
+    return invokeRequest(READINESS_URL, { method: 'GET' })
       .then((value) => {
         const nextSnapshot = normalizeAIReadinessSnapshot(value);
         apply(requestGeneration, nextSnapshot);
@@ -318,7 +326,7 @@ export function createAIReadinessController(args: CreateAIReadinessControllerArg
     loadingGeneration = 0;
     setLoading(false);
     setRetryPending(true);
-    const pending = request(READINESS_RETRY_URL, { method: 'POST' })
+    const pending = invokeRequest(READINESS_RETRY_URL, { method: 'POST' })
       .then((value) => {
         const nextSnapshot = normalizeAIReadinessSnapshot(value);
         apply(requestGeneration, nextSnapshot);
