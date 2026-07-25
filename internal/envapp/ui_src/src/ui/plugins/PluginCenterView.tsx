@@ -584,7 +584,7 @@ function PluginPermissionInventory(props: {
                     <div class="flex items-start justify-between gap-4">
                       <div class="min-w-0">
                         <div class="flex flex-wrap items-center gap-2">
-                          <span class="text-sm font-medium">{permissionLabel(permission.group, i18n)}</span>
+                          <span data-plugin-permission-name class="text-sm font-medium">{permissionName()}</span>
                           <Show when={permission.requiredToOpen}>
                             <span class="rounded-full bg-[var(--redeven-status-warning-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--redeven-status-warning-foreground)]">
                               {i18n.t('uiCopy.plugin.requiredToOpen')}
