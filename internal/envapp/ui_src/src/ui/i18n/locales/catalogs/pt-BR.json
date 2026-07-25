@@ -28,7 +28,7 @@
       "configurationTitle": "A configuração do armazenamento do Agent não corresponde",
       "configurationDescription": "A implantação atual não pode assumir com segurança a responsabilidade por este Floret Store.",
       "rollbackTitle": "A atualização dos dados do Agent foi revertida",
-      "rollbackDescription": "A atualização não foi concluída. O Floret Store anterior permanece intacto.",
+      "rollbackDescription": "A atualização não foi concluída. O Floret Store anterior permanece no local.",
       "committedTitle": "A atualização dos dados do Agent precisa ser validada",
       "committedDescription": "A atualização foi efetivada, mas o Redeven ainda não conseguiu verificar se o Flower pode usá-la.",
       "cancelledTitle": "A verificação dos dados do Agent foi interrompida",
@@ -40,8 +40,8 @@
     },
     "data": {
       "unopened": "O Flower permanece fechado até o fim desta verificação. O Redeven não reconstrói nenhum estado de conversa do Agent.",
-      "preserved": "O Floret Store existente foi mantido intacto.",
-      "rolledBack": "A tentativa de atualização foi revertida, e o Floret Store anterior permanece intacto.",
+      "preserved": "O Floret Store existente foi mantido no local.",
+      "rolledBack": "A tentativa de atualização foi revertida, e o Floret Store anterior permanece no local.",
       "committed": "Uma atualização de dados foi efetivada. O Redeven fará uma nova verificação antes de abrir o Flower."
     },
     "actions": {
@@ -78,8 +78,8 @@
       "floretDescription": "O Floret é responsável pelas conversas admitidas do Agent e pelo estado do ciclo de vida.",
       "redevenOwner": "Armazenamentos de produto do Redeven",
       "redevenDescription": "Esta verificação do Flower não inspeciona os armazenamentos de produto gerenciados pelo Redeven.",
-      "upstreamOwner": "Outros armazenamentos de componentes externos",
-      "upstreamDescription": "Cada componente externo mantém sua própria autoridade de manutenção.",
+      "upstreamOwner": "Outros armazenamentos de componentes anteriores na cadeia",
+      "upstreamDescription": "Cada componente anterior na cadeia mantém sua própria autoridade de manutenção.",
       "notChecked": "Não verificado aqui",
       "noIssue": "Nenhum problema de disponibilidade detectado",
       "refreshing": "Atualizando..."

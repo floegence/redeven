@@ -75,9 +75,9 @@
     "settings": {
       "title": "Agent 儲存診斷",
       "description": "依負責各資料儲存區的元件，分組顯示可用性。",
-      "floretDescription": "Floret 負責已接納的 Agent 對話和生命週期狀態。",
+      "floretDescription": "Floret 擁有已接納的 Agent 對話和生命週期狀態。",
       "redevenOwner": "Redeven 產品資料儲存區",
-      "redevenDescription": "此 Flower 檢查不會檢查由 Redeven 負責的產品資料儲存區。",
+      "redevenDescription": "此 Flower 檢查不會檢查由 Redeven 擁有的產品資料儲存區。",
       "upstreamOwner": "其他上游資料儲存區",
       "upstreamDescription": "每個上游元件各自保有其維護權責。",
       "notChecked": "未在此處檢查",
