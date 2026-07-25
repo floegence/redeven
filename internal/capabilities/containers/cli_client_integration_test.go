@@ -181,8 +181,8 @@ func runRealEnginePullCancelSmoke(t *testing.T, client *CLIClient, engine Engine
 	cancelClient.Timeout = defaultPullCancelSmokeTimeout
 	started := time.Now()
 	_, err := cancelClient.PullImage(context.Background(), engine, imageRef)
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("%s PullImage(%q) error = %v, want context.DeadlineExceeded", engine, imageRef, err)
+	if !errors.Is(err, ErrEngineTimeout) {
+		t.Fatalf("%s PullImage(%q) error = %v, want ErrEngineTimeout", engine, imageRef, err)
 	}
 	if elapsed := time.Since(started); elapsed > 10*time.Second {
 		t.Fatalf("%s PullImage(%q) cancellation took %s", engine, imageRef, elapsed)
