@@ -3,7 +3,7 @@ type: Release Contract
 title: CI and release gates
 description: Redeven binds published dependencies, generated assets, UI behavior, release payloads, tests, and OKF to the exact main tip being pushed.
 tags: [release, ci, quality, okf]
-timestamp: 2026-07-24T00:00:00Z
+timestamp: 2026-07-25T00:00:00Z
 ---
 # Summary
 
@@ -33,6 +33,27 @@ The final script requires a clean worktree and runs the repository contracts,
 generated assets, ReDevPlugin/Gateway/Flower integration, UI/Desktop checks,
 Docker Runtime E2E, OKF, serial uncached Go tests, and golangci-lint. Any
 generator that changes the tree fails the gate.
+
+The Desktop gate protects real Electron preload coverage from local process
+collisions. Every preload run uses a temporary real working directory and
+separate utility/session user-data directories, then verifies both paths inside
+Electron before inspecting bridge surfaces. It starts headless with a random
+integration marker and owns either a dedicated POSIX process group or an exact
+Windows process tree while its spawned leader remains addressable. Timeout,
+output overflow, and POSIX abnormal-close cleanup target only that spawned group
+and wait for it to drain. An unexplained external
+`SIGKILL` remains a gate failure and is never converted to success by retry or
+name-based process substitution. Dev Desktop launches use a distinct
+user-data directory, serialized transition lock, and atomic owner record in the
+current worktree's Git admin directory. Stop and force-stop authority requires
+the exact recorded PID and random launch marker to match again before each signal;
+signal failure or a process that remains alive blocks the next launch. Application names,
+bundle ids, generic Electron commands, working directories, and other
+worktrees are never discovery or termination authority. A fast simulated shell
+contract covers stale records, PID reuse, marker changes, and TERM/KILL ordering
+without touching real processes. A live child whose expected marker cannot be
+verified creates a worktree launch block rather than signal authority; the next
+transition remains blocked until that exact PID exits or exposes the marker.
 
 ## Documentation and generated assets
 
@@ -197,6 +218,8 @@ not become a fallback, shim, or local artifact path.
 - `redeven:.githooks/pre-commit:1` - Defines the fast staged gate.
 - `redeven:.githooks/pre-push:1` - Binds full validation to the exact main push.
 - `redeven:scripts/check_final_integration.sh:1` - Defines the complete local integration gate.
+- `redeven:scripts/test_dev_desktop_process_ownership.sh:1` - Proves worktree-scoped Dev Desktop signal authority without inspecting real processes.
+- `redeven:desktop/src/build/desktopPreloadRuntime.test.ts:1` - Runs real Electron preload bridges in isolated working and user-data directories.
 - `redeven:scripts/check_plugin_integration.sh:1` - Defines focused ReDevPlugin integration coverage.
 - `redeven:scripts/check_redevplugin_dependency_boundary.sh:1` - Rejects maintained local source wiring and fails closed on scan errors.
 - `redeven:scripts/check_catalog_plugin_package_url.mjs:1` - Binds the catalog distribution manifest to immutable package bytes.
