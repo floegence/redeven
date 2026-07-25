@@ -381,7 +381,7 @@ function InstallProgress(props: { stage: InstallStage; isUpdate: boolean }): JSX
                 <span
                   data-install-progress-connector
                   class={cn('absolute top-3 h-px -translate-y-1/2', complete() || active() ? 'bg-primary' : 'bg-border')}
-                  style={{ right: 'calc(50% + 1rem)', width: 'calc(100% - 2rem)' }}
+                  style={{ right: 'calc(50% + 1.25rem)', width: 'calc(100% - 2.5rem)' }}
                   aria-hidden="true"
                 />
               </Show>
