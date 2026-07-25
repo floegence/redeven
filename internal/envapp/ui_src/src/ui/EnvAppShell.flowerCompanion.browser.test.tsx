@@ -757,7 +757,17 @@ vi.mock('./services/desktopShellBridge', () => ({
 vi.mock('./services/localApi', () => ({
   fetchLocalApiJSON: vi.fn(),
   getEnvAppAccessStatus: getEnvAppAccessStatusMock,
+  LocalApiError: class LocalApiError extends Error {
+    readonly data: unknown;
+
+    constructor(args: Readonly<{ message: string; data?: unknown }>) {
+      super(args.message);
+      this.name = 'LocalApiError';
+      this.data = args.data;
+    }
+  },
   prepareLocalApiRequestInit: vi.fn(async (init: RequestInit) => init),
+  uploadLocalApiAttachment: vi.fn(),
   uploadLocalApiFile: vi.fn(),
   unlockEnvAppAccess: vi.fn(async () => ({ unlocked: true, resume_token: 'resume123' })),
 }));
