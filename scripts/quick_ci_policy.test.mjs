@@ -10,6 +10,42 @@ const uiGate = readFileSync(new URL("./check_ui_tests.sh", import.meta.url), "ut
 const jobsSource = workflow.slice(workflow.indexOf("\njobs:\n") + "\njobs:\n".length);
 const releaseJobsSource = releaseWorkflow.slice(releaseWorkflow.indexOf("\njobs:\n") + "\njobs:\n".length);
 
+const allowedQuickGateCommands = new Set([
+  "#!/usr/bin/env bash",
+  "set -euo pipefail",
+  'SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)',
+  'ROOT_DIR=$(cd -- "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd)',
+  'cd "$ROOT_DIR"',
+  'echo "[INFO] checking repository diff and Go formatting"',
+  "git diff --check",
+  "git diff-tree --check --root -r --no-commit-id HEAD",
+  'test -z "$(gofmt -l $(git ls-files \'*.go\'))"',
+  'echo "[INFO] checking shell, JavaScript, and Python syntax"',
+  "for script in scripts/*.sh scripts/okf/*.sh .githooks/pre-commit .githooks/pre-push; do",
+  'bash -n "$script"',
+  "done",
+  "for script in scripts/*.mjs; do",
+  'node --check "$script"',
+  'python3 -c \'from pathlib import Path; [compile(Path(name).read_text(encoding="utf-8"), name, "exec") for name in ("scripts/safe_extract_tar.py", "scripts/extract_desktop_runtime.py")]\'',
+  'echo "[INFO] checking bounded cloud policy and committed knowledge artifacts"',
+  "node --test scripts/quick_ci_policy.test.mjs scripts/actionlint_runner_policy.test.mjs",
+  "node --test scripts/check_readme_localizations.test.mjs",
+  "node scripts/check_readme_localizations.mjs --require-reviewed",
+  "./scripts/okf/check_source_integrity.sh",
+  "./scripts/build_okf_bundle.sh --verify-only",
+  'echo "[INFO] quick CI passed"',
+]);
+
+function assertClosedQuickGate(source) {
+  const commands = source
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith("#"));
+  for (const command of commands) {
+    assert.ok(allowedQuickGateCommands.has(command), `unexpected quick gate command: ${command}`);
+  }
+}
+
 test("ordinary GitHub CI is one bounded source-only job", () => {
   assert.match(workflow, /^name: Quick CI$/m);
   assert.match(workflow, /^\s{4}name: Quick CI$/m);
@@ -47,34 +83,7 @@ test("quick gate checks the committed tree instead of trusting a clean checkout"
 });
 
 test("quick gate remains a closed source-only command set", () => {
-  const commands = quickGate
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line && !line.startsWith("#") && !line.startsWith("echo "));
-  const allowed = new Set([
-    "#!/usr/bin/env bash",
-    "set -euo pipefail",
-    'SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)',
-    'ROOT_DIR=$(cd -- "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd)',
-    'cd "$ROOT_DIR"',
-    "git diff --check",
-    "git diff-tree --check --root -r --no-commit-id HEAD",
-    'test -z "$(gofmt -l $(git ls-files \'*.go\'))"',
-    "for script in scripts/*.sh scripts/okf/*.sh .githooks/pre-commit .githooks/pre-push; do",
-    'bash -n "$script"',
-    "done",
-    "for script in scripts/*.mjs; do",
-    'node --check "$script"',
-    'python3 -c \'from pathlib import Path; [compile(Path(name).read_text(encoding="utf-8"), name, "exec") for name in ("scripts/safe_extract_tar.py", "scripts/extract_desktop_runtime.py")]\'',
-    "node --test scripts/quick_ci_policy.test.mjs scripts/actionlint_runner_policy.test.mjs",
-    "node --test scripts/check_readme_localizations.test.mjs",
-    "node scripts/check_readme_localizations.mjs --require-reviewed",
-    "./scripts/okf/check_source_integrity.sh",
-    "./scripts/build_okf_bundle.sh --verify-only",
-  ]);
-  for (const command of commands) {
-    assert.ok(allowed.has(command), `unexpected quick gate command: ${command}`);
-  }
+  assertClosedQuickGate(quickGate);
 
   for (const forbidden of [
     "playwright",
@@ -94,6 +103,17 @@ test("quick gate remains a closed source-only command set", () => {
   ]) {
     assert.doesNotMatch(quickGate, new RegExp(forbidden, "i"));
   }
+});
+
+test("quick gate cannot hide work after a logging command", () => {
+  const mutatedGate = quickGate.replace(
+    'echo "[INFO] quick CI passed"',
+    'echo "[INFO] quick CI passed"; ./scripts/check_plugin_integration.sh --ci',
+  );
+  assert.throws(
+    () => assertClosedQuickGate(mutatedGate),
+    /unexpected quick gate command: .*check_plugin_integration/,
+  );
 });
 
 test("exact-main pre-push owns complete UI and browser coverage", () => {
