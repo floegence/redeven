@@ -34,6 +34,7 @@ afterEach(() => {
   dispose?.();
   dispose = undefined;
   document.body.innerHTML = '';
+  vi.useRealTimers();
 });
 
 function owner(id: string, canConfirm: () => boolean = () => true): PluginConfirmationOwner {
@@ -63,6 +64,12 @@ function intent(
   };
 }
 
+function activeEntryID(queue: ReturnType<typeof createPluginConfirmationQueue>): number {
+  const entryID = queue.active()?.id;
+  if (entryID === undefined) throw new Error('confirmation queue has no active entry');
+  return entryID;
+}
+
 describe('createPluginConfirmationQueue', () => {
   it('serializes confirmations in FIFO order and settles each decision once', async () => {
     const queue = createPluginConfirmationQueue();
@@ -76,12 +83,12 @@ describe('createPluginConfirmationQueue', () => {
 
     expect(queue.active()?.intent.requestId).toBe('first');
     expect(queue.pendingCount?.()).toBe(2);
-    queue.approveActive();
+    queue.approveActive(activeEntryID(queue));
     await expect(first).resolves.toEqual({ confirmed: true });
     expect(queue.active()?.intent.requestId).toBe('second');
     expect(queue.pendingCount?.()).toBe(1);
 
-    queue.rejectActive();
+    queue.rejectActive(activeEntryID(queue));
     await expect(second).resolves.toEqual({ confirmed: false });
     expect(queue.active()).toBeUndefined();
     expect(queue.pendingCount?.()).toBe(0);
@@ -100,7 +107,7 @@ describe('createPluginConfirmationQueue', () => {
 
     await expect(first).resolves.toEqual({ confirmed: false });
     expect(queue.active()?.intent.requestId).toBe('second');
-    queue.approveActive();
+    queue.approveActive(activeEntryID(queue));
     await expect(second).resolves.toEqual({ confirmed: true });
   });
 
@@ -134,7 +141,7 @@ describe('createPluginConfirmationQueue', () => {
     await expect(first).resolves.toEqual({ confirmed: false });
     expect(queue.active()?.intent.requestId).toBe('active');
 
-    queue.approveActive();
+    queue.approveActive(activeEntryID(queue));
     await expect(second).resolves.toEqual({ confirmed: true });
   });
 
@@ -152,8 +159,29 @@ describe('createPluginConfirmationQueue', () => {
     const pending = Promise.resolve(handler(intent('visible', new AbortController().signal)));
     expect(queue.active()?.owner).toBe(requestOwner);
     visible = false;
-    queue.approveActive();
+    queue.approveActive(activeEntryID(queue));
     await expect(pending).resolves.toEqual({ confirmed: false });
+  });
+
+  it('ignores decisions that do not match the displayed active entry', async () => {
+    const queue = createPluginConfirmationQueue();
+    const requestOwner = owner('entry-binding');
+    const firstController = new AbortController();
+    const first = Promise.resolve(queue.createHandler(requestOwner)(intent('first', firstController.signal)));
+    const second = Promise.resolve(queue.createHandler(requestOwner)(intent('second', new AbortController().signal)));
+    const firstID = activeEntryID(queue);
+
+    queue.approveActive(firstID + 1);
+    expect(queue.active()?.intent.requestId).toBe('first');
+
+    firstController.abort('surface request cancelled');
+    await expect(first).resolves.toEqual({ confirmed: false });
+    expect(queue.active()?.intent.requestId).toBe('second');
+
+    queue.approveActive(firstID);
+    expect(queue.active()?.intent.requestId).toBe('second');
+    queue.cancelAll();
+    await expect(second).resolves.toEqual({ confirmed: false });
   });
 
   it('cancels every queued owner without widening an earlier owner cancellation', async () => {
@@ -205,6 +233,7 @@ describe('PluginConfirmationDialog', () => {
     expect(document.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('Remove the api container?');
     expect(document.querySelector('[data-plugin-confirmation-owner]')?.textContent).toBe('Containers');
     expect(document.querySelector('[data-plugin-confirmation-target]')?.textContent).toContain('api');
+    expect(document.querySelector('[data-plugin-confirmation-destructive]')?.textContent?.trim()).toBe('destructive');
     expect(document.querySelector('[data-plugin-confirmation-impact]')?.textContent).toContain('Permanent removal');
     expect(document.querySelector('[data-plugin-confirmation-impact]')?.textContent).toContain('cannot be recovered');
     expect(document.querySelector('[data-plugin-confirmation-position]')?.textContent?.trim()).toBe('1 / 2');
@@ -224,9 +253,151 @@ describe('PluginConfirmationDialog', () => {
     expect(approve.textContent?.trim()).toBe('Remove');
     expect(approve.className).toContain('bg-destructive');
 
+    vi.useFakeTimers();
     approve.click();
     await expect(first).resolves.toEqual({ confirmed: true });
     expect(queue.active()?.intent.requestId).toBe('second');
+
+    const nextApprove = document.querySelector<HTMLButtonElement>('[data-plugin-confirmation-approve]')!;
+    expect(nextApprove).not.toBe(approve);
+    expect(nextApprove.disabled).toBe(true);
+    nextApprove.click();
+    nextApprove.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 }));
+    expect(queue.active()?.intent.requestId).toBe('second');
+
+    vi.advanceTimersByTime(750);
+    await Promise.resolve();
+    expect(document.querySelector<HTMLButtonElement>('[data-plugin-confirmation-approve]')?.disabled).toBe(false);
+    queue.cancelAll();
+    await expect(second).resolves.toEqual({ confirmed: false });
+  });
+
+  it('renders the complete contract-validated Containers domain plan as high risk', async () => {
+    const queue = createPluginConfirmationQueue();
+    const requestOwner = owner('containers');
+    const domainPlan = {
+      method: 'containers.start',
+      request: {
+        engine: 'docker',
+        container_id: 'container-api-id',
+      },
+      target: {
+        engine: 'docker',
+        container_id: 'container-api-id',
+        container_name: 'redeven-containers-acceptance',
+        target_hash: 'sha256:container-target',
+      },
+      image: {
+        reference: 'alpine:3.22',
+        digest_pinned: false,
+      },
+      runtime: {
+        privileged: true,
+        network_mode: 'bridge',
+      },
+      risk_level: 'critical',
+      risk_flags: [{
+        id: 'container_privileged',
+        severity: 'critical',
+        title: 'Privileged container',
+        detail: 'The container can access host-level resources.',
+        admin_required: true,
+      }],
+      requires_admin: true,
+      summary: [
+        'Start the selected container?',
+        'This action launches the existing container with its configured runtime access.',
+      ],
+    };
+    const controller = new AbortController();
+    const requestIntent = {
+      ...intent('domain-plan', controller.signal, domainPlan),
+      method: 'containers.start',
+    };
+    const pending = Promise.resolve(queue.createHandler(requestOwner)(requestIntent));
+    const mount = document.createElement('div');
+    document.body.append(mount);
+
+    dispose = render(() => <PluginConfirmationDialog queue={queue} />, mount);
+    await Promise.resolve();
+
+    expect(document.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('Start the selected container?');
+    expect(document.querySelector('[data-plugin-confirmation-summary]')?.textContent).toContain('configured runtime access');
+    expect(document.querySelector('[data-plugin-confirmation-target]')?.textContent).toContain('redeven-containers-acceptance');
+    expect(document.querySelector('[data-plugin-confirmation-target-identity]')?.textContent?.trim()).toBe('container-api-id');
+    expect(document.querySelector('[data-plugin-confirmation-risk-level]')?.textContent?.trim()).toBe('critical');
+    expect(document.querySelector('[data-plugin-confirmation-admin-required]')?.textContent).toContain('Admin required');
+    expect(document.querySelector('[data-plugin-confirmation-privileged]')?.textContent?.trim()).toBe('runtime.privileged');
+    expect(document.querySelector('[data-plugin-confirmation-impact]')?.textContent).toContain('Privileged container');
+    expect(document.querySelector('[data-plugin-confirmation-impact]')?.textContent).toContain('host-level resources');
+    expect(document.querySelector('[data-plugin-confirmation-approve]')?.className).toContain('bg-destructive');
+
+    queue.cancelAll();
+    await expect(pending).resolves.toEqual({ confirmed: false });
+  });
+
+  it('shows top-level data-loss risk without relying on color or risk flags', async () => {
+    const queue = createPluginConfirmationQueue();
+    const pending = Promise.resolve(queue.createHandler(owner('data-loss'))(intent(
+      'data-loss',
+      new AbortController().signal,
+      { summary: 'Replace data?', data_loss: true, data_loss_risk: true, risk_flags: [] },
+    )));
+    const mount = document.createElement('div');
+    document.body.append(mount);
+
+    dispose = render(() => <PluginConfirmationDialog queue={queue} />, mount);
+
+    expect(document.querySelector('[data-plugin-confirmation-data-loss]')?.textContent?.trim()).toBe('data_loss');
+    expect(document.querySelector('[data-plugin-confirmation-data-loss-risk]')?.textContent?.trim()).toBe('data_loss_risk');
+    expect(document.querySelector('[data-plugin-confirmation-approve]')?.className).toContain('bg-destructive');
+    queue.cancelAll();
+    await expect(pending).resolves.toEqual({ confirmed: false });
+  });
+
+  it('does not let a detached stale decision settle the next confirmation', async () => {
+    const queue = createPluginConfirmationQueue();
+    const requestOwner = owner('stale-dialog');
+    const firstController = new AbortController();
+    const first = Promise.resolve(queue.createHandler(requestOwner)(intent('first', firstController.signal)));
+    const second = Promise.resolve(queue.createHandler(requestOwner)(intent('second', new AbortController().signal)));
+    const mount = document.createElement('div');
+    document.body.append(mount);
+
+    dispose = render(() => <PluginConfirmationDialog queue={queue} />, mount);
+    const staleApprove = document.querySelector<HTMLButtonElement>('[data-plugin-confirmation-approve]')!;
+    firstController.abort('surface request cancelled');
+    await expect(first).resolves.toEqual({ confirmed: false });
+    expect(queue.active()?.intent.requestId).toBe('second');
+
+    staleApprove.click();
+    expect(queue.active()?.intent.requestId).toBe('second');
+    queue.cancelAll();
+    await expect(second).resolves.toEqual({ confirmed: false });
+  });
+
+  it('keeps replacement approval inert across a brief empty queue gap', async () => {
+    vi.useFakeTimers();
+    const queue = createPluginConfirmationQueue();
+    const requestOwner = owner('empty-gap');
+    const first = Promise.resolve(queue.createHandler(requestOwner)(intent('first', new AbortController().signal)));
+    const mount = document.createElement('div');
+    document.body.append(mount);
+
+    dispose = render(() => <PluginConfirmationDialog queue={queue} />, mount);
+    document.querySelector<HTMLButtonElement>('[data-plugin-confirmation-approve]')!.click();
+    await expect(first).resolves.toEqual({ confirmed: true });
+    expect(queue.active()).toBeUndefined();
+
+    const second = Promise.resolve(queue.createHandler(requestOwner)(intent('second', new AbortController().signal)));
+    const replacementApprove = document.querySelector<HTMLButtonElement>('[data-plugin-confirmation-approve]')!;
+    expect(replacementApprove.disabled).toBe(true);
+    replacementApprove.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 }));
+    expect(queue.active()?.intent.requestId).toBe('second');
+
+    vi.advanceTimersByTime(750);
+    await Promise.resolve();
+    expect(replacementApprove.disabled).toBe(false);
     queue.cancelAll();
     await expect(second).resolves.toEqual({ confirmed: false });
   });
