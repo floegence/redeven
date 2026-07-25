@@ -102,6 +102,7 @@ export type AgentSettingsResponse = Readonly<{
   ai: AIConfig | null;
   ai_runtime?: AIRuntimeStatus | null;
   ai_secrets?: AISecretsView | null;
+  ai_readiness?: unknown;
 }>;
 
 export type FilesystemScope = Readonly<{

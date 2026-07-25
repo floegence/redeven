@@ -11,6 +11,7 @@ import type {
 import type { EnvironmentDetail, LocalRuntimeInfo } from '../services/controlplaneApi';
 import type { FilePreviewOpenOptions } from '../widgets/FilePreviewContext';
 import type { FlowerCanonicalReferenceNavigationTarget } from '../flower/linkedContextNavigation';
+import type { AIReadinessController } from '../flower/aiReadiness';
 import type {
   EnvFileBrowserSurfacePayload,
   EnvOpenSurfaceOptions,
@@ -87,6 +88,7 @@ export type OpenTerminalInDirectoryRequest = {
 
 export type EnvContextValue = {
   flowerDraftCoordinator?: FlowerComposerDraftCoordinator;
+  aiReadinessController?: AIReadinessController;
   env_id: () => string;
   env: Resource<EnvironmentDetail | null>;
   localRuntime: () => LocalRuntimeInfo | null;

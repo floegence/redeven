@@ -17,6 +17,8 @@ import {
 } from '../../../../../flower_ui/src/i18n/createLocalizedFlowerSurfaceCopy';
 import { useRedevenRpc } from '../protocol/redeven_v1';
 import { createEnvLocalFlowerSurfaceAdapter } from '../flower/envLocalFlowerSurfaceAdapter';
+import { createAIReadinessController } from '../flower/aiReadiness';
+import { AIReadinessBoundary } from '../flower/AIReadinessBoundary';
 import { useI18n, type EnvAppTranslationKey, type I18nHelpers } from '../i18n';
 import { useEnvContext } from './EnvContext';
 import { readDesktopSessionContextSnapshot } from '../services/desktopSessionContext';
@@ -74,6 +76,9 @@ export function EnvAIPage(props: EnvAIPageProps) {
   const rpc = useRedevenRpc();
   const i18n = useI18n();
   const notification = useNotification();
+  const readinessController = env.aiReadinessController ?? createAIReadinessController({
+    canAutomaticallyRetry: () => Boolean(env.env()?.permissions?.can_admin || env.env()?.permissions?.is_owner),
+  });
   const surfaceCopy = createMemo(() => createEnvFlowerSurfaceCopy(i18n, i18n.locale()));
   const companionCopy = createMemo<FlowerThreadSwitcherCopy | undefined>(() => (
     props.companionCopy
@@ -144,45 +149,54 @@ export function EnvAIPage(props: EnvAIPageProps) {
   }));
 
   return (
-    <FlowerSurface
-      adapter={adapter()}
-      notify={(notice: FlowerSurfaceNotification) => {
-        const title = trim(notice.title) || (notice.tone === 'error'
-          ? i18n.t('flower.errorNotificationTitle')
-          : i18n.t('flower.notificationTitle'));
-        if (notice.tone === 'success') {
-          notification.success(title, notice.message);
-        } else if (notice.tone === 'info') {
-          notification.info(title, notice.message);
-        } else {
-          notification.error(title, notice.message);
-        }
-      }}
-      copy={surfaceCopy()}
-      draftCoordinator={props.draftCoordinator}
-      surfaceInstanceID={props.surfaceInstanceID}
+    <AIReadinessBoundary
+      controller={readinessController}
       presentation={props.presentation}
-      engaged={props.engaged}
-      transcriptVisible={props.transcriptVisible}
-      companionPresenceOwner={props.companionPresenceOwner}
-      companionOpen={props.companionOpen}
-      companionRegionID={props.companionRegionID}
-      companionSummary={props.companionSummary}
-      companionActionLabel={props.companionActionLabel}
-      companionCopy={companionCopy()}
-      headerTrailingActions={props.headerTrailingActions}
-      onPresenceChange={props.onPresenceChange}
-      focusThreadRequest={props.focusRequestScope === 'activity' ? props.focusThreadRequest : env.aiThreadFocusRequest()}
-      focusComposerRequest={props.focusComposerRequest}
-      onFocusThreadRequestConsumed={props.focusRequestScope === 'activity'
-        ? props.onFocusThreadRequestConsumed
-        : env.consumeAIThreadFocusRequest}
-      onCompanionOpenRequest={props.onCompanionOpenRequest}
-      onThreadSelectionEvent={createUIPresentationEventRecorder({
-        surface: 'flower',
-        source: (event) => event.metadata?.source ?? 'thread-list',
-      })}
-      class={`h-full min-h-0 ${props.class ?? ''}`}
-    />
+      onOpenUpdate={() => env.openSettings('agent', { origin: { kind: 'flower', returnSurfaceId: props.settingsReturnSurfaceId ?? 'ai' } })}
+      onOpenPermissions={() => env.openSettings('runtime', { origin: { kind: 'flower', returnSurfaceId: props.settingsReturnSurfaceId ?? 'ai' } })}
+      canRetryGeneration={Boolean(env.env()?.permissions?.can_admin || env.env()?.permissions?.is_owner)}
+      focusEnabled={props.engaged ?? true}
+    >
+      <FlowerSurface
+        adapter={adapter()}
+        notify={(notice: FlowerSurfaceNotification) => {
+          const title = trim(notice.title) || (notice.tone === 'error'
+            ? i18n.t('flower.errorNotificationTitle')
+            : i18n.t('flower.notificationTitle'));
+          if (notice.tone === 'success') {
+            notification.success(title, notice.message);
+          } else if (notice.tone === 'info') {
+            notification.info(title, notice.message);
+          } else {
+            notification.error(title, notice.message);
+          }
+        }}
+        copy={surfaceCopy()}
+        draftCoordinator={props.draftCoordinator}
+        surfaceInstanceID={props.surfaceInstanceID}
+        presentation={props.presentation}
+        engaged={props.engaged}
+        transcriptVisible={props.transcriptVisible}
+        companionPresenceOwner={props.companionPresenceOwner}
+        companionOpen={props.companionOpen}
+        companionRegionID={props.companionRegionID}
+        companionSummary={props.companionSummary}
+        companionActionLabel={props.companionActionLabel}
+        companionCopy={companionCopy()}
+        headerTrailingActions={props.headerTrailingActions}
+        onPresenceChange={props.onPresenceChange}
+        focusThreadRequest={props.focusRequestScope === 'activity' ? props.focusThreadRequest : env.aiThreadFocusRequest()}
+        focusComposerRequest={props.focusComposerRequest}
+        onFocusThreadRequestConsumed={props.focusRequestScope === 'activity'
+          ? props.onFocusThreadRequestConsumed
+          : env.consumeAIThreadFocusRequest}
+        onCompanionOpenRequest={props.onCompanionOpenRequest}
+        onThreadSelectionEvent={createUIPresentationEventRecorder({
+          surface: 'flower',
+          source: (event) => event.metadata?.source ?? 'thread-list',
+        })}
+        class={`h-full min-h-0 ${props.class ?? ''}`}
+      />
+    </AIReadinessBoundary>
   );
 }

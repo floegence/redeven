@@ -85,6 +85,41 @@ Denied admin or full-access requests and unknown AI routes never obtain a
 generation lease. Incomplete provider leases fail closed, release any supplied
 resource, and cannot be presented as `ready`.
 
+## Env App maintenance presentation
+
+Env App shares one Redeven-owned readiness controller across its Activity,
+Workbench, and Settings consumers. A Flower surface keeps the same component
+instance mounted, but hides that local subtree from layout, focus, and assistive
+technology until the sanitized snapshot is `ready`. A flat sibling maintenance
+section occupies only the Flower slot. It never sets `inert`, `aria-hidden`, a
+modal role, or a pointer trap on the Env App shell, Workbench canvas, terminal,
+files, Settings, or any shared ancestor. Only the visible Flower placement may
+move or restore focus; a retained Activity placement cannot compete with the
+active Workbench placement.
+
+Transient inspection waits briefly before presenting progress, does not invent
+a percentage, and shows the next bounded check without announcing a countdown
+every second. Automatic retries are limited to typed safe temporary or I/O
+failures, require current product admin authority, slow down while the document
+is hidden, and reset their allowance only after that blocked episode settles.
+Manual retry is single-flight and is offered only when the current user and the
+mapped reason policy allow a new generation. Update and environment-access actions route
+to Redeven-owned Settings. No force, reset, repair, ignore, or Store mutation
+action exists. Returning to `ready` reveals the same Flower DOM and restores the
+previous valid target without a success notification.
+
+Displayed diagnostics and clipboard output iterate the same projection of the
+six sanitized readiness fields. The projection maps reason codes to localized
+copy and never includes a raw reason, path, schema or SQL detail, credential,
+message, provider state, or tool output. Unknown states, reasons, and
+contradictory retry, commit, or rollback facts become one non-retryable contract
+failure. Settings groups the Floret Store separately from Redeven product stores
+and other upstream stores; only Floret receives a readiness result, while the
+other owners are explicitly marked as outside this check instead of receiving a
+fabricated health claim. All interactive controls publish pending state in the
+input turn, keep visible focus and pointer/disabled cursors, and provide explicit
+localized copy for clipboard failure.
+
 # Boundaries
 
 The readiness controller must not import Floret, SQLite, or threadstore
@@ -107,4 +142,8 @@ closed for unknown outcomes. Readiness history is not recovery authority.
 - `redeven:internal/codeapp/ai_readiness_test.go:16` - Covers drain ordering, close failure, parent cancellation, current startup options, replacement, duplicate release, late startup, phases, and sanitized failures.
 - `redeven:internal/codeapp/appserver/ai_readiness_test.go:78` - Covers unified unavailable responses, optional Settings projection, exact permission ordering, invalid leases, and secrets-only routes.
 - `redeven:internal/ai/rpc_readiness_test.go:15` - Covers dynamic recovery, generation lease counts, invalid leases, and concurrent connection cleanup.
+- `redeven:internal/envapp/ui_src/src/ui/flower/aiReadiness.ts:1` - Strictly normalizes the sanitized wire facts and owns bounded, permission-aware polling and retry state.
+- `redeven:internal/envapp/ui_src/src/ui/flower/AIReadinessBoundary.tsx:1` - Keeps maintenance presentation local to Flower with focus restoration and same-source diagnostics.
+- `redeven:internal/envapp/ui_src/src/ui/pages/settings/AIReadinessSettingsSection.tsx:1` - Groups store owners without claiming health for stores outside the readiness check.
+- `redeven:internal/envapp/ui_src/src/ui/flower/AIReadinessBoundary.browser.test.tsx:1` - Verifies narrow reflow, zoom, forced colors, reduced motion, overflow, and local interaction behavior in Chromium.
 - `redeven:scripts/check_floret_dependency_boundary.sh:1` - Rejects fixed service pointers, raw accessors, misplaced constructors, and readiness storage coupling.

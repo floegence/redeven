@@ -19,7 +19,10 @@ import { useWorkbenchPluginSurfaceContext } from './WorkbenchPluginSurfaceContex
 import { WorkbenchFilePreviewWidget } from './WorkbenchFilePreviewWidget';
 import { REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS } from './surface/workbenchActionSurface';
 import { REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS } from './surface/workbenchTextSelectionSurface';
-import { REDEVEN_WORKBENCH_WHEEL_LAYOUT_ONLY_PROPS } from './surface/workbenchWheelInteractive';
+import {
+  REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS,
+  REDEVEN_WORKBENCH_WHEEL_LAYOUT_ONLY_PROPS,
+} from './surface/workbenchWheelInteractive';
 import { buildWorkbenchFileBrowserStateScope } from './workbenchInstanceState';
 
 const FRONTABLE_WORKBENCH_RENDER_MODE = 'projected_surface';
@@ -220,7 +223,7 @@ function PortsWidget() {
   );
 }
 
-function FlowerWidget(_props: RedevenWorkbenchWidgetBodyProps) {
+function FlowerWidget(props: RedevenWorkbenchWidgetBodyProps) {
   const env = useEnvContext();
   const i18n = useI18n();
   const available = () => env.env.state !== 'ready' || hasRWXPermissions(env.env());
@@ -236,10 +239,14 @@ function FlowerWidget(_props: RedevenWorkbenchWidgetBodyProps) {
         />
       )}
     >
-      <div class="redeven-workbench-body-surface relative h-full min-h-0 min-w-0">
+      <div
+        {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
+        class="redeven-workbench-body-surface relative h-full min-h-0 min-w-0"
+      >
         <EnvAIPage
           draftCoordinator={env.flowerDraftCoordinator!}
           surfaceInstanceID="env-workbench-flower"
+          engaged={Boolean(props.selected && props.lifecycle !== 'cold' && !props.filtered)}
         />
       </div>
     </Show>
