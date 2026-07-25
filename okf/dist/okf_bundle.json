@@ -479,7 +479,7 @@
               "ui",
               "workbench"
             ],
-            "summary": "Plugin UI is a released ReDevPlugin sandbox surface inside Redeven chrome.\nActivity opens stable Shell-root windows; Workbench opens standard\n`redeven.plugin` widgets. A vertical Activity Bar switcher launches ready\nplugins or routes attention states to Plugin Center. Plugin Center combines\ntrust, policy, lifecycle, authorization, required access, and launch-target\nstate into one primary action per item. External installation is an explicit\nsource, security review, install, and completion flow; installed packages remain\ndisabled with zero grants. Redeven owns product navigation, review, geometry,\nstacking, and placement. ReDevPlugin owns admission, iframe bootstrap, bridge,\nlifecycle, confirmation, streams, and revocation. Failed exact-surface close is\nretryable without widening authority to sibling surfaces or the session.",
+            "summary": "Plugin UI runs as released ReDevPlugin sandbox surfaces inside Redeven chrome.\nActivity opens stable Shell-root windows; Workbench opens `redeven.plugin`\nwidgets. The Activity Bar launches ready plugins or routes attention states to\nPlugin Center, which combines trust, policy, lifecycle, access, and launch state\ninto one primary action per item. External installation uses explicit source,\nsecurity review, install, and completion stages; installed packages stay\ndisabled with zero grants. Redeven owns navigation, review, geometry,\nstacking, and placement. ReDevPlugin owns admission, iframe bootstrap, bridge,\nlifecycle, confirmation, streams, and revocation. Failed exact-surface close is\nretryable without widening authority to sibling surfaces or the session.",
             "section_count": 2
           },
           {
@@ -8142,8 +8142,8 @@
         "title": "Plugin surfaces",
         "type": "UI Contract"
       },
-      "body_length": 12346,
-      "summary": "Plugin UI is a released ReDevPlugin sandbox surface inside Redeven chrome.\nActivity opens stable Shell-root windows; Workbench opens standard\n`redeven.plugin` widgets. A vertical Activity Bar switcher launches ready\nplugins or routes attention states to Plugin Center. Plugin Center combines\ntrust, policy, lifecycle, authorization, required access, and launch-target\nstate into one primary action per item. External installation is an explicit\nsource, security review, install, and completion flow; installed packages remain\ndisabled with zero grants. Redeven owns product navigation, review, geometry,\nstacking, and placement. ReDevPlugin owns admission, iframe bootstrap, bridge,\nlifecycle, confirmation, streams, and revocation. Failed exact-surface close is\nretryable without widening authority to sibling surfaces or the session.",
+      "body_length": 12277,
+      "summary": "Plugin UI runs as released ReDevPlugin sandbox surfaces inside Redeven chrome.\nActivity opens stable Shell-root windows; Workbench opens `redeven.plugin`\nwidgets. The Activity Bar launches ready plugins or routes attention states to\nPlugin Center, which combines trust, policy, lifecycle, access, and launch state\ninto one primary action per item. External installation uses explicit source,\nsecurity review, install, and completion stages; installed packages stay\ndisabled with zero grants. Redeven owns navigation, review, geometry,\nstacking, and placement. ReDevPlugin owns admission, iframe bootstrap, bridge,\nlifecycle, confirmation, streams, and revocation. Failed exact-surface close is\nretryable without widening authority to sibling surfaces or the session.",
       "sections": [
         {
           "id": "contract",
@@ -8222,7 +8222,7 @@
           "description": "Covers persisted `redeven.plugin` widget state."
         }
       ],
-      "snippet": "Plugin UI is a released ReDevPlugin sandbox surface inside Redeven chrome. Activity opens stable Shell-root windows; Workbench opens standard `redeven.plugin` widgets. A vertical Activity Bar switcher launches ready plugins or routes attent",
+      "snippet": "Plugin UI runs as released ReDevPlugin sandbox surfaces inside Redeven chrome. Activity opens stable Shell-root windows; Workbench opens `redeven.plugin` widgets. The Activity Bar launches ready plugins or routes attention states to",
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -8845,5 +8845,5 @@
       ]
     }
   ],
-  "source_sha256": "50573a8ca51ca39fcdc3596798cb6bb3ac88a5b3f408da0eeee0871fd7af99d8"
+  "source_sha256": "7a967e09a8764b8ceb05b902a1d2ec7daf54f7de9aa2d385a3281bdb2bb2889f"
 }
