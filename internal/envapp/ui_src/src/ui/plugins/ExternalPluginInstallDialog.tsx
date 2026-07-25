@@ -155,7 +155,7 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
       await refreshCommitted(result);
     } catch (error) {
       if (!controller.signal.aborted) {
-        setError({ summary: i18n.t('uiCopy.plugin.external.commitFailed') });
+        setError({ summary: i18n.t(isUpdate() ? 'uiCopy.plugin.external.updateFailed' : 'uiCopy.plugin.external.commitFailed') });
         if (error instanceof ExternalPackageInspectionTerminalError) {
           setInspection(null);
           setConfirmed(false);
@@ -166,7 +166,7 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
           setStage('review');
         } else {
           setCommitNeedsReconciliation(true);
-          setError({ summary: i18n.t('uiCopy.plugin.external.commitOutcomeUnknown') });
+          setError({ summary: i18n.t(isUpdate() ? 'uiCopy.plugin.external.updateOutcomeUnknown' : 'uiCopy.plugin.external.commitOutcomeUnknown') });
           setStage('review');
         }
       }
@@ -187,7 +187,7 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
       setRefreshFailed(false);
     } catch {
       setRefreshFailed(true);
-      setError({ summary: i18n.t('uiCopy.plugin.external.refreshFailed') });
+      setError({ summary: i18n.t(isUpdate() ? 'uiCopy.plugin.external.updateRefreshFailed' : 'uiCopy.plugin.external.refreshFailed') });
     } finally {
       setRefreshPending(false);
     }
@@ -333,7 +333,7 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
           )}
         </Show>
         <Show when={stage() === 'committing'}>
-          <CommitProgress inspection={inspection()} />
+          <CommitProgress inspection={inspection()} isUpdate={isUpdate()} />
         </Show>
         <Show when={stage() === 'complete' && committed()}>
           {(result) => (
@@ -341,7 +341,10 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
               <div class="flex items-start gap-3">
                 <CheckCircle class="mt-0.5 h-5 w-5 shrink-0 text-[var(--redeven-status-success-foreground)]" />
                 <div>
-                  <div class="font-semibold">{i18n.t('uiCopy.plugin.external.complete', { plugin: result().plugin.manifest.plugin.display_name })}</div>
+                  <div class="font-semibold">{i18n.t(
+                    isUpdate() ? 'uiCopy.plugin.external.updateComplete' : 'uiCopy.plugin.external.complete',
+                    { plugin: result().plugin.manifest.plugin.display_name },
+                  )}</div>
                   <div class="mt-1 text-sm text-muted-foreground">{result().plugin.publisher_id} · v{result().plugin.version}</div>
                 </div>
               </div>
@@ -685,14 +688,11 @@ function InspectionReview(props: {
   const accessChanged = createMemo(() => declarations().some((declaration) => Boolean(declaration.change)));
   return (
     <div class="space-y-4">
-      <div class="flex items-start gap-3 border-b pb-4">
+      <div data-external-plugin-identity class="flex items-start gap-3 border-b pb-4">
         <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border bg-background"><Package class="h-5 w-5" /></div>
         <div class="min-w-0 flex-1">
           <div class="truncate text-base font-semibold">{props.inspection.plugin_id}</div>
           <div class="mt-1 text-sm text-muted-foreground">{props.inspection.publisher_id} · v{props.inspection.version}</div>
-          <code class="mt-1.5 block truncate text-[11px] text-muted-foreground" title={props.inspection.inspected_hashes.package_sha256}>
-            {props.inspection.inspected_hashes.package_sha256}
-          </code>
         </div>
       </div>
       <SourceProvenanceReview provenance={props.inspection.source_provenance} />
@@ -768,7 +768,7 @@ function InspectionReview(props: {
         </Show>
         <For each={declarations()}>
           {(declaration) => (
-            <details class={cn(
+            <details open={declaration.change === 'changed'} class={cn(
               'group rounded-md border border-l-2 bg-background',
               declaration.change === 'added' || declaration.change === 'changed'
                 ? 'border-l-[var(--redeven-status-warning-foreground)]'
@@ -825,7 +825,7 @@ function InspectionReview(props: {
           </details>
         </div>
       </Show>
-      <details class="group border-t pt-3 text-xs">
+      <details data-external-plugin-hashes class="group border-t pt-3 text-xs">
         <summary class="flex min-h-[44px] cursor-pointer list-none items-center gap-2 font-medium text-muted-foreground sm:min-h-9">
           <span class="flex-1">{i18n.t('uiCopy.plugin.external.packageHash')}</span>
           <ChevronDown class="h-4 w-4 transition-transform group-open:rotate-180" />
@@ -921,14 +921,14 @@ function PostInstallFacts(props: { updateEligibility: ExternalPluginInspection['
   );
 }
 
-function CommitProgress(props: { inspection: ExternalPluginInspection | null }): JSX.Element {
+function CommitProgress(props: { inspection: ExternalPluginInspection | null; isUpdate: boolean }): JSX.Element {
   const i18n = useI18n();
   return (
     <div role="status" class="space-y-4 rounded-md border bg-background p-5">
       <div class="flex items-center gap-3">
         <Loader2 class="h-5 w-5 shrink-0 animate-spin text-primary motion-reduce:animate-none" />
         <div>
-          <div class="font-semibold">{i18n.t('uiCopy.plugin.external.committing')}</div>
+          <div class="font-semibold">{i18n.t(props.isUpdate ? 'uiCopy.plugin.external.updating' : 'uiCopy.plugin.external.committing')}</div>
           <Show when={props.inspection}>
             {(current) => <div class="mt-1 text-sm text-muted-foreground">{current().plugin_id} · v{current().version}</div>}
           </Show>

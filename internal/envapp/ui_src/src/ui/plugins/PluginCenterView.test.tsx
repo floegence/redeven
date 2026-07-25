@@ -393,14 +393,17 @@ describe('PluginCenterView', () => {
       ), mount);
 
       const issue = mount.querySelector<HTMLElement>('[data-plugin-issue-details]')!;
+      const technicalDetails = issue.querySelector<HTMLDetailsElement>('[data-plugin-issue-evidence]')!;
+      const technicalSummary = technicalDetails.querySelector<HTMLElement>('summary')!;
       const scrollIntoView = vi.fn();
-      Object.defineProperty(issue, 'scrollIntoView', { configurable: true, value: scrollIntoView });
+      Object.defineProperty(technicalSummary, 'scrollIntoView', { configurable: true, value: scrollIntoView });
       const primary = mount.querySelector<HTMLButtonElement>(`[data-plugin-action="${action}"]`)!;
       expect(primary.textContent).toContain(label);
       primary.click();
 
       expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'nearest' });
-      expect(document.activeElement).toBe(issue);
+      expect(document.activeElement).toBe(technicalSummary);
+      expect(technicalDetails.open).toBe(false);
       expect(issue.textContent).toContain(recovery);
       const issueEvidence = issue.querySelector('[data-plugin-issue-evidence]')?.textContent ?? '';
       for (const fact of evidence) expect(issueEvidence).toContain(fact);

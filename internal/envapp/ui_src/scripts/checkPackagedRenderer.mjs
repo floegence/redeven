@@ -550,8 +550,13 @@ async function verifyBuiltPluginInstallRouting(browser) {
     await containersInstall.evaluate((button) => { button.disabled = false; });
     await containersInstall.click();
 
-    const externalPluginDialog = page.locator('[data-external-plugin-dialog]');
-    await externalPluginDialog.waitFor({ state: 'visible', timeout: 10_000 });
+    const externalPluginDialogContent = page.locator('[data-external-plugin-dialog]');
+    await externalPluginDialogContent.waitFor({ state: 'visible', timeout: 10_000 });
+    const externalPluginDialog = page.getByRole('dialog').filter({ has: externalPluginDialogContent });
+    const externalPluginDialogCount = await externalPluginDialog.count();
+    if (externalPluginDialogCount !== 1) {
+      throw new Error(`built external package dialog count = ${externalPluginDialogCount}, expected 1`);
+    }
     const packageURL = await externalPluginDialog.locator('input[type="url"]').inputValue();
     if (packageURL !== officialContainersPackageURL) {
       throw new Error(`built Containers package URL mismatch: ${JSON.stringify({

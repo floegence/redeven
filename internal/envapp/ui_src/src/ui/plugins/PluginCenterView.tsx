@@ -754,11 +754,16 @@ function PluginIssueDetails(props: { item: PluginInventoryItem }): JSX.Element {
             )}
           </Show>
         </div>
-        <div class="mt-3 space-y-1" data-plugin-issue-evidence>
-          <For each={rawEvidence()}>
-            {(fact) => <code class="block break-all text-[11px] text-muted-foreground">{fact}</code>}
-          </For>
-        </div>
+        <details class="mt-3 text-xs" data-plugin-issue-evidence>
+          <summary data-plugin-issue-evidence-summary class="cursor-pointer font-medium text-foreground">
+            {i18n.t('uiCopy.plugin.technicalDetails')}
+          </summary>
+          <div class="mt-2 space-y-1">
+            <For each={rawEvidence()}>
+              {(fact) => <code class="block break-all text-[11px] text-muted-foreground">{fact}</code>}
+            </For>
+          </div>
+        </details>
       </section>
     </Show>
   );
@@ -925,7 +930,7 @@ function PluginActions(props: {
       case 'review_update': props.onExternalUpdate(item()); break;
       case 'view_runtime':
       case 'view_trust':
-      case 'view_diagnostics': reveal('[data-plugin-issue-details]'); break;
+      case 'view_diagnostics': reveal('[data-plugin-issue-evidence-summary]'); break;
       case 'view_details': reveal('[data-plugin-technical-details]'); break;
     }
   };
