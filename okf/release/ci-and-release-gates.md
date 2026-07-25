@@ -45,7 +45,10 @@ and wait for it to drain. An unexplained external
 `SIGKILL` remains a gate failure and is never converted to success by retry or
 name-based process substitution. Before real Electron coverage, the full gate
 runs a non-mutating, non-interactive execution preflight against the exact npm
-Electron binary. Signal termination or macOS AMFI rejection fails as an explicit
+Electron binary. The preflight resolves package-manager symlinks, requires the
+package root to remain inside Desktop `node_modules`, matches the installed
+version to the exact `package.json` pin, and executes only that package's standard
+binary path. Signal termination or macOS AMFI rejection fails as an explicit
 environment error. Tests and gates never sign Electron, use developer signing
 identities, or mutate `node_modules` to change the host trust decision. These
 test-runtime rules do not change Dev Desktop launch or shutdown behavior.
