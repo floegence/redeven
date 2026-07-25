@@ -178,6 +178,66 @@ describe('createAIReadinessController', () => {
     controller.dispose();
   });
 
+  it('fails closed when a synchronous request transport returns no readiness payload', async () => {
+    const request = vi.fn(() => undefined);
+    const refreshController = createAIReadinessController({
+      request,
+      visibilitySource: null,
+      autoStart: false,
+    });
+
+    await expect(refreshController.refresh()).resolves.toEqual({
+      state: 'blocked',
+      reason_code: 'ai_readiness_contract_error',
+      retryable: false,
+      safe_to_retry: false,
+      committed: false,
+      rolled_back: false,
+    });
+    expect(refreshController.loading()).toBe(false);
+    refreshController.dispose();
+
+    const retryController = createAIReadinessController({
+      request,
+      visibilitySource: null,
+      autoStart: false,
+    });
+    await expect(retryController.retry()).resolves.toEqual({
+      state: 'blocked',
+      reason_code: 'ai_readiness_contract_error',
+      retryable: false,
+      safe_to_retry: false,
+      committed: false,
+      rolled_back: false,
+    });
+    expect(retryController.retryPending()).toBe(false);
+    expect(request.mock.calls).toEqual([
+      ['/_redeven_proxy/api/ai/readiness', { method: 'GET' }],
+      ['/_redeven_proxy/api/ai/readiness/retry', { method: 'POST' }],
+    ]);
+    retryController.dispose();
+  });
+
+  it('maps a synchronous request throw through the readiness failure boundary', async () => {
+    const request = vi.fn(() => {
+      throw new Error('synchronous transport failure');
+    });
+    const controller = createAIReadinessController({ request, visibilitySource: null });
+
+    await flushAsync();
+
+    expect(controller.snapshot()).toEqual({
+      state: 'blocked',
+      reason_code: 'ai_readiness_contract_error',
+      retryable: false,
+      safe_to_retry: false,
+      committed: false,
+      rolled_back: false,
+    });
+    expect(controller.loading()).toBe(false);
+    controller.dispose();
+  });
+
   it('uses LocalApiError.data.readiness without parsing its message', async () => {
     const request = vi.fn(async () => {
       throw new LocalApiError({
