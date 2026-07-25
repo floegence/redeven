@@ -223,6 +223,10 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Install Desktop dependencies
+        working-directory: desktop
+        run: npm ci --no-audit --no-fund
+
       - name: Download matching runtime package
         env:
           GH_TOKEN: ${{ github.token }}
