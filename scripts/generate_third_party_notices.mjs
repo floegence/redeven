@@ -2,8 +2,13 @@
 import { execFileSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  collectJavaScriptLockInventory,
+  packageCoordinate,
+} from './javascript_lock_inventory.mjs';
 import { verifyBundledIconIntegrity } from './terminal_agent_icon_integrity.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
@@ -12,6 +17,8 @@ const outputPath = path.join(repoRoot, 'THIRD_PARTY_NOTICES.md');
 const checkOnly = process.argv.includes('--check');
 const terminalAgentIconManifestPath = path.join(repoRoot, 'assets/terminal_agent_icons.json');
 const terminalAgentIconRoot = path.join(repoRoot, 'internal/envapp/ui_src/public/agent-cli-icons');
+const envAppRequire = createRequire(path.join(repoRoot, 'internal/envapp/ui_src/package.json'));
+const { load: parseYAML } = envAppRequire('js-yaml');
 const expectedTerminalAgentIconIdentities = [
   'codex', 'claude', 'opencode', 'kimi', 'gemini', 'qwen', 'copilot', 'cline',
   'roo', 'vibe', 'cursor', 'junie', 'kiro', 'openhands', 'trae', 'kilo',
@@ -38,6 +45,12 @@ const npmLicenseOverrides = new Map([
   ['@floegence/floeterm-terminal-web', { license: 'MIT', note: 'Built-in theme attribution and license texts are reproduced below from the verified 0.9.0 package.' }],
   ['@floegence/redevplugin-ui', { license: 'MIT', note: 'License inherited from floegence/redevplugin root LICENSE.' }],
   ['khroma', { license: 'MIT', note: 'The published README declares MIT copyright for the package authors.' }],
+]);
+
+const npmCoordinateLicenseOverrides = new Map([
+  ['@asamuzakjp/generational-cache@1.0.1', { license: 'MIT', note: 'License verified from the pnpm-installed package manifest.' }],
+  ['@humanfs/types@0.15.0', { license: 'Apache-2.0', note: 'License verified from the pnpm-installed package manifest.' }],
+  ['lru-cache@11.5.0', { license: 'BlueOak-1.0.0', note: 'License verified from the pnpm-installed package manifest.' }],
 ]);
 
 const goLicenseOverrides = new Map([
@@ -73,10 +86,10 @@ const goLicensePrefixFallbacks = [
   { prefix: 'github.com/pkg/browser', license: 'BSD-style', note: 'pkg/browser is distributed under a BSD-style license.' },
 ];
 
-const packageLockSources = [
-  { label: 'Desktop shell', file: 'desktop/package-lock.json' },
-  { label: 'Env App UI', file: 'internal/envapp/ui_src/package-lock.json' },
-  { label: 'Code App UI', file: 'internal/codeapp/ui_src/package-lock.json' },
+const javascriptLockSources = [
+  { label: 'Desktop shell', packageLock: 'desktop/package-lock.json', pnpmLock: 'desktop/pnpm-lock.yaml' },
+  { label: 'Env App UI', packageLock: 'internal/envapp/ui_src/package-lock.json', pnpmLock: 'internal/envapp/ui_src/pnpm-lock.yaml' },
+  { label: 'Code App UI', packageLock: 'internal/codeapp/ui_src/package-lock.json' },
 ];
 
 function readJSON(filePath) {
@@ -234,11 +247,6 @@ function normalizeLicense(value) {
   return text.replace(/\s+/g, ' ');
 }
 
-function npmPackageName(packagePath) {
-  const parts = packagePath.split('node_modules/');
-  return parts[parts.length - 1] ?? packagePath;
-}
-
 function mergeEntry(map, entry) {
   const existing = map.get(entry.key);
   if (!existing) {
@@ -252,38 +260,57 @@ function mergeEntry(map, entry) {
   }
 }
 
-function collectNpmEntries() {
+function collectJavaScriptEntries() {
   const entries = new Map();
 
-  for (const source of packageLockSources) {
-    const absolutePath = path.join(repoRoot, source.file);
-    const lock = readJSON(absolutePath);
-    for (const [packagePath, meta] of Object.entries(lock.packages ?? {})) {
-      if (!packagePath.includes('node_modules/')) continue;
-
-      const name = npmPackageName(packagePath);
-      const version = String(meta.version ?? '').trim();
-      if (!name || !version) continue;
-
-      const override = npmLicenseOverrides.get(name);
-      const license = normalizeLicense(override?.license ?? meta.license);
-      const notes = [];
-      if (override?.note) notes.push(override.note);
-      if (license.includes('GPL') && /\bMIT\b/.test(license)) {
-        notes.push('Redeven uses this dual-licensed package under the MIT option.');
-      }
-
-      mergeEntry(entries, {
-        key: `npm:${name}@${version}`,
-        ecosystem: 'npm',
-        name,
-        version,
-        license,
-        source: `https://www.npmjs.com/package/${encodeURIComponent(name)}/v/${encodeURIComponent(version)}`,
-        scopes: [source.label],
-        notes,
-      });
+  const inventory = collectJavaScriptLockInventory(javascriptLockSources.map((source) => ({
+    label: source.label,
+    packageLock: source.packageLock ? readJSON(path.join(repoRoot, source.packageLock)) : undefined,
+    pnpmLock: source.pnpmLock
+      ? parseYAML(fs.readFileSync(path.join(repoRoot, source.pnpmLock), 'utf8'))
+      : undefined,
+  })));
+  const licensesByName = new Map();
+  for (const pkg of inventory) {
+    for (const license of pkg.licenses) {
+      const licenses = licensesByName.get(pkg.name) ?? new Set();
+      licenses.add(normalizeLicense(license));
+      licensesByName.set(pkg.name, licenses);
     }
+  }
+
+  for (const pkg of inventory) {
+    const override = npmLicenseOverrides.get(pkg.name);
+    const coordinateOverride = npmCoordinateLicenseOverrides.get(packageCoordinate(pkg.name, pkg.version));
+    const exactLicenses = Array.from(new Set(pkg.licenses.map(normalizeLicense)));
+    if (exactLicenses.length > 1) {
+      throw new Error(`conflicting npm license metadata for ${packageCoordinate(pkg.name, pkg.version)}: ${exactLicenses.join(', ')}`);
+    }
+    const samePackageLicenses = [...(licensesByName.get(pkg.name) ?? [])];
+    const inheritedLicense = samePackageLicenses.length === 1 ? samePackageLicenses[0] : undefined;
+    const license = normalizeLicense(
+      override?.license ?? coordinateOverride?.license ?? exactLicenses[0] ?? inheritedLicense,
+    );
+    const notes = [];
+    if (override?.note) notes.push(override.note);
+    if (coordinateOverride?.note) notes.push(coordinateOverride.note);
+    if (!override && !coordinateOverride && exactLicenses.length === 0 && inheritedLicense) {
+      notes.push('License metadata inherited from another npm-locked version of the same package.');
+    }
+    if (license.includes('GPL') && /\bMIT\b/.test(license)) {
+      notes.push('Redeven uses this dual-licensed package under the MIT option.');
+    }
+
+    mergeEntry(entries, {
+      key: `npm:${packageCoordinate(pkg.name, pkg.version)}`,
+      ecosystem: 'npm',
+      name: pkg.name,
+      version: pkg.version,
+      license,
+      source: `https://www.npmjs.com/package/${encodeURIComponent(pkg.name)}/v/${encodeURIComponent(pkg.version)}`,
+      scopes: pkg.scopes,
+      notes,
+    });
   }
 
   return Array.from(entries.values()).sort(compareEntries);
@@ -502,7 +529,7 @@ The generator fails on missing licenses and on licenses that are not acceptable 
 }
 
 const goEntries = collectGoEntries();
-const npmEntries = collectNpmEntries();
+const npmEntries = collectJavaScriptEntries();
 const terminalAgentIcons = collectTerminalAgentIconAssets();
 const floetermThemeNotices = collectFloetermThemeNotices();
 const allEntries = [...goEntries, ...npmEntries];

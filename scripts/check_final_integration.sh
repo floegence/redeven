@@ -116,6 +116,7 @@ run_step "checking final rebased diff" git diff --check "${base}...${tip}"
 run_step "checking shell syntax" check_shell_syntax
 run_step "linting GitHub Actions workflows" check_github_workflows
 run_step "testing README localization contract" node --test scripts/check_readme_localizations.test.mjs
+run_step "testing JavaScript lock inventory" node --test scripts/javascript_lock_inventory.test.mjs
 run_step "checking reviewed README localizations" node scripts/check_readme_localizations.mjs --require-reviewed
 run_step "testing Git hook contracts" ./scripts/test_git_hooks.sh
 run_step "testing Go packages serially without cache" env GOWORK=off go test -p 1 -count=1 ./...
