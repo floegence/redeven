@@ -7,14 +7,13 @@ timestamp: 2026-07-24T00:00:00Z
 ---
 # Summary
 
-Plugin UI is a released ReDevPlugin sandbox surface inside Redeven chrome.
-Activity opens stable Shell-root windows; Workbench opens standard
-`redeven.plugin` widgets. A vertical Activity Bar switcher launches ready
-plugins or routes attention states to Plugin Center. Plugin Center combines
-trust, policy, lifecycle, authorization, required access, and launch-target
-state into one primary action per item. External installation is an explicit
-source, security review, install, and completion flow; installed packages remain
-disabled with zero grants. Redeven owns product navigation, review, geometry,
+Plugin UI runs as released ReDevPlugin sandbox surfaces inside Redeven chrome.
+Activity opens stable Shell-root windows; Workbench opens `redeven.plugin`
+widgets. The Activity Bar launches ready plugins or routes attention states to
+Plugin Center, which combines trust, policy, lifecycle, access, and launch state
+into one primary action per item. External installation uses explicit source,
+security review, install, and completion stages; installed packages stay
+disabled with zero grants. Redeven owns navigation, review, geometry,
 stacking, and placement. ReDevPlugin owns admission, iframe bootstrap, bridge,
 lifecycle, confirmation, streams, and revocation. Failed exact-surface close is
 retryable without widening authority to sibling surfaces or the session.
