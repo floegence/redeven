@@ -135,6 +135,10 @@ test("release workflow validates exact main and contains no test gate", () => {
     [...releaseJobsSource.matchAll(/^  ([a-z][a-z0-9-]*):$/gm)].length,
     [...releaseJobsSource.matchAll(/^    timeout-minutes: [0-9]+$/gm)].length,
   );
+  const desktopInstallOffset = releaseWorkflow.indexOf("run: npm ci --no-audit --no-fund");
+  const desktopPackageOffset = releaseWorkflow.indexOf("npm run package --");
+  assert.ok(desktopInstallOffset > 0, "release must install Desktop build dependencies");
+  assert.ok(desktopPackageOffset > desktopInstallOffset, "release must install Desktop dependencies before packaging");
 
   for (const forbidden of [
     "renderer-e2e",
