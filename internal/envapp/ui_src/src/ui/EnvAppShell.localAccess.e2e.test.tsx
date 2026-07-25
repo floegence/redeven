@@ -13,6 +13,7 @@ const getLocalAccessStatusMock = vi.fn();
 const unlockLocalAccessMock = vi.fn();
 const getEnvAppAccessStatusMock = vi.fn();
 const unlockEnvAppAccessMock = vi.fn();
+const fetchLocalApiJSONMock = vi.fn();
 const getEnvironmentMock = vi.fn();
 const mintLocalDirectConnectArtifactMock = vi.fn();
 const mintEnvProxyEntryTicketMock = vi.fn();
@@ -1025,7 +1026,7 @@ vi.mock('./utils/askFlowerPath', () => ({
 }));
 vi.mock('./utils/windowNavigation', () => ({ reloadCurrentPage: reloadCurrentPageMock }));
 vi.mock('./services/localApi', () => ({
-  fetchLocalApiJSON: vi.fn(),
+  fetchLocalApiJSON: fetchLocalApiJSONMock,
   localApiRequestCredentials: () => 'same-origin',
   getEnvAppAccessStatus: getEnvAppAccessStatusMock,
   uploadLocalApiFile: vi.fn(),
@@ -1236,6 +1237,14 @@ beforeEach(() => {
     .mockResolvedValueOnce({ password_required: true, unlocked: false })
     .mockResolvedValueOnce({ password_required: true, unlocked: true });
   unlockEnvAppAccessMock.mockResolvedValue({ unlocked: true, resume_token: 'resume123' });
+  fetchLocalApiJSONMock.mockResolvedValue({
+    state: 'ready',
+    reason_code: '',
+    retryable: false,
+    safe_to_retry: false,
+    committed: false,
+    rolled_back: false,
+  });
   getEnvironmentMock.mockResolvedValue({
     public_id: 'env_local',
     name: 'Local runtime',
@@ -3057,6 +3066,7 @@ describe('EnvAppShell local access gate', () => {
       expect(host.querySelector('#redeven-activity-flower-product')).toBeNull();
       expect(host.querySelector('[data-testid="activity-flower-composer"]')).toBeNull();
       expect(activitySurfaceLifecycleState.flowerMounts).toBe(0);
+      expect(fetchLocalApiJSONMock).not.toHaveBeenCalled();
 
       const input = host.querySelector('input[type="password"]') as HTMLInputElement;
       input.value = 'secret';
@@ -3078,6 +3088,10 @@ describe('EnvAppShell local access gate', () => {
       expect(host.querySelectorAll('[data-testid="ai-page"]')).toHaveLength(1);
       expect(host.querySelectorAll('[data-testid="activity-flower-composer"]')).toHaveLength(1);
       expect(activitySurfaceLifecycleState.flowerMounts).toBe(1);
+      expect(fetchLocalApiJSONMock).toHaveBeenCalledWith(
+        '/_redeven_proxy/api/ai/readiness',
+        { method: 'GET' },
+      );
 
       (host.querySelector('[data-activity-id="ai"]') as HTMLButtonElement | null)?.click();
       await flushUntil(() => (
@@ -3455,11 +3469,11 @@ describe('EnvAppShell local access gate', () => {
       expect(host.querySelector('[data-testid="connection-recovery-view"]')).toBeTruthy();
 
       await vi.advanceTimersByTimeAsync(12_000);
-      await flushUntil(() => host.textContent?.includes('Connection could not be restored') ?? false);
+      await flushUntil(() => Boolean(host.querySelector('input[type="password"]')), 40);
 
-      expect(host.textContent).toContain('Connection could not be restored');
-      expect(host.textContent).toContain('Desktop could not authenticate the original runtime connection.');
-      expect(host.querySelector('[data-testid="workbench-page"]')?.closest('[aria-hidden="true"]')).toBeTruthy();
+      expect(host.textContent).toContain('Unlock local runtime');
+      expect(host.textContent).toContain('Access password expired. Enter it again to continue.');
+      expect(host.querySelector('[data-testid="connection-recovery-view"]')).toBeFalsy();
     } finally {
       dispose();
     }
@@ -3495,6 +3509,85 @@ describe('EnvAppShell local access gate', () => {
       );
       expect(sidebarActiveTabValue).toBe('codex');
       expect(storage.getItem('redeven_envapp_active_tab')).toBe('codex');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('pauses pending AI readiness across local relock and refreshes once after regrant', async () => {
+    vi.useFakeTimers();
+    const lateReadiness = deferred<Record<string, unknown>>();
+    fetchLocalApiJSONMock.mockReset()
+      .mockImplementationOnce(() => lateReadiness.promise)
+      .mockResolvedValue({
+        state: 'ready',
+        reason_code: '',
+        retryable: false,
+        safe_to_retry: false,
+        committed: false,
+        rolled_back: false,
+      });
+    getLocalAccessStatusMock.mockReset()
+      .mockResolvedValue({ password_required: true, unlocked: false });
+    refreshLocalRuntimeMock.mockResolvedValue({
+      mode: 'local',
+      env_public_id: 'env_local',
+      direct_ws_url: 'ws://localhost/_redeven_direct/ws',
+      access_status: { password_required: true, unlocked: true },
+    });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushUntil(() => Boolean(host.querySelector('input[type="password"]')), 40);
+      expect(fetchLocalApiJSONMock).not.toHaveBeenCalled();
+
+      const firstInput = host.querySelector('input[type="password"]') as HTMLInputElement;
+      firstInput.value = 'secret';
+      firstInput.dispatchEvent(new Event('input', { bubbles: true }));
+      host.querySelector('form')?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      await flushUntil(() => fetchLocalApiJSONMock.mock.calls.length === 1, 40);
+      await flushUntil(() => protocolStatus === 'connected' && Boolean(host.querySelector('[data-testid="workbench-page"]')), 40);
+      await flushAsync();
+      getLocalAccessStatusMock.mockReset()
+        .mockResolvedValueOnce(null)
+        .mockResolvedValue({ password_required: true, unlocked: false });
+
+      protocolStatus = 'error';
+      protocolClient = null;
+      protocolError = { code: 'AGENT_OFFLINE', status: 503, message: 'Runtime is offline' };
+      const observer = connectMock.mock.calls[0]?.[0]?.observer as {
+        onDiagnosticEvent?: (event: Record<string, unknown>) => void;
+      } | undefined;
+      observer?.onDiagnosticEvent?.({ stage: 'reconnect', code: 'reconnect_attempt', result: 'retry', attempt_seq: 1 });
+      observer?.onDiagnosticEvent?.({ stage: 'reconnect', code: 'reconnect_exhausted', result: 'fail', attempt_seq: 1 });
+      await flushAsync();
+      await vi.advanceTimersByTimeAsync(12_000);
+      await flushUntil(() => Boolean(host.querySelector('input[type="password"]')), 40);
+
+      lateReadiness.resolve({
+        state: 'inspecting',
+        reason_code: '',
+        retryable: false,
+        safe_to_retry: false,
+        committed: false,
+        rolled_back: false,
+      });
+      await flushAsync();
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(fetchLocalApiJSONMock).toHaveBeenCalledTimes(1);
+
+      const input = host.querySelector('input[type="password"]') as HTMLInputElement;
+      input.value = 'secret-again';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      host.querySelector('form')?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      await flushUntil(() => fetchLocalApiJSONMock.mock.calls.length === 2, 40);
+
+      expect(unlockLocalAccessMock).toHaveBeenLastCalledWith('secret-again');
+      expect(fetchLocalApiJSONMock).toHaveBeenCalledTimes(2);
     } finally {
       dispose();
     }
@@ -3578,6 +3671,114 @@ describe('EnvAppShell remote access gate', () => {
 
       expect(host.querySelector('[data-testid="workbench-page"]')).toBeTruthy();
       expect(host.textContent).not.toContain('Preparing secure session');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('refreshes AI readiness after remote HTTP unlock while direct RPC remains pending', async () => {
+    getLocalRuntimeMock.mockResolvedValue(null);
+    getEnvPublicIDFromSessionMock.mockReturnValue('env_demo');
+    const connectDeferred = deferred<void>();
+    connectMock.mockImplementationOnce(async () => {
+      protocolStatus = 'connecting';
+      protocolClient = null;
+      await connectDeferred.promise;
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+      expect(fetchLocalApiJSONMock).not.toHaveBeenCalled();
+
+      const input = host.querySelector('input[type="password"]') as HTMLInputElement;
+      input.value = 'secret';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      host.querySelector('form')?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+
+      await flushUntil(() => fetchLocalApiJSONMock.mock.calls.length > 0);
+
+      expect(unlockEnvAppAccessMock).toHaveBeenCalledWith('secret');
+      expect(protocolStatus).toBe('connecting');
+      expect(accessResumeMock).not.toHaveBeenCalled();
+      expect(host.textContent).toContain('Preparing secure session');
+      expect(host.querySelector('[data-testid="workbench-page"]')).toBeNull();
+      expect(fetchLocalApiJSONMock).toHaveBeenCalledWith(
+        '/_redeven_proxy/api/ai/readiness',
+        { method: 'GET' },
+      );
+    } finally {
+      connectDeferred.resolve();
+      dispose();
+    }
+  });
+
+  it('pauses pending AI readiness across remote relock and refreshes once after regrant', async () => {
+    vi.useFakeTimers();
+    getLocalRuntimeMock.mockResolvedValue(null);
+    getEnvPublicIDFromSessionMock.mockReturnValue('env_demo');
+    getEnvAppAccessStatusMock.mockReset().mockResolvedValue({ password_required: true, unlocked: false });
+    const lateReadiness = deferred<Record<string, unknown>>();
+    fetchLocalApiJSONMock.mockReset()
+      .mockImplementationOnce(() => lateReadiness.promise)
+      .mockResolvedValue({
+        state: 'ready',
+        reason_code: '',
+        retryable: false,
+        safe_to_retry: false,
+        committed: false,
+        rolled_back: false,
+      });
+    const resumeFailure = deferred<void>();
+    accessResumeMock.mockReset()
+      .mockImplementationOnce(async () => {
+        await resumeFailure.promise;
+        throw Object.assign(new Error('invalid resume token'), { code: 401 });
+      })
+      .mockResolvedValue(undefined);
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+      expect(fetchLocalApiJSONMock).not.toHaveBeenCalled();
+
+      const firstInput = host.querySelector('input[type="password"]') as HTMLInputElement;
+      firstInput.value = 'secret';
+      firstInput.dispatchEvent(new Event('input', { bubbles: true }));
+      host.querySelector('form')?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      await flushUntil(() => fetchLocalApiJSONMock.mock.calls.length === 1 && accessResumeMock.mock.calls.length === 1, 40);
+
+      resumeFailure.resolve();
+      await flushUntil(() => host.textContent?.includes('Unlock runtime') ?? false, 40);
+      lateReadiness.resolve({
+        state: 'inspecting',
+        reason_code: '',
+        retryable: false,
+        safe_to_retry: false,
+        committed: false,
+        rolled_back: false,
+      });
+      await flushAsync();
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(fetchLocalApiJSONMock).toHaveBeenCalledTimes(1);
+
+      const secondInput = host.querySelector('input[type="password"]') as HTMLInputElement;
+      secondInput.value = 'secret-again';
+      secondInput.dispatchEvent(new Event('input', { bubbles: true }));
+      host.querySelector('form')?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      await flushUntil(() => fetchLocalApiJSONMock.mock.calls.length === 2, 40);
+
+      expect(unlockEnvAppAccessMock).toHaveBeenLastCalledWith('secret-again');
+      expect(fetchLocalApiJSONMock).toHaveBeenCalledTimes(2);
     } finally {
       dispose();
     }

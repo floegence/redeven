@@ -238,6 +238,17 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
         jsonResponse(response, { threads: [] });
         return;
       }
+      if (accessReady && requestURL.pathname === '/_redeven_proxy/api/ai/readiness') {
+        jsonResponse(response, {
+          state: 'ready',
+          reason_code: '',
+          retryable: false,
+          safe_to_retry: false,
+          committed: false,
+          rolled_back: false,
+        });
+        return;
+      }
       if (accessReady && (
         requestURL.pathname.startsWith('/api/')
         || requestURL.pathname.startsWith('/_redeven_proxy/api/')
@@ -383,6 +394,10 @@ async function verifyBuiltFlowerLifecycle(browser) {
     if (!collapsedBox || collapsedBox.width <= 0 || collapsedBox.height <= 0) {
       throw new Error(`built Flower collapsed companion has invalid geometry: ${JSON.stringify(collapsedBox)}`);
     }
+    const collapsedComposerBox = await composer.boundingBox();
+    if (!collapsedComposerBox || collapsedComposerBox.width <= 0 || collapsedComposerBox.height <= 0) {
+      throw new Error(`built Flower collapsed composer has invalid geometry: ${JSON.stringify(collapsedComposerBox)}`);
+    }
     await page.evaluate(() => {
       globalThis.__redevenBuiltFlowerIdentity = {
         surface: globalThis.document.querySelector('#redeven-flower-surface'),
@@ -390,7 +405,7 @@ async function verifyBuiltFlowerLifecycle(browser) {
       };
     });
 
-    await companion.click();
+    await composer.click();
     await page.waitForFunction(() => (
       globalThis.document
         .querySelector('#redeven-activity-flower-product')
@@ -484,6 +499,8 @@ async function verifyBuiltFlowerLifecycle(browser) {
       composer_count: restoredIdentity.composerCount,
       collapsed_width: collapsedBox.width,
       collapsed_height: collapsedBox.height,
+      collapsed_composer_width: collapsedComposerBox.width,
+      collapsed_composer_height: collapsedComposerBox.height,
       expanded_composer_bottom_gap: expandedBottom - composerBottom,
       full_page_width: fullPageSurfaceBox.width,
       full_page_height: fullPageSurfaceBox.height,

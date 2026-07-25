@@ -743,6 +743,11 @@ export function EnvAppShell() {
   ));
   const accessServerUnlocked = createMemo(() => Boolean(accessStatus()?.unlocked));
   const accessPending = createMemo(() => !accessChecked());
+  const readinessAccessGranted = createMemo(() => {
+    if (accessPending()) return false;
+    if (!accessPasswordRequired() || accessServerUnlocked()) return true;
+    return !isLocalMode() && Boolean(String(accessResumeToken() ?? '').trim());
+  });
   const [accessRecoveryBusy, setAccessRecoveryBusy] = createSignal(false);
   const accessLocked = createMemo(() => {
     if (!accessPasswordRequired()) return false;
@@ -947,13 +952,15 @@ export function EnvAppShell() {
   const canAdmin = createMemo(() => Boolean(env()?.permissions?.can_admin || env()?.permissions?.is_owner));
   const aiReadinessController = createAIReadinessController({
     autoStart: false,
+    initialPaused: true,
     canAutomaticallyRetry: canAdmin,
   });
-  let aiReadinessConnected = false;
+  let aiReadinessAccessible = false;
   createEffect(() => {
-    const connected = protocol.status() === 'connected';
-    if (connected && !aiReadinessConnected) void aiReadinessController.refresh();
-    aiReadinessConnected = connected;
+    const accessible = readinessAccessGranted();
+    if (accessible && !aiReadinessAccessible) void aiReadinessController.resume();
+    if (!accessible && aiReadinessAccessible) aiReadinessController.pause();
+    aiReadinessAccessible = accessible;
   });
   const canOpenPluginSurfaces = createMemo(() => Boolean(
     protocol.status() === 'connected' && env()?.permissions?.can_read,
@@ -4403,11 +4410,18 @@ export function EnvAppShell() {
             </Show>
           </div>
           <Show when={recoveryVisible()}>
-            <ConnectionRecoveryView
-              snapshot={recoverySnapshot()}
-              environmentName={envSessionIdentity().displayName}
-              onRetry={() => reconnectController.requestImmediateRetry()}
-            />
+            <Show
+              when={accessGatePhase() === 'unlock_required'}
+              fallback={(
+                <ConnectionRecoveryView
+                  snapshot={recoverySnapshot()}
+                  environmentName={envSessionIdentity().displayName}
+                  onRetry={() => reconnectController.requestImmediateRetry()}
+                />
+              )}
+            >
+              {accessGatePanel()}
+            </Show>
           </Show>
         </div>
         {renderActivityFlowerCompanion()}
@@ -4461,11 +4475,18 @@ export function EnvAppShell() {
         </Show>
       </div>
       <Show when={recoveryVisible()}>
-        <ConnectionRecoveryView
-          snapshot={recoverySnapshot()}
-          environmentName={envSessionIdentity().displayName}
-          onRetry={() => reconnectController.requestImmediateRetry()}
-        />
+        <Show
+          when={accessGatePhase() === 'unlock_required'}
+          fallback={(
+            <ConnectionRecoveryView
+              snapshot={recoverySnapshot()}
+              environmentName={envSessionIdentity().displayName}
+              onRetry={() => reconnectController.requestImmediateRetry()}
+            />
+          )}
+        >
+          {accessGatePanel()}
+        </Show>
       </Show>
     </div>
   );

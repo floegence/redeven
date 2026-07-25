@@ -41,6 +41,8 @@ export type AIReadinessController = Readonly<{
   nextCheckAt: Accessor<number | null>;
   refresh: () => Promise<AIReadinessSnapshot>;
   retry: () => Promise<AIReadinessSnapshot>;
+  pause: () => void;
+  resume: () => Promise<AIReadinessSnapshot>;
   dispose: () => void;
 }>;
 
@@ -59,6 +61,7 @@ type CreateAIReadinessControllerArgs = Readonly<{
   backgroundDelayMs?: number;
   maxAutomaticRetries?: number;
   autoStart?: boolean;
+  initialPaused?: boolean;
   canAutomaticallyRetry?: () => boolean;
 }>;
 
@@ -209,11 +212,12 @@ export function createAIReadinessController(args: CreateAIReadinessControllerArg
   const maxAutomaticRetries = normalizedCount(args.maxAutomaticRetries, 3);
 
   const [snapshot, setSnapshot] = createSignal<AIReadinessSnapshot>(unavailableSnapshot);
-  const [loading, setLoading] = createSignal(args.autoStart !== false);
+  const [loading, setLoading] = createSignal(args.autoStart !== false && args.initialPaused !== true);
   const [retryPending, setRetryPending] = createSignal(false);
   const [nextCheckAt, setNextCheckAt] = createSignal<number | null>(null);
 
   let disposed = false;
+  let paused = args.initialPaused === true;
   let generation = 0;
   let loadingGeneration = 0;
   let automaticRetryCount = 0;
@@ -236,7 +240,7 @@ export function createAIReadinessController(args: CreateAIReadinessControllerArg
 
   const schedule = (nextSnapshot: AIReadinessSnapshot): void => {
     clearTimer();
-    if (disposed || loading() || retryPending()) return;
+    if (disposed || paused || loading() || retryPending()) return;
 
     if (shouldPoll(nextSnapshot)) {
       const delay = currentDelay();
@@ -279,6 +283,7 @@ export function createAIReadinessController(args: CreateAIReadinessControllerArg
   );
 
   refresh = (): Promise<AIReadinessSnapshot> => {
+    if (disposed || paused) return Promise.resolve(snapshot());
     if (retryInFlight) return retryInFlight;
     clearTimer();
     const requestGeneration = ++generation;
@@ -304,6 +309,7 @@ export function createAIReadinessController(args: CreateAIReadinessControllerArg
   };
 
   startRetry = (manual: boolean): Promise<AIReadinessSnapshot> => {
+    if (disposed || paused) return Promise.resolve(snapshot());
     if (retryInFlight) return retryInFlight;
     clearTimer();
     if (manual) automaticRetryCount = 0;
@@ -335,6 +341,25 @@ export function createAIReadinessController(args: CreateAIReadinessControllerArg
 
   const retry = (): Promise<AIReadinessSnapshot> => startRetry(true);
 
+  const pause = (): void => {
+    if (disposed || paused) return;
+    paused = true;
+    generation += 1;
+    loadingGeneration = 0;
+    retryInFlight = null;
+    automaticRetryCount = 0;
+    clearTimer();
+    setLoading(false);
+    setRetryPending(false);
+    setSnapshot(unavailableSnapshot);
+  };
+
+  const resume = (): Promise<AIReadinessSnapshot> => {
+    if (disposed || !paused) return Promise.resolve(snapshot());
+    paused = false;
+    return refresh();
+  };
+
   const handleVisibilityChange = (): void => {
     if (disposed) return;
     schedule(snapshot());
@@ -352,7 +377,7 @@ export function createAIReadinessController(args: CreateAIReadinessControllerArg
   };
 
   if (getOwner()) onCleanup(dispose);
-  if (args.autoStart !== false) void refresh();
+  if (args.autoStart !== false && !paused) void refresh();
 
-  return { snapshot, loading, retryPending, nextCheckAt, refresh, retry, dispose };
+  return { snapshot, loading, retryPending, nextCheckAt, refresh, retry, pause, resume, dispose };
 }

@@ -51,6 +51,8 @@ function mountSettings(refreshResult?: ReturnType<typeof deferred<AIReadinessSna
     nextCheckAt: () => null,
     refresh,
     retry: async () => snapshot(),
+    pause: () => undefined,
+    resume: async () => snapshot(),
     dispose: () => undefined,
   };
   const host = document.createElement('div');

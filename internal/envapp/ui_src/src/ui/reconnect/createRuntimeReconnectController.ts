@@ -275,7 +275,7 @@ export function createRuntimeReconnectController(args: CreateRuntimeReconnectCon
 
   const completeRecovery = () => {
     const current = snapshot();
-    if (current.state === 'idle' || current.state === 'failed' || current.state === 'succeeded') return;
+    if (current.state === 'idle' || current.state === 'succeeded') return;
     clearWaitTimer();
     clearSuccessTimer();
     publish({
