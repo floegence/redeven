@@ -218,6 +218,10 @@ describe('ExternalPluginInstallDialog', () => {
     expect(progress.textContent).toContain('Review package');
     expect(progress.textContent).toContain('Install plugin');
     expect(progress.textContent).toContain('Ready');
+    const connectors = [...progress.querySelectorAll<HTMLElement>('[data-install-progress-connector]')];
+    expect(connectors).toHaveLength(3);
+    expect(connectors.map((connector) => connector.style.right)).toEqual(Array(3).fill('calc(50% + 1.25rem)'));
+    expect(connectors.map((connector) => connector.style.width)).toEqual(Array(3).fill('calc(100% - 2.5rem)'));
   });
 
   it('provides roving keyboard navigation and labelled source tab panels', async () => {
