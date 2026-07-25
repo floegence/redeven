@@ -959,6 +959,25 @@ tests, and published Floret release notes.
 
 ## Desktop UI Verification
 
+- Dev Desktop start/stop transitions are serialized by the current worktree's
+  Git-admin transition lock. Stop authority comes only from the exact PID and
+  random launch marker in that worktree's owner record. Never discover or terminate
+  Desktop processes by application name, bundle id, generic Electron command,
+  current working directory, or another worktree's state. Revalidate the marker
+  before every destructive signal. A failed signal or a process that remains
+  alive blocks owner replacement and the next launch. If a newly spawned child
+  remains alive without exposing its expected marker, persist a worktree launch
+  block that grants no signal authority and reject another launch until the PID
+  exits or the exact marker becomes verifiable.
+- Each worktree's Dev Desktop uses its own Git-admin user-data directory.
+  Electron integration tests use per-run temporary working and user-data
+  directories, a random launch marker, and either a dedicated POSIX process
+  group or an exact Windows process tree while its leader remains addressable.
+  An existing Dev Desktop and another test cannot share profile state or become
+  eligible for compliant Dev Desktop cleanup. Integration-test teardown may
+  signal only the exact process tree it spawned. An unexplained external
+  `SIGKILL` must remain a visible test failure; do not hide it with retries,
+  name-based workarounds, or discovery-based cleanup.
 - When testing a `dev_desktop.sh` Desktop build, identify the target app through the script's launched process path, user data directory, or remote debugging endpoint before interacting with it.
 - Do not treat the frontmost generic Electron window as the Redeven Desktop target unless its page URL or process arguments prove it belongs to the current worktree.
 - If multiple Electron instances are running, prefer the `dev_desktop.sh` CDP endpoint and page URL for automation. A default Electron welcome page is never valid evidence for Redeven Desktop behavior.

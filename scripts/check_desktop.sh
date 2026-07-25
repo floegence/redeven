@@ -49,6 +49,7 @@ main() {
   ui_pkg_log "Checking Redeven Desktop package..."
   ui_pkg_log "MODE: $mode"
   ui_pkg_log "ROOT_DIR: $ROOT_DIR"
+  bash "$SCRIPT_DIR/test_dev_desktop_process_ownership.sh"
 
   (
     cd "$dir"
