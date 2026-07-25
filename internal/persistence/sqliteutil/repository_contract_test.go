@@ -89,7 +89,7 @@ func TestRedevenOwnedSQLiteOpeningsUseMigrationEngine(t *testing.T) {
 					gotMigratingOpeners[rel] = struct{}{}
 				case selector.Sel.Name == "Open" && hasAlias(sqlAliases, receiver.Name) && firstStringArgument(call) == "sqlite":
 					gotDirectOpeners[rel] = struct{}{}
-				case selector.Sel.Name == "OpenSQLiteStore" && hasAlias(floretRuntimeAliases, receiver.Name):
+				case selector.Sel.Name == "StartSQLiteStore" && hasAlias(floretRuntimeAliases, receiver.Name):
 					gotFloretOpeners[rel] = struct{}{}
 				}
 				return true

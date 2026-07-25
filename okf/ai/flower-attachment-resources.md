@@ -32,7 +32,7 @@ Every direct, queued, follow-up, replacement, RPC, and service admission path re
 
 Redeven derives one model-scoped capability snapshot from the selected provider route and model modalities. The revision binds the exact MIME route matrix and product limits. A native image or file route is advertised only when the provider adapter can render and conservatively estimate that complete request. Strict UTF-8 text may instead use the bounded `attachment.read` host tool. Binary, image, and PDF content never use the text fallback.
 
-Floret v0.27.1 receives only canonical descriptors and owns their durable association, replay, fork, retry, SubAgent, and prompt-cache identity. Redeven opens and hashes bytes after Floret selects the exact request and before provider dispatch through the prepared-request contract. The prepared request freezes the fully rendered provider payload, estimate, and fingerprint, is consumed at most once, and is closed on every non-stream path. Historical reads repeat canonical membership and byte-integrity checks rather than trusting admission-time state.
+Floret v0.28.0 receives only canonical descriptors and owns their durable association, replay, fork, retry, SubAgent, and prompt-cache identity. Redeven opens and hashes bytes after Floret selects the exact request and before provider dispatch through the prepared-request contract. The prepared request freezes the fully rendered provider payload, estimate, and fingerprint, is consumed at most once, and is closed on every non-stream path. Historical reads repeat canonical membership and byte-integrity checks rather than trusting admission-time state.
 
 # Boundaries
 

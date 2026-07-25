@@ -430,8 +430,8 @@ func newFloretBootstrapResult(store *flruntime.Store) (*floretBootstrapResult, e
 }
 
 func openFloretRuntime(ctx context.Context, storePath string, progress func(FloretStoreStartupPhase)) (*floretBootstrapResult, floretStartupRecoveryCapabilities, error) {
-	store, err := openMaintainedFloretStore(ctx, storePath, observingFloretStoreMaintenanceAPI{
-		next: publicFloretStoreMaintenanceAPI{}, progress: progress,
+	store, err := openMaintainedFloretStore(ctx, storePath, observingFloretStoreStartupAPI{
+		next: publicFloretStoreStartupAPI{}, progress: progress,
 	})
 	if err != nil {
 		return nil, floretStartupRecoveryCapabilities{}, err

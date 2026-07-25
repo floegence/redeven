@@ -508,7 +508,7 @@ type testFloretReadHost struct {
 
 func openTestFloretHost(t *testing.T, storePath string, parentThreadID string, fakeResponse string) (testFloretReadHost, *flruntime.Store) {
 	t.Helper()
-	store, err := openMaintainedFloretStore(context.Background(), storePath, publicFloretStoreMaintenanceAPI{})
+	store, err := openMaintainedFloretStore(context.Background(), storePath, publicFloretStoreStartupAPI{})
 	if err != nil {
 		t.Fatalf("OpenSQLiteStore: %v", err)
 	}
@@ -1344,7 +1344,7 @@ func TestDeleteThreadDeletesFloretTreeWithoutCachedRuntime(t *testing.T) {
 	}
 	assertLegacyFloretSubagentStoreNotCreated(t, svc)
 
-	reopenedStore, err := openMaintainedFloretStore(ctx, storePath, publicFloretStoreMaintenanceAPI{})
+	reopenedStore, err := openMaintainedFloretStore(ctx, storePath, publicFloretStoreStartupAPI{})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -196,24 +196,24 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 			"@floegence/floe-webapp-core@0.39.3",
 		},
 		"internal/envapp/ui_src/package.json": {
-			"\"@floegence/floe-webapp-boot\": \"^0.39.3\"",
-			"\"@floegence/floe-webapp-core\": \"0.39.6\"",
-			"\"@floegence/floe-webapp-protocol\": \"^0.39.3\"",
+			"\"@floegence/floe-webapp-boot\": \"0.39.9\"",
+			"\"@floegence/floe-webapp-core\": \"0.39.9\"",
+			"\"@floegence/floe-webapp-protocol\": \"0.39.9\"",
 			"\"@floegence/floeterm-terminal-web\": \"0.9.0\"",
 			"\"@floegence/flowersec-core\": \"^0.27.0\"",
 		},
 		"internal/envapp/ui_src/package-lock.json": {
-			"floe-webapp-boot-0.39.3.tgz",
-			"floe-webapp-core-0.39.6.tgz",
-			"floe-webapp-protocol-0.39.3.tgz",
+			"floe-webapp-boot-0.39.9.tgz",
+			"floe-webapp-core-0.39.9.tgz",
+			"floe-webapp-protocol-0.39.9.tgz",
 			"floeterm-terminal-web-0.9.0.tgz",
 			"beamterm-renderer-1.0.1.tgz",
 			"flowersec-core-0.27.0.tgz",
 		},
 		"internal/envapp/ui_src/pnpm-lock.yaml": {
-			"@floegence/floe-webapp-boot@0.39.3",
-			"@floegence/floe-webapp-core@0.39.6",
-			"@floegence/floe-webapp-protocol@0.39.3",
+			"@floegence/floe-webapp-boot@0.39.9",
+			"@floegence/floe-webapp-core@0.39.9",
+			"@floegence/floe-webapp-protocol@0.39.9",
 			"@floegence/floeterm-terminal-web@0.9.0",
 			"@floegence/beamterm-renderer@1.0.1",
 			"@floegence/flowersec-core@0.27.0",
@@ -225,10 +225,10 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 			"flowersec-core-0.27.0.tgz",
 		},
 		"THIRD_PARTY_NOTICES.md": {
-			"@floegence/floe-webapp-boot | 0.39.3",
+			"@floegence/floe-webapp-boot | 0.39.9",
 			"@floegence/floe-webapp-core | 0.39.3",
-			"@floegence/floe-webapp-core | 0.39.6",
-			"@floegence/floe-webapp-protocol | 0.39.3",
+			"@floegence/floe-webapp-core | 0.39.9",
+			"@floegence/floe-webapp-protocol | 0.39.9",
 			"@floegence/floeterm-terminal-web | 0.9.0",
 			"@floegence/beamterm-renderer | 1.0.1",
 			"@floegence/flowersec-core | 0.27.0",
@@ -241,7 +241,7 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 		"okf/architecture/env-app-upstream-web-dependencies.md": {
 			"terminal-web v0.9.0",
 			"beamterm-renderer` v1.0.1",
-			"Floe Webapp Core v0.39.6",
+			"Floe Webapp Core v0.39.9",
 			"Flowersec Core v0.27.0",
 		},
 	}
@@ -426,8 +426,8 @@ func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 
 	const (
 		floretModule   = "github.com/floegence/floret"
-		floretVersion  = "v0.27.1"
-		floretSum      = "h1:r3NCKl/ooxKBw2fWYgRe6nf3VGmUi2wJt0V1W0zluvY="
+		floretVersion  = "v0.28.0"
+		floretSum      = "h1:RRhCknd0+yY78lcqGdCYlrLby6zhKCzPChUF4zzzrzA="
 		floretGoModSum = "h1:u2oNhsSB8OppYPHo/cTmXITL+3pxv7ckjYDiq3SjoCg="
 	)
 	root := repoRootForTest(t)
@@ -511,7 +511,7 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"TurnInput.References",
 			"MessageReference",
 			"raw `ResourceRef` never reaches the browser",
-			"v0.27.1",
+			"v0.28.0",
 		},
 		filepath.Join("okf", "ui", "flower-turn-launcher.md"): {
 			"file_path",
@@ -537,8 +537,8 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"complete immutable snapshot",
 		},
 		filepath.Join("internal", "runtimeservice", "compatibility_contract.json"): {
-			"Floret v0.27.1",
-			"floret-v0-27-1-maintenance-adoption",
+			"Floret v0.28.0",
+			"floret-v0-28-0-startup-adoption",
 			"single persistent source of truth",
 			"provider-owned thread titles",
 			"public contracts",
@@ -640,7 +640,7 @@ func TestFloretCapabilitiesAreMintedOnlyDuringBootstrap(t *testing.T) {
 	for _, marker := range []string{
 		"flconfig." + "ProviderFake",
 		"Fake" + "Response",
-		"flruntime." + "OpenSQLiteStore",
+		"flruntime." + "StartSQLiteStore",
 		"flruntime." + "ConfigureHostCapabilities",
 		"flruntime." + "NewTurnExecutionHostBinder",
 		"flruntime." + "NewSubAgentHostBinder",
@@ -652,11 +652,11 @@ func TestFloretCapabilitiesAreMintedOnlyDuringBootstrap(t *testing.T) {
 		}
 	}
 	maintenance := readRepoFile(t, root, filepath.Join("internal", "ai", "floret_store_maintenance.go"))
-	if !strings.Contains(maintenance, "flruntime."+"OpenSQLiteStore") {
-		t.Fatal("floret_store_maintenance.go must own the public Floret Store open operation")
+	if !strings.Contains(maintenance, "flruntime."+"StartSQLiteStore") {
+		t.Fatal("floret_store_maintenance.go must own the public Floret Store startup operation")
 	}
 	bootstrap := readRepoFile(t, root, filepath.Join("internal", "ai", "floret_bootstrap.go"))
-	if strings.Contains(bootstrap, "flruntime."+"OpenSQLiteStore") {
+	if strings.Contains(bootstrap, "flruntime."+"StartSQLiteStore") {
 		t.Fatal("floret_bootstrap.go must obtain the Store through the maintenance adapter")
 	}
 	for _, marker := range []string{
