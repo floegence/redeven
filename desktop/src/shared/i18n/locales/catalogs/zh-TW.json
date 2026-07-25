@@ -731,6 +731,8 @@
     "attention": "需處理"
   },
   "issue": {
+    "pluginStateRecoveryTitle": "檢查外掛程式狀態復原",
+    "pluginStateRecoveryMessage": "Redeven 發現了複製而來的外掛程式狀態。若要安全啟動，必須先執行會保留復原封存的復原作業。",
     "remoteEnvironmentInvalidTitle": "檢查環境 URL",
     "remoteEnvironmentOpenTitle": "無法開啟該環境",
     "sshEnvironmentOpenTitle": "無法開啟該 SSH 環境",
@@ -746,6 +748,22 @@
     "startupInvalidTitle": "本機環境啟動需要設定",
     "startupFailedTitle": "本機環境啟動失敗",
     "localEnvironmentAttentionTitle": "當地環境需要關注"
+  },
+  "pluginStateRecovery": {
+    "title": "檢查外掛程式狀態復原",
+    "summary": "此外掛程式狀態是從具有不同檔案系統識別資訊的位置複製或還原而來。Redeven 會完整保留此狀態以供復原，然後以全新且空白的外掛程式世代啟動。",
+    "archiveTitle": "保留原有狀態",
+    "archiveBody": "完整的來源狀態將移至非作用中的復原封存。",
+    "freshTitle": "從全新狀態開始",
+    "freshBody": "封存中的已安裝外掛程式、權限授予、設定、機密資料與儲存資料都不會重新成為作用中狀態。",
+    "retentionTitle": "保留復原證據",
+    "retentionBody": "Redeven 永遠不會自動刪除保留的封存。",
+    "entriesLabel": "來源項目數",
+    "sizeLabel": "來源資料位元組數",
+    "planLabel": "復原方案",
+    "confirm": "封存狀態並重新啟動",
+    "failed": "外掛程式狀態復原失敗。",
+    "completed": "外掛程式狀態已封存，本機環境已使用全新的外掛程式世代重新啟動。"
   },
   "blockedPage": {
     "stateDirLockedAttachTitle": "Redeven 已在其他位置啟動中",

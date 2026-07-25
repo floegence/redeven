@@ -430,6 +430,17 @@ The current released platform contract also fixes the host-integration shape:
   or future state must fail closed without mutation. This lifecycle applies
   only to ReDevPlugin-owned state and must not inspect or migrate Floret-owned
   schemas.
+  A copied supported root whose migration journal no longer matches the current
+  filesystem identity may use only the released read-only recovery inspection
+  and exact-plan recovery APIs. Redeven must present the projected source digest,
+  entry count, byte count, retained-state facts, and exact plan digest before an
+  explicit user confirmation. Recovery takes the same Local Environment runtime
+  lock, atomically retains the complete source as an inactive archive, commits a
+  new empty active generation, and verifies both outcomes before startup retries.
+  Cancellation performs no mutation. A changed plan, active runtime, unsupported
+  state, or failed verification blocks recovery; Redeven must never delete or
+  edit the journal, guess a replacement identity, expose archive paths, or reuse
+  archived plugins, grants, settings, secrets, or storage as active state.
 - Short-lived surfaces, operations, streams, handles, confirmations, and token
   audiences bind the exact `owner_session_hash`, `owner_user_hash`,
   `owner_env_hash`, and `session_channel_id_hash` derived from the active

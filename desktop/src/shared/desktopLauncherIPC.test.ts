@@ -124,6 +124,20 @@ describe('desktopLauncherIPC', () => {
       force_runtime_update: true,
     });
     expect(normalizeDesktopLauncherActionRequest({
+      kind: 'recover_plugin_state',
+      environment_id: ' local ',
+      expected_plan_sha256: 'a'.repeat(64),
+    })).toEqual({
+      kind: 'recover_plugin_state',
+      environment_id: 'local',
+      expected_plan_sha256: 'a'.repeat(64),
+    });
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'recover_plugin_state',
+      environment_id: 'local',
+      expected_plan_sha256: 'A'.repeat(64),
+    })).toBeNull();
+    expect(normalizeDesktopLauncherActionRequest({
       kind: 'restart_environment_runtime',
       environment_id: ' provider:https%3A%2F%2Fprovider.example.invalid:env:env_demo ',
       runtime_target_id: ' local:container:docker:container-stable-id:abc12345 ',

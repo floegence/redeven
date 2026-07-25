@@ -727,6 +727,8 @@
     "attention": "要対応"
   },
   "issue": {
+    "pluginStateRecoveryTitle": "プラグイン状態の復旧を確認",
+    "pluginStateRecoveryMessage": "Redeven がコピーされたプラグイン状態を検出しました。安全に起動するには、元の状態をアーカイブとして保持する復旧処理が必要です。",
     "remoteEnvironmentInvalidTitle": "環境 URL",
     "remoteEnvironmentOpenTitle": "その環境を開けません",
     "sshEnvironmentOpenTitle": "その SSH 環境を開けません",
@@ -742,6 +744,22 @@
     "startupInvalidTitle": "ローカル環境の起動には設定が必要です",
     "startupFailedTitle": "ローカル環境の起動に失敗しました",
     "localEnvironmentAttentionTitle": "ローカル環境には注意が必要です"
+  },
+  "pluginStateRecovery": {
+    "title": "プラグイン状態の復旧を確認",
+    "summary": "このプラグイン状態は、別のファイルシステム ID からコピーまたは復元されています。Redeven は復旧用に状態を保持し、その後、新しい空のプラグイン世代で起動します。",
+    "archiveTitle": "以前の状態を保持",
+    "archiveBody": "元の状態全体を、非アクティブな復旧アーカイブへ移動します。",
+    "freshTitle": "新しい状態で開始",
+    "freshBody": "アーカイブ内のインストール済みプラグイン、付与済み権限、設定、シークレット、ストレージは有効になりません。",
+    "retentionTitle": "復旧記録を保持",
+    "retentionBody": "Redeven が保持されたアーカイブを自動的に削除することはありません。",
+    "entriesLabel": "元の状態のエントリ数",
+    "sizeLabel": "元の状態のサイズ（バイト）",
+    "planLabel": "復旧プラン",
+    "confirm": "状態をアーカイブして再起動",
+    "failed": "プラグイン状態の復旧に失敗しました。",
+    "completed": "プラグイン状態をアーカイブし、新しいプラグイン世代でローカル環境を再起動しました。"
   },
   "blockedPage": {
     "stateDirLockedAttachTitle": "Redeven は別の場所で起動中です",

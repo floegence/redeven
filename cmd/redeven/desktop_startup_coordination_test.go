@@ -5,13 +5,49 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/lockfile"
+	"github.com/floegence/redeven/internal/redevpluginintegration"
 	"github.com/floegence/redeven/internal/runtimemanagement"
 	"github.com/floegence/redeven/internal/runtimeservice"
 )
+
+func TestWriteDesktopPluginStateRecoveryLaunchReportRequiresCanonicalPlan(t *testing.T) {
+	reportPath := filepath.Join(t.TempDir(), "startup-report.json")
+	plan := redevpluginintegration.OwnerScopeRecoveryPlan{
+		PlanSHA256:               strings.Repeat("a", 64),
+		RootIdentitySHA256:       strings.Repeat("b", 64),
+		SourceSnapshotSHA256:     strings.Repeat("c", 64),
+		SourceEntryCount:         96,
+		SourceBytes:              1132957,
+		HasRetainedQuarantine:    true,
+		HasSourceRecoveryJournal: true,
+	}
+	if err := writeDesktopPluginStateRecoveryLaunchReport(reportPath, plan); err != nil {
+		t.Fatal(err)
+	}
+	report := readDesktopLaunchReportForTest(t, reportPath)
+	if report.Status != desktopLaunchStatusBlocked || report.Code != desktopLaunchCodePluginStateRecoveryRequired || report.PluginStateRecovery == nil || *report.PluginStateRecovery != plan || report.Diagnostics != nil {
+		t.Fatalf("report = %#v", report)
+	}
+
+	invalid := plan
+	invalid.PlanSHA256 = strings.Repeat("A", 64)
+	if err := writeDesktopPluginStateRecoveryLaunchReport(filepath.Join(t.TempDir(), "invalid.json"), invalid); err == nil {
+		t.Fatal("invalid recovery plan was accepted")
+	}
+	if err := writeDesktopLaunchReport(filepath.Join(t.TempDir(), "unexpected.json"), desktopLaunchReport{
+		Status:              desktopLaunchStatusBlocked,
+		Code:                desktopLaunchCodeStartupFailed,
+		Message:             "failed",
+		PluginStateRecovery: &plan,
+	}); err == nil {
+		t.Fatal("non-recovery blocked report accepted a recovery plan")
+	}
+}
 
 func TestHandleDesktopLockConflictWritesAttachedReportWhenRuntimeIsAvailable(t *testing.T) {
 	stateRoot, err := os.MkdirTemp("/tmp", "rdv-startup-*")

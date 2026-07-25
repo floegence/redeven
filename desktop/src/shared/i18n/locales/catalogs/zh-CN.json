@@ -731,6 +731,8 @@
     "attention": "需处理"
   },
   "issue": {
+    "pluginStateRecoveryTitle": "检查插件状态恢复",
+    "pluginStateRecoveryMessage": "Redeven 发现了复制而来的插件状态。为了安全启动，需要先执行保留归档的恢复操作。",
     "remoteEnvironmentInvalidTitle": "检查环境 URL",
     "remoteEnvironmentOpenTitle": "无法打开该环境",
     "sshEnvironmentOpenTitle": "无法打开该 SSH 环境",
@@ -746,6 +748,22 @@
     "startupInvalidTitle": "本地环境启动需要设置",
     "startupFailedTitle": "本地环境启动失败",
     "localEnvironmentAttentionTitle": "本地环境需要注意"
+  },
+  "pluginStateRecovery": {
+    "title": "检查插件状态恢复",
+    "summary": "此插件状态是从其他文件系统身份复制或恢复而来的。Redeven 会将其完整保留以便恢复，然后使用一个新的空插件代次启动。",
+    "archiveTitle": "保留原有状态",
+    "archiveBody": "完整的源状态将移入非活动的恢复归档。",
+    "freshTitle": "从全新状态开始",
+    "freshBody": "归档中的已安装插件、授权、设置、机密和存储不会被激活。",
+    "retentionTitle": "保留恢复证据",
+    "retentionBody": "Redeven 永远不会自动删除保留的归档。",
+    "entriesLabel": "源条目数",
+    "sizeLabel": "源数据字节数",
+    "planLabel": "恢复方案",
+    "confirm": "归档状态并重新启动",
+    "failed": "插件状态恢复失败。",
+    "completed": "插件状态已归档，本地环境已使用新的插件代次重新启动。"
   },
   "blockedPage": {
     "stateDirLockedAttachTitle": "Redeven 已在其他位置启动中",

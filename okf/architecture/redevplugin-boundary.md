@@ -3,12 +3,12 @@ type: Architecture Boundary
 title: ReDevPlugin host integration boundary
 description: Redeven consumes ReDevPlugin as a published platform and keeps only host policy, placement, source admission, and business adapters.
 tags: [architecture, dependencies, plugins, release]
-timestamp: 2026-07-24T00:00:00Z
+timestamp: 2026-07-25T00:00:00Z
 ---
 # Summary
 
 ReDevPlugin is an independently released plugin platform. Redeven consumes its
-coordinated `v0.6.15` Go, npm, Rust source-crate, and machine-contract artifacts;
+coordinated `v0.6.16` Go, npm, Rust source-crate, and machine-contract artifacts;
 it does not fork platform mechanics. Redeven owns authenticated session mapping,
 product source policy and review UX, UI placement, product runtime builds, and
 concrete business adapters. Missing or unverifiable upstream identity, lifecycle,
@@ -42,12 +42,12 @@ external-package receipt store.
 
 ## Published dependency set
 
-The current integration consumes the coordinated ReDevPlugin `v0.6.15` set:
+The current integration consumes the coordinated ReDevPlugin `v0.6.16` set:
 
-- `github.com/floegence/redevplugin v0.6.15`;
-- `@floegence/redevplugin-contracts@0.6.15` and
-  `@floegence/redevplugin-ui@0.6.15`;
-- the exact six `0.6.15` Rust source crates ending in `redevplugin-runtime`;
+- `github.com/floegence/redevplugin v0.6.16`;
+- `@floegence/redevplugin-contracts@0.6.16` and
+  `@floegence/redevplugin-ui@0.6.16`;
+- the exact six `0.6.16` Rust source crates ending in `redevplugin-runtime`;
 - the released contract registry, package-set contract, contract hashes, and
   attested `platform-package-publication-v1.json` registry readback.
 
@@ -137,11 +137,21 @@ unprovable ownership is retained in quarantine while a fresh generation is
 committed. Unknown, corrupt, ambiguous, tampered, or future state blocks startup
 without mutation. Floret-owned state is outside this lifecycle.
 
+For an exact supported root copied across filesystem identities, Redeven may use
+the released read-only inspection and exact-plan recovery APIs from `v0.6.16`.
+The product presents the projected digests, counts, sizes, and retained-state
+facts, binds confirmation to one plan digest, and takes the normal Local
+Environment runtime lock. The released transaction retains the entire source as
+an inactive archive and commits a fresh empty generation atomically. Redeven
+does not edit the journal, reveal archive paths, delete retained state, reactivate
+archived authority or data, or recover unknown and unsupported state.
+
 # Evidence
 
 - `redeven:go.mod:11` - Pins the released ReDevPlugin Go module.
 - `redeven:internal/envapp/ui_src/package.json:29` - Pins the released UI package.
 - `redeven:internal/redevpluginintegration/integration.go:240` - Constructs released Host modules, including external package admission.
+- `redeven:internal/redevpluginintegration/owner_scope_recovery.go:1` - Adapts the released copied-root inspection and recovery API without taking state ownership.
 - `redeven:internal/redevpluginintegration/trust_adapter.go:1` - Delegates package signature and freshness assessment to the released verifier.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginPlatform.ts:1` - Owns the released client, transport, shared scope, and slot placement adapter.
 - `redeven:internal/envapp/ui_src/src/ui/workbench/redevenWorkbenchWidgets.tsx:300` - Registers the standard projected plugin widget.

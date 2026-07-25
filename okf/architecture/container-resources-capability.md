@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Container resources capability
 description: Redeven-owned Docker and Podman business capability registered through the released ReDevPlugin host contract.
 tags: [architecture, plugins, containers, capability]
-timestamp: 2026-07-24T00:00:00Z
+timestamp: 2026-07-25T00:00:00Z
 ---
 # Summary
 
@@ -12,7 +12,7 @@ the plugin identity, permission, confirmation, operation, stream, quota,
 revocation, and audit lifecycle around every call. The active capability is
 `redeven.capability.container_resources@1.0.0`, described by the signed
 `redeven.container_resources.v2@2.0.0` host-capability contract and consumed
-through ReDevPlugin v0.6.15. Requests never enter a Redeven-local manifest,
+through ReDevPlugin v0.6.16. Requests never enter a Redeven-local manifest,
 token, operation, stream, or runtime protocol.
 
 # Contract

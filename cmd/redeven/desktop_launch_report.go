@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/floegence/redeven/internal/redevpluginintegration"
 	"github.com/floegence/redeven/internal/runtimemanagement"
 	"github.com/floegence/redeven/internal/runtimeservice"
 )
@@ -21,9 +22,10 @@ const (
 )
 
 const (
-	desktopLaunchCodeStateDirLocked = "state_dir_locked"
-	desktopLaunchCodeStartupInvalid = "startup_invalid"
-	desktopLaunchCodeStartupFailed  = "startup_failed"
+	desktopLaunchCodeStateDirLocked              = "state_dir_locked"
+	desktopLaunchCodeStartupInvalid              = "startup_invalid"
+	desktopLaunchCodeStartupFailed               = "startup_failed"
+	desktopLaunchCodePluginStateRecoveryRequired = "plugin_state_recovery_required"
 )
 
 type desktopLaunchLockOwner struct {
@@ -82,8 +84,9 @@ type desktopLaunchReport struct {
 	StartedAtUnixMS          int64                             `json:"started_at_unix_ms,omitempty"`
 	RuntimeService           runtimeservice.Snapshot           `json:"runtime_service"`
 
-	LockOwner   *desktopLaunchLockOwner   `json:"lock_owner,omitempty"`
-	Diagnostics *desktopLaunchDiagnostics `json:"diagnostics,omitempty"`
+	LockOwner           *desktopLaunchLockOwner                        `json:"lock_owner,omitempty"`
+	Diagnostics         *desktopLaunchDiagnostics                      `json:"diagnostics,omitempty"`
+	PluginStateRecovery *redevpluginintegration.OwnerScopeRecoveryPlan `json:"plugin_state_recovery,omitempty"`
 }
 
 type runtimeControlEndpoint struct {
@@ -143,6 +146,16 @@ func writeDesktopLaunchReport(path string, report desktopLaunchReport) error {
 		}
 		if report.Message == "" {
 			return errors.New("missing blocked message")
+		}
+		if report.Code == desktopLaunchCodePluginStateRecoveryRequired {
+			if report.PluginStateRecovery == nil {
+				return errors.New("missing plugin_state_recovery")
+			}
+			if err := report.PluginStateRecovery.Validate(); err != nil {
+				return fmt.Errorf("invalid plugin_state_recovery: %w", err)
+			}
+		} else if report.PluginStateRecovery != nil {
+			return errors.New("plugin_state_recovery is not allowed for this blocked code")
 		}
 	default:
 		return errors.New("invalid desktop launch status")

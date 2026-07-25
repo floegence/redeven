@@ -17,6 +17,7 @@ import {
   environmentProgressPrimaryPresentation,
   selectEnvironmentPanelProgress,
 } from './environmentProgressPrimaryPresentation';
+import { pluginStateRecoveryDialogAfterFailure } from './pluginStateRecoveryDialog';
 import {
   IDLE_LAUNCHER_BUSY_STATE,
   busyStateBlocksEnvironmentAction,
@@ -2328,7 +2329,7 @@ describe('DesktopWelcomeShell', () => {
     expect((styles.match(/100dvh/g) ?? []).length).toBe(2);
 
     expect((appSrc.match(/<ConfirmDialog\b/g) ?? []).length).toBe(3);
-    expect((appSrc.match(/<Dialog\b/g) ?? []).length).toBe(6);
+    expect((appSrc.match(/<Dialog\b/g) ?? []).length).toBe(7);
     expect((appSrc.match(/class=\{LOCAL_ENVIRONMENT_SETTINGS_DIALOG_CLASS\}/g) ?? []).length).toBe(1);
     expect((appSrc.match(/class=\{CONNECTION_DIALOG_CLASS\}/g) ?? []).length).toBe(2);
     expect(appSrc).toContain('function ControlPlaneDialog');
@@ -2349,6 +2350,59 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('process_started_at_unix_ms');
     expect(appSrc).toContain('owner_evidence');
     expect(appSrc.indexOf("failure.code === 'confirmation_required'")).toBeLessThan(appSrc.indexOf('const presentation = launcherActionFailurePresentation'));
+  });
+
+  it('requires an explicit digest-bound plugin state recovery confirmation', () => {
+    const appSrc = readWelcomeSource();
+    expect(appSrc).toContain("failure.code === 'plugin_state_recovery_required'");
+    expect(appSrc).toContain('setPluginStateRecoveryDialog({');
+    expect(appSrc).toContain('if (!pluginStateRecoverySubmitting())');
+    expect(appSrc).toContain('if (!state || pluginStateRecoverySubmitting())');
+    expect(appSrc).toContain("kind: 'recover_plugin_state'");
+    expect(appSrc).toContain('expected_plan_sha256: state.proposal.plan.plan_sha256');
+    expect(appSrc).toContain("variant=\"destructive\"");
+    expect(appSrc).toContain("i18n().t('pluginStateRecovery.archiveBody')");
+    expect(appSrc).toContain("i18n().t('pluginStateRecovery.freshBody')");
+    expect(appSrc).toContain("i18n().t('pluginStateRecovery.retentionBody')");
+    expect(appSrc.indexOf("failure.code === 'plugin_state_recovery_required'")).toBeLessThan(appSrc.indexOf('const presentation = launcherActionFailurePresentation'));
+  });
+
+  it('requires renewed confirmation after a stale recovery plan is replaced', () => {
+    const initialProposal = {
+      environment_id: 'local-environment',
+      plan: {
+        plan_sha256: 'a'.repeat(64),
+        root_identity_sha256: 'b'.repeat(64),
+        source_snapshot_sha256: 'c'.repeat(64),
+        source_entry_count: 12,
+        source_bytes: 2048,
+        has_retained_quarantine: true,
+        has_source_recovery_journal: false,
+      },
+    };
+    const replacementProposal = {
+      ...initialProposal,
+      plan: {
+        ...initialProposal.plan,
+        plan_sha256: 'd'.repeat(64),
+        source_snapshot_sha256: 'e'.repeat(64),
+      },
+    };
+
+    const nextDialog = pluginStateRecoveryDialogAfterFailure({
+      proposal: initialProposal,
+      error: '',
+    }, {
+      ok: false,
+      code: 'plugin_state_recovery_required',
+      scope: 'environment',
+      message: 'Review the changed recovery plan.',
+      plugin_state_recovery: replacementProposal,
+    }, 'Recovery failed.');
+
+    expect(nextDialog.proposal).toBe(replacementProposal);
+    expect(nextDialog.proposal.plan.plan_sha256).not.toBe(initialProposal.plan.plan_sha256);
+    expect(nextDialog.error).toBe('Review the changed recovery plan.');
   });
 
   it('localizes structured local Runtime target details', () => {
