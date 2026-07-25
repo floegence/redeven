@@ -244,7 +244,8 @@ vi.mock('../maintenance/shared', () => ({
   formatUnknownError: (error: unknown) => (error instanceof Error ? error.message : String(error ?? '')),
 }));
 
-vi.mock('../services/localApi', () => ({
+vi.mock('../services/localApi', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../services/localApi')>(),
   fetchLocalApiJSON: localApiMocks.fetchLocalApiJSON,
 }));
 

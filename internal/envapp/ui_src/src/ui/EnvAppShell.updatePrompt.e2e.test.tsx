@@ -105,7 +105,8 @@ vi.mock('@floegence/floe-webapp-core/layout', async (importOriginal) => ({
   TopBarIconButton: (props: any) => <button type="button" onClick={props.onClick}>{props.children}</button>,
 }));
 
-vi.mock('@floegence/floe-webapp-core/ui', () => ({
+vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@floegence/floe-webapp-core/ui')>(),
   Button: (props: any) => (
     <button
       type="button"
@@ -157,15 +158,18 @@ vi.mock('./notes/NotesOverlay', () => ({
   NotesOverlay: () => <div data-testid="notes-overlay" />,
 }));
 
-vi.mock('@floegence/floe-webapp-core/icons', () => {
+vi.mock('@floegence/floe-webapp-core/icons', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@floegence/floe-webapp-core/icons')>();
   const Icon = () => <span />;
   return {
+    ...actual,
     Activity: Icon,
     ArrowRightLeft: Icon,
     Code: Icon,
     Copy: Icon,
     Download: Icon,
     Files: Icon,
+    FolderOpen: Icon,
     Globe: Icon,
     Grid3x3: Icon,
     Highlighter: Icon,
