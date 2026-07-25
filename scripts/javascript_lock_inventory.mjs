@@ -59,7 +59,7 @@ export function parsePnpmLock(lock) {
       ...parsePnpmPackageKey(packageKey),
       license: '',
       lockKind: 'pnpm',
-      platformFiltered: Array.isArray(meta.os) || Array.isArray(meta.cpu),
+      platformFiltered: Array.isArray(meta.os) || Array.isArray(meta.cpu) || Array.isArray(meta.libc),
     };
   });
 }

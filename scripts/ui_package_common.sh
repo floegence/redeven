@@ -10,20 +10,20 @@ ui_pkg_die() {
 }
 
 ui_pkg_run_pnpm() {
-  if command -v pnpm >/dev/null 2>&1; then
-    # pnpm refuses to recreate node_modules without a TTY unless CI is set.
-    if [ "${1:-}" = "install" ] && { [ ! -t 0 ] || [ ! -t 1 ]; } && [ -z "${CI:-}" ]; then
-      CI=true pnpm "$@"
-    else
-      pnpm "$@"
-    fi
-    return 0
-  fi
   if command -v corepack >/dev/null 2>&1; then
+    # pnpm refuses to recreate node_modules without a TTY unless CI is set.
     if [ "${1:-}" = "install" ] && { [ ! -t 0 ] || [ ! -t 1 ]; } && [ -z "${CI:-}" ]; then
       CI=true corepack pnpm "$@"
     else
       corepack pnpm "$@"
+    fi
+    return 0
+  fi
+  if command -v pnpm >/dev/null 2>&1; then
+    if [ "${1:-}" = "install" ] && { [ ! -t 0 ] || [ ! -t 1 ]; } && [ -z "${CI:-}" ]; then
+      CI=true pnpm "$@"
+    else
+      pnpm "$@"
     fi
     return 0
   fi

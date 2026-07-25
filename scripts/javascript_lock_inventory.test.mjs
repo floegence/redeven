@@ -159,11 +159,13 @@ test('platform-filtered lock packages resolve without installed manifest evidenc
       packages: {
         'exact-platform-package@1.0.0': { os: ['darwin'], cpu: ['arm64'] },
         'audited-platform-package@2.0.0': { os: ['linux'], cpu: ['x64'] },
+        'libc-only-platform-package@3.0.0': { libc: ['musl'] },
       },
     },
   }]);
   const coordinateOverrides = new Map([
     ['audited-platform-package@2.0.0', { license: 'Apache-2.0', note: 'exact registry audit' }],
+    ['libc-only-platform-package@3.0.0', { license: 'MIT', note: 'exact registry audit' }],
   ]);
 
   assert.doesNotThrow(() => assertPlatformFilteredLicensesResolvable(inventory, { coordinateOverrides }));
@@ -171,4 +173,6 @@ test('platform-filtered lock packages resolve without installed manifest evidenc
     () => assertPlatformFilteredLicensesResolvable(inventory, { coordinateOverrides: new Map() }),
     /audited-platform-package@2\.0\.0/u,
   );
+  const libcPackage = inventory.find(({ name }) => name === 'libc-only-platform-package');
+  assert.equal(libcPackage?.platformFiltered, true);
 });

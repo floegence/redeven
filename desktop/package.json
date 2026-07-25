@@ -6,6 +6,7 @@
   "author": "Floegence",
   "homepage": "https://github.com/floegence/redeven",
   "main": "dist/main/main.js",
+  "packageManager": "pnpm@10.32.1",
   "scripts": {
     "prepare:bundled-runtime": "../scripts/build_desktop_bundled_runtime.sh",
     "start": "npm run build && npm run prepare:bundled-runtime && electron .",
@@ -21,14 +22,16 @@
   },
   "overrides": {
     "@babel/core": "^7.29.7",
-    "brace-expansion@>=1.0.0 <2.0.0": "^1.1.16",
-    "brace-expansion@>=2.0.0 <3.0.0": "^2.1.2",
-    "brace-expansion@>=5.0.0 <6.0.0": "^5.0.8",
+    "@electron/asar": "^4.2.1",
+    "@electron/universal": "^3.0.6",
+    "brace-expansion": "^5.0.8",
     "dompurify": "^3.4.12",
     "form-data": "^4.0.6",
+    "filelist": "^2.0.2",
     "js-yaml": "^4.3.0",
     "lodash": "^4.18.1",
     "lodash-es": "^4.18.1",
+    "minimatch": "^10.2.5",
     "picomatch": "^4.0.4",
     "postcss@>=8.0.0 <9.0.0": "^8.5.22",
     "tar": "^7.5.22",
@@ -37,16 +40,31 @@
     "undici": "^7.28.0"
   },
   "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "esbuild"
+    ],
+    "packageExtensions": {
+      "app-builder-lib@26.15.3": {
+        "peerDependenciesMeta": {
+          "electron-builder-squirrel-windows": {
+            "optional": true
+          }
+        }
+      }
+    },
     "overrides": {
       "@babel/core": "^7.29.7",
-      "brace-expansion@>=1.0.0 <2.0.0": "^1.1.16",
-      "brace-expansion@>=2.0.0 <3.0.0": "^2.1.2",
-      "brace-expansion@>=5.0.0 <6.0.0": "^5.0.8",
+      "@electron/asar": "^4.2.1",
+      "@electron/universal": "^3.0.6",
+      "brace-expansion": "^5.0.8",
       "dompurify": "^3.4.12",
       "form-data": "^4.0.6",
+      "filelist": "^2.0.2",
       "js-yaml": "^4.3.0",
       "lodash": "^4.18.1",
       "lodash-es": "^4.18.1",
+      "minimatch": "^10.2.5",
       "picomatch": "^4.0.4",
       "postcss@>=8.0.0 <9.0.0": "^8.5.22",
       "tar": "^7.5.22",
@@ -65,7 +83,6 @@
     "@typescript-eslint/parser": "^8.57.0",
     "electron": "41.3.0",
     "electron-builder": "26.15.3",
-    "electron-builder-squirrel-windows": "26.15.3",
     "esbuild": "^0.28.1",
     "eslint": "^9.39.4",
     "globals": "^17.4.0",
