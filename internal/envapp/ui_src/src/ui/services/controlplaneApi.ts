@@ -352,6 +352,8 @@ async function fetchLocalJSON<T>(input: RequestInfo | URL, init: RequestInit & {
 }
 
 let cachedLocalRuntime: LocalRuntimeInfo | null | undefined = undefined;
+let localRuntimeLoad: Promise<LocalRuntimeInfo | null> | undefined;
+let localRuntimeLoadGeneration = 0;
 
 function normalizeLocalRuntimeInfo(raw: unknown): LocalRuntimeInfo {
   const data = (raw ?? {}) as Record<string, unknown>;
@@ -431,13 +433,42 @@ export async function unlockLocalAccess(password: string): Promise<LocalAccessUn
 
 export async function getLocalRuntime(): Promise<LocalRuntimeInfo | null> {
   if (cachedLocalRuntime !== undefined) return cachedLocalRuntime;
-  cachedLocalRuntime = await loadLocalRuntimeInfo();
-  return cachedLocalRuntime;
+  if (localRuntimeLoad) return localRuntimeLoad;
+
+  const generation = localRuntimeLoadGeneration;
+  const request = loadLocalRuntimeInfo()
+    .then((runtime) => {
+      if (localRuntimeLoadGeneration === generation) {
+        cachedLocalRuntime = runtime;
+      }
+      return runtime;
+    })
+    .finally(() => {
+      if (localRuntimeLoad === request) {
+        localRuntimeLoad = undefined;
+      }
+    });
+  localRuntimeLoad = request;
+  return request;
 }
 
 export async function refreshLocalRuntime(): Promise<LocalRuntimeInfo | null> {
-  cachedLocalRuntime = await loadLocalRuntimeInfo();
-  return cachedLocalRuntime;
+  const generation = ++localRuntimeLoadGeneration;
+  cachedLocalRuntime = undefined;
+  const request = loadLocalRuntimeInfo()
+    .then((runtime) => {
+      if (localRuntimeLoadGeneration === generation) {
+        cachedLocalRuntime = runtime;
+      }
+      return runtime;
+    })
+    .finally(() => {
+      if (localRuntimeLoad === request) {
+        localRuntimeLoad = undefined;
+      }
+    });
+  localRuntimeLoad = request;
+  return request;
 }
 
 export async function mintLocalDirectConnectArtifact(context: ArtifactAcquireContext = {}): Promise<ConnectArtifact> {

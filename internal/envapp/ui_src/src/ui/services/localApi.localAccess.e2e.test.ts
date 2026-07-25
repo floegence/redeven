@@ -70,9 +70,8 @@ describe('localApi access credentials', () => {
   });
 
   it('applies same-origin credentials to local API fetches on localhost', async () => {
-    vi.doMock('./controlplaneApi', () => ({
-      getLocalRuntime: vi.fn(async () => ({ mode: 'local', env_public_id: 'env_local' })),
-    }));
+    const getLocalRuntime = vi.fn(async () => ({ mode: 'local', env_public_id: 'env_local' }));
+    vi.doMock('./controlplaneApi', () => ({ getLocalRuntime }));
     const auth = await import('./localAccessAuth');
     auth.writeLocalAccessResumeToken('resume123');
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
@@ -87,6 +86,7 @@ describe('localApi access credentials', () => {
 
     expect(out).toEqual({ ok: true });
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(getLocalRuntime).toHaveBeenCalledTimes(1);
   });
 
   it('preserves multipart uploads while adding the local resume-token header', async () => {
