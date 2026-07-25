@@ -44,15 +44,6 @@
       "electron",
       "esbuild"
     ],
-    "packageExtensions": {
-      "app-builder-lib@26.15.3": {
-        "peerDependenciesMeta": {
-          "electron-builder-squirrel-windows": {
-            "optional": true
-          }
-        }
-      }
-    },
     "overrides": {
       "@babel/core": "^7.29.7",
       "@electron/asar": "^4.2.1",
@@ -83,6 +74,7 @@
     "@typescript-eslint/parser": "^8.57.0",
     "electron": "41.3.0",
     "electron-builder": "26.15.3",
+    "electron-builder-squirrel-windows": "26.15.3",
     "esbuild": "^0.28.1",
     "eslint": "^9.39.4",
     "globals": "^17.4.0",
