@@ -215,9 +215,13 @@ test('terminal preview exceptions require exact ANSI fields inside the preview f
     'function TerminalThemePreview(props) {',
     '  return [props.colors.black, props.colors.white];',
     '}',
-    'function OtherSurface(props) {',
+    'export function ExportedSurface(props) {',
     '  return props.colors.black;',
     '}',
+    'async function AsyncSurface(props) {',
+    '  return props.colors.white;',
+    '}',
+    'const ArrowSurface = (props) => props.colors.black;',
   ].join('\n');
   assert.deepEqual(findThemeColorViolations(
     preview,
@@ -225,6 +229,8 @@ test('terminal preview exceptions require exact ANSI fields inside the preview f
     THEME_COLOR_EXCEPTIONS,
   ), [
     `${terminalSettingsPath}:5: replace black with a semantic theme token or add a precise owner/path/use exception`,
+    `${terminalSettingsPath}:8: replace white with a semantic theme token or add a precise owner/path/use exception`,
+    `${terminalSettingsPath}:10: replace black with a semantic theme token or add a precise owner/path/use exception`,
   ]);
   assert.equal(findThemeColorViolations(
     'function TerminalThemePreview() { return "black"; }',

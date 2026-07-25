@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(scriptDir, '..');
@@ -91,6 +92,27 @@ function isDesktopThemeSourceDeclaration({ source, offset }) {
     const end = source.indexOf('} as const', start);
     return end > start && offset < end;
   });
+}
+
+function isInsideNamedFunction(source, offset, functionName) {
+  const sourceFile = ts.createSourceFile(
+    'theme-color-source.tsx',
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX,
+  );
+  let match = false;
+  const visit = (node) => {
+    if (match || offset < node.getStart(sourceFile) || offset >= node.end) return;
+    if (ts.isFunctionDeclaration(node) && node.name?.text === functionName) {
+      match = true;
+      return;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return match;
 }
 
 // Exceptions are deliberately scoped by path and source context. A whole file or
@@ -211,15 +233,9 @@ export const THEME_COLOR_EXCEPTIONS = Object.freeze([
     'internal/envapp/ui_src/src/ui/widgets/TerminalSettingsDialog.tsx',
     'terminal',
     'The terminal theme preview renders the selected ANSI black and white palette entries as user-inspectable swatches.',
-    ({ value, source, offset, lineSource }) => {
-      const start = source.indexOf('function TerminalThemePreview');
-      const end = source.indexOf('\nfunction ', start + 1);
-      return ['black', 'white'].includes(value.toLowerCase())
-        && start >= 0
-        && offset > start
-        && (end < 0 || offset < end)
-        && /props\.colors\.(?:black|white)\b/u.test(lineSource);
-    },
+    ({ value, source, offset, lineSource }) => ['black', 'white'].includes(value.toLowerCase())
+      && /props\.colors\.(?:black|white)\b/u.test(lineSource)
+      && isInsideNamedFunction(source, offset, 'TerminalThemePreview'),
   ),
   exception(
     'internal/envapp/ui_src/src/ui/widgets/TerminalSessionRuntime.tsx',
