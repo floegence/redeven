@@ -7,6 +7,14 @@ export function packageCoordinate(name, version) {
   return `${name}@${version}`;
 }
 
+function normalizeLicense(value) {
+  return String(value ?? '').trim().replace(/\s+/gu, ' ');
+}
+
+function isRecord(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
 export function parseNpmPackageLock(lock) {
   const packages = [];
   for (const [packagePath, meta] of Object.entries(lock?.packages ?? {})) {
@@ -37,11 +45,49 @@ export function parsePnpmPackageKey(packageKey) {
 }
 
 export function parsePnpmLock(lock) {
-  return Object.keys(lock?.packages ?? {}).map((packageKey) => ({
-    ...parsePnpmPackageKey(packageKey),
-    license: '',
-    lockKind: 'pnpm',
-  }));
+  if (!isRecord(lock) || String(lock.lockfileVersion) !== '9.0') {
+    throw new Error(`unsupported pnpm lockfileVersion: ${lock?.lockfileVersion ?? 'missing'}`);
+  }
+  if (!Object.hasOwn(lock, 'packages') || !isRecord(lock.packages)) {
+    throw new Error('pnpm v9 lock packages must be an object');
+  }
+  return Object.entries(lock.packages).map(([packageKey, meta]) => {
+    if (!isRecord(meta)) {
+      throw new Error(`pnpm v9 package metadata must be an object: ${packageKey}`);
+    }
+    return {
+      ...parsePnpmPackageKey(packageKey),
+      license: '',
+      lockKind: 'pnpm',
+    };
+  });
+}
+
+export function resolvePackageLicense(pkg, options = {}) {
+  const coordinate = packageCoordinate(pkg.name, pkg.version);
+  const exactLicenses = Array.from(new Set((pkg.licenses ?? []).map(normalizeLicense).filter(Boolean))).sort();
+  if (exactLicenses.length > 1) {
+    throw new Error(`conflicting exact license metadata for ${coordinate}: ${exactLicenses.join(', ')}`);
+  }
+
+  const packageOverride = options.packageOverrides?.get(pkg.name);
+  const coordinateOverride = options.coordinateOverrides?.get(coordinate);
+  const normalizedPackageOverride = normalizeLicense(packageOverride?.license);
+  const normalizedCoordinateOverride = normalizeLicense(coordinateOverride?.license);
+  if (normalizedPackageOverride && normalizedCoordinateOverride
+      && normalizedPackageOverride !== normalizedCoordinateOverride) {
+    throw new Error(`conflicting audited license overrides for ${coordinate}: ${normalizedPackageOverride}, ${normalizedCoordinateOverride}`);
+  }
+  const override = coordinateOverride ?? packageOverride;
+  const overrideLicense = normalizeLicense(override?.license);
+  const exactLicense = exactLicenses[0];
+  if (exactLicense && overrideLicense && exactLicense !== overrideLicense) {
+    throw new Error(`audited license override conflicts with exact metadata for ${coordinate}: ${overrideLicense}, ${exactLicense}`);
+  }
+  return {
+    license: exactLicense || overrideLicense || 'UNKNOWN',
+    notes: override?.note ? [String(override.note)] : [],
+  };
 }
 
 export function collectJavaScriptLockInventory(sources) {
