@@ -51,27 +51,29 @@ test("quick gate remains a closed source-only command set", () => {
     .split("\n")
     .map((line) => line.trim())
     .filter((line) => line && !line.startsWith("#") && !line.startsWith("echo "));
-  const allowed = [
-    /^#!\/usr\/bin\/env bash$/,
-    /^set -euo pipefail$/,
-    /^SCRIPT_DIR=/,
-    /^ROOT_DIR=/,
-    /^cd "\$ROOT_DIR"$/,
-    /^git diff --check$/,
-    /^git diff-tree --check --root -r --no-commit-id HEAD$/,
-    /^test -z "\$\(gofmt -l \$\(git ls-files '\*\.go'\)\)"$/,
-    /^for script in /,
-    /^bash -n "\$script"$/,
-    /^done$/,
-    /^node --check "\$script"$/,
-    /^python3 -c /,
-    /^node --test scripts\/(quick_ci_policy|actionlint_runner_policy|check_readme_localizations)\.test\.mjs(?: scripts\/actionlint_runner_policy\.test\.mjs)?$/,
-    /^node scripts\/check_readme_localizations\.mjs --require-reviewed$/,
-    /^\.\/scripts\/okf\/check_source_integrity\.sh$/,
-    /^\.\/scripts\/build_okf_bundle\.sh --verify-only$/,
-  ];
+  const allowed = new Set([
+    "#!/usr/bin/env bash",
+    "set -euo pipefail",
+    'SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)',
+    'ROOT_DIR=$(cd -- "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd)',
+    'cd "$ROOT_DIR"',
+    "git diff --check",
+    "git diff-tree --check --root -r --no-commit-id HEAD",
+    'test -z "$(gofmt -l $(git ls-files \'*.go\'))"',
+    "for script in scripts/*.sh scripts/okf/*.sh .githooks/pre-commit .githooks/pre-push; do",
+    'bash -n "$script"',
+    "done",
+    "for script in scripts/*.mjs; do",
+    'node --check "$script"',
+    'python3 -c \'from pathlib import Path; [compile(Path(name).read_text(encoding="utf-8"), name, "exec") for name in ("scripts/safe_extract_tar.py", "scripts/extract_desktop_runtime.py")]\'',
+    "node --test scripts/quick_ci_policy.test.mjs scripts/actionlint_runner_policy.test.mjs",
+    "node --test scripts/check_readme_localizations.test.mjs",
+    "node scripts/check_readme_localizations.mjs --require-reviewed",
+    "./scripts/okf/check_source_integrity.sh",
+    "./scripts/build_okf_bundle.sh --verify-only",
+  ]);
   for (const command of commands) {
-    assert.ok(allowed.some((pattern) => pattern.test(command)), `unexpected quick gate command: ${command}`);
+    assert.ok(allowed.has(command), `unexpected quick gate command: ${command}`);
   }
 
   for (const forbidden of [
@@ -84,6 +86,8 @@ test("quick gate remains a closed source-only command set", () => {
     "terminal-carrier",
     "terminal-performance",
     "check_final_integration",
+    "check_ui_tests",
+    "check_renderer_e2e",
     "check_flower_ui",
     "check_desktop",
     "docker",

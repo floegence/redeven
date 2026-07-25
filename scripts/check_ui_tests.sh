@@ -9,11 +9,9 @@ CODE_UI_DIR="$ROOT_DIR/internal/codeapp/ui_src"
 source "$SCRIPT_DIR/ui_package_common.sh"
 
 run_terminal_performance() {
-  local -a command=(pnpm run test:terminal-performance)
+  local -a command=(corepack pnpm run test:terminal-performance)
 
-  if ! command -v pnpm >/dev/null 2>&1; then
-    command=(corepack pnpm run test:terminal-performance)
-  fi
+  command -v corepack >/dev/null 2>&1 || ui_pkg_die "corepack not found (install Node.js)"
   if [[ "$(uname -s)" == "Linux" && -z "${DISPLAY:-}" ]]; then
     if ! command -v xvfb-run >/dev/null 2>&1; then
       ui_pkg_die "xvfb-run is required for terminal performance tests on Linux without DISPLAY"
