@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { render } from 'solid-js/web';
+import { createSignal } from 'solid-js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { PluginCenterView } from './PluginCenterView';
@@ -87,7 +88,7 @@ function containersPermissionProjection(granted = false): PluginInventoryProject
           deniedByGrant: false,
           blockedByPolicy: false,
           grantBlockedByPolicy: false,
-          blockedToOpen: !granted,
+          blockedToOpen: false,
         }],
         revisions: {
           policyRevision: 3,
@@ -224,6 +225,202 @@ describe('PluginCenterView', () => {
     expect(mount.querySelector('[data-plugin-center-details]')?.textContent).toContain('Disabled');
   });
 
+  it('reopens mobile details for every explicit shell focus request while kept alive', async () => {
+    const originalInnerWidth = window.innerWidth;
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 320 });
+    const [focusRequest, setFocusRequest] = createSignal(1);
+    const mount = document.createElement('div');
+    document.body.append(mount);
+
+    dispose = render(() => (
+      <PluginCenterView
+        projection={containersPermissionProjection()}
+        loading={false}
+        selectedInventoryKey="catalog:containers"
+        focusRequest={focusRequest()}
+        onCommand={vi.fn()}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces
+      />
+    ), mount);
+
+    await Promise.resolve();
+    const back = mount.querySelector<HTMLButtonElement>('[data-plugin-center-mobile-back]')!;
+    expect(document.activeElement).toBe(back);
+    back.click();
+    await Promise.resolve();
+    expect(getComputedStyle(mount.querySelector<HTMLElement>('[data-plugin-center-master]')!).display).not.toBe('none');
+
+    setFocusRequest(2);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(getComputedStyle(mount.querySelector<HTMLElement>('[data-plugin-center-details]')!).display).not.toBe('none');
+    expect(document.activeElement).toBe(back);
+
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: originalInnerWidth });
+  });
+
+  it('returns mobile details to the list for search and tab changes without losing the initiating focus', async () => {
+    const originalInnerWidth = window.innerWidth;
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 320 });
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginCenterView
+        projection={containersPermissionProjection(true)}
+        loading={false}
+        onCommand={vi.fn()}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces
+      />
+    ), mount);
+
+    const item = mount.querySelector<HTMLButtonElement>('[data-plugin-center-item="catalog:containers"]')!;
+    item.click();
+    await Promise.resolve();
+    await Promise.resolve();
+    const master = mount.querySelector<HTMLElement>('[data-plugin-center-master]')!;
+    const details = mount.querySelector<HTMLElement>('[data-plugin-center-details]')!;
+    expect(master.classList).toContain('hidden');
+    expect(details.classList).toContain('block');
+
+    const search = mount.querySelector<HTMLInputElement>('[data-plugin-center-search]')!;
+    search.focus();
+    search.value = 'containers';
+    search.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(master.classList).toContain('flex');
+    expect(details.classList).toContain('hidden');
+    expect(document.activeElement).toBe(search);
+
+    item.click();
+    await Promise.resolve();
+    await Promise.resolve();
+    const discover = mount.querySelector<HTMLButtonElement>('#plugin-center-tab-discover')!;
+    discover.focus();
+    discover.click();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(master.classList).toContain('flex');
+    expect(details.classList).toContain('hidden');
+    expect(document.activeElement).toBe(discover);
+    expect(discover.getAttribute('aria-selected')).toBe('true');
+
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: originalInnerWidth });
+  });
+
+  it.each([
+    {
+      action: 'trust',
+      label: 'View trust details',
+      attentionReason: 'trust_unavailable',
+      trustBadge: 'unavailable',
+      recovery: 'Review the trust and approval reason codes and source below.',
+      evidence: ['attention_reason=trust_unavailable', 'trust=unavailable', 'rollout_state=stable'],
+    },
+    {
+      action: 'runtime',
+      label: 'View runtime requirement',
+      attentionReason: 'runtime_missing',
+      trustBadge: 'official',
+      recovery: 'Update Redeven or ReDevPlugin to the required version',
+      evidence: ['attention_reason=runtime_missing', 'trust=official', 'rollout_state=stable'],
+    },
+    {
+      action: 'diagnostics',
+      label: 'View issue',
+      attentionReason: 'diagnostic_error',
+      trustBadge: 'official',
+      recovery: 'Resolve the reported host or package issue shown below',
+      evidence: ['attention_reason=diagnostic_error', 'trust=official', 'rollout_state=stable'],
+    },
+  ] as const)(
+    'focuses the real $action evidence and recovery from its primary action',
+    ({ action, label, attentionReason, trustBadge, recovery, evidence }) => {
+      const mount = document.createElement('div');
+      document.body.append(mount);
+      const issueProjection: PluginInventoryProjection = {
+        items: [{
+          ...containersPlugin,
+          pluginInstanceID: 'plugininst_containers',
+          version: '2.0.0',
+          managementRevision: 7,
+          lifecycleState: 'needs_attention',
+          attentionReason,
+          trustBadge,
+        }],
+      };
+      dispose = render(() => (
+        <PluginCenterView
+          projection={issueProjection}
+          loading={false}
+          selectedInventoryKey="catalog:containers"
+          onCommand={vi.fn()}
+          onRefresh={vi.fn()}
+          canManagePlugins
+          canOpenPluginSurfaces
+        />
+      ), mount);
+
+      const issue = mount.querySelector<HTMLElement>('[data-plugin-issue-details]')!;
+      const scrollIntoView = vi.fn();
+      Object.defineProperty(issue, 'scrollIntoView', { configurable: true, value: scrollIntoView });
+      const primary = mount.querySelector<HTMLButtonElement>(`[data-plugin-action="${action}"]`)!;
+      expect(primary.textContent).toContain(label);
+      primary.click();
+
+      expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'nearest' });
+      expect(document.activeElement).toBe(issue);
+      expect(issue.textContent).toContain(recovery);
+      const issueEvidence = issue.querySelector('[data-plugin-issue-evidence]')?.textContent ?? '';
+      for (const fact of evidence) expect(issueEvidence).toContain(fact);
+      expect(issue.textContent).toContain('0.9.0');
+      expect(issue.textContent).toContain('0.6.5');
+    },
+  );
+
+  it('describes and focuses technical details for an enabled plugin without a launch surface', () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    const backgroundProjection: PluginInventoryProjection = {
+      items: [{
+        ...containersPlugin,
+        pluginInstanceID: 'plugininst_background',
+        managementRevision: 9,
+        lifecycleState: 'enabled',
+        defaultLaunchTarget: undefined,
+      }],
+    };
+    dispose = render(() => (
+      <PluginCenterView
+        projection={backgroundProjection}
+        loading={false}
+        selectedInventoryKey="catalog:containers"
+        onCommand={vi.fn()}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces
+      />
+    ), mount);
+
+    const details = mount.querySelector<HTMLDetailsElement>('[data-plugin-technical-details]')!;
+    const summary = details.querySelector<HTMLElement>('summary')!;
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(details, 'scrollIntoView', { configurable: true, value: scrollIntoView });
+    const primary = mount.querySelector<HTMLButtonElement>('[data-plugin-action="details"]')!;
+    expect(primary.textContent).toContain('Technical details');
+    expect(primary.textContent).not.toContain('View issue');
+
+    primary.click();
+
+    expect(details.open).toBe(true);
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'nearest' });
+    expect(document.activeElement).toBe(summary);
+  });
+
   it('opens official catalog installation through the reviewed package URL flow', async () => {
     const onCommand = vi.fn();
     const onInspectExternal = vi.fn(async () => {
@@ -304,8 +501,10 @@ describe('PluginCenterView', () => {
     const openWorkbench = mount.querySelector('[data-plugin-action="open-workbench"]') as HTMLButtonElement;
     expect(openActivity.disabled).toBe(false);
     expect(openWorkbench.disabled).toBe(false);
-    expect((mount.querySelector('[data-plugin-action="disable"]') as HTMLButtonElement).disabled).toBe(true);
-    expect((mount.querySelector('[data-plugin-action="uninstall"]') as HTMLButtonElement).disabled).toBe(true);
+    (mount.querySelector('[data-plugin-action="more"]') as HTMLButtonElement).click();
+    await Promise.resolve();
+    expect(findDocumentButton('Disable').disabled).toBe(true);
+    expect(findDocumentButton('Uninstall').disabled).toBe(true);
     openActivity.click();
     await Promise.resolve();
     await Promise.resolve();
@@ -314,7 +513,7 @@ describe('PluginCenterView', () => {
     expect(onCommand).toHaveBeenNthCalledWith(2, expect.objectContaining({ type: 'open_surface', placement: 'workbench' }), expect.any(AbortSignal));
   });
 
-  it('keeps Disable available for an enabled plugin that needs permission attention', () => {
+  it('keeps Disable available for an enabled plugin that needs permission attention', async () => {
     const mount = document.createElement('div');
     document.body.append(mount);
     const installedProjection: PluginInventoryProjection = {
@@ -340,7 +539,9 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
-    expect((mount.querySelector('[data-plugin-action="disable"]') as HTMLButtonElement).disabled).toBe(false);
+    (mount.querySelector('[data-plugin-action="more"]') as HTMLButtonElement).click();
+    await Promise.resolve();
+    expect(findDocumentButton('Disable').disabled).toBe(false);
   });
 
   it('keeps permission switches model-driven across cancellation and confirmed grant', async () => {
@@ -367,6 +568,8 @@ describe('PluginCenterView', () => {
     permissionSwitch.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(permissionSwitch.getAttribute('aria-checked')).toBe('false');
+    expect(findDocumentButton('Cancel').className).toContain('min-h-[46px]');
+    expect(findDocumentButton('Grant').className).toContain('min-h-[46px]');
     findDocumentButton('Cancel').click();
     await Promise.resolve();
     expect(permissionSwitch.getAttribute('aria-checked')).toBe('false');
@@ -669,6 +872,159 @@ describe('PluginCenterView', () => {
     expect(onRefresh).toHaveBeenCalledTimes(1);
   });
 
+  it('uses the combined authorization state instead of a stale enabled lifecycle', () => {
+    const staleProjection = containersPermissionProjection(false);
+    staleProjection.items[0] = {
+      ...staleProjection.items[0],
+      lifecycleState: 'enabled',
+      defaultLaunchTarget: {
+        pluginID: 'com.redeven.official.containers',
+        pluginInstanceID: 'plugininst_containers',
+        surfaceID: 'containers.dashboard',
+        expectedManagementRevision: 7,
+        preferredPlacement: 'activity',
+      },
+    };
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginCenterView
+        projection={staleProjection}
+        loading={false}
+        onCommand={vi.fn()}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces
+      />
+    ), mount);
+
+    expect(mount.querySelector('[data-plugin-primary-actions]')?.textContent).toContain('Review required permissions');
+    expect(mount.querySelector('[data-plugin-action="open"]')).toBeNull();
+    expect(mount.querySelector('[data-plugin-action="open-workbench"]')).toBeNull();
+  });
+
+  it('requires a second destructive confirmation before uninstall deletes plugin data', async () => {
+    const onCommand = vi.fn();
+    const installedProjection: PluginInventoryProjection = {
+      items: [{
+        ...containersPlugin,
+        pluginInstanceID: 'plugininst_containers',
+        version: '2.0.0',
+        managementRevision: 23,
+        lifecycleState: 'disabled',
+      }],
+    };
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginCenterView
+        projection={installedProjection}
+        loading={false}
+        onCommand={onCommand}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces
+      />
+    ), mount);
+
+    (mount.querySelector('[data-plugin-action="more"]') as HTMLButtonElement).click();
+    await Promise.resolve();
+    findDocumentButton('Uninstall').click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const choices = [...document.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
+    expect(choices).toHaveLength(2);
+    expect(choices[0]?.getAttribute('aria-checked')).toBe('true');
+    expect(choices[1]?.getAttribute('aria-checked')).toBe('false');
+    expect((document.querySelector('[data-plugin-uninstall-confirm]') as HTMLButtonElement).className).toContain('min-h-[46px]');
+    choices[1]?.click();
+    (document.querySelector('[data-plugin-uninstall-confirm]') as HTMLButtonElement).click();
+
+    expect(onCommand).not.toHaveBeenCalled();
+    expect(document.querySelector('[data-plugin-uninstall-delete-warning]')?.textContent).toContain('Permanently delete');
+    expect((document.querySelector('[data-plugin-uninstall-confirm]') as HTMLButtonElement).textContent).toContain('Delete data');
+    (document.querySelector('[data-plugin-uninstall-confirm]') as HTMLButtonElement).click();
+
+    expect(onCommand).toHaveBeenCalledWith({
+      type: 'uninstall',
+      pluginInstanceID: 'plugininst_containers',
+      expectedManagementRevision: 23,
+      dataRetention: 'delete_data',
+    }, expect.any(AbortSignal));
+  });
+
+  it('restores keep data as the safe default after cancelling an uninstall', async () => {
+    const onCommand = vi.fn();
+    const installedProjection: PluginInventoryProjection = {
+      items: [{
+        ...containersPlugin,
+        pluginInstanceID: 'plugininst_containers',
+        version: '2.0.0',
+        managementRevision: 23,
+        lifecycleState: 'disabled',
+      }],
+    };
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginCenterView
+        projection={installedProjection}
+        loading={false}
+        onCommand={onCommand}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces
+      />
+    ), mount);
+
+    const openUninstall = async () => {
+      (mount.querySelector('[data-plugin-action="more"]') as HTMLButtonElement).click();
+      await Promise.resolve();
+      findDocumentButton('Uninstall').click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    };
+    await openUninstall();
+    const choices = [...document.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
+    choices[1]?.click();
+    findDocumentButton('Cancel').click();
+    await Promise.resolve();
+
+    await openUninstall();
+    const reopenedChoices = [...document.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
+    expect(reopenedChoices[0]?.getAttribute('aria-checked')).toBe('true');
+    expect(reopenedChoices[1]?.getAttribute('aria-checked')).toBe('false');
+    (document.querySelector('[data-plugin-uninstall-confirm]') as HTMLButtonElement).click();
+    expect(onCommand).toHaveBeenCalledWith({
+      type: 'uninstall',
+      pluginInstanceID: 'plugininst_containers',
+      expectedManagementRevision: 23,
+      dataRetention: 'keep_data',
+    }, expect.any(AbortSignal));
+  });
+
+  it('binds Plugin Center errors to a retry action and administrator guidance', () => {
+    const onRefresh = vi.fn();
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginCenterView
+        projection={projection}
+        loading={false}
+        error={new Error('Inventory unavailable')}
+        onCommand={vi.fn()}
+        onRefresh={onRefresh}
+        canManagePlugins={false}
+        canOpenPluginSurfaces
+      />
+    ), mount);
+
+    const error = mount.querySelector('[data-plugin-center-error]')!;
+    expect(error.textContent).toContain('Inventory unavailable');
+    expect(error.textContent).toContain('environment administrator');
+    findDocumentButton('Retry').click();
+    expect(onRefresh).toHaveBeenCalledOnce();
+  });
+
   it('admits one management mutation at a time and supplies an abort signal', async () => {
     let finish!: () => void;
     const onCommand = vi.fn((_command, signal: AbortSignal) => {
@@ -702,16 +1058,21 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
-    const disable = mount.querySelector('[data-plugin-action="disable"]') as HTMLButtonElement;
+    (mount.querySelector('[data-plugin-action="more"]') as HTMLButtonElement).click();
+    await Promise.resolve();
+    const disable = findDocumentButton('Disable');
     disable.click();
     disable.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(onCommand).toHaveBeenCalledTimes(1);
-    expect(disable.disabled).toBe(true);
+    (mount.querySelector('[data-plugin-action="more"]') as HTMLButtonElement).click();
+    await Promise.resolve();
+    expect(findDocumentButton('Disable').disabled).toBe(true);
 
     finish();
     await Promise.resolve();
     await Promise.resolve();
-    expect(disable.disabled).toBe(false);
+    expect(findDocumentButton('Disable').disabled).toBe(false);
   });
 
   it('selects same-plugin-id instances independently by inventory key', () => {
@@ -764,7 +1125,13 @@ describe('PluginCenterView', () => {
     expect(mount.querySelector('[data-plugin-center-details]')?.textContent).toContain('Toolbox Beta');
     expect(mount.querySelector('[data-plugin-center-details]')?.textContent).not.toContain('Toolbox Catalog');
     expect(mount.querySelector('[data-plugin-center-details]')?.textContent).not.toContain('Toolbox Alpha');
-    (mount.querySelector('[data-plugin-center-item="instance:plugini_toolbox_alpha"]') as HTMLButtonElement).click();
+    const beta = mount.querySelector('[data-plugin-center-item="instance:plugini_toolbox_beta"]') as HTMLButtonElement;
+    const alpha = mount.querySelector('[data-plugin-center-item="instance:plugini_toolbox_alpha"]') as HTMLButtonElement;
+    expect(beta.getAttribute('aria-current')).toBe('true');
+    expect(alpha.getAttribute('aria-current')).toBeNull();
+    alpha.click();
     expect(mount.querySelector('[data-plugin-center-details]')?.textContent).toContain('Toolbox Alpha');
+    expect(beta.getAttribute('aria-current')).toBeNull();
+    expect(alpha.getAttribute('aria-current')).toBe('true');
   });
 });

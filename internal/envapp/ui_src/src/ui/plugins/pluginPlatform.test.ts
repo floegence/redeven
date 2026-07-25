@@ -194,7 +194,7 @@ describe('createPluginSurfacePlacementCoordinator', () => {
       await retirement;
 
       expect(observedFailure).toBe(fastFailure);
-      expect(firstSlot.dispose).toHaveBeenCalledTimes(1);
+      expect(firstSlot.dispose).not.toHaveBeenCalled();
       expect(secondSlot.dispose).toHaveBeenCalledTimes(1);
     },
   );
@@ -251,7 +251,7 @@ describe('createPluginSurfacePlacementCoordinator', () => {
     ]);
   });
 
-  it('always closes and disposes a ready slot when hidden lifecycle delivery fails', async () => {
+  it('completes exact retirement when only hidden lifecycle delivery fails', async () => {
     const order: string[] = [];
     const slot = createSlot(order, 'hidden-error');
     const host = createHost('surface_hidden_error', order);
@@ -263,7 +263,8 @@ describe('createPluginSurfacePlacementCoordinator', () => {
 
     coordinator.setVisible(slot, true);
     await coordinator.open(slot, request);
-    await expect(coordinator.release(slot)).rejects.toThrow('hidden delivery failed');
+    await expect(coordinator.release(slot)).resolves.toBeUndefined();
+    await expect(coordinator.release(slot)).resolves.toBeUndefined();
 
     expect(order).toEqual([
       'lifecycle:visible',
@@ -272,18 +273,73 @@ describe('createPluginSurfacePlacementCoordinator', () => {
     ]);
   });
 
-  it('replays the same retirement failure instead of reporting a later release as successful', async () => {
+  it('retries only local disposal after exact close has succeeded', async () => {
     const order: string[] = [];
-    const slot = createSlot(order, 'retirement-error');
-    vi.mocked(slot.close).mockRejectedValue(new Error('server revoke failed'));
-    const coordinator = createPluginSurfacePlacementCoordinator(createClient(async () => createHost('surface_error', order)));
+    const slot = createSlot(order, 'dispose-error');
+    const disposeFailure = new Error('local dispose failed');
+    vi.mocked(slot.dispose)
+      .mockRejectedValueOnce(disposeFailure)
+      .mockResolvedValueOnce(undefined);
+    const coordinator = createPluginSurfacePlacementCoordinator(
+      createClient(async () => createHost('surface_dispose_error', order)),
+    );
 
     await coordinator.open(slot, request);
-    await expect(coordinator.release(slot)).rejects.toThrow('server revoke failed');
-    await expect(coordinator.release(slot)).rejects.toThrow('server revoke failed');
+    await expect(coordinator.release(slot)).rejects.toBe(disposeFailure);
 
     expect(slot.close).toHaveBeenCalledTimes(1);
     expect(slot.dispose).toHaveBeenCalledTimes(1);
+
+    await expect(coordinator.release(slot)).resolves.toBeUndefined();
+
+    expect(slot.close).toHaveBeenCalledTimes(1);
+    expect(slot.dispose).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps an exact slot registered and retries close after revocation fails', async () => {
+    const order: string[] = [];
+    const slot = createSlot(order, 'retirement-error');
+    const revokeFailure = new Error('server revoke failed');
+    vi.mocked(slot.close)
+      .mockRejectedValueOnce(revokeFailure)
+      .mockResolvedValueOnce(undefined);
+    const coordinator = createPluginSurfacePlacementCoordinator(createClient(async () => createHost('surface_error', order)));
+
+    await coordinator.open(slot, request);
+    await expect(coordinator.release(slot)).rejects.toBe(revokeFailure);
+
+    expect(slot.close).toHaveBeenCalledTimes(1);
+    expect(slot.dispose).not.toHaveBeenCalled();
+
+    await expect(coordinator.release(slot)).resolves.toBeUndefined();
+
+    expect(slot.close).toHaveBeenCalledTimes(2);
+    expect(slot.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries only the exact failed slot without affecting a retired sibling', async () => {
+    const order: string[] = [];
+    const failedSlot = createSlot(order, 'failed');
+    const siblingSlot = createSlot(order, 'sibling');
+    const revokeFailure = new Error('failed exact revoke');
+    vi.mocked(failedSlot.close)
+      .mockRejectedValueOnce(revokeFailure)
+      .mockResolvedValueOnce(undefined);
+    const coordinator = createPluginSurfacePlacementCoordinator(
+      createClient(async () => createHost('surface', order)),
+    );
+
+    await coordinator.open(failedSlot, request);
+    await coordinator.open(siblingSlot, { ...request, surface_id: 'containers.details' });
+
+    await expect(coordinator.release(failedSlot)).rejects.toBe(revokeFailure);
+    await expect(coordinator.release(siblingSlot)).resolves.toBeUndefined();
+    await expect(coordinator.release(failedSlot)).resolves.toBeUndefined();
+
+    expect(failedSlot.close).toHaveBeenCalledTimes(2);
+    expect(failedSlot.dispose).toHaveBeenCalledTimes(1);
+    expect(siblingSlot.close).toHaveBeenCalledTimes(1);
+    expect(siblingSlot.dispose).toHaveBeenCalledTimes(1);
   });
 
   it('locally disposes a slot after the SDK-owned mutation lifecycle invalidates it', async () => {
@@ -296,6 +352,25 @@ describe('createPluginSurfacePlacementCoordinator', () => {
     await coordinator.release(slot);
 
     expect(order).toEqual(['lifecycle:hidden', 'mutation:dispose']);
+  });
+
+  it('retries local disposal after SDK-owned mutation invalidation fails', async () => {
+    const order: string[] = [];
+    const slot = createSlot(order, 'mutation-retry');
+    const disposeFailure = new Error('mutation dispose failed');
+    vi.mocked(slot.dispose)
+      .mockRejectedValueOnce(disposeFailure)
+      .mockResolvedValueOnce(undefined);
+    const coordinator = createPluginSurfacePlacementCoordinator(
+      createClient(async () => createHost('surface_mutation_retry', order)),
+    );
+
+    await coordinator.open(slot, request);
+    await expect(coordinator.invalidatePlugin(request.plugin_instance_id)).rejects.toBe(disposeFailure);
+    await expect(coordinator.release(slot)).resolves.toBeUndefined();
+
+    expect(slot.close).not.toHaveBeenCalled();
+    expect(slot.dispose).toHaveBeenCalledTimes(2);
   });
 });
 

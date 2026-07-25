@@ -2,6 +2,7 @@
 
 import { render } from 'solid-js/web';
 import type { JSX } from 'solid-js';
+import { PluginTransportError } from '@floegence/redevplugin-ui';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ExternalPluginInstallDialog } from './ExternalPluginInstallDialog';
@@ -19,9 +20,10 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
     description?: string;
     children: JSX.Element;
     footer?: JSX.Element;
+    class?: string;
     onOpenChange: (open: boolean) => void;
   }) => props.open ? (
-    <section role="dialog" aria-label={props.title}>
+    <section role="dialog" aria-label={props.title} class={props.class}>
       <button data-dialog-dismiss type="button" onClick={() => props.onOpenChange(false)}>Dismiss</button>
       <div>{props.description}</div>
       {props.children}
@@ -204,6 +206,20 @@ async function flush(): Promise<void> {
 }
 
 describe('ExternalPluginInstallDialog', () => {
+  it('uses an opaque wide decision surface with a four-stage progress indicator', () => {
+    renderDialog();
+
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    const progress = document.querySelector<HTMLOListElement>('ol')!;
+    expect(dialog.className).toContain('max-w-[54rem]');
+    expect(dialog.className).toContain('bg-background');
+    expect(progress.children).toHaveLength(4);
+    expect(progress.querySelector('[aria-current="step"]')?.textContent).toContain('Plugin source');
+    expect(progress.textContent).toContain('Review package');
+    expect(progress.textContent).toContain('Install plugin');
+    expect(progress.textContent).toContain('Ready');
+  });
+
   it('provides roving keyboard navigation and labelled source tab panels', async () => {
     renderDialog();
     const tabs = [...document.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
@@ -242,6 +258,23 @@ describe('ExternalPluginInstallDialog', () => {
     }, expect.any(AbortSignal));
   });
 
+  it('requires a credential-free HTTPS package URL and a canonical GitHub repository URL', () => {
+    renderDialog();
+    const packageURL = inputWithPlaceholder('https://example.com/plugin.redevplugin');
+    typeInto(packageURL, 'http://plugins.example.com/toolbox.redevplugin');
+    packageURL.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
+    expect(packageURL.getAttribute('aria-invalid')).toBe('true');
+    expect(button('Review package').disabled).toBe(true);
+    expect(document.body.textContent).toContain('Check the source and try again');
+
+    button('GitHub').click();
+    const githubURL = inputWithPlaceholder('https://github.com/owner/repository');
+    typeInto(githubURL, 'https://github.com/example/toolbox/releases');
+    githubURL.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
+    expect(githubURL.getAttribute('aria-invalid')).toBe('true');
+    expect(button('Review package').disabled).toBe(true);
+  });
+
   it('inspects a GitHub repository with an optional exact release tag', async () => {
     const props = renderDialog();
     button('GitHub').click();
@@ -269,6 +302,15 @@ describe('ExternalPluginInstallDialog', () => {
     Object.defineProperty(upload, 'files', { configurable: true, value: [file] });
     upload.dispatchEvent(new Event('change', { bubbles: true }));
     expect(button('Review package').disabled).toBe(false);
+    expect(document.querySelector('[data-external-plugin-selected-file]')?.textContent).toContain('toolbox.redevplugin');
+    expect(document.querySelector('[data-external-plugin-selected-file]')?.textContent).toContain('7 B');
+
+    const remove = document.querySelector<HTMLButtonElement>('button[aria-label="Delete"]')!;
+    remove.click();
+    expect(button('Review package').disabled).toBe(true);
+
+    Object.defineProperty(upload, 'files', { configurable: true, value: [file] });
+    upload.dispatchEvent(new Event('change', { bubbles: true }));
 
     button('Review package').click();
     await flush();
@@ -297,6 +339,8 @@ describe('ExternalPluginInstallDialog', () => {
       expect(document.body.textContent).toContain(confirmationDigest);
       const confirmation = document.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
       expect(confirmation.disabled).toBe(false);
+      expect(confirmation.closest('footer')).not.toBeNull();
+      expect(confirmation.closest('label')?.className).toContain('min-h-[46px]');
       confirmation.click();
       expect(install.disabled).toBe(false);
 
@@ -305,6 +349,28 @@ describe('ExternalPluginInstallDialog', () => {
       expect(props.onCommit).toHaveBeenCalledWith(inspected, expect.any(AbortSignal));
     },
   );
+
+  it('keeps pending approval evidence factual and reserves first-person consent for the checkbox', async () => {
+    const inspected = inspection('absent', 'pending');
+    inspected.execution_approval.reason_codes = ['unsigned_package_requires_user_confirmation'];
+    renderDialog({ onInspect: vi.fn(async () => inspected) });
+    typeInto(inputWithPlaceholder('https://example.com/plugin.redevplugin'), 'https://plugins.example.com/toolbox.redevplugin');
+
+    button('Review package').click();
+    await flush();
+
+    const trustReview = document.querySelector<HTMLElement>('[data-external-plugin-trust-review]')!;
+    const confirmation = document.querySelector<HTMLElement>('[data-external-plugin-confirmation]')!;
+    const consentCopy = 'I approve this exact inspected package and its declared access.';
+    expect(trustReview.textContent).toContain('Waiting for your approval');
+    expect(trustReview.textContent).toContain('execution_approval=pending');
+    expect(trustReview.textContent).toContain('unsigned_package_requires_user_confirmation');
+    expect(trustReview.textContent).not.toContain(consentCopy);
+    expect(confirmation.querySelector('input[type="checkbox"]')).not.toBeNull();
+    expect(confirmation.textContent).toContain(consentCopy);
+    expect((document.body.textContent?.match(/I approve this exact inspected package and its declared access\./g) ?? []))
+      .toHaveLength(1);
+  });
 
   it('discloses every security declaration and highlights update deltas before confirmation', async () => {
     const inspected = inspection('absent');
@@ -450,16 +516,58 @@ describe('ExternalPluginInstallDialog', () => {
     button('Review package').click();
     await flush();
 
-    const confirmation = document.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
-    expect(confirmation.disabled).toBe(true);
-    expect(button('Install plugin').disabled).toBe(true);
+    expect(document.querySelector<HTMLInputElement>('input[type="checkbox"]')).toBeNull();
+    expect([...document.querySelectorAll('button')].some((candidate) => candidate.textContent?.trim() === 'Install plugin')).toBe(false);
     if (approvalState === 'policy_blocked') {
       expect(document.body.textContent).toContain('Managed by policy');
       expect(document.body.textContent).toContain('enterprise_source_policy');
     }
-    confirmation.click();
-    button('Install plugin').click();
     expect(props.onCommit).not.toHaveBeenCalled();
+  });
+
+  it('keeps the exact inspection and offers reconciliation after an unknown commit outcome', async () => {
+    const inspected = inspection('absent');
+    const committed = committedResult(inspected);
+    const onCommit = vi.fn()
+      .mockRejectedValueOnce(new Error('query transport unavailable'))
+      .mockResolvedValueOnce(committed);
+    const onOpenChange = vi.fn();
+    renderDialog({ onInspect: vi.fn(async () => inspected), onCommit, onOpenChange });
+    typeInto(inputWithPlaceholder('https://example.com/plugin.redevplugin'), 'https://plugins.example.com/toolbox.redevplugin');
+    button('Review package').click();
+    await flush();
+    document.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
+    button('Install plugin').click();
+    await flush();
+
+    expect(document.body.textContent).toContain('Installation status could not be confirmed');
+    expect(document.body.textContent).toContain(confirmationDigest);
+    expect([...document.querySelectorAll('button')].some((candidate) => candidate.textContent?.trim() === 'Back')).toBe(false);
+    expect([...document.querySelectorAll('button')].some((candidate) => candidate.textContent?.trim() === 'Cancel')).toBe(false);
+    (document.querySelector('[data-dialog-dismiss]') as HTMLButtonElement).click();
+    expect(onOpenChange).not.toHaveBeenCalled();
+    button('Retry').click();
+    await flush();
+    expect(onCommit).toHaveBeenNthCalledWith(2, inspected, expect.any(AbortSignal));
+  });
+
+  it('distinguishes a confirmed not-committed failure from an unknown outcome', async () => {
+    const inspected = inspection('absent');
+    const onCommit = vi.fn(async () => {
+      throw new PluginTransportError('request was not sent', new TypeError('offline'), 'not_committed');
+    });
+    renderDialog({ onInspect: vi.fn(async () => inspected), onCommit });
+    typeInto(inputWithPlaceholder('https://example.com/plugin.redevplugin'), 'https://plugins.example.com/toolbox.redevplugin');
+    button('Review package').click();
+    await flush();
+    document.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
+    button('Install plugin').click();
+    await flush();
+
+    expect(document.body.textContent).toContain('The plugin could not be installed');
+    expect(document.body.textContent).not.toContain('Installation status could not be confirmed');
+    expect(button('Install plugin')).toBeTruthy();
+    expect([...document.querySelectorAll('button')].some((candidate) => candidate.textContent?.trim() === 'Retry')).toBe(false);
   });
 
   it('cannot close during commit and refreshes inventory after a successful result', async () => {
@@ -485,16 +593,18 @@ describe('ExternalPluginInstallDialog', () => {
     await flush();
     expect(onCommitted).toHaveBeenCalledWith(result);
     expect(document.body.textContent).toContain('Example Toolbox was installed');
+    expect(button('Review required permissions')).toBeTruthy();
   });
 
   it('keeps a committed install terminal when the inventory refresh callback fails', async () => {
     const inspected = inspection('absent');
     const committed = committedResult(inspected);
     const onCommit = vi.fn(async () => committed);
-    const onCommitted = vi.fn(async () => {
-      throw new Error('inventory refresh failed');
-    });
-    renderDialog({ onInspect: vi.fn(async () => inspected), onCommit, onCommitted });
+    const onCommitted = vi.fn()
+      .mockRejectedValueOnce(new Error('inventory refresh failed'))
+      .mockResolvedValueOnce(undefined);
+    const onViewPermissions = vi.fn();
+    renderDialog({ onInspect: vi.fn(async () => inspected), onCommit, onCommitted, onViewPermissions });
     typeInto(inputWithPlaceholder('https://example.com/plugin.redevplugin'), 'https://plugins.example.com/toolbox.redevplugin');
     button('Review package').click();
     await flush();
@@ -507,6 +617,12 @@ describe('ExternalPluginInstallDialog', () => {
     expect(document.body.textContent).toContain('Example Toolbox was installed');
     expect(document.body.textContent).toContain('Installation completed, but the plugin list could not be refreshed');
     expect([...document.querySelectorAll('button')].some((candidate) => candidate.textContent?.trim() === 'Install plugin')).toBe(false);
+    expect([...document.querySelectorAll('button')].some((candidate) => candidate.textContent?.trim() === 'Review required permissions')).toBe(false);
+    button('Refresh plugins').click();
+    await flush();
+    expect(onCommitted).toHaveBeenNthCalledWith(2, committed);
+    button('Review required permissions').click();
+    expect(onViewPermissions).toHaveBeenCalledWith(committed);
   });
 
   it('requires a fresh inspection after the current inspection reaches failed terminal state', async () => {

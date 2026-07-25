@@ -33,6 +33,7 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
   const [errorMessage, setErrorMessage] = createSignal('');
   const confirmationOwner: PluginConfirmationOwner = {
     pluginID: props.target.pluginID,
+    displayName: props.target.displayName,
     pluginInstanceID: props.target.pluginInstanceID,
     surfaceID: props.target.surfaceID,
     canConfirm: () => mounted && Boolean(host()) && props.visible && pageVisible(),

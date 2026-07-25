@@ -1,0 +1,802 @@
+import '../../index.css';
+
+import { createSignal } from 'solid-js';
+import { render } from 'solid-js/web';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { commands, page, userEvent } from 'vitest/browser';
+import { LayoutProvider } from '@floegence/floe-webapp-core';
+import { Button } from '@floegence/floe-webapp-core/ui';
+import {
+  DEFAULT_WORKBENCH_THEME,
+  WorkbenchSurface,
+  createWorkbenchViewportFitForWidget,
+  type WorkbenchState,
+  type WorkbenchWidgetDefinition,
+  type WorkbenchWidgetItem,
+} from '@floegence/floe-webapp-core/workbench';
+import type { PluginConfirmationIntent, PluginSurfaceHost } from '@floegence/redevplugin-ui';
+
+import { I18nProvider, SUPPORTED_LOCALES, type RedevenLocale } from '../i18n';
+import { REDEVEN_LANGUAGE_PREFERENCE_STORAGE_KEY } from '../i18n/storageKey';
+import { redevenWorkbenchWidgets } from '../workbench/redevenWorkbenchWidgets';
+import { ActivityPluginSurfaceWindow } from './ActivityPluginSurfaceWindow';
+import { ExternalPluginInstallDialog } from './ExternalPluginInstallDialog';
+import { PluginConfirmationDialog, createPluginConfirmationQueue } from './PluginConfirmationQueue';
+import { PluginCenterView } from './PluginCenterView';
+import { PluginPanel } from './PluginPanel';
+import { PLUGIN_MOBILE_TOUCH_TARGET_CLASS } from './pluginPresentation';
+import type { PluginSurfacePlacementCoordinator } from './pluginPlatform';
+import type {
+  ExternalPluginCommitResult,
+  ExternalPluginInspection,
+  PluginInventoryItem,
+  PluginInventoryProjection,
+  PluginPanelModel,
+} from './pluginTypes';
+
+const mediaCommands = commands as unknown as Readonly<{
+  emulateMediaPreferences: (preferences: Readonly<{
+    forcedColors?: null | 'active' | 'none';
+    reducedMotion?: null | 'reduce' | 'no-preference';
+  }>) => Promise<void>;
+}>;
+
+const viewportCases = [
+  { width: 320, height: 720 },
+  { width: 768, height: 820 },
+  { width: 1440, height: 900 },
+] as const;
+
+const containersItem: PluginInventoryItem = {
+  inventoryKey: 'instance:containers',
+  pluginID: 'com.redeven.official.containers',
+  pluginInstanceID: 'plugini_redeven_official_containers',
+  displayName: 'Containers',
+  description: 'Manage Docker and Podman resources without leaving the current environment.',
+  iconFallback: 'containers',
+  publisher: 'Redeven',
+  version: '2.0.0',
+  managementRevision: 7,
+  canDisable: true,
+  lifecycleState: 'enabled',
+  trustBadge: 'official',
+  pinned: true,
+  defaultLaunchTarget: {
+    pluginID: 'com.redeven.official.containers',
+    pluginInstanceID: 'plugini_redeven_official_containers',
+    surfaceID: 'containers.dashboard',
+    displayName: 'Containers',
+    expectedManagementRevision: 7,
+    preferredPlacement: 'activity',
+  },
+  authorization: {
+    grants: [],
+    permissions: [{
+      permissionID: 'containers.read',
+      group: 'read',
+      requiredToOpen: true,
+      methods: ['containers.status'],
+      requiredToOpenMethods: ['containers.status'],
+      granted: true,
+      deniedByGrant: false,
+      blockedByPolicy: false,
+      grantBlockedByPolicy: false,
+      blockedToOpen: false,
+    }],
+    revisions: {
+      policyRevision: 3,
+      managementRevision: 7,
+      revokeEpoch: 2,
+    },
+  },
+};
+
+const toolboxItem: PluginInventoryItem = {
+  inventoryKey: 'instance:toolbox',
+  pluginID: 'com.example.toolbox',
+  pluginInstanceID: 'plugini_example_toolbox',
+  displayName: 'Developer Toolbox With A Deliberately Long Name',
+  description: 'A long description verifies that plugin copy stays inside its assigned readable column.',
+  iconFallback: 'generic',
+  publisher: 'Example Publisher',
+  version: '1.2.3',
+  managementRevision: 4,
+  lifecycleState: 'disabled',
+  trustBadge: 'community',
+  pinned: false,
+};
+
+const projection: PluginInventoryProjection = { items: [containersItem, toolboxItem] };
+const panelModel: PluginPanelModel = {
+  loading: false,
+  tiles: [
+    { kind: 'plugin', item: containersItem, action: 'open_surface' },
+    { kind: 'plugin', item: toolboxItem, action: 'open_details' },
+    { kind: 'open_center', id: 'plugin-center', label: 'Plugin Center' },
+  ],
+};
+
+const disposers: Array<() => void> = [];
+
+function fixedHost(): HTMLDivElement {
+  const host = document.createElement('div');
+  Object.assign(host.style, {
+    position: 'fixed',
+    inset: '0',
+    overflow: 'hidden',
+  });
+  document.body.appendChild(host);
+  return host;
+}
+
+async function settle(): Promise<void> {
+  await Promise.resolve();
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+}
+
+function expectInsideViewport(element: Element, viewport: Readonly<{ width: number; height: number }>): void {
+  const rect = element.getBoundingClientRect();
+  expect(rect.left).toBeGreaterThanOrEqual(-1);
+  expect(rect.top).toBeGreaterThanOrEqual(-1);
+  expect(rect.right).toBeLessThanOrEqual(viewport.width + 1);
+  expect(rect.bottom).toBeLessThanOrEqual(viewport.height + 1);
+}
+
+function expectNoHorizontalOverflow(element: HTMLElement): void {
+  expect(element.scrollWidth).toBeLessThanOrEqual(element.clientWidth + 1);
+}
+
+function expectTouchTarget(element: Element): void {
+  const rect = element.getBoundingClientRect();
+  expect(rect.width).toBeGreaterThanOrEqual(44);
+  expect(rect.height).toBeGreaterThanOrEqual(44);
+}
+
+function expectTouchTargets(elements: readonly Element[]): void {
+  const undersized = elements.flatMap((element) => {
+    const rect = element.getBoundingClientRect();
+    if (rect.width >= 44 && rect.height >= 44) return [];
+    return [{
+      control: element.getAttribute('aria-label') ?? element.textContent?.trim() ?? element.tagName,
+      width: Math.round(rect.width),
+      height: Math.round(rect.height),
+    }];
+  });
+  expect(undersized).toEqual([]);
+}
+
+function mountPanel(mobile: boolean): Readonly<{
+  host: HTMLElement;
+  trigger: () => HTMLButtonElement | undefined;
+}> {
+  const host = fixedHost();
+  const [trigger, setTrigger] = createSignal<HTMLButtonElement>();
+  const [open, setOpen] = createSignal(true);
+  disposers.push(render(() => (
+    <>
+      <button
+        ref={setTrigger}
+        type="button"
+        data-testid="plugin-switcher-trigger"
+        class="fixed left-3 top-5 h-11 w-11"
+      >
+        Plugins
+      </button>
+      <button type="button" data-testid="after-plugin-switcher" class="fixed bottom-3 right-3 h-11">
+        After switcher
+      </button>
+      <PluginPanel
+        id="plugin-switcher-browser-test"
+        open={open()}
+        mobile={mobile}
+        trigger={trigger()}
+        model={panelModel}
+        onClose={() => setOpen(false)}
+        onOpenCenter={() => undefined}
+        onOpenPluginSurface={() => undefined}
+        onOpenPluginDetails={() => undefined}
+      />
+    </>
+  ), host));
+  return { host, trigger };
+}
+
+function mountPluginCenter(): HTMLElement {
+  const host = fixedHost();
+  disposers.push(render(() => (
+    <PluginCenterView
+      projection={projection}
+      loading={false}
+      canManagePlugins
+      canOpenPluginSurfaces
+      onRefresh={() => undefined}
+      onCommand={() => undefined}
+    />
+  ), host));
+  return host;
+}
+
+function mountLocalizedPluginCenter(locale: RedevenLocale): HTMLElement {
+  localStorage.setItem(REDEVEN_LANGUAGE_PREFERENCE_STORAGE_KEY, locale);
+  const host = fixedHost();
+  const localizedProjection: PluginInventoryProjection = {
+    items: [{
+      ...containersItem,
+      lifecycleState: 'needs_attention',
+      attentionReason: 'runtime_missing',
+      displayName: 'Container Runtime Integration With A Deliberately Long Localized Layout Name',
+    }],
+  };
+  disposers.push(render(() => (
+    <I18nProvider>
+      <PluginCenterView
+        projection={localizedProjection}
+        loading={false}
+        canManagePlugins
+        canOpenPluginSurfaces
+        onRefresh={() => undefined}
+        onCommand={() => undefined}
+      />
+    </I18nProvider>
+  ), host));
+  return host;
+}
+
+function mountPluginCenterNavigation(): Readonly<{
+  host: HTMLElement;
+  openDetails: (inventoryKey: string) => void;
+}> {
+  const host = fixedHost();
+  const [selectedInventoryKey, setSelectedInventoryKey] = createSignal<string>();
+  const [focusRequest, setFocusRequest] = createSignal(0);
+  disposers.push(render(() => (
+    <PluginCenterView
+      projection={projection}
+      loading={false}
+      selectedInventoryKey={selectedInventoryKey()}
+      focusRequest={focusRequest()}
+      canManagePlugins
+      canOpenPluginSurfaces
+      onRefresh={() => undefined}
+      onCommand={() => undefined}
+    />
+  ), host));
+  return {
+    host,
+    openDetails: (inventoryKey) => {
+      setSelectedInventoryKey(inventoryKey);
+      setFocusRequest((request) => request + 1);
+    },
+  };
+}
+
+function unavailableInspection(): ExternalPluginInspection {
+  throw new Error('Inspection is not used on the source-stage geometry path');
+}
+
+function unavailableCommit(): ExternalPluginCommitResult {
+  throw new Error('Commit is not used on the source-stage geometry path');
+}
+
+function mountExternalDialog(
+  onInspect: Parameters<typeof ExternalPluginInstallDialog>[0]['onInspect'] = async () => unavailableInspection(),
+): HTMLElement {
+  const host = fixedHost();
+  disposers.push(render(() => (
+    <ExternalPluginInstallDialog
+      open
+      onOpenChange={() => undefined}
+      onInspect={onInspect}
+      onCommit={async () => unavailableCommit()}
+      onCommitted={() => undefined}
+    />
+  ), host));
+  return host;
+}
+
+function browserInspection(): ExternalPluginInspection {
+  const packageHash = 'sha256:8ecf6c0d206ee557c5528e2192b2594b5d097912b83028d43ff1336532b06d13';
+  const manifestHash = 'sha256:f96534ca709165d0e30f6e7713a57ec0754f84f84ccadc2edc000f19dde7cc3d';
+  const entriesHash = 'sha256:8a0048517719d934e52406dc6e9964d9ca165728d3e530d2c4df16f619bf17fa';
+  return {
+    inspection_id: 'inspection_external_browser_test',
+    expires_at: '2026-07-25T18:00:00Z',
+    intent: { action: 'install', plugin_instance_id: 'plugini_external_browser_test' },
+    publisher_id: 'com.example.publisher',
+    plugin_id: 'com.example.toolbox',
+    version: '1.2.3',
+    inspected_hashes: { package_sha256: packageHash, manifest_sha256: manifestHash, entries_sha256: entriesHash },
+    signature_assessment: {
+      state: 'absent',
+      reason_codes: [],
+      assessed_hashes: { package_sha256: packageHash, manifest_sha256: manifestHash, entries_sha256: entriesHash },
+      assessed_at: '2026-07-25T10:00:00Z',
+    },
+    source_provenance: {
+      kind: 'package_url',
+      source_origin: 'https://plugins.example.com',
+      source_path: '/toolbox.redevplugin',
+      redirect_chain: [],
+      package_sha256: packageHash,
+      resolved_at: '2026-07-25T10:00:00Z',
+    },
+    execution_approval: { state: 'pending', reason_codes: [], assessed_at: '2026-07-25T10:00:00Z' },
+    update_eligibility: { state: 'manual_only', reason_codes: [], assessed_at: '2026-07-25T10:00:00Z' },
+    security_summary: {
+      summary_sha256: 'sha256:9b30eca232030072294fcabdc98df492609672c92d2d04a545d5790119d1822b',
+      permissions: [],
+      methods: [],
+      capability_contracts: [],
+      workers: [],
+      network: [],
+      storage: [],
+      secret_refs: [],
+      core_actions: [],
+      intents: [],
+      surfaces: [],
+    },
+    confirmation_digest: 'sha256:684a09cfd858448baa7d52c3d30932d7684a09cfd858448baa7d52c3d30932d7',
+  };
+}
+
+function mountMobileTouchTargetContract(): HTMLElement {
+  const host = fixedHost();
+  disposers.push(render(() => (
+    <Button data-plugin-mobile-touch-contract size="sm" class={PLUGIN_MOBILE_TOUCH_TARGET_CLASS}>
+      Critical plugin action
+    </Button>
+  ), host));
+  return host;
+}
+
+function browserCoordinator(): PluginSurfacePlacementCoordinator {
+  return {
+    open: async (slot) => {
+      const iframe = document.createElement('iframe');
+      iframe.srcdoc = '<!doctype html><html><body>Plugin surface</body></html>';
+      slot.element.appendChild(iframe);
+      return {
+        element: iframe,
+        surfaceInstanceId: 'surface_browser_activity',
+        sendLifecycle: () => undefined,
+        close: async () => ({
+          quiesce: { outcome: 'acknowledged', durationMs: 0 },
+          revokeDurationMs: 0,
+          totalDurationMs: 0,
+        }),
+        dispose: async () => undefined,
+      } satisfies PluginSurfaceHost;
+    },
+    setVisible: () => undefined,
+    fail: async () => undefined,
+    release: async () => undefined,
+    invalidatePlugin: async () => undefined,
+    closeAll: async () => undefined,
+    dispose: async () => undefined,
+  };
+}
+
+function mountActivityWindow(): HTMLElement {
+  const host = fixedHost();
+  const queue = createPluginConfirmationQueue();
+  disposers.push(render(() => (
+    <LayoutProvider>
+      <ActivityPluginSurfaceWindow
+        instanceID="activity_browser_plugin"
+        target={containersItem.defaultLaunchTarget!}
+        coordinator={browserCoordinator()}
+        confirmationQueue={queue}
+        visible
+        active
+        zIndex={160}
+        focusRequest={1}
+        onActivate={() => undefined}
+        onClosed={() => undefined}
+        onEndPluginSession={async () => true}
+        onRetirementError={() => undefined}
+      />
+    </LayoutProvider>
+  ), host));
+  return host;
+}
+
+function mountConfirmationDialog(): HTMLElement {
+  const host = fixedHost();
+  const queue = createPluginConfirmationQueue();
+  const controller = new AbortController();
+  const intent: PluginConfirmationIntent = {
+    requestId: 'request_browser_confirmation',
+    method: 'containers.delete',
+    params: { container_id: 'api' },
+    requestHash: 'sha256:request-browser-confirmation',
+    planHash: 'sha256:plan-browser-confirmation',
+    plan: {
+      summary: 'Delete the selected production container after reviewing the irreversible impact',
+      action: 'Delete container',
+      resource_display_name: 'api-production-container-with-a-deliberately-long-name',
+      destructive: true,
+      risk_flags: [{ title: 'Service interruption', detail: 'The running service will stop immediately.' }],
+    },
+    confirmationTokenId: 'confirmation_browser',
+    signal: controller.signal,
+  };
+  void queue.createHandler({
+    pluginID: containersItem.pluginID,
+    displayName: containersItem.displayName,
+    pluginInstanceID: containersItem.pluginInstanceID!,
+    surfaceID: containersItem.defaultLaunchTarget!.surfaceID,
+    canConfirm: () => true,
+  })(intent);
+  disposers.push(render(() => <PluginConfirmationDialog queue={queue} />, host));
+  return host;
+}
+
+function mountWorkbenchPluginChrome(viewport: Readonly<{ width: number; height: number }>): HTMLElement {
+  const host = fixedHost();
+  const productionDefinition = redevenWorkbenchWidgets.find((definition) => definition.type === 'redeven.plugin')!;
+  const definition: WorkbenchWidgetDefinition = {
+    ...productionDefinition,
+    body: () => <div data-redeven-plugin-workbench-surface class="h-full w-full bg-background">Plugin surface</div>,
+  };
+  const item: WorkbenchWidgetItem = {
+    id: 'workbench_plugin_browser',
+    type: 'redeven.plugin',
+    title: 'Developer Toolbox With A Deliberately Long Name',
+    x: 20,
+    y: 20,
+    width: 720,
+    height: 520,
+    z_index: 1,
+    created_at_unix_ms: Date.now(),
+  };
+  const [state, setState] = createSignal<WorkbenchState>({
+    version: 1,
+    widgets: [item],
+    viewport: createWorkbenchViewportFitForWidget({
+      widget: item,
+      frameWidth: viewport.width,
+      frameHeight: viewport.height,
+      paddingPx: 32,
+    }),
+    locked: false,
+    filters: {},
+    selectedWidgetId: 'workbench_plugin_browser',
+    theme: DEFAULT_WORKBENCH_THEME,
+  });
+  disposers.push(render(() => (
+    <WorkbenchSurface
+      state={state}
+      setState={(updater) => setState(updater)}
+      widgetDefinitions={[definition]}
+      launcherWidgetTypes={[]}
+      enableKeyboard={false}
+    />
+  ), host));
+  return host;
+}
+
+beforeEach(async () => {
+  await mediaCommands.emulateMediaPreferences({ forcedColors: 'none', reducedMotion: 'no-preference' });
+  await page.viewport(1440, 900);
+});
+
+afterEach(async () => {
+  while (disposers.length > 0) disposers.pop()?.();
+  document.body.replaceChildren();
+  document.documentElement.classList.remove('dark', 'light');
+  localStorage.removeItem(REDEVEN_LANGUAGE_PREFERENCE_STORAGE_KEY);
+  await mediaCommands.emulateMediaPreferences({ forcedColors: 'none', reducedMotion: 'no-preference' });
+});
+
+describe('plugin management browser geometry and interaction', () => {
+  it.each(viewportCases.filter(({ width }) => width >= 768))(
+    'anchors the non-modal Plugin Switcher without overflow at $width px',
+    async (viewport) => {
+      await page.viewport(viewport.width, viewport.height);
+      const mounted = mountPanel(false);
+      await settle();
+
+      const dialog = document.querySelector<HTMLElement>('#plugin-switcher-browser-test')!;
+      expect(dialog.getAttribute('aria-modal')).toBe('false');
+      expectInsideViewport(dialog, viewport);
+      expectNoHorizontalOverflow(dialog);
+      expect(dialog.getBoundingClientRect().left).toBeGreaterThanOrEqual(
+        mounted.trigger()!.getBoundingClientRect().right,
+      );
+
+      const lastAction = dialog.querySelector<HTMLButtonElement>('[data-plugin-panel-tile="plugin-center"]')!;
+      lastAction.focus();
+      await userEvent.tab();
+      expect(dialog.contains(document.activeElement)).toBe(false);
+    },
+  );
+
+  it('keeps the 320 px Plugin Switcher sheet modal, contained, and touchable', async () => {
+    const viewport = viewportCases[0];
+    await page.viewport(viewport.width, viewport.height);
+    mountPanel(true);
+    await settle();
+
+    const dialog = document.querySelector<HTMLElement>('#plugin-switcher-browser-test')!;
+    expect(dialog.getAttribute('aria-modal')).toBe('true');
+    expectInsideViewport(dialog, viewport);
+    expectNoHorizontalOverflow(dialog);
+
+    const actions = Array.from(dialog.querySelectorAll<HTMLButtonElement>('button'));
+    expect(actions.length).toBeGreaterThanOrEqual(4);
+    actions.forEach(expectTouchTarget);
+
+    const lastAction = dialog.querySelector<HTMLButtonElement>('[data-plugin-panel-tile="plugin-center"]')!;
+    lastAction.focus();
+    await userEvent.tab();
+    expect(dialog.contains(document.activeElement)).toBe(true);
+  });
+
+  it.each(viewportCases)('keeps Plugin Center readable and non-overlapping at $width px', async (viewport) => {
+    await page.viewport(viewport.width, viewport.height);
+    const host = mountPluginCenter();
+    await settle();
+
+    const view = host.querySelector<HTMLElement>('[data-plugin-center-view]')!;
+    const shell = host.querySelector<HTMLElement>('[data-plugin-center-shell]')!;
+    const master = host.querySelector<HTMLElement>('[data-plugin-center-master]')!;
+    const details = host.querySelector<HTMLElement>('[data-plugin-center-details]')!;
+    expectInsideViewport(view, viewport);
+    expectNoHorizontalOverflow(view);
+    expectNoHorizontalOverflow(shell);
+    expect(getComputedStyle(host.querySelector<HTMLElement>('[data-plugin-center-item="instance:containers"]')!).boxShadow)
+      .toContain('inset');
+
+    if (viewport.width >= 640) {
+      expect(getComputedStyle(master).display).not.toBe('none');
+      expect(getComputedStyle(details).display).not.toBe('none');
+      const masterRect = master.getBoundingClientRect();
+      const detailsRect = details.getBoundingClientRect();
+      expect(Math.abs(masterRect.top - detailsRect.top)).toBeLessThanOrEqual(1);
+      expect(masterRect.right).toBeLessThanOrEqual(detailsRect.left + 1);
+    }
+  });
+
+  it('supports the 320 px Plugin Center list-to-detail drill-in and back navigation', async () => {
+    const viewport = viewportCases[0];
+    await page.viewport(viewport.width, viewport.height);
+    const host = mountPluginCenter();
+    await settle();
+
+    const master = host.querySelector<HTMLElement>('[data-plugin-center-master]')!;
+    const details = host.querySelector<HTMLElement>('[data-plugin-center-details]')!;
+    const item = host.querySelector<HTMLButtonElement>('[data-plugin-center-item="instance:containers"]')!;
+    expect(getComputedStyle(master).display).not.toBe('none');
+    expect(getComputedStyle(details).display).toBe('none');
+    expectTouchTarget(item);
+    expectTouchTargets([
+      host.querySelector<HTMLElement>('[data-plugin-center-install-external]')!,
+      host.querySelector<HTMLElement>('[data-plugin-center-search]')!,
+      host.querySelector<HTMLElement>('[data-plugin-center-refresh]')!,
+      ...Array.from(host.querySelectorAll<HTMLElement>('[role="tab"]')),
+    ]);
+
+    item.click();
+    await settle();
+    const back = host.querySelector<HTMLButtonElement>('[data-plugin-center-mobile-back]')!;
+    expect(getComputedStyle(master).display).toBe('none');
+    expect(getComputedStyle(details).display).not.toBe('none');
+    expectTouchTarget(back);
+    expect(document.activeElement).toBe(back);
+    expectTouchTarget(host.querySelector<HTMLButtonElement>('[role="switch"]')!);
+    expectInsideViewport(details, viewport);
+    expectNoHorizontalOverflow(details);
+
+    const permissionSwitch = host.querySelector<HTMLButtonElement>('[role="switch"]')!;
+    permissionSwitch.click();
+    await settle();
+    const permissionDialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    expectTouchTargets(Array.from(permissionDialog.querySelectorAll<HTMLButtonElement>('button:not([aria-label="Close"])')));
+    permissionDialog.querySelector<HTMLButtonElement>('button:not([aria-label="Close"])')?.click();
+    await settle();
+
+    back.click();
+    await settle();
+    expect(getComputedStyle(master).display).not.toBe('none');
+    expect(getComputedStyle(details).display).toBe('none');
+    expect(document.activeElement).toBe(item);
+  });
+
+  it('returns the 320 px Plugin Center to its list for search and tab changes', async () => {
+    await page.viewport(320, 720);
+    const host = mountPluginCenter();
+    await settle();
+    const master = host.querySelector<HTMLElement>('[data-plugin-center-master]')!;
+    const details = host.querySelector<HTMLElement>('[data-plugin-center-details]')!;
+    host.querySelector<HTMLButtonElement>('[data-plugin-center-item="instance:containers"]')!.click();
+    await settle();
+    expect(getComputedStyle(master).display).toBe('none');
+
+    const search = host.querySelector<HTMLInputElement>('[data-plugin-center-search]')!;
+    await userEvent.fill(search, 'containers');
+    await settle();
+    expect(getComputedStyle(master).display).not.toBe('none');
+    expect(getComputedStyle(details).display).toBe('none');
+    expect(document.activeElement).toBe(search);
+
+    host.querySelector<HTMLButtonElement>('[data-plugin-center-item="instance:containers"]')!.click();
+    await settle();
+    const discover = host.querySelector<HTMLButtonElement>('#plugin-center-tab-discover')!;
+    discover.click();
+    await settle();
+    expect(getComputedStyle(master).display).not.toBe('none');
+    expect(getComputedStyle(details).display).toBe('none');
+    expect(discover.getAttribute('aria-selected')).toBe('true');
+  });
+
+  it.each(SUPPORTED_LOCALES)(
+    'keeps the 320 px Plugin Center contained for %s long copy',
+    async (locale) => {
+      await page.viewport(320, 720);
+      const host = mountLocalizedPluginCenter(locale);
+      await settle();
+      await settle();
+      const view = host.querySelector<HTMLElement>('[data-plugin-center-view]')!;
+      expect(view).not.toBeNull();
+      expect(document.documentElement.lang).toBe(locale);
+      expectInsideViewport(view, { width: 320, height: 720 });
+      expectNoHorizontalOverflow(view);
+      expectNoHorizontalOverflow(host.querySelector<HTMLElement>('[data-plugin-center-shell]')!);
+      expectTouchTargets([
+        host.querySelector<HTMLElement>('[data-plugin-center-install-external]')!,
+        host.querySelector<HTMLElement>('[data-plugin-center-search]')!,
+        host.querySelector<HTMLElement>('[data-plugin-center-refresh]')!,
+        ...Array.from(host.querySelectorAll<HTMLElement>('[role="tab"]')),
+      ]);
+    },
+  );
+
+  it('reopens a kept-alive mobile plugin detail for every shell navigation request', async () => {
+    await page.viewport(320, 720);
+    const navigation = mountPluginCenterNavigation();
+    await settle();
+
+    navigation.openDetails('instance:containers');
+    await settle();
+    const master = navigation.host.querySelector<HTMLElement>('[data-plugin-center-master]')!;
+    const details = navigation.host.querySelector<HTMLElement>('[data-plugin-center-details]')!;
+    const back = navigation.host.querySelector<HTMLButtonElement>('[data-plugin-center-mobile-back]')!;
+    expect(getComputedStyle(master).display).toBe('none');
+    expect(getComputedStyle(details).display).not.toBe('none');
+    expect(document.activeElement).toBe(back);
+
+    back.click();
+    await settle();
+    expect(getComputedStyle(master).display).not.toBe('none');
+    expect(getComputedStyle(details).display).toBe('none');
+
+    navigation.openDetails('instance:containers');
+    await settle();
+    expect(getComputedStyle(master).display).toBe('none');
+    expect(getComputedStyle(details).display).not.toBe('none');
+    expect(document.activeElement).toBe(back);
+  });
+
+  it.each(viewportCases)('keeps the external install source step contained at $width px', async (viewport) => {
+    await page.viewport(viewport.width, viewport.height);
+    mountExternalDialog();
+    await settle();
+
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    const content = dialog.querySelector<HTMLElement>('[data-external-plugin-dialog]')!;
+    expect(dialog.getAttribute('aria-modal')).toBe('true');
+    expectInsideViewport(dialog, viewport);
+    expectNoHorizontalOverflow(dialog);
+    expectNoHorizontalOverflow(content);
+
+    const sourceTabs = Array.from(dialog.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
+    const sourceLabels = Array.from(dialog.querySelectorAll<HTMLElement>('[data-external-plugin-source-label]'));
+    expect(sourceTabs).toHaveLength(3);
+    expect(sourceLabels).toHaveLength(3);
+    sourceLabels.forEach(expectNoHorizontalOverflow);
+    for (let index = 1; index < sourceTabs.length; index += 1) {
+      expect(sourceTabs[index - 1].getBoundingClientRect().right)
+        .toBeLessThanOrEqual(sourceTabs[index].getBoundingClientRect().left + 1);
+    }
+    const markers = Array.from(dialog.querySelectorAll<HTMLElement>('[data-install-progress-marker]'));
+    const connectors = Array.from(dialog.querySelectorAll<HTMLElement>('[data-install-progress-connector]'));
+    const progressLabels = Array.from(dialog.querySelectorAll<HTMLElement>('[data-install-progress-label]'));
+    expect(markers).toHaveLength(4);
+    expect(connectors).toHaveLength(3);
+    expect(progressLabels).toHaveLength(4);
+    progressLabels.forEach(expectNoHorizontalOverflow);
+    connectors.forEach((connector, index) => {
+      const previousMarker = markers[index].getBoundingClientRect();
+      const nextMarker = markers[index + 1].getBoundingClientRect();
+      const connectorRect = connector.getBoundingClientRect();
+      const labelRect = connector.parentElement!.lastElementChild!.getBoundingClientRect();
+      expect(connectorRect.left).toBeGreaterThanOrEqual(previousMarker.right + 3);
+      expect(connectorRect.right).toBeLessThanOrEqual(nextMarker.left - 3);
+      expect(connectorRect.bottom).toBeLessThan(labelRect.top);
+    });
+    if (viewport.width === 320) {
+      expectTouchTargets([
+        ...sourceTabs,
+        ...Array.from(dialog.querySelectorAll<HTMLInputElement>('input:not([type="file"])')),
+        ...Array.from(dialog.querySelectorAll<HTMLButtonElement>('button'))
+          .filter((button) => button.getAttribute('role') !== 'tab'),
+      ]);
+    }
+  });
+
+  it('keeps mobile install review consent and shared critical actions touchable', async () => {
+    await page.viewport(320, 720);
+    mountExternalDialog(async () => browserInspection());
+    await settle();
+
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    const input = dialog.querySelector<HTMLInputElement>('input[type="url"]')!;
+    await userEvent.fill(input, 'https://plugins.example.com/toolbox.redevplugin');
+    dialog.querySelector<HTMLButtonElement>('[data-external-plugin-inspect]')!.click();
+    await settle();
+
+    const consent = dialog.querySelector<HTMLElement>('[data-external-plugin-confirmation]')!;
+    const trustReview = dialog.querySelector<HTMLElement>('[data-external-plugin-trust-review]')!;
+    expect(trustReview.textContent).toContain('Waiting for your approval');
+    expect(trustReview.textContent).not.toContain('I approve this exact inspected package');
+    expectTouchTarget(consent);
+    expectNoHorizontalOverflow(consent);
+
+    const touchContractHost = mountMobileTouchTargetContract();
+    await settle();
+    expectTouchTarget(touchContractHost.querySelector<HTMLElement>('[data-plugin-mobile-touch-contract]')!);
+  });
+
+  it.each(viewportCases)(
+    'keeps Activity, Workbench, and confirmation window chrome contained at $width px',
+    async (viewport) => {
+      await page.viewport(viewport.width, viewport.height);
+      mountActivityWindow();
+      await settle();
+      const activity = document.querySelector<HTMLElement>('[data-redeven-plugin-activity-window="true"]')!;
+      expect(activity).not.toBeNull();
+      expectInsideViewport(activity, viewport);
+      expectNoHorizontalOverflow(activity);
+      expect(activity.querySelector('[data-plugin-surface-host]')).not.toBeNull();
+
+      while (disposers.length > 0) disposers.pop()?.();
+      document.body.replaceChildren();
+      const workbenchHost = mountWorkbenchPluginChrome(viewport);
+      await settle();
+      const widget = workbenchHost.querySelector<HTMLElement>('[data-workbench-widget-type="redeven.plugin"]')!;
+      expect(widget).not.toBeNull();
+      expectInsideViewport(widget, viewport);
+      expectNoHorizontalOverflow(widget);
+      expect(widget.querySelector('[data-redeven-plugin-workbench-surface]')).not.toBeNull();
+      expect(widget.querySelector('[aria-label="Remove widget"]')).not.toBeNull();
+
+      while (disposers.length > 0) disposers.pop()?.();
+      document.body.replaceChildren();
+      mountConfirmationDialog();
+      await settle();
+      const confirmation = document.querySelector<HTMLElement>('[role="dialog"]')!;
+      expect(confirmation).not.toBeNull();
+      expectInsideViewport(confirmation, viewport);
+      expectNoHorizontalOverflow(confirmation);
+      if (viewport.width === 320) {
+        expectTouchTargets(Array.from(confirmation.querySelectorAll<HTMLButtonElement>('button')));
+      }
+    },
+  );
+
+  it('keeps primary plugin flows operable without waiting for motion', async () => {
+    await page.viewport(320, 720);
+    await mediaCommands.emulateMediaPreferences({ reducedMotion: 'reduce', forcedColors: 'none' });
+    const host = mountPluginCenter();
+    await settle();
+
+    expect(window.matchMedia('(prefers-reduced-motion: reduce)').matches).toBe(true);
+    host.querySelector<HTMLButtonElement>('[data-plugin-center-item="instance:containers"]')!.click();
+    await Promise.resolve();
+    expect(getComputedStyle(host.querySelector<HTMLElement>('[data-plugin-center-details]')!).display).not.toBe('none');
+    host.querySelector<HTMLButtonElement>('[data-plugin-center-mobile-back]')!.click();
+    await Promise.resolve();
+    expect(getComputedStyle(host.querySelector<HTMLElement>('[data-plugin-center-master]')!).display).not.toBe('none');
+  });
+});

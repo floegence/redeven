@@ -88,6 +88,7 @@ describe('v0.6.7 plugin inventory projection', () => {
 
     const panel = buildPluginPanelModel(projection);
     expect(panel.tiles[0]).toMatchObject({ kind: 'open_center', id: 'plugin-center' });
+    expect(panel.tiles).toHaveLength(1);
   });
 
   it('joins the registry record only by exact publisher, plugin, and instance identity', () => {

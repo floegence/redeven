@@ -1,10 +1,23 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { Link, Shield, Upload } from '@floegence/floe-webapp-core/icons';
+import {
+  AlertTriangle,
+  Check,
+  CheckCircle,
+  ChevronDown,
+  Link,
+  Loader2,
+  Package,
+  Shield,
+  Upload,
+  X,
+} from '@floegence/floe-webapp-core/icons';
 import { Dialog } from '@floegence/floe-webapp-core/ui';
+import { pluginMutationOutcome } from '@floegence/redevplugin-ui';
 
 import { useI18n } from '../i18n';
 import { ExternalPackageInspectionTerminalError } from './pluginApi';
+import { PLUGIN_MOBILE_TOUCH_TARGET_CLASS } from './pluginPresentation';
 import type {
   ExternalPluginCommitResult,
   ExternalPluginInspection,
@@ -23,6 +36,7 @@ type ExternalPluginInstallDialogProps = {
   onInspect: (request: ExternalPluginInspectionRequest, signal: AbortSignal) => Promise<ExternalPluginInspection>;
   onCommit: (inspection: ExternalPluginInspection, signal: AbortSignal) => Promise<ExternalPluginCommitResult>;
   onCommitted: (result: ExternalPluginCommitResult) => Promise<unknown> | unknown;
+  onViewPermissions?: (result: ExternalPluginCommitResult) => void;
 };
 
 type InstallStage = 'source' | 'review' | 'committing' | 'complete';
@@ -39,6 +53,9 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
   const [confirmed, setConfirmed] = createSignal(false);
   const [pending, setPending] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
+  const [commitNeedsReconciliation, setCommitNeedsReconciliation] = createSignal(false);
+  const [refreshPending, setRefreshPending] = createSignal(false);
+  const [refreshFailed, setRefreshFailed] = createSignal(false);
   let operation: AbortController | undefined;
 
   const isUpdate = () => Boolean(props.updateItem?.pluginInstanceID);
@@ -63,14 +80,16 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
     setConfirmed(false);
     setPending(false);
     setError(null);
+    setCommitNeedsReconciliation(false);
+    setRefreshPending(false);
+    setRefreshFailed(false);
   });
 
   onCleanup(() => operation?.abort('External plugin dialog disposed'));
 
   const canInspect = createMemo(() => {
     if (pending()) return false;
-    if (sourceKind() === 'package_upload') return Boolean(file());
-    return url().trim().length > 0;
+    return validateExternalSource(sourceKind(), url(), file()).valid;
   });
 
   const inspect = async () => {
@@ -96,6 +115,7 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
       const next = await props.onInspect(request, controller.signal);
       setInspection(next);
       setConfirmed(false);
+      setCommitNeedsReconciliation(false);
       setStage('review');
     } catch {
       if (!controller.signal.aborted) setError(i18n.t('uiCopy.plugin.external.inspectFailed'));
@@ -116,23 +136,26 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
     setPending(true);
     setStage('committing');
     setError(null);
+    setCommitNeedsReconciliation(false);
     try {
       const result = await props.onCommit(current, controller.signal);
       setCommitted(result);
       setStage('complete');
-      try {
-        await props.onCommitted(result);
-      } catch {
-        setError(i18n.t('uiCopy.plugin.external.refreshFailed'));
-      }
+      await refreshCommitted(result);
     } catch (error) {
       if (!controller.signal.aborted) {
         setError(i18n.t('uiCopy.plugin.external.commitFailed'));
         if (error instanceof ExternalPackageInspectionTerminalError) {
           setInspection(null);
           setConfirmed(false);
+          setCommitNeedsReconciliation(false);
           setStage('source');
+        } else if (pluginMutationOutcome(error) === 'not_committed') {
+          setCommitNeedsReconciliation(false);
+          setStage('review');
         } else {
+          setCommitNeedsReconciliation(true);
+          setError(i18n.t('uiCopy.plugin.external.commitOutcomeUnknown'));
           setStage('review');
         }
       }
@@ -144,11 +167,38 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
     }
   };
 
+  const refreshCommitted = async (result: ExternalPluginCommitResult) => {
+    if (refreshPending()) return;
+    setRefreshPending(true);
+    setError(null);
+    try {
+      await props.onCommitted(result);
+      setRefreshFailed(false);
+    } catch {
+      setRefreshFailed(true);
+      setError(i18n.t('uiCopy.plugin.external.refreshFailed'));
+    } finally {
+      setRefreshPending(false);
+    }
+  };
+
   const close = () => {
-    if (stage() === 'committing') return;
+    if (stage() === 'committing' || commitNeedsReconciliation()) return;
     operation?.abort('External plugin dialog closed');
     props.onOpenChange(false);
   };
+
+  const viewPermissions = () => {
+    const result = committed();
+    if (!result || refreshFailed()) return;
+    props.onViewPermissions?.(result);
+    props.onOpenChange(false);
+  };
+
+  const reviewBlocked = createMemo(() => {
+    const current = inspection();
+    return current ? inspectionBlocked(current) : false;
+  });
 
   return (
     <Dialog
@@ -156,34 +206,81 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
       onOpenChange={(open) => { if (!open) close(); }}
       title={dialogTitle()}
       description={i18n.t('uiCopy.plugin.external.dialogDescription')}
+      class={cn(
+        'w-[min(54rem,calc(100%-1rem))] max-w-[54rem] max-h-[80vh] bg-background text-foreground sm:w-[min(54rem,calc(100%-2rem))]',
+        commitNeedsReconciliation() && '[&>div:first-child>button]:hidden',
+      )}
       footer={(
-        <div class="flex w-full flex-wrap justify-end gap-2">
-          <Show when={stage() === 'review'}>
-            <button type="button" class="cursor-pointer rounded-md border px-3 py-1.5 text-sm hover:bg-muted" disabled={pending()} onClick={() => setStage('source')}>
-              {i18n.t('uiCopy.plugin.external.back')}
-            </button>
+        <div class="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <Show when={stage() === 'review' && inspection() && !reviewBlocked() && !commitNeedsReconciliation()} fallback={<span />}>
+            <label data-external-plugin-confirmation class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'flex cursor-pointer items-center gap-2 text-xs text-foreground sm:max-w-[30rem] sm:items-start')}>
+              <input
+                type="checkbox"
+                checked={confirmed()}
+                class="mt-0.5 h-4 w-4 shrink-0 rounded border"
+                onChange={(event) => setConfirmed(event.currentTarget.checked)}
+              />
+              <span>{i18n.t('uiCopy.plugin.external.confirmDigest')}</span>
+            </label>
           </Show>
-          <Show when={stage() !== 'committing'}>
-            <button type="button" class="cursor-pointer rounded-md border px-3 py-1.5 text-sm hover:bg-muted" onClick={close}>
-              {stage() === 'complete' ? i18n.t('common.actions.close') : i18n.t('common.actions.cancel')}
-            </button>
-          </Show>
-          <Show when={stage() === 'source'}>
-            <button type="button" class="cursor-pointer rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50" disabled={!canInspect()} onClick={() => void inspect()}>
-              {pending() ? i18n.t('uiCopy.plugin.external.inspecting') : i18n.t('uiCopy.plugin.external.inspect')}
-            </button>
-          </Show>
-          <Show when={stage() === 'review'}>
-            <button type="button" class="cursor-pointer rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50" disabled={!confirmed() || pending()} onClick={() => void commit()}>
-              {isUpdate() ? i18n.t('uiCopy.plugin.external.confirmUpdate') : i18n.t('uiCopy.plugin.external.confirmInstall')}
-            </button>
-          </Show>
+          <div class="flex shrink-0 flex-wrap justify-end gap-2">
+            <Show when={stage() === 'review' && !commitNeedsReconciliation()}>
+              <button type="button" class="min-h-[46px] cursor-pointer rounded-md border bg-background px-3 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-9" disabled={pending()} onClick={() => setStage('source')}>
+                {i18n.t('uiCopy.plugin.external.back')}
+              </button>
+            </Show>
+            <Show when={stage() !== 'committing' && !commitNeedsReconciliation()}>
+              <button type="button" class="min-h-[46px] cursor-pointer rounded-md border bg-background px-3 text-sm font-medium hover:bg-muted sm:min-h-9" onClick={close}>
+                {stage() === 'complete' ? i18n.t('common.actions.close') : i18n.t('common.actions.cancel')}
+              </button>
+            </Show>
+            <Show when={stage() === 'complete' && committed()}>
+              {(result) => (
+                <Show
+                  when={refreshFailed()}
+                  fallback={(
+                    <button type="button" class="min-h-[46px] cursor-pointer rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground sm:min-h-9" onClick={viewPermissions}>
+                      {i18n.t('uiCopy.plugin.reviewPermissions')}
+                    </button>
+                  )}
+                >
+                  <button
+                    type="button"
+                    data-external-plugin-refresh-inventory
+                    class="min-h-[46px] cursor-pointer rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-9"
+                    disabled={refreshPending()}
+                    onClick={() => void refreshCommitted(result())}
+                  >
+                    {i18n.t('uiCopy.plugin.refreshOfficial')}
+                  </button>
+                </Show>
+              )}
+            </Show>
+            <Show when={stage() === 'source'}>
+              <button data-external-plugin-inspect type="button" class="min-h-[46px] cursor-pointer rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-9" disabled={!canInspect()} onClick={() => void inspect()}>
+                {pending() ? i18n.t('uiCopy.plugin.external.inspecting') : i18n.t('uiCopy.plugin.external.inspect')}
+              </button>
+            </Show>
+            <Show when={stage() === 'review' && !reviewBlocked()}>
+              <button type="button" class="min-h-[46px] cursor-pointer rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-9" disabled={!confirmed() || pending()} onClick={() => void commit()}>
+                {commitNeedsReconciliation()
+                  ? i18n.t('common.actions.retry')
+                  : isUpdate()
+                    ? i18n.t('uiCopy.plugin.external.confirmUpdate')
+                    : i18n.t('uiCopy.plugin.external.confirmInstall')}
+              </button>
+            </Show>
+          </div>
         </div>
       )}
     >
-      <div data-external-plugin-dialog class="space-y-4">
+      <div data-external-plugin-dialog class="space-y-5">
+        <InstallProgress stage={stage()} isUpdate={isUpdate()} />
         <Show when={error()}>
-          <div role="alert" class="border-l-2 border-destructive bg-destructive/10 px-3 py-2 text-sm text-destructive">{error()}</div>
+          <div role="alert" class="flex gap-2 rounded-md border border-destructive bg-background px-3 py-2.5 text-sm text-destructive">
+            <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{error()}</span>
+          </div>
         </Show>
         <Show when={stage() === 'source'}>
           <SourceForm
@@ -203,24 +300,101 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
             <InspectionReview
               inspection={current()}
               previousSummary={props.updateItem?.externalPackage?.securitySummary}
-              confirmed={confirmed()}
-              onConfirmed={setConfirmed}
             />
           )}
         </Show>
         <Show when={stage() === 'committing'}>
-          <div role="status" class="py-8 text-center text-sm text-muted-foreground">{i18n.t('uiCopy.plugin.external.committing')}</div>
+          <CommitProgress inspection={inspection()} />
         </Show>
         <Show when={stage() === 'complete' && committed()}>
           {(result) => (
-            <div role="status" class="border-l-2 border-[var(--redeven-status-success-foreground)] bg-[var(--redeven-status-success-soft)] px-3 py-3 text-sm text-foreground">
-              {i18n.t('uiCopy.plugin.external.complete', { plugin: result().plugin.manifest.plugin.display_name })}
+            <div role="status" class="space-y-4 rounded-md border bg-background p-5">
+              <div class="flex items-start gap-3">
+                <CheckCircle class="mt-0.5 h-5 w-5 shrink-0 text-[var(--redeven-status-success-foreground)]" />
+                <div>
+                  <div class="font-semibold">{i18n.t('uiCopy.plugin.external.complete', { plugin: result().plugin.manifest.plugin.display_name })}</div>
+                  <div class="mt-1 text-sm text-muted-foreground">{result().plugin.publisher_id} · v{result().plugin.version}</div>
+                </div>
+              </div>
+              <PostInstallFacts updateEligibility={result().update_eligibility.state} />
             </div>
           )}
         </Show>
       </div>
     </Dialog>
   );
+}
+
+function InstallProgress(props: { stage: InstallStage; isUpdate: boolean }): JSX.Element {
+  const i18n = useI18n();
+  const activeIndex = () => ({ source: 0, review: 1, committing: 2, complete: 3 })[props.stage];
+  const steps = () => [
+    i18n.t('uiCopy.plugin.external.source'),
+    i18n.t('uiCopy.plugin.external.inspect'),
+    props.isUpdate ? i18n.t('uiCopy.plugin.external.confirmUpdate') : i18n.t('uiCopy.plugin.external.confirmInstall'),
+    i18n.t('common.status.ready'),
+  ];
+  return (
+    <ol class="grid grid-cols-4 border-b pb-4" aria-label={i18n.t('uiCopy.plugin.external.dialogDescription')}>
+      <For each={steps()}>
+        {(label, index) => {
+          const complete = () => index() < activeIndex();
+          const active = () => index() === activeIndex();
+          return (
+            <li
+              class={cn(
+                'relative flex min-w-0 flex-col items-center gap-2 px-1 text-center text-[11px] font-medium sm:text-xs',
+                active() || complete() ? 'text-foreground' : 'text-muted-foreground',
+              )}
+              aria-current={active() ? 'step' : undefined}
+            >
+              <Show when={index() > 0}>
+                <span
+                  data-install-progress-connector
+                  class={cn('absolute top-3 h-px -translate-y-1/2', complete() || active() ? 'bg-primary' : 'bg-border')}
+                  style={{ right: 'calc(50% + 1rem)', width: 'calc(100% - 2rem)' }}
+                  aria-hidden="true"
+                />
+              </Show>
+              <span data-install-progress-marker class={cn(
+                'relative z-[1] flex h-6 w-6 shrink-0 items-center justify-center rounded-full border bg-background text-[10px]',
+                complete() ? 'border-primary bg-primary text-primary-foreground' : active() ? 'border-primary text-primary' : 'border-border',
+              )}>
+                {complete() ? <Check class="h-3.5 w-3.5" /> : index() + 1}
+              </span>
+              <span data-install-progress-label class="min-h-8 max-w-full px-0.5 leading-4">{label}</span>
+            </li>
+          );
+        }}
+      </For>
+    </ol>
+  );
+}
+
+type SourceValidation = { valid: boolean; error?: 'url' };
+
+function validateExternalSource(
+  sourceKind: ExternalPluginSourceKind,
+  rawURL: string,
+  file: File | null,
+): SourceValidation {
+  if (sourceKind === 'package_upload') return { valid: Boolean(file) };
+  let parsed: URL;
+  try {
+    parsed = new URL(rawURL.trim());
+  } catch {
+    return { valid: false, error: 'url' };
+  }
+  if (parsed.protocol !== 'https:' || parsed.username || parsed.password) {
+    return { valid: false, error: 'url' };
+  }
+  if (sourceKind === 'github_repository') {
+    const path = parsed.pathname.replace(/^\/+|\/+$/g, '').split('/').filter(Boolean);
+    if (parsed.hostname.toLowerCase() !== 'github.com' || path.length !== 2 || parsed.search || parsed.hash) {
+      return { valid: false, error: 'url' };
+    }
+  }
+  return { valid: true };
 }
 
 function SourceForm(props: {
@@ -235,6 +409,9 @@ function SourceForm(props: {
   onFile: (file: File | null) => void;
 }): JSX.Element {
   const i18n = useI18n();
+  const [validationVisible, setValidationVisible] = createSignal(false);
+  let fileInput: HTMLInputElement | undefined;
+  const validation = createMemo(() => validateExternalSource(props.sourceKind, props.url, props.file));
   const choices: readonly { kind: ExternalPluginSourceKind; label: string; icon: typeof Link }[] = [
     { kind: 'package_url', label: i18n.t('uiCopy.plugin.external.packageURL'), icon: Link },
     { kind: 'github_repository', label: i18n.t('uiCopy.plugin.external.githubRepository'), icon: Link },
@@ -243,6 +420,7 @@ function SourceForm(props: {
   const sourceTabID = (kind: ExternalPluginSourceKind) => `external-plugin-source-tab-${kind}`;
   const selectSource = (kind: ExternalPluginSourceKind, focus = false) => {
     props.onSourceKind(kind);
+    setValidationVisible(false);
     if (focus) queueMicrotask(() => document.getElementById(sourceTabID(kind))?.focus());
   };
   const selectAdjacentSource = (event: KeyboardEvent, kind: ExternalPluginSourceKind) => {
@@ -273,7 +451,7 @@ function SourceForm(props: {
               aria-controls="external-plugin-source-panel"
               tabIndex={props.sourceKind === choice.kind ? 0 : -1}
               class={cn(
-                'flex min-h-9 cursor-pointer items-center justify-center gap-1.5 rounded px-2 text-xs font-medium transition',
+                'flex min-h-[44px] cursor-pointer flex-col items-center justify-center gap-1 rounded px-1 py-2 text-xs font-medium transition sm:min-h-9 sm:flex-row sm:gap-1.5 sm:px-2 sm:py-0',
                 props.sourceKind === choice.kind ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
               )}
               disabled={props.pending}
@@ -281,7 +459,7 @@ function SourceForm(props: {
               onKeyDown={(event) => selectAdjacentSource(event, choice.kind)}
             >
               <choice.icon class="h-3.5 w-3.5 shrink-0" />
-              <span class="truncate">{choice.label}</span>
+              <span data-external-plugin-source-label class="max-w-full text-center leading-4">{choice.label}</span>
             </button>
           )}
         </For>
@@ -290,7 +468,7 @@ function SourceForm(props: {
         id="external-plugin-source-panel"
         role="tabpanel"
         aria-labelledby={sourceTabID(props.sourceKind)}
-        class="space-y-4"
+        class="space-y-4 pt-1"
       >
       <Show when={props.sourceKind !== 'package_upload'}>
         <label class="block space-y-1.5 text-sm font-medium">
@@ -302,9 +480,20 @@ function SourceForm(props: {
             placeholder={props.sourceKind === 'github_repository'
               ? i18n.t('uiCopy.plugin.external.repositoryURLPlaceholder')
               : i18n.t('uiCopy.plugin.external.packageURLPlaceholder')}
-            class="h-9 w-full rounded-md border bg-background px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+            aria-invalid={validationVisible() && !validation().valid ? 'true' : undefined}
+            aria-describedby={validationVisible() && !validation().valid ? 'external-plugin-source-error' : undefined}
+            class={cn(
+              'h-[46px] w-full rounded-md border bg-background px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 sm:h-10',
+              validationVisible() && !validation().valid && 'border-destructive focus:border-destructive focus:ring-destructive/20',
+            )}
             onInput={(event) => props.onURL(event.currentTarget.value)}
+            onBlur={() => setValidationVisible(props.url.trim().length > 0)}
           />
+          <Show when={validationVisible() && !validation().valid}>
+            <span id="external-plugin-source-error" role="alert" class="block text-xs font-normal text-destructive">
+              {i18n.t('uiCopy.plugin.external.inspectFailed')}
+            </span>
+          </Show>
         </label>
       </Show>
       <Show when={props.sourceKind === 'github_repository'}>
@@ -315,41 +504,74 @@ function SourceForm(props: {
             value={props.tag}
             disabled={props.pending}
             placeholder={i18n.t('uiCopy.plugin.external.latestRelease')}
-            class="h-9 w-full rounded-md border bg-background px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+            class="h-[46px] w-full rounded-md border bg-background px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 sm:h-10"
             onInput={(event) => props.onTag(event.currentTarget.value)}
           />
         </label>
       </Show>
       <Show when={props.sourceKind === 'package_upload'}>
-        <label class="block space-y-1.5 text-sm font-medium">
-          <span>{i18n.t('uiCopy.plugin.external.packageFile')}</span>
+        <div class="space-y-2">
           <input
+            ref={fileInput}
+            id="external-plugin-package-file"
             type="file"
             accept=".redevplugin,application/vnd.redevplugin.package+zip,application/zip"
             disabled={props.pending}
-            class="block w-full cursor-pointer rounded-md border bg-background text-sm file:mr-3 file:cursor-pointer file:border-0 file:border-r file:bg-muted file:px-3 file:py-2 file:text-sm file:font-medium"
+            class="peer sr-only"
             onChange={(event) => props.onFile(event.currentTarget.files?.[0] ?? null)}
           />
-          <Show when={props.file}><div class="truncate text-xs font-normal text-muted-foreground">{props.file?.name}</div></Show>
-        </label>
+          <label
+            for="external-plugin-package-file"
+            class="flex min-h-28 cursor-pointer flex-col items-center justify-center gap-2 rounded-md border border-dashed bg-background px-4 py-5 text-center transition-colors hover:border-primary hover:bg-muted peer-focus-visible:border-primary peer-focus-visible:ring-2 peer-focus-visible:ring-primary/20"
+          >
+            <Upload class="h-5 w-5 text-muted-foreground" />
+            <span class="text-sm font-medium">{i18n.t('uiCopy.plugin.external.packageFile')}</span>
+            <span class="text-xs text-muted-foreground">{i18n.t('common.actions.open')}</span>
+          </label>
+          <Show when={props.file}>
+            {(selectedFile) => (
+              <div data-external-plugin-selected-file class="flex items-center gap-3 rounded-md border bg-background px-3 py-2.5">
+                <Package class="h-4 w-4 shrink-0 text-muted-foreground" />
+                <div class="min-w-0 flex-1">
+                  <div class="truncate text-sm font-medium">{selectedFile().name}</div>
+                  <div class="text-xs text-muted-foreground">{formatFileSize(selectedFile().size)}</div>
+                </div>
+                <button
+                  type="button"
+                  class="flex h-[44px] w-[44px] shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground sm:h-8 sm:w-8"
+                  aria-label={i18n.t('common.actions.delete')}
+                  title={i18n.t('common.actions.delete')}
+                  onClick={() => {
+                    if (fileInput) fileInput.value = '';
+                    props.onFile(null);
+                  }}
+                >
+                  <X class="h-4 w-4" />
+                </button>
+              </div>
+            )}
+          </Show>
+        </div>
       </Show>
       </div>
     </>
   );
 }
 
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 function InspectionReview(props: {
   inspection: ExternalPluginInspection;
   previousSummary?: PluginExternalPackageSecuritySummary;
-  confirmed: boolean;
-  onConfirmed: (confirmed: boolean) => void;
 }): JSX.Element {
   const i18n = useI18n();
   const summary = () => props.inspection.security_summary;
   const signature = () => props.inspection.signature_assessment.state;
-  const blocked = () => signature() === 'invalid'
-    || signature() === 'revoked'
-    || props.inspection.execution_approval.state === 'policy_blocked';
+  const blocked = () => inspectionBlocked(props.inspection);
   const facts = () => [
     [i18n.t('uiCopy.plugin.external.permissions'), summary().permissions.length],
     [i18n.t('uiCopy.plugin.external.methods'), summary().methods.length],
@@ -366,43 +588,73 @@ function InspectionReview(props: {
   const accessChanged = createMemo(() => declarations().some((declaration) => Boolean(declaration.change)));
   return (
     <div class="space-y-4">
-      <div class="flex items-start gap-3 border-b pb-3">
-        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-muted"><Shield class="h-4 w-4" /></div>
-        <div class="min-w-0">
-          <div class="truncate font-semibold">{props.inspection.plugin_id}</div>
-          <div class="mt-0.5 text-xs text-muted-foreground">{props.inspection.publisher_id} · v{props.inspection.version}</div>
+      <div class="flex items-start gap-3 border-b pb-4">
+        <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border bg-background"><Package class="h-5 w-5" /></div>
+        <div class="min-w-0 flex-1">
+          <div class="truncate text-base font-semibold">{props.inspection.plugin_id}</div>
+          <div class="mt-1 text-sm text-muted-foreground">{props.inspection.publisher_id} · v{props.inspection.version}</div>
+          <code class="mt-1.5 block truncate text-[11px] text-muted-foreground" title={props.inspection.inspected_hashes.package_sha256}>
+            {props.inspection.inspected_hashes.package_sha256}
+          </code>
         </div>
       </div>
-      <div class="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
-        <For each={facts()}>
-          {(fact) => (
-            <div class="border-t pt-2">
-              <div class="text-[10px] font-semibold uppercase text-muted-foreground">{fact[0]}</div>
-              <div class="mt-0.5 text-sm font-medium">{fact[1]}</div>
-            </div>
-          )}
-        </For>
-      </div>
       <SourceProvenanceReview provenance={props.inspection.source_provenance} />
+      <div class="grid gap-2 sm:grid-cols-3" data-external-plugin-trust-review>
+        <DecisionFact
+          icon={<Shield class="h-4 w-4" />}
+          primary={signatureReviewLabel(signature(), i18n)}
+          secondary={`signature=${signature()}`}
+          tone={blocked() ? 'blocked' : signature() === 'verified' ? 'positive' : 'caution'}
+        />
+        <DecisionFact
+          icon={blocked() ? <AlertTriangle class="h-4 w-4" /> : <Check class="h-4 w-4" />}
+          primary={executionApprovalReviewLabel(props.inspection.execution_approval.state, i18n)}
+          secondary={[
+            `execution_approval=${props.inspection.execution_approval.state}`,
+            ...props.inspection.execution_approval.reason_codes,
+          ].join(' · ')}
+          tone={blocked() ? 'blocked' : 'neutral'}
+        />
+        <DecisionFact
+          icon={<Link class="h-4 w-4" />}
+          primary={props.inspection.update_eligibility.state === 'automatic_eligible'
+            ? i18n.t('uiCopy.plugin.external.automaticUpdates')
+            : i18n.t('uiCopy.plugin.external.manualUpdates')}
+          secondary={`update_eligibility=${props.inspection.update_eligibility.state}`}
+          tone={props.inspection.update_eligibility.state === 'automatic_eligible' ? 'positive' : 'neutral'}
+        />
+      </div>
+      <PostInstallFacts updateEligibility={props.inspection.update_eligibility.state} />
       <Show when={props.previousSummary && accessChanged()}>
-        <div class="border-l-2 border-[var(--redeven-status-warning-foreground)] bg-[var(--redeven-status-warning-soft)] px-3 py-2 text-sm">
+        <div class="rounded-md border border-[var(--redeven-status-warning-foreground)] bg-background px-3 py-2 text-sm">
           {i18n.t('uiCopy.plugin.external.accessChanged')}
         </div>
       </Show>
-      <div class="space-y-3 border-t pt-3">
+      <div class="space-y-3 border-t pt-4" data-external-plugin-security-declarations>
         <div class="text-xs font-semibold uppercase text-muted-foreground">{i18n.t('uiCopy.plugin.external.declaredAccess')}</div>
+        <div class="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-5">
+          <For each={facts()}>
+            {(fact) => (
+              <div class="border-t pt-2">
+                <div class="text-[10px] font-semibold uppercase text-muted-foreground">{fact[0]}</div>
+                <div class="mt-0.5 text-sm font-semibold">{fact[1]}</div>
+              </div>
+            )}
+          </For>
+        </div>
         <For each={declarations()}>
           {(declaration) => (
-            <div class={cn(
-              'border-l-2 px-3 py-2',
+            <details open={Boolean(declaration.change)} class={cn(
+              'group rounded-md border border-l-2 bg-background',
               declaration.change === 'added' || declaration.change === 'changed'
-                ? 'border-[var(--redeven-status-warning-foreground)] bg-[var(--redeven-status-warning-soft)]'
+                ? 'border-l-[var(--redeven-status-warning-foreground)]'
                 : declaration.change === 'removed'
-                  ? 'border-muted-foreground/35 bg-muted/40 opacity-75'
-                  : 'border-border bg-muted/25',
+                  ? 'border-l-muted-foreground/35 opacity-75'
+                  : 'border-l-border',
             )}>
-              <div class="flex flex-wrap items-center gap-2">
+              <summary class="flex min-h-10 cursor-pointer list-none flex-wrap items-center gap-2 px-3 py-2">
                 <span class="text-[10px] font-semibold uppercase text-muted-foreground">{securityCategoryLabel(declaration.category, i18n)}</span>
+                <code class="min-w-0 flex-1 break-all text-xs font-semibold">{declaration.identity}</code>
                 <Show when={declaration.change}>
                   {(change) => (
                     <span class="rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase">
@@ -410,70 +662,164 @@ function InspectionReview(props: {
                     </span>
                   )}
                 </Show>
+                <ChevronDown class="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+              </summary>
+              <div class="border-t px-3 py-2">
+                <For each={declaration.facts}>
+                  {(fact) => <code class="mt-1 block break-all text-[11px] text-muted-foreground">{fact}</code>}
+                </For>
+                <Show when={declaration.previousFacts}>
+                  {(previousFacts) => (
+                    <div class="mt-2 border-t pt-2 opacity-75">
+                      <span class="text-[10px] font-semibold uppercase text-muted-foreground">{i18n.t('uiCopy.plugin.external.previous')}</span>
+                      <For each={previousFacts()}>
+                        {(fact) => <code class="mt-1 block break-all text-[11px] text-muted-foreground line-through">{fact}</code>}
+                      </For>
+                    </div>
+                  )}
+                </Show>
               </div>
-              <code class="mt-1 block break-all text-xs font-semibold">{declaration.identity}</code>
-              <For each={declaration.facts}>
-                {(fact) => <code class="mt-1 block break-all text-[11px] text-muted-foreground">{fact}</code>}
-              </For>
-              <Show when={declaration.previousFacts}>
-                {(previousFacts) => (
-                  <div class="mt-2 border-t border-current/15 pt-2 opacity-75">
-                    <span class="text-[10px] font-semibold uppercase text-muted-foreground">
-                      {i18n.t('uiCopy.plugin.external.previous')}
-                    </span>
-                    <For each={previousFacts()}>
-                      {(fact) => <code class="mt-1 block break-all text-[11px] text-muted-foreground line-through">{fact}</code>}
-                    </For>
-                  </div>
-                )}
-              </Show>
-            </div>
+            </details>
           )}
         </For>
-        <div>
-          <div class="font-medium text-muted-foreground">{i18n.t('uiCopy.plugin.external.securitySummaryHash')}</div>
-          <code class="mt-1 block break-all text-[11px]">{summary().summary_sha256}</code>
-        </div>
       </div>
-      <div class={cn(
-        'border-l-2 px-3 py-2 text-sm',
-        blocked() ? 'border-destructive bg-destructive/10 text-destructive' : signature() === 'verified'
-          ? 'border-[var(--redeven-status-success-foreground)] bg-[var(--redeven-status-success-soft)]'
-          : 'border-[var(--redeven-status-warning-foreground)] bg-[var(--redeven-status-warning-soft)]',
-      )}>
-        <div class="font-medium">{signatureReviewLabel(signature(), i18n)}</div>
-        <Show when={props.inspection.execution_approval.state === 'policy_blocked'}>
-          <div class="mt-1 font-medium">{i18n.t('uiCopy.plugin.managedByPolicy')}</div>
-          <For each={props.inspection.execution_approval.reason_codes}>
+      <Show when={blocked()}>
+        <div role="alert" class="rounded-md border border-destructive bg-background px-3 py-2.5 text-sm text-destructive">
+          <div class="font-medium">{signatureReviewLabel(signature(), i18n)}</div>
+          <Show when={props.inspection.execution_approval.state === 'policy_blocked'}>
+            <div class="mt-1 font-medium">{i18n.t('uiCopy.plugin.managedByPolicy')}</div>
+          </Show>
+          <For each={[
+            ...props.inspection.signature_assessment.reason_codes,
+            ...props.inspection.execution_approval.reason_codes,
+          ]}>
             {(reason) => <code class="mt-1 block break-all text-[11px]">{reason}</code>}
           </For>
+        </div>
+      </Show>
+      <details class="group border-t pt-3 text-xs">
+        <summary class="flex min-h-[44px] cursor-pointer list-none items-center gap-2 font-medium text-muted-foreground sm:min-h-9">
+          <span class="flex-1">{i18n.t('uiCopy.plugin.external.packageHash')}</span>
+          <ChevronDown class="h-4 w-4 transition-transform group-open:rotate-180" />
+        </summary>
+        <div class="space-y-3 pb-1 pt-2">
+          <div>
+            <div class="font-medium text-muted-foreground">{i18n.t('uiCopy.plugin.external.packageHash')}</div>
+            <code class="mt-1 block break-all text-[11px]">{props.inspection.inspected_hashes.package_sha256}</code>
+          </div>
+          <div>
+            <div class="font-medium text-muted-foreground">{i18n.t('uiCopy.plugin.external.securitySummaryHash')}</div>
+            <code class="mt-1 block break-all text-[11px]">{summary().summary_sha256}</code>
+          </div>
+          <div>
+            <div class="font-medium text-muted-foreground">{i18n.t('uiCopy.plugin.external.confirmationDigest')}</div>
+            <code class="mt-1 block break-all text-[11px]">{props.inspection.confirmation_digest}</code>
+          </div>
+        </div>
+      </details>
+    </div>
+  );
+}
+
+function inspectionBlocked(inspection: ExternalPluginInspection): boolean {
+  return inspection.signature_assessment.state === 'invalid'
+    || inspection.signature_assessment.state === 'revoked'
+    || inspection.execution_approval.state === 'policy_blocked';
+}
+
+function executionApprovalReviewLabel(
+  state: ExternalPluginInspection['execution_approval']['state'],
+  i18n: ReturnType<typeof useI18n>,
+): string {
+  switch (state) {
+    case 'pending': return i18n.t('uiCopy.plugin.external.executionApprovalPending');
+    case 'user_approved': return i18n.t('uiCopy.plugin.external.executionApprovalUserApproved');
+    case 'policy_approved': return i18n.t('uiCopy.plugin.external.executionApprovalPolicyApproved');
+    case 'policy_blocked': return i18n.t('uiCopy.plugin.external.executionApprovalPolicyBlocked');
+  }
+}
+
+function DecisionFact(props: {
+  icon: JSX.Element;
+  primary: string;
+  secondary?: string;
+  tone: 'positive' | 'caution' | 'blocked' | 'neutral';
+}): JSX.Element {
+  return (
+    <div class={cn(
+      'flex min-h-20 items-start gap-2 rounded-md border bg-background p-3 text-sm',
+      props.tone === 'blocked' && 'border-destructive text-destructive',
+      props.tone === 'positive' && 'border-[var(--redeven-status-success-foreground)]',
+      props.tone === 'caution' && 'border-[var(--redeven-status-warning-foreground)]',
+    )}>
+      <span class="mt-0.5 shrink-0">{props.icon}</span>
+      <span class="min-w-0">
+        <span class="block font-medium leading-5">{props.primary}</span>
+        <Show when={props.secondary}>
+          {(secondary) => <code class="mt-1 block break-all text-[10px] text-muted-foreground">{secondary()}</code>}
         </Show>
-        <div class="mt-1 text-xs opacity-80">
-          {props.inspection.update_eligibility.state === 'automatic_eligible'
+      </span>
+    </div>
+  );
+}
+
+function PostInstallFacts(props: { updateEligibility: ExternalPluginInspection['update_eligibility']['state'] }): JSX.Element {
+  const i18n = useI18n();
+  return (
+    <div class="grid gap-2 sm:grid-cols-3" data-external-plugin-install-outcome>
+      <div class="rounded-md border bg-background px-3 py-2.5">
+        <div class="text-[10px] font-semibold uppercase text-muted-foreground">{i18n.t('uiCopy.plugin.lifecycle')}</div>
+        <div class="mt-1 text-sm font-semibold">{i18n.t('uiCopy.plugin.disabled')}</div>
+      </div>
+      <div class="rounded-md border bg-background px-3 py-2.5">
+        <div class="text-[10px] font-semibold uppercase text-muted-foreground">{i18n.t('uiCopy.plugin.external.permissions')}</div>
+        <div class="mt-1 text-sm font-semibold">0 · {i18n.t('uiCopy.plugin.permissionNotGranted')}</div>
+      </div>
+      <div class="rounded-md border bg-background px-3 py-2.5">
+        <div class="text-[10px] font-semibold uppercase text-muted-foreground">{i18n.t('uiCopy.plugin.external.confirmUpdate')}</div>
+        <div class="mt-1 text-sm font-semibold">
+          {props.updateEligibility === 'automatic_eligible'
             ? i18n.t('uiCopy.plugin.external.automaticUpdates')
             : i18n.t('uiCopy.plugin.external.manualUpdates')}
         </div>
       </div>
-      <div class="space-y-2 border-t pt-3 text-xs">
+    </div>
+  );
+}
+
+function CommitProgress(props: { inspection: ExternalPluginInspection | null }): JSX.Element {
+  const i18n = useI18n();
+  return (
+    <div role="status" class="space-y-4 rounded-md border bg-background p-5">
+      <div class="flex items-center gap-3">
+        <Loader2 class="h-5 w-5 shrink-0 animate-spin text-primary motion-reduce:animate-none" />
         <div>
-          <div class="font-medium text-muted-foreground">{i18n.t('uiCopy.plugin.external.packageHash')}</div>
-          <code class="mt-1 block break-all text-[11px]">{props.inspection.inspected_hashes.package_sha256}</code>
-        </div>
-        <div>
-          <div class="font-medium text-muted-foreground">{i18n.t('uiCopy.plugin.external.confirmationDigest')}</div>
-          <code class="mt-1 block break-all text-[11px]">{props.inspection.confirmation_digest}</code>
+          <div class="font-semibold">{i18n.t('uiCopy.plugin.external.committing')}</div>
+          <Show when={props.inspection}>
+            {(current) => <div class="mt-1 text-sm text-muted-foreground">{current().plugin_id} · v{current().version}</div>}
+          </Show>
         </div>
       </div>
-      <label class={cn('flex items-start gap-2 text-sm', blocked() ? 'cursor-not-allowed opacity-50' : 'cursor-pointer')}>
-        <input
-          type="checkbox"
-          checked={props.confirmed}
-          disabled={blocked()}
-          class="mt-0.5 h-4 w-4 rounded border"
-          onChange={(event) => props.onConfirmed(event.currentTarget.checked)}
-        />
-        <span>{i18n.t('uiCopy.plugin.external.confirmDigest')}</span>
-      </label>
+      <Show when={props.inspection}>
+        {(current) => (
+          <div class="grid gap-2 sm:grid-cols-2">
+            <DecisionFact
+              icon={<Shield class="h-4 w-4" />}
+              primary={signatureReviewLabel(current().signature_assessment.state, i18n)}
+              secondary={`signature=${current().signature_assessment.state}`}
+              tone={current().signature_assessment.state === 'verified' ? 'positive' : 'caution'}
+            />
+            <DecisionFact
+              icon={<Link class="h-4 w-4" />}
+              primary={current().update_eligibility.state === 'automatic_eligible'
+                ? i18n.t('uiCopy.plugin.external.automaticUpdates')
+                : i18n.t('uiCopy.plugin.external.manualUpdates')}
+              secondary={`update_eligibility=${current().update_eligibility.state}`}
+              tone="neutral"
+            />
+          </div>
+        )}
+      </Show>
     </div>
   );
 }

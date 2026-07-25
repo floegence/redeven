@@ -78,6 +78,7 @@ type RegisteredPluginSurfaceSlot = {
   host?: PluginSurfaceHost;
   publishedVisible?: boolean;
   status: 'opening' | 'ready' | 'failed' | 'retiring';
+  closeCompleted: boolean;
   failure?: Error;
 };
 
@@ -107,32 +108,41 @@ export function createPluginSurfacePlacementCoordinator(
   const retire = (entry: RegisteredPluginSurfaceSlot): Promise<void> => {
     const existing = retirementBySlot.get(entry.slot);
     if (existing) return existing;
-    const retirement = (async () => {
-      const failures: unknown[] = [];
+    const operation = (async () => {
+      let visibilityFailure: unknown;
       if (entry.status === 'ready') {
         try {
           publishVisibility(entry, false);
         } catch (error) {
-          failures.push(error);
+          visibilityFailure = error;
         }
       }
       entry.status = 'retiring';
       entry.opening.abort('plugin surface slot retired');
-      try {
-        await entry.slot.close();
-      } catch (error) {
-        failures.push(error);
+      if (!entry.closeCompleted) {
+        try {
+          await entry.slot.close();
+          entry.closeCompleted = true;
+        } catch (error) {
+          if (visibilityFailure !== undefined) {
+            throw new AggregateError([visibilityFailure, error], 'Plugin surface slot closure failed');
+          }
+          throw error;
+        }
       }
       try {
         await entry.slot.dispose();
       } catch (error) {
-        failures.push(error);
+        if (visibilityFailure !== undefined) {
+          throw new AggregateError([visibilityFailure, error], 'Plugin surface slot retirement failed');
+        }
+        throw error;
       }
-      if (failures.length === 1) throw failures[0];
-      if (failures.length > 1) {
-        throw new AggregateError(failures, 'Plugin surface slot retirement failed');
-      }
-    })().finally(() => {
+    });
+    const retirement = operation().catch((error: unknown) => {
+      retirementBySlot.delete(entry.slot);
+      throw error;
+    }).then(() => {
       if (entries.get(entry.slot) === entry) entries.delete(entry.slot);
     });
     retirementBySlot.set(entry.slot, retirement);
@@ -142,7 +152,10 @@ export function createPluginSurfacePlacementCoordinator(
   const disposeInactiveSlot = (slot: PluginSurfaceSlot): Promise<void> => {
     const existing = retirementBySlot.get(slot);
     if (existing) return existing;
-    const retirement = Promise.resolve().then(() => slot.dispose());
+    const retirement = Promise.resolve().then(() => slot.dispose()).catch((error: unknown) => {
+      retirementBySlot.delete(slot);
+      throw error;
+    });
     retirementBySlot.set(slot, retirement);
     return retirement;
   };
@@ -173,6 +186,7 @@ export function createPluginSurfacePlacementCoordinator(
         pluginInstanceID: request.plugin_instance_id,
         opening: new AbortController(),
         status: 'opening',
+        closeCompleted: false,
       };
       entries.set(slot, entry);
       try {

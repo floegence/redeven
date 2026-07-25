@@ -368,6 +368,7 @@ describe('redevenWorkbenchWidgets plugin behavior', () => {
         confirmationQueue: {} as any,
         workbenchVisible: () => true,
         resolveTarget: (target) => target,
+        onOpenPluginDetails: vi.fn(),
         onRetirementError: vi.fn(),
       }}>
         <Body widgetId="widget-plugin-1" title="Containers" type={'redeven.plugin' as any} lifecycle="hot" requestActivate={requestActivate} />
@@ -412,6 +413,7 @@ describe('redevenWorkbenchWidgets plugin behavior', () => {
         confirmationQueue: {} as any,
         workbenchVisible: () => true,
         resolveTarget: (target) => target,
+        onOpenPluginDetails: vi.fn(),
         onRetirementError: vi.fn(),
       }}>
         <Body widgetId="widget-plugin-1" title="Containers" type={'redeven.plugin' as any} lifecycle="hot" />
@@ -439,6 +441,7 @@ describe('redevenWorkbenchWidgets plugin behavior', () => {
       const definition = redevenWorkbenchWidgets.find((widget) => widget.type === 'redeven.plugin');
       if (!definition) throw new Error('missing plugin widget definition');
       const Body = definition.body;
+      const onOpenPluginDetails = vi.fn();
       const host = document.createElement('div');
       document.body.appendChild(host);
       const dispose = render(() => (
@@ -449,6 +452,7 @@ describe('redevenWorkbenchWidgets plugin behavior', () => {
           resolveTarget: (target) => state === 'stale'
             ? { ...target, expectedManagementRevision: target.expectedManagementRevision + 1 }
             : null,
+          onOpenPluginDetails,
           onRetirementError: vi.fn(),
         }}>
           <Body widgetId="widget-plugin-1" title="Containers" type={'redeven.plugin' as any} lifecycle="hot" />
@@ -460,6 +464,14 @@ describe('redevenWorkbenchWidgets plugin behavior', () => {
       expect(host.textContent).toContain('Containers');
       expect(host.textContent).toContain('Needs attention');
       expect(host.textContent).toContain('Unavailable');
+      const recoveryButton = host.querySelector('[data-plugin-workbench-view-issue]') as HTMLButtonElement | null;
+      expect(recoveryButton).not.toBeNull();
+      expect(recoveryButton?.textContent).toContain('Plugin Center');
+      expect(recoveryButton?.className).toContain('min-h-[46px]');
+      expect(recoveryButton?.getAttribute('data-redeven-workbench-action-surface')).toBe('true');
+      recoveryButton?.click();
+      expect(onOpenPluginDetails).toHaveBeenCalledOnce();
+      expect(onOpenPluginDetails).toHaveBeenCalledWith('instance:instance-containers');
       dispose();
     },
   );

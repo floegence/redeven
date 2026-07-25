@@ -5,6 +5,7 @@ import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { PluginPanel } from './PluginPanel';
+import { buildPluginPanelModel } from './pluginInventoryProjection';
 import type { PluginInventoryItem, PluginPanelModel } from './pluginTypes';
 
 let dispose: (() => void) | undefined;
@@ -50,46 +51,76 @@ function panelModel(item: PluginInventoryItem = pluginItem()): PluginPanelModel 
   };
 }
 
+function createTrigger(): HTMLButtonElement {
+  const trigger = document.createElement('button');
+  trigger.textContent = 'Plugins';
+  trigger.getBoundingClientRect = vi.fn(() => ({
+    x: 8,
+    y: 96,
+    left: 8,
+    top: 96,
+    right: 48,
+    bottom: 136,
+    width: 40,
+    height: 40,
+    toJSON: () => ({}),
+  }));
+  document.body.append(trigger);
+  return trigger;
+}
+
+function mountPanel(props: Partial<Parameters<typeof PluginPanel>[0]> = {}) {
+  const mount = document.createElement('div');
+  document.body.append(mount);
+  dispose = render(() => (
+    <PluginPanel
+      open
+      model={panelModel()}
+      onClose={vi.fn()}
+      onOpenCenter={vi.fn()}
+      onOpenPluginDetails={vi.fn()}
+      onOpenPluginSurface={vi.fn()}
+      {...props}
+    />
+  ), mount);
+}
+
 describe('PluginPanel', () => {
-  it('renders Plugin Center as the first tile and opens it', () => {
+  it('renders plugins as a vertical action list with Plugin Center in a separate footer', () => {
     const onOpenCenter = vi.fn();
-    const mount = document.createElement('div');
-    document.body.append(mount);
+    mountPanel({ onOpenCenter });
 
-    dispose = render(() => (
-      <PluginPanel
-        open
-        model={panelModel()}
-        onClose={vi.fn()}
-        onOpenCenter={onOpenCenter}
-        onOpenPluginDetails={vi.fn()}
-        onOpenPluginSurface={vi.fn()}
-      />
-    ), mount);
-
-    const tiles = [...mount.querySelectorAll('[data-plugin-panel-tile]')];
-    expect(tiles[0].textContent).toContain('Plugin Center');
-    (tiles[0] as HTMLButtonElement).click();
+    const dialog = document.querySelector('[role="dialog"]')!;
+    const plugin = dialog.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]')!;
+    const center = dialog.querySelector('[data-plugin-panel-tile="plugin-center"]')!;
+    expect(plugin.textContent).toContain('Open in Activity');
+    expect(center.textContent).toContain('Plugin Center');
+    expect(plugin.compareDocumentPosition(center) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    (center as HTMLButtonElement).click();
     expect(onOpenCenter).toHaveBeenCalledTimes(1);
   });
 
-  it('opens enabled plugins through the surface callback', () => {
+  it('keeps catalog-only plugins in Plugin Center and shows the installed-plugin empty state', () => {
+    const catalogItem = pluginItem({
+      inventoryKey: 'catalog:containers',
+      pluginInstanceID: undefined,
+      lifecycleState: 'not_installed',
+      managementRevision: undefined,
+      defaultLaunchTarget: undefined,
+    });
+    mountPanel({ model: buildPluginPanelModel({ items: [catalogItem] }) });
+
+    const dialog = document.querySelector('[role="dialog"]')!;
+    expect(dialog.querySelector('[data-plugin-panel-tile="catalog:containers"]')).toBeNull();
+    expect(dialog.textContent).toContain('No installed plugins yet.');
+    expect(dialog.querySelector('[data-plugin-panel-tile="plugin-center"]')).not.toBeNull();
+  });
+
+  it('opens enabled plugins through the existing surface action', () => {
     const onOpenPluginSurface = vi.fn();
-    const mount = document.createElement('div');
-    document.body.append(mount);
+    mountPanel({ onOpenPluginSurface });
 
-    dispose = render(() => (
-      <PluginPanel
-        open
-        model={panelModel()}
-        onClose={vi.fn()}
-        onOpenCenter={vi.fn()}
-        onOpenPluginDetails={vi.fn()}
-        onOpenPluginSurface={onOpenPluginSurface}
-      />
-    ), mount);
-
-    (mount.querySelectorAll('[data-plugin-panel-tile]')[1] as HTMLButtonElement).click();
+    (document.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]') as HTMLButtonElement).click();
     expect(onOpenPluginSurface).toHaveBeenCalledWith({
       pluginID: 'com.redeven.official.containers',
       pluginInstanceID: 'plugininst_containers',
@@ -99,82 +130,123 @@ describe('PluginPanel', () => {
     });
   });
 
-  it('routes disabled plugins to details', () => {
+  it('shows the next lifecycle action and routes disabled plugins to details', () => {
     const onOpenPluginDetails = vi.fn();
-    const mount = document.createElement('div');
-    document.body.append(mount);
+    mountPanel({
+      model: panelModel(pluginItem({ lifecycleState: 'disabled', attentionReason: 'disabled' })),
+      onOpenPluginDetails,
+    });
 
-    dispose = render(() => (
-      <PluginPanel
-        open
-        model={panelModel(pluginItem({ lifecycleState: 'disabled', attentionReason: 'disabled' }))}
-        onClose={vi.fn()}
-        onOpenCenter={vi.fn()}
-        onOpenPluginDetails={onOpenPluginDetails}
-        onOpenPluginSurface={vi.fn()}
-      />
-    ), mount);
-
-    (mount.querySelectorAll('[data-plugin-panel-tile]')[1] as HTMLButtonElement).click();
+    const row = document.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]') as HTMLButtonElement;
+    expect(row.textContent).toContain('Disabled');
+    expect(row.textContent).toContain('Enable');
+    row.click();
     expect(onOpenPluginDetails).toHaveBeenCalledWith('instance:plugininst_containers');
   });
 
-  it('closes on Escape and exposes pointer cursor classes for tiles', () => {
-    const onClose = vi.fn();
-    const mount = document.createElement('div');
-    document.body.append(mount);
+  it('anchors the opaque desktop surface to the Activity Bar trigger', () => {
+    const trigger = createTrigger();
+    mountPanel({ id: 'plugin-switcher', trigger });
 
-    dispose = render(() => (
-      <PluginPanel
-        open
-        model={panelModel()}
-        onClose={onClose}
-        onOpenCenter={vi.fn()}
-        onOpenPluginDetails={vi.fn()}
-        onOpenPluginSurface={vi.fn()}
-      />
-    ), mount);
-
-    for (const tile of mount.querySelectorAll('[data-plugin-panel-tile]')) {
-      expect(tile.className).toContain('cursor-pointer');
-    }
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
-    expect(onClose).toHaveBeenCalledTimes(1);
+    const dialog = document.querySelector('#plugin-switcher')!;
+    const floatingLayer = dialog.parentElement!;
+    expect(floatingLayer.style.left).toBe('56px');
+    expect(floatingLayer.style.top).toBe('96px');
+    expect(dialog.className).toContain('bg-popover');
+    expect(dialog.className).not.toContain('backdrop-blur');
+    expect(dialog.getAttribute('aria-modal')).toBe('false');
   });
 
-  it('defers outside close until click so the activity trigger can toggle cleanly', () => {
-    const onClose = vi.fn();
-    const mount = document.createElement('div');
-    document.body.append(mount);
+  it('clamps the anchored desktop surface inside the viewport', () => {
+    const trigger = createTrigger();
+    trigger.getBoundingClientRect = vi.fn(() => ({
+      x: 960,
+      y: 740,
+      left: 960,
+      top: 740,
+      right: 1000,
+      bottom: 780,
+      width: 40,
+      height: 40,
+      toJSON: () => ({}),
+    }));
+    mountPanel({ trigger });
 
-    dispose = render(() => (
-      <PluginPanel
-        open
-        model={panelModel()}
-        onClose={onClose}
-        onOpenCenter={vi.fn()}
-        onOpenPluginDetails={vi.fn()}
-        onOpenPluginSurface={vi.fn()}
-      />
-    ), mount);
-
-    document.dispatchEvent(new Event('pointerdown', { bubbles: true }));
-    expect(onClose).not.toHaveBeenCalled();
-    document.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    expect(onClose).toHaveBeenCalledTimes(1);
+    const floatingLayer = document.querySelector('[role="dialog"]')!.parentElement!;
+    expect(floatingLayer.style.left).toBe('648px');
+    expect(floatingLayer.style.top).toBe('200px');
   });
 
-  it('moves focus into the panel, traps Tab, and restores the opening control', async () => {
-    const trigger = document.createElement('button');
-    document.body.append(trigger);
+  it('focuses the first action without trapping Tab and restores trigger focus after Escape', async () => {
+    const trigger = createTrigger();
     trigger.focus();
+    const [open, setOpen] = createSignal(true);
     const mount = document.createElement('div');
     document.body.append(mount);
-    const [open, setOpen] = createSignal(true);
-
     dispose = render(() => (
       <PluginPanel
         open={open()}
+        trigger={trigger}
+        model={panelModel()}
+        onClose={() => setOpen(false)}
+        onOpenCenter={vi.fn()}
+        onOpenPluginDetails={vi.fn()}
+        onOpenPluginSurface={vi.fn()}
+      />
+    ), mount);
+
+    await Promise.resolve();
+    const row = document.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]') as HTMLButtonElement;
+    expect(document.activeElement).toBe(row);
+
+    const tab = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    document.dispatchEvent(tab);
+    expect(tab.defaultPrevented).toBe(false);
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(document.activeElement).toBe(trigger);
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it('closes on an outside click, restores focus, and lets the trigger own its toggle', () => {
+    const trigger = createTrigger();
+    const [open, setOpen] = createSignal(true);
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginPanel
+        open={open()}
+        trigger={trigger}
+        model={panelModel()}
+        onClose={() => setOpen(false)}
+        onOpenCenter={vi.fn()}
+        onOpenPluginDetails={vi.fn()}
+        onOpenPluginSurface={vi.fn()}
+      />
+    ), mount);
+
+    trigger.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(open()).toBe(true);
+    document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(open()).toBe(false);
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it('uses a modal mobile sheet with 44px controls and restores focus after backdrop dismiss', async () => {
+    const trigger = createTrigger();
+    const shell = document.createElement('main');
+    const preExistingInert = document.createElement('aside');
+    preExistingInert.inert = true;
+    document.body.append(shell, preExistingInert);
+    trigger.focus();
+    const [open, setOpen] = createSignal(true);
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginPanel
+        open={open()}
+        mobile
+        trigger={trigger}
         model={panelModel()}
         onClose={() => setOpen(false)}
         onOpenCenter={vi.fn()}
@@ -184,34 +256,43 @@ describe('PluginPanel', () => {
     ), mount);
     await Promise.resolve();
 
-    const focusable = [...mount.querySelectorAll<HTMLButtonElement>('button')];
-    expect(document.activeElement).toBe(focusable[0]);
-    focusable.at(-1)!.focus();
-    const forward = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
-    document.dispatchEvent(forward);
-    expect(forward.defaultPrevented).toBe(true);
-    expect(document.activeElement).toBe(focusable[0]);
+    const dialog = document.querySelector('[role="dialog"]')!;
+    expect(dialog.getAttribute('aria-modal')).toBe('true');
+    const close = document.querySelector('[aria-label="Close plugins"]') as HTMLButtonElement;
+    expect(close.className).toContain('h-[44px]');
+    expect(close.className).toContain('w-[44px]');
+    expect(document.activeElement).toBe(close);
+    expect(trigger.inert).toBe(true);
+    expect(shell.inert).toBe(true);
+    expect(preExistingInert.inert).toBe(true);
 
-    const backward = new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true });
-    document.dispatchEvent(backward);
-    expect(backward.defaultPrevented).toBe(true);
-    expect(document.activeElement).toBe(focusable.at(-1));
+    close.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true }));
+    const center = document.querySelector('[data-plugin-panel-tile="plugin-center"]') as HTMLButtonElement;
+    expect(document.activeElement).toBe(center);
+    center.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+    expect(document.activeElement).toBe(close);
 
-    setOpen(false);
+    const backdrop = dialog.parentElement!;
+    backdrop.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+    expect(open()).toBe(false);
     expect(document.activeElement).toBe(trigger);
+    expect(Boolean(trigger.inert)).toBe(false);
+    expect(Boolean(shell.inert)).toBe(false);
+    expect(preExistingInert.inert).toBe(true);
   });
 
-  it('does not restore the opening control after navigating to a plugin surface', async () => {
-    const trigger = document.createElement('button');
+  it('does not steal focus back after navigating to a plugin surface', () => {
+    const trigger = createTrigger();
     const target = document.createElement('button');
-    document.body.append(trigger, target);
+    document.body.append(target);
     trigger.focus();
+    const [open, setOpen] = createSignal(true);
     const mount = document.createElement('div');
     document.body.append(mount);
-    const [open, setOpen] = createSignal(true);
     dispose = render(() => (
       <PluginPanel
         open={open()}
+        trigger={trigger}
         model={panelModel()}
         onClose={() => setOpen(false)}
         onOpenCenter={vi.fn()}
@@ -219,10 +300,8 @@ describe('PluginPanel', () => {
         onOpenPluginSurface={() => target.focus()}
       />
     ), mount);
-    await Promise.resolve();
 
-    (mount.querySelectorAll('[data-plugin-panel-tile]')[1] as HTMLButtonElement).click();
+    (document.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]') as HTMLButtonElement).click();
     expect(document.activeElement).toBe(target);
-    expect(document.activeElement).not.toBe(trigger);
   });
 });
