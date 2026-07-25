@@ -77,6 +77,8 @@ check_shell_syntax() {
   bash -n scripts/check_desktop_electron_test_runtime.sh
   bash -n scripts/check_docker_runtime_e2e.sh
   bash -n scripts/check_final_integration.sh
+  bash -n scripts/check_quick_ci.sh
+  bash -n scripts/check_renderer_e2e.sh
   bash -n scripts/check_gateway_protocol_contract.sh
   bash -n scripts/check_floret_dependency_boundary.sh
   bash -n scripts/check_redevplugin_dependency_boundary.sh
@@ -99,8 +101,19 @@ check_shell_syntax() {
   bash -n .githooks/pre-push
 }
 
+check_github_workflows() {
+  local actionlint_bin
+  actionlint_bin="$(command -v actionlint || true)"
+  if [ -z "$actionlint_bin" ] || ! "$actionlint_bin" -version 2>/dev/null | grep -Eq '^1\.7\.10([[:space:]]|$)'; then
+    env GOWORK=off go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.10
+    actionlint_bin="$(go env GOPATH)/bin/actionlint"
+  fi
+  "$actionlint_bin" .github/workflows/*.yml
+}
+
 run_step "checking final rebased diff" git diff --check "${base}...${tip}"
 run_step "checking shell syntax" check_shell_syntax
+run_step "linting GitHub Actions workflows" check_github_workflows
 run_step "testing README localization contract" node --test scripts/check_readme_localizations.test.mjs
 run_step "checking reviewed README localizations" node scripts/check_readme_localizations.mjs --require-reviewed
 run_step "testing Git hook contracts" ./scripts/test_git_hooks.sh
@@ -123,6 +136,7 @@ run_step "checking ReDevPlugin integration" ./scripts/check_plugin_integration.s
 run_step "checking Gateway protocol contract" ./scripts/check_gateway_protocol_contract.sh
 run_step "checking Floret dependency boundary" ./scripts/check_floret_dependency_boundary.sh
 run_step "checking Flower live protocol" ./scripts/check_flower_live_protocol.sh
+run_step "checking built renderer and terminal recovery E2E" ./scripts/check_renderer_e2e.sh
 run_step "checking Flower UI" ./scripts/check_flower_ui.sh
 run_step "checking Desktop" ./scripts/check_desktop.sh --full
 run_step "checking Docker Runtime E2E" ./scripts/check_docker_runtime_e2e.sh

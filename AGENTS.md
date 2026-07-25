@@ -32,6 +32,14 @@ Goals:
 - Keep feature branches private until they are merged into `main`.
 - Do not push feature branches or create pull requests unless the user explicitly asks for that collaboration path.
 - Do not create a pull request merely to trigger CI; by default, fast-forward the ready feature into `main`, push `main`, and verify the `main` Actions run.
+- Ordinary GitHub push and pull-request CI must stay short and source-only. It
+  may check formatting, syntax, committed generated artifacts, localization,
+  and repository boundaries, but it must not install browsers, build product
+  packages, or run integration, renderer, terminal, Desktop, Docker, stress, or
+  performance suites. Those complex checks belong to the exact-main pre-push
+  gate in `scripts/check_final_integration.sh`. Tag release workflows retain
+  only the build, signing, attestation, registry readback, and publication work
+  that requires the release ref or hosted platform runners.
 - Default sync strategy for a feature branch: `git rebase origin/main`.
 - Do not merge `origin/main` into a feature branch in the normal flow.
 - Preserve intentional commit history when integrating:
