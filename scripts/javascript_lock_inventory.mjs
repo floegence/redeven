@@ -59,6 +59,7 @@ export function parsePnpmLock(lock) {
       ...parsePnpmPackageKey(packageKey),
       license: '',
       lockKind: 'pnpm',
+      platformFiltered: Array.isArray(meta.os) || Array.isArray(meta.cpu),
     };
   });
 }
@@ -90,6 +91,20 @@ export function resolvePackageLicense(pkg, options = {}) {
   };
 }
 
+export function assertPlatformFilteredLicensesResolvable(inventory, options = {}) {
+  const unresolved = [];
+  for (const pkg of inventory) {
+    if (!pkg.platformFiltered) continue;
+    const resolution = resolvePackageLicense(pkg, options);
+    if (resolution.license === 'UNKNOWN') {
+      unresolved.push(packageCoordinate(pkg.name, pkg.version));
+    }
+  }
+  if (unresolved.length > 0) {
+    throw new Error(`platform-filtered packages require platform-independent exact license evidence: ${unresolved.join(', ')}`);
+  }
+}
+
 export function collectJavaScriptLockInventory(sources) {
   const inventory = new Map();
   for (const source of sources) {
@@ -107,11 +122,13 @@ export function collectJavaScriptLockInventory(sources) {
           licenses: pkg.license ? [pkg.license] : [],
           scopes: [source.label],
           lockKinds: [pkg.lockKind],
+          platformFiltered: Boolean(pkg.platformFiltered),
         });
         continue;
       }
       existing.scopes = Array.from(new Set([...existing.scopes, source.label])).sort();
       existing.lockKinds = Array.from(new Set([...existing.lockKinds, pkg.lockKind])).sort();
+      existing.platformFiltered ||= Boolean(pkg.platformFiltered);
       if (pkg.license) {
         existing.licenses = Array.from(new Set([...existing.licenses, pkg.license])).sort();
       }

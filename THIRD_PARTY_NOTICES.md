@@ -273,7 +273,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @motionone/utils | 10.18.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40motionone%2Futils/v/10.18.0 |  |
 | @napi-rs/canvas-android-arm64 | 0.1.100 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-android-arm64/v/0.1.100 | License audited from the exact registry package manifest. |
 | @napi-rs/canvas-android-arm64 | 0.1.99 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-android-arm64/v/0.1.99 |  |
-| @napi-rs/canvas-darwin-arm64 | 0.1.100 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-darwin-arm64/v/0.1.100 |  |
+| @napi-rs/canvas-darwin-arm64 | 0.1.100 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-darwin-arm64/v/0.1.100 | License audited from the exact registry package manifest. |
 | @napi-rs/canvas-darwin-arm64 | 0.1.99 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-darwin-arm64/v/0.1.99 |  |
 | @napi-rs/canvas-darwin-x64 | 0.1.100 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-darwin-x64/v/0.1.100 | License audited from the exact registry package manifest. |
 | @napi-rs/canvas-darwin-x64 | 0.1.99 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas-darwin-x64/v/0.1.99 |  |
@@ -380,7 +380,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @tailwindcss/oxide-android-arm64 | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-android-arm64/v/4.3.0 | License audited from the exact registry package manifest. |
 | @tailwindcss/oxide-android-arm64 | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Foxide-android-arm64/v/4.3.1 |  |
 | @tailwindcss/oxide-darwin-arm64 | 4.2.2 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-darwin-arm64/v/4.2.2 |  |
-| @tailwindcss/oxide-darwin-arm64 | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-darwin-arm64/v/4.3.0 |  |
+| @tailwindcss/oxide-darwin-arm64 | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-darwin-arm64/v/4.3.0 | License audited from the exact registry package manifest. |
 | @tailwindcss/oxide-darwin-arm64 | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Foxide-darwin-arm64/v/4.3.1 |  |
 | @tailwindcss/oxide-darwin-x64 | 4.2.2 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-darwin-x64/v/4.2.2 |  |
 | @tailwindcss/oxide-darwin-x64 | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-darwin-x64/v/4.3.0 | License audited from the exact registry package manifest. |

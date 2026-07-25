@@ -6,6 +6,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  assertPlatformFilteredLicensesResolvable,
   collectJavaScriptLockInventory,
   packageCoordinate,
   resolvePackageLicense,
@@ -52,6 +53,7 @@ const npmCoordinateLicenseOverrides = new Map([
   ['@asamuzakjp/generational-cache@1.0.1', { license: 'MIT', note: 'License verified from the pnpm-installed package manifest.' }],
   ['@humanfs/types@0.15.0', { license: 'Apache-2.0', note: 'License verified from the pnpm-installed package manifest.' }],
   ['@napi-rs/canvas-android-arm64@0.1.100', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
+  ['@napi-rs/canvas-darwin-arm64@0.1.100', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
   ['@napi-rs/canvas-darwin-x64@0.1.100', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
   ['@napi-rs/canvas-linux-arm-gnueabihf@0.1.100', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
   ['@napi-rs/canvas-linux-arm64-gnu@0.1.100', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
@@ -62,6 +64,7 @@ const npmCoordinateLicenseOverrides = new Map([
   ['@napi-rs/canvas-win32-arm64-msvc@0.1.100', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
   ['@napi-rs/canvas-win32-x64-msvc@0.1.100', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
   ['@tailwindcss/oxide-android-arm64@4.3.0', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
+  ['@tailwindcss/oxide-darwin-arm64@4.3.0', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
   ['@tailwindcss/oxide-darwin-x64@4.3.0', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
   ['@tailwindcss/oxide-freebsd-x64@4.3.0', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
   ['@tailwindcss/oxide-linux-arm-gnueabihf@4.3.0', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
@@ -339,6 +342,10 @@ function collectJavaScriptEntries() {
       ? parseYAML(fs.readFileSync(path.join(repoRoot, source.pnpmLock), 'utf8'))
       : undefined,
   })));
+  assertPlatformFilteredLicensesResolvable(inventory, {
+    packageOverrides: npmLicenseOverrides,
+    coordinateOverrides: npmCoordinateLicenseOverrides,
+  });
   const installedLicenseEvidence = collectInstalledJavaScriptLicenseEvidence();
 
   for (const pkg of inventory) {

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  assertPlatformFilteredLicensesResolvable,
   collectJavaScriptLockInventory,
   packageCoordinate,
   parsePnpmPackageKey,
@@ -54,6 +55,7 @@ test('collectJavaScriptLockInventory retains npm and pnpm mismatches and pnpm-on
       licenses: [],
       scopes: ['Desktop shell'],
       lockKinds: ['pnpm'],
+      platformFiltered: false,
     },
   );
 });
@@ -77,6 +79,7 @@ test('collectJavaScriptLockInventory merges lock provenance without duplicating 
     licenses: ['MIT'],
     scopes: ['Desktop shell', 'Env App UI'],
     lockKinds: ['npm', 'pnpm'],
+    platformFiltered: false,
   }]);
 });
 
@@ -140,5 +143,32 @@ test('resolvePackageLicense rejects conflicting exact-coordinate metadata', () =
   assert.throws(
     () => resolvePackageLicense({ name: 'shared', version: '1.0.0', licenses: ['MIT', 'ISC'] }),
     /conflicting exact license metadata/u,
+  );
+});
+
+test('platform-filtered lock packages resolve without installed manifest evidence', () => {
+  const inventory = collectJavaScriptLockInventory([{
+    label: 'UI',
+    packageLock: {
+      packages: {
+        'node_modules/exact-platform-package': { version: '1.0.0', license: 'MIT' },
+      },
+    },
+    pnpmLock: {
+      lockfileVersion: '9.0',
+      packages: {
+        'exact-platform-package@1.0.0': { os: ['darwin'], cpu: ['arm64'] },
+        'audited-platform-package@2.0.0': { os: ['linux'], cpu: ['x64'] },
+      },
+    },
+  }]);
+  const coordinateOverrides = new Map([
+    ['audited-platform-package@2.0.0', { license: 'Apache-2.0', note: 'exact registry audit' }],
+  ]);
+
+  assert.doesNotThrow(() => assertPlatformFilteredLicensesResolvable(inventory, { coordinateOverrides }));
+  assert.throws(
+    () => assertPlatformFilteredLicensesResolvable(inventory, { coordinateOverrides: new Map() }),
+    /audited-platform-package@2\.0\.0/u,
   );
 });
