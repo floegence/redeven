@@ -225,6 +225,33 @@ describe('PluginCenterView', () => {
     expect(mount.querySelector('[data-plugin-center-details]')?.textContent).toContain('Disabled');
   });
 
+  it('moves desktop focus into the requested plugin details inspector', async () => {
+    const originalInnerWidth = window.innerWidth;
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 });
+    const mount = document.createElement('div');
+    document.body.append(mount);
+
+    dispose = render(() => (
+      <PluginCenterView
+        projection={containersPermissionProjection()}
+        loading={false}
+        selectedInventoryKey="catalog:containers"
+        focusRequest={1}
+        onCommand={vi.fn()}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces
+      />
+    ), mount);
+
+    await Promise.resolve();
+    await Promise.resolve();
+    const heading = mount.querySelector<HTMLHeadingElement>('[data-plugin-center-detail-heading]')!;
+    expect(document.activeElement).toBe(heading);
+    expect(heading.textContent).toBe('Containers');
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: originalInnerWidth });
+  });
+
   it('reopens mobile details for every explicit shell focus request while kept alive', async () => {
     const originalInnerWidth = window.innerWidth;
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 320 });
@@ -637,8 +664,8 @@ describe('PluginCenterView', () => {
       authorization: {
         ...base.authorization!,
         permissions: [
-          { ...base.authorization!.permissions[0], permissionID: 'workspace.read', group: 'other', methods: ['workspace.list'] },
-          { ...base.authorization!.permissions[0], permissionID: 'workspace.write', group: 'other', methods: ['workspace.write'] },
+          { ...base.authorization!.permissions[0], permissionID: 'workspace.read', group: 'other', requiredToOpen: false, methods: ['workspace.list'] },
+          { ...base.authorization!.permissions[0], permissionID: 'workspace.write', group: 'other', requiredToOpen: false, methods: ['workspace.write'] },
         ],
       },
     };
@@ -659,11 +686,16 @@ describe('PluginCenterView', () => {
 
     const readSwitch = mount.querySelector('[data-plugin-permission="workspace.read"] [role="switch"]') as HTMLButtonElement;
     const writeSwitch = mount.querySelector('[data-plugin-permission="workspace.write"] [role="switch"]') as HTMLButtonElement;
-    expect(readSwitch.getAttribute('aria-label')).toBe('Change workspace.read permission');
-    expect(writeSwitch.getAttribute('aria-label')).toBe('Change workspace.write permission');
+    expect(readSwitch.getAttribute('aria-label')).toBe('Change Workspace read permission');
+    expect(writeSwitch.getAttribute('aria-label')).toBe('Change Workspace write permission');
+    expect(mount.textContent).toContain('Optional');
+    const technicalDetails = mount.querySelectorAll<HTMLDetailsElement>('[data-plugin-permission-technical-details]');
+    expect(technicalDetails).toHaveLength(2);
+    expect([...technicalDetails].every((details) => !details.open)).toBe(true);
+    expect(technicalDetails[1].textContent).toContain('workspace.write');
     writeSwitch.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(document.body.textContent).toContain('Grant workspace.write to Example Toolbox?');
+    expect(document.body.textContent).toContain('Grant Workspace write to Example Toolbox?');
     findDocumentButton('Grant').click();
     await Promise.resolve();
     expect(onCommand).toHaveBeenCalledWith(expect.objectContaining({
@@ -671,6 +703,42 @@ describe('PluginCenterView', () => {
       pluginInstanceID: 'plugininst_toolbox',
       permissionID: 'workspace.write',
     }), expect.any(AbortSignal));
+  });
+
+  it('explains why a policy-managed optional permission cannot be granted', () => {
+    const policyProjection = containersPermissionProjection();
+    const item = policyProjection.items[0];
+    policyProjection.items[0] = {
+      ...item,
+      authorization: {
+        ...item.authorization!,
+        permissions: [{
+          ...item.authorization!.permissions[0],
+          requiredToOpen: false,
+          blockedByPolicy: true,
+          grantBlockedByPolicy: true,
+        }],
+      },
+    };
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginCenterView
+        projection={policyProjection}
+        loading={false}
+        selectedInventoryKey="catalog:containers"
+        onCommand={vi.fn()}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces
+      />
+    ), mount);
+
+    const permission = mount.querySelector<HTMLElement>('[data-plugin-permission="containers.read"]')!;
+    expect(permission.textContent).toContain('Optional');
+    expect(permission.textContent).toContain('Managed by policy');
+    expect(permission.textContent).toContain('cannot be granted under the current environment policy');
+    expect(permission.querySelector<HTMLButtonElement>('[role="switch"]')?.disabled).toBe(true);
   });
 
   it('keeps the projected permission state unchanged when a confirmed mutation fails', async () => {

@@ -13,7 +13,11 @@ import {
   X,
 } from '@floegence/floe-webapp-core/icons';
 import { Dialog } from '@floegence/floe-webapp-core/ui';
-import { pluginMutationOutcome } from '@floegence/redevplugin-ui';
+import {
+  PluginPlatformRequestError,
+  PluginTransportError,
+  pluginMutationOutcome,
+} from '@floegence/redevplugin-ui';
 
 import { useI18n } from '../i18n';
 import { ExternalPackageInspectionTerminalError } from './pluginApi';
@@ -41,6 +45,13 @@ type ExternalPluginInstallDialogProps = {
 
 type InstallStage = 'source' | 'review' | 'committing' | 'complete';
 
+type PluginInstallError = {
+  summary: string;
+  recovery?: string;
+  code?: string;
+  technical?: string;
+};
+
 export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogProps): JSX.Element {
   const i18n = useI18n();
   const [stage, setStage] = createSignal<InstallStage>('source');
@@ -52,7 +63,7 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
   const [committed, setCommitted] = createSignal<ExternalPluginCommitResult | null>(null);
   const [confirmed, setConfirmed] = createSignal(false);
   const [pending, setPending] = createSignal(false);
-  const [error, setError] = createSignal<string | null>(null);
+  const [error, setError] = createSignal<PluginInstallError | null>(null);
   const [commitNeedsReconciliation, setCommitNeedsReconciliation] = createSignal(false);
   const [refreshPending, setRefreshPending] = createSignal(false);
   const [refreshFailed, setRefreshFailed] = createSignal(false);
@@ -117,8 +128,8 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
       setConfirmed(false);
       setCommitNeedsReconciliation(false);
       setStage('review');
-    } catch {
-      if (!controller.signal.aborted) setError(i18n.t('uiCopy.plugin.external.inspectFailed'));
+    } catch (error) {
+      if (!controller.signal.aborted) setError(inspectErrorFromUnknown(error, i18n));
     } finally {
       if (operation === controller) {
         operation = undefined;
@@ -144,7 +155,7 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
       await refreshCommitted(result);
     } catch (error) {
       if (!controller.signal.aborted) {
-        setError(i18n.t('uiCopy.plugin.external.commitFailed'));
+        setError({ summary: i18n.t('uiCopy.plugin.external.commitFailed') });
         if (error instanceof ExternalPackageInspectionTerminalError) {
           setInspection(null);
           setConfirmed(false);
@@ -155,7 +166,7 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
           setStage('review');
         } else {
           setCommitNeedsReconciliation(true);
-          setError(i18n.t('uiCopy.plugin.external.commitOutcomeUnknown'));
+          setError({ summary: i18n.t('uiCopy.plugin.external.commitOutcomeUnknown') });
           setStage('review');
         }
       }
@@ -176,7 +187,7 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
       setRefreshFailed(false);
     } catch {
       setRefreshFailed(true);
-      setError(i18n.t('uiCopy.plugin.external.refreshFailed'));
+      setError({ summary: i18n.t('uiCopy.plugin.external.refreshFailed') });
     } finally {
       setRefreshPending(false);
     }
@@ -277,10 +288,28 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
       <div data-external-plugin-dialog class="space-y-5">
         <InstallProgress stage={stage()} isUpdate={isUpdate()} />
         <Show when={error()}>
-          <div role="alert" class="flex gap-2 rounded-md border border-destructive bg-background px-3 py-2.5 text-sm text-destructive">
-            <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0" />
-            <span>{error()}</span>
-          </div>
+          {(currentError) => (
+            <div role="alert" class="flex gap-2 rounded-md border border-destructive bg-background px-3 py-2.5 text-sm text-destructive">
+              <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0" />
+              <div class="min-w-0 flex-1">
+                <div class="font-medium">{currentError().summary}</div>
+                <Show when={currentError().recovery}>
+                  {(recovery) => <div class="mt-1 text-xs leading-5 text-muted-foreground">{recovery()}</div>}
+                </Show>
+                <Show when={currentError().code || currentError().technical}>
+                  <details class="mt-2 text-xs text-muted-foreground">
+                    <summary class="cursor-pointer font-medium text-foreground">{i18n.t('uiCopy.plugin.technicalDetails')}</summary>
+                    <Show when={currentError().code}>
+                      {(code) => <code class="mt-2 block break-all">{code()}</code>}
+                    </Show>
+                    <Show when={currentError().technical}>
+                      {(technical) => <code class="mt-1 block break-all">{technical()}</code>}
+                    </Show>
+                  </details>
+                </Show>
+              </div>
+            </div>
+          )}
         </Show>
         <Show when={stage() === 'source'}>
           <SourceForm
@@ -397,6 +426,85 @@ function validateExternalSource(
   return { valid: true };
 }
 
+function inspectErrorFromUnknown(error: unknown, i18n: ReturnType<typeof useI18n>): PluginInstallError {
+  const authoritative = error instanceof PluginTransportError && error.cause instanceof PluginPlatformRequestError
+    ? error.cause
+    : error;
+  const rawCode = authoritative instanceof PluginPlatformRequestError
+    ? authoritative.errorCode
+    : readSafeErrorField(authoritative, 'errorCode') ?? readSafeErrorField(authoritative, 'code');
+  const code = rawCode && /^[A-Z][A-Z0-9_]{2,127}$/.test(rawCode) ? rawCode : undefined;
+  const rawMessage = authoritative instanceof Error
+    ? authoritative.message
+    : readSafeErrorField(authoritative, 'message');
+  const message = sanitizePluginErrorText(rawMessage ?? '');
+  const transportFailure = error instanceof PluginTransportError || (!code && authoritative instanceof TypeError);
+  return {
+    summary: message || i18n.t('uiCopy.plugin.external.inspectFailed'),
+    recovery: inspectionRecovery(code, transportFailure, i18n),
+    code,
+    technical: message && message !== i18n.t('uiCopy.plugin.external.inspectFailed') ? message : undefined,
+  };
+}
+
+function inspectionRecovery(
+  code: string | undefined,
+  transportFailure: boolean,
+  i18n: ReturnType<typeof useI18n>,
+): string {
+  if (transportFailure) return i18n.t('uiCopy.plugin.external.inspectNetworkRecovery');
+  if (!code) return i18n.t('uiCopy.plugin.external.inspectGeneralRecovery');
+  if (
+    code === 'PLUGIN_MANIFEST_INVALID'
+    || code === 'PLUGIN_PACKAGE_INVALID'
+    || code === 'PLUGIN_PACKAGE_TOO_LARGE'
+    || code === 'PLUGIN_PACKAGE_PATH_FORBIDDEN'
+    || code === 'PLUGIN_CONTRACT_MISMATCH'
+    || code === 'PLUGIN_INVALID_REQUEST'
+  ) return i18n.t('uiCopy.plugin.external.inspectPackageRecovery');
+  if (
+    code === 'PLUGIN_SIGNATURE_INVALID'
+    || code === 'PLUGIN_TRUST_STATE_DENIED'
+    || code === 'PLUGIN_TRUST_VERIFICATION_REQUIRED'
+    || code === 'PLUGIN_TRUST_VERIFICATION_INVALID'
+    || code === 'PLUGIN_RELEASE_REF_VERIFICATION_FAILED'
+    || code === 'PLUGIN_RELEASE_REF_POLICY_DENIED'
+    || code === 'PLUGIN_ORIGIN_DENIED'
+    || code === 'PLUGIN_DISABLED_BY_POLICY'
+  ) return i18n.t('uiCopy.plugin.external.inspectPolicyRecovery');
+  if (code === 'PLUGIN_RUNTIME_UNAVAILABLE' || code === 'PLUGIN_FEATURE_NOT_CONFIGURED') {
+    return i18n.t('uiCopy.plugin.external.inspectRuntimeRecovery');
+  }
+  return i18n.t('uiCopy.plugin.external.inspectGeneralRecovery');
+}
+
+function readSafeErrorField(error: unknown, field: 'code' | 'errorCode' | 'message'): string | undefined {
+  if (!error || typeof error !== 'object') return undefined;
+  const value = (error as Record<string, unknown>)[field];
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function sanitizePluginErrorText(value: string): string {
+  const withoutSensitiveURLs = value.replace(/https?:\/\/[^\s<>"']+/gi, (rawURL) => {
+    const trailing = rawURL.match(/[),.;:!?]+$/)?.[0] ?? '';
+    const candidate = trailing ? rawURL.slice(0, -trailing.length) : rawURL;
+    try {
+      const parsed = new URL(candidate);
+      parsed.username = '';
+      parsed.password = '';
+      parsed.search = '';
+      parsed.hash = '';
+      return `${parsed.origin}${parsed.pathname}${trailing}`;
+    } catch {
+      return `[redacted URL]${trailing}`;
+    }
+  });
+  return withoutSensitiveURLs
+    .replace(/([?&](?:access_?token|api_?key|key|secret|password|authorization)=)[^&\s]+/gi, '$1[redacted]')
+    .trim()
+    .slice(0, 512);
+}
+
 function SourceForm(props: {
   sourceKind: ExternalPluginSourceKind;
   url: string;
@@ -491,7 +599,7 @@ function SourceForm(props: {
           />
           <Show when={validationVisible() && !validation().valid}>
             <span id="external-plugin-source-error" role="alert" class="block text-xs font-normal text-destructive">
-              {i18n.t('uiCopy.plugin.external.inspectFailed')}
+              {i18n.t('uiCopy.plugin.external.sourceInvalid')}
             </span>
           </Show>
         </label>
@@ -572,18 +680,7 @@ function InspectionReview(props: {
   const summary = () => props.inspection.security_summary;
   const signature = () => props.inspection.signature_assessment.state;
   const blocked = () => inspectionBlocked(props.inspection);
-  const facts = () => [
-    [i18n.t('uiCopy.plugin.external.permissions'), summary().permissions.length],
-    [i18n.t('uiCopy.plugin.external.methods'), summary().methods.length],
-    [i18n.t('uiCopy.plugin.external.capabilityContracts'), summary().capability_contracts.length],
-    [i18n.t('uiCopy.plugin.external.workers'), summary().workers.length],
-    [i18n.t('uiCopy.plugin.external.network'), summary().network.length],
-    [i18n.t('uiCopy.plugin.external.storage'), summary().storage.length],
-    [i18n.t('uiCopy.plugin.external.secretRefs'), summary().secret_refs.length],
-    [i18n.t('uiCopy.plugin.external.coreActions'), summary().core_actions.length],
-    [i18n.t('uiCopy.plugin.external.intents'), summary().intents.length],
-    [i18n.t('uiCopy.plugin.external.surfaces'), summary().surfaces.length],
-  ] as const;
+  const categorySummaries = () => securityCategorySummaries(summary(), i18n);
   const declarations = createMemo(() => securityDeclarations(summary(), props.previousSummary));
   const accessChanged = createMemo(() => declarations().some((declaration) => Boolean(declaration.change)));
   return (
@@ -632,16 +729,37 @@ function InspectionReview(props: {
       </Show>
       <div class="space-y-3 border-t pt-4" data-external-plugin-security-declarations>
         <div class="text-xs font-semibold uppercase text-muted-foreground">{i18n.t('uiCopy.plugin.external.declaredAccess')}</div>
-        <div class="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-5">
-          <For each={facts()}>
-            {(fact) => (
-              <div class="border-t pt-2">
-                <div class="text-[10px] font-semibold uppercase text-muted-foreground">{fact[0]}</div>
-                <div class="mt-0.5 text-sm font-semibold">{fact[1]}</div>
-              </div>
-            )}
-          </For>
-        </div>
+        <p class="text-sm leading-6 text-muted-foreground">{i18n.t('uiCopy.plugin.external.declaredAccessGuidance')}</p>
+        <Show
+          when={categorySummaries().length > 0}
+          fallback={<div class="rounded-md border bg-background px-3 py-2.5 text-sm text-muted-foreground">{i18n.t('uiCopy.plugin.external.noDeclaredAccess')}</div>}
+        >
+          <div class="grid gap-2 sm:grid-cols-2" data-external-plugin-purpose-summary>
+            <For each={categorySummaries()}>
+              {(category) => (
+                <div class="rounded-md border bg-background px-3 py-2.5">
+                  <div class="flex items-center justify-between gap-3">
+                    <div class="text-xs font-semibold uppercase text-muted-foreground">{securityCategoryLabel(category.category, i18n)}</div>
+                    <div class="flex items-center gap-1.5">
+                      <span class={cn(
+                        'rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                        category.risk === 'sensitive'
+                          ? 'bg-[var(--redeven-status-warning-soft)] text-[var(--redeven-status-warning-foreground)]'
+                          : 'bg-muted text-muted-foreground',
+                      )}>
+                        {category.risk === 'sensitive'
+                          ? i18n.t('uiCopy.plugin.external.reviewCarefully')
+                          : i18n.t('uiCopy.plugin.external.declaredCapability')}
+                      </span>
+                      <span class="text-sm font-semibold">{category.count}</span>
+                    </div>
+                  </div>
+                  <p class="mt-1 text-xs leading-5 text-muted-foreground">{category.purpose}</p>
+                </div>
+              )}
+            </For>
+          </div>
+        </Show>
         <For each={declarations()}>
           {(declaration) => (
             <details open={Boolean(declaration.change)} class={cn(
@@ -654,7 +772,7 @@ function InspectionReview(props: {
             )}>
               <summary class="flex min-h-10 cursor-pointer list-none flex-wrap items-center gap-2 px-3 py-2">
                 <span class="text-[10px] font-semibold uppercase text-muted-foreground">{securityCategoryLabel(declaration.category, i18n)}</span>
-                <code class="min-w-0 flex-1 break-all text-xs font-semibold">{declaration.identity}</code>
+                <span class="min-w-0 flex-1 text-xs font-semibold">{humanizeTechnicalIdentifier(declaration.identity)}</span>
                 <Show when={declaration.change}>
                   {(change) => (
                     <span class="rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase">
@@ -665,6 +783,7 @@ function InspectionReview(props: {
                 <ChevronDown class="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
               </summary>
               <div class="border-t px-3 py-2">
+                <code class="block break-all text-[11px] text-foreground">{declaration.identity}</code>
                 <For each={declaration.facts}>
                   {(fact) => <code class="mt-1 block break-all text-[11px] text-muted-foreground">{fact}</code>}
                 </For>
@@ -979,6 +1098,66 @@ function securityCategoryLabel(category: SecurityCategory, i18n: ReturnType<type
     surfaces: 'uiCopy.plugin.external.surfaces',
   };
   return i18n.t(keys[category]);
+}
+
+function securityCategorySummaries(
+  summary: PluginExternalPackageSecuritySummary,
+  i18n: ReturnType<typeof useI18n>,
+): readonly { category: SecurityCategory; count: number; purpose: string; risk: 'standard' | 'sensitive' }[] {
+  const categories: readonly { category: SecurityCategory; count: number }[] = [
+    { category: 'permissions', count: summary.permissions.length },
+    { category: 'methods', count: summary.methods.length },
+    { category: 'capability_contracts', count: summary.capability_contracts.length },
+    { category: 'workers', count: summary.workers.length },
+    { category: 'network', count: summary.network.length },
+    { category: 'storage', count: summary.storage.length },
+    { category: 'secret_refs', count: summary.secret_refs.length },
+    { category: 'core_actions', count: summary.core_actions.length },
+    { category: 'intents', count: summary.intents.length },
+    { category: 'surfaces', count: summary.surfaces.length },
+  ];
+  return categories.filter((category) => category.count > 0).map((category) => ({
+    ...category,
+    purpose: securityCategoryPurpose(category.category, i18n),
+    risk: securityCategoryIsSensitive(category.category, summary) ? 'sensitive' : 'standard',
+  }));
+}
+
+function securityCategoryPurpose(category: SecurityCategory, i18n: ReturnType<typeof useI18n>): string {
+  const keys: Record<SecurityCategory, Parameters<typeof i18n.t>[0]> = {
+    permissions: 'uiCopy.plugin.external.purpose.permissions',
+    methods: 'uiCopy.plugin.external.purpose.methods',
+    capability_contracts: 'uiCopy.plugin.external.purpose.capabilityContracts',
+    workers: 'uiCopy.plugin.external.purpose.workers',
+    network: 'uiCopy.plugin.external.purpose.network',
+    storage: 'uiCopy.plugin.external.purpose.storage',
+    secret_refs: 'uiCopy.plugin.external.purpose.secretRefs',
+    core_actions: 'uiCopy.plugin.external.purpose.coreActions',
+    intents: 'uiCopy.plugin.external.purpose.intents',
+    surfaces: 'uiCopy.plugin.external.purpose.surfaces',
+  };
+  return i18n.t(keys[category]);
+}
+
+function securityCategoryIsSensitive(
+  category: SecurityCategory,
+  summary: PluginExternalPackageSecuritySummary,
+): boolean {
+  if (category === 'methods') return summary.methods.some((method) => method.dangerous || method.effect !== 'read');
+  return category === 'workers'
+    || category === 'network'
+    || category === 'secret_refs'
+    || category === 'core_actions';
+}
+
+function humanizeTechnicalIdentifier(value: string): string {
+  const normalized = value
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[._:/@-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!normalized) return value;
+  return normalized.charAt(0).toLocaleUpperCase() + normalized.slice(1);
 }
 
 function list(values: readonly string[]): string {
