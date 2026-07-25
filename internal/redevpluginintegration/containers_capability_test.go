@@ -105,6 +105,61 @@ func TestContainersCapabilityReturnsPublishedBusinessError(t *testing.T) {
 	}
 }
 
+func TestContainerBusinessErrorClassifiesEngineAvailabilityFailures(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		cause error
+		code  string
+	}{
+		{name: "CLI unavailable", cause: containers.ErrCLIUnavailable, code: "CONTAINER_ENGINE_UNAVAILABLE"},
+		{name: "backend unreachable", cause: containers.ErrBackendUnreachable, code: "CONTAINER_ENGINE_UNAVAILABLE"},
+		{name: "engine timeout", cause: containers.ErrEngineTimeout, code: "CONTAINER_OPERATION_FAILED"},
+		{name: "deadline timeout", cause: context.DeadlineExceeded, code: "CONTAINER_OPERATION_FAILED"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			var businessError *capability.BusinessError
+			if err := containerBusinessError(tt.cause); !errors.As(err, &businessError) || businessError.Code != tt.code {
+				t.Fatalf("containerBusinessError() = %#v, want code %q", err, tt.code)
+			}
+			if len(businessError.Details) != 0 {
+				t.Fatalf("business error details = %#v, want redacted empty details", businessError.Details)
+			}
+		})
+	}
+}
+
+func TestContainerBusinessErrorsConformToVerifiedSignedContract(t *testing.T) {
+	t.Parallel()
+
+	contract := verifiedContainersContract(t).Contract
+	published := make(map[string]capabilitycontract.BusinessError, len(contract.Errors))
+	for _, candidate := range contract.Errors {
+		published[candidate.Code] = candidate
+	}
+	for _, cause := range []error{
+		containers.ErrCLIUnavailable,
+		containers.ErrBackendUnreachable,
+		containers.ErrEngineTimeout,
+		context.DeadlineExceeded,
+	} {
+		var businessError *capability.BusinessError
+		if err := containerBusinessError(cause); !errors.As(err, &businessError) {
+			t.Fatalf("containerBusinessError(%v) = %v, want capability.BusinessError", cause, err)
+		}
+		declared, ok := published[businessError.Code]
+		if !ok {
+			t.Fatalf("business error code %q is not declared by verified contract %s", businessError.Code, contract.ContractVersion)
+		}
+		if businessError.Message != declared.Message || len(businessError.Details) != 0 || declared.DetailsSchema != nil {
+			t.Fatalf("business error %#v does not match verified declaration %#v", businessError, declared)
+		}
+	}
+}
+
 func TestContainersCapabilityReturnsEveryPublishedResourceError(t *testing.T) {
 	adapter := newTestContainersCapabilityAdapter(&capabilityEngineClient{inspectErr: containers.ErrContainerNotFound})
 	_, err := adapter.Invoke(context.Background(), capability.Invocation{

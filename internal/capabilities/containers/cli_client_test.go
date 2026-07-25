@@ -49,11 +49,55 @@ func TestCLIClientStatusPropagatesDeadline(t *testing.T) {
 
 	client := &CLIClient{Runner: &contextCancelRunner{}, Timeout: 5 * time.Millisecond}
 	status, err := client.Status(context.Background(), EnginePodman)
+	if !errors.Is(err, ErrEngineTimeout) {
+		t.Fatalf("Status() error = %v, want ErrEngineTimeout", err)
+	}
+	if status.Available {
+		t.Fatalf("Status() = %+v, want unavailable timeout result", status)
+	}
+}
+
+func TestCLIClientStatusPropagatesParentDeadline(t *testing.T) {
+	t.Parallel()
+
+	client := &CLIClient{Runner: CommandRunnerFunc(func(context.Context, string, ...string) ([]byte, error) {
+		return nil, context.DeadlineExceeded
+	})}
+	status, err := client.Status(context.Background(), EngineDocker)
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Status() error = %v, want context.DeadlineExceeded", err)
 	}
 	if status.Available {
-		t.Fatalf("Status() = %+v, want unavailable timeout result", status)
+		t.Fatalf("Status() = %+v, want unavailable deadline result", status)
+	}
+}
+
+func TestCLIClientStatusClassifiesEngineAvailabilityFailures(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		err  error
+		want error
+	}{
+		{name: "CLI unavailable", err: ErrCLIUnavailable, want: ErrCLIUnavailable},
+		{name: "backend unreachable", err: errors.New("engine command exited"), want: ErrBackendUnreachable},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			client := &CLIClient{Runner: CommandRunnerFunc(func(context.Context, string, ...string) ([]byte, error) {
+				return nil, tt.err
+			})}
+
+			status, err := client.Status(context.Background(), EngineDocker)
+			if !errors.Is(err, tt.want) {
+				t.Fatalf("Status() error = %v, want %v", err, tt.want)
+			}
+			if status.Engine != EngineDocker || status.Available {
+				t.Fatalf("Status() = %+v, want unavailable Docker result", status)
+			}
+		})
 	}
 }
 
@@ -214,8 +258,8 @@ func TestCLIClientPullImageTimeoutCancelsRunner(t *testing.T) {
 
 	started := time.Now()
 	_, err := client.PullImage(context.Background(), EngineDocker, "ghcr.io/acme/api:latest")
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("PullImage() error = %v, want context.DeadlineExceeded", err)
+	if !errors.Is(err, ErrEngineTimeout) {
+		t.Fatalf("PullImage() error = %v, want ErrEngineTimeout", err)
 	}
 	if elapsed := time.Since(started); elapsed > time.Second {
 		t.Fatalf("PullImage() timeout took %s", elapsed)

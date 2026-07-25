@@ -680,9 +680,12 @@ func containerBusinessError(cause error) error {
 	code := "CONTAINER_OPERATION_FAILED"
 	message := "The container operation failed"
 	var details map[string]any
-	if errors.Is(cause, containers.ErrEngineUnavailable) {
+	if errors.Is(cause, containers.ErrEngineUnavailable) || errors.Is(cause, containers.ErrCLIUnavailable) || errors.Is(cause, containers.ErrBackendUnreachable) {
 		code = "CONTAINER_ENGINE_UNAVAILABLE"
 		message = "The selected container engine is unavailable"
+	} else if errors.Is(cause, containers.ErrEngineTimeout) || errors.Is(cause, context.DeadlineExceeded) {
+		code = "CONTAINER_OPERATION_FAILED"
+		message = "The container operation failed"
 	} else if errors.Is(cause, containers.ErrContainerNotFound) {
 		code = "CONTAINER_NOT_FOUND"
 		message = "The requested container does not exist"
