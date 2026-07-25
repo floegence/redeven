@@ -208,6 +208,20 @@ export const THEME_COLOR_EXCEPTIONS = Object.freeze([
       && lineSource.includes('terminalTheme'),
   ),
   exception(
+    'internal/envapp/ui_src/src/ui/widgets/TerminalSettingsDialog.tsx',
+    'terminal',
+    'The terminal theme preview renders the selected ANSI black and white palette entries as user-inspectable swatches.',
+    ({ value, source, offset, lineSource }) => {
+      const start = source.indexOf('function TerminalThemePreview');
+      const end = source.indexOf('\nfunction ', start + 1);
+      return ['black', 'white'].includes(value.toLowerCase())
+        && start >= 0
+        && offset > start
+        && (end < 0 || offset < end)
+        && /props\.colors\.(?:black|white)\b/u.test(lineSource);
+    },
+  ),
+  exception(
     'internal/envapp/ui_src/src/ui/widgets/TerminalSessionRuntime.tsx',
     'terminal',
     'The detached xterm runtime fallback is used only before terminal theme colors resolve.',
