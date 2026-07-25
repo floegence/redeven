@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync"
 )
 
 const binaryName = "redevplugin-runtime"
@@ -34,16 +35,15 @@ func InstallAt(root string) (func() error, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create ReDevPlugin runtime fixture: %w", err)
 	}
-	created := true
+	var cleanupOnce sync.Once
+	var cleanupErr error
 	cleanup := func() error {
-		if !created {
-			return nil
-		}
-		created = false
-		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("remove ReDevPlugin runtime fixture: %w", err)
-		}
-		return nil
+		cleanupOnce.Do(func() {
+			if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+				cleanupErr = fmt.Errorf("remove ReDevPlugin runtime fixture: %w", err)
+			}
+		})
+		return cleanupErr
 	}
 	if written, err := file.Write(header); err != nil || written != len(header) {
 		_ = file.Close()

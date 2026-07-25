@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"testing"
 )
 
@@ -73,6 +74,44 @@ func TestInstallAtPreservesMatchingFixture(t *testing.T) {
 	}
 	if err := firstCleanup(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestInstallAtCleanupIsConcurrentAndIdempotent(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux runtime admission fixture")
+	}
+	root := t.TempDir()
+	cleanup, err := InstallAt(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const callers = 2
+	start := make(chan struct{})
+	errs := make(chan error, callers)
+	var wg sync.WaitGroup
+	wg.Add(callers)
+	for range callers {
+		go func() {
+			defer wg.Done()
+			<-start
+			errs <- cleanup()
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("concurrent cleanup: %v", err)
+		}
+	}
+	if err := cleanup(); err != nil {
+		t.Fatalf("repeat cleanup: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, binaryName)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("runtime fixture stat error = %v, want not exist", err)
 	}
 }
 
