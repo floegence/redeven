@@ -54,10 +54,11 @@ func (c *CLIClient) Status(ctx context.Context, engine Engine) (EngineStatus, er
 	}
 	raw, err := c.run(ctx, engine, "version", "--format", "{{json .}}")
 	if err != nil {
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) ||
+			errors.Is(err, ErrCLIUnavailable) || errors.Is(err, ErrEngineTimeout) {
 			return EngineStatus{Engine: engine}, err
 		}
-		return EngineStatus{Engine: engine, Available: false}, nil
+		return EngineStatus{Engine: engine}, fmt.Errorf("%w: %s", ErrBackendUnreachable, engine)
 	}
 	version := extractVersion(raw)
 	return EngineStatus{Engine: engine, Available: true, Version: version}, nil
@@ -213,7 +214,13 @@ func (c *CLIClient) run(ctx context.Context, engine Engine, args ...string) ([]b
 	defer cancel()
 	out, err := runner.Run(runCtx, string(engine), args...)
 	if ctxErr := runCtx.Err(); ctxErr != nil {
-		return nil, ctxErr
+		if parentErr := ctx.Err(); parentErr != nil {
+			return nil, parentErr
+		}
+		return nil, fmt.Errorf("%w: %s", ErrEngineTimeout, engine)
+	}
+	if isCommandNotFound(err) {
+		return nil, fmt.Errorf("%w: %s", ErrCLIUnavailable, engine)
 	}
 	if len(out) > maxCommandOutputBytes {
 		return nil, ErrCommandOutputLimit
@@ -287,7 +294,7 @@ type execRunner struct{}
 
 func (execRunner) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
 	if _, err := exec.LookPath(name); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %s", ErrCLIUnavailable, name)
 	}
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Env = processenv.Current()
@@ -332,7 +339,7 @@ func (execRunner) Run(ctx context.Context, name string, args ...string) ([]byte,
 
 func (execRunner) Stream(ctx context.Context, name string, args []string, onStdoutLine func([]byte) error) error {
 	if _, err := exec.LookPath(name); err != nil {
-		return err
+		return fmt.Errorf("%w: %s", ErrCLIUnavailable, name)
 	}
 	if onStdoutLine == nil {
 		return errors.New("stdout line handler is required")
@@ -382,6 +389,14 @@ func (execRunner) Stream(ctx context.Context, name string, args []string, onStdo
 		return classifyCommandFailure(args, waitErr)
 	}
 	return nil
+}
+
+func isCommandNotFound(err error) bool {
+	if err == nil || errors.Is(err, ErrCLIUnavailable) || errors.Is(err, exec.ErrNotFound) {
+		return err != nil
+	}
+	var execError *exec.Error
+	return errors.As(err, &execError)
 }
 
 func classifyCommandFailure(args []string, cause error) error {

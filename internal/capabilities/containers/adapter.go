@@ -10,6 +10,9 @@ import (
 
 var (
 	ErrEngineUnavailable     = errors.New("container engine is unavailable")
+	ErrCLIUnavailable        = errors.New("container engine CLI is unavailable")
+	ErrBackendUnreachable    = errors.New("container engine backend is unreachable")
+	ErrEngineTimeout         = errors.New("container engine timed out")
 	ErrInvalidEngine         = errors.New("container engine is invalid")
 	ErrInvalidMethod         = errors.New("container method is invalid")
 	ErrCommandOutputLimit    = errors.New("container command output limit exceeded")
