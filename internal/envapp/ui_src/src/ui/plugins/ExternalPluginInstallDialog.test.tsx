@@ -166,6 +166,37 @@ function committedResult(source: ExternalPluginInspection): ExternalPluginCommit
   };
 }
 
+function externalUpdateItem(
+  source: ExternalPluginInspection = inspection(),
+): PluginInventoryItem & { pluginInstanceID: string; managementRevision: number } {
+  return {
+    inventoryKey: 'instance:plugini_external_12345678',
+    pluginID: source.plugin_id,
+    pluginInstanceID: 'plugini_external_12345678',
+    displayName: 'Example Toolbox',
+    description: 'External plugin',
+    iconFallback: 'generic',
+    publisher: 'Example Publisher',
+    version: '1.2.3',
+    managementRevision: 9,
+    lifecycleState: 'disabled',
+    trustBadge: 'unsigned',
+    pinned: false,
+    externalPackage: {
+      signatureAssessment: source.signature_assessment,
+      sourceProvenance: {
+        kind: 'package_upload',
+        upload_id: 'upload_previous_12345678',
+        package_sha256: packageHash,
+        resolved_at: '2026-07-23T10:00:00Z',
+      },
+      executionApproval: source.execution_approval,
+      updateEligibility: source.update_eligibility,
+      securitySummary: source.security_summary,
+    },
+  };
+}
+
 function renderDialog(overrides: Partial<Parameters<typeof ExternalPluginInstallDialog>[0]> = {}) {
   const mount = document.createElement('div');
   document.body.append(mount);
@@ -545,10 +576,11 @@ describe('ExternalPluginInstallDialog', () => {
     expect(copy).toContain('Previous');
     const declarations = document.querySelectorAll<HTMLDetailsElement>('[data-external-plugin-security-declarations] > details');
     expect(declarations.length).toBeGreaterThan(0);
-    expect([...declarations].every((details) => !details.open)).toBe(true);
-    expect([...declarations].some((details) => details.querySelector('summary')?.textContent?.includes('Added'))).toBe(true);
-    expect([...declarations].some((details) => details.querySelector('summary')?.textContent?.includes('Changed'))).toBe(true);
-    expect([...declarations].some((details) => details.querySelector('summary')?.textContent?.includes('Removed'))).toBe(true);
+    const declarationFor = (change: string) => [...declarations]
+      .find((details) => details.querySelector('summary')?.textContent?.includes(change));
+    expect(declarationFor('Added')?.open).toBe(false);
+    expect(declarationFor('Changed')?.open).toBe(true);
+    expect(declarationFor('Removed')?.open).toBe(false);
   });
 
   it('explains declared capability purposes before collapsed technical evidence', async () => {
@@ -734,32 +766,7 @@ describe('ExternalPluginInstallDialog', () => {
   });
 
   it('starts an upload update from a fresh file selection and inspection bound to the installed revision', async () => {
-    const updateItem = {
-      inventoryKey: 'instance:plugini_external_12345678',
-      pluginID: 'com.example.toolbox',
-      pluginInstanceID: 'plugini_external_12345678',
-      displayName: 'Example Toolbox',
-      description: 'External plugin',
-      iconFallback: 'generic',
-      publisher: 'Example Publisher',
-      version: '1.2.3',
-      managementRevision: 9,
-      lifecycleState: 'disabled',
-      trustBadge: 'unsigned',
-      pinned: false,
-      externalPackage: {
-        signatureAssessment: inspection().signature_assessment,
-        sourceProvenance: {
-          kind: 'package_upload',
-          upload_id: 'upload_previous_12345678',
-          package_sha256: packageHash,
-          resolved_at: '2026-07-23T10:00:00Z',
-        },
-        executionApproval: inspection().execution_approval,
-        updateEligibility: inspection().update_eligibility,
-        securitySummary: inspection().security_summary,
-      },
-    } satisfies PluginInventoryItem;
+    const updateItem = externalUpdateItem();
     const nextInspection = {
       ...inspection(),
       intent: {
@@ -794,6 +801,48 @@ describe('ExternalPluginInstallDialog', () => {
       },
     }, expect.any(AbortSignal));
     expect(document.body.textContent).toContain(confirmationDigest);
+    const identity = document.querySelector<HTMLElement>('[data-external-plugin-identity]')!;
+    const hashes = document.querySelector<HTMLDetailsElement>('[data-external-plugin-hashes]')!;
+    expect(identity.textContent).not.toContain(packageHash);
+    expect(hashes.open).toBe(false);
+    expect(hashes.textContent).toContain(packageHash);
+  });
+
+  it('uses update-specific copy for progress, unknown reconciliation, and completion', async () => {
+    const updateItem = externalUpdateItem();
+    const inspected = {
+      ...inspection(),
+      intent: {
+        action: 'update' as const,
+        plugin_instance_id: updateItem.pluginInstanceID!,
+        expected_management_revision: updateItem.managementRevision!,
+      },
+    };
+    let resolveCommit!: (result: ExternalPluginCommitResult) => void;
+    const onCommit = vi.fn()
+      .mockRejectedValueOnce(new Error('query transport unavailable'))
+      .mockImplementationOnce(() => new Promise<ExternalPluginCommitResult>((resolve) => { resolveCommit = resolve; }));
+    renderDialog({ updateItem, onInspect: vi.fn(async () => inspected), onCommit });
+
+    const upload = document.querySelector<HTMLInputElement>('input[type="file"]')!;
+    Object.defineProperty(upload, 'files', { configurable: true, value: [new File(['update'], 'toolbox-1.2.4.redevplugin')] });
+    upload.dispatchEvent(new Event('change', { bubbles: true }));
+    button('Review package').click();
+    await flush();
+    document.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
+    button('Update plugin').click();
+    await flush();
+
+    expect(document.body.textContent).toContain('Update status could not be confirmed');
+    expect(document.body.textContent).not.toContain('Installation status could not be confirmed');
+    button('Retry').click();
+    await flush();
+    expect(document.body.textContent).toContain('Completing update...');
+    expect(document.body.textContent).not.toContain('Completing installation...');
+    resolveCommit(committedResult(inspected));
+    await flush();
+    expect(document.body.textContent).toContain('Example Toolbox was updated');
+    expect(document.body.textContent).not.toContain('Example Toolbox was installed');
   });
 
   it('checks the latest eligible GitHub release instead of pinning the previously resolved tag', async () => {
