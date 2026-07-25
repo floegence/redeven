@@ -39,4 +39,3 @@ describe('filesystemRoots', () => {
     expect(parseFilesystemPathInput('/var', ctx.homePathAbs)).toBe('/var');
   });
 });
-

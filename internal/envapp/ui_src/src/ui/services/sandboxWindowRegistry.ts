@@ -25,4 +25,3 @@ export function getSandboxWindowInfo(source: MessageEventSource | null): Sandbox
   }
   return info;
 }
-
