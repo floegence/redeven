@@ -30,7 +30,7 @@
       "rollbackTitle": "Die Aktualisierung der Agent-Daten wurde zurückgesetzt",
       "rollbackDescription": "Die Aktualisierung wurde nicht abgeschlossen. Der vorherige Floret Store bleibt bestehen.",
       "committedTitle": "Die Aktualisierung der Agent-Daten muss verifiziert werden",
-      "committedDescription": "Die Aktualisierung wurde festgeschrieben, aber Redeven konnte noch nicht verifizieren, dass Flower die Daten verwenden kann.",
+      "committedDescription": "Die Aktualisierung wurde festgeschrieben, aber Redeven konnte noch nicht verifizieren, dass Flower den Floret Store verwenden kann.",
       "cancelledTitle": "Die Prüfung der Agent-Daten wurde unterbrochen",
       "cancelledDescription": "Redeven hat die Prüfung beendet, bevor Flower geöffnet wurde.",
       "startupTitle": "Flower konnte nicht gestartet werden",
@@ -40,7 +40,7 @@
     },
     "data": {
       "unopened": "Flower bleibt geschlossen, bis diese Prüfung abgeschlossen ist. Redeven rekonstruiert keinen Zustand von Agent-Unterhaltungen.",
-      "preserved": "Der vorhandene Floret Store wurde unverändert beibehalten.",
+      "preserved": "Der vorhandene Floret Store wurde beibehalten.",
       "rolledBack": "Der Aktualisierungsversuch wurde zurückgesetzt und der vorherige Floret Store bleibt bestehen.",
       "committed": "Eine Datenaktualisierung wurde festgeschrieben. Redeven prüft sie erneut, bevor Flower geöffnet wird."
     },
@@ -75,7 +75,7 @@
     "settings": {
       "title": "Diagnose des Agent-Speichers",
       "description": "Die Verfügbarkeit ist nach der jeweils für einen Speicher verantwortlichen Komponente gruppiert.",
-      "floretDescription": "Floret ist für zugelassene Agent-Unterhaltungen und deren Lebenszykluszustand verantwortlich.",
+      "floretDescription": "Floret ist für aufgenommene Agent-Unterhaltungen und deren Lebenszykluszustand verantwortlich.",
       "redevenOwner": "Redeven-Produktspeicher",
       "redevenDescription": "Diese Flower-Prüfung untersucht keine Redeven-eigenen Produktspeicher.",
       "upstreamOwner": "Andere vorgelagerte Speicher",

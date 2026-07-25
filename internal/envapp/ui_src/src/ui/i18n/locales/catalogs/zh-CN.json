@@ -75,9 +75,9 @@
     "settings": {
       "title": "Agent 存储诊断",
       "description": "可用性信息按负责各个存储的组件分组显示。",
-      "floretDescription": "Floret 负责已接纳的 Agent 对话和生命周期状态。",
+      "floretDescription": "Floret 拥有已接纳的 Agent 对话和生命周期状态。",
       "redevenOwner": "Redeven 产品存储",
-      "redevenDescription": "此 Flower 检查不会检查由 Redeven 负责的产品存储。",
+      "redevenDescription": "此 Flower 检查不会检查归 Redeven 所有的产品存储。",
       "upstreamOwner": "其他上游存储",
       "upstreamDescription": "每个上游组件都保有自己的维护权限。",
       "notChecked": "未在此处检查",

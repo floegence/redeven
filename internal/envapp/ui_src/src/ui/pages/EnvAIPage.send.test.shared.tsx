@@ -298,6 +298,18 @@ vi.mock('@floegence/floe-webapp-core/ui', async () => ({
 
 vi.mock('../services/localApi', () => ({
   fetchLocalApiJSON: mocks.fetchLocalApiJSONMock,
+  uploadLocalApiAttachment: vi.fn(),
+  LocalApiError: class LocalApiError extends Error {
+    readonly code: string;
+    readonly data: unknown;
+
+    constructor(args: Readonly<{ message: string; code?: string; data?: unknown }>) {
+      super(args.message);
+      this.name = 'LocalApiError';
+      this.code = args.code ?? '';
+      this.data = args.data;
+    }
+  },
 }));
 
 vi.mock('../protocol/redeven_v1', () => ({

@@ -26,11 +26,11 @@
       "ioTitle": "Les données Agent ne sont pas disponibles",
       "ioDescription": "Redeven n’a pas pu terminer une opération de stockage et s’est arrêté avant d’ouvrir Flower.",
       "configurationTitle": "La configuration du stockage Agent ne correspond pas",
-      "configurationDescription": "Le déploiement actuel ne peut pas revendiquer en toute sécurité la gestion de ce Floret Store.",
+      "configurationDescription": "Le déploiement actuel ne peut pas prendre en charge ce Floret Store en toute sécurité.",
       "rollbackTitle": "Un retour arrière a été effectué sur la mise à jour des données Agent",
       "rollbackDescription": "La mise à jour n’a pas abouti. Le Floret Store précédent reste en place.",
       "committedTitle": "La mise à jour des données Agent doit être validée",
-      "committedDescription": "La mise à jour a été appliquée, mais Redeven n’a pas encore pu confirmer que Flower peut l’utiliser.",
+      "committedDescription": "La mise à jour a été enregistrée, mais Redeven n’a pas encore pu vérifier que Flower peut l’utiliser.",
       "cancelledTitle": "La vérification des données Agent a été interrompue",
       "cancelledDescription": "Redeven a arrêté la vérification avant d’ouvrir Flower.",
       "startupTitle": "Flower n’a pas pu démarrer",
@@ -42,7 +42,7 @@
       "unopened": "Flower reste fermé jusqu’à la fin de cette vérification. Redeven ne reconstruit aucun état de conversation Agent.",
       "preserved": "Le Floret Store existant a été conservé en l’état.",
       "rolledBack": "La tentative de mise à jour a fait l’objet d’un retour arrière et le Floret Store précédent reste en place.",
-      "committed": "Une mise à jour des données a été appliquée. Redeven l’examinera de nouveau avant d’ouvrir Flower."
+      "committed": "Une mise à jour des données a été enregistrée. Redeven l’examinera de nouveau avant d’ouvrir Flower."
     },
     "actions": {
       "retry": "Vérifier de nouveau",
@@ -67,7 +67,7 @@
       "statusReady": "Prêt",
       "statusBlocked": "Bloqué",
       "retry": "Nouvelle vérification autorisée",
-      "committed": "Mise à jour des données appliquée",
+      "committed": "Mise à jour des données enregistrée",
       "rolledBack": "Retour arrière effectué sur la mise à jour des données",
       "yes": "Oui",
       "no": "Non"
