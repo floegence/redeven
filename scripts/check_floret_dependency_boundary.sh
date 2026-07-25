@@ -28,6 +28,10 @@ esac
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 ROOT_DIR=$(cd -- "$SCRIPT_DIR/.." &> /dev/null && pwd)
 PARENT_DIR=$(cd -- "$ROOT_DIR/.." &> /dev/null && pwd)
+FLORET_MODULE="github.com/floegence/floret"
+FLORET_VERSION="v0.28.0"
+FLORET_SUM="h1:RRhCknd0+yY78lcqGdCYlrLby6zhKCzPChUF4zzzrzA="
+FLORET_GO_MOD_SUM="h1:u2oNhsSB8OppYPHo/cTmXITL+3pxv7ckjYDiq3SjoCg="
 
 cd "$ROOT_DIR"
 export GOWORK=off
@@ -65,7 +69,7 @@ check_no_go_workspace_files() {
 }
 
 check_go_module_boundary() {
-  local matches
+  local matches module_contract
 
   if matches=$(rg -n --pcre2 'github\.com/floegence/floret[^\n]*=>[[:space:]]*(\.{1,2}/|/|file:|[A-Za-z]:)' go.mod go.sum 2>/dev/null); then
     printf '%s\n' "$matches"
@@ -78,9 +82,22 @@ check_go_module_boundary() {
   fi
 
   if rg -q --pcre2 '"github\.com/floegence/floret(/[^"]*)?"' --glob '*.go' .; then
-    if ! rg -q --pcre2 '^\s*github\.com/floegence/floret\s+v[0-9]+\.[0-9]+\.[0-9]+' go.mod; then
-      fail "Go source imports Floret but go.mod does not require a published semver module."
+    if ! module_contract=$(go list -mod=readonly -m -f '{{.Path}}|{{.Version}}|{{if .Replace}}{{.Replace.Path}}|{{.Replace.Version}}{{end}}' "$FLORET_MODULE"); then
+      fail "The published Floret module cannot be resolved."
+    elif [ "$module_contract" != "$FLORET_MODULE|$FLORET_VERSION|" ]; then
+      fail "Floret module contract is $module_contract, want $FLORET_MODULE|$FLORET_VERSION| with no replacement."
     fi
+  fi
+
+  if ! rg -Fxq "$FLORET_MODULE $FLORET_VERSION $FLORET_SUM" go.sum; then
+    fail "go.sum is missing the exact published Floret $FLORET_VERSION checksum."
+  fi
+  if ! rg -Fxq "$FLORET_MODULE $FLORET_VERSION/go.mod $FLORET_GO_MOD_SUM" go.sum; then
+    fail "go.sum is missing the exact published Floret $FLORET_VERSION go.mod checksum."
+  fi
+  if matches=$(rg -n "^${FLORET_MODULE//./\\.} v" go.sum | rg -v " ${FLORET_VERSION//./\\.}(/go.mod)? "); then
+    printf '%s\n' "$matches"
+    fail "go.sum contains an unexpected Floret version."
   fi
 
   echo "[INFO] Go module boundary checked"
@@ -202,7 +219,7 @@ check_floret_capability_bootstrap_boundary() {
 		--glob '*.go' \
 		--glob '!**/*_test.go' \
 		--glob '!internal/ai/floret_store_maintenance.go' \
-		'InspectSQLiteStore|VerifySQLiteStore|MigrateSQLiteStore|OpenSQLiteStore|SQLiteStore(Inspection|Verification|MigrationRequest|MigrationResult|MaintenanceError|OpenRequest)' \
+		'StartSQLiteStore|InspectSQLiteStore|VerifySQLiteStore|MigrateSQLiteStore|OpenSQLiteStore|SQLiteStartup(Request|Result|Progress|Phase)|SQLiteStore(Inspection|Verification|MigrationRequest|MigrationResult|MaintenanceError|OpenRequest)' \
 		internal 2>/dev/null); then
 		printf '%s\n' "$matches"
 		fail "Raw Floret Store maintenance contracts must stay inside the public maintenance adapter."

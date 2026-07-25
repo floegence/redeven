@@ -47,9 +47,10 @@ canonical-schema verification.
 ## Upstream-owned schemas
 
 Floret owns Agent journal storage and its schema lifecycle. Redeven supplies a
-path only to the published Inspect, Verify, Migrate, and inspection-bound Open
-entrypoints in the AI composition root; it does not query, patch, version, or
-migrate Floret tables.
+path and selects compatible automatic migration only through the published
+`StartSQLiteStore` entrypoint in the AI composition root. Floret owns
+inspection, migration, verification, exact open, and bounded stale-state
+recovery; Redeven does not query, patch, version, or migrate Floret tables.
 Redeven migrations may call public Floret maintenance APIs only when moving a
 Redeven-owned field across the ownership boundary, and must complete their
 product preflight before making such an upstream effect.
@@ -80,6 +81,6 @@ opens an upstream database directly to manufacture a cross-store transaction.
 - `redeven:internal/codeapp/codeapp.go:156` - Opens product stores during service composition before returning the Code App service.
 - `redeven:okf/architecture/ai-readiness-lifecycle.md:1` - Defines isolated AI startup and generation failure behavior.
 - `redeven:internal/ai/threadstore/store.go:43` - Preflights and automatically migrates the Redeven-owned AI product database.
-- `redeven:internal/ai/floret_bootstrap.go:432` - Opens the Floret-owned store only through the published runtime API.
+- `redeven:internal/ai/floret_store_maintenance.go:77` - Starts the Floret-owned store only through the published `StartSQLiteStore` API.
 - `redeven:scripts/check_floret_dependency_boundary.sh:118` - Rejects Redeven access to Floret-owned storage schemas and raw SQL.
 - `redeven:okf/ai/flower-storage-ownership-and-migrations.md:1` - Defines the specialized cross-owner Flower product migration.

@@ -43,4 +43,4 @@ Renderers do not persist a competing canonical selection, accept arbitrary color
 - `redeven:internal/envapp/ui_src/src/ui/App.tsx:62` - Env App configures published shell presets and synchronizes the mounted Floe theme service.
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppThemePicker.tsx:1` - Env App exposes the same source and published per-mode preset choices in standalone web and Desktop-embedded sessions.
 - `redeven:desktop/package.json:60` - Desktop consumes published Floe Webapp Core v0.39.3.
-- `redeven:internal/envapp/ui_src/package.json:22` - Env App consumes published Floe Webapp Boot, Core, and Protocol v0.39.3.
+- `redeven:internal/envapp/ui_src/package.json:22` - Env App consumes published Floe Webapp Boot, Core, and Protocol v0.39.9.

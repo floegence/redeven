@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	flruntime "github.com/floegence/floret/runtime"
@@ -16,7 +17,7 @@ import (
 
 // The opaque fixtures were created by blank modules pinned to the named
 // published tags using only runtime.OpenSQLiteStore and host capability APIs.
-func TestFloretStoreMaintenanceOpensPublishedFixturesAcrossRestart(t *testing.T) {
+func TestFloretStoreStartupOpensPublishedFixturesAcrossRestart(t *testing.T) {
 	fixtures := []struct {
 		version  string
 		threadID flruntime.ThreadID
@@ -40,16 +41,8 @@ func TestFloretStoreMaintenanceOpensPublishedFixturesAcrossRestart(t *testing.T)
 			}
 			expandGzipFixture(t, fixturePath, storePath)
 
-			inspection, err := flruntime.InspectSQLiteStore(context.Background(), storePath)
-			if err != nil {
-				t.Fatalf("inspect published fixture: %v", err)
-			}
-			if inspection.State != flruntime.SQLiteStoreStateCurrent || inspection.Observed.Version != "16" {
-				t.Fatalf("published fixture inspection state=%s schema=%s", inspection.State, inspection.Observed.Version)
-			}
-
 			for restart := 0; restart < 2; restart++ {
-				store, err := openMaintainedFloretStore(context.Background(), storePath, publicFloretStoreMaintenanceAPI{})
+				store, err := openMaintainedFloretStore(context.Background(), storePath, publicFloretStoreStartupAPI{})
 				if err != nil {
 					t.Fatalf("restart %d open: %v", restart, err)
 				}
@@ -101,552 +94,219 @@ func expandGzipFixture(t *testing.T, sourcePath string, destinationPath string) 
 	}
 }
 
-type fakeFloretStoreMaintenanceAPI struct {
-	inspectResults []flruntime.SQLiteStoreInspection
-	inspectErrors  []error
-	verifyResult   flruntime.SQLiteStoreVerification
-	verifyErr      error
-	migrateResult  flruntime.SQLiteStoreMigrationResult
-	migrateErr     error
-	openErr        error
-
-	inspectCalls int
-	verifyCalls  int
-	migrateCalls int
-	openCalls    int
-	migrateReq   flruntime.SQLiteStoreMigrationRequest
-	openReq      flruntime.SQLiteStoreOpenRequest
+type fakeFloretStoreStartupAPI struct {
+	result   flruntime.SQLiteStartupResult
+	err      error
+	updates  []flruntime.SQLiteStartupProgress
+	requests []flruntime.SQLiteStartupRequest
 }
 
-func (f *fakeFloretStoreMaintenanceAPI) Inspect(context.Context, string, ...flruntime.SQLiteStoreOption) (flruntime.SQLiteStoreInspection, error) {
-	index := f.inspectCalls
-	f.inspectCalls++
-	if index < len(f.inspectErrors) && f.inspectErrors[index] != nil {
-		return flruntime.SQLiteStoreInspection{}, f.inspectErrors[index]
+func (f *fakeFloretStoreStartupAPI) Start(_ context.Context, _ string, request flruntime.SQLiteStartupRequest, _ ...flruntime.SQLiteStoreOption) (flruntime.SQLiteStartupResult, error) {
+	f.requests = append(f.requests, request)
+	for _, update := range f.updates {
+		if request.Progress != nil {
+			request.Progress(update)
+		}
 	}
-	if index >= len(f.inspectResults) {
-		return flruntime.SQLiteStoreInspection{}, errors.New("unexpected inspect")
-	}
-	return f.inspectResults[index], nil
+	return f.result, f.err
 }
 
-func (f *fakeFloretStoreMaintenanceAPI) Verify(context.Context, string, ...flruntime.SQLiteStoreOption) (flruntime.SQLiteStoreVerification, error) {
-	f.verifyCalls++
-	return f.verifyResult, f.verifyErr
-}
-
-func (f *fakeFloretStoreMaintenanceAPI) Migrate(_ context.Context, _ string, request flruntime.SQLiteStoreMigrationRequest, _ ...flruntime.SQLiteStoreOption) (flruntime.SQLiteStoreMigrationResult, error) {
-	f.migrateCalls++
-	f.migrateReq = request
-	result := f.migrateResult
-	if result.OperationID == "request" {
-		result.OperationID = request.OperationID
+func TestFloretStoreStartupUsesStandardCompatibleEntryPoint(t *testing.T) {
+	store := flruntime.NewMemoryStore()
+	defer store.Close()
+	inspection := flruntime.SQLiteStoreInspection{State: flruntime.SQLiteStoreStateCurrent}
+	verification := flruntime.SQLiteStoreVerification{Inspection: inspection}
+	migration := flruntime.SQLiteStoreMigrationResult{
+		OperationID: "derived-by-floret", Committed: true,
 	}
-	return result, f.migrateErr
-}
-
-func (f *fakeFloretStoreMaintenanceAPI) Open(_ context.Context, _ string, request flruntime.SQLiteStoreOpenRequest, _ ...flruntime.SQLiteStoreOption) (*flruntime.Store, error) {
-	f.openCalls++
-	f.openReq = request
-	if f.openErr != nil {
-		return nil, f.openErr
+	fake := &fakeFloretStoreStartupAPI{
+		result: flruntime.SQLiteStartupResult{
+			Store: store, Inspection: &inspection, Verification: &verification, Migration: &migration,
+		},
+		updates: []flruntime.SQLiteStartupProgress{
+			{Phase: flruntime.SQLiteStartupInspecting},
+			{Phase: flruntime.SQLiteStartupMigrating},
+			{Phase: flruntime.SQLiteStartupMigrating, Maintenance: &flruntime.SQLiteStoreMaintenanceProgress{}},
+			{Phase: flruntime.SQLiteStartupVerifying},
+			{Phase: flruntime.SQLiteStartupOpening},
+		},
 	}
-	return flruntime.NewMemoryStore(), nil
-}
-
-func TestFloretStoreMaintenanceInitializesMissingAndEmptyWithoutMigration(t *testing.T) {
-	for _, state := range []flruntime.SQLiteStoreState{flruntime.SQLiteStoreStateMissing, flruntime.SQLiteStoreStateEmpty} {
-		t.Run(string(state), func(t *testing.T) {
-			inspection := initialFloretStoreInspection(state)
-			api := &fakeFloretStoreMaintenanceAPI{inspectResults: []flruntime.SQLiteStoreInspection{inspection}}
-			store, err := openMaintainedFloretStore(context.Background(), "/opaque/floret.sqlite", api)
-			if err != nil {
-				t.Fatalf("open maintained Store: %v", err)
-			}
-			defer store.Close()
-			if api.inspectCalls != 1 || api.verifyCalls != 0 || api.migrateCalls != 0 || api.openCalls != 1 {
-				t.Fatalf("calls inspect=%d verify=%d migrate=%d open=%d", api.inspectCalls, api.verifyCalls, api.migrateCalls, api.openCalls)
-			}
-			if api.openReq.ExpectedState != state || api.openReq.ExpectedSchema != (flruntime.StoreSchemaIdentity{}) {
-				t.Fatalf("open request=%+v", api.openReq)
-			}
-		})
-	}
-}
-
-func TestFloretStoreMaintenanceVerifiesCurrentBeforeInspectionBoundOpen(t *testing.T) {
-	inspection := currentFloretStoreInspection()
-	api := &fakeFloretStoreMaintenanceAPI{
-		inspectResults: []flruntime.SQLiteStoreInspection{inspection},
-		verifyResult:   validFloretStoreVerification(),
-	}
-	store, err := openMaintainedFloretStore(context.Background(), "/opaque/floret.sqlite", api)
+	var phases []FloretStoreStartupPhase
+	got, err := openMaintainedFloretStore(context.Background(), "/opaque/floret.sqlite", observingFloretStoreStartupAPI{
+		next: fake, progress: func(phase FloretStoreStartupPhase) { phases = append(phases, phase) },
+	})
 	if err != nil {
 		t.Fatalf("open maintained Store: %v", err)
 	}
-	defer store.Close()
-	if api.verifyCalls != 1 || api.migrateCalls != 0 || api.openCalls != 1 {
-		t.Fatalf("calls verify=%d migrate=%d open=%d", api.verifyCalls, api.migrateCalls, api.openCalls)
+	if got != store {
+		t.Fatal("startup did not return the Store produced by Floret")
 	}
-	if api.openReq.ExpectedState != flruntime.SQLiteStoreStateCurrent || api.openReq.ExpectedSchema != inspection.Observed {
-		t.Fatalf("open request=%+v", api.openReq)
+	if len(fake.requests) != 1 {
+		t.Fatalf("startup calls=%d, want 1", len(fake.requests))
 	}
-}
-
-func TestFloretStoreMaintenanceMigratesExactObservedSchemaThenVerifies(t *testing.T) {
-	before := upgradeableFloretStoreInspection()
-	after := currentFloretStoreInspection()
-	api := &fakeFloretStoreMaintenanceAPI{
-		inspectResults: []flruntime.SQLiteStoreInspection{before},
-		migrateResult: flruntime.SQLiteStoreMigrationResult{
-			OperationID: "request", Mode: flruntime.SQLiteStoreMigrationApply,
-			Before: before, After: after, Status: flruntime.SQLiteStoreMaintenanceReady,
-			Changed: true, Committed: true,
-		},
-		verifyResult: validFloretStoreVerification(),
+	request := fake.requests[0]
+	if request.MigrationPolicy != flruntime.SQLiteMigrationApplyCompatible {
+		t.Fatalf("migration policy=%q", request.MigrationPolicy)
 	}
-	store, err := openMaintainedFloretStore(context.Background(), "/opaque/floret.sqlite", api)
-	if err != nil {
-		t.Fatalf("open maintained Store: %v", err)
+	if request.MigrationOperationID != "" {
+		t.Fatalf("Redeven must let Floret derive migration identity, got %q", request.MigrationOperationID)
 	}
-	defer store.Close()
-	if api.migrateReq.Mode != flruntime.SQLiteStoreMigrationApply || api.migrateReq.ExpectedSchema != before.Observed {
-		t.Fatalf("migration request=%+v", api.migrateReq)
+	wantPhases := []FloretStoreStartupPhase{
+		FloretStoreStartupInspecting,
+		FloretStoreStartupMigrating,
+		FloretStoreStartupVerifying,
 	}
-	if api.inspectCalls != 1 || api.migrateCalls != 1 || api.verifyCalls != 1 || api.openCalls != 1 {
-		t.Fatalf("calls inspect=%d migrate=%d verify=%d open=%d", api.inspectCalls, api.migrateCalls, api.verifyCalls, api.openCalls)
+	if !reflect.DeepEqual(phases, wantPhases) {
+		t.Fatalf("phases=%v, want %v", phases, wantPhases)
 	}
 }
 
-func TestFloretStoreMaintenanceReinspectsStaleMigrationBeforeProceeding(t *testing.T) {
-	before := upgradeableFloretStoreInspection()
-	api := &fakeFloretStoreMaintenanceAPI{
-		inspectResults: []flruntime.SQLiteStoreInspection{before, currentFloretStoreInspection()},
-		migrateResult: flruntime.SQLiteStoreMigrationResult{
-			OperationID: "request", Mode: flruntime.SQLiteStoreMigrationApply,
-			Status: flruntime.SQLiteStoreMaintenanceFailed, Reason: flruntime.SQLiteStoreReasonInspectionStale,
-			Retryable: true, SafeToRetry: true,
-		},
-		migrateErr: &flruntime.SQLiteStoreMaintenanceError{
-			Operation: flruntime.SQLiteStoreOperationMigrate,
-			Reason:    flruntime.SQLiteStoreReasonInspectionStale,
-			Retryable: true, SafeToRetry: true,
-		},
-		verifyResult: validFloretStoreVerification(),
-	}
-	store, err := openMaintainedFloretStore(context.Background(), "/opaque/floret.sqlite", api)
-	if err != nil {
-		t.Fatalf("open after fresh current inspection: %v", err)
-	}
-	defer store.Close()
-	if api.inspectCalls != 2 || api.migrateCalls != 1 || api.verifyCalls != 1 || api.openCalls != 1 {
-		t.Fatalf("calls inspect=%d migrate=%d verify=%d open=%d", api.inspectCalls, api.migrateCalls, api.verifyCalls, api.openCalls)
-	}
-}
-
-func TestFloretStoreMaintenanceMigrationFailuresRemainTypedAndClosed(t *testing.T) {
-	before := upgradeableFloretStoreInspection()
+func TestFloretStoreStartupProjectsTypedPublicFailures(t *testing.T) {
 	tests := []struct {
 		name      string
-		result    flruntime.SQLiteStoreMigrationResult
+		state     flruntime.SQLiteStoreState
+		operation flruntime.SQLiteStoreMaintenanceOperation
+		reason    flruntime.SQLiteStoreReason
+		retryable bool
+		safe      bool
 		wantClass FloretStoreStartupClass
 	}{
-		{
-			name: "rolled_back",
-			result: flruntime.SQLiteStoreMigrationResult{
-				OperationID: "request", Mode: flruntime.SQLiteStoreMigrationApply,
-				Status: flruntime.SQLiteStoreMaintenanceFailed, Reason: flruntime.SQLiteStoreReasonMigrationFailed,
-				RolledBack: true, SafeToRetry: true,
-			},
-			wantClass: FloretStoreStartupMigrationRolledBack,
-		},
-		{
-			name: "committed_but_unverified",
-			result: flruntime.SQLiteStoreMigrationResult{
-				OperationID: "request", Mode: flruntime.SQLiteStoreMigrationApply,
-				Status: flruntime.SQLiteStoreMaintenanceFailed, Reason: flruntime.SQLiteStoreReasonMigrationFailed,
-				Committed: true,
-			},
-			wantClass: FloretStoreStartupPostCommitVerification,
-		},
+		{name: "busy", state: flruntime.SQLiteStoreStateBusy, operation: flruntime.SQLiteStoreOperationInspect, reason: flruntime.SQLiteStoreReasonBusy, retryable: true, safe: true, wantClass: FloretStoreStartupTemporarilyBlocked},
+		{name: "future", state: flruntime.SQLiteStoreStateFuture, operation: flruntime.SQLiteStoreOperationOpen, reason: flruntime.SQLiteStoreReasonNewerReader, wantClass: FloretStoreStartupUpdateRequired},
+		{name: "unsupported", state: flruntime.SQLiteStoreStateUnsupportedOlder, operation: flruntime.SQLiteStoreOperationOpen, reason: flruntime.SQLiteStoreReasonUnsupported, wantClass: FloretStoreStartupUnsupportedStore},
+		{name: "corrupt", state: flruntime.SQLiteStoreStateCorrupt, operation: flruntime.SQLiteStoreOperationOpen, reason: flruntime.SQLiteStoreReasonCorrupt, wantClass: FloretStoreStartupIntegrityError},
+		{name: "lease mismatch", state: flruntime.SQLiteStoreStateCurrent, operation: flruntime.SQLiteStoreOperationOpen, reason: flruntime.SQLiteStoreReasonLeaseMismatch, wantClass: FloretStoreStartupConfigurationError},
+		{name: "permission", state: flruntime.SQLiteStoreStatePermissionDenied, operation: flruntime.SQLiteStoreOperationInspect, reason: flruntime.SQLiteStoreReasonPermission, wantClass: FloretStoreStartupEnvironmentPermissionError},
+		{name: "io", state: flruntime.SQLiteStoreStateIOError, operation: flruntime.SQLiteStoreOperationInspect, reason: flruntime.SQLiteStoreReasonIO, retryable: true, safe: true, wantClass: FloretStoreStartupIOError},
+		{name: "cancelled", operation: flruntime.SQLiteStoreOperationInspect, reason: flruntime.SQLiteStoreReasonCancelled, retryable: true, safe: true, wantClass: FloretStoreStartupCancelled},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			api := &fakeFloretStoreMaintenanceAPI{
-				inspectResults: []flruntime.SQLiteStoreInspection{before, before},
-				migrateResult:  test.result,
-				migrateErr: &flruntime.SQLiteStoreMaintenanceError{
-					Operation:   flruntime.SQLiteStoreOperationMigrate,
-					Reason:      flruntime.SQLiteStoreReasonMigrationFailed,
-					SafeToRetry: test.result.SafeToRetry,
+			inspection := flruntime.SQLiteStoreInspection{State: test.state}
+			fake := &fakeFloretStoreStartupAPI{
+				result: flruntime.SQLiteStartupResult{Inspection: &inspection},
+				err: &flruntime.SQLiteStoreMaintenanceError{
+					Operation: test.operation, Reason: test.reason,
+					Retryable: test.retryable, SafeToRetry: test.safe,
 				},
 			}
-			_, err := openMaintainedFloretStore(context.Background(), "/opaque/floret.sqlite", api)
-			_ = assertFloretStoreStartupClass(t, err, test.wantClass)
-			if api.verifyCalls != 0 || api.openCalls != 0 {
-				t.Fatalf("failure proceeded to verify/open: verify=%d open=%d", api.verifyCalls, api.openCalls)
+			_, err := openMaintainedFloretStore(context.Background(), "/opaque/floret.sqlite", fake)
+			startupErr := assertFloretStoreStartupClass(t, err, test.wantClass)
+			if startupErr.State != test.state || startupErr.Operation != test.operation || startupErr.Reason != test.reason {
+				t.Fatalf("startup error=%+v", startupErr)
+			}
+			if startupErr.Retryable != test.retryable {
+				t.Fatalf("Retryable=%v, want %v", startupErr.Retryable, test.retryable)
+			}
+			wantSafe := test.safe && (test.reason == flruntime.SQLiteStoreReasonBusy || test.reason == flruntime.SQLiteStoreReasonInspectionStale || test.reason == flruntime.SQLiteStoreReasonIO)
+			if startupErr.SafeToRetry != wantSafe {
+				t.Fatalf("SafeToRetry=%v, want %v", startupErr.SafeToRetry, wantSafe)
 			}
 		})
 	}
 }
 
-func TestFloretStoreMaintenanceMapsPublicFactsWithoutStringParsing(t *testing.T) {
+func TestFloretStoreStartupPreservesMigrationSettlementFacts(t *testing.T) {
 	tests := []struct {
 		name      string
-		inspect   flruntime.SQLiteStoreInspection
+		migration flruntime.SQLiteStoreMigrationResult
+		operation flruntime.SQLiteStoreMaintenanceOperation
 		wantClass FloretStoreStartupClass
 		wantSafe  bool
+		wantState flruntime.SQLiteStoreState
 	}{
-		{name: "busy", inspect: flruntime.SQLiteStoreInspection{State: flruntime.SQLiteStoreStateBusy, LeasePolicyState: flruntime.SQLiteStoreLeasePolicyUnavailable, Reason: flruntime.SQLiteStoreReasonBusy, SafeToRetry: true}, wantClass: FloretStoreStartupTemporarilyBlocked, wantSafe: true},
-		{name: "future", inspect: flruntime.SQLiteStoreInspection{State: flruntime.SQLiteStoreStateFuture, LeasePolicyState: flruntime.SQLiteStoreLeasePolicyUnavailable, Reason: flruntime.SQLiteStoreReasonNewerReader}, wantClass: FloretStoreStartupUpdateRequired},
-		{name: "unsupported", inspect: flruntime.SQLiteStoreInspection{State: flruntime.SQLiteStoreStateUnsupportedOlder, LeasePolicyState: flruntime.SQLiteStoreLeasePolicyUnavailable, Reason: flruntime.SQLiteStoreReasonUnsupported}, wantClass: FloretStoreStartupUnsupportedStore},
-		{name: "drifted", inspect: flruntime.SQLiteStoreInspection{State: flruntime.SQLiteStoreStateDrifted, LeasePolicyState: flruntime.SQLiteStoreLeasePolicyUnavailable, Reason: flruntime.SQLiteStoreReasonFingerprint}, wantClass: FloretStoreStartupIntegrityError},
-		{name: "corrupt", inspect: flruntime.SQLiteStoreInspection{State: flruntime.SQLiteStoreStateCorrupt, LeasePolicyState: flruntime.SQLiteStoreLeasePolicyUnavailable, Reason: flruntime.SQLiteStoreReasonCorrupt}, wantClass: FloretStoreStartupIntegrityError},
-		{name: "permission", inspect: flruntime.SQLiteStoreInspection{State: flruntime.SQLiteStoreStatePermissionDenied, LeasePolicyState: flruntime.SQLiteStoreLeasePolicyUnavailable, Reason: flruntime.SQLiteStoreReasonPermission}, wantClass: FloretStoreStartupEnvironmentPermissionError},
-		{name: "io_retryable", inspect: flruntime.SQLiteStoreInspection{State: flruntime.SQLiteStoreStateIOError, LeasePolicyState: flruntime.SQLiteStoreLeasePolicyUnavailable, Reason: flruntime.SQLiteStoreReasonIO, SafeToRetry: true}, wantClass: FloretStoreStartupIOError, wantSafe: true},
-		{name: "lease_mismatch", inspect: func() flruntime.SQLiteStoreInspection {
-			value := currentFloretStoreInspection()
-			value.LeasePolicyState = flruntime.SQLiteStoreLeasePolicyMismatch
-			value.Reason = flruntime.SQLiteStoreReasonLeaseMismatch
-			return value
-		}(), wantClass: FloretStoreStartupConfigurationError},
-		{name: "unknown", inspect: flruntime.SQLiteStoreInspection{State: flruntime.SQLiteStoreState("new_state"), SafeToRetry: true}, wantClass: FloretStoreStartupContractError},
+		{
+			name: "committed but startup failed",
+			migration: flruntime.SQLiteStoreMigrationResult{
+				OperationID: "migration-committed", Committed: true,
+				Reason: flruntime.SQLiteStoreReasonMigrationFailed, Retryable: true,
+				After: flruntime.SQLiteStoreInspection{State: flruntime.SQLiteStoreStateCurrent},
+			},
+			operation: flruntime.SQLiteStoreOperationVerify,
+			wantClass: FloretStoreStartupPostCommitVerification,
+			wantState: flruntime.SQLiteStoreStateCurrent,
+		},
+		{
+			name: "rolled back",
+			migration: flruntime.SQLiteStoreMigrationResult{
+				OperationID: "migration-rolled-back", RolledBack: true,
+				Reason: flruntime.SQLiteStoreReasonMigrationFailed, Retryable: true, SafeToRetry: true,
+			},
+			operation: flruntime.SQLiteStoreOperationMigrate,
+			wantClass: FloretStoreStartupMigrationRolledBack,
+			wantSafe:  true,
+			wantState: flruntime.SQLiteStoreStateUpgradeable,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			api := &fakeFloretStoreMaintenanceAPI{inspectResults: []flruntime.SQLiteStoreInspection{test.inspect}}
-			_, err := openMaintainedFloretStore(context.Background(), "/opaque/floret.sqlite", api)
+			inspection := flruntime.SQLiteStoreInspection{State: flruntime.SQLiteStoreStateUpgradeable}
+			fake := &fakeFloretStoreStartupAPI{
+				result: flruntime.SQLiteStartupResult{Inspection: &inspection, Migration: &test.migration},
+				err: &flruntime.SQLiteStoreMaintenanceError{
+					Operation: test.operation,
+					Reason:    flruntime.SQLiteStoreReasonMigrationFailed,
+					Retryable: true,
+				},
+			}
+			_, err := openMaintainedFloretStore(context.Background(), "/opaque/floret.sqlite", fake)
 			startupErr := assertFloretStoreStartupClass(t, err, test.wantClass)
+			if startupErr.OperationID != test.migration.OperationID || startupErr.Committed != test.migration.Committed || startupErr.RolledBack != test.migration.RolledBack {
+				t.Fatalf("startup error=%+v", startupErr)
+			}
+			if startupErr.State != test.wantState {
+				t.Fatalf("State=%s, want %s", startupErr.State, test.wantState)
+			}
 			if startupErr.SafeToRetry != test.wantSafe {
 				t.Fatalf("SafeToRetry=%v, want %v", startupErr.SafeToRetry, test.wantSafe)
 			}
-			if api.openCalls != 0 {
-				t.Fatalf("open calls=%d, want 0", api.openCalls)
-			}
 		})
 	}
 }
 
-func TestFloretStoreMaintenanceCancellationAndUnknownErrorsFailClosed(t *testing.T) {
+func TestFloretStoreStartupFailsClosedOnInvalidAdapterResults(t *testing.T) {
 	tests := []struct {
-		name      string
-		err       error
-		wantClass FloretStoreStartupClass
+		name string
+		api  floretStoreStartupAPI
 	}{
-		{
-			name: "cancelled",
-			err: &flruntime.SQLiteStoreMaintenanceError{
-				Operation:   flruntime.SQLiteStoreOperationInspect,
-				Reason:      flruntime.SQLiteStoreReasonCancelled,
-				SafeToRetry: true,
-				Err:         context.Canceled,
-			},
-			wantClass: FloretStoreStartupCancelled,
-		},
-		{name: "unknown_error", err: errors.New("opaque failure"), wantClass: FloretStoreStartupContractError},
-		{
-			name: "unknown_typed_reason",
-			err: &flruntime.SQLiteStoreMaintenanceError{
-				Operation: flruntime.SQLiteStoreOperationInspect,
-				Reason:    flruntime.SQLiteStoreReason("new_reason"),
-			},
-			wantClass: FloretStoreStartupContractError,
-		},
+		{name: "unknown error", api: &fakeFloretStoreStartupAPI{err: errors.New("opaque failure")}},
+		{name: "unknown typed reason", api: &fakeFloretStoreStartupAPI{err: &flruntime.SQLiteStoreMaintenanceError{Operation: flruntime.SQLiteStoreOperationOpen, Reason: flruntime.SQLiteStoreReason("future_reason")}}},
+		{name: "success without Store", api: &fakeFloretStoreStartupAPI{}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			api := &fakeFloretStoreMaintenanceAPI{inspectErrors: []error{test.err}}
-			_, err := openMaintainedFloretStore(context.Background(), "/opaque/floret.sqlite", api)
-			startupErr := assertFloretStoreStartupClass(t, err, test.wantClass)
-			if test.wantClass == FloretStoreStartupCancelled && !errors.Is(startupErr, context.Canceled) {
-				t.Fatalf("cancelled error does not unwrap context cancellation: %v", startupErr)
-			}
-			if startupErr.SafeToRetry {
-				t.Fatal("cancelled or unknown startup result must not authorize an automatic retry")
-			}
+			_, err := openMaintainedFloretStore(context.Background(), "/opaque/floret.sqlite", test.api)
+			_ = assertFloretStoreStartupClass(t, err, FloretStoreStartupContractError)
 		})
 	}
-}
-
-func TestFloretStoreMaintenanceRejectsInvalidVerificationAndMigrationContracts(t *testing.T) {
-	t.Run("failed verification check", func(t *testing.T) {
-		verification := validFloretStoreVerification()
-		verification.Checks[0].Passed = false
-		api := &fakeFloretStoreMaintenanceAPI{
-			inspectResults: []flruntime.SQLiteStoreInspection{currentFloretStoreInspection()},
-			verifyResult:   verification,
-		}
-		_, err := openMaintainedFloretStore(context.Background(), "/opaque/floret.sqlite", api)
-		_ = assertFloretStoreStartupClass(t, err, FloretStoreStartupContractError)
-		if api.openCalls != 0 {
-			t.Fatal("invalid verification proceeded to open")
-		}
-	})
-
 	for _, test := range []struct {
-		name   string
-		mutate func(*flruntime.SQLiteStoreVerification)
+		name string
+		ctx  context.Context
+		path string
+		api  floretStoreStartupAPI
 	}{
-		{name: "verification current marked missing", mutate: func(value *flruntime.SQLiteStoreVerification) { value.Inspection.Exists = false }},
-		{name: "verification current marked empty", mutate: func(value *flruntime.SQLiteStoreVerification) { value.Inspection.Empty = true }},
-		{name: "verification current has busy reason", mutate: func(value *flruntime.SQLiteStoreVerification) {
-			value.Inspection.Reason = flruntime.SQLiteStoreReasonBusy
-		}},
+		{name: "nil context", path: "/opaque/floret.sqlite", api: &fakeFloretStoreStartupAPI{}},
+		{name: "empty path", ctx: context.Background(), api: &fakeFloretStoreStartupAPI{}},
+		{name: "nil API", ctx: context.Background(), path: "/opaque/floret.sqlite"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			verification := validFloretStoreVerification()
-			test.mutate(&verification)
-			api := &fakeFloretStoreMaintenanceAPI{
-				inspectResults: []flruntime.SQLiteStoreInspection{currentFloretStoreInspection()},
-				verifyResult:   verification,
-			}
-			_, err := openMaintainedFloretStore(context.Background(), "/opaque/floret.sqlite", api)
+			_, err := openMaintainedFloretStore(test.ctx, test.path, test.api)
 			_ = assertFloretStoreStartupClass(t, err, FloretStoreStartupContractError)
-			if api.openCalls != 0 {
-				t.Fatal("inconsistent verification inspection proceeded to open")
-			}
 		})
-	}
-
-	t.Run("mismatched migration operation", func(t *testing.T) {
-		before := upgradeableFloretStoreInspection()
-		api := &fakeFloretStoreMaintenanceAPI{
-			inspectResults: []flruntime.SQLiteStoreInspection{before},
-			migrateResult: flruntime.SQLiteStoreMigrationResult{
-				OperationID: "wrong", Mode: flruntime.SQLiteStoreMigrationApply,
-				Before: before, After: currentFloretStoreInspection(),
-				Status: flruntime.SQLiteStoreMaintenanceReady, Changed: true, Committed: true,
-			},
-		}
-		_, err := openMaintainedFloretStore(context.Background(), "/opaque/floret.sqlite", api)
-		_ = assertFloretStoreStartupClass(t, err, FloretStoreStartupContractError)
-		if api.verifyCalls != 0 || api.openCalls != 0 {
-			t.Fatal("invalid migration result proceeded to verify/open")
-		}
-	})
-
-	t.Run("verification diverges from committed result", func(t *testing.T) {
-		before := upgradeableFloretStoreInspection()
-		after := currentFloretStoreInspection()
-		verification := validFloretStoreVerification()
-		verification.Inspection.Observed = flruntime.StoreSchemaIdentity{Version: "v-other", Fingerprint: "fingerprint-other"}
-		verification.Inspection.Current = verification.Inspection.Observed
-		api := &fakeFloretStoreMaintenanceAPI{
-			inspectResults: []flruntime.SQLiteStoreInspection{before},
-			migrateResult: flruntime.SQLiteStoreMigrationResult{
-				OperationID: "request", Mode: flruntime.SQLiteStoreMigrationApply,
-				Before: before, After: after, Status: flruntime.SQLiteStoreMaintenanceReady,
-				Changed: true, Committed: true,
-			},
-			verifyResult: verification,
-		}
-		_, err := openMaintainedFloretStore(context.Background(), "/opaque/floret.sqlite", api)
-		_ = assertFloretStoreStartupClass(t, err, FloretStoreStartupPostCommitVerification)
-		if api.inspectCalls != 2 || api.openCalls != 0 {
-			t.Fatalf("divergent verification inspect=%d open=%d", api.inspectCalls, api.openCalls)
-		}
-	})
-
-	t.Run("failed migration reports unsettled change", func(t *testing.T) {
-		before := upgradeableFloretStoreInspection()
-		api := &fakeFloretStoreMaintenanceAPI{
-			inspectResults: []flruntime.SQLiteStoreInspection{before},
-			migrateResult: flruntime.SQLiteStoreMigrationResult{
-				OperationID: "request", Mode: flruntime.SQLiteStoreMigrationApply,
-				Status: flruntime.SQLiteStoreMaintenanceFailed, Changed: true,
-				Reason: flruntime.SQLiteStoreReasonMigrationFailed,
-			},
-			migrateErr: &flruntime.SQLiteStoreMaintenanceError{
-				Operation: flruntime.SQLiteStoreOperationMigrate,
-				Reason:    flruntime.SQLiteStoreReasonMigrationFailed,
-			},
-		}
-		_, err := openMaintainedFloretStore(context.Background(), "/opaque/floret.sqlite", api)
-		_ = assertFloretStoreStartupClass(t, err, FloretStoreStartupContractError)
-		if api.inspectCalls != 1 || api.verifyCalls != 0 || api.openCalls != 0 {
-			t.Fatalf("invalid failure continued: inspect=%d verify=%d open=%d", api.inspectCalls, api.verifyCalls, api.openCalls)
-		}
-	})
-
-	for _, test := range []struct {
-		name   string
-		mutate func(*flruntime.SQLiteStoreMaintenanceError)
-	}{
-		{name: "failed migration error operation disagrees", mutate: func(value *flruntime.SQLiteStoreMaintenanceError) {
-			value.Operation = flruntime.SQLiteStoreOperationVerify
-		}},
-		{name: "failed migration error reason disagrees", mutate: func(value *flruntime.SQLiteStoreMaintenanceError) { value.Reason = flruntime.SQLiteStoreReasonBusy }},
-		{name: "failed migration error retry facts disagree", mutate: func(value *flruntime.SQLiteStoreMaintenanceError) { value.Retryable = true }},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			before := upgradeableFloretStoreInspection()
-			maintenanceErr := &flruntime.SQLiteStoreMaintenanceError{
-				Operation: flruntime.SQLiteStoreOperationMigrate,
-				Reason:    flruntime.SQLiteStoreReasonMigrationFailed,
-			}
-			test.mutate(maintenanceErr)
-			api := &fakeFloretStoreMaintenanceAPI{
-				inspectResults: []flruntime.SQLiteStoreInspection{before},
-				migrateResult: flruntime.SQLiteStoreMigrationResult{
-					OperationID: "request", Mode: flruntime.SQLiteStoreMigrationApply,
-					Status: flruntime.SQLiteStoreMaintenanceFailed, Reason: flruntime.SQLiteStoreReasonMigrationFailed,
-				},
-				migrateErr: maintenanceErr,
-			}
-			_, err := openMaintainedFloretStore(context.Background(), "/opaque/floret.sqlite", api)
-			_ = assertFloretStoreStartupClass(t, err, FloretStoreStartupContractError)
-			if api.inspectCalls != 1 || api.verifyCalls != 0 || api.openCalls != 0 {
-				t.Fatalf("inconsistent failure continued: inspect=%d verify=%d open=%d", api.inspectCalls, api.verifyCalls, api.openCalls)
-			}
-		})
-	}
-}
-
-func TestFloretStoreMaintenanceReinspectsOpenFailureWithoutReusingThePlan(t *testing.T) {
-	inspection := currentFloretStoreInspection()
-	api := &fakeFloretStoreMaintenanceAPI{
-		inspectResults: []flruntime.SQLiteStoreInspection{inspection, inspection},
-		verifyResult:   validFloretStoreVerification(),
-		openErr: &flruntime.SQLiteStoreMaintenanceError{
-			Operation: flruntime.SQLiteStoreOperationOpen,
-			Reason:    flruntime.SQLiteStoreReasonInspectionStale,
-			Retryable: true, SafeToRetry: true,
-		},
-	}
-	_, err := openMaintainedFloretStore(context.Background(), "/opaque/floret.sqlite", api)
-	_ = assertFloretStoreStartupClass(t, err, FloretStoreStartupTemporarilyBlocked)
-	if api.inspectCalls != 2 || api.openCalls != 1 {
-		t.Fatalf("calls inspect=%d open=%d", api.inspectCalls, api.openCalls)
-	}
-}
-
-func TestFloretStoreMaintenanceReinspectsInitializeOpenFailure(t *testing.T) {
-	api := &fakeFloretStoreMaintenanceAPI{
-		inspectResults: []flruntime.SQLiteStoreInspection{
-			initialFloretStoreInspection(flruntime.SQLiteStoreStateMissing),
-			currentFloretStoreInspection(),
-		},
-		openErr: &flruntime.SQLiteStoreMaintenanceError{
-			Operation: flruntime.SQLiteStoreOperationOpen,
-			Reason:    flruntime.SQLiteStoreReasonInspectionStale,
-			Retryable: true, SafeToRetry: true,
-		},
-	}
-	_, err := openMaintainedFloretStore(context.Background(), "/opaque/floret.sqlite", api)
-	_ = assertFloretStoreStartupClass(t, err, FloretStoreStartupTemporarilyBlocked)
-	if api.inspectCalls != 2 || api.verifyCalls != 0 || api.migrateCalls != 0 || api.openCalls != 1 {
-		t.Fatalf("calls inspect=%d verify=%d migrate=%d open=%d", api.inspectCalls, api.verifyCalls, api.migrateCalls, api.openCalls)
-	}
-}
-
-func TestFloretStoreMaintenanceRejectsMalformedInspectionFacts(t *testing.T) {
-	tests := []struct {
-		name       string
-		inspection flruntime.SQLiteStoreInspection
-	}{
-		{name: "current marked missing", inspection: func() flruntime.SQLiteStoreInspection {
-			value := currentFloretStoreInspection()
-			value.Exists = false
-			return value
-		}()},
-		{name: "missing with current reason", inspection: flruntime.SQLiteStoreInspection{State: flruntime.SQLiteStoreStateMissing, Kind: flruntime.SQLiteStoreKindUnknown, LeasePolicyState: flruntime.SQLiteStoreLeasePolicyUnavailable, Reason: flruntime.SQLiteStoreReasonCurrent}},
-		{name: "upgradeable lease mismatch", inspection: func() flruntime.SQLiteStoreInspection {
-			value := upgradeableFloretStoreInspection()
-			value.LeasePolicyState = flruntime.SQLiteStoreLeasePolicyMismatch
-			value.Reason = flruntime.SQLiteStoreReasonMigrationAvailable
-			return value
-		}()},
-		{name: "upgradeable lease matches", inspection: func() flruntime.SQLiteStoreInspection {
-			value := upgradeableFloretStoreInspection()
-			value.LeasePolicyState = flruntime.SQLiteStoreLeasePolicyMatches
-			return value
-		}()},
-		{name: "upgradeable unknown lease state", inspection: func() flruntime.SQLiteStoreInspection {
-			value := upgradeableFloretStoreInspection()
-			value.LeasePolicyState = flruntime.SQLiteStoreLeasePolicyState("future_value")
-			return value
-		}()},
-		{name: "unknown state with lease mismatch", inspection: flruntime.SQLiteStoreInspection{State: flruntime.SQLiteStoreState("new_state"), LeasePolicyState: flruntime.SQLiteStoreLeasePolicyMismatch, Reason: flruntime.SQLiteStoreReasonLeaseMismatch}},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			api := &fakeFloretStoreMaintenanceAPI{inspectResults: []flruntime.SQLiteStoreInspection{test.inspection}}
-			_, err := openMaintainedFloretStore(context.Background(), "/opaque/floret.sqlite", api)
-			_ = assertFloretStoreStartupClass(t, err, FloretStoreStartupContractError)
-			if api.verifyCalls != 0 || api.migrateCalls != 0 || api.openCalls != 0 {
-				t.Fatal("malformed inspection reached a Store operation")
-			}
-		})
-	}
-}
-
-func TestNewServiceContextCancelsBeforeStoreOrProductRecovery(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	stateDir := t.TempDir()
-	_, err := NewServiceContext(ctx, Options{StateDir: stateDir, AgentHomeDir: t.TempDir()})
-	_ = assertFloretStoreStartupClass(t, err, FloretStoreStartupCancelled)
-	if _, statErr := os.Stat(filepath.Join(stateDir, "ai", "threads.sqlite")); !errors.Is(statErr, os.ErrNotExist) {
-		t.Fatalf("cancelled startup reached product thread recovery Store: %v", statErr)
-	}
-	var nilContext context.Context
-	if _, err := NewServiceContext(nilContext, Options{}); err == nil {
-		t.Fatal("nil startup context was accepted")
-	}
-}
-
-func currentFloretStoreInspection() flruntime.SQLiteStoreInspection {
-	identity := flruntime.StoreSchemaIdentity{Version: "v-current", Fingerprint: "fingerprint-current"}
-	return flruntime.SQLiteStoreInspection{
-		Kind: flruntime.SQLiteStoreKindFloret, State: flruntime.SQLiteStoreStateCurrent,
-		Exists:   true,
-		Observed: identity, Current: identity,
-		LeasePolicyState: flruntime.SQLiteStoreLeasePolicyMatches,
-		Reason:           flruntime.SQLiteStoreReasonCurrent,
-	}
-}
-
-func initialFloretStoreInspection(state flruntime.SQLiteStoreState) flruntime.SQLiteStoreInspection {
-	inspection := flruntime.SQLiteStoreInspection{
-		State: state, Kind: flruntime.SQLiteStoreKindUnknown,
-		LeasePolicyState: flruntime.SQLiteStoreLeasePolicyUnavailable,
-		Reason:           flruntime.SQLiteStoreReasonStoreMissing,
-	}
-	if state == flruntime.SQLiteStoreStateEmpty {
-		inspection.Exists = true
-		inspection.Empty = true
-		inspection.Reason = flruntime.SQLiteStoreReasonStoreEmpty
-	}
-	return inspection
-}
-
-func upgradeableFloretStoreInspection() flruntime.SQLiteStoreInspection {
-	inspection := currentFloretStoreInspection()
-	inspection.State = flruntime.SQLiteStoreStateUpgradeable
-	inspection.Observed = flruntime.StoreSchemaIdentity{Version: "v-old", Fingerprint: "fingerprint-old"}
-	inspection.LeasePolicyState = flruntime.SQLiteStoreLeasePolicyUnavailable
-	inspection.Reason = flruntime.SQLiteStoreReasonMigrationAvailable
-	return inspection
-}
-
-func validFloretStoreVerification() flruntime.SQLiteStoreVerification {
-	return flruntime.SQLiteStoreVerification{
-		Inspection: currentFloretStoreInspection(),
-		Checks:     []flruntime.SQLiteStoreVerificationCheck{{Code: "public_contract", Passed: true}},
 	}
 }
 
 func assertFloretStoreStartupClass(t *testing.T, err error, want FloretStoreStartupClass) *FloretStoreStartupError {
 	t.Helper()
 	if err == nil {
-		t.Fatalf("error=nil, want class %s", want)
+		t.Fatalf("expected startup class %s", want)
 	}
 	var startupErr *FloretStoreStartupError
 	if !errors.As(err, &startupErr) {
 		t.Fatalf("error type=%T, want *FloretStoreStartupError", err)
 	}
 	if startupErr.Class != want {
-		t.Fatalf("class=%s, want %s (error=%v cause=%v)", startupErr.Class, want, err, startupErr.cause)
+		t.Fatalf("startup class=%s, want %s", startupErr.Class, want)
 	}
 	return startupErr
 }
