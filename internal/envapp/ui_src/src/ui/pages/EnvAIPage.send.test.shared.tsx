@@ -83,6 +83,9 @@ const mocks = vi.hoisted(() => {
     blocks: [{ type: 'markdown', content: `Transcript for ${threadId}` }],
   }]);
   const fetchLocalApiJSONMock = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/_redeven_proxy/api/ai/readiness') {
+      return { state: 'ready', reason_code: '', retryable: false, safe_to_retry: false, committed: false, rolled_back: false };
+    }
     if (url.includes('/file-action-open-target')) {
       const body = typeof init?.body === 'string' ? JSON.parse(init.body) as Record<string, unknown> : {};
       return {
@@ -122,6 +125,7 @@ const mocks = vi.hoisted(() => {
       const thread = {
         thread_id: threadID,
         title: 'Loaded Env Flower thread',
+        title_status: 'ready',
         model_id: 'openai/gpt-5.2',
         run_status: state.threadDetailWaitingPrompt || state.timelineMessages?.some((message) => {
           const record = message && typeof message === 'object' ? message as Record<string, unknown> : {};
@@ -150,13 +154,19 @@ const mocks = vi.hoisted(() => {
       };
     }
     if (url.includes('/_redeven_proxy/api/ai/threads?')) {
-      return { threads: [{ thread_id: 'thread-1', title: 'Env Flower history', model_id: 'openai/gpt-5.2', run_status: 'success', working_dir: '/workspace/env-flower', created_at_unix_ms: 1, updated_at_unix_ms: 2, read_status: readStatus(2_000) }] };
+      return { threads: [{ thread_id: 'thread-1', title: 'Env Flower history', title_status: 'ready', model_id: 'openai/gpt-5.2', run_status: 'success', working_dir: '/workspace/env-flower', created_at_unix_ms: 1, updated_at_unix_ms: 2, read_status: readStatus(2_000) }] };
     }
     if (url.includes('/_redeven_proxy/api/ai/threads/') && init?.method === 'POST' && url.endsWith('/read')) {
       return { read_status: readStatus(2_000) };
     }
+    if (url.includes('/_redeven_proxy/api/ai/composer-drafts/') && url.endsWith('/thread') && init?.method === 'POST') {
+      return { thread_id: 'thread-new', draft_revision: 1 };
+    }
+    if (url.includes('/_redeven_proxy/api/ai/threads/') && url.endsWith('/turns') && init?.method === 'POST') {
+      return { turn_id: 'turn-new', run_id: 'run-1', kind: 'start' };
+    }
     if (url.includes('/_redeven_proxy/api/ai/threads') && init?.method === 'POST') {
-      return { thread: { thread_id: 'thread-new', title: 'New Env Flower chat', model_id: 'openai/gpt-5.2', run_status: 'running', working_dir: '/workspace/env-flower', created_at_unix_ms: 3, updated_at_unix_ms: 4, read_status: readStatus(4_000) } };
+      return { thread: { thread_id: 'thread-new', title: 'New Env Flower chat', title_status: 'ready', model_id: 'openai/gpt-5.2', run_status: 'running', working_dir: '/workspace/env-flower', created_at_unix_ms: 3, updated_at_unix_ms: 4, read_status: readStatus(4_000) } };
     }
     if (url.includes('/_redeven_proxy/api/ai/provider_bundle')) {
       return {};
@@ -303,6 +313,15 @@ vi.mock('./EnvContext', () => ({
   useEnvContext: () => ({
     env_id: () => 'env-1',
     env: () => ({ name: 'Demo Env' }),
+    aiReadinessController: {
+      snapshot: () => ({ state: 'ready', reason_code: '', retryable: false, safe_to_retry: false, committed: false, rolled_back: false }),
+      loading: () => false,
+      retryPending: () => false,
+      nextCheckAt: () => null,
+      refresh: async () => ({ state: 'ready', reason_code: '', retryable: false, safe_to_retry: false, committed: false, rolled_back: false }),
+      retry: async () => ({ state: 'ready', reason_code: '', retryable: false, safe_to_retry: false, committed: false, rolled_back: false }),
+      dispose: () => undefined,
+    },
     aiThreadFocusRequest: () => null,
     consumeAIThreadFocusRequest: mocks.consumeAIThreadFocusRequestMock,
     openFileBrowserAtPath: mocks.openFileBrowserAtPathMock,
@@ -1212,7 +1231,7 @@ export function registerEnvAIPageSendTests() {
       }
     });
 
-    it('starts a new Env-local Flower chat through the runtime RPC path', async () => {
+    it('starts a new Env-local Flower chat through the prepared draft turn path', async () => {
       const { host, dispose } = await renderPage();
       try {
         const textarea = host.querySelector('textarea') as HTMLTextAreaElement;
@@ -1226,12 +1245,15 @@ export function registerEnvAIPageSendTests() {
         await flush();
         await flush();
         expect(mocks.subscribeThreadMock).toHaveBeenCalledWith({ threadId: 'thread-new' });
-        expect(mocks.sendUserTurnMock).toHaveBeenCalledWith(expect.objectContaining({
-          threadId: 'thread-new',
+        const turnRequest = mocks.fetchLocalApiJSONMock.mock.calls.find(([url, init]) => (
+          String(url).endsWith('/_redeven_proxy/api/ai/threads/thread-new/turns') && init?.method === 'POST'
+        ));
+        expect(turnRequest).toBeTruthy();
+        expect(JSON.parse(String(turnRequest?.[1]?.body ?? '{}'))).toEqual(expect.objectContaining({
+          thread_id: 'thread-new',
           model: 'openai/gpt-5.2',
-          input: expect.objectContaining({ text: '你好，Flower', attachments: [] }),
+          input: expect.objectContaining({ text: '你好，Flower', attachment_ids: [] }),
         }));
-        expect(host.textContent).toContain('Transcript for thread-new');
       } finally {
         dispose();
       }
@@ -1246,12 +1268,12 @@ export function registerEnvAIPageSendTests() {
         textarea.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
         textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, isComposing: true }));
         await flush();
-        expect(mocks.sendUserTurnMock).not.toHaveBeenCalled();
+        expect(mocks.fetchLocalApiJSONMock.mock.calls.filter(([url, init]) => String(url).endsWith('/turns') && init?.method === 'POST')).toHaveLength(0);
         textarea.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true }));
         textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
         await flush();
         await flush();
-        expect(mocks.sendUserTurnMock).toHaveBeenCalledTimes(1);
+        expect(mocks.fetchLocalApiJSONMock.mock.calls.filter(([url, init]) => String(url).endsWith('/turns') && init?.method === 'POST')).toHaveLength(1);
       } finally {
         dispose();
       }

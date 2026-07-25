@@ -24,6 +24,8 @@ import type {
   AIProviderDialogMode, AIPermissionType, SettingsUpdateResponse,
 } from '../types';
 import { useI18n, type I18nHelpers } from '../../../i18n';
+import { createAIReadinessController } from '../../../flower/aiReadiness';
+import { AIReadinessSettingsSection } from '../AIReadinessSettingsSection';
 
 const AUTO_SAVE_DELAY_MS = 700;
 const PERMISSION_TYPES: readonly AIPermissionType[] = ['readonly', 'approval_required', 'full_access'];
@@ -174,6 +176,9 @@ function validateAIValue(cfg: AIConfig, i18n: I18nHelpers) {
 
 export function FlowerSection() {
   const ctx = useEnvSettingsPage(); const i18n = useI18n();
+  const readinessController = ctx.env.aiReadinessController ?? createAIReadinessController({
+    canAutomaticallyRetry: ctx.canAdmin,
+  });
 
   const [permissionType, setPermissionType] = createSignal<AIPermissionType>('approval_required');
   const [confirmedPermissionType, setConfirmedPermissionType] = createSignal<AIPermissionType>('approval_required');
@@ -396,6 +401,7 @@ export function FlowerSection() {
   );
   return (
     <>
+      <AIReadinessSettingsSection controller={readinessController} />
       <SettingsSection
         icon={Bot} title={i18n.t('aiChrome.flowerTitle')} description={i18n.t('flowerSettings.description')}
         badge={aiModelOptions().length > 0 ? i18n.t('flowerSettings.activeBadge') : i18n.t('flowerSettings.noModelSelected')}

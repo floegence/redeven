@@ -67,4 +67,9 @@ describe('redevenWorkbenchWidgets source contract', () => {
     expect(source).toContain('REDEVEN_WORKBENCH_WHEEL_LAYOUT_ONLY_PROPS');
     expect(source).toContain('{...REDEVEN_WORKBENCH_WHEEL_LAYOUT_ONLY_PROPS}');
   });
+
+  it('gives Flower local wheel routing and derives engagement from the selected widget lifecycle', () => {
+    expect(source).toContain('{...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}');
+    expect(source).toContain("engaged={Boolean(props.selected && props.lifecycle !== 'cold' && !props.filtered)}");
+  });
 });

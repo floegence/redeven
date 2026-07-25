@@ -80,6 +80,7 @@ import { flowerTurnAdmissionUncertainIdentity } from '../../../../flower_ui/src/
 import type { ContextActionExecutionContext } from './contextActions/protocol';
 import { createFlowerLinkedContextNavigation } from './flower/linkedContextNavigation';
 import { createEnvLocalFlowerDraftPersistence } from './flower/envLocalFlowerSurfaceAdapter';
+import { createAIReadinessController } from './flower/aiReadiness';
 import { buildPluginPanelModel } from './plugins/pluginInventoryProjection';
 import { createPluginLifecycleAPI } from './plugins/pluginApi';
 import {
@@ -944,6 +945,16 @@ export function EnvAppShell() {
   const [auditOpen, setAuditOpen] = createSignal(false);
   const canViewAudit = createMemo(() => Boolean(env()?.permissions?.can_admin));
   const canAdmin = createMemo(() => Boolean(env()?.permissions?.can_admin || env()?.permissions?.is_owner));
+  const aiReadinessController = createAIReadinessController({
+    autoStart: false,
+    canAutomaticallyRetry: canAdmin,
+  });
+  let aiReadinessConnected = false;
+  createEffect(() => {
+    const connected = protocol.status() === 'connected';
+    if (connected && !aiReadinessConnected) void aiReadinessController.refresh();
+    aiReadinessConnected = connected;
+  });
   const canOpenPluginSurfaces = createMemo(() => Boolean(
     protocol.status() === 'connected' && env()?.permissions?.can_read,
   ));
@@ -4541,6 +4552,7 @@ export function EnvAppShell() {
     <EnvContext.Provider
       value={{
         flowerDraftCoordinator,
+        aiReadinessController,
         env_id: envId,
         env,
         localRuntime,
