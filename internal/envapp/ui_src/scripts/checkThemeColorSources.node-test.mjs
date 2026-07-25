@@ -208,3 +208,27 @@ test('brand exceptions require both the exact path and authored SVG use', () => 
     THEME_COLOR_EXCEPTIONS,
   ).length, 1);
 });
+
+test('terminal preview exceptions require exact ANSI fields inside the preview function', () => {
+  const terminalSettingsPath = 'internal/envapp/ui_src/src/ui/widgets/TerminalSettingsDialog.tsx';
+  const preview = [
+    'function TerminalThemePreview(props) {',
+    '  return [props.colors.black, props.colors.white];',
+    '}',
+    'function OtherSurface(props) {',
+    '  return props.colors.black;',
+    '}',
+  ].join('\n');
+  assert.deepEqual(findThemeColorViolations(
+    preview,
+    terminalSettingsPath,
+    THEME_COLOR_EXCEPTIONS,
+  ), [
+    `${terminalSettingsPath}:5: replace black with a semantic theme token or add a precise owner/path/use exception`,
+  ]);
+  assert.equal(findThemeColorViolations(
+    'function TerminalThemePreview() { return "black"; }',
+    terminalSettingsPath,
+    THEME_COLOR_EXCEPTIONS,
+  ).length, 1);
+});
