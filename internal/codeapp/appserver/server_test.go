@@ -182,6 +182,12 @@ func newDistRouteTestServer(t *testing.T, dist fs.FS, backend Backend) *Server {
 		ListenAddr:         "127.0.0.1:0",
 		ConfigPath:         writeTestConfig(t),
 		ResolveSessionMeta: func(string) (*session.Meta, bool) { return nil, false },
+		AcquirePluginSession: func(channelID string) (*session.Meta, func(), bool) {
+			if strings.TrimSpace(channelID) == "" {
+				return nil, nil, false
+			}
+			return &session.Meta{ChannelID: channelID}, func() {}, true
+		},
 	})
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -848,7 +854,7 @@ func TestServer_PluginManagementAPIDelegatesToPluginPlatform(t *testing.T) {
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/_redevplugin/api/plugins/catalog?filter=enabled", nil)
-	req.Header.Set("Origin", "https://env-local.example.com")
+	req.Header.Set("Origin", envOriginWithChannel("ch-plugin-management"))
 	rr := httptest.NewRecorder()
 	srv.serveHTTP(rr, req)
 	if rr.Code != 218 {
@@ -930,7 +936,7 @@ func TestServer_PluginPlatformPreservesCanonicalPath(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/_redevplugin/api/plugins/catalog", nil)
 	req.Host = "env-local.example.com"
-	req.Header.Set("Origin", "https://env-local.example.com")
+	req.Header.Set("Origin", envOriginWithChannel("ch-plugin-canonical"))
 	rr := httptest.NewRecorder()
 	srv.serveHTTP(rr, req)
 	if rr.Code != http.StatusNoContent {

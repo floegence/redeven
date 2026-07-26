@@ -8,7 +8,7 @@ timestamp: 2026-07-25T00:00:00Z
 # Summary
 
 ReDevPlugin is an independently released plugin platform. Redeven consumes its
-coordinated `v0.6.17` Go, npm, Rust source-crate, and machine-contract artifacts;
+coordinated `v0.6.18` Go, npm, Rust source-crate, and machine-contract artifacts;
 it does not fork platform mechanics. Redeven owns authenticated session mapping,
 product source policy and review UX, UI placement, product runtime builds, and
 concrete business adapters. Missing or unverifiable upstream identity, lifecycle,
@@ -42,12 +42,12 @@ external-package receipt store.
 
 ## Published dependency set
 
-The current integration consumes the coordinated ReDevPlugin `v0.6.17` set:
+The current integration consumes the coordinated ReDevPlugin `v0.6.18` set:
 
-- `github.com/floegence/redevplugin v0.6.17`;
-- `@floegence/redevplugin-contracts@0.6.17` and
-  `@floegence/redevplugin-ui@0.6.17`;
-- the exact six `0.6.17` Rust source crates ending in `redevplugin-runtime`;
+- `github.com/floegence/redevplugin v0.6.18`;
+- `@floegence/redevplugin-contracts@0.6.18` and
+  `@floegence/redevplugin-ui@0.6.18`;
+- the exact six `0.6.18` Rust source crates ending in `redevplugin-runtime`;
 - the released contract registry, package-set contract, contract hashes, and
   attested `platform-package-publication-v1.json` registry readback.
 
@@ -67,6 +67,15 @@ generation. Redeven supplies session, authorization, web-security, trust,
 official release-source, observability, secret, external source, and business
 adapters; it never edits registry, staged inspection, receipt, token, lease,
 revoke-epoch, or plugin-data state directly.
+
+Redeven supplies the exact already-held Local Environment runtime lock and its
+runtime instance id to the released session-maintenance adapter. ReDevPlugin owns
+the durable phase, teardown identity, continuation, terminal claim, migration,
+and reconciliation contract. Redeven owns only authenticated channel generation,
+Local UI access-session binding, transport admission leases, and shutdown
+ordering around that adapter. Logout and expiry may select exact product
+connections and generations, but they cannot invent a lifecycle phase, delete a
+durable fence, or widen one access session into another owner scope.
 
 The external-package module may retrieve a package from a validated public HTTPS
 package URL or GitHub Release, or accept a bounded local `.redevplugin` upload.
@@ -138,7 +147,7 @@ committed. Unknown, corrupt, ambiguous, tampered, or future state blocks startup
 without mutation. Floret-owned state is outside this lifecycle.
 
 For an exact supported root copied across filesystem identities, Redeven may use
-the released read-only inspection and exact-plan recovery APIs from `v0.6.17`.
+the released read-only inspection and exact-plan recovery APIs from `v0.6.18`.
 The product presents the projected digests, counts, sizes, and retained-state
 facts, binds confirmation to one plan digest, and takes the normal Local
 Environment runtime lock. The released transaction retains the entire source as
@@ -151,6 +160,9 @@ archived authority or data, or recover unknown and unsupported state.
 - `redeven:go.mod:11` - Pins the released ReDevPlugin Go module.
 - `redeven:internal/envapp/ui_src/package.json:29` - Pins the released UI package.
 - `redeven:internal/redevpluginintegration/integration.go:240` - Constructs released Host modules, including external package admission.
+- `redeven:internal/redevpluginintegration/session_lifecycle_adapter.go:1` - Persists and migrates the released session-maintenance lifecycle under real runtime-lock authority.
+- `redeven:internal/agent/plugin_session_registry.go:1` - Owns process-local authenticated generation admission and exact access-session retirement.
+- `redeven:internal/localui/localui.go:1` - Binds Local UI access sessions, pending artifacts, credentials, and direct transports without persisting raw credentials.
 - `redeven:internal/redevpluginintegration/owner_scope_recovery.go:1` - Adapts the released copied-root inspection and recovery API without taking state ownership.
 - `redeven:internal/redevpluginintegration/trust_adapter.go:1` - Delegates package signature and freshness assessment to the released verifier.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginPlatform.ts:1` - Owns the released client, transport, shared scope, and slot placement adapter.

@@ -218,6 +218,7 @@ describe('controlplaneApi local access flow', () => {
       expect(init?.signal).toBe(controller.signal);
       expect(new Headers(init?.headers).get(auth.getLocalAccessResumeHeaderName())).toBe('resume123');
       return jsonResponse({
+        plugin_session_credential: 'plugin-generation-secret',
         connect_artifact: {
           v: 1,
           transport: 'direct',
@@ -242,6 +243,8 @@ describe('controlplaneApi local access flow', () => {
     }
     expect(out.direct_info.channel_id).toBe('ch_local');
     expect(String(out.direct_info.ws_url)).toBe('ws://localhost/_redeven_direct/ws?redeven_access_resume=resume123');
+    const pluginCredential = await import('./pluginSessionCredential');
+    expect(pluginCredential.readPluginSessionCredential()).toBe('plugin-generation-secret');
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 

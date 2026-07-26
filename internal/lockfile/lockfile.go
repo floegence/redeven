@@ -113,6 +113,10 @@ func (l *Lock) Path() string {
 	return l.path
 }
 
+func (l *Lock) Held() bool {
+	return l != nil && l.f != nil
+}
+
 func (l *Lock) SetContent(body []byte) error {
 	if l == nil || l.f == nil {
 		return fmt.Errorf("lock is not held")

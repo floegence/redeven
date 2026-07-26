@@ -8,7 +8,7 @@ import (
 	"github.com/floegence/redeven/internal/session"
 )
 
-func TestResolvePluginPlatformSessionMetaAddsLocalUIFallback(t *testing.T) {
+func TestResolvePluginPlatformSessionMetaRejectsSyntheticLocalUIFallback(t *testing.T) {
 	t.Parallel()
 
 	policy, err := config.ParsePermissionPolicyPreset("execute_read_write")
@@ -28,18 +28,8 @@ func TestResolvePluginPlatformSessionMetaAddsLocalUIFallback(t *testing.T) {
 		},
 	})
 
-	meta, ok := resolver("local-ui")
-	if !ok || meta == nil {
-		t.Fatalf("local-ui session was not resolved")
-	}
-	if meta.ChannelID != "local-ui" || meta.EndpointID != "env_local" || meta.UserPublicID != "user_local" {
-		t.Fatalf("local-ui identity = %+v, want synthetic local Env App session", meta)
-	}
-	if meta.FloeApp != "com.floegence.redeven.agent" || meta.CodeSpaceID != "env-ui" || meta.SessionKind != "envapp_rpc" {
-		t.Fatalf("local-ui app context = %+v, want Env App context", meta)
-	}
-	if !meta.CanRead || !meta.CanWrite || !meta.CanExecute || !meta.CanAdmin {
-		t.Fatalf("local-ui permissions = read:%v write:%v execute:%v admin:%v, want rwx admin", meta.CanRead, meta.CanWrite, meta.CanExecute, meta.CanAdmin)
+	if meta, ok := resolver("local-ui"); ok || meta != nil {
+		t.Fatalf("synthetic local-ui session = %+v ok=%v, want rejected", meta, ok)
 	}
 }
 
@@ -53,7 +43,7 @@ func TestResolvePluginPlatformSessionMetaKeepsRemoteResolverAuthoritative(t *tes
 	}
 	resolver := resolvePluginPlatformSessionMeta(Options{
 		LocalUIEnabled: true,
-		ResolveSessionMeta: func(channelID string) (*session.Meta, bool) {
+		ResolvePluginSessionMeta: func(channelID string) (*session.Meta, bool) {
 			if channelID == "ch_remote" {
 				return remote, true
 			}

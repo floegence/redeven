@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"strings"
 	"time"
@@ -33,6 +34,9 @@ type LocalDirectSessionOptions struct {
 	AccessUnlocked            bool
 	TraceID                   string
 	ConnectArtifactIssuedAtMs int64
+	PluginCredentialHash      [sha256.Size]byte
+	HasPluginCredential       bool
+	AccessSessionID           string
 }
 
 func (a *Agent) registerLocalDirectChannel(meta session.Meta, opts LocalDirectSessionOptions) func() {
@@ -82,6 +86,10 @@ func (a *Agent) ServeLocalDirectSession(ctx context.Context, sess endpoint.Sessi
 	defer cancel()
 
 	a.mu.Lock()
+	if a.sessionStopping {
+		a.mu.Unlock()
+		return errors.New("session admission is closed")
+	}
 	if _, ok := a.sessions[channelID]; ok {
 		a.mu.Unlock()
 		return errors.New("session already active")
@@ -93,15 +101,27 @@ func (a *Agent) ServeLocalDirectSession(ctx context.Context, sess endpoint.Sessi
 		tunnelURL:         "", // no tunnel in direct mode
 		connectedAtUnixMs: connectedAtUnixMs,
 	}
+	a.sessionWG.Add(1)
+	a.mu.Unlock()
+	defer a.sessionWG.Done()
+
+	generation, err := a.activatePluginSession(metaCopy, opts.PluginCredentialHash, opts.HasPluginCredential, opts.AccessSessionID)
+	if err != nil {
+		a.removeActiveSession(channelID)
+		return err
+	}
+	a.mu.Lock()
+	if active := a.sessions[channelID]; active != nil {
+		active.pluginGeneration = generation
+	}
 	a.mu.Unlock()
 
 	cleanupAccessGate := a.registerLocalDirectChannel(metaCopy, opts)
 
 	defer func() {
 		cleanupAccessGate()
-		a.mu.Lock()
-		delete(a.sessions, channelID)
-		a.mu.Unlock()
+		closedGeneration := a.removeActiveSession(channelID)
+		a.closePluginSessionGeneration(channelID, closedGeneration)
 
 		reason := "eof"
 		if errors.Is(err, context.Canceled) {

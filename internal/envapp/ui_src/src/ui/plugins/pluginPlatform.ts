@@ -12,6 +12,7 @@ import {
 } from '@floegence/redevplugin-ui';
 
 import { prepareLocalApiRequestInit } from '../services/localApi';
+import { applyPluginSessionCredential } from '../services/pluginSessionCredential';
 
 export const redevPluginCSRFHeader = 'X-ReDevPlugin-CSRF';
 export const redevPluginCSRFProof = 'redeven-env-v1';
@@ -261,6 +262,7 @@ export function createAuthenticatedReDevPluginFetch(): FetchLike {
     }
     const headers = new Headers(init.headers);
     headers.set(redevPluginCSRFHeader, redevPluginCSRFProof);
+    applyPluginSessionCredential(headers);
     return fetch(input, await prepareLocalApiRequestInit({
       method: init.method,
       headers,

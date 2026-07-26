@@ -2,6 +2,7 @@ package localui
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"net"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/runtimemanagement"
+	"github.com/gorilla/websocket"
 )
 
 type authorityTestListener struct {
@@ -248,8 +250,18 @@ func TestSecurityHeadersDoNotWeakenExistingPolicy(t *testing.T) {
 func TestPendingCredentialCommitsExactlyOnce(t *testing.T) {
 	t.Parallel()
 
-	s := &Server{pending: make(map[string]pendingDirect)}
-	p := pendingDirect{initExpireAtUnixS: time.Now().Add(time.Minute).Unix(), connectArtifactIssuedAtMs: time.Now().UnixMilli()}
+	conn := &websocket.Conn{}
+	s := &Server{
+		pending:      make(map[string]pendingDirect),
+		directConns:  map[*websocket.Conn]*localDirectConnection{conn: {accessSessionID: "access"}},
+		pluginAccess: make(map[string]*pluginAccessSession),
+	}
+	s.pluginAccess["access"] = &pluginAccessSession{
+		state:       pluginAccessActive,
+		pending:     map[string]struct{}{"channel": {}},
+		connections: make(map[*websocket.Conn]string),
+	}
+	p := pendingDirect{accessSessionID: "access", initExpireAtUnixS: time.Now().Add(time.Minute).Unix(), connectArtifactIssuedAtMs: time.Now().UnixMilli()}
 	p.psk[0] = 1
 	s.pending["channel"] = p
 	resolved, ok := s.resolvePending("channel")
@@ -263,7 +275,7 @@ func TestPendingCredentialCommitsExactlyOnce(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if s.commitPending("channel", resolved) == nil {
+			if s.commitPending("channel", resolved, conn) == nil {
 				successes.Add(1)
 			}
 		}()
@@ -274,6 +286,73 @@ func TestPendingCredentialCommitsExactlyOnce(t *testing.T) {
 	}
 	if _, ok := s.resolvePending("channel"); ok {
 		t.Fatal("committed credential remained available")
+	}
+}
+
+func TestPluginAccessSessionCloseRevokesOnlyItsPendingArtifacts(t *testing.T) {
+	t.Parallel()
+
+	s := &Server{
+		pending: map[string]pendingDirect{
+			"one": {accessSessionID: "access-one"},
+			"two": {accessSessionID: "access-two"},
+		},
+		pluginAccess: map[string]*pluginAccessSession{
+			"access-one": {state: pluginAccessActive, pending: map[string]struct{}{"one": {}}, connections: make(map[*websocket.Conn]string)},
+			"access-two": {state: pluginAccessActive, pending: map[string]struct{}{"two": {}}, connections: make(map[*websocket.Conn]string)},
+		},
+	}
+	s.closePluginAccessSession("access-one")
+	if _, ok := s.pending["one"]; ok {
+		t.Fatal("closed access session left its pending artifact active")
+	}
+	if _, ok := s.pending["two"]; !ok {
+		t.Fatal("closed access session removed a sibling pending artifact")
+	}
+	if _, ok := s.pluginAccess["access-one"]; ok {
+		t.Fatal("closed empty access session remained registered")
+	}
+	if access := s.pluginAccess["access-two"]; access == nil || access.state != pluginAccessActive {
+		t.Fatal("closed access session changed a sibling session")
+	}
+}
+
+func TestPluginAccessRequestRequiresExactActiveAccessSession(t *testing.T) {
+	t.Parallel()
+
+	conn := &websocket.Conn{}
+	s := &Server{
+		accessGate: accessgate.New(accessgate.Options{Password: "secret"}),
+		directConns: map[*websocket.Conn]*localDirectConnection{
+			conn: {accessSessionID: "access-one", channelID: "channel"},
+		},
+		pluginAccess: map[string]*pluginAccessSession{
+			"access-one": {
+				state:       pluginAccessActive,
+				expiresAt:   time.Now().Add(time.Minute),
+				pending:     make(map[string]struct{}),
+				connections: map[*websocket.Conn]string{conn: "channel"},
+			},
+		},
+	}
+	request := httptest.NewRequest(http.MethodGet, "http://localhost/_redevplugin/api/plugins", nil)
+	request = request.WithContext(context.WithValue(request.Context(), localAccessSessionContextKey{}, localAccessSessionContext{
+		accessSessionID: "access-one",
+		expiresAt:       time.Now().Add(time.Minute),
+	}))
+	if !s.pluginAccessAllowsRequest(request, "channel") {
+		t.Fatal("exact active access session was rejected")
+	}
+	mismatch := request.WithContext(context.WithValue(request.Context(), localAccessSessionContextKey{}, localAccessSessionContext{
+		accessSessionID: "access-two",
+		expiresAt:       time.Now().Add(time.Minute),
+	}))
+	if s.pluginAccessAllowsRequest(mismatch, "channel") {
+		t.Fatal("mismatched access session was accepted")
+	}
+	s.pluginAccess["access-one"].state = pluginAccessClosing
+	if s.pluginAccessAllowsRequest(request, "channel") {
+		t.Fatal("closing access session was accepted")
 	}
 }
 

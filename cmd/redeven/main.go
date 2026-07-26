@@ -668,6 +668,10 @@ func (c *cli) runCmd(args []string) int {
 	if err := writeAgentLockMetadata(lk, lockMetadata); err != nil {
 		return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to write runtime lock metadata: %v", err))
 	}
+	pluginRuntimeAuthority, err := redevpluginintegration.NewRuntimeProcessAuthority(lk, lockPath, runtimeInstanceID)
+	if err != nil {
+		return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to bind plugin runtime authority: %v", err))
+	}
 	if err := config.WriteEnvironmentCatalogRecord(stateLayout, cfg, config.EnvironmentCatalogAccess{
 		LocalUIBind:                          localUIBindLabel,
 		LocalUIPasswordConfigured:            accessGate.Enabled(),
@@ -736,7 +740,8 @@ func (c *cli) runCmd(args []string) int {
 				Title: "control channel disabled",
 			})
 		},
-		AccessGate: accessGate,
+		AccessGate:             accessGate,
+		PluginRuntimeAuthority: pluginRuntimeAuthority,
 	})
 	if err != nil {
 		var recoveryRequired *redevpluginintegration.OwnerScopeRecoveryRequiredError
@@ -758,10 +763,7 @@ func (c *cli) runCmd(args []string) int {
 	// Graceful shutdown on SIGINT/SIGTERM.
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-stop
-		cancel()
-	}()
+	var localUIServer *localui.Server
 
 	// Start the Local UI server before running the control channel loop so users can open
 	// the local page immediately.
@@ -798,6 +800,7 @@ func (c *cli) runCmd(args []string) int {
 		if err != nil {
 			return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to init local ui: %v", err))
 		}
+		localUIServer = srv
 		if err := srv.Start(ctx); err != nil {
 			return failRuntimeLaunch(
 				desktopLaunchCodeStartupFailed,
@@ -888,6 +891,16 @@ func (c *cli) runCmd(args []string) int {
 		}
 	}
 
+	go func() {
+		select {
+		case <-stop:
+			if localUIServer != nil {
+				_ = localUIServer.Close()
+			}
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
 	if err := a.Run(ctx); err != nil && ctx.Err() == nil {
 		return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("runtime exited with error: %v", err))
 	}

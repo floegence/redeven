@@ -65,16 +65,125 @@ func TestGate_LocalSessionLifecycle(t *testing.T) {
 	if result == nil || result.SessionToken == "" {
 		t.Fatalf("MintLocalSession() missing token: %#v", result)
 	}
+	if result.AccessSessionID == "" {
+		t.Fatal("MintLocalSession() missing internal access session id")
+	}
 	if !result.Unlocked {
 		t.Fatalf("MintLocalSession() should report unlocked: %#v", result)
 	}
 	if !gate.IsLocalSessionValid(result.SessionToken) {
 		t.Fatalf("local session should be valid")
 	}
+	if expiresAt, ok := gate.LocalSessionExpiresAt(result.SessionToken); !ok || expiresAt.UnixMilli() != result.SessionExpiresAtUnix {
+		t.Fatalf("LocalSessionExpiresAt() = (%v, %v), want unix ms %d", expiresAt, ok, result.SessionExpiresAtUnix)
+	}
 
 	gate.RevokeLocalSession(result.SessionToken)
 	if gate.IsLocalSessionValid(result.SessionToken) {
 		t.Fatalf("local session should be revoked")
+	}
+	if _, ok := gate.LocalSessionExpiresAt(result.SessionToken); ok {
+		t.Fatal("revoked local session should not expose a deadline")
+	}
+}
+
+func TestGate_ResumeKeepsAccessSessionIdentityAndLogoutRevokesLineage(t *testing.T) {
+	gate := New(Options{Password: "secret"})
+	initial, err := gate.MintLocalSession("secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if initial.SessionExpiresAtUnix != initial.ResumeExpiresAtUnix {
+		t.Fatalf("initial expiry = %d, want lineage deadline %d", initial.SessionExpiresAtUnix, initial.ResumeExpiresAtUnix)
+	}
+	resumed, err := gate.MintLocalSessionFromResumeToken(initial.ResumeToken, session.Meta{
+		EndpointID: "env_local", FloeApp: "com.floegence.redeven.agent", CodeSpaceID: "env-ui",
+		SessionKind: "envapp_rpc", UserPublicID: "user_local",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resumed.AccessSessionID != initial.AccessSessionID {
+		t.Fatalf("resumed access session = %q, want %q", resumed.AccessSessionID, initial.AccessSessionID)
+	}
+	if accessSessionID, ok := gate.TakeLocalSession(resumed.SessionToken); !ok || accessSessionID != initial.AccessSessionID {
+		t.Fatalf("TakeLocalSession() = (%q, %v)", accessSessionID, ok)
+	}
+	if gate.IsLocalSessionValid(initial.SessionToken) || gate.IsLocalSessionValid(resumed.SessionToken) {
+		t.Fatal("logout left a token from the access-session lineage active")
+	}
+	if gate.CanResumeMeta(initial.ResumeToken, localAccessTestMeta()) {
+		t.Fatal("logout left the access-session resume token active")
+	}
+}
+
+func TestGate_ResumedLocalSessionCannotOutliveLineage(t *testing.T) {
+	gate := New(Options{
+		Password:        "secret",
+		ResumeTTL:       time.Hour,
+		LocalSessionTTL: 24 * time.Hour,
+	})
+	initial, err := gate.MintLocalSession("secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if initial.SessionExpiresAtUnix != initial.ResumeExpiresAtUnix {
+		t.Fatalf("initial expiry = %d, want lineage deadline %d", initial.SessionExpiresAtUnix, initial.ResumeExpiresAtUnix)
+	}
+	resumed, err := gate.MintLocalSessionFromResumeToken(initial.ResumeToken, localAccessTestMeta())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resumed.SessionExpiresAtUnix != initial.ResumeExpiresAtUnix {
+		t.Fatalf("resumed expiry = %d, want lineage deadline %d", resumed.SessionExpiresAtUnix, initial.ResumeExpiresAtUnix)
+	}
+}
+
+func TestGate_TakeAccessSessionByResumeTokenRevokesLineage(t *testing.T) {
+	gate := New(Options{Password: "secret"})
+	initial, err := gate.MintLocalSession("secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resumed, err := gate.MintLocalSessionFromResumeToken(initial.ResumeToken, localAccessTestMeta())
+	if err != nil {
+		t.Fatal(err)
+	}
+	accessSessionID, ok := gate.TakeAccessSessionByResumeToken(initial.ResumeToken)
+	if !ok || accessSessionID != initial.AccessSessionID {
+		t.Fatalf("TakeAccessSessionByResumeToken() = (%q, %v), want (%q, true)", accessSessionID, ok, initial.AccessSessionID)
+	}
+	if gate.IsLocalSessionValid(initial.SessionToken) || gate.IsLocalSessionValid(resumed.SessionToken) {
+		t.Fatal("resume-token logout left a local token active")
+	}
+	if gate.CanResumeMeta(initial.ResumeToken, localAccessTestMeta()) {
+		t.Fatal("resume-token logout left its resume token active")
+	}
+}
+
+func TestGate_TakeExpiredLocalSessionsClosesIdentityOnce(t *testing.T) {
+	gate := New(Options{Password: "secret", LocalSessionTTL: time.Minute})
+	initial, err := gate.MintLocalSession("secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resumed, err := gate.MintLocalSessionFromResumeToken(initial.ResumeToken, localAccessTestMeta())
+	if err != nil {
+		t.Fatal(err)
+	}
+	expired := gate.TakeExpiredLocalSessions(time.Now().Add(2 * time.Minute))
+	if len(expired) != 1 || expired[0].AccessSessionID != initial.AccessSessionID {
+		t.Fatalf("expired sessions = %#v", expired)
+	}
+	if gate.IsLocalSessionValid(initial.SessionToken) || gate.IsLocalSessionValid(resumed.SessionToken) {
+		t.Fatal("expired access-session lineage remained valid")
+	}
+}
+
+func localAccessTestMeta() session.Meta {
+	return session.Meta{
+		EndpointID: "env_local", FloeApp: "com.floegence.redeven.agent", CodeSpaceID: "env-ui",
+		SessionKind: "envapp_rpc", UserPublicID: "user_local",
 	}
 }
 
