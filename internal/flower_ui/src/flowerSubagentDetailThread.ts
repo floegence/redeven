@@ -30,7 +30,7 @@ function subagentThreadStatus(status: string): FlowerThreadStatus {
 }
 
 function canonicalMessages(detail: FlowerSubagentDetail): FlowerChatMessage[] {
-  return detail.messages;
+  return [...detail.messages];
 }
 
 function readStatus(thread: FlowerThreadSnapshot): FlowerThreadReadStatus {
