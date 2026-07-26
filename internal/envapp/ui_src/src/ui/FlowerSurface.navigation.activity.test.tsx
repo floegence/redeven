@@ -24,6 +24,7 @@ import {
   liveBootstrap,
   modelIOStatus,
   renderSurfaceWithAdapter,
+	subagentActivityMessage,
   subagentDetail,
   subagentSummary,
   thread,
@@ -213,9 +214,57 @@ describe('FlowerSurface navigation activity', () => {
       title: 'Sibling thread',
     });
     const loadThread = vi.fn(async (threadID: string) => liveBootstrap(threadID === siblingThread.thread_id ? siblingThread : parentThread));
-    const loadSubagentDetail = vi.fn(async (_parentID: string, _childID: string, afterOrdinal = 0) => {
-      if (afterOrdinal > 0) {
-        return subagentDetail({
+		const loadSubagentDetail = vi.fn(async (_parentID: string, _childID: string, afterOrdinal = 0) => {
+			if (afterOrdinal > 0) {
+				const pageActivity = activityTimeline({
+					thread_id: 'thread-child-review',
+					run_id: 'subagent:thread-child-review',
+					turn_id: 'child-canonical',
+					items: [
+						activityItem({
+							item_id: 'call-terminal-running',
+							tool_id: 'call-terminal-running',
+							tool_name: 'terminal.exec',
+							renderer: 'terminal',
+							label: 'go test ./internal/ui',
+							status: 'running',
+							payload: { command: 'go test ./internal/ui', status: 'running' },
+						}),
+						activityItem({
+							item_id: 'call-terminal',
+							tool_id: 'call-terminal',
+							tool_name: 'terminal.exec',
+							renderer: 'terminal',
+							label: 'go test ./internal/ai',
+							status: 'success',
+							payload: {
+								command: 'go test ./internal/ai', status: 'success', output: 'PASS ./internal/ai',
+								first_seq: 1, last_seq: 1, latest_seq: 1, has_more: false, truncated: false,
+								content_ref: 'hash-tool-result',
+							},
+						}),
+						activityItem({
+							item_id: 'event-delegated-lifecycle',
+							tool_id: 'event-delegated-lifecycle',
+							tool_name: 'subagent.event',
+							kind: 'control',
+							renderer: 'structured',
+							label: 'delegated_lifecycle',
+							description: 'Subagent queued follow-up evidence.',
+							status: 'success',
+							payload: { summary: 'Subagent queued follow-up evidence.', details: 'phase: handoff\nsource: floret' },
+						}),
+					],
+				});
+				return subagentDetail({
+					messages: [
+						subagentActivityMessage(pageActivity, { id: 'child-activity-page', turn_ordinal: 3 }),
+						{
+							id: 'child-turn-page', turn_id: 'child-turn-page', thread_id: 'thread-child-review',
+							run_id: 'child-run-page', turn_ordinal: 4, role: 'assistant',
+							content: 'Second page handoff detail.', status: 'complete', created_at_ms: 190,
+						},
+					],
           timeline: [
             {
               ordinal: 5,
@@ -238,58 +287,7 @@ describe('FlowerSurface navigation activity', () => {
               },
             },
           ],
-          activity: activityTimeline({
-            thread_id: 'thread-child-review',
-            run_id: 'subagent:thread-child-review',
-            turn_id: 'child-canonical',
-            items: [
-              activityItem({
-                item_id: 'call-terminal-running',
-                tool_id: 'call-terminal-running',
-                tool_name: 'terminal.exec',
-                renderer: 'terminal',
-                label: 'go test ./internal/ui',
-                status: 'running',
-                payload: {
-                  command: 'go test ./internal/ui',
-                  status: 'running',
-                },
-              }),
-              activityItem({
-                item_id: 'call-terminal',
-                tool_id: 'call-terminal',
-                tool_name: 'terminal.exec',
-                renderer: 'terminal',
-                label: 'go test ./internal/ai',
-                status: 'success',
-                payload: {
-                  command: 'go test ./internal/ai',
-                  status: 'success',
-				  output: 'PASS ./internal/ai',
-				  first_seq: 1,
-				  last_seq: 1,
-				  latest_seq: 1,
-				  has_more: false,
-				  truncated: false,
-                  content_ref: 'hash-tool-result',
-                },
-              }),
-              activityItem({
-                item_id: 'event-delegated-lifecycle',
-                tool_id: 'event-delegated-lifecycle',
-                tool_name: 'subagent.event',
-                kind: 'control',
-                renderer: 'structured',
-                label: 'delegated_lifecycle',
-                description: 'Subagent queued follow-up evidence.',
-                status: 'success',
-                payload: {
-                  summary: 'Subagent queued follow-up evidence.',
-                  details: 'phase: handoff\nsource: floret',
-                },
-              }),
-            ],
-          }),
+					activity: pageActivity,
           next_ordinal: 7,
           has_more: false,
           generated_at_ms: 200,
@@ -530,6 +528,17 @@ describe('FlowerSurface navigation activity', () => {
     tailPage.resolve(subagentDetail({
       has_more: false,
       next_ordinal: 6,
+		messages: [{
+			id: 'child-turn-tail',
+			turn_id: 'child-turn-tail',
+			thread_id: 'thread-child-review',
+			run_id: 'child-run-tail',
+			turn_ordinal: 3,
+			role: 'assistant',
+			content: 'Fresh tail detail.',
+			status: 'complete',
+			created_at_ms: 220,
+		}],
       timeline: [
         {
           ordinal: 6,
@@ -553,62 +562,66 @@ describe('FlowerSurface navigation activity', () => {
     const sharedRunID = 'subagent:thread-child-review';
     const loadSubagentDetail = vi.fn((_parentID: string, _childID: string, afterOrdinal = 0) => {
       if (afterOrdinal > 0) {
+		const pageActivity = activityTimeline({
+			thread_id: 'thread-child-review',
+			run_id: sharedRunID,
+			turn_id: 'child-canonical',
+			items: [
+				activityItem({
+					item_id: 'shared-run-first',
+					tool_id: 'shared-run-first',
+					tool_name: 'subagent.event',
+					kind: 'control',
+					renderer: 'structured',
+					label: 'first shared run activity',
+					description: 'First shared run activity.',
+					status: 'success',
+					payload: { summary: 'First shared run activity.' },
+				}),
+				activityItem({
+					item_id: 'shared-run-second',
+					tool_id: 'shared-run-second',
+					tool_name: 'subagent.event',
+					kind: 'control',
+					renderer: 'structured',
+					label: 'second shared run activity',
+					description: 'Second shared run activity.',
+					status: 'success',
+					payload: { summary: 'Second shared run activity.' },
+				}),
+			],
+		});
         return Promise.resolve(subagentDetail({
           has_more: false,
           next_ordinal: 7,
+			messages: [subagentActivityMessage(pageActivity, { id: 'child-activity-tail', turn_ordinal: 3 })],
           timeline: [],
-          activity: activityTimeline({
-            thread_id: 'thread-child-review',
-            run_id: sharedRunID,
-            turn_id: 'child-canonical',
-            items: [
-              activityItem({
-                item_id: 'shared-run-first',
-                tool_id: 'shared-run-first',
-                tool_name: 'subagent.event',
-                kind: 'control',
-                renderer: 'structured',
-                label: 'first shared run activity',
-                description: 'First shared run activity.',
-                status: 'success',
-                payload: { summary: 'First shared run activity.' },
-              }),
-              activityItem({
-                item_id: 'shared-run-second',
-                tool_id: 'shared-run-second',
-                tool_name: 'subagent.event',
-                kind: 'control',
-                renderer: 'structured',
-                label: 'second shared run activity',
-                description: 'Second shared run activity.',
-                status: 'success',
-                payload: { summary: 'Second shared run activity.' },
-              }),
-            ],
-          }),
+			activity: pageActivity,
           generated_at_ms: 230,
         }));
       }
-      return Promise.resolve(subagentDetail({
+		const initialActivity = activityTimeline({
+			thread_id: 'thread-child-review',
+			run_id: sharedRunID,
+			turn_id: 'child-canonical',
+			items: [activityItem({
+				item_id: 'shared-run-first',
+				tool_id: 'shared-run-first',
+				tool_name: 'subagent.event',
+				kind: 'control',
+				renderer: 'structured',
+				label: 'first shared run activity',
+				description: 'First shared run activity.',
+				status: 'success',
+				payload: { summary: 'First shared run activity.' },
+			})],
+		});
+		return Promise.resolve(subagentDetail({
         has_more: true,
         next_ordinal: 5,
+		messages: [subagentActivityMessage(initialActivity, { id: 'child-activity-initial' })],
         timeline: [],
-        activity: activityTimeline({
-          thread_id: 'thread-child-review',
-          run_id: sharedRunID,
-          turn_id: 'child-canonical',
-          items: [activityItem({
-            item_id: 'shared-run-first',
-            tool_id: 'shared-run-first',
-            tool_name: 'subagent.event',
-            kind: 'control',
-            renderer: 'structured',
-            label: 'first shared run activity',
-            description: 'First shared run activity.',
-            status: 'success',
-            payload: { summary: 'First shared run activity.' },
-          })],
-        }),
+		activity: initialActivity,
         generated_at_ms: 180,
       }));
     });
@@ -673,6 +686,17 @@ describe('FlowerSurface navigation activity', () => {
     tailPage.resolve(subagentDetail({
       has_more: false,
       next_ordinal: 6,
+		messages: [{
+			id: 'child-turn-tail-complete',
+			turn_id: 'child-turn-tail-complete',
+			thread_id: 'thread-child-review',
+			run_id: 'child-run-tail',
+			turn_ordinal: 3,
+			role: 'assistant',
+			content: 'Tail completed before manual paging.',
+			status: 'complete',
+			created_at_ms: 220,
+		}],
       timeline: [
         {
           ordinal: 6,
@@ -735,17 +759,19 @@ describe('FlowerSurface navigation activity', () => {
       status: index === 6 ? 'error' : 'success',
       payload: { summary: `Fetched source ${index + 1}` },
     }));
+	const successfulActivity = activityTimeline({
+		thread_id: 'thread-child-review',
+		run_id: 'subagent:thread-child-review',
+		turn_id: 'child-canonical',
+		items: operationItems.map((item) => ({ ...item, status: 'success' })),
+	});
     const loadSubagentDetail = vi.fn(async () => subagentDetail({
+		messages: [subagentActivityMessage(successfulActivity)],
       timeline: [
         subagentDetail().timeline[0]!,
         subagentDetail().timeline[3]!,
       ],
-      activity: activityTimeline({
-        thread_id: 'thread-child-review',
-        run_id: 'subagent:thread-child-review',
-        turn_id: 'child-canonical',
-        items: operationItems.map((item) => ({ ...item, status: 'success' })),
-      }),
+		activity: successfulActivity,
       has_more: false,
     }));
     const runtime = renderSurfaceWithAdapter({
@@ -773,17 +799,19 @@ describe('FlowerSurface navigation activity', () => {
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     await waitFor(() => !subagentDetailSurface(runtime));
 
-    loadSubagentDetail.mockResolvedValueOnce(subagentDetail({
+	const failedActivity = activityTimeline({
+		thread_id: 'thread-child-review',
+		run_id: 'subagent:thread-child-review',
+		turn_id: 'child-canonical',
+		items: operationItems,
+	});
+		loadSubagentDetail.mockResolvedValueOnce(subagentDetail({
+		messages: [subagentActivityMessage(failedActivity)],
       timeline: [
         subagentDetail().timeline[0]!,
         subagentDetail().timeline[3]!,
       ],
-      activity: activityTimeline({
-        thread_id: 'thread-child-review',
-        run_id: 'subagent:thread-child-review',
-        turn_id: 'child-canonical',
-        items: operationItems,
-      }),
+		activity: failedActivity,
       has_more: false,
     }));
     (runtime.querySelector('.flower-chat-header-actions button[title^="Open subagents"]') as HTMLButtonElement).click();

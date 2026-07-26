@@ -656,6 +656,7 @@ type FlowerTimelineMessage struct {
 	ThreadID     string                   `json:"thread_id"`
 	TurnID       string                   `json:"turn_id"`
 	RunID        string                   `json:"run_id"`
+	TurnOrdinal  int64                    `json:"turn_ordinal,omitempty"`
 	Role         string                   `json:"role"`
 	Content      string                   `json:"content"`
 	Status       string                   `json:"status"`

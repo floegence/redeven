@@ -264,6 +264,7 @@ type FlowerSubagentTimelineRow struct {
 
 type FlowerSubagentDetailResponse struct {
 	Summary             FlowerSubagentSummary       `json:"summary"`
+	Messages            []FlowerTimelineMessage     `json:"messages"`
 	Timeline            []FlowerSubagentTimelineRow `json:"timeline"`
 	Activity            *ActivityTimelineBlock      `json:"activity,omitempty"`
 	ModelIOStatus       *FlowerModelIOStatus        `json:"model_io_status,omitempty"`

@@ -30,6 +30,7 @@ type floretBootstrapResult struct {
 }
 
 type floretStartupRecoveryCapabilities struct {
+	inventory     floretRootThreadInventory
 	root          floretRootTurnRecoveryBinder
 	subagent      floretSubagentTurnRecoveryBinder
 	listSubagents floretSubagentReadHostFactory
@@ -204,6 +205,10 @@ func (h floretSubagentReadHostAdapter) ListSubAgents(ctx context.Context, parent
 	return h.host.ListSubAgents(ctx, parentThreadID)
 }
 
+func (h floretSubagentReadHostAdapter) ListThreadTurns(ctx context.Context, req flruntime.ListThreadTurnsRequest) (flruntime.ThreadTurnsPage, error) {
+	return h.host.ListThreadTurns(ctx, req)
+}
+
 func (h floretSubagentReadHostAdapter) ReadSubAgentDetail(ctx context.Context, req flruntime.ReadSubAgentDetailRequest) (flruntime.SubAgentDetail, error) {
 	return h.host.ReadSubAgentDetail(ctx, req)
 }
@@ -276,11 +281,15 @@ func configureFloretRuntime(store *flruntime.Store) (*floretBootstrapResult, flo
 		compactionBinder       *flruntime.ThreadCompactionHostBinder
 		subagentBinder         *flruntime.SubAgentHostBinder
 		subagentReadBinder     *flruntime.SubAgentReadHostBinder
+		threadInventory        *flruntime.ThreadInventoryHost
 		pendingToolCoordinator floretPendingToolRecoveryCoordinator
 		recoveryBinder         *flruntime.InterruptedTurnRecoveryHostBinder
 	)
 	err := flruntime.ConfigureHostCapabilities(store, func(bootstrap *flruntime.HostBootstrap) error {
 		var err error
+		if threadInventory, err = flruntime.NewThreadInventoryHost(bootstrap); err != nil {
+			return err
+		}
 		if threadReadBinder, err = flruntime.NewThreadReadHostBinder(bootstrap); err != nil {
 			return err
 		}
@@ -399,6 +408,7 @@ func configureFloretRuntime(store *flruntime.Store) (*floretBootstrapResult, flo
 	result.threadFork = floretThreadForkAuthorityAdapter{fork: result.newThreadFork, title: result.newThreadTitle}
 	result.threadDelete = floretThreadDeleteAuthorityAdapter{delete: result.newThreadDelete}
 	recovery := floretStartupRecoveryCapabilities{
+		inventory: threadInventory,
 		root: func(ctx context.Context, threadID flruntime.ThreadID) (floretInterruptedTurnRecoveryHostFactory, error) {
 			factory, err := recoveryBinder.BindThread(ctx, threadID)
 			if err != nil {

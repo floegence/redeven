@@ -1,524 +1,136 @@
 import { describe, expect, it } from 'vitest';
 
-import type { FlowerSubagentDetail } from './contracts/flowerSurfaceContracts';
+import type {
+  FlowerChatMessage,
+  FlowerSubagentDetail,
+  FlowerSubagentSummary,
+} from './contracts/flowerSurfaceContracts';
 import { projectSubagentDetailThread } from './flowerSubagentDetailThread';
 
+const baseSummary: FlowerSubagentSummary = {
+  parent_thread_id: 'parent-1',
+  thread_id: 'child-1',
+  task_name: 'Review boundary',
+  agent_type: 'reviewer',
+  status: 'completed',
+  can_send_input: false,
+  can_interrupt: false,
+  can_close: true,
+  created_at_ms: 100,
+  updated_at_ms: 500,
+};
+
+function message(overrides: Partial<FlowerChatMessage> = {}): FlowerChatMessage {
+  return {
+    id: 'assistant-turn-1',
+    turn_id: 'turn-1',
+    thread_id: 'child-1',
+    run_id: 'run-1',
+    turn_ordinal: 1,
+    role: 'assistant',
+    content: 'Canonical assistant answer.',
+    status: 'complete',
+    created_at_ms: 200,
+    ...overrides,
+  };
+}
+
+function detail(overrides: Partial<FlowerSubagentDetail> = {}): FlowerSubagentDetail {
+  return {
+    summary: baseSummary,
+    messages: [message()],
+    timeline: [],
+    generated_at_ms: 500,
+    ...overrides,
+  };
+}
+
 describe('projectSubagentDetailThread', () => {
-  it('keeps canonical activity interleaved with surrounding assistant text', () => {
-    const detail: FlowerSubagentDetail = {
-      summary: {
-        parent_thread_id: 'parent-1',
-        thread_id: 'child-1',
-        task_name: 'Research news',
-        agent_type: 'worker',
-        status: 'completed',
-        can_send_input: false,
-        can_interrupt: false,
-        can_close: true,
-        created_at_ms: 100,
-        updated_at_ms: 500,
-      },
-      timeline: [
-        {
-          ordinal: 1,
-          kind: 'assistant_message',
-          created_at_ms: 100,
-          message: { role: 'assistant', text: 'I will check sources first.' },
-        },
-        {
-          ordinal: 2,
-          kind: 'tool_activity',
-          type: 'tool_activity_updated',
-          created_at_ms: 200,
-          tool_call: { id: 'call-1', name: 'terminal.exec' },
-        },
-        {
-          ordinal: 3,
-          kind: 'assistant_message',
-          created_at_ms: 300,
-          message: { role: 'assistant', text: 'The command found useful headlines.' },
-        },
-      ],
-      activity: {
-        type: 'activity-timeline',
-        schema_version: 1,
-        run_id: 'child-run',
-        thread_id: 'child-1',
-        turn_id: 'child-turn',
-        summary: {
-          status: 'success',
-          severity: 'normal',
-          needs_attention: false,
-          total_items: 1,
-          counts: { success: 1 },
-        },
-        items: [{
-          item_id: 'tool:call-1',
-          tool_id: 'call-1',
-          tool_name: 'terminal.exec',
-          kind: 'tool',
-          status: 'success',
-          severity: 'normal',
-          needs_attention: false,
-          requires_approval: false,
-          label: 'python news.py',
-          renderer: 'terminal',
-        }],
-      },
-      generated_at_ms: 500,
-    };
-
-    const thread = projectSubagentDetailThread(detail);
-
-    expect(thread?.messages.map((message) => message.blocks?.[0]?.type)).toEqual([
-      'markdown',
-      'activity-timeline',
-      'markdown',
-    ]);
-    expect(thread?.messages.map((message) => message.created_at_ms)).toEqual([100, 200, 300]);
-    expect(thread?.messages[1].blocks?.[0]).toMatchObject({
-      type: 'activity-timeline',
-      items: [{ tool_id: 'call-1', status: 'success' }],
-    });
-  });
-
-  it('renders full subagent message text instead of the bounded preview', () => {
-    const fullText = `Complete report ${'evidence section '.repeat(80)}http://arxiv.org/abs/2607.02514v1`;
-    const preview = 'Complete report http://arxiv.org/abs/2607.02...';
-    const detail: FlowerSubagentDetail = {
-      summary: {
-        parent_thread_id: 'parent-1',
-        thread_id: 'child-1',
-        task_name: 'Research papers',
-        agent_type: 'researcher',
-        status: 'completed',
-        last_message: 'summary-only fallback should not render',
-        can_send_input: false,
-        can_interrupt: false,
-        can_close: true,
-        created_at_ms: 100,
-        updated_at_ms: 300,
-      },
-      timeline: [{
-        ordinal: 1,
-        kind: 'assistant_message',
-        created_at_ms: 200,
-        message: {
-          role: 'assistant',
-          text: fullText,
-          preview,
-        },
-      }],
-      generated_at_ms: 300,
-    };
-
-    const thread = projectSubagentDetailThread(detail);
-
-    expect(thread?.messages).toHaveLength(1);
-    expect(thread?.messages[0].content).toBe(fullText);
-    expect(thread?.messages[0].content).toContain('http://arxiv.org/abs/2607.02514v1');
-    expect(thread?.messages[0].content).not.toBe(preview);
-    expect(thread?.messages[0].content).not.toBe(detail.summary.last_message);
-  });
-
-  it('uses timeline ordinal to place canonical activity when rows share a timestamp', () => {
-    const detail: FlowerSubagentDetail = {
-      summary: {
-        parent_thread_id: 'parent-1',
-        thread_id: 'child-1',
-        task_name: 'Research news',
-        agent_type: 'worker',
-        status: 'completed',
-        can_send_input: false,
-        can_interrupt: false,
-        can_close: true,
-        created_at_ms: 100,
-        updated_at_ms: 500,
-      },
-      timeline: [
-        {
-          ordinal: 1,
-          kind: 'assistant_message',
-          created_at_ms: 200,
-          message: { role: 'assistant', text: 'Before the command.' },
-        },
-        {
-          ordinal: 2,
-          kind: 'tool_activity',
-          type: 'tool_activity_updated',
-          created_at_ms: 200,
-          tool_call: { id: 'call-1', name: 'terminal.exec' },
-        },
-        {
-          ordinal: 3,
-          kind: 'assistant_message',
-          created_at_ms: 200,
-          message: { role: 'assistant', text: 'After the command.' },
-        },
-      ],
-      activity: {
-        type: 'activity-timeline',
-        schema_version: 1,
-        run_id: 'child-run',
-        thread_id: 'child-1',
-        turn_id: 'child-turn',
-        summary: {
-          status: 'success',
-          severity: 'normal',
-          needs_attention: false,
-          total_items: 1,
-          counts: { success: 1 },
-        },
-        items: [{
-          item_id: 'tool:call-1',
-          tool_id: 'call-1',
-          tool_name: 'terminal.exec',
-          kind: 'tool',
-          status: 'success',
-          severity: 'normal',
-          needs_attention: false,
-          requires_approval: false,
-          label: 'python news.py',
-          renderer: 'terminal',
-        }],
-      },
-      generated_at_ms: 500,
-    };
-
-    const thread = projectSubagentDetailThread(detail);
-
-    expect(thread?.messages.map((message) => message.blocks?.[0]?.type)).toEqual([
-      'markdown',
-      'activity-timeline',
-      'markdown',
-    ]);
-    expect(thread?.messages.map((message) => message.content)).toEqual([
-      'Before the command.',
-      '',
-      'After the command.',
-    ]);
-  });
-
-  it('keeps separate tool phases anchored between assistant messages', () => {
-    const detail: FlowerSubagentDetail = {
-      summary: {
-        parent_thread_id: 'parent-1',
-        thread_id: 'child-1',
-        task_name: 'Research news',
-        agent_type: 'worker',
-        status: 'completed',
-        can_send_input: false,
-        can_interrupt: false,
-        can_close: true,
-        created_at_ms: 100,
-        updated_at_ms: 700,
-      },
-      timeline: [
-        {
-          ordinal: 1,
-          kind: 'assistant_message',
-          created_at_ms: 100,
-          message: { role: 'assistant', text: 'A: I will check the first source.' },
-        },
-        {
-          ordinal: 2,
-          kind: 'tool_activity',
-          type: 'tool_activity_updated',
-          created_at_ms: 200,
-          tool_call: { id: 'call-1', name: 'terminal.exec' },
-        },
-        {
-          ordinal: 3,
-          kind: 'assistant_message',
-          created_at_ms: 300,
-          message: { role: 'assistant', text: 'B: The first source is useful.' },
-        },
-        {
-          ordinal: 4,
-          kind: 'tool_activity',
-          type: 'tool_activity_updated',
+  it('uses canonical Floret messages as the complete transcript authority', () => {
+    const projected = projectSubagentDetailThread(detail({
+      messages: [
+        message({
+          id: 'assistant-turn-2',
+          turn_id: 'turn-2',
+          run_id: 'run-2',
+          turn_ordinal: 2,
+          content: 'Second answer.',
           created_at_ms: 400,
-          tool_call: { id: 'call-2', name: 'terminal.exec' },
-        },
-        {
-          ordinal: 5,
-          kind: 'assistant_message',
-          created_at_ms: 500,
-          message: { role: 'assistant', text: 'C: The second source confirms it.' },
-        },
-      ],
-      activity: {
-        type: 'activity-timeline',
-        schema_version: 1,
-        run_id: 'child-run',
-        thread_id: 'child-1',
-        turn_id: 'child-turn',
-        summary: {
-          status: 'success',
-          severity: 'normal',
-          needs_attention: false,
-          total_items: 2,
-          counts: { success: 2 },
-        },
-        items: [
-          {
-            item_id: 'tool:call-1',
-            tool_id: 'call-1',
-            tool_name: 'terminal.exec',
-            kind: 'tool',
-            status: 'success',
-            severity: 'normal',
-            needs_attention: false,
-            requires_approval: false,
-            label: 'fetch source one',
-            renderer: 'terminal',
-          },
-          {
-            item_id: 'tool:call-2',
-            tool_id: 'call-2',
-            tool_name: 'terminal.exec',
-            kind: 'tool',
-            status: 'success',
-            severity: 'normal',
-            needs_attention: false,
-            requires_approval: false,
-            label: 'fetch source two',
-            renderer: 'terminal',
-          },
-        ],
-      },
-      generated_at_ms: 700,
-    };
-
-    const thread = projectSubagentDetailThread(detail);
-
-    expect(thread?.messages.map((message) => message.blocks?.[0]?.type)).toEqual([
-      'markdown',
-      'activity-timeline',
-      'markdown',
-      'activity-timeline',
-      'markdown',
-    ]);
-    expect(thread?.messages.map((message) => message.content)).toEqual([
-      'A: I will check the first source.',
-      '',
-      'B: The first source is useful.',
-      '',
-      'C: The second source confirms it.',
-    ]);
-    const activityBlocks = thread?.messages
-      .flatMap((message) => (message.blocks ?? []).filter((block) => block.type === 'activity-timeline')) ?? [];
-    expect(activityBlocks).toHaveLength(2);
-    expect(activityBlocks[0]).toMatchObject({
-      summary: { total_items: 1, counts: { success: 1 } },
-      items: [{ tool_id: 'call-1' }],
-    });
-    expect(activityBlocks[1]).toMatchObject({
-      summary: { total_items: 1, counts: { success: 1 } },
-      items: [{ tool_id: 'call-2' }],
-    });
-  });
-
-  it('uses ordinal anchors instead of wall-clock timestamps for visible ordering', () => {
-    const detail: FlowerSubagentDetail = {
-      summary: {
-        parent_thread_id: 'parent-1',
-        thread_id: 'child-1',
-        task_name: 'Research news',
-        agent_type: 'worker',
-        status: 'completed',
-        can_send_input: false,
-        can_interrupt: false,
-        can_close: true,
-        created_at_ms: 100,
-        updated_at_ms: 700,
-      },
-      timeline: [
-        {
-          ordinal: 1,
-          kind: 'assistant_message',
-          created_at_ms: 500,
-          message: { role: 'assistant', text: 'A: text with a late timestamp.' },
-        },
-        {
-          ordinal: 2,
-          kind: 'tool_activity',
-          type: 'tool_activity_updated',
-          created_at_ms: 100,
-          tool_call: { id: 'call-1', name: 'terminal.exec' },
-        },
-        {
-          ordinal: 3,
-          kind: 'assistant_message',
-          created_at_ms: 200,
-          message: { role: 'assistant', text: 'B: text after the tool by ordinal.' },
-        },
-      ],
-      activity: {
-        type: 'activity-timeline',
-        schema_version: 1,
-        run_id: 'child-run',
-        thread_id: 'child-1',
-        turn_id: 'child-turn',
-        summary: {
-          status: 'success',
-          severity: 'normal',
-          needs_attention: false,
-          total_items: 1,
-          counts: { success: 1 },
-        },
-        items: [{
-          item_id: 'tool:call-1',
-          tool_id: 'call-1',
-          tool_name: 'terminal.exec',
-          kind: 'tool',
-          status: 'success',
-          severity: 'normal',
-          needs_attention: false,
-          requires_approval: false,
-          label: 'fetch source one',
-          renderer: 'terminal',
-        }],
-      },
-      generated_at_ms: 700,
-    };
-
-    const thread = projectSubagentDetailThread(detail);
-
-    expect(thread?.messages.map((message) => message.content)).toEqual([
-      'A: text with a late timestamp.',
-      '',
-      'B: text after the tool by ordinal.',
-    ]);
-    expect(thread?.messages.map((message) => message.blocks?.[0]?.type)).toEqual([
-      'markdown',
-      'activity-timeline',
-      'markdown',
-    ]);
-  });
-
-  it('does not attach unmatched canonical activity items to the first tool anchor', () => {
-    const detail: FlowerSubagentDetail = {
-      summary: {
-        parent_thread_id: 'parent-1',
-        thread_id: 'child-1',
-        task_name: 'Research news',
-        agent_type: 'worker',
-        status: 'completed',
-        can_send_input: false,
-        can_interrupt: false,
-        can_close: true,
-        created_at_ms: 100,
-        updated_at_ms: 500,
-      },
-      timeline: [
-        {
-          ordinal: 1,
-          kind: 'assistant_message',
-          created_at_ms: 100,
-          message: { role: 'assistant', text: 'Before the anchored command.' },
-        },
-        {
-          ordinal: 2,
-          kind: 'tool_activity',
-          type: 'tool_activity_updated',
-          created_at_ms: 200,
-          tool_call: { id: 'call-1', name: 'terminal.exec' },
-        },
-        {
-          ordinal: 3,
-          kind: 'assistant_message',
+        }),
+        message({
+          id: 'user-turn-1',
+          role: 'user',
+          content: 'Visible follow-up input.',
           created_at_ms: 300,
-          message: { role: 'assistant', text: 'After the anchored command.' },
+        }),
+        message(),
+      ],
+    }));
+
+    expect(projected?.messages.map((item) => item.id)).toEqual([
+      'user-turn-1',
+      'assistant-turn-1',
+      'assistant-turn-2',
+    ]);
+    expect(projected?.messages.map((item) => item.content)).toEqual([
+      'Visible follow-up input.',
+      'Canonical assistant answer.',
+      'Second answer.',
+    ]);
+  });
+
+  it('preserves canonical blocks and full message content without rebuilding them', () => {
+    const fullText = `Complete report ${'evidence section '.repeat(80)}http://arxiv.org/abs/2607.02514v1`;
+    const canonical = message({
+      content: fullText,
+      blocks: [
+        { type: 'markdown', content: fullText },
+        {
+          type: 'activity-timeline',
+          schema_version: 1,
+          summary: {
+            status: 'success',
+            severity: 'normal',
+            needs_attention: false,
+            total_items: 0,
+            counts: {},
+          },
+          items: [],
+        },
+      ],
+    });
+
+    const projected = projectSubagentDetailThread(detail({ messages: [canonical] }));
+
+    expect(projected?.messages).toEqual([canonical]);
+    expect(projected?.messages[0].content).toContain('http://arxiv.org/abs/2607.02514v1');
+  });
+
+  it('never derives transcript messages from diagnostic timeline metadata or activity', () => {
+    const delegatedMission = '# Delegated Mission\nInternal operating contract.';
+    const projected = projectSubagentDetailThread(detail({
+      messages: [message({ content: 'Visible canonical result.' })],
+      timeline: [
+        {
+          ordinal: 1,
+          kind: 'user_message',
+          created_at_ms: 100,
+          metadata: { subagent_prompt_kind: 'delegated_mission' },
+          message: { role: 'user', text: delegatedMission },
+        },
+        {
+          ordinal: 2,
+          kind: 'assistant_message',
+          created_at_ms: 200,
+          message: { role: 'assistant', text: 'Diagnostic-only assistant preview.' },
         },
       ],
       activity: {
         type: 'activity-timeline',
         schema_version: 1,
-        run_id: 'child-run',
+        run_id: 'run-1',
         thread_id: 'child-1',
-        turn_id: 'child-turn',
-        summary: {
-          status: 'success',
-          severity: 'normal',
-          needs_attention: false,
-          total_items: 2,
-          counts: { success: 2 },
-        },
-        items: [
-          {
-            item_id: 'tool:call-1',
-            tool_id: 'call-1',
-            tool_name: 'terminal.exec',
-            kind: 'tool',
-            status: 'success',
-            severity: 'normal',
-            needs_attention: false,
-            requires_approval: false,
-            label: 'anchored command',
-            renderer: 'terminal',
-          },
-          {
-            item_id: 'tool:call-missing',
-            tool_id: 'call-missing',
-            tool_name: 'terminal.exec',
-            kind: 'tool',
-            status: 'success',
-            severity: 'normal',
-            needs_attention: false,
-            requires_approval: false,
-            label: 'unmatched command',
-            renderer: 'terminal',
-          },
-        ],
-      },
-      generated_at_ms: 500,
-    };
-
-    const thread = projectSubagentDetailThread(detail);
-    const activityBlocks = thread?.messages
-      .flatMap((message) => (message.blocks ?? []).filter((block) => block.type === 'activity-timeline')) ?? [];
-
-    expect(activityBlocks).toHaveLength(1);
-    expect(activityBlocks[0]).toMatchObject({
-      summary: { total_items: 1, counts: { success: 1 } },
-      items: [{ tool_id: 'call-1' }],
-    });
-    expect(JSON.stringify(thread)).not.toContain('call-missing');
-    expect(JSON.stringify(thread)).not.toContain('unmatched command');
-  });
-
-  it('renders canonical subagent activity as the only tool activity block', () => {
-    const detail: FlowerSubagentDetail = {
-      summary: {
-        parent_thread_id: 'parent-1',
-        thread_id: 'child-1',
-        task_name: 'Weather south',
-        agent_type: 'worker',
-        status: 'completed',
-        can_send_input: false,
-        can_interrupt: false,
-        can_close: true,
-        created_at_ms: 100,
-        updated_at_ms: 300,
-      },
-      timeline: [{
-        ordinal: 4,
-        kind: 'tool_activity',
-        type: 'tool_activity_updated',
-        created_at_ms: 220,
-        tool_call: {
-          id: 'call-1',
-          name: 'terminal.exec',
-          args_hash: 'args-hash',
-        },
-      }],
-      activity: {
-        type: 'activity-timeline',
-        schema_version: 1,
-        run_id: 'child-run',
-        thread_id: 'child-1',
-        turn_id: 'child-turn',
+        turn_id: 'turn-1',
         summary: {
           status: 'success',
           severity: 'normal',
@@ -527,315 +139,92 @@ describe('projectSubagentDetailThread', () => {
           counts: { success: 1 },
         },
         items: [{
-          item_id: 'tool:call-1',
-          tool_id: 'call-1',
+          item_id: 'tool:diagnostic-only',
+          tool_id: 'diagnostic-only',
           tool_name: 'terminal.exec',
           kind: 'tool',
           status: 'success',
           severity: 'normal',
           needs_attention: false,
           requires_approval: false,
-          label: 'python weather.py',
+          label: 'diagnostic-only',
           renderer: 'terminal',
         }],
       },
-      generated_at_ms: 350,
-    };
+    }));
 
-    const thread = projectSubagentDetailThread(detail);
-
-    const activityBlocks = thread?.messages.flatMap((message) => (message.blocks ?? []).filter((block) => block.type === 'activity-timeline')) ?? [];
-    expect(activityBlocks).toHaveLength(1);
-    expect(activityBlocks[0]).toMatchObject({
-      summary: { status: 'success' },
-      items: [{ tool_id: 'call-1', status: 'success' }],
-    });
-    expect(JSON.stringify(thread)).not.toContain('"status":"running"');
+    expect(projected?.messages.map((item) => item.content)).toEqual(['Visible canonical result.']);
+    expect(JSON.stringify(projected)).not.toContain('Delegated Mission');
+    expect(JSON.stringify(projected)).not.toContain('Diagnostic-only assistant preview');
+    expect(JSON.stringify(projected)).not.toContain('diagnostic-only');
   });
 
-  it('does not render the raw delegated mission prompt as a user message', () => {
-    const detail: FlowerSubagentDetail = {
+  it('does not synthesize a transcript message from summary fallbacks', () => {
+    const projected = projectSubagentDetailThread(detail({
       summary: {
-        parent_thread_id: 'parent-1',
-        thread_id: 'child-1',
-        task_name: 'News review',
-        task_description: 'Review the latest AI industry news.',
-        agent_type: 'worker',
-        status: 'completed',
-        can_send_input: false,
-        can_interrupt: false,
-        can_close: true,
-        created_at_ms: 100,
-        updated_at_ms: 300,
-      },
-      timeline: [
-        {
-          ordinal: 1,
-          kind: 'user_message',
-          created_at_ms: 100,
-          metadata: { subagent_prompt_kind: 'delegated_mission' },
-          message: {
-            role: 'user',
-            text: '# Delegated Mission\nYour task: Review the latest AI industry news.\n\n# Operating Contract\nUse tools.',
-          },
-        },
-        {
-          ordinal: 2,
-          kind: 'assistant_message',
-          created_at_ms: 200,
-          message: { role: 'assistant', text: 'I found three useful sources.' },
-        },
-      ],
-      generated_at_ms: 350,
-    };
-
-    const thread = projectSubagentDetailThread(detail);
-
-    expect(thread?.messages).toHaveLength(1);
-    expect(thread?.messages[0].content).toBe('I found three useful sources.');
-    expect(JSON.stringify(thread)).not.toContain('Delegated Mission');
-    expect(JSON.stringify(thread)).not.toContain('Operating Contract');
-  });
-
-  it('uses delegated mission metadata as the raw prompt filter boundary', () => {
-    const baseSummary = {
-      parent_thread_id: 'parent-1',
-      thread_id: 'child-1',
-      task_name: 'News review',
-      task_description: 'Review the latest AI industry news.',
-      agent_type: 'worker',
-      status: 'completed',
-      can_send_input: false,
-      can_interrupt: false,
-      can_close: true,
-      created_at_ms: 100,
-      updated_at_ms: 300,
-    };
-    const hidden = projectSubagentDetailThread({
-      summary: baseSummary,
-      timeline: [
-        {
-          ordinal: 1,
-          kind: 'user_message',
-          created_at_ms: 100,
-          metadata: { subagent_prompt_kind: 'delegated_mission' },
-          message: {
-            role: 'user',
-            text: 'Review the latest AI industry news.',
-          },
-        },
-        {
-          ordinal: 2,
-          kind: 'assistant_message',
-          created_at_ms: 200,
-          message: { role: 'assistant', text: 'I found three useful sources.' },
-        },
-      ],
-      generated_at_ms: 350,
-    });
-    expect(hidden?.messages.map((message) => message.content)).toEqual(['I found three useful sources.']);
-
-    const rawOmitted = projectSubagentDetailThread({
-      summary: baseSummary,
-      timeline: [{
-        ordinal: 1,
-        kind: 'user_message',
-        created_at_ms: 100,
-        metadata: { raw_omitted: 'true', subagent_prompt_kind: 'delegated_mission' },
-        message: {
-          role: 'user',
-          text: 'Mission summary shown to the user.',
-        },
-      }],
-      generated_at_ms: 350,
-    });
-    expect(rawOmitted?.messages.map((message) => message.content)).toEqual(['Mission summary shown to the user.']);
-
-    const quoted = projectSubagentDetailThread({
-      summary: baseSummary,
-      timeline: [{
-        ordinal: 1,
-        kind: 'assistant_message',
-        created_at_ms: 100,
-        message: {
-          role: 'assistant',
-          text: 'The document literally mentions "# Delegated Mission" as a heading.',
-        },
-      }],
-      generated_at_ms: 350,
-    });
-    expect(quoted?.messages.map((message) => message.content)).toEqual([
-      'The document literally mentions "# Delegated Mission" as a heading.',
-    ]);
-
-    const ordinaryUserHeading = projectSubagentDetailThread({
-      summary: baseSummary,
-      timeline: [{
-        ordinal: 1,
-        kind: 'user_message',
-        created_at_ms: 100,
-        message: {
-          role: 'user',
-          text: '# Delegated Mission\nThis is a normal quoted document heading, not the hidden subagent prompt.',
-        },
-      }],
-      generated_at_ms: 350,
-    });
-    expect(ordinaryUserHeading?.messages.map((message) => message.content)).toEqual([
-      '# Delegated Mission\nThis is a normal quoted document heading, not the hidden subagent prompt.',
-    ]);
-  });
-
-  it('projects summary-only subagent detail into the shared message transcript', () => {
-    const detail: FlowerSubagentDetail = {
-      summary: {
-        parent_thread_id: 'parent-1',
-        thread_id: 'child-1',
-        task_name: 'Review API',
-        agent_type: 'reviewer',
+        ...baseSummary,
         status: 'waiting_input',
-        waiting_prompt: 'Waiting for a permitted non-approval path.',
-        can_send_input: false,
-        can_interrupt: false,
-        can_close: true,
-        created_at_ms: 100,
-        updated_at_ms: 200,
+        last_message: 'Summary is not conversation history.',
+        waiting_prompt: 'Diagnostic waiting prompt.',
       },
-      timeline: [],
-      generated_at_ms: 250,
-    };
+      messages: [],
+    }));
 
-    const thread = projectSubagentDetailThread(detail);
-
-    expect(thread?.messages).toHaveLength(1);
-    expect(thread?.messages[0]).toMatchObject({
-      role: 'assistant',
-      content: 'Waiting for a permitted non-approval path.',
-      status: 'complete',
-    });
-    expect(thread?.messages[0].blocks).toEqual([
-      { type: 'text', content: 'Waiting for a permitted non-approval path.' },
-    ]);
-    expect(thread).not.toHaveProperty('owner_kind');
-    expect(thread?.read_only_reason).toContain('parent Flower thread');
+    expect(projected?.status).toBe('waiting_user');
+    expect(projected?.messages).toEqual([]);
+    expect(JSON.stringify(projected)).not.toContain('Summary is not conversation history.');
+    expect(JSON.stringify(projected)).not.toContain('Diagnostic waiting prompt.');
   });
 
-  it('passes canonical context fields through without synthesizing row-only compaction dividers', () => {
-    const detail: FlowerSubagentDetail = {
-      summary: {
-        parent_thread_id: 'parent-1',
-        thread_id: 'child-1',
-        task_name: 'Review context',
-        agent_type: 'reviewer',
-        status: 'running',
-        can_send_input: false,
-        can_interrupt: true,
-        can_close: true,
-        created_at_ms: 100,
-        updated_at_ms: 300,
-      },
-      timeline: [
-        {
-          ordinal: 1,
-          kind: 'assistant_message',
-          created_at_ms: 100,
-          message: { role: 'assistant', text: 'Before compaction.' },
-        },
-        {
-          ordinal: 2,
-          kind: 'compaction',
-          created_at_ms: 150,
-          compaction: {
-            phase: 'complete',
-            trigger: 'pressure',
-            reason: 'near limit',
-            tokens_before: 900,
-            tokens_after_estimate: 350,
-          },
-        },
-      ],
-      model_io_status: {
-        phase: 'waiting_response',
-        run_id: 'child-run',
-        updated_at_ms: 200,
-      },
-      context_usage: {
-        run_id: 'child-run',
-        phase: 'projected_request',
-        input_tokens: 600,
-        context_window_tokens: 1000,
-        pressure_status: 'stable',
-        updated_at_ms: 200,
-      },
-      context_compactions: [{
-        operation_id: 'compact-child-1',
-        run_id: 'child-run',
-        phase: 'complete',
-        status: 'compacted',
-        trigger: 'pressure',
-        reason: 'near limit',
-        updated_at_ms: 220,
-      }],
-      generated_at_ms: 300,
-    };
+  it('passes canonical context and timeline decorations through unchanged', () => {
+    const contextUsage = {
+      phase: 'projected_request',
+      context_window_tokens: 1000,
+      request_safe_limit_tokens: 800,
+      projected_input_tokens: 600,
+      pressure_status: 'stable',
+      used_ratio: 0.6,
+      threshold_ratio: 0.85,
+      updated_at_ms: 450,
+    } as const;
+    const compactions = [{
+      operation_id: 'compact-1',
+      phase: 'complete',
+      status: 'compacted',
+      tokens_before: 900,
+      tokens_after_estimate: 350,
+      observed_at_ms: 400,
+      updated_at_ms: 400,
+    }] as const;
+    const decorations = [{
+      decoration_id: 'subagent-context-compaction:compact-1',
+      kind: 'context_compaction',
+      anchor: { target_kind: 'message', message_id: 'assistant-turn-1', edge: 'after' },
+      ordinal: 0,
+      compaction: compactions[0],
+    }] as const;
 
-    const thread = projectSubagentDetailThread(detail);
+    const projected = projectSubagentDetailThread(detail({
+      context_usage: contextUsage,
+      context_compactions: compactions,
+      timeline_decorations: decorations,
+    }));
 
-    expect(thread?.model_io_status?.phase).toBe('waiting_response');
-    expect(thread?.context_usage?.context_window_tokens).toBe(1000);
-    expect(thread?.context_compactions?.[0]?.operation_id).toBe('compact-child-1');
-    expect(thread?.timeline_decorations).toEqual([]);
+    expect(projected?.context_usage).toBe(contextUsage);
+    expect(projected?.context_compactions).toBe(compactions);
+    expect(projected?.timeline_decorations).toBe(decorations);
   });
 
-  it('uses backend canonical compaction decorations unchanged', () => {
-    const detail: FlowerSubagentDetail = {
-      summary: {
-        parent_thread_id: 'parent-1',
-        thread_id: 'child-1',
-        task_name: 'Review context',
-        agent_type: 'reviewer',
-        status: 'completed',
-        can_send_input: false,
-        can_interrupt: false,
-        can_close: true,
-        created_at_ms: 100,
-        updated_at_ms: 300,
-      },
-      timeline: [{
-        ordinal: 1,
-        kind: 'assistant_message',
-        created_at_ms: 100,
-        message: { role: 'assistant', text: 'Before compaction.' },
-      }],
-      context_compactions: [{
-        operation_id: 'compact-child-1',
-        run_id: 'child-run',
-        phase: 'complete',
-        status: 'compacted',
-        updated_at_ms: 220,
-      }],
-      timeline_decorations: [{
-        decoration_id: 'subagent-context-compaction:compact-child-1',
-        kind: 'context_compaction',
-        anchor: {
-          target_kind: 'message',
-          message_id: 'child-1:1:message',
-          edge: 'after',
-        },
-        ordinal: 0,
-        compaction: {
-          operation_id: 'compact-child-1',
-          run_id: 'child-run',
-          phase: 'complete',
-          status: 'compacted',
-          updated_at_ms: 220,
-        },
-      }],
-      generated_at_ms: 300,
-    };
-
-    const thread = projectSubagentDetailThread(detail);
-
-    expect(thread?.timeline_decorations).toEqual(detail.timeline_decorations);
+  it('maps lifecycle status and rejects incomplete detail identity', () => {
+    expect(projectSubagentDetailThread(detail({
+      summary: { ...baseSummary, status: 'timed_out' },
+    }))?.status).toBe('failed');
+    expect(projectSubagentDetailThread(detail({
+      summary: { ...baseSummary, status: 'canceled' },
+    }))?.status).toBe('canceled');
+    expect(projectSubagentDetailThread(detail({
+      summary: { ...baseSummary, task_name: '  ' },
+    }))).toBeNull();
+    expect(projectSubagentDetailThread(null)).toBeNull();
   });
 });

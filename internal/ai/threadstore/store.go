@@ -134,6 +134,11 @@ type ThreadsCursor struct {
 	ThreadID                string
 }
 
+type ThreadSettingsRecoveryCursor struct {
+	EndpointID string
+	ThreadID   string
+}
+
 const threadSelectColumnsSQL = `
   thread_id, endpoint_id, namespace_public_id, model_id, reasoning_selection_json, permission_type, working_dir,
   pinned_at_unix_ms, queue_revision,
@@ -349,38 +354,68 @@ LIMIT ?
 	return out, next, nil
 }
 
-// ListAllThreadSettingsForRecovery returns the host-owned root identities that
-// the startup recovery coordinator must reconcile with Floret. It is not a UI
-// pagination surface and does not project canonical Agent state.
-func (s *Store) ListAllThreadSettingsForRecovery(ctx context.Context) ([]ThreadSettings, error) {
+// ListThreadSettingsForRecoveryPage returns a stable page of host-owned root
+// identities for startup reconciliation. It does not project Agent state.
+func (s *Store) ListThreadSettingsForRecoveryPage(ctx context.Context, cursor ThreadSettingsRecoveryCursor, limit int) ([]ThreadSettings, ThreadSettingsRecoveryCursor, bool, error) {
 	if s == nil || s.db == nil {
-		return nil, errors.New("store not initialized")
+		return nil, ThreadSettingsRecoveryCursor{}, false, errors.New("store not initialized")
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	rows, err := s.db.QueryContext(ctx, fmt.Sprintf(`
+	cursor.EndpointID = strings.TrimSpace(cursor.EndpointID)
+	cursor.ThreadID = strings.TrimSpace(cursor.ThreadID)
+	if (cursor.EndpointID == "") != (cursor.ThreadID == "") {
+		return nil, ThreadSettingsRecoveryCursor{}, false, errors.New("recovery settings cursor is incomplete")
+	}
+	if limit <= 0 {
+		limit = 200
+	}
+	if limit > 200 {
+		return nil, ThreadSettingsRecoveryCursor{}, false, errors.New("recovery settings page size exceeds 200")
+	}
+	args := []any{}
+	query := fmt.Sprintf(`
 SELECT
 %s
 FROM ai_thread_settings
+`, threadSelectColumnsSQL)
+	if cursor.EndpointID != "" {
+		query += `
+WHERE endpoint_id > ? OR (endpoint_id = ? AND thread_id > ?)
+`
+		args = append(args, cursor.EndpointID, cursor.EndpointID, cursor.ThreadID)
+	}
+	query += `
 ORDER BY endpoint_id ASC, thread_id ASC
-`, threadSelectColumnsSQL))
+LIMIT ?
+`
+	args = append(args, limit+1)
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, err
+		return nil, ThreadSettingsRecoveryCursor{}, false, err
 	}
 	defer rows.Close()
-	out := make([]ThreadSettings, 0)
+	out := make([]ThreadSettings, 0, limit+1)
 	for rows.Next() {
 		var settings ThreadSettings
 		if err := scanThreadRow(rows, &settings); err != nil {
-			return nil, err
+			return nil, ThreadSettingsRecoveryCursor{}, false, err
 		}
 		out = append(out, settings)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, ThreadSettingsRecoveryCursor{}, false, err
 	}
-	return out, nil
+	hasMore := len(out) > limit
+	if hasMore {
+		out = out[:limit]
+	}
+	if !hasMore || len(out) == 0 {
+		return out, ThreadSettingsRecoveryCursor{}, false, nil
+	}
+	last := out[len(out)-1]
+	return out, ThreadSettingsRecoveryCursor{EndpointID: last.EndpointID, ThreadID: last.ThreadID}, true, nil
 }
 
 func (s *Store) GetThreadSettings(ctx context.Context, endpointID string, threadID string) (*ThreadSettings, error) {

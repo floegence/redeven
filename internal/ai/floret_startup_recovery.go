@@ -23,6 +23,19 @@ type floretStartupRecoveryTarget struct {
 	factory     floretInterruptedTurnRecoveryHostFactory
 }
 
+type floretRootThreadInventory interface {
+	ListRootThreads(context.Context, flruntime.ListRootThreadsRequest) (flruntime.RootThreadsPage, error)
+}
+
+type floretStartupRecoverySettingsStore interface {
+	ListThreadSettingsForRecoveryPage(context.Context, threadstore.ThreadSettingsRecoveryCursor, int) ([]threadstore.ThreadSettings, threadstore.ThreadSettingsRecoveryCursor, bool, error)
+}
+
+type floretRootThreadInventoryReconciliation struct {
+	RootThreadIDs         []flruntime.ThreadID
+	OrphanedRootThreadIDs []flruntime.ThreadID
+}
+
 func (s *Service) recoverPreTurnStartupOperations(ctx context.Context) error {
 	for {
 		completed, err := s.replayPendingThreadCreateOperations(ctxOrBackground(ctx))
@@ -35,23 +48,92 @@ func (s *Service) recoverPreTurnStartupOperations(ctx context.Context) error {
 	}
 }
 
-func buildFloretStartupRecoveryTargets(ctx context.Context, db interface {
-	ListAllThreadSettingsForRecovery(context.Context) ([]threadstore.ThreadSettings, error)
-}, capabilities floretStartupRecoveryCapabilities) ([]floretStartupRecoveryTarget, error) {
-	if db == nil || capabilities.root == nil || capabilities.subagent == nil || capabilities.listSubagents == nil {
+func reconcileFloretRootThreadInventory(ctx context.Context, db floretStartupRecoverySettingsStore, inventory floretRootThreadInventory) (floretRootThreadInventoryReconciliation, error) {
+	if db == nil || inventory == nil {
+		return floretRootThreadInventoryReconciliation{}, errors.New("Floret root inventory reconciliation capability is unavailable")
+	}
+	ctx = ctxOrBackground(ctx)
+	productRoots := make(map[flruntime.ThreadID]struct{})
+	var settingsCursor threadstore.ThreadSettingsRecoveryCursor
+	for {
+		settings, next, hasMore, err := db.ListThreadSettingsForRecoveryPage(ctx, settingsCursor, 200)
+		if err != nil {
+			return floretRootThreadInventoryReconciliation{}, fmt.Errorf("list recovery thread settings: %w", err)
+		}
+		for _, item := range settings {
+			threadID := flruntime.ThreadID(strings.TrimSpace(item.ThreadID))
+			if threadID == "" || string(threadID) != item.ThreadID {
+				return floretRootThreadInventoryReconciliation{}, errors.New("recovery thread settings contain an invalid thread identity")
+			}
+			if _, duplicate := productRoots[threadID]; duplicate {
+				return floretRootThreadInventoryReconciliation{}, fmt.Errorf("recovery thread settings contain duplicate thread %q", threadID)
+			}
+			productRoots[threadID] = struct{}{}
+		}
+		if !hasMore {
+			if next != (threadstore.ThreadSettingsRecoveryCursor{}) {
+				return floretRootThreadInventoryReconciliation{}, errors.New("recovery thread settings pagination returned an unexpected terminal cursor")
+			}
+			break
+		}
+		if next == (threadstore.ThreadSettingsRecoveryCursor{}) || next == settingsCursor {
+			return floretRootThreadInventoryReconciliation{}, errors.New("recovery thread settings pagination did not advance")
+		}
+		settingsCursor = next
+	}
+
+	result := floretRootThreadInventoryReconciliation{}
+	canonicalRoots := make(map[flruntime.ThreadID]struct{})
+	var cursor flruntime.ThreadInventoryCursor
+	for {
+		page, err := inventory.ListRootThreads(ctx, flruntime.ListRootThreadsRequest{Cursor: cursor, Limit: 200})
+		if err != nil {
+			return floretRootThreadInventoryReconciliation{}, fmt.Errorf("list canonical Floret root threads: %w", err)
+		}
+		if err := page.Validate(); err != nil {
+			return floretRootThreadInventoryReconciliation{}, fmt.Errorf("validate canonical Floret root page: %w", err)
+		}
+		for _, thread := range page.Threads {
+			if _, duplicate := canonicalRoots[thread.ID]; duplicate {
+				return floretRootThreadInventoryReconciliation{}, fmt.Errorf("canonical Floret root inventory contains duplicate thread %q", thread.ID)
+			}
+			canonicalRoots[thread.ID] = struct{}{}
+			result.RootThreadIDs = append(result.RootThreadIDs, thread.ID)
+			if _, exists := productRoots[thread.ID]; !exists {
+				result.OrphanedRootThreadIDs = append(result.OrphanedRootThreadIDs, thread.ID)
+			}
+		}
+		if !page.HasMore {
+			break
+		}
+		if page.NextCursor == "" || page.NextCursor == cursor {
+			return floretRootThreadInventoryReconciliation{}, errors.New("canonical Floret root pagination did not advance")
+		}
+		cursor = page.NextCursor
+	}
+	for threadID := range productRoots {
+		if _, exists := canonicalRoots[threadID]; !exists {
+			return floretRootThreadInventoryReconciliation{}, fmt.Errorf("product thread settings reference missing canonical Floret root %q", threadID)
+		}
+	}
+	return result, nil
+}
+
+func buildFloretStartupRecoveryTargets(ctx context.Context, rootThreadIDs []flruntime.ThreadID, capabilities floretStartupRecoveryCapabilities) ([]floretStartupRecoveryTarget, error) {
+	if capabilities.root == nil || capabilities.subagent == nil || capabilities.listSubagents == nil {
 		return nil, errors.New("Floret startup recovery capability is unavailable")
 	}
-	settings, err := db.ListAllThreadSettingsForRecovery(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list recovery thread settings: %w", err)
-	}
-	targets := make([]floretStartupRecoveryTarget, 0, len(settings))
-	for _, item := range settings {
-		threadID := strings.TrimSpace(item.ThreadID)
-		if threadID == "" {
-			return nil, errors.New("recovery thread settings contain an empty thread identity")
+	targets := make([]floretStartupRecoveryTarget, 0, len(rootThreadIDs))
+	seenRoots := make(map[flruntime.ThreadID]struct{}, len(rootThreadIDs))
+	for _, rootThreadID := range rootThreadIDs {
+		threadID := strings.TrimSpace(string(rootThreadID))
+		if threadID == "" || threadID != string(rootThreadID) {
+			return nil, errors.New("Floret startup recovery roots contain an invalid thread identity")
 		}
-		rootThreadID := flruntime.ThreadID(threadID)
+		if _, duplicate := seenRoots[rootThreadID]; duplicate {
+			return nil, fmt.Errorf("Floret startup recovery roots contain duplicate thread %q", rootThreadID)
+		}
+		seenRoots[rootThreadID] = struct{}{}
 		rootFactory, err := capabilities.root(ctx, rootThreadID)
 		switch {
 		case errors.Is(err, flruntime.ErrInterruptedTurnNotFound):

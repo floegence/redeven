@@ -16,8 +16,9 @@ const FlowerSurface: Component<Omit<FlowerSurfaceProps, 'draftCoordinator'>> = (
   <FlowerSurfaceComponent {...props} draftCoordinator={createFlowerComposerDraftCoordinator()} />
 );
 import type {
-  FlowerActivityItem,
-  FlowerActivityTimelineBlock,
+	FlowerActivityItem,
+	FlowerActivityTimelineBlock,
+	FlowerChatMessage,
   FlowerInputRequest,
   FlowerRouterDecision,
   FlowerSettingsDraft,
@@ -477,6 +478,25 @@ export function subagentSummary(overrides: Partial<FlowerSubagentSummary> = {}):
   };
 }
 
+export function subagentActivityMessage(
+	block: FlowerActivityTimelineBlock,
+	overrides: Partial<FlowerChatMessage> = {},
+): FlowerChatMessage {
+	return {
+		id: 'child-turn-activity',
+		turn_id: 'child-turn-activity',
+		thread_id: 'thread-child-review',
+		run_id: block.run_id,
+		turn_ordinal: 2,
+		role: 'assistant',
+		content: '',
+		status: 'complete',
+		created_at_ms: 150,
+		blocks: [block],
+		...overrides,
+	};
+}
+
 export function subagentDetail(overrides: Partial<FlowerSubagentDetail> = {}): FlowerSubagentDetail {
   return {
     summary: {
@@ -490,9 +510,68 @@ export function subagentDetail(overrides: Partial<FlowerSubagentDetail> = {}): F
       can_interrupt: true,
       can_close: true,
       created_at_ms: 100,
-      updated_at_ms: 160,
-    },
-    timeline: [
+		updated_at_ms: 160,
+	},
+	messages: [
+		{
+			id: 'child-user-follow-up',
+			turn_id: 'child-turn-1',
+			thread_id: 'thread-child-review',
+			run_id: 'child-run-1',
+			turn_ordinal: 1,
+			role: 'user',
+			content: 'Review the API boundary.',
+			status: 'complete',
+			created_at_ms: 110,
+		},
+		{
+			id: 'child-turn-1',
+			turn_id: 'child-turn-1',
+			thread_id: 'thread-child-review',
+			run_id: 'child-run-1',
+			turn_ordinal: 1,
+			role: 'assistant',
+			content: 'Child handoff ready.',
+			status: 'complete',
+			created_at_ms: 160,
+		},
+		subagentActivityMessage(activityTimeline({
+			thread_id: 'thread-child-review',
+			run_id: 'subagent:thread-child-review',
+			turn_id: 'child-canonical',
+			items: [
+				activityItem({
+					item_id: 'call-terminal-running',
+					tool_id: 'call-terminal-running',
+					tool_name: 'terminal.exec',
+					renderer: 'terminal',
+					label: 'go test ./internal/ui',
+					status: 'running',
+					payload: { command: 'go test ./internal/ui', status: 'running' },
+				}),
+				activityItem({
+					item_id: 'call-terminal',
+					tool_id: 'call-terminal',
+					tool_name: 'terminal.exec',
+					renderer: 'terminal',
+					label: 'go test ./internal/ai',
+					status: 'success',
+					payload: {
+						command: 'go test ./internal/ai',
+						status: 'success',
+						output: 'PASS ./internal/ai',
+						first_seq: 1,
+						last_seq: 1,
+						latest_seq: 1,
+						has_more: false,
+						truncated: false,
+						content_ref: 'hash-tool-result',
+					},
+				}),
+			],
+		})),
+	],
+	timeline: [
       {
         ordinal: 1,
         kind: 'user_message',

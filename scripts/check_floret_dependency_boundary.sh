@@ -29,8 +29,8 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 ROOT_DIR=$(cd -- "$SCRIPT_DIR/.." &> /dev/null && pwd)
 PARENT_DIR=$(cd -- "$ROOT_DIR/.." &> /dev/null && pwd)
 FLORET_MODULE="github.com/floegence/floret"
-FLORET_VERSION="v0.28.0"
-FLORET_SUM="h1:RRhCknd0+yY78lcqGdCYlrLby6zhKCzPChUF4zzzrzA="
+FLORET_VERSION="v0.30.0"
+FLORET_SUM="h1:7rM+PbQtEtezk8cJAYEz8qNWRaGzievau+cR1zSu3q8="
 FLORET_GO_MOD_SUM="h1:u2oNhsSB8OppYPHo/cTmXITL+3pxv7ckjYDiq3SjoCg="
 
 cd "$ROOT_DIR"
@@ -199,6 +199,25 @@ check_agent_shadow_contract_semantics() {
 	fi
 
 	echo "[INFO] Agent shadow contract semantics checked"
+}
+
+check_canonical_subagent_and_root_inventory_boundaries() {
+	local matches
+
+	if matches=$(rg -n --pcre2 --glob '!**/*_test.go' --glob '!**/*.test.ts' --glob '!**/*.test.tsx' \
+		'subagent_prompt_kind|raw_omitted|IncludeRaw:[[:space:]]*true|ListAllThreadSettingsForRecovery' internal 2>/dev/null); then
+		printf '%s\n' "$matches"
+		fail "SubAgent transcript and startup roots must not fall back to metadata, raw detail, or product-owned inventory."
+	fi
+	if ! rg -q 'ThreadUserMessageOriginDelegatedMission' internal/ai/subagents_floret.go \
+		|| ! rg -q 'ListThreadTurns' internal/ai/floret_contracts.go \
+		|| ! rg -q 'NewThreadInventoryHost' internal/ai/floret_bootstrap.go \
+		|| ! rg -q 'UserMessageOrigin.*UserEntryID' AGENTS.md \
+		|| ! rg -q 'ThreadInventoryHost' AGENTS.md; then
+		fail "Typed SubAgent origin reads and Floret root inventory authority must remain wired through public contracts."
+	fi
+
+	echo "[INFO] canonical SubAgent and root inventory boundaries checked"
 }
 
 check_floret_capability_bootstrap_boundary() {
@@ -570,6 +589,7 @@ check_no_floret_internal_imports
 check_no_floret_schema_access
 check_no_agent_shadow_storage
 check_agent_shadow_contract_semantics
+check_canonical_subagent_and_root_inventory_boundaries
 check_floret_capability_bootstrap_boundary
 check_floret_thread_creation_boundary
 check_removed_product_schema_paths

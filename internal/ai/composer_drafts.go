@@ -172,7 +172,7 @@ func (s *Service) reconcileStaleComposerDraftAdmissions(ctx context.Context, db 
 }
 
 func floretThreadContainsTurn(ctx context.Context, host floretThreadReadHost, threadID, turnID string) (bool, error) {
-	var before *flruntime.ThreadTurnsBeforeCursor
+	var before *flruntime.ThreadTurnCursor
 	for {
 		req := flruntime.ListThreadTurnsRequest{ThreadID: flruntime.ThreadID(threadID)}
 		if before == nil {
@@ -193,10 +193,10 @@ func floretThreadContainsTurn(ctx context.Context, host floretThreadReadHost, th
 		if !page.HasMore {
 			return false, nil
 		}
-		if len(page.Turns) == 0 || page.BeforeCursor == nil || strings.TrimSpace(page.BeforeCursor.EntryID) == "" {
+		if len(page.Turns) == 0 || page.BeforeCursor == nil || strings.TrimSpace(string(*page.BeforeCursor)) == "" {
 			return false, errors.New("Floret turn pagination stopped before admission reconciliation")
 		}
-		if before != nil && before.EntryID == page.BeforeCursor.EntryID {
+		if before != nil && *before == *page.BeforeCursor {
 			return false, errors.New("Floret turn pagination did not advance during admission reconciliation")
 		}
 		before = page.BeforeCursor

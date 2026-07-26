@@ -349,7 +349,7 @@ func TestResolveFlowerCanonicalReferenceOpenTargetFindsReferenceBeforeTailPage(t
 	if err != nil {
 		t.Fatalf("list tail: %v", err)
 	}
-	if len(tail.Turns) != 200 || !tail.HasMore || tail.BeforeCursor == nil || strings.TrimSpace(tail.BeforeCursor.EntryID) == "" {
+	if len(tail.Turns) != 200 || !tail.HasMore || tail.BeforeCursor == nil || strings.TrimSpace(string(*tail.BeforeCursor)) == "" {
 		t.Fatalf("tail page=%#v, want 200 turns and an advancing before cursor", tail)
 	}
 	older, err := readHost.ListThreadTurns(ctx, flruntime.ListThreadTurnsRequest{

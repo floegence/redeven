@@ -180,6 +180,9 @@ type recordingFloretHost struct {
 	detail             flruntime.SubAgentDetail
 	detailErr          error
 	detailRequests     []flruntime.ReadSubAgentDetailRequest
+	turnPage           flruntime.ThreadTurnsPage
+	turnErr            error
+	turnRequests       []flruntime.ListThreadTurnsRequest
 	spawnRequests      []flruntime.SpawnSubAgentRequest
 	sendInputRequests  []flruntime.SendSubAgentInputRequest
 	sendInputResult    *flruntime.SubAgentSnapshot
@@ -265,8 +268,18 @@ func (h *recordingFloretHost) ReadThreadContext(_ context.Context, id flruntime.
 	return flruntime.ThreadContextSnapshot{ThreadID: id}, nil
 }
 
-func (h *recordingFloretHost) ListThreadTurns(_ context.Context, _ flruntime.ListThreadTurnsRequest) (flruntime.ThreadTurnsPage, error) {
-	return flruntime.ThreadTurnsPage{}, nil
+func (h *recordingFloretHost) ListThreadTurns(_ context.Context, req flruntime.ListThreadTurnsRequest) (flruntime.ThreadTurnsPage, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.turnRequests = append(h.turnRequests, req)
+	if h.turnErr != nil {
+		return flruntime.ThreadTurnsPage{}, h.turnErr
+	}
+	page := h.turnPage
+	if page.ThreadID == "" {
+		page.ThreadID = req.ThreadID
+	}
+	return page, nil
 }
 
 func (h *recordingFloretHost) RunTurn(context.Context, flruntime.RunTurnRequest) (flruntime.TurnResult, error) {
@@ -579,8 +592,12 @@ func newTestFloretHostFromService(t *testing.T, svc *Service, parentThreadID str
 	return &testFloretHost{floretTurnHost: turnHost, floretSubagentHost: subagentHost}
 }
 
-func seedTestFloretSubagentTree(t *testing.T, ctx context.Context, svc *Service, parentThreadID string, childThreadID string) string {
+func seedTestFloretSubagentTree(t *testing.T, ctx context.Context, svc *Service, parentThreadID string, childThreadID string, mission ...string) string {
 	t.Helper()
+	delegatedMission := "work"
+	if len(mission) > 0 {
+		delegatedMission = mission[0]
+	}
 	storePath, err := floretThreadStorePath(svc.stateDir)
 	if err != nil {
 		t.Fatalf("floretThreadStorePath: %v", err)
@@ -629,7 +646,7 @@ func seedTestFloretSubagentTree(t *testing.T, ctx context.Context, svc *Service,
 		ParentTurnID:   parentTurnID,
 		ThreadID:       flruntime.ThreadID(childThreadID),
 		TaskName:       "child",
-		Message:        "work",
+		Message:        delegatedMission,
 		ForkMode:       flruntime.SubAgentForkNone,
 	}); err != nil {
 		close(gateway.release)
@@ -648,6 +665,50 @@ func seedTestFloretSubagentTree(t *testing.T, ctx context.Context, svc *Service,
 		t.Fatalf("WaitSubAgents=%#v err=%v", waited, err)
 	}
 	return storePath
+}
+
+func TestServiceGetFlowerSubagentDetailUsesPublishedTypedOriginForMissionVisibility(t *testing.T) {
+	t.Parallel()
+
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+	parent, err := svc.CreateThread(ctx, meta, "parent", "openai/gpt-5-mini", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread parent: %v", err)
+	}
+	const childThreadID = "floret_child_typed_origin_visibility"
+	const delegatedMission = "internal delegated mission sentinel 7f1a6c"
+	seedTestFloretSubagentTree(t, ctx, svc, parent.ThreadID, childThreadID, delegatedMission)
+
+	readHost, err := svc.openFloretSubagentReadHost(ctx, parent.ThreadID)
+	if err != nil {
+		t.Fatalf("open SubAgent read host: %v", err)
+	}
+	turns, err := listAllFloretThreadTurns(ctx, readHost, childThreadID)
+	if err != nil {
+		t.Fatalf("ListThreadTurns: %v", err)
+	}
+	if len(turns) != 1 || turns[0].UserInput != delegatedMission ||
+		turns[0].UserMessageOrigin != flruntime.ThreadUserMessageOriginDelegatedMission ||
+		strings.TrimSpace(turns[0].UserEntryID) == "" {
+		t.Fatalf("published typed child turn=%#v", turns)
+	}
+
+	detail, err := svc.GetFlowerSubagentDetail(ctx, meta, parent.ThreadID, childThreadID, 0, 200)
+	if err != nil {
+		t.Fatalf("GetFlowerSubagentDetail: %v", err)
+	}
+	wire, err := json.Marshal(detail)
+	if err != nil {
+		t.Fatalf("marshal detail: %v", err)
+	}
+	if strings.Contains(string(wire), delegatedMission) {
+		t.Fatalf("delegated mission leaked into Redeven detail payload: %s", wire)
+	}
+	if !strings.Contains(string(wire), "child done") {
+		t.Fatalf("canonical assistant result missing from Redeven detail payload: %s", wire)
+	}
 }
 
 func TestSubagentOperationIdentitiesAreStableAndScoped(t *testing.T) {
@@ -1397,7 +1458,7 @@ func TestCancelThreadRejectsUnownedSubagentLifecycleWithoutCachedRuntime(t *test
 	}
 }
 
-func TestServiceGetFlowerSubagentDetailRequestsRawMessageContent(t *testing.T) {
+func TestServiceGetFlowerSubagentDetailUsesCanonicalMessagesAndSanitizedDiagnostics(t *testing.T) {
 	t.Parallel()
 
 	svc := newSendTurnTestService(t)
@@ -1411,6 +1472,33 @@ func TestServiceGetFlowerSubagentDetailRequestsRawMessageContent(t *testing.T) {
 	finalPreview := "complete report http://arxiv.org/abs/2607.02..."
 	finalContent := "complete report " + strings.Repeat("evidence section ", 80) + "http://arxiv.org/abs/2607.02514v1"
 	host := &recordingFloretHost{
+		turnPage: flruntime.ThreadTurnsPage{
+			ThreadID:       flruntime.ThreadID("child-detail"),
+			ThroughOrdinal: 7,
+			Turns: []flruntime.ThreadTurnSnapshot{{
+				TurnID:            flruntime.TurnID("child-turn"),
+				RunID:             flruntime.RunID("child-run"),
+				Ordinal:           1,
+				StartedAt:         now.Add(-50 * time.Second),
+				UpdatedAt:         now.Add(-5 * time.Second),
+				UserEntryID:       "child-user-entry",
+				UserMessageOrigin: flruntime.ThreadUserMessageOriginDelegatedMission,
+				UserInput:         "delegate mission",
+				Status:            flruntime.TurnStatusCompleted,
+				ThroughOrdinal:    7,
+				Projection: flruntime.ThreadTurnProjection{
+					ThreadID:       flruntime.ThreadID("child-detail"),
+					TurnID:         flruntime.TurnID("child-turn"),
+					RunID:          flruntime.RunID("child-run"),
+					Status:         flruntime.TurnStatusCompleted,
+					ThroughOrdinal: 7,
+					Segments: []flruntime.ThreadTurnProjectionSegment{{
+						Kind: flruntime.ThreadTurnProjectionSegmentAssistantText,
+						Text: finalContent,
+					}},
+				},
+			}},
+		},
 		detail: flruntime.SubAgentDetail{
 			Snapshot: flruntime.SubAgentSnapshot{
 				ThreadID:       flruntime.ThreadID("child-detail"),
@@ -1428,7 +1516,7 @@ func TestServiceGetFlowerSubagentDetailRequestsRawMessageContent(t *testing.T) {
 			},
 			Events: []flruntime.ThreadDetailEvent{
 				{
-					ID:        "event-user",
+					ID:        "child-user-entry",
 					Ordinal:   1,
 					ThreadID:  flruntime.ThreadID("child-detail"),
 					TurnID:    flruntime.TurnID("child-turn"),
@@ -1589,7 +1677,6 @@ func TestServiceGetFlowerSubagentDetailRequestsRawMessageContent(t *testing.T) {
 					Message: &flruntime.ThreadDetailMessage{
 						Role:    "assistant",
 						Preview: finalPreview,
-						Content: finalContent,
 					},
 				},
 			},
@@ -1676,16 +1763,16 @@ func TestServiceGetFlowerSubagentDetailRequestsRawMessageContent(t *testing.T) {
 	if req.AfterOrdinal != 7 || req.Limit != 333 {
 		t.Fatalf("unexpected detail pagination: %#v", req)
 	}
-	if !req.IncludeRaw {
-		t.Fatalf("Flower UI detail must request raw child transcript messages for full display output")
+	if req.IncludeRaw {
+		t.Fatalf("Flower UI detail must not request raw child transcript messages")
 	}
 	if detail == nil || detail.Summary.ThreadID != "child-detail" || detail.Summary.ParentThreadID != parent.ThreadID {
 		t.Fatalf("unexpected detail summary: %#v", detail)
 	}
-	if len(detail.Timeline) != 7 {
-		t.Fatalf("timeline rows=%d, want 7: %#v", len(detail.Timeline), detail.Timeline)
+	if len(detail.Timeline) != 6 {
+		t.Fatalf("timeline rows=%d, want 6 after hiding the delegated mission event: %#v", len(detail.Timeline), detail.Timeline)
 	}
-	for _, index := range []int{1, 2, 3, 4} {
+	for _, index := range []int{0, 1, 2, 3} {
 		rowJSON, err := json.Marshal(detail.Timeline[index])
 		if err != nil {
 			t.Fatalf("marshal row %d: %v", index, err)
@@ -1694,14 +1781,14 @@ func TestServiceGetFlowerSubagentDetailRequestsRawMessageContent(t *testing.T) {
 			t.Fatalf("timeline row %d should not expose per-event activity: %s", index, string(rowJSON))
 		}
 	}
-	if detail.Timeline[1].ToolCall == nil || detail.Timeline[1].ToolCall.Name != "terminal.exec" || detail.Timeline[1].ToolCall.ArgsHash == "" {
-		t.Fatalf("tool call row not projected: %#v", detail.Timeline[1])
+	if detail.Timeline[0].ToolCall == nil || detail.Timeline[0].ToolCall.Name != "terminal.exec" || detail.Timeline[0].ToolCall.ArgsHash == "" {
+		t.Fatalf("tool call row not projected: %#v", detail.Timeline[0])
 	}
-	if detail.Timeline[2].ToolResult == nil || detail.Timeline[2].ToolResult.Preview != "total 4" || !detail.Timeline[2].ToolResult.Truncated {
-		t.Fatalf("tool result row not projected: %#v", detail.Timeline[2])
+	if detail.Timeline[1].ToolResult == nil || detail.Timeline[1].ToolResult.Preview != "total 4" || !detail.Timeline[1].ToolResult.Truncated {
+		t.Fatalf("tool result row not projected: %#v", detail.Timeline[1])
 	}
-	if detail.Timeline[3].ToolCall == nil || detail.Timeline[3].Kind != "tool_activity" {
-		t.Fatalf("tool activity row not projected as journal fact: %#v", detail.Timeline[3])
+	if detail.Timeline[2].ToolCall == nil || detail.Timeline[2].Kind != "tool_activity" {
+		t.Fatalf("tool activity row not projected as journal fact: %#v", detail.Timeline[2])
 	}
 	if detail.Activity == nil || len(detail.Activity.Items) != 1 {
 		t.Fatalf("canonical subagent activity not projected: %#v", detail)
@@ -1720,20 +1807,20 @@ func TestServiceGetFlowerSubagentDetailRequestsRawMessageContent(t *testing.T) {
 	if strings.Contains(string(encoded), "raw-full-output") || strings.Contains(string(encoded), "full_output") {
 		t.Fatalf("detail leaked full output artifact reference: %s", string(encoded))
 	}
-	if detail.Timeline[4].Approval == nil || detail.Timeline[4].Approval.State != "denied" {
-		t.Fatalf("approval row not projected: %#v", detail.Timeline[4])
+	if detail.Timeline[3].Approval == nil || detail.Timeline[3].Approval.State != "denied" {
+		t.Fatalf("approval row not projected: %#v", detail.Timeline[3])
 	}
-	if detail.Timeline[5].Error != "tool blocked" {
-		t.Fatalf("error row not projected: %#v", detail.Timeline[5])
+	if detail.Timeline[4].Error != "tool blocked" {
+		t.Fatalf("error row not projected: %#v", detail.Timeline[4])
 	}
-	if detail.Timeline[6].Message == nil || detail.Timeline[6].Message.Text != finalContent || detail.Timeline[6].Message.Preview != finalPreview {
-		t.Fatalf("assistant detail should use raw content for text and bounded preview for preview: %#v", detail.Timeline[6])
+	if detail.Timeline[5].Message == nil || detail.Timeline[5].Message.Text != finalPreview || detail.Timeline[5].Message.Preview != finalPreview {
+		t.Fatalf("assistant diagnostic should expose only the bounded preview: %#v", detail.Timeline[5])
 	}
-	if strings.Contains(detail.Timeline[6].Message.Preview, "2607.02514v1") {
-		t.Fatalf("assistant preview should remain bounded: %#v", detail.Timeline[6].Message)
+	if len(detail.Messages) != 1 || detail.Messages[0].Role != "assistant" || detail.Messages[0].Content != finalContent {
+		t.Fatalf("canonical assistant message missing full content: %#v", detail.Messages)
 	}
-	if detail.Timeline[6].Message.Text == detail.Summary.LastMessage {
-		t.Fatalf("assistant detail text should come from Floret message content, not summary last_message: %#v", detail.Timeline[6].Message)
+	if strings.Contains(detail.Timeline[5].Message.Preview, "2607.02514v1") {
+		t.Fatalf("assistant preview should remain bounded: %#v", detail.Timeline[5].Message)
 	}
 	if !detail.HasMore || detail.NextOrdinal != 7 || detail.RetainedFrom != 1 {
 		t.Fatalf("pagination metadata not projected: %#v", detail)
@@ -1752,6 +1839,33 @@ func TestServiceGetFlowerSubagentDetailProjectsCanonicalContextFacts(t *testing.
 	}
 	now := time.UnixMilli(20_000)
 	host := &recordingFloretHost{
+		turnPage: flruntime.ThreadTurnsPage{
+			ThreadID:       flruntime.ThreadID("child-context"),
+			ThroughOrdinal: 2,
+			Turns: []flruntime.ThreadTurnSnapshot{{
+				TurnID:            flruntime.TurnID("child-turn"),
+				RunID:             flruntime.RunID("child-run"),
+				Ordinal:           1,
+				StartedAt:         now.Add(-50 * time.Second),
+				UpdatedAt:         now,
+				UserEntryID:       "child-context-user",
+				UserMessageOrigin: flruntime.ThreadUserMessageOriginDelegatedMission,
+				UserInput:         "inspect context",
+				Status:            flruntime.TurnStatusCompleted,
+				ThroughOrdinal:    2,
+				Projection: flruntime.ThreadTurnProjection{
+					ThreadID:       flruntime.ThreadID("child-context"),
+					TurnID:         flruntime.TurnID("child-turn"),
+					RunID:          flruntime.RunID("child-run"),
+					Status:         flruntime.TurnStatusCompleted,
+					ThroughOrdinal: 2,
+					Segments: []flruntime.ThreadTurnProjectionSegment{{
+						Kind: flruntime.ThreadTurnProjectionSegmentAssistantText,
+						Text: "I am about to compact context.",
+					}},
+				},
+			}},
+		},
 		detail: flruntime.SubAgentDetail{
 			Snapshot: flruntime.SubAgentSnapshot{
 				ThreadID:       flruntime.ThreadID("child-context"),
@@ -1874,7 +1988,7 @@ func TestServiceGetFlowerSubagentDetailProjectsCanonicalContextFacts(t *testing.
 		t.Fatalf("timeline decorations=%#v, want one", detail.TimelineDecorations)
 	}
 	decoration := detail.TimelineDecorations[0]
-	if decoration.Compaction.OperationID != "compact-child-1" || decoration.Anchor.MessageID != "child-context:1:message" || decoration.Anchor.Edge != "after" {
+	if decoration.Compaction.OperationID != "compact-child-1" || decoration.Anchor.MessageID != "child-turn" || decoration.Anchor.Edge != "after" {
 		t.Fatalf("unexpected timeline decoration: %#v", decoration)
 	}
 	if detail.ModelIOStatus != nil {
@@ -1894,7 +2008,7 @@ func TestFlowerSubagentCompactionAnchorsRejectMetadataIdentityAlias(t *testing.T
 			Compaction: &flruntime.ThreadDetailCompaction{Phase: "complete"},
 			Metadata:   map[string]string{"context_operation_id": "legacy-operation"},
 		}},
-	})
+	}, nil)
 	if err == nil {
 		t.Fatal("subagent compaction metadata identity alias was accepted")
 	}
@@ -1950,7 +2064,7 @@ func TestServiceGetFlowerSubagentDetailUsesParentScopedReadHostWithoutCachedRunt
 	if err != nil {
 		t.Fatalf("marshal detail: %v", err)
 	}
-	if strings.Contains(string(encoded), `"content"`) || strings.Contains(string(encoded), `"args_json"`) {
+	if strings.Contains(string(encoded), `"args_json"`) || strings.Contains(string(encoded), `"full_output"`) {
 		t.Fatalf("maintenance detail leaked raw fields: %s", string(encoded))
 	}
 }
@@ -1969,7 +2083,7 @@ func TestServiceGetFlowerSubagentDetailRejectsWrongParentBeforeRuntime(t *testin
 	if err != nil {
 		t.Fatalf("CreateThread child: %v", err)
 	}
-	host := &recordingFloretHost{detailErr: flruntime.ErrSubAgentNotFound}
+	host := &recordingFloretHost{turnErr: flruntime.ErrSubAgentNotFound}
 	key := runThreadKey(meta.EndpointID, otherParent.ThreadID)
 	svc.mu.Lock()
 	bindRecordingThreadRead(svc, otherParent.ThreadID, host)
@@ -1989,10 +2103,11 @@ func TestServiceGetFlowerSubagentDetailRejectsWrongParentBeforeRuntime(t *testin
 		t.Fatalf("GetFlowerSubagentDetail err=%v, want sql.ErrNoRows", err)
 	}
 	host.mu.Lock()
-	requests := len(host.detailRequests)
+	turnRequests := len(host.turnRequests)
+	detailRequests := len(host.detailRequests)
 	host.mu.Unlock()
-	if requests != 1 {
-		t.Fatalf("detail host calls=%d, want 1", requests)
+	if turnRequests != 1 || detailRequests != 0 {
+		t.Fatalf("typed turn calls=%d detail calls=%d, want 1 and 0", turnRequests, detailRequests)
 	}
 }
 
