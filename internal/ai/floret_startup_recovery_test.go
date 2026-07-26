@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -290,6 +291,9 @@ func TestFloretStartupRecoveryBindsChildToExactCanonicalParent(t *testing.T) {
 	childFactory := &scriptedInterruptedTurnRecoveryFactory{host: childHost}
 	capabilities := floretStartupRecoveryCapabilities{
 		listSubagents: func(_ context.Context, parentThreadID flruntime.ThreadID) (floretSubagentReadHost, error) {
+			if parentThreadID == "child_recovery" {
+				return startupRecoverySubagentReadHost{}, nil
+			}
 			if parentThreadID != "parent_recovery" {
 				t.Fatalf("SubAgent read parent=%q", parentThreadID)
 			}
@@ -317,6 +321,67 @@ func TestFloretStartupRecoveryBindsChildToExactCanonicalParent(t *testing.T) {
 	}
 	if result.pending || result.recovered != 1 {
 		t.Fatalf("recovery=%+v, want exact child recovery", result)
+	}
+}
+
+func TestFloretStartupRecoveryWalksNestedSubagents(t *testing.T) {
+	t.Parallel()
+
+	var listed []flruntime.ThreadID
+	var bound [][2]flruntime.ThreadID
+	capabilities := floretStartupRecoveryCapabilities{
+		listSubagents: func(_ context.Context, parentThreadID flruntime.ThreadID) (floretSubagentReadHost, error) {
+			listed = append(listed, parentThreadID)
+			switch parentThreadID {
+			case "root_nested":
+				return startupRecoverySubagentReadHost{snapshots: []flruntime.SubAgentSnapshot{{ThreadID: "child_nested", ParentThreadID: parentThreadID}}}, nil
+			case "child_nested":
+				return startupRecoverySubagentReadHost{snapshots: []flruntime.SubAgentSnapshot{{ThreadID: "grandchild_nested", ParentThreadID: parentThreadID}}}, nil
+			case "grandchild_nested":
+				return startupRecoverySubagentReadHost{}, nil
+			default:
+				return nil, errors.New("unexpected nested SubAgent parent")
+			}
+		},
+		root: func(context.Context, flruntime.ThreadID) (floretInterruptedTurnRecoveryHostFactory, error) {
+			return nil, flruntime.ErrInterruptedTurnNotFound
+		},
+		subagent: func(_ context.Context, parentThreadID flruntime.ThreadID, childThreadID flruntime.ThreadID) (floretInterruptedTurnRecoveryHostFactory, error) {
+			bound = append(bound, [2]flruntime.ThreadID{parentThreadID, childThreadID})
+			return nil, flruntime.ErrInterruptedTurnNotFound
+		},
+	}
+	if _, err := buildFloretStartupRecoveryTargets(context.Background(), []flruntime.ThreadID{"root_nested"}, capabilities); err != nil {
+		t.Fatalf("build nested startup recovery targets: %v", err)
+	}
+	if want := []flruntime.ThreadID{"root_nested", "child_nested", "grandchild_nested"}; !slices.Equal(listed, want) {
+		t.Fatalf("listed parents=%v, want %v", listed, want)
+	}
+	if want := [][2]flruntime.ThreadID{{"root_nested", "child_nested"}, {"child_nested", "grandchild_nested"}}; !slices.Equal(bound, want) {
+		t.Fatalf("bound nested children=%v, want %v", bound, want)
+	}
+}
+
+func TestFloretStartupRecoveryRejectsRootReusedAsDescendant(t *testing.T) {
+	t.Parallel()
+	capabilities := floretStartupRecoveryCapabilities{
+		listSubagents: func(_ context.Context, parentThreadID flruntime.ThreadID) (floretSubagentReadHost, error) {
+			if parentThreadID == "root_a" {
+				return startupRecoverySubagentReadHost{snapshots: []flruntime.SubAgentSnapshot{{ThreadID: "root_b", ParentThreadID: parentThreadID}}}, nil
+			}
+			return startupRecoverySubagentReadHost{}, nil
+		},
+		root: func(context.Context, flruntime.ThreadID) (floretInterruptedTurnRecoveryHostFactory, error) {
+			return nil, flruntime.ErrInterruptedTurnNotFound
+		},
+		subagent: func(context.Context, flruntime.ThreadID, flruntime.ThreadID) (floretInterruptedTurnRecoveryHostFactory, error) {
+			t.Fatal("duplicate root must be rejected before binding a SubAgent target")
+			return nil, nil
+		},
+	}
+	_, err := buildFloretStartupRecoveryTargets(context.Background(), []flruntime.ThreadID{"root_a", "root_b"}, capabilities)
+	if err == nil || !strings.Contains(err.Error(), "duplicate thread") {
+		t.Fatalf("error=%v, want duplicate durable identity rejection", err)
 	}
 }
 

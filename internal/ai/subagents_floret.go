@@ -2604,7 +2604,7 @@ func (s *Service) GetFlowerSubagentDetail(ctx context.Context, meta *session.Met
 	return nil, errors.New("unreachable SubAgent detail read state")
 }
 
-var errFloretSubagentDetailSnapshotChanged = errors.New("Floret SubAgent detail snapshot changed during read")
+var errFloretSubagentDetailSnapshotChanged = errors.New("Floret subagent detail snapshot changed during read")
 
 func isFloretSubagentNotFoundError(err error) bool {
 	if err == nil {
@@ -2682,8 +2682,8 @@ func (s *Service) flowerSubagentDetailResponse(endpointID string, detail flrunti
 }
 
 type canonicalUserMessageFact struct {
-	TurnID string
-	Origin flruntime.ThreadUserMessageOrigin
+	turnID string
+	origin flruntime.ThreadUserMessageOrigin
 }
 
 func visibleSubagentDetailEvents(events []flruntime.ThreadDetailEvent, turns []flruntime.ThreadTurnSnapshot, threadID string) ([]flruntime.ThreadDetailEvent, error) {
@@ -2692,6 +2692,9 @@ func visibleSubagentDetailEvents(events []flruntime.ThreadDetailEvent, turns []f
 		return nil, err
 	}
 	threadID = strings.TrimSpace(threadID)
+	if threadID == "" {
+		return nil, errors.New("Floret subagent detail is missing its canonical thread identity")
+	}
 	visible := make([]flruntime.ThreadDetailEvent, 0, len(events))
 	for _, event := range events {
 		if event.Kind != flruntime.ThreadDetailEventUserMessage {
@@ -2703,10 +2706,10 @@ func visibleSubagentDetailEvents(events []flruntime.ThreadDetailEvent, turns []f
 		if !ok {
 			return nil, fmt.Errorf("%w: detail event references unknown canonical user entry %q", errFloretSubagentDetailSnapshotChanged, entryID)
 		}
-		if strings.TrimSpace(string(event.ThreadID)) != threadID || strings.TrimSpace(string(event.TurnID)) != fact.TurnID {
-			return nil, fmt.Errorf("%w: detail event canonical user entry identity does not match thread and turn", errFloretSubagentDetailSnapshotChanged)
+		if strings.TrimSpace(string(event.ThreadID)) != threadID || strings.TrimSpace(string(event.TurnID)) != fact.turnID {
+			return nil, fmt.Errorf("detail event canonical user entry identity %q does not match thread %q turn %q", entryID, threadID, fact.turnID)
 		}
-		if fact.Origin == flruntime.ThreadUserMessageOriginDelegatedMission {
+		if fact.origin == flruntime.ThreadUserMessageOriginDelegatedMission {
 			continue
 		}
 		visible = append(visible, event)
@@ -2721,7 +2724,7 @@ func delegatedMissionEntryIDsFromTurns(turns []flruntime.ThreadTurnSnapshot) (ma
 	}
 	hidden := make(map[string]struct{})
 	for entryID, fact := range facts {
-		if fact.Origin == flruntime.ThreadUserMessageOriginDelegatedMission {
+		if fact.origin == flruntime.ThreadUserMessageOriginDelegatedMission {
 			hidden[entryID] = struct{}{}
 		}
 	}
@@ -2733,6 +2736,9 @@ func canonicalUserMessageFactsFromTurns(turns []flruntime.ThreadTurnSnapshot) (m
 	for _, turn := range turns {
 		turnID := strings.TrimSpace(string(turn.TurnID))
 		entryID := strings.TrimSpace(turn.UserEntryID)
+		if turnID == "" {
+			return nil, errors.New("Floret turn is missing its canonical turn identity")
+		}
 		if turn.RetrySource != nil {
 			if turn.UserMessageOrigin != "" || entryID != "" {
 				return nil, fmt.Errorf("Floret retry turn %q exposes a user-message origin or entry", turnID)
@@ -2753,12 +2759,20 @@ func canonicalUserMessageFactsFromTurns(turns []flruntime.ThreadTurnSnapshot) (m
 		if _, duplicate := facts[entryID]; duplicate {
 			return nil, fmt.Errorf("Floret turns duplicate canonical user entry %q", entryID)
 		}
-		facts[entryID] = canonicalUserMessageFact{TurnID: turnID, Origin: turn.UserMessageOrigin}
+		facts[entryID] = canonicalUserMessageFact{turnID: turnID, origin: turn.UserMessageOrigin}
 	}
 	return facts, nil
 }
 
 func remapSubagentDetailProjectionDecorationAnchors(decorations []FlowerTimelineDecoration, turns []flruntime.ThreadTurnSnapshot, messages []FlowerTimelineMessage) ([]FlowerTimelineDecoration, error) {
+	if len(decorations) == 0 {
+		return nil, nil
+	}
+	facts, err := canonicalUserMessageFactsFromTurns(turns)
+	if err != nil {
+		return nil, err
+	}
+	visibleMessageIDs := make(map[string]struct{}, len(messages))
 	visibleByTurn := make(map[string]string)
 	for _, message := range messages {
 		turnID := strings.TrimSpace(message.TurnID)
@@ -2766,15 +2780,14 @@ func remapSubagentDetailProjectionDecorationAnchors(decorations []FlowerTimeline
 		if turnID == "" || messageID == "" {
 			continue
 		}
+		visibleMessageIDs[messageID] = struct{}{}
 		if visibleByTurn[turnID] == "" || strings.TrimSpace(message.Role) == "assistant" {
 			visibleByTurn[turnID] = messageID
 		}
 	}
 	retrySourceByTurn := make(map[string]string)
-	ordinalByTurn := make(map[string]int64)
 	for _, turn := range turns {
 		turnID := strings.TrimSpace(string(turn.TurnID))
-		ordinalByTurn[turnID] = turn.Ordinal
 		if turn.RetrySource != nil {
 			retrySourceByTurn[turnID] = strings.TrimSpace(string(turn.RetrySource.TurnID))
 		}
@@ -2785,30 +2798,40 @@ func remapSubagentDetailProjectionDecorationAnchors(decorations []FlowerTimeline
 		if decoration.Kind != FlowerTimelineDecorationTurnProjectionUnavailable || decoration.ProjectionUnavailable == nil {
 			continue
 		}
-		turnID := strings.TrimSpace(decoration.ProjectionUnavailable.TurnID)
-		anchorID := visibleByTurn[turnID]
+		originalAnchorID := strings.TrimSpace(decoration.Anchor.MessageID)
+		if _, visible := visibleMessageIDs[originalAnchorID]; visible {
+			continue
+		}
+		anchorFact, hidden := facts[originalAnchorID]
+		if !hidden || anchorFact.origin != flruntime.ThreadUserMessageOriginDelegatedMission {
+			return nil, fmt.Errorf("projection unavailable decoration %q references invisible canonical message %q", decoration.DecorationID, originalAnchorID)
+		}
+		projectionTurnID := strings.TrimSpace(decoration.ProjectionUnavailable.TurnID)
+		turnID := projectionTurnID
+		anchorID := ""
+		anchorTurnReached := false
 		visited := make(map[string]struct{})
-		for anchorID == "" {
+		for {
 			if _, duplicate := visited[turnID]; duplicate {
-				break
+				return nil, fmt.Errorf("projection unavailable retry chain for turn %q contains a cycle", projectionTurnID)
 			}
 			visited[turnID] = struct{}{}
 			turnID = retrySourceByTurn[turnID]
 			if turnID == "" {
 				break
 			}
-			anchorID = visibleByTurn[turnID]
-		}
-		if anchorID == "" {
-			targetOrdinal := ordinalByTurn[strings.TrimSpace(decoration.ProjectionUnavailable.TurnID)]
-			for _, message := range messages {
-				if message.TurnOrdinal > 0 && message.TurnOrdinal < targetOrdinal {
-					anchorID = strings.TrimSpace(message.MessageID)
-				}
+			if turnID == anchorFact.turnID {
+				anchorTurnReached = true
+			}
+			if anchorID == "" {
+				anchorID = visibleByTurn[turnID]
 			}
 		}
+		if !anchorTurnReached {
+			return nil, fmt.Errorf("projection unavailable decoration %q anchor does not belong to retry turn %q", decoration.DecorationID, projectionTurnID)
+		}
 		if anchorID == "" {
-			return nil, fmt.Errorf("projection unavailable turn %q has no visible canonical anchor", decoration.ProjectionUnavailable.TurnID)
+			return nil, fmt.Errorf("projection unavailable retry turn %q has no visible canonical source anchor", projectionTurnID)
 		}
 		decoration.Anchor = FlowerTimelineAnchor{TargetKind: "message", MessageID: anchorID, Edge: "after"}
 		if err := decoration.Validate(); err != nil {
