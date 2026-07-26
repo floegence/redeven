@@ -606,8 +606,59 @@ func (s *Store) ListFollowupsByLane(ctx context.Context, endpointID string, thre
 	return s.listFollowupsByLane(ctx, endpointID, threadID, lane, limit)
 }
 
-func (s *Store) ListAllFollowupsByLaneForRecovery(ctx context.Context, endpointID string, threadID string, lane string) ([]QueuedTurn, error) {
-	return s.listFollowupsByLane(ctx, endpointID, threadID, lane, 0)
+func (s *Store) ListFollowupsByLaneAfter(ctx context.Context, endpointID string, threadID string, lane string, afterSortIndex int64, afterQueueID string, limit int) ([]QueuedTurn, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	afterQueueID = strings.TrimSpace(afterQueueID)
+	var err error
+	lane, err = parseFollowupLane(lane)
+	if err != nil {
+		return nil, err
+	}
+	if endpointID == "" || threadID == "" || afterSortIndex < 0 || (afterSortIndex > 0 && afterQueueID == "") {
+		return nil, errors.New("invalid followup keyset request")
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+	if limit > 500 {
+		limit = 500
+	}
+	query := `
+SELECT queue_id, endpoint_id, thread_id, channel_id, lane, admission_state, turn_id, run_id, model_id, text_content, attachments_json, context_action_json, options_json, session_meta_json,
+       created_by_user_public_id, created_by_user_email, sort_index, created_at_unix_ms, updated_at_unix_ms
+FROM ai_queued_turns
+WHERE endpoint_id = ? AND thread_id = ? AND lane = ?`
+	args := []any{endpointID, threadID, lane}
+	if afterQueueID != "" {
+		query += ` AND (sort_index > ? OR (sort_index = ? AND queue_id > ?))`
+		args = append(args, afterSortIndex, afterSortIndex, afterQueueID)
+	}
+	query += ` ORDER BY sort_index ASC, queue_id ASC LIMIT ?`
+	args = append(args, limit)
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]QueuedTurn, 0, limit)
+	for rows.Next() {
+		rec, err := scanFollowup(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (s *Store) listFollowupsByLane(ctx context.Context, endpointID string, threadID string, lane string, limit int) ([]QueuedTurn, error) {

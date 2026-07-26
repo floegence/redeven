@@ -17,7 +17,10 @@ import (
 )
 
 type attachmentAuthorityReadHost struct {
-	page flruntime.ThreadTurnsPage
+	page          flruntime.ThreadTurnsPage
+	exactErr      error
+	exactRequests *[]flruntime.ReadThreadTurnRequest
+	listRequests  *[]flruntime.ListThreadTurnsRequest
 }
 
 func (h attachmentAuthorityReadHost) ReadThread(context.Context, flruntime.ThreadID) (flruntime.ThreadSnapshot, error) {
@@ -26,7 +29,24 @@ func (h attachmentAuthorityReadHost) ReadThread(context.Context, flruntime.Threa
 func (h attachmentAuthorityReadHost) ReadThreadOverview(context.Context, flruntime.ThreadID) (flruntime.ThreadOverview, error) {
 	return flruntime.ThreadOverview{}, errors.New("not used")
 }
-func (h attachmentAuthorityReadHost) ListThreadTurns(context.Context, flruntime.ListThreadTurnsRequest) (flruntime.ThreadTurnsPage, error) {
+func (h attachmentAuthorityReadHost) ReadThreadTurn(_ context.Context, req flruntime.ReadThreadTurnRequest) (flruntime.ThreadTurnSnapshot, error) {
+	if h.exactRequests != nil {
+		*h.exactRequests = append(*h.exactRequests, req)
+	}
+	if h.exactErr != nil {
+		return flruntime.ThreadTurnSnapshot{}, h.exactErr
+	}
+	for _, turn := range h.page.Turns {
+		if turn.TurnID == req.TurnID {
+			return turn, nil
+		}
+	}
+	return flruntime.ThreadTurnSnapshot{}, flruntime.ErrTurnNotFound
+}
+func (h attachmentAuthorityReadHost) ListThreadTurns(_ context.Context, req flruntime.ListThreadTurnsRequest) (flruntime.ThreadTurnsPage, error) {
+	if h.listRequests != nil {
+		*h.listRequests = append(*h.listRequests, req)
+	}
 	return h.page, nil
 }
 func (h attachmentAuthorityReadHost) ReadThreadAgentTodos(context.Context, flruntime.ThreadID) (flruntime.ThreadAgentTodoState, error) {
@@ -47,14 +67,18 @@ func TestFloretLiveAttachmentAuthorityReadsExactCanonicalTurn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	authority := floretLiveAttachmentAuthority{threadID: "thread_1", host: attachmentAuthorityReadHost{page: flruntime.ThreadTurnsPage{
-		ThreadID: "thread_1",
-		Turns: []flruntime.ThreadTurnSnapshot{{
-			TurnID: "turn_1", UserAttachments: []flruntime.MessageAttachment{{
-				ResourceRef: ref, Name: "notes.txt", MIMEType: "text/plain; charset=utf-8", SizeBytes: 42,
+	var exactRequests []flruntime.ReadThreadTurnRequest
+	var listRequests []flruntime.ListThreadTurnsRequest
+	authority := floretLiveAttachmentAuthority{threadID: "thread_1", host: attachmentAuthorityReadHost{
+		exactRequests: &exactRequests, listRequests: &listRequests,
+		page: flruntime.ThreadTurnsPage{
+			ThreadID: "thread_1",
+			Turns: []flruntime.ThreadTurnSnapshot{{
+				TurnID: "turn_1", UserAttachments: []flruntime.MessageAttachment{{
+					ResourceRef: ref, Name: "notes.txt", MIMEType: "text/plain; charset=utf-8", SizeBytes: 42,
+				}},
 			}},
-		}},
-	}}}
+		}}}
 	membership, err := authority.ReadCanonicalAttachmentMembership(context.Background(), "thread_1", "turn_1", attachmentID)
 	if err != nil {
 		t.Fatal(err)
@@ -62,11 +86,37 @@ func TestFloretLiveAttachmentAuthorityReadsExactCanonicalTurn(t *testing.T) {
 	if membership.ResourceRef != ref || membership.ContentSHA256 != digest || membership.Name != "notes.txt" || membership.SizeBytes != 42 {
 		t.Fatalf("membership=%#v", membership)
 	}
+	if len(exactRequests) != 1 || exactRequests[0].TurnID != "turn_1" || len(listRequests) != 0 {
+		t.Fatalf("exact requests=%#v list requests=%#v", exactRequests, listRequests)
+	}
 	if _, err := authority.ReadCanonicalAttachmentMembership(context.Background(), "thread_1", "turn_other", attachmentID); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("wrong turn error=%v, want sql.ErrNoRows", err)
 	}
 	if _, err := authority.ReadCanonicalAttachmentMembership(context.Background(), "thread_other", "turn_1", attachmentID); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("wrong thread error=%v, want sql.ErrNoRows", err)
+	}
+}
+
+func TestFloretLiveAttachmentAuthorityScansOnlyWithoutTurnIdentity(t *testing.T) {
+	t.Parallel()
+	const attachmentID = "upl_bbbbbbbbbbbbbbbbbbbbbbbb"
+	ref, err := immutableFloretUploadResourceRef(attachmentID, strings.Repeat("b", 64))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var exactRequests []flruntime.ReadThreadTurnRequest
+	var listRequests []flruntime.ListThreadTurnsRequest
+	authority := floretLiveAttachmentAuthority{threadID: "thread_1", host: attachmentAuthorityReadHost{
+		exactRequests: &exactRequests, listRequests: &listRequests,
+		page: flruntime.ThreadTurnsPage{ThreadID: "thread_1", Turns: []flruntime.ThreadTurnSnapshot{{
+			TurnID: "turn_1", UserAttachments: []flruntime.MessageAttachment{{ResourceRef: ref, Name: "notes.txt"}},
+		}}},
+	}}
+	if _, err := authority.find(context.Background(), "", attachmentID); err != nil {
+		t.Fatal(err)
+	}
+	if len(exactRequests) != 0 || len(listRequests) != 1 {
+		t.Fatalf("exact requests=%#v list requests=%#v", exactRequests, listRequests)
 	}
 }
 

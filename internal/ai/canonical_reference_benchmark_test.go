@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -65,15 +66,19 @@ func TestCanonicalReferencePerformanceBudgets(t *testing.T) {
 		}
 	})
 
-	t.Run("lookup across 1000 turns", func(t *testing.T) {
+	t.Run("exact lookup in 1000 turn thread", func(t *testing.T) {
 		const referenceID = "context:oldest"
-		pager := canonicalReferenceBenchmarkTurnPager{turns: canonicalReferenceBenchmarkTurns(1000, referenceID)}
+		reader := &canonicalReferenceBenchmarkTurnReader{turn: canonicalReferenceBenchmarkTurns(1000, referenceID)[0]}
+		lookupCalls := 0
 		lookup := func() error {
-			listed, err := listAllFloretThreadTurns(context.Background(), pager, "thread_budget")
+			lookupCalls++
+			turn, err := reader.ReadThreadTurn(context.Background(), flruntime.ReadThreadTurnRequest{
+				ThreadID: "thread_budget", TurnID: "turn_0000",
+			})
 			if err != nil {
 				return err
 			}
-			if _, ok := exactFlowerCanonicalReference(listed, "turn_0000", referenceID); !ok {
+			if _, ok := exactFlowerCanonicalReference(turn, referenceID); !ok {
 				return fmt.Errorf("oldest canonical reference was not found")
 			}
 			return nil
@@ -95,6 +100,9 @@ func TestCanonicalReferencePerformanceBudgets(t *testing.T) {
 		}
 		if average := time.Since(startedAt) / iterations; average > 2*time.Millisecond {
 			t.Fatalf("1000-turn lookup average=%s, budget=2ms", average)
+		}
+		if reader.exactCalls != lookupCalls || reader.listCalls != 0 {
+			t.Fatalf("lookup calls=%d exact calls=%d list calls=%d", lookupCalls, reader.exactCalls, reader.listCalls)
 		}
 	})
 }
@@ -202,43 +210,23 @@ func BenchmarkCanonicalReferenceBrowserProjection(b *testing.B) {
 	}
 }
 
-type canonicalReferenceBenchmarkTurnPager struct {
-	turns []flruntime.ThreadTurnSnapshot
+type canonicalReferenceBenchmarkTurnReader struct {
+	turn       flruntime.ThreadTurnSnapshot
+	exactCalls int
+	listCalls  int
 }
 
-func (p canonicalReferenceBenchmarkTurnPager) ListThreadTurns(_ context.Context, req flruntime.ListThreadTurnsRequest) (flruntime.ThreadTurnsPage, error) {
-	end := len(p.turns)
-	if req.BeforeCursor != nil {
-		end = -1
-		for index, turn := range p.turns {
-			if turn.UserEntryID == string(*req.BeforeCursor) {
-				end = index
-				break
-			}
-		}
-		if end < 0 {
-			return flruntime.ThreadTurnsPage{}, fmt.Errorf("unknown benchmark cursor %q", *req.BeforeCursor)
-		}
+func (r *canonicalReferenceBenchmarkTurnReader) ReadThreadTurn(_ context.Context, req flruntime.ReadThreadTurnRequest) (flruntime.ThreadTurnSnapshot, error) {
+	r.exactCalls++
+	if req.TurnID != r.turn.TurnID {
+		return flruntime.ThreadTurnSnapshot{}, flruntime.ErrTurnNotFound
 	}
-	limit := req.Limit
-	if req.Tail > 0 {
-		limit = req.Tail
-	}
-	if limit <= 0 {
-		limit = 200
-	}
-	start := max(0, end-limit)
-	page := flruntime.ThreadTurnsPage{
-		ThreadID:       req.ThreadID,
-		Turns:          append([]flruntime.ThreadTurnSnapshot(nil), p.turns[start:end]...),
-		HasMore:        start > 0,
-		ThroughOrdinal: int64(end),
-	}
-	if start > 0 {
-		cursor := flruntime.ThreadTurnCursor(p.turns[start].UserEntryID)
-		page.BeforeCursor = &cursor
-	}
-	return page, nil
+	return r.turn, nil
+}
+
+func (r *canonicalReferenceBenchmarkTurnReader) ListThreadTurns(context.Context, flruntime.ListThreadTurnsRequest) (flruntime.ThreadTurnsPage, error) {
+	r.listCalls++
+	return flruntime.ThreadTurnsPage{}, errors.New("unexpected canonical history scan")
 }
 
 func BenchmarkCanonicalReferenceLookupAcross1000Turns(b *testing.B) {
@@ -248,15 +236,17 @@ func BenchmarkCanonicalReferenceLookupAcross1000Turns(b *testing.B) {
 		referenceID = "context:oldest"
 	)
 	turns := canonicalReferenceBenchmarkTurns(turnCount, referenceID)
-	pager := canonicalReferenceBenchmarkTurnPager{turns: turns}
+	reader := canonicalReferenceBenchmarkTurnReader{turn: turns[0]}
 	b.ReportAllocs()
 	b.ResetTimer()
 	for range b.N {
-		listed, err := listAllFloretThreadTurns(context.Background(), pager, threadID)
+		turn, err := reader.ReadThreadTurn(context.Background(), flruntime.ReadThreadTurnRequest{
+			ThreadID: threadID, TurnID: "turn_0000",
+		})
 		if err != nil {
 			b.Fatal(err)
 		}
-		reference, ok := exactFlowerCanonicalReference(listed, "turn_0000", referenceID)
+		reference, ok := exactFlowerCanonicalReference(turn, referenceID)
 		if !ok {
 			b.Fatal("oldest canonical reference was not found")
 		}

@@ -172,35 +172,18 @@ func (s *Service) reconcileStaleComposerDraftAdmissions(ctx context.Context, db 
 }
 
 func floretThreadContainsTurn(ctx context.Context, host floretThreadReadHost, threadID, turnID string) (bool, error) {
-	var before *flruntime.ThreadTurnCursor
-	for {
-		req := flruntime.ListThreadTurnsRequest{ThreadID: flruntime.ThreadID(threadID)}
-		if before == nil {
-			req.Tail = 200
-		} else {
-			req.BeforeCursor = before
-			req.Limit = 200
-		}
-		page, err := host.ListThreadTurns(ctx, req)
-		if err != nil {
-			return false, err
-		}
-		for _, turn := range page.Turns {
-			if strings.TrimSpace(string(turn.TurnID)) == turnID {
-				return true, nil
-			}
-		}
-		if !page.HasMore {
-			return false, nil
-		}
-		if len(page.Turns) == 0 || page.BeforeCursor == nil || strings.TrimSpace(string(*page.BeforeCursor)) == "" {
-			return false, errors.New("Floret turn pagination stopped before admission reconciliation")
-		}
-		if before != nil && *before == *page.BeforeCursor {
-			return false, errors.New("Floret turn pagination did not advance during admission reconciliation")
-		}
-		before = page.BeforeCursor
+	threadID = strings.TrimSpace(threadID)
+	turnID = strings.TrimSpace(turnID)
+	if host == nil || threadID == "" || turnID == "" {
+		return false, errors.New("invalid Floret exact turn read identity")
 	}
+	_, err := host.ReadThreadTurn(ctxOrBackground(ctx), flruntime.ReadThreadTurnRequest{
+		ThreadID: flruntime.ThreadID(threadID), TurnID: flruntime.TurnID(turnID),
+	})
+	if errors.Is(err, flruntime.ErrTurnNotFound) {
+		return false, nil
+	}
+	return err == nil, err
 }
 
 func (s *Service) RenewComposerDraftLease(ctx context.Context, owner UploadOwner, scopeID, holderID, leaseID string) (threadstore.ComposerDraftLeaseResult, error) {

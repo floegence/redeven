@@ -193,6 +193,46 @@ func TestStoreThreadMetadataAndPendingCommandRoundTrip(t *testing.T) {
 	}
 }
 
+func TestListFollowupsByLaneAfterPagesZeroSortIndexesByQueueID(t *testing.T) {
+	store := openStoreForTest(t)
+	ctx := t.Context()
+	const endpointID = "env_keyset"
+	const threadID = "thread_keyset"
+	if err := store.CreateThreadSettings(ctx, ThreadSettings{EndpointID: endpointID, ThreadID: threadID, PermissionType: "approval_required"}); err != nil {
+		t.Fatal(err)
+	}
+	for index := 0; index < 501; index++ {
+		if _, _, _, err := store.CreateFollowup(ctx, QueuedTurn{
+			QueueID: fmt.Sprintf("queue_%04d", index), EndpointID: endpointID, ThreadID: threadID,
+			ChannelID: "channel_keyset", Lane: FollowupLaneQueued,
+			TurnID: fmt.Sprintf("turn_%04d", index), RunID: fmt.Sprintf("run_%04d", index),
+			AttachmentsJSON: "[]", OptionsJSON: "{}", SessionMetaJSON: "{}",
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := store.db.ExecContext(ctx, `UPDATE ai_queued_turns SET sort_index = 0 WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID); err != nil {
+		t.Fatal(err)
+	}
+	first, err := store.ListFollowupsByLaneAfter(ctx, endpointID, threadID, FollowupLaneQueued, 0, "", 500)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(first) != 500 || first[0].QueueID != "queue_0000" || first[499].QueueID != "queue_0499" {
+		t.Fatalf("first page bounds=%#v ... %#v count=%d", first[0], first[len(first)-1], len(first))
+	}
+	second, err := store.ListFollowupsByLaneAfter(ctx, endpointID, threadID, FollowupLaneQueued, first[499].SortIndex, first[499].QueueID, 500)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(second) != 1 || second[0].QueueID != "queue_0500" || second[0].SortIndex != 0 {
+		t.Fatalf("second page=%#v", second)
+	}
+	if _, err := store.ListFollowupsByLaneAfter(ctx, endpointID, threadID, FollowupLaneQueued, 1, "", 10); err == nil {
+		t.Fatal("positive sort cursor without queue identity was accepted")
+	}
+}
+
 func TestStoreThreadMetadataUpdatesDoNotCreateConversationState(t *testing.T) {
 	store := openStoreForTest(t)
 	ctx := context.Background()

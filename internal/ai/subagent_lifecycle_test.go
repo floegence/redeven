@@ -184,6 +184,7 @@ type recordingFloretHost struct {
 	turnPages          []flruntime.ThreadTurnsPage
 	turnErr            error
 	turnRequests       []flruntime.ListThreadTurnsRequest
+	exactTurnRequests  []flruntime.ReadThreadTurnRequest
 	spawnRequests      []flruntime.SpawnSubAgentRequest
 	sendInputRequests  []flruntime.SendSubAgentInputRequest
 	sendInputResult    *flruntime.SubAgentSnapshot
@@ -285,6 +286,24 @@ func (h *recordingFloretHost) ListThreadTurns(_ context.Context, req flruntime.L
 		page.ThreadID = req.ThreadID
 	}
 	return page, nil
+}
+
+func (h *recordingFloretHost) ReadThreadTurn(_ context.Context, req flruntime.ReadThreadTurnRequest) (flruntime.ThreadTurnSnapshot, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.exactTurnRequests = append(h.exactTurnRequests, req)
+	if h.turnErr != nil {
+		return flruntime.ThreadTurnSnapshot{}, h.turnErr
+	}
+	pages := append([]flruntime.ThreadTurnsPage{h.turnPage}, h.turnPages...)
+	for _, page := range pages {
+		for _, turn := range page.Turns {
+			if turn.TurnID == req.TurnID {
+				return turn, nil
+			}
+		}
+	}
+	return flruntime.ThreadTurnSnapshot{}, flruntime.ErrTurnNotFound
 }
 
 func (h *recordingFloretHost) RunTurn(context.Context, flruntime.RunTurnRequest) (flruntime.TurnResult, error) {

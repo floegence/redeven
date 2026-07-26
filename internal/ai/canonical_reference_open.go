@@ -98,11 +98,16 @@ func (s *Service) ResolveFlowerCanonicalReferenceOpenTarget(ctx context.Context,
 		}
 		return FlowerCanonicalReferenceOpenTarget{}, ErrFlowerCanonicalReferenceUnavailable
 	}
-	turns, err := listAllFloretThreadTurns(ctxOrBackground(ctx), host, threadID)
+	turn, err := host.ReadThreadTurn(ctxOrBackground(ctx), flruntime.ReadThreadTurnRequest{
+		ThreadID: flruntime.ThreadID(threadID), TurnID: flruntime.TurnID(turnID),
+	})
+	if errors.Is(err, flruntime.ErrTurnNotFound) {
+		return FlowerCanonicalReferenceOpenTarget{}, ErrFlowerCanonicalReferenceNotFound
+	}
 	if err != nil {
 		return FlowerCanonicalReferenceOpenTarget{}, ErrFlowerCanonicalReferenceUnavailable
 	}
-	reference, ok := exactFlowerCanonicalReference(turns, turnID, referenceID)
+	reference, ok := exactFlowerCanonicalReference(turn, referenceID)
 	if !ok {
 		return FlowerCanonicalReferenceOpenTarget{}, ErrFlowerCanonicalReferenceNotFound
 	}
@@ -172,17 +177,11 @@ func (s *Service) ResolveFlowerCanonicalReferenceOpenTarget(ctx context.Context,
 	}, nil
 }
 
-func exactFlowerCanonicalReference(turns []flruntime.ThreadTurnSnapshot, turnID string, referenceID string) (flruntime.MessageReference, bool) {
-	for _, turn := range turns {
-		if strings.TrimSpace(string(turn.TurnID)) != turnID {
-			continue
+func exactFlowerCanonicalReference(turn flruntime.ThreadTurnSnapshot, referenceID string) (flruntime.MessageReference, bool) {
+	for _, reference := range turn.UserReferences {
+		if strings.TrimSpace(reference.ReferenceID) == referenceID {
+			return reference, true
 		}
-		for _, reference := range turn.UserReferences {
-			if strings.TrimSpace(reference.ReferenceID) == referenceID {
-				return reference, true
-			}
-		}
-		return flruntime.MessageReference{}, false
 	}
 	return flruntime.MessageReference{}, false
 }

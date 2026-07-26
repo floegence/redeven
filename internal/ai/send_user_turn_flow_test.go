@@ -26,6 +26,23 @@ func newSendTurnTestService(t *testing.T) *Service {
 	return newSendTurnTestServiceAt(t, t.TempDir(), t.TempDir())
 }
 
+func readCanonicalThreadTurnIDsForTest(t *testing.T, svc *Service, ctx context.Context, threadID string) map[string]struct{} {
+	t.Helper()
+	host, err := svc.openFloretThreadReadHost(ctx, threadID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	turns, err := listAllFloretThreadTurns(ctx, host, threadID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids := make(map[string]struct{}, len(turns))
+	for _, turn := range turns {
+		ids[strings.TrimSpace(string(turn.TurnID))] = struct{}{}
+	}
+	return ids
+}
+
 func newSendTurnTestServiceAt(t *testing.T, stateDir string, agentHomeDir string) *Service {
 	t.Helper()
 	cfg := &config.AIConfig{
@@ -137,10 +154,7 @@ func TestSendUserTurnRejectsInvalidExplicitTurnIDWithoutAdmissionSideEffects(t *
 	if queued != 0 {
 		t.Fatalf("queued turns=%d, want 0", queued)
 	}
-	turnIDs, err := svc.readCanonicalThreadTurnIDs(ctx, thread.ThreadID)
-	if err != nil {
-		t.Fatal(err)
-	}
+	turnIDs := readCanonicalThreadTurnIDsForTest(t, svc, ctx, thread.ThreadID)
 	if len(turnIDs) != 0 {
 		t.Fatalf("canonical turns=%v, want none", turnIDs)
 	}
@@ -187,10 +201,7 @@ func TestAdmissionRPCDecodersRejectLegacyAndInvalidTurnIdentityWithoutSideEffect
 		if err != nil {
 			t.Fatal(err)
 		}
-		turns, err := svc.readCanonicalThreadTurnIDs(ctx, thread.ThreadID)
-		if err != nil {
-			t.Fatal(err)
-		}
+		turns := readCanonicalThreadTurnIDsForTest(t, svc, ctx, thread.ThreadID)
 		if queued != 0 || len(turns) != wantCanonicalTurns || svc.HasActiveThreadForEndpoint(meta.EndpointID, thread.ThreadID) {
 			t.Fatalf("admission side effects: queued=%d canonical=%v active=%v", queued, turns, svc.HasActiveThreadForEndpoint(meta.EndpointID, thread.ThreadID))
 		}
@@ -390,10 +401,7 @@ func TestStartupRecoveryReleasesUnadmittedInFlightCommand(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	turnIDs, err := restarted.readCanonicalThreadTurnIDs(ctx, thread.ThreadID)
-	if err != nil {
-		t.Fatal(err)
-	}
+	turnIDs := readCanonicalThreadTurnIDsForTest(t, restarted, ctx, thread.ThreadID)
 	if _, admitted := turnIDs[command.TurnID]; admitted {
 		t.Fatal("startup recovery admitted a command that had no canonical user entry before the crash")
 	}

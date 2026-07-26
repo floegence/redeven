@@ -103,6 +103,10 @@ func (startupRecoverySubagentReadHost) ListThreadTurns(context.Context, flruntim
 	return flruntime.ThreadTurnsPage{}, errors.New("unexpected SubAgent turn read")
 }
 
+func (startupRecoverySubagentReadHost) ReadThreadTurn(context.Context, flruntime.ReadThreadTurnRequest) (flruntime.ThreadTurnSnapshot, error) {
+	return flruntime.ThreadTurnSnapshot{}, errors.New("unexpected SubAgent exact turn read")
+}
+
 func (startupRecoverySubagentReadHost) ReadSubAgentDetail(context.Context, flruntime.ReadSubAgentDetailRequest) (flruntime.SubAgentDetail, error) {
 	return flruntime.SubAgentDetail{}, errors.New("unexpected SubAgent detail read")
 }

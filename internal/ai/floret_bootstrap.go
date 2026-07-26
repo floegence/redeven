@@ -170,6 +170,10 @@ func (h floretThreadReadHostAdapter) ReadThreadOverview(ctx context.Context, id 
 	return h.host.ReadThreadOverview(ctx, id)
 }
 
+func (h floretThreadReadHostAdapter) ReadThreadTurn(ctx context.Context, req flruntime.ReadThreadTurnRequest) (flruntime.ThreadTurnSnapshot, error) {
+	return h.host.ReadThreadTurn(ctx, req)
+}
+
 func (h floretThreadReadHostAdapter) ListThreadTurns(ctx context.Context, req flruntime.ListThreadTurnsRequest) (flruntime.ThreadTurnsPage, error) {
 	return h.host.ListThreadTurns(ctx, req)
 }
@@ -203,6 +207,10 @@ func (f floretInterruptedTurnRecoveryHostFactoryAdapter) NewHost(ctx context.Con
 
 func (h floretSubagentReadHostAdapter) ListSubAgents(ctx context.Context, parentThreadID flruntime.ThreadID) ([]flruntime.SubAgentSnapshot, error) {
 	return h.host.ListSubAgents(ctx, parentThreadID)
+}
+
+func (h floretSubagentReadHostAdapter) ReadThreadTurn(ctx context.Context, req flruntime.ReadThreadTurnRequest) (flruntime.ThreadTurnSnapshot, error) {
+	return h.host.ReadThreadTurn(ctx, req)
 }
 
 func (h floretSubagentReadHostAdapter) ListThreadTurns(ctx context.Context, req flruntime.ListThreadTurnsRequest) (flruntime.ThreadTurnsPage, error) {

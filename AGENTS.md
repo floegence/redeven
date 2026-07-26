@@ -877,7 +877,7 @@ Redeven code must not bypass those Floret lifecycles:
 - a user command may retain prompt text and queued upload ownership only before
   Floret admission. A committed public Floret turn causes Redeven to atomically
   remove that command and move its uploads to thread ownership; restart
-  reconciliation checks the exact opaque `TurnID` through `ListThreadTurns`.
+  reconciliation checks the exact opaque `TurnID` through `ReadThreadTurn`.
   Before runtime authority reopens, an `in_flight` command without that
   canonical turn is atomically released through its exact command, turn, and
   run identity so one runtime settlement owner may retry it;
@@ -888,9 +888,14 @@ Redeven code must not bypass those Floret lifecycles:
   consumes that frozen result, while later projection rereads the host resource
   and verifies the same digest. Redeven must not persist admitted `TurnID`/`RunID`
   attachment mappings or degrade resolution failures into filename text;
-- Flower history, pagination, thread summaries, waiting presentation, approvals,
-  and todos must read `ListThreadTurns`, `ReadThreadOverview`, pending approvals,
-  and the typed todo API. Realtime events may carry only in-memory run
+- Known-`TurnID` reconciliation, attachment membership, and canonical reference
+  membership must use `ReadThreadTurn`; only `ErrTurnNotFound` means absent, and
+  authority, storage, or corruption errors must fail closed without a
+  `ListThreadTurns` fallback. Flower history and pagination continue to read
+  `ListThreadTurns`; thread summaries, waiting presentation, approvals, and todos
+  read `ReadThreadOverview`, pending approvals, and the typed todo API. The
+  unknown-`TurnID` attachment lookup may scan canonical `ListThreadTurns` pages
+  until its versioned locator carries a source TurnID. Realtime events may carry only in-memory run
   presentation and canonical replacement signals; they must not carry transcript
   messages or a transcript-reset protocol;
 - SubAgent transcript presentation must read typed `ListThreadTurns` pages from

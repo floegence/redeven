@@ -3,12 +3,14 @@ package ai
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
+	flruntime "github.com/floegence/floret/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
@@ -37,6 +39,14 @@ func requireUploadNotFound(t *testing.T, err error) {
 	var uploadErr *UploadError
 	if !errors.As(err, &uploadErr) || uploadErr.Code != UploadErrorNotFound {
 		t.Fatalf("error=%v, want typed attachment_not_found", err)
+	}
+}
+
+func requireUploadError(t *testing.T, err error, code string, retryable bool) {
+	t.Helper()
+	var uploadErr *UploadError
+	if !errors.As(err, &uploadErr) || uploadErr.Code != code || uploadErr.Retryable != retryable {
+		t.Fatalf("error=%v, want code=%q retryable=%v", err, code, retryable)
 	}
 }
 
@@ -125,14 +135,24 @@ func TestAttachmentAudienceRequiresExactDraftQueueAndCanonicalTurn(t *testing.T)
 	if opened, err := svc.OpenLiveUpload(ctx, owner, membership.ThreadID, membership.TurnID, canonical.UploadID, &fakeLiveAttachmentAuthority{membership: membership}); err != nil || opened.Info.AttachmentID != canonical.UploadID {
 		t.Fatalf("exact canonical audience opened=%#v err=%v", opened, err)
 	}
+	_, err = svc.OpenLiveUpload(ctx, owner, membership.ThreadID, membership.TurnID, canonical.UploadID, &fakeLiveAttachmentAuthority{err: sql.ErrNoRows})
+	requireUploadNotFound(t, err)
+	_, err = svc.OpenLiveUpload(ctx, owner, membership.ThreadID, membership.TurnID, canonical.UploadID, &fakeLiveAttachmentAuthority{err: errors.New("canonical authority corrupt")})
+	requireUploadError(t, err, UploadErrorStoreUnavailable, true)
 	wrongTurn := membership
 	wrongTurn.TurnID = "turn_other"
 	_, err = svc.OpenLiveUpload(ctx, owner, membership.ThreadID, membership.TurnID, canonical.UploadID, &fakeLiveAttachmentAuthority{membership: wrongTurn})
-	requireUploadNotFound(t, err)
+	requireUploadError(t, err, UploadErrorIntegrityMismatch, false)
 	wrongThread := membership
 	wrongThread.ThreadID = "thread_other"
 	_, err = svc.OpenLiveUpload(ctx, owner, "thread_other", membership.TurnID, canonical.UploadID, &fakeLiveAttachmentAuthority{membership: wrongThread})
 	requireUploadNotFound(t, err)
 	_, err = svc.OpenLiveUpload(ctx, other, membership.ThreadID, membership.TurnID, canonical.UploadID, &fakeLiveAttachmentAuthority{membership: membership})
 	requireUploadNotFound(t, err)
+
+	svc.floretReads = &floretReadCapabilities{thread: func(context.Context, flruntime.ThreadID) (floretThreadReadHost, error) {
+		return nil, errors.New("canonical store corrupt")
+	}}
+	_, err = svc.OpenCanonicalLiveAttachmentForTurn(ctx, owner, membership.ThreadID, membership.TurnID, canonical.UploadID)
+	requireUploadError(t, err, UploadErrorStoreUnavailable, true)
 }
