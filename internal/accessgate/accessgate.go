@@ -45,6 +45,7 @@ type UnlockResult struct {
 type LocalSessionResult struct {
 	Unlocked             bool   `json:"unlocked"`
 	SessionToken         string `json:"-"`
+	AccessSessionID      string `json:"-"`
 	SessionExpiresAtUnix int64  `json:"session_expires_at_unix_ms,omitempty"`
 	ResumeToken          string `json:"resume_token,omitempty"`
 	ResumeExpiresAtUnix  int64  `json:"resume_expires_at_unix_ms,omitempty"`
@@ -61,16 +62,22 @@ type channelState struct {
 }
 
 type resumeTokenState struct {
-	userPublicID string
-	endpointID   string
-	floeApp      string
-	codeSpaceID  string
-	sessionKind  string
-	expiresAt    time.Time
+	accessSessionID string
+	userPublicID    string
+	endpointID      string
+	floeApp         string
+	codeSpaceID     string
+	sessionKind     string
+	expiresAt       time.Time
 }
 
 type localSessionState struct {
-	expiresAt time.Time
+	accessSessionID string
+	expiresAt       time.Time
+}
+
+type ExpiredLocalSession struct {
+	AccessSessionID string
 }
 
 type failedAttemptState struct {
@@ -234,7 +241,7 @@ func (g *Gate) UnlockChannelWithSubject(channelID string, password string, subje
 
 	out := &UnlockResult{Unlocked: true}
 	if shouldMintResumeTokenLocked(st.meta) {
-		resumeToken, expiresAt, err := g.mintResumeTokenLocked(now, st.meta)
+		resumeToken, expiresAt, err := g.mintResumeTokenLocked(now, st.meta, "")
 		if err != nil {
 			return nil, err
 		}
@@ -260,7 +267,8 @@ func (g *Gate) MintLocalSessionWithSubject(password string, subject string) (*Lo
 	defer g.mu.Unlock()
 	g.cleanupExpiredLocked(now)
 
-	sessionToken, expiresAt, err := g.mintLocalSessionLocked(now)
+	lineageExpiresAt := now.Add(g.resumeTTL)
+	sessionToken, accessSessionID, expiresAt, err := g.mintLocalSessionLocked(now, "", lineageExpiresAt)
 	if err != nil {
 		return nil, err
 	}
@@ -274,7 +282,7 @@ func (g *Gate) MintLocalSessionWithSubject(password string, subject string) (*Lo
 		UserPublicID:      "user_local",
 		UserEmail:         "local@redeven",
 		NamespacePublicID: "ns_local",
-	})
+	}, accessSessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -282,6 +290,7 @@ func (g *Gate) MintLocalSessionWithSubject(password string, subject string) (*Lo
 	return &LocalSessionResult{
 		Unlocked:             true,
 		SessionToken:         sessionToken,
+		AccessSessionID:      accessSessionID,
 		SessionExpiresAtUnix: expiresAt.UnixMilli(),
 		ResumeToken:          resumeToken,
 		ResumeExpiresAtUnix:  resumeExpiresAt.UnixMilli(),
@@ -297,17 +306,19 @@ func (g *Gate) MintTrustedLocalSession(meta session.Meta) (*LocalSessionResult, 
 	defer g.mu.Unlock()
 	g.cleanupExpiredLocked(now)
 
-	sessionToken, expiresAt, err := g.mintLocalSessionLocked(now)
+	lineageExpiresAt := now.Add(g.resumeTTL)
+	sessionToken, accessSessionID, expiresAt, err := g.mintLocalSessionLocked(now, "", lineageExpiresAt)
 	if err != nil {
 		return nil, err
 	}
-	resumeToken, resumeExpiresAt, err := g.mintResumeTokenLocked(now, meta)
+	resumeToken, resumeExpiresAt, err := g.mintResumeTokenLocked(now, meta, accessSessionID)
 	if err != nil {
 		return nil, err
 	}
 	return &LocalSessionResult{
 		Unlocked:             true,
 		SessionToken:         sessionToken,
+		AccessSessionID:      accessSessionID,
 		SessionExpiresAtUnix: expiresAt.UnixMilli(),
 		ResumeToken:          resumeToken,
 		ResumeExpiresAtUnix:  resumeExpiresAt.UnixMilli(),
@@ -331,8 +342,12 @@ func (g *Gate) MintLocalSessionFromResumeToken(resumeToken string, meta session.
 	if err := g.validateResumeTokenLocked(now, resumeToken, meta); err != nil {
 		return nil, err
 	}
+	resume := g.resumeTokens[resumeToken]
+	if resume == nil || strings.TrimSpace(resume.accessSessionID) == "" {
+		return nil, errors.New("resume token access session is unavailable")
+	}
 
-	sessionToken, expiresAt, err := g.mintLocalSessionLocked(now)
+	sessionToken, accessSessionID, expiresAt, err := g.mintLocalSessionLocked(now, resume.accessSessionID, resume.expiresAt)
 	if err != nil {
 		return nil, err
 	}
@@ -340,6 +355,7 @@ func (g *Gate) MintLocalSessionFromResumeToken(resumeToken string, meta session.
 	return &LocalSessionResult{
 		Unlocked:             true,
 		SessionToken:         sessionToken,
+		AccessSessionID:      accessSessionID,
 		SessionExpiresAtUnix: expiresAt.UnixMilli(),
 	}, nil
 }
@@ -348,29 +364,113 @@ func (g *Gate) IsLocalSessionValid(token string) bool {
 	if g == nil || !g.enabled {
 		return true
 	}
+	_, ok := g.LocalSessionExpiresAt(token)
+	return ok
+}
+
+// LocalSessionExpiresAt resolves the active deadline for an opaque Local UI
+// session token without exposing any other session state to callers.
+func (g *Gate) LocalSessionExpiresAt(token string) (time.Time, bool) {
+	_, expiresAt, ok := g.ResolveLocalSession(token)
+	return expiresAt, ok
+}
+
+func (g *Gate) ResolveLocalSession(token string) (string, time.Time, bool) {
+	if g == nil || !g.enabled {
+		return "", time.Time{}, false
+	}
 	token = strings.TrimSpace(token)
 	if token == "" {
-		return false
+		return "", time.Time{}, false
 	}
 	now := time.Now()
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.cleanupExpiredLocked(now)
 	st := g.localSessions[token]
-	return st != nil && !now.After(st.expiresAt)
+	if st == nil || now.After(st.expiresAt) {
+		return "", time.Time{}, false
+	}
+	return st.accessSessionID, st.expiresAt, true
 }
 
-func (g *Gate) RevokeLocalSession(token string) {
+func (g *Gate) TakeLocalSession(token string) (string, bool) {
 	if g == nil || !g.enabled {
-		return
+		return "", false
 	}
 	token = strings.TrimSpace(token)
 	if token == "" {
-		return
+		return "", false
 	}
 	g.mu.Lock()
-	delete(g.localSessions, token)
-	g.mu.Unlock()
+	defer g.mu.Unlock()
+	st := g.localSessions[token]
+	if st == nil || strings.TrimSpace(st.accessSessionID) == "" {
+		return "", false
+	}
+	g.revokeAccessSessionLocked(st.accessSessionID)
+	return st.accessSessionID, true
+}
+
+// TakeAccessSessionByResumeToken revokes the complete access-session lineage
+// identified by an active resume token and returns its opaque internal ID.
+func (g *Gate) TakeAccessSessionByResumeToken(resumeToken string) (string, bool) {
+	if g == nil || !g.enabled {
+		return "", false
+	}
+	resumeToken = strings.TrimSpace(resumeToken)
+	if resumeToken == "" {
+		return "", false
+	}
+	now := time.Now()
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.cleanupExpiredLocked(now)
+	st := g.resumeTokens[resumeToken]
+	if st == nil || strings.TrimSpace(st.accessSessionID) == "" || !now.Before(st.expiresAt) {
+		return "", false
+	}
+	g.revokeAccessSessionLocked(st.accessSessionID)
+	return st.accessSessionID, true
+}
+
+func (g *Gate) TakeExpiredLocalSessions(now time.Time) []ExpiredLocalSession {
+	if g == nil || !g.enabled {
+		return nil
+	}
+	if now.IsZero() {
+		now = time.Now()
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	expiredIDs := make(map[string]struct{})
+	for token, st := range g.localSessions {
+		if st == nil || now.After(st.expiresAt) {
+			delete(g.localSessions, token)
+			if st != nil && strings.TrimSpace(st.accessSessionID) != "" {
+				expiredIDs[st.accessSessionID] = struct{}{}
+			}
+		}
+	}
+	for _, st := range g.localSessions {
+		if st != nil {
+			delete(expiredIDs, st.accessSessionID)
+		}
+	}
+	expired := make([]ExpiredLocalSession, 0, len(expiredIDs))
+	for accessSessionID := range expiredIDs {
+		expired = append(expired, ExpiredLocalSession{AccessSessionID: accessSessionID})
+		for token, resume := range g.resumeTokens {
+			if resume != nil && resume.accessSessionID == accessSessionID {
+				delete(g.resumeTokens, token)
+			}
+		}
+	}
+	return expired
+}
+
+func (g *Gate) RevokeLocalSession(token string) {
+	_, _ = g.TakeLocalSession(token)
 }
 
 func (g *Gate) RevokeResumeToken(resumeToken string) {
@@ -433,11 +533,6 @@ func (g *Gate) cleanupExpiredLocked(now time.Time) {
 			delete(g.resumeTokens, token)
 		}
 	}
-	for token, st := range g.localSessions {
-		if st == nil || now.After(st.expiresAt) {
-			delete(g.localSessions, token)
-		}
-	}
 	for subject, st := range g.failedAttempts {
 		if st == nil {
 			delete(g.failedAttempts, subject)
@@ -487,17 +582,40 @@ func (g *Gate) validateResumeTokenLocked(now time.Time, resumeToken string, meta
 	return nil
 }
 
-func (g *Gate) mintLocalSessionLocked(now time.Time) (string, time.Time, error) {
-	sessionToken, err := randomToken(24)
-	if err != nil {
-		return "", time.Time{}, err
+func (g *Gate) revokeAccessSessionLocked(accessSessionID string) {
+	for candidate, local := range g.localSessions {
+		if local != nil && local.accessSessionID == accessSessionID {
+			delete(g.localSessions, candidate)
+		}
 	}
-	expiresAt := now.Add(g.localSessionTTL)
-	g.localSessions[sessionToken] = &localSessionState{expiresAt: expiresAt}
-	return sessionToken, expiresAt, nil
+	for candidate, resume := range g.resumeTokens {
+		if resume != nil && resume.accessSessionID == accessSessionID {
+			delete(g.resumeTokens, candidate)
+		}
+	}
 }
 
-func (g *Gate) mintResumeTokenLocked(now time.Time, meta session.Meta) (string, time.Time, error) {
+func (g *Gate) mintLocalSessionLocked(now time.Time, accessSessionID string, lineageExpiresAt time.Time) (string, string, time.Time, error) {
+	sessionToken, err := randomToken(24)
+	if err != nil {
+		return "", "", time.Time{}, err
+	}
+	accessSessionID = strings.TrimSpace(accessSessionID)
+	if accessSessionID == "" {
+		accessSessionID, err = randomToken(24)
+		if err != nil {
+			return "", "", time.Time{}, err
+		}
+	}
+	expiresAt := now.Add(g.localSessionTTL)
+	if !lineageExpiresAt.IsZero() && lineageExpiresAt.Before(expiresAt) {
+		expiresAt = lineageExpiresAt
+	}
+	g.localSessions[sessionToken] = &localSessionState{accessSessionID: accessSessionID, expiresAt: expiresAt}
+	return sessionToken, accessSessionID, expiresAt, nil
+}
+
+func (g *Gate) mintResumeTokenLocked(now time.Time, meta session.Meta, accessSessionID string) (string, time.Time, error) {
 	resumeToken, err := randomToken(32)
 	if err != nil {
 		return "", time.Time{}, err
@@ -505,12 +623,13 @@ func (g *Gate) mintResumeTokenLocked(now time.Time, meta session.Meta) (string, 
 	sessionKind := normalizeSessionKind(meta.SessionKind)
 	expiresAt := now.Add(g.resumeTTL)
 	g.resumeTokens[resumeToken] = &resumeTokenState{
-		userPublicID: strings.TrimSpace(meta.UserPublicID),
-		endpointID:   strings.TrimSpace(meta.EndpointID),
-		floeApp:      strings.TrimSpace(meta.FloeApp),
-		codeSpaceID:  strings.TrimSpace(meta.CodeSpaceID),
-		sessionKind:  sessionKind,
-		expiresAt:    expiresAt,
+		accessSessionID: strings.TrimSpace(accessSessionID),
+		userPublicID:    strings.TrimSpace(meta.UserPublicID),
+		endpointID:      strings.TrimSpace(meta.EndpointID),
+		floeApp:         strings.TrimSpace(meta.FloeApp),
+		codeSpaceID:     strings.TrimSpace(meta.CodeSpaceID),
+		sessionKind:     sessionKind,
+		expiresAt:       expiresAt,
 	}
 	return resumeToken, expiresAt, nil
 }

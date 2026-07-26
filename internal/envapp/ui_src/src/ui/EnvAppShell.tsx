@@ -165,6 +165,10 @@ import {
   isKnownAccessUnlockErrorCode,
 } from './services/accessUnlockError';
 import { clearLocalAccessResumeToken, writeLocalAccessResumeToken } from './services/localAccessAuth';
+import {
+  clearPluginSessionCredential,
+  readPluginSessionCredential,
+} from './services/pluginSessionCredential';
 import { getSandboxWindowInfo } from './services/sandboxWindowRegistry';
 import { consumeAccessResumeTokenFromWindow } from './accessResume';
 import { CODE_SPACE_ID_ENV_UI, FLOE_APP_AGENT, FLOE_APP_CODE, FLOE_APP_PORT_FORWARD, type LauncherFloeApp } from './services/floeproxyContract';
@@ -622,6 +626,7 @@ export function EnvAppShell() {
       }
     }
     setPluginSessionRetired(true);
+    clearPluginSessionCredential();
     setActivityPluginWindows([]);
     return true;
   };
@@ -652,6 +657,7 @@ export function EnvAppShell() {
     if (coordinatorError !== undefined) throw coordinatorError;
   };
   onCleanup(() => {
+    clearPluginSessionCredential();
     pluginInventoryAbort?.abort('Env App shell disposed');
     pluginConfirmationQueue.cancelAll();
     void disposePluginPlatform().catch(reportPluginSurfaceRetirementError);
@@ -2238,8 +2244,23 @@ export function EnvAppShell() {
     });
   };
 
+  const acquireLocalDirectArtifact = async (context: Readonly<{ traceId?: string; signal?: AbortSignal }> = {}) => {
+    if (readPluginSessionCredential()) {
+      pluginConfirmationQueue.cancelAll();
+      await Promise.allSettled([
+        pluginSurfaceCoordinator.closeAll(),
+        workbenchPluginSurfaceController?.closeAll() ?? Promise.resolve(),
+      ]);
+      setActivityPluginWindows([]);
+      clearPluginSessionCredential();
+    }
+    const artifact = await mintLocalDirectConnectArtifact(context);
+    if (pluginSessionRetired()) clearPluginSessionCredential();
+    return artifact;
+  };
+
   const localProtocolConnectConfig: ProtocolConnectConfig | null = localTransportSecurity.policy ? createArtifactDirectReconnectConfig({
-    source: { kind: 'refreshable', acquire: mintLocalDirectConnectArtifact },
+    source: { kind: 'refreshable', acquire: acquireLocalDirectArtifact },
     observer,
     connect: {
       ...FLOWERSEC_CONNECT_RESOURCES,

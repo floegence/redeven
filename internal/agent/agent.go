@@ -41,6 +41,7 @@ import (
 	"github.com/floegence/redeven/internal/gitrepo"
 	"github.com/floegence/redeven/internal/monitor"
 	"github.com/floegence/redeven/internal/portforward"
+	"github.com/floegence/redeven/internal/redevpluginintegration"
 	"github.com/floegence/redeven/internal/rpcutil"
 	"github.com/floegence/redeven/internal/runtimeidentity"
 	"github.com/floegence/redeven/internal/runtimeproxy"
@@ -127,7 +128,8 @@ type Options struct {
 	// OnControlDisabled is called when the runtime starts without a control channel.
 	OnControlDisabled func()
 
-	AccessGate *accessgate.Gate
+	AccessGate             *accessgate.Gate
+	PluginRuntimeAuthority *redevpluginintegration.RuntimeProcessAuthority
 }
 
 type Agent struct {
@@ -141,28 +143,36 @@ type Agent struct {
 	commit    string
 	buildTime string
 
-	agentHomeAbs       string
-	filesystemScope    *filesystemscope.Registry
-	shell              string
-	stateDir           string
-	configPath         string
-	instanceID         string
-	binaryPath         string
-	localUIBind        string
-	processStartedAtMs int64
+	agentHomeAbs            string
+	filesystemScope         *filesystemscope.Registry
+	shell                   string
+	stateDir                string
+	configPath              string
+	instanceID              string
+	binaryPath              string
+	localUIBind             string
+	processStartedAtMs      int64
+	pluginProcessGeneration string
 
-	term *terminal.Manager
-	mon  *monitor.Service
-	sys  *syssvc.Service
-	code *codeapp.Service
+	term                   *terminal.Manager
+	mon                    *monitor.Service
+	sys                    *syssvc.Service
+	code                   *codeapp.Service
+	pluginSessionLifecycle pluginSessionLifecycle
 
 	maintenanceOp          atomic.Int32
 	maintenanceState       maintenanceSnapshotStore
 	maintenanceMarkerStore *runtimeMaintenanceMarkerStore
 
-	providerLinkMu sync.Mutex
-	mu             sync.Mutex
-	sessions       map[string]*activeSession // channel_id -> session
+	providerLinkMu  sync.Mutex
+	mu              sync.Mutex
+	sessions        map[string]*activeSession // channel_id -> session
+	sessionStopping bool
+	pluginSessions  *authenticatedPluginSessionRegistry
+	sessionWG       sync.WaitGroup
+	pluginCloseMu   sync.Mutex
+	pluginClosing   bool
+	pluginCloseWG   sync.WaitGroup
 
 	controlConnectedOnce sync.Once
 	onControlConnected   func()
@@ -191,6 +201,7 @@ type activeSession struct {
 	meta              session.Meta
 	tunnelURL         string // grant_server.tunnel_url (for UI/auditing only)
 	connectedAtUnixMs int64  // set after ConnectTunnel succeeds
+	pluginGeneration  PluginSessionGeneration
 }
 
 func New(opts Options) (*Agent, error) {
@@ -242,35 +253,49 @@ func New(opts Options) (*Agent, error) {
 	if err != nil {
 		return nil, fmt.Errorf("resolve Redeven executable identity: %w", err)
 	}
+	pluginProcessGeneration := strings.TrimSpace(opts.InstanceID)
+	if opts.PluginRuntimeAuthority != nil {
+		authorityGeneration := strings.TrimSpace(opts.PluginRuntimeAuthority.ProcessGeneration())
+		if pluginProcessGeneration == "" || authorityGeneration != pluginProcessGeneration {
+			return nil, errors.New("plugin runtime authority does not match runtime instance")
+		}
+	} else if pluginProcessGeneration == "" {
+		pluginProcessGeneration, err = randomOpaqueID(20)
+		if err != nil {
+			return nil, fmt.Errorf("create plugin process generation: %w", err)
+		}
+	}
 	a := &Agent{
-		cfg:                    opts.Config,
-		log:                    logger,
-		version:                strings.TrimSpace(opts.Version),
-		commit:                 strings.TrimSpace(opts.Commit),
-		buildTime:              strings.TrimSpace(opts.BuildTime),
-		agentHomeAbs:           agentHomeAbs,
-		filesystemScope:        filesystemScope,
-		shell:                  shell,
-		stateDir:               stateDir,
-		configPath:             cfgPathAbs,
-		instanceID:             strings.TrimSpace(opts.InstanceID),
-		binaryPath:             binaryPath,
-		localUIBind:            strings.TrimSpace(opts.LocalUIBind),
-		processStartedAtMs:     time.Now().UnixMilli(),
-		term:                   terminal.NewManagerWithScope(shell, filesystemScope, logger),
-		mon:                    monitor.NewService(logger),
-		sessions:               make(map[string]*activeSession),
-		maintenanceMarkerStore: newRuntimeMaintenanceMarkerStore(config.RuntimeMaintenancePathFromConfigPath(cfgPathAbs)),
-		onControlConnected:     opts.OnControlConnected,
-		onControlConnecting:    opts.OnControlConnecting,
-		onControlRetry:         opts.OnControlRetry,
-		onControlDisabled:      opts.OnControlDisabled,
-		localUIEnabled:         opts.LocalUIEnabled,
-		controlChannelEnabled:  opts.ControlChannelEnabled,
-		desktopManaged:         opts.DesktopManaged,
-		effectiveRunMode:       strings.TrimSpace(opts.EffectiveRunMode),
-		remoteEnabled:          opts.RemoteEnabled,
-		accessGate:             opts.AccessGate,
+		cfg:                     opts.Config,
+		log:                     logger,
+		version:                 strings.TrimSpace(opts.Version),
+		commit:                  strings.TrimSpace(opts.Commit),
+		buildTime:               strings.TrimSpace(opts.BuildTime),
+		agentHomeAbs:            agentHomeAbs,
+		filesystemScope:         filesystemScope,
+		shell:                   shell,
+		stateDir:                stateDir,
+		configPath:              cfgPathAbs,
+		instanceID:              strings.TrimSpace(opts.InstanceID),
+		binaryPath:              binaryPath,
+		localUIBind:             strings.TrimSpace(opts.LocalUIBind),
+		processStartedAtMs:      time.Now().UnixMilli(),
+		pluginProcessGeneration: pluginProcessGeneration,
+		term:                    terminal.NewManagerWithScope(shell, filesystemScope, logger),
+		mon:                     monitor.NewService(logger),
+		sessions:                make(map[string]*activeSession),
+		pluginSessions:          newAuthenticatedPluginSessionRegistry(),
+		maintenanceMarkerStore:  newRuntimeMaintenanceMarkerStore(config.RuntimeMaintenancePathFromConfigPath(cfgPathAbs)),
+		onControlConnected:      opts.OnControlConnected,
+		onControlConnecting:     opts.OnControlConnecting,
+		onControlRetry:          opts.OnControlRetry,
+		onControlDisabled:       opts.OnControlDisabled,
+		localUIEnabled:          opts.LocalUIEnabled,
+		controlChannelEnabled:   opts.ControlChannelEnabled,
+		desktopManaged:          opts.DesktopManaged,
+		effectiveRunMode:        strings.TrimSpace(opts.EffectiveRunMode),
+		remoteEnabled:           opts.RemoteEnabled,
+		accessGate:              opts.AccessGate,
 	}
 	a.reconcileRuntimeMaintenanceMarker()
 
@@ -369,11 +394,16 @@ func New(opts Options) (*Agent, error) {
 			}
 			return strings.TrimSpace(tunnelURL), true
 		},
+		ResolvePluginSessionMeta: a.ResolvePluginSession,
+		AcquirePluginSession:     a.AcquirePluginSession,
+		EndPluginSession:         a.EndPluginSession,
+		PluginRuntimeAuthority:   opts.PluginRuntimeAuthority,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("init codeapp: %w", err)
 	}
 	a.code = codeSvc
+	a.pluginSessionLifecycle = codeSvc
 
 	return a, nil
 }
@@ -407,9 +437,10 @@ func summarizeFilesystemRoots(scope *filesystemscope.Registry) []map[string]any 
 func (a *Agent) Run(ctx context.Context) error {
 	a.StartBackgroundServices(ctx)
 
+	closeCodeApp := true
 	defer func() {
 		a.stopControlChannel()
-		if a != nil && a.code != nil {
+		if closeCodeApp && a != nil && a.code != nil {
 			_ = a.code.Close()
 		}
 	}()
@@ -439,8 +470,18 @@ func (a *Agent) Run(ctx context.Context) error {
 	}
 
 	<-ctx.Done()
+	a.beginSessionShutdown()
 	a.stopControlChannel()
+	a.pluginSessions.stopAdmission()
 	a.stopAllSessions()
+	if !a.waitForSessions(30 * time.Second) {
+		closeCodeApp = false
+		return errors.New("session drain timed out; plugin host left open for process termination")
+	}
+	if !a.waitForPluginSessionCloses(30 * time.Second) {
+		closeCodeApp = false
+		return errors.New("plugin session maintenance timed out; plugin host left open for process termination")
+	}
 	return ctx.Err()
 }
 
@@ -923,6 +964,10 @@ func (a *Agent) handleGrantNotify(ctx context.Context, payload json.RawMessage) 
 	metaCopy := *meta
 
 	a.mu.Lock()
+	if a.sessionStopping {
+		a.mu.Unlock()
+		return
+	}
 	if _, ok := a.sessions[channelID]; ok {
 		a.mu.Unlock()
 		// Idempotency: ignore duplicate notify for the same channel.
@@ -934,6 +979,7 @@ func (a *Agent) handleGrantNotify(ctx context.Context, payload json.RawMessage) 
 		meta:      metaCopy,
 		tunnelURL: strings.TrimSpace(n.GrantServer.TunnelUrl),
 	}
+	a.sessionWG.Add(1)
 	a.mu.Unlock()
 
 	if a.accessGate != nil && a.accessGate.Enabled() {
@@ -942,12 +988,12 @@ func (a *Agent) handleGrantNotify(ctx context.Context, payload json.RawMessage) 
 
 	go func(meta *session.Meta) {
 		defer func() {
+			defer a.sessionWG.Done()
 			if a.accessGate != nil && a.accessGate.Enabled() {
 				a.accessGate.UnregisterChannel(channelID)
 			}
-			a.mu.Lock()
-			delete(a.sessions, channelID)
-			a.mu.Unlock()
+			generation := a.removeActiveSession(channelID)
+			a.closePluginSessionGeneration(channelID, generation)
 		}()
 		_ = a.runDataSession(sessCtx, n.GrantServer, meta)
 	}(&metaCopy)
@@ -1073,7 +1119,9 @@ func (a *Agent) runDataSession(ctx context.Context, grant *controlv1.ChannelInit
 	opened = true
 
 	connectedAtUnixMs = time.Now().UnixMilli()
-	a.markSessionConnected(channelID, connectedAtUnixMs)
+	if err := a.markSessionConnected(channelID, connectedAtUnixMs); err != nil {
+		return err
+	}
 
 	a.log.Info("data session opened",
 		"channel_id", channelID,
@@ -1389,36 +1437,205 @@ func (a *Agent) prepareAccessProxyUpstream(ctx context.Context, meta *session.Me
 	return strings.TrimSpace(proxy.URL()), func() { _ = proxy.Close() }, nil
 }
 
-func (a *Agent) markSessionConnected(channelID string, connectedAtUnixMs int64) {
+func (a *Agent) markSessionConnected(channelID string, connectedAtUnixMs int64) error {
 	if a == nil {
-		return
+		return errors.New("agent is unavailable")
 	}
 	channelID = strings.TrimSpace(channelID)
 	if channelID == "" {
-		return
+		return errors.New("missing channel_id")
 	}
 
 	a.mu.Lock()
-	defer a.mu.Unlock()
 	s := a.sessions[channelID]
 	if s == nil {
-		return
+		a.mu.Unlock()
+		return errors.New("session is unavailable")
 	}
+	meta := s.meta
+	a.mu.Unlock()
+
+	generation, err := a.activatePluginSession(meta, [32]byte{}, false, "")
+	if err != nil {
+		return err
+	}
+
+	a.mu.Lock()
+	if a.sessions[channelID] != s {
+		a.mu.Unlock()
+		a.startPluginSessionClose(channelID, generation)
+		return errors.New("session was replaced during activation")
+	}
+	s.pluginGeneration = generation
 	if connectedAtUnixMs > 0 {
 		s.connectedAtUnixMs = connectedAtUnixMs
+	}
+	a.mu.Unlock()
+	return nil
+}
+
+func (a *Agent) removeActiveSession(channelID string) PluginSessionGeneration {
+	if a == nil {
+		return 0
+	}
+	channelID = strings.TrimSpace(channelID)
+	a.mu.Lock()
+	s := a.sessions[channelID]
+	if s != nil {
+		delete(a.sessions, channelID)
+	}
+	a.mu.Unlock()
+	if s == nil {
+		return 0
+	}
+	return s.pluginGeneration
+}
+
+func (a *Agent) closePluginSessionGeneration(channelID string, generation PluginSessionGeneration) {
+	if a == nil || generation == 0 {
+		return
+	}
+	meta, ok := a.pluginSessions.beginClose(generation)
+	if !ok {
+		return
+	}
+	a.maintainPluginSessionGeneration(channelID, generation, meta)
+}
+
+func (a *Agent) startPluginSessionClose(channelID string, generation PluginSessionGeneration) {
+	if a == nil || generation == 0 {
+		return
+	}
+	meta, ok := a.pluginSessions.beginClose(generation)
+	if !ok {
+		return
+	}
+	a.pluginCloseMu.Lock()
+	if a.pluginClosing {
+		a.pluginCloseMu.Unlock()
+		a.maintainPluginSessionGeneration(channelID, generation, meta)
+		return
+	}
+	a.pluginCloseWG.Add(1)
+	a.pluginCloseMu.Unlock()
+	go func() {
+		defer a.pluginCloseWG.Done()
+		a.maintainPluginSessionGeneration(channelID, generation, meta)
+	}()
+}
+
+func (a *Agent) maintainPluginSessionGeneration(channelID string, generation PluginSessionGeneration, meta *session.Meta) {
+	if a == nil || generation == 0 || meta == nil {
+		return
+	}
+	if a.code != nil && a.code.AppServer() != nil {
+		a.code.AppServer().ClosePluginSessionConnections(channelID)
+	}
+	if a.pluginSessionLifecycle == nil {
+		return
+	}
+	for attempt := 0; ; attempt++ {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		err := a.WaitPluginSessionDrained(ctx, generation)
+		if err == nil {
+			err = a.pluginSessionLifecycle.RecordPluginSessionTerminalIntent(ctx, meta, a.pluginProcessGeneration, pluginSessionGenerationID(generation))
+		}
+		if err == nil && !a.TerminalizePluginSession(generation) {
+			err = errors.New("plugin session terminalization rejected")
+		}
+		if err == nil {
+			err = a.pluginSessionLifecycle.MaintainTerminalPluginSession(ctx, meta, a.pluginProcessGeneration, pluginSessionGenerationID(generation))
+		}
+		cancel()
+		if err == nil {
+			if !a.pluginSessions.discardTerminal(generation) {
+				a.log.Warn("plugin session terminal record could not be discarded", "channel_id", strings.TrimSpace(channelID))
+			}
+			return
+		}
+		a.log.Warn("plugin session maintenance incomplete", "channel_id", strings.TrimSpace(channelID), "attempt", attempt+1, "error", err)
+		delay := time.Second << min(attempt, 5)
+		timer := time.NewTimer(delay)
+		a.mu.Lock()
+		runCtx := a.runCtx
+		a.mu.Unlock()
+		if runCtx == nil {
+			runCtx = context.Background()
+		}
+		select {
+		case <-timer.C:
+		case <-runCtx.Done():
+			timer.Stop()
+			return
+		}
 	}
 }
 
 func (a *Agent) stopAllSessions() {
 	a.mu.Lock()
-	defer a.mu.Unlock()
+	cancels := make([]context.CancelFunc, 0, len(a.sessions))
 	for _, s := range a.sessions {
 		if s == nil || s.cancel == nil {
 			continue
 		}
-		s.cancel()
+		cancels = append(cancels, s.cancel)
 	}
-	a.sessions = make(map[string]*activeSession)
+	a.mu.Unlock()
+	for _, cancel := range cancels {
+		cancel()
+	}
+}
+
+func (a *Agent) beginSessionShutdown() {
+	if a == nil {
+		return
+	}
+	a.mu.Lock()
+	a.sessionStopping = true
+	a.mu.Unlock()
+}
+
+func (a *Agent) waitForSessions(timeout time.Duration) bool {
+	if a == nil {
+		return true
+	}
+	done := make(chan struct{})
+	go func() {
+		a.sessionWG.Wait()
+		close(done)
+	}()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-done:
+		return true
+	case <-timer.C:
+		a.log.Warn("session drain timed out")
+		return false
+	}
+}
+
+func (a *Agent) waitForPluginSessionCloses(timeout time.Duration) bool {
+	if a == nil {
+		return true
+	}
+	a.pluginCloseMu.Lock()
+	a.pluginClosing = true
+	a.pluginCloseMu.Unlock()
+	done := make(chan struct{})
+	go func() {
+		a.pluginCloseWG.Wait()
+		close(done)
+	}()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-done:
+		return true
+	case <-timer.C:
+		a.log.Warn("plugin session maintenance drain timed out")
+		return false
+	}
 }
 
 func hostnameBestEffort() string {
@@ -1591,6 +1808,17 @@ func secureRandomUnit() (float64, error) {
 	}
 	const unitScale = 1 << 53
 	return float64(binary.LittleEndian.Uint64(data[:])>>11) / float64(unitScale), nil
+}
+
+func randomOpaqueID(size int) (string, error) {
+	if size <= 0 {
+		return "", errors.New("random identifier size must be positive")
+	}
+	data := make([]byte, size)
+	if _, err := rand.Read(data); err != nil {
+		return "", err
+	}
+	return strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(data)), nil
 }
 
 // --- logger ---

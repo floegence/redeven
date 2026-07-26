@@ -1,6 +1,7 @@
 package appserver
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/tls"
@@ -63,6 +64,8 @@ type Options struct {
 	Diagnostics             *diagnostics.Store
 	ResolveSessionMeta      func(channelID string) (*session.Meta, bool)
 	ResolveSessionTunnelURL func(channelID string) (string, bool)
+	AcquirePluginSession    func(channelID string) (*session.Meta, func(), bool)
+	EndPluginSession        func(channelID string)
 	// ConfigPath is the absolute path to the runtime config file.
 	// It is used to read and persist settings updates initiated from the Env App UI.
 	ConfigPath string
@@ -229,6 +232,8 @@ type Server struct {
 
 	resolveSessionMeta      func(channelID string) (*session.Meta, bool)
 	resolveSessionTunnelURL func(channelID string) (string, bool)
+	acquirePluginSession    func(channelID string) (*session.Meta, func(), bool)
+	endPluginSession        func(channelID string)
 
 	configPath            string
 	stateDir              string
@@ -238,6 +243,8 @@ type Server struct {
 	secrets               *settings.SecretsStore
 	threadReadState       *threadreadstate.Store
 	pluginPlatform        http.Handler
+	pluginConnMu          sync.Mutex
+	pluginConns           map[*pluginAdmissionConn]struct{}
 
 	agentHomeDir string
 	scope        *filesystemscope.Registry
@@ -268,15 +275,23 @@ const (
 )
 
 type localUIRoute struct {
-	kind        localUIRouteKind
-	codeSpaceID string
-	forwardID   string
+	kind            localUIRouteKind
+	codeSpaceID     string
+	forwardID       string
+	pluginChannelID string
 }
 
 type localUIRouteContextKey struct{}
 
 func WithLocalUIEnvRoute(r *http.Request) *http.Request {
 	return withLocalUIRoute(r, localUIRoute{kind: localUIRouteEnv})
+}
+
+func WithLocalUIPluginRoute(r *http.Request, channelID string) *http.Request {
+	return withLocalUIRoute(r, localUIRoute{
+		kind:            localUIRouteEnv,
+		pluginChannelID: strings.TrimSpace(channelID),
+	})
 }
 
 func WithLocalUICodeSpaceRoute(r *http.Request, codeSpaceID string) *http.Request {
@@ -366,12 +381,15 @@ func New(opts Options) (*Server, error) {
 		diag:                    opts.Diagnostics,
 		resolveSessionMeta:      opts.ResolveSessionMeta,
 		resolveSessionTunnelURL: opts.ResolveSessionTunnelURL,
+		acquirePluginSession:    opts.AcquirePluginSession,
+		endPluginSession:        opts.EndPluginSession,
 		configPath:              strings.TrimSpace(opts.ConfigPath),
 		stateDir:                stateDir,
 		localPermissionPolicy:   localPermissionPolicy,
 		secrets:                 secrets,
 		threadReadState:         opts.ThreadReadStateStore,
 		pluginPlatform:          opts.PluginPlatform,
+		pluginConns:             make(map[*pluginAdmissionConn]struct{}),
 		distFS:                  opts.DistFS,
 		addr:                    addr,
 	}, nil
@@ -425,6 +443,7 @@ func (g *Server) Close() error {
 	if g == nil {
 		return nil
 	}
+	g.closePluginConnections()
 	if g.srv != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
@@ -609,13 +628,202 @@ func (g *Server) servePluginPlatform(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
-	if channelID, ok := g.pluginManagementChannelID(r); ok {
-		next.Header.Set(sessionhop.HeaderChannelID, channelID)
-	} else {
+	channelID, ok := g.pluginManagementChannelID(r)
+	if !ok || g.acquirePluginSession == nil {
 		next.Header.Del(sessionhop.HeaderChannelID)
+		http.Error(w, "plugin session unavailable", http.StatusForbidden)
+		return
 	}
+	_, release, ok := g.acquirePluginSession(channelID)
+	if !ok || release == nil {
+		next.Header.Del(sessionhop.HeaderChannelID)
+		http.Error(w, "plugin session unavailable", http.StatusForbidden)
+		return
+	}
+	next.Header.Set(sessionhop.HeaderChannelID, channelID)
 	next = redevpluginintegration.WithRouteRole(next, redevpluginintegration.RouteRoleEnvTrusted)
-	g.pluginPlatform.ServeHTTP(w, next)
+	admissionWriter := &pluginAdmissionResponseWriter{
+		ResponseWriter: w,
+		server:         g,
+		release:        release,
+		channel:        channelID,
+	}
+	g.pluginPlatform.ServeHTTP(admissionWriter, next)
+	admissionWriter.releaseAfterServe()
+	if isPluginSessionEndRequest(r) && admissionWriter.committedSuccess() && g.endPluginSession != nil {
+		g.endPluginSession(channelID)
+	}
+}
+
+func isPluginSessionEndRequest(r *http.Request) bool {
+	return r != nil && r.URL != nil && r.Method == http.MethodPost &&
+		path.Clean(r.URL.Path) == "/_redevplugin/api/plugins/session/revoke-scope"
+}
+
+type pluginAdmissionResponseWriter struct {
+	http.ResponseWriter
+	server  *Server
+	release func()
+	channel string
+
+	mu       sync.Mutex
+	hijacked bool
+	released bool
+	status   int
+}
+
+func (w *pluginAdmissionResponseWriter) WriteHeader(status int) {
+	w.mu.Lock()
+	if w.status == 0 {
+		w.status = status
+	}
+	w.mu.Unlock()
+	w.ResponseWriter.WriteHeader(status)
+}
+
+func (w *pluginAdmissionResponseWriter) Write(body []byte) (int, error) {
+	w.mu.Lock()
+	if w.status == 0 {
+		w.status = http.StatusOK
+	}
+	w.mu.Unlock()
+	return w.ResponseWriter.Write(body)
+}
+
+func (w *pluginAdmissionResponseWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
+}
+
+func (w *pluginAdmissionResponseWriter) Flush() {
+	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
+func (w *pluginAdmissionResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	hijacker, ok := w.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, errors.New("response writer does not support hijacking")
+	}
+	conn, rw, err := hijacker.Hijack()
+	if err != nil {
+		return nil, nil, err
+	}
+	w.mu.Lock()
+	if w.released {
+		w.mu.Unlock()
+		_ = conn.Close()
+		return nil, nil, errors.New("plugin admission already released")
+	}
+	w.hijacked = true
+	tracked := &pluginAdmissionConn{Conn: conn, owner: w.server, release: w.release, channel: w.channel}
+	w.mu.Unlock()
+	if w.server != nil {
+		w.server.trackPluginConnection(tracked)
+		if w.server.acquirePluginSession == nil {
+			_ = tracked.Close()
+			return nil, nil, errors.New("plugin session admission is unavailable")
+		}
+		_, probeRelease, active := w.server.acquirePluginSession(w.channel)
+		if !active || probeRelease == nil {
+			_ = tracked.Close()
+			return nil, nil, errors.New("plugin session retired during hijack")
+		}
+		probeRelease()
+	}
+	return tracked, rw, nil
+}
+
+func (w *pluginAdmissionResponseWriter) releaseAfterServe() {
+	w.mu.Lock()
+	if w.hijacked || w.released {
+		w.mu.Unlock()
+		return
+	}
+	w.released = true
+	release := w.release
+	w.mu.Unlock()
+	if release != nil {
+		release()
+	}
+}
+
+func (w *pluginAdmissionResponseWriter) committedSuccess() bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	status := w.status
+	if status == 0 {
+		status = http.StatusOK
+	}
+	return !w.hijacked && status >= 200 && status < 300
+}
+
+type pluginAdmissionConn struct {
+	net.Conn
+	owner   *Server
+	release func()
+	channel string
+	once    sync.Once
+}
+
+func (c *pluginAdmissionConn) Close() error {
+	if c == nil {
+		return nil
+	}
+	err := c.Conn.Close()
+	c.once.Do(func() {
+		if c.owner != nil {
+			c.owner.untrackPluginConnection(c)
+		}
+		if c.release != nil {
+			c.release()
+		}
+	})
+	return err
+}
+
+func (g *Server) trackPluginConnection(conn *pluginAdmissionConn) {
+	if g == nil || conn == nil {
+		return
+	}
+	g.pluginConnMu.Lock()
+	g.pluginConns[conn] = struct{}{}
+	g.pluginConnMu.Unlock()
+}
+
+func (g *Server) untrackPluginConnection(conn *pluginAdmissionConn) {
+	if g == nil || conn == nil {
+		return
+	}
+	g.pluginConnMu.Lock()
+	delete(g.pluginConns, conn)
+	g.pluginConnMu.Unlock()
+}
+
+func (g *Server) closePluginConnections() {
+	g.closePluginConnectionsForChannel("")
+}
+
+func (g *Server) ClosePluginSessionConnections(channelID string) {
+	g.closePluginConnectionsForChannel(strings.TrimSpace(channelID))
+}
+
+func (g *Server) closePluginConnectionsForChannel(channelID string) {
+	if g == nil {
+		return
+	}
+	g.pluginConnMu.Lock()
+	connections := make([]*pluginAdmissionConn, 0, len(g.pluginConns))
+	for conn := range g.pluginConns {
+		if channelID != "" && conn.channel != channelID {
+			continue
+		}
+		connections = append(connections, conn)
+	}
+	g.pluginConnMu.Unlock()
+	for _, conn := range connections {
+		_ = conn.Close()
+	}
 }
 
 func pluginPlatformTrustedOrigin(r *http.Request) (string, error) {
@@ -647,6 +855,9 @@ func pluginPlatformTrustedOrigin(r *http.Request) (string, error) {
 
 func (g *Server) pluginManagementChannelID(r *http.Request) (string, bool) {
 	if route, ok := localUIRouteFromRequest(r); ok {
+		if channelID := strings.TrimSpace(route.pluginChannelID); channelID != "" {
+			return channelID, true
+		}
 		meta := g.localSessionMeta(route)
 		if meta == nil {
 			return "", false

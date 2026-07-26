@@ -3,6 +3,7 @@ package localui
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"io"
@@ -23,9 +24,41 @@ import (
 	"github.com/floegence/redeven/internal/codeapp/codeserver"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/diagnostics"
+	"github.com/floegence/redeven/internal/lockfile"
+	"github.com/floegence/redeven/internal/redevpluginintegration"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/sessionhop"
 )
+
+func TestServer_ConnectArtifactStoresOnlyPluginCredentialHash(t *testing.T) {
+	t.Parallel()
+
+	s := newTestServer(t, nil)
+	req := httptest.NewRequest(http.MethodPost, "http://localhost:23998/api/local/direct/connect_artifact", bytes.NewBufferString(`{}`))
+	res := httptest.NewRecorder()
+	s.handler().ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%q", res.Code, res.Body.String())
+	}
+	var envelope connectArtifactEnvelope
+	if err := json.Unmarshal(res.Body.Bytes(), &envelope); err != nil {
+		t.Fatalf("decode artifact envelope: %v", err)
+	}
+	if envelope.ConnectArtifact == nil || envelope.ConnectArtifact.DirectInfo == nil || envelope.PluginSessionCredential == "" {
+		t.Fatalf("artifact envelope is incomplete: %+v", envelope)
+	}
+	channelID := envelope.ConnectArtifact.DirectInfo.ChannelId
+	s.pendingMu.Lock()
+	pending, ok := s.pending[channelID]
+	s.pendingMu.Unlock()
+	if !ok {
+		t.Fatalf("pending direct generation %q is missing", channelID)
+	}
+	wantHash := sha256.Sum256([]byte(envelope.PluginSessionCredential))
+	if pending.pluginCredentialHash != wantHash {
+		t.Fatal("pending direct generation did not retain the exact credential hash")
+	}
+}
 
 func writeTestConfig(t *testing.T) string {
 	t.Helper()
@@ -199,6 +232,17 @@ func newTestServerWithAppServer(t *testing.T, gate *accessgate.Gate, appSrv *app
 
 func newRuntimeHealthTestAgent(t *testing.T, cfgPath string) *agent.Agent {
 	t.Helper()
+	const runtimeInstanceID = "local-ui-test-process"
+	lockPath := filepath.Join(filepath.Dir(cfgPath), "agent.lock")
+	runtimeLock, err := lockfile.Acquire(lockPath)
+	if err != nil {
+		t.Fatalf("lockfile.Acquire() error = %v", err)
+	}
+	t.Cleanup(func() { _ = runtimeLock.Release() })
+	runtimeAuthority, err := redevpluginintegration.NewRuntimeProcessAuthority(runtimeLock, lockPath, runtimeInstanceID)
+	if err != nil {
+		t.Fatalf("NewRuntimeProcessAuthority() error = %v", err)
+	}
 	policy, err := config.ParsePermissionPolicyPreset("")
 	if err != nil {
 		t.Fatalf("ParsePermissionPolicyPreset() error = %v", err)
@@ -208,11 +252,13 @@ func newRuntimeHealthTestAgent(t *testing.T, cfgPath string) *agent.Agent {
 			AgentHomeDir:     t.TempDir(),
 			PermissionPolicy: policy,
 		},
-		ConfigPath:            cfgPath,
-		LocalUIEnabled:        true,
-		ControlChannelEnabled: false,
-		Version:               "dev",
-		LogOutput:             io.Discard,
+		ConfigPath:             cfgPath,
+		InstanceID:             runtimeInstanceID,
+		LocalUIEnabled:         true,
+		ControlChannelEnabled:  false,
+		Version:                "dev",
+		LogOutput:              io.Discard,
+		PluginRuntimeAuthority: runtimeAuthority,
 	})
 	if err != nil {
 		t.Fatalf("agent.New() error = %v", err)
@@ -358,7 +404,7 @@ func TestServer_PluginPlatformRoutesAreAbsentWithoutHandler(t *testing.T) {
 	}
 }
 
-func TestServer_PluginManagementAPIUsesAccessGateWhenPlatformEnabled(t *testing.T) {
+func TestServer_PluginManagementAPIRequiresAccessAndGenerationCredential(t *testing.T) {
 	gate := accessgate.New(accessgate.Options{Password: "secret"})
 	cfgPath := writeTestConfig(t)
 	appSrv := newTestAppServerWithPluginPlatform(t, cfgPath, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -380,15 +426,12 @@ func TestServer_PluginManagementAPIUsesAccessGateWhenPlatformEnabled(t *testing.
 	openReq.Header.Set("Origin", "https://env-local.example.com")
 	openRes := httptest.NewRecorder()
 	open.handler().ServeHTTP(openRes, openReq)
-	if openRes.Result().StatusCode != 218 {
-		t.Fatalf("open plugin management status = %d, want delegated 218; body=%q", openRes.Result().StatusCode, openRes.Body.String())
-	}
-	if strings.TrimSpace(openRes.Body.String()) != "/_redevplugin/api/plugins/catalog" {
-		t.Fatalf("delegated path = %q", openRes.Body.String())
+	if openRes.Result().StatusCode != http.StatusForbidden {
+		t.Fatalf("credential-free plugin management status = %d, want 403; body=%q", openRes.Result().StatusCode, openRes.Body.String())
 	}
 }
 
-func TestServer_PluginManagementAPILocalUIProvidesSessionChannel(t *testing.T) {
+func TestServer_PluginManagementAPIRejectsCallerChannelWithoutCredential(t *testing.T) {
 	cfgPath := writeTestConfig(t)
 	var gotChannelID string
 	appSrv := newTestAppServerWithPluginPlatform(t, cfgPath, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -399,14 +442,15 @@ func TestServer_PluginManagementAPILocalUIProvidesSessionChannel(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "http://localhost:23998/_redevplugin/api/plugins/enable", strings.NewReader(`{}`))
 	req.Header.Set("Origin", "http://localhost:23998")
+	req.Header.Set(sessionhop.HeaderChannelID, "caller-controlled")
 	res := httptest.NewRecorder()
 	s.handler().ServeHTTP(res, req)
 
-	if res.Result().StatusCode != 218 {
-		t.Fatalf("plugin management status = %d, want delegated 218; body=%q", res.Result().StatusCode, res.Body.String())
+	if res.Result().StatusCode != http.StatusForbidden {
+		t.Fatalf("plugin management status = %d, want 403; body=%q", res.Result().StatusCode, res.Body.String())
 	}
-	if gotChannelID != "local-ui" {
-		t.Fatalf("delegated channel header = %q, want local-ui", gotChannelID)
+	if gotChannelID != "" {
+		t.Fatalf("untrusted caller channel reached plugin platform: %q", gotChannelID)
 	}
 }
 
@@ -565,6 +609,20 @@ func TestServer_LocalAccessUnlockFlow(t *testing.T) {
 	if resumeConnectRes.Result().StatusCode != http.StatusOK {
 		t.Fatalf("resume-token connect_artifact status = %d, want %d", resumeConnectRes.Result().StatusCode, http.StatusOK)
 	}
+	resumedCookies := resumeConnectRes.Result().Cookies()
+	if len(resumedCookies) == 0 {
+		t.Fatal("resume-token connect_artifact did not mint an access cookie")
+	}
+	accessSessionID, resumedExpiresAt, ok := gate.ResolveLocalSession(resumedCookies[0].Value)
+	if !ok {
+		t.Fatal("resume-token connect_artifact minted an invalid access cookie")
+	}
+	s.directMu.Lock()
+	trackedAccess := s.pluginAccess[accessSessionID]
+	s.directMu.Unlock()
+	if trackedAccess == nil || trackedAccess.expiresAt.UnixMilli() != resumedExpiresAt.UnixMilli() {
+		t.Fatalf("tracked resumed access expiry = %#v, want %v", trackedAccess, resumedExpiresAt)
+	}
 
 	cookies := unlockRes.Result().Cookies()
 	if len(cookies) == 0 {
@@ -588,7 +646,7 @@ func TestServer_LocalAccessUnlockFlow(t *testing.T) {
 	}
 
 	logoutReq := httptest.NewRequest(http.MethodPost, "http://localhost:23998/api/local/access/logout", nil)
-	logoutReq.AddCookie(cookies[0])
+	logoutReq.Header.Set(localAccessResumeHeader, unlockBody.Data.ResumeToken)
 	logoutRes := httptest.NewRecorder()
 	s.handleAccessLogout(logoutRes, logoutReq)
 	if logoutRes.Result().StatusCode != http.StatusOK {
@@ -601,6 +659,15 @@ func TestServer_LocalAccessUnlockFlow(t *testing.T) {
 	s.handleRuntime(revokedRes, revokedReq)
 	if revokedRes.Result().StatusCode != http.StatusLocked {
 		t.Fatalf("revoked runtime status = %d, want %d", revokedRes.Result().StatusCode, http.StatusLocked)
+	}
+	if gate.IsLocalSessionValid(resumedCookies[0].Value) {
+		t.Fatal("resume-only logout left the resumed local cookie active")
+	}
+	s.directMu.Lock()
+	_, accessStillTracked := s.pluginAccess[accessSessionID]
+	s.directMu.Unlock()
+	if accessStillTracked {
+		t.Fatal("resume-only logout left the plugin access session active")
 	}
 }
 

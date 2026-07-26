@@ -39,6 +39,7 @@ type Options struct {
 	Audit              *auditlog.Store
 	Diagnostics        *diagnostics.Store
 	Containers         *containers.Adapter
+	RuntimeAuthority   *RuntimeProcessAuthority
 	releaseTrustNow    func() time.Time
 	newReleaseModule   func(string) (*host.ReleaseModule, host.PluginReleaseRef, func() error, error)
 	newExternalFetcher func(*externalsource.StageStore) (host.ExternalPackageFetcher, error)
@@ -46,10 +47,11 @@ type Options struct {
 }
 
 type Integration struct {
-	handler      http.Handler
-	host         *host.Host
-	capabilities *containersCapabilityAdapter
-	closers      []func() error
+	handler          http.Handler
+	host             *host.Host
+	capabilities     *containersCapabilityAdapter
+	sessionLifecycle *sessionLifecycleAdapter
+	closers          []func() error
 }
 
 func New(ctx context.Context, opts Options) (*Integration, error) {
@@ -95,6 +97,7 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 	closeOnError := func() { _ = closeAll(closers) }
 	externalStage, err := externalsource.NewStageStore(filepath.Join(root, "external-package-stage"))
 	if err != nil {
+		closeOnError()
 		return nil, err
 	}
 	// The Host owns pending inspection cleanup, so the shared stage closes only
@@ -165,7 +168,9 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 		closeOnError()
 		return nil, err
 	}
-	sessionLifecycle, err := newSessionLifecycleAdapter(filepath.Join(dbRoot, "closed_sessions.json"))
+	sessionLifecycle, err := newSessionLifecycleAdapter(filepath.Join(dbRoot, "closed_sessions.json"), sessionLifecycleStartupAuthority{
+		runtime: opts.RuntimeAuthority, stateGenerationID: generation.Status.FreshGenerationID,
+	})
 	if err != nil {
 		closeOnError()
 		return nil, err
@@ -272,6 +277,7 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 			ConfirmationIntents:  confirmationIntents,
 			Streams:              streamStore,
 			SessionLifecycle:     sessionLifecycle,
+			SessionMaintenance:   sessionLifecycle,
 			SessionScopes:        sessionScopes,
 		},
 		Release: releaseModule,
@@ -307,16 +313,113 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 		return nil, err
 	}
 	integration := &Integration{
-		handler:      handler,
-		host:         h,
-		capabilities: capabilityAdapter,
-		closers:      closers,
+		handler:          handler,
+		host:             h,
+		capabilities:     capabilityAdapter,
+		sessionLifecycle: sessionLifecycle,
+		closers:          closers,
 	}
 	return integration, nil
 }
 
 func (i *Integration) Handler() http.Handler {
 	return i.handler
+}
+
+func (i *Integration) PluginProcessGeneration() string {
+	if i == nil || i.sessionLifecycle == nil {
+		return ""
+	}
+	if !i.sessionLifecycle.startupAuthority.runtime.valid() {
+		return ""
+	}
+	return i.sessionLifecycle.startupAuthority.runtime.processGeneration
+}
+
+func (i *Integration) BindActiveGeneration(ctx context.Context, generation PluginSessionGeneration) error {
+	if i == nil || i.sessionLifecycle == nil {
+		return errors.New("plugin session lifecycle is unavailable")
+	}
+	return i.sessionLifecycle.bindActiveGeneration(ctx, generation)
+}
+
+func (i *Integration) RecordCloseContinuation(ctx context.Context, generation PluginSessionGeneration) error {
+	if i == nil || i.sessionLifecycle == nil {
+		return errors.New("plugin session lifecycle is unavailable")
+	}
+	return i.sessionLifecycle.recordCloseContinuation(ctx, generation)
+}
+
+func (i *Integration) RecordTerminalIntent(ctx context.Context, generation PluginSessionGeneration) error {
+	if i == nil || i.sessionLifecycle == nil {
+		return errors.New("plugin session lifecycle is unavailable")
+	}
+	return i.sessionLifecycle.recordTerminalIntent(ctx, generation)
+}
+
+func (i *Integration) DiscardFinalizedGeneration(ctx context.Context, generation PluginSessionGeneration) error {
+	if i == nil || i.sessionLifecycle == nil {
+		return errors.New("plugin session lifecycle is unavailable")
+	}
+	return i.sessionLifecycle.discardFinalizedGeneration(ctx, generation)
+}
+
+// MaintainTerminalGeneration keeps the opaque teardown identity inside the
+// integration boundary while converging one exact terminal generation.
+func (i *Integration) MaintainTerminalGeneration(ctx context.Context, generation PluginSessionGeneration) error {
+	if i == nil || i.host == nil || i.sessionLifecycle == nil {
+		return errors.New("plugin session lifecycle is unavailable")
+	}
+	if _, err := validatePluginSessionGeneration(generation); err != nil {
+		return err
+	}
+	record, err := i.sessionLifecycle.InspectSessionScopeMaintenance(ctx, host.InspectSessionScopeMaintenanceRequest{
+		Session: generation.Session,
+	})
+	if err != nil {
+		return err
+	}
+	if !record.TerminalEvidence {
+		return host.ErrSessionMaintenanceState
+	}
+	if record.Phase == "" {
+		closed, err := i.host.CloseAuthenticatedSessionScope(ctx, host.CloseAuthenticatedSessionScopeRequest{
+			Session: generation.Session,
+		})
+		if err != nil {
+			return err
+		}
+		if closed.Status == host.SessionScopeTeardownAbsent {
+			return host.ErrSessionMaintenanceState
+		}
+		record, err = i.sessionLifecycle.InspectSessionScopeMaintenance(ctx, host.InspectSessionScopeMaintenanceRequest{
+			Session: generation.Session,
+		})
+		if err != nil {
+			return err
+		}
+	}
+	resumed, err := i.host.ResumeClosedSessionScopeTeardown(ctx, host.ResumeClosedSessionScopeTeardownRequest{
+		Session:  generation.Session,
+		Identity: record.Identity,
+	})
+	if err != nil {
+		return err
+	}
+	if resumed.Status != host.SessionScopeTeardownComplete {
+		return nil
+	}
+	finalized, err := i.host.FinalizeClosedSessionScope(ctx, host.FinalizeClosedSessionScopeRequest{
+		Session:  generation.Session,
+		Identity: record.Identity,
+	})
+	if err != nil {
+		return err
+	}
+	if finalized.Status == host.SessionScopeFinalizationAbsent {
+		return host.ErrSessionMaintenanceState
+	}
+	return i.sessionLifecycle.discardFinalizedGeneration(ctx, generation)
 }
 
 func (i *Integration) Close() error {

@@ -8,4 +8,8 @@ const (
 	// context; this header exists only so the app server can recover the already-bound
 	// session without depending on public host labels.
 	HeaderChannelID = "X-Redeven-Session-Channel"
+	// HeaderPluginSessionCredential carries the opaque Local UI plugin-management
+	// generation credential. The Local UI edge consumes and removes it before the
+	// trusted hop injects HeaderChannelID.
+	HeaderPluginSessionCredential = "X-Redeven-Plugin-Session"
 )

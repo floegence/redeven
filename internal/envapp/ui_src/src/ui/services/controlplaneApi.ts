@@ -5,6 +5,7 @@ import { SESSION_KIND_ENVAPP_RPC, sessionKindForLauncherApp, type LauncherFloeAp
 import { appendLocalAccessResumeQuery, applyLocalAccessResumeHeader } from './localAccessAuth';
 import { controlPlaneOriginFromSandboxLocation } from './sandboxOrigins';
 import { AccessUnlockError, isKnownAccessUnlockErrorCode, normalizeRetryAfterMs } from './accessUnlockError';
+import { writePluginSessionCredential } from './pluginSessionCredential';
 
 export interface Environment {
   public_id: string;
@@ -472,7 +473,10 @@ export async function refreshLocalRuntime(): Promise<LocalRuntimeInfo | null> {
 }
 
 export async function mintLocalDirectConnectArtifact(context: ArtifactAcquireContext = {}): Promise<ConnectArtifact> {
-  const out = await fetchLocalJSON<{ connect_artifact?: unknown }>('/api/local/direct/connect_artifact', {
+  const out = await fetchLocalJSON<{
+    connect_artifact?: unknown;
+    plugin_session_credential?: unknown;
+  }>('/api/local/direct/connect_artifact', {
     method: 'POST',
     ...(context.signal === undefined ? {} : { signal: context.signal }),
   });
@@ -485,6 +489,11 @@ export async function mintLocalDirectConnectArtifact(context: ArtifactAcquireCon
   if (!wsURL || !channelID) {
     throw new Error('Invalid local direct connect artifact');
   }
+  const pluginSessionCredential = asString(out?.plugin_session_credential);
+  if (!pluginSessionCredential) {
+    throw new Error('Invalid local plugin session credential');
+  }
+  writePluginSessionCredential(pluginSessionCredential);
   return {
     ...artifact,
     direct_info: {

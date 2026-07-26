@@ -1,13 +1,13 @@
 ---
 type: Architecture Contract
 title: Plugin platform integration
-description: Redeven mounts ReDevPlugin v0.6.17 and adds authenticated host modules, copied-root recovery, external-source policy, product placement, and business adapters.
+description: Redeven mounts ReDevPlugin v0.6.18 and adds authenticated host modules, copied-root recovery, external-source policy, product placement, and business adapters.
 tags: [architecture, plugins, local-ui, redevplugin]
 timestamp: 2026-07-25T00:00:00Z
 ---
 # Summary
 
-Redeven integrates ReDevPlugin `v0.6.17` through one Go Host, one canonical HTTP
+Redeven integrates ReDevPlugin `v0.6.18` through one Go Host, one canonical HTTP
 namespace, one Env App `PluginPlatformClient`, one shared surface scope, and the
 released ProcessManager over a verified Redeven-built Linux runtime. Redeven
 adds authenticated session mapping, public-source admission policy, product
@@ -38,6 +38,38 @@ surfaces, operations, streams, handles, confirmations, and tokens bind the full
 active owner-session, owner-user, owner-environment, and channel audience.
 Session close uses the released durable four-hash coordinator and authentication
 state is removed only after exact drain acknowledgement.
+
+## Session authority and teardown
+
+Each authenticated channel receives one process-local generation. Creation is
+bound to the exact runtime instance that owns the already-held `agent.lock`; the
+Host rejects caller assertions, a second lock, or a generation from another
+process. Redeven's registry stores only plugin credential hashes, admits requests
+through one reference-counted lease, and moves a generation through
+`active -> retired -> terminal` without replacing an active channel in place.
+
+Local UI plugin credentials additionally bind a server-generated access-session
+id. The id remains internal and follows one resume lineage; the raw credential is
+kept only in Env App memory. Logout, active expiry, direct transport EOF, and
+server shutdown stop mint and request admission, remove pending artifacts, close
+the exact WebSocket set, and retire only generations owned by that access session.
+No-password mode scopes the access session to one direct connection.
+
+The released lifecycle adapter persists the active process/session generation,
+phase, exact four-hash identity, close continuation, terminal claim, revision,
+and checksum in an atomically replaced generation. Startup accepts only the
+current lock authority, strictly migrates recognized v1 state while retaining its
+exact bytes, reconciles recoverable interrupted phases, and rejects symlinks,
+non-regular files, tampered journals, ambiguous fences, and future state without
+mutation. A post-rename durability failure poisons the adapter because the
+mutation outcome is unknown.
+
+Shutdown closes Local UI admission and hijacked transports before canceling
+Agent sessions. It then waits for request leases, session handlers, and tracked
+maintenance workers before closing the Host. A timeout leaves the durable
+continuation for the next startup and does not close the Host concurrently with a
+callback. Transient maintenance failures retry in the background while the
+runtime remains active.
 
 ## Copied owner-scope recovery
 
@@ -107,7 +139,7 @@ user pin.
 ## Runtime and Containers
 
 The runtime module binds the canonical sibling executable, target, ReDevPlugin
-`0.6.17`, released Rust IPC and WASM ABI, exact product-build descriptor, lease
+`0.6.18`, released Rust IPC and WASM ABI, exact product-build descriptor, lease
 replay storage, and released limits. Linux runtime bytes are built with Rust
 1.88.0 from the attested package set and travel with SBOM, provenance, notices,
 and signature evidence. Missing, non-canonical, wrong-target, unsigned, or
@@ -173,7 +205,7 @@ disposal alone is not revocation evidence.
 # Boundaries
 
 Canonical ownership is defined by [ReDevPlugin host integration boundary](redevplugin-boundary.md).
-This concept owns only Redeven's concrete `v0.6.17` assembly.
+This concept owns only Redeven's concrete `v0.6.18` assembly.
 
 Manifest surfaces remain `view|command|background` with semantic roles. Activity,
 Workbench, window, widget, inventory key, navigation, settings, and product layout

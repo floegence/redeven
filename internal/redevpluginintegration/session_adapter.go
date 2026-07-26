@@ -235,28 +235,40 @@ func (r *sessionResolver) resolvedSessionFromMeta(expectedChannelID string, meta
 	if r == nil || r.permissionPolicy == nil || meta == nil {
 		return resolvedSession{}, sessionctx.ErrSessionRequired
 	}
-	expectedChannelID = strings.TrimSpace(expectedChannelID)
-	channelID := strings.TrimSpace(meta.ChannelID)
-	userID := strings.TrimSpace(meta.UserPublicID)
-	environmentID := strings.TrimSpace(meta.EndpointID)
-	if expectedChannelID == "" || channelID == "" || userID == "" || environmentID == "" ||
-		channelID != expectedChannelID || channelID != meta.ChannelID || userID != meta.UserPublicID || environmentID != meta.EndpointID {
-		return resolvedSession{}, sessionctx.ErrSessionRequired
+	sessionContext, err := canonicalPluginSessionContextFromMeta(expectedChannelID, meta)
+	if err != nil {
+		return resolvedSession{}, err
 	}
+	userID := strings.TrimSpace(meta.UserPublicID)
 	cap := r.permissionPolicy.ResolveCap(userID, meta.FloeApp)
 	return resolvedSession{
-		context: sessionctx.Context{
-			OwnerSessionHash:     hashID("session", channelID),
-			OwnerUserHash:        hashID("user", userID),
-			OwnerEnvHash:         hashID("env", environmentID),
-			SessionChannelIDHash: hashID("channel", channelID),
-		},
+		context: sessionContext,
 		permissions: sessionPermissions{
 			read:    meta.CanRead && cap.Read,
 			write:   meta.CanWrite && cap.Write,
 			execute: meta.CanExecute && cap.Execute,
 			admin:   meta.CanAdmin,
 		},
+	}, nil
+}
+
+func canonicalPluginSessionContextFromMeta(expectedChannelID string, meta *session.Meta) (sessionctx.Context, error) {
+	if meta == nil {
+		return sessionctx.Context{}, sessionctx.ErrSessionRequired
+	}
+	expectedChannelID = strings.TrimSpace(expectedChannelID)
+	channelID := strings.TrimSpace(meta.ChannelID)
+	userID := strings.TrimSpace(meta.UserPublicID)
+	environmentID := strings.TrimSpace(meta.EndpointID)
+	if expectedChannelID == "" || channelID == "" || userID == "" || environmentID == "" ||
+		channelID != expectedChannelID || channelID != meta.ChannelID || userID != meta.UserPublicID || environmentID != meta.EndpointID {
+		return sessionctx.Context{}, sessionctx.ErrSessionRequired
+	}
+	return sessionctx.Context{
+		OwnerSessionHash:     hashID("session", channelID),
+		OwnerUserHash:        hashID("user", userID),
+		OwnerEnvHash:         hashID("env", environmentID),
+		SessionChannelIDHash: hashID("channel", channelID),
 	}, nil
 }
 

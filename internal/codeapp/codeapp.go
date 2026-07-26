@@ -65,9 +65,13 @@ type Options struct {
 	Terminal    *terminal.Manager
 	// LocalUIEnabled enables Local UI-specific runtime behavior such as shorter
 	// code-server reconnection grace and local app-server routing.
-	LocalUIEnabled          bool
-	ResolveSessionMeta      func(channelID string) (*session.Meta, bool)
-	ResolveSessionTunnelURL func(channelID string) (string, bool)
+	LocalUIEnabled           bool
+	ResolveSessionMeta       func(channelID string) (*session.Meta, bool)
+	ResolveSessionTunnelURL  func(channelID string) (string, bool)
+	ResolvePluginSessionMeta func(channelID string) (*session.Meta, bool)
+	AcquirePluginSession     func(channelID string) (*session.Meta, func(), bool)
+	EndPluginSession         func(channelID string)
+	PluginRuntimeAuthority   *redevpluginintegration.RuntimeProcessAuthority
 
 	newAIService   aiServiceFactory
 	closeAIService aiServiceCloser
@@ -300,6 +304,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		Audit:              opts.Audit,
 		Diagnostics:        opts.Diagnostics,
 		Containers:         containerAdapter,
+		RuntimeAuthority:   opts.PluginRuntimeAuthority,
 	})
 	if err != nil {
 		terminalLayoutCleanup()
@@ -327,6 +332,8 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		Diagnostics:             opts.Diagnostics,
 		ResolveSessionMeta:      opts.ResolveSessionMeta,
 		ResolveSessionTunnelURL: opts.ResolveSessionTunnelURL,
+		AcquirePluginSession:    opts.AcquirePluginSession,
+		EndPluginSession:        opts.EndPluginSession,
 		ConfigPath:              strings.TrimSpace(opts.ConfigPath),
 		SecretsStore:            secrets,
 		ThreadReadStateStore:    threadReadStateStore,
@@ -413,16 +420,13 @@ func (s *Service) Close() error {
 }
 
 func resolvePluginPlatformSessionMeta(opts Options) func(channelID string) (*session.Meta, bool) {
-	base := opts.ResolveSessionMeta
+	base := opts.ResolvePluginSessionMeta
 	return func(channelID string) (*session.Meta, bool) {
 		channelID = strings.TrimSpace(channelID)
 		if base != nil {
 			if meta, ok := base(channelID); ok && meta != nil {
 				return meta, true
 			}
-		}
-		if opts.LocalUIEnabled && channelID == appserver.LocalUIChannelID {
-			return appserver.LocalEnvSessionMeta(strings.TrimSpace(opts.ConfigPath)), true
 		}
 		return nil, false
 	}
@@ -440,6 +444,39 @@ func (s *Service) AppServer() *appserver.Server {
 		return nil
 	}
 	return s.appSrv
+}
+
+func (s *Service) BindPluginSessionGeneration(ctx context.Context, meta *session.Meta, processGeneration, sessionGeneration string) error {
+	if s == nil || s.pluginIntegration == nil {
+		return errors.New("plugin integration is unavailable")
+	}
+	generation, err := redevpluginintegration.PluginSessionGenerationFromMeta(meta, processGeneration, sessionGeneration)
+	if err != nil {
+		return err
+	}
+	return s.pluginIntegration.BindActiveGeneration(ctx, generation)
+}
+
+func (s *Service) RecordPluginSessionTerminalIntent(ctx context.Context, meta *session.Meta, processGeneration, sessionGeneration string) error {
+	if s == nil || s.pluginIntegration == nil {
+		return errors.New("plugin integration is unavailable")
+	}
+	generation, err := redevpluginintegration.PluginSessionGenerationFromMeta(meta, processGeneration, sessionGeneration)
+	if err != nil {
+		return err
+	}
+	return s.pluginIntegration.RecordTerminalIntent(ctx, generation)
+}
+
+func (s *Service) MaintainTerminalPluginSession(ctx context.Context, meta *session.Meta, processGeneration, sessionGeneration string) error {
+	if s == nil || s.pluginIntegration == nil {
+		return errors.New("plugin integration is unavailable")
+	}
+	generation, err := redevpluginintegration.PluginSessionGenerationFromMeta(meta, processGeneration, sessionGeneration)
+	if err != nil {
+		return err
+	}
+	return s.pluginIntegration.MaintainTerminalGeneration(ctx, generation)
 }
 
 func appServerThreadReadStatePath(stateAbs string) (string, error) {

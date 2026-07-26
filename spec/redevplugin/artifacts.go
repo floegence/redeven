@@ -270,7 +270,7 @@ func OfficialContainersPluginRelease() (ContainersPluginRelease, error) {
 }
 
 func validateOfficialReleaseMetadata(ref host.PluginReleaseRef, release releasecontract.ReleaseMetadataV5) error {
-	if release.SchemaVersion != releasecontract.ReleaseMetadataSchemaVersion || release.SourceID != ref.SourceID ||
+	if release.SchemaVersion != releasecontract.ReleaseMetadataSchemaVersionV5 || release.SourceID != ref.SourceID ||
 		release.ReleaseMetadataRef != ref.ReleaseMetadataRef || release.PublisherID != ref.PublisherID ||
 		release.PluginID != ref.PluginID || release.Version != ref.Version {
 		return errors.New("official Containers release metadata identity is invalid")

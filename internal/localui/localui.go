@@ -3,6 +3,7 @@ package localui
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -33,6 +34,7 @@ import (
 	"github.com/floegence/redeven/internal/runtimemanagement"
 	"github.com/floegence/redeven/internal/runtimeservice"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/sessionhop"
 	"github.com/gorilla/websocket"
 )
 
@@ -110,8 +112,13 @@ type Server struct {
 
 	latestVersionResolver latestVersionResolver
 
-	pendingMu sync.Mutex
-	pending   map[string]pendingDirect
+	pendingMu     sync.Mutex
+	pending       map[string]pendingDirect
+	directMu      sync.Mutex
+	directClosing bool
+	directConns   map[*websocket.Conn]*localDirectConnection
+	pluginAccess  map[string]*pluginAccessSession
+	directWG      sync.WaitGroup
 
 	authorityMu        sync.RWMutex
 	networkAuthorities map[string]struct{}
@@ -131,10 +138,39 @@ type Server struct {
 
 type pendingDirect struct {
 	psk                       [32]byte
+	pluginCredentialHash      [sha256.Size]byte
+	accessSessionID           string
 	initExpireAtUnixS         int64
 	meta                      session.Meta
 	traceID                   string
 	connectArtifactIssuedAtMs int64
+}
+
+type pluginAccessState uint8
+
+const (
+	pluginAccessActive pluginAccessState = iota + 1
+	pluginAccessClosing
+	pluginAccessClosed
+)
+
+type pluginAccessSession struct {
+	state       pluginAccessState
+	expiresAt   time.Time
+	pending     map[string]struct{}
+	connections map[*websocket.Conn]string
+}
+
+type localDirectConnection struct {
+	accessSessionID string
+	channelID       string
+}
+
+type localAccessSessionContextKey struct{}
+
+type localAccessSessionContext struct {
+	accessSessionID string
+	expiresAt       time.Time
 }
 
 func (s *Server) handler() http.Handler {
@@ -262,6 +298,8 @@ func New(opts Options) (*Server, error) {
 		accessGate:             opts.AccessGate,
 		exposure:               exposure,
 		pending:                make(map[string]pendingDirect),
+		directConns:            make(map[*websocket.Conn]*localDirectConnection),
+		pluginAccess:           make(map[string]*pluginAccessSession),
 		networkAuthorities:     make(map[string]struct{}),
 		resolveAccessHosts:     resolveNetworkAccessHosts,
 	}, nil
@@ -520,6 +558,9 @@ func (s *Server) Close() error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
+	for _, conn := range s.beginDirectShutdown() {
+		_ = conn.Close()
+	}
 	if s.srv != nil {
 		_ = s.srv.Shutdown(ctx)
 	}
@@ -538,6 +579,7 @@ func (s *Server) Close() error {
 	if s.desktopBridgeListener != nil {
 		_ = s.desktopBridgeListener.Close()
 	}
+	s.waitForDirectShutdown(ctx)
 	s.srv = nil
 	s.listeners = nil
 	s.desktopBridgeServer = nil
@@ -740,7 +782,29 @@ func (s *Server) ensureLocalAccessHTTPResponse(w http.ResponseWriter, r *http.Re
 	}
 
 	s.setLocalAccessCookie(w, result.SessionToken, result.SessionExpiresAtUnix)
+	*r = *r.WithContext(context.WithValue(r.Context(), localAccessSessionContextKey{}, localAccessSessionContext{
+		accessSessionID: strings.TrimSpace(result.AccessSessionID),
+		expiresAt:       time.UnixMilli(result.SessionExpiresAtUnix),
+	}))
 	return true
+}
+
+func (s *Server) activeLocalAccessSession(r *http.Request) (string, time.Time, bool) {
+	if s == nil {
+		return "", time.Time{}, false
+	}
+	if !s.accessEnabled() {
+		return "", time.Time{}, true
+	}
+	if resumed, ok := r.Context().Value(localAccessSessionContextKey{}).(localAccessSessionContext); ok && strings.TrimSpace(resumed.accessSessionID) != "" && !resumed.expiresAt.IsZero() {
+		return strings.TrimSpace(resumed.accessSessionID), resumed.expiresAt, true
+	}
+	token := s.localAccessToken(r)
+	accessSessionID, expiresAt, ok := s.accessGate.ResolveLocalSession(token)
+	if !ok {
+		return "", time.Time{}, false
+	}
+	return accessSessionID, expiresAt, true
 }
 
 func (s *Server) setLocalAccessCookie(w http.ResponseWriter, token string, expiresAtUnixMs int64) {
@@ -782,7 +846,7 @@ func (s *Server) requireLocalAccessAPI(w http.ResponseWriter, r *http.Request) b
 }
 
 func (s *Server) requireLocalAccessHTTP(w http.ResponseWriter, r *http.Request) bool {
-	if s.hasLocalAccess(r) {
+	if s.ensureLocalAccessHTTPResponse(w, r) {
 		return true
 	}
 	http.Error(w, "access password required", http.StatusLocked)
@@ -829,7 +893,17 @@ func (s *Server) handlePluginPlatform(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "access password required", http.StatusLocked)
 		return
 	}
-	s.appServer.ServeHTTP(w, appserver.WithLocalUIEnvRoute(r))
+	credential := strings.TrimSpace(r.Header.Get(sessionhop.HeaderPluginSessionCredential))
+	channelID, ok := s.a.ResolvePluginSessionCredential(credential)
+	if !ok || !s.pluginAccessAllowsRequest(r, channelID) {
+		http.Error(w, "plugin session unavailable", http.StatusForbidden)
+		return
+	}
+	next := r.Clone(r.Context())
+	next.Header = r.Header.Clone()
+	next.Header.Del(sessionhop.HeaderPluginSessionCredential)
+	next.Header.Del(sessionhop.HeaderChannelID)
+	s.appServer.ServeHTTP(w, appserver.WithLocalUIPluginRoute(next, channelID))
 }
 
 func (s *Server) handleCodeSpace(w http.ResponseWriter, r *http.Request) {
@@ -1012,10 +1086,14 @@ func (s *Server) handleAccessLogout(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.accessEnabled() {
 		if token := s.localAccessToken(r); token != "" {
-			s.accessGate.RevokeLocalSession(token)
+			if accessSessionID, ok := s.accessGate.TakeLocalSession(token); ok {
+				s.closePluginAccessSession(accessSessionID)
+			}
 		}
 		if resumeToken := s.localAccessResumeToken(r); resumeToken != "" {
-			s.accessGate.RevokeResumeToken(resumeToken)
+			if accessSessionID, ok := s.accessGate.TakeAccessSessionByResumeToken(resumeToken); ok {
+				s.closePluginAccessSession(accessSessionID)
+			}
 		}
 	}
 	s.clearLocalAccessCookie(w)
@@ -1233,20 +1311,26 @@ func randomB64u(n int) (string, error) {
 }
 
 type connectArtifactEnvelope struct {
-	ConnectArtifact *protocolio.ConnectArtifact `json:"connect_artifact"`
+	ConnectArtifact         *protocolio.ConnectArtifact `json:"connect_artifact"`
+	PluginSessionCredential string                      `json:"plugin_session_credential"`
 }
 
-func (s *Server) mintPending(meta session.Meta, wsURL string, traceID string) (*protocolio.ConnectArtifact, error) {
+func (s *Server) mintPending(meta session.Meta, wsURL string, traceID, accessSessionID string, accessExpiresAt time.Time) (*protocolio.ConnectArtifact, string, error) {
 	if s == nil {
-		return nil, errors.New("server not ready")
+		return nil, "", errors.New("server not ready")
 	}
 	channelID, err := randomB64u(24)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
+	pluginCredential, err := randomB64u(32)
+	if err != nil {
+		return nil, "", err
+	}
+	pluginCredentialHash := sha256.Sum256([]byte(pluginCredential))
 	var psk [32]byte
 	if _, err := rand.Read(psk[:]); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	// Keep the init window reasonably short; the UI can always mint a fresh connect artifact.
@@ -1254,15 +1338,53 @@ func (s *Server) mintPending(meta session.Meta, wsURL string, traceID string) (*
 	initExp := now.Add(10 * time.Minute).Unix()
 
 	meta.ChannelID = channelID
+	accessSessionID = strings.TrimSpace(accessSessionID)
+	if accessSessionID == "" {
+		accessSessionID = "direct:" + channelID
+	}
 
 	s.pendingMu.Lock()
+	s.directMu.Lock()
+	if s.directClosing {
+		s.directMu.Unlock()
+		s.pendingMu.Unlock()
+		return nil, "", errors.New("plugin session admission is closed")
+	}
+	if s.pending == nil {
+		s.pending = make(map[string]pendingDirect)
+	}
+	if s.pluginAccess == nil {
+		s.pluginAccess = make(map[string]*pluginAccessSession)
+	}
+	access := s.pluginAccess[accessSessionID]
+	if access == nil {
+		access = &pluginAccessSession{
+			state:       pluginAccessActive,
+			expiresAt:   accessExpiresAt,
+			pending:     make(map[string]struct{}),
+			connections: make(map[*websocket.Conn]string),
+		}
+		s.pluginAccess[accessSessionID] = access
+	}
+	if access.state != pluginAccessActive || (!access.expiresAt.IsZero() && !time.Now().Before(access.expiresAt)) {
+		s.directMu.Unlock()
+		s.pendingMu.Unlock()
+		return nil, "", errors.New("local access session is unavailable")
+	}
+	if !accessExpiresAt.IsZero() && (access.expiresAt.IsZero() || accessExpiresAt.After(access.expiresAt)) {
+		access.expiresAt = accessExpiresAt
+	}
 	s.pending[channelID] = pendingDirect{
 		psk:                       psk,
+		pluginCredentialHash:      pluginCredentialHash,
+		accessSessionID:           accessSessionID,
 		initExpireAtUnixS:         initExp,
 		meta:                      meta,
 		traceID:                   strings.TrimSpace(traceID),
 		connectArtifactIssuedAtMs: now.UnixMilli(),
 	}
+	access.pending[channelID] = struct{}{}
+	s.directMu.Unlock()
 	s.pendingMu.Unlock()
 
 	directInfo := &directv1.DirectConnectInfo{
@@ -1295,7 +1417,7 @@ func (s *Server) mintPending(meta session.Meta, wsURL string, traceID string) (*
 		Transport:   protocolio.ConnectArtifactTransportDirect,
 		DirectInfo:  directInfo,
 		Correlation: correlation,
-	}, nil
+	}, pluginCredential, nil
 }
 
 func (s *Server) handleConnectArtifact(w http.ResponseWriter, r *http.Request) {
@@ -1339,7 +1461,12 @@ func (s *Server) handleConnectArtifact(w http.ResponseWriter, r *http.Request) {
 	meta.CreatedAtUnixMs = time.Now().UnixMilli()
 
 	traceID := localUITraceID(r)
-	artifact, err := s.mintPending(meta, wsURL, traceID)
+	accessSessionID, accessExpiresAt, ok := s.activeLocalAccessSession(r)
+	if !ok {
+		http.Error(w, "local access session unavailable", http.StatusLocked)
+		return
+	}
+	artifact, pluginCredential, err := s.mintPending(meta, wsURL, traceID, accessSessionID, accessExpiresAt)
 	if err != nil {
 		http.Error(w, "failed to mint connect artifact", http.StatusInternalServerError)
 		return
@@ -1363,7 +1490,10 @@ func (s *Server) handleConnectArtifact(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	writeJSON(w, http.StatusOK, connectArtifactEnvelope{ConnectArtifact: artifact})
+	writeJSON(w, http.StatusOK, connectArtifactEnvelope{
+		ConnectArtifact:         artifact,
+		PluginSessionCredential: pluginCredential,
+	})
 }
 
 type environmentResp struct {
@@ -1551,12 +1681,13 @@ func (s *Server) resolvePending(channelID string) (pendingDirect, bool) {
 	}
 	if p.initExpireAtUnixS <= 0 || now > p.initExpireAtUnixS {
 		delete(s.pending, id)
+		s.removePendingAccessBinding(p.accessSessionID, id)
 		return pendingDirect{}, false
 	}
 	return p, true
 }
 
-func (s *Server) commitPending(channelID string, expected pendingDirect) error {
+func (s *Server) commitPending(channelID string, expected pendingDirect, conn *websocket.Conn) error {
 	if s == nil {
 		return errors.New("server not ready")
 	}
@@ -1566,15 +1697,35 @@ func (s *Server) commitPending(channelID string, expected pendingDirect) error {
 	}
 	s.pendingMu.Lock()
 	defer s.pendingMu.Unlock()
+	s.directMu.Lock()
+	defer s.directMu.Unlock()
 	current, ok := s.pending[id]
 	if !ok || current.psk != expected.psk || current.connectArtifactIssuedAtMs != expected.connectArtifactIssuedAtMs {
 		return errors.New("credential already consumed or replaced")
 	}
 	if current.initExpireAtUnixS <= 0 || time.Now().Unix() > current.initExpireAtUnixS {
 		delete(s.pending, id)
+		if access := s.pluginAccess[current.accessSessionID]; access != nil {
+			delete(access.pending, id)
+		}
 		return errors.New("credential expired")
 	}
+	access := s.pluginAccess[current.accessSessionID]
+	tracked := s.directConns[conn]
+	if access == nil || access.state != pluginAccessActive || tracked == nil {
+		return errors.New("local access session is unavailable")
+	}
+	if !access.expiresAt.IsZero() && !time.Now().Before(access.expiresAt) {
+		return errors.New("local access session expired")
+	}
+	if tracked.accessSessionID != "" && tracked.accessSessionID != current.accessSessionID {
+		return errors.New("local access session binding mismatch")
+	}
 	delete(s.pending, id)
+	delete(access.pending, id)
+	tracked.accessSessionID = current.accessSessionID
+	tracked.channelID = id
+	access.connections[conn] = id
 	return nil
 }
 
@@ -1584,6 +1735,11 @@ func (s *Server) handleDirectWS(w http.ResponseWriter, r *http.Request) {
 	}
 	traceID := localUITraceID(r)
 	if !s.requireLocalAccessHTTP(w, r) {
+		return
+	}
+	requestAccessSessionID, _, accessOK := s.activeLocalAccessSession(r)
+	if !accessOK {
+		http.Error(w, "local access session unavailable", http.StatusLocked)
 		return
 	}
 	if !s.sameOriginWSRequest(r) {
@@ -1601,6 +1757,11 @@ func (s *Server) handleDirectWS(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	if !s.trackDirectConnection(c, requestAccessSessionID) {
+		_ = c.Close()
+		return
+	}
+	defer s.untrackDirectConnection(c)
 	defer c.Close()
 	_ = c.SetReadDeadline(time.Time{})
 	_ = c.SetWriteDeadline(time.Time{})
@@ -1628,13 +1789,16 @@ func (s *Server) handleDirectWS(w http.ResponseWriter, r *http.Request) {
 			}
 			resolved = p
 			resolvedOK = true
+			if requestAccessSessionID != "" && requestAccessSessionID != resolved.accessSessionID {
+				return endpoint.DirectHandshakeCredential{}, errors.New("local access session binding mismatch")
+			}
 			return endpoint.DirectHandshakeCredential{
 				Secrets: endpoint.DirectHandshakeSecrets{
 					PSK:               resolved.psk[:],
 					InitExpireAtUnixS: resolved.initExpireAtUnixS,
 				},
 				CommitAuthenticated: func(context.Context) error {
-					return s.commitPending(ch, resolved)
+					return s.commitPending(ch, resolved, c)
 				},
 			}, nil
 		},
@@ -1665,6 +1829,10 @@ func (s *Server) handleDirectWS(w http.ResponseWriter, r *http.Request) {
 		s.log.Warn("local direct session missing resolved meta", "channel_id", ch)
 		return
 	}
+	if !s.directConnectionActive(c, ch) {
+		s.log.Warn("local direct session access closed during handshake", "channel_id", ch)
+		return
+	}
 
 	metaCopy := resolved.meta
 	if strings.TrimSpace(metaCopy.ChannelID) == "" {
@@ -1677,8 +1845,212 @@ func (s *Server) handleDirectWS(w http.ResponseWriter, r *http.Request) {
 		AccessUnlocked:            s.accessEnabled(),
 		TraceID:                   firstNonEmptyString([]string{resolved.traceID, traceID}),
 		ConnectArtifactIssuedAtMs: resolved.connectArtifactIssuedAtMs,
+		PluginCredentialHash:      resolved.pluginCredentialHash,
+		HasPluginCredential:       true,
+		AccessSessionID:           resolved.accessSessionID,
 	}); err != nil && r.Context().Err() == nil {
 		s.log.Warn("local direct session exited", "channel_id", metaCopy.ChannelID, "error", err)
+	}
+	if !s.accessEnabled() {
+		s.closePluginAccessSession(resolved.accessSessionID)
+	}
+}
+
+func (s *Server) trackDirectConnection(conn *websocket.Conn, accessSessionID string) bool {
+	if s == nil || conn == nil {
+		return false
+	}
+	s.directMu.Lock()
+	defer s.directMu.Unlock()
+	if s.directClosing {
+		return false
+	}
+	if s.directConns == nil {
+		s.directConns = make(map[*websocket.Conn]*localDirectConnection)
+	}
+	accessSessionID = strings.TrimSpace(accessSessionID)
+	if accessSessionID != "" {
+		access := s.pluginAccess[accessSessionID]
+		if access == nil || access.state != pluginAccessActive || (!access.expiresAt.IsZero() && !time.Now().Before(access.expiresAt)) {
+			return false
+		}
+	}
+	s.directConns[conn] = &localDirectConnection{accessSessionID: accessSessionID}
+	s.directWG.Add(1)
+	return true
+}
+
+func (s *Server) untrackDirectConnection(conn *websocket.Conn) {
+	if s == nil || conn == nil {
+		return
+	}
+	s.directMu.Lock()
+	binding, tracked := s.directConns[conn]
+	if tracked {
+		delete(s.directConns, conn)
+		if access := s.pluginAccess[binding.accessSessionID]; access != nil {
+			delete(access.connections, conn)
+			if access.state == pluginAccessClosing && len(access.pending) == 0 && len(access.connections) == 0 {
+				access.state = pluginAccessClosed
+				delete(s.pluginAccess, binding.accessSessionID)
+			}
+		}
+	}
+	s.directMu.Unlock()
+	if tracked {
+		s.directWG.Done()
+	}
+}
+
+func (s *Server) beginDirectShutdown() []*websocket.Conn {
+	if s == nil {
+		return nil
+	}
+	s.directMu.Lock()
+	s.directClosing = true
+	connections := make([]*websocket.Conn, 0, len(s.directConns))
+	for conn := range s.directConns {
+		connections = append(connections, conn)
+	}
+	pending := make(map[string]string)
+	for accessSessionID, access := range s.pluginAccess {
+		if access == nil {
+			continue
+		}
+		access.state = pluginAccessClosing
+		for channelID := range access.pending {
+			pending[channelID] = accessSessionID
+		}
+	}
+	s.directMu.Unlock()
+	s.pendingMu.Lock()
+	for channelID, accessSessionID := range pending {
+		if current, ok := s.pending[channelID]; ok && current.accessSessionID == accessSessionID {
+			delete(s.pending, channelID)
+		}
+	}
+	s.pendingMu.Unlock()
+	return connections
+}
+
+func (s *Server) removePendingAccessBinding(accessSessionID, channelID string) {
+	if s == nil {
+		return
+	}
+	s.directMu.Lock()
+	defer s.directMu.Unlock()
+	access := s.pluginAccess[strings.TrimSpace(accessSessionID)]
+	if access == nil {
+		return
+	}
+	delete(access.pending, strings.TrimSpace(channelID))
+	if access.state == pluginAccessClosing && len(access.pending) == 0 && len(access.connections) == 0 {
+		access.state = pluginAccessClosed
+		delete(s.pluginAccess, strings.TrimSpace(accessSessionID))
+	}
+}
+
+func (s *Server) directConnectionActive(conn *websocket.Conn, channelID string) bool {
+	if s == nil || conn == nil {
+		return false
+	}
+	s.directMu.Lock()
+	defer s.directMu.Unlock()
+	binding := s.directConns[conn]
+	if binding == nil || binding.channelID != strings.TrimSpace(channelID) {
+		return false
+	}
+	access := s.pluginAccess[binding.accessSessionID]
+	return access != nil && access.state == pluginAccessActive && (access.expiresAt.IsZero() || time.Now().Before(access.expiresAt))
+}
+
+func (s *Server) pluginAccessAllowsRequest(r *http.Request, channelID string) bool {
+	if s == nil {
+		return false
+	}
+	requestAccessSessionID, _, ok := s.activeLocalAccessSession(r)
+	if !ok {
+		return false
+	}
+	s.directMu.Lock()
+	defer s.directMu.Unlock()
+	for _, binding := range s.directConns {
+		if binding == nil || binding.channelID != strings.TrimSpace(channelID) {
+			continue
+		}
+		access := s.pluginAccess[binding.accessSessionID]
+		if access == nil || access.state != pluginAccessActive || (!access.expiresAt.IsZero() && !time.Now().Before(access.expiresAt)) {
+			return false
+		}
+		return requestAccessSessionID == "" || requestAccessSessionID == binding.accessSessionID
+	}
+	return false
+}
+
+func (s *Server) closePluginAccessSession(accessSessionID string) {
+	if s == nil {
+		return
+	}
+	accessSessionID = strings.TrimSpace(accessSessionID)
+	if accessSessionID == "" {
+		return
+	}
+	s.directMu.Lock()
+	access := s.pluginAccess[accessSessionID]
+	if access == nil || access.state == pluginAccessClosed {
+		s.directMu.Unlock()
+		return
+	}
+	access.state = pluginAccessClosing
+	pending := make([]string, 0, len(access.pending))
+	for channelID := range access.pending {
+		pending = append(pending, channelID)
+	}
+	connections := make([]*websocket.Conn, 0, len(access.connections))
+	for conn := range access.connections {
+		connections = append(connections, conn)
+	}
+	s.directMu.Unlock()
+	if s.a != nil {
+		s.a.EndPluginAccessSession(accessSessionID)
+	}
+
+	s.pendingMu.Lock()
+	for _, channelID := range pending {
+		if current, ok := s.pending[channelID]; ok && current.accessSessionID == accessSessionID {
+			delete(s.pending, channelID)
+		}
+	}
+	s.pendingMu.Unlock()
+
+	s.directMu.Lock()
+	if current := s.pluginAccess[accessSessionID]; current != nil {
+		for _, channelID := range pending {
+			delete(current.pending, channelID)
+		}
+		if len(current.connections) == 0 {
+			current.state = pluginAccessClosed
+			delete(s.pluginAccess, accessSessionID)
+		}
+	}
+	s.directMu.Unlock()
+	for _, conn := range connections {
+		_ = conn.Close()
+	}
+}
+
+func (s *Server) waitForDirectShutdown(ctx context.Context) {
+	if s == nil {
+		return
+	}
+	done := make(chan struct{})
+	go func() {
+		s.directWG.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-ctx.Done():
 	}
 }
 
@@ -1723,8 +2095,14 @@ func (s *Server) sweepExpired() {
 	for k, v := range s.pending {
 		if v.initExpireAtUnixS > 0 && now > v.initExpireAtUnixS {
 			delete(s.pending, k)
+			s.removePendingAccessBinding(v.accessSessionID, k)
 		}
 	}
 	s.pendingMu.Unlock()
 
+	if s.accessGate != nil {
+		for _, expired := range s.accessGate.TakeExpiredLocalSessions(time.Now()) {
+			s.closePluginAccessSession(expired.AccessSessionID)
+		}
+	}
 }

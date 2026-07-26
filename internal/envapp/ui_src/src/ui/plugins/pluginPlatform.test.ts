@@ -19,6 +19,10 @@ import {
   redevPluginCSRFHeader,
   redevPluginCSRFProof,
 } from './pluginPlatform';
+import {
+  clearPluginSessionCredential,
+  writePluginSessionCredential,
+} from '../services/pluginSessionCredential';
 
 vi.mock('../services/localApi', () => ({
   prepareLocalApiRequestInit: vi.fn(async (init: RequestInit) => init),
@@ -31,6 +35,7 @@ const request: PluginOpenSurfaceRequest = {
 };
 
 afterEach(() => {
+  clearPluginSessionCredential();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -376,6 +381,7 @@ describe('createPluginSurfacePlacementCoordinator', () => {
 
 describe('createAuthenticatedReDevPluginFetch', () => {
   it('admits only the canonical same-origin API and attaches the CSRF proof', async () => {
+    writePluginSessionCredential('generation-secret');
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response('{}', { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
     const platformFetch = createAuthenticatedReDevPluginFetch();
@@ -388,6 +394,7 @@ describe('createAuthenticatedReDevPluginFetch', () => {
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
     const headers = new Headers(init.headers);
     expect(headers.get(redevPluginCSRFHeader)).toBe(redevPluginCSRFProof);
+    expect(headers.get('X-Redeven-Plugin-Session')).toBe('generation-secret');
     expect(init.cache).toBeUndefined();
   });
 

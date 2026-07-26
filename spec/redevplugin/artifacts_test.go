@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/floegence/redevplugin/pkg/pluginpkg"
+	"github.com/floegence/redevplugin/pkg/releasecontract"
 )
 
 func TestOfficialContainersPluginReleaseIsSignedAndClosed(t *testing.T) {
@@ -22,6 +23,10 @@ func TestOfficialContainersPluginReleaseIsSignedAndClosed(t *testing.T) {
 	}
 	if len(release.ReleaseMetadataSignature) != ed25519.SignatureSize {
 		t.Fatalf("release signature size = %d", len(release.ReleaseMetadataSignature))
+	}
+	metadata, err := releasecontract.DecodeReleaseMetadata(release.ReleaseMetadataBytes)
+	if err != nil || metadata.SchemaVersion != releasecontract.ReleaseMetadataSchemaVersionV5 {
+		t.Fatalf("release metadata schema = %q, error = %v", metadata.SchemaVersion, err)
 	}
 	if release.Ref.Channel != officialChannel || len(release.ReleaseTrustDocuments) != 5 || len(release.SigningLedgerArtifacts) == 0 ||
 		len(release.RootTrustAnchor.PublicKey) != ed25519.PublicKeySize || len(release.SigningLedgerAnchor.PublicKey) != ed25519.PublicKeySize {

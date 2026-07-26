@@ -158,6 +158,58 @@ func TestGrantNotifyRejectsMissingRemoteIdentityBeforeRegisteringAccessGate(t *t
 	}
 }
 
+func TestGrantNotifyRejectsSessionAfterShutdownAdmissionCloses(t *testing.T) {
+	gate := accessgate.New(accessgate.Options{Password: "secret"})
+	a := &Agent{
+		cfg: &config.Config{
+			EnvironmentID:    "env_test",
+			PermissionPolicy: defaultPermissionPolicyForAgentTest(t),
+		},
+		log:        slog.New(slog.NewTextHandler(io.Discard, nil)),
+		sessions:   map[string]*activeSession{},
+		accessGate: gate,
+	}
+	a.beginSessionShutdown()
+
+	notify := session.GrantServerNotify{
+		GrantServer: &controlv1.ChannelInitGrant{
+			ChannelId: "ch_after_shutdown",
+			TunnelUrl: "ws://127.0.0.1:1/tunnel/ws",
+		},
+		SessionMeta: &session.Meta{
+			ChannelID:         "ch_after_shutdown",
+			EndpointID:        "env_test",
+			FloeApp:           FloeAppRedevenAgent,
+			CodeSpaceID:       "env-ui",
+			SessionKind:       "envapp_proxy",
+			UserPublicID:      "u_remote",
+			NamespacePublicID: "ns_remote",
+			CanRead:           true,
+			CanWrite:          true,
+			CanExecute:        true,
+			CreatedAtUnixMs:   1_700_000_000_000,
+		},
+	}
+	payload, err := json.Marshal(notify)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.handleGrantNotify(context.Background(), payload)
+
+	a.mu.Lock()
+	_, exists := a.sessions["ch_after_shutdown"]
+	a.mu.Unlock()
+	if exists {
+		t.Fatal("shutdown admission gate accepted a remote session")
+	}
+	if !a.waitForSessions(50 * time.Millisecond) {
+		t.Fatal("shutdown admission rejection changed the session wait group")
+	}
+	if status := gate.Status("ch_after_shutdown"); status.FloeApp != "" {
+		t.Fatalf("rejected session was registered in access gate: %#v", status)
+	}
+}
+
 func defaultPermissionPolicyForAgentTest(t *testing.T) *config.PermissionPolicy {
 	t.Helper()
 	policy, err := config.ParsePermissionPolicyPreset("")
