@@ -156,6 +156,7 @@ func (s *Service) threadTimelineMessagesFromTurns(endpointID string, threadID st
 	}
 	items := make([]threadTimelineMessage, 0, len(turns)*2)
 	seenTurns := make(map[string]struct{}, len(turns))
+	canonicalUserAnchors := make(map[string]string, len(turns))
 	for _, turn := range turns {
 		turnID := strings.TrimSpace(string(turn.TurnID))
 		runID := strings.TrimSpace(string(turn.RunID))
@@ -178,6 +179,10 @@ func (s *Service) threadTimelineMessagesFromTurns(endpointID string, threadID st
 			if userEntryID != "" || strings.TrimSpace(turn.UserInput) != "" || len(turn.UserAttachments) != 0 || len(turn.UserReferences) != 0 {
 				return nil, canonicalTimelineResyncErrorf("retry turn %q duplicates canonical user input", turnID)
 			}
+			canonicalUserAnchors[turnID] = canonicalUserAnchors[sourceTurnID]
+			if canonicalUserAnchors[turnID] == "" {
+				return nil, canonicalTimelineResyncErrorf("retry turn %q has no canonical user anchor", turnID)
+			}
 		} else {
 			if userEntryID == "" {
 				return nil, canonicalTimelineResyncErrorf("turn %q is missing its canonical user entry", turnID)
@@ -187,6 +192,7 @@ func (s *Service) threadTimelineMessagesFromTurns(endpointID string, threadID st
 			if err != nil {
 				return nil, err
 			}
+			canonicalUserAnchors[turnID] = userEntryID
 			items = append(items, threadTimelineMessage{
 				RowID: userRowID, MessageID: userEntryID, CreatedAt: userCreatedAt,
 				CanonicalTurn: turnID, CanonicalRun: runID,
@@ -204,7 +210,7 @@ func (s *Service) threadTimelineMessagesFromTurns(endpointID string, threadID st
 				TurnOrdinal: turn.Ordinal, TurnStatus: turn.Status, MessageJSON: assistant,
 			})
 		} else if reason.Valid() {
-			decoration, err := projectionUnavailableDecoration(turn, reason)
+			decoration, err := projectionUnavailableDecoration(turn, reason, canonicalUserAnchors[turnID])
 			if err != nil {
 				return nil, err
 			}
@@ -413,17 +419,17 @@ func (s *Service) floretProjectionMessage(endpointID string, threadID string, tu
 	return sanitized, "", err
 }
 
-func projectionUnavailableDecoration(turn flruntime.ThreadTurnSnapshot, reason FlowerTurnProjectionUnavailableReason) (FlowerTimelineDecoration, error) {
+func projectionUnavailableDecoration(turn flruntime.ThreadTurnSnapshot, reason FlowerTurnProjectionUnavailableReason, anchorUserEntryID string) (FlowerTimelineDecoration, error) {
 	turnID := strings.TrimSpace(string(turn.TurnID))
 	runID := strings.TrimSpace(string(turn.RunID))
-	userEntryID := strings.TrimSpace(turn.UserEntryID)
-	if turnID == "" || runID == "" || userEntryID == "" || !reason.Valid() {
+	anchorUserEntryID = strings.TrimSpace(anchorUserEntryID)
+	if turnID == "" || runID == "" || anchorUserEntryID == "" || !reason.Valid() {
 		return FlowerTimelineDecoration{}, errors.New("projection unavailable decoration identity is incomplete")
 	}
 	decoration := FlowerTimelineDecoration{
 		DecorationID: "turn-projection-unavailable:" + turnID,
 		Kind:         FlowerTimelineDecorationTurnProjectionUnavailable,
-		Anchor:       FlowerTimelineAnchor{TargetKind: "message", MessageID: userEntryID, Edge: "after"},
+		Anchor:       FlowerTimelineAnchor{TargetKind: "message", MessageID: anchorUserEntryID, Edge: "after"},
 		ProjectionUnavailable: &FlowerTurnProjectionUnavailable{
 			TurnID: turnID, RunID: runID, ExpectedMessageID: turnID, Reason: reason,
 		},
