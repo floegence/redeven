@@ -2380,6 +2380,19 @@
     }
   },
   "terminal": {
+    "sharedGeometry": {
+      "compact": "Compartido entre vistas · {cols}×{rows}",
+      "short": "Compartido {cols}×{rows}",
+      "label": "Compartido",
+      "ariaLabel": "El diseño del terminal se comparte entre las vistas conectadas. El tamaño compartido es de {cols} por {rows}.",
+      "title": "Diseño compartido del terminal",
+      "description": "Este terminal está abierto en varias vistas con distintos tamaños disponibles. Para mantener un diseño coherente entre las vistas, utiliza actualmente una cuadrícula compartida de {cols}×{rows}; por eso, los saltos de línea y el espacio vacío pueden ser distintos en esta área.",
+      "localSize": "Esta vista",
+      "effectiveSize": "Tamaño compartido",
+      "resolution": "La cuadrícula compartida se ajusta automáticamente cuando las vistas conectadas cambian de tamaño o se desconectan.",
+      "announcement": "El diseño del terminal se comparte entre las vistas conectadas.",
+      "triggerDescription": "Abrir los detalles del diseño compartido del terminal."
+    },
     "title": "Terminal",
     "terminalName": "Terminal {index}",
     "creatingEyebrow": "Terminal",

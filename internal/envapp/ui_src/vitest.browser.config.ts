@@ -2,6 +2,7 @@ import { defineConfig, mergeConfig } from 'vitest/config';
 import { playwright } from '@vitest/browser-playwright';
 import axe from 'axe-core';
 import { PNG } from 'pngjs';
+import { createHash } from 'node:crypto';
 import type { Frame, Page } from 'playwright';
 import viteConfig from './vite.config';
 
@@ -12,6 +13,30 @@ async function readinessFrame(page: Page): Promise<Frame> {
     if (await frame.locator('.ai-readiness-boundary').count() > 0) return frame;
   }
   throw new Error('AI readiness test frame is unavailable');
+}
+
+async function terminalPanelFrame(page: Page): Promise<Frame> {
+  for (const frame of page.frames()) {
+    if (await frame.locator('[data-testid="terminal-content"]').count() > 0) return frame;
+  }
+  throw new Error('Terminal panel test frame is unavailable');
+}
+
+function hashPngRegion(
+  image: ReturnType<typeof PNG.sync.read>,
+  region: Readonly<{ x: number; y: number; width: number; height: number }>,
+): string {
+  const hash = createHash('sha256');
+  const left = Math.max(0, Math.min(image.width, Math.floor(region.x)));
+  const top = Math.max(0, Math.min(image.height, Math.floor(region.y)));
+  const right = Math.max(left, Math.min(image.width, Math.ceil(region.x + region.width)));
+  const bottom = Math.max(top, Math.min(image.height, Math.ceil(region.y + region.height)));
+  for (let row = top; row < bottom; row += 1) {
+    const start = (row * image.width + left) * 4;
+    const end = (row * image.width + right) * 4;
+    hash.update(image.data.subarray(start, end));
+  }
+  return hash.digest('hex');
 }
 
 export default mergeConfig(viteConfig, defineConfig({
@@ -84,6 +109,32 @@ export default mergeConfig(viteConfig, defineConfig({
             opaquePixels,
             distinctColorBuckets: colorBuckets.size,
             ...metrics,
+          };
+        },
+        inspectTerminalSharedGeometryScreenshot: async ({ page }) => {
+          const frame = await terminalPanelFrame(page);
+          const body = frame.locator('body');
+          const terminal = frame.locator('[data-testid="terminal-content"]').first();
+          const [bodyBox, terminalBox, screenshot] = await Promise.all([
+            body.boundingBox(),
+            terminal.boundingBox(),
+            body.screenshot({ type: 'png' }),
+          ]);
+          if (!bodyBox || !terminalBox) throw new Error('Terminal screenshot geometry is unavailable');
+          const image = PNG.sync.read(screenshot);
+          const scaleX = image.width / bodyBox.width;
+          const scaleY = image.height / bodyBox.height;
+          const safeCanvasRegion = {
+            x: (terminalBox.x - bodyBox.x) * scaleX,
+            y: (terminalBox.y - bodyBox.y) * scaleY,
+            width: Math.max(1, Math.min(32, terminalBox.width * scaleX)),
+            height: Math.max(1, Math.min(32, terminalBox.height * scaleY)),
+          };
+          return {
+            fullHash: createHash('sha256').update(image.data).digest('hex'),
+            safeCanvasHash: hashPngRegion(image, safeCanvasRegion),
+            canvasWidth: terminalBox.width,
+            canvasHeight: terminalBox.height,
           };
         },
         sizeReadinessFrame: async ({ page }, size: Readonly<{ width: number; height: number }>) => {

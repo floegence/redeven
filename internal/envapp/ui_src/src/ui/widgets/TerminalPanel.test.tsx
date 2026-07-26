@@ -4,7 +4,11 @@ import { For, Show, createEffect, createSignal } from 'solid-js';
 import { render as solidRender } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LOCAL_INTERACTION_SURFACE_ATTR } from '@floegence/floe-webapp-core/ui';
-import { TerminalLiveErrorCode, TerminalLiveServerError } from '@floegence/floeterm-terminal-web/live';
+import {
+  TerminalLiveErrorCode,
+  TerminalLiveServerError,
+  type TerminalLiveAttachResult,
+} from '@floegence/floeterm-terminal-web/live';
 
 import {
   TerminalPanel,
@@ -285,10 +289,29 @@ const rpcFsMocks = vi.hoisted(() => ({
 }));
 
 const transportMocks = vi.hoisted(() => {
-  const attach = vi.fn().mockResolvedValue({ historyBoundarySequence: 0 });
+  const attach = vi.fn().mockImplementation(async (_sessionId: string, cols: number, rows: number) => ({
+    historyBoundarySequence: 0,
+    historyGeneration: 1,
+    historyStartSequence: 0,
+    geometryGeneration: 1,
+    runtimeAttachGeneration: 1,
+    cols,
+    rows,
+  }));
+  const resize = vi.fn().mockImplementation(async (_sessionId: string, cols: number, rows: number) => ({
+    runtimeAttachGeneration: 1,
+    requested: { cols, rows },
+    effective: {
+      generation: 1,
+      outputSequenceBoundary: 0,
+      cols,
+      rows,
+    },
+  }));
   return {
     sendInput: vi.fn().mockResolvedValue(undefined),
-    resize: vi.fn().mockResolvedValue(undefined),
+    resize,
+    resizeWithEffectiveGeometry: resize,
     attach,
     attachWithHistoryBoundary: attach,
     history: vi.fn().mockResolvedValue([]),
@@ -334,6 +357,12 @@ const terminalEventSourceState = vi.hoisted(() => ({
     outputSequenceBoundary: number;
     cols: number;
     rows: number;
+  }) => void>>(),
+  lifecycleHandlers: new Map<string, Set<(event: {
+    sessionId: string;
+    runtimeAttachGeneration: number;
+    state: 'attached' | 'closed';
+    reason?: 'superseded' | 'stream_ended' | 'session_closed' | 'error' | 'detached' | 'session_deleted' | 'connection_epoch_changed' | 'disposed';
   }) => void>>(),
 }));
 
@@ -540,6 +569,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
     Download: Icon,
     ExternalLink: Icon,
     Folder: Icon,
+    LayoutDashboard: Icon,
     Menu: Icon,
     Plus: Icon,
     Refresh: Icon,
@@ -1528,6 +1558,14 @@ vi.mock('../services/terminalTransport', async () => {
         terminalEventSourceState.geometryHandlers.get(sessionId)?.delete(handler);
       };
     },
+    onTerminalLiveAttachmentLifecycle: (sessionId: string, handler: any) => {
+      const current = terminalEventSourceState.lifecycleHandlers.get(sessionId) ?? new Set();
+      current.add(handler);
+      terminalEventSourceState.lifecycleHandlers.set(sessionId, current);
+      return () => {
+        terminalEventSourceState.lifecycleHandlers.get(sessionId)?.delete(handler);
+      };
+    },
   } }),
   createTerminalConnId: () => 'conn-1',
   };
@@ -1755,6 +1793,19 @@ function emitTerminalData(sessionId: string, data: string, sequence?: number) {
   }
 }
 
+function emitTerminalAttachmentLifecycle(
+  sessionId: string,
+  event: {
+    runtimeAttachGeneration: number;
+    state: 'attached' | 'closed';
+    reason?: 'superseded' | 'stream_ended' | 'session_closed' | 'error' | 'detached' | 'session_deleted' | 'connection_epoch_changed' | 'disposed';
+  },
+) {
+  for (const handler of terminalEventSourceState.lifecycleHandlers.get(sessionId) ?? []) {
+    handler({ sessionId, ...event });
+  }
+}
+
 function publishTerminalSessions() {
   for (const subscriber of terminalSessionsState.subscribers) {
     subscriber(terminalSessionsState.sessions);
@@ -1965,6 +2016,7 @@ describe('TerminalPanel', () => {
     terminalEventSourceState.dataHandlers = new Map();
     terminalEventSourceState.nameHandlers = new Map();
     terminalEventSourceState.geometryHandlers = new Map();
+    terminalEventSourceState.lifecycleHandlers = new Map();
     terminalEventSourceState.dataSubscribe.mockClear();
     notificationMocks.error.mockClear();
     notificationMocks.info.mockClear();
@@ -1989,8 +2041,25 @@ describe('TerminalPanel', () => {
       if ('mockClear' in mock) mock.mockClear();
     });
     transportMocks.sendInput.mockResolvedValue(undefined);
-    transportMocks.resize.mockResolvedValue(undefined);
-    transportMocks.attach.mockResolvedValue({ historyBoundarySequence: 0 });
+    transportMocks.resize.mockImplementation(async (_sessionId: string, cols: number, rows: number) => ({
+      runtimeAttachGeneration: 1,
+      requested: { cols, rows },
+      effective: {
+        generation: 1,
+        outputSequenceBoundary: 0,
+        cols,
+        rows,
+      },
+    }));
+    transportMocks.attach.mockImplementation(async (_sessionId: string, cols: number, rows: number) => ({
+      historyBoundarySequence: 0,
+      historyGeneration: 1,
+      historyStartSequence: 0,
+      geometryGeneration: 1,
+      runtimeAttachGeneration: 1,
+      cols,
+      rows,
+    }));
     transportMocks.history.mockResolvedValue([]);
     transportMocks.historyPage.mockResolvedValue({
       chunks: [],
@@ -3500,8 +3569,8 @@ describe('TerminalPanel', () => {
   });
 
   it('retains live output that arrives before the attach history boundary acknowledgement', async () => {
-    let resolveAttach!: (value: { historyBoundarySequence: number }) => void;
-    const attach = new Promise<{ historyBoundarySequence: number }>((resolve) => {
+    let resolveAttach!: (value: TerminalLiveAttachResult) => void;
+    const attach = new Promise<TerminalLiveAttachResult>((resolve) => {
       resolveAttach = resolve;
     });
     transportMocks.attach.mockReturnValueOnce(attach);
@@ -3531,7 +3600,15 @@ describe('TerminalPanel', () => {
     );
 
     emitTerminalData('session-1', 'live-two', 2);
-    resolveAttach({ historyBoundarySequence: 1 });
+    resolveAttach({
+      historyBoundarySequence: 1,
+      historyGeneration: 1,
+      historyStartSequence: 0,
+      geometryGeneration: 1,
+      runtimeAttachGeneration: 1,
+      cols: 80,
+      rows: 24,
+    });
 
     await waitForTerminalPanelCondition(() => {
       const writes = terminalCoreInstances[0]?.write.mock.calls
@@ -3550,6 +3627,179 @@ describe('TerminalPanel', () => {
       -1,
       { snapshotEndSequence: 1, historyGeneration: undefined },
     );
+  });
+
+  it('finishes attach and confirms the latest local size when the host resizes in flight', async () => {
+    let resolveAttach!: (value: TerminalLiveAttachResult) => void;
+    transportMocks.attach.mockReturnValueOnce(new Promise<TerminalLiveAttachResult>((resolve) => {
+      resolveAttach = resolve;
+    }));
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="panel" />, host);
+    await waitForTerminalPanelCondition(() => {
+      expect(transportMocks.attach).toHaveBeenCalledWith('session-1', 80, 24);
+    });
+    terminalCoreInstances[0]?.handlers?.onResize?.({ cols: 100, rows: 30 });
+    resolveAttach({
+      historyBoundarySequence: 0,
+      historyGeneration: 1,
+      historyStartSequence: 0,
+      geometryGeneration: 1,
+      runtimeAttachGeneration: 1,
+      cols: 80,
+      rows: 24,
+    });
+
+    await waitForTerminalPanelCondition(() => {
+      expect(transportMocks.resizeWithEffectiveGeometry).toHaveBeenCalledWith('session-1', 100, 30);
+      expect(host.querySelector('[data-terminal-runtime-session="session-1"]')?.getAttribute('aria-busy')).toBe('false');
+    });
+    expect(host.textContent).not.toContain('This terminal could not be restored.');
+  });
+
+  it('reloads the current attachment after a structured stream close without waiting for resize', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="panel" />, host);
+    await settleTerminalPanelAfterPaint();
+    const firstCore = terminalCoreInstances[0];
+    transportMocks.resizeWithEffectiveGeometry.mockClear();
+
+    emitTerminalAttachmentLifecycle('session-1', {
+      runtimeAttachGeneration: 1,
+      state: 'closed',
+      reason: 'stream_ended',
+    });
+
+    await waitForTerminalPanelCondition(() => {
+      expect(transportMocks.attach).toHaveBeenCalledTimes(2);
+      expect(terminalCoreInstances).toHaveLength(2);
+    });
+    expect(firstCore?.setConnected).toHaveBeenCalledWith(false);
+    expect(firstCore?.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('removes a session after a structured session-closed lifecycle event', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="panel" />, host);
+    await settleTerminalPanelAfterPaint();
+
+    emitTerminalAttachmentLifecycle('session-1', {
+      runtimeAttachGeneration: 1,
+      state: 'closed',
+      reason: 'session_closed',
+    });
+
+    await waitForTerminalPanelCondition(() => {
+      expect(transportMocks.forgetSession).toHaveBeenCalledWith('session-1');
+      expect(sessionsCoordinatorMocks.refresh).toHaveBeenCalled();
+    });
+    expect(transportMocks.attach).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores a structured close from an older attachment generation', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="panel" />, host);
+    await settleTerminalPanelAfterPaint();
+
+    emitTerminalAttachmentLifecycle('session-1', {
+      runtimeAttachGeneration: 99,
+      state: 'closed',
+      reason: 'error',
+    });
+    await settleTerminalPanelAfterPaint();
+
+    expect(transportMocks.attach).toHaveBeenCalledTimes(1);
+    expect(host.querySelector('[data-terminal-runtime-session="session-1"]')?.getAttribute('aria-busy')).toBe('false');
+  });
+
+  it('fails closed when an older geometry generation changes dimensions across boundaries', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="panel" />, host);
+    await settleTerminalPanelAfterPaint();
+    const core = terminalCoreInstances[0];
+    core?.setFixedDimensions.mockClear();
+    const handlers = terminalEventSourceState.geometryHandlers.get('session-1') ?? [];
+    for (const handler of handlers) {
+      handler({ sessionId: 'session-1', generation: 3, outputSequenceBoundary: 10, cols: 60, rows: 20 });
+      handler({ sessionId: 'session-1', generation: 2, outputSequenceBoundary: 1, cols: 70, rows: 22 });
+    }
+    emitTerminalData('session-1', 'boundary-one', 1);
+    await drainTerminalPanelAsyncWork();
+    expect(core?.setFixedDimensions).toHaveBeenCalledWith({ cols: 70, rows: 22 });
+
+    for (const handler of handlers) {
+      handler({ sessionId: 'session-1', generation: 2, outputSequenceBoundary: 2, cols: 71, rows: 22 });
+    }
+    emitTerminalData('session-1', 'boundary-two', 2);
+    await drainTerminalPanelAsyncWork();
+
+    expect(core?.setFixedDimensions).not.toHaveBeenCalledWith({ cols: 71, rows: 22 });
+    expect(host.textContent).toContain('This terminal could not be restored.');
+  });
+
+  it('announces shared geometry once per visible selected attachment lifecycle', async () => {
+    transportMocks.attach.mockImplementation(async (_sessionId: string, _cols: number, _rows: number) => ({
+      historyBoundarySequence: 0,
+      historyGeneration: 1,
+      historyStartSequence: 0,
+      geometryGeneration: 1,
+      runtimeAttachGeneration: 1,
+      cols: 60,
+      rows: 20,
+    }));
+    transportMocks.resizeWithEffectiveGeometry.mockImplementation(async (_sessionId: string, cols: number, rows: number) => ({
+      runtimeAttachGeneration: 1,
+      requested: { cols, rows },
+      effective: {
+        generation: 1,
+        outputSequenceBoundary: 0,
+        cols: 60,
+        rows: 20,
+      },
+    }));
+    const [selected, setSelected] = createSignal(false);
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="workbench" workbenchSelected={selected()} />, host);
+    await settleTerminalPanelAfterPaint();
+    await new Promise<void>((resolve) => setTimeout(resolve, 380));
+    await settleTerminalPanel();
+    const announcement = () => host.querySelector('[data-testid="terminal-shared-geometry-announcement"]')?.textContent ?? '';
+
+    expect(host.querySelector('[data-terminal-shared-geometry-inert="true"]')).toBeTruthy();
+    expect(announcement()).toBe('');
+    setSelected(true);
+    await settleTerminalPanel();
+    expect(announcement()).toBe('Terminal layout is shared across connected views.');
+
+    setSelected(false);
+    await settleTerminalPanel();
+    expect(announcement()).toBe('');
+    setSelected(true);
+    await settleTerminalPanel();
+    expect(announcement()).toBe('');
+
+    emitTerminalAttachmentLifecycle('session-1', {
+      runtimeAttachGeneration: 1,
+      state: 'closed',
+      reason: 'stream_ended',
+    });
+    await settleTerminalPanel();
+    expect(host.querySelector('[data-testid="terminal-shared-geometry-status-notice"]')).toBeNull();
+    await waitForTerminalPanelCondition(() => {
+      expect(transportMocks.attach).toHaveBeenCalledTimes(2);
+    });
+    await vi.waitFor(() => {
+      expect(host.querySelector('[data-testid="terminal-shared-geometry-status-notice"]')).toBeTruthy();
+    }, { timeout: 1_500, interval: 20 });
+    await settleTerminalPanel();
+    expect(announcement()).toBe('Terminal layout is shared across connected views.');
   });
 
   it('rebuilds a ready terminal after a blocking core failure', async () => {
@@ -3640,8 +3890,8 @@ describe('TerminalPanel', () => {
         lastActiveAtMs: 9,
       },
     ];
-    let resolveRetryAttach!: (value: { historyBoundarySequence: number }) => void;
-    const retryAttach = new Promise<{ historyBoundarySequence: number }>((resolve) => {
+    let resolveRetryAttach!: (value: TerminalLiveAttachResult) => void;
+    const retryAttach = new Promise<TerminalLiveAttachResult>((resolve) => {
       resolveRetryAttach = resolve;
     });
     const host = document.createElement('div');
@@ -3663,7 +3913,15 @@ describe('TerminalPanel', () => {
     await waitForTerminalPanelCondition(() => {
       expect(findActiveTerminalTab(host)?.getAttribute('data-terminal-session-id')).toBe('session-2');
     });
-    resolveRetryAttach({ historyBoundarySequence: 0 });
+    resolveRetryAttach({
+      historyBoundarySequence: 0,
+      historyGeneration: 1,
+      historyStartSequence: 0,
+      geometryGeneration: 1,
+      runtimeAttachGeneration: 1,
+      cols: 80,
+      rows: 24,
+    });
     await settleTerminalPanelAfterPaint();
 
     expect(retriedSessionCore?.focus).not.toHaveBeenCalled();
@@ -5729,7 +5987,7 @@ describe('TerminalPanel', () => {
   });
 
   it('keeps initial host measurement inside ATTACH until live_v1 acknowledges the stream', async () => {
-    let acknowledgeAttach!: (value: { historyBoundarySequence: number }) => void;
+    let acknowledgeAttach!: (value: TerminalLiveAttachResult) => void;
     transportMocks.attach.mockReturnValueOnce(new Promise((resolve) => {
       acknowledgeAttach = resolve;
     }));
@@ -5742,7 +6000,15 @@ describe('TerminalPanel', () => {
     });
     expect(transportMocks.resize).not.toHaveBeenCalled();
 
-    acknowledgeAttach({ historyBoundarySequence: 0 });
+    acknowledgeAttach({
+      historyBoundarySequence: 0,
+      historyGeneration: 1,
+      historyStartSequence: 0,
+      geometryGeneration: 1,
+      runtimeAttachGeneration: 1,
+      cols: 80,
+      rows: 24,
+    });
     await settleTerminalPanel();
     expect(host.textContent).not.toContain('This terminal could not be restored.');
   });
@@ -6506,10 +6772,155 @@ describe('TerminalPanel', () => {
     await settleTerminalPanelAfterPaint();
 
     const resumedCore = terminalCoreInstances.at(-1);
+    expect(resumedCore).toBeTruthy();
     expect(resumedCore).not.toBe(sleepingCore);
     expect(resumedCore?.restoreSnapshot).toHaveBeenCalledWith(snapshot);
     expect(createOutputCoordinatorSpy).not.toHaveBeenCalled();
     expect(transportMocks.historyPage).not.toHaveBeenCalled();
+  });
+
+  it('rejects a working-set snapshot whose captured grid no longer matches its effective fact', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanelAfterPaint();
+    const runtime = terminalWorkingSetState.runtimes.get('session-1');
+    expect(runtime).toBeTruthy();
+    vi.useFakeTimers();
+    installRequestAnimationFrameMock('timer');
+    const hibernate = runtime.hibernate();
+    await vi.advanceTimersByTimeAsync(1);
+    const snapshot = await hibernate;
+    expect(snapshot).toBeTruthy();
+    (snapshot as { cols: number }).cols = 81;
+
+    const resume = runtime.resume(snapshot);
+    await vi.advanceTimersByTimeAsync(1);
+    await resume;
+    await settleTerminalPanelAfterPaint();
+
+    const resumedCore = terminalCoreInstances.at(-1);
+    expect(resumedCore?.restoreSnapshot).not.toHaveBeenCalled();
+    expect(resumedCore?.clear).toHaveBeenCalled();
+  });
+
+  it('rejects a working-set snapshot whose output checkpoint changed after capture', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanelAfterPaint();
+    const runtime = terminalWorkingSetState.runtimes.get('session-1');
+    vi.useFakeTimers();
+    installRequestAnimationFrameMock('timer');
+    const hibernate = runtime.hibernate();
+    await vi.advanceTimersByTimeAsync(1);
+    const snapshot = await hibernate;
+    (snapshot as { coveredThroughSequence: number }).coveredThroughSequence += 1;
+
+    const resume = runtime.resume(snapshot);
+    await vi.advanceTimersByTimeAsync(1);
+    await resume;
+    await settleTerminalPanelAfterPaint();
+
+    const resumedCore = terminalCoreInstances.at(-1);
+    expect(resumedCore?.restoreSnapshot).not.toHaveBeenCalled();
+    expect(resumedCore?.clear).toHaveBeenCalled();
+  });
+
+  it('seeds an unretained resume fact before replay and applies it only after history crosses its boundary', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanelAfterPaint();
+    const runtime = terminalWorkingSetState.runtimes.get('session-1');
+    vi.useFakeTimers();
+    installRequestAnimationFrameMock('timer');
+    const hibernate = runtime.hibernate();
+    await vi.advanceTimersByTimeAsync(1);
+    await hibernate;
+    emitTerminalAttachmentLifecycle('session-1', {
+      runtimeAttachGeneration: 1,
+      state: 'closed',
+      reason: 'detached',
+    });
+    emitTerminalAttachmentLifecycle('session-1', {
+      runtimeAttachGeneration: 2,
+      state: 'attached',
+    });
+    transportMocks.resizeWithEffectiveGeometry.mockResolvedValueOnce({
+      runtimeAttachGeneration: 2,
+      requested: { cols: 80, rows: 24 },
+      effective: {
+        generation: 2,
+        outputSequenceBoundary: 5,
+        cols: 70,
+        rows: 22,
+      },
+    });
+    transportMocks.historyPage.mockResolvedValueOnce(makeTerminalHistoryPage({
+      chunks: [{ sequence: 5, timestampMs: 5, data: textEncoder.encode('resume-history') }],
+      firstSequence: 1,
+      lastSequence: 5,
+      coveredThroughSequence: 5,
+      snapshotEndSequence: 5,
+      firstRetainedSequence: 1,
+      coveredBytes: 14,
+      totalBytes: 14,
+    }));
+
+    const resume = runtime.resume(null);
+    await vi.advanceTimersByTimeAsync(1);
+    await resume;
+    await settleTerminalPanelAfterPaint();
+
+    const resumedCore = terminalCoreInstances.at(-1);
+    expect(transportMocks.resizeWithEffectiveGeometry).toHaveBeenCalledWith('session-1', 80, 24);
+    expect(resumedCore).toBeTruthy();
+    expect(transportMocks.historyPage).toHaveBeenCalled();
+    expect(resumedCore?.setFixedDimensions).toHaveBeenCalledTimes(2);
+    expect(resumedCore?.setFixedDimensions).toHaveBeenNthCalledWith(1, { cols: 70, rows: 22 });
+    expect(resumedCore?.setFixedDimensions).toHaveBeenNthCalledWith(2, { cols: 70, rows: 22 });
+    expect(resumedCore!.setFixedDimensions.mock.invocationCallOrder[0]).toBeLessThan(
+      resumedCore!.write.mock.invocationCallOrder[0]!,
+    );
+    expect(resumedCore!.write.mock.invocationCallOrder[0]).toBeLessThan(
+      resumedCore!.setFixedDimensions.mock.invocationCallOrder[1]!,
+    );
+  });
+
+  it('keeps hibernated geometry candidates ordered until the resumed renderer crosses their boundary', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanelAfterPaint();
+    const runtime = terminalWorkingSetState.runtimes.get('session-1');
+    expect(runtime).toBeTruthy();
+    vi.useFakeTimers();
+    installRequestAnimationFrameMock('timer');
+    const hibernate = runtime.hibernate();
+    await vi.advanceTimersByTimeAsync(1);
+    const snapshot = await hibernate;
+    expect(snapshot).toBeTruthy();
+
+    for (const handler of terminalEventSourceState.geometryHandlers.get('session-1') ?? []) {
+      handler({
+        sessionId: 'session-1',
+        generation: 2,
+        outputSequenceBoundary: 1,
+        cols: 90,
+        rows: 28,
+      });
+    }
+    emitTerminalData('session-1', 'hibernated-output', 1);
+    const resume = runtime.resume(snapshot);
+    await vi.advanceTimersByTimeAsync(1);
+    await resume;
+    await drainTerminalPanelAsyncWork();
+
+    const resumedCore = terminalCoreInstances.at(-1);
+    expect(resumedCore?.restoreSnapshot).toHaveBeenCalledWith(snapshot);
+    expect(resumedCore?.write.mock.calls.map((call: unknown[]) => decodeTerminalWrite(call[0]))).toContain('hibernated-output');
+    expect(resumedCore?.setFixedDimensions).toHaveBeenCalledWith({ cols: 90, rows: 28 });
   });
 
   it('marks the first rendered history baseline when working-set snapshot restore falls back to replay', async () => {
@@ -7022,7 +7433,15 @@ describe('TerminalPanel', () => {
     render(() => <TerminalPanel variant="workbench" />, host);
     await settleTerminalPanel();
 
-    transportMocks.attach.mockResolvedValueOnce({ historyBoundarySequence: 6 });
+    transportMocks.attach.mockResolvedValueOnce({
+      historyBoundarySequence: 6,
+      historyGeneration: 2,
+      historyStartSequence: 7,
+      geometryGeneration: 1,
+      runtimeAttachGeneration: 1,
+      cols: 80,
+      rows: 24,
+    });
     transportMocks.historyPage.mockResolvedValueOnce(makeTerminalHistoryPage({
       coveredThroughSequence: 6,
       snapshotEndSequence: 6,
@@ -7297,7 +7716,15 @@ describe('TerminalPanel', () => {
     } as any;
     const host = document.createElement('div');
     document.body.appendChild(host);
-    transportMocks.attach.mockResolvedValueOnce({ historyBoundarySequence: 1 });
+    transportMocks.attach.mockResolvedValueOnce({
+      historyBoundarySequence: 1,
+      historyGeneration: 2,
+      historyStartSequence: 0,
+      geometryGeneration: 1,
+      runtimeAttachGeneration: 1,
+      cols: 80,
+      rows: 24,
+    });
 
     render(() => (
       <TerminalSessionCatalogContext.Provider value={catalog}>

@@ -5,7 +5,11 @@ import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
 import { getThemeColors } from '@floegence/floeterm-terminal-web';
-import { TerminalLiveErrorCode, TerminalLiveServerError } from '@floegence/floeterm-terminal-web/live';
+import {
+  TerminalLiveErrorCode,
+  TerminalLiveServerError,
+  type TerminalLiveAttachResult,
+} from '@floegence/floeterm-terminal-web/live';
 
 import { EnvTerminalPage } from '../pages/EnvTerminalPage';
 import { TerminalSessionCatalogContext } from '../services/terminalSessionCatalog';
@@ -30,6 +34,12 @@ const mediaCommands = commands as unknown as Readonly<{
     forcedColors?: null | 'active' | 'none';
     reducedMotion?: null | 'reduce' | 'no-preference';
   }>) => Promise<void>;
+  inspectTerminalSharedGeometryScreenshot: () => Promise<Readonly<{
+    fullHash: string;
+    safeCanvasHash: string;
+    canvasWidth: number;
+    canvasHeight: number;
+  }>>;
 }>;
 
 function nearestRankP95(values: readonly number[]): number {
@@ -73,15 +83,36 @@ const rpcFsMocks = vi.hoisted(() => ({
   readFile: vi.fn().mockResolvedValue({ content: '{"scripts":{}}' }),
 }));
 
-const transportAttachState = vi.hoisted(() => ({ historyBoundarySequence: 0 }));
+const transportAttachState = vi.hoisted(() => ({
+  historyBoundarySequence: 0,
+  effectiveCols: null as number | null,
+  effectiveRows: null as number | null,
+}));
 
 const transportMocks = vi.hoisted(() => {
-  const attach = vi.fn().mockImplementation(async () => ({
+  const attach = vi.fn().mockImplementation(async (_sessionId: string, cols: number, rows: number) => ({
     historyBoundarySequence: transportAttachState.historyBoundarySequence,
+    historyGeneration: 1,
+    historyStartSequence: 0,
+    geometryGeneration: 1,
+    runtimeAttachGeneration: 1,
+    cols: transportAttachState.effectiveCols ?? cols,
+    rows: transportAttachState.effectiveRows ?? rows,
+  }));
+  const resize = vi.fn().mockImplementation(async (_sessionId: string, cols: number, rows: number) => ({
+    runtimeAttachGeneration: 1,
+    requested: { cols, rows },
+    effective: {
+      generation: 1,
+      outputSequenceBoundary: transportAttachState.historyBoundarySequence,
+      cols,
+      rows,
+    },
   }));
   return {
     sendInput: vi.fn().mockResolvedValue(undefined),
-    resize: vi.fn().mockResolvedValue(undefined),
+    resize,
+    resizeWithEffectiveGeometry: resize,
     attach,
     attachWithHistoryBoundary: attach,
     history: vi.fn().mockResolvedValue([]),
@@ -132,6 +163,9 @@ const terminalCoreState = vi.hoisted(() => ({
   instances: [] as Array<{
     write: ReturnType<typeof vi.fn>;
     setFixedDimensions: ReturnType<typeof vi.fn>;
+    getDimensions: () => { cols: number; rows: number };
+    focus: ReturnType<typeof vi.fn>;
+    handlers: { onError?: (error: Error) => void };
     config: any;
     emitBell: () => void;
   }>,
@@ -483,6 +517,7 @@ vi.mock('../services/terminalTransport', async () => {
         terminalEventSourceState.geometryHandlers.get(sessionId)?.delete(handler);
       };
     },
+    onTerminalLiveAttachmentLifecycle: () => () => undefined,
   } }),
   createTerminalConnId: () => 'conn-1',
   };
@@ -698,6 +733,8 @@ beforeEach(() => {
   terminalEventSourceState.nameHandlers = new Map();
   terminalEventSourceState.geometryHandlers = new Map();
   transportAttachState.historyBoundarySequence = 0;
+  transportAttachState.effectiveCols = null;
+  transportAttachState.effectiveRows = null;
   terminalCoreState.instances = [];
   terminalSessionsState.sessions = [
     {
@@ -720,9 +757,14 @@ beforeEach(() => {
   terminalSessionsState.subscribers = [];
   Object.values(transportMocks).forEach((mock) => mock.mockClear());
   transportMocks.attach.mockReset();
-  transportMocks.attach.mockImplementation(async () => ({
+  transportMocks.attach.mockImplementation(async (_sessionId: string, cols: number, rows: number) => ({
     historyBoundarySequence: transportAttachState.historyBoundarySequence,
+    historyGeneration: 1,
+    historyStartSequence: 0,
+    geometryGeneration: 1,
     runtimeAttachGeneration: 1,
+    cols: transportAttachState.effectiveCols ?? cols,
+    rows: transportAttachState.effectiveRows ?? rows,
   }));
   transportMocks.historyPage.mockResolvedValue(withHistoryContract({
     chunks: [],
@@ -1051,6 +1093,134 @@ describe('TerminalPanel browser activity integration', () => {
     ]);
   });
 
+  it('projects shared-geometry details into the explicit owner surface without changing terminal geometry', async () => {
+    terminalSessionsState.sessions = [terminalSessionsState.sessions[0]!];
+    transportAttachState.effectiveCols = 60;
+    transportAttachState.effectiveRows = 20;
+    const surfaceHost = document.createElement('div');
+    surfaceHost.setAttribute('data-floe-dialog-surface-host', 'true');
+    surfaceHost.style.cssText = 'position:relative;width:840px;height:500px;';
+    document.body.appendChild(surfaceHost);
+    const dispose = render(() => <TerminalPanel variant="workbench" workbenchSelected />, surfaceHost);
+
+    try {
+      await expect.poll(() => surfaceHost.querySelector('[data-testid="terminal-shared-geometry-status-notice"]')).toBeTruthy();
+      const trigger = surfaceHost.querySelector<HTMLButtonElement>('button[aria-expanded]')!;
+      const terminalContent = surfaceHost.querySelector<HTMLElement>('[data-testid="terminal-content"]')!;
+      const core = terminalCoreState.instances[0]!;
+      const contentBefore = terminalContent.getBoundingClientRect();
+      const dimensionsBefore = core.getDimensions();
+      core.setFixedDimensions.mockClear();
+      transportMocks.resizeWithEffectiveGeometry.mockClear();
+
+      trigger.focus();
+      await new Promise<void>((resolve) => setTimeout(resolve, 1650));
+      const closedScreenshot = await mediaCommands.inspectTerminalSharedGeometryScreenshot();
+      await userEvent.keyboard('{Enter}');
+      await expect.poll(() => surfaceHost.querySelector('[data-floe-surface-floating-layer="true"]')).toBeTruthy();
+      const openScreenshot = await mediaCommands.inspectTerminalSharedGeometryScreenshot();
+
+      const region = surfaceHost.querySelector<HTMLElement>('[role="region"]')!;
+      expect(region.textContent).toContain('60×20');
+      expect(trigger.getAttribute('aria-expanded')).toBe('true');
+      expect(trigger.getAttribute('aria-controls')).toBe(region.id);
+      expect(document.activeElement).toBe(trigger);
+      expect(region.tabIndex).toBe(0);
+      expect(region.scrollHeight).toBeGreaterThan(region.clientHeight);
+      expect(region.getAttribute('data-floe-canvas-wheel-interactive')).toBe('true');
+      expect(region.getAttribute('data-redeven-workbench-wheel-role')).toBe('local-scroll-viewport');
+      expect(terminalContent.getBoundingClientRect()).toEqual(contentBefore);
+      expect(core.getDimensions()).toEqual(dimensionsBefore);
+      expect(core.setFixedDimensions).not.toHaveBeenCalled();
+      expect(transportMocks.resizeWithEffectiveGeometry).not.toHaveBeenCalled();
+      expect(openScreenshot.fullHash).not.toBe(closedScreenshot.fullHash);
+      expect(openScreenshot.safeCanvasHash).toBe(closedScreenshot.safeCanvasHash);
+      expect(openScreenshot.canvasWidth).toBe(closedScreenshot.canvasWidth);
+      expect(openScreenshot.canvasHeight).toBe(closedScreenshot.canvasHeight);
+      const surfaceTransform = surfaceHost.style.transform;
+      const selectionBefore = window.getSelection()?.toString() ?? '';
+      region.focus();
+      await userEvent.keyboard('{PageDown}');
+      await expect.poll(() => region.scrollTop).toBeGreaterThan(0);
+      expect(surfaceHost.style.transform).toBe(surfaceTransform);
+      expect(window.getSelection()?.toString() ?? '').toBe(selectionBefore);
+
+      surfaceHost.style.transform = 'translateX(15px)';
+      await expect.poll(() => surfaceHost.querySelector('[data-floe-surface-floating-layer="true"]')).toBeNull();
+      expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    } finally {
+      dispose();
+      surfaceHost.remove();
+    }
+  });
+
+  it('uses deterministic desktop and mobile slots and an inert unselected Workbench notice', async () => {
+    terminalSessionsState.sessions = [terminalSessionsState.sessions[0]!];
+    transportAttachState.effectiveCols = 60;
+    transportAttachState.effectiveRows = 20;
+    const host = document.createElement('div');
+    host.style.cssText = 'width:800px;height:500px;';
+    host.setAttribute('data-floe-dialog-surface-host', 'true');
+    document.body.appendChild(host);
+    const [workbenchSelected, setWorkbenchSelected] = createSignal(false);
+    host.addEventListener('pointerdown', () => setWorkbenchSelected(true));
+    const disposeDesktop = render(() => (
+      <TerminalPanel variant="workbench" workbenchSelected={workbenchSelected()} />
+    ), host);
+
+    await expect.poll(() => host.querySelector('[data-terminal-shared-geometry-inert="true"]')).toBeTruthy();
+    const desktopNotice = host.querySelector<HTMLElement>('[data-testid="terminal-shared-geometry-status-notice"]')!;
+    expect(host.querySelector('button[aria-expanded]')).toBeNull();
+    expect(getComputedStyle(desktopNotice).width).toBe('184px');
+    terminalCoreState.instances[0]?.focus.mockClear();
+    await userEvent.click(desktopNotice);
+    await settleTerminalPanel();
+    expect(workbenchSelected()).toBe(true);
+    expect(host.querySelector('[data-floe-surface-floating-layer="true"]')).toBeNull();
+    expect(terminalCoreState.instances[0]?.focus).not.toHaveBeenCalled();
+
+    const selectedTrigger = host.querySelector<HTMLButtonElement>('button[aria-expanded]')!;
+    selectedTrigger.click();
+    await expect.poll(() => host.querySelector('[data-floe-surface-floating-layer="true"]')).toBeTruthy();
+    selectedTrigger.click();
+    setWorkbenchSelected(false);
+    await settleTerminalPanel();
+    expect(host.querySelector('[data-terminal-shared-geometry-inert="true"]')).toBeTruthy();
+
+    host.style.width = '600px';
+    await settleTerminalPanel();
+    expect(getComputedStyle(desktopNotice).width).toBe('104px');
+    expect(getComputedStyle(desktopNotice.querySelector('.terminal-shared-geometry-notice__short')!).display).not.toBe('none');
+    expect(getComputedStyle(host.querySelector('.terminal-shared-geometry-history')!).display).toBe('none');
+
+    host.style.width = '400px';
+    await settleTerminalPanel();
+    expect(getComputedStyle(desktopNotice).width).toBe('28px');
+    expect(getComputedStyle(desktopNotice.querySelector('.terminal-shared-geometry-notice__short')!).display).toBe('none');
+    terminalCoreState.instances[0]?.handlers.onError?.(new Error('renderer failed'));
+    await settleTerminalPanel();
+    expect(host.querySelector('[data-testid="terminal-status-bar"]')?.getAttribute('data-terminal-runtime-state')).toBe('blocking');
+    expect(getComputedStyle(host.querySelector('.terminal-shared-geometry-history')!).display).toBe('none');
+    disposeDesktop();
+    host.replaceChildren();
+    terminalCoreState.instances = [];
+    layoutState.mobile = true;
+    host.style.width = '390px';
+    const disposeMobile = render(() => <TerminalPanel variant="workbench" />, host);
+
+    await expect.poll(() => host.querySelector('[data-testid="terminal-shared-geometry-mobile-notice"]')).toBeTruthy();
+    const mobileNotice = host.querySelector<HTMLElement>('[data-testid="terminal-shared-geometry-mobile-notice"]')!;
+    expect(getComputedStyle(mobileNotice).width).toBe('96px');
+    expect(getComputedStyle(mobileNotice.querySelector('.terminal-shared-geometry-notice__trigger')!).height).toBe('36px');
+    host.style.width = '340px';
+    await settleTerminalPanel();
+    expect(getComputedStyle(mobileNotice).width).toBe('60px');
+    host.style.width = '300px';
+    await settleTerminalPanel();
+    expect(getComputedStyle(mobileNotice).width).toBe('36px');
+    disposeMobile();
+  });
+
   it('applies shared geometry exactly between the output sequences around its boundary', async () => {
     terminalSessionsState.sessions = [terminalSessionsState.sessions[0]!];
     const host = document.createElement('div');
@@ -1060,6 +1230,7 @@ describe('TerminalPanel browser activity integration', () => {
     await settleTerminalPanel();
     const core = terminalCoreState.instances[0]!;
     expect(core.config.responsive.reportHostDimensionsWithFixedGrid).toBe(true);
+    core.setFixedDimensions.mockClear();
 
     emitTerminalData('session-1', 'old-size', 1);
     emitTerminalGeometry('session-1', 2, 1, 90, 28);
@@ -1078,8 +1249,16 @@ describe('TerminalPanel browser activity integration', () => {
 
   it('retains live output received during a delayed zero-boundary attach round trip', async () => {
     terminalSessionsState.sessions = [terminalSessionsState.sessions[0]!];
-    let releaseAttach!: (result: { historyBoundarySequence: number }) => void;
-    const attachResult = new Promise<{ historyBoundarySequence: number }>((resolve) => {
+    let releaseAttach!: (result: {
+      historyBoundarySequence: number;
+      historyGeneration: number;
+      historyStartSequence: number;
+      geometryGeneration: number;
+      runtimeAttachGeneration: number;
+      cols: number;
+      rows: number;
+    }) => void;
+    const attachResult = new Promise<Parameters<typeof releaseAttach>[0]>((resolve) => {
       releaseAttach = resolve;
     });
     transportMocks.attachWithHistoryBoundary.mockReturnValueOnce(attachResult);
@@ -1090,12 +1269,78 @@ describe('TerminalPanel browser activity integration', () => {
     await expect.poll(() => transportMocks.attachWithHistoryBoundary.mock.calls.length).toBe(1);
 
     emitTerminalData('session-1', 'attach-rtt-live', 1);
-    releaseAttach({ historyBoundarySequence: 0 });
+    releaseAttach({
+      historyBoundarySequence: 0,
+      historyGeneration: 1,
+      historyStartSequence: 0,
+      geometryGeneration: 1,
+      runtimeAttachGeneration: 1,
+      cols: 80,
+      rows: 24,
+    });
 
     await expect.poll(() => (
       terminalCoreState.instances[0]?.write.mock.calls.map((call) => decodeTerminalWrite(call[0])) ?? []
     )).toEqual(['attach-rtt-live']);
     expect(transportMocks.historyPage).not.toHaveBeenCalled();
+  });
+
+  it('keeps an older attach candidate in the renderer queue when a newer geometry event arrives first', async () => {
+    terminalSessionsState.sessions = [terminalSessionsState.sessions[0]!];
+    let releaseAttach!: (result: TerminalLiveAttachResult) => void;
+    transportMocks.attachWithHistoryBoundary.mockReturnValueOnce(new Promise<TerminalLiveAttachResult>((resolve) => {
+      releaseAttach = resolve;
+    }));
+    transportMocks.historyPage.mockResolvedValueOnce(withHistoryContract({
+      chunks: [{ sequence: 4, timestampMs: 4, data: textEncoder.encode('history-4') }],
+      nextStartSeq: 5,
+      hasMore: false,
+      firstSequence: 1,
+      lastSequence: 4,
+      coveredThroughSequence: 4,
+      snapshotEndSequence: 4,
+      firstRetainedSequence: 1,
+      coveredBytes: 9,
+      totalBytes: 9,
+    }));
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="panel" />, host);
+    await expect.poll(() => transportMocks.attachWithHistoryBoundary.mock.calls.length).toBe(1);
+
+    emitTerminalGeometry('session-1', 3, 8, 60, 20);
+    releaseAttach({
+      historyBoundarySequence: 4,
+      historyGeneration: 1,
+      historyStartSequence: 1,
+      geometryGeneration: 2,
+      runtimeAttachGeneration: 1,
+      cols: 70,
+      rows: 22,
+    });
+    await expect.poll(() => terminalCoreState.instances[0]?.setFixedDimensions.mock.calls.length ?? 0).toBeGreaterThanOrEqual(1);
+    for (let sequence = 5; sequence <= 9; sequence += 1) {
+      emitTerminalData('session-1', `live-${sequence}`, sequence);
+    }
+    await settleTerminalPanel();
+
+    const core = terminalCoreState.instances[0]!;
+    const intermediateCall = core.setFixedDimensions.mock.calls.findIndex(([size]) => size.cols === 70 && size.rows === 22);
+    const latestCall = core.setFixedDimensions.mock.calls.findIndex(([size]) => size.cols === 60 && size.rows === 20);
+    expect(intermediateCall).toBeGreaterThanOrEqual(0);
+    expect(latestCall).toBeGreaterThan(intermediateCall);
+    const writes = core.write.mock.calls.map((call) => decodeTerminalWrite(call[0]));
+    const throughBoundary = writes.findIndex((value) => value.includes('live-8'));
+    const afterBoundary = writes.findIndex((value) => value.includes('live-9'));
+    expect(core.setFixedDimensions.mock.invocationCallOrder[intermediateCall]).toBeLessThan(
+      core.write.mock.invocationCallOrder[throughBoundary]!,
+    );
+    expect(core.write.mock.invocationCallOrder[throughBoundary]).toBeLessThan(
+      core.setFixedDimensions.mock.invocationCallOrder[latestCall]!,
+    );
+    expect(core.setFixedDimensions.mock.invocationCallOrder[latestCall]).toBeLessThan(
+      core.write.mock.invocationCallOrder[afterBoundary]!,
+    );
   });
 
   it('adopts the first live sequence after empty activity history', async () => {
@@ -1859,6 +2104,9 @@ describe('TerminalPanel browser activity integration', () => {
       });
       expect(document.body.querySelector('[role="menu"]')).toBeNull();
 
+      await vi.waitFor(() => {
+        expect(host.querySelector('textarea[aria-label="Terminal input"]')).toBeTruthy();
+      });
       const currentInput = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="Terminal input"]');
       currentInput!.dispatchEvent(new KeyboardEvent('keydown', {
         key: 'ContextMenu',

@@ -105,6 +105,9 @@ import {
 } from './TerminalSessionNavigator';
 import { deriveTerminalAgentSessionPresentation } from './terminalAgentSessionPresentation';
 import { TerminalSearchOverlay } from './TerminalSearchOverlay';
+import { TerminalSharedGeometryNotice } from './TerminalSharedGeometryNotice';
+import type { TerminalSharedGeometryPresentation } from './terminalSharedGeometryPresentation';
+import { REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR } from '../workbench/surface/workbenchInputRouting';
 
 type pending_terminal_session_status = 'creating' | 'failed';
 
@@ -1217,6 +1220,11 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     ReadonlyMap<string, TerminalForegroundPresentation>
   >(new Map());
   const [runtimeStatusBySession, setRuntimeStatusBySession] = createSignal<Record<string, TerminalSessionRuntimeStatus>>({});
+  const [geometryPresentationBySession, setGeometryPresentationBySession] = createSignal<
+    Record<string, TerminalSharedGeometryPresentation>
+  >({});
+  const [sharedGeometryAnnouncement, setSharedGeometryAnnouncement] = createSignal('');
+  const announcedGeometryLifecycles = new Set<string>();
 
   const handleExecuteDenied = (e: unknown): boolean => {
     if (!isPermissionDeniedError(e, 'process')) return false;
@@ -1778,6 +1786,32 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     });
   };
 
+  const handleGeometryPresentation = (
+    id: string,
+    presentation: TerminalSharedGeometryPresentation | null,
+  ) => {
+    setGeometryPresentationBySession(current => {
+      if (!presentation) {
+        if (!current[id]) return current;
+        const next = { ...current };
+        delete next[id];
+        return next;
+      }
+      const previous = current[id];
+      if (previous
+        && previous.lifecycleEpoch === presentation.lifecycleEpoch
+        && previous.rendererEpoch === presentation.rendererEpoch
+        && previous.requestEpoch === presentation.requestEpoch
+        && previous.local.cols === presentation.local.cols
+        && previous.local.rows === presentation.local.rows
+        && previous.effective.generation === presentation.effective.generation
+        && previous.effective.outputSequenceBoundary === presentation.effective.outputSequenceBoundary
+        && previous.effective.cols === presentation.effective.cols
+        && previous.effective.rows === presentation.effective.rows) return current;
+      return { ...current, [id]: presentation };
+    });
+  };
+
   const getActiveTerminalViewportElement = (): HTMLDivElement | null => {
     const sid = activeSessionId();
     if (!sid) return null;
@@ -2088,6 +2122,30 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const activeRuntimeStatus = createMemo<TerminalSessionRuntimeStatus>(() => {
     const sid = activeSessionId();
     return sid ? runtimeStatusBySession()[sid] ?? { state: 'idle' } : { state: 'idle' };
+  });
+
+  const activeGeometryPresentation = createMemo<TerminalSharedGeometryPresentation | null>(() => {
+    if (activeRuntimeStatus().state !== 'idle') return null;
+    const id = activeDisplaySessionId();
+    return id ? geometryPresentationBySession()[id] ?? null : null;
+  });
+
+  createEffect(() => {
+    const presentation = activeGeometryPresentation();
+    const id = activeDisplaySessionId();
+    if (!presentation || !id || !viewActive() || !workbenchSelected()) {
+      setSharedGeometryAnnouncement('');
+      return;
+    }
+    const key = `${id}:${presentation.lifecycleEpoch}`;
+    if (announcedGeometryLifecycles.has(key)) return;
+    setSharedGeometryAnnouncement('');
+    queueMicrotask(() => {
+      if (activeDisplaySessionId() !== id || activeGeometryPresentation()?.lifecycleEpoch !== presentation.lifecycleEpoch) return;
+      if (!viewActive() || !workbenchSelected() || announcedGeometryLifecycles.has(key)) return;
+      announcedGeometryLifecycles.add(key);
+      setSharedGeometryAnnouncement(i18n.t('terminal.sharedGeometry.announcement'));
+    });
   });
 
   const showTerminalStatusBar = createMemo(() => {
@@ -3095,6 +3153,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   let searchInputEl: HTMLInputElement | null = null;
   let rootEl: HTMLDivElement | null = null;
+  let mobileToolbarEl: HTMLDivElement | null = null;
   const [mobileKeyboardElement, setMobileKeyboardElement] = createSignal<HTMLDivElement | null>(null);
 
   const getActiveCore = () => {
@@ -4038,6 +4097,20 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   };
 
   const terminalShortcutModLabel = createMemo(() => (isMacLikePlatform() ? 'Cmd' : 'Ctrl'));
+  const terminalDisclosureFallbackFocus = () => {
+    if (variant === 'workbench') {
+      const widgetRoot = rootEl?.closest<HTMLElement>(`[${REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR}]`);
+      if (widgetRoot) return widgetRoot;
+    }
+    return (isMobileLayout() ? mobileToolbarEl : null) ?? rootEl;
+  };
+  const terminalDisclosureSurfaceBoundary = () => rootEl;
+  const previousMobileToolbarControl = () => (
+    mobileToolbarEl?.querySelector<HTMLElement>('[data-testid="terminal-session-drawer-open"]') ?? null
+  );
+  const nextMobileToolbarControl = () => (
+    mobileToolbarEl?.querySelector<HTMLElement>('[data-testid="terminal-clear-active-session"]') ?? null
+  );
   const activeSessionListItem = createMemo(() => {
     const activeId = activeDisplaySessionId();
     if (!activeId) return null;
@@ -4055,8 +4128,9 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const body = (
     <div
       ref={(n) => (rootEl = n)}
+      tabIndex={-1}
       data-terminal-panel-variant={variant}
-      class="h-full min-h-0 flex flex-col"
+      class="terminal-shared-geometry-container h-full min-h-0 flex flex-col outline-none"
       onKeyDown={handleRootKeyDown}
       onFocusIn={() => setPanelHasFocus(true)}
       onPointerDown={() => setPanelHasFocus(true)}
@@ -4102,7 +4176,13 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
           />
 
           <div class="min-w-0 min-h-0 flex flex-1 flex-col">
-            <div class="flex h-10 shrink-0 items-center gap-2 border-b border-border bg-background/90 px-2">
+            <div
+              ref={(element) => {
+                mobileToolbarEl = element;
+              }}
+              tabIndex={-1}
+              class="flex h-10 shrink-0 items-center gap-2 border-b border-border bg-background/90 px-2 outline-none"
+            >
               <Show when={isMobileLayout()}>
                 <Button
                   size="sm"
@@ -4131,6 +4211,19 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                   </Show>
                 </div>
               </div>
+              <Show when={isMobileLayout() ? activeGeometryPresentation() : null}>
+                {(presentation) => (
+                  <TerminalSharedGeometryNotice
+                    presentation={presentation()}
+                    mobile
+                    interactive={workbenchSelected()}
+                    fallbackFocus={terminalDisclosureFallbackFocus}
+                    surfaceBoundary={terminalDisclosureSurfaceBoundary}
+                    previousFocus={previousMobileToolbarControl}
+                    nextFocus={nextMobileToolbarControl}
+                  />
+                )}
+              </Show>
               <Button
                 aria-busy={clearingSessionId() !== null}
                 data-terminal-clear-state={clearingSessionId() ? 'pending' : 'idle'}
@@ -4223,6 +4316,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                               registerActions={registerActions}
                               registerWorkingSetRuntime={registerWorkingSetRuntime}
                               onRuntimeStatus={handleRuntimeStatus}
+                              onGeometryPresentation={handleGeometryPresentation}
                               onSessionGone={handleTerminalSessionGone}
                               onInteractive={handleTerminalInteractive}
                               onLiveOutputObserved={handleLiveOutputObserved}
@@ -4373,6 +4467,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
             <Show when={showTerminalStatusBar()}>
               <div
                 data-testid="terminal-status-bar"
+                data-terminal-runtime-state={activeRuntimeStatus().state}
                 class="relative z-10 grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-1 overflow-hidden border-t border-border bg-background leading-none text-muted-foreground"
                 classList={{
                   'h-11 min-h-11 max-h-11 px-1 text-[11px]': useMobileRecoveryStatusBar(),
@@ -4405,9 +4500,20 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                   >
                     {activeRuntimeStatusMessage()}
                   </span>
+                  <Show when={!isMobileLayout() ? activeGeometryPresentation() : null}>
+                    {(presentation) => (
+                      <TerminalSharedGeometryNotice
+                        presentation={presentation()}
+                        mobile={false}
+                        interactive={workbenchSelected()}
+                        fallbackFocus={terminalDisclosureFallbackFocus}
+                        surfaceBoundary={terminalDisclosureSurfaceBoundary}
+                      />
+                    )}
+                  </Show>
                   <span
                     data-terminal-history-bytes={historyBytes() === null ? '' : String(historyBytes())}
-                    class="ml-auto shrink-0"
+                    class="terminal-shared-geometry-history ml-auto shrink-0"
                     classList={{ hidden: useMobileRecoveryStatusBar() }}
                   >
                     {i18n.t('terminal.statusHistory')}: {historyBytes() === null ? '-' : formatBytes(historyBytes() ?? 0)}
@@ -4467,6 +4573,15 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                 </Show>
               </div>
             </Show>
+            <span
+              class="sr-only"
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+              data-testid="terminal-shared-geometry-announcement"
+            >
+              {sharedGeometryAnnouncement()}
+            </span>
           </div>
         </div>
       </Show>

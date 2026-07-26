@@ -3,12 +3,14 @@ import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
   TerminalCore,
-  TerminalEventSource,
   TerminalSessionInfo,
 } from '@floegence/floeterm-terminal-web';
 
 import '../../index.css';
-import type { RedevenTerminalTransport } from '../services/terminalTransport';
+import type {
+  RedevenTerminalEventSource,
+  RedevenTerminalTransport,
+} from '../services/terminalTransport';
 import type { TerminalWorkingSetRuntime } from '../services/terminalAdaptiveWorkingSet';
 import { TerminalSessionRuntime } from './TerminalSessionRuntime';
 
@@ -49,8 +51,16 @@ const SESSION = {
   isActive: true,
 } as TerminalSessionInfo;
 
-const EVENT_SOURCE: TerminalEventSource = {
+const EVENT_SOURCE: RedevenTerminalEventSource = {
   onTerminalData: () => () => undefined,
+  onTerminalLiveAttachmentLifecycle: (_sessionId, handler) => {
+    queueMicrotask(() => handler({
+      sessionId: SESSION.id,
+      runtimeAttachGeneration: 1,
+      state: 'attached',
+    }));
+    return () => undefined;
+  },
 };
 
 const createTransport = (): RedevenTerminalTransport => ({
@@ -65,6 +75,16 @@ const createTransport = (): RedevenTerminalTransport => ({
     rows,
   }),
   resize: async () => undefined,
+  resizeWithEffectiveGeometry: async (_sessionId, cols, rows) => ({
+    runtimeAttachGeneration: 1,
+    requested: { cols, rows },
+    effective: {
+      generation: 1,
+      outputSequenceBoundary: 1,
+      cols,
+      rows,
+    },
+  }),
   sendInput: async () => undefined,
   history: async () => [],
   historyPage: async () => ({
