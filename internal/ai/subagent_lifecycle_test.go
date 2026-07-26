@@ -1827,6 +1827,89 @@ func TestServiceGetFlowerSubagentDetailUsesCanonicalMessagesAndSanitizedDiagnost
 	}
 }
 
+func TestVisibleSubagentDetailEventsFailsClosedForUnknownUserEntry(t *testing.T) {
+	events := []flruntime.ThreadDetailEvent{{
+		ID:   "unknown-entry",
+		Kind: flruntime.ThreadDetailEventUserMessage,
+	}}
+	turns := []flruntime.ThreadTurnSnapshot{{
+		TurnID:            "turn-known",
+		UserEntryID:       "known-entry",
+		UserMessageOrigin: flruntime.ThreadUserMessageOriginUser,
+	}}
+	_, err := visibleSubagentDetailEvents(events, turns)
+	if err == nil || !strings.Contains(err.Error(), "unknown canonical user entry") {
+		t.Fatalf("visibleSubagentDetailEvents error=%v, want unknown canonical user entry", err)
+	}
+}
+
+func TestVisibleSubagentDetailEventsUsesTypedOriginsForExactVisibility(t *testing.T) {
+	turns := []flruntime.ThreadTurnSnapshot{
+		{TurnID: "turn-mission", UserEntryID: "entry-mission", UserMessageOrigin: flruntime.ThreadUserMessageOriginDelegatedMission},
+		{TurnID: "turn-user", UserEntryID: "entry-user", UserMessageOrigin: flruntime.ThreadUserMessageOriginUser},
+		{TurnID: "turn-input", UserEntryID: "entry-input", UserMessageOrigin: flruntime.ThreadUserMessageOriginSubAgentInput},
+		{TurnID: "turn-pending", UserEntryID: "entry-pending", UserMessageOrigin: flruntime.ThreadUserMessageOriginPendingToolCompletion},
+		{TurnID: "turn-retry", RetrySource: &flruntime.ThreadTurnRetrySource{TurnID: "turn-user"}},
+	}
+	events := []flruntime.ThreadDetailEvent{
+		{ID: "entry-mission", Kind: flruntime.ThreadDetailEventUserMessage},
+		{ID: "entry-user", Kind: flruntime.ThreadDetailEventUserMessage},
+		{ID: "entry-input", Kind: flruntime.ThreadDetailEventUserMessage},
+		{ID: "entry-pending", Kind: flruntime.ThreadDetailEventUserMessage},
+		{ID: "assistant-event", Kind: flruntime.ThreadDetailEventAssistantMessage},
+	}
+	visible, err := visibleSubagentDetailEvents(events, turns)
+	if err != nil {
+		t.Fatalf("visibleSubagentDetailEvents: %v", err)
+	}
+	if len(visible) != 4 {
+		t.Fatalf("visible events=%#v, want ordinary user, subagent input, pending completion, and assistant", visible)
+	}
+	for index, wantID := range []string{"entry-user", "entry-input", "entry-pending", "assistant-event"} {
+		if visible[index].ID != wantID {
+			t.Fatalf("visible event %d id=%q, want %q", index, visible[index].ID, wantID)
+		}
+	}
+}
+
+func TestServiceGetFlowerSubagentDetailFailsClosedWhenDetailAdvancesPastTypedTurns(t *testing.T) {
+	t.Parallel()
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+	parent, err := svc.CreateThread(ctx, meta, "parent", "openai/gpt-5-mini", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread parent: %v", err)
+	}
+	host := &recordingFloretHost{
+		turnPage: flruntime.ThreadTurnsPage{
+			ThreadID:       "child-toctou",
+			ThroughOrdinal: 1,
+			Turns: []flruntime.ThreadTurnSnapshot{{
+				TurnID: "turn-mission", RunID: "run-mission", Ordinal: 1,
+				UserEntryID: "entry-mission", UserMessageOrigin: flruntime.ThreadUserMessageOriginDelegatedMission,
+				ThroughOrdinal: 1,
+			}},
+		},
+		detail: flruntime.SubAgentDetail{
+			Snapshot: flruntime.SubAgentSnapshot{ThreadID: "child-toctou", ParentThreadID: flruntime.ThreadID(parent.ThreadID)},
+			Context:  flruntime.ThreadContextSnapshot{ThreadID: "child-toctou"},
+			Events: []flruntime.ThreadDetailEvent{{
+				ID: "entry-admitted-after-turn-read", ThreadID: "child-toctou", TurnID: "turn-new",
+				Kind: flruntime.ThreadDetailEventUserMessage,
+			}},
+		},
+	}
+	svc.mu.Lock()
+	bindRecordingThreadRead(svc, parent.ThreadID, host)
+	bindRecordingSubagentRead(svc, parent.ThreadID, host)
+	svc.mu.Unlock()
+	_, err = svc.GetFlowerSubagentDetail(ctx, meta, parent.ThreadID, "child-toctou", 0, 50)
+	if err == nil || !strings.Contains(err.Error(), "unknown canonical user entry") {
+		t.Fatalf("GetFlowerSubagentDetail error=%v, want fail-closed TOCTOU rejection", err)
+	}
+}
+
 func TestServiceGetFlowerSubagentDetailProjectsCanonicalContextFacts(t *testing.T) {
 	t.Parallel()
 

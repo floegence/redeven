@@ -2614,6 +2614,10 @@ func (s *Service) flowerSubagentDetailResponse(endpointID string, detail flrunti
 	if err != nil {
 		return FlowerSubagentDetailResponse{}, err
 	}
+	visibleEvents, err := visibleSubagentDetailEvents(detail.Events, turns)
+	if err != nil {
+		return FlowerSubagentDetailResponse{}, err
+	}
 	timelineItems, err := s.threadTimelineMessagesFromTurns(endpointID, threadID, turns)
 	if err != nil {
 		return FlowerSubagentDetailResponse{}, err
@@ -2653,7 +2657,7 @@ func (s *Service) flowerSubagentDetailResponse(endpointID string, detail flrunti
 	return FlowerSubagentDetailResponse{
 		Summary:             flowerSubagentSummary(detail.Snapshot),
 		Messages:            messages,
-		Timeline:            flowerSubagentTimelineRows(visibleSubagentDetailEvents(detail.Events, hiddenUserMessageIDs)),
+		Timeline:            flowerSubagentTimelineRows(visibleEvents),
 		Activity:            flowerSubagentActivityBlockValue(detail.ActivityTimeline),
 		ContextUsage:        contextUsage,
 		ContextCompactions:  contextCompactions,
@@ -2665,21 +2669,46 @@ func (s *Service) flowerSubagentDetailResponse(endpointID string, detail flrunti
 	}, nil
 }
 
-func visibleSubagentDetailEvents(events []flruntime.ThreadDetailEvent, hiddenUserMessageIDs map[string]struct{}) []flruntime.ThreadDetailEvent {
+func visibleSubagentDetailEvents(events []flruntime.ThreadDetailEvent, turns []flruntime.ThreadTurnSnapshot) ([]flruntime.ThreadDetailEvent, error) {
+	origins, err := canonicalUserMessageOriginsFromTurns(turns)
+	if err != nil {
+		return nil, err
+	}
 	visible := make([]flruntime.ThreadDetailEvent, 0, len(events))
 	for _, event := range events {
-		if event.Kind == flruntime.ThreadDetailEventUserMessage {
-			if _, hidden := hiddenUserMessageIDs[strings.TrimSpace(event.ID)]; hidden {
-				continue
-			}
+		if event.Kind != flruntime.ThreadDetailEventUserMessage {
+			visible = append(visible, event)
+			continue
+		}
+		entryID := strings.TrimSpace(event.ID)
+		origin, ok := origins[entryID]
+		if !ok {
+			return nil, fmt.Errorf("detail event references unknown canonical user entry %q", entryID)
+		}
+		if origin == flruntime.ThreadUserMessageOriginDelegatedMission {
+			continue
 		}
 		visible = append(visible, event)
 	}
-	return visible
+	return visible, nil
 }
 
 func delegatedMissionEntryIDsFromTurns(turns []flruntime.ThreadTurnSnapshot) (map[string]struct{}, error) {
+	origins, err := canonicalUserMessageOriginsFromTurns(turns)
+	if err != nil {
+		return nil, err
+	}
 	hidden := make(map[string]struct{})
+	for entryID, origin := range origins {
+		if origin == flruntime.ThreadUserMessageOriginDelegatedMission {
+			hidden[entryID] = struct{}{}
+		}
+	}
+	return hidden, nil
+}
+
+func canonicalUserMessageOriginsFromTurns(turns []flruntime.ThreadTurnSnapshot) (map[string]flruntime.ThreadUserMessageOrigin, error) {
+	origins := make(map[string]flruntime.ThreadUserMessageOrigin)
 	for _, turn := range turns {
 		turnID := strings.TrimSpace(string(turn.TurnID))
 		entryID := strings.TrimSpace(turn.UserEntryID)
@@ -2689,23 +2718,23 @@ func delegatedMissionEntryIDsFromTurns(turns []flruntime.ThreadTurnSnapshot) (ma
 			}
 			continue
 		}
+		if entryID == "" {
+			return nil, fmt.Errorf("Floret user turn %q is missing its canonical user entry", turnID)
+		}
 		switch turn.UserMessageOrigin {
 		case flruntime.ThreadUserMessageOriginDelegatedMission:
-			if entryID == "" {
-				return nil, fmt.Errorf("Floret delegated mission turn %q is missing its canonical user entry", turnID)
-			}
-			hidden[entryID] = struct{}{}
 		case flruntime.ThreadUserMessageOriginUser,
 			flruntime.ThreadUserMessageOriginSubAgentInput,
 			flruntime.ThreadUserMessageOriginPendingToolCompletion:
-			if entryID == "" {
-				return nil, fmt.Errorf("Floret user turn %q is missing its canonical user entry", turnID)
-			}
 		default:
 			return nil, fmt.Errorf("Floret turn %q has unsupported user-message origin %q", turnID, turn.UserMessageOrigin)
 		}
+		if _, duplicate := origins[entryID]; duplicate {
+			return nil, fmt.Errorf("Floret turns duplicate canonical user entry %q", entryID)
+		}
+		origins[entryID] = turn.UserMessageOrigin
 	}
-	return hidden, nil
+	return origins, nil
 }
 
 func flowerSubagentDetailContextUsage(contextBlock flruntime.ThreadContextSnapshot) (*FlowerContextUsage, error) {

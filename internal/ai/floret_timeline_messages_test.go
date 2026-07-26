@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	flruntime "github.com/floegence/floret/runtime"
 	"github.com/floegence/redeven/internal/session"
@@ -57,6 +58,53 @@ func TestThreadTimelineUsesCanonicalFloretOrdinalOrder(t *testing.T) {
 	last := decodeTimelineMessageForTest(t, response.Messages[len(response.Messages)-2])
 	if last.Role != "user" || last.Content != "user 3" {
 		t.Fatalf("latest user message is not last canonical turn: %#v", last)
+	}
+}
+
+func TestThreadTimelineRetryWithoutUserEntryUsesSourceCanonicalAnchor(t *testing.T) {
+	for _, status := range []flruntime.TurnStatus{
+		flruntime.TurnStatusFailed,
+		flruntime.TurnStatusCancelled,
+		flruntime.TurnStatusCompleted,
+	} {
+		t.Run(string(status), func(t *testing.T) {
+			svc := newTestService(t, nil)
+			now := time.UnixMilli(20_000)
+			turns := []flruntime.ThreadTurnSnapshot{
+				{
+					TurnID: "turn_source", RunID: "run_source", Ordinal: 1,
+					StartedAt: now, UpdatedAt: now, UserEntryID: "entry_source",
+					UserMessageOrigin: flruntime.ThreadUserMessageOriginUser,
+					UserInput:         "source input", Status: flruntime.TurnStatusCompleted, ThroughOrdinal: 1,
+					Projection: flruntime.ThreadTurnProjection{
+						ThreadID: "thread_retry_anchor", TurnID: "turn_source", RunID: "run_source",
+						Status: flruntime.TurnStatusCompleted, ThroughOrdinal: 1, Segments: []flruntime.ThreadTurnProjectionSegment{{
+							Kind: flruntime.ThreadTurnProjectionSegmentAssistantText, Text: "source answer",
+						}},
+					},
+				},
+				{
+					TurnID: "turn_retry", RunID: "run_retry", Ordinal: 2,
+					StartedAt: now.Add(time.Second), UpdatedAt: now.Add(2 * time.Second),
+					RetrySource: &flruntime.ThreadTurnRetrySource{TurnID: "turn_source"},
+					Status:      status, ThroughOrdinal: 2,
+					Projection: flruntime.ThreadTurnProjection{
+						ThreadID: "thread_retry_anchor", TurnID: "turn_retry", RunID: "run_retry",
+						Status: status, ThroughOrdinal: 2,
+					},
+				},
+			}
+			items, err := svc.threadTimelineMessagesFromTurns("env", "thread_retry_anchor", turns)
+			if err != nil {
+				t.Fatalf("threadTimelineMessagesFromTurns: %v", err)
+			}
+			if len(items) != 3 || items[2].Decoration == nil {
+				t.Fatalf("items=%#v, want source user, source assistant, retry decoration", items)
+			}
+			if items[2].Decoration.Anchor.MessageID != "entry_source" {
+				t.Fatalf("retry decoration anchor=%q, want source user entry", items[2].Decoration.Anchor.MessageID)
+			}
+		})
 	}
 }
 

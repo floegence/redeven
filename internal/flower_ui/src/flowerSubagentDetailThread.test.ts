@@ -46,7 +46,7 @@ function detail(overrides: Partial<FlowerSubagentDetail> = {}): FlowerSubagentDe
 }
 
 describe('projectSubagentDetailThread', () => {
-  it('uses canonical Floret messages as the complete transcript authority', () => {
+  it('uses canonical Floret messages as the complete transcript authority without reordering', () => {
     const projected = projectSubagentDetailThread(detail({
       messages: [
         message({
@@ -68,14 +68,14 @@ describe('projectSubagentDetailThread', () => {
     }));
 
     expect(projected?.messages.map((item) => item.id)).toEqual([
+      'assistant-turn-2',
       'user-turn-1',
       'assistant-turn-1',
-      'assistant-turn-2',
     ]);
     expect(projected?.messages.map((item) => item.content)).toEqual([
+      'Second answer.',
       'Visible follow-up input.',
       'Canonical assistant answer.',
-      'Second answer.',
     ]);
   });
 

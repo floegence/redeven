@@ -7,12 +7,6 @@ import type {
 } from './contracts/flowerSurfaceContracts';
 import { trimString } from './flowerSurfaceModel';
 
-type OrderedMessage = {
-  message: FlowerChatMessage;
-  ordinal: number;
-  sequence: number;
-};
-
 function subagentThreadStatus(status: string): FlowerThreadStatus {
   switch (trimString(status)) {
     case 'queued':
@@ -36,14 +30,7 @@ function subagentThreadStatus(status: string): FlowerThreadStatus {
 }
 
 function canonicalMessages(detail: FlowerSubagentDetail): FlowerChatMessage[] {
-  return detail.messages
-    .map((message, sequence): OrderedMessage => ({
-      message,
-      ordinal: Math.max(0, Math.floor(Number(message.turn_ordinal ?? 0))) * 4 + (message.role === 'user' ? 0 : 1),
-      sequence,
-    }))
-    .sort((left, right) => left.ordinal - right.ordinal || left.sequence - right.sequence)
-    .map((entry) => entry.message);
+  return detail.messages;
 }
 
 function readStatus(thread: FlowerThreadSnapshot): FlowerThreadReadStatus {
