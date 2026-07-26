@@ -90,7 +90,7 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 		"provider_base_url": strings.TrimSpace(providerCfg.BaseURL),
 		"model":             modelName,
 	})
-	state := newRuntimeState(taskObjective)
+	state := newTodoRuntimeState()
 	if source, hydrated := r.hydrateTodoRuntimeState(ctx, &state); hydrated {
 		r.recordRunDiagnostic("todo.hydrated", RealtimeStreamKindLifecycle, map[string]any{
 			"source":           source,

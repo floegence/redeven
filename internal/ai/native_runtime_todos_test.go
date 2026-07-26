@@ -89,7 +89,7 @@ func TestActionableTodoSummary_IgnoresControlSignalTodos(t *testing.T) {
 func TestUpdateTodoRuntimeState(t *testing.T) {
 	t.Parallel()
 
-	state := newRuntimeState("test objective")
+	state := newTodoRuntimeState()
 	calls := []ToolCall{
 		{ID: "call_1", Name: "write_todos"},
 	}
@@ -137,7 +137,7 @@ func TestHydrateTodoRuntimeStateRequiresThreadSnapshot(t *testing.T) {
 	t.Parallel()
 
 	r := &run{}
-	state := newRuntimeState("objective")
+	state := newTodoRuntimeState()
 	source, hydrated := r.hydrateTodoRuntimeState(context.Background(), &state)
 	if hydrated {
 		t.Fatalf("expected no todo hydration without thread snapshot")

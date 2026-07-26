@@ -176,13 +176,29 @@ check_no_agent_shadow_storage() {
     --glob '*.go' \
     --glob '!**/*_test.go' \
     --glob '!internal/testutil/legacydb/**' \
-    --glob '!internal/ai/threadstore/schema.go' \
     "$shadow_pattern" internal 2>/dev/null); then
     printf '%s\n' "$matches"
     fail "Redeven production code must not define, query, or persist Agent shadow conversation state."
   fi
 
   echo "[INFO] Agent shadow storage boundary checked"
+}
+
+check_agent_shadow_contract_semantics() {
+	if ! GOWORK=off go test ./internal/ai \
+		-run '^(TestAgentShadowContractsStayRemoved|TestAgentShadowContractScannerRejectsForbiddenShapes|TestTodoRuntimeStateShapeIsExact)$' \
+		-count=1; then
+		fail "Removed Agent contracts and the exact todo runtime state shape must remain enforced."
+		return
+	fi
+	if ! GOWORK=off go test ./internal/ai/threadstore \
+		-run '^(TestStoreSchemaContainsOnlyProductThreadState|TestExactProductSchemaAllowlistRejectsShadowExtensions)$' \
+		-count=1; then
+		fail "The product threadstore must match the exact reviewed table and thread-settings column allowlists."
+		return
+	fi
+
+	echo "[INFO] Agent shadow contract semantics checked"
 }
 
 check_floret_capability_bootstrap_boundary() {
@@ -553,6 +569,7 @@ check_local_source_wiring
 check_no_floret_internal_imports
 check_no_floret_schema_access
 check_no_agent_shadow_storage
+check_agent_shadow_contract_semantics
 check_floret_capability_bootstrap_boundary
 check_floret_thread_creation_boundary
 check_removed_product_schema_paths

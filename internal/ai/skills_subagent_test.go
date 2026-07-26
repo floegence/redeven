@@ -274,7 +274,7 @@ This content should appear in overlay.`
 	}
 	tools := []ToolDef{{Name: "use_skill", Visibility: ToolVisibilityStandard, Capabilities: []ToolCapabilityClass{ToolCapabilityOpenWorld}}}
 	contract := resolveRunCapabilityContract(r, tools, testSignalDefs("task_complete"), false)
-	prompt := r.buildLayeredSystemPrompt("objective", permissionTypeString(FlowerPermissionApprovalRequired), TaskComplexityStandard, 0, true, tools, newRuntimeState("objective"), "", contract)
+	prompt := r.buildLayeredSystemPrompt("objective", permissionTypeString(FlowerPermissionApprovalRequired), TaskComplexityStandard, 0, true, tools, newTodoRuntimeState(), "", contract)
 	if !strings.Contains(prompt, "Available skills:") || !strings.Contains(prompt, "prompt-skill") {
 		t.Fatalf("prompt missing skills catalog: %q", prompt)
 	}

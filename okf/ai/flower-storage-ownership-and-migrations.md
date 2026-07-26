@@ -9,7 +9,7 @@ timestamp: 2026-07-18T00:00:00Z
 
 - Authority: Floret owns admitted Agent state; Redeven owns host settings, unadmitted work, upload storage, routing/read state, security audit, and cross-store operation intent.
 - Outcome: schema v6 adds revisioned composer drafts to host settings, routing, queue state, and owner-scoped attachments without copying canonical Agent state.
-- Invariants: migration accepts only verified product schemas v2 through v6; Floret title migration for v2 runs before the Redeven SQL migration transaction.
+- Invariants: migration accepts only verified product schemas v2 through v6; fresh product tables and thread-setting columns are closed allowlists; Floret title migration for v2 runs before the Redeven SQL migration transaction.
 - Failure boundary: title conflicts, unsupported kind/version, schema drift, invalid records, and failed Floret calls stop startup without repair, backup, reset, or substitute database creation.
 
 # Contract
@@ -17,6 +17,8 @@ timestamp: 2026-07-18T00:00:00Z
 ## Schema v6 ownership
 
 `ai_thread_settings` stores endpoint, namespace, model, reasoning, permission type, working directory, pin state, queue revision, host audit identity, and settings timestamps. Canonical title, lifecycle, preview, latest turn, and Agent relationships exist only in Floret. Upload rows and files remain Redeven resources. Before admission, `ai_upload_refs` binds uploads to one queued command. Its admission state is `ready` or immutable `in_flight`; bulk draft recovery excludes the latter. Admission atomically settles command and upload ownership. A known pre-admission failure releases the command as a draft. Startup may return a crash-interrupted command to `ready` only after public Floret reads prove its exact TurnID was not admitted. Redeven stores no admitted TurnID/RunID lifecycle or message mapping, so a missing settlement row is an error.
+
+The current-process todo prompt projection contains only typed counts and the Floret todo snapshot version/update round. It has no JSON tags or durable representation. Removed dialogue pairs, structured-user-input records, loop snapshots, pending tool queues, error queues, progress signatures, objective digests, and estimate-source fields are not Redeven contracts and cannot be reintroduced as declarations or durable JSON keys.
 
 `ai_composer_drafts` stores one unadmitted product draft per exact `(endpoint_id, owner_user_hash, scope_id)`. Its strict JSON snapshot, monotonic revision, expiring editor lease, update time, and 30-day expiry are Redeven coordination state, not message history. Draft read, lease, and mutation remain available whenever the Redeven AI service and threadstore have started; they do not require a configured model profile. Only thread preparation and turn admission require usable model capability. Upload completion creates only an owner-bound `draft_pending` claim. An exact lease and revision mutation atomically promotes selected claims to `draft`, removes claims no longer present, and updates the ordered snapshot. Admission atomically validates text, model, proposed TurnID, attachment order, owner, and revision before moving claims to a queued command and deleting the draft row.
 
@@ -49,6 +51,8 @@ grant Redeven authority over Floret's database schema.
 
 Redeven migration code may call only public Floret maintenance APIs and may retain only host settings, resources, queue state, routing/read state, audit, and operation intent. It must not query Floret SQLite, infer canonical data from old Redeven rows, or keep legacy aliases and compatibility parsers after conversion to v4.
 
+Fresh product stores have an exact reviewed table inventory, and `ai_thread_settings` has an exact reviewed column inventory. Any additional table or setting column is a boundary change that must fail the schema ownership test until its product responsibility is reviewed. AST and reflection checks separately keep removed Agent-shaped declarations, serialization tags, and durable shadow JSON keys out of production code while allowing current-process diagnostics.
+
 # Evidence
 
 - `redeven:internal/ai/threadstore/schema.go` - Threadstore declares product schema version 6 and its host-only tables.
@@ -57,6 +61,8 @@ Redeven migration code may call only public Floret maintenance APIs and may reta
 - `redeven:internal/ai/service.go:289` - Title preflight compares and writes through Floret public APIs before opening the product store.
 - `redeven:internal/ai/threadstore/product_migrations.go` - Contiguous migrations retain product routing, remove Agent shadows, and migrate upload ownership without guessing.
 - `redeven:internal/ai/threadstore/schema_v6_test.go` - Tests verify fresh stores and the v5-to-v6 draft migration preserve product records.
+- `redeven:internal/ai/threadstore/store_test.go` - Fresh-store tests enforce exact product table and thread-setting column allowlists and reject shadow extensions.
 - `redeven:internal/ai/threadstore/composer_drafts_test.go` - Tests enforce lease, revision, claim promotion, expiry, deletion, and reconciliation boundaries.
 - `redeven:internal/ai/threadstore/schema_migration_test.go` - Tests verify title/routing/ownership migration, rollback, schema drift rejection, and unsupported version rejection.
-- `redeven:scripts/check_floret_dependency_boundary.sh:1` - Static checks reject Floret storage access and local dependency wiring.
+- `redeven:internal/ai/agent_shadow_boundary_test.go` - AST and reflection checks reject removed Agent contracts and lock the non-serialized todo projection shape.
+- `redeven:scripts/check_floret_dependency_boundary.sh:1` - The boundary gate rejects Floret storage/local wiring and runs the semantic Agent-shadow and schema allowlist tests.

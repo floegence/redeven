@@ -2811,7 +2811,7 @@ func validateAskUserSignal(signal askUserSignal) string {
 	return ""
 }
 
-func (r *run) hydrateTodoRuntimeState(ctx context.Context, state *runtimeState) (string, bool) {
+func (r *run) hydrateTodoRuntimeState(ctx context.Context, state *todoRuntimeState) (string, bool) {
 	if state == nil {
 		return "", false
 	}
@@ -2852,7 +2852,7 @@ func (r *run) hydrateTodoRuntimeState(ctx context.Context, state *runtimeState) 
 	return "", false
 }
 
-func updateTodoRuntimeState(state *runtimeState, calls []ToolCall, results []ToolResult, round int) {
+func updateTodoRuntimeState(state *todoRuntimeState, calls []ToolCall, results []ToolResult, round int) {
 	if state == nil || len(results) == 0 {
 		return
 	}
@@ -2953,7 +2953,7 @@ func readAnyInt(raw any) int {
 	}
 }
 
-func (r *run) buildLayeredSystemPrompt(objective string, permissionType string, complexity string, round int, isFirstRound bool, tools []ToolDef, state runtimeState, exceptionOverlay string, capability runCapabilityContract) string {
+func (r *run) buildLayeredSystemPrompt(objective string, permissionType string, complexity string, round int, isFirstRound bool, tools []ToolDef, state todoRuntimeState, exceptionOverlay string, capability runCapabilityContract) string {
 	snapshot := buildPromptRuntimeSnapshot(r, objective, permissionType, complexity, round, isFirstRound, tools, state, exceptionOverlay, capability)
 	document := buildPromptDocument(snapshot)
 	return document.render(layeredPromptStaticPrefixCache, promptStaticPrefixCacheKey(snapshot))

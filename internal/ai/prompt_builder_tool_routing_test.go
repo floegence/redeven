@@ -15,7 +15,7 @@ func buildPromptForToolRoutingTest(t *testing.T) string {
 	})
 	tools := []ToolDef{{Name: "terminal.exec"}, {Name: "file.read"}, {Name: "okf.index"}, {Name: "okf.search"}, {Name: "okf.open"}, {Name: "web.search"}}
 	contract := resolveRunCapabilityContract(r, tools, nil, false)
-	return r.buildLayeredSystemPrompt("objective", permissionTypeString(FlowerPermissionApprovalRequired), TaskComplexityStandard, 0, true, tools, newRuntimeState("objective"), "", contract)
+	return r.buildLayeredSystemPrompt("objective", permissionTypeString(FlowerPermissionApprovalRequired), TaskComplexityStandard, 0, true, tools, newTodoRuntimeState(), "", contract)
 }
 
 func buildReadonlyPromptForToolRoutingTest(t *testing.T) string {
@@ -38,7 +38,7 @@ func buildReadonlyPromptForToolRoutingTest(t *testing.T) string {
 		{Name: "subagents", Visibility: ToolVisibilityDelegationControl},
 	}
 	contract := resolveRunCapabilityContract(r, tools, nil, false)
-	return r.buildLayeredSystemPrompt("objective", permissionTypeString(FlowerPermissionReadonly), TaskComplexityStandard, 0, true, tools, newRuntimeState("objective"), "", contract)
+	return r.buildLayeredSystemPrompt("objective", permissionTypeString(FlowerPermissionReadonly), TaskComplexityStandard, 0, true, tools, newTodoRuntimeState(), "", contract)
 }
 
 func assertPromptContains(t *testing.T, prompt string, want string) {

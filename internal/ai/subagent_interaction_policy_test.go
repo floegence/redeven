@@ -272,7 +272,7 @@ func TestBuildLayeredSystemPrompt_NoUserInteractionOmitsAskUserGuidance(t *testi
 	})
 	tools := []ToolDef{{Name: "terminal.exec"}}
 	contract := resolveRunCapabilityContract(r, tools, testSignalDefs("task_complete"), false)
-	prompt := r.buildLayeredSystemPrompt("objective", permissionTypeString(FlowerPermissionApprovalRequired), TaskComplexityStandard, 0, true, tools, newRuntimeState("objective"), "", contract)
+	prompt := r.buildLayeredSystemPrompt("objective", permissionTypeString(FlowerPermissionApprovalRequired), TaskComplexityStandard, 0, true, tools, newTodoRuntimeState(), "", contract)
 	if strings.Contains(prompt, "call ask_user") || strings.Contains(prompt, "ask_user is unavailable") || strings.Contains(prompt, "Do not attempt ask_user") {
 		t.Fatalf("no-user prompt should not include ask_user guidance: %q", prompt)
 	}
@@ -296,7 +296,7 @@ func TestBuildLayeredSystemPrompt_SubagentAutonomousUsesDelegatedWording(t *test
 	})
 	tools := []ToolDef{{Name: "terminal.exec"}}
 	contract := resolveRunCapabilityContract(r, tools, testSignalDefs("task_complete"), false)
-	prompt := r.buildLayeredSystemPrompt("objective", permissionTypeString(FlowerPermissionApprovalRequired), TaskComplexityStandard, 0, true, tools, newRuntimeState("objective"), "", contract)
+	prompt := r.buildLayeredSystemPrompt("objective", permissionTypeString(FlowerPermissionApprovalRequired), TaskComplexityStandard, 0, true, tools, newTodoRuntimeState(), "", contract)
 	if !strings.Contains(prompt, "You are Flower operating as a delegated autonomous subagent") {
 		t.Fatalf("subagent prompt missing delegated identity: %q", prompt)
 	}
@@ -316,7 +316,7 @@ func TestBuildLayeredSystemPrompt_ApprovalRequiredDescribesPermissionType(t *tes
 	tools := []ToolDef{{Name: "terminal.exec"}, {Name: "file.edit", Mutating: true}}
 	signals := testSignalDefs("task_complete", "ask_user")
 	contract := resolveRunCapabilityContract(r, tools, signals, false)
-	prompt := r.buildLayeredSystemPrompt("objective", permissionTypeString(FlowerPermissionApprovalRequired), TaskComplexityStandard, 0, true, tools, newRuntimeState("objective"), "", contract)
+	prompt := r.buildLayeredSystemPrompt("objective", permissionTypeString(FlowerPermissionApprovalRequired), TaskComplexityStandard, 0, true, tools, newTodoRuntimeState(), "", contract)
 	if !strings.Contains(prompt, "- Permission type: approval_required") {
 		t.Fatalf("prompt missing approval_required permission type: %q", prompt)
 	}
@@ -333,7 +333,7 @@ func TestBuildLayeredSystemPrompt_NoUserInteractionUsesTaskCompleteBlockers(t *t
 	})
 	tools := []ToolDef{{Name: "terminal.exec"}}
 	contract := resolveRunCapabilityContract(r, tools, testSignalDefs("task_complete", "ask_user"), false)
-	prompt := r.buildLayeredSystemPrompt("objective", permissionTypeString(FlowerPermissionApprovalRequired), TaskComplexityStandard, 0, true, tools, newRuntimeState("objective"), "", contract)
+	prompt := r.buildLayeredSystemPrompt("objective", permissionTypeString(FlowerPermissionApprovalRequired), TaskComplexityStandard, 0, true, tools, newTodoRuntimeState(), "", contract)
 	if !strings.Contains(prompt, "User interaction is disabled in this run.") {
 		t.Fatalf("no-user prompt missing disabled interaction guidance: %q", prompt)
 	}
@@ -351,7 +351,7 @@ func TestBuildLayeredSystemPrompt_SubagentNoUserInteractionUsesParentActions(t *
 	})
 	tools := []ToolDef{{Name: "terminal.exec"}}
 	contract := resolveRunCapabilityContract(r, tools, testSignalDefs("task_complete"), false)
-	prompt := r.buildLayeredSystemPrompt("objective", permissionTypeString(FlowerPermissionApprovalRequired), TaskComplexityStandard, 0, true, tools, newRuntimeState("objective"), "", contract)
+	prompt := r.buildLayeredSystemPrompt("objective", permissionTypeString(FlowerPermissionApprovalRequired), TaskComplexityStandard, 0, true, tools, newTodoRuntimeState(), "", contract)
 	if !strings.Contains(prompt, "finish with task_complete including blockers plus suggested parent actions") {
 		t.Fatalf("subagent prompt missing parent-action guidance: %q", prompt)
 	}

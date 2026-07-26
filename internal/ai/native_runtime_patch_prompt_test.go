@@ -21,7 +21,7 @@ func TestBuildLayeredSystemPrompt_DocumentsCanonicalPatchUsage(t *testing.T) {
 		0,
 		true,
 		[]ToolDef{{Name: "terminal.exec"}, {Name: "file.read"}, {Name: "file.edit"}, {Name: "file.write"}, {Name: "apply_patch"}},
-		newRuntimeState("Update a source file"),
+		newTodoRuntimeState(),
 		"",
 		runCapabilityContract{},
 	)

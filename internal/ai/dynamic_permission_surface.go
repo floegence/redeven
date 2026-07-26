@@ -124,7 +124,7 @@ func (r *run) buildRunToolSurfaceWithSnapshotCommit(ctx context.Context, cfg run
 	if err != nil {
 		return runToolSurface{}, err
 	}
-	state := runtimeState{}
+	state := todoRuntimeState{}
 	if cfg.State != nil {
 		state = cfg.State.snapshot()
 	}

@@ -37,7 +37,6 @@ type promptRuntimeSnapshot struct {
 	TaskComplexity                 string
 	PromptProfile                  string
 	TodoStatus                     promptTodoStatus
-	RecentErrors                   []string
 	AvailableToolNames             string
 	AvailableSkills                []SkillMeta
 	ActiveSkills                   []SkillActivation
@@ -181,7 +180,7 @@ func (d promptDocument) render(cache *promptStaticPrefixCache, key cachedPromptP
 	return strings.Join(parts, "\n\n")
 }
 
-func buildPromptRuntimeSnapshot(r *run, objective string, permissionType string, complexity string, round int, isFirstRound bool, tools []ToolDef, state runtimeState, exceptionOverlay string, capability runCapabilityContract) promptRuntimeSnapshot {
+func buildPromptRuntimeSnapshot(r *run, objective string, permissionType string, complexity string, round int, isFirstRound bool, tools []ToolDef, state todoRuntimeState, exceptionOverlay string, capability runCapabilityContract) promptRuntimeSnapshot {
 	complexity = normalizeTaskComplexity(complexity)
 	allowUserInteraction := capability.AllowUserInteraction
 	if !allowUserInteraction && strings.TrimSpace(capability.PromptProfile) == "" {
@@ -218,7 +217,6 @@ func buildPromptRuntimeSnapshot(r *run, objective string, permissionType string,
 			SnapshotVersion:  state.TodoSnapshotVersion,
 			LastUpdatedRound: state.TodoLastUpdatedRound,
 		},
-		RecentErrors:                   cloneStringSlice(state.RecentErrors),
 		AvailableToolNames:             availableToolNames,
 		AvailableSkills:                availableSkills,
 		ActiveSkills:                   activeSkills,
@@ -624,10 +622,6 @@ func buildPromptAutonomousInteractionSection(spec promptProfileSpec) promptSecti
 }
 
 func buildPromptRuntimeContextSection(snapshot promptRuntimeSnapshot) promptSection {
-	recentErrors := "none"
-	if len(snapshot.RecentErrors) > 0 {
-		recentErrors = strings.Join(snapshot.RecentErrors, " | ")
-	}
 	todoStatus := "unknown"
 	if snapshot.TodoStatus.TrackingEnabled {
 		todoStatus = fmt.Sprintf(
@@ -649,7 +643,6 @@ func buildPromptRuntimeContextSection(snapshot promptRuntimeSnapshot) promptSect
 		fmt.Sprintf("- Task complexity: %s", snapshot.TaskComplexity),
 		fmt.Sprintf("- Available tools: %s", snapshot.AvailableToolNames),
 		fmt.Sprintf("- Objective: %s", snapshot.Objective),
-		fmt.Sprintf("- Recent errors: %s", recentErrors),
 		fmt.Sprintf("- Todo tracking: %s", todoStatus),
 	)
 	if snapshot.AllowUserInteraction {
