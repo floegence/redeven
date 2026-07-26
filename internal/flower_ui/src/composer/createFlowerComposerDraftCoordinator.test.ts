@@ -228,6 +228,45 @@ describe('createFlowerComposerDraftCoordinator', () => {
     expect(acquire).toHaveBeenLastCalledWith('thread-1', 'workbench', true);
   });
 
+  it('keeps a redacted conflict stable when background polling returns a lease-redacted snapshot', async () => {
+    vi.useFakeTimers();
+    let unsubscribe: () => void = () => undefined;
+    try {
+      const lease = ownedLease(Date.now() + 30_000, 'workbench');
+      const load = vi.fn(async () => draftSnapshot(4, draftValue({ text: 'shared draft' })));
+      const acquire = vi.fn()
+        .mockResolvedValueOnce({
+          state: 'conflict' as const,
+          snapshot: draftSnapshot(4, draftValue({ text: 'shared draft' })),
+          holderID: 'another_surface',
+        })
+        .mockResolvedValueOnce({
+          state: 'owned' as const,
+          snapshot: draftSnapshot(4, draftValue({ text: 'shared draft' }), lease),
+          lease,
+        });
+      const coordinator = createFlowerComposerDraftCoordinator({
+        persistence: persistenceWith({ load, acquire }),
+      });
+      const session = coordinator.open('thread-1', 'workbench');
+      unsubscribe = session.subscribe(() => undefined);
+
+      await expect(session.acquire()).resolves.toMatchObject({ kind: 'lease_conflict' });
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(load).toHaveBeenCalledTimes(2);
+      expect(session.leaseState()).toMatchObject({
+        kind: 'lease_conflict',
+        holder_id: 'another_surface',
+      });
+
+      await expect(session.takeOver()).resolves.toMatchObject({ kind: 'lease_owned' });
+      expect(session.leaseState()).toMatchObject({ kind: 'lease_owned' });
+    } finally {
+      unsubscribe();
+      vi.useRealTimers();
+    }
+  });
+
   it('keeps the lease bearer and unsaved projection when renew or mutation transport fails', async () => {
     const lease = ownedLease();
     const mutate = vi.fn().mockRejectedValueOnce(new Error('offline')).mockImplementation(

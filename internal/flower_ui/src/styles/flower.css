@@ -290,9 +290,11 @@
 }
 
 .flower-companion-collapsed-action {
+  display: flex;
   min-width: 0;
   height: 100%;
   flex: 1 1 auto;
+  align-items: center;
   cursor: pointer;
   overflow: hidden;
   border: 0;
@@ -301,7 +303,12 @@
   padding: 0;
   text-align: left;
   font-size: 0.6875rem;
+  line-height: 1rem;
   outline: none;
+}
+
+.flower-companion-collapsed-recovery {
+  color: color-mix(in srgb, var(--destructive) 42%, var(--foreground));
 }
 
 .flower-companion-collapsed-action:focus-visible {
