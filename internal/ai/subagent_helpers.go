@@ -2,15 +2,6 @@ package ai
 
 import "strings"
 
-func cloneStringSlice(in []string) []string {
-	if len(in) == 0 {
-		return []string{}
-	}
-	out := make([]string, len(in))
-	copy(out, in)
-	return out
-}
-
 func normalizeSubagentThreadIDs(value any) []string {
 	ids := extractStringSlice(value)
 	out := make([]string, 0, len(ids))
