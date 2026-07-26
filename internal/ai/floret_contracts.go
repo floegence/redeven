@@ -100,6 +100,7 @@ type floretCompactionHost interface {
 type floretThreadReadHost interface {
 	ReadThread(context.Context, flruntime.ThreadID) (flruntime.ThreadSnapshot, error)
 	ReadThreadOverview(context.Context, flruntime.ThreadID) (flruntime.ThreadOverview, error)
+	ReadThreadTurn(context.Context, flruntime.ReadThreadTurnRequest) (flruntime.ThreadTurnSnapshot, error)
 	ListThreadTurns(context.Context, flruntime.ListThreadTurnsRequest) (flruntime.ThreadTurnsPage, error)
 	ReadThreadAgentTodos(context.Context, flruntime.ThreadID) (flruntime.ThreadAgentTodoState, error)
 	ReadThreadContext(context.Context, flruntime.ThreadID) (flruntime.ThreadContextSnapshot, error)
@@ -108,6 +109,7 @@ type floretThreadReadHost interface {
 
 type floretSubagentReadHost interface {
 	ListSubAgents(context.Context, flruntime.ThreadID) ([]flruntime.SubAgentSnapshot, error)
+	ReadThreadTurn(context.Context, flruntime.ReadThreadTurnRequest) (flruntime.ThreadTurnSnapshot, error)
 	ListThreadTurns(context.Context, flruntime.ListThreadTurnsRequest) (flruntime.ThreadTurnsPage, error)
 	ReadSubAgentDetail(context.Context, flruntime.ReadSubAgentDetailRequest) (flruntime.SubAgentDetail, error)
 }

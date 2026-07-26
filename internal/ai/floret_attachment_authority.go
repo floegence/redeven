@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 
 	flruntime "github.com/floegence/floret/runtime"
@@ -30,6 +31,19 @@ func (a floretLiveAttachmentAuthority) ReadCanonicalAttachmentMembership(ctx con
 }
 
 func (a floretLiveAttachmentAuthority) find(ctx context.Context, exactTurnID string, attachmentID string) (CanonicalAttachmentMembership, error) {
+	exactTurnID = strings.TrimSpace(exactTurnID)
+	if exactTurnID != "" {
+		turn, err := a.host.ReadThreadTurn(ctxOrBackground(ctx), flruntime.ReadThreadTurnRequest{
+			ThreadID: flruntime.ThreadID(a.threadID), TurnID: flruntime.TurnID(exactTurnID),
+		})
+		if errors.Is(err, flruntime.ErrTurnNotFound) {
+			return CanonicalAttachmentMembership{}, sql.ErrNoRows
+		}
+		if err != nil {
+			return CanonicalAttachmentMembership{}, err
+		}
+		return canonicalAttachmentMembershipForTurn(a.threadID, turn, attachmentID)
+	}
 	var before *flruntime.ThreadTurnCursor
 	for {
 		req := flruntime.ListThreadTurnsRequest{ThreadID: flruntime.ThreadID(a.threadID)}
@@ -44,20 +58,12 @@ func (a floretLiveAttachmentAuthority) find(ctx context.Context, exactTurnID str
 			return CanonicalAttachmentMembership{}, err
 		}
 		for _, turn := range page.Turns {
-			turnID := strings.TrimSpace(string(turn.TurnID))
-			if exactTurnID != "" && turnID != exactTurnID {
-				continue
+			membership, membershipErr := canonicalAttachmentMembershipForTurn(a.threadID, turn, attachmentID)
+			if membershipErr == nil {
+				return membership, nil
 			}
-			for _, attachment := range turn.UserAttachments {
-				id, digest, legacy, err := floretUploadIdentityFromResourceRef(attachment.ResourceRef)
-				if err != nil || id != attachmentID || (digest == "" && !legacy) {
-					continue
-				}
-				return CanonicalAttachmentMembership{
-					ThreadID: a.threadID, TurnID: turnID, AttachmentID: id,
-					ResourceRef: attachment.ResourceRef, ContentSHA256: digest,
-					Name: attachment.Name, DetectedMediaType: attachment.MIMEType, SizeBytes: attachment.SizeBytes,
-				}, nil
+			if !errors.Is(membershipErr, sql.ErrNoRows) {
+				return CanonicalAttachmentMembership{}, membershipErr
 			}
 		}
 		if !page.HasMore {
@@ -71,6 +77,25 @@ func (a floretLiveAttachmentAuthority) find(ctx context.Context, exactTurnID str
 		}
 		before = page.BeforeCursor
 	}
+}
+
+func canonicalAttachmentMembershipForTurn(threadID string, turn flruntime.ThreadTurnSnapshot, attachmentID string) (CanonicalAttachmentMembership, error) {
+	turnID := strings.TrimSpace(string(turn.TurnID))
+	if turnID == "" {
+		return CanonicalAttachmentMembership{}, errors.New("Floret returned an empty turn identity")
+	}
+	for _, attachment := range turn.UserAttachments {
+		id, digest, legacy, err := floretUploadIdentityFromResourceRef(attachment.ResourceRef)
+		if err != nil || id != attachmentID || (digest == "" && !legacy) {
+			continue
+		}
+		return CanonicalAttachmentMembership{
+			ThreadID: threadID, TurnID: turnID, AttachmentID: id,
+			ResourceRef: attachment.ResourceRef, ContentSHA256: digest,
+			Name: attachment.Name, DetectedMediaType: attachment.MIMEType, SizeBytes: attachment.SizeBytes,
+		}, nil
+	}
+	return CanonicalAttachmentMembership{}, sql.ErrNoRows
 }
 
 func (s *Service) openCanonicalLiveAttachment(ctx context.Context, owner UploadOwner, threadID string, attachmentID string) (openedCanonicalAttachment, error) {
@@ -104,7 +129,10 @@ func (s *Service) OpenCanonicalLiveAttachmentForTurn(ctx context.Context, owner 
 	}
 	host, err := s.openFloretThreadReadHost(ctxOrBackground(ctx), threadID)
 	if err != nil {
-		return nil, NewUploadError(UploadErrorNotFound, false, errors.New("attachment not found"))
+		if errors.Is(err, flruntime.ErrThreadNotFound) || errors.Is(err, flruntime.ErrThreadDeleted) {
+			return nil, NewUploadError(UploadErrorNotFound, false, errors.New("attachment not found"))
+		}
+		return nil, NewUploadError(UploadErrorStoreUnavailable, true, fmt.Errorf("open canonical attachment authority: %w", err))
 	}
 	authority := floretLiveAttachmentAuthority{threadID: threadID, host: host}
 	return s.OpenLiveUpload(ctx, owner, threadID, turnID, attachmentID, authority)

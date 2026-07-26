@@ -666,8 +666,14 @@ func (s *Service) OpenLiveUpload(ctx context.Context, owner UploadOwner, threadI
 		return nil, NewUploadError(UploadErrorNotFound, false, errors.New("attachment not found"))
 	}
 	membership, err := authority.ReadCanonicalAttachmentMembership(ctxOrBackground(ctx), threadID, turnID, uploadID)
-	if err != nil || strings.TrimSpace(membership.ThreadID) != threadID || strings.TrimSpace(membership.TurnID) != turnID || strings.TrimSpace(membership.AttachmentID) != uploadID || strings.TrimSpace(membership.ResourceRef) == "" {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, NewUploadError(UploadErrorNotFound, false, errors.New("attachment not found"))
+	}
+	if err != nil {
+		return nil, NewUploadError(UploadErrorStoreUnavailable, true, fmt.Errorf("read canonical attachment authority: %w", err))
+	}
+	if strings.TrimSpace(membership.ThreadID) != threadID || strings.TrimSpace(membership.TurnID) != turnID || strings.TrimSpace(membership.AttachmentID) != uploadID || strings.TrimSpace(membership.ResourceRef) == "" {
+		return nil, NewUploadError(UploadErrorIntegrityMismatch, false, errors.New("canonical attachment membership is inconsistent"))
 	}
 	resourceUploadID, resourceDigest, legacyResourceRef, err := floretUploadIdentityFromResourceRef(membership.ResourceRef)
 	if err != nil || resourceUploadID != uploadID || (resourceDigest == "" && !legacyResourceRef) {

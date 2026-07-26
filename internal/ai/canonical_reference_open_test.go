@@ -17,6 +17,22 @@ import (
 	"github.com/floegence/redeven/internal/session"
 )
 
+type canonicalReferenceCountingReadHost struct {
+	floretThreadReadHost
+	exactRequests []flruntime.ReadThreadTurnRequest
+	listRequests  []flruntime.ListThreadTurnsRequest
+}
+
+func (h *canonicalReferenceCountingReadHost) ReadThreadTurn(ctx context.Context, req flruntime.ReadThreadTurnRequest) (flruntime.ThreadTurnSnapshot, error) {
+	h.exactRequests = append(h.exactRequests, req)
+	return h.floretThreadReadHost.ReadThreadTurn(ctx, req)
+}
+
+func (h *canonicalReferenceCountingReadHost) ListThreadTurns(ctx context.Context, req flruntime.ListThreadTurnsRequest) (flruntime.ThreadTurnsPage, error) {
+	h.listRequests = append(h.listRequests, req)
+	return h.floretThreadReadHost.ListThreadTurns(ctx, req)
+}
+
 func TestResolveFlowerCanonicalReferenceOpenTargetUsesExactFloretIdentity(t *testing.T) {
 	t.Parallel()
 
@@ -56,6 +72,12 @@ func TestResolveFlowerCanonicalReferenceOpenTargetUsesExactFloretIdentity(t *tes
 	}); err != nil {
 		t.Fatalf("RunTurn: %v", err)
 	}
+	readHost, err := svc.openFloretThreadReadHost(ctx, thread.ThreadID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	countingReadHost := &canonicalReferenceCountingReadHost{floretThreadReadHost: readHost}
+	bindRecordingThreadRead(svc, thread.ThreadID, countingReadHost)
 
 	fileTarget, err := svc.ResolveFlowerCanonicalReferenceOpenTarget(ctx, meta, FlowerCanonicalReferenceOpenRequest{
 		ThreadID: thread.ThreadID, TurnID: "turn_reference_open", ReferenceID: "context:0",
@@ -65,6 +87,9 @@ func TestResolveFlowerCanonicalReferenceOpenTargetUsesExactFloretIdentity(t *tes
 	}
 	if fileTarget.Kind != "file" || fileTarget.Path != filePath || fileTarget.Label != "main.ts" {
 		t.Fatalf("file target=%#v", fileTarget)
+	}
+	if len(countingReadHost.exactRequests) != 1 || countingReadHost.exactRequests[0].TurnID != "turn_reference_open" || len(countingReadHost.listRequests) != 0 {
+		t.Fatalf("exact requests=%#v list requests=%#v", countingReadHost.exactRequests, countingReadHost.listRequests)
 	}
 
 	directoryTarget, err := svc.ResolveFlowerCanonicalReferenceOpenTarget(ctx, meta, FlowerCanonicalReferenceOpenRequest{

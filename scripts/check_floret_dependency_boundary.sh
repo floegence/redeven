@@ -29,8 +29,8 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 ROOT_DIR=$(cd -- "$SCRIPT_DIR/.." &> /dev/null && pwd)
 PARENT_DIR=$(cd -- "$ROOT_DIR/.." &> /dev/null && pwd)
 FLORET_MODULE="github.com/floegence/floret"
-FLORET_VERSION="v0.30.0"
-FLORET_SUM="h1:7rM+PbQtEtezk8cJAYEz8qNWRaGzievau+cR1zSu3q8="
+FLORET_VERSION="v0.31.2"
+FLORET_SUM="h1:OfNcfMLqyqos+3lvFQWizHGi2F5sGjix2kLCR2QkwSg="
 FLORET_GO_MOD_SUM="h1:u2oNhsSB8OppYPHo/cTmXITL+3pxv7ckjYDiq3SjoCg="
 
 cd "$ROOT_DIR"
@@ -218,6 +218,41 @@ check_canonical_subagent_and_root_inventory_boundaries() {
 	fi
 
 	echo "[INFO] canonical SubAgent and root inventory boundaries checked"
+}
+
+check_exact_turn_read_boundaries() {
+	local matches file
+
+	if ! rg -q 'ReadThreadTurn' internal/ai/floret_contracts.go \
+		|| ! rg -q 'ReadThreadTurn' internal/ai/floret_bootstrap.go \
+		|| ! rg -q 'ReadThreadTurn' AGENTS.md \
+		|| ! rg -q 'only `ErrTurnNotFound` means absent' AGENTS.md; then
+		fail "Known-Turn reads and their fail-closed error contract must remain wired through Floret public APIs."
+	fi
+
+	for file in \
+		internal/ai/canonical_reference_open.go \
+		internal/ai/composer_drafts.go \
+		internal/ai/queued_turns.go; do
+		if matches=$(rg -n 'ListThreadTurns|listAllFloretThreadTurns|readCanonicalThreadTurnIDs' "$file" 2>/dev/null); then
+			printf '%s\n' "$matches"
+			fail "Known-Turn production paths must not fall back to canonical history scans: $file"
+		fi
+	done
+
+	if matches=$(rg -n --glob '*.go' --glob '!**/*_test.go' 'readCanonicalThreadTurnIDs' internal/ai 2>/dev/null); then
+		printf '%s\n' "$matches"
+		fail "The removed canonical TurnID full-scan helper must not return."
+	fi
+
+	if ! rg -q 'exactTurnID != ""' internal/ai/floret_attachment_authority.go \
+		|| ! rg -q 'ReadThreadTurn' internal/ai/floret_attachment_authority.go \
+		|| ! rg -q 'ListThreadTurns' internal/ai/floret_attachment_authority.go \
+		|| ! rg -q 'ListThreadTurns' internal/ai/floret_timeline_messages.go; then
+		fail "Exact attachment reads and the reviewed history/unknown-Turn list uses must both remain present."
+	fi
+
+	echo "[INFO] exact canonical turn read boundaries checked"
 }
 
 check_floret_capability_bootstrap_boundary() {
@@ -590,6 +625,7 @@ check_no_floret_schema_access
 check_no_agent_shadow_storage
 check_agent_shadow_contract_semantics
 check_canonical_subagent_and_root_inventory_boundaries
+check_exact_turn_read_boundaries
 check_floret_capability_bootstrap_boundary
 check_floret_thread_creation_boundary
 check_removed_product_schema_paths

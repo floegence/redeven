@@ -1,6 +1,8 @@
 # Redeven OKF Update Log
 
 ## 2026-07-26
+* **Dependency**: Upgraded to published Floret v0.31.2 and adopted exact canonical `ReadThreadTurn` authority for known-Turn reconciliation, attachment membership, and reference activation.
+* **Boundary**: Kept history, SubAgent transcript, and unknown-Turn attachment scans on canonical `ListThreadTurns`, rejected list fallback and non-not-found error downgrades, and exhausted pending commands through stable product keyset pages before startup, fork, or delete authority proceeds.
 * **Dependency**: Upgraded to published Floret v0.30.0 with exact public checksums and opaque turn cursors.
 * **Boundary**: Made typed Floret turn projections the only SubAgent transcript authority, hiding delegated missions only through `UserMessageOrigin` plus exact `UserEntryID` and removing browser metadata parsing and synthetic message identities.
 * **Recovery**: Made Floret `ThreadInventoryHost` the startup root inventory authority while retaining paged Redeven settings solely for product configuration reconciliation.

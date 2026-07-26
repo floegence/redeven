@@ -527,35 +527,8 @@ func (s *Service) recoverQueuedTurnCommandsForStartup(ctx context.Context) ([]qu
 			if activeRunID != "" || finalizingRunID != "" || (idleCompaction != nil && idleCompaction.busy()) {
 				return false, errors.New("queued turn startup recovery encountered an active runtime settlement owner")
 			}
-			commands, listErr := db.ListAllFollowupsByLaneForRecovery(recoveryCtx, endpointID, threadID, threadstore.FollowupLaneQueued)
-			if listErr != nil {
-				return false, listErr
-			}
-			turnIDs, turnErr := s.readCanonicalThreadTurnIDs(recoveryCtx, threadID)
-			if turnErr != nil {
-				return false, turnErr
-			}
-			for _, command := range commands {
-				if _, accepted := turnIDs[strings.TrimSpace(command.TurnID)]; accepted {
-					if err := s.commitPendingTurnCommandAdmission(recoveryCtx, endpointID, threadID, command.QueueID, command.TurnID, nil); err != nil {
-						return false, fmt.Errorf("settle admitted command %q turn %q: %w", command.QueueID, command.TurnID, err)
-					}
-					continue
-				}
-				if command.AdmissionState == threadstore.PendingTurnAdmissionInFlight {
-					releaseErr := s.releasePendingTurnCommandAdmission(
-						recoveryCtx,
-						endpointID,
-						threadID,
-						command.QueueID,
-						command.TurnID,
-						command.RunID,
-						threadstore.FollowupLaneQueued,
-					)
-					if releaseErr != nil {
-						return false, fmt.Errorf("release unadmitted command %q turn %q run %q: %w", command.QueueID, command.TurnID, command.RunID, releaseErr)
-					}
-				}
+			if err := s.reconcileStartupPendingTurnCommands(recoveryCtx, endpointID, threadID, db); err != nil {
+				return false, err
 			}
 			host, hostErr := s.openFloretThreadReadHost(recoveryCtx, threadID)
 			var snapshot flruntime.ThreadSnapshot
