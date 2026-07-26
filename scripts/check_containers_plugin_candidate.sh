@@ -14,10 +14,10 @@ npm test
 npm run build
 
 cd "$ROOT_DIR"
-GOWORK=off go run github.com/floegence/redevplugin/cmd/redevplugin@v0.6.18 \
+GOWORK=off go run github.com/floegence/redevplugin/cmd/redevplugin@v0.6.19 \
   package "$PLUGIN_DIR/dist" "$TEMP_DIR/plugin.redevplugin" >/dev/null
 cmp "$TEMP_DIR/plugin.redevplugin" "$CANDIDATE"
-GOWORK=off go run github.com/floegence/redevplugin/cmd/redevplugin@v0.6.18 \
+GOWORK=off go run github.com/floegence/redevplugin/cmd/redevplugin@v0.6.19 \
   validate "$CANDIDATE" >/dev/null
 if unzip -Z1 "$CANDIDATE" | grep -Fxq 'signatures/package.sig'; then
   echo "Containers candidate unexpectedly contains official signature evidence" >&2
@@ -32,7 +32,7 @@ unzip -p "$CANDIDATE" manifest.json | node -e '
     const expected = {
       schema_version: "redevplugin.manifest.v6",
       version: "2.1.0",
-      min_runtime_version: "0.6.18",
+      min_runtime_version: "0.6.19",
       ui_protocol_version: "plugin-ui-v6",
     };
     if (manifest.schema_version !== expected.schema_version

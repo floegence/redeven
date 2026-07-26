@@ -8,7 +8,7 @@
     "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
-    "@floegence/redevplugin-ui": "0.6.18"
+    "@floegence/redevplugin-ui": "0.6.19"
   },
   "devDependencies": {
     "esbuild": "0.28.1",

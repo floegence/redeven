@@ -1,13 +1,13 @@
 ---
 type: Architecture Contract
 title: Plugin platform integration
-description: Redeven mounts ReDevPlugin v0.6.18 and adds authenticated host modules, copied-root recovery, external-source policy, product placement, and business adapters.
+description: Redeven mounts ReDevPlugin v0.6.19 and adds authenticated host modules, copied-root recovery, external-source policy, product placement, and business adapters.
 tags: [architecture, plugins, local-ui, redevplugin]
 timestamp: 2026-07-25T00:00:00Z
 ---
 # Summary
 
-Redeven integrates ReDevPlugin `v0.6.18` through one Go Host, one canonical HTTP
+Redeven integrates ReDevPlugin `v0.6.19` through one Go Host, one canonical HTTP
 namespace, one Env App `PluginPlatformClient`, one shared surface scope, and the
 released ProcessManager over a verified Redeven-built Linux runtime. Redeven
 adds authenticated session mapping, public-source admission policy, product
@@ -139,7 +139,7 @@ user pin.
 ## Runtime and Containers
 
 The runtime module binds the canonical sibling executable, target, ReDevPlugin
-`0.6.18`, released Rust IPC and WASM ABI, exact product-build descriptor, lease
+`0.6.19`, released Rust IPC and WASM ABI, exact product-build descriptor, lease
 replay storage, and released limits. Linux runtime bytes are built with Rust
 1.88.0 from the attested package set and travel with SBOM, provenance, notices,
 and signature evidence. Missing, non-canonical, wrong-target, unsigned, or
@@ -208,7 +208,7 @@ disposal alone is not revocation evidence.
 # Boundaries
 
 Canonical ownership is defined by [ReDevPlugin host integration boundary](redevplugin-boundary.md).
-This concept owns only Redeven's concrete `v0.6.18` assembly.
+This concept owns only Redeven's concrete `v0.6.19` assembly.
 
 Manifest surfaces remain `view|command|background` with semantic roles. Activity,
 Workbench, window, widget, inventory key, navigation, settings, and product layout
