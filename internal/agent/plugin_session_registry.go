@@ -139,20 +139,6 @@ func (r *authenticatedPluginSessionRegistry) activeGeneration(channelID string) 
 	return record.generation, true
 }
 
-func (r *authenticatedPluginSessionRegistry) generationMeta(generation PluginSessionGeneration) (*session.Meta, bool) {
-	if r == nil || generation == 0 {
-		return nil, false
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	record := r.byGeneration[generation]
-	if record == nil {
-		return nil, false
-	}
-	metaCopy := record.meta
-	return &metaCopy, true
-}
-
 func (r *authenticatedPluginSessionRegistry) acquireChannel(channelID string) (*session.Meta, func(), bool) {
 	if r == nil {
 		return nil, nil, false
