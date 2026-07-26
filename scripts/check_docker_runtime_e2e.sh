@@ -6,6 +6,23 @@ ROOT_DIR=$(cd -- "$SCRIPT_DIR/.." &> /dev/null && pwd)
 RUST_TOOLCHAIN="1.88.0"
 RUST_IMAGE="rust:${RUST_TOOLCHAIN}-bookworm"
 
+module_copy_root=$(mktemp -d "${TMPDIR:-/tmp}/redeven-docker-runtime-mod.XXXXXX")
+build_root=""
+cleanup() {
+  rm -rf "$module_copy_root"
+  if [ -n "$build_root" ]; then
+    rm -rf "$build_root"
+  fi
+}
+trap cleanup EXIT
+cp "$ROOT_DIR/go.mod" "$module_copy_root/go.mod"
+cp "$ROOT_DIR/go.sum" "$module_copy_root/go.sum"
+docker_e2e_go_flags="${GOFLAGS:-}"
+if [ -n "$docker_e2e_go_flags" ]; then
+  docker_e2e_go_flags+=" "
+fi
+export GOFLAGS="${docker_e2e_go_flags}-modfile=$module_copy_root/go.mod"
+
 if ! command -v docker >/dev/null 2>&1; then
   echo "docker runtime e2e failed: docker is not installed or not on PATH" >&2
   exit 1
@@ -49,7 +66,6 @@ mkdir -p "$runtime_cache" "$cache_root/cargo-home" "$cache_root/cargo-target-${g
 
 if ! node "$SCRIPT_DIR/redevplugin_release_contract.mjs" verify-elf "$runtime_path" "linux/$goarch" >/dev/null 2>&1; then
   build_root=$(mktemp -d "${TMPDIR:-/tmp}/redeven-docker-runtime.XXXXXX")
-  trap 'rm -rf "$build_root"' EXIT
   rustflags_key="CARGO_TARGET_$(printf '%s' "$rust_target" | tr '[:lower:]-' '[:upper:]_')_RUSTFLAGS"
   docker run --rm \
     --user "$(id -u):$(id -g)" \
