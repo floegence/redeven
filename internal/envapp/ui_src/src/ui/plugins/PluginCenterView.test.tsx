@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PluginCenterView } from './PluginCenterView';
 import { OFFICIAL_CONTAINERS_RELEASE_REF } from './officialContainersRelease.generated';
 import { OFFICIAL_CONTAINERS_PACKAGE_URL } from './officialPluginCatalog';
-import type { PluginInventoryProjection } from './pluginTypes';
+import type { ExternalPluginCommitResult, ExternalPluginInspection, PluginInventoryProjection } from './pluginTypes';
 
 let dispose: (() => void) | undefined;
 
@@ -23,6 +23,8 @@ const containersPlugin = {
   displayName: 'Containers',
   description: 'Manage Docker and Podman resources.',
   iconFallback: 'containers',
+  category: 'infrastructure',
+  searchKeywords: ['docker', 'podman'],
   publisher: 'Redeven',
   lifecycleState: 'not_installed',
   trustBadge: 'official',
@@ -41,6 +43,8 @@ const containersPlugin = {
     rolloutState: 'stable',
     defaultSurfaceID: 'containers.dashboard',
     iconFallback: 'containers',
+    category: 'infrastructure',
+    searchKeywords: ['docker', 'podman'],
     trustedSigningKeyIDs: ['redeven-official-signing-2026'],
     distribution: {
       releaseRef: OFFICIAL_CONTAINERS_RELEASE_REF,
@@ -59,6 +63,8 @@ const databasePlugin = {
   displayName: 'Database Tools',
   description: 'Inspect local database connections.',
   iconFallback: 'database',
+  category: 'data',
+  searchKeywords: ['database'],
   officialCatalog: undefined,
 } satisfies PluginInventoryProjection['items'][number];
 
@@ -107,6 +113,116 @@ function findDocumentButton(label: string): HTMLButtonElement {
   return button;
 }
 
+function openInventoryDetails(mount: HTMLElement, inventoryKey = 'catalog:containers'): HTMLButtonElement {
+  const item = mount.querySelector<HTMLButtonElement>(`[data-plugin-center-item="${inventoryKey}"]`);
+  if (!item) throw new Error(`Plugin Center item not found: ${inventoryKey}`);
+  item.click();
+  return item;
+}
+
+function externalInspectionForCenter(): ExternalPluginInspection {
+  const packageHash = 'sha256:8ecf6c0d206ee557c5528e2192b2594b5d097912b83028d43ff1336532b06d13';
+  const manifestHash = 'sha256:f96534ca709165d0e30f6e7713a57ec0754f84f84ccadc2edc000f19dde7cc3d';
+  const entriesHash = 'sha256:8a0048517719d934e52406dc6e9964d9ca165728d3e530d2c4df16f619bf17fa';
+  return {
+    inspection_id: 'inspection_external_center_test',
+    expires_at: '2026-07-27T12:00:00Z',
+    intent: { action: 'install', plugin_instance_id: 'plugini_external_beta' },
+    publisher_id: 'com.example.publisher',
+    plugin_id: 'com.example.toolbox',
+    version: '1.2.3',
+    inspected_hashes: { package_sha256: packageHash, manifest_sha256: manifestHash, entries_sha256: entriesHash },
+    signature_assessment: {
+      state: 'absent',
+      reason_codes: [],
+      assessed_hashes: { package_sha256: packageHash, manifest_sha256: manifestHash, entries_sha256: entriesHash },
+      assessed_at: '2026-07-27T10:00:00Z',
+    },
+    source_provenance: {
+      kind: 'package_url',
+      source_origin: 'https://plugins.example.com',
+      source_path: '/toolbox.redevplugin',
+      redirect_chain: [],
+      package_sha256: packageHash,
+      resolved_at: '2026-07-27T10:00:00Z',
+    },
+    execution_approval: { state: 'pending', reason_codes: [], assessed_at: '2026-07-27T10:00:00Z' },
+    update_eligibility: { state: 'manual_only', reason_codes: [], assessed_at: '2026-07-27T10:00:00Z' },
+    security_summary: {
+      summary_sha256: 'sha256:9b30eca232030072294fcabdc98df492609672c92d2d04a545d5790119d1822b',
+      permissions: [],
+      methods: [],
+      capability_contracts: [],
+      workers: [],
+      network: [],
+      storage: [],
+      secret_refs: [],
+      core_actions: [],
+      intents: [],
+      surfaces: [],
+    },
+    confirmation_digest: 'sha256:684a09cfd858448baa7d52c3d30932d7684a09cfd858448baa7d52c3d30932d7',
+  };
+}
+
+function externalCommitForCenter(source: ExternalPluginInspection): ExternalPluginCommitResult {
+  const packageHash = source.inspected_hashes.package_sha256;
+  return {
+    status: 'committed',
+    inspection_id: source.inspection_id,
+    intent: source.intent,
+    receipt: {
+      commit_id: 'commit_external_center_test',
+      inspection_id: source.inspection_id,
+      package_sha256: packageHash,
+      management_revision: 1,
+      committed_at: '2026-07-27T10:01:00Z',
+    },
+    plugin: {
+      plugin_instance_id: source.intent.plugin_instance_id,
+      publisher_id: source.publisher_id,
+      plugin_id: source.plugin_id,
+      version: source.version,
+      active_fingerprint: packageHash,
+      package_hash: packageHash,
+      manifest_hash: source.inspected_hashes.manifest_sha256,
+      entries_hash: source.inspected_hashes.entries_sha256,
+      trust_state: 'unsigned_local',
+      trust_assessment: { trust_state: 'unsigned_local', verified_hashes: source.inspected_hashes },
+      signature_assessment: source.signature_assessment,
+      source_provenance: source.source_provenance,
+      execution_approval: { ...source.execution_approval, state: 'user_approved' },
+      update_eligibility: source.update_eligibility,
+      security_summary: source.security_summary,
+      enable_state: 'disabled',
+      policy_revision: 1,
+      management_revision: 1,
+      revoke_epoch: 0,
+      manifest: {
+        schema_version: 'redevplugin.manifest.v5',
+        publisher: { publisher_id: source.publisher_id, display_name: 'Example Publisher' },
+        plugin: {
+          plugin_id: source.plugin_id,
+          display_name: 'Toolbox Beta',
+          version: source.version,
+          api_version: 'plugin-v1',
+          min_runtime_version: '0.6.9',
+          ui_protocol_version: 'plugin-ui-v5',
+        },
+        surfaces: [],
+      },
+      package_entries: [],
+      installed_at: '2026-07-27T10:01:00Z',
+      updated_at: '2026-07-27T10:01:00Z',
+    },
+    signature_assessment: source.signature_assessment,
+    source_provenance: source.source_provenance,
+    execution_approval: { ...source.execution_approval, state: 'user_approved' },
+    update_eligibility: source.update_eligibility,
+    security_summary: source.security_summary,
+  };
+}
+
 describe('PluginCenterView', () => {
   it('exposes the active Plugin Center view with tab semantics', () => {
     const mount = document.createElement('div');
@@ -151,7 +267,7 @@ describe('PluginCenterView', () => {
     expect(mount.querySelector('[data-plugin-center-view]')).not.toBeNull();
     expect(mount.querySelector('[data-plugin-center-shell]')).not.toBeNull();
     expect(mount.querySelector('[data-plugin-center-list]')).not.toBeNull();
-    expect(mount.querySelector('[data-plugin-center-details]')).not.toBeNull();
+    expect(mount.querySelector('[data-plugin-center-details]')).toBeNull();
     expect(mount.querySelector('[data-settings-nav-item="plugins"]')).toBeNull();
     expect(mount.textContent).toContain('Installed');
     expect(mount.textContent).toContain('Discover');
@@ -165,6 +281,12 @@ describe('PluginCenterView', () => {
 
     expect(mount.querySelector('[data-plugin-center-item="catalog:database"]')).not.toBeNull();
     expect(mount.querySelector('[data-plugin-center-item="catalog:containers"]')).toBeNull();
+
+    search.value = '';
+    search.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    (mount.querySelector('[data-plugin-center-category="infrastructure"]') as HTMLButtonElement).click();
+    expect(mount.querySelector('[data-plugin-center-item="catalog:containers"]')).not.toBeNull();
+    expect(mount.querySelector('[data-plugin-center-item="catalog:database"]')).toBeNull();
   });
 
   it('keeps header controls within narrow viewports by wrapping search onto its own row', () => {
@@ -190,6 +312,83 @@ describe('PluginCenterView', () => {
     expect(searchField.classList).toContain('order-first');
     expect(searchField.classList).toContain('w-full');
     expect(searchField.classList).toContain('min-w-0');
+  });
+
+  it('keeps external installation in the administrative overflow menu', async () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginCenterView
+        projection={projection}
+        loading={false}
+        onCommand={vi.fn()}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces={false}
+      />
+    ), mount);
+
+    expect(mount.textContent).not.toContain('Install from source');
+    (mount.querySelector('[data-plugin-center-install-external]') as HTMLButtonElement).click();
+    await Promise.resolve();
+    findDocumentButton('Install from source').click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(document.querySelector('[data-external-plugin-dialog]')).not.toBeNull();
+  });
+
+  it('combines source, trust, lifecycle, and category filters without rebuilding identity', async () => {
+    const externalCommunity = {
+      ...databasePlugin,
+      inventoryKey: 'instance:community-database',
+      pluginInstanceID: 'community-database',
+      managementRevision: 2,
+      lifecycleState: 'disabled',
+      trustBadge: 'community',
+    } satisfies PluginInventoryProjection['items'][number];
+    const externalUnsigned = {
+      ...containersPlugin,
+      inventoryKey: 'instance:unsigned-containers',
+      pluginInstanceID: 'unsigned-containers',
+      managementRevision: 4,
+      lifecycleState: 'needs_attention',
+      trustBadge: 'unsigned',
+      officialCatalog: undefined,
+    } satisfies PluginInventoryProjection['items'][number];
+    const officialInstalled = {
+      ...containersPlugin,
+      inventoryKey: 'instance:official-containers',
+      pluginInstanceID: 'official-containers',
+      managementRevision: 7,
+      lifecycleState: 'enabled',
+    } satisfies PluginInventoryProjection['items'][number];
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginCenterView
+        projection={{ items: [officialInstalled, externalCommunity, externalUnsigned] }}
+        loading={false}
+        onCommand={vi.fn()}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces={false}
+      />
+    ), mount);
+
+    (mount.querySelector('[data-plugin-center-category="infrastructure"]') as HTMLButtonElement).click();
+    for (const [filter, label] of [
+      ['source', 'External'],
+      ['trust', 'Unsigned'],
+      ['lifecycle', 'Needs attention'],
+    ] as const) {
+      (mount.querySelector(`[data-plugin-center-filter="${filter}"]`) as HTMLButtonElement).click();
+      await Promise.resolve();
+      findDocumentButton(label).click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+
+    expect(mount.querySelector('[data-plugin-center-item="instance:unsigned-containers"]')).not.toBeNull();
+    expect(mount.querySelector('[data-plugin-center-item="instance:official-containers"]')).toBeNull();
+    expect(mount.querySelector('[data-plugin-center-item="instance:community-database"]')).toBeNull();
   });
 
   it('selects a plugin details inspector from an explicit shell request', () => {
@@ -223,6 +422,35 @@ describe('PluginCenterView', () => {
 
     expect(mount.querySelector('[data-plugin-center-details]')?.textContent).toContain('Containers');
     expect(mount.querySelector('[data-plugin-center-details]')?.textContent).toContain('Disabled');
+  });
+
+  it('consumes an exact shell selection once so inventory refresh does not reopen closed details', async () => {
+    const [currentProjection, setCurrentProjection] = createSignal(containersPermissionProjection());
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginCenterView
+        projection={currentProjection()}
+        loading={false}
+        selectedInventoryKey="catalog:containers"
+        focusRequest={1}
+        onCommand={vi.fn()}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces
+      />
+    ), mount);
+
+    await Promise.resolve();
+    expect(mount.querySelector('[data-plugin-center-details]')).not.toBeNull();
+    (mount.querySelector('[data-plugin-center-mobile-back]') as HTMLButtonElement).click();
+    await Promise.resolve();
+    expect(mount.querySelector('[data-plugin-center-details]')).toBeNull();
+
+    setCurrentProjection({ items: currentProjection().items.map((item) => ({ ...item })) });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(mount.querySelector('[data-plugin-center-details]')).toBeNull();
   });
 
   it('moves desktop focus into the requested plugin details inspector', async () => {
@@ -283,7 +511,7 @@ describe('PluginCenterView', () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(getComputedStyle(mount.querySelector<HTMLElement>('[data-plugin-center-details]')!).display).not.toBe('none');
-    expect(document.activeElement).toBe(back);
+    expect(document.activeElement).toBe(mount.querySelector<HTMLButtonElement>('[data-plugin-center-mobile-back]'));
 
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: originalInnerWidth });
   });
@@ -320,7 +548,7 @@ describe('PluginCenterView', () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(master.classList).toContain('flex');
-    expect(details.classList).toContain('hidden');
+    expect(mount.querySelector('[data-plugin-center-details]')).toBeNull();
     expect(document.activeElement).toBe(search);
 
     item.click();
@@ -332,7 +560,7 @@ describe('PluginCenterView', () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(master.classList).toContain('flex');
-    expect(details.classList).toContain('hidden');
+    expect(mount.querySelector('[data-plugin-center-details]')).toBeNull();
     expect(document.activeElement).toBe(discover);
     expect(discover.getAttribute('aria-selected')).toBe('true');
 
@@ -472,6 +700,7 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
+    openInventoryDetails(mount);
     const install = mount.querySelector('[data-plugin-action="install"]') as HTMLButtonElement;
     expect(install.disabled).toBe(false);
     expect(install.textContent).toContain('Install');
@@ -527,6 +756,8 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
+    openInventoryDetails(mount);
+    expect(mount.querySelector('[data-plugin-center-install-external]')).toBeNull();
     const openActivity = mount.querySelector('[data-plugin-action="open"]') as HTMLButtonElement;
     const openWorkbench = mount.querySelector('[data-plugin-action="open-workbench"]') as HTMLButtonElement;
     expect(openActivity.disabled).toBe(false);
@@ -569,6 +800,7 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
+    openInventoryDetails(mount);
     (mount.querySelector('[data-plugin-action="more"]') as HTMLButtonElement).click();
     await Promise.resolve();
     expect(findDocumentButton('Disable').disabled).toBe(false);
@@ -813,6 +1045,7 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
+    openInventoryDetails(mount);
     const open = mount.querySelector('[data-plugin-action="open"]') as HTMLButtonElement;
     expect(open.disabled).toBe(false);
     open.click();
@@ -854,6 +1087,7 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
+    openInventoryDetails(mount);
     const update = mount.querySelector('[data-plugin-action="update-external"]') as HTMLButtonElement;
     expect(update.disabled).toBe(false);
     update.click();
@@ -903,6 +1137,7 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
+    openInventoryDetails(mount);
     expect(mount.textContent).toContain('Needs attention');
     expect(mount.querySelector('[data-plugin-action="enable"]')).toBeNull();
     expect(mount.querySelector('[data-plugin-action="open"]')).toBeNull();
@@ -921,6 +1156,7 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
+    openInventoryDetails(mount);
     expect(mount.querySelector('[data-plugin-action="update-external"]')).not.toBeNull();
     expect(mount.querySelector('[data-plugin-action="enable"]')).toBeNull();
   });
@@ -972,6 +1208,7 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
+    openInventoryDetails(mount);
     expect(mount.querySelector('[data-plugin-primary-actions]')?.textContent).toContain('Review required permissions');
     expect(mount.querySelector('[data-plugin-action="open"]')).toBeNull();
     expect(mount.querySelector('[data-plugin-action="open-workbench"]')).toBeNull();
@@ -1001,6 +1238,7 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
+    openInventoryDetails(mount);
     (mount.querySelector('[data-plugin-action="more"]') as HTMLButtonElement).click();
     await Promise.resolve();
     findDocumentButton('Uninstall').click();
@@ -1051,6 +1289,7 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
+    openInventoryDetails(mount);
     const openUninstall = async () => {
       (mount.querySelector('[data-plugin-action="more"]') as HTMLButtonElement).click();
       await Promise.resolve();
@@ -1132,6 +1371,7 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
+    openInventoryDetails(mount);
     (mount.querySelector('[data-plugin-action="more"]') as HTMLButtonElement).click();
     await Promise.resolve();
     const disable = findDocumentButton('Disable');
@@ -1207,5 +1447,144 @@ describe('PluginCenterView', () => {
     expect(mount.querySelector('[data-plugin-center-details]')?.textContent).toContain('Toolbox Alpha');
     expect(beta.getAttribute('aria-current')).toBeNull();
     expect(alpha.getAttribute('aria-current')).toBe('true');
+  });
+
+  it('keeps the exact committed instance selected while retained filters exclude it', async () => {
+    const inspected = externalInspectionForCenter();
+    const committed = externalCommitForCenter(inspected);
+    const alpha = {
+      ...containersPermissionProjection().items[0],
+      inventoryKey: 'instance:toolbox-alpha',
+      pluginID: 'com.example.toolbox',
+      pluginInstanceID: 'toolbox-alpha',
+      displayName: 'Toolbox Alpha',
+      description: 'Existing external plugin instance.',
+      publisher: 'Example Publisher',
+      version: '1.0.0',
+      managementRevision: 3,
+      lifecycleState: 'disabled',
+      trustBadge: 'unsigned',
+      officialCatalog: undefined,
+    } satisfies PluginInventoryProjection['items'][number];
+    const beta = {
+      ...containersPermissionProjection().items[0],
+      inventoryKey: 'instance:plugini_external_beta',
+      pluginID: 'com.example.toolbox',
+      pluginInstanceID: 'plugini_external_beta',
+      displayName: 'Toolbox Beta',
+      description: 'Newly committed external plugin instance.',
+      publisher: 'Example Publisher',
+      version: '1.2.3',
+      managementRevision: 1,
+      lifecycleState: 'needs_attention',
+      trustBadge: 'unsigned',
+      officialCatalog: undefined,
+    } satisfies PluginInventoryProjection['items'][number];
+    const [currentProjection, setCurrentProjection] = createSignal<PluginInventoryProjection>({ items: [alpha] });
+    const onRefresh = vi.fn(async () => setCurrentProjection({ items: [alpha, beta] }));
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginCenterView
+        projection={currentProjection()}
+        loading={false}
+        onInspectExternal={vi.fn(async () => inspected)}
+        onCommitExternal={vi.fn(async () => committed)}
+        onCommand={vi.fn()}
+        onRefresh={onRefresh}
+        canManagePlugins
+        canOpenPluginSurfaces={false}
+      />
+    ), mount);
+
+    const search = mount.querySelector<HTMLInputElement>('[data-plugin-center-search]')!;
+    search.value = 'Alpha';
+    search.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    (mount.querySelector('[data-plugin-center-install-external]') as HTMLButtonElement).click();
+    await Promise.resolve();
+    findDocumentButton('Install from source').click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const source = document.querySelector<HTMLInputElement>('[data-external-plugin-dialog] input[type="url"]')!;
+    source.value = 'https://plugins.example.com/toolbox.redevplugin';
+    source.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    findDocumentButton('Review package').click();
+    await Promise.resolve();
+    await Promise.resolve();
+    document.querySelector<HTMLInputElement>('[data-external-plugin-confirmation] input[type="checkbox"]')!.click();
+    findDocumentButton('Install plugin').click();
+    await Promise.resolve();
+    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(onRefresh).toHaveBeenCalledOnce();
+    expect(mount.querySelector('[data-plugin-center-item="instance:plugini_external_beta"]')).toBeNull();
+    expect(mount.querySelector('[data-plugin-center-details]')?.textContent).toContain('Toolbox Beta');
+    expect(mount.querySelector('[data-plugin-center-details]')?.textContent).not.toContain('Toolbox Alpha');
+
+    const dialogContent = document.querySelector<HTMLElement>('[data-external-plugin-dialog]')!;
+    const dialog = dialogContent.closest<HTMLElement>('[role="dialog"]')!;
+    const reviewPermissions = [...dialog.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent?.trim() === 'Review required permissions')!;
+    reviewPermissions.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const permissions = mount.querySelector<HTMLElement>('[data-plugin-permissions]')!;
+    expect(mount.querySelector('[data-plugin-center-details]')?.textContent).toContain('Toolbox Beta');
+    expect(document.activeElement).toBe(permissions);
+  });
+
+  it('preserves an exact shell detail request when retained filters exclude it', async () => {
+    const alpha = {
+      ...containersPlugin,
+      inventoryKey: 'instance:toolbox-alpha',
+      pluginID: 'com.example.toolbox',
+      pluginInstanceID: 'toolbox-alpha',
+      displayName: 'Toolbox Alpha',
+      managementRevision: 3,
+      lifecycleState: 'disabled',
+      officialCatalog: undefined,
+    } satisfies PluginInventoryProjection['items'][number];
+    const beta = {
+      ...alpha,
+      inventoryKey: 'instance:toolbox-beta',
+      pluginInstanceID: 'toolbox-beta',
+      displayName: 'Toolbox Beta',
+      managementRevision: 8,
+    } satisfies PluginInventoryProjection['items'][number];
+    const [selectedKey, setSelectedKey] = createSignal<string>();
+    const [focusRequest, setFocusRequest] = createSignal(0);
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginCenterView
+        projection={{ items: [alpha, beta] }}
+        loading={false}
+        selectedInventoryKey={selectedKey()}
+        focusRequest={focusRequest()}
+        onCommand={vi.fn()}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces={false}
+      />
+    ), mount);
+
+    const search = mount.querySelector<HTMLInputElement>('[data-plugin-center-search]')!;
+    search.value = 'Alpha';
+    search.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    expect(mount.querySelector('[data-plugin-center-item="instance:toolbox-beta"]')).toBeNull();
+
+    setSelectedKey('instance:toolbox-beta');
+    setFocusRequest(1);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(mount.querySelector('[data-plugin-center-details]')?.textContent).toContain('Toolbox Beta');
+    expect(mount.querySelector('[data-plugin-center-details]')?.textContent).not.toContain('Toolbox Alpha');
+
+    const back = mount.querySelector<HTMLButtonElement>('[data-plugin-center-mobile-back]')!;
+    back.focus();
+    back.click();
+    await Promise.resolve();
+    expect(mount.querySelector('[data-plugin-center-details]')).toBeNull();
+    expect(document.activeElement).toBe(search);
   });
 });

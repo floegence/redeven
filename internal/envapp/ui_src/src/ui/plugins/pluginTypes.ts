@@ -27,6 +27,14 @@ export type PluginAttentionReason =
   | 'install_unavailable'
   | 'trust_unavailable';
 
+export type PluginPresentationCategory =
+  | 'development'
+  | 'infrastructure'
+  | 'data'
+  | 'collaboration'
+  | 'productivity'
+  | 'other';
+
 export type OfficialPluginDistribution = {
   releaseRef: PluginReleaseRef;
   installSource: ExternalPluginSourcePreset;
@@ -55,6 +63,9 @@ export type OfficialPluginCatalogItem = {
   defaultSurfaceID: string;
   defaultSurfaceDisplayNameKey?: 'uiCopy.plugin.containersDashboardSurface';
   iconFallback: 'containers' | 'database' | 'github' | 'generic';
+  category: PluginPresentationCategory;
+  searchKeywords: readonly string[];
+  searchAliasesKey?: 'uiCopy.plugin.containersSearchAliases';
   trustedSigningKeyIDs: readonly string[];
   permissions?: readonly OfficialPluginPermission[];
   distribution: OfficialPluginDistribution;
@@ -97,6 +108,9 @@ export type PluginInventoryItem = {
   description: string;
   iconURL?: string;
   iconFallback: 'containers' | 'database' | 'github' | 'generic';
+  category: PluginPresentationCategory;
+  searchKeywords: readonly string[];
+  searchAliasesKey?: 'uiCopy.plugin.containersSearchAliases';
   publisher: string;
   version?: string;
   managementRevision?: number;

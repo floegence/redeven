@@ -55,6 +55,8 @@ const containersItem: PluginInventoryItem = {
   displayName: 'Containers',
   description: 'Manage Docker and Podman resources without leaving the current environment.',
   iconFallback: 'containers',
+  category: 'infrastructure',
+  searchKeywords: ['docker', 'podman'],
   publisher: 'Redeven',
   version: '2.0.0',
   managementRevision: 7,
@@ -99,6 +101,8 @@ const toolboxItem: PluginInventoryItem = {
   displayName: 'Developer Toolbox With A Deliberately Long Name',
   description: 'A long description verifies that plugin copy stays inside its assigned readable column.',
   iconFallback: 'generic',
+  category: 'development',
+  searchKeywords: ['toolbox'],
   publisher: 'Example Publisher',
   version: '1.2.3',
   managementRevision: 4,
@@ -493,24 +497,23 @@ afterEach(async () => {
 
 describe('plugin management browser geometry and interaction', () => {
   it.each(viewportCases.filter(({ width }) => width >= 768))(
-    'anchors the non-modal Plugin Switcher without overflow at $width px',
+    'centers the modal Plugin Launcher without overflow at $width px',
     async (viewport) => {
       await page.viewport(viewport.width, viewport.height);
       const mounted = mountPanel(false);
       await settle();
 
       const dialog = document.querySelector<HTMLElement>('#plugin-switcher-browser-test')!;
-      expect(dialog.getAttribute('aria-modal')).toBe('false');
+      expect(dialog.getAttribute('aria-modal')).toBe('true');
       expectInsideViewport(dialog, viewport);
       expectNoHorizontalOverflow(dialog);
-      expect(dialog.getBoundingClientRect().left).toBeGreaterThanOrEqual(
-        mounted.trigger()!.getBoundingClientRect().right,
-      );
+      expect(Math.abs(dialog.getBoundingClientRect().left + dialog.getBoundingClientRect().width / 2 - viewport.width / 2)).toBeLessThan(2);
+      expect(mounted.host.inert).toBe(true);
 
       const lastAction = dialog.querySelector<HTMLButtonElement>('[data-plugin-panel-tile="plugin-center"]')!;
       lastAction.focus();
       await userEvent.tab();
-      expect(dialog.contains(document.activeElement)).toBe(false);
+      expect(dialog.contains(document.activeElement)).toBe(true);
     },
   );
 
@@ -543,12 +546,17 @@ describe('plugin management browser geometry and interaction', () => {
     const view = host.querySelector<HTMLElement>('[data-plugin-center-view]')!;
     const shell = host.querySelector<HTMLElement>('[data-plugin-center-shell]')!;
     const master = host.querySelector<HTMLElement>('[data-plugin-center-master]')!;
-    const details = host.querySelector<HTMLElement>('[data-plugin-center-details]')!;
+    const item = host.querySelector<HTMLElement>('[data-plugin-center-item="instance:containers"]')!;
     expectInsideViewport(view, viewport);
     expectNoHorizontalOverflow(view);
     expectNoHorizontalOverflow(shell);
-    expect(getComputedStyle(host.querySelector<HTMLElement>('[data-plugin-center-item="instance:containers"]')!).boxShadow)
-      .toContain('inset');
+    expect(host.querySelector('[data-plugin-center-details]')).toBeNull();
+    expect(getComputedStyle(item).boxShadow).toBe('none');
+
+    item.click();
+    await settle();
+    const details = host.querySelector<HTMLElement>('[data-plugin-center-details]')!;
+    expect(getComputedStyle(item).boxShadow).toContain('inset');
 
     if (viewport.width >= 640) {
       expect(getComputedStyle(master).display).not.toBe('none');
@@ -567,10 +575,9 @@ describe('plugin management browser geometry and interaction', () => {
     await settle();
 
     const master = host.querySelector<HTMLElement>('[data-plugin-center-master]')!;
-    const details = host.querySelector<HTMLElement>('[data-plugin-center-details]')!;
     const item = host.querySelector<HTMLButtonElement>('[data-plugin-center-item="instance:containers"]')!;
     expect(getComputedStyle(master).display).not.toBe('none');
-    expect(getComputedStyle(details).display).toBe('none');
+    expect(host.querySelector('[data-plugin-center-details]')).toBeNull();
     expectTouchTarget(item);
     expectTouchTargets([
       host.querySelector<HTMLElement>('[data-plugin-center-install-external]')!,
@@ -581,6 +588,7 @@ describe('plugin management browser geometry and interaction', () => {
 
     item.click();
     await settle();
+    const details = host.querySelector<HTMLElement>('[data-plugin-center-details]')!;
     const back = host.querySelector<HTMLButtonElement>('[data-plugin-center-mobile-back]')!;
     expect(getComputedStyle(master).display).toBe('none');
     expect(getComputedStyle(details).display).not.toBe('none');
@@ -601,7 +609,7 @@ describe('plugin management browser geometry and interaction', () => {
     back.click();
     await settle();
     expect(getComputedStyle(master).display).not.toBe('none');
-    expect(getComputedStyle(details).display).toBe('none');
+    expect(host.querySelector('[data-plugin-center-details]')).toBeNull();
     expect(document.activeElement).toBe(item);
   });
 
@@ -610,7 +618,6 @@ describe('plugin management browser geometry and interaction', () => {
     const host = mountPluginCenter();
     await settle();
     const master = host.querySelector<HTMLElement>('[data-plugin-center-master]')!;
-    const details = host.querySelector<HTMLElement>('[data-plugin-center-details]')!;
     host.querySelector<HTMLButtonElement>('[data-plugin-center-item="instance:containers"]')!.click();
     await settle();
     expect(getComputedStyle(master).display).toBe('none');
@@ -619,7 +626,7 @@ describe('plugin management browser geometry and interaction', () => {
     await userEvent.fill(search, 'containers');
     await settle();
     expect(getComputedStyle(master).display).not.toBe('none');
-    expect(getComputedStyle(details).display).toBe('none');
+    expect(host.querySelector('[data-plugin-center-details]')).toBeNull();
     expect(document.activeElement).toBe(search);
 
     host.querySelector<HTMLButtonElement>('[data-plugin-center-item="instance:containers"]')!.click();
@@ -628,7 +635,7 @@ describe('plugin management browser geometry and interaction', () => {
     discover.click();
     await settle();
     expect(getComputedStyle(master).display).not.toBe('none');
-    expect(getComputedStyle(details).display).toBe('none');
+    expect(host.querySelector('[data-plugin-center-details]')).toBeNull();
     expect(discover.getAttribute('aria-selected')).toBe('true');
   });
 
@@ -670,13 +677,15 @@ describe('plugin management browser geometry and interaction', () => {
     back.click();
     await settle();
     expect(getComputedStyle(master).display).not.toBe('none');
-    expect(getComputedStyle(details).display).toBe('none');
+    expect(navigation.host.querySelector('[data-plugin-center-details]')).toBeNull();
 
     navigation.openDetails('instance:containers');
     await settle();
+    const reopenedDetails = navigation.host.querySelector<HTMLElement>('[data-plugin-center-details]')!;
+    const reopenedBack = navigation.host.querySelector<HTMLButtonElement>('[data-plugin-center-mobile-back]')!;
     expect(getComputedStyle(master).display).toBe('none');
-    expect(getComputedStyle(details).display).not.toBe('none');
-    expect(document.activeElement).toBe(back);
+    expect(getComputedStyle(reopenedDetails).display).not.toBe('none');
+    expect(document.activeElement).toBe(reopenedBack);
   });
 
   it('moves desktop keyboard focus into details for shell navigation requests', async () => {

@@ -52,12 +52,17 @@ and image targets are `(engine, image_ref)`; no request may collapse those
 identities to a name or bare id. Every method requires the closed Docker or
 Podman engine explicitly; the adapter never probes engines in preference order.
 
-The adapter covers engine status, container list and inspect, start preflight,
-start, stop, restart, remove, bounded/following logs, and image pull. DTOs are
-minimal and do not expose raw inspect JSON, environment values, label values,
-or sensitive host paths. Preflight reduces observed runtime state to stable
-risk flags, redacted mount/device summaries, a target hash, risk level, and
-admin requirement suitable for ReDevPlugin's risk-based confirmation flow.
+The active v2 adapter covers engine status, container list and inspect, start
+preflight, start, stop, restart, remove, bounded/following logs, and image pull.
+The 2.2.0 UI candidate therefore limits its inspector to the published v2
+fields and does not claim complete image or volume management. Full image
+history/tag/remove/prune, container create/run/pause/unpause/kill/stats, and
+volume list/inspect/create/remove/prune require a new signed capability contract
+and released plugin before they can be exposed in production. DTOs are minimal
+and do not expose raw inspect JSON, environment values, label values, or
+sensitive host paths. Preflight reduces observed runtime state to stable risk
+flags, redacted mount/device summaries, a target hash, risk level, and admin
+requirement suitable for ReDevPlugin's risk-based confirmation flow.
 
 `CLIClient` executes only explicit Docker or Podman argv with bounded command
 duration and output. It accepts Docker NDJSON and Podman JSON-array list

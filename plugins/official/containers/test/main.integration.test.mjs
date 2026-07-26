@@ -27,6 +27,7 @@ const bundle = await build({
           export class RedevenContainerResourcesClient {
             status(request) { return globalThis.__containersFixture.client.status(request); }
             list(request) { return globalThis.__containersFixture.client.list(request); }
+            inspect(request) { return globalThis.__containersFixture.client.inspect(request); }
             start(request) { return globalThis.__containersFixture.client.start(request); }
             stop(request) { return globalThis.__containersFixture.client.stop(request); }
             restart(request) { return globalThis.__containersFixture.client.restart(request); }
@@ -168,11 +169,96 @@ test('resume retries terminal reconciliation and clears the recovered error', { 
   });
 });
 
+test('filters containers locally without changing authoritative inventory', { concurrency: false }, async () => {
+  const fixture = await loadFixture();
+  fixture.action('filter-containers', 'container-a');
+  await eventually(() => {
+    const rendered = fixture.renderedText();
+    assert.match(rendered, /container-a/u);
+    assert.doesNotMatch(rendered, /container-b/u);
+    assert.match(rendered, /1 of 2 resources/u);
+  });
+
+  fixture.action('filter-containers', 'missing');
+  await eventually(() => assert.match(fixture.renderedText(), /No matching containers/u));
+});
+
+test('keeps filtered-out active operations visible and actionable', { concurrency: false }, async () => {
+  const active = operation('operation-filtered');
+  const fixture = await loadFixture({ start: async () => active.handle });
+  fixture.action('start-container', 'container-a');
+  await eventually(() => assert.match(fixture.renderedText(), /Start · Running/u));
+
+  fixture.action('filter-containers', 'container-b');
+  await eventually(() => {
+    const rendered = fixture.renderedText();
+    assert.match(rendered, /Active operations/u);
+    assert.match(rendered, /Start · Running/u);
+    assert.match(rendered, /Cancel/u);
+    assert.match(rendered, /container-b/u);
+  });
+});
+
+test('opens and closes exact v2 container details', { concurrency: false }, async () => {
+  const fixture = await loadFixture();
+  const detailsAction = findNode(fixture.renderedTree(), (node) => node.attributes?.['aria-label'] === 'Details container-a');
+  assert.equal(detailsAction?.attributes?.['data-redevplugin-action'], 'inspect-container');
+  fixture.action('inspect-container', 'container-a');
+  await eventually(() => {
+    const rendered = fixture.renderedText();
+    assert.match(rendered, /Image digest/u);
+    assert.match(rendered, /Published ports/u);
+  });
+  assert.deepEqual(fixture.inspectCalls, ['container-a']);
+
+  fixture.action('close-container-details');
+  await eventually(() => assert.doesNotMatch(fixture.renderedText(), /Image digest/u));
+  const restoredDetails = findNode(fixture.renderedTree(), (node) => node.attributes?.['aria-label'] === 'Details container-a');
+  assert.equal(restoredDetails?.attributes?.autofocus, true);
+});
+
+test('ignores stale inspect responses across exact targets', { concurrency: false }, async () => {
+  const first = deferred();
+  const second = deferred();
+  const fixture = await loadFixture({
+    inspect: ({ container_id: containerID }, item) => containerID === 'container-a' ? first.promise : second.promise,
+  });
+
+  fixture.action('inspect-container', 'container-a');
+  fixture.action('inspect-container', 'container-b');
+  second.resolve({ engine: 'docker', container: container('container-b') });
+  await eventually(() => {
+    const details = findNode(fixture.renderedTree(), (node) => node.key === 'details-content');
+    assert.match(textContent(details), /container-b/u);
+    assert.doesNotMatch(textContent(details), /container-a/u);
+  });
+  first.resolve({ engine: 'docker', container: container('container-a') });
+  await settle();
+  await settle();
+  const details = findNode(fixture.renderedTree(), (node) => node.key === 'details-content');
+  assert.match(textContent(details), /container-b/u);
+  assert.doesNotMatch(textContent(details), /container-a/u);
+});
+
+test('does not reopen details when a pending inspect resolves after close', { concurrency: false }, async () => {
+  const pending = deferred();
+  const fixture = await loadFixture({ inspect: () => pending.promise });
+  fixture.action('inspect-container', 'container-a');
+  await eventually(() => assert.match(fixture.renderedText(), /Loading details/u));
+  fixture.action('close-container-details');
+  await eventually(() => assert.doesNotMatch(fixture.renderedText(), /Loading details/u));
+  pending.resolve({ engine: 'docker', container: container('container-a') });
+  await settle();
+  await settle();
+  assert.doesNotMatch(fixture.renderedText(), /Image digest/u);
+});
+
 async function loadFixture(overrides = {}) {
   const actions = new Map();
   const lifecycle = [];
   const renders = [];
   const startCalls = [];
+  const inspectCalls = [];
   const containers = [container('container-a'), container('container-b')];
   const bridge = {
     ready: async () => undefined,
@@ -185,6 +271,13 @@ async function loadFixture(overrides = {}) {
     list: async (request) => overrides.list
       ? overrides.list(request, containers)
       : { engine: request.engine, containers },
+    inspect: async (request) => {
+      inspectCalls.push(request.container_id);
+      const item = containers.find(({ container_id: containerID }) => containerID === request.container_id);
+      if (!item) throw new Error('container missing');
+      if (overrides.inspect) return overrides.inspect(request, item);
+      return { engine: request.engine, container: item };
+    },
     start: async (request) => {
       startCalls.push(request.container_id);
       return overrides.start(request);
@@ -200,6 +293,7 @@ async function loadFixture(overrides = {}) {
   await eventually(() => assert.equal(renders.length > 0, true));
   return {
     startCalls,
+    inspectCalls,
     action(name, value) {
       const callback = actions.get(name);
       assert.ok(callback, `missing action ${name}`);
@@ -210,6 +304,9 @@ async function loadFixture(overrides = {}) {
     },
     renderedText() {
       return textContent(renders.at(-1));
+    },
+    renderedTree() {
+      return renders.at(-1);
     },
   };
 }
@@ -259,6 +356,26 @@ function textContent(node) {
   if (!node || typeof node !== 'object') return '';
   if (node.type === 'text') return node.text;
   return (node.children ?? []).map(textContent).join(' ');
+}
+
+function findNode(node, predicate) {
+  if (!node || typeof node !== 'object') return undefined;
+  if (predicate(node)) return node;
+  for (const child of node.children ?? []) {
+    const match = findNode(child, predicate);
+    if (match) return match;
+  }
+  return undefined;
+}
+
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
 }
 
 async function settle() {

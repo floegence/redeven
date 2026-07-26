@@ -10,6 +10,7 @@ import {
   RedevenContainerResourcesClient,
   isRedevenContainerResourcesBusinessError,
   type ContainersListResponse,
+  type ContainersInspectResponse,
 } from '../../../../spec/redevplugin/official-containers-capability/capabilities/redeven.container_resources.v2/v2.0.0/redeven.container_resources.v2.client';
 import {
   ContainerOperationStore,
@@ -21,6 +22,7 @@ import {
 import { cancellationFailurePolicy, mutationOutcome, submissionFailurePolicy } from './operation-policy';
 
 type Container = ContainersListResponse['containers'][number];
+type ContainerDetails = ContainersInspectResponse['container'];
 type OperationHandle = Pick<PluginOperation<object>, 'operation_id' | 'snapshot' | 'wait' | 'cancel'>;
 
 type DashboardState = {
@@ -28,10 +30,12 @@ type DashboardState = {
   engineVersion: string;
   available: boolean;
   loading: boolean;
+  query: string;
   containers: Container[];
   notice: string;
   noticeTone: 'neutral' | 'error';
   error: string;
+  details: { engine: Engine; containerID: string; generation: number; container?: ContainerDetails; loading: boolean; error: string };
   logs: { engine: Engine; containerID: string; generation: number; lines: string[]; loading: boolean; error: string };
 };
 
@@ -42,22 +46,27 @@ const state: DashboardState = {
   engineVersion: '',
   available: false,
   loading: true,
+  query: '',
   containers: [],
   notice: '',
   noticeTone: 'neutral',
   error: '',
+  details: { engine: 'docker', containerID: '', generation: 0, loading: false, error: '' },
   logs: { engine: 'docker', containerID: '', generation: 0, lines: [], loading: false, error: '' },
 };
 
 let disposed = false;
 let refreshSequence = 0;
 let logsGeneration = 0;
+let detailsGeneration = 0;
+let detailsReturnFocusContainerID = '';
 const inventorySequences = new Map<Engine, number>();
 const operations = new ContainerOperationStore();
 const operationHandles = new Map<string, { generation: number; handle: OperationHandle }>();
 const observationControllers = new Map<string, { generation: number; controller: AbortController }>();
 
 bridge.onAction('refresh-containers', () => void refresh());
+bridge.onAction('filter-containers', (event) => void updateContainerFilter(event));
 bridge.onAction('select-engine', (event) => void selectEngine(event));
 bridge.onAction('start-container', (event) => void runContainerOperation('start', event));
 bridge.onAction('stop-container', (event) => void runContainerOperation('stop', event));
@@ -67,10 +76,14 @@ bridge.onAction('cancel-container-operation', (event) => void cancelContainerOpe
 bridge.onAction('resume-container-observation', (event) => void resumeContainerObservation(event));
 bridge.onAction('view-container-logs', (event) => void loadLogs(event));
 bridge.onAction('close-container-logs', () => void closeLogs());
+bridge.onAction('inspect-container', (event) => void inspectContainer(event));
+bridge.onAction('close-container-details', () => void closeContainerDetails());
 bridge.onLifecycle((event) => {
   if (event.type === 'dispose') {
     disposed = true;
     refreshSequence += 1;
+    detailsGeneration += 1;
+    detailsReturnFocusContainerID = '';
     for (const observation of observationControllers.values()) observation.controller.abort();
     observationControllers.clear();
   }
@@ -88,7 +101,15 @@ async function selectEngine(event: PluginUIActionEvent): Promise<void> {
   if (state.engine === event.value) return;
   state.engine = event.value;
   state.logs = { engine: event.value, containerID: '', generation: ++logsGeneration, lines: [], loading: false, error: '' };
+  state.details = { engine: event.value, containerID: '', generation: ++detailsGeneration, loading: false, error: '' };
+  detailsReturnFocusContainerID = '';
   await refresh();
+}
+
+async function updateContainerFilter(event: PluginUIActionEvent): Promise<void> {
+  if (event.isComposing) return;
+  state.query = event.value?.slice(0, 200) ?? '';
+  await renderSafely();
 }
 
 async function refresh(): Promise<void> {
@@ -321,6 +342,39 @@ async function closeLogs(): Promise<void> {
   await render();
 }
 
+async function inspectContainer(event: PluginUIActionEvent): Promise<void> {
+  const containerID = event.value?.trim() ?? '';
+  if (!containerID) return;
+  const engine = state.engine;
+  const generation = ++detailsGeneration;
+  detailsReturnFocusContainerID = '';
+  state.details = { engine, containerID, generation, loading: true, error: '' };
+  await renderSafely();
+  try {
+    const result = await client.inspect({ engine, container_id: containerID });
+    if (!isCurrentDetailsView(engine, containerID, generation)) return;
+    state.details = { engine, containerID, generation, container: result.container, loading: false, error: '' };
+  } catch (error) {
+    if (!isCurrentDetailsView(engine, containerID, generation)) return;
+    state.details = {
+      engine,
+      containerID,
+      generation,
+      loading: false,
+      error: readableError(error, 'Container details are unavailable.', engine),
+    };
+  }
+  await renderSafely();
+}
+
+async function closeContainerDetails(): Promise<void> {
+  const returnFocusContainerID = state.details.containerID;
+  state.details = { engine: state.engine, containerID: '', generation: ++detailsGeneration, loading: false, error: '' };
+  detailsReturnFocusContainerID = returnFocusContainerID;
+  await renderSafely();
+  detailsReturnFocusContainerID = '';
+}
+
 function render(): Promise<void> {
   if (disposed) return Promise.resolve();
   return bridge.render({
@@ -328,7 +382,13 @@ function render(): Promise<void> {
     key: 'containers-root',
     tag: 'main',
     attributes: { class: 'containers-app' },
-    children: [header(), statusStrip(), content(), state.logs.containerID ? logsPanel() : emptyNode('logs-empty')],
+    children: [
+      header(),
+      statusStrip(),
+      content(),
+      state.details.loading || state.details.container || state.details.error ? detailsPanel() : emptyNode('details-empty'),
+      state.logs.containerID ? logsPanel() : emptyNode('logs-empty'),
+    ],
   });
 }
 
@@ -403,25 +463,47 @@ function content(): PluginUIVNode {
       ? emptyState()
       : element('container-content', 'section', { class: 'container-content' }, [detached, emptyState()]);
   }
+  const visibleContainers = filteredContainers();
+  const visibleOperations = detachedOperations(false, visibleContainers, state.query.trim() ? 'Active operations' : undefined);
   return element('container-content', 'section', { class: 'container-content' }, [
-    detached,
-    element('content-heading', 'div', { class: 'content-heading' }, [
-      element('content-copy', 'div', {}, [
-        element('content-title', 'h2', {}, [text('content-title-text', 'All containers')]),
-        element('content-subtitle', 'p', {}, [text('content-subtitle-text', `${state.containers.length} resources on ${engineLabel(state.engine)}`)]),
-      ]),
-    ]),
-    element('container-grid', 'div', { class: 'container-grid' }, state.containers.map(containerCard)),
+    visibleOperations,
+    containersHeading(visibleContainers.length),
+    visibleContainers.length > 0
+      ? element('container-grid', 'div', { class: 'container-grid' }, visibleContainers.map(containerCard))
+      : filteredEmptyState(),
   ]);
 }
 
-function detachedOperations(includeVisible = false): PluginUIVNode {
-  const visibleContainerIDs = new Set(state.containers.map((container) => container.container_id));
+function containersHeading(visibleCount: number): PluginUIVNode {
+  return element('content-heading', 'div', { class: 'content-heading' }, [
+    element('content-copy', 'div', {}, [
+      element('content-title', 'h2', {}, [text('content-title-text', 'Containers')]),
+      element('content-subtitle', 'p', {}, [
+        text('content-subtitle-text', state.query.trim()
+          ? `${visibleCount} of ${state.containers.length} resources on ${engineLabel(state.engine)}`
+          : `${state.containers.length} resources on ${engineLabel(state.engine)}`),
+      ]),
+    ]),
+    element('container-search-label', 'label', { class: 'resource-search' }, [
+      element('container-search-label-copy', 'span', { class: 'sr-only' }, [text('container-search-label-text', 'Search containers')]),
+      element('container-search-input', 'input', {
+        type: 'search',
+        value: state.query,
+        placeholder: 'Search name, ID, image, or port',
+        autocomplete: 'off',
+        'data-redevplugin-action': 'filter-containers',
+      }),
+    ]),
+  ]);
+}
+
+function detachedOperations(includeVisible = false, attachedContainers: readonly Container[] = state.containers, labelOverride = ''): PluginUIVNode {
+  const visibleContainerIDs = new Set(attachedContainers.map((container) => container.container_id));
   const detached = operations
     .forEngine(state.engine)
     .filter((operation) => includeVisible || !visibleContainerIDs.has(operation.containerID));
   if (detached.length === 0) return emptyNode('detached-operations-empty');
-  const label = includeVisible ? 'Active operations' : 'Operations awaiting reconciliation';
+  const label = labelOverride || (includeVisible ? 'Active operations' : 'Operations awaiting reconciliation');
   return element('detached-operations', 'section', { class: 'detached-operations', 'aria-label': label }, [
     element('detached-operations-title', 'h2', {}, [text('detached-operations-title-text', label)]),
     element('detached-operations-list', 'div', { class: 'detached-operations-list' }, detached.map(operationPanel)),
@@ -447,12 +529,17 @@ function containerCard(container: Container): PluginUIVNode {
       element(`container-${container.container_id}-image-value`, 'strong', { title: image }, [text(`container-${container.container_id}-image-value-text`, image)]),
     ]),
     element(`container-${container.container_id}-meta`, 'div', { class: 'meta-row' }, [
-      text(`container-${container.container_id}-ports`, portSummary(container)),
-      text(`container-${container.container_id}-digest`, container.image.digest_pinned ? 'Digest pinned' : 'Tag reference'),
+      element(`container-${container.container_id}-ports`, 'span', {}, [
+        text(`container-${container.container_id}-ports-text`, portSummary(container)),
+      ]),
+      element(`container-${container.container_id}-digest`, 'span', {}, [
+        text(`container-${container.container_id}-digest-text`, container.image.digest_pinned ? 'Digest pinned' : 'Tag reference'),
+      ]),
     ]),
     element(`container-${container.container_id}-actions`, 'div', { class: 'card-actions' }, [
       actionButton(container, running ? 'stop' : 'start', running ? 'Stop' : 'Start', busy),
       actionButton(container, 'restart', 'Restart', busy || !running),
+      actionButton(container, 'inspect-container', 'Details', false),
       actionButton(container, 'view-container-logs', 'Logs', false),
       actionButton(container, 'remove', 'Remove', busy || running, 'danger'),
     ]),
@@ -499,10 +586,11 @@ function operationAction(
 }
 
 function actionButton(container: Container, action: string, label: string, disabled: boolean, tone = ''): PluginUIVNode {
-  const platformAction = action === 'view-container-logs' ? action : `${action}-container`;
+  const platformAction = action === 'view-container-logs' || action === 'inspect-container' ? action : `${action}-container`;
   return element(`container-${container.container_id}-${action}`, 'button', {
     class: `action-button ${tone}`.trim(), type: 'button', value: container.container_id, disabled,
     'data-redevplugin-action': platformAction,
+    autofocus: action === 'inspect-container' && detailsReturnFocusContainerID === container.container_id,
     'aria-label': `${label} ${container.name || shortID(container.container_id)}`,
   }, [text(`container-${container.container_id}-${action}-text`, label)]);
 }
@@ -521,6 +609,72 @@ function logsPanel(): PluginUIVNode {
     element('logs-body', 'pre', { class: 'logs-body', 'aria-live': 'polite' }, [
       text('logs-body-text', state.logs.error || (state.logs.lines.length > 0 ? state.logs.lines.join('\n') : state.logs.loading ? 'Loading logs…' : 'No log lines returned.')),
     ]),
+  ]);
+}
+
+function detailsPanel(): PluginUIVNode {
+  const container = state.details.container;
+  const title = container?.name || (container ? shortID(container.container_id) : 'Container details');
+  return element('details-backdrop', 'div', { class: 'inspector-backdrop' }, [
+    element('details-panel', 'aside', {
+      class: 'inspector-panel',
+      role: 'dialog',
+      'aria-modal': true,
+      'aria-label': title,
+    }, [
+      element('details-header', 'header', { class: 'inspector-header' }, [
+        element('details-heading-copy', 'div', {}, [
+          element('details-eyebrow', 'p', { class: 'eyebrow' }, [text('details-eyebrow-text', engineLabel(state.details.engine))]),
+          element('details-title', 'h2', {}, [text('details-title-text', title)]),
+        ]),
+        element('details-close', 'button', {
+          class: 'close-button',
+          type: 'button',
+          autofocus: true,
+          'data-redevplugin-action': 'close-container-details',
+          'data-redevplugin-escape-action': 'close-container-details',
+          'aria-label': 'Close container details',
+        }, [text('details-close-text', 'Close')]),
+      ]),
+      element('details-body', 'div', { class: 'inspector-body' }, [
+        state.details.loading ? inspectorState('details-loading', 'Loading details…') : emptyNode('details-loading-empty'),
+        state.details.error ? inspectorState('details-error', state.details.error, 'error') : emptyNode('details-error-empty'),
+        container ? containerDetailsContent(container) : emptyNode('details-content-empty'),
+      ]),
+    ]),
+  ]);
+}
+
+function inspectorState(key: string, message: string, tone = ''): PluginUIVNode {
+  return element(key, 'div', { class: `inspector-state ${tone}`.trim(), role: tone === 'error' ? 'alert' : 'status' }, [
+    text(`${key}-text`, message),
+  ]);
+}
+
+function containerDetailsContent(container: ContainerDetails): PluginUIVNode {
+  const image = container.image.reference || container.image.digest || 'Unknown image';
+  const ports = container.ports ?? [];
+  return element('details-content', 'div', { class: 'details-content' }, [
+    detailField('details-state', 'State', container.state),
+    detailField('details-id', 'Container ID', container.container_id, true),
+    detailField('details-image', 'Image', image, true),
+    detailField('details-digest', 'Image digest', container.image.digest || 'Not pinned', true),
+    detailField('details-created', 'Created', container.created_at_unix_ms ? new Date(container.created_at_unix_ms).toLocaleString() : 'Unknown'),
+    element('details-ports', 'section', { class: 'details-section' }, [
+      element('details-ports-title', 'h3', {}, [text('details-ports-title-text', 'Published ports')]),
+      ports.length > 0
+        ? element('details-ports-list', 'ul', {}, ports.map((port, index) => element(`details-port-${index}`, 'li', {}, [
+          text(`details-port-${index}-text`, `${port.host_ip || 'all interfaces'}:${port.host_port || 'dynamic'} → ${port.port}/${port.protocol || 'tcp'}`),
+        ])))
+        : element('details-ports-empty', 'p', {}, [text('details-ports-empty-text', 'No published ports')]),
+    ]),
+  ]);
+}
+
+function detailField(key: string, label: string, value: string, code = false): PluginUIVNode {
+  return element(key, 'div', { class: 'detail-field' }, [
+    element(`${key}-label`, 'span', {}, [text(`${key}-label-text`, label)]),
+    element(`${key}-value`, code ? 'code' : 'strong', { title: value }, [text(`${key}-value-text`, value)]),
   ]);
 }
 
@@ -546,6 +700,32 @@ function emptyState(): PluginUIVNode {
     element('empty-title', 'h2', {}, [text('empty-title-text', 'No containers yet')]),
     element('empty-copy', 'p', {}, [text('empty-copy-text', `No running or stopped resources were reported by ${engineLabel(state.engine)}.`)]),
   ]);
+}
+
+function filteredEmptyState(): PluginUIVNode {
+  return element('filtered-empty-state', 'section', { class: 'center-state compact' }, [
+    element('filtered-empty-visual', 'div', { class: 'state-visual empty', 'aria-hidden': true }, []),
+    element('filtered-empty-title', 'h2', {}, [text('filtered-empty-title-text', 'No matching containers')]),
+    element('filtered-empty-copy', 'p', {}, [text('filtered-empty-copy-text', 'Change the search query to see other resources.')]),
+  ]);
+}
+
+function filteredContainers(): Container[] {
+  const query = state.query.normalize('NFKC').trim().toLocaleLowerCase();
+  if (!query) return state.containers;
+  return state.containers.filter((container) => {
+    const ports = (container.ports ?? []).map((port) => (
+      `${port.host_ip ?? ''}:${port.host_port ?? ''}:${port.port}/${port.protocol ?? 'tcp'}`
+    ));
+    return [
+      container.name,
+      container.container_id,
+      container.image.reference,
+      container.image.digest,
+      container.state,
+      ...ports,
+    ].some((value) => String(value ?? '').normalize('NFKC').toLocaleLowerCase().includes(query));
+  });
 }
 
 function readableError(error: unknown, fallback: string, engine: Engine = state.engine): string {
@@ -627,6 +807,15 @@ function isCurrentLogView(engine: Engine, containerID: string, generation: numbe
   return state.logs.engine === engine
     && state.logs.containerID === containerID
     && state.logs.generation === generation;
+}
+
+function isCurrentDetailsView(engine: Engine, containerID: string, generation: number): boolean {
+  return !disposed
+    && state.engine === engine
+    && state.details.engine === engine
+    && state.details.containerID === containerID
+    && state.details.generation === generation
+    && detailsGeneration === generation;
 }
 
 async function renderSafely(): Promise<void> {
