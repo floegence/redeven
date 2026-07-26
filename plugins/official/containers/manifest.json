@@ -1,5 +1,5 @@
 {
-  "schema_version": "redevplugin.manifest.v5",
+  "schema_version": "redevplugin.manifest.v6",
   "publisher": {
     "publisher_id": "com.redeven.official",
     "display_name": "Redeven Official"
@@ -7,10 +7,10 @@
   "plugin": {
     "plugin_id": "com.redeven.official.containers",
     "display_name": "Containers",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "api_version": "plugin-v1",
-    "min_runtime_version": "0.6.5",
-    "ui_protocol_version": "plugin-ui-v5"
+    "min_runtime_version": "0.6.18",
+    "ui_protocol_version": "plugin-ui-v6"
   },
   "surfaces": [
     {
