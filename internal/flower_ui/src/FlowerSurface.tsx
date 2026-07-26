@@ -992,6 +992,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let composerRef: HTMLTextAreaElement | HTMLInputElement | undefined;
   let attachmentPickerRef: HTMLInputElement | undefined;
   let attachmentPickerButtonRef: HTMLButtonElement | undefined;
+  let composerDraftRecoveryButtonRef: HTMLButtonElement | undefined;
+  let expandedDraftRecoveryFocusRequested = false;
   let attachmentReselectTarget: Readonly<{ sessionKey: string; localID: string }> | null = null;
   let attachmentPickerSessionKey = '';
   let surfaceDisposed = false;
@@ -1688,6 +1690,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (!operation) return false;
     drainPendingAttachmentIntents(operation);
     return true;
+  };
+  const recoverComposerDraft = async (takeOver = false) => {
+    const recovered = await acquireComposerDraftLease(takeOver);
+    requestAnimationFrame(() => {
+      if (recovered && composerRef && !composerRef.disabled) {
+        composerRef.focus({ preventScroll: true });
+        return;
+      }
+      composerDraftRecoveryButtonRef?.focus({ preventScroll: true });
+    });
   };
   const queueComposerAttachmentIntent = (
     sessionKey: string,
@@ -5988,7 +6000,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const question = activeInputQuestion();
     return question ? questionDraft(question.id).text ?? '' : '';
   });
-  const companionSummaryVisible = createMemo(() => (
+  const companionSummaryEligible = createMemo(() => (
     companionCollapsed()
     && !companionActionVisible()
     && !composerFocused()
@@ -5996,6 +6008,35 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     && !trimString(composerTextValue())
     && !composerHasAttachments()
     && Boolean(trimString(props.companionSummary?.visualText))
+  ));
+  const companionActiveWorkSummaryVisible = createMemo(() => (
+    companionSummaryEligible()
+    && (props.companionSummary?.priorityStatus === 'running' || props.companionSummary?.priorityStatus === 'queued')
+  ));
+  const companionRecovery = createMemo(() => {
+    if (!companionCollapsed() || companionActionVisible() || companionActiveWorkSummaryVisible()) return null;
+    if (composerDraftLeaseConflict()) {
+      return {
+        kind: 'lease_conflict' as const,
+        message: attachmentCopy().leaseConflict,
+      };
+    }
+    if (composerDraftInitiallyUnavailable()) {
+      return {
+        kind: 'draft_unavailable' as const,
+        message: attachmentCopy().draftUnavailable,
+      };
+    }
+    return null;
+  });
+  const companionRecoveryVisible = createMemo(() => companionRecovery() !== null);
+  const openCompanionForDraftRecovery = () => {
+    expandedDraftRecoveryFocusRequested = true;
+    props.onCompanionOpenRequest?.();
+  };
+  const companionSummaryVisible = createMemo(() => (
+    companionSummaryEligible()
+    && !companionRecoveryVisible()
   ));
   const companionDescriptionID = createMemo(() => (
     props.companionRegionID ? `${props.companionRegionID}-status` : undefined
@@ -6008,6 +6049,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       && props.companionSummary?.progressKind !== 'output'
     )
   ));
+
+  createEffect(() => {
+    if (companionCollapsed() || !expandedDraftRecoveryFocusRequested) return;
+    expandedDraftRecoveryFocusRequested = false;
+    requestAnimationFrame(() => composerDraftRecoveryButtonRef?.focus({ preventScroll: true }));
+  });
 
   const composerPlaceholder = createMemo(() => {
     if (selectedThreadDetailPending()) return copy().chat.threadLoading;
@@ -9056,12 +9103,29 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     type="button"
                     class="flower-companion-collapsed-action"
                     aria-controls={props.companionRegionID}
+                    aria-expanded="false"
                     onClick={() => props.onCompanionOpenRequest?.()}
                   >
                     <span class="truncate">
                       {props.companionActionLabel || props.companionSummary?.visualText}
                     </span>
                   </button>
+                </Show>
+                <Show when={companionRecovery()} keyed>
+                  {(recovery) => (
+                    <button
+                      type="button"
+                      class="flower-companion-collapsed-action flower-companion-collapsed-recovery"
+                      data-flower-companion-recovery={recovery.kind}
+                      title={recovery.message}
+                      aria-label={recovery.message}
+                      aria-controls={props.companionRegionID}
+                      aria-expanded="false"
+                      onClick={openCompanionForDraftRecovery}
+                    >
+                      <span class="truncate">{recovery.message}</span>
+                    </button>
+                  )}
                 </Show>
                 <Show when={companionSummaryVisible()}>
                   <button
@@ -9112,7 +9176,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     </span>
                   </button>
                 </Show>
-                <Show when={companionCollapsed() && !companionActionVisible() && companionDescriptionID()}>
+                <Show when={companionCollapsed() && !companionActionVisible() && !companionRecoveryVisible() && companionDescriptionID()}>
                   <span
                     id={companionDescriptionID()}
                     class="flower-visually-hidden"
@@ -9125,8 +9189,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 </Show>
                 <div
                   class="flower-composer-content"
-                  aria-hidden={companionActionVisible() || companionSummaryVisible() ? 'true' : undefined}
-                  inert={companionActionVisible() || companionSummaryVisible()}
+                  aria-hidden={companionActionVisible() || companionRecoveryVisible() || companionSummaryVisible() ? 'true' : undefined}
+                  inert={companionActionVisible() || companionRecoveryVisible() || companionSummaryVisible()}
                 >
                 <input
                   ref={attachmentPickerRef}
@@ -9193,7 +9257,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 <Show when={composerDraftLeaseConflict()}>
                   <div class="flower-composer-draft-conflict" role="status">
                     <span>{attachmentCopy().leaseConflict}</span>
-                    <button type="button" onClick={() => void acquireComposerDraftLease(true)}>{attachmentCopy().takeOver}</button>
+                    <button
+                      ref={composerDraftRecoveryButtonRef}
+                      type="button"
+                      onClick={() => void recoverComposerDraft(true)}
+                    >
+                      {attachmentCopy().takeOver}
+                    </button>
                   </div>
                 </Show>
                 <Show when={composerDraftStoreUnavailable()}>
@@ -9204,7 +9274,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 <Show when={composerDraftInitiallyUnavailable()}>
                   <div class="flower-composer-draft-conflict" role="status">
                     <span>{attachmentCopy().draftUnavailable}</span>
-                    <button type="button" onClick={() => void acquireComposerDraftLease()}>{attachmentCopy().retry}</button>
+                    <button
+                      ref={composerDraftRecoveryButtonRef}
+                      type="button"
+                      onClick={() => void recoverComposerDraft()}
+                    >
+                      {attachmentCopy().retry}
+                    </button>
                   </div>
                 </Show>
                 <Show when={(selectedInputRequest() || selectedComposerApprovalDisplayAction()) && (composerChatDraftHasRawText() || composerHasAttachments())}>

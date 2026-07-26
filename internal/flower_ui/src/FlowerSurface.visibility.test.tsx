@@ -24,7 +24,11 @@ import type {
 } from './contracts/flowerSurfaceContracts';
 import type { FlowerCompanionPresenceProjection } from './flowerCompanionPresence';
 import { FlowerSurface as FlowerSurfaceComponent, type FlowerSurfaceProps } from './FlowerSurface';
-import { createFlowerComposerDraftCoordinator } from './composer/createFlowerComposerDraftCoordinator';
+import {
+  createFlowerComposerDraftCoordinator,
+  type FlowerComposerDraftLease,
+  type FlowerComposerDraftSnapshot,
+} from './composer/createFlowerComposerDraftCoordinator';
 
 const FlowerSurface: Component<Omit<FlowerSurfaceProps, 'draftCoordinator'>> = (props) => (
   <FlowerSurfaceComponent {...props} draftCoordinator={createFlowerComposerDraftCoordinator()} />
@@ -100,6 +104,20 @@ function readStatus(isUnread = true, revision = 2): FlowerThreadReadStatus {
       last_read_message_at_unix_ms: isUnread ? (revision - 1) * 1_000 : revision * 1_000,
       last_seen_activity_signature: `status:running\u001factivity:${isUnread ? revision - 1 : revision}`,
     },
+  };
+}
+
+function composerDraftSnapshot(
+  scopeID: string,
+  revision = 0,
+  lease?: FlowerComposerDraftLease,
+): FlowerComposerDraftSnapshot {
+  return {
+    scope_id: scopeID,
+    revision,
+    value: { text: '', attachments: [], mode: 'ordinary' },
+    updated_at_unix_ms: 1_000 + revision,
+    ...(lease ? { lease } : {}),
   };
 }
 
@@ -411,6 +429,220 @@ describe('FlowerSurface companion visibility lifecycle', () => {
     expect(host.querySelector('textarea')).toBe(textarea);
   });
 
+  it('opens a collapsed draft conflict before explicit takeover and preserves composer identity', async () => {
+    const idleThread = thread({
+      thread_id: 'thread-draft-conflict',
+      status: 'idle',
+      read_status: readStatus(false),
+    });
+    const harness = createAdapterHarness({
+      listThreads: vi.fn(async () => [idleThread]),
+      loadThread: vi.fn(async () => bootstrap(idleThread)),
+    });
+    const coordinator = createFlowerComposerDraftCoordinator({ createLeaseID: () => 'activity-lease' });
+    const activitySession = coordinator.open(idleThread.thread_id, 'activity');
+    await activitySession.acquire();
+    const workbenchSession = coordinator.open(idleThread.thread_id, 'workbench');
+    const [open, setOpen] = createSignal(false);
+    dispose = render(() => (
+      <FlowerSurfaceComponent
+        adapter={harness.adapter}
+        draftCoordinator={coordinator}
+        surfaceInstanceID="workbench"
+        notify={() => undefined}
+        presentation="companion"
+        companionOpen={open()}
+        companionRegionID="test-flower-companion"
+        companionSummary={{
+          visualText: 'Task complete',
+          accessibleText: 'Task complete',
+          priorityStatus: 'completed',
+          ephemeralKind: 'completion',
+          running: false,
+        }}
+        engaged={open()}
+        transcriptVisible={open()}
+        onCompanionOpenRequest={() => setOpen(true)}
+        focusThreadRequest={{ request_id: 'focus-conflict', thread_id: idleThread.thread_id }}
+      />
+    ), host);
+
+    await waitUntil(
+      () => Boolean(host.querySelector('[data-flower-companion-recovery="lease_conflict"]')),
+      'collapsed draft conflict recovery did not render',
+    );
+    const surface = host.querySelector('[data-flower-companion-open]') as HTMLElement;
+    const textarea = host.querySelector('textarea') as HTMLTextAreaElement;
+    const content = host.querySelector('.flower-composer-content') as HTMLElement & { inert: boolean };
+    const recovery = host.querySelector('[data-flower-companion-recovery="lease_conflict"]') as HTMLButtonElement;
+    expect(recovery.tagName).toBe('BUTTON');
+    expect(recovery.disabled).toBe(false);
+    expect(recovery.tabIndex).toBe(0);
+    expect(recovery.textContent).toContain('This draft is being edited in another Flower surface.');
+    expect(recovery.getAttribute('aria-label')).toBe('This draft is being edited in another Flower surface.');
+    expect(recovery.getAttribute('aria-controls')).toBe('test-flower-companion');
+    expect(recovery.getAttribute('aria-expanded')).toBe('false');
+    expect(textarea.disabled).toBe(true);
+    expect(content.inert).toBe(true);
+    expect(content.getAttribute('aria-hidden')).toBe('true');
+    expect(host.querySelector('.flower-companion-collapsed-summary')).toBeNull();
+    expect(host.querySelector('#test-flower-companion-status')).toBeNull();
+
+    recovery.focus();
+    recovery.click();
+    await flushAsync();
+    expect(surface.dataset.flowerCompanionOpen).toBe('true');
+    expect(workbenchSession.leaseState().kind).toBe('lease_conflict');
+    expect(host.querySelector('textarea')).toBe(textarea);
+    await presentNextFrame();
+    const takeover = host.querySelector('.flower-composer-draft-conflict button') as HTMLButtonElement;
+    expect(document.activeElement).toBe(takeover);
+
+    takeover.click();
+    await waitUntil(() => !textarea.disabled, 'takeover did not restore the composer');
+    await presentNextFrame();
+    expect(workbenchSession.leaseState().kind).toBe('lease_owned');
+    expect(host.querySelector('textarea')).toBe(textarea);
+    expect(document.activeElement).toBe(textarea);
+  });
+
+  it('keeps active work ahead of collapsed draft recovery', async () => {
+    const runningThread = thread({
+      thread_id: 'thread-running-conflict',
+      status: 'running',
+    });
+    const harness = createAdapterHarness({
+      listThreads: vi.fn(async () => [runningThread]),
+      loadThread: vi.fn(async () => bootstrap(runningThread)),
+    });
+    const coordinator = createFlowerComposerDraftCoordinator();
+    await coordinator.open(runningThread.thread_id, 'activity').acquire();
+    dispose = render(() => (
+      <FlowerSurfaceComponent
+        adapter={harness.adapter}
+        draftCoordinator={coordinator}
+        surfaceInstanceID="workbench"
+        notify={() => undefined}
+        presentation="companion"
+        companionOpen={false}
+        companionRegionID="test-flower-companion"
+        companionSummary={{
+          visualText: 'Working on the current task',
+          accessibleText: 'Working on the current task',
+          priorityStatus: 'running',
+          running: true,
+        }}
+        engaged={false}
+        transcriptVisible={false}
+        focusThreadRequest={{ request_id: 'focus-running-conflict', thread_id: runningThread.thread_id }}
+      />
+    ), host);
+
+    await waitUntil(
+      () => Boolean(host.querySelector('.flower-companion-collapsed-summary')),
+      'active work summary did not render',
+    );
+    expect(host.querySelector('.flower-companion-collapsed-summary')?.textContent).toContain('Working on the current task');
+    expect(host.querySelector('[data-flower-companion-recovery]')).toBeNull();
+    expect(host.querySelectorAll('.flower-companion-collapsed-action')).toHaveLength(0);
+  });
+
+  it('opens collapsed unavailable draft recovery before retrying persistence', async () => {
+    const idleThread = thread({
+      thread_id: 'thread-draft-unavailable',
+      status: 'idle',
+      read_status: readStatus(false),
+    });
+    const harness = createAdapterHarness({
+      listThreads: vi.fn(async () => [idleThread]),
+      loadThread: vi.fn(async () => bootstrap(idleThread)),
+    });
+    const lease: FlowerComposerDraftLease = {
+      lease_id: 'recovered-lease',
+      scope_id: idleThread.thread_id,
+      holder_id: 'activity',
+      acquired_revision: 0,
+      expires_at_unix_ms: Date.now() + 30_000,
+    };
+    let persistenceOnline = false;
+    const load = vi.fn(async (scopeID: string) => {
+      if (scopeID === idleThread.thread_id && !persistenceOnline) throw new Error('offline');
+      return composerDraftSnapshot(scopeID);
+    });
+    const acquire = vi.fn(async () => ({
+      state: 'owned' as const,
+      snapshot: composerDraftSnapshot(idleThread.thread_id, 0, lease),
+      lease,
+    }));
+    const coordinator = createFlowerComposerDraftCoordinator({
+      persistence: {
+        load,
+        acquire,
+        renew: async () => ({
+          state: 'owned',
+          snapshot: composerDraftSnapshot(idleThread.thread_id, 0, lease),
+          lease,
+        }),
+        mutate: async (_scopeID, _holderID, _leaseID, expectedRevision, value) => ({
+          kind: 'committed',
+          snapshot: {
+            ...composerDraftSnapshot(idleThread.thread_id, expectedRevision + 1, lease),
+            value,
+          },
+        }),
+        release: async () => undefined,
+      },
+    });
+    const unavailableSession = coordinator.open(idleThread.thread_id, 'activity');
+    await vi.waitFor(() => expect(unavailableSession.leaseState().kind).toBe('store_unavailable'));
+    const [open, setOpen] = createSignal(false);
+    dispose = render(() => (
+      <FlowerSurfaceComponent
+        adapter={harness.adapter}
+        draftCoordinator={coordinator}
+        surfaceInstanceID="activity"
+        notify={() => undefined}
+        presentation="companion"
+        companionOpen={open()}
+        companionRegionID="test-flower-companion"
+        companionSummary={{
+          visualText: '',
+          accessibleText: 'Ready to ask Flower',
+          priorityStatus: 'idle',
+          running: false,
+        }}
+        engaged={open()}
+        transcriptVisible={open()}
+        onCompanionOpenRequest={() => setOpen(true)}
+        focusThreadRequest={{ request_id: 'focus-unavailable', thread_id: idleThread.thread_id }}
+      />
+    ), host);
+
+    await waitUntil(
+      () => Boolean(host.querySelector('[data-flower-companion-recovery="draft_unavailable"]')),
+      'collapsed unavailable draft recovery did not render',
+    );
+    const textarea = host.querySelector('textarea') as HTMLTextAreaElement;
+    const recovery = host.querySelector('[data-flower-companion-recovery="draft_unavailable"]') as HTMLButtonElement;
+    expect(recovery.textContent).toContain('Draft editing is unavailable until the connection recovers.');
+    expect(recovery.getAttribute('aria-controls')).toBe('test-flower-companion');
+    expect(acquire).not.toHaveBeenCalled();
+
+    recovery.click();
+    await flushAsync();
+    expect(acquire).not.toHaveBeenCalled();
+    await presentNextFrame();
+    const retry = host.querySelector('.flower-composer-draft-conflict button') as HTMLButtonElement;
+    expect(document.activeElement).toBe(retry);
+
+    persistenceOnline = true;
+    retry.click();
+    await waitUntil(() => !textarea.disabled, 'draft retry did not restore the composer');
+    await presentNextFrame();
+    expect(acquire).toHaveBeenCalledTimes(1);
+    expect(document.activeElement).toBe(textarea);
+  });
+
   it('lets a collapsed approval action own accessibility without a contradictory summary announcement', async () => {
     const approvalAction = {
       action_id: 'approval-collapsed',
@@ -462,9 +694,13 @@ describe('FlowerSurface companion visibility lifecycle', () => {
         },
       })),
     });
+    const coordinator = createFlowerComposerDraftCoordinator();
+    await coordinator.open(approvalThread.thread_id, 'activity').acquire();
     dispose = render(() => (
-      <FlowerSurface
+      <FlowerSurfaceComponent
         adapter={harness.adapter}
+        draftCoordinator={coordinator}
+        surfaceInstanceID="workbench"
         notify={() => undefined}
         presentation="companion"
         companionOpen={false}
@@ -489,6 +725,7 @@ describe('FlowerSurface companion visibility lifecycle', () => {
     const action = host.querySelector('.flower-companion-collapsed-action') as HTMLButtonElement;
     expect(action.textContent).toContain('Open Flower to continue');
     expect(action.getAttribute('aria-controls')).toBe('test-flower-companion');
+    expect(host.querySelector('[data-flower-companion-recovery]')).toBeNull();
     expect(host.querySelector('#test-flower-companion-status')).toBeNull();
     expect(host.textContent).not.toContain('Ready to ask Flower');
   });
@@ -527,9 +764,13 @@ describe('FlowerSurface companion visibility lifecycle', () => {
         },
       })),
     });
+    const coordinator = createFlowerComposerDraftCoordinator();
+    await coordinator.open(secretThread.thread_id, 'activity').acquire();
     dispose = render(() => (
-      <FlowerSurface
+      <FlowerSurfaceComponent
         adapter={harness.adapter}
+        draftCoordinator={coordinator}
+        surfaceInstanceID="workbench"
         notify={() => undefined}
         presentation="companion"
         companionOpen={false}
@@ -555,6 +796,7 @@ describe('FlowerSurface companion visibility lifecycle', () => {
     expect(actions).toHaveLength(1);
     expect(actions[0]?.textContent).toContain('Open Flower to continue');
     expect(actions[0]?.getAttribute('aria-controls')).toBe('test-flower-companion');
+    expect(host.querySelector('[data-flower-companion-recovery]')).toBeNull();
     expect(host.querySelector('#test-flower-companion-status')).toBeNull();
     expect(host.textContent).not.toContain('Ready to ask Flower');
   });
