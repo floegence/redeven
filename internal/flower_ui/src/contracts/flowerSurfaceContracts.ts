@@ -155,11 +155,12 @@ export type FlowerMessageReference =
 
 export type FlowerChatMessage = Readonly<{
   id: string;
-  // Canonical root-thread messages always carry turn_id. Synthetic local and
-  // SubAgent detail rows may omit it because they are not admission records.
+  // Canonical root-thread and SubAgent messages always carry turn_id. Synthetic
+  // local presentation rows may omit it because they are not admission records.
   turn_id?: string;
   thread_id?: string;
   run_id?: string;
+  turn_ordinal?: number;
   role: FlowerChatMessageRole;
   content: string;
   status: FlowerChatMessageStatus;
@@ -613,6 +614,7 @@ export type FlowerSubagentTimelineRow = Readonly<{
 
 export type FlowerSubagentDetail = Readonly<{
   summary: FlowerSubagentSummary;
+  messages: readonly FlowerChatMessage[];
   timeline: readonly FlowerSubagentTimelineRow[];
   activity?: FlowerActivityTimelineBlock;
   model_io_status?: FlowerModelIOStatus | null;

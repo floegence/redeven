@@ -30,7 +30,7 @@ func (a floretLiveAttachmentAuthority) ReadCanonicalAttachmentMembership(ctx con
 }
 
 func (a floretLiveAttachmentAuthority) find(ctx context.Context, exactTurnID string, attachmentID string) (CanonicalAttachmentMembership, error) {
-	var before *flruntime.ThreadTurnsBeforeCursor
+	var before *flruntime.ThreadTurnCursor
 	for {
 		req := flruntime.ListThreadTurnsRequest{ThreadID: flruntime.ThreadID(a.threadID)}
 		if before == nil {
@@ -63,10 +63,10 @@ func (a floretLiveAttachmentAuthority) find(ctx context.Context, exactTurnID str
 		if !page.HasMore {
 			return CanonicalAttachmentMembership{}, sql.ErrNoRows
 		}
-		if len(page.Turns) == 0 || page.BeforeCursor == nil || strings.TrimSpace(page.BeforeCursor.EntryID) == "" {
+		if len(page.Turns) == 0 || page.BeforeCursor == nil || strings.TrimSpace(string(*page.BeforeCursor)) == "" {
 			return CanonicalAttachmentMembership{}, errors.New("Floret turn pagination stopped before completion")
 		}
-		if before != nil && before.EntryID == page.BeforeCursor.EntryID {
+		if before != nil && *before == *page.BeforeCursor {
 			return CanonicalAttachmentMembership{}, errors.New("Floret turn pagination did not advance")
 		}
 		before = page.BeforeCursor

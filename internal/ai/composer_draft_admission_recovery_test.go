@@ -173,11 +173,11 @@ func TestPrepareComposerDraftThreadRejectsAttachmentAdmissionBeforeBindingOrCrea
 	if after.Revision != draft.Revision || string(after.Value) != string(draft.Value) || strings.Contains(string(after.Value), `"target_thread_id"`) {
 		t.Fatalf("rejected admission mutated draft: before=%#v after=%#v", draft, after)
 	}
-	settings, err := svc.threadsDB.ListAllThreadSettingsForRecovery(t.Context())
+	settings, _, hasMore, err := svc.threadsDB.ListThreadSettingsForRecoveryPage(t.Context(), threadstore.ThreadSettingsRecoveryCursor{}, 200)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(settings) != 0 {
+	if len(settings) != 0 || hasMore {
 		t.Fatalf("rejected admission created thread settings: %#v", settings)
 	}
 	operations, err := svc.threadsDB.ListPendingThreadCreateOperations(t.Context(), 10)

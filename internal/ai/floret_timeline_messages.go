@@ -145,25 +145,54 @@ func (s *Service) loadThreadTimelineMessages(ctx context.Context, endpointID str
 	if err != nil {
 		return nil, err
 	}
+	return s.threadTimelineMessagesFromTurns(endpointID, threadID, turns)
+}
+
+func (s *Service) threadTimelineMessagesFromTurns(endpointID string, threadID string, turns []flruntime.ThreadTurnSnapshot) ([]threadTimelineMessage, error) {
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	if endpointID == "" || threadID == "" {
+		return nil, errors.New("invalid canonical timeline identity")
+	}
 	items := make([]threadTimelineMessage, 0, len(turns)*2)
+	seenTurns := make(map[string]struct{}, len(turns))
 	for _, turn := range turns {
 		turnID := strings.TrimSpace(string(turn.TurnID))
 		runID := strings.TrimSpace(string(turn.RunID))
 		userEntryID := strings.TrimSpace(turn.UserEntryID)
-		if turnID == "" || runID == "" || userEntryID == "" || turn.Ordinal <= 0 {
+		if turnID == "" || runID == "" || turn.Ordinal <= 0 {
 			return nil, fmt.Errorf("Floret turn %q has incomplete canonical identity", turnID)
 		}
-		userCreatedAt := turn.StartedAt.UnixMilli()
-		userRaw, err := canonicalUserTimelineMessageForThread(threadID, turnID, userEntryID, turn.UserInput, turn.UserAttachments, turn.UserReferences, userCreatedAt)
-		if err != nil {
-			return nil, err
+		if _, duplicate := seenTurns[turnID]; duplicate {
+			return nil, canonicalTimelineResyncErrorf("turn %q is duplicated", turnID)
 		}
 		userRowID := turn.Ordinal * 4
-		items = append(items, threadTimelineMessage{
-			RowID: userRowID, MessageID: userEntryID, CreatedAt: userCreatedAt,
-			CanonicalTurn: turnID, CanonicalRun: runID,
-			TurnOrdinal: turn.Ordinal, TurnStatus: turn.Status, MessageJSON: userRaw,
-		})
+		if turn.RetrySource != nil {
+			sourceTurnID := strings.TrimSpace(string(turn.RetrySource.TurnID))
+			if sourceTurnID == "" || sourceTurnID == turnID {
+				return nil, canonicalTimelineResyncErrorf("retry turn %q has an invalid source", turnID)
+			}
+			if _, found := seenTurns[sourceTurnID]; !found {
+				return nil, canonicalTimelineResyncErrorf("retry turn %q references unavailable source %q", turnID, sourceTurnID)
+			}
+			if userEntryID != "" || strings.TrimSpace(turn.UserInput) != "" || len(turn.UserAttachments) != 0 || len(turn.UserReferences) != 0 {
+				return nil, canonicalTimelineResyncErrorf("retry turn %q duplicates canonical user input", turnID)
+			}
+		} else {
+			if userEntryID == "" {
+				return nil, canonicalTimelineResyncErrorf("turn %q is missing its canonical user entry", turnID)
+			}
+			userCreatedAt := turn.StartedAt.UnixMilli()
+			userRaw, err := canonicalUserTimelineMessageForThread(threadID, turnID, userEntryID, turn.UserInput, turn.UserAttachments, turn.UserReferences, userCreatedAt)
+			if err != nil {
+				return nil, err
+			}
+			items = append(items, threadTimelineMessage{
+				RowID: userRowID, MessageID: userEntryID, CreatedAt: userCreatedAt,
+				CanonicalTurn: turnID, CanonicalRun: runID,
+				TurnOrdinal: turn.Ordinal, TurnStatus: turn.Status, MessageJSON: userRaw,
+			})
+		}
 		assistant, reason, err := s.floretProjectionMessage(endpointID, threadID, turn)
 		if err != nil {
 			return nil, err
@@ -185,6 +214,7 @@ func (s *Service) loadThreadTimelineMessages(ctx context.Context, endpointID str
 				TurnOrdinal: turn.Ordinal, TurnStatus: turn.Status, Decoration: &decoration,
 			})
 		}
+		seenTurns[turnID] = struct{}{}
 	}
 	return items, nil
 }
@@ -195,7 +225,7 @@ func listAllFloretThreadTurns(ctx context.Context, host interface {
 	newerThroughOrdinal := int64(-1)
 	newerOldestTurnOrdinal := int64(-1)
 	out := make([]flruntime.ThreadTurnSnapshot, 0)
-	var before *flruntime.ThreadTurnsBeforeCursor
+	var before *flruntime.ThreadTurnCursor
 	for {
 		request := flruntime.ListThreadTurnsRequest{ThreadID: flruntime.ThreadID(threadID)}
 		if before == nil {
@@ -237,10 +267,10 @@ func listAllFloretThreadTurns(ctx context.Context, host interface {
 		if !page.HasMore {
 			break
 		}
-		if len(page.Turns) == 0 || page.BeforeCursor == nil || strings.TrimSpace(page.BeforeCursor.EntryID) == "" {
+		if len(page.Turns) == 0 || page.BeforeCursor == nil || strings.TrimSpace(string(*page.BeforeCursor)) == "" {
 			return nil, errors.New("Floret turn pagination did not advance")
 		}
-		if before != nil && page.BeforeCursor.EntryID == before.EntryID {
+		if before != nil && *page.BeforeCursor == *before {
 			return nil, errors.New("Floret turn pagination cursor did not advance")
 		}
 		newerThroughOrdinal = page.ThroughOrdinal

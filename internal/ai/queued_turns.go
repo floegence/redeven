@@ -88,7 +88,7 @@ func (s *Service) readCanonicalThreadTurnIDs(ctx context.Context, threadID strin
 		return nil, err
 	}
 	turnIDs := make(map[string]struct{})
-	var beforeCursor *flruntime.ThreadTurnsBeforeCursor
+	var beforeCursor *flruntime.ThreadTurnCursor
 	for {
 		req := flruntime.ListThreadTurnsRequest{ThreadID: flruntime.ThreadID(threadID)}
 		if beforeCursor == nil {
@@ -111,10 +111,10 @@ func (s *Service) readCanonicalThreadTurnIDs(ctx context.Context, threadID strin
 		if !page.HasMore {
 			break
 		}
-		if len(page.Turns) == 0 || page.BeforeCursor == nil || strings.TrimSpace(page.BeforeCursor.EntryID) == "" {
+		if len(page.Turns) == 0 || page.BeforeCursor == nil || strings.TrimSpace(string(*page.BeforeCursor)) == "" {
 			return nil, errors.New("Floret turn pagination stopped before completion")
 		}
-		if beforeCursor != nil && page.BeforeCursor.EntryID == beforeCursor.EntryID {
+		if beforeCursor != nil && *page.BeforeCursor == *beforeCursor {
 			return nil, errors.New("Floret turn pagination did not advance")
 		}
 		beforeCursor = page.BeforeCursor

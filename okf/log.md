@@ -1,8 +1,13 @@
 # Redeven OKF Update Log
 
+## 2026-07-26
+* **Dependency**: Upgraded to published Floret v0.30.0 with exact public checksums and opaque turn cursors.
+* **Boundary**: Made typed Floret turn projections the only SubAgent transcript authority, hiding delegated missions only through `UserMessageOrigin` plus exact `UserEntryID` and removing browser metadata parsing and synthetic message identities.
+* **Recovery**: Made Floret `ThreadInventoryHost` the startup root inventory authority while retaining paged Redeven settings solely for product configuration reconciliation.
+
 ## 2026-07-25
 * **CI**: Canonicalized package-manager symlinks while keeping the Desktop Electron preflight bound to the in-repository package root, exact version pin, and standard npm binary path.
-* **Dependency**: Upgraded to published Floret v0.28.0 and replaced Redeven's duplicate Store maintenance state machine with the standard `StartSQLiteStore` entrypoint while retaining product readiness and typed failure projection.
+* **Dependency**: Upgraded to published Floret v0.30.0 and replaced Redeven's duplicate Store maintenance state machine with the standard `StartSQLiteStore` entrypoint while retaining product readiness and typed failure projection.
 * **Architecture**: Isolated AI startup behind a process-local readiness controller with typed unavailability, request-scoped generation leases, serialized retry, and drain-before-close replacement while keeping unrelated Code App surfaces available.
 * **UI**: Added a Flower-local AI maintenance surface and owner-grouped Settings diagnostics with fail-closed typed mapping, bounded recovery, same-source sanitized clipboard output, focus restoration, responsive accessibility, and explicit localization.
 * **Dependency**: Upgraded to published Floret v0.27.1 and adopted its inspection-bound open contract with typed, fail-closed Store startup orchestration and published-version restart fixtures.

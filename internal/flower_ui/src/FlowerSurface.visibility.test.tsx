@@ -275,6 +275,7 @@ function createAdapterHarness(overrides: Partial<FlowerSurfaceAdapter> = {}): Ad
         can_interrupt: false,
         can_close: false,
       },
+      messages: [],
       timeline: [],
       next_ordinal: 0,
       has_more: false,

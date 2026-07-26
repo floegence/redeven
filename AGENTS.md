@@ -893,6 +893,12 @@ Redeven code must not bypass those Floret lifecycles:
   and the typed todo API. Realtime events may carry only in-memory run
   presentation and canonical replacement signals; they must not carry transcript
   messages or a transcript-reset protocol;
+- SubAgent transcript presentation must read typed `ListThreadTurns` pages from
+  the parent-scoped Floret host. Only `delegated_mission` user rows may be hidden,
+  and only by exact `UserMessageOrigin` plus `UserEntryID`. Redeven must not
+  request raw child messages, parse detail-event metadata as authority, synthesize
+  message identities, duplicate retry user rows, or rebuild conversation from
+  `ReadSubAgentDetail`; sanitized detail events remain a separate diagnostic ledger;
 - provider adapters may pass `PreviousState` and `ResponseState` only at the
   typed Floret gateway boundary. Floret persists the complete opaque state and
   invalidates it by journal leaf plus the non-sensitive gateway compatibility
@@ -923,6 +929,9 @@ Redeven code must not bypass those Floret lifecycles:
   coordinator. Composition must use arbitrary-ID recovery binders once to
   produce an immutable list of recovery factories already bound to exact root
   or parent-child identity and durable proof before retry ownership is retained.
+  Root enumeration must come from a composition-owned Floret
+  `ThreadInventoryHost`; paged Redeven settings are only a product-configuration
+  reconciliation input and must not create, omit, or replace canonical roots.
   Runtime binding stays closed until interrupted-turn and pending SubAgent
   publication recovery completes, and Redeven must not mint pending-tool
   recovery without durable host process ownership. Startup must process every

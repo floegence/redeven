@@ -70,6 +70,39 @@ ORDER BY name
 	}
 }
 
+func TestListThreadSettingsForRecoveryPageUsesStableOpaquePosition(t *testing.T) {
+	t.Parallel()
+
+	store := openStoreForTest(t)
+	ctx := context.Background()
+	for _, settings := range []ThreadSettings{
+		{EndpointID: "env_b", ThreadID: "thread_3", PermissionType: "approval_required"},
+		{EndpointID: "env_a", ThreadID: "thread_2", PermissionType: "approval_required"},
+		{EndpointID: "env_a", ThreadID: "thread_1", PermissionType: "approval_required"},
+	} {
+		if err := store.CreateThreadSettings(ctx, settings); err != nil {
+			t.Fatal(err)
+		}
+	}
+	first, cursor, hasMore, err := store.ListThreadSettingsForRecoveryPage(ctx, ThreadSettingsRecoveryCursor{}, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(first) != 2 || first[0].EndpointID != "env_a" || first[0].ThreadID != "thread_1" || first[1].ThreadID != "thread_2" || !hasMore {
+		t.Fatalf("first page=%#v cursor=%#v has_more=%v", first, cursor, hasMore)
+	}
+	second, terminal, hasMore, err := store.ListThreadSettingsForRecoveryPage(ctx, cursor, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(second) != 1 || second[0].EndpointID != "env_b" || second[0].ThreadID != "thread_3" || hasMore || terminal != (ThreadSettingsRecoveryCursor{}) {
+		t.Fatalf("second page=%#v cursor=%#v has_more=%v", second, terminal, hasMore)
+	}
+	if _, _, _, err := store.ListThreadSettingsForRecoveryPage(ctx, ThreadSettingsRecoveryCursor{EndpointID: "env_a"}, 2); err == nil {
+		t.Fatal("incomplete recovery cursor was accepted")
+	}
+}
+
 func TestExactProductSchemaAllowlistRejectsShadowExtensions(t *testing.T) {
 	testCases := []struct {
 		name string

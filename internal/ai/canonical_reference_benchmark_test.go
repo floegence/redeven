@@ -211,13 +211,13 @@ func (p canonicalReferenceBenchmarkTurnPager) ListThreadTurns(_ context.Context,
 	if req.BeforeCursor != nil {
 		end = -1
 		for index, turn := range p.turns {
-			if turn.UserEntryID == req.BeforeCursor.EntryID {
+			if turn.UserEntryID == string(*req.BeforeCursor) {
 				end = index
 				break
 			}
 		}
 		if end < 0 {
-			return flruntime.ThreadTurnsPage{}, fmt.Errorf("unknown benchmark cursor %q", req.BeforeCursor.EntryID)
+			return flruntime.ThreadTurnsPage{}, fmt.Errorf("unknown benchmark cursor %q", *req.BeforeCursor)
 		}
 	}
 	limit := req.Limit
@@ -235,7 +235,8 @@ func (p canonicalReferenceBenchmarkTurnPager) ListThreadTurns(_ context.Context,
 		ThroughOrdinal: int64(end),
 	}
 	if start > 0 {
-		page.BeforeCursor = &flruntime.ThreadTurnsBeforeCursor{EntryID: p.turns[start].UserEntryID}
+		cursor := flruntime.ThreadTurnCursor(p.turns[start].UserEntryID)
+		page.BeforeCursor = &cursor
 	}
 	return page, nil
 }

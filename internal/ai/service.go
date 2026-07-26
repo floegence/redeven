@@ -429,7 +429,16 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 		return nil, createReplayErr
 	}
 	recoveryTargetsCtx, recoveryTargetsCancel := context.WithTimeout(ctx, persistTO)
-	recoveryTargets, recoveryTargetsErr := buildFloretStartupRecoveryTargets(recoveryTargetsCtx, ts, floretRecovery)
+	reconciliation, recoveryTargetsErr := reconcileFloretRootThreadInventory(recoveryTargetsCtx, ts, floretRecovery.inventory)
+	if recoveryTargetsErr == nil {
+		for _, threadID := range reconciliation.OrphanedRootThreadIDs {
+			logger.Warn("ai: canonical Floret root has no product settings", "thread_id", threadID)
+		}
+	}
+	var recoveryTargets []floretStartupRecoveryTarget
+	if recoveryTargetsErr == nil {
+		recoveryTargets, recoveryTargetsErr = buildFloretStartupRecoveryTargets(recoveryTargetsCtx, reconciliation.RootThreadIDs, floretRecovery)
+	}
 	recoveryTargetsCancel()
 	if recoveryTargetsErr != nil {
 		closeServiceBeforeMaintenance(svc)
