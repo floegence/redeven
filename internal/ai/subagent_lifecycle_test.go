@@ -181,6 +181,7 @@ type recordingFloretHost struct {
 	detailErr          error
 	detailRequests     []flruntime.ReadSubAgentDetailRequest
 	turnPage           flruntime.ThreadTurnsPage
+	turnPages          []flruntime.ThreadTurnsPage
 	turnErr            error
 	turnRequests       []flruntime.ListThreadTurnsRequest
 	spawnRequests      []flruntime.SpawnSubAgentRequest
@@ -276,6 +277,10 @@ func (h *recordingFloretHost) ListThreadTurns(_ context.Context, req flruntime.L
 		return flruntime.ThreadTurnsPage{}, h.turnErr
 	}
 	page := h.turnPage
+	if len(h.turnPages) > 0 {
+		page = h.turnPages[0]
+		h.turnPages = h.turnPages[1:]
+	}
 	if page.ThreadID == "" {
 		page.ThreadID = req.ThreadID
 	}
@@ -1837,7 +1842,9 @@ func TestVisibleSubagentDetailEventsFailsClosedForUnknownUserEntry(t *testing.T)
 		UserEntryID:       "known-entry",
 		UserMessageOrigin: flruntime.ThreadUserMessageOriginUser,
 	}}
-	_, err := visibleSubagentDetailEvents(events, turns)
+	events[0].ThreadID = "child"
+	events[0].TurnID = "turn-known"
+	_, err := visibleSubagentDetailEvents(events, turns, "child")
 	if err == nil || !strings.Contains(err.Error(), "unknown canonical user entry") {
 		t.Fatalf("visibleSubagentDetailEvents error=%v, want unknown canonical user entry", err)
 	}
@@ -1858,7 +1865,14 @@ func TestVisibleSubagentDetailEventsUsesTypedOriginsForExactVisibility(t *testin
 		{ID: "entry-pending", Kind: flruntime.ThreadDetailEventUserMessage},
 		{ID: "assistant-event", Kind: flruntime.ThreadDetailEventAssistantMessage},
 	}
-	visible, err := visibleSubagentDetailEvents(events, turns)
+	for index := range events {
+		events[index].ThreadID = "child"
+	}
+	events[0].TurnID = "turn-mission"
+	events[1].TurnID = "turn-user"
+	events[2].TurnID = "turn-input"
+	events[3].TurnID = "turn-pending"
+	visible, err := visibleSubagentDetailEvents(events, turns, "child")
 	if err != nil {
 		t.Fatalf("visibleSubagentDetailEvents: %v", err)
 	}
@@ -1869,6 +1883,42 @@ func TestVisibleSubagentDetailEventsUsesTypedOriginsForExactVisibility(t *testin
 		if visible[index].ID != wantID {
 			t.Fatalf("visible event %d id=%q, want %q", index, visible[index].ID, wantID)
 		}
+	}
+}
+
+func TestVisibleSubagentDetailEventsRejectsKnownEntryWithWrongTurnOrThread(t *testing.T) {
+	turns := []flruntime.ThreadTurnSnapshot{{TurnID: "turn-known", UserEntryID: "entry-known", UserMessageOrigin: flruntime.ThreadUserMessageOriginUser}}
+	for name, event := range map[string]flruntime.ThreadDetailEvent{
+		"wrong thread": {ID: "entry-known", ThreadID: "other", TurnID: "turn-known", Kind: flruntime.ThreadDetailEventUserMessage},
+		"wrong turn":   {ID: "entry-known", ThreadID: "child", TurnID: "other", Kind: flruntime.ThreadDetailEventUserMessage},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := visibleSubagentDetailEvents([]flruntime.ThreadDetailEvent{event}, turns, "child")
+			if err == nil || !strings.Contains(err.Error(), "canonical user entry identity") {
+				t.Fatalf("error=%v, want canonical user entry identity rejection", err)
+			}
+		})
+	}
+}
+
+func TestSubagentDetailRetryDecorationUsesVisibleSourceAnchor(t *testing.T) {
+	turns := []flruntime.ThreadTurnSnapshot{
+		{TurnID: "turn-source", Ordinal: 1, UserEntryID: "entry-mission", UserMessageOrigin: flruntime.ThreadUserMessageOriginDelegatedMission},
+		{TurnID: "turn-retry", Ordinal: 2, RetrySource: &flruntime.ThreadTurnRetrySource{TurnID: "turn-source"}},
+	}
+	decorations := []FlowerTimelineDecoration{{
+		DecorationID:          "turn-projection-unavailable:turn-retry",
+		Kind:                  FlowerTimelineDecorationTurnProjectionUnavailable,
+		Anchor:                FlowerTimelineAnchor{TargetKind: "message", MessageID: "entry-mission", Edge: "after"},
+		ProjectionUnavailable: &FlowerTurnProjectionUnavailable{TurnID: "turn-retry", RunID: "run-retry", ExpectedMessageID: "turn-retry", Reason: FlowerTurnProjectionUnavailableNotRenderable},
+	}}
+	messages := []FlowerTimelineMessage{{MessageID: "turn-source", TurnID: "turn-source", Role: "assistant", TurnOrdinal: 1}}
+	remapped, err := remapSubagentDetailProjectionDecorationAnchors(decorations, turns, messages)
+	if err != nil {
+		t.Fatalf("remapSubagentDetailProjectionDecorationAnchors: %v", err)
+	}
+	if remapped[0].Anchor.MessageID != "turn-source" {
+		t.Fatalf("retry decoration anchor=%q, want visible source assistant", remapped[0].Anchor.MessageID)
 	}
 }
 
@@ -1907,6 +1957,55 @@ func TestServiceGetFlowerSubagentDetailFailsClosedWhenDetailAdvancesPastTypedTur
 	_, err = svc.GetFlowerSubagentDetail(ctx, meta, parent.ThreadID, "child-toctou", 0, 50)
 	if err == nil || !strings.Contains(err.Error(), "unknown canonical user entry") {
 		t.Fatalf("GetFlowerSubagentDetail error=%v, want fail-closed TOCTOU rejection", err)
+	}
+}
+
+func TestServiceGetFlowerSubagentDetailRereadsTypedTurnsAfterConcurrentAdmission(t *testing.T) {
+	t.Parallel()
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+	parent, err := svc.CreateThread(ctx, meta, "parent", "openai/gpt-5-mini", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread parent: %v", err)
+	}
+	now := time.UnixMilli(30_000)
+	baseTurn := flruntime.ThreadTurnSnapshot{
+		TurnID: "turn-mission", RunID: "run-mission", Ordinal: 1, ThroughOrdinal: 1,
+		StartedAt: now, UpdatedAt: now,
+		UserEntryID: "entry-mission", UserMessageOrigin: flruntime.ThreadUserMessageOriginDelegatedMission,
+		UserInput:  "delegated mission",
+		Status:     flruntime.TurnStatusCompleted,
+		Projection: flruntime.ThreadTurnProjection{ThreadID: "child-reread", TurnID: "turn-mission", RunID: "run-mission", Status: flruntime.TurnStatusCompleted, ThroughOrdinal: 1, Segments: []flruntime.ThreadTurnProjectionSegment{{Kind: flruntime.ThreadTurnProjectionSegmentAssistantText, Text: "done"}}},
+	}
+	newTurn := flruntime.ThreadTurnSnapshot{
+		TurnID: "turn-new", RunID: "run-new", Ordinal: 2, ThroughOrdinal: 2,
+		StartedAt: now.Add(time.Second), UpdatedAt: now.Add(time.Second),
+		UserEntryID: "entry-new", UserMessageOrigin: flruntime.ThreadUserMessageOriginUser,
+		UserInput: "new input", Status: flruntime.TurnStatusRunning,
+		Projection: flruntime.ThreadTurnProjection{ThreadID: "child-reread", TurnID: "turn-new", RunID: "run-new", Status: flruntime.TurnStatusRunning, ThroughOrdinal: 2},
+	}
+	host := &recordingFloretHost{
+		turnPages: []flruntime.ThreadTurnsPage{{ThreadID: "child-reread", ThroughOrdinal: 1, Turns: []flruntime.ThreadTurnSnapshot{baseTurn}}, {ThreadID: "child-reread", ThroughOrdinal: 2, Turns: []flruntime.ThreadTurnSnapshot{baseTurn, newTurn}}},
+		detail: flruntime.SubAgentDetail{
+			Snapshot:    flruntime.SubAgentSnapshot{ThreadID: "child-reread", ParentThreadID: flruntime.ThreadID(parent.ThreadID), CreatedAt: now, UpdatedAt: now.Add(time.Second)},
+			Context:     flruntime.ThreadContextSnapshot{ThreadID: "child-reread"},
+			Events:      []flruntime.ThreadDetailEvent{{ID: "entry-new", ThreadID: "child-reread", TurnID: "turn-new", Kind: flruntime.ThreadDetailEventUserMessage, CreatedAt: now.Add(time.Second)}},
+			GeneratedAt: now.Add(time.Second),
+		},
+	}
+	svc.mu.Lock()
+	bindRecordingThreadRead(svc, parent.ThreadID, host)
+	bindRecordingSubagentRead(svc, parent.ThreadID, host)
+	svc.mu.Unlock()
+	if _, err := svc.GetFlowerSubagentDetail(ctx, meta, parent.ThreadID, "child-reread", 0, 50); err != nil {
+		t.Fatalf("GetFlowerSubagentDetail after bounded reread: %v", err)
+	}
+	host.mu.Lock()
+	calls := len(host.turnRequests)
+	host.mu.Unlock()
+	if calls != 2 {
+		t.Fatalf("typed turn reads=%d, want bounded reread after one snapshot mismatch", calls)
 	}
 }
 

@@ -2558,45 +2558,53 @@ func (s *Service) GetFlowerSubagentDetail(ctx context.Context, meta *session.Met
 	if err != nil {
 		return nil, err
 	}
-	turns, err := listAllFloretThreadTurns(ctxOrBackground(ctx), detailHost, childThreadID)
-	if err != nil {
-		if isFloretSubagentNotFoundError(err) {
-			return nil, sql.ErrNoRows
+	for attempt := 0; attempt < 2; attempt++ {
+		turns, err := listAllFloretThreadTurns(ctxOrBackground(ctx), detailHost, childThreadID)
+		if err != nil {
+			if isFloretSubagentNotFoundError(err) {
+				return nil, sql.ErrNoRows
+			}
+			return nil, err
 		}
-		return nil, err
-	}
-	detail, err := detailHost.ReadSubAgentDetail(ctxOrBackground(ctx), flruntime.ReadSubAgentDetailRequest{
-		ParentThreadID: flruntime.ThreadID(parentThreadID),
-		ChildThreadID:  flruntime.ThreadID(childThreadID),
-		AfterOrdinal:   afterOrdinal,
-		Limit:          limit,
-		IncludeRaw:     false,
-	})
-	if err != nil {
-		if isFloretSubagentNotFoundError(err) {
-			return nil, sql.ErrNoRows
+		detail, err := detailHost.ReadSubAgentDetail(ctxOrBackground(ctx), flruntime.ReadSubAgentDetailRequest{
+			ParentThreadID: flruntime.ThreadID(parentThreadID),
+			ChildThreadID:  flruntime.ThreadID(childThreadID),
+			AfterOrdinal:   afterOrdinal,
+			Limit:          limit,
+			IncludeRaw:     false,
+		})
+		if err != nil {
+			if isFloretSubagentNotFoundError(err) {
+				return nil, sql.ErrNoRows
+			}
+			return nil, err
 		}
-		return nil, err
-	}
-	resp, err := s.flowerSubagentDetailResponse(endpointID, detail, turns)
-	if err != nil {
-		if s.log != nil {
-			s.log.Warn("ai: rejected Floret subagent detail contract", "thread_id", parentThreadID, "child_thread_id", childThreadID, "error", err)
+		resp, err := s.flowerSubagentDetailResponse(endpointID, detail, turns)
+		if errors.Is(err, errFloretSubagentDetailSnapshotChanged) && attempt == 0 {
+			continue
 		}
-		return nil, fmt.Errorf("invalid Floret subagent detail contract: %w", err)
+		if err != nil {
+			if s.log != nil {
+				s.log.Warn("ai: rejected Floret subagent detail contract", "thread_id", parentThreadID, "child_thread_id", childThreadID, "error", err)
+			}
+			return nil, fmt.Errorf("invalid Floret subagent detail contract: %w", err)
+		}
+		if strings.TrimSpace(resp.Summary.ParentThreadID) != parentThreadID || strings.TrimSpace(resp.Summary.ThreadID) != childThreadID {
+			return nil, fmt.Errorf(
+				"invalid Floret subagent detail contract: parent %q child %q, want parent %q child %q",
+				resp.Summary.ParentThreadID,
+				resp.Summary.ThreadID,
+				parentThreadID,
+				childThreadID,
+			)
+		}
+		resp.Summary.ContextMode = contextModeForSubagentForkMode(detail.Snapshot.ForkMode)
+		return &resp, nil
 	}
-	if strings.TrimSpace(resp.Summary.ParentThreadID) != parentThreadID || strings.TrimSpace(resp.Summary.ThreadID) != childThreadID {
-		return nil, fmt.Errorf(
-			"invalid Floret subagent detail contract: parent %q child %q, want parent %q child %q",
-			resp.Summary.ParentThreadID,
-			resp.Summary.ThreadID,
-			parentThreadID,
-			childThreadID,
-		)
-	}
-	resp.Summary.ContextMode = contextModeForSubagentForkMode(detail.Snapshot.ForkMode)
-	return &resp, nil
+	return nil, errors.New("unreachable SubAgent detail read state")
 }
+
+var errFloretSubagentDetailSnapshotChanged = errors.New("Floret SubAgent detail snapshot changed during read")
 
 func isFloretSubagentNotFoundError(err error) bool {
 	if err == nil {
@@ -2614,7 +2622,7 @@ func (s *Service) flowerSubagentDetailResponse(endpointID string, detail flrunti
 	if err != nil {
 		return FlowerSubagentDetailResponse{}, err
 	}
-	visibleEvents, err := visibleSubagentDetailEvents(detail.Events, turns)
+	visibleEvents, err := visibleSubagentDetailEvents(detail.Events, turns, threadID)
 	if err != nil {
 		return FlowerSubagentDetailResponse{}, err
 	}
@@ -2653,6 +2661,10 @@ func (s *Service) flowerSubagentDetailResponse(endpointID string, detail flrunti
 	if err != nil {
 		return FlowerSubagentDetailResponse{}, err
 	}
+	projectionDecorations, err = remapSubagentDetailProjectionDecorationAnchors(projectionDecorations, turns, messages)
+	if err != nil {
+		return FlowerSubagentDetailResponse{}, err
+	}
 	timelineDecorations = append(timelineDecorations, projectionDecorations...)
 	return FlowerSubagentDetailResponse{
 		Summary:             flowerSubagentSummary(detail.Snapshot),
@@ -2669,11 +2681,17 @@ func (s *Service) flowerSubagentDetailResponse(endpointID string, detail flrunti
 	}, nil
 }
 
-func visibleSubagentDetailEvents(events []flruntime.ThreadDetailEvent, turns []flruntime.ThreadTurnSnapshot) ([]flruntime.ThreadDetailEvent, error) {
-	origins, err := canonicalUserMessageOriginsFromTurns(turns)
+type canonicalUserMessageFact struct {
+	TurnID string
+	Origin flruntime.ThreadUserMessageOrigin
+}
+
+func visibleSubagentDetailEvents(events []flruntime.ThreadDetailEvent, turns []flruntime.ThreadTurnSnapshot, threadID string) ([]flruntime.ThreadDetailEvent, error) {
+	facts, err := canonicalUserMessageFactsFromTurns(turns)
 	if err != nil {
 		return nil, err
 	}
+	threadID = strings.TrimSpace(threadID)
 	visible := make([]flruntime.ThreadDetailEvent, 0, len(events))
 	for _, event := range events {
 		if event.Kind != flruntime.ThreadDetailEventUserMessage {
@@ -2681,11 +2699,14 @@ func visibleSubagentDetailEvents(events []flruntime.ThreadDetailEvent, turns []f
 			continue
 		}
 		entryID := strings.TrimSpace(event.ID)
-		origin, ok := origins[entryID]
+		fact, ok := facts[entryID]
 		if !ok {
-			return nil, fmt.Errorf("detail event references unknown canonical user entry %q", entryID)
+			return nil, fmt.Errorf("%w: detail event references unknown canonical user entry %q", errFloretSubagentDetailSnapshotChanged, entryID)
 		}
-		if origin == flruntime.ThreadUserMessageOriginDelegatedMission {
+		if strings.TrimSpace(string(event.ThreadID)) != threadID || strings.TrimSpace(string(event.TurnID)) != fact.TurnID {
+			return nil, fmt.Errorf("%w: detail event canonical user entry identity does not match thread and turn", errFloretSubagentDetailSnapshotChanged)
+		}
+		if fact.Origin == flruntime.ThreadUserMessageOriginDelegatedMission {
 			continue
 		}
 		visible = append(visible, event)
@@ -2694,21 +2715,21 @@ func visibleSubagentDetailEvents(events []flruntime.ThreadDetailEvent, turns []f
 }
 
 func delegatedMissionEntryIDsFromTurns(turns []flruntime.ThreadTurnSnapshot) (map[string]struct{}, error) {
-	origins, err := canonicalUserMessageOriginsFromTurns(turns)
+	facts, err := canonicalUserMessageFactsFromTurns(turns)
 	if err != nil {
 		return nil, err
 	}
 	hidden := make(map[string]struct{})
-	for entryID, origin := range origins {
-		if origin == flruntime.ThreadUserMessageOriginDelegatedMission {
+	for entryID, fact := range facts {
+		if fact.Origin == flruntime.ThreadUserMessageOriginDelegatedMission {
 			hidden[entryID] = struct{}{}
 		}
 	}
 	return hidden, nil
 }
 
-func canonicalUserMessageOriginsFromTurns(turns []flruntime.ThreadTurnSnapshot) (map[string]flruntime.ThreadUserMessageOrigin, error) {
-	origins := make(map[string]flruntime.ThreadUserMessageOrigin)
+func canonicalUserMessageFactsFromTurns(turns []flruntime.ThreadTurnSnapshot) (map[string]canonicalUserMessageFact, error) {
+	facts := make(map[string]canonicalUserMessageFact)
 	for _, turn := range turns {
 		turnID := strings.TrimSpace(string(turn.TurnID))
 		entryID := strings.TrimSpace(turn.UserEntryID)
@@ -2729,12 +2750,72 @@ func canonicalUserMessageOriginsFromTurns(turns []flruntime.ThreadTurnSnapshot) 
 		default:
 			return nil, fmt.Errorf("Floret turn %q has unsupported user-message origin %q", turnID, turn.UserMessageOrigin)
 		}
-		if _, duplicate := origins[entryID]; duplicate {
+		if _, duplicate := facts[entryID]; duplicate {
 			return nil, fmt.Errorf("Floret turns duplicate canonical user entry %q", entryID)
 		}
-		origins[entryID] = turn.UserMessageOrigin
+		facts[entryID] = canonicalUserMessageFact{TurnID: turnID, Origin: turn.UserMessageOrigin}
 	}
-	return origins, nil
+	return facts, nil
+}
+
+func remapSubagentDetailProjectionDecorationAnchors(decorations []FlowerTimelineDecoration, turns []flruntime.ThreadTurnSnapshot, messages []FlowerTimelineMessage) ([]FlowerTimelineDecoration, error) {
+	visibleByTurn := make(map[string]string)
+	for _, message := range messages {
+		turnID := strings.TrimSpace(message.TurnID)
+		messageID := strings.TrimSpace(message.MessageID)
+		if turnID == "" || messageID == "" {
+			continue
+		}
+		if visibleByTurn[turnID] == "" || strings.TrimSpace(message.Role) == "assistant" {
+			visibleByTurn[turnID] = messageID
+		}
+	}
+	retrySourceByTurn := make(map[string]string)
+	ordinalByTurn := make(map[string]int64)
+	for _, turn := range turns {
+		turnID := strings.TrimSpace(string(turn.TurnID))
+		ordinalByTurn[turnID] = turn.Ordinal
+		if turn.RetrySource != nil {
+			retrySourceByTurn[turnID] = strings.TrimSpace(string(turn.RetrySource.TurnID))
+		}
+	}
+	out := append([]FlowerTimelineDecoration(nil), decorations...)
+	for index := range out {
+		decoration := &out[index]
+		if decoration.Kind != FlowerTimelineDecorationTurnProjectionUnavailable || decoration.ProjectionUnavailable == nil {
+			continue
+		}
+		turnID := strings.TrimSpace(decoration.ProjectionUnavailable.TurnID)
+		anchorID := visibleByTurn[turnID]
+		visited := make(map[string]struct{})
+		for anchorID == "" {
+			if _, duplicate := visited[turnID]; duplicate {
+				break
+			}
+			visited[turnID] = struct{}{}
+			turnID = retrySourceByTurn[turnID]
+			if turnID == "" {
+				break
+			}
+			anchorID = visibleByTurn[turnID]
+		}
+		if anchorID == "" {
+			targetOrdinal := ordinalByTurn[strings.TrimSpace(decoration.ProjectionUnavailable.TurnID)]
+			for _, message := range messages {
+				if message.TurnOrdinal > 0 && message.TurnOrdinal < targetOrdinal {
+					anchorID = strings.TrimSpace(message.MessageID)
+				}
+			}
+		}
+		if anchorID == "" {
+			return nil, fmt.Errorf("projection unavailable turn %q has no visible canonical anchor", decoration.ProjectionUnavailable.TurnID)
+		}
+		decoration.Anchor = FlowerTimelineAnchor{TargetKind: "message", MessageID: anchorID, Edge: "after"}
+		if err := decoration.Validate(); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
 }
 
 func flowerSubagentDetailContextUsage(contextBlock flruntime.ThreadContextSnapshot) (*FlowerContextUsage, error) {
