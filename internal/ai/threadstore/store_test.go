@@ -3,54 +3,121 @@ package threadstore
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"path/filepath"
+	"reflect"
+	"sort"
 	"testing"
 )
 
 func TestStoreSchemaContainsOnlyProductThreadState(t *testing.T) {
 	store := openStoreForTest(t)
-	forbiddenTables := []string{
-		"conversation_turns", "transcript_messages", "ai_messages", "ai_runs", "ai_tool_calls", "ai_run_events",
-		"execution_spans", "ai_thread_todos", "ai_thread_state", "ai_thread_checkpoints", "memory_items", "memory_embeddings",
-		"structured_user_inputs", "request_user_input_secret_answers",
-		"ai_delegated_approval_requests", "ai_delegated_approval_events",
-		"ai_delegated_approval_outbox", "ai_delegated_approval_idempotency",
+	wantTables := []string{
+		"__redeven_db_meta",
+		"ai_child_permission_snapshots",
+		"ai_composer_drafts",
+		"ai_flower_thread_routing",
+		"ai_permission_snapshots",
+		"ai_queued_turns",
+		"ai_subagent_publication_operations",
+		"ai_thread_create_operations",
+		"ai_thread_delete_operations",
+		"ai_thread_fork_operations",
+		"ai_thread_settings",
+		"ai_upload_attempts",
+		"ai_upload_refs",
+		"ai_uploads",
+		"provider_capabilities",
 	}
-	for _, table := range forbiddenTables {
-		var count int
-		if err := store.db.QueryRow(`SELECT COUNT(1) FROM sqlite_master WHERE type = 'table' AND name = ?`, table).Scan(&count); err != nil {
-			t.Fatalf("inspect table %s: %v", table, err)
-		}
-		if count != 0 {
-			t.Fatalf("forbidden Agent shadow table %s exists", table)
-		}
+	gotTables := schemaNamesForTest(t, store.db, `
+SELECT name
+FROM sqlite_master
+WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+ORDER BY name
+`)
+	if err := exactSchemaNamesError("fresh product tables", gotTables, wantTables); err != nil {
+		t.Fatal(err)
 	}
-	forbiddenColumns := map[string]struct{}{
-		"run_status": {}, "run_error": {}, "run_error_code": {}, "waiting_user_input_json": {},
-		"last_message_at_unix_ms": {}, "last_message_preview": {}, "activity_revision": {}, "activity_signature": {},
-		"title": {}, "title_source": {}, "title_generated_at_unix_ms": {}, "title_input_message_id": {},
-		"title_model_id": {}, "title_prompt_version": {},
+
+	wantThreadSettingsColumns := []string{
+		"created_by_user_email",
+		"created_by_user_public_id",
+		"endpoint_id",
+		"model_id",
+		"namespace_public_id",
+		"permission_type",
+		"pinned_at_unix_ms",
+		"queue_revision",
+		"reasoning_selection_json",
+		"settings_created_at_unix_ms",
+		"settings_updated_at_unix_ms",
+		"thread_id",
+		"updated_by_user_email",
+		"updated_by_user_public_id",
+		"working_dir",
 	}
-	rows, err := store.db.Query(`PRAGMA table_info(ai_thread_settings)`)
+	gotThreadSettingsColumns := schemaNamesForTest(t, store.db, `
+SELECT name
+FROM pragma_table_info('ai_thread_settings')
+ORDER BY name
+`)
+	if err := exactSchemaNamesError("ai_thread_settings columns", gotThreadSettingsColumns, wantThreadSettingsColumns); err != nil {
+		t.Fatal(err)
+	}
+
+	if count := countRowsForTest(t, store.db, `SELECT COUNT(1) FROM pragma_table_info('ai_thread_fork_operations') WHERE name = 'floret_result_json'`); count != 0 {
+		t.Fatal("fork operation persists a Floret result shadow")
+	}
+}
+
+func TestExactProductSchemaAllowlistRejectsShadowExtensions(t *testing.T) {
+	testCases := []struct {
+		name string
+		got  []string
+		want []string
+	}{
+		{name: "shadow table", got: []string{"ai_messages", "ai_thread_settings"}, want: []string{"ai_thread_settings"}},
+		{name: "shadow settings column", got: []string{"thread_id", "title"}, want: []string{"thread_id"}},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			if err := exactSchemaNamesError(testCase.name, testCase.got, testCase.want); err == nil {
+				t.Fatal("shadow schema extension satisfied the exact allowlist")
+			}
+		})
+	}
+}
+
+func schemaNamesForTest(t *testing.T, db *sql.DB, query string) []string {
+	t.Helper()
+	rows, err := db.Query(query)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer rows.Close()
+	var names []string
 	for rows.Next() {
-		var cid int
-		var name, columnType string
-		var notNull, primaryKey int
-		var defaultValue any
-		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+		var name string
+		if err := rows.Scan(&name); err != nil {
 			t.Fatal(err)
 		}
-		if _, forbidden := forbiddenColumns[name]; forbidden {
-			t.Fatalf("forbidden Agent shadow column ai_thread_settings.%s exists", name)
-		}
+		names = append(names, name)
 	}
-	if count := countRowsForTest(t, store.db, `SELECT COUNT(1) FROM pragma_table_info('ai_thread_fork_operations') WHERE name = 'floret_result_json'`); count != 0 {
-		t.Fatal("fork operation persists a Floret result shadow")
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
 	}
+	return names
+}
+
+func exactSchemaNamesError(label string, got []string, want []string) error {
+	got = append([]string(nil), got...)
+	want = append([]string(nil), want...)
+	sort.Strings(got)
+	sort.Strings(want)
+	if reflect.DeepEqual(got, want) {
+		return nil
+	}
+	return fmt.Errorf("%s mismatch: got=%v want=%v", label, got, want)
 }
 
 func TestStoreThreadMetadataAndPendingCommandRoundTrip(t *testing.T) {

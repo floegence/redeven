@@ -436,7 +436,7 @@ func (s *floretSubagentRuntime) newHostLocked(ctx context.Context, parent *run, 
 		parent.id,
 	)
 	childRun.setPermissionState(initialSnapshot.PermissionType, initialSnapshot)
-	state := newFloretToolRuntimeState(newRuntimeState("subagents"))
+	state := newFloretToolRuntimeState(newTodoRuntimeState())
 	// Every executable child registry is produced by surfaceProvider after the
 	// canonical child identity is known. The base registry has no handlers, so
 	// provisional or parent authority cannot dispatch an effect.

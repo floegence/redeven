@@ -17,7 +17,7 @@ import (
 
 type floretToolRuntimeState struct {
 	mu    sync.Mutex
-	state runtimeState
+	state todoRuntimeState
 }
 
 const (
@@ -31,13 +31,13 @@ const (
 	floretToolHostContextAuthorityThreadIDKey    = "permission_authority_thread_id"
 )
 
-func newFloretToolRuntimeState(state runtimeState) *floretToolRuntimeState {
+func newFloretToolRuntimeState(state todoRuntimeState) *floretToolRuntimeState {
 	return &floretToolRuntimeState{state: state}
 }
 
-func (s *floretToolRuntimeState) snapshot() runtimeState {
+func (s *floretToolRuntimeState) snapshot() todoRuntimeState {
 	if s == nil {
-		return runtimeState{}
+		return todoRuntimeState{}
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()

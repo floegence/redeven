@@ -25,41 +25,12 @@ type ModelCapability struct {
 	PreferredToolSchemaMode        string                       `json:"preferred_tool_schema_mode"`
 }
 
-// DialogueTurn stores the product-level paired message view used by persistence tests and UI-safe reads.
-type DialogueTurn struct {
-	TurnRowID          int64  `json:"turn_row_id,omitempty"`
-	UserMessageRowID   int64  `json:"user_message_row_id,omitempty"`
-	AssistantRowID     int64  `json:"assistant_row_id,omitempty"`
-	TurnID             string `json:"turn_id"`
-	RunID              string `json:"run_id"`
-	UserMessageID      string `json:"user_message_id"`
-	AssistantMessageID string `json:"assistant_message_id"`
-	UserText           string `json:"user_text"`
-	AssistantText      string `json:"assistant_text"`
-	CreatedAtUnixMs    int64  `json:"created_at_unix_ms"`
-}
-
 // AttachmentManifest is the attachment capability adaptation input.
 type AttachmentManifest struct {
 	Name     string `json:"name"`
 	MimeType string `json:"mime_type"`
 	URL      string `json:"url"`
 	Mode     string `json:"mode"`
-}
-
-type StructuredUserInput struct {
-	PromptID            string `json:"prompt_id"`
-	ToolID              string `json:"tool_id,omitempty"`
-	ReasonCode          string `json:"reason_code,omitempty"`
-	QuestionID          string `json:"question_id"`
-	Header              string `json:"header,omitempty"`
-	Question            string `json:"question"`
-	SelectedChoiceID    string `json:"selected_choice_id,omitempty"`
-	SelectedChoiceLabel string `json:"selected_choice_label,omitempty"`
-	Text                string `json:"text,omitempty"`
-	PublicSummary       string `json:"public_summary,omitempty"`
-	ContainsSecret      bool   `json:"contains_secret,omitempty"`
-	CreatedAtUnixMs     int64  `json:"created_at_unix_ms"`
 }
 
 func NormalizeCapability(in ModelCapability) ModelCapability {

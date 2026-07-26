@@ -585,7 +585,7 @@ func (s *Service) runIdleThreadCompaction(ctx context.Context, meta *session.Met
 	if modelCapability.MaxContextTokens > 0 {
 		contextWindow = modelCapability.MaxContextTokens
 	}
-	systemPrompt := r.buildLayeredSystemPrompt("", permissionTypeString(permissionType), TaskComplexityStandard, 0, true, nil, runtimeState{}, "", runCapabilityContract{})
+	systemPrompt := r.buildLayeredSystemPrompt("", permissionTypeString(permissionType), TaskComplexityStandard, 0, true, nil, todoRuntimeState{}, "", runCapabilityContract{})
 	if r.floretCompactionHostFactory == nil {
 		return errors.New("floret compaction host factory not ready")
 	}
