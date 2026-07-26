@@ -2380,6 +2380,19 @@
     }
   },
   "terminal": {
+    "sharedGeometry": {
+      "compact": "他のビューと共有 · {cols}×{rows}",
+      "short": "共有 {cols}×{rows}",
+      "label": "共有",
+      "ariaLabel": "ターミナルのレイアウトは接続中のビュー間で共有されています。共有サイズは {cols}×{rows} です。",
+      "title": "共有ターミナルレイアウト",
+      "description": "このターミナルは、利用可能なサイズが異なる複数のビューで開かれています。ビュー間でレイアウトを揃えるため、現在は {cols}×{rows} の共有グリッドを使用しています。そのため、折り返しや余白がこの領域と異なる場合があります。",
+      "localSize": "このビュー",
+      "effectiveSize": "共有サイズ",
+      "resolution": "接続中のビューのサイズ変更や切断に応じて、共有グリッドは自動的に調整されます。",
+      "announcement": "ターミナルのレイアウトは接続中のビュー間で共有されています。",
+      "triggerDescription": "共有ターミナルレイアウトの詳細を開きます。"
+    },
     "title": "ターミナル",
     "terminalName": "ターミナル {index}",
     "creatingEyebrow": "ターミナル",

@@ -1,7 +1,7 @@
 ---
 type: UI Contract
 title: Workbench terminal interaction
-description: Terminal attachment, input-plane ownership, focus, retained history, and performance validation.
+description: Terminal attachment, shared-geometry presentation, input ownership, retained history, and performance validation.
 tags: [ui, workbench, terminal, performance]
 timestamp: 2026-07-23T00:00:00Z
 ---
@@ -16,6 +16,10 @@ Activity and Workbench terminals use Floeterm's single binary `terminal/live_v1`
 Every visible terminal view opens `terminal/live_v1`, sends one binary `ATTACH`, and receives an atomic history boundary plus history and geometry generations. Live output begins strictly after that boundary; retained history at or before the boundary is fetched through bounded RPC pages and committed through the paged output coordinator. Missing, malformed, or discontinuous sequence metadata fails closed. Disconnect recovery opens a new named stream and repeats the same attach-and-boundary procedure; it does not switch transports or silently discard output.
 
 Each `TerminalPanel` allocates a fresh connection id, including panels in another browser page or another view in the same page. Views may report different column and row capacities. Floeterm computes the effective PTY grid from all attached connections and broadcasts one geometry generation with an exact output-sequence boundary. Redeven keeps every view's host reporting enabled even while it renders a fixed shared grid, queues geometry events until output through the boundary has reached the parser, and splits a render batch when the boundary falls inside it. Therefore two views apply the same resize between the same output sequences even when their DOM sizes differ. No page claims exclusive attachment ownership and no focus-dependent retry state machine serializes concurrent views.
+
+Attach and resize acknowledgements include the runtime attachment generation, requested local grid, and effective shared grid. Redeven accepts effective facts through one monotonic reducer, rejects stale attachment or renderer epochs, and fails closed on conflicting dimensions within one geometry generation. A structured close invalidates presentation immediately and either removes a closed session or starts reconnect recovery. Hibernation releases only the renderer: it retains the live attachment and ordered geometry candidates, restores a snapshot only when its lifecycle, grid, and output checkpoint match the captured effective fact, and otherwise seeds the new renderer from a confirmed effective fact before replaying history.
+
+When the current visible view has acknowledged a larger local grid but the current renderer has applied a smaller effective grid, Redeven presents a lightweight informational status inside existing Terminal chrome. The status appears only for the active display session in idle recovery state, waits briefly to avoid flicker, and never changes terminal canvas geometry. Its disclosure states that connected views with different available sizes share one grid, shows local and effective dimensions, and explains that the grid adjusts as views resize or disconnect. It does not infer view count, device, window, user, or per-view dimensions. Unselected Workbench widgets render an inert pointer-through visual; selected Workbench and Activity surfaces use a real disclosure button and an explicitly owner-bound surface floating layer. Lifecycle, session, selection, recovery, anchor movement, and confirmed equality close the disclosure without stealing focus, while each live attachment is announced at most once through a polite live region.
 
 Input and resize use the same binary stream. Input bytes are forwarded exactly once and repeated characters remain repeated. Resize promises resolve only after the matching `RESIZE_APPLIED`; a stream end, protocol error, permission denial, missing session, slow consumer, or session close remains an explicit state. `SESSION_CLOSED` removes the session without presenting an ordinary reconnect error. Server error codes are structured Floeterm values rather than parsed message text or legacy RPC status codes.
 
@@ -45,6 +49,8 @@ Redeven may map Flowersec `openStream("terminal/live_v1")` into Floeterm's byte-
 - `redeven:internal/envapp/ui_src/src/ui/services/terminalCatalogTransport.ts` - Catalog and paged history stay isolated from the live and renderer bundle.
 - `redeven:internal/envapp/ui_src/src/ui/services/terminalSessionCatalog.tsx` - Provider-scoped command notifications converge before any terminal runtime mounts.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/TerminalSessionRuntime.tsx` - Runtime applies shared geometry at its output boundary and reports host capacity while rendering the fixed grid.
-- `redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.browser.test.tsx` - Chromium coverage separates output from command truth and verifies title, spinner, and geometry recovery.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/terminalSharedGeometryPresentation.ts` - Transactional presentation state fences local, known, applied, and displayed geometry by attachment, renderer, request, and output boundary.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/TerminalSharedGeometryNotice.tsx` - The responsive disclosure owns surface projection, keyboard routing, overflow scrolling, and focus recovery.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.browser.test.tsx` - Chromium coverage verifies output ordering, command truth, geometry recovery, owner-bound disclosure projection, responsive slots, and canvas stability.
 - `redeven:internal/envapp/ui_src/scripts/checkInitialBuildBudget.mjs` - Production build policy rejects Terminal live or renderer modules in the initial catalog graph.
 - `redeven:internal/envapp/ui_src/scripts/checkTerminalRecoveryCarrier.mjs` - The process carrier validates real Runtime, PTY, parser, canvas, input, and retained-history behavior.

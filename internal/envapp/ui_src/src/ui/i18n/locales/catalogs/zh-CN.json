@@ -2380,6 +2380,19 @@
     }
   },
   "terminal": {
+    "sharedGeometry": {
+      "compact": "与其他视图共享 · {cols}×{rows}",
+      "short": "共享 {cols}×{rows}",
+      "label": "共享",
+      "ariaLabel": "终端布局正与其他视图共享，共享尺寸为 {cols}×{rows}。",
+      "title": "共享终端布局",
+      "description": "同一终端还连接在尺寸不同的其他视图中。为保持各视图的终端排版一致，终端暂按 {cols}×{rows} 的共享网格排版，因此换行和留白可能与当前区域不同。",
+      "localSize": "当前视图",
+      "effectiveSize": "共享尺寸",
+      "resolution": "已连接视图的尺寸或连接状态变化后，共享网格会自动重新调整。",
+      "announcement": "终端布局正与其他视图共享。",
+      "triggerDescription": "打开共享终端布局的详细说明。"
+    },
     "title": "终端",
     "terminalName": "终端 {index}",
     "creatingEyebrow": "终端",

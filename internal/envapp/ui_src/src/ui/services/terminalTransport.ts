@@ -8,6 +8,8 @@ import {
   TerminalLiveErrorCode,
   TerminalLiveServerError,
   type TerminalLiveAttachResult,
+  type TerminalLiveEventSource,
+  type TerminalLiveResizeAppliedResult,
 } from '@floegence/floeterm-terminal-web/live';
 import type { Client } from '@floegence/flowersec-core';
 import { ProtocolNotConnectedError, RpcError } from '@floegence/floe-webapp-protocol';
@@ -27,9 +29,16 @@ export function createTerminalConnId(): string {
 
 export type TerminalSessionStats = { history: { totalBytes: number } };
 export type RedevenTerminalAttachResult = TerminalLiveAttachResult;
+export type RedevenTerminalResizeAppliedResult = TerminalLiveResizeAppliedResult;
+export type RedevenTerminalEventSource = TerminalLiveEventSource;
 
 export type RedevenTerminalTransport = TerminalTransport & Readonly<{
   attachWithHistoryBoundary(sessionId: string, cols: number, rows: number): Promise<RedevenTerminalAttachResult>;
+  resizeWithEffectiveGeometry(
+    sessionId: string,
+    cols: number,
+    rows: number,
+  ): Promise<RedevenTerminalResizeAppliedResult>;
   historyPage(
     sessionId: string,
     startSeq: number,
@@ -44,7 +53,7 @@ export type RedevenTerminalTransport = TerminalTransport & Readonly<{
 
 export type RedevenTerminalLiveBundle = Readonly<{
   transport: RedevenTerminalTransport;
-  eventSource: TerminalEventSource;
+  eventSource: RedevenTerminalEventSource;
 }>;
 
 export function isBestEffortTerminalDisconnectError(error: unknown): boolean {

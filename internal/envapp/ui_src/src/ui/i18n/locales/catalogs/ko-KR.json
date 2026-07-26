@@ -2380,6 +2380,19 @@
     }
   },
   "terminal": {
+    "sharedGeometry": {
+      "compact": "다른 뷰와 공유 · {cols}×{rows}",
+      "short": "공유 {cols}×{rows}",
+      "label": "공유",
+      "ariaLabel": "터미널 레이아웃을 연결된 뷰와 공유하고 있습니다. 공유 크기는 {cols}×{rows}입니다.",
+      "title": "공유 터미널 레이아웃",
+      "description": "이 터미널은 사용 가능한 크기가 서로 다른 여러 뷰에서 열려 있습니다. 뷰 간 레이아웃을 일관되게 유지하기 위해 현재 {cols}×{rows} 크기의 공유 그리드를 사용하므로, 줄 바꿈 위치와 빈 공간이 이 영역에서 예상한 것과 다를 수 있습니다.",
+      "localSize": "이 뷰",
+      "effectiveSize": "공유 크기",
+      "resolution": "연결된 뷰의 크기가 바뀌거나 연결이 끊기면 공유 그리드가 자동으로 조정됩니다.",
+      "announcement": "터미널 레이아웃을 연결된 뷰와 공유하고 있습니다.",
+      "triggerDescription": "공유 터미널 레이아웃에 대한 세부 정보를 엽니다."
+    },
     "title": "터미널",
     "terminalName": "터미널 {index}",
     "creatingEyebrow": "터미널",

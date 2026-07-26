@@ -2380,6 +2380,19 @@
     }
   },
   "terminal": {
+    "sharedGeometry": {
+      "compact": "與其他檢視共用 · {cols}×{rows}",
+      "short": "共用 {cols}×{rows}",
+      "label": "共用",
+      "ariaLabel": "終端版面配置正與其他已連線的檢視共用，共用尺寸為 {cols}×{rows}。",
+      "title": "共用的終端版面配置",
+      "description": "同一個終端也在可用尺寸不同的其他檢視中開啟。為了讓各檢視的版面配置保持一致，目前使用 {cols}×{rows} 的共用網格，因此換行與留白可能和這個區域不同。",
+      "localSize": "這個檢視",
+      "effectiveSize": "共用尺寸",
+      "resolution": "已連線的檢視調整尺寸或中斷連線時，共用網格會自動調整。",
+      "announcement": "終端版面配置正與其他已連線的檢視共用。",
+      "triggerDescription": "開啟共用終端版面配置的詳細資訊。"
+    },
     "title": "終端",
     "terminalName": "終端 {index}",
     "creatingEyebrow": "終端",

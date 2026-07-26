@@ -2380,6 +2380,19 @@
     }
   },
   "terminal": {
+    "sharedGeometry": {
+      "compact": "Partagé entre les vues · {cols}×{rows}",
+      "short": "Partagé {cols}×{rows}",
+      "label": "Partagé",
+      "ariaLabel": "La disposition du terminal est partagée entre les vues connectées. La taille partagée est de {cols} par {rows}.",
+      "title": "Disposition partagée du terminal",
+      "description": "Ce terminal est ouvert dans plusieurs vues dont l’espace disponible diffère. Pour conserver une disposition cohérente entre les vues, il utilise actuellement une grille partagée de {cols}×{rows}. Les retours à la ligne et les espaces vides peuvent donc ne pas correspondre aux dimensions de cette zone.",
+      "localSize": "Cette vue",
+      "effectiveSize": "Taille partagée",
+      "resolution": "La grille partagée s’ajuste automatiquement lorsque les vues connectées sont redimensionnées ou déconnectées.",
+      "announcement": "La disposition du terminal est partagée entre les vues connectées.",
+      "triggerDescription": "Ouvrir les détails de la disposition partagée du terminal."
+    },
     "title": "Terminal",
     "terminalName": "Terminal {index} Terminal",
     "creatingEyebrow": "Création",

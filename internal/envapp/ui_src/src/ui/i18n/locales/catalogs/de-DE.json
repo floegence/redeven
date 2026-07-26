@@ -2380,6 +2380,19 @@
     }
   },
   "terminal": {
+    "sharedGeometry": {
+      "compact": "Mit anderen Ansichten geteilt · {cols}×{rows}",
+      "short": "Geteilt {cols}×{rows}",
+      "label": "Geteilt",
+      "ariaLabel": "Das Terminal-Layout wird mit verbundenen Ansichten geteilt. Die gemeinsame Größe beträgt {cols} mal {rows}.",
+      "title": "Gemeinsames Terminal-Layout",
+      "description": "Dieses Terminal ist in mehreren Ansichten mit unterschiedlich viel verfügbarem Platz geöffnet. Damit das Layout in allen Ansichten gleich bleibt, verwendet es derzeit ein gemeinsames Raster von {cols}×{rows}. Dadurch können Zeilenumbrüche und Leerraum von diesem Bereich abweichen.",
+      "localSize": "Diese Ansicht",
+      "effectiveSize": "Gemeinsame Größe",
+      "resolution": "Das gemeinsame Raster wird automatisch angepasst, wenn verbundene Ansichten ihre Größe ändern oder getrennt werden.",
+      "announcement": "Das Terminal-Layout wird mit verbundenen Ansichten geteilt.",
+      "triggerDescription": "Details zum gemeinsamen Terminal-Layout öffnen."
+    },
     "title": "Terminal",
     "terminalName": "Terminal {index}",
     "creatingEyebrow": "Terminal",

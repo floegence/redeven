@@ -11,7 +11,6 @@ import {
   type PagedTerminalOutputSnapshot,
   type PreparedPagedTerminalHistory,
   type TerminalAppearance,
-  type TerminalEventSource,
   type TerminalOutputPipelineChunk,
   type TerminalResponsiveConfig,
   type TerminalRestorableSnapshot,
@@ -19,6 +18,7 @@ import {
 } from '@floegence/floeterm-terminal-web';
 import {
   classifyTerminalAttachLifecycleExit,
+  type RedevenTerminalEventSource,
   type RedevenTerminalTransport,
 } from '../services/terminalTransport';
 import { createTerminalFileLinkProvider, type TerminalResolvedLinkTarget } from '../services/terminalLinkProvider';
@@ -49,11 +49,18 @@ import {
   markTerminalPerformance,
   pseudonymousTerminalSessionRef,
 } from '../services/terminalPerformance';
+import {
+  createTerminalGeometryPresentationController,
+  type TerminalEffectiveGeometry,
+  type TerminalGeometryRequestContext,
+  type TerminalSharedGeometryPresentation,
+} from './terminalSharedGeometryPresentation';
 
 type SessionLoadingState = 'idle' | 'initializing' | 'attaching' | 'loading_history' | 'reconnecting';
 
 type SharedTerminalGeometryEvent = Readonly<{
   sessionId: string;
+  lifecycleEpoch: number;
   generation: number;
   outputSequenceBoundary: number;
   cols: number;
@@ -138,12 +145,16 @@ export type TerminalSessionRuntimeProps = Readonly<{
   bottomInsetPx: () => number;
   connId: string;
   transport: RedevenTerminalTransport;
-  eventSource: TerminalEventSource;
+  eventSource: RedevenTerminalEventSource;
   registerCore: (sessionId: string, core: TerminalCore | null) => void;
   registerSurfaceElement: (sessionId: string, surface: HTMLDivElement | null) => void;
   registerActions: (sessionId: string, actions: TerminalSessionRuntimeActions | null) => void;
   registerWorkingSetRuntime: (sessionId: string, runtime: TerminalWorkingSetRuntime | null) => void;
   onRuntimeStatus?: (sessionId: string, status: TerminalSessionRuntimeStatus) => void;
+  onGeometryPresentation?: (
+    sessionId: string,
+    presentation: TerminalSharedGeometryPresentation | null,
+  ) => void;
   onSessionGone?: (sessionId: string) => void;
   onInteractive?: (sessionId: string) => void;
   onLiveOutputObserved?: (sessionId: string, byteLength: number, sequence: number | undefined) => void;
@@ -184,6 +195,10 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   const [blockingFailureCode, setBlockingFailureCode] = createSignal<'terminal_unavailable' | PagedTerminalOutputFailureCode | null>(null);
   const [showRetryingStatus, setShowRetryingStatus] = createSignal(false);
   const [historyReplayProgress, setHistoryReplayProgress] = createSignal<{ loadedBytes: number; totalBytes: number } | null>(null);
+  const [geometryRendererReady, setGeometryRendererReady] = createSignal(false);
+  const geometryPresentation = createTerminalGeometryPresentationController({
+    onPresentation: presentation => props.onGeometryPresentation?.(stableSessionId, presentation),
+  });
 
   const [showLoading, setShowLoading] = createSignal(false);
   let loadingDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -240,6 +255,15 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   });
 
   createEffect(() => {
+    geometryPresentation.setEligible(
+      props.viewActive()
+      && props.active()
+      && geometryRendererReady()
+      && runtimeStatus().state === 'idle',
+    );
+  });
+
+  createEffect(() => {
     const shouldDelay = baselineReady() && outputRecoveryState() === 'retry-wait';
     setShowRetryingStatus(false);
     if (!shouldDelay) return;
@@ -273,6 +297,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   let unsubData: (() => void) | null = null;
   let unsubNameUpdate: (() => void) | null = null;
   let unsubGeometry: (() => void) | null = null;
+  let unsubAttachmentLifecycle: (() => void) | null = null;
   let appearanceRaf: number | null = null;
   let activationRaf: number | null = null;
   let inputProtectionTimer: ReturnType<typeof setTimeout> | null = null;
@@ -291,7 +316,17 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   let lastRetryEventKey = '';
   let lastWrittenOutputSequence = 0;
   let lastAppliedGeometryGeneration = 0;
+  let lastAppliedGeometryBoundary = -1;
   let pendingGeometryEvents: SharedTerminalGeometryEvent[] = [];
+  const geometryGridByGeneration = new Map<number, Readonly<{ cols: number; rows: number }>>();
+  let activeGeometryLifecycleEpoch = 0;
+  let activeGeometryRendererEpoch = 0;
+  let activeRuntimeAttachGeneration = 0;
+  let latestGeometryResizeContext: TerminalGeometryRequestContext | null = null;
+  const snapshotGeometryFacts = new WeakMap<object, Readonly<{
+    effective: TerminalEffectiveGeometry;
+    coveredThroughSequence: number;
+  }>>();
   let liveAttachmentReady = false;
   let latestHostDimensions: Readonly<{ cols: number; rows: number }> | null = null;
   const currentHostDimensions = () => latestHostDimensions;
@@ -486,6 +521,8 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     unsubNameUpdate = null;
     unsubGeometry?.();
     unsubGeometry = null;
+    unsubAttachmentLifecycle?.();
+    unsubAttachmentLifecycle = null;
   };
 
   const applyPendingGeometry = () => {
@@ -493,14 +530,29 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     if (!core) return;
     while (pendingGeometryEvents.length > 0) {
       const event = pendingGeometryEvents[0]!;
-      if (event.generation <= lastAppliedGeometryGeneration) {
+      if (event.lifecycleEpoch !== activeGeometryLifecycleEpoch) {
+        pendingGeometryEvents.shift();
+        continue;
+      }
+      if (event.generation < lastAppliedGeometryGeneration
+        || (event.generation === lastAppliedGeometryGeneration
+          && event.outputSequenceBoundary <= lastAppliedGeometryBoundary)) {
         pendingGeometryEvents.shift();
         continue;
       }
       if (event.outputSequenceBoundary > lastWrittenOutputSequence) return;
       pendingGeometryEvents.shift();
       lastAppliedGeometryGeneration = event.generation;
+      lastAppliedGeometryBoundary = event.outputSequenceBoundary;
       core.setFixedDimensions({ cols: event.cols, rows: event.rows });
+      geometryPresentation.noteAppliedEffective({
+        lifecycleEpoch: event.lifecycleEpoch,
+        rendererEpoch: activeGeometryRendererEpoch,
+        generation: event.generation,
+        outputSequenceBoundary: event.outputSequenceBoundary,
+        cols: event.cols,
+        rows: event.rows,
+      });
     }
   };
 
@@ -512,18 +564,45 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       reportBlockingFailure('terminal_unavailable');
       return;
     }
-    if (event.generation <= lastAppliedGeometryGeneration) return;
-    const duplicate = pendingGeometryEvents.find(pending => pending.generation === event.generation);
+    if (event.lifecycleEpoch !== activeGeometryLifecycleEpoch) return;
+    const generationGrid = geometryGridByGeneration.get(event.generation);
+    if (generationGrid
+      && (generationGrid.cols !== event.cols || generationGrid.rows !== event.rows)) {
+      reportBlockingFailure('terminal_unavailable');
+      return;
+    }
+    if (!generationGrid) {
+      geometryGridByGeneration.set(event.generation, { cols: event.cols, rows: event.rows });
+    }
+    if (!geometryPresentation.noteKnownEffective(event)) {
+      const known = geometryPresentation.getState().knownEffective;
+      if (known
+        && known.generation === event.generation
+        && (known.cols !== event.cols || known.rows !== event.rows)) {
+        reportBlockingFailure('terminal_unavailable');
+        return;
+      }
+    }
+    if (event.generation < lastAppliedGeometryGeneration
+      || (event.generation === lastAppliedGeometryGeneration
+        && event.outputSequenceBoundary <= lastAppliedGeometryBoundary)) return;
+    const duplicate = pendingGeometryEvents.find(pending => (
+      pending.lifecycleEpoch === event.lifecycleEpoch
+      && pending.generation === event.generation
+      && pending.outputSequenceBoundary === event.outputSequenceBoundary
+    ));
     if (duplicate) {
-      if (duplicate.outputSequenceBoundary !== event.outputSequenceBoundary
-        || duplicate.cols !== event.cols
+      if (duplicate.cols !== event.cols
         || duplicate.rows !== event.rows) {
         reportBlockingFailure('terminal_unavailable');
       }
       return;
     }
     pendingGeometryEvents.push(event);
-    pendingGeometryEvents.sort((left, right) => left.generation - right.generation);
+    pendingGeometryEvents.sort((left, right) => (
+      left.generation - right.generation
+      || left.outputSequenceBoundary - right.outputSequenceBoundary
+    ));
     applyPendingGeometry();
   };
 
@@ -635,6 +714,8 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     cancelPendingAppearanceApply();
     cancelPendingActivationRefresh();
     pendingBaselineRender = null;
+    setGeometryRendererReady(false);
+    geometryPresentation.endRenderer(activeGeometryRendererEpoch);
     term?.dispose();
     term = null;
     props.registerCore(sessionId(), null);
@@ -657,7 +738,14 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     activitySettledThroughSequence = 0;
     lastWrittenOutputSequence = 0;
     lastAppliedGeometryGeneration = 0;
+    lastAppliedGeometryBoundary = -1;
     pendingGeometryEvents = [];
+    geometryGridByGeneration.clear();
+    if (activeRuntimeAttachGeneration > 0) {
+      geometryPresentation.closeAttachment(activeRuntimeAttachGeneration);
+    }
+    activeRuntimeAttachGeneration = 0;
+    latestGeometryResizeContext = null;
     liveAttachmentReady = false;
     latestHostDimensions = null;
     props.onPendingOutputReset?.(sessionId(), {
@@ -756,7 +844,51 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     }, 750);
   };
 
-  const createCore = (id: string, target: HTMLDivElement): TerminalCore => {
+  const requestTerminalResize = async (
+    id: string,
+    size: Readonly<{ cols: number; rows: number }>,
+  ): Promise<TerminalEffectiveGeometry | null> => {
+    const context = geometryPresentation.beginResize(size);
+    if (!context) return null;
+    latestGeometryResizeContext = context;
+    try {
+      const result = await props.transport.resizeWithEffectiveGeometry(id, size.cols, size.rows);
+      if (disposed) return null;
+      const effective = geometryPresentation.acknowledgeResize(context, result);
+      if (!effective) return null;
+      queueTerminalGeometry({ sessionId: id, ...effective });
+      return effective;
+    } catch (errorValue) {
+      geometryPresentation.failResize(context);
+      if (latestGeometryResizeContext?.callSequence !== context.callSequence
+        || !liveAttachmentReady
+        || disposed) return null;
+      const lifecycleExit = classifyTerminalAttachLifecycleExit(errorValue);
+      if (lifecycleExit === 'session_gone') {
+        if (props.onSessionGone) props.onSessionGone(id);
+        else props.transport.forgetSession(id);
+        return null;
+      }
+      if (lifecycleExit === 'disconnected') {
+        waitingForProtocolClient = props.protocolClient();
+        setLoading('reconnecting');
+        return null;
+      }
+      reportBlockingFailure('terminal_unavailable');
+      return null;
+    }
+  };
+
+  const createCore = (
+    id: string,
+    target: HTMLDivElement,
+    options?: Readonly<{ preserveGeometryQueue?: boolean }>,
+  ): TerminalCore => {
+    activeGeometryRendererEpoch = geometryPresentation.beginRenderer();
+    lastWrittenOutputSequence = 0;
+    lastAppliedGeometryGeneration = 0;
+    lastAppliedGeometryBoundary = -1;
+    if (!options?.preserveGeometryQueue) pendingGeometryEvents = [];
     let core: TerminalCore | null = null;
     core = new TerminalCore(
       target,
@@ -794,22 +926,9 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
         onResize: (size: { cols: number; rows: number }) => {
           if (!props.viewActive() || !props.active()) return;
           latestHostDimensions = { cols: size.cols, rows: size.rows };
+          geometryPresentation.observeLocal(size);
           if (!liveAttachmentReady) return;
-          void props.transport.resize(id, size.cols, size.rows).catch((errorValue) => {
-            if (!liveAttachmentReady || disposed) return;
-            const lifecycleExit = classifyTerminalAttachLifecycleExit(errorValue);
-            if (lifecycleExit === 'session_gone') {
-              if (props.onSessionGone) props.onSessionGone(id);
-              else props.transport.forgetSession(id);
-              return;
-            }
-            if (lifecycleExit === 'disconnected') {
-              waitingForProtocolClient = props.protocolClient();
-              setLoading('reconnecting');
-              return;
-            }
-            reportBlockingFailure('terminal_unavailable');
-          });
+          void requestTerminalResize(id, size);
         },
         onError: () => {
           console.error('[TerminalPanel] Terminal core failed', { event: 'terminal_core_failed' });
@@ -1056,6 +1175,10 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     setLoading('initializing');
     liveAttachmentReady = false;
     latestHostDimensions = null;
+    activeGeometryLifecycleEpoch = geometryPresentation.beginLifecycle();
+    geometryGridByGeneration.clear();
+    activeRuntimeAttachGeneration = 0;
+    latestGeometryResizeContext = null;
 
     const core = createCore(id, target);
     const coordinator = ensureOutputCoordinator(id);
@@ -1083,8 +1206,45 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       });
 
       if (props.eventSource.onTerminalGeometry) {
-        unsubGeometry = props.eventSource.onTerminalGeometry(id, queueTerminalGeometry);
+        const lifecycleEpoch = activeGeometryLifecycleEpoch;
+        unsubGeometry = props.eventSource.onTerminalGeometry(id, event => {
+          queueTerminalGeometry({ ...event, lifecycleEpoch });
+        });
       }
+
+      const lifecycleEpoch = activeGeometryLifecycleEpoch;
+      unsubAttachmentLifecycle = props.eventSource.onTerminalLiveAttachmentLifecycle(id, event => {
+        if (lifecycleEpoch !== activeGeometryLifecycleEpoch) return;
+        if (event.state === 'attached') {
+          if (!geometryPresentation.bindAttachment(lifecycleEpoch, event.runtimeAttachGeneration)) {
+            reportBlockingFailure('terminal_unavailable');
+            return;
+          }
+          activeRuntimeAttachGeneration = event.runtimeAttachGeneration;
+          liveAttachmentReady = true;
+          return;
+        }
+        geometryPresentation.closeAttachment(event.runtimeAttachGeneration);
+        if (event.runtimeAttachGeneration !== activeRuntimeAttachGeneration) return;
+        activeRuntimeAttachGeneration = 0;
+        liveAttachmentReady = false;
+        term?.setConnected(false);
+        if (event.reason === 'session_closed' || event.reason === 'session_deleted') {
+          setLoading('idle');
+          if (props.onSessionGone) props.onSessionGone(id);
+          else props.transport.forgetSession(id);
+          return;
+        }
+        if (event.reason === 'stream_ended'
+          || event.reason === 'error'
+          || event.reason === 'connection_epoch_changed') {
+          waitingForProtocolClient = null;
+          setLoading('reconnecting');
+          queueMicrotask(() => {
+            if (!disposed && loading() === 'reconnecting') void reload();
+          });
+        }
+      });
 
       if (props.eventSource.onTerminalNameUpdate) {
         unsubNameUpdate = props.eventSource.onTerminalNameUpdate(id, (ev) => {
@@ -1095,6 +1255,8 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       setLoading('attaching');
       transitionRecoveryPhase('attaching');
       const dims = core.getDimensions();
+      geometryPresentation.observeLocal(dims);
+      const attachRequestEpoch = geometryPresentation.getState().requestEpoch;
       markTerminalRecoveryMilestone(trace, 'attach-start', { cols: dims.cols, rows: dims.rows });
       const attachResult = await props.transport.attachWithHistoryBoundary(id, dims.cols, dims.rows);
       if (seq !== initSeq) return;
@@ -1107,6 +1269,25 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
         reportBlockingFailure('history_contract_invalid');
         throw new Error('Terminal attach response returned an invalid history boundary');
       }
+      const initialEffective = geometryPresentation.acknowledgeAttach({
+        lifecycleEpoch,
+        rendererEpoch: activeGeometryRendererEpoch,
+        requestEpoch: attachRequestEpoch,
+        requested: dims,
+        runtimeAttachGeneration: attachResult.runtimeAttachGeneration,
+        effective: {
+          generation: attachResult.geometryGeneration,
+          outputSequenceBoundary: historyBoundarySequence,
+          cols: attachResult.cols,
+          rows: attachResult.rows,
+        },
+      });
+      if (!initialEffective) {
+        reportBlockingFailure('terminal_unavailable');
+        throw new Error('Terminal attach geometry acknowledgement was inconsistent');
+      }
+      activeRuntimeAttachGeneration = attachResult.runtimeAttachGeneration;
+      queueTerminalGeometry({ sessionId: id, ...initialEffective });
       markTerminalRecoveryMilestone(trace, 'attach-ack', {
         runtime_attach_generation: attachResult.runtimeAttachGeneration,
         cols: dims.cols,
@@ -1123,7 +1304,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       liveAttachmentReady = true;
       const latestDimensions = currentHostDimensions();
       if (latestDimensions && (latestDimensions.cols !== dims.cols || latestDimensions.rows !== dims.rows)) {
-        await props.transport.resize(id, latestDimensions.cols, latestDimensions.rows);
+        await requestTerminalResize(id, latestDimensions);
         if (seq !== initSeq) return;
       }
 
@@ -1218,6 +1399,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       if (seq !== initSeq) return;
       setLoading('idle');
       setReadyOnce(true);
+      setGeometryRendererReady(true);
       transitionRecoveryPhase('interactive');
       markTerminalRecoveryMilestone(trace, 'interactive', {
         coordinator_attach_generation: outputCoordinatorSnapshot?.attachGeneration,
@@ -1284,6 +1466,17 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       const snapshot = core.captureRestorableSnapshot({
         coveredThroughSequence: coordinatorSnapshot.coveredThroughSequence,
       });
+      const knownEffective = geometryPresentation.getState().knownEffective;
+      if (snapshot
+        && knownEffective
+        && snapshot.cols === knownEffective.cols
+        && snapshot.rows === knownEffective.rows
+        && snapshot.coveredThroughSequence >= knownEffective.outputSequenceBoundary) {
+        snapshotGeometryFacts.set(snapshot, {
+          effective: knownEffective,
+          coveredThroughSequence: snapshot.coveredThroughSequence,
+        });
+      }
       disposeCore();
       return snapshot;
     } catch (errorValue) {
@@ -1312,7 +1505,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     setBlockingFailureCode(null);
     setLoading('initializing');
     setShowLoading(true);
-    const core = createCore(id, target);
+    const core = createCore(id, target, { preserveGeometryQueue: true });
     const coordinator = ensureOutputCoordinator(id);
 
     try {
@@ -1322,8 +1515,36 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       applyTerminalAppearance(core, buildTerminalAppearance(), { forceResize: true });
       core.setConnected(true);
 
-      await restoreTerminalSnapshotOrReplay({
-        snapshot,
+      const snapshotCapture = snapshot ? snapshotGeometryFacts.get(snapshot) ?? null : null;
+      const snapshotFact = snapshotCapture?.effective ?? null;
+      const snapshotEffective = snapshot
+        && snapshotFact
+        && snapshotCapture
+        && snapshotFact.lifecycleEpoch === activeGeometryLifecycleEpoch
+        && snapshot.cols === snapshotFact.cols
+        && snapshot.rows === snapshotFact.rows
+        && snapshot.coveredThroughSequence === snapshotCapture.coveredThroughSequence
+        && snapshot.coveredThroughSequence >= snapshotFact.outputSequenceBoundary
+        ? snapshotFact
+        : null;
+      const validSnapshot = snapshotEffective ? snapshot : null;
+      const retainedEffective = geometryPresentation.getState().knownEffective;
+      let seedEffective = snapshotEffective ?? retainedEffective;
+      if (!seedEffective) {
+        const dimensions = core.getDimensions();
+        latestHostDimensions = dimensions;
+        geometryPresentation.observeLocal(dimensions);
+        seedEffective = await requestTerminalResize(id, dimensions);
+        if (!seedEffective) {
+          throw new Error('Terminal resume could not confirm the current shared geometry');
+        }
+      }
+      if (seedEffective) {
+        core.setFixedDimensions({ cols: seedEffective.cols, rows: seedEffective.rows });
+      }
+
+      const restoreSource = await restoreTerminalSnapshotOrReplay({
+        snapshot: validSnapshot,
         restoreSnapshot: (value) => core.restoreSnapshot(value),
         replayHistory: async () => {
           replayCoveredBytes = 0;
@@ -1369,9 +1590,20 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       });
       if (seq !== initSeq) return;
 
+      if (restoreSource === 'snapshot' && validSnapshot && snapshotEffective) {
+        lastWrittenOutputSequence = Math.max(
+          lastWrittenOutputSequence,
+          validSnapshot.coveredThroughSequence,
+        );
+        queueTerminalGeometry({ sessionId: id, ...snapshotEffective });
+      }
+      const latestEffective = geometryPresentation.getState().knownEffective;
+      if (latestEffective) queueTerminalGeometry({ sessionId: id, ...latestEffective });
+
       setLoading('idle');
       setReadyOnce(true);
       setShowLoading(false);
+      setGeometryRendererReady(true);
       transitionRecoveryPhase('interactive');
       markTerminalRecoveryMilestone(trace, 'interactive', {
         coordinator_attach_generation: coordinator.getSnapshot().attachGeneration,
@@ -1458,6 +1690,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     initSeq += 1;
     reloadSeq += 1;
     disposeTerminal();
+    geometryPresentation.dispose();
     props.registerCore(sessionId(), null);
     props.registerSurfaceElement(sessionId(), null);
     props.onRuntimeStatus?.(stableSessionId, { state: 'idle' });

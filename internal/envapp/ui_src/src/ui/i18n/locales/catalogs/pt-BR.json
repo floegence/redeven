@@ -2380,6 +2380,19 @@
     }
   },
   "terminal": {
+    "sharedGeometry": {
+      "compact": "Compartilhado entre visualizações · {cols}×{rows}",
+      "short": "Compartilhado {cols}×{rows}",
+      "label": "Compartilhado",
+      "ariaLabel": "O layout do terminal é compartilhado entre as visualizações conectadas. O tamanho compartilhado é {cols} por {rows}.",
+      "title": "Layout compartilhado do terminal",
+      "description": "Este terminal está aberto em várias visualizações com diferentes espaços disponíveis. Para manter o layout consistente entre elas, ele usa atualmente uma grade compartilhada de {cols}×{rows}. Por isso, as quebras de linha e os espaços vazios podem ser diferentes nesta área.",
+      "localSize": "Esta visualização",
+      "effectiveSize": "Tamanho compartilhado",
+      "resolution": "A grade compartilhada se ajusta automaticamente quando as visualizações conectadas são redimensionadas ou desconectadas.",
+      "announcement": "O layout do terminal é compartilhado entre as visualizações conectadas.",
+      "triggerDescription": "Abrir detalhes sobre o layout compartilhado do terminal."
+    },
     "title": "Terminal",
     "terminalName": "Terminal {index}",
     "creatingEyebrow": "Terminal",

@@ -115,6 +115,8 @@ describe('terminal live transport', () => {
     const stream = new FakeStream();
     const openStream = vi.fn().mockResolvedValue(stream);
     const bundle = createRedevenTerminalLiveBundle(rpc, () => ({ openStream } as any), 'connection-1');
+    const lifecycle: unknown[] = [];
+    bundle.eventSource.onTerminalLiveAttachmentLifecycle('session-1', event => lifecycle.push(event));
 
     const attaching = bundle.transport.attachWithHistoryBoundary('session-1', 80, 24);
     await waitUntil(() => stream.writes.length === 1);
@@ -140,14 +142,22 @@ describe('terminal live transport', () => {
       historyGeneration: 2,
       historyStartSequence: 1,
       geometryGeneration: 1,
+      runtimeAttachGeneration: 1,
+      cols: 80,
+      rows: 24,
     });
+    expect(lifecycle).toEqual([{
+      sessionId: 'session-1',
+      runtimeAttachGeneration: 1,
+      state: 'attached',
+    }]);
 
     await bundle.transport.sendInput('session-1', 'aa');
     const input = decodeInput(decodeSingleWrite(stream.writes[1]!));
     expect(input.sequence).toBe(1n);
     expect(new TextDecoder().decode(input.data)).toBe('aa');
 
-    const resizing = bundle.transport.resize('session-1', 100, 30);
+    const resizing = bundle.transport.resizeWithEffectiveGeometry('session-1', 100, 30);
     await waitUntil(() => stream.writes.length === 3);
     const resize = decodeResize(decodeSingleWrite(stream.writes[2]!));
     expect(resize).toEqual({ sequence: 1n, cols: 100, rows: 30 });
@@ -158,7 +168,22 @@ describe('terminal live transport', () => {
       cols: 100,
       rows: 30,
     }));
-    await resizing;
+    await expect(resizing).resolves.toEqual({
+      runtimeAttachGeneration: 1,
+      requested: { cols: 100, rows: 30 },
+      effective: {
+        generation: 2,
+        outputSequenceBoundary: 4,
+        cols: 100,
+        rows: 30,
+      },
+    });
+
+    bundle.transport.forgetSession('session-1');
+    expect(lifecycle).toEqual([
+      { sessionId: 'session-1', runtimeAttachGeneration: 1, state: 'attached' },
+      { sessionId: 'session-1', runtimeAttachGeneration: 1, state: 'closed', reason: 'detached' },
+    ]);
   });
 
   it('keeps history and name updates on the RPC control plane', async () => {
