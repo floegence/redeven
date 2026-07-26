@@ -259,6 +259,7 @@ import {
   DesktopThemePicker,
   type DesktopThemePickerSnapshot,
 } from './DesktopThemePicker';
+import { rovingRadioIndexForKey } from './rovingRadioGroup';
 import { desktopControlPlaneKey, suggestControlPlaneDisplayLabel } from '../shared/controlPlaneProvider';
 import {
   DESKTOP_ACTION_TOAST_LIMIT,
@@ -13051,6 +13052,7 @@ const WELCOME_DIALOG_PANEL_CLASS = 'redeven-welcome-dialog-panel';
 const LOCAL_ENVIRONMENT_SETTINGS_DIALOG_CLASS = cn(
   WELCOME_DIALOG_PANEL_CLASS,
   'redeven-welcome-dialog-panel--settings',
+  'redeven-settings-dialog',
 );
 
 const CONNECTION_DIALOG_CLASS = cn(
@@ -13058,7 +13060,7 @@ const CONNECTION_DIALOG_CLASS = cn(
   'redeven-welcome-dialog-panel--connection',
 );
 
-const LOCAL_ENVIRONMENT_SETTINGS_CARD_CLASS = 'redeven-tile rounded-md border border-border px-4 py-4 redeven-settings-detail-card';
+const LOCAL_ENVIRONMENT_SETTINGS_CARD_CLASS = 'redeven-tile redeven-boundary-panel rounded-md border px-4 py-4 redeven-settings-detail-card';
 
 function accessModeIcon(mode: DesktopAccessMode): (props?: { class?: string }) => JSX.Element {
   switch (mode) {
@@ -13187,7 +13189,7 @@ function SettingsApplyTimingControl(props: Readonly<{
   i18n: DesktopI18n;
 }>) {
   return (
-    <div class="grid gap-3 border-t border-border pt-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+    <div class="redeven-divider grid gap-3 border-t pt-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
       <div class="min-w-0">
         <div class="text-xs font-medium text-foreground">{props.i18n.t('settings.applyTimingTitle')}</div>
         <div class="mt-1 text-[11px] leading-5 text-muted-foreground">{props.i18n.t('settings.applyTimingHelp')}</div>
@@ -13252,6 +13254,7 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
   const settingsSaveLabel = createMemo(() => props.i18n.t('settings.saveEnvironmentSettings', {
     label: settingsEnvironmentLabel(),
   }));
+  const visibilityGroupID = createUniqueId();
   const localUIPasswordCanClear = createMemo(() => (
     props.baselineSnapshot.local_ui_password_configured
     && props.draft.local_ui_password_mode !== 'clear'
@@ -13332,6 +13335,15 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
   function returnToEdit(): void {
     setStep('edit');
     queueMicrotask(() => reviewTriggerRef?.focus());
+  }
+
+  function selectAccessMode(mode: DesktopAccessMode): void {
+    setAccessModeOverride(mode === 'custom_exposure' ? mode : null);
+    props.applyAccessMode(mode);
+  }
+
+  function focusAccessMode(mode: DesktopAccessMode): void {
+    queueMicrotask(() => document.getElementById(`${visibilityGroupID}-${mode}`)?.focus());
   }
 
   return (
@@ -13427,8 +13439,8 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
           when={step() === 'review'}
           fallback={(
             <div class="space-y-6">
-            <div class="redeven-settings-statusbar overflow-hidden rounded-md border border-border">
-              <div class="grid divide-y divide-border sm:grid-cols-[1fr_auto_1fr] sm:divide-x sm:divide-y-0">
+            <div class="redeven-settings-statusbar redeven-boundary-panel overflow-hidden rounded-md border">
+              <div class="redeven-divide-children grid divide-y sm:grid-cols-[1fr_auto_1fr] sm:divide-x sm:divide-y-0">
                 <div class="flex items-start gap-3 px-4 py-3">
                   <div class={cn(
                     'mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border transition-colors',
@@ -13507,29 +13519,37 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
                   class="mt-3 grid gap-3 sm:grid-cols-3"
                 >
                   <For each={props.baselineSnapshot.access_mode_options}>
-                    {(option) => {
+                    {(option, index) => {
                       const selected = createMemo(() => accessModel().access_mode === option.value);
                       const localizedOption = createMemo(() => localizedAccessModeOption(props.i18n, option));
                       const Icon = accessModeIcon(option.value);
                       return (
                         <button
                           type="button"
+                          id={`${visibilityGroupID}-${option.value}`}
                           role="radio"
                           aria-checked={selected()}
+                          tabIndex={selected() ? 0 : -1}
                           class={cn(
                             'redeven-visibility-card group relative flex cursor-pointer flex-col gap-2 rounded-md border px-4 py-3.5 text-left transition-[border-color,background-color,box-shadow] duration-150',
                             selected()
                               ? 'border-primary/60 bg-primary/10 shadow-[0_0_0_1px_color-mix(in_srgb,var(--primary)_32%,transparent)_inset]'
-                              : 'redeven-tile border-border hover:-translate-y-[1px] hover:border-primary/25 hover:bg-muted/15 hover:shadow-[0_6px_20px_-12px_color-mix(in_srgb,var(--foreground)_26%,transparent)]',
+                              : 'redeven-tile redeven-boundary-panel redeven-surface-panel--interactive hover:-translate-y-[1px] hover:bg-muted/15 hover:shadow-[0_6px_20px_-12px_color-mix(in_srgb,var(--foreground)_26%,transparent)]',
                           )}
-                          onClick={() => {
-                            if (option.value === 'custom_exposure') {
-                              setAccessModeOverride('custom_exposure');
-                              props.applyAccessMode(option.value);
+                          onClick={() => selectAccessMode(option.value)}
+                          onKeyDown={(event) => {
+                            const options = props.baselineSnapshot.access_mode_options;
+                            const nextIndex = rovingRadioIndexForKey(event.key, index(), options.length);
+                            if (nextIndex === null) {
                               return;
                             }
-                            setAccessModeOverride(null);
-                            props.applyAccessMode(option.value);
+                            event.preventDefault();
+                            const nextOption = options[nextIndex];
+                            if (!nextOption) {
+                              return;
+                            }
+                            selectAccessMode(nextOption.value);
+                            focusAccessMode(nextOption.value);
                           }}
                         >
                           <div class="flex items-start justify-between gap-3">
@@ -13537,7 +13557,7 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
                               'flex h-9 w-9 shrink-0 items-center justify-center rounded-md border transition-colors',
                               selected()
                                 ? 'border-primary/40 bg-primary/15 text-primary'
-                                : 'border-border/70 bg-muted/25 text-muted-foreground group-hover:border-primary/25 group-hover:text-foreground',
+                                : 'redeven-surface-control bg-muted/25 text-muted-foreground group-hover:text-foreground',
                             )}>
                               <Icon class="h-4 w-4" />
                             </div>
@@ -13545,7 +13565,7 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
                               'flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-colors',
                               selected()
                                 ? 'border-primary bg-primary text-primary-foreground'
-                                : 'border-border/80 bg-background group-hover:border-primary/40',
+                                : 'redeven-surface-control bg-background',
                             )}>
                               <Show when={selected()}>
                                 <Check class="h-2.5 w-2.5" />
@@ -13591,7 +13611,7 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
                               />
                             </label>
                             <Show when={accessModel().access_mode === 'local_only'}>
-                              <div class="rounded-md border border-dashed border-border/60 bg-muted/10 px-3 py-2.5">
+                              <div class="redeven-surface-inset rounded-md border border-dashed px-3 py-2.5">
                                 <Checkbox
                                   checked={accessModel().port_mode === 'auto'}
                                   onChange={props.toggleAutoPort}
@@ -13636,7 +13656,7 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
                           />
                         )}
                       >
-                        <div class="flex items-start gap-2.5 rounded-md border border-dashed border-border/60 bg-muted/10 px-3 py-2.5">
+                        <div class="redeven-surface-inset flex items-start gap-2.5 rounded-md border border-dashed px-3 py-2.5">
                           <Shield class="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                           <div class="text-[11px] leading-[1.55] text-muted-foreground">
                             {props.i18n.t('settings.localOnlyProtectionNote')}
@@ -13673,7 +13693,7 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
           )}
         >
           <div class="space-y-5">
-          <div class="flex items-start gap-3 border-b border-border pb-4">
+          <div class="redeven-divider flex items-start gap-3 border-b pb-4">
             <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-warning/30 bg-warning/10 text-warning">
               <AlertTriangle class="h-4 w-4" />
             </div>

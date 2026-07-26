@@ -20,6 +20,7 @@ import { TopBarIconButton } from '@floegence/floe-webapp-core/layout';
 import type { DesktopI18n, DesktopTranslationKey } from '../shared/i18n';
 import type { DesktopThemeSource } from '../shared/desktopTheme';
 import { DesktopAnchoredOverlaySurface } from './DesktopAnchoredOverlaySurface';
+import { rovingRadioIndexForKey } from './rovingRadioGroup';
 
 export type DesktopThemePickerSnapshot = Readonly<{
   source: DesktopThemeSource;
@@ -77,26 +78,6 @@ export function desktopThemePresetLabel(i18n: DesktopI18n, preset: FloeThemePres
 
 export function desktopThemePresetsForMode(mode: FloeShellThemeMode): readonly FloeThemePreset[] {
   return getShellThemePresetsForMode(builtInShellThemePresets, mode);
-}
-
-function moveIndex(event: KeyboardEvent, current: number, count: number): number | null {
-  if (count <= 0) {
-    return null;
-  }
-  switch (event.key) {
-    case 'ArrowRight':
-    case 'ArrowDown':
-      return (current + 1) % count;
-    case 'ArrowLeft':
-    case 'ArrowUp':
-      return (current - 1 + count) % count;
-    case 'Home':
-      return 0;
-    case 'End':
-      return count - 1;
-    default:
-      return null;
-  }
 }
 
 function focusElementByID(id: string): void {
@@ -365,7 +346,7 @@ export function DesktopThemePicker(props: DesktopThemePickerProps) {
                         class="redeven-theme-picker__mode"
                         onClick={() => selectSource(source)}
                         onKeyDown={(event) => {
-                          const nextIndex = moveIndex(event, index(), THEME_SOURCE_OPTIONS.length);
+                          const nextIndex = rovingRadioIndexForKey(event.key, index(), THEME_SOURCE_OPTIONS.length);
                           if (nextIndex !== null) {
                             event.preventDefault();
                             const nextSource = THEME_SOURCE_OPTIONS[nextIndex]!;
@@ -430,7 +411,7 @@ export function DesktopThemePicker(props: DesktopThemePickerProps) {
                         class="redeven-theme-picker__theme"
                         onClick={() => selectPreset(preset)}
                         onKeyDown={(event) => {
-                          const nextIndex = moveIndex(event, index(), presets().length);
+                          const nextIndex = rovingRadioIndexForKey(event.key, index(), presets().length);
                           if (nextIndex !== null) {
                             event.preventDefault();
                             const nextPreset = presets()[nextIndex];

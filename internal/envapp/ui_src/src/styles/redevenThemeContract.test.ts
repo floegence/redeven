@@ -115,6 +115,10 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).not.toContain(':root {\n  /* Keep the Env App light surface contract on the document scope so body portals inherit it too. */\n  --background:');
 
     expect(src).toContain('--redeven-surface-panel: rgb(41, 44, 51);');
+    expect(src).toContain('--border: #59616e;');
+    expect(src).toContain('--input: #68788f;');
+    expect(src).toContain('--chrome-border: #47515f;');
+    expect(src).toContain('--sidebar-border: var(--chrome-border);');
     expect(src).toContain('--redeven-runtime-monitor-upload-line: var(--redeven-categorical-graph-5);');
     expect(src).toContain('--redeven-surface-main: var(--redeven-surface-panel);');
     expect(src).toContain('--redeven-surface-panel-soft: #353942;');
@@ -122,13 +126,13 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('--redeven-surface-overlay: var(--redeven-surface-panel-elevated);');
     expect(src).toContain('--redeven-surface-control: color-mix(in srgb, var(--background) 62%, var(--redeven-surface-panel-elevated) 38%);');
     expect(src).toContain('--redeven-surface-control-muted: color-mix(in srgb, var(--muted) 56%, var(--background));');
-    expect(src).toContain('--redeven-surface-panel-border: color-mix(in srgb, var(--border) 82%, #616976 18%);');
+    expect(src).toContain('--redeven-surface-panel-border: var(--border);');
     expect(src).toContain('--redeven-stroke-panel: var(--redeven-surface-panel-border);');
-    expect(src).toContain('--redeven-stroke-panel-strong: color-mix(in srgb, var(--redeven-stroke-panel) 62%, var(--foreground) 38%);');
-    expect(src).toContain('--redeven-stroke-overlay: color-mix(in srgb, var(--redeven-stroke-panel) 74%, var(--foreground) 26%);');
-    expect(src).toContain('--redeven-stroke-control: color-mix(in srgb, var(--redeven-stroke-panel) 68%, var(--foreground) 32%);');
+    expect(src).toContain('--redeven-stroke-panel-strong: color-mix(in srgb, var(--redeven-surface-panel) 60%, var(--foreground) 40%);');
+    expect(src).toContain('--redeven-stroke-overlay: color-mix(in srgb, var(--redeven-surface-overlay) 56%, var(--foreground) 44%);');
+    expect(src).toContain('--redeven-stroke-control: var(--input);');
     expect(src).toContain('--redeven-stroke-control-strong: color-mix(in srgb, var(--redeven-stroke-control) 68%, var(--foreground) 32%);');
-    expect(src).toContain('--redeven-stroke-divider: color-mix(in srgb, var(--redeven-stroke-panel) 74%, transparent);');
+    expect(src).toContain('--redeven-stroke-divider: #4e5664;');
     expect(src).toContain('--redeven-link-fg: var(--color-sky-400);');
     expect(src).toContain('--redeven-link-hover-fg: var(--color-sky-300);');
     expect(src).toContain('--redeven-link-code-bg: color-mix(in srgb, var(--redeven-link-fg) 13%, var(--background));');
@@ -139,7 +143,7 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('--git-browser-selection-chip-fg: color-mix(in srgb, var(--primary) 62%, var(--foreground) 38%);');
   });
 
-  it('keeps the main content surface separate from shell chrome and global palette tokens', () => {
+  it('keeps the main content surface separate from shell chrome while pairing its Classic Dark strokes', () => {
     const src = readRedevenCss();
 
     expect(src).toContain('.redeven-surface-main {');
@@ -148,7 +152,7 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('--redeven-workbench-default-body-surface: var(--redeven-surface-main);');
     expect(src).not.toContain('--background: color-mix(in srgb, var(--redeven-surface-panel)');
     expect(src).not.toContain('--muted: color-mix(in srgb, var(--redeven-surface-panel)');
-    expect(src).not.toContain('--border: color-mix(in srgb, var(--redeven-surface-panel)');
+    expect(src).toContain('--border: #59616e;');
     expect(src).not.toContain('--sidebar: color-mix(in srgb, var(--redeven-surface-panel)');
     expect(src).not.toContain('--activity-bar: color-mix(in srgb, var(--redeven-surface-panel)');
     expect(src).toContain('--card: #fffdfa;');
@@ -184,7 +188,7 @@ describe('Redeven Env App surface theme contract', () => {
       '--redeven-settings-control-border: #8793a5;',
       '--redeven-settings-header-bg: #141820;',
       '--redeven-settings-sidebar-bg: #141820;',
-      '--redeven-settings-sidebar-border: #2b323d;',
+      '--redeven-settings-sidebar-border: color-mix(in srgb, var(--redeven-settings-sidebar-bg) 74%, var(--foreground) 26%);',
       '--redeven-settings-content-bg: #181c23;',
       '--redeven-settings-card-bg: #222730;',
       '--redeven-settings-sidebar-inset-bg: #1b2027;',
@@ -196,8 +200,8 @@ describe('Redeven Env App surface theme contract', () => {
       '--redeven-settings-sidebar-control-border: #68788f;',
       '--redeven-settings-inset-bg: #1b2027;',
       '--redeven-settings-row-hover-bg: #282e38;',
-      '--redeven-settings-card-border: #343c48;',
-      '--redeven-settings-divider: #2b323d;',
+      '--redeven-settings-card-border: color-mix(in srgb, var(--redeven-settings-card-bg) 72%, var(--foreground) 28%);',
+      '--redeven-settings-divider: color-mix(in srgb, var(--redeven-settings-inset-bg) 80%, var(--foreground) 20%);',
       '--redeven-settings-label-fg: #c0c9d6;',
       '--redeven-settings-note-fg: #94a3b8;',
       '--redeven-settings-selection-bg: #22324a;',
@@ -254,6 +258,11 @@ describe('Redeven Env App surface theme contract', () => {
     expect(contrastRatio('#94a3b8', '#222730')).toBeGreaterThanOrEqual(4.5);
     expect(contrastRatio('#94a3b8', '#1b2027')).toBeGreaterThanOrEqual(4.5);
     expect(contrastRatio('#68788f', '#222730')).toBeGreaterThanOrEqual(3);
+
+    expect(contrastRatio('#59616e', '#292c33')).toBeGreaterThanOrEqual(2.2);
+    expect(contrastRatio('#68788f', '#292c33')).toBeGreaterThanOrEqual(3);
+    expect(contrastRatio('#47515f', '#121721')).toBeGreaterThanOrEqual(2.2);
+    expect(contrastRatio('#4e5664', '#292c33')).toBeGreaterThanOrEqual(1.8);
   });
 
   it('keeps Flower on the shared main content surface family instead of private raw color literals', () => {

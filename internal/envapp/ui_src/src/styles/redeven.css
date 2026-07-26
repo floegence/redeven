@@ -543,6 +543,15 @@
 
 :root[data-floe-shell-theme='classic-dark'],
 :root:not([data-floe-shell-theme]).dark {
+  /* Redeven lifts Classic Dark's product panels above Floe's base card. Keep the paired strokes visible. */
+  --border: #59616e;
+  --input: #68788f;
+  --chrome-border: #47515f;
+  --top-bar-border: var(--chrome-border);
+  --activity-bar-border: var(--chrome-border);
+  --bottom-bar-border: var(--chrome-border);
+  --terminal-panel-border: var(--chrome-border);
+  --sidebar-border: var(--chrome-border);
   --redeven-surface-panel: rgb(41, 44, 51);
   --redeven-surface-main: var(--redeven-surface-panel);
   --redeven-surface-panel-soft: #353942;
@@ -552,7 +561,7 @@
   --redeven-surface-control-muted: color-mix(in srgb, var(--muted) 56%, var(--background));
   --redeven-settings-header-bg: #141820;
   --redeven-settings-sidebar-bg: #141820;
-  --redeven-settings-sidebar-border: #2b323d;
+  --redeven-settings-sidebar-border: color-mix(in srgb, var(--redeven-settings-sidebar-bg) 74%, var(--foreground) 26%);
   --redeven-settings-content-bg: #181c23;
   --redeven-settings-card-bg: #222730;
   --redeven-settings-sidebar-inset-bg: #1b2027;
@@ -565,8 +574,8 @@
   --redeven-settings-inset-bg: #1b2027;
   --redeven-settings-row-bg: var(--redeven-settings-inset-bg);
   --redeven-settings-row-hover-bg: #282e38;
-  --redeven-settings-card-border: #343c48;
-  --redeven-settings-divider: #2b323d;
+  --redeven-settings-card-border: color-mix(in srgb, var(--redeven-settings-card-bg) 72%, var(--foreground) 28%);
+  --redeven-settings-divider: color-mix(in srgb, var(--redeven-settings-inset-bg) 80%, var(--foreground) 20%);
   --redeven-settings-label-fg: #c0c9d6;
   --redeven-settings-note-fg: #94a3b8;
   --redeven-settings-selection-bg: #22324a;
@@ -576,13 +585,13 @@
   --redeven-settings-choice-selected-border: #4c5664;
   --redeven-settings-control-border: #68788f;
   --redeven-settings-section-shadow: none;
-  --redeven-surface-panel-border: color-mix(in srgb, var(--border) 82%, #616976 18%);
+  --redeven-surface-panel-border: var(--border);
   --redeven-stroke-panel: var(--redeven-surface-panel-border);
-  --redeven-stroke-panel-strong: color-mix(in srgb, var(--redeven-stroke-panel) 62%, var(--foreground) 38%);
-  --redeven-stroke-overlay: color-mix(in srgb, var(--redeven-stroke-panel) 74%, var(--foreground) 26%);
-  --redeven-stroke-control: color-mix(in srgb, var(--redeven-stroke-panel) 68%, var(--foreground) 32%);
+  --redeven-stroke-panel-strong: color-mix(in srgb, var(--redeven-surface-panel) 60%, var(--foreground) 40%);
+  --redeven-stroke-overlay: color-mix(in srgb, var(--redeven-surface-overlay) 56%, var(--foreground) 44%);
+  --redeven-stroke-control: var(--input);
   --redeven-stroke-control-strong: color-mix(in srgb, var(--redeven-stroke-control) 68%, var(--foreground) 32%);
-  --redeven-stroke-divider: color-mix(in srgb, var(--redeven-stroke-panel) 74%, transparent);
+  --redeven-stroke-divider: #4e5664;
   --git-table-gridline: color-mix(in srgb, var(--redeven-stroke-panel) 88%, var(--foreground) 12%);
   --redeven-link-fg: var(--color-sky-400);
   --redeven-link-hover-fg: var(--color-sky-300);
@@ -2003,6 +2012,10 @@ html.dark .git-changes-table-skeleton__row > span {
   background: var(--redeven-surface-panel) !important;
 }
 
+.redeven-boundary-panel {
+  border-color: var(--redeven-stroke-panel) !important;
+}
+
 .redeven-surface-main {
   background: var(--redeven-surface-main) !important;
 }
@@ -2084,6 +2097,10 @@ html.dark .git-changes-table-skeleton__row > span {
 
 .redeven-divider--strong {
   border-color: var(--redeven-stroke-control) !important;
+}
+
+.redeven-divide-children > :not(:last-child) {
+  border-color: var(--redeven-stroke-divider) !important;
 }
 
 .git-table-frame,
