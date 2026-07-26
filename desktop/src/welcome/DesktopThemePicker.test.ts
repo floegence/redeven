@@ -124,10 +124,7 @@ describe('DesktopThemePicker', () => {
     expect(pickerSource.match(/role="radiogroup"/gu)).toHaveLength(2);
     expect((pickerSource.match(/role="radio"/gu) ?? []).length).toBeGreaterThanOrEqual(2);
     expect(pickerSource).toContain('tabIndex={selected() ? 0 : -1}');
-    expect(pickerSource).toContain("case 'ArrowRight':");
-    expect(pickerSource).toContain("case 'ArrowLeft':");
-    expect(pickerSource).toContain("case 'Home':");
-    expect(pickerSource).toContain("case 'End':");
+    expect(pickerSource).toContain('rovingRadioIndexForKey(event.key');
     expect(pickerSource).toContain("event.key === 'Enter' || event.key === ' '");
     expect(pickerSource).toContain("event.key === 'Escape'");
     expect(pickerSource).toContain("document.addEventListener('mousedown', handleMouseDown)");

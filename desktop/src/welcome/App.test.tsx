@@ -2167,6 +2167,26 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("i18n.t('settings.sharedPasswordHelp')");
   });
 
+  it('uses the shared surface hierarchy for Local Environment Settings boundaries', () => {
+    const appSrc = readWelcomeSource();
+    const dialogStart = appSrc.indexOf('function LocalEnvironmentSettingsDialog');
+    const dialogEnd = appSrc.indexOf('function ConnectionDialog', dialogStart);
+    const dialogSrc = appSrc.slice(dialogStart, dialogEnd);
+
+    expect(appSrc).toContain("'redeven-settings-dialog',");
+    expect(appSrc).toContain("'redeven-tile redeven-boundary-panel rounded-md border px-4 py-4 redeven-settings-detail-card'");
+    expect(dialogSrc).toContain('redeven-settings-statusbar redeven-boundary-panel');
+    expect(dialogSrc).toContain('redeven-tile redeven-boundary-panel redeven-surface-panel--interactive');
+    expect(dialogSrc).toContain('redeven-divide-children grid divide-y');
+    expect(dialogSrc).toContain('redeven-surface-control bg-background');
+    expect(dialogSrc.match(/redeven-surface-inset/g)).toHaveLength(2);
+    expect(dialogSrc).toContain('redeven-divider flex items-start');
+    expect(dialogSrc).toContain('tabIndex={selected() ? 0 : -1}');
+    expect(dialogSrc).toContain('rovingRadioIndexForKey(event.key, index(), options.length)');
+    expect(dialogSrc).toContain('selectAccessMode(nextOption.value);');
+    expect(dialogSrc).toContain('focusAccessMode(nextOption.value);');
+  });
+
   it('keeps global language controls out of Local Environment Settings', () => {
     const appSrc = readWelcomeSource();
     const dialogStart = appSrc.indexOf('function LocalEnvironmentSettingsDialog');
