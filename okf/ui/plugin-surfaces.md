@@ -1,33 +1,58 @@
 ---
 type: UI Contract
 title: Plugin surfaces
-description: Env App manages official and external plugins through exact inventory identities, explicit review, SDK-owned surfaces, Activity windows, and Workbench widgets.
+description: Env App manages official and external plugins through an accessible Launcher, searchable category discovery, exact inventory identities, explicit review, SDK-owned surfaces, Activity windows, and Workbench widgets.
 tags: [ui, plugins, activity, workbench, plugin-center]
 timestamp: 2026-07-24T00:00:00Z
 ---
 # Summary
 
-Plugin UI runs as released ReDevPlugin sandbox surfaces inside Redeven chrome.
-Activity opens stable Shell-root windows; Workbench opens `redeven.plugin`
-widgets. The Activity Bar launches ready plugins or routes attention states to
-Plugin Center, which combines trust, policy, lifecycle, access, and launch state
-into one primary action per item. External installation uses explicit source,
-security review, install, and completion stages; installed packages stay
-disabled with zero grants. Redeven owns navigation, review, geometry,
-stacking, and placement. ReDevPlugin owns admission, iframe bootstrap, bridge,
-lifecycle, confirmation, streams, and revocation. Failed exact-surface close is
-retryable without widening authority to sibling surfaces or the session.
+Plugin UI runs as released ReDevPlugin sandbox surfaces in Redeven chrome.
+Activity opens Shell-root windows; Workbench opens `redeven.plugin` widgets.
+The Activity Bar opens a search-first Launcher with stable categories, keyboard
+navigation, and exact inventory routing. Plugin Center combines trust, policy,
+lifecycle, access, and launch state into one primary action per item. External
+installation uses explicit source, security review, install, and completion;
+installed packages stay disabled with zero grants. Redeven owns navigation,
+review, geometry, stacking, placement, and filters. ReDevPlugin owns admission,
+iframe bootstrap, bridge, lifecycle, confirmation, streams, and revocation.
+Failed exact-surface close is retryable without widening authority.
 
 # Contract
 
 ## Discovery and exact inventory
 
-The Activity Bar `Plugins` entry opens an opaque vertical switcher without
-changing the current normal surface. Ready rows open their default Activity
-surface; every row states its next action. Disabled, unavailable, not-installed,
-permission-required, and policy-restricted rows open exact management details.
-The desktop switcher is anchored and non-modal, while the mobile sheet is modal.
-Plugin Center remains a dedicated Activity surface with a separate footer entry.
+The Activity Bar `Plugins` entry opens a Shell-root Launcher without changing
+the current normal surface. Desktop uses a centered modal with a search field,
+category rail, and responsive icon grid; mobile uses a bottom sheet with the
+same controls and at least 44px touch targets. Search normalizes Unicode with
+NFKC and locale-aware case folding, matches display name, canonical keywords,
+and the locale's explicit alias key, and intersects with the selected category.
+The category set is stable (`development`, `infrastructure`, `data`,
+`collaboration`, `productivity`, `other`) and never inferred from localized
+labels. Empty results provide a single clear-filters action. Ready items open
+their default Activity surface; disabled, unavailable, not-installed,
+permission-required, and policy-restricted items open exact management details.
+Escape clears search before closing, focus is trapped and restored, background
+content is inert, and arrow/Home/End navigation remains within the visible grid.
+Each plugin is a semantic list item containing a native primary button. Its
+secondary menu exposes only real Activity, Workbench, and exact management
+actions supported by that item; its layout and hit target do not overlap the
+primary launch button. Absent product mutation APIs are not simulated.
+Plugin Center remains a dedicated Activity surface with a separate Launcher
+entry and uses the same category/search projection. Its local filters combine
+source (official catalog or external), trust, and lifecycle without rebuilding
+identity. Discover is a responsive 2-4 column card grid; Installed and Updates
+stay denser management lists so scanning and state comparison remain efficient.
+The directory opens with no inspector selected. Only an explicit item selection
+or Shell exact-key request opens detail; closing detail preserves the directory
+tab, query, and filters, then restores the originating exact item when it is
+visible or the search field when retained filters hide it. A committed external
+install or update protects its exact instance selection from retained filters
+until the user changes directory context or closes detail. A Shell request remains
+bound to its requested item even when retained filters exclude it. External
+installation is visible only to administrators as a lower-weight overflow action
+and does not compete with primary discovery.
 
 The Shell owns inventory loading, one platform client, shared scope, placement
 controllers, and the selected product inventory key. Every catalog or installed

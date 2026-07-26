@@ -14,6 +14,9 @@ import type {
   PluginInventoryItem,
   PluginInventoryProjection,
   PluginLifecycleCommand,
+  PluginLifecycleState,
+  PluginPresentationCategory,
+  PluginTrustBadge,
 } from './pluginTypes';
 import { createUIPresentationEventRecorder } from '../services/uiPresentationTransactions';
 import { ExternalPluginInstallDialog } from './ExternalPluginInstallDialog';
@@ -34,12 +37,21 @@ export type PluginCenterViewProps = {
   onCommitExternal?: (inspection: ExternalPluginInspection, signal: AbortSignal) => Promise<ExternalPluginCommitResult>;
 };
 
+type PluginSourceFilter = 'all' | 'official' | 'external';
+type PluginTrustFilter = 'all' | PluginTrustBadge;
+type PluginLifecycleFilter = 'all' | Exclude<PluginLifecycleState, 'installed'>;
+
 export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   const i18n = useI18n();
   const [activeTab, setActiveTab] = createSignal<PluginCenterTab>(initialTabForProjection(props.projection));
   const [initialTabResolved, setInitialTabResolved] = createSignal(Boolean(props.projection));
   const [query, setQuery] = createSignal('');
+  const [category, setCategory] = createSignal<PluginPresentationCategory | 'all'>('all');
+  const [sourceFilter, setSourceFilter] = createSignal<PluginSourceFilter>('all');
+  const [trustFilter, setTrustFilter] = createSignal<PluginTrustFilter>('all');
+  const [lifecycleFilter, setLifecycleFilter] = createSignal<PluginLifecycleFilter>('all');
   const [selectedInventoryKey, setSelectedInventoryKey] = createSignal<string | undefined>();
+  const [protectedSelectionInventoryKey, setProtectedSelectionInventoryKey] = createSignal<string | undefined>();
   const [commandError, setCommandError] = createSignal<string | null>(null);
   const [commandPending, setCommandPending] = createSignal(false);
   const [uninstallChoiceFor, setUninstallChoiceFor] = createSignal<string | null>(null);
@@ -49,12 +61,19 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   const [externalSourcePreset, setExternalSourcePreset] = createSignal<ExternalPluginSourcePreset | undefined>();
   let commandController: AbortController | undefined;
   let pluginCenterPanelRef: HTMLDivElement | undefined;
+  let pluginCenterSearchRef: HTMLInputElement | undefined;
   let mobileDetailBackButton: HTMLButtonElement | undefined;
   let detailHeadingRef: HTMLHeadingElement | undefined;
   let mobileDetailReturnTarget: HTMLButtonElement | undefined;
+  let deferredPermissionsFocus: number | undefined;
   let handledDetailFocusRequest: number | undefined;
+  let handledSelectionInventoryKey: string | undefined;
+  let handledSelectionFocusRequest: number | undefined;
 
-  onCleanup(() => commandController?.abort('Plugin Center disposed'));
+  onCleanup(() => {
+    commandController?.abort('Plugin Center disposed');
+    if (deferredPermissionsFocus !== undefined) window.clearTimeout(deferredPermissionsFocus);
+  });
 
   const projection = createMemo(() => props.projection);
   const model = createMemo(() => buildPluginCenterModel(projection(), activeTab()));
@@ -71,7 +90,13 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
         return [];
     }
   });
-  const visibleItems = createMemo(() => filterItems(tabItems(), query(), i18n));
+  const visibleItems = createMemo(() => filterItems(tabItems(), {
+    query: query(),
+    category: category(),
+    source: sourceFilter(),
+    trust: trustFilter(),
+    lifecycle: lifecycleFilter(),
+  }, i18n, i18n.locale()));
   const loading = createMemo(() => props.loading);
   const errorMessage = createMemo(() => messageFromUnknown(props.error ?? commandError()));
   const canManage = createMemo(() => props.canManagePlugins);
@@ -89,8 +114,11 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     const focusRequest = props.focusRequest;
     const requestedKey = props.selectedInventoryKey;
     if (!requestedKey) return;
+    if (requestedKey === handledSelectionInventoryKey && focusRequest === handledSelectionFocusRequest) return;
     const requestedItem = allItems().find((item) => item.inventoryKey === requestedKey);
     if (requestedItem) {
+      handledSelectionInventoryKey = requestedKey;
+      handledSelectionFocusRequest = focusRequest;
       setSelectedInventoryKey(requestedItem.inventoryKey);
       tabSelection.commitNow(tabForItem(requestedItem));
       if (focusRequest !== undefined && focusRequest !== handledDetailFocusRequest) {
@@ -117,19 +145,28 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   });
 
   createEffect(() => {
-    const items = visibleItems();
     const currentKey = selectedInventoryKey();
-    if (currentKey && items.some((item) => item.inventoryKey === currentKey)) {
+    if (!currentKey) return;
+    if (!allItems().some((item) => item.inventoryKey === currentKey)) {
+      setProtectedSelectionInventoryKey(undefined);
+      setSelectedInventoryKey(undefined);
+      setMobileDetailOpen(false);
       return;
     }
-    setSelectedInventoryKey(items[0]?.inventoryKey);
+    if (props.selectedInventoryKey === currentKey) return;
+    if (protectedSelectionInventoryKey() === currentKey) return;
+    if (!visibleItems().some((item) => item.inventoryKey === currentKey)) {
+      setSelectedInventoryKey(undefined);
+      setMobileDetailOpen(false);
+    }
   });
 
-  const selectedItem = createMemo(() => (
-    visibleItems().find((item) => item.inventoryKey === selectedInventoryKey()) ??
-    allItems().find((item) => item.inventoryKey === selectedInventoryKey()) ??
-    visibleItems()[0]
-  ));
+  const selectedItem = createMemo(() => allItems().find((item) => item.inventoryKey === selectedInventoryKey()));
+  const filtersActive = createMemo(() => query() !== ''
+    || category() !== 'all'
+    || sourceFilter() !== 'all'
+    || trustFilter() !== 'all'
+    || lifecycleFilter() !== 'all');
 
   const openExternalDialog = (item?: PluginInventoryItem, sourcePreset?: ExternalPluginSourcePreset) => {
     setExternalUpdateItem(item);
@@ -155,6 +192,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   };
 
   const openDetails = (inventoryKey: string, returnTarget: HTMLButtonElement) => {
+    setProtectedSelectionInventoryKey(undefined);
     setSelectedInventoryKey(inventoryKey);
     mobileDetailReturnTarget = returnTarget;
     setMobileDetailOpen(true);
@@ -163,22 +201,33 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     }
   };
 
-  const closeMobileDetails = () => {
+  const closeDetails = () => {
+    const returnTarget = mobileDetailReturnTarget;
+    mobileDetailReturnTarget = undefined;
+    setProtectedSelectionInventoryKey(undefined);
+    setSelectedInventoryKey(undefined);
     setMobileDetailOpen(false);
     queueMicrotask(() => {
-      if (mobileDetailReturnTarget?.isConnected) {
-        mobileDetailReturnTarget.focus({ preventScroll: true });
-      }
+      if (returnTarget?.isConnected) returnTarget.focus({ preventScroll: true });
+      else if (pluginCenterSearchRef?.isConnected) pluginCenterSearchRef.focus({ preventScroll: true });
+      else pluginCenterPanelRef?.focus({ preventScroll: true });
     });
+  };
+
+  const clearDetailSelection = () => {
+    mobileDetailReturnTarget = undefined;
+    setProtectedSelectionInventoryKey(undefined);
+    setSelectedInventoryKey(undefined);
+    setMobileDetailOpen(false);
   };
 
   const updateQuery = (nextQuery: string) => {
     setQuery(nextQuery);
-    setMobileDetailOpen(false);
+    clearDetailSelection();
   };
 
   const selectTab = (tab: PluginCenterTab) => {
-    setMobileDetailOpen(false);
+    clearDetailSelection();
     tabSelection.request(tab);
   };
 
@@ -200,6 +249,18 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
       discoverCount={model().discover.length}
       updatesCount={model().updates.length}
       onQueryInput={updateQuery}
+      searchRef={(element) => { pluginCenterSearchRef = element; }}
+      category={category()}
+      onCategorySelect={(next) => {
+        setCategory(next);
+        clearDetailSelection();
+      }}
+      sourceFilter={sourceFilter()}
+      trustFilter={trustFilter()}
+      lifecycleFilter={lifecycleFilter()}
+      onSourceFilter={(next) => { setSourceFilter(next); clearDetailSelection(); }}
+      onTrustFilter={(next) => { setTrustFilter(next); clearDetailSelection(); }}
+      onLifecycleFilter={(next) => { setLifecycleFilter(next); clearDetailSelection(); }}
       onRefresh={() => void refreshInventory()}
       onTabSelect={selectTab}
       canManage={canManage()}
@@ -230,6 +291,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
         ref={pluginCenterPanelRef}
         id="plugin-center-panel"
         role="tabpanel"
+        tabIndex={-1}
         aria-labelledby={`plugin-center-tab-${activeTab()}`}
         data-plugin-center-shell
         class="flex min-h-0 flex-1 flex-col sm:flex-row"
@@ -237,11 +299,21 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
         <div
           data-plugin-center-master
           class={cn(
-            'min-h-0 w-full flex-col border-b sm:w-[280px] sm:border-b-0 sm:border-r lg:w-[min(340px,42vw)]',
+            'min-h-0 w-full flex-col border-b sm:border-b-0 sm:border-r',
+            selectedItem()
+              ? activeTab() === 'discover' ? 'sm:w-[min(560px,58vw)]' : 'sm:w-[280px] lg:w-[min(340px,42vw)]'
+              : 'sm:w-full sm:border-r-0',
             mobileDetailOpen() ? 'hidden sm:flex' : 'flex',
           )}
         >
-          <div data-plugin-center-list class="min-h-0 flex-1 overflow-y-auto">
+          <div
+            data-plugin-center-list
+            class={cn(
+              'min-h-0 flex-1 overflow-y-auto',
+              activeTab() === 'discover' && 'grid auto-rows-min grid-cols-1 gap-3 p-4 md:grid-cols-2',
+              activeTab() === 'discover' && !selectedItem() && 'lg:grid-cols-3 xl:grid-cols-4',
+            )}
+          >
             <Show when={loading()}>
               <div class="border-b px-4 py-3 text-sm text-muted-foreground">{i18n.t('uiCopy.plugin.loadingOfficial')}</div>
             </Show>
@@ -252,8 +324,11 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
                   data-plugin-center-item={item.inventoryKey}
                   aria-current={selectedItem()?.inventoryKey === item.inventoryKey ? 'true' : undefined}
                   class={cn(
-                    'flex w-full cursor-pointer items-start gap-3 border-b px-4 py-3 text-left transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                    selectedItem()?.inventoryKey === item.inventoryKey ? 'bg-primary/10 shadow-[inset_3px_0_0_var(--primary)]' : 'bg-background',
+                    'flex w-full cursor-pointer items-start gap-3 px-4 py-3 text-left transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                    activeTab() === 'discover' ? 'min-h-36 rounded-md border bg-background' : 'border-b',
+                    selectedItem()?.inventoryKey === item.inventoryKey
+                      ? activeTab() === 'discover' ? 'border-primary bg-primary/5' : 'bg-primary/10 shadow-[inset_3px_0_0_var(--primary)]'
+                      : 'bg-background',
                   )}
                   onClick={(event) => openDetails(item.inventoryKey, event.currentTarget)}
                 >
@@ -275,25 +350,48 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
               )}
             </For>
             <Show when={!loading() && visibleItems().length === 0}>
-              <div class="px-4 py-10 text-center text-sm text-muted-foreground">{i18n.t('uiCopy.plugin.emptyView')}</div>
+              <div class="col-span-full flex min-h-52 flex-col items-center justify-center px-4 py-10 text-center text-sm text-muted-foreground">
+                <Search class="h-6 w-6" />
+                <p class="mt-3">{i18n.t('uiCopy.plugin.emptyView')}</p>
+                <Show when={filtersActive()}>
+                  <button
+                    type="button"
+                    class="mt-3 min-h-[44px] cursor-pointer rounded-md border px-3 text-xs font-semibold text-foreground hover:bg-muted"
+                    onClick={() => {
+                      setQuery('');
+                      setCategory('all');
+                      setSourceFilter('all');
+                      setTrustFilter('all');
+                      setLifecycleFilter('all');
+                      clearDetailSelection();
+                    }}
+                  >
+                    {i18n.t('uiCopy.plugin.clearFilters')}
+                  </button>
+                </Show>
+              </div>
             </Show>
           </div>
         </div>
-        <PluginCenterDetails
-          item={selectedItem()}
-          mobileOpen={mobileDetailOpen()}
-          mobileBackRef={(element) => { mobileDetailBackButton = element; }}
-          detailHeadingRef={(element) => { detailHeadingRef = element; }}
-          onMobileBack={closeMobileDetails}
-          canManage={canManage()}
-          canOpenSurfaces={canOpenSurfaces()}
-          commandPending={commandPending()}
-          uninstallChoiceFor={uninstallChoiceFor()}
-          onCommand={(command) => void runCommand(command)}
-          onAskUninstall={setUninstallChoiceFor}
-          onExternalInstall={(item) => openExternalDialog(undefined, item.officialCatalog?.distribution.installSource)}
-          onExternalUpdate={(item) => openExternalDialog(item, item.officialCatalog?.distribution.installSource)}
-        />
+        <Show when={selectedItem()}>
+          {(item) => (
+            <PluginCenterDetails
+              item={item()}
+              mobileOpen={mobileDetailOpen()}
+              mobileBackRef={(element) => { mobileDetailBackButton = element; }}
+              detailHeadingRef={(element) => { detailHeadingRef = element; }}
+              onMobileBack={closeDetails}
+              canManage={canManage()}
+              canOpenSurfaces={canOpenSurfaces()}
+              commandPending={commandPending()}
+              uninstallChoiceFor={uninstallChoiceFor()}
+              onCommand={(command) => void runCommand(command)}
+              onAskUninstall={setUninstallChoiceFor}
+              onExternalInstall={(selected) => openExternalDialog(undefined, selected.officialCatalog?.distribution.installSource)}
+              onExternalUpdate={(selected) => openExternalDialog(selected, selected.officialCatalog?.distribution.installSource)}
+            />
+          )}
+        </Show>
       </div>
       <ExternalPluginInstallDialog
         open={externalDialogOpen()}
@@ -314,16 +412,22 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
         })}
         onCommitted={async (result) => {
           await props.onRefresh();
-          setSelectedInventoryKey(`instance:${result.plugin.plugin_instance_id}`);
+          const inventoryKey = `instance:${result.plugin.plugin_instance_id}`;
+          setProtectedSelectionInventoryKey(inventoryKey);
+          setSelectedInventoryKey(inventoryKey);
           tabSelection.commitNow('installed');
         }}
         onViewPermissions={(result) => {
-          setSelectedInventoryKey(`instance:${result.plugin.plugin_instance_id}`);
+          const inventoryKey = `instance:${result.plugin.plugin_instance_id}`;
+          setProtectedSelectionInventoryKey(inventoryKey);
+          setSelectedInventoryKey(inventoryKey);
           tabSelection.commitNow('installed');
           setMobileDetailOpen(true);
-          queueMicrotask(() => {
+          if (deferredPermissionsFocus !== undefined) window.clearTimeout(deferredPermissionsFocus);
+          deferredPermissionsFocus = window.setTimeout(() => {
+            deferredPermissionsFocus = undefined;
             pluginCenterPanelRef?.querySelector<HTMLElement>('[data-plugin-permissions]')?.focus({ preventScroll: true });
-          });
+          }, 0);
         }}
       />
     </PluginCenterShell>
@@ -332,12 +436,21 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
 
 export function PluginCenterShell(props: {
   query: string;
+  searchRef?: (element: HTMLInputElement) => void;
+  category: PluginPresentationCategory | 'all';
+  sourceFilter: PluginSourceFilter;
+  trustFilter: PluginTrustFilter;
+  lifecycleFilter: PluginLifecycleFilter;
   loading: boolean;
   activeTab: PluginCenterTab;
   installedCount: number;
   discoverCount: number;
   updatesCount: number;
   onQueryInput: (query: string) => void;
+  onCategorySelect: (category: PluginPresentationCategory | 'all') => void;
+  onSourceFilter: (source: PluginSourceFilter) => void;
+  onTrustFilter: (trust: PluginTrustFilter) => void;
+  onLifecycleFilter: (lifecycle: PluginLifecycleFilter) => void;
   onRefresh: () => void;
   onTabSelect: (tab: PluginCenterTab) => void;
   canManage: boolean;
@@ -355,6 +468,11 @@ export function PluginCenterShell(props: {
     handledFocusRequest = request;
     queueMicrotask(() => rootRef?.focus({ preventScroll: true }));
   });
+  const administrationItems = (): DropdownItem[] => [{
+    id: 'install-external',
+    label: i18n.t('uiCopy.plugin.installFromSource'),
+    disabled: !props.canManage || props.loading,
+  }];
   return (
     <section ref={rootRef} data-plugin-center-view tabIndex={-1} class="flex h-full min-h-0 flex-col bg-background text-foreground">
       <div class="shrink-0 border-b bg-background px-4 py-3">
@@ -367,19 +485,11 @@ export function PluginCenterShell(props: {
             <p class="mt-1 text-sm text-muted-foreground">{i18n.t('uiCopy.plugin.catalogDescription')}</p>
           </div>
           <div class="flex w-full min-w-0 flex-wrap items-center gap-2 lg:w-auto lg:max-w-[min(760px,65vw)] lg:justify-end">
-            <button
-              type="button"
-              data-plugin-center-install-external
-              class="inline-flex h-[44px] min-w-0 max-w-full cursor-pointer items-center gap-1.5 rounded-md border px-3 text-xs font-medium transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50 sm:h-8 sm:px-2.5"
-              disabled={!props.canManage || props.loading}
-              onClick={props.onInstallExternal}
-            >
-              <Download class="h-3.5 w-3.5" />
-              <span class="truncate">{i18n.t('uiCopy.plugin.installFromSource')}</span>
-            </button>
             <label class="relative order-first block w-full min-w-0 sm:order-none sm:min-w-48 sm:flex-1 lg:w-[min(320px,52vw)] lg:flex-none">
+              <span class="sr-only">{i18n.t('uiCopy.plugin.searchPlaceholder')}</span>
               <Search class="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <input
+                ref={props.searchRef}
                 data-plugin-center-search
                 type="search"
                 value={props.query}
@@ -388,6 +498,28 @@ export function PluginCenterShell(props: {
                 class="h-[44px] w-full rounded-md border bg-background pl-8 pr-2 text-sm outline-none transition placeholder:text-muted-foreground/60 focus:border-primary focus:ring-2 focus:ring-primary/20 sm:h-8"
               />
             </label>
+            <Show when={props.canManage}>
+              <Dropdown
+                align="end"
+                disabled={props.loading}
+                items={administrationItems()}
+                onSelect={(id) => {
+                  if (id === 'install-external') props.onInstallExternal();
+                }}
+                triggerAriaLabel={i18n.t('uiCopy.plugin.moreActions')}
+                trigger={(
+                  <button
+                    type="button"
+                    data-plugin-center-install-external
+                    class="inline-flex h-[44px] w-[44px] cursor-pointer items-center justify-center rounded-md border text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 sm:h-8 sm:w-8"
+                    disabled={props.loading}
+                    title={i18n.t('uiCopy.plugin.moreActions')}
+                  >
+                    <MoreHorizontal class="h-3.5 w-3.5" />
+                  </button>
+                )}
+              />
+            </Show>
             <button
               type="button"
               data-plugin-center-refresh
@@ -414,6 +546,55 @@ export function PluginCenterShell(props: {
           <TabButton id="discover" active={props.activeTab} onSelect={props.onTabSelect} label={i18n.t('uiCopy.plugin.discoverCount', { count: props.discoverCount })} />
           <TabButton id="installed" active={props.activeTab} onSelect={props.onTabSelect} label={i18n.t('uiCopy.plugin.installedCount', { count: props.installedCount })} />
           <TabButton id="updates" active={props.activeTab} onSelect={props.onTabSelect} label={i18n.t('uiCopy.plugin.updatesCount', { count: props.updatesCount })} />
+        </div>
+        <div class="mt-2 flex gap-1 overflow-x-auto pb-0.5" role="group" aria-label={i18n.t('uiCopy.plugin.categories')}>
+          <CenterCategoryButton id="all" active={props.category} label={i18n.t('uiCopy.plugin.categoryAll')} onSelect={props.onCategorySelect} />
+          <CenterCategoryButton id="development" active={props.category} label={i18n.t('uiCopy.plugin.categoryDevelopment')} onSelect={props.onCategorySelect} />
+          <CenterCategoryButton id="infrastructure" active={props.category} label={i18n.t('uiCopy.plugin.categoryInfrastructure')} onSelect={props.onCategorySelect} />
+          <CenterCategoryButton id="data" active={props.category} label={i18n.t('uiCopy.plugin.categoryData')} onSelect={props.onCategorySelect} />
+          <CenterCategoryButton id="collaboration" active={props.category} label={i18n.t('uiCopy.plugin.categoryCollaboration')} onSelect={props.onCategorySelect} />
+          <CenterCategoryButton id="productivity" active={props.category} label={i18n.t('uiCopy.plugin.categoryProductivity')} onSelect={props.onCategorySelect} />
+          <CenterCategoryButton id="other" active={props.category} label={i18n.t('uiCopy.plugin.categoryOther')} onSelect={props.onCategorySelect} />
+        </div>
+        <div class="mt-2 flex gap-2 overflow-x-auto pb-0.5" data-plugin-center-filters>
+          <CenterFilterMenu
+            id="source"
+            value={props.sourceFilter}
+            onSelect={(value) => props.onSourceFilter(value as PluginSourceFilter)}
+            items={[
+              { id: 'all', label: i18n.t('uiCopy.plugin.external.source') },
+              { id: 'official', label: i18n.t('uiCopy.plugin.officialSource') },
+              { id: 'external', label: i18n.t('uiCopy.plugin.externalPlugin') },
+            ]}
+          />
+          <CenterFilterMenu
+            id="trust"
+            value={props.trustFilter}
+            onSelect={(value) => props.onTrustFilter(value as PluginTrustFilter)}
+            items={[
+              { id: 'all', label: i18n.t('uiCopy.plugin.trust') },
+              { id: 'official', label: i18n.t('uiCopy.plugin.official') },
+              { id: 'verified', label: i18n.t('uiCopy.plugin.verified') },
+              { id: 'community', label: i18n.t('uiCopy.plugin.community') },
+              { id: 'unsigned', label: i18n.t('uiCopy.plugin.unsigned') },
+              { id: 'blocked', label: i18n.t('uiCopy.plugin.blocked') },
+              { id: 'revoked', label: i18n.t('uiCopy.plugin.revoked') },
+              { id: 'unavailable', label: i18n.t('uiCopy.plugin.unavailable') },
+            ]}
+          />
+          <CenterFilterMenu
+            id="lifecycle"
+            value={props.lifecycleFilter}
+            onSelect={(value) => props.onLifecycleFilter(value as PluginLifecycleFilter)}
+            items={[
+              { id: 'all', label: i18n.t('uiCopy.plugin.lifecycle') },
+              { id: 'enabled', label: i18n.t('uiCopy.plugin.enabled') },
+              { id: 'disabled', label: i18n.t('uiCopy.plugin.disabled') },
+              { id: 'needs_attention', label: i18n.t('uiCopy.plugin.needsAttention') },
+              { id: 'update_available', label: i18n.t('uiCopy.plugin.updateAvailable') },
+              { id: 'not_installed', label: i18n.t('uiCopy.plugin.notInstalled') },
+            ]}
+          />
         </div>
       </div>
       {props.children}
@@ -454,7 +635,7 @@ export function PluginCenterDetails(props: {
               size="sm"
               variant="ghost"
               icon={ArrowLeft}
-              class="min-h-[44px] sm:hidden"
+              class="min-h-[44px]"
               onClick={props.onMobileBack}
             >
               {i18n.t('uiCopy.plugin.backToList')}
@@ -863,6 +1044,54 @@ function TabButton(props: {
   );
 }
 
+function CenterCategoryButton(props: {
+  id: PluginPresentationCategory | 'all';
+  active: PluginPresentationCategory | 'all';
+  label: string;
+  onSelect: (category: PluginPresentationCategory | 'all') => void;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      data-plugin-center-category={props.id}
+      aria-pressed={props.id === props.active}
+      class={cn(
+        'h-11 min-w-11 shrink-0 cursor-pointer rounded-md border px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:h-8 sm:min-w-0',
+        props.id === props.active ? 'border-foreground/20 bg-foreground text-background' : 'bg-background text-muted-foreground hover:bg-muted hover:text-foreground',
+      )}
+      onClick={() => props.onSelect(props.id)}
+    >
+      {props.label}
+    </button>
+  );
+}
+
+function CenterFilterMenu(props: {
+  id: 'source' | 'trust' | 'lifecycle';
+  value: string;
+  items: DropdownItem[];
+  onSelect: (value: string) => void;
+}): JSX.Element {
+  const currentLabel = () => props.items.find((item) => item.id === props.value)?.label ?? props.items[0]?.label ?? '';
+  return (
+    <Dropdown
+      align="start"
+      value={props.value}
+      items={props.items}
+      onSelect={props.onSelect}
+      trigger={(
+        <button
+          type="button"
+          data-plugin-center-filter={props.id}
+          class="h-11 shrink-0 cursor-pointer rounded-md border bg-background px-3 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground sm:h-8"
+        >
+          {currentLabel()}
+        </button>
+      )}
+    />
+  );
+}
+
 function PluginActions(props: {
   item: PluginInventoryItem;
   canManage: boolean;
@@ -1155,23 +1384,46 @@ function DetailStat(props: { label: string; value: string }): JSX.Element {
 }
 
 function PluginIcon(props: { item: PluginInventoryItem; class?: string; size?: 'sm' | 'lg' }): JSX.Element {
+  const [imageFailed, setImageFailed] = createSignal(false);
   return (
     <span
       class={cn(
-        'flex shrink-0 items-center justify-center rounded-md bg-muted text-foreground',
+        'flex shrink-0 items-center justify-center overflow-hidden rounded-md border bg-muted text-foreground',
         props.size === 'lg' ? 'h-12 w-12' : 'h-10 w-10',
         props.class,
       )}
     >
-      <Grid3x3 class={props.size === 'lg' ? 'h-5 w-5' : 'h-4 w-4'} />
+      <Show when={props.item.iconURL && !imageFailed()} fallback={(
+        props.item.iconFallback === 'containers'
+          ? <Grid3x3 class={props.size === 'lg' ? 'h-5 w-5' : 'h-4 w-4'} />
+          : <Settings class={props.size === 'lg' ? 'h-5 w-5' : 'h-4 w-4'} />
+      )}>
+        <img src={props.item.iconURL ?? ''} alt="" class="h-full w-full object-cover" onError={() => setImageFailed(true)} />
+      </Show>
     </span>
   );
 }
 
-function filterItems(items: readonly PluginInventoryItem[], rawQuery: string, i18n: I18nHelpers): PluginInventoryItem[] {
-  const query = rawQuery.trim().toLowerCase();
-  if (!query) return [...items];
+function filterItems(
+  items: readonly PluginInventoryItem[],
+  filters: Readonly<{
+    query: string;
+    category: PluginPresentationCategory | 'all';
+    source: PluginSourceFilter;
+    trust: PluginTrustFilter;
+    lifecycle: PluginLifecycleFilter;
+  }>,
+  i18n: I18nHelpers,
+  locale: string,
+): PluginInventoryItem[] {
+  const query = filters.query.normalize('NFKC').trim().toLocaleLowerCase(locale);
   return items.filter((item) => {
+    if (filters.category !== 'all' && item.category !== filters.category) return false;
+    if (filters.source === 'official' && !item.officialCatalog) return false;
+    if (filters.source === 'external' && item.officialCatalog) return false;
+    if (filters.trust !== 'all' && item.trustBadge !== filters.trust) return false;
+    if (filters.lifecycle !== 'all' && item.lifecycleState !== filters.lifecycle) return false;
+    if (!query) return true;
     const fields = [
       item.displayName,
       item.description,
@@ -1180,9 +1432,23 @@ function filterItems(items: readonly PluginInventoryItem[], rawQuery: string, i1
       statusLabel(item, i18n),
       item.officialCatalog?.stableVersion,
       item.version,
+      centerCategoryLabel(item.category, i18n),
+      item.searchAliasesKey ? i18n.t(item.searchAliasesKey) : undefined,
+      ...item.searchKeywords,
     ];
-    return fields.some((field) => String(field ?? '').toLowerCase().includes(query));
+    return fields.some((field) => String(field ?? '').normalize('NFKC').toLocaleLowerCase(locale).includes(query));
   });
+}
+
+function centerCategoryLabel(category: PluginPresentationCategory, i18n: I18nHelpers): string {
+  switch (category) {
+    case 'development': return i18n.t('uiCopy.plugin.categoryDevelopment');
+    case 'infrastructure': return i18n.t('uiCopy.plugin.categoryInfrastructure');
+    case 'data': return i18n.t('uiCopy.plugin.categoryData');
+    case 'collaboration': return i18n.t('uiCopy.plugin.categoryCollaboration');
+    case 'productivity': return i18n.t('uiCopy.plugin.categoryProductivity');
+    case 'other': return i18n.t('uiCopy.plugin.categoryOther');
+  }
 }
 
 function initialTabForProjection(projection?: PluginInventoryProjection): PluginCenterTab {

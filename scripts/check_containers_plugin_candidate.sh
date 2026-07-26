@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)
 ROOT_DIR=$(cd -- "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd)
 PLUGIN_DIR="$ROOT_DIR/plugins/official/containers"
-CANDIDATE="$ROOT_DIR/spec/redevplugin/candidate-containers-plugin/2.1.0/plugin.redevplugin"
+CANDIDATE="$ROOT_DIR/spec/redevplugin/candidate-containers-plugin/2.2.0/plugin.redevplugin"
 TEMP_DIR=$(mktemp -d)
 trap 'rm -rf "$TEMP_DIR"' EXIT
 
@@ -31,7 +31,7 @@ unzip -p "$CANDIDATE" manifest.json | node -e '
     const manifest = JSON.parse(source);
     const expected = {
       schema_version: "redevplugin.manifest.v6",
-      version: "2.1.0",
+      version: "2.2.0",
       min_runtime_version: "0.6.19",
       ui_protocol_version: "plugin-ui-v6",
     };
@@ -44,4 +44,4 @@ unzip -p "$CANDIDATE" manifest.json | node -e '
   });
 '
 
-echo "Containers plugin 2.1.0 unsigned candidate verified"
+echo "Containers plugin 2.2.0 unsigned candidate verified"

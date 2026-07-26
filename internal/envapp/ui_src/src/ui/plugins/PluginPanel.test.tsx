@@ -24,6 +24,9 @@ function pluginItem(overrides: Partial<PluginInventoryItem> = {}): PluginInvento
     displayName: 'Containers',
     description: 'Manage Docker and Podman resources.',
     iconFallback: 'containers',
+    category: 'infrastructure',
+    searchKeywords: ['docker', 'podman'],
+    searchAliasesKey: 'uiCopy.plugin.containersSearchAliases',
     publisher: 'Redeven',
     version: '2.0.0',
     managementRevision: 23,
@@ -85,15 +88,28 @@ function mountPanel(props: Partial<Parameters<typeof PluginPanel>[0]> = {}) {
   ), mount);
 }
 
+function findDocumentButton(label: string): HTMLButtonElement {
+  const button = [...document.querySelectorAll<HTMLButtonElement>('button')]
+    .find((candidate) => candidate.textContent?.trim() === label);
+  if (!button) throw new Error(`Button not found: ${label}`);
+  return button;
+}
+
 describe('PluginPanel', () => {
-  it('renders plugins as a vertical action list with Plugin Center in a separate footer', () => {
+  it('renders installed plugins in an application grid with Plugin Center in a separate footer', () => {
     const onOpenCenter = vi.fn();
     mountPanel({ onOpenCenter });
 
     const dialog = document.querySelector('[role="dialog"]')!;
     const plugin = dialog.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]')!;
     const center = dialog.querySelector('[data-plugin-panel-tile="plugin-center"]')!;
-    expect(plugin.textContent).toContain('Open in Activity');
+    expect(plugin.textContent).toContain('Containers');
+    const grid = dialog.querySelector('[data-plugin-launcher-grid]')!;
+    expect(grid.tagName).toBe('UL');
+    expect(plugin.tagName).toBe('BUTTON');
+    expect(plugin.getAttribute('role')).toBeNull();
+    expect(plugin.parentElement?.tagName).toBe('LI');
+    expect(dialog.getAttribute('aria-describedby')).toBe('plugin-launcher-description');
     expect(center.textContent).toContain('Plugin Center');
     expect(plugin.compareDocumentPosition(center) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     (center as HTMLButtonElement).click();
@@ -130,7 +146,26 @@ describe('PluginPanel', () => {
     });
   });
 
-  it('shows the next lifecycle action and routes disabled plugins to details', () => {
+  it('offers real Activity, Workbench, and detail secondary actions', async () => {
+    const onOpenPluginSurface = vi.fn();
+    const onOpenPluginDetails = vi.fn();
+    mountPanel({ onOpenPluginSurface, onOpenPluginDetails });
+
+    (document.querySelector('[data-plugin-panel-tile-menu="instance:plugininst_containers"]') as HTMLButtonElement).click();
+    await Promise.resolve();
+    expect(findDocumentButton('Open in Activity')).not.toBeNull();
+    expect(findDocumentButton('Technical details')).not.toBeNull();
+    findDocumentButton('Open in Workbench').click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(onOpenPluginSurface).toHaveBeenCalledWith(expect.objectContaining({
+      pluginInstanceID: 'plugininst_containers',
+      preferredPlacement: 'workbench',
+    }));
+    expect(onOpenPluginDetails).not.toHaveBeenCalled();
+  });
+
+  it('shows lifecycle state and routes disabled plugins to details', () => {
     const onOpenPluginDetails = vi.fn();
     mountPanel({
       model: panelModel(pluginItem({ lifecycleState: 'disabled', attentionReason: 'disabled' })),
@@ -138,46 +173,26 @@ describe('PluginPanel', () => {
     });
 
     const row = document.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]') as HTMLButtonElement;
-    expect(row.textContent).toContain('Disabled');
-    expect(row.textContent).toContain('Enable');
+    expect(row.parentElement?.textContent).toContain('Disabled');
+    expect(row.getAttribute('aria-describedby')).toBeTruthy();
     row.click();
     expect(onOpenPluginDetails).toHaveBeenCalledWith('instance:plugininst_containers');
   });
 
-  it('anchors the opaque desktop surface to the Activity Bar trigger', () => {
+  it('renders the desktop launcher as an isolated centered modal', async () => {
     const trigger = createTrigger();
     mountPanel({ id: 'plugin-switcher', trigger });
 
     const dialog = document.querySelector('#plugin-switcher')!;
-    const floatingLayer = dialog.parentElement!;
-    expect(floatingLayer.style.left).toBe('56px');
-    expect(floatingLayer.style.top).toBe('96px');
     expect(dialog.className).toContain('bg-popover');
     expect(dialog.className).not.toContain('backdrop-blur');
-    expect(dialog.getAttribute('aria-modal')).toBe('false');
+    expect(dialog.getAttribute('aria-modal')).toBe('true');
+    expect(dialog.parentElement?.className).toContain('justify-center');
+    await Promise.resolve();
+    expect(document.activeElement).toBe(document.querySelector('[data-plugin-launcher-search]'));
   });
 
-  it('clamps the anchored desktop surface inside the viewport', () => {
-    const trigger = createTrigger();
-    trigger.getBoundingClientRect = vi.fn(() => ({
-      x: 960,
-      y: 740,
-      left: 960,
-      top: 740,
-      right: 1000,
-      bottom: 780,
-      width: 40,
-      height: 40,
-      toJSON: () => ({}),
-    }));
-    mountPanel({ trigger });
-
-    const floatingLayer = document.querySelector('[role="dialog"]')!.parentElement!;
-    expect(floatingLayer.style.left).toBe('648px');
-    expect(floatingLayer.style.top).toBe('200px');
-  });
-
-  it('focuses the first action without trapping Tab and restores trigger focus after Escape', async () => {
+  it('traps focus and restores trigger focus after Escape', async () => {
     const trigger = createTrigger();
     trigger.focus();
     const [open, setOpen] = createSignal(true);
@@ -196,16 +211,77 @@ describe('PluginPanel', () => {
     ), mount);
 
     await Promise.resolve();
-    const row = document.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]') as HTMLButtonElement;
-    expect(document.activeElement).toBe(row);
+    const search = document.querySelector('[data-plugin-launcher-search]') as HTMLInputElement;
+    expect(document.activeElement).toBe(search);
 
-    const tab = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
-    document.dispatchEvent(tab);
-    expect(tab.defaultPrevented).toBe(false);
+    const close = document.querySelector('[aria-label="Close plugins"]') as HTMLButtonElement;
+    close.focus();
+    const previous = new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true });
+    document.dispatchEvent(previous);
+    expect(previous.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(document.querySelector('[data-plugin-panel-tile="plugin-center"]'));
 
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     expect(document.activeElement).toBe(trigger);
     expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it('filters installed plugins by normalized search and explicit category', () => {
+    const toolbox = pluginItem({
+      inventoryKey: 'instance:plugininst_toolbox',
+      pluginID: 'com.example.toolbox',
+      pluginInstanceID: 'plugininst_toolbox',
+      displayName: 'Toolbox',
+      description: 'Developer utilities.',
+      iconFallback: 'generic',
+      category: 'development',
+      searchKeywords: ['terminal'],
+      defaultLaunchTarget: {
+        pluginID: 'com.example.toolbox',
+        pluginInstanceID: 'plugininst_toolbox',
+        surfaceID: 'toolbox.main',
+        expectedManagementRevision: 23,
+        preferredPlacement: 'activity',
+      },
+    });
+    mountPanel({
+      model: {
+        loading: false,
+        tiles: [
+          { kind: 'open_center', id: 'plugin-center', label: 'Plugin Center' },
+          { kind: 'plugin', item: pluginItem(), action: 'open_surface' },
+          { kind: 'plugin', item: toolbox, action: 'open_surface' },
+        ],
+      },
+    });
+
+    const search = document.querySelector('[data-plugin-launcher-search]') as HTMLInputElement;
+    search.value = 'ＴＥＲＭＩＮＡＬ';
+    search.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    expect(document.querySelector('[data-plugin-panel-tile="instance:plugininst_toolbox"]')).not.toBeNull();
+    expect(document.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]')).toBeNull();
+
+    search.value = '';
+    search.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    (document.querySelector('[data-plugin-launcher-category="infrastructure"]') as HTMLButtonElement).click();
+    expect(document.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]')).not.toBeNull();
+    expect(document.querySelector('[data-plugin-panel-tile="instance:plugininst_toolbox"]')).toBeNull();
+
+  });
+
+  it('clears search on the first Escape and closes on the second Escape', async () => {
+    const onClose = vi.fn();
+    mountPanel({ onClose });
+    await Promise.resolve();
+    const search = document.querySelector('[data-plugin-launcher-search]') as HTMLInputElement;
+    search.value = 'docker';
+    search.dispatchEvent(new InputEvent('input', { bubbles: true }));
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    expect(search.value).toBe('');
+    expect(onClose).not.toHaveBeenCalled();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it('closes on an outside click, restores focus, and lets the trigger own its toggle', () => {
@@ -227,7 +303,7 @@ describe('PluginPanel', () => {
 
     trigger.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(open()).toBe(true);
-    document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    document.querySelector('[data-plugin-launcher-backdrop]')?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
     expect(open()).toBe(false);
     expect(document.activeElement).toBe(trigger);
   });
@@ -261,11 +337,12 @@ describe('PluginPanel', () => {
     const close = document.querySelector('[aria-label="Close plugins"]') as HTMLButtonElement;
     expect(close.className).toContain('h-[44px]');
     expect(close.className).toContain('w-[44px]');
-    expect(document.activeElement).toBe(close);
+    expect(document.activeElement).toBe(document.querySelector('[data-plugin-launcher-search]'));
     expect(trigger.inert).toBe(true);
     expect(shell.inert).toBe(true);
     expect(preExistingInert.inert).toBe(true);
 
+    close.focus();
     close.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true }));
     const center = document.querySelector('[data-plugin-panel-tile="plugin-center"]') as HTMLButtonElement;
     expect(document.activeElement).toBe(center);

@@ -7,13 +7,14 @@ timestamp: 2026-07-26T00:00:00Z
 ---
 # Summary
 
-The Containers `2.1.0` source consumes ReDevPlugin `0.6.19` operation handles
-through manifest v6 and `plugin-ui-v6`. Every Docker or Podman container owns an
-independent mutation generation. The same resource remains locked until terminal
-observation and authoritative inventory reconciliation, while unrelated resources
-remain usable. Unknown mutation outcomes are never replayed or presented as
-success. The repository artifact is an explicitly unsigned candidate, not an
-official catalog release.
+The production Containers `2.0.0` release remains the signed, trust-closed
+artifact. The `2.1.0` candidate is historical and immutable. The current
+repository UI candidate is `2.2.0`, built against the released ReDevPlugin
+`0.6.19` operation handles through manifest v6 and `plugin-ui-v6`; it is not an
+official catalog release. Every Docker or Podman container owns an independent
+mutation generation. The same resource remains locked until terminal observation
+and authoritative inventory reconciliation, while unrelated resources remain
+usable. Unknown mutation outcomes are never replayed or presented as success.
 
 # Contract
 
@@ -58,19 +59,31 @@ and narrow layouts collapse actions and operation details without hiding the
 resource-local state. Operations whose resource disappears from inventory remain
 visible in a dedicated reconciliation section.
 
-## Candidate and release trust
+## Candidate UI and release trust
 
-`spec/redevplugin/candidate-containers-plugin/2.1.0/plugin.redevplugin` is an
+The 2.2.0 candidate presents a dense, responsive resource list with client-side
+search over the exact v2 wire fields (container name, id, image, state, and
+published ports). A selected container opens a modal inspector containing only
+state, id, image/digest, created time, and published ports; it must not fabricate
+mounts, devices, runtime metadata, image history, or volumes that the active
+contract does not expose. Semantic theme variables follow the system light/dark
+preference for candidate preview, with reduced-motion behavior and mobile
+controls at least 44px. Exact Redeven preset and locale adaptation still require
+released host-neutral ReDevPlugin context. Search and inspection are presentation
+state only and do not alter operation identity, permissions, or reconciliation
+locks.
+
+`spec/redevplugin/candidate-containers-plugin/2.2.0/plugin.redevplugin` is an
 unsigned build candidate. The local integration gate installs exact npm
 dependencies, runs focused state and bundled-client tests, rebuilds the source,
 packages it with the released ReDevPlugin `v0.6.19` CLI, compares exact bytes,
-validates manifest v6, version `2.1.0`, minimum runtime `0.6.19`, and
+validates manifest v6, version `2.2.0`, minimum runtime `0.6.19`, and
 `plugin-ui-v6`, and rejects any package signature entry.
 
 Production catalog installation remains pinned to the signed, trust-closed
 Containers `2.0.0` release. The candidate does not change stable/latest catalog
 metadata, generated release refs, signed release artifacts, or trust roots. A real
-`2.1.0` official release requires external signing keys plus fresh root, policy,
+`2.2.0` official release requires external signing keys plus fresh root, policy,
 revocation, ledger, release metadata, and package signature evidence. Candidate
 bytes never become official, verified, auto-update eligible, or stable by their
 presence in this repository.
@@ -91,4 +104,4 @@ semantics. Canonical integration and package-source ownership remain in
 - `redeven:plugins/official/containers/src/operation-policy.ts:1` - Separates retryable not-committed outcomes from uncertain mutations and cancellations.
 - `redeven:plugins/official/containers/test/main.integration.test.mjs:1` - Proves resource concurrency, unknown-outcome locking, and dispose-without-cancel behavior.
 - `redeven:scripts/check_containers_plugin_candidate.sh:1` - Rebuilds and validates the unsigned candidate without treating it as a signed release.
-- `redeven:spec/redevplugin/candidate-containers-plugin/2.1.0/plugin.redevplugin:0` - Carries the deterministic unsigned candidate bytes.
+- `redeven:spec/redevplugin/candidate-containers-plugin/2.2.0/plugin.redevplugin:0` - Carries the deterministic unsigned candidate bytes.

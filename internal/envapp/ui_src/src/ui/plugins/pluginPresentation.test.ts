@@ -11,6 +11,8 @@ function plugin(overrides: Partial<PluginInventoryItem> = {}): PluginInventoryIt
     displayName: 'Example Plugin',
     description: 'Example plugin',
     iconFallback: 'generic',
+    category: 'other',
+    searchKeywords: [],
     publisher: 'Example',
     version: '1.0.0',
     managementRevision: 4,

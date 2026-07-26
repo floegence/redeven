@@ -21,6 +21,9 @@ export const OFFICIAL_PLUGIN_CATALOG_SEED: readonly OfficialPluginCatalogItem[] 
     defaultSurfaceID: 'containers.dashboard',
     defaultSurfaceDisplayNameKey: 'uiCopy.plugin.containersDashboardSurface',
     iconFallback: 'containers',
+    category: 'infrastructure',
+    searchKeywords: ['container', 'docker', 'podman', 'image', 'volume', 'runtime'],
+    searchAliasesKey: 'uiCopy.plugin.containersSearchAliases',
     trustedSigningKeyIDs: ['redeven-official-signing-2026'],
     permissions: [
       {
