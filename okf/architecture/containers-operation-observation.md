@@ -7,7 +7,7 @@ timestamp: 2026-07-26T00:00:00Z
 ---
 # Summary
 
-The Containers `2.1.0` source consumes ReDevPlugin `0.6.18` operation handles
+The Containers `2.1.0` source consumes ReDevPlugin `0.6.19` operation handles
 through manifest v6 and `plugin-ui-v6`. Every Docker or Podman container owns an
 independent mutation generation. The same resource remains locked until terminal
 observation and authoritative inventory reconciliation, while unrelated resources
@@ -63,8 +63,8 @@ visible in a dedicated reconciliation section.
 `spec/redevplugin/candidate-containers-plugin/2.1.0/plugin.redevplugin` is an
 unsigned build candidate. The local integration gate installs exact npm
 dependencies, runs focused state and bundled-client tests, rebuilds the source,
-packages it with the released ReDevPlugin `v0.6.18` CLI, compares exact bytes,
-validates manifest v6, version `2.1.0`, minimum runtime `0.6.18`, and
+packages it with the released ReDevPlugin `v0.6.19` CLI, compares exact bytes,
+validates manifest v6, version `2.1.0`, minimum runtime `0.6.19`, and
 `plugin-ui-v6`, and rejects any package signature entry.
 
 Production catalog installation remains pinned to the signed, trust-closed

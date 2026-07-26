@@ -15,7 +15,7 @@ import (
 	"github.com/floegence/redevplugin/pkg/version"
 )
 
-const officialRuntimeVersion = "0.6.18"
+const officialRuntimeVersion = "0.6.19"
 
 type runtimeModuleDependencies struct {
 	Path          string
