@@ -13,6 +13,7 @@ import {
 
 const INITIAL_DIMENSIONS = { cols: 80, rows: 24 } as const;
 const FIXED_DIMENSIONS = { cols: 166, rows: 53 } as const;
+const TERMINAL_SCROLLBAR_ARIA_LABEL = 'Terminal history';
 
 const createTerminalHost = (): HTMLDivElement => {
   const host = document.createElement('div');
@@ -28,8 +29,13 @@ const createPublishedCore = (host: HTMLDivElement): TerminalCore => {
   const config = getDefaultTerminalConfig('dark', {
     ...INITIAL_DIMENSIONS,
     fixedDimensions: INITIAL_DIMENSIONS,
-    rendererType: 'canvas',
+    rendererType: 'webgl',
     cursorBlink: false,
+    fit: { scrollbarReservePx: 15 },
+    scrollbar: {
+      visibility: 'persistent',
+      ariaLabel: TERMINAL_SCROLLBAR_ARIA_LABEL,
+    },
   });
   expect(config.scrollback).toBe(10_000);
   return new TerminalCore(host, config);
@@ -121,7 +127,8 @@ describe('published Floeterm TerminalCore dependency contract', () => {
   });
 
   it('preserves configured buffer rows and reports owned WASM memory', async () => {
-    const core = await initializeAtFixedDimensions(createTerminalHost());
+    const host = createTerminalHost();
+    const core = await initializeAtFixedDimensions(host);
     cores.add(core);
     const markers = Array.from({ length: 1_200 }, (_, index) => (
       `REDEVEN-SCROLLBACK-${String(index).padStart(4, '0')}`
@@ -134,6 +141,17 @@ describe('published Floeterm TerminalCore dependency contract', () => {
     expect(info?.bufferLength).toBeGreaterThanOrEqual(markers.length);
     expect(bufferContains(core, markers[0]!)).toBe(true);
     expect(bufferContains(core, markers.at(-1)!)).toBe(true);
+
+    const scrollbar = host.querySelector<HTMLElement>('[data-floeterm-scrollbar]');
+    const scrollbarThumb = host.querySelector<HTMLElement>('[data-floeterm-scrollbar-thumb]');
+    expect(scrollbar).not.toBeNull();
+    expect(scrollbarThumb).not.toBeNull();
+    expect(scrollbar?.getAttribute('role')).toBe('scrollbar');
+    expect(scrollbar?.getAttribute('aria-label')).toBe(TERMINAL_SCROLLBAR_ARIA_LABEL);
+    expect(scrollbar?.dataset.visible).toBe('true');
+    expect(scrollbar?.hidden).toBe(false);
+    expect(scrollbar?.getBoundingClientRect().width).toBe(12);
+    expect(scrollbarThumb!.getBoundingClientRect().height).toBeGreaterThan(0);
 
     const estimate = core.getResourceEstimate();
     expect(Number.isFinite(estimate.wasmMemoryBytes)).toBe(true);

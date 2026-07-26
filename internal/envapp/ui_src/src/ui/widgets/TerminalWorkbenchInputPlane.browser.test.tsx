@@ -35,6 +35,10 @@ const writeTerminal = (core: TerminalCore, data: string): Promise<void> => (
   new Promise<void>((resolve) => core.write(data, resolve))
 );
 
+const writeTerminalHistory = (core: TerminalCore, data: string): Promise<void> => (
+  new Promise<void>((resolve) => core.writeHistory(data, resolve))
+);
+
 describe('Workbench terminal input plane', () => {
   let disposeSurface: (() => void) | null = null;
 
@@ -63,12 +67,21 @@ describe('Workbench terminal input plane', () => {
           rows: 47,
           fontSize: 12,
           rendererType: 'canvas',
-          fit: { scrollbarReservePx: 0 },
+          fit: { scrollbarReservePx: 15 },
+          scrollbar: {
+            visibility: 'persistent',
+            ariaLabel: 'Terminal history',
+          },
         }, {
           onData: (data) => terminalData.push(data),
         });
         core = nextCore;
         void nextCore.initialize().then(async () => {
+          nextCore.setConnected(true);
+          await writeTerminalHistory(nextCore, Array.from(
+            { length: 240 },
+            (_, index) => `workbench-history-${String(index).padStart(4, '0')}\r\n`,
+          ).join(''));
           await writeTerminal(nextCore, [
             '\x1b[2J\x1b[H',
             'top - 12:00:00 up 1 day, load average: 0.10, 0.08, 0.05\r\n',
@@ -179,14 +192,30 @@ describe('Workbench terminal input plane', () => {
     const terminalPane = host.querySelector('[data-testid="terminal-pane"]');
     const canvas = terminalPane?.querySelector('canvas');
     const textarea = document.querySelector('textarea[aria-label="Terminal input"]');
+    const scrollbar = terminalPane?.querySelector<HTMLElement>('[data-floeterm-scrollbar]');
+    const scrollbarThumb = terminalPane?.querySelector<HTMLElement>('[data-floeterm-scrollbar-thumb]');
     expect(terminalPane).toBeInstanceOf(HTMLElement);
     expect(canvas).toBeInstanceOf(HTMLCanvasElement);
     expect(textarea).toBeInstanceOf(HTMLTextAreaElement);
+    expect(scrollbar).toBeInstanceOf(HTMLElement);
+    expect(scrollbarThumb).toBeInstanceOf(HTMLElement);
     if (
       !(terminalPane instanceof HTMLElement)
       || !(canvas instanceof HTMLCanvasElement)
       || !(textarea instanceof HTMLTextAreaElement)
+      || !(scrollbar instanceof HTMLElement)
+      || !(scrollbarThumb instanceof HTMLElement)
     ) return;
+
+    const paneRect = terminalPane.getBoundingClientRect();
+    const scrollbarRect = scrollbar.getBoundingClientRect();
+    expect(scrollbar.dataset.visible).toBe('true');
+    expect(scrollbar.hidden).toBe(false);
+    expect(scrollbar.style.width).toBe('12px');
+    expect(scrollbar.getAttribute('aria-label')).toBe('Terminal history');
+    expect(scrollbarRect.right).toBeLessThanOrEqual(paneRect.right + 0.5);
+    expect(scrollbarRect.left).toBeGreaterThanOrEqual(paneRect.left - 0.5);
+    expect(scrollbarThumb.getBoundingClientRect().height).toBeGreaterThan(0);
 
     const renderHost = canvas.parentElement;
     expect(renderHost).toBeInstanceOf(HTMLElement);

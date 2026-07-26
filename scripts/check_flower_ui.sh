@@ -121,6 +121,7 @@ main() {
         src/ui/FlowerSurface.setupGuide.browser.test.tsx \
         src/ui/widgets/FlowerTurnLauncherWindow.browser.test.tsx \
         src/ui/widgets/TerminalCoreDependencyContract.browser.test.tsx \
+        src/ui/widgets/TerminalSessionRuntime.scrollbar.browser.test.tsx \
         src/ui/widgets/TerminalWorkbenchInputPlane.browser.test.tsx \
         src/ui/plugins/PluginManagement.browser.test.tsx \
         src/ui/flower/SubagentDetailWindow.boundary.browser.test.tsx

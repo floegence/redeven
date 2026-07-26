@@ -412,6 +412,7 @@ vi.mock('@floegence/floeterm-terminal-web', async () => {
     setFontFamily = vi.fn();
     setPresentationScale = vi.fn();
     setFixedDimensions = vi.fn();
+    setScrollbarOptions = vi.fn();
     registerLinkProvider = vi.fn();
     setSearchResultsCallback = vi.fn();
     clearSearch = vi.fn();

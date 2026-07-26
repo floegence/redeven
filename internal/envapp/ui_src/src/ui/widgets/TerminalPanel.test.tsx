@@ -879,6 +879,7 @@ vi.mock('@floegence/floeterm-terminal-web', async () => {
     }));
     setPresentationScale = vi.fn();
     setFixedDimensions = vi.fn();
+    setScrollbarOptions = vi.fn();
     setAppearance = vi.fn((appearance: {
       theme?: Record<string, unknown>;
       fontSize?: number;
@@ -2824,7 +2825,13 @@ describe('TerminalPanel', () => {
       notifyResizeOnlyWhenFocused: true,
       reportHostDimensionsWithFixedGrid: true,
     });
-    expect(terminalConfigState.values[0]?.fit).toBeUndefined();
+    expect(terminalConfigState.values[0]?.fit).toEqual({
+      scrollbarReservePx: 15,
+    });
+    expect(terminalConfigState.values[0]?.scrollbar).toEqual({
+      visibility: 'persistent',
+      ariaLabel: 'Terminal history',
+    });
   });
 
   it('uses the upstream paged output coordinator for activity panels', async () => {
@@ -4392,7 +4399,7 @@ describe('TerminalPanel', () => {
     );
   });
 
-  it('removes the terminal scrollbar reserve for workbench projected surfaces', async () => {
+  it('keeps a visible terminal scrollbar gutter for workbench projected surfaces', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -4401,7 +4408,11 @@ describe('TerminalPanel', () => {
 
     expect(terminalConfigState.values.length).toBeGreaterThan(0);
     expect(terminalConfigState.values[0]?.fit).toEqual({
-      scrollbarReservePx: 0,
+      scrollbarReservePx: 15,
+    });
+    expect(terminalConfigState.values[0]?.scrollbar).toEqual({
+      visibility: 'persistent',
+      ariaLabel: 'Terminal history',
     });
     expect(createOutputCoordinatorSpy).toHaveBeenCalledTimes(1);
   });

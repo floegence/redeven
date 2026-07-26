@@ -766,7 +766,11 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
         fontSize: fontSize(),
         // Workbench zoom is an outer visual transform; terminal geometry stays stable.
         presentationScale: 1,
-        fit: props.variant === 'workbench' ? { scrollbarReservePx: 0 } : undefined,
+        fit: { scrollbarReservePx: 15 },
+        scrollbar: {
+          visibility: 'persistent',
+          ariaLabel: i18n.t('terminal.historyScrollbar'),
+        },
         allowTransparency: false,
         theme: colors(),
         fontFamily: fontFamily(),
@@ -1434,6 +1438,12 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     const appearance = buildTerminalAppearance();
     if (!term) return;
     scheduleTerminalAppearanceApply(appearance);
+  });
+
+  createEffect(() => {
+    const ariaLabel = i18n.t('terminal.historyScrollbar');
+    if (!term) return;
+    term.setScrollbarOptions({ ariaLabel });
   });
 
   createEffect(() => {
