@@ -1,10 +1,11 @@
 {
   "name": "@redeven/official-containers-plugin",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.json --noEmit && node build.mjs"
+    "build": "tsc -p tsconfig.json --noEmit && node build.mjs",
+    "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
     "@floegence/redevplugin-ui": "0.6.18"

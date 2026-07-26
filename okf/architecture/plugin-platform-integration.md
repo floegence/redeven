@@ -152,6 +152,9 @@ package. Installation and enablement do not imply resource access. The initial
 Containers surface requires an active `containers.read` grant, and the product
 shows that requirement before attempting to open the surface.
 
+The Containers operation observation and candidate-release boundary is owned by
+[Containers operation observation](containers-operation-observation.md).
+
 ## Env App inventory and permissions
 
 Env App owns one authenticated fetch adapter, one released client, one shared
