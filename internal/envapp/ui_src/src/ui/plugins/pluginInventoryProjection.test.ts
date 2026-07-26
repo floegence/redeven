@@ -116,7 +116,10 @@ describe('v0.6.7 plugin inventory projection', () => {
     });
   });
 
-  it.each([
+  const catalogPresentationMismatchCases: Array<{
+    label: string;
+    overrides: Partial<ReDevPluginRecord>;
+  }> = [
     {
       label: 'package hash mismatch',
       overrides: {
@@ -148,13 +151,6 @@ describe('v0.6.7 plugin inventory projection', () => {
           package_sha256: packageHash,
           resolved_at: '2026-07-24T10:00:00Z',
         },
-        manifest: {
-          ...installedRecord().manifest,
-          plugin: {
-            ...installedRecord().manifest.plugin,
-            version: '1.9.0',
-          },
-        },
       },
     },
     {
@@ -173,16 +169,11 @@ describe('v0.6.7 plugin inventory projection', () => {
             key_id: 'community-signing-key',
           },
         },
-        manifest: {
-          ...installedRecord().manifest,
-          plugin: {
-            ...installedRecord().manifest.plugin,
-            version: '1.9.0',
-          },
-        },
       },
     },
-  ])('does not let a same-identity $label inherit official catalog presentation', ({ overrides }) => {
+  ];
+
+  it.each(catalogPresentationMismatchCases)('does not let a same-identity $label inherit official catalog presentation', ({ overrides }) => {
     const projection = projectPluginInventory({
       officialCatalog: [officialContainers],
       installedPlugins: [installedRecord(overrides)],
