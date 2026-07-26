@@ -2388,6 +2388,7 @@
     "initializing": "터미널 초기화 중...",
     "attaching": "터미널 연결 중...",
     "loadingHistory": "기록 로드 중...",
+    "historyScrollbar": "터미널 기록",
     "loadingHistoryProgress": "기록 로드 중 {loaded} / {total}",
     "recoveringOutput": "터미널 출력 복구 중...",
     "retryingOutputRecovery": "터미널 출력 복구가 일시 중지되었습니다. 재시도 중...",

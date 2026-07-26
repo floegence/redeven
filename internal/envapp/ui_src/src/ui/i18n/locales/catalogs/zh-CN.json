@@ -2388,6 +2388,7 @@
     "initializing": "正在初始化终端...",
     "attaching": "正在附加终端...",
     "loadingHistory": "正在加载历史...",
+    "historyScrollbar": "终端历史记录",
     "loadingHistoryProgress": "正在加载历史 {loaded} / {total}",
     "recoveringOutput": "正在恢复终端输出...",
     "retryingOutputRecovery": "终端输出恢复暂时中断，正在重试...",

@@ -2388,6 +2388,7 @@
     "initializing": "Terminal wird initialisiert...",
     "attaching": "Terminal wird angeschlossen...",
     "loadingHistory": "Verlauf wird geladen...",
+    "historyScrollbar": "Terminalverlauf",
     "loadingHistoryProgress": "Verlauf wird geladen {loaded} / {total}",
     "recoveringOutput": "Die Terminalausgabe wird wiederhergestellt...",
     "retryingOutputRecovery": "Die Wiederherstellung der Terminalausgabe wurde angehalten. Erneuter Versuch...",

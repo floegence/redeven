@@ -2388,6 +2388,7 @@
     "initializing": "Inicializando terminal...",
     "attaching": "Conectando terminal...",
     "loadingHistory": "Cargando historial...",
+    "historyScrollbar": "Historial del terminal",
     "loadingHistoryProgress": "Cargando historial {loaded} / {total}",
     "recoveringOutput": "Recuperando la salida del terminal...",
     "retryingOutputRecovery": "Recuperación de la salida del terminal en pausa. Reintentando...",

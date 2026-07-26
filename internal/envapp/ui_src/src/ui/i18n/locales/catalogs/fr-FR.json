@@ -2388,6 +2388,7 @@
     "initializing": "Initialisation du terminal...",
     "attaching": "Fixation du terminal...",
     "loadingHistory": "Chargement de l'historique...",
+    "historyScrollbar": "Historique du terminal",
     "loadingHistoryProgress": "Chargement de l'historique {loaded} / {total}",
     "recoveringOutput": "Récupération de la sortie du terminal...",
     "retryingOutputRecovery": "La récupération de la sortie du terminal a été interrompue. Nouvelle tentative...",

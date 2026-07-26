@@ -119,15 +119,15 @@ describe('published npm dependency policy', () => {
       '@floegence/floeterm-terminal-web',
     ));
 
-    expect(version).toBe('0.9.0');
+    expect(version).toBe('0.10.0');
     expect(expectedTarballUrl('@floegence/floeterm-terminal-web', version)).toBe(
-      'https://registry.npmjs.org/@floegence/floeterm-terminal-web/-/floeterm-terminal-web-0.9.0.tgz',
+      'https://registry.npmjs.org/@floegence/floeterm-terminal-web/-/floeterm-terminal-web-0.10.0.tgz',
     );
 
     const previousReleaseMarkers = new Map([
-      ['package.json', '"@floegence/floeterm-terminal-web": "0.8.0"'],
-      ['package-lock.json', 'floeterm-terminal-web-0.8.0.tgz'],
-      ['pnpm-lock.yaml', "'@floegence/floeterm-terminal-web@0.8.0':"],
+      ['package.json', '"@floegence/floeterm-terminal-web": "0.9.0"'],
+      ['package-lock.json', 'floeterm-terminal-web-0.9.0.tgz'],
+      ['pnpm-lock.yaml', "'@floegence/floeterm-terminal-web@0.9.0':"],
     ]);
     for (const [file, marker] of previousReleaseMarkers) {
       expect(readText(file), `${file} must not retain the previous Floeterm release`).not.toContain(marker);

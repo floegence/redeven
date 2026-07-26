@@ -559,6 +559,7 @@ export const enUSWidgetChrome = defineDictionary({
     initializing: 'Initializing terminal...',
     attaching: 'Attaching terminal...',
     loadingHistory: 'Loading history...',
+    historyScrollbar: 'Terminal history',
     loadingHistoryProgress: 'Loading history {loaded} / {total}',
     recoveringOutput: 'Recovering terminal output...',
     retryingOutputRecovery: 'Terminal output recovery paused. Retrying...',

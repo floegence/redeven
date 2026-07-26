@@ -2388,6 +2388,7 @@
     "initializing": "端末を初期化中...",
     "attaching": "端末を接続中...",
     "loadingHistory": "履歴をロード中...",
+    "historyScrollbar": "ターミナル履歴",
     "loadingHistoryProgress": "履歴をロード中 {loaded} / {total}",
     "recoveringOutput": "端末出力を回復中...",
     "retryingOutputRecovery": "端末出力の回復が一時停止されました。再試行中...",

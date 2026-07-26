@@ -2388,6 +2388,7 @@
     "initializing": "正在初始化終端...",
     "attaching": "正在附加終端機...",
     "loadingHistory": "正在載入歷史...",
+    "historyScrollbar": "終端機歷程",
     "loadingHistoryProgress": "正在載入歷史 {loaded} / {total}",
     "recoveringOutput": "正在恢復終端輸出...",
     "retryingOutputRecovery": "終端輸出恢復暫時中斷，正在重試...",
