@@ -134,11 +134,16 @@ async function mountPanel(theme: Theme, viewport: Viewport) {
   return host;
 }
 
-function expectStableRect(before: DOMRect, after: DOMRect): void {
-  expect(Math.abs(after.left - before.left)).toBeLessThan(1);
-  expect(Math.abs(after.top - before.top)).toBeLessThan(1);
-  expect(Math.abs(after.width - before.width)).toBeLessThan(1);
-  expect(Math.abs(after.height - before.height)).toBeLessThan(1);
+function expectStableAnchoredRect(
+  beforeButton: DOMRect,
+  beforeEditor: DOMRect,
+  afterButton: DOMRect,
+  afterEditor: DOMRect,
+): void {
+  expect(Math.abs((afterEditor.right - afterButton.right) - (beforeEditor.right - beforeButton.right))).toBeLessThan(1);
+  expect(Math.abs((afterEditor.bottom - afterButton.bottom) - (beforeEditor.bottom - beforeButton.bottom))).toBeLessThan(1);
+  expect(Math.abs(afterButton.width - beforeButton.width)).toBeLessThan(1);
+  expect(Math.abs(afterButton.height - beforeButton.height)).toBeLessThan(1);
 }
 
 describe('Flower turn launcher send feedback', () => {
@@ -185,14 +190,17 @@ describe('Flower turn launcher send feedback', () => {
     for (const testCase of cases) {
       const mounted = await mountLauncher(testCase.theme, testCase.viewport);
       const textarea = document.querySelector('.flower-turn-launcher-textarea') as HTMLTextAreaElement | null;
+      const editorShell = document.querySelector('[data-testid="flower-turn-launcher-editor-shell"]') as HTMLElement | null;
       const sendButton = document.querySelector('[data-testid="flower-turn-launcher-inline-send"]') as HTMLButtonElement | null;
       expect(textarea).not.toBeNull();
+      expect(editorShell).not.toBeNull();
       expect(sendButton).not.toBeNull();
 
       await page.getByRole('textbox').fill('Inspect this file and explain the safest change.');
       await nextFrame();
 
       const idleRect = sendButton!.getBoundingClientRect();
+      const idleEditorRect = editorShell!.getBoundingClientRect();
       const idleStyle = getComputedStyle(sendButton!);
       const textareaStyle = getComputedStyle(textarea!);
       expect(idleRect.width).toBeCloseTo(36, 0);
@@ -206,7 +214,8 @@ describe('Flower turn launcher send feedback', () => {
       await nextFrame();
 
       const loadingRect = sendButton!.getBoundingClientRect();
-      expectStableRect(idleRect, loadingRect);
+      const loadingEditorRect = editorShell!.getBoundingClientRect();
+      expectStableAnchoredRect(idleRect, idleEditorRect, loadingRect, loadingEditorRect);
       expect(mounted.submitCount()).toBe(1);
       expect(sendButton!.disabled).toBe(true);
       expect(sendButton!.getAttribute('aria-busy')).toBe('true');
