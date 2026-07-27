@@ -22,9 +22,19 @@ export type FlowerComposerDraftAttachment = Readonly<{
   staged?: FlowerStagedAttachment;
 }>;
 
+export type FlowerComposerDraftReferenceKind = 'file' | 'directory';
+
+export type FlowerComposerDraftReference = Readonly<{
+  local_id: string;
+  kind: FlowerComposerDraftReferenceKind;
+  path: string;
+  label: string;
+}>;
+
 export type FlowerComposerDraftValue = Readonly<{
   text: string;
   attachments: readonly FlowerComposerDraftAttachment[];
+  references: readonly FlowerComposerDraftReference[];
   mode: FlowerComposerDraftMode;
   model_id?: string;
   permission_type?: FlowerPermissionType;
@@ -148,6 +158,7 @@ type ScopeState = {
 const emptyDraft = (): FlowerComposerDraftValue => ({
   text: '',
   attachments: [],
+  references: [],
   mode: 'ordinary',
 });
 

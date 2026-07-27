@@ -241,6 +241,8 @@ func TestFloretContextProjectionBuildsCanonicalReferencesAndSupplementalContextT
 		{name: "text", surface: "git_browser", item: ContextActionContextItem{Kind: "text_snapshot", Title: "Quoted text", Content: "selected lines"}, wantKind: flruntime.MessageReferenceText, wantText: "selected lines"},
 		{name: "file", surface: "file_browser", item: ContextActionContextItem{Kind: "file_path", Path: "/workspace/src/main.ts"}, wantKind: flruntime.MessageReferenceFile, wantLocator: true},
 		{name: "directory", surface: "file_browser", item: ContextActionContextItem{Kind: "file_path", Path: "/workspace/src", IsDirectory: true}, wantKind: flruntime.MessageReferenceDirectory, wantLocator: true},
+		{name: "composer file", surface: "flower_composer", item: ContextActionContextItem{Kind: "file_path", Path: "/workspace/src/main.ts"}, wantKind: flruntime.MessageReferenceFile, wantLocator: true},
+		{name: "composer directory", surface: "flower_composer", item: ContextActionContextItem{Kind: "file_path", Path: "/workspace/src", IsDirectory: true}, wantKind: flruntime.MessageReferenceDirectory, wantLocator: true},
 		{name: "terminal", surface: "terminal", item: ContextActionContextItem{Kind: "terminal_selection", WorkingDir: "/workspace", Selection: "pnpm test\nPASS", SelectionChars: 14}, wantKind: flruntime.MessageReferenceTerminal, wantText: "pnpm test\nPASS"},
 		{name: "process", surface: "monitoring", item: ContextActionContextItem{Kind: "process_snapshot", PID: 4242, Name: "vite", Username: "dev", Platform: "darwin", CapturedAtMs: 1783677600000}, wantKind: flruntime.MessageReferenceProcess, wantText: "vite"},
 	}

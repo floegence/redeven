@@ -985,6 +985,82 @@ describe('Env local Flower surface adapter', () => {
     })).rejects.toThrow();
   });
 
+  it('serializes a reference-only composer action as valid JSON for prepare and admission', async () => {
+    const rawBodies: string[] = [];
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/settings') {
+        return jsonResponse({
+          ai: {
+            current_model_id: 'default/gpt-4.1',
+            providers: [{
+              id: 'default',
+              type: 'openai_compatible',
+              models: [{ model_name: 'gpt-4.1' }],
+            }],
+          },
+          ai_secrets: {
+            provider_api_key_set: { default: true },
+            web_search_provider_api_key_set: {},
+          },
+        });
+      }
+      if (url === '/_redeven_proxy/api/ai/models') {
+        return jsonResponse({ current_model: 'default/gpt-4.1' });
+      }
+      if (url === '/_redeven_proxy/api/ai/composer-drafts/draft_reference/thread' && init?.method === 'POST') {
+        rawBodies.push(String(init.body));
+        return jsonResponse({ thread_id: 'thread_reference', draft_revision: 2 });
+      }
+      if (url === '/_redeven_proxy/api/ai/threads/thread_reference/turns' && init?.method === 'POST') {
+        rawBodies.push(String(init.body));
+        const body = JSON.parse(String(init.body)) as { input: { turn_id: string } };
+        return jsonResponse({ run_id: 'run_reference', turn_id: body.input.turn_id, kind: 'start' });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    const subscribeThread = vi.fn(async () => ({ runId: '' }));
+    const adapter = createEnvLocalFlowerSurfaceAdapter({
+      envPublicID: 'env_a',
+      envLabel: 'Demo Env',
+      rpc: { ai: { subscribeThread } } as any,
+    });
+    const contextAction = {
+      schema_version: 2,
+      action_id: 'assistant.ask.flower',
+      provider: 'flower',
+      target: { target_id: 'current', locality: 'auto' },
+      source: { surface: 'flower_composer' },
+      context: [{ kind: 'file_path', path: '/workspace/src', is_directory: true }],
+      presentation: { label: 'Ask Flower', priority: 100 },
+    } as const;
+
+    await expect(adapter.launchTurn({
+      draft_id: 'draft_reference',
+      expected_draft_revision: 1,
+      prompt: '',
+      context_action: contextAction,
+    })).resolves.toMatchObject({
+      thread_id: 'thread_reference',
+      run_id: 'run_reference',
+    });
+
+    expect(rawBodies).toHaveLength(2);
+    const [prepareBody, turnBody] = rawBodies.map((body) => JSON.parse(body) as Record<string, unknown>);
+    expect(prepareBody).toMatchObject({
+      expected_draft_revision: 1,
+      context_action: contextAction,
+    });
+    expect(turnBody).toMatchObject({
+      thread_id: 'thread_reference',
+      expected_draft_revision: 2,
+      input: {
+        text: '',
+        context_action: contextAction,
+      },
+    });
+    expect(subscribeThread).toHaveBeenCalledWith({ threadId: 'thread_reference' });
+  });
+
   it('passes reasoning selection through create thread and turn launch', async () => {
     const subscribeThread = vi.fn(async () => ({ runId: '' }));
     const createdBodies: unknown[] = [];

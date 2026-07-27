@@ -1,5 +1,10 @@
 # Redeven OKF Update Log
 
+## 2026-07-27
+* **Feature**: Added working-directory file and directory references through the full Flower composer's whitespace-boundary `@` interaction, with bounded deterministic discovery, keyboard and IME behavior, separate draft chips, and the attachment control fixed immediately before More.
+* **Boundary**: Added the strict `flower_composer` context-action source, rejected client-authored labels and unknown fields, and kept paths as non-authorizing metadata while Floret remains the sole canonical source after admission.
+* **Storage**: Advanced threadstore to schema v7, atomically upgraded verified v6 draft JSON with an explicit empty reference array, and bound ordered references plus the exact normalized context-action projection to the existing lease/revision admission transaction so changed path, order, directory kind, source, or JSON fails without draft, queue, upload-claim, or Floret side effects.
+
 ## 2026-07-26
 * **Dependency**: Upgraded to published Floret v0.31.2 and adopted exact canonical `ReadThreadTurn` authority for known-Turn reconciliation, attachment membership, and reference activation.
 * **Boundary**: Kept history, SubAgent transcript, and unknown-Turn attachment scans on canonical `ListThreadTurns`, rejected list fallback and non-not-found error downgrades, and exhausted pending commands through stable product keyset pages before startup, fork, or delete authority proceeds.

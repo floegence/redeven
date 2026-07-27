@@ -311,6 +311,13 @@ export type FlowerSurfaceCopy = Readonly<{
     compactNeedsConversation: string;
     commandMenuLabel: string;
     composerMoreLabel: string;
+    composerReferencesLabel: string;
+    composerReferenceLoading: string;
+    composerReferenceEmpty: string;
+    composerReferenceError: string;
+    composerReferenceRemove: (path: string) => string;
+    composerReferenceAdded: (path: string) => string;
+    composerReferenceExists: (path: string) => string;
     commandCompactContext: string;
     pendingSending: string;
     pendingQueued: string;
@@ -475,7 +482,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     overLimit: (limit) => `Text longer than ${limit.toLocaleString()} characters will be sent as an attachment.`,
     invalidText: 'This text contains invalid Unicode and cannot be attached.',
     restoreFailed: 'Flower could not restore this text attachment.',
-    compactBlocked: 'Remove or send attachments before compacting context.',
+    compactBlocked: 'Remove or send attachments and references before compacting context.',
     leaseConflict: 'This draft is being edited in another Flower surface.',
     takeOver: 'Take over editing',
     draftUnsaved: 'Draft changes will be saved when the connection recovers.',
@@ -522,6 +529,13 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     compactNeedsConversation: 'There is no context to compact yet.',
     commandMenuLabel: 'Flower commands',
     composerMoreLabel: 'More input options',
+    composerReferencesLabel: 'File and folder references',
+    composerReferenceLoading: 'Searching files and folders...',
+    composerReferenceEmpty: 'No matching files or folders',
+    composerReferenceError: 'Flower could not search this working directory.',
+    composerReferenceRemove: (path) => `Remove reference ${path}`,
+    composerReferenceAdded: (path) => `${path} referenced.`,
+    composerReferenceExists: (path) => `${path} is already referenced.`,
     commandCompactContext: 'Compact current context',
     pendingSending: 'Sending',
     pendingQueued: 'Queued',

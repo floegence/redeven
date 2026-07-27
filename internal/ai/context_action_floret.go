@@ -7,12 +7,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"path"
 	"strconv"
 	"strings"
 	"time"
 
 	flruntime "github.com/floegence/floret/runtime"
+	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
 const (
@@ -202,15 +202,7 @@ func floretContextReferenceID(index int) string {
 }
 
 func contextReferencePathLabel(value string) string {
-	value = strings.ReplaceAll(strings.TrimSpace(value), "\\", "/")
-	if value == "" {
-		return ""
-	}
-	label := path.Base(strings.TrimSuffix(value, "/"))
-	if label == "." || label == "/" {
-		return value
-	}
-	return label
+	return threadstore.ComposerReferencePathLabel(value)
 }
 
 func truncateContextReferenceText(value string) (string, bool) {

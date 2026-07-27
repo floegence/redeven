@@ -115,7 +115,7 @@ function composerDraftSnapshot(
   return {
     scope_id: scopeID,
     revision,
-    value: { text: '', attachments: [], mode: 'ordinary' },
+    value: { text: '', attachments: [], references: [], mode: 'ordinary' },
     updated_at_unix_ms: 1_000 + revision,
     ...(lease ? { lease } : {}),
   };

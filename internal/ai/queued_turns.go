@@ -574,7 +574,7 @@ func (s *Service) enqueueQueuedTurn(ctx context.Context, meta *session.Meta, req
 		if strings.TrimSpace(req.DraftID) != "" && req.ExpectedDraftRevision != nil {
 			result, replaceErr = db.ReplaceFollowupFromComposerDraft(pctx, sourceFollowupID, rec, uploadIDs, createdAtUnixMs, threadstore.ComposerDraftAdmission{
 				OwnerUserHash: owner.OwnerUserHash, DraftID: strings.TrimSpace(req.DraftID), ExpectedRevision: *req.ExpectedDraftRevision,
-				Attachment: attachmentAdmission,
+				ContextActionJSON: contextActionJSON, Attachment: attachmentAdmission,
 			})
 		} else {
 			result, replaceErr = db.ReplaceFollowupWithAttachmentAdmission(pctx, sourceFollowupID, rec, uploadIDs, createdAtUnixMs, attachmentAdmission)
@@ -591,10 +591,11 @@ func (s *Service) enqueueQueuedTurn(ctx context.Context, meta *session.Meta, req
 		var createErr error
 		if strings.TrimSpace(req.DraftID) != "" && req.ExpectedDraftRevision != nil {
 			queued, position, _, createErr = db.CreateFollowupFromComposerDraft(pctx, rec, uploadIDs, createdAtUnixMs, threadstore.ComposerDraftAdmission{
-				OwnerUserHash:    owner.OwnerUserHash,
-				DraftID:          strings.TrimSpace(req.DraftID),
-				ExpectedRevision: *req.ExpectedDraftRevision,
-				Attachment:       attachmentAdmission,
+				OwnerUserHash:     owner.OwnerUserHash,
+				DraftID:           strings.TrimSpace(req.DraftID),
+				ExpectedRevision:  *req.ExpectedDraftRevision,
+				ContextActionJSON: contextActionJSON,
+				Attachment:        attachmentAdmission,
 			})
 		} else {
 			queued, position, _, createErr = db.CreateFollowupWithAttachmentAdmission(pctx, rec, uploadIDs, createdAtUnixMs, attachmentAdmission)

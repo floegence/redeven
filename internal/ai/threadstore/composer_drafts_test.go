@@ -44,12 +44,76 @@ func composerDraftValueForTest(text, mode string, uploadIDs ...string) json.RawM
 	value, err := json.Marshal(map[string]any{
 		"text":        text,
 		"attachments": attachments,
+		"references":  []any{},
 		"mode":        mode,
 	})
 	if err != nil {
 		panic(err)
 	}
 	return value
+}
+
+func TestNormalizeComposerDraftValueValidatesReferencesStrictly(t *testing.T) {
+	t.Parallel()
+
+	base := func() map[string]any {
+		return map[string]any{
+			"text": "review these paths", "attachments": []any{}, "mode": ComposerDraftModeOrdinary,
+			"references": []any{
+				map[string]any{"local_id": "ref_file", "kind": "file", "label": "main.go", "path": "/workspace/main.go"},
+				map[string]any{"local_id": "ref_dir", "kind": "directory", "label": "src", "path": "/workspace/src"},
+			},
+		}
+	}
+	encode := func(value map[string]any) json.RawMessage {
+		raw, err := json.Marshal(value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return raw
+	}
+	canonical, err := normalizeComposerDraftValue(encode(base()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded composerDraftAdmissionValue
+	if err := json.Unmarshal(canonical, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if len(decoded.References) != 2 || decoded.References[0].Path != "/workspace/main.go" || decoded.References[1].Kind != "directory" {
+		t.Fatalf("references=%#v", decoded.References)
+	}
+	if _, err := normalizeComposerDraftValue(append(encode(base()), []byte(" trailing")...)); err == nil {
+		t.Fatal("composer draft accepted trailing non-JSON content")
+	}
+
+	tests := []struct {
+		name   string
+		mutate func(map[string]any)
+	}{
+		{name: "missing references", mutate: func(value map[string]any) { delete(value, "references") }},
+		{name: "non array references", mutate: func(value map[string]any) { value["references"] = map[string]any{} }},
+		{name: "unknown reference field", mutate: func(value map[string]any) { value["references"].([]any)[0].(map[string]any)["unknown"] = true }},
+		{name: "invalid kind", mutate: func(value map[string]any) { value["references"].([]any)[0].(map[string]any)["kind"] = "text" }},
+		{name: "trimmed path", mutate: func(value map[string]any) {
+			value["references"].([]any)[0].(map[string]any)["path"] = " /workspace/main.go "
+		}},
+		{name: "label is not path derived", mutate: func(value map[string]any) { value["references"].([]any)[0].(map[string]any)["label"] = "forged.go" }},
+		{name: "duplicate local identity", mutate: func(value map[string]any) { value["references"].([]any)[1].(map[string]any)["local_id"] = "ref_file" }},
+		{name: "duplicate semantic path", mutate: func(value map[string]any) {
+			items := value["references"].([]any)
+			items[1] = map[string]any{"local_id": "ref_duplicate", "kind": "file", "label": "main.go", "path": "/workspace/main.go"}
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			value := base()
+			test.mutate(value)
+			if _, err := normalizeComposerDraftValue(encode(value)); err == nil {
+				t.Fatal("invalid composer draft reference was accepted")
+			}
+		})
+	}
 }
 
 func TestComposerDraftLeaseAndRevisionCAS(t *testing.T) {
@@ -244,6 +308,7 @@ func TestComposerDraftMutationCanonicalizesStagedUploadMetadata(t *testing.T) {
 	}
 	value := map[string]any{
 		"text": "", "mode": ComposerDraftModeOrdinary, "capability_revision": "capability-canonical",
+		"references": []any{},
 		"attachments": []any{map[string]any{
 			"local_id": "local_metadata", "source": "drop", "name": "forged.txt", "mime_type": "image/png", "size_bytes": 999,
 			"staged": map[string]any{

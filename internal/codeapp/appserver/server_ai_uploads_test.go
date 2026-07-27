@@ -245,6 +245,10 @@ func TestAIComposerDraftRoutesRedactLeaseSecretsFromPublicConflictAndErrorRespon
 	if acquireBody.Data.State != "owned" || leaseSecret == "" {
 		t.Fatalf("acquire response=%s", acquired.Body.String())
 	}
+	malformedThread := performServerRequest(srv, http.MethodPost, scopePath+"/thread", ownerOrigin, `{"expected_draft_revision":`)
+	if malformedThread.Code != http.StatusBadRequest || !bytes.Contains(malformedThread.Body.Bytes(), []byte(`"error":"invalid json"`)) {
+		t.Fatalf("malformed thread preparation status=%d body=%s", malformedThread.Code, malformedThread.Body.String())
+	}
 
 	assertRedacted := func(label string, response *httptest.ResponseRecorder) {
 		t.Helper()
@@ -257,7 +261,7 @@ func TestAIComposerDraftRoutesRedactLeaseSecretsFromPublicConflictAndErrorRespon
 		t.Fatalf("load status=%d body=%s", loaded.Code, loaded.Body.String())
 	}
 	assertRedacted("load", loaded)
-	committed := performServerRequest(srv, http.MethodPut, scopePath, ownerOrigin, `{"holder_id":"surface_secret_owner","lease_id":"`+leaseSecret+`","expected_revision":0,"value":{"text":"saved","attachments":[],"mode":"ordinary"}}`)
+	committed := performServerRequest(srv, http.MethodPut, scopePath, ownerOrigin, `{"holder_id":"surface_secret_owner","lease_id":"`+leaseSecret+`","expected_revision":0,"value":{"text":"saved","attachments":[],"references":[],"mode":"ordinary"}}`)
 	if committed.Code != http.StatusOK || !bytes.Contains(committed.Body.Bytes(), []byte(`"state":"committed"`)) {
 		t.Fatalf("committed mutation status=%d body=%s", committed.Code, committed.Body.String())
 	}
@@ -275,7 +279,7 @@ func TestAIComposerDraftRoutesRedactLeaseSecretsFromPublicConflictAndErrorRespon
 	}
 	assertRedacted("wrong renew", wrongRenew)
 
-	leaseLostMutation := performServerRequest(srv, http.MethodPut, scopePath, ownerOrigin, `{"holder_id":"surface_conflicting","lease_id":"wrong-secret","expected_revision":1,"value":{"text":"","attachments":[],"mode":"ordinary"}}`)
+	leaseLostMutation := performServerRequest(srv, http.MethodPut, scopePath, ownerOrigin, `{"holder_id":"surface_conflicting","lease_id":"wrong-secret","expected_revision":1,"value":{"text":"","attachments":[],"references":[],"mode":"ordinary"}}`)
 	if leaseLostMutation.Code != http.StatusOK || !bytes.Contains(leaseLostMutation.Body.Bytes(), []byte(`"state":"lease_lost"`)) {
 		t.Fatalf("lease-lost mutation status=%d body=%s", leaseLostMutation.Code, leaseLostMutation.Body.String())
 	}
@@ -314,7 +318,7 @@ func TestAIComposerDraftStorageRemainsAvailableWithoutConfiguredModel(t *testing
 		t.Fatalf("acquire response=%s", acquired.Body.String())
 	}
 
-	committed := performServerRequest(srv, http.MethodPut, scopePath, ownerOrigin, `{"holder_id":"surface_without_model","lease_id":"`+leaseID+`","expected_revision":0,"value":{"text":"saved before model setup","attachments":[],"mode":"ordinary"}}`)
+	committed := performServerRequest(srv, http.MethodPut, scopePath, ownerOrigin, `{"holder_id":"surface_without_model","lease_id":"`+leaseID+`","expected_revision":0,"value":{"text":"saved before model setup","attachments":[],"references":[],"mode":"ordinary"}}`)
 	if committed.Code != http.StatusOK || !bytes.Contains(committed.Body.Bytes(), []byte(`"state":"committed"`)) {
 		t.Fatalf("commit status=%d body=%s", committed.Code, committed.Body.String())
 	}

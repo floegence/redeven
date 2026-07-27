@@ -9,7 +9,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/url"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -25,6 +27,10 @@ const (
 	composerDraftLeaseDuration                  = 15 * time.Second
 	composerDraftInlineTextCodePointLimit int64 = 50_000
 	composerDraftNewThreadScopeID               = "__new_thread__"
+	composerDraftReferenceLimit                 = 128
+	composerDraftReferenceLocalIDLimit          = 200
+	composerDraftReferencePathLimit             = 4_096
+	composerDraftReferenceLabelRuneLimit        = 256
 )
 
 var (
@@ -81,14 +87,15 @@ type ComposerDraftAdmissionCandidate struct {
 }
 
 type composerDraftAdmissionValue struct {
-	Text                         string `json:"text"`
-	Mode                         string `json:"mode"`
-	ProposedTurnID               string `json:"proposed_turn_id"`
-	AdmissionStarted             bool   `json:"admission_started"`
-	ModelID                      string `json:"model_id"`
-	CapabilityRevision           string `json:"capability_revision"`
-	PreparedLongTextAttachmentID string `json:"prepared_long_text_attachment_id"`
-	TargetThreadID               string `json:"target_thread_id"`
+	Text                         string                   `json:"text"`
+	Mode                         string                   `json:"mode"`
+	ProposedTurnID               string                   `json:"proposed_turn_id"`
+	AdmissionStarted             bool                     `json:"admission_started"`
+	ModelID                      string                   `json:"model_id"`
+	CapabilityRevision           string                   `json:"capability_revision"`
+	PreparedLongTextAttachmentID string                   `json:"prepared_long_text_attachment_id"`
+	TargetThreadID               string                   `json:"target_thread_id"`
+	References                   []composerDraftReference `json:"references"`
 	Attachments                  []struct {
 		Source string `json:"source"`
 		Staged *struct {
@@ -106,6 +113,215 @@ type composerDraftAdmissionValue struct {
 			} `json:"text_stats"`
 		} `json:"staged"`
 	} `json:"attachments"`
+}
+
+type composerDraftReference struct {
+	LocalID string `json:"local_id"`
+	Kind    string `json:"kind"`
+	Label   string `json:"label"`
+	Path    string `json:"path"`
+}
+
+type composerReferenceAdmissionProjection struct {
+	Path        string
+	IsDirectory bool
+}
+
+func NormalizeComposerReferencePath(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" || len(value) > composerDraftReferencePathLimit || !utf8.ValidString(value) || strings.ContainsAny(value, "\r\n\x00") {
+		return "", errors.New("invalid composer reference path")
+	}
+	return value, nil
+}
+
+func ComposerReferencePathLabel(value string) string {
+	value = strings.ReplaceAll(strings.TrimSpace(value), "\\", "/")
+	if value == "" {
+		return ""
+	}
+	label := path.Base(strings.TrimSuffix(value, "/"))
+	if label == "." || label == "/" {
+		return value
+	}
+	return label
+}
+
+func normalizeComposerDraftReferences(value map[string]any) ([]composerDraftReference, error) {
+	raw, exists := value["references"]
+	if !exists {
+		return nil, errors.New("invalid composer draft references")
+	}
+	items, ok := raw.([]any)
+	if !ok || len(items) > composerDraftReferenceLimit {
+		return nil, errors.New("invalid composer draft references")
+	}
+	references := make([]composerDraftReference, 0, len(items))
+	seenLocalIDs := make(map[string]struct{}, len(items))
+	seenPaths := make(map[string]struct{}, len(items))
+	canonical := make([]any, 0, len(items))
+	for _, rawItem := range items {
+		item, ok := rawItem.(map[string]any)
+		if !ok || len(item) != 4 {
+			return nil, errors.New("invalid composer draft reference")
+		}
+		localID, localIDOK := item["local_id"].(string)
+		kind, kindOK := item["kind"].(string)
+		label, labelOK := item["label"].(string)
+		rawPath, pathOK := item["path"].(string)
+		if !localIDOK || !kindOK || !labelOK || !pathOK {
+			return nil, errors.New("invalid composer draft reference")
+		}
+		localID = strings.TrimSpace(localID)
+		if localID == "" || localID != item["local_id"] || len(localID) > composerDraftReferenceLocalIDLimit || !utf8.ValidString(localID) || strings.ContainsAny(localID, "\r\n\x00") {
+			return nil, errors.New("invalid composer draft reference identity")
+		}
+		if kind != "file" && kind != "directory" {
+			return nil, errors.New("invalid composer draft reference kind")
+		}
+		normalizedPath, err := NormalizeComposerReferencePath(rawPath)
+		if err != nil || normalizedPath != rawPath {
+			return nil, errors.New("invalid composer draft reference path")
+		}
+		derivedLabel := ComposerReferencePathLabel(normalizedPath)
+		if label == "" || label != strings.TrimSpace(label) || label != derivedLabel || utf8.RuneCountInString(label) > composerDraftReferenceLabelRuneLimit {
+			return nil, errors.New("invalid composer draft reference label")
+		}
+		if _, duplicate := seenLocalIDs[localID]; duplicate {
+			return nil, errors.New("duplicate composer draft reference identity")
+		}
+		semanticKey := kind + "\x00" + normalizedPath
+		if _, duplicate := seenPaths[semanticKey]; duplicate {
+			return nil, errors.New("duplicate composer draft reference path")
+		}
+		seenLocalIDs[localID] = struct{}{}
+		seenPaths[semanticKey] = struct{}{}
+		reference := composerDraftReference{LocalID: localID, Kind: kind, Label: label, Path: normalizedPath}
+		references = append(references, reference)
+		canonical = append(canonical, map[string]any{
+			"local_id": reference.LocalID,
+			"kind":     reference.Kind,
+			"label":    reference.Label,
+			"path":     reference.Path,
+		})
+	}
+	value["references"] = canonical
+	return references, nil
+}
+
+func composerDraftReferenceProjection(references []composerDraftReference) ([]composerReferenceAdmissionProjection, error) {
+	if len(references) > composerDraftReferenceLimit {
+		return nil, errors.New("invalid composer draft references")
+	}
+	projection := make([]composerReferenceAdmissionProjection, 0, len(references))
+	seen := make(map[string]struct{}, len(references))
+	for _, reference := range references {
+		pathValue, err := NormalizeComposerReferencePath(reference.Path)
+		if err != nil {
+			return nil, errors.New("invalid composer draft reference path")
+		}
+		isDirectory := false
+		switch strings.TrimSpace(reference.Kind) {
+		case "file":
+		case "directory":
+			isDirectory = true
+		default:
+			return nil, errors.New("invalid composer draft reference kind")
+		}
+		key := pathValue + "\x00" + fmt.Sprint(isDirectory)
+		if _, duplicate := seen[key]; duplicate {
+			return nil, errors.New("duplicate composer draft reference path")
+		}
+		seen[key] = struct{}{}
+		projection = append(projection, composerReferenceAdmissionProjection{Path: pathValue, IsDirectory: isDirectory})
+	}
+	return projection, nil
+}
+
+func composerContextActionReferenceProjection(raw string) ([]composerReferenceAdmissionProjection, bool, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, false, nil
+	}
+	var envelope struct {
+		SchemaVersion int             `json:"schema_version"`
+		ActionID      string          `json:"action_id"`
+		Provider      string          `json:"provider"`
+		Target        json.RawMessage `json:"target"`
+		Source        struct {
+			Surface   string `json:"surface"`
+			SurfaceID string `json:"surface_id,omitempty"`
+		} `json:"source"`
+		ExecutionContext    json.RawMessage   `json:"execution_context,omitempty"`
+		Context             []json.RawMessage `json:"context"`
+		Presentation        json.RawMessage   `json:"presentation"`
+		SuggestedWorkingDir string            `json:"suggested_working_dir_abs,omitempty"`
+	}
+	decoder := json.NewDecoder(strings.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&envelope); err != nil {
+		return nil, false, errors.New("invalid composer context action")
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return nil, false, errors.New("invalid composer context action")
+	}
+	if strings.TrimSpace(envelope.Source.Surface) != "flower_composer" {
+		return nil, false, nil
+	}
+	if envelope.SchemaVersion != 2 || strings.TrimSpace(envelope.ActionID) != "assistant.ask.flower" || strings.TrimSpace(envelope.Provider) != "flower" || len(envelope.Context) == 0 || len(envelope.Context) > composerDraftReferenceLimit {
+		return nil, true, errors.New("invalid composer context action")
+	}
+	projection := make([]composerReferenceAdmissionProjection, 0, len(envelope.Context))
+	seen := make(map[string]struct{}, len(envelope.Context))
+	for _, rawItem := range envelope.Context {
+		var item struct {
+			Kind        string `json:"kind"`
+			Path        string `json:"path"`
+			IsDirectory bool   `json:"is_directory"`
+		}
+		itemDecoder := json.NewDecoder(strings.NewReader(string(rawItem)))
+		itemDecoder.DisallowUnknownFields()
+		if err := itemDecoder.Decode(&item); err != nil || strings.TrimSpace(item.Kind) != "file_path" {
+			return nil, true, errors.New("invalid composer context action")
+		}
+		pathValue, err := NormalizeComposerReferencePath(item.Path)
+		if err != nil || pathValue != item.Path {
+			return nil, true, errors.New("invalid composer context action")
+		}
+		key := pathValue + "\x00" + fmt.Sprint(item.IsDirectory)
+		if _, duplicate := seen[key]; duplicate {
+			return nil, true, errors.New("duplicate composer context action reference")
+		}
+		seen[key] = struct{}{}
+		projection = append(projection, composerReferenceAdmissionProjection{Path: pathValue, IsDirectory: item.IsDirectory})
+	}
+	return projection, true, nil
+}
+
+func validateComposerDraftReferenceAdmission(references []composerDraftReference, contextActionJSON string) error {
+	draftProjection, err := composerDraftReferenceProjection(references)
+	if err != nil {
+		return err
+	}
+	actionProjection, composerAction, err := composerContextActionReferenceProjection(contextActionJSON)
+	if err != nil {
+		return err
+	}
+	if !composerAction {
+		if len(draftProjection) == 0 {
+			return nil
+		}
+		return errors.New("composer draft reference admission changed")
+	}
+	if len(draftProjection) != len(actionProjection) {
+		return errors.New("composer draft reference admission changed")
+	}
+	for index := range draftProjection {
+		if draftProjection[index] != actionProjection[index] {
+			return errors.New("composer draft reference admission changed")
+		}
+	}
+	return nil
 }
 
 func composerDraftTextStats(text string) (digest string, sizeBytes, codePoints, lines int64) {
@@ -244,6 +460,9 @@ func validateComposerDraftAdmissionTx(
 	if strings.TrimSpace(value.ModelID) != "" && strings.TrimSpace(modelID) != "" && strings.TrimSpace(value.ModelID) != strings.TrimSpace(modelID) {
 		return errors.New("composer draft model changed")
 	}
+	if err := validateComposerDraftReferenceAdmission(value.References, admission.ContextActionJSON); err != nil {
+		return err
+	}
 	if len(uploadIDs) > 0 && strings.TrimSpace(value.CapabilityRevision) != strings.TrimSpace(admission.Attachment.CapabilityRevision) {
 		return errors.New("composer draft attachment capability changed")
 	}
@@ -327,7 +546,7 @@ WHERE u.endpoint_id = ? AND u.owner_scope_kind = ? AND u.owner_user_hash = ?
 }
 
 func emptyComposerDraftValue() json.RawMessage {
-	return json.RawMessage(`{"text":"","attachments":[],"mode":"ordinary"}`)
+	return json.RawMessage(`{"text":"","attachments":[],"references":[],"mode":"ordinary"}`)
 }
 
 func normalizeComposerDraftIdentity(endpointID, ownerUserHash, scopeID string) (string, string, string, error) {
@@ -373,7 +592,7 @@ func normalizeComposerDraftValue(raw json.RawMessage) (json.RawMessage, error) {
 	if err := dec.Decode(&value); err != nil || value == nil {
 		return nil, errors.New("invalid composer draft value")
 	}
-	if err := dec.Decode(&struct{}{}); err == nil {
+	if err := dec.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		return nil, errors.New("invalid composer draft value")
 	}
 	text, textOK := value["text"].(string)
@@ -391,6 +610,9 @@ func normalizeComposerDraftValue(raw json.RawMessage) (json.RawMessage, error) {
 		if _, ok := item.(map[string]any); !ok {
 			return nil, errors.New("invalid composer draft attachment")
 		}
+	}
+	if _, err := normalizeComposerDraftReferences(value); err != nil {
+		return nil, err
 	}
 	return json.Marshal(value)
 }

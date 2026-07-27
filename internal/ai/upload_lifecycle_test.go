@@ -118,6 +118,7 @@ func stageTestDraftAttachmentValue(t *testing.T, svc *Service, meta *session.Met
 	}
 	draftValue := map[string]any{
 		"text": text, "mode": mode, "model_id": modelID, "capability_revision": capability.Revision,
+		"references": []any{},
 		"attachments": []map[string]any{{
 			"local_id": "local_" + upload.AttachmentID, "source": "file", "ordinal": 1,
 			"staged": map[string]any{

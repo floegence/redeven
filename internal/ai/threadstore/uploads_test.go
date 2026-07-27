@@ -225,7 +225,7 @@ func TestStoreThreadDeleteIntentRejectsLateComposerAndUploadClaims(t *testing.T)
 			_, err := store.MutateComposerDraft(ctx, ComposerDraftMutation{
 				EndpointID: endpointID, OwnerUserHash: ownerHash, ScopeID: threadID,
 				HolderID: "surface_delete_race", LeaseID: lease.Draft.LeaseID, ExpectedRevision: lease.Draft.Revision,
-				Value: json.RawMessage(`{"text":"late","attachments":[],"mode":"ordinary"}`), NowUnixMs: 1_002,
+				Value: json.RawMessage(`{"text":"late","attachments":[],"references":[],"mode":"ordinary"}`), NowUnixMs: 1_002,
 			})
 			return err
 		}},

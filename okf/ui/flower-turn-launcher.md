@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower turn launcher
 description: Flower first-turn launchers collect scoped context and send one turn before handing off to the owning Flower surface.
 tags: [ui, flower, desktop, env-app, interaction]
-timestamp: 2026-07-23T00:00:00Z
+timestamp: 2026-07-27T00:00:00Z
 quality_exception: Cross-surface first-turn contract spanning shared Flower UI, Desktop, Env App, upload admission, and handoff behavior.
 ---
 # Summary
@@ -33,6 +33,8 @@ Thread detail and live summary patches expose those Redeven-owned commands as `q
 Transcript linked-context actions distinguish host navigation from self-contained snapshot preview. In Env App, file chips delegate their canonical path to the existing live File Preview host and directory chips delegate to the existing Files host, so Activity, Workbench, and mobile placement remain owned by the standard environment controllers. The shared Flower floating preview accepts only text and process snapshot actions, including short terminal selections, historical display-only file selections, and generated Git or environment snapshots; it must never render a placeholder file or directory window. A host exposes file and directory navigation independently through optional adapter capabilities. Desktop Welcome does not expose those capabilities, so file and directory records from shared local history remain visible but noninteractive there. Capability absence and host failures never fall back to an explanatory or empty floating window.
 
 Flower thread working directory is a Redeven product thread attribute decided at creation time. `FlowerSurfaceAdapter` exposes optional working-directory picker reads for path context and directory entries; Env App implements them through the existing runtime FS RPC, while Desktop Welcome implements them through the fixed runtime FS Local API bridge. In New chat, `FlowerSurface` keeps a local `workingDirDraft`, displays only the basename in the header chip, opens the shared `DirectoryPicker` when the chip is clicked, and sends `working_dir` only when creating a new thread. Existing threads display their immutable `thread.working_dir` basename with the full path in title/ARIA text; clicking that chip copies the full path and never opens a picker or patches the thread.
+
+The full chat composer's working-directory `@` discovery, editable chips, strict `flower_composer` action, and ordered admission comparison are owned by [Flower composer references](flower-composer-references.md). They reuse `launchTurn` without changing the focused first-turn launcher's interaction contract.
 
 Env App implements `stopThread` with the existing AI RPC stop endpoint and then reloads the thread bootstrap. Desktop implements the same adapter method through the runtime Flower HTTP bridge, which allows `POST /_redeven_proxy/api/ai/threads/:id/cancel` and reloads `/live/bootstrap`. The app server thread cancel route preserves RWX permission checks and audit events while calling `StopThread`. An active run is canceled and canonically finalized first; queued followups are recovered to drafts only after that terminal boundary, before the endpoint returns success.
 

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"math"
 	"strings"
+
+	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
 const ContextActionSchemaVersion = 2
@@ -29,6 +31,7 @@ const (
 	contextActionSessionGateway    = "runtime_gateway"
 	contextActionSessionSandbox    = "region_sandbox"
 	contextActionSurfaceWelcomeEnv = "desktop_welcome_environment_card"
+	contextActionSurfaceComposer   = "flower_composer"
 	contextActionSurfaceFile       = "file_browser"
 	contextActionSurfaceTerminal   = "terminal"
 	contextActionSurfacePreview    = "file_preview"
@@ -96,6 +99,31 @@ type ContextActionContextItem struct {
 	Title          string  `json:"title,omitempty"`
 	Detail         string  `json:"detail,omitempty"`
 	Content        string  `json:"content,omitempty"`
+	wireFields     map[string]json.RawMessage
+}
+
+func (item *ContextActionContextItem) UnmarshalJSON(data []byte) error {
+	type contextActionContextItemWire ContextActionContextItem
+	var decoded contextActionContextItemWire
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	for field := range fields {
+		switch field {
+		case "kind", "path", "is_directory", "root_label", "selection", "selection_chars", "working_dir",
+			"pid", "name", "username", "cpu_percent", "memory_bytes", "platform", "captured_at_ms",
+			"title", "detail", "content":
+		default:
+			return fmt.Errorf("json: unknown field %q", field)
+		}
+	}
+	*item = ContextActionContextItem(decoded)
+	item.wireFields = fields
+	return nil
 }
 
 func (item ContextActionContextItem) MarshalJSON() ([]byte, error) {
@@ -204,6 +232,7 @@ func normalizeAskFlowerContextActionEnvelope(in *ContextActionEnvelope) (*Contex
 	}
 	switch out.Source.Surface {
 	case contextActionSurfaceWelcomeEnv,
+		contextActionSurfaceComposer,
 		contextActionSurfaceFile,
 		contextActionSurfaceTerminal,
 		contextActionSurfacePreview,
@@ -225,10 +254,38 @@ func normalizeAskFlowerContextActionEnvelope(in *ContextActionEnvelope) (*Contex
 			return nil, ErrInvalidContextAction
 		}
 	}
+	if out.Source.Surface == contextActionSurfaceComposer {
+		for index := range out.Context {
+			if !contextActionComposerItemWireShapeAllowed(out.Context[index]) {
+				return nil, ErrInvalidContextAction
+			}
+			normalizedPath, err := threadstore.NormalizeComposerReferencePath(out.Context[index].Path)
+			if err != nil || normalizedPath != out.Context[index].Path || strings.TrimSpace(out.Context[index].RootLabel) != "" {
+				return nil, ErrInvalidContextAction
+			}
+			out.Context[index].Path = normalizedPath
+		}
+	}
 	if err := validateAskFlowerContextActionItems(out); err != nil {
 		return nil, err
 	}
 	return out, nil
+}
+
+func contextActionComposerItemWireShapeAllowed(item ContextActionContextItem) bool {
+	if item.wireFields == nil {
+		return true
+	}
+	if len(item.wireFields) != 3 {
+		return false
+	}
+	for _, field := range []string{"kind", "path", "is_directory"} {
+		if _, ok := item.wireFields[field]; !ok {
+			return false
+		}
+	}
+	directoryJSON := strings.TrimSpace(string(item.wireFields["is_directory"]))
+	return directoryJSON == "true" || directoryJSON == "false"
 }
 
 func validateAskFlowerContextActionItems(action *ContextActionEnvelope) error {
@@ -252,7 +309,7 @@ func validateAskFlowerContextActionItems(action *ContextActionEnvelope) error {
 
 func contextActionSurfaceAllowsKind(surface string, kind string) bool {
 	switch strings.TrimSpace(surface) {
-	case contextActionSurfaceFile:
+	case contextActionSurfaceComposer, contextActionSurfaceFile:
 		return kind == contextActionKindFilePath
 	case contextActionSurfacePreview, contextActionSurfaceEditor:
 		return kind == contextActionKindFilePath
@@ -379,6 +436,7 @@ func normalizeContextActionItems(items []ContextActionContextItem) []ContextActi
 			Title:          strings.TrimSpace(item.Title),
 			Detail:         strings.TrimSpace(item.Detail),
 			Content:        item.Content,
+			wireFields:     item.wireFields,
 		}
 		out = append(out, normalized)
 	}

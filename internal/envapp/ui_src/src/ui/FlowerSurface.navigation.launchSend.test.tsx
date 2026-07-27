@@ -553,14 +553,14 @@ it('does not restore or delete a long-text attachment after navigating to anothe
   const coordinator = createFlowerComposerDraftCoordinator({
     initialDraft: (scopeID) => scopeID === '__new_thread__'
       ? {
-          text: 'draft A', mode: 'ordinary',
+          text: 'draft A', references: [], mode: 'ordinary',
           attachments: [{
             local_id: 'local-restore', source: 'long_text', name: attachment.name,
             mime_type: attachment.mime_type, size_bytes: attachment.size_bytes,
             upload_request_id: 'draft-restore', attempt_state: 'staged_ready', staged: attachment,
           }],
         }
-      : { text: '', attachments: [], mode: 'ordinary' },
+      : { text: '', attachments: [], references: [], mode: 'ordinary' },
   });
   const restored = deferred<FlowerStagedLongTextReadResult>();
   const readStagedLongText = vi.fn(() => restored.promise);
@@ -596,7 +596,7 @@ it('does not reclaim focus after restoring long text into the current editor', a
   };
   const coordinator = createFlowerComposerDraftCoordinator({
     initialDraft: () => ({
-      text: 'draft ', mode: 'ordinary',
+      text: 'draft ', references: [], mode: 'ordinary',
       attachments: [{
         local_id: 'local-restore-focus', source: 'long_text', name: attachment.name,
         mime_type: attachment.mime_type, size_bytes: attachment.size_bytes,
@@ -1715,6 +1715,19 @@ describe('FlowerSurface navigation launch/send', () => {
       ...adapter(true),
       listThreads: vi.fn(async () => []),
       loadThread: vi.fn(async () => liveBootstrap(launchedThread)),
+      loadAttachmentCapability: vi.fn(async (modelID: string): Promise<FlowerAttachmentCapability> => ({
+        model_id: modelID,
+        revision: 'composer-action-order',
+        enabled: true,
+        supports_long_text: true,
+        max_attachments: 4,
+        max_file_size_bytes: 1_000_000,
+        max_total_size_bytes: 2_000_000,
+        routes: { 'text/plain': 'tool_read' },
+      })),
+      uploadAttachment: vi.fn(async () => {
+        throw new Error('upload is not expected in the action-order test');
+      }),
       getWorkingDirectoryPathContext,
       listWorkingDirectoryEntries,
       launchTurn,
@@ -1722,7 +1735,13 @@ describe('FlowerSurface navigation launch/send', () => {
 
     layout.trigger();
 
-    await waitFor(() => Boolean(runtime.querySelector('button.flower-composer-more-button')));
+    await waitFor(() => Boolean(
+      runtime.querySelector('button.flower-composer-attachment-button')
+      && runtime.querySelector('button.flower-composer-more-button'),
+    ));
+    const attachmentButton = runtime.querySelector('button.flower-composer-attachment-button') as HTMLButtonElement;
+    const moreButton = runtime.querySelector('button.flower-composer-more-button') as HTMLButtonElement;
+    expect(attachmentButton.compareDocumentPosition(moreButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(runtime.querySelector('[data-flower-composer-inline-item="permission"] .flower-permission-trigger')).toBeTruthy();
     expect(runtime.querySelector('[data-flower-composer-inline-item="working_dir"]')).toBeNull();
     (runtime.querySelector('button.flower-composer-more-button') as HTMLButtonElement).click();

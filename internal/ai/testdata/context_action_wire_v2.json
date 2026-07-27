@@ -16,6 +16,22 @@
     }
   },
   {
+    "name": "canonical_flower_composer_directory",
+    "expect_kind": "file_path",
+    "expect_label": "src",
+    "action": {
+      "schema_version": 2,
+      "action_id": "assistant.ask.flower",
+      "provider": "flower",
+      "target": { "target_id": "current", "locality": "auto" },
+      "source": { "surface": "flower_composer" },
+      "context": [
+        { "kind": "file_path", "path": "/workspace/src", "is_directory": true }
+      ],
+      "presentation": { "label": "Ask Flower", "priority": 100 }
+    }
+  },
+  {
     "name": "legacy_file_missing_false",
     "expect_kind": "file_path",
     "expect_label": "index.ts",
