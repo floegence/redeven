@@ -15,7 +15,41 @@ import (
 	"testing"
 
 	"golang.org/x/mod/modfile"
+	"gopkg.in/yaml.v3"
 )
+
+func TestDesktopPnpmPeerInstallSettingMatchesLockfile(t *testing.T) {
+	t.Parallel()
+
+	root := repoRootForTest(t)
+	var workspace struct {
+		AutoInstallPeers *bool `yaml:"autoInstallPeers"`
+	}
+	if err := yaml.Unmarshal([]byte(readRepoFile(t, root, "desktop", "pnpm-workspace.yaml")), &workspace); err != nil {
+		t.Fatalf("parse desktop pnpm workspace: %v", err)
+	}
+	var lock struct {
+		Settings struct {
+			AutoInstallPeers *bool `yaml:"autoInstallPeers"`
+		} `yaml:"settings"`
+	}
+	if err := yaml.Unmarshal([]byte(readRepoFile(t, root, "desktop", "pnpm-lock.yaml")), &lock); err != nil {
+		t.Fatalf("parse desktop pnpm lockfile: %v", err)
+	}
+	if workspace.AutoInstallPeers == nil {
+		t.Fatal("desktop/pnpm-workspace.yaml must explicitly set autoInstallPeers")
+	}
+	if lock.Settings.AutoInstallPeers == nil {
+		t.Fatal("desktop/pnpm-lock.yaml must explicitly record settings.autoInstallPeers")
+	}
+	if *workspace.AutoInstallPeers != *lock.Settings.AutoInstallPeers {
+		t.Fatalf(
+			"desktop pnpm autoInstallPeers mismatch: workspace=%t lockfile=%t",
+			*workspace.AutoInstallPeers,
+			*lock.Settings.AutoInstallPeers,
+		)
+	}
+}
 
 func TestFlowersecDependencyUsesPublishedRelease(t *testing.T) {
 	t.Parallel()
