@@ -21,6 +21,7 @@ function deferred<Value>() {
 const draftValue = (overrides: Partial<FlowerComposerDraftValue> = {}): FlowerComposerDraftValue => ({
   text: '',
   attachments: [],
+  references: [],
   mode: 'ordinary',
   ...overrides,
 });

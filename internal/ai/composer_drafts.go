@@ -25,9 +25,10 @@ type ComposerDraftMutationRequest struct {
 }
 
 type ComposerDraftThreadRequest struct {
-	ExpectedDraftRevision int64               `json:"expected_draft_revision"`
-	TurnID                string              `json:"turn_id"`
-	Create                CreateThreadRequest `json:"create"`
+	ExpectedDraftRevision int64                  `json:"expected_draft_revision"`
+	TurnID                string                 `json:"turn_id"`
+	ContextAction         *ContextActionEnvelope `json:"context_action,omitempty"`
+	Create                CreateThreadRequest    `json:"create"`
 }
 
 type ComposerDraftThreadResponse struct {
@@ -239,6 +240,10 @@ func (s *Service) PrepareComposerDraftThread(ctx context.Context, meta *session.
 	if err != nil {
 		return ComposerDraftThreadResponse{}, err
 	}
+	contextActionJSON, err := marshalQueuedTurnContextAction(request.ContextAction)
+	if err != nil {
+		return ComposerDraftThreadResponse{}, err
+	}
 	draftBeforeBind, err := db.GetComposerDraft(ctxOrBackground(ctx), owner.EndpointID, owner.OwnerUserHash, scopeID, time.Now().UnixMilli())
 	if err != nil {
 		return ComposerDraftThreadResponse{}, err
@@ -290,10 +295,10 @@ func (s *Service) PrepareComposerDraftThread(ctx context.Context, meta *session.
 	}
 	if err := db.ValidateComposerDraftAdmission(ctxOrBackground(ctx), threadstore.QueuedTurn{
 		EndpointID: owner.EndpointID, ThreadID: scopeID, TurnID: turnID,
-		ModelID: resolvedModel.ID, TextContent: normalizedInput.Text,
+		ModelID: resolvedModel.ID, TextContent: normalizedInput.Text, ContextActionJSON: contextActionJSON,
 	}, uploadIDs, threadstore.ComposerDraftAdmission{
 		OwnerUserHash: owner.OwnerUserHash, DraftID: scopeID,
-		ExpectedRevision: admissionRevision, Attachment: attachmentAdmission,
+		ExpectedRevision: admissionRevision, ContextActionJSON: contextActionJSON, Attachment: attachmentAdmission,
 	}); err != nil {
 		return ComposerDraftThreadResponse{}, err
 	}

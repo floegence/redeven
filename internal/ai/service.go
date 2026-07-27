@@ -1718,7 +1718,7 @@ func (s *Service) startUserTurnDetached(ctx context.Context, meta *session.Meta,
 			if preparedUser.DraftID != "" && preparedUser.ExpectedDraftRevision != nil {
 				replacement, replaceErr = prepared.db.ReplaceFollowupFromComposerDraft(pctx, sourceID, record, preparedUser.UploadIDs, preparedUser.CreatedAtUnixMs, threadstore.ComposerDraftAdmission{
 					OwnerUserHash: preparedUser.OwnerUserHash, DraftID: preparedUser.DraftID, ExpectedRevision: *preparedUser.ExpectedDraftRevision,
-					Attachment: preparedUser.AttachmentAdmission,
+					ContextActionJSON: contextActionJSON, Attachment: preparedUser.AttachmentAdmission,
 				})
 			} else {
 				replacement, replaceErr = prepared.db.ReplaceFollowupWithAttachmentAdmission(pctx, sourceID, record, preparedUser.UploadIDs, preparedUser.CreatedAtUnixMs, preparedUser.AttachmentAdmission)
@@ -1734,10 +1734,11 @@ func (s *Service) startUserTurnDetached(ctx context.Context, meta *session.Meta,
 		} else {
 			if preparedUser.DraftID != "" && preparedUser.ExpectedDraftRevision != nil {
 				_, _, _, err = prepared.db.CreateFollowupFromComposerDraft(pctx, record, preparedUser.UploadIDs, preparedUser.CreatedAtUnixMs, threadstore.ComposerDraftAdmission{
-					OwnerUserHash:    preparedUser.OwnerUserHash,
-					DraftID:          preparedUser.DraftID,
-					ExpectedRevision: *preparedUser.ExpectedDraftRevision,
-					Attachment:       preparedUser.AttachmentAdmission,
+					OwnerUserHash:     preparedUser.OwnerUserHash,
+					DraftID:           preparedUser.DraftID,
+					ExpectedRevision:  *preparedUser.ExpectedDraftRevision,
+					ContextActionJSON: contextActionJSON,
+					Attachment:        preparedUser.AttachmentAdmission,
 				})
 			} else {
 				_, _, _, err = prepared.db.CreateFollowupWithAttachmentAdmission(pctx, record, preparedUser.UploadIDs, preparedUser.CreatedAtUnixMs, preparedUser.AttachmentAdmission)

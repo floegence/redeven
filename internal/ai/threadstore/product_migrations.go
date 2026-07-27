@@ -6,16 +6,151 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/floegence/redeven/internal/ai/permissionsnapshot"
 )
+
+type productV6ComposerDraft struct {
+	endpointID           string
+	ownerUserHash        string
+	scopeID              string
+	revision             int64
+	valueJSON            string
+	leaseID              string
+	leaseHolderID        string
+	leaseExpiresAtUnixMs int64
+	createdAtUnixMs      int64
+	updatedAtUnixMs      int64
+	expiresAtUnixMs      int64
+}
+
+func migrateProductV6ToV7(tx *sql.Tx) error {
+	if err := verifyProductSchemaVersion(tx, 6); err != nil {
+		return fmt.Errorf("verify product threadstore v6: %w", err)
+	}
+	drafts, err := readProductV6ComposerDraftsForMigration(tx)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`
+ALTER TABLE ai_composer_drafts RENAME TO product_v6_ai_composer_drafts;
+DROP INDEX idx_ai_composer_drafts_expiry;
+`); err != nil {
+		return err
+	}
+	if err := createComposerDraftsTableTx(tx); err != nil {
+		return err
+	}
+	for _, draft := range drafts {
+		if _, err := tx.Exec(`
+INSERT INTO ai_composer_drafts(
+  endpoint_id, owner_user_hash, scope_id, revision, value_json,
+  lease_id, lease_holder_id, lease_expires_at_unix_ms,
+  created_at_unix_ms, updated_at_unix_ms, expires_at_unix_ms
+) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`, draft.endpointID, draft.ownerUserHash, draft.scopeID, draft.revision, draft.valueJSON,
+			draft.leaseID, draft.leaseHolderID, draft.leaseExpiresAtUnixMs,
+			draft.createdAtUnixMs, draft.updatedAtUnixMs, draft.expiresAtUnixMs); err != nil {
+			return fmt.Errorf("restore composer draft %q during v7 migration: %w", draft.scopeID, err)
+		}
+	}
+	if _, err := tx.Exec(`DROP TABLE product_v6_ai_composer_drafts`); err != nil {
+		return err
+	}
+	return verifyProductSchemaVersion(tx, 7)
+}
+
+func readProductV6ComposerDraftsForMigration(tx *sql.Tx) ([]productV6ComposerDraft, error) {
+	rows, err := tx.Query(`
+SELECT endpoint_id, owner_user_hash, scope_id, revision, value_json,
+       lease_id, lease_holder_id, lease_expires_at_unix_ms,
+       created_at_unix_ms, updated_at_unix_ms, expires_at_unix_ms
+FROM ai_composer_drafts
+ORDER BY endpoint_id, owner_user_hash, scope_id
+`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	drafts := make([]productV6ComposerDraft, 0)
+	for rows.Next() {
+		var draft productV6ComposerDraft
+		if err := rows.Scan(
+			&draft.endpointID,
+			&draft.ownerUserHash,
+			&draft.scopeID,
+			&draft.revision,
+			&draft.valueJSON,
+			&draft.leaseID,
+			&draft.leaseHolderID,
+			&draft.leaseExpiresAtUnixMs,
+			&draft.createdAtUnixMs,
+			&draft.updatedAtUnixMs,
+			&draft.expiresAtUnixMs,
+		); err != nil {
+			return nil, err
+		}
+		migratedValue, err := migrateComposerDraftValueV6ToV7(draft.valueJSON)
+		if err != nil {
+			return nil, fmt.Errorf("validate composer draft %q before v7 migration: %w", draft.scopeID, err)
+		}
+		draft.valueJSON = migratedValue
+		drafts = append(drafts, draft)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	return drafts, nil
+}
+
+func migrateComposerDraftValueV6ToV7(raw string) (string, error) {
+	if len(raw) == 0 || len(raw) > 12<<20 || !utf8.ValidString(raw) {
+		return "", errors.New("invalid composer draft value")
+	}
+	var value map[string]any
+	decoder := json.NewDecoder(strings.NewReader(raw))
+	decoder.UseNumber()
+	if err := decoder.Decode(&value); err != nil || value == nil {
+		return "", errors.New("invalid composer draft value")
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return "", errors.New("invalid composer draft value")
+	}
+	allowed := map[string]struct{}{
+		"text": {}, "attachments": {}, "mode": {}, "model_id": {},
+		"permission_type": {}, "reasoning_selection": {}, "working_dir": {},
+		"proposed_turn_id": {}, "admission_started": {},
+		"prepared_long_text_local_id": {}, "prepared_long_text_attachment_id": {},
+		"target_thread_id": {}, "capability_revision": {},
+	}
+	for key := range value {
+		if _, ok := allowed[key]; !ok {
+			return "", fmt.Errorf("invalid composer draft value field %q", key)
+		}
+	}
+	value["references"] = []any{}
+	withReferences, err := json.Marshal(value)
+	if err != nil {
+		return "", errors.New("invalid composer draft value")
+	}
+	normalized, err := normalizeComposerDraftValue(withReferences)
+	if err != nil {
+		return "", err
+	}
+	return string(normalized), nil
+}
 
 func migrateProductV5ToV6(tx *sql.Tx) error {
 	if err := verifyProductSchemaVersion(tx, 5); err != nil {
 		return fmt.Errorf("verify product threadstore v5: %w", err)
 	}
-	if err := createComposerDraftsTableTx(tx); err != nil {
+	if err := createComposerDraftsTableV6Tx(tx); err != nil {
 		return err
 	}
 	if err := migrateProductV5DraftUploadRefs(tx); err != nil {

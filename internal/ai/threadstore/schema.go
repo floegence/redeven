@@ -2,6 +2,7 @@ package threadstore
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"reflect"
 	"sync"
@@ -11,7 +12,7 @@ import (
 
 const (
 	threadstoreSchemaKind           = "ai_threadstore_product_v2"
-	threadstoreCurrentSchemaVersion = 6
+	threadstoreCurrentSchemaVersion = 7
 )
 
 // CurrentSchemaVersion returns the product-only threadstore schema version.
@@ -31,6 +32,7 @@ func threadstoreSchemaSpec() sqliteutil.Spec {
 			{FromVersion: 3, ToVersion: 4, Apply: migrateProductV3ToV4},
 			{FromVersion: 4, ToVersion: 5, Apply: migrateProductV4ToV5},
 			{FromVersion: 5, ToVersion: 6, Apply: migrateProductV5ToV6},
+			{FromVersion: 6, ToVersion: 7, Apply: migrateProductV6ToV7},
 		},
 		Verify: verifyThreadstoreSchema,
 	}
@@ -41,6 +43,13 @@ func createThreadstoreSchema(tx *sql.Tx) error {
 		return err
 	}
 	return createComposerDraftsTableTx(tx)
+}
+
+func createThreadstoreSchemaV6(tx *sql.Tx) error {
+	if err := createThreadstoreSchemaWithFlowerTables(tx, createFlowerThreadRoutingTableTx, createUploadTablesTx); err != nil {
+		return err
+	}
+	return createComposerDraftsTableV6Tx(tx)
 }
 
 func createThreadstoreSchemaV5(tx *sql.Tx) error {
@@ -199,13 +208,24 @@ CREATE TABLE provider_capabilities (
 }
 
 func createComposerDraftsTableTx(tx *sql.Tx) error {
+	return createComposerDraftsTableWithDefaultTx(tx, `{"text":"","attachments":[],"references":[],"mode":"ordinary"}`)
+}
+
+func createComposerDraftsTableV6Tx(tx *sql.Tx) error {
+	return createComposerDraftsTableWithDefaultTx(tx, `{"text":"","attachments":[],"mode":"ordinary"}`)
+}
+
+func createComposerDraftsTableWithDefaultTx(tx *sql.Tx, valueDefault string) error {
+	if valueDefault == "" {
+		return errors.New("missing composer draft value default")
+	}
 	_, err := tx.Exec(`
 CREATE TABLE ai_composer_drafts (
   endpoint_id TEXT NOT NULL,
   owner_user_hash TEXT NOT NULL CHECK(length(owner_user_hash) = 64),
   scope_id TEXT NOT NULL,
   revision INTEGER NOT NULL DEFAULT 0 CHECK(revision >= 0),
-  value_json TEXT NOT NULL DEFAULT '{"text":"","attachments":[],"mode":"ordinary"}',
+  value_json TEXT NOT NULL DEFAULT '` + valueDefault + `',
   lease_id TEXT NOT NULL DEFAULT '',
   lease_holder_id TEXT NOT NULL DEFAULT '',
   lease_expires_at_unix_ms INTEGER NOT NULL DEFAULT 0,
@@ -698,6 +718,8 @@ func expectedProductSchemaContract(version int) ([]canonicalSchemaObject, error)
 		build = createThreadstoreSchemaV4
 	case 5:
 		build = createThreadstoreSchemaV5
+	case 6:
+		build = createThreadstoreSchemaV6
 	case threadstoreCurrentSchemaVersion:
 		build = createThreadstoreSchema
 	default:

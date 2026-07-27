@@ -1,5 +1,5 @@
 import type { FlowerTurnLauncherContextTone } from '../flowerTurnLauncherCopy';
-import type { FlowerTurnLauncherSourceSurface } from './flowerSurfaceContracts';
+import type { FlowerLinkedContextSourceSurface } from './flowerSurfaceContracts';
 
 export type FlowerChatContextTone = FlowerTurnLauncherContextTone;
 
@@ -31,7 +31,7 @@ export type FlowerChatContextDisplay =
     }>
   | Readonly<{
       authority: 'queued_context_action';
-      surface: FlowerTurnLauncherSourceSurface;
+      surface: FlowerLinkedContextSourceSurface;
       target: string;
       chips: readonly FlowerChatContextChip[];
     }>;

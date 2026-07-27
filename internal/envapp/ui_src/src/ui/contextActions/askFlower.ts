@@ -1,6 +1,7 @@
 import type {
   FlowerTurnLauncherContextItem,
   FlowerTurnLauncherIntent,
+  FlowerTurnLauncherSourceSurface,
 } from '../../../../../flower_ui/src';
 import {
   CONTEXT_ACTION_SCHEMA_VERSION,
@@ -18,7 +19,7 @@ export type EnvFlowerTurnLauncherContextItem = Exclude<
 >;
 
 export type EnvFlowerTurnLauncherIntent = Omit<FlowerTurnLauncherIntent, 'context_items' | 'source_surface'> & Readonly<{
-  source_surface: ContextActionSurface;
+  source_surface: FlowerTurnLauncherSourceSurface;
   context_items: readonly EnvFlowerTurnLauncherContextItem[];
 }>;
 

@@ -863,6 +863,7 @@ describe('Local Environment Flower surface adapter', () => {
 
     expect(calls.find((call) => call.path === '/_redeven_proxy/api/ai/composer-drafts/draft-card/thread')?.body).toMatchObject({
       expected_draft_revision: 1,
+      context_action: contextAction,
       create: {
         working_dir: '/workspace/redeven',
         permission_type: 'readonly',
@@ -883,6 +884,50 @@ describe('Local Environment Flower surface adapter', () => {
         permission_type: 'readonly',
       },
     });
+  });
+
+  it('admits a reference-only Flower composer turn through the Desktop bridge', async () => {
+    const calls: RuntimeFlowerRequest[] = [];
+    const contextAction = {
+      schema_version: 2,
+      action_id: 'assistant.ask.flower',
+      provider: 'flower',
+      target: { target_id: 'current', locality: 'auto' },
+      source: { surface: 'flower_composer' },
+      context: [{ kind: 'file_path', path: '/workspace/main.ts', is_directory: false }],
+      presentation: { label: 'Ask Flower', priority: 100 },
+    } as const;
+    const bridge = bridgeFor((request) => {
+      calls.push(request);
+      if (request.path === '/_redeven_proxy/api/settings') return settingsResponse();
+      if (request.path === '/_redeven_proxy/api/ai/models') return { current_model: 'default/gpt-4.1' };
+      if (request.path === '/_redeven_proxy/api/ai/composer-drafts/draft-reference/thread') {
+        return { thread_id: 'thread-reference', draft_revision: 2 };
+      }
+      if (request.path === '/_redeven_proxy/api/ai/threads/thread-reference/turns') {
+        const turnID = String((request.body as { input?: { turn_id?: string } })?.input?.turn_id ?? '');
+        return { turn_id: turnID, run_id: 'run-reference', kind: 'start' };
+      }
+      throw new Error(`unexpected path: ${request.path}`);
+    });
+
+    await expect(launchLocalEnvironmentFlowerTurn(bridge, {
+      draft_id: 'draft-reference',
+      expected_draft_revision: 1,
+      prompt: '',
+      context_action: contextAction,
+    })).resolves.toMatchObject({
+      thread_id: 'thread-reference',
+      run_id: 'run-reference',
+    });
+
+    expect(calls.find((call) => call.path === '/_redeven_proxy/api/ai/composer-drafts/draft-reference/thread')?.body)
+      .toMatchObject({ expected_draft_revision: 1, context_action: contextAction });
+    expect(calls.find((call) => call.path === '/_redeven_proxy/api/ai/threads/thread-reference/turns')?.body)
+      .toMatchObject({
+        expected_draft_revision: 2,
+        input: { text: '', context_action: contextAction },
+      });
   });
 
   it('rejects invalid explicit context actions instead of dropping linked context', async () => {
@@ -907,10 +952,7 @@ describe('Local Environment Flower surface adapter', () => {
       },
     })).rejects.toThrow('Invalid Flower context action.');
 
-    expect(calls.map((call) => call.path)).toEqual([
-      '/_redeven_proxy/api/settings',
-      '/_redeven_proxy/api/ai/models',
-    ]);
+    expect(calls).toEqual([]);
   });
 
   it('admits an attachment-only turn from a previously staged upload', async () => {

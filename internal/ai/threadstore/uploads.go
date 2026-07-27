@@ -1026,10 +1026,22 @@ func (s *Store) BindUploadsToRef(ctx context.Context, endpointID string, threadI
 }
 
 type ComposerDraftAdmission struct {
-	OwnerUserHash    string
-	DraftID          string
-	ExpectedRevision int64
-	Attachment       AttachmentAdmission
+	OwnerUserHash     string
+	DraftID           string
+	ExpectedRevision  int64
+	ContextActionJSON string
+	Attachment        AttachmentAdmission
+}
+
+func normalizeComposerDraftAdmissionContext(recContextActionJSON string, admission *ComposerDraftAdmission) error {
+	if admission == nil {
+		return errors.New("invalid composer draft admission")
+	}
+	admission.ContextActionJSON = strings.TrimSpace(admission.ContextActionJSON)
+	if admission.ContextActionJSON != strings.TrimSpace(recContextActionJSON) {
+		return errors.New("composer draft context action changed")
+	}
+	return nil
 }
 
 type AttachmentAdmission struct {
@@ -1050,11 +1062,15 @@ func (s *Store) ValidateComposerDraftAdmission(ctx context.Context, rec QueuedTu
 	rec.ThreadID = strings.TrimSpace(rec.ThreadID)
 	rec.TurnID = strings.TrimSpace(rec.TurnID)
 	rec.ModelID = strings.TrimSpace(rec.ModelID)
+	rec.ContextActionJSON = strings.TrimSpace(rec.ContextActionJSON)
 	admission.OwnerUserHash = strings.ToLower(strings.TrimSpace(admission.OwnerUserHash))
 	admission.DraftID = strings.TrimSpace(admission.DraftID)
 	uploadIDs = dedupeNonEmptyStrings(uploadIDs)
 	if rec.EndpointID == "" || rec.ThreadID == "" || rec.TurnID == "" || len(admission.OwnerUserHash) != sha256.Size*2 || admission.DraftID == "" || admission.ExpectedRevision < 0 {
 		return errors.New("invalid composer draft admission")
+	}
+	if err := normalizeComposerDraftAdmissionContext(rec.ContextActionJSON, &admission); err != nil {
+		return err
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -1147,6 +1163,7 @@ func (s *Store) createFollowupWithUploadRefs(ctx context.Context, rec QueuedTurn
 		return QueuedTurn{}, 0, 0, errors.New("invalid text content")
 	}
 	rec.AttachmentsJSON = strings.TrimSpace(rec.AttachmentsJSON)
+	rec.ContextActionJSON = strings.TrimSpace(rec.ContextActionJSON)
 	rec.OptionsJSON = strings.TrimSpace(rec.OptionsJSON)
 	rec.SessionMetaJSON = strings.TrimSpace(rec.SessionMetaJSON)
 	rec.CreatedByUserPublicID = strings.TrimSpace(rec.CreatedByUserPublicID)
@@ -1189,6 +1206,9 @@ func (s *Store) createFollowupWithUploadRefs(ctx context.Context, rec QueuedTurn
 		admission.DraftID = strings.TrimSpace(admission.DraftID)
 		if len(admission.OwnerUserHash) != 64 || admission.DraftID == "" || admission.ExpectedRevision < 0 {
 			return QueuedTurn{}, 0, 0, errors.New("invalid composer draft admission")
+		}
+		if err := normalizeComposerDraftAdmissionContext(rec.ContextActionJSON, admission); err != nil {
+			return QueuedTurn{}, 0, 0, err
 		}
 		if err := validateComposerDraftAdmissionTx(
 			ctx, tx, rec.EndpointID, admission.OwnerUserHash, admission.DraftID,
@@ -1304,6 +1324,9 @@ func (s *Store) replaceFollowupWithUploadRefs(ctx context.Context, sourceFollowu
 		admission.DraftID = strings.TrimSpace(admission.DraftID)
 		if len(admission.OwnerUserHash) != 64 || admission.DraftID == "" || admission.ExpectedRevision < 0 {
 			return FollowupReplacementResult{}, errors.New("invalid composer draft admission")
+		}
+		if err := normalizeComposerDraftAdmissionContext(rec.ContextActionJSON, admission); err != nil {
+			return FollowupReplacementResult{}, err
 		}
 		if err := validateComposerDraftAdmissionTx(
 			ctx, tx, rec.EndpointID, admission.OwnerUserHash, admission.DraftID,

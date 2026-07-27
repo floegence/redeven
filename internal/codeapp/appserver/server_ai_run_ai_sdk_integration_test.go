@@ -336,7 +336,7 @@ func TestServer_AI_Run_UsesModelGatewayAndPersistsAssistantMessage(t *testing.T)
 		longText := strings.Repeat("😀", 50_001)
 		longTurnID := "turn_appserver_long_inline"
 		longDraftValue, _ := json.Marshal(map[string]any{
-			"text": longText, "attachments": []any{}, "mode": "admission_in_flight",
+			"text": longText, "attachments": []any{}, "references": []any{}, "mode": "admission_in_flight",
 			"model_id": "openai/gpt-5-mini", "proposed_turn_id": longTurnID, "admission_started": true,
 		})
 		longDraft, err := aiSvc.MutateComposerDraft(t.Context(), longOwner, ai.ComposerDraftMutationRequest{
@@ -381,7 +381,7 @@ func TestServer_AI_Run_UsesModelGatewayAndPersistsAssistantMessage(t *testing.T)
 		draft, err := aiSvc.MutateComposerDraft(t.Context(), owner, ai.ComposerDraftMutationRequest{
 			ScopeID: threadID, HolderID: "appserver-integration", LeaseID: lease.Draft.LeaseID,
 			ExpectedRevision: lease.Draft.Revision,
-			Value:            json.RawMessage(`{"text":"hi","attachments":[],"mode":"admission_in_flight","model_id":"openai/gpt-5-mini","proposed_turn_id":"turn_appserver_receipt","admission_started":true}`),
+			Value:            json.RawMessage(`{"text":"hi","attachments":[],"references":[],"mode":"admission_in_flight","model_id":"openai/gpt-5-mini","proposed_turn_id":"turn_appserver_receipt","admission_started":true}`),
 		})
 		if err != nil {
 			t.Fatal(err)

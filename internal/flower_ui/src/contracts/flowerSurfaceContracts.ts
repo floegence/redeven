@@ -1129,6 +1129,8 @@ export type FlowerTurnLauncherSourceSurface =
   | 'git_browser'
   | 'editor_preview';
 
+export type FlowerLinkedContextSourceSurface = FlowerTurnLauncherSourceSurface | 'flower_composer';
+
 export type FlowerTurnLauncherContextItem =
   | Readonly<{
       kind: 'environment';
@@ -1201,7 +1203,7 @@ export type FlowerLinkedContextPathOpenRequest = Readonly<{
   thread_id?: string;
   message_id: string;
   context_index: number;
-  source_surface: FlowerTurnLauncherSourceSurface;
+  source_surface: FlowerLinkedContextSourceSurface;
   target: string;
 }>;
 

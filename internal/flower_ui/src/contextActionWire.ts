@@ -16,6 +16,7 @@ export type ContextActionLocality =
 
 export type ContextActionSurface =
   | 'desktop_welcome_environment_card'
+  | 'flower_composer'
   | 'file_browser'
   | 'terminal'
   | 'file_preview'
@@ -98,6 +99,7 @@ const ASK_FLOWER_LOCALITIES: readonly ContextActionLocality[] = [
 
 const ASK_FLOWER_SURFACES: readonly ContextActionSurface[] = [
   'desktop_welcome_environment_card',
+  'flower_composer',
   'file_browser',
   'terminal',
   'file_preview',
@@ -130,6 +132,11 @@ const KNOWN_CONTEXT_KINDS = new Set([
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function hasOnlyKeys(record: Record<string, unknown>, allowed: readonly string[]): boolean {
+  const allowedSet = new Set(allowed);
+  return Object.keys(record).every((key) => allowedSet.has(key));
 }
 
 function isStringMember<T extends string>(value: unknown, choices: readonly T[]): value is T {
@@ -229,6 +236,7 @@ function surfaceAllowsKind(surface: ContextActionSurface, kind: string): boolean
     case 'monitoring': return kind === 'process_snapshot';
     case 'git_browser':
     case 'desktop_welcome_environment_card': return kind === 'text_snapshot';
+    case 'flower_composer':
     case 'file_browser':
     case 'file_preview':
     case 'editor_preview': return kind === 'file_path';
@@ -240,6 +248,12 @@ export function parseAskFlowerContextActionEnvelope(value: unknown): ContextActi
   if (value.schema_version !== CONTEXT_ACTION_SCHEMA_VERSION || value.action_id !== 'assistant.ask.flower' || value.provider !== 'flower') return null;
   if (!isRecord(value.target) || !validNonEmptyString(value.target.target_id) || !isStringMember(value.target.locality, ASK_FLOWER_LOCALITIES)) return null;
   if (!isRecord(value.source) || !isStringMember(value.source.surface, ASK_FLOWER_SURFACES)) return null;
+  if (value.source.surface === 'flower_composer') {
+    if (!hasOnlyKeys(value, ['schema_version', 'action_id', 'provider', 'target', 'source', 'execution_context', 'context', 'presentation', 'suggested_working_dir_abs'])) return null;
+    if (!hasOnlyKeys(value.target, ['target_id', 'locality']) || !hasOnlyKeys(value.source, ['surface', 'surface_id'])) return null;
+    if (isRecord(value.execution_context) && !hasOnlyKeys(value.execution_context, ['current_target_id', 'source_env_public_id', 'runtime_hint', 'session_source'])) return null;
+    if (!isRecord(value.presentation) || !hasOnlyKeys(value.presentation, ['label', 'priority', 'status_label', 'disabled_reason'])) return null;
+  }
   const surfaceID = optionalString(value.source, 'surface_id');
   if (surfaceID === null) return null;
   if (value.execution_context !== undefined && !isRecord(value.execution_context)) return null;
@@ -259,6 +273,7 @@ export function parseAskFlowerContextActionEnvelope(value: unknown): ContextActi
 
   const context: ContextActionContextItem[] = [];
   for (const rawItem of value.context) {
+    if (value.source.surface === 'flower_composer' && (!isRecord(rawItem) || !hasOnlyKeys(rawItem, ['kind', 'path', 'is_directory']))) return null;
     const rawKind = isRecord(rawItem) && typeof rawItem.kind === 'string' ? rawItem.kind : '';
     if (!KNOWN_CONTEXT_KINDS.has(rawKind) || !surfaceAllowsKind(value.source.surface, rawKind)) return null;
     const item = parseContextItem(rawItem);

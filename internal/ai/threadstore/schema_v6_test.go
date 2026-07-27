@@ -49,7 +49,7 @@ VALUES(1, 'ai_threadstore_product_v2', 5, 5);
 	return db
 }
 
-func TestThreadstoreMigratesV5ToV6WithoutChangingExistingRecords(t *testing.T) {
+func TestThreadstoreMigratesV5ThroughV7WithoutChangingExistingRecords(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "threads.sqlite")
 	raw := createProductV5DatabaseForTest(t, path)
@@ -85,8 +85,8 @@ VALUES('env_v5', 'upload_v5', '', 'draft', 'legacy_draft', 13);
 	if err := store.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
 		t.Fatal(err)
 	}
-	if version != 6 {
-		t.Fatalf("user_version=%d, want 6", version)
+	if version != threadstoreCurrentSchemaVersion {
+		t.Fatalf("user_version=%d, want %d", version, threadstoreCurrentSchemaVersion)
 	}
 	settings, err := store.GetThreadSettings(t.Context(), "env_v5", "thread_v5")
 	if err != nil {
@@ -112,8 +112,8 @@ VALUES('env_v5', 'upload_v5', '', 'draft', 'legacy_draft', 13);
 	if countRowsForTest(t, store.db, `SELECT COUNT(1) FROM ai_composer_drafts`) != 0 {
 		t.Fatal("v5 migration invented composer draft rows")
 	}
-	if countRowsForTest(t, store.db, `SELECT COUNT(1) FROM __redeven_db_meta WHERE singleton = 1 AND last_migrated_from_version = 5 AND last_migrated_to_version = 6`) != 1 {
-		t.Fatal("v5 to v6 migration metadata was not committed")
+	if countRowsForTest(t, store.db, `SELECT COUNT(1) FROM __redeven_db_meta WHERE singleton = 1 AND last_migrated_from_version = 5 AND last_migrated_to_version = 7`) != 1 {
+		t.Fatal("v5 through v7 migration metadata was not committed")
 	}
 }
 
@@ -165,15 +165,15 @@ WHERE endpoint_id = 'env_v5_quarantine' AND upload_id = 'upload_v5_quarantine' A
 	}
 }
 
-func TestFreshThreadstoreV6ComposerDraftSchemaAndConstraints(t *testing.T) {
+func TestFreshThreadstoreV7ComposerDraftSchemaAndConstraints(t *testing.T) {
 	t.Parallel()
 	store := openStoreForTest(t)
 
 	if countRowsForTest(t, store.db, `SELECT COUNT(1) FROM sqlite_master WHERE type = 'table' AND name = 'ai_composer_drafts'`) != 1 {
-		t.Fatal("fresh v6 schema is missing ai_composer_drafts")
+		t.Fatal("fresh v7 schema is missing ai_composer_drafts")
 	}
 	if countRowsForTest(t, store.db, `SELECT COUNT(1) FROM sqlite_master WHERE type = 'index' AND name = 'idx_ai_composer_drafts_expiry' AND tbl_name = 'ai_composer_drafts'`) != 1 {
-		t.Fatal("fresh v6 schema is missing composer draft expiry index")
+		t.Fatal("fresh v7 schema is missing composer draft expiry index")
 	}
 	var indexColumns string
 	if err := store.db.QueryRow(`
@@ -198,7 +198,7 @@ FROM (
 INSERT INTO ai_composer_drafts(
   endpoint_id, owner_user_hash, scope_id, revision, value_json,
   created_at_unix_ms, updated_at_unix_ms, expires_at_unix_ms
-) VALUES('env_constraints', ?, 'scope_constraints', ?, '{"text":"","attachments":[],"mode":"ordinary"}', 1, 1, 2)
+) VALUES('env_constraints', ?, 'scope_constraints', ?, '{"text":"","attachments":[],"references":[],"mode":"ordinary"}', 1, 1, 2)
 `, owner, revision)
 		return err
 	}
@@ -235,11 +235,16 @@ VALUES('thread_atomic', 'env_atomic', 'approval_required', 1, 1)
 
 	injected := errors.New("injected post-migration verification failure")
 	spec := threadstoreSchemaSpec()
-	spec.Migrations[len(spec.Migrations)-1].Apply = func(tx *sql.Tx) error {
-		if err := migrateProductV5ToV6(tx); err != nil {
-			return err
+	for index := range spec.Migrations {
+		if spec.Migrations[index].FromVersion != 5 {
+			continue
 		}
-		return injected
+		spec.Migrations[index].Apply = func(tx *sql.Tx) error {
+			if err := migrateProductV5ToV6(tx); err != nil {
+				return err
+			}
+			return injected
+		}
 	}
 	if db, err := sqliteutil.Open(path, spec); !errors.Is(err, injected) {
 		if db != nil {
@@ -416,7 +421,7 @@ func TestThreadstoreRejectsDriftedV5WithoutMutation(t *testing.T) {
 	}
 }
 
-func TestThreadstoreRejectsFutureV7WithoutMutation(t *testing.T) {
+func TestThreadstoreRejectsFutureV8WithoutMutation(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "threads.sqlite")
 	store, err := Open(path)
@@ -427,8 +432,8 @@ func TestThreadstoreRejectsFutureV7WithoutMutation(t *testing.T) {
 INSERT INTO ai_composer_drafts(
   endpoint_id, owner_user_hash, scope_id, revision, value_json,
   created_at_unix_ms, updated_at_unix_ms, expires_at_unix_ms
-) VALUES('env_future', ?, 'scope_future', 2, '{"text":"future","attachments":[],"mode":"ordinary"}', 1, 2, 3);
-PRAGMA user_version=7;
+) VALUES('env_future', ?, 'scope_future', 2, '{"text":"future","attachments":[],"references":[],"mode":"ordinary"}', 1, 2, 3);
+PRAGMA user_version=8;
 `, strings.Repeat("f", 64)); err != nil {
 		t.Fatal(err)
 	}
@@ -448,7 +453,7 @@ PRAGMA user_version=7;
 	if err := raw.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
 		t.Fatal(err)
 	}
-	if version != 7 || countRowsForTest(t, raw, `SELECT COUNT(1) FROM ai_composer_drafts WHERE endpoint_id = 'env_future' AND revision = 2`) != 1 {
+	if version != 8 || countRowsForTest(t, raw, `SELECT COUNT(1) FROM ai_composer_drafts WHERE endpoint_id = 'env_future' AND revision = 2`) != 1 {
 		t.Fatalf("future version rejection mutated database: version=%d", version)
 	}
 }

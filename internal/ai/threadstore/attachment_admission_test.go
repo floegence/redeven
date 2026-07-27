@@ -164,6 +164,7 @@ func prepareLongTextDraftForAdmissionTest(t *testing.T, store *Store, suffix str
 	}
 	value, _ := json.Marshal(map[string]any{
 		"text": text, "mode": ComposerDraftModeAdmissionInFlight, "model_id": "openai/model",
+		"references":          []any{},
 		"capability_revision": revision, "proposed_turn_id": "turn_long_" + suffix, "admission_started": true,
 		"prepared_long_text_attachment_id": uploadID,
 		"attachments": []any{map[string]any{

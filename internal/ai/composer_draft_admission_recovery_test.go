@@ -28,6 +28,7 @@ func seedStaleAdmissionDraftForServiceTest(
 	value := map[string]any{
 		"text":              "recover this admission",
 		"attachments":       []any{},
+		"references":        []any{},
 		"mode":              threadstore.ComposerDraftModeAdmissionInFlight,
 		"admission_started": true,
 		"proposed_turn_id":  turnID,
@@ -101,6 +102,73 @@ func TestPrepareComposerDraftThreadReplaysBoundTargetAndDurableCreate(t *testing
 	}
 }
 
+func TestPrepareComposerDraftThreadValidatesComposerReferencesBeforeBinding(t *testing.T) {
+	svc, owner := composerDraftOwnerForServiceTest(t)
+	meta := testSendTurnMeta()
+	const scopeID = "__new_thread__"
+	const turnID = "turn_prepare_references"
+	const referencePath = "/workspace/src"
+	lease, err := svc.threadsDB.AcquireComposerDraftLease(
+		t.Context(), owner.EndpointID, owner.OwnerUserHash, scopeID, "surface_prepare_references", false, time.Now().UnixMilli(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	value, err := json.Marshal(map[string]any{
+		"text": "review this directory", "attachments": []any{},
+		"references": []any{map[string]any{
+			"local_id": "reference_src", "kind": "directory", "label": "src", "path": referencePath,
+		}},
+		"mode": threadstore.ComposerDraftModeAdmissionInFlight, "admission_started": true, "proposed_turn_id": turnID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	draft, err := svc.threadsDB.MutateComposerDraft(t.Context(), threadstore.ComposerDraftMutation{
+		EndpointID: owner.EndpointID, OwnerUserHash: owner.OwnerUserHash, ScopeID: scopeID,
+		HolderID: "surface_prepare_references", LeaseID: lease.Draft.LeaseID, ExpectedRevision: lease.Draft.Revision,
+		Value: value, NowUnixMs: time.Now().UnixMilli(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	action := func(path string) *ContextActionEnvelope {
+		return &ContextActionEnvelope{
+			SchemaVersion: ContextActionSchemaVersion,
+			ActionID:      contextActionAskFlowerID,
+			Provider:      contextActionFlowerProvider,
+			Target:        ContextActionTarget{TargetID: "current", Locality: contextActionLocalityAuto},
+			Source:        ContextActionSource{Surface: contextActionSurfaceComposer},
+			Context:       []ContextActionContextItem{{Kind: contextActionKindFilePath, Path: path, IsDirectory: true}},
+			Presentation:  ContextActionPresentation{Label: "Ask Flower", Priority: 100},
+		}
+	}
+	request := ComposerDraftThreadRequest{
+		ExpectedDraftRevision: draft.Revision,
+		TurnID:                turnID,
+		ContextAction:         action("/workspace/other"),
+		Create:                CreateThreadRequest{Title: "Reference draft"},
+	}
+	if _, err := svc.PrepareComposerDraftThread(t.Context(), meta, owner, scopeID, request); err == nil || !strings.Contains(err.Error(), "reference admission changed") {
+		t.Fatalf("PrepareComposerDraftThread mismatch error=%v", err)
+	}
+	afterMismatch, err := svc.threadsDB.GetComposerDraft(t.Context(), owner.EndpointID, owner.OwnerUserHash, scopeID, time.Now().UnixMilli())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if afterMismatch.Revision != draft.Revision || strings.Contains(string(afterMismatch.Value), "target_thread_id") {
+		t.Fatalf("reference mismatch bound draft=%#v", afterMismatch)
+	}
+	request.ContextAction = action(referencePath)
+	prepared, err := svc.PrepareComposerDraftThread(t.Context(), meta, owner, scopeID, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if prepared.ThreadID == "" || prepared.DraftRevision != draft.Revision+1 {
+		t.Fatalf("prepared=%#v", prepared)
+	}
+}
+
 func TestPrepareComposerDraftThreadRejectsAttachmentAdmissionBeforeBindingOrCreate(t *testing.T) {
 	svc, owner := composerDraftOwnerForServiceTest(t)
 	meta := testSendTurnMeta()
@@ -136,6 +204,7 @@ func TestPrepareComposerDraftThreadRejectsAttachmentAdmissionBeforeBindingOrCrea
 	}
 	value, err := json.Marshal(map[string]any{
 		"text":                "send attachment",
+		"references":          []any{},
 		"model_id":            "openai/gpt-5-mini",
 		"mode":                threadstore.ComposerDraftModeAdmissionInFlight,
 		"admission_started":   true,

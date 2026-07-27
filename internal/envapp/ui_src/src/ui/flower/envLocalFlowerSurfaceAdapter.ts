@@ -739,10 +739,10 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       const copy = adapterCopy(options);
       const prompt = input.prompt;
       const attachmentIDs = (input.attachment_ids ?? []).map(trim).filter(Boolean);
-      if (!prompt.trim() && attachmentIDs.length === 0) throw new Error(copy.enterMessageBeforeSending);
+      const contextAction = requireAskFlowerContextActionEnvelope(input.context_action);
+      if (!prompt.trim() && attachmentIDs.length === 0 && !contextAction) throw new Error(copy.enterMessageBeforeSending);
       const snapshot = await loadSettingsSnapshot(options);
       const permissionType = normalizePermissionType(input.permission_type ?? snapshot.defaults.permission_type);
-      const contextAction = requireAskFlowerContextActionEnvelope(input.context_action);
       let threadID = trim(input.thread_id);
       let turnModelID = trim(input.model_id);
       const proposedTurnID = trim(input.turn_id) || createFlowerClientTurnID();
@@ -771,6 +771,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
           body: JSON.stringify({
             expected_draft_revision: expectedDraftRevision,
             turn_id: proposedTurnID,
+            ...(contextAction ? { context_action: contextAction } : {}),
             create: createBody,
           }),
         });

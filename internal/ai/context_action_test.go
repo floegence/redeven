@@ -127,6 +127,70 @@ func TestNormalizeAskFlowerContextActionRejectsContextFreePayloads(t *testing.T)
 	}
 }
 
+func TestNormalizeAskFlowerContextActionEnforcesComposerItemWireShape(t *testing.T) {
+	t.Parallel()
+
+	normalizeWire := func(t *testing.T, surface string, item map[string]any) (*ContextActionEnvelope, error) {
+		t.Helper()
+		raw, err := json.Marshal(map[string]any{
+			"schema_version": ContextActionSchemaVersion,
+			"action_id":      contextActionAskFlowerID,
+			"provider":       contextActionFlowerProvider,
+			"target":         map[string]any{"target_id": "current", "locality": "auto"},
+			"source":         map[string]any{"surface": surface},
+			"context":        []any{item},
+			"presentation":   map[string]any{"label": "Ask Flower", "priority": 100},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var action ContextActionEnvelope
+		if err := decodeStrictJSON(string(raw), &action); err != nil {
+			return nil, err
+		}
+		return normalizeAskFlowerContextActionEnvelope(&action)
+	}
+
+	for name, item := range map[string]map[string]any{
+		"file":      {"kind": "file_path", "path": "/workspace/main.go", "is_directory": false},
+		"directory": {"kind": "file_path", "path": "/workspace/src", "is_directory": true},
+	} {
+		t.Run("accepts canonical "+name, func(t *testing.T) {
+			t.Parallel()
+			if action, err := normalizeWire(t, contextActionSurfaceComposer, item); err != nil || action == nil {
+				t.Fatalf("normalize wire action=(%#v, %v), want valid", action, err)
+			}
+		})
+	}
+
+	for name, item := range map[string]map[string]any{
+		"missing is_directory": {"kind": "file_path", "path": "/workspace/main.go"},
+		"null is_directory":    {"kind": "file_path", "path": "/workspace/main.go", "is_directory": nil},
+		"string is_directory":  {"kind": "file_path", "path": "/workspace/main.go", "is_directory": "false"},
+		"empty root_label":     {"kind": "file_path", "path": "/workspace/main.go", "is_directory": false, "root_label": ""},
+		"zero selection_chars": {"kind": "file_path", "path": "/workspace/main.go", "is_directory": false, "selection_chars": 0},
+		"empty content":        {"kind": "file_path", "path": "/workspace/main.go", "is_directory": false, "content": ""},
+		"unknown field":        {"kind": "file_path", "path": "/workspace/main.go", "is_directory": false, "unexpected": false},
+	} {
+		t.Run("rejects "+name, func(t *testing.T) {
+			t.Parallel()
+			if action, err := normalizeWire(t, contextActionSurfaceComposer, item); err == nil || action != nil {
+				t.Fatalf("normalize wire action=(%#v, %v), want invalid", action, err)
+			}
+		})
+	}
+
+	t.Run("keeps non-composer file wire semantics", func(t *testing.T) {
+		t.Parallel()
+		action, err := normalizeWire(t, contextActionSurfaceFile, map[string]any{
+			"kind": "file_path", "path": "/workspace/main.go", "root_label": "Workspace",
+		})
+		if err != nil || action == nil || action.Context[0].RootLabel != "Workspace" {
+			t.Fatalf("normalize wire action=(%#v, %v), want existing file-browser semantics", action, err)
+		}
+	})
+}
+
 func TestQueuedTurnContextActionPersistsThroughStoreRoundTrip(t *testing.T) {
 	t.Parallel()
 
@@ -307,6 +371,23 @@ func TestQueuedTurnContextActionRejectsLegacyFileSelectionBody(t *testing.T) {
 	}
 }
 
+func TestQueuedTurnContextActionRejectsUnknownFlowerComposerFields(t *testing.T) {
+	t.Parallel()
+
+	_, err := unmarshalQueuedTurnContextAction(`{
+  "schema_version": 2,
+  "action_id": "assistant.ask.flower",
+  "provider": "flower",
+  "target": {"target_id":"current","locality":"auto"},
+  "source": {"surface":"flower_composer"},
+  "context": [{"kind":"file_path","path":"/workspace/main.go","is_directory":false,"content":"hidden"}],
+  "presentation": {"label":"Ask Flower","priority":100}
+}`)
+	if err == nil {
+		t.Fatal("flower_composer context accepted an unsupported item field")
+	}
+}
+
 func TestContextActionNormalizationPreservesUserTextPayload(t *testing.T) {
 	action := normalizeContextActionEnvelope(&ContextActionEnvelope{
 		SchemaVersion: ContextActionSchemaVersion,
@@ -442,6 +523,19 @@ func TestNormalizeAskFlowerContextActionEnforcesSourceKindPrivacyMatrix(t *testi
 		{
 			name:   "file browser path only",
 			action: base("file_browser", ContextActionContextItem{Kind: "file_path", Path: "/workspace/app.go"}),
+		},
+		{
+			name:   "flower composer file path only",
+			action: base("flower_composer", ContextActionContextItem{Kind: "file_path", Path: "/workspace/app.go"}),
+		},
+		{
+			name:   "flower composer directory path only",
+			action: base("flower_composer", ContextActionContextItem{Kind: "file_path", Path: "/workspace/src", IsDirectory: true}),
+		},
+		{
+			name:    "flower composer rejects terminal context",
+			action:  base("flower_composer", ContextActionContextItem{Kind: "terminal_selection", WorkingDir: "/workspace", SelectionChars: 0}),
+			wantErr: true,
 		},
 		{
 			name:    "file browser rejects file selection body",

@@ -599,13 +599,13 @@ export async function launchLocalEnvironmentFlowerTurn(
 ): Promise<FlowerTurnLaunchReceipt> {
   const prompt = input.prompt;
   const attachmentIDs = (input.attachment_ids ?? []).map(trim).filter(Boolean);
-  if (!prompt.trim() && attachmentIDs.length === 0) throw new Error('Enter a message or add an attachment before sending.');
+  const contextAction = requireAskFlowerContextActionEnvelope(input.context_action);
+  if (!prompt.trim() && attachmentIDs.length === 0 && !contextAction) throw new Error('Enter a message or add an attachment before sending.');
   const snapshot = await loadSettingsSnapshot(bridge);
   const models = await loadModels(bridge);
   const modelID = currentModelID(snapshot, models);
   if (!modelID) throw new Error('Select a Flower model before starting a chat.');
   const permissionType = normalizePermissionType(input.permission_type ?? snapshot.defaults.permission_type);
-  const contextAction = requireAskFlowerContextActionEnvelope(input.context_action);
   let threadID = trim(input.thread_id);
   const proposedTurnID = trim(input.turn_id) || createFlowerClientTurnID();
   let expectedDraftRevision = input.expected_draft_revision;
@@ -624,7 +624,12 @@ export async function launchLocalEnvironmentFlowerTurn(
       bridge,
       'POST',
       `/_redeven_proxy/api/ai/composer-drafts/${encodeURIComponent(draftID)}/thread`,
-      { expected_draft_revision: expectedDraftRevision, turn_id: proposedTurnID, create: createBody },
+      {
+        expected_draft_revision: expectedDraftRevision,
+        turn_id: proposedTurnID,
+        ...(contextAction ? { context_action: contextAction } : {}),
+        create: createBody,
+      },
     );
     threadID = trim(created.thread_id);
     expectedDraftRevision = Number.isInteger(created.draft_revision) ? created.draft_revision : undefined;

@@ -43,6 +43,7 @@ main() {
       src/ui/FlowerSurface.navigation.context.test.tsx \
       src/ui/FlowerSurface.navigation.activity.test.tsx \
       src/ui/FlowerSurface.navigation.launchSend.test.tsx \
+      src/ui/FlowerSurface.composerReferences.test.tsx \
       src/ui/FlowerSurface.desktopModelSource.e2e.test.tsx \
       src/ui/FlowerSurface.navigation.threads.test.tsx \
       src/ui/FlowerSurface.threadDeletion.test.tsx \
@@ -76,7 +77,10 @@ main() {
       internal/flower_ui/src/attachments/flowerAttachmentModel.test.ts \
       internal/flower_ui/src/attachments/createFlowerAttachmentController.test.ts \
       internal/flower_ui/src/composer/createFlowerComposerDraftCoordinator.test.ts \
+      internal/flower_ui/src/composer/flowerComposerReferenceToken.test.ts \
+      internal/flower_ui/src/composer/flowerComposerReferenceIndex.test.ts \
       internal/flower_host_ui/src/redevenFlowerDraftPersistence.test.ts \
+      internal/flower_ui/src/contextActionWire.test.ts \
       internal/flower_ui/src/flowerActivityPresentation.test.ts \
       internal/flower_ui/src/flowerSubagentDetailThread.test.ts \
       internal/flower_ui/src/flowerSubagentProjection.test.ts \
@@ -116,6 +120,7 @@ main() {
         src/ui/EnvAppShell.flowerCompanion.browser.test.tsx \
         src/ui/flowerCompanionTailMotion.browser.test.tsx \
         src/ui/FlowerSurface.canonicalReferences.browser.test.tsx \
+        src/ui/FlowerSurface.composerReferences.browser.test.tsx \
         src/ui/FlowerSurface.approvalRefresh.browser.test.tsx \
         src/ui/FlowerSurface.activityDisclosure.browser.test.tsx \
         src/ui/FlowerSurface.setupGuide.browser.test.tsx \

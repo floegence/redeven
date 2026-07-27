@@ -950,7 +950,7 @@ PRAGMA user_version=40;
 	}
 	_ = db.Close()
 	_, err = Open(path)
-	if err == nil || !strings.Contains(err.Error(), "only") || !strings.Contains(err.Error(), "v2 through v6") {
+	if err == nil || !strings.Contains(err.Error(), "only") || !strings.Contains(err.Error(), "v2 through v7") {
 		t.Fatalf("Open error=%v", err)
 	}
 	db, err = sql.Open("sqlite", path)
