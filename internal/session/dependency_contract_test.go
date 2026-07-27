@@ -1474,6 +1474,10 @@ func isNestedRepositoryRoot(path string) (bool, error) {
 	}
 
 	cmd := exec.Command("git", "-C", path, "rev-parse", "--show-toplevel")
+	cmd.Env, err = environmentWithoutLocalGitRepository()
+	if err != nil {
+		return false, err
+	}
 	output, err := cmd.Output()
 	if err != nil {
 		var exitErr *exec.ExitError
@@ -1491,6 +1495,25 @@ func isNestedRepositoryRoot(path string) (bool, error) {
 		return false, err
 	}
 	return filepath.Clean(resolvedTopLevel) == filepath.Clean(resolvedPath), nil
+}
+
+func environmentWithoutLocalGitRepository() ([]string, error) {
+	output, err := exec.Command("git", "rev-parse", "--local-env-vars").Output()
+	if err != nil {
+		return nil, err
+	}
+	localVariables := make(map[string]bool)
+	for _, name := range strings.Fields(string(output)) {
+		localVariables[name] = true
+	}
+	environment := make([]string, 0, len(os.Environ()))
+	for _, entry := range os.Environ() {
+		name, _, _ := strings.Cut(entry, "=")
+		if !localVariables[name] {
+			environment = append(environment, entry)
+		}
+	}
+	return environment, nil
 }
 
 func repoRootForTest(t *testing.T) string {

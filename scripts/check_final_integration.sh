@@ -59,6 +59,12 @@ if [ -n "$(git status --porcelain)" ]; then
   exit 1
 fi
 
+# Git exports repository-local variables to hooks. Once the exact main tip and
+# worktree are verified, let every nested Git command discover its own repo.
+while IFS= read -r variable; do
+  unset "$variable"
+done < <(git rev-parse --local-env-vars)
+
 run_step() {
   local title="$1"
   shift
