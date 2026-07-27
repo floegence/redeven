@@ -176,8 +176,3 @@ func identityDigest(parts ...string) string {
 	}
 	return hex.EncodeToString(h.Sum(nil))
 }
-
-func isPathWithin(path, root string) bool {
-	rel, err := filepath.Rel(root, path)
-	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
-}
