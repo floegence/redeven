@@ -94,6 +94,10 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
     exiting: () => false,
     state: () => (options.open() ? 'entered' : 'exited'),
   }),
+  focusMenuItem: (menu: HTMLElement | null) => {
+    menu?.querySelector<HTMLButtonElement>('[role="menuitem"]:not([disabled])')?.focus();
+  },
+  handleMenuKeyboardNavigation: vi.fn(),
   Button: (props: any) => (
     <button
       type="button"
