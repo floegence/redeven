@@ -44,7 +44,7 @@ describe('terminal agent session presentation', () => {
     });
     expect(deriveTerminalAgentSessionPresentation('claude', 'settled')).toMatchObject({
       identity: 'claude',
-      outputState: 'settled',
+      outputState: 'none',
     });
     expect(deriveTerminalAgentSessionPresentation('top', 'streaming')).toEqual({
       identity: null,

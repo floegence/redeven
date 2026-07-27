@@ -394,6 +394,8 @@ const terminalSessionsState = vi.hoisted(() => ({
       revision: number;
       updatedAtMs: number;
     };
+    executionContext?: any;
+    workState?: any;
   }>,
   subscribers: [] as Array<(value: Array<{
     id: string;
@@ -413,6 +415,8 @@ const terminalSessionsState = vi.hoisted(() => ({
       revision: number;
       updatedAtMs: number;
     };
+    executionContext?: any;
+    workState?: any;
   }>) => void>,
 }));
 
@@ -570,6 +574,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
     ExternalLink: Icon,
     Folder: Icon,
     LayoutDashboard: Icon,
+    Link: Icon,
     Menu: Icon,
     Plus: Icon,
     Refresh: Icon,
@@ -1841,6 +1846,20 @@ function publishTerminalOutputActivity(
   publishTerminalSessions();
 }
 
+function publishTerminalExecutionContext(sessionId: string, executionContext: any) {
+  terminalSessionsState.sessions = terminalSessionsState.sessions.map((session) => (
+    session.id === sessionId ? { ...session, executionContext } : session
+  ));
+  publishTerminalSessions();
+}
+
+function publishTerminalWorkState(sessionId: string, workState: any) {
+  terminalSessionsState.sessions = terminalSessionsState.sessions.map((session) => (
+    session.id === sessionId ? { ...session, workState } : session
+  ));
+  publishTerminalSessions();
+}
+
 function findTerminalTab(host: HTMLElement, label: string): HTMLButtonElement | undefined {
   return Array.from(host.querySelectorAll<HTMLButtonElement>('button[data-terminal-session-id]')).find((button) => button.textContent?.includes(label));
 }
@@ -1862,9 +1881,9 @@ function findTerminalTabStatus(host: HTMLElement, label: string, status: 'runnin
   return tab?.parentElement?.querySelector(`[data-terminal-tab-status="${status}"]`) ?? tab?.querySelector(`[data-terminal-tab-status="${status}"]`) ?? null;
 }
 
-function findTerminalRunningSpinner(host: HTMLElement, label: string): SVGElement | null {
+function findTerminalActivityWave(host: HTMLElement, label: string): SVGElement | null {
   const tab = findTerminalTab(host, label);
-  return tab?.parentElement?.querySelector<SVGElement>('[data-terminal-tab-status="running"] svg') ?? null;
+  return tab?.parentElement?.querySelector<SVGElement>('[data-terminal-output-state="streaming"]') ?? null;
 }
 
 function findPendingTerminalTabStatus(host: HTMLElement, label: string, status: 'creating' | 'failed'): Element | null {
@@ -2297,7 +2316,7 @@ describe('TerminalPanel', () => {
     const tab = findTerminalTab(host, 'Terminal 1');
     expect(tab).toBeTruthy();
     expect(tab?.className).toContain('cursor-pointer');
-    expect(tab?.getAttribute('title')).toBe('/workspace/redeven');
+    expect(tab?.getAttribute('title')).toBe('redeven');
     const row = tab?.parentElement;
     expect(row?.textContent).toContain('redeven');
     const avatar = row?.querySelector<HTMLElement>('[data-terminal-session-avatar="session-1"]');
@@ -2489,7 +2508,7 @@ describe('TerminalPanel', () => {
     expect(findTerminalTab(host, 'Terminal 2')?.dataset.terminalSessionActive).toBe('false');
   });
 
-  it('keeps a running sidebar spinner mounted when sidebar actions update row state', async () => {
+  it('keeps a sidebar activity wave mounted when sidebar actions update row state', async () => {
     terminalSessionsState.sessions = [
       {
         id: 'session-1',
@@ -2523,16 +2542,21 @@ describe('TerminalPanel', () => {
     publishTerminalForegroundCommand('session-2', {
       phase: 'running', displayName: 'top', revision: 1, updatedAtMs: 10,
     });
-    await vi.waitFor(() => expect(findTerminalRunningSpinner(host, 'Terminal 2')).not.toBeNull());
+    publishTerminalOutputActivity('session-2', {
+      phase: 'streaming', revision: 1, updatedAtMs: 10,
+    });
+    await vi.waitFor(() => expect(findTerminalActivityWave(host, 'Terminal 2')).not.toBeNull());
 
-    const runningSpinner = findTerminalRunningSpinner(host, 'Terminal 2');
-    expect(host.querySelector('[data-terminal-session-title="session-2"]')?.textContent).toBe('top');
+    const activityWave = findTerminalActivityWave(host, 'Terminal 2');
+    await vi.waitFor(() => {
+      expect(host.querySelector('[data-terminal-session-title="session-2"]')?.textContent).toBe('top');
+    });
 
     host.querySelector<HTMLButtonElement>('[data-testid="terminal-session-path-copy-session-2"]')?.click();
     await settleTerminalPanel();
 
     expect(writeTextToClipboardSpy).toHaveBeenCalledWith('/workspace/beta');
-    expect(findTerminalRunningSpinner(host, 'Terminal 2')).toBe(runningSpinner);
+    expect(findTerminalActivityWave(host, 'Terminal 2')).toBe(activityWave);
     expect(findTerminalTab(host, 'Terminal 1')?.dataset.terminalSessionActive).toBe('true');
 
     host.querySelector<HTMLButtonElement>('[data-testid="terminal-session-files-session-2"]')?.click();
@@ -2543,7 +2567,7 @@ describe('TerminalPanel', () => {
       title: 'beta',
       openStrategy: undefined,
     });
-    expect(findTerminalRunningSpinner(host, 'Terminal 2')).toBe(runningSpinner);
+    expect(findTerminalActivityWave(host, 'Terminal 2')).toBe(activityWave);
     expect(findTerminalTab(host, 'Terminal 1')?.dataset.terminalSessionActive).toBe('true');
   });
 
@@ -5159,6 +5183,9 @@ describe('TerminalPanel', () => {
         foregroundCommand: {
           phase: 'running', displayName: 'top', revision: 1, updatedAtMs: 10,
         },
+        outputActivity: {
+          phase: 'streaming', revision: 1, updatedAtMs: 10,
+        },
       },
     ];
 
@@ -5192,14 +5219,14 @@ describe('TerminalPanel', () => {
     const initialAttachCallCount = transportMocks.attach.mock.calls.length;
     const mountedCores = [...terminalCoreInstances];
 
-    await vi.waitFor(() => expect(findTerminalRunningSpinner(host, 'Terminal 2')).not.toBeNull());
-    const runningSpinner = findTerminalRunningSpinner(host, 'Terminal 2');
+    await vi.waitFor(() => expect(findTerminalActivityWave(host, 'Terminal 2')).not.toBeNull());
+    const activityWave = findTerminalActivityWave(host, 'Terminal 2');
 
     terminalSessionsState.sessions = terminalSessionsState.sessions.map((session) => ({ ...session }));
     publishTerminalSessions();
     await settleTerminalPanel();
 
-    expect(findTerminalRunningSpinner(host, 'Terminal 2')).toBe(runningSpinner);
+    expect(findTerminalActivityWave(host, 'Terminal 2')).toBe(activityWave);
     expect(terminalCoreInstances).toEqual(mountedCores);
     expect(mountedCores[0]?.dispose).not.toHaveBeenCalled();
     expect(mountedCores[1]?.dispose).not.toHaveBeenCalled();
@@ -6041,6 +6068,310 @@ describe('TerminalPanel', () => {
     });
   });
 
+  it('presents an idle SSH session consistently and never treats its path as local', async () => {
+    terminalBufferLinesState.lines.set(0, 'src/app/server.ts:18:4 failed to compile');
+    terminalSessionsState.sessions = [{
+      id: 'session-ssh',
+      name: 'SSH',
+      workingDir: '/root/project',
+      createdAtMs: 1,
+      isActive: true,
+      lastActiveAtMs: 10,
+      executionContext: {
+        location: {
+          kind: 'remote', phase: 'ready', label: 'root@host', authority: 'host', workingDirectory: '/root/project', source: 'osc7',
+        },
+        application: { kind: 'shell', identity: '', displayName: '' },
+        revision: 1,
+        updatedAtMs: 10,
+      },
+      workState: {
+        phase: 'idle', source: 'semantic', contextRevision: 1, foregroundCommandRevision: 0, revision: 1, updatedAtMs: 10,
+      },
+    }];
+    const titleChanges = vi.fn();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" onTitleChange={titleChanges} />, host);
+    await settleTerminalPanelAfterPaint();
+
+    const titles = Array.from(host.querySelectorAll('[data-terminal-session-title="session-ssh"]'));
+    expect(titles.length).toBeGreaterThan(0);
+    expect(titles.map((element) => element.textContent)).toEqual(titles.map(() => 'root@host'));
+    expect(titleChanges).toHaveBeenLastCalledWith('Terminal · root@host');
+    expect(host.querySelector('[data-terminal-session-avatar="session-ssh"] > span')).not.toBeNull();
+    expect(host.querySelector('[data-terminal-process-state="running"]')).toBeNull();
+    expect(host.querySelector('[data-testid="terminal-session-path-session-ssh"]')?.textContent).toBe('/root/project');
+    expect(host.querySelector('[data-testid="terminal-session-files-session-ssh"]')).toBeNull();
+
+    const provider = terminalCoreInstances[0]?.registeredLinkProviders[0];
+    expect(provider).toBeTruthy();
+    const links = await new Promise<any[] | undefined>((resolve) => {
+      provider.provideLinks(1, resolve);
+    });
+    expect(links ?? []).toHaveLength(0);
+
+    const menu = await openSidebarContextMenu(host, 'SSH');
+    const askFlowerButton = findContextMenuButton(menu, 'Ask Flower');
+    const filesButton = findContextMenuButton(menu, 'Files');
+    const duplicateButton = findContextMenuButton(menu, 'Duplicate session');
+    for (const button of [askFlowerButton, filesButton, duplicateButton]) {
+      expect(button?.disabled).toBe(false);
+      expect(button?.getAttribute('aria-disabled')).toBe('true');
+      const descriptionId = button?.getAttribute('aria-describedby') ?? '';
+      expect(descriptionId).not.toBe('');
+      expect(menu.querySelector(`#${descriptionId}`)?.textContent).toContain('outside the local Environment');
+    }
+    await settleTerminalPanelAfterPaint();
+    expect(document.activeElement).toBe(askFlowerButton);
+    askFlowerButton?.click();
+    await settleTerminalPanel();
+    expect(openFlowerTurnLauncherSpy).not.toHaveBeenCalled();
+
+    menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await settleTerminalPanel();
+    const terminalSurface = host.querySelector('.redeven-terminal-surface');
+    terminalSurface?.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 24,
+      clientY: 32,
+    }));
+    await settleTerminalPanelAfterPaint();
+    const surfaceMenu = host.querySelector('[role="menu"]') as HTMLDivElement | null;
+    const surfaceAskButton = surfaceMenu ? findContextMenuButton(surfaceMenu, 'Ask Flower') : undefined;
+    const surfaceFilesButton = surfaceMenu ? findContextMenuButton(surfaceMenu, 'Browse files') : undefined;
+    expect(surfaceAskButton?.getAttribute('aria-disabled')).toBe('true');
+    expect(surfaceFilesButton?.getAttribute('aria-disabled')).toBe('true');
+    surfaceAskButton?.click();
+    await settleTerminalPanel();
+    expect(openFlowerTurnLauncherSpy).not.toHaveBeenCalled();
+  });
+
+  it('revokes open menu path actions when a local session becomes remote', async () => {
+    terminalSessionsState.sessions = [{
+      id: 'session-1',
+      name: 'Terminal 1',
+      workingDir: '/workspace/repo',
+      createdAtMs: 1,
+      isActive: true,
+      lastActiveAtMs: 10,
+      executionContext: {
+        location: {
+          kind: 'local', phase: 'ready', label: '', authority: '', workingDirectory: '/workspace/repo', source: 'shell_integration',
+        },
+        application: { kind: 'shell', identity: '', displayName: '' },
+        revision: 1,
+        updatedAtMs: 10,
+      },
+    }];
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanelAfterPaint();
+
+    const sidebarMenu = await openSidebarContextMenu(host, 'Terminal 1');
+    expect(findContextMenuButton(sidebarMenu, 'Ask Flower')?.getAttribute('aria-disabled')).not.toBe('true');
+    expect(findContextMenuButton(sidebarMenu, 'Files')?.getAttribute('aria-disabled')).not.toBe('true');
+    expect(findContextMenuButton(sidebarMenu, 'Duplicate session')?.getAttribute('aria-disabled')).not.toBe('true');
+
+    publishTerminalExecutionContext('session-1', {
+      location: {
+        kind: 'remote', phase: 'ready', label: 'root@host', authority: 'host', workingDirectory: '/root/project', source: 'osc7',
+      },
+      application: { kind: 'shell', identity: '', displayName: '' },
+      revision: 2,
+      updatedAtMs: 20,
+    });
+    await settleTerminalPanelAfterPaint();
+
+    const liveSidebarMenu = host.querySelector('[role="menu"]') as HTMLDivElement;
+    const sidebarPathActions = [
+      findContextMenuButton(liveSidebarMenu, 'Ask Flower'),
+      findContextMenuButton(liveSidebarMenu, 'Files'),
+      findContextMenuButton(liveSidebarMenu, 'Duplicate session'),
+    ];
+    for (const button of sidebarPathActions) {
+      expect(button?.disabled).toBe(false);
+      expect(button?.getAttribute('aria-disabled')).toBe('true');
+      button?.click();
+    }
+    await settleTerminalPanel();
+    expect(openFlowerTurnLauncherSpy).not.toHaveBeenCalled();
+    expect(openFileBrowserAtPathSpy).not.toHaveBeenCalled();
+    expect(sessionsCoordinatorMocks.createSession).not.toHaveBeenCalled();
+
+    liveSidebarMenu.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await settleTerminalPanel();
+    publishTerminalExecutionContext('session-1', {
+      location: {
+        kind: 'local', phase: 'ready', label: '', authority: '', workingDirectory: '/workspace/repo', source: 'shell_integration',
+      },
+      application: { kind: 'shell', identity: '', displayName: '' },
+      revision: 3,
+      updatedAtMs: 30,
+    });
+    await settleTerminalPanelAfterPaint();
+
+    host.querySelector('.redeven-terminal-surface')?.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 24,
+      clientY: 32,
+    }));
+    await settleTerminalPanelAfterPaint();
+    const surfaceMenu = host.querySelector('[role="menu"]') as HTMLDivElement;
+    expect(findContextMenuButton(surfaceMenu, 'Ask Flower')?.getAttribute('aria-disabled')).not.toBe('true');
+    expect(findContextMenuButton(surfaceMenu, 'Browse files')?.getAttribute('aria-disabled')).not.toBe('true');
+
+    publishTerminalExecutionContext('session-1', {
+      location: {
+        kind: 'remote', phase: 'ready', label: 'root@host', authority: 'host', workingDirectory: '/root/project', source: 'osc7',
+      },
+      application: { kind: 'shell', identity: '', displayName: '' },
+      revision: 4,
+      updatedAtMs: 40,
+    });
+    await settleTerminalPanelAfterPaint();
+
+    const liveSurfaceMenu = host.querySelector('[role="menu"]') as HTMLDivElement;
+    for (const label of ['Ask Flower', 'Browse files']) {
+      const button = findContextMenuButton(liveSurfaceMenu, label);
+      expect(button?.disabled).toBe(false);
+      expect(button?.getAttribute('aria-disabled')).toBe('true');
+      button?.click();
+    }
+    await settleTerminalPanel();
+    expect(openFlowerTurnLauncherSpy).not.toHaveBeenCalled();
+    expect(openFileBrowserAtPathSpy).not.toHaveBeenCalled();
+  });
+
+  it('revokes an open surface Ask Flower action when the current local path disappears', async () => {
+    terminalSessionsState.sessions = [{
+      id: 'session-1',
+      name: 'Terminal 1',
+      workingDir: '/workspace/repo',
+      createdAtMs: 1,
+      isActive: true,
+      lastActiveAtMs: 10,
+      executionContext: {
+        location: {
+          kind: 'local', phase: 'ready', label: '', authority: '', workingDirectory: '/workspace/repo', source: 'shell_integration',
+        },
+        application: { kind: 'shell', identity: '', displayName: '' },
+        revision: 1,
+        updatedAtMs: 10,
+      },
+    }];
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanelAfterPaint();
+
+    host.querySelector('.redeven-terminal-surface')?.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 24,
+      clientY: 32,
+    }));
+    await settleTerminalPanelAfterPaint();
+    const menu = host.querySelector('[role="menu"]') as HTMLDivElement;
+    expect(findContextMenuButton(menu, 'Ask Flower')?.getAttribute('aria-disabled')).not.toBe('true');
+
+    terminalSessionsState.sessions = terminalSessionsState.sessions.map((session) => ({
+      ...session,
+      workingDir: '',
+      executionContext: {
+        location: {
+          kind: 'local', phase: 'ready', label: '', authority: '', workingDirectory: '', source: 'shell_integration',
+        },
+        application: { kind: 'shell', identity: '', displayName: '' },
+        revision: 2,
+        updatedAtMs: 20,
+      },
+    }));
+    publishTerminalSessions();
+    await settleTerminalPanelAfterPaint();
+
+    const liveMenu = host.querySelector('[role="menu"]') as HTMLDivElement;
+    const askFlowerButton = findContextMenuButton(liveMenu, 'Ask Flower');
+    expect(askFlowerButton?.disabled).toBe(true);
+    const descriptionId = askFlowerButton?.getAttribute('aria-describedby') ?? '';
+    expect(liveMenu.querySelector(`#${descriptionId}`)?.textContent).toContain('valid working directory');
+    askFlowerButton?.click();
+    await settleTerminalPanel();
+    expect(openFlowerTurnLauncherSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not restart the shared SSH opening budget when a second panel mounts late', async () => {
+    terminalSessionsState.sessions = [{
+      id: 'session-ssh-opening',
+      name: 'SSH',
+      workingDir: '/workspace',
+      createdAtMs: 1,
+      isActive: true,
+      lastActiveAtMs: 10,
+      executionContext: {
+        location: {
+          kind: 'remote', phase: 'opening', label: 'SSH', authority: '', workingDirectory: '', source: 'foreground_candidate',
+        },
+        application: { kind: 'shell', identity: '', displayName: '' },
+        revision: 2,
+        updatedAtMs: 10,
+      },
+    }];
+    let nowMs = 1_100;
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => nowMs);
+    const catalog = {
+      sessions: () => terminalSessionsState.sessions,
+      hydrated: () => true,
+      loading: () => false,
+      stale: () => false,
+      error: () => null,
+      permissionDenied: () => false,
+      connectionEpoch: () => 1,
+      remoteOpeningObservedAtMs: () => 1_000,
+      coordinator: () => sessionsCoordinatorMocks,
+      getCoordinator: () => sessionsCoordinatorMocks,
+      refresh: sessionsCoordinatorMocks.refresh,
+      upsertSession: vi.fn(),
+      removeSession: vi.fn(),
+      updateSessionMeta: vi.fn(),
+      clearForPermissionDenied: vi.fn(),
+      requestPreparedHistory: vi.fn().mockResolvedValue(null),
+      startHistoryWarmup: vi.fn(),
+      invalidateHistory: vi.fn(),
+      setSurfaceActive: vi.fn(),
+    } as any;
+    const firstHost = document.createElement('div');
+    const secondHost = document.createElement('div');
+    document.body.append(firstHost, secondHost);
+
+    render(() => (
+      <TerminalSessionCatalogContext.Provider value={catalog}>
+        <TerminalPanel variant="workbench" />
+      </TerminalSessionCatalogContext.Provider>
+    ), firstHost);
+    await settleTerminalPanelAfterPaint();
+    expect(firstHost.querySelector('[data-terminal-process-state="running"]')).not.toBeNull();
+
+    nowMs = 1_900;
+    render(() => (
+      <TerminalSessionCatalogContext.Provider value={catalog}>
+        <TerminalPanel variant="workbench" />
+      </TerminalSessionCatalogContext.Provider>
+    ), secondHost);
+    await settleTerminalPanelAfterPaint();
+    expect(secondHost.querySelector('[data-terminal-process-state="running"]')).toBeNull();
+    const secondRow = secondHost.querySelector<HTMLButtonElement>('button[data-terminal-session-id="session-ssh-opening"]');
+    const statusDescriptionId = secondRow?.getAttribute('aria-describedby') ?? '';
+    expect(secondHost.querySelector(`#${statusDescriptionId}`)?.textContent).toContain('Connecting to SSH');
+    nowSpy.mockRestore();
+  });
+
   it('marks inactive sessions after a bell with an unread dot and clears it when the session becomes active', async () => {
     terminalSessionsState.sessions = [
       {
@@ -6142,7 +6473,7 @@ describe('TerminalPanel', () => {
     expect(findTerminalWorkIndicator(host)?.dataset.terminalWorkState).toBe('idle');
   });
 
-  it('keeps the running sidebar spinner node mounted while switching workbench sessions', async () => {
+  it('keeps the sidebar activity wave node mounted while switching workbench sessions', async () => {
     terminalSessionsState.sessions = [
       {
         id: 'session-1',
@@ -6161,6 +6492,9 @@ describe('TerminalPanel', () => {
         lastActiveAtMs: 5,
         foregroundCommand: {
           phase: 'running', displayName: 'top', revision: 1, updatedAtMs: 10,
+        },
+        outputActivity: {
+          phase: 'streaming', revision: 1, updatedAtMs: 10,
         },
       },
     ];
@@ -6191,18 +6525,18 @@ describe('TerminalPanel', () => {
     findTerminalTab(host, 'Terminal 1')?.click();
     await settleTerminalPanel();
 
-    await vi.waitFor(() => expect(findTerminalRunningSpinner(host, 'Terminal 2')).not.toBeNull());
-    const runningSpinner = findTerminalRunningSpinner(host, 'Terminal 2');
+    await vi.waitFor(() => expect(findTerminalActivityWave(host, 'Terminal 2')).not.toBeNull());
+    const activityWave = findTerminalActivityWave(host, 'Terminal 2');
 
     findTerminalTab(host, 'Terminal 2')?.click();
     await settleTerminalPanel();
 
-    expect(findTerminalRunningSpinner(host, 'Terminal 2')).toBe(runningSpinner);
+    expect(findTerminalActivityWave(host, 'Terminal 2')).toBe(activityWave);
 
     findTerminalTab(host, 'Terminal 1')?.click();
     await settleTerminalPanel();
 
-    expect(findTerminalRunningSpinner(host, 'Terminal 2')).toBe(runningSpinner);
+    expect(findTerminalActivityWave(host, 'Terminal 2')).toBe(activityWave);
   });
 
   it('does not treat uncommitted background output as a foreground command', async () => {
@@ -6281,11 +6615,16 @@ describe('TerminalPanel', () => {
       phase: 'running', displayName: 'top', revision: 1, updatedAtMs: 10,
     });
     expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).toBeNull();
-    await vi.waitFor(() => expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).not.toBeNull());
-    expect(host.querySelector('[data-terminal-session-title="session-2"]')?.textContent).toBe('top');
+    await vi.waitFor(() => {
+      expect(host.querySelector('[data-terminal-session-title="session-2"]')?.textContent).toBe('top');
+    });
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).not.toBeNull();
     expect(host.querySelector('[data-testid="terminal-session-path-session-2"]')?.textContent).toBe('/workspace/repo');
     expect(findTerminalTabStatus(host, 'Terminal 2', 'unread')).toBeNull();
-    expect(findTerminalWorkIndicator(host)?.dataset.terminalWorkState).toBe('idle');
+    expect(findTerminalWorkIndicator(host)?.dataset.terminalWorkState).toBe('running');
+    const runningRow = findTerminalTab(host, 'Terminal 2');
+    expect(host.querySelector(`#${runningRow?.getAttribute('aria-describedby')}`)?.textContent)
+      .toContain('The foreground process is running.');
 
     findTerminalTab(host, 'Terminal 2')?.click();
     await settleTerminalPanel();
@@ -6297,11 +6636,12 @@ describe('TerminalPanel', () => {
     });
     await settleTerminalPanel();
     expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).toBeNull();
+    expect(findTerminalWorkIndicator(host)?.dataset.terminalWorkState).toBe('idle');
     expect(Array.from(host.querySelectorAll('[data-terminal-session-title="session-2"]')).map((element) => element.textContent)).toEqual(['repo', 'repo']);
     expect(titleChanges).toHaveBeenLastCalledWith('Terminal · repo');
   });
 
-  it('projects agent identity and output activity independently from the running process spinner', async () => {
+  it('projects agent identity and semantic work independently from raw output activity', async () => {
     terminalSessionsState.sessions = [
       {
         id: 'session-1',
@@ -6323,6 +6663,15 @@ describe('TerminalPanel', () => {
         },
         outputActivity: {
           phase: 'streaming', revision: 1, updatedAtMs: 11,
+        },
+        executionContext: {
+          location: { kind: 'local', phase: 'ready', label: '', authority: '', workingDirectory: '/workspace/repo', source: 'shell_integration' },
+          application: { kind: 'agent_cli', identity: 'codex', displayName: 'Codex' },
+          revision: 1,
+          updatedAtMs: 10,
+        },
+        workState: {
+          phase: 'working', source: 'semantic', contextRevision: 1, foregroundCommandRevision: 1, revision: 1, updatedAtMs: 11,
         },
       },
     ];
@@ -6333,20 +6682,41 @@ describe('TerminalPanel', () => {
     await settleTerminalPanel();
     await vi.waitFor(() => expect(host.querySelector('[data-terminal-agent-identity="codex"]')).not.toBeNull());
 
-    const spinner = host.querySelector('[data-terminal-agent-identity="codex"] [data-terminal-process-state="running"]');
-    expect(spinner).not.toBeNull();
-    expect(host.querySelector('[data-terminal-output-state="streaming"]')).not.toBeNull();
+    const activityWave = host.querySelector('[data-terminal-output-state="streaming"]');
+    expect(activityWave).not.toBeNull();
+    expect(host.querySelector('[data-terminal-process-state="running"]')).toBeNull();
 
     publishTerminalOutputActivity('session-agent', {
       phase: 'settled', revision: 2, updatedAtMs: 20,
     });
     await settleTerminalPanel();
-    expect(host.querySelector('[data-terminal-output-state="streaming"]')).toBeNull();
-    expect(host.querySelector('[data-terminal-output-state="settled"]')).not.toBeNull();
-    expect(host.querySelector('[data-terminal-agent-identity="codex"] [data-terminal-process-state="running"]')).toBe(spinner);
+    expect(host.querySelector('[data-terminal-output-state="streaming"]')).toBe(activityWave);
+
+    publishTerminalWorkState('session-agent', {
+      phase: 'waiting_user', source: 'semantic', contextRevision: 1, foregroundCommandRevision: 1, revision: 2, updatedAtMs: 25,
+    });
+    await settleTerminalPanel();
+    expect(host.querySelector('[data-terminal-attention-state="waiting"]')).not.toBeNull();
+
+    publishTerminalWorkState('session-agent', {
+      phase: 'idle', source: 'semantic', contextRevision: 1, foregroundCommandRevision: 1, revision: 3, updatedAtMs: 28,
+    });
+    await settleTerminalPanel();
+    expect(host.querySelector('[data-terminal-agent-identity="codex"]')).not.toBeNull();
+    expect(host.querySelector('[data-terminal-output-state]')).toBeNull();
+    expect(host.querySelector('[data-terminal-attention-state="waiting"]')).toBeNull();
 
     publishTerminalForegroundCommand('session-agent', {
       phase: 'idle', displayName: '', revision: 2, updatedAtMs: 30,
+    });
+    publishTerminalExecutionContext('session-agent', {
+      location: { kind: 'local', phase: 'ready', label: '', authority: '', workingDirectory: '/workspace/repo', source: 'shell_integration' },
+      application: { kind: 'shell', identity: '', displayName: '' },
+      revision: 2,
+      updatedAtMs: 30,
+    });
+    publishTerminalWorkState('session-agent', {
+      phase: 'idle', source: 'semantic', contextRevision: 2, foregroundCommandRevision: 2, revision: 4, updatedAtMs: 30,
     });
     publishTerminalOutputActivity('session-agent', {
       phase: 'unknown', revision: 3, updatedAtMs: 30,
@@ -6357,7 +6727,41 @@ describe('TerminalPanel', () => {
     expect(host.querySelector('[data-terminal-session-avatar="session-agent"]')?.textContent).toContain('R');
   });
 
-  it('turns a settled agent wave into one unread dot and restores the settled glyph after viewing', async () => {
+  it('keeps the SSH Link location marker when an Agent owns the primary identity', async () => {
+    terminalSessionsState.sessions = [{
+      id: 'session-remote-agent',
+      name: 'Agent',
+      workingDir: '/workspace',
+      createdAtMs: 1,
+      isActive: true,
+      lastActiveAtMs: 10,
+      foregroundCommand: { phase: 'running', displayName: 'codex', revision: 1, updatedAtMs: 10 },
+      executionContext: {
+        location: {
+          kind: 'remote', phase: 'ready', label: 'root@host', authority: 'host', workingDirectory: '/root/project', source: 'osc7',
+        },
+        application: { kind: 'agent_cli', identity: 'codex', displayName: 'Codex' },
+        revision: 1,
+        updatedAtMs: 10,
+      },
+      workState: {
+        phase: 'idle', source: 'semantic', contextRevision: 1, foregroundCommandRevision: 1, revision: 1, updatedAtMs: 10,
+      },
+    }];
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanelAfterPaint();
+
+    expect(host.querySelector('[data-terminal-agent-identity="codex"]')).not.toBeNull();
+    expect(host.querySelector('[data-terminal-toolbar-location-icon="link"]')).not.toBeNull();
+    const sidebarPath = host.querySelector('[data-testid="terminal-session-path-session-remote-agent"]');
+    expect(sidebarPath?.previousElementSibling).not.toBeNull();
+    expect(sidebarPath?.textContent).toBe('root@host · /root/project');
+  });
+
+  it('keeps semantic work above unread attention and becomes quiet after the user views idle work', async () => {
     terminalSessionsState.sessions = [
       {
         id: 'session-1',
@@ -6379,6 +6783,15 @@ describe('TerminalPanel', () => {
         },
         outputActivity: {
           phase: 'streaming', revision: 1, updatedAtMs: 11,
+        },
+        executionContext: {
+          location: { kind: 'local', phase: 'ready', label: '', authority: '', workingDirectory: '/workspace/repo', source: 'shell_integration' },
+          application: { kind: 'agent_cli', identity: 'codex', displayName: 'Codex' },
+          revision: 1,
+          updatedAtMs: 10,
+        },
+        workState: {
+          phase: 'working', source: 'semantic', contextRevision: 1, foregroundCommandRevision: 1, revision: 1, updatedAtMs: 11,
         },
       },
     ];
@@ -6408,16 +6821,19 @@ describe('TerminalPanel', () => {
     publishTerminalOutputActivity('session-agent', {
       phase: 'settled', revision: 2, updatedAtMs: 20,
     });
+    publishTerminalWorkState('session-agent', {
+      phase: 'idle', source: 'semantic', contextRevision: 1, foregroundCommandRevision: 1, revision: 2, updatedAtMs: 20,
+    });
     await settleTerminalPanel();
-    expect(host.querySelectorAll('[data-terminal-output-attention="unread"]')).toHaveLength(1);
+    expect(host.querySelectorAll('[data-terminal-attention-state="unread"]')).toHaveLength(1);
     expect(host.querySelector('[data-terminal-output-state="settled"]')).toBeNull();
-    expect(host.querySelector('[data-terminal-attention-state="unread"]')).toBeNull();
+    expect(host.querySelector('[data-terminal-output-attention="unread"]')).toBeNull();
 
     findTerminalTab(host, 'Agent')?.click();
     await settleTerminalPanelAfterPaint();
-    expect(host.querySelector('[data-terminal-output-attention="unread"]')).toBeNull();
-    expect(host.querySelector('[data-terminal-output-state="settled"]')).not.toBeNull();
-    expect(host.querySelector('[data-terminal-agent-identity="codex"] [data-terminal-process-state="running"]')).not.toBeNull();
+    expect(host.querySelector('[data-terminal-attention-state="unread"]')).toBeNull();
+    expect(host.querySelector('[data-terminal-output-state]')).toBeNull();
+    expect(host.querySelector('[data-terminal-agent-identity="codex"]')).not.toBeNull();
   });
 
   it('does not flash a spinner or program title for a command that finishes inside the confirmation window', async () => {
@@ -6617,6 +7033,30 @@ describe('TerminalPanel', () => {
         createdAtMs: 2,
         isActive: false,
         lastActiveAtMs: 5,
+        foregroundCommand: {
+          phase: 'running', displayName: 'codex', revision: 4, updatedAtMs: 5,
+        },
+        executionContext: {
+          location: {
+            kind: 'remote',
+            phase: 'ready',
+            label: 'root@build-runner-with-a-very-long-hostname.example.internal',
+            authority: 'build-runner-with-a-very-long-hostname.example.internal',
+            workingDirectory: '/srv/repositories/redeven/feature/terminal-context',
+            source: 'osc7',
+          },
+          application: { kind: 'agent_cli', identity: 'codex', displayName: 'Codex' },
+          revision: 4,
+          updatedAtMs: 5,
+        },
+        workState: {
+          phase: 'waiting_user',
+          source: 'semantic',
+          contextRevision: 4,
+          foregroundCommandRevision: 4,
+          revision: 4,
+          updatedAtMs: 5,
+        },
       },
     ];
     const host = document.createElement('div');
@@ -6627,7 +7067,10 @@ describe('TerminalPanel', () => {
 
     const sidebar = host.querySelector('[data-testid="mock-sidebar"]') as HTMLElement;
     expect(sidebar.classList.contains('hidden')).toBe(true);
-    expect(host.querySelector('[data-testid="terminal-session-drawer-open"]')).not.toBeNull();
+    const drawerButton = host.querySelector<HTMLButtonElement>('[data-testid="terminal-session-drawer-open"]');
+    expect(drawerButton).not.toBeNull();
+    expect(drawerButton?.getAttribute('aria-label')).toContain('User input');
+    expect(host.querySelector('[data-terminal-background-attention="waiting"]')).not.toBeNull();
 
     (host.querySelector('[data-testid="terminal-session-drawer-open"]') as HTMLButtonElement).click();
     await settleTerminalPanel();
@@ -6639,6 +7082,20 @@ describe('TerminalPanel', () => {
     expect(sidebar.classList.contains('hidden')).toBe(true);
     expect(findActiveTerminalTab(host)?.getAttribute('data-terminal-session-id')).toBe('session-2');
     expect(terminalCoreInstances.at(-1)?.focus).toHaveBeenCalled();
+    expect(host.querySelector('[data-terminal-mobile-attention="waiting"]')).not.toBeNull();
+    expect(drawerButton?.getAttribute('aria-label')).toBe('Sessions');
+    expect(host.querySelector('[data-terminal-background-attention]')).toBeNull();
+
+    const contextDisclosure = host.querySelector<HTMLButtonElement>('[data-testid="terminal-active-context-disclosure"]');
+    expect(contextDisclosure?.getAttribute('aria-label')).toContain('build-runner-with-a-very-long-hostname.example.internal');
+    contextDisclosure?.focus();
+    contextDisclosure?.click();
+    await Promise.resolve();
+    expect(document.body.querySelector('[role="tooltip"]')?.textContent)
+      .toContain('root@build-runner-with-a-very-long-hostname.example.internal');
+    contextDisclosure?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await settleTerminalPanel();
+    expect(document.body.querySelector('[role="tooltip"]')?.getAttribute('aria-hidden') ?? 'true').toBe('true');
 
     (host.querySelector('[data-testid="terminal-session-drawer-open"]') as HTMLButtonElement).click();
     await settleTerminalPanel();
@@ -9547,7 +10004,7 @@ describe('TerminalPanel', () => {
     expect(findActiveTerminalTab(panelB!)?.textContent).toContain('Terminal 3');
   });
 
-  it('keeps a running sidebar spinner mounted while controlled workbench group state catches up', async () => {
+  it('keeps a sidebar activity wave mounted while controlled workbench group state catches up', async () => {
     terminalSessionsState.sessions = [
       {
         id: 'session-1',
@@ -9641,9 +10098,12 @@ describe('TerminalPanel', () => {
     applyLatestPanelAState();
     await settleTerminalPanel();
 
-    await vi.waitFor(() => expect(findTerminalRunningSpinner(panelA!, 'Terminal 2')).not.toBeNull());
-    const runningSpinner = findTerminalRunningSpinner(panelA!, 'Terminal 2');
-    expect(findTerminalRunningSpinner(panelB!, 'Terminal 2')).toBeNull();
+    publishTerminalOutputActivity('session-2', {
+      phase: 'streaming', revision: 1, updatedAtMs: 10,
+    });
+    await vi.waitFor(() => expect(findTerminalActivityWave(panelA!, 'Terminal 2')).not.toBeNull());
+    const activityWave = findTerminalActivityWave(panelA!, 'Terminal 2');
+    expect(findTerminalActivityWave(panelB!, 'Terminal 2')).toBeNull();
 
     groupStateSpy.mockClear();
     const terminal2Button = panelA!.querySelector<HTMLButtonElement>('button[data-terminal-session-id="session-2"]');
@@ -9651,7 +10111,7 @@ describe('TerminalPanel', () => {
 
     dispatchTerminalPointerDown(terminal2Button!);
 
-    expect(findTerminalRunningSpinner(panelA!, 'Terminal 2')).toBe(runningSpinner);
+    expect(findTerminalActivityWave(panelA!, 'Terminal 2')).toBe(activityWave);
     expect(groupStateSpy).not.toHaveBeenCalled();
 
     terminal2Button?.click();
@@ -9661,13 +10121,13 @@ describe('TerminalPanel', () => {
       sessionIds: ['session-1', 'session-2'],
       activeSessionId: 'session-2',
     });
-    expect(findTerminalRunningSpinner(panelA!, 'Terminal 2')).toBe(runningSpinner);
-    expect(findTerminalRunningSpinner(panelB!, 'Terminal 2')).toBeNull();
+    expect(findTerminalActivityWave(panelA!, 'Terminal 2')).toBe(activityWave);
+    expect(findTerminalActivityWave(panelB!, 'Terminal 2')).toBeNull();
 
     applyLatestPanelAState();
     await settleTerminalPanel();
 
-    expect(findTerminalRunningSpinner(panelA!, 'Terminal 2')).toBe(runningSpinner);
+    expect(findTerminalActivityWave(panelA!, 'Terminal 2')).toBe(activityWave);
     expect(findActiveTerminalTab(panelA!)?.textContent).toContain('Terminal 2');
     expect(findActiveTerminalTab(panelB!)?.textContent).toContain('Terminal 3');
   });

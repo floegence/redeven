@@ -207,6 +207,8 @@ const terminalSessionsState = vi.hoisted(() => ({
       revision: number;
       updatedAtMs: number;
     };
+    executionContext?: any;
+    workState?: any;
   }>,
   subscribers: [] as Array<(value: Array<{
     id: string;
@@ -226,6 +228,8 @@ const terminalSessionsState = vi.hoisted(() => ({
       revision: number;
       updatedAtMs: number;
     };
+    executionContext?: any;
+    workState?: any;
   }>) => void>,
 }));
 
@@ -667,6 +671,20 @@ function publishTerminalOutputActivity(
 ) {
   terminalSessionsState.sessions = terminalSessionsState.sessions.map((session) => (
     session.id === sessionId ? { ...session, outputActivity } : session
+  ));
+  for (const subscriber of terminalSessionsState.subscribers) subscriber(terminalSessionsState.sessions);
+}
+
+function publishTerminalExecutionContext(sessionId: string, executionContext: any) {
+  terminalSessionsState.sessions = terminalSessionsState.sessions.map((session) => (
+    session.id === sessionId ? { ...session, executionContext } : session
+  ));
+  for (const subscriber of terminalSessionsState.subscribers) subscriber(terminalSessionsState.sessions);
+}
+
+function publishTerminalWorkState(sessionId: string, workState: any) {
+  terminalSessionsState.sessions = terminalSessionsState.sessions.map((session) => (
+    session.id === sessionId ? { ...session, workState } : session
   ));
   for (const subscriber of terminalSessionsState.subscribers) subscriber(terminalSessionsState.sessions);
 }
@@ -1652,7 +1670,7 @@ describe('TerminalPanel browser activity integration', () => {
     expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).toBeNull();
   });
 
-  it('shows a confirmed program title and spinner, then restores the directory on idle', async () => {
+  it('shows a confirmed ordinary program title with a running spinner, then restores the directory on idle', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     render(() => <TerminalPanel variant="workbench" />, host);
@@ -1677,7 +1695,7 @@ describe('TerminalPanel browser activity integration', () => {
     expect(host.querySelector('[data-terminal-session-title="session-2"]')?.textContent).toBe('repo');
   });
 
-  it('renders audited agent identity and switches output glyphs without resizing the status slot', async () => {
+  it('renders audited agent identity and keeps semantic work stable when raw output settles', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     render(() => <TerminalPanel variant="workbench" />, host);
@@ -1689,18 +1707,26 @@ describe('TerminalPanel browser activity integration', () => {
     publishTerminalOutputActivity('session-2', {
       phase: 'streaming', revision: 1, updatedAtMs: 11,
     });
+    publishTerminalExecutionContext('session-2', {
+      location: { kind: 'local', phase: 'ready', label: '', authority: '', workingDirectory: '/workspace/repo', source: 'shell_integration' },
+      application: { kind: 'agent_cli', identity: 'codex', displayName: 'Codex' },
+      revision: 1,
+      updatedAtMs: 10,
+    });
+    publishTerminalWorkState('session-2', {
+      phase: 'working', source: 'semantic', contextRevision: 1, foregroundCommandRevision: 1, revision: 1, updatedAtMs: 11,
+    });
     await new Promise<void>((resolve) => setTimeout(resolve, 170));
     await settleTerminalPanel();
 
     const identity = host.querySelector<HTMLElement>('[data-terminal-agent-identity="codex"]');
     const slot = host.querySelector<HTMLElement>('[data-terminal-output-slot="session-2"]');
-    const spinner = identity?.querySelector('[data-terminal-process-state="running"]');
     expect(identity).not.toBeNull();
     const identityStyle = getComputedStyle(identity!);
     expect(parseFloat(identityStyle.borderRadius)).toBeGreaterThanOrEqual(identity!.getBoundingClientRect().width / 2);
     expect(getComputedStyle(identity!.querySelector<HTMLElement>('.bg-current')!).webkitMaskImage).toContain('/_redeven_proxy/env/agent-cli-icons/codex.svg');
     expect(host.querySelector('[data-terminal-output-state="streaming"]')).not.toBeNull();
-    expect(spinner).not.toBeNull();
+    expect(identity?.querySelector('[data-terminal-process-state="running"]')).toBeNull();
     const before = slot!.getBoundingClientRect();
 
     publishTerminalOutputActivity('session-2', {
@@ -1708,12 +1734,20 @@ describe('TerminalPanel browser activity integration', () => {
     });
     await settleTerminalPanel();
     const after = slot!.getBoundingClientRect();
-    expect(host.querySelector('[data-terminal-output-state="settled"]')).not.toBeNull();
-    expect(identity?.querySelector('[data-terminal-process-state="running"]')).toBe(spinner);
+    expect(host.querySelector('[data-terminal-output-state="streaming"]')).not.toBeNull();
     expect([after.width, after.height]).toEqual([before.width, before.height]);
 
     publishTerminalForegroundCommand('session-2', {
       phase: 'running', displayName: 'claude', revision: 2, updatedAtMs: 30,
+    });
+    publishTerminalExecutionContext('session-2', {
+      location: { kind: 'local', phase: 'ready', label: '', authority: '', workingDirectory: '/workspace/repo', source: 'shell_integration' },
+      application: { kind: 'agent_cli', identity: 'claude', displayName: 'Claude Code' },
+      revision: 2,
+      updatedAtMs: 30,
+    });
+    publishTerminalWorkState('session-2', {
+      phase: 'working', source: 'semantic', contextRevision: 2, foregroundCommandRevision: 2, revision: 2, updatedAtMs: 30,
     });
     await new Promise<void>((resolve) => setTimeout(resolve, 170));
     await settleTerminalPanel();
@@ -1769,7 +1803,7 @@ describe('TerminalPanel browser activity integration', () => {
     expect(getComputedStyle(filesButton).pointerEvents).toBe('auto');
   });
 
-  it('paints settled unread agent output as a stable blue dot until the session is viewed', async () => {
+  it('paints idle unread Agent attention as a stable dot until the session is viewed', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     render(() => <TerminalPanel variant="workbench" />, host);
@@ -1786,36 +1820,47 @@ describe('TerminalPanel browser activity integration', () => {
     publishTerminalOutputActivity('session-2', {
       phase: 'streaming', revision: 1, updatedAtMs: 11,
     });
+    publishTerminalExecutionContext('session-2', {
+      location: { kind: 'local', phase: 'ready', label: '', authority: '', workingDirectory: '/workspace/repo', source: 'shell_integration' },
+      application: { kind: 'agent_cli', identity: 'codex', displayName: 'Codex' },
+      revision: 1,
+      updatedAtMs: 10,
+    });
+    publishTerminalWorkState('session-2', {
+      phase: 'working', source: 'semantic', contextRevision: 1, foregroundCommandRevision: 1, revision: 1, updatedAtMs: 11,
+    });
     await new Promise<void>((resolve) => setTimeout(resolve, 170));
     await settleTerminalPanel();
 
-    const slot = host.querySelector<HTMLElement>('[data-terminal-output-slot="session-2"]')!;
+    const slot = host.querySelector<HTMLElement>('[data-terminal-attention-slot="session-2"]')!;
     const slotBefore = slot.getBoundingClientRect();
-    const spinner = host.querySelector('[data-terminal-agent-identity="codex"] [data-terminal-process-state="running"]');
     terminalCoreState.instances[1]?.emitBell();
     publishTerminalOutputActivity('session-2', {
       phase: 'settled', revision: 2, updatedAtMs: 20,
     });
+    publishTerminalWorkState('session-2', {
+      phase: 'idle', source: 'semantic', contextRevision: 1, foregroundCommandRevision: 1, revision: 2, updatedAtMs: 20,
+    });
     await settleTerminalPanel();
 
-    const dot = host.querySelector<HTMLElement>('[data-terminal-output-attention="unread"]')!;
+    const dot = host.querySelector<HTMLElement>('[data-terminal-attention-state="unread"]')!;
     const dotRect = dot.getBoundingClientRect();
     const dotStyle = getComputedStyle(dot);
     const slotUnread = slot.getBoundingClientRect();
-    expect([dotRect.width, dotRect.height]).toEqual([8, 8]);
-    expect(parseFloat(dotStyle.borderRadius)).toBeGreaterThanOrEqual(4);
-    expect(dotStyle.backgroundColor).toBe('rgb(59, 130, 246)');
+    expect([dotRect.width, dotRect.height]).toEqual([6, 6]);
+    expect(parseFloat(dotStyle.borderRadius)).toBeGreaterThanOrEqual(3);
+    expect(dotStyle.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
     expect([slotUnread.width, slotUnread.height]).toEqual([slotBefore.width, slotBefore.height]);
-    expect(host.querySelector('[data-terminal-agent-identity="codex"] [data-terminal-process-state="running"]')).toBe(spinner);
-    expect(host.querySelector('[data-terminal-attention-state="unread"]')).toBeNull();
+    expect(host.querySelector('[data-terminal-process-state="running"]')).toBeNull();
+    expect(host.querySelector('[data-terminal-output-attention="unread"]')).toBeNull();
 
     await page.elementLocator(findTerminalTab(host, 'Terminal 2')!).click();
     await settleTerminalPanel();
     const slotRead = slot.getBoundingClientRect();
-    expect(host.querySelector('[data-terminal-output-attention="unread"]')).toBeNull();
-    expect(host.querySelector('[data-terminal-output-state="settled"]')).not.toBeNull();
+    expect(host.querySelector('[data-terminal-attention-state="unread"]')).toBeNull();
+    expect(host.querySelector('[data-terminal-output-state]')).toBeNull();
     expect([slotRead.width, slotRead.height]).toEqual([slotBefore.width, slotBefore.height]);
-    expect(host.querySelector('[data-terminal-agent-identity="codex"] [data-terminal-process-state="running"]')).toBe(spinner);
+    expect(host.querySelector('[data-terminal-agent-identity="codex"]')).not.toBeNull();
   });
 
   it('uses thesvg light and dark variants without filtering the official mark', async () => {
@@ -1826,6 +1871,15 @@ describe('TerminalPanel browser activity integration', () => {
 
     publishTerminalForegroundCommand('session-2', {
       phase: 'running', displayName: 'cursor-agent', revision: 1, updatedAtMs: 10,
+    });
+    publishTerminalExecutionContext('session-2', {
+      location: { kind: 'local', phase: 'ready', label: '', authority: '', workingDirectory: '/workspace/repo', source: 'shell_integration' },
+      application: { kind: 'agent_cli', identity: 'cursor', displayName: 'Cursor' },
+      revision: 1,
+      updatedAtMs: 10,
+    });
+    publishTerminalWorkState('session-2', {
+      phase: 'idle', source: 'semantic', contextRevision: 1, foregroundCommandRevision: 1, revision: 1, updatedAtMs: 10,
     });
     await new Promise<void>((resolve) => setTimeout(resolve, 170));
     await settleTerminalPanel();
@@ -1848,7 +1902,7 @@ describe('TerminalPanel browser activity integration', () => {
     }
   });
 
-  it('keeps output and process shapes distinct with reduced motion and forced colors', async () => {
+  it('keeps work and attention shapes distinct with reduced motion and forced colors', async () => {
     await mediaCommands.emulateMediaPreferences({ reducedMotion: 'reduce', forcedColors: 'active' });
     try {
       const host = document.createElement('div');
@@ -1867,32 +1921,60 @@ describe('TerminalPanel browser activity integration', () => {
       publishTerminalOutputActivity('session-2', {
         phase: 'streaming', revision: 1, updatedAtMs: 11,
       });
+      publishTerminalExecutionContext('session-2', {
+        location: { kind: 'local', phase: 'ready', label: '', authority: '', workingDirectory: '/workspace/repo', source: 'shell_integration' },
+        application: { kind: 'agent_cli', identity: 'codex', displayName: 'Codex' },
+        revision: 1,
+        updatedAtMs: 10,
+      });
+      publishTerminalWorkState('session-2', {
+        phase: 'working', source: 'semantic', contextRevision: 1, foregroundCommandRevision: 1, revision: 1, updatedAtMs: 11,
+      });
       await new Promise<void>((resolve) => setTimeout(resolve, 170));
       await settleTerminalPanel();
 
       const outputBar = host.querySelector<SVGRectElement>('.redeven-terminal-output-wave-bar')!;
-      const spinner = host.querySelector<SVGElement>('[data-terminal-agent-identity="codex"] [data-terminal-process-state="running"] svg')!;
       const trigger = host.querySelector<HTMLElement>('[data-terminal-output-trigger="session-2"]')!;
+      expect(trigger.getAttribute('aria-label')).toBe('Working');
+      expect(trigger.dataset.terminalActivitySource).toBe('semantic');
       expect(window.matchMedia('(prefers-reduced-motion: reduce)').matches).toBe(true);
       expect(window.matchMedia('(forced-colors: active)').matches).toBe(true);
       expect(getComputedStyle(outputBar).animationName).toBe('none');
-      expect(getComputedStyle(spinner).animationName).toBe('none');
       expect(getComputedStyle(trigger).borderTopStyle).toBe('solid');
       expect(outputBar.getBoundingClientRect().height).toBeGreaterThan(0);
 
-      terminalCoreState.instances[1]?.emitBell();
       publishTerminalOutputActivity('session-2', {
         phase: 'settled', revision: 2, updatedAtMs: 20,
       });
+      publishTerminalWorkState('session-2', {
+        phase: 'waiting_user', source: 'semantic', contextRevision: 1, foregroundCommandRevision: 1, revision: 2, updatedAtMs: 20,
+      });
       await settleTerminalPanel();
 
-      const unreadDot = host.querySelector<HTMLElement>('[data-terminal-output-attention="unread"]')!;
+      const attentionTrigger = host.querySelector<HTMLButtonElement>('[data-terminal-attention-trigger="session-2"]')!;
+      const waitingDot = attentionTrigger.querySelector<HTMLElement>('[data-terminal-attention-state="waiting"]')!;
+      expect(getComputedStyle(attentionTrigger).borderTopStyle).toBe('solid');
+      expect([waitingDot.getBoundingClientRect().width, waitingDot.getBoundingClientRect().height]).toEqual([8, 8]);
+      await page.elementLocator(attentionTrigger).click();
+      expect(document.body.querySelector('[role="tooltip"]')?.textContent).toContain('User input');
+      await userEvent.keyboard('{Escape}');
+      expect(document.body.querySelector('[role="tooltip"]')?.getAttribute('aria-hidden')).toBe('true');
+      await new Promise<void>((resolve) => setTimeout(resolve, 100));
+      expect(document.body.querySelector('[role="tooltip"]')).toBeNull();
+
+      terminalCoreState.instances[1]?.emitBell();
+      publishTerminalWorkState('session-2', {
+        phase: 'idle', source: 'semantic', contextRevision: 1, foregroundCommandRevision: 1, revision: 3, updatedAtMs: 21,
+      });
+      await settleTerminalPanel();
+
+      const unreadDot = host.querySelector<HTMLElement>('[data-terminal-attention-state="unread"]')!;
       const unreadDotRect = unreadDot.getBoundingClientRect();
       const unreadDotStyle = getComputedStyle(unreadDot);
-      expect([unreadDotRect.width, unreadDotRect.height]).toEqual([8, 8]);
+      expect([unreadDotRect.width, unreadDotRect.height]).toEqual([6, 6]);
       expect(unreadDotStyle.borderTopStyle).toBe('solid');
       expect(unreadDotStyle.animationName).toBe('none');
-      expect(host.querySelector('[data-terminal-agent-identity="codex"] [data-terminal-process-state="running"] svg')).toBe(spinner);
+      expect(host.querySelector('[data-terminal-process-state="running"]')).toBeNull();
     } finally {
       await mediaCommands.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'none' });
     }
@@ -1919,12 +2001,12 @@ describe('TerminalPanel browser activity integration', () => {
 
       const row = host.querySelector<HTMLButtonElement>('button[data-terminal-session-id="session-2"]')!;
       await page.elementLocator(row).click();
-      expect(document.body.querySelector('[role="tooltip"]')).toBeNull();
+      expect(document.body.querySelector('[role="tooltip"]')?.getAttribute('aria-hidden') ?? 'true').toBe('true');
 
       const trigger = host.querySelector<HTMLButtonElement>('[data-terminal-output-trigger="session-2"]')!;
       trigger.focus();
       await settleTerminalPanel();
-      expect(document.body.querySelector('[role="tooltip"]')?.textContent).toContain('producing');
+      expect(document.body.querySelector('[role="tooltip"]')?.textContent).toContain('Terminal output is active');
 
       await userEvent.keyboard('{Escape}');
       expect(document.body.querySelector('[role="tooltip"]')?.getAttribute('aria-hidden')).toBe('true');
@@ -1932,14 +2014,14 @@ describe('TerminalPanel browser activity integration', () => {
       expect(document.body.querySelector('[role="tooltip"]')).toBeNull();
 
       await page.elementLocator(trigger).click();
-      expect(document.body.querySelector('[role="tooltip"]')?.textContent).toContain('producing');
+      expect(document.body.querySelector('[role="tooltip"]')?.textContent).toContain('Terminal output is active');
       await page.elementLocator(trigger).click();
       expect(document.body.querySelector('[role="tooltip"]')?.getAttribute('aria-hidden')).toBe('true');
       await new Promise<void>((resolve) => setTimeout(resolve, 100));
       expect(document.body.querySelector('[role="tooltip"]')).toBeNull();
 
       await page.elementLocator(trigger).click();
-      expect(document.body.querySelector('[role="tooltip"]')?.textContent).toContain('producing');
+      expect(document.body.querySelector('[role="tooltip"]')?.textContent).toContain('Terminal output is active');
       outside.dispatchEvent(new PointerEvent('pointerdown', {
         bubbles: true,
         isPrimary: true,
@@ -2245,12 +2327,32 @@ describe('TerminalPanel browser activity integration', () => {
       publishTerminalOutputActivity('session-2', {
         phase: 'streaming', revision: 20 + width, updatedAtMs: 21 + width,
       });
+      publishTerminalExecutionContext('session-2', {
+        location: {
+          kind: 'remote',
+          phase: 'ready',
+          label: 'root@build-runner-with-a-very-long-hostname.example.internal',
+          authority: 'build-runner-with-a-very-long-hostname.example.internal',
+          workingDirectory: '/srv/repositories/redeven/feature/terminal-context',
+          source: 'osc7',
+        },
+        application: { kind: 'agent_cli', identity: 'codex', displayName: 'Codex' },
+        revision: 20 + width,
+        updatedAtMs: 20 + width,
+      });
+      publishTerminalWorkState('session-2', {
+        phase: 'working', source: 'semantic', contextRevision: 20 + width, foregroundCommandRevision: 20 + width,
+        revision: 20 + width, updatedAtMs: 21 + width,
+      });
       await new Promise<void>((resolve) => setTimeout(resolve, 170));
       await settleTerminalPanel();
 
       const hostRect = host.getBoundingClientRect();
       const contentRect = host.querySelector<HTMLElement>('[data-testid="terminal-content"]')?.getBoundingClientRect();
-      expect(contentRect?.width ?? 0).toBeGreaterThan(0);
+      expect(
+        contentRect?.width ?? 0,
+        `terminal content must remain visible: size=${width}x${height} transformed=${transformed} host=${JSON.stringify(hostRect.toJSON())} content=${JSON.stringify(contentRect?.toJSON())} sidebar=${JSON.stringify(host.querySelector<HTMLElement>('.redeven-terminal-session-sidebar')?.getBoundingClientRect().toJSON())}`,
+      ).toBeGreaterThan(0);
       expect((contentRect?.right ?? 0) <= hostRect.right + 1).toBe(true);
 
       if (layoutState.mobile) {
@@ -2277,7 +2379,27 @@ describe('TerminalPanel browser activity integration', () => {
         const closeButton = host.querySelector<HTMLElement>('[data-testid="close-session-session-2"]');
         const filesButton = host.querySelector<HTMLElement>('[data-testid="terminal-session-files-session-2"]');
         expect(closeButton ? getComputedStyle(closeButton).opacity : null).toBe('1');
-        expect(filesButton ? getComputedStyle(filesButton).opacity : null).toBe('1');
+        expect(filesButton).toBeNull();
+
+        findTerminalTab(host, 'Terminal 2')?.click();
+        await settleTerminalPanel();
+        const disclosure = host.querySelector<HTMLButtonElement>('[data-testid="terminal-active-context-disclosure"]');
+        const disclosureRect = disclosure?.getBoundingClientRect();
+        const activityRect = host.querySelector<HTMLElement>('[data-terminal-mobile-activity-slot]')?.getBoundingClientRect();
+        expect(disclosure?.getAttribute('aria-label')).toContain('build-runner-with-a-very-long-hostname.example.internal');
+        expect(
+          (disclosureRect?.right ?? Number.POSITIVE_INFINITY) <= (activityRect?.left ?? 0) + 1,
+          `mobile context must not overlap activity: disclosure=${JSON.stringify(disclosureRect?.toJSON())} activity=${JSON.stringify(activityRect?.toJSON())}`,
+        ).toBe(true);
+        disclosure?.click();
+        await settleTerminalPanel();
+        expect(document.body.querySelector('[role="tooltip"]')?.textContent)
+          .toContain('root@build-runner-with-a-very-long-hostname.example.internal');
+
+        host.querySelector<HTMLButtonElement>('[data-testid="terminal-session-drawer-open"]')?.click();
+        await settleTerminalPanel();
+        findTerminalTab(host, 'Terminal 1')?.click();
+        await settleTerminalPanel();
       }
 
       expect(host.querySelector('[data-terminal-agent-identity="codex"]')).not.toBeNull();

@@ -1,6 +1,6 @@
 import { For, Index, Show, batch, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { createUIFirstSelection, deferAfterPaint, isMacLikePlatform, matchKeybind, useCurrentWidgetId, useLayout, useNotification, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
-import { BugIcon, Copy, Download, Folder, Menu, Refresh, Terminal, Trash, X } from '@floegence/floe-webapp-core/icons';
+import { BugIcon, Copy, Download, Folder, Link, Menu, Refresh, Terminal, Trash, X } from '@floegence/floe-webapp-core/icons';
 import '@fontsource/iosevka/400.css';
 
 import {
@@ -17,12 +17,16 @@ import {
   TerminalCore,
   getThemeColors,
   isTerminalThemeName,
+  normalizeTerminalExecutionContextInfo,
+  normalizeTerminalWorkStateInfo,
   type Logger,
   type TerminalAppearance,
+  type TerminalExecutionContextInfo,
   type TerminalOutputActivityInfo,
   type TerminalSessionInfo,
   type TerminalThemeName,
   type TerminalTouchScrollRuntime,
+  type TerminalWorkStateInfo,
 } from '@floegence/floeterm-terminal-web';
 import {
   createRedevenTerminalLiveBundle,
@@ -30,6 +34,12 @@ import {
 } from '../services/terminalTransport';
 import { disposeRedevenTerminalSessionsCoordinator, getRedevenTerminalSessionsCoordinator } from '../services/terminalSessions';
 import { useTerminalSessionCatalog } from '../services/terminalSessionCatalog';
+import {
+  deriveTerminalSessionChrome,
+  TERMINAL_REMOTE_OPENING_SPINNER_MS,
+  type TerminalSessionChrome,
+  type TerminalSessionChromeTransition,
+} from '../services/terminalSessionChrome';
 import {
   ensureTerminalPreferencesInitialized,
   resolveTerminalUserTheme,
@@ -79,6 +89,7 @@ import {
 } from '../services/terminalForegroundPresentation';
 import { FloatingContextMenu, type FloatingContextMenuItem } from './FloatingContextMenu';
 import { useI18n } from '../i18n';
+import { Tooltip } from '../primitives/Tooltip';
 import { createUIPresentationEventRecorder } from '../services/uiPresentationTransactions';
 import {
   createTerminalAdaptiveWorkingSetManager,
@@ -99,11 +110,13 @@ import {
 } from './TerminalSessionRuntime';
 import {
   TerminalSessionNavigator,
+  TerminalSessionChromeIcon,
+  TerminalSessionProcessBadge,
+  TerminalOutputStatusGlyph,
   type TerminalSessionAttentionState,
   type TerminalSessionNavigationItem,
   type TerminalSessionProcessState,
 } from './TerminalSessionNavigator';
-import { deriveTerminalAgentSessionPresentation } from './terminalAgentSessionPresentation';
 import { TerminalSearchOverlay } from './TerminalSearchOverlay';
 import { TerminalSharedGeometryNotice } from './TerminalSharedGeometryNotice';
 import type { TerminalSharedGeometryPresentation } from './terminalSharedGeometryPresentation';
@@ -291,7 +304,6 @@ const TERMINAL_INPUT_SELECTOR = 'textarea[aria-label="Terminal input"], textarea
 const MOBILE_TERMINAL_TOUCH_SCROLL_LINE_HEIGHT_FALLBACK_PX = 20;
 const MOBILE_TERMINAL_TOUCH_SCROLL_MIN_LINE_HEIGHT_PX = 12;
 type TerminalSessionTabVisualStateMap = Record<string, TerminalTabVisualState>;
-type TerminalSessionWorkStateMap = Record<string, TerminalSessionWorkState>;
 
 type pending_terminal_session = {
   id: string;
@@ -319,7 +331,7 @@ type terminal_session_avatar_tone = Readonly<{
 type terminal_sidebar_context_menu = Readonly<{
   x: number;
   y: number;
-  item: TerminalSessionNavigationItem;
+  sessionId: string;
   triggerElement: HTMLElement | null;
 }> | null;
 
@@ -475,14 +487,24 @@ function buildTerminalSidebarAvatarTone(seed: string): terminal_session_avatar_t
   return TERMINAL_SIDEBAR_AVATAR_TONES[index] ?? TERMINAL_SIDEBAR_AVATAR_TONES[0];
 }
 
-function resolveTerminalSidebarProcessState(foregroundRunning: boolean): TerminalSessionProcessState {
-  return foregroundRunning ? 'running' : 'none';
+function resolveTerminalChromeTransition(
+  status: TerminalSessionRuntimeStatus | undefined,
+): TerminalSessionChromeTransition {
+  if (status?.state === 'blocking') return 'failed';
+  if (status?.state === 'reconnecting' || status?.state === 'retrying') return 'reconnecting';
+  return 'none';
+}
+
+function resolveTerminalSidebarProcessState(chrome: TerminalSessionChrome): TerminalSessionProcessState {
+  if (chrome.status === 'failed') return 'failed';
+  return chrome.status === 'spinner' || chrome.processRunning ? 'running' : 'none';
 }
 
 function resolveTerminalSidebarAttentionState(
-  visualState: TerminalTabVisualState | undefined,
+  chrome: TerminalSessionChrome,
 ): TerminalSessionAttentionState {
-  return visualState === 'unread' ? 'unread' : 'none';
+  if (chrome.status === 'failed' || chrome.status === 'spinner') return 'none';
+  return chrome.attention;
 }
 
 function buildTerminalPanelTitle(
@@ -530,6 +552,39 @@ function normalizeTerminalOutputActivity(
   return value;
 }
 
+function sameTerminalExecutionContext(
+  left: TerminalSessionInfo['executionContext'],
+  right: TerminalSessionInfo['executionContext'],
+): boolean {
+  const normalizedLeft: TerminalExecutionContextInfo = normalizeTerminalExecutionContextInfo(left);
+  const normalizedRight: TerminalExecutionContextInfo = normalizeTerminalExecutionContextInfo(right);
+  return normalizedLeft.location.kind === normalizedRight.location.kind
+    && normalizedLeft.location.phase === normalizedRight.location.phase
+    && normalizedLeft.location.label === normalizedRight.location.label
+    && normalizedLeft.location.authority === normalizedRight.location.authority
+    && normalizedLeft.location.workingDirectory === normalizedRight.location.workingDirectory
+    && normalizedLeft.location.source === normalizedRight.location.source
+    && normalizedLeft.application.kind === normalizedRight.application.kind
+    && normalizedLeft.application.identity === normalizedRight.application.identity
+    && normalizedLeft.application.displayName === normalizedRight.application.displayName
+    && normalizedLeft.revision === normalizedRight.revision
+    && normalizedLeft.updatedAtMs === normalizedRight.updatedAtMs;
+}
+
+function sameTerminalWorkState(
+  left: TerminalSessionInfo['workState'],
+  right: TerminalSessionInfo['workState'],
+): boolean {
+  const normalizedLeft: TerminalWorkStateInfo = normalizeTerminalWorkStateInfo(left);
+  const normalizedRight: TerminalWorkStateInfo = normalizeTerminalWorkStateInfo(right);
+  return normalizedLeft.phase === normalizedRight.phase
+    && normalizedLeft.source === normalizedRight.source
+    && normalizedLeft.contextRevision === normalizedRight.contextRevision
+    && normalizedLeft.foregroundCommandRevision === normalizedRight.foregroundCommandRevision
+    && normalizedLeft.revision === normalizedRight.revision
+    && normalizedLeft.updatedAtMs === normalizedRight.updatedAtMs;
+}
+
 function normalizeTerminalSessionInfo(value: TerminalSessionInfo): TerminalSessionInfo | null {
   const id = String(value?.id ?? '').trim();
   if (!id) return null;
@@ -542,6 +597,8 @@ function normalizeTerminalSessionInfo(value: TerminalSessionInfo): TerminalSessi
     isActive: Boolean(value?.isActive),
     foregroundCommand: normalizeTerminalForegroundCommand(value?.foregroundCommand),
     outputActivity: normalizeTerminalOutputActivity(value?.outputActivity),
+    executionContext: normalizeTerminalExecutionContextInfo(value?.executionContext),
+    workState: normalizeTerminalWorkStateInfo(value?.workState),
   };
 }
 
@@ -579,7 +636,9 @@ function sameTerminalSessionInfo(a: TerminalSessionInfo | null | undefined, b: T
     && a.lastActiveAtMs === b.lastActiveAtMs
     && a.isActive === b.isActive
     && sameTerminalForegroundCommand(a.foregroundCommand, b.foregroundCommand)
-    && sameTerminalOutputActivity(a.outputActivity, b.outputActivity),
+    && sameTerminalOutputActivity(a.outputActivity, b.outputActivity)
+    && sameTerminalExecutionContext(a.executionContext, b.executionContext)
+    && sameTerminalWorkState(a.workState, b.workState),
   );
 }
 
@@ -723,23 +782,6 @@ export function resolvePendingTerminalSessions(
   }
 
   return resolved;
-}
-
-function mergeTerminalSessionWorkStates(
-  sessions: readonly TerminalSessionInfo[],
-  workStateBySession: TerminalSessionWorkStateMap,
-): TerminalSessionWorkState {
-  let hasRunning = false;
-  for (const session of sessions) {
-    const state = workStateBySession[session.id] ?? 'idle';
-    if (state === 'active') {
-      return 'active';
-    }
-    if (state === 'running') {
-      hasRunning = true;
-    }
-  }
-  return hasRunning ? 'running' : 'idle';
 }
 
 const PendingTerminalTabStatusIcon = (props: { status: pending_terminal_session_status }) => {
@@ -895,10 +937,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const [terminalAskMenu, setTerminalAskMenu] = createSignal<{
     x: number;
     y: number;
-    workingDir: string;
-    homePath?: string;
     selection: terminal_context_snapshot;
-    showBrowseFiles: boolean;
     triggerElement: HTMLElement | null;
   } | null>(null);
   let terminalAskMenuEl: HTMLDivElement | null = null;
@@ -1215,7 +1254,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const [mobileKeyboardPathEntries, setMobileKeyboardPathEntries] = createSignal<TerminalMobileKeyboardPathEntry[]>([]);
   const [mobileKeyboardPackageScripts, setMobileKeyboardPackageScripts] = createSignal<TerminalMobileKeyboardScript[]>([]);
   const [tabVisualStateBySession, setTabVisualStateBySession] = createSignal<TerminalSessionTabVisualStateMap>({});
-  const [workStateBySession, setWorkStateBySession] = createSignal<TerminalSessionWorkStateMap>({});
   const [foregroundPresentationBySession, setForegroundPresentationBySession] = createSignal<
     ReadonlyMap<string, TerminalForegroundPresentation>
   >(new Map());
@@ -1246,17 +1284,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const tabActivityTracker = createTerminalTabActivityTracker({
     publishVisualState: (sessionId, state) => {
       setTabVisualStateBySession((prev) => {
-        if (prev[sessionId] === state) {
-          return prev;
-        }
-        return {
-          ...prev,
-          [sessionId]: state,
-        };
-      });
-    },
-    publishWorkState: (sessionId, state) => {
-      setWorkStateBySession((prev) => {
         if (prev[sessionId] === state) {
           return prev;
         }
@@ -1459,7 +1486,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   });
 
   createEffect(() => {
-    const id = terminalAskMenu()?.selection.sessionId ?? terminalSidebarMenu()?.item.id ?? null;
+    const id = terminalAskMenu()?.selection.sessionId ?? terminalSidebarMenu()?.sessionId ?? null;
     if (!id) return;
     terminalWorkingSet.setInteraction(id, 'context-menu', true);
     onCleanup(() => terminalWorkingSet.setInteraction(id, 'context-menu', false));
@@ -2023,7 +2050,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   };
 
   const openTerminalFileLinkTarget = async (target: TerminalResolvedLinkTarget) => {
-    if (!canBrowseFiles()) {
+    if (!canBrowseFiles() || activeSessionChrome()?.remote) {
       return;
     }
 
@@ -2041,19 +2068,91 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return sessions().find((session) => session.id === sid) ?? null;
   });
 
+  const [terminalChromeNowMs, setTerminalChromeNowMs] = createSignal(Date.now());
+  const fallbackRemoteOpeningObservedAtBySession = new Map<string, number>();
+
+  createEffect(() => {
+    const currentSessions = sessions();
+    const nowMs = Math.max(Date.now(), terminalChromeNowMs());
+    let nextExpiryMs = Number.POSITIVE_INFINITY;
+    const openingSessionIds = new Set<string>();
+
+    for (const session of currentSessions) {
+      const context = session.executionContext;
+      if (context?.location.kind !== 'remote' || context.location.phase !== 'opening') continue;
+      openingSessionIds.add(session.id);
+      const sharedObservedAtMs = terminalCatalog?.remoteOpeningObservedAtMs?.(session.id);
+      const hasSharedObservation = typeof sharedObservedAtMs === 'number' && Number.isFinite(sharedObservedAtMs);
+      const observedAtMs = hasSharedObservation
+        ? sharedObservedAtMs
+        : (fallbackRemoteOpeningObservedAtBySession.get(session.id) ?? Date.now());
+      if (!hasSharedObservation) {
+        fallbackRemoteOpeningObservedAtBySession.set(session.id, observedAtMs);
+      }
+      nextExpiryMs = Math.min(
+        nextExpiryMs,
+        observedAtMs + TERMINAL_REMOTE_OPENING_SPINNER_MS,
+      );
+    }
+
+    for (const sessionId of fallbackRemoteOpeningObservedAtBySession.keys()) {
+      if (!openingSessionIds.has(sessionId)) fallbackRemoteOpeningObservedAtBySession.delete(sessionId);
+    }
+
+    if (!Number.isFinite(nextExpiryMs) || nextExpiryMs <= nowMs) return;
+    const timer = globalThis.setTimeout(() => {
+      setTerminalChromeNowMs(Date.now());
+    }, Math.max(1, nextExpiryMs - nowMs + 1));
+    onCleanup(() => globalThis.clearTimeout(timer));
+  });
+
+  const terminalChromeBySession = createMemo<ReadonlyMap<string, TerminalSessionChrome>>(() => {
+    const foregroundPresentations = foregroundPresentationBySession();
+    const tabStates = tabVisualStateBySession();
+    const runtimeStatuses = runtimeStatusBySession();
+    const nowMs = terminalChromeNowMs();
+    const chromeBySession = new Map<string, TerminalSessionChrome>();
+
+    sessions().forEach((session, index) => {
+      const fullPath = normalizeAskFlowerAbsolutePath(String(session.workingDir ?? '').trim());
+      const fallbackLabel = buildTerminalSessionLabel(
+        session,
+        i18n.t('terminal.terminalName', { index: index + 1 }),
+      );
+      chromeBySession.set(session.id, deriveTerminalSessionChrome({
+        session,
+        directoryTitle: buildTerminalSidebarDirectoryTitle(fullPath, fallbackLabel),
+        fallbackTitle: fallbackLabel,
+        foregroundDisplayName: foregroundPresentations.get(session.id)?.displayName ?? '',
+        foregroundRunning: foregroundPresentations.has(session.id),
+        transition: resolveTerminalChromeTransition(runtimeStatuses[session.id]),
+        unread: tabStates[session.id] === 'unread',
+        nowMs,
+        remoteOpeningObservedAtMs: terminalCatalog?.remoteOpeningObservedAtMs?.(session.id)
+          ?? fallbackRemoteOpeningObservedAtBySession.get(session.id),
+      }));
+    });
+
+    return chromeBySession;
+  });
+
+  const activeSessionChrome = createMemo(() => {
+    const sessionId = activeSessionId();
+    return sessionId ? terminalChromeBySession().get(sessionId) ?? null : null;
+  });
+
   createEffect(() => {
     const terminalLabel = i18n.t('terminal.title');
     const session = activeSession();
-    const foregroundDisplayName = session
-      ? foregroundPresentationBySession().get(session.id)?.displayName ?? ''
-      : '';
     props.onTitleChange?.(session
-      ? buildTerminalPanelTitle(session, terminalLabel, foregroundDisplayName)
+      ? buildTerminalPanelTitle(session, terminalLabel, activeSessionChrome()?.title ?? '')
       : buildPendingTerminalPanelTitle(activePendingSession(), terminalLabel));
   });
 
   const activeSessionWorkingDir = createMemo(() => {
-    return normalizeAskFlowerAbsolutePath(activeSession()?.workingDir ?? '')
+    const chrome = activeSessionChrome();
+    if (chrome?.remote) return '';
+    return normalizeAskFlowerAbsolutePath(chrome?.localWorkingDir ?? '')
       || normalizeAskFlowerAbsolutePath(agentHomePathAbs())
       || '/';
   });
@@ -2092,7 +2191,12 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   });
 
   const panelWorkState = createMemo<TerminalSessionWorkState>(() => {
-    return mergeTerminalSessionWorkStates(sessions(), workStateBySession());
+    let hasTransition = false;
+    for (const chrome of terminalChromeBySession().values()) {
+      if (chrome.status === 'wave') return 'active';
+      if (chrome.status === 'spinner' || chrome.processRunning) hasTransition = true;
+    }
+    return hasTransition ? 'running' : 'idle';
   });
 
   const terminalWorkIndicatorState = createMemo<TerminalSessionWorkState>(() => {
@@ -3052,19 +3156,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       return changed ? next : prev;
     });
 
-    setWorkStateBySession((prev) => {
-      let changed = false;
-      const next: TerminalSessionWorkStateMap = {};
-      for (const [id, state] of Object.entries(prev)) {
-        if (ids.has(id)) {
-          next[id] = state;
-        } else {
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
-
     setRuntimeStatusBySession((prev) => {
       let changed = false;
       const next: Record<string, TerminalSessionRuntimeStatus> = {};
@@ -3087,33 +3178,47 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const sessionListItems = createMemo<TerminalSessionNavigationItem[]>(() => {
     const list = sessions();
-    const tabStates = tabVisualStateBySession();
-    const foregroundPresentations = foregroundPresentationBySession();
+    const chromeBySession = terminalChromeBySession();
+    const runtimeStatuses = runtimeStatusBySession();
     const canOpenPath = canBrowseFiles();
     const sessionItems = list.map((s, index) => {
-      const fullPath = normalizeAskFlowerAbsolutePath(String(s.workingDir ?? '').trim());
       const fallbackLabel = buildTerminalSessionLabel(s, i18n.t('terminal.terminalName', { index: index + 1 }));
-      const directoryTitle = buildTerminalSidebarDirectoryTitle(fullPath, fallbackLabel);
-      const foregroundPresentation = foregroundPresentations.get(s.id);
-      const title = foregroundPresentation?.displayName || directoryTitle;
-      const agentPresentation = deriveTerminalAgentSessionPresentation(
-        foregroundPresentation?.displayName ?? '',
-        s.outputActivity?.phase,
-      );
+      const chrome = chromeBySession.get(s.id) ?? deriveTerminalSessionChrome({
+        session: s,
+        directoryTitle: buildTerminalSidebarDirectoryTitle(s.workingDir, fallbackLabel),
+        fallbackTitle: fallbackLabel,
+      });
       return {
         id: s.id,
         label: fallbackLabel,
-        title,
-        avatarInitial: buildTerminalSidebarAvatarInitial(directoryTitle),
-        avatarTone: buildTerminalSidebarAvatarTone(`${s.id}:${fullPath}:${directoryTitle}`),
-        fullPath,
-        processState: resolveTerminalSidebarProcessState(Boolean(foregroundPresentation)),
-        outputState: agentPresentation.outputState,
-        attentionState: resolveTerminalSidebarAttentionState(tabStates[s.id]),
-        agentIdentity: agentPresentation.identity,
-        canBrowsePath: Boolean(fullPath) && canOpenPath,
+        title: chrome.title,
+        avatarInitial: buildTerminalSidebarAvatarInitial(chrome.title),
+        avatarTone: buildTerminalSidebarAvatarTone(`${s.id}:${chrome.displayPath}:${chrome.title}`),
+        avatar: chrome.avatar,
+        subtitleIcon: chrome.subtitleIcon,
+        subtitle: chrome.subtitle,
+        fullPath: chrome.displayPath,
+        localWorkingDir: chrome.localWorkingDir,
+        processState: resolveTerminalSidebarProcessState(chrome),
+        transitionState: chrome.status === 'failed'
+          ? 'failed' as const
+          : resolveTerminalChromeTransition(runtimeStatuses[s.id]) === 'reconnecting'
+            ? 'reconnecting' as const
+            : chrome.remotePhase === 'opening'
+              ? 'opening' as const
+              : 'none' as const,
+        failureKind: chrome.status === 'failed' ? 'runtime' as const : 'none' as const,
+        outputState: chrome.status === 'wave' ? 'streaming' as const : 'none' as const,
+        activitySource: chrome.status === 'wave' && chrome.statusSource === 'semantic'
+          ? 'semantic' as const
+          : chrome.status === 'wave' && chrome.statusSource === 'output'
+            ? 'output' as const
+            : 'none' as const,
+        attentionState: resolveTerminalSidebarAttentionState(chrome),
+        remote: chrome.remote,
+        canBrowsePath: chrome.canUseLocalPath && Boolean(chrome.localWorkingDir) && canOpenPath,
         canClear: true,
-        canDuplicate: Boolean(fullPath),
+        canDuplicate: chrome.canUseLocalPath && Boolean(chrome.localWorkingDir),
         closable: true,
       };
     });
@@ -3127,11 +3232,18 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         title,
         avatarInitial: buildTerminalSidebarAvatarInitial(title),
         avatarTone: buildTerminalSidebarAvatarTone(`${session.id}:${fullPath}:${title}`),
+        avatar: { kind: 'initial' as const },
+        subtitleIcon: 'none' as const,
+        subtitle: fullPath,
         fullPath,
+        localWorkingDir: fullPath,
         processState: session.status,
+        transitionState: session.status === 'failed' ? 'failed' as const : 'creating' as const,
+        failureKind: session.status === 'failed' ? 'creation' as const : 'none' as const,
         outputState: 'none' as const,
+        activitySource: 'none' as const,
         attentionState: 'none' as const,
-        agentIdentity: null,
+        remote: false,
         canBrowsePath: Boolean(fullPath) && canOpenPath,
         canClear: false,
         canDuplicate: false,
@@ -3493,13 +3605,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     const resolvedSession = activeSession ?? sessions()[0] ?? null;
     if (!resolvedSession) return;
 
-    const workingDir = normalizeAskFlowerAbsolutePath(String(resolvedSession.workingDir ?? '').trim())
-      || normalizeAskFlowerAbsolutePath(agentHomePathAbs())
-      || '';
-    const homePath = normalizeAskFlowerAbsolutePath(agentHomePathAbs()) || undefined;
     const core = coreRegistry.get(resolvedSession.id) ?? getActiveCore();
     const selection = buildTerminalContextSnapshot(resolvedSession.id, core);
-    const showBrowseFiles = Boolean(workingDir) && canBrowseFiles();
 
     if (!currentActiveId) {
       setActiveSessionId(resolvedSession.id);
@@ -3509,10 +3616,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     setTerminalAskMenu({
       x: context.x,
       y: context.y,
-      workingDir,
-      homePath,
       selection,
-      showBrowseFiles,
       triggerElement: context.triggerElement,
     });
   };
@@ -3616,72 +3720,86 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const handleBrowseFilesFromTerminal = () => {
     const menu = terminalAskMenu();
-    if (!menu || !menu.showBrowseFiles) return;
+    if (!menu) return;
+    const item = sessionListItemById().get(menu.selection.sessionId);
+    const workingDir = item?.remote
+      ? ''
+      : normalizeAskFlowerAbsolutePath(item?.localWorkingDir ?? '');
+    if (!item?.canBrowsePath || !workingDir) return;
     setTerminalAskMenu(null);
 
-    void env.openFileBrowserAtPath(menu.workingDir, {
-      homePath: menu.homePath,
+    void env.openFileBrowserAtPath(workingDir, {
+      homePath: normalizeAskFlowerAbsolutePath(agentHomePathAbs()) || undefined,
       openStrategy: env.viewMode() === 'workbench' ? 'create_new' : undefined,
     });
   };
 
   const openSidebarItemFiles = (item: TerminalSessionNavigationItem) => {
-    if (!item.canBrowsePath || !item.fullPath) return;
+    const currentItem = sessionListItemById().get(item.id);
+    if (!currentItem?.canBrowsePath || currentItem.remote || !currentItem.localWorkingDir) return;
 
     setTerminalSidebarMenu(null);
-    void env.openFileBrowserAtPath(item.fullPath, {
+    void env.openFileBrowserAtPath(currentItem.localWorkingDir, {
       homePath: normalizeAskFlowerAbsolutePath(agentHomePathAbs()) || undefined,
-      title: buildTerminalSidebarDirectoryTitle(item.fullPath, item.label),
+      title: buildTerminalSidebarDirectoryTitle(currentItem.localWorkingDir, currentItem.label),
       openStrategy: env.viewMode() === 'workbench' ? 'create_new' : undefined,
     });
   };
 
   const copySidebarItemPath = (item: TerminalSessionNavigationItem) => {
-    const fullPath = normalizeAskFlowerAbsolutePath(item.fullPath);
-    if (!fullPath) return;
+    const currentItem = sessionListItemById().get(item.id);
+    const fullPath = normalizeAskFlowerAbsolutePath(currentItem?.fullPath ?? '');
+    if (!currentItem || !fullPath) return;
+    const sessionId = currentItem.id;
 
     void writeTextToClipboard(fullPath)
       .then(() => {
-        setCopiedSidebarPathSessionId(item.id);
+        setCopiedSidebarPathSessionId(sessionId);
         if (sidebarPathCopyResetTimer !== undefined) {
           globalThis.clearTimeout(sidebarPathCopyResetTimer);
         }
         sidebarPathCopyResetTimer = globalThis.setTimeout(() => {
           sidebarPathCopyResetTimer = undefined;
-          setCopiedSidebarPathSessionId((current) => (current === item.id ? null : current));
+          setCopiedSidebarPathSessionId((current) => (current === sessionId ? null : current));
         }, 1500);
       })
       .catch(notifyTerminalCopyFailure);
   };
 
   const duplicateSidebarItemSession = (item: TerminalSessionNavigationItem) => {
-    const fullPath = normalizeAskFlowerAbsolutePath(item.fullPath);
-    if (!connected() || !item.canDuplicate || !fullPath) return;
+    const currentItem = sessionListItemById().get(item.id);
+    const fullPath = currentItem?.remote
+      ? ''
+      : normalizeAskFlowerAbsolutePath(currentItem?.localWorkingDir ?? '');
+    if (!connected() || !currentItem?.canDuplicate || !fullPath) return;
     const nextIndex = sessions().length + pendingTerminalSessions().length + 1;
     const fallbackName = i18n.t('terminal.terminalName', { index: nextIndex });
     void beginCreateSession(resolveRequestedSessionName(undefined, fullPath, fallbackName), fullPath);
   };
 
   const clearSidebarItemSession = (item: TerminalSessionNavigationItem) => {
-    if (!item.canClear) return;
+    const currentItem = sessionListItemById().get(item.id);
+    if (!currentItem?.canClear) return;
     const menu = terminalSidebarMenu();
     const focusRestoreIntent = captureTerminalFocusRestoreIntent(
-      item.id,
+      currentItem.id,
       menu?.triggerElement ?? null,
     );
     setTerminalSidebarMenu(null);
-    void clearSession(item.id, { focusRestoreIntent });
+    void clearSession(currentItem.id, { focusRestoreIntent });
   };
 
   const askFlowerFromSidebarItem = (item: TerminalSessionNavigationItem, anchor: { x: number; y: number }) => {
-    const workingDir = normalizeAskFlowerAbsolutePath(item.fullPath) || normalizeAskFlowerAbsolutePath(agentHomePathAbs()) || '';
+    const currentItem = sessionListItemById().get(item.id);
+    if (!currentItem || currentItem.remote) return;
+    const workingDir = normalizeAskFlowerAbsolutePath(currentItem.localWorkingDir);
     if (!workingDir) return;
     setTerminalSidebarMenu(null);
     openTerminalAskFlowerContext({
       x: anchor.x,
       y: anchor.y,
       workingDir,
-      selection: buildTerminalContextSnapshot(item.id, coreRegistry.get(item.id) ?? null),
+      selection: buildTerminalContextSnapshot(currentItem.id, coreRegistry.get(currentItem.id) ?? null),
     });
   };
 
@@ -3691,7 +3809,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     workingDir: string;
     selection: terminal_context_snapshot;
   }) => {
-    const workingDir = normalizeAskFlowerAbsolutePath(context.workingDir) || normalizeAskFlowerAbsolutePath(agentHomePathAbs()) || '';
+    const workingDir = normalizeAskFlowerAbsolutePath(context.workingDir);
     if (!workingDir) return;
 
     const selection = context.selection.hasSelection
@@ -3738,7 +3856,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     env.openFlowerTurnLauncher(attachAskFlowerContextAction({
       id: createClientId('ask-flower'),
       source_surface: 'terminal',
-      suggested_working_dir: workingDir,
+      ...(workingDir ? { suggested_working_dir: workingDir } : {}),
       context_items: contextItems,
       pending_attachments: [],
       notes,
@@ -3748,31 +3866,49 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const askFlowerFromTerminal = () => {
     const menu = terminalAskMenu();
     if (!menu) return;
+    const item = sessionListItemById().get(menu.selection.sessionId);
+    if (!item || item.remote) return;
+    const workingDir = normalizeAskFlowerAbsolutePath(item.localWorkingDir);
+    if (!workingDir) return;
     setTerminalAskMenu(null);
     openTerminalAskFlowerContext({
       x: menu.x,
       y: menu.y,
-      workingDir: menu.workingDir,
+      workingDir,
       selection: menu.selection,
     });
   };
 
   const buildTerminalAskMenuItems = (menu: NonNullable<ReturnType<typeof terminalAskMenu>>): FloatingContextMenuItem[] => {
+    const item = sessionListItemById().get(menu.selection.sessionId);
+    const remote = item?.remote === true;
+    const workingDir = remote
+      ? ''
+      : normalizeAskFlowerAbsolutePath(item?.localWorkingDir ?? '');
+    const localPathUnavailable = !remote && !workingDir;
     const primaryItems: FloatingContextMenuItem[] = [
       {
         id: 'ask-flower',
         kind: 'action',
         label: i18n.t('terminal.askFlower'),
         icon: FlowerContextMenuIcon,
+        disabled: remote || localPathUnavailable,
+        disabledReason: remote
+          ? i18n.t('terminal.remotePathActionsUnavailable')
+          : localPathUnavailable
+            ? i18n.t('terminal.invalidWorkingDirectory')
+            : undefined,
         onSelect: askFlowerFromTerminal,
       },
     ];
-    if (menu.showBrowseFiles) {
+    if (item?.canBrowsePath || remote) {
       primaryItems.push({
         id: 'browse-files',
         kind: 'action',
         label: i18n.t('terminal.browseFiles'),
         icon: Folder,
+        disabled: remote || !item?.canBrowsePath,
+        disabledReason: remote ? i18n.t('terminal.remotePathActionsUnavailable') : undefined,
         onSelect: handleBrowseFilesFromTerminal,
       });
     }
@@ -3803,13 +3939,20 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   };
 
   const buildTerminalSidebarMenuItems = (menu: NonNullable<ReturnType<typeof terminalSidebarMenu>>): FloatingContextMenuItem[] => {
-    const item = menu.item;
+    const item = sessionListItemById().get(menu.sessionId);
+    if (!item) return [];
     return [
       {
         id: 'sidebar-ask-flower',
         kind: 'action',
         label: i18n.t('terminal.askFlower'),
         icon: FlowerContextMenuIcon,
+        disabled: item.remote || !item.localWorkingDir,
+        disabledReason: item.remote
+          ? i18n.t('terminal.remotePathActionsUnavailable')
+          : !item.localWorkingDir
+            ? i18n.t('terminal.invalidWorkingDirectory')
+            : undefined,
         onSelect: () => askFlowerFromSidebarItem(item, { x: menu.x, y: menu.y }),
       },
       {
@@ -3818,6 +3961,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         label: i18n.t('terminal.files'),
         icon: Folder,
         disabled: !item.canBrowsePath,
+        disabledReason: item.remote ? i18n.t('terminal.remotePathActionsUnavailable') : undefined,
         onSelect: () => openSidebarItemFiles(item),
       },
       {
@@ -3826,6 +3970,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         label: i18n.t('terminal.duplicateSession'),
         icon: Copy,
         disabled: !item.canDuplicate,
+        disabledReason: item.remote ? i18n.t('terminal.remotePathActionsUnavailable') : undefined,
         onSelect: () => {
           setTerminalSidebarMenu(null);
           duplicateSidebarItemSession(item);
@@ -3871,7 +4016,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     setTerminalSidebarMenu({
       x: event.clientX,
       y: event.clientY,
-      item,
+      sessionId: item.id,
       triggerElement,
     });
   };
@@ -3888,7 +4033,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     setTerminalSidebarMenu({
       x: rect ? rect.left + Math.min(rect.width - 16, 64) : 0,
       y: rect ? rect.top + Math.min(rect.height - 8, 44) : 0,
-      item,
+      sessionId: item.id,
       triggerElement: target,
     });
   };
@@ -4117,12 +4262,54 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return sessionListItems().find((item) => item.id === activeId) ?? null;
   });
   const activeToolbarTitle = createMemo(() => activeSessionListItem()?.title ?? i18n.t('terminal.title'));
+  const activeToolbarAvatar = createMemo(() => activeSessionListItem()?.avatar ?? { kind: 'initial' as const });
+  const activeToolbarProcessState = createMemo(() => activeSessionListItem()?.processState ?? 'none');
+  const activeToolbarSubtitleIcon = createMemo(() => activeSessionListItem()?.subtitleIcon ?? 'none');
   const activeToolbarSubtitle = createMemo(() => {
     const activeItem = activeSessionListItem();
-    if (activeItem?.fullPath) return activeItem.fullPath;
+    if (activeItem?.subtitle) return activeItem.subtitle;
     const pending = activePendingSession();
     if (pending?.workingDir) return pending.workingDir;
     return activeSession()?.id ?? '';
+  });
+  const activeToolbarActivityDescription = createMemo(() => {
+    const item = activeSessionListItem();
+    if (!item) return '';
+    if (item.outputState !== 'none') {
+      const activity = item.activitySource === 'semantic'
+        ? i18n.t('codexActivity.status.working')
+        : i18n.t('terminal.outputStreaming');
+      return item.attentionState === 'unread'
+        ? `${activity}. ${i18n.t('terminal.unreadOutputDescription')}`
+        : activity;
+    }
+    if (item.attentionState === 'waiting') {
+      return i18n.t('codex.pendingRequests.titleByType.userInput');
+    }
+    if (item.attentionState === 'unread') {
+      return i18n.t('terminal.unreadOutputDescription');
+    }
+    return '';
+  });
+  const mobileBackgroundAttention = createMemo<TerminalSessionAttentionState>(() => {
+    const activeId = activeDisplaySessionId();
+    let unread = false;
+    for (const item of sessionListItems()) {
+      if (item.id === activeId) continue;
+      if (item.attentionState === 'waiting') return 'waiting';
+      if (item.attentionState === 'unread') unread = true;
+    }
+    return unread ? 'unread' : 'none';
+  });
+  const mobileSessionDrawerLabel = createMemo(() => {
+    const attention = mobileBackgroundAttention();
+    if (attention === 'waiting') {
+      return `${i18n.t('terminal.sessions')}. ${i18n.t('codex.pendingRequests.titleByType.userInput')}`;
+    }
+    if (attention === 'unread') {
+      return `${i18n.t('terminal.sessions')}. ${i18n.t('terminal.unreadOutputDescription')}`;
+    }
+    return i18n.t('terminal.sessions');
   });
 
   const body = (
@@ -4150,6 +4337,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
             connected={connected()}
             refreshing={refreshing()}
             activeTitle={activeToolbarTitle()}
+            activeAvatar={activeToolbarAvatar()}
             shortcutModLabel={terminalShortcutModLabel()}
             filterQuery={sessionFilterQuery()}
             itemIds={sessionListItemIds()}
@@ -4187,30 +4375,103 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                 <Button
                   size="sm"
                   variant="ghost"
-                  class="h-7 w-7 shrink-0 p-0"
+                  class="relative h-7 w-7 shrink-0 p-0"
                   data-testid="terminal-session-drawer-open"
                   onClick={() => setSessionDrawerOpen(true)}
-                  title={i18n.t('terminal.sessions')}
+                  aria-label={mobileSessionDrawerLabel()}
+                  title={mobileSessionDrawerLabel()}
                 >
                   <Menu class="h-4 w-4" />
+                  <Show when={mobileBackgroundAttention() !== 'none'}>
+                    <span
+                      class={`absolute right-0.5 top-0.5 rounded-full border border-background forced-colors:border-current ${mobileBackgroundAttention() === 'waiting'
+                        ? 'h-2 w-2 bg-warning'
+                        : 'h-1.5 w-1.5 bg-primary'}`}
+                      data-terminal-background-attention={mobileBackgroundAttention()}
+                      aria-hidden="true"
+                    />
+                  </Show>
                 </Button>
               </Show>
-              <div class="flex min-w-0 flex-1 items-center gap-2">
-                <div class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border bg-muted/40 text-muted-foreground">
-                  <Terminal class="h-3.5 w-3.5" />
+              <div class="contents">
+                <div class="relative flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border bg-muted/40 text-muted-foreground">
+                  <TerminalSessionChromeIcon avatar={activeToolbarAvatar()} class="h-3.5 w-3.5" />
+                  <TerminalSessionProcessBadge state={activeToolbarProcessState()} />
                 </div>
-                <div class="min-w-0">
-                  <div
-                    class="truncate text-xs font-semibold text-foreground"
-                    data-terminal-session-title={activeSessionId() ?? ''}
+                <div class="min-w-0 flex-1 overflow-hidden">
+                  <Tooltip
+                    placement="bottom"
+                    delay={0}
+                    clickToToggle
+                    content={(
+                      <span class="flex max-w-[min(82vw,360px)] flex-col gap-0.5 text-left">
+                        <span class="break-words font-semibold">{activeToolbarTitle()}</span>
+                        <Show when={activeToolbarSubtitle()}>
+                          <span class="break-all text-popover-foreground/75">{activeToolbarSubtitle()}</span>
+                        </Show>
+                      </span>
+                    )}
                   >
-                    {activeToolbarTitle()}
-                  </div>
-                  <Show when={activeToolbarSubtitle()}>
-                    <div class="truncate text-[10px] leading-3 text-muted-foreground">{activeToolbarSubtitle()}</div>
-                  </Show>
+                    <button
+                      type="button"
+                      class="block w-full min-w-0 max-w-full cursor-pointer overflow-hidden text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      aria-label={[activeToolbarTitle(), activeToolbarSubtitle()].filter(Boolean).join(', ')}
+                      data-testid="terminal-active-context-disclosure"
+                    >
+                      <span
+                        class="block truncate text-xs font-semibold text-foreground"
+                        data-terminal-session-title={activeSessionId() ?? ''}
+                      >
+                        {activeToolbarTitle()}
+                      </span>
+                      <Show when={activeToolbarSubtitle()}>
+                        <span class="flex min-w-0 items-center text-[10px] leading-3 text-muted-foreground">
+                          <Show when={activeToolbarSubtitleIcon() === 'link'}>
+                            <span class="mr-1 flex h-2.5 w-2.5 shrink-0" data-terminal-toolbar-location-icon="link" aria-hidden="true">
+                              <Link class="h-2.5 w-2.5" />
+                            </span>
+                          </Show>
+                          <span class="truncate">{activeToolbarSubtitle()}</span>
+                        </span>
+                      </Show>
+                    </button>
+                  </Tooltip>
                 </div>
               </div>
+              <Show when={isMobileLayout()}>
+                <span
+                  class="flex h-7 w-7 shrink-0 items-center justify-center"
+                  data-terminal-mobile-activity-slot=""
+                >
+                  <Show when={activeSessionListItem()?.outputState !== 'none'} fallback={(
+                    <Show when={activeSessionListItem()?.attentionState !== 'none'}>
+                      <Tooltip content={activeToolbarActivityDescription()} placement="bottom" delay={0} clickToToggle>
+                        <button
+                          type="button"
+                          class={`flex h-7 w-7 cursor-pointer items-center justify-center rounded focus:outline-none focus-visible:ring-1 focus-visible:ring-ring forced-colors:border forced-colors:border-current ${activeSessionListItem()?.attentionState === 'waiting'
+                            ? 'text-warning hover:bg-warning/10'
+                            : 'text-primary hover:bg-primary/10'}`}
+                          aria-label={activeToolbarActivityDescription()}
+                          data-terminal-mobile-attention={activeSessionListItem()?.attentionState}
+                        >
+                          <span class={`rounded-full bg-current ${activeSessionListItem()?.attentionState === 'waiting' ? 'h-2 w-2' : 'h-1.5 w-1.5'}`} aria-hidden="true" />
+                        </button>
+                      </Tooltip>
+                    </Show>
+                  )}>
+                    <Tooltip content={activeToolbarActivityDescription()} placement="bottom" delay={0} clickToToggle>
+                      <button
+                        type="button"
+                        class="flex h-7 w-7 cursor-pointer items-center justify-center rounded text-primary hover:bg-primary/10 focus:outline-none focus-visible:ring-1 focus-visible:ring-ring forced-colors:border forced-colors:border-current"
+                        aria-label={activeToolbarActivityDescription()}
+                        data-terminal-mobile-activity={activeSessionListItem()?.activitySource}
+                      >
+                        <TerminalOutputStatusGlyph state="streaming" />
+                      </button>
+                    </Tooltip>
+                  </Show>
+                </span>
+              </Show>
               <Show when={isMobileLayout() ? activeGeometryPresentation() : null}>
                 {(presentation) => (
                   <TerminalSharedGeometryNotice
@@ -4306,7 +4567,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                               fontSize={fontSize}
                               fontFamily={fontFamily}
                               agentHomePathAbs={agentHomePathAbs}
-                              canOpenFilePreview={canBrowseFiles}
+                              canOpenFilePreview={() => (
+                                canBrowseFiles()
+                                && Boolean(terminalChromeBySession().get(sessionId)?.canUseLocalPath)
+                              )}
                               bottomInsetPx={terminalViewportInsetPx}
                               connId={connId}
                               transport={transport}
@@ -4593,6 +4857,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
             y={menu.y}
             ariaLabel={i18n.t('terminal.title')}
             focusAnchor={menu.triggerElement}
+            focusDisabledItems={sessionListItemById().get(menu.selection.sessionId)?.remote === true}
             items={buildTerminalAskMenuItems(menu)}
             onDismiss={dismissTerminalAskMenu}
             menuRef={(el) => {
@@ -4609,6 +4874,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
             y={menu.y}
             ariaLabel={i18n.t('terminal.sessions')}
             focusAnchor={menu.triggerElement}
+            focusDisabledItems={sessionListItemById().get(menu.sessionId)?.remote === true}
             items={buildTerminalSidebarMenuItems(menu)}
             onDismiss={dismissTerminalSidebarMenu}
             menuRef={(el) => {

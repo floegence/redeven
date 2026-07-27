@@ -24,6 +24,8 @@ func TestTerminalRPCTypeIDsAreUnique(t *testing.T) {
 		"sessions changed":          TypeID_TERMINAL_SESSIONS_CHANGED,
 		"foreground command update": TypeID_TERMINAL_FOREGROUND_COMMAND_UPDATE,
 		"output activity update":    TypeID_TERMINAL_OUTPUT_ACTIVITY_UPDATE,
+		"execution context update":  TypeID_TERMINAL_EXECUTION_CONTEXT_UPDATE,
+		"semantic work update":      TypeID_TERMINAL_WORK_STATE_UPDATE,
 	} {
 		if previous, exists := typeIDs[typeID]; exists {
 			t.Fatalf("terminal RPC Type ID %d is shared by %q and %q", typeID, previous, name)
@@ -33,6 +35,12 @@ func TestTerminalRPCTypeIDsAreUnique(t *testing.T) {
 
 	if TypeID_TERMINAL_OUTPUT_ACTIVITY_UPDATE != 2014 {
 		t.Fatalf("output activity Type ID = %d, want 2014", TypeID_TERMINAL_OUTPUT_ACTIVITY_UPDATE)
+	}
+	if TypeID_TERMINAL_EXECUTION_CONTEXT_UPDATE != 2015 {
+		t.Fatalf("execution context Type ID = %d, want 2015", TypeID_TERMINAL_EXECUTION_CONTEXT_UPDATE)
+	}
+	if TypeID_TERMINAL_WORK_STATE_UPDATE != 2016 {
+		t.Fatalf("semantic work Type ID = %d, want 2016", TypeID_TERMINAL_WORK_STATE_UPDATE)
 	}
 }
 
@@ -82,5 +90,62 @@ func TestOutputActivityRPCTypeIDIsGloballyUnique(t *testing.T) {
 	}
 	if len(locations) != 1 {
 		t.Fatalf("RPC Type ID %d declarations = %v, want only terminal output activity", TypeID_TERMINAL_OUTPUT_ACTIVITY_UPDATE, locations)
+	}
+}
+
+func TestContextAndWorkRPCTypeIDsAreGloballyUnique(t *testing.T) {
+	repoRoot := filepath.Clean(filepath.Join("..", ".."))
+	internalRoot := filepath.Join(repoRoot, "internal")
+	targets := map[uint32]string{
+		TypeID_TERMINAL_EXECUTION_CONTEXT_UPDATE: "terminal execution context",
+		TypeID_TERMINAL_WORK_STATE_UPDATE:        "terminal semantic work state",
+	}
+	locations := map[uint32][]string{}
+	files := token.NewFileSet()
+
+	err := filepath.WalkDir(internalRoot, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() || filepath.Ext(path) != ".go" || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		file, err := parser.ParseFile(files, path, nil, 0)
+		if err != nil {
+			return err
+		}
+		ast.Inspect(file, func(node ast.Node) bool {
+			spec, ok := node.(*ast.ValueSpec)
+			if !ok {
+				return true
+			}
+			for index, name := range spec.Names {
+				if !strings.Contains(strings.ToLower(name.Name), "typeid") || index >= len(spec.Values) {
+					continue
+				}
+				literal, ok := spec.Values[index].(*ast.BasicLit)
+				if !ok || literal.Kind != token.INT {
+					continue
+				}
+				value, err := strconv.ParseUint(literal.Value, 0, 32)
+				if err != nil {
+					continue
+				}
+				typeID := uint32(value)
+				if _, tracked := targets[typeID]; tracked {
+					locations[typeID] = append(locations[typeID], files.Position(name.Pos()).String()+" "+name.Name)
+				}
+			}
+			return true
+		})
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("scan global RPC Type IDs: %v", err)
+	}
+	for typeID, owner := range targets {
+		if len(locations[typeID]) != 1 {
+			t.Fatalf("RPC Type ID %d declarations = %v, want only %s", typeID, locations[typeID], owner)
+		}
 	}
 }

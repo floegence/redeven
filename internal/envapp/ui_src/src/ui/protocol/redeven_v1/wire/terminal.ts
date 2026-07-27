@@ -11,6 +11,37 @@ export type wire_terminal_output_activity_info = {
   updated_at_ms: number;
 };
 
+export type wire_terminal_location_info = {
+  kind: 'unknown' | 'local' | 'remote';
+  phase: 'unknown' | 'opening' | 'ready';
+  label: string;
+  authority: string;
+  working_directory: string;
+  source: 'unknown' | 'shell_integration' | 'osc7' | 'osc_title' | 'foreground_candidate';
+};
+
+export type wire_terminal_application_info = {
+  kind: 'unknown' | 'shell' | 'agent_cli' | 'interactive_app';
+  identity: string;
+  display_name: string;
+};
+
+export type wire_terminal_execution_context_info = {
+  location: wire_terminal_location_info;
+  application: wire_terminal_application_info;
+  revision: number;
+  updated_at_ms: number;
+};
+
+export type wire_terminal_work_state_info = {
+  phase: 'unknown' | 'idle' | 'working' | 'waiting_user';
+  source: '' | 'semantic';
+  context_revision: number;
+  foreground_command_revision: number;
+  revision: number;
+  updated_at_ms: number;
+};
+
 export type wire_terminal_session_info = {
   id: string;
   name: string;
@@ -20,6 +51,8 @@ export type wire_terminal_session_info = {
   is_active: boolean;
   foreground_command?: wire_terminal_foreground_command_info;
   output_activity?: wire_terminal_output_activity_info;
+  execution_context?: wire_terminal_execution_context_info;
+  work_state?: wire_terminal_work_state_info;
 };
 
 export type wire_terminal_session_create_req = {
@@ -50,6 +83,16 @@ export type wire_terminal_foreground_command_update_notify = {
 export type wire_terminal_output_activity_update_notify = {
   session_id: string;
   output_activity: wire_terminal_output_activity_info;
+};
+
+export type wire_terminal_execution_context_update_notify = {
+  session_id: string;
+  execution_context: wire_terminal_execution_context_info;
+};
+
+export type wire_terminal_work_state_update_notify = {
+  session_id: string;
+  work_state: wire_terminal_work_state_info;
 };
 
 export type wire_terminal_history_req = {

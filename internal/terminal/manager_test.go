@@ -19,6 +19,7 @@ import (
 
 	termgo "github.com/floegence/floeterm/terminal-go"
 	"github.com/floegence/flowersec/flowersec-go/rpc"
+	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/session"
@@ -1037,6 +1038,327 @@ func TestOutputActivityUpdateNormalizesMalformedUpstreamPhase(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("did not receive normalized terminal output activity update")
+	}
+}
+
+func TestContextAndWorkEventsReachEveryAuthorizedControlClient(t *testing.T) {
+	m := newQuietTestManager(t, t.TempDir())
+	t.Cleanup(m.Cleanup)
+
+	type clientHarness struct {
+		serverConn     net.Conn
+		clientConn     net.Conn
+		client         *rpc.Client
+		detach         func()
+		contextUpdates chan terminalExecutionContextUpdatePayload
+		workUpdates    chan terminalWorkStateUpdatePayload
+	}
+	newHarness := func() *clientHarness {
+		serverConn, clientConn := net.Pipe()
+		router := rpc.NewRouter()
+		server := rpc.NewServer(serverConn, router)
+		client := rpc.NewClient(clientConn)
+		contextUpdates := make(chan terminalExecutionContextUpdatePayload, 1)
+		workUpdates := make(chan terminalWorkStateUpdatePayload, 1)
+		client.OnNotify(TypeID_TERMINAL_EXECUTION_CONTEXT_UPDATE, func(payload json.RawMessage) {
+			var update terminalExecutionContextUpdatePayload
+			if json.Unmarshal(payload, &update) == nil {
+				contextUpdates <- update
+			}
+		})
+		client.OnNotify(TypeID_TERMINAL_WORK_STATE_UPDATE, func(payload json.RawMessage) {
+			var update terminalWorkStateUpdatePayload
+			if json.Unmarshal(payload, &update) == nil {
+				workUpdates <- update
+			}
+		})
+		detach := m.RegisterWithAccessGate(
+			router,
+			&session.Meta{CanRead: true, CanWrite: true, CanExecute: true},
+			server,
+			nil,
+		)
+		return &clientHarness{
+			serverConn:     serverConn,
+			clientConn:     clientConn,
+			client:         client,
+			detach:         detach,
+			contextUpdates: contextUpdates,
+			workUpdates:    workUpdates,
+		}
+	}
+
+	clients := []*clientHarness{newHarness(), newHarness()}
+	for _, harness := range clients {
+		harness := harness
+		t.Cleanup(func() {
+			harness.detach()
+			_ = harness.client.Close()
+			_ = harness.serverConn.Close()
+			_ = harness.clientConn.Close()
+		})
+	}
+
+	handler := &eventHandler{m: m}
+	handler.OnTerminalExecutionContextChanged("shared-session", termgo.TerminalExecutionContextInfo{
+		Location: termgo.TerminalLocationInfo{
+			Kind:             termgo.TerminalLocationRemote,
+			Phase:            termgo.TerminalLocationPhaseReady,
+			Label:            "root@host",
+			Authority:        "host",
+			WorkingDirectory: "/root/project",
+			Source:           termgo.TerminalContextSourceOSC7,
+		},
+		Application: termgo.TerminalApplicationInfo{
+			Kind:        termgo.TerminalApplicationAgentCLI,
+			Identity:    "codex",
+			DisplayName: "Codex",
+		},
+		Revision:  7,
+		UpdatedAt: 90,
+	})
+	handler.OnTerminalSemanticWorkStateChanged("shared-session", termgo.TerminalWorkStateInfo{
+		Phase:                     termgo.TerminalWorkWaitingUser,
+		Source:                    "semantic",
+		ContextRevision:           7,
+		ForegroundCommandRevision: 4,
+		Revision:                  8,
+		UpdatedAt:                 91,
+	})
+
+	for index, harness := range clients {
+		select {
+		case update := <-harness.contextUpdates:
+			if update.SessionID != "shared-session" || update.ExecutionContext.Location.Label != "root@host" || update.ExecutionContext.Application.Identity != "codex" || update.ExecutionContext.Revision != 7 {
+				t.Fatalf("client %d execution context = %#v", index, update)
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("client %d did not receive terminal execution context update", index)
+		}
+		select {
+		case update := <-harness.workUpdates:
+			if update.SessionID != "shared-session" || update.WorkState.Phase != "waiting_user" || update.WorkState.ContextRevision != 7 || update.WorkState.Revision != 8 {
+				t.Fatalf("client %d semantic work state = %#v", index, update)
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("client %d did not receive terminal semantic work update", index)
+		}
+	}
+}
+
+func TestContextAndWorkNotificationsFollowDynamicAccessGateState(t *testing.T) {
+	m := newQuietTestManager(t, t.TempDir())
+	t.Cleanup(m.Cleanup)
+	gate := accessgate.New(accessgate.Options{Password: "secret"})
+
+	type clientHarness struct {
+		meta           session.Meta
+		serverConn     net.Conn
+		clientConn     net.Conn
+		client         *rpc.Client
+		detach         func()
+		contextUpdates chan terminalExecutionContextUpdatePayload
+		workUpdates    chan terminalWorkStateUpdatePayload
+	}
+	newHarness := func(channelID string, unlocked bool) *clientHarness {
+		serverConn, clientConn := net.Pipe()
+		router := rpc.NewRouter()
+		server := rpc.NewServer(serverConn, router)
+		client := rpc.NewClient(clientConn)
+		meta := session.Meta{ChannelID: channelID, CanRead: true, CanWrite: true, CanExecute: true}
+		gate.RegisterChannelWithOptions(meta, accessgate.RegisterChannelOptions{Unlocked: unlocked})
+		contextUpdates := make(chan terminalExecutionContextUpdatePayload, 4)
+		workUpdates := make(chan terminalWorkStateUpdatePayload, 4)
+		client.OnNotify(TypeID_TERMINAL_EXECUTION_CONTEXT_UPDATE, func(payload json.RawMessage) {
+			var update terminalExecutionContextUpdatePayload
+			if json.Unmarshal(payload, &update) == nil {
+				contextUpdates <- update
+			}
+		})
+		client.OnNotify(TypeID_TERMINAL_WORK_STATE_UPDATE, func(payload json.RawMessage) {
+			var update terminalWorkStateUpdatePayload
+			if json.Unmarshal(payload, &update) == nil {
+				workUpdates <- update
+			}
+		})
+		detach := m.RegisterWithAccessGate(router, &meta, server, gate)
+		return &clientHarness{
+			meta: meta, serverConn: serverConn, clientConn: clientConn, client: client,
+			detach: detach, contextUpdates: contextUpdates, workUpdates: workUpdates,
+		}
+	}
+	locked := newHarness("locked", false)
+	unlocked := newHarness("unlocked", true)
+	for _, harness := range []*clientHarness{locked, unlocked} {
+		harness := harness
+		t.Cleanup(func() {
+			harness.detach()
+			gate.UnregisterChannel(harness.meta.ChannelID)
+			_ = harness.client.Close()
+			_ = harness.serverConn.Close()
+			_ = harness.clientConn.Close()
+		})
+	}
+
+	broadcast := func(revision uint64) {
+		m.broadcastExecutionContextUpdate("shared-session", termgo.TerminalExecutionContextInfo{
+			Location: termgo.TerminalLocationInfo{
+				Kind: termgo.TerminalLocationRemote, Phase: termgo.TerminalLocationPhaseReady,
+				Label: "root@host", Authority: "host", WorkingDirectory: "/root/project",
+			},
+			Application: termgo.TerminalApplicationInfo{Kind: termgo.TerminalApplicationAgentCLI, Identity: "codex", DisplayName: "Codex"},
+			Revision:    revision,
+		})
+		m.broadcastWorkStateUpdate("shared-session", termgo.TerminalWorkStateInfo{
+			Phase: termgo.TerminalWorkWorking, Source: "semantic", ContextRevision: revision,
+			ForegroundCommandRevision: 1, Revision: revision,
+		})
+	}
+	requireUpdates := func(harness *clientHarness, revision uint64) {
+		t.Helper()
+		select {
+		case update := <-harness.contextUpdates:
+			if update.ExecutionContext.Revision != revision {
+				t.Fatalf("context revision = %d, want %d", update.ExecutionContext.Revision, revision)
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("channel %q did not receive context update", harness.meta.ChannelID)
+		}
+		select {
+		case update := <-harness.workUpdates:
+			if update.WorkState.Revision != revision {
+				t.Fatalf("work revision = %d, want %d", update.WorkState.Revision, revision)
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("channel %q did not receive work update", harness.meta.ChannelID)
+		}
+	}
+	requireNoUpdates := func(harness *clientHarness) {
+		t.Helper()
+		select {
+		case update := <-harness.contextUpdates:
+			t.Fatalf("channel %q received locked context update: %#v", harness.meta.ChannelID, update)
+		case <-time.After(100 * time.Millisecond):
+		}
+		select {
+		case update := <-harness.workUpdates:
+			t.Fatalf("channel %q received locked work update: %#v", harness.meta.ChannelID, update)
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+
+	broadcast(1)
+	requireUpdates(unlocked, 1)
+	requireNoUpdates(locked)
+	if _, err := gate.UnlockChannel(locked.meta.ChannelID, "secret"); err != nil {
+		t.Fatalf("UnlockChannel() error = %v", err)
+	}
+	broadcast(2)
+	requireUpdates(unlocked, 2)
+	requireUpdates(locked, 2)
+	gate.UnregisterChannel(locked.meta.ChannelID)
+	broadcast(3)
+	requireUpdates(unlocked, 3)
+	requireNoUpdates(locked)
+}
+
+func TestContextAndWorkWireNormalizationAndPayloadIsolation(t *testing.T) {
+	contextInfo := toExecutionContextInfo(termgo.TerminalExecutionContextInfo{
+		Location: termgo.TerminalLocationInfo{
+			Kind:             termgo.TerminalLocationKind("corrupt"),
+			Phase:            termgo.TerminalLocationPhase("corrupt"),
+			Label:            "must-not-survive",
+			Authority:        "must-not-survive",
+			WorkingDirectory: "/must-not-survive",
+			Source:           termgo.TerminalContextSource("corrupt"),
+		},
+		Application: termgo.TerminalApplicationInfo{
+			Kind:        termgo.TerminalApplicationKind("corrupt"),
+			Identity:    "must-not-survive",
+			DisplayName: "must-not-survive",
+		},
+		Revision:  9,
+		UpdatedAt: 100,
+	})
+	if contextInfo.Location.Kind != "unknown" || contextInfo.Location.Phase != "unknown" || contextInfo.Location.Source != "unknown" {
+		t.Fatalf("execution context location = %#v, want normalized unknown", contextInfo.Location)
+	}
+	if contextInfo.Location.Label != "" || contextInfo.Location.Authority != "" || contextInfo.Location.WorkingDirectory != "" {
+		t.Fatalf("invalid execution context retained location detail: %#v", contextInfo.Location)
+	}
+	if contextInfo.Application.Kind != "unknown" || contextInfo.Application.Identity != "" || contextInfo.Application.DisplayName != "" {
+		t.Fatalf("invalid execution context retained application detail: %#v", contextInfo.Application)
+	}
+
+	workInfo := toWorkStateInfo(termgo.TerminalWorkStateInfo{
+		Phase:                     termgo.TerminalWorkPhase("corrupt"),
+		Source:                    "must-not-survive",
+		ContextRevision:           10,
+		ForegroundCommandRevision: 11,
+		Revision:                  12,
+		UpdatedAt:                 101,
+	})
+	if workInfo.Phase != "unknown" || workInfo.Source != "" || workInfo.ContextRevision != 0 || workInfo.ForegroundCommandRevision != 0 {
+		t.Fatalf("work state = %#v, want normalized unknown without stale fences", workInfo)
+	}
+
+	contextPayload, err := json.Marshal(terminalExecutionContextUpdatePayload{
+		SessionID:        "session-1",
+		ExecutionContext: contextInfo,
+	})
+	if err != nil {
+		t.Fatalf("marshal execution context payload: %v", err)
+	}
+	for _, forbidden := range []string{"foreground_command", "output_activity", "work_state", "must-not-survive"} {
+		if strings.Contains(string(contextPayload), forbidden) {
+			t.Fatalf("execution context payload contains %q: %s", forbidden, contextPayload)
+		}
+	}
+
+	workPayload, err := json.Marshal(terminalWorkStateUpdatePayload{SessionID: "session-1", WorkState: workInfo})
+	if err != nil {
+		t.Fatalf("marshal semantic work payload: %v", err)
+	}
+	for _, forbidden := range []string{"execution_context", `"foreground_command":`, "output_activity", "must-not-survive"} {
+		if strings.Contains(string(workPayload), forbidden) {
+			t.Fatalf("semantic work payload contains %q: %s", forbidden, workPayload)
+		}
+	}
+}
+
+func TestWireSessionInfoIncludesExecutionContextAndWorkSnapshots(t *testing.T) {
+	wire := toWireSessionInfo(termgo.TerminalSessionInfo{
+		ID: "session-1",
+		ExecutionContext: termgo.TerminalExecutionContextInfo{
+			Location: termgo.TerminalLocationInfo{
+				Kind:             termgo.TerminalLocationRemote,
+				Phase:            termgo.TerminalLocationPhaseReady,
+				Label:            "root@host",
+				Authority:        "host",
+				WorkingDirectory: "/root/project",
+				Source:           termgo.TerminalContextSourceOSC7,
+			},
+			Application: termgo.TerminalApplicationInfo{
+				Kind:        termgo.TerminalApplicationAgentCLI,
+				Identity:    "claude",
+				DisplayName: "Claude Code",
+			},
+			Revision:  3,
+			UpdatedAt: 40,
+		},
+		WorkState: termgo.TerminalWorkStateInfo{
+			Phase:                     termgo.TerminalWorkWorking,
+			ContextRevision:           3,
+			ForegroundCommandRevision: 2,
+			Revision:                  4,
+			UpdatedAt:                 41,
+		},
+	})
+	if wire.ExecutionContext.Location.Label != "root@host" || wire.ExecutionContext.Application.Identity != "claude" || wire.ExecutionContext.Revision != 3 {
+		t.Fatalf("execution context snapshot = %#v", wire.ExecutionContext)
+	}
+	if wire.WorkState.Phase != "working" || wire.WorkState.Source != "semantic" || wire.WorkState.ContextRevision != 3 || wire.WorkState.Revision != 4 {
+		t.Fatalf("semantic work snapshot = %#v", wire.WorkState)
 	}
 }
 

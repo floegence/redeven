@@ -1,6 +1,12 @@
 import { bytesFromBase64 } from './base64';
-import { normalizeTerminalForegroundCommandDisplayName } from '@floegence/floeterm-terminal-web/sessions';
+import {
+  normalizeTerminalExecutionContextInfo,
+  normalizeTerminalForegroundCommandDisplayName,
+  normalizeTerminalWorkStateInfo,
+} from '@floegence/floeterm-terminal-web/sessions';
 import type {
+  wire_terminal_execution_context_info,
+  wire_terminal_execution_context_update_notify,
   wire_terminal_foreground_command_info,
   wire_terminal_foreground_command_update_notify,
   wire_terminal_history_req,
@@ -19,6 +25,8 @@ import type {
   wire_terminal_clear_req,
   wire_terminal_clear_resp,
   wire_terminal_sessions_changed_notify,
+  wire_terminal_work_state_info,
+  wire_terminal_work_state_update_notify,
 } from '../wire/terminal';
 import type {
   TerminalClearRequest,
@@ -26,6 +34,7 @@ import type {
   TerminalHistoryRequest,
   TerminalHistoryResponse,
   TerminalForegroundCommandUpdateEvent,
+  TerminalExecutionContextUpdateEvent,
   TerminalNameUpdateEvent,
   TerminalOutputActivityUpdateEvent,
   TerminalSessionCreateRequest,
@@ -36,11 +45,14 @@ import type {
   TerminalSessionStatsRequest,
   TerminalSessionStatsResponse,
   TerminalSessionsChangedEvent,
+  TerminalWorkStateUpdateEvent,
 } from '../sdk/terminal';
 
 import type {
+  TerminalExecutionContextInfo,
   TerminalForegroundCommandInfo,
   TerminalOutputActivityInfo,
+  TerminalWorkStateInfo,
 } from '@floegence/floeterm-terminal-web';
 
 const UNKNOWN_FOREGROUND_COMMAND: TerminalForegroundCommandInfo = Object.freeze({
@@ -55,6 +67,73 @@ const UNKNOWN_OUTPUT_ACTIVITY: TerminalOutputActivityInfo = Object.freeze({
   revision: 0,
   updatedAtMs: 0,
 });
+
+const UNKNOWN_EXECUTION_CONTEXT = Object.freeze(normalizeTerminalExecutionContextInfo(undefined));
+const UNKNOWN_WORK_STATE = Object.freeze(normalizeTerminalWorkStateInfo(undefined));
+
+function sameExecutionContext(left: TerminalExecutionContextInfo, right: TerminalExecutionContextInfo): boolean {
+  return left.location.kind === right.location.kind
+    && left.location.phase === right.location.phase
+    && left.location.label === right.location.label
+    && left.location.authority === right.location.authority
+    && left.location.workingDirectory === right.location.workingDirectory
+    && left.location.source === right.location.source
+    && left.application.kind === right.application.kind
+    && left.application.identity === right.application.identity
+    && left.application.displayName === right.application.displayName
+    && left.revision === right.revision
+    && left.updatedAtMs === right.updatedAtMs;
+}
+
+function sameWorkState(left: TerminalWorkStateInfo, right: TerminalWorkStateInfo): boolean {
+  return left.phase === right.phase
+    && left.source === right.source
+    && left.contextRevision === right.contextRevision
+    && left.foregroundCommandRevision === right.foregroundCommandRevision
+    && left.revision === right.revision
+    && left.updatedAtMs === right.updatedAtMs;
+}
+
+export function fromWireTerminalExecutionContextInfo(
+  value: wire_terminal_execution_context_info | null | undefined,
+): TerminalExecutionContextInfo | null {
+  if (!value || typeof value !== 'object' || !value.location || !value.application) return null;
+  const candidate: TerminalExecutionContextInfo = {
+    location: {
+      kind: value.location.kind,
+      phase: value.location.phase,
+      label: value.location.label,
+      authority: value.location.authority,
+      workingDirectory: value.location.working_directory,
+      source: value.location.source,
+    },
+    application: {
+      kind: value.application.kind,
+      identity: value.application.identity,
+      displayName: value.application.display_name,
+    },
+    revision: value.revision,
+    updatedAtMs: value.updated_at_ms,
+  };
+  const normalized = normalizeTerminalExecutionContextInfo(candidate);
+  return sameExecutionContext(candidate, normalized) ? normalized : null;
+}
+
+export function fromWireTerminalWorkStateInfo(
+  value: wire_terminal_work_state_info | null | undefined,
+): TerminalWorkStateInfo | null {
+  if (!value || typeof value !== 'object') return null;
+  const candidate: TerminalWorkStateInfo = {
+    phase: value.phase,
+    source: value.source,
+    contextRevision: value.context_revision,
+    foregroundCommandRevision: value.foreground_command_revision,
+    revision: value.revision,
+    updatedAtMs: value.updated_at_ms,
+  };
+  const normalized = normalizeTerminalWorkStateInfo(candidate);
+  return sameWorkState(candidate, normalized) ? normalized : null;
+}
 
 export function fromWireTerminalForegroundCommandInfo(
   value: wire_terminal_foreground_command_info | null | undefined,
@@ -104,6 +183,10 @@ function toTerminalSessionInfo(s: wire_terminal_session_info): TerminalSessionIn
       ?? { ...UNKNOWN_FOREGROUND_COMMAND },
     outputActivity: fromWireTerminalOutputActivityInfo(s?.output_activity)
       ?? { ...UNKNOWN_OUTPUT_ACTIVITY },
+    executionContext: fromWireTerminalExecutionContextInfo(s?.execution_context)
+      ?? { ...UNKNOWN_EXECUTION_CONTEXT, location: { ...UNKNOWN_EXECUTION_CONTEXT.location }, application: { ...UNKNOWN_EXECUTION_CONTEXT.application } },
+    workState: fromWireTerminalWorkStateInfo(s?.work_state)
+      ?? { ...UNKNOWN_WORK_STATE },
   };
 }
 
@@ -234,6 +317,24 @@ export function fromWireTerminalOutputActivityUpdateNotify(
   if (!sessionId) return null;
   const outputActivity = fromWireTerminalOutputActivityInfo(payload?.output_activity);
   return outputActivity ? { sessionId, outputActivity } : null;
+}
+
+export function fromWireTerminalExecutionContextUpdateNotify(
+  payload: wire_terminal_execution_context_update_notify,
+): TerminalExecutionContextUpdateEvent | null {
+  const sessionId = String(payload?.session_id ?? '').trim();
+  if (!sessionId) return null;
+  const executionContext = fromWireTerminalExecutionContextInfo(payload?.execution_context);
+  return executionContext ? { sessionId, executionContext } : null;
+}
+
+export function fromWireTerminalWorkStateUpdateNotify(
+  payload: wire_terminal_work_state_update_notify,
+): TerminalWorkStateUpdateEvent | null {
+  const sessionId = String(payload?.session_id ?? '').trim();
+  if (!sessionId) return null;
+  const workState = fromWireTerminalWorkStateInfo(payload?.work_state);
+  return workState ? { sessionId, workState } : null;
 }
 
 export function fromWireTerminalSessionsChangedNotify(payload: wire_terminal_sessions_changed_notify): TerminalSessionsChangedEvent | null {

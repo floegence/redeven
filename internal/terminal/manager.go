@@ -32,6 +32,8 @@ const (
 	TypeID_TERMINAL_SESSIONS_CHANGED          uint32 = 2012 // notify (agent -> client): terminal sessions list changed
 	TypeID_TERMINAL_FOREGROUND_COMMAND_UPDATE uint32 = 2013 // notify (agent -> client): shell-reported foreground command changed
 	TypeID_TERMINAL_OUTPUT_ACTIVITY_UPDATE    uint32 = 2014 // notify (agent -> client): foreground command output activity changed
+	TypeID_TERMINAL_EXECUTION_CONTEXT_UPDATE  uint32 = 2015 // notify (agent -> client): atomic location/application context changed
+	TypeID_TERMINAL_WORK_STATE_UPDATE         uint32 = 2016 // notify (agent -> client): semantic work state changed
 )
 
 const (
@@ -72,6 +74,8 @@ type SessionInfo struct {
 	IsActive          bool                  `json:"is_active"`
 	ForegroundCommand ForegroundCommandInfo `json:"foreground_command"`
 	OutputActivity    *OutputActivityInfo   `json:"output_activity,omitempty"`
+	ExecutionContext  ExecutionContextInfo  `json:"execution_context"`
+	WorkState         WorkStateInfo         `json:"work_state"`
 }
 
 type ForegroundCommandInfo struct {
@@ -85,6 +89,37 @@ type OutputActivityInfo struct {
 	Phase       string `json:"phase"`
 	Revision    uint64 `json:"revision"`
 	UpdatedAtMs int64  `json:"updated_at_ms"`
+}
+
+type LocationInfo struct {
+	Kind             string `json:"kind"`
+	Phase            string `json:"phase"`
+	Label            string `json:"label"`
+	Authority        string `json:"authority"`
+	WorkingDirectory string `json:"working_directory"`
+	Source           string `json:"source"`
+}
+
+type ApplicationInfo struct {
+	Kind        string `json:"kind"`
+	Identity    string `json:"identity"`
+	DisplayName string `json:"display_name"`
+}
+
+type ExecutionContextInfo struct {
+	Location    LocationInfo    `json:"location"`
+	Application ApplicationInfo `json:"application"`
+	Revision    uint64          `json:"revision"`
+	UpdatedAtMs int64           `json:"updated_at_ms"`
+}
+
+type WorkStateInfo struct {
+	Phase                     string `json:"phase"`
+	Source                    string `json:"source"`
+	ContextRevision           uint64 `json:"context_revision"`
+	ForegroundCommandRevision uint64 `json:"foreground_command_revision"`
+	Revision                  uint64 `json:"revision"`
+	UpdatedAtMs               int64  `json:"updated_at_ms"`
 }
 
 type slogTerminalLogger struct{ log *slog.Logger }
@@ -192,7 +227,7 @@ func (m *Manager) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, stre
 	}
 
 	if session.AllowsProcessLaunch(meta) && streamServer != nil {
-		m.ensureWriter(streamServer)
+		m.ensureWriter(streamServer, meta, gate)
 	}
 
 	// Create session
@@ -420,7 +455,7 @@ func (m *Manager) Cleanup() {
 	m.mu.Unlock()
 }
 
-func (m *Manager) ensureWriter(streamServer *rpc.Server) {
+func (m *Manager) ensureWriter(streamServer *rpc.Server, meta *session.Meta, gate *accessgate.Gate) {
 	if m == nil || streamServer == nil {
 		return
 	}
@@ -429,7 +464,7 @@ func (m *Manager) ensureWriter(streamServer *rpc.Server) {
 	if _, ok := m.writers[streamServer]; ok {
 		return
 	}
-	m.writers[streamServer] = newControlSink(streamServer, m.log)
+	m.writers[streamServer] = newControlSink(streamServer, meta, gate, m.log)
 }
 
 // broadcastNameUpdate sends a name/working directory update notification to all
@@ -542,6 +577,53 @@ func (m *Manager) broadcastOutputActivityUpdate(sessionID string, activity termg
 	}
 }
 
+func (m *Manager) broadcastExecutionContextUpdate(sessionID string, context termgo.TerminalExecutionContextInfo) {
+	if m == nil || strings.TrimSpace(sessionID) == "" || m.sessionHidden(sessionID) {
+		return
+	}
+	payload := terminalExecutionContextUpdatePayload{
+		SessionID:        sessionID,
+		ExecutionContext: toExecutionContextInfo(context),
+	}
+	m.broadcastTerminalMetadata(TypeID_TERMINAL_EXECUTION_CONTEXT_UPDATE, payload)
+}
+
+func (m *Manager) broadcastWorkStateUpdate(sessionID string, work termgo.TerminalWorkStateInfo) {
+	if m == nil || strings.TrimSpace(sessionID) == "" || m.sessionHidden(sessionID) {
+		return
+	}
+	payload := terminalWorkStateUpdatePayload{
+		SessionID: sessionID,
+		WorkState: toWorkStateInfo(work),
+	}
+	m.broadcastTerminalMetadata(TypeID_TERMINAL_WORK_STATE_UPDATE, payload)
+}
+
+func (m *Manager) broadcastTerminalMetadata(typeID uint32, payload any) {
+	var writers []*controlSink
+	m.mu.Lock()
+	if len(m.writers) > 0 {
+		writers = make([]*controlSink, 0, len(m.writers))
+		for _, writer := range m.writers {
+			if writer != nil {
+				writers = append(writers, writer)
+			}
+		}
+	}
+	m.mu.Unlock()
+	if len(writers) == 0 {
+		return
+	}
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return
+	}
+	msg := sinkMsg{TypeID: typeID, Payload: b}
+	for _, writer := range writers {
+		writer.Send(msg)
+	}
+}
+
 func (m *Manager) broadcastSessionsChanged(payload terminalSessionsChangedPayload) {
 	if m == nil || strings.TrimSpace(payload.Reason) == "" {
 		return
@@ -606,9 +688,11 @@ func (m *Manager) createSession(name string, workingDir string) (*termgo.Session
 type eventHandler struct{ m *Manager }
 
 var (
-	_ termgo.TerminalEventHandler                = (*eventHandler)(nil)
-	_ termgo.TerminalSessionMetadataEventHandler = (*eventHandler)(nil)
-	_ termgo.TerminalOutputActivityEventHandler  = (*eventHandler)(nil)
+	_ termgo.TerminalEventHandler                  = (*eventHandler)(nil)
+	_ termgo.TerminalSessionMetadataEventHandler   = (*eventHandler)(nil)
+	_ termgo.TerminalOutputActivityEventHandler    = (*eventHandler)(nil)
+	_ termgo.TerminalExecutionContextEventHandler  = (*eventHandler)(nil)
+	_ termgo.TerminalSemanticWorkStateEventHandler = (*eventHandler)(nil)
 )
 
 func (h *eventHandler) OnTerminalData(_ string, _ termgo.TerminalOutputEvent) {
@@ -638,6 +722,20 @@ func (h *eventHandler) OnTerminalOutputActivityChanged(sessionID string, info te
 		return
 	}
 	h.m.broadcastOutputActivityUpdate(sessionID, info)
+}
+
+func (h *eventHandler) OnTerminalExecutionContextChanged(sessionID string, info termgo.TerminalExecutionContextInfo) {
+	if h == nil || h.m == nil {
+		return
+	}
+	h.m.broadcastExecutionContextUpdate(sessionID, info)
+}
+
+func (h *eventHandler) OnTerminalSemanticWorkStateChanged(sessionID string, info termgo.TerminalWorkStateInfo) {
+	if h == nil || h.m == nil {
+		return
+	}
+	h.m.broadcastWorkStateUpdate(sessionID, info)
 }
 
 func (h *eventHandler) OnTerminalSessionCreated(session *termgo.Session) {
@@ -699,6 +797,8 @@ type terminalSessionInfo struct {
 	IsActive          bool                  `json:"is_active"`
 	ForegroundCommand ForegroundCommandInfo `json:"foreground_command"`
 	OutputActivity    *OutputActivityInfo   `json:"output_activity,omitempty"`
+	ExecutionContext  ExecutionContextInfo  `json:"execution_context"`
+	WorkState         WorkStateInfo         `json:"work_state"`
 }
 
 func toWireSessionInfo(info termgo.TerminalSessionInfo) *terminalSessionInfo {
@@ -711,6 +811,8 @@ func toWireSessionInfo(info termgo.TerminalSessionInfo) *terminalSessionInfo {
 		IsActive:          info.IsActive,
 		ForegroundCommand: toForegroundCommandInfo(info.ForegroundCommand),
 		OutputActivity:    toOptionalOutputActivityInfo(info.OutputActivity),
+		ExecutionContext:  toExecutionContextInfo(info.ExecutionContext),
+		WorkState:         toWorkStateInfo(info.WorkState),
 	}
 }
 
@@ -724,6 +826,8 @@ func toSessionInfo(info termgo.TerminalSessionInfo) *SessionInfo {
 		IsActive:          info.IsActive,
 		ForegroundCommand: toForegroundCommandInfo(info.ForegroundCommand),
 		OutputActivity:    toOptionalOutputActivityInfo(info.OutputActivity),
+		ExecutionContext:  toExecutionContextInfo(info.ExecutionContext),
+		WorkState:         toWorkStateInfo(info.WorkState),
 	}
 }
 
@@ -758,6 +862,100 @@ func toOutputActivityInfo(info termgo.TerminalOutputActivityInfo) OutputActivity
 	}
 }
 
+func toExecutionContextInfo(info termgo.TerminalExecutionContextInfo) ExecutionContextInfo {
+	location := info.Location
+	switch location.Kind {
+	case termgo.TerminalLocationLocal, termgo.TerminalLocationRemote:
+	default:
+		location = termgo.TerminalLocationInfo{
+			Kind:  termgo.TerminalLocationUnknown,
+			Phase: termgo.TerminalLocationPhaseUnknown,
+		}
+	}
+	switch location.Phase {
+	case termgo.TerminalLocationPhaseUnknown, termgo.TerminalLocationPhaseOpening, termgo.TerminalLocationPhaseReady:
+	default:
+		location.Phase = termgo.TerminalLocationPhaseUnknown
+	}
+	switch location.Source {
+	case termgo.TerminalContextSourceUnknown,
+		termgo.TerminalContextSourceShellIntegration,
+		termgo.TerminalContextSourceOSC7,
+		termgo.TerminalContextSourceOSCTitle,
+		termgo.TerminalContextSourceForegroundCandidate:
+	default:
+		location.Source = termgo.TerminalContextSourceUnknown
+	}
+	if location.Kind == termgo.TerminalLocationLocal {
+		location.Label = ""
+		location.Authority = ""
+	}
+	if location.Kind == termgo.TerminalLocationUnknown {
+		location.Phase = termgo.TerminalLocationPhaseUnknown
+		location.Label = ""
+		location.Authority = ""
+		location.WorkingDirectory = ""
+		location.Source = termgo.TerminalContextSourceUnknown
+	}
+
+	application := info.Application
+	switch application.Kind {
+	case termgo.TerminalApplicationShell,
+		termgo.TerminalApplicationAgentCLI,
+		termgo.TerminalApplicationInteractiveApp:
+	default:
+		application = termgo.TerminalApplicationInfo{Kind: termgo.TerminalApplicationUnknown}
+	}
+	if application.Kind != termgo.TerminalApplicationAgentCLI {
+		application.Identity = ""
+	}
+	if application.Kind == termgo.TerminalApplicationShell {
+		application.DisplayName = ""
+	}
+
+	return ExecutionContextInfo{
+		Location: LocationInfo{
+			Kind:             string(location.Kind),
+			Phase:            string(location.Phase),
+			Label:            location.Label,
+			Authority:        location.Authority,
+			WorkingDirectory: location.WorkingDirectory,
+			Source:           string(location.Source),
+		},
+		Application: ApplicationInfo{
+			Kind:        string(application.Kind),
+			Identity:    application.Identity,
+			DisplayName: application.DisplayName,
+		},
+		Revision:    info.Revision,
+		UpdatedAtMs: info.UpdatedAt,
+	}
+}
+
+func toWorkStateInfo(info termgo.TerminalWorkStateInfo) WorkStateInfo {
+	phase := info.Phase
+	source := info.Source
+	contextRevision := info.ContextRevision
+	foregroundCommandRevision := info.ForegroundCommandRevision
+	switch phase {
+	case termgo.TerminalWorkIdle, termgo.TerminalWorkWorking, termgo.TerminalWorkWaitingUser:
+		source = "semantic"
+	default:
+		phase = termgo.TerminalWorkUnknown
+		source = ""
+		contextRevision = 0
+		foregroundCommandRevision = 0
+	}
+	return WorkStateInfo{
+		Phase:                     string(phase),
+		Source:                    source,
+		ContextRevision:           contextRevision,
+		ForegroundCommandRevision: foregroundCommandRevision,
+		Revision:                  info.Revision,
+		UpdatedAtMs:               info.UpdatedAt,
+	}
+}
+
 type terminalCreateReq struct {
 	Name       string `json:"name,omitempty"`
 	WorkingDir string `json:"working_dir,omitempty"`
@@ -787,6 +985,16 @@ type terminalForegroundCommandUpdatePayload struct {
 type terminalOutputActivityUpdatePayload struct {
 	SessionID      string             `json:"session_id"`
 	OutputActivity OutputActivityInfo `json:"output_activity"`
+}
+
+type terminalExecutionContextUpdatePayload struct {
+	SessionID        string               `json:"session_id"`
+	ExecutionContext ExecutionContextInfo `json:"execution_context"`
+}
+
+type terminalWorkStateUpdatePayload struct {
+	SessionID string        `json:"session_id"`
+	WorkState WorkStateInfo `json:"work_state"`
 }
 
 type terminalSessionsChangedPayload struct {
@@ -939,13 +1147,19 @@ type sinkMsg struct {
 
 type controlSink struct {
 	srv    *rpc.Server
+	meta   session.Meta
+	gate   *accessgate.Gate
 	log    *slog.Logger
 	mu     sync.Mutex
 	closed bool
 }
 
-func newControlSink(srv *rpc.Server, log *slog.Logger) *controlSink {
-	return &controlSink{srv: srv, log: log}
+func newControlSink(srv *rpc.Server, meta *session.Meta, gate *accessgate.Gate, log *slog.Logger) *controlSink {
+	var metaCopy session.Meta
+	if meta != nil {
+		metaCopy = *meta
+	}
+	return &controlSink{srv: srv, meta: metaCopy, gate: gate, log: log}
 }
 
 func (w *controlSink) Send(msg sinkMsg) {
@@ -955,6 +1169,12 @@ func (w *controlSink) Send(msg sinkMsg) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.closed || w.srv == nil {
+		return
+	}
+	if err := accessgate.RequireRPC(w.gate, &w.meta, accessgate.RPCAccessProtected); err != nil {
+		return
+	}
+	if err := requireProcessLaunchPermission(&w.meta); err != nil {
 		return
 	}
 	if err := w.srv.Notify(msg.TypeID, msg.Payload); err != nil && w.log != nil && !errors.Is(err, context.Canceled) {
