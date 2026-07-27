@@ -53,6 +53,7 @@ describe('shared Flower UI boundary', () => {
     expect(coordinator).not.toContain('createRedevenFlowerDraftPersistence');
     expect(coordinator).not.toContain("method: 'GET' | 'POST' | 'PUT'");
     expect(coordinator).not.toContain("action: 'take_over'");
+    expect(coordinator).not.toMatch(/\blease\b|holder|persistence|pollTimer|initialDraft/i);
   });
 
   it('keeps Redeven target routing fields out of the shared Flower surface contract', () => {

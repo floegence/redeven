@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createEnvLocalFlowerSurfaceAdapter } from './envLocalFlowerSurfaceAdapter';
-import type { FlowerPermissionType, FlowerSurfaceAdapter } from '../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import type {
+  FlowerAttachmentStagingScope,
+  FlowerPermissionType,
+  FlowerSurfaceAdapter,
+} from '../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { projectFlowerLiveBootstrap } from '../../../../../flower_ui/src/flowerLiveReducer';
 import { clearLocalAccessResumeToken, writeLocalAccessResumeToken } from '../services/localAccessAuth';
 
@@ -40,6 +44,15 @@ function errorResponse(code: string, data: unknown): Response {
 }
 
 const DESKTOP_MODEL_ID = `desktop:model_${'a'.repeat(64)}`;
+
+function stagingScope(threadID: string): FlowerAttachmentStagingScope {
+  return {
+    staging_scope_id: `staging_${threadID}`,
+    thread_id: threadID,
+    capability: `secret_${threadID}`,
+    expires_at_unix_ms: 10_000,
+  };
+}
 
 function readStatus(status = 'idle') {
   return {
@@ -90,15 +103,107 @@ function liveBootstrap(threadID: string, status = 'canceled') {
 }
 
 describe('Env local Flower surface adapter', () => {
-	it('opens staged previews with a one-time local access resume credential', async () => {
+	it('creates and releases attachment staging scopes without exposing the capability', async () => {
+		fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+			if (url === '/_redeven_proxy/api/ai/upload-staging-scopes' && init?.method === 'POST') {
+				return {
+					ok: true,
+					status: 200,
+					headers: new Headers({ 'Upload-Staging-Capability': 'secret-from-response-header' }),
+					text: async () => JSON.stringify({
+						data: {
+							staging_scope_id: 'staging_thread-staged',
+							thread_id: 'thread-staged',
+							expires_at_unix_ms: 123_456,
+						},
+					}),
+				} as Response;
+			}
+			if (url === '/_redeven_proxy/api/ai/upload-staging-scopes/staging_thread-staged' && init?.method === 'DELETE') {
+				return {
+					ok: true,
+					status: 204,
+					headers: new Headers(),
+					text: async () => '',
+				} as Response;
+			}
+			throw new Error(`unexpected fetch: ${url}`);
+		});
+		const adapter = createEnvLocalFlowerSurfaceAdapter({
+			envPublicID: 'env_a',
+			envLabel: 'Demo Env',
+			rpc: { ai: {} } as any,
+		});
+
+		const scope = await adapter.createAttachmentStagingScope?.('thread-staged');
+		expect(scope).toEqual({
+			staging_scope_id: 'staging_thread-staged',
+			thread_id: 'thread-staged',
+			capability: 'secret-from-response-header',
+			expires_at_unix_ms: 123_456,
+		});
+		await adapter.releaseAttachmentStagingScope?.(scope!);
+
+		const createBody = String(fetchMock.mock.calls[0]?.[1]?.body);
+		expect(JSON.parse(createBody)).toEqual({ thread_id: 'thread-staged' });
+		expect(createBody).not.toContain('secret-from-response-header');
+		const releaseURL = String(fetchMock.mock.calls[1]?.[0]);
+		const releaseInit = fetchMock.mock.calls[1]?.[1];
+		expect(releaseURL).toBe('/_redeven_proxy/api/ai/upload-staging-scopes/staging_thread-staged');
+		expect(releaseURL).not.toContain('secret-from-response-header');
+		expect(releaseInit?.body).toBeUndefined();
+		const releaseHeaders = new Headers(releaseInit?.headers);
+		expect(releaseHeaders.get('Upload-Staging-Capability')).toBe('secret-from-response-header');
+		expect(releaseHeaders.get('Upload-Staging-Scope-ID')).toBeNull();
+	});
+
+	it('rejects attachment staging responses that target another thread', async () => {
+		fetchMock.mockResolvedValue({
+			ok: true,
+			status: 200,
+			headers: new Headers({ 'Upload-Staging-Capability': 'secret-from-response-header' }),
+			text: async () => JSON.stringify({
+				data: {
+					staging_scope_id: 'staging_wrong',
+					thread_id: 'thread-other',
+					expires_at_unix_ms: 123_456,
+				},
+			}),
+		} as Response);
+		const adapter = createEnvLocalFlowerSurfaceAdapter({
+			envPublicID: 'env_a',
+			envLabel: 'Demo Env',
+			rpc: { ai: {} } as any,
+		});
+
+		await expect(adapter.createAttachmentStagingScope?.('thread-requested')).rejects.toThrow('invalid');
+	});
+
+	it('opens staged previews through an authenticated object URL without exposing credentials', async () => {
 		const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+		const previousCreateObjectURL = Object.getOwnPropertyDescriptor(URL, 'createObjectURL');
+		const previousRevokeObjectURL = Object.getOwnPropertyDescriptor(URL, 'revokeObjectURL');
 		const open = vi.fn();
+		const createObjectURL = vi.fn(() => 'blob:flower-preview');
+		const revokeObjectURL = vi.fn();
 		Object.defineProperty(globalThis, 'window', {
 			configurable: true,
-			value: { location: { href: 'http://127.0.0.1:23998/_redeven_proxy/env/' }, open },
+			value: {
+				location: { href: 'http://127.0.0.1:23998/_redeven_proxy/env/' },
+				open,
+				setTimeout: vi.fn(),
+			},
 		});
+		Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectURL });
+		Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectURL });
 		writeLocalAccessResumeToken('resume_preview_123');
 		try {
+			fetchMock.mockResolvedValue({
+				ok: true,
+				status: 200,
+				headers: new Headers({ 'content-type': 'text/plain' }),
+				blob: async () => new Blob(['notes'], { type: 'text/plain' }),
+			} as Response);
 			const adapter = createEnvLocalFlowerSurfaceAdapter({
 				envPublicID: 'env_a',
 				envLabel: 'Demo Env',
@@ -113,16 +218,25 @@ describe('Env local Flower surface adapter', () => {
 				locator: 'attachment://v1/upl_preview_1/notes.txt',
 				source: 'file',
 				capability_revision: 'capability_1',
-			}, 'draft_preview_1');
-			expect(open).toHaveBeenCalledWith(
-				'http://127.0.0.1:23998/_redeven_proxy/api/ai/uploads/upl_preview_1?draft_id=draft_preview_1&preview=1&redeven_access_resume=resume_preview_123',
-				'_blank',
-				'noopener,noreferrer',
+			}, stagingScope('thread_preview'));
+			expect(fetchMock).toHaveBeenCalledWith(
+				'/_redeven_proxy/api/ai/uploads/upl_preview_1',
+				expect.objectContaining({ method: 'GET' }),
 			);
+			const previewHeaders = new Headers(fetchMock.mock.calls[0]?.[1]?.headers);
+			expect(previewHeaders.get('Upload-Staging-Scope-ID')).toBe('staging_thread_preview');
+			expect(previewHeaders.get('Upload-Staging-Capability')).toBe('secret_thread_preview');
+			expect(String(fetchMock.mock.calls[0]?.[0])).not.toContain('secret_thread_preview');
+			expect(open).toHaveBeenCalledWith('blob:flower-preview', '_blank', 'noopener,noreferrer');
+			expect(createObjectURL).toHaveBeenCalledOnce();
 		} finally {
 			clearLocalAccessResumeToken();
 			if (previousWindow) Object.defineProperty(globalThis, 'window', previousWindow);
 			else Reflect.deleteProperty(globalThis, 'window');
+			if (previousCreateObjectURL) Object.defineProperty(URL, 'createObjectURL', previousCreateObjectURL);
+			else Reflect.deleteProperty(URL, 'createObjectURL');
+			if (previousRevokeObjectURL) Object.defineProperty(URL, 'revokeObjectURL', previousRevokeObjectURL);
+			else Reflect.deleteProperty(URL, 'revokeObjectURL');
 		}
 	});
 
@@ -887,6 +1001,7 @@ describe('Env local Flower surface adapter', () => {
 
   it('serializes staged attachment ids into the strict turn input without mixing them into linked context', async () => {
     const turnBodies: unknown[] = [];
+    const turnHeaders: HeadersInit[] = [];
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/settings') {
         return jsonResponse({
@@ -896,6 +1011,7 @@ describe('Env local Flower surface adapter', () => {
       }
       if (url === '/_redeven_proxy/api/ai/threads/thread_upload/turns' && init?.method === 'POST') {
         turnBodies.push(JSON.parse(String(init.body)));
+        turnHeaders.push(init.headers ?? {});
         const body = turnBodies[0] as { input: { turn_id: string } };
         return jsonResponse({ run_id: 'run_upload', turn_id: body.input.turn_id, kind: 'start' });
       }
@@ -934,8 +1050,7 @@ describe('Env local Flower surface adapter', () => {
 
     await adapter.launchTurn({
       thread_id: 'thread_upload',
-      draft_id: 'draft_upload',
-      expected_draft_revision: 1,
+      staging_scope: stagingScope('thread_upload'),
       prompt: 'review notes',
       attachment_ids: ['upl_notes'],
       context_action: contextAction,
@@ -944,12 +1059,18 @@ describe('Env local Flower surface adapter', () => {
     expect(uploadAttachment).not.toHaveBeenCalled();
     expect(subscribeThread).toHaveBeenCalledWith({ threadId: 'thread_upload' });
     expect(turnBodies[0]).toMatchObject({
+      thread_id: 'thread_upload',
+      staging_scope_id: 'staging_thread_upload',
       input: {
         text: 'review notes',
         attachments: [{ attachment_id: 'upl_notes' }],
         context_action: contextAction,
       },
     });
+    expect(new Headers(turnHeaders[0]).get('Upload-Staging-Capability')).toBe('secret_thread_upload');
+    expect(JSON.stringify(turnBodies[0])).not.toContain('secret_thread_upload');
+    expect(turnBodies[0]).not.toHaveProperty('draft_id');
+    expect(turnBodies[0]).not.toHaveProperty('expected_draft_revision');
     expect((turnBodies[0] as { input: Record<string, unknown> }).input).not.toHaveProperty('attachment_ids');
   });
 
@@ -974,8 +1095,7 @@ describe('Env local Flower surface adapter', () => {
     });
     await expect(adapter.launchTurn({
       thread_id: 'thread_upload',
-      draft_id: 'draft_upload',
-      expected_draft_revision: 1,
+      staging_scope: stagingScope('thread_upload'),
       prompt: '',
       attachment_ids: ['upl_notes'],
     })).resolves.toMatchObject({ thread_id: 'thread_upload', run_id: 'run_upload' });
@@ -985,7 +1105,7 @@ describe('Env local Flower surface adapter', () => {
     })).rejects.toThrow();
   });
 
-  it('serializes a reference-only composer action as valid JSON for prepare and admission', async () => {
+  it('serializes a reference-only composer action in one create-and-admit request', async () => {
     const rawBodies: string[] = [];
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/settings') {
@@ -1006,10 +1126,6 @@ describe('Env local Flower surface adapter', () => {
       }
       if (url === '/_redeven_proxy/api/ai/models') {
         return jsonResponse({ current_model: 'default/gpt-4.1' });
-      }
-      if (url === '/_redeven_proxy/api/ai/composer-drafts/draft_reference/thread' && init?.method === 'POST') {
-        rawBodies.push(String(init.body));
-        return jsonResponse({ thread_id: 'thread_reference', draft_revision: 2 });
       }
       if (url === '/_redeven_proxy/api/ai/threads/thread_reference/turns' && init?.method === 'POST') {
         rawBodies.push(String(init.body));
@@ -1035,8 +1151,7 @@ describe('Env local Flower surface adapter', () => {
     } as const;
 
     await expect(adapter.launchTurn({
-      draft_id: 'draft_reference',
-      expected_draft_revision: 1,
+      staging_scope: stagingScope('thread_reference'),
       prompt: '',
       context_action: contextAction,
     })).resolves.toMatchObject({
@@ -1044,15 +1159,15 @@ describe('Env local Flower surface adapter', () => {
       run_id: 'run_reference',
     });
 
-    expect(rawBodies).toHaveLength(2);
-    const [prepareBody, turnBody] = rawBodies.map((body) => JSON.parse(body) as Record<string, unknown>);
-    expect(prepareBody).toMatchObject({
-      expected_draft_revision: 1,
-      context_action: contextAction,
-    });
+    expect(rawBodies).toHaveLength(1);
+    const [turnBody] = rawBodies.map((body) => JSON.parse(body) as Record<string, unknown>);
     expect(turnBody).toMatchObject({
       thread_id: 'thread_reference',
-      expected_draft_revision: 2,
+      staging_scope_id: 'staging_thread_reference',
+      create: {
+        model_id: 'default/gpt-4.1',
+        permission_type: 'approval_required',
+      },
       input: {
         text: '',
         context_action: contextAction,
@@ -1063,7 +1178,6 @@ describe('Env local Flower surface adapter', () => {
 
   it('passes reasoning selection through create thread and turn launch', async () => {
     const subscribeThread = vi.fn(async () => ({ runId: '' }));
-    const createdBodies: unknown[] = [];
     const turnBodies: unknown[] = [];
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/settings') {
@@ -1097,10 +1211,6 @@ describe('Env local Flower surface adapter', () => {
       if (url === '/_redeven_proxy/api/ai/models') {
         return jsonResponse({ current_model: 'default/gpt-5.4' });
       }
-      if (url === '/_redeven_proxy/api/ai/composer-drafts/draft_reasoning/thread' && init?.method === 'POST') {
-        createdBodies.push(JSON.parse(String(init.body ?? '{}')));
-        return jsonResponse({ thread_id: 'thread_reasoning', draft_revision: 2 });
-      }
       if (url === '/_redeven_proxy/api/ai/threads/thread_reasoning/turns' && init?.method === 'POST') {
         turnBodies.push(JSON.parse(String(init.body)));
         return jsonResponse({ run_id: 'run_reasoning', turn_id: 'client_reasoning-message', kind: 'start' });
@@ -1120,24 +1230,20 @@ describe('Env local Flower surface adapter', () => {
 
     const receipt = await adapter.launchTurn({
       turn_id: 'client_reasoning-message',
-      draft_id: 'draft_reasoning',
-      expected_draft_revision: 1,
+      staging_scope: stagingScope('thread_reasoning'),
       prompt: 'reason about this',
       reasoning_selection: { level: 'high' },
     });
 
     expect(receipt.thread_id).toBe('thread_reasoning');
     expect(receipt.turn_id).toBe('client_reasoning-message');
-    expect(createdBodies[0]).toMatchObject({
-      expected_draft_revision: 1,
-      turn_id: 'client_reasoning-message',
+    expect(turnBodies[0]).toMatchObject({
+      thread_id: 'thread_reasoning',
+      staging_scope_id: 'staging_thread_reasoning',
       create: {
         model_id: 'default/gpt-5.4',
         reasoning_selection: { level: 'high' },
       },
-    });
-    expect(turnBodies[0]).toMatchObject({
-      thread_id: 'thread_reasoning',
       model: 'default/gpt-5.4',
       input: {
         turn_id: 'client_reasoning-message',
@@ -1185,8 +1291,6 @@ describe('Env local Flower surface adapter', () => {
 
     await expect(adapter.launchTurn({
       thread_id: 'thread_existing',
-      draft_id: 'draft_existing',
-      expected_draft_revision: 1,
       turn_id: 'turn_client',
       prompt: 'send once',
     })).rejects.toMatchObject({
@@ -1196,7 +1300,7 @@ describe('Env local Flower surface adapter', () => {
   });
 
   it('distinguishes definite HTTP rejection from unknown transport and receipt outcomes', async () => {
-    let turnOutcome: 'definite' | 'transport' | 'malformed' = 'definite';
+    let turnOutcome: 'definite' | 'transport' | 'malformed' | 'invalid_json' = 'definite';
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/settings') {
         return jsonResponse({
@@ -1213,6 +1317,14 @@ describe('Env local Flower surface adapter', () => {
       if (url === '/_redeven_proxy/api/ai/threads/thread_existing/turns' && init?.method === 'POST') {
         if (turnOutcome === 'definite') return errorResponse('turn_rejected', { message: 'Turn rejected.' });
         if (turnOutcome === 'transport') throw new Error('transport disconnected');
+        if (turnOutcome === 'invalid_json') {
+          return {
+            ok: true,
+            status: 200,
+            headers: new Headers({ 'content-type': 'text/html' }),
+            text: async () => '<html>not json</html>',
+          } as Response;
+        }
         return jsonResponse({ turn_id: 'turn_malformed', kind: 'start' });
       }
       throw new Error(`unexpected fetch: ${url}`);
@@ -1228,7 +1340,7 @@ describe('Env local Flower surface adapter', () => {
     });
 
     const definiteFailure = await createAdapter().launchTurn({
-      thread_id: 'thread_existing', draft_id: 'draft_existing', expected_draft_revision: 1,
+      thread_id: 'thread_existing',
       turn_id: 'turn_definite', prompt: 'send once',
     }).catch((error: unknown) => error);
     expect(definiteFailure).toMatchObject({ name: 'LocalApiError', code: 'turn_rejected' });
@@ -1236,7 +1348,7 @@ describe('Env local Flower surface adapter', () => {
 
     turnOutcome = 'transport';
     await expect(createAdapter().launchTurn({
-      thread_id: 'thread_existing', draft_id: 'draft_existing', expected_draft_revision: 1,
+      thread_id: 'thread_existing',
       turn_id: 'turn_transport', prompt: 'send once',
     })).rejects.toMatchObject({
       uncertain_admission: { thread_id: 'thread_existing', turn_id: 'turn_transport' },
@@ -1244,11 +1356,20 @@ describe('Env local Flower surface adapter', () => {
 
     turnOutcome = 'malformed';
     await expect(createAdapter().launchTurn({
-      thread_id: 'thread_existing', draft_id: 'draft_existing', expected_draft_revision: 1,
+      thread_id: 'thread_existing',
       turn_id: 'turn_malformed', prompt: 'send once',
     })).rejects.toMatchObject({
       message: 'Flower turn admission returned an invalid receipt.',
       uncertain_admission: { thread_id: 'thread_existing', turn_id: 'turn_malformed' },
+    });
+
+    turnOutcome = 'invalid_json';
+    await expect(createAdapter().launchTurn({
+      thread_id: 'thread_existing',
+      turn_id: 'turn_invalid_json', prompt: 'send once',
+    })).rejects.toMatchObject({
+      code: 'INVALID_JSON_RESPONSE',
+      uncertain_admission: { thread_id: 'thread_existing', turn_id: 'turn_invalid_json' },
     });
   });
 
@@ -1291,8 +1412,6 @@ describe('Env local Flower surface adapter', () => {
 
     await adapter.launchTurn({
       thread_id: 'thread_existing',
-      draft_id: 'draft_existing',
-      expected_draft_revision: 1,
       prompt: 'continue existing thread',
     });
 

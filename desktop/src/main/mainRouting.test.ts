@@ -1179,6 +1179,10 @@ describe('main routing', () => {
     expect(routeSrc).toContain("{ path: '/_redeven_proxy/api/ai/default_permission', methods: ['PUT'] }");
     expect(routeSrc).toContain("{ path: '/_redeven_proxy/api/ai/current_model', methods: ['PUT'] }");
     expect(routeSrc).toContain("'/_redeven_proxy/api/ai/models'");
+    expect(routeSrc).toContain("{ path: '/_redeven_proxy/api/ai/upload-staging-scopes', methods: ['POST'] }");
+    expect(routeSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/upload-staging-scopes\\/[^/]+$/u");
+    expect(routeSrc).not.toContain('composer-drafts');
+    expect(routeSrc).not.toContain('draft_id');
     expect(mainSrc).toContain('runtimeFlowerDeleteQuery,');
     expect(routeSrc).toContain("methods: ['GET', 'PATCH']");
     expect(routeSrc).toContain("methods: ['DELETE'], allowsQuery: runtimeFlowerDeleteQuery");
@@ -1190,6 +1194,8 @@ describe('main routing', () => {
     expect(routeSrc).toContain('runtimeFlowerSubagentDetailQuery');
     expect(routeSrc).toContain('after_ordinal');
     expect(routeSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/turns$/u");
+    expect(routeSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/uploads\\/[^/]+$/u, methods: ['GET', 'DELETE']");
+    expect(routeSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/uploads\\/[^/]+\\/long_text$/u, methods: ['GET']");
     expect(routeSrc).not.toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/live$/u");
     expect(routeSrc).not.toContain('live\\/updates');
     expect(routeSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/approvals$/u");
@@ -1231,22 +1237,31 @@ describe('main routing', () => {
     expect(requestSrc).toContain('const record = await ensureRuntimeFlowerRecord();');
     expect(requestSrc).toContain('const url = new URL(path, runtimeFlowerBaseURL(record));');
     expect(requestSrc).toContain('runtimeFlowerMethodAllowed(path, method)');
-    expect(requestSrc).toContain('let accessHeaders = await runtimeFlowerAccessHeaders(record, environment);');
+    expect(requestSrc).toContain('let accessHeaders = withStagingCapability(await runtimeFlowerAccessHeaders(record, environment));');
+    expect(requestSrc).toContain('runtimeFlowerInvalidJSONError(response, parsed)');
+    expect(requestSrc).not.toContain('error.body');
     expect(requestSrc).toContain('Cookie: runtimeFlowerAccessCookieHeader(cookie)');
     expect(requestSrc).toContain('runtimeFlowerRequestHTTP(url, { ...request, method, path }, { headers: accessHeaders })');
     expect(requestSrc).not.toContain('requestProviderDesktopSessionMaterial');
     expect(requestSrc).not.toContain('requestDesktopOpenSession');
 
-    const httpStart = mainSrc.indexOf('function runtimeFlowerRequestHTTP(');
-    const httpEnd = mainSrc.indexOf('function parseRuntimeFlowerJSON(', httpStart);
+    const runtimeFlowerHTTPSrc = readMainModuleSource('runtimeFlowerHTTP.ts');
+    const httpStart = runtimeFlowerHTTPSrc.indexOf('export function requestRuntimeFlowerHTTP(');
+    const httpEnd = runtimeFlowerHTTPSrc.indexOf('export function parseRuntimeFlowerJSON(', httpStart);
     expect(httpStart).toBeGreaterThanOrEqual(0);
     expect(httpEnd).toBeGreaterThan(httpStart);
-    const httpSrc = mainSrc.slice(httpStart, httpEnd);
+    const httpSrc = runtimeFlowerHTTPSrc.slice(httpStart, httpEnd);
     expect(httpSrc).toContain("Accept: options.accept ?? 'application/json'");
     expect(httpSrc).not.toContain('application/x-ndjson');
     expect(requestSrc).toContain("accept: '*/*'");
     expect(requestSrc).toContain("contentType: response.headers['content-type']");
     expect(requestSrc).not.toContain('displayName: request.display_name');
+
+    expect(runtimeFlowerHTTPSrc).toContain('export function requestRuntimeFlowerHTTP(');
+    expect(runtimeFlowerHTTPSrc).toContain('export function parseRuntimeFlowerJSON(');
+    expect(runtimeFlowerHTTPSrc).toContain('export function runtimeFlowerInvalidJSONError(');
+    expect(runtimeFlowerHTTPSrc).toContain("'runtime_flower_invalid_json'");
+    expect(runtimeFlowerHTTPSrc).toContain("'Flower returned an invalid JSON response.'");
 
     const chunkStart = mainSrc.indexOf('async function writeRuntimeFlowerAttachmentChunk(');
     const commitStart = mainSrc.indexOf('async function commitRuntimeFlowerAttachmentUpload(', chunkStart);
@@ -1283,7 +1298,7 @@ describe('main routing', () => {
     expect(unlockSrc).not.toContain('throw new Error(error?.message');
 
     const ensureStart = mainSrc.indexOf('async function ensureRuntimeFlowerRecord()');
-    const ensureEnd = mainSrc.indexOf('function runtimeFlowerRequestHTTP(', ensureStart);
+    const ensureEnd = mainSrc.indexOf('function runtimeFlowerEnvelopeError(', ensureStart);
     expect(ensureStart).toBeGreaterThanOrEqual(0);
     expect(ensureEnd).toBeGreaterThan(ensureStart);
     const ensureSrc = mainSrc.slice(ensureStart, ensureEnd);

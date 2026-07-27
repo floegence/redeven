@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"reflect"
 	"strings"
 	"unicode/utf8"
 
@@ -25,6 +26,179 @@ type productV6ComposerDraft struct {
 	createdAtUnixMs      int64
 	updatedAtUnixMs      int64
 	expiresAtUnixMs      int64
+}
+
+func migrateProductV7ToV8(tx *sql.Tx, decisions legacyComposerAdmissionDecisionSet) error {
+	if err := verifyProductSchemaVersion(tx, 7); err != nil {
+		return fmt.Errorf("verify product threadstore v7: %w", err)
+	}
+	rows, err := tx.Query(`
+SELECT endpoint_id, owner_user_hash, scope_id, value_json
+FROM ai_composer_drafts
+ORDER BY endpoint_id, owner_user_hash, scope_id
+`)
+	if err != nil {
+		return err
+	}
+	type legacyDraft struct{ endpointID, ownerUserHash, scopeID, valueJSON string }
+	var drafts []legacyDraft
+	for rows.Next() {
+		var draft legacyDraft
+		if err := rows.Scan(&draft.endpointID, &draft.ownerUserHash, &draft.scopeID, &draft.valueJSON); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		drafts = append(drafts, draft)
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	consumedDecisions := map[string]struct{}{}
+	for _, draft := range drafts {
+		var value composerDraftAdmissionValue
+		if _, err := normalizeComposerDraftValue(json.RawMessage(draft.valueJSON)); err != nil {
+			return fmt.Errorf("preflight legacy composer draft %q: malformed value: %w", draft.scopeID, err)
+		}
+		if err := json.Unmarshal([]byte(draft.valueJSON), &value); err != nil {
+			return fmt.Errorf("preflight legacy composer draft %q: malformed value: %w", draft.scopeID, err)
+		}
+		if !value.AdmissionStarted {
+			continue
+		}
+		turnID := strings.TrimSpace(value.ProposedTurnID)
+		threadID := strings.TrimSpace(value.TargetThreadID)
+		if threadID == "" && strings.TrimSpace(draft.scopeID) != "__new_thread__" {
+			threadID = strings.TrimSpace(draft.scopeID)
+		}
+		if turnID == "" || threadID == "" {
+			return fmt.Errorf("preflight legacy composer draft %q: incomplete admission identity", draft.scopeID)
+		}
+		uploadIDs, err := composerDraftAttachmentIDs(json.RawMessage(draft.valueJSON))
+		if err != nil {
+			return fmt.Errorf("preflight legacy composer draft %q attachments: %w", draft.scopeID, err)
+		}
+		queuedID, queued, err := exactLegacyQueuedComposerAdmission(tx, draft, value, threadID, turnID, uploadIDs)
+		if err != nil {
+			return err
+		}
+		decisionKey := legacyComposerAdmissionDecisionKey(draft.endpointID, draft.ownerUserHash, draft.scopeID)
+		decisionRecord, ok := decisions[decisionKey]
+		if !ok {
+			return fmt.Errorf("legacy composer admission %s/%s has no frozen preflight decision", threadID, turnID)
+		}
+		currentAttachments, _, err := readLegacyComposerAttachments(tx, draft.endpointID, draft.ownerUserHash, draft.scopeID, uploadIDs)
+		if err != nil {
+			return err
+		}
+		currentAdmission := LegacyComposerAdmission{
+			EndpointID: strings.TrimSpace(draft.endpointID), OwnerUserHash: strings.ToLower(strings.TrimSpace(draft.ownerUserHash)),
+			ScopeID: strings.TrimSpace(draft.scopeID), ThreadID: threadID, TurnID: turnID, Attachments: currentAttachments,
+		}
+		if !reflect.DeepEqual(decisionRecord.Admission, currentAdmission) {
+			return fmt.Errorf("legacy composer admission %s/%s changed after preflight", threadID, turnID)
+		}
+		if decisionRecord.Queued != queued {
+			return fmt.Errorf("legacy composer admission %s/%s queued state changed after preflight", threadID, turnID)
+		}
+		consumedDecisions[decisionKey] = struct{}{}
+		if queued {
+			if err := transferLegacyDraftRefsTx(tx, draft, uploadIDs, threadID, UploadRefKindQueuedTurn, queuedID); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := validateLegacyComposerAdmissionDecision(currentAdmission, decisionRecord.Decision); err != nil {
+			return fmt.Errorf("legacy composer admission %s/%s decision invalid: %w", threadID, turnID, err)
+		}
+		switch decisionRecord.Decision.State {
+		case LegacyComposerAdmissionAdmitted:
+			if err := transferLegacyDraftRefsTx(tx, draft, uploadIDs, threadID, UploadRefKindThread, threadID); err != nil {
+				return err
+			}
+		case LegacyComposerAdmissionMissing:
+		}
+	}
+	if len(consumedDecisions) != len(decisions) {
+		return errors.New("legacy composer admission preflight decision set does not match migration rows")
+	}
+	if err := createUploadStagingScopesTableTx(tx); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`
+DELETE FROM ai_upload_refs WHERE ref_kind IN ('draft', 'draft_pending');
+UPDATE ai_uploads
+SET state = 'deleting', delete_after_unix_ms = 0
+WHERE state = 'staged'
+  AND NOT EXISTS (
+    SELECT 1 FROM ai_upload_refs r
+    WHERE r.endpoint_id = ai_uploads.endpoint_id AND r.upload_id = ai_uploads.upload_id
+  );
+DROP INDEX idx_ai_composer_drafts_expiry;
+DROP TABLE ai_composer_drafts;
+`); err != nil {
+		return err
+	}
+	return verifyProductSchemaVersion(tx, 8)
+}
+
+func exactLegacyQueuedComposerAdmission(tx *sql.Tx, draft struct{ endpointID, ownerUserHash, scopeID, valueJSON string }, value composerDraftAdmissionValue, threadID, turnID string, uploadIDs []string) (string, bool, error) {
+	var queueID, modelID, textContent, attachmentsJSON, contextActionJSON string
+	err := tx.QueryRow(`
+SELECT queue_id, model_id, text_content, attachments_json, context_action_json
+FROM ai_queued_turns
+WHERE endpoint_id = ? AND thread_id = ? AND turn_id = ?
+`, draft.endpointID, threadID, turnID).Scan(&queueID, &modelID, &textContent, &attachmentsJSON, &contextActionJSON)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	var queuedAttachments []struct {
+		AttachmentID string `json:"attachment_id"`
+	}
+	if err := decodeStrictJSON(attachmentsJSON, &queuedAttachments); err != nil {
+		return "", false, fmt.Errorf("legacy queued command %q attachments are malformed: %w", queueID, err)
+	}
+	queuedIDs := make([]string, 0, len(queuedAttachments))
+	for _, item := range queuedAttachments {
+		queuedIDs = append(queuedIDs, strings.TrimSpace(item.AttachmentID))
+	}
+	expectedText := value.Text
+	if strings.TrimSpace(value.PreparedLongTextAttachmentID) != "" {
+		expectedText = ""
+	}
+	if strings.TrimSpace(modelID) != strings.TrimSpace(value.ModelID) || textContent != expectedText || !reflect.DeepEqual(queuedIDs, uploadIDs) {
+		return "", false, fmt.Errorf("legacy queued command %q conflicts with composer admission", queueID)
+	}
+	if err := validateComposerDraftReferenceAdmission(value.References, contextActionJSON); err != nil {
+		return "", false, fmt.Errorf("legacy queued command %q references conflict with composer admission: %w", queueID, err)
+	}
+	return strings.TrimSpace(queueID), true, nil
+}
+
+func transferLegacyDraftRefsTx(tx *sql.Tx, draft struct{ endpointID, ownerUserHash, scopeID, valueJSON string }, uploadIDs []string, threadID, targetRefKind, targetRefID string) error {
+	draftRefID := legacyComposerDraftUploadRefID(draft.ownerUserHash, draft.scopeID)
+	for _, uploadID := range uploadIDs {
+		var count int
+		if err := tx.QueryRow(`
+SELECT COUNT(1) FROM ai_upload_refs
+WHERE endpoint_id = ? AND upload_id = ? AND ref_kind IN (?, ?) AND ref_id = ?
+`, draft.endpointID, uploadID, legacyUploadRefKindDraft, legacyUploadRefKindDraftPending, draftRefID).Scan(&count); err != nil || count != 1 {
+			return fmt.Errorf("legacy composer attachment %q does not have one exact draft claim", uploadID)
+		}
+		if _, err := tx.Exec(`
+INSERT INTO ai_upload_refs(endpoint_id, upload_id, thread_id, ref_kind, ref_id, created_at_unix_ms)
+VALUES(?, ?, ?, ?, ?, 0)
+ON CONFLICT(endpoint_id, upload_id, ref_kind, ref_id) DO NOTHING
+`, draft.endpointID, uploadID, threadID, targetRefKind, targetRefID); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE ai_uploads SET state = ?, delete_after_unix_ms = 0 WHERE endpoint_id = ? AND upload_id = ?`, UploadStateLive, draft.endpointID, uploadID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func migrateProductV6ToV7(tx *sql.Tx) error {
@@ -166,7 +340,7 @@ FROM ai_upload_refs r
 JOIN ai_uploads u ON u.endpoint_id = r.endpoint_id AND u.upload_id = r.upload_id
 WHERE r.ref_kind IN (?, ?)
 ORDER BY r.id ASC
-`, UploadRefKindDraft, UploadRefKindDraftPending)
+	`, legacyUploadRefKindDraft, legacyUploadRefKindDraftPending)
 	if err != nil {
 		return err
 	}
@@ -200,7 +374,7 @@ ORDER BY r.id ASC
 			if len(ref.ownerUserHash) != 64 {
 				return fmt.Errorf("draft upload reference %d has invalid owner identity", ref.id)
 			}
-			refID = composerDraftUploadRefID(ref.ownerUserHash, ref.scopeID)
+			refID = legacyComposerDraftUploadRefID(ref.ownerUserHash, ref.scopeID)
 		case UploadOwnerScopeLegacyThread, UploadOwnerScopeLegacyStagedQuarantine:
 			if ref.ownerUserHash != "" {
 				return fmt.Errorf("draft upload reference %d has invalid legacy owner identity", ref.id)

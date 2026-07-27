@@ -14,11 +14,14 @@ describe('Flower composer draft host ownership', () => {
 
     expect(surface).toContain('draftCoordinator: FlowerComposerDraftCoordinator;');
     expect(surface).not.toContain('props.draftCoordinator ?? createFlowerComposerDraftCoordinator()');
-    expect(envShell).toContain('const flowerDraftCoordinator = createFlowerComposerDraftCoordinator({');
-    expect(envShell).toContain('persistence: createEnvLocalFlowerDraftPersistence(),');
+    expect(envShell).toContain('const flowerDraftCoordinator = createFlowerComposerDraftCoordinator();');
+    expect(envShell).toContain('onCleanup(() => flowerDraftCoordinator.dispose())');
     expect(envPage).toContain('draftCoordinator={props.draftCoordinator}');
     expect(workbench).toContain('draftCoordinator={env.flowerDraftCoordinator!}');
     expect(desktop).toContain('draftCoordinator={flowerDraftCoordinator}');
-    expect(desktop).toContain('persistence: createLocalEnvironmentFlowerDraftPersistence(props.runtime.settings),');
+    expect(desktop).toContain('const flowerDraftCoordinator = createFlowerComposerDraftCoordinator();');
+    expect(desktop).toContain('onCleanup(() => flowerDraftCoordinator.dispose())');
+    expect(surface).not.toContain('surfaceInstanceID');
+    expect(surface).not.toMatch(/draftLease|takeOver|draftUnavailable|draftUnsaved/i);
   });
 });

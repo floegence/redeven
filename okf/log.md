@@ -1,6 +1,9 @@
 # Redeven OKF Update Log
 
 ## 2026-07-27
+* **Breaking**: Removed persistent Flower composer drafts, leases, conflict/takeover recovery, and cross-connection hydration; Activity, Workbench, floating drawers, and remounts now share only one connection-local in-memory coordinator.
+* **Storage**: Advanced threadstore to schema v8 with capability-hash upload staging scopes, isolated legacy-draft migration, and atomic new-thread settings/create intent/immutable first-command/staging-claim freeze.
+* **Fix**: Unified new and existing conversation sends on the strict thread-turn endpoint, converted malformed or empty transport responses into typed uncertain admission, placed Attach immediately before More, and autosized the composer through five visual lines.
 * **Feature**: Added working-directory file and directory references through the full Flower composer's whitespace-boundary `@` interaction, with bounded deterministic discovery, keyboard and IME behavior, separate draft chips, and the attachment control fixed immediately before More.
 * **Boundary**: Added the strict `flower_composer` context-action source, rejected client-authored labels and unknown fields, and kept paths as non-authorizing metadata while Floret remains the sole canonical source after admission.
 * **Storage**: Advanced threadstore to schema v7, atomically upgraded verified v6 draft JSON with an explicit empty reference array, and bound ordered references plus the exact normalized context-action projection to the existing lease/revision admission transaction so changed path, order, directory kind, source, or JSON fails without draft, queue, upload-claim, or Floret side effects.

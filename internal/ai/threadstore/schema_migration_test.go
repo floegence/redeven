@@ -220,21 +220,11 @@ VALUES('env_v4_quarantine', 'upload_v4_quarantine', '', 'draft', 'legacy_v4_draf
 	if err != nil {
 		t.Fatal(err)
 	}
-	if upload.OwnerScopeKind != UploadOwnerScopeLegacyStagedQuarantine || upload.OwnerUserHash != "" || upload.State != UploadStateStaged {
+	if upload.OwnerScopeKind != UploadOwnerScopeLegacyStagedQuarantine || upload.OwnerUserHash != "" || upload.State != UploadStateDeleting {
 		t.Fatalf("migrated v4 quarantine upload=%#v", upload)
 	}
-	var threadID, refID string
-	if err := store.db.QueryRow(`
-SELECT thread_id, ref_id FROM ai_upload_refs
-WHERE endpoint_id = 'env_v4_quarantine' AND upload_id = 'upload_v4_quarantine' AND ref_kind = 'draft'
-`).Scan(&threadID, &refID); err != nil {
-		t.Fatal(err)
-	}
-	if threadID != "legacy_v4_draft_scope" || refID != "legacy_v4_draft_scope" {
-		t.Fatalf("migrated v4 quarantine ref thread_id=%q ref_id=%q", threadID, refID)
-	}
-	if _, err := store.GetDraftOwnedUpload(t.Context(), "env_v4_quarantine", strings.Repeat("a", 64), "legacy_v4_draft_scope", "upload_v4_quarantine"); !errors.Is(err, sql.ErrNoRows) {
-		t.Fatalf("v4 quarantined upload became user-readable: %v", err)
+	if got := countRowsForTest(t, store.db, `SELECT COUNT(1) FROM ai_upload_refs WHERE endpoint_id = ? AND upload_id = ?`, "env_v4_quarantine", "upload_v4_quarantine"); got != 0 {
+		t.Fatalf("v4 quarantined upload retained %d obsolete draft refs", got)
 	}
 }
 
@@ -950,7 +940,7 @@ PRAGMA user_version=40;
 	}
 	_ = db.Close()
 	_, err = Open(path)
-	if err == nil || !strings.Contains(err.Error(), "only") || !strings.Contains(err.Error(), "v2 through v7") {
+	if err == nil || !strings.Contains(err.Error(), "only") || !strings.Contains(err.Error(), "v2 through v8") {
 		t.Fatalf("Open error=%v", err)
 	}
 	db, err = sql.Open("sqlite", path)

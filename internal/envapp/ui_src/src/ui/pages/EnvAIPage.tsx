@@ -42,7 +42,6 @@ function createEnvFlowerSurfaceCopy(i18n: I18nHelpers, locale: string) {
 
 export type EnvAIPageProps = Readonly<{
   draftCoordinator: FlowerComposerDraftCoordinator;
-  surfaceInstanceID: string;
   presentation?: 'full' | 'companion';
   engaged?: boolean;
   transcriptVisible?: boolean;
@@ -173,7 +172,6 @@ export function EnvAIPage(props: EnvAIPageProps) {
         }}
         copy={surfaceCopy()}
         draftCoordinator={props.draftCoordinator}
-        surfaceInstanceID={props.surfaceInstanceID}
         presentation={props.presentation}
         engaged={props.engaged}
         transcriptVisible={props.transcriptVisible}

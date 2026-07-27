@@ -6,9 +6,14 @@ import { describe, expect, it } from 'vitest';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const stylesPath = path.join(repoRoot, 'internal', 'flower_ui', 'src', 'styles', 'flower.css');
+const surfacePath = path.join(repoRoot, 'internal', 'flower_ui', 'src', 'FlowerSurface.tsx');
 
 function flowerStyles(): string {
   return fs.readFileSync(stylesPath, 'utf8');
+}
+
+function surfaceSource(): string {
+  return fs.readFileSync(surfacePath, 'utf8');
 }
 
 function cssRule(css: string, selector: string): string {
@@ -69,7 +74,11 @@ describe('Flower model status indicator', () => {
 
   it('keeps the context indicator compact inside composer actions', () => {
     const css = flowerStyles();
+    const src = surfaceSource();
     const actionsRule = cssRule(css, '.flower-composer-actions');
+    const toolClusterRule = cssRule(css, '.flower-composer-tool-cluster');
+    const attachmentButtonRule = cssRule(css, '.flower-composer-attachment-button');
+    const moreAnchorRule = cssRule(css, '.flower-composer-more-anchor');
     const indicatorRule = cssRule(css, '.flower-composer-context-indicator');
     const progressRule = cssRule(css, '.flower-composer-context-progress');
     const tooltipRule = cssRule(css, '.flower-composer-context-tooltip');
@@ -77,6 +86,17 @@ describe('Flower model status indicator', () => {
 
     expect(actionsRule).toContain('display: inline-flex');
     expect(actionsRule).toContain('justify-content: flex-end');
+    expect(toolClusterRule).toContain('gap: 0');
+    expect(attachmentButtonRule).toContain('width: 2.75rem');
+    expect(attachmentButtonRule).toContain('height: 2.75rem');
+    expect(moreAnchorRule).toContain('width: 2.75rem');
+    expect(moreAnchorRule).toContain('height: 2.75rem');
+    const toolClusterIndex = src.indexOf('class="flower-composer-tool-cluster"');
+    const attachmentButtonIndex = src.indexOf('class="flower-composer-attachment-button"', toolClusterIndex);
+    const moreButtonIndex = src.indexOf('{composerMoreButton()}', attachmentButtonIndex);
+    expect(toolClusterIndex).toBeGreaterThanOrEqual(0);
+    expect(attachmentButtonIndex).toBeGreaterThan(toolClusterIndex);
+    expect(moreButtonIndex).toBeGreaterThan(attachmentButtonIndex);
     expect(indicatorRule).toContain('position: relative');
     expect(progressRule).toContain('width: 2.1rem');
     expect(progressRule).toContain('height: 2.1rem');
@@ -112,17 +132,23 @@ describe('Flower model status indicator', () => {
     expect(css).not.toContain('.flower-composer-reasoning-control');
   });
 
-  it('keeps the composer More panel clamped through a viewport shift variable', () => {
+  it('delegates composer More positioning to the shared surface floating layer', () => {
     const css = flowerStyles();
+    const src = surfaceSource();
     const panelRule = cssRule(css, '.flower-composer-more-panel');
     const modelMenuRule = cssRule(css, '.flower-model-menu');
 
-    expect(panelRule).toContain('width: min(22rem, calc(100vw - 2rem))');
-    expect(panelRule).toContain('transform: translateX(var(--flower-composer-more-panel-shift-x, 0px))');
+    expect(src).toContain('<SurfaceFloatingLayer');
+    expect(src).toContain('class="flower-composer-more-layer"');
+    expect(src).toContain('owner={composerMoreButtonRef}');
+    expect(src).not.toContain('composerMorePanelShiftX');
+    expect(panelRule).toContain('width: 100%');
+    expect(panelRule).not.toContain('position: absolute');
+    expect(panelRule).not.toContain('transform: translateX');
     expect(modelMenuRule).toContain('transform: translateX(var(--flower-model-menu-shift-x, 0px))');
   });
 
-  it('keeps the expanded companion composer to one stable row', () => {
+  it('lets the expanded companion composer grow while keeping actions bottom-aligned', () => {
     const css = flowerStyles();
     const contentRule = cssRule(css, ".flower-composer[data-flower-companion-compact='true'] .flower-composer-content");
     const textareaRule = cssRule(css, ".flower-composer[data-flower-companion-compact='true'] textarea");
@@ -133,9 +159,10 @@ describe('Flower model status indicator', () => {
     const tailValueRule = cssRule(css, '.flower-companion-collapsed-tail-value');
 
     expect(contentRule).toContain('grid-template-columns: minmax(0, 1fr) auto');
-    expect(textareaRule).toContain('min-height: 2.25rem');
-    expect(textareaRule).toContain('height: 2.25rem');
-    expect(textareaRule).toContain('white-space: nowrap');
+    expect(contentRule).toContain('align-items: end');
+    expect(textareaRule).toContain('line-height: 1.5rem');
+    expect(textareaRule).not.toContain('height: 2.25rem');
+    expect(textareaRule).not.toContain('white-space: nowrap');
     expect(summaryRule).toContain('display: flex');
     expect(summaryRule).not.toContain('position: absolute');
     expect(summaryTextRule).toContain('flex: 1 1 auto');

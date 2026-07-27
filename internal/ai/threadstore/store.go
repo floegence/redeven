@@ -27,7 +27,47 @@ type Store struct {
 type OpenOption func(*openOptions)
 
 type openOptions struct {
-	migrateTitle func(context.Context, LegacyThreadTitle) error
+	migrateTitle             func(context.Context, LegacyThreadTitle) error
+	legacyUploadsDir         string
+	preflightLegacyAdmission func(context.Context, LegacyComposerAdmission) (LegacyComposerAdmissionDecision, error)
+}
+
+type LegacyComposerAdmission struct {
+	EndpointID    string
+	OwnerUserHash string
+	ScopeID       string
+	ThreadID      string
+	TurnID        string
+	Attachments   []LegacyComposerAttachment
+}
+
+type LegacyComposerAttachment struct {
+	UploadID          string
+	Name              string
+	DetectedMediaType string
+	SizeBytes         int64
+	ContentSHA256     string
+}
+
+type LegacyComposerCanonicalAttachment struct {
+	UploadID      string
+	ResourceRef   string
+	Name          string
+	MIMEType      string
+	SizeBytes     int64
+	ContentSHA256 string
+}
+
+type LegacyComposerAdmissionState string
+
+const (
+	LegacyComposerAdmissionAdmitted LegacyComposerAdmissionState = "admitted"
+	LegacyComposerAdmissionMissing  LegacyComposerAdmissionState = "missing"
+)
+
+type LegacyComposerAdmissionDecision struct {
+	State       LegacyComposerAdmissionState
+	Attachments []LegacyComposerCanonicalAttachment
 }
 
 // WithLegacyThreadTitleMigrator supplies the Floret-side title migration used
@@ -35,6 +75,13 @@ type openOptions struct {
 func WithLegacyThreadTitleMigrator(migrateTitle func(context.Context, LegacyThreadTitle) error) OpenOption {
 	return func(options *openOptions) {
 		options.migrateTitle = migrateTitle
+	}
+}
+
+func WithLegacyComposerAdmissionPreflight(uploadsDir string, preflight func(context.Context, LegacyComposerAdmission) (LegacyComposerAdmissionDecision, error)) OpenOption {
+	return func(options *openOptions) {
+		options.legacyUploadsDir = strings.TrimSpace(uploadsDir)
+		options.preflightLegacyAdmission = preflight
 	}
 }
 
@@ -52,7 +99,11 @@ func Open(path string, optionList ...OpenOption) (*Store, error) {
 	if err := migrateLegacyThreadTitles(p, options.migrateTitle); err != nil {
 		return nil, err
 	}
-	db, err := sqliteutil.Open(p, threadstoreSchemaSpec())
+	legacyAdmissionDecisions, err := preflightLegacyComposerAdmissions(p, options.legacyUploadsDir, options.preflightLegacyAdmission)
+	if err != nil {
+		return nil, err
+	}
+	db, err := sqliteutil.Open(p, threadstoreSchemaSpec(legacyAdmissionDecisions))
 	if err != nil {
 		return nil, err
 	}

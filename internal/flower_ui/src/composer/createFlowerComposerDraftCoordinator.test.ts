@@ -1,419 +1,228 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import {
-  createFlowerComposerDraftCoordinator,
-  type FlowerComposerDraftLease,
-  type FlowerComposerDraftPersistence,
-  type FlowerComposerDraftSnapshot,
-  type FlowerComposerDraftValue,
-} from './createFlowerComposerDraftCoordinator';
-
-function deferred<Value>() {
-  let resolve!: (value: Value) => void;
-  let reject!: (reason?: unknown) => void;
-  const promise = new Promise<Value>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise;
-    reject = rejectPromise;
-  });
-  return { promise, resolve, reject };
-}
-
-const draftValue = (overrides: Partial<FlowerComposerDraftValue> = {}): FlowerComposerDraftValue => ({
-  text: '',
-  attachments: [],
-  references: [],
-  mode: 'ordinary',
-  ...overrides,
-});
-
-const draftSnapshot = (
-  revision: number,
-  value: FlowerComposerDraftValue = draftValue(),
-  lease?: FlowerComposerDraftLease,
-): FlowerComposerDraftSnapshot => ({
-  scope_id: 'thread-1',
-  revision,
-  value,
-  updated_at_unix_ms: 1_000 + revision,
-  ...(lease ? { lease } : {}),
-});
-
-const ownedLease = (
-  expiresAt = Date.now() + 30_000,
-  holderID = 'activity',
-): FlowerComposerDraftLease => ({
-  lease_id: 'lease-secret',
-  scope_id: 'thread-1',
-  holder_id: holderID,
-  acquired_revision: 0,
-  expires_at_unix_ms: expiresAt,
-});
-
-function persistenceWith(
-  overrides: Partial<FlowerComposerDraftPersistence> = {},
-): FlowerComposerDraftPersistence {
-  const lease = ownedLease();
-  return {
-    load: async () => draftSnapshot(0),
-    acquire: async () => ({ state: 'owned', snapshot: draftSnapshot(0, draftValue(), lease), lease }),
-    renew: async () => ({ state: 'owned', snapshot: draftSnapshot(0, draftValue(), lease), lease }),
-    mutate: async (_scopeID, _holderID, _leaseID, expectedRevision, value) => ({
-      kind: 'committed',
-      snapshot: draftSnapshot(expectedRevision + 1, value, lease),
-    }),
-    release: async () => undefined,
-    ...overrides,
-  };
-}
+import { createFlowerComposerDraftCoordinator } from './createFlowerComposerDraftCoordinator';
 
 describe('createFlowerComposerDraftCoordinator', () => {
-  it('does not acquire a lease merely by opening or reading a draft', () => {
+  it('shares one connection-local draft between sessions for the same scope', () => {
     const coordinator = createFlowerComposerDraftCoordinator();
-    const activity = coordinator.open('thread-1', 'activity');
-    const workbench = coordinator.open('thread-1', 'workbench');
-    expect(activity.leaseState()).toEqual({ kind: 'lease_available' });
-    expect(workbench.leaseState()).toEqual({ kind: 'lease_available' });
-    expect(coordinator.read('thread-1').revision).toBe(0);
+    const activity = coordinator.open('thread-1');
+    const workbench = coordinator.open('thread-1');
+    const listener = vi.fn();
+    workbench.subscribe(listener);
+
+    const result = activity.mutate((draft) => ({ ...draft, text: 'shared text' }));
+
+    expect(result).toMatchObject({ kind: 'committed', snapshot: { revision: 1 } });
+    expect(workbench.snapshot().value.text).toBe('shared text');
+    expect(listener).toHaveBeenLastCalledWith(result.snapshot);
   });
 
-  it('serializes first mutation ownership and exposes the shared projection', async () => {
-    const coordinator = createFlowerComposerDraftCoordinator({ createLeaseID: () => 'lease-1' });
-    const activity = coordinator.open('thread-1', 'activity');
-    const workbench = coordinator.open('thread-1', 'workbench');
-    expect((await activity.acquire()).kind).toBe('lease_owned');
-    expect(await workbench.acquire()).toMatchObject({ kind: 'lease_conflict', holder_id: 'activity' });
+  it('isolates drafts in different scopes', () => {
+    const coordinator = createFlowerComposerDraftCoordinator();
+    coordinator.open('thread-a').mutate((draft) => ({ ...draft, text: 'alpha' }));
+    coordinator.open('thread-b').mutate((draft) => ({ ...draft, text: 'beta' }));
 
-    const committed = await activity.mutate(0, (draft) => ({ ...draft, text: 'shared draft' }));
-    expect(committed.kind).toBe('committed');
-    expect(workbench.snapshot()).toMatchObject({
-      revision: 1,
-      value: { text: 'shared draft' },
-    });
+    expect(coordinator.read('thread-a').value.text).toBe('alpha');
+    expect(coordinator.read('thread-b').value.text).toBe('beta');
   });
 
-  it('offers an atomic first-mutation acquire for synchronous composer input', () => {
-    const coordinator = createFlowerComposerDraftCoordinator({ createLeaseID: () => 'lease-1' });
-    const activity = coordinator.open('thread-1', 'activity');
-    const workbench = coordinator.open('thread-1', 'workbench');
-    expect(activity.tryAcquire().kind).toBe('lease_owned');
-    expect(workbench.tryAcquire()).toMatchObject({ kind: 'lease_conflict', holder_id: 'activity' });
+  it('isolates the same thread across separate connection coordinators', () => {
+    const firstConnection = createFlowerComposerDraftCoordinator();
+    const secondConnection = createFlowerComposerDraftCoordinator();
+    firstConnection.open('thread-1').mutate((draft) => ({ ...draft, text: 'first connection only' }));
+
+    expect(firstConnection.read('thread-1').value.text).toBe('first connection only');
+    expect(secondConnection.read('thread-1').value.text).toBe('');
   });
 
-  it('rejects stale revisions and lets takeover continue from the latest shared revision', async () => {
-    let leaseID = 0;
-    const coordinator = createFlowerComposerDraftCoordinator({ createLeaseID: () => `lease-${++leaseID}` });
-    const activity = coordinator.open('thread-1', 'activity');
-    const workbench = coordinator.open('thread-1', 'workbench');
-    await activity.acquire();
-    await activity.mutate(0, (draft) => ({ ...draft, text: 'activity edit' }));
+  it('applies mutations atomically in call order', () => {
+    const coordinator = createFlowerComposerDraftCoordinator();
+    const session = coordinator.open('thread-1');
 
-    expect((await activity.mutate(0, (draft) => ({ ...draft, text: 'stale' }))).kind).toBe('revision_conflict');
-    expect((await workbench.takeOver()).kind).toBe('lease_owned');
-    expect((await activity.mutate(1, (draft) => ({ ...draft, text: 'late activity write' }))).kind).toBe('lease_lost');
-    await workbench.mutate(1, (draft) => ({ ...draft, text: `${draft.text} + workbench` }));
-    expect(coordinator.read('thread-1').value.text).toBe('activity edit + workbench');
+    session.mutate((draft) => ({ ...draft, text: `${draft.text}a` }));
+    session.mutate((draft) => ({ ...draft, text: `${draft.text}b` }));
+    session.mutate((draft) => ({ ...draft, text: `${draft.text}c` }));
+
+    expect(session.snapshot()).toMatchObject({ revision: 3, value: { text: 'abc' } });
   });
 
-  it('rejects takeover while long-text preparation or turn admission owns the draft', async () => {
-    let leaseID = 0;
-    const coordinator = createFlowerComposerDraftCoordinator({ createLeaseID: () => `lease-${++leaseID}` });
-    const activity = coordinator.open('thread-1', 'activity');
-    const workbench = coordinator.open('thread-1', 'workbench');
-    await activity.acquire();
-    await activity.mutate(0, (draft) => ({
+  it('clears the complete scope value and notifies every session', () => {
+    const coordinator = createFlowerComposerDraftCoordinator();
+    const first = coordinator.open('thread-1');
+    const second = coordinator.open('thread-1');
+    const listener = vi.fn();
+    second.subscribe(listener);
+    first.mutate((draft) => ({
       ...draft,
-      mode: 'preparing_long_text_submission',
-      proposed_turn_id: 'turn-1',
+      text: 'message',
+      references: [{ local_id: 'ref-1', kind: 'file', path: '/tmp/a', label: 'a' }],
     }));
-    expect(await workbench.takeOver()).toMatchObject({ kind: 'lease_conflict', holder_id: 'activity' });
 
-    await activity.mutate(1, (draft) => ({ ...draft, mode: 'admission_in_flight' }));
-    expect(await workbench.takeOver()).toMatchObject({ kind: 'lease_conflict', holder_id: 'activity' });
-    expect(coordinator.read('thread-1').value.proposed_turn_id).toBe('turn-1');
+    const result = second.clear();
+
+    expect(result.snapshot.value).toEqual({ text: '', attachments: [], references: [], mode: 'ordinary' });
+    expect(first.snapshot()).toBe(result.snapshot);
+    expect(listener).toHaveBeenLastCalledWith(result.snapshot);
   });
 
-  it('keeps an admission lease bounded while explicit renewal makes progress', async () => {
-    let now = 1_000;
-    const coordinator = createFlowerComposerDraftCoordinator({ now: () => now, leaseDurationMS: 1_000 });
-    const activity = coordinator.open('thread-1', 'activity');
-    await activity.acquire();
-    await activity.mutate(0, (draft) => ({ ...draft, mode: 'admission_in_flight', proposed_turn_id: 'turn-1' }));
-    now = 1_500;
-    expect((await activity.renew()).kind).toBe('lease_owned');
-    now = 2_200;
-    expect(activity.leaseState().kind).toBe('lease_owned');
-    expect((await coordinator.open('thread-1', 'workbench').acquire()).kind).toBe('lease_conflict');
-    now = 2_600;
-    expect(coordinator.open('thread-1', 'workbench').leaseState().kind).toBe('lease_available');
-  });
-
-  it('does not grant a takeover when the draft enters admission during its await boundary', async () => {
+  it('moves a pending new-thread scope to its admitted thread identity', () => {
     const coordinator = createFlowerComposerDraftCoordinator();
-    const activity = coordinator.open('thread-1', 'activity');
-    const workbench = coordinator.open('thread-1', 'workbench');
-    await activity.acquire();
-    const takeover = workbench.takeOver();
-    await activity.mutate(0, (draft) => ({ ...draft, mode: 'admission_in_flight', proposed_turn_id: 'turn-1' }));
-    expect(await takeover).toMatchObject({ kind: 'lease_conflict', holder_id: 'activity' });
-    expect(activity.leaseState().kind).toBe('lease_owned');
-  });
+    const pending = coordinator.open('');
+    const listener = vi.fn();
+    pending.subscribe(listener);
+    pending.mutate((draft) => ({ ...draft, text: 'preserved' }));
 
-  it('releases expired leases without creating a module singleton', async () => {
-    let now = 1_000;
-    const first = createFlowerComposerDraftCoordinator({ now: () => now, leaseDurationMS: 1_000 });
-    const second = createFlowerComposerDraftCoordinator({ now: () => now, leaseDurationMS: 1_000 });
-    await first.open('thread-1', 'activity').acquire();
-    expect(second.open('thread-1', 'workbench').leaseState()).toEqual({ kind: 'lease_available' });
-    now = 2_001;
-    expect(first.open('thread-1', 'workbench').leaseState()).toEqual({ kind: 'lease_available' });
-  });
+    const moved = coordinator.moveScope('', 'thread-created');
 
-  it('reports an unavailable store distinctly and recovers on the next acquire', async () => {
-    const lease = ownedLease();
-    const load = vi.fn()
-      .mockRejectedValueOnce(new Error('offline'))
-      .mockResolvedValueOnce(draftSnapshot(2, draftValue({ text: 'server draft' })));
-    const coordinator = createFlowerComposerDraftCoordinator({
-      now: () => 1_000,
-      persistence: persistenceWith({
-        load,
-        acquire: async () => ({
-          state: 'owned',
-          snapshot: draftSnapshot(2, draftValue({ text: 'server draft' }), lease),
-          lease,
-        }),
-      }),
-    });
-    const session = coordinator.open('thread-1', 'activity');
-    await vi.waitFor(() => expect(session.leaseState()).toEqual({ kind: 'store_unavailable', unsaved: false }));
-
-    expect(await session.acquire()).toMatchObject({ kind: 'lease_owned', lease: { lease_id: 'lease-secret' } });
-    expect(session.snapshot()).toMatchObject({ revision: 2, value: { text: 'server draft' } });
-    expect(load).toHaveBeenCalledTimes(2);
-  });
-
-  it('keeps a redacted persistent lease conflict stable until explicit takeover', async () => {
-    const lease = ownedLease(Date.now() + 30_000, 'workbench');
-    const acquire = vi.fn()
-      .mockResolvedValueOnce({
-        state: 'conflict' as const,
-        snapshot: draftSnapshot(4, draftValue({ text: 'shared draft' })),
-        holderID: 'another_surface',
-      })
-      .mockResolvedValueOnce({
-        state: 'owned' as const,
-        snapshot: draftSnapshot(4, draftValue({ text: 'shared draft' }), lease),
-        lease,
-      });
-    const coordinator = createFlowerComposerDraftCoordinator({
-      persistence: persistenceWith({ acquire }),
-    });
-    const session = coordinator.open('thread-1', 'workbench');
-
-    await expect(session.acquire()).resolves.toMatchObject({
-      kind: 'lease_conflict',
-      holder_id: 'another_surface',
-    });
-    expect(session.leaseState()).toMatchObject({
-      kind: 'lease_conflict',
-      holder_id: 'another_surface',
-    });
-    expect(session.tryAcquire()).toMatchObject({ kind: 'lease_conflict' });
-    expect(acquire).toHaveBeenCalledTimes(1);
-
-    await expect(session.takeOver()).resolves.toMatchObject({
-      kind: 'lease_owned',
-      lease: { lease_id: 'lease-secret' },
-    });
-    expect(session.leaseState()).toMatchObject({ kind: 'lease_owned' });
-    expect(acquire).toHaveBeenLastCalledWith('thread-1', 'workbench', true);
-  });
-
-  it('keeps a redacted conflict stable when background polling returns a lease-redacted snapshot', async () => {
-    vi.useFakeTimers();
-    let unsubscribe: () => void = () => undefined;
-    try {
-      const lease = ownedLease(Date.now() + 30_000, 'workbench');
-      const load = vi.fn(async () => draftSnapshot(4, draftValue({ text: 'shared draft' })));
-      const acquire = vi.fn()
-        .mockResolvedValueOnce({
-          state: 'conflict' as const,
-          snapshot: draftSnapshot(4, draftValue({ text: 'shared draft' })),
-          holderID: 'another_surface',
-        })
-        .mockResolvedValueOnce({
-          state: 'owned' as const,
-          snapshot: draftSnapshot(4, draftValue({ text: 'shared draft' }), lease),
-          lease,
-        });
-      const coordinator = createFlowerComposerDraftCoordinator({
-        persistence: persistenceWith({ load, acquire }),
-      });
-      const session = coordinator.open('thread-1', 'workbench');
-      unsubscribe = session.subscribe(() => undefined);
-
-      await expect(session.acquire()).resolves.toMatchObject({ kind: 'lease_conflict' });
-      await vi.advanceTimersByTimeAsync(2_000);
-      expect(load).toHaveBeenCalledTimes(2);
-      expect(session.leaseState()).toMatchObject({
-        kind: 'lease_conflict',
-        holder_id: 'another_surface',
-      });
-
-      await expect(session.takeOver()).resolves.toMatchObject({ kind: 'lease_owned' });
-      expect(session.leaseState()).toMatchObject({ kind: 'lease_owned' });
-    } finally {
-      unsubscribe();
-      vi.useRealTimers();
-    }
-  });
-
-  it('keeps the lease bearer and unsaved projection when renew or mutation transport fails', async () => {
-    const lease = ownedLease();
-    const mutate = vi.fn().mockRejectedValueOnce(new Error('offline')).mockImplementation(
-      async (_scopeID, _holderID, _leaseID, expectedRevision: number, value: FlowerComposerDraftValue) => ({
-        kind: 'committed' as const,
-        snapshot: draftSnapshot(expectedRevision + 1, value, lease),
-      }),
-    );
-    const renew = vi.fn()
-      .mockRejectedValueOnce(new Error('offline'))
-      .mockResolvedValueOnce({ state: 'owned' as const, snapshot: draftSnapshot(0), lease });
-    const coordinator = createFlowerComposerDraftCoordinator({
-      now: () => 1_000,
-      persistence: persistenceWith({ mutate, renew }),
-    });
-    const session = coordinator.open('thread-1', 'activity');
-    await session.acquire();
-
-    expect(await session.mutate(0, (value) => ({ ...value, text: 'kept locally' }))).toMatchObject({
-      kind: 'store_unavailable',
-      unsaved: true,
-    });
-    expect(session.snapshot().value.text).toBe('kept locally');
-    expect(session.leaseState()).toMatchObject({
-      kind: 'lease_owned',
-      lease: { lease_id: 'lease-secret' },
-      persistence: 'store_unavailable',
-      unsaved: true,
-    });
-
-    expect(await session.renew()).toMatchObject({
-      kind: 'lease_owned',
-      lease: { lease_id: 'lease-secret' },
-      persistence: 'store_unavailable',
-      unsaved: true,
-    });
-    expect(await session.renew()).toMatchObject({ kind: 'lease_owned', lease: { lease_id: 'lease-secret' } });
-    expect(session.snapshot()).toMatchObject({ revision: 1, value: { text: 'kept locally' } });
-    expect(session.leaseState()).not.toHaveProperty('persistence');
-    expect(mutate).toHaveBeenLastCalledWith('thread-1', 'activity', 'lease-secret', 0, expect.objectContaining({ text: 'kept locally' }));
-  });
-
-  it('coalesces rapid typing through the serialized queue without losing the latest text', async () => {
-    const persisted: string[] = [];
-    const coordinator = createFlowerComposerDraftCoordinator({
-      now: () => 1_000,
-      persistence: persistenceWith({
-        mutate: async (_scopeID, _holderID, _leaseID, expectedRevision, value) => {
-          persisted.push(value.text);
-          return {
-            kind: 'committed',
-            snapshot: draftSnapshot(expectedRevision + 1, value, ownedLease()),
-          };
-        },
-      }),
-    });
-    const session = coordinator.open('thread-1', 'activity');
-    await session.acquire();
-
-    const first = session.mutate(0, (value) => ({ ...value, text: 'h' }));
-    const second = session.mutate(0, (value) => ({ ...value, text: 'he' }));
-    const third = session.mutate(0, (value) => ({ ...value, text: 'hello' }));
-    expect(session.snapshot().value.text).toBe('hello');
-
-    await Promise.all([first, second, third]);
-    expect(persisted).toEqual(['h', 'he', 'hello']);
-    expect(session.snapshot()).toMatchObject({ revision: 3, value: { text: 'hello' } });
-  });
-
-  it('serializes concurrent text and attachment changes without dropping either intent', async () => {
-    const lease = ownedLease();
-    const firstResponse = deferred<Awaited<ReturnType<FlowerComposerDraftPersistence['mutate']>>>();
-    const secondResponse = deferred<Awaited<ReturnType<FlowerComposerDraftPersistence['mutate']>>>();
-    const mutate = vi.fn()
-      .mockReturnValueOnce(firstResponse.promise)
-      .mockReturnValueOnce(secondResponse.promise);
-    const coordinator = createFlowerComposerDraftCoordinator({
-      now: () => 1_000,
-      persistence: persistenceWith({ mutate }),
-    });
-    const session = coordinator.open('thread-1', 'activity');
-    await session.acquire();
-
-    const typing = session.mutate(0, (value) => ({ ...value, text: 'hello' }));
-    const attachment = session.mutate(0, (value) => ({
-      ...value,
-      attachments: [{
-        local_id: 'local-1',
-        source: 'file',
-        name: 'notes.txt',
-        mime_type: 'text/plain',
-        size_bytes: 12,
-        upload_request_id: 'upload-1',
-        attempt_state: 'ready',
-      }],
+    expect(moved).toMatchObject({ scope_id: 'thread-created', value: { text: 'preserved' } });
+    expect(coordinator.open('thread-created').snapshot()).toBe(moved);
+    expect(listener).toHaveBeenLastCalledWith(expect.objectContaining({
+      scope_id: '__new_thread__',
+      value: expect.objectContaining({ text: '' }),
     }));
-    expect(session.snapshot().value).toMatchObject({ text: 'hello', attachments: [{ local_id: 'local-1' }] });
-    await vi.waitFor(() => expect(mutate).toHaveBeenCalledTimes(1));
-    expect(mutate.mock.calls[0]?.[3]).toBe(0);
-    expect(mutate.mock.calls[0]?.[4]).toMatchObject({ text: 'hello', attachments: [] });
-
-    firstResponse.resolve({ kind: 'committed', snapshot: draftSnapshot(1, draftValue({ text: 'hello' }), lease) });
-    await expect(typing).resolves.toMatchObject({ kind: 'committed' });
-    await vi.waitFor(() => expect(mutate).toHaveBeenCalledTimes(2));
-    expect(mutate.mock.calls[1]?.[3]).toBe(1);
-    expect(mutate.mock.calls[1]?.[4]).toMatchObject({ text: 'hello', attachments: [{ local_id: 'local-1' }] });
-
-    secondResponse.resolve({
-      kind: 'committed',
-      snapshot: draftSnapshot(2, mutate.mock.calls[1]![4] as FlowerComposerDraftValue, lease),
-    });
-    await expect(attachment).resolves.toMatchObject({ kind: 'committed' });
-    expect(session.snapshot()).toMatchObject({
-      revision: 2,
-      value: { text: 'hello', attachments: [{ local_id: 'local-1' }] },
-    });
+    expect(coordinator.read('').value.text).toBe('');
   });
 
-  it('does not let a deferred old renew snapshot overwrite a newer local intent', async () => {
-    const lease = ownedLease();
-    const renewResponse = deferred<Awaited<ReturnType<FlowerComposerDraftPersistence['renew']>>>();
-    const mutate = vi.fn(async (_scopeID, _holderID, _leaseID, expectedRevision: number, value: FlowerComposerDraftValue) => ({
-      kind: 'committed' as const,
-      snapshot: draftSnapshot(expectedRevision + 1, value, lease),
-    }));
-    const coordinator = createFlowerComposerDraftCoordinator({
-      now: () => 1_000,
-      persistence: persistenceWith({ renew: () => renewResponse.promise, mutate }),
-    });
-    const session = coordinator.open('thread-1', 'activity');
-    await session.acquire();
+  it('transfers into an opened target while resetting the pending source for other surfaces', () => {
+    const coordinator = createFlowerComposerDraftCoordinator();
+    const pending = coordinator.open('');
+    const admitted = coordinator.open('thread-created');
+    const admittedListener = vi.fn();
+    admitted.subscribe(admittedListener);
+    pending.mutate((draft) => ({ ...draft, text: 'connection draft' }));
 
-    const renewing = session.renew();
-    const typing = session.mutate(0, (value) => ({ ...value, text: 'new local text' }));
-    expect(session.snapshot().value.text).toBe('new local text');
-    renewResponse.resolve({ state: 'owned', snapshot: draftSnapshot(0, draftValue({ text: 'old server text' })), lease });
-    await renewing;
-    expect(session.snapshot().value.text).toBe('new local text');
-    await typing;
-    expect(mutate).toHaveBeenCalledWith(
-      'thread-1',
-      'activity',
-      'lease-secret',
-      0,
-      expect.objectContaining({ text: 'new local text' }),
-    );
-    expect(session.snapshot()).toMatchObject({ revision: 1, value: { text: 'new local text' } });
+    const moved = coordinator.moveScope('', 'thread-created');
+    admitted.mutate((draft) => ({ ...draft, text: `${draft.text} shared` }));
+
+    expect(moved.value.text).toBe('connection draft');
+    expect(pending.snapshot().value.text).toBe('');
+    expect(admitted.snapshot().value.text).toBe('connection draft shared');
+    expect(admitted.snapshot()).not.toBe(pending.snapshot());
+    expect(admittedListener).toHaveBeenLastCalledWith(admitted.snapshot());
+  });
+
+  it('keeps source and target sessions independent after a transfer', () => {
+    const coordinator = createFlowerComposerDraftCoordinator();
+    const pending = coordinator.open('');
+    const admitted = coordinator.open('thread-created');
+    pending.mutate((draft) => ({ ...draft, text: 'admitted message' }));
+
+    coordinator.moveScope('', 'thread-created');
+    pending.mutate((draft) => ({ ...draft, text: 'next message' }));
+
+    expect(pending.snapshot().value.text).toBe('next message');
+    expect(admitted.snapshot().value.text).toBe('admitted message');
+  });
+
+  it('shares one attachment staging capability across surfaces and releases it with the connection', async () => {
+    const coordinator = createFlowerComposerDraftCoordinator({ now: () => 100 });
+    const create = vi.fn(async () => ({
+      staging_scope_id: 'staging-scope-1',
+      thread_id: 'thread-1',
+      capability: 'connection-secret',
+      expires_at_unix_ms: 10_000,
+    }));
+    const release = vi.fn(async () => undefined);
+
+    const [activityScope, workbenchScope] = await Promise.all([
+      coordinator.ensureAttachmentStagingScope('thread-1', create, release),
+      coordinator.ensureAttachmentStagingScope('thread-1', create, release),
+    ]);
+
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(workbenchScope).toBe(activityScope);
+    expect(coordinator.attachmentStagingScope('thread-1')).toBe(activityScope);
+
+    coordinator.dispose();
+
+    expect(release).toHaveBeenCalledTimes(1);
+    expect(release).toHaveBeenCalledWith(activityScope);
+  });
+
+  it('moves the connection-local staging capability with a new-thread scope', async () => {
+    const coordinator = createFlowerComposerDraftCoordinator({ now: () => 100 });
+    const stagingScope = {
+      staging_scope_id: 'staging-scope-new',
+      thread_id: 'thread-created',
+      capability: 'connection-secret',
+      expires_at_unix_ms: 10_000,
+    };
+    await coordinator.ensureAttachmentStagingScope('', async () => stagingScope, async () => undefined);
+
+    coordinator.moveScope('', 'thread-created');
+
+    expect(coordinator.attachmentStagingScope('thread-created')).toBe(stagingScope);
+    expect(coordinator.attachmentStagingScope('')).toBeNull();
+  });
+
+  it('settles a pending staging creation into the moved target scope', async () => {
+    const coordinator = createFlowerComposerDraftCoordinator({ now: () => 100 });
+    let resolveCreation!: (scope: {
+      staging_scope_id: string;
+      thread_id: string;
+      capability: string;
+      expires_at_unix_ms: number;
+    }) => void;
+    const release = vi.fn(async () => undefined);
+    const creation = coordinator.ensureAttachmentStagingScope('', () => new Promise((resolve) => {
+      resolveCreation = resolve;
+    }), release);
+
+    coordinator.moveScope('', 'thread-created');
+    const stagingScope = {
+      staging_scope_id: 'staging-scope-moved-pending',
+      thread_id: 'thread-created',
+      capability: 'connection-secret',
+      expires_at_unix_ms: 10_000,
+    };
+    resolveCreation(stagingScope);
+
+    await expect(creation).resolves.toBe(stagingScope);
+    expect(coordinator.attachmentStagingScope('thread-created')).toBe(stagingScope);
+    expect(coordinator.attachmentStagingScope('')).toBeNull();
+    coordinator.releaseAttachmentStagingScope('thread-created');
+    expect(release).toHaveBeenCalledWith(stagingScope);
+  });
+
+  it('releases an expiring scope and deduplicates its concurrent refresh', async () => {
+    let now = 100;
+    const coordinator = createFlowerComposerDraftCoordinator({ now: () => now });
+    const scopes = [
+      {
+        staging_scope_id: 'staging-scope-old', thread_id: 'thread-1', capability: 'old-secret',
+        expires_at_unix_ms: 6_000,
+      },
+      {
+        staging_scope_id: 'staging-scope-new', thread_id: 'thread-1', capability: 'new-secret',
+        expires_at_unix_ms: 20_000,
+      },
+    ];
+    const create = vi.fn(async () => scopes.shift()!);
+    const release = vi.fn(async () => undefined);
+    const oldScope = await coordinator.ensureAttachmentStagingScope('thread-1', create, release);
+    now = 1_001;
+
+    const [activityScope, workbenchScope] = await Promise.all([
+      coordinator.ensureAttachmentStagingScope('thread-1', create, release),
+      coordinator.ensureAttachmentStagingScope('thread-1', create, release),
+    ]);
+
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(release).toHaveBeenCalledTimes(1);
+    expect(release).toHaveBeenCalledWith(oldScope);
+    expect(workbenchScope).toBe(activityScope);
+    expect(activityScope.staging_scope_id).toBe('staging-scope-new');
+  });
+
+  it('rejects reads and mutations after disposal', () => {
+    const coordinator = createFlowerComposerDraftCoordinator();
+    const session = coordinator.open('thread-1');
+    coordinator.dispose();
+
+    expect(() => session.mutate((draft) => draft)).toThrow(/disposed/i);
+    expect(() => session.clear()).toThrow(/disposed/i);
+    expect(() => coordinator.read('thread-1')).toThrow(/disposed/i);
+    expect(() => coordinator.open('thread-1')).toThrow(/disposed/i);
+    expect(() => coordinator.moveScope('thread-1', 'thread-2')).toThrow(/disposed/i);
   });
 });

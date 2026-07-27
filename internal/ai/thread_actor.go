@@ -705,7 +705,7 @@ func (a *threadActor) handleMaybeStartQueuedTurn(ctx context.Context) error {
 			err:                err,
 		}
 	}
-	if _, _, err := a.mgr.svc.prepareUserTurn(ctx, meta, endpointID, threadID, startReq.Model, startReq.Input, "", nil); err != nil {
+	if _, _, err := a.mgr.svc.prepareUserTurn(ctx, meta, endpointID, threadID, startReq.Model, startReq.Input, "", ""); err != nil {
 		return &queuedTurnStartError{
 			endpointID:         endpointID,
 			threadID:           threadID,
@@ -828,12 +828,17 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 		options.ReasoningSelection = resolved.Effective
 		return nil
 	}
+	req.Options.PermissionType = permissionTypeString(resolvedPermissionType)
+	if err := normalizeTurnReasoning(&req.Options); err != nil {
+		return SendUserTurnResponse{}, err
+	}
+	appliedPermissionType = permissionTypeString(resolvedPermissionType)
+	if receipt, err := a.mgr.svc.frozenTurnReceipt(ctx, meta, req); err != nil {
+		return SendUserTurnResponse{}, err
+	} else if receipt != nil {
+		return *receipt, nil
+	}
 	if openPrompt != nil && req.QueueAfterWaitingUser {
-		req.Options.PermissionType = permissionTypeString(resolvedPermissionType)
-		if err := normalizeTurnReasoning(&req.Options); err != nil {
-			return SendUserTurnResponse{}, err
-		}
-		appliedPermissionType = permissionTypeString(resolvedPermissionType)
 		queued, position, err := a.mgr.svc.enqueueQueuedTurn(ctx, meta, req)
 		if err != nil {
 			return SendUserTurnResponse{}, err
@@ -850,12 +855,6 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 	if openPrompt != nil {
 		return SendUserTurnResponse{}, ErrWaitingUserQueueConflict
 	}
-	req.Options.PermissionType = permissionTypeString(resolvedPermissionType)
-	if err := normalizeTurnReasoning(&req.Options); err != nil {
-		return SendUserTurnResponse{}, err
-	}
-	appliedPermissionType = permissionTypeString(resolvedPermissionType)
-
 	if activeRunID != "" || finalizingRunID != "" {
 		queued, position, err := a.mgr.svc.enqueueQueuedTurn(ctx, meta, req)
 		if err != nil {
@@ -911,12 +910,12 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 	}
 
 	startReq := RunStartRequest{
-		ThreadID:              threadID,
-		Model:                 strings.TrimSpace(req.Model),
-		Input:                 req.Input,
-		Options:               req.Options,
-		DraftID:               req.DraftID,
-		ExpectedDraftRevision: req.ExpectedDraftRevision,
+		ThreadID:          threadID,
+		Model:             strings.TrimSpace(req.Model),
+		Input:             req.Input,
+		Options:           req.Options,
+		StagingScopeID:    req.StagingScopeID,
+		StagingCapability: req.StagingCapability,
 	}
 	admitted, _, err := a.mgr.svc.startUserTurnDetached(ctx, meta, runID, startReq, req.SourceFollowupID)
 	if err != nil {

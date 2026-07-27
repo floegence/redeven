@@ -366,12 +366,12 @@ type StopThreadResponse struct {
 // - thread_id is mandatory; the agent builds history from the persisted thread store.
 // - history must NOT be provided by clients (agent is the source of truth).
 type RunStartRequest struct {
-	ThreadID              string     `json:"thread_id"`
-	Model                 string     `json:"model"`
-	Input                 RunInput   `json:"input"`
-	Options               RunOptions `json:"options"`
-	DraftID               string     `json:"-"`
-	ExpectedDraftRevision *int64     `json:"-"`
+	ThreadID          string     `json:"thread_id"`
+	Model             string     `json:"model"`
+	Input             RunInput   `json:"input"`
+	Options           RunOptions `json:"options"`
+	StagingScopeID    string     `json:"-"`
+	StagingCapability string     `json:"-"`
 }
 
 // RunRequest is the internal run request for Go runtime execution.

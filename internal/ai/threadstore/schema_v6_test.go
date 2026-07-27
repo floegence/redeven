@@ -49,7 +49,7 @@ VALUES(1, 'ai_threadstore_product_v2', 5, 5);
 	return db
 }
 
-func TestThreadstoreMigratesV5ThroughV7WithoutChangingExistingRecords(t *testing.T) {
+func TestThreadstoreMigratesV5ThroughV8AndRemovesObsoleteDraftClaims(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "threads.sqlite")
 	raw := createProductV5DatabaseForTest(t, path)
@@ -95,25 +95,21 @@ VALUES('env_v5', 'upload_v5', '', 'draft', 'legacy_draft', 13);
 	if settings.ModelID != "openai/gpt-5" || settings.WorkingDir != "/workspace" || settings.NamespacePublicID != "namespace_v5" {
 		t.Fatalf("migrated settings=%#v", settings)
 	}
-	upload, err := store.GetDraftOwnedUpload(t.Context(), "env_v5", ownerHash, "legacy_draft", "upload_v5")
+	upload, err := store.GetUpload(t.Context(), "env_v5", "upload_v5")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if upload.Name != "notes.txt" || upload.SizeBytes != 7 || upload.ContentSHA256 != contentHash || upload.State != UploadStateStaged {
+	if upload.Name != "notes.txt" || upload.SizeBytes != 7 || upload.ContentSHA256 != contentHash || upload.State != UploadStateDeleting {
 		t.Fatalf("migrated upload=%#v", upload)
 	}
-	var migratedThreadID, migratedRefID string
-	if err := store.db.QueryRow(`SELECT thread_id, ref_id FROM ai_upload_refs WHERE endpoint_id = 'env_v5' AND upload_id = 'upload_v5' AND ref_kind = ?`, UploadRefKindDraft).Scan(&migratedThreadID, &migratedRefID); err != nil {
-		t.Fatal(err)
+	if got := countRowsForTest(t, store.db, `SELECT COUNT(1) FROM ai_upload_refs WHERE endpoint_id = 'env_v5' AND upload_id = 'upload_v5'`); got != 0 {
+		t.Fatalf("obsolete draft ref count=%d", got)
 	}
-	if migratedThreadID != "legacy_draft" || migratedRefID != composerDraftUploadRefID(ownerHash, "legacy_draft") {
-		t.Fatalf("migrated draft ref thread_id=%q ref_id=%q", migratedThreadID, migratedRefID)
+	if countRowsForTest(t, store.db, `SELECT COUNT(1) FROM sqlite_master WHERE type = 'table' AND name = 'ai_composer_drafts'`) != 0 {
+		t.Fatal("v5 migration retained composer draft storage")
 	}
-	if countRowsForTest(t, store.db, `SELECT COUNT(1) FROM ai_composer_drafts`) != 0 {
-		t.Fatal("v5 migration invented composer draft rows")
-	}
-	if countRowsForTest(t, store.db, `SELECT COUNT(1) FROM __redeven_db_meta WHERE singleton = 1 AND last_migrated_from_version = 5 AND last_migrated_to_version = 7`) != 1 {
-		t.Fatal("v5 through v7 migration metadata was not committed")
+	if countRowsForTest(t, store.db, `SELECT COUNT(1) FROM __redeven_db_meta WHERE singleton = 1 AND last_migrated_from_version = 5 AND last_migrated_to_version = 8`) != 1 {
+		t.Fatal("v5 through v8 migration metadata was not committed")
 	}
 }
 
@@ -147,75 +143,40 @@ VALUES('env_v5_quarantine', 'upload_v5_quarantine', '', 'draft', 'legacy_draft_s
 	if err != nil {
 		t.Fatal(err)
 	}
-	if upload.OwnerScopeKind != UploadOwnerScopeLegacyStagedQuarantine || upload.OwnerUserHash != "" || upload.State != UploadStateStaged {
+	if upload.OwnerScopeKind != UploadOwnerScopeLegacyStagedQuarantine || upload.OwnerUserHash != "" || upload.State != UploadStateDeleting {
 		t.Fatalf("migrated quarantine upload=%#v", upload)
 	}
-	var threadID, refID string
-	if err := store.db.QueryRow(`
-SELECT thread_id, ref_id FROM ai_upload_refs
-WHERE endpoint_id = 'env_v5_quarantine' AND upload_id = 'upload_v5_quarantine' AND ref_kind = 'draft'
-`).Scan(&threadID, &refID); err != nil {
-		t.Fatal(err)
-	}
-	if threadID != "legacy_draft_scope" || refID != "legacy_draft_scope" {
-		t.Fatalf("migrated quarantine ref thread_id=%q ref_id=%q", threadID, refID)
-	}
-	if _, err := store.GetDraftOwnedUpload(t.Context(), "env_v5_quarantine", strings.Repeat("a", 64), "legacy_draft_scope", "upload_v5_quarantine"); !errors.Is(err, sql.ErrNoRows) {
-		t.Fatalf("quarantined upload became user-readable: %v", err)
+	if got := countRowsForTest(t, store.db, `SELECT COUNT(1) FROM ai_upload_refs WHERE endpoint_id = 'env_v5_quarantine' AND upload_id = 'upload_v5_quarantine'`); got != 0 {
+		t.Fatalf("quarantined upload retained %d obsolete draft refs", got)
 	}
 }
 
-func TestFreshThreadstoreV7ComposerDraftSchemaAndConstraints(t *testing.T) {
+func TestFreshThreadstoreV8HasStagingScopesWithoutComposerDrafts(t *testing.T) {
 	t.Parallel()
 	store := openStoreForTest(t)
 
-	if countRowsForTest(t, store.db, `SELECT COUNT(1) FROM sqlite_master WHERE type = 'table' AND name = 'ai_composer_drafts'`) != 1 {
-		t.Fatal("fresh v7 schema is missing ai_composer_drafts")
+	if countRowsForTest(t, store.db, `SELECT COUNT(1) FROM sqlite_master WHERE type = 'table' AND name = 'ai_composer_drafts'`) != 0 {
+		t.Fatal("fresh v8 schema retained composer drafts")
 	}
-	if countRowsForTest(t, store.db, `SELECT COUNT(1) FROM sqlite_master WHERE type = 'index' AND name = 'idx_ai_composer_drafts_expiry' AND tbl_name = 'ai_composer_drafts'`) != 1 {
-		t.Fatal("fresh v7 schema is missing composer draft expiry index")
+	if countRowsForTest(t, store.db, `SELECT COUNT(1) FROM sqlite_master WHERE type = 'table' AND name = 'ai_upload_staging_scopes'`) != 1 {
+		t.Fatal("fresh v8 schema is missing upload staging scopes")
 	}
 	var indexColumns string
 	if err := store.db.QueryRow(`
 SELECT group_concat(name, ',')
 FROM (
   SELECT info.name
-  FROM pragma_index_info('idx_ai_composer_drafts_expiry') info
-  ORDER BY info.seqno
+	  FROM pragma_index_info('idx_ai_upload_staging_scopes_expiry') info
+	  ORDER BY info.seqno
 )
 `).Scan(&indexColumns); err != nil {
 		t.Fatal(err)
 	}
-	if indexColumns != "expires_at_unix_ms,endpoint_id,scope_id" {
+	if indexColumns != "expires_at_unix_ms,staging_scope_id" {
 		t.Fatalf("expiry index columns=%q", indexColumns)
 	}
-	if countRowsForTest(t, store.db, `SELECT COUNT(1) FROM pragma_table_info('ai_composer_drafts')`) != 11 {
-		t.Fatal("fresh composer draft table has an unexpected column contract")
-	}
-	ownerHash := strings.Repeat("a", 64)
-	insert := func(owner string, revision int64) error {
-		_, err := store.db.Exec(`
-INSERT INTO ai_composer_drafts(
-  endpoint_id, owner_user_hash, scope_id, revision, value_json,
-  created_at_unix_ms, updated_at_unix_ms, expires_at_unix_ms
-) VALUES('env_constraints', ?, 'scope_constraints', ?, '{"text":"","attachments":[],"references":[],"mode":"ordinary"}', 1, 1, 2)
-`, owner, revision)
-		return err
-	}
-	if err := insert(ownerHash, 0); err != nil {
-		t.Fatalf("valid composer draft insert: %v", err)
-	}
-	if err := insert(ownerHash, 0); err == nil {
-		t.Fatal("composer draft primary key accepted a duplicate identity")
-	}
-	if _, err := store.db.Exec(`DELETE FROM ai_composer_drafts`); err != nil {
-		t.Fatal(err)
-	}
-	if err := insert("short", 0); err == nil {
-		t.Fatal("composer draft accepted an invalid owner hash")
-	}
-	if err := insert(ownerHash, -1); err == nil {
-		t.Fatal("composer draft accepted a negative revision")
+	if countRowsForTest(t, store.db, `SELECT COUNT(1) FROM pragma_table_info('ai_upload_staging_scopes')`) != 8 {
+		t.Fatal("fresh staging scope table has an unexpected column contract")
 	}
 }
 
@@ -421,7 +382,7 @@ func TestThreadstoreRejectsDriftedV5WithoutMutation(t *testing.T) {
 	}
 }
 
-func TestThreadstoreRejectsFutureV8WithoutMutation(t *testing.T) {
+func TestThreadstoreRejectsFutureV9WithoutMutation(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "threads.sqlite")
 	store, err := Open(path)
@@ -429,12 +390,12 @@ func TestThreadstoreRejectsFutureV8WithoutMutation(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := store.db.Exec(`
-INSERT INTO ai_composer_drafts(
-  endpoint_id, owner_user_hash, scope_id, revision, value_json,
-  created_at_unix_ms, updated_at_unix_ms, expires_at_unix_ms
-) VALUES('env_future', ?, 'scope_future', 2, '{"text":"future","attachments":[],"references":[],"mode":"ordinary"}', 1, 2, 3);
-PRAGMA user_version=8;
-`, strings.Repeat("f", 64)); err != nil {
+INSERT INTO ai_upload_staging_scopes(
+  staging_scope_id, endpoint_id, owner_user_hash, thread_id, capability_hash,
+  created_at_unix_ms, expires_at_unix_ms
+) VALUES('scope_future', 'env_future', ?, 'thread_future', ?, 1, 3);
+PRAGMA user_version=9;
+`, strings.Repeat("f", 64), strings.Repeat("c", 64)); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.Close(); err != nil {
@@ -453,7 +414,7 @@ PRAGMA user_version=8;
 	if err := raw.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
 		t.Fatal(err)
 	}
-	if version != 8 || countRowsForTest(t, raw, `SELECT COUNT(1) FROM ai_composer_drafts WHERE endpoint_id = 'env_future' AND revision = 2`) != 1 {
+	if version != 9 || countRowsForTest(t, raw, `SELECT COUNT(1) FROM ai_upload_staging_scopes WHERE endpoint_id = 'env_future' AND staging_scope_id = 'scope_future'`) != 1 {
 		t.Fatalf("future version rejection mutated database: version=%d", version)
 	}
 }

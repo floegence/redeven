@@ -302,6 +302,23 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 		default:
 			return fmt.Errorf("canonical Floret title %q conflicts with Redeven title %q", canonicalTitle, strings.TrimSpace(legacy.Title))
 		}
+	}), threadstore.WithLegacyComposerAdmissionPreflight(uploadsDir, func(_ context.Context, legacy threadstore.LegacyComposerAdmission) (threadstore.LegacyComposerAdmissionDecision, error) {
+		preflightCtx, cancel := context.WithTimeout(context.Background(), persistTO)
+		defer cancel()
+		threadID := flruntime.ThreadID(strings.TrimSpace(legacy.ThreadID))
+		turnID := flruntime.TurnID(strings.TrimSpace(legacy.TurnID))
+		readHost, err := floretBootstrap.newThreadRead(preflightCtx, threadID)
+		if err != nil {
+			return threadstore.LegacyComposerAdmissionDecision{}, fmt.Errorf("bind canonical Floret turn read: %w", err)
+		}
+		turn, err := readHost.ReadThreadTurn(preflightCtx, flruntime.ReadThreadTurnRequest{ThreadID: threadID, TurnID: turnID})
+		if errors.Is(err, flruntime.ErrTurnNotFound) {
+			return threadstore.LegacyComposerAdmissionDecision{State: threadstore.LegacyComposerAdmissionMissing}, nil
+		}
+		if err != nil {
+			return threadstore.LegacyComposerAdmissionDecision{}, fmt.Errorf("read canonical Floret turn: %w", err)
+		}
+		return legacyComposerAdmissionDecisionFromCanonicalTurn(legacy, turn)
 	}))
 	if err != nil {
 		_ = floretBootstrap.close()
@@ -450,6 +467,38 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 	}
 	svc.startBackgroundMaintenance()
 	return svc, nil
+}
+
+func legacyComposerAdmissionDecisionFromCanonicalTurn(
+	legacy threadstore.LegacyComposerAdmission,
+	turn flruntime.ThreadTurnSnapshot,
+) (threadstore.LegacyComposerAdmissionDecision, error) {
+	if turn.TurnID != flruntime.TurnID(strings.TrimSpace(legacy.TurnID)) {
+		return threadstore.LegacyComposerAdmissionDecision{}, errors.New("canonical Floret turn identity mismatch")
+	}
+	if len(turn.UserAttachments) != len(legacy.Attachments) {
+		return threadstore.LegacyComposerAdmissionDecision{}, errors.New("canonical Floret attachment membership mismatch")
+	}
+	canonicalAttachments := make([]threadstore.LegacyComposerCanonicalAttachment, 0, len(turn.UserAttachments))
+	for index, canonical := range turn.UserAttachments {
+		uploadID, digest, legacyResourceRef, parseErr := floretUploadIdentityFromResourceRef(canonical.ResourceRef)
+		if parseErr != nil || legacyResourceRef || strings.TrimSpace(digest) == "" {
+			return threadstore.LegacyComposerAdmissionDecision{}, fmt.Errorf("canonical Floret attachment %d has invalid immutable identity", index)
+		}
+		local := legacy.Attachments[index]
+		if uploadID != local.UploadID || canonical.Name != local.Name || canonical.MIMEType != local.DetectedMediaType ||
+			canonical.SizeBytes != local.SizeBytes || !strings.EqualFold(digest, local.ContentSHA256) {
+			return threadstore.LegacyComposerAdmissionDecision{}, fmt.Errorf("canonical Floret attachment %d conflicts with product attachment", index)
+		}
+		canonicalAttachments = append(canonicalAttachments, threadstore.LegacyComposerCanonicalAttachment{
+			UploadID: uploadID, ResourceRef: canonical.ResourceRef, Name: canonical.Name, MIMEType: canonical.MIMEType,
+			SizeBytes: canonical.SizeBytes, ContentSHA256: digest,
+		})
+	}
+	return threadstore.LegacyComposerAdmissionDecision{
+		State:       threadstore.LegacyComposerAdmissionAdmitted,
+		Attachments: canonicalAttachments,
+	}, nil
 }
 
 func closeServiceBeforeMaintenance(s *Service) {
@@ -1649,7 +1698,7 @@ func (s *Service) startUserTurnDetached(ctx context.Context, meta *session.Meta,
 		return admittedUserTurn{}, req.Input, errors.New("invalid request")
 	}
 
-	preparedUser, normalizedInput, err := s.prepareUserTurn(ctx, meta, endpointID, threadID, req.Model, req.Input, req.DraftID, req.ExpectedDraftRevision)
+	preparedUser, normalizedInput, err := s.prepareUserTurn(ctx, meta, endpointID, threadID, req.Model, req.Input, req.StagingScopeID, req.StagingCapability)
 	if err != nil {
 		return admittedUserTurn{}, req.Input, err
 	}
@@ -1715,11 +1764,8 @@ func (s *Service) startUserTurnDetached(ctx context.Context, meta *session.Meta,
 		if sourceID != "" {
 			var replacement threadstore.FollowupReplacementResult
 			var replaceErr error
-			if preparedUser.DraftID != "" && preparedUser.ExpectedDraftRevision != nil {
-				replacement, replaceErr = prepared.db.ReplaceFollowupFromComposerDraft(pctx, sourceID, record, preparedUser.UploadIDs, preparedUser.CreatedAtUnixMs, threadstore.ComposerDraftAdmission{
-					OwnerUserHash: preparedUser.OwnerUserHash, DraftID: preparedUser.DraftID, ExpectedRevision: *preparedUser.ExpectedDraftRevision,
-					ContextActionJSON: contextActionJSON, Attachment: preparedUser.AttachmentAdmission,
-				})
+			if preparedUser.StagingScope != nil {
+				replacement, replaceErr = prepared.db.ReplaceFollowupFromStaging(pctx, sourceID, record, preparedUser.UploadIDs, preparedUser.CreatedAtUnixMs, preparedUser.AttachmentAdmission, *preparedUser.StagingScope)
 			} else {
 				replacement, replaceErr = prepared.db.ReplaceFollowupWithAttachmentAdmission(pctx, sourceID, record, preparedUser.UploadIDs, preparedUser.CreatedAtUnixMs, preparedUser.AttachmentAdmission)
 			}
@@ -1732,14 +1778,8 @@ func (s *Service) startUserTurnDetached(ctx context.Context, meta *session.Meta,
 				s.log.Warn("pending turn replacement physical cleanup deferred", "thread_id", threadID, "source_followup_id", sourceID, "error", cleanupErr)
 			}
 		} else {
-			if preparedUser.DraftID != "" && preparedUser.ExpectedDraftRevision != nil {
-				_, _, _, err = prepared.db.CreateFollowupFromComposerDraft(pctx, record, preparedUser.UploadIDs, preparedUser.CreatedAtUnixMs, threadstore.ComposerDraftAdmission{
-					OwnerUserHash:     preparedUser.OwnerUserHash,
-					DraftID:           preparedUser.DraftID,
-					ExpectedRevision:  *preparedUser.ExpectedDraftRevision,
-					ContextActionJSON: contextActionJSON,
-					Attachment:        preparedUser.AttachmentAdmission,
-				})
+			if preparedUser.StagingScope != nil {
+				_, _, _, err = prepared.db.CreateFollowupFromStaging(pctx, record, preparedUser.UploadIDs, preparedUser.CreatedAtUnixMs, preparedUser.AttachmentAdmission, *preparedUser.StagingScope)
 			} else {
 				_, _, _, err = prepared.db.CreateFollowupWithAttachmentAdmission(pctx, record, preparedUser.UploadIDs, preparedUser.CreatedAtUnixMs, preparedUser.AttachmentAdmission)
 			}

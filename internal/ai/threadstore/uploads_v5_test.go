@@ -2,12 +2,14 @@ package threadstore
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 func quotaUploadRecord(ownerHash string, uploadID string, size int64) UploadRecord {
@@ -17,6 +19,28 @@ func quotaUploadRecord(ownerHash string, uploadID string, size int64) UploadReco
 		SizeBytes: size, ContentSHA256: strings.Repeat("d", 64), Source: UploadSourceFile,
 		State: UploadStateStaged, CreatedAtUnixMs: 1, DeleteAfterUnixMs: 2,
 	}
+}
+
+func completeUploadAttemptForTest(t *testing.T, store *Store, attempt UploadAttemptRecord, rec UploadRecord) UploadStagingScope {
+	t.Helper()
+	now := time.Now()
+	capabilityHash := sha256.Sum256([]byte(rec.UploadID))
+	scope := UploadStagingScope{
+		StagingScopeID:  "scope_" + rec.UploadID,
+		EndpointID:      rec.EndpointID,
+		OwnerUserHash:   rec.OwnerUserHash,
+		ThreadID:        "thread_" + rec.UploadID,
+		CapabilityHash:  fmt.Sprintf("%x", capabilityHash),
+		CreatedAtUnixMs: now.Add(-time.Minute).UnixMilli(),
+		ExpiresAtUnixMs: now.Add(time.Hour).UnixMilli(),
+	}
+	if err := store.CreateUploadStagingScope(t.Context(), scope); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.CompleteUploadAttemptToStaging(t.Context(), attempt, rec, scope); err != nil {
+		t.Fatal(err)
+	}
+	return scope
 }
 
 func TestUploadAttemptReservationAndCompletionAreOwnerScopedAndIdempotent(t *testing.T) {
@@ -51,9 +75,7 @@ func TestUploadAttemptReservationAndCompletionAreOwnerScopedAndIdempotent(t *tes
 		SizeBytes: 4, ContentSHA256: strings.Repeat("d", 64), Source: UploadSourceFile,
 		State: UploadStateStaged, CreatedAtUnixMs: 2, DeleteAfterUnixMs: 3,
 	}
-	if err := store.CompleteUploadAttempt(context.Background(), attempt, rec, attempt.UploadRequestID); err != nil {
-		t.Fatal(err)
-	}
+	completeUploadAttemptForTest(t, store, attempt, rec)
 	completed, created, err := store.ReserveUploadAttempt(context.Background(), attempt)
 	if err != nil || created || completed.Status != UploadAttemptComplete {
 		t.Fatalf("completed=(%#v,%t,%v)", completed, created, err)
@@ -67,7 +89,7 @@ func TestUploadAttemptReservationAndCompletionAreOwnerScopedAndIdempotent(t *tes
 	}
 }
 
-func TestDraftUploadRefsAreExclusiveAndProtectStagedResources(t *testing.T) {
+func TestStagingUploadRefsProtectResourcesUntilScopeRelease(t *testing.T) {
 	t.Parallel()
 	store, err := Open(filepath.Join(t.TempDir(), "threads.sqlite"))
 	if err != nil {
@@ -86,16 +108,17 @@ func TestDraftUploadRefsAreExclusiveAndProtectStagedResources(t *testing.T) {
 	if err := store.InsertUpload(context.Background(), rec); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.BindUserUploadsToDraft(context.Background(), rec.EndpointID, ownerHash, "draft_1", []string{rec.UploadID}, 3); err != nil {
+	scope := stagingScopeForTest(rec.EndpointID, "thread_1", ownerHash, "scope_1")
+	if err := store.CreateUploadStagingScope(t.Context(), scope); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.BindUserUploadsToDraft(context.Background(), rec.EndpointID, ownerHash, "draft_2", []string{rec.UploadID}, 4); err == nil {
-		t.Fatal("second draft claimed an attachment")
+	if _, err := store.db.Exec(`INSERT INTO ai_upload_refs(endpoint_id, upload_id, thread_id, ref_kind, ref_id, created_at_unix_ms) VALUES(?, ?, ?, ?, ?, ?)`, rec.EndpointID, rec.UploadID, scope.ThreadID, UploadRefKindStaging, stagingUploadRefID(ownerHash, scope.StagingScopeID), 3); err != nil {
+		t.Fatal(err)
 	}
 	if _, err := store.PrepareUserStagedUploadDeletion(context.Background(), rec.EndpointID, ownerHash, rec.UploadID, 5); err == nil {
 		t.Fatal("deletion ignored an active draft ref")
 	}
-	cleanup, err := store.ReleaseUserDraftUploads(context.Background(), rec.EndpointID, ownerHash, "draft_1", []string{rec.UploadID}, 6)
+	cleanup, err := store.ReleaseUploadStagingScope(context.Background(), scope, 6)
 	if err != nil || len(cleanup) != 1 || cleanup[0].State != UploadStateDeleting {
 		t.Fatalf("release cleanup=%#v err=%v", cleanup, err)
 	}
@@ -136,7 +159,17 @@ func TestStagedOwnerQuotaSerializesConcurrentCompletions(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			results <- store.CompleteUploadAttempt(context.Background(), item.attempt, item.record, item.attempt.UploadRequestID)
+			now := time.Now()
+			scope := UploadStagingScope{
+				StagingScopeID: "scope_" + item.record.UploadID, EndpointID: item.record.EndpointID,
+				OwnerUserHash: item.record.OwnerUserHash, ThreadID: "thread_" + item.record.UploadID,
+				CapabilityHash: fmt.Sprintf("%x", sha256.Sum256([]byte(item.record.UploadID))), CreatedAtUnixMs: now.Add(-time.Minute).UnixMilli(), ExpiresAtUnixMs: now.Add(time.Hour).UnixMilli(),
+			}
+			if err := store.CreateUploadStagingScope(context.Background(), scope); err != nil {
+				results <- err
+				return
+			}
+			results <- store.CompleteUploadAttemptToStaging(context.Background(), item.attempt, item.record, scope)
 		}()
 	}
 	wg.Wait()
@@ -177,7 +210,11 @@ func TestStagedByteQuotaAndLastLiveRefReleaseCapacity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.CompleteUploadAttempt(ctx, reserved, quotaUploadRecord(ownerHash, attempt.UploadID, 1), reserved.UploadRequestID); !errors.Is(err, ErrUploadQuotaExceeded) {
+	overScope := stagingScopeForTest("env_quota", "thread_over", ownerHash, "scope_over")
+	if err := store.CreateUploadStagingScope(ctx, overScope); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.CompleteUploadAttemptToStaging(ctx, reserved, quotaUploadRecord(ownerHash, attempt.UploadID, 1), overScope); !errors.Is(err, ErrUploadQuotaExceeded) {
 		t.Fatalf("staged byte quota error=%v", err)
 	}
 	if _, err := store.db.Exec(`DELETE FROM ai_uploads WHERE upload_id = ?`, fullStaged.UploadID); err != nil {
@@ -198,7 +235,11 @@ func TestStagedByteQuotaAndLastLiveRefReleaseCapacity(t *testing.T) {
 	if err := store.InsertUpload(ctx, next); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.BindUserUploadsToDraft(ctx, "env_quota", ownerHash, "draft_quota", []string{next.UploadID}, 3); err != nil {
+	nextScope := stagingScopeForTest("env_quota", "thread_quota", ownerHash, "scope_quota")
+	if err := store.CreateUploadStagingScope(ctx, nextScope); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(`INSERT INTO ai_upload_refs(endpoint_id, upload_id, thread_id, ref_kind, ref_id, created_at_unix_ms) VALUES(?, ?, ?, ?, ?, ?)`, "env_quota", next.UploadID, nextScope.ThreadID, UploadRefKindStaging, stagingUploadRefID(ownerHash, nextScope.StagingScopeID), 3); err != nil {
 		t.Fatal(err)
 	}
 	bindNext := func(claimedAt int64) error {
@@ -207,7 +248,7 @@ func TestStagedByteQuotaAndLastLiveRefReleaseCapacity(t *testing.T) {
 			return err
 		}
 		defer func() { _ = tx.Rollback() }()
-		if err := bindUploadsToRefTx(ctx, tx, "env_quota", "thread_quota", UploadRefKindThread, "thread_quota", []string{next.UploadID}, claimedAt, "draft_quota", ownerHash); err != nil {
+		if err := bindUploadsToRefTx(ctx, tx, "env_quota", "thread_quota", UploadRefKindThread, "thread_quota", []string{next.UploadID}, claimedAt, UploadRefKindStaging, stagingUploadRefID(ownerHash, nextScope.StagingScopeID), ownerHash); err != nil {
 			return err
 		}
 		return tx.Commit()

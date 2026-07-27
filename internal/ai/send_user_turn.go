@@ -14,6 +14,7 @@ import (
 var ErrRunChanged = errors.New("run changed")
 var ErrWaitingPromptChanged = errors.New("waiting prompt changed")
 var ErrWaitingUserQueueConflict = errors.New("waiting-user queue request conflicts with waiting response")
+var ErrTurnIdempotencyConflict = errors.New("turn id conflicts with a different frozen command")
 var ErrFollowupsRevisionChanged = errors.New("followups revision changed")
 var ErrInvalidFollowupLane = errors.New("invalid followup lane")
 var ErrReadOnlyThread = errors.New("thread is read only")
@@ -30,15 +31,16 @@ const (
 var ErrLongTextAttachmentRequired = threadstore.ErrLongTextAttachmentRequired
 
 type SendUserTurnRequest struct {
-	ThreadID              string     `json:"thread_id"`
-	DraftID               string     `json:"draft_id,omitempty"`
-	ExpectedDraftRevision *int64     `json:"expected_draft_revision,omitempty"`
-	Model                 string     `json:"model,omitempty"`
-	Input                 RunInput   `json:"input"`
-	Options               RunOptions `json:"options"`
-	ExpectedRunID         string     `json:"expected_run_id,omitempty"`
-	QueueAfterWaitingUser bool       `json:"queue_after_waiting_user,omitempty"`
-	SourceFollowupID      string     `json:"source_followup_id,omitempty"`
+	ThreadID              string               `json:"thread_id"`
+	Create                *CreateThreadRequest `json:"create,omitempty"`
+	StagingScopeID        string               `json:"staging_scope_id,omitempty"`
+	StagingCapability     string               `json:"-"`
+	Model                 string               `json:"model,omitempty"`
+	Input                 RunInput             `json:"input"`
+	Options               RunOptions           `json:"options"`
+	ExpectedRunID         string               `json:"expected_run_id,omitempty"`
+	QueueAfterWaitingUser bool                 `json:"queue_after_waiting_user,omitempty"`
+	SourceFollowupID      string               `json:"source_followup_id,omitempty"`
 }
 
 type SendUserTurnResponse struct {
@@ -74,13 +76,12 @@ type userTurnAdmissionOutcome struct {
 }
 
 type preparedUserTurn struct {
-	TurnID                string
-	CreatedAtUnixMs       int64
-	UploadIDs             []string
-	OwnerUserHash         string
-	DraftID               string
-	ExpectedDraftRevision *int64
-	AttachmentAdmission   threadstore.AttachmentAdmission
+	TurnID              string
+	CreatedAtUnixMs     int64
+	UploadIDs           []string
+	OwnerUserHash       string
+	StagingScope        *threadstore.UploadStagingScope
+	AttachmentAdmission threadstore.AttachmentAdmission
 }
 
 func validateInlineTurnText(text string) error {
@@ -110,6 +111,9 @@ func (s *Service) SendUserTurn(ctx context.Context, meta *session.Meta, req Send
 	threadID := strings.TrimSpace(req.ThreadID)
 	if endpointID == "" || threadID == "" {
 		return SendUserTurnResponse{}, errors.New("invalid request")
+	}
+	if req.Create != nil {
+		return s.sendInitialUserTurn(ctx, meta, req)
 	}
 	if s.threadMgr == nil {
 		return SendUserTurnResponse{}, errors.New("thread manager not ready")
@@ -208,7 +212,7 @@ func normalizeOrCreateTurnID(raw string) (string, error) {
 	return raw, nil
 }
 
-func (s *Service) prepareUserTurn(ctx context.Context, meta *session.Meta, endpointID string, threadID string, modelID string, input RunInput, draftID string, expectedDraftRevision *int64) (preparedUserTurn, RunInput, error) {
+func (s *Service) prepareUserTurn(ctx context.Context, meta *session.Meta, endpointID string, threadID string, modelID string, input RunInput, stagingScopeID string, stagingCapability string) (preparedUserTurn, RunInput, error) {
 	if s == nil {
 		return preparedUserTurn{}, input, errors.New("nil service")
 	}
@@ -233,17 +237,24 @@ func (s *Service) prepareUserTurn(ctx context.Context, meta *session.Meta, endpo
 	if err != nil {
 		return preparedUserTurn{}, input, err
 	}
-	draftID = strings.TrimSpace(draftID)
-	if draftID != "" && (expectedDraftRevision == nil || *expectedDraftRevision < 0) {
-		return preparedUserTurn{}, input, errors.New("composer draft revision is required")
+	var stagingScope *threadstore.UploadStagingScope
+	stagingScopeID = strings.TrimSpace(stagingScopeID)
+	if stagingScopeID != "" {
+		scope, authorizeErr := s.authorizeUploadStagingScope(ctx, owner, stagingScopeID, stagingCapability)
+		if authorizeErr != nil {
+			return preparedUserTurn{}, input, authorizeErr
+		}
+		if strings.TrimSpace(scope.ThreadID) != threadID {
+			return preparedUserTurn{}, input, errors.New("upload staging target changed")
+		}
+		stagingScope = &scope
 	}
-	input, uploadIDs, attachmentAdmission, err := s.prepareInputAttachmentAdmission(ctx, owner, draftID, strings.TrimSpace(modelID), input)
+	input, uploadIDs, attachmentAdmission, err := s.prepareInputAttachmentAdmission(ctx, owner, stagingScope, strings.TrimSpace(modelID), input)
 	if err != nil {
 		return preparedUserTurn{}, input, err
 	}
 	return preparedUserTurn{
 		TurnID: turnID, CreatedAtUnixMs: time.Now().UnixMilli(), UploadIDs: uploadIDs,
-		OwnerUserHash: owner.OwnerUserHash, DraftID: draftID, ExpectedDraftRevision: expectedDraftRevision,
-		AttachmentAdmission: attachmentAdmission,
+		OwnerUserHash: owner.OwnerUserHash, StagingScope: stagingScope, AttachmentAdmission: attachmentAdmission,
 	}, input, nil
 }

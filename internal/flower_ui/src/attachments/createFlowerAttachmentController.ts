@@ -1,6 +1,7 @@
 import type {
   FlowerAttachmentCapability,
   FlowerAttachmentSource,
+  FlowerAttachmentStagingScope,
   FlowerAttachmentUploadInput,
   FlowerStagedAttachment,
   FlowerStagedLongTextReadResult,
@@ -72,6 +73,7 @@ type MutableFlowerAttachmentItem = {
 
 export type FlowerAttachmentControllerSnapshot = Readonly<{
   capability: FlowerAttachmentCapability | null;
+  staging_scope: FlowerAttachmentStagingScope | null;
   items: readonly FlowerAttachmentItem[];
   active_uploads: number;
   queued_uploads: number;
@@ -84,7 +86,10 @@ export type FlowerLongTextAddResult =
 export type FlowerAttachmentController = Readonly<{
   snapshot: () => FlowerAttachmentControllerSnapshot;
   subscribe: (listener: (snapshot: FlowerAttachmentControllerSnapshot) => void) => () => void;
+  batch: <Result>(operation: () => Result) => Result;
   setCapability: (capability: FlowerAttachmentCapability | null) => void;
+  setStagingScope: (scope: FlowerAttachmentStagingScope | null) => void;
+  markStagingUnavailable: () => void;
   hydrateDraft: (items: readonly FlowerAttachmentDraftHydrationItem[]) => void;
   addFiles: (files: readonly File[], source: Extract<FlowerAttachmentSource, 'file' | 'paste' | 'drop'>) => readonly string[];
   addLongText: (text: string, name?: string) => FlowerLongTextAddResult;
@@ -109,11 +114,11 @@ export type FlowerAttachmentDraftHydrationItem = Readonly<{
 }>;
 
 export type FlowerAttachmentControllerOptions = Readonly<{
-  draftID?: string;
+  stagingScope?: FlowerAttachmentStagingScope | null;
   capability?: FlowerAttachmentCapability | null;
   upload?: (input: FlowerAttachmentUploadInput) => Promise<FlowerStagedAttachment>;
-  deleteStaged?: (attachmentID: string, draftID: string) => Promise<void>;
-  readStagedLongText?: (attachment: FlowerStagedAttachment, draftID: string) => Promise<FlowerStagedLongTextReadResult>;
+  deleteStaged?: (attachmentID: string, scope: FlowerAttachmentStagingScope) => Promise<void>;
+  readStagedLongText?: (attachment: FlowerStagedAttachment, scope: FlowerAttachmentStagingScope) => Promise<FlowerStagedLongTextReadResult>;
   now?: () => number;
   createID?: (kind: 'local' | 'request' | 'attempt') => string;
   concurrency?: number;
@@ -175,8 +180,8 @@ function uploadFailure(error: unknown): Readonly<{ code: FlowerAttachmentErrorCo
 export function createFlowerAttachmentController(
   options: FlowerAttachmentControllerOptions,
 ): FlowerAttachmentController {
-  const draftID = options.draftID?.trim() || '__new_thread__';
   let capability = options.capability ?? null;
+  let stagingScope = options.stagingScope ?? null;
   let disposed = false;
   const concurrency = Math.max(1, Math.floor(options.concurrency ?? FLOWER_ATTACHMENT_UPLOAD_CONCURRENCY));
   const now = options.now ?? Date.now;
@@ -184,6 +189,8 @@ export function createFlowerAttachmentController(
   const items: MutableFlowerAttachmentItem[] = [];
   const listeners = new Set<(snapshot: FlowerAttachmentControllerSnapshot) => void>();
   const idleWaiters = new Set<() => void>();
+  let batchDepth = 0;
+  let emitPending = false;
 
   const createID = (kind: 'local' | 'request' | 'attempt') => options.createID?.(kind) ?? secureRandomID(kind);
   const invalidateAttempt = (item: MutableFlowerAttachmentItem) => {
@@ -193,17 +200,25 @@ export function createFlowerAttachmentController(
   };
   const snapshot = (): FlowerAttachmentControllerSnapshot => ({
     capability,
+    staging_scope: stagingScope,
     items: items.map(readonlyItem),
     active_uploads: items.filter((item) => item.status === 'uploading').length,
     queued_uploads: items.filter((item) => item.status === 'queued').length,
   });
-  const emit = () => {
+  const flushEmit = () => {
     const next = snapshot();
     for (const listener of listeners) listener(next);
     if (next.active_uploads === 0 && next.queued_uploads === 0) {
       for (const resolve of idleWaiters) resolve();
       idleWaiters.clear();
     }
+  };
+  const emit = () => {
+    if (batchDepth > 0) {
+      emitPending = true;
+      return;
+    }
+    flushEmit();
   };
 
   const validationError = (file: File, excludedLocalID?: string): FlowerAttachmentErrorCode | null => {
@@ -237,7 +252,7 @@ export function createFlowerAttachmentController(
     let active = items.filter((item) => item.status === 'uploading').length;
     for (const item of items) {
       if (active >= concurrency) break;
-      if (item.status !== 'queued' || !item.file || !capability || !options.upload) continue;
+      if (item.status !== 'queued' || !item.file || !capability || !stagingScope || !options.upload) continue;
       active += 1;
       item.status = 'uploading';
       item.error_code = undefined;
@@ -251,11 +266,11 @@ export function createFlowerAttachmentController(
       item.controller = controller;
       const upload = options.upload;
       const uploadCapability = capability;
-      emit();
-      void upload({
+      const uploadStagingScope = stagingScope;
+      const uploadPromise = upload({
         attempt_id: attemptID,
         request_id: item.request_id,
-        draft_id: draftID,
+        staging_scope: uploadStagingScope,
         model_id: uploadCapability.model_id,
         capability_revision: uploadCapability.revision,
         source: item.source,
@@ -269,15 +284,18 @@ export function createFlowerAttachmentController(
           item.total_bytes = progress.total;
           emit();
         },
-      }).then((staged) => {
+      });
+      void uploadPromise.then((staged) => {
         if (item.attempt_id !== attemptID || item.status !== 'uploading') {
           const current = items.find((candidate) => candidate.local_id === item.local_id);
           if (!current || current.request_id !== uploadRequestID) {
-            if (staged.attachment_id) void options.deleteStaged?.(staged.attachment_id, draftID).catch(() => undefined);
+            if (staged.attachment_id) void options.deleteStaged?.(staged.attachment_id, uploadStagingScope).catch(() => undefined);
             return;
           }
           if (current.staged?.attachment_id === staged.attachment_id) return;
-          if (!current.staged && (current.status === 'queued' || current.status === 'uploading')) {
+          const uploadScopeStillActive = stagingScope?.staging_scope_id === uploadStagingScope.staging_scope_id
+            && stagingScope.capability === uploadStagingScope.capability;
+          if (uploadScopeStillActive && !current.staged && (current.status === 'queued' || current.status === 'uploading')) {
             invalidateAttempt(current);
             current.attempt_id = attemptID;
             applyStagedMetadata(current, staged);
@@ -287,7 +305,7 @@ export function createFlowerAttachmentController(
             current.error_code = undefined;
             return;
           }
-          if (staged.attachment_id) void options.deleteStaged?.(staged.attachment_id, draftID).catch(() => undefined);
+          if (staged.attachment_id) void options.deleteStaged?.(staged.attachment_id, uploadStagingScope).catch(() => undefined);
           return;
         }
         applyStagedMetadata(item, staged);
@@ -304,6 +322,7 @@ export function createFlowerAttachmentController(
         emit();
         pump();
       });
+      emit();
     }
   };
 
@@ -343,6 +362,18 @@ export function createFlowerAttachmentController(
       listener(snapshot());
       return () => listeners.delete(listener);
     },
+    batch: (operation) => {
+      batchDepth += 1;
+      try {
+        return operation();
+      } finally {
+        batchDepth -= 1;
+        if (batchDepth === 0 && emitPending) {
+          emitPending = false;
+          flushEmit();
+        }
+      }
+    },
     setCapability: (next) => {
       capability = next;
       for (const item of items) {
@@ -354,6 +385,37 @@ export function createFlowerAttachmentController(
       emit();
       pump();
     },
+    setStagingScope: (next) => {
+      const previous = stagingScope;
+      stagingScope = next;
+      const changed = Boolean(previous && (!next
+        || previous.staging_scope_id !== next.staging_scope_id
+        || previous.capability !== next.capability));
+      if (changed) {
+        for (const item of items) {
+          if (item.status === 'uploading') invalidateAttempt(item);
+          if (!item.staged && item.status !== 'uploading') continue;
+          item.staged = undefined;
+          item.loaded_bytes = 0;
+          item.total_bytes = item.file?.size;
+          item.progress_indeterminate = false;
+          item.status = item.file ? 'queued' : 'reselect_required';
+          item.error_code = item.file ? undefined : 'attachment_restore_failed';
+        }
+      }
+      emit();
+      pump();
+    },
+    markStagingUnavailable: () => {
+      let changed = false;
+      for (const item of items) {
+        if (item.status !== 'queued') continue;
+        item.status = 'upload_error';
+        item.error_code = 'attachment_unavailable';
+        changed = true;
+      }
+      if (changed) emit();
+    },
     hydrateDraft: (draftItems) => {
       const incoming = new Set(draftItems.map((item) => item.local_id));
       for (let index = items.length - 1; index >= 0; index -= 1) {
@@ -363,29 +425,35 @@ export function createFlowerAttachmentController(
         items.splice(index, 1);
       }
       for (const draftItem of draftItems) {
-        const staged = draftItem.staged;
         const existing = items.find((item) => item.local_id === draftItem.local_id);
+        const live = !draftItem.staged && existing?.file ? existing : undefined;
+        const staged = draftItem.staged ?? live?.staged;
         const projected: MutableFlowerAttachmentItem = {
           local_id: draftItem.local_id,
           request_id: draftItem.request_id,
-          attempt_id: '',
+          attempt_id: live?.attempt_id ?? '',
           source: draftItem.source,
           name: draftItem.name,
           mime_type: draftItem.mime_type,
           size_bytes: draftItem.size_bytes,
-          text_stats: staged?.text_stats ? { ...staged.text_stats } : undefined,
-          status: staged && capability && flowerStagedAttachmentCompatible(capability, staged)
+          text_stats: live?.text_stats
+            ? { ...live.text_stats }
+            : staged?.text_stats
+              ? { ...staged.text_stats }
+              : undefined,
+          status: live?.status ?? (staged && capability && flowerStagedAttachmentCompatible(capability, staged)
             ? 'staged_ready'
             : staged
               ? 'incompatible'
-              : 'reselect_required',
-          loaded_bytes: staged?.size_bytes ?? 0,
-          total_bytes: staged?.size_bytes,
-          progress_indeterminate: false,
+              : 'reselect_required'),
+          loaded_bytes: live?.loaded_bytes ?? staged?.size_bytes ?? 0,
+          total_bytes: live?.total_bytes ?? staged?.size_bytes,
+          progress_indeterminate: live?.progress_indeterminate ?? false,
+          error_code: live?.error_code,
           staged,
-          ...(existing?.file ? { file: existing.file } : {}),
-          ...(existing?.longText !== undefined ? { longText: existing.longText } : {}),
-          ...(existing?.controller ? { controller: existing.controller } : {}),
+          ...(live?.file ? { file: live.file } : {}),
+          ...(live?.longText !== undefined ? { longText: live.longText } : {}),
+          ...(live?.controller ? { controller: live.controller } : {}),
         };
         if (existing) Object.assign(existing, projected);
         else items.push(projected);
@@ -457,8 +525,8 @@ export function createFlowerAttachmentController(
       const item = items[index];
       if (item) invalidateAttempt(item);
       items.splice(index, 1);
-      if (item?.staged?.attachment_id) {
-        void options.deleteStaged?.(item.staged.attachment_id, draftID).catch(() => undefined);
+      if (item?.staged?.attachment_id && stagingScope) {
+        void options.deleteStaged?.(item.staged.attachment_id, stagingScope).catch(() => undefined);
       }
       emit();
       pump();
@@ -485,8 +553,10 @@ export function createFlowerAttachmentController(
       const item = items.find((candidate) => candidate.local_id === localID);
       if (!item || item.source !== 'long_text') throw new Error('attachment_restore_failed');
       if (item.longText !== undefined) return item.longText;
-      if (!item.staged?.attachment_id || !options.readStagedLongText) throw new Error('attachment_restore_failed');
-      const restored = await options.readStagedLongText(item.staged, draftID);
+      if (!item.staged?.attachment_id || !stagingScope || !options.readStagedLongText) {
+        throw new Error('attachment_restore_failed');
+      }
+      const restored = await options.readStagedLongText(item.staged, stagingScope);
       const inspection = inspectFlowerText(restored.text);
       if (
         !inspection

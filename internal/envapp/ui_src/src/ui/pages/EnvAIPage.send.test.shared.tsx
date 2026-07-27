@@ -159,11 +159,11 @@ const mocks = vi.hoisted(() => {
     if (url.includes('/_redeven_proxy/api/ai/threads/') && init?.method === 'POST' && url.endsWith('/read')) {
       return { read_status: readStatus(2_000) };
     }
-    if (url.includes('/_redeven_proxy/api/ai/composer-drafts/') && url.endsWith('/thread') && init?.method === 'POST') {
-      return { thread_id: 'thread-new', draft_revision: 1 };
-    }
     if (url.includes('/_redeven_proxy/api/ai/threads/') && url.endsWith('/turns') && init?.method === 'POST') {
-      return { turn_id: 'turn-new', run_id: 'run-1', kind: 'start' };
+      const body = typeof init.body === 'string'
+        ? JSON.parse(init.body) as { input?: { turn_id?: string } }
+        : {};
+      return { turn_id: body.input?.turn_id, run_id: 'run-1', kind: 'start' };
     }
     if (url.includes('/_redeven_proxy/api/ai/threads') && init?.method === 'POST') {
       return { thread: { thread_id: 'thread-new', title: 'New Env Flower chat', title_status: 'ready', model_id: 'openai/gpt-5.2', run_status: 'running', working_dir: '/workspace/env-flower', created_at_unix_ms: 3, updated_at_unix_ms: 4, read_status: readStatus(4_000) } };
@@ -179,7 +179,7 @@ const mocks = vi.hoisted(() => {
     runId: 'run-1',
     kind: 'start',
   }));
-  const subscribeThreadMock = vi.fn(async () => ({ runId: 'run-subscribe' }));
+  const subscribeThreadMock = vi.fn(async (_input: { threadId: string }) => ({ runId: 'run-subscribe' }));
   const openFileBrowserAtPathMock = vi.fn(async () => undefined);
   const openFilePreviewMock = vi.fn(async () => undefined);
   const openFlowerFileBrowserMock = vi.fn(async () => undefined);
@@ -298,6 +298,11 @@ vi.mock('@floegence/floe-webapp-core/ui', async () => ({
 
 vi.mock('../services/localApi', () => ({
   fetchLocalApiJSON: mocks.fetchLocalApiJSONMock,
+  fetchLocalApiJSONResponse: vi.fn(async (url: string, init?: RequestInit) => ({
+    data: await mocks.fetchLocalApiJSONMock(url, init),
+    headers: new Headers(),
+    status: 200,
+  })),
   uploadLocalApiAttachment: vi.fn(),
   LocalApiError: class LocalApiError extends Error {
     readonly code: string;
@@ -449,7 +454,6 @@ async function renderPage() {
   const dispose = render(() => (
     <mod.EnvAIPage
       draftCoordinator={createFlowerComposerDraftCoordinator()}
-      surfaceInstanceID="env-ai-page-test"
     />
   ), host);
   await flush();
@@ -1243,7 +1247,7 @@ export function registerEnvAIPageSendTests() {
       }
     });
 
-    it('starts a new Env-local Flower chat through the prepared draft turn path', async () => {
+    it('starts a new Env-local Flower chat through one create-and-admit turn request', async () => {
       const { host, dispose } = await renderPage();
       try {
         const textarea = host.querySelector('textarea') as HTMLTextAreaElement;
@@ -1256,18 +1260,24 @@ export function registerEnvAIPageSendTests() {
         sendButton?.click();
         await flush();
         await flush();
-        expect(mocks.subscribeThreadMock).toHaveBeenCalledWith({ threadId: 'thread-new' });
+        expect(mocks.subscribeThreadMock).toHaveBeenCalledOnce();
+        const admittedThreadID = String(mocks.subscribeThreadMock.mock.calls[0]?.[0]?.threadId ?? '');
+        expect(admittedThreadID).toMatch(/^th_[A-Za-z0-9_-]{24}$/u);
         const turnRequest = mocks.fetchLocalApiJSONMock.mock.calls.find(([url, init]) => (
-          String(url).endsWith('/_redeven_proxy/api/ai/threads/thread-new/turns') && init?.method === 'POST'
+          String(url).endsWith(`/_redeven_proxy/api/ai/threads/${admittedThreadID}/turns`) && init?.method === 'POST'
         ));
         expect(turnRequest).toBeTruthy();
         const turnBody = JSON.parse(String(turnRequest?.[1]?.body ?? '{}')) as {
           input: Record<string, unknown>;
         };
         expect(turnBody).toEqual(expect.objectContaining({
-          thread_id: 'thread-new',
+          thread_id: admittedThreadID,
           model: 'openai/gpt-5.2',
           input: expect.objectContaining({ text: '你好，Flower', attachments: [] }),
+          create: expect.objectContaining({
+            model_id: 'openai/gpt-5.2',
+            permission_type: 'approval_required',
+          }),
         }));
         expect(turnBody.input).not.toHaveProperty('attachment_ids');
       } finally {

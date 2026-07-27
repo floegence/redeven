@@ -12,7 +12,8 @@ export type RuntimeFlowerAttachmentSource = 'uploaded_file' | 'long_text';
 export type RuntimeFlowerAttachmentPrepareRequest = Readonly<{
   operation_id: string;
   upload_request_id: string;
-  draft_id: string;
+  staging_scope_id: string;
+  staging_capability: string;
   source: RuntimeFlowerAttachmentSource;
   display_name: string;
   media_type: string;
@@ -76,7 +77,8 @@ export type RuntimeFlowerAttachmentProgress = Readonly<{
 
 export type RuntimeFlowerAttachmentPreviewRequest = Readonly<{
   attachment_id: string;
-  draft_id: string;
+  staging_scope_id: string;
+  staging_capability: string;
   display_name: string;
 }>;
 
@@ -92,6 +94,11 @@ function compact(value: unknown): string {
 function boundedID(value: unknown): string {
   const id = compact(value);
   return id.length > 0 && id.length <= 160 ? id : '';
+}
+
+function boundedSecret(value: unknown): string {
+  const secret = compact(value);
+  return secret.length > 0 && secret.length <= 1024 && !/[\r\n\0]/u.test(secret) ? secret : '';
 }
 
 function nonNegativeInteger(value: unknown): number | undefined {
@@ -152,14 +159,15 @@ export function normalizeRuntimeFlowerAttachmentPrepareRequest(value: unknown): 
   const record = value && typeof value === 'object' ? value as Partial<RuntimeFlowerAttachmentPrepareRequest> : {};
   const operationID = boundedID(record.operation_id);
   const uploadRequestID = boundedID(record.upload_request_id);
-  const draftID = boundedID(record.draft_id);
+  const stagingScopeID = boundedID(record.staging_scope_id);
+  const stagingCapability = boundedSecret(record.staging_capability);
   const source = compact(record.source);
   const displayName = canonicalDisplayName(record.display_name);
   const mediaType = canonicalMediaType(record.media_type);
   const sizeBytes = nonNegativeInteger(record.size_bytes);
   const contentSHA256 = normalizeSHA256(record.content_sha256);
   const displayNameSHA256 = normalizeSHA256(record.display_name_sha256);
-  if (!operationID || !uploadRequestID || !draftID || (source !== 'uploaded_file' && source !== 'long_text') ||
+  if (!operationID || !uploadRequestID || !stagingScopeID || !stagingCapability || (source !== 'uploaded_file' && source !== 'long_text') ||
       !displayName || displayName.length > 1024 || !mediaType || mediaType.length > 512 ||
       sizeBytes === undefined || !contentSHA256 || !displayNameSHA256) {
     return null;
@@ -167,7 +175,8 @@ export function normalizeRuntimeFlowerAttachmentPrepareRequest(value: unknown): 
   return {
     operation_id: operationID,
     upload_request_id: uploadRequestID,
-    draft_id: draftID,
+    staging_scope_id: stagingScopeID,
+    staging_capability: stagingCapability,
     source,
     display_name: displayName,
     media_type: mediaType,
@@ -196,10 +205,11 @@ export function normalizeRuntimeFlowerAttachmentOperationRequest(value: unknown)
 export function normalizeRuntimeFlowerAttachmentPreviewRequest(value: unknown): RuntimeFlowerAttachmentPreviewRequest | null {
   const record = value && typeof value === 'object' ? value as Partial<RuntimeFlowerAttachmentPreviewRequest> : {};
   const attachmentID = boundedID(record.attachment_id);
-  const draftID = boundedID(record.draft_id);
+  const stagingScopeID = boundedID(record.staging_scope_id);
+  const stagingCapability = boundedSecret(record.staging_capability);
   const displayName = canonicalDisplayName(record.display_name);
-  return attachmentID && draftID && displayName && displayName.length <= 1024
-    ? { attachment_id: attachmentID, draft_id: draftID, display_name: displayName }
+  return attachmentID && stagingScopeID && stagingCapability && displayName && displayName.length <= 1024
+    ? { attachment_id: attachmentID, staging_scope_id: stagingScopeID, staging_capability: stagingCapability, display_name: displayName }
     : null;
 }
 

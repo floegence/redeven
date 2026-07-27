@@ -15,7 +15,8 @@ describe('runtime Flower attachment IPC', () => {
     expect(normalizeRuntimeFlowerAttachmentPrepareRequest({
       operation_id: 'operation-1',
       upload_request_id: 'upload-1',
-      draft_id: 'draft-1',
+      staging_scope_id: 'staging-1',
+      staging_capability: 'secret-1',
       source: 'long_text',
       display_name: 'notes.txt',
       media_type: 'text/plain; charset=utf-8',
@@ -25,7 +26,8 @@ describe('runtime Flower attachment IPC', () => {
     })).toEqual({
       operation_id: 'operation-1',
       upload_request_id: 'upload-1',
-      draft_id: 'draft-1',
+      staging_scope_id: 'staging-1',
+      staging_capability: 'secret-1',
       source: 'long_text',
       display_name: 'notes.txt',
       media_type: 'text/plain; charset=utf-8',
@@ -37,7 +39,7 @@ describe('runtime Flower attachment IPC', () => {
 
   it('rejects invalid digests and oversized chunks', () => {
     expect(normalizeRuntimeFlowerAttachmentPrepareRequest({
-      operation_id: 'operation-1', upload_request_id: 'upload-1', draft_id: 'draft-1', source: 'uploaded_file',
+      operation_id: 'operation-1', upload_request_id: 'upload-1', staging_scope_id: 'staging-1', staging_capability: 'secret-1', source: 'uploaded_file',
       display_name: 'notes.txt', media_type: 'text/plain', size_bytes: 1,
       content_sha256: 'bad', display_name_sha256: digest,
     })).toBeNull();
@@ -49,7 +51,7 @@ describe('runtime Flower attachment IPC', () => {
 
   it('rejects header injection and non-canonical media type parameters', () => {
     const request = {
-      operation_id: 'operation-1', upload_request_id: 'upload-1', draft_id: 'draft-1', source: 'uploaded_file',
+      operation_id: 'operation-1', upload_request_id: 'upload-1', staging_scope_id: 'staging-1', staging_capability: 'secret-1', source: 'uploaded_file',
       display_name: 'notes.txt', size_bytes: 1,
       content_sha256: digest, display_name_sha256: digest,
     } as const;
@@ -85,18 +87,23 @@ describe('runtime Flower attachment IPC', () => {
   it('accepts only owner-audience preview identities and safe display names', () => {
     expect(normalizeRuntimeFlowerAttachmentPreviewRequest({
       attachment_id: 'upl_preview_1',
-      draft_id: '__new_thread__',
+      staging_scope_id: 'staging-preview-1',
+      staging_capability: 'secret-preview-1',
       display_name: 'notes.txt',
     })).toEqual({
       attachment_id: 'upl_preview_1',
-      draft_id: '__new_thread__',
+      staging_scope_id: 'staging-preview-1',
+      staging_capability: 'secret-preview-1',
       display_name: 'notes.txt',
     });
     expect(normalizeRuntimeFlowerAttachmentPreviewRequest({
-      attachment_id: 'upl_preview_1', draft_id: '__new_thread__', display_name: '../notes.txt',
+      attachment_id: 'upl_preview_1', staging_scope_id: 'staging-preview-1', staging_capability: 'secret-preview-1', display_name: '../notes.txt',
     })).toBeNull();
     expect(normalizeRuntimeFlowerAttachmentPreviewRequest({
-      attachment_id: 'upl_preview_1', draft_id: '', display_name: 'notes.txt',
+      attachment_id: 'upl_preview_1', staging_scope_id: '', staging_capability: 'secret-preview-1', display_name: 'notes.txt',
+    })).toBeNull();
+    expect(normalizeRuntimeFlowerAttachmentPreviewRequest({
+      attachment_id: 'upl_preview_1', staging_scope_id: 'staging-preview-1', staging_capability: 'secret\npreview', display_name: 'notes.txt',
     })).toBeNull();
   });
 });

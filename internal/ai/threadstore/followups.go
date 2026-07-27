@@ -197,6 +197,23 @@ WHERE endpoint_id = ? AND thread_id = ? AND lane = ? AND turn_id = ?
 	return scanFollowup(row)
 }
 
+func (s *Store) GetFollowupByLaneAndTurnID(ctx context.Context, endpointID, threadID, lane, turnID string) (QueuedTurn, error) {
+	if s == nil || s.db == nil {
+		return QueuedTurn{}, errors.New("store not initialized")
+	}
+	lane, err := parseFollowupLane(lane)
+	if err != nil {
+		return QueuedTurn{}, err
+	}
+	row := s.db.QueryRowContext(ctxOrBackground(ctx), `
+SELECT queue_id, endpoint_id, thread_id, channel_id, lane, admission_state, turn_id, run_id, model_id, text_content, attachments_json, context_action_json, options_json, session_meta_json,
+       created_by_user_public_id, created_by_user_email, sort_index, created_at_unix_ms, updated_at_unix_ms
+FROM ai_queued_turns
+WHERE endpoint_id = ? AND thread_id = ? AND lane = ? AND turn_id = ?
+`, strings.TrimSpace(endpointID), strings.TrimSpace(threadID), lane, strings.TrimSpace(turnID))
+	return scanFollowup(row)
+}
+
 func (s *Store) GetThreadFollowupsRevision(ctx context.Context, endpointID string, threadID string) (int64, error) {
 	if s == nil || s.db == nil {
 		return 0, errors.New("store not initialized")

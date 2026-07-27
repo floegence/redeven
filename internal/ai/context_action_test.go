@@ -195,7 +195,7 @@ func TestQueuedTurnContextActionPersistsThroughStoreRoundTrip(t *testing.T) {
 	t.Parallel()
 
 	svc := newSendTurnTestService(t)
-	meta := testUploadMeta()
+	meta := testSendTurnMeta()
 	ctx := context.Background()
 
 	thread, err := svc.CreateThread(ctx, meta, "queued context action", "", "", "")
@@ -203,10 +203,6 @@ func TestQueuedTurnContextActionPersistsThroughStoreRoundTrip(t *testing.T) {
 		t.Fatalf("CreateThread: %v", err)
 	}
 	const turnID = "msg_context_action"
-	upload, draftRevision := stageTestAdmissionDraftAttachment(
-		t, svc, meta, thread.ThreadID, turnID, "queued with context", "openai/gpt-5-mini",
-		"attachment body", "notes.txt", "text/plain",
-	)
 	action := &ContextActionEnvelope{
 		SchemaVersion: ContextActionSchemaVersion,
 		ActionID:      "assistant.ask.flower",
@@ -227,15 +223,12 @@ func TestQueuedTurnContextActionPersistsThroughStoreRoundTrip(t *testing.T) {
 	}
 
 	queued, _, err := svc.enqueueQueuedTurn(ctx, meta, SendUserTurnRequest{
-		ThreadID:              thread.ThreadID,
-		DraftID:               thread.ThreadID,
-		ExpectedDraftRevision: &draftRevision,
-		Model:                 "openai/gpt-5-mini",
+		ThreadID: thread.ThreadID,
+		Model:    "openai/gpt-5-mini",
 		Input: RunInput{
 			TurnID:        turnID,
 			Text:          "queued with context",
 			ContextAction: action,
-			Attachments:   []RunAttachmentIn{{AttachmentID: upload.AttachmentID}},
 		},
 	})
 	if err != nil {
@@ -259,12 +252,8 @@ func TestQueuedTurnContextActionPersistsThroughStoreRoundTrip(t *testing.T) {
 		t.Fatalf("queued context action is not canonical: %s", viewJSON)
 	}
 	attachments := view.QueuedTurns[0].Attachments
-	if len(attachments) != 1 || attachments[0].AttachmentID != upload.AttachmentID || attachments[0].Name != "notes.txt" ||
-		!strings.HasPrefix(attachments[0].MimeType, "text/plain") || attachments[0].SizeBytes != int64(len("attachment body")) ||
-		attachments[0].LogicalLocator != upload.LogicalLocator ||
-		!strings.Contains(attachments[0].URL, "thread_id="+thread.ThreadID) ||
-		!strings.Contains(attachments[0].URL, "queue_id="+queued.QueueID) {
-		t.Fatalf("queued thread attachments=%#v, want exact UI-safe attachment snapshot", attachments)
+	if len(attachments) != 0 {
+		t.Fatalf("queued thread attachments=%#v, want none", attachments)
 	}
 
 	popped, err := svc.threadsDB.PopNextQueuedTurn(ctx, meta.EndpointID, thread.ThreadID)

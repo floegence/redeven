@@ -266,7 +266,6 @@ function FlowerWidget(props: RedevenWorkbenchWidgetBodyProps) {
       >
         <EnvAIPage
           draftCoordinator={env.flowerDraftCoordinator!}
-          surfaceInstanceID="env-workbench-flower"
           engaged={Boolean(props.selected && props.lifecycle !== 'cold' && !props.filtered)}
         />
       </div>

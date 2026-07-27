@@ -2,7 +2,12 @@
 
 import { describe, expect, it, vi } from 'vitest';
 
-import type { FlowerAttachmentCapability, FlowerStagedAttachment } from '../contracts/flowerSurfaceContracts';
+import type {
+  FlowerAttachmentCapability,
+  FlowerAttachmentStagingScope,
+  FlowerAttachmentUploadProgress,
+  FlowerStagedAttachment,
+} from '../contracts/flowerSurfaceContracts';
 import { createFlowerAttachmentController } from './createFlowerAttachmentController';
 
 function capability(overrides: Partial<FlowerAttachmentCapability> = {}): FlowerAttachmentCapability {
@@ -22,6 +27,13 @@ function capability(overrides: Partial<FlowerAttachmentCapability> = {}): Flower
   };
 }
 
+const stagingScope: FlowerAttachmentStagingScope = {
+  staging_scope_id: 'staging-scope-1',
+  thread_id: 'thread-1',
+  capability: 'scope-capability',
+  expires_at_unix_ms: 60_000,
+};
+
 function staged(input: Readonly<{ id: string; file: File; source?: 'file' | 'long_text' }>): FlowerStagedAttachment {
   return {
     attachment_id: input.id,
@@ -36,6 +48,86 @@ function staged(input: Readonly<{ id: string; file: File; source?: 'file' | 'lon
 }
 
 describe('createFlowerAttachmentController', () => {
+  it('keeps uploads queued until a connection-local staging scope is available', async () => {
+    const file = new File(['queued'], 'queued.txt', { type: 'text/plain' });
+    const upload = vi.fn(async (input) => staged({ id: 'upl_queued________________', file: input.file }));
+    const controller = createFlowerAttachmentController({ capability: capability(), upload });
+
+    controller.addFiles([file], 'file');
+    expect(upload).not.toHaveBeenCalled();
+    expect(controller.snapshot().items[0]?.status).toBe('queued');
+
+    controller.setStagingScope(stagingScope);
+    await controller.waitForIdle();
+    expect(upload).toHaveBeenCalledWith(expect.objectContaining({ staging_scope: stagingScope }));
+    expect(controller.snapshot().items[0]?.status).toBe('staged_ready');
+  });
+
+  it('reuploads retained local files when an expired staging scope is replaced', async () => {
+    const file = new File(['refresh'], 'refresh.txt', { type: 'text/plain' });
+    const refreshedScope: FlowerAttachmentStagingScope = {
+      ...stagingScope,
+      staging_scope_id: 'staging-scope-2',
+      capability: 'scope-capability-2',
+    };
+    const upload = vi.fn(async (input) => staged({
+      id: input.staging_scope.staging_scope_id === stagingScope.staging_scope_id
+        ? 'upl_before_refresh________'
+        : 'upl_after_refresh_________',
+      file: input.file,
+    }));
+    const controller = createFlowerAttachmentController({ capability: capability(), stagingScope, upload });
+    controller.addFiles([file], 'file');
+    await controller.waitForIdle();
+
+    controller.setStagingScope(refreshedScope);
+    await controller.waitForIdle();
+
+    expect(upload).toHaveBeenCalledTimes(2);
+    expect(upload.mock.calls[1]?.[0]).toEqual(expect.objectContaining({ staging_scope: refreshedScope }));
+    expect(controller.snapshot().items[0]).toMatchObject({
+      status: 'staged_ready',
+      staged: { attachment_id: 'upl_after_refresh_________' },
+    });
+  });
+
+  it('invalidates an in-flight upload when its staging scope is released and refreshes it under the new scope', async () => {
+    const file = new File(['refresh in flight'], 'refresh-in-flight.txt', { type: 'text/plain' });
+    const refreshedScope: FlowerAttachmentStagingScope = {
+      ...stagingScope,
+      staging_scope_id: 'staging-scope-refreshed',
+      capability: 'scope-capability-refreshed',
+    };
+    const uploads: Array<(attachment: FlowerStagedAttachment) => void> = [];
+    const deleteStaged = vi.fn(async () => undefined);
+    const controller = createFlowerAttachmentController({
+      capability: capability(),
+      stagingScope,
+      deleteStaged,
+      upload: () => new Promise((resolve) => uploads.push(resolve)),
+    });
+
+    controller.addFiles([file], 'file');
+    expect(uploads).toHaveLength(1);
+    controller.setStagingScope(null);
+    expect(controller.snapshot().items[0]?.status).toBe('queued');
+    controller.setStagingScope(refreshedScope);
+    expect(uploads).toHaveLength(2);
+
+    const stale = staged({ id: 'upl_expired_in_flight_____', file });
+    uploads[0]!(stale);
+    await vi.waitFor(() => expect(deleteStaged).toHaveBeenCalledWith(stale.attachment_id, stagingScope));
+    expect(controller.snapshot().items[0]?.status).toBe('uploading');
+
+    const current = staged({ id: 'upl_refreshed_in_flight___', file });
+    uploads[1]!(current);
+    await controller.waitForIdle();
+    expect(controller.snapshot().items[0]).toMatchObject({
+      status: 'staged_ready',
+      staged: { attachment_id: current.attachment_id },
+    });
+  });
+
   it('runs at most three uploads while preserving item order', async () => {
     const releases: Array<() => void> = [];
     let active = 0;
@@ -47,7 +139,7 @@ describe('createFlowerAttachmentController', () => {
       active -= 1;
       return staged({ id: `upl_${input.file.name.padEnd(24, '_')}`, file: input.file });
     });
-    const controller = createFlowerAttachmentController({ capability: capability(), upload });
+    const controller = createFlowerAttachmentController({ capability: capability(), stagingScope, upload });
     const files = Array.from({ length: 5 }, (_, index) => new File([`${index}`], `${index}.txt`, { type: 'text/plain' }));
 
     controller.addFiles(files, 'file');
@@ -70,6 +162,7 @@ describe('createFlowerAttachmentController', () => {
     const deleteStaged = vi.fn(async () => undefined);
     const controller = createFlowerAttachmentController({
       capability: capability(),
+      stagingScope,
       deleteStaged,
       upload: (input) => new Promise((resolve) => {
         reportProgress = (loaded) => input.on_progress({
@@ -88,7 +181,7 @@ describe('createFlowerAttachmentController', () => {
     reportProgress?.(4);
     expect(controller.snapshot().items).toEqual([]);
     finishUpload?.(staged({ id: 'upl_latecommit____________', file }));
-    await vi.waitFor(() => expect(deleteStaged).toHaveBeenCalledWith('upl_latecommit____________', expect.any(String)));
+    await vi.waitFor(() => expect(deleteStaged).toHaveBeenCalledWith('upl_latecommit____________', stagingScope));
   });
 
   it('keeps a replacement upload independent from a cancelled attempt', async () => {
@@ -98,6 +191,7 @@ describe('createFlowerAttachmentController', () => {
     const deleteStaged = vi.fn(async () => undefined);
     const controller = createFlowerAttachmentController({
       capability: capability(),
+      stagingScope,
       deleteStaged,
       concurrency: 1,
       upload: () => new Promise((resolve) => uploads.push(resolve)),
@@ -108,14 +202,14 @@ describe('createFlowerAttachmentController', () => {
     expect(uploads).toHaveLength(2);
 
     uploads[0]!(attachment);
-    await vi.waitFor(() => expect(deleteStaged).toHaveBeenCalledWith(attachment.attachment_id, expect.any(String)));
+    await vi.waitFor(() => expect(deleteStaged).toHaveBeenCalledWith(attachment.attachment_id, stagingScope));
     expect(controller.snapshot().items[0]?.status).toBe('uploading');
     const replacement = staged({ id: 'upl_replacement____________', file });
     uploads[1]!(replacement);
     await controller.waitForIdle();
 
     expect(controller.snapshot().items[0]?.staged?.attachment_id).toBe(replacement.attachment_id);
-    expect(deleteStaged).not.toHaveBeenCalledWith(replacement.attachment_id, expect.any(String));
+    expect(deleteStaged).not.toHaveBeenCalledWith(replacement.attachment_id, stagingScope);
   });
 
   it('cleans a late commit after removal and reconciles deleted shared items', async () => {
@@ -124,13 +218,14 @@ describe('createFlowerAttachmentController', () => {
     const deleteStaged = vi.fn(async () => undefined);
     const controller = createFlowerAttachmentController({
       capability: capability(),
+      stagingScope,
       deleteStaged,
       upload: () => new Promise((resolve) => uploads.push(resolve)),
     });
     const [removedID] = controller.addFiles([file], 'file');
     controller.remove(removedID!);
     uploads[0]!(staged({ id: 'upl_removed_______________', file }));
-    await vi.waitFor(() => expect(deleteStaged).toHaveBeenCalledWith('upl_removed_______________', expect.any(String)));
+    await vi.waitFor(() => expect(deleteStaged).toHaveBeenCalledWith('upl_removed_______________', stagingScope));
 
     const shared = staged({ id: 'upl_shared_reconcile______', file });
     controller.hydrateDraft([{
@@ -155,6 +250,7 @@ describe('createFlowerAttachmentController', () => {
   it('preserves deterministic server validation errors without offering retry', async () => {
     const controller = createFlowerAttachmentController({
       capability: capability(),
+      stagingScope,
       upload: async () => {
         throw Object.assign(new Error('rejected'), { code: 'attachment_invalid_text_encoding', data: { retryable: false } });
       },
@@ -180,7 +276,7 @@ describe('createFlowerAttachmentController', () => {
       text_stats: { code_points: 12, lines: 3 },
       capability_revision: 'capability-1',
     }));
-    const controller = createFlowerAttachmentController({ capability: capability(), upload });
+    const controller = createFlowerAttachmentController({ capability: capability(), stagingScope, upload });
 
     controller.addFiles([file], 'file');
     await controller.waitForIdle();
@@ -199,7 +295,7 @@ describe('createFlowerAttachmentController', () => {
   it('restores exact long text from memory and removes it independently', async () => {
     const upload = vi.fn(async (input) => staged({ id: 'upl_longtext_____________', file: input.file, source: 'long_text' }));
     const deleteStaged = vi.fn(async () => undefined);
-    const controller = createFlowerAttachmentController({ capability: capability(), upload, deleteStaged });
+    const controller = createFlowerAttachmentController({ capability: capability(), stagingScope, upload, deleteStaged });
     const text = `${'😀'.repeat(50_001)}\r\nexact`;
     const added = controller.addLongText(text);
     expect(added.kind).toBe('accepted');
@@ -247,5 +343,42 @@ describe('createFlowerAttachmentController', () => {
         staged: attachment,
       }),
     ]);
+  });
+
+  it('keeps a live upload intact when the connection-local draft projects back', async () => {
+    let finishUpload!: (attachment: FlowerStagedAttachment) => void;
+    let reportProgress!: (progress: FlowerAttachmentUploadProgress) => void;
+    let uploadAttemptID = '';
+    const file = new File(['shared'], 'shared.txt', { type: 'text/plain' });
+    const controller = createFlowerAttachmentController({
+      capability: capability(),
+      stagingScope,
+      upload: (input) => {
+        uploadAttemptID = input.attempt_id;
+        reportProgress = input.on_progress;
+        return new Promise((resolve) => { finishUpload = resolve; });
+      },
+    });
+    const [localID] = controller.addFiles([file], 'file');
+    const uploading = controller.snapshot().items[0]!;
+
+    controller.hydrateDraft([{
+      local_id: localID!,
+      request_id: uploading.request_id,
+      source: uploading.source,
+      name: uploading.name,
+      mime_type: uploading.mime_type,
+      size_bytes: uploading.size_bytes,
+    }]);
+
+    expect(controller.snapshot().items[0]?.status).toBe('uploading');
+    reportProgress({ attempt_id: uploadAttemptID, loaded: 3, total: file.size, indeterminate: false });
+    expect(controller.snapshot().items[0]?.loaded_bytes).toBe(3);
+    finishUpload(staged({ id: 'upl_live_projection________', file }));
+    await controller.waitForIdle();
+    expect(controller.snapshot().items[0]).toMatchObject({
+      status: 'staged_ready',
+      staged: { attachment_id: 'upl_live_projection________' },
+    });
   });
 });

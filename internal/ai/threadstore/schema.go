@@ -12,7 +12,7 @@ import (
 
 const (
 	threadstoreSchemaKind           = "ai_threadstore_product_v2"
-	threadstoreCurrentSchemaVersion = 7
+	threadstoreCurrentSchemaVersion = 8
 )
 
 // CurrentSchemaVersion returns the product-only threadstore schema version.
@@ -20,7 +20,11 @@ func CurrentSchemaVersion() int {
 	return threadstoreCurrentSchemaVersion
 }
 
-func threadstoreSchemaSpec() sqliteutil.Spec {
+func threadstoreSchemaSpec(decisionList ...legacyComposerAdmissionDecisionSet) sqliteutil.Spec {
+	var legacyAdmissionDecisions legacyComposerAdmissionDecisionSet
+	if len(decisionList) > 0 {
+		legacyAdmissionDecisions = decisionList[0]
+	}
 	return sqliteutil.Spec{
 		Kind:           threadstoreSchemaKind,
 		CurrentVersion: threadstoreCurrentSchemaVersion,
@@ -33,12 +37,22 @@ func threadstoreSchemaSpec() sqliteutil.Spec {
 			{FromVersion: 4, ToVersion: 5, Apply: migrateProductV4ToV5},
 			{FromVersion: 5, ToVersion: 6, Apply: migrateProductV5ToV6},
 			{FromVersion: 6, ToVersion: 7, Apply: migrateProductV6ToV7},
+			{FromVersion: 7, ToVersion: 8, Apply: func(tx *sql.Tx) error {
+				return migrateProductV7ToV8(tx, legacyAdmissionDecisions)
+			}},
 		},
 		Verify: verifyThreadstoreSchema,
 	}
 }
 
 func createThreadstoreSchema(tx *sql.Tx) error {
+	if err := createThreadstoreSchemaWithFlowerTables(tx, createFlowerThreadRoutingTableTx, createUploadTablesTx); err != nil {
+		return err
+	}
+	return createUploadStagingScopesTableTx(tx)
+}
+
+func createThreadstoreSchemaV7(tx *sql.Tx) error {
 	if err := createThreadstoreSchemaWithFlowerTables(tx, createFlowerThreadRoutingTableTx, createUploadTablesTx); err != nil {
 		return err
 	}
@@ -288,6 +302,24 @@ CREATE TABLE ai_upload_refs (
 CREATE UNIQUE INDEX idx_ai_upload_refs_unique_ref ON ai_upload_refs(endpoint_id, upload_id, ref_kind, ref_id);
 CREATE INDEX idx_ai_upload_refs_thread_upload ON ai_upload_refs(endpoint_id, thread_id, upload_id);
 CREATE INDEX idx_ai_upload_refs_upload ON ai_upload_refs(endpoint_id, upload_id);
+`)
+	return err
+}
+
+func createUploadStagingScopesTableTx(tx *sql.Tx) error {
+	_, err := tx.Exec(`
+CREATE TABLE ai_upload_staging_scopes (
+  staging_scope_id TEXT PRIMARY KEY,
+  endpoint_id TEXT NOT NULL,
+  owner_user_hash TEXT NOT NULL CHECK(length(owner_user_hash) = 64),
+  thread_id TEXT NOT NULL,
+  capability_hash TEXT NOT NULL CHECK(length(capability_hash) = 64),
+  created_at_unix_ms INTEGER NOT NULL,
+  expires_at_unix_ms INTEGER NOT NULL,
+  released_at_unix_ms INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX idx_ai_upload_staging_scopes_expiry ON ai_upload_staging_scopes(expires_at_unix_ms, staging_scope_id);
+CREATE UNIQUE INDEX idx_ai_upload_staging_scopes_capability ON ai_upload_staging_scopes(capability_hash);
 `)
 	return err
 }
@@ -720,6 +752,8 @@ func expectedProductSchemaContract(version int) ([]canonicalSchemaObject, error)
 		build = createThreadstoreSchemaV5
 	case 6:
 		build = createThreadstoreSchemaV6
+	case 7:
+		build = createThreadstoreSchemaV7
 	case threadstoreCurrentSchemaVersion:
 		build = createThreadstoreSchema
 	default:

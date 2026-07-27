@@ -79,7 +79,6 @@ import {
 import { flowerTurnAdmissionUncertainIdentity } from '../../../../flower_ui/src/flowerTurnAdmission';
 import type { ContextActionExecutionContext } from './contextActions/protocol';
 import { createFlowerLinkedContextNavigation } from './flower/linkedContextNavigation';
-import { createEnvLocalFlowerDraftPersistence } from './flower/envLocalFlowerSurfaceAdapter';
 import { createAIReadinessController } from './flower/aiReadiness';
 import { buildPluginPanelModel } from './plugins/pluginInventoryProjection';
 import { createPluginLifecycleAPI } from './plugins/pluginApi';
@@ -555,9 +554,8 @@ export function EnvAppShell() {
   const rpc = useRedevenRpc();
   const cmd = useCommand();
   const notify = useNotification();
-  const flowerDraftCoordinator = createFlowerComposerDraftCoordinator({
-    persistence: createEnvLocalFlowerDraftPersistence(),
-  });
+  const flowerDraftCoordinator = createFlowerComposerDraftCoordinator();
+  onCleanup(() => flowerDraftCoordinator.dispose());
   const pluginConfirmationQueue = createPluginConfirmationQueue();
   const [pluginSessionRetired, setPluginSessionRetired] = createSignal(false);
   const retiredPluginManagementRevisionByInstanceID = new Map<string, number>();
@@ -2076,13 +2074,19 @@ export function EnvAppShell() {
         openLinkedDirectoryBrowser: openFlowerLinkedDirectoryBrowser,
       });
       const attachmentIDs: string[] = [];
+      const stagingScope = (input.intent.pending_attachments?.length ?? 0) > 0
+        ? await adapter.createAttachmentStagingScope?.()
+        : undefined;
+      if ((input.intent.pending_attachments?.length ?? 0) > 0 && !stagingScope) {
+        throw new Error('Attachment staging is unavailable for this Flower surface.');
+      }
       for (const [index, file] of (input.intent.pending_attachments ?? []).entries()) {
         if (!adapter.uploadAttachment) throw new Error('Attachment upload is unavailable for this Flower surface.');
         const requestID = `${input.intent.id}:attachment:${index}`;
         const staged = await adapter.uploadAttachment({
           attempt_id: requestID,
           request_id: requestID,
-          draft_id: input.intent.id,
+          staging_scope: stagingScope!,
           model_id: '',
           capability_revision: '',
           source: 'file',
@@ -2097,6 +2101,7 @@ export function EnvAppShell() {
         context_action: input.intent.context_action,
         working_dir: input.intent.suggested_working_dir,
         attachment_ids: attachmentIDs,
+        ...(stagingScope ? { staging_scope: stagingScope } : {}),
       });
       const threadId = trimString(receipt.thread_id);
       if (!threadId) {
@@ -4292,7 +4297,6 @@ export function EnvAppShell() {
           >
             <EnvAIPage
               draftCoordinator={flowerDraftCoordinator}
-              surfaceInstanceID="env-activity-flower"
               presentation={activityFlowerPlacement() === 'full_page' ? 'full' : 'companion'}
               engaged={activityFlowerEngaged()}
               transcriptVisible={activityFlowerEngaged()}

@@ -1030,8 +1030,7 @@ export type FlowerResolveHandlerInput = Readonly<{
 export type FlowerTurnLaunchInput = Readonly<{
   thread_id?: string;
   turn_id?: string;
-  draft_id?: string;
-  expected_draft_revision?: number;
+  staging_scope?: FlowerAttachmentStagingScope;
   prompt: string;
   decision?: FlowerRouterDecision | null;
   context_action?: unknown;
@@ -1096,6 +1095,13 @@ export type FlowerStagedAttachment = Readonly<{
   created_at_unix_ms?: number;
 }>;
 
+export type FlowerAttachmentStagingScope = Readonly<{
+  staging_scope_id: string;
+  thread_id: string;
+  capability: string;
+  expires_at_unix_ms: number;
+}>;
+
 export type FlowerAttachmentUploadProgress = Readonly<{
   attempt_id: string;
   loaded: number;
@@ -1106,7 +1112,7 @@ export type FlowerAttachmentUploadProgress = Readonly<{
 export type FlowerAttachmentUploadInput = Readonly<{
   attempt_id: string;
   request_id: string;
-  draft_id: string;
+  staging_scope: FlowerAttachmentStagingScope;
   model_id: string;
   capability_revision: string;
   source: FlowerAttachmentSource;
@@ -1301,10 +1307,12 @@ export type FlowerSurfaceAdapter = Readonly<{
   deleteThread?: (threadID: string) => Promise<FlowerThreadDeleteOutcome>;
   resolveHandler: (input?: FlowerResolveHandlerInput) => Promise<FlowerRouterDecision>;
   loadAttachmentCapability?: (modelID: string) => Promise<FlowerAttachmentCapability>;
+  createAttachmentStagingScope?: (threadID?: string) => Promise<FlowerAttachmentStagingScope>;
+  releaseAttachmentStagingScope?: (scope: FlowerAttachmentStagingScope) => Promise<void>;
   uploadAttachment?: (input: FlowerAttachmentUploadInput) => Promise<FlowerStagedAttachment>;
-  deleteStagedAttachment?: (attachmentID: string, draftID: string) => Promise<void>;
-  readStagedLongText?: (attachment: FlowerStagedAttachment, draftID: string) => Promise<FlowerStagedLongTextReadResult>;
-  previewStagedAttachment?: (attachment: FlowerStagedAttachment, draftID: string) => void | Promise<void>;
+  deleteStagedAttachment?: (attachmentID: string, scope: FlowerAttachmentStagingScope) => Promise<void>;
+  readStagedLongText?: (attachment: FlowerStagedAttachment, scope: FlowerAttachmentStagingScope) => Promise<FlowerStagedLongTextReadResult>;
+  previewStagedAttachment?: (attachment: FlowerStagedAttachment, scope: FlowerAttachmentStagingScope) => void | Promise<void>;
   launchTurn: (input: FlowerTurnLaunchInput) => Promise<FlowerTurnLaunchReceipt>;
   compactThreadContext: (input: FlowerCompactThreadContextInput) => Promise<FlowerLiveBootstrap>;
   stopThread: (threadID: string) => Promise<FlowerLiveBootstrap>;

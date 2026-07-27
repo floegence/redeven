@@ -81,7 +81,6 @@ describe('Flower Desktop model source E2E', () => {
   it('projects the read-only catalog and sends the opaque model with reasoning on the first turn', async () => {
     const deepSeekModelID = `desktop:model_${'1'.repeat(64)}`;
     const flashModelID = `desktop:model_${'2'.repeat(64)}`;
-    const createdBodies: unknown[] = [];
     const turnBodies: unknown[] = [];
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/settings' && init?.method === 'GET') {
@@ -143,17 +142,14 @@ describe('Flower Desktop model source E2E', () => {
       if (url === '/_redeven_proxy/api/ai/threads?limit=200' && init?.method === 'GET') {
         return jsonResponse({ threads: [] });
       }
-      if (/^\/_redeven_proxy\/api\/ai\/composer-drafts\/[^/]+\/thread$/u.test(url) && init?.method === 'POST') {
-        createdBodies.push(JSON.parse(String(init.body ?? '{}')));
-        return jsonResponse({ thread_id: 'thread-desktop-e2e', draft_revision: 2 });
-      }
-      if (url === '/_redeven_proxy/api/ai/threads/thread-desktop-e2e/turns' && init?.method === 'POST') {
-        const body = JSON.parse(String(init.body ?? '{}')) as { input?: { turn_id?: string } };
+      if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/turns$/u.test(url) && init?.method === 'POST') {
+        const body = JSON.parse(String(init.body ?? '{}')) as { thread_id?: string; input?: { turn_id?: string } };
         turnBodies.push(body);
         return jsonResponse({ turn_id: body.input?.turn_id, run_id: 'run-desktop-e2e', kind: 'start' });
       }
-      if (url === '/_redeven_proxy/api/ai/threads/thread-desktop-e2e/live/bootstrap' && init?.method === 'GET') {
-        return jsonResponse(liveBootstrap('thread-desktop-e2e', deepSeekModelID));
+      const bootstrapMatch = /^\/_redeven_proxy\/api\/ai\/threads\/([^/]+)\/live\/bootstrap$/u.exec(url);
+      if (bootstrapMatch && init?.method === 'GET') {
+        return jsonResponse(liveBootstrap(decodeURIComponent(bootstrapMatch[1]!), deepSeekModelID));
       }
       throw new Error(`unexpected fetch: ${url} ${init?.method ?? ''}`);
     });
@@ -218,19 +214,19 @@ describe('Flower Desktop model source E2E', () => {
     submit.click();
     await waitFor(() => turnBodies.length === 1);
 
-    expect(createdBodies).toEqual([expect.objectContaining({
+    expect(turnBodies[0]).toEqual(expect.objectContaining({
       create: expect.objectContaining({
         model_id: deepSeekModelID,
         reasoning_selection: { level: 'high' },
       }),
-    })]);
+    }));
     expect(turnBodies[0]).toEqual(expect.objectContaining({
-      thread_id: 'thread-desktop-e2e',
+      thread_id: expect.stringMatching(/^th_[A-Za-z0-9_-]{24}$/u),
       model: deepSeekModelID,
       options: expect.objectContaining({
         reasoning_selection: { level: 'high' },
       }),
     }));
-    expect(subscribeThread).toHaveBeenCalledWith({ threadId: 'thread-desktop-e2e' });
+    expect(subscribeThread).toHaveBeenCalledWith({ threadId: (turnBodies[0] as { thread_id: string }).thread_id });
   });
 });

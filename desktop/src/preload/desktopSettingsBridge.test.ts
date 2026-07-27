@@ -57,7 +57,7 @@ describe('bootstrapDesktopSettingsBridge', () => {
     });
     const digest = 'a'.repeat(64);
     await bridge.prepareRuntimeFlowerAttachment({
-      operation_id: 'operation-1', upload_request_id: 'upload-1', draft_id: 'draft-1', source: 'uploaded_file',
+      operation_id: 'operation-1', upload_request_id: 'upload-1', staging_scope_id: 'staging-1', staging_capability: 'secret-1', source: 'uploaded_file',
       display_name: 'notes.txt', media_type: 'text/plain', size_bytes: 3,
       content_sha256: digest, display_name_sha256: digest,
     });
@@ -67,7 +67,7 @@ describe('bootstrapDesktopSettingsBridge', () => {
     await bridge.commitRuntimeFlowerAttachment({ operation_id: 'operation-1' });
     await bridge.cancelRuntimeFlowerAttachment({ operation_id: 'operation-1' });
     await bridge.previewRuntimeFlowerAttachment({
-      attachment_id: 'upl-preview-1', draft_id: 'draft-1', display_name: 'notes.txt',
+      attachment_id: 'upl-preview-1', staging_scope_id: 'staging-1', staging_capability: 'secret-1', display_name: 'notes.txt',
     });
     bridge.cancel();
 
@@ -90,7 +90,7 @@ describe('bootstrapDesktopSettingsBridge', () => {
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(5, 'redeven-desktop:runtime-flower-attachment-commit', { operation_id: 'operation-1' });
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(6, 'redeven-desktop:runtime-flower-attachment-cancel', { operation_id: 'operation-1' });
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(7, 'redeven-desktop:runtime-flower-attachment-preview', {
-      attachment_id: 'upl-preview-1', draft_id: 'draft-1', display_name: 'notes.txt',
+      attachment_id: 'upl-preview-1', staging_scope_id: 'staging-1', staging_capability: 'secret-1', display_name: 'notes.txt',
     });
     expect(ipcRendererSend).toHaveBeenCalledWith('redeven-desktop:cancel-settings');
     expect(Object.keys(bridge).sort()).toEqual([

@@ -16,6 +16,40 @@ import {
 } from './FlowerSurface.navigation.testHarness';
 
 describe('Flower composer reference browser interaction', () => {
+  it('grows through five lines, scrolls from the sixth, and shrinks after deletion', async () => {
+    await page.viewport(800, 900);
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => []),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('.flower-composer textarea')));
+    const textarea = runtime.querySelector('.flower-composer textarea') as HTMLTextAreaElement;
+    const setText = async (value: string) => {
+      textarea.value = value;
+      textarea.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: value }));
+      await waitFor(() => textarea.value === value);
+      await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    };
+
+    await setText('one');
+    const oneLineHeight = textarea.getBoundingClientRect().height;
+    await setText('one\ntwo\nthree\nfour\nfive');
+    const fiveLineHeight = textarea.getBoundingClientRect().height;
+    expect(fiveLineHeight).toBeGreaterThan(oneLineHeight);
+    expect(getComputedStyle(textarea).overflowY).toBe('hidden');
+
+    await setText('one\ntwo\nthree\nfour\nfive\nsix');
+    const sixLineHeight = textarea.getBoundingClientRect().height;
+    expect(Math.abs(sixLineHeight - fiveLineHeight)).toBeLessThanOrEqual(1);
+    expect(getComputedStyle(textarea).overflowY).toBe('auto');
+    expect(textarea.scrollHeight).toBeGreaterThan(textarea.clientHeight);
+
+    await setText('one');
+    expect(textarea.getBoundingClientRect().height).toBeLessThan(fiveLineHeight);
+    expect(getComputedStyle(textarea).overflowY).toBe('hidden');
+  });
+
   it('keeps reference autocomplete projected, keyboard-usable, and contained on a narrow surface', async () => {
     await page.viewport(320, 720);
     const capability: FlowerAttachmentCapability = {
@@ -28,7 +62,7 @@ describe('Flower composer reference browser interaction', () => {
       max_total_size_bytes: 2_000_000,
       routes: { 'text/plain': 'tool_read' },
     };
-    const runtime = renderSurfaceWithAdapter({
+    const runtime = renderSurfaceWithAdapterProps({
       ...adapter(true),
       listThreads: vi.fn(async () => []),
       getWorkingDirectoryPathContext: vi.fn(async () => ({
@@ -53,7 +87,22 @@ describe('Flower composer reference browser interaction', () => {
       uploadAttachment: vi.fn(async (): Promise<FlowerStagedAttachment> => {
         throw new Error('upload is not expected in the reference browser test');
       }),
+    }, {
+      presentation: 'companion',
+      companionOpen: true,
+      companionPresenceOwner: true,
+      engaged: true,
+      transcriptVisible: false,
     });
+    const projectedHost = document.createElement('div');
+    projectedHost.setAttribute('data-floe-dialog-surface-host', 'true');
+    projectedHost.style.cssText = 'position:relative;width:300px;height:680px;transform:translate(12px, 8px) scale(0.9);transform-origin:top left;';
+    const portalLayer = document.createElement('div');
+    portalLayer.setAttribute('data-floe-surface-portal-layer', 'true');
+    portalLayer.style.cssText = 'position:absolute;inset:0;';
+    document.body.appendChild(portalLayer);
+    portalLayer.appendChild(projectedHost);
+    projectedHost.appendChild(runtime);
 
     await waitFor(() => Boolean(
       runtime.querySelector('textarea')
@@ -62,9 +111,9 @@ describe('Flower composer reference browser interaction', () => {
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
     textarea.focus();
     await userEvent.keyboard('@src');
-    await waitFor(() => runtime.querySelector('[role="listbox"] [role="option"]') !== null);
+    await waitFor(() => portalLayer.querySelector('[role="listbox"] [role="option"]') !== null);
 
-    const listbox = runtime.querySelector('[role="listbox"]') as HTMLElement;
+    const listbox = portalLayer.querySelector('[role="listbox"]') as HTMLElement;
     const floatingLayer = listbox.closest('[data-floe-local-interaction-surface="true"]') as HTMLElement;
     expect(floatingLayer).toBeTruthy();
     expect(floatingLayer.getAttribute('data-flower-floating-layer')).toBe('true');
@@ -76,18 +125,29 @@ describe('Flower composer reference browser interaction', () => {
     const more = runtime.querySelector('.flower-composer-more-button') as HTMLButtonElement;
     expect(more).toBeTruthy();
     expect(attachment.compareDocumentPosition(more) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(attachment.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
-    expect(more.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
+    expect(attachment.offsetWidth).toBeGreaterThanOrEqual(44);
+    expect(attachment.offsetHeight).toBeGreaterThanOrEqual(44);
+    expect(more.offsetWidth).toBeGreaterThanOrEqual(44);
+    expect(more.offsetHeight).toBeGreaterThanOrEqual(44);
     more.focus();
-    await waitFor(() => runtime.querySelector('[role="listbox"]') === null);
+    await waitFor(() => portalLayer.querySelector('[role="listbox"]') === null);
     const currentMore = runtime.querySelector('.flower-composer-more-button') as HTMLButtonElement;
     expect(currentMore).toBeTruthy();
-    currentMore.click();
-    await waitFor(() => runtime.querySelector('[data-flower-composer-more-panel="true"]') !== null);
-    expect(runtime.querySelector('[data-flower-composer-more-panel="true"]')).toBeTruthy();
-    currentMore.click();
+    await userEvent.click(currentMore);
+    await waitFor(() => portalLayer.querySelector('[data-flower-composer-more-panel="true"]') !== null);
+    const morePanel = portalLayer.querySelector('[data-flower-composer-more-panel="true"]') as HTMLElement;
+    const moreLayer = morePanel.closest('[data-floe-local-interaction-surface="true"]') as HTMLElement;
+    expect(moreLayer).toBeTruthy();
+    expect(moreLayer.getAttribute('data-flower-floating-layer')).toBe('true');
+    expect(morePanel.style.position).toBe('');
+    expect(morePanel.style.left).toBe('');
+    expect(morePanel.style.top).toBe('');
+    await userEvent.click(currentMore);
+    await waitFor(() => portalLayer.querySelector('[data-flower-composer-more-panel="true"]') === null);
+    await waitFor(() => document.activeElement === currentMore);
     textarea.focus();
-    await waitFor(() => runtime.querySelector('[role="listbox"] [role="option"]') !== null);
+    await userEvent.keyboard('{Backspace}c');
+    await waitFor(() => portalLayer.querySelector('[role="listbox"] [role="option"]') !== null);
 
     await userEvent.keyboard('{Enter}');
     await waitFor(() => runtime.querySelector('.flower-composer-reference-chip') !== null);
@@ -95,8 +155,8 @@ describe('Flower composer reference browser interaction', () => {
     const remove = runtime.querySelector('.flower-composer-reference-chip-remove') as HTMLButtonElement;
     expect(chip.getAttribute('data-reference-kind')).toBe('directory');
     expect(chip.scrollWidth).toBeLessThanOrEqual(chip.clientWidth + 1);
-    expect(remove.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
-    expect(remove.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    expect(remove.offsetWidth).toBeGreaterThanOrEqual(44);
+    expect(remove.offsetHeight).toBeGreaterThanOrEqual(44);
 
     expect(runtime.querySelector('#redeven-flower-surface')!.scrollWidth)
       .toBeLessThanOrEqual(runtime.querySelector('#redeven-flower-surface')!.clientWidth + 1);
@@ -147,6 +207,14 @@ describe('Flower composer reference browser interaction', () => {
       expect(attachment.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
       expect(more.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
       expect(more.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+      const normalizedGap = more.getBoundingClientRect().left - attachment.getBoundingClientRect().right;
+      expect(normalizedGap).toBeGreaterThanOrEqual(-0.5);
+      expect(normalizedGap).toBeLessThanOrEqual(2);
+      await userEvent.click(more);
+      await waitFor(() => document.querySelector('[data-flower-composer-more-panel="true"]') !== null);
+      await userEvent.click(more);
+      await waitFor(() => document.querySelector('[data-flower-composer-more-panel="true"]') === null);
+      await waitFor(() => document.activeElement === runtime.querySelector('.flower-composer-more-button'));
       expect(runtime.querySelector('#redeven-flower-surface')!.scrollWidth)
         .toBeLessThanOrEqual(runtime.querySelector('#redeven-flower-surface')!.clientWidth + 1);
       expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
