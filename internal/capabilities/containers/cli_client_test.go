@@ -105,11 +105,11 @@ func TestCLIClientListParsesDockerNDJSONAndPodmanArray(t *testing.T) {
 	t.Parallel()
 
 	dockerList := strings.Join([]string{
-		`{"ID":"abc123","Names":"api,api_1","Image":"ghcr.io/acme/api:latest","State":"running","Status":"Up 2 minutes","CreatedAt":"2024-01-01T00:00:00Z"}`,
+		`{"ID":"abc123","Names":"api,api_1","Image":"ghcr.io/acme/api:latest","State":"running","Status":"Up 2 minutes","Ports":"127.0.0.1:8080->80/tcp, 443/tcp","CreatedAt":"2024-01-01 00:00:00 +0000 UTC"}`,
 		`{"ID":"def456","Names":"worker","Image":"ghcr.io/acme/worker:latest","State":"exited","Status":"Exited (0)","CreatedAt":"2024-01-02T00:00:00Z"}`,
 	}, "\n")
 	podmanList := `[
-		{"Id":"pod123","Names":["pod-api"],"Image":"quay.io/acme/api:latest","State":"running","Created":1704067200}
+		{"Id":"pod123","Names":["pod-api"],"Image":"quay.io/acme/api:latest","State":"running","CreatedAt":"2 years ago","Created":1704067200,"Ports":[{"host_ip":"::1","container_port":8080,"host_port":18080,"range":2,"protocol":"tcp,udp"}],"ExposedPorts":{"8080":["tcp"],"9000":["sctp"]}}
 	]`
 	runner := &fakeCommandRunner{
 		outputs: map[string]string{
@@ -129,6 +129,12 @@ func TestCLIClientListParsesDockerNDJSONAndPodmanArray(t *testing.T) {
 	if dockerContainers[0].ContainerID != "abc123" || dockerContainers[0].Name != "api" || dockerContainers[0].State != ContainerStateRunning {
 		t.Fatalf("first docker container = %+v", dockerContainers[0])
 	}
+	if dockerContainers[0].CreatedAtUnixMs != 1704067200000 || !reflect.DeepEqual(dockerContainers[0].Ports, []PortSummary{
+		{Protocol: "tcp", HostIP: "127.0.0.1", HostPort: 8080, Port: 80},
+		{Protocol: "tcp", Port: 443},
+	}) {
+		t.Fatalf("first docker container metadata = %+v", dockerContainers[0])
+	}
 	if dockerContainers[1].State != ContainerStateExited {
 		t.Fatalf("second docker state = %q", dockerContainers[1].State)
 	}
@@ -139,6 +145,15 @@ func TestCLIClientListParsesDockerNDJSONAndPodmanArray(t *testing.T) {
 	}
 	if len(podmanContainers) != 1 || podmanContainers[0].Name != "pod-api" || podmanContainers[0].CreatedAtUnixMs != 1704067200000 {
 		t.Fatalf("podman containers = %+v", podmanContainers)
+	}
+	if !reflect.DeepEqual(podmanContainers[0].Ports, []PortSummary{
+		{Protocol: "tcp", HostIP: "::1", HostPort: 18080, Port: 8080},
+		{Protocol: "udp", HostIP: "::1", HostPort: 18080, Port: 8080},
+		{Protocol: "tcp", HostIP: "::1", HostPort: 18081, Port: 8081},
+		{Protocol: "udp", HostIP: "::1", HostPort: 18081, Port: 8081},
+		{Protocol: "sctp", Port: 9000},
+	}) {
+		t.Fatalf("podman ports = %+v", podmanContainers[0].Ports)
 	}
 }
 
@@ -159,7 +174,7 @@ func TestCLIClientInspectParsesRuntimeInputs(t *testing.T) {
 	if container.ContainerID != "container_123" || container.Name != "api" || container.State != ContainerStateRunning {
 		t.Fatalf("container identity = %+v", container)
 	}
-	if container.Image.Reference != "ghcr.io/acme/api:latest" || container.Image.Digest != "sha256:feedface" {
+	if container.Image.Reference != "ghcr.io/acme/api:latest" || container.Image.Digest != testSHA256Digest {
 		t.Fatalf("image = %+v", container.Image)
 	}
 	if !container.Runtime.Privileged || container.Runtime.NetworkMode != "host" || container.Runtime.RestartPolicy != "always" {
@@ -228,7 +243,7 @@ func TestCLIClientPullImageParsesDigest(t *testing.T) {
 
 	runner := &fakeCommandRunner{
 		outputs: map[string]string{
-			"docker pull ghcr.io/acme/api:latest": "latest: Pulling from acme/api\nDigest: sha256:feedface\nStatus: Downloaded newer image\n",
+			"docker pull ghcr.io/acme/api:latest": "latest: Pulling from acme/api\nDigest: " + testSHA256Digest + "\nStatus: Downloaded newer image\n",
 		},
 	}
 	client := &CLIClient{Runner: runner}
@@ -237,7 +252,7 @@ func TestCLIClientPullImageParsesDigest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PullImage() error = %v", err)
 	}
-	if !result.Completed || result.Image.Reference != "ghcr.io/acme/api:latest" || result.Image.Digest != "sha256:feedface" {
+	if !result.Completed || result.Image.Reference != "ghcr.io/acme/api:latest" || result.Image.Digest != testSHA256Digest {
 		t.Fatalf("pull result = %+v", result)
 	}
 }
@@ -249,7 +264,9 @@ func TestCLIClientV3ResourcesParseDockerAndPodmanFormats(t *testing.T) {
 		"docker images --no-trunc --format json":               `{"ID":"sha256:one","Repository":"ghcr.io/acme/api","Tag":"latest","Digest":"sha256:digest"}`,
 		"podman images --no-trunc --format json":               `[{"Id":"sha256:two","Reference":"quay.io/acme/api:stable","Digest":"sha256:pdigest"}]`,
 		"docker volume ls --format json":                       `{"Name":"data","Driver":"local","Scope":"local"}`,
-		"podman volume ls --format json":                       `{"name":"cache","driver":"local","scope":"local"}`,
+		"podman volume ls --format json":                       `[{"Name":"cache","Driver":"local","Scope":"local","CreatedAt":"2024-01-03T00:00:00Z"}]`,
+		"docker ps -a --no-trunc --format json":                "",
+		"podman ps -a --no-trunc --format json":                "",
 	}}
 	client := &CLIClient{Runner: runner}
 	stats, err := client.Stats(context.Background(), EngineDocker, "container_123")
@@ -272,7 +289,7 @@ func TestCLIClientV3ResourcesParseDockerAndPodmanFormats(t *testing.T) {
 		t.Fatalf("docker volumes = %+v, err=%v", dockerVolumes, err)
 	}
 	podmanVolumes, err := client.ListVolumes(context.Background(), EnginePodman)
-	if err != nil || len(podmanVolumes) != 1 || podmanVolumes[0].Name != "cache" {
+	if err != nil || len(podmanVolumes) != 1 || podmanVolumes[0].Name != "cache" || podmanVolumes[0].CreatedAtUnixMs != 1704240000000 {
 		t.Fatalf("podman volumes = %+v, err=%v", podmanVolumes, err)
 	}
 }
@@ -594,7 +611,7 @@ const dockerInspectFixture = `[
     "Id": "container_123",
     "Name": "/api",
     "Created": "2024-01-01T00:00:00Z",
-    "RepoDigests": ["ghcr.io/acme/api@sha256:feedface"],
+    "RepoDigests": ["ghcr.io/acme/api@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"],
     "Config": {
       "Image": "ghcr.io/acme/api:latest",
       "Env": ["API_TOKEN=raw-token", "PATH=/usr/bin"],

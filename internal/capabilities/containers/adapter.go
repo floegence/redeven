@@ -9,22 +9,108 @@ import (
 )
 
 var (
-	ErrEngineUnavailable     = errors.New("container engine is unavailable")
-	ErrCLIUnavailable        = errors.New("container engine CLI is unavailable")
-	ErrBackendUnreachable    = errors.New("container engine backend is unreachable")
-	ErrEngineTimeout         = errors.New("container engine timed out")
-	ErrInvalidEngine         = errors.New("container engine is invalid")
-	ErrInvalidMethod         = errors.New("container method is invalid")
-	ErrCommandOutputLimit    = errors.New("container command output limit exceeded")
-	ErrContainerNotFound     = errors.New("container not found")
-	ErrLogsUnavailable       = errors.New("container logs unavailable")
-	ErrLogStreamBackpressure = errors.New("logs stream sink backpressure")
-	ErrLogsFollowUnsupported = errors.New("logs follow requires a streaming adapter")
+	ErrEngineUnavailable        = errors.New("container engine is unavailable")
+	ErrCLIUnavailable           = errors.New("container engine CLI is unavailable")
+	ErrBackendUnreachable       = errors.New("container engine backend is unreachable")
+	ErrDaemonStopped            = errors.New("container engine daemon is stopped")
+	ErrPermissionDenied         = errors.New("container engine permission denied")
+	ErrEngineTimeout            = errors.New("container engine timed out")
+	ErrInvalidEngine            = errors.New("container engine is invalid")
+	ErrInvalidMethod            = errors.New("container method is invalid")
+	ErrCommandOutputLimit       = errors.New("container command output limit exceeded")
+	ErrContainerNotFound        = errors.New("container not found")
+	ErrLogsUnavailable          = errors.New("container logs unavailable")
+	ErrLogStreamBackpressure    = errors.New("logs stream sink backpressure")
+	ErrLogsFollowUnsupported    = errors.New("logs follow requires a streaming adapter")
+	ErrImageNotFound            = errors.New("container image not found")
+	ErrImageReferenced          = errors.New("container image is referenced")
+	ErrVolumeInUse              = errors.New("container volume is in use")
+	ErrContainerRunning         = errors.New("container is running")
+	ErrResourcePlanStale        = errors.New("container resource plan is stale")
+	ErrReferenceStateIncomplete = errors.New("container resource reference state is incomplete")
+	ErrResourcePrunePartial     = errors.New("container resource prune partially completed")
+	ErrResourcePruneReconcile   = errors.New("container resource prune requires reconciliation")
 )
+
+type ResourcePrunePartialError struct {
+	ResourceKind        string
+	CompletedIdentities []string
+	PendingIdentities   []string
+	Cause               error
+}
+
+func (e *ResourcePrunePartialError) Error() string {
+	if e == nil {
+		return ErrResourcePrunePartial.Error()
+	}
+	return fmt.Sprintf("%s: %s (%d completed, %d require reconciliation)", ErrResourcePrunePartial, e.ResourceKind, len(e.CompletedIdentities), len(e.PendingIdentities))
+}
+
+func (e *ResourcePrunePartialError) Is(target error) bool { return target == ErrResourcePrunePartial }
+
+func (e *ResourcePrunePartialError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Cause
+}
+
+type ResourcePruneReconciliationError struct {
+	ResourceKind string
+	Identities   []string
+	Cause        error
+}
+
+func (e *ResourcePruneReconciliationError) Error() string {
+	if e == nil {
+		return ErrResourcePruneReconcile.Error()
+	}
+	return fmt.Sprintf("%s: %s (%d identities)", ErrResourcePruneReconcile, e.ResourceKind, len(e.Identities))
+}
+
+func (e *ResourcePruneReconciliationError) Is(target error) bool {
+	return target == ErrResourcePruneReconcile
+}
+
+func (e *ResourcePruneReconciliationError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Cause
+}
 
 type ContainerNotFoundError struct {
 	ContainerID string
 }
+
+type ImageNotFoundError struct{ Image string }
+
+func (e *ImageNotFoundError) Error() string        { return ErrImageNotFound.Error() }
+func (e *ImageNotFoundError) Is(target error) bool { return target == ErrImageNotFound }
+
+type ImageReferencedError struct {
+	Image      string
+	References int
+}
+
+func (e *ImageReferencedError) Error() string        { return ErrImageReferenced.Error() }
+func (e *ImageReferencedError) Is(target error) bool { return target == ErrImageReferenced }
+
+type VolumeInUseError struct {
+	Name       string
+	References int
+}
+
+func (e *VolumeInUseError) Error() string        { return ErrVolumeInUse.Error() }
+func (e *VolumeInUseError) Is(target error) bool { return target == ErrVolumeInUse }
+
+type ContainerRunningError struct {
+	ContainerID   string
+	ContainerName string
+}
+
+func (e *ContainerRunningError) Error() string        { return ErrContainerRunning.Error() }
+func (e *ContainerRunningError) Is(target error) bool { return target == ErrContainerRunning }
 
 func (e *ContainerNotFoundError) Error() string { return ErrContainerNotFound.Error() }
 
@@ -42,6 +128,7 @@ type EngineContainer struct {
 	Name            string
 	Image           ImageInput
 	State           ContainerState
+	Health          string
 	CreatedAtUnixMs int64
 	Runtime         RuntimeInput
 	Ports           []PortSummary
@@ -197,8 +284,8 @@ func (a *Adapter) Inspect(ctx context.Context, req ContainerInspectRequest) (Con
 		return ContainerInspectResponse{}, err
 	}
 	containerID := strings.TrimSpace(req.ContainerID)
-	if containerID == "" {
-		return ContainerInspectResponse{}, errors.New("container_id is required")
+	if err := validateContainerIdentifier(containerID); err != nil {
+		return ContainerInspectResponse{}, err
 	}
 	container, err := a.client.Inspect(ctx, req.Engine, containerID)
 	if err != nil {
@@ -215,8 +302,8 @@ func (a *Adapter) StartPreflight(ctx context.Context, req ContainerStartRequest)
 		return StartPreflightPlan{}, err
 	}
 	containerID := strings.TrimSpace(req.ContainerID)
-	if containerID == "" {
-		return StartPreflightPlan{}, errors.New("container_id is required")
+	if err := validateContainerIdentifier(containerID); err != nil {
+		return StartPreflightPlan{}, err
 	}
 	container, err := a.client.Inspect(ctx, req.Engine, containerID)
 	if err != nil {
@@ -271,8 +358,8 @@ func (a *Adapter) TailLogs(ctx context.Context, req LogsTailRequest) (LogsTailRe
 		return LogsTailResponse{}, err
 	}
 	containerID := strings.TrimSpace(req.ContainerID)
-	if containerID == "" {
-		return LogsTailResponse{}, errors.New("container_id is required")
+	if err := validateContainerIdentifier(containerID); err != nil {
+		return LogsTailResponse{}, err
 	}
 	result, err := a.client.TailLogs(ctx, EngineLogsRequest{
 		Engine:      req.Engine,
@@ -296,8 +383,8 @@ func (a *Adapter) FollowLogs(ctx context.Context, req LogsTailRequest, sink LogL
 		return err
 	}
 	containerID := strings.TrimSpace(req.ContainerID)
-	if containerID == "" {
-		return errors.New("container_id is required")
+	if err := validateContainerIdentifier(containerID); err != nil {
+		return err
 	}
 	if sink == nil {
 		return errors.New("logs stream sink is required")
@@ -341,8 +428,8 @@ func validateImagePull(req ImagePullRequest) (Engine, string, error) {
 		return "", "", err
 	}
 	imageRef := strings.TrimSpace(req.ImageRef)
-	if imageRef == "" {
-		return "", "", errors.New("image_ref is required")
+	if err := validateImageReference(imageRef); err != nil {
+		return "", "", err
 	}
 	return req.Engine, imageRef, nil
 }
@@ -407,11 +494,19 @@ func validateAction(req EngineActionRequest) error {
 	default:
 		return fmt.Errorf("%w: %q", ErrInvalidMethod, req.Method)
 	}
-	if strings.TrimSpace(req.ContainerID) == "" {
-		return errors.New("container_id is required")
+	if err := validateContainerIdentifier(req.ContainerID); err != nil {
+		return err
 	}
 	if req.TimeoutSec < 0 {
 		return errors.New("timeout_sec must be non-negative")
+	}
+	return nil
+}
+
+func validateContainerIdentifier(value string) error {
+	value = strings.TrimSpace(value)
+	if value == "" || len(value) > 1024 || strings.HasPrefix(value, "-") || hasControl(value) {
+		return errors.New("container_id is invalid")
 	}
 	return nil
 }
@@ -422,6 +517,7 @@ func containerSummary(container EngineContainer) ContainerSummary {
 		Name:            strings.TrimSpace(container.Name),
 		Image:           imageSummary(container.Image),
 		State:           container.State,
+		Health:          strings.TrimSpace(container.Health),
 		CreatedAtUnixMs: container.CreatedAtUnixMs,
 		Ports:           append([]PortSummary(nil), container.Ports...),
 	}
@@ -446,6 +542,7 @@ func containerInspect(container EngineContainer) ContainerInspect {
 		Name:            strings.TrimSpace(container.Name),
 		Image:           imageSummary(container.Image),
 		State:           container.State,
+		Health:          strings.TrimSpace(container.Health),
 		CreatedAtUnixMs: container.CreatedAtUnixMs,
 		Runtime:         runtime,
 		Labels:          runtime.Labels,
@@ -460,6 +557,6 @@ func imageSummary(image ImageInput) ImageSummary {
 	return ImageSummary{
 		Reference:    strings.TrimSpace(image.Reference),
 		Digest:       digest,
-		DigestPinned: digest != "",
+		DigestPinned: isImageDigestPinned(image.Reference, digest),
 	}
 }

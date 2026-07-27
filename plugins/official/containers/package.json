@@ -1,6 +1,6 @@
 {
   "name": "@redeven/official-containers-plugin",
-  "version": "2.2.0",
+  "version": "3.0.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,7 +8,7 @@
     "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
-    "@floegence/redevplugin-ui": "0.6.19"
+    "@floegence/redevplugin-ui": "0.6.20"
   },
   "devDependencies": {
     "esbuild": "0.28.1",

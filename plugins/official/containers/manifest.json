@@ -1,5 +1,5 @@
 {
-  "schema_version": "redevplugin.manifest.v6",
+  "schema_version": "redevplugin.manifest.v7",
   "publisher": {
     "publisher_id": "com.redeven.official",
     "display_name": "Redeven Official"
@@ -7,10 +7,10 @@
   "plugin": {
     "plugin_id": "com.redeven.official.containers",
     "display_name": "Containers",
-    "version": "2.2.0",
+    "version": "3.0.0",
     "api_version": "plugin-v1",
-    "min_runtime_version": "0.6.19",
-    "ui_protocol_version": "plugin-ui-v6"
+    "min_runtime_version": "0.6.20",
+    "ui_protocol_version": "plugin-ui-v7"
   },
   "surfaces": [
     {
@@ -20,115 +20,8 @@
       "label": "Containers",
       "entry": "ui/index.html",
       "default_size": {
-        "width": 1080,
-        "height": 760
-      }
-    }
-  ],
-  "capability_bindings": [
-    {
-      "binding_id": "container_resources",
-      "contract": {
-        "publisher_id": "com.redeven.official",
-        "contract_id": "redeven.container_resources.v2",
-        "contract_version": "2.0.0",
-        "artifact_ref": "capabilities/redeven.container_resources.v2/v2.0.0/redeven.container_resources.v2.schema.json",
-        "artifact_sha256": "c29cb8759236c8c10d03c34234df10ecc76b61714ad0f9a438440a28b071010b",
-        "manifest_ref": "capabilities/redeven.container_resources.v2/v2.0.0/redeven.container_resources.v2.manifest.json",
-        "manifest_sha256": "12851520960816ee1e317a6d2383d9f69f8578461c29677df5e3b25c8c6db56e",
-        "signature_ref": "capabilities/redeven.container_resources.v2/v2.0.0/redeven.container_resources.v2.sig",
-        "signature_sha256": "973799475aeb5b672e36799b6cb3982a5efede4286aefc66420233d36d246695",
-        "signature_key_id": "redeven-official-signing-2026",
-        "signature_policy_epoch": "1",
-        "signature_revocation_epoch": "1",
-        "compatibility_ref": "capabilities/redeven.container_resources.v2/v2.0.0/redeven.container_resources.v2.compatibility.json",
-        "compatibility_sha256": "4a406bfa8c90cb47a9cd322b0bb2c3064257b0b4d2c2af3b0f4214132dfc20ae",
-        "generated_client_ref": "capabilities/redeven.container_resources.v2/v2.0.0/redeven.container_resources.v2.client.ts",
-        "generated_client_sha256": "910895e08a1f4408cb9766cf5f183992ef88f10442dcb210d2fe9472f4885c61",
-        "notices_ref": "capabilities/redeven.container_resources.v2/v2.0.0/redeven.container_resources.v2.notices.json",
-        "notices_sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
-      }
-    }
-  ],
-  "methods": [
-    {
-      "method": "containers.status",
-      "route": {
-        "kind": "capability",
-        "binding_id": "container_resources",
-        "target_method": "containers.status"
-      }
-    },
-    {
-      "method": "containers.list",
-      "route": {
-        "kind": "capability",
-        "binding_id": "container_resources",
-        "target_method": "containers.list"
-      }
-    },
-    {
-      "method": "containers.inspect",
-      "route": {
-        "kind": "capability",
-        "binding_id": "container_resources",
-        "target_method": "containers.inspect"
-      }
-    },
-    {
-      "method": "containers.start.preflight",
-      "route": {
-        "kind": "capability",
-        "binding_id": "container_resources",
-        "target_method": "containers.start.preflight"
-      }
-    },
-    {
-      "method": "containers.start",
-      "route": {
-        "kind": "capability",
-        "binding_id": "container_resources",
-        "target_method": "containers.start"
-      }
-    },
-    {
-      "method": "containers.stop",
-      "route": {
-        "kind": "capability",
-        "binding_id": "container_resources",
-        "target_method": "containers.stop"
-      }
-    },
-    {
-      "method": "containers.restart",
-      "route": {
-        "kind": "capability",
-        "binding_id": "container_resources",
-        "target_method": "containers.restart"
-      }
-    },
-    {
-      "method": "containers.remove",
-      "route": {
-        "kind": "capability",
-        "binding_id": "container_resources",
-        "target_method": "containers.remove"
-      }
-    },
-    {
-      "method": "containers.logs.tail",
-      "route": {
-        "kind": "capability",
-        "binding_id": "container_resources",
-        "target_method": "containers.logs.tail"
-      }
-    },
-    {
-      "method": "images.pull",
-      "route": {
-        "kind": "capability",
-        "binding_id": "container_resources",
-        "target_method": "images.pull"
+        "width": 1180,
+        "height": 800
       }
     }
   ]

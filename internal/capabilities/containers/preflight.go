@@ -25,6 +25,7 @@ type StartPreflightInput struct {
 type ImageInput struct {
 	Reference string
 	Digest    string
+	RuntimeID string `json:"-"`
 }
 
 type RuntimeInput struct {
@@ -67,7 +68,7 @@ func BuildStartPreflightPlan(input StartPreflightInput) (StartPreflightPlan, err
 	image := ImageSummary{
 		Reference:    strings.TrimSpace(input.Image.Reference),
 		Digest:       strings.TrimSpace(input.Image.Digest),
-		DigestPinned: strings.TrimSpace(input.Image.Digest) != "",
+		DigestPinned: isImageDigestPinned(input.Image.Reference, input.Image.Digest),
 	}
 	runtime := RuntimeSummary{
 		Privileged:    input.Runtime.Privileged,
