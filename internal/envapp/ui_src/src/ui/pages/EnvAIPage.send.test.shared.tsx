@@ -1261,11 +1261,15 @@ export function registerEnvAIPageSendTests() {
           String(url).endsWith('/_redeven_proxy/api/ai/threads/thread-new/turns') && init?.method === 'POST'
         ));
         expect(turnRequest).toBeTruthy();
-        expect(JSON.parse(String(turnRequest?.[1]?.body ?? '{}'))).toEqual(expect.objectContaining({
+        const turnBody = JSON.parse(String(turnRequest?.[1]?.body ?? '{}')) as {
+          input: Record<string, unknown>;
+        };
+        expect(turnBody).toEqual(expect.objectContaining({
           thread_id: 'thread-new',
           model: 'openai/gpt-5.2',
-          input: expect.objectContaining({ text: '你好，Flower', attachment_ids: [] }),
+          input: expect.objectContaining({ text: '你好，Flower', attachments: [] }),
         }));
+        expect(turnBody.input).not.toHaveProperty('attachment_ids');
       } finally {
         dispose();
       }
