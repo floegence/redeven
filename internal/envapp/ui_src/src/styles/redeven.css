@@ -550,7 +550,7 @@
   /* Redeven lifts Classic Dark's product panels above Floe's base card. Keep the paired strokes visible. */
   --border: #59616e;
   --input: #68788f;
-  --chrome-border: #47515f;
+  --chrome-border: #4a5462;
   --top-bar-border: var(--chrome-border);
   --activity-bar-border: var(--chrome-border);
   --bottom-bar-border: var(--chrome-border);
