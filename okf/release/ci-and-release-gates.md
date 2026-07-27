@@ -4,6 +4,7 @@ title: CI and release gates
 description: Redeven binds published dependencies, generated assets, UI behavior, release payloads, tests, and OKF to the exact main tip being pushed.
 tags: [release, ci, quality, okf]
 timestamp: 2026-07-25T00:00:00Z
+quality_exception: Cross-product exact-main release contract spanning dependencies, generated assets, tests, packaging, signing evidence, and publication gates.
 ---
 # Summary
 
@@ -67,7 +68,7 @@ Go tests that import their embed packages.
 
 ## ReDevPlugin dependency gate
 
-Redeven consumes only the coordinated ReDevPlugin `v0.6.19` package set. The
+Redeven consumes only the coordinated ReDevPlugin `v0.6.20` package set. The
 boundary guard rejects local sibling paths, Go workspaces/replacements, npm
 links, copied contracts or runtimes, Rust path overrides, and a second
 platform-core package tree. Local-wiring scans cover maintained source, scripts,
@@ -186,7 +187,7 @@ the released durable four-hash fence and drain; Redeven awaits exact teardown
 acknowledgement before deleting identity and reconciles retained fences on
 restart.
 
-Workbench plugin interaction is releasable only through the `v0.6.19`
+Workbench plugin interaction is releasable only through the `v0.6.20`
 source/port-bound interaction ownership and exact-surface close contracts. The
 gate rejects overlays, pointer-event switching, copied interaction DTOs, a
 second bridge, session-wide close fallback, placement persistence before close,

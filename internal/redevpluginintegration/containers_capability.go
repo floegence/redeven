@@ -19,11 +19,12 @@ import (
 )
 
 const (
-	containersCapabilityID      = "redeven.capability.container_resources"
-	containersCapabilityVersion = "1.0.0"
-	containerTaskCanceledReason = "container operation canceled"
-	containerTerminalFailure    = "container capability terminal state failed"
-	containerTerminalTimeout    = 2 * time.Second
+	containersCapabilityID        = "redeven.capability.container_resources"
+	containersCapabilityVersion   = "1.0.0"
+	containersCapabilityV3Version = "2.0.0"
+	containerTaskCanceledReason   = "container operation canceled"
+	containerTerminalFailure      = "container capability terminal state failed"
+	containerTerminalTimeout      = 2 * time.Second
 )
 
 var errContainerTaskCanceled = errors.New(containerTaskCanceledReason)
@@ -105,7 +106,8 @@ func (a *containersCapabilityAdapter) Close() error {
 }
 
 func (a *containersCapabilityAdapter) ProjectTarget(_ context.Context, req capability.TargetResolutionRequest) (capability.TargetDescriptor, error) {
-	if a == nil || a.containers == nil || req.CapabilityID != containersCapabilityID || req.CapabilityVersion != containersCapabilityVersion {
+	if a == nil || a.containers == nil || req.CapabilityID != containersCapabilityID ||
+		(req.CapabilityVersion != containersCapabilityVersion && req.CapabilityVersion != containersCapabilityV3Version) {
 		return capability.TargetDescriptor{}, errors.New("containers capability target is invalid")
 	}
 	kind, err := containerTargetKind(req.TargetMethod)
@@ -117,18 +119,35 @@ func (a *containersCapabilityAdapter) ProjectTarget(_ context.Context, req capab
 
 func containerTargetKind(method string) (string, error) {
 	switch containers.Method(method) {
-	case containers.MethodStatus, containers.MethodList:
+	case containers.MethodStatus, containers.MethodList,
+		containers.MethodImagesList, containers.MethodVolumesList,
+		containers.MethodImagesPrunePreflight, containers.MethodVolumesPrunePreflight,
+		containers.MethodImagesPrune, containers.MethodVolumesPrune:
 		return "container_engine", nil
 	case containers.MethodInspect,
+		containers.MethodContainersStatsSnapshot,
+		containers.MethodContainersStatsWatch,
+		containers.MethodContainersCreatePreflight,
+		containers.MethodContainersCreate,
 		containers.MethodStartPreflight,
 		containers.MethodStart,
 		containers.MethodStop,
 		containers.MethodRestart,
 		containers.MethodRemove,
+		containers.MethodContainersRemovePreflight,
+		containers.MethodPause,
+		containers.MethodUnpause,
+		containers.MethodKill,
 		containers.MethodLogsTail:
 		return "container", nil
-	case containers.MethodImagesPull:
+	case containers.MethodImagesPull, containers.MethodImagesInspect,
+		containers.MethodImagesHistory, containers.MethodImagesTag, containers.MethodImagesRemovePreflight,
+		containers.MethodImagesRemove:
 		return "container_image", nil
+	case containers.MethodVolumesInspect, containers.MethodVolumesCreatePreflight,
+		containers.MethodVolumesCreate, containers.MethodVolumesRemovePreflight,
+		containers.MethodVolumesRemove:
+		return "container_volume", nil
 	default:
 		return "", fmt.Errorf("%w: %q", containers.ErrInvalidMethod, method)
 	}
@@ -140,18 +159,44 @@ func (a *containersCapabilityAdapter) Invoke(ctx context.Context, req capability
 	}
 	switch containers.Method(req.Execution.TargetMethod) {
 	case containers.MethodStatus:
-		return a.status(ctx, req.Arguments)
+		return a.status(ctx, req.Execution.ExecutionBinding, req.Arguments)
 	case containers.MethodList:
-		return a.list(ctx, req.Arguments)
+		return a.list(ctx, req.Execution.ExecutionBinding, req.Arguments)
 	case containers.MethodInspect:
-		return a.inspect(ctx, req.Arguments)
+		return a.inspect(ctx, req.Execution.ExecutionBinding, req.Arguments)
 	case containers.MethodStartPreflight:
-		return a.startPreflight(ctx, req.Arguments)
+		return a.startPreflight(ctx, req.Execution.ExecutionBinding, req.Arguments)
+	case containers.MethodContainersStatsSnapshot,
+		containers.MethodContainersCreatePreflight,
+		containers.MethodContainersRemovePreflight,
+		containers.MethodImagesList,
+		containers.MethodImagesInspect,
+		containers.MethodImagesHistory,
+		containers.MethodImagesRemovePreflight,
+		containers.MethodImagesPrunePreflight,
+		containers.MethodVolumesList,
+		containers.MethodVolumesInspect,
+		containers.MethodVolumesCreatePreflight,
+		containers.MethodVolumesRemovePreflight,
+		containers.MethodVolumesPrunePreflight:
+		return a.invokeResourceSync(ctx, containers.Method(req.Execution.TargetMethod), req.Arguments)
+	case containers.MethodContainersStatsWatch:
+		return a.startStatsStream(ctx, req)
 	case containers.MethodStart,
 		containers.MethodStop,
 		containers.MethodRestart,
 		containers.MethodRemove,
-		containers.MethodImagesPull:
+		containers.MethodImagesPull,
+		containers.MethodContainersCreate,
+		containers.MethodPause,
+		containers.MethodUnpause,
+		containers.MethodKill,
+		containers.MethodImagesTag,
+		containers.MethodImagesRemove,
+		containers.MethodImagesPrune,
+		containers.MethodVolumesCreate,
+		containers.MethodVolumesRemove,
+		containers.MethodVolumesPrune:
 		return a.startOperation(ctx, req)
 	case containers.MethodLogsTail:
 		return a.startLogStream(ctx, req)
@@ -175,14 +220,14 @@ func (a *containersCapabilityAdapter) CancelOperation(_ context.Context, req cap
 	return nil
 }
 
-func (a *containersCapabilityAdapter) status(ctx context.Context, arguments map[string]any) (capability.Result, error) {
+func (a *containersCapabilityAdapter) status(ctx context.Context, binding capability.ExecutionBinding, arguments map[string]any) (capability.Result, error) {
 	var input engineArguments
 	if err := decodeCapabilityArguments(arguments, &input); err != nil {
 		return capability.Result{}, err
 	}
 	result, err := a.containers.Status(ctx, containers.StatusRequest{Engine: input.Engine})
 	if err != nil {
-		return capability.Result{}, containerBusinessError(err)
+		return capability.Result{}, containerBusinessErrorForBinding(binding, err)
 	}
 	data := map[string]any{
 		"engine":    string(result.Engine),
@@ -194,14 +239,14 @@ func (a *containersCapabilityAdapter) status(ctx context.Context, arguments map[
 	return capability.Result{Data: data}, nil
 }
 
-func (a *containersCapabilityAdapter) list(ctx context.Context, arguments map[string]any) (capability.Result, error) {
+func (a *containersCapabilityAdapter) list(ctx context.Context, binding capability.ExecutionBinding, arguments map[string]any) (capability.Result, error) {
 	var input listArguments
 	if err := decodeCapabilityArguments(arguments, &input); err != nil {
 		return capability.Result{}, err
 	}
 	result, err := a.containers.List(ctx, containers.ContainerListRequest{Engine: input.Engine, All: input.All})
 	if err != nil {
-		return capability.Result{}, containerBusinessError(err)
+		return capability.Result{}, containerBusinessErrorForBinding(binding, err)
 	}
 	items := make([]any, len(result.Containers))
 	for index, item := range result.Containers {
@@ -213,7 +258,7 @@ func (a *containersCapabilityAdapter) list(ctx context.Context, arguments map[st
 	}}, nil
 }
 
-func (a *containersCapabilityAdapter) inspect(ctx context.Context, arguments map[string]any) (capability.Result, error) {
+func (a *containersCapabilityAdapter) inspect(ctx context.Context, binding capability.ExecutionBinding, arguments map[string]any) (capability.Result, error) {
 	var input containerArguments
 	if err := decodeCapabilityArguments(arguments, &input); err != nil {
 		return capability.Result{}, err
@@ -223,7 +268,7 @@ func (a *containersCapabilityAdapter) inspect(ctx context.Context, arguments map
 		ContainerID: input.ContainerID,
 	})
 	if err != nil {
-		return capability.Result{}, containerBusinessError(err)
+		return capability.Result{}, containerBusinessErrorForBinding(binding, err)
 	}
 	return capability.Result{Data: map[string]any{
 		"engine":    string(result.Engine),
@@ -231,7 +276,7 @@ func (a *containersCapabilityAdapter) inspect(ctx context.Context, arguments map
 	}}, nil
 }
 
-func (a *containersCapabilityAdapter) startPreflight(ctx context.Context, arguments map[string]any) (capability.Result, error) {
+func (a *containersCapabilityAdapter) startPreflight(ctx context.Context, binding capability.ExecutionBinding, arguments map[string]any) (capability.Result, error) {
 	var input containerArguments
 	if err := decodeCapabilityArguments(arguments, &input); err != nil {
 		return capability.Result{}, err
@@ -241,7 +286,7 @@ func (a *containersCapabilityAdapter) startPreflight(ctx context.Context, argume
 		ContainerID: input.ContainerID,
 	})
 	if err != nil {
-		return capability.Result{}, containerBusinessError(err)
+		return capability.Result{}, containerBusinessErrorForBinding(binding, err)
 	}
 	return capability.Result{Data: projectStartPreflight(plan)}, nil
 }
@@ -311,6 +356,17 @@ func (a *containersCapabilityAdapter) containerOperation(method containers.Metho
 			_, err := a.containers.PullImage(ctx, containers.ImagePullRequest{Engine: input.Engine, ImageRef: input.ImageRef})
 			return err
 		}, nil
+	case containers.MethodContainersCreate,
+		containers.MethodPause,
+		containers.MethodUnpause,
+		containers.MethodKill,
+		containers.MethodImagesTag,
+		containers.MethodImagesRemove,
+		containers.MethodImagesPrune,
+		containers.MethodVolumesCreate,
+		containers.MethodVolumesRemove,
+		containers.MethodVolumesPrune:
+		return a.resourceOperation(method, arguments)
 	default:
 		return nil, nil, fmt.Errorf("%w: %q is not an operation method", containers.ErrInvalidMethod, method)
 	}
@@ -342,6 +398,30 @@ func (a *containersCapabilityAdapter) startLogStream(ctx context.Context, req ca
 		"engine":       string(input.Engine),
 		"container_id": input.ContainerID,
 		"subscribed":   true,
+	}}, nil
+}
+
+func (a *containersCapabilityAdapter) startStatsStream(ctx context.Context, req capability.Invocation) (capability.Result, error) {
+	if req.Execution.Operation == nil || req.Execution.Stream == nil || strings.TrimSpace(req.Execution.Operation.ID()) == "" || strings.TrimSpace(req.Execution.Stream.ID()) == "" {
+		return capability.Result{}, errors.New("containers stats stream sinks are required")
+	}
+	var input statsWatchArguments
+	if err := decodeCapabilityArguments(req.Arguments, &input); err != nil {
+		return capability.Result{}, err
+	}
+	if input.IntervalMS == 0 {
+		input.IntervalMS = 2_000
+	}
+	if input.IntervalMS < 1_000 || input.IntervalMS > 30_000 {
+		return capability.Result{}, errors.New("stats interval_ms must be between 1000 and 30000")
+	}
+	taskCtx, err := a.registerTask(ctx, req.Execution.Operation.ID(), req.Execution.TargetMethod)
+	if err != nil {
+		return capability.Result{}, err
+	}
+	go a.runStatsTask(taskCtx, req.Execution.ExecutionBinding, req.Execution.Operation, req.Execution.Stream, input)
+	return capability.Result{Data: map[string]any{
+		"engine": string(input.Engine), "container_id": input.ContainerID, "subscribed": true,
 	}}, nil
 }
 
@@ -382,10 +462,20 @@ func (a *containersCapabilityAdapter) unregisterTask(operationID string) {
 
 func (a *containersCapabilityAdapter) runOperationTask(ctx context.Context, binding capability.ExecutionBinding, sink capability.OperationSink, run func(context.Context) error) {
 	defer a.unregisterTask(sink.ID())
+	if err := sink.ReportProgress(ctx, capability.OperationProgress{Revision: 1, Phase: "running"}); err != nil {
+		terminalCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), a.terminalTimeout)
+		defer cancel()
+		a.recordTerminalResult(binding, sink.Fail(terminalCtx, capability.ExecutionFailurePlatformFailed, err))
+		return
+	}
 	err := runContainerTask(ctx, run)
 	terminalCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), a.terminalTimeout)
 	defer cancel()
 	if err == nil {
+		if progressErr := sink.ReportProgress(terminalCtx, capability.OperationProgress{Revision: 2, Phase: "finalizing"}); progressErr != nil {
+			a.recordTerminalResult(binding, sink.Fail(terminalCtx, capability.ExecutionFailurePlatformFailed, progressErr))
+			return
+		}
 		a.recordTerminalResult(binding, sink.Complete(terminalCtx))
 		return
 	}
@@ -393,7 +483,7 @@ func (a *containersCapabilityAdapter) runOperationTask(ctx context.Context, bind
 		a.recordTerminalResult(binding, sink.Cancel(terminalCtx, containerTaskCanceledReason))
 		return
 	}
-	a.recordTerminalResult(binding, sink.Fail(terminalCtx, capability.ExecutionFailureAdapterFailed, containerBusinessError(err)))
+	a.recordTerminalResult(binding, sink.Fail(terminalCtx, capability.ExecutionFailureAdapterFailed, containerBusinessErrorForBinding(binding, err)))
 }
 
 func (a *containersCapabilityAdapter) runLogTask(ctx context.Context, binding capability.ExecutionBinding, operation capability.OperationSink, stream capability.StreamSink, input logArguments) {
@@ -437,7 +527,45 @@ func (a *containersCapabilityAdapter) runLogTask(ctx context.Context, binding ca
 		a.recordTerminalResult(binding, operation.Cancel(terminalCtx, containerTaskCanceledReason))
 		return
 	}
-	a.recordTerminalResult(binding, stream.Fail(terminalCtx, capability.ExecutionFailureAdapterFailed, containerBusinessError(err)))
+	a.recordTerminalResult(binding, stream.Fail(terminalCtx, capability.ExecutionFailureAdapterFailed, containerBusinessErrorForBinding(binding, err)))
+}
+
+func (a *containersCapabilityAdapter) runStatsTask(ctx context.Context, binding capability.ExecutionBinding, operation capability.OperationSink, stream capability.StreamSink, input statsWatchArguments) {
+	defer a.unregisterTask(operation.ID())
+	run := func(taskCtx context.Context) error {
+		ticker := time.NewTicker(time.Duration(input.IntervalMS) * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			stats, err := a.containers.Stats(taskCtx, input.Engine, input.ContainerID)
+			if err != nil {
+				return err
+			}
+			projected, err := projectResourceValue(stats)
+			if err != nil {
+				return err
+			}
+			if err := stream.Append(taskCtx, projected); err != nil {
+				return err
+			}
+			select {
+			case <-taskCtx.Done():
+				return context.Cause(taskCtx)
+			case <-ticker.C:
+			}
+		}
+	}
+	err := runContainerTask(ctx, run)
+	terminalCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), a.terminalTimeout)
+	defer cancel()
+	if err == nil {
+		a.recordTerminalResult(binding, stream.Close(terminalCtx))
+		return
+	}
+	if containerTaskWasCanceled(ctx, operation.CancelRequested()) {
+		a.recordTerminalResult(binding, operation.Cancel(terminalCtx, containerTaskCanceledReason))
+		return
+	}
+	a.recordTerminalResult(binding, stream.Fail(terminalCtx, capability.ExecutionFailureAdapterFailed, containerBusinessErrorForBinding(binding, err)))
 }
 
 func (a *containersCapabilityAdapter) recordTerminalResult(binding capability.ExecutionBinding, err error) {
@@ -520,9 +648,10 @@ type containerActionArguments struct {
 }
 
 type removeArguments struct {
-	Engine      containers.Engine `json:"engine"`
-	ContainerID string            `json:"container_id"`
-	Force       bool              `json:"force,omitempty"`
+	Engine           containers.Engine `json:"engine"`
+	ContainerID      string            `json:"container_id"`
+	Force            bool              `json:"force,omitempty"`
+	ConfirmationName string            `json:"confirmation_name,omitempty"`
 }
 
 type logArguments struct {
@@ -531,6 +660,12 @@ type logArguments struct {
 	TailLines   int               `json:"tail_lines,omitempty"`
 	SinceUnixMS int64             `json:"since_unix_ms,omitempty"`
 	Follow      bool              `json:"follow,omitempty"`
+}
+
+type statsWatchArguments struct {
+	Engine      containers.Engine `json:"engine"`
+	ContainerID string            `json:"container_id"`
+	IntervalMS  int               `json:"interval_ms,omitempty"`
 }
 
 type imagePullArguments struct {
@@ -563,6 +698,9 @@ func projectContainerSummary(item containers.ContainerSummary) map[string]any {
 	if item.CreatedAtUnixMs > 0 {
 		data["created_at_unix_ms"] = item.CreatedAtUnixMs
 	}
+	if item.Health != "" {
+		data["health"] = item.Health
+	}
 	if len(item.Ports) > 0 {
 		ports := make([]any, len(item.Ports))
 		for index, port := range item.Ports {
@@ -585,6 +723,9 @@ func projectContainerInspect(item containers.ContainerInspect) map[string]any {
 	if item.CreatedAtUnixMs > 0 {
 		data["created_at_unix_ms"] = item.CreatedAtUnixMs
 	}
+	if item.Health != "" {
+		data["health"] = item.Health
+	}
 	if len(item.Ports) > 0 {
 		ports := make([]any, len(item.Ports))
 		for index, port := range item.Ports {
@@ -592,7 +733,74 @@ func projectContainerInspect(item containers.ContainerInspect) map[string]any {
 		}
 		data["ports"] = ports
 	}
+	data["runtime"] = projectRuntimeSummary(item.Runtime)
+	if len(item.Mounts) > 0 {
+		data["mounts"] = projectMountSummaries(item.Mounts)
+	}
+	if len(item.Devices) > 0 {
+		data["devices"] = projectDeviceSummaries(item.Devices)
+	}
 	return data
+}
+
+func projectRuntimeSummary(runtime containers.RuntimeSummary) map[string]any {
+	data := map[string]any{
+		"privileged": runtime.Privileged,
+		"env":        projectCountSummary(runtime.Env.Total, runtime.Env.PlainCount, runtime.Env.SecretLikeCount),
+		"labels":     projectCountSummary(runtime.Labels.Total, runtime.Labels.PlainCount, runtime.Labels.SecretLikeCount),
+	}
+	for key, value := range map[string]string{"network_mode": runtime.NetworkMode, "pid_mode": runtime.PIDMode, "ipc_mode": runtime.IPCMode, "restart_policy": runtime.RestartPolicy} {
+		if strings.TrimSpace(value) != "" {
+			data[key] = strings.TrimSpace(value)
+		}
+	}
+	if len(runtime.Mounts) > 0 {
+		data["mounts"] = projectMountSummaries(runtime.Mounts)
+	}
+	if len(runtime.Devices) > 0 {
+		data["devices"] = projectDeviceSummaries(runtime.Devices)
+	}
+	if len(runtime.CapAdd) > 0 {
+		data["cap_add"] = append([]string(nil), runtime.CapAdd...)
+	}
+	if len(runtime.CapDrop) > 0 {
+		data["cap_drop"] = append([]string(nil), runtime.CapDrop...)
+	}
+	return data
+}
+
+func projectCountSummary(total, plain, protected int) map[string]any {
+	return map[string]any{"total": total, "plain_count": plain, "protected_count": protected}
+}
+
+func projectMountSummaries(mounts []containers.MountSummary) []any {
+	out := make([]any, 0, len(mounts))
+	for _, mount := range mounts {
+		item := map[string]any{"type": string(mount.Type), "source_kind": string(mount.SourceKind), "read_only": mount.ReadOnly}
+		if mount.SensitivePath {
+			item["sensitive_path"] = true
+		}
+		if mount.ContainerSocket {
+			item["container_socket"] = true
+		}
+		out = append(out, item)
+	}
+	return out
+}
+
+func projectDeviceSummaries(devices []containers.DeviceSummary) []any {
+	out := make([]any, 0, len(devices))
+	for _, device := range devices {
+		item := map[string]any{}
+		if strings.TrimSpace(device.Permissions) != "" {
+			item["permissions"] = strings.TrimSpace(device.Permissions)
+		}
+		if device.SensitivePath {
+			item["sensitive_path"] = true
+		}
+		out = append(out, item)
+	}
+	return out
 }
 
 func projectImage(image containers.ImageSummary) map[string]any {
@@ -697,6 +905,36 @@ func containerBusinessError(cause error) error {
 	} else if errors.Is(cause, containers.ErrLogsUnavailable) {
 		code = "CONTAINER_LOGS_UNAVAILABLE"
 		message = "Container logs are unavailable"
+	} else if errors.Is(cause, containers.ErrResourceCapabilityUnsupported) {
+		code = "CONTAINER_RESOURCE_UNSUPPORTED"
+		message = "The selected resource operation is unsupported"
+	} else if errors.Is(cause, containers.ErrImageNotFound) {
+		code = "CONTAINER_IMAGE_NOT_FOUND"
+		message = "The requested image does not exist"
+	} else if errors.Is(cause, containers.ErrImageReferenced) {
+		code = "CONTAINER_IMAGE_IN_USE"
+		message = "The image is referenced by one or more containers"
+		var referenced *containers.ImageReferencedError
+		if errors.As(cause, &referenced) {
+			details = map[string]any{"image": strings.TrimSpace(referenced.Image), "referenced_containers": float64(referenced.References)}
+		}
+	} else if errors.Is(cause, containers.ErrVolumeInUse) {
+		code = "CONTAINER_VOLUME_IN_USE"
+		message = "The volume is attached to a container"
+		var inUse *containers.VolumeInUseError
+		if errors.As(cause, &inUse) {
+			details = map[string]any{"name": strings.TrimSpace(inUse.Name), "referenced_containers": float64(inUse.References)}
+		}
+	} else if errors.Is(cause, containers.ErrContainerRunning) {
+		code = "CONTAINER_RUNNING"
+		message = "The running container requires an explicit force-removal plan"
+		var running *containers.ContainerRunningError
+		if errors.As(cause, &running) {
+			details = map[string]any{"container_id": strings.TrimSpace(running.ContainerID), "container_name": strings.TrimSpace(running.ContainerName)}
+		}
+	} else if errors.Is(cause, containers.ErrResourcePlanStale) {
+		code = "CONTAINER_PLAN_STALE"
+		message = "The requested operation plan is stale"
 	}
 	businessError, err := capability.NewBusinessError(code, message, details)
 	if err != nil {

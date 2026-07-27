@@ -137,6 +137,28 @@ test('allows only the exact Desktop preload bootstrap and QR paper surface', () 
   ]);
 });
 
+test('plugin protocol fallbacks require the exact path and named palette blocks', () => {
+  const pluginContextPath = 'internal/envapp/ui_src/src/ui/plugins/pluginSurfaceContext.ts';
+  const source = [
+    'const lightSurfaceColorFallbacks = {',
+    "  canvas: '#f4f1ed',",
+    '};',
+    "const unrelatedPalette = { canvas: '#123456' };",
+    'const darkSurfaceColorFallbacks = {',
+    "  canvas: '#171b22',",
+    '};',
+  ].join('\n');
+
+  assert.deepEqual(findThemeColorViolations(source, pluginContextPath, THEME_COLOR_EXCEPTIONS), [
+    `${pluginContextPath}:4: replace #123456 with a semantic theme token or add a precise owner/path/use exception`,
+  ]);
+  assert.equal(findThemeColorViolations(
+    source,
+    'internal/envapp/ui_src/src/ui/plugins/OtherSurface.ts',
+    THEME_COLOR_EXCEPTIONS,
+  ).length, 3);
+});
+
 test('theme-source exceptions require exact Classic selectors or global neutral source tokens', () => {
   const declaration = [
     ":root[data-floe-shell-theme='classic-light'],",

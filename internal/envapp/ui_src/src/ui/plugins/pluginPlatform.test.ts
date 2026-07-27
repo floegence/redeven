@@ -45,6 +45,7 @@ function createHost(id: string, order?: string[]): PluginSurfaceHost {
     element: document.createElement('iframe'),
     surfaceInstanceId: id,
     sendLifecycle: vi.fn((event) => order?.push(`lifecycle:${event.type}`)),
+    updateContext: vi.fn(),
     close: vi.fn(async () => ({
       quiesce: { outcome: 'acknowledged' as const, durationMs: 1 },
       revokeDurationMs: 1,

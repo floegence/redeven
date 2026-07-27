@@ -99,7 +99,7 @@ func TestAdapterActionsLogsAndPullUseBusinessClient(t *testing.T) {
 			"docker:container_123": {Engine: EngineDocker, ContainerID: "container_123", Lines: []LogLine{{TimestampUnixMs: 1704067200000, Message: "ready"}}},
 		},
 		pulls: map[string]EngineImageResult{
-			"docker:ghcr.io/acme/api:latest": {Engine: EngineDocker, Image: ImageInput{Reference: "ghcr.io/acme/api:latest", Digest: "sha256:feedface"}, Completed: true},
+			"docker:ghcr.io/acme/api:latest": {Engine: EngineDocker, Image: ImageInput{Reference: "ghcr.io/acme/api:latest", Digest: testSHA256Digest}, Completed: true},
 		},
 	}
 	adapter := mustNewAdapter(t, client)
@@ -164,6 +164,25 @@ func TestBuildResourcePlanProducesStableDigest(t *testing.T) {
 	}
 	if first.PlanDigest == "" || first.PlanDigest != second.PlanDigest || !strings.HasPrefix(first.PlanDigest, "sha256:") {
 		t.Fatalf("plan digests = %q and %q", first.PlanDigest, second.PlanDigest)
+	}
+}
+
+func TestResourceCapabilityMethodCatalogIsClosedAndComplete(t *testing.T) {
+	methods := Methods()
+	if len(methods) != 34 {
+		t.Fatalf("Methods() count = %d, want 34", len(methods))
+	}
+	seen := make(map[Method]struct{}, len(methods))
+	for _, method := range methods {
+		if _, exists := seen[method]; exists {
+			t.Fatalf("Methods() contains duplicate %q", method)
+		}
+		seen[method] = struct{}{}
+	}
+	for _, required := range []Method{MethodContainersStatsWatch, MethodImagesRemovePreflight, MethodImagesPrunePreflight, MethodVolumesPrunePreflight} {
+		if _, exists := seen[required]; !exists {
+			t.Fatalf("Methods() is missing %q", required)
+		}
 	}
 }
 

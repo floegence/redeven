@@ -7,6 +7,7 @@ import { Show, createEffect, createSignal, onCleanup, onMount, type JSX } from '
 import { useI18n } from '../i18n';
 import type { PluginConfirmationOwner, PluginConfirmationQueue } from './PluginConfirmationQueue';
 import type { PluginSurfaceInteractionEvent, PluginSurfacePlacementCoordinator } from './pluginPlatform';
+import { createRedevenPluginSurfaceContext, pluginSurfaceContextFingerprint } from './pluginSurfaceContext';
 import type { PluginSurfaceLaunchTarget } from './pluginTypes';
 
 export type PluginSurfaceBodyProps = {
@@ -27,6 +28,11 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
   let slot: PluginSurfaceSlot | undefined;
   let mounted = true;
   let closePromise: Promise<boolean> | undefined;
+  let themeObserver: MutationObserver | undefined;
+  let surfaceContextRevision = 1;
+  let currentSurfaceContext = createRedevenPluginSurfaceContext(surfaceContextRevision, i18n.locale());
+  let currentSurfaceContextFingerprint = pluginSurfaceContextFingerprint(currentSurfaceContext);
+  const initialSurfaceContextRevision = currentSurfaceContext.revision;
   const [host, setHost] = createSignal<PluginSurfaceHost>();
   const [pageVisible, setPageVisible] = createSignal(!document.hidden);
   const [loadState, setLoadState] = createSignal<SurfaceLoadState>('opening');
@@ -52,6 +58,22 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
       },
     });
     const ownedSlot = slot;
+    const refreshSurfaceContext = () => {
+      const candidate = createRedevenPluginSurfaceContext(surfaceContextRevision + 1, i18n.locale());
+      const fingerprint = pluginSurfaceContextFingerprint(candidate);
+      if (fingerprint === currentSurfaceContextFingerprint) return;
+      surfaceContextRevision += 1;
+      currentSurfaceContext = { ...candidate, revision: surfaceContextRevision };
+      currentSurfaceContextFingerprint = fingerprint;
+      host()?.updateContext(currentSurfaceContext);
+    };
+    if (typeof MutationObserver === 'function') {
+      themeObserver = new MutationObserver(refreshSurfaceContext);
+      themeObserver.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ['class', 'dir', 'lang', 'style', 'data-theme', 'data-floe-shell-theme'],
+      });
+    }
     props.coordinator.setVisible(ownedSlot, props.visible && pageVisible());
     void props.coordinator.open(ownedSlot, {
       plugin_instance_id: props.target.pluginInstanceID,
@@ -60,6 +82,7 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
     }, {
       confirm: props.confirmationQueue.createHandler(confirmationOwner),
       onInteraction: props.onInteraction,
+      surfaceContext: currentSurfaceContext,
       onError(error) {
         if (!mounted) return;
         setLoadState('error');
@@ -73,6 +96,9 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
       if (!mounted) return;
       openedHost.element.dataset.pluginSurfaceIframe = '';
       setHost(openedHost);
+      if (currentSurfaceContext.revision > initialSurfaceContextRevision) {
+        openedHost.updateContext(currentSurfaceContext);
+      }
       setLoadState('ready');
     }).catch((error: unknown) => {
       if (!mounted) return;
@@ -84,9 +110,21 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
       mounted = false;
       props.registerClose?.(null);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      themeObserver?.disconnect();
       props.confirmationQueue.cancelOwner(confirmationOwner);
       void props.coordinator.release(ownedSlot).catch(props.onRetirementError);
     });
+  });
+
+  createEffect(() => {
+    const languageTag = i18n.locale();
+    const candidate = createRedevenPluginSurfaceContext(surfaceContextRevision + 1, languageTag);
+    const fingerprint = pluginSurfaceContextFingerprint(candidate);
+    if (fingerprint === currentSurfaceContextFingerprint) return;
+    surfaceContextRevision += 1;
+    currentSurfaceContext = { ...candidate, revision: surfaceContextRevision };
+    currentSurfaceContextFingerprint = fingerprint;
+    host()?.updateContext(currentSurfaceContext);
   });
 
   createEffect(() => {

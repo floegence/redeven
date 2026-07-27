@@ -51,7 +51,7 @@ func TestBuildStartPreflightPlanRedactsSensitiveDataAndFlagsRisks(t *testing.T) 
 func TestBuildStartPreflightPlanProducesStableOwnedSummaries(t *testing.T) {
 	input := StartPreflightInput{
 		Engine: EnginePodman, ContainerID: "container_9", ContainerName: "worker",
-		Image: ImageInput{Reference: "registry.example/worker@sha256:feed", Digest: "sha256:feed"},
+		Image: ImageInput{Reference: "registry.example/worker@" + testSHA256Digest, Digest: testSHA256Digest},
 		Runtime: RuntimeInput{
 			Env: []string{"B=2", "A=1"}, Labels: map[string]string{"team": "infra"},
 			Mounts: []MountInput{

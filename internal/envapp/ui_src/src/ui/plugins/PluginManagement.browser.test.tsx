@@ -366,6 +366,7 @@ function browserCoordinator(): PluginSurfacePlacementCoordinator {
         element: iframe,
         surfaceInstanceId: 'surface_browser_activity',
         sendLifecycle: () => undefined,
+        updateContext: () => undefined,
         close: async () => ({
           quiesce: { outcome: 'acknowledged', durationMs: 0 },
           revokeDurationMs: 0,

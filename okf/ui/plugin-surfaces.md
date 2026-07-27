@@ -4,6 +4,7 @@ title: Plugin surfaces
 description: Env App manages official and external plugins through an accessible Launcher, searchable category discovery, exact inventory identities, explicit review, SDK-owned surfaces, Activity windows, and Workbench widgets.
 tags: [ui, plugins, activity, workbench, plugin-center]
 timestamp: 2026-07-24T00:00:00Z
+quality_exception: Cross-surface UI contract spanning exact plugin identity, Launcher discovery, Center governance, Activity placement, and Workbench placement.
 ---
 # Summary
 

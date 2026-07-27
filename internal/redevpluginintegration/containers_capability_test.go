@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -56,7 +58,7 @@ func TestContainersCapabilitySyncResponsesMatchSignedContract(t *testing.T) {
 		status: containers.EngineStatus{Engine: containers.EngineDocker, Available: true, Version: "27.1.0"},
 		containers: []containers.EngineContainer{{
 			Engine: containers.EngineDocker, ContainerID: "container_1", Name: "api",
-			Image: containers.ImageInput{Reference: "ghcr.io/acme/api:latest", Digest: "sha256:feed"},
+			Image: containers.ImageInput{Reference: "ghcr.io/acme/api:latest", Digest: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"},
 			State: containers.ContainerStateRunning, CreatedAtUnixMs: 1704067200000,
 			Ports: []containers.PortSummary{{Protocol: "tcp", HostPort: 8080, Port: 80}},
 		}},
@@ -198,6 +200,56 @@ func TestContainersCapabilityOperationUsesHostOwnedSink(t *testing.T) {
 	}
 	if terminal := waitTerminal(t, sink.terminal); terminal != "completed" {
 		t.Fatalf("operation terminal = %q", terminal)
+	}
+	first := <-sink.progress
+	second := <-sink.progress
+	if first.Revision != 1 || first.Phase != "running" || second.Revision != 2 || second.Phase != "finalizing" {
+		t.Fatalf("operation progress = %#v, %#v", first, second)
+	}
+}
+
+func TestContainersV3ResourceProjectionAndOperationMatchCandidateContract(t *testing.T) {
+	client := &extendedCapabilityEngineClient{
+		capabilityEngineClient: &capabilityEngineClient{},
+		images:                 []containers.ImageRecord{{ID: "sha256:image", Tags: []string{"api:latest"}, ReferencedContainers: 1}},
+		volumes:                []containers.VolumeRecord{{Name: "data", Driver: "local", ReferencedContainers: 1}},
+	}
+	adapter := newTestContainersCapabilityAdapter(client)
+
+	for _, test := range []struct {
+		method    containers.Method
+		arguments map[string]any
+	}{
+		{method: containers.MethodContainersStatsSnapshot, arguments: map[string]any{"engine": "docker", "container_id": "container_1"}},
+		{method: containers.MethodImagesList, arguments: map[string]any{"engine": "docker"}},
+		{method: containers.MethodImagesPrunePreflight, arguments: map[string]any{"engine": "docker"}},
+		{method: containers.MethodVolumesList, arguments: map[string]any{"engine": "docker"}},
+		{method: containers.MethodVolumesPrunePreflight, arguments: map[string]any{"engine": "docker"}},
+	} {
+		result, err := adapter.Invoke(context.Background(), capability.Invocation{
+			Execution: capability.ExecutionContext{ExecutionBinding: capability.ExecutionBinding{TargetMethod: string(test.method)}},
+			Arguments: test.arguments,
+		})
+		if err != nil {
+			t.Fatalf("Invoke(%s) error = %v", test.method, err)
+		}
+		validateContainersV3CandidateResponse(t, string(test.method), result.Data)
+	}
+
+	sink := newTestOperationSink("operation_pause")
+	result, err := adapter.Invoke(context.Background(), capability.Invocation{
+		Execution: capability.ExecutionContext{
+			ExecutionBinding: capability.ExecutionBinding{TargetMethod: string(containers.MethodPause)},
+			Operation:        sink,
+		},
+		Arguments: map[string]any{"engine": "docker", "container_id": "container_1"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	validateContainersV3CandidateResponse(t, string(containers.MethodPause), result.Data)
+	if terminal := waitTerminal(t, sink.terminal); terminal != "completed" {
+		t.Fatalf("pause operation terminal = %q", terminal)
 	}
 }
 
@@ -441,6 +493,33 @@ func verifiedContainersContract(t *testing.T) capabilitycontract.VerifiedContrac
 	return verified
 }
 
+func validateContainersV3CandidateResponse(t *testing.T, method string, value any) {
+	t.Helper()
+	contractPath := filepath.Join("..", "..", "spec", "capabilities", "container-resources-v3.contract.json")
+	raw, err := os.ReadFile(contractPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var contract capabilitycontract.Contract
+	if err := json.Unmarshal(raw, &contract); err != nil {
+		t.Fatal(err)
+	}
+	for _, candidate := range contract.Methods {
+		if candidate.Name != method {
+			continue
+		}
+		prepared, err := capability.PrepareResponseData(value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := capabilitycontract.ValidateValue(candidate.ResponseSchema, prepared); err != nil {
+			t.Fatalf("candidate response for %s does not match v3 contract: %v\n%#v", method, err, prepared)
+		}
+		return
+	}
+	t.Fatalf("candidate contract method %q not found", method)
+}
+
 func mustPreparedResponse(t *testing.T, value any) string {
 	t.Helper()
 	prepared, err := capability.PrepareResponseData(value)
@@ -461,6 +540,97 @@ type capabilityEngineClient struct {
 	action     func(context.Context, containers.EngineActionRequest) (containers.EngineActionResult, error)
 	inspectErr error
 	logsErr    error
+}
+
+type extendedCapabilityEngineClient struct {
+	*capabilityEngineClient
+	images               []containers.ImageRecord
+	volumes              []containers.VolumeRecord
+	prunedImageRequests  []containers.ResourcePruneRequest
+	prunedVolumeRequests []containers.ResourcePruneRequest
+}
+
+func (c *extendedCapabilityEngineClient) CreateContainer(_ context.Context, req containers.ContainerCreateRequest) (containers.ContainerActionResponse, error) {
+	return containers.ContainerActionResponse{Engine: req.Engine, Method: containers.MethodContainersCreate, ContainerID: "container_new", Completed: true}, nil
+}
+
+func (c *extendedCapabilityEngineClient) Stats(_ context.Context, _ containers.Engine, containerID string) (containers.ContainerStats, error) {
+	return containers.ContainerStats{ContainerID: containerID, CPUPercent: 1.5, MemoryBytes: 1024, MemoryLimit: 2048}, nil
+}
+
+func (c *extendedCapabilityEngineClient) ListImages(context.Context, containers.Engine) ([]containers.ImageRecord, error) {
+	return append([]containers.ImageRecord(nil), c.images...), nil
+}
+
+func (c *extendedCapabilityEngineClient) InspectImage(context.Context, containers.Engine, string) (containers.ImageRecord, error) {
+	return c.images[0], nil
+}
+
+func (c *extendedCapabilityEngineClient) HistoryImage(context.Context, containers.Engine, string) ([]containers.ImageHistoryEntry, error) {
+	return []containers.ImageHistoryEntry{{ID: "layer_1", SizeBytes: 512}}, nil
+}
+
+func (c *extendedCapabilityEngineClient) TagImage(context.Context, containers.ImageTagRequest) error {
+	return nil
+}
+
+func (c *extendedCapabilityEngineClient) RemoveImage(context.Context, containers.ImageRemoveRequest) error {
+	return nil
+}
+
+func (c *extendedCapabilityEngineClient) PruneImages(_ context.Context, req containers.ResourcePruneRequest) error {
+	c.prunedImageRequests = append(c.prunedImageRequests, req)
+	removed := make(map[string]struct{}, len(req.ResourceIdentities))
+	for _, identity := range req.ResourceIdentities {
+		removed[identity] = struct{}{}
+	}
+	kept := c.images[:0]
+	for _, item := range c.images {
+		identity := item.Digest
+		if identity == "" {
+			identity = item.ID
+		}
+		if identity == "" {
+			identity = item.Reference
+		}
+		if _, exists := removed[identity]; !exists {
+			kept = append(kept, item)
+		}
+	}
+	c.images = kept
+	return nil
+}
+
+func (c *extendedCapabilityEngineClient) ListVolumes(context.Context, containers.Engine) ([]containers.VolumeRecord, error) {
+	return append([]containers.VolumeRecord(nil), c.volumes...), nil
+}
+
+func (c *extendedCapabilityEngineClient) InspectVolume(context.Context, containers.Engine, string) (containers.VolumeRecord, error) {
+	return c.volumes[0], nil
+}
+
+func (c *extendedCapabilityEngineClient) CreateVolume(_ context.Context, req containers.VolumeCreateRequest) (containers.VolumeRecord, error) {
+	return containers.VolumeRecord{Name: req.Name, Driver: req.Driver}, nil
+}
+
+func (c *extendedCapabilityEngineClient) RemoveVolume(context.Context, containers.VolumeRemoveRequest) error {
+	return nil
+}
+
+func (c *extendedCapabilityEngineClient) PruneVolumes(_ context.Context, req containers.ResourcePruneRequest) error {
+	c.prunedVolumeRequests = append(c.prunedVolumeRequests, req)
+	removed := make(map[string]struct{}, len(req.ResourceIdentities))
+	for _, identity := range req.ResourceIdentities {
+		removed[identity] = struct{}{}
+	}
+	kept := c.volumes[:0]
+	for _, item := range c.volumes {
+		if _, exists := removed[item.Name]; !exists {
+			kept = append(kept, item)
+		}
+	}
+	c.volumes = kept
+	return nil
 }
 
 func (c *capabilityEngineClient) Status(_ context.Context, engine containers.Engine) (containers.EngineStatus, error) {
@@ -511,16 +681,22 @@ func (c *capabilityEngineClient) PullImage(_ context.Context, engine containers.
 type testOperationSink struct {
 	id              string
 	terminal        chan string
+	progress        chan capability.OperationProgress
 	cancelRequested chan struct{}
 	completeErr     error
 	complete        func(context.Context) error
 }
 
 func newTestOperationSink(id string) *testOperationSink {
-	return &testOperationSink{id: id, terminal: make(chan string, 1), cancelRequested: make(chan struct{})}
+	return &testOperationSink{id: id, terminal: make(chan string, 1), progress: make(chan capability.OperationProgress, 4), cancelRequested: make(chan struct{})}
 }
 
 func (s *testOperationSink) ID() string { return s.id }
+
+func (s *testOperationSink) ReportProgress(_ context.Context, progress capability.OperationProgress) error {
+	s.progress <- progress
+	return nil
+}
 
 func (s *testOperationSink) Complete(ctx context.Context) error {
 	if s.complete != nil {

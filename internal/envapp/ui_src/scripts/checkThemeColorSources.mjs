@@ -37,6 +37,7 @@ const EXCEPTION_OWNERS = new Set([
   'terminal',
   'syntax',
   'diagram',
+  'plugin-protocol',
   'persisted',
   'desktop-fallback',
 ]);
@@ -118,6 +119,16 @@ function isInsideNamedFunction(source, offset, functionName) {
 // Exceptions are deliberately scoped by path and source context. A whole file or
 // directory must never be exempted merely because it currently contains one valid color source.
 export const THEME_COLOR_EXCEPTIONS = Object.freeze([
+  exception(
+    'internal/envapp/ui_src/src/ui/plugins/pluginSurfaceContext.ts',
+    'plugin-protocol',
+    'The cross-origin plugin context requires concrete hex fallbacks before computed Redeven theme tokens are available.',
+    ({ source, offset }) => ['lightSurfaceColorFallbacks', 'darkSurfaceColorFallbacks'].some((name) => {
+      const start = source.indexOf(`const ${name}`);
+      const end = source.indexOf('\n};', start);
+      return start >= 0 && end > start && offset > start && offset < end;
+    }),
+  ),
   exception(
     'desktop/src/preload/windowTheme.ts',
     'desktop-fallback',

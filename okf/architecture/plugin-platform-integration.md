@@ -1,13 +1,14 @@
 ---
 type: Architecture Contract
 title: Plugin platform integration
-description: Redeven mounts ReDevPlugin v0.6.19 and adds authenticated host modules, copied-root recovery, external-source policy, product placement, and business adapters.
+description: Redeven mounts ReDevPlugin v0.6.20 and adds authenticated host modules, copied-root recovery, external-source policy, product placement, and business adapters.
 tags: [architecture, plugins, local-ui, redevplugin]
 timestamp: 2026-07-25T00:00:00Z
+quality_exception: Cross-domain host integration contract spanning identity, security, runtime, storage, routes, surfaces, and business adapters.
 ---
 # Summary
 
-Redeven integrates ReDevPlugin `v0.6.19` through one Go Host, one canonical HTTP
+Redeven integrates ReDevPlugin `v0.6.20` through one Go Host, one canonical HTTP
 namespace, one Env App `PluginPlatformClient`, one shared surface scope, and the
 released ProcessManager over a verified Redeven-built Linux runtime. Redeven
 adds authenticated session mapping, public-source admission policy, product
@@ -139,7 +140,7 @@ user pin.
 ## Runtime and Containers
 
 The runtime module binds the canonical sibling executable, target, ReDevPlugin
-`0.6.19`, released Rust IPC and WASM ABI, exact product-build descriptor, lease
+`0.6.20`, released Rust IPC and WASM ABI, exact product-build descriptor, lease
 replay storage, and released limits. Linux runtime bytes are built with Rust
 1.88.0 from the attested package set and travel with SBOM, provenance, notices,
 and signature evidence. Missing, non-canonical, wrong-target, unsigned, or
@@ -164,6 +165,13 @@ mutation carries its current management and applicable policy/revoke revisions;
 committed and unknown management outcomes rely on Host revocation followed by
 the SDK's scope teardown, then refresh state without a second slot-close path or
 blind mutation retry.
+
+Every opened surface receives the released `redevplugin.surface_context.v1`
+with a monotonic revision, semantic light/dark palette, language tag, and text
+direction. Env App observes locale and shell-theme changes, calls the released
+slot host `updateContext` for the same iframe, and never remounts a surface to
+apply appearance. Context revision starts at one for each fresh slot; duplicate
+appearance or locale projections do not increment it.
 
 The inventory projects official catalog entries and every installed instance as
 separate records. Navigation, tile selection, and detail state use exact
@@ -208,7 +216,7 @@ disposal alone is not revocation evidence.
 # Boundaries
 
 Canonical ownership is defined by [ReDevPlugin host integration boundary](redevplugin-boundary.md).
-This concept owns only Redeven's concrete `v0.6.19` assembly.
+This concept owns only Redeven's concrete `v0.6.20` assembly.
 
 Manifest surfaces remain `view|command|background` with semantic roles. Activity,
 Workbench, window, widget, inventory key, navigation, settings, and product layout
@@ -225,6 +233,7 @@ never become manifest fields.
 - `redeven:internal/redevpluginintegration/session_adapter.go:340` - Maps read and admin external-package actions to explicit product permissions.
 - `redeven:internal/redevpluginintegration/runtime_module.go:1` - Configures the released runtime manager and fixed version.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts:1` - Uses generated lifecycle, external-package, and permission-requirement APIs.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/pluginSurfaceContext.ts:1` - Projects semantic shell appearance and locale into the released revisioned surface context.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginInventoryProjection.ts:1` - Projects exact inventory identities, trust, provenance, grants, and requirements.
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:1120` - Coordinates exact inventory navigation and placement handoff.
 - `redeven:internal/envapp/ui_src/src/ui/workbench/EnvWorkbenchPage.tsx:2150` - Persists and reconciles plugin Workbench widgets.

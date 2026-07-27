@@ -32,6 +32,8 @@ afterEach(() => {
   dispose?.();
   dispose = undefined;
   document.body.innerHTML = '';
+  document.documentElement.classList.remove('dark', 'light');
+  document.documentElement.removeAttribute('data-floe-shell-theme');
   vi.restoreAllMocks();
 });
 
@@ -41,6 +43,7 @@ function createHost(): PluginSurfaceHost {
     element,
     surfaceInstanceId: 'surface_instance_1',
     sendLifecycle: vi.fn(),
+    updateContext: vi.fn(),
     close: vi.fn(async () => ({
       quiesce: { outcome: 'acknowledged' as const, durationMs: 1 },
       revokeDurationMs: 1,
@@ -113,6 +116,12 @@ describe('PluginSurfaceBody', () => {
       expect.objectContaining({
         confirm: expect.any(Function),
         onError: expect.any(Function),
+        surfaceContext: expect.objectContaining({
+          schema_version: 'redevplugin.surface_context.v1',
+          revision: 1,
+          appearance: expect.objectContaining({ color_scheme: 'light' }),
+          locale: { language_tag: 'en-US', direction: 'ltr' },
+        }),
       }),
     );
     expect(confirmationQueue.createHandler).toHaveBeenCalledWith(expect.objectContaining({
@@ -131,6 +140,37 @@ describe('PluginSurfaceBody', () => {
     expect(mount.querySelector('[data-plugin-surface-stage]')?.className).toContain('[&>iframe]:h-full');
     expect(host.sendLifecycle).toHaveBeenCalledWith({ type: 'visible' });
     expect(mount.querySelector('[data-plugin-surface-host]')?.getAttribute('data-surface-instance-id')).toBe('surface_instance_1');
+  });
+
+  it('updates theme context in the existing iframe with monotonically increasing revisions', async () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    const host = createHost();
+    const coordinator = createCoordinator(host);
+
+    dispose = render(() => (
+      <PluginSurfaceBody
+        coordinator={coordinator}
+        confirmationQueue={createConfirmationQueue()}
+        target={target}
+        visible
+        onRetirementError={vi.fn()}
+      />
+    ), mount);
+    await flushAsync();
+
+    document.documentElement.classList.add('dark');
+    await flushAsync();
+
+    expect(host.updateContext).toHaveBeenCalledWith(expect.objectContaining({
+      revision: 2,
+      appearance: expect.objectContaining({ color_scheme: 'dark' }),
+    }));
+    expect(coordinator.open).toHaveBeenCalledOnce();
+
+    document.documentElement.dataset.floeShellTheme = 'classic-dark';
+    await flushAsync();
+    expect(host.updateContext).toHaveBeenCalledTimes(1);
   });
 
   it('publishes an explicit initial hidden state and follows placement visibility', async () => {

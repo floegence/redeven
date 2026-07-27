@@ -8,7 +8,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
+	"os"
 	"os/exec"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -55,7 +58,7 @@ func (c *CLIClient) Status(ctx context.Context, engine Engine) (EngineStatus, er
 	raw, err := c.run(ctx, engine, "version", "--format", "{{json .}}")
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) ||
-			errors.Is(err, ErrCLIUnavailable) || errors.Is(err, ErrEngineTimeout) {
+			errors.Is(err, ErrCLIUnavailable) || errors.Is(err, ErrDaemonStopped) || errors.Is(err, ErrPermissionDenied) || errors.Is(err, ErrEngineTimeout) {
 			return EngineStatus{Engine: engine}, err
 		}
 		return EngineStatus{Engine: engine}, fmt.Errorf("%w: %s", ErrBackendUnreachable, engine)
@@ -84,8 +87,8 @@ func (c *CLIClient) Inspect(ctx context.Context, engine Engine, containerID stri
 		return EngineContainer{}, err
 	}
 	containerID = strings.TrimSpace(containerID)
-	if containerID == "" {
-		return EngineContainer{}, errors.New("container_id is required")
+	if err := validateContainerIdentifier(containerID); err != nil {
+		return EngineContainer{}, err
 	}
 	raw, err := c.run(ctx, engine, "inspect", containerID)
 	if err != nil {
@@ -116,8 +119,8 @@ func (c *CLIClient) TailLogs(ctx context.Context, req EngineLogsRequest) (Engine
 		return EngineLogsResult{}, err
 	}
 	containerID := strings.TrimSpace(req.ContainerID)
-	if containerID == "" {
-		return EngineLogsResult{}, errors.New("container_id is required")
+	if err := validateContainerIdentifier(containerID); err != nil {
+		return EngineLogsResult{}, err
 	}
 	if req.Follow {
 		return EngineLogsResult{}, ErrLogsFollowUnsupported
@@ -147,8 +150,8 @@ func (c *CLIClient) FollowLogs(ctx context.Context, req EngineLogsRequest, sink 
 		return err
 	}
 	containerID := strings.TrimSpace(req.ContainerID)
-	if containerID == "" {
-		return errors.New("container_id is required")
+	if err := validateContainerIdentifier(containerID); err != nil {
+		return err
 	}
 	if sink == nil {
 		return errors.New("logs stream sink is required")
@@ -180,8 +183,8 @@ func (c *CLIClient) PullImage(ctx context.Context, engine Engine, imageRef strin
 		return EngineImageResult{}, err
 	}
 	imageRef = strings.TrimSpace(imageRef)
-	if imageRef == "" {
-		return EngineImageResult{}, errors.New("image_ref is required")
+	if err := validateImageReference(imageRef); err != nil {
+		return EngineImageResult{}, err
 	}
 	raw, err := c.run(ctx, engine, "pull", imageRef)
 	if err != nil {
@@ -298,6 +301,23 @@ func normalizeTailLines(value int) (int, error) {
 
 type execRunner struct{}
 
+const maxCommandStderrBytes = 64 * 1024
+
+type boundedCommandStderr struct {
+	data []byte
+}
+
+func (w *boundedCommandStderr) Write(value []byte) (int, error) {
+	remaining := maxCommandStderrBytes - len(w.data)
+	if remaining > 0 {
+		if len(value) < remaining {
+			remaining = len(value)
+		}
+		w.data = append(w.data, value[:remaining]...)
+	}
+	return len(value), nil
+}
+
 func (execRunner) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
 	if _, err := exec.LookPath(name); err != nil {
 		return nil, fmt.Errorf("%w: %s", ErrCLIUnavailable, name)
@@ -308,12 +328,16 @@ func (execRunner) Run(ctx context.Context, name string, args ...string) ([]byte,
 	cmd.Cancel = func() error {
 		return terminateCommandProcessTree(cmd)
 	}
+	var stderr boundedCommandStderr
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, errors.New("container command stdout pipe failed")
 	}
-	cmd.Stderr = io.Discard
+	cmd.Stderr = &stderr
 	if err := cmd.Start(); err != nil {
+		if errors.Is(err, os.ErrPermission) {
+			return nil, ErrPermissionDenied
+		}
 		return nil, errors.New("container command start failed")
 	}
 	out, readErr := io.ReadAll(io.LimitReader(stdout, maxCommandOutputBytes+1))
@@ -338,7 +362,7 @@ func (execRunner) Run(ctx context.Context, name string, args ...string) ([]byte,
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return nil, ctxErr
 		}
-		return nil, classifyCommandFailure(args, waitErr)
+		return nil, classifyCommandFailure(args, waitErr, stderr.data)
 	}
 	return out, nil
 }
@@ -356,12 +380,16 @@ func (execRunner) Stream(ctx context.Context, name string, args []string, onStdo
 	cmd.Cancel = func() error {
 		return terminateCommandProcessTree(cmd)
 	}
+	var stderr boundedCommandStderr
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return err
 	}
-	cmd.Stderr = io.Discard
+	cmd.Stderr = &stderr
 	if err := cmd.Start(); err != nil {
+		if errors.Is(err, os.ErrPermission) {
+			return ErrPermissionDenied
+		}
 		return err
 	}
 	scanner := bufio.NewScanner(stdout)
@@ -392,7 +420,7 @@ func (execRunner) Stream(ctx context.Context, name string, args []string, onStdo
 		return ctxErr
 	}
 	if waitErr != nil {
-		return classifyCommandFailure(args, waitErr)
+		return classifyCommandFailure(args, waitErr, stderr.data)
 	}
 	return nil
 }
@@ -405,7 +433,29 @@ func isCommandNotFound(err error) bool {
 	return errors.As(err, &execError)
 }
 
-func classifyCommandFailure(args []string, cause error) error {
+func classifyCommandFailure(args []string, cause error, stderr ...[]byte) error {
+	if errors.Is(cause, os.ErrPermission) {
+		return ErrPermissionDenied
+	}
+	detail := ""
+	if len(stderr) > 0 {
+		detail = strings.ToLower(string(stderr[0]))
+	}
+	for _, marker := range []string{"permission denied while trying to connect", "docker.sock: permission denied", "podman.sock: permission denied"} {
+		if strings.Contains(detail, marker) {
+			return ErrPermissionDenied
+		}
+	}
+	for _, marker := range []string{"is the docker daemon running", "daemon is not running", "podman socket is not running", "podman machine is not running"} {
+		if strings.Contains(detail, marker) {
+			return ErrDaemonStopped
+		}
+	}
+	for _, marker := range []string{"cannot connect", "connection refused", "no route to host", "network is unreachable"} {
+		if strings.Contains(detail, marker) {
+			return ErrBackendUnreachable
+		}
+	}
 	if len(args) > 0 && args[0] == "logs" {
 		return ErrLogsUnavailable
 	}
@@ -437,6 +487,9 @@ type inspectState struct {
 	Running    bool   `json:"Running"`
 	Paused     bool   `json:"Paused"`
 	Restarting bool   `json:"Restarting"`
+	Health     *struct {
+		Status string `json:"Status"`
+	} `json:"Health"`
 }
 
 type inspectHostConfig struct {
@@ -456,6 +509,7 @@ type inspectRestartPolicy struct {
 
 type inspectMount struct {
 	Type        string `json:"Type"`
+	Name        string `json:"Name"`
 	Source      string `json:"Source"`
 	Destination string `json:"Destination"`
 	Target      string `json:"Target"`
@@ -489,9 +543,10 @@ func parseContainerInspect(engine Engine, raw []byte) (EngineContainer, error) {
 	image := ImageInput{
 		Reference: strings.TrimSpace(doc.Config.Image),
 		Digest:    firstDigest(append(append([]string(nil), doc.RepoDigests...), doc.Config.RepoDigests...)),
+		RuntimeID: cleanImageMetadata(doc.Image),
 	}
 	if image.Reference == "" {
-		image.Reference = strings.TrimSpace(doc.Image)
+		image.Reference = image.RuntimeID
 	}
 	return EngineContainer{
 		Engine:          engine,
@@ -499,6 +554,7 @@ func parseContainerInspect(engine Engine, raw []byte) (EngineContainer, error) {
 		Name:            strings.TrimPrefix(strings.TrimSpace(doc.Name), "/"),
 		Image:           image,
 		State:           normalizeContainerState(doc.State),
+		Health:          inspectHealth(doc.State),
 		CreatedAtUnixMs: parseTimeUnixMs(doc.Created),
 		Runtime: RuntimeInput{
 			Privileged:    doc.HostConfig.Privileged,
@@ -518,16 +574,43 @@ func parseContainerInspect(engine Engine, raw []byte) (EngineContainer, error) {
 }
 
 type listEntry struct {
-	ID        string      `json:"ID"`
-	IDAlt     string      `json:"Id"`
-	Names     any         `json:"Names"`
-	NamesAlt  any         `json:"NamesArray"`
-	Image     string      `json:"Image"`
-	ImageID   string      `json:"ImageID"`
-	State     string      `json:"State"`
-	Status    string      `json:"Status"`
-	CreatedAt string      `json:"CreatedAt"`
-	Created   json.Number `json:"Created"`
+	ID           string              `json:"ID"`
+	IDAlt        string              `json:"Id"`
+	Names        any                 `json:"Names"`
+	NamesAlt     any                 `json:"NamesArray"`
+	Image        string              `json:"Image"`
+	ImageID      string              `json:"ImageID"`
+	State        string              `json:"State"`
+	Status       string              `json:"Status"`
+	Ports        json.RawMessage     `json:"Ports"`
+	ExposedPorts map[string][]string `json:"ExposedPorts"`
+	CreatedAt    string              `json:"CreatedAt"`
+	Created      json.Number         `json:"Created"`
+}
+
+type listPortMapping struct {
+	HostIP        string `json:"host_ip"`
+	ContainerPort uint16 `json:"container_port"`
+	HostPort      uint16 `json:"host_port"`
+	Range         uint16 `json:"range"`
+	Protocol      string `json:"protocol"`
+}
+
+func inspectHealth(state inspectState) string {
+	if state.Health == nil {
+		return ""
+	}
+	return strings.ToLower(strings.TrimSpace(state.Health.Status))
+}
+
+func listHealth(status string) string {
+	status = strings.ToLower(status)
+	for _, value := range []string{"healthy", "unhealthy", "starting"} {
+		if strings.Contains(status, "("+value+")") {
+			return value
+		}
+	}
+	return ""
 }
 
 func parseContainerList(engine Engine, raw []byte) ([]EngineContainer, error) {
@@ -564,16 +647,168 @@ func parseContainerList(engine Engine, raw []byte) ([]EngineContainer, error) {
 		if createdAt == 0 {
 			createdAt = parseUnixSecondsMs(entry.Created)
 		}
+		ports, err := parseListPorts(entry.Ports, entry.ExposedPorts)
+		if err != nil {
+			return nil, fmt.Errorf("parse container list ports: %w", err)
+		}
 		out = append(out, EngineContainer{
 			Engine:          engine,
 			ContainerID:     id,
 			Name:            firstName(entry.Names, entry.NamesAlt),
 			Image:           ImageInput{Reference: strings.TrimSpace(entry.Image)},
 			State:           normalizeStateString(entry.State, entry.Status),
+			Health:          listHealth(entry.Status),
 			CreatedAtUnixMs: createdAt,
+			Ports:           ports,
 		})
 	}
 	return out, nil
+}
+
+func parseListPorts(raw json.RawMessage, exposed map[string][]string) ([]PortSummary, error) {
+	var out []PortSummary
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) > 0 && !bytes.Equal(trimmed, []byte("null")) {
+		switch trimmed[0] {
+		case '"':
+			var value string
+			if err := json.Unmarshal(trimmed, &value); err != nil {
+				return nil, err
+			}
+			out = append(out, parseListPortString(value)...)
+		case '[':
+			var mappings []listPortMapping
+			if err := json.Unmarshal(trimmed, &mappings); err != nil {
+				return nil, err
+			}
+			for _, mapping := range mappings {
+				ports, err := expandListPortMapping(mapping)
+				if err != nil {
+					return nil, err
+				}
+				out = append(out, ports...)
+			}
+		default:
+			return nil, errors.New("ports must be a string or array")
+		}
+	}
+	exposedPortKeys := make([]string, 0, len(exposed))
+	for portText := range exposed {
+		exposedPortKeys = append(exposedPortKeys, portText)
+	}
+	sort.Slice(exposedPortKeys, func(i, j int) bool {
+		return atoi(exposedPortKeys[i]) < atoi(exposedPortKeys[j])
+	})
+	for _, portText := range exposedPortKeys {
+		port := atoi(portText)
+		if port < 1 || port > 65535 {
+			continue
+		}
+		protocols := append([]string(nil), exposed[portText]...)
+		sort.Strings(protocols)
+		for _, protocol := range protocols {
+			candidate := PortSummary{Port: port, Protocol: normalizePortProtocol(protocol)}
+			if !containsContainerPort(out, candidate) {
+				out = append(out, candidate)
+			}
+		}
+	}
+	return out, nil
+}
+
+func parseListPortString(value string) []PortSummary {
+	var out []PortSummary
+	for _, entry := range strings.Split(value, ",") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		host, container, published := strings.Cut(entry, "->")
+		if !published {
+			container = host
+			host = ""
+		}
+		portText, protocol, _ := strings.Cut(strings.TrimSpace(container), "/")
+		port := atoi(portText)
+		if port < 1 || port > 65535 {
+			continue
+		}
+		item := PortSummary{Port: port, Protocol: strings.ToLower(strings.TrimSpace(protocol))}
+		if item.Protocol == "" {
+			item.Protocol = "tcp"
+		}
+		if host != "" {
+			host = strings.TrimSpace(host)
+			if address, portValue, err := net.SplitHostPort(host); err == nil {
+				item.HostIP = strings.Trim(address, "[]")
+				item.HostPort = atoi(portValue)
+			} else if index := strings.LastIndex(host, ":"); index >= 0 {
+				item.HostIP = strings.Trim(host[:index], "[]")
+				item.HostPort = atoi(host[index+1:])
+			} else {
+				item.HostPort = atoi(host)
+			}
+		}
+		out = append(out, item)
+	}
+	return out
+}
+
+func expandListPortMapping(mapping listPortMapping) ([]PortSummary, error) {
+	count := int(mapping.Range)
+	if count == 0 {
+		count = 1
+	}
+	containerPort := int(mapping.ContainerPort)
+	hostPort := int(mapping.HostPort)
+	if containerPort < 1 || containerPort+count-1 > 65535 || (hostPort > 0 && hostPort+count-1 > 65535) {
+		return nil, errors.New("port mapping is outside the valid range")
+	}
+	protocols := strings.Split(mapping.Protocol, ",")
+	if strings.TrimSpace(mapping.Protocol) == "" {
+		protocols = []string{"tcp"}
+	}
+	out := make([]PortSummary, 0, count*len(protocols))
+	for offset := 0; offset < count; offset++ {
+		for _, protocol := range protocols {
+			item := PortSummary{
+				Protocol: normalizePortProtocol(protocol),
+				HostIP:   strings.TrimSpace(mapping.HostIP),
+				Port:     containerPort + offset,
+			}
+			if hostPort > 0 {
+				item.HostPort = hostPort + offset
+			}
+			out = appendUniquePort(out, item)
+		}
+	}
+	return out, nil
+}
+
+func normalizePortProtocol(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "" {
+		return "tcp"
+	}
+	return value
+}
+
+func appendUniquePort(ports []PortSummary, candidate PortSummary) []PortSummary {
+	for _, port := range ports {
+		if port == candidate {
+			return ports
+		}
+	}
+	return append(ports, candidate)
+}
+
+func containsContainerPort(ports []PortSummary, candidate PortSummary) bool {
+	for _, port := range ports {
+		if port.Port == candidate.Port && port.Protocol == candidate.Protocol {
+			return true
+		}
+	}
+	return false
 }
 
 func parseLogLines(raw []byte) []LogLine {
@@ -682,13 +917,18 @@ func normalizeStateString(values ...string) ContainerState {
 func inspectMountInputs(mounts []inspectMount) []MountInput {
 	out := make([]MountInput, 0, len(mounts))
 	for _, mount := range mounts {
+		mountType := normalizeMountType(mount.Type)
+		source := strings.TrimSpace(mount.Source)
+		if mountType == MountTypeVolume && strings.TrimSpace(mount.Name) != "" {
+			source = strings.TrimSpace(mount.Name)
+		}
 		target := strings.TrimSpace(mount.Destination)
 		if target == "" {
 			target = strings.TrimSpace(mount.Target)
 		}
 		out = append(out, MountInput{
-			Type:     normalizeMountType(mount.Type),
-			Source:   strings.TrimSpace(mount.Source),
+			Type:     mountType,
+			Source:   source,
 			Target:   target,
 			ReadOnly: !mount.RW,
 		})
