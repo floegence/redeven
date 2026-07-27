@@ -1,6 +1,6 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from 'solid-js';
 import { cn, createUIFirstSelection } from '@floegence/floe-webapp-core';
-import { AlertTriangle, ArrowLeft, CheckCircle, Download, Grid3x3, MoreHorizontal, RefreshIcon, Search, Settings, Shield, X } from '@floegence/floe-webapp-core/icons';
+import { AlertTriangle, ArrowLeft, CheckCircle, ChevronDown, Download, Grid3x3, MoreHorizontal, RefreshIcon, Search, Settings, Shield, X } from '@floegence/floe-webapp-core/icons';
 import { Button, Dialog, Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 
 import { buildPluginCenterModel } from './pluginInventoryProjection';
@@ -209,6 +209,14 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     || sourceFilter() !== 'all'
     || trustFilter() !== 'all'
     || lifecycleFilter() !== 'all');
+  const clearAllFilters = () => {
+    setQuery('');
+    setCategory('all');
+    setSourceFilter('all');
+    setTrustFilter('all');
+    setLifecycleFilter('all');
+    clearDetailSelection();
+  };
 
   const openExternalDialog = (item?: PluginInventoryItem, sourcePreset?: ExternalPluginSourcePreset) => {
     setExternalUpdateItem(item);
@@ -303,6 +311,8 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
       onSourceFilter={(next) => { setSourceFilter(next); clearDetailSelection(); }}
       onTrustFilter={(next) => { setTrustFilter(next); clearDetailSelection(); }}
       onLifecycleFilter={(next) => { setLifecycleFilter(next); clearDetailSelection(); }}
+      filtersActive={filtersActive()}
+      onClearFilters={clearAllFilters}
       onRefresh={() => void refreshInventory()}
       onTabSelect={selectTab}
       canManage={canManage()}
@@ -399,14 +409,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
                   <button
                     type="button"
                     class="mt-3 min-h-[44px] cursor-pointer rounded-md border px-3 text-xs font-semibold text-foreground hover:bg-muted"
-                    onClick={() => {
-                      setQuery('');
-                      setCategory('all');
-                      setSourceFilter('all');
-                      setTrustFilter('all');
-                      setLifecycleFilter('all');
-                      clearDetailSelection();
-                    }}
+                    onClick={clearAllFilters}
                   >
                     {i18n.t('uiCopy.plugin.clearFilters')}
                   </button>
@@ -491,6 +494,8 @@ export function PluginCenterShell(props: {
   onSourceFilter: (source: PluginSourceFilter) => void;
   onTrustFilter: (trust: PluginTrustFilter) => void;
   onLifecycleFilter: (lifecycle: PluginLifecycleFilter) => void;
+  filtersActive: boolean;
+  onClearFilters: () => void;
   onRefresh: () => void;
   onTabSelect: (tab: PluginCenterTab) => void;
   canManage: boolean;
@@ -596,45 +601,60 @@ export function PluginCenterShell(props: {
           <CenterCategoryButton id="productivity" active={props.category} label={i18n.t('uiCopy.plugin.categoryProductivity')} onSelect={props.onCategorySelect} />
           <CenterCategoryButton id="other" active={props.category} label={i18n.t('uiCopy.plugin.categoryOther')} onSelect={props.onCategorySelect} />
         </div>
-        <div class="mt-2 flex gap-2 overflow-x-auto pb-0.5" data-plugin-center-filters>
-          <CenterFilterMenu
-            id="source"
-            value={props.sourceFilter}
-            onSelect={(value) => props.onSourceFilter(value as PluginSourceFilter)}
-            items={[
-              { id: 'all', label: i18n.t('uiCopy.plugin.external.source') },
-              { id: 'official', label: i18n.t('uiCopy.plugin.officialSource') },
-              { id: 'external', label: i18n.t('uiCopy.plugin.externalPlugin') },
-            ]}
-          />
-          <CenterFilterMenu
-            id="trust"
-            value={props.trustFilter}
-            onSelect={(value) => props.onTrustFilter(value as PluginTrustFilter)}
-            items={[
-              { id: 'all', label: i18n.t('uiCopy.plugin.trust') },
-              { id: 'official', label: i18n.t('uiCopy.plugin.official') },
-              { id: 'verified', label: i18n.t('uiCopy.plugin.verified') },
-              { id: 'community', label: i18n.t('uiCopy.plugin.community') },
-              { id: 'unsigned', label: i18n.t('uiCopy.plugin.unsigned') },
-              { id: 'blocked', label: i18n.t('uiCopy.plugin.blocked') },
-              { id: 'revoked', label: i18n.t('uiCopy.plugin.revoked') },
-              { id: 'unavailable', label: i18n.t('uiCopy.plugin.unavailable') },
-            ]}
-          />
-          <CenterFilterMenu
-            id="lifecycle"
-            value={props.lifecycleFilter}
-            onSelect={(value) => props.onLifecycleFilter(value as PluginLifecycleFilter)}
-            items={[
-              { id: 'all', label: i18n.t('uiCopy.plugin.lifecycle') },
-              { id: 'enabled', label: i18n.t('uiCopy.plugin.enabled') },
-              { id: 'disabled', label: i18n.t('uiCopy.plugin.disabled') },
-              { id: 'needs_attention', label: i18n.t('uiCopy.plugin.needsAttention') },
-              { id: 'update_available', label: i18n.t('uiCopy.plugin.updateAvailable') },
-              { id: 'not_installed', label: i18n.t('uiCopy.plugin.notInstalled') },
-            ]}
-          />
+        <div class="mt-2 flex min-w-0 items-start gap-2" data-plugin-center-filters>
+          <div class="flex min-w-0 flex-1 gap-2 overflow-x-auto border-x border-transparent pb-1" data-plugin-center-filter-scroll>
+            <CenterFilterMenu
+              id="source"
+              dimension={i18n.t('uiCopy.plugin.external.source')}
+              value={props.sourceFilter}
+              onSelect={(value) => props.onSourceFilter(value as PluginSourceFilter)}
+              items={[
+                { id: 'all', label: i18n.t('uiCopy.plugin.categoryAll') },
+                { id: 'official', label: i18n.t('uiCopy.plugin.officialSource') },
+                { id: 'external', label: i18n.t('uiCopy.plugin.externalPlugin') },
+              ]}
+            />
+            <CenterFilterMenu
+              id="trust"
+              dimension={i18n.t('uiCopy.plugin.trust')}
+              value={props.trustFilter}
+              onSelect={(value) => props.onTrustFilter(value as PluginTrustFilter)}
+              items={[
+                { id: 'all', label: i18n.t('uiCopy.plugin.categoryAll') },
+                { id: 'official', label: i18n.t('uiCopy.plugin.official') },
+                { id: 'verified', label: i18n.t('uiCopy.plugin.verified') },
+                { id: 'community', label: i18n.t('uiCopy.plugin.community') },
+                { id: 'unsigned', label: i18n.t('uiCopy.plugin.unsigned') },
+                { id: 'blocked', label: i18n.t('uiCopy.plugin.blocked') },
+                { id: 'revoked', label: i18n.t('uiCopy.plugin.revoked') },
+                { id: 'unavailable', label: i18n.t('uiCopy.plugin.unavailable') },
+              ]}
+            />
+            <CenterFilterMenu
+              id="lifecycle"
+              dimension={i18n.t('uiCopy.plugin.lifecycle')}
+              value={props.lifecycleFilter}
+              onSelect={(value) => props.onLifecycleFilter(value as PluginLifecycleFilter)}
+              items={[
+                { id: 'all', label: i18n.t('uiCopy.plugin.categoryAll') },
+                { id: 'enabled', label: i18n.t('uiCopy.plugin.enabled') },
+                { id: 'disabled', label: i18n.t('uiCopy.plugin.disabled') },
+                { id: 'needs_attention', label: i18n.t('uiCopy.plugin.needsAttention') },
+                { id: 'update_available', label: i18n.t('uiCopy.plugin.updateAvailable') },
+                { id: 'not_installed', label: i18n.t('uiCopy.plugin.notInstalled') },
+              ]}
+            />
+          </div>
+          <Show when={props.filtersActive}>
+            <button
+              type="button"
+              data-plugin-center-clear-filters
+              class="h-11 shrink-0 cursor-pointer whitespace-nowrap rounded-md px-2.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:h-8"
+              onClick={props.onClearFilters}
+            >
+              {i18n.t('uiCopy.plugin.clearFilters')}
+            </button>
+          </Show>
         </div>
       </div>
       {props.children}
@@ -1111,25 +1131,36 @@ function CenterCategoryButton(props: {
 
 function CenterFilterMenu(props: {
   id: 'source' | 'trust' | 'lifecycle';
+  dimension: string;
   value: string;
   items: DropdownItem[];
   onSelect: (value: string) => void;
 }): JSX.Element {
+  const i18n = useI18n();
   const currentLabel = () => props.items.find((item) => item.id === props.value)?.label ?? props.items[0]?.label ?? '';
+  const triggerLabel = () => i18n.t('uiCopy.plugin.filterSelection', {
+    dimension: props.dimension,
+    value: currentLabel(),
+  });
   return (
     <Dropdown
       align="start"
       value={props.value}
       items={props.items}
       onSelect={props.onSelect}
+      triggerAriaLabel={triggerLabel()}
+      triggerClass="group/filter shrink-0 rounded-md"
       trigger={(
-        <button
-          type="button"
+        <div
           data-plugin-center-filter={props.id}
-          class="h-11 shrink-0 cursor-pointer rounded-md border bg-background px-3 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground sm:h-8"
+          class={cn(
+            'inline-flex h-11 cursor-pointer items-center gap-2 rounded-md border bg-background px-3 text-xs font-medium text-muted-foreground transition-[border-color,background-color,color,box-shadow] duration-150 hover:border-foreground/20 hover:bg-muted hover:text-foreground group-focus-visible/filter:ring-2 group-focus-visible/filter:ring-ring sm:h-8',
+            props.value !== 'all' && 'border-primary/40 bg-primary/5 text-foreground',
+          )}
         >
-          {currentLabel()}
-        </button>
+          <span class="whitespace-nowrap">{triggerLabel()}</span>
+          <ChevronDown class="h-3.5 w-3.5 shrink-0 transition-transform duration-150 group-aria-expanded/filter:rotate-180 motion-reduce:transition-none" />
+        </div>
       )}
     />
   );

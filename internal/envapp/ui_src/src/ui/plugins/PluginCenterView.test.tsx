@@ -391,6 +391,49 @@ describe('PluginCenterView', () => {
     expect(mount.querySelector('[data-plugin-center-item="instance:community-database"]')).toBeNull();
   });
 
+  it('keeps filter dimensions, current values, chevrons, and clear action visible', async () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginCenterView
+        projection={projection}
+        loading={false}
+        onCommand={vi.fn()}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces={false}
+      />
+    ), mount);
+
+    const source = mount.querySelector<HTMLElement>('[data-plugin-center-filter="source"]')!;
+    const trust = mount.querySelector<HTMLElement>('[data-plugin-center-filter="trust"]')!;
+    const lifecycle = mount.querySelector<HTMLElement>('[data-plugin-center-filter="lifecycle"]')!;
+    expect(source.textContent).toContain('Plugin source: All');
+    expect(trust.textContent).toContain('Trust: All');
+    expect(lifecycle.textContent).toContain('Lifecycle: All');
+    for (const trigger of [source, trust, lifecycle]) {
+      const owner = trigger.closest<HTMLElement>('[data-floe-dropdown-trigger]')!;
+      expect(owner.getAttribute('aria-haspopup')).toBe('menu');
+      expect(owner.tabIndex).toBe(0);
+      expect(trigger.tabIndex).toBe(-1);
+      expect(trigger.matches('button, [role="button"]')).toBe(false);
+      expect(trigger.querySelector('svg')).not.toBeNull();
+    }
+
+    source.click();
+    await Promise.resolve();
+    findDocumentButton('Official').click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(source.textContent).toContain('Plugin source: Official');
+    const clear = mount.querySelector<HTMLElement>('[data-plugin-center-clear-filters]')!;
+    expect(clear).not.toBeNull();
+    expect(clear.closest('[data-plugin-center-filter-scroll]')).toBeNull();
+
+    (mount.querySelector('[data-plugin-center-clear-filters]') as HTMLButtonElement).click();
+    expect(source.textContent).toContain('Plugin source: All');
+    expect(mount.querySelector('[data-plugin-center-clear-filters]')).toBeNull();
+  });
+
   it('selects a plugin details inspector from an explicit shell request', () => {
     const installedProjection: PluginInventoryProjection = {
       items: [

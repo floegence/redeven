@@ -44,6 +44,7 @@ type ExternalPluginInstallDialogProps = {
 };
 
 type InstallStage = 'source' | 'review' | 'committing' | 'complete';
+type ExternalReviewOperation = 'install' | 'update' | 'reinstall' | 'replace' | 'install_checked';
 
 type PluginInstallError = {
   summary: string;
@@ -72,9 +73,17 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
   let reviewHeading: HTMLElement | undefined;
 
   const isUpdate = () => Boolean(props.updateItem?.pluginInstanceID);
-  const dialogTitle = () => isUpdate()
-    ? i18n.t('uiCopy.plugin.external.updateTitle', { plugin: props.updateItem?.displayName ?? '' })
-    : i18n.t('uiCopy.plugin.external.installTitle');
+  const reviewOperation = createMemo<ExternalReviewOperation>(() => resolveReviewOperation(inspection(), props.updateItem));
+  const dialogTitle = () => {
+    const plugin = props.updateItem?.displayName ?? '';
+    switch (reviewOperation()) {
+      case 'install': return i18n.t('uiCopy.plugin.external.installTitle');
+      case 'reinstall': return i18n.t('uiCopy.plugin.external.reinstallTitle', { plugin });
+      case 'replace': return i18n.t('uiCopy.plugin.external.replaceTitle', { plugin });
+      case 'install_checked': return i18n.t('uiCopy.plugin.external.installCheckedTitle', { plugin });
+      case 'update': return i18n.t('uiCopy.plugin.external.updateTitle', { plugin });
+    }
+  };
 
   createEffect(() => {
     if (!props.open) return;
@@ -234,18 +243,7 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
         commitNeedsReconciliation() && '[&>div:first-child>button]:hidden',
       )}
       footer={(
-        <div data-external-plugin-footer class="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <Show when={stage() === 'review' && inspection() && !reviewBlocked() && !commitNeedsReconciliation()} fallback={<span />}>
-            <label data-external-plugin-confirmation class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'flex cursor-pointer items-center gap-2 text-xs text-foreground sm:max-w-[30rem] sm:items-start')}>
-              <input
-                type="checkbox"
-                checked={confirmed()}
-                class="mt-0.5 h-4 w-4 shrink-0 rounded border"
-                onChange={(event) => setConfirmed(event.currentTarget.checked)}
-              />
-              <span>{i18n.t('uiCopy.plugin.external.confirmDigest')}</span>
-            </label>
-          </Show>
+        <div data-external-plugin-footer class="flex w-full justify-end">
           <div class="flex shrink-0 flex-wrap justify-end gap-2">
             <Show when={stage() === 'review' && !commitNeedsReconciliation()}>
               <button type="button" class="min-h-[46px] cursor-pointer rounded-md border bg-background px-3 text-sm font-medium transition-[background-color,transform] duration-150 hover:bg-muted active:scale-[0.98] motion-reduce:transform-none motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-9" disabled={pending()} onClick={returnToSource}>
@@ -288,9 +286,7 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
               <button type="button" class="min-h-[46px] cursor-pointer rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-9" disabled={!confirmed() || pending()} onClick={() => void commit()}>
                 {commitNeedsReconciliation()
                   ? i18n.t('common.actions.retry')
-                  : isUpdate()
-                    ? i18n.t('uiCopy.plugin.external.confirmUpdate')
-                    : i18n.t('uiCopy.plugin.external.confirmInstall')}
+                  : reviewOperationActionLabel(reviewOperation(), i18n)}
               </button>
             </Show>
           </div>
@@ -298,7 +294,7 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
       )}
     >
       <div ref={dialogContent} data-external-plugin-dialog class="space-y-4">
-        <InstallProgress stage={stage()} isUpdate={isUpdate()} />
+        <InstallProgress stage={stage()} operation={reviewOperation()} />
         <Show when={error()}>
           {(currentError) => (
             <div role="alert" class="flex gap-2 rounded-md border border-destructive bg-background px-3 py-2.5 text-sm text-destructive">
@@ -343,12 +339,15 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
               displayName={props.updateItem?.displayName}
               previousVersion={props.updateItem?.version}
               previousSummary={props.updateItem?.externalPackage?.securitySummary}
+              operation={reviewOperation()}
+              confirmed={confirmed()}
+              onConfirmed={setConfirmed}
               focusTargetRef={(element) => { reviewHeading = element; }}
             />
           )}
         </Show>
         <Show when={stage() === 'committing'}>
-          <CommitProgress inspection={inspection()} isUpdate={isUpdate()} />
+          <CommitProgress inspection={inspection()} operation={reviewOperation()} />
         </Show>
         <Show when={stage() === 'complete' && committed()}>
           {(result) => (
@@ -357,13 +356,17 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
                 <CheckCircle class="mt-0.5 h-5 w-5 shrink-0 text-[var(--redeven-status-success-foreground)]" />
                 <div>
                   <div class="font-semibold">{i18n.t(
-                    isUpdate() ? 'uiCopy.plugin.external.updateComplete' : 'uiCopy.plugin.external.complete',
+                    reviewOperationCompletionKey(reviewOperation()),
                     { plugin: result().plugin.manifest.plugin.display_name },
                   )}</div>
                   <div class="mt-1 text-sm text-muted-foreground">{result().plugin.publisher_id} · v{result().plugin.version}</div>
                 </div>
               </div>
-              <PostInstallFacts updateEligibility={result().update_eligibility.state} />
+              <PostInstallFacts
+                operation={reviewOperation()}
+                updateEligibility={result().update_eligibility.state}
+                committedEnableState={result().plugin.enable_state}
+              />
             </div>
           )}
         </Show>
@@ -372,13 +375,13 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
   );
 }
 
-function InstallProgress(props: { stage: InstallStage; isUpdate: boolean }): JSX.Element {
+function InstallProgress(props: { stage: InstallStage; operation: ExternalReviewOperation }): JSX.Element {
   const i18n = useI18n();
   const activeIndex = () => ({ source: 0, review: 1, committing: 2, complete: 3 })[props.stage];
   const steps = () => [
     i18n.t('uiCopy.plugin.external.source'),
     i18n.t('uiCopy.plugin.external.inspect'),
-    props.isUpdate ? i18n.t('uiCopy.plugin.external.confirmUpdate') : i18n.t('uiCopy.plugin.external.confirmInstall'),
+    reviewOperationActionLabel(props.operation, i18n),
     i18n.t('common.status.ready'),
   ];
   return (
@@ -692,6 +695,9 @@ function InspectionReview(props: {
   displayName?: string;
   previousVersion?: string;
   previousSummary?: PluginExternalPackageSecuritySummary;
+  operation: ExternalReviewOperation;
+  confirmed: boolean;
+  onConfirmed: (confirmed: boolean) => void;
   focusTargetRef?: (element: HTMLElement) => void;
 }): JSX.Element {
   const i18n = useI18n();
@@ -709,6 +715,8 @@ function InspectionReview(props: {
     (['added', 'changed'] as const).flatMap((change) => {
       const count = changes().filter((declaration) => (
         declaration.category === category
+        && declaration.category !== 'permissions'
+        && declaration.category !== 'methods'
         && declaration.change === change
         && !securityDeclarationIsSensitive(declaration)
       )).length;
@@ -718,6 +726,8 @@ function InspectionReview(props: {
   const hiddenStandardDeclarationCount = createMemo(() => currentDeclarations()
     .filter((declaration) => (
       !securityDeclarationIsSensitive(declaration)
+      && declaration.category !== 'permissions'
+      && declaration.category !== 'methods'
       && declaration.change !== 'added'
       && declaration.change !== 'changed'
     )).length);
@@ -725,11 +735,8 @@ function InspectionReview(props: {
     declarations().some((declaration) => declaration.category === category)
   )));
   const tone = () => blocked() ? 'blocked' : signature() === 'verified' ? 'positive' : 'caution';
-  const decisionTitle = () => blocked()
-    ? i18n.t('uiCopy.plugin.external.reviewBlocked')
-    : signature() === 'verified'
-      ? i18n.t('uiCopy.plugin.external.reviewReady')
-      : i18n.t('uiCopy.plugin.external.reviewCaution');
+  const decisionTitle = () => trustDecisionTitle(props.inspection, i18n);
+  const decisionGuidance = () => trustDecisionGuidance(props.inspection, i18n);
   const sourceSummary = () => {
     const provenance = props.inspection.source_provenance;
     if (provenance.kind === 'package_url') return provenance.source_origin;
@@ -748,11 +755,11 @@ function InspectionReview(props: {
           <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
             <span>{props.inspection.publisher_id}</span>
             <span aria-hidden="true">·</span>
-            <span>
-              <Show when={props.previousVersion} fallback={<>v{props.inspection.version}</>}>
-                {(previousVersion) => `v${previousVersion()} -> v${props.inspection.version}`}
-              </Show>
-            </span>
+            <VersionReview
+              operation={props.operation}
+              previousVersion={props.previousVersion}
+              inspectedVersion={props.inspection.version}
+            />
           </div>
           <code class="mt-1 block max-w-full truncate text-[11px] text-muted-foreground">{sourceSummary()}</code>
         </div>
@@ -785,93 +792,153 @@ function InspectionReview(props: {
             >
               {decisionTitle()}
             </h2>
-            <div class="mt-1 text-sm leading-5 text-muted-foreground">{signatureReviewLabel(signature(), i18n)}</div>
-            <Show when={props.inspection.execution_approval.state === 'policy_blocked'}>
-              <div class="mt-1 text-sm font-medium text-destructive">{i18n.t('uiCopy.plugin.managedByPolicy')}</div>
-            </Show>
+            <div class="mt-1 text-sm leading-6 text-muted-foreground">{decisionGuidance()}</div>
           </div>
         </div>
-        <dl class="mt-3 border-t border-current/15 pt-3 text-xs">
-          <div class="min-w-0">
-            <dt class="text-muted-foreground">{i18n.t('uiCopy.plugin.external.executionApproval')}</dt>
-            <dd class="mt-0.5 font-medium">{executionApprovalReviewLabel(props.inspection.execution_approval.state, i18n)}</dd>
-          </div>
-        </dl>
       </section>
-      <PostInstallFacts updateEligibility={props.inspection.update_eligibility.state} />
+      <PostInstallFacts operation={props.operation} updateEligibility={props.inspection.update_eligibility.state} />
       <InspectionHighlights
+        permissions={currentDeclarations().filter((declaration) => declaration.category === 'permissions')}
+        methods={summary().methods}
         changes={changes()}
         highlights={highlights()}
         standardChanges={standardChanges()}
         currentDeclarationCount={currentDeclarations().length}
         hiddenStandardDeclarationCount={hiddenStandardDeclarationCount()}
+        hasPreviousSummary={Boolean(props.previousSummary)}
         showAccessChanged={Boolean(props.previousSummary && accessChanged())}
       />
       <InspectionReport
         inspection={props.inspection}
+        operation={props.operation}
         declarations={declarations()}
         changes={changes()}
         categories={reportCategories()}
       />
+      <Show when={!blocked()}>
+        <InspectionConfirmation
+          inspection={props.inspection}
+          operation={props.operation}
+          checked={props.confirmed}
+          onChecked={props.onConfirmed}
+        />
+      </Show>
     </div>
   );
 }
 
 function InspectionHighlights(props: {
+  permissions: readonly SecurityDeclaration[];
+  methods: PluginExternalPackageSecuritySummary['methods'];
   changes: readonly SecurityDeclaration[];
   highlights: readonly SecurityDeclaration[];
   standardChanges: readonly StandardChangeSummary[];
   currentDeclarationCount: number;
   hiddenStandardDeclarationCount: number;
+  hasPreviousSummary: boolean;
   showAccessChanged: boolean;
 }): JSX.Element {
   const i18n = useI18n();
+  const operationGroups = createMemo(() => operationImpactGroups(props.methods));
+  const otherHighlights = createMemo(() => props.highlights.filter((declaration) => declaration.category !== 'methods'));
+  const dangerousMethodCount = createMemo(() => props.methods.filter((method) => method.dangerous).length);
   return (
-    <section data-external-plugin-review-highlights class="space-y-3 border-t pt-4">
-      <div class="flex items-center justify-between gap-3">
-        <h3 class="text-xs font-semibold uppercase text-muted-foreground">{i18n.t('uiCopy.plugin.external.reviewHighlights')}</h3>
+    <section data-external-plugin-review-highlights data-external-plugin-access-review class="space-y-5 border-t pt-4">
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <h3 class="text-sm font-semibold">{i18n.t('uiCopy.plugin.external.requestedAccessTitle')}</h3>
+          <p class="mt-1 text-xs leading-5 text-muted-foreground">{i18n.t('uiCopy.plugin.external.requestedAccessGuidance')}</p>
+        </div>
         <Show when={props.changes.length > 0}>
           <span class="rounded-full bg-[var(--redeven-status-warning-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--redeven-status-warning-foreground)]">
             {i18n.tn('uiCopy.plugin.external.reportChanges', props.changes.length)}
           </span>
         </Show>
       </div>
-      <Show when={props.showAccessChanged}>
+      <Show when={props.showAccessChanged} fallback={(
+        <Show when={props.hasPreviousSummary && props.currentDeclarationCount > 0 && props.changes.length === 0}>
+          <p class="text-sm leading-5 text-muted-foreground">{i18n.t('uiCopy.plugin.external.accessUnchanged')}</p>
+        </Show>
+      )}>
         <p class="text-sm leading-5 text-[var(--redeven-status-warning-foreground)]">{i18n.t('uiCopy.plugin.external.accessChanged')}</p>
       </Show>
-      <Show
-        when={props.highlights.length > 0}
-        fallback={(
-          <p class="text-sm leading-6 text-muted-foreground">
-            {props.currentDeclarationCount === 0
-              ? i18n.t('uiCopy.plugin.external.noDeclaredAccess')
-              : i18n.t('uiCopy.plugin.external.noReviewHighlights')}
-          </p>
-        )}
-      >
-        <div class="grid gap-2 sm:grid-cols-2">
-          <For each={props.highlights}>
-            {(declaration) => (
-              <div class={cn(
-                'min-w-0 rounded-md border px-3 py-2.5',
-                (declaration.change === 'added' || declaration.change === 'changed')
-                  && 'border-[var(--redeven-status-warning-foreground)]',
-              )}>
-                <div class="flex items-center gap-2">
-                  <span class="min-w-0 flex-1 text-xs font-semibold uppercase text-muted-foreground">
-                    {securityCategoryLabel(declaration.category, i18n)}
-                  </span>
-                  <Show when={declaration.change}>
-                    {(change) => <ChangeBadge change={change()} />}
+
+      <div data-external-plugin-requested-permissions>
+        <h4 class="text-xs font-semibold uppercase text-muted-foreground">{i18n.t('uiCopy.plugin.external.requestedPermissions')}</h4>
+        <Show when={props.permissions.length > 0} fallback={(
+          <div class="mt-2 flex items-start gap-2 rounded-md border bg-muted/10 px-3 py-2.5 text-sm text-muted-foreground">
+            <Check class="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{i18n.t('uiCopy.plugin.external.noRequestedPermissions')}</span>
+          </div>
+        )}>
+          <ul class="mt-2 divide-y rounded-md border" role="list">
+            <For each={props.permissions}>
+              {(permission) => (
+                <li class="flex min-w-0 items-center gap-3 px-3 py-2.5">
+                  <Shield class="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <span class="min-w-0 flex-1 text-sm font-medium">{humanizeTechnicalIdentifier(permission.identity)}</span>
+                  <Show when={permission.change}>{(change) => <ChangeBadge change={change()} />}</Show>
+                </li>
+              )}
+            </For>
+          </ul>
+        </Show>
+      </div>
+
+      <div data-external-plugin-declared-operations>
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <h4 class="text-xs font-semibold uppercase text-muted-foreground">{i18n.t('uiCopy.plugin.external.declaredOperations')}</h4>
+          <Show when={dangerousMethodCount() > 0}>
+            <span class="rounded-full border border-[var(--redeven-status-warning-foreground)] px-2 py-0.5 text-[10px] font-semibold text-[var(--redeven-status-warning-foreground)]">
+              {i18n.tn('uiCopy.plugin.external.dangerousOperations', dangerousMethodCount())}
+            </span>
+          </Show>
+        </div>
+        <Show when={operationGroups().length > 0} fallback={(
+          <p class="mt-2 text-sm text-muted-foreground">{i18n.t('uiCopy.plugin.external.noDeclaredOperations')}</p>
+        )}>
+          <div class="mt-2 grid gap-2 sm:grid-cols-2">
+            <For each={operationGroups()}>
+              {(group) => (
+                <div class={cn(
+                  'min-w-0 rounded-md border px-3 py-2.5',
+                  (group.dangerousCount > 0 || group.effect === 'delete' || group.effect === 'admin' || group.effect === 'other')
+                    && 'border-[var(--redeven-status-warning-foreground)] bg-[var(--redeven-status-warning-soft)]',
+                )}>
+                  <div class="flex items-center justify-between gap-3">
+                    <span class="text-sm font-semibold">{operationEffectLabel(group.effect, i18n)}</span>
+                    <span class="shrink-0 text-xs font-semibold tabular-nums">{group.count}</span>
+                  </div>
+                  <p class="mt-1 text-xs leading-5 text-muted-foreground">{operationEffectGuidance(group.effect, i18n)}</p>
+                  <Show when={group.preflightOnlyCount > 0}>
+                    <p class="mt-1 text-[11px] text-muted-foreground">{i18n.tn('uiCopy.plugin.external.preflightOnlyOperations', group.preflightOnlyCount)}</p>
                   </Show>
                 </div>
-                <div class="mt-1 truncate text-sm font-medium">{humanizeTechnicalIdentifier(declaration.identity)}</div>
-                <Show when={securityDeclarationHighlight(declaration)}>
-                  {(fact) => <code class="mt-1 block break-all text-[11px] text-muted-foreground">{fact()}</code>}
-                </Show>
-              </div>
-            )}
-          </For>
+              )}
+            </For>
+          </div>
+        </Show>
+      </div>
+
+      <Show when={otherHighlights().length > 0}>
+        <div data-external-plugin-other-attention>
+          <h4 class="text-xs font-semibold uppercase text-muted-foreground">{i18n.t('uiCopy.plugin.external.otherDeclaredAccess')}</h4>
+          <div class="mt-2 grid gap-2 sm:grid-cols-2">
+            <For each={otherHighlights()}>
+              {(declaration) => (
+                <div class="min-w-0 rounded-md border px-3 py-2.5">
+                  <div class="flex items-center gap-2">
+                    <span class="min-w-0 flex-1 text-xs font-semibold text-muted-foreground">{securityCategoryLabel(declaration.category, i18n)}</span>
+                    <Show when={declaration.change}>{(change) => <ChangeBadge change={change()} />}</Show>
+                  </div>
+                  <div class="mt-1 text-sm font-medium">{humanizeTechnicalIdentifier(declaration.identity)}</div>
+                  <Show when={securityDeclarationHighlight(declaration)}>
+                    {(fact) => <code class="mt-1 block break-all text-[11px] text-muted-foreground">{fact()}</code>}
+                  </Show>
+                </div>
+              )}
+            </For>
+          </div>
         </div>
       </Show>
       <Show when={props.standardChanges.length > 0}>
@@ -898,6 +965,7 @@ function InspectionHighlights(props: {
 
 function InspectionReport(props: {
   inspection: ExternalPluginInspection;
+  operation: ExternalReviewOperation;
   declarations: readonly SecurityDeclaration[];
   changes: readonly SecurityDeclaration[];
   categories: readonly SecurityCategory[];
@@ -974,7 +1042,11 @@ function InspectionReport(props: {
         <section class="space-y-3 border-t pt-4" data-external-plugin-security-declarations>
           <div>
             <h3 class="text-xs font-semibold uppercase text-muted-foreground">{i18n.t('uiCopy.plugin.external.declaredAccess')}</h3>
-            <p class="mt-1 text-sm leading-6 text-muted-foreground">{i18n.t('uiCopy.plugin.external.declaredAccessGuidance')}</p>
+            <p class="mt-1 text-sm leading-6 text-muted-foreground">
+              {i18n.t(props.operation === 'install'
+                ? 'uiCopy.plugin.external.declaredAccessGuidance'
+                : 'uiCopy.plugin.external.declaredAccessUpdateGuidance')}
+            </p>
           </div>
           <Show when={props.categories.length > 0} fallback={<p class="text-sm text-muted-foreground">{i18n.t('uiCopy.plugin.external.noDeclaredAccess')}</p>}>
             <For each={props.categories}>
@@ -1035,6 +1107,78 @@ function InspectionReport(props: {
         </section>
       </div>
     </details>
+  );
+}
+
+function InspectionConfirmation(props: {
+  inspection: ExternalPluginInspection;
+  operation: ExternalReviewOperation;
+  checked: boolean;
+  onChecked: (checked: boolean) => void;
+}): JSX.Element {
+  const i18n = useI18n();
+  const update = () => props.operation !== 'install';
+  return (
+    <section data-external-plugin-confirmation-region class="border-t pt-4">
+      <label
+        data-external-plugin-confirmation
+        class={cn(
+          PLUGIN_MOBILE_TOUCH_TARGET_CLASS,
+          'group flex cursor-pointer items-start gap-3 rounded-md border bg-muted/10 px-3 py-3 transition-[border-color,background-color,transform] duration-150 hover:bg-muted/30 active:scale-[0.995] focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 motion-reduce:transform-none motion-reduce:transition-none',
+          props.checked && 'border-primary bg-primary/5',
+        )}
+      >
+        <input
+          type="checkbox"
+          checked={props.checked}
+          class="mt-0.5 h-4 w-4 shrink-0 rounded border"
+          onChange={(event) => props.onChecked(event.currentTarget.checked)}
+        />
+        <span class="min-w-0 flex-1">
+          <span class="block text-sm font-semibold">{reviewOperationConfirmationTitle(props.operation, i18n)}</span>
+          <span class="mt-1 block text-xs leading-5 text-muted-foreground">
+            {i18n.t(update()
+              ? 'uiCopy.plugin.external.confirmUpdateGuidance'
+              : 'uiCopy.plugin.external.confirmInstallGuidance')}
+          </span>
+          <code class="mt-2 block break-all text-[10px] text-muted-foreground">
+            {i18n.t('uiCopy.plugin.external.confirmationDigest')}: {props.inspection.confirmation_digest}
+          </code>
+        </span>
+      </label>
+    </section>
+  );
+}
+
+function VersionReview(props: {
+  operation: ExternalReviewOperation;
+  previousVersion?: string;
+  inspectedVersion: string;
+}): JSX.Element {
+  const i18n = useI18n();
+  if (!props.previousVersion) return <>v{props.inspectedVersion}</>;
+  if (props.operation === 'update') return <>{i18n.t('uiCopy.plugin.external.versionChange', {
+    previous: props.previousVersion,
+    next: props.inspectedVersion,
+  })}</>;
+  const label = () => {
+    switch (props.operation) {
+      case 'reinstall': return i18n.t('uiCopy.plugin.external.samePackageInstalled', { version: props.inspectedVersion });
+      case 'replace': return i18n.t('uiCopy.plugin.external.sameVersionDifferentPackage', { version: props.inspectedVersion });
+      case 'install_checked': return i18n.t('uiCopy.plugin.external.sameVersionUnknownPackage', { version: props.inspectedVersion });
+      default: return `v${props.inspectedVersion}`;
+    }
+  };
+  return (
+    <span class={cn(
+      'inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-xs font-medium',
+      props.operation === 'reinstall' && 'border-[var(--redeven-status-success-foreground)] text-[var(--redeven-status-success-foreground)]',
+      (props.operation === 'replace' || props.operation === 'install_checked')
+        && 'border-[var(--redeven-status-warning-foreground)] text-[var(--redeven-status-warning-foreground)]',
+    )}>
+      {props.operation === 'reinstall' ? <CheckCircle class="h-3 w-3" /> : <AlertTriangle class="h-3 w-3" />}
+      {label()}
+    </span>
   );
 }
 
@@ -1115,38 +1259,52 @@ function DecisionFact(props: {
   );
 }
 
-function PostInstallFacts(props: { updateEligibility: ExternalPluginInspection['update_eligibility']['state'] }): JSX.Element {
+function PostInstallFacts(props: {
+  operation: ExternalReviewOperation;
+  updateEligibility: ExternalPluginInspection['update_eligibility']['state'];
+  committedEnableState?: ExternalPluginCommitResult['plugin']['enable_state'];
+}): JSX.Element {
   const i18n = useI18n();
+  const update = () => props.operation !== 'install';
+  const lifecycle = () => {
+    if (props.committedEnableState === 'enabled') return i18n.t('uiCopy.plugin.enabled');
+    if (props.committedEnableState === 'disabled') return i18n.t('uiCopy.plugin.disabled');
+    return update() ? i18n.t('uiCopy.plugin.external.currentStateRetained') : i18n.t('uiCopy.plugin.disabled');
+  };
   return (
     <dl class="grid grid-cols-2 gap-3 border-y bg-muted/10 px-1 py-3 sm:grid-cols-3 sm:gap-0 sm:divide-x" data-external-plugin-install-outcome>
       <div class="min-w-0 sm:px-3 sm:first:pl-0">
-        <div class="text-[10px] font-semibold uppercase text-muted-foreground">{i18n.t('uiCopy.plugin.lifecycle')}</div>
-        <div class="mt-0.5 text-sm font-medium">{i18n.t('uiCopy.plugin.disabled')}</div>
+        <dt class="text-[10px] font-semibold uppercase text-muted-foreground">{i18n.t('uiCopy.plugin.lifecycle')}</dt>
+        <dd class="mt-0.5 text-sm font-medium">{lifecycle()}</dd>
       </div>
       <div class="min-w-0 sm:px-3">
-        <div class="text-[10px] font-semibold uppercase text-muted-foreground">{i18n.t('uiCopy.plugin.external.permissions')}</div>
-        <div class="mt-0.5 text-sm font-medium">0 · {i18n.t('uiCopy.plugin.permissionNotGranted')}</div>
+        <dt class="text-[10px] font-semibold uppercase text-muted-foreground">{i18n.t('uiCopy.plugin.external.permissions')}</dt>
+        <dd class="mt-0.5 text-sm font-medium">
+          {update()
+            ? i18n.t('uiCopy.plugin.external.noNewPermissionGrants')
+            : `0 · ${i18n.t('uiCopy.plugin.permissionNotGranted')}`}
+        </dd>
       </div>
       <div class="col-span-2 min-w-0 border-t pt-3 sm:col-span-1 sm:border-t-0 sm:px-3 sm:pt-0 sm:last:pr-0">
-        <div class="text-[10px] font-semibold uppercase text-muted-foreground">{i18n.t('uiCopy.plugin.external.updateMode')}</div>
-        <div class="mt-0.5 text-sm font-medium">
+        <dt class="text-[10px] font-semibold uppercase text-muted-foreground">{i18n.t('uiCopy.plugin.external.updateMode')}</dt>
+        <dd class="mt-0.5 text-sm font-medium">
           {props.updateEligibility === 'automatic_eligible'
             ? i18n.t('uiCopy.plugin.external.automaticUpdates')
             : i18n.t('uiCopy.plugin.external.manualUpdates')}
-        </div>
+        </dd>
       </div>
     </dl>
   );
 }
 
-function CommitProgress(props: { inspection: ExternalPluginInspection | null; isUpdate: boolean }): JSX.Element {
+function CommitProgress(props: { inspection: ExternalPluginInspection | null; operation: ExternalReviewOperation }): JSX.Element {
   const i18n = useI18n();
   return (
     <div role="status" class="space-y-4 rounded-md border bg-background p-5">
       <div class="flex items-center gap-3">
         <Loader2 class="h-5 w-5 shrink-0 animate-spin text-primary motion-reduce:animate-none" />
         <div>
-          <div class="font-semibold">{i18n.t(props.isUpdate ? 'uiCopy.plugin.external.updating' : 'uiCopy.plugin.external.committing')}</div>
+          <div class="font-semibold">{reviewOperationProgressLabel(props.operation, i18n)}</div>
           <Show when={props.inspection}>
             {(current) => <div class="mt-1 text-sm text-muted-foreground">{current().plugin_id} · v{current().version}</div>}
           </Show>
@@ -1247,6 +1405,14 @@ type StandardChangeSummary = {
   count: number;
 };
 
+type OperationEffectGroup = 'read' | 'write' | 'execute' | 'delete' | 'admin' | 'other';
+type OperationImpactGroup = {
+  effect: OperationEffectGroup;
+  count: number;
+  dangerousCount: number;
+  preflightOnlyCount: number;
+};
+
 const securityCategoryOrder: readonly SecurityCategory[] = [
   'permissions',
   'methods',
@@ -1264,6 +1430,12 @@ function securityDeclarationIsSensitive(declaration: SecurityDeclaration): boole
   if (declaration.category === 'methods') {
     const method = declaration.value as PluginExternalPackageSecuritySummary['methods'][number];
     return method.dangerous || method.effect !== 'read';
+  }
+  if (declaration.category === 'storage') {
+    const storage = declaration.value as PluginExternalPackageSecuritySummary['storage'][number];
+    return storage.method_access.some((access) => access.operations.some((operation) => (
+      ['write', 'put', 'insert', 'update', 'delete', 'exec'].includes(operation)
+    )));
   }
   return declaration.category === 'workers'
     || declaration.category === 'network'
@@ -1292,6 +1464,10 @@ function securityDeclarationHighlight(declaration: SecurityDeclaration): string 
     case 'core_actions': {
       const value = declaration.value as PluginExternalPackageSecuritySummary['core_actions'][number];
       return `effect=${value.effect}`;
+    }
+    case 'storage': {
+      const value = declaration.value as PluginExternalPackageSecuritySummary['storage'][number];
+      return value.method_access.flatMap((access) => access.operations).join(', ');
     }
     default:
       return undefined;
@@ -1428,6 +1604,60 @@ function humanizeTechnicalIdentifier(value: string): string {
   return normalized.charAt(0).toLocaleUpperCase() + normalized.slice(1);
 }
 
+function operationImpactGroups(methods: PluginExternalPackageSecuritySummary['methods']): readonly OperationImpactGroup[] {
+  const order: readonly OperationEffectGroup[] = ['read', 'write', 'execute', 'delete', 'admin', 'other'];
+  const grouped = new Map<OperationEffectGroup, OperationImpactGroup>();
+  for (const method of methods) {
+    const effect = operationEffectGroup(method.effect as string);
+    const current = grouped.get(effect) ?? { effect, count: 0, dangerousCount: 0, preflightOnlyCount: 0 };
+    grouped.set(effect, {
+      effect,
+      count: current.count + 1,
+      dangerousCount: current.dangerousCount + (method.dangerous ? 1 : 0),
+      preflightOnlyCount: current.preflightOnlyCount + (method.preflight_only ? 1 : 0),
+    });
+  }
+  return order.flatMap((effect) => {
+    const group = grouped.get(effect);
+    return group ? [group] : [];
+  });
+}
+
+function operationEffectGroup(effect: string): OperationEffectGroup {
+  switch (effect) {
+    case 'read': return 'read';
+    case 'write': return 'write';
+    case 'execute': return 'execute';
+    case 'delete': return 'delete';
+    case 'admin': return 'admin';
+    default: return 'other';
+  }
+}
+
+function operationEffectLabel(effect: OperationEffectGroup, i18n: ReturnType<typeof useI18n>): string {
+  const keys: Record<OperationEffectGroup, Parameters<typeof i18n.t>[0]> = {
+    read: 'uiCopy.plugin.external.operationRead',
+    write: 'uiCopy.plugin.external.operationWrite',
+    execute: 'uiCopy.plugin.external.operationExecute',
+    delete: 'uiCopy.plugin.external.operationDelete',
+    admin: 'uiCopy.plugin.external.operationAdmin',
+    other: 'uiCopy.plugin.external.operationOther',
+  };
+  return i18n.t(keys[effect]);
+}
+
+function operationEffectGuidance(effect: OperationEffectGroup, i18n: ReturnType<typeof useI18n>): string {
+  const keys: Record<OperationEffectGroup, Parameters<typeof i18n.t>[0]> = {
+    read: 'uiCopy.plugin.external.operationReadGuidance',
+    write: 'uiCopy.plugin.external.operationWriteGuidance',
+    execute: 'uiCopy.plugin.external.operationExecuteGuidance',
+    delete: 'uiCopy.plugin.external.operationDeleteGuidance',
+    admin: 'uiCopy.plugin.external.operationAdminGuidance',
+    other: 'uiCopy.plugin.external.operationOtherGuidance',
+  };
+  return i18n.t(keys[effect]);
+}
+
 function list(values: readonly string[]): string {
   return values.length > 0 ? values.join(', ') : '-';
 }
@@ -1436,6 +1666,97 @@ function fields(value: object): string {
   return Object.entries(value).map(([key, field]) => (
     `${key}=${Array.isArray(field) ? list(field.map(String)) : String(field)}`
   )).join('; ');
+}
+
+function resolveReviewOperation(
+  inspection: ExternalPluginInspection | null,
+  updateItem?: PluginInventoryItem,
+): ExternalReviewOperation {
+  if (!updateItem?.pluginInstanceID) return 'install';
+  if (!inspection || updateItem.version !== inspection.version) return 'update';
+  const previousHash = updateItem.externalPackage?.sourceProvenance.package_sha256;
+  if (!previousHash) return 'install_checked';
+  return previousHash === inspection.inspected_hashes.package_sha256 ? 'reinstall' : 'replace';
+}
+
+function reviewOperationActionLabel(
+  operation: ExternalReviewOperation,
+  i18n: ReturnType<typeof useI18n>,
+): string {
+  switch (operation) {
+    case 'install': return i18n.t('uiCopy.plugin.external.confirmInstall');
+    case 'update': return i18n.t('uiCopy.plugin.external.confirmUpdate');
+    case 'reinstall': return i18n.t('uiCopy.plugin.external.confirmReinstall');
+    case 'replace': return i18n.t('uiCopy.plugin.external.confirmReplace');
+    case 'install_checked': return i18n.t('uiCopy.plugin.external.confirmInstallChecked');
+  }
+}
+
+function reviewOperationConfirmationTitle(
+  operation: ExternalReviewOperation,
+  i18n: ReturnType<typeof useI18n>,
+): string {
+  switch (operation) {
+    case 'install': return i18n.t('uiCopy.plugin.external.confirmInstallTitle');
+    case 'update': return i18n.t('uiCopy.plugin.external.confirmUpdateTitle');
+    case 'reinstall': return i18n.t('uiCopy.plugin.external.confirmReinstallTitle');
+    case 'replace': return i18n.t('uiCopy.plugin.external.confirmReplaceTitle');
+    case 'install_checked': return i18n.t('uiCopy.plugin.external.confirmInstallCheckedTitle');
+  }
+}
+
+function reviewOperationProgressLabel(
+  operation: ExternalReviewOperation,
+  i18n: ReturnType<typeof useI18n>,
+): string {
+  switch (operation) {
+    case 'install': return i18n.t('uiCopy.plugin.external.committing');
+    case 'update': return i18n.t('uiCopy.plugin.external.updating');
+    case 'reinstall': return i18n.t('uiCopy.plugin.external.reinstalling');
+    case 'replace': return i18n.t('uiCopy.plugin.external.replacing');
+    case 'install_checked': return i18n.t('uiCopy.plugin.external.installingChecked');
+  }
+}
+
+function reviewOperationCompletionKey(
+  operation: ExternalReviewOperation,
+): Parameters<ReturnType<typeof useI18n>['t']>[0] {
+  switch (operation) {
+    case 'install': return 'uiCopy.plugin.external.complete';
+    case 'update': return 'uiCopy.plugin.external.updateComplete';
+    case 'reinstall': return 'uiCopy.plugin.external.reinstallComplete';
+    case 'replace': return 'uiCopy.plugin.external.replaceComplete';
+    case 'install_checked': return 'uiCopy.plugin.external.installCheckedComplete';
+  }
+}
+
+function trustDecisionTitle(
+  inspection: ExternalPluginInspection,
+  i18n: ReturnType<typeof useI18n>,
+): string {
+  if (inspection.execution_approval.state === 'policy_blocked') return i18n.t('uiCopy.plugin.external.reviewPolicyBlocked');
+  if (inspection.signature_assessment.state === 'invalid' || inspection.signature_assessment.state === 'revoked') {
+    return i18n.t('uiCopy.plugin.external.reviewBlocked');
+  }
+  return inspection.signature_assessment.state === 'verified'
+    ? i18n.t('uiCopy.plugin.external.reviewIdentityVerified')
+    : i18n.t('uiCopy.plugin.external.reviewSourceConfirmation');
+}
+
+function trustDecisionGuidance(
+  inspection: ExternalPluginInspection,
+  i18n: ReturnType<typeof useI18n>,
+): string {
+  if (inspection.execution_approval.state === 'policy_blocked') return i18n.t('uiCopy.plugin.external.policyBlockedGuidance');
+  switch (inspection.signature_assessment.state) {
+    case 'verified': return i18n.t('uiCopy.plugin.external.signatureVerifiedGuidance');
+    case 'absent': return i18n.t('uiCopy.plugin.external.signatureAbsentGuidance');
+    case 'unknown_signer': return i18n.t('uiCopy.plugin.external.signatureUnknownGuidance');
+    case 'unavailable': return i18n.t('uiCopy.plugin.external.signatureUnavailableGuidance');
+    case 'invalid': return i18n.t('uiCopy.plugin.external.signatureInvalidGuidance');
+    case 'revoked': return i18n.t('uiCopy.plugin.external.signatureRevokedGuidance');
+    default: return i18n.t('uiCopy.plugin.external.signatureUnavailableGuidance');
+  }
 }
 
 function signatureReviewLabel(state: ExternalPluginInspection['signature_assessment']['state'], i18n: ReturnType<typeof useI18n>): string {

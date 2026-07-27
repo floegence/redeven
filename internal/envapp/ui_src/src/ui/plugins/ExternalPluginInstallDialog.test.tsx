@@ -410,7 +410,8 @@ describe('ExternalPluginInstallDialog', () => {
       expect(document.body.textContent).toContain(confirmationDigest);
       const confirmation = document.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
       expect(confirmation.disabled).toBe(false);
-      expect(confirmation.closest('footer')).not.toBeNull();
+      expect(confirmation.closest('footer')).toBeNull();
+      expect(confirmation.closest('[data-external-plugin-confirmation-region]')).not.toBeNull();
       expect(confirmation.closest('label')?.className).toContain('min-h-[46px]');
       confirmation.click();
       expect(install.disabled).toBe(false);
@@ -421,7 +422,7 @@ describe('ExternalPluginInstallDialog', () => {
     },
   );
 
-  it('keeps pending approval evidence factual and reserves first-person consent for the checkbox', async () => {
+  it('explains why exact-package confirmation is required without exposing approval jargon', async () => {
     const inspected = inspection('absent', 'pending');
     inspected.execution_approval.reason_codes = ['unsigned_package_requires_user_confirmation'];
     renderDialog({ onInspect: vi.fn(async () => inspected) });
@@ -432,9 +433,10 @@ describe('ExternalPluginInstallDialog', () => {
 
     const trustReview = document.querySelector<HTMLElement>('[data-external-plugin-trust-review]')!;
     const confirmation = document.querySelector<HTMLElement>('[data-external-plugin-confirmation]')!;
-    const consentCopy = 'I approve this exact inspected package and its declared access.';
-    expect(trustReview.textContent).toContain('Waiting for your approval');
+    expect(trustReview.textContent).toContain('Confirm this package source');
+    expect(trustReview.textContent).toContain('This package is unsigned');
     expect(trustReview.textContent).not.toContain('Update mode');
+    expect(trustReview.textContent).not.toContain('Waiting for your approval');
     expect(trustReview.textContent).not.toContain('execution_approval=pending');
     expect(trustReview.textContent).not.toContain('unsigned_package_requires_user_confirmation');
     const report = document.querySelector<HTMLDetailsElement>('[data-external-plugin-report]')!;
@@ -445,11 +447,10 @@ describe('ExternalPluginInstallDialog', () => {
     expect(report.textContent).toContain(inspected.expires_at);
     expect(report.textContent).toContain('action=install');
     expect(document.activeElement).toBe(trustReview);
-    expect(trustReview.textContent).not.toContain(consentCopy);
     expect(confirmation.querySelector('input[type="checkbox"]')).not.toBeNull();
-    expect(confirmation.textContent).toContain(consentCopy);
-    expect((document.body.textContent?.match(/I approve this exact inspected package and its declared access\./g) ?? []))
-      .toHaveLength(1);
+    expect(confirmation.textContent).toContain('Confirm installation of this plugin package');
+    expect(confirmation.textContent).toContain('start Disabled with no permission grants');
+    expect(confirmation.textContent).toContain(confirmationDigest);
     button('Back').click();
     await flush();
     expect(document.activeElement).toBe(inputWithPlaceholder('https://example.com/plugin.redevplugin'));
@@ -463,10 +464,69 @@ describe('ExternalPluginInstallDialog', () => {
     await flush();
 
     const decision = document.querySelector<HTMLElement>('[data-external-plugin-trust-review]')!;
-    expect(decision.textContent).toContain('Ready for your review');
-    expect(decision.textContent).toContain('Signature verified');
-    expect(decision.textContent).toContain('Waiting for your approval');
+    expect(decision.textContent).toContain('Publisher identity verified');
+    expect(decision.textContent).toContain('publisher signature is verified');
+    expect(decision.textContent).not.toContain('Waiting for your approval');
     expect(button('Install plugin').disabled).toBe(true);
+  });
+
+  it.each(['pending', 'user_approved', 'policy_approved'] as const)(
+    'requires exact-package confirmation when execution approval is %s',
+    async (approvalState) => {
+      const inspected = inspection('verified', approvalState);
+      renderDialog({ onInspect: vi.fn(async () => inspected) });
+      typeInto(inputWithPlaceholder('https://example.com/plugin.redevplugin'), 'https://plugins.example.com/toolbox.redevplugin');
+      button('Review package').click();
+      await flush();
+
+      expect(document.querySelector('[data-external-plugin-confirmation]')).not.toBeNull();
+      expect(button('Install plugin').disabled).toBe(true);
+      const report = document.querySelector<HTMLDetailsElement>('[data-external-plugin-report]')!;
+      expect(report.textContent).toContain(`execution_approval=${approvalState}`);
+    },
+  );
+
+  it('separates requested permissions from declared operation impact and keeps raw methods in the report', async () => {
+    const inspected = inspection('absent');
+    const method = (name: string, effect: 'read' | 'write' | 'execute' | 'delete' | 'admin', dangerous = false, preflightOnly = false) => ({
+      method: name,
+      route: { kind: 'capability' as const, binding_id: 'workspace-v1', target_method: name },
+      effect,
+      execution: 'sync' as const,
+      dangerous,
+      preflight_only: preflightOnly,
+      required_permissions: [] as string[],
+      confirmation: { mode: 'none' as const, request_hash_fields: [] as string[], plan_hash_required: false },
+    });
+    inspected.security_summary.permissions = [];
+    inspected.security_summary.methods = [
+      method('workspace.inspect', 'read', true),
+      method('workspace.write', 'write'),
+      method('workspace.run', 'execute', false, true),
+      method('workspace.remove', 'delete'),
+      method('workspace.admin', 'admin'),
+      { ...method('workspace.future', 'admin'), effect: 'future_effect' as never },
+    ];
+    renderDialog({ onInspect: vi.fn(async () => inspected) });
+    typeInto(inputWithPlaceholder('https://example.com/plugin.redevplugin'), 'https://plugins.example.com/toolbox.redevplugin');
+    button('Review package').click();
+    await flush();
+
+    const permissions = document.querySelector<HTMLElement>('[data-external-plugin-requested-permissions]')!;
+    const operations = document.querySelector<HTMLElement>('[data-external-plugin-declared-operations]')!;
+    expect(permissions.textContent).toContain('does not declare any permissions to request');
+    for (const label of ['View information', 'Change content', 'Run actions', 'Delete content', 'Administrative control', 'Other high-attention operations']) {
+      expect(operations.textContent).toContain(label);
+    }
+    expect(operations.textContent).toContain('1 operation needs extra attention');
+    expect(operations.textContent).toContain('1 operation is limited to preflight checks');
+    expect(operations.textContent).not.toContain('workspace.inspect');
+    expect(operations.textContent).not.toContain('effect=');
+    const report = document.querySelector<HTMLDetailsElement>('[data-external-plugin-report]')!;
+    expect(report.textContent).toContain('workspace.inspect');
+    expect(report.textContent).toContain('effect=read');
+    expect(report.textContent).toContain('workspace.future');
+    expect(report.textContent).toContain('effect=future_effect');
   });
 
   it('distinguishes no declarations from standard declarations without claiming safety', async () => {
@@ -475,7 +535,9 @@ describe('ExternalPluginInstallDialog', () => {
     button('Review package').click();
     await flush();
     expect(document.querySelector('[data-external-plugin-review-highlights]')?.textContent)
-      .toContain('This package declares no plugin capabilities or access');
+      .toContain('does not declare any permissions to request');
+    expect(document.querySelector('[data-external-plugin-review-highlights]')?.textContent)
+      .toContain('does not declare any plugin operations');
 
     dispose?.();
     document.body.innerHTML = '';
@@ -486,8 +548,9 @@ describe('ExternalPluginInstallDialog', () => {
     button('Review package').click();
     await flush();
     const highlights = document.querySelector('[data-external-plugin-review-highlights]')?.textContent ?? '';
-    expect(highlights).toContain('No access declarations need special attention');
-    expect(highlights).toContain('1 additional standard declaration');
+    expect(highlights).toContain('Permissions this plugin may request');
+    expect(highlights).toContain('Workspace read');
+    expect(highlights).not.toContain('Methods');
     expect(highlights).not.toContain('safe');
   });
 
@@ -511,11 +574,9 @@ describe('ExternalPluginInstallDialog', () => {
     button('Review package').click();
     await flush();
 
-    const standardChanges = document.querySelector<HTMLElement>('[data-external-plugin-standard-changes]')!;
-    expect(standardChanges.textContent).toContain('Permissions');
-    expect(standardChanges.textContent).toContain('1');
-    expect(standardChanges.textContent).toContain('Added');
-    expect(standardChanges.textContent).not.toContain('additional standard declaration');
+    const requestedPermissions = document.querySelector<HTMLElement>('[data-external-plugin-requested-permissions]')!;
+    expect(requestedPermissions.textContent).toContain('Workspace read');
+    expect(requestedPermissions.textContent).toContain('Added');
     expect(document.querySelector<HTMLDetailsElement>('[data-external-plugin-report]')?.open).toBe(false);
   });
 
@@ -688,12 +749,12 @@ describe('ExternalPluginInstallDialog', () => {
     const highlights = document.querySelector<HTMLElement>('[data-external-plugin-review-highlights]')!;
     expect(highlights.textContent).toContain('Network rules');
     expect(highlights.textContent).toContain('api.github.com:443');
-    expect(highlights.textContent).toContain('1 additional standard declaration');
+    expect(highlights.textContent).toContain('Workspace read');
     const report = document.querySelector<HTMLDetailsElement>('[data-external-plugin-report]')!;
     expect(report.open).toBe(false);
     expect(report.textContent).toContain('permissions the plugin may ask');
     expect(report.textContent).toContain('declared external destinations');
-    expect(document.body.textContent).toContain('Installation grants no permissions');
+    expect(document.body.textContent).toContain('A fresh installation grants no permissions');
     const permissionDisclosure = [...document.querySelectorAll<HTMLDetailsElement>('[data-external-plugin-security-declarations] > details')]
       .find((details) => details.querySelector('summary')?.textContent?.includes('Permissions'));
     expect(permissionDisclosure?.open).toBe(false);
@@ -718,7 +779,7 @@ describe('ExternalPluginInstallDialog', () => {
     expect(document.querySelector<HTMLInputElement>('input[type="checkbox"]')).toBeNull();
     expect([...document.querySelectorAll('button')].some((candidate) => candidate.textContent?.trim() === 'Install plugin')).toBe(false);
     if (approvalState === 'policy_blocked') {
-      expect(document.body.textContent).toContain('Managed by policy');
+      expect(document.body.textContent).toContain('Blocked by environment policy');
       expect(document.body.textContent).toContain('enterprise_source_policy');
       const blockedDecision = document.querySelector<HTMLElement>('[role="alert"]')!;
       const report = document.querySelector<HTMLDetailsElement>('[data-external-plugin-report]')!;
@@ -908,6 +969,7 @@ describe('ExternalPluginInstallDialog', () => {
     const updateItem = externalUpdateItem();
     const inspected = {
       ...inspection(),
+      version: '1.2.4',
       intent: {
         action: 'update' as const,
         plugin_instance_id: updateItem.pluginInstanceID!,
@@ -939,6 +1001,102 @@ describe('ExternalPluginInstallDialog', () => {
     await flush();
     expect(document.body.textContent).toContain('Example Toolbox was updated');
     expect(document.body.textContent).not.toContain('Example Toolbox was installed');
+  });
+
+  it('reinstalls the exact package when version and package hash match', async () => {
+    const updateItem = externalUpdateItem();
+    const inspected = {
+      ...inspection(),
+      intent: {
+        action: 'update' as const,
+        plugin_instance_id: updateItem.pluginInstanceID,
+        expected_management_revision: updateItem.managementRevision,
+      },
+    };
+    const onCommit = vi.fn(async () => committedResult(inspected));
+    renderDialog({ updateItem, onInspect: vi.fn(async () => inspected), onCommit });
+    const upload = document.querySelector<HTMLInputElement>('input[type="file"]')!;
+    Object.defineProperty(upload, 'files', { configurable: true, value: [new File(['same'], 'toolbox-1.2.3.redevplugin')] });
+    upload.dispatchEvent(new Event('change', { bubbles: true }));
+    button('Review package').click();
+    await flush();
+
+    expect(document.querySelector('[data-external-plugin-identity]')?.textContent).toContain('This exact package is already installed; no update is needed · v1.2.3');
+    expect(document.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('Reinstall Example Toolbox');
+    document.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
+    button('Reinstall this version').click();
+    await flush();
+    expect(onCommit).toHaveBeenCalledWith(inspected, expect.any(AbortSignal));
+  });
+
+  it('warns when the same version resolves to different package content', async () => {
+    const updateItem = externalUpdateItem();
+    const differentHash = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    const inspected = inspection();
+    inspected.intent = {
+      action: 'update',
+      plugin_instance_id: updateItem.pluginInstanceID,
+      expected_management_revision: updateItem.managementRevision,
+    };
+    inspected.inspected_hashes.package_sha256 = differentHash;
+    inspected.source_provenance = { ...inspected.source_provenance, package_sha256: differentHash };
+    renderDialog({ updateItem, onInspect: vi.fn(async () => inspected) });
+    const upload = document.querySelector<HTMLInputElement>('input[type="file"]')!;
+    Object.defineProperty(upload, 'files', { configurable: true, value: [new File(['different'], 'toolbox-1.2.3.redevplugin')] });
+    upload.dispatchEvent(new Event('change', { bubbles: true }));
+    button('Review package').click();
+    await flush();
+
+    expect(document.querySelector('[data-external-plugin-identity]')?.textContent).toContain('Same version, different package · v1.2.3');
+    expect(button('Replace with inspected package').disabled).toBe(true);
+    expect(document.body.textContent).not.toContain('latest version');
+  });
+
+  it('does not claim a package match when the installed hash is unavailable', async () => {
+    const updateItem = { ...externalUpdateItem(), externalPackage: undefined };
+    const inspected = inspection();
+    inspected.intent = {
+      action: 'update',
+      plugin_instance_id: updateItem.pluginInstanceID,
+      expected_management_revision: updateItem.managementRevision,
+    };
+    renderDialog({ updateItem, onInspect: vi.fn(async () => inspected) });
+    typeInto(inputWithPlaceholder('https://example.com/plugin.redevplugin'), 'https://plugins.example.com/toolbox.redevplugin');
+    button('Review package').click();
+    await flush();
+
+    expect(document.querySelector('[data-external-plugin-identity]')?.textContent).toContain('Same version, package match unknown · v1.2.3');
+    expect(button('Install inspected package').disabled).toBe(true);
+  });
+
+  it('retains Host-managed enabled state and existing grants during update', async () => {
+    const updateItem = { ...externalUpdateItem(), lifecycleState: 'enabled' as const };
+    const inspected = inspection();
+    inspected.version = '1.2.4';
+    inspected.intent = {
+      action: 'update',
+      plugin_instance_id: updateItem.pluginInstanceID,
+      expected_management_revision: updateItem.managementRevision,
+    };
+    const result = committedResult(inspected);
+    result.plugin.enable_state = 'enabled';
+    renderDialog({ updateItem, onInspect: vi.fn(async () => inspected), onCommit: vi.fn(async () => result) });
+    const upload = document.querySelector<HTMLInputElement>('input[type="file"]')!;
+    Object.defineProperty(upload, 'files', { configurable: true, value: [new File(['update'], 'toolbox-1.2.4.redevplugin')] });
+    upload.dispatchEvent(new Event('change', { bubbles: true }));
+    button('Review package').click();
+    await flush();
+
+    const reviewFacts = document.querySelector<HTMLElement>('[data-external-plugin-install-outcome]')!;
+    expect(reviewFacts.textContent).toContain('Current state retained');
+    expect(reviewFacts.textContent).toContain('No new grants');
+    document.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
+    button('Update plugin').click();
+    await flush();
+    const completionFacts = document.querySelector<HTMLElement>('[data-external-plugin-install-outcome]')!;
+    expect(completionFacts.textContent).toContain('Enabled');
+    expect(completionFacts.textContent).not.toContain('Disabled');
+    expect(completionFacts.textContent).toContain('No new grants');
   });
 
   it('checks the latest eligible GitHub release instead of pinning the previously resolved tag', async () => {

@@ -3,21 +3,21 @@ type: UI Contract
 title: Plugin surfaces
 description: Env App manages official and external plugins through an accessible Launcher, searchable category discovery, exact inventory identities, explicit review, SDK-owned surfaces, Activity windows, and Workbench widgets.
 tags: [ui, plugins, activity, workbench, plugin-center]
-timestamp: 2026-07-24T00:00:00Z
+timestamp: 2026-07-27T00:00:00Z
 quality_exception: Cross-surface UI contract spanning exact plugin identity, Launcher discovery, Center governance, Activity placement, and Workbench placement.
 ---
 # Summary
 
-Plugin UI runs as released ReDevPlugin sandbox surfaces in Redeven chrome.
+Plugin UI embeds released ReDevPlugin sandbox surfaces in Redeven chrome.
 Activity opens Shell-root windows; Workbench opens `redeven.plugin` widgets.
-The Activity Bar opens a search-first Launcher with stable categories, keyboard
-navigation, and exact inventory routing. Plugin Center combines trust, policy,
-lifecycle, access, and launch state into one primary action per item. External
-installation uses explicit source, security review, install, and completion;
-installed packages stay disabled with zero grants. Redeven owns navigation,
-review, geometry, stacking, placement, and filters. ReDevPlugin owns admission,
-iframe bootstrap, bridge, lifecycle, confirmation, streams, and revocation.
-Failed exact-surface close is retryable without widening authority.
+Activity Bar opens a search-first Launcher with stable categories, keyboard
+navigation, and exact inventory routing. Plugin Center combines trust, lifecycle,
+access, and launch state into one action. External installs use explicit source,
+review, commit, and completion. Fresh installs start disabled with zero grants;
+updates retain Host-managed state and grants without adding any. Redeven owns
+navigation, review, placement, and filters; ReDevPlugin owns admission, iframe
+and bridge lifecycle, confirmation, streams, and revocation. Failed exact-surface
+close stays retryable without wider authority.
 
 # Contract
 
@@ -43,7 +43,10 @@ primary launch button. Absent product mutation APIs are not simulated.
 Plugin Center remains a dedicated Activity surface with a separate Launcher
 entry and uses the same category/search projection. Its local filters combine
 source (official catalog or external), trust, and lifecycle without rebuilding
-identity. Discover is a responsive 2-4 column card grid; Installed and Updates
+identity. Every filter trigger permanently names its dimension and current
+value, exposes a dropdown affordance, and keeps one clear-all action visible
+whenever search, category, source, trust, or lifecycle filtering is active.
+Discover is a responsive 2-4 column card grid; Installed and Updates
 stay denser management lists so scanning and state comparison remain efficient.
 The directory opens with no inspector selected. Only an explicit item selection
 or Shell exact-key request opens detail; closing detail preserves the directory
@@ -101,20 +104,33 @@ update remains bound to the exact instance and management revision.
 
 The opaque review dialog exposes four compact visible stages: source, security
 review, install, and done. Review starts with immutable plugin identity, a
-concise source identity, and one decision summary that exclusively owns the
-signature, execution-approval, policy, and continue-or-blocked state. That same
-decision surface states the disabled, zero-grant result and update mode; a
-verified signature must never imply that access has been granted. Invalid,
-revoked, and policy-blocked results remain top-level blocked decisions. Absent,
-unknown-signer, and temporarily unavailable signatures remain top-level caution
-decisions that require exact-package confirmation.
+concise source identity, and one plain-language trust decision. The primary UI
+does not expose execution-approval field names or reason codes. It explains why
+the exact package requires confirmation; full approval state and reason evidence
+remain in the initially collapsed report. Invalid, revoked, and policy-blocked
+results remain top-level blocked decisions. Absent, unknown-signer, and
+temporarily unavailable signatures remain top-level caution decisions that
+require exact-package confirmation. Verified, user-approved, and policy-approved
+assessments still require product confirmation and never imply a permission grant.
+
+The review separates `security_summary.permissions` from methods. Permissions
+lead as permissions the plugin may later request. Methods are grouped by the
+released `read|write|execute|delete|admin` effect set as declared operation
+impact, never as granted permissions or completed actions. Dangerous methods
+remain prominent regardless of effect, and an unrecognized runtime value fails
+visible as an additional high-attention group. Raw identifiers, effects, route,
+preflight, confirmation, and contract facts remain in the complete report.
+Network destinations, worker artifacts, secret references, and contract-proven
+storage writes use observable capability language without inferred business
+purpose.
 
 The next review level shows declared worker code, external destinations, secret
-references, non-read or dangerous methods, core actions, and every sensitive
-added or changed update declaration. An update also shows the total added,
-changed, and removed count before confirmation. If no declaration needs special
-attention, the review says so without claiming that the plugin is safe, trusted,
-or authorized. The complete Host inspection report is always initially closed;
+references, operation-impact groups, core actions, and every sensitive added or
+changed update declaration. An update also shows the total added, changed, and
+removed count before confirmation and explicitly says when declared access is
+unchanged. If no permission or operation is declared, each empty state remains
+separate and makes no claim that the plugin is safe, trusted, or authorized. The
+complete Host inspection report is always initially closed;
 its entry carries the update-change count, and an explicit open expands the
 categories containing added or changed declarations while removed-only and
 unchanged categories remain closed. The report retains the complete Host source
@@ -124,6 +140,12 @@ manifest, entries, and security-summary hashes, and confirmation digest.
 Progressive disclosure changes prominence only and never removes authoritative
 inspection facts. Policy-blocked results retain their exact reason codes instead
 of collapsing into an unsigned-package warning.
+
+The exact-package confirmation control follows the collapsed report in the
+scrolling review body, directly before the fixed action footer. First install
+confirmation states the disabled, zero-grant result. Update or reinstall
+confirmation states that the Host retains enabled state and existing grants and
+adds no grants automatically.
 
 Invalid, revoked, or policy-blocked assessment disables commit. Absent,
 unknown-signer, and temporarily unavailable signatures show a prominent risk
@@ -136,8 +158,14 @@ An in-progress update retires its visible slots while reconciliation is pending.
 A failed terminal result keeps the installed revision eligible to reopen; a
 timeout, abort, or otherwise unresolved in-progress outcome fences that revision
 until inventory proves a newer runnable target.
-After commit, the plugin is visibly disabled with zero grants and manual updates
-unless verified evidence allows automatic updates. The completion action enters
+After an install commit, the plugin is visibly disabled with zero grants. After
+an update or reinstall, completion reads `plugin.enable_state` from the Host
+receipt, retains existing grants, and claims only that no new grants were added.
+Manual updates remain the default unless verified evidence allows automatic
+updates. Equal SemVer never proves latest: equal package hashes offer exact-package
+reinstall, different hashes warn that content differs, and missing prior hash
+states that equality cannot be determined. Every case remains bound to the
+exact update intent and inspection digest. The completion action enters
 the exact installed detail for permission review and manual enablement. A refresh
 failure after a terminal commit exposes only an inventory refresh recovery and
 never a second commit action. Unknown outcomes offer only same-inspection
