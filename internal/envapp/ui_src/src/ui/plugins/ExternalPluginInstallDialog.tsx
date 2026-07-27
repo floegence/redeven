@@ -202,8 +202,8 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
   const viewPermissions = () => {
     const result = committed();
     if (!result || refreshFailed()) return;
-    props.onViewPermissions?.(result);
     props.onOpenChange(false);
+    props.onViewPermissions?.(result);
   };
 
   const reviewBlocked = createMemo(() => {

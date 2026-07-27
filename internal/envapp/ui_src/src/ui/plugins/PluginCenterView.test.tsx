@@ -1530,7 +1530,7 @@ describe('PluginCenterView', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     const permissions = mount.querySelector<HTMLElement>('[data-plugin-permissions]')!;
     expect(mount.querySelector('[data-plugin-center-details]')?.textContent).toContain('Toolbox Beta');
-    expect(document.activeElement).toBe(permissions);
+    await vi.waitFor(() => expect(document.activeElement).toBe(permissions));
   });
 
   it('preserves an exact shell detail request when retained filters exclude it', async () => {
