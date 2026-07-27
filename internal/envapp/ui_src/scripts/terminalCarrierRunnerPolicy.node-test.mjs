@@ -2,23 +2,30 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-import { classifyTerminalCarrierConsoleMessage } from './terminalCarrierRunnerPolicy.mjs';
+import {
+  classifyTerminalCarrierConsoleMessage,
+  resolveTerminalCarrierBrowserMode,
+} from './terminalCarrierRunnerPolicy.mjs';
 
 const carrierSource = await readFile(new URL('./checkTerminalRecoveryCarrier.mjs', import.meta.url), 'utf8');
 const ciSource = await readFile(new URL('../../../../.github/workflows/ci-check.yml', import.meta.url), 'utf8');
 const prePushSource = await readFile(new URL('../../../../scripts/check_renderer_e2e.sh', import.meta.url), 'utf8');
+const uiGateSource = await readFile(new URL('../../../../scripts/check_ui_tests.sh', import.meta.url), 'utf8');
+const performanceSource = await readFile(new URL('./checkTerminalInteractionPerformance.mjs', import.meta.url), 'utf8');
+const browserConfigSource = await readFile(new URL('../vitest.browser.config.ts', import.meta.url), 'utf8');
+const packageSource = await readFile(new URL('../package.json', import.meta.url), 'utf8');
 const releaseSource = await readFile(new URL('../../../../.github/workflows/release.yml', import.meta.url), 'utf8');
 
 test('keeps the supported terminal carriers explicit in the exact-main pre-push gate', () => {
-  assert.match(carrierSource, /chromium\.launch\(\{\s*headless: false,/u);
+  assert.match(carrierSource, /chromium\.launch\(\{\s*headless: options\.headless,/u);
+  assert.match(carrierSource, /--enable-gpu/u);
   assert.match(carrierSource, /installReDevPluginRuntimeFixture\(tempDir\)/u);
 
   assert.doesNotMatch(ciSource, /test:terminal-carrier/u);
 
-  assert.match(prePushSource, /corepack pnpm run test:terminal-carrier -- --fixture-bytes "\$fixture_bytes"/u);
-  assert.match(prePushSource, /"\$\(uname -s\)" == "Linux" && -z "\$\{DISPLAY:-\}"/u);
-  assert.match(prePushSource, /command -v xvfb-run/u);
-  assert.match(prePushSource, /xvfb-run -a "\$\{command\[@\]\}"/u);
+  assert.match(prePushSource, /corepack pnpm run test:terminal-carrier -- --headless --fixture-bytes "\$fixture_bytes"/u);
+  assert.doesNotMatch(prePushSource, /DISPLAY|xvfb-run/u);
+  assert.doesNotMatch(uiGateSource, /DISPLAY|xvfb-run/u);
   assert.match(prePushSource, /ui_pkg_need_install "\$UI_DIR"/u);
   assert.match(prePushSource, /pnpm install --frozen-lockfile/u);
   assert.match(prePushSource, /pnpm exec playwright install chromium/u);
@@ -29,6 +36,36 @@ test('keeps the supported terminal carriers explicit in the exact-main pre-push 
 
   assert.doesNotMatch(prePushSource, /--fixture-bytes 8388608/u);
   assert.doesNotMatch(releaseSource, /--fixture-bytes 8388608/u);
+});
+
+test('defaults browser gates to headless while preserving explicit headed diagnostics', () => {
+  assert.deepEqual(resolveTerminalCarrierBrowserMode([]), {
+    browserMode: 'headless',
+    headless: true,
+  });
+  assert.deepEqual(resolveTerminalCarrierBrowserMode(['--headless']), {
+    browserMode: 'headless',
+    headless: true,
+  });
+  assert.deepEqual(resolveTerminalCarrierBrowserMode(['--headed']), {
+    browserMode: 'headed',
+    headless: false,
+  });
+  assert.throws(
+    () => resolveTerminalCarrierBrowserMode(['--headless', '--headed']),
+    /cannot be used together/,
+  );
+
+  assert.match(browserConfigSource, /^\s*headless: true,$/mu);
+  assert.match(browserConfigSource, /^\s*fileParallelism: false,$/mu);
+  assert.match(browserConfigSource, /--enable-gpu/u);
+  assert.match(browserConfigSource, /--disable-background-timer-throttling/u);
+  assert.match(browserConfigSource, /--disable-renderer-backgrounding/u);
+  assert.match(packageSource, /"test:browser:headed": "node scripts\/runVitestBrowser\.mjs --browser\.headless=false"/u);
+  assert.match(performanceSource, /checkTerminalRecoveryCarrier\.mjs'\),\s*'--headless'/u);
+  assert.match(performanceSource, /browser_mode: fixedTerminalPerformanceBrowserMode/u);
+  assert.doesNotMatch(prePushSource, /--headed|test:browser:headed/u);
+  assert.doesNotMatch(uiGateSource, /--headed|test:browser:headed/u);
 });
 
 test('reports Chromium readback diagnostics without weakening renderer failures', () => {

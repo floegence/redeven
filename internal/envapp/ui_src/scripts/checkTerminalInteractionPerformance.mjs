@@ -28,6 +28,7 @@ const args = process.argv.slice(2).filter((value) => value !== '--');
 const reportPath = args[0] || '/tmp/redeven-terminal-fixed-performance.json';
 const tempDir = mkdtempSync(path.join(os.tmpdir(), 'redeven-terminal-fixed-performance-'));
 const carrierReportPath = path.join(tempDir, 'terminal-carrier.json');
+const fixedTerminalPerformanceBrowserMode = 'headless';
 
 function run(stage, commandArgs, env = process.env) {
   const result = spawnSync(process.execPath, commandArgs, {
@@ -123,6 +124,7 @@ function readRunnerIdentity(carrierReport = null) {
     arch: process.arch,
     node: process.version,
     chromium: carrierReport?.runner?.chromium ?? null,
+    browser_mode: fixedTerminalPerformanceBrowserMode,
     cpu_model: cpus[0]?.model ?? null,
     cpu_count: cpus.length,
     total_memory_bytes: os.totalmem(),
@@ -162,6 +164,7 @@ try {
   try {
     run('terminal prepared-history performance', [
       path.join(scriptDir, 'checkTerminalRecoveryCarrier.mjs'),
+      '--headless',
       '--fixture-bytes',
       String(64 * 1024),
       '--max-interactive-ms',

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  assertFixedTerminalPerformanceBrowserMode,
   assertTerminalCarrierHistoryVisualEvidence,
   assertTerminalCarrierHistoryVisualMatch,
   assertTerminalCarrierInteractiveLimit,
@@ -243,6 +244,7 @@ test('builds one fixed-performance report with browser, carrier, revision, and r
   ].join('\n'));
   const carrierReport = {
     status: 'passed',
+    runner: { browser_mode: 'headless' },
     threshold: { max_interactive_ms: 150 },
     shared_prepared_history_summary: { sample_count: 2, interactive_p95_ms: 59.9 },
     shared_prepared_history_samples: [
@@ -251,7 +253,7 @@ test('builds one fixed-performance report with browser, carrier, revision, and r
     ],
   };
   const sourceRevision = { commit: '0123456789abcdef', dirty: true, working_tree_diff_sha256: 'abc' };
-  const runner = { id: 'test-runner', chromium: '140.0' };
+  const runner = { id: 'test-runner', chromium: '140.0', browser_mode: 'headless' };
 
   const report = buildFixedTerminalPerformanceReport({
     browserMetrics,
@@ -286,6 +288,7 @@ test('rejects incomplete or internally inconsistent fixed-performance evidence',
   ].join('\n'));
   const carrierReport = {
     status: 'passed',
+    runner: { browser_mode: 'headless' },
     threshold: { max_interactive_ms: 150 },
     shared_prepared_history_summary: { sample_count: 2, interactive_p95_ms: 59.9 },
     shared_prepared_history_samples: [{ sample_index: 1 }],
@@ -296,7 +299,7 @@ test('rejects incomplete or internally inconsistent fixed-performance evidence',
       browserMetrics: incompleteBrowserMetrics,
       carrierReport,
       sourceRevision: {},
-      runner: {},
+      runner: { browser_mode: 'headless' },
     }),
     /missing terminal_warm_core_switch/,
   );
@@ -323,8 +326,29 @@ test('rejects incomplete or internally inconsistent fixed-performance evidence',
       ],
       carrierReport,
       sourceRevision: {},
-      runner: {},
+      runner: { browser_mode: 'headless' },
     }),
     /samples_ms must match sample_count|sample count does not match/,
+  );
+});
+
+test('binds fixed-performance runner identity to the carrier browser mode', () => {
+  assert.equal(assertFixedTerminalPerformanceBrowserMode({
+    runner: { browser_mode: 'headless' },
+    carrierReport: { runner: { browser_mode: 'headless' } },
+  }), 'headless');
+  assert.throws(
+    () => assertFixedTerminalPerformanceBrowserMode({
+      runner: { browser_mode: 'headless' },
+      carrierReport: { runner: {} },
+    }),
+    /carrier evidence runner browser_mode is required/,
+  );
+  assert.throws(
+    () => assertFixedTerminalPerformanceBrowserMode({
+      runner: { browser_mode: 'headless' },
+      carrierReport: { runner: { browser_mode: 'headed' } },
+    }),
+    /browser mode does not match carrier evidence/,
   );
 });

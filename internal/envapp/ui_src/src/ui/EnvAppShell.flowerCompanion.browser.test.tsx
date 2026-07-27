@@ -1054,6 +1054,7 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     await userEvent.click(send);
     await flushAsync();
     await flushAsync();
+    expect(fixture.companion.dataset.companionPhase).toBe('expanding');
     await new Promise((resolve) => setTimeout(resolve, 180));
 
     const panelRect = elementRect(fixture.panel);
@@ -1063,10 +1064,10 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     expect(panelRect.width).toBeGreaterThan(0);
     expect(panelRect.width).toBeLessThan(width);
     expect(panelRect.bottom).toBeCloseTo(elementRect(fixture.mobileRail).bottom, 0);
-    expect(fixture.companion.dataset.companionPhase).toBe('expanding');
     expect(fixture.companion.dataset.companionVisibility).toBe('visible');
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    expect(fixture.companion.dataset.companionPhase).toBe('expanded');
+    await vi.waitFor(() => {
+      expect(fixture.companion.dataset.companionPhase).toBe('expanded');
+    }, { timeout: 1_000 });
     expect(document.querySelector('[data-testid="activity-flower-focused-thread"]')?.textContent).toBe('thread-launched');
     expect(document.querySelector('[data-floe-shell-slot="mobile-tab-bar"] [role="tab"][aria-selected="true"]')?.getAttribute('aria-label'))
       .toBe(activeSurfaceLabel);
@@ -1081,8 +1082,9 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     expect(fixture.product.dataset.presentation).toBe('collapsed');
     expect(fixture.product.getAttribute('aria-hidden')).toBeNull();
     expect(fixture.companion.dataset.companionPhase).toBe('collapsing');
-    await new Promise((resolve) => setTimeout(resolve, 190));
-    expect(fixture.companion.dataset.companionPhase).toBe('collapsed');
+    await vi.waitFor(() => {
+      expect(fixture.companion.dataset.companionPhase).toBe('collapsed');
+    }, { timeout: 1_000 });
     expect(elementRect(fixture.mobileRail).width).toBeGreaterThan(0);
     expect(document.querySelector('.flower-companion-collapsed-icon-running')).not.toBeNull();
     expect(document.querySelector('.flower-companion-collapsed-summary')).not.toBeNull();

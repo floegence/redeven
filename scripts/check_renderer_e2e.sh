@@ -8,17 +8,7 @@ source "$SCRIPT_DIR/ui_package_common.sh"
 
 run_terminal_carrier() {
   local fixture_bytes="$1"
-  local -a command=(corepack pnpm run test:terminal-carrier -- --fixture-bytes "$fixture_bytes")
-
-  if [[ "$(uname -s)" == "Linux" && -z "${DISPLAY:-}" ]]; then
-    if ! command -v xvfb-run >/dev/null 2>&1; then
-      echo "xvfb-run is required for headed terminal carrier E2E on Linux without DISPLAY" >&2
-      return 1
-    fi
-    xvfb-run -a "${command[@]}"
-    return
-  fi
-  "${command[@]}"
+  corepack pnpm run test:terminal-carrier -- --headless --fixture-bytes "$fixture_bytes"
 }
 
 cd "$UI_DIR"
