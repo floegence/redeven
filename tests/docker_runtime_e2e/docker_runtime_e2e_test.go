@@ -638,7 +638,9 @@ func (f *fixture) assertInventoryRequiresConfirmedTakeover(ctx context.Context) 
 	if isolationAfter.Summary.Automatic != 1 || len(isolationAfter.Instances) != 1 {
 		f.t.Fatalf("stopping the target container affected the isolation container: %#v", isolationAfter)
 	}
-	if err := f.stopRuntimeInventoryInContainer(ctx, isolationContainer, isolationAfter, runtimemanagement.RuntimeProcessReconciliationAutomatic); err != nil {
+	if err := f.stopAutomaticRuntimeInventoryInContainer(ctx, isolationContainer, func() runtimemanagement.RuntimeProcessInventory {
+		return f.runtimeInventoryInContainer(ctx, isolationContainer)
+	}); err != nil {
 		f.t.Fatalf("stop isolation inventory: %v", err)
 	}
 }
@@ -660,14 +662,10 @@ func (f *fixture) performDesktopOwnedUpgrade(ctx context.Context) {
 
 func (f *fixture) stopRuntime(ctx context.Context) launchReport {
 	f.t.Helper()
-	inventory := f.runtimeInventory(ctx)
-	if inventory.Summary.Blocked > 0 {
-		f.t.Fatalf("runtime inventory contains blocking instances: %#v", inventory)
-	}
-	if len(inventory.Instances) > 0 {
-		if err := f.stopRuntimeInventoryInContainer(ctx, f.containerName, inventory, runtimemanagement.RuntimeProcessReconciliationAutomatic); err != nil {
-			f.t.Fatalf("stop runtime inventory: %v", err)
-		}
+	if err := f.stopAutomaticRuntimeInventoryInContainer(ctx, f.containerName, func() runtimemanagement.RuntimeProcessInventory {
+		return f.runtimeInventory(ctx)
+	}); err != nil {
+		f.t.Fatalf("stop runtime inventory: %v", err)
 	}
 	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
@@ -756,6 +754,32 @@ func (f *fixture) stopRuntimeInventoryInContainer(
 		return fmt.Errorf("runtime stop left processes: %#v", stopped.After)
 	}
 	return nil
+}
+
+func (f *fixture) stopAutomaticRuntimeInventoryInContainer(
+	ctx context.Context,
+	containerName string,
+	readInventory func() runtimemanagement.RuntimeProcessInventory,
+) error {
+	f.t.Helper()
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		inventory := readInventory()
+		if inventory.Summary.Blocked > 0 {
+			return fmt.Errorf("runtime inventory contains blocking instances: %#v", inventory)
+		}
+		if len(inventory.Instances) == 0 {
+			return nil
+		}
+		err := f.stopRuntimeInventoryInContainer(ctx, containerName, inventory, runtimemanagement.RuntimeProcessReconciliationAutomatic)
+		if err == nil {
+			return nil
+		}
+		if !strings.Contains(err.Error(), runtimemanagement.RuntimeProcessErrorInventoryChanged) || !time.Now().Before(deadline) {
+			return err
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 }
 
 func (f *fixture) recoverRuntimeAfterManagementSocketLoss(ctx context.Context, previousProcessStartedAtMs int64) pingSnapshot {
