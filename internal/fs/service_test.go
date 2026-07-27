@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/floegence/flowersec/flowersec-go/framing/jsonframe"
@@ -31,6 +33,7 @@ type recordingMutationCoordinator struct {
 	ctx    context.Context
 	effect gitruntime.FilesystemEffect
 	calls  int
+	before func(gitruntime.FilesystemEffect) error
 }
 
 type mutationContextKey struct{}
@@ -39,6 +42,11 @@ func (c *recordingMutationCoordinator) CoordinateFilesystemMutation(ctx context.
 	c.ctx = ctx
 	c.effect = effect
 	c.calls++
+	if c.before != nil {
+		if err := c.before(effect); err != nil {
+			return err
+		}
+	}
 	return fn()
 }
 
@@ -128,6 +136,170 @@ func TestFilesystemWriteEffectAlwaysChangesTopology(t *testing.T) {
 		if !effect.ChangesTopology || len(effect.Paths) != 1 || effect.Paths[0] != target {
 			t.Fatalf("filesystemWriteEffect(%q) = %#v, want topology-exclusive exact path", target, effect)
 		}
+	}
+}
+
+func TestMutationRPCsBindEffectToCoordinatedCanonicalPaths(t *testing.T) {
+	tests := []struct {
+		name    string
+		typeID  uint32
+		prepare func(t *testing.T, repoA string, repoB string)
+		request func(alias string) any
+		assert  func(t *testing.T, repoA string, repoB string)
+	}{
+		{
+			name:   "write",
+			typeID: TypeID_FS_WRITE,
+			request: func(alias string) any {
+				return fsWriteFileReq{Path: filepath.Join(alias, "written.txt"), Content: "repo-a"}
+			},
+			assert: func(t *testing.T, repoA string, repoB string) {
+				assertFileContent(t, filepath.Join(repoA, "written.txt"), "repo-a")
+				assertPathMissing(t, filepath.Join(repoB, "written.txt"))
+			},
+		},
+		{
+			name:   "mkdir",
+			typeID: TypeID_FS_MKDIR,
+			request: func(alias string) any {
+				return fsMkdirReq{Path: filepath.Join(alias, "created")}
+			},
+			assert: func(t *testing.T, repoA string, repoB string) {
+				if info, err := os.Stat(filepath.Join(repoA, "created")); err != nil || !info.IsDir() {
+					t.Fatalf("coordinated directory missing: info=%#v error=%v", info, err)
+				}
+				assertPathMissing(t, filepath.Join(repoB, "created"))
+			},
+		},
+		{
+			name:   "delete",
+			typeID: TypeID_FS_DELETE,
+			prepare: func(t *testing.T, repoA string, repoB string) {
+				writeTestFile(t, filepath.Join(repoA, "victim.txt"), "repo-a")
+				writeTestFile(t, filepath.Join(repoB, "victim.txt"), "repo-b")
+			},
+			request: func(alias string) any {
+				return fsDeleteReq{Path: filepath.Join(alias, "victim.txt")}
+			},
+			assert: func(t *testing.T, repoA string, repoB string) {
+				assertPathMissing(t, filepath.Join(repoA, "victim.txt"))
+				assertFileContent(t, filepath.Join(repoB, "victim.txt"), "repo-b")
+			},
+		},
+		{
+			name:   "rename",
+			typeID: TypeID_FS_RENAME,
+			prepare: func(t *testing.T, repoA string, repoB string) {
+				writeTestFile(t, filepath.Join(repoA, "source.txt"), "repo-a")
+				writeTestFile(t, filepath.Join(repoB, "source.txt"), "repo-b")
+			},
+			request: func(alias string) any {
+				return fsRenameReq{OldPath: filepath.Join(alias, "source.txt"), NewPath: filepath.Join(alias, "renamed.txt")}
+			},
+			assert: func(t *testing.T, repoA string, repoB string) {
+				assertPathMissing(t, filepath.Join(repoA, "source.txt"))
+				assertFileContent(t, filepath.Join(repoA, "renamed.txt"), "repo-a")
+				assertFileContent(t, filepath.Join(repoB, "source.txt"), "repo-b")
+				assertPathMissing(t, filepath.Join(repoB, "renamed.txt"))
+			},
+		},
+		{
+			name:   "copy",
+			typeID: TypeID_FS_COPY,
+			prepare: func(t *testing.T, repoA string, repoB string) {
+				writeTestFile(t, filepath.Join(repoA, "source.txt"), "repo-a")
+				writeTestFile(t, filepath.Join(repoB, "source.txt"), "repo-b")
+			},
+			request: func(alias string) any {
+				return fsCopyReq{SourcePath: filepath.Join(alias, "source.txt"), DestPath: filepath.Join(alias, "copied.txt")}
+			},
+			assert: func(t *testing.T, repoA string, repoB string) {
+				assertFileContent(t, filepath.Join(repoA, "copied.txt"), "repo-a")
+				assertPathMissing(t, filepath.Join(repoB, "copied.txt"))
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			root := t.TempDir()
+			repoA := filepath.Join(root, "repo-a")
+			repoB := filepath.Join(root, "repo-b")
+			alias := filepath.Join(root, "active")
+			for _, path := range []string{repoA, repoB} {
+				if err := os.MkdirAll(path, 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			mustSymlink(t, repoA, alias)
+			canonicalRepoA := mustEvalPath(t, repoA)
+			if test.prepare != nil {
+				test.prepare(t, repoA, repoB)
+			}
+
+			coordinator := &recordingMutationCoordinator{before: func(effect gitruntime.FilesystemEffect) error {
+				for _, effectPath := range effect.Paths {
+					rel, err := filepath.Rel(canonicalRepoA, effectPath)
+					if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+						return fmt.Errorf("effect path %q is not bound to repo A", effectPath)
+					}
+				}
+				if err := os.Remove(alias); err != nil {
+					return err
+				}
+				return os.Symlink(repoB, alias)
+			}}
+			scope, err := filesystemscope.NewDefaultRegistry(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			svc := NewServiceWithCoordinator(scope, coordinator)
+			callMutationRPC(t, svc, test.typeID, test.request(alias))
+			if coordinator.calls != 1 {
+				t.Fatalf("coordinator calls = %d, want 1", coordinator.calls)
+			}
+			test.assert(t, repoA, repoB)
+		})
+	}
+}
+
+func callMutationRPC(t *testing.T, svc *Service, typeID uint32, request any) {
+	t.Helper()
+	router := rpc.NewRouter()
+	svc.Register(router, &session.Meta{CanRead: true, CanWrite: true})
+	serverConn, clientConn := net.Pipe()
+	defer serverConn.Close()
+	defer clientConn.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	server := rpc.NewServer(serverConn, router)
+	go func() { _ = server.Serve(ctx) }()
+	client := rpc.NewClient(clientConn)
+	payload, err := json.Marshal(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, rpcErr, callErr := client.Call(ctx, typeID, payload)
+	if callErr != nil {
+		t.Fatalf("Call error = %v", callErr)
+	}
+	if rpcErr != nil {
+		t.Fatalf("RPC error = %#v", rpcErr)
+	}
+}
+
+func assertFileContent(t *testing.T, path string, want string) {
+	t.Helper()
+	content, err := os.ReadFile(path)
+	if err != nil || string(content) != want {
+		t.Fatalf("ReadFile(%q) = %q, %v, want %q", path, content, err, want)
+	}
+}
+
+func assertPathMissing(t *testing.T, path string) {
+	t.Helper()
+	if _, err := os.Lstat(path); !os.IsNotExist(err) {
+		t.Fatalf("path %q exists or returned unexpected error: %v", path, err)
 	}
 }
 
