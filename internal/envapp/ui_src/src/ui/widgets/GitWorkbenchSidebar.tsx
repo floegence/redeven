@@ -15,6 +15,7 @@ import {
   branchDisplayName,
   branchIdentity,
   describeGitHead,
+  exactGitPath,
   resolveGitBranchWorktreePath,
   summarizeWorkspaceCount,
   workspaceViewSectionCount,
@@ -227,7 +228,7 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
   let scheduledBranchScrollTask: (() => void) | null = null;
   let previousBranchesRef: GitListBranchesResponse | null | undefined;
   let pendingSelectionScrollAnchor: BranchSelectionScrollAnchor | null = null;
-  const repoRootPath = () => String(props.repoSummary?.repoRootPath ?? '').trim();
+  const repoRootPath = () => exactGitPath(props.repoSummary?.repoRootPath);
 
   const branchContextMenuItems = (target: BranchContextTarget): GitContextMenuActionItem[] => {
     const { branch } = target;

@@ -45,6 +45,14 @@ export type wire_git_get_repo_summary_resp = {
   behind_count?: number;
   stash_count?: number;
   workspace_summary: wire_git_workspace_summary;
+  workspace_revision?: string;
+};
+
+export type wire_git_get_capabilities_resp = {
+  workspace_revision_v1: boolean;
+  workspace_path_status_v1: boolean;
+  workspace_directory_scope_v1: boolean;
+  stash_section_diff_v1: boolean;
 };
 
 export type wire_git_diff_file_summary = {
@@ -75,8 +83,14 @@ export type wire_git_workspace_change = wire_git_diff_file_summary & {
   parent_path?: string;
   directory_path?: string;
   descendant_file_count?: number;
+  unstaged_file_count?: number;
+  untracked_file_count?: number;
+  staged_file_count?: number;
+  conflicted_file_count?: number;
   contains_untracked?: boolean;
   contains_unstaged?: boolean;
+  contains_staged?: boolean;
+  contains_conflicted?: boolean;
   mutation_paths?: string[];
 };
 
@@ -104,6 +118,7 @@ export type wire_git_list_workspace_page_req = {
   directory_path?: string;
   offset?: number;
   limit?: number;
+  expected_workspace_revision?: string;
 };
 
 export type wire_git_list_workspace_page_resp = {
@@ -117,6 +132,19 @@ export type wire_git_list_workspace_page_resp = {
   offset?: number;
   next_offset?: number;
   has_more?: boolean;
+  items: wire_git_workspace_change[];
+  workspace_revision?: string;
+};
+
+export type wire_git_list_workspace_path_statuses_req = {
+  repo_root_path: string;
+  paths: string[];
+  expected_workspace_revision?: string;
+};
+
+export type wire_git_list_workspace_path_statuses_resp = {
+  repo_root_path: string;
+  workspace_revision: string;
   items: wire_git_workspace_change[];
 };
 
@@ -269,10 +297,7 @@ export type wire_git_drop_stash_resp = {
 export type wire_git_linked_worktree_snapshot = {
   worktree_path?: string;
   summary: wire_git_workspace_summary;
-  staged: wire_git_workspace_change[];
-  unstaged: wire_git_workspace_change[];
-  untracked: wire_git_workspace_change[];
-  conflicted: wire_git_workspace_change[];
+  workspace_revision?: string;
 };
 
 
@@ -353,10 +378,7 @@ export type wire_git_delete_linked_worktree_preview = {
   worktree_path?: string;
   accessible: boolean;
   summary: wire_git_workspace_summary;
-  staged: wire_git_workspace_change[];
-  unstaged: wire_git_workspace_change[];
-  untracked: wire_git_workspace_change[];
-  conflicted: wire_git_workspace_change[];
+  workspace_revision?: string;
 };
 
 export type wire_git_preview_delete_branch_resp = {
@@ -503,7 +525,9 @@ export type wire_git_commit_detail = {
   body?: string;
 };
 
-export type wire_git_commit_file_summary = wire_git_diff_file_summary;
+export type wire_git_commit_file_summary = wire_git_diff_file_summary & {
+  stash_section?: string;
+};
 
 export type wire_git_diff_file_ref = {
   change_type?: string;
@@ -551,6 +575,7 @@ export type wire_git_get_diff_content_req = {
   base_ref?: string;
   target_ref?: string;
   stash_id?: string;
+  stash_section?: string;
   mode?: string;
   file: wire_git_diff_file_ref;
 };

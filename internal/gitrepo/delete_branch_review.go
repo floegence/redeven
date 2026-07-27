@@ -7,28 +7,28 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
-	"github.com/floegence/redeven/internal/gitutil"
+	"github.com/floegence/redeven/internal/gitruntime"
 )
 
 type deleteBranchPlan struct {
-	Target                      deleteBranchTarget
-	LinkedWorktree              *gitDeleteLinkedWorktreePreview
-	RequiresWorktreeRemoval     bool
-	RequiresDiscardConfirmation bool
-	SafeDeleteAllowed           bool
-	SafeDeleteBaseRef           string
-	SafeDeleteReason            string
-	ForceDeleteAllowed          bool
-	ForceDeleteRequiresConfirm  bool
-	ForceDeleteReason           string
-	BlockingReason              string
-	TargetHeadCommit            string
-	SafeDeleteBaseCommit        string
-	PlanFingerprint             string
+	Target                          deleteBranchTarget
+	LinkedWorktree                  *gitDeleteLinkedWorktreePreview
+	RequiresWorktreeRemoval         bool
+	RequiresDiscardConfirmation     bool
+	SafeDeleteAllowed               bool
+	SafeDeleteBaseRef               string
+	SafeDeleteReason                string
+	ForceDeleteAllowed              bool
+	ForceDeleteRequiresConfirm      bool
+	ForceDeleteReason               string
+	BlockingReason                  string
+	TargetHeadCommit                string
+	SafeDeleteBaseCommit            string
+	DestructiveWorkspaceFingerprint string
+	PlanFingerprint                 string
 }
 
 type deleteBranchFingerprintPayload struct {
@@ -67,22 +67,42 @@ func normalizeDeleteBranchMode(value string) (deleteBranchMode, error) {
 	}
 }
 
-type deleteBranchFingerprintLinkedWorktree struct {
-	WorktreePath string                         `json:"worktree_path"`
-	Accessible   bool                           `json:"accessible"`
-	Summary      gitWorkspaceSummary            `json:"summary"`
-	Changes      []deleteBranchFingerprintEntry `json:"changes,omitempty"`
+func (s *Service) deleteBranchTopologyPaths(ctx context.Context, repo repoContext, name string, fullName string, kind string) ([]string, error) {
+	target, err := normalizeDeleteBranchTarget(name, fullName, kind)
+	if err != nil {
+		return nil, err
+	}
+	paths := []string{repo.repoRootReal}
+	bindings, err := s.readWorktreeBindings(ctx, repo.repoRootReal)
+	if err != nil {
+		return nil, err
+	}
+	if binding, ok := bindings["refs/heads/"+target.LocalName]; ok {
+		path := filepath.Clean(binding.Path)
+		if path != "" && path != filepath.Clean(repo.repoRootReal) {
+			paths = append(paths, path)
+		}
+	}
+	return paths, nil
 }
 
-type deleteBranchFingerprintEntry struct {
-	Section    string `json:"section,omitempty"`
-	ChangeType string `json:"change_type,omitempty"`
-	Path       string `json:"path,omitempty"`
-	OldPath    string `json:"old_path,omitempty"`
-	NewPath    string `json:"new_path,omitempty"`
-	Additions  int    `json:"additions,omitempty"`
-	Deletions  int    `json:"deletions,omitempty"`
-	IsBinary   bool   `json:"is_binary,omitempty"`
+func sameDeleteBranchTopologyPaths(left []string, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if filepath.Clean(left[index]) != filepath.Clean(right[index]) {
+			return false
+		}
+	}
+	return true
+}
+
+type deleteBranchFingerprintLinkedWorktree struct {
+	WorktreePath                    string              `json:"worktree_path"`
+	Accessible                      bool                `json:"accessible"`
+	Summary                         gitWorkspaceSummary `json:"summary"`
+	DestructiveWorkspaceFingerprint string              `json:"destructive_workspace_fingerprint,omitempty"`
 }
 
 func (s *Service) previewDeleteBranch(ctx context.Context, repo repoContext, name string, fullName string, kind string) (*previewDeleteBranchResp, error) {
@@ -90,7 +110,7 @@ func (s *Service) previewDeleteBranch(ctx context.Context, repo repoContext, nam
 	if err != nil {
 		return nil, err
 	}
-	plan, err := s.buildDeleteBranchPlan(ctx, repo, target)
+	plan, err := s.buildDeleteBranchPlan(ctx, repo, target, false)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +133,7 @@ func (s *Service) previewDeleteBranch(ctx context.Context, repo repoContext, nam
 	}, nil
 }
 
-func (s *Service) buildDeleteBranchPlan(ctx context.Context, repo repoContext, target deleteBranchTarget) (deleteBranchPlan, error) {
+func (s *Service) buildDeleteBranchPlan(ctx context.Context, repo repoContext, target deleteBranchTarget, directWorkspaceRead bool) (deleteBranchPlan, error) {
 	if strings.TrimSpace(target.LocalName) == "" {
 		return deleteBranchPlan{}, errors.New("target branch does not exist")
 	}
@@ -122,17 +142,17 @@ func (s *Service) buildDeleteBranchPlan(ctx context.Context, repo repoContext, t
 	}
 
 	localRef := "refs/heads/" + target.LocalName
-	if !gitRefExists(ctx, repo.repoRootReal, localRef) {
+	if !s.gitRefExists(ctx, repo.repoRootReal, localRef) {
 		return deleteBranchPlan{}, errors.New("target branch does not exist")
 	}
 
-	targetHeadCommit := strings.TrimSpace(readGitOptional(ctx, repo.repoRootReal, "rev-parse", "--verify", localRef))
-	linkedWorktree, err := s.readDeleteLinkedWorktreePreview(ctx, repo, localRef)
+	targetHeadCommit := strings.TrimSpace(s.readGitOptional(ctx, repo.repoRootReal, "rev-parse", "--verify", localRef))
+	linkedWorktree, err := s.readDeleteLinkedWorktreePreview(ctx, repo, localRef, directWorkspaceRead)
 	if err != nil {
 		return deleteBranchPlan{}, err
 	}
-	safeDeleteBaseRef, safeDeleteBaseCommit := resolveSafeDeleteBase(ctx, repo, target.LocalName)
-	safeDeleteAllowed, safeDeleteReason := readSafeDeleteStatus(ctx, repo.repoRootReal, localRef, safeDeleteBaseRef)
+	safeDeleteBaseRef, safeDeleteBaseCommit := s.resolveSafeDeleteBase(ctx, repo, target.LocalName)
+	safeDeleteAllowed, safeDeleteReason := s.readSafeDeleteStatus(ctx, repo.repoRootReal, localRef, safeDeleteBaseRef)
 
 	plan := deleteBranchPlan{
 		Target:                      target,
@@ -152,20 +172,26 @@ func (s *Service) buildDeleteBranchPlan(ctx context.Context, repo repoContext, t
 		plan.ForceDeleteAllowed = false
 		plan.ForceDeleteReason = plan.BlockingReason
 	}
+	if linkedWorktree != nil && linkedWorktree.Accessible {
+		plan.DestructiveWorkspaceFingerprint, err = s.destructiveWorkspaceFingerprint(ctx, linkedWorktree.WorktreePath)
+		if err != nil {
+			return deleteBranchPlan{}, err
+		}
+	}
 	plan.PlanFingerprint = buildDeleteBranchPlanFingerprint(repo, plan)
 	return plan, nil
 }
 
-func (s *Service) readDeleteLinkedWorktreePreview(ctx context.Context, repo repoContext, localRef string) (*gitDeleteLinkedWorktreePreview, error) {
-	bindings, err := readWorktreeBindings(ctx, repo.repoRootReal)
+func (s *Service) readDeleteLinkedWorktreePreview(ctx context.Context, repo repoContext, localRef string, directWorkspaceRead bool) (*gitDeleteLinkedWorktreePreview, error) {
+	bindings, err := s.readWorktreeBindings(ctx, repo.repoRootReal)
 	if err != nil {
-		return nil, nil
+		return nil, err
 	}
 	binding, ok := bindings[localRef]
 	if !ok {
 		return nil, nil
 	}
-	worktreePath := filepath.Clean(strings.TrimSpace(binding.Path))
+	worktreePath := filepath.Clean(binding.Path)
 	if worktreePath == "" || worktreePath == filepath.Clean(repo.repoRootReal) {
 		return nil, nil
 	}
@@ -178,23 +204,35 @@ func (s *Service) readDeleteLinkedWorktreePreview(ctx context.Context, repo repo
 			Summary:      gitWorkspaceSummary{},
 		}, nil
 	}
+	if directWorkspaceRead {
+		linkedRepo, loadErr := s.loadRepoContext(ctx, repoRootReal)
+		if loadErr != nil {
+			return nil, loadErr
+		}
+		status, statusErr := s.readWorkspaceStatus(ctx, linkedRepo.repoRootReal)
+		if statusErr != nil {
+			return nil, statusErr
+		}
+		return &gitDeleteLinkedWorktreePreview{
+			WorktreePath: linkedRepo.repoRootReal,
+			Accessible:   true,
+			Summary:      status.Summary(),
+		}, nil
+	}
 	snapshot, err := s.readLinkedWorktreeSnapshot(ctx, repoRootReal)
 	if err != nil {
 		return nil, err
 	}
 	return &gitDeleteLinkedWorktreePreview{
-		WorktreePath: snapshot.WorktreePath,
-		Accessible:   true,
-		Summary:      snapshot.Summary,
-		Staged:       snapshot.Staged,
-		Unstaged:     snapshot.Unstaged,
-		Untracked:    snapshot.Untracked,
-		Conflicted:   snapshot.Conflicted,
+		WorktreePath:      snapshot.WorktreePath,
+		Accessible:        true,
+		Summary:           snapshot.Summary,
+		WorkspaceRevision: snapshot.WorkspaceRevision,
 	}, nil
 }
 
-func resolveSafeDeleteBase(ctx context.Context, repo repoContext, localName string) (string, string) {
-	upstreamRef := strings.TrimSpace(readGitOptional(
+func (s *Service) resolveSafeDeleteBase(ctx context.Context, repo repoContext, localName string) (string, string) {
+	upstreamRef := strings.TrimSpace(s.readGitOptional(
 		ctx,
 		repo.repoRootReal,
 		"for-each-ref",
@@ -202,7 +240,7 @@ func resolveSafeDeleteBase(ctx context.Context, repo repoContext, localName stri
 		"refs/heads/"+localName,
 	))
 	if upstreamRef != "" {
-		upstreamCommit := strings.TrimSpace(readGitOptional(ctx, repo.repoRootReal, "rev-parse", "--verify", upstreamRef))
+		upstreamCommit := strings.TrimSpace(s.readGitOptional(ctx, repo.repoRootReal, "rev-parse", "--verify", upstreamRef))
 		if upstreamCommit != "" {
 			return upstreamRef, upstreamCommit
 		}
@@ -210,27 +248,20 @@ func resolveSafeDeleteBase(ctx context.Context, repo repoContext, localName stri
 
 	headCommit := strings.TrimSpace(repo.headCommit)
 	if headCommit == "" {
-		headCommit = strings.TrimSpace(readGitOptional(ctx, repo.repoRootReal, "rev-parse", "--verify", "HEAD"))
+		headCommit = strings.TrimSpace(s.readGitOptional(ctx, repo.repoRootReal, "rev-parse", "--verify", "HEAD"))
 	}
 	return "HEAD", headCommit
 }
 
-func readSafeDeleteStatus(ctx context.Context, repoRoot string, localRef string, baseRef string) (bool, string) {
+func (s *Service) readSafeDeleteStatus(ctx context.Context, repoRoot string, localRef string, baseRef string) (bool, string) {
 	if strings.TrimSpace(baseRef) == "" {
 		return false, "Safe delete cannot be verified because the delete base is unavailable."
 	}
-	cmd, err := gitutil.CommandContext(ctx, repoRoot, nil, "merge-base", "--is-ancestor", localRef, baseRef)
+	_, err := s.runtime.RunRead(ctx, repoRoot, nil, "merge-base", "--is-ancestor", localRef, baseRef)
 	if err != nil {
-		return false, "Safe delete cannot be verified because the delete check could not be started."
-	}
-	if out, err := cmd.CombinedOutput(); err != nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
+		var commandErr *gitruntime.CommandError
+		if errors.As(err, &commandErr) && !commandErr.UnknownOutcome && !commandErr.BudgetExceeded && commandErr.ExitCode == 1 {
 			return false, fmt.Sprintf("Branch is not fully merged into %s.", baseRef)
-		}
-		msg := strings.TrimSpace(string(out))
-		if msg != "" {
-			return false, msg
 		}
 		return false, "Safe delete cannot be verified because the delete check failed."
 	}
@@ -260,10 +291,10 @@ func buildDeleteBranchPlanFingerprint(repo repoContext, plan deleteBranchPlan) s
 	}
 	if plan.LinkedWorktree != nil {
 		payload.LinkedWorktree = &deleteBranchFingerprintLinkedWorktree{
-			WorktreePath: plan.LinkedWorktree.WorktreePath,
-			Accessible:   plan.LinkedWorktree.Accessible,
-			Summary:      plan.LinkedWorktree.Summary,
-			Changes:      flattenDeleteBranchFingerprintChanges(plan.LinkedWorktree),
+			WorktreePath:                    plan.LinkedWorktree.WorktreePath,
+			Accessible:                      plan.LinkedWorktree.Accessible,
+			Summary:                         plan.LinkedWorktree.Summary,
+			DestructiveWorkspaceFingerprint: plan.DestructiveWorkspaceFingerprint,
 		}
 	}
 	data, err := json.Marshal(payload)
@@ -273,30 +304,4 @@ func buildDeleteBranchPlanFingerprint(repo repoContext, plan deleteBranchPlan) s
 	}
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
-}
-
-func flattenDeleteBranchFingerprintChanges(worktree *gitDeleteLinkedWorktreePreview) []deleteBranchFingerprintEntry {
-	if worktree == nil {
-		return nil
-	}
-	out := make([]deleteBranchFingerprintEntry, 0, len(worktree.Staged)+len(worktree.Unstaged)+len(worktree.Untracked)+len(worktree.Conflicted))
-	appendItems := func(items []gitWorkspaceChange) {
-		for _, item := range items {
-			out = append(out, deleteBranchFingerprintEntry{
-				Section:    item.Section,
-				ChangeType: item.ChangeType,
-				Path:       item.Path,
-				OldPath:    item.OldPath,
-				NewPath:    item.NewPath,
-				Additions:  item.Additions,
-				Deletions:  item.Deletions,
-				IsBinary:   item.IsBinary,
-			})
-		}
-	}
-	appendItems(worktree.Staged)
-	appendItems(worktree.Unstaged)
-	appendItems(worktree.Untracked)
-	appendItems(worktree.Conflicted)
-	return out
 }

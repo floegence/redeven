@@ -7,6 +7,7 @@ import type { GitRepoSummaryResponse } from '../protocol/redeven_v1';
 import {
   createEmptyWorkspaceViewPageState,
   changeSecondaryPath,
+  exactGitPath,
   isGitWorkspaceDirectoryEntry,
   pickDefaultWorkspaceViewSection,
   type GitSeededWorkspaceChange,
@@ -117,7 +118,7 @@ function buildFileItemForIcon(item: GitSeededWorkspaceChange): { name: string; t
 }
 
 function itemPath(item: GitSeededWorkspaceChange): string {
-  return String(item.displayPath || item.path || item.newPath || item.oldPath || '').trim() || '(unknown path)';
+  return exactGitPath(item.displayPath || item.path || item.newPath || item.oldPath) || '(unknown path)';
 }
 
 function itemDirectorySummary(item: GitSeededWorkspaceChange, i18n: I18nHelpers): string {
@@ -451,9 +452,9 @@ type GitChangesContextMenuTarget =
     }>;
 
 function parentGitPath(relativePath: string): string {
-  const normalized = String(relativePath ?? '').trim().replace(/\\/g, '/').replace(/\/+$/, '');
-  const separatorIndex = normalized.lastIndexOf('/');
-  return separatorIndex < 0 ? '' : normalized.slice(0, separatorIndex);
+  const exactPath = exactGitPath(relativePath);
+  const separatorIndex = exactPath.lastIndexOf('/');
+  return separatorIndex < 0 ? '' : exactPath.slice(0, separatorIndex);
 }
 
 export function GitChangesPanel(props: GitChangesPanelProps) {
@@ -536,10 +537,10 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
   const visibleError = () => String(props.error ?? '').trim() || (!selectedPageState().initialized ? selectedPageState().error : '');
   const visibleLoadingMore = () => Boolean(selectedPageState().loading && selectedPageState().initialized && selectedLoadingMode() === 'append');
   const stagedLoadingItems = () => Boolean(stagedPageState().loading && !props.commitBusy);
-  const activeDirectoryPath = () => selectedSection() === 'changes' ? String(selectedPageState().directoryPath ?? '').trim() : '';
+  const activeDirectoryPath = () => selectedSection() === 'changes' ? exactGitPath(selectedPageState().directoryPath) : '';
   const activeBreadcrumbs = () => selectedSection() === 'changes' ? selectedPageState().breadcrumbs ?? [] : [];
-  const repoRootPath = () => String(props.workspace?.repoRootPath ?? props.repoSummary?.repoRootPath ?? '').trim();
-  const effectiveRootPath = () => String(props.repoSummary?.worktreePath ?? repoRootPath()).trim();
+  const repoRootPath = () => exactGitPath(props.workspace?.repoRootPath ?? props.repoSummary?.repoRootPath);
+  const effectiveRootPath = () => exactGitPath(props.repoSummary?.worktreePath ?? repoRootPath());
   const repoShortcutRequest = (directoryPath = activeDirectoryPath()): GitDirectoryShortcutRequest | null => (
     buildGitDirectoryShortcutRequest({
       rootPath: effectiveRootPath(),
@@ -596,7 +597,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
   }));
   const breadcrumbSegments = createMemo<GitChangesBreadcrumbSegment[]>(() => activeBreadcrumbs().map((crumb) => ({
     label: String(crumb.label ?? '').trim() || i18n.t('git.common.folder'),
-    path: String(crumb.path ?? '').trim(),
+    path: exactGitPath(crumb.path),
   })));
   const headerPrimaryActions = () => headerPresentation().primaryActionIds;
   const headerUtilityActions = () => headerPresentation().utilityActionIds;
@@ -1291,7 +1292,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
         item={diffItem()}
         source={diffItem() ? {
           kind: 'workspace',
-          repoRootPath: String(props.workspace?.repoRootPath ?? props.repoSummary?.repoRootPath ?? '').trim(),
+          repoRootPath: exactGitPath(props.workspace?.repoRootPath ?? props.repoSummary?.repoRootPath),
           workspaceSection: String(diffItem()?.section ?? '').trim(),
         } : null}
         title={i18n.t('git.changes.workspaceDiffTitle')}

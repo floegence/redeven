@@ -18,6 +18,7 @@ import {
 import { buildRedevenFileResourceUrl } from '../utils/filePreviewResource';
 import { openReadFileStreamChannel } from '../utils/fileStreamReader';
 import { getFilePreviewBlockReason } from './FileBrowserShared';
+import { createWorkspaceEffectRpc } from '../services/workspaceEffects';
 
 type PendingPreviewAction =
   | { type: 'close' }
@@ -525,7 +526,9 @@ export function createFilePreviewController(params: {
     setPreviewSaveError(null);
 
     try {
-      await rpc.fs.writeFile({
+      const client = params.client();
+      if (!client) return false;
+      await createWorkspaceEffectRpc(client, rpc).fs.writeFile({
         path: item.path,
         content,
         encoding: 'utf8',

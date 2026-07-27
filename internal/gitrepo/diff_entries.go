@@ -2,16 +2,18 @@ package gitrepo
 
 import (
 	"context"
+	"errors"
+	"io"
 	"strconv"
 	"strings"
 	"unicode/utf8"
 
-	"github.com/floegence/redeven/internal/gitutil"
+	"github.com/floegence/redeven/internal/gitruntime"
 )
 
 const (
 	embeddedGitDiffEntryMaxBytes    = 256 * 1024
-	fullContextGitDiffEntryMaxBytes = 4 * 1024 * 1024
+	fullContextGitDiffEntryMaxBytes = 640 * 1024
 )
 
 type gitDiffEntryData struct {
@@ -49,11 +51,75 @@ func (entry gitDiffEntryData) toDiffFileContent() gitDiffFileContent {
 }
 
 func (s *Service) readGitDiffEntriesWithLimit(ctx context.Context, repoRoot string, maxBytes int, allowedExitCodes []int, args ...string) ([]gitDiffEntryData, []byte, error) {
-	out, err := gitutil.RunCombinedOutputAllowExitCodes(ctx, repoRoot, nil, allowedExitCodes, args...)
-	if err != nil {
+	collector := newBoundedDiffPrefix(maxBytes)
+	result, err := s.runtime.StreamRead(ctx, repoRoot, nil, collector.consume, args...)
+	if err != nil && !allowedGitStreamExit(err, allowedExitCodes) {
 		return nil, nil, err
 	}
-	return parseGitDiffEntriesWithLimit(out, maxBytes), out, nil
+	for collector.truncated && len(collector.data) > 0 && !utf8.Valid(collector.data) {
+		collector.data = collector.data[:len(collector.data)-1]
+	}
+	entries := parseGitDiffEntriesWithLimit(collector.data, maxBytes)
+	if collector.truncated {
+		for index := range entries {
+			entries[index].PatchTruncated = true
+		}
+	}
+	return entries, result.Stdout, nil
+}
+
+type boundedDiffPrefix struct {
+	data      []byte
+	limit     int
+	truncated bool
+}
+
+func newBoundedDiffPrefix(limit int) *boundedDiffPrefix {
+	if limit < 0 {
+		limit = 0
+	}
+	if limit > fullContextGitDiffEntryMaxBytes {
+		limit = fullContextGitDiffEntryMaxBytes
+	}
+	return &boundedDiffPrefix{data: make([]byte, 0, min(limit, 64<<10)), limit: limit}
+}
+
+func (c *boundedDiffPrefix) consume(reader io.Reader) error {
+	buffer := make([]byte, 32<<10)
+	for {
+		n, err := reader.Read(buffer)
+		if n > 0 {
+			remaining := c.limit - len(c.data)
+			if remaining > 0 {
+				keep := min(n, remaining)
+				c.data = append(c.data, buffer[:keep]...)
+				if keep != n {
+					c.truncated = true
+				}
+			} else {
+				c.truncated = true
+			}
+		}
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+	}
+}
+
+func allowedGitStreamExit(err error, allowed []int) bool {
+	var commandErr *gitruntime.CommandError
+	if !errors.As(err, &commandErr) || commandErr.UnknownOutcome || commandErr.BudgetExceeded {
+		return false
+	}
+	for _, code := range allowed {
+		if commandErr.ExitCode == code {
+			return true
+		}
+	}
+	return false
 }
 
 func parseGitDiffEntries(out []byte) []gitDiffEntryData {
@@ -76,24 +142,29 @@ func parseGitDiffEntriesWithLimit(out []byte, maxBytes int) []gitDiffEntryData {
 func splitGitDiffSections(raw string) []string {
 	normalized := strings.ReplaceAll(raw, "\r\n", "\n")
 	normalized = strings.ReplaceAll(normalized, "\r", "\n")
-	lines := strings.Split(normalized, "\n")
 	sections := make([]string, 0, 8)
-	current := make([]string, 0, 32)
-	for _, line := range lines {
+	sectionStart := -1
+	for lineStart := 0; lineStart <= len(normalized); {
+		lineEnd := strings.IndexByte(normalized[lineStart:], '\n')
+		if lineEnd < 0 {
+			lineEnd = len(normalized)
+		} else {
+			lineEnd += lineStart
+		}
+		line := normalized[lineStart:lineEnd]
 		if isGitDiffSectionStart(line) {
-			if len(current) > 0 {
-				sections = append(sections, strings.TrimRight(strings.Join(current, "\n"), "\n"))
+			if sectionStart >= 0 {
+				sections = append(sections, strings.TrimRight(normalized[sectionStart:lineStart], "\n"))
 			}
-			current = []string{line}
-			continue
+			sectionStart = lineStart
 		}
-		if len(current) == 0 {
-			continue
+		if lineEnd == len(normalized) {
+			break
 		}
-		current = append(current, line)
+		lineStart = lineEnd + 1
 	}
-	if len(current) > 0 {
-		sections = append(sections, strings.TrimRight(strings.Join(current, "\n"), "\n"))
+	if sectionStart >= 0 {
+		sections = append(sections, strings.TrimRight(normalized[sectionStart:], "\n"))
 	}
 	return sections
 }
@@ -105,40 +176,57 @@ func isGitDiffSectionStart(line string) bool {
 }
 
 func parseGitDiffEntryWithLimit(section string, maxBytes int) gitDiffEntryData {
-	lines := strings.Split(strings.ReplaceAll(strings.ReplaceAll(section, "\r\n", "\n"), "\r", "\n"), "\n")
+	normalized := strings.ReplaceAll(section, "\r\n", "\n")
+	normalized = strings.ReplaceAll(normalized, "\r", "\n")
 	entry := gitDiffEntryData{ChangeType: "modified"}
-	if len(lines) == 0 {
+	if normalized == "" {
 		return entry
 	}
 
-	entry.OldPath, entry.NewPath = parseGitDiffHeaderPaths(lines[0])
-	entry.Path = preferredDiffPath(entry.ChangeType, entry.OldPath, entry.NewPath)
+	firstLine := true
+	for lineStart := 0; lineStart <= len(normalized); {
+		lineEnd := strings.IndexByte(normalized[lineStart:], '\n')
+		if lineEnd < 0 {
+			lineEnd = len(normalized)
+		} else {
+			lineEnd += lineStart
+		}
+		line := normalized[lineStart:lineEnd]
+		if firstLine {
+			entry.OldPath, entry.NewPath = parseGitDiffHeaderPaths(line)
+			entry.Path = preferredDiffPath(entry.ChangeType, entry.OldPath, entry.NewPath)
+			firstLine = false
+			if lineEnd == len(normalized) {
+				break
+			}
+			lineStart = lineEnd + 1
+			continue
+		}
 
-	for _, line := range lines[1:] {
 		switch {
 		case strings.HasPrefix(line, "rename from "):
 			entry.ChangeType = "renamed"
-			entry.OldPath = strings.TrimSpace(strings.TrimPrefix(line, "rename from "))
+			entry.OldPath = normalizeGitMetadataPath(strings.TrimPrefix(line, "rename from "))
 		case strings.HasPrefix(line, "rename to "):
 			entry.ChangeType = "renamed"
-			entry.NewPath = strings.TrimSpace(strings.TrimPrefix(line, "rename to "))
+			entry.NewPath = normalizeGitMetadataPath(strings.TrimPrefix(line, "rename to "))
 		case strings.HasPrefix(line, "copy from "):
 			entry.ChangeType = "copied"
-			entry.OldPath = strings.TrimSpace(strings.TrimPrefix(line, "copy from "))
+			entry.OldPath = normalizeGitMetadataPath(strings.TrimPrefix(line, "copy from "))
 		case strings.HasPrefix(line, "copy to "):
 			entry.ChangeType = "copied"
-			entry.NewPath = strings.TrimSpace(strings.TrimPrefix(line, "copy to "))
+			entry.NewPath = normalizeGitMetadataPath(strings.TrimPrefix(line, "copy to "))
 		case strings.HasPrefix(line, "new file mode "):
 			entry.ChangeType = "added"
 		case strings.HasPrefix(line, "deleted file mode "):
 			entry.ChangeType = "deleted"
 		case strings.HasPrefix(line, "--- "):
-			oldPath := normalizeGitPatchMarkerPath(strings.TrimSpace(strings.TrimPrefix(line, "--- ")))
+			oldPath := normalizeGitPatchMarkerPath(strings.TrimPrefix(line, "--- "))
 			if oldPath != "" {
 				entry.OldPath = oldPath
 			}
 		case strings.HasPrefix(line, "+++ "):
-			newPath := normalizeGitPatchMarkerPath(strings.TrimSpace(strings.TrimPrefix(line, "+++ ")))
+			newPath := normalizeGitPatchMarkerPath(strings.TrimPrefix(line, "+++ "))
 			if newPath != "" {
 				entry.NewPath = newPath
 			}
@@ -151,6 +239,10 @@ func parseGitDiffEntryWithLimit(section string, maxBytes int) gitDiffEntryData {
 		if strings.HasPrefix(line, "-") && !strings.HasPrefix(line, "---") {
 			entry.Deletions += 1
 		}
+		if lineEnd == len(normalized) {
+			break
+		}
+		lineStart = lineEnd + 1
 	}
 
 	entry.Path = preferredDiffPath(entry.ChangeType, entry.OldPath, entry.NewPath)
@@ -163,21 +255,51 @@ func parseGitDiffHeaderPaths(line string) (string, string) {
 	rest := ""
 	switch {
 	case strings.HasPrefix(line, "diff --git "):
-		rest = strings.TrimSpace(strings.TrimPrefix(line, "diff --git "))
+		rest = strings.TrimPrefix(line, "diff --git ")
 	case strings.HasPrefix(line, "diff --cc "):
-		pathValue := normalizeGitPatchMarkerPath(strings.TrimSpace(strings.TrimPrefix(line, "diff --cc ")))
+		pathValue := normalizeGitMetadataPath(strings.TrimPrefix(line, "diff --cc "))
 		return pathValue, pathValue
 	case strings.HasPrefix(line, "diff --combined "):
-		pathValue := normalizeGitPatchMarkerPath(strings.TrimSpace(strings.TrimPrefix(line, "diff --combined ")))
+		pathValue := normalizeGitMetadataPath(strings.TrimPrefix(line, "diff --combined "))
 		return pathValue, pathValue
 	default:
 		return "", ""
+	}
+	if oldPath, newPath, ok := splitUnquotedGitDiffPaths(rest); ok {
+		return normalizeGitPatchMarkerPath(oldPath), normalizeGitPatchMarkerPath(newPath)
 	}
 	parts := scanGitHeaderPathTokens(rest, 2)
 	if len(parts) < 2 {
 		return "", ""
 	}
 	return normalizeGitPatchMarkerPath(parts[0]), normalizeGitPatchMarkerPath(parts[1])
+}
+
+func splitUnquotedGitDiffPaths(raw string) (string, string, bool) {
+	if !strings.HasPrefix(raw, "a/") || strings.HasPrefix(raw, "\"") {
+		return "", "", false
+	}
+	fallback := -1
+	for searchStart := 0; searchStart < len(raw); {
+		relative := strings.Index(raw[searchStart:], " b/")
+		if relative < 0 {
+			break
+		}
+		separator := searchStart + relative
+		if fallback < 0 {
+			fallback = separator
+		}
+		oldPath := raw[:separator]
+		newPath := raw[separator+1:]
+		if strings.TrimPrefix(oldPath, "a/") == strings.TrimPrefix(newPath, "b/") {
+			return oldPath, newPath, true
+		}
+		searchStart = separator + 1
+	}
+	if fallback < 0 {
+		return "", "", false
+	}
+	return raw[:fallback], raw[fallback+1:], true
 }
 
 func scanGitHeaderPathTokens(raw string, want int) []string {
@@ -226,7 +348,7 @@ func scanGitHeaderPathTokens(raw string, want int) []string {
 }
 
 func normalizeGitPatchMarkerPath(raw string) string {
-	value := strings.TrimSpace(raw)
+	value := strings.TrimSuffix(raw, "\t")
 	if value == "" || value == "/dev/null" {
 		return ""
 	}
@@ -235,7 +357,14 @@ func normalizeGitPatchMarkerPath(raw string) string {
 	}
 	value = strings.TrimPrefix(value, "a/")
 	value = strings.TrimPrefix(value, "b/")
-	return strings.TrimSpace(value)
+	return value
+}
+
+func normalizeGitMetadataPath(raw string) string {
+	if unquoted, err := strconv.Unquote(raw); err == nil {
+		return unquoted
+	}
+	return raw
 }
 
 func preferredDiffPath(changeType string, oldPath string, newPath string) string {
@@ -256,13 +385,13 @@ func preferredDiffPath(changeType string, oldPath string, newPath string) string
 }
 
 func preferredDiffDisplayPath(pathValue string, oldPath string, newPath string) string {
-	if strings.TrimSpace(pathValue) != "" {
-		return strings.TrimSpace(pathValue)
+	if pathValue != "" {
+		return pathValue
 	}
-	if strings.TrimSpace(newPath) != "" {
-		return strings.TrimSpace(newPath)
+	if newPath != "" {
+		return newPath
 	}
-	return strings.TrimSpace(oldPath)
+	return oldPath
 }
 
 func truncateEmbeddedPatchText(text string, maxBytes int) (string, bool) {

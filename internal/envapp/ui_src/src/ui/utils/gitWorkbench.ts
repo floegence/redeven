@@ -69,6 +69,10 @@ export type GitDetachedSwitchTarget = {
   branchName?: string;
 };
 
+export function exactGitPath(value: string | null | undefined): string {
+  return typeof value === "string" ? value : "";
+}
+
 type GitSeededDiffFields = Pick<
   Partial<GitDiffFileContent>,
   "patchText" | "patchTruncated"
@@ -273,7 +277,7 @@ export function buildGitWorkbenchSubviewItems(params: {
 export function repoDisplayName(
   repoRootPath: string | null | undefined,
 ): string {
-  const pathValue = String(repoRootPath ?? "").trim();
+	const pathValue = exactGitPath(repoRootPath);
   if (!pathValue || pathValue === "/") return "Repository";
   const parts = pathValue.split("/").filter(Boolean);
   return parts[parts.length - 1] || "Repository";
@@ -408,7 +412,7 @@ export function workspaceViewSectionActionKey(
   section: GitWorkspaceViewSection,
   directoryPath?: string | null,
 ): string {
-  const normalizedDirectoryPath = String(directoryPath ?? "").trim();
+  const normalizedDirectoryPath = String(directoryPath ?? "");
   if (section === "changes" && normalizedDirectoryPath) {
     return `section:${section}:${normalizedDirectoryPath}`;
   }
@@ -588,12 +592,14 @@ export function gitDiffEntryIdentity(
   item: GitDiffEntryLike | null | undefined,
 ): string {
   if (!item) return "";
-  return [
+  const stashSection = 'stashSection' in item ? String(item.stashSection ?? '') : '';
+  return JSON.stringify([
+    stashSection,
     item.changeType || "",
     item.path || "",
     item.oldPath || "",
     item.newPath || "",
-  ].join(":");
+  ]);
 }
 
 export function workspaceEntryKey(
@@ -612,9 +618,7 @@ export function isGitWorkspaceDirectoryEntry(
 export function workspaceDirectoryPath(
   item: GitWorkspaceChange | null | undefined,
 ): string {
-  return String(
-    item?.directoryPath ?? item?.displayPath ?? item?.path ?? "",
-  ).trim();
+  return String(item?.directoryPath ?? item?.displayPath ?? item?.path ?? "");
 }
 
 export function workspacePageItems(
@@ -772,8 +776,8 @@ export function resolveGitBranchWorktreePath(
   activeRepoRootPath: string,
 ): string {
   if (!branch) return "";
-  if (branch.current) return String(activeRepoRootPath ?? "").trim();
-  return String(branch.worktreePath ?? "").trim();
+  if (branch.current) return String(activeRepoRootPath ?? "");
+  return String(branch.worktreePath ?? "");
 }
 
 export function compareHeadline(
@@ -816,15 +820,10 @@ export function workspaceHealthLabel(
 export function changeDisplayPath(
   change: GitDiffEntryLike | null | undefined,
 ): string {
-  return (
-    String(
-      change?.displayPath ||
-        change?.path ||
-        change?.newPath ||
-        change?.oldPath ||
-        "",
-    ).trim() || "(unknown path)"
+  const path = String(
+    change?.displayPath || change?.path || change?.newPath || change?.oldPath || "",
   );
+  return path || "(unknown path)";
 }
 
 export function changeSecondaryPath(
@@ -851,8 +850,8 @@ export function workspaceMutationPaths(
     ? change.mutationPaths
     : [];
   const values = [...explicitValues, change.path, change.newPath, change.oldPath]
-    .map((item) => String(item ?? "").trim())
-    .filter(Boolean);
+    .map((item) => String(item ?? ""))
+    .filter((item) => item.length > 0);
   return Array.from(new Set(values));
 }
 
@@ -876,7 +875,7 @@ export function recountWorkspaceSummary(
 export function unstageWorkspaceDestination(
   change: GitWorkspaceChange | null | undefined,
 ): GitWorkspaceSection {
-  if (change?.changeType === "added" && !String(change.oldPath ?? "").trim()) {
+  if (change?.changeType === "added" && String(change.oldPath ?? "").length === 0) {
     return "untracked";
   }
   return "unstaged";
@@ -894,7 +893,7 @@ export function applyWorkspaceSectionMutation(
 ): GitListWorkspaceChangesResponse | null {
   if (!workspace) return null;
   const wanted = new Set(
-    params.paths.map((item) => String(item ?? "").trim()).filter(Boolean),
+    params.paths.map((item) => String(item ?? "")).filter((item) => item.length > 0),
   );
   if (wanted.size === 0) return workspace;
 

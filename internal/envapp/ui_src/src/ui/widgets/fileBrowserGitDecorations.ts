@@ -1,10 +1,10 @@
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import type {
   GitListWorkspaceChangesResponse,
+  GitListWorkspacePathStatusesResponse,
   GitWorkspaceChange,
   GitWorkspaceSection,
 } from '../protocol/redeven_v1';
-import { getParentDir, normalizePath } from './FileBrowserShared';
 
 export type FileBrowserGitDecorationKind = 'added' | 'modified';
 
@@ -19,7 +19,6 @@ const ADDED_DECORATION: NonNullable<FileItem['decoration']> = {
   badge: {
     label: 'A',
     tone: 'success',
-    title: 'Added in Git working tree',
   },
   nameTone: 'success',
 };
@@ -28,7 +27,6 @@ const MODIFIED_DECORATION: NonNullable<FileItem['decoration']> = {
   badge: {
     label: 'M',
     tone: 'info',
-    title: 'Modified in Git working tree',
   },
   nameTone: 'info',
 };
@@ -46,15 +44,23 @@ function mergeDecorationKind(
 }
 
 function normalizeRepoRootPath(repoRootPath: string): string {
-  const raw = String(repoRootPath ?? '').trim();
-  return raw ? normalizePath(raw) : '';
+  const raw = String(repoRootPath ?? '');
+  if (!raw) return '';
+  if (raw === '/') return '/';
+  return raw.endsWith('/') ? raw.replace(/\/+$/, '') || '/' : raw;
 }
 
 function absoluteGitPath(repoRootPath: string, path: string | null | undefined): string {
-  const raw = String(path ?? '').trim();
+  const raw = String(path ?? '');
   if (!raw) return '';
-  if (raw.startsWith('/')) return normalizePath(raw);
-  return normalizePath(`${repoRootPath === '/' ? '' : repoRootPath}/${raw}`);
+  if (raw.startsWith('/')) return normalizeRepoRootPath(raw);
+  return `${repoRootPath === '/' ? '' : repoRootPath}/${raw}`;
+}
+
+function parentGitPath(path: string): string {
+  const lastSlash = path.lastIndexOf('/');
+  if (lastSlash <= 0) return '/';
+  return path.slice(0, lastSlash) || '/';
 }
 
 function isPathInsideRepo(path: string, repoRootPath: string): boolean {
@@ -67,11 +73,11 @@ function addAggregatedDirectoryDecorations(
   changedPath: string,
   kind: FileBrowserGitDecorationKind,
 ): void {
-  let cursor = getParentDir(changedPath);
+  let cursor = parentGitPath(changedPath);
   while (isPathInsideRepo(cursor, repoRootPath)) {
     decorations.set(cursor, mergeDecorationKind(decorations.get(cursor), kind));
     if (cursor === repoRootPath) break;
-    const parent = getParentDir(cursor);
+    const parent = parentGitPath(cursor);
     if (parent === cursor) break;
     cursor = parent;
   }
@@ -84,7 +90,7 @@ function addDecorationPath(
   kind: FileBrowserGitDecorationKind,
   options: { decorateSelf: boolean; aggregateParents: boolean },
 ): void {
-  const normalizedPath = normalizePath(changedPath);
+  const normalizedPath = changedPath;
   if (!isPathInsideRepo(normalizedPath, repoRootPath)) return;
   if (options.decorateSelf) {
     decorations.set(normalizedPath, mergeDecorationKind(decorations.get(normalizedPath), kind));
@@ -115,7 +121,7 @@ function decorationKindForChange(
   const changeType = String(change.changeType ?? '').trim().toLowerCase();
   const changeSection = String(change.section ?? section ?? '').trim().toLowerCase();
   if (isDirectoryChange(change)) {
-    if (changeSection === 'conflicted' || change.containsUnstaged) return 'modified';
+    if (changeSection === 'conflicted' || change.containsUnstaged || change.containsConflicted || change.containsStaged) return 'modified';
     if (change.containsUntracked) return 'added';
   }
   if (changeType === 'added' || changeType === 'untracked' || changeSection === 'untracked') {
@@ -124,8 +130,16 @@ function decorationKindForChange(
   return 'modified';
 }
 
+function primarySectionForPathStatus(change: GitWorkspaceChange): GitWorkspaceSection {
+  if (isValidWorkspaceSection(change.section)) return change.section;
+  if (change.containsUnstaged) return 'unstaged';
+  if (change.containsUntracked) return 'untracked';
+  if (change.containsConflicted) return 'conflicted';
+  return 'staged';
+}
+
 function changeDirectoryPath(change: GitWorkspaceChange): string {
-  return String(change.directoryPath ?? change.displayPath ?? change.path ?? '').trim();
+  return String(change.directoryPath ?? change.displayPath ?? change.path ?? '');
 }
 
 function changeMutationPaths(change: GitWorkspaceChange): string[] {
@@ -136,8 +150,8 @@ function changeMutationPaths(change: GitWorkspaceChange): string[] {
     change.newPath,
     change.oldPath,
   ]
-    .map((path) => String(path ?? '').trim())
-    .filter(Boolean)));
+    .map((path) => String(path ?? ''))
+    .filter((path) => path.length > 0)));
 }
 
 function addWorkspaceChangeDecorations(
@@ -193,7 +207,7 @@ function addChangeToMap(
   path: string,
   change: GitWorkspaceChange,
 ): void {
-  const key = normalizePath(path);
+  const key = path;
   const current = map.get(key) ?? [];
   const identity = changeIdentity(change);
   if (current.some((item) => changeIdentity(item) === identity)) return;
@@ -214,13 +228,13 @@ function addDirectoryChange(
   changedPath: string,
   change: GitWorkspaceChange,
 ): void {
-  let cursor = isDirectoryChange(change) && normalizePath(changedPath) !== repoRootPath
-    ? normalizePath(changedPath)
-    : getParentDir(normalizePath(changedPath));
+  let cursor = isDirectoryChange(change) && changedPath !== repoRootPath
+    ? changedPath
+    : parentGitPath(changedPath);
   while (isPathInsideRepo(cursor, repoRootPath)) {
     addChangeToMap(directoryChanges, cursor, change);
     if (cursor === repoRootPath) break;
-    const parent = getParentDir(cursor);
+    const parent = parentGitPath(cursor);
     if (parent === cursor) break;
     cursor = parent;
   }
@@ -255,6 +269,32 @@ export function buildFileBrowserGitDecorationIndex(
   };
 }
 
+export function buildFileBrowserGitPathStatusIndex(
+  repoRootPath: string,
+  response: GitListWorkspacePathStatusesResponse | null | undefined,
+): FileBrowserGitDecorationIndex | null {
+  const normalizedRepoRootPath = normalizeRepoRootPath(repoRootPath || response?.repoRootPath || '');
+  if (!normalizedRepoRootPath) return null;
+
+  const kinds = new Map<string, FileBrowserGitDecorationKind>();
+  const fileChanges = new Map<string, GitWorkspaceChange[]>();
+  const directoryChanges = new Map<string, GitWorkspaceChange[]>();
+  for (const change of response?.items ?? []) {
+    addWorkspaceChangeDecorations(
+      kinds,
+      fileChanges,
+      directoryChanges,
+      normalizedRepoRootPath,
+      change,
+      primarySectionForPathStatus(change),
+    );
+  }
+
+  const decorations = new Map<string, NonNullable<FileItem['decoration']>>();
+  for (const [path, kind] of kinds) decorations.set(path, decorationForKind(kind));
+  return { repoRootPath: normalizedRepoRootPath, decorations, fileChanges, directoryChanges };
+}
+
 export function applyFileBrowserGitDecorations(
   items: FileItem[],
   index: FileBrowserGitDecorationIndex | null | undefined,
@@ -266,7 +306,7 @@ export function applyFileBrowserGitDecorations(
     const nextChildren = item.children
       ? applyFileBrowserGitDecorations(item.children, index)
       : undefined;
-    const nextDecoration = index.decorations.get(normalizePath(item.path));
+    const nextDecoration = index.decorations.get(item.path);
     const childrenChanged = Boolean(nextChildren && nextChildren !== item.children);
     if (!nextDecoration && !childrenChanged) return item;
     changed = true;

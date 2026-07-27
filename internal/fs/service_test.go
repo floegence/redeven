@@ -14,6 +14,7 @@ import (
 	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/filesystemscope"
+	"github.com/floegence/redeven/internal/gitruntime"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -24,6 +25,108 @@ func mustEvalPath(t *testing.T, path string) string {
 		t.Fatalf("EvalSymlinks(%q): %v", path, err)
 	}
 	return filepath.Clean(resolved)
+}
+
+type recordingMutationCoordinator struct {
+	ctx    context.Context
+	effect gitruntime.FilesystemEffect
+	calls  int
+}
+
+func (c *recordingMutationCoordinator) CoordinateFilesystemMutation(ctx context.Context, effect gitruntime.FilesystemEffect, fn func() error) error {
+	c.ctx = ctx
+	c.effect = effect
+	c.calls++
+	return fn()
+}
+
+func TestCoordinateMutationUsesRPCContextAndEffect(t *testing.T) {
+	coordinator := &recordingMutationCoordinator{}
+	scope, err := filesystemscope.NewDefaultRegistry(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := NewServiceWithCoordinator(scope, coordinator)
+	ctx := context.WithValue(context.Background(), struct{}{}, "request")
+	target := filepath.Join(t.TempDir(), "file.txt")
+	called := false
+	if err := svc.coordinateMutation(ctx, gitruntime.FilesystemEffect{Paths: []string{target}}, func() error {
+		called = true
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if !called || coordinator.calls != 1 || coordinator.ctx != ctx || len(coordinator.effect.Paths) != 1 || coordinator.effect.Paths[0] != target {
+		t.Fatalf("coordination = %#v, called=%v", coordinator, called)
+	}
+}
+
+func TestMutationRPCsFailClosedWithoutCoordinator(t *testing.T) {
+	root := t.TempDir()
+	source := filepath.Join(root, "source.txt")
+	writeTestFile(t, source, "source")
+	svc := NewService(root)
+	router := rpc.NewRouter()
+	svc.Register(router, &session.Meta{CanRead: true, CanWrite: true})
+
+	serverConn, clientConn := net.Pipe()
+	defer serverConn.Close()
+	defer clientConn.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	server := rpc.NewServer(serverConn, router)
+	go func() { _ = server.Serve(ctx) }()
+	client := rpc.NewClient(clientConn)
+
+	requests := []struct {
+		name    string
+		typeID  uint32
+		request any
+	}{
+		{name: "write", typeID: TypeID_FS_WRITE, request: fsWriteFileReq{Path: filepath.Join(root, "write.txt"), Content: "write"}},
+		{name: "mkdir", typeID: TypeID_FS_MKDIR, request: fsMkdirReq{Path: filepath.Join(root, "directory")}},
+		{name: "delete", typeID: TypeID_FS_DELETE, request: fsDeleteReq{Path: source}},
+		{name: "rename", typeID: TypeID_FS_RENAME, request: fsRenameReq{OldPath: source, NewPath: filepath.Join(root, "renamed.txt")}},
+		{name: "copy", typeID: TypeID_FS_COPY, request: fsCopyReq{SourcePath: source, DestPath: filepath.Join(root, "copied.txt")}},
+	}
+	for _, test := range requests {
+		t.Run(test.name, func(t *testing.T) {
+			payload, err := json.Marshal(test.request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, rpcErr, callErr := client.Call(ctx, test.typeID, payload)
+			if callErr != nil {
+				t.Fatalf("Call error = %v", callErr)
+			}
+			if rpcErr == nil || rpcErr.Code != gitruntime.ErrorResourceLimit {
+				t.Fatalf("RPC error = %#v, want resource limit", rpcErr)
+			}
+		})
+	}
+
+	if content, err := os.ReadFile(source); err != nil || string(content) != "source" {
+		t.Fatalf("source changed after rejected mutations: content=%q error=%v", content, err)
+	}
+	for _, path := range []string{"write.txt", "directory", "renamed.txt", "copied.txt"} {
+		if _, err := os.Lstat(filepath.Join(root, path)); !os.IsNotExist(err) {
+			t.Fatalf("rejected mutation created %q: %v", path, err)
+		}
+	}
+}
+
+func TestFilesystemWriteEffectAlwaysChangesTopology(t *testing.T) {
+	for _, target := range []string{
+		filepath.Join("repo", "src", "app.go"),
+		filepath.Join("repo", ".git", "config"),
+		filepath.Join("separate-git-dir", "config.worktree"),
+		filepath.Join("separate-git-dir", "worktrees", "linked", "gitdir"),
+	} {
+		effect := filesystemWriteEffect(target)
+		if !effect.ChangesTopology || len(effect.Paths) != 1 || effect.Paths[0] != target {
+			t.Fatalf("filesystemWriteEffect(%q) = %#v, want topology-exclusive exact path", target, effect)
+		}
+	}
 }
 
 func writeTestFile(t *testing.T, path string, content string) {

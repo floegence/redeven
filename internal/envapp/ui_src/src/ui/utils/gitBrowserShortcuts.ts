@@ -9,11 +9,12 @@ import type {
   GitStashSummary,
   GitWorkspaceChange,
 } from '../protocol/redeven_v1';
-import { dirnameAbsolute, isWithinAbsolutePath, normalizeAbsolutePath } from './askFlowerPath';
+import { normalizeAbsolutePath } from './askFlowerPath';
 import { createClientId } from './clientId';
 import {
   branchDisplayName,
   changeDisplayPath,
+  exactGitPath,
   isGitWorkspaceDirectoryEntry,
   repoDisplayName,
   type GitSeededCommitFileSummary,
@@ -156,26 +157,27 @@ function truncateCodePoints(value: unknown, maxCodePoints: number, marker = ''):
 }
 
 function normalizeGitRelativePath(value: unknown, allowEmpty: boolean): string | null {
-  const raw = compact(value).replace(/\\/g, '/');
-  if (!raw || raw === '.') return allowEmpty ? '' : null;
-  if (raw.startsWith('/')) return null;
-
-  const parts = raw
-    .replace(/\/+$/, '')
-    .split('/')
-    .filter((part) => part && part !== '.');
-
-  if (parts.length === 0) return allowEmpty ? '' : null;
-  if (parts.some((part) => part === '..' || part.includes('\0'))) return null;
-  return parts.join('/');
+  const raw = typeof value === 'string' ? value : '';
+  if (!raw) return allowEmpty ? '' : null;
+  if (raw.startsWith('/') || raw.includes('\0')) return null;
+  const parts = raw.split('/');
+  if (parts.some((part) => !part || part === '.' || part === '..')) return null;
+  return raw;
 }
 
 function normalizeGitRootPath(value: unknown): string | null {
-  const rootPath = normalizeAbsolutePath(compact(value));
-  if (!rootPath) return null;
-  const parts = rootPath.split('/').filter(Boolean);
-  if (parts.some((part) => part === '.' || part === '..' || part.includes('\0'))) return null;
+  const rootPath = typeof value === 'string' ? exactGitPath(value) : '';
+  if (!rootPath || !rootPath.startsWith('/') || rootPath.includes('\0')) return null;
+  if (rootPath !== '/' && rootPath.endsWith('/')) return null;
+  const parts = rootPath === '/' ? [] : rootPath.slice(1).split('/');
+  if (parts.some((part) => !part || part === '.' || part === '..')) return null;
   return rootPath;
+}
+
+function dirnameLiteralAbsolute(path: string): string {
+  if (path === '/') return '/';
+  const separatorIndex = path.lastIndexOf('/');
+  return separatorIndex <= 0 ? '/' : path.slice(0, separatorIndex);
 }
 
 function resolveGitPath(rootPathValue: unknown, gitPathValue: unknown, allowEmpty = false): {
@@ -188,18 +190,17 @@ function resolveGitPath(rootPathValue: unknown, gitPathValue: unknown, allowEmpt
   const relativePath = normalizeGitRelativePath(gitPathValue, allowEmpty);
   if (relativePath === null) return null;
   const absolutePath = relativePath
-    ? normalizeAbsolutePath(`${rootPath === '/' ? '' : rootPath}/${relativePath}`)
+    ? `${rootPath === '/' ? '' : rootPath}/${relativePath}`
     : rootPath;
-  if (!absolutePath || !isWithinAbsolutePath(absolutePath, rootPath)) return null;
   return { rootPath, relativePath, absolutePath };
 }
 
 function currentGitItemPath(item: GitWorkspaceChange | GitCommitFileSummary): string {
   const changeType = compact(item.changeType).toLowerCase();
   if (changeType === 'renamed' || changeType === 'copied') {
-    return compact(item.newPath) || compact(item.path);
+    return exactGitPath(item.newPath) || exactGitPath(item.path);
   }
-  return compact(item.path) || compact(item.newPath) || compact(item.oldPath);
+  return exactGitPath(item.path) || exactGitPath(item.newPath) || exactGitPath(item.oldPath);
 }
 
 export function buildGitFileShortcutTarget(
@@ -210,7 +211,7 @@ export function buildGitFileShortcutTarget(
   const entryKind = compact((params.item as GitWorkspaceChange).entryKind).toLowerCase();
   return {
     absolutePath: resolved.absolutePath,
-    parentDirectoryPath: dirnameAbsolute(resolved.absolutePath),
+    parentDirectoryPath: dirnameLiteralAbsolute(resolved.absolutePath),
     relativePath: resolved.relativePath,
     canPreviewCurrentFile:
       compact(params.item.changeType).toLowerCase() !== 'deleted' && entryKind !== 'directory',
@@ -220,7 +221,7 @@ export function buildGitFileShortcutTarget(
 export function buildGitDirectoryShortcutRequest(
   params: BuildGitDirectoryShortcutRequestParams,
 ): GitDirectoryShortcutRequest | null {
-  const directoryPath = compact(params.directoryPath) === '/' ? '' : params.directoryPath;
+  const directoryPath = params.directoryPath === '/' ? '' : params.directoryPath;
   const resolved = resolveGitPath(params.rootPath, directoryPath, true);
   if (!resolved) return null;
   const path = resolved.absolutePath;
@@ -261,8 +262,8 @@ function formatChangeType(changeType: unknown): string {
 }
 
 function formatPathLabel(item: GitWorkspaceChange | GitCommitFileSummary): string {
-  const oldPath = compact(item.oldPath);
-  const newPath = compact(item.newPath);
+  const oldPath = exactGitPath(item.oldPath);
+  const newPath = exactGitPath(item.newPath);
   if (oldPath && newPath && oldPath !== newPath) {
     return `${oldPath} -> ${newPath}`;
   }

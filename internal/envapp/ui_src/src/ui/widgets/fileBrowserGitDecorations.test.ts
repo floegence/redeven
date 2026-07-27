@@ -4,6 +4,7 @@ import type { GitListWorkspaceChangesResponse } from '../protocol/redeven_v1';
 import {
   applyFileBrowserGitDecorations,
   buildFileBrowserGitDecorationIndex,
+  buildFileBrowserGitPathStatusIndex,
 } from './fileBrowserGitDecorations';
 
 function workspace(
@@ -175,5 +176,43 @@ describe('fileBrowserGitDecorations', () => {
 
     expect(applyFileBrowserGitDecorations(items, null)).toBe(items);
     expect(buildFileBrowserGitDecorationIndex('', null)).toBeNull();
+  });
+
+  it('builds decorations and directory targets from path-status aggregates', () => {
+    const index = buildFileBrowserGitPathStatusIndex('/repo', {
+      repoRootPath: '/repo',
+      workspaceRevision: 'revision-a',
+      items: [
+        { path: 'app/main.ts', section: 'staged', changeType: 'modified' },
+        {
+          entryKind: 'directory',
+          directoryPath: 'app',
+          containsStaged: true,
+          containsConflicted: true,
+          stagedFileCount: 1,
+          conflictedFileCount: 1,
+          descendantFileCount: 2,
+        },
+      ],
+    });
+
+    expect(index?.decorations.get('/repo/app')?.badge?.label).toBe('M');
+    expect(index?.fileChanges.get('/repo/app/main.ts')?.[0]?.section).toBe('staged');
+    expect(index?.directoryChanges.get('/repo/app')?.some((item) => item.containsConflicted)).toBe(true);
+  });
+
+  it('preserves Git paths with edge whitespace and Unix backslashes', () => {
+    const index = buildFileBrowserGitPathStatusIndex('/repo ', {
+      repoRootPath: '/repo ',
+      workspaceRevision: 'revision-a',
+      items: [
+        { path: ' leading\\name ', section: 'unstaged', changeType: 'modified' },
+      ],
+    });
+    const absolutePath = '/repo / leading\\name ';
+    const decorated = applyFileBrowserGitDecorations([item(absolutePath)], index);
+
+    expect(index?.fileChanges.get(absolutePath)?.[0]?.path).toBe(' leading\\name ');
+    expect(badgeLabel(decorated[0])).toBe('M');
   });
 });

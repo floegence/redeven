@@ -27,6 +27,7 @@ import type {
   GitApplyStashResponse,
   GitCheckoutBranchRequest,
   GitCheckoutBranchResponse,
+  GitCapabilitiesResponse,
   GitCommitWorkspaceRequest,
   GitCommitWorkspaceResponse,
   GitDiscardWorkspaceRequest,
@@ -63,6 +64,8 @@ import type {
   GitListCommitsResponse,
   GitListWorkspacePageRequest,
   GitListWorkspacePageResponse,
+  GitListWorkspacePathStatusesRequest,
+  GitListWorkspacePathStatusesResponse,
   GitListWorkspaceChangesRequest,
   GitListWorkspaceChangesResponse,
   GitPullRepoRequest,
@@ -112,6 +115,7 @@ import { fromWireFsCopyResponse, fromWireFsDeleteResponse, fromWireFsListRespons
 import {
   fromWireGitApplyStashResponse,
   fromWireGitCheckoutBranchResponse,
+  fromWireGitCapabilitiesResponse,
   fromWireGitCommitWorkspaceResponse,
   fromWireGitDiscardWorkspaceResponse,
   fromWireGitDeleteBranchResponse,
@@ -131,6 +135,7 @@ import {
   fromWireGitListBranchesResponse,
   fromWireGitListCommitsResponse,
   fromWireGitListWorkspacePageResponse,
+  fromWireGitListWorkspacePathStatusesResponse,
   fromWireGitListWorkspaceChangesResponse,
   fromWireGitPullRepoResponse,
   fromWireGitPushRepoResponse,
@@ -160,6 +165,7 @@ import {
   toWireGitListBranchesRequest,
   toWireGitListCommitsRequest,
   toWireGitListWorkspacePageRequest,
+  toWireGitListWorkspacePathStatusesRequest,
   toWireGitListWorkspaceChangesRequest,
   toWireGitPullRepoRequest,
   toWireGitPushRepoRequest,
@@ -201,6 +207,7 @@ import type {
   wire_git_apply_stash_resp,
   wire_git_checkout_branch_req,
   wire_git_checkout_branch_resp,
+  wire_git_get_capabilities_resp,
   wire_git_commit_workspace_req,
   wire_git_commit_workspace_resp,
   wire_git_discard_workspace_req,
@@ -239,6 +246,8 @@ import type {
   wire_git_list_commits_resp,
   wire_git_list_workspace_page_req,
   wire_git_list_workspace_page_resp,
+  wire_git_list_workspace_path_statuses_req,
+  wire_git_list_workspace_path_statuses_resp,
   wire_git_list_workspace_changes_req,
   wire_git_list_workspace_changes_resp,
   wire_git_pull_repo_req,
@@ -279,8 +288,10 @@ export type RedevenV1Rpc = {
   };
   git: {
     resolveRepo: (req: GitResolveRepoRequest) => Promise<GitResolveRepoResponse>;
+    getCapabilities: () => Promise<GitCapabilitiesResponse>;
     getRepoSummary: (req: GitRepoSummaryRequest) => Promise<GitRepoSummaryResponse>;
     listWorkspacePage: (req: GitListWorkspacePageRequest) => Promise<GitListWorkspacePageResponse>;
+    listWorkspacePathStatuses: (req: GitListWorkspacePathStatusesRequest) => Promise<GitListWorkspacePathStatusesResponse>;
     listWorkspaceChanges: (req: GitListWorkspaceChangesRequest) => Promise<GitListWorkspaceChangesResponse>;
     listStashes: (req: GitListStashesRequest) => Promise<GitListStashesResponse>;
     getStashDetail: (req: GitGetStashDetailRequest) => Promise<GitGetStashDetailResponse>;
@@ -400,6 +411,10 @@ export function createRedevenV1Rpc(helpers: RpcHelpers): RedevenV1Rpc {
       },
     },
     git: {
+      getCapabilities: async () => {
+        const resp = await call<Record<string, never>, wire_git_get_capabilities_resp>(redevenV1TypeIds.git.getCapabilities, {});
+        return fromWireGitCapabilitiesResponse(resp);
+      },
       resolveRepo: async (req) => {
         const payload = toWireGitResolveRepoRequest(req);
         const resp = await call<wire_git_resolve_repo_req, wire_git_resolve_repo_resp>(redevenV1TypeIds.git.resolveRepo, payload);
@@ -414,6 +429,11 @@ export function createRedevenV1Rpc(helpers: RpcHelpers): RedevenV1Rpc {
         const payload = toWireGitListWorkspacePageRequest(req);
         const resp = await call<wire_git_list_workspace_page_req, wire_git_list_workspace_page_resp>(redevenV1TypeIds.git.listWorkspacePage, payload);
         return fromWireGitListWorkspacePageResponse(resp);
+      },
+      listWorkspacePathStatuses: async (req) => {
+        const payload = toWireGitListWorkspacePathStatusesRequest(req);
+        const resp = await call<wire_git_list_workspace_path_statuses_req, wire_git_list_workspace_path_statuses_resp>(redevenV1TypeIds.git.listWorkspacePathStatuses, payload);
+        return fromWireGitListWorkspacePathStatusesResponse(resp);
       },
       listWorkspaceChanges: async (req) => {
         const payload = toWireGitListWorkspaceChangesRequest(req);

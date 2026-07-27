@@ -92,7 +92,7 @@ func (s *Service) buildDetachedSwitchState(ctx context.Context, repo repoContext
 	}
 	state := detachedSwitchState{
 		TargetRef:        resolvedTargetRef,
-		TargetCommit:     readGitOptional(ctx, repo.repoRootReal, "rev-parse", "--verify", resolvedTargetRef+"^{commit}"),
+		TargetCommit:     s.readGitOptional(ctx, repo.repoRootReal, "rev-parse", "--verify", resolvedTargetRef+"^{commit}"),
 		WorkspaceSummary: status.Summary(),
 	}
 	if state.TargetCommit == "" {
@@ -102,7 +102,7 @@ func (s *Service) buildDetachedSwitchState(ctx context.Context, repo repoContext
 		state.BlockingReason = formatWorkspaceBlockedReason("switching to detached HEAD", state.WorkspaceSummary)
 		return state, nil
 	}
-	if operation := readGitOperationState(ctx, repo.repoRootReal); operation != "" {
+	if operation := s.readGitOperationState(ctx, repo.repoRootReal); operation != "" {
 		state.BlockingReason = formatOperationBlockedReason("switching to detached HEAD", operation)
 		return state, nil
 	}

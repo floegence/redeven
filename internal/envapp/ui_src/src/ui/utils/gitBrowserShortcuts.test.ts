@@ -323,6 +323,15 @@ describe('gitBrowserShortcuts', () => {
     });
   });
 
+  it('does not confuse a literal whitespace directory with the legacy root scope', () => {
+    expect(buildGitDirectoryShortcutRequest({
+      rootPath: '/workspace/repo',
+      directoryPath: ' / ',
+    })).toMatchObject({
+      path: '/workspace/repo/ / ',
+    });
+  });
+
   it('rejects parent-traversal Git directory scopes', () => {
     expect(buildGitDirectoryShortcutRequest({
       rootPath: '/workspace/repo',
@@ -330,15 +339,25 @@ describe('gitBrowserShortcuts', () => {
     })).toBeNull();
   });
 
-  it('builds file targets from the effective root and normalizes backslashes', () => {
+  it('preserves literal whitespace and backslashes in Git file targets', () => {
     expect(buildGitFileShortcutTarget({
-      rootPath: '/workspace/repo-worktree',
-      item: { changeType: 'modified', path: 'src\\ui\\app.ts' },
+      rootPath: '/workspace/repo-worktree | ',
+      item: { changeType: 'modified', path: ' leading\\name ' },
     })).toEqual({
-      absolutePath: '/workspace/repo-worktree/src/ui/app.ts',
-      parentDirectoryPath: '/workspace/repo-worktree/src/ui',
-      relativePath: 'src/ui/app.ts',
+      absolutePath: '/workspace/repo-worktree | / leading\\name ',
+      parentDirectoryPath: '/workspace/repo-worktree | ',
+      relativePath: ' leading\\name ',
       canPreviewCurrentFile: true,
+    });
+  });
+
+  it('preserves literal repository and directory paths in directory shortcuts', () => {
+    expect(buildGitDirectoryShortcutRequest({
+      rootPath: '/workspace/repo | ',
+      directoryPath: ' leading\\directory ',
+    })).toEqual({
+      path: '/workspace/repo | / leading\\directory ',
+      preferredName: ' leading\\directory ',
     });
   });
 

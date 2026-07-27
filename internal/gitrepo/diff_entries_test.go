@@ -140,3 +140,54 @@ func TestTruncateEmbeddedPatchText_PreservesUTF8(t *testing.T) {
 		t.Fatalf("trimmed text is not valid utf-8: %q", trimmed)
 	}
 }
+
+func TestParseGitDiffEntryWithLimit_HighNewlineDensityRemainsBounded(t *testing.T) {
+	t.Parallel()
+
+	const patchLimit = 640 * 1024
+	raw := "diff --git a/src/main.txt b/src/main.txt\n" + strings.Repeat("+\n", patchLimit)
+	entry := parseGitDiffEntryWithLimit(raw, patchLimit)
+
+	if entry.Path != "src/main.txt" {
+		t.Fatalf("Path=%q, want src/main.txt", entry.Path)
+	}
+	if entry.Additions != patchLimit {
+		t.Fatalf("Additions=%d, want %d", entry.Additions, patchLimit)
+	}
+	if !entry.PatchTruncated || len(entry.PatchText) > patchLimit {
+		t.Fatalf("high-density patch was not bounded: truncated=%v bytes=%d", entry.PatchTruncated, len(entry.PatchText))
+	}
+}
+
+func TestParseGitDiffEntries_PreservesLeadingAndTrailingPathSpaces(t *testing.T) {
+	t.Parallel()
+
+	const pathValue = " leading and trailing "
+	raw := strings.Join([]string{
+		"diff --git a/ leading and trailing  b/ leading and trailing ",
+		"index 1111111..2222222 100644",
+		"--- a/ leading and trailing \t",
+		"+++ b/ leading and trailing \t",
+		"@@ -1 +1 @@",
+		"-old",
+		"+new",
+	}, "\n")
+	entries := parseGitDiffEntries([]byte(raw))
+	if len(entries) != 1 {
+		t.Fatalf("entries=%d, want 1", len(entries))
+	}
+	entry := entries[0]
+	if entry.Path != pathValue || entry.OldPath != pathValue || entry.NewPath != pathValue || entry.DisplayPath != pathValue {
+		t.Fatalf("path spaces were not preserved: %+v", entry)
+	}
+
+	rename := parseGitDiffEntries([]byte(strings.Join([]string{
+		"diff --git a/ leading and trailing  b/ renamed trailing ",
+		"similarity index 100%",
+		"rename from  leading and trailing ",
+		"rename to  renamed trailing ",
+	}, "\n")))
+	if len(rename) != 1 || rename[0].OldPath != pathValue || rename[0].NewPath != " renamed trailing " {
+		t.Fatalf("rename path spaces were not preserved: %+v", rename)
+	}
+}

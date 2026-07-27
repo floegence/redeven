@@ -28,6 +28,7 @@ import type {
 import {
   changeDisplayPath,
   changeSecondaryPath,
+  exactGitPath,
   gitDiffEntryIdentity,
   repoDisplayName,
   shortGitHash,
@@ -405,7 +406,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
     document.removeEventListener('mouseup', onResizeMouseUp);
   });
 
-  const repoPath = () => String(props.repoRootPath ?? props.repoSummary?.repoRootPath ?? '').trim();
+  const repoPath = () => exactGitPath(props.repoRootPath ?? props.repoSummary?.repoRootPath);
   const repoName = () => repoDisplayName(repoPath());
   const workspaceTotal = () => summarizeWorkspaceCount(props.workspaceSummary);
   const canSave = createMemo(() => Boolean(

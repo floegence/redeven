@@ -45,6 +45,14 @@ export type GitRepoSummaryResponse = {
   behindCount?: number;
   stashCount?: number;
   workspaceSummary: GitWorkspaceSummary;
+  workspaceRevision?: string;
+};
+
+export type GitCapabilitiesResponse = {
+  workspaceRevisionV1: boolean;
+  workspacePathStatusV1: boolean;
+  workspaceDirectoryScopeV1: boolean;
+  stashSectionDiffV1: boolean;
 };
 
 export type GitWorkspaceSection = 'staged' | 'unstaged' | 'untracked' | 'conflicted';
@@ -79,8 +87,14 @@ export type GitWorkspaceChange = GitDiffFileSummary & {
   parentPath?: string;
   directoryPath?: string;
   descendantFileCount?: number;
+  unstagedFileCount?: number;
+  untrackedFileCount?: number;
+  stagedFileCount?: number;
+  conflictedFileCount?: number;
   containsUntracked?: boolean;
   containsUnstaged?: boolean;
+  containsStaged?: boolean;
+  containsConflicted?: boolean;
   mutationPaths?: string[];
 };
 
@@ -92,10 +106,7 @@ export type GitWorkspaceBreadcrumb = {
 export type GitLinkedWorktreeSnapshot = {
   worktreePath?: string;
   summary: GitWorkspaceSummary;
-  staged: GitWorkspaceChange[];
-  unstaged: GitWorkspaceChange[];
-  untracked: GitWorkspaceChange[];
-  conflicted: GitWorkspaceChange[];
+  workspaceRevision?: string;
 };
 
 export type GitListWorkspaceChangesRequest = {
@@ -117,6 +128,7 @@ export type GitListWorkspacePageRequest = {
   directoryPath?: string;
   offset?: number;
   limit?: number;
+  expectedWorkspaceRevision?: string;
 };
 
 export type GitListWorkspacePageResponse = {
@@ -130,6 +142,19 @@ export type GitListWorkspacePageResponse = {
   offset?: number;
   nextOffset?: number;
   hasMore?: boolean;
+  items: GitWorkspaceChange[];
+  workspaceRevision?: string;
+};
+
+export type GitListWorkspacePathStatusesRequest = {
+  repoRootPath: string;
+  paths: string[];
+  expectedWorkspaceRevision?: string;
+};
+
+export type GitListWorkspacePathStatusesResponse = {
+  repoRootPath: string;
+  workspaceRevision: string;
   items: GitWorkspaceChange[];
 };
 
@@ -349,10 +374,7 @@ export type GitDeleteLinkedWorktreePreview = {
   worktreePath?: string;
   accessible: boolean;
   summary: GitWorkspaceSummary;
-  staged: GitWorkspaceChange[];
-  unstaged: GitWorkspaceChange[];
-  untracked: GitWorkspaceChange[];
-  conflicted: GitWorkspaceChange[];
+  workspaceRevision?: string;
 };
 
 export type GitPreviewDeleteBranchRequest = {
@@ -508,7 +530,11 @@ export type GitCommitDetail = {
   body?: string;
 };
 
-export type GitCommitFileSummary = GitDiffFileSummary;
+export type GitStashSection = 'staged' | 'unstaged' | 'untracked';
+
+export type GitCommitFileSummary = GitDiffFileSummary & {
+  stashSection?: GitStashSection | string;
+};
 
 export type GitDiffFileRef = {
   changeType?: 'added' | 'modified' | 'deleted' | 'renamed' | 'copied' | 'conflicted' | string;
@@ -559,6 +585,7 @@ export type GitGetDiffContentRequest = {
   baseRef?: string;
   targetRef?: string;
   stashId?: string;
+  stashSection?: GitStashSection | string;
   mode?: GitDiffContentMode | string;
   file: GitDiffFileRef;
 };

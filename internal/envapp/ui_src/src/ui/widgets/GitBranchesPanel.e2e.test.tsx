@@ -34,8 +34,12 @@ vi.mock("../protocol/redeven_v1", async () => {
 import {
   redevenV1Contract,
   type GitBranchSummary,
+  type GitListWorkspacePageResponse,
 } from "../protocol/redeven_v1";
-import { GitBranchesPanel } from "./GitBranchesPanel";
+import {
+  GitBranchesPanel,
+  gitBranchPanelIdentityKey,
+} from "./GitBranchesPanel";
 
 const resizeObserverState = {
   observers: [] as Array<{
@@ -2388,18 +2392,7 @@ describe("GitBranchesPanel interactions", () => {
           untrackedCount: 1,
           conflictedCount: 0,
         },
-        staged: [],
-        unstaged: [],
-        untracked: [
-          {
-            section: "untracked",
-            changeType: "added",
-            path: "scratch.txt",
-            displayPath: "scratch.txt",
-            patchText: "@@ -0,0 +1 @@\n+scratch",
-          },
-        ],
-        conflicted: [],
+        workspaceRevision: "revision-linked-dirty",
       },
     };
 
@@ -3102,8 +3095,8 @@ describe("GitBranchesPanel interactions", () => {
       files: [
         {
           changeType: "modified",
-          path: "src/merge.ts",
-          displayPath: "src/merge.ts",
+          path: " src/merge.ts ",
+          displayPath: " src/merge.ts ",
           additions: 5,
           deletions: 2,
           patchText: "@@ -1 +1 @@\n-before\n+after",
@@ -3180,7 +3173,7 @@ describe("GitBranchesPanel interactions", () => {
       expect(document.body.textContent).toContain("Fast-forward");
       expect(document.body.textContent).toContain("feature/demo");
       expect(document.body.textContent).toContain("Changed Files");
-      expect(document.body.textContent).toContain("src/merge.ts");
+      expect(document.body.textContent).toContain(" src/merge.ts ");
       expect(document.body.textContent).toContain("Fast-Forward main");
 
       const confirmButton = Array.from(
@@ -3223,7 +3216,7 @@ describe("GitBranchesPanel interactions", () => {
       blocking: {
         kind: "workspace_dirty",
         reason: "Current workspace must be clean before merging (1 unstaged).",
-        workspacePath: "/workspace/repo-blocked",
+        workspacePath: "/workspace/repo-blocked ",
         workspaceSummary: {
           stagedCount: 0,
           unstagedCount: 1,
@@ -3320,7 +3313,7 @@ describe("GitBranchesPanel interactions", () => {
       stashShortcut!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       expect(onOpenStash).toHaveBeenCalledWith({
         tab: "save",
-        repoRootPath: "/workspace/repo-blocked",
+        repoRootPath: "/workspace/repo-blocked ",
         source: "merge_blocker",
       });
 
@@ -3550,6 +3543,203 @@ describe("GitBranchesPanel interactions", () => {
     }
   });
 
+  it("does not consume a refresh token while the initial status request is in flight", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+
+    let resolveInitial!: (value: GitListWorkspacePageResponse) => void;
+    const initialPromise = new Promise<GitListWorkspacePageResponse>((resolve) => {
+      resolveInitial = resolve;
+    });
+    mockListWorkspacePage.mockReset();
+    mockListWorkspacePage
+      .mockImplementationOnce(() => initialPromise)
+      .mockResolvedValueOnce({
+        repoRootPath: "/workspace/repo-linked",
+        section: "changes",
+        summary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
+        totalCount: 1,
+        offset: 0,
+        nextOffset: 1,
+        hasMore: false,
+        items: [{
+          section: "unstaged",
+          changeType: "modified",
+          path: "src/fresh.ts",
+          displayPath: "src/fresh.ts",
+        }],
+      });
+
+    let setRefreshToken!: (value: number) => number;
+    const branch = {
+      name: "feature/linked",
+      fullName: "refs/heads/feature/linked",
+      kind: "local" as const,
+      worktreePath: "/workspace/repo-linked",
+    };
+    const dispose = render(() => {
+      const [refreshToken, updateRefreshToken] = createSignal(0);
+      setRefreshToken = updateRefreshToken;
+      return (
+        <LayoutProvider>
+          <NotificationProvider>
+            <ProtocolProvider contract={redevenV1Contract}>
+              <GitBranchesPanel
+                repoRootPath="/workspace/repo"
+                statusRefreshToken={refreshToken()}
+                selectedBranch={branch}
+                branches={{ repoRootPath: "/workspace/repo", currentRef: "main", local: [branch], remote: [] }}
+              />
+            </ProtocolProvider>
+          </NotificationProvider>
+        </LayoutProvider>
+      );
+    }, host);
+
+    try {
+      await flush();
+      expect(mockListWorkspacePage).toHaveBeenCalledTimes(1);
+
+      setRefreshToken(1);
+      await flush();
+      expect(mockListWorkspacePage).toHaveBeenCalledTimes(1);
+
+      resolveInitial({
+        repoRootPath: "/workspace/repo-linked",
+        section: "changes",
+        summary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
+        totalCount: 1,
+        offset: 0,
+        nextOffset: 1,
+        hasMore: false,
+        items: [{ section: "unstaged", changeType: "modified", path: "src/stale.ts", displayPath: "src/stale.ts" }],
+      });
+      await flush();
+      await flush();
+
+      expect(mockListWorkspacePage).toHaveBeenCalledTimes(2);
+      expect(host.textContent).toContain("src/fresh.ts");
+      expect(host.textContent).not.toContain("src/stale.ts");
+    } finally {
+      dispose();
+    }
+  });
+
+  it("resets status generations across capability and protocol-client transitions", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+
+    let resolveOldGeneration!: (value: GitListWorkspacePageResponse) => void;
+    const oldGeneration = new Promise<GitListWorkspacePageResponse>((resolve) => {
+      resolveOldGeneration = resolve;
+    });
+    mockListWorkspacePage.mockReset();
+    mockListWorkspacePage
+      .mockImplementationOnce(() => oldGeneration)
+      .mockResolvedValueOnce({
+        repoRootPath: "/workspace/repo-linked",
+        section: "changes",
+        summary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
+        totalCount: 1,
+        offset: 0,
+        nextOffset: 1,
+        hasMore: false,
+        items: [{ section: "unstaged", changeType: "modified", path: "src/legacy.ts", displayPath: "src/legacy.ts" }],
+      })
+      .mockResolvedValueOnce({
+        repoRootPath: "/workspace/repo-linked",
+        section: "changes",
+        workspaceRevision: "revision-client-b",
+        summary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
+        totalCount: 1,
+        offset: 0,
+        nextOffset: 1,
+        hasMore: false,
+        items: [{ section: "unstaged", changeType: "modified", path: "src/client-b.ts", displayPath: "src/client-b.ts" }],
+      });
+
+    const clientA = {};
+    const clientB = {};
+    let setProtocolContext!: (value: { client: object; mode: "legacy" | "capable" }) => { client: object; mode: "legacy" | "capable" };
+    const branch = {
+      name: "feature/linked",
+      fullName: "refs/heads/feature/linked",
+      kind: "local" as const,
+      worktreePath: "/workspace/repo-linked",
+    };
+    const dispose = render(() => {
+      const [protocolContext, updateProtocolContext] = createSignal({ client: clientA, mode: "capable" as const });
+      setProtocolContext = updateProtocolContext;
+      return (
+        <LayoutProvider>
+          <NotificationProvider>
+            <ProtocolProvider contract={redevenV1Contract}>
+              <GitBranchesPanel
+                repoRootPath="/workspace/repo"
+                protocolClientIdentity={protocolContext().client}
+                capabilityMode={protocolContext().mode}
+                selectedBranch={branch}
+                branches={{ repoRootPath: "/workspace/repo", currentRef: "main", local: [branch], remote: [] }}
+              />
+            </ProtocolProvider>
+          </NotificationProvider>
+        </LayoutProvider>
+      );
+    }, host);
+
+    try {
+      await flush();
+      expect(mockListWorkspacePage).toHaveBeenCalledTimes(1);
+
+      setProtocolContext({ client: clientA, mode: "legacy" });
+      await flush();
+      expect(mockListWorkspacePage).toHaveBeenCalledTimes(2);
+      expect(host.textContent).toContain("src/legacy.ts");
+
+      resolveOldGeneration({
+        repoRootPath: "/workspace/repo-linked",
+        section: "changes",
+        workspaceRevision: "revision-old",
+        summary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
+        totalCount: 1,
+        offset: 0,
+        nextOffset: 1,
+        hasMore: false,
+        items: [{ section: "unstaged", changeType: "modified", path: "src/old.ts", displayPath: "src/old.ts" }],
+      });
+      await flush();
+      expect(host.textContent).not.toContain("src/old.ts");
+
+      setProtocolContext({ client: clientB, mode: "capable" });
+      await flush();
+      expect(mockListWorkspacePage).toHaveBeenCalledTimes(3);
+      expect(mockListWorkspacePage).toHaveBeenLastCalledWith({
+        repoRootPath: "/workspace/repo-linked",
+        section: "changes",
+        offset: 0,
+        limit: 200,
+        expectedWorkspaceRevision: undefined,
+      });
+      expect(host.textContent).toContain("src/client-b.ts");
+      expect(host.textContent).not.toContain("src/legacy.ts");
+    } finally {
+      dispose();
+    }
+  });
+
+  it("keeps branch and repo identity tuples distinct when pipe-joined keys collide", () => {
+    const first = ["refs/heads/a|/tmp/x", "/tmp/y"] as const;
+    const second = ["refs/heads/a", "/tmp/x|/tmp/y"] as const;
+
+    expect(first.join("|")).toBe(second.join("|"));
+    expect(gitBranchPanelIdentityKey(...first)).not.toBe(
+      gitBranchPanelIdentityKey(...second),
+    );
+    expect(gitBranchPanelIdentityKey(...first, 7)).not.toBe(
+      gitBranchPanelIdentityKey(...second, 7),
+    );
+  });
+
   it("shows a tooltip on the linked-worktree delete confirm button when safe delete is blocked", async () => {
     const host = document.createElement("div");
     document.body.appendChild(host);
@@ -3583,10 +3773,7 @@ describe("GitBranchesPanel interactions", () => {
           untrackedCount: 0,
           conflictedCount: 0,
         },
-        staged: [],
-        unstaged: [],
-        untracked: [],
-        conflicted: [],
+        workspaceRevision: "revision-linked-clean",
       },
     };
 

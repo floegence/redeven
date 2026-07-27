@@ -1,6 +1,6 @@
 import { For, Show } from 'solid-js';
 import type { GitWorkspaceChange } from '../protocol/redeven_v1';
-import { changeSecondaryPath, gitDiffEntryIdentity } from '../utils/gitWorkbench';
+import { changeSecondaryPath, exactGitPath, gitDiffEntryIdentity } from '../utils/gitWorkbench';
 import { gitChangePathClass } from './GitChrome';
 import {
   GIT_CHANGED_FILES_CELL_CLASS,
@@ -22,7 +22,7 @@ import { GIT_WORKBENCH_SCROLL_REGION_PROPS } from './gitWorkbenchScrollRegion';
 import { useI18n } from '../i18n';
 
 function itemPath(item: GitWorkspaceChange, i18n: ReturnType<typeof useI18n>): string {
-  return String(item.displayPath || item.path || item.newPath || item.oldPath || '').trim() || i18n.t('filePreview.unknownPath');
+  return exactGitPath(item.displayPath || item.path || item.newPath || item.oldPath) || i18n.t('filePreview.unknownPath');
 }
 
 function itemSectionLabel(item: GitWorkspaceChange, i18n: ReturnType<typeof useI18n>): string {
@@ -77,7 +77,7 @@ export function GitWorkspaceStatusTable(props: GitWorkspaceStatusTableProps) {
                         <div class="min-w-0">
                           <button
                             type="button"
-                            class={`block max-w-full cursor-pointer truncate text-left text-[11px] font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 ${gitChangePathClass(item.changeType)}`}
+                            class={`block max-w-full cursor-pointer truncate whitespace-pre text-left text-[11px] font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 ${gitChangePathClass(item.changeType)}`}
                             title={changeSecondaryPath(item)}
                             onClick={() => props.onOpenDiff?.(item)}
                           >

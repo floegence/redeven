@@ -484,10 +484,7 @@ describe('GitWorkspace interactions', () => {
           untrackedCount: 1,
           conflictedCount: 0,
         },
-        staged: [],
-        unstaged: [],
-        untracked: [],
-        conflicted: [],
+        workspaceRevision: 'revision-linked',
       },
     };
     let setSubview!: (view: 'changes' | 'branches' | 'history') => void;

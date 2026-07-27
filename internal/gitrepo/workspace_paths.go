@@ -8,11 +8,13 @@ import (
 )
 
 func normalizeGitPathspec(pathValue string) (string, error) {
-	item := strings.TrimSpace(strings.ReplaceAll(pathValue, "\\", "/"))
-	if item == "" {
+	if pathValue == "" {
 		return "", nil
 	}
-	cleaned := path.Clean(item)
+	if strings.IndexByte(pathValue, 0) >= 0 {
+		return "", errors.New("invalid git path")
+	}
+	cleaned := path.Clean(pathValue)
 	switch {
 	case cleaned == ".":
 		return "", nil
@@ -158,18 +160,42 @@ func workspaceCanonicalMatchSet(paths []string) map[string]struct{} {
 
 func sortWorkspaceChanges(items []gitWorkspaceChange) {
 	sort.Slice(items, func(i int, j int) bool {
-		left := workspaceChangeBrowsePath(items[i])
-		right := workspaceChangeBrowsePath(items[j])
-		if left == right {
-			return workspaceEntrySortRank(items[i]) < workspaceEntrySortRank(items[j])
-		}
 		leftRank := workspaceEntrySortRank(items[i])
 		rightRank := workspaceEntrySortRank(items[j])
 		if leftRank != rightRank {
 			return leftRank < rightRank
 		}
-		return left < right
+		left := workspaceChangeBrowsePath(items[i])
+		right := workspaceChangeBrowsePath(items[j])
+		if left != right {
+			return left < right
+		}
+		if items[i].Section != items[j].Section {
+			return workspaceSectionRank(items[i].Section) < workspaceSectionRank(items[j].Section)
+		}
+		if items[i].ChangeType != items[j].ChangeType {
+			return items[i].ChangeType < items[j].ChangeType
+		}
+		if items[i].OldPath != items[j].OldPath {
+			return items[i].OldPath < items[j].OldPath
+		}
+		return items[i].NewPath < items[j].NewPath
 	})
+}
+
+func workspaceSectionRank(section string) int {
+	switch section {
+	case "unstaged":
+		return 0
+	case "untracked":
+		return 1
+	case "conflicted":
+		return 2
+	case "staged":
+		return 3
+	default:
+		return 4
+	}
 }
 
 func workspaceEntrySortRank(item gitWorkspaceChange) int {

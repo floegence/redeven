@@ -4,8 +4,6 @@ import (
 	"context"
 	"strconv"
 	"strings"
-
-	"github.com/floegence/redeven/internal/gitutil"
 )
 
 func (s *Service) readGitDiffMetadata(ctx context.Context, repoRoot string, nameStatusArgs []string, numstatArgs []string) ([]gitCommitFileSummary, error) {
@@ -104,7 +102,7 @@ func (s *Service) readGitDiffNameStatusMetadata(ctx context.Context, repoRoot st
 }
 
 func (s *Service) readGitDiffNameStatusMetadataWithAllowedExitCodes(ctx context.Context, repoRoot string, allowedExitCodes []int, args ...string) ([]gitDiffFileSummary, error) {
-	out, err := gitutil.RunCombinedOutputAllowExitCodes(ctx, repoRoot, nil, allowedExitCodes, args...)
+	out, err := s.runGitReadAllowExitCodes(ctx, repoRoot, allowedExitCodes, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -116,7 +114,7 @@ func (s *Service) readGitDiffNumstatMetadata(ctx context.Context, repoRoot strin
 }
 
 func (s *Service) readGitDiffNumstatMetadataWithAllowedExitCodes(ctx context.Context, repoRoot string, allowedExitCodes []int, args ...string) ([]gitDiffFileSummary, error) {
-	out, err := gitutil.RunCombinedOutputAllowExitCodes(ctx, repoRoot, nil, allowedExitCodes, args...)
+	out, err := s.runGitReadAllowExitCodes(ctx, repoRoot, allowedExitCodes, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +125,7 @@ func parseGitNameStatusMetadata(out []byte) []gitDiffFileSummary {
 	tokens := strings.Split(string(out), "\x00")
 	items := make([]gitDiffFileSummary, 0, len(tokens)/2)
 	for index := 0; index < len(tokens); index += 1 {
-		status := strings.TrimSpace(strings.TrimSuffix(tokens[index], "\n"))
+		status := strings.TrimPrefix(tokens[index], "\n")
 		if status == "" {
 			continue
 		}
@@ -137,8 +135,8 @@ func parseGitNameStatusMetadata(out []byte) []gitDiffFileSummary {
 			if index+2 >= len(tokens) {
 				break
 			}
-			oldPath := strings.TrimSpace(strings.TrimSuffix(tokens[index+1], "\n"))
-			newPath := strings.TrimSpace(strings.TrimSuffix(tokens[index+2], "\n"))
+			oldPath := tokens[index+1]
+			newPath := tokens[index+2]
 			index += 2
 			items = append(items, gitDiffFileSummary{
 				ChangeType:  normalizeNameStatusChangeType(changeKind),
@@ -151,7 +149,7 @@ func parseGitNameStatusMetadata(out []byte) []gitDiffFileSummary {
 			if index+1 >= len(tokens) {
 				break
 			}
-			pathValue := strings.TrimSpace(strings.TrimSuffix(tokens[index+1], "\n"))
+			pathValue := tokens[index+1]
 			index += 1
 			items = append(items, gitDiffFileSummary{
 				ChangeType:  normalizeNameStatusChangeType(changeKind),
@@ -167,8 +165,7 @@ func parseGitNumstatMetadata(out []byte) []gitDiffFileSummary {
 	tokens := strings.Split(string(out), "\x00")
 	items := make([]gitDiffFileSummary, 0, len(tokens)/2)
 	for index := 0; index < len(tokens); index += 1 {
-		record := strings.TrimSuffix(tokens[index], "\n")
-		record = strings.TrimSpace(record)
+		record := strings.TrimPrefix(tokens[index], "\n")
 		if record == "" {
 			continue
 		}
@@ -177,15 +174,15 @@ func parseGitNumstatMetadata(out []byte) []gitDiffFileSummary {
 			continue
 		}
 		additions, deletions, isBinary := parseNumstatCounts(fields[0], fields[1])
-		pathValue := strings.TrimSpace(fields[2])
+		pathValue := fields[2]
 		oldPath := ""
 		newPath := ""
 		if pathValue == "" {
 			if index+2 >= len(tokens) {
 				break
 			}
-			oldPath = normalizeGitPatchMarkerPath(strings.TrimSpace(strings.TrimSuffix(tokens[index+1], "\n")))
-			newPath = normalizeGitPatchMarkerPath(strings.TrimSpace(strings.TrimSuffix(tokens[index+2], "\n")))
+			oldPath = tokens[index+1]
+			newPath = tokens[index+2]
 			index += 2
 			pathValue = firstNonEmptyPath(newPath, oldPath)
 		}

@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"strings"
-
-	"github.com/floegence/redeven/internal/gitutil"
 )
 
 type checkoutBranchTarget struct {
@@ -45,7 +43,7 @@ func (s *Service) stageWorkspace(ctx context.Context, repo repoContext, selectio
 	if result.MatchedCount == 0 {
 		return result, nil
 	}
-	args := []string{"add", "-A"}
+	args := []string{"--literal-pathspecs", "add", "-A"}
 	switch {
 	case len(normalizedPaths) > 0:
 		args = append(args, "--")
@@ -53,7 +51,7 @@ func (s *Service) stageWorkspace(ctx context.Context, repo repoContext, selectio
 	case normalizedDirectoryPath != "":
 		args = append(args, "--", normalizedDirectoryPath)
 	}
-	if _, err := gitutil.RunCombinedOutput(ctx, repo.repoRootReal, nil, args...); err != nil {
+	if _, err := s.runtime.RunMutation(ctx, repo.repoRootReal, nil, args...); err != nil {
 		return gitWorkspaceMutationResult{}, err
 	}
 	remainingItems, err := s.resolveWorkspaceMutationRemaining(ctx, repo, selection, "stage", selectedItems)
@@ -77,7 +75,7 @@ func (s *Service) unstageWorkspace(ctx context.Context, repo repoContext, select
 	if result.MatchedCount == 0 {
 		return result, nil
 	}
-	args := []string{"reset", "--quiet", "--"}
+	args := []string{"--literal-pathspecs", "reset", "--quiet", "--"}
 	switch {
 	case len(normalizedPaths) > 0:
 		args = append(args, normalizedPaths...)
@@ -86,7 +84,7 @@ func (s *Service) unstageWorkspace(ctx context.Context, repo repoContext, select
 	default:
 		args = append(args, ".")
 	}
-	if _, err := gitutil.RunCombinedOutput(ctx, repo.repoRootReal, nil, args...); err != nil {
+	if _, err := s.runtime.RunMutation(ctx, repo.repoRootReal, nil, args...); err != nil {
 		return gitWorkspaceMutationResult{}, err
 	}
 	remainingItems, err := s.resolveWorkspaceMutationRemaining(ctx, repo, selection, "unstage", selectedItems)
@@ -125,16 +123,16 @@ func (s *Service) discardWorkspace(ctx context.Context, repo repoContext, select
 	}
 	trackedPaths, untrackedPaths := workspaceDiscardPaths(selectedItems)
 	if len(trackedPaths) > 0 {
-		args := []string{"restore", "--worktree", "--"}
+		args := []string{"--literal-pathspecs", "restore", "--worktree", "--"}
 		args = append(args, trackedPaths...)
-		if _, err := gitutil.RunCombinedOutput(ctx, repo.repoRootReal, nil, args...); err != nil {
+		if _, err := s.runtime.RunMutation(ctx, repo.repoRootReal, nil, args...); err != nil {
 			return gitWorkspaceMutationResult{}, err
 		}
 	}
 	if len(untrackedPaths) > 0 {
-		args := []string{"clean", "-f", "-d", "--"}
+		args := []string{"--literal-pathspecs", "clean", "-f", "-d", "--"}
 		args = append(args, untrackedPaths...)
-		if _, err := gitutil.RunCombinedOutput(ctx, repo.repoRootReal, nil, args...); err != nil {
+		if _, err := s.runtime.RunMutation(ctx, repo.repoRootReal, nil, args...); err != nil {
 			return gitWorkspaceMutationResult{}, err
 		}
 	}
@@ -332,7 +330,7 @@ func (s *Service) commitWorkspace(ctx context.Context, repo repoContext, message
 	if len(status.Staged) == 0 {
 		return nil, errors.New("no staged changes to commit")
 	}
-	_, err = gitutil.RunCombinedOutput(ctx, repo.repoRootReal, []string{"GIT_EDITOR=:"}, "commit", "--message", message, "--cleanup=strip")
+	_, err = s.runtime.RunMutation(ctx, repo.repoRootReal, []string{"GIT_EDITOR=:"}, "commit", "--message", message, "--cleanup=strip")
 	if err != nil {
 		return nil, err
 	}
@@ -348,7 +346,7 @@ func (s *Service) commitWorkspace(ctx context.Context, repo repoContext, message
 }
 
 func (s *Service) fetchRepo(ctx context.Context, repo repoContext) (*fetchRepoResp, error) {
-	if _, err := gitutil.RunCombinedOutput(ctx, repo.repoRootReal, nil, "fetch", "--all", "--prune"); err != nil {
+	if _, err := s.runtime.RunMutation(ctx, repo.repoRootReal, nil, "fetch", "--all", "--prune"); err != nil {
 		return nil, err
 	}
 	updatedRepo, err := s.loadRepoContext(ctx, repo.repoRootReal)
@@ -366,7 +364,7 @@ func (s *Service) pullRepo(ctx context.Context, repo repoContext) (*pullRepoResp
 	if strings.TrimSpace(repo.headRef) == "" || repo.headRef == "HEAD" {
 		return nil, errors.New("cannot pull while HEAD is detached")
 	}
-	if _, err := gitutil.RunCombinedOutput(ctx, repo.repoRootReal, nil, "pull", "--ff-only"); err != nil {
+	if _, err := s.runtime.RunMutation(ctx, repo.repoRootReal, nil, "pull", "--ff-only"); err != nil {
 		return nil, err
 	}
 	updatedRepo, err := s.loadRepoContext(ctx, repo.repoRootReal)
@@ -384,7 +382,7 @@ func (s *Service) pushRepo(ctx context.Context, repo repoContext) (*pushRepoResp
 	if strings.TrimSpace(repo.headRef) == "" || repo.headRef == "HEAD" {
 		return nil, errors.New("cannot push while HEAD is detached")
 	}
-	if _, err := gitutil.RunCombinedOutput(ctx, repo.repoRootReal, nil, "push"); err != nil {
+	if _, err := s.runtime.RunMutation(ctx, repo.repoRootReal, nil, "push"); err != nil {
 		return nil, err
 	}
 	updatedRepo, err := s.loadRepoContext(ctx, repo.repoRootReal)
@@ -409,22 +407,22 @@ func (s *Service) checkoutBranch(ctx context.Context, repo repoContext, name str
 		localRef := "refs/heads/" + target.LocalName
 		remoteRef := "refs/remotes/" + target.RemoteName
 		switch {
-		case gitRefExists(ctx, repo.repoRootReal, localRef):
+		case s.gitRefExists(ctx, repo.repoRootReal, localRef):
 			args = append(args, target.LocalName)
-		case gitRefExists(ctx, repo.repoRootReal, remoteRef):
+		case s.gitRefExists(ctx, repo.repoRootReal, remoteRef):
 			args = append(args, "--track", "-b", target.LocalName, remoteRef)
 		default:
 			return nil, errors.New("target branch does not exist")
 		}
 	default:
 		localRef := "refs/heads/" + target.LocalName
-		if !gitRefExists(ctx, repo.repoRootReal, localRef) {
+		if !s.gitRefExists(ctx, repo.repoRootReal, localRef) {
 			return nil, errors.New("target branch does not exist")
 		}
 		args = append(args, target.LocalName)
 	}
 
-	if _, err := gitutil.RunCombinedOutput(ctx, repo.repoRootReal, nil, args...); err != nil {
+	if _, err := s.runtime.RunMutation(ctx, repo.repoRootReal, nil, args...); err != nil {
 		return nil, err
 	}
 	updatedRepo, err := s.loadRepoContext(ctx, repo.repoRootReal)
@@ -446,7 +444,7 @@ func (s *Service) switchDetached(ctx context.Context, repo repoContext, targetRe
 	if strings.TrimSpace(state.BlockingReason) != "" {
 		return nil, errors.New(state.BlockingReason)
 	}
-	if _, err := gitutil.RunCombinedOutput(ctx, repo.repoRootReal, nil, "switch", "--detach", state.TargetRef); err != nil {
+	if _, err := s.runtime.RunMutation(ctx, repo.repoRootReal, nil, "switch", "--detach", state.TargetRef); err != nil {
 		return nil, err
 	}
 	updatedRepo, err := s.loadRepoContext(ctx, repo.repoRootReal)
@@ -539,7 +537,7 @@ func (s *Service) deleteBranch(
 	if err != nil {
 		return nil, err
 	}
-	plan, err := s.buildDeleteBranchPlan(ctx, repo, target)
+	plan, err := s.buildDeleteBranchPlan(ctx, repo, target, true)
 	if err != nil {
 		return nil, err
 	}
@@ -577,7 +575,7 @@ func (s *Service) deleteBranch(
 			args = append(args, "--force")
 		}
 		args = append(args, plan.LinkedWorktree.WorktreePath)
-		if _, err := gitutil.RunCombinedOutput(ctx, repo.repoRootReal, nil, args...); err != nil {
+		if _, err := s.runtime.RunMutation(ctx, repo.repoRootReal, nil, args...); err != nil {
 			return nil, err
 		}
 		removedWorktreePath = plan.LinkedWorktree.WorktreePath
@@ -587,7 +585,7 @@ func (s *Service) deleteBranch(
 	if deleteMode == deleteBranchModeForce {
 		deleteFlag = "-D"
 	}
-	if _, err := gitutil.RunCombinedOutput(ctx, repo.repoRootReal, nil, "branch", deleteFlag, target.LocalName); err != nil {
+	if _, err := s.runtime.RunMutation(ctx, repo.repoRootReal, nil, "branch", deleteFlag, target.LocalName); err != nil {
 		return nil, err
 	}
 	updatedRepo, err := s.loadRepoContext(ctx, repo.repoRootReal)
@@ -604,11 +602,7 @@ func (s *Service) deleteBranch(
 }
 
 func (s *Service) runMergeBranchCommand(ctx context.Context, repoRoot string, mergeRef string) (bool, error) {
-	cmd, err := gitutil.CommandContext(ctx, repoRoot, nil, "merge", "--no-edit", mergeRef)
-	if err != nil {
-		return false, err
-	}
-	out, err := cmd.CombinedOutput()
+	_, err := s.runtime.RunMutation(ctx, repoRoot, nil, "merge", "--no-edit", mergeRef)
 	if err == nil {
 		return false, nil
 	}
@@ -618,19 +612,15 @@ func (s *Service) runMergeBranchCommand(ctx context.Context, repoRoot string, me
 		return true, nil
 	}
 
-	message := strings.TrimSpace(string(out))
-	if message == "" {
-		message = err.Error()
-	}
-	return false, errors.New(message)
+	return false, err
 }
 
-func gitRefExists(ctx context.Context, repoRoot string, ref string) bool {
+func (s *Service) gitRefExists(ctx context.Context, repoRoot string, ref string) bool {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
 		return false
 	}
-	_, err := gitutil.RunCombinedOutput(ctx, repoRoot, nil, "show-ref", "--verify", "--quiet", ref)
+	_, err := s.runGitRead(ctx, repoRoot, "show-ref", "--verify", "--quiet", ref)
 	return err == nil
 }
 

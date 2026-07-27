@@ -3,6 +3,8 @@ package gitrepo
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -154,6 +156,47 @@ func TestE2E_GitRepoRPC_ResolveListDetail(t *testing.T) {
 	case <-done:
 	case <-time.After(2 * time.Second):
 		t.Fatalf("rpc server did not stop")
+	}
+}
+
+func TestE2E_GitRepoRPC_LargeFullDiffReturnsTruncatedAndKeepsSession(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	largeContent := strings.Repeat("\n", 2*fullContextGitDiffEntryMaxBytes)
+	if err := os.WriteFile(filepath.Join(fixture.Root, "src", "main.txt"), []byte(largeContent), 0o644); err != nil {
+		t.Fatalf("WriteFile(large diff): %v", err)
+	}
+
+	svc := NewService(fixture.Root)
+	client, closeServer := startGitRepoRPCSession(t, svc)
+	defer closeServer()
+	payload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_DIFF_CONTENT, mustMarshalJSON(t, getDiffContentReq{
+		RepoRootPath:     fixture.Root,
+		SourceKind:       "workspace",
+		WorkspaceSection: "unstaged",
+		Mode:             "full",
+		File: gitDiffFileRef{
+			ChangeType: "modified",
+			Path:       "src/main.txt",
+		},
+	}))
+	if err != nil {
+		t.Fatalf("large full diff call closed session: %v", err)
+	}
+	if rpcErr != nil {
+		t.Fatalf("large full diff rpc error: %+v", rpcErr)
+	}
+	var diffResp getDiffContentResp
+	if err := json.Unmarshal(payload, &diffResp); err != nil {
+		t.Fatalf("unmarshal large full diff: %v", err)
+	}
+	if !diffResp.File.PatchTruncated || len(diffResp.File.PatchText) >= fullContextGitDiffEntryMaxBytes {
+		t.Fatalf("large full diff was not bounded: truncated=%v bytes=%d", diffResp.File.PatchTruncated, len(diffResp.File.PatchText))
+	}
+
+	_, rpcErr, err = client.Call(context.Background(), TypeID_GIT_GET_CAPABILITIES, mustMarshalJSON(t, getCapabilitiesReq{}))
+	if err != nil || rpcErr != nil {
+		t.Fatalf("session unusable after large diff: err=%v rpcErr=%+v", err, rpcErr)
 	}
 }
 
@@ -586,7 +629,7 @@ func TestE2E_GitRepoRPC_StashEndpoints(t *testing.T) {
 	var untrackedFile *gitCommitFileSummary
 	for index := range detailResp.Stash.Files {
 		file := detailResp.Stash.Files[index]
-		if trackedFile == nil && (file.Path == workspace.TrackedPath || file.NewPath == workspace.TrackedPath) {
+		if trackedFile == nil && file.StashSection == "unstaged" && (file.Path == workspace.TrackedPath || file.NewPath == workspace.TrackedPath) {
 			candidate := file
 			trackedFile = &candidate
 		}
@@ -603,6 +646,7 @@ func TestE2E_GitRepoRPC_StashEndpoints(t *testing.T) {
 		RepoRootPath: fixture.Root,
 		SourceKind:   "stash",
 		StashID:      saveResp.Created.ID,
+		StashSection: trackedFile.StashSection,
 		Mode:         "preview",
 		File: gitDiffFileRef{
 			ChangeType: trackedFile.ChangeType,
@@ -629,6 +673,7 @@ func TestE2E_GitRepoRPC_StashEndpoints(t *testing.T) {
 		RepoRootPath: fixture.Root,
 		SourceKind:   "stash",
 		StashID:      saveResp.Created.ID,
+		StashSection: untrackedFile.StashSection,
 		Mode:         "preview",
 		File: gitDiffFileRef{
 			ChangeType: untrackedFile.ChangeType,
@@ -791,6 +836,63 @@ func startGitRepoRPCSession(t *testing.T, svc *Service) (*rpc.Client, func()) {
 	return rpc.NewClient(clientConn), cleanup
 }
 
+func TestE2E_GitRepoRPC_WorkspaceCapabilitiesAndBudgetErrorKeepSessionOpen(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	workspace := createWorkspaceChangesFixture(t, fixture.Root)
+	svc := NewService(fixture.Root)
+	client, closeServer := startGitRepoRPCSession(t, svc)
+	defer closeServer()
+
+	capabilityPayload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_GET_CAPABILITIES, mustMarshalJSON(t, getCapabilitiesReq{}))
+	if err != nil {
+		t.Fatalf("get capabilities call: %v", err)
+	}
+	if rpcErr != nil {
+		t.Fatalf("get capabilities rpc error: %+v", rpcErr)
+	}
+	var capabilities getCapabilitiesResp
+	if err := json.Unmarshal(capabilityPayload, &capabilities); err != nil {
+		t.Fatalf("unmarshal capabilities: %v", err)
+	}
+	if !capabilities.WorkspaceRevisionV1 || !capabilities.WorkspacePathStatusV1 || !capabilities.WorkspaceDirectoryScopeV1 || !capabilities.StashSectionDiffV1 {
+		t.Fatalf("unexpected capabilities: %+v", capabilities)
+	}
+
+	tooManyPaths := make([]string, maxWorkspacePathStatusPaths+1)
+	for index := range tooManyPaths {
+		tooManyPaths[index] = fmt.Sprintf("path-%d", index)
+	}
+	_, rpcErr, err = client.Call(context.Background(), TypeID_GIT_LIST_PATH_STATUSES, mustMarshalJSON(t, listWorkspacePathStatusesReq{
+		RepoRootPath: fixture.Root,
+		Paths:        tooManyPaths,
+	}))
+	if err != nil {
+		t.Fatalf("oversized path status call closed the session: %v", err)
+	}
+	if rpcErr == nil || rpcErr.Code != GitErrorRequestBudget {
+		t.Fatalf("oversized path status rpc error=%+v, want code %d", rpcErr, GitErrorRequestBudget)
+	}
+
+	statusPayload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_LIST_PATH_STATUSES, mustMarshalJSON(t, listWorkspacePathStatusesReq{
+		RepoRootPath: fixture.Root,
+		Paths:        []string{workspace.TrackedPath},
+	}))
+	if err != nil {
+		t.Fatalf("path status call after budget error: %v", err)
+	}
+	if rpcErr != nil {
+		t.Fatalf("path status rpc error after budget error: %+v", rpcErr)
+	}
+	var statusResp listWorkspacePathStatusesResp
+	if err := json.Unmarshal(statusPayload, &statusResp); err != nil {
+		t.Fatalf("unmarshal path status: %v", err)
+	}
+	if statusResp.WorkspaceRevision == "" || len(statusResp.Items) != 2 {
+		t.Fatalf("unexpected path status response: %+v", statusResp)
+	}
+}
+
 func TestE2E_GitRepoRPC_PreviewDeleteBranchWithLinkedWorktree(t *testing.T) {
 	t.Parallel()
 	fixture := createTestRepoFixture(t)
@@ -835,8 +937,35 @@ func TestE2E_GitRepoRPC_PreviewDeleteBranchWithLinkedWorktree(t *testing.T) {
 	if mustEvalPathE2E(t, previewResp.LinkedWorktree.WorktreePath) != mustEvalPathE2E(t, worktree) {
 		t.Fatalf("preview worktree path=%q, want %q", previewResp.LinkedWorktree.WorktreePath, worktree)
 	}
-	if len(previewResp.LinkedWorktree.Untracked) != 1 || previewResp.LinkedWorktree.Untracked[0].Path != "scratch.txt" {
-		t.Fatalf("unexpected preview worktree changes: %+v", previewResp.LinkedWorktree.Untracked)
+	if previewResp.LinkedWorktree.Summary.UntrackedCount != 1 || previewResp.LinkedWorktree.WorkspaceRevision == "" {
+		t.Fatalf("unexpected preview worktree summary: %+v", previewResp.LinkedWorktree)
+	}
+
+	deletePayload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_DELETE_BRANCH, mustMarshalJSON(t, deleteBranchReq{
+		RepoRootPath:                 fixture.Root,
+		Name:                         compare.Branch,
+		FullName:                     "refs/heads/" + compare.Branch,
+		Kind:                         "local",
+		DeleteMode:                   string(deleteBranchModeSafe),
+		RemoveLinkedWorktree:         true,
+		DiscardLinkedWorktreeChanges: true,
+		PlanFingerprint:              previewResp.PlanFingerprint,
+	}))
+	if err != nil {
+		t.Fatalf("delete linked worktree branch call: %v", err)
+	}
+	if rpcErr != nil {
+		t.Fatalf("delete linked worktree branch rpc error: %+v", rpcErr)
+	}
+	var deleteResp deleteBranchResp
+	if err := json.Unmarshal(deletePayload, &deleteResp); err != nil {
+		t.Fatalf("unmarshal linked worktree delete response: %v", err)
+	}
+	if !deleteResp.LinkedWorktreeRemoved {
+		t.Fatalf("linked worktree was not removed: %+v", deleteResp)
+	}
+	if _, err := os.Lstat(worktree); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("linked worktree still exists after delete: %v", err)
 	}
 }
 
@@ -891,7 +1020,7 @@ func TestE2E_GitRepoRPC_ForceDeleteBranch(t *testing.T) {
 	if deleteResp.HeadRef != compare.BaseBranch {
 		t.Fatalf("HeadRef=%q, want %q", deleteResp.HeadRef, compare.BaseBranch)
 	}
-	if gitRefExists(context.Background(), fixture.Root, "refs/heads/"+compare.Branch) {
+	if svc.gitRefExists(context.Background(), fixture.Root, "refs/heads/"+compare.Branch) {
 		t.Fatalf("expected branch %q to be force deleted", compare.Branch)
 	}
 }

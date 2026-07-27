@@ -7,7 +7,7 @@
     "frontmatter": {
       "okf_version": "0.2"
     },
-    "body": "# Redeven OKF Bundle\n\nThis top-level OKF corpus is the maintained repository knowledge surface for the current Redeven implementation. It is authored from current source code, generated contracts, and release automation rather than from removed product documents.\n\n## Architecture\n\n- [Database schema migration ownership](architecture/database-schema-migrations.md) - Automatically migrate Redeven product stores while Floret and ReDevPlugin schemas remain upstream-owned.\n- [AI readiness and service generation lifecycle](architecture/ai-readiness-lifecycle.md) - Keep product surfaces available while AI startup, retry, generation draining, and typed unavailability remain process-local.\n- [Runtime startup presentation](architecture/runtime-startup-presentation.md) - Structured startup events, renderer modes, and Desktop readiness reports.\n- [Local UI surface](architecture/local-ui-surface.md) - Browser entrypoints, access gate, direct sessions, and Env App proxying.\n- [Runtime Service snapshot](architecture/runtime-service-snapshot.md) - Desktop/runtime compatibility, open readiness, capabilities, and bindings.\n- [Runtime session permission gates](architecture/runtime-session-permission-gates.md) - Runtime validation and local permission clamping before sessions open.\n- [Runtime transport dependencies](architecture/runtime-transport-dependencies.md) - Flowersec and Floeterm dependency boundaries.\n- [Env App upstream web dependencies](architecture/env-app-upstream-web-dependencies.md) - Published web package contracts consumed by Env App.\n- [ReDevPlugin host integration boundary](architecture/redevplugin-boundary.md) - Separate released platform ownership from Redeven source policy, placement, runtime build, and business adapters.\n- [Plugin platform integration](architecture/plugin-platform-integration.md) - Mount the released Host, admit reviewed external packages, and coordinate exact Activity and Workbench placements.\n- [Containers operation observation](architecture/containers-operation-observation.md) - Observe resource-local mutations to terminal reconciliation while keeping unsigned candidates outside official release trust.\n- [Container resources capability](architecture/container-resources-capability.md) - Register Docker and Podman business access while preserving explicit `containers.read` admission.\n\n## Security\n\n- [Local UI network exposure](security/local-ui-network-exposure.md) - Fixed-port plaintext exposure admission, exact authority checks, acknowledgement, and warning preferences.\n- [Permission policy and filesystem scope](security/permission-policy-and-filesystem-scope.md) - Local caps and directory-level file access policy.\n- [Plugin platform integration security](security/plugin-platform-integration-security.md) - Keep authenticated ownership, package provenance, signature trust, permissions, and runtime authority independent.\n\n## Desktop\n\n- [Desktop shell theme state](desktop/desktop-shell-theme-state.md) - Global source, per-mode Floe presets, renderer synchronization, and native window colors.\n- [Desktop runtime bridge](desktop/desktop-runtime-bridge.md) - Desktop-managed Local UI launches, runtime-control, and startup probing.\n- [Desktop runtime readiness](desktop/desktop-runtime-readiness.md) - Validate startup handoff, access admission, lifecycle readiness, and window-open gates.\n- [Desktop transport recovery](desktop/desktop-transport-recovery.md) - Preserve bridge identity, recovery generations, and terminal session disposal.\n- [Desktop SSH runtime operations](desktop/desktop-ssh-runtime-operations.md) - Coordinate shared SSH transports, operation generations, host discovery, and process inventory.\n- [Desktop session and model source](desktop/desktop-session-model-source.md) - Project session routes, opaque Desktop models, Flower attach, and lifecycle invalidation.\n- [Desktop runtime process lifecycle](desktop/desktop-runtime-process-lifecycle.md) - Scoped inventory, historical process reconciliation, package activation ordering, and lifecycle success conditions.\n\n## Gateway\n\n- [Gateway service](gateway/gateway-service.md) - Standalone Gateway binary, managed service lifecycle, and Desktop bridge.\n\n## Code\n\n- [Browser Editor runtime](code/browser-editor-runtime.md) - Code App app server, codespace proxying, and managed Browser Editor setup.\n\n## UI\n\n- [UI presentation transactions](ui/ui-presentation-transactions.md) - Visual intent, after-paint content commits, post-paint effects, keep-alive continuity, and performance budgets.\n- [Workbench interaction contracts](ui/workbench-interaction-contracts.md) - Wheel, text selection, and action-surface ownership contracts.\n- [Workbench input ownership](ui/workbench-input-ownership.md) - Distinguish canvas, local-scroll, pointer, text, and terminal input ownership.\n- [Workbench terminal interaction](ui/workbench-terminal-interaction.md) - Preserve attachment, input-plane, focus, retained-history, and performance ownership.\n- [Workbench surface lifecycle](ui/workbench-surface-lifecycle.md) - Preserve selection, recovery, lazy widgets, and shared floating-surface ownership.\n- [Plugin surfaces](ui/plugin-surfaces.md) - Review exact plugin inventory and place SDK surfaces in Activity windows or Workbench widgets.\n- [Flower turn launcher](ui/flower-turn-launcher.md) - Use one strict turn endpoint, connection-local composer state, typed admission outcomes, and host handoff responsibilities.\n- [Flower composer references](ui/flower-composer-references.md) - Working-directory @ discovery, editable draft chips, strict composer wire data, and ordered admission into Floret.\n- [Flower Activity companion](ui/flower-activity-companion.md) - Present one stable Activity Flower surface as a dedicated page, fixed work-detail overlay, or centered bottom-bar presence while preserving canonical authority and Workbench isolation.\n- [Flower live timeline](ui/flower-live-timeline.md) - Canonical live thread timeline projection, replacement events, and cursor ownership.\n- [Flower timeline ordering](ui/flower-timeline-ordering.md) - Consume canonical turn pages, projections, decorations, cursors, and replacement events.\n- [Flower model and navigation presentation](ui/flower-model-navigation.md) - Keep model-source controls, notifications, and staged thread selection explicit.\n- [Flower composer attachments](ui/flower-composer-attachments.md) - Stage files and long text through one shared, revisioned composer workflow.\n- [Flower terminal activity presentation](ui/flower-terminal-activity.md) - Preserve canonical terminal activity, disclosure, animation, and scrolling state.\n- [Flower approval and context state](ui/flower-approval-context.md) - Project approval queues, compaction, context usage, and read acknowledgement.\n- [Flower subagent detail presentation](ui/flower-subagent-detail.md) - Render parent-owned membership and read-only child execution detail.\n\n## AI\n\n- [AI tool runtime](ai/ai-tool-runtime.md) - Builtin tool registry, permission checks, and activity projection.\n- [Flower storage ownership and migrations](ai/flower-storage-ownership-and-migrations.md) - Apply host-only schema v8, capability-bound upload staging, immutable commands, and strict contiguous migration boundaries.\n- [Flower attachment resources](ai/flower-attachment-resources.md) - Enforce owner-scoped uploads, canonical reads, quotas, and last-reference cleanup.\n- [AI tool permissions and dispatch](ai/tool-permission-runtime.md) - Apply tool registration, scheduling, permission, approval, readonly, and target-routing contracts.\n- [AI tool approval runtime](ai/tool-approval-runtime.md) - Reconcile pending approval queues, conflicts, decisions, and authoritative live state.\n- [AI terminal tool runtime](ai/terminal-tool-runtime.md) - Manage PTY handles, incremental output, termination, and Floret settlement.\n- [AI model and context runtime](ai/model-context-runtime.md) - Separate model-source ownership, provider mapping, token limits, context, and compaction.\n- [Floret thread runtime integration](ai/floret-thread-runtime.md) - Read canonical overviews, titles, structured attachments, and admitted lifecycle through published Floret APIs.\n- [Flower subagent runtime](ai/subagent-runtime.md) - Use Floret-owned child threads, strict spawn input, delegated permission audit, membership, and detail.\n- [Flower thread fork coordination](ai/flower-thread-fork-coordination.md) - Fork canonical Agent state first, then materialize fixed host settings and thread resource ownership.\n- [Flower thread deletion coordination](ai/flower-thread-deletion-coordination.md) - Retire product access after durable intent, serialize canonical-first cleanup, and fail closed on integrity loss.\n- [Flower plugin generation](ai/flower-plugin-generation.md) - Generated plugin flows through Floret approval and ReDevPlugin lifecycle APIs.\n- [Flower context action records](ai/flower-context-action-records.md) - Ask Flower launcher context validation, persistence, and UI badge projection.\n- [Redeven environment operations](ai/redeven-env-operations.md) - Product boundary for Flower and automation environment lifecycle requests.\n- [OKF bundle lifecycle](ai/okf-bundle-lifecycle.md) - OKF source validation, deterministic artifacts, and runtime embedding.\n- [OKF tool suite](ai/okf-search-tool.md) - Read-only repository knowledge access through index browsing, short search, and concept opening.\n\n## Protocol\n\n- [Gateway v1 protocol](protocol/gateway-v1-protocol.md) - OpenAPI source contract for Gateway HTTP JSON endpoints, auth, envelopes, and Desktop behavior boundaries.\n- [RCPP v2 provider API](protocol/rcpp-v2-provider-api.md) - Provider discovery, Desktop auth, environment catalog, health, open-session, and bootstrap.\n\n## Release\n\n- [CI and release gates](release/ci-and-release-gates.md) - Local/CI checks and release artifact contracts.\n- [OKF release assets](release/okf-release-assets.md) - Public release verification files for the embedded OKF bundle.",
+    "body": "# Redeven OKF Bundle\n\nThis top-level OKF corpus is the maintained repository knowledge surface for the current Redeven implementation. It is authored from current source code, generated contracts, and release automation rather than from removed product documents.\n\n## Architecture\n\n- [Database schema migration ownership](architecture/database-schema-migrations.md) - Automatically migrate Redeven product stores while Floret and ReDevPlugin schemas remain upstream-owned.\n- [AI readiness and service generation lifecycle](architecture/ai-readiness-lifecycle.md) - Keep product surfaces available while AI startup, retry, generation draining, and typed unavailability remain process-local.\n- [Runtime startup presentation](architecture/runtime-startup-presentation.md) - Structured startup events, renderer modes, and Desktop readiness reports.\n- [Local UI surface](architecture/local-ui-surface.md) - Browser entrypoints, access gate, direct sessions, and Env App proxying.\n- [Runtime Service snapshot](architecture/runtime-service-snapshot.md) - Desktop/runtime compatibility, open readiness, capabilities, and bindings.\n- [Runtime session permission gates](architecture/runtime-session-permission-gates.md) - Runtime validation and local permission clamping before sessions open.\n- [Runtime transport dependencies](architecture/runtime-transport-dependencies.md) - Flowersec and Floeterm dependency boundaries.\n- [Git workspace inventory lifecycle](architecture/git-workspace-inventory-lifecycle.md) - Bound revisioned workspace capture, transport resources, mutation coordination, and linked-worktree removal.\n- [Env App upstream web dependencies](architecture/env-app-upstream-web-dependencies.md) - Published web package contracts consumed by Env App.\n- [ReDevPlugin host integration boundary](architecture/redevplugin-boundary.md) - Separate released platform ownership from Redeven source policy, placement, runtime build, and business adapters.\n- [Plugin platform integration](architecture/plugin-platform-integration.md) - Mount the released Host, admit reviewed external packages, and coordinate exact Activity and Workbench placements.\n- [Containers operation observation](architecture/containers-operation-observation.md) - Observe resource-local mutations to terminal reconciliation while keeping unsigned candidates outside official release trust.\n- [Container resources capability](architecture/container-resources-capability.md) - Register Docker and Podman business access while preserving explicit `containers.read` admission.\n\n## Security\n\n- [Local UI network exposure](security/local-ui-network-exposure.md) - Fixed-port plaintext exposure admission, exact authority checks, acknowledgement, and warning preferences.\n- [Permission policy and filesystem scope](security/permission-policy-and-filesystem-scope.md) - Local caps and directory-level file access policy.\n- [Plugin platform integration security](security/plugin-platform-integration-security.md) - Keep authenticated ownership, package provenance, signature trust, permissions, and runtime authority independent.\n\n## Desktop\n\n- [Desktop shell theme state](desktop/desktop-shell-theme-state.md) - Global source, per-mode Floe presets, renderer synchronization, and native window colors.\n- [Desktop runtime bridge](desktop/desktop-runtime-bridge.md) - Desktop-managed Local UI launches, runtime-control, and startup probing.\n- [Desktop runtime readiness](desktop/desktop-runtime-readiness.md) - Validate startup handoff, access admission, lifecycle readiness, and window-open gates.\n- [Desktop transport recovery](desktop/desktop-transport-recovery.md) - Preserve bridge identity, recovery generations, and terminal session disposal.\n- [Desktop SSH runtime operations](desktop/desktop-ssh-runtime-operations.md) - Coordinate shared SSH transports, operation generations, host discovery, and process inventory.\n- [Desktop session and model source](desktop/desktop-session-model-source.md) - Project session routes, opaque Desktop models, Flower attach, and lifecycle invalidation.\n- [Desktop runtime process lifecycle](desktop/desktop-runtime-process-lifecycle.md) - Scoped inventory, historical process reconciliation, package activation ordering, and lifecycle success conditions.\n\n## Gateway\n\n- [Gateway service](gateway/gateway-service.md) - Standalone Gateway binary, managed service lifecycle, and Desktop bridge.\n\n## Code\n\n- [Browser Editor runtime](code/browser-editor-runtime.md) - Code App app server, codespace proxying, and managed Browser Editor setup.\n\n## UI\n\n- [UI presentation transactions](ui/ui-presentation-transactions.md) - Visual intent, after-paint content commits, post-paint effects, keep-alive continuity, and performance budgets.\n- [Git workspace generation and Files decoration](ui/git-workspace-generation-and-decoration.md) - Keep Git views and background Files status consistent through capability gating and monotonic invalidation.\n- [Workbench interaction contracts](ui/workbench-interaction-contracts.md) - Wheel, text selection, and action-surface ownership contracts.\n- [Workbench input ownership](ui/workbench-input-ownership.md) - Distinguish canvas, local-scroll, pointer, text, and terminal input ownership.\n- [Workbench terminal interaction](ui/workbench-terminal-interaction.md) - Preserve attachment, input-plane, focus, retained-history, and performance ownership.\n- [Workbench surface lifecycle](ui/workbench-surface-lifecycle.md) - Preserve selection, recovery, lazy widgets, and shared floating-surface ownership.\n- [Plugin surfaces](ui/plugin-surfaces.md) - Review exact plugin inventory and place SDK surfaces in Activity windows or Workbench widgets.\n- [Flower turn launcher](ui/flower-turn-launcher.md) - Use one strict turn endpoint, connection-local composer state, typed admission outcomes, and host handoff responsibilities.\n- [Flower composer references](ui/flower-composer-references.md) - Working-directory @ discovery, editable draft chips, strict composer wire data, and ordered admission into Floret.\n- [Flower Activity companion](ui/flower-activity-companion.md) - Present one stable Activity Flower surface as a dedicated page, fixed work-detail overlay, or centered bottom-bar presence while preserving canonical authority and Workbench isolation.\n- [Flower live timeline](ui/flower-live-timeline.md) - Canonical live thread timeline projection, replacement events, and cursor ownership.\n- [Flower timeline ordering](ui/flower-timeline-ordering.md) - Consume canonical turn pages, projections, decorations, cursors, and replacement events.\n- [Flower model and navigation presentation](ui/flower-model-navigation.md) - Keep model-source controls, notifications, and staged thread selection explicit.\n- [Flower composer attachments](ui/flower-composer-attachments.md) - Stage files and long text through one shared, revisioned composer workflow.\n- [Flower terminal activity presentation](ui/flower-terminal-activity.md) - Preserve canonical terminal activity, disclosure, animation, and scrolling state.\n- [Flower approval and context state](ui/flower-approval-context.md) - Project approval queues, compaction, context usage, and read acknowledgement.\n- [Flower subagent detail presentation](ui/flower-subagent-detail.md) - Render parent-owned membership and read-only child execution detail.\n\n## AI\n\n- [AI tool runtime](ai/ai-tool-runtime.md) - Builtin tool registry, permission checks, and activity projection.\n- [Flower storage ownership and migrations](ai/flower-storage-ownership-and-migrations.md) - Apply host-only schema v8, capability-bound upload staging, immutable commands, and strict contiguous migration boundaries.\n- [Flower attachment resources](ai/flower-attachment-resources.md) - Enforce owner-scoped uploads, canonical reads, quotas, and last-reference cleanup.\n- [AI tool permissions and dispatch](ai/tool-permission-runtime.md) - Apply tool registration, scheduling, permission, approval, readonly, and target-routing contracts.\n- [AI tool approval runtime](ai/tool-approval-runtime.md) - Reconcile pending approval queues, conflicts, decisions, and authoritative live state.\n- [AI terminal tool runtime](ai/terminal-tool-runtime.md) - Manage PTY handles, incremental output, termination, and Floret settlement.\n- [AI model and context runtime](ai/model-context-runtime.md) - Separate model-source ownership, provider mapping, token limits, context, and compaction.\n- [Floret thread runtime integration](ai/floret-thread-runtime.md) - Read canonical overviews, titles, structured attachments, and admitted lifecycle through published Floret APIs.\n- [Flower subagent runtime](ai/subagent-runtime.md) - Use Floret-owned child threads, strict spawn input, delegated permission audit, membership, and detail.\n- [Flower thread fork coordination](ai/flower-thread-fork-coordination.md) - Fork canonical Agent state first, then materialize fixed host settings and thread resource ownership.\n- [Flower thread deletion coordination](ai/flower-thread-deletion-coordination.md) - Retire product access after durable intent, serialize canonical-first cleanup, and fail closed on integrity loss.\n- [Flower plugin generation](ai/flower-plugin-generation.md) - Generated plugin flows through Floret approval and ReDevPlugin lifecycle APIs.\n- [Flower context action records](ai/flower-context-action-records.md) - Ask Flower launcher context validation, persistence, and UI badge projection.\n- [Redeven environment operations](ai/redeven-env-operations.md) - Product boundary for Flower and automation environment lifecycle requests.\n- [OKF bundle lifecycle](ai/okf-bundle-lifecycle.md) - OKF source validation, deterministic artifacts, and runtime embedding.\n- [OKF tool suite](ai/okf-search-tool.md) - Read-only repository knowledge access through index browsing, short search, and concept opening.\n\n## Protocol\n\n- [Gateway v1 protocol](protocol/gateway-v1-protocol.md) - OpenAPI source contract for Gateway HTTP JSON endpoints, auth, envelopes, and Desktop behavior boundaries.\n- [RCPP v2 provider API](protocol/rcpp-v2-provider-api.md) - Provider discovery, Desktop auth, environment catalog, health, open-session, and bootstrap.\n\n## Release\n\n- [CI and release gates](release/ci-and-release-gates.md) - Local/CI checks and release artifact contracts.\n- [OKF release assets](release/okf-release-assets.md) - Public release verification files for the embedded OKF bundle.",
     "sections": [
       {
         "title": "Architecture",
@@ -117,6 +117,22 @@
             ],
             "summary": "Redeven runtime builds control and data sessions on Flowersec client and endpoint primitives, while terminal lifecycle inside the runtime is delegated to Floeterm's terminal-go manager. Floeterm preserves valid user Bash prompt commands as independent syntax units; invalid user scripts remain Bash errors and are not normalized or hidden.\n\nRuntime transport uses Flowersec sessions while terminal lifecycle is delegated to Floeterm managers.",
             "section_count": 2
+          },
+          {
+            "concept_id": "architecture.git-workspace-inventory-lifecycle",
+            "path": "architecture/git-workspace-inventory-lifecycle.md",
+            "type": "Runtime Contract",
+            "title": "Git workspace inventory lifecycle",
+            "description": "Bound Git workspace capture, immutable revisions, resource admission, mutation coordination, and destructive linked-worktree removal.",
+            "tags": [
+              "architecture",
+              "filesystem",
+              "git",
+              "runtime",
+              "transport"
+            ],
+            "summary": "Redeven exposes Git workspace state as bounded, immutable, process-local inventory snapshots. Fresh queries stream Git porcelain output into an admitted snapshot; paged and path-scoped reads bind an exact revision. Git and Files mutations coordinate against the same repository and topology authority, invalidate all affected snapshots before and after effects, and never use display state to authorize a mutation. Oversized, stale, malformed, or resource-exhausted work fails closed with a small typed Git error while the Flowersec session remains usable.",
+            "section_count": 4
           },
           {
             "concept_id": "architecture.env-app-upstream-web-dependencies",
@@ -420,6 +436,22 @@
             ],
             "summary": "Redeven prioritizes visible input acknowledgement over the secondary work caused by a selection change. A heavy navigation event is one presentation transaction with three ordered stages: the lightweight selected control is updated synchronously, target content visibility is committed after that intent can paint, and visibility-dependent focus, resize, scroll restoration, viewport movement, or measurement runs only after the target content can paint. This ordering applies to Activity navigation, Activity/Workbench mode, terminal sessions, Workbench widgets, Flower and Codex threads, Files/Git modes, and heavy Settings, Plugin Center, or Debug Console panels.",
             "section_count": 2
+          },
+          {
+            "concept_id": "ui.git-workspace-generation-and-decoration",
+            "path": "ui/git-workspace-generation-and-decoration.md",
+            "type": "UI Contract",
+            "title": "Git workspace generation and Files decoration",
+            "description": "Keep Git views and Files decorations revision-consistent through capability gating, generation ownership, and monotonic invalidation.",
+            "tags": [
+              "files",
+              "git",
+              "interaction",
+              "state",
+              "ui"
+            ],
+            "summary": "Env App treats each visible Git workspace projection as a revision-bound generation owned by one protocol client and repository. Git Changes, Branch status, and Files decorations have independent owners but share a provider-level monotonic invalidation bus. Files navigation never waits for Git, never downloads a complete workspace inventory, and preserves the last committed decoration while one bounded replacement generation is built. A stale or invalidated response cannot restore old state after navigation, remount, capability probing, or an effect with an unknown outcome.",
+            "section_count": 4
           },
           {
             "concept_id": "ui.workbench-interaction-contracts",
@@ -1102,6 +1134,12 @@
         "title": "Env App upstream web dependencies"
       },
       {
+        "label": "Git workspace inventory lifecycle",
+        "path": "architecture/git-workspace-inventory-lifecycle.md",
+        "concept_id": "architecture.git-workspace-inventory-lifecycle",
+        "title": "Git workspace inventory lifecycle"
+      },
+      {
         "label": "Local UI surface",
         "path": "architecture/local-ui-surface.md",
         "concept_id": "architecture.local-ui-surface",
@@ -1298,6 +1336,12 @@
         "path": "ui/flower-turn-launcher.md",
         "concept_id": "ui.flower-turn-launcher",
         "title": "Flower turn launcher"
+      },
+      {
+        "label": "Git workspace generation and Files decoration",
+        "path": "ui/git-workspace-generation-and-decoration.md",
+        "concept_id": "ui.git-workspace-generation-and-decoration",
+        "title": "Git workspace generation and Files decoration"
       },
       {
         "label": "Plugin surfaces",
@@ -4168,6 +4212,126 @@
           "path": "release/ci-and-release-gates.md",
           "concept_id": "release.ci-and-release-gates",
           "title": "CI and release gates"
+        }
+      ]
+    },
+    {
+      "path": "architecture/git-workspace-inventory-lifecycle.md",
+      "concept_id": "architecture.git-workspace-inventory-lifecycle",
+      "type": "Runtime Contract",
+      "title": "Git workspace inventory lifecycle",
+      "description": "Bound Git workspace capture, immutable revisions, resource admission, mutation coordination, and destructive linked-worktree removal.",
+      "tags": [
+        "architecture",
+        "filesystem",
+        "git",
+        "runtime",
+        "transport"
+      ],
+      "timestamp": "2026-07-28T00:00:00Z",
+      "frontmatter": {
+        "description": "Bound Git workspace capture, immutable revisions, resource admission, mutation coordination, and destructive linked-worktree removal.",
+        "tags": [
+          "architecture",
+          "filesystem",
+          "git",
+          "runtime",
+          "transport"
+        ],
+        "timestamp": "2026-07-28T00:00:00Z",
+        "title": "Git workspace inventory lifecycle",
+        "type": "Runtime Contract"
+      },
+      "body_length": 8738,
+      "summary": "Redeven exposes Git workspace state as bounded, immutable, process-local inventory snapshots. Fresh queries stream Git porcelain output into an admitted snapshot; paged and path-scoped reads bind an exact revision. Git and Files mutations coordinate against the same repository and topology authority, invalidate all affected snapshots before and after effects, and never use display state to authorize a mutation. Oversized, stale, malformed, or resource-exhausted work fails closed with a small typed Git error while the Flowersec session remains usable.",
+      "sections": [
+        {
+          "id": "inventory-contract",
+          "title": "Inventory contract",
+          "level": 1,
+          "body": "Workspace capture reads NUL-delimited porcelain v2 incrementally. It does not recursively walk untracked directories, buffer an unbounded command response, or enrich every item with patch statistics. Token, record, canonical-path, retained-heap, subprocess, capture, and published-cache limits are admitted before retained capacity grows beyond its reservation. Cancellation, parser failure, Git failure, or any limit violation terminates and reaps the command and publishes no partial snapshot.\n\nGit-relative paths preserve canonical Git slash and byte semantics through parsing, sorting, DTOs, literal pathspecs, diffs, and mutations. Empty, non-UTF-8, absolute, parent-escaping, or otherwise unrepresentable wire paths fail closed. Directory markers, nested repositories, linked worktrees, and symlinks are boundaries rather than implicit recursive inventory roots.\n\nEach successful capture produces a content-derived `workspace_revision`. A request without an expected revision starts a fresh generation; a request with `expected_workspace_revision` reads only that exact snapshot. Missing, expired, invalidated, or identity-mismatched revisions return the snapshot-stale code and never fall through to a newer snapshot. Session-local LRU and TTL limits, the Agent-wide published-snapshot budget, capture reservations, and active pins bound retained memory while preventing eviction during an accepted page or batch.\n\nRepository identity separates the common Git directory from the worktree root and per-worktree Git directory. Common-repository identity coordinates shared refs and invalidation; worktree identity keys snapshots so linked worktrees cannot exchange index or workspace state. Stable filesystem identity prevents a deleted and recreated path from inheriting an older coordinator or revision.",
+          "char_count": 1810
+        },
+        {
+          "id": "query-and-wire-contract",
+          "title": "Query and wire contract",
+          "level": 1,
+          "body": "`git.getCapabilities` advertises revisioned workspace pages, path-scoped status, directory scope, and stash-section diff support. `git.listWorkspacePage` returns one section and directory scope at a time. `git.listWorkspacePathStatuses` accepts only a bounded set of already-known paths and returns file rows or aggregate directory counts without descendant arrays. Both APIs return the bound revision. The legacy full-workspace method remains registered for compatibility but rejects inventories that require pagination before enrichment or response construction.\n\nEvery Git request passes raw payload and structural admission before JSON DTO decoding. Every Git response, including errors and mutation output, passes a Git-domain envelope budget using the production envelope shape. Response encoding checks and emits JSON incrementally within the payload cap, so high-escape strings cannot allocate an oversized encoded buffer before rejection. Large parsers and command runners enforce byte and record limits while reading rather than constructing an oversized business object first. Stable numeric errors distinguish stale snapshots, inventory limits, response budgets, pagination requirements, destructive-scan limits, process resources, request budgets, and path encoding.\n\nThe current Flowersec v0.27 integration admits at most four direct RPC streams and fixes each stream's request and notification scheduler limits before serving it. The reservation covers Flowersec-owned inbound frames and queues plus bounded Git outbound payload and final-marshal allowance. It does not claim a general bound for non-Git outbound responses or notifications; that transport-wide lifecycle remains owned by a future published Flowersec transport release.",
+          "char_count": 1750
+        },
+        {
+          "id": "mutation-coordination",
+          "title": "Mutation coordination",
+          "level": 1,
+          "body": "The Agent owns one Git runtime shared by direct sessions. A cancellable topology gate, active-worktree registry, canonical repository lock order, per-repository fair read/write coordination, epochs, process admissions, snapshot storage, and destructive-scan admission form one lifecycle. Capture holds shared topology and repository leases through status completion, epoch revalidation, and snapshot publication. Git mutations hold the repository exclusively from current-state planning through effect outcome and final invalidation.\n\nFiles write, create, copy, rename, and delete effects use the same coordination boundary. Effects discover overlap with each admitted worktree root, common Git directory, and per-worktree Git directory, acquire all affected repositories in canonical order, and revalidate identities. Every Files-owned write takes the topology-exclusive path because Git metadata may live in an arbitrary `--separate-git-dir`; filename-based detection cannot prove that a target is ordinary content. Topology-changing effects fail closed when registry completeness or resource admission cannot prove the overlap set. Every dispatched effect invalidates before and after completion, including partial failures and unknown transport outcomes. Preview and validation-only calls do not invalidate.\n\nGit commands use a bounded runner. On cancellation, parser failure, or output overflow, POSIX implementations signal the process group, apply the bounded termination sequence, close local pipe ends, and wait for the direct process and readers before releasing admission. The direct leader and pipe readers are observed concurrently; if the leader exits while an escaped descendant retains a pipe, the runner allows only a short drain window, closes its pipe ends, returns an unknown outcome, and releases admission. Process-group operations are serialized before leader reaping. Descendants that deliberately escape the process group remain an explicit operating-system boundary; their existence does not permit an unbounded handler or retained pipe.",
+          "char_count": 2063
+        },
+        {
+          "id": "linked-worktree-removal",
+          "title": "Linked worktree removal",
+          "level": 1,
+          "body": "Linked-worktree lists and previews expose summary state rather than full file arrays. Forced removal requires a separate content-sensitive destructive fingerprint generated by a single admitted, streaming, no-follow scan. The scan hashes the portable pathname tree, kinds, modes, sizes, regular-file content, and symlink targets while checking identity and metadata stability. The root Git control entry is excluded only after its type, exact contents when applicable, canonical target, and filesystem identity match the already resolved Git directory.\n\nUnsupported file kinds, unreadable entries, topology changes, identity drift, deadline checks, or entry, path, heap, and content limits block deletion. Execution holds the exclusive topology and repository leases from identity revalidation through a second scan, fingerprint comparison, final root verification, and `git worktree remove --force`. This prevents Redeven-owned writers from entering between verification and removal. Hostile external writers and metadata outside the portable fingerprint, including ACLs, extended attributes, resource forks, and alternate data streams, are explicit non-transactional boundaries.",
+          "char_count": 1180
+        }
+      ],
+      "evidence": [
+        {
+          "id": "redeven:internal/gitrepo/workspace.go:0:captures workspace state and projects revision-bound pages.",
+          "source": "redeven:internal/gitrepo/workspace.go",
+          "description": "Captures workspace state and projects revision-bound pages."
+        },
+        {
+          "id": "redeven:internal/gitrepo/workspace_paths.go:0:serves bounded path-scoped status and directory aggregates.",
+          "source": "redeven:internal/gitrepo/workspace_paths.go",
+          "description": "Serves bounded path-scoped status and directory aggregates."
+        },
+        {
+          "id": "redeven:internal/gitrepo/service.go:0:registers git rpc handlers, capabilities, errors, and mutation entrypoints.",
+          "source": "redeven:internal/gitrepo/service.go",
+          "description": "Registers Git RPC handlers, capabilities, errors, and mutation entrypoints."
+        },
+        {
+          "id": "redeven:internal/gitrepo/delete_branch_review.go:0:builds linked-worktree summaries and content-sensitive delete plans.",
+          "source": "redeven:internal/gitrepo/delete_branch_review.go",
+          "description": "Builds linked-worktree summaries and content-sensitive delete plans."
+        },
+        {
+          "id": "redeven:internal/gitrepo/destructive_workspace_fingerprint.go:0:performs the admitted no-follow destructive scan.",
+          "source": "redeven:internal/gitrepo/destructive_workspace_fingerprint.go",
+          "description": "Performs the admitted no-follow destructive scan."
+        },
+        {
+          "id": "redeven:internal/gitrepo/rpc_contract.go:0:applies raw request admission and response-envelope guards to the closed git rpc set.",
+          "source": "redeven:internal/gitrepo/rpc_contract.go",
+          "description": "Applies raw request admission and response-envelope guards to the closed Git RPC set."
+        },
+        {
+          "id": "redeven:internal/gitrepo/workspace_snapshot.go:0:owns immutable snapshot publication, pins, ttl sweep, invalidation, and resource release.",
+          "source": "redeven:internal/gitrepo/workspace_snapshot.go",
+          "description": "Owns immutable snapshot publication, pins, TTL sweep, invalidation, and resource release."
+        },
+        {
+          "id": "redeven:internal/gitruntime:0:owns topology and repository coordination, process containment, bounded waits, registry refs, and agent-wide admissions.",
+          "source": "redeven:internal/gitruntime",
+          "description": "Owns topology and repository coordination, process containment, bounded waits, registry refs, and Agent-wide admissions."
+        },
+        {
+          "id": "redeven:internal/agent/agent.go:0:injects the shared runtime and drains accepted direct-session streams before service teardown.",
+          "source": "redeven:internal/agent/agent.go",
+          "description": "Injects the shared runtime and drains accepted direct-session streams before service teardown."
+        },
+        {
+          "id": "redeven:internal/fs/service.go:0:coordinates filesystem effects with git repository mutation ownership.",
+          "source": "redeven:internal/fs/service.go",
+          "description": "Coordinates filesystem effects with Git repository mutation ownership."
+        }
+      ],
+      "snippet": "Redeven exposes Git workspace state as bounded, immutable, process-local inventory snapshots. Fresh queries stream Git porcelain output into an admitted snapshot; paged and path-scoped reads bind an exact revision. Git and Files mutations c",
+      "backlinks": [
+        {
+          "label": "Redeven OKF Bundle",
+          "path": "index.md",
+          "title": "Redeven OKF Bundle"
         }
       ]
     },
@@ -8531,6 +8695,116 @@
       ]
     },
     {
+      "path": "ui/git-workspace-generation-and-decoration.md",
+      "concept_id": "ui.git-workspace-generation-and-decoration",
+      "type": "UI Contract",
+      "title": "Git workspace generation and Files decoration",
+      "description": "Keep Git views and Files decorations revision-consistent through capability gating, generation ownership, and monotonic invalidation.",
+      "tags": [
+        "files",
+        "git",
+        "interaction",
+        "state",
+        "ui"
+      ],
+      "timestamp": "2026-07-28T00:00:00Z",
+      "frontmatter": {
+        "description": "Keep Git views and Files decorations revision-consistent through capability gating, generation ownership, and monotonic invalidation.",
+        "tags": [
+          "files",
+          "git",
+          "interaction",
+          "state",
+          "ui"
+        ],
+        "timestamp": "2026-07-28T00:00:00Z",
+        "title": "Git workspace generation and Files decoration",
+        "type": "UI Contract"
+      },
+      "body_length": 6991,
+      "summary": "Env App treats each visible Git workspace projection as a revision-bound generation owned by one protocol client and repository. Git Changes, Branch status, and Files decorations have independent owners but share a provider-level monotonic invalidation bus. Files navigation never waits for Git, never downloads a complete workspace inventory, and preserves the last committed decoration while one bounded replacement generation is built. A stale or invalidated response cannot restore old state after navigation, remount, capability probing, or an effect with an unknown outcome.",
+      "sections": [
+        {
+          "id": "capability-and-generation-contract",
+          "title": "Capability and generation contract",
+          "level": 1,
+          "body": "Git workspace-v1 behavior starts only after `git.getCapabilities` confirms revision, path-status, directory-scope, and stash-section support for the exact protocol client object. Only a capability-method 404 is cached as an old Agent. Other probe failures are transient and retry on an explicit refresh or later mount. Replacing the protocol client discards the old capability state, generation state, and late responses; old Agents never trigger a fallback to the unbounded legacy workspace call for Files decoration.\n\nEvery owner starts with a fresh response that establishes its `workspace_revision`. Its later page, section, directory, or path batches carry `expected_workspace_revision`. Response commit checks the client identity, repository, owner generation, requested scope, revision, and invalidation watermark. Snapshot-stale invalidates the whole owner and permits at most one automatic fresh restart for that operation. A new-capability response that omits the promised revision fails closed rather than silently switching to legacy semantics.\n\nChanges, staged, and conflicted directory scopes remain explicit. Directory rows are aggregates, not representative descendants, and menu routing uses a deterministic priority: pending changes first, then conflicted, then staged. Moving from a Files-owned revision to the main Workspace opens a fresh Workspace generation before applying the requested section and directory scope; it cannot splice Files revision data into an older Workspace owner.",
+          "char_count": 1506
+        },
+        {
+          "id": "invalidation-contract",
+          "title": "Invalidation contract",
+          "level": 1,
+          "body": "The stable protocol provider owns `GitWorkspaceInvalidationBus`. Each client identity has a monotonically increasing global watermark and per-repository watermarks. A repository event advances that repository; an event without a reliable repository advances the client-global watermark. Other protocol clients are isolated.\n\nMounted Files, Workbench, Activity, launcher, and preview owners subscribe for live invalidation. Unmount removes the subscription but the provider retains watermarks for the client lifetime. Bootstrap, remount, capability transition, fresh dispatch, and response commit compare the current maximum of the global and repository watermarks. Persisted or retained generations carry their commit watermark and are discarded on remount when older than the provider watermark. This closes the unmount, capability-probe, and response-commit races without keeping view-local shadow authorities.\n\nAll Files and Git effects use one `executeWorkspaceEffect` boundary. Once an effect has been dispatched, its `finally` path publishes invalidation whether the result is success, an application error, or transport-unknown. Create, save, mkdir, copy, rename, duplicate, delete, stage, unstage, discard, commit, stash, checkout, pull, merge, and related effects cannot bypass this boundary. Preview and pure validation requests do not publish mutation invalidation.",
+          "char_count": 1376
+        },
+        {
+          "id": "files-decoration-contract",
+          "title": "Files decoration contract",
+          "level": 1,
+          "body": "Files renders filesystem results immediately. Git decoration runs in the background only for paths already loaded by the current Files scope; it never expands filesystem pages or traverses workspace pages to discover more paths. At most one decoration request is active for an owner, and rapid navigation records only the latest pending scope. Late work from another client, repository, directory, generation, or watermark is ignored.\n\nBefore dispatch, path-status requests are split by all three production limits: at most 64 paths, at most 128 KiB of path UTF-8 bytes, and at most 736 KiB for the complete request encoded by the production codec. Escaped control characters, the repository path, revision, field names, punctuation, and JSON framing count toward the codec limit. Request-budget and response-budget errors may trigger bounded binary subdivision. The first successful child establishes the revision for siblings. A single path that still exceeds the contract degrades only that path and leaves Files and the connection usable.\n\nDecoration is double-buffered. Loading and transient failures retain the committed markers, directory aggregates, tooltips, and menus. A complete successful replacement atomically removes markers for paths that became clean. Background errors use existing localized generic and truncated-content messages; server error text is never shown directly. The same section identity distinguishes duplicate stash or workspace rows, so staged, unstaged, untracked, and conflicted actions remain addressable without ambiguous row keys.",
+          "char_count": 1569
+        },
+        {
+          "id": "boundaries",
+          "title": "Boundaries",
+          "level": 1,
+          "body": "Workspace revisions provide read consistency, not mutation authorization. The server rebuilds mutation guards from current Git state. UI cancellation is an ownership optimization, not proof that a dispatched effect did not run; invalidation remains mandatory for unknown outcomes. Provider watermarks are process-local UI coordination state and are released with the protocol client, not persisted as repository truth.\n\nFiles without the new capability remains fully usable as a filesystem browser, but has no Git decoration. Non-Git Flowersec outbound allocation is outside this feature's transport budget and must not be presented as fixed by UI batching.",
+          "char_count": 657
+        }
+      ],
+      "evidence": [
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/typeIds.ts:0:assigns the capability and path-status rpc type identifiers.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/typeIds.ts",
+          "description": "Assigns the capability and path-status RPC type identifiers."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/contract.ts:0:exposes the revision-aware production rpc codec.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/contract.ts",
+          "description": "Exposes the revision-aware production RPC codec."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/sdk/git.ts:0:defines capability, revision, path-status, aggregate, and stash-section dtos.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/sdk/git.ts",
+          "description": "Defines capability, revision, path-status, aggregate, and stash-section DTOs."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/services/gitWorkspaceRuntime.ts:0:owns protocol-client capability and monotonic invalidation watermarks.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/services/gitWorkspaceRuntime.ts",
+          "description": "Owns protocol-client capability and monotonic invalidation watermarks."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/services/gitWorkspacePathStatus.ts:0:splits path-status work by path, utf-8, and production-codec budgets.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/services/gitWorkspacePathStatus.ts",
+          "description": "Splits path-status work by path, UTF-8, and production-codec budgets."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/services/workspaceEffects.ts:0:publishes invalidation after every dispatched workspace effect outcome.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/services/workspaceEffects.ts",
+          "description": "Publishes invalidation after every dispatched workspace effect outcome."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/widgets/RemoteFileBrowser.tsx:0:projects background git status over loaded files paths and routes directory actions.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/widgets/RemoteFileBrowser.tsx",
+          "description": "Projects background Git status over loaded Files paths and routes directory actions."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/widgets/GitBranchesPanel.tsx:0:owns revision-bound branch status sections, pagination, and directory scopes.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/widgets/GitBranchesPanel.tsx",
+          "description": "Owns revision-bound Branch status sections, pagination, and directory scopes."
+        }
+      ],
+      "snippet": "Env App treats each visible Git workspace projection as a revision-bound generation owned by one protocol client and repository. Git Changes, Branch status, and Files decorations have independent owners but share a provider-level monotonic ",
+      "backlinks": [
+        {
+          "label": "Redeven OKF Bundle",
+          "path": "index.md",
+          "title": "Redeven OKF Bundle"
+        }
+      ]
+    },
+    {
       "path": "ui/plugin-surfaces.md",
       "concept_id": "ui.plugin-surfaces",
       "type": "UI Contract",
@@ -9271,5 +9545,5 @@
       ]
     }
   ],
-  "source_sha256": "7aa248e86720e1d69b45beaf36b2e4c38867277b0da1762d5d81b840f9a1ccd9"
+  "source_sha256": "b673df87f9d95772941a044d2b4d9f3ae6e10a15377faeb12cc42cea3a9a96b8"
 }

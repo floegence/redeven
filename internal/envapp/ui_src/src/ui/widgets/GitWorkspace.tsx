@@ -22,6 +22,7 @@ import type { GitDeleteBranchDialogConfirmOptions, GitDeleteBranchDialogState } 
 import type { GitMergeBranchDialogConfirmOptions, GitMergeBranchDialogState } from './GitMergeBranchDialog';
 import type { GitAskFlowerRequest, GitDirectoryShortcutRequest, GitFileShortcutTarget } from '../utils/gitBrowserShortcuts';
 import { useI18n } from '../i18n';
+import type { GitCapabilityMode } from '../services/gitWorkspaceRuntime';
 
 export interface GitWorkspaceProps {
   mode: GitHistoryMode;
@@ -74,6 +75,8 @@ export interface GitWorkspaceProps {
   branchesLoading?: boolean;
   branchesError?: string;
   statusRefreshToken?: number;
+  protocolClientIdentity?: object | null;
+  capabilityMode?: GitCapabilityMode;
   selectedBranch?: GitBranchSummary | null;
   branchDetailState?: GitBranchDetailPresentationState;
   selectedBranchKey?: string;
@@ -248,6 +251,8 @@ export function GitWorkspace(props: GitWorkspaceProps) {
               branchesError={props.branchesError}
               branchDetailState={props.branchDetailState}
               statusRefreshToken={props.statusRefreshToken}
+              protocolClientIdentity={props.protocolClientIdentity}
+              capabilityMode={props.capabilityMode}
               selectedBranch={props.selectedBranch}
               selectedBranchSubview={props.selectedBranchSubview}
               onSelectBranchSubview={props.onSelectBranchSubview}
