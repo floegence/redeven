@@ -158,6 +158,10 @@ func (s *Service) deleteEntry(path string, recursive bool) error {
 	if err != nil {
 		return fmt.Errorf("%w: %w", errFSInvalidPath, err)
 	}
+	return deleteEntryResolved(entryPath, recursive)
+}
+
+func deleteEntryResolved(entryPath string, recursive bool) error {
 	if recursive {
 		return os.RemoveAll(entryPath)
 	}
@@ -173,7 +177,10 @@ func (s *Service) renameEntry(oldPath string, newPath string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("%w: %w", errFSInvalidNewPath, err)
 	}
+	return renameEntryResolved(oldEntryPath, newEntryPath)
+}
 
+func renameEntryResolved(oldEntryPath string, newEntryPath string) (string, error) {
 	if _, err := os.Lstat(oldEntryPath); os.IsNotExist(err) {
 		return "", os.ErrNotExist
 	} else if err != nil {
@@ -204,7 +211,10 @@ func (s *Service) copyEntry(sourcePath string, destPath string, overwrite bool) 
 	if err != nil {
 		return "", fmt.Errorf("%w: %w", errFSInvalidDestPath, err)
 	}
+	return copyEntryResolved(sourceEntryPath, destEntryPath, overwrite)
+}
 
+func copyEntryResolved(sourceEntryPath string, destEntryPath string, overwrite bool) (string, error) {
 	sourceLinkInfo, err := os.Lstat(sourceEntryPath)
 	if os.IsNotExist(err) {
 		return "", os.ErrNotExist

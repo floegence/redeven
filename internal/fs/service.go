@@ -220,7 +220,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 			return nil, &rpc.Error{Code: 400, Message: "invalid path"}
 		}
 		if err := s.coordinateMutation(ctx, gitruntime.FilesystemEffect{Paths: []string{target}, ChangesTopology: true}, func() error {
-			_, err := s.mkdirTarget(req.Path, createParents)
+			_, err := mkdirTargetResolved(target, createParents)
 			return err
 		}); err != nil {
 			return nil, mutationCoordinationRPCError(err)
@@ -237,7 +237,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 			mutationErr = fmt.Errorf("%w: %w", errFSInvalidPath, mutationErr)
 		} else {
 			mutationErr = s.coordinateMutation(ctx, gitruntime.FilesystemEffect{Paths: []string{target}, ChangesTopology: true}, func() error {
-				return s.deleteEntry(req.Path, req.Recursive != nil && *req.Recursive)
+				return deleteEntryResolved(target, req.Recursive != nil && *req.Recursive)
 			})
 		}
 		if err := mutationErr; err != nil {
@@ -277,7 +277,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		default:
 			err = s.coordinateMutation(ctx, gitruntime.FilesystemEffect{Paths: []string{oldPath, newTarget}, ChangesTopology: true}, func() error {
 				var renameErr error
-				newPath, renameErr = s.renameEntry(req.OldPath, req.NewPath)
+				newPath, renameErr = renameEntryResolved(oldPath, newTarget)
 				return renameErr
 			})
 		}
@@ -322,7 +322,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		default:
 			err = s.coordinateMutation(ctx, gitruntime.FilesystemEffect{Paths: []string{source, dest}, ChangesTopology: true}, func() error {
 				var copyErr error
-				newPath, copyErr = s.copyEntry(req.SourcePath, req.DestPath, overwrite)
+				newPath, copyErr = copyEntryResolved(source, dest, overwrite)
 				return copyErr
 			})
 		}
@@ -400,6 +400,10 @@ func (s *Service) mkdirTarget(path string, createParents bool) (string, error) {
 		return "", &rpc.Error{Code: 400, Message: "invalid path"}
 	}
 
+	return mkdirTargetResolved(targetPath, createParents)
+}
+
+func mkdirTargetResolved(targetPath string, createParents bool) (string, error) {
 	if _, err := os.Stat(targetPath); err == nil {
 		return "", &rpc.Error{Code: 409, Message: "path already exists"}
 	} else if !os.IsNotExist(err) {
