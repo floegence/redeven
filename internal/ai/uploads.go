@@ -86,7 +86,8 @@ func (e *UploadError) Unwrap() error {
 
 type SaveUploadRequest struct {
 	Owner                 UploadOwner
-	DraftID               string
+	StagingScopeID        string
+	StagingCapability     string
 	Reader                io.Reader
 	DisplayName           string
 	DeclaredMediaType     string
@@ -278,7 +279,7 @@ func uploadRequestFingerprint(req SaveUploadRequest, name string) string {
 		strconv.FormatInt(req.ExpectedSizeBytes, 10),
 		strings.ToLower(strings.TrimSpace(req.Source)),
 		strings.ToLower(strings.TrimSpace(req.DisplayNameSHA256)),
-		strings.TrimSpace(req.DraftID),
+		strings.TrimSpace(req.StagingScopeID),
 		name,
 	}, "\x00")
 	digest := sha256.Sum256([]byte(value))
@@ -417,9 +418,13 @@ func (s *Service) SaveUpload(ctx context.Context, req SaveUploadRequest) (*Uploa
 	if req.UploadRequestID == "" || len(req.UploadRequestID) > 200 || strings.ContainsAny(req.UploadRequestID, "\r\n\x00") {
 		return nil, NewUploadError(UploadErrorInvalidRequest, false, errors.New("invalid upload request id"))
 	}
-	req.DraftID = strings.TrimSpace(req.DraftID)
-	if req.DraftID == "" || len(req.DraftID) > 200 || strings.ContainsAny(req.DraftID, "\r\n\x00") {
-		return nil, NewUploadError(UploadErrorInvalidRequest, false, errors.New("invalid upload draft id"))
+	req.StagingScopeID = strings.TrimSpace(req.StagingScopeID)
+	if req.StagingScopeID == "" || len(req.StagingScopeID) > 200 || strings.ContainsAny(req.StagingScopeID, "\r\n\x00") {
+		return nil, NewUploadError(UploadErrorInvalidRequest, false, errors.New("invalid upload staging scope"))
+	}
+	scope, err := s.authorizeUploadStagingScope(ctx, owner, req.StagingScopeID, req.StagingCapability)
+	if err != nil {
+		return nil, err
 	}
 	if req.MaxBytes <= 0 {
 		req.MaxBytes = 10 << 20
@@ -462,7 +467,7 @@ func (s *Service) SaveUpload(ctx context.Context, req SaveUploadRequest) (*Uploa
 	if !created {
 		switch attempt.Status {
 		case threadstore.UploadAttemptComplete:
-			rec, getErr := db.GetDraftOwnedUpload(ctxOrBackground(ctx), owner.EndpointID, owner.OwnerUserHash, req.DraftID, attempt.UploadID)
+			rec, getErr := db.GetStagingOwnedUpload(ctxOrBackground(ctx), owner.EndpointID, owner.OwnerUserHash, scope.StagingScopeID, attempt.UploadID)
 			if getErr != nil {
 				return nil, NewUploadError(UploadErrorStoreUnavailable, true, errors.New("completed upload is unavailable"))
 			}
@@ -550,7 +555,7 @@ func (s *Service) SaveUpload(ctx context.Context, req SaveUploadRequest) (*Uploa
 		Source: req.Source, State: threadstore.UploadStateStaged,
 		CreatedAtUnixMs: createdAt, DeleteAfterUnixMs: createdAt + uploadStagedTTL.Milliseconds(),
 	}
-	if err := db.CompleteUploadAttempt(ctxOrBackground(ctx), attempt, rec, req.DraftID); err != nil {
+	if err := db.CompleteUploadAttemptToStaging(ctxOrBackground(ctx), attempt, rec, scope); err != nil {
 		if errors.Is(err, threadstore.ErrUploadQuotaExceeded) {
 			return fail(UploadErrorQuotaExceeded, false, err)
 		}
@@ -570,6 +575,10 @@ func (s *Service) completeRenamedUploadAttempt(
 	req SaveUploadRequest,
 	name string,
 ) (*UploadResponse, error) {
+	scope, err := s.authorizeUploadStagingScope(ctx, req.Owner, req.StagingScopeID, req.StagingCapability)
+	if err != nil {
+		return nil, err
+	}
 	dataPath := filepath.Join(dir, attempt.UploadID+".data")
 	f, err := os.Open(dataPath)
 	if errors.Is(err, os.ErrNotExist) {
@@ -620,7 +629,7 @@ func (s *Service) completeRenamedUploadAttempt(
 		Source: req.Source, State: threadstore.UploadStateStaged,
 		CreatedAtUnixMs: createdAt, DeleteAfterUnixMs: createdAt + uploadStagedTTL.Milliseconds(),
 	}
-	if err := db.CompleteUploadAttempt(ctx, attempt, rec, req.DraftID); err != nil {
+	if err := db.CompleteUploadAttemptToStaging(ctx, attempt, rec, scope); err != nil {
 		if errors.Is(err, threadstore.ErrUploadQuotaExceeded) {
 			return failInterrupted(UploadErrorQuotaExceeded, false, err)
 		}
@@ -630,32 +639,6 @@ func (s *Service) completeRenamedUploadAttempt(
 		return nil, NewUploadError(UploadErrorStoreUnavailable, true, errors.New("failed to recover interrupted upload metadata"))
 	}
 	return uploadResponseFromRecord(&rec), nil
-}
-
-func (s *Service) OpenUpload(ctx context.Context, owner UploadOwner, draftID string, uploadID string) (*OpenUploadResult, error) {
-	if s == nil || owner.EndpointID == "" || len(owner.OwnerUserHash) != 64 || strings.TrimSpace(draftID) == "" {
-		return nil, NewUploadError(UploadErrorNotFound, false, errors.New("attachment not found"))
-	}
-	uploadID = strings.TrimSpace(uploadID)
-	if !validUploadID(uploadID) {
-		return nil, NewUploadError(UploadErrorNotFound, false, errors.New("attachment not found"))
-	}
-	s.mu.Lock()
-	dir := strings.TrimSpace(s.uploadsDir)
-	db := s.threadsDB
-	s.mu.Unlock()
-	if dir == "" || db == nil {
-		return nil, NewUploadError(UploadErrorStoreUnavailable, true, errors.New("attachment store is unavailable"))
-	}
-	rec, err := db.GetDraftOwnedUpload(ctxOrBackground(ctx), owner.EndpointID, owner.OwnerUserHash, strings.TrimSpace(draftID), uploadID)
-	if err != nil || rec == nil || rec.State != threadstore.UploadStateStaged {
-		return nil, NewUploadError(UploadErrorNotFound, false, errors.New("attachment not found"))
-	}
-	filePath := filepath.Join(dir, filepath.Base(rec.StorageRelPath))
-	if err := verifyUploadArtifact(rec, filePath); err != nil {
-		return nil, NewUploadError(UploadErrorNotFound, false, errors.New("attachment not found"))
-	}
-	return &OpenUploadResult{Info: uploadResponseFromRecord(rec), FilePath: filePath}, nil
 }
 
 func (s *Service) OpenLiveUpload(ctx context.Context, owner UploadOwner, threadID string, turnID string, uploadID string, authority LiveAttachmentCanonicalAuthority) (*OpenUploadResult, error) {
@@ -855,70 +838,6 @@ func inspectLegacyTextUploadArtifact(rec *threadstore.UploadRecord, filePath str
 		return "", 0, 0, errors.New("attachment is not strict UTF-8 text")
 	}
 	return digest, *codePoints, *lineCount, nil
-}
-
-func (s *Service) ReadStagedLongText(ctx context.Context, owner UploadOwner, draftID string, uploadID string) (*StagedLongTextResponse, error) {
-	if s == nil || owner.EndpointID == "" || len(owner.OwnerUserHash) != 64 || strings.TrimSpace(draftID) == "" || !validUploadID(strings.TrimSpace(uploadID)) {
-		return nil, NewUploadError(UploadErrorNotFound, false, errors.New("attachment not found"))
-	}
-	s.mu.Lock()
-	dir := strings.TrimSpace(s.uploadsDir)
-	db := s.threadsDB
-	s.mu.Unlock()
-	if dir == "" || db == nil {
-		return nil, NewUploadError(UploadErrorStoreUnavailable, true, errors.New("attachment store is unavailable"))
-	}
-	rec, err := db.GetDraftOwnedUpload(ctxOrBackground(ctx), owner.EndpointID, owner.OwnerUserHash, draftID, uploadID)
-	if err != nil || rec.Source != threadstore.UploadSourceLongText || rec.SizeBytes > 10<<20 {
-		return nil, NewUploadError(UploadErrorNotFound, false, errors.New("attachment not found"))
-	}
-	body, err := os.ReadFile(filepath.Join(dir, filepath.Base(rec.StorageRelPath)))
-	if err != nil || int64(len(body)) != rec.SizeBytes || !utf8.Valid(body) {
-		return nil, NewUploadError(UploadErrorIntegrityMismatch, false, errors.New("long text attachment failed integrity validation"))
-	}
-	digest := sha256.Sum256(body)
-	actualDigest := hex.EncodeToString(digest[:])
-	if actualDigest != rec.ContentSHA256 {
-		return nil, NewUploadError(UploadErrorIntegrityMismatch, false, errors.New("long text attachment failed integrity validation"))
-	}
-	return &StagedLongTextResponse{
-		Attachment: uploadResponseFromRecord(rec),
-		Text:       string(body), ContentSHA256: actualDigest,
-	}, nil
-}
-
-func (s *Service) DeleteDraftUpload(ctx context.Context, owner UploadOwner, draftID string, uploadID string) error {
-	if s == nil || strings.TrimSpace(draftID) == "" || !validUploadID(strings.TrimSpace(uploadID)) {
-		return NewUploadError(UploadErrorNotFound, false, errors.New("attachment not found"))
-	}
-	s.mu.Lock()
-	db := s.threadsDB
-	s.mu.Unlock()
-	if db == nil {
-		return NewUploadError(UploadErrorStoreUnavailable, true, errors.New("attachment store is unavailable"))
-	}
-	cleanup, err := db.ReleaseUserDraftUploads(
-		ctxOrBackground(ctx), owner.EndpointID, owner.OwnerUserHash,
-		strings.TrimSpace(draftID), []string{strings.TrimSpace(uploadID)}, time.Now().UnixMilli(),
-	)
-	if err != nil {
-		if _, getErr := db.GetUserOwnedUpload(ctxOrBackground(ctx), owner.EndpointID, owner.OwnerUserHash, strings.TrimSpace(uploadID)); errors.Is(getErr, sql.ErrNoRows) {
-			if known, knownErr := db.HasCompletedOwnedUploadAttempt(ctxOrBackground(ctx), owner.EndpointID, owner.OwnerUserHash, strings.TrimSpace(uploadID)); knownErr == nil && known {
-				return nil
-			}
-		}
-		return NewUploadError(UploadErrorNotFound, false, errors.New("attachment not found"))
-	}
-	for _, rec := range cleanup {
-		if err := s.removeUploadArtifacts(rec); err != nil {
-			_ = db.RescheduleUploadDeletion(ctxOrBackground(ctx), []string{rec.UploadID}, time.Now().Add(uploadCleanupRetryDelay).UnixMilli())
-			return NewUploadError(UploadErrorStoreUnavailable, true, errors.New("attachment deletion is pending"))
-		}
-		if _, err := db.FinalizeDeletedUploads(ctxOrBackground(ctx), []string{rec.UploadID}); err != nil {
-			return NewUploadError(UploadErrorStoreUnavailable, true, errors.New("attachment deletion is pending"))
-		}
-	}
-	return nil
 }
 
 func validUploadID(uploadID string) bool {

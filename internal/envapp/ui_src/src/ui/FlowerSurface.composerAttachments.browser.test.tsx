@@ -171,7 +171,7 @@ describe('Flower composer attachment browser presentation', () => {
     }
   });
 
-  it('keeps attachment controls and model guidance usable at 400-percent equivalent width', async () => {
+  it('keeps attachment controls usable at 400-percent equivalent width and model guidance contained', async () => {
     await page.viewport(320, 720);
     const capability: FlowerAttachmentCapability = {
       model_id: 'openai/gpt-5.2',
@@ -201,6 +201,8 @@ describe('Flower composer attachment browser presentation', () => {
     });
 
     await waitFor(() => Boolean(runtime.querySelector('input[type="file"]')));
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    expect(textarea.getBoundingClientRect().width).toBeGreaterThanOrEqual(128);
     const picker = runtime.querySelector('input[type="file"]') as HTMLInputElement;
     const transfer = new DataTransfer();
     transfer.items.add(new File(
@@ -223,18 +225,15 @@ describe('Flower composer attachment browser presentation', () => {
     expectHorizontallyContained(item.getBoundingClientRect(), lane.getBoundingClientRect());
     expectHorizontallyContained(actions.getBoundingClientRect(), item.getBoundingClientRect());
 
-    let modelTrigger = Array.from(runtime.querySelectorAll<HTMLButtonElement>('.flower-model-reasoning-model-trigger'))
+    const visibleModelTrigger = () => Array.from(document.querySelectorAll<HTMLButtonElement>('.flower-model-reasoning-model-trigger'))
       .find((button) => !button.closest('.flower-composer-controls-measure') && button.getBoundingClientRect().width > 0);
-    if (!modelTrigger) {
-      (runtime.querySelector('.flower-composer-more-button') as HTMLButtonElement).click();
-      await waitFor(() => Boolean(runtime.querySelector('.flower-composer-more-panel')));
-      modelTrigger = Array.from(runtime.querySelectorAll<HTMLButtonElement>('.flower-model-reasoning-model-trigger'))
-        .find((button) => !button.closest('.flower-composer-controls-measure') && button.getBoundingClientRect().width > 0);
-    }
+    await page.viewport(800, 720);
+    await waitFor(() => Boolean(visibleModelTrigger()));
+    const modelTrigger = visibleModelTrigger();
     expect(modelTrigger).toBeTruthy();
     modelTrigger!.click();
-    await waitFor(() => Boolean(runtime.querySelector('.flower-model-menu-attachment-status')));
-    const menu = runtime.querySelector('.flower-model-menu') as HTMLElement;
+    await waitFor(() => Boolean(document.querySelector('.flower-model-menu-attachment-status')));
+    const menu = document.querySelector('.flower-model-menu') as HTMLElement;
     await waitFor(() => {
       const menuBounds = menu.getBoundingClientRect();
       const surfaceBounds = surface.getBoundingClientRect();

@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"path"
 	"strings"
-
-	"github.com/floegence/redeven/internal/ai/threadstore"
+	"unicode/utf8"
 )
 
 const ContextActionSchemaVersion = 2
@@ -259,7 +259,7 @@ func normalizeAskFlowerContextActionEnvelope(in *ContextActionEnvelope) (*Contex
 			if !contextActionComposerItemWireShapeAllowed(out.Context[index]) {
 				return nil, ErrInvalidContextAction
 			}
-			normalizedPath, err := threadstore.NormalizeComposerReferencePath(out.Context[index].Path)
+			normalizedPath, err := normalizeCanonicalReferencePath(out.Context[index].Path)
 			if err != nil || normalizedPath != out.Context[index].Path || strings.TrimSpace(out.Context[index].RootLabel) != "" {
 				return nil, ErrInvalidContextAction
 			}
@@ -270,6 +270,26 @@ func normalizeAskFlowerContextActionEnvelope(in *ContextActionEnvelope) (*Contex
 		return nil, err
 	}
 	return out, nil
+}
+
+func normalizeCanonicalReferencePath(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" || len(value) > 16*1024 || !utf8.ValidString(value) || strings.ContainsAny(value, "\r\n\x00") {
+		return "", errors.New("invalid canonical reference path")
+	}
+	return value, nil
+}
+
+func canonicalReferencePathLabel(value string) string {
+	value = strings.ReplaceAll(strings.TrimSpace(value), "\\", "/")
+	if value == "" {
+		return ""
+	}
+	label := path.Base(strings.TrimSuffix(value, "/"))
+	if label == "." || label == "/" {
+		return value
+	}
+	return label
 }
 
 func contextActionComposerItemWireShapeAllowed(item ContextActionContextItem) bool {

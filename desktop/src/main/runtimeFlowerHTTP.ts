@@ -1,4 +1,6 @@
-import type { IncomingHttpHeaders, IncomingMessage } from 'node:http';
+import http, { type IncomingHttpHeaders, type IncomingMessage } from 'node:http';
+import https from 'node:https';
+import type { RuntimeFlowerError, RuntimeFlowerRequest } from '../shared/runtimeFlowerIPC';
 
 export type RuntimeFlowerHTTPResponse = Readonly<{
   status: number;
@@ -51,4 +53,61 @@ export function readRuntimeFlowerHTTPResponse(response: IncomingMessage): Promis
       });
     });
   });
+}
+
+export function requestRuntimeFlowerHTTP(
+  url: URL,
+  request: RuntimeFlowerRequest,
+  options: Readonly<{ headers?: Readonly<Record<string, string>>; accept?: string }> = {},
+): Promise<RuntimeFlowerHTTPResponse> {
+  return new Promise((resolve, reject) => {
+    const body = request.body === undefined ? '' : JSON.stringify(request.body);
+    const client = url.protocol === 'https:' ? https : http;
+    const req = client.request(url, {
+      method: request.method,
+      timeout: 120_000,
+      headers: {
+        Accept: options.accept ?? 'application/json',
+        ...(options.headers ?? {}),
+        ...(body ? {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(body),
+        } : {}),
+      },
+    }, (response) => {
+      void readRuntimeFlowerHTTPResponse(response).then(resolve, reject);
+    });
+    req.on('timeout', () => {
+      req.destroy(new Error('Flower runtime request timed out.'));
+    });
+    req.on('error', reject);
+    if (body) req.write(body);
+    req.end();
+  });
+}
+
+export function parseRuntimeFlowerJSON(body: string): unknown {
+  if (!String(body ?? '').trim()) {
+    return null;
+  }
+  try {
+    return JSON.parse(body) as unknown;
+  } catch {
+    return body;
+  }
+}
+
+export function runtimeFlowerInvalidJSONError(
+  response: Pick<RuntimeFlowerHTTPResponse, 'status' | 'body'>,
+  parsed: unknown = parseRuntimeFlowerJSON(response.body),
+): RuntimeFlowerError | null {
+  if (response.status === 204) return null;
+  if (String(response.body ?? '').trim() && parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+    return null;
+  }
+  return {
+    code: 'runtime_flower_invalid_json',
+    message: 'Flower returned an invalid JSON response.',
+    status: response.status,
+  };
 }

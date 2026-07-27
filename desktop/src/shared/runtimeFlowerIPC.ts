@@ -6,6 +6,8 @@ export type RuntimeFlowerRequest = Readonly<{
   method: RuntimeFlowerRequestMethod;
   path: string;
   body?: unknown;
+  staging_scope_id?: string;
+  staging_capability?: string;
 }>;
 
 export type RuntimeFlowerError = Readonly<{
@@ -22,6 +24,7 @@ export type RuntimeFlowerRequestResult = Readonly<
   | {
       ok: true;
       data: unknown;
+      stagingCapability?: string;
     }
   | {
       ok: false;

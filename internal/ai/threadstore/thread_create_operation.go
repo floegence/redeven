@@ -95,8 +95,10 @@ func (s *Store) PrepareThreadCreateOperation(ctx context.Context, req PrepareThr
 	if err != nil {
 		return ThreadCreateOperation{}, err
 	}
-	sum := sha256.Sum256(snapshotJSON)
-	fingerprint := hex.EncodeToString(sum[:])
+	fingerprint, err := threadCreateRequestFingerprint(snapshot)
+	if err != nil {
+		return ThreadCreateOperation{}, err
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return ThreadCreateOperation{}, err
@@ -141,6 +143,17 @@ INSERT INTO ai_thread_create_operations(
 		return ThreadCreateOperation{}, err
 	}
 	return operation, nil
+}
+
+func threadCreateRequestFingerprint(snapshot threadCreateSnapshotV1) (string, error) {
+	snapshot.Settings.SettingsCreatedAtUnixMs = 0
+	snapshot.Settings.SettingsUpdatedAtUnixMs = 0
+	b, err := json.Marshal(snapshot)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:]), nil
 }
 
 func (s *Store) ConfirmThreadCreateFloretCreated(ctx context.Context, operationID string) (ThreadCreateOperation, error) {
@@ -304,8 +317,8 @@ func loadThreadCreateOperationRow(scanner rowScanner) (ThreadCreateOperation, er
 	if err != nil || permissionType != snapshot.Settings.PermissionType {
 		return ThreadCreateOperation{}, errors.New("thread create operation snapshot has invalid permission type")
 	}
-	sum := sha256.Sum256([]byte(operation.SnapshotJSON))
-	if operation.RequestFingerprint == "" || operation.RequestFingerprint != hex.EncodeToString(sum[:]) {
+	fingerprint, err := threadCreateRequestFingerprint(snapshot)
+	if err != nil || operation.RequestFingerprint == "" || operation.RequestFingerprint != fingerprint {
 		return ThreadCreateOperation{}, errors.New("thread create operation snapshot fingerprint mismatch")
 	}
 	operation.Settings = snapshot.Settings

@@ -422,6 +422,89 @@ func (s *Service) CreateThread(ctx context.Context, meta *session.Meta, title st
 	})
 }
 
+func (s *Service) buildThreadCreateSettings(ctx context.Context, meta *session.Meta, req CreateThreadRequest) (threadstore.ThreadSettings, error) {
+	id := strings.TrimSpace(req.ThreadID)
+	if !validUploadStagingThreadID(id) {
+		return threadstore.ThreadSettings{}, errors.New("invalid thread id")
+	}
+	s.mu.Lock()
+	cfg := s.cfg
+	s.mu.Unlock()
+	modelID := strings.TrimSpace(req.ModelID)
+	defaultPermission := FlowerPermissionApprovalRequired
+	if cfg != nil {
+		configured, err := permissionTypeOrDefault(cfg.EffectivePermissionType(), defaultPermission)
+		if err != nil {
+			return threadstore.ThreadSettings{}, fmt.Errorf("invalid configured permission type: %w", err)
+		}
+		defaultPermission = configured
+	}
+	permissionType, err := permissionTypeOrDefault(req.PermissionType, defaultPermission)
+	if err != nil {
+		return threadstore.ThreadSettings{}, err
+	}
+	if modelID != "" {
+		if _, _, ok := strings.Cut(modelID, "/"); !ok && !isDesktopModelSourceModelID(modelID) {
+			return threadstore.ThreadSettings{}, errors.New("invalid model")
+		}
+		if cfg != nil && cfg.HasModelProfile() && cfg.IsAllowedModelID(modelID) {
+		} else if ok, allowErr := s.desktopModelSourceModelAllowed(ctx, modelID); allowErr != nil {
+			return threadstore.ThreadSettings{}, allowErr
+		} else if !ok {
+			return threadstore.ThreadSettings{}, fmt.Errorf("model not allowed: %s", modelID)
+		}
+	}
+	if modelID == "" {
+		if candidate, ok := s.resolvedDesktopModelSourceOverrideModel(ctx); ok {
+			modelID = candidate
+		}
+	}
+	if modelID == "" {
+		if candidate, ok := s.resolvedDesktopModelSourceDefaultModel(ctx); ok {
+			modelID = candidate
+		}
+	}
+	if modelID == "" && cfg != nil && cfg.HasModelProfile() {
+		if candidate := strings.TrimSpace(cfg.CurrentModelID); candidate != "" && cfg.IsAllowedModelID(candidate) {
+			modelID = candidate
+		}
+	}
+	reasoningCapability, modelDefaultReasoning, _, err := s.threadReasoningDefaults(ctx, modelID)
+	if err != nil {
+		return threadstore.ThreadSettings{}, err
+	}
+	reasoningSelection, err := normalizeRequestedReasoningOrReject(reasoningCapability, req.ReasoningSelection)
+	if err != nil {
+		return threadstore.ThreadSettings{}, reasoningSelectionError(modelID, err)
+	}
+	if reasoningSelection.IsZero() {
+		reasoningSelection = modelDefaultReasoning
+	}
+	if err := config.ValidateAIReasoningSelection(reasoningCapability, reasoningSelection); err != nil {
+		return threadstore.ThreadSettings{}, reasoningSelectionError(modelID, err)
+	}
+	reasoningSelectionJSON, err := marshalReasoningSelection(reasoningSelection)
+	if err != nil {
+		return threadstore.ThreadSettings{}, err
+	}
+	workingDir := strings.TrimSpace(req.WorkingDir)
+	if workingDir == "" {
+		workingDir = strings.TrimSpace(s.agentHomeDir)
+	}
+	workingDir, err = validateThreadWorkingDir(workingDir, s.scope)
+	if err != nil {
+		return threadstore.ThreadSettings{}, err
+	}
+	now := time.Now().UnixMilli()
+	return threadstore.ThreadSettings{
+		ThreadID: id, EndpointID: strings.TrimSpace(meta.EndpointID), NamespacePublicID: strings.TrimSpace(meta.NamespacePublicID),
+		ModelID: modelID, ReasoningSelectionJSON: reasoningSelectionJSON, PermissionType: permissionTypeString(permissionType), WorkingDir: workingDir,
+		CreatedByUserPublicID: strings.TrimSpace(meta.UserPublicID), CreatedByUserEmail: strings.TrimSpace(meta.UserEmail),
+		UpdatedByUserPublicID: strings.TrimSpace(meta.UserPublicID), UpdatedByUserEmail: strings.TrimSpace(meta.UserEmail),
+		SettingsCreatedAtUnixMs: now, SettingsUpdatedAtUnixMs: now,
+	}, nil
+}
+
 func (s *Service) CreateThreadWithOptions(ctx context.Context, meta *session.Meta, req CreateThreadRequest) (*ThreadView, error) {
 	if s == nil {
 		return nil, errors.New("nil service")
@@ -431,7 +514,6 @@ func (s *Service) CreateThreadWithOptions(ctx context.Context, meta *session.Met
 	}
 	s.mu.Lock()
 	db := s.threadsDB
-	cfg := s.cfg
 	s.mu.Unlock()
 	if db == nil {
 		return nil, errors.New("threads store not ready")
@@ -448,92 +530,12 @@ func (s *Service) CreateThreadWithOptions(ctx context.Context, meta *session.Met
 		return nil, errors.New("invalid thread id")
 	}
 
-	modelID := strings.TrimSpace(req.ModelID)
-	defaultPermission := FlowerPermissionApprovalRequired
-	if cfg != nil {
-		p, err := permissionTypeOrDefault(cfg.EffectivePermissionType(), defaultPermission)
-		if err != nil {
-			return nil, fmt.Errorf("invalid configured permission type: %w", err)
-		}
-		defaultPermission = p
-	}
-	permissionType, err := permissionTypeOrDefault(req.PermissionType, defaultPermission)
+	req.ThreadID = id
+	t, err := s.buildThreadCreateSettings(ctxOrBackground(ctx), meta, req)
 	if err != nil {
 		return nil, err
 	}
-	if modelID != "" {
-		if _, _, ok := strings.Cut(modelID, "/"); !ok && !isDesktopModelSourceModelID(modelID) {
-			return nil, errors.New("invalid model")
-		}
-		if cfg.HasModelProfile() && cfg.IsAllowedModelID(modelID) {
-			// The model is provided by the runtime config.
-		} else if ok, err := s.desktopModelSourceModelAllowed(ctx, modelID); err != nil {
-			return nil, err
-		} else if !ok {
-			return nil, fmt.Errorf("model not allowed: %s", modelID)
-		}
-	}
-	if modelID == "" {
-		if id, ok := s.resolvedDesktopModelSourceOverrideModel(ctx); ok {
-			modelID = id
-		}
-	}
-	if modelID == "" {
-		if id, ok := s.resolvedDesktopModelSourceDefaultModel(ctx); ok {
-			modelID = id
-		}
-	}
-	if modelID == "" && cfg.HasModelProfile() {
-		if id := strings.TrimSpace(cfg.CurrentModelID); id != "" && cfg.IsAllowedModelID(id) {
-			modelID = id
-		}
-	}
-
-	reasoningCapability, modelDefaultReasoning, _, err := s.threadReasoningDefaults(ctx, modelID)
-	if err != nil {
-		return nil, err
-	}
-	reasoningSelection, err := normalizeRequestedReasoningOrReject(reasoningCapability, req.ReasoningSelection)
-	if err != nil {
-		return nil, reasoningSelectionError(modelID, err)
-	}
-	if reasoningSelection.IsZero() {
-		reasoningSelection = modelDefaultReasoning
-	}
-	if err := config.ValidateAIReasoningSelection(reasoningCapability, reasoningSelection); err != nil {
-		return nil, reasoningSelectionError(modelID, err)
-	}
-	reasoningSelectionJSON, err := marshalReasoningSelection(reasoningSelection)
-	if err != nil {
-		return nil, err
-	}
-
-	fallbackWorkingDir := strings.TrimSpace(s.agentHomeDir)
-	workingDir := strings.TrimSpace(req.WorkingDir)
-	if workingDir == "" {
-		workingDir = fallbackWorkingDir
-	}
-	workingDirClean, err := validateThreadWorkingDir(workingDir, s.scope)
-	if err != nil {
-		return nil, err
-	}
-
-	now := time.Now().UnixMilli()
-	t := threadstore.ThreadSettings{
-		ThreadID:                id,
-		EndpointID:              strings.TrimSpace(meta.EndpointID),
-		NamespacePublicID:       strings.TrimSpace(meta.NamespacePublicID),
-		ModelID:                 modelID,
-		ReasoningSelectionJSON:  reasoningSelectionJSON,
-		PermissionType:          permissionTypeString(permissionType),
-		WorkingDir:              workingDirClean,
-		CreatedByUserPublicID:   strings.TrimSpace(meta.UserPublicID),
-		CreatedByUserEmail:      strings.TrimSpace(meta.UserEmail),
-		UpdatedByUserPublicID:   strings.TrimSpace(meta.UserPublicID),
-		UpdatedByUserEmail:      strings.TrimSpace(meta.UserEmail),
-		SettingsCreatedAtUnixMs: now,
-		SettingsUpdatedAtUnixMs: now,
-	}
+	now := t.SettingsCreatedAtUnixMs
 	operation, err := db.PrepareThreadCreateOperation(ctx, threadstore.PrepareThreadCreateRequest{
 		Settings: t, ExplicitTitle: strings.TrimSpace(req.Title), CreatedAtMS: now,
 	})

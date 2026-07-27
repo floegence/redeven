@@ -62,39 +62,14 @@ INSERT INTO ai_composer_drafts(
 	}
 }
 
-func TestFreshThreadstoreV7ComposerDraftDefaultIncludesReferences(t *testing.T) {
-	t.Parallel()
-	store := openStoreForTest(t)
-	ownerHash := strings.Repeat("a", 64)
-	if _, err := store.db.Exec(`
-INSERT INTO ai_composer_drafts(
-  endpoint_id, owner_user_hash, scope_id,
-  created_at_unix_ms, updated_at_unix_ms, expires_at_unix_ms
-) VALUES('env_fresh_v7', ?, 'scope_fresh_v7', 1, 1, 2)
-`, ownerHash); err != nil {
-		t.Fatal(err)
-	}
-	var valueJSON string
-	if err := store.db.QueryRow(`
-SELECT value_json FROM ai_composer_drafts
-WHERE endpoint_id = 'env_fresh_v7' AND owner_user_hash = ? AND scope_id = 'scope_fresh_v7'
-`, ownerHash).Scan(&valueJSON); err != nil {
-		t.Fatal(err)
-	}
-	want := `{"text":"","attachments":[],"references":[],"mode":"ordinary"}`
-	if valueJSON != want {
-		t.Fatalf("fresh v7 composer draft default=%q, want %q", valueJSON, want)
-	}
-}
-
-func TestThreadstoreMigratesV6ComposerDraftsToV7PreservingRecords(t *testing.T) {
+func TestThreadstoreMigratesV6OrdinaryComposerDraftsThroughV8(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "threads.sqlite")
 	raw := createProductV6DatabaseForTest(t, path)
 	withoutReferences := `{"text":"legacy","attachments":[],"mode":"ordinary"}`
-	admissionValue := ` {"text":"keep","attachments":[],"mode":"admission_in_flight","model_id":"openai/gpt-5.2","proposed_turn_id":"turn_v6","admission_started":true} `
+	secondOrdinaryValue := ` {"text":"keep","attachments":[],"mode":"ordinary"} `
 	insertProductV6ComposerDraftForTest(t, raw, "scope_without_references", withoutReferences)
-	insertProductV6ComposerDraftForTest(t, raw, "scope_admission", admissionValue)
+	insertProductV6ComposerDraftForTest(t, raw, "scope_second", secondOrdinaryValue)
 	if err := raw.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -108,46 +83,17 @@ func TestThreadstoreMigratesV6ComposerDraftsToV7PreservingRecords(t *testing.T) 
 	if err := store.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
 		t.Fatal(err)
 	}
-	if version != 7 {
-		t.Fatalf("user_version=%d, want 7", version)
+	if version != 8 {
+		t.Fatalf("user_version=%d, want 8", version)
 	}
-	rows, err := store.db.Query(`
-SELECT endpoint_id, owner_user_hash, scope_id, revision, value_json, lease_id, lease_holder_id, lease_expires_at_unix_ms,
-       created_at_unix_ms, updated_at_unix_ms, expires_at_unix_ms
-FROM ai_composer_drafts
-ORDER BY scope_id
-`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rows.Close()
-	values := make(map[string]string)
-	for rows.Next() {
-		var endpointID, ownerUserHash, scopeID, valueJSON, leaseID, holderID string
-		var revision, leaseExpiresAt, createdAt, updatedAt, expiresAt int64
-		if err := rows.Scan(&endpointID, &ownerUserHash, &scopeID, &revision, &valueJSON, &leaseID, &holderID, &leaseExpiresAt, &createdAt, &updatedAt, &expiresAt); err != nil {
-			t.Fatal(err)
-		}
-		if endpointID != "env_v6" || ownerUserHash != strings.Repeat("a", 64) || revision != 17 || leaseID != "lease_v6" || holderID != "holder_v6" || leaseExpiresAt != 203 || createdAt != 201 || updatedAt != 202 || expiresAt != 204 {
-			t.Fatalf("migrated draft %q changed record fields: endpoint=%q owner=%q revision=%d lease=%q holder=%q timestamps=%d/%d/%d/%d",
-				scopeID, endpointID, ownerUserHash, revision, leaseID, holderID, leaseExpiresAt, createdAt, updatedAt, expiresAt)
-		}
-		values[scopeID] = valueJSON
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatal(err)
-	}
-	if got := values["scope_admission"]; !strings.Contains(got, `"references":[]`) || !strings.Contains(got, `"proposed_turn_id":"turn_v6"`) || !strings.Contains(got, `"admission_started":true`) {
-		t.Fatalf("admission draft was not migrated losslessly: %q", got)
-	}
-	if got := values["scope_without_references"]; !strings.Contains(got, `"references":[]`) || !strings.Contains(got, `"text":"legacy"`) {
-		t.Fatalf("legacy value was not migrated losslessly: %q", got)
+	if countRowsForTest(t, store.db, `SELECT COUNT(1) FROM sqlite_master WHERE type = 'table' AND name = 'ai_composer_drafts'`) != 0 {
+		t.Fatal("v8 migration retained composer draft storage")
 	}
 	if countRowsForTest(t, store.db, `SELECT COUNT(1) FROM sqlite_master WHERE name = 'product_v6_ai_composer_drafts'`) != 0 {
-		t.Fatal("v7 migration retained the v6 composer draft table")
+		t.Fatal("v8 migration retained the v6 composer draft table")
 	}
-	if countRowsForTest(t, store.db, `SELECT COUNT(1) FROM __redeven_db_meta WHERE singleton = 1 AND created_at_unix_ms = 101 AND last_migrated_from_version = 6 AND last_migrated_to_version = 7`) != 1 {
-		t.Fatal("v6 to v7 migration metadata was not committed")
+	if countRowsForTest(t, store.db, `SELECT COUNT(1) FROM __redeven_db_meta WHERE singleton = 1 AND created_at_unix_ms = 101 AND last_migrated_from_version = 6 AND last_migrated_to_version = 8`) != 1 {
+		t.Fatal("v6 through v8 migration metadata was not committed")
 	}
 }
 

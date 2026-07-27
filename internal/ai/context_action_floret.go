@@ -12,7 +12,6 @@ import (
 	"time"
 
 	flruntime "github.com/floegence/floret/runtime"
-	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
 const (
@@ -202,7 +201,7 @@ func floretContextReferenceID(index int) string {
 }
 
 func contextReferencePathLabel(value string) string {
-	return threadstore.ComposerReferencePathLabel(value)
+	return canonicalReferencePathLabel(value)
 }
 
 func truncateContextReferenceText(value string) (string, bool) {

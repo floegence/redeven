@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import fs from 'node:fs/promises';
-import http, { type ClientRequest } from 'node:http';
+import http, { type ClientRequest, type IncomingHttpHeaders } from 'node:http';
 import https from 'node:https';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -190,8 +190,11 @@ import {
 import { LauncherOperationRegistry, launcherOperationProgress, type LauncherOperationAttemptIdentity } from './launcherOperations';
 import {
 	invalidateRuntimeFlowerAccessOnStatus,
+	parseRuntimeFlowerJSON,
 	readRuntimeFlowerHTTPResponse,
+	requestRuntimeFlowerHTTP as runtimeFlowerRequestHTTP,
   runtimeFlowerDeleteQuery,
+	runtimeFlowerInvalidJSONError,
   type RuntimeFlowerHTTPResponse,
 } from './runtimeFlowerHTTP';
 import {
@@ -1011,7 +1014,7 @@ function runtimeFlowerAccessCookieHeader(cookieValue: string): string {
   return `${LOCAL_UI_ACCESS_COOKIE_NAME}=${cookieValue}`;
 }
 
-function runtimeFlowerAccessCookieFromHeaders(headers: http.IncomingHttpHeaders): string {
+function runtimeFlowerAccessCookieFromHeaders(headers: IncomingHttpHeaders): string {
   const setCookie = headers['set-cookie'];
   const values = Array.isArray(setCookie)
     ? setCookie
@@ -8743,25 +8746,6 @@ const runtimeFlowerAttachmentCapabilityQuery = (parsed: URL): boolean => {
     && values[0]!.trim().length > 0
     && values[0]!.length <= 512;
 };
-const runtimeFlowerAttachmentDraftQuery = (parsed: URL): boolean => {
-  const values = parsed.searchParams.getAll('draft_id');
-  return [...parsed.searchParams.keys()].every((key) => key === 'draft_id')
-    && values.length === 1
-    && values[0]!.trim().length > 0
-    && values[0]!.length <= 200;
-};
-const runtimeFlowerAttachmentReadQuery = (parsed: URL): boolean => {
-  if (runtimeFlowerAttachmentDraftQuery(parsed)) return true;
-  const draftIDs = parsed.searchParams.getAll('draft_id');
-  const preview = parsed.searchParams.getAll('preview');
-  return [...parsed.searchParams.keys()].join(',') === 'draft_id,preview'
-    && draftIDs.length === 1
-    && draftIDs[0]!.trim().length > 0
-    && draftIDs[0]!.length <= 200
-    && preview.length === 1
-    && preview[0] === '1';
-};
-
 const RUNTIME_FLOWER_ROUTES: readonly RuntimeFlowerRoute[] = [
   { path: '/_redeven_proxy/api/settings', methods: ['GET'] },
   { path: '/_redeven_proxy/api/fs/path_context', methods: ['GET'] },
@@ -8771,8 +8755,8 @@ const RUNTIME_FLOWER_ROUTES: readonly RuntimeFlowerRoute[] = [
   { path: '/_redeven_proxy/api/ai/current_model', methods: ['PUT'] },
   { path: '/_redeven_proxy/api/ai/models', methods: ['GET'] },
   { path: '/_redeven_proxy/api/ai/attachments/capabilities', methods: ['GET'], allowsQuery: runtimeFlowerAttachmentCapabilityQuery },
-  { path: /^\/_redeven_proxy\/api\/ai\/composer-drafts\/[^/]+$/u, methods: ['GET', 'PUT'] },
-  { path: /^\/_redeven_proxy\/api\/ai\/composer-drafts\/[^/]+\/lease$/u, methods: ['POST'] },
+  { path: '/_redeven_proxy/api/ai/upload-staging-scopes', methods: ['POST'] },
+  { path: /^\/_redeven_proxy\/api\/ai\/upload-staging-scopes\/[^/]+$/u, methods: ['DELETE'] },
   { path: '/_redeven_proxy/api/ai/uploads', methods: ['POST'] },
   { path: '/_redeven_proxy/api/ai/threads', methods: ['GET', 'POST'], allowsQuery: runtimeFlowerLimitQuery },
   { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+$/u, methods: ['GET', 'PATCH'] },
@@ -8788,9 +8772,8 @@ const RUNTIME_FLOWER_ROUTES: readonly RuntimeFlowerRoute[] = [
   { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/context\/compact$/u, methods: ['POST'] },
   { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/cancel$/u, methods: ['POST'] },
   { path: /^\/_redeven_proxy\/api\/ai\/runs\/[^/]+\/terminal\/[^/]+\/read$/u, methods: ['GET'], allowsQuery: runtimeFlowerTerminalReadQuery },
-  { path: /^\/_redeven_proxy\/api\/ai\/uploads\/[^/]+$/u, methods: ['GET'], allowsQuery: runtimeFlowerAttachmentReadQuery },
-  { path: /^\/_redeven_proxy\/api\/ai\/uploads\/[^/]+$/u, methods: ['DELETE'], allowsQuery: runtimeFlowerAttachmentDraftQuery },
-  { path: /^\/_redeven_proxy\/api\/ai\/uploads\/[^/]+\/long_text$/u, methods: ['GET'], allowsQuery: runtimeFlowerAttachmentDraftQuery },
+  { path: /^\/_redeven_proxy\/api\/ai\/uploads\/[^/]+$/u, methods: ['GET', 'DELETE'] },
+  { path: /^\/_redeven_proxy\/api\/ai\/uploads\/[^/]+\/long_text$/u, methods: ['GET'] },
 ];
 
 function runtimeFlowerRouteMatches(route: RuntimeFlowerRoute, parsed: URL): boolean {
@@ -8915,50 +8898,6 @@ async function ensureRuntimeFlowerRecord(): Promise<LocalEnvironmentRuntimeRecor
   return record;
 }
 
-function runtimeFlowerRequestHTTP(
-  url: URL,
-  request: RuntimeFlowerRequest,
-  options: Readonly<{ headers?: Readonly<Record<string, string>>; accept?: string }> = {},
-): Promise<RuntimeFlowerHTTPResponse> {
-  return new Promise((resolve, reject) => {
-    const body = request.body === undefined ? '' : JSON.stringify(request.body);
-    const client = url.protocol === 'https:' ? https : http;
-    const req = client.request(url, {
-      method: request.method,
-      timeout: 120_000,
-      headers: {
-        Accept: options.accept ?? 'application/json',
-        ...(options.headers ?? {}),
-        ...(body ? {
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(body),
-        } : {}),
-      },
-    }, (res) => {
-      void readRuntimeFlowerHTTPResponse(res).then(resolve, reject);
-    });
-    req.on('timeout', () => {
-      req.destroy(new Error('Flower runtime request timed out.'));
-    });
-    req.on('error', reject);
-    if (body) {
-      req.write(body);
-    }
-    req.end();
-  });
-}
-
-function parseRuntimeFlowerJSON(body: string): unknown {
-  if (!compact(body)) {
-    return null;
-  }
-  try {
-    return JSON.parse(body) as unknown;
-  } catch {
-    return body;
-  }
-}
-
 function runtimeFlowerEnvelopeError(parsed: unknown, status: number): RuntimeFlowerError | null {
   const record = parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : null;
   if (!record || record.ok !== false) {
@@ -9039,7 +8978,38 @@ async function requestRuntimeFlower(request: RuntimeFlowerRequest): Promise<Runt
   const record = await ensureRuntimeFlowerRecord();
   const url = new URL(path, runtimeFlowerBaseURL(record));
   const environment = preferences.local_environment;
-  let accessHeaders = await runtimeFlowerAccessHeaders(record, environment);
+  const stagingCapability = compact(request.staging_capability);
+  const stagingScopeID = compact(request.staging_scope_id);
+  const requestPathname = new URL(path, 'http://runtime-flower.local').pathname;
+  const stagingReleaseMatch = /^\/_redeven_proxy\/api\/ai\/upload-staging-scopes\/([^/]+)$/u.exec(requestPathname);
+  const isStagingRelease = method === 'DELETE' && stagingReleaseMatch !== null;
+  const acceptsStagingAuthorization = isStagingRelease
+    || (method === 'POST' && requestPathname === '/_redeven_proxy/api/ai/uploads')
+    || (method === 'POST' && /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/turns$/u.test(requestPathname))
+    || ((method === 'GET' || method === 'DELETE') && /^\/_redeven_proxy\/api\/ai\/uploads\/[^/]+(?:\/long_text)?$/u.test(requestPathname));
+  if (stagingCapability && (stagingCapability.length > 1024 || /[\r\n\0]/u.test(stagingCapability))) {
+    throw new Error('Flower attachment staging capability is invalid.');
+  }
+  if (stagingScopeID && (stagingScopeID.length > 200 || /[\r\n\0]/u.test(stagingScopeID))) {
+    throw new Error('Flower attachment staging scope identity is invalid.');
+  }
+  if (Boolean(stagingScopeID) !== Boolean(stagingCapability)) {
+    throw new Error('Flower attachment staging scope and capability must be supplied together.');
+  }
+  if (stagingCapability && !acceptsStagingAuthorization) {
+    throw new Error('Flower attachment staging authorization is not allowed for this path.');
+  }
+  if (isStagingRelease && decodeURIComponent(stagingReleaseMatch[1]!) !== stagingScopeID) {
+    throw new Error('Flower attachment staging scope does not match the release path.');
+  }
+  const withStagingCapability = (headers: Readonly<Record<string, string>>): Record<string, string> => ({
+    ...headers,
+    ...(stagingCapability ? {
+      'Upload-Staging-Capability': stagingCapability,
+      ...(!isStagingRelease ? { 'Upload-Staging-Scope-ID': stagingScopeID } : {}),
+    } : {}),
+  });
+  let accessHeaders = withStagingCapability(await runtimeFlowerAccessHeaders(record, environment));
   let response: RuntimeFlowerHTTPResponse;
   try {
     response = await runtimeFlowerRequestHTTP(url, { ...request, method, path }, { headers: accessHeaders });
@@ -9049,7 +9019,7 @@ async function requestRuntimeFlower(request: RuntimeFlowerRequest): Promise<Runt
   if (response.status === 423) {
     runtimeFlowerAccessCookies.delete(runtimeFlowerBaseURL(record));
     const cookie = await unlockRuntimeFlowerAccess(record, environment);
-    accessHeaders = { Cookie: runtimeFlowerAccessCookieHeader(cookie) };
+    accessHeaders = withStagingCapability({ Cookie: runtimeFlowerAccessCookieHeader(cookie) });
     try {
       response = await runtimeFlowerRequestHTTP(url, { ...request, method, path }, { headers: accessHeaders });
     } catch (error) {
@@ -9061,21 +9031,42 @@ async function requestRuntimeFlower(request: RuntimeFlowerRequest): Promise<Runt
   if (error) {
     return { ok: false, error, failureKind: 'response' };
   }
+  const invalidJSONError = runtimeFlowerInvalidJSONError(response, parsed);
+  if (invalidJSONError) {
+    return {
+      ok: false,
+      error: invalidJSONError,
+      failureKind: 'response',
+    };
+  }
   const dataRecord = parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : null;
+  const responseCapabilityRaw = response.headers['upload-staging-capability'];
+  const responseCapability = compact(Array.isArray(responseCapabilityRaw) ? responseCapabilityRaw[0] : responseCapabilityRaw);
+  if (responseCapability && (responseCapability.length > 1024 || /[\r\n\0]/u.test(responseCapability))) {
+    return {
+      ok: false,
+      error: runtimeFlowerError('runtime_flower_invalid_staging_capability', 'Flower returned an invalid attachment staging capability.', response.status),
+      failureKind: 'response',
+    };
+  }
   return {
     ok: true,
     data: dataRecord && Object.prototype.hasOwnProperty.call(dataRecord, 'data') ? dataRecord.data : parsed,
+    ...(responseCapability ? { stagingCapability: responseCapability } : {}),
   };
 }
 
 async function fetchRuntimeFlowerAttachmentPreview(request: RuntimeFlowerAttachmentPreviewRequest): Promise<RuntimeFlowerHTTPResponse> {
   const preferences = await loadDesktopPreferencesCached();
   const record = await ensureRuntimeFlowerRecord();
-  const query = new URLSearchParams({ draft_id: request.draft_id, preview: '1' });
-  const requestPath = runtimeFlowerPath(`/_redeven_proxy/api/ai/uploads/${encodeURIComponent(request.attachment_id)}?${query.toString()}`);
+  const requestPath = runtimeFlowerPath(`/_redeven_proxy/api/ai/uploads/${encodeURIComponent(request.attachment_id)}`);
   const url = new URL(requestPath, runtimeFlowerBaseURL(record));
   const environment = preferences.local_environment;
-  let accessHeaders = await runtimeFlowerAccessHeaders(record, environment);
+  const stagingHeaders = {
+    'Upload-Staging-Scope-ID': request.staging_scope_id,
+    'Upload-Staging-Capability': request.staging_capability,
+  };
+  let accessHeaders: Record<string, string> = { ...await runtimeFlowerAccessHeaders(record, environment), ...stagingHeaders };
   return requestRuntimeFlowerAttachmentPreviewWithAccess({
     request: () => runtimeFlowerRequestHTTP(url, { method: 'GET', path: requestPath }, {
       headers: accessHeaders,
@@ -9086,7 +9077,7 @@ async function fetchRuntimeFlowerAttachmentPreview(request: RuntimeFlowerAttachm
     },
     refreshAccess: async () => {
       const cookie = await unlockRuntimeFlowerAccess(record, environment);
-      accessHeaders = { Cookie: runtimeFlowerAccessCookieHeader(cookie) };
+      accessHeaders = { Cookie: runtimeFlowerAccessCookieHeader(cookie), ...stagingHeaders };
     },
   });
 }
@@ -9180,7 +9171,8 @@ async function prepareRuntimeFlowerAttachmentUpload(
         'Content-Type': `multipart/form-data; boundary=${boundary}`,
         'Content-Length': String(contentLength),
         'Idempotency-Key': input.upload_request_id,
-        'Upload-Draft-ID': input.draft_id,
+        'Upload-Staging-Scope-ID': input.staging_scope_id,
+        'Upload-Staging-Capability': input.staging_capability,
         'Upload-Content-SHA256': input.content_sha256,
         'Upload-Content-Length': String(input.size_bytes),
         'Upload-Display-Name-SHA256': input.display_name_sha256,

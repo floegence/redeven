@@ -178,13 +178,9 @@ WHERE endpoint_id = ? AND status = ? AND (source_thread_id = ? OR destination_th
 	if err != nil {
 		return ThreadDeleteOperation{}, err
 	}
-	draftUploadIDs, err := listComposerDraftUploadIDsForScopeTx(ctx, tx, endpointID, threadID)
-	if err != nil {
-		return ThreadDeleteOperation{}, err
-	}
 	snapshot := ThreadDeleteSnapshotV1{
 		SchemaVersion:         ThreadDeleteSnapshotSchemaV1,
-		UploadCleanupIDs:      dedupeNonEmptyStrings(append(uploadIDs, draftUploadIDs...)),
+		UploadCleanupIDs:      dedupeNonEmptyStrings(uploadIDs),
 		DeleteFlowerReadState: deleteFlowerReadState,
 	}
 	snapshotJSON, err := json.Marshal(snapshot)
@@ -251,9 +247,6 @@ func (s *Store) CommitThreadDeleteProductData(ctx context.Context, operationID s
 	}
 	now := time.Now().UnixMilli()
 	if _, err := prepareUploadCleanupForThreadTx(ctx, tx, operation.EndpointID, operation.ThreadID, now); err != nil {
-		return ThreadDeleteOperation{}, err
-	}
-	if err := deleteComposerDraftsForScopeTx(ctx, tx, operation.EndpointID, operation.ThreadID, now); err != nil {
 		return ThreadDeleteOperation{}, err
 	}
 	if err := deleteThreadScopedRowsTx(ctx, tx, operation.EndpointID, operation.ThreadID); err != nil {

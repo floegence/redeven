@@ -23,7 +23,16 @@ export function flowerTurnAdmissionUncertainFailure(
   }
   const failure = new Error(error instanceof Error ? error.message : trim(error) || 'Flower turn admission response was unavailable.') as Error & { cause?: unknown };
   failure.cause = error;
+  const source = error && typeof error === 'object'
+    ? error as { code?: unknown; status?: unknown; failureKind?: unknown }
+    : {};
+  const code = trim(source.code);
+  const status = Number(source.status);
+  const failureKind = trim(source.failureKind);
   return Object.assign(failure, {
+    ...(code ? { code } : {}),
+    ...(Number.isFinite(status) && status >= 0 ? { status } : {}),
+    ...(failureKind ? { failureKind } : {}),
     uncertain_admission: { thread_id: tid, turn_id: acceptedTurnID },
   });
 }

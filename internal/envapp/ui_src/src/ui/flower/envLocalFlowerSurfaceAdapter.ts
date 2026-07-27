@@ -1,11 +1,17 @@
 import type { RedevenV1Rpc } from '../protocol/redeven_v1';
-import { fetchLocalApiJSON, LocalApiError, uploadLocalApiAttachment } from '../services/localApi';
-import { appendLocalAccessResumeQuery } from '../services/localAccessAuth';
+import {
+  fetchLocalApiJSON,
+  fetchLocalApiJSONResponse,
+  LocalApiError,
+  prepareLocalApiRequestInit,
+  uploadLocalApiAttachment,
+} from '../services/localApi';
 import type { AgentSettingsResponse, AIConfig, AIModelProfile } from '../pages/settings/types';
 import type {
   FlowerApprovalDecisionReceipt,
   FlowerAttachmentUploadInput,
   FlowerAttachmentCapability,
+  FlowerAttachmentStagingScope,
   FlowerCanonicalReferenceOpenRequest,
   FlowerProvider,
   FlowerProviderDraft,
@@ -41,15 +47,12 @@ import {
   serializeFlowerReasoningSelection,
 } from '../../../../../flower_ui/src/reasoning';
 import { normalizeFlowerAttachmentCapability } from '../../../../../flower_ui/src/attachments/flowerAttachmentModel';
-import { createRedevenFlowerDraftPersistence } from '../../../../../flower_host_ui/src/redevenFlowerDraftPersistence';
-
-export function createEnvLocalFlowerDraftPersistence() {
-  return createRedevenFlowerDraftPersistence(async (method, path, body) => fetchLocalApiJSON<unknown>(path, {
-    method,
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  }));
-}
-
+import {
+  createFlowerClientThreadID,
+  flowerAttachmentStagingHeaders,
+  flowerStagingCapabilityHeaderName,
+  normalizeFlowerAttachmentStagingScope,
+} from '../../../../../flower_host_ui/src/flowerAttachmentStaging';
 type EnvLocalFlowerSurfaceAdapterOptions = Readonly<{
   envPublicID: string;
   envLabel: string;
@@ -102,11 +105,6 @@ type ThreadView = Readonly<{
 
 type ThreadReadStatus = FlowerThreadReadStatus;
 
-type PreparedDraftThreadResponse = Readonly<{
-  thread_id?: string;
-  draft_revision?: number;
-}>;
-
 type LoadThreadResponse = Readonly<{
   thread?: ThreadView;
 }>;
@@ -149,7 +147,8 @@ async function uploadEnvLocalFlowerAttachment(input: FlowerAttachmentUploadInput
     file: new File([input.file], canonicalName, { type: input.file.type }),
     source: input.source === 'long_text' ? 'long_text' : 'uploaded_file',
     requestID: input.request_id,
-    draftID: input.draft_id,
+    stagingScopeID: input.staging_scope.staging_scope_id,
+    stagingCapability: input.staging_scope.capability,
     contentSHA256,
     displayNameSHA256,
     signal: input.signal,
@@ -215,6 +214,59 @@ function mapEnvStagedLongText(raw: unknown, expected: FlowerStagedAttachment): F
     throw new Error('Flower long-text restore returned mismatched attachment metadata.');
   }
   return { attachment: expected, text: record.text };
+}
+
+async function createEnvAttachmentStagingScope(threadID?: string): Promise<FlowerAttachmentStagingScope> {
+  const targetThreadID = trim(threadID) || createFlowerClientThreadID();
+  const response = await fetchLocalApiJSONResponse<unknown>(
+    '/_redeven_proxy/api/ai/upload-staging-scopes',
+    { method: 'POST', body: JSON.stringify({ thread_id: targetThreadID }) },
+  );
+  return normalizeFlowerAttachmentStagingScope(
+    response.data,
+    response.headers.get(flowerStagingCapabilityHeaderName()),
+    targetThreadID,
+  );
+}
+
+async function releaseEnvAttachmentStagingScope(scope: FlowerAttachmentStagingScope): Promise<void> {
+  const headers = flowerAttachmentStagingHeaders(scope);
+  await fetchLocalApiJSON<unknown>(
+    `/_redeven_proxy/api/ai/upload-staging-scopes/${encodeURIComponent(scope.staging_scope_id)}`,
+    { method: 'DELETE', headers: { 'Upload-Staging-Capability': headers['Upload-Staging-Capability'] } },
+  );
+}
+
+async function previewEnvStagedAttachment(
+  attachment: FlowerStagedAttachment,
+  scope: FlowerAttachmentStagingScope,
+): Promise<void> {
+  const response = await fetch(
+    `/_redeven_proxy/api/ai/uploads/${encodeURIComponent(trim(attachment.attachment_id))}`,
+    await prepareLocalApiRequestInit({
+      method: 'GET',
+      headers: { ...flowerAttachmentStagingHeaders(scope), Accept: '*/*' },
+    }),
+  );
+  if (!response.ok) {
+    throw new LocalApiError({
+      message: `Attachment preview failed with HTTP ${response.status}.`,
+      status: response.status,
+      code: 'ATTACHMENT_PREVIEW_FAILED',
+    });
+  }
+  const contentType = trim(response.headers.get('content-type')).toLowerCase();
+  const safeType = contentType === 'application/pdf'
+    || contentType === 'image/png'
+    || contentType === 'image/jpeg'
+    || contentType === 'image/gif'
+    || contentType === 'image/webp'
+    || contentType === 'text/plain'
+    || contentType === 'text/plain; charset=utf-8';
+  if (!safeType) throw new Error('Flower returned an unsupported attachment preview content type.');
+  const objectURL = URL.createObjectURL(await response.blob());
+  window.open(objectURL, '_blank', 'noopener,noreferrer');
+  window.setTimeout(() => URL.revokeObjectURL(objectURL), 60_000);
 }
 
 function parseCanonicalReferenceOpenTarget(raw: unknown): FlowerCanonicalReferenceNavigationTarget {
@@ -716,25 +768,23 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       if (capability.model_id !== trim(modelID)) throw new Error('Flower attachment capability returned a different model identity.');
       return capability;
     },
+    createAttachmentStagingScope: createEnvAttachmentStagingScope,
+    releaseAttachmentStagingScope: releaseEnvAttachmentStagingScope,
     uploadAttachment: options.uploadAttachment ?? uploadEnvLocalFlowerAttachment,
-    deleteStagedAttachment: async (attachmentID, draftID) => {
+    deleteStagedAttachment: async (attachmentID, scope) => {
       await fetchLocalApiJSON<unknown>(
-        `/_redeven_proxy/api/ai/uploads/${encodeURIComponent(trim(attachmentID))}?draft_id=${encodeURIComponent(trim(draftID))}`,
-        { method: 'DELETE' },
+        `/_redeven_proxy/api/ai/uploads/${encodeURIComponent(trim(attachmentID))}`,
+        { method: 'DELETE', headers: flowerAttachmentStagingHeaders(scope) },
       );
     },
-    readStagedLongText: async (attachment, draftID) => mapEnvStagedLongText(
+    readStagedLongText: async (attachment, scope) => mapEnvStagedLongText(
       await fetchLocalApiJSON<unknown>(
-        `/_redeven_proxy/api/ai/uploads/${encodeURIComponent(trim(attachment.attachment_id))}/long_text?draft_id=${encodeURIComponent(trim(draftID))}`,
-        { method: 'GET' },
+        `/_redeven_proxy/api/ai/uploads/${encodeURIComponent(trim(attachment.attachment_id))}/long_text`,
+        { method: 'GET', headers: flowerAttachmentStagingHeaders(scope) },
       ),
       attachment,
     ),
-	previewStagedAttachment: (attachment, draftID) => {
-	  const path = `/_redeven_proxy/api/ai/uploads/${encodeURIComponent(trim(attachment.attachment_id))}`;
-	  const query = new URLSearchParams({ draft_id: trim(draftID), preview: '1' });
-	  window.open(appendLocalAccessResumeQuery(`${path}?${query.toString()}`), '_blank', 'noopener,noreferrer');
-	},
+    previewStagedAttachment: previewEnvStagedAttachment,
     launchTurn: async (input: FlowerTurnLaunchInput) => {
       const copy = adapterCopy(options);
       const prompt = input.prompt;
@@ -743,15 +793,23 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       if (!prompt.trim() && attachmentIDs.length === 0 && !contextAction) throw new Error(copy.enterMessageBeforeSending);
       const snapshot = await loadSettingsSnapshot(options);
       const permissionType = normalizePermissionType(input.permission_type ?? snapshot.defaults.permission_type);
-      let threadID = trim(input.thread_id);
+      const existingThreadID = trim(input.thread_id);
+      const stagingScope = input.staging_scope;
+      const threadID = existingThreadID || trim(stagingScope?.thread_id) || createFlowerClientThreadID();
+      if (stagingScope && trim(stagingScope.thread_id) !== threadID) {
+        throw new Error('Flower attachment staging scope targets a different thread.');
+      }
+      if (attachmentIDs.length > 0 && !stagingScope) {
+        throw new Error('Flower attachments require a staging scope.');
+      }
       let turnModelID = trim(input.model_id);
       const proposedTurnID = trim(input.turn_id) || createFlowerClientTurnID();
-      let expectedDraftRevision = input.expected_draft_revision;
-      if (!threadID) {
+      let createBody: Record<string, unknown> | undefined;
+      if (!existingThreadID) {
         const models = await loadModels();
         turnModelID = turnModelID || currentModelID(snapshot, models);
         if (!turnModelID) throw new Error(copy.selectModelBeforeChat);
-        const createBody: Record<string, unknown> = {
+        createBody = {
           title: '',
           model_id: turnModelID,
           permission_type: permissionType,
@@ -763,32 +821,17 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         if (trim(input.working_dir)) {
           createBody.working_dir = trim(input.working_dir);
         }
-        const draftID = trim(input.draft_id);
-        if (!draftID || expectedDraftRevision === undefined) throw new Error(copy.failedToCreateChat);
-        const created = await fetchLocalApiJSON<PreparedDraftThreadResponse>(
-          `/_redeven_proxy/api/ai/composer-drafts/${encodeURIComponent(draftID)}/thread`, {
-          method: 'POST',
-          body: JSON.stringify({
-            expected_draft_revision: expectedDraftRevision,
-            turn_id: proposedTurnID,
-            ...(contextAction ? { context_action: contextAction } : {}),
-            create: createBody,
-          }),
-        });
-        threadID = trim(created.thread_id);
-        expectedDraftRevision = Number.isInteger(created.draft_revision) ? created.draft_revision : undefined;
       }
-      if (!threadID || expectedDraftRevision === undefined) throw new Error(copy.failedToCreateChat);
-      await options.rpc.ai.subscribeThread({ threadId: threadID });
       try {
+        const stagingHeaders = stagingScope ? flowerAttachmentStagingHeaders(stagingScope) : undefined;
         const response = await fetchLocalApiJSON<SendTurnResponse>(
           `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/turns`,
           {
             method: 'POST',
+            ...(stagingHeaders ? { headers: stagingHeaders } : {}),
             body: JSON.stringify({
               thread_id: threadID,
-              draft_id: trim(input.draft_id),
-              expected_draft_revision: expectedDraftRevision,
+              ...(stagingScope ? { staging_scope_id: stagingScope.staging_scope_id } : {}),
               ...(turnModelID ? { model: turnModelID } : {}),
               input: {
                 turn_id: proposedTurnID,
@@ -800,6 +843,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
                 permission_type: permissionType,
                 ...(serializeFlowerReasoningSelection(input.reasoning_selection) ? { reasoning_selection: serializeFlowerReasoningSelection(input.reasoning_selection) } : {}),
               },
+              ...(createBody ? { create: createBody } : {}),
             }),
           },
         );
@@ -820,9 +864,10 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
             proposedTurnID,
           );
         }
+        void options.rpc.ai.subscribeThread({ threadId: threadID }).catch(() => undefined);
         return { thread_id: threadID, turn_id: turnID, run_id: runID, kind };
       } catch (error) {
-        if (error instanceof LocalApiError) throw error;
+        if (error instanceof LocalApiError && error.code !== 'INVALID_JSON_RESPONSE') throw error;
         if (flowerTurnAdmissionUncertainIdentity(error)) {
           throw error;
         }

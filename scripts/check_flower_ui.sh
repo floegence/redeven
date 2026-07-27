@@ -77,9 +77,10 @@ main() {
       internal/flower_ui/src/attachments/flowerAttachmentModel.test.ts \
       internal/flower_ui/src/attachments/createFlowerAttachmentController.test.ts \
       internal/flower_ui/src/composer/createFlowerComposerDraftCoordinator.test.ts \
+      internal/flower_ui/src/composer/createFlowerComposerAutosizeController.test.ts \
       internal/flower_ui/src/composer/flowerComposerReferenceToken.test.ts \
       internal/flower_ui/src/composer/flowerComposerReferenceIndex.test.ts \
-      internal/flower_host_ui/src/redevenFlowerDraftPersistence.test.ts \
+      internal/flower_host_ui/src/flowerAttachmentStaging.test.ts \
       internal/flower_ui/src/contextActionWire.test.ts \
       internal/flower_ui/src/flowerActivityPresentation.test.ts \
       internal/flower_ui/src/flowerSubagentDetailThread.test.ts \

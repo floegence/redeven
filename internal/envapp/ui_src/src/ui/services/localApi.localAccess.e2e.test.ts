@@ -266,6 +266,30 @@ describe('localApi access credentials', () => {
     });
   });
 
+  it.each([
+    ['empty', ''],
+    ['HTML', '<!doctype html><title>proxy error</title>'],
+    ['malformed', '{"ok":'],
+  ])('reports a typed error for a successful %s JSON response', async (_name, body) => {
+    vi.doMock('./controlplaneApi', () => ({ getLocalRuntime: vi.fn(async () => null) }));
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(body, { status: 200 })));
+
+    const mod = await import('./localApi');
+    await expect(mod.fetchLocalApiJSON('/api/test/invalid-json', { method: 'POST' })).rejects.toMatchObject({
+      name: 'LocalApiError',
+      status: 200,
+      code: 'INVALID_JSON_RESPONSE',
+    });
+  });
+
+  it('accepts an empty 204 response for idempotent staging release', async () => {
+    vi.doMock('./controlplaneApi', () => ({ getLocalRuntime: vi.fn(async () => null) }));
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 204 })));
+
+    const mod = await import('./localApi');
+    await expect(mod.fetchLocalApiJSON('/api/test/release', { method: 'DELETE' })).resolves.toBeNull();
+  });
+
   it('preserves retry-after metadata for local unlock cooldown responses', async () => {
     const fetchMock = vi.fn(async () => errorResponseWithRetry('Too many incorrect password attempts.', 429, 30_000));
     vi.stubGlobal('fetch', fetchMock);

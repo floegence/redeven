@@ -265,10 +265,6 @@ export type FlowerSurfaceCopy = Readonly<{
     invalidText: string;
     restoreFailed: string;
     compactBlocked: string;
-    leaseConflict: string;
-    takeOver: string;
-    draftUnsaved: string;
-    draftUnavailable: string;
     pendingDraft: string;
     modelSupportChecking: string;
     modelSupported: string;
@@ -483,10 +479,6 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     invalidText: 'This text contains invalid Unicode and cannot be attached.',
     restoreFailed: 'Flower could not restore this text attachment.',
     compactBlocked: 'Remove or send attachments and references before compacting context.',
-    leaseConflict: 'This draft is being edited in another Flower surface.',
-    takeOver: 'Take over editing',
-    draftUnsaved: 'Draft changes will be saved when the connection recovers.',
-    draftUnavailable: 'Draft editing is unavailable until the connection recovers.',
     pendingDraft: 'Unsent draft preserved.',
     modelSupportChecking: 'Checking attachment support',
     modelSupported: 'Supports current attachments',

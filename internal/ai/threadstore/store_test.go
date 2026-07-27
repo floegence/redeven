@@ -15,7 +15,6 @@ func TestStoreSchemaContainsOnlyProductThreadState(t *testing.T) {
 	wantTables := []string{
 		"__redeven_db_meta",
 		"ai_child_permission_snapshots",
-		"ai_composer_drafts",
 		"ai_flower_thread_routing",
 		"ai_permission_snapshots",
 		"ai_queued_turns",
@@ -26,6 +25,7 @@ func TestStoreSchemaContainsOnlyProductThreadState(t *testing.T) {
 		"ai_thread_settings",
 		"ai_upload_attempts",
 		"ai_upload_refs",
+		"ai_upload_staging_scopes",
 		"ai_uploads",
 		"provider_capabilities",
 	}

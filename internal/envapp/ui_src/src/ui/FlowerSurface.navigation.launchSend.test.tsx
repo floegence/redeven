@@ -9,8 +9,8 @@ import type {
   FlowerRouterDecision,
   FlowerAttachmentCapability,
   FlowerStagedAttachment,
-  FlowerStagedLongTextReadResult,
   FlowerSettingsSnapshot,
+  FlowerTurnLaunchInput,
   FlowerTurnLaunchReceipt,
 } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { flowerTurnAdmissionUncertainFailure } from '../../../../flower_ui/src/flowerTurnAdmission';
@@ -19,6 +19,7 @@ import {
   adapter,
   decision,
   deferred,
+  disposeRenderedSurface,
   flush,
   flowerSurfaceNotifications,
   inputRequest,
@@ -48,30 +49,25 @@ function selectedThreadReady(root: ParentNode, threadID: string): boolean {
     && surface?.getAttribute('data-flower-selected-thread-loading') === 'false';
 }
 
-it('does not launch after the exact composer lease expires during handler resolution', async () => {
-  let now = 1_000;
-  const coordinator = createFlowerComposerDraftCoordinator({ now: () => now, leaseDurationMS: 1_000 });
+it('launches once after asynchronous handler resolution with an in-memory draft', async () => {
+  const coordinator = createFlowerComposerDraftCoordinator();
   const handler = deferred<FlowerRouterDecision>();
   const surfaceAdapter = adapter();
   const launchTurn = vi.fn(surfaceAdapter.launchTurn);
   const resolveHandler = vi.fn(() => handler.promise);
-  const runtime = renderSurfaceWithDraftCoordinator({ ...surfaceAdapter, launchTurn, resolveHandler }, coordinator, 'activity');
+  const runtime = renderSurfaceWithDraftCoordinator({ ...surfaceAdapter, launchTurn, resolveHandler }, coordinator);
   await waitFor(() => Boolean(runtime.querySelector('textarea')));
   const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
-  textarea.value = 'lease-bound send';
+  textarea.value = 'in-memory send';
   textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
   await waitFor(() => !(runtime.querySelector('button.flower-composer-submit') as HTMLButtonElement).disabled);
   const send = runtime.querySelector('button.flower-composer-submit') as HTMLButtonElement;
   send.click();
   await waitFor(() => runtime.querySelector('.flower-composer')?.getAttribute('aria-busy') === 'true');
 
-  now = 2_001;
-  expect((await coordinator.open('__new_thread__', 'workbench').acquire()).kind).toBe('lease_owned');
   handler.resolve(decision());
-  await flush();
-  await flush();
-
-  expect(launchTurn).not.toHaveBeenCalled();
+  await waitFor(() => launchTurn.mock.calls.length === 1);
+  expect(launchTurn).toHaveBeenCalledWith(expect.objectContaining({ prompt: 'in-memory send' }));
 });
 
 it('admits only one turn when Send and Enter race a fresh attachment capability read', async () => {
@@ -97,13 +93,16 @@ it('admits only one turn when Send and Enter race a fresh attachment capability 
   });
   const runtime = renderSurfaceWithDraftCoordinator({
     ...surfaceAdapter, launchTurn, uploadAttachment, loadAttachmentCapability,
-  }, coordinator, 'activity');
+  }, coordinator);
   await waitFor(() => capabilityCalls === 1 && Boolean(runtime.querySelector('input[type="file"]')));
   const picker = runtime.querySelector('input[type="file"]') as HTMLInputElement;
   const file = new File(['attachment'], 'notes.txt', { type: 'text/plain' });
   Object.defineProperty(picker, 'files', { configurable: true, value: [file] });
   picker.dispatchEvent(new Event('change', { bubbles: true }));
-  await waitFor(() => runtime.querySelector('[data-attachment-status="staged_ready"]') !== null);
+  await waitFor(() => vi.mocked(surfaceAdapter.createAttachmentStagingScope!).mock.calls.length === 1);
+  await waitFor(() => runtime.querySelector('[data-attachment-status]') !== null);
+  expect(runtime.querySelector('[data-attachment-status]')?.getAttribute('data-attachment-status')).toBe('staged_ready');
+  expect(uploadAttachment).toHaveBeenCalledOnce();
 
   const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
   textarea.value = 'one turn only';
@@ -161,7 +160,7 @@ it('shows which models support the attachments already in the composer', async (
     loadSettings: vi.fn(async () => snapshot),
     loadAttachmentCapability,
     uploadAttachment,
-  }, createFlowerComposerDraftCoordinator(), 'activity');
+  }, createFlowerComposerDraftCoordinator());
 
   await waitFor(() => Boolean(runtime.querySelector('input[type="file"]')));
   const picker = runtime.querySelector('input[type="file"]') as HTMLInputElement;
@@ -217,7 +216,7 @@ it('retains an exact over-limit paste and selection when local limits reject con
     ...surfaceAdapter,
     loadAttachmentCapability: vi.fn(async () => capability),
     uploadAttachment: vi.fn(async () => { throw new Error('upload should not start'); }),
-  }, createFlowerComposerDraftCoordinator(), 'activity');
+  }, createFlowerComposerDraftCoordinator());
   await waitFor(() => Boolean(runtime.querySelector('input[type="file"]')));
   const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
   const payload = 'x'.repeat(50_001);
@@ -256,7 +255,7 @@ it('keeps an exact over-limit paste in the editor until its attachment is staged
     ...adapter(),
     loadAttachmentCapability: vi.fn(async () => capability),
     uploadAttachment,
-  }, createFlowerComposerDraftCoordinator(), 'activity');
+  }, createFlowerComposerDraftCoordinator());
   await waitFor(() => Boolean(runtime.querySelector('input[type="file"]')));
   const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
   const payload = 'x'.repeat(50_001);
@@ -296,7 +295,7 @@ it('does not reclaim focus after an over-limit paste finishes staging', async ()
   const uploadAttachment = vi.fn(() => completion.promise);
   const runtime = renderSurfaceWithDraftCoordinator({
     ...adapter(), loadAttachmentCapability: vi.fn(async () => capability), uploadAttachment,
-  }, createFlowerComposerDraftCoordinator(), 'activity');
+  }, createFlowerComposerDraftCoordinator());
   await waitFor(() => Boolean(runtime.querySelector('textarea')));
   const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
   const payload = 'y'.repeat(50_001);
@@ -329,11 +328,12 @@ it('preserves an exact over-limit paste when staging fails', async () => {
     routes: { 'text/plain': 'tool_read', 'text/plain; charset=utf-8': 'tool_read' },
   };
   const completion = deferred<FlowerStagedAttachment>();
+  const coordinator = createFlowerComposerDraftCoordinator();
   const runtime = renderSurfaceWithDraftCoordinator({
     ...adapter(),
     loadAttachmentCapability: vi.fn(async () => capability),
     uploadAttachment: vi.fn(() => completion.promise),
-  }, createFlowerComposerDraftCoordinator(), 'activity');
+  }, coordinator);
   await waitFor(() => Boolean(runtime.querySelector('input[type="file"]')));
   const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
   const payload = '失败内容'.repeat(16_667);
@@ -347,9 +347,72 @@ it('preserves an exact over-limit paste when staging fails', async () => {
   textarea.dispatchEvent(paste);
   await waitFor(() => textarea.value === `prefix${payload}`);
   completion.reject(new Error('offline'));
-  await waitFor(() => runtime.querySelector('[data-attachment-status="upload_error"]') !== null);
+  await waitFor(() => coordinator.attachmentController('__new_thread__', () => {
+    throw new Error('missing shared controller');
+  }).snapshot().items.length === 0);
 
   expect(textarea.value).toBe(`prefix${payload}`);
+});
+
+it('uploads a failed long-text paste only once when the user sends the preserved text', async () => {
+  const capability: FlowerAttachmentCapability = {
+    model_id: 'openai/gpt-5.2', revision: 'capability-long-paste-send-after-failure', enabled: true, supports_long_text: true,
+    max_attachments: 4, max_file_size_bytes: 1_000_000, max_total_size_bytes: 2_000_000,
+    routes: { 'text/plain': 'tool_read', 'text/plain; charset=utf-8': 'tool_read' },
+  };
+  const retryCompletion = deferred<FlowerStagedAttachment>();
+  let attempts = 0;
+  const uploadAttachment = vi.fn((_input: FlowerAttachmentUploadInput) => {
+    attempts += 1;
+    if (attempts === 1) return Promise.reject(new Error('offline'));
+    return retryCompletion.promise;
+  });
+  const launchTurn = vi.fn(adapter().launchTurn);
+  const coordinator = createFlowerComposerDraftCoordinator();
+  const runtime = renderSurfaceWithDraftCoordinator({
+    ...adapter(),
+    loadAttachmentCapability: vi.fn(async () => capability),
+    uploadAttachment,
+    launchTurn,
+  }, coordinator);
+  await waitFor(() => Boolean(runtime.querySelector('textarea')));
+  const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+  const payload = 'q'.repeat(50_001);
+  const paste = new Event('paste', { bubbles: true, cancelable: true }) as ClipboardEvent;
+  Object.defineProperty(paste, 'clipboardData', {
+    value: { files: [], getData: (type: string) => type === 'text/plain' ? payload : '' },
+  });
+  textarea.dispatchEvent(paste);
+  await waitFor(() => textarea.value === payload);
+  await waitFor(() => uploadAttachment.mock.calls.length === 1);
+  await waitFor(() => coordinator.attachmentController('__new_thread__', () => {
+    throw new Error('missing shared controller');
+  }).snapshot().items.length === 0);
+
+  const submit = runtime.querySelector('.flower-composer-submit') as HTMLButtonElement;
+  await waitFor(() => !submit.disabled);
+  submit.click();
+  await waitFor(() => uploadAttachment.mock.calls.length === 2);
+  const retryInput = uploadAttachment.mock.calls[1]?.[0];
+  expect(retryInput?.source).toBe('long_text');
+  expect(retryInput?.file.size).toBe(new TextEncoder().encode(payload).byteLength);
+  retryCompletion.resolve({
+    attachment_id: 'upl_long_paste_once________',
+    name: retryInput!.file.name,
+    mime_type: retryInput!.file.type,
+    size_bytes: retryInput!.file.size,
+    digest_sha256: 'd'.repeat(64),
+    source: 'long_text',
+    capability_revision: capability.revision,
+    locator: 'attachment://v1/upl_long_paste_once/long.txt',
+    text_stats: { code_points: payload.length, lines: 1 },
+  });
+  await waitFor(() => launchTurn.mock.calls.length === 1);
+  expect(launchTurn).toHaveBeenCalledWith(expect.objectContaining({
+    prompt: '',
+    attachment_ids: ['upl_long_paste_once________'],
+  }));
+  expect(uploadAttachment).toHaveBeenCalledTimes(2);
 });
 
 it('keeps concurrent editor changes and discards the staged long-paste duplicate', async () => {
@@ -362,7 +425,7 @@ it('keeps concurrent editor changes and discards the staged long-paste duplicate
   const uploadAttachment = vi.fn(() => completion.promise);
   const runtime = renderSurfaceWithDraftCoordinator({
     ...adapter(), loadAttachmentCapability: vi.fn(async () => capability), uploadAttachment,
-  }, createFlowerComposerDraftCoordinator(), 'activity');
+  }, createFlowerComposerDraftCoordinator());
   await waitFor(() => Boolean(runtime.querySelector('input[type="file"]')));
   const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
   const payload = 'z'.repeat(50_001);
@@ -385,41 +448,366 @@ it('keeps concurrent editor changes and discards the staged long-paste duplicate
   expect(textarea.value).toBe(`${payload} user edit`);
 });
 
-it('retains a pasted file intent and local text until explicit draft takeover', async () => {
+it('shares one in-memory draft across Activity and Workbench without conflict UI', async () => {
   const coordinator = createFlowerComposerDraftCoordinator();
-  const activity = coordinator.open('__new_thread__', 'activity');
-  await activity.acquire();
-  await activity.mutate(0, (value) => ({ ...value, text: 'shared text' }));
+  coordinator.open('__new_thread__').mutate((value) => ({ ...value, text: 'seeded from Activity' }));
+  coordinator.open('thread-1').mutate((value) => ({ ...value, text: 'thread-scoped draft' }));
+  const newThreadAdapter = () => ({ ...adapter(), listThreads: vi.fn(async () => []) });
+  const activity = renderSurfaceWithDraftCoordinator(newThreadAdapter(), coordinator);
+  const workbench = renderSurfaceWithDraftCoordinator(newThreadAdapter(), coordinator);
+  await waitFor(() => (
+    (activity.querySelector('textarea') as HTMLTextAreaElement | null)?.value === 'seeded from Activity'
+    && (workbench.querySelector('textarea') as HTMLTextAreaElement | null)?.value === 'seeded from Activity'
+  ));
+
+  coordinator.open('__new_thread__').mutate((value) => ({ ...value, text: 'shared from Workbench' }));
+  await waitFor(() => (workbench.querySelector('textarea') as HTMLTextAreaElement).value === 'shared from Workbench');
+
+  const remounted = renderSurfaceWithDraftCoordinator(newThreadAdapter(), coordinator);
+  await waitFor(() => (remounted.querySelector('textarea') as HTMLTextAreaElement | null)?.value === 'shared from Workbench');
+
+  const switcher = renderSurfaceWithDraftCoordinator(adapter(), coordinator);
+  await waitFor(() => (switcher.querySelector('textarea') as HTMLTextAreaElement | null)?.value === 'shared from Workbench');
+  (switcher.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
+  await waitFor(() => (
+    selectedThreadReady(switcher, 'thread-1')
+    && (switcher.querySelector('textarea') as HTMLTextAreaElement).value === 'thread-scoped draft'
+  ));
+  (switcher.querySelector('button[aria-label="New chat"]') as HTMLButtonElement).click();
+  await waitFor(() => (switcher.querySelector('textarea') as HTMLTextAreaElement).value === 'shared from Workbench');
+
+  expect(activity.querySelector('.flower-composer-draft-conflict')).toBeNull();
+  expect(workbench.querySelector('.flower-composer-draft-conflict')).toBeNull();
+  expect(coordinator.read('__new_thread__').value.text).toBe('shared from Workbench');
+});
+
+it('keeps a selected attachment when its originating surface unmounts during staging creation', async () => {
+  const coordinator = createFlowerComposerDraftCoordinator();
   const capability: FlowerAttachmentCapability = {
-    model_id: 'openai/gpt-5.2', revision: 'capability-pending-file', enabled: true, supports_long_text: true,
+    model_id: 'openai/gpt-5.2', revision: 'capability-remount-staging', enabled: true, supports_long_text: true,
     max_attachments: 4, max_file_size_bytes: 1_000_000, max_total_size_bytes: 2_000_000,
     routes: { 'text/plain': 'tool_read' },
   };
+  const scopeCreation = deferred<{
+    staging_scope_id: string;
+    thread_id: string;
+    capability: string;
+    expires_at_unix_ms: number;
+  }>();
+  const stagingScope = {
+    staging_scope_id: 'staging-remount', thread_id: 'th_remount', capability: 'remount-secret',
+    expires_at_unix_ms: Date.now() + 60_000,
+  };
   const uploadAttachment = vi.fn(async (input: FlowerAttachmentUploadInput): Promise<FlowerStagedAttachment> => ({
-    attachment_id: 'upl_pending_file__________', name: input.file.name, mime_type: input.file.type,
-    size_bytes: input.file.size, digest_sha256: 'e'.repeat(64), source: input.source,
-    capability_revision: capability.revision, locator: `attachment://v1/upl_pending_file/${input.file.name}`,
+    attachment_id: 'upl_remount______________', name: input.file.name, mime_type: input.file.type,
+    size_bytes: input.file.size, digest_sha256: 'a'.repeat(64), source: input.source,
+    capability_revision: capability.revision, locator: 'attachment://v1/upl_remount/remount.txt',
   }));
-  const runtime = renderSurfaceWithDraftCoordinator({
-    ...adapter(), loadAttachmentCapability: vi.fn(async () => capability), uploadAttachment,
-  }, coordinator, 'workbench');
-  await waitFor(() => Boolean(runtime.querySelector('textarea')) && Boolean(runtime.querySelector('.flower-composer-draft-conflict')));
-  const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
-  textarea.value = 'local unsaved text';
-  textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
-  const file = new File(['pending'], 'pending.txt', { type: 'text/plain' });
-  const paste = new Event('paste', { bubbles: true, cancelable: true }) as ClipboardEvent;
-  Object.defineProperty(paste, 'clipboardData', { value: { files: [file], getData: () => '' } });
+  const surfaceAdapter = {
+    ...adapter(),
+    listThreads: vi.fn(async () => []),
+    loadAttachmentCapability: vi.fn(async () => capability),
+    createAttachmentStagingScope: vi.fn(() => scopeCreation.promise),
+    uploadAttachment,
+  };
+  const activity = renderSurfaceWithDraftCoordinator(surfaceAdapter, coordinator);
+  await waitFor(() => Boolean(activity.querySelector('input[type="file"]')));
+  const picker = activity.querySelector('input[type="file"]') as HTMLInputElement;
+  Object.defineProperty(picker, 'files', {
+    configurable: true,
+    value: [new File(['remount'], 'remount.txt', { type: 'text/plain' })],
+  });
+  picker.dispatchEvent(new Event('change', { bubbles: true }));
+  expect(coordinator.attachmentController('__new_thread__', () => {
+    throw new Error('missing shared controller');
+  }).snapshot().items).toHaveLength(1);
 
-  textarea.dispatchEvent(paste);
-  expect(paste.defaultPrevented).toBe(true);
-  expect(uploadAttachment).not.toHaveBeenCalled();
-  expect(textarea.value).toBe('local unsaved text');
+  disposeRenderedSurface(activity);
+  const workbench = renderSurfaceWithDraftCoordinator(surfaceAdapter, coordinator);
+  scopeCreation.resolve(stagingScope);
 
-  const takeover = runtime.querySelector('.flower-composer-draft-conflict button') as HTMLButtonElement;
-  takeover.click();
   await waitFor(() => uploadAttachment.mock.calls.length === 1);
-  expect(textarea.value).toBe('local unsaved text');
+  await waitFor(() => workbench.querySelector('[data-attachment-status="staged_ready"]') !== null);
+  expect(uploadAttachment).toHaveBeenCalledWith(expect.objectContaining({ staging_scope: stagingScope }));
+});
+
+it('retains a file and retries staging from a remounted surface after scope creation fails', async () => {
+  const coordinator = createFlowerComposerDraftCoordinator();
+  const capability: FlowerAttachmentCapability = {
+    model_id: 'openai/gpt-5.2', revision: 'capability-remount-retry', enabled: true, supports_long_text: true,
+    max_attachments: 4, max_file_size_bytes: 1_000_000, max_total_size_bytes: 2_000_000,
+    routes: { 'text/plain': 'tool_read' },
+  };
+  const stagingScope = {
+    staging_scope_id: 'staging-remount-retry', thread_id: 'th_remount_retry', capability: 'retry-secret',
+    expires_at_unix_ms: Date.now() + 60_000,
+  };
+  let scopeAttempt = 0;
+  const createAttachmentStagingScope = vi.fn(async () => {
+    scopeAttempt += 1;
+    if (scopeAttempt === 1) throw new Error('staging unavailable');
+    return stagingScope;
+  });
+  const uploadAttachment = vi.fn(async (input: FlowerAttachmentUploadInput): Promise<FlowerStagedAttachment> => ({
+    attachment_id: 'upl_remount_retry________', name: input.file.name, mime_type: input.file.type,
+    size_bytes: input.file.size, digest_sha256: 'b'.repeat(64), source: input.source,
+    capability_revision: capability.revision, locator: 'attachment://v1/upl_remount_retry/retry.txt',
+  }));
+  const surfaceAdapter = {
+    ...adapter(),
+    listThreads: vi.fn(async () => []),
+    loadAttachmentCapability: vi.fn(async () => capability),
+    createAttachmentStagingScope,
+    uploadAttachment,
+  };
+  const activity = renderSurfaceWithDraftCoordinator(surfaceAdapter, coordinator);
+  await waitFor(() => Boolean(activity.querySelector('input[type="file"]')));
+  const picker = activity.querySelector('input[type="file"]') as HTMLInputElement;
+  Object.defineProperty(picker, 'files', {
+    configurable: true,
+    value: [new File(['retry'], 'retry.txt', { type: 'text/plain' })],
+  });
+  picker.dispatchEvent(new Event('change', { bubbles: true }));
+  await waitFor(() => coordinator.attachmentController('__new_thread__', () => {
+    throw new Error('missing shared controller');
+  }).snapshot().items[0]?.status === 'upload_error');
+
+  disposeRenderedSurface(activity);
+  const workbench = renderSurfaceWithDraftCoordinator(surfaceAdapter, coordinator);
+  await waitFor(() => workbench.querySelector('[data-attachment-status="upload_error"] button') !== null);
+  (workbench.querySelector('[data-attachment-status="upload_error"] button') as HTMLButtonElement).click();
+
+  await waitFor(() => uploadAttachment.mock.calls.length === 1);
+  expect(createAttachmentStagingScope).toHaveBeenCalledTimes(2);
+  expect(uploadAttachment).toHaveBeenCalledWith(expect.objectContaining({ staging_scope: stagingScope }));
+});
+
+it('shares one connection-local attachment capability and locks every surface during admission', async () => {
+  const coordinator = createFlowerComposerDraftCoordinator();
+  const capability: FlowerAttachmentCapability = {
+    model_id: 'openai/gpt-5.2', revision: 'capability-shared-surface', enabled: true, supports_long_text: true,
+    max_attachments: 4, max_file_size_bytes: 1_000_000, max_total_size_bytes: 2_000_000,
+    routes: { 'text/plain': 'tool_read' },
+  };
+  const stagingScope = {
+    staging_scope_id: 'staging-shared-surface',
+    thread_id: 'th_shared_surface',
+    capability: 'shared-connection-secret',
+    expires_at_unix_ms: Date.now() + 60_000,
+  };
+  const refreshedStagingScope = {
+    staging_scope_id: 'staging-shared-surface-refreshed',
+    thread_id: 'th_shared_surface_refreshed',
+    capability: 'shared-connection-secret-refreshed',
+    expires_at_unix_ms: Date.now() + 120_000,
+  };
+  const stagingScopes = [stagingScope, refreshedStagingScope];
+  const createAttachmentStagingScope = vi.fn(async () => stagingScopes.shift()!);
+  const releaseAttachmentStagingScope = vi.fn(async () => undefined);
+  const loadAttachmentCapability = vi.fn(async () => capability);
+  const uploadAttachment = vi.fn(async (input: FlowerAttachmentUploadInput): Promise<FlowerStagedAttachment> => ({
+    attachment_id: 'upl_shared_surface________',
+    name: input.file.name,
+    mime_type: input.file.type,
+    size_bytes: input.file.size,
+    digest_sha256: 'f'.repeat(64),
+    source: 'file',
+    capability_revision: capability.revision,
+    locator: 'attachment://v1/upl_shared_surface/notes.txt',
+  }));
+  const launchCompletion = deferred<FlowerTurnLaunchReceipt>();
+  const launchTurn = vi.fn((_input: FlowerTurnLaunchInput) => launchCompletion.promise);
+  const surfaceAdapter = {
+    ...adapter(),
+    listThreads: vi.fn(async () => []),
+    loadAttachmentCapability,
+    createAttachmentStagingScope,
+    releaseAttachmentStagingScope,
+    uploadAttachment,
+    launchTurn,
+  };
+  const activity = renderSurfaceWithDraftCoordinator(surfaceAdapter, coordinator);
+  await waitFor(() => loadAttachmentCapability.mock.calls.length >= 1);
+  const workbench = renderSurfaceWithDraftCoordinator(surfaceAdapter, coordinator);
+  await waitFor(() => loadAttachmentCapability.mock.calls.length >= 2);
+  await flush();
+
+  const picker = activity.querySelector('input[type="file"]') as HTMLInputElement;
+  expect((activity.querySelector('button.flower-composer-attachment-button') as HTMLButtonElement).disabled).toBe(false);
+  expect(picker.disabled).toBe(false);
+  Object.defineProperty(picker, 'files', {
+    configurable: true,
+    value: [new File(['shared attachment'], 'notes.txt', { type: 'text/plain' })],
+  });
+  picker.dispatchEvent(new Event('change', { bubbles: true }));
+  await waitFor(() => createAttachmentStagingScope.mock.calls.length === 1);
+  await flush();
+  const sharedController = coordinator.attachmentController(
+    '__new_thread__',
+    () => { throw new Error('missing shared controller'); },
+  );
+  const sharedControllerSnapshot = sharedController.snapshot();
+  expect(sharedControllerSnapshot).toMatchObject({
+    capability,
+    staging_scope: stagingScope,
+  });
+  await waitFor(() => sharedController.snapshot().items.length === 1);
+  await waitFor(() => uploadAttachment.mock.calls.length === 1);
+  await waitFor(() => coordinator.read('__new_thread__').value.attachments.length === 1);
+  await waitFor(() => sharedController.snapshot().items[0]?.status === 'staged_ready');
+  await waitFor(() => workbench.querySelector('[data-attachment-status="staged_ready"]') !== null);
+
+  const textarea = workbench.querySelector('textarea') as HTMLTextAreaElement;
+  textarea.value = 'send from Workbench';
+  textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+  await waitFor(() => !(workbench.querySelector('.flower-composer-submit') as HTMLButtonElement).disabled);
+  (workbench.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
+  await waitFor(() => launchTurn.mock.calls.length === 1);
+
+  expect(createAttachmentStagingScope).toHaveBeenCalledTimes(1);
+  expect(uploadAttachment).toHaveBeenCalledWith(expect.objectContaining({ staging_scope: stagingScope }));
+  expect(launchTurn).toHaveBeenCalledWith(expect.objectContaining({
+    prompt: 'send from Workbench',
+    staging_scope: stagingScope,
+    attachment_ids: ['upl_shared_surface________'],
+  }));
+  expect(textarea.disabled).toBe(true);
+  expect((activity.querySelector('textarea') as HTMLTextAreaElement).disabled).toBe(true);
+  expect((activity.querySelector('.flower-composer-submit') as HTMLButtonElement).disabled).toBe(true);
+  expect((activity.querySelector('.flower-composer') as HTMLElement).inert).toBe(true);
+  expect((activity.querySelector('.flower-model-reasoning-model-trigger') as HTMLButtonElement).disabled).toBe(true);
+
+  textarea.value = 'late mutation from another surface';
+  textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+  Object.defineProperty(picker, 'files', {
+    configurable: true,
+    value: [new File(['late attachment'], 'late.txt', { type: 'text/plain' })],
+  });
+  picker.dispatchEvent(new Event('change', { bubbles: true }));
+  await flush();
+  expect(coordinator.read('__new_thread__').value.text).toBe('send from Workbench');
+  expect(sharedController.snapshot().items).toHaveLength(1);
+  expect(launchTurn).toHaveBeenCalledTimes(1);
+  expect(launchTurn).toHaveBeenLastCalledWith(expect.objectContaining({
+    prompt: 'send from Workbench',
+    attachment_ids: ['upl_shared_surface________'],
+  }));
+
+  launchCompletion.resolve(launchReceipt('th_shared_surface', 'turn-shared-surface'));
+  await waitFor(() => coordinator.read('__new_thread__').value.text === '');
+  await waitFor(() => coordinator.read('th_shared_surface').value.text === '');
+
+  expect(coordinator.read('__new_thread__').value.attachments).toEqual([]);
+  expect(coordinator.read('th_shared_surface').value.attachments).toEqual([]);
+  expect((activity.querySelector('textarea') as HTMLTextAreaElement).value).toBe('');
+
+  await waitFor(() => {
+    const attachmentButton = activity.querySelector('.flower-composer-attachment-button') as HTMLButtonElement | null;
+    return Boolean(attachmentButton && !attachmentButton.disabled);
+  });
+  const refreshedPicker = activity.querySelector('input[type="file"]') as HTMLInputElement;
+  Object.defineProperty(refreshedPicker, 'files', {
+    configurable: true,
+    value: [new File(['second attachment'], 'second.txt', { type: 'text/plain' })],
+  });
+  refreshedPicker.dispatchEvent(new Event('change', { bubbles: true }));
+  await waitFor(() => createAttachmentStagingScope.mock.calls.length === 2);
+  await waitFor(() => uploadAttachment.mock.calls.length === 2);
+
+  expect(releaseAttachmentStagingScope).toHaveBeenCalledWith(stagingScope);
+  expect(uploadAttachment.mock.calls[1]?.[0]).toEqual(expect.objectContaining({
+    staging_scope: refreshedStagingScope,
+  }));
+});
+
+it('does not let a deferred long-paste conversion cross another surface send claim', async () => {
+  const coordinator = createFlowerComposerDraftCoordinator();
+  const capability: FlowerAttachmentCapability = {
+    model_id: 'openai/gpt-5.2', revision: 'capability-long-paste-claim', enabled: true, supports_long_text: true,
+    max_attachments: 4, max_file_size_bytes: 1_000_000, max_total_size_bytes: 2_000_000,
+    routes: { 'text/plain; charset=utf-8': 'tool_read' },
+  };
+  const stagingScope = {
+    staging_scope_id: 'staging-long-paste-claim',
+    thread_id: 'th_long_paste_claim',
+    capability: 'long-paste-claim-secret',
+    expires_at_unix_ms: Date.now() + 60_000,
+  };
+  const scopeCompletion = deferred<typeof stagingScope>();
+  const uploadCompletion = deferred<FlowerStagedAttachment>();
+  const launchCompletion = deferred<FlowerTurnLaunchReceipt>();
+  const createAttachmentStagingScope = vi.fn(() => scopeCompletion.promise);
+  const releaseAttachmentStagingScope = vi.fn(async () => undefined);
+  const uploadAttachment = vi.fn((_input: FlowerAttachmentUploadInput) => uploadCompletion.promise);
+  const launchTurn = vi.fn((_input: FlowerTurnLaunchInput) => launchCompletion.promise);
+  const surfaceAdapter = {
+    ...adapter(),
+    listThreads: vi.fn(async () => []),
+    loadAttachmentCapability: vi.fn(async () => capability),
+    createAttachmentStagingScope,
+    releaseAttachmentStagingScope,
+    uploadAttachment,
+    launchTurn,
+  };
+  const activity = renderSurfaceWithDraftCoordinator(surfaceAdapter, coordinator);
+  await waitFor(() => {
+    const attachmentButton = activity.querySelector('.flower-composer-attachment-button') as HTMLButtonElement | null;
+    return Boolean(attachmentButton && !attachmentButton.disabled);
+  });
+  const workbench = renderSurfaceWithDraftCoordinator(surfaceAdapter, coordinator);
+  await waitFor(() => {
+    const attachmentButton = workbench.querySelector('.flower-composer-attachment-button') as HTMLButtonElement | null;
+    return Boolean(attachmentButton && !attachmentButton.disabled);
+  });
+  const activityTextarea = activity.querySelector('textarea') as HTMLTextAreaElement;
+  const longText = `${'p'.repeat(50_001)}\nexact ending`;
+  const paste = new Event('paste', { bubbles: true, cancelable: true }) as ClipboardEvent;
+  Object.defineProperty(paste, 'clipboardData', {
+    value: { files: [], getData: (type: string) => type === 'text/plain' ? longText : '' },
+  });
+  activityTextarea.dispatchEvent(paste);
+  await waitFor(() => createAttachmentStagingScope.mock.calls.length === 1);
+  await waitFor(() => (workbench.querySelector('textarea') as HTMLTextAreaElement).value === longText);
+
+  const submit = workbench.querySelector('.flower-composer-submit') as HTMLButtonElement;
+  await waitFor(() => !submit.disabled);
+  submit.click();
+  await waitFor(() => Boolean(coordinator.read('__new_thread__').value.proposed_turn_id));
+  scopeCompletion.resolve(stagingScope);
+  await waitFor(() => uploadAttachment.mock.calls.length === 1);
+  const sentUpload = uploadAttachment.mock.calls[0]?.[0] as FlowerAttachmentUploadInput;
+  expect(sentUpload.source).toBe('long_text');
+  expect(sentUpload.file.size).toBe(new TextEncoder().encode(longText).byteLength);
+  uploadCompletion.resolve({
+    attachment_id: 'upl_long_paste_claim______',
+    name: sentUpload.file.name,
+    mime_type: sentUpload.file.type,
+    size_bytes: sentUpload.file.size,
+    digest_sha256: 'e'.repeat(64),
+    source: 'long_text',
+    capability_revision: capability.revision,
+    locator: 'attachment://v1/upl_long_paste_claim/long.txt',
+    text_stats: { code_points: Array.from(longText).length, lines: 2 },
+  });
+  await waitFor(() => launchTurn.mock.calls.length === 1);
+  expect(launchTurn).toHaveBeenCalledWith(expect.objectContaining({
+    prompt: '',
+    attachment_ids: ['upl_long_paste_claim______'],
+  }));
+  expect(uploadAttachment).toHaveBeenCalledTimes(1);
+
+  launchCompletion.resolve(launchReceipt(stagingScope.thread_id, 'turn-long-paste-claim'));
+  await waitFor(() => coordinator.read('__new_thread__').value.text === '');
+  await waitFor(() => coordinator.read(stagingScope.thread_id).value.text === '');
+  await flush();
+  expect(coordinator.read('__new_thread__').value.attachments).toEqual([]);
+  expect(coordinator.read(stagingScope.thread_id).value.attachments).toEqual([]);
+  expect(coordinator.attachmentController('__new_thread__', () => {
+    throw new Error('missing shared controller');
+  }).snapshot().items).toEqual([]);
+  expect(uploadAttachment).toHaveBeenCalledTimes(1);
+  expect(createAttachmentStagingScope).toHaveBeenCalledTimes(1);
+  expect(releaseAttachmentStagingScope).toHaveBeenCalledWith(stagingScope);
 });
 
 it('always prevents a file drop from navigating even when attachments are unavailable', async () => {
@@ -449,7 +837,7 @@ it('treats 50,001 whitespace characters as sendable long text instead of an empt
     ...surfaceAdapter,
     loadAttachmentCapability: vi.fn(async () => capability),
     uploadAttachment,
-  }, createFlowerComposerDraftCoordinator(), 'activity');
+  }, createFlowerComposerDraftCoordinator());
   await waitFor(() => Boolean(runtime.querySelector('textarea')));
   const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
   textarea.value = ' '.repeat(50_001);
@@ -490,7 +878,7 @@ it('cancels an exact long-text upload without losing the editor text and allows 
     loadAttachmentCapability: vi.fn(async () => capability),
     uploadAttachment,
     launchTurn,
-  }, coordinator, 'activity');
+  }, coordinator);
 
   await waitFor(() => Boolean(runtime.querySelector('textarea')));
   const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
@@ -541,89 +929,47 @@ it('cancels an exact long-text upload without losing the editor text and allows 
   }));
 });
 
-it('does not restore or delete a long-text attachment after navigating to another thread', async () => {
-  const text = 'restored exact text';
+it('keeps a staged long-text draft isolated after navigating to another thread', async () => {
+  const text = 'restored exact text '.repeat(3_000);
+  const capability: FlowerAttachmentCapability = {
+    model_id: 'openai/gpt-5.2', revision: 'capability-restore-navigation', enabled: true, supports_long_text: true,
+    max_attachments: 4, max_file_size_bytes: 1_000_000, max_total_size_bytes: 2_000_000,
+    routes: { 'text/plain; charset=utf-8': 'tool_read' },
+  };
   const attachment: FlowerStagedAttachment = {
     attachment_id: 'upl_restore_navigation____', name: 'long-text.txt',
     mime_type: 'text/plain; charset=utf-8', size_bytes: new TextEncoder().encode(text).byteLength,
-    digest_sha256: 'b'.repeat(64), source: 'long_text', capability_revision: 'capability-1',
+    digest_sha256: 'b'.repeat(64), source: 'long_text', capability_revision: capability.revision,
     locator: 'attachment://v1/upl_restore_navigation____/long-text.txt',
     text_stats: { code_points: Array.from(text).length, lines: 1 },
   };
-  const coordinator = createFlowerComposerDraftCoordinator({
-    initialDraft: (scopeID) => scopeID === '__new_thread__'
-      ? {
-          text: 'draft A', references: [], mode: 'ordinary',
-          attachments: [{
-            local_id: 'local-restore', source: 'long_text', name: attachment.name,
-            mime_type: attachment.mime_type, size_bytes: attachment.size_bytes,
-            upload_request_id: 'draft-restore', attempt_state: 'staged_ready', staged: attachment,
-          }],
-        }
-      : { text: '', attachments: [], references: [], mode: 'ordinary' },
-  });
-  const restored = deferred<FlowerStagedLongTextReadResult>();
-  const readStagedLongText = vi.fn(() => restored.promise);
+  const coordinator = createFlowerComposerDraftCoordinator();
   const deleteStagedAttachment = vi.fn(async () => undefined);
   const surfaceAdapter = adapter();
   const runtime = renderSurfaceWithDraftCoordinator({
-    ...surfaceAdapter, readStagedLongText, deleteStagedAttachment,
-  }, coordinator, 'activity');
+    ...surfaceAdapter,
+    loadAttachmentCapability: vi.fn(async () => capability),
+    uploadAttachment: vi.fn(async () => attachment),
+    deleteStagedAttachment,
+  }, coordinator);
+  await waitFor(() => Boolean(runtime.querySelector('input[type="file"]')));
+  const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+  const paste = new Event('paste', { bubbles: true, cancelable: true }) as ClipboardEvent;
+  Object.defineProperty(paste, 'clipboardData', {
+    value: { files: [], getData: (type: string) => type === 'text/plain' ? text : '' },
+  });
+  textarea.dispatchEvent(paste);
   const restoreSelector = 'button[aria-label="Restore to editor"]';
   await waitFor(() => Boolean(runtime.querySelector(restoreSelector)));
-  (runtime.querySelector(restoreSelector) as HTMLButtonElement).click();
-  await waitFor(() => readStagedLongText.mock.calls.length === 1);
+  await waitFor(() => coordinator.read('__new_thread__').value.attachments.length === 1);
   (runtime.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
   await waitFor(() => selectedThreadReady(runtime, 'thread-1'));
-  restored.resolve({ attachment, text });
   await flush();
   await flush();
 
   expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).not.toContain(text);
   expect(deleteStagedAttachment).not.toHaveBeenCalled();
-  expect(coordinator.read('__new_thread__').value).toMatchObject({ text: 'draft A' });
   expect(coordinator.read('__new_thread__').value.attachments).toHaveLength(1);
-});
-
-it('does not reclaim focus after restoring long text into the current editor', async () => {
-  const text = 'restored exact text';
-  const attachment: FlowerStagedAttachment = {
-    attachment_id: 'upl_restore_focus_________', name: 'long-text.txt',
-    mime_type: 'text/plain; charset=utf-8', size_bytes: new TextEncoder().encode(text).byteLength,
-    digest_sha256: 'f'.repeat(64), source: 'long_text', capability_revision: 'capability-1',
-    locator: 'attachment://v1/upl_restore_focus/long-text.txt',
-    text_stats: { code_points: Array.from(text).length, lines: 1 },
-  };
-  const coordinator = createFlowerComposerDraftCoordinator({
-    initialDraft: () => ({
-      text: 'draft ', references: [], mode: 'ordinary',
-      attachments: [{
-        local_id: 'local-restore-focus', source: 'long_text', name: attachment.name,
-        mime_type: attachment.mime_type, size_bytes: attachment.size_bytes,
-        upload_request_id: 'draft-restore-focus', attempt_state: 'staged_ready', staged: attachment,
-      }],
-    }),
-  });
-  const restored = deferred<FlowerStagedLongTextReadResult>();
-  const runtime = renderSurfaceWithDraftCoordinator({
-    ...adapter(),
-    readStagedLongText: vi.fn(() => restored.promise),
-    deleteStagedAttachment: vi.fn(async () => undefined),
-  }, coordinator, 'activity');
-  const restoreSelector = 'button[aria-label="Restore to editor"]';
-  await waitFor(() => Boolean(runtime.querySelector(restoreSelector)));
-  const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
-  textarea.focus();
-  textarea.setSelectionRange(textarea.value.length, textarea.value.length);
-  (runtime.querySelector(restoreSelector) as HTMLButtonElement).click();
-  const modelTrigger = runtime.querySelector('.flower-model-reasoning-model-trigger') as HTMLButtonElement;
-  modelTrigger.focus();
-
-  restored.resolve({ attachment, text });
-  await waitFor(() => textarea.value === `draft ${text}`);
-  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-
-  expect(document.activeElement).toBe(modelTrigger);
 });
 
 function withCanonicalUserTurnID<T extends { readonly messages: readonly { readonly id: string }[] }>(threadValue: T, userEntryID: string, turnID: string): T {
@@ -1884,6 +2230,7 @@ describe('FlowerSurface navigation launch/send', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-existing-workdir-overflow"] button')));
     (runtime.querySelector('[data-thread-id="thread-existing-workdir-overflow"] button') as HTMLButtonElement).click();
+    await waitFor(() => selectedThreadReady(runtime, 'thread-existing-workdir-overflow'));
     layout.trigger();
     await waitFor(() => Boolean(runtime.querySelector('button.flower-composer-more-button')));
 

@@ -540,7 +540,6 @@ vi.mock('./widgets/FlowerTurnLauncherWindow', () => ({
 }));
 vi.mock('./flower/envLocalFlowerSurfaceAdapter', () => ({
   createEnvLocalFlowerSurfaceAdapter: () => ({ launchTurn: flowerLaunchTurnMock }),
-  createEnvLocalFlowerDraftPersistence: () => undefined,
 }));
 vi.mock('./notes/NotesOverlay', () => ({ NotesOverlay: () => <div /> }));
 vi.mock('./maintenance/RuntimeUpdateContext', () => ({ RuntimeUpdateContext: createContext({}) }));

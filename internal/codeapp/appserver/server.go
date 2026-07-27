@@ -28,7 +28,6 @@ import (
 	"time"
 
 	"github.com/floegence/redeven/internal/ai"
-	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/auditlog"
 	"github.com/floegence/redeven/internal/codeapp/codeserver"
 	"github.com/floegence/redeven/internal/codexbridge"
@@ -1176,6 +1175,51 @@ type apiResp struct {
 	ErrorCode    string      `json:"error_code,omitempty"`
 	ErrorDetails string      `json:"error_details,omitempty"`
 	Data         interface{} `json:"data,omitempty"`
+}
+
+const (
+	uploadStagingScopeIDHeader    = "Upload-Staging-Scope-ID"
+	uploadStagingCapabilityHeader = "Upload-Staging-Capability"
+)
+
+func exactUploadStagingHeaders(r *http.Request) (string, string, error) {
+	if r == nil || len(r.Header.Values(uploadStagingScopeIDHeader)) != 1 || len(r.Header.Values(uploadStagingCapabilityHeader)) != 1 {
+		return "", "", errors.New("upload staging authorization is required")
+	}
+	scopeID := strings.TrimSpace(r.Header.Get(uploadStagingScopeIDHeader))
+	capability := strings.TrimSpace(r.Header.Get(uploadStagingCapabilityHeader))
+	if scopeID == "" || capability == "" {
+		return "", "", errors.New("upload staging authorization is required")
+	}
+	return scopeID, capability, nil
+}
+
+func optionalUploadStagingHeaders(r *http.Request) (string, string, error) {
+	if r == nil {
+		return "", "", nil
+	}
+	scopeValues := r.Header.Values(uploadStagingScopeIDHeader)
+	capabilityValues := r.Header.Values(uploadStagingCapabilityHeader)
+	if len(scopeValues) == 0 && len(capabilityValues) == 0 {
+		return "", "", nil
+	}
+	return exactUploadStagingHeaders(r)
+}
+
+func decodeAIUserTurnRequest(reader io.Reader) (ai.SendUserTurnRequest, error) {
+	var body ai.SendUserTurnRequest
+	dec := json.NewDecoder(reader)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&body); err != nil {
+		return ai.SendUserTurnRequest{}, err
+	}
+	if err := dec.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return ai.SendUserTurnRequest{}, errors.New("multiple json values")
+		}
+		return ai.SendUserTurnRequest{}, err
+	}
+	return body, nil
 }
 
 func writeUploadError(w http.ResponseWriter, err error) {
@@ -4721,14 +4765,8 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
 				return
 			}
-			dec := json.NewDecoder(r.Body)
-			dec.DisallowUnknownFields()
-			var body ai.SendUserTurnRequest
-			if err := dec.Decode(&body); err != nil {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
-				return
-			}
-			if err := dec.Decode(&struct{}{}); err != io.EOF {
+			body, err := decodeAIUserTurnRequest(r.Body)
+			if err != nil {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
 				return
 			}
@@ -4738,10 +4776,16 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			body.ThreadID = threadID
-			if strings.TrimSpace(body.DraftID) == "" || body.ExpectedDraftRevision == nil || *body.ExpectedDraftRevision < 0 {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "draft identity is required"})
+			stagingScopeID, stagingCapability, headerErr := optionalUploadStagingHeaders(r)
+			if headerErr != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "upload staging authorization is required"})
 				return
 			}
+			if strings.TrimSpace(body.StagingScopeID) != stagingScopeID {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "upload staging scope mismatch"})
+				return
+			}
+			body.StagingCapability = stagingCapability
 			resp, err := aiSvc.SendUserTurn(r.Context(), meta, body)
 			if err != nil {
 				errorCode := ""
@@ -5310,29 +5354,18 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 
 		}
 
-	case strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/ai/composer-drafts/"):
-		rest := strings.TrimPrefix(r.URL.Path, "/_redeven_proxy/api/ai/composer-drafts/")
-		parts := strings.Split(rest, "/")
-		if len(parts) < 1 || len(parts) > 2 || strings.TrimSpace(parts[0]) == "" || (len(parts) == 2 && parts[1] != "lease" && parts[1] != "thread") {
-			writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
-			return
-		}
-		leaseAction := len(parts) == 2 && parts[1] == "lease"
-		threadAction := len(parts) == 2 && parts[1] == "thread"
-		validMethod := r.Method == http.MethodGet || r.Method == http.MethodPut
-		if leaseAction || threadAction {
-			validMethod = r.Method == http.MethodPost
-		}
-		if !validMethod {
-			writeJSON(w, http.StatusMethodNotAllowed, apiResp{OK: false, Error: "method not allowed"})
-			return
-		}
-		scopeID := strings.TrimSpace(parts[0])
+	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/upload-staging-scopes":
 		meta, ok := g.requirePermission(w, r, requiredPermissionFull)
-		if !ok {
+		if !ok || !g.requireAIService(w, aiSvc) {
 			return
 		}
-		if !g.requireAIService(w, aiSvc) {
+		dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10))
+		dec.DisallowUnknownFields()
+		var body struct {
+			ThreadID string `json:"thread_id"`
+		}
+		if err := dec.Decode(&body); err != nil || dec.Decode(&struct{}{}) != io.EOF {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
 			return
 		}
 		owner, err := ai.NewUploadOwner(meta.EndpointID, meta.UserPublicID, meta.ChannelID)
@@ -5340,94 +5373,35 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeUploadError(w, err)
 			return
 		}
-		if r.Method == http.MethodGet && !leaseAction && !threadAction {
-			draft, err := aiSvc.LoadComposerDraft(r.Context(), owner, scopeID)
-			if err != nil {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "composer draft read failed"})
-				return
-			}
-			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: draft})
+		created, err := aiSvc.CreateUploadStagingScope(r.Context(), owner, body.ThreadID)
+		if err != nil {
+			writeUploadError(w, err)
 			return
 		}
-		if r.Method == http.MethodPost && leaseAction {
-			dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10))
-			dec.DisallowUnknownFields()
-			var body struct {
-				Action   string `json:"action"`
-				HolderID string `json:"holder_id"`
-				LeaseID  string `json:"lease_id,omitempty"`
-			}
-			if err := dec.Decode(&body); err != nil || dec.Decode(&struct{}{}) != io.EOF {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
-				return
-			}
-			var result any
-			switch strings.TrimSpace(body.Action) {
-			case "acquire":
-				result, err = aiSvc.AcquireComposerDraftLease(r.Context(), owner, scopeID, body.HolderID, false)
-			case "take_over":
-				result, err = aiSvc.AcquireComposerDraftLease(r.Context(), owner, scopeID, body.HolderID, true)
-			case "renew":
-				result, err = aiSvc.RenewComposerDraftLease(r.Context(), owner, scopeID, body.HolderID, body.LeaseID)
-			case "release":
-				err = aiSvc.ReleaseComposerDraftLease(r.Context(), owner, scopeID, body.HolderID, body.LeaseID)
-				result = map[string]any{"state": "released"}
-			default:
-				err = errors.New("invalid lease action")
-			}
-			if err != nil {
-				writeJSON(w, http.StatusConflict, apiResp{OK: false, Error: "composer draft lease changed"})
-				return
-			}
-			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: result})
+		w.Header().Set(uploadStagingCapabilityHeader, created.Capability)
+		w.Header().Set("Access-Control-Expose-Headers", uploadStagingCapabilityHeader)
+		writeJSON(w, http.StatusCreated, apiResp{OK: true, Data: created})
+		return
+
+	case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/ai/upload-staging-scopes/"):
+		meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+		if !ok || !g.requireAIService(w, aiSvc) {
 			return
 		}
-		if r.Method == http.MethodPost && threadAction {
-			if !aiSvc.Enabled() {
-				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
-				return
-			}
-			dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10))
-			dec.DisallowUnknownFields()
-			var body ai.ComposerDraftThreadRequest
-			if err := dec.Decode(&body); err != nil || dec.Decode(&struct{}{}) != io.EOF {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
-				return
-			}
-			prepared, err := aiSvc.PrepareComposerDraftThread(r.Context(), meta, owner, scopeID, body)
-			if err != nil {
-				writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: "composer draft thread preparation failed"})
-				return
-			}
-			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: prepared})
+		scopeID := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, "/_redeven_proxy/api/ai/upload-staging-scopes/"))
+		if scopeID == "" || strings.Contains(scopeID, "/") || len(r.Header.Values(uploadStagingCapabilityHeader)) != 1 {
+			writeUploadError(w, ai.NewUploadError(ai.UploadErrorInvalidRequest, false, errors.New("upload staging authorization is required")))
 			return
 		}
-		if r.Method == http.MethodPut && !leaseAction && !threadAction {
-			dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 12<<20))
-			dec.DisallowUnknownFields()
-			var body ai.ComposerDraftMutationRequest
-			if err := dec.Decode(&body); err != nil || dec.Decode(&struct{}{}) != io.EOF {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
-				return
-			}
-			body.ScopeID = scopeID
-			draft, err := aiSvc.MutateComposerDraft(r.Context(), owner, body)
-			if errors.Is(err, threadstore.ErrComposerDraftRevisionConflict) {
-				writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"state": "revision_conflict", "draft": draft}})
-				return
-			}
-			if errors.Is(err, threadstore.ErrComposerDraftLeaseLost) {
-				writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"state": "lease_lost", "draft": draft}})
-				return
-			}
-			if err != nil {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "composer draft mutation failed"})
-				return
-			}
-			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"state": "committed", "draft": draft}})
+		owner, err := ai.NewUploadOwner(meta.EndpointID, meta.UserPublicID, meta.ChannelID)
+		if err == nil {
+			err = aiSvc.ReleaseUploadStagingScope(r.Context(), owner, scopeID, r.Header.Get(uploadStagingCapabilityHeader))
+		}
+		if err != nil {
+			writeUploadError(w, err)
 			return
 		}
-		writeJSON(w, http.StatusMethodNotAllowed, apiResp{OK: false, Error: "method not allowed"})
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"released": true}})
 		return
 
 	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/attachments/capabilities":
@@ -5463,6 +5437,11 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		}
 		if !aiSvc.Enabled() {
 			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
+			return
+		}
+		stagingScopeID, stagingCapability, err := exactUploadStagingHeaders(r)
+		if err != nil {
+			writeUploadError(w, ai.NewUploadError(ai.UploadErrorInvalidRequest, false, err))
 			return
 		}
 		const maxUploadBytes = int64(10 << 20)
@@ -5508,7 +5487,8 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			source = values[0]
 		}
 		out, err := aiSvc.SaveUpload(r.Context(), ai.SaveUploadRequest{
-			Owner: owner, DraftID: r.Header.Get("Upload-Draft-ID"), Reader: f, DisplayName: fh.Filename, DeclaredMediaType: fh.Header.Get("Content-Type"),
+			Owner: owner, StagingScopeID: stagingScopeID, StagingCapability: stagingCapability,
+			Reader: f, DisplayName: fh.Filename, DeclaredMediaType: fh.Header.Get("Content-Type"),
 			Source: source, UploadRequestID: r.Header.Get("Idempotency-Key"),
 			ExpectedContentSHA256: r.Header.Get("Upload-Content-SHA256"), ExpectedSizeBytes: expectedSize,
 			DisplayNameSHA256: r.Header.Get("Upload-Display-Name-SHA256"), MaxBytes: maxUploadBytes,
@@ -5560,7 +5540,12 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if readLongText {
-			out, err := aiSvc.ReadStagedLongText(r.Context(), owner, strings.TrimSpace(r.URL.Query().Get("draft_id")), uploadID)
+			stagingScopeID, stagingCapability, headerErr := exactUploadStagingHeaders(r)
+			if headerErr != nil {
+				writeUploadError(w, ai.NewUploadError(ai.UploadErrorInvalidRequest, false, headerErr))
+				return
+			}
+			out, err := aiSvc.ReadStagingLongText(r.Context(), owner, stagingScopeID, stagingCapability, uploadID)
 			if err != nil {
 				writeUploadError(w, err)
 				return
@@ -5569,13 +5554,12 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if r.Method == http.MethodDelete {
-			draftID := strings.TrimSpace(r.URL.Query().Get("draft_id"))
-			var err error
-			if draftID != "" {
-				err = aiSvc.DeleteDraftUpload(r.Context(), owner, draftID, uploadID)
-			} else {
-				err = aiSvc.DeleteStagedUpload(r.Context(), owner, uploadID)
+			stagingScopeID, stagingCapability, headerErr := exactUploadStagingHeaders(r)
+			if headerErr != nil {
+				writeUploadError(w, ai.NewUploadError(ai.UploadErrorInvalidRequest, false, headerErr))
+				return
 			}
+			err = aiSvc.DeleteStagingScopeUpload(r.Context(), owner, stagingScopeID, stagingCapability, uploadID)
 			if err != nil {
 				writeUploadError(w, err)
 				return
@@ -5583,18 +5567,22 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"attachment_id": uploadID, "deleted": true}})
 			return
 		}
-		draftID := strings.TrimSpace(r.URL.Query().Get("draft_id"))
 		threadID := strings.TrimSpace(r.URL.Query().Get("thread_id"))
 		turnID := strings.TrimSpace(r.URL.Query().Get("turn_id"))
 		queueID := strings.TrimSpace(r.URL.Query().Get("queue_id"))
 		var opened *ai.OpenUploadResult
 		switch {
-		case draftID != "" && threadID == "" && turnID == "" && queueID == "":
-			opened, err = aiSvc.OpenUpload(r.Context(), owner, draftID, uploadID)
-		case draftID == "" && threadID != "" && turnID != "" && queueID == "":
+		case threadID != "" && turnID != "" && queueID == "":
 			opened, err = aiSvc.OpenCanonicalLiveAttachmentForTurn(r.Context(), owner, threadID, turnID, uploadID)
-		case draftID == "" && threadID != "" && turnID == "" && queueID != "":
+		case threadID != "" && turnID == "" && queueID != "":
 			opened, err = aiSvc.OpenQueuedUpload(r.Context(), owner, threadID, queueID, uploadID)
+		case threadID == "" && turnID == "" && queueID == "":
+			stagingScopeID, stagingCapability, headerErr := exactUploadStagingHeaders(r)
+			if headerErr == nil {
+				opened, err = aiSvc.OpenStagingUpload(r.Context(), owner, stagingScopeID, stagingCapability, uploadID)
+			} else {
+				err = ai.NewUploadError(ai.UploadErrorNotFound, false, errors.New("attachment not found"))
+			}
 		default:
 			err = ai.NewUploadError(ai.UploadErrorNotFound, false, errors.New("attachment not found"))
 		}

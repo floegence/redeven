@@ -68,10 +68,6 @@ func normalizeUploadID(raw string) (string, error) {
 }
 
 func (s *Service) normalizeInputAttachments(ctx context.Context, owner UploadOwner, input RunInput) (RunInput, map[string]resolvedUploadAttachment, []string, error) {
-	return s.normalizeInputAttachmentsForDraft(ctx, owner, "", input)
-}
-
-func (s *Service) normalizeInputAttachmentsForDraft(ctx context.Context, owner UploadOwner, draftID string, input RunInput) (RunInput, map[string]resolvedUploadAttachment, []string, error) {
 	input.Attachments = append([]RunAttachmentIn(nil), input.Attachments...)
 	contextAction, err := normalizeAskFlowerContextActionEnvelope(input.ContextAction)
 	if err != nil {
@@ -88,7 +84,7 @@ func (s *Service) normalizeInputAttachmentsForDraft(ctx context.Context, owner U
 	uploadIDs := make([]string, 0, len(input.Attachments))
 	normalized := make([]RunAttachmentIn, 0, len(input.Attachments))
 	for _, item := range input.Attachments {
-		next, info, err := s.resolveAttachmentInfo(ctx, owner, draftID, item)
+		next, info, err := s.resolveAttachmentInfo(ctx, owner, item)
 		if err != nil {
 			return input, nil, nil, err
 		}
@@ -103,7 +99,7 @@ func (s *Service) normalizeInputAttachmentsForDraft(ctx context.Context, owner U
 func (s *Service) prepareInputAttachmentAdmission(
 	ctx context.Context,
 	owner UploadOwner,
-	draftID string,
+	stagingScope *threadstore.UploadStagingScope,
 	modelID string,
 	input RunInput,
 ) (RunInput, []string, threadstore.AttachmentAdmission, error) {
@@ -126,8 +122,8 @@ func (s *Service) prepareInputAttachmentAdmission(
 		uploadIDs  []string
 		err        error
 	)
-	if strings.TrimSpace(draftID) != "" {
-		normalized, infoByID, uploadIDs, err = s.normalizeInputAttachmentsForDraft(ctx, owner, draftID, input)
+	if stagingScope != nil {
+		normalized, infoByID, uploadIDs, err = s.normalizeInputAttachmentsForStaging(ctx, owner, *stagingScope, input)
 	} else {
 		normalized, infoByID, uploadIDs, err = s.normalizeInputAttachments(ctx, owner, input)
 	}
@@ -167,23 +163,51 @@ func (s *Service) prepareInputAttachmentAdmission(
 	return normalized, uploadIDs, contract, nil
 }
 
-func (s *Service) resolveAttachmentInfo(ctx context.Context, owner UploadOwner, draftID string, item RunAttachmentIn) (RunAttachmentIn, *resolvedUploadAttachment, error) {
+func (s *Service) normalizeInputAttachmentsForStaging(ctx context.Context, owner UploadOwner, scope threadstore.UploadStagingScope, input RunInput) (RunInput, map[string]resolvedUploadAttachment, []string, error) {
+	input.Attachments = append([]RunAttachmentIn(nil), input.Attachments...)
+	contextAction, err := normalizeAskFlowerContextActionEnvelope(input.ContextAction)
+	if err != nil {
+		return input, nil, nil, err
+	}
+	input.ContextAction = contextAction
+	if len(input.Attachments) == 0 {
+		return input, nil, nil, nil
+	}
+	s.mu.Lock()
+	db := s.threadsDB
+	s.mu.Unlock()
+	if db == nil {
+		return input, nil, nil, errors.New("threads store not ready")
+	}
+	infoByID := make(map[string]resolvedUploadAttachment, len(input.Attachments))
+	uploadIDs := make([]string, 0, len(input.Attachments))
+	normalized := make([]RunAttachmentIn, 0, len(input.Attachments))
+	for _, item := range input.Attachments {
+		uploadID, normalizeErr := normalizeUploadID(item.AttachmentID)
+		if normalizeErr != nil {
+			return input, nil, nil, normalizeErr
+		}
+		rec, loadErr := db.GetStagingOwnedUpload(ctxOrBackground(ctx), owner.EndpointID, owner.OwnerUserHash, scope.StagingScopeID, uploadID)
+		if loadErr != nil || rec == nil {
+			return input, nil, nil, errors.New("attachment is not owned by the upload staging scope")
+		}
+		normalized = append(normalized, RunAttachmentIn{AttachmentID: uploadID})
+		infoByID[uploadID] = resolvedUploadAttachment{
+			UploadID: uploadID,
+			Name:     strings.TrimSpace(rec.Name), MimeType: strings.TrimSpace(rec.DetectedMediaType), Size: rec.SizeBytes,
+		}
+		uploadIDs = append(uploadIDs, uploadID)
+	}
+	input.Attachments = normalized
+	return input, infoByID, uploadIDs, nil
+}
+
+func (s *Service) resolveAttachmentInfo(ctx context.Context, owner UploadOwner, item RunAttachmentIn) (RunAttachmentIn, *resolvedUploadAttachment, error) {
 	uploadID, err := normalizeUploadID(item.AttachmentID)
 	if err != nil {
 		return RunAttachmentIn{}, nil, err
 	}
-	var rec *threadstore.UploadRecord
-	if strings.TrimSpace(draftID) != "" {
-		s.mu.Lock()
-		db := s.threadsDB
-		s.mu.Unlock()
-		if db == nil {
-			return RunAttachmentIn{}, nil, errors.New("threads store not ready")
-		}
-		rec, err = db.GetDraftOwnedUpload(ctxOrBackground(ctx), owner.EndpointID, owner.OwnerUserHash, strings.TrimSpace(draftID), uploadID)
-	} else {
-		rec, err = s.ensureUserOwnedUploadRecord(ctx, owner, uploadID)
-	}
+	rec, err := s.ensureUserOwnedUploadRecord(ctx, owner, uploadID)
 	if err != nil {
 		return RunAttachmentIn{}, nil, err
 	}
@@ -326,22 +350,6 @@ func (s *Service) sweepPendingUploads(ctx context.Context) (int64, error) {
 	var total int64
 	for {
 		pctx, cancel := context.WithTimeout(ctxOrBackground(ctx), persistTO)
-		drafts, err := db.SweepExpiredComposerDrafts(pctx, time.Now().UnixMilli(), uploadCleanupBatchSize)
-		cancel()
-		if err != nil {
-			return total, err
-		}
-		n, err := s.processUploadCleanupCandidates(ctx, drafts.UploadsToDelete)
-		total += n
-		if err != nil {
-			return total, err
-		}
-		if drafts.DraftsDeleted < uploadCleanupBatchSize {
-			break
-		}
-	}
-	for {
-		pctx, cancel := context.WithTimeout(ctxOrBackground(ctx), persistTO)
 		recs, err := db.PrepareExpiredUploadsForDeletion(pctx, time.Now().UnixMilli(), uploadCleanupBatchSize)
 		cancel()
 		if err != nil {
@@ -357,6 +365,38 @@ func (s *Service) sweepPendingUploads(ctx context.Context) (int64, error) {
 		}
 		if len(recs) < uploadCleanupBatchSize {
 			return total, nil
+		}
+	}
+}
+
+func (s *Service) sweepExpiredUploadStagingScopes(ctx context.Context) (int64, error) {
+	if s == nil {
+		return 0, nil
+	}
+	s.mu.Lock()
+	db := s.threadsDB
+	persistTO := s.persistOpTO
+	s.mu.Unlock()
+	if db == nil {
+		return 0, nil
+	}
+	if persistTO <= 0 {
+		persistTO = defaultPersistOpTimeout
+	}
+	var released int64
+	for {
+		pctx, cancel := context.WithTimeout(ctxOrBackground(ctx), persistTO)
+		cleanup, count, err := db.ReleaseExpiredUploadStagingScopes(pctx, time.Now().UnixMilli(), uploadCleanupBatchSize)
+		cancel()
+		if err != nil {
+			return released, err
+		}
+		if _, err := s.processUploadCleanupCandidates(ctx, cleanup); err != nil {
+			return released, err
+		}
+		released += int64(count)
+		if count < uploadCleanupBatchSize {
+			return released, nil
 		}
 	}
 }
@@ -483,19 +523,6 @@ func (s *Service) runBackgroundMaintenance(reason string) {
 	} else if creates > 0 && s.log != nil {
 		s.log.Info("ai thread create replay completed", "reason", reason, "count", creates)
 	}
-	if createErr == nil {
-		s.mu.Lock()
-		db := s.threadsDB
-		s.mu.Unlock()
-		admissions, admissionErr := s.reconcileStaleComposerDraftAdmissions(ctx, db, uploadCleanupBatchSize)
-		if admissionErr != nil {
-			if s.log != nil {
-				s.log.Warn("ai composer admission recovery incomplete", "reason", reason, "error", admissionErr)
-			}
-		} else if admissions > 0 && s.log != nil {
-			s.log.Info("ai composer admission recovery completed", "reason", reason, "count", admissions)
-		}
-	}
 	deletes, deleteErr := s.replayPendingThreadDeletes(ctx, threadDeleteReplayBatchSize)
 	if deleteErr != nil {
 		if s.log != nil {
@@ -503,6 +530,14 @@ func (s *Service) runBackgroundMaintenance(reason string) {
 		}
 	} else if deletes > 0 && s.log != nil {
 		s.log.Info("ai thread delete replay completed", "reason", reason, "count", deletes)
+	}
+	expiredScopes, expiredScopeErr := s.sweepExpiredUploadStagingScopes(ctx)
+	if expiredScopeErr != nil {
+		if s.log != nil {
+			s.log.Warn("ai upload staging maintenance failed", "reason", reason, "error", expiredScopeErr)
+		}
+	} else if expiredScopes > 0 && s.log != nil {
+		s.log.Info("ai upload staging maintenance released scopes", "reason", reason, "count", expiredScopes)
 	}
 	n, err := s.sweepPendingUploads(ctx)
 	if err != nil {

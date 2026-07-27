@@ -67,6 +67,7 @@ import type {
   FlowerLiveBootstrap,
   FlowerActivityApprovalState,
   FlowerAttachmentCapability,
+  FlowerAttachmentStagingScope,
   FlowerModelIOPhase,
   FlowerModelIOStatus,
   FlowerModelSourceStatus,
@@ -132,9 +133,15 @@ import { FlowerProviderBrandIcon, flowerModelSupportsImage, formatFlowerTokenCou
 import { FlowerReasoningControl } from './ReasoningControl';
 import {
   type FlowerComposerDraftCoordinator,
+  type FlowerComposerDraftAttachment,
   type FlowerComposerDraftReference,
   type FlowerComposerDraftSession,
+  type FlowerComposerDraftSnapshot,
 } from './composer/createFlowerComposerDraftCoordinator';
+import {
+  createFlowerComposerAutosizeController,
+  type FlowerComposerAutosizeController,
+} from './composer/createFlowerComposerAutosizeController';
 import {
   createFlowerComposerReferenceIndex,
   normalizeFlowerComposerReferencePath,
@@ -318,6 +325,9 @@ const FLOWER_COMPOSER_COMPACT_COMMAND_OPTION_ID = 'flower-composer-command-compa
 const FLOWER_COMPOSER_REFERENCE_MENU_ID = 'flower-composer-reference-menu';
 const FLOWER_COMPOSER_REFERENCE_OPTION_PREFIX = 'flower-composer-reference-option-';
 const FLOWER_COMPOSER_REFERENCE_MENU_ESTIMATED_HEIGHT = 296;
+const FLOWER_COMPOSER_MORE_PANEL_ESTIMATED_WIDTH = 352;
+const FLOWER_COMPOSER_MORE_PANEL_ROW_HEIGHT = 44;
+const FLOWER_COMPOSER_MORE_PANEL_VERTICAL_CHROME = 12;
 const TRANSCRIPT_NEAR_BOTTOM_THRESHOLD_PX = 96;
 const TRANSCRIPT_SCROLL_TO_LATEST_MS = 220;
 const SELECTED_THREAD_TAIL_REVEAL_FALLBACK_MS = 120;
@@ -330,6 +340,21 @@ const FLOWER_SURFACE_LAYER = {
   subagentWindow: 160,
   contextPreview: 162,
 } as const;
+
+function flowerComposerDraftAttachments(
+  items: readonly FlowerAttachmentItem[],
+): readonly FlowerComposerDraftAttachment[] {
+  return items.map((item) => ({
+    local_id: item.local_id,
+    source: item.source,
+    name: item.name,
+    mime_type: item.mime_type,
+    size_bytes: item.size_bytes,
+    upload_request_id: item.request_id,
+    attempt_state: item.status,
+    ...(item.staged ? { staged: item.staged } : {}),
+  }));
+}
 function isModelIOPresentationBoundary(kind: string): boolean {
   return kind === 'model_io.updated';
 }
@@ -744,7 +769,6 @@ export type FlowerSurfaceProps = Readonly<{
   notify: (notification: FlowerSurfaceNotification) => void;
   copy?: FlowerSurfaceCopy;
   draftCoordinator: FlowerComposerDraftCoordinator;
-  surfaceInstanceID?: string;
   warmup?: FlowerSurfaceWarmupState | null;
   focusThreadRequest?: FlowerThreadFocusRequest | null;
   focusComposerRequest?: number;
@@ -838,8 +862,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const copy = () => props.copy ?? DEFAULT_FLOWER_SURFACE_COPY;
   const attachmentCopy = () => copy().attachments;
   const draftCoordinator = props.draftCoordinator;
-  const surfaceInstanceID = trimString(props.surfaceInstanceID)
-    || `flower_surface_${globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)}`;
   const subagentsCopy = (): FlowerSubagentsCopy => copy().subagents ?? DEFAULT_FLOWER_SURFACE_COPY.subagents!;
   const notify = (notification: FlowerSurfaceNotification) => {
     const message = trimString(notification.message);
@@ -906,11 +928,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [workingDirectoryCopied, setWorkingDirectoryCopied] = createSignal(false);
   const [composerMoreOpen, setComposerMoreOpen] = createSignal(false);
   const [attachmentStateRevision, setAttachmentStateRevision] = createSignal(0);
-  const [draftCoordinatorRevision, setDraftCoordinatorRevision] = createSignal(0);
   const [attachmentDragActive, setAttachmentDragActive] = createSignal(false);
   const [longTextPreparing, setLongTextPreparing] = createSignal(false);
   let cancelActiveLongTextSubmission: (() => void) | null = null;
-  const [composerMorePanelShiftX, setComposerMorePanelShiftX] = createSignal(0);
+  const [composerMorePanelPosition, setComposerMorePanelPosition] = createSignal<FlowerFloatingPoint>({ x: 8, y: 8 });
   const [composerControlLayout, setComposerControlLayout] = createSignal<FlowerComposerControlLayout>({
     availableWidth: 0,
     itemWidths: {},
@@ -1021,11 +1042,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let startedFocusThreadRequestID = '';
   let startedFocusComposerRequest = 0;
   let composerRef: HTMLTextAreaElement | HTMLInputElement | undefined;
+  let composerAutosizeController: FlowerComposerAutosizeController | undefined;
   const composerReferenceRemoveButtons = new Map<string, HTMLButtonElement>();
   let attachmentPickerRef: HTMLInputElement | undefined;
   let attachmentPickerButtonRef: HTMLButtonElement | undefined;
-  let composerDraftRecoveryButtonRef: HTMLButtonElement | undefined;
-  let expandedDraftRecoveryFocusRequested = false;
   let attachmentReselectTarget: Readonly<{ sessionKey: string; localID: string }> | null = null;
   let attachmentPickerSessionKey = '';
   let surfaceDisposed = false;
@@ -1593,11 +1613,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const status = selectedThreadLiveStatus();
     return status !== 'running' && status !== 'waiting_approval' && status !== 'waiting_user';
   });
-  const composerPermissionInteractive = createMemo(() => (
-    !selectedThreadDetailPending()
-    && !selectedThreadReadOnly()
-    && (!selectedThreadID() || typeof props.adapter.setThreadPermissionType === 'function')
-  ));
   const permissionPatchPending = createMemo(() => {
     const pending = pendingPermissionPatch();
     if (!pending) return false;
@@ -1622,194 +1637,162 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const updateCurrentComposerSessionDraft = (updater: (draft: FlowerComposerSessionDraft) => FlowerComposerSessionDraft) => {
     updateComposerSessionDraft(currentComposerSessionKey(), updater);
   };
+  const updateComposerSessionText = (rawSessionKey: string, text: string) => {
+    const sessionKey = trimString(rawSessionKey) || PENDING_NEW_THREAD_ID;
+    if (draftSessionFor(sessionKey).snapshot().value.proposed_turn_id) return;
+    updateComposerSessionDraft(sessionKey, (draft) => (
+      draft.chatDraft === text ? draft : { ...draft, chatDraft: text }
+    ));
+    draftSessionFor(sessionKey).mutate((draft) => (
+      draft.text === text ? draft : { ...draft, text }
+    ));
+  };
   const attachmentControllers = new Map<string, FlowerAttachmentController>();
   const attachmentControllerUnsubscribers = new Map<string, () => void>();
   const draftSessions = new Map<string, FlowerComposerDraftSession>();
+  const draftSessionSnapshots = new Map<string, () => FlowerComposerDraftSnapshot>();
   const draftSessionUnsubscribers = new Map<string, () => void>();
-  const draftOperationRenewalTimers = new Set<number>();
-  type PendingComposerAttachmentIntent =
+  const hydratedDraftSessionRevisions = new Map<string, number>();
+  type ComposerAttachmentIntent =
     | Readonly<{ kind: 'add'; files: readonly File[]; source: 'file' | 'paste' | 'drop' }>
     | Readonly<{ kind: 'reselect'; localID: string; file: File }>;
-  const pendingAttachmentIntents = new Map<string, PendingComposerAttachmentIntent[]>();
-  const pendingAttachmentAcquisitions = new Set<string>();
   const attachmentControllerFor = (rawSessionKey: string): FlowerAttachmentController => {
     const sessionKey = trimString(rawSessionKey) || PENDING_NEW_THREAD_ID;
     const existing = attachmentControllers.get(sessionKey);
-    if (existing) return existing;
-    const controller = createFlowerAttachmentController({
-      draftID: sessionKey,
+    const controller = draftCoordinator.attachmentController(sessionKey, () => createFlowerAttachmentController({
+      stagingScope: draftCoordinator.attachmentStagingScope(sessionKey),
       upload: props.adapter.uploadAttachment,
       deleteStaged: props.adapter.deleteStagedAttachment,
       readStagedLongText: props.adapter.readStagedLongText,
-    });
+    }));
+    if (existing === controller) return controller;
+    attachmentControllerUnsubscribers.get(sessionKey)?.();
     attachmentControllers.set(sessionKey, controller);
     attachmentControllerUnsubscribers.set(sessionKey, controller.subscribe(() => {
       setAttachmentStateRevision((revision) => revision + 1);
     }));
     return controller;
   };
+  const ensureAttachmentStagingScope = (rawSessionKey: string): Promise<FlowerAttachmentStagingScope> => {
+    const sessionKey = trimString(rawSessionKey) || PENDING_NEW_THREAD_ID;
+    if (!props.adapter.createAttachmentStagingScope) {
+      return Promise.reject(new Error('Attachment staging is unavailable.'));
+    }
+    return draftCoordinator.ensureAttachmentStagingScope(
+      sessionKey,
+      () => props.adapter.createAttachmentStagingScope!(
+        sessionKey === PENDING_NEW_THREAD_ID ? undefined : sessionKey,
+      ),
+      (scope) => props.adapter.releaseAttachmentStagingScope?.(scope) ?? Promise.resolve(),
+    );
+  };
+  const releaseAttachmentStagingScope = (rawSessionKey: string) => {
+    const sessionKey = trimString(rawSessionKey) || PENDING_NEW_THREAD_ID;
+    draftCoordinator.releaseAttachmentStagingScope(sessionKey);
+  };
   const draftSessionFor = (rawSessionKey: string): FlowerComposerDraftSession => {
     const sessionKey = trimString(rawSessionKey) || PENDING_NEW_THREAD_ID;
     const existing = draftSessions.get(sessionKey);
     if (existing) return existing;
-    const session = draftCoordinator.open(sessionKey, surfaceInstanceID);
+    const session = draftCoordinator.open(sessionKey);
     draftSessions.set(sessionKey, session);
-    draftSessionUnsubscribers.set(sessionKey, session.subscribe(() => {
-      setDraftCoordinatorRevision((revision) => revision + 1);
-    }));
+    const [snapshot, setSnapshot] = createSignal(session.snapshot(), { equals: false });
+    draftSessionSnapshots.set(sessionKey, snapshot);
+    draftSessionUnsubscribers.set(sessionKey, session.subscribe((next) => setSnapshot(() => next)));
     return session;
+  };
+  const reactiveDraftSnapshotFor = (rawSessionKey: string): FlowerComposerDraftSnapshot => {
+    const sessionKey = trimString(rawSessionKey) || PENDING_NEW_THREAD_ID;
+    draftSessionFor(sessionKey);
+    const snapshot = draftSessionSnapshots.get(sessionKey);
+    if (!snapshot) throw new Error('Flower composer draft session snapshot is unavailable.');
+    return snapshot();
   };
   const currentAttachmentController = (): FlowerAttachmentController => attachmentControllerFor(currentComposerSessionKey());
   const currentAttachmentSnapshot = createMemo<FlowerAttachmentControllerSnapshot>(() => {
     attachmentStateRevision();
     return currentAttachmentController().snapshot();
   });
-  const currentDraftSession = (): FlowerComposerDraftSession => draftSessionFor(currentComposerSessionKey());
-  const currentDraftLeaseState = createMemo(() => {
-    draftCoordinatorRevision();
-    return currentDraftSession().leaseState();
-  });
-  const composerDraftLeaseConflict = createMemo(() => currentDraftLeaseState().kind === 'lease_conflict');
-  const composerDraftLeaseAcquiring = createMemo(() => currentDraftLeaseState().kind === 'lease_acquiring');
-  const composerDraftInitiallyUnavailable = createMemo(() => currentDraftLeaseState().kind === 'store_unavailable');
-  const composerDraftStoreUnavailable = createMemo(() => {
-    const state = currentDraftLeaseState();
-    return state.kind === 'lease_owned' && state.persistence === 'store_unavailable';
-  });
-  type ComposerDraftLeaseOperation = Readonly<{
+  const composerSharedOperationActive = createMemo(() => Boolean(
+    reactiveDraftSnapshotFor(currentComposerSessionKey()).value.proposed_turn_id,
+  ));
+  const composerPermissionInteractive = createMemo(() => (
+    !composerSharedOperationActive()
+    && !selectedThreadDetailPending()
+    && !selectedThreadReadOnly()
+    && (!selectedThreadID() || typeof props.adapter.setThreadPermissionType === 'function')
+  ));
+  type ComposerDraftOperation = Readonly<{
     sessionKey: string;
     session: FlowerComposerDraftSession;
     controller: FlowerAttachmentController;
-    leaseID: string;
   }>;
-  const composerDraftOperationCurrent = (operation: ComposerDraftLeaseOperation): boolean => {
-    if (surfaceDisposed || currentComposerSessionKey() !== operation.sessionKey) return false;
-    const state = operation.session.leaseState();
-    return state.kind === 'lease_owned' && state.lease.lease_id === operation.leaseID;
-  };
-  const composerDraftOperationOwned = (operation: ComposerDraftLeaseOperation): boolean => {
-    const state = operation.session.leaseState();
-    return state.kind === 'lease_owned' && state.lease.lease_id === operation.leaseID;
-  };
-  const acquireComposerDraftOperation = async (takeOver = false): Promise<ComposerDraftLeaseOperation | null> => {
+  const composerDraftOperationCurrent = (operation: ComposerDraftOperation): boolean => (
+    !surfaceDisposed && currentComposerSessionKey() === operation.sessionKey
+  );
+  const composerDraftOperationActive = (_operation: ComposerDraftOperation): boolean => !surfaceDisposed;
+  const currentComposerDraftOperation = (): ComposerDraftOperation => {
     const sessionKey = currentComposerSessionKey();
-    const session = draftSessionFor(sessionKey);
-    const controller = attachmentControllerFor(sessionKey);
-    const before = session.leaseState();
-    const state = before.kind === 'lease_owned'
-      ? before
-      : takeOver
-        ? await session.takeOver()
-        : await session.acquire();
-    setDraftCoordinatorRevision((revision) => revision + 1);
-    if (
-      state.kind !== 'lease_owned'
-      || surfaceDisposed
-      || currentComposerSessionKey() !== sessionKey
-      || session.leaseState().kind !== 'lease_owned'
-    ) return null;
-    const current = session.leaseState();
-    if (current.kind !== 'lease_owned' || current.lease.lease_id !== state.lease.lease_id) return null;
-    const operation = { sessionKey, session, controller, leaseID: state.lease.lease_id };
-    drainPendingAttachmentIntents(operation);
-    return operation;
-  };
-  const drainPendingAttachmentIntents = (operation: ComposerDraftLeaseOperation) => {
-    if (!composerDraftOperationCurrent(operation)) return;
-    const intents = pendingAttachmentIntents.get(operation.sessionKey);
-    if (!intents?.length) return;
-    pendingAttachmentIntents.delete(operation.sessionKey);
-    for (const intent of intents) {
-      if (intent.kind === 'add') operation.controller.addFiles(intent.files, intent.source);
-      else operation.controller.reselect(intent.localID, intent.file);
-    }
-  };
-  const acquireComposerDraftLease = async (takeOver = false): Promise<boolean> => {
-    const operation = await acquireComposerDraftOperation(takeOver);
-    if (!operation) return false;
-    drainPendingAttachmentIntents(operation);
-    return true;
-  };
-  const recoverComposerDraft = async (takeOver = false) => {
-    const recovered = await acquireComposerDraftLease(takeOver);
-    requestAnimationFrame(() => {
-      if (recovered && composerRef && !composerRef.disabled) {
-        composerRef.focus({ preventScroll: true });
-        return;
-      }
-      composerDraftRecoveryButtonRef?.focus({ preventScroll: true });
-    });
+    return {
+      sessionKey,
+      session: draftSessionFor(sessionKey),
+      controller: attachmentControllerFor(sessionKey),
+    };
   };
   const queueComposerAttachmentIntent = (
     sessionKey: string,
-    intent: PendingComposerAttachmentIntent,
+    intent: ComposerAttachmentIntent,
   ) => {
-    const session = draftSessionFor(sessionKey);
-    const existing = pendingAttachmentIntents.get(sessionKey) ?? [];
-    pendingAttachmentIntents.set(sessionKey, [...existing, intent]);
-    const state = session.leaseState();
-    if (state.kind === 'lease_owned') {
-      drainPendingAttachmentIntents({
-        sessionKey,
-        session,
-        controller: attachmentControllerFor(sessionKey),
-        leaseID: state.lease.lease_id,
+    const operation = {
+      sessionKey,
+      session: draftSessionFor(sessionKey),
+      controller: attachmentControllerFor(sessionKey),
+    };
+    if (operation.session.snapshot().value.proposed_turn_id) return;
+    batch(() => {
+      operation.controller.batch(() => {
+        if (intent.kind === 'add') operation.controller.addFiles(intent.files, intent.source);
+        else operation.controller.reselect(intent.localID, intent.file);
+        operation.session.mutate((value) => ({
+          ...value,
+          attachments: flowerComposerDraftAttachments(operation.controller.snapshot().items),
+        }));
       });
-      return;
-    }
-    if (state.kind === 'lease_conflict') {
-      notifyComposerError(attachmentCopy().leaseConflict);
-      return;
-    }
-    if (state.kind === 'store_unavailable') {
-      notifyComposerError(attachmentCopy().draftUnavailable);
-      return;
-    }
-    if (pendingAttachmentAcquisitions.has(sessionKey)) return;
-    pendingAttachmentAcquisitions.add(sessionKey);
-    void acquireComposerDraftOperation().then((operation) => {
-      if (operation?.sessionKey === sessionKey) {
-        drainPendingAttachmentIntents(operation);
-        return;
-      }
-      const latest = session.leaseState();
-      notifyComposerError(latest.kind === 'lease_conflict' ? attachmentCopy().leaseConflict : attachmentCopy().draftUnavailable);
-    }).finally(() => pendingAttachmentAcquisitions.delete(sessionKey));
-  };
-  const withComposerDraftLease = (action: (operation: ComposerDraftLeaseOperation) => void) => {
-    const sessionKey = currentComposerSessionKey();
-    const session = draftSessionFor(sessionKey);
-    const before = session.leaseState();
-    const state = before.kind === 'lease_available' ? session.tryAcquire() : before;
-    if (state.kind === 'lease_owned') {
-      const operation = {
-        sessionKey,
-        session,
-        controller: attachmentControllerFor(sessionKey),
-        leaseID: state.lease.lease_id,
-      };
-      if (composerDraftOperationCurrent(operation)) action(operation);
-      return;
-    }
-    void acquireComposerDraftOperation().then((operation) => {
-      if (operation && composerDraftOperationCurrent(operation)) action(operation);
+    });
+    void ensureAttachmentStagingScope(sessionKey).catch(() => {
+      operation.controller.markStagingUnavailable();
+      notifyComposerError(attachmentCopy().unavailable);
     });
   };
-
   createEffect(() => {
     const sessionKey = currentComposerSessionKey();
-    const session = draftSessionFor(sessionKey);
-    draftCoordinatorRevision();
-    const lease = session.leaseState();
-    if (lease.kind === 'lease_owned' || lease.kind === 'lease_acquiring' || lease.kind === 'lease_conflict') return;
-    const sharedDraft = session.snapshot().value;
+    const sharedSnapshot = reactiveDraftSnapshotFor(sessionKey);
+    const sharedDraft = sharedSnapshot.value;
+    const sharedStagingScope = draftCoordinator.attachmentStagingScope(sessionKey);
+    if (attachmentControllerFor(sessionKey).snapshot().staging_scope !== sharedStagingScope) {
+      attachmentControllerFor(sessionKey).setStagingScope(sharedStagingScope);
+    }
     const sharedText = sharedDraft.text;
     updateComposerSessionDraft(sessionKey, (draft) => (
-      draft.chatDraft === sharedText && JSON.stringify(draft.references) === JSON.stringify(sharedDraft.references)
+      draft.chatDraft === sharedText
+        && JSON.stringify(draft.references) === JSON.stringify(sharedDraft.references)
+        && draft.modelIDOverride === sharedDraft.model_id
+        && draft.permissionTypeOverride === sharedDraft.permission_type
+        && sameFlowerReasoningSelection(draft.reasoningOverride, sharedDraft.reasoning_selection)
+        && draft.workingDirDraft === sharedDraft.working_dir
         ? draft
-        : { ...draft, chatDraft: sharedText, references: sharedDraft.references }
+        : {
+          ...draft,
+          chatDraft: sharedText,
+          references: sharedDraft.references,
+          modelIDOverride: sharedDraft.model_id,
+          permissionTypeOverride: sharedDraft.permission_type,
+          reasoningOverride: sharedDraft.reasoning_selection,
+          workingDirDraft: sharedDraft.working_dir,
+        }
     ));
-    attachmentControllerFor(sessionKey).hydrateDraft(sharedDraft.attachments.map((item) => ({
+    const attachmentController = attachmentControllerFor(sessionKey);
+    const hydratedAttachments = sharedDraft.attachments.map((item) => ({
       local_id: item.local_id,
       request_id: item.upload_request_id,
       source: item.source,
@@ -1817,46 +1800,44 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       mime_type: item.mime_type,
       size_bytes: item.size_bytes,
       ...(item.staged ? { staged: item.staged } : {}),
-    })));
+    }));
+    const currentHydratedAttachments = attachmentController.snapshot().items.map((item) => ({
+      local_id: item.local_id,
+      request_id: item.request_id,
+      source: item.source,
+      name: item.name,
+      mime_type: item.mime_type,
+      size_bytes: item.size_bytes,
+      ...(item.staged ? { staged: item.staged } : {}),
+    }));
+    if (JSON.stringify(currentHydratedAttachments) !== JSON.stringify(hydratedAttachments)) {
+      attachmentController.hydrateDraft(hydratedAttachments);
+    }
+    hydratedDraftSessionRevisions.set(sessionKey, sharedSnapshot.revision);
   });
 
   createEffect(() => {
     const sessionKey = currentComposerSessionKey();
     const session = draftSessionFor(sessionKey);
-    const lease = currentDraftLeaseState();
     const draft = currentComposerSessionDraft();
     const attachments = currentAttachmentSnapshot().items;
     const inspection = inspectFlowerText(draft.chatDraft);
-    const shared = session.snapshot();
+    const shared = reactiveDraftSnapshotFor(sessionKey);
+    if (hydratedDraftSessionRevisions.get(sessionKey) !== shared.revision) return;
+    if (shared.value.proposed_turn_id) return;
     const mode = shared.value.proposed_turn_id
       ? shared.value.mode
-      : longTextPreparing()
-      ? 'preparing_long_text_submission' as const
-      : chatRunning()
-        ? 'admission_in_flight' as const
-        : inspection && inspection.codePoints > FLOWER_INLINE_TEXT_CODE_POINT_LIMIT
-          ? 'over_limit_editing' as const
-          : 'ordinary' as const;
-    if (lease.kind !== 'lease_owned') return;
+      : inspection && inspection.codePoints > FLOWER_INLINE_TEXT_CODE_POINT_LIMIT
+        ? 'over_limit_editing' as const
+        : 'ordinary' as const;
     if (composerReferenceMutationCount() > 0) return;
-    const projectedAttachments = attachments.map((item) => ({
-      local_id: item.local_id,
-      source: item.source,
-      name: item.name,
-      mime_type: item.mime_type,
-      size_bytes: item.size_bytes,
-      upload_request_id: item.request_id,
-      attempt_state: item.status,
-      ...(item.staged ? { staged: item.staged } : {}),
-    }));
+    const projectedAttachments = flowerComposerDraftAttachments(attachments);
     const projectedModelID = selectedComposerModelID();
     const projectedPermissionType = composerPermissionType();
     const projectedReasoningSelection = serializeFlowerReasoningSelection(composerLaunchReasoningSelection());
     const projectedWorkingDir = draftWorkingDirectory();
     const projectedCapabilityRevision = currentAttachmentSnapshot().capability?.revision;
-    const unchanged = shared.value.text === draft.chatDraft
-      && JSON.stringify(shared.value.references) === JSON.stringify(draft.references)
-      && shared.value.mode === mode
+    const unchanged = shared.value.mode === mode
       && shared.value.model_id === projectedModelID
       && shared.value.permission_type === projectedPermissionType
       && JSON.stringify(shared.value.reasoning_selection) === JSON.stringify(projectedReasoningSelection)
@@ -1864,10 +1845,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       && shared.value.capability_revision === projectedCapabilityRevision
       && JSON.stringify(shared.value.attachments) === JSON.stringify(projectedAttachments);
     if (unchanged) return;
-    void session.mutate(shared.revision, (value) => ({
+    session.mutate((value) => ({
       ...value,
-      text: draft.chatDraft,
-      references: draft.references,
+      text: value.text,
+      references: value.references,
       attachments: projectedAttachments,
       mode,
       model_id: projectedModelID,
@@ -1875,46 +1856,22 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       reasoning_selection: projectedReasoningSelection,
       working_dir: projectedWorkingDir,
       capability_revision: projectedCapabilityRevision,
-    })).then(() => setDraftCoordinatorRevision((revision) => revision + 1));
-  });
-
-  onMount(() => {
-    const retryDraftPersistence = () => {
-      if (document.visibilityState === 'hidden') return;
-      const session = currentDraftSession();
-      const state = session.leaseState();
-      if (state.kind === 'lease_owned' && (state.persistence === 'store_unavailable' || state.unsaved)) {
-        void session.renew().then(() => setDraftCoordinatorRevision((revision) => revision + 1));
-      } else if (state.kind === 'store_unavailable') {
-        void session.acquire().then(() => setDraftCoordinatorRevision((revision) => revision + 1));
-      }
-    };
-    window.addEventListener('online', retryDraftPersistence);
-    document.addEventListener('visibilitychange', retryDraftPersistence);
-    onCleanup(() => {
-      window.removeEventListener('online', retryDraftPersistence);
-      document.removeEventListener('visibilitychange', retryDraftPersistence);
-    });
+    }));
   });
 
   onCleanup(() => {
     surfaceDisposed = true;
+    composerAutosizeController?.dispose();
+    composerAutosizeController = undefined;
     for (const unsubscribe of attachmentControllerUnsubscribers.values()) unsubscribe();
-    for (const controller of attachmentControllers.values()) controller.dispose();
-    pendingAttachmentIntents.clear();
-    pendingAttachmentAcquisitions.clear();
     for (const unsubscribe of draftSessionUnsubscribers.values()) unsubscribe();
-    for (const timer of draftOperationRenewalTimers) window.clearInterval(timer);
-    draftOperationRenewalTimers.clear();
     for (const session of draftSessions.values()) {
-      const state = session.leaseState();
       const snapshot = session.snapshot();
       if (
-        state.kind === 'lease_owned'
-        && (snapshot.value.mode === 'preparing_long_text_submission' || snapshot.value.mode === 'admission_in_flight')
+        (snapshot.value.mode === 'preparing_long_text_submission' || snapshot.value.mode === 'admission_in_flight')
         && snapshot.value.admission_started !== true
       ) {
-        void session.mutate(snapshot.revision, (value) => ({
+        session.mutate((value) => ({
           ...value,
           mode: (inspectFlowerText(value.text)?.codePoints ?? 0) > FLOWER_INLINE_TEXT_CODE_POINT_LIMIT
             ? 'over_limit_editing'
@@ -1923,7 +1880,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           admission_started: undefined,
         }));
       }
-      void session.release();
     }
   });
   const selectedThreadDetailMatches = (threadID: string): boolean => {
@@ -1978,11 +1934,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const canPickWorkingDirectory = createMemo(() => (
     !selectedThreadID()
     && workingDirectoryPickerAvailable()
+    && !composerSharedOperationActive()
     && !chatRunning()
     && !surfaceWarmupActive()
   ));
   const workingDirectoryChipInteractive = createMemo(() => (
-    !selectedThreadDetailPending()
+    !composerSharedOperationActive()
+    && !selectedThreadDetailPending()
     && (selectedThreadID() ? displayedWorkingDirectory() !== '' : canPickWorkingDirectory())
   ));
   const workingDirectoryChipTitle = createMemo(() => {
@@ -2182,6 +2140,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     });
   };
   const updateComposerModelID = async (modelID: string) => {
+    if (composerSharedOperationActive()) return;
     const mid = trimString(modelID);
     if (!mid) return;
     const option = modelSelectOptions().find((item) => item.id === mid);
@@ -2252,6 +2211,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   };
   const updateComposerReasoningSelection = async (selection: FlowerReasoningSelection | undefined) => {
+    if (composerSharedOperationActive()) return;
     const normalized = serializeFlowerReasoningSelection(selection);
     const threadID = trimString(selectedThreadID());
     if (!threadID || selectedInputRequest()) {
@@ -2742,7 +2702,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return current?.model_source?.state === 'ready' ? trimString(current.model_source.current_model_id) : '';
   });
   const selectedComposerModelID = createMemo(() => {
-    const threadModelID = trimString(selectedThread()?.model_id);
+    const thread = selectedThread();
+    const threadModelID = thread?.thread_id === trimString(selectedThreadID())
+      ? trimString(thread.model_id)
+      : '';
     if (threadModelID) return threadModelID;
     return trimString(currentComposerSessionDraft().modelIDOverride) || currentModelID();
   });
@@ -2901,12 +2864,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return threadID ? pending.threadID === threadID : pending.threadID === PENDING_NEW_THREAD_ID;
   });
   const composerModelInteractive = createMemo(() => (
-    selectedThreadPreferenceEditable()
+    !composerSharedOperationActive()
+    && selectedThreadPreferenceEditable()
     && modelSelectOptions().length > 0
     && (!selectedThreadID() || typeof props.adapter.setThreadModel === 'function')
   ));
   const composerReasoningInteractive = createMemo(() => (
-    composerReasoningEnabled()
+    !composerSharedOperationActive()
+    && composerReasoningEnabled()
     && (selectedInputRequest() ? !selectedThreadReadOnly() : selectedThreadPreferenceEditable())
     && (!selectedThreadID() || selectedInputRequest() || typeof props.adapter.setThreadReasoningSelection === 'function')
   ));
@@ -3120,14 +3085,24 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     cancelTranscriptAnimationFrame(composerMorePanelPositionFrame);
     composerMorePanelPositionFrame = 0;
   };
+  const composerMorePanelEstimatedSize = (): Readonly<{ width: number; height: number }> => ({
+    width: FLOWER_COMPOSER_MORE_PANEL_ESTIMATED_WIDTH,
+    height: FLOWER_COMPOSER_MORE_PANEL_VERTICAL_CHROME
+      + (composerOverflowControlIDs().length + (companionCompactComposer() && selectedContextUsage() ? 1 : 0))
+        * FLOWER_COMPOSER_MORE_PANEL_ROW_HEIGHT,
+  });
   const scheduleComposerMorePanelPosition = () => {
     cancelComposerMorePanelPosition();
-    setComposerMorePanelShiftX(0);
     composerMorePanelPositionFrame = requestTranscriptAnimationFrame(() => {
       composerMorePanelPositionFrame = 0;
-      const panel = composerMorePanelRef;
-      if (!panel) return;
-      setComposerMorePanelShiftX(viewportShiftXForRect(panel.getBoundingClientRect()));
+      const anchor = composerMoreButtonRef;
+      if (!anchor) return;
+      const rect = anchor.getBoundingClientRect();
+      const estimated = composerMorePanelEstimatedSize();
+      setComposerMorePanelPosition({
+        x: rect.right - estimated.width,
+        y: rect.top - estimated.height - 8,
+      });
     });
   };
   createEffect(() => {
@@ -3147,35 +3122,65 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   createEffect(() => {
     if (!composerMoreOpen()) {
       cancelComposerMorePanelPosition();
-      setComposerMorePanelShiftX(0);
       return;
     }
     void composerOverflowControlIDs().join('|');
+    void selectedContextUsage();
     scheduleComposerMorePanelPosition();
     window.addEventListener('resize', scheduleComposerMorePanelPosition);
+    window.addEventListener('scroll', scheduleComposerMorePanelPosition, true);
     onCleanup(() => {
       cancelComposerMorePanelPosition();
       window.removeEventListener('resize', scheduleComposerMorePanelPosition);
+      window.removeEventListener('scroll', scheduleComposerMorePanelPosition, true);
     });
   });
+  const closeComposerMore = (restoreFocus: boolean) => {
+    setComposerMoreOpen(false);
+    if (restoreFocus) {
+      queueMicrotask(() => {
+        let remainingFrames = 2;
+        const restoreCurrentButton = () => {
+          if (composerMoreButtonRef?.isConnected) composerMoreButtonRef.focus();
+          remainingFrames -= 1;
+          if (remainingFrames > 0) window.requestAnimationFrame(restoreCurrentButton);
+        };
+        window.requestAnimationFrame(restoreCurrentButton);
+      });
+    }
+  };
   createEffect(() => {
     if (!composerMoreOpen()) return;
+    queueMicrotask(() => {
+      const panel = composerMorePanelRef;
+      if (!panel || !composerMoreOpen()) return;
+      const target = panel.querySelector<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ) ?? panel;
+      target.focus({ preventScroll: true });
+    });
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node | null;
       if (composerMoreButtonRef?.contains(target) || composerMorePanelRef?.contains(target)) return;
-      setComposerMoreOpen(false);
+      closeComposerMore(false);
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       event.preventDefault();
-      setComposerMoreOpen(false);
-      queueMicrotask(() => composerMoreButtonRef?.focus());
+      closeComposerMore(true);
+    };
+    const onFocusIn = (event: FocusEvent) => {
+      const target = event.target as Node | null;
+      if (composerMoreButtonRef?.contains(target) || composerMorePanelRef?.contains(target)) return;
+      closeComposerMore(false);
     };
     document.addEventListener('pointerdown', onPointerDown, true);
     document.addEventListener('keydown', onKeyDown, true);
+    document.addEventListener('focusin', onFocusIn, true);
     onCleanup(() => {
       document.removeEventListener('pointerdown', onPointerDown, true);
       document.removeEventListener('keydown', onKeyDown, true);
+      document.removeEventListener('focusin', onFocusIn, true);
     });
   });
 
@@ -4340,19 +4345,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return;
     }
     const turnID = createFlowerClientTurnID();
-    const operation = await acquireComposerDraftOperation();
-    if (!operation || !composerDraftOperationCurrent(operation)) {
-      notifyComposerError(attachmentCopy().leaseConflict);
-      return;
-    }
-    const persistenceState = operation.session.leaseState();
-    if (persistenceState.kind === 'lease_owned' && (persistenceState.persistence === 'store_unavailable' || persistenceState.unsaved)) {
-      const recovered = await operation.session.renew();
-      if (recovered.kind !== 'lease_owned' || recovered.persistence === 'store_unavailable' || recovered.unsaved) {
-        notifyComposerError(attachmentCopy().draftUnsaved);
-        return;
-      }
-    }
+    const operation = currentComposerDraftOperation();
+    if (!composerDraftOperationCurrent(operation)) return;
     const operationMode = inspection.codePoints > FLOWER_INLINE_TEXT_CODE_POINT_LIMIT
       ? 'preparing_long_text_submission' as const
       : 'admission_in_flight' as const;
@@ -4362,40 +4356,32 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const frozenReasoningSelection = serializeFlowerReasoningSelection(composerLaunchReasoningSelection());
     const frozenWorkingDir = draftWorkingDirectory();
     const frozenCapabilityRevision = currentAttachmentSnapshot().capability?.revision;
-    let operationClaim;
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      const operationStart = operation.session.snapshot();
-      operationClaim = await operation.session.mutate(operationStart.revision, (value) => (
-        value.proposed_turn_id && value.proposed_turn_id !== turnID
-          ? value
-          : {
-            ...value,
-            text: promptInput,
-            mode: operationMode,
-            proposed_turn_id: turnID,
-            admission_started: false,
-            model_id: frozenModelID,
-            permission_type: frozenPermissionType,
-            reasoning_selection: frozenReasoningSelection,
-            working_dir: frozenWorkingDir,
-            capability_revision: frozenCapabilityRevision,
-          }
-      ));
-      if (operationClaim.kind !== 'revision_conflict') break;
-      if (!composerDraftOperationCurrent(operation)) break;
-    }
+    const operationClaim = operation.session.mutate((value) => (
+      value.proposed_turn_id && value.proposed_turn_id !== turnID
+        ? value
+        : {
+          ...value,
+          text: promptInput,
+          mode: operationMode,
+          proposed_turn_id: turnID,
+          admission_started: false,
+          model_id: frozenModelID,
+          permission_type: frozenPermissionType,
+          reasoning_selection: frozenReasoningSelection,
+          working_dir: frozenWorkingDir,
+          capability_revision: frozenCapabilityRevision,
+        }
+    ));
     if (
       !operationClaim
       || operationClaim.kind !== 'committed'
       || operationClaim.snapshot.value.proposed_turn_id !== turnID
       || !composerDraftOperationCurrent(operation)
-    ) {
-      notifyComposerError(attachmentCopy().leaseConflict);
-      return;
-    }
+    ) return;
     const launchController = operation.controller;
     const launchSessionKey = operation.sessionKey;
     const frozenDraft = operationClaim.snapshot.value;
+    const frozenAttachmentLocalIDs = new Set(frozenDraft.attachments.map((item) => item.local_id));
     const draftReasoningSelection = !selectedID ? frozenDraft.reasoning_selection : undefined;
     const draftModelID = !selectedID ? frozenDraft.model_id ?? '' : '';
     const launchModelID = frozenDraft.model_id ?? frozenModelID;
@@ -4420,17 +4406,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       && ordinaryTurnContextCurrent()
       && operation.session.snapshot().value.proposed_turn_id === turnID
     );
-    const renewalTimer = window.setInterval(() => {
-      if (!submissionCurrent()) {
-        window.clearInterval(renewalTimer);
-        draftOperationRenewalTimers.delete(renewalTimer);
-        return;
-      }
-      void operation.session.renew();
-    }, 5_000);
-    draftOperationRenewalTimers.add(renewalTimer);
     let preparedLongTextLocalID = '';
     let consumedAttachmentLocalIDs: readonly string[] = [];
+    const attachmentItemsForSubmission = (snapshot: FlowerAttachmentControllerSnapshot) => snapshot.items.filter((item) => (
+      frozenAttachmentLocalIDs.has(item.local_id) || item.local_id === preparedLongTextLocalID
+    ));
     const cancelLongTextSubmission = () => {
       cancelRequested = true;
       if (preparedLongTextLocalID) launchController.cancel(preparedLongTextLocalID);
@@ -4439,9 +4419,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     cancelActiveLongTextSubmission = cancelLongTextSubmission;
     const clearAcceptedComposerDraft = (...sessionKeys: string[]) => {
       launchController.consumeReady(consumedAttachmentLocalIDs);
-      const shared = operation.session.snapshot();
-      if (composerDraftOperationOwned(operation)) {
-        void operation.session.mutate(shared.revision, (value) => ({
+      const acceptedSessionKeys = new Set([
+        launchSessionKey,
+        ...sessionKeys,
+      ].map((value) => trimString(value) || PENDING_NEW_THREAD_ID));
+      if (composerDraftOperationActive(operation)) {
+        for (const sessionKey of acceptedSessionKeys) draftSessionFor(sessionKey).mutate((value) => ({
           ...value,
           text: '',
           attachments: [],
@@ -4453,7 +4436,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           prepared_long_text_attachment_id: undefined,
         }));
       }
-      for (const sessionKey of new Set([launchSessionKey, ...sessionKeys].map((value) => trimString(value) || PENDING_NEW_THREAD_ID))) {
+      for (const sessionKey of acceptedSessionKeys) {
         updateComposerSessionDraft(sessionKey, (draft) => ({
           ...draft,
           chatDraft: '',
@@ -4474,8 +4457,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     setChatRunning(true);
     try {
       let attachmentSnapshot = launchController.snapshot();
-      if (attachmentSnapshot.items.length > 0 || inspection.codePoints > FLOWER_INLINE_TEXT_CODE_POINT_LIMIT) {
-        if (!launchModelID || !props.adapter.loadAttachmentCapability || !props.adapter.uploadAttachment) {
+      let attachmentItems = attachmentItemsForSubmission(attachmentSnapshot);
+      let launchStagingScope = attachmentSnapshot.staging_scope;
+      if (attachmentItems.length > 0 || inspection.codePoints > FLOWER_INLINE_TEXT_CODE_POINT_LIMIT) {
+        if (
+          !launchModelID
+          || !props.adapter.loadAttachmentCapability
+          || !props.adapter.createAttachmentStagingScope
+          || !props.adapter.uploadAttachment
+        ) {
           notifyComposerError(attachmentCopy().unavailable);
           return;
         }
@@ -4491,10 +4481,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           }
           return;
         }
+        try {
+          launchStagingScope = await ensureAttachmentStagingScope(launchSessionKey);
+        } catch {
+          notifyComposerError(attachmentCopy().unavailable);
+          return;
+        }
         attachmentSnapshot = launchController.snapshot();
+        attachmentItems = attachmentItemsForSubmission(attachmentSnapshot);
       }
       if (!submissionCurrent()) return;
-      if (attachmentSnapshot.items.some((item) => item.status !== 'staged_ready')) return;
+      if (attachmentItems.filter((item) => frozenAttachmentLocalIDs.has(item.local_id)).length !== frozenAttachmentLocalIDs.size) return;
+      if (attachmentItems.some((item) => item.status !== 'staged_ready')) return;
       if (inspection.codePoints > FLOWER_INLINE_TEXT_CODE_POINT_LIMIT) {
         if (!attachmentSnapshot.capability?.supports_long_text) {
           notifyComposerError(attachmentCopy().unavailable);
@@ -4514,20 +4512,20 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           return;
         }
         attachmentSnapshot = launchController.snapshot();
-        const prepared = attachmentSnapshot.items.find((item) => item.local_id === preparedLongTextLocalID);
+        attachmentItems = attachmentItemsForSubmission(attachmentSnapshot);
+        const prepared = attachmentItems.find((item) => item.local_id === preparedLongTextLocalID);
         if (prepared?.status !== 'staged_ready') {
           launchController.remove(preparedLongTextLocalID);
           preparedLongTextLocalID = '';
           notifyComposerError(attachmentCopy().unavailable);
           return;
         }
-        const preparing = operation.session.snapshot();
-        const transitioned = await operation.session.mutate(preparing.revision, (value) => (
+        const transitioned = operation.session.mutate((value) => (
           value.proposed_turn_id === turnID
             ? {
               ...value,
               mode: 'admission_in_flight',
-              attachments: attachmentSnapshot.items.map((item) => ({
+              attachments: attachmentItems.map((item) => ({
                 local_id: item.local_id,
                 source: item.source,
                 name: item.name,
@@ -4554,8 +4552,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         setLongTextPreparing(false);
       }
       const prompt = inspection.codePoints > FLOWER_INLINE_TEXT_CODE_POINT_LIMIT ? '' : promptInput;
-      const readyItems = attachmentSnapshot.items.filter((item) => item.status === 'staged_ready');
+      const readyItems = attachmentItems.filter((item) => item.status === 'staged_ready');
       const attachmentIDs = flowerAttachmentIDs(readyItems);
+      launchStagingScope = attachmentSnapshot.staging_scope ?? launchStagingScope;
+      if (attachmentIDs.length > 0 && !launchStagingScope) {
+        notifyComposerError(attachmentCopy().unavailable);
+        return;
+      }
       const frozenReferences = frozenDraft.references;
       if (!prompt && attachmentIDs.length === 0 && frozenReferences.length === 0) {
         notifyComposerError(copy().chat.enterMessageBeforeSending);
@@ -4577,8 +4580,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           return;
         }
         if (!submissionCurrent()) return;
-        const beforeAdmission = operation.session.snapshot();
-        const admission = await operation.session.mutate(beforeAdmission.revision, (value) => (
+        const admission = operation.session.mutate((value) => (
           value.proposed_turn_id === turnID
             ? { ...value, admission_started: true }
             : value
@@ -4607,8 +4609,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         receipt = await props.adapter.launchTurn({
           thread_id: selectedID || undefined,
           turn_id: turnID,
-          draft_id: launchSessionKey,
-          expected_draft_revision: admission.snapshot.revision,
+          ...(launchStagingScope ? { staging_scope: launchStagingScope } : {}),
           prompt,
           ...(attachmentIDs.length > 0 ? { attachment_ids: attachmentIDs } : {}),
           ...(contextAction ? { context_action: contextAction } : {}),
@@ -4628,22 +4629,21 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           const uncertainSessionKey = trimString(uncertain.thread_id);
           if (uncertainSessionKey && uncertainSessionKey !== launchSessionKey) {
             const sourceSnapshot = operation.session.snapshot();
-            const uncertainSession = draftSessionFor(uncertainSessionKey);
-            const uncertainLease = uncertainSession.tryAcquire();
-            if (uncertainLease.kind === 'lease_owned') {
-              const targetSnapshot = uncertainSession.snapshot();
-              await uncertainSession.mutate(targetSnapshot.revision, (value) => ({
-                ...value,
-                text: promptInput,
-                attachments: sourceSnapshot.value.attachments,
-                references: sourceSnapshot.value.references,
-                mode: 'admission_in_flight',
-                proposed_turn_id: uncertain.turn_id,
-                admission_started: true,
-                prepared_long_text_local_id: sourceSnapshot.value.prepared_long_text_local_id,
-                prepared_long_text_attachment_id: sourceSnapshot.value.prepared_long_text_attachment_id,
-              }));
+            if (launchSessionKey === PENDING_NEW_THREAD_ID) {
+              draftCoordinator.moveScope(launchSessionKey, uncertainSessionKey);
             }
+            const uncertainSession = draftSessionFor(uncertainSessionKey);
+            uncertainSession.mutate((value) => ({
+              ...value,
+              text: promptInput,
+              attachments: sourceSnapshot.value.attachments,
+              references: sourceSnapshot.value.references,
+              mode: 'admission_in_flight',
+              proposed_turn_id: uncertain.turn_id,
+              admission_started: true,
+              prepared_long_text_local_id: sourceSnapshot.value.prepared_long_text_local_id,
+              prepared_long_text_attachment_id: sourceSnapshot.value.prepared_long_text_attachment_id,
+            }));
             updateComposerSessionDraft(uncertainSessionKey, (draft) => ({
               ...draft,
               chatDraft: promptInput,
@@ -4666,10 +4666,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           notifyComposerError(getErrorMessage(error));
         }
         if (preparedLongTextLocalID) launchController.remove(preparedLongTextLocalID);
-        if (composerDraftOperationOwned(operation)) {
+        if (composerDraftOperationActive(operation)) {
           const rejected = operation.session.snapshot();
           if (rejected.value.proposed_turn_id === turnID) {
-            void operation.session.mutate(rejected.revision, (value) => ({
+            operation.session.mutate((value) => ({
               ...value,
               mode: inspection.codePoints > FLOWER_INLINE_TEXT_CODE_POINT_LIMIT ? 'over_limit_editing' : 'ordinary',
               proposed_turn_id: undefined,
@@ -4681,7 +4681,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         }
         return;
       }
-      clearAcceptedComposerDraft();
+      clearAcceptedComposerDraft(receipt.thread_id);
+      releaseAttachmentStagingScope(launchSessionKey);
       const selectionCurrent = setSelectedThreadWithDetailIfSessionCurrent(launchSessionKey, receipt.thread_id);
       if (selectionCurrent) {
         setLoadError('');
@@ -4690,14 +4691,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }
     } finally {
       if (cancelActiveLongTextSubmission === cancelLongTextSubmission) cancelActiveLongTextSubmission = null;
-      window.clearInterval(renewalTimer);
-      draftOperationRenewalTimers.delete(renewalTimer);
       setLongTextPreparing(false);
       setChatRunning(false);
-      if (composerDraftOperationOwned(operation)) {
+      if (composerDraftOperationActive(operation)) {
         const shared = operation.session.snapshot();
         if (shared.value.proposed_turn_id === turnID && shared.value.admission_started !== true) {
-          void operation.session.mutate(shared.revision, (value) => ({
+          operation.session.mutate((value) => ({
             ...value,
             mode: inspection.codePoints > FLOWER_INLINE_TEXT_CODE_POINT_LIMIT ? 'over_limit_editing' : 'ordinary',
             proposed_turn_id: undefined,
@@ -4878,10 +4877,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       : '';
     setCompactSubmitting(true);
     setPendingContextCompaction(localPendingCompaction(thread, Date.now()));
-    updateComposerSessionDraft(threadID, (draft) => ({
-      ...draft,
-      chatDraft: '',
-    }));
+    updateComposerSessionText(threadID, '');
     requestComposerFocus();
     revealPendingCompactionDivider();
     try {
@@ -4894,10 +4890,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (selectionCurrent) {
         setSelectedThreadWithDetail(updated.thread_id);
       }
-      updateComposerSessionDraft(threadID, (draft) => ({
-        ...draft,
-        chatDraft: '',
-      }));
+      updateComposerSessionText(threadID, '');
       if (selectionCurrent) {
         setLoadError('');
         returnToChat();
@@ -4908,10 +4901,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       setPendingContextCompaction((pending) => (
         pending?.thread_id === threadID ? null : pending
       ));
-      updateComposerSessionDraft(threadID, (draft) => ({
-        ...draft,
-        chatDraft: FLOWER_COMPACT_CONTEXT_COMMAND,
-      }));
+      updateComposerSessionText(threadID, FLOWER_COMPACT_CONTEXT_COMMAND);
       if (selectedThreadDetailMatches(threadID)) {
         notifyComposerError(getErrorMessage(error));
       }
@@ -4973,7 +4963,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }
       return;
     }
-    if (chatRunning()) {
+    if (chatRunning() || composerSharedOperationActive()) {
       if (longTextPreparing()) cancelActiveLongTextSubmission?.();
       return;
     }
@@ -5022,8 +5012,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     pendingReadPersistenceSnapshots.delete(tid);
     liveCursors.delete(tid);
     liveStreamGenerations.delete(tid);
-    pendingAttachmentIntents.delete(tid);
-    pendingAttachmentAcquisitions.delete(tid);
+    releaseAttachmentStagingScope(tid);
 
     setThreads((current) => current.filter((thread) => thread.thread_id !== tid));
     setComposerSessionDrafts((current) => {
@@ -5795,7 +5784,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       updateInputText(waitingQuestion, value);
       return;
     }
-    updateCurrentComposerSessionDraft((draft) => (draft.chatDraft === value ? draft : { ...draft, chatDraft: value }));
+    updateComposerSessionText(currentComposerSessionKey(), value);
   };
 
   const composerAttachmentItems = createMemo(() => currentAttachmentSnapshot().items);
@@ -5805,6 +5794,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   ));
   const composerAttachmentCapabilityEnabled = createMemo(() => (
     currentAttachmentSnapshot().capability?.enabled === true
+    && typeof props.adapter.createAttachmentStagingScope === 'function'
     && typeof props.adapter.uploadAttachment === 'function'
   ));
   const composerAttachmentEditingAllowed = createMemo(() => (
@@ -5813,6 +5803,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     && !selectedThreadDetailPending()
     && !selectedThreadReadOnly()
     && !surfaceWarmupActive()
+    && !composerSharedOperationActive()
     && !chatRunning()
     && !longTextPreparing()
   ));
@@ -5823,8 +5814,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const composerCanAddAttachments = createMemo(() => (
     composerAttachmentEditingAllowed()
     && composerAttachmentCapabilityEnabled()
-    && !composerDraftLeaseConflict()
-    && !composerDraftInitiallyUnavailable()
   ));
   const composerTextInspection = createMemo(() => inspectFlowerText(currentComposerSessionDraft().chatDraft));
   const composerTextOverLimit = createMemo(() => (
@@ -5959,16 +5948,29 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         retainedPaste.value,
       );
       void (async () => {
-        const operation = await acquireComposerDraftOperation();
-        if (!operation || operation.sessionKey !== retainedSessionKey || !composerDraftOperationCurrent(operation)) return;
+        const operation = currentComposerDraftOperation();
+        if (operation.sessionKey !== retainedSessionKey || !composerDraftOperationCurrent(operation)) return;
         if (currentComposerSessionDraft().chatDraft !== retainedPaste.value) return;
-        const before = operation.session.snapshot();
-        const retained = await operation.session.mutate(before.revision, (value) => ({
+        const retained = operation.session.mutate((value) => ({
           ...value,
           text: retainedPaste.value,
         }));
         if (retained.kind !== 'committed' || !composerDraftOperationCurrent(operation)) return;
         if (currentComposerSessionDraft().chatDraft !== retainedPaste.value) return;
+        try {
+          await ensureAttachmentStagingScope(operation.sessionKey);
+        } catch {
+          if (composerDraftOperationCurrent(operation)) notifyComposerError(attachmentCopy().unavailable);
+          return;
+        }
+        const beforeAdd = operation.session.snapshot();
+        if (
+          !composerDraftOperationCurrent(operation)
+          || beforeAdd.revision !== retained.snapshot.revision
+          || beforeAdd.value.proposed_turn_id
+          || beforeAdd.value.text !== retainedPaste.value
+          || currentComposerSessionDraft().chatDraft !== retainedPaste.value
+        ) return;
         const capability = operation.controller.snapshot().capability;
         const added = capability?.supports_long_text
           ? operation.controller.addLongText(decision.payload)
@@ -5978,11 +5980,22 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           return;
         }
         await operation.controller.waitForIdle();
+        const afterUpload = operation.session.snapshot();
+        if (!composerDraftOperationCurrent(operation) || afterUpload.value.proposed_turn_id) {
+          operation.controller.cancel(added.local_id);
+          return;
+        }
         const item = operation.controller.snapshot().items.find((candidate) => candidate.local_id === added.local_id);
-        if (item?.status !== 'staged_ready') return;
+        if (item?.status !== 'staged_ready') {
+          if (item?.source === 'long_text') {
+            operation.controller.cancel(added.local_id);
+          }
+          return;
+        }
         const unchanged = composerDraftOperationCurrent(operation)
+          && !afterUpload.value.proposed_turn_id
           && currentComposerSessionDraft().chatDraft === retainedPaste.value
-          && operation.session.snapshot().value.text === retainedPaste.value
+          && afterUpload.value.text === retainedPaste.value
           && (!(composerRef instanceof HTMLTextAreaElement) || composerRef.value === retainedPaste.value);
         if (unchanged) {
           updateComposerText(decision.value);
@@ -5996,20 +6009,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           );
           return;
         }
-        const shared = operation.session.snapshot();
-        if (composerDraftOperationOwned(operation)) {
-          await operation.session.mutate(shared.revision, (value) => ({
+        if (composerDraftOperationActive(operation) && !operation.session.snapshot().value.proposed_turn_id) {
+          operation.session.mutate((value) => ({
             ...value,
             attachments: value.attachments.filter((attachment) => attachment.local_id !== added.local_id),
           }));
         }
-        operation.controller.remove(added.local_id);
+        operation.controller.cancel(added.local_id);
       })();
       return;
     }
     updateComposerText(decision.value);
     scheduleComposerSelection(decision.selectionStart, decision.selectionEnd, currentComposerSessionKey(), decision.value);
-    withComposerDraftLease(() => undefined);
   };
   const handleComposerTextInput = (event: InputEvent & { currentTarget: HTMLTextAreaElement }) => {
     if (composerReferenceMutationActive()) {
@@ -6026,28 +6037,46 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     updateComposerText(value);
     syncComposerSelection(event.currentTarget);
     setComposerReferenceDismissedSignature('');
-    withComposerDraftLease(() => undefined);
   };
   const restoreLongTextAttachment = async (localID: string) => {
     const focusOwner = typeof document === 'undefined' ? null : document.activeElement;
     try {
-      const operation = await acquireComposerDraftOperation();
-      if (!operation || !composerDraftOperationCurrent(operation)) return;
+      const operation = currentComposerDraftOperation();
+      if (!composerDraftOperationCurrent(operation)) return;
       const shared = operation.session.snapshot();
+      if (shared.value.proposed_turn_id) return;
       const attachment = shared.value.attachments.find((item) => item.local_id === localID);
       if (!attachment || attachment.source !== 'long_text') throw new Error('attachment_restore_failed');
       const current = shared.value.text;
       const start = composerRef instanceof HTMLTextAreaElement ? composerRef.selectionStart : current.length;
       const end = composerRef instanceof HTMLTextAreaElement ? composerRef.selectionEnd : current.length;
       const text = await operation.controller.restoreLongText(localID);
-      if (!composerDraftOperationCurrent(operation)) return;
+      const afterRestore = operation.session.snapshot();
+      if (
+        !composerDraftOperationCurrent(operation)
+        || afterRestore.revision !== shared.revision
+        || afterRestore.value.proposed_turn_id
+        || afterRestore.value.text !== current
+        || !afterRestore.value.attachments.some((item) => item.local_id === localID && item.source === 'long_text')
+      ) return;
       const restored = replaceFlowerTextSelection(current, text, start, end);
-      const committed = await operation.session.mutate(shared.revision, (value) => ({
-        ...value,
-        text: restored.value,
-        attachments: value.attachments.filter((item) => item.local_id !== localID),
-      }));
-      if (committed.kind !== 'committed' || !composerDraftOperationCurrent(operation)) return;
+      const committed = operation.session.mutate((value) => (
+        value.proposed_turn_id
+          || value.text !== current
+          || !value.attachments.some((item) => item.local_id === localID && item.source === 'long_text')
+          ? value
+          : {
+              ...value,
+              text: restored.value,
+              attachments: value.attachments.filter((item) => item.local_id !== localID),
+            }
+      ));
+      if (
+        committed.kind !== 'committed'
+        || committed.snapshot.revision === afterRestore.revision
+        || committed.snapshot.value.proposed_turn_id
+        || !composerDraftOperationCurrent(operation)
+      ) return;
       updateComposerSessionDraft(operation.sessionKey, (draft) => ({ ...draft, chatDraft: restored.value }));
       operation.controller.remove(localID);
       scheduleComposerSelection(
@@ -6073,8 +6102,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
   const previewStagedAttachment = async (item: FlowerAttachmentItem) => {
     if (!item.staged || !props.adapter.previewStagedAttachment) return;
+    const scope = currentAttachmentSnapshot().staging_scope;
+    if (!scope) return;
     try {
-      await props.adapter.previewStagedAttachment(item.staged, currentComposerSessionKey());
+      await props.adapter.previewStagedAttachment(item.staged, scope);
     } catch (error) {
       notifyComposerError(getErrorMessage(error));
     }
@@ -6103,6 +6134,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const question = activeInputQuestion();
     return question ? questionDraft(question.id).text ?? '' : '';
   });
+  createEffect(() => {
+    composerTextValue();
+    currentComposerSessionKey();
+    if (companionCollapsed()) composerAutosizeController?.suspend();
+    else {
+      composerAutosizeController?.resume();
+      composerAutosizeController?.schedule();
+    }
+  });
   const composerReferences = createMemo(() => currentComposerSessionDraft().references);
   const composerHasReferences = createMemo(() => composerReferences().length > 0);
   const companionSummaryEligible = createMemo(() => (
@@ -6115,35 +6155,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     && !composerHasReferences()
     && Boolean(trimString(props.companionSummary?.visualText))
   ));
-  const companionActiveWorkSummaryVisible = createMemo(() => (
-    companionSummaryEligible()
-    && (props.companionSummary?.priorityStatus === 'running' || props.companionSummary?.priorityStatus === 'queued')
-  ));
-  const companionRecovery = createMemo(() => {
-    if (!companionCollapsed() || companionActionVisible() || companionActiveWorkSummaryVisible()) return null;
-    if (composerDraftLeaseConflict()) {
-      return {
-        kind: 'lease_conflict' as const,
-        message: attachmentCopy().leaseConflict,
-      };
-    }
-    if (composerDraftInitiallyUnavailable()) {
-      return {
-        kind: 'draft_unavailable' as const,
-        message: attachmentCopy().draftUnavailable,
-      };
-    }
-    return null;
-  });
-  const companionRecoveryVisible = createMemo(() => companionRecovery() !== null);
-  const openCompanionForDraftRecovery = () => {
-    expandedDraftRecoveryFocusRequested = true;
-    props.onCompanionOpenRequest?.();
-  };
-  const companionSummaryVisible = createMemo(() => (
-    companionSummaryEligible()
-    && !companionRecoveryVisible()
-  ));
+  const companionSummaryVisible = companionSummaryEligible;
   const companionDescriptionID = createMemo(() => (
     props.companionRegionID ? `${props.companionRegionID}-status` : undefined
   ));
@@ -6155,12 +6167,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       && props.companionSummary?.progressKind !== 'output'
     )
   ));
-
-  createEffect(() => {
-    if (companionCollapsed() || !expandedDraftRecoveryFocusRequested) return;
-    expandedDraftRecoveryFocusRequested = false;
-    requestAnimationFrame(() => composerDraftRecoveryButtonRef?.focus({ preventScroll: true }));
-  });
 
   const composerPlaceholder = createMemo(() => {
     if (selectedThreadDetailPending()) return copy().chat.threadLoading;
@@ -6180,7 +6186,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (selectedComposerApprovalDisplayAction()) return true;
     if (selectedThreadDetailPending()) return true;
     if (selectedThreadReadOnly()) return true;
-    if (composerDraftLeaseConflict() || composerDraftInitiallyUnavailable()) return true;
+    if (composerSharedOperationActive()) return true;
     if (chatRunning()) return true;
     if (!selectedInputRequest()) return false;
     return inputSubmitting() || !activeInputQuestion();
@@ -6284,11 +6290,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         selectionEnd: selection.end,
       });
       if (!token) return;
-      const operation = await acquireComposerDraftOperation();
-      if (!operation || !composerDraftOperationCurrent(operation)) {
-        notifyComposerError(attachmentCopy().leaseConflict);
-        return;
-      }
+      const operation = currentComposerDraftOperation();
+      if (!composerDraftOperationCurrent(operation)) return;
+      if (operation.session.snapshot().value.proposed_turn_id) return;
       if (currentComposerSessionDraft().chatDraft !== localDraft.chatDraft) return;
       const replacement = replaceFlowerComposerReferenceToken(localDraft.chatDraft, token.range);
       const normalizedPath = normalizeFlowerComposerReferencePath(candidate.path);
@@ -6305,7 +6309,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const existing = before.value.references.some((reference) => (
         `${reference.kind}\0${normalizeFlowerComposerReferencePath(reference.path)}` === identity
       ));
-      const result = await operation.session.mutate(before.revision, (value) => {
+      const result = operation.session.mutate((value) => {
         if (value.text !== localDraft.chatDraft) return value;
         const alreadyExists = value.references.some((reference) => (
           `${reference.kind}\0${normalizeFlowerComposerReferencePath(reference.path)}` === identity
@@ -6316,15 +6320,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           references: alreadyExists ? value.references : [...value.references, newReference],
         };
       });
-      setDraftCoordinatorRevision((revision) => revision + 1);
-      if (result.kind !== 'committed' || !composerDraftOperationCurrent(operation)) {
-        notifyComposerError(attachmentCopy().leaseConflict);
-        return;
-      }
-      if (result.snapshot.value.text !== replacement.text) {
-        notifyComposerError(attachmentCopy().leaseConflict);
-        return;
-      }
+      if (!composerDraftOperationCurrent(operation)) return;
+      if (result.snapshot.value.text !== replacement.text) return;
       updateComposerSessionDraft(operation.sessionKey, (draft) => ({
         ...draft,
         chatDraft: result.snapshot.value.text,
@@ -6350,21 +6347,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       || focusOwner === document.body
     );
     try {
-      const operation = await acquireComposerDraftOperation();
-      if (!operation || !composerDraftOperationCurrent(operation)) {
-        notifyComposerError(attachmentCopy().leaseConflict);
-        return;
-      }
-      const before = operation.session.snapshot();
-      const result = await operation.session.mutate(before.revision, (value) => ({
+      const operation = currentComposerDraftOperation();
+      if (!composerDraftOperationCurrent(operation)) return;
+      if (operation.session.snapshot().value.proposed_turn_id) return;
+      const result = operation.session.mutate((value) => ({
         ...value,
         references: value.references.filter((item) => item.local_id !== reference.local_id),
       }));
-      setDraftCoordinatorRevision((revision) => revision + 1);
-      if (result.kind !== 'committed' || !composerDraftOperationCurrent(operation)) {
-        notifyComposerError(attachmentCopy().leaseConflict);
-        return;
-      }
+      if (!composerDraftOperationCurrent(operation)) return;
       updateComposerSessionDraft(operation.sessionKey, (draft) => ({
         ...draft,
         references: result.snapshot.value.references,
@@ -6482,10 +6472,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (composerReferenceMutationCount() > 0) return true;
     if (selectedComposerApprovalDisplayAction()) return true;
     if (selectedThreadDetailPending()) return true;
+    if (composerSharedOperationActive() && !chatRunning()) return true;
     if (longTextPreparing()) return false;
     if (threadStopping() || chatRunning()) return true;
     if (selectedThreadReadOnly()) return true;
-    if (composerDraftLeaseConflict() || composerDraftLeaseAcquiring() || composerDraftInitiallyUnavailable()) return true;
     if (composerSlashCommand().kind === 'invalid') return true;
     if (composerPrimaryActionIsCommand()) {
       return composerHasAttachments() || composerHasReferences() || compactSubmitting() || !readyForChat() || !!selectedInputRequest() || !selectedThreadID() || !selectedThreadHasContent();
@@ -9130,37 +9120,45 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const composerMorePanel = () => (
     <Show when={composerMoreOpen() && composerOverflowControlIDs().length > 0}>
-      <div
-        ref={composerMorePanelRef}
-        class="flower-composer-more-panel"
-        style={{ '--flower-composer-more-panel-shift-x': `${composerMorePanelShiftX()}px` } as JSX.CSSProperties}
-        role="dialog"
-        aria-label={copy().chat.composerMoreLabel}
-        data-flower-composer-more-panel="true"
+      <SurfaceFloatingLayer
+        owner={composerMoreButtonRef}
+        position={composerMorePanelPosition()}
+        estimatedSize={composerMorePanelEstimatedSize()}
+        class="flower-composer-more-layer"
+        data-flower-floating-layer="true"
       >
-        <For each={composerOverflowControlIDs()}>
-          {(id) => (
-            <div class="flower-composer-more-row" data-flower-composer-more-item={id}>
-              <span class="flower-composer-more-label">{composerControlLabel(id)}</span>
-              <span class="flower-composer-more-control">{composerControl(id, 'overflow')}</span>
-            </div>
-          )}
-        </For>
-        <Show when={companionCompactComposer() && selectedContextUsage()}>
-          {(contextUsage) => (
-            <div class="flower-composer-more-row" data-flower-composer-more-item="context">
-              <span class="flower-composer-more-label">{copy().chat.contextIndicator.label}</span>
-              <span class="flower-composer-more-control">
-                <FlowerComposerContextIndicator
-                  usage={contextUsage().usage}
-                  freshness={contextUsage().freshness}
-                  copy={copy()}
-                />
-              </span>
-            </div>
-          )}
-        </Show>
-      </div>
+        <div
+          ref={composerMorePanelRef}
+          class="flower-composer-more-panel"
+          role="dialog"
+          aria-label={copy().chat.composerMoreLabel}
+          tabIndex={-1}
+          data-flower-composer-more-panel="true"
+        >
+          <For each={composerOverflowControlIDs()}>
+            {(id) => (
+              <div class="flower-composer-more-row" data-flower-composer-more-item={id}>
+                <span class="flower-composer-more-label">{composerControlLabel(id)}</span>
+                <span class="flower-composer-more-control">{composerControl(id, 'overflow')}</span>
+              </div>
+            )}
+          </For>
+          <Show when={companionCompactComposer() && selectedContextUsage()}>
+            {(contextUsage) => (
+              <div class="flower-composer-more-row" data-flower-composer-more-item="context">
+                <span class="flower-composer-more-label">{copy().chat.contextIndicator.label}</span>
+                <span class="flower-composer-more-control">
+                  <FlowerComposerContextIndicator
+                    usage={contextUsage().usage}
+                    freshness={contextUsage().freshness}
+                    copy={copy()}
+                  />
+                </span>
+              </div>
+            )}
+          </Show>
+        </div>
+      </SurfaceFloatingLayer>
     </Show>
   );
 
@@ -9175,11 +9173,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           title={copy().chat.composerMoreLabel}
           aria-haspopup="dialog"
           aria-expanded={composerMoreOpen()}
-          onClick={() => setComposerMoreOpen((open) => !open)}
+          onClick={() => {
+            if (!composerMoreOpen()) {
+              setComposerMoreOpen(true);
+              return;
+            }
+            closeComposerMore(true);
+          }}
         >
           <MoreHorizontal class="h-3.5 w-3.5" aria-hidden="true" />
         </button>
-        {composerMorePanel()}
       </div>
     </Show>
   );
@@ -9215,6 +9218,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const composerReferenceMenu = () => (
     <Show when={composerReferenceMenuVisible()}>
       <SurfaceFloatingLayer
+        owner={composerRef}
         position={composerReferenceMenuPosition()}
         estimatedSize={{
           width: composerReferenceMenuWidth(),
@@ -9449,7 +9453,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                         copy={copy().emptyState}
                         disabled={!readyForChat()}
                         showSuggestions={presentation() !== 'companion'}
-                        onSuggestionClick={(prompt) => updateCurrentComposerSessionDraft((draft) => ({ ...draft, chatDraft: prompt }))}
+                        onSuggestionClick={(prompt) => updateComposerSessionText(currentComposerSessionKey(), prompt)}
                       />
                     )}
             >
@@ -9516,8 +9520,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               </Show>
               <div
                 class="flower-composer flower-chat-input-floating chat-input-container p-3"
-                aria-busy={chatRunning() || selectedApprovalDecisionHandoff() || composerReferenceMutationCount() > 0 ? 'true' : undefined}
-                data-flower-turn-submitting={chatRunning() ? 'true' : undefined}
+                aria-busy={chatRunning() || composerSharedOperationActive() || selectedApprovalDecisionHandoff() || composerReferenceMutationCount() > 0 ? 'true' : undefined}
+                aria-disabled={composerSharedOperationActive() && !chatRunning() ? 'true' : undefined}
+                inert={composerSharedOperationActive() && !chatRunning()}
+                data-flower-turn-submitting={chatRunning() || composerSharedOperationActive() ? 'true' : undefined}
                 data-flower-approval-handoff={selectedComposerApprovalHandoffActive() ? 'true' : undefined}
                 data-flower-approval-handoff-phase={selectedComposerApprovalHandoffActive() ? selectedComposerApprovalHandoffPhase() : undefined}
                 data-flower-companion-compact={companionCompactComposer() ? 'true' : undefined}
@@ -9579,22 +9585,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     </span>
                   </button>
                 </Show>
-                <Show when={companionRecovery()} keyed>
-                  {(recovery) => (
-                    <button
-                      type="button"
-                      class="flower-companion-collapsed-action flower-companion-collapsed-recovery"
-                      data-flower-companion-recovery={recovery.kind}
-                      title={recovery.message}
-                      aria-label={recovery.message}
-                      aria-controls={props.companionRegionID}
-                      aria-expanded="false"
-                      onClick={openCompanionForDraftRecovery}
-                    >
-                      <span class="truncate">{recovery.message}</span>
-                    </button>
-                  )}
-                </Show>
                 <Show when={companionSummaryVisible()}>
                   <button
                     type="button"
@@ -9644,7 +9634,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     </span>
                   </button>
                 </Show>
-                <Show when={companionCollapsed() && !companionActionVisible() && !companionRecoveryVisible() && companionDescriptionID()}>
+                <Show when={companionCollapsed() && !companionActionVisible() && companionDescriptionID()}>
                   <span
                     id={companionDescriptionID()}
                     class="flower-visually-hidden"
@@ -9657,8 +9647,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 </Show>
                 <div
                   class="flower-composer-content"
-                  aria-hidden={companionActionVisible() || companionRecoveryVisible() || companionSummaryVisible() ? 'true' : undefined}
-                  inert={companionActionVisible() || companionRecoveryVisible() || companionSummaryVisible()}
+                  aria-hidden={companionActionVisible() || companionSummaryVisible() ? 'true' : undefined}
+                  inert={companionActionVisible() || companionSummaryVisible()}
                 >
                 <input
                   ref={attachmentPickerRef}
@@ -9735,7 +9725,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                             class="flower-composer-reference-chip-remove"
                             aria-label={copy().chat.composerReferenceRemove(reference.path)}
                             title={copy().chat.composerReferenceRemove(reference.path)}
-                            disabled={composerReferenceMutationCount() > 0 || !composerReferenceEditingAllowed() || composerDraftLeaseConflict() || composerDraftInitiallyUnavailable()}
+                            disabled={composerReferenceMutationCount() > 0 || !composerReferenceEditingAllowed()}
                             onClick={() => void removeComposerReference(reference, index())}
                           >
                             <XCircle class="h-3.5 w-3.5" aria-hidden="true" />
@@ -9749,45 +9739,26 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   <FlowerAttachmentLane
                     items={composerAttachmentItems()}
                     copy={attachmentCopy()}
-                    disabled={!composerAttachmentEditingAllowed() || composerDraftLeaseConflict() || composerDraftInitiallyUnavailable()}
-                    onRetry={(localID) => withComposerDraftLease(() => currentAttachmentController().retry(localID))}
+                    disabled={!composerAttachmentEditingAllowed()}
+                    onRetry={(localID) => {
+                      const operation = currentComposerDraftOperation();
+                      void ensureAttachmentStagingScope(operation.sessionKey).then(() => {
+                        if (!composerDraftOperationCurrent(operation) || operation.session.snapshot().value.proposed_turn_id) return;
+                        operation.controller.retry(localID);
+                      }).catch(() => {
+                        if (!composerDraftOperationCurrent(operation) || operation.session.snapshot().value.proposed_turn_id) return;
+                        operation.controller.markStagingUnavailable();
+                        notifyComposerError(attachmentCopy().unavailable);
+                      });
+                    }}
                     onReselect={reselectAttachment}
-                    onCancel={(localID) => withComposerDraftLease(() => currentAttachmentController().cancel(localID))}
-                    onRemove={(localID) => withComposerDraftLease(() => currentAttachmentController().remove(localID))}
+                    onCancel={(localID) => currentAttachmentController().cancel(localID)}
+                    onRemove={(localID) => currentAttachmentController().remove(localID)}
                     onRestore={(localID) => void restoreLongTextAttachment(localID)}
                     onPreview={props.adapter.previewStagedAttachment ? previewStagedAttachment : undefined}
                     onCopyReference={(item) => void copyAttachmentReference(item)}
                     onFocusFallback={() => attachmentPickerButtonRef?.focus()}
                   />
-                </Show>
-                <Show when={composerDraftLeaseConflict()}>
-                  <div class="flower-composer-draft-conflict" role="status">
-                    <span>{attachmentCopy().leaseConflict}</span>
-                    <button
-                      ref={composerDraftRecoveryButtonRef}
-                      type="button"
-                      onClick={() => void recoverComposerDraft(true)}
-                    >
-                      {attachmentCopy().takeOver}
-                    </button>
-                  </div>
-                </Show>
-                <Show when={composerDraftStoreUnavailable()}>
-                  <div class="flower-composer-draft-conflict" role="status">
-                    <span>{attachmentCopy().draftUnsaved}</span>
-                  </div>
-                </Show>
-                <Show when={composerDraftInitiallyUnavailable()}>
-                  <div class="flower-composer-draft-conflict" role="status">
-                    <span>{attachmentCopy().draftUnavailable}</span>
-                    <button
-                      ref={composerDraftRecoveryButtonRef}
-                      type="button"
-                      onClick={() => void recoverComposerDraft()}
-                    >
-                      {attachmentCopy().retry}
-                    </button>
-                  </div>
                 </Show>
                 <Show when={(selectedInputRequest() || selectedComposerApprovalDisplayAction()) && (composerChatDraftHasRawText() || composerHasAttachments() || composerHasReferences())}>
                   <div class="flower-composer-draft-presence" role="status">
@@ -9811,6 +9782,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                           <textarea
                             ref={(el) => {
                               composerRef = el;
+                              composerAutosizeController?.dispose();
+                              composerAutosizeController = createFlowerComposerAutosizeController(el);
+                              if (companionCollapsed()) composerAutosizeController.suspend();
                             }}
                             class="w-full text-sm leading-6 text-foreground placeholder:text-muted-foreground"
                             placeholder={composerPlaceholder()}
@@ -9837,22 +9811,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                             onFocus={(event) => {
                               setComposerFocused(true);
                               const target = event.currentTarget;
-                              const selectionStart = target.selectionStart;
-                              const selectionEnd = target.selectionEnd;
                               syncComposerSelection(target);
-                              const sessionKey = currentComposerSessionKey();
-                              void acquireComposerDraftLease().then((owned) => {
-                                if (!owned || currentComposerSessionKey() !== sessionKey) return;
-                                if (document.activeElement !== target && document.activeElement !== document.body) return;
-                                if (target.selectionStart !== selectionStart || target.selectionEnd !== selectionEnd) return;
-                                scheduleComposerSelection(
-                                  selectionStart,
-                                  selectionEnd,
-                                  sessionKey,
-                                  target.value,
-                                  { start: selectionStart, end: selectionEnd },
-                                );
-                              });
                               if (companionCollapsed()) props.onCompanionOpenRequest?.();
                             }}
                             onBlur={() => setComposerFocused(false)}
@@ -9874,7 +9833,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                               updateComposerText(event.currentTarget.value);
                               syncComposerSelection(event.currentTarget);
                               setComposerReferenceDismissedSignature('');
-                              withComposerDraftLease(() => undefined);
+                              composerAutosizeController?.schedule();
                             }}
                             onKeyDown={handleComposerKeyDown}
                           />
@@ -9969,24 +9928,27 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                       </Show>
                     </div>
                     <div class="flower-composer-actions">
-                      <Show when={composerAttachmentEditingAllowed()}>
-                        <button
-                          ref={attachmentPickerButtonRef}
-                          type="button"
-                          class="flower-composer-attachment-button"
-                          aria-label={composerCanAddAttachments() ? attachmentCopy().add : attachmentCopy().unavailable}
-                          title={composerCanAddAttachments() ? attachmentCopy().add : attachmentCopy().unavailable}
-                          disabled={!composerCanAddAttachments()}
-                          onClick={() => {
-                            attachmentPickerSessionKey = currentComposerSessionKey();
-                            attachmentReselectTarget = null;
-                            attachmentPickerRef?.click();
-                          }}
-                        >
-                          <Paperclip class="h-4 w-4" aria-hidden="true" />
-                        </button>
-                      </Show>
-                      {composerMoreButton()}
+                <div class="flower-composer-tool-cluster">
+                        <Show when={composerAttachmentEditingAllowed()}>
+                          <button
+                            ref={attachmentPickerButtonRef}
+                            type="button"
+                            class="flower-composer-attachment-button"
+                            aria-label={composerCanAddAttachments() ? attachmentCopy().add : attachmentCopy().unavailable}
+                            title={composerCanAddAttachments() ? attachmentCopy().add : attachmentCopy().unavailable}
+                            disabled={composerSharedOperationActive() || !composerCanAddAttachments()}
+                            onClick={() => {
+                              attachmentPickerSessionKey = currentComposerSessionKey();
+                              attachmentReselectTarget = null;
+                              attachmentPickerRef?.click();
+                            }}
+                          >
+                            <Paperclip class="h-4 w-4" aria-hidden="true" />
+                          </button>
+                        </Show>
+                  {composerMoreButton()}
+                </div>
+                {composerMorePanel()}
                       <Show when={!companionCompactComposer() && selectedContextUsage()}>
                         {(contextUsage) => (
                           <FlowerComposerContextIndicator

@@ -61,7 +61,41 @@ func newUploadRouteServer(t *testing.T) (*Server, string, string) {
 	return srv, ownerOrigin, otherOrigin
 }
 
-func uploadMultipartRequest(t *testing.T, body []byte, requestID string, origin string) *http.Request {
+type uploadRouteStagingScope struct {
+	StagingScopeID string
+	Capability     string
+}
+
+func createUploadRouteStagingScope(t *testing.T, srv *Server, origin, threadID string) uploadRouteStagingScope {
+	t.Helper()
+	response := performServerRequest(srv, http.MethodPost, "/_redeven_proxy/api/ai/upload-staging-scopes", origin, `{"thread_id":"`+threadID+`"}`)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("create staging scope status=%d body=%s", response.Code, response.Body.String())
+	}
+	var body struct {
+		Data struct {
+			StagingScopeID string `json:"staging_scope_id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	scope := uploadRouteStagingScope{StagingScopeID: body.Data.StagingScopeID, Capability: response.Header().Get(uploadStagingCapabilityHeader)}
+	if scope.StagingScopeID == "" || scope.Capability == "" {
+		t.Fatalf("invalid staging scope response body=%s headers=%v", response.Body.String(), response.Header())
+	}
+	if bytes.Contains(response.Body.Bytes(), []byte(scope.Capability)) {
+		t.Fatal("staging capability leaked into response JSON")
+	}
+	return scope
+}
+
+func authorizeUploadRouteRequest(req *http.Request, scope uploadRouteStagingScope) {
+	req.Header.Set(uploadStagingScopeIDHeader, scope.StagingScopeID)
+	req.Header.Set(uploadStagingCapabilityHeader, scope.Capability)
+}
+
+func uploadMultipartRequest(t *testing.T, body []byte, requestID string, origin string, scope uploadRouteStagingScope) *http.Request {
 	t.Helper()
 	var payload bytes.Buffer
 	writer := multipart.NewWriter(&payload)
@@ -82,7 +116,7 @@ func uploadMultipartRequest(t *testing.T, body []byte, requestID string, origin 
 	req.Header.Set("Origin", origin)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	req.Header.Set("Idempotency-Key", requestID)
-	req.Header.Set("Upload-Draft-ID", "draft_route_1")
+	authorizeUploadRouteRequest(req, scope)
 	digest := sha256.Sum256(body)
 	nameDigest := sha256.Sum256([]byte("notes.txt"))
 	req.Header.Set("Upload-Content-SHA256", fmt.Sprintf("%x", digest[:]))
@@ -94,9 +128,10 @@ func uploadMultipartRequest(t *testing.T, body []byte, requestID string, origin 
 func TestAIUploadRoutesEnforceOwnerAndSupportHeadRangeDelete(t *testing.T) {
 	t.Parallel()
 	srv, ownerOrigin, otherOrigin := newUploadRouteServer(t)
+	scope := createUploadRouteStagingScope(t, srv, ownerOrigin, "th_123456789012345678901234")
 	body := []byte("abcdef")
 	post := httptest.NewRecorder()
-	srv.serveHTTP(post, uploadMultipartRequest(t, body, "route_request_1", ownerOrigin))
+	srv.serveHTTP(post, uploadMultipartRequest(t, body, "route_request_1", ownerOrigin, scope))
 	if post.Code != http.StatusOK {
 		t.Fatalf("POST status=%d body=%s", post.Code, post.Body.String())
 	}
@@ -110,10 +145,11 @@ func TestAIUploadRoutesEnforceOwnerAndSupportHeadRangeDelete(t *testing.T) {
 	if !response.OK || response.Data.AttachmentID == "" || response.Data.ContentSHA256 == "" {
 		t.Fatalf("response=%#v", response)
 	}
-	path := "/_redeven_proxy/api/ai/uploads/" + response.Data.AttachmentID + "?draft_id=draft_route_1"
+	path := "/_redeven_proxy/api/ai/uploads/" + response.Data.AttachmentID
 
 	headReq := httptest.NewRequest(http.MethodHead, path, nil)
 	headReq.Header.Set("Origin", ownerOrigin)
+	authorizeUploadRouteRequest(headReq, scope)
 	head := httptest.NewRecorder()
 	srv.serveHTTP(head, headReq)
 	if head.Code != http.StatusOK || head.Body.Len() != 0 || head.Header().Get("Cache-Control") != "private, no-store" {
@@ -122,6 +158,7 @@ func TestAIUploadRoutesEnforceOwnerAndSupportHeadRangeDelete(t *testing.T) {
 
 	rangeReq := httptest.NewRequest(http.MethodGet, path, nil)
 	rangeReq.Header.Set("Origin", ownerOrigin)
+	authorizeUploadRouteRequest(rangeReq, scope)
 	rangeReq.Header.Set("Range", "bytes=1-3")
 	rangeResp := httptest.NewRecorder()
 	srv.serveHTTP(rangeResp, rangeReq)
@@ -132,8 +169,9 @@ func TestAIUploadRoutesEnforceOwnerAndSupportHeadRangeDelete(t *testing.T) {
 		t.Fatalf("download disposition=%q, want attachment", disposition)
 	}
 
-	previewReq := httptest.NewRequest(http.MethodGet, path+"&preview=1", nil)
+	previewReq := httptest.NewRequest(http.MethodGet, path+"?preview=1", nil)
 	previewReq.Header.Set("Origin", ownerOrigin)
+	authorizeUploadRouteRequest(previewReq, scope)
 	previewResp := httptest.NewRecorder()
 	srv.serveHTTP(previewResp, previewReq)
 	if previewResp.Code != http.StatusOK || previewResp.Body.String() != string(body) {
@@ -146,7 +184,7 @@ func TestAIUploadRoutesEnforceOwnerAndSupportHeadRangeDelete(t *testing.T) {
 		t.Fatalf("preview CSP=%q, want sandboxed closed policy", policy)
 	}
 
-	ambiguousReq := httptest.NewRequest(http.MethodGet, path+"&thread_id=thread_forged&turn_id=turn_forged", nil)
+	ambiguousReq := httptest.NewRequest(http.MethodGet, path+"?thread_id=thread_forged&turn_id=turn_forged", nil)
 	ambiguousReq.Header.Set("Origin", ownerOrigin)
 	ambiguousResp := httptest.NewRecorder()
 	srv.serveHTTP(ambiguousResp, ambiguousReq)
@@ -156,6 +194,7 @@ func TestAIUploadRoutesEnforceOwnerAndSupportHeadRangeDelete(t *testing.T) {
 
 	otherReq := httptest.NewRequest(http.MethodGet, path, nil)
 	otherReq.Header.Set("Origin", otherOrigin)
+	authorizeUploadRouteRequest(otherReq, scope)
 	otherResp := httptest.NewRecorder()
 	srv.serveHTTP(otherResp, otherReq)
 	if otherResp.Code != http.StatusNotFound || !bytes.Contains(otherResp.Body.Bytes(), []byte(ai.UploadErrorNotFound)) {
@@ -164,6 +203,7 @@ func TestAIUploadRoutesEnforceOwnerAndSupportHeadRangeDelete(t *testing.T) {
 
 	deleteReq := httptest.NewRequest(http.MethodDelete, path, nil)
 	deleteReq.Header.Set("Origin", ownerOrigin)
+	authorizeUploadRouteRequest(deleteReq, scope)
 	deleteResp := httptest.NewRecorder()
 	srv.serveHTTP(deleteResp, deleteReq)
 	if deleteResp.Code != http.StatusOK {
@@ -171,13 +211,15 @@ func TestAIUploadRoutesEnforceOwnerAndSupportHeadRangeDelete(t *testing.T) {
 	}
 	secondDeleteReq := httptest.NewRequest(http.MethodDelete, path, nil)
 	secondDeleteReq.Header.Set("Origin", ownerOrigin)
+	authorizeUploadRouteRequest(secondDeleteReq, scope)
 	secondDeleteResp := httptest.NewRecorder()
 	srv.serveHTTP(secondDeleteResp, secondDeleteReq)
-	if secondDeleteResp.Code != http.StatusOK {
+	if secondDeleteResp.Code != http.StatusNotFound {
 		t.Fatalf("second DELETE status=%d body=%s", secondDeleteResp.Code, secondDeleteResp.Body.String())
 	}
 	missingReq := httptest.NewRequest(http.MethodGet, path, nil)
 	missingReq.Header.Set("Origin", ownerOrigin)
+	authorizeUploadRouteRequest(missingReq, scope)
 	missingResp := httptest.NewRecorder()
 	srv.serveHTTP(missingResp, missingReq)
 	if missingResp.Code != http.StatusNotFound {
@@ -188,9 +230,10 @@ func TestAIUploadRoutesEnforceOwnerAndSupportHeadRangeDelete(t *testing.T) {
 func TestAIUploadPreviewNeverReturnsActiveTextMediaInline(t *testing.T) {
 	t.Parallel()
 	srv, ownerOrigin, _ := newUploadRouteServer(t)
+	scope := createUploadRouteStagingScope(t, srv, ownerOrigin, "th_223456789012345678901234")
 	body := []byte(`<!doctype html><script>globalThis.compromised = true</script>`)
 	post := httptest.NewRecorder()
-	srv.serveHTTP(post, uploadMultipartRequest(t, body, "route_active_text", ownerOrigin))
+	srv.serveHTTP(post, uploadMultipartRequest(t, body, "route_active_text", ownerOrigin, scope))
 	if post.Code != http.StatusOK {
 		t.Fatalf("POST status=%d body=%s", post.Code, post.Body.String())
 	}
@@ -204,8 +247,9 @@ func TestAIUploadPreviewNeverReturnsActiveTextMediaInline(t *testing.T) {
 		t.Fatalf("detected media type=%q, want canonical plain text", response.Data.DetectedMediaType)
 	}
 	preview := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/ai/uploads/"+response.Data.AttachmentID+"?draft_id=draft_route_1&preview=1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/ai/uploads/"+response.Data.AttachmentID+"?preview=1", nil)
 	req.Header.Set("Origin", ownerOrigin)
+	authorizeUploadRouteRequest(req, scope)
 	srv.serveHTTP(preview, req)
 	if preview.Code != http.StatusOK || preview.Body.String() != string(body) {
 		t.Fatalf("preview status=%d body=%q", preview.Code, preview.Body.String())
@@ -221,111 +265,26 @@ func TestAIUploadPreviewNeverReturnsActiveTextMediaInline(t *testing.T) {
 	}
 }
 
-func TestAIComposerDraftRoutesRedactLeaseSecretsFromPublicConflictAndErrorResponses(t *testing.T) {
+func TestAIComposerDraftRoutesAreRemoved(t *testing.T) {
 	t.Parallel()
 	srv, ownerOrigin, _ := newUploadRouteServer(t)
 	const scopePath = "/_redeven_proxy/api/ai/composer-drafts/thread_lease_redaction"
-
-	acquired := performServerRequest(srv, http.MethodPost, scopePath+"/lease", ownerOrigin, `{"action":"acquire","holder_id":"surface_secret_owner"}`)
-	if acquired.Code != http.StatusOK {
-		t.Fatalf("acquire status=%d body=%s", acquired.Code, acquired.Body.String())
+	removed := performServerRequest(srv, http.MethodGet, scopePath, ownerOrigin, "")
+	if removed.Code != http.StatusNotFound {
+		t.Fatalf("removed composer route status=%d body=%s", removed.Code, removed.Body.String())
 	}
-	var acquireBody struct {
-		Data struct {
-			State string `json:"state"`
-			Draft struct {
-				LeaseID string `json:"lease_id"`
-			} `json:"draft"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(acquired.Body.Bytes(), &acquireBody); err != nil {
-		t.Fatal(err)
-	}
-	leaseSecret := acquireBody.Data.Draft.LeaseID
-	if acquireBody.Data.State != "owned" || leaseSecret == "" {
-		t.Fatalf("acquire response=%s", acquired.Body.String())
-	}
-	malformedThread := performServerRequest(srv, http.MethodPost, scopePath+"/thread", ownerOrigin, `{"expected_draft_revision":`)
-	if malformedThread.Code != http.StatusBadRequest || !bytes.Contains(malformedThread.Body.Bytes(), []byte(`"error":"invalid json"`)) {
-		t.Fatalf("malformed thread preparation status=%d body=%s", malformedThread.Code, malformedThread.Body.String())
-	}
-
-	assertRedacted := func(label string, response *httptest.ResponseRecorder) {
-		t.Helper()
-		if bytes.Contains(response.Body.Bytes(), []byte(leaseSecret)) || bytes.Contains(response.Body.Bytes(), []byte("surface_secret_owner")) {
-			t.Fatalf("%s leaked lease authority: status=%d body=%s", label, response.Code, response.Body.String())
-		}
-	}
-	loaded := performServerRequest(srv, http.MethodGet, scopePath, ownerOrigin, "")
-	if loaded.Code != http.StatusOK {
-		t.Fatalf("load status=%d body=%s", loaded.Code, loaded.Body.String())
-	}
-	assertRedacted("load", loaded)
-	committed := performServerRequest(srv, http.MethodPut, scopePath, ownerOrigin, `{"holder_id":"surface_secret_owner","lease_id":"`+leaseSecret+`","expected_revision":0,"value":{"text":"saved","attachments":[],"references":[],"mode":"ordinary"}}`)
-	if committed.Code != http.StatusOK || !bytes.Contains(committed.Body.Bytes(), []byte(`"state":"committed"`)) {
-		t.Fatalf("committed mutation status=%d body=%s", committed.Code, committed.Body.String())
-	}
-	assertRedacted("committed mutation", committed)
-
-	conflict := performServerRequest(srv, http.MethodPost, scopePath+"/lease", ownerOrigin, `{"action":"acquire","holder_id":"surface_conflicting"}`)
-	if conflict.Code != http.StatusOK || !bytes.Contains(conflict.Body.Bytes(), []byte(`"state":"conflict"`)) || !bytes.Contains(conflict.Body.Bytes(), []byte(`"holder_id":"another_surface"`)) {
-		t.Fatalf("conflict status=%d body=%s", conflict.Code, conflict.Body.String())
-	}
-	assertRedacted("conflict", conflict)
-
-	wrongRenew := performServerRequest(srv, http.MethodPost, scopePath+"/lease", ownerOrigin, `{"action":"renew","holder_id":"surface_secret_owner","lease_id":"wrong-secret"}`)
-	if wrongRenew.Code != http.StatusOK || !bytes.Contains(wrongRenew.Body.Bytes(), []byte(`"state":"lost"`)) {
-		t.Fatalf("wrong renew status=%d body=%s", wrongRenew.Code, wrongRenew.Body.String())
-	}
-	assertRedacted("wrong renew", wrongRenew)
-
-	leaseLostMutation := performServerRequest(srv, http.MethodPut, scopePath, ownerOrigin, `{"holder_id":"surface_conflicting","lease_id":"wrong-secret","expected_revision":1,"value":{"text":"","attachments":[],"references":[],"mode":"ordinary"}}`)
-	if leaseLostMutation.Code != http.StatusOK || !bytes.Contains(leaseLostMutation.Body.Bytes(), []byte(`"state":"lease_lost"`)) {
-		t.Fatalf("lease-lost mutation status=%d body=%s", leaseLostMutation.Code, leaseLostMutation.Body.String())
-	}
-	assertRedacted("lease-lost mutation", leaseLostMutation)
 }
 
-func TestAIComposerDraftStorageRemainsAvailableWithoutConfiguredModel(t *testing.T) {
+func TestAIComposerDraftRoutesStayRemovedWithoutConfiguredModel(t *testing.T) {
 	t.Parallel()
 	srv, aiSvc, ownerOrigin, _ := newUploadRouteServerWithAIConfig(t, &config.AIConfig{})
 	if aiSvc.Enabled() {
 		t.Fatal("AI service unexpectedly has a configured model")
 	}
 	const scopePath = "/_redeven_proxy/api/ai/composer-drafts/unconfigured_model_draft"
-
-	loaded := performServerRequest(srv, http.MethodGet, scopePath, ownerOrigin, "")
-	if loaded.Code != http.StatusOK {
-		t.Fatalf("load status=%d body=%s", loaded.Code, loaded.Body.String())
-	}
-
-	acquired := performServerRequest(srv, http.MethodPost, scopePath+"/lease", ownerOrigin, `{"action":"acquire","holder_id":"surface_without_model"}`)
-	if acquired.Code != http.StatusOK {
-		t.Fatalf("acquire status=%d body=%s", acquired.Code, acquired.Body.String())
-	}
-	var acquireBody struct {
-		Data struct {
-			Draft struct {
-				LeaseID string `json:"lease_id"`
-			} `json:"draft"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(acquired.Body.Bytes(), &acquireBody); err != nil {
-		t.Fatal(err)
-	}
-	leaseID := acquireBody.Data.Draft.LeaseID
-	if leaseID == "" {
-		t.Fatalf("acquire response=%s", acquired.Body.String())
-	}
-
-	committed := performServerRequest(srv, http.MethodPut, scopePath, ownerOrigin, `{"holder_id":"surface_without_model","lease_id":"`+leaseID+`","expected_revision":0,"value":{"text":"saved before model setup","attachments":[],"references":[],"mode":"ordinary"}}`)
-	if committed.Code != http.StatusOK || !bytes.Contains(committed.Body.Bytes(), []byte(`"state":"committed"`)) {
-		t.Fatalf("commit status=%d body=%s", committed.Code, committed.Body.String())
-	}
-
-	admission := performServerRequest(srv, http.MethodPost, scopePath+"/thread", ownerOrigin, `{}`)
-	if admission.Code != http.StatusServiceUnavailable || !bytes.Contains(admission.Body.Bytes(), []byte("ai not configured")) {
-		t.Fatalf("admission status=%d body=%s", admission.Code, admission.Body.String())
+	removed := performServerRequest(srv, http.MethodGet, scopePath, ownerOrigin, "")
+	if removed.Code != http.StatusNotFound {
+		t.Fatalf("removed composer route status=%d body=%s", removed.Code, removed.Body.String())
 	}
 }
 
@@ -350,11 +309,50 @@ func TestAIUploadRouteRejectsUnknownMultipartPartsWithTypedError(t *testing.T) {
 
 func TestAIUploadRouteEnforcesOverallMultipartHardCap(t *testing.T) {
 	srv, ownerOrigin, _ := newUploadRouteServer(t)
+	scope := createUploadRouteStagingScope(t, srv, ownerOrigin, "th_323456789012345678901234")
 	body := bytes.Repeat([]byte{'x'}, (10<<20)+(64<<10))
-	req := uploadMultipartRequest(t, body, "route_oversized", ownerOrigin)
+	req := uploadMultipartRequest(t, body, "route_oversized", ownerOrigin, scope)
 	resp := httptest.NewRecorder()
 	srv.serveHTTP(resp, req)
 	if resp.Code != http.StatusRequestEntityTooLarge || !bytes.Contains(resp.Body.Bytes(), []byte(ai.UploadErrorTooLarge)) {
 		t.Fatalf("status=%d body=%s", resp.Code, resp.Body.String())
+	}
+}
+
+func TestAIUserTurnDecoderAcceptsCurrentFlowerPayloadAndRejectsRemovedDraftShape(t *testing.T) {
+	payload := `{
+  "thread_id":"th_123456789012345678901234",
+  "staging_scope_id":"ustg_scope",
+  "model":"openai/test",
+  "input":{"turn_id":"turn_123","text":"hello","attachments":[{"attachment_id":"upl_123"}]},
+  "options":{"permission_type":"approval_required"},
+  "create":{"title":"","model_id":"openai/test","permission_type":"approval_required"}
+}`
+	decoded, err := decodeAIUserTurnRequest(strings.NewReader(payload))
+	if err != nil {
+		t.Fatalf("current Flower payload decoded as invalid json: %v", err)
+	}
+	if decoded.Create == nil || decoded.Create.ModelID != "openai/test" || decoded.StagingScopeID != "ustg_scope" || decoded.Input.TurnID != "turn_123" {
+		t.Fatalf("decoded payload=%#v", decoded)
+	}
+	legacy := `{"thread_id":"th_123456789012345678901234","draft_id":"draft_1","expected_draft_revision":1,"input":{"text":"hello","attachments":[]},"options":{}}`
+	if _, err := decodeAIUserTurnRequest(strings.NewReader(legacy)); err == nil {
+		t.Fatal("removed composer draft payload was accepted")
+	}
+	request := httptest.NewRequest(http.MethodPost, "/", nil)
+	if scopeID, capability, err := optionalUploadStagingHeaders(request); err != nil || scopeID != "" || capability != "" {
+		t.Fatalf("optional empty staging headers=(%q,%q,%v)", scopeID, capability, err)
+	}
+	request.Header.Set(uploadStagingScopeIDHeader, "scope_1")
+	if _, _, err := optionalUploadStagingHeaders(request); err == nil {
+		t.Fatal("partial staging authorization headers were accepted")
+	}
+	request.Header.Set(uploadStagingCapabilityHeader, "secret_1")
+	if scopeID, capability, err := optionalUploadStagingHeaders(request); err != nil || scopeID != "scope_1" || capability != "secret_1" {
+		t.Fatalf("exact staging headers=(%q,%q,%v)", scopeID, capability, err)
+	}
+	request.Header.Add(uploadStagingCapabilityHeader, "secret_2")
+	if _, _, err := optionalUploadStagingHeaders(request); err == nil {
+		t.Fatal("duplicate staging capability headers were accepted")
 	}
 }

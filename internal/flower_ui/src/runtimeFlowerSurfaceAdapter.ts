@@ -130,6 +130,8 @@ export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
   persistDefaultModel: (modelID: string) => Promise<FlowerSettingsSnapshot>;
   resolveHandler: (input?: FlowerResolveHandlerInput) => Promise<FlowerRouterDecision>;
   loadAttachmentCapability?: FlowerSurfaceAdapter['loadAttachmentCapability'];
+  createAttachmentStagingScope?: FlowerSurfaceAdapter['createAttachmentStagingScope'];
+  releaseAttachmentStagingScope?: FlowerSurfaceAdapter['releaseAttachmentStagingScope'];
   uploadAttachment?: FlowerSurfaceAdapter['uploadAttachment'];
   deleteStagedAttachment?: FlowerSurfaceAdapter['deleteStagedAttachment'];
   readStagedLongText?: FlowerSurfaceAdapter['readStagedLongText'];
@@ -301,6 +303,8 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     } : {}),
     resolveHandler: options.resolveHandler,
     ...(options.loadAttachmentCapability ? { loadAttachmentCapability: options.loadAttachmentCapability } : {}),
+    ...(options.createAttachmentStagingScope ? { createAttachmentStagingScope: options.createAttachmentStagingScope } : {}),
+    ...(options.releaseAttachmentStagingScope ? { releaseAttachmentStagingScope: options.releaseAttachmentStagingScope } : {}),
     ...(options.uploadAttachment ? { uploadAttachment: options.uploadAttachment } : {}),
     ...(options.deleteStagedAttachment ? { deleteStagedAttachment: options.deleteStagedAttachment } : {}),
     ...(options.readStagedLongText ? { readStagedLongText: options.readStagedLongText } : {}),

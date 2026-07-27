@@ -4,8 +4,10 @@ import { describe, expect, it } from 'vitest';
 
 import {
 	invalidateRuntimeFlowerAccessOnStatus,
+	parseRuntimeFlowerJSON,
 	readRuntimeFlowerHTTPResponse,
 	runtimeFlowerDeleteQuery,
+	runtimeFlowerInvalidJSONError,
 } from './runtimeFlowerHTTP';
 
 function listen(server: http.Server): Promise<number> {
@@ -65,6 +67,29 @@ describe('readRuntimeFlowerHTTPResponse', () => {
     const port = await listen(server);
     try {
       await expect(request(port)).rejects.toThrow(/aborted|closed before completion/);
+    } finally {
+      await close(server);
+    }
+  });
+
+  it.each([
+    ['empty', ''],
+    ['HTML', '<!doctype html><title>proxy error</title>'],
+    ['malformed JSON', '{"ok":true'],
+  ])('classifies a real successful %s response as typed invalid JSON', async (_label, body) => {
+    const server = http.createServer((_request, response) => {
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end(body);
+    });
+    const port = await listen(server);
+    try {
+      const response = await request(port);
+      const parsed = parseRuntimeFlowerJSON(response.body);
+      expect(runtimeFlowerInvalidJSONError(response, parsed)).toEqual({
+        code: 'runtime_flower_invalid_json',
+        message: 'Flower returned an invalid JSON response.',
+        status: 200,
+      });
     } finally {
       await close(server);
     }

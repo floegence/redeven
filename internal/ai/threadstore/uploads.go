@@ -14,9 +14,10 @@ import (
 )
 
 var (
-	ErrUploadIdempotencyConflict = errors.New("upload idempotency conflict")
-	ErrUploadInProgress          = errors.New("upload is still in progress")
-	ErrUploadQuotaExceeded       = errors.New("upload quota exceeded")
+	ErrUploadIdempotencyConflict  = errors.New("upload idempotency conflict")
+	ErrUploadInProgress           = errors.New("upload is still in progress")
+	ErrUploadQuotaExceeded        = errors.New("upload quota exceeded")
+	ErrLongTextAttachmentRequired = errors.New("long_text_attachment_required")
 )
 
 const (
@@ -24,10 +25,9 @@ const (
 	UploadStateLive     = "live"
 	UploadStateDeleting = "deleting"
 
-	UploadRefKindThread       = "thread"
-	UploadRefKindQueuedTurn   = "queued_turn"
-	UploadRefKindDraft        = "draft"
-	UploadRefKindDraftPending = "draft_pending"
+	UploadRefKindThread     = "thread"
+	UploadRefKindQueuedTurn = "queued_turn"
+	UploadRefKindStaging    = "staging"
 
 	UploadOwnerScopeUser                   = "user"
 	UploadOwnerScopeLegacyThread           = "legacy_thread"
@@ -162,23 +162,11 @@ func normalizeUploadRefKind(kind string) string {
 		return UploadRefKindQueuedTurn
 	case UploadRefKindThread:
 		return UploadRefKindThread
-	case UploadRefKindDraft:
-		return UploadRefKindDraft
-	case UploadRefKindDraftPending:
-		return UploadRefKindDraftPending
+	case UploadRefKindStaging:
+		return UploadRefKindStaging
 	default:
 		return ""
 	}
-}
-
-func composerDraftUploadRefID(ownerUserHash string, scopeID string) string {
-	ownerUserHash = strings.ToLower(strings.TrimSpace(ownerUserHash))
-	scopeID = strings.TrimSpace(scopeID)
-	if len(ownerUserHash) != 64 || scopeID == "" {
-		return ""
-	}
-	digest := sha256.Sum256([]byte(ownerUserHash + "\x00" + scopeID))
-	return "draft_ref_v1_" + hex.EncodeToString(digest[:])
 }
 
 func sanitizeUploadStorageRelPath(raw string) string {
@@ -520,144 +508,6 @@ WHERE endpoint_id = ? AND owner_scope_kind = ? AND owner_user_hash = ? AND uploa
 	return &rec, nil
 }
 
-func (s *Store) BindUserUploadsToDraft(ctx context.Context, endpointID string, ownerUserHash string, draftID string, uploadIDs []string, createdAtUnixMs int64) error {
-	if s == nil || s.db == nil {
-		return errors.New("store not initialized")
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	ownerUserHash = strings.ToLower(strings.TrimSpace(ownerUserHash))
-	draftID = strings.TrimSpace(draftID)
-	uploadIDs = dedupeNonEmptyStrings(uploadIDs)
-	if endpointID == "" || len(ownerUserHash) != 64 || draftID == "" || len(uploadIDs) == 0 {
-		return errors.New("invalid draft upload reference")
-	}
-	draftRefID := composerDraftUploadRefID(ownerUserHash, draftID)
-	if createdAtUnixMs <= 0 {
-		createdAtUnixMs = time.Now().UnixMilli()
-	}
-	tx, err := s.db.BeginTx(ctxOrBackground(ctx), nil)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-	observeStoreTransaction(ctx, "bind_user_uploads_to_draft")
-	if err := requireComposerDraftScopeWritableTx(ctxOrBackground(ctx), tx, endpointID, draftID); err != nil {
-		return err
-	}
-	for _, uploadID := range uploadIDs {
-		var state string
-		if err := tx.QueryRowContext(ctxOrBackground(ctx), `
-SELECT state FROM ai_uploads
-WHERE endpoint_id = ? AND owner_scope_kind = ? AND owner_user_hash = ? AND upload_id = ?
-`, endpointID, UploadOwnerScopeUser, ownerUserHash, uploadID).Scan(&state); err != nil {
-			return err
-		}
-		if state != UploadStateStaged {
-			return errors.New("draft attachment is not staged")
-		}
-		var otherDraft string
-		err := tx.QueryRowContext(ctxOrBackground(ctx), `
-SELECT ref_id FROM ai_upload_refs
-	WHERE endpoint_id = ? AND upload_id = ? AND ref_kind IN (?, ?) AND ref_id <> ?
-	LIMIT 1
-		`, endpointID, uploadID, UploadRefKindDraft, UploadRefKindDraftPending, draftRefID).Scan(&otherDraft)
-		if err == nil {
-			return errors.New("attachment is already claimed by another draft")
-		}
-		if !errors.Is(err, sql.ErrNoRows) {
-			return err
-		}
-		if _, err := tx.ExecContext(ctxOrBackground(ctx), `
-INSERT INTO ai_upload_refs(endpoint_id, upload_id, thread_id, ref_kind, ref_id, created_at_unix_ms)
-	VALUES(?, ?, ?, ?, ?, ?)
-	ON CONFLICT(endpoint_id, upload_id, ref_kind, ref_id) DO NOTHING
-		`, endpointID, uploadID, draftID, UploadRefKindDraft, draftRefID, createdAtUnixMs); err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(ctxOrBackground(ctx), `
-DELETE FROM ai_upload_refs
-WHERE endpoint_id = ? AND upload_id = ? AND ref_kind = ? AND ref_id = ?
-`, endpointID, uploadID, UploadRefKindDraftPending, draftRefID); err != nil {
-			return err
-		}
-	}
-	return tx.Commit()
-}
-
-func (s *Store) GetDraftOwnedUpload(ctx context.Context, endpointID string, ownerUserHash string, draftID string, uploadID string) (*UploadRecord, error) {
-	if s == nil || s.db == nil {
-		return nil, errors.New("store not initialized")
-	}
-	ownerUserHash = strings.ToLower(strings.TrimSpace(ownerUserHash))
-	draftID = strings.TrimSpace(draftID)
-	draftRefID := composerDraftUploadRefID(ownerUserHash, draftID)
-	if draftRefID == "" {
-		return nil, sql.ErrNoRows
-	}
-	var rec UploadRecord
-	if err := scanUploadRow(s.db.QueryRowContext(ctxOrBackground(ctx), `
-SELECT u.upload_id, u.endpoint_id, u.owner_scope_kind, u.owner_user_hash, u.storage_relpath, u.name,
-       u.declared_media_type, u.detected_media_type, u.size_bytes, u.content_sha256,
-       u.unicode_code_points, u.logical_line_count, u.source, u.state,
-       u.created_at_unix_ms, u.claimed_at_unix_ms, u.delete_after_unix_ms
-FROM ai_uploads u
-JOIN ai_upload_refs r ON r.endpoint_id = u.endpoint_id AND r.upload_id = u.upload_id
-WHERE u.endpoint_id = ? AND u.owner_scope_kind = ? AND u.owner_user_hash = ? AND u.upload_id = ?
-  AND u.state = ? AND r.ref_kind IN (?, ?) AND r.ref_id = ?
-	`, strings.TrimSpace(endpointID), UploadOwnerScopeUser, ownerUserHash,
-		strings.TrimSpace(uploadID), UploadStateStaged, UploadRefKindDraft, UploadRefKindDraftPending, draftRefID), &rec); err != nil {
-		return nil, err
-	}
-	return &rec, nil
-}
-
-func (s *Store) ReleaseUserDraftUploads(ctx context.Context, endpointID string, ownerUserHash string, draftID string, uploadIDs []string, deleteAfterUnixMs int64) ([]UploadRecord, error) {
-	if s == nil || s.db == nil {
-		return nil, errors.New("store not initialized")
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	ownerUserHash = strings.ToLower(strings.TrimSpace(ownerUserHash))
-	draftID = strings.TrimSpace(draftID)
-	uploadIDs = dedupeNonEmptyStrings(uploadIDs)
-	if endpointID == "" || len(ownerUserHash) != 64 || draftID == "" || len(uploadIDs) == 0 {
-		return nil, errors.New("invalid draft upload reference")
-	}
-	draftRefID := composerDraftUploadRefID(ownerUserHash, draftID)
-	tx, err := s.db.BeginTx(ctxOrBackground(ctx), nil)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = tx.Rollback() }()
-	for _, uploadID := range uploadIDs {
-		result, err := tx.ExecContext(ctxOrBackground(ctx), `
-DELETE FROM ai_upload_refs
-WHERE endpoint_id = ? AND upload_id = ? AND ref_kind IN (?, ?) AND ref_id = ?
-  AND EXISTS (
-    SELECT 1 FROM ai_uploads u
-    WHERE u.endpoint_id = ai_upload_refs.endpoint_id AND u.upload_id = ai_upload_refs.upload_id
-      AND u.owner_scope_kind = ? AND u.owner_user_hash = ?
-  )
-	`, endpointID, uploadID, UploadRefKindDraft, UploadRefKindDraftPending, draftRefID, UploadOwnerScopeUser, ownerUserHash)
-		if err != nil {
-			return nil, err
-		}
-		if affected, err := result.RowsAffected(); err != nil || affected != 1 {
-			if err != nil {
-				return nil, err
-			}
-			return nil, sql.ErrNoRows
-		}
-	}
-	cleanup, err := collectUnreferencedUploadsTx(ctxOrBackground(ctx), tx, endpointID, uploadIDs, deleteAfterUnixMs)
-	if err != nil {
-		return nil, err
-	}
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
-	return cleanup, nil
-}
-
 func (s *Store) ReserveUploadAttempt(ctx context.Context, attempt UploadAttemptRecord) (UploadAttemptRecord, bool, error) {
 	if s == nil || s.db == nil {
 		return UploadAttemptRecord{}, false, errors.New("store not initialized")
@@ -716,88 +566,6 @@ INSERT INTO ai_upload_attempts(
 		return UploadAttemptRecord{}, false, err
 	}
 	return attempt, true, nil
-}
-
-func (s *Store) CompleteUploadAttempt(ctx context.Context, attempt UploadAttemptRecord, rec UploadRecord, draftID string) error {
-	if s == nil || s.db == nil {
-		return errors.New("store not initialized")
-	}
-	rec = normalizeUploadRecord(rec)
-	draftID = strings.TrimSpace(draftID)
-	if err := validateUploadRecordForWrite(rec); err != nil {
-		return err
-	}
-	if draftID == "" {
-		return errors.New("upload draft identity is required")
-	}
-	draftRefID := composerDraftUploadRefID(rec.OwnerUserHash, draftID)
-	if draftRefID == "" {
-		return errors.New("invalid upload draft identity")
-	}
-	tx, err := s.db.BeginTx(ctxOrBackground(ctx), nil)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-	observeStoreTransaction(ctx, "complete_upload_attempt")
-	if err := requireComposerDraftScopeWritableTx(ctxOrBackground(ctx), tx, rec.EndpointID, draftID); err != nil {
-		return err
-	}
-	var storedFingerprint, storedUploadID, status string
-	if err := tx.QueryRowContext(ctxOrBackground(ctx), `
-SELECT request_fingerprint, upload_id, status FROM ai_upload_attempts
-WHERE endpoint_id = ? AND owner_user_hash = ? AND upload_request_id = ?
-`, attempt.EndpointID, attempt.OwnerUserHash, attempt.UploadRequestID).Scan(&storedFingerprint, &storedUploadID, &status); err != nil {
-		return err
-	}
-	if storedFingerprint != attempt.RequestFingerprint || storedUploadID != rec.UploadID {
-		return ErrUploadIdempotencyConflict
-	}
-	if status == UploadAttemptComplete {
-		var draftRef int
-		if err := tx.QueryRowContext(ctxOrBackground(ctx), `
-SELECT COUNT(1) FROM ai_upload_refs
-			WHERE endpoint_id = ? AND upload_id = ? AND ref_kind IN (?, ?) AND ref_id = ?
-	`, rec.EndpointID, rec.UploadID, UploadRefKindDraft, UploadRefKindDraftPending, draftRefID).Scan(&draftRef); err != nil {
-			return err
-		}
-		if draftRef != 1 {
-			return errors.New("completed upload is missing its draft claim")
-		}
-		return tx.Commit()
-	}
-	if status != UploadAttemptReceiving {
-		return errors.New("upload attempt is not receiving")
-	}
-	if rec.OwnerScopeKind == UploadOwnerScopeUser {
-		if err := enforceUploadQuotaTx(ctxOrBackground(ctx), tx, rec.EndpointID, rec.OwnerUserHash, "", UploadStateStaged, rec.SizeBytes); err != nil {
-			return err
-		}
-	}
-	if _, err := tx.ExecContext(ctxOrBackground(ctx), `
-INSERT INTO ai_uploads(
-  upload_id, endpoint_id, owner_scope_kind, owner_user_hash, storage_relpath, name,
-  declared_media_type, detected_media_type, size_bytes, content_sha256,
-  unicode_code_points, logical_line_count, source, state,
-  created_at_unix_ms, claimed_at_unix_ms, delete_after_unix_ms
-) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-`, uploadRecordArgs(rec)...); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctxOrBackground(ctx), `
-UPDATE ai_upload_attempts SET status = ?, error_code = '', updated_at_unix_ms = ?
-WHERE endpoint_id = ? AND owner_user_hash = ? AND upload_request_id = ? AND status = ?
-`, UploadAttemptComplete, time.Now().UnixMilli(), attempt.EndpointID, attempt.OwnerUserHash,
-		attempt.UploadRequestID, UploadAttemptReceiving); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctxOrBackground(ctx), `
-	INSERT INTO ai_upload_refs(endpoint_id, upload_id, thread_id, ref_kind, ref_id, created_at_unix_ms)
-		VALUES(?, ?, ?, ?, ?, ?)
-	`, rec.EndpointID, rec.UploadID, draftID, UploadRefKindDraftPending, draftRefID, rec.CreatedAtUnixMs); err != nil {
-		return err
-	}
-	return tx.Commit()
 }
 
 func (s *Store) FailUploadAttempt(ctx context.Context, attempt UploadAttemptRecord, errorCode string) error {
@@ -1019,29 +787,10 @@ func (s *Store) BindUploadsToRef(ctx context.Context, endpointID string, threadI
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if err := bindUploadsToRefTx(ctx, tx, endpointID, threadID, refKind, refID, uploadIDs, claimedAtUnixMs, "", ""); err != nil {
+	if err := bindUploadsToRefTx(ctx, tx, endpointID, threadID, refKind, refID, uploadIDs, claimedAtUnixMs, "", "", ""); err != nil {
 		return err
 	}
 	return tx.Commit()
-}
-
-type ComposerDraftAdmission struct {
-	OwnerUserHash     string
-	DraftID           string
-	ExpectedRevision  int64
-	ContextActionJSON string
-	Attachment        AttachmentAdmission
-}
-
-func normalizeComposerDraftAdmissionContext(recContextActionJSON string, admission *ComposerDraftAdmission) error {
-	if admission == nil {
-		return errors.New("invalid composer draft admission")
-	}
-	admission.ContextActionJSON = strings.TrimSpace(admission.ContextActionJSON)
-	if admission.ContextActionJSON != strings.TrimSpace(recContextActionJSON) {
-		return errors.New("composer draft context action changed")
-	}
-	return nil
 }
 
 type AttachmentAdmission struct {
@@ -1051,42 +800,6 @@ type AttachmentAdmission struct {
 	MaxTurnBytes       int64
 	SupportsLongText   bool
 	Routes             map[string]string
-}
-
-func (s *Store) ValidateComposerDraftAdmission(ctx context.Context, rec QueuedTurn, uploadIDs []string, admission ComposerDraftAdmission) error {
-	if s == nil || s.db == nil {
-		return errors.New("store not initialized")
-	}
-	ctx = ctxOrBackground(ctx)
-	rec.EndpointID = strings.TrimSpace(rec.EndpointID)
-	rec.ThreadID = strings.TrimSpace(rec.ThreadID)
-	rec.TurnID = strings.TrimSpace(rec.TurnID)
-	rec.ModelID = strings.TrimSpace(rec.ModelID)
-	rec.ContextActionJSON = strings.TrimSpace(rec.ContextActionJSON)
-	admission.OwnerUserHash = strings.ToLower(strings.TrimSpace(admission.OwnerUserHash))
-	admission.DraftID = strings.TrimSpace(admission.DraftID)
-	uploadIDs = dedupeNonEmptyStrings(uploadIDs)
-	if rec.EndpointID == "" || rec.ThreadID == "" || rec.TurnID == "" || len(admission.OwnerUserHash) != sha256.Size*2 || admission.DraftID == "" || admission.ExpectedRevision < 0 {
-		return errors.New("invalid composer draft admission")
-	}
-	if err := normalizeComposerDraftAdmissionContext(rec.ContextActionJSON, &admission); err != nil {
-		return err
-	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-	if err := validateAttachmentAdmissionTx(ctx, tx, rec.EndpointID, uploadIDs, admission.Attachment); err != nil {
-		return err
-	}
-	if err := validateComposerDraftAdmissionTx(
-		ctx, tx, rec.EndpointID, admission.OwnerUserHash, admission.DraftID,
-		admission.ExpectedRevision, rec.TurnID, rec.ModelID, rec.TextContent, uploadIDs, admission,
-	); err != nil {
-		return err
-	}
-	return tx.Commit()
 }
 
 func validateAttachmentAdmissionTx(ctx context.Context, tx *sql.Tx, endpointID string, uploadIDs []string, admission AttachmentAdmission) error {
@@ -1129,18 +842,14 @@ WHERE endpoint_id = ? AND upload_id = ? AND owner_scope_kind = ? AND owner_user_
 }
 
 func (s *Store) CreateFollowupWithUploadRefs(ctx context.Context, rec QueuedTurn, uploadIDs []string, claimedAtUnixMs int64) (QueuedTurn, int, int64, error) {
-	return s.createFollowupWithUploadRefs(ctx, rec, uploadIDs, claimedAtUnixMs, nil, nil)
+	return s.createFollowupWithUploadRefs(ctx, rec, uploadIDs, claimedAtUnixMs, nil)
 }
 
 func (s *Store) CreateFollowupWithAttachmentAdmission(ctx context.Context, rec QueuedTurn, uploadIDs []string, claimedAtUnixMs int64, admission AttachmentAdmission) (QueuedTurn, int, int64, error) {
-	return s.createFollowupWithUploadRefs(ctx, rec, uploadIDs, claimedAtUnixMs, &admission, nil)
+	return s.createFollowupWithUploadRefs(ctx, rec, uploadIDs, claimedAtUnixMs, &admission)
 }
 
-func (s *Store) CreateFollowupFromComposerDraft(ctx context.Context, rec QueuedTurn, uploadIDs []string, claimedAtUnixMs int64, admission ComposerDraftAdmission) (QueuedTurn, int, int64, error) {
-	return s.createFollowupWithUploadRefs(ctx, rec, uploadIDs, claimedAtUnixMs, &admission.Attachment, &admission)
-}
-
-func (s *Store) createFollowupWithUploadRefs(ctx context.Context, rec QueuedTurn, uploadIDs []string, claimedAtUnixMs int64, attachmentAdmission *AttachmentAdmission, admission *ComposerDraftAdmission) (QueuedTurn, int, int64, error) {
+func (s *Store) createFollowupWithUploadRefs(ctx context.Context, rec QueuedTurn, uploadIDs []string, claimedAtUnixMs int64, attachmentAdmission *AttachmentAdmission) (QueuedTurn, int, int64, error) {
 	if s == nil || s.db == nil {
 		return QueuedTurn{}, 0, 0, errors.New("store not initialized")
 	}
@@ -1201,43 +910,12 @@ func (s *Store) createFollowupWithUploadRefs(ctx context.Context, rec QueuedTurn
 			return QueuedTurn{}, 0, 0, err
 		}
 	}
-	if admission != nil {
-		admission.OwnerUserHash = strings.ToLower(strings.TrimSpace(admission.OwnerUserHash))
-		admission.DraftID = strings.TrimSpace(admission.DraftID)
-		if len(admission.OwnerUserHash) != 64 || admission.DraftID == "" || admission.ExpectedRevision < 0 {
-			return QueuedTurn{}, 0, 0, errors.New("invalid composer draft admission")
-		}
-		if err := normalizeComposerDraftAdmissionContext(rec.ContextActionJSON, admission); err != nil {
-			return QueuedTurn{}, 0, 0, err
-		}
-		if err := validateComposerDraftAdmissionTx(
-			ctx, tx, rec.EndpointID, admission.OwnerUserHash, admission.DraftID,
-			admission.ExpectedRevision, rec.TurnID, rec.ModelID, rec.TextContent, uploadIDs,
-			*admission,
-		); err != nil {
-			return QueuedTurn{}, 0, 0, err
-		}
-	}
 	queued, position, revision, err := createFollowupTx(ctx, tx, rec)
 	if err != nil {
 		return QueuedTurn{}, 0, 0, err
 	}
-	sourceDraftID := ""
-	ownerUserHash := ""
-	if admission != nil {
-		sourceDraftID = admission.DraftID
-		ownerUserHash = admission.OwnerUserHash
-	}
-	if err := bindUploadsToRefTx(ctx, tx, rec.EndpointID, rec.ThreadID, UploadRefKindQueuedTurn, queued.QueueID, uploadIDs, claimedAtUnixMs, sourceDraftID, ownerUserHash); err != nil {
+	if err := bindUploadsToRefTx(ctx, tx, rec.EndpointID, rec.ThreadID, UploadRefKindQueuedTurn, queued.QueueID, uploadIDs, claimedAtUnixMs, "", "", ""); err != nil {
 		return QueuedTurn{}, 0, 0, err
-	}
-	if admission != nil {
-		if _, err := tx.ExecContext(ctx, `
-DELETE FROM ai_composer_drafts
-WHERE endpoint_id = ? AND owner_user_hash = ? AND scope_id = ? AND revision = ?
-`, rec.EndpointID, admission.OwnerUserHash, admission.DraftID, admission.ExpectedRevision); err != nil {
-			return QueuedTurn{}, 0, 0, err
-		}
 	}
 	if err := tx.Commit(); err != nil {
 		return QueuedTurn{}, 0, 0, err
@@ -1253,11 +931,11 @@ func (s *Store) ReplaceFollowupWithAttachmentAdmission(ctx context.Context, sour
 	return s.replaceFollowupWithUploadRefs(ctx, sourceFollowupID, rec, uploadIDs, claimedAtUnixMs, &admission, nil)
 }
 
-func (s *Store) ReplaceFollowupFromComposerDraft(ctx context.Context, sourceFollowupID string, rec QueuedTurn, uploadIDs []string, claimedAtUnixMs int64, admission ComposerDraftAdmission) (FollowupReplacementResult, error) {
-	return s.replaceFollowupWithUploadRefs(ctx, sourceFollowupID, rec, uploadIDs, claimedAtUnixMs, &admission.Attachment, &admission)
+func (s *Store) ReplaceFollowupFromStaging(ctx context.Context, sourceFollowupID string, rec QueuedTurn, uploadIDs []string, claimedAtUnixMs int64, admission AttachmentAdmission, scope UploadStagingScope) (FollowupReplacementResult, error) {
+	return s.replaceFollowupWithUploadRefs(ctx, sourceFollowupID, rec, uploadIDs, claimedAtUnixMs, &admission, &scope)
 }
 
-func (s *Store) replaceFollowupWithUploadRefs(ctx context.Context, sourceFollowupID string, rec QueuedTurn, uploadIDs []string, claimedAtUnixMs int64, attachmentAdmission *AttachmentAdmission, admission *ComposerDraftAdmission) (FollowupReplacementResult, error) {
+func (s *Store) replaceFollowupWithUploadRefs(ctx context.Context, sourceFollowupID string, rec QueuedTurn, uploadIDs []string, claimedAtUnixMs int64, attachmentAdmission *AttachmentAdmission, stagingScope *UploadStagingScope) (FollowupReplacementResult, error) {
 	if s == nil || s.db == nil {
 		return FollowupReplacementResult{}, errors.New("store not initialized")
 	}
@@ -1314,25 +992,17 @@ func (s *Store) replaceFollowupWithUploadRefs(ctx context.Context, sourceFollowu
 		return FollowupReplacementResult{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if attachmentAdmission != nil {
-		if err := validateAttachmentAdmissionTx(ctx, tx, rec.EndpointID, uploadIDs, *attachmentAdmission); err != nil {
+	if stagingScope != nil {
+		*stagingScope = normalizeUploadStagingScope(*stagingScope)
+		if stagingScope.EndpointID != rec.EndpointID || stagingScope.ThreadID != rec.ThreadID {
+			return FollowupReplacementResult{}, errors.New("upload staging target changed")
+		}
+		if err := requireUploadStagingScopeActiveTx(ctx, tx, *stagingScope, time.Now().UnixMilli()); err != nil {
 			return FollowupReplacementResult{}, err
 		}
 	}
-	if admission != nil {
-		admission.OwnerUserHash = strings.ToLower(strings.TrimSpace(admission.OwnerUserHash))
-		admission.DraftID = strings.TrimSpace(admission.DraftID)
-		if len(admission.OwnerUserHash) != 64 || admission.DraftID == "" || admission.ExpectedRevision < 0 {
-			return FollowupReplacementResult{}, errors.New("invalid composer draft admission")
-		}
-		if err := normalizeComposerDraftAdmissionContext(rec.ContextActionJSON, admission); err != nil {
-			return FollowupReplacementResult{}, err
-		}
-		if err := validateComposerDraftAdmissionTx(
-			ctx, tx, rec.EndpointID, admission.OwnerUserHash, admission.DraftID,
-			admission.ExpectedRevision, rec.TurnID, rec.ModelID, rec.TextContent, uploadIDs,
-			*admission,
-		); err != nil {
+	if attachmentAdmission != nil {
+		if err := validateAttachmentAdmissionTx(ctx, tx, rec.EndpointID, uploadIDs, *attachmentAdmission); err != nil {
 			return FollowupReplacementResult{}, err
 		}
 	}
@@ -1385,13 +1055,15 @@ VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		}
 		return FollowupReplacementResult{}, err
 	}
-	sourceDraftID := ""
 	ownerUserHash := ""
-	if admission != nil {
-		sourceDraftID = admission.DraftID
-		ownerUserHash = admission.OwnerUserHash
+	sourceRefID := ""
+	sourceRefKind := ""
+	if stagingScope != nil {
+		ownerUserHash = stagingScope.OwnerUserHash
+		sourceRefKind = UploadRefKindStaging
+		sourceRefID = stagingUploadRefID(ownerUserHash, stagingScope.StagingScopeID)
 	}
-	if err := bindUploadsToRefTx(ctx, tx, rec.EndpointID, rec.ThreadID, UploadRefKindQueuedTurn, rec.QueueID, uploadIDs, claimedAtUnixMs, sourceDraftID, ownerUserHash); err != nil {
+	if err := bindUploadsToRefTx(ctx, tx, rec.EndpointID, rec.ThreadID, UploadRefKindQueuedTurn, rec.QueueID, uploadIDs, claimedAtUnixMs, sourceRefKind, sourceRefID, ownerUserHash); err != nil {
 		return FollowupReplacementResult{}, err
 	}
 	deleted, err := tx.ExecContext(ctx, `
@@ -1407,18 +1079,6 @@ WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ? AND admission_state = ?
 	uploadsToDelete, err := prepareUploadCleanupForRefTx(ctx, tx, rec.EndpointID, rec.ThreadID, UploadRefKindQueuedTurn, sourceFollowupID, now)
 	if err != nil {
 		return FollowupReplacementResult{}, err
-	}
-	if admission != nil {
-		deletedDraft, err := tx.ExecContext(ctx, `
-DELETE FROM ai_composer_drafts
-WHERE endpoint_id = ? AND owner_user_hash = ? AND scope_id = ? AND revision = ?
-`, rec.EndpointID, admission.OwnerUserHash, admission.DraftID, admission.ExpectedRevision)
-		if err != nil {
-			return FollowupReplacementResult{}, err
-		}
-		if affected, _ := deletedDraft.RowsAffected(); affected != 1 {
-			return FollowupReplacementResult{}, ErrComposerDraftRevisionConflict
-		}
 	}
 	position, err := followupPositionTx(ctx, tx, rec.EndpointID, rec.ThreadID, rec.Lane, rec.QueueID, rec.SortIndex)
 	if err != nil {
@@ -1510,7 +1170,7 @@ WHERE endpoint_id = ? AND thread_id = ? AND ref_kind = ? AND ref_id = ?
 	if err := queryRows.Close(); err != nil {
 		return err
 	}
-	if err := bindUploadsToRefTx(ctx, tx, endpointID, threadID, UploadRefKindThread, threadID, dedupeNonEmptyStrings(uploadIDs), admittedAtUnixMs, "", ""); err != nil {
+	if err := bindUploadsToRefTx(ctx, tx, endpointID, threadID, UploadRefKindThread, threadID, dedupeNonEmptyStrings(uploadIDs), admittedAtUnixMs, "", "", ""); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `
@@ -1536,19 +1196,16 @@ WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ? AND lane = ? AND turn_i
 	return tx.Commit()
 }
 
-func bindUploadsToRefTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string, refKind string, refID string, uploadIDs []string, claimedAtUnixMs int64, sourceDraftID string, expectedOwnerUserHash string) error {
+func bindUploadsToRefTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string, refKind string, refID string, uploadIDs []string, claimedAtUnixMs int64, sourceRefKind string, sourceRefID string, expectedOwnerUserHash string) error {
 	endpointID = strings.TrimSpace(endpointID)
 	threadID = strings.TrimSpace(threadID)
 	refKind = normalizeUploadRefKind(refKind)
 	refID = strings.TrimSpace(refID)
-	sourceDraftID = strings.TrimSpace(sourceDraftID)
+	sourceRefKind = normalizeUploadRefKind(sourceRefKind)
+	sourceRefID = strings.TrimSpace(sourceRefID)
 	expectedOwnerUserHash = strings.ToLower(strings.TrimSpace(expectedOwnerUserHash))
-	sourceDraftRefID := ""
-	if sourceDraftID != "" {
-		sourceDraftRefID = composerDraftUploadRefID(expectedOwnerUserHash, sourceDraftID)
-		if sourceDraftRefID == "" {
-			return errors.New("invalid draft upload reference")
-		}
+	if (sourceRefKind == "") != (sourceRefID == "") {
+		return errors.New("invalid source upload reference")
 	}
 	uploadIDs = dedupeNonEmptyStrings(uploadIDs)
 	if endpointID == "" || threadID == "" || refKind == "" || refID == "" {
@@ -1577,15 +1234,15 @@ WHERE endpoint_id = ? AND upload_id = ? AND LOWER(COALESCE(state, '')) <> ?
 		}
 		if ownerScopeKind == UploadOwnerScopeUser {
 			if state == UploadStateStaged {
-				if sourceDraftID == "" || len(expectedOwnerUserHash) != 64 || expectedOwnerUserHash != ownerUserHash.String {
-					return errors.New("staged attachment requires exact draft ownership")
+				if sourceRefKind == "" || len(expectedOwnerUserHash) != 64 || expectedOwnerUserHash != ownerUserHash.String {
+					return errors.New("staged attachment requires exact source ownership")
 				}
-				var draftRef int
+				var sourceRef int
 				if err := tx.QueryRowContext(ctx, `
 SELECT COUNT(1) FROM ai_upload_refs
 WHERE endpoint_id = ? AND upload_id = ? AND ref_kind = ? AND ref_id = ?
-				`, endpointID, uploadID, UploadRefKindDraft, sourceDraftRefID).Scan(&draftRef); err != nil || draftRef != 1 {
-					return errors.New("staged attachment is not owned by the exact draft")
+				`, endpointID, uploadID, sourceRefKind, sourceRefID).Scan(&sourceRef); err != nil || sourceRef != 1 {
+					return errors.New("staged attachment is not owned by the exact source")
 				}
 			}
 			if state != UploadStateLive {
@@ -1613,11 +1270,11 @@ ON CONFLICT(endpoint_id, upload_id, ref_kind, ref_id) DO NOTHING
 `, endpointID, uploadID, threadID, refKind, refID, claimedAtUnixMs); err != nil {
 			return err
 		}
-		if sourceDraftID != "" {
+		if sourceRefKind != "" {
 			if _, err := tx.ExecContext(ctx, `
 DELETE FROM ai_upload_refs
 	WHERE endpoint_id = ? AND upload_id = ? AND ref_kind = ? AND ref_id = ?
-			`, endpointID, uploadID, UploadRefKindDraft, sourceDraftRefID); err != nil {
+			`, endpointID, uploadID, sourceRefKind, sourceRefID); err != nil {
 				return err
 			}
 		}

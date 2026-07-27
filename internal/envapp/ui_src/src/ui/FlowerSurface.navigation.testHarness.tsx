@@ -142,7 +142,10 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
     );
   },
   SurfaceFloatingLayer: (props: any) => {
-    const { children, layerRef, position, class: className, style, ...rest } = props;
+    const {
+      children, layerRef, position, owner: _owner, estimatedSize: _estimatedSize, clamp: _clamp,
+      class: className, style, ...rest
+    } = props;
     return (
       <div
         ref={(node) => layerRef?.(node)}
@@ -791,6 +794,13 @@ export function adapter(configured = true): FlowerSurfaceAdapter {
     })),
     resolveHandler: vi.fn(async () => decision()),
     persistDefaultModel: vi.fn(async () => settingsSnapshot(configured)),
+    createAttachmentStagingScope: vi.fn(async (threadID?: string) => ({
+      staging_scope_id: `staging_${threadID ?? 'new'}`,
+      thread_id: threadID ?? 'th_test_new',
+      capability: `secret_${threadID ?? 'new'}`,
+      expires_at_unix_ms: Date.now() + 60_000,
+    })),
+    releaseAttachmentStagingScope: vi.fn(async () => undefined),
     launchTurn: vi.fn(async (input) => launchReceipt(input.thread_id ?? 'thread-1', input.turn_id ?? 'turn-launch')),
     compactThreadContext: vi.fn(async (input) => liveBootstrap(thread({
       thread_id: input.thread_id,
@@ -860,6 +870,7 @@ export function threadOrder(runtime: HTMLElement): string[] {
 }
 
 const disposers: Array<() => void> = [];
+const runtimeDisposers = new WeakMap<HTMLDivElement, () => void>();
 const notifications: FlowerSurfaceNotification[] = [];
 
 export function flowerSurfaceNotifications(): readonly FlowerSurfaceNotification[] {
@@ -917,19 +928,30 @@ export function renderSurfaceWithAdapter(surfaceAdapter: FlowerSurfaceAdapter): 
 export function renderSurfaceWithDraftCoordinator(
   surfaceAdapter: FlowerSurfaceAdapter,
   draftCoordinator: FlowerComposerDraftCoordinator,
-  surfaceInstanceID: string,
 ): HTMLDivElement {
   const runtime = document.createElement('div');
   document.body.appendChild(runtime);
-  disposers.push(render(() => (
+  const dispose = render(() => (
     <FlowerSurfaceComponent
       adapter={surfaceAdapter}
       draftCoordinator={draftCoordinator}
-      surfaceInstanceID={surfaceInstanceID}
       notify={(notification) => notifications.push(notification)}
     />
-  ), runtime));
+  ), runtime);
+  let disposed = false;
+  const disposeOnce = () => {
+    if (disposed) return;
+    disposed = true;
+    runtimeDisposers.delete(runtime);
+    dispose();
+  };
+  runtimeDisposers.set(runtime, disposeOnce);
+  disposers.push(disposeOnce);
   return runtime;
+}
+
+export function disposeRenderedSurface(runtime: HTMLDivElement): void {
+  runtimeDisposers.get(runtime)?.();
 }
 
 export function renderSurfaceWithAdapterProps(

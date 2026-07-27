@@ -29,6 +29,7 @@ import type {
   FlowerSurfaceAdapter,
   FlowerAttachmentUploadInput,
   FlowerAttachmentCapability,
+  FlowerAttachmentStagingScope,
   FlowerStagedAttachment,
   FlowerStagedLongTextReadResult,
   FlowerLiveBootstrap,
@@ -62,8 +63,11 @@ import {
   normalizeFlowerReasoningCapability,
   serializeFlowerReasoningSelection,
 } from '../../../../internal/flower_ui/src/reasoning';
-import { createRedevenFlowerDraftPersistence } from '../../../../internal/flower_host_ui/src/redevenFlowerDraftPersistence';
 import { normalizeFlowerAttachmentCapability } from '../../../../internal/flower_ui/src/attachments/flowerAttachmentModel';
+import {
+  createFlowerClientThreadID,
+  normalizeFlowerAttachmentStagingScope,
+} from '../../../../internal/flower_host_ui/src/flowerAttachmentStaging';
 
 export type DesktopSettingsBridge = Readonly<{
   save: (draft: DesktopSettingsDraft) => Promise<SaveDesktopSettingsResult>;
@@ -101,11 +105,6 @@ type ThreadView = Readonly<{
   thread_id?: string;
   read_status: ThreadReadStatus;
 } & Record<string, unknown>>;
-
-type PreparedDraftThreadResponse = Readonly<{
-  thread_id?: string;
-  draft_revision?: number;
-}>;
 
 type SendTurnResponse = Readonly<{
   run_id?: string;
@@ -232,11 +231,16 @@ async function runtimeJSON<T>(
   method: RuntimeFlowerRequest['method'],
   path: string,
   body?: unknown,
+  stagingScope?: FlowerAttachmentStagingScope,
 ): Promise<T> {
   const result = await bridge.requestRuntimeFlower({
     method,
     path,
     ...(body === undefined ? {} : { body }),
+    ...(stagingScope ? {
+      staging_scope_id: stagingScope.staging_scope_id,
+      staging_capability: stagingScope.capability,
+    } : {}),
   });
   if (!result.ok) {
     throw runtimeFlowerError(result.error, result.failureKind);
@@ -244,10 +248,18 @@ async function runtimeJSON<T>(
   return result.data as T;
 }
 
-export function createLocalEnvironmentFlowerDraftPersistence(bridge: DesktopSettingsBridge) {
-  return createRedevenFlowerDraftPersistence(
-    (method, path, body) => runtimeJSON<unknown>(bridge, method, path, body),
-  );
+async function createDesktopAttachmentStagingScope(
+  bridge: DesktopSettingsBridge,
+  requestedThreadID?: string,
+): Promise<FlowerAttachmentStagingScope> {
+  const threadID = trim(requestedThreadID) || createFlowerClientThreadID();
+  const result = await bridge.requestRuntimeFlower({
+    method: 'POST',
+    path: '/_redeven_proxy/api/ai/upload-staging-scopes',
+    body: { thread_id: threadID },
+  });
+  if (!result.ok) throw runtimeFlowerError(result.error, result.failureKind);
+  return normalizeFlowerAttachmentStagingScope(result.data, result.stagingCapability, threadID);
 }
 
 function positiveInteger(raw: unknown): number | undefined {
@@ -559,7 +571,8 @@ async function uploadRuntimeFlowerAttachment(
     const prepared = await bridge.prepareRuntimeFlowerAttachment({
       operation_id: operationID,
       upload_request_id: input.request_id,
-      draft_id: input.draft_id,
+      staging_scope_id: input.staging_scope.staging_scope_id,
+      staging_capability: input.staging_scope.capability,
       source: input.source === 'long_text' ? 'long_text' : 'uploaded_file',
       display_name: canonicalName,
       media_type: trim(input.file.type) || 'application/octet-stream',
@@ -603,55 +616,49 @@ export async function launchLocalEnvironmentFlowerTurn(
   if (!prompt.trim() && attachmentIDs.length === 0 && !contextAction) throw new Error('Enter a message or add an attachment before sending.');
   const snapshot = await loadSettingsSnapshot(bridge);
   const models = await loadModels(bridge);
-  const modelID = currentModelID(snapshot, models);
+  const modelID = trim(input.model_id) || currentModelID(snapshot, models);
   if (!modelID) throw new Error('Select a Flower model before starting a chat.');
   const permissionType = normalizePermissionType(input.permission_type ?? snapshot.defaults.permission_type);
-  let threadID = trim(input.thread_id);
+  const existingThreadID = trim(input.thread_id);
+  const stagingScope = input.staging_scope;
+  const threadID = existingThreadID || trim(stagingScope?.thread_id) || createFlowerClientThreadID();
+  if (stagingScope && trim(stagingScope.thread_id) !== threadID) {
+    throw new Error('Flower attachment staging scope targets a different thread.');
+  }
+  if (attachmentIDs.length > 0 && !stagingScope) {
+    throw new Error('Flower attachments require a staging scope.');
+  }
   const proposedTurnID = trim(input.turn_id) || createFlowerClientTurnID();
-  let expectedDraftRevision = input.expected_draft_revision;
-  if (!threadID) {
-    const createBody: Record<string, unknown> = {
+  let createBody: Record<string, unknown> | undefined;
+  if (!existingThreadID) {
+    createBody = {
       title: '',
       model_id: modelID,
       permission_type: permissionType,
     };
+    const reasoningSelection = serializeFlowerReasoningSelection(input.reasoning_selection);
+    if (reasoningSelection) createBody.reasoning_selection = reasoningSelection;
     if (trim(input.working_dir)) {
       createBody.working_dir = trim(input.working_dir);
     }
-    const draftID = trim(input.draft_id);
-    if (!draftID || expectedDraftRevision === undefined) throw new Error('Failed to create Flower chat.');
-    const created = await runtimeJSON<PreparedDraftThreadResponse>(
-      bridge,
-      'POST',
-      `/_redeven_proxy/api/ai/composer-drafts/${encodeURIComponent(draftID)}/thread`,
-      {
-        expected_draft_revision: expectedDraftRevision,
-        turn_id: proposedTurnID,
-        ...(contextAction ? { context_action: contextAction } : {}),
-        create: createBody,
-      },
-    );
-    threadID = trim(created.thread_id);
-    expectedDraftRevision = Number.isInteger(created.draft_revision) ? created.draft_revision : undefined;
   }
-  if (!threadID || expectedDraftRevision === undefined) throw new Error('Failed to create Flower chat.');
   try {
     const response = await runtimeJSON<SendTurnResponse>(bridge, 'POST', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/turns`, {
       thread_id: threadID,
-      draft_id: trim(input.draft_id),
-      expected_draft_revision: expectedDraftRevision,
+      ...(stagingScope ? { staging_scope_id: stagingScope.staging_scope_id } : {}),
       model: modelID,
       input: {
         turn_id: proposedTurnID,
         text: prompt,
-        attachment_ids: attachmentIDs,
+        attachments: attachmentIDs.map((attachmentID) => ({ attachment_id: attachmentID })),
         ...(contextAction ? { context_action: contextAction } : {}),
       },
       options: {
         permission_type: permissionType,
         ...(serializeFlowerReasoningSelection(input.reasoning_selection) ? { reasoning_selection: serializeFlowerReasoningSelection(input.reasoning_selection) } : {}),
       },
-    });
+      ...(createBody ? { create: createBody } : {}),
+    }, stagingScope);
     const turnID = trim(response.turn_id);
     const runID = trim(response.run_id);
     const kind = trim(response.kind);
@@ -671,7 +678,8 @@ export async function launchLocalEnvironmentFlowerTurn(
     }
     return { thread_id: threadID, turn_id: turnID, run_id: runID, kind };
   } catch (error) {
-    if (error instanceof RuntimeFlowerResponseError && error.failureKind !== 'transport_unknown') {
+    if (error instanceof RuntimeFlowerResponseError && error.failureKind !== 'transport_unknown'
+      && error.code !== 'runtime_flower_invalid_json') {
       throw error;
     }
     if (flowerTurnAdmissionUncertainIdentity(error)) {
@@ -793,26 +801,41 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
       if (capability.model_id !== trim(modelID)) throw new Error('Flower attachment capability returned a different model identity.');
       return capability;
     },
-    uploadAttachment: (input) => uploadRuntimeFlowerAttachment(bridge, input),
-    deleteStagedAttachment: async (attachmentID, draftID) => {
+    createAttachmentStagingScope: (threadID) => createDesktopAttachmentStagingScope(bridge, threadID),
+    releaseAttachmentStagingScope: async (scope) => {
       await runtimeJSON<unknown>(
         bridge,
         'DELETE',
-        `/_redeven_proxy/api/ai/uploads/${encodeURIComponent(trim(attachmentID))}?draft_id=${encodeURIComponent(trim(draftID))}`,
+        `/_redeven_proxy/api/ai/upload-staging-scopes/${encodeURIComponent(scope.staging_scope_id)}`,
+        undefined,
+        scope,
       );
     },
-    readStagedLongText: async (attachment, draftID) => mapRuntimeStagedLongText(
+    uploadAttachment: (input) => uploadRuntimeFlowerAttachment(bridge, input),
+    deleteStagedAttachment: async (attachmentID, scope) => {
+      await runtimeJSON<unknown>(
+        bridge,
+        'DELETE',
+        `/_redeven_proxy/api/ai/uploads/${encodeURIComponent(trim(attachmentID))}`,
+        undefined,
+        scope,
+      );
+    },
+    readStagedLongText: async (attachment, scope) => mapRuntimeStagedLongText(
       await runtimeJSON<unknown>(
         bridge,
         'GET',
-        `/_redeven_proxy/api/ai/uploads/${encodeURIComponent(trim(attachment.attachment_id))}/long_text?draft_id=${encodeURIComponent(trim(draftID))}`,
+        `/_redeven_proxy/api/ai/uploads/${encodeURIComponent(trim(attachment.attachment_id))}/long_text`,
+        undefined,
+        scope,
       ),
       attachment,
     ),
-    previewStagedAttachment: async (attachment, draftID) => {
+    previewStagedAttachment: async (attachment, scope) => {
       const result = await bridge.previewRuntimeFlowerAttachment({
         attachment_id: trim(attachment.attachment_id),
-        draft_id: trim(draftID),
+        staging_scope_id: scope.staging_scope_id,
+        staging_capability: scope.capability,
         display_name: attachment.name,
       });
       if (!result.ok) throw new Error(result.message || 'Desktop could not preview this attachment.');

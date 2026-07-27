@@ -30,7 +30,7 @@ async function openThreadDeleteDialog(runtime: HTMLElement, threadID: string): P
     clientX: 100,
     clientY: 100,
   }));
-  await waitFor(() => Boolean(document.querySelector('[role="menuitem"][data-destructive="true"]')));
+  await waitFor(() => Boolean(document.querySelector('[role="menuitem"][data-destructive="true"]')), 3_000);
   (document.querySelector('[role="menuitem"][data-destructive="true"]') as HTMLButtonElement).click();
   await waitFor(() => document.body.textContent?.includes(DEFAULT_FLOWER_SURFACE_COPY.threadList.deleteDialogTitle) === true);
   const confirm = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((button) => (

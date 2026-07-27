@@ -36,7 +36,8 @@ export type LocalAttachmentUploadRequest = Readonly<{
   file: File;
   source: 'uploaded_file' | 'long_text';
   requestID: string;
-  draftID: string;
+  stagingScopeID: string;
+  stagingCapability: string;
   contentSHA256: string;
   displayNameSHA256: string;
   signal: AbortSignal;
@@ -116,13 +117,27 @@ export async function prepareLocalApiRequestInit(init: RequestInit): Promise<Req
 }
 
 export async function fetchLocalApiJSON<T>(url: string, init: RequestInit): Promise<T> {
+  return (await fetchLocalApiJSONResponse<T>(url, init)).data;
+}
+
+export type LocalApiJSONResponse<T> = Readonly<{
+  data: T;
+  headers: Headers;
+  status: number;
+}>;
+
+export async function fetchLocalApiJSONResponse<T>(url: string, init: RequestInit): Promise<LocalApiJSONResponse<T>> {
   const resp = await fetch(url, await prepareLocalApiRequestInit(init));
   const text = await resp.text();
   let data: any = null;
+  let parsedJSON = false;
   try {
-    data = text ? JSON.parse(text) : null;
+    if (text) {
+      data = JSON.parse(text);
+      parsedJSON = true;
+    }
   } catch {
-    // ignore
+    // Error responses still use their HTTP status below without exposing the body.
   }
   if (!resp.ok) {
     const message = localApiErrorMessage(data, resp.status);
@@ -142,7 +157,18 @@ export async function fetchLocalApiJSON<T>(url: string, init: RequestInit): Prom
     }
     throw new LocalApiError({ message, status: resp.status || 400, code, data: data?.data });
   }
-  return (data?.data ?? data) as T;
+  if (resp.status !== 204 && !parsedJSON) {
+    throw new LocalApiError({
+      message: 'Local API returned an invalid JSON response.',
+      status: resp.status,
+      code: 'INVALID_JSON_RESPONSE',
+    });
+  }
+  return {
+    data: (data?.data ?? data) as T,
+    headers: resp.headers,
+    status: resp.status,
+  };
 }
 
 export async function uploadLocalApiFile(file: File): Promise<string> {
@@ -175,7 +201,8 @@ export async function uploadLocalApiAttachment(request: LocalAttachmentUploadReq
     body: form,
     headers: {
       'Idempotency-Key': request.requestID,
-      'Upload-Draft-ID': request.draftID,
+      'Upload-Staging-Scope-ID': request.stagingScopeID,
+      'Upload-Staging-Capability': request.stagingCapability,
       'Upload-Content-SHA256': request.contentSHA256,
       'Upload-Content-Length': String(request.file.size),
       'Upload-Display-Name-SHA256': request.displayNameSHA256,
@@ -204,8 +231,12 @@ export async function uploadLocalApiAttachment(request: LocalAttachmentUploadReq
     xhr.onload = () => {
       finish();
       let data: any = null;
+      let parsedJSON = false;
       try {
-        data = xhr.responseText ? JSON.parse(xhr.responseText) : null;
+        if (xhr.responseText) {
+          data = JSON.parse(xhr.responseText);
+          parsedJSON = true;
+        }
       } catch {
         // The typed error below intentionally omits an untrusted response body.
       }
@@ -218,6 +249,14 @@ export async function uploadLocalApiAttachment(request: LocalAttachmentUploadReq
           return;
         }
         reject(new LocalApiError({ message, status: xhr.status || 400, code, data: data?.data }));
+        return;
+      }
+      if (xhr.status !== 204 && !parsedJSON) {
+        reject(new LocalApiError({
+          message: 'Attachment upload returned an invalid JSON response.',
+          status: xhr.status,
+          code: 'INVALID_JSON_RESPONSE',
+        }));
         return;
       }
       resolve((data?.data ?? data) as LocalStagedAttachmentResponse);

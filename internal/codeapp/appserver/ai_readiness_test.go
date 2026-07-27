@@ -222,7 +222,7 @@ func TestAIReadinessUnknownOrMismatchedAIRoutesDoNotAcquire(t *testing.T) {
 				{method: http.MethodPost, path: "/_redeven_proxy/api/ai/runs/run_1/terminal/process_1/unknown", status: http.StatusNotFound},
 				{method: http.MethodPost, path: "/_redeven_proxy/api/ai/runs/run_1/terminal/process_1/read", status: http.StatusMethodNotAllowed},
 				{method: http.MethodGet, path: "/_redeven_proxy/api/ai/composer-drafts/scope_1/unknown", status: http.StatusNotFound},
-				{method: http.MethodPatch, path: "/_redeven_proxy/api/ai/composer-drafts/scope_1", status: http.StatusMethodNotAllowed},
+				{method: http.MethodPatch, path: "/_redeven_proxy/api/ai/composer-drafts/scope_1", status: http.StatusNotFound},
 				{method: http.MethodGet, path: "/_redeven_proxy/api/ai/uploads/upload_1/unknown", status: http.StatusNotFound},
 				{method: http.MethodPatch, path: "/_redeven_proxy/api/ai/uploads/upload_1", status: http.StatusMethodNotAllowed},
 				{method: http.MethodGet, path: "/_redeven_proxy/api/ai/uploads", status: http.StatusMethodNotAllowed},

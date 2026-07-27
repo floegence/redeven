@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	flruntime "github.com/floegence/floret/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -22,6 +23,21 @@ func NewQueuedTurnID() (string, error) {
 		return "", err
 	}
 	return "qt_" + base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+func floretThreadContainsTurn(ctx context.Context, host floretThreadReadHost, threadID, turnID string) (bool, error) {
+	threadID = strings.TrimSpace(threadID)
+	turnID = strings.TrimSpace(turnID)
+	if host == nil || threadID == "" || turnID == "" {
+		return false, errors.New("invalid Floret exact turn read identity")
+	}
+	_, err := host.ReadThreadTurn(ctxOrBackground(ctx), flruntime.ReadThreadTurnRequest{
+		ThreadID: flruntime.ThreadID(threadID), TurnID: flruntime.TurnID(turnID),
+	})
+	if errors.Is(err, flruntime.ErrTurnNotFound) {
+		return false, nil
+	}
+	return err == nil, err
 }
 
 func (s *Service) commitPendingTurnCommandAdmission(ctx context.Context, endpointID string, threadID string, commandID string, turnID string, uploadIDs []string) error {
@@ -465,6 +481,140 @@ func queuedTurnRecordToSessionMeta(rec threadstore.QueuedTurn, namespacePublicID
 	return &meta, nil
 }
 
+func (s *Service) frozenTurnReceipt(ctx context.Context, meta *session.Meta, req SendUserTurnRequest) (*SendUserTurnResponse, error) {
+	turnID := strings.TrimSpace(req.Input.TurnID)
+	if turnID == "" {
+		return nil, nil
+	}
+	s.mu.Lock()
+	db := s.threadsDB
+	s.mu.Unlock()
+	if db == nil {
+		return nil, errors.New("threads store not ready")
+	}
+	rec, err := db.GetFollowupByLaneAndTurnID(ctxOrBackground(ctx), meta.EndpointID, req.ThreadID, threadstore.FollowupLaneQueued, turnID)
+	if err == nil {
+		contextAction, normalizeErr := normalizeAskFlowerContextActionEnvelope(req.Input.ContextAction)
+		if normalizeErr != nil {
+			return nil, normalizeErr
+		}
+		contextJSON, marshalErr := marshalQueuedTurnContextAction(contextAction)
+		if marshalErr != nil {
+			return nil, marshalErr
+		}
+		attachmentsJSON, marshalErr := marshalQueuedTurnAttachments(req.Input.Attachments)
+		if marshalErr != nil {
+			return nil, marshalErr
+		}
+		optionsJSON, marshalErr := marshalQueuedTurnOptions(req.Options)
+		if marshalErr != nil {
+			return nil, marshalErr
+		}
+		sessionJSON, marshalErr := marshalQueuedTurnSessionMeta(meta)
+		if marshalErr != nil {
+			return nil, marshalErr
+		}
+		if strings.TrimSpace(rec.ModelID) != strings.TrimSpace(req.Model) || rec.TextContent != req.Input.Text ||
+			rec.AttachmentsJSON != attachmentsJSON || rec.ContextActionJSON != contextJSON ||
+			rec.OptionsJSON != optionsJSON || rec.SessionMetaJSON != sessionJSON || strings.TrimSpace(rec.ChannelID) != strings.TrimSpace(meta.ChannelID) {
+			return nil, ErrTurnIdempotencyConflict
+		}
+		kind := "queued"
+		position := 0
+		if rec.AdmissionState == threadstore.PendingTurnAdmissionInFlight {
+			kind = "start"
+		} else {
+			items, listErr := db.ListFollowupsByLane(ctxOrBackground(ctx), meta.EndpointID, req.ThreadID, threadstore.FollowupLaneQueued, 500)
+			if listErr != nil {
+				return nil, listErr
+			}
+			for index, item := range items {
+				if item.QueueID == rec.QueueID {
+					position = index + 1
+					break
+				}
+			}
+		}
+		return &SendUserTurnResponse{RunID: rec.RunID, TurnID: rec.TurnID, Kind: kind, QueueID: rec.QueueID, QueuePosition: position, AppliedPermissionType: req.Options.PermissionType}, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
+	host, err := s.openFloretThreadReadHost(ctxOrBackground(ctx), strings.TrimSpace(req.ThreadID))
+	if err != nil {
+		return nil, err
+	}
+	turn, err := host.ReadThreadTurn(ctxOrBackground(ctx), flruntime.ReadThreadTurnRequest{ThreadID: flruntime.ThreadID(strings.TrimSpace(req.ThreadID)), TurnID: flruntime.TurnID(turnID)})
+	if errors.Is(err, flruntime.ErrTurnNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if turn.UserInput != req.Input.Text || len(turn.UserAttachments) != len(req.Input.Attachments) {
+		return nil, ErrTurnIdempotencyConflict
+	}
+	for index, attachment := range turn.UserAttachments {
+		uploadID, parseErr := uploadIDFromFloretResourceRef(attachment.ResourceRef)
+		if parseErr != nil || uploadID != strings.TrimSpace(req.Input.Attachments[index].AttachmentID) {
+			return nil, ErrTurnIdempotencyConflict
+		}
+	}
+	incomingReferences, err := s.canonicalReferencesForFrozenRetry(ctxOrBackground(ctx), meta, db, req)
+	if err != nil {
+		return nil, err
+	}
+	if !sameCanonicalMessageReferences(turn.UserReferences, incomingReferences) {
+		return nil, ErrTurnIdempotencyConflict
+	}
+	return &SendUserTurnResponse{RunID: string(turn.RunID), TurnID: string(turn.TurnID), Kind: "start", AppliedPermissionType: req.Options.PermissionType}, nil
+}
+
+func (s *Service) canonicalReferencesForFrozenRetry(ctx context.Context, meta *session.Meta, db *threadstore.Store, req SendUserTurnRequest) ([]flruntime.MessageReference, error) {
+	if req.Input.ContextAction == nil {
+		return nil, nil
+	}
+	settings, err := db.GetThreadSettings(ctx, strings.TrimSpace(meta.EndpointID), strings.TrimSpace(req.ThreadID))
+	if err != nil {
+		return nil, err
+	}
+	if settings == nil {
+		return nil, errors.New("thread settings not found")
+	}
+	routing, err := db.GetFlowerThreadRouting(ctx, strings.TrimSpace(meta.EndpointID), strings.TrimSpace(req.ThreadID))
+	if err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	policy := normalizeToolTargetPolicy(s.toolTargetPolicy)
+	policyForRun := s.toolTargetPolicyForRun
+	s.mu.Unlock()
+	if policyForRun != nil {
+		policy = normalizeToolTargetPolicy(policyForRun(meta, *settings, routing))
+	}
+	authority, err := resolveFlowerCanonicalReferenceTargetAuthority(meta.EndpointID, policy, routing)
+	if err != nil {
+		return nil, err
+	}
+	projection, err := floretContextProjectionForInputWithAuthority(req.Input, &authority)
+	if err != nil {
+		return nil, err
+	}
+	return projection.References, nil
+}
+
+func sameCanonicalMessageReferences(a, b []flruntime.MessageReference) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for index := range a {
+		if a[index] != b[index] {
+			return false
+		}
+	}
+	return true
+}
+
 func (s *Service) enqueueQueuedTurn(ctx context.Context, meta *session.Meta, req SendUserTurnRequest) (threadstore.QueuedTurn, int, error) {
 	if s == nil {
 		return threadstore.QueuedTurn{}, 0, errors.New("nil service")
@@ -517,8 +667,19 @@ func (s *Service) enqueueQueuedTurn(ctx context.Context, meta *session.Meta, req
 	if err != nil {
 		return threadstore.QueuedTurn{}, 0, err
 	}
+	var stagingScope *threadstore.UploadStagingScope
+	if strings.TrimSpace(req.StagingScopeID) != "" {
+		scope, authorizeErr := s.authorizeUploadStagingScope(ctx, owner, req.StagingScopeID, req.StagingCapability)
+		if authorizeErr != nil {
+			return threadstore.QueuedTurn{}, 0, authorizeErr
+		}
+		if strings.TrimSpace(scope.ThreadID) != strings.TrimSpace(req.ThreadID) {
+			return threadstore.QueuedTurn{}, 0, errors.New("upload staging target changed")
+		}
+		stagingScope = &scope
+	}
 	normalizedInput, uploadIDs, attachmentAdmission, err := s.prepareInputAttachmentAdmission(
-		ctx, owner, strings.TrimSpace(req.DraftID), strings.TrimSpace(req.Model), req.Input,
+		ctx, owner, stagingScope, strings.TrimSpace(req.Model), req.Input,
 	)
 	if err != nil {
 		return threadstore.QueuedTurn{}, 0, err
@@ -571,11 +732,8 @@ func (s *Service) enqueueQueuedTurn(ctx context.Context, meta *session.Meta, req
 	if sourceFollowupID := strings.TrimSpace(req.SourceFollowupID); sourceFollowupID != "" {
 		var result threadstore.FollowupReplacementResult
 		var replaceErr error
-		if strings.TrimSpace(req.DraftID) != "" && req.ExpectedDraftRevision != nil {
-			result, replaceErr = db.ReplaceFollowupFromComposerDraft(pctx, sourceFollowupID, rec, uploadIDs, createdAtUnixMs, threadstore.ComposerDraftAdmission{
-				OwnerUserHash: owner.OwnerUserHash, DraftID: strings.TrimSpace(req.DraftID), ExpectedRevision: *req.ExpectedDraftRevision,
-				ContextActionJSON: contextActionJSON, Attachment: attachmentAdmission,
-			})
+		if stagingScope != nil {
+			result, replaceErr = db.ReplaceFollowupFromStaging(pctx, sourceFollowupID, rec, uploadIDs, createdAtUnixMs, attachmentAdmission, *stagingScope)
 		} else {
 			result, replaceErr = db.ReplaceFollowupWithAttachmentAdmission(pctx, sourceFollowupID, rec, uploadIDs, createdAtUnixMs, attachmentAdmission)
 		}
@@ -589,14 +747,8 @@ func (s *Service) enqueueQueuedTurn(ctx context.Context, meta *session.Meta, req
 		}
 	} else {
 		var createErr error
-		if strings.TrimSpace(req.DraftID) != "" && req.ExpectedDraftRevision != nil {
-			queued, position, _, createErr = db.CreateFollowupFromComposerDraft(pctx, rec, uploadIDs, createdAtUnixMs, threadstore.ComposerDraftAdmission{
-				OwnerUserHash:     owner.OwnerUserHash,
-				DraftID:           strings.TrimSpace(req.DraftID),
-				ExpectedRevision:  *req.ExpectedDraftRevision,
-				ContextActionJSON: contextActionJSON,
-				Attachment:        attachmentAdmission,
-			})
+		if stagingScope != nil {
+			queued, position, _, createErr = db.CreateFollowupFromStaging(pctx, rec, uploadIDs, createdAtUnixMs, attachmentAdmission, *stagingScope)
 		} else {
 			queued, position, _, createErr = db.CreateFollowupWithAttachmentAdmission(pctx, rec, uploadIDs, createdAtUnixMs, attachmentAdmission)
 		}

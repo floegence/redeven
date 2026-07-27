@@ -1,3 +1,5 @@
+import http from 'node:http';
+
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -9,8 +11,20 @@ import {
   type DesktopSettingsBridge,
 } from './localEnvironmentFlowerSurfaceAdapter';
 import type { RuntimeFlowerRequest } from '../../shared/runtimeFlowerIPC';
+import {
+  parseRuntimeFlowerJSON,
+  requestRuntimeFlowerHTTP,
+  runtimeFlowerInvalidJSONError,
+} from '../../main/runtimeFlowerHTTP';
 import { projectFlowerLiveBootstrap } from '../../../../internal/flower_ui/src/flowerLiveReducer';
 import type { AgentSettingsResponse } from '../../../../internal/envapp/ui_src/src/ui/pages/settings/types';
+
+const stagingScope = (threadID: string) => ({
+  staging_scope_id: `staging_${threadID}`,
+  thread_id: threadID,
+  capability: `secret_${threadID}`,
+  expires_at_unix_ms: 10_000,
+});
 
 function readStatus(isUnread = false, revision = 2, status = 'idle') {
   const signature = `status:${status}\u001factivity:${revision}`;
@@ -136,6 +150,79 @@ function attachmentBridgeStubs() {
 }
 
 describe('Local Environment Flower surface adapter', () => {
+  it('creates and releases attachment staging scopes without putting capabilities in URL or body', async () => {
+    const calls: RuntimeFlowerRequest[] = [];
+    const requestRuntimeFlower = vi.fn(async (request: RuntimeFlowerRequest) => {
+      calls.push(request);
+      if (request.path === '/_redeven_proxy/api/ai/upload-staging-scopes') {
+        return {
+          ok: true as const,
+          data: {
+            staging_scope_id: 'staging_thread-staged',
+            thread_id: 'thread-staged',
+            expires_at_unix_ms: 123_456,
+          },
+          stagingCapability: 'secret-from-response-header',
+        };
+      }
+      if (request.path === '/_redeven_proxy/api/ai/upload-staging-scopes/staging_thread-staged') {
+        return { ok: true as const, data: null };
+      }
+      throw new Error(`unexpected path: ${request.path}`);
+    });
+    const bridge: DesktopSettingsBridge = {
+      ...attachmentBridgeStubs(),
+      save: vi.fn(async () => ({ ok: true as const, snapshot: {} as never })),
+      requestRuntimeFlower,
+      cancel: vi.fn(),
+    };
+    const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
+
+    const scope = await adapter.createAttachmentStagingScope?.('thread-staged');
+    expect(scope).toEqual({
+      staging_scope_id: 'staging_thread-staged',
+      thread_id: 'thread-staged',
+      capability: 'secret-from-response-header',
+      expires_at_unix_ms: 123_456,
+    });
+    await adapter.releaseAttachmentStagingScope?.(scope!);
+
+    expect(calls[0]).toEqual({
+      method: 'POST',
+      path: '/_redeven_proxy/api/ai/upload-staging-scopes',
+      body: { thread_id: 'thread-staged' },
+    });
+    expect(calls[1]).toEqual({
+      method: 'DELETE',
+      path: '/_redeven_proxy/api/ai/upload-staging-scopes/staging_thread-staged',
+      staging_scope_id: 'staging_thread-staged',
+      staging_capability: 'secret-from-response-header',
+    });
+    expect(JSON.stringify(calls[0])).not.toContain('secret-from-response-header');
+    expect(calls[1]?.path).not.toContain('secret-from-response-header');
+    expect(calls[1]).not.toHaveProperty('body');
+  });
+
+  it('rejects attachment staging responses that target another thread', async () => {
+    const bridge: DesktopSettingsBridge = {
+      ...attachmentBridgeStubs(),
+      save: vi.fn(async () => ({ ok: true as const, snapshot: {} as never })),
+      requestRuntimeFlower: vi.fn(async () => ({
+        ok: true as const,
+        data: {
+          staging_scope_id: 'staging_wrong',
+          thread_id: 'thread-other',
+          expires_at_unix_ms: 123_456,
+        },
+        stagingCapability: 'secret-from-response-header',
+      })),
+      cancel: vi.fn(),
+    };
+
+    await expect(createLocalEnvironmentFlowerSurfaceAdapter(bridge)
+      .createAttachmentStagingScope?.('thread-requested')).rejects.toThrow('invalid');
+  });
+
   it('maps runtime settings to the shared Flower snapshot without dropping model metadata', () => {
     const snapshot = mapRuntimeFlowerSettings(settingsResponse());
 
@@ -239,10 +326,7 @@ describe('Local Environment Flower surface adapter', () => {
       if (request.path === '/_redeven_proxy/api/settings') return settingsResponse();
       if (request.path === '/_redeven_proxy/api/ai/models') return { current_model: 'default/gpt-4.1', models: [{ id: 'default/gpt-4.1' }] };
       if (request.path === '/_redeven_proxy/api/ai/threads?limit=200') return { threads: [threadView()] };
-      if (request.path === '/_redeven_proxy/api/ai/composer-drafts/draft-desktop/thread') {
-        return { thread_id: 'thread-new', draft_revision: 2 };
-      }
-      if (request.path === '/_redeven_proxy/api/ai/threads/thread-new/turns') {
+      if (request.path === '/_redeven_proxy/api/ai/threads/th_desktop_new/turns') {
         return { turn_id: 'client_desktop-message', run_id: 'run-1', kind: 'start' };
       }
       throw new Error(`unexpected path: ${request.path}`);
@@ -253,13 +337,12 @@ describe('Local Environment Flower surface adapter', () => {
     await adapter.listThreads();
     const receipt = await adapter.launchTurn({
       turn_id: 'client_desktop-message',
-      draft_id: 'draft-desktop',
-      expected_draft_revision: 1,
+      staging_scope: stagingScope('th_desktop_new'),
       prompt: 'hello',
     });
 
     expect(receipt).toEqual({
-      thread_id: 'thread-new',
+      thread_id: 'th_desktop_new',
       turn_id: 'client_desktop-message',
       run_id: 'run-1',
       kind: 'start',
@@ -269,14 +352,19 @@ describe('Local Environment Flower surface adapter', () => {
       'GET /_redeven_proxy/api/ai/threads?limit=200',
       'GET /_redeven_proxy/api/settings',
       'GET /_redeven_proxy/api/ai/models',
-      'POST /_redeven_proxy/api/ai/composer-drafts/draft-desktop/thread',
-      'POST /_redeven_proxy/api/ai/threads/thread-new/turns',
+      'POST /_redeven_proxy/api/ai/threads/th_desktop_new/turns',
     ]);
-    expect(calls.find((call) => call.path === '/_redeven_proxy/api/ai/threads/thread-new/turns')?.body).toMatchObject({
-      thread_id: 'thread-new',
+    expect(calls.find((call) => call.path === '/_redeven_proxy/api/ai/threads/th_desktop_new/turns')?.body).toMatchObject({
+      thread_id: 'th_desktop_new',
+      staging_scope_id: 'staging_th_desktop_new',
       model: 'default/gpt-4.1',
-      input: { turn_id: 'client_desktop-message', text: 'hello', attachment_ids: [] },
+      input: { turn_id: 'client_desktop-message', text: 'hello', attachments: [] },
       options: { permission_type: 'approval_required' },
+      create: { title: '', model_id: 'default/gpt-4.1', permission_type: 'approval_required' },
+    });
+    expect(calls.at(-1)).toMatchObject({
+      staging_scope_id: 'staging_th_desktop_new',
+      staging_capability: 'secret_th_desktop_new',
     });
   });
 
@@ -292,8 +380,6 @@ describe('Local Environment Flower surface adapter', () => {
 
     await expect(launchLocalEnvironmentFlowerTurn(bridge, {
       thread_id: 'thread-existing',
-      draft_id: 'draft-existing',
-      expected_draft_revision: 1,
       turn_id: 'turn-client',
       prompt: 'send once',
     })).rejects.toMatchObject({
@@ -327,8 +413,6 @@ describe('Local Environment Flower surface adapter', () => {
     };
     const definiteFailure = await launchLocalEnvironmentFlowerTurn(definiteBridge, {
       thread_id: 'thread-existing',
-      draft_id: 'draft-existing',
-      expected_draft_revision: 1,
       turn_id: 'turn-definite',
       prompt: 'send once',
     }).catch((error: unknown) => error);
@@ -358,8 +442,6 @@ describe('Local Environment Flower surface adapter', () => {
     };
     await expect(launchLocalEnvironmentFlowerTurn(transportBridge, {
       thread_id: 'thread-existing',
-      draft_id: 'draft-existing',
-      expected_draft_revision: 1,
       turn_id: 'turn-transport',
       prompt: 'send once',
     })).rejects.toMatchObject({
@@ -376,14 +458,146 @@ describe('Local Environment Flower surface adapter', () => {
     });
     await expect(launchLocalEnvironmentFlowerTurn(malformedBridge, {
       thread_id: 'thread-existing',
-      draft_id: 'draft-existing',
-      expected_draft_revision: 1,
       turn_id: 'turn-malformed',
       prompt: 'send once',
     })).rejects.toMatchObject({
       message: 'Flower turn admission returned an invalid receipt.',
       uncertain_admission: { thread_id: 'thread-existing', turn_id: 'turn-malformed' },
     });
+
+    const invalidJSONBridge: DesktopSettingsBridge = {
+      ...attachmentBridgeStubs(),
+      save: vi.fn(async () => ({ ok: true as const, snapshot: {} as never })),
+      requestRuntimeFlower: vi.fn(async (request) => {
+        if (request.path === '/_redeven_proxy/api/settings') {
+          return { ok: true as const, data: settingsResponse() };
+        }
+        if (request.path === '/_redeven_proxy/api/ai/models') {
+          return { ok: true as const, data: { current_model: 'default/gpt-4.1' } };
+        }
+        if (request.path === '/_redeven_proxy/api/ai/threads/thread-existing/turns') {
+          return {
+            ok: false as const,
+            error: {
+              code: 'runtime_flower_invalid_json',
+              message: 'Flower returned an invalid JSON response.',
+              status: 200,
+            },
+            failureKind: 'response' as const,
+          };
+        }
+        throw new Error(`unexpected path: ${request.path}`);
+      }),
+      cancel: vi.fn(),
+    };
+    await expect(launchLocalEnvironmentFlowerTurn(invalidJSONBridge, {
+      thread_id: 'thread-existing',
+      turn_id: 'turn-invalid-json',
+      prompt: 'send once',
+    })).rejects.toMatchObject({
+      code: 'runtime_flower_invalid_json',
+      uncertain_admission: { thread_id: 'thread-existing', turn_id: 'turn-invalid-json' },
+    });
+  });
+
+  it.each([
+    ['empty response', ''],
+    ['HTML response', '<!doctype html><title>proxy error</title>'],
+    ['malformed JSON response', '{"ok":true'],
+  ])('preserves exact new-thread admission identity for an invalid %s', async (_label, responseBody) => {
+    const calls: RuntimeFlowerRequest[] = [];
+    let receivedTurnBody: unknown;
+    const server = http.createServer((request, response) => {
+      const chunks: Buffer[] = [];
+      request.on('data', (chunk: Buffer | string) => {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      });
+      request.on('end', () => {
+        receivedTurnBody = JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
+        response.writeHead(200, { 'Content-Type': 'application/json' });
+        response.end(responseBody);
+      });
+    });
+    const port = await new Promise<number>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(0, '127.0.0.1', () => {
+        server.off('error', reject);
+        const address = server.address();
+        if (!address || typeof address === 'string') {
+          reject(new Error('test server did not expose a TCP address'));
+          return;
+        }
+        resolve(address.port);
+      });
+    });
+    const candidateThreadID = 'th_desktop_invalid_json_candidate';
+    const clientTurnID = 'turn-desktop-invalid-json';
+    const bridge: DesktopSettingsBridge = {
+      ...attachmentBridgeStubs(),
+      save: vi.fn(async () => ({ ok: true as const, snapshot: {} as never })),
+      requestRuntimeFlower: vi.fn(async (request) => {
+        calls.push(request);
+        if (request.path === '/_redeven_proxy/api/settings') {
+          return { ok: true as const, data: settingsResponse() };
+        }
+        if (request.path === '/_redeven_proxy/api/ai/models') {
+          return { ok: true as const, data: { current_model: 'default/gpt-4.1' } };
+        }
+        if (request.path === '/_redeven_proxy/api/ai/threads/th_desktop_invalid_json_candidate/turns') {
+          const response = await requestRuntimeFlowerHTTP(
+            new URL(request.path, 'http://127.0.0.1:' + String(port)),
+            request,
+          );
+          const parsed = parseRuntimeFlowerJSON(response.body);
+          const invalidJSONError = runtimeFlowerInvalidJSONError(response, parsed);
+          if (!invalidJSONError) {
+            return { ok: true as const, data: parsed };
+          }
+          return {
+            ok: false as const,
+            error: invalidJSONError,
+            failureKind: 'response' as const,
+          };
+        }
+        throw new Error('unexpected runtime Flower path');
+      }),
+      cancel: vi.fn(),
+    };
+
+    try {
+      const failure = await launchLocalEnvironmentFlowerTurn(bridge, {
+        turn_id: clientTurnID,
+        staging_scope: stagingScope(candidateThreadID),
+        prompt: 'new conversation',
+      }).catch((error: unknown) => error);
+
+      expect(failure).toMatchObject({
+        message: 'Flower returned an invalid JSON response.',
+        code: 'runtime_flower_invalid_json',
+        uncertain_admission: { thread_id: candidateThreadID, turn_id: clientTurnID },
+      });
+      expect((failure as Error).message.toLowerCase()).not.toBe('invalid json');
+      const turnRequest = calls.find((call) => call.method === 'POST' && call.path.endsWith('/turns'));
+      expect(turnRequest).toMatchObject({
+        path: '/_redeven_proxy/api/ai/threads/th_desktop_invalid_json_candidate/turns',
+        staging_scope_id: 'staging_th_desktop_invalid_json_candidate',
+        body: {
+          thread_id: candidateThreadID,
+          staging_scope_id: 'staging_th_desktop_invalid_json_candidate',
+          input: { turn_id: clientTurnID, text: 'new conversation', attachments: [] },
+          create: {
+            title: '',
+            model_id: 'default/gpt-4.1',
+            permission_type: 'approval_required',
+          },
+        },
+      });
+      expect(receivedTurnBody).toEqual(turnRequest?.body);
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => error ? reject(error) : resolve());
+      });
+    }
   });
 
   it('updates the current model through runtime Flower IPC', async () => {
@@ -841,10 +1055,7 @@ describe('Local Environment Flower surface adapter', () => {
       calls.push(request);
       if (request.path === '/_redeven_proxy/api/settings') return settingsResponse();
       if (request.path === '/_redeven_proxy/api/ai/models') return { current_model: 'default/gpt-4.1' };
-      if (request.path === '/_redeven_proxy/api/ai/composer-drafts/draft-card/thread') {
-        return { thread_id: 'thread-card', draft_revision: 2 };
-      }
-      if (request.path === '/_redeven_proxy/api/ai/threads/thread-card/turns') {
+      if (request.path === '/_redeven_proxy/api/ai/threads/th_card/turns') {
         acceptedTurnID = String((request.body as { input?: { turn_id?: string } })?.input?.turn_id ?? '');
         return { turn_id: acceptedTurnID, run_id: 'run-card', kind: 'start' };
       }
@@ -852,8 +1063,7 @@ describe('Local Environment Flower surface adapter', () => {
     });
 
     await launchLocalEnvironmentFlowerTurn(bridge, {
-      draft_id: 'draft-card',
-      expected_draft_revision: 1,
+      staging_scope: stagingScope('th_card'),
       prompt: 'inspect env',
       context_action: contextAction,
       working_dir: '/workspace/redeven',
@@ -861,27 +1071,32 @@ describe('Local Environment Flower surface adapter', () => {
       permission_type: 'readonly',
     });
 
-    expect(calls.find((call) => call.path === '/_redeven_proxy/api/ai/composer-drafts/draft-card/thread')?.body).toMatchObject({
-      expected_draft_revision: 1,
-      context_action: contextAction,
+    expect(calls.find((call) => call.path === '/_redeven_proxy/api/ai/threads/th_card/turns')?.body).toMatchObject({
+      thread_id: 'th_card',
+      staging_scope_id: 'staging_th_card',
       create: {
         working_dir: '/workspace/redeven',
         permission_type: 'readonly',
       },
     });
-    expect(calls.find((call) => call.path === '/_redeven_proxy/api/ai/threads/thread-card/turns')?.body).toEqual({
-      thread_id: 'thread-card',
-      draft_id: 'draft-card',
-      expected_draft_revision: 2,
+    expect(calls.find((call) => call.path === '/_redeven_proxy/api/ai/threads/th_card/turns')?.body).toEqual({
+      thread_id: 'th_card',
+      staging_scope_id: 'staging_th_card',
       model: 'default/gpt-4.1',
       input: {
         turn_id: acceptedTurnID,
         text: 'inspect env',
-        attachment_ids: ['upl_notes'],
+        attachments: [{ attachment_id: 'upl_notes' }],
         context_action: contextAction,
       },
       options: {
         permission_type: 'readonly',
+      },
+      create: {
+        title: '',
+        model_id: 'default/gpt-4.1',
+        permission_type: 'readonly',
+        working_dir: '/workspace/redeven',
       },
     });
   });
@@ -901,10 +1116,7 @@ describe('Local Environment Flower surface adapter', () => {
       calls.push(request);
       if (request.path === '/_redeven_proxy/api/settings') return settingsResponse();
       if (request.path === '/_redeven_proxy/api/ai/models') return { current_model: 'default/gpt-4.1' };
-      if (request.path === '/_redeven_proxy/api/ai/composer-drafts/draft-reference/thread') {
-        return { thread_id: 'thread-reference', draft_revision: 2 };
-      }
-      if (request.path === '/_redeven_proxy/api/ai/threads/thread-reference/turns') {
+      if (request.path === '/_redeven_proxy/api/ai/threads/th_reference/turns') {
         const turnID = String((request.body as { input?: { turn_id?: string } })?.input?.turn_id ?? '');
         return { turn_id: turnID, run_id: 'run-reference', kind: 'start' };
       }
@@ -912,21 +1124,19 @@ describe('Local Environment Flower surface adapter', () => {
     });
 
     await expect(launchLocalEnvironmentFlowerTurn(bridge, {
-      draft_id: 'draft-reference',
-      expected_draft_revision: 1,
+      staging_scope: stagingScope('th_reference'),
       prompt: '',
       context_action: contextAction,
     })).resolves.toMatchObject({
-      thread_id: 'thread-reference',
+      thread_id: 'th_reference',
       run_id: 'run-reference',
     });
 
-    expect(calls.find((call) => call.path === '/_redeven_proxy/api/ai/composer-drafts/draft-reference/thread')?.body)
-      .toMatchObject({ expected_draft_revision: 1, context_action: contextAction });
-    expect(calls.find((call) => call.path === '/_redeven_proxy/api/ai/threads/thread-reference/turns')?.body)
+    expect(calls.find((call) => call.path === '/_redeven_proxy/api/ai/threads/th_reference/turns')?.body)
       .toMatchObject({
-        expected_draft_revision: 2,
-        input: { text: '', context_action: contextAction },
+        staging_scope_id: 'staging_th_reference',
+        input: { text: '', attachments: [], context_action: contextAction },
+        create: { model_id: 'default/gpt-4.1' },
       });
   });
 
@@ -970,8 +1180,7 @@ describe('Local Environment Flower surface adapter', () => {
 
     await expect(launchLocalEnvironmentFlowerTurn(bridge, {
       thread_id: 'thread-upload',
-      draft_id: 'draft-upload',
-      expected_draft_revision: 1,
+      staging_scope: stagingScope('thread-upload'),
       prompt: '',
       attachment_ids: ['upl_notes'],
     })).resolves.toMatchObject({ thread_id: 'thread-upload', run_id: 'run-upload' });
@@ -1003,10 +1212,11 @@ describe('Local Environment Flower surface adapter', () => {
       capability_revision: 'capability-1',
     };
 
-    await expect(adapter.previewStagedAttachment?.(attachment, 'draft-preview')).resolves.toBeUndefined();
+    await expect(adapter.previewStagedAttachment?.(attachment, stagingScope('thread-preview'))).resolves.toBeUndefined();
     expect(previewRuntimeFlowerAttachment).toHaveBeenCalledWith({
       attachment_id: 'upl_preview_notes',
-      draft_id: 'draft-preview',
+      staging_scope_id: 'staging_thread-preview',
+      staging_capability: 'secret_thread-preview',
       display_name: '../release-notes.txt',
     });
     expect(directOpen).not.toHaveBeenCalled();
@@ -1028,6 +1238,6 @@ describe('Local Environment Flower surface adapter', () => {
       locator: 'attachment://v1/upl_preview_expired/notes.txt',
       source: 'file',
       capability_revision: 'capability-1',
-    }, 'draft-preview')).rejects.toThrow('Preview access expired.');
+    }, stagingScope('thread-preview'))).rejects.toThrow('Preview access expired.');
   });
 });

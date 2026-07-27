@@ -8,8 +8,6 @@ import type {
 } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import {
   createFlowerComposerDraftCoordinator,
-  type FlowerComposerDraftPersistence,
-  type FlowerComposerDraftSnapshot,
 } from '../../../../flower_ui/src/composer/createFlowerComposerDraftCoordinator';
 import {
   adapter,
@@ -74,67 +72,6 @@ async function typeComposerToken(runtime: ParentNode, value: string): Promise<HT
 
 function placeCaretAtEnd(textarea: HTMLTextAreaElement): void {
   textarea.setSelectionRange(textarea.value.length, textarea.value.length);
-}
-
-function createDeferredReferenceRemovalCoordinator(): Readonly<{
-  coordinator: ReturnType<typeof createFlowerComposerDraftCoordinator>;
-  mutationStarted: ReturnType<typeof deferred<void>>;
-  allowMutation: ReturnType<typeof deferred<void>>;
-  armMutation: () => void;
-}> {
-  const mutationStarted = deferred<void>();
-  const allowMutation = deferred<void>();
-  let mutationArmed = false;
-  let remote: FlowerComposerDraftSnapshot = {
-    scope_id: 'new',
-    revision: 0,
-    value: { text: '', attachments: [], references: [], mode: 'ordinary' },
-    updated_at_unix_ms: 1,
-  };
-  const persistence: FlowerComposerDraftPersistence = {
-    load: vi.fn(async () => remote),
-    acquire: vi.fn(async (_scopeID, holderID) => {
-      const lease = {
-        lease_id: 'lease-reference-removal',
-        scope_id: remote.scope_id,
-        holder_id: holderID,
-        acquired_revision: remote.revision,
-        expires_at_unix_ms: Date.now() + 60_000,
-      };
-      return { state: 'owned' as const, snapshot: remote, lease };
-    }),
-    renew: vi.fn(async (_scopeID, holderID, leaseID) => ({
-      state: 'owned' as const,
-      snapshot: remote,
-      lease: {
-        lease_id: leaseID,
-        scope_id: remote.scope_id,
-        holder_id: holderID,
-        acquired_revision: remote.revision,
-        expires_at_unix_ms: Date.now() + 60_000,
-      },
-    })),
-    mutate: vi.fn(async (_scopeID, _holderID, _leaseID, _expectedRevision, value) => {
-      if (mutationArmed) {
-        mutationStarted.resolve(undefined);
-        await allowMutation.promise;
-      }
-      remote = {
-        scope_id: remote.scope_id,
-        revision: remote.revision + 1,
-        value,
-        updated_at_unix_ms: 2,
-      };
-      return { kind: 'committed' as const, snapshot: remote };
-    }),
-    release: vi.fn(async () => undefined),
-  };
-  return {
-    coordinator: createFlowerComposerDraftCoordinator({ persistence }),
-    mutationStarted,
-    allowMutation,
-    armMutation: () => { mutationArmed = true; },
-  };
 }
 
 describe('Flower composer references', () => {
@@ -217,7 +154,7 @@ describe('Flower composer references', () => {
     expect(runtime.querySelector('.flower-composer-reference-chip')?.getAttribute('data-reference-kind')).toBe('file');
   });
 
-  it('serializes rapid candidate activation before awaiting the draft lease', async () => {
+  it('serializes rapid candidate activation against the shared in-memory draft', async () => {
     const runtime = renderSurfaceWithAdapter(composerReferenceAdapter({
       listEntries: async () => [
         { name: 'main.ts', path: '/workspace/main.ts', isDirectory: false, modifiedAt: 2 },
@@ -237,101 +174,24 @@ describe('Flower composer references', () => {
     expect(runtime.querySelectorAll('.flower-composer-reference-chip')).toHaveLength(1);
   });
 
-  it('keeps the focused composer read-only while a persisted reference mutation is pending', async () => {
-    const mutationStarted = deferred<void>();
-    const allowMutation = deferred<void>();
-    const launchTurn = vi.fn(async (turn) => (
-      launchReceipt(turn.thread_id ?? 'thread-reference', turn.turn_id ?? 'turn-reference')
-    ));
-    let remote: FlowerComposerDraftSnapshot = {
-      scope_id: 'new',
-      revision: 0,
-      value: { text: '', attachments: [], references: [], mode: 'ordinary' },
-      updated_at_unix_ms: 1,
-    };
-    const persistence: FlowerComposerDraftPersistence = {
-      load: vi.fn(async () => remote),
-      acquire: vi.fn(async (_scopeID, holderID) => {
-        const lease = {
-          lease_id: 'lease-reference-pending',
-          scope_id: remote.scope_id,
-          holder_id: holderID,
-          acquired_revision: remote.revision,
-          expires_at_unix_ms: Date.now() + 60_000,
-        };
-        return { state: 'owned' as const, snapshot: remote, lease };
-      }),
-      renew: vi.fn(async (_scopeID, holderID, leaseID) => ({
-        state: 'owned' as const,
-        snapshot: remote,
-        lease: {
-          lease_id: leaseID,
-          scope_id: remote.scope_id,
-          holder_id: holderID,
-          acquired_revision: remote.revision,
-          expires_at_unix_ms: Date.now() + 60_000,
-        },
-      })),
-      mutate: vi.fn(async (_scopeID, _holderID, _leaseID, _expectedRevision, value) => {
-        mutationStarted.resolve(undefined);
-        await allowMutation.promise;
-        remote = {
-          scope_id: remote.scope_id,
-          revision: remote.revision + 1,
-          value,
-          updated_at_unix_ms: 2,
-        };
-        return { kind: 'committed' as const, snapshot: remote };
-      }),
-      release: vi.fn(async () => undefined),
-    };
-    const coordinator = createFlowerComposerDraftCoordinator({ persistence });
+  it('commits a selected reference synchronously without blocking the composer', async () => {
+    const coordinator = createFlowerComposerDraftCoordinator();
     const runtime = renderSurfaceWithDraftCoordinator(composerReferenceAdapter({
-      launchTurn,
       listEntries: async () => [{
         name: 'main.ts', path: '/workspace/main.ts', isDirectory: false, modifiedAt: 1,
       }],
-    }), coordinator, 'reference-pending');
+    }), coordinator);
 
     await waitFor(() => runtime.querySelector('.flower-working-dir-chip') !== null);
     const textarea = await typeComposerToken(runtime, '@main');
     await waitFor(() => runtime.querySelector('[role="option"]') !== null);
     (runtime.querySelector('[role="option"]') as HTMLButtonElement).click();
-    await mutationStarted.promise;
-    await waitFor(() => textarea.readOnly);
+    await waitFor(() => runtime.querySelector('.flower-composer-reference-chip') !== null);
+
     expect(runtime.querySelector('[role="listbox"]')).toBeNull();
-    expect(textarea.closest('.flower-composer')?.getAttribute('aria-busy')).toBe('true');
-    const enter = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
-    textarea.dispatchEvent(enter);
-    expect(enter.defaultPrevented).toBe(true);
-    expect(launchTurn).not.toHaveBeenCalled();
-    const tab = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
-    textarea.dispatchEvent(tab);
-    expect(tab.defaultPrevented).toBe(false);
-    const outside = document.createElement('button');
-    runtime.appendChild(outside);
-    outside.focus();
-    expect(document.activeElement).toBe(outside);
-
-    textarea.value = '@main should-not-stick';
-    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
-    expect(textarea.value).toBe('@main');
-
-    const paste = new Event('paste', { bubbles: true, cancelable: true }) as ClipboardEvent;
-    Object.defineProperty(paste, 'clipboardData', {
-      value: {
-        files: [],
-        getData: (type: string) => type === 'text/plain' ? ' should-not-stick' : '',
-      },
-    });
-    expect(textarea.dispatchEvent(paste)).toBe(false);
-    expect(textarea.value).toBe('@main');
-    expect((runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).disabled).toBe(true);
-
-    allowMutation.resolve(undefined);
-    await waitFor(() => runtime.querySelector('.flower-composer-reference-chip') !== null && !textarea.readOnly);
+    expect(textarea.closest('.flower-composer')?.getAttribute('aria-busy')).not.toBe('true');
+    expect(textarea.readOnly).toBe(false);
     expect(textarea.value).toBe('');
-    expect(document.activeElement).toBe(outside);
     await typeComposerToken(runtime, 'after');
     expect(textarea.value).toBe('after');
   });
@@ -452,16 +312,14 @@ describe('Flower composer references', () => {
     expect(document.activeElement).toBe(textarea);
   });
 
-  it('preserves external focus while the last reference removal persists', async () => {
-    const pending = createDeferredReferenceRemovalCoordinator();
+  it('preserves external focus after the last in-memory reference removal', async () => {
     const runtime = renderSurfaceWithDraftCoordinator(
       composerReferenceAdapter({
         listEntries: async () => [{
           name: 'main.ts', path: '/workspace/main.ts', isDirectory: false, modifiedAt: 1,
         }],
       }),
-      pending.coordinator,
-      'reference-removal-external-focus',
+      createFlowerComposerDraftCoordinator(),
     );
 
     await waitFor(() => runtime.querySelector('.flower-working-dir-chip') !== null);
@@ -472,23 +330,19 @@ describe('Flower composer references', () => {
     await waitFor(() => runtime.querySelector('.flower-composer-reference-chip-remove') !== null);
     const remove = runtime.querySelector('.flower-composer-reference-chip-remove') as HTMLButtonElement;
     await waitFor(() => !remove.disabled);
-    pending.armMutation();
     remove.focus();
     remove.click();
-    await pending.mutationStarted.promise;
 
     const outside = document.createElement('button');
     runtime.appendChild(outside);
     outside.focus();
-    pending.allowMutation.resolve(undefined);
 
     await waitFor(() => runtime.querySelector('.flower-composer-reference-chip') === null);
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     expect(document.activeElement).toBe(outside);
   });
 
-  it('moves focus to the adjacent chip after a persisted reference removal', async () => {
-    const pending = createDeferredReferenceRemovalCoordinator();
+  it('moves focus to the adjacent chip after an in-memory reference removal', async () => {
     const runtime = renderSurfaceWithDraftCoordinator(
       composerReferenceAdapter({
         listEntries: async () => [
@@ -496,8 +350,7 @@ describe('Flower composer references', () => {
           { name: 'src', path: '/workspace/src', isDirectory: true, modifiedAt: 1 },
         ],
       }),
-      pending.coordinator,
-      'reference-removal-adjacent-focus',
+      createFlowerComposerDraftCoordinator(),
     );
 
     await waitFor(() => runtime.querySelector('.flower-working-dir-chip') !== null);
@@ -513,11 +366,8 @@ describe('Flower composer references', () => {
     await waitFor(() => runtime.querySelectorAll('.flower-composer-reference-chip-remove').length === 2);
     const remove = runtime.querySelector('.flower-composer-reference-chip-remove') as HTMLButtonElement;
     await waitFor(() => !remove.disabled);
-    pending.armMutation();
     remove.focus();
     remove.click();
-    await pending.mutationStarted.promise;
-    pending.allowMutation.resolve(undefined);
 
     await waitFor(() => runtime.querySelectorAll('.flower-composer-reference-chip-remove').length === 1);
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
