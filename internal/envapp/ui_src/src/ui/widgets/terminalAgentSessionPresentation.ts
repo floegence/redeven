@@ -5,7 +5,7 @@ import {
 } from '@floegence/floeterm-terminal-web/sessions';
 import { REDEVEN_ENV_APP_BASE_PATH } from '../../build/envAppBasePath';
 
-export type TerminalSessionOutputState = 'none' | 'streaming' | 'settled';
+export type TerminalSessionOutputState = 'none' | 'streaming';
 
 export type TerminalAgentCliPresentation = Readonly<{
   label: string;
@@ -69,6 +69,6 @@ export function deriveTerminalAgentSessionPresentation(
   if (!identity) return { identity: null, outputState: 'none' };
   return {
     identity,
-    outputState: outputPhase === 'streaming' || outputPhase === 'settled' ? outputPhase : 'none',
+    outputState: outputPhase === 'streaming' ? 'streaming' : 'none',
   };
 }

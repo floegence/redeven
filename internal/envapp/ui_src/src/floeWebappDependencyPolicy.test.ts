@@ -119,9 +119,9 @@ describe('published npm dependency policy', () => {
       '@floegence/floeterm-terminal-web',
     ));
 
-    expect(version).toBe('0.10.1');
+    expect(version).toBe('0.11.0');
     expect(expectedTarballUrl('@floegence/floeterm-terminal-web', version)).toBe(
-      'https://registry.npmjs.org/@floegence/floeterm-terminal-web/-/floeterm-terminal-web-0.10.1.tgz',
+      'https://registry.npmjs.org/@floegence/floeterm-terminal-web/-/floeterm-terminal-web-0.11.0.tgz',
     );
 
     const previousReleaseMarkers = new Map([

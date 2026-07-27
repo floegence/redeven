@@ -26,6 +26,7 @@ function renderNavigator(item: TerminalSessionNavigationItem, onSelectSession = 
       connected
       refreshing={false}
       activeTitle={item.title}
+      activeAvatar={item.avatar}
       shortcutModLabel="Ctrl"
       filterQuery=""
       itemIds={[item.id]}
@@ -62,11 +63,18 @@ function navigationItem(overrides: Partial<TerminalSessionNavigationItem> = {}):
       border: 'rgb(40, 50, 60)',
       foreground: 'rgb(240, 240, 240)',
     },
+    avatar: { kind: 'agent', identity: 'codex' },
+    subtitleIcon: 'none',
+    subtitle: '/workspace/redeven',
     fullPath: '/workspace/redeven',
-    processState: 'running',
+    localWorkingDir: '/workspace/redeven',
+    processState: 'none',
+    transitionState: 'none',
+    failureKind: 'none',
     outputState: 'streaming',
+    activitySource: 'output',
     attentionState: 'unread',
-    agentIdentity: 'codex',
+    remote: false,
     canBrowsePath: true,
     canClear: true,
     canDuplicate: true,
@@ -80,7 +88,7 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     const { host } = renderNavigator(navigationItem());
 
     expect(host.querySelector('[data-terminal-agent-identity="codex"]')).not.toBeNull();
-    expect(host.querySelector('[data-terminal-process-state="running"]')).not.toBeNull();
+    expect(host.querySelector('[data-terminal-process-state="running"]')).toBeNull();
     expect(host.querySelector('[data-terminal-output-state="streaming"]')).not.toBeNull();
     expect(host.querySelector('[data-terminal-output-attention="unread"]')).toBeNull();
     expect(host.querySelector('[data-terminal-attention-state="unread"]')).toBeNull();
@@ -91,32 +99,59 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     expect(rowButton.parentElement?.className).toContain('color-mix(in_srgb,var(--foreground)_6%,transparent)');
     const descriptionId = rowButton.getAttribute('aria-describedby');
     expect(descriptionId).toBe('terminal-session-status-agent-session');
-    expect(host.querySelector(`#${descriptionId}`)?.textContent).toContain('foreground process is running');
     expect(host.querySelector(`#${descriptionId}`)?.textContent).toContain('Unread terminal output');
     expect(rowButton.hasAttribute('aria-live')).toBe(false);
     expect(rowButton.hasAttribute('aria-busy')).toBe(false);
   });
 
-  it('uses a blue unread dot for settled agent output without duplicating the title marker', () => {
-    const { host } = renderNavigator(navigationItem({ outputState: 'settled' }));
-    const trigger = host.querySelector<HTMLButtonElement>('[data-terminal-output-trigger="agent-session"]');
-    const unreadDot = host.querySelector<HTMLElement>('[data-terminal-output-attention="unread"]');
+  it('uses a stable amber attention dot when an Agent needs user input', () => {
+    const { host } = renderNavigator(navigationItem({ outputState: 'none', attentionState: 'waiting' }));
+    const waitingDot = host.querySelector<HTMLElement>('[data-terminal-attention-state="waiting"]');
 
-    expect(unreadDot).not.toBeNull();
-    expect(unreadDot?.className).toContain('h-2 w-2 rounded-full bg-info');
-    expect(host.querySelector('[data-terminal-attention-state="unread"]')).toBeNull();
-    expect(trigger?.getAttribute('aria-label')).toContain('Unread terminal output');
+    expect(waitingDot).not.toBeNull();
+    expect(waitingDot?.className).toContain('bg-current');
+    expect(host.querySelector('[data-terminal-attention-trigger="agent-session"]')?.className).toContain('text-warning');
+    expect(host.querySelector('[data-terminal-output-state]')).toBeNull();
+    expect(host.querySelector('[data-terminal-tab-status="waiting"]')).not.toBeNull();
   });
 
-  it('uses a static flat line for read settled output without claiming success', () => {
-    const { host } = renderNavigator(navigationItem({ outputState: 'settled', attentionState: 'none' }));
-    const trigger = host.querySelector<HTMLButtonElement>('[data-terminal-output-trigger="agent-session"]');
+  it('opens waiting help from touch-style clicks and closes it on Escape', async () => {
+    const onSelectSession = vi.fn();
+    const { host } = renderNavigator(
+      navigationItem({ outputState: 'none', activitySource: 'none', attentionState: 'waiting' }),
+      onSelectSession,
+    );
+    const trigger = host.querySelector<HTMLButtonElement>('[data-terminal-attention-trigger="agent-session"]')!;
 
-    expect(host.querySelector('[data-terminal-output-state="settled"]')).not.toBeNull();
-    expect(host.querySelector('[data-terminal-output-attention="unread"]')).toBeNull();
-    expect(trigger?.getAttribute('aria-label')).toContain('stable');
-    expect(trigger?.querySelector('svg')?.className).not.toContain('animate-spin');
-    expect(trigger?.textContent?.toLowerCase()).not.toContain('complete');
+    trigger.focus();
+    trigger.click();
+    await Promise.resolve();
+    expect(document.body.querySelector('[role="tooltip"]')?.textContent).toContain('User input');
+    expect(onSelectSession).not.toHaveBeenCalled();
+
+    trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await Promise.resolve();
+    expect(document.body.querySelector('[role="tooltip"]')?.getAttribute('aria-hidden')).toBe('true');
+  });
+
+  it('keeps an idle Agent quiet after output settles', () => {
+    const { host } = renderNavigator(navigationItem({ outputState: 'none', attentionState: 'none' }));
+
+    expect(host.querySelector('[data-terminal-output-state]')).toBeNull();
+    expect(host.querySelector('[data-terminal-attention-state]')).toBeNull();
+    expect(host.querySelector('[data-terminal-process-state="running"]')).toBeNull();
+  });
+
+  it('describes semantic Agent work without claiming terminal output', () => {
+    const { host } = renderNavigator(navigationItem({ activitySource: 'semantic', attentionState: 'none' }));
+    const trigger = host.querySelector<HTMLButtonElement>('[data-terminal-output-trigger="agent-session"]')!;
+    const rowButton = host.querySelector<HTMLButtonElement>('button[data-terminal-session-id="agent-session"]')!;
+    const descriptionId = rowButton.getAttribute('aria-describedby') ?? '';
+
+    expect(trigger.getAttribute('aria-label')).toBe('Working');
+    expect(trigger.dataset.terminalActivitySource).toBe('semantic');
+    expect(host.querySelector(`#${descriptionId}`)?.textContent).toContain('Working');
+    expect(host.querySelector(`#${descriptionId}`)?.textContent).not.toContain('output');
   });
 
   it('opens output help from touch-style clicks without selecting the session and closes on Escape', async () => {
@@ -127,7 +162,7 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     trigger.focus();
     trigger.click();
     await Promise.resolve();
-    expect(document.body.querySelector('[role="tooltip"]')?.textContent).toContain('producing');
+    expect(document.body.querySelector('[role="tooltip"]')?.textContent).toContain('Terminal output is active');
     expect(onSelectSession).not.toHaveBeenCalled();
 
     trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
@@ -146,7 +181,7 @@ describe('TerminalSessionNavigator agent status presentation', () => {
   it('keeps the neutral initial avatar and no agent output indicator for ordinary commands', () => {
     const { host } = renderNavigator(navigationItem({
       title: 'top',
-      agentIdentity: null,
+      avatar: { kind: 'initial' },
       outputState: 'none',
       attentionState: 'none',
     }));
@@ -157,15 +192,112 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     expect(host.querySelector('[data-terminal-output-state]')).toBeNull();
   });
 
+  it('shows confirmed ordinary foreground work independently from unread attention', () => {
+    const { host } = renderNavigator(navigationItem({
+      title: 'top',
+      avatar: { kind: 'initial' },
+      processState: 'running',
+      outputState: 'none',
+      attentionState: 'unread',
+    }));
+    const rowButton = host.querySelector<HTMLButtonElement>('button[data-terminal-session-id="agent-session"]')!;
+    const descriptionId = rowButton.getAttribute('aria-describedby') ?? '';
+
+    expect(host.querySelector('[data-terminal-process-state="running"]')).not.toBeNull();
+    expect(host.querySelector('[data-terminal-attention-state="unread"]')).not.toBeNull();
+    expect(host.querySelector(`#${descriptionId}`)?.textContent).toContain('The foreground process is running.');
+    expect(host.querySelector(`#${descriptionId}`)?.textContent).toContain('Unread terminal output.');
+  });
+
+  it('keeps the full title and subtitle independently discoverable', () => {
+    const { host } = renderNavigator(navigationItem({
+      title: 'root@build-runner-with-a-very-long-hostname.example.internal',
+      subtitle: '/srv/repositories/redeven/feature/terminal-context',
+      fullPath: '/srv/repositories/redeven/feature/terminal-context',
+    }));
+    const rowButton = host.querySelector<HTMLButtonElement>('button[data-terminal-session-id="agent-session"]')!;
+    const subtitle = host.querySelector<HTMLElement>('[data-testid="terminal-session-path-agent-session"]')!;
+
+    expect(rowButton.title).toBe('root@build-runner-with-a-very-long-hostname.example.internal');
+    expect(rowButton.getAttribute('aria-label')).toContain('/srv/repositories/redeven/feature/terminal-context');
+    expect(subtitle.title).toBe('/srv/repositories/redeven/feature/terminal-context');
+  });
+
   it('keeps ordinary session unread attention in the title slot', () => {
     const { host } = renderNavigator(navigationItem({
       title: 'top',
-      agentIdentity: null,
+      avatar: { kind: 'initial' },
       outputState: 'none',
     }));
 
     expect(host.querySelector('[data-terminal-attention-state="unread"]')).not.toBeNull();
     expect(host.querySelector('[data-terminal-output-attention="unread"]')).toBeNull();
+  });
+
+  it('uses the Link avatar for an idle remote shell without a spinner', () => {
+    const { host } = renderNavigator(navigationItem({
+      title: 'root@host',
+      avatar: { kind: 'link' },
+      remote: true,
+      subtitle: '/root/project',
+      fullPath: '/root/project',
+      localWorkingDir: '',
+      processState: 'none',
+      outputState: 'none',
+      attentionState: 'none',
+      canBrowsePath: false,
+      canDuplicate: false,
+    }));
+
+    expect(host.querySelector('[data-terminal-session-title="agent-session"]')?.textContent).toBe('root@host');
+    expect(host.querySelector('[data-terminal-process-state="running"]')).toBeNull();
+    expect(host.querySelector('[data-terminal-session-avatar="agent-session"] svg')).not.toBeNull();
+  });
+
+  it('shows a Link location marker beneath an Agent running over SSH', () => {
+    const { host } = renderNavigator(navigationItem({
+      subtitleIcon: 'link',
+      subtitle: 'root@host · /root/project',
+      remote: true,
+    }));
+
+    const path = host.querySelector('[data-testid="terminal-session-path-agent-session"]');
+    expect(path?.previousElementSibling?.tagName.toLowerCase()).toBe('svg');
+    expect(path?.textContent).toBe('root@host · /root/project');
+  });
+
+  it('describes a pending session creation failure precisely', () => {
+    const { host } = renderNavigator(navigationItem({
+      processState: 'failed',
+      transitionState: 'failed',
+      failureKind: 'creation',
+      outputState: 'none',
+      activitySource: 'none',
+      attentionState: 'none',
+    }));
+    const rowButton = host.querySelector<HTMLButtonElement>('button[data-terminal-session-id="agent-session"]')!;
+    const descriptionId = rowButton.getAttribute('aria-describedby') ?? '';
+
+    expect(descriptionId).toBe('terminal-session-status-agent-session');
+    expect(host.querySelector(`#${descriptionId}`)?.textContent).toContain('Creation failed');
+    expect(host.querySelector(`#${descriptionId}`)?.textContent).not.toContain('Needs attention');
+  });
+
+  it('describes a blocking terminal runtime failure precisely', () => {
+    const { host } = renderNavigator(navigationItem({
+      processState: 'failed',
+      transitionState: 'failed',
+      failureKind: 'runtime',
+      outputState: 'none',
+      activitySource: 'none',
+      attentionState: 'none',
+    }));
+    const rowButton = host.querySelector<HTMLButtonElement>('button[data-terminal-session-id="agent-session"]')!;
+    const descriptionId = rowButton.getAttribute('aria-describedby') ?? '';
+
+    expect(descriptionId).toBe('terminal-session-status-agent-session');
+    expect(host.querySelector(`#${descriptionId}`)?.textContent).toContain('This terminal could not be restored.');
+    expect(host.querySelector(`#${descriptionId}`)?.textContent).not.toContain('Needs attention');
   });
 
   it('reserves four explicit trailing action cells even when actions are unavailable', () => {

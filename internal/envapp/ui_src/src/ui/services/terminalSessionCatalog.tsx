@@ -1,9 +1,11 @@
 import { createContext, createEffect, createSignal, onCleanup, untrack, useContext, type Accessor, type ParentProps } from 'solid-js';
 import type {
+  TerminalExecutionContextInfo,
   TerminalForegroundCommandInfo,
   TerminalOutputActivityInfo,
   TerminalSessionInfo,
   TerminalSessionsCoordinator,
+  TerminalWorkStateInfo,
 } from '@floegence/floeterm-terminal-web/sessions';
 import type { PreparedPagedTerminalHistory } from '@floegence/floeterm-terminal-web/history';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
@@ -38,6 +40,7 @@ export type TerminalSessionCatalogValue = Readonly<{
   error: Accessor<string | null>;
   permissionDenied: Accessor<boolean>;
   connectionEpoch: Accessor<number>;
+  remoteOpeningObservedAtMs: (sessionId: string) => number | undefined;
   coordinator: Accessor<TerminalSessionsCoordinator | null>;
   getCoordinator: () => TerminalSessionsCoordinator | null;
   refresh: () => Promise<void>;
@@ -50,6 +53,8 @@ export type TerminalSessionCatalogValue = Readonly<{
     isActive?: boolean;
     foregroundCommand?: TerminalForegroundCommandInfo;
     outputActivity?: TerminalOutputActivityInfo;
+    executionContext?: TerminalExecutionContextInfo;
+    workState?: TerminalWorkStateInfo;
   }) => void;
   clearForPermissionDenied: () => void;
   requestPreparedHistory: (sessionId: string) => Promise<PreparedPagedTerminalHistory | null>;
@@ -97,6 +102,7 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
   const [error, setError] = createSignal<string | null>(null);
   const [permissionDenied, setPermissionDenied] = createSignal(false);
   const [connectionEpoch, setConnectionEpoch] = createSignal(0);
+  const [remoteOpeningEpochRevision, setRemoteOpeningEpochRevision] = createSignal(0);
   const [coordinator, setCoordinator] = createSignal<TerminalSessionsCoordinator | null>(null);
 
   let activeClient: object | null = null;
@@ -105,6 +111,8 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
   let unsubscribeCoordinator: (() => void) | null = null;
   let unsubscribeForegroundCommand: (() => void) | null = null;
   let unsubscribeOutputActivity: (() => void) | null = null;
+  let unsubscribeExecutionContext: (() => void) | null = null;
+  let unsubscribeWorkState: (() => void) | null = null;
   let preloadCancel: (() => void) | null = null;
   let lifecycleRevision = 0;
   let refreshRequestSequence = 0;
@@ -119,6 +127,9 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
   const pendingForegroundCommands = new Map<string, TerminalForegroundCommandInfo>();
   const pendingOutputActivities = new Map<string, TerminalOutputActivityInfo>();
   const latestOutputActivities = new Map<string, TerminalOutputActivityInfo>();
+  const latestExecutionContexts = new Map<string, TerminalExecutionContextInfo>();
+  const latestWorkStates = new Map<string, TerminalWorkStateInfo>();
+  const remoteOpeningObservedAtBySession = new Map<string, number>();
   const pendingMetadataLimit = 512;
   let pendingMetadataOverflowRevision = 0;
   let pendingMetadataReconcile: Promise<void> | null = null;
@@ -166,6 +177,83 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     }
     pendingForegroundCommands.delete(sessionId);
     current.updateSessionMeta(sessionId, { foregroundCommand });
+    const latestWorkState = latestWorkStates.get(sessionId);
+    if (latestWorkState) {
+      current.updateSessionMeta(sessionId, { workState: latestWorkState });
+      latestWorkStates.delete(sessionId);
+    }
+    return true;
+  };
+
+  const retainLatestExecutionContext = (
+    sessionId: string,
+    executionContext: TerminalExecutionContextInfo,
+  ): boolean => {
+    const existing = latestExecutionContexts.get(sessionId);
+    if (existing && existing.revision > executionContext.revision) return false;
+    latestExecutionContexts.delete(sessionId);
+    latestExecutionContexts.set(sessionId, executionContext);
+    while (latestExecutionContexts.size > pendingMetadataLimit) {
+      const oldest = latestExecutionContexts.keys().next().value;
+      if (typeof oldest !== 'string') break;
+      latestExecutionContexts.delete(oldest);
+      latestWorkStates.delete(oldest);
+      pendingMetadataOverflowRevision += 1;
+      schedulePendingMetadataReconcile();
+    }
+    return true;
+  };
+
+  const retainLatestWorkState = (sessionId: string, workState: TerminalWorkStateInfo): boolean => {
+    const existing = latestWorkStates.get(sessionId);
+    if (existing && existing.revision > workState.revision) return false;
+    latestWorkStates.delete(sessionId);
+    latestWorkStates.set(sessionId, workState);
+    while (latestWorkStates.size > pendingMetadataLimit) {
+      const oldest = latestWorkStates.keys().next().value;
+      if (typeof oldest !== 'string') break;
+      latestWorkStates.delete(oldest);
+      pendingMetadataOverflowRevision += 1;
+      schedulePendingMetadataReconcile();
+    }
+    return true;
+  };
+
+  const applyExecutionContext = (
+    sessionId: string,
+    executionContext: TerminalExecutionContextInfo,
+  ): boolean => {
+    const current = activeCoordinator;
+    const existingSession = current?.getSnapshot().find((session) => session.id === sessionId);
+    if (!current || !existingSession) {
+      retainLatestExecutionContext(sessionId, executionContext);
+      return false;
+    }
+    if ((existingSession.executionContext?.revision ?? -1) <= executionContext.revision) {
+      current.updateSessionMeta(sessionId, { executionContext });
+    }
+    latestExecutionContexts.delete(sessionId);
+    const latestWorkState = latestWorkStates.get(sessionId);
+    if (latestWorkState) {
+      if ((existingSession.workState?.revision ?? -1) <= latestWorkState.revision) {
+        current.updateSessionMeta(sessionId, { workState: latestWorkState });
+      }
+      latestWorkStates.delete(sessionId);
+    }
+    return true;
+  };
+
+  const applyWorkState = (sessionId: string, workState: TerminalWorkStateInfo): boolean => {
+    const current = activeCoordinator;
+    const existingSession = current?.getSnapshot().find((session) => session.id === sessionId);
+    if (!current || !existingSession) {
+      retainLatestWorkState(sessionId, workState);
+      return false;
+    }
+    if ((existingSession.workState?.revision ?? -1) <= workState.revision) {
+      current.updateSessionMeta(sessionId, { workState });
+    }
+    latestWorkStates.delete(sessionId);
     return true;
   };
 
@@ -232,6 +320,19 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
       }
       current.updateSessionMeta(sessionId, { outputActivity });
     }
+    for (const [sessionId, executionContext] of latestExecutionContexts) {
+      const existing = snapshotById.get(sessionId);
+      if (!existing) continue;
+      latestExecutionContexts.delete(sessionId);
+      if ((existing.executionContext?.revision ?? -1) <= executionContext.revision) {
+        current.updateSessionMeta(sessionId, { executionContext });
+      }
+    }
+    for (const [sessionId, workState] of latestWorkStates) {
+      if (!snapshotById.has(sessionId)) continue;
+      latestWorkStates.delete(sessionId);
+      current.updateSessionMeta(sessionId, { workState });
+    }
   };
 
   const convergeOutputActivities = (current: TerminalSessionsCoordinator) => {
@@ -243,6 +344,21 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
       } else if (snapshotActivity) {
         latestOutputActivities.set(session.id, snapshotActivity);
       }
+    }
+  };
+
+  const convergeContextAndWork = (current: TerminalSessionsCoordinator) => {
+    for (const session of current.getSnapshot()) {
+      const latestContext = latestExecutionContexts.get(session.id);
+      if (latestContext && latestContext.revision >= (session.executionContext?.revision ?? -1)) {
+        current.updateSessionMeta(session.id, { executionContext: latestContext });
+      }
+      latestExecutionContexts.delete(session.id);
+      const latestWork = latestWorkStates.get(session.id);
+      if (latestWork && latestWork.revision >= (session.workState?.revision ?? -1)) {
+        current.updateSessionMeta(session.id, { workState: latestWork });
+      }
+      latestWorkStates.delete(session.id);
     }
   };
 
@@ -268,7 +384,32 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
           latestOutputActivities.delete(sessionId);
         }
       }
+      for (const sessionId of latestExecutionContexts.keys()) {
+        if (!authoritativeIds.has(sessionId)) latestExecutionContexts.delete(sessionId);
+      }
+      for (const sessionId of latestWorkStates.keys()) {
+        if (!authoritativeIds.has(sessionId)) latestWorkStates.delete(sessionId);
+      }
     }
+    const openingSessionIds = new Set<string>();
+    let openingEpochsChanged = false;
+    const observedAtMs = Date.now();
+    for (const session of visible) {
+      if (session.executionContext?.location.kind !== 'remote'
+        || session.executionContext.location.phase !== 'opening') continue;
+      openingSessionIds.add(session.id);
+      if (!remoteOpeningObservedAtBySession.has(session.id)) {
+        remoteOpeningObservedAtBySession.set(session.id, observedAtMs);
+        openingEpochsChanged = true;
+      }
+    }
+    for (const sessionId of remoteOpeningObservedAtBySession.keys()) {
+      if (openingSessionIds.has(sessionId)) continue;
+      remoteOpeningObservedAtBySession.delete(sessionId);
+      openingEpochsChanged = true;
+    }
+    if (openingEpochsChanged) setRemoteOpeningEpochRevision((value) => value + 1);
+
     const frozen = Object.freeze([...visible]);
     setSessions(frozen);
     historyWarmup?.syncSessions(frozen);
@@ -297,9 +438,19 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     unsubscribeForegroundCommand = null;
     unsubscribeOutputActivity?.();
     unsubscribeOutputActivity = null;
+    unsubscribeExecutionContext?.();
+    unsubscribeExecutionContext = null;
+    unsubscribeWorkState?.();
+    unsubscribeWorkState = null;
     pendingForegroundCommands.clear();
     pendingOutputActivities.clear();
     latestOutputActivities.clear();
+    latestExecutionContexts.clear();
+    latestWorkStates.clear();
+    if (remoteOpeningObservedAtBySession.size > 0) {
+      remoteOpeningObservedAtBySession.clear();
+      setRemoteOpeningEpochRevision((value) => value + 1);
+    }
     pendingMetadataReconcile = null;
     if (pendingMetadataRetryTimer != null) {
       globalThis.clearTimeout(pendingMetadataRetryTimer);
@@ -393,6 +544,20 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
         applyOutputActivity(sessionId, event.outputActivity);
       });
     }
+    if (terminalRpc && typeof terminalRpc.onExecutionContextUpdate === 'function') {
+      unsubscribeExecutionContext = terminalRpc.onExecutionContextUpdate((event) => {
+        const sessionId = String(event.sessionId ?? '').trim();
+        if (!sessionId || removedSessionIds.has(sessionId)) return;
+        applyExecutionContext(sessionId, event.executionContext);
+      });
+    }
+    if (terminalRpc && typeof terminalRpc.onWorkStateUpdate === 'function') {
+      unsubscribeWorkState = terminalRpc.onWorkStateUpdate((event) => {
+        const sessionId = String(event.sessionId ?? '').trim();
+        if (!sessionId || removedSessionIds.has(sessionId)) return;
+        applyWorkState(sessionId, event.workState);
+      });
+    }
     setConnectionEpoch((value) => value + 1);
     return next;
   };
@@ -418,6 +583,7 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
         || current !== activeCoordinator
       ) return;
       convergeOutputActivities(current);
+      convergeContextAndWork(current);
       flushPendingMetadata(current);
       coordinatorHydrated = true;
       applySnapshot(current.getSnapshot(), true);
@@ -528,6 +694,8 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
       pendingForegroundCommands.delete(normalized);
       pendingOutputActivities.delete(normalized);
       latestOutputActivities.delete(normalized);
+      latestExecutionContexts.delete(normalized);
+      latestWorkStates.delete(normalized);
       historyWarmup?.invalidate(normalized, 'removed');
       const current = getCoordinator();
       if (current) current.removeSession(normalized);
@@ -542,6 +710,8 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     isActive?: boolean;
     foregroundCommand?: TerminalForegroundCommandInfo;
     outputActivity?: TerminalOutputActivityInfo;
+    executionContext?: TerminalExecutionContextInfo;
+    workState?: TerminalWorkStateInfo;
   }) => {
     const normalized = String(sessionId ?? '').trim();
     if (!normalized) return;
@@ -583,6 +753,11 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     if (active) activeSurfaceIds.add(id);
     else activeSurfaceIds.delete(id);
     historyWarmup?.setPageActive(activeSurfaceIds.size > 0);
+  };
+
+  const remoteOpeningObservedAtMs = (sessionId: string): number | undefined => {
+    remoteOpeningEpochRevision();
+    return remoteOpeningObservedAtBySession.get(String(sessionId ?? '').trim());
   };
 
   if (typeof document !== 'undefined') {
@@ -671,6 +846,7 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     error,
     permissionDenied,
     connectionEpoch,
+    remoteOpeningObservedAtMs,
     coordinator,
     getCoordinator,
     refresh,

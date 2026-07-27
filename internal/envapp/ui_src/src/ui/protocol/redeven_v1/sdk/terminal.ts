@@ -1,6 +1,8 @@
 import type {
+  TerminalExecutionContextInfo,
   TerminalForegroundCommandInfo,
   TerminalOutputActivityInfo,
+  TerminalWorkStateInfo,
 } from '@floegence/floeterm-terminal-web';
 
 export type TerminalSessionInfo = {
@@ -12,6 +14,8 @@ export type TerminalSessionInfo = {
   isActive: boolean;
   foregroundCommand: TerminalForegroundCommandInfo;
   outputActivity: TerminalOutputActivityInfo;
+  executionContext: TerminalExecutionContextInfo;
+  workState: TerminalWorkStateInfo;
 };
 
 export type TerminalSessionCreateRequest = {
@@ -94,6 +98,16 @@ export type TerminalForegroundCommandUpdateEvent = {
 export type TerminalOutputActivityUpdateEvent = {
   sessionId: string;
   outputActivity: TerminalOutputActivityInfo;
+};
+
+export type TerminalExecutionContextUpdateEvent = {
+  sessionId: string;
+  executionContext: TerminalExecutionContextInfo;
+};
+
+export type TerminalWorkStateUpdateEvent = {
+  sessionId: string;
+  workState: TerminalWorkStateInfo;
 };
 
 export type TerminalSessionLifecycle =

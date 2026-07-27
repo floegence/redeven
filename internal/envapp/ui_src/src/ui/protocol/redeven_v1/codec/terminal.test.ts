@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  fromWireTerminalExecutionContextUpdateNotify,
   fromWireTerminalForegroundCommandUpdateNotify,
   fromWireTerminalHistoryResponse,
   fromWireTerminalOutputActivityUpdateNotify,
   fromWireTerminalSessionCreateResponse,
   fromWireTerminalSessionListResponse,
   fromWireTerminalSessionsChangedNotify,
+  fromWireTerminalWorkStateUpdateNotify,
   toWireTerminalHistoryRequest,
 } from './terminal';
 
@@ -176,6 +178,90 @@ describe('terminal codec', () => {
       output_activity: {
         phase: 'settled',
         revision: 2,
+        updated_at_ms: 10,
+      },
+    })).toBeNull();
+  });
+
+  it('decodes atomic execution context and revision-fenced semantic work notifications', () => {
+    expect(fromWireTerminalExecutionContextUpdateNotify({
+      session_id: ' session-1 ',
+      execution_context: {
+        location: {
+          kind: 'remote',
+          phase: 'ready',
+          label: 'root@host',
+          authority: 'host',
+          working_directory: '/root/project',
+          source: 'osc7',
+        },
+        application: {
+          kind: 'agent_cli',
+          identity: 'codex',
+          display_name: 'Codex',
+        },
+        revision: 7,
+        updated_at_ms: 8,
+      },
+    })).toEqual({
+      sessionId: 'session-1',
+      executionContext: {
+        location: {
+          kind: 'remote',
+          phase: 'ready',
+          label: 'root@host',
+          authority: 'host',
+          workingDirectory: '/root/project',
+          source: 'osc7',
+        },
+        application: { kind: 'agent_cli', identity: 'codex', displayName: 'Codex' },
+        revision: 7,
+        updatedAtMs: 8,
+      },
+    });
+    expect(fromWireTerminalWorkStateUpdateNotify({
+      session_id: 'session-1',
+      work_state: {
+        phase: 'waiting_user',
+        source: 'semantic',
+        context_revision: 7,
+        foreground_command_revision: 4,
+        revision: 9,
+        updated_at_ms: 10,
+      },
+    })).toEqual({
+      sessionId: 'session-1',
+      workState: {
+        phase: 'waiting_user',
+        source: 'semantic',
+        contextRevision: 7,
+        foregroundCommandRevision: 4,
+        revision: 9,
+        updatedAtMs: 10,
+      },
+    });
+  });
+
+  it('rejects malformed context and work values without accepting their high revisions', () => {
+    expect(fromWireTerminalExecutionContextUpdateNotify({
+      session_id: 'session-sensitive',
+      execution_context: {
+        location: {
+          kind: 'remote', phase: 'ready', label: 'root@host', authority: 'host', working_directory: '/root', source: 'unsafe' as any,
+        },
+        application: { kind: 'agent_cli', identity: 'codex', display_name: 'Codex' },
+        revision: 999,
+        updated_at_ms: 10,
+      },
+    })).toBeNull();
+    expect(fromWireTerminalWorkStateUpdateNotify({
+      session_id: 'session-sensitive',
+      work_state: {
+        phase: 'working',
+        source: '' as any,
+        context_revision: 7,
+        foreground_command_revision: 4,
+        revision: 999,
         updated_at_ms: 10,
       },
     })).toBeNull();

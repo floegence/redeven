@@ -27,6 +27,12 @@ const rpcState = vi.hoisted(() => ({
   onOutputActivityUpdate: vi.fn(),
   outputSubscriptionAvailable: true,
   outputActivityHandler: null as ((event: any) => void) | null,
+  onExecutionContextUpdate: vi.fn(),
+  contextSubscriptionAvailable: true,
+  executionContextHandler: null as ((event: any) => void) | null,
+  onWorkStateUpdate: vi.fn(),
+  workSubscriptionAvailable: true,
+  workStateHandler: null as ((event: any) => void) | null,
 }));
 
 class FakeCoordinator {
@@ -35,6 +41,7 @@ class FakeCoordinator {
   private listeners = new Set<(snapshot: any[]) => void>();
   private inFlight: { revision: number; promise: Promise<void> } | null = null;
   private mutationRevision = 0;
+  private metadataConflictKeys = new Set<string>();
 
   constructor(options: any) {
     this.transport = options.transport;
@@ -80,7 +87,40 @@ class FakeCoordinator {
 
   updateSessionMeta(id: string, patch: any) {
     const existing = this.snapshot.find((entry) => entry.id === id);
-    if (existing) this.upsertSession({ ...existing, ...patch, id });
+    if (!existing) return;
+    const next = { ...existing, ...patch, id };
+    const currentContext = existing.executionContext;
+    const incomingContext = patch.executionContext;
+    if (currentContext && incomingContext && incomingContext.revision <= currentContext.revision) {
+      if (incomingContext.revision === currentContext.revision
+        && JSON.stringify(incomingContext) !== JSON.stringify(currentContext)) {
+        this.scheduleMetadataConflictReconcile(`${id}:context:${incomingContext.revision}`);
+      }
+      next.executionContext = currentContext;
+    }
+    const currentWork = existing.workState;
+    const incomingWork = patch.workState;
+    const context = next.executionContext ?? existing.executionContext;
+    const foreground = next.foregroundCommand ?? existing.foregroundCommand;
+    const workMatchesFences = incomingWork
+      && incomingWork.contextRevision === (context?.revision ?? 0)
+      && incomingWork.foregroundCommandRevision === (foreground?.revision ?? 0);
+    if (incomingWork && !workMatchesFences) {
+      next.workState = currentWork;
+    } else if (currentWork && incomingWork && incomingWork.revision <= currentWork.revision) {
+      if (incomingWork.revision === currentWork.revision
+        && JSON.stringify(incomingWork) !== JSON.stringify(currentWork)) {
+        this.scheduleMetadataConflictReconcile(`${id}:work:${incomingWork.revision}`);
+      }
+      next.workState = currentWork;
+    }
+    this.upsertSession(next);
+  }
+
+  private scheduleMetadataConflictReconcile(key: string) {
+    if (this.metadataConflictKeys.has(key)) return;
+    this.metadataConflictKeys.add(key);
+    queueMicrotask(() => { void this.refresh(); });
   }
 
   dispose() {
@@ -107,6 +147,8 @@ vi.mock('../protocol/redeven_v1', () => ({
     onSessionsChanged: rpcState.onSessionsChanged,
     onForegroundCommandUpdate: rpcState.foregroundSubscriptionAvailable ? rpcState.onForegroundCommandUpdate : undefined,
     onOutputActivityUpdate: rpcState.outputSubscriptionAvailable ? rpcState.onOutputActivityUpdate : undefined,
+    onExecutionContextUpdate: rpcState.contextSubscriptionAvailable ? rpcState.onExecutionContextUpdate : undefined,
+    onWorkStateUpdate: rpcState.workSubscriptionAvailable ? rpcState.onWorkStateUpdate : undefined,
     createSession: vi.fn(),
     deleteSession: vi.fn(),
   } }),
@@ -173,10 +215,23 @@ describe('TerminalSessionCatalogProvider', () => {
       rpcState.outputActivityHandler = handler;
       return () => { rpcState.outputActivityHandler = null; };
     });
+    rpcState.onExecutionContextUpdate.mockReset();
+    rpcState.contextSubscriptionAvailable = true;
+    rpcState.onExecutionContextUpdate.mockImplementation((handler: (event: any) => void) => {
+      rpcState.executionContextHandler = handler;
+      return () => { rpcState.executionContextHandler = null; };
+    });
+    rpcState.onWorkStateUpdate.mockReset();
+    rpcState.workSubscriptionAvailable = true;
+    rpcState.onWorkStateUpdate.mockImplementation((handler: (event: any) => void) => {
+      rpcState.workStateHandler = handler;
+      return () => { rpcState.workStateHandler = null; };
+    });
     coordinatorState.current = null;
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     document.body.innerHTML = '';
   });
 
@@ -197,6 +252,8 @@ describe('TerminalSessionCatalogProvider', () => {
   it('falls back to authoritative refresh when optional metadata subscriptions are unavailable', async () => {
     rpcState.foregroundSubscriptionAvailable = false;
     rpcState.outputSubscriptionAvailable = false;
+    rpcState.contextSubscriptionAvailable = false;
+    rpcState.workSubscriptionAvailable = false;
     let latest: any = null;
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -210,6 +267,8 @@ describe('TerminalSessionCatalogProvider', () => {
     expect(latest.sessions()).toHaveLength(1);
     expect(rpcState.onForegroundCommandUpdate).not.toHaveBeenCalled();
     expect(rpcState.onOutputActivityUpdate).not.toHaveBeenCalled();
+    expect(rpcState.onExecutionContextUpdate).not.toHaveBeenCalled();
+    expect(rpcState.onWorkStateUpdate).not.toHaveBeenCalled();
 
     rpcState.sessions = [{ ...rpcState.sessions[0], name: 'Refreshed terminal' }];
     rpcState.list.mockImplementation(async () => ({ sessions: rpcState.sessions }));
@@ -389,6 +448,209 @@ describe('TerminalSessionCatalogProvider', () => {
     dispose();
   });
 
+  it('retains early context and work truth across stale snapshots and ignores older revisions', async () => {
+    let resolveList!: (value: any) => void;
+    rpcState.list.mockImplementationOnce(() => new Promise((resolve) => { resolveList = resolve; }));
+    let latest: any = null;
+    const host = document.createElement('div');
+    const dispose = render(() => (
+      <TerminalSessionCatalogProvider>
+        <Consumer onValue={(value) => { latest = value; }} />
+      </TerminalSessionCatalogProvider>
+    ), host);
+    await vi.waitFor(() => expect(rpcState.onWorkStateUpdate).toHaveBeenCalled());
+
+    const remoteContext = {
+      location: { kind: 'remote', phase: 'ready', label: 'root@host', authority: 'host', workingDirectory: '/root/project', source: 'osc7' },
+      application: { kind: 'agent_cli', identity: 'codex', displayName: 'Codex' },
+      revision: 3,
+      updatedAtMs: 30,
+    };
+    const workingState = {
+      phase: 'working', source: 'semantic', contextRevision: 3, foregroundCommandRevision: 2, revision: 4, updatedAtMs: 40,
+    };
+    rpcState.executionContextHandler?.({ sessionId: 's1', executionContext: remoteContext });
+    rpcState.workStateHandler?.({ sessionId: 's1', workState: workingState });
+    resolveList({ sessions: [{
+      ...rpcState.sessions[0],
+      foregroundCommand: { phase: 'running', displayName: 'codex', revision: 2, updatedAtMs: 20 },
+      executionContext: {
+        location: { kind: 'local', phase: 'ready', label: '', authority: '', workingDirectory: '/', source: 'shell_integration' },
+        application: { kind: 'shell', identity: '', displayName: '' },
+        revision: 2,
+        updatedAtMs: 20,
+      },
+      workState: { phase: 'idle', source: 'semantic', contextRevision: 2, foregroundCommandRevision: 2, revision: 3, updatedAtMs: 20 },
+    }] });
+
+    await vi.waitFor(() => expect(latest?.hydrated()).toBe(true));
+    expect(latest.sessions()[0]?.executionContext).toEqual(remoteContext);
+    expect(latest.sessions()[0]?.workState).toEqual(workingState);
+
+    rpcState.executionContextHandler?.({
+      sessionId: 's1',
+      executionContext: { ...remoteContext, revision: 2, updatedAtMs: 50 },
+    });
+    rpcState.workStateHandler?.({
+      sessionId: 's1',
+      workState: { ...workingState, phase: 'idle', revision: 3, updatedAtMs: 50 },
+    });
+    expect(latest.sessions()[0]?.executionContext).toEqual(remoteContext);
+    expect(latest.sessions()[0]?.workState).toEqual(workingState);
+    dispose();
+  });
+
+  it('routes equal-revision context conflicts through one authoritative reconcile', async () => {
+    const authoritativeSession = {
+      ...rpcState.sessions[0],
+      foregroundCommand: { phase: 'running', displayName: 'ssh', revision: 2, updatedAtMs: 20 },
+      executionContext: {
+        location: { kind: 'local', phase: 'ready', label: '', authority: '', workingDirectory: '/', source: 'shell_integration' },
+        application: { kind: 'shell', identity: '', displayName: '' },
+        revision: 3,
+        updatedAtMs: 30,
+      },
+      workState: { phase: 'idle', source: 'semantic', contextRevision: 3, foregroundCommandRevision: 2, revision: 4, updatedAtMs: 40 },
+    };
+    rpcState.list.mockReset();
+    rpcState.list.mockResolvedValue({ sessions: [authoritativeSession] });
+    let latest: any = null;
+    const host = document.createElement('div');
+    const dispose = render(() => (
+      <TerminalSessionCatalogProvider>
+        <Consumer onValue={(value) => { latest = value; }} />
+      </TerminalSessionCatalogProvider>
+    ), host);
+    await vi.waitFor(() => expect(latest?.hydrated()).toBe(true));
+
+    rpcState.executionContextHandler?.({
+      sessionId: 's1',
+      executionContext: {
+        location: { kind: 'remote', phase: 'ready', label: 'root@host', authority: 'host', workingDirectory: '/root', source: 'osc7' },
+        application: { kind: 'shell', identity: '', displayName: '' },
+        revision: 3,
+        updatedAtMs: 31,
+      },
+    });
+
+    await vi.waitFor(() => expect(rpcState.list).toHaveBeenCalledTimes(2));
+    expect(latest.sessions()[0]?.executionContext).toEqual(authoritativeSession.executionContext);
+    dispose();
+  });
+
+  it('reconciles a fence-valid equal work conflict but ignores a fence-stale one', async () => {
+    const authoritativeSession = {
+      ...rpcState.sessions[0],
+      foregroundCommand: { phase: 'running', displayName: 'codex', revision: 2, updatedAtMs: 20 },
+      executionContext: {
+        location: { kind: 'local', phase: 'ready', label: '', authority: '', workingDirectory: '/', source: 'shell_integration' },
+        application: { kind: 'agent_cli', identity: 'codex', displayName: 'Codex' },
+        revision: 3,
+        updatedAtMs: 30,
+      },
+      workState: { phase: 'idle', source: 'semantic', contextRevision: 3, foregroundCommandRevision: 2, revision: 4, updatedAtMs: 40 },
+    };
+    rpcState.list.mockReset();
+    rpcState.list.mockResolvedValue({ sessions: [authoritativeSession] });
+    let latest: any = null;
+    const host = document.createElement('div');
+    const dispose = render(() => (
+      <TerminalSessionCatalogProvider>
+        <Consumer onValue={(value) => { latest = value; }} />
+      </TerminalSessionCatalogProvider>
+    ), host);
+    await vi.waitFor(() => expect(latest?.hydrated()).toBe(true));
+
+    rpcState.workStateHandler?.({
+      sessionId: 's1',
+      workState: { phase: 'working', source: 'semantic', contextRevision: 3, foregroundCommandRevision: 2, revision: 4, updatedAtMs: 41 },
+    });
+    await vi.waitFor(() => expect(rpcState.list).toHaveBeenCalledTimes(2));
+    expect(latest.sessions()[0]?.workState).toEqual(authoritativeSession.workState);
+
+    rpcState.workStateHandler?.({
+      sessionId: 's1',
+      workState: { phase: 'waiting_user', source: 'semantic', contextRevision: 2, foregroundCommandRevision: 2, revision: 4, updatedAtMs: 42 },
+    });
+    await Promise.resolve();
+    expect(rpcState.list).toHaveBeenCalledTimes(2);
+    expect(latest.sessions()[0]?.workState).toEqual(authoritativeSession.workState);
+    dispose();
+  });
+
+  it('anchors remote opening animation to one shared continuous epoch', async () => {
+    let nowMs = 1_000;
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => nowMs);
+    const openingContext = {
+      location: { kind: 'remote', phase: 'opening', label: 'SSH', authority: '', workingDirectory: '', source: 'foreground_candidate' },
+      application: { kind: 'shell', identity: '', displayName: '' },
+      revision: 1,
+      updatedAtMs: 10,
+    };
+    rpcState.list.mockReset();
+    rpcState.list.mockResolvedValue({ sessions: [{ ...rpcState.sessions[0], executionContext: openingContext }] });
+    let latest: any = null;
+    const host = document.createElement('div');
+    const dispose = render(() => (
+      <TerminalSessionCatalogProvider>
+        <Consumer onValue={(value) => { latest = value; }} />
+      </TerminalSessionCatalogProvider>
+    ), host);
+    await vi.waitFor(() => expect(latest?.hydrated()).toBe(true));
+    expect(latest.remoteOpeningObservedAtMs('s1')).toBe(1_000);
+
+    nowMs = 1_500;
+    rpcState.executionContextHandler?.({
+      sessionId: 's1',
+      executionContext: { ...openingContext, revision: 2, updatedAtMs: 20 },
+    });
+    expect(latest.remoteOpeningObservedAtMs('s1')).toBe(1_000);
+
+    rpcState.executionContextHandler?.({
+      sessionId: 's1',
+      executionContext: {
+        ...openingContext,
+        location: { ...openingContext.location, phase: 'ready', authority: 'host', label: 'root@host' },
+        revision: 3,
+        updatedAtMs: 30,
+      },
+    });
+    expect(latest.remoteOpeningObservedAtMs('s1')).toBeUndefined();
+
+    nowMs = 2_000;
+    rpcState.executionContextHandler?.({
+      sessionId: 's1',
+      executionContext: { ...openingContext, revision: 4, updatedAtMs: 40 },
+    });
+    expect(latest.remoteOpeningObservedAtMs('s1')).toBe(2_000);
+    nowSpy.mockRestore();
+    dispose();
+  });
+
+  it('disposes context and work subscriptions across reconnects', async () => {
+    let latest: any = null;
+    const host = document.createElement('div');
+    const dispose = render(() => (
+      <TerminalSessionCatalogProvider>
+        <Consumer onValue={(value) => { latest = value; }} />
+      </TerminalSessionCatalogProvider>
+    ), host);
+    await vi.waitFor(() => expect(latest?.hydrated()).toBe(true));
+    expect(rpcState.executionContextHandler).not.toBeNull();
+    expect(rpcState.workStateHandler).not.toBeNull();
+
+    protocolState.setStatus('connecting');
+    protocolState.setClient(null);
+    await vi.waitFor(() => expect(rpcState.executionContextHandler).toBeNull());
+    expect(rpcState.workStateHandler).toBeNull();
+
+    protocolState.setStatus('connected');
+    protocolState.setClient({ id: 'client-2' });
+    await vi.waitFor(() => expect(rpcState.onExecutionContextUpdate).toHaveBeenCalledTimes(2));
+    expect(rpcState.onWorkStateUpdate).toHaveBeenCalledTimes(2);
+    dispose();
+  });
+
   it('converges missed output activity updates through an authoritative refresh', async () => {
     let latest: any = null;
     const host = document.createElement('div');
@@ -513,6 +775,78 @@ describe('TerminalSessionCatalogProvider', () => {
     await vi.waitFor(() => expect(latest?.sessions()[0]?.outputActivity).toEqual({
       phase: 'streaming', revision: 3, updatedAtMs: 30,
     }));
+    dispose();
+  });
+
+  it('reconciles execution context and work truth when the bounded early-notification buffer overflows', async () => {
+    const sessionCount = 513;
+    const localContext = {
+      location: { kind: 'local', phase: 'ready', label: '', authority: '', workingDirectory: '/', source: 'shell_integration' },
+      application: { kind: 'shell', identity: '', displayName: '' },
+      revision: 2,
+      updatedAtMs: 20,
+    };
+    const remoteContext = {
+      location: { kind: 'remote', phase: 'ready', label: 'root@host', authority: 'host', workingDirectory: '/root', source: 'osc7' },
+      application: { kind: 'agent_cli', identity: 'codex', displayName: 'Codex' },
+      revision: 3,
+      updatedAtMs: 30,
+    };
+    const staleWork = {
+      phase: 'idle', source: 'semantic', contextRevision: 2, foregroundCommandRevision: 0, revision: 2, updatedAtMs: 20,
+    };
+    const authoritativeWork = {
+      phase: 'waiting_user', source: 'semantic', contextRevision: 3, foregroundCommandRevision: 0, revision: 3, updatedAtMs: 30,
+    };
+    const staleSessions = Array.from({ length: sessionCount }, (_, index) => ({
+      id: `context-session-${index}`,
+      name: `Terminal ${index}`,
+      workingDir: '/',
+      createdAtMs: index + 1,
+      lastActiveAtMs: index + 1,
+      isActive: index === 0,
+      executionContext: localContext,
+      workState: staleWork,
+    }));
+    const authoritativeSessions = staleSessions.map((session, index) => index === 0 ? {
+      ...session,
+      executionContext: remoteContext,
+      workState: authoritativeWork,
+    } : session);
+    let resolveInitialList!: (value: any) => void;
+    let resolveReconcile!: (value: any) => void;
+    rpcState.list
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveInitialList = resolve; }))
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveReconcile = resolve; }));
+
+    let latest: any = null;
+    const host = document.createElement('div');
+    const dispose = render(() => (
+      <TerminalSessionCatalogProvider>
+        <Consumer onValue={(value) => { latest = value; }} />
+      </TerminalSessionCatalogProvider>
+    ), host);
+    await vi.waitFor(() => expect(rpcState.onExecutionContextUpdate).toHaveBeenCalled());
+    await vi.waitFor(() => expect(rpcState.onWorkStateUpdate).toHaveBeenCalled());
+
+    for (let index = 0; index < sessionCount; index += 1) {
+      rpcState.executionContextHandler?.({
+        sessionId: `context-session-${index}`,
+        executionContext: remoteContext,
+      });
+      rpcState.workStateHandler?.({
+        sessionId: `context-session-${index}`,
+        workState: authoritativeWork,
+      });
+    }
+    resolveInitialList({ sessions: staleSessions });
+
+    await vi.waitFor(() => expect(rpcState.list).toHaveBeenCalledTimes(2));
+    resolveReconcile({ sessions: authoritativeSessions });
+    await vi.waitFor(() => {
+      expect(latest?.sessions()[0]?.executionContext).toEqual(remoteContext);
+      expect(latest?.sessions()[0]?.workState).toEqual(authoritativeWork);
+    });
     dispose();
   });
 
