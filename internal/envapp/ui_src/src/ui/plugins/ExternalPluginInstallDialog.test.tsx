@@ -239,7 +239,7 @@ async function flush(): Promise<void> {
 }
 
 describe('ExternalPluginInstallDialog', () => {
-  it('uses an opaque wide decision surface with a four-stage progress indicator', () => {
+  it('uses an opaque wide decision surface with a compact four-stage progress indicator', () => {
     renderDialog();
 
     const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
@@ -251,10 +251,9 @@ describe('ExternalPluginInstallDialog', () => {
     expect(progress.textContent).toContain('Review package');
     expect(progress.textContent).toContain('Install plugin');
     expect(progress.textContent).toContain('Ready');
-    const connectors = [...progress.querySelectorAll<HTMLElement>('[data-install-progress-connector]')];
-    expect(connectors).toHaveLength(3);
-    expect(connectors.map((connector) => connector.style.right)).toEqual(Array(3).fill('calc(50% + 1.25rem)'));
-    expect(connectors.map((connector) => connector.style.width)).toEqual(Array(3).fill('calc(100% - 2.5rem)'));
+    expect(progress.querySelectorAll('[data-install-progress-segment]')).toHaveLength(4);
+    expect(document.querySelector('[data-install-progress-current]')?.textContent).toBe('Plugin source');
+    expect(document.querySelector('[data-install-progress]')?.textContent).toContain('Step 1 of 4');
   });
 
   it('provides roving keyboard navigation and labelled source tab panels', async () => {
@@ -435,17 +434,89 @@ describe('ExternalPluginInstallDialog', () => {
     const confirmation = document.querySelector<HTMLElement>('[data-external-plugin-confirmation]')!;
     const consentCopy = 'I approve this exact inspected package and its declared access.';
     expect(trustReview.textContent).toContain('Waiting for your approval');
-    const trustTechnicalDetails = trustReview.querySelectorAll<HTMLDetailsElement>('[data-decision-technical-details]');
-    expect(trustTechnicalDetails).toHaveLength(3);
-    expect([...trustTechnicalDetails].every((details) => !details.open)).toBe(true);
-    expect([...trustTechnicalDetails].every((details) => !details.querySelector('summary')?.textContent?.includes('execution_approval'))).toBe(true);
-    expect(trustTechnicalDetails[1].textContent).toContain('execution_approval=pending');
-    expect(trustTechnicalDetails[1].textContent).toContain('unsigned_package_requires_user_confirmation');
+    expect(trustReview.textContent).not.toContain('Update mode');
+    expect(trustReview.textContent).not.toContain('execution_approval=pending');
+    expect(trustReview.textContent).not.toContain('unsigned_package_requires_user_confirmation');
+    const report = document.querySelector<HTMLDetailsElement>('[data-external-plugin-report]')!;
+    expect(report.open).toBe(false);
+    expect(report.textContent).toContain('execution_approval=pending');
+    expect(report.textContent).toContain('unsigned_package_requires_user_confirmation');
+    expect(report.textContent).toContain(inspected.inspection_id);
+    expect(report.textContent).toContain(inspected.expires_at);
+    expect(report.textContent).toContain('action=install');
+    expect(document.activeElement).toBe(trustReview);
     expect(trustReview.textContent).not.toContain(consentCopy);
     expect(confirmation.querySelector('input[type="checkbox"]')).not.toBeNull();
     expect(confirmation.textContent).toContain(consentCopy);
     expect((document.body.textContent?.match(/I approve this exact inspected package and its declared access\./g) ?? []))
       .toHaveLength(1);
+    button('Back').click();
+    await flush();
+    expect(document.activeElement).toBe(inputWithPlaceholder('https://example.com/plugin.redevplugin'));
+  });
+
+  it('keeps verified trust distinct from pending user approval', async () => {
+    const inspected = inspection('verified', 'pending');
+    renderDialog({ onInspect: vi.fn(async () => inspected) });
+    typeInto(inputWithPlaceholder('https://example.com/plugin.redevplugin'), 'https://plugins.example.com/toolbox.redevplugin');
+    button('Review package').click();
+    await flush();
+
+    const decision = document.querySelector<HTMLElement>('[data-external-plugin-trust-review]')!;
+    expect(decision.textContent).toContain('Ready for your review');
+    expect(decision.textContent).toContain('Signature verified');
+    expect(decision.textContent).toContain('Waiting for your approval');
+    expect(button('Install plugin').disabled).toBe(true);
+  });
+
+  it('distinguishes no declarations from standard declarations without claiming safety', async () => {
+    renderDialog({ onInspect: vi.fn(async () => inspection('absent')) });
+    typeInto(inputWithPlaceholder('https://example.com/plugin.redevplugin'), 'https://plugins.example.com/empty.redevplugin');
+    button('Review package').click();
+    await flush();
+    expect(document.querySelector('[data-external-plugin-review-highlights]')?.textContent)
+      .toContain('This package declares no plugin capabilities or access');
+
+    dispose?.();
+    document.body.innerHTML = '';
+    const standard = inspection('absent');
+    standard.security_summary.permissions = [{ permission_id: 'workspace.read', methods: ['workspace.list'] }];
+    renderDialog({ onInspect: vi.fn(async () => standard) });
+    typeInto(inputWithPlaceholder('https://example.com/plugin.redevplugin'), 'https://plugins.example.com/standard.redevplugin');
+    button('Review package').click();
+    await flush();
+    const highlights = document.querySelector('[data-external-plugin-review-highlights]')?.textContent ?? '';
+    expect(highlights).toContain('No access declarations need special attention');
+    expect(highlights).toContain('1 additional standard declaration');
+    expect(highlights).not.toContain('safe');
+  });
+
+  it('identifies standard added access by category before the full report', async () => {
+    const previous = inspection('absent');
+    const updateItem = externalUpdateItem(previous);
+    const inspected = inspection('absent');
+    inspected.intent = {
+      action: 'update',
+      plugin_instance_id: updateItem.pluginInstanceID,
+      expected_management_revision: updateItem.managementRevision,
+    };
+    inspected.version = '1.2.4';
+    inspected.security_summary.permissions = [{ permission_id: 'workspace.read', methods: ['workspace.list'] }];
+    renderDialog({ updateItem, onInspect: vi.fn(async () => inspected) });
+
+    const upload = document.querySelector<HTMLInputElement>('input[type="file"]')!;
+    const file = new File(['new package'], 'toolbox-1.2.4.redevplugin');
+    Object.defineProperty(upload, 'files', { configurable: true, value: [file] });
+    upload.dispatchEvent(new Event('change', { bubbles: true }));
+    button('Review package').click();
+    await flush();
+
+    const standardChanges = document.querySelector<HTMLElement>('[data-external-plugin-standard-changes]')!;
+    expect(standardChanges.textContent).toContain('Permissions');
+    expect(standardChanges.textContent).toContain('1');
+    expect(standardChanges.textContent).toContain('Added');
+    expect(standardChanges.textContent).not.toContain('additional standard declaration');
+    expect(document.querySelector<HTMLDetailsElement>('[data-external-plugin-report]')?.open).toBe(false);
   });
 
   it('discloses every security declaration and highlights update deltas before confirmation', async () => {
@@ -578,13 +649,20 @@ describe('ExternalPluginInstallDialog', () => {
     expect(copy).toContain('Changed');
     expect(copy).toContain('Removed');
     expect(copy).toContain('Previous');
+    const report = document.querySelector<HTMLDetailsElement>('[data-external-plugin-report]')!;
+    const highlights = document.querySelector<HTMLElement>('[data-external-plugin-review-highlights]')!;
+    expect(report.open).toBe(false);
+    expect(report.querySelector('summary')?.textContent).toContain('3 changes');
+    expect(highlights.textContent).toContain('Network rules');
+    expect(highlights.textContent).toContain('api.github.com:443');
+    expect(highlights.textContent).toContain('Changed');
     const declarations = document.querySelectorAll<HTMLDetailsElement>('[data-external-plugin-security-declarations] > details');
     expect(declarations.length).toBeGreaterThan(0);
-    const declarationFor = (change: string) => [...declarations]
-      .find((details) => details.querySelector('summary')?.textContent?.includes(change));
-    expect(declarationFor('Added')?.open).toBe(false);
-    expect(declarationFor('Changed')?.open).toBe(true);
-    expect(declarationFor('Removed')?.open).toBe(false);
+    const declarationFor = (category: string) => [...declarations]
+      .find((details) => details.querySelector('summary')?.textContent?.includes(category));
+    expect(declarationFor('Permissions')?.open).toBe(true);
+    expect(declarationFor('Network rules')?.open).toBe(true);
+    expect(declarationFor('Storage')?.open).toBe(false);
   });
 
   it('explains declared capability purposes before collapsed technical evidence', async () => {
@@ -607,18 +685,18 @@ describe('ExternalPluginInstallDialog', () => {
     button('Review package').click();
     await flush();
 
-    const purposeSummary = document.querySelector<HTMLElement>('[data-external-plugin-purpose-summary]')!;
-    expect(purposeSummary.textContent).toContain('permissions the plugin may ask');
-    expect(purposeSummary.textContent).toContain('declared external destinations');
-    expect(purposeSummary.textContent).toContain('Review carefully');
-    const purposeCards = purposeSummary.querySelectorAll(':scope > div');
-    expect(purposeCards[0].textContent).toContain('Network rules');
-    expect(purposeCards[0].textContent).toContain('Review carefully');
-    expect(purposeCards[1].textContent).toContain('Permissions');
+    const highlights = document.querySelector<HTMLElement>('[data-external-plugin-review-highlights]')!;
+    expect(highlights.textContent).toContain('Network rules');
+    expect(highlights.textContent).toContain('api.github.com:443');
+    expect(highlights.textContent).toContain('1 additional standard declaration');
+    const report = document.querySelector<HTMLDetailsElement>('[data-external-plugin-report]')!;
+    expect(report.open).toBe(false);
+    expect(report.textContent).toContain('permissions the plugin may ask');
+    expect(report.textContent).toContain('declared external destinations');
     expect(document.body.textContent).toContain('Installation grants no permissions');
-    const permissionDisclosure = document.querySelector<HTMLDetailsElement>('[data-external-plugin-security-declarations] > details');
+    const permissionDisclosure = [...document.querySelectorAll<HTMLDetailsElement>('[data-external-plugin-security-declarations] > details')]
+      .find((details) => details.querySelector('summary')?.textContent?.includes('Permissions'));
     expect(permissionDisclosure?.open).toBe(false);
-    expect(permissionDisclosure?.querySelector('summary')?.textContent).toContain('Workspace read');
     expect(permissionDisclosure?.querySelector('summary')?.textContent).not.toContain('workspace.read');
     expect(permissionDisclosure?.querySelector('code')?.textContent).toBe('workspace.read');
   });
@@ -642,9 +720,11 @@ describe('ExternalPluginInstallDialog', () => {
     if (approvalState === 'policy_blocked') {
       expect(document.body.textContent).toContain('Managed by policy');
       expect(document.body.textContent).toContain('enterprise_source_policy');
-      const blockedTechnicalDetails = document.querySelector<HTMLDetailsElement>('[role="alert"] details');
-      expect(blockedTechnicalDetails?.open).toBe(false);
-      expect(blockedTechnicalDetails?.querySelector('summary')?.textContent).not.toContain('enterprise_source_policy');
+      const blockedDecision = document.querySelector<HTMLElement>('[role="alert"]')!;
+      const report = document.querySelector<HTMLDetailsElement>('[data-external-plugin-report]')!;
+      expect(blockedDecision.textContent).not.toContain('enterprise_source_policy');
+      expect(report.open).toBe(false);
+      expect(report.textContent).toContain('enterprise_source_policy');
     }
     expect(props.onCommit).not.toHaveBeenCalled();
   });
@@ -771,8 +851,13 @@ describe('ExternalPluginInstallDialog', () => {
 
   it('starts an upload update from a fresh file selection and inspection bound to the installed revision', async () => {
     const updateItem = externalUpdateItem();
+    const inspectionBase = inspection('verified', 'user_approved');
+    inspectionBase.signature_assessment.algorithm = 'ed25519';
+    inspectionBase.signature_assessment.key_id = 'example-signing-key';
+    inspectionBase.signature_assessment.assessment_epoch = '42';
+    inspectionBase.execution_approval.approved_at = '2026-07-24T10:01:00Z';
     const nextInspection = {
-      ...inspection(),
+      ...inspectionBase,
       intent: {
         action: 'update' as const,
         plugin_instance_id: updateItem.pluginInstanceID,
@@ -806,10 +891,17 @@ describe('ExternalPluginInstallDialog', () => {
     }, expect.any(AbortSignal));
     expect(document.body.textContent).toContain(confirmationDigest);
     const identity = document.querySelector<HTMLElement>('[data-external-plugin-identity]')!;
-    const hashes = document.querySelector<HTMLDetailsElement>('[data-external-plugin-hashes]')!;
+    const report = document.querySelector<HTMLDetailsElement>('[data-external-plugin-report]')!;
+    const hashes = document.querySelector<HTMLElement>('[data-external-plugin-hashes]')!;
     expect(identity.textContent).not.toContain(packageHash);
-    expect(hashes.open).toBe(false);
+    expect(report.open).toBe(false);
     expect(hashes.textContent).toContain(packageHash);
+    expect(hashes.textContent).toContain(manifestHash);
+    expect(hashes.textContent).toContain(entriesHash);
+    expect(report.textContent).toContain('algorithm=ed25519');
+    expect(report.textContent).toContain('key_id=example-signing-key');
+    expect(report.textContent).toContain('assessment_epoch=42');
+    expect(report.textContent).toContain('approved_at=2026-07-24T10:01:00Z');
   });
 
   it('uses update-specific copy for progress, unknown reconciliation, and completion', async () => {

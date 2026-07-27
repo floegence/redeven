@@ -676,6 +676,10 @@ describe('Env App i18n dictionaries', () => {
     expect(en.t('settings.connection.description')).toContain('Redeven');
     expect(en.t('settings.connection.description')).toContain('Desktop');
     expect(en.t('settings.connection.description')).toContain('Runtime');
+    expect(en.tn('uiCopy.plugin.external.reportChanges', 1)).toBe('1 change');
+    expect(en.tn('uiCopy.plugin.external.reportChanges', 2)).toBe('2 changes');
+    expect(en.tn('uiCopy.plugin.external.additionalDeclarations', 1)).toContain('1 additional standard declaration is');
+    expect(en.tn('uiCopy.plugin.external.additionalDeclarations', 2)).toContain('2 additional standard declarations are');
 
     const deDE = createI18nHelpers('de-DE');
     expect(deDE.t('chatActivity.command')).toBe('Befehl');
@@ -694,6 +698,9 @@ describe('Env App i18n dictionaries', () => {
     expect(ruRU.tn('flowerSurface.attachments.lines', 1)).toBe('1 строка');
     expect(ruRU.tn('flowerSurface.attachments.lines', 2)).toBe('2 строки');
     expect(ruRU.tn('flowerSurface.attachments.lines', 5)).toBe('5 строк');
+    expect(ruRU.tn('uiCopy.plugin.external.reportChanges', 1)).toBe('1 изменение');
+    expect(ruRU.tn('uiCopy.plugin.external.reportChanges', 2)).toBe('2 изменения');
+    expect(ruRU.tn('uiCopy.plugin.external.reportChanges', 5)).toBe('5 изменений');
 
     const esES = createI18nHelpers('es-ES');
     expect(esES.tn('shell.flowerCompanion.summary.withoutTitle.needsAttention', 1)).toBe('Una tarea requiere tu atención');

@@ -68,6 +68,8 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
   const [refreshPending, setRefreshPending] = createSignal(false);
   const [refreshFailed, setRefreshFailed] = createSignal(false);
   let operation: AbortController | undefined;
+  let dialogContent: HTMLDivElement | undefined;
+  let reviewHeading: HTMLElement | undefined;
 
   const isUpdate = () => Boolean(props.updateItem?.pluginInstanceID);
   const dialogTitle = () => isUpdate()
@@ -128,6 +130,7 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
       setConfirmed(false);
       setCommitNeedsReconciliation(false);
       setStage('review');
+      queueMicrotask(() => reviewHeading?.focus({ preventScroll: true }));
     } catch (error) {
       if (!controller.signal.aborted) setError(inspectErrorFromUnknown(error, i18n));
     } finally {
@@ -211,6 +214,15 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
     return current ? inspectionBlocked(current) : false;
   });
 
+  const returnToSource = () => {
+    setStage('source');
+    queueMicrotask(() => {
+      dialogContent
+        ?.querySelector<HTMLInputElement>('[data-external-plugin-source-input]')
+        ?.focus({ preventScroll: true });
+    });
+  };
+
   return (
     <Dialog
       open={props.open}
@@ -218,11 +230,11 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
       title={dialogTitle()}
       description={i18n.t('uiCopy.plugin.external.dialogDescription')}
       class={cn(
-        'w-[min(54rem,calc(100%-1rem))] max-w-[54rem] max-h-[80vh] bg-background text-foreground sm:w-[min(54rem,calc(100%-2rem))]',
+        'w-[min(54rem,calc(100%-1rem))] max-w-[54rem] max-h-[calc(100dvh-1rem)] bg-background text-foreground sm:max-h-[80vh] sm:w-[min(54rem,calc(100%-2rem))]',
         commitNeedsReconciliation() && '[&>div:first-child>button]:hidden',
       )}
       footer={(
-        <div class="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div data-external-plugin-footer class="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <Show when={stage() === 'review' && inspection() && !reviewBlocked() && !commitNeedsReconciliation()} fallback={<span />}>
             <label data-external-plugin-confirmation class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'flex cursor-pointer items-center gap-2 text-xs text-foreground sm:max-w-[30rem] sm:items-start')}>
               <input
@@ -236,7 +248,7 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
           </Show>
           <div class="flex shrink-0 flex-wrap justify-end gap-2">
             <Show when={stage() === 'review' && !commitNeedsReconciliation()}>
-              <button type="button" class="min-h-[46px] cursor-pointer rounded-md border bg-background px-3 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-9" disabled={pending()} onClick={() => setStage('source')}>
+              <button type="button" class="min-h-[46px] cursor-pointer rounded-md border bg-background px-3 text-sm font-medium transition-[background-color,transform] duration-150 hover:bg-muted active:scale-[0.98] motion-reduce:transform-none motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-9" disabled={pending()} onClick={returnToSource}>
                 {i18n.t('uiCopy.plugin.external.back')}
               </button>
             </Show>
@@ -285,7 +297,7 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
         </div>
       )}
     >
-      <div data-external-plugin-dialog class="space-y-5">
+      <div ref={dialogContent} data-external-plugin-dialog class="space-y-4">
         <InstallProgress stage={stage()} isUpdate={isUpdate()} />
         <Show when={error()}>
           {(currentError) => (
@@ -328,7 +340,10 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
           {(current) => (
             <InspectionReview
               inspection={current()}
+              displayName={props.updateItem?.displayName}
+              previousVersion={props.updateItem?.version}
               previousSummary={props.updateItem?.externalPackage?.securitySummary}
+              focusTargetRef={(element) => { reviewHeading = element; }}
             />
           )}
         </Show>
@@ -367,39 +382,34 @@ function InstallProgress(props: { stage: InstallStage; isUpdate: boolean }): JSX
     i18n.t('common.status.ready'),
   ];
   return (
-    <ol class="grid grid-cols-4 border-b pb-4" aria-label={i18n.t('uiCopy.plugin.external.dialogDescription')}>
-      <For each={steps()}>
-        {(label, index) => {
-          const complete = () => index() < activeIndex();
-          const active = () => index() === activeIndex();
-          return (
-            <li
-              class={cn(
-                'relative flex min-w-0 flex-col items-center gap-2 px-1 text-center text-[11px] font-medium sm:text-xs',
-                active() || complete() ? 'text-foreground' : 'text-muted-foreground',
-              )}
-              aria-current={active() ? 'step' : undefined}
-            >
-              <Show when={index() > 0}>
-                <span
-                  data-install-progress-connector
-                  class={cn('absolute top-3 h-px -translate-y-1/2', complete() || active() ? 'bg-primary' : 'bg-border')}
-                  style={{ right: 'calc(50% + 1.25rem)', width: 'calc(100% - 2.5rem)' }}
-                  aria-hidden="true"
-                />
-              </Show>
-              <span data-install-progress-marker class={cn(
-                'relative z-[1] flex h-6 w-6 shrink-0 items-center justify-center rounded-full border bg-background text-[10px]',
-                complete() ? 'border-primary bg-primary text-primary-foreground' : active() ? 'border-primary text-primary' : 'border-border',
-              )}>
-                {complete() ? <Check class="h-3.5 w-3.5" /> : index() + 1}
-              </span>
-              <span data-install-progress-label class="min-h-8 max-w-full px-0.5 leading-4">{label}</span>
-            </li>
-          );
-        }}
-      </For>
-    </ol>
+    <div data-install-progress class="border-b pb-3">
+      <div class="flex items-center justify-between gap-3 text-xs">
+        <span class="min-w-0 truncate font-semibold" data-install-progress-current>{steps()[activeIndex()]}</span>
+        <span class="shrink-0 text-muted-foreground">
+          {i18n.t('uiCopy.plugin.external.stepProgress', { current: activeIndex() + 1, total: steps().length })}
+        </span>
+      </div>
+      <ol class="mt-2 grid grid-cols-4 gap-1" aria-label={i18n.t('uiCopy.plugin.external.dialogDescription')}>
+        <For each={steps()}>
+          {(label, index) => {
+            const complete = () => index() < activeIndex();
+            const active = () => index() === activeIndex();
+            return (
+              <li
+                data-install-progress-segment
+                class={cn(
+                  'h-1 min-w-0 rounded-full transition-colors duration-200 motion-reduce:transition-none',
+                  active() || complete() ? 'bg-primary' : 'bg-border',
+                )}
+                aria-current={active() ? 'step' : undefined}
+              >
+                <span class="sr-only">{label}</span>
+              </li>
+            );
+          }}
+        </For>
+      </ol>
+    </div>
   );
 }
 
@@ -585,6 +595,7 @@ function SourceForm(props: {
         <label class="block space-y-1.5 text-sm font-medium">
           <span>{props.sourceKind === 'github_repository' ? i18n.t('uiCopy.plugin.external.repositoryURL') : i18n.t('uiCopy.plugin.external.packageURL')}</span>
           <input
+            data-external-plugin-source-input
             type="url"
             value={props.url}
             disabled={props.pending}
@@ -624,6 +635,7 @@ function SourceForm(props: {
         <div class="space-y-2">
           <input
             ref={fileInput}
+            data-external-plugin-source-input
             id="external-plugin-package-file"
             type="file"
             accept=".redevplugin,application/vnd.redevplugin.package+zip,application/zip"
@@ -677,174 +689,380 @@ function formatFileSize(bytes: number): string {
 
 function InspectionReview(props: {
   inspection: ExternalPluginInspection;
+  displayName?: string;
+  previousVersion?: string;
   previousSummary?: PluginExternalPackageSecuritySummary;
+  focusTargetRef?: (element: HTMLElement) => void;
 }): JSX.Element {
   const i18n = useI18n();
   const summary = () => props.inspection.security_summary;
   const signature = () => props.inspection.signature_assessment.state;
   const blocked = () => inspectionBlocked(props.inspection);
-  const categorySummaries = () => securityCategorySummaries(summary(), i18n);
   const declarations = createMemo(() => securityDeclarations(summary(), props.previousSummary));
-  const accessChanged = createMemo(() => declarations().some((declaration) => Boolean(declaration.change)));
+  const changes = createMemo(() => declarations().filter((declaration) => Boolean(declaration.change)));
+  const accessChanged = () => changes().length > 0;
+  const highlights = createMemo(() => declarations().filter((declaration) => (
+    declaration.change !== 'removed' && securityDeclarationIsSensitive(declaration)
+  )));
+  const currentDeclarations = createMemo(() => declarations().filter((declaration) => declaration.change !== 'removed'));
+  const standardChanges = createMemo(() => securityCategoryOrder.flatMap((category) => (
+    (['added', 'changed'] as const).flatMap((change) => {
+      const count = changes().filter((declaration) => (
+        declaration.category === category
+        && declaration.change === change
+        && !securityDeclarationIsSensitive(declaration)
+      )).length;
+      return count > 0 ? [{ category, change, count }] : [];
+    })
+  )));
+  const hiddenStandardDeclarationCount = createMemo(() => currentDeclarations()
+    .filter((declaration) => (
+      !securityDeclarationIsSensitive(declaration)
+      && declaration.change !== 'added'
+      && declaration.change !== 'changed'
+    )).length);
+  const reportCategories = createMemo(() => securityCategoryOrder.filter((category) => (
+    declarations().some((declaration) => declaration.category === category)
+  )));
+  const tone = () => blocked() ? 'blocked' : signature() === 'verified' ? 'positive' : 'caution';
+  const decisionTitle = () => blocked()
+    ? i18n.t('uiCopy.plugin.external.reviewBlocked')
+    : signature() === 'verified'
+      ? i18n.t('uiCopy.plugin.external.reviewReady')
+      : i18n.t('uiCopy.plugin.external.reviewCaution');
+  const sourceSummary = () => {
+    const provenance = props.inspection.source_provenance;
+    if (provenance.kind === 'package_url') return provenance.source_origin;
+    if (provenance.kind === 'github_repository') return provenance.repository_url;
+    return i18n.t('uiCopy.plugin.external.packageFile');
+  };
   return (
-    <div class="space-y-4">
-      <div data-external-plugin-identity class="flex items-start gap-3 border-b pb-4">
-        <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border bg-background"><Package class="h-5 w-5" /></div>
+    <div class="space-y-4 animate-in fade-in slide-in-from-bottom-1 duration-200 motion-reduce:animate-none">
+      <div data-external-plugin-identity class="flex items-start gap-3">
+        <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border bg-muted/30"><Package class="h-5 w-5" /></div>
         <div class="min-w-0 flex-1">
-          <div class="truncate text-base font-semibold">{props.inspection.plugin_id}</div>
-          <div class="mt-1 text-sm text-muted-foreground">{props.inspection.publisher_id} · v{props.inspection.version}</div>
-        </div>
-      </div>
-      <SourceProvenanceReview provenance={props.inspection.source_provenance} />
-      <div class="grid gap-2 sm:grid-cols-3" data-external-plugin-trust-review>
-        <DecisionFact
-          icon={<Shield class="h-4 w-4" />}
-          primary={signatureReviewLabel(signature(), i18n)}
-          technical={[
-            `signature=${signature()}`,
-            ...props.inspection.signature_assessment.reason_codes,
-          ]}
-          tone={blocked() ? 'blocked' : signature() === 'verified' ? 'positive' : 'caution'}
-        />
-        <DecisionFact
-          icon={blocked() ? <AlertTriangle class="h-4 w-4" /> : <Check class="h-4 w-4" />}
-          primary={executionApprovalReviewLabel(props.inspection.execution_approval.state, i18n)}
-          technical={[
-            `execution_approval=${props.inspection.execution_approval.state}`,
-            ...props.inspection.execution_approval.reason_codes,
-          ]}
-          tone={blocked() ? 'blocked' : 'neutral'}
-        />
-        <DecisionFact
-          icon={<Link class="h-4 w-4" />}
-          primary={props.inspection.update_eligibility.state === 'automatic_eligible'
-            ? i18n.t('uiCopy.plugin.external.automaticUpdates')
-            : i18n.t('uiCopy.plugin.external.manualUpdates')}
-          technical={[
-            `update_eligibility=${props.inspection.update_eligibility.state}`,
-            ...props.inspection.update_eligibility.reason_codes,
-          ]}
-          tone={props.inspection.update_eligibility.state === 'automatic_eligible' ? 'positive' : 'neutral'}
-        />
-      </div>
-      <PostInstallFacts updateEligibility={props.inspection.update_eligibility.state} />
-      <Show when={props.previousSummary && accessChanged()}>
-        <div class="rounded-md border border-[var(--redeven-status-warning-foreground)] bg-background px-3 py-2 text-sm">
-          {i18n.t('uiCopy.plugin.external.accessChanged')}
-        </div>
-      </Show>
-      <div class="space-y-3 border-t pt-4" data-external-plugin-security-declarations>
-        <div class="text-xs font-semibold uppercase text-muted-foreground">{i18n.t('uiCopy.plugin.external.declaredAccess')}</div>
-        <p class="text-sm leading-6 text-muted-foreground">{i18n.t('uiCopy.plugin.external.declaredAccessGuidance')}</p>
-        <Show
-          when={categorySummaries().length > 0}
-          fallback={<div class="rounded-md border bg-background px-3 py-2.5 text-sm text-muted-foreground">{i18n.t('uiCopy.plugin.external.noDeclaredAccess')}</div>}
-        >
-          <div class="grid gap-2 sm:grid-cols-2" data-external-plugin-purpose-summary>
-            <For each={categorySummaries()}>
-              {(category) => (
-                <div class="rounded-md border bg-background px-3 py-2.5">
-                  <div class="flex items-center justify-between gap-3">
-                    <div class="text-xs font-semibold uppercase text-muted-foreground">{securityCategoryLabel(category.category, i18n)}</div>
-                    <div class="flex items-center gap-1.5">
-                      <span class={cn(
-                        'rounded-full px-2 py-0.5 text-[10px] font-semibold',
-                        category.risk === 'sensitive'
-                          ? 'bg-[var(--redeven-status-warning-soft)] text-[var(--redeven-status-warning-foreground)]'
-                          : 'bg-muted text-muted-foreground',
-                      )}>
-                        {category.risk === 'sensitive'
-                          ? i18n.t('uiCopy.plugin.external.reviewCarefully')
-                          : i18n.t('uiCopy.plugin.external.declaredCapability')}
-                      </span>
-                      <span class="text-sm font-semibold">{category.count}</span>
-                    </div>
-                  </div>
-                  <p class="mt-1 text-xs leading-5 text-muted-foreground">{category.purpose}</p>
-                </div>
-              )}
-            </For>
+          <div class="truncate text-base font-semibold">{props.displayName ?? props.inspection.plugin_id}</div>
+          <Show when={props.displayName && props.displayName !== props.inspection.plugin_id}>
+            <div class="mt-0.5 truncate text-xs text-muted-foreground">{props.inspection.plugin_id}</div>
+          </Show>
+          <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+            <span>{props.inspection.publisher_id}</span>
+            <span aria-hidden="true">·</span>
+            <span>
+              <Show when={props.previousVersion} fallback={<>v{props.inspection.version}</>}>
+                {(previousVersion) => `v${previousVersion()} -> v${props.inspection.version}`}
+              </Show>
+            </span>
           </div>
+          <code class="mt-1 block max-w-full truncate text-[11px] text-muted-foreground">{sourceSummary()}</code>
+        </div>
+      </div>
+      <section
+        ref={props.focusTargetRef}
+        tabIndex={-1}
+        data-external-plugin-trust-review
+        role={blocked() ? 'alert' : undefined}
+        class={cn(
+          'rounded-md border px-4 py-3.5 outline-none',
+          tone() === 'blocked' && 'border-destructive bg-destructive/5',
+          tone() === 'caution' && 'border-[var(--redeven-status-warning-foreground)] bg-[var(--redeven-status-warning-soft)]',
+          tone() === 'positive' && 'border-[var(--redeven-status-success-foreground)] bg-[var(--redeven-status-success-soft)]',
+        )}
+      >
+        <div class="flex items-start gap-3">
+          <span class={cn(
+            'mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border bg-background',
+            tone() === 'blocked' && 'border-destructive text-destructive',
+            tone() === 'caution' && 'border-[var(--redeven-status-warning-foreground)] text-[var(--redeven-status-warning-foreground)]',
+            tone() === 'positive' && 'border-[var(--redeven-status-success-foreground)] text-[var(--redeven-status-success-foreground)]',
+          )}>
+            {blocked() ? <AlertTriangle class="h-4 w-4" /> : tone() === 'positive' ? <Check class="h-4 w-4" /> : <Shield class="h-4 w-4" />}
+          </span>
+          <div class="min-w-0 flex-1">
+            <h2
+              data-external-plugin-review-heading
+              class="text-sm font-semibold"
+            >
+              {decisionTitle()}
+            </h2>
+            <div class="mt-1 text-sm leading-5 text-muted-foreground">{signatureReviewLabel(signature(), i18n)}</div>
+            <Show when={props.inspection.execution_approval.state === 'policy_blocked'}>
+              <div class="mt-1 text-sm font-medium text-destructive">{i18n.t('uiCopy.plugin.managedByPolicy')}</div>
+            </Show>
+          </div>
+        </div>
+        <dl class="mt-3 border-t border-current/15 pt-3 text-xs">
+          <div class="min-w-0">
+            <dt class="text-muted-foreground">{i18n.t('uiCopy.plugin.external.executionApproval')}</dt>
+            <dd class="mt-0.5 font-medium">{executionApprovalReviewLabel(props.inspection.execution_approval.state, i18n)}</dd>
+          </div>
+        </dl>
+      </section>
+      <PostInstallFacts updateEligibility={props.inspection.update_eligibility.state} />
+      <InspectionHighlights
+        changes={changes()}
+        highlights={highlights()}
+        standardChanges={standardChanges()}
+        currentDeclarationCount={currentDeclarations().length}
+        hiddenStandardDeclarationCount={hiddenStandardDeclarationCount()}
+        showAccessChanged={Boolean(props.previousSummary && accessChanged())}
+      />
+      <InspectionReport
+        inspection={props.inspection}
+        declarations={declarations()}
+        changes={changes()}
+        categories={reportCategories()}
+      />
+    </div>
+  );
+}
+
+function InspectionHighlights(props: {
+  changes: readonly SecurityDeclaration[];
+  highlights: readonly SecurityDeclaration[];
+  standardChanges: readonly StandardChangeSummary[];
+  currentDeclarationCount: number;
+  hiddenStandardDeclarationCount: number;
+  showAccessChanged: boolean;
+}): JSX.Element {
+  const i18n = useI18n();
+  return (
+    <section data-external-plugin-review-highlights class="space-y-3 border-t pt-4">
+      <div class="flex items-center justify-between gap-3">
+        <h3 class="text-xs font-semibold uppercase text-muted-foreground">{i18n.t('uiCopy.plugin.external.reviewHighlights')}</h3>
+        <Show when={props.changes.length > 0}>
+          <span class="rounded-full bg-[var(--redeven-status-warning-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--redeven-status-warning-foreground)]">
+            {i18n.tn('uiCopy.plugin.external.reportChanges', props.changes.length)}
+          </span>
         </Show>
-        <For each={declarations()}>
-          {(declaration) => (
-            <details open={declaration.change === 'changed'} class={cn(
-              'group rounded-md border border-l-2 bg-background',
-              declaration.change === 'added' || declaration.change === 'changed'
-                ? 'border-l-[var(--redeven-status-warning-foreground)]'
-                : declaration.change === 'removed'
-                  ? 'border-l-muted-foreground/35 opacity-75'
-                  : 'border-l-border',
-            )}>
-              <summary class="flex min-h-10 cursor-pointer list-none flex-wrap items-center gap-2 px-3 py-2">
-                <span class="text-[10px] font-semibold uppercase text-muted-foreground">{securityCategoryLabel(declaration.category, i18n)}</span>
-                <span class="min-w-0 flex-1 text-xs font-semibold">{humanizeTechnicalIdentifier(declaration.identity)}</span>
-                <Show when={declaration.change}>
-                  {(change) => (
-                    <span class="rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase">
-                      {i18n.t(`uiCopy.plugin.external.${change()}`)}
-                    </span>
-                  )}
-                </Show>
-                <ChevronDown class="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
-              </summary>
-              <div class="border-t px-3 py-2">
-                <code class="block break-all text-[11px] text-foreground">{declaration.identity}</code>
-                <For each={declaration.facts}>
-                  {(fact) => <code class="mt-1 block break-all text-[11px] text-muted-foreground">{fact}</code>}
-                </For>
-                <Show when={declaration.previousFacts}>
-                  {(previousFacts) => (
-                    <div class="mt-2 border-t pt-2 opacity-75">
-                      <span class="text-[10px] font-semibold uppercase text-muted-foreground">{i18n.t('uiCopy.plugin.external.previous')}</span>
-                      <For each={previousFacts()}>
-                        {(fact) => <code class="mt-1 block break-all text-[11px] text-muted-foreground line-through">{fact}</code>}
-                      </For>
-                    </div>
-                  )}
+      </div>
+      <Show when={props.showAccessChanged}>
+        <p class="text-sm leading-5 text-[var(--redeven-status-warning-foreground)]">{i18n.t('uiCopy.plugin.external.accessChanged')}</p>
+      </Show>
+      <Show
+        when={props.highlights.length > 0}
+        fallback={(
+          <p class="text-sm leading-6 text-muted-foreground">
+            {props.currentDeclarationCount === 0
+              ? i18n.t('uiCopy.plugin.external.noDeclaredAccess')
+              : i18n.t('uiCopy.plugin.external.noReviewHighlights')}
+          </p>
+        )}
+      >
+        <div class="grid gap-2 sm:grid-cols-2">
+          <For each={props.highlights}>
+            {(declaration) => (
+              <div class={cn(
+                'min-w-0 rounded-md border px-3 py-2.5',
+                (declaration.change === 'added' || declaration.change === 'changed')
+                  && 'border-[var(--redeven-status-warning-foreground)]',
+              )}>
+                <div class="flex items-center gap-2">
+                  <span class="min-w-0 flex-1 text-xs font-semibold uppercase text-muted-foreground">
+                    {securityCategoryLabel(declaration.category, i18n)}
+                  </span>
+                  <Show when={declaration.change}>
+                    {(change) => <ChangeBadge change={change()} />}
+                  </Show>
+                </div>
+                <div class="mt-1 truncate text-sm font-medium">{humanizeTechnicalIdentifier(declaration.identity)}</div>
+                <Show when={securityDeclarationHighlight(declaration)}>
+                  {(fact) => <code class="mt-1 block break-all text-[11px] text-muted-foreground">{fact()}</code>}
                 </Show>
               </div>
-            </details>
-          )}
-        </For>
-      </div>
-      <Show when={blocked()}>
-        <div role="alert" class="rounded-md border border-destructive bg-background px-3 py-2.5 text-sm text-destructive">
-          <div class="font-medium">{signatureReviewLabel(signature(), i18n)}</div>
-          <Show when={props.inspection.execution_approval.state === 'policy_blocked'}>
-            <div class="mt-1 font-medium">{i18n.t('uiCopy.plugin.managedByPolicy')}</div>
-          </Show>
-          <details class="mt-2 text-xs">
-            <summary class="cursor-pointer font-medium">{i18n.t('uiCopy.plugin.technicalDetails')}</summary>
-            <For each={[
-              ...props.inspection.signature_assessment.reason_codes,
-              ...props.inspection.execution_approval.reason_codes,
-            ]}>
-              {(reason) => <code class="mt-1 block break-all text-[11px]">{reason}</code>}
-            </For>
-          </details>
+            )}
+          </For>
         </div>
       </Show>
-      <details data-external-plugin-hashes class="group border-t pt-3 text-xs">
-        <summary class="flex min-h-[44px] cursor-pointer list-none items-center gap-2 font-medium text-muted-foreground sm:min-h-9">
-          <span class="flex-1">{i18n.t('uiCopy.plugin.external.packageHash')}</span>
-          <ChevronDown class="h-4 w-4 transition-transform group-open:rotate-180" />
-        </summary>
-        <div class="space-y-3 pb-1 pt-2">
-          <div>
-            <div class="font-medium text-muted-foreground">{i18n.t('uiCopy.plugin.external.packageHash')}</div>
-            <code class="mt-1 block break-all text-[11px]">{props.inspection.inspected_hashes.package_sha256}</code>
-          </div>
-          <div>
-            <div class="font-medium text-muted-foreground">{i18n.t('uiCopy.plugin.external.securitySummaryHash')}</div>
-            <code class="mt-1 block break-all text-[11px]">{summary().summary_sha256}</code>
-          </div>
-          <div>
-            <div class="font-medium text-muted-foreground">{i18n.t('uiCopy.plugin.external.confirmationDigest')}</div>
-            <code class="mt-1 block break-all text-[11px]">{props.inspection.confirmation_digest}</code>
-          </div>
+      <Show when={props.standardChanges.length > 0}>
+        <div data-external-plugin-standard-changes class="grid gap-1.5 sm:grid-cols-2">
+          <For each={props.standardChanges}>
+            {(summary) => (
+              <div class="flex min-w-0 items-center gap-2 rounded-md border px-3 py-2 text-xs">
+                <span class="min-w-0 flex-1 truncate font-medium">{securityCategoryLabel(summary.category, i18n)}</span>
+                <span class="shrink-0 font-semibold tabular-nums">{summary.count}</span>
+                <ChangeBadge change={summary.change} />
+              </div>
+            )}
+          </For>
         </div>
-      </details>
+      </Show>
+      <Show when={props.hiddenStandardDeclarationCount > 0}>
+        <p class="text-xs text-muted-foreground">
+          {i18n.tn('uiCopy.plugin.external.additionalDeclarations', props.hiddenStandardDeclarationCount)}
+        </p>
+      </Show>
+    </section>
+  );
+}
+
+function InspectionReport(props: {
+  inspection: ExternalPluginInspection;
+  declarations: readonly SecurityDeclaration[];
+  changes: readonly SecurityDeclaration[];
+  categories: readonly SecurityCategory[];
+}): JSX.Element {
+  const i18n = useI18n();
+  return (
+    <details data-external-plugin-report class="group border-t pt-1">
+      <summary class="flex min-h-[44px] cursor-pointer list-none items-center gap-3 rounded-md px-1 text-sm font-semibold transition-colors duration-150 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none">
+        <span class="min-w-0 flex-1">{i18n.t('uiCopy.plugin.external.fullInspectionReport')}</span>
+        <Show when={props.changes.length > 0}>
+          <span class="shrink-0 text-xs font-medium text-[var(--redeven-status-warning-foreground)]">
+            {i18n.tn('uiCopy.plugin.external.reportChanges', props.changes.length)}
+          </span>
+        </Show>
+        <ChevronDown class="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-150 group-open:rotate-180 motion-reduce:transition-none" />
+      </summary>
+      <div class="space-y-5 pb-1 pt-3">
+        <section class="space-y-3" data-external-plugin-report-trust>
+          <h3 class="text-xs font-semibold uppercase text-muted-foreground">{i18n.t('uiCopy.plugin.trust')}</h3>
+          <ReportFact
+            primary={signatureReviewLabel(props.inspection.signature_assessment.state, i18n)}
+            technical={[
+              `signature=${props.inspection.signature_assessment.state}`,
+              ...(props.inspection.signature_assessment.algorithm !== undefined
+                ? [`algorithm=${props.inspection.signature_assessment.algorithm}`]
+                : []),
+              ...(props.inspection.signature_assessment.key_id !== undefined
+                ? [`key_id=${props.inspection.signature_assessment.key_id}`]
+                : []),
+              `assessed_at=${props.inspection.signature_assessment.assessed_at}`,
+              ...(props.inspection.signature_assessment.assessment_epoch !== undefined
+                ? [`assessment_epoch=${props.inspection.signature_assessment.assessment_epoch}`]
+                : []),
+              `assessed_package_sha256=${props.inspection.signature_assessment.assessed_hashes.package_sha256}`,
+              `assessed_manifest_sha256=${props.inspection.signature_assessment.assessed_hashes.manifest_sha256}`,
+              `assessed_entries_sha256=${props.inspection.signature_assessment.assessed_hashes.entries_sha256}`,
+              ...props.inspection.signature_assessment.reason_codes,
+            ]}
+          />
+          <ReportFact
+            primary={executionApprovalReviewLabel(props.inspection.execution_approval.state, i18n)}
+            technical={[
+              `execution_approval=${props.inspection.execution_approval.state}`,
+              `assessed_at=${props.inspection.execution_approval.assessed_at}`,
+              ...(props.inspection.execution_approval.approved_at !== undefined
+                ? [`approved_at=${props.inspection.execution_approval.approved_at}`]
+                : []),
+              ...props.inspection.execution_approval.reason_codes,
+            ]}
+          />
+          <ReportFact
+            primary={props.inspection.update_eligibility.state === 'automatic_eligible'
+              ? i18n.t('uiCopy.plugin.external.automaticUpdates')
+              : i18n.t('uiCopy.plugin.external.manualUpdates')}
+            technical={[
+              `update_eligibility=${props.inspection.update_eligibility.state}`,
+              `assessed_at=${props.inspection.update_eligibility.assessed_at}`,
+              ...props.inspection.update_eligibility.reason_codes,
+            ]}
+          />
+        </section>
+
+        <section class="space-y-3 border-t pt-4" data-external-plugin-report-source>
+          <h3 class="text-xs font-semibold uppercase text-muted-foreground">{i18n.t('uiCopy.plugin.external.sourceAndIdentity')}</h3>
+          <div class="grid gap-3 sm:grid-cols-2">
+            <AuditFact label={i18n.t('uiCopy.plugin.external.inspectionID')} value={props.inspection.inspection_id} />
+            <AuditFact label={i18n.t('uiCopy.plugin.external.expiresAt')} value={props.inspection.expires_at} />
+            <AuditFact label={i18n.t('uiCopy.plugin.external.intent')} value={fields(props.inspection.intent)} />
+            <AuditFact label={i18n.t('uiCopy.plugin.publisher')} value={props.inspection.publisher_id} />
+          </div>
+          <SourceProvenanceReview provenance={props.inspection.source_provenance} />
+        </section>
+
+        <section class="space-y-3 border-t pt-4" data-external-plugin-security-declarations>
+          <div>
+            <h3 class="text-xs font-semibold uppercase text-muted-foreground">{i18n.t('uiCopy.plugin.external.declaredAccess')}</h3>
+            <p class="mt-1 text-sm leading-6 text-muted-foreground">{i18n.t('uiCopy.plugin.external.declaredAccessGuidance')}</p>
+          </div>
+          <Show when={props.categories.length > 0} fallback={<p class="text-sm text-muted-foreground">{i18n.t('uiCopy.plugin.external.noDeclaredAccess')}</p>}>
+            <For each={props.categories}>
+              {(category) => {
+                const rows = () => props.declarations.filter((declaration) => declaration.category === category);
+                const changed = () => rows().some((declaration) => declaration.change === 'added' || declaration.change === 'changed');
+                return (
+                  <details open={changed()} class="group/category border-b last:border-b-0">
+                    <summary class="flex min-h-[44px] cursor-pointer list-none items-center gap-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                      <span class="min-w-0 flex-1">
+                        <span class="block text-sm font-medium">{securityCategoryLabel(category, i18n)} · {rows().length}</span>
+                        <span class="mt-0.5 block text-xs leading-5 text-muted-foreground">{securityCategoryPurpose(category, i18n)}</span>
+                      </span>
+                      <ChevronDown class="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-150 group-open/category:rotate-180 motion-reduce:transition-none" />
+                    </summary>
+                    <div class="divide-y border-t">
+                      <For each={rows()}>
+                        {(declaration) => (
+                          <div class="py-3">
+                            <div class="flex flex-wrap items-center gap-2">
+                              <span class="min-w-0 flex-1 text-xs font-semibold">{humanizeTechnicalIdentifier(declaration.identity)}</span>
+                              <Show when={declaration.change}>
+                                {(change) => <ChangeBadge change={change()} />}
+                              </Show>
+                            </div>
+                            <code class="mt-1 block break-all text-[11px] text-foreground">{declaration.identity}</code>
+                            <For each={declaration.facts}>
+                              {(fact) => <code class="mt-1 block break-all text-[11px] text-muted-foreground">{fact}</code>}
+                            </For>
+                            <Show when={declaration.previousFacts}>
+                              {(previousFacts) => (
+                                <div class="mt-2 border-t pt-2 opacity-75">
+                                  <span class="text-[10px] font-semibold uppercase text-muted-foreground">{i18n.t('uiCopy.plugin.external.previous')}</span>
+                                  <For each={previousFacts()}>
+                                    {(fact) => <code class="mt-1 block break-all text-[11px] text-muted-foreground line-through">{fact}</code>}
+                                  </For>
+                                </div>
+                              )}
+                            </Show>
+                          </div>
+                        )}
+                      </For>
+                    </div>
+                  </details>
+                );
+              }}
+            </For>
+          </Show>
+        </section>
+
+        <section data-external-plugin-hashes class="space-y-3 border-t pt-4">
+          <h3 class="text-xs font-semibold uppercase text-muted-foreground">{i18n.t('uiCopy.plugin.external.integrity')}</h3>
+          <AuditFact label={i18n.t('uiCopy.plugin.external.packageHash')} value={props.inspection.inspected_hashes.package_sha256} />
+          <AuditFact label={i18n.t('uiCopy.plugin.external.manifestHash')} value={props.inspection.inspected_hashes.manifest_sha256} />
+          <AuditFact label={i18n.t('uiCopy.plugin.external.entriesHash')} value={props.inspection.inspected_hashes.entries_sha256} />
+          <AuditFact label={i18n.t('uiCopy.plugin.external.securitySummaryHash')} value={props.inspection.security_summary.summary_sha256} />
+          <AuditFact label={i18n.t('uiCopy.plugin.external.confirmationDigest')} value={props.inspection.confirmation_digest} />
+        </section>
+      </div>
+    </details>
+  );
+}
+
+function ChangeBadge(props: { change: NonNullable<SecurityDeclaration['change']> }): JSX.Element {
+  const i18n = useI18n();
+  return (
+    <span class="rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase">
+      {i18n.t(`uiCopy.plugin.external.${props.change}`)}
+    </span>
+  );
+}
+
+function ReportFact(props: { primary: string; technical: readonly string[] }): JSX.Element {
+  return (
+    <div class="border-l-2 border-border pl-3">
+      <div class="text-sm font-medium">{props.primary}</div>
+      <For each={props.technical}>
+        {(fact) => <code class="mt-1 block break-all text-[11px] text-muted-foreground">{fact}</code>}
+      </For>
+    </div>
+  );
+}
+
+function AuditFact(props: { label: string; value: string }): JSX.Element {
+  return (
+    <div class="min-w-0">
+      <div class="text-xs font-medium text-muted-foreground">{props.label}</div>
+      <code class="mt-1 block break-all text-[11px] text-foreground">{props.value}</code>
     </div>
   );
 }
@@ -900,24 +1118,24 @@ function DecisionFact(props: {
 function PostInstallFacts(props: { updateEligibility: ExternalPluginInspection['update_eligibility']['state'] }): JSX.Element {
   const i18n = useI18n();
   return (
-    <div class="grid gap-2 sm:grid-cols-3" data-external-plugin-install-outcome>
-      <div class="rounded-md border bg-background px-3 py-2.5">
+    <dl class="grid grid-cols-2 gap-3 border-y bg-muted/10 px-1 py-3 sm:grid-cols-3 sm:gap-0 sm:divide-x" data-external-plugin-install-outcome>
+      <div class="min-w-0 sm:px-3 sm:first:pl-0">
         <div class="text-[10px] font-semibold uppercase text-muted-foreground">{i18n.t('uiCopy.plugin.lifecycle')}</div>
-        <div class="mt-1 text-sm font-semibold">{i18n.t('uiCopy.plugin.disabled')}</div>
+        <div class="mt-0.5 text-sm font-medium">{i18n.t('uiCopy.plugin.disabled')}</div>
       </div>
-      <div class="rounded-md border bg-background px-3 py-2.5">
+      <div class="min-w-0 sm:px-3">
         <div class="text-[10px] font-semibold uppercase text-muted-foreground">{i18n.t('uiCopy.plugin.external.permissions')}</div>
-        <div class="mt-1 text-sm font-semibold">0 · {i18n.t('uiCopy.plugin.permissionNotGranted')}</div>
+        <div class="mt-0.5 text-sm font-medium">0 · {i18n.t('uiCopy.plugin.permissionNotGranted')}</div>
       </div>
-      <div class="rounded-md border bg-background px-3 py-2.5">
-        <div class="text-[10px] font-semibold uppercase text-muted-foreground">{i18n.t('uiCopy.plugin.external.confirmUpdate')}</div>
-        <div class="mt-1 text-sm font-semibold">
+      <div class="col-span-2 min-w-0 border-t pt-3 sm:col-span-1 sm:border-t-0 sm:px-3 sm:pt-0 sm:last:pr-0">
+        <div class="text-[10px] font-semibold uppercase text-muted-foreground">{i18n.t('uiCopy.plugin.external.updateMode')}</div>
+        <div class="mt-0.5 text-sm font-medium">
           {props.updateEligibility === 'automatic_eligible'
             ? i18n.t('uiCopy.plugin.external.automaticUpdates')
             : i18n.t('uiCopy.plugin.external.manualUpdates')}
         </div>
       </div>
-    </div>
+    </dl>
   );
 }
 
@@ -966,20 +1184,32 @@ function SourceProvenanceReview(props: { provenance: ExternalPluginInspection['s
       return [
         `${provenance.source_origin}${provenance.source_path}`,
         ...provenance.redirect_chain.map((hop) => `${hop.origin}${hop.path}`),
+        `package_sha256=${provenance.package_sha256}`,
+        `resolved_at=${provenance.resolved_at}`,
       ];
     }
     if (provenance.kind === 'github_repository') {
       return [
         provenance.repository_url,
-        provenance.release_tag ?? '',
-        provenance.asset_name ?? '',
-        provenance.resolved_commit_sha,
-      ].filter(Boolean);
+        `repository_id=${provenance.repository_id}`,
+        `release_id=${provenance.release_id}`,
+        `asset_id=${provenance.asset_id}`,
+        `owner=${provenance.owner}; repository=${provenance.repository}`,
+        `release_tag=${provenance.release_tag ?? '-'}`,
+        `asset_name=${provenance.asset_name ?? '-'}`,
+        `resolved_commit_sha=${provenance.resolved_commit_sha}`,
+        `package_sha256=${provenance.package_sha256}`,
+        `resolved_at=${provenance.resolved_at}`,
+      ];
     }
-    return [provenance.upload_id];
+    return [
+      `upload_id=${provenance.upload_id}`,
+      `package_sha256=${provenance.package_sha256}`,
+      `resolved_at=${provenance.resolved_at}`,
+    ];
   };
   return (
-    <div class="border-t pt-3" data-external-plugin-source-provenance>
+    <div data-external-plugin-source-provenance>
       <div class="text-xs font-semibold uppercase text-muted-foreground">
         {i18n.t('uiCopy.plugin.external.source')}
       </div>
@@ -1010,6 +1240,63 @@ type SecurityDeclaration = {
   value: unknown;
   change?: 'added' | 'changed' | 'removed';
 };
+
+type StandardChangeSummary = {
+  category: SecurityCategory;
+  change: 'added' | 'changed';
+  count: number;
+};
+
+const securityCategoryOrder: readonly SecurityCategory[] = [
+  'permissions',
+  'methods',
+  'capability_contracts',
+  'workers',
+  'network',
+  'storage',
+  'secret_refs',
+  'core_actions',
+  'intents',
+  'surfaces',
+];
+
+function securityDeclarationIsSensitive(declaration: SecurityDeclaration): boolean {
+  if (declaration.category === 'methods') {
+    const method = declaration.value as PluginExternalPackageSecuritySummary['methods'][number];
+    return method.dangerous || method.effect !== 'read';
+  }
+  return declaration.category === 'workers'
+    || declaration.category === 'network'
+    || declaration.category === 'secret_refs'
+    || declaration.category === 'core_actions';
+}
+
+function securityDeclarationHighlight(declaration: SecurityDeclaration): string | undefined {
+  switch (declaration.category) {
+    case 'methods': {
+      const value = declaration.value as PluginExternalPackageSecuritySummary['methods'][number];
+      return `effect=${value.effect}`;
+    }
+    case 'workers': {
+      const value = declaration.value as PluginExternalPackageSecuritySummary['workers'][number];
+      return value.artifact;
+    }
+    case 'network': {
+      const value = declaration.value as PluginExternalPackageSecuritySummary['network'][number];
+      return list(value.destinations);
+    }
+    case 'secret_refs': {
+      const value = declaration.value as PluginExternalPackageSecuritySummary['secret_refs'][number];
+      return value.secret_ref;
+    }
+    case 'core_actions': {
+      const value = declaration.value as PluginExternalPackageSecuritySummary['core_actions'][number];
+      return `effect=${value.effect}`;
+    }
+    default:
+      return undefined;
+  }
+}
 
 function securityDeclarations(
   current: PluginExternalPackageSecuritySummary,
@@ -1115,32 +1402,6 @@ function securityCategoryLabel(category: SecurityCategory, i18n: ReturnType<type
   return i18n.t(keys[category]);
 }
 
-function securityCategorySummaries(
-  summary: PluginExternalPackageSecuritySummary,
-  i18n: ReturnType<typeof useI18n>,
-): readonly { category: SecurityCategory; count: number; purpose: string; risk: 'standard' | 'sensitive' }[] {
-  const categories: readonly { category: SecurityCategory; count: number }[] = [
-    { category: 'permissions', count: summary.permissions.length },
-    { category: 'methods', count: summary.methods.length },
-    { category: 'capability_contracts', count: summary.capability_contracts.length },
-    { category: 'workers', count: summary.workers.length },
-    { category: 'network', count: summary.network.length },
-    { category: 'storage', count: summary.storage.length },
-    { category: 'secret_refs', count: summary.secret_refs.length },
-    { category: 'core_actions', count: summary.core_actions.length },
-    { category: 'intents', count: summary.intents.length },
-    { category: 'surfaces', count: summary.surfaces.length },
-  ];
-  return categories
-    .filter((category) => category.count > 0)
-    .map((category) => ({
-      ...category,
-      purpose: securityCategoryPurpose(category.category, i18n),
-      risk: securityCategoryIsSensitive(category.category, summary) ? 'sensitive' as const : 'standard' as const,
-    }))
-    .sort((left, right) => Number(right.risk === 'sensitive') - Number(left.risk === 'sensitive'));
-}
-
 function securityCategoryPurpose(category: SecurityCategory, i18n: ReturnType<typeof useI18n>): string {
   const keys: Record<SecurityCategory, Parameters<typeof i18n.t>[0]> = {
     permissions: 'uiCopy.plugin.external.purpose.permissions',
@@ -1155,17 +1416,6 @@ function securityCategoryPurpose(category: SecurityCategory, i18n: ReturnType<ty
     surfaces: 'uiCopy.plugin.external.purpose.surfaces',
   };
   return i18n.t(keys[category]);
-}
-
-function securityCategoryIsSensitive(
-  category: SecurityCategory,
-  summary: PluginExternalPackageSecuritySummary,
-): boolean {
-  if (category === 'methods') return summary.methods.some((method) => method.dangerous || method.effect !== 'read');
-  return category === 'workers'
-    || category === 'network'
-    || category === 'secret_refs'
-    || category === 'core_actions';
 }
 
 function humanizeTechnicalIdentifier(value: string): string {

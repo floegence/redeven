@@ -99,13 +99,31 @@ Update source entry preserves only reusable public identity. GitHub may prefill
 its public repository, while package URLs and uploads require fresh input. Every
 update remains bound to the exact instance and management revision.
 
-The opaque review dialog exposes four visible stages: source, security review,
-install, and done. Review starts with immutable identity, Host provenance,
-signature, execution approval, update eligibility, and the disabled/zero-grant
-result. The complete Host security summary remains available by category and
-item, changed update access expands automatically, and hashes and confirmation
-digest remain progressively disclosed. Policy-blocked results retain reason
-codes instead of collapsing into an unsigned-package warning.
+The opaque review dialog exposes four compact visible stages: source, security
+review, install, and done. Review starts with immutable plugin identity, a
+concise source identity, and one decision summary that exclusively owns the
+signature, execution-approval, policy, and continue-or-blocked state. That same
+decision surface states the disabled, zero-grant result and update mode; a
+verified signature must never imply that access has been granted. Invalid,
+revoked, and policy-blocked results remain top-level blocked decisions. Absent,
+unknown-signer, and temporarily unavailable signatures remain top-level caution
+decisions that require exact-package confirmation.
+
+The next review level shows declared worker code, external destinations, secret
+references, non-read or dangerous methods, core actions, and every sensitive
+added or changed update declaration. An update also shows the total added,
+changed, and removed count before confirmation. If no declaration needs special
+attention, the review says so without claiming that the plugin is safe, trusted,
+or authorized. The complete Host inspection report is always initially closed;
+its entry carries the update-change count, and an explicit open expands the
+categories containing added or changed declarations while removed-only and
+unchanged categories remain closed. The report retains the complete Host source
+provenance, inspection id, expiry, intent, signature, execution approval, update
+eligibility, reason codes, security summary by category and item, package,
+manifest, entries, and security-summary hashes, and confirmation digest.
+Progressive disclosure changes prominence only and never removes authoritative
+inspection facts. Policy-blocked results retain their exact reason codes instead
+of collapsing into an unsigned-package warning.
 
 Invalid, revoked, or policy-blocked assessment disables commit. Absent,
 unknown-signer, and temporarily unavailable signatures show a prominent risk

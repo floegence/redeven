@@ -44,6 +44,7 @@ const mediaCommands = commands as unknown as Readonly<{
 
 const viewportCases = [
   { width: 320, height: 720 },
+  { width: 390, height: 844 },
   { width: 768, height: 820 },
   { width: 1440, height: 900 },
 ] as const;
@@ -301,6 +302,27 @@ function mountExternalDialog(
   return host;
 }
 
+async function mountLocalizedExternalDialog(
+  locale: RedevenLocale,
+  onInspect: Parameters<typeof ExternalPluginInstallDialog>[0]['onInspect'],
+): Promise<HTMLElement> {
+  localStorage.setItem(REDEVEN_LANGUAGE_PREFERENCE_STORAGE_KEY, locale);
+  await loadEnvAppDictionary(locale);
+  const host = fixedHost();
+  disposers.push(render(() => (
+    <I18nProvider>
+      <ExternalPluginInstallDialog
+        open
+        onOpenChange={() => undefined}
+        onInspect={onInspect}
+        onCommit={async () => unavailableCommit()}
+        onCommitted={() => undefined}
+      />
+    </I18nProvider>
+  ), host));
+  return host;
+}
+
 function browserInspection(): ExternalPluginInspection {
   const packageHash = 'sha256:8ecf6c0d206ee557c5528e2192b2594b5d097912b83028d43ff1336532b06d13';
   const manifestHash = 'sha256:f96534ca709165d0e30f6e7713a57ec0754f84f84ccadc2edc000f19dde7cc3d';
@@ -335,7 +357,15 @@ function browserInspection(): ExternalPluginInspection {
       methods: [],
       capability_contracts: [],
       workers: [],
-      network: [],
+      network: [{
+        connector_id: 'github-api',
+        transport: 'http',
+        scope: 'user',
+        destinations: ['api.github.com:443'],
+        auth_declared: true,
+        tls_declared: true,
+        method_access: [{ method: 'github.repositories', operations: ['http'], http_methods: ['GET'] }],
+      }],
       storage: [],
       secret_refs: [],
       core_actions: [],
@@ -726,22 +756,11 @@ describe('plugin management browser geometry and interaction', () => {
       expect(sourceTabs[index - 1].getBoundingClientRect().right)
         .toBeLessThanOrEqual(sourceTabs[index].getBoundingClientRect().left + 1);
     }
-    const markers = Array.from(dialog.querySelectorAll<HTMLElement>('[data-install-progress-marker]'));
-    const connectors = Array.from(dialog.querySelectorAll<HTMLElement>('[data-install-progress-connector]'));
-    const progressLabels = Array.from(dialog.querySelectorAll<HTMLElement>('[data-install-progress-label]'));
-    expect(markers).toHaveLength(4);
-    expect(connectors).toHaveLength(3);
-    expect(progressLabels).toHaveLength(4);
-    progressLabels.forEach(expectNoHorizontalOverflow);
-    connectors.forEach((connector, index) => {
-      const previousMarker = markers[index].getBoundingClientRect();
-      const nextMarker = markers[index + 1].getBoundingClientRect();
-      const connectorRect = connector.getBoundingClientRect();
-      const labelRect = connector.parentElement!.lastElementChild!.getBoundingClientRect();
-      expect(connectorRect.left).toBeGreaterThanOrEqual(previousMarker.right + 3);
-      expect(connectorRect.right).toBeLessThanOrEqual(nextMarker.left - 3);
-      expect(connectorRect.bottom).toBeLessThan(labelRect.top);
-    });
+    const segments = Array.from(dialog.querySelectorAll<HTMLElement>('[data-install-progress-segment]'));
+    expect(segments).toHaveLength(4);
+    expect(dialog.querySelector('[data-install-progress-current]')?.textContent).toBe('Plugin source');
+    expect(dialog.querySelector('[data-install-progress]')?.textContent).toContain('Step 1 of 4');
+    segments.forEach(expectNoHorizontalOverflow);
     if (viewport.width === 320) {
       expectTouchTargets([
         ...sourceTabs,
@@ -752,8 +771,8 @@ describe('plugin management browser geometry and interaction', () => {
     }
   });
 
-  it('keeps mobile install review consent and shared critical actions touchable', async () => {
-    await page.viewport(320, 720);
+  it.each(viewportCases)('keeps the external install review contained at $width px', async (viewport) => {
+    await page.viewport(viewport.width, viewport.height);
     mountExternalDialog(async () => browserInspection());
     await settle();
 
@@ -765,14 +784,62 @@ describe('plugin management browser geometry and interaction', () => {
 
     const consent = dialog.querySelector<HTMLElement>('[data-external-plugin-confirmation]')!;
     const trustReview = dialog.querySelector<HTMLElement>('[data-external-plugin-trust-review]')!;
+    const highlights = dialog.querySelector<HTMLElement>('[data-external-plugin-review-highlights]')!;
+    const report = dialog.querySelector<HTMLDetailsElement>('[data-external-plugin-report]')!;
+    const footer = dialog.querySelector<HTMLElement>('[data-external-plugin-footer]')!;
     expect(trustReview.textContent).toContain('Waiting for your approval');
     expect(trustReview.textContent).not.toContain('I approve this exact inspected package');
-    expectTouchTarget(consent);
+    expect(highlights.textContent).toContain('api.github.com:443');
+    expect(report.open).toBe(false);
+    expect(document.activeElement).toBe(trustReview);
+    expectInsideViewport(dialog, viewport);
     expectNoHorizontalOverflow(consent);
-
-    const touchContractHost = mountMobileTouchTargetContract();
+    expectNoHorizontalOverflow(trustReview);
+    expectNoHorizontalOverflow(highlights);
+    expectNoHorizontalOverflow(report);
+    expectNoHorizontalOverflow(footer);
+    if (viewport.width === 320) {
+      expectTouchTarget(consent);
+      const touchContractHost = mountMobileTouchTargetContract();
+      await settle();
+      expectTouchTarget(touchContractHost.querySelector<HTMLElement>('[data-plugin-mobile-touch-contract]')!);
+      expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
+    }
+    report.querySelector<HTMLElement>('summary')!.click();
     await settle();
-    expectTouchTarget(touchContractHost.querySelector<HTMLElement>('[data-plugin-mobile-touch-contract]')!);
+    expect(report.open).toBe(true);
+    expectNoHorizontalOverflow(report);
+  });
+
+  it('keeps a long localized review contained and its report keyboard-operable', async () => {
+    const viewport = { width: 320, height: 720 } as const;
+    await page.viewport(viewport.width, viewport.height);
+    await mountLocalizedExternalDialog('de-DE', async () => browserInspection());
+    await settle();
+
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    await userEvent.fill(dialog.querySelector<HTMLInputElement>('input[type="url"]')!, 'https://plugins.example.com/toolbox.redevplugin');
+    dialog.querySelector<HTMLButtonElement>('[data-external-plugin-inspect]')!.click();
+    await settle();
+
+    const trustReview = dialog.querySelector<HTMLElement>('[data-external-plugin-trust-review]')!;
+    const highlights = dialog.querySelector<HTMLElement>('[data-external-plugin-review-highlights]')!;
+    const report = dialog.querySelector<HTMLDetailsElement>('[data-external-plugin-report]')!;
+    const reportSummary = report.querySelector<HTMLElement>('summary')!;
+    const footer = dialog.querySelector<HTMLElement>('[data-external-plugin-footer]')!;
+    expect(document.documentElement.lang).toBe('de-DE');
+    expect(document.activeElement).toBe(trustReview);
+    expectInsideViewport(dialog, viewport);
+    [dialog, trustReview, highlights, report, footer].forEach(expectNoHorizontalOverflow);
+
+    reportSummary.focus();
+    expect(document.activeElement).toBe(reportSummary);
+    await userEvent.keyboard('{Enter}');
+    await settle();
+    expect(report.open).toBe(true);
+    await userEvent.keyboard('{Space}');
+    await settle();
+    expect(report.open).toBe(false);
   });
 
   it.each(viewportCases)(
@@ -825,5 +892,27 @@ describe('plugin management browser geometry and interaction', () => {
     host.querySelector<HTMLButtonElement>('[data-plugin-center-mobile-back]')!.click();
     await Promise.resolve();
     expect(getComputedStyle(host.querySelector<HTMLElement>('[data-plugin-center-master]')!).display).not.toBe('none');
+  });
+
+  it('keeps the external review report operable with reduced motion and forced colors', async () => {
+    await page.viewport(390, 844);
+    await mediaCommands.emulateMediaPreferences({ reducedMotion: 'reduce', forcedColors: 'active' });
+    mountExternalDialog(async () => browserInspection());
+    await settle();
+
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    await userEvent.fill(dialog.querySelector<HTMLInputElement>('input[type="url"]')!, 'https://plugins.example.com/toolbox.redevplugin');
+    dialog.querySelector<HTMLButtonElement>('[data-external-plugin-inspect]')!.click();
+    await settle();
+
+    const report = dialog.querySelector<HTMLDetailsElement>('[data-external-plugin-report]')!;
+    expect(window.matchMedia('(prefers-reduced-motion: reduce)').matches).toBe(true);
+    expect(window.matchMedia('(forced-colors: active)').matches).toBe(true);
+    expect(report.open).toBe(false);
+    report.querySelector<HTMLElement>('summary')!.click();
+    await Promise.resolve();
+    expect(report.open).toBe(true);
+    expectNoHorizontalOverflow(dialog);
+    expectNoHorizontalOverflow(report);
   });
 });
