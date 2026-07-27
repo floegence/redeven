@@ -272,6 +272,12 @@ func actionArgs(method Method, containerID string, force bool, timeoutSec int) [
 			args = append(args, "--force")
 		}
 		return append(args, containerID)
+	case MethodPause:
+		return []string{"pause", containerID}
+	case MethodUnpause:
+		return []string{"unpause", containerID}
+	case MethodKill:
+		return []string{"kill", containerID}
 	default:
 		return nil
 	}

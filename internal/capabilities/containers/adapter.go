@@ -403,7 +403,7 @@ func validateAction(req EngineActionRequest) error {
 		return err
 	}
 	switch req.Method {
-	case MethodStart, MethodStop, MethodRestart, MethodRemove:
+	case MethodStart, MethodStop, MethodRestart, MethodRemove, MethodPause, MethodUnpause, MethodKill:
 	default:
 		return fmt.Errorf("%w: %q", ErrInvalidMethod, req.Method)
 	}
