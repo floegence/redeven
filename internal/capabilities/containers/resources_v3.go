@@ -331,5 +331,3 @@ func validDevicePermissions(value string) bool {
 	}
 	return len(seen) > 0
 }
-
-func normalizeResourceName(value string) string { return strings.TrimSpace(value) }

@@ -2,8 +2,6 @@ package redevpluginintegration
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -402,15 +400,6 @@ func projectResourcePlanTarget(target map[string]any) map[string]any {
 		}
 	}
 	return out
-}
-
-func resourceTargetHash(engine containers.Engine, method containers.Method, identity string) string {
-	digest := sha256.Sum256([]byte(string(engine) + "\x00" + string(method) + "\x00" + identity))
-	return "sha256:" + hex.EncodeToString(digest[:])
-}
-
-func resourceOperationSummary(method containers.Method) string {
-	return "Review " + strings.ReplaceAll(string(method), ".", " ")
 }
 
 func acceptedResourceOperation(method containers.Method, engine containers.Engine, containerID string) map[string]any {
