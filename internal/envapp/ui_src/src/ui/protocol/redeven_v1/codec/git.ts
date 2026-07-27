@@ -3,6 +3,7 @@ import type {
   GitApplyStashResponse,
   GitCheckoutBranchRequest,
   GitCheckoutBranchResponse,
+  GitCapabilitiesResponse,
   GitDropStashRequest,
   GitDropStashResponse,
   GitDiscardWorkspaceRequest,
@@ -48,6 +49,8 @@ import type {
   GitListCommitsResponse,
   GitListWorkspacePageRequest,
   GitListWorkspacePageResponse,
+  GitListWorkspacePathStatusesRequest,
+  GitListWorkspacePathStatusesResponse,
   GitListStashesRequest,
   GitListStashesResponse,
   GitSaveStashRequest,
@@ -81,6 +84,7 @@ import type {
   wire_git_apply_stash_resp,
   wire_git_checkout_branch_req,
   wire_git_checkout_branch_resp,
+  wire_git_get_capabilities_resp,
   wire_git_drop_stash_req,
   wire_git_drop_stash_resp,
   wire_git_discard_workspace_req,
@@ -128,6 +132,8 @@ import type {
   wire_git_list_commits_resp,
   wire_git_list_workspace_page_req,
   wire_git_list_workspace_page_resp,
+  wire_git_list_workspace_path_statuses_req,
+  wire_git_list_workspace_path_statuses_resp,
   wire_git_list_stashes_req,
   wire_git_list_stashes_resp,
   wire_git_save_stash_req,
@@ -212,8 +218,14 @@ function fromWireGitWorkspaceChange(resp: wire_git_workspace_change): GitWorkspa
     parentPath: typeof resp?.parent_path === 'string' ? resp.parent_path : undefined,
     directoryPath: typeof resp?.directory_path === 'string' ? resp.directory_path : undefined,
     descendantFileCount: typeof resp?.descendant_file_count === 'number' ? resp.descendant_file_count : undefined,
+    unstagedFileCount: typeof resp?.unstaged_file_count === 'number' ? resp.unstaged_file_count : undefined,
+    untrackedFileCount: typeof resp?.untracked_file_count === 'number' ? resp.untracked_file_count : undefined,
+    stagedFileCount: typeof resp?.staged_file_count === 'number' ? resp.staged_file_count : undefined,
+    conflictedFileCount: typeof resp?.conflicted_file_count === 'number' ? resp.conflicted_file_count : undefined,
     containsUntracked: typeof resp?.contains_untracked === 'boolean' ? resp.contains_untracked : undefined,
     containsUnstaged: typeof resp?.contains_unstaged === 'boolean' ? resp.contains_unstaged : undefined,
+    containsStaged: typeof resp?.contains_staged === 'boolean' ? resp.contains_staged : undefined,
+    containsConflicted: typeof resp?.contains_conflicted === 'boolean' ? resp.contains_conflicted : undefined,
     mutationPaths: Array.isArray(resp?.mutation_paths) ? resp.mutation_paths.map((item) => String(item ?? '')) : undefined,
     ...fromWireGitDiffFileSummary(resp),
   };
@@ -283,7 +295,10 @@ function fromWireGitCommitDetail(resp: wire_git_commit_detail): GitCommitDetail 
 }
 
 function fromWireGitCommitFileSummary(resp: wire_git_commit_file_summary): GitCommitFileSummary {
-  return fromWireGitDiffFileSummary(resp);
+  return {
+    ...fromWireGitDiffFileSummary(resp),
+    stashSection: typeof resp?.stash_section === 'string' ? resp.stash_section : undefined,
+  };
 }
 
 function toWireGitDiffFileRef(req: GitDiffFileRef): wire_git_diff_file_ref {
@@ -300,10 +315,7 @@ function fromWireGitLinkedWorktreeSnapshot(resp: wire_git_linked_worktree_snapsh
   return {
     worktreePath: typeof resp?.worktree_path === 'string' ? resp.worktree_path : undefined,
     summary: fromWireGitWorkspaceSummary(resp?.summary),
-    staged: Array.isArray(resp?.staged) ? resp.staged.map(fromWireGitWorkspaceChange) : [],
-    unstaged: Array.isArray(resp?.unstaged) ? resp.unstaged.map(fromWireGitWorkspaceChange) : [],
-    untracked: Array.isArray(resp?.untracked) ? resp.untracked.map(fromWireGitWorkspaceChange) : [],
-    conflicted: Array.isArray(resp?.conflicted) ? resp.conflicted.map(fromWireGitWorkspaceChange) : [],
+    workspaceRevision: typeof resp?.workspace_revision === 'string' ? resp.workspace_revision : undefined,
   };
 }
 
@@ -313,10 +325,7 @@ function fromWireGitDeleteLinkedWorktreePreview(resp: wire_git_delete_linked_wor
     worktreePath: typeof resp?.worktree_path === 'string' ? resp.worktree_path : undefined,
     accessible: Boolean(resp?.accessible),
     summary: fromWireGitWorkspaceSummary(resp?.summary),
-    staged: Array.isArray(resp?.staged) ? resp.staged.map(fromWireGitWorkspaceChange) : [],
-    unstaged: Array.isArray(resp?.unstaged) ? resp.unstaged.map(fromWireGitWorkspaceChange) : [],
-    untracked: Array.isArray(resp?.untracked) ? resp.untracked.map(fromWireGitWorkspaceChange) : [],
-    conflicted: Array.isArray(resp?.conflicted) ? resp.conflicted.map(fromWireGitWorkspaceChange) : [],
+    workspaceRevision: typeof resp?.workspace_revision === 'string' ? resp.workspace_revision : undefined,
   };
 }
 
@@ -385,6 +394,16 @@ export function fromWireGitGetRepoSummaryResponse(resp: wire_git_get_repo_summar
     behindCount: typeof resp?.behind_count === 'number' ? resp.behind_count : undefined,
     stashCount: typeof resp?.stash_count === 'number' ? resp.stash_count : undefined,
     workspaceSummary: fromWireGitWorkspaceSummary(resp?.workspace_summary),
+    workspaceRevision: typeof resp?.workspace_revision === 'string' ? resp.workspace_revision : undefined,
+  };
+}
+
+export function fromWireGitCapabilitiesResponse(resp: wire_git_get_capabilities_resp): GitCapabilitiesResponse {
+  return {
+    workspaceRevisionV1: Boolean(resp?.workspace_revision_v1),
+    workspacePathStatusV1: Boolean(resp?.workspace_path_status_v1),
+    workspaceDirectoryScopeV1: Boolean(resp?.workspace_directory_scope_v1),
+    stashSectionDiffV1: Boolean(resp?.stash_section_diff_v1),
   };
 }
 
@@ -412,6 +431,7 @@ export function toWireGitListWorkspacePageRequest(req: GitListWorkspacePageReque
     directory_path: typeof req.directoryPath === 'string' ? req.directoryPath : undefined,
     offset: typeof req.offset === 'number' ? req.offset : undefined,
     limit: typeof req.limit === 'number' ? req.limit : undefined,
+    expected_workspace_revision: typeof req.expectedWorkspaceRevision === 'string' ? req.expectedWorkspaceRevision : undefined,
   };
 }
 
@@ -432,6 +452,29 @@ export function fromWireGitListWorkspacePageResponse(resp: wire_git_list_workspa
     offset: typeof resp?.offset === 'number' ? resp.offset : undefined,
     nextOffset: typeof resp?.next_offset === 'number' ? resp.next_offset : undefined,
     hasMore: typeof resp?.has_more === 'boolean' ? resp.has_more : undefined,
+    items: Array.isArray(resp?.items) ? resp.items.map(fromWireGitWorkspaceChange) : [],
+    workspaceRevision: typeof resp?.workspace_revision === 'string' ? resp.workspace_revision : undefined,
+  };
+}
+
+export function toWireGitListWorkspacePathStatusesRequest(
+  req: GitListWorkspacePathStatusesRequest,
+): wire_git_list_workspace_path_statuses_req {
+  return {
+    repo_root_path: req.repoRootPath,
+    paths: req.paths,
+    expected_workspace_revision: typeof req.expectedWorkspaceRevision === 'string'
+      ? req.expectedWorkspaceRevision
+      : undefined,
+  };
+}
+
+export function fromWireGitListWorkspacePathStatusesResponse(
+  resp: wire_git_list_workspace_path_statuses_resp,
+): GitListWorkspacePathStatusesResponse {
+  return {
+    repoRootPath: String(resp?.repo_root_path ?? ''),
+    workspaceRevision: String(resp?.workspace_revision ?? ''),
     items: Array.isArray(resp?.items) ? resp.items.map(fromWireGitWorkspaceChange) : [],
   };
 }
@@ -661,6 +704,7 @@ export function toWireGitGetDiffContentRequest(req: GitGetDiffContentRequest): w
     base_ref: typeof req.baseRef === 'string' ? req.baseRef : undefined,
     target_ref: typeof req.targetRef === 'string' ? req.targetRef : undefined,
     stash_id: typeof req.stashId === 'string' ? req.stashId : undefined,
+    stash_section: typeof req.stashSection === 'string' ? req.stashSection : undefined,
     mode: typeof req.mode === 'string' ? req.mode : undefined,
     file: toWireGitDiffFileRef(req.file),
   };

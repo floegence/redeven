@@ -15,6 +15,7 @@ import type {
 } from '../protocol/redeven_v1';
 import {
   describeGitHead,
+  exactGitPath,
   reattachBranchFromRepoSummary,
   repoDisplayName,
   type GitBranchDetailPresentationState,
@@ -47,6 +48,7 @@ import { UIFirstKeepAlivePanel } from '../primitives/UIFirstKeepAlivePanel';
 import { useI18n } from '../i18n';
 import { FlowerIcon } from '../icons/FlowerIcon';
 import { GitEntityContextMenu, createGitEntityContextMenuController, type GitContextMenuActionItem } from './GitEntityContextMenu';
+import type { GitCapabilityMode } from '../services/gitWorkspaceRuntime';
 
 export interface GitWorkbenchProps {
   repoInfo?: GitResolveRepoResponse | null;
@@ -70,6 +72,8 @@ export interface GitWorkbenchProps {
   branchesLoading?: boolean;
   branchesError?: string;
   statusRefreshToken?: number;
+  protocolClientIdentity?: object | null;
+  capabilityMode?: GitCapabilityMode;
   selectedBranch?: GitBranchSummary | null;
   branchDetailState?: GitBranchDetailPresentationState;
   selectedBranchSubview?: GitBranchSubview;
@@ -167,7 +171,7 @@ const GIT_WORKBENCH_SUBVIEW_ID_PREFIX = 'git-workbench-subview';
 export function GitWorkbench(props: GitWorkbenchProps) {
   const i18n = useI18n();
   const repoLabel = () => repoDisplayName(props.repoSummary?.repoRootPath || props.repoInfo?.repoRootPath || props.currentPath);
-  const repoPath = () => String(props.repoSummary?.repoRootPath || props.repoInfo?.repoRootPath || props.currentPath || '/').trim() || '/';
+  const repoPath = () => exactGitPath(props.repoSummary?.repoRootPath || props.repoInfo?.repoRootPath || props.currentPath) || '/';
   const repoDirRequest = (): GitDirectoryShortcutRequest | null =>
     buildGitDirectoryShortcutRequest({ rootPath: repoPath() });
   const headRef = () => String(props.repoSummary?.headRef || props.repoInfo?.headRef || '').trim();
@@ -216,11 +220,11 @@ export function GitWorkbench(props: GitWorkbenchProps) {
     }),
   });
   const repositoryContextTarget = (): RepositoryContextTarget | null => {
-    const root = String(props.repoSummary?.repoRootPath || props.repoInfo?.repoRootPath || '').trim();
+    const root = exactGitPath(props.repoSummary?.repoRootPath || props.repoInfo?.repoRootPath);
     if (!root) return null;
     return {
       repoRootPath: root,
-      worktreePath: String(props.repoSummary?.worktreePath || '').trim() || undefined,
+      worktreePath: exactGitPath(props.repoSummary?.worktreePath) || undefined,
       headRef: String(props.repoSummary?.headRef || props.repoInfo?.headRef || '').trim() || undefined,
       headCommit: String(props.repoSummary?.headCommit || props.repoInfo?.headCommit || '').trim() || undefined,
       summary: props.repoSummary ?? undefined,
@@ -378,7 +382,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
                 class={cn('shrink-0', gitToneHeaderActionButtonClass())}
                 disabled={repoActionsDisabled()}
                 onClick={() => {
-                  const repoRootPath = String(props.repoSummary?.repoRootPath || props.repoInfo?.repoRootPath || '').trim();
+                  const repoRootPath = exactGitPath(props.repoSummary?.repoRootPath || props.repoInfo?.repoRootPath);
                   if (!repoRootPath) return;
                   props.onOpenStash?.({
                     tab: 'stashes',
@@ -501,6 +505,8 @@ export function GitWorkbench(props: GitWorkbenchProps) {
               repoRootPath={props.repoSummary?.repoRootPath}
               repoSummary={props.repoSummary}
               statusRefreshToken={props.statusRefreshToken}
+              protocolClientIdentity={props.protocolClientIdentity}
+              capabilityMode={props.capabilityMode}
               selectedBranch={props.selectedBranch}
               branchDetailState={props.branchDetailState}
               selectedBranchSubview={props.selectedBranchSubview}

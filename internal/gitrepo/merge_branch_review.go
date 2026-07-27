@@ -92,7 +92,7 @@ func (s *Service) buildMergeBranchPlan(ctx context.Context, repo repoContext, ta
 	if strings.TrimSpace(target.FullName) == "" {
 		return mergeBranchPlan{}, errors.New("target branch does not exist")
 	}
-	if !gitRefExists(ctx, repo.repoRootReal, target.FullName) {
+	if !s.gitRefExists(ctx, repo.repoRootReal, target.FullName) {
 		return mergeBranchPlan{}, errors.New("target branch does not exist")
 	}
 
@@ -104,7 +104,7 @@ func (s *Service) buildMergeBranchPlan(ctx context.Context, repo repoContext, ta
 		Source:           target,
 		CurrentRef:       strings.TrimSpace(repo.headRef),
 		CurrentCommit:    strings.TrimSpace(repo.headCommit),
-		SourceCommit:     strings.TrimSpace(readGitOptional(ctx, repo.repoRootReal, "rev-parse", "--verify", target.FullName)),
+		SourceCommit:     strings.TrimSpace(s.readGitOptional(ctx, repo.repoRootReal, "rev-parse", "--verify", target.FullName)),
 		WorkspaceSummary: status.Summary(),
 	}
 
@@ -119,7 +119,7 @@ func (s *Service) buildMergeBranchPlan(ctx context.Context, repo repoContext, ta
 		return plan, nil
 	}
 	if plan.CurrentCommit == "" {
-		plan.CurrentCommit = strings.TrimSpace(readGitOptional(ctx, repo.repoRootReal, "rev-parse", "--verify", "HEAD"))
+		plan.CurrentCommit = strings.TrimSpace(s.readGitOptional(ctx, repo.repoRootReal, "rev-parse", "--verify", "HEAD"))
 	}
 	if plan.CurrentRef == target.Name || target.FullName == "refs/heads/"+plan.CurrentRef {
 		plan.Outcome = mergeBranchOutcomeBlocked
@@ -134,7 +134,7 @@ func (s *Service) buildMergeBranchPlan(ctx context.Context, repo repoContext, ta
 		plan.PlanFingerprint = buildMergeBranchPlanFingerprint(plan)
 		return plan, nil
 	}
-	if operation := readGitOperationState(ctx, repo.repoRootReal); operation != "" {
+	if operation := s.readGitOperationState(ctx, repo.repoRootReal); operation != "" {
 		plan.Outcome = mergeBranchOutcomeBlocked
 		plan.Blocking = newOperationMutationBlocker("merging another branch", operation)
 		plan.BlockingReason = plan.Blocking.Reason
@@ -142,7 +142,7 @@ func (s *Service) buildMergeBranchPlan(ctx context.Context, repo repoContext, ta
 		return plan, nil
 	}
 
-	mergeBase := strings.TrimSpace(readGitOptional(ctx, repo.repoRootReal, "merge-base", plan.CurrentRef, target.MergeRef))
+	mergeBase := strings.TrimSpace(s.readGitOptional(ctx, repo.repoRootReal, "merge-base", plan.CurrentRef, target.MergeRef))
 	plan.MergeBase = mergeBase
 	if plan.SourceCommit == "" {
 		plan.Outcome = mergeBranchOutcomeBlocked
@@ -261,7 +261,7 @@ func buildMergeBranchPlanFingerprint(plan mergeBranchPlan) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func readGitOperationState(ctx context.Context, repoRoot string) string {
+func (s *Service) readGitOperationState(ctx context.Context, repoRoot string) string {
 	checks := []struct {
 		Path  string
 		State string
@@ -273,7 +273,7 @@ func readGitOperationState(ctx context.Context, repoRoot string) string {
 		{Path: "REVERT_HEAD", State: "revert"},
 	}
 	for _, check := range checks {
-		gitPath := strings.TrimSpace(readGitOptional(ctx, repoRoot, "rev-parse", "--git-path", check.Path))
+		gitPath := strings.TrimSpace(s.readGitOptional(ctx, repoRoot, "rev-parse", "--git-path", check.Path))
 		if gitPath == "" {
 			continue
 		}

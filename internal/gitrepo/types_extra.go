@@ -21,29 +21,31 @@ type gitMutationBlocker struct {
 }
 
 type getRepoSummaryResp struct {
-	RepoRootPath     string              `json:"repo_root_path"`
-	WorktreePath     string              `json:"worktree_path,omitempty"`
-	IsWorktree       bool                `json:"is_worktree,omitempty"`
-	HeadRef          string              `json:"head_ref,omitempty"`
-	HeadCommit       string              `json:"head_commit,omitempty"`
-	Detached         bool                `json:"detached,omitempty"`
-	ReattachBranch   *gitBranchSummary   `json:"reattach_branch,omitempty"`
-	UpstreamRef      string              `json:"upstream_ref,omitempty"`
-	AheadCount       int                 `json:"ahead_count,omitempty"`
-	BehindCount      int                 `json:"behind_count,omitempty"`
-	StashCount       int                 `json:"stash_count,omitempty"`
-	WorkspaceSummary gitWorkspaceSummary `json:"workspace_summary"`
+	RepoRootPath      string              `json:"repo_root_path"`
+	WorktreePath      string              `json:"worktree_path,omitempty"`
+	IsWorktree        bool                `json:"is_worktree,omitempty"`
+	HeadRef           string              `json:"head_ref,omitempty"`
+	HeadCommit        string              `json:"head_commit,omitempty"`
+	Detached          bool                `json:"detached,omitempty"`
+	ReattachBranch    *gitBranchSummary   `json:"reattach_branch,omitempty"`
+	UpstreamRef       string              `json:"upstream_ref,omitempty"`
+	AheadCount        int                 `json:"ahead_count,omitempty"`
+	BehindCount       int                 `json:"behind_count,omitempty"`
+	StashCount        int                 `json:"stash_count,omitempty"`
+	WorkspaceSummary  gitWorkspaceSummary `json:"workspace_summary"`
+	WorkspaceRevision string              `json:"workspace_revision,omitempty"`
 }
 
 type gitDiffFileSummary struct {
-	ChangeType  string `json:"change_type,omitempty"`
-	Path        string `json:"path,omitempty"`
-	OldPath     string `json:"old_path,omitempty"`
-	NewPath     string `json:"new_path,omitempty"`
-	DisplayPath string `json:"display_path,omitempty"`
-	Additions   int    `json:"additions,omitempty"`
-	Deletions   int    `json:"deletions,omitempty"`
-	IsBinary    bool   `json:"is_binary,omitempty"`
+	ChangeType   string `json:"change_type,omitempty"`
+	Path         string `json:"path,omitempty"`
+	OldPath      string `json:"old_path,omitempty"`
+	NewPath      string `json:"new_path,omitempty"`
+	DisplayPath  string `json:"display_path,omitempty"`
+	Additions    int    `json:"additions,omitempty"`
+	Deletions    int    `json:"deletions,omitempty"`
+	IsBinary     bool   `json:"is_binary,omitempty"`
+	StashSection string `json:"stash_section,omitempty"`
 }
 
 type gitDiffFileContent struct {
@@ -60,6 +62,12 @@ type gitWorkspaceChange struct {
 	DescendantFileCount int      `json:"descendant_file_count,omitempty"`
 	ContainsUntracked   bool     `json:"contains_untracked,omitempty"`
 	ContainsUnstaged    bool     `json:"contains_unstaged,omitempty"`
+	ContainsStaged      bool     `json:"contains_staged,omitempty"`
+	ContainsConflicted  bool     `json:"contains_conflicted,omitempty"`
+	UnstagedFileCount   int      `json:"unstaged_file_count,omitempty"`
+	UntrackedFileCount  int      `json:"untracked_file_count,omitempty"`
+	StagedFileCount     int      `json:"staged_file_count,omitempty"`
+	ConflictedFileCount int      `json:"conflicted_file_count,omitempty"`
 	MutationPaths       []string `json:"mutation_paths,omitempty"`
 	gitDiffFileSummary
 }
@@ -74,34 +82,37 @@ type listWorkspaceChangesReq struct {
 }
 
 type listWorkspaceChangesResp struct {
-	RepoRootPath string               `json:"repo_root_path"`
-	Summary      gitWorkspaceSummary  `json:"summary"`
-	Staged       []gitWorkspaceChange `json:"staged,omitempty"`
-	Unstaged     []gitWorkspaceChange `json:"unstaged,omitempty"`
-	Untracked    []gitWorkspaceChange `json:"untracked,omitempty"`
-	Conflicted   []gitWorkspaceChange `json:"conflicted,omitempty"`
+	RepoRootPath      string               `json:"repo_root_path"`
+	WorkspaceRevision string               `json:"workspace_revision,omitempty"`
+	Summary           gitWorkspaceSummary  `json:"summary"`
+	Staged            []gitWorkspaceChange `json:"staged,omitempty"`
+	Unstaged          []gitWorkspaceChange `json:"unstaged,omitempty"`
+	Untracked         []gitWorkspaceChange `json:"untracked,omitempty"`
+	Conflicted        []gitWorkspaceChange `json:"conflicted,omitempty"`
 }
 
 type listWorkspacePageReq struct {
-	RepoRootPath  string `json:"repo_root_path"`
-	Section       string `json:"section,omitempty"`
-	DirectoryPath string `json:"directory_path,omitempty"`
-	Offset        int    `json:"offset,omitempty"`
-	Limit         int    `json:"limit,omitempty"`
+	RepoRootPath              string `json:"repo_root_path"`
+	Section                   string `json:"section,omitempty"`
+	DirectoryPath             string `json:"directory_path,omitempty"`
+	Offset                    int    `json:"offset,omitempty"`
+	Limit                     int    `json:"limit,omitempty"`
+	ExpectedWorkspaceRevision string `json:"expected_workspace_revision,omitempty"`
 }
 
 type listWorkspacePageResp struct {
-	RepoRootPath   string                   `json:"repo_root_path"`
-	Section        string                   `json:"section,omitempty"`
-	DirectoryPath  string                   `json:"directory_path,omitempty"`
-	Breadcrumbs    []gitWorkspaceBreadcrumb `json:"breadcrumbs,omitempty"`
-	Summary        gitWorkspaceSummary      `json:"summary"`
-	ScopeFileCount int                      `json:"scope_file_count,omitempty"`
-	TotalCount     int                      `json:"total_count,omitempty"`
-	Offset         int                      `json:"offset,omitempty"`
-	NextOffset     int                      `json:"next_offset,omitempty"`
-	HasMore        bool                     `json:"has_more,omitempty"`
-	Items          []gitWorkspaceChange     `json:"items,omitempty"`
+	RepoRootPath      string                   `json:"repo_root_path"`
+	WorkspaceRevision string                   `json:"workspace_revision,omitempty"`
+	Section           string                   `json:"section,omitempty"`
+	DirectoryPath     string                   `json:"directory_path,omitempty"`
+	Breadcrumbs       []gitWorkspaceBreadcrumb `json:"breadcrumbs,omitempty"`
+	Summary           gitWorkspaceSummary      `json:"summary"`
+	ScopeFileCount    int                      `json:"scope_file_count,omitempty"`
+	TotalCount        int                      `json:"total_count,omitempty"`
+	Offset            int                      `json:"offset,omitempty"`
+	NextOffset        int                      `json:"next_offset,omitempty"`
+	HasMore           bool                     `json:"has_more,omitempty"`
+	Items             []gitWorkspaceChange     `json:"items,omitempty"`
 }
 
 type listStashesReq struct {
@@ -278,13 +289,10 @@ type previewDeleteBranchReq struct {
 }
 
 type gitDeleteLinkedWorktreePreview struct {
-	WorktreePath string               `json:"worktree_path,omitempty"`
-	Accessible   bool                 `json:"accessible"`
-	Summary      gitWorkspaceSummary  `json:"summary"`
-	Staged       []gitWorkspaceChange `json:"staged,omitempty"`
-	Unstaged     []gitWorkspaceChange `json:"unstaged,omitempty"`
-	Untracked    []gitWorkspaceChange `json:"untracked,omitempty"`
-	Conflicted   []gitWorkspaceChange `json:"conflicted,omitempty"`
+	WorktreePath      string              `json:"worktree_path,omitempty"`
+	Accessible        bool                `json:"accessible"`
+	Summary           gitWorkspaceSummary `json:"summary"`
+	WorkspaceRevision string              `json:"workspace_revision,omitempty"`
 }
 
 type previewDeleteBranchResp struct {
@@ -403,12 +411,9 @@ type getBranchCompareReq struct {
 }
 
 type gitLinkedWorktreeSnapshot struct {
-	WorktreePath string               `json:"worktree_path,omitempty"`
-	Summary      gitWorkspaceSummary  `json:"summary"`
-	Staged       []gitWorkspaceChange `json:"staged,omitempty"`
-	Unstaged     []gitWorkspaceChange `json:"unstaged,omitempty"`
-	Untracked    []gitWorkspaceChange `json:"untracked,omitempty"`
-	Conflicted   []gitWorkspaceChange `json:"conflicted,omitempty"`
+	WorktreePath      string              `json:"worktree_path,omitempty"`
+	Summary           gitWorkspaceSummary `json:"summary"`
+	WorkspaceRevision string              `json:"workspace_revision,omitempty"`
 }
 
 type getBranchCompareResp struct {
@@ -438,6 +443,7 @@ type getDiffContentReq struct {
 	BaseRef          string         `json:"base_ref,omitempty"`
 	TargetRef        string         `json:"target_ref,omitempty"`
 	StashID          string         `json:"stash_id,omitempty"`
+	StashSection     string         `json:"stash_section,omitempty"`
 	Mode             string         `json:"mode,omitempty"`
 	File             gitDiffFileRef `json:"file"`
 }
@@ -450,3 +456,24 @@ type getDiffContentResp struct {
 }
 
 type gitCommitFileSummary = gitDiffFileSummary
+
+type getCapabilitiesReq struct{}
+
+type getCapabilitiesResp struct {
+	WorkspaceRevisionV1       bool `json:"workspace_revision_v1"`
+	WorkspacePathStatusV1     bool `json:"workspace_path_status_v1"`
+	WorkspaceDirectoryScopeV1 bool `json:"workspace_directory_scope_v1"`
+	StashSectionDiffV1        bool `json:"stash_section_diff_v1"`
+}
+
+type listWorkspacePathStatusesReq struct {
+	RepoRootPath              string   `json:"repo_root_path"`
+	Paths                     []string `json:"paths"`
+	ExpectedWorkspaceRevision string   `json:"expected_workspace_revision,omitempty"`
+}
+
+type listWorkspacePathStatusesResp struct {
+	RepoRootPath      string               `json:"repo_root_path"`
+	WorkspaceRevision string               `json:"workspace_revision"`
+	Items             []gitWorkspaceChange `json:"items,omitempty"`
+}

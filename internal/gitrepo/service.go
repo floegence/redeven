@@ -7,10 +7,12 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/filesystemscope"
+	"github.com/floegence/redeven/internal/gitruntime"
 	"github.com/floegence/redeven/internal/gitutil"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -45,6 +47,8 @@ const (
 	TypeID_GIT_DROP_STASH          uint32 = 1127
 	TypeID_GIT_LIST_WORKSPACE_PAGE uint32 = 1128
 	TypeID_GIT_DISCARD_WORKSPACE   uint32 = 1129
+	TypeID_GIT_GET_CAPABILITIES    uint32 = 1130
+	TypeID_GIT_LIST_PATH_STATUSES  uint32 = 1131
 
 	defaultCommitPageSize = 50
 	maxCommitPageSize     = 200
@@ -55,7 +59,12 @@ const (
 var errGitUnavailable = errors.New("git unavailable")
 
 type Service struct {
-	scope *filesystemscope.Registry
+	scope          *filesystemscope.Registry
+	workspaceStore *workspaceSnapshotStore
+	runtime        *gitruntime.Runtime
+	runtimeSession *gitruntime.Session
+	captureMu      sync.Mutex
+	captures       map[string]*workspaceCaptureCall
 }
 
 func NewService(agentHomeAbs string) *Service {
@@ -63,14 +72,96 @@ func NewService(agentHomeAbs string) *Service {
 	if err != nil {
 		panic(err)
 	}
-	return &Service{scope: scope}
+	return NewServiceWithScopeAndRuntime(scope, gitruntime.New())
 }
 
 func NewServiceWithScope(scope *filesystemscope.Registry) *Service {
 	if scope == nil {
 		panic("nil filesystem scope")
 	}
-	return &Service{scope: scope}
+	return NewServiceWithScopeAndRuntime(scope, gitruntime.New())
+}
+
+func NewServiceWithScopeAndRuntime(scope *filesystemscope.Registry, runtime *gitruntime.Runtime) *Service {
+	if scope == nil {
+		panic("nil filesystem scope")
+	}
+	if runtime == nil {
+		panic("nil git runtime")
+	}
+	return &Service{
+		scope:          scope,
+		workspaceStore: newWorkspaceSnapshotStore(),
+		runtime:        runtime,
+		runtimeSession: runtime.NewSession(),
+		captures:       make(map[string]*workspaceCaptureCall),
+	}
+}
+
+func (s *Service) Close() {
+	if s == nil {
+		return
+	}
+	s.workspaceStore.close()
+	if s.runtimeSession != nil {
+		s.runtimeSession.Close()
+	}
+}
+
+func (s *Service) acquireRepoMutation(ctx context.Context, repo repoContext) (context.Context, func(), error) {
+	identity := repo.identity
+	if identity.WorktreeKey == "" {
+		resolved, ok, err := s.runtime.ResolveRepositoryIdentity(ctx, repo.repoRootReal)
+		if err != nil {
+			return ctx, nil, err
+		}
+		if !ok {
+			return ctx, nil, errors.New("not a git repository")
+		}
+		identity = resolved
+	}
+	lease, err := s.runtime.AcquireMutation(ctx, identity)
+	if err != nil {
+		return ctx, nil, err
+	}
+	s.workspaceStore.invalidate(identity.WorktreeKey)
+	return lease.Context(ctx), func() {
+		s.workspaceStore.invalidate(identity.WorktreeKey)
+		lease.Release()
+	}, nil
+}
+
+type repoReadLeaseContext struct {
+	commonRepoKey string
+	epoch         uint64
+}
+
+type repoReadLeaseContextKey struct{}
+
+func (s *Service) acquireRepoRead(ctx context.Context, repo repoContext) (context.Context, func(), error) {
+	identity := repo.identity
+	if identity.WorktreeKey == "" {
+		resolved, ok, err := s.runtime.ResolveRepositoryIdentity(ctx, repo.repoRootReal)
+		if err != nil {
+			return ctx, nil, err
+		}
+		if !ok {
+			return ctx, nil, errors.New("not a git repository")
+		}
+		identity = resolved
+	}
+	lease, err := s.runtime.AcquireRead(ctx, identity)
+	if err != nil {
+		return ctx, nil, err
+	}
+	leaseCtx := lease.Context(ctx)
+	leaseCtx = context.WithValue(leaseCtx, repoReadLeaseContextKey{}, repoReadLeaseContext{commonRepoKey: identity.CommonRepoKey, epoch: lease.Epoch()})
+	return leaseCtx, lease.Release, nil
+}
+
+func repoReadEpochFromContext(ctx context.Context, identity gitruntime.RepositoryIdentity) (uint64, bool) {
+	lease, ok := ctx.Value(repoReadLeaseContextKey{}).(repoReadLeaseContext)
+	return lease.epoch, ok && lease.commonRepoKey == identity.CommonRepoKey
 }
 
 func (s *Service) Register(r *rpc.Router, meta *session.Meta) {
@@ -82,7 +173,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		return
 	}
 
-	accessgate.RegisterTyped[resolveRepoReq, resolveRepoResp](r, TypeID_GIT_RESOLVE_REPO, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *resolveRepoReq) (*resolveRepoResp, error) {
+	registerGitTyped[resolveRepoReq, resolveRepoResp](r, TypeID_GIT_RESOLVE_REPO, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *resolveRepoReq) (*resolveRepoResp, error) {
 		if meta == nil || !meta.CanRead {
 			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
 		}
@@ -91,10 +182,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		}
 		result, err := s.resolveRepoForPath(ctx, req.Path)
 		if err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				return nil, &rpc.Error{Code: 404, Message: "not found"}
-			}
-			return nil, &rpc.Error{Code: 400, Message: "invalid path"}
+			return nil, classifyRepoRPCError(err)
 		}
 		if !result.Available {
 			return &resolveRepoResp{
@@ -113,7 +201,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		}, nil
 	})
 
-	accessgate.RegisterTyped[listCommitsReq, listCommitsResp](r, TypeID_GIT_LIST_COMMITS, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *listCommitsReq) (*listCommitsResp, error) {
+	registerGitTyped[listCommitsReq, listCommitsResp](r, TypeID_GIT_LIST_COMMITS, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *listCommitsReq) (*listCommitsResp, error) {
 		if meta == nil || !meta.CanRead {
 			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
 		}
@@ -124,6 +212,11 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if err != nil {
 			return nil, classifyRepoRPCError(err)
 		}
+		ctx, releaseRead, err := s.acquireRepoRead(ctx, repo)
+		if err != nil {
+			return nil, classifyGitRPCError(err)
+		}
+		defer releaseRead()
 		limit := defaultCommitPageSize
 		if req.Limit > 0 {
 			limit = req.Limit
@@ -150,7 +243,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		}, nil
 	})
 
-	accessgate.RegisterTyped[getCommitDetailReq, getCommitDetailResp](r, TypeID_GIT_GET_COMMIT_DETAIL, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *getCommitDetailReq) (*getCommitDetailResp, error) {
+	registerGitTyped[getCommitDetailReq, getCommitDetailResp](r, TypeID_GIT_GET_COMMIT_DETAIL, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *getCommitDetailReq) (*getCommitDetailResp, error) {
 		if meta == nil || !meta.CanRead {
 			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
 		}
@@ -161,6 +254,11 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if err != nil {
 			return nil, classifyRepoRPCError(err)
 		}
+		ctx, releaseRead, err := s.acquireRepoRead(ctx, repo)
+		if err != nil {
+			return nil, classifyGitRPCError(err)
+		}
+		defer releaseRead()
 		commit := strings.TrimSpace(req.Commit)
 		if commit == "" {
 			return nil, &rpc.Error{Code: 400, Message: "missing commit"}
@@ -177,7 +275,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		}, nil
 	})
 
-	accessgate.RegisterTyped[getRepoSummaryReq, getRepoSummaryResp](r, TypeID_GIT_GET_REPO_SUMMARY, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *getRepoSummaryReq) (*getRepoSummaryResp, error) {
+	registerGitTyped[getRepoSummaryReq, getRepoSummaryResp](r, TypeID_GIT_GET_REPO_SUMMARY, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *getRepoSummaryReq) (*getRepoSummaryResp, error) {
 		if meta == nil || !meta.CanRead {
 			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
 		}
@@ -188,6 +286,11 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if err != nil {
 			return nil, classifyRepoRPCError(err)
 		}
+		ctx, releaseRead, err := s.acquireRepoRead(ctx, repo)
+		if err != nil {
+			return nil, classifyGitRPCError(err)
+		}
+		defer releaseRead()
 		summary, err := s.getRepoSummary(ctx, repo)
 		if err != nil {
 			return nil, classifyGitRPCError(err)
@@ -195,7 +298,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		return summary, nil
 	})
 
-	accessgate.RegisterTyped[listWorkspaceChangesReq, listWorkspaceChangesResp](r, TypeID_GIT_LIST_WORKSPACE, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *listWorkspaceChangesReq) (*listWorkspaceChangesResp, error) {
+	registerGitTyped[listWorkspaceChangesReq, listWorkspaceChangesResp](r, TypeID_GIT_LIST_WORKSPACE, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *listWorkspaceChangesReq) (*listWorkspaceChangesResp, error) {
 		if meta == nil || !meta.CanRead {
 			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
 		}
@@ -206,14 +309,22 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if err != nil {
 			return nil, classifyRepoRPCError(err)
 		}
+		ctx, releaseRead, err := s.acquireRepoRead(ctx, repo)
+		if err != nil {
+			return nil, classifyGitRPCError(err)
+		}
+		defer releaseRead()
 		status, err := s.listWorkspaceChanges(ctx, repo)
 		if err != nil {
 			return nil, classifyGitRPCError(err)
 		}
+		if !workspaceBusinessResponseFits(status) {
+			return nil, classifyGitRPCError(errWorkspacePaginationRequired)
+		}
 		return status, nil
 	})
 
-	accessgate.RegisterTyped[listWorkspacePageReq, listWorkspacePageResp](r, TypeID_GIT_LIST_WORKSPACE_PAGE, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *listWorkspacePageReq) (*listWorkspacePageResp, error) {
+	registerGitTyped[listWorkspacePageReq, listWorkspacePageResp](r, TypeID_GIT_LIST_WORKSPACE_PAGE, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *listWorkspacePageReq) (*listWorkspacePageResp, error) {
 		if meta == nil || !meta.CanRead {
 			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
 		}
@@ -224,14 +335,22 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if err != nil {
 			return nil, classifyRepoRPCError(err)
 		}
-		resp, err := s.listWorkspacePage(ctx, repo, req.Section, req.DirectoryPath, req.Offset, req.Limit)
+		ctx, releaseRead, err := s.acquireRepoRead(ctx, repo)
 		if err != nil {
 			return nil, classifyGitRPCError(err)
+		}
+		defer releaseRead()
+		resp, err := s.listWorkspacePage(ctx, repo, req.Section, req.DirectoryPath, req.Offset, req.Limit, req.ExpectedWorkspaceRevision)
+		if err != nil {
+			return nil, classifyGitRPCError(err)
+		}
+		if !workspaceBusinessResponseFits(resp) {
+			return nil, classifyGitRPCError(errWorkspaceResponseBudget)
 		}
 		return resp, nil
 	})
 
-	accessgate.RegisterTyped[listStashesReq, listStashesResp](r, TypeID_GIT_LIST_STASHES, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *listStashesReq) (*listStashesResp, error) {
+	registerGitTyped[listStashesReq, listStashesResp](r, TypeID_GIT_LIST_STASHES, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *listStashesReq) (*listStashesResp, error) {
 		if meta == nil || !meta.CanRead {
 			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
 		}
@@ -242,6 +361,11 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if err != nil {
 			return nil, classifyRepoRPCError(err)
 		}
+		ctx, releaseRead, err := s.acquireRepoRead(ctx, repo)
+		if err != nil {
+			return nil, classifyGitRPCError(err)
+		}
+		defer releaseRead()
 		resp, err := s.listStashes(ctx, repo)
 		if err != nil {
 			return nil, classifyGitRPCError(err)
@@ -249,7 +373,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		return resp, nil
 	})
 
-	accessgate.RegisterTyped[getStashDetailReq, getStashDetailResp](r, TypeID_GIT_GET_STASH_DETAIL, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *getStashDetailReq) (*getStashDetailResp, error) {
+	registerGitTyped[getStashDetailReq, getStashDetailResp](r, TypeID_GIT_GET_STASH_DETAIL, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *getStashDetailReq) (*getStashDetailResp, error) {
 		if meta == nil || !meta.CanRead {
 			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
 		}
@@ -260,6 +384,11 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if err != nil {
 			return nil, classifyRepoRPCError(err)
 		}
+		ctx, releaseRead, err := s.acquireRepoRead(ctx, repo)
+		if err != nil {
+			return nil, classifyGitRPCError(err)
+		}
+		defer releaseRead()
 		resp, err := s.getStashDetail(ctx, repo, req.ID)
 		if err != nil {
 			return nil, classifyGitRPCError(err)
@@ -267,7 +396,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		return resp, nil
 	})
 
-	accessgate.RegisterTyped[listBranchesReq, listBranchesResp](r, TypeID_GIT_LIST_BRANCHES, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *listBranchesReq) (*listBranchesResp, error) {
+	registerGitTyped[listBranchesReq, listBranchesResp](r, TypeID_GIT_LIST_BRANCHES, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *listBranchesReq) (*listBranchesResp, error) {
 		if meta == nil || !meta.CanRead {
 			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
 		}
@@ -278,6 +407,11 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if err != nil {
 			return nil, classifyRepoRPCError(err)
 		}
+		ctx, releaseRead, err := s.acquireRepoRead(ctx, repo)
+		if err != nil {
+			return nil, classifyGitRPCError(err)
+		}
+		defer releaseRead()
 		branches, err := s.listBranches(ctx, repo)
 		if err != nil {
 			return nil, classifyGitRPCError(err)
@@ -285,7 +419,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		return branches, nil
 	})
 
-	accessgate.RegisterTyped[getBranchCompareReq, getBranchCompareResp](r, TypeID_GIT_GET_BRANCH_DIFF, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *getBranchCompareReq) (*getBranchCompareResp, error) {
+	registerGitTyped[getBranchCompareReq, getBranchCompareResp](r, TypeID_GIT_GET_BRANCH_DIFF, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *getBranchCompareReq) (*getBranchCompareResp, error) {
 		if meta == nil || !meta.CanRead {
 			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
 		}
@@ -296,6 +430,11 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if err != nil {
 			return nil, classifyRepoRPCError(err)
 		}
+		ctx, releaseRead, err := s.acquireRepoRead(ctx, repo)
+		if err != nil {
+			return nil, classifyGitRPCError(err)
+		}
+		defer releaseRead()
 		compare, err := s.getBranchCompare(ctx, repo, req.BaseRef, req.TargetRef, req.Limit)
 		if err != nil {
 			return nil, classifyGitRPCError(err)
@@ -303,7 +442,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		return compare, nil
 	})
 
-	accessgate.RegisterTyped[getDiffContentReq, getDiffContentResp](r, TypeID_GIT_DIFF_CONTENT, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *getDiffContentReq) (*getDiffContentResp, error) {
+	registerGitTyped[getDiffContentReq, getDiffContentResp](r, TypeID_GIT_DIFF_CONTENT, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *getDiffContentReq) (*getDiffContentResp, error) {
 		if meta == nil || !meta.CanRead {
 			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
 		}
@@ -314,10 +453,15 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if err != nil {
 			return nil, classifyRepoRPCError(err)
 		}
+		ctx, releaseRead, err := s.acquireRepoRead(ctx, repo)
+		if err != nil {
+			return nil, classifyGitRPCError(err)
+		}
+		defer releaseRead()
 		if strings.TrimSpace(req.SourceKind) == "" {
 			return nil, &rpc.Error{Code: 400, Message: "missing source kind"}
 		}
-		if strings.TrimSpace(req.File.Path) == "" && strings.TrimSpace(req.File.OldPath) == "" && strings.TrimSpace(req.File.NewPath) == "" {
+		if req.File.Path == "" && req.File.OldPath == "" && req.File.NewPath == "" {
 			return nil, &rpc.Error{Code: 400, Message: "missing diff file"}
 		}
 		resp, err := s.getDiffContent(ctx, repo, *req)
@@ -327,7 +471,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		return resp, nil
 	})
 
-	accessgate.RegisterTyped[stageWorkspaceReq, stageWorkspaceResp](r, TypeID_GIT_STAGE_WORKSPACE, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *stageWorkspaceReq) (*stageWorkspaceResp, error) {
+	registerGitTyped[stageWorkspaceReq, stageWorkspaceResp](r, TypeID_GIT_STAGE_WORKSPACE, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *stageWorkspaceReq) (*stageWorkspaceResp, error) {
 		if meta == nil || !meta.CanWrite {
 			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
 		}
@@ -338,6 +482,11 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if err != nil {
 			return nil, classifyRepoRPCError(err)
 		}
+		ctx, releaseMutation, err := s.acquireRepoMutation(ctx, repo)
+		if err != nil {
+			return nil, classifyGitMutationRPCError(err)
+		}
+		defer releaseMutation()
 		result, err := s.stageWorkspace(ctx, repo, workspaceMutationSelection{
 			Section:       req.Section,
 			DirectoryPath: req.DirectoryPath,
@@ -352,7 +501,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		}, nil
 	})
 
-	accessgate.RegisterTyped[unstageWorkspaceReq, unstageWorkspaceResp](r, TypeID_GIT_UNSTAGE_WORKSPACE, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *unstageWorkspaceReq) (*unstageWorkspaceResp, error) {
+	registerGitTyped[unstageWorkspaceReq, unstageWorkspaceResp](r, TypeID_GIT_UNSTAGE_WORKSPACE, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *unstageWorkspaceReq) (*unstageWorkspaceResp, error) {
 		if meta == nil || !meta.CanWrite {
 			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
 		}
@@ -363,6 +512,11 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if err != nil {
 			return nil, classifyRepoRPCError(err)
 		}
+		ctx, releaseMutation, err := s.acquireRepoMutation(ctx, repo)
+		if err != nil {
+			return nil, classifyGitMutationRPCError(err)
+		}
+		defer releaseMutation()
 		result, err := s.unstageWorkspace(ctx, repo, workspaceMutationSelection{
 			Section:       req.Section,
 			DirectoryPath: req.DirectoryPath,
@@ -377,7 +531,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		}, nil
 	})
 
-	accessgate.RegisterTyped[discardWorkspaceReq, discardWorkspaceResp](r, TypeID_GIT_DISCARD_WORKSPACE, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *discardWorkspaceReq) (*discardWorkspaceResp, error) {
+	registerGitTyped[discardWorkspaceReq, discardWorkspaceResp](r, TypeID_GIT_DISCARD_WORKSPACE, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *discardWorkspaceReq) (*discardWorkspaceResp, error) {
 		if meta == nil || !meta.CanWrite {
 			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
 		}
@@ -388,6 +542,11 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if err != nil {
 			return nil, classifyRepoRPCError(err)
 		}
+		ctx, releaseMutation, err := s.acquireRepoMutation(ctx, repo)
+		if err != nil {
+			return nil, classifyGitMutationRPCError(err)
+		}
+		defer releaseMutation()
 		result, err := s.discardWorkspace(ctx, repo, workspaceMutationSelection{
 			Section:       req.Section,
 			DirectoryPath: req.DirectoryPath,
@@ -402,7 +561,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		}, nil
 	})
 
-	accessgate.RegisterTyped[commitWorkspaceReq, commitWorkspaceResp](r, TypeID_GIT_COMMIT_WORKSPACE, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *commitWorkspaceReq) (*commitWorkspaceResp, error) {
+	registerGitTyped[commitWorkspaceReq, commitWorkspaceResp](r, TypeID_GIT_COMMIT_WORKSPACE, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *commitWorkspaceReq) (*commitWorkspaceResp, error) {
 		if meta == nil || !meta.CanWrite {
 			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
 		}
@@ -413,6 +572,11 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if err != nil {
 			return nil, classifyRepoRPCError(err)
 		}
+		ctx, releaseMutation, err := s.acquireRepoMutation(ctx, repo)
+		if err != nil {
+			return nil, classifyGitMutationRPCError(err)
+		}
+		defer releaseMutation()
 		resp, err := s.commitWorkspace(ctx, repo, req.Message)
 		if err != nil {
 			return nil, classifyGitMutationRPCError(err)
@@ -420,7 +584,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		return resp, nil
 	})
 
-	accessgate.RegisterTyped[saveStashReq, saveStashResp](r, TypeID_GIT_SAVE_STASH, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *saveStashReq) (*saveStashResp, error) {
+	registerGitTyped[saveStashReq, saveStashResp](r, TypeID_GIT_SAVE_STASH, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *saveStashReq) (*saveStashResp, error) {
 		if meta == nil || !meta.CanWrite {
 			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
 		}
@@ -431,6 +595,11 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if err != nil {
 			return nil, classifyRepoRPCError(err)
 		}
+		ctx, releaseMutation, err := s.acquireRepoMutation(ctx, repo)
+		if err != nil {
+			return nil, classifyGitMutationRPCError(err)
+		}
+		defer releaseMutation()
 		resp, err := s.saveStash(ctx, repo, *req)
 		if err != nil {
 			return nil, classifyGitMutationRPCError(err)
@@ -438,7 +607,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		return resp, nil
 	})
 
-	accessgate.RegisterTyped[fetchRepoReq, fetchRepoResp](r, TypeID_GIT_FETCH_REPO, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *fetchRepoReq) (*fetchRepoResp, error) {
+	registerGitTyped[fetchRepoReq, fetchRepoResp](r, TypeID_GIT_FETCH_REPO, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *fetchRepoReq) (*fetchRepoResp, error) {
 		if meta == nil || !meta.CanWrite {
 			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
 		}
@@ -449,6 +618,11 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if err != nil {
 			return nil, classifyRepoRPCError(err)
 		}
+		ctx, releaseMutation, err := s.acquireRepoMutation(ctx, repo)
+		if err != nil {
+			return nil, classifyGitMutationRPCError(err)
+		}
+		defer releaseMutation()
 		resp, err := s.fetchRepo(ctx, repo)
 		if err != nil {
 			return nil, classifyGitMutationRPCError(err)
@@ -456,7 +630,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		return resp, nil
 	})
 
-	accessgate.RegisterTyped[pullRepoReq, pullRepoResp](r, TypeID_GIT_PULL_REPO, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *pullRepoReq) (*pullRepoResp, error) {
+	registerGitTyped[pullRepoReq, pullRepoResp](r, TypeID_GIT_PULL_REPO, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *pullRepoReq) (*pullRepoResp, error) {
 		if meta == nil || !meta.CanWrite {
 			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
 		}
@@ -467,6 +641,11 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if err != nil {
 			return nil, classifyRepoRPCError(err)
 		}
+		ctx, releaseMutation, err := s.acquireRepoMutation(ctx, repo)
+		if err != nil {
+			return nil, classifyGitMutationRPCError(err)
+		}
+		defer releaseMutation()
 		resp, err := s.pullRepo(ctx, repo)
 		if err != nil {
 			return nil, classifyGitMutationRPCError(err)
@@ -474,7 +653,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		return resp, nil
 	})
 
-	accessgate.RegisterTyped[pushRepoReq, pushRepoResp](r, TypeID_GIT_PUSH_REPO, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *pushRepoReq) (*pushRepoResp, error) {
+	registerGitTyped[pushRepoReq, pushRepoResp](r, TypeID_GIT_PUSH_REPO, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *pushRepoReq) (*pushRepoResp, error) {
 		if meta == nil || !meta.CanWrite {
 			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
 		}
@@ -485,6 +664,11 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if err != nil {
 			return nil, classifyRepoRPCError(err)
 		}
+		ctx, releaseMutation, err := s.acquireRepoMutation(ctx, repo)
+		if err != nil {
+			return nil, classifyGitMutationRPCError(err)
+		}
+		defer releaseMutation()
 		resp, err := s.pushRepo(ctx, repo)
 		if err != nil {
 			return nil, classifyGitMutationRPCError(err)
@@ -492,7 +676,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		return resp, nil
 	})
 
-	accessgate.RegisterTyped[checkoutBranchReq, checkoutBranchResp](r, TypeID_GIT_CHECKOUT_BRANCH, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *checkoutBranchReq) (*checkoutBranchResp, error) {
+	registerGitTyped[checkoutBranchReq, checkoutBranchResp](r, TypeID_GIT_CHECKOUT_BRANCH, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *checkoutBranchReq) (*checkoutBranchResp, error) {
 		if meta == nil || !meta.CanWrite {
 			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
 		}
@@ -503,6 +687,11 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if err != nil {
 			return nil, classifyRepoRPCError(err)
 		}
+		ctx, releaseMutation, err := s.acquireRepoMutation(ctx, repo)
+		if err != nil {
+			return nil, classifyGitMutationRPCError(err)
+		}
+		defer releaseMutation()
 		resp, err := s.checkoutBranch(ctx, repo, req.Name, req.FullName, req.Kind)
 		if err != nil {
 			return nil, classifyGitMutationRPCError(err)
@@ -510,7 +699,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		return resp, nil
 	})
 
-	accessgate.RegisterTyped[switchDetachedReq, switchDetachedResp](r, TypeID_GIT_SWITCH_DETACHED, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *switchDetachedReq) (*switchDetachedResp, error) {
+	registerGitTyped[switchDetachedReq, switchDetachedResp](r, TypeID_GIT_SWITCH_DETACHED, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *switchDetachedReq) (*switchDetachedResp, error) {
 		if meta == nil || !meta.CanWrite {
 			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
 		}
@@ -521,6 +710,11 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if err != nil {
 			return nil, classifyRepoRPCError(err)
 		}
+		ctx, releaseMutation, err := s.acquireRepoMutation(ctx, repo)
+		if err != nil {
+			return nil, classifyGitMutationRPCError(err)
+		}
+		defer releaseMutation()
 		resp, err := s.switchDetached(ctx, repo, req.TargetRef)
 		if err != nil {
 			return nil, classifyGitMutationRPCError(err)
@@ -528,7 +722,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		return resp, nil
 	})
 
-	accessgate.RegisterTyped[previewApplyStashReq, previewApplyStashResp](r, TypeID_GIT_PREVIEW_APPLY, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *previewApplyStashReq) (*previewApplyStashResp, error) {
+	registerGitTyped[previewApplyStashReq, previewApplyStashResp](r, TypeID_GIT_PREVIEW_APPLY, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *previewApplyStashReq) (*previewApplyStashResp, error) {
 		if meta == nil || !meta.CanWrite {
 			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
 		}
@@ -539,6 +733,11 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if err != nil {
 			return nil, classifyRepoRPCError(err)
 		}
+		ctx, releaseRead, err := s.acquireRepoRead(ctx, repo)
+		if err != nil {
+			return nil, classifyGitMutationRPCError(err)
+		}
+		defer releaseRead()
 		resp, err := s.previewApplyStash(ctx, repo, req.ID, req.RemoveAfterApply)
 		if err != nil {
 			return nil, classifyGitMutationRPCError(err)
@@ -546,7 +745,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		return resp, nil
 	})
 
-	accessgate.RegisterTyped[applyStashReq, applyStashResp](r, TypeID_GIT_APPLY_STASH, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *applyStashReq) (*applyStashResp, error) {
+	registerGitTyped[applyStashReq, applyStashResp](r, TypeID_GIT_APPLY_STASH, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *applyStashReq) (*applyStashResp, error) {
 		if meta == nil || !meta.CanWrite {
 			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
 		}
@@ -557,6 +756,11 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if err != nil {
 			return nil, classifyRepoRPCError(err)
 		}
+		ctx, releaseMutation, err := s.acquireRepoMutation(ctx, repo)
+		if err != nil {
+			return nil, classifyGitMutationRPCError(err)
+		}
+		defer releaseMutation()
 		resp, err := s.applyStash(ctx, repo, req.ID, req.RemoveAfterApply, req.PlanFingerprint)
 		if err != nil {
 			return nil, classifyGitMutationRPCError(err)
@@ -564,7 +768,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		return resp, nil
 	})
 
-	accessgate.RegisterTyped[previewDropStashReq, previewDropStashResp](r, TypeID_GIT_PREVIEW_DROP, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *previewDropStashReq) (*previewDropStashResp, error) {
+	registerGitTyped[previewDropStashReq, previewDropStashResp](r, TypeID_GIT_PREVIEW_DROP, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *previewDropStashReq) (*previewDropStashResp, error) {
 		if meta == nil || !meta.CanWrite {
 			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
 		}
@@ -575,6 +779,11 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if err != nil {
 			return nil, classifyRepoRPCError(err)
 		}
+		ctx, releaseRead, err := s.acquireRepoRead(ctx, repo)
+		if err != nil {
+			return nil, classifyGitMutationRPCError(err)
+		}
+		defer releaseRead()
 		resp, err := s.previewDropStash(ctx, repo, req.ID)
 		if err != nil {
 			return nil, classifyGitMutationRPCError(err)
@@ -582,7 +791,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		return resp, nil
 	})
 
-	accessgate.RegisterTyped[dropStashReq, dropStashResp](r, TypeID_GIT_DROP_STASH, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *dropStashReq) (*dropStashResp, error) {
+	registerGitTyped[dropStashReq, dropStashResp](r, TypeID_GIT_DROP_STASH, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *dropStashReq) (*dropStashResp, error) {
 		if meta == nil || !meta.CanWrite {
 			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
 		}
@@ -593,6 +802,11 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if err != nil {
 			return nil, classifyRepoRPCError(err)
 		}
+		ctx, releaseMutation, err := s.acquireRepoMutation(ctx, repo)
+		if err != nil {
+			return nil, classifyGitMutationRPCError(err)
+		}
+		defer releaseMutation()
 		resp, err := s.dropStash(ctx, repo, req.ID, req.PlanFingerprint)
 		if err != nil {
 			return nil, classifyGitMutationRPCError(err)
@@ -600,7 +814,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		return resp, nil
 	})
 
-	accessgate.RegisterTyped[previewDeleteBranchReq, previewDeleteBranchResp](r, TypeID_GIT_PREVIEW_DELETE, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *previewDeleteBranchReq) (*previewDeleteBranchResp, error) {
+	registerGitTyped[previewDeleteBranchReq, previewDeleteBranchResp](r, TypeID_GIT_PREVIEW_DELETE, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *previewDeleteBranchReq) (*previewDeleteBranchResp, error) {
 		if meta == nil || !meta.CanWrite {
 			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
 		}
@@ -611,6 +825,11 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if err != nil {
 			return nil, classifyRepoRPCError(err)
 		}
+		ctx, releaseRead, err := s.acquireRepoRead(ctx, repo)
+		if err != nil {
+			return nil, classifyGitMutationRPCError(err)
+		}
+		defer releaseRead()
 		resp, err := s.previewDeleteBranch(ctx, repo, req.Name, req.FullName, req.Kind)
 		if err != nil {
 			return nil, classifyGitMutationRPCError(err)
@@ -618,7 +837,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		return resp, nil
 	})
 
-	accessgate.RegisterTyped[deleteBranchReq, deleteBranchResp](r, TypeID_GIT_DELETE_BRANCH, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *deleteBranchReq) (*deleteBranchResp, error) {
+	registerGitTyped[deleteBranchReq, deleteBranchResp](r, TypeID_GIT_DELETE_BRANCH, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *deleteBranchReq) (*deleteBranchResp, error) {
 		if meta == nil || !meta.CanWrite {
 			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
 		}
@@ -629,27 +848,54 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if err != nil {
 			return nil, classifyRepoRPCError(err)
 		}
-		resp, err := s.deleteBranch(
-			ctx,
-			repo,
-			deleteBranchOptions{
-				Name:                         req.Name,
-				FullName:                     req.FullName,
-				Kind:                         req.Kind,
-				DeleteMode:                   req.DeleteMode,
-				ConfirmBranchName:            req.ConfirmBranchName,
-				RemoveLinkedWorktree:         req.RemoveLinkedWorktree,
-				DiscardLinkedWorktreeChanges: req.DiscardLinkedWorktreeChanges,
-				PlanFingerprint:              req.PlanFingerprint,
-			},
-		)
+		readCtx, releaseRead, err := s.acquireRepoRead(ctx, repo)
+		if err != nil {
+			return nil, classifyGitMutationRPCError(err)
+		}
+		topologyPaths, err := s.deleteBranchTopologyPaths(readCtx, repo, req.Name, req.FullName, req.Kind)
+		releaseRead()
+		if err != nil {
+			return nil, classifyGitMutationRPCError(err)
+		}
+		options := deleteBranchOptions{
+			Name:                         req.Name,
+			FullName:                     req.FullName,
+			Kind:                         req.Kind,
+			DeleteMode:                   req.DeleteMode,
+			ConfirmBranchName:            req.ConfirmBranchName,
+			RemoveLinkedWorktree:         req.RemoveLinkedWorktree,
+			DiscardLinkedWorktreeChanges: req.DiscardLinkedWorktreeChanges,
+			PlanFingerprint:              req.PlanFingerprint,
+		}
+		var resp *deleteBranchResp
+		s.workspaceStore.invalidate(repo.identity.WorktreeKey)
+		err = s.runtime.CoordinateTopologyMutation(ctx, gitruntime.FilesystemEffect{
+			Paths:           topologyPaths,
+			ChangesTopology: true,
+		}, func(lockedCtx context.Context) error {
+			lockedRepo, loadErr := s.loadRepoContext(lockedCtx, repo.repoRootReal)
+			if loadErr != nil {
+				return loadErr
+			}
+			lockedPaths, pathsErr := s.deleteBranchTopologyPaths(lockedCtx, lockedRepo, req.Name, req.FullName, req.Kind)
+			if pathsErr != nil {
+				return pathsErr
+			}
+			if !sameDeleteBranchTopologyPaths(topologyPaths, lockedPaths) {
+				return gitruntime.ErrResourceLimit
+			}
+			var deleteErr error
+			resp, deleteErr = s.deleteBranch(lockedCtx, lockedRepo, options)
+			return deleteErr
+		})
+		s.workspaceStore.invalidate(repo.identity.WorktreeKey)
 		if err != nil {
 			return nil, classifyGitMutationRPCError(err)
 		}
 		return resp, nil
 	})
 
-	accessgate.RegisterTyped[previewMergeBranchReq, previewMergeBranchResp](r, TypeID_GIT_PREVIEW_MERGE, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *previewMergeBranchReq) (*previewMergeBranchResp, error) {
+	registerGitTyped[previewMergeBranchReq, previewMergeBranchResp](r, TypeID_GIT_PREVIEW_MERGE, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *previewMergeBranchReq) (*previewMergeBranchResp, error) {
 		if meta == nil || !meta.CanWrite {
 			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
 		}
@@ -660,6 +906,11 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if err != nil {
 			return nil, classifyRepoRPCError(err)
 		}
+		ctx, releaseRead, err := s.acquireRepoRead(ctx, repo)
+		if err != nil {
+			return nil, classifyGitMutationRPCError(err)
+		}
+		defer releaseRead()
 		resp, err := s.previewMergeBranch(ctx, repo, req.Name, req.FullName, req.Kind)
 		if err != nil {
 			return nil, classifyGitMutationRPCError(err)
@@ -667,7 +918,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		return resp, nil
 	})
 
-	accessgate.RegisterTyped[mergeBranchReq, mergeBranchResp](r, TypeID_GIT_MERGE_BRANCH, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *mergeBranchReq) (*mergeBranchResp, error) {
+	registerGitTyped[mergeBranchReq, mergeBranchResp](r, TypeID_GIT_MERGE_BRANCH, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *mergeBranchReq) (*mergeBranchResp, error) {
 		if meta == nil || !meta.CanWrite {
 			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
 		}
@@ -678,9 +929,52 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if err != nil {
 			return nil, classifyRepoRPCError(err)
 		}
+		ctx, releaseMutation, err := s.acquireRepoMutation(ctx, repo)
+		if err != nil {
+			return nil, classifyGitMutationRPCError(err)
+		}
+		defer releaseMutation()
 		resp, err := s.mergeBranch(ctx, repo, req.Name, req.FullName, req.Kind, req.PlanFingerprint)
 		if err != nil {
 			return nil, classifyGitMutationRPCError(err)
+		}
+		return resp, nil
+	})
+
+	registerGitTyped[getCapabilitiesReq, getCapabilitiesResp](r, TypeID_GIT_GET_CAPABILITIES, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *getCapabilitiesReq) (*getCapabilitiesResp, error) {
+		if meta == nil || !meta.CanRead {
+			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
+		}
+		return &getCapabilitiesResp{
+			WorkspaceRevisionV1:       true,
+			WorkspacePathStatusV1:     true,
+			WorkspaceDirectoryScopeV1: true,
+			StashSectionDiffV1:        true,
+		}, nil
+	})
+
+	registerGitPathStatusTyped(r, s.runtime, gate, meta, func(ctx context.Context, req *listWorkspacePathStatusesReq) (*listWorkspacePathStatusesResp, error) {
+		if meta == nil || !meta.CanRead {
+			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
+		}
+		if req == nil {
+			req = &listWorkspacePathStatusesReq{}
+		}
+		repo, err := s.resolveExplicitRepo(ctx, req.RepoRootPath)
+		if err != nil {
+			return nil, classifyRepoRPCError(err)
+		}
+		ctx, releaseRead, err := s.acquireRepoRead(ctx, repo)
+		if err != nil {
+			return nil, classifyGitRPCError(err)
+		}
+		defer releaseRead()
+		resp, err := s.listWorkspacePathStatuses(ctx, repo, req.Paths, req.ExpectedWorkspaceRevision)
+		if err != nil {
+			return nil, classifyGitRPCError(err)
+		}
+		if !workspaceBusinessResponseFits(resp) {
+			return nil, classifyGitRPCError(errWorkspaceResponseBudget)
 		}
 		return resp, nil
 	})
@@ -691,6 +985,7 @@ type repoContext struct {
 	headRef      string
 	headCommit   string
 	dirty        bool
+	identity     gitruntime.RepositoryIdentity
 }
 
 type repoResolveResult struct {
@@ -716,22 +1011,23 @@ func (s *Service) resolveRepoForPath(ctx context.Context, path string) (repoReso
 	if !stat.IsDir() {
 		targetDir = filepath.Dir(resolved.RealAbs)
 	}
-	repoRootReal, err := resolveGitTopLevel(ctx, targetDir)
+	identity, ok, err := s.runtime.ResolveRepositoryIdentity(ctx, targetDir)
 	if err != nil {
-		if errors.Is(err, errGitUnavailable) {
+		if gitutil.IsGitUnavailable(err) {
 			return repoResolveResult{
 				GitAvailable:      false,
 				UnavailableReason: gitUnavailableReason,
 			}, nil
 		}
+		return repoResolveResult{}, err
+	}
+	if !ok {
 		return repoResolveResult{
 			GitAvailable:      true,
 			UnavailableReason: "Current path is not inside a Git repository.",
 		}, nil
 	}
-	if eval, err := filepath.EvalSymlinks(repoRootReal); err == nil {
-		repoRootReal = filepath.Clean(eval)
-	}
+	repoRootReal := identity.WorktreeRoot
 	if _, ok := s.scope.Contains(repoRootReal); !ok {
 		return repoResolveResult{
 			GitAvailable:      true,
@@ -773,47 +1069,50 @@ func (s *Service) validateRepoRootPath(ctx context.Context, repoRootPath string)
 	if !stat.IsDir() {
 		return "", errors.New("repo root must be a directory")
 	}
-	topLevel, err := resolveGitTopLevel(ctx, repoRootReal)
-	if err != nil {
-		if errors.Is(err, errGitUnavailable) {
-			return "", err
-		}
-		return "", errors.New("not a git repository")
-	}
-	if filepath.Clean(topLevel) != filepath.Clean(repoRootReal) {
-		return "", errors.New("repo_root_path must match worktree root")
-	}
-	return repoRootReal, nil
-}
-
-func resolveGitTopLevel(ctx context.Context, dir string) (string, error) {
-	topLevel, err := gitutil.ResolveTopLevel(ctx, dir)
+	identity, ok, err := s.runtime.ResolveRepositoryIdentity(ctx, repoRootReal)
 	if err != nil {
 		if gitutil.IsGitUnavailable(err) {
 			return "", errGitUnavailable
 		}
 		return "", err
 	}
-	return topLevel, nil
+	if !ok {
+		return "", errors.New("not a git repository")
+	}
+	if filepath.Clean(identity.WorktreeRoot) != filepath.Clean(repoRootReal) {
+		return "", errors.New("repo_root_path must match worktree root")
+	}
+	return repoRootReal, nil
 }
 
 func (s *Service) loadRepoContext(ctx context.Context, repoRootReal string) (repoContext, error) {
-	headRef := strings.TrimSpace(readGitOptional(ctx, repoRootReal, "symbolic-ref", "--quiet", "--short", "HEAD"))
-	if headRef == "" {
-		headRef = strings.TrimSpace(readGitOptional(ctx, repoRootReal, "rev-parse", "--abbrev-ref", "HEAD"))
+	identity, ok, err := s.runtime.ResolveRepositoryIdentity(ctx, repoRootReal)
+	if err != nil {
+		return repoContext{}, err
 	}
-	headCommit := strings.TrimSpace(readGitOptional(ctx, repoRootReal, "rev-parse", "--verify", "HEAD"))
-	dirtyRaw := readGitOptional(ctx, repoRootReal, "status", "--porcelain", "--untracked-files=normal")
+	if !ok || filepath.Clean(identity.WorktreeRoot) != filepath.Clean(repoRootReal) {
+		return repoContext{}, errors.New("not a git repository")
+	}
+	if err := s.runtimeSession.RetainRepository(ctx, identity); err != nil {
+		return repoContext{}, err
+	}
+	headRef := strings.TrimSpace(s.readGitOptional(ctx, repoRootReal, "symbolic-ref", "--quiet", "--short", "HEAD"))
+	if headRef == "" {
+		headRef = strings.TrimSpace(s.readGitOptional(ctx, repoRootReal, "rev-parse", "--abbrev-ref", "HEAD"))
+	}
+	headCommit := strings.TrimSpace(s.readGitOptional(ctx, repoRootReal, "rev-parse", "--verify", "HEAD"))
+	dirtyRaw := s.readGitOptional(ctx, repoRootReal, "status", "--porcelain", "--untracked-files=normal")
 	return repoContext{
 		repoRootReal: repoRootReal,
 		headRef:      headRef,
 		headCommit:   headCommit,
 		dirty:        strings.TrimSpace(dirtyRaw) != "",
+		identity:     identity,
 	}, nil
 }
 
-func readGitOptional(ctx context.Context, repoRoot string, args ...string) string {
-	out, err := gitutil.RunCombinedOutput(ctx, repoRoot, nil, args...)
+func (s *Service) readGitOptional(ctx context.Context, repoRoot string, args ...string) string {
+	out, err := s.runGitRead(ctx, repoRoot, args...)
 	if err != nil {
 		return ""
 	}
@@ -829,7 +1128,7 @@ func (s *Service) listCommits(ctx context.Context, repo repoContext, ref string,
 		return nil, 0, false, nil
 	}
 	format := "%H%x00%h%x00%P%x00%an%x00%ae%x00%at%x00%s%x00%b%x1e"
-	out, err := gitutil.RunCombinedOutput(ctx, repo.repoRootReal, nil,
+	out, err := s.runGitRead(ctx, repo.repoRootReal,
 		"log",
 		"--date-order",
 		"--max-count="+strconv.Itoa(limit+1),
@@ -854,7 +1153,7 @@ func (s *Service) listCommits(ctx context.Context, repo repoContext, ref string,
 
 func (s *Service) getCommitDetail(ctx context.Context, repo repoContext, commit string) (gitCommitDetail, gitCommitDiffPresentation, []gitCommitFileSummary, error) {
 	format := "%H%x00%h%x00%P%x00%an%x00%ae%x00%at%x00%s%x00%B%x1e"
-	metaOut, err := gitutil.RunCombinedOutput(ctx, repo.repoRootReal, nil, "show", "-s", "--format="+format, commit)
+	metaOut, err := s.runGitRead(ctx, repo.repoRootReal, "show", "-s", "--format="+format, commit)
 	if err != nil {
 		return gitCommitDetail{}, gitCommitDiffPresentation{}, nil, err
 	}
@@ -959,6 +1258,15 @@ func classifyRepoRPCError(err error) *rpc.Error {
 	if errors.Is(err, errGitUnavailable) {
 		return &rpc.Error{Code: 503, Message: gitUnavailableReason}
 	}
+	if errors.Is(err, gitruntime.ErrResourceLimit) || errors.Is(err, gitruntime.ErrRequestBudget) ||
+		errors.Is(err, gitruntime.ErrResponseBudget) || errors.Is(err, context.Canceled) ||
+		errors.Is(err, context.DeadlineExceeded) {
+		return classifyGitRPCError(err)
+	}
+	var commandErr *gitruntime.CommandError
+	if errors.As(err, &commandErr) {
+		return classifyGitRPCError(err)
+	}
 	if errors.Is(err, os.ErrNotExist) {
 		return &rpc.Error{Code: 404, Message: "not found"}
 	}
@@ -979,6 +1287,32 @@ func classifyGitRPCError(err error) *rpc.Error {
 	}
 	if errors.Is(err, errGitUnavailable) || gitutil.IsGitUnavailable(err) {
 		return &rpc.Error{Code: 503, Message: gitUnavailableReason}
+	}
+	switch {
+	case errors.Is(err, context.Canceled):
+		return &rpc.Error{Code: 499, Message: "request canceled"}
+	case errors.Is(err, context.DeadlineExceeded):
+		return &rpc.Error{Code: 504, Message: "git request timed out"}
+	case errors.Is(err, errWorkspaceSnapshotStale):
+		return &rpc.Error{Code: GitErrorWorkspaceSnapshotStale, Message: "workspace snapshot is stale"}
+	case errors.Is(err, errWorkspaceInventoryLimit):
+		return &rpc.Error{Code: GitErrorWorkspaceInventoryLimit, Message: "workspace inventory exceeds resource limit"}
+	case errors.Is(err, errWorkspacePathEncoding):
+		return &rpc.Error{Code: GitErrorWorkspacePathEncoding, Message: "workspace path is not valid UTF-8"}
+	case errors.Is(err, errWorkspacePaginationRequired):
+		return &rpc.Error{Code: GitErrorWorkspacePaginationRequired, Message: "workspace pagination is required"}
+	case errors.Is(err, errWorkspaceResponseBudget):
+		return &rpc.Error{Code: GitErrorWorkspaceResponseBudget, Message: "workspace response exceeds resource budget"}
+	case errors.Is(err, errDestructiveWorkspaceScanLimit):
+		return &rpc.Error{Code: GitErrorDestructiveWorkspaceScanLimit, Message: "destructive workspace scan exceeds safety limit"}
+	case errors.Is(err, gitruntime.ErrResourceLimit):
+		return &rpc.Error{Code: GitErrorResourceLimit, Message: "git runtime resource limit exceeded"}
+	case errors.Is(err, gitruntime.ErrRequestBudget):
+		return &rpc.Error{Code: GitErrorRequestBudget, Message: "git request exceeds resource budget"}
+	case errors.Is(err, gitruntime.ErrResponseBudget):
+		return &rpc.Error{Code: GitErrorResponseBudget, Message: "git response exceeds resource budget"}
+	case errors.Is(err, errWorktreePorcelainZUnsupported):
+		return &rpc.Error{Code: 501, Message: "git worktree porcelain-z is unsupported"}
 	}
 	message := strings.TrimSpace(err.Error())
 	lower := strings.ToLower(message)
@@ -1011,6 +1345,10 @@ func classifyGitRPCError(err error) *rpc.Error {
 		return &rpc.Error{Code: 404, Message: "stash not found"}
 	case strings.Contains(lower, "file not found in diff"):
 		return &rpc.Error{Code: 404, Message: "file not found in diff"}
+	case strings.Contains(lower, "ambiguous stash section"):
+		return &rpc.Error{Code: 400, Message: "ambiguous stash section"}
+	case strings.Contains(lower, "invalid stash section"):
+		return &rpc.Error{Code: 400, Message: "invalid stash section"}
 	case strings.Contains(lower, "not a git repository"):
 		return &rpc.Error{Code: 404, Message: "repository not found"}
 	default:
@@ -1021,6 +1359,10 @@ func classifyGitRPCError(err error) *rpc.Error {
 func classifyGitMutationRPCError(err error) *rpc.Error {
 	if err == nil {
 		return &rpc.Error{Code: 500, Message: "internal error"}
+	}
+	if errors.Is(err, gitruntime.ErrResourceLimit) || errors.Is(err, gitruntime.ErrRequestBudget) || errors.Is(err, gitruntime.ErrResponseBudget) ||
+		errors.Is(err, errWorkspaceInventoryLimit) || errors.Is(err, errWorkspacePathEncoding) || errors.Is(err, errDestructiveWorkspaceScanLimit) {
+		return classifyGitRPCError(err)
 	}
 	message := strings.TrimSpace(err.Error())
 	lower := strings.ToLower(message)

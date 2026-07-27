@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"strings"
-
-	"github.com/floegence/redeven/internal/gitutil"
 )
 
 type gitCommitDiffMode string
@@ -45,7 +43,7 @@ func (s *Service) readCommitDiffPresentation(ctx context.Context, repoRoot strin
 	if commit == "" {
 		return gitCommitDiffPresentation{}, errors.New("missing commit")
 	}
-	out, err := gitutil.RunCombinedOutput(ctx, repoRoot, nil, "show", "-s", "--format=%P", commit)
+	out, err := s.runGitRead(ctx, repoRoot, "show", "-s", "--format=%P", commit)
 	if err != nil {
 		return gitCommitDiffPresentation{}, err
 	}
@@ -90,6 +88,7 @@ func buildCommitDiffMetadataArgs(commit string, presentation gitCommitDiffPresen
 
 func buildCommitDiffPatchArgs(commit string, pathspecs []string, unifiedArg string, presentation gitCommitDiffPresentation) []string {
 	args := []string{
+		"--literal-pathspecs",
 		"show",
 		"--format=",
 		"--patch",

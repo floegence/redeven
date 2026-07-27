@@ -9,6 +9,7 @@ import {
   buildGitWorkbenchSubviewItems,
   changeSecondaryPath,
   compareHeadline,
+  exactGitPath,
   findWorkspaceChangeByKey,
   pickDefaultWorkspaceViewSection,
   repoDisplayName,
@@ -63,8 +64,12 @@ describe('gitWorkbench helpers', () => {
   it('formats rename path fallback and repo display name', () => {
     expect(changeSecondaryPath({ oldPath: 'src/old.ts', newPath: 'src/new.ts' })).toBe('src/old.ts → src/new.ts');
     expect(changeSecondaryPath({ path: 'src/app.ts', displayPath: 'src/app.ts' })).toBe('src/app.ts');
+    expect(changeSecondaryPath({ path: ' file ' })).toBe(' file ');
     expect(repoDisplayName('/workspace/repo')).toBe('repo');
     expect(repoDisplayName('/')).toBe('Repository');
+    expect(exactGitPath('/workspace/repo ')).toBe('/workspace/repo ');
+    expect(exactGitPath('   ')).toBe('   ');
+    expect(repoDisplayName('/workspace/repo ')).toBe('repo ');
   });
 
   it('builds stable workspace and branch identities', () => {
@@ -76,8 +81,9 @@ describe('gitWorkbench helpers', () => {
       untracked: [],
       conflicted: [],
     };
-    expect(workspaceEntryKey(workspace.staged[0])).toBe('staged::modified:src/app.ts::');
-    expect(findWorkspaceChangeByKey(workspace, 'staged::modified:src/app.ts::')?.path).toBe('src/app.ts');
+    const key = 'staged::["","modified","src/app.ts","",""]';
+    expect(workspaceEntryKey(workspace.staged[0])).toBe(key);
+    expect(findWorkspaceChangeByKey(workspace, key)?.path).toBe('src/app.ts');
 
     const branches = {
       repoRootPath: '/',

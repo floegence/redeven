@@ -39,6 +39,7 @@ import (
 	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/fs"
 	"github.com/floegence/redeven/internal/gitrepo"
+	"github.com/floegence/redeven/internal/gitruntime"
 	"github.com/floegence/redeven/internal/monitor"
 	"github.com/floegence/redeven/internal/portforward"
 	"github.com/floegence/redeven/internal/redevpluginintegration"
@@ -191,6 +192,7 @@ type Agent struct {
 	effectiveRunMode      string
 	remoteEnabled         bool
 	accessGate            *accessgate.Gate
+	gitRuntime            *gitruntime.Runtime
 }
 
 // activeSession represents a server-side Flowersec channel session handled by the agent.
@@ -296,6 +298,7 @@ func New(opts Options) (*Agent, error) {
 		effectiveRunMode:        strings.TrimSpace(opts.EffectiveRunMode),
 		remoteEnabled:           opts.RemoteEnabled,
 		accessGate:              opts.AccessGate,
+		gitRuntime:              gitruntime.New(),
 	}
 	a.reconcileRuntimeMaintenanceMarker()
 
@@ -1300,8 +1303,9 @@ func (a *Agent) serveRedevenAgentSession(ctx context.Context, sess endpoint.Sess
 		return errors.New("missing session")
 	}
 
-	fsSvc := fs.NewServiceWithScope(a.filesystemScope)
-	gitRepoSvc := gitrepo.NewServiceWithScope(a.filesystemScope)
+	fsSvc := fs.NewServiceWithCoordinator(a.filesystemScope, a.gitRuntime)
+	gitRepoSvc := gitrepo.NewServiceWithScopeAndRuntime(a.filesystemScope, a.gitRuntime)
+	defer gitRepoSvc.Close()
 
 	srv, err := serve.New(serve.Options{
 		OnError: func(err error) {
@@ -1363,7 +1367,13 @@ func (a *Agent) serveRedevenAgentSession(ctx context.Context, sess endpoint.Sess
 		}
 	}
 
-	return srv.ServeSession(ctx, sess)
+	trackedSession := &drainingEndpointSession{Session: sess}
+	streamCtx, cancelStreams := context.WithCancel(ctx)
+	serveErr := srv.ServeSession(streamCtx, trackedSession)
+	cancelStreams()
+	_ = sess.Close()
+	trackedSession.Wait()
+	return serveErr
 }
 
 func (a *Agent) registerTerminalLiveStream(srv *serve.Server, meta *session.Meta) {
@@ -1378,11 +1388,19 @@ func (a *Agent) registerTerminalLiveStream(srv *serve.Server, meta *session.Meta
 }
 
 func (a *Agent) serveRPCStream(ctx context.Context, stream io.ReadWriteCloser, meta *session.Meta, fsSvc *fs.Service, gitRepoSvc *gitrepo.Service) {
+	streamAdmission, err := a.gitRuntime.TryAcquireRPCStream()
+	if err != nil {
+		a.log.Warn("rpc stream admission rejected", "category", "git_runtime_stream_limit")
+		_ = stream.Close()
+		return
+	}
+	defer streamAdmission.Release()
+
 	router := rpc.NewRouter()
 	srv, err := rpc.NewServerWithOptions(stream, router, rpc.ServerOptions{
-		MaxConcurrentRequests:  32,
-		MaxQueuedRequests:      128,
-		MaxQueuedNotifications: 128,
+		MaxConcurrentRequests:  gitruntime.MaxConcurrentRPCRequests,
+		MaxQueuedRequests:      gitruntime.MaxQueuedRPCRequests,
+		MaxQueuedNotifications: gitruntime.MaxQueuedRPCNotifications,
 	})
 	if err != nil {
 		a.log.Warn("rpc server init failed", "error", err)

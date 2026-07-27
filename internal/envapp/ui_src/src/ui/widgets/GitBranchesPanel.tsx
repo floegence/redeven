@@ -58,6 +58,7 @@ import {
   changeSecondaryPath,
   createEmptyWorkspaceViewPageStateRecord,
   describeGitHead,
+  exactGitPath,
   gitDiffEntryIdentity,
   isGitWorkspaceDirectoryEntry,
   pickDefaultWorkspaceViewSectionFromSummary,
@@ -160,8 +161,16 @@ import {
   createGitEntityContextMenuController,
   type GitContextMenuActionItem,
 } from "./GitEntityContextMenu";
+import { isGitWorkspaceSnapshotStale, type GitCapabilityMode } from '../services/gitWorkspaceRuntime';
 
 const BRANCH_STATUS_PAGE_SIZE = 200;
+
+export function gitBranchPanelIdentityKey(
+  ...parts: ReadonlyArray<string | number>
+): string {
+  return JSON.stringify(parts);
+}
+
 const BRANCH_STATUS_TABLE_COLUMN_KEYS = [
   "git.common.path",
   "uiCopy.git.section",
@@ -174,6 +183,8 @@ export interface GitBranchesPanelProps {
   repoRootPath?: string;
   repoSummary?: GitRepoSummaryResponse | null;
   statusRefreshToken?: number;
+  protocolClientIdentity?: object | null;
+  capabilityMode?: GitCapabilityMode;
   selectedBranch?: GitBranchSummary | null;
   branchDetailState?: GitBranchDetailPresentationState;
   selectedBranchSubview?: GitBranchSubview;
@@ -258,19 +269,15 @@ function formatAbsoluteTime(ms?: number): string {
 }
 
 function compareFilePath(item: GitCommitFileSummary, unknownPath: string): string {
-  return (
-    String(
-      item.displayPath || item.path || item.newPath || item.oldPath || "",
-    ).trim() || unknownPath
-  );
+  return exactGitPath(
+    item.displayPath || item.path || item.newPath || item.oldPath,
+  ) || unknownPath;
 }
 
 function worktreeFilePath(item: GitWorkspaceChange, unknownPath: string): string {
-  return (
-    String(
-      item.displayPath || item.path || item.newPath || item.oldPath || "",
-    ).trim() || unknownPath
-  );
+  return exactGitPath(
+    item.displayPath || item.path || item.newPath || item.oldPath,
+  ) || unknownPath;
 }
 
 function branchStatusPrimaryLabel(item: GitWorkspaceChange, unknownPath: string): string {
@@ -294,7 +301,7 @@ function branchStatusEmptyPresentation(
   title: string;
   detail: string;
 } {
-  const scopedToDirectory = Boolean(directoryPath.trim());
+  const scopedToDirectory = directoryPath.length > 0;
   if (section === "changes") {
     return {
       title: i18n.t('git.branches.noPendingFiles'),
@@ -801,7 +808,7 @@ function BranchStatusEmptyState(props: {
     branchStatusEmptyPresentation(
       props.section,
       i18n,
-      String(props.directoryPath ?? "").trim(),
+      exactGitPath(props.directoryPath),
     );
   const Icon = () => branchStatusEmptyIcon(props.section);
   return (
@@ -1661,7 +1668,7 @@ function HistoryList(
     String(props.selectedCommitHash ?? "").trim(),
   );
   const repoRootPath = createMemo(() =>
-    String(props.repoRootPath ?? "").trim(),
+    exactGitPath(props.repoRootPath),
   );
   const headDisplay = createMemo(() => localizedGitHeadDisplay(describeGitHead(props.repoSummary), i18n));
   const currentHeadCommit = createMemo(() =>
@@ -1673,7 +1680,7 @@ function HistoryList(
       props.selectedBranch?.fullName ?? props.selectedBranch?.name ?? "",
     ).trim();
     if (!repo || !branchKey) return "";
-    return `${repo}|${branchKey}`;
+    return gitBranchPanelIdentityKey(repo, branchKey);
   });
   const commitDetails = createMemo(() => {
     const contextKey = historyContextKey();
@@ -1804,7 +1811,7 @@ function HistoryList(
     if (!repo || !hash || !contextKey) return;
     const existing = commitDetails()[hash];
     if (existing?.loading || existing?.loaded) return;
-    const requestKey = `${contextKey}|${hash}`;
+    const requestKey = gitBranchPanelIdentityKey(contextKey, hash);
     if (requestedCommitDetailKeys.has(requestKey)) return;
     requestedCommitDetailKeys.add(requestKey);
 
@@ -1840,7 +1847,7 @@ function HistoryList(
           };
         });
       })
-      .catch((err) => {
+      .catch(() => {
         setCommitDetailsByContext((prev) => {
           const currentContext = prev[contextKey] ?? {};
           return {
@@ -1850,10 +1857,7 @@ function HistoryList(
               [hash]: {
                 files: [],
                 loading: false,
-                error:
-                  err instanceof Error
-                    ? err.message
-                    : String(err ?? i18n.t('git.common.requestFailed')),
+                error: i18n.t('git.common.requestFailed'),
                 loaded: true,
               },
             },
@@ -2260,7 +2264,7 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
       return;
     }
 
-    const repoRootPath = String(props.repoRootPath ?? "").trim();
+    const repoRootPath = exactGitPath(props.repoRootPath);
     const nextSource = String(sourceRef()).trim();
     const nextTarget = String(targetRef()).trim();
     if (!repoRootPath || !nextSource || !nextTarget) {
@@ -2284,14 +2288,10 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
         if (seq !== compareReqSeq) return;
         setCompare(resp);
       })
-      .catch((err) => {
+      .catch(() => {
         if (seq !== compareReqSeq) return;
         setCompare(null);
-        setError(
-          err instanceof Error
-            ? err.message
-            : String(err ?? i18n.t('git.common.requestFailed')),
-        );
+        setError(i18n.t('git.common.requestFailed'));
       })
       .finally(() => {
         if (seq === compareReqSeq) setLoading(false);
@@ -2394,8 +2394,8 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
                             selectedKey={selectedKey()}
                             context={{
                               kind: 'compare',
-                              repoRootPath: String(compareAccessor().repoRootPath ?? props.repoRootPath ?? '').trim(),
-                              liveRootPath: String(compareAccessor().repoRootPath ?? props.repoRootPath ?? '').trim(),
+                              repoRootPath: exactGitPath(compareAccessor().repoRootPath ?? props.repoRootPath),
+                              liveRootPath: exactGitPath(compareAccessor().repoRootPath ?? props.repoRootPath),
                               baseRef: compareAccessor().baseRef,
                               targetRef: compareAccessor().targetRef,
                             }}
@@ -2498,6 +2498,10 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   let lastStatusDataContextKey = "";
   let lastStatusRefreshContextKey = "";
   let lastStatusSelectionContextKey = "";
+  let statusWorkspaceRevision = '';
+  let hasStatusProtocolContext = false;
+  let lastStatusProtocolClientIdentity: object | null | undefined;
+  let lastStatusCapabilityMode: GitCapabilityMode | undefined;
 
   const branchDetailState = (): GitBranchDetailPresentationState =>
     props.branchDetailState ??
@@ -2529,7 +2533,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   const statusTabActive = () => branchSubview() === "status";
   const historyTabActive = () => branchSubview() === "history";
   const activeRepoRootPath = () =>
-    String(props.repoRootPath || props.repoSummary?.repoRootPath || "").trim();
+    exactGitPath(props.repoRootPath || props.repoSummary?.repoRootPath);
   const repoHeadDisplay = () => localizedGitHeadDisplay(describeGitHead(props.repoSummary), i18n);
   const reattachBranch = () => reattachBranchFromRepoSummary(props.repoSummary);
   const statusRepoRootPath = () =>
@@ -2542,11 +2546,12 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
       directoryPath,
     });
   const resetStatusWorkspace = () => {
-    statusReqSeqBySection = { changes: 0, conflicted: 0, staged: 0 };
+    for (const section of WORKSPACE_VIEW_SECTIONS) statusReqSeqBySection[section] += 1;
     setStatusWorkspace(null);
     setStatusPages(createEmptyWorkspaceViewPageStateRecord());
     setStatusLoading(false);
     setStatusError("");
+    statusWorkspaceRevision = '';
   };
   const updateStatusPageState = (
     section: GitWorkspaceViewSection,
@@ -2585,7 +2590,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
       loading: false,
       error: "",
       initialized: true,
-      directoryPath: String(page.directoryPath ?? "").trim(),
+      directoryPath: String(page.directoryPath ?? ""),
       breadcrumbs: Array.isArray(page.breadcrumbs) ? [...page.breadcrumbs] : [],
     }));
     setStatusError("");
@@ -2638,12 +2643,12 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     );
   const activeStatusDirectoryPath = () =>
     selectedStatusSection() === "changes"
-      ? String(visibleStatusPageState().directoryPath ?? "").trim()
+      ? String(visibleStatusPageState().directoryPath ?? "")
       : "";
   const statusBreadcrumbSegments = createMemo(() =>
     (visibleStatusPageState().breadcrumbs ?? []).map((crumb) => ({
       label: String(crumb.label ?? "").trim() || i18n.t('git.common.folder'),
-      path: String(crumb.path ?? "").trim(),
+      path: String(crumb.path ?? ""),
     })),
   );
   const showStatusBreadcrumbRail = () =>
@@ -3502,18 +3507,20 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
       force?: boolean;
       background?: boolean;
       directoryPath?: string;
+      staleRetry?: boolean;
     } = {},
   ): Promise<GitListWorkspacePageResponse | undefined> => {
     const repoRootPath = statusRepoRootPath();
     if (!repoRootPath) return;
 
     const currentState = statusPageState(section);
+    if (props.capabilityMode === 'capable'
+      && !statusWorkspaceRevision
+      && WORKSPACE_VIEW_SECTIONS.some((candidate) => statusPageState(candidate).loading)) return;
     const append = Boolean(options.append);
     const directoryPath =
-      section === "changes"
-        ? String(
-            options.directoryPath ?? currentState.directoryPath ?? "",
-          ).trim()
+      section === "changes" || props.capabilityMode === 'capable'
+        ? String(options.directoryPath ?? currentState.directoryPath ?? "")
         : "";
     const offset = append ? currentState.nextOffset : 0;
     const background = Boolean(
@@ -3529,13 +3536,25 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
         ) {
           return;
         }
-      } else if (currentState.initialized && !currentState.loading) {
+      } else if (currentState.initialized || currentState.loading) {
         return;
       }
     }
 
     const seq = (statusReqSeqBySection[section] ?? 0) + 1;
     statusReqSeqBySection[section] = seq;
+    const clientIdentity = props.protocolClientIdentity;
+    const capabilityMode = props.capabilityMode;
+    const refreshToken = Number(props.statusRefreshToken ?? 0);
+    const expectedWorkspaceRevision = capabilityMode === 'capable' ? statusWorkspaceRevision : '';
+    const branch = interactiveBranch();
+    if (branch) {
+      lastStatusRefreshContextKey = gitBranchPanelIdentityKey(
+        branchIdentity(branch),
+        repoRootPath,
+        refreshToken,
+      );
+    }
 
     updateStatusPageState(section, (state) => ({
       ...state,
@@ -3551,21 +3570,31 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
       const resp = await rpc.git.listWorkspacePage({
         repoRootPath,
         section,
-        directoryPath: section === "changes" && directoryPath
-          ? directoryPath
-          : undefined,
+        directoryPath: directoryPath || undefined,
         offset,
         limit: BRANCH_STATUS_PAGE_SIZE,
+        expectedWorkspaceRevision: expectedWorkspaceRevision || undefined,
       });
-      if (seq !== statusReqSeqBySection[section]) return;
+      if (seq !== statusReqSeqBySection[section]
+        || props.protocolClientIdentity !== clientIdentity
+        || props.capabilityMode !== capabilityMode
+        || Number(props.statusRefreshToken ?? 0) !== refreshToken) return;
+      if (props.capabilityMode === 'capable' && !resp.workspaceRevision) {
+        throw new Error('Git workspace response omitted workspace_revision');
+      }
+      if (expectedWorkspaceRevision && resp.workspaceRevision !== expectedWorkspaceRevision) {
+        throw new Error('Git workspace response changed workspace_revision');
+      }
+      if (props.capabilityMode === 'capable') statusWorkspaceRevision = String(resp.workspaceRevision ?? '');
       applyStatusPageSnapshot(resp, { append });
       return resp;
     } catch (err) {
       if (seq !== statusReqSeqBySection[section]) return;
-      const message =
-        err instanceof Error
-          ? err.message
-          : String(err ?? "Failed to load branch status");
+      if (props.capabilityMode === 'capable' && isGitWorkspaceSnapshotStale(err) && !options.staleRetry) {
+        resetStatusWorkspace();
+        return loadStatusSection(section, { ...options, force: true, staleRetry: true });
+      }
+      const message = i18n.t('git.common.requestFailed');
       updateStatusPageState(section, (state) => ({
         ...state,
         loading: false,
@@ -3578,7 +3607,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
         setStatusError(message);
         props.onBranchDetailLoadFailure?.();
       } else if (background) {
-        notification.warning("Git refresh incomplete", message);
+        notification.warning(i18n.t('git.notifications.refreshIncompleteTitle'), message);
       }
     } finally {
       if (seq === statusReqSeqBySection[section]) {
@@ -3629,10 +3658,26 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   });
 
   createEffect(() => {
+    const clientIdentity = props.protocolClientIdentity;
+    const capabilityMode = props.capabilityMode;
+    if (hasStatusProtocolContext
+      && clientIdentity === lastStatusProtocolClientIdentity
+      && capabilityMode === lastStatusCapabilityMode) return;
+    hasStatusProtocolContext = true;
+    lastStatusProtocolClientIdentity = clientIdentity;
+    lastStatusCapabilityMode = capabilityMode;
+    lastStatusDataContextKey = "";
+    lastStatusRefreshContextKey = "";
+    resetStatusWorkspace();
+  });
+
+  createEffect(() => {
     const branch = interactiveBranch();
     const repoRootPath = statusRepoRootPath();
     const contextKey =
-      branch && repoRootPath ? `${branchIdentity(branch)}|${repoRootPath}` : "";
+      branch && repoRootPath
+        ? gitBranchPanelIdentityKey(branchIdentity(branch), repoRootPath)
+        : "";
     if (contextKey === lastStatusSelectionContextKey) return;
     lastStatusSelectionContextKey = contextKey;
     setSelectedStatusSection("changes");
@@ -3645,12 +3690,12 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     const refreshToken = Number(props.statusRefreshToken ?? 0);
     const contextKey =
       branch && repoRootPath
-        ? `${branchIdentity(branch)}|${repoRootPath}`
+        ? gitBranchPanelIdentityKey(branchIdentity(branch), repoRootPath)
         : "";
     if (contextKey === lastStatusDataContextKey) return;
     lastStatusDataContextKey = contextKey;
     lastStatusRefreshContextKey = contextKey
-      ? `${contextKey}|${refreshToken}`
+      ? gitBranchPanelIdentityKey(branchIdentity(branch!), repoRootPath, refreshToken)
       : "";
     resetStatusWorkspace();
   });
@@ -3673,10 +3718,12 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     const repoRootPath = statusRepoRootPath();
     const refreshToken = Number(props.statusRefreshToken ?? 0);
     if (!branch || subview !== "status" || !repoRootPath) return;
-    const contextKey = `${branchIdentity(branch)}|${repoRootPath}`;
-    const refreshKey = `${contextKey}|${refreshToken}`;
+    const refreshKey = gitBranchPanelIdentityKey(
+      branchIdentity(branch),
+      repoRootPath,
+      refreshToken,
+    );
     if (refreshKey === lastStatusRefreshContextKey) return;
-    lastStatusRefreshContextKey = refreshKey;
     const section = selectedStatusSection();
     const pageState = statusPageState(section);
     if (!pageState.initialized || pageState.loading) return;

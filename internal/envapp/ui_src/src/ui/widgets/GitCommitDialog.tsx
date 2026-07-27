@@ -1,6 +1,7 @@
 import { For, Show, createMemo } from 'solid-js';
 import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
 import type { GitWorkspaceChange } from '../protocol/redeven_v1';
+import { exactGitPath } from '../utils/gitWorkbench';
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { gitChangePathClass } from './GitChrome';
 import { useI18n } from '../i18n';
@@ -35,7 +36,7 @@ export interface GitCommitDialogProps {
 }
 
 function itemPath(item: GitWorkspaceChange): string {
-  return String(item.displayPath || item.path || item.newPath || item.oldPath || '').trim() || '(unknown path)';
+  return exactGitPath(item.displayPath || item.path || item.newPath || item.oldPath) || '(unknown path)';
 }
 
 export function GitCommitDialog(props: GitCommitDialogProps) {
@@ -101,7 +102,7 @@ export function GitCommitDialog(props: GitCommitDialogProps) {
                     {(item) => (
                       <tr class={gitChangedFilesRowClass(false)}>
                         <td class={GIT_CHANGED_FILES_CELL_CLASS}>
-                          <div class={`truncate text-[11px] font-medium ${gitChangePathClass(item.changeType)}`} title={itemPath(item)}>{itemPath(item)}</div>
+                          <div class={`truncate whitespace-pre text-[11px] font-medium ${gitChangePathClass(item.changeType)}`} title={itemPath(item)}>{itemPath(item)}</div>
                         </td>
                         <td class={GIT_CHANGED_FILES_CELL_CLASS}><GitChangeStatusPill change={item.changeType} /></td>
                         <td class={GIT_CHANGED_FILES_CELL_CLASS}><GitChangeMetrics additions={item.additions} deletions={item.deletions} /></td>

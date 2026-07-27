@@ -1,4 +1,4 @@
-import { Show, batch, createEffect, createMemo, createSignal, untrack, type JSX } from 'solid-js';
+import { Show, batch, createEffect, createMemo, createSignal, onCleanup, untrack, type JSX } from 'solid-js';
 import { cn, createUIFirstSelection, useLayout, useNotification, useResolvedFloeConfig } from '@floegence/floe-webapp-core';
 import { Copy, Download, FileText, Folder, MoreHorizontal, Pencil, Plus, Refresh, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
 import {
@@ -33,6 +33,17 @@ import { buildRuntimeFileDownloadCommand } from '../downloads/downloadCommands';
 import type { FlowerTurnLauncherIntent } from '../../../../../flower_ui/src';
 import { sortContextActionMenuItems } from '../contextActions/menu';
 import { resolveRendererStorageScopeID } from '../services/desktopSessionContext';
+import {
+  getGitCapabilityMode,
+  getGitWorkspaceWatermark,
+  isGitOperationPlanStale,
+  isGitWorkspaceSnapshotStale,
+  probeGitCapabilities,
+  subscribeGitWorkspaceInvalidation,
+  type GitCapabilityMode,
+} from '../services/gitWorkspaceRuntime';
+import { queryGitWorkspacePathStatuses } from '../services/gitWorkspacePathStatus';
+import { createWorkspaceEffectRpc } from '../services/workspaceEffects';
 import {
   basenameFromAbsolutePath,
   normalizeAbsolutePath,
@@ -84,6 +95,7 @@ import {
   findWorkspaceChangeByKey,
   findWorkspaceChangeByKeyInItems,
   changeSecondaryPath,
+  exactGitPath,
   isGitWorkspaceDirectoryEntry,
   isGitWorkspaceSection,
   isWorkspaceViewSectionKnownEmpty,
@@ -123,7 +135,7 @@ import {
 import { buildGitMutationRefreshPlan, type GitMutationRefreshKind } from '../utils/gitMutationRefresh';
 import {
   applyFileBrowserGitDecorations,
-  buildFileBrowserGitDecorationIndex,
+  buildFileBrowserGitPathStatusIndex,
   type FileBrowserGitDecorationIndex,
 } from './fileBrowserGitDecorations';
 import {
@@ -265,11 +277,12 @@ type GitWorkspaceLoadOptions = GitLoadOptions & {
   offset?: number;
   force?: boolean;
   directoryPath?: string;
+  staleRetry?: boolean;
 };
 
 type FilesGitDirectoryActionTarget =
   | { kind: 'changes'; directoryPath: string }
-  | { kind: 'section'; section: GitWorkspaceViewSection; item: GitWorkspaceChange | null };
+  | { kind: 'section'; section: GitWorkspaceViewSection; directoryPath: string };
 
 type GitCommitContextScope = 'repo' | 'branch';
 
@@ -497,11 +510,11 @@ function createGitCommitContext(params: {
   branchSubview: GitBranchSubview;
   branch?: GitBranchSummary | null;
 }): GitCommitContext | null {
-  const repoRootPath = String(params.repoRootPath ?? '').trim();
+  const repoRootPath = exactGitPath(params.repoRootPath);
   if (!repoRootPath) return null;
   if (params.subview === 'history') {
     return {
-      key: `${repoRootPath}|repo|`,
+      key: JSON.stringify([repoRootPath, 'repo', '']),
       scope: 'repo',
       repoRootPath,
       ref: '',
@@ -511,7 +524,7 @@ function createGitCommitContext(params: {
     const ref = String(params.branch?.name ?? '').trim();
     if (!ref) return null;
     return {
-      key: `${repoRootPath}|branch|${ref}`,
+      key: JSON.stringify([repoRootPath, 'branch', ref]),
       scope: 'branch',
       repoRootPath,
       ref,
@@ -646,6 +659,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   const [files, setFiles] = createSignal<FileItem[]>([]);
   const [filesGitDecorationIndex, setFilesGitDecorationIndex] = createSignal<FileBrowserGitDecorationIndex | null>(null);
+  const [gitCapabilityMode, setGitCapabilityMode] = createSignal<GitCapabilityMode>('unknown');
   const decoratedFiles = createMemo(() => applyFileBrowserGitDecorations(files(), filesGitDecorationIndex()));
   const [filesGitDiffDialogOpen, setFilesGitDiffDialogOpen] = createSignal(false);
   const [filesGitDiffDialogItem, setFilesGitDiffDialogItem] = createSignal<GitWorkspaceChange | null>(null);
@@ -770,6 +784,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   let dirReqSeq = 0;
   let repoReqSeq = 0;
   let filesGitDecorationReqSeq = 0;
+  let filesGitDecorationInFlight = false;
+  let pendingFilesGitDecorationRequest: { repoRootPath: string; sequence: number } | null = null;
+  let gitWorkspaceRevision = '';
   let gitListReqSeq = 0;
   let gitRepoSummaryReqSeq = 0;
   let gitWorkspaceReqSeqBySection: Record<GitWorkspaceViewSection, number> = { changes: 0, conflicted: 0, staged: 0 };
@@ -784,9 +801,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   let gitAskFlowerReqSeq = 0;
   let lastGitCommitContextKey = '';
   let lastGitRepoKey = '';
+  let lastGitRepoRootPath = '';
   let lastFilesGitDecorationRepoKey = '';
   let lastGitSubviewActivationKey = '';
   let lastGitBranchStatusActivationKey = '';
+  let activeGitProtocolClient: object | null = null;
+  let activeGitCapabilityMode: GitCapabilityMode = 'unknown';
 
   const readGitCommitCacheEntry = (contextKey: string): GitCommitListCacheEntry | null => {
     const key = String(contextKey ?? '').trim();
@@ -890,24 +910,99 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const clearFilesGitDecorationIndex = () => {
     filesGitDecorationReqSeq += 1;
     lastFilesGitDecorationRepoKey = '';
+    pendingFilesGitDecorationRequest = null;
     setFilesGitDecorationIndex(null);
   };
 
+  const loadedFilesGitPaths = (repoRootPath: string): string[] => {
+    const prefix = repoRootPath === '/' ? '/' : `${repoRootPath}/`;
+    const paths = new Set<string>();
+    const visit = (items: FileItem[]) => {
+      for (const item of items) {
+        const absolutePath = item.path;
+        if (absolutePath.startsWith(prefix)) paths.add(absolutePath.slice(prefix.length));
+        if (item.children) visit(item.children);
+      }
+    };
+    visit(files());
+    return [...paths];
+  };
+
+  const loadedFilesGitScopeKey = (): string => {
+    const paths: string[] = [];
+    const visit = (items: FileItem[]) => {
+      for (const item of items) {
+        paths.push(item.path);
+        if (item.children) visit(item.children);
+      }
+    };
+    visit(files());
+    return paths.join('\u0000');
+  };
+
+  const performFilesGitDecorationLoad = async (
+    repoRootPath: string,
+    seq: number,
+  ): Promise<void> => {
+    const client = protocol.client();
+    if (!client || gitCapabilityMode() !== 'capable') return;
+    const paths = loadedFilesGitPaths(repoRootPath);
+    const watermark = getGitWorkspaceWatermark(client, repoRootPath);
+    const isCurrentGeneration = () => seq === filesGitDecorationReqSeq
+      && protocol.client() === client
+      && getGitWorkspaceWatermark(client, repoRootPath) === watermark;
+    try {
+      const result = await queryGitWorkspacePathStatuses({
+        repoRootPath,
+        paths,
+        call: (request) => rpc.git.listWorkspacePathStatuses(request),
+        shouldContinue: isCurrentGeneration,
+        onSnapshotStale: () => {
+          if (isCurrentGeneration()) setFilesGitDecorationIndex(null);
+        },
+      });
+      if (result.preempted || !isCurrentGeneration()) return;
+      setFilesGitDecorationIndex(buildFileBrowserGitPathStatusIndex(repoRootPath, {
+        repoRootPath,
+        workspaceRevision: result.workspaceRevision ?? '',
+        items: result.items,
+      }));
+    } catch {
+      // Keep the committed decoration index during background failures.
+    }
+  };
+
   const loadFilesGitDecorationIndex = async (repoRootPath: string): Promise<void> => {
-    const rawRepoRootPath = String(repoRootPath ?? '').trim();
-    if (!rawRepoRootPath || !protocol.client()) {
+    const rawRepoRootPath = String(repoRootPath ?? '');
+    const client = protocol.client();
+    const requestSeq = ++filesGitDecorationReqSeq;
+    if (!rawRepoRootPath || !client) {
       clearFilesGitDecorationIndex();
       return;
     }
-    const normalizedRepoRootPath = normalizePath(rawRepoRootPath);
-    const seq = ++filesGitDecorationReqSeq;
+    const exactRepoRootPath = rawRepoRootPath;
+    if (gitCapabilityMode() === 'unknown' || gitCapabilityMode() === 'transient') {
+      const mode = await probeGitCapabilities(client, () => rpc.git.getCapabilities(), {
+        force: gitCapabilityMode() === 'transient',
+      });
+      if (protocol.client() !== client || requestSeq !== filesGitDecorationReqSeq) return;
+      setGitCapabilityMode(mode);
+    }
+    if (gitCapabilityMode() !== 'capable') {
+      clearFilesGitDecorationIndex();
+      return;
+    }
+    pendingFilesGitDecorationRequest = { repoRootPath: exactRepoRootPath, sequence: requestSeq };
+    if (filesGitDecorationInFlight) return;
+    filesGitDecorationInFlight = true;
     try {
-      const resp = await rpc.git.listWorkspaceChanges({ repoRootPath: normalizedRepoRootPath });
-      if (seq !== filesGitDecorationReqSeq) return;
-      setFilesGitDecorationIndex(buildFileBrowserGitDecorationIndex(normalizedRepoRootPath, resp));
-    } catch {
-      if (seq !== filesGitDecorationReqSeq) return;
-      setFilesGitDecorationIndex(null);
+      while (pendingFilesGitDecorationRequest) {
+        const nextRequest = pendingFilesGitDecorationRequest;
+        pendingFilesGitDecorationRequest = null;
+        await performFilesGitDecorationLoad(nextRequest.repoRootPath, nextRequest.sequence);
+      }
+    } finally {
+      filesGitDecorationInFlight = false;
     }
   };
 
@@ -1154,11 +1249,11 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   });
 
   const resolveActiveRepoRootPath = (overridePath?: string): string => {
-    const candidate = String(overridePath ?? repoInfo()?.repoRootPath ?? '').trim();
-    return candidate;
+	return exactGitPath(overridePath ?? repoInfo()?.repoRootPath);
   };
 
   const shouldNotifyGitLoadError = (options: { notifyOnError?: boolean }): boolean => options.notifyOnError !== false;
+  const presentGitRequestError = (fallback = i18n.t('git.common.requestFailed')): string => fallback;
 
   const resolveRepoInfo = async (path: string = currentBrowserPath(), options: { silent?: boolean; notifyOnError?: boolean } = {}): Promise<GitResolveRepoResponse | null> => {
     const client = protocol.client();
@@ -1265,8 +1360,22 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   };
 
   const resetGitWorkspacePages = () => {
-    gitWorkspaceReqSeqBySection = { changes: 0, conflicted: 0, staged: 0 };
+    for (const section of WORKSPACE_VIEW_SECTIONS) gitWorkspaceReqSeqBySection[section] += 1;
     setGitWorkspacePages(createEmptyWorkspaceViewPageStateRecord());
+  };
+
+  const discardGitWorkspaceGeneration = () => {
+    clearFilesGitDecorationIndex();
+    gitWorkspaceRevision = '';
+    gitRepoSummaryReqSeq += 1;
+    setGitRepoSummary(null);
+    setGitRepoSummaryLoading(false);
+    setGitRepoSummaryError('');
+    setGitWorkspace(null);
+    setGitWorkspaceError('');
+    setSelectedGitWorkspaceKey('');
+    resetGitWorkspacePages();
+    setGitBranchStatusRefreshToken((value) => value + 1);
   };
 
   const updateGitWorkspacePageState = (
@@ -1310,7 +1419,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       loadingMode: undefined,
       error: '',
       initialized: true,
-      directoryPath: section === 'changes' ? String(prev.directoryPath ?? '').trim() : '',
+      directoryPath: section === 'changes' ? String(prev.directoryPath ?? '') : '',
       breadcrumbs: section === 'changes' && Array.isArray(prev.breadcrumbs) ? [...prev.breadcrumbs] : [],
     }));
     return true;
@@ -1358,7 +1467,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       loadingMode: undefined,
       error: '',
       initialized: true,
-      directoryPath: String(page.directoryPath ?? '').trim(),
+      directoryPath: String(page.directoryPath ?? ''),
       breadcrumbs: Array.isArray(page.breadcrumbs) ? [...page.breadcrumbs] : [],
     }));
     syncGitWorkspaceSelection(nextWorkspace);
@@ -1366,6 +1475,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   const invalidateGitWorkspaceSections = (sections: GitWorkspaceViewSection[]) => {
     const wanted = Array.from(new Set(sections));
+    for (const section of wanted) gitWorkspaceReqSeqBySection[section] += 1;
     setGitWorkspace((prev) => clearWorkspaceViewSections(prev, wanted));
     setGitWorkspacePages((prev) => {
       const next = { ...prev };
@@ -1395,6 +1505,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     gitMergeReviewReqSeq += 1;
     gitDeleteReviewReqSeq += 1;
     lastGitRepoKey = '';
+    lastGitRepoRootPath = '';
+    gitWorkspaceRevision = '';
     setGitRepoSummary(null);
     setGitRepoSummaryLoading(false);
     setGitRepoSummaryError('');
@@ -1436,7 +1548,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   );
   const filesGitDiffDialogSource = createMemo(() => {
     const item = filesGitDiffDialogItem();
-    const repoRootPath = String(filesGitDecorationIndex()?.repoRootPath ?? repoInfo()?.repoRootPath ?? '').trim();
+    const repoRootPath = exactGitPath(filesGitDecorationIndex()?.repoRootPath ?? repoInfo()?.repoRootPath);
     if (!item || !repoRootPath || !isGitWorkspaceSection(item.section)) return null;
     return {
       kind: 'workspace' as const,
@@ -1444,7 +1556,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       workspaceSection: item.section,
     };
   });
-  const activeStashRepoRootPath = () => String(stashWindowContext()?.repoRootPath ?? '').trim();
+  const activeStashRepoRootPath = () => exactGitPath(stashWindowContext()?.repoRootPath);
   const activeStashSource = () => stashWindowContext()?.source ?? 'header';
   const selectedStashSummary = createMemo<GitStashSummary | GitStashDetail | null>(() => {
     const stashId = String(selectedStashId() ?? '').trim();
@@ -1659,7 +1771,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   };
 
   const formatGitFileCountLabel = (count: number): string => fileCountLabel(count);
-  const activeChangesDirectoryPath = () => String(gitWorkspacePageState('changes').directoryPath ?? '').trim();
+  const activeChangesDirectoryPath = () => String(gitWorkspacePageState('changes').directoryPath ?? '');
   const activeChangesPageCount = () => {
     const state = gitWorkspacePageState('changes');
     return state.initialized
@@ -1736,8 +1848,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       const result = await action();
       await onSuccess(result);
       return true;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err ?? i18n.t('git.common.requestFailed'));
+    } catch {
+      const message = presentGitRequestError();
       const title = scope === 'commit'
         ? i18n.t('git.notifications.commitFailedTitle')
         : scope === 'stage'
@@ -1782,15 +1894,15 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     key: string;
     count: number;
   }) => {
-    const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
+    const repoRootPath = exactGitPath(repoInfo()?.repoRootPath);
     if (!repoRootPath) return;
     const uniqueSourceSections = Array.from(new Set(params.sourceSections));
     const paths = Array.isArray(params.paths) ? params.paths : [];
-    const directoryPath = String(params.directoryPath ?? '').trim();
+    const directoryPath = String(params.directoryPath ?? '');
     await runGitMutation(
       'stage',
       params.key,
-      () => rpc.git.stageWorkspace({
+      () => createWorkspaceEffectRpc(protocol.client()!, rpc, repoRootPath).git.stageWorkspace({
         repoRootPath,
         section: paths.length === 0 ? (uniqueSourceSections[0] === 'conflicted' ? 'conflicted' : 'changes') : undefined,
         directoryPath: paths.length === 0 && directoryPath ? directoryPath : undefined,
@@ -1820,14 +1932,14 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     key: string;
     count: number;
   }) => {
-    const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
+    const repoRootPath = exactGitPath(repoInfo()?.repoRootPath);
     if (!repoRootPath) return;
     const paths = Array.isArray(params.paths) ? params.paths : [];
-    const directoryPath = String(params.directoryPath ?? '').trim();
+    const directoryPath = String(params.directoryPath ?? '');
     await runGitMutation(
       'unstage',
       params.key,
-      () => rpc.git.unstageWorkspace({
+      () => createWorkspaceEffectRpc(protocol.client()!, rpc, repoRootPath).git.unstageWorkspace({
         repoRootPath,
         section: paths.length === 0 ? 'staged' : undefined,
         directoryPath: paths.length === 0 && directoryPath ? directoryPath : undefined,
@@ -1883,14 +1995,14 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     key: string;
     count: number;
   }) => {
-    const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
+    const repoRootPath = exactGitPath(repoInfo()?.repoRootPath);
     if (!repoRootPath) return;
     const paths = Array.isArray(params.paths) ? params.paths : [];
-    const directoryPath = String(params.directoryPath ?? '').trim();
+    const directoryPath = String(params.directoryPath ?? '');
     await runGitMutation(
       'discard',
       params.key,
-      () => rpc.git.discardWorkspace({
+      () => createWorkspaceEffectRpc(protocol.client()!, rpc, repoRootPath).git.discardWorkspace({
         repoRootPath,
         section: paths.length === 0 ? 'changes' : undefined,
         directoryPath: paths.length === 0 && directoryPath ? directoryPath : undefined,
@@ -1966,7 +2078,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     scope: { directoryPath?: string; count?: number } = {},
   ) => {
     if (section !== 'changes') return;
-    const directoryPath = String(scope.directoryPath ?? activeChangesDirectoryPath()).trim();
+    const directoryPath = String(scope.directoryPath ?? activeChangesDirectoryPath());
     const count = Math.max(0, Number(scope.count ?? activeChangesPageCount()));
     if (count <= 0) return;
     setSelectedGitWorkspaceSection(section);
@@ -1978,7 +2090,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   };
 
   const handleCommitWorkspace = async (message: string) => {
-    const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
+    const repoRootPath = exactGitPath(repoInfo()?.repoRootPath);
     const trimmed = String(message ?? '').trim();
     if (!repoRootPath) return;
     if (!trimmed) {
@@ -1988,7 +2100,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     await runGitMutation(
       'commit',
       'commit',
-      () => rpc.git.commitWorkspace({ repoRootPath, message: trimmed }),
+      () => createWorkspaceEffectRpc(protocol.client()!, rpc, repoRootPath).git.commitWorkspace({ repoRootPath, message: trimmed }),
       async (resp) => {
         invalidateGitWorkspaceSections(['staged']);
         setGitRepoSummary((prev) => (prev
@@ -2017,13 +2129,14 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   };
 
   const applyGitMutationRepoState = (resp: GitMutationRepoResponse) => {
-    const repoRootPath = String(resp.repoRootPath ?? '').trim() || resolveActiveRepoRootPath();
+    const repoRootPath = exactGitPath(resp.repoRootPath) || resolveActiveRepoRootPath();
     const nextHeadRef = typeof resp.headRef === 'string' ? resp.headRef : undefined;
     const nextHeadCommit = typeof resp.headCommit === 'string' ? resp.headCommit : undefined;
-    const nextRepoKey = repoRootPath ? `${repoRootPath}|${nextHeadCommit ?? (repoInfo()?.headCommit ?? '')}` : '';
+    const nextRepoKey = repoRootPath ? JSON.stringify([repoRootPath, nextHeadCommit ?? (repoInfo()?.headCommit ?? '')]) : '';
 
     if (nextRepoKey) {
       lastGitRepoKey = nextRepoKey;
+      lastGitRepoRootPath = repoRootPath;
     }
 
     setRepoInfo((prev) => (prev
@@ -2050,7 +2163,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const refreshGitStateAfterMutation = async (kind: GitMutationRefreshKind, resp: GitMutationRepoResponse) => {
     applyGitMutationRepoState(resp);
 
-    const repoRootPath = String(resp.repoRootPath ?? '').trim() || resolveActiveRepoRootPath();
+    const repoRootPath = exactGitPath(resp.repoRootPath) || resolveActiveRepoRootPath();
     if (!repoRootPath) return;
 
     const plan = buildGitMutationRefreshPlan(kind, {
@@ -2089,7 +2202,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   };
 
   const resolveStashRepoRootPath = (overridePath?: string): string => (
-    String(overridePath ?? activeStashRepoRootPath()).trim()
+    exactGitPath(overridePath ?? activeStashRepoRootPath())
   );
 
   const loadStashContext = async (options: GitLoadOptions = {}) => {
@@ -2110,9 +2223,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         repoSummary: repoSummaryResp,
         workspaceSummary: repoSummaryResp?.workspaceSummary ?? null,
       };
-    } catch (err) {
+    } catch {
       if (seq !== stashContextReqSeq) return;
-      const message = err instanceof Error ? err.message : String(err ?? 'Failed to load stash context');
+      const message = presentGitRequestError(i18n.t('uiCopy.git.failedToLoadStashContext'));
       if (!options.silent) {
         setStashRepoSummary(null);
         setStashWorkspaceSummary(null);
@@ -2167,9 +2280,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         resetStashDetailState();
       }
       return resp;
-    } catch (err) {
+    } catch {
       if (seq !== stashListReqSeq) return;
-      const message = err instanceof Error ? err.message : String(err ?? 'Failed to load stashes');
+      const message = presentGitRequestError(i18n.t('uiCopy.git.failedToLoadStashes'));
       if (!options.silent) {
         setStashList([]);
         setSelectedStashId('');
@@ -2203,9 +2316,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       setStashDetail(resp?.stash ?? null);
       setStashDetailError('');
       return resp;
-    } catch (err) {
+    } catch {
       if (seq !== stashDetailReqSeq) return;
-      const message = err instanceof Error ? err.message : String(err ?? 'Failed to load stash detail');
+      const message = presentGitRequestError(i18n.t('uiCopy.git.failedToLoadStashDetail'));
       if (!options.silent) {
         setStashDetail(null);
         setStashDetailError(message);
@@ -2238,9 +2351,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     targetRepoRootPath: string,
     resp: GitMutationRepoResponse,
   ) => {
-    const normalizedTargetPath = String(targetRepoRootPath ?? '').trim();
+    const exactTargetPath = exactGitPath(targetRepoRootPath);
     const activeRepoRootPath = resolveActiveRepoRootPath();
-    if (activeRepoRootPath && activeRepoRootPath === normalizedTargetPath) {
+    if (activeRepoRootPath && activeRepoRootPath === exactTargetPath) {
       await refreshGitStateAfterMutation(kind, resp);
     } else {
       const refreshes: Array<Promise<unknown>> = [];
@@ -2256,7 +2369,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   };
 
   const openGitStashWindow = (request: GitStashWindowRequest = {}) => {
-    const repoRootPath = String(request.repoRootPath ?? resolveActiveRepoRootPath()).trim();
+    const repoRootPath = exactGitPath(request.repoRootPath ?? resolveActiveRepoRootPath());
     if (!repoRootPath) {
       notification.error(i18n.t('git.notifications.stashUnavailableTitle'), i18n.t('git.notifications.repositoryPathUnavailable'));
       return;
@@ -2305,7 +2418,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     await runGitMutation(
       'saveStash',
       `stash:save:${repoRootPath}`,
-      () => rpc.git.saveStash({
+      () => createWorkspaceEffectRpc(protocol.client()!, rpc, repoRootPath).git.saveStash({
         repoRootPath,
         message: message || undefined,
         includeUntracked: stashIncludeUntracked(),
@@ -2355,9 +2468,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         preview,
         reviewContext: buildGitStashReviewContextFromApplyPreview(preview),
       });
-    } catch (err) {
+    } catch {
       if (seq !== stashReviewReqSeq) return;
-      const message = err instanceof Error ? err.message : String(err ?? 'Failed to review stash apply');
+      const message = presentGitRequestError();
       setStashReview(null);
       setStashReviewError(message);
       notification.error(i18n.t('git.notifications.stashReviewFailedTitle'), message);
@@ -2387,9 +2500,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         preview,
         reviewContext: buildGitStashReviewContextFromDropPreview(preview),
       });
-    } catch (err) {
+    } catch {
       if (seq !== stashReviewReqSeq) return;
-      const message = err instanceof Error ? err.message : String(err ?? 'Failed to review stash deletion');
+      const message = presentGitRequestError();
       setStashReview(null);
       setStashReviewError(message);
       if (options.notifyOnError !== false) {
@@ -2459,7 +2572,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     setGitMutationKey(stashId);
     try {
       if (review.kind === 'apply') {
-        const resp = await rpc.git.applyStash({
+        const resp = await createWorkspaceEffectRpc(protocol.client()!, rpc, repoRootPath).git.applyStash({
           repoRootPath,
           id: stashId,
           removeAfterApply: review.removeAfterApply,
@@ -2482,7 +2595,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
             : i18n.t('git.notifications.appliedSelectedStashMessage'),
         );
       } else {
-        const resp = await rpc.git.dropStash({
+        const resp = await createWorkspaceEffectRpc(protocol.client()!, rpc, repoRootPath).git.dropStash({
           repoRootPath,
           id: stashId,
           planFingerprint: review.preview.planFingerprint,
@@ -2502,7 +2615,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       if (review.kind === 'drop' && await recoverDropStashError(err, { repoRootPath, stashId })) {
         return;
       }
-      const message = err instanceof Error ? err.message : String(err ?? 'Request failed.');
+      const message = presentGitRequestError();
       setStashReviewError(message);
       if (err instanceof RpcError && (err.code === 404 || err.code === 409)) {
         void refreshStashWindowData({
@@ -2520,12 +2633,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   };
 
   const handleFetchRepo = async () => {
-    const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
+    const repoRootPath = exactGitPath(repoInfo()?.repoRootPath);
     if (!repoRootPath) return;
     await runGitMutation(
       'fetch',
       'repo:fetch',
-      () => rpc.git.fetchRepo({ repoRootPath }),
+      () => createWorkspaceEffectRpc(protocol.client()!, rpc, repoRootPath).git.fetchRepo({ repoRootPath }),
       (resp) => {
         void refreshGitStateAfterMutation('fetch', resp);
         notification.success(i18n.t('git.notifications.fetchedTitle'), i18n.t('git.notifications.remoteRefsUpdated'));
@@ -2534,12 +2647,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   };
 
   const handlePullRepo = async () => {
-    const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
+    const repoRootPath = exactGitPath(repoInfo()?.repoRootPath);
     if (!repoRootPath) return;
     await runGitMutation(
       'pull',
       'repo:pull',
-      () => rpc.git.pullRepo({ repoRootPath }),
+      () => createWorkspaceEffectRpc(protocol.client()!, rpc, repoRootPath).git.pullRepo({ repoRootPath }),
       (resp) => {
         void refreshGitStateAfterMutation('pull', resp);
         notification.success(i18n.t('git.notifications.pulledTitle'), `${resp.headRef || 'HEAD'} ${String(resp.headCommit ?? '').slice(0, 7)}`.trim());
@@ -2548,12 +2661,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   };
 
   const handlePushRepo = async () => {
-    const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
+    const repoRootPath = exactGitPath(repoInfo()?.repoRootPath);
     if (!repoRootPath) return;
     await runGitMutation(
       'push',
       'repo:push',
-      () => rpc.git.pushRepo({ repoRootPath }),
+      () => createWorkspaceEffectRpc(protocol.client()!, rpc, repoRootPath).git.pushRepo({ repoRootPath }),
       (resp) => {
         void refreshGitStateAfterMutation('push', resp);
         notification.success(i18n.t('git.notifications.pushedTitle'), `${resp.headRef || 'HEAD'} ${String(resp.headCommit ?? '').slice(0, 7)}`.trim());
@@ -2562,12 +2675,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   };
 
   const handleCheckoutBranch = async (branch: GitBranchSummary) => {
-    const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
+    const repoRootPath = exactGitPath(repoInfo()?.repoRootPath);
     if (!repoRootPath) return;
     await runGitMutation(
       'checkout',
       branchIdentity(branch),
-      () => rpc.git.checkoutBranch({
+      () => createWorkspaceEffectRpc(protocol.client()!, rpc, repoRootPath).git.checkoutBranch({
         repoRootPath,
         name: branch.name,
         fullName: branch.fullName,
@@ -2581,7 +2694,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   };
 
   const handleSwitchDetached = async (target: GitDetachedSwitchTarget) => {
-    const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
+    const repoRootPath = exactGitPath(repoInfo()?.repoRootPath);
     const commitHash = String(target.commitHash ?? '').trim();
     if (!repoRootPath || !commitHash) return;
     if (target.source === 'branch_history') {
@@ -2591,7 +2704,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     await runGitMutation(
       'switchDetached',
       commitHash,
-      () => rpc.git.switchDetached({
+      () => createWorkspaceEffectRpc(protocol.client()!, rpc, repoRootPath).git.switchDetached({
         repoRootPath,
         targetRef: commitHash,
       }),
@@ -2622,7 +2735,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   };
 
   const handleMergeBranch = async (branch: GitBranchSummary) => {
-    const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
+    const repoRootPath = exactGitPath(repoInfo()?.repoRootPath);
     if (!repoRootPath) return;
     if (!protocol.client()) {
       notification.error(i18n.t('git.notifications.unavailableTitle'), i18n.t('git.common.connectionNotReady'));
@@ -2646,9 +2759,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       });
       if (seq !== gitMergeReviewReqSeq) return;
       setGitMergeReviewPreview(resp);
-    } catch (err) {
+    } catch {
       if (seq !== gitMergeReviewReqSeq) return;
-      const message = err instanceof Error ? err.message : String(err ?? i18n.t('git.notifications.failedToReviewBranchMerge'));
+      const message = presentGitRequestError(i18n.t('git.notifications.failedToReviewBranchMerge'));
       setGitMergeReviewPreview(null);
       setGitMergeReviewError(message);
     } finally {
@@ -2676,7 +2789,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   };
 
   const handleDeleteBranch = async (branch: GitBranchSummary) => {
-    const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
+    const repoRootPath = exactGitPath(repoInfo()?.repoRootPath);
     if (!repoRootPath) return;
     if (!protocol.client()) {
       notification.error(i18n.t('git.notifications.unavailableTitle'), i18n.t('git.common.connectionNotReady'));
@@ -2700,9 +2813,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       });
       if (seq !== gitDeleteReviewReqSeq) return;
       setGitDeleteReviewPreview(resp);
-    } catch (err) {
+    } catch {
       if (seq !== gitDeleteReviewReqSeq) return;
-      const message = err instanceof Error ? err.message : String(err ?? i18n.t('git.notifications.failedToReviewBranchDeletion'));
+      const message = presentGitRequestError(i18n.t('git.notifications.failedToReviewBranchDeletion'));
       setGitDeleteReviewPreview(null);
       setGitDeleteReviewError(message);
     } finally {
@@ -2713,7 +2826,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const refreshGitStateAfterBranchDelete = async (resp: GitMutationRepoResponse) => {
     applyGitMutationRepoState(resp);
 
-    const repoRootPath = String(resp.repoRootPath ?? '').trim() || resolveActiveRepoRootPath();
+    const repoRootPath = exactGitPath(resp.repoRootPath) || resolveActiveRepoRootPath();
     if (!repoRootPath) return;
 
     await loadGitBranches({
@@ -2729,7 +2842,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       planFingerprint?: string;
     },
   ) => {
-    const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
+    const repoRootPath = exactGitPath(repoInfo()?.repoRootPath);
     if (!repoRootPath) return;
     if (!protocol.client()) {
       notification.error(i18n.t('git.notifications.unavailableTitle'), i18n.t('git.common.connectionNotReady'));
@@ -2740,7 +2853,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     setGitMutationScope('mergeBranch');
     setGitMutationKey(branchIdentity(branch));
     try {
-      const resp = await rpc.git.mergeBranch({
+      const resp = await createWorkspaceEffectRpc(protocol.client()!, rpc, repoRootPath).git.mergeBranch({
         repoRootPath,
         name: branch.name,
         fullName: branch.fullName,
@@ -2769,8 +2882,11 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       focusGitWorkspaceSection('conflicted', gitWorkspace());
       notification.warning(i18n.t('git.notifications.mergeConflictsTitle'), i18n.t('git.notifications.resolveConflicts', { target: targetRef }));
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err ?? i18n.t('git.common.requestFailed'));
-      if (message.toLowerCase().includes('stale')) {
+      const stalePlan = isGitOperationPlanStale(err, 'mergeBranch');
+      const message = presentGitRequestError(stalePlan
+        ? i18n.t('git.notifications.failedToReviewBranchMerge')
+        : undefined);
+      if (stalePlan) {
         setGitMergeReviewPreview(null);
         setGitMergeReviewError(message);
       } else {
@@ -2793,7 +2909,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       planFingerprint?: string;
     },
   ) => {
-    const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
+    const repoRootPath = exactGitPath(repoInfo()?.repoRootPath);
     if (!repoRootPath) return;
     if (!protocol.client()) {
       notification.error(i18n.t('git.notifications.unavailableTitle'), i18n.t('git.common.connectionNotReady'));
@@ -2804,7 +2920,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     setGitMutationScope('deleteBranch');
     setGitMutationKey(branchIdentity(branch));
     try {
-      const resp = await rpc.git.deleteBranch({
+      const resp = await createWorkspaceEffectRpc(protocol.client()!, rpc, repoRootPath).git.deleteBranch({
         repoRootPath,
         name: branch.name,
         fullName: branch.fullName,
@@ -2819,8 +2935,11 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       void refreshGitStateAfterBranchDelete(resp);
       notification.success(i18n.t('git.notifications.deletedTitle'), i18n.t('git.notifications.branchRemoved', { branch: branch.name || i18n.t('git.notifications.branchTitleFallback') }));
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err ?? i18n.t('git.common.requestFailed'));
-      if (message.toLowerCase().includes('stale')) {
+      const stalePlan = isGitOperationPlanStale(err, 'deleteBranch');
+      const message = presentGitRequestError(stalePlan
+        ? i18n.t('git.notifications.failedToReviewBranchDeletion')
+        : undefined);
+      if (stalePlan) {
         setGitDeleteReviewPreview(null);
         setGitDeleteReviewError(message);
       } else {
@@ -2835,20 +2954,33 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   const loadGitRepoSummary = async (options: GitLoadOptions = {}) => {
     const repoRootPath = resolveActiveRepoRootPath(options.repoRootPath);
-    if (!repoRootPath || !protocol.client()) return;
+    const client = protocol.client();
+    if (!repoRootPath || !client) return;
     const seq = ++gitRepoSummaryReqSeq;
+    const watermark = getGitWorkspaceWatermark(client, repoRootPath);
     if (!options.silent) {
       setGitRepoSummaryLoading(true);
       setGitRepoSummaryError('');
     }
     try {
       const resp = await rpc.git.getRepoSummary({ repoRootPath });
-      if (seq !== gitRepoSummaryReqSeq) return;
+      if (seq !== gitRepoSummaryReqSeq
+        || protocol.client() !== client
+        || getGitWorkspaceWatermark(client, repoRootPath) !== watermark) return;
+      if (gitCapabilityMode() === 'capable' && !resp.workspaceRevision) {
+        throw new Error('Git workspace response omitted workspace_revision');
+      }
+      const nextRevision = gitCapabilityMode() === 'capable' ? String(resp.workspaceRevision ?? '') : '';
+      if (gitWorkspaceRevision && nextRevision && gitWorkspaceRevision !== nextRevision) {
+        setGitWorkspace(null);
+        resetGitWorkspacePages();
+      }
+      gitWorkspaceRevision = nextRevision;
       setGitRepoSummary(resp);
       return resp;
-    } catch (err) {
+    } catch {
       if (seq !== gitRepoSummaryReqSeq) return;
-      const message = err instanceof Error ? err.message : String(err ?? 'Failed to load repository summary');
+      const message = presentGitRequestError();
       if (!options.silent) {
         setGitRepoSummary(null);
         setGitRepoSummaryError(message);
@@ -2865,12 +2997,18 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     options: GitWorkspaceLoadOptions = {},
   ): Promise<GitListWorkspacePageResponse | undefined> => {
     const repoRootPath = resolveActiveRepoRootPath(options.repoRootPath);
-    if (!repoRootPath || !protocol.client()) return;
+    const client = protocol.client();
+    if (!repoRootPath || !client) return;
+
+    if (gitCapabilityMode() === 'capable' && !gitWorkspaceRevision) {
+      const summary = await loadGitRepoSummary({ ...options, repoRootPath });
+      if (!summary || !gitWorkspaceRevision) return;
+    }
 
     const currentState = gitWorkspacePageState(section);
     const append = Boolean(options.append);
-    const directoryPath = section === 'changes'
-      ? String(options.directoryPath ?? currentState.directoryPath ?? '').trim()
+    const directoryPath = section === 'changes' || gitCapabilityMode() === 'capable'
+      ? String(options.directoryPath ?? currentState.directoryPath ?? '')
       : '';
     const offset = typeof options.offset === 'number'
       ? Math.max(0, options.offset)
@@ -2885,13 +3023,15 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         if (!currentState.initialized || currentState.loading || !currentState.hasMore) {
           return;
         }
-      } else if (currentState.initialized && !currentState.loading) {
+      } else if (currentState.initialized || currentState.loading) {
         return;
       }
     }
 
     const seq = (gitWorkspaceReqSeqBySection[section] ?? 0) + 1;
     gitWorkspaceReqSeqBySection[section] = seq;
+    const expectedWorkspaceRevision = gitCapabilityMode() === 'capable' ? gitWorkspaceRevision : '';
+    const watermark = getGitWorkspaceWatermark(client, repoRootPath);
 
     updateGitWorkspacePageState(section, (state) => ({
       ...state,
@@ -2907,16 +3047,34 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       const resp = await rpc.git.listWorkspacePage({
         repoRootPath,
         section,
-        directoryPath: section === 'changes' && directoryPath ? directoryPath : undefined,
+        directoryPath: directoryPath || undefined,
         offset,
         limit: GIT_WORKSPACE_PAGE_SIZE,
+        expectedWorkspaceRevision: expectedWorkspaceRevision || undefined,
       });
-      if (seq !== gitWorkspaceReqSeqBySection[section]) return;
+      if (seq !== gitWorkspaceReqSeqBySection[section]
+        || protocol.client() !== client
+        || getGitWorkspaceWatermark(client, repoRootPath) !== watermark) return;
+      if (expectedWorkspaceRevision && resp.workspaceRevision !== expectedWorkspaceRevision) {
+        throw new Error('Git workspace response changed workspace_revision');
+      }
+      if (gitCapabilityMode() === 'capable' && !resp.workspaceRevision) {
+        throw new Error('Git workspace response omitted workspace_revision');
+      }
       applyWorkspacePageSnapshot(resp, { append });
       return resp;
     } catch (err) {
       if (seq !== gitWorkspaceReqSeqBySection[section]) return;
-      const message = err instanceof Error ? err.message : String(err ?? 'Failed to load workspace changes');
+      if (gitCapabilityMode() === 'capable' && isGitWorkspaceSnapshotStale(err) && !options.staleRetry) {
+        gitWorkspaceRevision = '';
+        setGitRepoSummary(null);
+        setGitWorkspace(null);
+        resetGitWorkspacePages();
+        const summary = await loadGitRepoSummary({ ...options, repoRootPath });
+        if (!summary) return;
+        return loadGitWorkspaceSection(section, { ...options, repoRootPath, force: true, staleRetry: true });
+      }
+      const message = presentGitRequestError();
       updateGitWorkspacePageState(section, (state) => ({
         ...state,
         loading: false,
@@ -3041,9 +3199,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       }
       setGitBranchDetailReady(requestedKey, resolvedBranch);
       return true;
-    } catch (err) {
+    } catch {
       if (seq !== gitBranchDetailReqSeq) return false;
-      const message = err instanceof Error ? err.message : String(err ?? 'Failed to verify branch');
+      const message = presentGitRequestError();
       setGitBranchDetailError(requestedKey, requestedBranch, message);
       return false;
     }
@@ -3065,9 +3223,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       });
       setSelectedGitBranchSubview((prev) => (prev === 'history' ? 'history' : 'status'));
       return resp;
-    } catch (err) {
+    } catch {
       if (seq !== gitBranchesReqSeq) return;
-      const message = err instanceof Error ? err.message : String(err ?? 'Failed to load branches');
+      const message = presentGitRequestError();
       if (!options.silent) {
         setGitBranches(null);
         setGitBranchesError(message);
@@ -3086,19 +3244,19 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       resetGitWorkbenchData();
       return;
     }
-    const repoRootPath = String(nextInfo.repoRootPath ?? '').trim();
+    const repoRootPath = exactGitPath(nextInfo.repoRootPath);
     const plan = buildGitActivationRefreshPlan({
       subview: gitSubview(),
       branchSubview: selectedGitBranchSubview(),
     });
 
-    const refreshes: Array<Promise<unknown>> = [];
     if (plan.refreshRepoSummary) {
-      refreshes.push(loadGitRepoSummary({
+      await loadGitRepoSummary({
         silent: Boolean(gitRepoSummary()),
         repoRootPath,
-      }));
+      });
     }
+    const refreshes: Array<Promise<unknown>> = [];
     if (plan.refreshWorkspace) {
       refreshes.push(refreshVisibleGitWorkspaceSection(repoRootPath));
     }
@@ -3210,9 +3368,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         setGitCommitListRef(nextRef);
       }
       return resp;
-    } catch (err) {
+    } catch {
       if (seq !== gitListReqSeq) return;
-      const message = err instanceof Error ? err.message : String(err ?? 'Failed to load commits');
+      const message = presentGitRequestError();
       if (context?.scope === 'branch' && gitSubview() === 'branches' && selectedGitBranchSubview() === 'history') {
         void reconcileSelectedGitBranch({
           requestedKey: selectedGitBranchName(),
@@ -3285,7 +3443,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     if (pageMode() === 'git' || !canEnterGitHistory()) return;
     setGitSurfacePrewarmed(true);
     const info = repoInfo();
-    const repoRootPath = String(info?.repoRootPath ?? '').trim();
+    const repoRootPath = exactGitPath(info?.repoRootPath);
     if (!info?.available || !repoRootPath) return;
 
     const refreshes: Array<Promise<unknown>> = [];
@@ -3747,7 +3905,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     if (!id || !path) return;
     const normalizedPath = normalizePath(path);
     if (pathLoadInFlight() === normalizedPath) return;
-    const repoRootPath = repoInfo()?.available ? String(repoInfo()?.repoRootPath ?? '').trim() : '';
+    const repoRootPath = repoInfo()?.available ? exactGitPath(repoInfo()?.repoRootPath) : '';
     if (repoRootPath) {
       void loadFilesGitDecorationIndex(repoRootPath);
     }
@@ -3830,7 +3988,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         if (normalizePath(to) === from) continue;
 
         try {
-          await rpc.fs.rename({ oldPath: from, newPath: to });
+          await createWorkspaceEffectRpc(protocol.client()!, rpc).fs.rename({ oldPath: from, newPath: to });
 
           applyLocalMove(item, destDir);
           okCount += 1;
@@ -3869,7 +4027,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     try {
       for (const item of items) {
         const isDir = item.type === 'folder';
-        await rpc.fs.delete({ path: item.path, recursive: isDir });
+        await createWorkspaceEffectRpc(protocol.client()!, rpc).fs.delete({ path: item.path, recursive: isDir });
       }
       const pathsToRemove = new Set(items.map((i) => normalizePath(i.path)));
       setFiles((prev) => removeItemsFromTree(prev, pathsToRemove));
@@ -4001,7 +4159,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     setRenameLoading(true);
 
     try {
-      await rpc.fs.rename({ oldPath: item.path, newPath });
+      await createWorkspaceEffectRpc(protocol.client()!, rpc).fs.rename({ oldPath: item.path, newPath });
       const updates: Partial<FileItem> = {
         name: nextName,
         path: newPath,
@@ -4046,7 +4204,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const scopedRootPath = normalizePath(matchFilesystemRoot(parentDir, filesystemRoots())?.pathAbs || defaultRootPath() || parentDir);
 
     try {
-      await rpc.fs.copy({ sourcePath: item.path, destPath });
+      await createWorkspaceEffectRpc(protocol.client()!, rpc).fs.copy({ sourcePath: item.path, destPath });
       const newItem: FileItem = {
         ...item,
         id: destPath,
@@ -4079,13 +4237,13 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
     try {
       if (draft.kind === 'file') {
-        await rpc.fs.writeFile({
+        await createWorkspaceEffectRpc(protocol.client()!, rpc).fs.writeFile({
           path: finalPath,
           content: '',
           createDirs: false,
         });
       } else {
-        await rpc.fs.mkdir({
+        await createWorkspaceEffectRpc(protocol.client()!, rpc).fs.mkdir({
           path: finalPath,
           createParents: false,
         });
@@ -4217,6 +4375,59 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   });
 
   createEffect(() => {
+    const client = protocol.client();
+    if (!client) {
+      if (activeGitProtocolClient) discardGitWorkspaceGeneration();
+      activeGitProtocolClient = null;
+      activeGitCapabilityMode = 'unknown';
+      setGitCapabilityMode('unknown');
+      return;
+    }
+
+    const knownMode = getGitCapabilityMode(client);
+    if (client !== activeGitProtocolClient) {
+      activeGitProtocolClient = client;
+      activeGitCapabilityMode = knownMode;
+      batch(() => {
+        setGitCapabilityMode(knownMode);
+        discardGitWorkspaceGeneration();
+      });
+    } else {
+      setGitCapabilityMode(knownMode);
+    }
+    const unsubscribe = subscribeGitWorkspaceInvalidation(client, (event) => {
+      const activeRepo = String(repoInfo()?.repoRootPath ?? '');
+      if (event.repoRootPath && event.repoRootPath !== activeRepo) return;
+      discardGitWorkspaceGeneration();
+
+      if (!activeRepo) return;
+      void (async () => {
+        const summary = await loadGitRepoSummary({ repoRootPath: activeRepo, silent: true });
+        if (!summary || protocol.client() !== client) return;
+        if (pageMode() === 'git' && gitSubview() === 'changes') {
+          await loadCurrentGitWorkspaceSection({ repoRootPath: activeRepo, silent: true, force: true });
+        } else if (pageMode() === 'files') {
+          await loadFilesGitDecorationIndex(activeRepo);
+        }
+      })();
+    });
+    onCleanup(unsubscribe);
+
+    void probeGitCapabilities(client, () => rpc.git.getCapabilities()).then((mode) => {
+      if (protocol.client() !== client) return;
+      if (mode !== activeGitCapabilityMode) {
+        activeGitCapabilityMode = mode;
+        batch(() => {
+          setGitCapabilityMode(mode);
+          discardGitWorkspaceGeneration();
+        });
+      } else {
+        setGitCapabilityMode(mode);
+      }
+    });
+  });
+
+  createEffect(() => {
     const id = envId();
     const client = protocol.client();
     const mode = pageMode();
@@ -4248,9 +4459,10 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const client = protocol.client();
     const mode = pageMode();
     const info = repoInfo();
-    const repoRootPath = String(info?.repoRootPath ?? '').trim();
-    const repoKey = client && mode === 'files' && info?.available && repoRootPath
-      ? `${normalizePath(repoRootPath)}|${String(info.headCommit ?? '').trim()}|${info.dirty ? 'dirty' : 'clean'}`
+    const repoRootPath = String(info?.repoRootPath ?? '');
+    const loadedScope = loadedFilesGitScopeKey();
+    const repoKey = client && mode === 'files' && info?.available && repoRootPath && gitCapabilityMode() === 'capable'
+      ? JSON.stringify([repoRootPath, loadedScope])
       : '';
     if (!repoKey) {
       clearFilesGitDecorationIndex();
@@ -4273,10 +4485,16 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   createEffect(() => {
     const mode = pageMode();
     const info = repoInfo();
-    const repoKey = info?.available ? `${info.repoRootPath ?? ''}|${info.headCommit ?? ''}` : '';
-    const nextRepoRootPath = String(info?.repoRootPath ?? '').trim();
-    const previousRepoRootPath = lastGitRepoKey ? String(lastGitRepoKey.split('|')[0] ?? '').trim() : '';
+    const capabilityMode = gitCapabilityMode();
+    const nextRepoRootPath = exactGitPath(info?.repoRootPath);
+    const repoKey = info?.available && nextRepoRootPath
+      ? JSON.stringify([nextRepoRootPath, info.headCommit ?? ''])
+      : '';
+    const previousRepoRootPath = lastGitRepoRootPath;
     if (mode !== 'git') {
+      return;
+    }
+    if (capabilityMode === 'unknown' || capabilityMode === 'probing') {
       return;
     }
     if (!repoKey) {
@@ -4294,12 +4512,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       setSelectedGitBranchSubview('status');
     }
     lastGitRepoKey = repoKey;
+    lastGitRepoRootPath = nextRepoRootPath;
     lastGitCommitContextKey = '';
-    void loadGitRepoSummary({ silent: Boolean(gitRepoSummary()) });
     if (gitSubview() === 'changes') {
       invalidateGitWorkspaceSections(['changes', 'conflicted', 'staged']);
-      void loadCurrentGitWorkspaceSection({ silent: Boolean(gitWorkspace()), force: true });
     }
+    void loadGitRepoSummary({ silent: Boolean(gitRepoSummary()) });
     if (gitSubview() === 'branches') {
       void loadGitBranches({ silent: Boolean(gitBranches()), selectionMode: 'default_if_empty' });
     }
@@ -4308,10 +4526,13 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   createEffect(() => {
     const mode = pageMode();
     const subview = gitSubview();
-    const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
+    const capabilityMode = gitCapabilityMode();
+    const repoRootPath = exactGitPath(repoInfo()?.repoRootPath);
     if (mode !== 'git' || !repoRootPath) return;
+    if (capabilityMode === 'unknown' || capabilityMode === 'probing') return;
 
-    if (!gitRepoSummary() && !gitRepoSummaryLoading()) {
+    const summary = gitRepoSummary();
+    if (!summary && !gitRepoSummaryLoading()) {
       void loadGitRepoSummary();
     }
     if (subview === 'changes') {
@@ -4329,7 +4550,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   createEffect(() => {
     const mode = pageMode();
-    const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
+    const repoRootPath = exactGitPath(repoInfo()?.repoRootPath);
     const context = currentGitCommitContext();
 
     if (mode !== 'git' || !repoRootPath) {
@@ -4356,7 +4577,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   createEffect(() => {
     const mode = pageMode();
-    const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
+    const repoRootPath = exactGitPath(repoInfo()?.repoRootPath);
     const subview = normalizeGitActivationSubview(gitSubview());
     const activationKey = mode === 'git' && repoRootPath ? subview : '';
     if (!activationKey) {
@@ -4372,7 +4593,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   createEffect(() => {
     const mode = pageMode();
-    const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
+    const repoRootPath = exactGitPath(repoInfo()?.repoRootPath);
     const subview = normalizeGitActivationSubview(gitSubview());
     const branchSubview = selectedGitBranchSubview();
     const activationKey = mode === 'git' && repoRootPath && subview === 'branches' && branchSubview === 'status'
@@ -4459,11 +4680,11 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
             files: Array.isArray(resp.stash?.files) ? resp.stash.files : [],
           };
         }
-      } catch (error) {
+      } catch {
         if (seq !== gitAskFlowerReqSeq) return;
         notification.error(
           i18n.t('git.notifications.askFlowerUnavailableTitle'),
-          error instanceof Error ? error.message : String(error ?? i18n.t('git.notifications.failedToBuildGitContext')),
+          i18n.t('git.notifications.failedToBuildGitContext'),
         );
         return;
       }
@@ -4585,8 +4806,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   const filesGitRepoRelativePath = (absolutePath: string): string => {
     const index = filesGitDecorationIndex();
-    const repoRootPath = normalizePath(index?.repoRootPath ?? '');
-    const normalizedPath = normalizePath(absolutePath);
+    const repoRootPath = String(index?.repoRootPath ?? '');
+    const normalizedPath = String(absolutePath ?? '');
     if (!repoRootPath || !normalizedPath) return '';
     if (normalizedPath === repoRootPath) return '';
     const prefix = repoRootPath === '/' ? '/' : `${repoRootPath}/`;
@@ -4611,13 +4832,13 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   const filesGitDiffableChangesForItem = (item: FileItem | null | undefined): GitWorkspaceChange[] => {
     if (!item || item.type !== 'file' || !canEnterGitHistory()) return [];
-    const changes = filesGitDecorationIndex()?.fileChanges.get(normalizePath(item.path)) ?? [];
+    const changes = filesGitDecorationIndex()?.fileChanges.get(item.path) ?? [];
     return sortFilesGitChanges(changes.filter(isFilesGitDiffableChange));
   };
 
   const filesGitDirectoryChangesForItem = (item: FileItem | null | undefined): GitWorkspaceChange[] => {
     if (!item || item.type !== 'folder' || !canEnterGitHistory()) return [];
-    const changes = filesGitDecorationIndex()?.directoryChanges.get(normalizePath(item.path)) ?? [];
+    const changes = filesGitDecorationIndex()?.directoryChanges.get(item.path) ?? [];
     return sortFilesGitChanges(changes);
   };
 
@@ -4647,17 +4868,20 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     changes: GitWorkspaceChange[],
   ): FilesGitDirectoryActionTarget | null => {
     const directoryPath = filesGitRepoRelativePath(item.path);
-    const pendingChange = changes.find((change) => change.section === 'unstaged' || change.section === 'untracked');
+    const pendingChange = changes.find((change) => change.section === 'unstaged'
+      || change.section === 'untracked'
+      || change.containsUnstaged
+      || change.containsUntracked);
     if (pendingChange) {
       return { kind: 'changes', directoryPath };
     }
-    const conflictedChange = changes.find((change) => change.section === 'conflicted') ?? null;
+    const conflictedChange = changes.find((change) => change.section === 'conflicted' || change.containsConflicted) ?? null;
     if (conflictedChange) {
-      return { kind: 'section', section: 'conflicted', item: conflictedChange };
+      return { kind: 'section', section: 'conflicted', directoryPath };
     }
-    const stagedChange = changes.find((change) => change.section === 'staged') ?? null;
+    const stagedChange = changes.find((change) => change.section === 'staged' || change.containsStaged) ?? null;
     if (stagedChange) {
-      return { kind: 'section', section: 'staged', item: stagedChange };
+      return { kind: 'section', section: 'staged', directoryPath };
     }
     return null;
   };
@@ -4668,18 +4892,26 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     if (!target) return;
     gitSubviewSelection.commitNow('changes');
     pageModeSelection.commitNow('git');
-    if (target.kind === 'changes') {
-      navigateGitChangesDirectory(target.directoryPath);
-      return;
-    }
+    const section = target.kind === 'changes' ? 'changes' : target.section;
     batch(() => {
-      setSelectedGitWorkspaceSection(target.section);
-      setSelectedGitWorkspaceKey(workspaceEntryKey(target.item));
+      setSelectedGitWorkspaceSection(section);
+      setSelectedGitWorkspaceKey('');
     });
-    void loadGitWorkspaceSection(target.section, {
-      force: true,
-      silent: Boolean(gitWorkspace()),
-    });
+    gitWorkspaceRevision = '';
+    setGitRepoSummary(null);
+    setGitWorkspace(null);
+    resetGitWorkspacePages();
+    void (async () => {
+      const repoRootPath = resolveActiveRepoRootPath();
+      const summary = await loadGitRepoSummary({ repoRootPath, silent: true });
+      if (!summary) return;
+      await loadGitWorkspaceSection(section, {
+        repoRootPath,
+        directoryPath: target.directoryPath,
+        force: true,
+        silent: true,
+      });
+    })();
   };
 
   const buildViewDiffMenuItem = (changes: GitWorkspaceChange[]): ContextMenuItem | null => {
@@ -5176,6 +5408,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       branchesLoading={gitBranchesLoading()}
                       branchesError={gitBranchesError()}
                       statusRefreshToken={gitBranchStatusRefreshToken()}
+                      protocolClientIdentity={protocol.client()}
+                      capabilityMode={gitCapabilityMode()}
                       selectedBranch={selectedGitBranchDisplay()}
                       branchDetailState={gitBranchPresentationState()}
                       selectedBranchKey={selectedGitBranchName()}

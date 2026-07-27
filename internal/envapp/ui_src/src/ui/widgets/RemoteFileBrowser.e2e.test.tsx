@@ -162,6 +162,10 @@ const gitWorkspaceRenderStore = vi.hoisted(() => ({
     switchDetachedBusy: boolean;
     mergeBusy: boolean;
     deleteBusy: boolean;
+    mergePreviewError?: string;
+    mergeActionError?: string;
+    deletePreviewError?: string;
+    deleteActionError?: string;
   }>,
 }));
 
@@ -233,6 +237,15 @@ const envActionSpies = vi.hoisted(() => ({
   openFlowerTurnLauncher: vi.fn(),
 }));
 
+const protocolClientStore = vi.hoisted(() => {
+  const store = {
+    client: { connected: true } as object,
+    read: undefined as unknown as () => object,
+  };
+  store.read = () => store.client;
+  return store;
+});
+
 const mockRpc = vi.hoisted(() => ({
   fs: {
     list: vi.fn(),
@@ -244,9 +257,11 @@ const mockRpc = vi.hoisted(() => ({
     getPathContext: vi.fn(),
   },
   git: {
+    getCapabilities: vi.fn(),
     resolveRepo: vi.fn(),
     getRepoSummary: vi.fn(),
     listWorkspacePage: vi.fn(),
+    listWorkspacePathStatuses: vi.fn(),
     listWorkspaceChanges: vi.fn(),
     listBranches: vi.fn(),
     getBranchCompare: vi.fn(),
@@ -321,7 +336,7 @@ vi.mock('@floegence/floe-webapp-protocol', async () => {
   return {
     ...actual,
     useProtocol: () => ({
-      client: () => ({ connected: true }),
+      client: () => protocolClientStore.read(),
       status: () => 'connected',
     }),
   };
@@ -812,9 +827,13 @@ vi.mock('./GitWorkspace', () => ({
     deleteBusy?: boolean;
     mergeReviewOpen?: boolean;
     mergePreview?: { planFingerprint?: string } | null;
+    mergePreviewError?: string;
+    mergeActionError?: string;
     mergeDialogState?: string;
     deleteReviewOpen?: boolean;
     deletePreview?: { planFingerprint?: string } | null;
+    deletePreviewError?: string;
+    deleteActionError?: string;
     deleteDialogState?: string;
     onSelectBranchSubview?: (view: 'status' | 'history') => void;
     onFetch?: () => void;
@@ -873,6 +892,10 @@ vi.mock('./GitWorkspace', () => ({
         switchDetachedBusy: Boolean(props.switchDetachedBusy),
         mergeBusy: Boolean(props.mergeBusy),
         deleteBusy: Boolean(props.deleteBusy),
+        mergePreviewError: props.mergePreviewError,
+        mergeActionError: props.mergeActionError,
+        deletePreviewError: props.deletePreviewError,
+        deleteActionError: props.deleteActionError,
       });
     });
 
@@ -1261,6 +1284,8 @@ function createEnvContextWithIdAccessor(envId: () => string, options?: { canWrit
 }
 
 beforeEach(() => {
+  protocolClientStore.client = { connected: true };
+  protocolClientStore.read = () => protocolClientStore.client;
   delete window.redevenDesktopSessionContext;
   Object.defineProperty(window, 'matchMedia', {
     writable: true,
@@ -1386,10 +1411,19 @@ beforeEach(() => {
     headRef: 'main',
     headCommit: 'abc1234',
   });
+  mockRpc.git.getCapabilities.mockReset();
+  mockRpc.git.getCapabilities.mockRejectedValue(Object.assign(new Error('not found'), { code: 404 }));
+  mockRpc.git.listWorkspacePathStatuses.mockReset();
+  mockRpc.git.listWorkspacePathStatuses.mockResolvedValue({
+    repoRootPath: '/workspace/repo',
+    workspaceRevision: 'revision-files',
+    items: [],
+  });
   mockRpc.git.getRepoSummary.mockResolvedValue({
     repoRootPath: '/workspace/repo',
     headRef: 'main',
     headCommit: 'abc1234',
+    workspaceRevision: 'revision-workspace',
     workspaceSummary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
   });
   mockRpc.git.listWorkspacePage.mockResolvedValue({
@@ -1400,6 +1434,7 @@ beforeEach(() => {
     offset: 0,
     nextOffset: 0,
     hasMore: false,
+    workspaceRevision: 'revision-workspace',
     items: [],
   });
   mockRpc.git.listWorkspaceChanges.mockResolvedValue({
@@ -1583,6 +1618,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  protocolClientStore.client = { connected: true };
   delete window.redevenDesktopSessionContext;
   document.body.innerHTML = '';
   vi.clearAllMocks();
@@ -1627,7 +1663,7 @@ describe('RemoteFileBrowser persistence', () => {
     }
   });
 
-  it('passes git status decorations to Files mode for changed files and aggregate directories', async () => {
+  it('passes git status decorations to Files mode without trimming the repository root', async () => {
     widgetStateStore.values['widget-1'] = {
       browserSidebarWidth: 312,
       lastPathByEnv: { 'env-1': '/workspace/repo' },
@@ -1646,26 +1682,34 @@ describe('RemoteFileBrowser persistence', () => {
       if (path === '/workspace/repo') {
         return {
           entries: [
-            { name: 'app', path: '/workspace/repo/app', isDirectory: true, modifiedAt: 1 },
-            { name: 'terminal-web', path: '/workspace/repo/terminal-web', isDirectory: true, modifiedAt: 1 },
-            { name: 'Makefile', path: '/workspace/repo/Makefile', isDirectory: false, modifiedAt: 1 },
+            { name: 'app', path: '/workspace/repo /app', isDirectory: true, modifiedAt: 1 },
+            { name: 'terminal-web', path: '/workspace/repo /terminal-web', isDirectory: true, modifiedAt: 1 },
+            { name: 'Makefile', path: '/workspace/repo /Makefile', isDirectory: false, modifiedAt: 1 },
           ],
         };
       }
       return { entries: [] };
     });
-    mockRpc.git.listWorkspaceChanges.mockResolvedValue({
-      repoRootPath: '/workspace/repo',
-      summary: { stagedCount: 0, unstagedCount: 2, untrackedCount: 1, conflictedCount: 0 },
-      staged: [],
-      unstaged: [
+    mockRpc.git.resolveRepo.mockResolvedValue({
+      available: true,
+      repoRootPath: '/workspace/repo ',
+      headRef: 'main',
+      headCommit: 'abc1234',
+    });
+    mockRpc.git.getCapabilities.mockResolvedValue({
+      workspaceRevisionV1: true,
+      workspacePathStatusV1: true,
+      workspaceDirectoryScopeV1: true,
+      stashSectionDiffV1: true,
+    });
+    mockRpc.git.listWorkspacePathStatuses.mockResolvedValue({
+      repoRootPath: '/workspace/repo ',
+      workspaceRevision: 'revision-files',
+      items: [
         { section: 'unstaged', changeType: 'modified', path: 'Makefile' },
-        { section: 'unstaged', changeType: 'modified', path: 'app/web/src/App.tsx' },
+        { entryKind: 'directory', directoryPath: 'app', containsUnstaged: true, unstagedFileCount: 1, descendantFileCount: 1 },
+        { entryKind: 'directory', directoryPath: 'terminal-web', containsUntracked: true, untrackedFileCount: 1, descendantFileCount: 1 },
       ],
-      untracked: [
-        { section: 'untracked', changeType: 'added', path: 'terminal-web/src/fabric/index.ts' },
-      ],
-      conflicted: [],
     });
 
     const host = document.createElement('div');
@@ -1682,11 +1726,16 @@ describe('RemoteFileBrowser persistence', () => {
     try {
       await flush();
       await flush();
+      await flush();
       const decorations = host.querySelector('[data-testid="mock-files-decorations"]')?.textContent ?? '';
-      expect(mockRpc.git.listWorkspaceChanges).toHaveBeenCalledWith({ repoRootPath: '/workspace/repo' });
-      expect(decorations).toContain('/workspace/repo/Makefile:M:info:info');
-      expect(decorations).toContain('/workspace/repo/app:M:info:info');
-      expect(decorations).toContain('/workspace/repo/terminal-web:A:success:success');
+      expect(mockRpc.git.listWorkspacePathStatuses).toHaveBeenCalledWith({
+        repoRootPath: '/workspace/repo ',
+        paths: expect.arrayContaining(['Makefile', 'app', 'terminal-web']),
+      });
+      expect(mockRpc.git.listWorkspaceChanges).not.toHaveBeenCalled();
+      expect(decorations).toContain('/workspace/repo /Makefile:M:info:info');
+      expect(decorations).toContain('/workspace/repo /app:M:info:info');
+      expect(decorations).toContain('/workspace/repo /terminal-web:A:success:success');
     } finally {
       dispose();
     }
@@ -1705,15 +1754,18 @@ describe('RemoteFileBrowser persistence', () => {
         { name: '.env', path: '/workspace/repo/src/.env', isDirectory: false, modifiedAt: 1 },
       ],
     });
-    mockRpc.git.listWorkspaceChanges.mockResolvedValue({
+    mockRpc.git.getCapabilities.mockResolvedValue({
+      workspaceRevisionV1: true,
+      workspacePathStatusV1: true,
+      workspaceDirectoryScopeV1: true,
+      stashSectionDiffV1: true,
+    });
+    mockRpc.git.listWorkspacePathStatuses.mockResolvedValue({
       repoRootPath: '/workspace/repo',
-      summary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
-      staged: [],
-      unstaged: [
+      workspaceRevision: 'revision-files',
+      items: [
         { section: 'unstaged', changeType: 'modified', path: 'src/.env' },
       ],
-      untracked: [],
-      conflicted: [],
     });
 
     const host = document.createElement('div');
@@ -1786,6 +1838,9 @@ describe('RemoteFileBrowser persistence', () => {
       expect(host.querySelector('[data-testid="mock-file-menu-order"]')?.textContent).not.toContain('view-diff');
       expect(host.querySelector('[data-testid="mock-multi-file-menu-order"]')?.textContent).not.toContain('view-diff');
       expect(Array.from(host.querySelectorAll('button')).some((node) => node.textContent === 'mock-view-diff-file')).toBe(false);
+      expect(mockRpc.git.getCapabilities).toHaveBeenCalled();
+      expect(mockRpc.git.listWorkspacePathStatuses).not.toHaveBeenCalled();
+      expect(mockRpc.git.listWorkspaceChanges).not.toHaveBeenCalled();
     } finally {
       dispose();
     }
@@ -1804,17 +1859,19 @@ describe('RemoteFileBrowser persistence', () => {
         { name: '.env', path: '/workspace/repo/src/.env', isDirectory: false, modifiedAt: 1 },
       ],
     });
-    mockRpc.git.listWorkspaceChanges.mockResolvedValue({
+    mockRpc.git.getCapabilities.mockResolvedValue({
+      workspaceRevisionV1: true,
+      workspacePathStatusV1: true,
+      workspaceDirectoryScopeV1: true,
+      stashSectionDiffV1: true,
+    });
+    mockRpc.git.listWorkspacePathStatuses.mockResolvedValue({
       repoRootPath: '/workspace/repo',
-      summary: { stagedCount: 1, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
-      staged: [
+      workspaceRevision: 'revision-files',
+      items: [
         { section: 'staged', changeType: 'modified', path: 'src/.env' },
-      ],
-      unstaged: [
         { section: 'unstaged', changeType: 'modified', path: 'src/.env' },
       ],
-      untracked: [],
-      conflicted: [],
     });
 
     const host = document.createElement('div');
@@ -1863,15 +1920,18 @@ describe('RemoteFileBrowser persistence', () => {
         { name: 'src', path: '/workspace/repo/src', isDirectory: true, modifiedAt: 1 },
       ],
     });
-    mockRpc.git.listWorkspaceChanges.mockResolvedValue({
+    mockRpc.git.getCapabilities.mockResolvedValue({
+      workspaceRevisionV1: true,
+      workspacePathStatusV1: true,
+      workspaceDirectoryScopeV1: true,
+      stashSectionDiffV1: true,
+    });
+    mockRpc.git.listWorkspacePathStatuses.mockResolvedValue({
       repoRootPath: '/workspace/repo',
-      summary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
-      staged: [],
-      unstaged: [
-        { section: 'unstaged', changeType: 'modified', path: 'src/app.ts' },
+      workspaceRevision: 'revision-files',
+      items: [
+        { entryKind: 'directory', directoryPath: 'src', containsUnstaged: true, unstagedFileCount: 1, descendantFileCount: 1 },
       ],
-      untracked: [],
-      conflicted: [],
     });
 
     const host = document.createElement('div');
@@ -1886,6 +1946,7 @@ describe('RemoteFileBrowser persistence', () => {
     ), host);
 
     try {
+      await flush();
       await flush();
       await flush();
 
@@ -1904,6 +1965,7 @@ describe('RemoteFileBrowser persistence', () => {
         directoryPath: 'src',
         offset: 0,
         limit: 200,
+        expectedWorkspaceRevision: 'revision-workspace',
       });
     } finally {
       dispose();
@@ -1923,15 +1985,18 @@ describe('RemoteFileBrowser persistence', () => {
         { name: 'src', path: '/workspace/repo/src', isDirectory: true, modifiedAt: 1 },
       ],
     });
-    mockRpc.git.listWorkspaceChanges.mockResolvedValue({
+    mockRpc.git.getCapabilities.mockResolvedValue({
+      workspaceRevisionV1: true,
+      workspacePathStatusV1: true,
+      workspaceDirectoryScopeV1: true,
+      stashSectionDiffV1: true,
+    });
+    mockRpc.git.listWorkspacePathStatuses.mockResolvedValue({
       repoRootPath: '/workspace/repo',
-      summary: { stagedCount: 1, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
-      staged: [
-        { section: 'staged', changeType: 'modified', path: 'src/app.ts' },
+      workspaceRevision: 'revision-files',
+      items: [
+        { entryKind: 'directory', directoryPath: 'src', containsStaged: true, stagedFileCount: 1, descendantFileCount: 1 },
       ],
-      unstaged: [],
-      untracked: [],
-      conflicted: [],
     });
 
     const host = document.createElement('div');
@@ -1948,6 +2013,7 @@ describe('RemoteFileBrowser persistence', () => {
     try {
       await flush();
       await flush();
+      await flush();
       mockRpc.git.listWorkspacePage.mockClear();
 
       const viewFolderChangesButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-view-folder-changes') as HTMLButtonElement | undefined;
@@ -1960,9 +2026,10 @@ describe('RemoteFileBrowser persistence', () => {
       expect(mockRpc.git.listWorkspacePage).toHaveBeenCalledWith({
         repoRootPath: '/workspace/repo',
         section: 'staged',
-        directoryPath: undefined,
+        directoryPath: 'src',
         offset: 0,
         limit: 200,
+        expectedWorkspaceRevision: 'revision-workspace',
       });
     } finally {
       dispose();
@@ -1994,7 +2061,13 @@ describe('RemoteFileBrowser persistence', () => {
       }
       return { entries: [] };
     });
-    mockRpc.git.listWorkspaceChanges.mockRejectedValueOnce(new Error('git status failed'));
+    mockRpc.git.getCapabilities.mockResolvedValue({
+      workspaceRevisionV1: true,
+      workspacePathStatusV1: true,
+      workspaceDirectoryScopeV1: true,
+      stashSectionDiffV1: true,
+    });
+    mockRpc.git.listWorkspacePathStatuses.mockRejectedValueOnce(new Error('git status failed'));
 
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -3656,7 +3729,7 @@ describe('RemoteFileBrowser persistence', () => {
       await flush();
 
       expect(gitStashWindowRenderStore.snapshots.some((item) => item.open && item.reviewKind === 'drop')).toBe(true);
-      mockRpc.git.getRepoSummary.mockResolvedValueOnce({
+      mockRpc.git.getRepoSummary.mockResolvedValue({
         repoRootPath: '/workspace/repo',
         headRef: 'main',
         headCommit: 'def5678',
@@ -3667,13 +3740,16 @@ describe('RemoteFileBrowser persistence', () => {
       gitStashWindowRenderStore.onConfirmReview?.();
       await flush();
       await flush();
+      await flush();
 
       expect(mockRpc.git.dropStash).toHaveBeenCalledTimes(1);
       expect(mockRpc.git.previewDropStash).toHaveBeenCalledTimes(2);
       expect(gitStashWindowRenderStore.snapshots.some((item) => item.open && item.reviewKind === 'drop')).toBe(true);
-      expect(notificationStore.info).toContainEqual({
-        title: 'Delete confirmation refreshed',
-        message: 'Repository state changed. Confirm deletion again.',
+      await vi.waitFor(() => {
+        expect(notificationStore.info).toContainEqual({
+          title: 'Delete confirmation refreshed',
+          message: 'Repository state changed. Confirm deletion again.',
+        });
       });
       expect(notificationStore.error.some((item) => item.title === 'Delete stash failed')).toBe(false);
     } finally {
@@ -3899,7 +3975,8 @@ describe('RemoteFileBrowser persistence', () => {
       ask!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
       expect(envActionSpies.openFlowerTurnLauncher).not.toHaveBeenCalled();
-      expect(notificationStore.error.some((item) => item.message === 'commit detail unavailable')).toBe(true);
+      expect(notificationStore.error.some((item) => item.message === 'Failed to build Git context.')).toBe(true);
+      expect(notificationStore.error.some((item) => item.message === 'commit detail unavailable')).toBe(false);
     } finally {
       dispose();
     }
@@ -4808,7 +4885,7 @@ describe('RemoteFileBrowser persistence', () => {
     }
   });
 
-  it('keeps repository sync actions on local busy states and shows success toasts', async () => {
+  it('keeps repository sync actions local while the invalidated workspace refreshes', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -4833,7 +4910,192 @@ describe('RemoteFileBrowser persistence', () => {
       expect(notificationStore.success).toContainEqual({ title: 'Fetched', message: 'Remote refs were updated.' });
       expect(gitWorkspaceRenderStore.snapshots.length).toBeGreaterThan(0);
       expect(gitWorkspaceRenderStore.snapshots.some((item) => item.fetchBusy)).toBe(true);
-      expect(gitWorkspaceRenderStore.snapshots.every((item) => !item.repoInfoLoading && !item.repoSummaryLoading && !item.workspaceLoading && !item.branchesLoading && !item.listLoading)).toBe(true);
+      expect(gitWorkspaceRenderStore.snapshots.every((item) => !item.repoInfoLoading)).toBe(true);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('preserves the exact repository root through Git pages and mutations', async () => {
+    const repoRootPath = '/workspace/repo | ';
+    widgetStateStore.values['widget-1'] = {
+      ...(widgetStateStore.values['widget-1'] ?? {}),
+      pageModeByEnv: { 'env-1': 'git' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+    mockRpc.git.resolveRepo.mockResolvedValue({
+      available: true,
+      repoRootPath,
+      headRef: 'main',
+      headCommit: 'abc1234',
+    });
+    mockRpc.git.getCapabilities.mockResolvedValue({
+      workspaceRevisionV1: true,
+      workspacePathStatusV1: true,
+      workspaceDirectoryScopeV1: true,
+      stashSectionDiffV1: true,
+    });
+    mockRpc.git.getRepoSummary.mockResolvedValue({
+      repoRootPath,
+      headRef: 'main',
+      headCommit: 'abc1234',
+      workspaceRevision: 'revision-exact-root',
+      workspaceSummary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
+    });
+    mockRpc.git.listWorkspacePage.mockImplementation(async (request) => ({
+      repoRootPath,
+      section: request.section,
+      workspaceRevision: 'revision-exact-root',
+      summary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
+      totalCount: 1,
+      offset: 0,
+      nextOffset: 1,
+      hasMore: false,
+      items: [{ section: 'unstaged', changeType: 'modified', path: 'src/app.ts' }],
+    }));
+    mockRpc.git.fetchRepo.mockResolvedValue({
+      repoRootPath,
+      headRef: 'main',
+      headCommit: 'abc1234',
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      await flush();
+      await flush();
+
+      expect(mockRpc.git.getRepoSummary).toHaveBeenCalledWith({ repoRootPath });
+      expect(mockRpc.git.listWorkspacePage).toHaveBeenCalledWith(expect.objectContaining({
+        repoRootPath,
+        section: 'changes',
+        expectedWorkspaceRevision: 'revision-exact-root',
+      }));
+
+      const fetchButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-fetch') as HTMLButtonElement | undefined;
+      expect(fetchButton).toBeTruthy();
+      fetchButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(mockRpc.git.fetchRepo).toHaveBeenCalledWith({ repoRootPath });
+    } finally {
+      dispose();
+    }
+  });
+
+  it('resets the main workspace generation when the protocol client identity changes', async () => {
+    widgetStateStore.values['widget-1'] = {
+      ...(widgetStateStore.values['widget-1'] ?? {}),
+      pageModeByEnv: { 'env-1': 'git' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+    const clientA = { id: 'a' };
+    const clientB = { id: 'b' };
+    const [client, setClient] = createSignal<object>(clientA);
+    protocolClientStore.read = client;
+    mockRpc.git.getCapabilities.mockResolvedValue({
+      workspaceRevisionV1: true,
+      workspacePathStatusV1: true,
+      workspaceDirectoryScopeV1: true,
+      stashSectionDiffV1: true,
+    });
+    mockRpc.git.getRepoSummary.mockImplementation(async () => ({
+      repoRootPath: '/workspace/repo',
+      headRef: 'main',
+      headCommit: client() === clientA ? 'commit-a' : 'commit-b',
+      workspaceRevision: client() === clientA ? 'revision-a' : 'revision-b',
+      workspaceSummary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
+    }));
+    mockRpc.git.listWorkspacePage.mockImplementation(async (request) => ({
+      repoRootPath: '/workspace/repo',
+      section: request.section,
+      workspaceRevision: client() === clientA ? 'revision-a' : 'revision-b',
+      summary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
+      totalCount: 1,
+      offset: 0,
+      nextOffset: 1,
+      hasMore: false,
+      items: [{ section: 'unstaged', changeType: 'modified', path: client() === clientA ? 'src/a.ts' : 'src/b.ts' }],
+    }));
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      await flush();
+      const summaryCallsBefore = mockRpc.git.getRepoSummary.mock.calls.length;
+      const pageCallsBefore = mockRpc.git.listWorkspacePage.mock.calls.length;
+
+      setClient(clientB);
+      await flush();
+      await flush();
+
+      expect(mockRpc.git.getRepoSummary.mock.calls.length).toBeGreaterThan(summaryCallsBefore);
+      expect(mockRpc.git.listWorkspacePage.mock.calls.length).toBeGreaterThan(pageCallsBefore);
+      expect(mockRpc.git.listWorkspacePage.mock.calls.some(([request]) => (
+        request.expectedWorkspaceRevision === 'revision-b'
+      ))).toBe(true);
+    } finally {
+      dispose();
+      protocolClientStore.read = () => protocolClientStore.client;
+    }
+  });
+
+  it('invalidates and reloads the committed workspace after a failed mutation', async () => {
+    widgetStateStore.values['widget-1'] = {
+      ...(widgetStateStore.values['widget-1'] ?? {}),
+      pageModeByEnv: { 'env-1': 'git' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+    mockRpc.git.fetchRepo.mockRejectedValueOnce(new RpcError({
+      typeId: 1113,
+      code: 503,
+      message: 'raw transport failure',
+    }));
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      mockRpc.git.getRepoSummary.mockClear();
+      mockRpc.git.listWorkspacePage.mockClear();
+      gitWorkspaceRenderStore.snapshots = [];
+
+      const fetchButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-fetch') as HTMLButtonElement | undefined;
+      expect(fetchButton).toBeTruthy();
+      fetchButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+      await flush();
+
+      expect(mockRpc.git.getRepoSummary).toHaveBeenCalled();
+      expect(mockRpc.git.listWorkspacePage).toHaveBeenCalled();
+      expect(gitWorkspaceRenderStore.snapshots.some((snapshot) => snapshot.shellLoadingMessage === 'Loading workspace changes...')).toBe(true);
+      expect(notificationStore.error.some((item) => item.message === 'raw transport failure')).toBe(false);
     } finally {
       dispose();
     }
@@ -5214,6 +5476,7 @@ describe('RemoteFileBrowser persistence', () => {
       expect(discardButton).toBeTruthy();
       discardButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
+      await flush();
 
       expect(mockRpc.git.discardWorkspace).toHaveBeenCalledWith({
         repoRootPath: '/workspace/repo',
@@ -5221,7 +5484,8 @@ describe('RemoteFileBrowser persistence', () => {
         directoryPath: 'desktop/diagnostics',
         paths: undefined,
       });
-      expect(mockRpc.git.listWorkspaceChanges).toHaveBeenCalledWith({ repoRootPath: '/workspace/repo' });
+      expect(mockRpc.git.listWorkspaceChanges).not.toHaveBeenCalled();
+      expect(mockRpc.git.listWorkspacePage.mock.calls.length).toBeGreaterThan(1);
       expect(notificationStore.warning).toContainEqual({
         title: 'Nothing discarded',
         message: 'No current files matched the selected folder.',
@@ -5231,7 +5495,7 @@ describe('RemoteFileBrowser persistence', () => {
     }
   });
 
-  it('keeps checkout on local busy state and shows a toast without global reload flags', async () => {
+  it('keeps checkout on local busy state while the invalidated workspace refreshes', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -5260,13 +5524,13 @@ describe('RemoteFileBrowser persistence', () => {
       });
       expect(notificationStore.success).toContainEqual({ title: 'Checked out', message: 'feature/demo is now active.' });
       expect(gitWorkspaceRenderStore.snapshots.some((item) => item.checkoutBusy)).toBe(true);
-      expect(gitWorkspaceRenderStore.snapshots.every((item) => !item.repoInfoLoading && !item.repoSummaryLoading && !item.workspaceLoading && !item.branchesLoading && !item.listLoading)).toBe(true);
+      expect(gitWorkspaceRenderStore.snapshots.every((item) => !item.repoInfoLoading)).toBe(true);
     } finally {
       dispose();
     }
   });
 
-  it('keeps detached switch on local busy state, redirects branch history to graph, and shows a toast', async () => {
+  it('keeps detached switch local, redirects history, and refreshes the invalidated workspace', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -5294,14 +5558,14 @@ describe('RemoteFileBrowser persistence', () => {
       });
       expect(notificationStore.success).toContainEqual({ title: 'Detached HEAD', message: 'Detached HEAD at fedcba98.' });
       expect(gitWorkspaceRenderStore.snapshots.some((item) => item.switchDetachedBusy)).toBe(true);
-      expect(gitWorkspaceRenderStore.snapshots.every((item) => !item.repoInfoLoading && !item.repoSummaryLoading && !item.workspaceLoading && !item.branchesLoading && !item.listLoading)).toBe(true);
+      expect(gitWorkspaceRenderStore.snapshots.every((item) => !item.repoInfoLoading)).toBe(true);
       expect(gitWorkspaceRenderStore.snapshots.some((item) => item.subview === 'history')).toBe(true);
     } finally {
       dispose();
     }
   });
 
-  it('keeps merge on local busy state and shows a success toast without global reload flags', async () => {
+  it('keeps merge on local busy state while the invalidated workspace refreshes', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -5343,7 +5607,69 @@ describe('RemoteFileBrowser persistence', () => {
       });
       expect(notificationStore.success).toContainEqual({ title: 'Fast-forwarded', message: 'main now includes feature/demo.' });
       expect(gitWorkspaceRenderStore.snapshots.some((item) => item.mergeBusy)).toBe(true);
-      expect(gitWorkspaceRenderStore.snapshots.every((item) => !item.repoInfoLoading && !item.repoSummaryLoading && !item.workspaceLoading && !item.branchesLoading && !item.listLoading)).toBe(true);
+      expect(gitWorkspaceRenderStore.snapshots.every((item) => !item.repoInfoLoading)).toBe(true);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('classifies merge and delete stale plans by structured RPC code without exposing server text', async () => {
+    mockRpc.git.mergeBranch.mockRejectedValueOnce(new RpcError({
+      typeId: 1118,
+      code: 409,
+      message: 'sensitive merge server detail',
+    }));
+    mockRpc.git.deleteBranch.mockRejectedValueOnce(new RpcError({
+      typeId: 1116,
+      code: 409,
+      message: 'sensitive delete server detail',
+    }));
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+
+      const mergeButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-merge-branch') as HTMLButtonElement | undefined;
+      mergeButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+      const confirmMerge = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-confirm-merge-branch') as HTMLButtonElement | undefined;
+      expect(confirmMerge).toBeTruthy();
+      confirmMerge!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+      await flush();
+
+      expect(gitWorkspaceRenderStore.snapshots.some((snapshot) => (
+        snapshot.mergePreviewError === 'Failed to review branch merge.'
+        && !snapshot.mergeActionError
+      ))).toBe(true);
+      expect(Array.from(host.querySelectorAll('button')).some((node) => node.textContent === 'mock-confirm-merge-branch')).toBe(false);
+
+      const deleteButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-delete-branch') as HTMLButtonElement | undefined;
+      deleteButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+      const confirmDelete = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-confirm-delete-branch') as HTMLButtonElement | undefined;
+      expect(confirmDelete).toBeTruthy();
+      confirmDelete!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+      await flush();
+
+      expect(gitWorkspaceRenderStore.snapshots.some((snapshot) => (
+        snapshot.deletePreviewError === 'Failed to review branch deletion.'
+        && !snapshot.deleteActionError
+      ))).toBe(true);
+      expect(Array.from(host.querySelectorAll('button')).some((node) => node.textContent === 'mock-confirm-delete-branch')).toBe(false);
+      const renderedNotifications = JSON.stringify(notificationStore);
+      expect(renderedNotifications).not.toContain('sensitive merge server detail');
+      expect(renderedNotifications).not.toContain('sensitive delete server detail');
     } finally {
       dispose();
     }
@@ -5416,7 +5742,7 @@ describe('RemoteFileBrowser persistence', () => {
     }
   });
 
-  it('keeps branch delete on local busy state and shows a toast without global reload flags', async () => {
+  it('keeps branch delete local while the invalidated workspace refreshes', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -5462,7 +5788,7 @@ describe('RemoteFileBrowser persistence', () => {
       });
       expect(notificationStore.success).toContainEqual({ title: 'Deleted', message: 'feature/demo was removed.' });
       expect(gitWorkspaceRenderStore.snapshots.some((item) => item.deleteBusy)).toBe(true);
-      expect(gitWorkspaceRenderStore.snapshots.every((item) => !item.repoInfoLoading && !item.repoSummaryLoading && !item.workspaceLoading && !item.branchesLoading && !item.listLoading)).toBe(true);
+      expect(gitWorkspaceRenderStore.snapshots.every((item) => !item.repoInfoLoading)).toBe(true);
     } finally {
       dispose();
     }

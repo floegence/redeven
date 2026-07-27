@@ -1,12 +1,14 @@
 package gitrepo
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
-	"github.com/floegence/redeven/internal/gitutil"
+	"github.com/floegence/redeven/internal/gitruntime"
 )
 
 const (
@@ -19,8 +21,10 @@ type worktreeBinding struct {
 	Path string
 }
 
+var errWorktreePorcelainZUnsupported = errors.New("git worktree porcelain-z is unsupported")
+
 func (s *Service) listBranches(ctx context.Context, repo repoContext) (*listBranchesResp, error) {
-	bindings, _ := readWorktreeBindings(ctx, repo.repoRootReal)
+	bindings, _ := s.readWorktreeBindings(ctx, repo.repoRootReal)
 	bindings = s.filterAccessibleWorktreeBindings(ctx, bindings)
 	format := strings.Join([]string{
 		"%(refname)",
@@ -32,7 +36,7 @@ func (s *Service) listBranches(ctx context.Context, repo repoContext) (*listBran
 		"%(upstream:short)",
 		"%(upstream:track)",
 	}, "%00") + "%1e"
-	out, err := gitutil.RunCombinedOutput(ctx, repo.repoRootReal, nil,
+	out, err := s.runGitRead(ctx, repo.repoRootReal,
 		"for-each-ref",
 		"--sort=-committerdate",
 		"--format="+format,
@@ -67,33 +71,115 @@ func (s *Service) filterAccessibleWorktreeBindings(ctx context.Context, bindings
 	return filtered
 }
 
-func readWorktreeBindings(ctx context.Context, repoRoot string) (map[string]worktreeBinding, error) {
-	out, err := gitutil.RunCombinedOutput(ctx, repoRoot, nil, "worktree", "list", "--porcelain")
+func (s *Service) readWorktreeBindings(ctx context.Context, repoRoot string) (map[string]worktreeBinding, error) {
+	result, err := s.runtime.RunRead(ctx, repoRoot, nil, "worktree", "list", "--porcelain", "-z")
 	if err != nil {
+		var commandErr *gitruntime.CommandError
+		message := strings.ToLower(string(result.Stderr))
+		if errors.As(err, &commandErr) && !commandErr.UnknownOutcome &&
+			(strings.Contains(message, "unknown option") || strings.Contains(message, "usage: git worktree list")) {
+			return nil, errWorktreePorcelainZUnsupported
+		}
 		return nil, err
 	}
-	blocks := strings.Split(strings.TrimSpace(string(out)), "\n\n")
-	result := make(map[string]worktreeBinding, len(blocks))
-	for _, block := range blocks {
-		if strings.TrimSpace(block) == "" {
-			continue
+	return parseWorktreeBindingsPorcelainZ(result.Stdout)
+}
+
+func parseWorktreeBindingsPorcelainZ(out []byte) (map[string]worktreeBinding, error) {
+	result := make(map[string]worktreeBinding)
+	pathValue := ""
+	refValue := ""
+	seenHead := false
+	detached := false
+	bare := false
+	locked := false
+	prunable := false
+	commit := func() error {
+		if pathValue == "" && refValue == "" && !seenHead && !detached && !bare && !locked && !prunable {
+			return nil
 		}
-		lines := strings.Split(block, "\n")
-		pathValue := ""
-		refValue := ""
-		for _, line := range lines {
-			line = strings.TrimSpace(line)
-			switch {
-			case strings.HasPrefix(line, "worktree "):
-				pathValue = strings.TrimSpace(strings.TrimPrefix(line, "worktree "))
-			case strings.HasPrefix(line, "branch "):
-				refValue = strings.TrimSpace(strings.TrimPrefix(line, "branch "))
+		validWorktree := pathValue != "" && !bare && seenHead &&
+			((refValue != "") != detached) && !(locked && prunable)
+		validBare := pathValue != "" && bare && !seenHead && refValue == "" &&
+			!detached && !locked && !prunable
+		if !validWorktree && !validBare {
+			return errors.New("malformed git worktree porcelain-z output")
+		}
+		if refValue != "" && pathValue != "" {
+			if _, duplicate := result[refValue]; duplicate {
+				return errors.New("malformed git worktree porcelain-z output")
 			}
+			result[refValue] = worktreeBinding{Ref: refValue, Path: pathValue}
 		}
-		if refValue == "" || pathValue == "" {
+		pathValue = ""
+		refValue = ""
+		seenHead = false
+		detached = false
+		bare = false
+		locked = false
+		prunable = false
+		return nil
+	}
+	for cursor := 0; cursor < len(out); {
+		next := bytes.IndexByte(out[cursor:], 0)
+		if next < 0 {
+			return nil, errors.New("malformed git worktree porcelain-z output")
+		}
+		next += cursor
+		token := out[cursor:next]
+		cursor = next + 1
+		if len(token) == 0 {
+			if err := commit(); err != nil {
+				return nil, err
+			}
 			continue
 		}
-		result[refValue] = worktreeBinding{Ref: refValue, Path: pathValue}
+		if !utf8.Valid(token) {
+			return nil, errors.New("malformed git worktree porcelain-z output")
+		}
+		value := string(token)
+		switch {
+		case strings.HasPrefix(value, "worktree "):
+			if pathValue != "" || strings.TrimPrefix(value, "worktree ") == "" {
+				return nil, errors.New("malformed git worktree porcelain-z output")
+			}
+			pathValue = strings.TrimPrefix(value, "worktree ")
+		case strings.HasPrefix(value, "HEAD "):
+			if pathValue == "" || seenHead || strings.TrimPrefix(value, "HEAD ") == "" {
+				return nil, errors.New("malformed git worktree porcelain-z output")
+			}
+			seenHead = true
+		case strings.HasPrefix(value, "branch "):
+			if pathValue == "" || refValue != "" || detached || bare || strings.TrimPrefix(value, "branch ") == "" {
+				return nil, errors.New("malformed git worktree porcelain-z output")
+			}
+			refValue = strings.TrimPrefix(value, "branch ")
+		case value == "detached":
+			if pathValue == "" || detached || bare || refValue != "" {
+				return nil, errors.New("malformed git worktree porcelain-z output")
+			}
+			detached = true
+		case value == "bare":
+			if pathValue == "" || bare || detached || refValue != "" {
+				return nil, errors.New("malformed git worktree porcelain-z output")
+			}
+			bare = true
+		case value == "locked", strings.HasPrefix(value, "locked "):
+			if pathValue == "" || locked {
+				return nil, errors.New("malformed git worktree porcelain-z output")
+			}
+			locked = true
+		case value == "prunable", strings.HasPrefix(value, "prunable "):
+			if pathValue == "" || prunable {
+				return nil, errors.New("malformed git worktree porcelain-z output")
+			}
+			prunable = true
+		default:
+			return nil, errors.New("malformed git worktree porcelain-z output")
+		}
+	}
+	if pathValue != "" || refValue != "" || seenHead || detached || bare || locked || prunable {
+		return nil, errors.New("malformed git worktree porcelain-z output")
 	}
 	return result, nil
 }
@@ -185,8 +271,8 @@ func (s *Service) getBranchCompare(ctx context.Context, repo repoContext, baseRe
 	if limit > maxBranchCompareLimit {
 		limit = maxBranchCompareLimit
 	}
-	mergeBase := strings.TrimSpace(readGitOptional(ctx, repo.repoRootReal, "merge-base", baseRef, targetRef))
-	targetAhead, targetBehind := readSymmetricAheadBehind(ctx, repo.repoRootReal, baseRef, targetRef)
+	mergeBase := strings.TrimSpace(s.readGitOptional(ctx, repo.repoRootReal, "merge-base", baseRef, targetRef))
+	targetAhead, targetBehind := s.readSymmetricAheadBehind(ctx, repo.repoRootReal, baseRef, targetRef)
 	commits, _, _, err := s.listCommits(ctx, repo, baseRef+".."+targetRef, 0, limit)
 	if err != nil {
 		return nil, err
@@ -217,7 +303,7 @@ func (s *Service) getBranchCompare(ctx context.Context, repo repoContext, baseRe
 	}
 
 	var linkedWorktree *gitLinkedWorktreeSnapshot
-	if bindings, err := readWorktreeBindings(ctx, repo.repoRootReal); err == nil {
+	if bindings, err := s.readWorktreeBindings(ctx, repo.repoRootReal); err == nil {
 		bindings = s.filterAccessibleWorktreeBindings(ctx, bindings)
 		if binding, ok := findWorktreeBinding(bindings, targetRef); ok {
 			if snapshot, err := s.readLinkedWorktreeSnapshot(ctx, binding.Path); err == nil {
@@ -263,22 +349,20 @@ func (s *Service) readLinkedWorktreeSnapshot(ctx context.Context, worktreePath s
 	if err != nil {
 		return nil, err
 	}
-	workspace, err := s.listWorkspaceChanges(ctx, repo)
+	snapshot, release, err := s.workspaceSnapshot(ctx, repo.repoRootReal, "")
 	if err != nil {
 		return nil, err
 	}
+	defer release()
 	return &gitLinkedWorktreeSnapshot{
-		WorktreePath: repo.repoRootReal,
-		Summary:      workspace.Summary,
-		Staged:       workspace.Staged,
-		Unstaged:     workspace.Unstaged,
-		Untracked:    workspace.Untracked,
-		Conflicted:   workspace.Conflicted,
+		WorktreePath:      repo.repoRootReal,
+		Summary:           snapshot.status.Summary(),
+		WorkspaceRevision: snapshot.revision,
 	}, nil
 }
 
-func readSymmetricAheadBehind(ctx context.Context, repoRoot string, baseRef string, targetRef string) (int, int) {
-	out := strings.TrimSpace(readGitOptional(ctx, repoRoot, "rev-list", "--left-right", "--count", baseRef+"..."+targetRef))
+func (s *Service) readSymmetricAheadBehind(ctx context.Context, repoRoot string, baseRef string, targetRef string) (int, int) {
+	out := strings.TrimSpace(s.readGitOptional(ctx, repoRoot, "rev-list", "--left-right", "--count", baseRef+"..."+targetRef))
 	if out == "" {
 		return 0, 0
 	}

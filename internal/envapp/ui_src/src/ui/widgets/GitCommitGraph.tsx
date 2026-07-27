@@ -7,7 +7,7 @@ import type { GitAskFlowerRequest, GitDirectoryShortcutRequest } from '../utils/
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { useI18n } from '../i18n';
 import { GitEntityContextMenu, createGitEntityContextMenuController, type GitContextMenuActionItem } from './GitEntityContextMenu';
-import type { GitDetachedSwitchTarget } from '../utils/gitWorkbench';
+import { exactGitPath, type GitDetachedSwitchTarget } from '../utils/gitWorkbench';
 
 export type CommitGraphLane = {
   hash: string;
@@ -236,7 +236,7 @@ export function GitCommitGraph(props: GitCommitGraphProps) {
     'grid-template-rows': `${SUBJECT_ROW_HEIGHT}px ${META_ROW_HEIGHT}px`,
     gap: `${ROW_GAP}px`,
   };
-  const repoRootPath = () => String(props.repoRootPath ?? '').trim();
+  const repoRootPath = () => exactGitPath(props.repoRootPath);
   const contextMenuItems = (target: CommitContextTarget): GitContextMenuActionItem[] => {
     const { commit } = target;
     const items: GitContextMenuActionItem[] = [];

@@ -2,7 +2,7 @@ import { For, Show, createSignal } from 'solid-js';
 import { cn, useLayout } from '@floegence/floe-webapp-core';
 import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
 import type { GitBranchSummary, GitCommitFileSummary, GitPreviewMergeBranchResponse, GitWorkspaceSummary } from '../protocol/redeven_v1';
-import { branchDisplayName, changeSecondaryPath, gitDiffEntryIdentity, type GitStashWindowRequest } from '../utils/gitWorkbench';
+import { branchDisplayName, changeSecondaryPath, exactGitPath, gitDiffEntryIdentity, type GitStashWindowRequest } from '../utils/gitWorkbench';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 import { gitChangePathClass } from './GitChrome';
@@ -47,7 +47,7 @@ export interface GitMergeBranchDialogProps {
 }
 
 function mergePreviewFilePath(item: GitCommitFileSummary, i18n: ReturnType<typeof useI18n>): string {
-  return String(item.displayPath || item.path || item.newPath || item.oldPath || '').trim() || i18n.t('filePreview.unknownPath');
+  return exactGitPath(item.displayPath || item.path || item.newPath || item.oldPath) || i18n.t('filePreview.unknownPath');
 }
 
 function formatWorkspaceSummary(summary: GitWorkspaceSummary | null | undefined, i18n: ReturnType<typeof useI18n>): string {
@@ -124,7 +124,7 @@ export function GitMergeBranchDialog(props: GitMergeBranchDialogProps) {
   const currentRef = () => String(preview()?.currentRef ?? '').trim() || i18n.t('git.notifications.currentBranchFallback');
   const sourceName = () => String(preview()?.sourceName ?? '').trim() || branchName();
   const blockingReason = () => String(preview()?.blockingReason ?? preview()?.blocking?.reason ?? '').trim();
-  const stashBlockerPath = () => String(preview()?.blocking?.workspacePath ?? '').trim();
+  const stashBlockerPath = () => exactGitPath(preview()?.blocking?.workspacePath);
   const canOpenStashShortcut = () => Boolean(
     props.onOpenStash
     && preview()?.blocking?.canStashWorkspace
@@ -326,7 +326,7 @@ export function GitMergeBranchDialog(props: GitMergeBranchDialogProps) {
                                             <div class="min-w-0">
                                               <button
                                                 type="button"
-                                                class={`block max-w-full cursor-pointer truncate text-left text-[11px] font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 ${gitChangePathClass(item.changeType)}`}
+                                                class={`block max-w-full cursor-pointer truncate whitespace-pre text-left text-[11px] font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 ${gitChangePathClass(item.changeType)}`}
                                                 title={changeSecondaryPath(item)}
                                                 onClick={() => {
                                                   setDiffDialogItem(item);
@@ -384,7 +384,7 @@ export function GitMergeBranchDialog(props: GitMergeBranchDialogProps) {
         item={diffDialogItem()}
         source={diffDialogItem() && preview() ? {
           kind: 'compare',
-          repoRootPath: String(preview()?.repoRootPath ?? '').trim(),
+          repoRootPath: exactGitPath(preview()?.repoRootPath),
           baseRef: String(preview()?.currentRef ?? '').trim(),
           targetRef: String(preview()?.sourceName ?? '').trim() || branchName(),
         } : null}

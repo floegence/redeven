@@ -1,8 +1,12 @@
 package gitrepo
 
 import (
+	"bufio"
 	"context"
+	"crypto/sha256"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +14,7 @@ import (
 
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/filesystemscope"
+	"github.com/floegence/redeven/internal/gitruntime"
 	"github.com/floegence/redeven/internal/gitutil"
 )
 
@@ -198,6 +203,43 @@ func TestResolveRepoForPath_GitUnavailable(t *testing.T) {
 	}
 	if got := result.UnavailableReason; got != gitUnavailableReason {
 		t.Fatalf("unexpected unavailable reason: %q", got)
+	}
+}
+
+func TestResolveRepoMethodsPreserveRuntimeResourceLimit(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	svc := NewService(root)
+	svc.runtime = nil
+
+	if _, err := svc.resolveRepoForPath(context.Background(), root); !errors.Is(err, gitruntime.ErrResourceLimit) {
+		t.Fatalf("resolveRepoForPath error = %v, want resource limit", err)
+	}
+	if _, err := svc.resolveExplicitRepo(context.Background(), root); !errors.Is(err, gitruntime.ErrResourceLimit) {
+		t.Fatalf("resolveExplicitRepo error = %v, want resource limit", err)
+	}
+}
+
+func TestClassifyRepoRPCErrorPreservesRuntimeFailures(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		err  error
+		code uint32
+	}{
+		{name: "resource limit", err: gitruntime.ErrResourceLimit, code: GitErrorResourceLimit},
+		{name: "request budget", err: gitruntime.ErrRequestBudget, code: GitErrorRequestBudget},
+		{name: "response budget", err: gitruntime.ErrResponseBudget, code: GitErrorResponseBudget},
+		{name: "canceled", err: context.Canceled, code: 499},
+		{name: "deadline", err: context.DeadlineExceeded, code: 504},
+		{name: "unknown outcome", err: &gitruntime.CommandError{UnknownOutcome: true}, code: 500},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := classifyRepoRPCError(test.err); got.Code != test.code {
+				t.Fatalf("classifyRepoRPCError(%v).Code = %d, want %d", test.err, got.Code, test.code)
+			}
+		})
 	}
 }
 
@@ -530,7 +572,7 @@ func TestStashListDetailApplyAndDropFlow(t *testing.T) {
 	var untrackedFile *gitCommitFileSummary
 	for index := range detailResp.Stash.Files {
 		file := detailResp.Stash.Files[index]
-		if trackedFile == nil && (file.Path == workspace.TrackedPath || file.NewPath == workspace.TrackedPath) {
+		if trackedFile == nil && file.StashSection == "unstaged" && (file.Path == workspace.TrackedPath || file.NewPath == workspace.TrackedPath) {
 			candidate := file
 			trackedFile = &candidate
 		}
@@ -547,6 +589,7 @@ func TestStashListDetailApplyAndDropFlow(t *testing.T) {
 		RepoRootPath: fixture.Root,
 		SourceKind:   "stash",
 		StashID:      saveResp.Created.ID,
+		StashSection: trackedFile.StashSection,
 		Mode:         "preview",
 		File: gitDiffFileRef{
 			ChangeType: trackedFile.ChangeType,
@@ -563,6 +606,7 @@ func TestStashListDetailApplyAndDropFlow(t *testing.T) {
 		RepoRootPath: fixture.Root,
 		SourceKind:   "stash",
 		StashID:      saveResp.Created.ID,
+		StashSection: untrackedFile.StashSection,
 		Mode:         "preview",
 		File: gitDiffFileRef{
 			ChangeType: untrackedFile.ChangeType,
@@ -982,6 +1026,22 @@ func TestListWorkspaceChanges_ReportsOnlyRealConflictsInConflictedSection(t *tes
 	}
 }
 
+func TestListWorkspaceChangesRequiresPaginationBeforeLegacyEnrichment(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	for index := 0; index < 513; index++ {
+		writeFixtureFile(t, fixture.Root, fmt.Sprintf("bulk/file-%04d.txt", index), []byte("pending\n"))
+	}
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+	if _, err := svc.listWorkspaceChanges(context.Background(), repo); !errors.Is(err, errWorkspacePaginationRequired) {
+		t.Fatalf("listWorkspaceChanges error=%v, want pagination required", err)
+	}
+}
+
 func TestListWorkspacePage_ChangesPagesImmediateChildren(t *testing.T) {
 	t.Parallel()
 	fixture := createTestRepoFixture(t)
@@ -998,7 +1058,7 @@ func TestListWorkspacePage_ChangesPagesImmediateChildren(t *testing.T) {
 		t.Fatalf("resolveExplicitRepo: %v", err)
 	}
 
-	resp, err := svc.listWorkspacePage(context.Background(), repo, "changes", "", 1, 2)
+	resp, err := svc.listWorkspacePage(context.Background(), repo, "changes", "", 1, 2, "")
 	if err != nil {
 		t.Fatalf("listWorkspacePage(changes): %v", err)
 	}
@@ -1033,7 +1093,7 @@ func TestListWorkspacePage_StagesAndConflictsRemainSectionScoped(t *testing.T) {
 		t.Fatalf("stageWorkspacePaths: %v", err)
 	}
 
-	stagedPage, err := svc.listWorkspacePage(context.Background(), repo, "staged", "", 0, 1)
+	stagedPage, err := svc.listWorkspacePage(context.Background(), repo, "staged", "", 0, 1, "")
 	if err != nil {
 		t.Fatalf("listWorkspacePage(staged): %v", err)
 	}
@@ -1054,7 +1114,7 @@ func TestListWorkspacePage_StagesAndConflictsRemainSectionScoped(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolveExplicitRepo(conflict): %v", err)
 	}
-	conflictedPage, err := conflictSvc.listWorkspacePage(context.Background(), conflictRepo, "conflicted", "", 0, 10)
+	conflictedPage, err := conflictSvc.listWorkspacePage(context.Background(), conflictRepo, "conflicted", "", 0, 10, "")
 	if err != nil {
 		t.Fatalf("listWorkspacePage(conflicted): %v", err)
 	}
@@ -1064,11 +1124,15 @@ func TestListWorkspacePage_StagesAndConflictsRemainSectionScoped(t *testing.T) {
 	if len(conflictedPage.Items) != 1 {
 		t.Fatalf("len(conflicted items)=%d, want 1", len(conflictedPage.Items))
 	}
-	if conflictedPage.Items[0].Section != "conflicted" || conflictedPage.Items[0].Path != conflict.ConflictPath {
+	if conflictedPage.Items[0].Section != "conflicted" || conflictedPage.Items[0].EntryKind != "directory" || !conflictedPage.Items[0].ContainsConflicted {
 		t.Fatalf("unexpected conflicted item: %+v", conflictedPage.Items[0])
 	}
-	if conflictedPage.Items[0].ChangeType != "conflicted" {
-		t.Fatalf("ChangeType=%q, want conflicted", conflictedPage.Items[0].ChangeType)
+	conflictedDirectoryPage, err := conflictSvc.listWorkspacePage(context.Background(), conflictRepo, "conflicted", conflictedPage.Items[0].DirectoryPath, 0, 10, conflictedPage.WorkspaceRevision)
+	if err != nil {
+		t.Fatalf("listWorkspacePage(conflicted directory): %v", err)
+	}
+	if len(conflictedDirectoryPage.Items) != 1 || conflictedDirectoryPage.Items[0].Path != conflict.ConflictPath || conflictedDirectoryPage.Items[0].ChangeType != "conflicted" {
+		t.Fatalf("unexpected conflicted directory item: %+v", conflictedDirectoryPage.Items)
 	}
 }
 
@@ -1086,7 +1150,7 @@ func TestListWorkspacePage_ChangesSupportsDirectoryBrowsing(t *testing.T) {
 		t.Fatalf("resolveExplicitRepo: %v", err)
 	}
 
-	rootPage, err := svc.listWorkspacePage(context.Background(), repo, "changes", "", 0, 20)
+	rootPage, err := svc.listWorkspacePage(context.Background(), repo, "changes", "", 0, 20, "")
 	if err != nil {
 		t.Fatalf("listWorkspacePage(root): %v", err)
 	}
@@ -1107,7 +1171,7 @@ func TestListWorkspacePage_ChangesSupportsDirectoryBrowsing(t *testing.T) {
 		t.Fatalf("unexpected desktop directory aggregate: %+v", desktopDir)
 	}
 
-	desktopPage, err := svc.listWorkspacePage(context.Background(), repo, "changes", "desktop/", 0, 20)
+	desktopPage, err := svc.listWorkspacePage(context.Background(), repo, "changes", "desktop/", 0, 20, "")
 	if err != nil {
 		t.Fatalf("listWorkspacePage(desktop): %v", err)
 	}
@@ -1125,6 +1189,202 @@ func TestListWorkspacePage_ChangesSupportsDirectoryBrowsing(t *testing.T) {
 	}
 	if desktopPage.Items[1].EntryKind != "file" || desktopPage.Items[1].Path != "desktop/readme.md" {
 		t.Fatalf("unexpected second desktop item: %+v", desktopPage.Items[1])
+	}
+}
+
+func TestWorkspaceSnapshotRevisionPinsPagesAndRejectsInvalidatedEpoch(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	createWorkspaceChangesFixture(t, fixture.Root)
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	fresh, err := svc.listWorkspacePage(context.Background(), repo, "changes", "", 0, 20, "")
+	if err != nil {
+		t.Fatalf("listWorkspacePage(fresh): %v", err)
+	}
+	if fresh.WorkspaceRevision == "" {
+		t.Fatal("fresh workspace page did not return a revision")
+	}
+	pinned, err := svc.listWorkspacePage(context.Background(), repo, "changes", "", 0, 20, fresh.WorkspaceRevision)
+	if err != nil {
+		t.Fatalf("listWorkspacePage(pinned): %v", err)
+	}
+	if pinned.WorkspaceRevision != fresh.WorkspaceRevision {
+		t.Fatalf("pinned revision=%q, want %q", pinned.WorkspaceRevision, fresh.WorkspaceRevision)
+	}
+
+	_, releaseMutation, err := svc.acquireRepoMutation(context.Background(), repo)
+	if err != nil {
+		t.Fatalf("acquireRepoMutation: %v", err)
+	}
+	releaseMutation()
+	if _, err := svc.listWorkspacePage(context.Background(), repo, "changes", "", 0, 20, fresh.WorkspaceRevision); !errors.Is(err, errWorkspaceSnapshotStale) {
+		t.Fatalf("expected stale snapshot after mutation epoch, got %v", err)
+	}
+}
+
+func TestListWorkspacePathStatusesReturnsFileSectionsAndUniqueDirectoryCounts(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	workspace := createWorkspaceChangesFixture(t, fixture.Root)
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	resp, err := svc.listWorkspacePathStatuses(context.Background(), repo, []string{"src", workspace.TrackedPath, workspace.UntrackedPath}, "")
+	if err != nil {
+		t.Fatalf("listWorkspacePathStatuses: %v", err)
+	}
+	if resp.WorkspaceRevision == "" {
+		t.Fatal("path status response did not return a revision")
+	}
+	if len(resp.Items) != 4 {
+		t.Fatalf("items=%d, want directory + two tracked sections + untracked: %+v", len(resp.Items), resp.Items)
+	}
+	directory := resp.Items[0]
+	if directory.EntryKind != "directory" || directory.DirectoryPath != "src" || directory.DescendantFileCount != 1 || directory.StagedFileCount != 1 || directory.UnstagedFileCount != 1 {
+		t.Fatalf("unexpected directory aggregate: %+v", directory)
+	}
+	sections := map[string]bool{}
+	for _, item := range resp.Items[1:] {
+		if item.Path == workspace.TrackedPath {
+			sections[item.Section] = true
+		}
+	}
+	if !sections["staged"] || !sections["unstaged"] {
+		t.Fatalf("tracked path sections=%v, want staged and unstaged", sections)
+	}
+	if _, err := svc.listWorkspacePathStatuses(context.Background(), repo, []string{"../outside"}, resp.WorkspaceRevision); err == nil {
+		t.Fatal("expected invalid relative path to fail")
+	}
+}
+
+func TestParseWorkspaceStatusPreservesLiteralPathBytes(t *testing.T) {
+	t.Parallel()
+	want := " leading space/line\nUnicode-\u6587\u4ef6\\name.txt "
+	snapshot, err := parseWorkspaceStatusReader(bufio.NewReader(strings.NewReader("? "+want+"\x00")), "")
+	if err != nil {
+		t.Fatalf("parseWorkspaceStatusReader: %v", err)
+	}
+	if len(snapshot.Untracked) != 1 || snapshot.Untracked[0].Path != want {
+		t.Fatalf("untracked=%+v, want literal path %q", snapshot.Untracked, want)
+	}
+}
+
+func TestWorkspaceDiffAndMutationsPreserveLiteralPathBytes(t *testing.T) {
+	fixture := createTestRepoFixture(t)
+	paths := []string{
+		" leading.txt",
+		"trailing.txt ",
+		"line\nbreak.txt",
+		"Unicode-文件.txt",
+		"backslash\\name.txt",
+	}
+	for _, pathValue := range paths {
+		writeFixtureFile(t, fixture.Root, pathValue, []byte("original\n"))
+	}
+	addArgs := append([]string{"--literal-pathspecs", "add", "--"}, paths...)
+	runGitFixture(t, fixture.Root, addArgs...)
+	runGitFixture(t, fixture.Root, "commit", "-m", "add literal paths")
+	for _, pathValue := range paths {
+		writeFixtureFile(t, fixture.Root, pathValue, []byte("changed\n"))
+	}
+
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+	for _, pathValue := range paths {
+		t.Run(fmt.Sprintf("path-%x", sha256.Sum256([]byte(pathValue)))[:17], func(t *testing.T) {
+			req := getDiffContentReq{
+				RepoRootPath:     fixture.Root,
+				SourceKind:       "workspace",
+				WorkspaceSection: "unstaged",
+				Mode:             "preview",
+				File:             gitDiffFileRef{Path: pathValue},
+			}
+			encoded, marshalErr := json.Marshal(req)
+			if marshalErr != nil {
+				t.Fatal(marshalErr)
+			}
+			var roundTripped getDiffContentReq
+			if unmarshalErr := json.Unmarshal(encoded, &roundTripped); unmarshalErr != nil {
+				t.Fatal(unmarshalErr)
+			}
+			if roundTripped.File.Path != pathValue {
+				t.Fatalf("DTO path=%q, want byte-identical %q", roundTripped.File.Path, pathValue)
+			}
+
+			unstaged := mustGetDiffContent(t, svc, repo, roundTripped)
+			if unstaged.File.Path != pathValue {
+				t.Fatalf("unstaged diff path=%q, want %q", unstaged.File.Path, pathValue)
+			}
+			if err := svc.stageWorkspacePaths(context.Background(), repo, []string{pathValue}); err != nil {
+				t.Fatalf("stageWorkspacePaths(%q): %v", pathValue, err)
+			}
+			req.WorkspaceSection = "staged"
+			staged := mustGetDiffContent(t, svc, repo, req)
+			if staged.File.Path != pathValue {
+				t.Fatalf("staged diff path=%q, want %q", staged.File.Path, pathValue)
+			}
+			if err := svc.unstageWorkspacePaths(context.Background(), repo, []string{pathValue}); err != nil {
+				t.Fatalf("unstageWorkspacePaths(%q): %v", pathValue, err)
+			}
+			if err := svc.discardWorkspacePaths(context.Background(), repo, []string{pathValue}); err != nil {
+				t.Fatalf("discardWorkspacePaths(%q): %v", pathValue, err)
+			}
+			content, readErr := os.ReadFile(filepath.Join(fixture.Root, filepath.FromSlash(pathValue)))
+			if readErr != nil || string(content) != "original\n" {
+				t.Fatalf("discarded content=%q error=%v", content, readErr)
+			}
+		})
+	}
+}
+
+func TestParseWorktreeBindingsPorcelainZPreservesLiteralPath(t *testing.T) {
+	t.Parallel()
+	wantPath := "/tmp/ leading\nUnicode-\u6587\u4ef6\\worktree "
+	bindings, err := parseWorktreeBindingsPorcelainZ([]byte("worktree " + wantPath + "\x00HEAD abc\x00branch refs/heads/feature/literal\x00\x00"))
+	if err != nil {
+		t.Fatalf("parseWorktreeBindingsPorcelainZ: %v", err)
+	}
+	binding, ok := bindings["refs/heads/feature/literal"]
+	if !ok || binding.Path != wantPath {
+		t.Fatalf("binding=%+v, ok=%v, want literal path %q", binding, ok, wantPath)
+	}
+}
+
+func TestParseWorktreeBindingsPorcelainZRejectsMalformedRecord(t *testing.T) {
+	t.Parallel()
+	for _, input := range [][]byte{
+		[]byte("worktree /tmp/repo\x00HEAD abc"),
+		[]byte("worktree /tmp/repo\x00unexpected value\x00\x00"),
+		[]byte("worktree /tmp/one\x00worktree /tmp/two\x00\x00"),
+		[]byte("HEAD abc\x00\x00"),
+		[]byte("worktree /tmp/repo\x00HEAD abc\x00HEAD def\x00\x00"),
+		[]byte("worktree /tmp/repo\x00detached\x00detached\x00\x00"),
+		[]byte("worktree /tmp/repo\x00locked\x00locked reason\x00\x00"),
+		[]byte("worktree /tmp/repo\x00prunable\x00prunable reason\x00\x00"),
+		[]byte("worktree /tmp/repo\x00detached\x00branch refs/heads/main\x00\x00"),
+		[]byte("worktree /tmp/repo\x00branch refs/heads/main\x00bare\x00\x00"),
+		[]byte("worktree /tmp/repo\x00branch refs/heads/main\x00\x00"),
+		[]byte("worktree /tmp/repo\x00HEAD abc\x00\x00"),
+		[]byte("worktree /tmp/repo\x00detached\x00\x00"),
+		[]byte("worktree /tmp/repo\x00HEAD abc\x00bare\x00\x00"),
+		[]byte("worktree /tmp/repo\x00bare\x00locked\x00\x00"),
+		[]byte("worktree /tmp/repo\x00bare\x00prunable\x00\x00"),
+		[]byte("worktree /tmp/repo\x00HEAD abc\x00branch refs/heads/main\x00locked\x00prunable\x00\x00"),
+	} {
+		if _, err := parseWorktreeBindingsPorcelainZ(input); err == nil {
+			t.Fatalf("parseWorktreeBindingsPorcelainZ(%q) succeeded", input)
+		}
 	}
 }
 
@@ -1996,7 +2256,7 @@ func TestDeleteBranch_DeletesMergedLocalBranch(t *testing.T) {
 	if resp.HeadRef != compare.BaseBranch {
 		t.Fatalf("HeadRef=%q, want %q", resp.HeadRef, compare.BaseBranch)
 	}
-	if gitRefExists(context.Background(), fixture.Root, "refs/heads/"+compare.Branch) {
+	if svc.gitRefExists(context.Background(), fixture.Root, "refs/heads/"+compare.Branch) {
 		t.Fatalf("expected branch %q to be deleted", compare.Branch)
 	}
 }
@@ -2098,7 +2358,7 @@ func TestDeleteBranch_ForceDeletesUnmergedBranchWithExactBranchName(t *testing.T
 	if resp.HeadRef != compare.BaseBranch {
 		t.Fatalf("HeadRef=%q, want %q", resp.HeadRef, compare.BaseBranch)
 	}
-	if gitRefExists(context.Background(), fixture.Root, "refs/heads/"+compare.Branch) {
+	if svc.gitRefExists(context.Background(), fixture.Root, "refs/heads/"+compare.Branch) {
 		t.Fatalf("expected branch %q to be force deleted", compare.Branch)
 	}
 }
@@ -2164,11 +2424,89 @@ func TestPreviewDeleteBranch_ReportsLinkedDirtyWorktree(t *testing.T) {
 	if preview.LinkedWorktree.Summary.UntrackedCount != 1 {
 		t.Fatalf("unexpected worktree summary: %+v", preview.LinkedWorktree.Summary)
 	}
-	if len(preview.LinkedWorktree.Untracked) != 1 || preview.LinkedWorktree.Untracked[0].Path != "scratch.txt" {
-		t.Fatalf("unexpected worktree changes: %+v", preview.LinkedWorktree.Untracked)
+	if preview.LinkedWorktree.WorkspaceRevision == "" {
+		t.Fatalf("expected linked worktree revision: %+v", preview.LinkedWorktree)
 	}
 	if !preview.ForceDeleteAllowed || !preview.ForceDeleteRequiresConfirm {
 		t.Fatalf("expected force delete fallback for linked worktree preview: %+v", preview)
+	}
+}
+
+func TestDestructiveWorkspaceFingerprintDetectsCleanTrackedContentChanges(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	compare := createComparisonBranchFixture(t, fixture.Root, fixture.UpdateCommit)
+	worktree := filepath.Join(filepath.Dir(fixture.Root), "fingerprint-wt")
+	runGitFixture(t, fixture.Root, "worktree", "add", worktree, compare.Branch)
+
+	svc := NewService(filepath.Dir(fixture.Root))
+	before, err := svc.destructiveWorkspaceFingerprint(context.Background(), worktree)
+	if err != nil {
+		t.Fatalf("destructiveWorkspaceFingerprint(before): %v", err)
+	}
+	trackedPath := filepath.Join(worktree, compare.FilePath)
+	if err := os.WriteFile(trackedPath, []byte("rewritten outside git status summary\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(%s): %v", trackedPath, err)
+	}
+	after, err := svc.destructiveWorkspaceFingerprint(context.Background(), worktree)
+	if err != nil {
+		t.Fatalf("destructiveWorkspaceFingerprint(after): %v", err)
+	}
+	if before == after {
+		t.Fatalf("destructive fingerprint did not change after tracked content rewrite: %q", before)
+	}
+}
+
+func TestDestructiveWorkspaceScannerAdmissionIsHardBounded(t *testing.T) {
+	t.Parallel()
+	scanner := &destructiveWorkspaceScanner{ctx: context.Background(), hash: sha256.New()}
+	for index := 0; index < destructiveScanMaxEntries; index++ {
+		if err := scanner.admitEntry("a", "a"); err != nil {
+			t.Fatalf("admitEntry(%d): %v", index, err)
+		}
+	}
+	if err := scanner.admitEntry("overflow", "overflow"); !errors.Is(err, errDestructiveWorkspaceScanLimit) {
+		t.Fatalf("overflow admission error=%v", err)
+	}
+}
+
+func TestDestructiveWorkspaceScannerNoFollowRejectsSymlink(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "target"), []byte("data"), 0o644); err != nil {
+		t.Fatalf("WriteFile(target): %v", err)
+	}
+	if err := os.Symlink("target", filepath.Join(root, "link")); err != nil {
+		t.Fatalf("Symlink(link): %v", err)
+	}
+	directory, err := openRootDirectoryNoFollow(root)
+	if err != nil {
+		t.Skipf("no-follow directory access unavailable: %v", err)
+	}
+	defer directory.Close()
+	if file, err := openRegularAtNoFollow(directory, "link"); err == nil {
+		_ = file.Close()
+		t.Fatal("openRegularAtNoFollow followed a symlink")
+	}
+}
+
+func TestRepositoryIdentityCurrentRejectsGitDirReplacement(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	runtime := gitruntime.New()
+	identity, ok, err := runtime.ResolveRepositoryIdentity(context.Background(), fixture.Root)
+	if err != nil || !ok {
+		t.Fatalf("ResolveRepositoryIdentity: ok=%v err=%v", ok, err)
+	}
+	retainedGitDir := identity.GitDir + ".retained"
+	if err := os.Rename(identity.GitDir, retainedGitDir); err != nil {
+		t.Fatalf("Rename(git dir): %v", err)
+	}
+	if err := os.Mkdir(identity.GitDir, 0o755); err != nil {
+		t.Fatalf("Mkdir(replacement git dir): %v", err)
+	}
+	if runtime.RepositoryIdentityCurrent(identity) {
+		t.Fatal("repository identity remained current after git-dir replacement")
 	}
 }
 
@@ -2278,7 +2616,7 @@ func TestDeleteBranch_RemovesLinkedCleanWorktreeAndBranch(t *testing.T) {
 	if _, err := os.Stat(worktree); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("expected worktree %q to be removed, err=%v", worktree, err)
 	}
-	if gitRefExists(context.Background(), fixture.Root, "refs/heads/"+compare.Branch) {
+	if svc.gitRefExists(context.Background(), fixture.Root, "refs/heads/"+compare.Branch) {
 		t.Fatalf("expected branch %q to be deleted", compare.Branch)
 	}
 }
@@ -2367,7 +2705,7 @@ func TestDeleteBranch_RemovesDirtyLinkedWorktreeAndBranchWithConsent(t *testing.
 	if _, err := os.Stat(worktree); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("expected worktree %q to be removed, err=%v", worktree, err)
 	}
-	if gitRefExists(context.Background(), fixture.Root, "refs/heads/"+compare.Branch) {
+	if svc.gitRefExists(context.Background(), fixture.Root, "refs/heads/"+compare.Branch) {
 		t.Fatalf("expected branch %q to be deleted", compare.Branch)
 	}
 }
@@ -2416,7 +2754,7 @@ func TestDeleteBranch_ForceDeletesUnmergedDirtyLinkedWorktreeAndBranch(t *testin
 	if _, err := os.Stat(worktree); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("expected worktree %q to be removed, err=%v", worktree, err)
 	}
-	if gitRefExists(context.Background(), fixture.Root, "refs/heads/"+compare.Branch) {
+	if svc.gitRefExists(context.Background(), fixture.Root, "refs/heads/"+compare.Branch) {
 		t.Fatalf("expected branch %q to be force deleted", compare.Branch)
 	}
 }
@@ -2536,8 +2874,15 @@ func TestParseWorkspaceStatusPorcelainV2(t *testing.T) {
 	if len(snapshot.Untracked) != 1 {
 		t.Fatalf("untracked=%d, want 1", len(snapshot.Untracked))
 	}
-	if snapshot.Staged[1].ChangeType != "renamed" || snapshot.Staged[1].OldPath != "src/old.txt" || snapshot.Staged[1].NewPath != "src/new.txt" {
-		t.Fatalf("unexpected rename item: %+v", snapshot.Staged[1])
+	var renameItem *gitWorkspaceChange
+	for i := range snapshot.Staged {
+		if snapshot.Staged[i].ChangeType == "renamed" {
+			renameItem = &snapshot.Staged[i]
+			break
+		}
+	}
+	if renameItem == nil || renameItem.OldPath != "src/old.txt" || renameItem.NewPath != "src/new.txt" {
+		t.Fatalf("unexpected staged items: %+v", snapshot.Staged)
 	}
 	if snapshot.Untracked[0].Path != "notes/todo.txt" {
 		t.Fatalf("unexpected untracked path: %+v", snapshot.Untracked[0])
@@ -2757,7 +3102,7 @@ func TestGetBranchCompare_EmbedsLinkedWorktreeSnapshot(t *testing.T) {
 	if resp.LinkedWorktree.Summary.UntrackedCount != 1 {
 		t.Fatalf("LinkedWorktree.Summary.UntrackedCount=%d, want 1", resp.LinkedWorktree.Summary.UntrackedCount)
 	}
-	if len(resp.LinkedWorktree.Untracked) != 1 || resp.LinkedWorktree.Untracked[0].Path != "scratch.txt" {
-		t.Fatalf("unexpected linked worktree untracked files: %+v", resp.LinkedWorktree.Untracked)
+	if resp.LinkedWorktree.WorkspaceRevision == "" {
+		t.Fatalf("expected linked worktree revision: %+v", resp.LinkedWorktree)
 	}
 }

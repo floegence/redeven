@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/filesystemscope"
+	"github.com/floegence/redeven/internal/gitruntime"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -28,7 +30,8 @@ const (
 )
 
 type Service struct {
-	scope *filesystemscope.Registry
+	scope       *filesystemscope.Registry
+	coordinator gitruntime.FilesystemMutationCoordinator
 }
 
 type PathContextResponse = fsGetPathContextResp
@@ -46,10 +49,35 @@ func NewService(agentHomeAbs string) *Service {
 }
 
 func NewServiceWithScope(scope *filesystemscope.Registry) *Service {
+	return NewServiceWithCoordinator(scope, nil)
+}
+
+func NewServiceWithCoordinator(scope *filesystemscope.Registry, coordinator gitruntime.FilesystemMutationCoordinator) *Service {
 	if scope == nil {
 		panic("nil filesystem scope")
 	}
-	return &Service{scope: scope}
+	return &Service{scope: scope, coordinator: coordinator}
+}
+
+func (s *Service) coordinateMutation(ctx context.Context, effect gitruntime.FilesystemEffect, fn func() error) error {
+	if s.coordinator == nil {
+		return gitruntime.ErrResourceLimit
+	}
+	return s.coordinator.CoordinateFilesystemMutation(ctx, effect, fn)
+}
+
+func filesystemWriteEffect(target string) gitruntime.FilesystemEffect {
+	// Git metadata may live in an arbitrary --separate-git-dir. Treat every
+	// Files-owned write as topology-exclusive so identity resolution cannot run
+	// while a control file is truncated or replaced.
+	return gitruntime.FilesystemEffect{Paths: []string{target}, ChangesTopology: true}
+}
+
+func mutationCoordinationRPCError(err error) error {
+	if errors.Is(err, gitruntime.ErrResourceLimit) {
+		return &rpc.Error{Code: gitruntime.ErrorResourceLimit, Message: "git runtime resource limit exceeded"}
+	}
+	return err
 }
 
 func (s *Service) Register(r *rpc.Router, meta *session.Meta) {
@@ -128,7 +156,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		}
 	})
 
-	accessgate.RegisterTyped[fsWriteFileReq, fsWriteFileResp](r, TypeID_FS_WRITE, gate, meta, accessgate.RPCAccessProtected, func(_ctx context.Context, req *fsWriteFileReq) (*fsWriteFileResp, error) {
+	accessgate.RegisterTyped[fsWriteFileReq, fsWriteFileResp](r, TypeID_FS_WRITE, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *fsWriteFileReq) (*fsWriteFileResp, error) {
 		if meta == nil || !meta.CanWrite {
 			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
 		}
@@ -141,12 +169,6 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 				return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
 			}
 			return nil, &rpc.Error{Code: 400, Message: "invalid path"}
-		}
-
-		if req.CreateDirs != nil && *req.CreateDirs {
-			if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-				return nil, &rpc.Error{Code: 500, Message: "mkdir failed"}
-			}
 		}
 
 		enc := strings.ToLower(strings.TrimSpace(req.Encoding))
@@ -164,28 +186,64 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 			return nil, &rpc.Error{Code: 400, Message: "unsupported encoding"}
 		}
 
-		if err := os.WriteFile(p, data, 0o644); err != nil {
+		createDirs := req.CreateDirs != nil && *req.CreateDirs
+		err = s.coordinateMutation(ctx, filesystemWriteEffect(p), func() error {
+			if createDirs {
+				if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+					return err
+				}
+			}
+			return os.WriteFile(p, data, 0o644)
+		})
+		if err != nil {
+			if errors.Is(err, gitruntime.ErrResourceLimit) {
+				return nil, mutationCoordinationRPCError(err)
+			}
 			return nil, &rpc.Error{Code: 500, Message: "write failed"}
 		}
 		return &fsWriteFileResp{Success: true}, nil
 	})
 
-	accessgate.RegisterTyped[fsMkdirReq, fsMkdirResp](r, TypeID_FS_MKDIR, gate, meta, accessgate.RPCAccessProtected, func(_ctx context.Context, req *fsMkdirReq) (*fsMkdirResp, error) {
+	accessgate.RegisterTyped[fsMkdirReq, fsMkdirResp](r, TypeID_FS_MKDIR, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *fsMkdirReq) (*fsMkdirResp, error) {
 		if meta == nil || !meta.CanWrite {
 			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
 		}
 		createParents := req.CreateParents != nil && *req.CreateParents
-		if _, err := s.mkdirTarget(req.Path, createParents); err != nil {
-			return nil, err
+		target, resolveErr := s.resolveTargetPath(req.Path)
+		if resolveErr != nil {
+			if errors.Is(resolveErr, filesystemscope.ErrPathOutsideScope) {
+				return nil, &rpc.Error{Code: 403, Message: "path outside filesystem scope"}
+			}
+			if errors.Is(resolveErr, filesystemscope.ErrWriteDenied) {
+				return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+			}
+			return nil, &rpc.Error{Code: 400, Message: "invalid path"}
+		}
+		if err := s.coordinateMutation(ctx, gitruntime.FilesystemEffect{Paths: []string{target}, ChangesTopology: true}, func() error {
+			_, err := s.mkdirTarget(req.Path, createParents)
+			return err
+		}); err != nil {
+			return nil, mutationCoordinationRPCError(err)
 		}
 		return &fsMkdirResp{Success: true}, nil
 	})
 
-	accessgate.RegisterTyped[fsDeleteReq, fsDeleteResp](r, TypeID_FS_DELETE, gate, meta, accessgate.RPCAccessProtected, func(_ctx context.Context, req *fsDeleteReq) (*fsDeleteResp, error) {
+	accessgate.RegisterTyped[fsDeleteReq, fsDeleteResp](r, TypeID_FS_DELETE, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *fsDeleteReq) (*fsDeleteResp, error) {
 		if meta == nil || !meta.CanWrite {
 			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
 		}
-		if err := s.deleteEntry(req.Path, req.Recursive != nil && *req.Recursive); err != nil {
+		target, mutationErr := s.resolveExistingWritableEntryPath(req.Path)
+		if mutationErr != nil {
+			mutationErr = fmt.Errorf("%w: %w", errFSInvalidPath, mutationErr)
+		} else {
+			mutationErr = s.coordinateMutation(ctx, gitruntime.FilesystemEffect{Paths: []string{target}, ChangesTopology: true}, func() error {
+				return s.deleteEntry(req.Path, req.Recursive != nil && *req.Recursive)
+			})
+		}
+		if err := mutationErr; err != nil {
+			if errors.Is(err, gitruntime.ErrResourceLimit) {
+				return nil, mutationCoordinationRPCError(err)
+			}
 			if os.IsNotExist(err) {
 				return nil, &rpc.Error{Code: 404, Message: "not found"}
 			}
@@ -203,12 +261,30 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		return &fsDeleteResp{Success: true}, nil
 	})
 
-	accessgate.RegisterTyped[fsRenameReq, fsRenameResp](r, TypeID_FS_RENAME, gate, meta, accessgate.RPCAccessProtected, func(_ctx context.Context, req *fsRenameReq) (*fsRenameResp, error) {
+	accessgate.RegisterTyped[fsRenameReq, fsRenameResp](r, TypeID_FS_RENAME, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *fsRenameReq) (*fsRenameResp, error) {
 		if meta == nil || !meta.CanWrite {
 			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
 		}
-		newPath, err := s.renameEntry(req.OldPath, req.NewPath)
+		oldPath, oldResolveErr := s.resolveExistingWritableEntryPath(req.OldPath)
+		newTarget, newResolveErr := s.resolveTargetPath(req.NewPath)
+		var newPath string
+		var err error
+		switch {
+		case oldResolveErr != nil:
+			err = fmt.Errorf("%w: %w", errFSInvalidOldPath, oldResolveErr)
+		case newResolveErr != nil:
+			err = fmt.Errorf("%w: %w", errFSInvalidNewPath, newResolveErr)
+		default:
+			err = s.coordinateMutation(ctx, gitruntime.FilesystemEffect{Paths: []string{oldPath, newTarget}, ChangesTopology: true}, func() error {
+				var renameErr error
+				newPath, renameErr = s.renameEntry(req.OldPath, req.NewPath)
+				return renameErr
+			})
+		}
 		if err != nil {
+			if errors.Is(err, gitruntime.ErrResourceLimit) {
+				return nil, mutationCoordinationRPCError(err)
+			}
 			switch {
 			case os.IsNotExist(err):
 				return nil, &rpc.Error{Code: 404, Message: "source not found"}
@@ -229,13 +305,31 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		return &fsRenameResp{Success: true, NewPath: newPath}, nil
 	})
 
-	accessgate.RegisterTyped[fsCopyReq, fsCopyResp](r, TypeID_FS_COPY, gate, meta, accessgate.RPCAccessProtected, func(_ctx context.Context, req *fsCopyReq) (*fsCopyResp, error) {
+	accessgate.RegisterTyped[fsCopyReq, fsCopyResp](r, TypeID_FS_COPY, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *fsCopyReq) (*fsCopyResp, error) {
 		if meta == nil || !meta.CanWrite {
 			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
 		}
 		overwrite := req.Overwrite != nil && *req.Overwrite
-		newPath, err := s.copyEntry(req.SourcePath, req.DestPath, overwrite)
+		source, sourceResolveErr := s.resolveExistingEntryPath(req.SourcePath)
+		dest, destResolveErr := s.resolveTargetPath(req.DestPath)
+		var newPath string
+		var err error
+		switch {
+		case sourceResolveErr != nil:
+			err = fmt.Errorf("%w: %w", errFSInvalidSourcePath, sourceResolveErr)
+		case destResolveErr != nil:
+			err = fmt.Errorf("%w: %w", errFSInvalidDestPath, destResolveErr)
+		default:
+			err = s.coordinateMutation(ctx, gitruntime.FilesystemEffect{Paths: []string{source, dest}, ChangesTopology: true}, func() error {
+				var copyErr error
+				newPath, copyErr = s.copyEntry(req.SourcePath, req.DestPath, overwrite)
+				return copyErr
+			})
+		}
 		if err != nil {
+			if errors.Is(err, gitruntime.ErrResourceLimit) {
+				return nil, mutationCoordinationRPCError(err)
+			}
 			switch {
 			case os.IsNotExist(err):
 				return nil, &rpc.Error{Code: 404, Message: "source not found"}

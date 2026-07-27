@@ -22,6 +22,7 @@ import { FlowerIcon } from "../icons/FlowerIcon";
 import {
   changeSecondaryPath,
   describeGitHead,
+  exactGitPath,
   gitDiffEntryIdentity,
   shortGitHash,
   type GitDetachedSwitchTarget,
@@ -234,7 +235,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
     String(props.repoInfo?.unavailableReason ?? "").trim(),
   );
   const repoRootPath = createMemo(() =>
-    String(props.repoInfo?.repoRootPath ?? "").trim(),
+    exactGitPath(props.repoInfo?.repoRootPath),
   );
   const commitHash = createMemo(() =>
     String(props.selectedCommitHash ?? "").trim(),
@@ -582,9 +583,9 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                                     onClick={() =>
                                       props.onAskFlower?.({
                                         kind: "commit",
-                                        repoRootPath: String(
-                                          props.repoInfo?.repoRootPath ?? "",
-                                        ).trim(),
+                                        repoRootPath: exactGitPath(
+                                          props.repoInfo?.repoRootPath,
+                                        ),
                                         location: "graph",
                                         commit: detail,
                                         files: commitFiles(),

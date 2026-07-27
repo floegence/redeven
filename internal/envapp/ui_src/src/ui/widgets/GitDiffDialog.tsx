@@ -16,6 +16,7 @@ import {
   type GitGetDiffContentRequest,
 } from "../protocol/redeven_v1";
 import {
+  exactGitPath,
   seedGitDiffContent,
   type GitSeededCommitFileSummary,
   type GitSeededWorkspaceChange,
@@ -154,14 +155,10 @@ const GIT_DIFF_WINDOW_DEFAULT_SIZE = { width: 1100, height: 760 };
 const GIT_DIFF_WINDOW_MIN_SIZE = { width: 720, height: 520 };
 
 function defaultDiffErrorState(
-  error: unknown,
+  _error: unknown,
   fallbackMessage: string,
 ): GitDiffDialogErrorState {
-  if (error instanceof Error && String(error.message ?? "").trim()) {
-    return { message: String(error.message).trim() };
-  }
-  const raw = String(error ?? "").trim();
-  return { message: raw || fallbackMessage };
+  return { message: fallbackMessage };
 }
 
 function resolveDiffErrorState(
@@ -189,7 +186,7 @@ function resolveDiffErrorState(
 }
 
 function normalizeDiffPathCandidate(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
+  return typeof value === "string" ? exactGitPath(value) : "";
 }
 
 function isDirectoryDiffPlaceholder(
@@ -228,7 +225,7 @@ function buildDiffContentRequest(
   item: GitDiffDialogItem | null | undefined,
   mode: GitDiffContentMode,
 ): GitGetDiffContentRequest | null {
-  const repoRootPath = String(source?.repoRootPath ?? "").trim();
+  const repoRootPath = exactGitPath(source?.repoRootPath);
   if (!repoRootPath || !source || !item) return null;
   const file = {
     changeType:
@@ -268,6 +265,9 @@ function buildDiffContentRequest(
         repoRootPath,
         sourceKind: "stash",
         stashId: String(source.stashId ?? "").trim(),
+        stashSection: 'stashSection' in item && typeof item.stashSection === 'string'
+          ? item.stashSection
+          : undefined,
         mode,
         file,
       };
@@ -308,6 +308,10 @@ function buildGitDiffDialogSelectionKey(
     stashId:
       source.kind === "stash"
         ? normalizeDiffPathCandidate(source.stashId)
+        : undefined,
+    stashSection:
+      'stashSection' in item && typeof item.stashSection === 'string'
+        ? item.stashSection
         : undefined,
     file: {
       changeType:

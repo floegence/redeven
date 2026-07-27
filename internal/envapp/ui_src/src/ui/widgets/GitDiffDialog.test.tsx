@@ -258,6 +258,61 @@ describe("GitDiffDialog", () => {
     }
   });
 
+  it("preserves the exact repository root in diff requests", async () => {
+    const repoRootPath = "/workspace/repo ";
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+
+    const dispose = render(
+      () => (
+        <LayoutProvider>
+          <NotificationProvider>
+            <GitDiffDialog
+              open
+              onOpenChange={() => {}}
+              item={{
+                changeType: "modified",
+                path: "src/app.ts",
+                displayPath: "src/app.ts",
+                patchText: "@@ -1 +1 @@\n-oldValue\n+newValue",
+              }}
+              source={{
+                kind: "workspace",
+                repoRootPath,
+                workspaceSection: "unstaged",
+              }}
+              title="Workspace Diff"
+              emptyMessage="Select a file to inspect its diff."
+            />
+          </NotificationProvider>
+        </LayoutProvider>
+      ),
+      host,
+    );
+
+    try {
+      await flush();
+      const fullContextButton = Array.from(
+        document.querySelectorAll("button"),
+      ).find((node) => node.textContent?.trim() === "Full Context");
+      expect(fullContextButton).toBeTruthy();
+      fullContextButton!.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+      await flush();
+
+      expect(mockGetDiffContent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          repoRootPath,
+          sourceKind: "workspace",
+          workspaceSection: "unstaged",
+        }),
+      );
+    } finally {
+      dispose();
+    }
+  });
+
   it("shows merge first-parent context for commit diffs without changing the request payload", async () => {
     mockGetDiffContent.mockResolvedValueOnce({
       repoRootPath: "/workspace/repo",
@@ -847,7 +902,8 @@ describe("GitDiffDialog", () => {
       await flush();
 
       expect(mockGetDiffContent).toHaveBeenCalledTimes(1);
-      expect(document.body.textContent).toContain("full context failed");
+      expect(document.body.textContent).toContain("Failed to load full-context diff.");
+      expect(document.body.textContent).not.toContain("full context failed");
     } finally {
       dispose();
     }

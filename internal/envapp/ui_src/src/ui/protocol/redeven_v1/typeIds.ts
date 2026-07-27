@@ -39,6 +39,8 @@ export const redevenV1TypeIds = {
     dropStash: 1127,
     listWorkspacePage: 1128,
     discardWorkspace: 1129,
+    getCapabilities: 1130,
+    listWorkspacePathStatuses: 1131,
   },
   terminal: {
     sessionCreate: 2001,

@@ -4,6 +4,7 @@ import type {
   GitRepoSummaryResponse,
   GitStashSummary,
 } from '../protocol/redeven_v1';
+import { exactGitPath } from './gitWorkbench';
 
 export type GitStashReviewContext = {
   repoRootPath: string;
@@ -43,7 +44,7 @@ function buildGitStashReviewContext(
   stash: Pick<GitStashSummary, 'id' | 'headCommit'> | null | undefined,
 ): GitStashReviewContext {
   return {
-    repoRootPath: normalizeValue(repoRootPath),
+    repoRootPath: exactGitPath(repoRootPath),
     headRef: normalizeValue(headRef) || undefined,
     headCommit: normalizeValue(headCommit) || undefined,
     stashId: normalizeValue(stash?.id),
@@ -67,10 +68,10 @@ function valuesConflict(expected: string | null | undefined, current: string | n
 
 export function stashReviewMatchesTarget(review: GitStashReviewState | null | undefined, target: GitStashReviewTarget): boolean {
   const reviewContext = review?.reviewContext;
-  const repoRootPath = normalizeValue(target.repoRootPath);
+  const repoRootPath = exactGitPath(target.repoRootPath);
   const stashId = normalizeValue(target.stash?.id);
   if (!reviewContext || !repoRootPath || !stashId) return false;
-  if (repoRootPath !== normalizeValue(reviewContext.repoRootPath)) return false;
+  if (repoRootPath !== exactGitPath(reviewContext.repoRootPath)) return false;
   if (stashId !== normalizeValue(reviewContext.stashId)) return false;
   if (valuesConflict(reviewContext.headRef, target.repoSummary?.headRef)) return false;
   if (valuesConflict(reviewContext.headCommit, target.repoSummary?.headCommit)) return false;
