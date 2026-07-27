@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 type PublishedPreset = Readonly<{
   name: string;
+  displayName: string;
   mode: 'light' | 'dark';
   preview: Readonly<{
     background: string;
@@ -31,6 +32,7 @@ function publishedPresets(): readonly PublishedPreset[] {
     const { builtInShellThemePresets } = await import('@floegence/floe-webapp-core');
     process.stdout.write(JSON.stringify(builtInShellThemePresets.map((preset) => ({
       name: preset.name,
+      displayName: preset.displayName,
       mode: preset.mode,
       preview: preset.preview,
       hasMonacoTheme: Boolean(preset.monaco?.[preset.mode]),
@@ -71,7 +73,14 @@ const DARK_PRESET_NAMES = [
   'nord',
   'dracula',
   'abyss',
+  'studio',
+  'graphite',
 ] as const;
+
+const LOCALIZED_PRESET_NAMES = new Set<string>([
+  ...LIGHT_PRESET_NAMES,
+  ...DARK_PRESET_NAMES.filter((name) => name !== 'studio' && name !== 'graphite'),
+]);
 
 function readPickerSource(): string {
   return fs.readFileSync(path.join(__dirname, 'DesktopThemePicker.tsx'), 'utf8');
@@ -82,7 +91,7 @@ function readWelcomeStyles(): string {
 }
 
 describe('DesktopThemePicker', () => {
-  it('keeps the 11 light and 11 dark Floe 0.39 presets in their published order', () => {
+  it('keeps the 11 light and 13 dark Floe 0.40 presets in their published order', () => {
     const lightPresets = builtInShellThemePresets.filter((preset) => preset.mode === 'light');
     const darkPresets = builtInShellThemePresets.filter((preset) => preset.mode === 'dark');
 
@@ -90,14 +99,19 @@ describe('DesktopThemePicker', () => {
     expect(darkPresets.map((preset) => preset.name)).toEqual(DARK_PRESET_NAMES);
     expect(lightPresets[0]?.name).toBe('classic-light');
     expect(darkPresets[0]?.name).toBe('classic-dark');
-    expect([...lightPresets, ...darkPresets]).toHaveLength(22);
+    expect([...lightPresets, ...darkPresets]).toHaveLength(24);
   });
 
-  it('provides a localized label mapping and a complete Monaco-aware preview for every preset', () => {
+  it('provides localized labels with an upstream display-name fallback and complete Monaco-aware previews', () => {
     const pickerSource = readPickerSource();
 
     for (const preset of builtInShellThemePresets) {
-      expect(pickerSource).toContain(`shell.themePicker.presets.${preset.name}`);
+      if (LOCALIZED_PRESET_NAMES.has(preset.name)) {
+        expect(pickerSource).toContain(`shell.themePicker.presets.${preset.name}`);
+      } else {
+        expect(['studio', 'graphite']).toContain(preset.name);
+        expect(preset.displayName).toMatch(/^(Studio|Graphite)$/u);
+      }
       expect(preset.preview).toMatchObject({
         background: expect.any(String),
         surface: expect.any(String),
@@ -108,6 +122,7 @@ describe('DesktopThemePicker', () => {
       expect(preset.hasMonacoTheme).toBe(true);
     }
 
+    expect(pickerSource).toContain(': preset.displayName;');
     expect(pickerSource).toContain("'background-color': preview()?.background");
     expect(pickerSource).toContain("'background-color': preview()?.surface");
     expect(pickerSource).toContain("'background-color': preview()?.sidebar ?? preview()?.surface");
