@@ -59,20 +59,36 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   const [externalDialogOpen, setExternalDialogOpen] = createSignal(false);
   const [externalUpdateItem, setExternalUpdateItem] = createSignal<PluginInventoryItem | undefined>();
   const [externalSourcePreset, setExternalSourcePreset] = createSignal<ExternalPluginSourcePreset | undefined>();
+  const [permissionsFocusRequest, setPermissionsFocusRequest] = createSignal<{ id: number; inventoryKey: string }>();
+  const [permissionsFocusTarget, setPermissionsFocusTarget] = createSignal<HTMLElement>();
   let commandController: AbortController | undefined;
   let pluginCenterPanelRef: HTMLDivElement | undefined;
   let pluginCenterSearchRef: HTMLInputElement | undefined;
   let mobileDetailBackButton: HTMLButtonElement | undefined;
   let detailHeadingRef: HTMLHeadingElement | undefined;
   let mobileDetailReturnTarget: HTMLButtonElement | undefined;
-  let deferredPermissionsFocus: number | undefined;
   let handledDetailFocusRequest: number | undefined;
   let handledSelectionInventoryKey: string | undefined;
   let handledSelectionFocusRequest: number | undefined;
+  let nextPermissionsFocusRequest = 0;
+  let handledPermissionsFocusRequest = 0;
+  let deferredPermissionsFocusFrame: number | undefined;
+  let deferredPermissionsFocusTimer: number | undefined;
+
+  const cancelDeferredPermissionsFocus = () => {
+    if (deferredPermissionsFocusFrame !== undefined) {
+      window.cancelAnimationFrame(deferredPermissionsFocusFrame);
+      deferredPermissionsFocusFrame = undefined;
+    }
+    if (deferredPermissionsFocusTimer !== undefined) {
+      window.clearTimeout(deferredPermissionsFocusTimer);
+      deferredPermissionsFocusTimer = undefined;
+    }
+  };
 
   onCleanup(() => {
     commandController?.abort('Plugin Center disposed');
-    if (deferredPermissionsFocus !== undefined) window.clearTimeout(deferredPermissionsFocus);
+    cancelDeferredPermissionsFocus();
   });
 
   const projection = createMemo(() => props.projection);
@@ -142,6 +158,32 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
       tabSelection.commitNow('discover');
     }
     setInitialTabResolved(true);
+  });
+
+  createEffect(() => {
+    const request = permissionsFocusRequest();
+    const target = permissionsFocusTarget();
+    const selectedKey = selectedInventoryKey();
+    const dialogOpen = externalDialogOpen();
+    cancelDeferredPermissionsFocus();
+    if (!request
+      || request.id <= handledPermissionsFocusRequest
+      || request.inventoryKey !== selectedKey
+      || dialogOpen
+      || !target?.isConnected) return;
+    deferredPermissionsFocusFrame = window.requestAnimationFrame(() => {
+      deferredPermissionsFocusFrame = undefined;
+      deferredPermissionsFocusTimer = window.setTimeout(() => {
+        deferredPermissionsFocusTimer = undefined;
+        if (permissionsFocusRequest() !== request
+          || request.inventoryKey !== selectedInventoryKey()
+          || externalDialogOpen()
+          || permissionsFocusTarget() !== target
+          || !target.isConnected) return;
+        target.focus({ preventScroll: true });
+        handledPermissionsFocusRequest = request.id;
+      }, 0);
+    });
   });
 
   createEffect(() => {
@@ -380,6 +422,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
               mobileOpen={mobileDetailOpen()}
               mobileBackRef={(element) => { mobileDetailBackButton = element; }}
               detailHeadingRef={(element) => { detailHeadingRef = element; }}
+              permissionsRef={setPermissionsFocusTarget}
               onMobileBack={closeDetails}
               canManage={canManage()}
               canOpenSurfaces={canOpenSurfaces()}
@@ -423,11 +466,8 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
           setSelectedInventoryKey(inventoryKey);
           tabSelection.commitNow('installed');
           setMobileDetailOpen(true);
-          if (deferredPermissionsFocus !== undefined) window.clearTimeout(deferredPermissionsFocus);
-          deferredPermissionsFocus = window.setTimeout(() => {
-            deferredPermissionsFocus = undefined;
-            pluginCenterPanelRef?.querySelector<HTMLElement>('[data-plugin-permissions]')?.focus({ preventScroll: true });
-          }, 0);
+          nextPermissionsFocusRequest += 1;
+          setPermissionsFocusRequest({ id: nextPermissionsFocusRequest, inventoryKey });
         }}
       />
     </PluginCenterShell>
@@ -607,6 +647,7 @@ export function PluginCenterDetails(props: {
   mobileOpen?: boolean;
   mobileBackRef?: (element: HTMLButtonElement) => void;
   detailHeadingRef?: (element: HTMLHeadingElement) => void;
+  permissionsRef?: (element: HTMLElement) => void;
   onMobileBack?: () => void;
   canManage: boolean;
   canOpenSurfaces: boolean;
@@ -670,6 +711,7 @@ export function PluginCenterDetails(props: {
               canManage={props.canManage}
               commandPending={props.commandPending}
               onCommand={props.onCommand}
+              focusTargetRef={props.permissionsRef}
             />
 
             <details class="border-t pt-4" data-plugin-technical-details>
@@ -703,6 +745,7 @@ function PluginPermissionInventory(props: {
   canManage: boolean;
   commandPending: boolean;
   onCommand: (command: PluginLifecycleCommand) => void;
+  focusTargetRef?: (element: HTMLElement) => void;
 }): JSX.Element {
   const i18n = useI18n();
   const [confirmation, setConfirmation] = createSignal<{ permissionID: string; grant: boolean } | null>(null);
@@ -727,7 +770,7 @@ function PluginPermissionInventory(props: {
   return (
     <Show when={authorization()}>
       {(inventory) => (
-        <section data-plugin-permissions tabIndex={-1}>
+        <section ref={props.focusTargetRef} data-plugin-permissions tabIndex={-1}>
           <div class="flex items-start justify-between gap-3 border-b pb-2">
             <div>
               <h3 class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
