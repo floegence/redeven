@@ -583,6 +583,14 @@ describe('plugin management browser geometry and interaction', () => {
     expectNoHorizontalOverflow(shell);
     expect(host.querySelector('[data-plugin-center-details]')).toBeNull();
     expect(getComputedStyle(item).boxShadow).toBe('none');
+    const filterTriggers = Array.from(host.querySelectorAll<HTMLElement>('[data-plugin-center-filter]'));
+    expect(filterTriggers).toHaveLength(3);
+    expect(filterTriggers.map((trigger) => trigger.textContent)).toEqual(expect.arrayContaining([
+      expect.stringContaining('Plugin source: All'),
+      expect.stringContaining('Trust: All'),
+      expect.stringContaining('Lifecycle: All'),
+    ]));
+    filterTriggers.forEach((trigger) => expect(trigger.querySelector('svg')).not.toBeNull());
 
     item.click();
     await settle();
@@ -598,6 +606,51 @@ describe('plugin management browser geometry and interaction', () => {
       expect(masterRect.right).toBeLessThanOrEqual(detailsRect.left + 1);
     }
   });
+
+  it('opens a filter from the keyboard and restores focus when dismissed', async () => {
+    await page.viewport(390, 844);
+    const host = mountPluginCenter();
+    await settle();
+    const source = host.querySelector<HTMLElement>('[data-plugin-center-filter="source"]')!;
+    const sourceTrigger = source.closest<HTMLElement>('[data-floe-dropdown-trigger]')!;
+    const trustTrigger = host.querySelector<HTMLElement>('[data-plugin-center-filter="trust"]')!
+      .closest<HTMLElement>('[data-floe-dropdown-trigger]')!;
+    expect(source.matches('button, [role="button"]')).toBe(false);
+    expect(source.tabIndex).toBe(-1);
+    expect(sourceTrigger.tabIndex).toBe(0);
+    sourceTrigger.focus();
+    await userEvent.keyboard('{Enter}');
+    await settle();
+    expect(sourceTrigger.getAttribute('aria-expanded')).toBe('true');
+    await userEvent.keyboard('{Escape}');
+    await settle();
+    expect(sourceTrigger.getAttribute('aria-expanded')).not.toBe('true');
+    expect(document.activeElement).toBe(sourceTrigger);
+    await userEvent.tab();
+    expect(document.activeElement).toBe(trustTrigger);
+  });
+
+  it.each(viewportCases.filter(({ width }) => width <= 390))(
+    'keeps clear filters visible outside the horizontal filter track at $width px',
+    async (viewport) => {
+      await page.viewport(viewport.width, viewport.height);
+      const host = mountPluginCenter();
+      await settle();
+      const sourceTrigger = host.querySelector<HTMLElement>('[data-plugin-center-filter="source"]')!
+        .closest<HTMLElement>('[data-floe-dropdown-trigger]')!;
+      sourceTrigger.focus();
+      await userEvent.keyboard('{Enter}');
+      await settle();
+      await userEvent.keyboard('{ArrowDown}{Enter}');
+      await settle();
+
+      const clear = host.querySelector<HTMLButtonElement>('[data-plugin-center-clear-filters]')!;
+      expect(clear).not.toBeNull();
+      expect(clear.closest('[data-plugin-center-filter-scroll]')).toBeNull();
+      expectInsideViewport(clear, viewport);
+      expectTouchTarget(clear);
+    },
+  );
 
   it('supports the 320 px Plugin Center list-to-detail drill-in and back navigation', async () => {
     const viewport = viewportCases[0];
@@ -787,11 +840,14 @@ describe('plugin management browser geometry and interaction', () => {
     const highlights = dialog.querySelector<HTMLElement>('[data-external-plugin-review-highlights]')!;
     const report = dialog.querySelector<HTMLDetailsElement>('[data-external-plugin-report]')!;
     const footer = dialog.querySelector<HTMLElement>('[data-external-plugin-footer]')!;
-    expect(trustReview.textContent).toContain('Waiting for your approval');
-    expect(trustReview.textContent).not.toContain('I approve this exact inspected package');
+    expect(trustReview.textContent).toContain('Confirm this package source');
+    expect(trustReview.textContent).not.toContain('Waiting for your approval');
     expect(highlights.textContent).toContain('api.github.com:443');
+    expect(highlights.textContent).toContain('Permissions this plugin may request');
+    expect(highlights.textContent).toContain('Operations this plugin can request');
     expect(report.open).toBe(false);
     expect(document.activeElement).toBe(trustReview);
+    expect(consent.closest('footer')).toBeNull();
     expectInsideViewport(dialog, viewport);
     expectNoHorizontalOverflow(consent);
     expectNoHorizontalOverflow(trustReview);
@@ -800,6 +856,9 @@ describe('plugin management browser geometry and interaction', () => {
     expectNoHorizontalOverflow(footer);
     if (viewport.width === 320) {
       expectTouchTarget(consent);
+      consent.scrollIntoView({ block: 'end' });
+      await settle();
+      expect(consent.getBoundingClientRect().bottom).toBeLessThanOrEqual(footer.getBoundingClientRect().top + 1);
       const touchContractHost = mountMobileTouchTargetContract();
       await settle();
       expectTouchTarget(touchContractHost.querySelector<HTMLElement>('[data-plugin-mobile-touch-contract]')!);
