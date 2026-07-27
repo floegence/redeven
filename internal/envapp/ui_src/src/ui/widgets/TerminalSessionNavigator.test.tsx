@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   TerminalSessionNavigator,
+  describeTerminalSessionNavigationItem,
   type TerminalSessionNavigationItem,
 } from './TerminalSessionNavigator';
 
@@ -307,6 +308,35 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     expect(descriptionId).toBe('terminal-panel-test-session-status-agent-session');
     expect(host.querySelector(`#${descriptionId}`)?.textContent).toContain('This terminal could not be restored.');
     expect(host.querySelector(`#${descriptionId}`)?.textContent).not.toContain('Needs attention');
+  });
+
+  it('preserves localized sentence punctuation while completing unpunctuated statuses', () => {
+    const messages: Record<string, string> = {
+      'terminal.reconnecting': 'Terminal wird erneut verbunden...',
+      'terminal.terminalUnavailable': 'Dieses Terminal konnte nicht wiederhergestellt werden.',
+      'terminal.creatingStatus': 'Creating terminal',
+    };
+    const t = ((key: string) => messages[key] ?? '') as Parameters<typeof describeTerminalSessionNavigationItem>[1];
+    const base = navigationItem({
+      avatar: { kind: 'initial' },
+      outputState: 'none',
+      activitySource: 'none',
+      attentionState: 'none',
+    });
+
+    expect(describeTerminalSessionNavigationItem({
+      ...base,
+      transitionState: 'reconnecting',
+    }, t)).toBe('Terminal wird erneut verbunden...');
+    expect(describeTerminalSessionNavigationItem({
+      ...base,
+      transitionState: 'failed',
+      failureKind: 'runtime',
+    }, t)).toBe('Dieses Terminal konnte nicht wiederhergestellt werden.');
+    expect(describeTerminalSessionNavigationItem({
+      ...base,
+      transitionState: 'creating',
+    }, t)).toBe('Creating terminal.');
   });
 
   it('reserves four explicit trailing action cells even when actions are unavailable', () => {
