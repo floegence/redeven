@@ -12,6 +12,7 @@ const disposers: Array<() => void> = [];
 
 afterEach(() => {
   while (disposers.length > 0) disposers.pop()?.();
+  vi.useRealTimers();
   document.body.innerHTML = '';
 });
 
@@ -96,7 +97,7 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     expect(host.querySelector('[data-terminal-session-avatar="agent-session"]')?.className).not.toContain('rgba(');
     expect(host.querySelector('[data-terminal-output-trigger="agent-session"]')?.className).toContain('h-7 w-7');
     const rowButton = host.querySelector<HTMLButtonElement>('button[data-terminal-session-id="agent-session"]')!;
-    expect(rowButton.parentElement?.className).toContain('color-mix(in_srgb,var(--foreground)_6%,transparent)');
+    expect(rowButton.closest('[data-terminal-session-row]')?.className).toContain('color-mix(in_srgb,var(--foreground)_6%,transparent)');
     const descriptionId = rowButton.getAttribute('aria-describedby');
     expect(descriptionId).toBe('terminal-session-status-agent-session');
     expect(host.querySelector(`#${descriptionId}`)?.textContent).toContain('Unread terminal output');
@@ -209,18 +210,25 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     expect(host.querySelector(`#${descriptionId}`)?.textContent).toContain('Unread terminal output.');
   });
 
-  it('keeps the full title and subtitle independently discoverable', () => {
+  it('discloses the full title and subtitle from row focus and closes on Escape', async () => {
+    vi.useFakeTimers();
     const { host } = renderNavigator(navigationItem({
       title: 'root@build-runner-with-a-very-long-hostname.example.internal',
       subtitle: '/srv/repositories/redeven/feature/terminal-context',
       fullPath: '/srv/repositories/redeven/feature/terminal-context',
     }));
     const rowButton = host.querySelector<HTMLButtonElement>('button[data-terminal-session-id="agent-session"]')!;
-    const subtitle = host.querySelector<HTMLElement>('[data-testid="terminal-session-path-agent-session"]')!;
-
-    expect(rowButton.title).toBe('root@build-runner-with-a-very-long-hostname.example.internal');
     expect(rowButton.getAttribute('aria-label')).toContain('/srv/repositories/redeven/feature/terminal-context');
-    expect(subtitle.title).toBe('/srv/repositories/redeven/feature/terminal-context');
+    rowButton.focus();
+    await vi.advanceTimersByTimeAsync(300);
+    expect(document.body.querySelector('[role="tooltip"]')?.textContent)
+      .toContain('root@build-runner-with-a-very-long-hostname.example.internal');
+    expect(document.body.querySelector('[role="tooltip"]')?.textContent)
+      .toContain('/srv/repositories/redeven/feature/terminal-context');
+
+    rowButton.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await Promise.resolve();
+    expect(document.body.querySelector('[role="tooltip"]')?.getAttribute('aria-hidden') ?? 'true').toBe('true');
   });
 
   it('keeps ordinary session unread attention in the title slot', () => {

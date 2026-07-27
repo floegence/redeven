@@ -1172,6 +1172,62 @@ describe('TerminalPanel browser activity integration', () => {
     }
   });
 
+  it('keeps long session identity tooltips inside a transformed Workbench surface for hover and focus', async () => {
+    terminalSessionsState.sessions = [{
+      id: 'session-remote',
+      name: 'SSH',
+      workingDir: '/workspace',
+      createdAtMs: 1,
+      isActive: true,
+      lastActiveAtMs: 10,
+      executionContext: {
+        location: {
+          kind: 'remote',
+          phase: 'ready',
+          label: 'root@build-runner-with-a-very-long-hostname.example.internal',
+          authority: 'build-runner-with-a-very-long-hostname.example.internal',
+          workingDirectory: '/srv/repositories/redeven/feature/terminal-context',
+          source: 'osc7',
+        },
+        application: { kind: 'shell', identity: '', displayName: '' },
+        revision: 2,
+        updatedAtMs: 10,
+      },
+    }];
+    const surfaceHost = document.createElement('div');
+    surfaceHost.setAttribute('data-floe-dialog-surface-host', 'true');
+    surfaceHost.style.cssText = 'position:relative;width:640px;height:440px;transform:translateX(18px) scale(0.9);transform-origin:top left;';
+    document.body.appendChild(surfaceHost);
+    const dispose = render(() => <TerminalPanel variant="workbench" workbenchSelected />, surfaceHost);
+
+    try {
+      await settleTerminalPanel();
+      const row = surfaceHost.querySelector<HTMLButtonElement>('button[data-terminal-session-id="session-remote"]')!;
+      await page.elementLocator(row).hover();
+      await expect.poll(() => surfaceHost.querySelector('[role="tooltip"]')).toBeTruthy();
+
+      let tooltip = surfaceHost.querySelector<HTMLElement>('[role="tooltip"]')!;
+      expect(tooltip.textContent).toContain('root@build-runner-with-a-very-long-hostname.example.internal');
+      expect(tooltip.textContent).toContain('/srv/repositories/redeven/feature/terminal-context');
+      expect(tooltip.closest('[data-floe-dialog-surface-host="true"]')).toBe(surfaceHost);
+      expect(tooltip.getAttribute('data-floe-local-interaction-surface')).toBe('true');
+
+      await page.elementLocator(surfaceHost.querySelector<HTMLElement>('[data-testid="terminal-content"]')!).hover();
+      await expect.poll(() => surfaceHost.querySelector('[role="tooltip"]')).toBeNull();
+
+      row.focus();
+      await expect.poll(() => surfaceHost.querySelector('[role="tooltip"]')).toBeTruthy();
+      tooltip = surfaceHost.querySelector<HTMLElement>('[role="tooltip"]')!;
+      expect(tooltip.getAttribute('data-floe-local-interaction-surface')).toBe('true');
+      await userEvent.keyboard('{Escape}');
+      expect(tooltip.getAttribute('aria-hidden')).toBe('true');
+      await expect.poll(() => surfaceHost.querySelector('[role="tooltip"]')).toBeNull();
+    } finally {
+      dispose();
+      surfaceHost.remove();
+    }
+  });
+
   it('uses deterministic desktop and mobile slots and an inert unselected Workbench notice', async () => {
     terminalSessionsState.sessions = [terminalSessionsState.sessions[0]!];
     transportAttachState.effectiveCols = 60;

@@ -672,7 +672,17 @@ vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => ({
     </div>
   ),
   SurfaceFloatingLayer: (props: any) => {
-    const { children, layerRef, position, class: className, style, ...rest } = props;
+    const {
+      children,
+      layerRef,
+      position,
+      class: className,
+      style,
+      owner: _owner,
+      clamp: _clamp,
+      estimatedSize: _estimatedSize,
+      ...rest
+    } = props;
     return (
       <div
         ref={layerRef}
@@ -1878,17 +1888,17 @@ function findTerminalTabsRoot(host: HTMLElement): HTMLElement | null {
 
 function findTerminalTabStatus(host: HTMLElement, label: string, status: 'running' | 'unread' | 'none'): Element | null {
   const tab = findTerminalTab(host, label);
-  return tab?.parentElement?.querySelector(`[data-terminal-tab-status="${status}"]`) ?? tab?.querySelector(`[data-terminal-tab-status="${status}"]`) ?? null;
+  return tab?.closest('[data-terminal-session-row]')?.querySelector(`[data-terminal-tab-status="${status}"]`) ?? tab?.querySelector(`[data-terminal-tab-status="${status}"]`) ?? null;
 }
 
 function findTerminalActivityWave(host: HTMLElement, label: string): SVGElement | null {
   const tab = findTerminalTab(host, label);
-  return tab?.parentElement?.querySelector<SVGElement>('[data-terminal-output-state="streaming"]') ?? null;
+  return tab?.closest('[data-terminal-session-row]')?.querySelector<SVGElement>('[data-terminal-output-state="streaming"]') ?? null;
 }
 
 function findPendingTerminalTabStatus(host: HTMLElement, label: string, status: 'creating' | 'failed'): Element | null {
   const tab = findTerminalTab(host, label);
-  return tab?.parentElement?.querySelector(`[data-terminal-tab-status="${status}"]`) ?? tab?.querySelector(`[data-terminal-tab-status="${status}"]`) ?? null;
+  return tab?.closest('[data-terminal-session-row]')?.querySelector(`[data-terminal-tab-status="${status}"]`) ?? tab?.querySelector(`[data-terminal-tab-status="${status}"]`) ?? null;
 }
 
 function findTerminalWorkIndicator(host: HTMLElement): HTMLElement | null {
@@ -1896,7 +1906,7 @@ function findTerminalWorkIndicator(host: HTMLElement): HTMLElement | null {
 }
 
 async function openSidebarContextMenu(host: HTMLElement, label: string): Promise<HTMLDivElement> {
-  const row = findTerminalTab(host, label)?.parentElement;
+  const row = findTerminalTab(host, label)?.closest('[data-terminal-session-row]');
   expect(row).toBeTruthy();
 
   row?.dispatchEvent(new MouseEvent('contextmenu', {
@@ -2316,8 +2326,8 @@ describe('TerminalPanel', () => {
     const tab = findTerminalTab(host, 'Terminal 1');
     expect(tab).toBeTruthy();
     expect(tab?.className).toContain('cursor-pointer');
-    expect(tab?.getAttribute('title')).toBe('redeven');
-    const row = tab?.parentElement;
+    expect(tab?.getAttribute('title')).toBeNull();
+    const row = tab?.closest('[data-terminal-session-row]');
     expect(row?.textContent).toContain('redeven');
     const avatar = row?.querySelector<HTMLElement>('[data-terminal-session-avatar="session-1"]');
     expect(avatar?.textContent).toContain('R');
@@ -2327,7 +2337,7 @@ describe('TerminalPanel', () => {
     expect(pathText).toBeTruthy();
     expect(pathText?.tagName).toBe('SPAN');
     expect(pathText?.textContent).toContain('/workspace/redeven');
-    expect(pathText?.getAttribute('title')).toBe('/workspace/redeven');
+    expect(pathText?.getAttribute('title')).toBeNull();
     expect(pathText?.className).not.toContain('underline');
     expect(pathText?.className).toContain('pointer-events-none');
     expect(pathText?.className).toContain('cursor-pointer');
@@ -4028,6 +4038,9 @@ describe('TerminalPanel', () => {
     expect(statusBar?.textContent).toContain('This terminal could not be restored.');
     expect(host.querySelector('button[aria-label="Retry"]')?.classList.contains('size-11')).toBe(true);
     expect(host.querySelector('button[aria-label="Diagnostics"]')?.classList.contains('size-11')).toBe(true);
+    const disclosure = host.querySelector<HTMLButtonElement>('[data-testid="terminal-active-context-disclosure"]');
+    const descriptionId = disclosure?.getAttribute('aria-describedby') ?? '';
+    expect(host.querySelector(`#${descriptionId}`)?.textContent).toContain('This terminal could not be restored');
   });
 
   it('keeps activity input live while the upstream output pipeline has inactive backlog', async () => {
@@ -6307,6 +6320,7 @@ describe('TerminalPanel', () => {
   });
 
   it('does not restart the shared SSH opening budget when a second panel mounts late', async () => {
+    layoutState.mobile = true;
     terminalSessionsState.sessions = [{
       id: 'session-ssh-opening',
       name: 'SSH',
@@ -6369,6 +6383,9 @@ describe('TerminalPanel', () => {
     const secondRow = secondHost.querySelector<HTMLButtonElement>('button[data-terminal-session-id="session-ssh-opening"]');
     const statusDescriptionId = secondRow?.getAttribute('aria-describedby') ?? '';
     expect(secondHost.querySelector(`#${statusDescriptionId}`)?.textContent).toContain('Connecting to SSH');
+    const activeDisclosure = secondHost.querySelector<HTMLButtonElement>('[data-testid="terminal-active-context-disclosure"]');
+    const activeStatusId = activeDisclosure?.getAttribute('aria-describedby') ?? '';
+    expect(secondHost.querySelector(`#${activeStatusId}`)?.textContent).toContain('Connecting to SSH');
     nowSpy.mockRestore();
   });
 
@@ -7014,6 +7031,51 @@ describe('TerminalPanel', () => {
     expect(host.querySelector('[data-terminal-session-id="session-42"]')).not.toBeNull();
   });
 
+  it('announces an active local foreground process from the mobile context disclosure', async () => {
+    layoutState.mobile = true;
+    terminalPrefsState.mobileInputMode = 'system';
+    terminalSessionsState.sessions = [{
+      id: 'session-local-process',
+      name: 'Build',
+      workingDir: '/workspace/redeven',
+      createdAtMs: 1,
+      isActive: true,
+      lastActiveAtMs: 10,
+    }];
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+    publishTerminalForegroundCommand('session-local-process', {
+      phase: 'running', displayName: 'pnpm', revision: 2, updatedAtMs: Date.now(),
+    });
+    await new Promise<void>((resolve) => setTimeout(resolve, 170));
+    await settleTerminalPanel();
+
+    const disclosure = host.querySelector<HTMLButtonElement>('[data-testid="terminal-active-context-disclosure"]');
+    const descriptionId = disclosure?.getAttribute('aria-describedby') ?? '';
+    expect(host.querySelector(`#${descriptionId}`)?.textContent).toContain('The foreground process is running');
+    expect(host.querySelector('[data-terminal-process-state="running"]')).not.toBeNull();
+  });
+
+  it('announces a reconnecting active session from the mobile context disclosure', async () => {
+    layoutState.mobile = true;
+    terminalPrefsState.mobileInputMode = 'system';
+    const disconnected = new Error('connection interrupted');
+    disconnected.name = 'AbortError';
+    transportMocks.attach.mockRejectedValueOnce(disconnected);
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await waitForTerminalPanelCondition(() => {
+      const disclosure = host.querySelector<HTMLButtonElement>('[data-testid="terminal-active-context-disclosure"]');
+      const descriptionId = disclosure?.getAttribute('aria-describedby') ?? '';
+      expect(host.querySelector(`#${descriptionId}`)?.textContent).toContain('Reconnecting');
+    });
+  });
+
   it('uses a full-width mobile terminal with a dismissible session drawer and restores focus after selection', async () => {
     layoutState.mobile = true;
     terminalPrefsState.mobileInputMode = 'system';
@@ -7088,6 +7150,10 @@ describe('TerminalPanel', () => {
 
     const contextDisclosure = host.querySelector<HTMLButtonElement>('[data-testid="terminal-active-context-disclosure"]');
     expect(contextDisclosure?.getAttribute('aria-label')).toContain('build-runner-with-a-very-long-hostname.example.internal');
+    const contextStatusId = contextDisclosure?.getAttribute('aria-describedby') ?? '';
+    const contextStatus = host.querySelector(`#${contextStatusId}`)?.textContent ?? '';
+    expect(contextStatus).toContain('Agent CLI: Codex');
+    expect(contextStatus).toContain('User input');
     contextDisclosure?.focus();
     contextDisclosure?.click();
     await Promise.resolve();

@@ -235,6 +235,28 @@ function terminalActivityTooltip(
   return unread ? `${activity}. ${t('terminal.unreadOutputDescription')}` : activity;
 }
 
+export function describeTerminalSessionNavigationItem(
+  item: TerminalSessionNavigationItem,
+  t: ReturnType<typeof useI18n>['t'],
+): string {
+  const agentPresentation = item.avatar.kind === 'agent'
+    ? TERMINAL_AGENT_CLI_PRESENTATIONS[item.avatar.identity]
+    : null;
+  return [
+    agentPresentation ? t('terminal.agentCliDescription', { name: agentPresentation.label }) : '',
+    item.transitionState === 'creating' ? `${t('terminal.creatingStatus')}.` : '',
+    item.transitionState === 'reconnecting' ? `${t('terminal.reconnecting')}.` : '',
+    item.transitionState === 'opening' ? `${t('terminal.remoteOpeningStatus')}.` : '',
+    item.failureKind === 'creation' ? `${t('terminal.creationFailedStatus')}.` : '',
+    item.failureKind === 'runtime' ? `${t('terminal.terminalUnavailable')}.` : '',
+    item.processState === 'running' && item.transitionState === 'none' ? t('terminal.processRunningDescription') : '',
+    item.outputState !== 'none' && item.activitySource === 'semantic' ? `${t('codexActivity.status.working')}.` : '',
+    item.outputState !== 'none' && item.activitySource === 'output' ? `${t('terminal.outputStreaming')}.` : '',
+    item.attentionState === 'waiting' ? t('codex.pendingRequests.titleByType.userInput') : '',
+    item.attentionState === 'unread' ? t('terminal.unreadOutputDescription') : '',
+  ].filter(Boolean).join(' ');
+}
+
 export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
   const i18n = useI18n();
   const sidebarWidth = () => (props.mobile ? 232 : 286);
@@ -369,56 +391,57 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                       const agentPresentation = createMemo(() => agentIdentity()
                         ? TERMINAL_AGENT_CLI_PRESENTATIONS[agentIdentity()!]
                         : null);
-                      const statusDescription = createMemo(() => [
-                        agentPresentation() ? i18n.t('terminal.agentCliDescription', { name: agentPresentation()!.label }) : '',
-                        item().transitionState === 'creating' ? `${i18n.t('terminal.creatingStatus')}.` : '',
-                        item().transitionState === 'reconnecting' ? `${i18n.t('terminal.reconnecting')}.` : '',
-                        item().transitionState === 'opening' ? `${i18n.t('terminal.remoteOpeningStatus')}.` : '',
-                        item().failureKind === 'creation' ? `${i18n.t('terminal.creationFailedStatus')}.` : '',
-                        item().failureKind === 'runtime' ? `${i18n.t('terminal.terminalUnavailable')}.` : '',
-                        item().processState === 'running' && item().transitionState === 'none' ? i18n.t('terminal.processRunningDescription') : '',
-                        item().outputState !== 'none' && item().activitySource === 'semantic' ? `${i18n.t('codexActivity.status.working')}.` : '',
-                        item().outputState !== 'none' && item().activitySource === 'output' ? `${i18n.t('terminal.outputStreaming')}.` : '',
-                        item().attentionState === 'waiting' ? i18n.t('codex.pendingRequests.titleByType.userInput') : '',
-                        item().attentionState === 'unread' ? i18n.t('terminal.unreadOutputDescription') : '',
-                      ].filter(Boolean).join(' '));
+                      const statusDescription = createMemo(() => describeTerminalSessionNavigationItem(item(), i18n.t));
                       return (
                         <div
+                          data-terminal-session-row={sessionId}
                           class={`group relative overflow-hidden rounded-md border px-2.5 py-2 pr-16 text-xs transition-colors duration-75 ${sidebarActive()
                             ? 'border-border/20 bg-sidebar-accent text-sidebar-accent-foreground shadow-[0_1px_3px_color-mix(in_srgb,var(--foreground)_6%,transparent)]'
                             : 'border-transparent text-sidebar-foreground/80 hover:border-border/15 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground'}`}
                           onContextMenu={(event) => props.onOpenContextMenu(event, item())}
                         >
-                          <button
-                            type="button"
-                            class="absolute inset-0 z-0 w-full cursor-pointer rounded-md focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-sidebar-ring"
-                            data-terminal-session-id={sessionId}
-                            data-terminal-session-active={sidebarActive() ? 'true' : 'false'}
-                            data-terminal-session-index={index() + 1}
-                            aria-label={`${item().label}: ${item().title}${agentPresentation() ? `, ${agentPresentation()!.label}` : ''}${item().subtitle ? ` ${item().subtitle}` : ''}`}
-                            aria-describedby={statusDescription() ? `terminal-session-status-${sessionId}` : undefined}
-                            aria-current={committedActive() ? 'page' : undefined}
-                            title={item().title}
-                            onPointerDown={(event) => props.onPreviewSession(event, sessionId)}
-                            onPointerUp={() => queueMicrotask(props.onResetSessionPreview)}
-                            onPointerCancel={props.onResetSessionPreview}
-                            onClick={() => props.onSelectSession(sessionId)}
-                            onKeyDown={(event) => props.onOpenKeyboardMenu(event, item())}
+                          <Tooltip
+                            content={(
+                              <span class="flex max-w-[min(82vw,360px)] flex-col gap-0.5 text-left">
+                                <span class="break-words font-semibold">{item().title}</span>
+                                <Show when={item().subtitle}>
+                                  <span class="break-all text-popover-foreground/75">{item().subtitle}</span>
+                                </Show>
+                              </span>
+                            )}
+                            placement="right"
+                            anchorClass="!absolute inset-0 z-0 !block"
                           >
-                            <span class="sr-only">{item().label}</span>
-                            <Show when={item().processState !== 'none'}>
-                              <span class="sr-only" data-terminal-tab-status={item().processState} />
-                            </Show>
-                            <Show when={item().attentionState !== 'none'}>
-                              <span class="sr-only" data-terminal-tab-status={item().attentionState} />
-                            </Show>
-                            <Show when={item().processState === 'none' && item().attentionState === 'none'}>
-                              <span class="sr-only" data-terminal-tab-status="none" />
-                            </Show>
-                            <Show when={statusDescription()}>
-                              <span class="sr-only" id={`terminal-session-status-${sessionId}`}>{statusDescription()}</span>
-                            </Show>
-                          </button>
+                            <button
+                              type="button"
+                              class="h-full w-full cursor-pointer rounded-md focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-sidebar-ring"
+                              data-terminal-session-id={sessionId}
+                              data-terminal-session-active={sidebarActive() ? 'true' : 'false'}
+                              data-terminal-session-index={index() + 1}
+                              aria-label={`${item().label}: ${item().title}${agentPresentation() ? `, ${agentPresentation()!.label}` : ''}${item().subtitle ? ` ${item().subtitle}` : ''}`}
+                              aria-describedby={statusDescription() ? `terminal-session-status-${sessionId}` : undefined}
+                              aria-current={committedActive() ? 'page' : undefined}
+                              onPointerDown={(event) => props.onPreviewSession(event, sessionId)}
+                              onPointerUp={() => queueMicrotask(props.onResetSessionPreview)}
+                              onPointerCancel={props.onResetSessionPreview}
+                              onClick={() => props.onSelectSession(sessionId)}
+                              onKeyDown={(event) => props.onOpenKeyboardMenu(event, item())}
+                            >
+                              <span class="sr-only">{item().label}</span>
+                              <Show when={item().processState !== 'none'}>
+                                <span class="sr-only" data-terminal-tab-status={item().processState} />
+                              </Show>
+                              <Show when={item().attentionState !== 'none'}>
+                                <span class="sr-only" data-terminal-tab-status={item().attentionState} />
+                              </Show>
+                              <Show when={item().processState === 'none' && item().attentionState === 'none'}>
+                                <span class="sr-only" data-terminal-tab-status="none" />
+                              </Show>
+                              <Show when={statusDescription()}>
+                                <span class="sr-only" id={`terminal-session-status-${sessionId}`}>{statusDescription()}</span>
+                              </Show>
+                            </button>
+                          </Tooltip>
                           <Show when={sidebarActive()}>
                             <span class="absolute left-0 top-2 bottom-2 z-10 w-[2px] rounded-full bg-primary" aria-hidden="true" />
                           </Show>
@@ -535,7 +558,6 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                                   </Show>
                                   <span
                                     class="pointer-events-none min-w-0 flex-1 cursor-pointer truncate text-[11px] leading-6 text-muted-foreground/75"
-                                    title={item().subtitle}
                                     data-terminal-session-path={sessionId}
                                     data-testid={`terminal-session-path-${sessionId}`}
                                   >
