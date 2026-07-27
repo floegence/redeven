@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"errors"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -30,16 +29,6 @@ type resolvedUploadAttachment struct {
 	Name     string
 	MimeType string
 	Size     int64
-}
-
-func parseUploadIDFromURL(raw string) string {
-	raw = strings.TrimSpace(raw)
-	if !strings.HasPrefix(raw, uploadURLPrefix) {
-		return ""
-	}
-	raw = strings.TrimPrefix(raw, uploadURLPrefix)
-	raw = strings.Trim(path.Clean("/"+raw), "/")
-	return strings.TrimSpace(raw)
 }
 
 func uniqueStrings(items []string) []string {
