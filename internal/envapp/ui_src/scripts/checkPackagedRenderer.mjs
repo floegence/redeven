@@ -540,6 +540,12 @@ async function verifyBuiltPluginInstallRouting(browser) {
 
     const pluginCenter = page.locator('[data-plugin-center-view]');
     await pluginCenter.waitFor({ state: 'visible', timeout: 10_000 });
+    const containersItem = pluginCenter.locator('[data-plugin-center-item]').filter({ hasText: 'Containers' });
+    if (await containersItem.count() !== 1) {
+      throw new Error(`built Containers catalog item count = ${await containersItem.count()}, expected 1`);
+    }
+    await containersItem.click();
+    await pluginCenter.locator('[data-plugin-center-details]').waitFor({ state: 'visible', timeout: 10_000 });
     const containersInstall = pluginCenter.locator('[data-plugin-action="install"]');
     if (await containersInstall.count() !== 1) {
       throw new Error(`built Containers Install action count = ${await containersInstall.count()}, expected 1`);
