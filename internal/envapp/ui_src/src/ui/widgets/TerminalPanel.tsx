@@ -113,6 +113,7 @@ import {
   TerminalSessionChromeIcon,
   TerminalSessionProcessBadge,
   TerminalOutputStatusGlyph,
+  describeTerminalSessionNavigationItem,
   type TerminalSessionAttentionState,
   type TerminalSessionNavigationItem,
   type TerminalSessionProcessState,
@@ -4291,6 +4292,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     }
     return '';
   });
+  const activeToolbarStatusDescription = createMemo(() => {
+    const item = activeSessionListItem();
+    return item ? describeTerminalSessionNavigationItem(item, i18n.t) : '';
+  });
   const mobileBackgroundAttention = createMemo<TerminalSessionAttentionState>(() => {
     const activeId = activeDisplaySessionId();
     let unread = false;
@@ -4416,6 +4421,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                       type="button"
                       class="block w-full min-w-0 max-w-full cursor-pointer overflow-hidden text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                       aria-label={[activeToolbarTitle(), activeToolbarSubtitle()].filter(Boolean).join(', ')}
+                      aria-describedby={activeToolbarStatusDescription() ? 'terminal-active-context-status' : undefined}
                       data-testid="terminal-active-context-disclosure"
                     >
                       <span
@@ -4436,6 +4442,9 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                       </Show>
                     </button>
                   </Tooltip>
+                  <Show when={activeToolbarStatusDescription()}>
+                    <span class="sr-only" id="terminal-active-context-status">{activeToolbarStatusDescription()}</span>
+                  </Show>
                 </div>
               </div>
               <Show when={isMobileLayout()}>

@@ -53,7 +53,7 @@ describe('Tooltip', () => {
     document.body.innerHTML = '';
   });
 
-  it('renders the floating layer through document.body instead of the local trigger subtree', async () => {
+  it('renders through the surface-aware floating layer outside the trigger subtree', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -77,6 +77,7 @@ describe('Tooltip', () => {
       expect(tooltip?.style.visibility).toBe('visible');
       expect(tooltip?.className).toContain('text-popover-foreground');
       expect(tooltip?.className).toContain('redeven-surface-overlay');
+      expect(tooltip?.getAttribute('data-floe-surface-floating-layer')).toBe('true');
     } finally {
       dispose();
     }
@@ -148,4 +149,36 @@ describe('Tooltip', () => {
       dispose();
     }
   });
+
+  it('dismisses a hover or focus tooltip when its trigger is activated', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <Tooltip content="Remote session identity" delay={0}>
+        <button type="button">Select session</button>
+      </Tooltip>
+    ), host);
+
+    try {
+      const anchor = host.querySelector('[data-redeven-tooltip-anchor]') as HTMLElement;
+      const trigger = host.querySelector('button') as HTMLButtonElement;
+
+      anchor.dispatchEvent(new MouseEvent('mouseenter'));
+      trigger.focus();
+      await flushPositioning();
+      expect(document.body.querySelector('[role="tooltip"]')).toBeTruthy();
+
+      trigger.click();
+      await Promise.resolve();
+      expect(document.body.querySelector('[role="tooltip"]')).toBeNull();
+
+      trigger.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+      await flushPositioning();
+      expect(document.body.querySelector('[role="tooltip"]')).toBeNull();
+    } finally {
+      dispose();
+    }
+  });
+
 });

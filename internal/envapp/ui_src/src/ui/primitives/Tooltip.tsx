@@ -1,7 +1,6 @@
 import { Show, createEffect, createSignal, onCleanup, createMemo, type JSX } from 'solid-js';
-import { Portal } from 'solid-js/web';
 import { cn } from '@floegence/floe-webapp-core';
-import { createFloatingPresence } from '@floegence/floe-webapp-core/ui';
+import { createFloatingPresence, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
 import { resolveAnchoredOverlayPosition, type AnchoredOverlayPlacement, type AnchoredOverlayPosition } from './anchoredOverlay';
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 
@@ -11,6 +10,7 @@ export interface TooltipProps {
   placement?: AnchoredOverlayPlacement;
   delay?: number;
   class?: string;
+  anchorClass?: string;
   clickToToggle?: boolean;
 }
 
@@ -40,6 +40,7 @@ function tooltipArrowStyle(position: AnchoredOverlayPosition): JSX.CSSProperties
  */
 export function Tooltip(props: TooltipProps) {
   const [visible, setVisible] = createSignal(false);
+  const [forceUnmount, setForceUnmount] = createSignal(false);
   const tooltipPresence = createFloatingPresence({
     open: visible,
     exitDurationMs: 80,
@@ -105,17 +106,25 @@ export function Tooltip(props: TooltipProps) {
     clearTimeoutHandle();
     const delay = props.delay ?? 300;
     if (delay <= 0) {
+      setForceUnmount(false);
       setVisible(true);
       return;
     }
     timeout = setTimeout(() => {
       timeout = undefined;
+      setForceUnmount(false);
       setVisible(true);
     }, delay);
   };
 
   const hide = () => {
     clearTimeoutHandle();
+    setVisible(false);
+  };
+
+  const dismissTransient = () => {
+    clearTimeoutHandle();
+    setForceUnmount(true);
     setVisible(false);
   };
 
@@ -133,10 +142,11 @@ export function Tooltip(props: TooltipProps) {
     window.visualViewport?.addEventListener('resize', handleViewportChange);
     window.visualViewport?.addEventListener('scroll', handleViewportChange);
     const handleOutsidePointerDown = (event: PointerEvent) => {
-      if (!props.clickToToggle || anchorRef?.contains(event.target as Node)) return;
+      if (anchorRef?.contains(event.target as Node)) return;
       pinned = false;
       dismissed = true;
-      hide();
+      if (props.clickToToggle) hide();
+      else dismissTransient();
     };
     document.addEventListener('pointerdown', handleOutsidePointerDown, true);
 
@@ -176,7 +186,7 @@ export function Tooltip(props: TooltipProps) {
     <span
       ref={anchorRef}
       data-redeven-tooltip-anchor=""
-      class="relative inline-block max-w-full"
+      class={cn('relative inline-block max-w-full', props.anchorClass)}
       onMouseEnter={() => {
         hovered = true;
         dismissed = false;
@@ -187,7 +197,11 @@ export function Tooltip(props: TooltipProps) {
         if (!focused && !pinned) hide();
       }}
       onClick={() => {
-        if (!props.clickToToggle) return;
+        if (!props.clickToToggle) {
+          dismissed = true;
+          dismissTransient();
+          return;
+        }
         if (pinned) {
           pinned = false;
           dismissed = true;
@@ -199,7 +213,7 @@ export function Tooltip(props: TooltipProps) {
         }
       }}
       onKeyDown={(event) => {
-        if (!props.clickToToggle || event.key !== 'Escape' || !visible()) return;
+        if (event.key !== 'Escape' || !visible()) return;
         event.preventDefault();
         event.stopPropagation();
         pinned = false;
@@ -220,34 +234,35 @@ export function Tooltip(props: TooltipProps) {
     >
       {props.children}
 
-      <Show when={tooltipPresence.mounted()}>
-        <Portal>
+      <Show when={tooltipPresence.mounted() && !forceUnmount()}>
+        <SurfaceFloatingLayer
+          owner={anchorRef}
+          position={{ x: position()?.left ?? 0, y: position()?.top ?? 0 }}
+          clamp={false}
+          layerRef={(element) => {
+            tooltipRef = element;
+          }}
+          role="tooltip"
+          data-placement={resolvedPlacement()}
+          data-floating-presence={tooltipPresence.state()}
+          aria-hidden={tooltipPresence.exiting() ? 'true' : undefined}
+          class={cn(
+            'pointer-events-none z-[200] max-w-[min(24rem,calc(100vw-1rem))] rounded border px-2 py-1 text-xs leading-snug text-popover-foreground shadow-md',
+            redevenSurfaceRoleClass('overlay'),
+            'whitespace-normal break-words',
+            'floe-floating-presence floe-floating-tooltip',
+            props.class,
+          )}
+          style={{
+            visibility: position() ? 'visible' : 'hidden',
+          }}
+        >
+          {props.content}
           <div
-            ref={tooltipRef}
-            role="tooltip"
-            data-placement={resolvedPlacement()}
-            data-floating-presence={tooltipPresence.state()}
-            aria-hidden={tooltipPresence.exiting() ? 'true' : undefined}
-            class={cn(
-              'pointer-events-none fixed z-[200] max-w-[min(24rem,calc(100vw-1rem))] rounded border px-2 py-1 text-xs leading-snug text-popover-foreground shadow-md',
-              redevenSurfaceRoleClass('overlay'),
-              'whitespace-normal break-words',
-              'floe-floating-presence floe-floating-tooltip',
-              props.class,
-            )}
-            style={{
-              left: position() ? `${position()!.left}px` : '0px',
-              top: position() ? `${position()!.top}px` : '0px',
-              visibility: position() ? 'visible' : 'hidden',
-            }}
-          >
-            {props.content}
-            <div
-              class={cn('absolute h-0 w-0', tooltipArrowClass(resolvedPlacement()))}
-              style={position() ? tooltipArrowStyle(position()!) : undefined}
-            />
-          </div>
-        </Portal>
+            class={cn('absolute h-0 w-0', tooltipArrowClass(resolvedPlacement()))}
+            style={position() ? tooltipArrowStyle(position()!) : undefined}
+          />
+        </SurfaceFloatingLayer>
       </Show>
     </span>
   );
