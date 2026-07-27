@@ -650,11 +650,3 @@ func (m *processMonitor) stop() {
 		m.cancel()
 	}
 }
-
-func boundedDiagnostic(stderr []byte) string {
-	message := strings.TrimSpace(string(stderr))
-	if len(message) > 240 {
-		message = message[:240]
-	}
-	return message
-}

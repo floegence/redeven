@@ -33,6 +33,8 @@ type recordingMutationCoordinator struct {
 	calls  int
 }
 
+type mutationContextKey struct{}
+
 func (c *recordingMutationCoordinator) CoordinateFilesystemMutation(ctx context.Context, effect gitruntime.FilesystemEffect, fn func() error) error {
 	c.ctx = ctx
 	c.effect = effect
@@ -47,7 +49,7 @@ func TestCoordinateMutationUsesRPCContextAndEffect(t *testing.T) {
 		t.Fatal(err)
 	}
 	svc := NewServiceWithCoordinator(scope, coordinator)
-	ctx := context.WithValue(context.Background(), struct{}{}, "request")
+	ctx := context.WithValue(context.Background(), mutationContextKey{}, "request")
 	target := filepath.Join(t.TempDir(), "file.txt")
 	called := false
 	if err := svc.coordinateMutation(ctx, gitruntime.FilesystemEffect{Paths: []string{target}}, func() error {

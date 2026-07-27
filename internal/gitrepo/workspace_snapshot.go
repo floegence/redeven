@@ -450,11 +450,3 @@ func workspaceSnapshotRevision(status workspaceStatusSnapshot) string {
 	}
 	return hex.EncodeToString(h.Sum(nil))
 }
-
-func cloneWorkspaceStatus(status workspaceStatusSnapshot) workspaceStatusSnapshot {
-	status.Staged = append([]gitWorkspaceChange(nil), status.Staged...)
-	status.Unstaged = append([]gitWorkspaceChange(nil), status.Unstaged...)
-	status.Untracked = append([]gitWorkspaceChange(nil), status.Untracked...)
-	status.Conflicted = append([]gitWorkspaceChange(nil), status.Conflicted...)
-	return status
-}

@@ -131,12 +131,6 @@ func (l *limiter) tryAcquire() (func(), bool) {
 	}, true
 }
 
-func (l *limiter) count() int {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return l.active
-}
-
 // Admission is an idempotently released runtime reservation.
 type Admission struct {
 	release func()

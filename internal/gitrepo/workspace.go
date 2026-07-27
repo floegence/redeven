@@ -155,49 +155,6 @@ func workspacePageBounds(totalCount int, offset int, limit int) (int, int, int, 
 	return start, end, nextOffset, hasMore
 }
 
-func sliceWorkspaceItems(items []gitWorkspaceChange, offset int, limit int) ([]gitWorkspaceChange, int, bool) {
-	start, end, nextOffset, hasMore := workspacePageBounds(len(items), offset, limit)
-	if start >= end {
-		return nil, nextOffset, hasMore
-	}
-	return items[start:end], nextOffset, hasMore
-}
-
-func slicePendingWorkspaceItems(unstaged []gitWorkspaceChange, untracked []gitWorkspaceChange, offset int, limit int) ([]gitWorkspaceChange, []gitWorkspaceChange, int, int, bool) {
-	totalCount := len(unstaged) + len(untracked)
-	start, end, nextOffset, hasMore := workspacePageBounds(totalCount, offset, limit)
-	if start >= end {
-		return nil, nil, totalCount, nextOffset, hasMore
-	}
-
-	unstagedStart := clampWorkspaceIndex(start, len(unstaged))
-	unstagedEnd := clampWorkspaceIndex(end, len(unstaged))
-	var unstagedPage []gitWorkspaceChange
-	if unstagedStart < unstagedEnd {
-		unstagedPage = unstaged[unstagedStart:unstagedEnd]
-	}
-
-	untrackedStart := clampWorkspaceIndex(start-len(unstaged), len(untracked))
-	untrackedEnd := clampWorkspaceIndex(end-len(unstaged), len(untracked))
-	var untrackedPage []gitWorkspaceChange
-	if untrackedStart < untrackedEnd {
-		untrackedPage = untracked[untrackedStart:untrackedEnd]
-	}
-
-	return unstagedPage, untrackedPage, totalCount, nextOffset, hasMore
-}
-
-func clampWorkspaceIndex(value int, max int) int {
-	switch {
-	case value < 0:
-		return 0
-	case value > max:
-		return max
-	default:
-		return value
-	}
-}
-
 func (s *Service) listWorkspacePage(ctx context.Context, repo repoContext, section string, directoryPath string, offset int, limit int, expectedRevision string) (*listWorkspacePageResp, error) {
 	snapshot, release, err := s.workspaceSnapshot(ctx, repo.repoRootReal, expectedRevision)
 	if err != nil {
@@ -580,10 +537,6 @@ func workspaceSectionPathspecs(statusItems []gitWorkspaceChange) []string {
 
 func (s *Service) readWorkspaceSectionChanges(ctx context.Context, repoRoot string, section string, statusItems []gitWorkspaceChange) ([]gitWorkspaceChange, error) {
 	return s.readWorkspaceSectionChangesWithPathspecs(ctx, repoRoot, section, statusItems, nil)
-}
-
-func (s *Service) readWorkspaceSectionChangesPage(ctx context.Context, repoRoot string, section string, statusItems []gitWorkspaceChange) ([]gitWorkspaceChange, error) {
-	return s.readWorkspaceSectionChangesWithPathspecs(ctx, repoRoot, section, statusItems, workspaceSectionPathspecs(statusItems))
 }
 
 func (s *Service) readWorkspaceSectionChangesWithPathspecs(ctx context.Context, repoRoot string, section string, statusItems []gitWorkspaceChange, pathspecs []string) ([]gitWorkspaceChange, error) {
