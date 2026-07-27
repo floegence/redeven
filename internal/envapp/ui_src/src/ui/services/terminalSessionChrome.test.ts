@@ -46,6 +46,44 @@ describe('deriveTerminalSessionChrome', () => {
     });
   });
 
+  it('fails closed when execution context is missing or unknown', () => {
+    for (const executionContext of [
+      undefined,
+      {
+        location: { kind: 'unknown', phase: 'unknown', label: '', authority: '', workingDirectory: '', source: 'unknown' },
+        application: { kind: 'unknown', identity: '', displayName: '' },
+        revision: 0,
+        updatedAtMs: 0,
+      },
+    ] as const) {
+      expect(derive(session({ executionContext }))).toMatchObject({
+        localWorkingDir: '',
+        canUseLocalPath: false,
+        remote: false,
+      });
+    }
+  });
+
+  it('requires authoritative ready shell integration before granting local path capabilities', () => {
+    for (const location of [
+      { kind: 'local', phase: 'opening', label: '', authority: '', workingDirectory: '', source: 'shell_integration' },
+      { kind: 'local', phase: 'ready', label: '', authority: '', workingDirectory: '', source: 'foreground_candidate' },
+    ] as const) {
+      expect(derive(session({
+        executionContext: {
+          location,
+          application: { kind: 'shell', identity: '', displayName: '' },
+          revision: 2,
+          updatedAtMs: 2,
+        },
+      }))).toMatchObject({
+        localWorkingDir: '',
+        canUseLocalPath: false,
+        remote: false,
+      });
+    }
+  });
+
   it('keeps a confirmed ordinary foreground process independent from output and attention', () => {
     expect(derive(session(), {
       foregroundDisplayName: 'top',

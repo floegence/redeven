@@ -47,6 +47,7 @@ export type TerminalSessionNavigationItem = Readonly<{
 }>;
 
 export type TerminalSessionNavigatorProps = Readonly<{
+  accessibilityIdPrefix: string;
   mobile: boolean;
   drawerOpen: boolean;
   connected: boolean;
@@ -419,7 +420,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                               data-terminal-session-active={sidebarActive() ? 'true' : 'false'}
                               data-terminal-session-index={index() + 1}
                               aria-label={`${item().label}: ${item().title}${agentPresentation() ? `, ${agentPresentation()!.label}` : ''}${item().subtitle ? ` ${item().subtitle}` : ''}`}
-                              aria-describedby={statusDescription() ? `terminal-session-status-${sessionId}` : undefined}
+                              aria-describedby={statusDescription() ? `${props.accessibilityIdPrefix}-session-status-${sessionId}` : undefined}
                               aria-current={committedActive() ? 'page' : undefined}
                               onPointerDown={(event) => props.onPreviewSession(event, sessionId)}
                               onPointerUp={() => queueMicrotask(props.onResetSessionPreview)}
@@ -438,7 +439,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                                 <span class="sr-only" data-terminal-tab-status="none" />
                               </Show>
                               <Show when={statusDescription()}>
-                                <span class="sr-only" id={`terminal-session-status-${sessionId}`}>{statusDescription()}</span>
+                                <span class="sr-only" id={`${props.accessibilityIdPrefix}-session-status-${sessionId}`}>{statusDescription()}</span>
                               </Show>
                             </button>
                           </Tooltip>

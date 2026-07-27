@@ -22,6 +22,7 @@ function renderNavigator(item: TerminalSessionNavigationItem, onSelectSession = 
   const itemById = new Map([[item.id, item]]);
   disposers.push(render(() => (
     <TerminalSessionNavigator
+      accessibilityIdPrefix="terminal-panel-test"
       mobile={false}
       drawerOpen={false}
       connected
@@ -99,7 +100,7 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     const rowButton = host.querySelector<HTMLButtonElement>('button[data-terminal-session-id="agent-session"]')!;
     expect(rowButton.closest('[data-terminal-session-row]')?.className).toContain('color-mix(in_srgb,var(--foreground)_6%,transparent)');
     const descriptionId = rowButton.getAttribute('aria-describedby');
-    expect(descriptionId).toBe('terminal-session-status-agent-session');
+    expect(descriptionId).toBe('terminal-panel-test-session-status-agent-session');
     expect(host.querySelector(`#${descriptionId}`)?.textContent).toContain('Unread terminal output');
     expect(rowButton.hasAttribute('aria-live')).toBe(false);
     expect(rowButton.hasAttribute('aria-busy')).toBe(false);
@@ -286,7 +287,7 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     const rowButton = host.querySelector<HTMLButtonElement>('button[data-terminal-session-id="agent-session"]')!;
     const descriptionId = rowButton.getAttribute('aria-describedby') ?? '';
 
-    expect(descriptionId).toBe('terminal-session-status-agent-session');
+    expect(descriptionId).toBe('terminal-panel-test-session-status-agent-session');
     expect(host.querySelector(`#${descriptionId}`)?.textContent).toContain('Creation failed');
     expect(host.querySelector(`#${descriptionId}`)?.textContent).not.toContain('Needs attention');
   });
@@ -303,7 +304,7 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     const rowButton = host.querySelector<HTMLButtonElement>('button[data-terminal-session-id="agent-session"]')!;
     const descriptionId = rowButton.getAttribute('aria-describedby') ?? '';
 
-    expect(descriptionId).toBe('terminal-session-status-agent-session');
+    expect(descriptionId).toBe('terminal-panel-test-session-status-agent-session');
     expect(host.querySelector(`#${descriptionId}`)?.textContent).toContain('This terminal could not be restored.');
     expect(host.querySelector(`#${descriptionId}`)?.textContent).not.toContain('Needs attention');
   });

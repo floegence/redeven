@@ -1,4 +1,4 @@
-import { For, Index, Show, batch, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
+import { For, Index, Show, batch, createEffect, createMemo, createSignal, createUniqueId, onCleanup } from 'solid-js';
 import { createUIFirstSelection, deferAfterPaint, isMacLikePlatform, matchKeybind, useCurrentWidgetId, useLayout, useNotification, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
 import { BugIcon, Copy, Download, Folder, Link, Menu, Refresh, Terminal, Trash, X } from '@floegence/floe-webapp-core/icons';
 import '@fontsource/iosevka/400.css';
@@ -889,6 +889,8 @@ const MoreVerticalIcon = (props: { class?: string }) => (
 
 function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const i18n = useI18n();
+  const accessibilityIdPrefix = `terminal-panel-${createUniqueId()}`;
+  const activeContextStatusId = `${accessibilityIdPrefix}-active-context-status`;
   const variant: TerminalPanelVariant = props.variant ?? 'panel';
   const protocol = useProtocol();
   const rpc = useRedevenRpc();
@@ -2051,7 +2053,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   };
 
   const openTerminalFileLinkTarget = async (target: TerminalResolvedLinkTarget) => {
-    if (!canBrowseFiles() || activeSessionChrome()?.remote) {
+    if (!canBrowseFiles() || !activeSessionChrome()?.canUseLocalPath) {
       return;
     }
 
@@ -2152,7 +2154,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const activeSessionWorkingDir = createMemo(() => {
     const chrome = activeSessionChrome();
-    if (chrome?.remote) return '';
+    if (!chrome?.canUseLocalPath) return '';
     return normalizeAskFlowerAbsolutePath(chrome?.localWorkingDir ?? '')
       || normalizeAskFlowerAbsolutePath(agentHomePathAbs())
       || '/';
@@ -2165,10 +2167,11 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   });
 
   const mobileKeyboardContext = createMemo(() => {
+    const canUseLocalPath = Boolean(activeSessionChrome()?.canUseLocalPath);
     return deriveTerminalMobileKeyboardContext({
       state: mobileKeyboardDraftState(),
       workingDirAbs: activeSessionWorkingDir(),
-      agentHomePathAbs: agentHomePathAbs(),
+      agentHomePathAbs: canUseLocalPath ? agentHomePathAbs() : '',
     });
   });
 
@@ -2471,8 +2474,9 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   });
 
   createEffect(() => {
+    const canUseLocalPath = Boolean(activeSessionChrome()?.canUseLocalPath);
     const query = mobileKeyboardContext().pathQuery;
-    if (!shouldUseFloeMobileKeyboard() || !query) {
+    if (!canUseLocalPath || !shouldUseFloeMobileKeyboard() || !query) {
       setMobileKeyboardPathEntries([]);
       return;
     }
@@ -2513,8 +2517,9 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   });
 
   createEffect(() => {
+    const canUseLocalPath = Boolean(activeSessionChrome()?.canUseLocalPath);
     const workingDir = activeSessionWorkingDir();
-    if (!shouldUseFloeMobileKeyboard() || !workingDir) {
+    if (!canUseLocalPath || !shouldUseFloeMobileKeyboard() || !workingDir) {
       setMobileKeyboardPackageScripts([]);
       return;
     }
@@ -4337,6 +4342,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       <Show when={connected()} fallback={<div class="p-4 text-xs text-muted-foreground">{i18n.t('terminal.notConnected')}</div>}>
         <div class="relative flex min-h-0 flex-1 overflow-hidden bg-background">
           <TerminalSessionNavigator
+            accessibilityIdPrefix={accessibilityIdPrefix}
             mobile={isMobileLayout()}
             drawerOpen={sessionDrawerOpen()}
             connected={connected()}
@@ -4421,7 +4427,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                       type="button"
                       class="block w-full min-w-0 max-w-full cursor-pointer overflow-hidden text-left focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                       aria-label={[activeToolbarTitle(), activeToolbarSubtitle()].filter(Boolean).join(', ')}
-                      aria-describedby={activeToolbarStatusDescription() ? 'terminal-active-context-status' : undefined}
+                      aria-describedby={activeToolbarStatusDescription() ? activeContextStatusId : undefined}
                       data-testid="terminal-active-context-disclosure"
                     >
                       <span
@@ -4443,7 +4449,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                     </button>
                   </Tooltip>
                   <Show when={activeToolbarStatusDescription()}>
-                    <span class="sr-only" id="terminal-active-context-status">{activeToolbarStatusDescription()}</span>
+                    <span class="sr-only" id={activeContextStatusId}>{activeToolbarStatusDescription()}</span>
                   </Show>
                 </div>
               </div>
