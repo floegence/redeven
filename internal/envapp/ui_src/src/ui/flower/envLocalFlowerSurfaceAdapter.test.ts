@@ -885,7 +885,7 @@ describe('Env local Flower surface adapter', () => {
     expect(sendUserTurn).not.toHaveBeenCalled();
   });
 
-  it('passes staged attachment ids without mixing upload identity into linked context', async () => {
+  it('serializes staged attachment ids into the strict turn input without mixing them into linked context', async () => {
     const turnBodies: unknown[] = [];
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/settings') {
@@ -944,8 +944,13 @@ describe('Env local Flower surface adapter', () => {
     expect(uploadAttachment).not.toHaveBeenCalled();
     expect(subscribeThread).toHaveBeenCalledWith({ threadId: 'thread_upload' });
     expect(turnBodies[0]).toMatchObject({
-      input: { text: 'review notes', attachment_ids: ['upl_notes'], context_action: contextAction },
+      input: {
+        text: 'review notes',
+        attachments: [{ attachment_id: 'upl_notes' }],
+        context_action: contextAction,
+      },
     });
+    expect((turnBodies[0] as { input: Record<string, unknown> }).input).not.toHaveProperty('attachment_ids');
   });
 
   it('allows attachment-only admission and rejects a truly empty turn', async () => {
@@ -1061,7 +1066,7 @@ describe('Env local Flower surface adapter', () => {
       input: {
         turn_id: 'client_reasoning-message',
         text: 'reason about this',
-        attachment_ids: [],
+        attachments: [],
       },
       options: expect.objectContaining({
         reasoning_selection: { level: 'high' },
@@ -1220,7 +1225,12 @@ describe('Env local Flower surface adapter', () => {
     }));
     expect(turnBodies[0]).toEqual(expect.objectContaining({
       thread_id: 'thread_existing',
+      input: expect.objectContaining({
+        text: 'continue existing thread',
+        attachments: [],
+      }),
     }));
+    expect((turnBodies[0] as { input: Record<string, unknown> }).input).not.toHaveProperty('attachment_ids');
   });
 
 	it('passes reasoning selection through input response continuations', async () => {
