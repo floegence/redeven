@@ -28,11 +28,11 @@ func (a *Adapter) CreatePreflight(req ContainerCreateRequest) (ResourcePlan, err
 	}
 	mounts := make([]MountInput, 0, len(req.Mounts))
 	for _, mount := range req.Mounts {
-		mounts = append(mounts, MountInput{Type: mount.Type, Source: mount.Source, Target: mount.Target, ReadOnly: mount.ReadOnly})
+		mounts = append(mounts, MountInput(mount))
 	}
 	devices := make([]DeviceInput, 0, len(req.Devices))
 	for _, device := range req.Devices {
-		devices = append(devices, DeviceInput{HostPath: device.HostPath, ContainerPath: device.ContainerPath, Permissions: device.Permissions})
+		devices = append(devices, DeviceInput(device))
 	}
 	runtime := RuntimeSummary{
 		Privileged: req.Privileged, NetworkMode: req.NetworkMode, PIDMode: req.PIDMode, IPCMode: req.IPCMode,
