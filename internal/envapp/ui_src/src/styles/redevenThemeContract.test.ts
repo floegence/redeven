@@ -117,7 +117,7 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('--redeven-surface-panel: rgb(41, 44, 51);');
     expect(src).toContain('--border: #59616e;');
     expect(src).toContain('--input: #68788f;');
-    expect(src).toContain('--chrome-border: #47515f;');
+    expect(src).toContain('--chrome-border: #4a5462;');
     expect(src).toContain('--sidebar-border: var(--chrome-border);');
     expect(src).toContain('--redeven-runtime-monitor-upload-line: var(--redeven-categorical-graph-5);');
     expect(src).toContain('--redeven-surface-main: var(--redeven-surface-panel);');
