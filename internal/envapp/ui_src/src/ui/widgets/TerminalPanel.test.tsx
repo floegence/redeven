@@ -774,6 +774,9 @@ vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => ({
             <button type="button" data-testid="mobile-keyboard-key-g" onClick={() => props.onKey?.('g')}>
               Send g
             </button>
+            <button type="button" data-testid="mobile-keyboard-key-path" onClick={() => props.onKey?.('cd ./')}>
+              Send path command
+            </button>
             <button type="button" data-testid="mobile-keyboard-dismiss" onClick={() => props.onDismiss?.()}>
               Dismiss
             </button>
@@ -1827,6 +1830,22 @@ function publishTerminalSessions() {
   }
 }
 
+function trustedLocalExecutionContext(workingDirectory: string, revision = 1) {
+  return {
+    location: {
+      kind: 'local' as const,
+      phase: 'ready' as const,
+      label: '',
+      authority: '',
+      workingDirectory,
+      source: 'shell_integration',
+    },
+    application: { kind: 'shell' as const, identity: '', displayName: '' },
+    revision,
+    updatedAtMs: revision * 10,
+  };
+}
+
 function publishTerminalForegroundCommand(
   sessionId: string,
   foregroundCommand: {
@@ -2147,6 +2166,7 @@ describe('TerminalPanel', () => {
         createdAtMs: 1,
         isActive: true,
         lastActiveAtMs: 10,
+        executionContext: trustedLocalExecutionContext('/workspace'),
       },
     ];
     terminalSessionsState.subscribers = [];
@@ -2314,6 +2334,7 @@ describe('TerminalPanel', () => {
         createdAtMs: 1,
         isActive: true,
         lastActiveAtMs: 10,
+        executionContext: trustedLocalExecutionContext('/workspace/redeven'),
       },
     ];
 
@@ -2357,6 +2378,7 @@ describe('TerminalPanel', () => {
         createdAtMs: 1,
         isActive: true,
         lastActiveAtMs: 10,
+        executionContext: trustedLocalExecutionContext('/workspace/alpha'),
       },
       {
         id: 'session-2',
@@ -2365,6 +2387,7 @@ describe('TerminalPanel', () => {
         createdAtMs: 2,
         isActive: false,
         lastActiveAtMs: 20,
+        executionContext: trustedLocalExecutionContext('/workspace/beta'),
       },
     ];
 
@@ -2415,6 +2438,7 @@ describe('TerminalPanel', () => {
         createdAtMs: 1,
         isActive: true,
         lastActiveAtMs: 10,
+        executionContext: trustedLocalExecutionContext('/workspace/alpha'),
       },
       {
         id: 'session-2',
@@ -2423,6 +2447,7 @@ describe('TerminalPanel', () => {
         createdAtMs: 2,
         isActive: false,
         lastActiveAtMs: 20,
+        executionContext: trustedLocalExecutionContext('/workspace/beta'),
       },
     ];
 
@@ -2463,6 +2488,7 @@ describe('TerminalPanel', () => {
         createdAtMs: 1,
         isActive: true,
         lastActiveAtMs: 10,
+        executionContext: trustedLocalExecutionContext('/workspace/redeven'),
       },
     ];
 
@@ -2487,6 +2513,7 @@ describe('TerminalPanel', () => {
         createdAtMs: 1,
         isActive: true,
         lastActiveAtMs: 10,
+        executionContext: trustedLocalExecutionContext('/workspace/alpha'),
       },
       {
         id: 'session-2',
@@ -2495,6 +2522,7 @@ describe('TerminalPanel', () => {
         createdAtMs: 2,
         isActive: false,
         lastActiveAtMs: 20,
+        executionContext: trustedLocalExecutionContext('/workspace/beta'),
       },
     ];
 
@@ -2527,6 +2555,7 @@ describe('TerminalPanel', () => {
         createdAtMs: 1,
         isActive: true,
         lastActiveAtMs: 10,
+        executionContext: trustedLocalExecutionContext('/workspace/alpha'),
       },
       {
         id: 'session-2',
@@ -2535,6 +2564,7 @@ describe('TerminalPanel', () => {
         createdAtMs: 2,
         isActive: false,
         lastActiveAtMs: 20,
+        executionContext: trustedLocalExecutionContext('/workspace/beta'),
       },
     ];
 
@@ -2632,6 +2662,7 @@ describe('TerminalPanel', () => {
         createdAtMs: 1,
         isActive: true,
         lastActiveAtMs: 10,
+        executionContext: trustedLocalExecutionContext('/workspace/redeven'),
       },
     ];
 
@@ -2661,6 +2692,7 @@ describe('TerminalPanel', () => {
         createdAtMs: 1,
         isActive: true,
         lastActiveAtMs: 10,
+        executionContext: trustedLocalExecutionContext('/workspace/redeven'),
       },
     ];
 
@@ -2692,6 +2724,7 @@ describe('TerminalPanel', () => {
         createdAtMs: 1,
         isActive: true,
         lastActiveAtMs: 10,
+        executionContext: trustedLocalExecutionContext('/workspace/alpha'),
       },
       {
         id: 'session-2',
@@ -2700,6 +2733,7 @@ describe('TerminalPanel', () => {
         createdAtMs: 2,
         isActive: false,
         lastActiveAtMs: 20,
+        executionContext: trustedLocalExecutionContext('/workspace/beta'),
       },
     ];
     terminalBufferLinesState.lines.set(24, '$ pnpm test');
@@ -2878,6 +2912,7 @@ describe('TerminalPanel', () => {
         createdAtMs: 1,
         isActive: true,
         lastActiveAtMs: 10,
+        executionContext: trustedLocalExecutionContext('/workspace/redeven'),
       },
     ];
 
@@ -5846,6 +5881,7 @@ describe('TerminalPanel', () => {
       createdAtMs: 1,
       isActive: true,
       lastActiveAtMs: 10,
+      executionContext: trustedLocalExecutionContext('/workspace/redeven'),
     }];
     let rejectFirstCreate!: (error: Error) => void;
     let resolveSecondCreate!: (session: typeof terminalSessionsState.sessions[number]) => void;
@@ -5912,6 +5948,7 @@ describe('TerminalPanel', () => {
       createdAtMs: 1,
       isActive: true,
       lastActiveAtMs: 10,
+      executionContext: trustedLocalExecutionContext('/workspace/redeven'),
     }];
     let rejectFirstCreate!: (error: Error) => void;
     let resolveSecondCreate!: (session: typeof terminalSessionsState.sessions[number]) => void;
@@ -6162,6 +6199,64 @@ describe('TerminalPanel', () => {
     expect(openFlowerTurnLauncherSpy).not.toHaveBeenCalled();
   });
 
+  it('fails closed for missing execution context across local path actions and mobile filesystem RPCs', async () => {
+    layoutState.mobile = true;
+    terminalPrefsState.mobileInputMode = 'floe';
+    terminalBufferLinesState.lines.set(0, 'src/app/server.ts:18:4 failed to compile');
+    terminalSessionsState.sessions = [{
+      id: 'session-unknown',
+      name: 'Terminal 1',
+      workingDir: '/workspace',
+      createdAtMs: 1,
+      isActive: true,
+      lastActiveAtMs: 10,
+    }];
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanelAfterPaint();
+
+    const provider = terminalCoreInstances[0]?.registeredLinkProviders[0];
+    expect(provider).toBeTruthy();
+    const links = await new Promise<any[] | undefined>((resolve) => {
+      provider.provideLinks(1, resolve);
+    });
+    expect(links ?? []).toHaveLength(0);
+
+    host.querySelector<HTMLButtonElement>('[data-testid="mobile-keyboard-key-path"]')?.click();
+    await settleTerminalPanel();
+    expect(rpcFsMocks.list).not.toHaveBeenCalled();
+    expect(rpcFsMocks.readFile).not.toHaveBeenCalled();
+
+    const menu = await openSidebarContextMenu(host, 'Terminal 1');
+    for (const label of ['Ask Flower', 'Files', 'Duplicate session']) {
+      const button = findContextMenuButton(menu, label);
+      expect(button).toBeTruthy();
+      expect(button?.disabled).toBe(true);
+      button?.click();
+    }
+    await settleTerminalPanel();
+    expect(openFlowerTurnLauncherSpy).not.toHaveBeenCalled();
+    expect(openFileBrowserAtPathSpy).not.toHaveBeenCalled();
+    expect(sessionsCoordinatorMocks.createSession).not.toHaveBeenCalled();
+    expect(openPreviewSpy).not.toHaveBeenCalled();
+
+    publishTerminalExecutionContext('session-unknown', {
+      location: {
+        kind: 'unknown', phase: 'unknown', label: '', authority: '', workingDirectory: '', source: 'unknown',
+      },
+      application: { kind: 'unknown', identity: '', displayName: '' },
+      revision: 2,
+      updatedAtMs: 20,
+    });
+    await settleTerminalPanelAfterPaint();
+    host.querySelector<HTMLButtonElement>('[data-testid="mobile-keyboard-key-path"]')?.click();
+    await settleTerminalPanel();
+    expect(rpcFsMocks.list).not.toHaveBeenCalled();
+    expect(rpcFsMocks.readFile).not.toHaveBeenCalled();
+  });
+
   it('revokes open menu path actions when a local session becomes remote', async () => {
     terminalSessionsState.sessions = [{
       id: 'session-1',
@@ -6386,6 +6481,21 @@ describe('TerminalPanel', () => {
     const activeDisclosure = secondHost.querySelector<HTMLButtonElement>('[data-testid="terminal-active-context-disclosure"]');
     const activeStatusId = activeDisclosure?.getAttribute('aria-describedby') ?? '';
     expect(secondHost.querySelector(`#${activeStatusId}`)?.textContent).toContain('Connecting to SSH');
+
+    const firstRow = firstHost.querySelector<HTMLButtonElement>('button[data-terminal-session-id="session-ssh-opening"]');
+    const firstDisclosure = firstHost.querySelector<HTMLButtonElement>('[data-testid="terminal-active-context-disclosure"]');
+    const describedBy = [firstRow, firstDisclosure, secondRow, activeDisclosure]
+      .map((element) => element?.getAttribute('aria-describedby') ?? '');
+    expect(describedBy.every(Boolean)).toBe(true);
+    expect(new Set(describedBy).size).toBe(describedBy.length);
+    for (const id of describedBy.slice(0, 2)) {
+      expect(firstHost.querySelector(`#${id}`)?.textContent).toContain('Connecting to SSH');
+      expect(secondHost.querySelector(`#${id}`)).toBeNull();
+    }
+    for (const id of describedBy.slice(2)) {
+      expect(secondHost.querySelector(`#${id}`)?.textContent).toContain('Connecting to SSH');
+      expect(firstHost.querySelector(`#${id}`)).toBeNull();
+    }
     nowSpy.mockRestore();
   });
 
@@ -6604,6 +6714,7 @@ describe('TerminalPanel', () => {
         createdAtMs: 1,
         isActive: true,
         lastActiveAtMs: 10,
+        executionContext: trustedLocalExecutionContext('/workspace'),
       },
       {
         id: 'session-2',
@@ -6612,6 +6723,7 @@ describe('TerminalPanel', () => {
         createdAtMs: 2,
         isActive: false,
         lastActiveAtMs: 5,
+        executionContext: trustedLocalExecutionContext('/workspace/repo'),
       },
     ];
 

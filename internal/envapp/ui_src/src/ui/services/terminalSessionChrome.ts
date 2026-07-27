@@ -55,8 +55,11 @@ export function deriveTerminalSessionChrome(input: Readonly<{
   const application = context.application;
   const remote = location?.kind === 'remote';
   const remotePhase = remote ? location?.phase ?? 'unknown' : 'unknown';
+  const canUseLocalPath = location?.kind === 'local'
+    && location.phase === 'ready'
+    && location.source === 'shell_integration';
   const sessionWorkingDir = compact(session.workingDir);
-  const localWorkingDir = remote ? '' : sessionWorkingDir;
+  const localWorkingDir = canUseLocalPath ? sessionWorkingDir : '';
   const remoteWorkingDir = remote ? compact(location?.workingDirectory) : '';
   const agentIdentity = application?.kind === 'agent_cli'
     ? application.identity as TerminalAgentCliIdentity
@@ -99,13 +102,13 @@ export function deriveTerminalSessionChrome(input: Readonly<{
   const transition = input.transition ?? 'none';
   if (transition === 'failed') {
     return {
-      title, subtitle, displayPath, localWorkingDir, canUseLocalPath: !remote, subtitleIcon,
+      title, subtitle, displayPath, localWorkingDir, canUseLocalPath, subtitleIcon,
       avatar, status: 'failed', statusSource: 'transition', processRunning, attention, remote, remotePhase,
     };
   }
   if (transition === 'creating' || transition === 'connecting' || transition === 'reconnecting') {
     return {
-      title, subtitle, displayPath, localWorkingDir, canUseLocalPath: !remote, subtitleIcon,
+      title, subtitle, displayPath, localWorkingDir, canUseLocalPath, subtitleIcon,
       avatar, status: 'spinner', statusSource: 'transition', processRunning, attention, remote, remotePhase,
     };
   }
@@ -119,37 +122,37 @@ export function deriveTerminalSessionChrome(input: Readonly<{
     && nowMs - openingObservedAtMs < TERMINAL_REMOTE_OPENING_SPINNER_MS
   ) {
     return {
-      title, subtitle, displayPath, localWorkingDir, canUseLocalPath: false, subtitleIcon,
+      title, subtitle, displayPath, localWorkingDir, canUseLocalPath, subtitleIcon,
       avatar, status: 'spinner', statusSource: 'transition', processRunning, attention, remote, remotePhase,
     };
   }
 
   if (workPhase === 'waiting_user') {
     return {
-      title, subtitle, displayPath, localWorkingDir, canUseLocalPath: !remote, subtitleIcon,
+      title, subtitle, displayPath, localWorkingDir, canUseLocalPath, subtitleIcon,
       avatar, status: 'attention', statusSource: 'semantic', processRunning, attention, remote, remotePhase,
     };
   }
   if (workPhase === 'working') {
     return {
-      title, subtitle, displayPath, localWorkingDir, canUseLocalPath: !remote, subtitleIcon,
+      title, subtitle, displayPath, localWorkingDir, canUseLocalPath, subtitleIcon,
       avatar, status: 'wave', statusSource: 'semantic', processRunning, attention, remote, remotePhase,
     };
   }
   if (workPhase === 'unknown' && (input.outputStreaming || session.outputActivity?.phase === 'streaming')) {
     return {
-      title, subtitle, displayPath, localWorkingDir, canUseLocalPath: !remote, subtitleIcon,
+      title, subtitle, displayPath, localWorkingDir, canUseLocalPath, subtitleIcon,
       avatar, status: 'wave', statusSource: 'output', processRunning, attention, remote, remotePhase,
     };
   }
   if (input.unread) {
     return {
-      title, subtitle, displayPath, localWorkingDir, canUseLocalPath: !remote, subtitleIcon,
+      title, subtitle, displayPath, localWorkingDir, canUseLocalPath, subtitleIcon,
       avatar, status: 'unread', statusSource: 'attention', processRunning, attention, remote, remotePhase,
     };
   }
   return {
-    title, subtitle, displayPath, localWorkingDir, canUseLocalPath: !remote, subtitleIcon,
+    title, subtitle, displayPath, localWorkingDir, canUseLocalPath, subtitleIcon,
     avatar, status: 'none', statusSource: 'none', processRunning, attention, remote, remotePhase,
   };
 }

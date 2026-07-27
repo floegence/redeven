@@ -735,6 +735,22 @@ function findTerminalTabStatus(host: HTMLElement, label: string, status: 'runnin
   return findTerminalTab(host, label)?.querySelector(`[data-terminal-tab-status="${status}"]`) ?? null;
 }
 
+function trustedLocalExecutionContext(workingDirectory: string) {
+  return {
+    location: {
+      kind: 'local',
+      phase: 'ready',
+      label: '',
+      authority: '',
+      workingDirectory,
+      source: 'shell_integration',
+    },
+    application: { kind: 'shell', identity: '', displayName: '' },
+    revision: 1,
+    updatedAtMs: 10,
+  };
+}
+
 beforeEach(() => {
   sessionStorage.clear();
   layoutState.mobile = false;
@@ -762,6 +778,7 @@ beforeEach(() => {
       createdAtMs: 1,
       isActive: true,
       lastActiveAtMs: 10,
+      executionContext: trustedLocalExecutionContext('/workspace'),
     },
     {
       id: 'session-2',
@@ -770,6 +787,7 @@ beforeEach(() => {
       createdAtMs: 2,
       isActive: false,
       lastActiveAtMs: 5,
+      executionContext: trustedLocalExecutionContext('/workspace/repo'),
     },
   ];
   terminalSessionsState.subscribers = [];
