@@ -9,6 +9,12 @@ fail() {
   exit 1
 }
 
+# Git exports repository-local variables to hooks. Clear them before creating
+# the foreign fixture repository so its commits cannot resolve back to Redeven.
+while IFS= read -r variable; do
+  unset "$variable"
+done < <(git rev-parse --local-env-vars)
+
 if grep -Eq 'build_assets|check_plugin_integration|check_gateway_protocol_contract|check_desktop|check_docker_runtime_e2e|check_final_integration' "$ROOT_DIR/.githooks/pre-commit"; then
   fail "pre-commit must contain only fast commit-time checks"
 fi
