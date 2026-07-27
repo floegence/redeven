@@ -2,11 +2,13 @@ package session
 
 import (
 	"bufio"
+	"errors"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -1007,6 +1009,15 @@ func TestFloretContextLifecycleBoundaryDoesNotUseHostHistoryAPIs(t *testing.T) {
 		}
 		name := entry.Name()
 		if entry.IsDir() {
+			if path != root {
+				nested, nestedErr := isNestedRepositoryRoot(path)
+				if nestedErr != nil {
+					return nestedErr
+				}
+				if nested {
+					return filepath.SkipDir
+				}
+			}
 			switch name {
 			case ".git", "node_modules", ".next", "dist", "build", "tmp":
 				return filepath.SkipDir
@@ -1036,6 +1047,48 @@ func TestFloretContextLifecycleBoundaryDoesNotUseHostHistoryAPIs(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("scan repository: %v", err)
+	}
+}
+
+func TestNestedRepositoryRootDetection(t *testing.T) {
+	t.Parallel()
+
+	repositoryRoot := repoRootForTest(t)
+	root := t.TempDir()
+	ordinaryDir := filepath.Join(root, "ordinary")
+	brokenMarkerDir := filepath.Join(root, "broken-marker")
+	symlinkMarkerDir := filepath.Join(root, "symlink-marker")
+	for _, dir := range []string{ordinaryDir, brokenMarkerDir, symlinkMarkerDir} {
+		if err := os.Mkdir(dir, 0o755); err != nil {
+			t.Fatalf("create fixture directory %s: %v", dir, err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(brokenMarkerDir, ".git"), []byte("not git metadata\n"), 0o644); err != nil {
+		t.Fatalf("create broken repository marker: %v", err)
+	}
+	if err := os.Symlink(filepath.Join(repositoryRoot, ".git"), filepath.Join(symlinkMarkerDir, ".git")); err != nil {
+		t.Fatalf("create symlink repository marker: %v", err)
+	}
+
+	for _, testCase := range []struct {
+		name string
+		path string
+		want bool
+	}{
+		{name: "current repository", path: repositoryRoot, want: true},
+		{name: "ordinary directory", path: ordinaryDir, want: false},
+		{name: "broken marker", path: brokenMarkerDir, want: false},
+		{name: "symlink marker", path: symlinkMarkerDir, want: false},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			got, err := isNestedRepositoryRoot(testCase.path)
+			if err != nil {
+				t.Fatalf("detect nested repository root: %v", err)
+			}
+			if got != testCase.want {
+				t.Fatalf("isNestedRepositoryRoot(%q) = %v, want %v", testCase.path, got, testCase.want)
+			}
+		})
 	}
 }
 
@@ -1402,6 +1455,42 @@ func floretBoundaryScanFile(path string) bool {
 	default:
 		return false
 	}
+}
+
+func isNestedRepositoryRoot(path string) (bool, error) {
+	markerPath := filepath.Join(path, ".git")
+	markerInfo, err := os.Lstat(markerPath)
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if markerInfo.Mode()&os.ModeSymlink != 0 {
+		return false, nil
+	}
+	if !markerInfo.IsDir() && !markerInfo.Mode().IsRegular() {
+		return false, nil
+	}
+
+	cmd := exec.Command("git", "-C", path, "rev-parse", "--show-toplevel")
+	output, err := cmd.Output()
+	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			return false, nil
+		}
+		return false, err
+	}
+	resolvedTopLevel, err := filepath.EvalSymlinks(strings.TrimSpace(string(output)))
+	if err != nil {
+		return false, err
+	}
+	resolvedPath, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return false, err
+	}
+	return filepath.Clean(resolvedTopLevel) == filepath.Clean(resolvedPath), nil
 }
 
 func repoRootForTest(t *testing.T) string {
