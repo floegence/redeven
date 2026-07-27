@@ -136,6 +136,37 @@ func TestAdapterPreservesPublishedContainerResourceFailures(t *testing.T) {
 	}
 }
 
+func TestAdapterV3ResourcesRemainOptionalForExistingEngineClients(t *testing.T) {
+	t.Parallel()
+	adapter := mustNewAdapter(t, &fakeEngineClient{})
+	if _, err := adapter.Stats(context.Background(), EngineDocker, "container_123"); !errors.Is(err, ErrResourceCapabilityUnsupported) {
+		t.Fatalf("Stats() error = %v, want ErrResourceCapabilityUnsupported", err)
+	}
+	if _, err := adapter.ListImages(context.Background(), EngineDocker); !errors.Is(err, ErrResourceCapabilityUnsupported) {
+		t.Fatalf("ListImages() error = %v, want ErrResourceCapabilityUnsupported", err)
+	}
+	if _, err := adapter.ListVolumes(context.Background(), EngineDocker); !errors.Is(err, ErrResourceCapabilityUnsupported) {
+		t.Fatalf("ListVolumes() error = %v, want ErrResourceCapabilityUnsupported", err)
+	}
+}
+
+func TestBuildResourcePlanProducesStableDigest(t *testing.T) {
+	t.Parallel()
+	target := map[string]any{"engine": string(EngineDocker), "container_id": "container_123"}
+	request := map[string]any{"engine": string(EngineDocker), "container_id": "container_123"}
+	first, err := BuildResourcePlan(MethodStart, target, request, RiskLevelLow, nil, false, "start container")
+	if err != nil {
+		t.Fatalf("BuildResourcePlan() error = %v", err)
+	}
+	second, err := BuildResourcePlan(MethodStart, target, request, RiskLevelLow, nil, false, "start container")
+	if err != nil {
+		t.Fatalf("BuildResourcePlan() second error = %v", err)
+	}
+	if first.PlanDigest == "" || first.PlanDigest != second.PlanDigest || !strings.HasPrefix(first.PlanDigest, "sha256:") {
+		t.Fatalf("plan digests = %q and %q", first.PlanDigest, second.PlanDigest)
+	}
+}
+
 func TestAdapterFollowLogsStreamsThroughFollowerClient(t *testing.T) {
 	client := &fakeFollowingEngineClient{fakeEngineClient: fakeEngineClient{}}
 	var lines []LogLine

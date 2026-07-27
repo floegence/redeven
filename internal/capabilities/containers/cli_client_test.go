@@ -185,6 +185,9 @@ func TestCLIClientActionsBuildSafeArgv(t *testing.T) {
 			"docker stop --time 10 container_123":   "container_123\n",
 			"docker restart --time 3 container_123": "container_123\n",
 			"docker rm --force container_123":       "container_123\n",
+			"docker pause container_123":            "container_123\n",
+			"docker unpause container_123":          "container_123\n",
+			"docker kill container_123":             "container_123\n",
 		},
 	}
 	client := &CLIClient{Runner: runner}
@@ -194,6 +197,9 @@ func TestCLIClientActionsBuildSafeArgv(t *testing.T) {
 		{Engine: EngineDocker, Method: MethodStop, ContainerID: "container_123", TimeoutSec: 10},
 		{Engine: EngineDocker, Method: MethodRestart, ContainerID: "container_123", TimeoutSec: 3},
 		{Engine: EngineDocker, Method: MethodRemove, ContainerID: "container_123", Force: true},
+		{Engine: EngineDocker, Method: MethodPause, ContainerID: "container_123"},
+		{Engine: EngineDocker, Method: MethodUnpause, ContainerID: "container_123"},
+		{Engine: EngineDocker, Method: MethodKill, ContainerID: "container_123"},
 	} {
 		result, err := client.Action(context.Background(), req)
 		if err != nil {
@@ -208,6 +214,9 @@ func TestCLIClientActionsBuildSafeArgv(t *testing.T) {
 		"docker stop --time 10 container_123",
 		"docker restart --time 3 container_123",
 		"docker rm --force container_123",
+		"docker pause container_123",
+		"docker unpause container_123",
+		"docker kill container_123",
 	}
 	if !reflect.DeepEqual(runner.calls, wantCalls) {
 		t.Fatalf("calls = %#v, want %#v", runner.calls, wantCalls)
@@ -230,6 +239,70 @@ func TestCLIClientPullImageParsesDigest(t *testing.T) {
 	}
 	if !result.Completed || result.Image.Reference != "ghcr.io/acme/api:latest" || result.Image.Digest != "sha256:feedface" {
 		t.Fatalf("pull result = %+v", result)
+	}
+}
+
+func TestCLIClientV3ResourcesParseDockerAndPodmanFormats(t *testing.T) {
+	t.Parallel()
+	runner := &fakeCommandRunner{outputs: map[string]string{
+		"docker stats --no-stream --format json container_123": `{"ID":"container_123","CPUPerc":"12.5%","MemUsage":"10.5MiB / 1GiB","NetIO":"1.5kB / 2MB"}`,
+		"docker images --no-trunc --format json":               `{"ID":"sha256:one","Repository":"ghcr.io/acme/api","Tag":"latest","Digest":"sha256:digest"}`,
+		"podman images --no-trunc --format json":               `[{"Id":"sha256:two","Reference":"quay.io/acme/api:stable","Digest":"sha256:pdigest"}]`,
+		"docker volume ls --format json":                       `{"Name":"data","Driver":"local","Scope":"local"}`,
+		"podman volume ls --format json":                       `{"name":"cache","driver":"local","scope":"local"}`,
+	}}
+	client := &CLIClient{Runner: runner}
+	stats, err := client.Stats(context.Background(), EngineDocker, "container_123")
+	if err != nil {
+		t.Fatalf("Stats() error = %v", err)
+	}
+	if stats.ContainerID != "container_123" || stats.CPUPercent != 12.5 || stats.MemoryBytes != int64(10.5*1024*1024) || stats.MemoryLimit != 1<<30 || stats.NetworkRxBytes != 1500 || stats.NetworkTxBytes != 2_000_000 {
+		t.Fatalf("stats = %+v", stats)
+	}
+	dockerImages, err := client.ListImages(context.Background(), EngineDocker)
+	if err != nil || len(dockerImages) != 1 || dockerImages[0].ID != "sha256:one" || dockerImages[0].Reference != "ghcr.io/acme/api:latest" {
+		t.Fatalf("docker images = %+v, err=%v", dockerImages, err)
+	}
+	podmanImages, err := client.ListImages(context.Background(), EnginePodman)
+	if err != nil || len(podmanImages) != 1 || podmanImages[0].ID != "sha256:two" || podmanImages[0].Reference != "quay.io/acme/api:stable" {
+		t.Fatalf("podman images = %+v, err=%v", podmanImages, err)
+	}
+	dockerVolumes, err := client.ListVolumes(context.Background(), EngineDocker)
+	if err != nil || len(dockerVolumes) != 1 || dockerVolumes[0].Name != "data" {
+		t.Fatalf("docker volumes = %+v, err=%v", dockerVolumes, err)
+	}
+	podmanVolumes, err := client.ListVolumes(context.Background(), EnginePodman)
+	if err != nil || len(podmanVolumes) != 1 || podmanVolumes[0].Name != "cache" {
+		t.Fatalf("podman volumes = %+v, err=%v", podmanVolumes, err)
+	}
+}
+
+func TestCLIClientV3ResourceMutationsBuildSafeArgv(t *testing.T) {
+	t.Parallel()
+	runner := &fakeCommandRunner{outputs: map[string]string{
+		"docker run -d --name api --restart always --network host --privileged -e MODE=prod ghcr.io/acme/api:latest sh -c sleep": "container_123\n",
+		"docker tag ghcr.io/acme/api:latest ghcr.io/acme/api:stable":                                                             "",
+		"docker image rm --force ghcr.io/acme/api:old":                                                                           "",
+		"docker volume create --driver local data":                                                                               "data\n",
+		"docker volume rm data": "",
+	}}
+	client := &CLIClient{Runner: runner}
+	created, err := client.CreateContainer(context.Background(), ContainerCreateRequest{Engine: EngineDocker, Name: "api", Image: "ghcr.io/acme/api:latest", Command: []string{"sh", "-c", "sleep"}, Env: []string{"MODE=prod"}, RestartPolicy: "always", NetworkMode: "host", Privileged: true})
+	if err != nil || created.ContainerID != "container_123" {
+		t.Fatalf("CreateContainer() = %+v, err=%v", created, err)
+	}
+	if err := client.TagImage(context.Background(), ImageTagRequest{Engine: EngineDocker, Image: "ghcr.io/acme/api:latest", Tag: "ghcr.io/acme/api:stable"}); err != nil {
+		t.Fatalf("TagImage() error = %v", err)
+	}
+	if err := client.RemoveImage(context.Background(), ImageRemoveRequest{Engine: EngineDocker, Image: "ghcr.io/acme/api:old", Force: true}); err != nil {
+		t.Fatalf("RemoveImage() error = %v", err)
+	}
+	volume, err := client.CreateVolume(context.Background(), VolumeCreateRequest{Engine: EngineDocker, Name: "data", Driver: "local"})
+	if err != nil || volume.Name != "data" {
+		t.Fatalf("CreateVolume() = %+v, err=%v", volume, err)
+	}
+	if err := client.RemoveVolume(context.Background(), VolumeRemoveRequest{Engine: EngineDocker, Name: "data"}); err != nil {
+		t.Fatalf("RemoveVolume() error = %v", err)
 	}
 }
 

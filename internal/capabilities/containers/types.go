@@ -21,16 +21,33 @@ func (e Engine) Valid() bool {
 type Method string
 
 const (
-	MethodStatus         Method = "containers.status"
-	MethodList           Method = "containers.list"
-	MethodInspect        Method = "containers.inspect"
-	MethodStartPreflight Method = "containers.start.preflight"
-	MethodStart          Method = "containers.start"
-	MethodStop           Method = "containers.stop"
-	MethodRestart        Method = "containers.restart"
-	MethodRemove         Method = "containers.remove"
-	MethodLogsTail       Method = "containers.logs.tail"
-	MethodImagesPull     Method = "images.pull"
+	MethodStatus                    Method = "containers.status"
+	MethodList                      Method = "containers.list"
+	MethodInspect                   Method = "containers.inspect"
+	MethodStartPreflight            Method = "containers.start.preflight"
+	MethodStart                     Method = "containers.start"
+	MethodStop                      Method = "containers.stop"
+	MethodRestart                   Method = "containers.restart"
+	MethodRemove                    Method = "containers.remove"
+	MethodLogsTail                  Method = "containers.logs.tail"
+	MethodImagesPull                Method = "images.pull"
+	MethodContainersStatsSnapshot   Method = "containers.stats.snapshot"
+	MethodImagesList                Method = "images.list"
+	MethodImagesInspect             Method = "images.inspect"
+	MethodImagesHistory             Method = "images.history"
+	MethodImagesTag                 Method = "images.tag"
+	MethodImagesRemove              Method = "images.remove"
+	MethodImagesPrune               Method = "images.prune"
+	MethodVolumesList               Method = "volumes.list"
+	MethodVolumesInspect            Method = "volumes.inspect"
+	MethodVolumesCreate             Method = "volumes.create"
+	MethodVolumesRemove             Method = "volumes.remove"
+	MethodVolumesPrune              Method = "volumes.prune"
+	MethodContainersCreate          Method = "containers.create"
+	MethodContainersRemovePreflight Method = "containers.remove.preflight"
+	MethodPause                     Method = "containers.pause"
+	MethodUnpause                   Method = "containers.unpause"
+	MethodKill                      Method = "containers.kill"
 )
 
 func Methods() []Method {
@@ -45,6 +62,11 @@ func Methods() []Method {
 		MethodRemove,
 		MethodLogsTail,
 		MethodImagesPull,
+		MethodContainersStatsSnapshot,
+		MethodImagesList, MethodImagesInspect, MethodImagesHistory, MethodImagesTag, MethodImagesRemove, MethodImagesPrune,
+		MethodVolumesList, MethodVolumesInspect, MethodVolumesCreate, MethodVolumesRemove, MethodVolumesPrune,
+		MethodContainersCreate, MethodContainersRemovePreflight,
+		MethodPause, MethodUnpause, MethodKill,
 	}
 }
 
@@ -156,6 +178,50 @@ type ImagePullResponse struct {
 	Engine    Engine       `json:"engine"`
 	Image     ImageSummary `json:"image"`
 	Completed bool         `json:"completed"`
+}
+
+type ContainerStats struct {
+	ContainerID    string  `json:"container_id"`
+	CPUPercent     float64 `json:"cpu_percent"`
+	MemoryBytes    int64   `json:"memory_bytes"`
+	MemoryLimit    int64   `json:"memory_limit"`
+	NetworkRxBytes int64   `json:"network_rx_bytes"`
+	NetworkTxBytes int64   `json:"network_tx_bytes"`
+}
+
+type ImageRecord struct {
+	ID                   string   `json:"id"`
+	Reference            string   `json:"reference,omitempty"`
+	Digest               string   `json:"digest,omitempty"`
+	Tags                 []string `json:"tags,omitempty"`
+	SizeBytes            int64    `json:"size_bytes,omitempty"`
+	CreatedAtUnixMs      int64    `json:"created_at_unix_ms,omitempty"`
+	ReferencedContainers int      `json:"referenced_containers"`
+}
+
+type ImageHistoryEntry struct {
+	ID              string `json:"id,omitempty"`
+	CreatedAtUnixMs int64  `json:"created_at_unix_ms,omitempty"`
+	SizeBytes       int64  `json:"size_bytes,omitempty"`
+	CreatedBy       string `json:"created_by,omitempty"`
+}
+
+type VolumeRecord struct {
+	Name                 string `json:"name"`
+	Driver               string `json:"driver,omitempty"`
+	Scope                string `json:"scope,omitempty"`
+	CreatedAtUnixMs      int64  `json:"created_at_unix_ms,omitempty"`
+	ReferencedContainers int    `json:"referenced_containers"`
+}
+
+type ResourcePlan struct {
+	Method        Method         `json:"method"`
+	Target        map[string]any `json:"target"`
+	PlanDigest    string         `json:"plan_digest"`
+	Summary       []string       `json:"summary,omitempty"`
+	RiskLevel     RiskLevel      `json:"risk_level"`
+	RiskFlags     []RiskFlag     `json:"risk_flags"`
+	RequiresAdmin bool           `json:"requires_admin"`
 }
 
 type ContainerSummary struct {

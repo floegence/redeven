@@ -1,0 +1,3836 @@
+{
+  "schema_version": "redevplugin.host_capability_contract.v1",
+  "contract_id": "redeven.container_resources.v3",
+  "contract_version": "3.0.0",
+  "publisher_id": "com.redeven.official",
+  "capability_id": "redeven.capability.container_resources",
+  "capability_version": "2.0.0",
+  "client_name": "RedevenContainerResourcesV3Client",
+  "methods": [
+    {
+      "name": "containers.status",
+      "client_method": "status",
+      "effect": "read",
+      "execution": "sync",
+      "required_permissions": [
+        "containers.read"
+      ],
+      "target_fields": [
+        "engine"
+      ],
+      "target_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "engine"
+        ],
+        "properties": {
+          "engine": {
+            "enum": [
+              "docker",
+              "podman"
+            ],
+            "type": "string"
+          }
+        }
+      },
+      "request_type_name": "ContainersStatusRequest",
+      "response_type_name": "ContainersStatusResponse",
+      "request_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "engine"
+        ],
+        "properties": {
+          "engine": {
+            "enum": [
+              "docker",
+              "podman"
+            ],
+            "type": "string"
+          }
+        }
+      },
+      "response_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "engine",
+          "available"
+        ],
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "engine_version": {
+            "type": "string"
+          }
+        }
+      },
+      "quota": {}
+    },
+    {
+      "name": "containers.list",
+      "client_method": "list",
+      "effect": "read",
+      "execution": "sync",
+      "required_permissions": [
+        "containers.read"
+      ],
+      "target_fields": [
+        "engine"
+      ],
+      "target_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "engine"
+        ],
+        "properties": {
+          "engine": {
+            "enum": [
+              "docker",
+              "podman"
+            ],
+            "type": "string"
+          }
+        }
+      },
+      "request_type_name": "ContainersListRequest",
+      "response_type_name": "ContainersListResponse",
+      "request_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "engine"
+        ],
+        "properties": {
+          "engine": {
+            "enum": [
+              "docker",
+              "podman"
+            ],
+            "type": "string"
+          },
+          "all": {
+            "type": "boolean"
+          }
+        }
+      },
+      "response_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "engine",
+          "containers"
+        ],
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "containers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "container_id",
+                "image",
+                "state"
+              ],
+              "properties": {
+                "container_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "name": {
+                  "type": "string"
+                },
+                "image": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "digest_pinned"
+                  ],
+                  "properties": {
+                    "reference": {
+                      "type": "string"
+                    },
+                    "digest": {
+                      "type": "string"
+                    },
+                    "digest_pinned": {
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "created",
+                    "running",
+                    "paused",
+                    "restarting",
+                    "exited",
+                    "stopped",
+                    "unknown"
+                  ]
+                },
+                "created_at_unix_ms": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "ports": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "port"
+                    ],
+                    "properties": {
+                      "protocol": {
+                        "type": "string"
+                      },
+                      "host_ip": {
+                        "type": "string"
+                      },
+                      "host_port": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "port": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 65535
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "quota": {}
+    },
+    {
+      "name": "containers.inspect",
+      "client_method": "inspect",
+      "effect": "read",
+      "execution": "sync",
+      "required_permissions": [
+        "containers.read"
+      ],
+      "target_fields": [
+        "engine",
+        "container_id"
+      ],
+      "target_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "engine",
+          "container_id"
+        ],
+        "properties": {
+          "engine": {
+            "enum": [
+              "docker",
+              "podman"
+            ],
+            "type": "string"
+          },
+          "container_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "request_type_name": "ContainersInspectRequest",
+      "response_type_name": "ContainersInspectResponse",
+      "request_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "engine",
+          "container_id"
+        ],
+        "properties": {
+          "engine": {
+            "enum": [
+              "docker",
+              "podman"
+            ],
+            "type": "string"
+          },
+          "container_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "response_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "engine",
+          "container"
+        ],
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "container": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "container_id",
+              "image",
+              "state"
+            ],
+            "properties": {
+              "container_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "name": {
+                "type": "string"
+              },
+              "image": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "digest_pinned"
+                ],
+                "properties": {
+                  "reference": {
+                    "type": "string"
+                  },
+                  "digest": {
+                    "type": "string"
+                  },
+                  "digest_pinned": {
+                    "type": "boolean"
+                  }
+                }
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "created",
+                  "running",
+                  "paused",
+                  "restarting",
+                  "exited",
+                  "stopped",
+                  "unknown"
+                ]
+              },
+              "created_at_unix_ms": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "ports": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "port"
+                  ],
+                  "properties": {
+                    "protocol": {
+                      "type": "string"
+                    },
+                    "host_ip": {
+                      "type": "string"
+                    },
+                    "host_port": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "port": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 65535
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "quota": {}
+    },
+    {
+      "name": "containers.start.preflight",
+      "client_method": "startPreflight",
+      "effect": "read",
+      "execution": "sync",
+      "preflight_only": true,
+      "required_permissions": [
+        "containers.read"
+      ],
+      "target_fields": [
+        "engine",
+        "container_id"
+      ],
+      "target_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "engine",
+          "container_id"
+        ],
+        "properties": {
+          "engine": {
+            "enum": [
+              "docker",
+              "podman"
+            ],
+            "type": "string"
+          },
+          "container_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "request_type_name": "ContainersStartPreflightRequest",
+      "response_type_name": "ContainersStartPreflightResponse",
+      "request_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "engine",
+          "container_id"
+        ],
+        "properties": {
+          "engine": {
+            "enum": [
+              "docker",
+              "podman"
+            ],
+            "type": "string"
+          },
+          "container_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "response_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "method",
+          "request",
+          "target",
+          "image",
+          "runtime",
+          "risk_level",
+          "risk_flags",
+          "requires_admin"
+        ],
+        "properties": {
+          "method": {
+            "type": "string",
+            "const": "containers.start"
+          },
+          "request": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "engine",
+              "container_id"
+            ],
+            "properties": {
+              "engine": {
+                "type": "string",
+                "enum": [
+                  "docker",
+                  "podman"
+                ]
+              },
+              "container_id": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "target": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "engine",
+              "container_id",
+              "target_hash"
+            ],
+            "properties": {
+              "engine": {
+                "type": "string",
+                "enum": [
+                  "docker",
+                  "podman"
+                ]
+              },
+              "container_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "container_name": {
+                "type": "string"
+              },
+              "target_hash": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "image": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "digest_pinned"
+            ],
+            "properties": {
+              "reference": {
+                "type": "string"
+              },
+              "digest": {
+                "type": "string"
+              },
+              "digest_pinned": {
+                "type": "boolean"
+              }
+            }
+          },
+          "runtime": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "privileged"
+            ],
+            "properties": {
+              "privileged": {
+                "type": "boolean"
+              },
+              "network_mode": {
+                "type": "string"
+              },
+              "pid_mode": {
+                "type": "string"
+              },
+              "ipc_mode": {
+                "type": "string"
+              },
+              "restart_policy": {
+                "type": "string"
+              }
+            }
+          },
+          "risk_level": {
+            "type": "string",
+            "enum": [
+              "none",
+              "low",
+              "medium",
+              "high",
+              "critical"
+            ]
+          },
+          "risk_flags": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "severity",
+                "title"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "severity": {
+                  "type": "string",
+                  "enum": [
+                    "low",
+                    "medium",
+                    "high",
+                    "critical"
+                  ]
+                },
+                "title": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "detail": {
+                  "type": "string"
+                },
+                "admin_required": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "requires_admin": {
+            "type": "boolean"
+          },
+          "summary": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "quota": {}
+    },
+    {
+      "name": "containers.start",
+      "client_method": "start",
+      "effect": "execute",
+      "execution": "operation",
+      "required_permissions": [
+        "containers.execute"
+      ],
+      "target_fields": [
+        "engine",
+        "container_id"
+      ],
+      "target_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "engine",
+          "container_id"
+        ],
+        "properties": {
+          "engine": {
+            "enum": [
+              "docker",
+              "podman"
+            ],
+            "type": "string"
+          },
+          "container_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "request_type_name": "ContainersStartRequest",
+      "response_type_name": "ContainersStartResponse",
+      "request_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "engine",
+          "container_id"
+        ],
+        "properties": {
+          "engine": {
+            "enum": [
+              "docker",
+              "podman"
+            ],
+            "type": "string"
+          },
+          "container_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "response_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "accepted",
+          "engine",
+          "container_id",
+          "method"
+        ],
+        "properties": {
+          "accepted": {
+            "type": "boolean"
+          },
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "container_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "method": {
+            "type": "string",
+            "const": "containers.start"
+          }
+        }
+      },
+      "confirmation": {
+        "mode": "risk_based",
+        "preflight_method": "containers.start.preflight",
+        "request_hash_fields": [
+          "engine",
+          "container_id"
+        ],
+        "plan_hash_required": true
+      },
+      "cancel_policy": {
+        "cancelable": true,
+        "disable_behavior": "cancel",
+        "uninstall_behavior": "cancel_then_block_delete",
+        "ack_timeout_ms": 2000
+      },
+      "quota": {
+        "max_concurrent": 4,
+        "max_duration_ms": 120000
+      }
+    },
+    {
+      "name": "containers.stop",
+      "client_method": "stop",
+      "effect": "execute",
+      "execution": "operation",
+      "required_permissions": [
+        "containers.execute"
+      ],
+      "target_fields": [
+        "engine",
+        "container_id"
+      ],
+      "target_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "engine",
+          "container_id"
+        ],
+        "properties": {
+          "engine": {
+            "enum": [
+              "docker",
+              "podman"
+            ],
+            "type": "string"
+          },
+          "container_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "request_type_name": "ContainersStopRequest",
+      "response_type_name": "ContainersStopResponse",
+      "request_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "engine",
+          "container_id"
+        ],
+        "properties": {
+          "engine": {
+            "enum": [
+              "docker",
+              "podman"
+            ],
+            "type": "string"
+          },
+          "container_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "timeout_sec": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "response_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "accepted",
+          "engine",
+          "container_id",
+          "method"
+        ],
+        "properties": {
+          "accepted": {
+            "type": "boolean"
+          },
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "container_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "method": {
+            "type": "string",
+            "const": "containers.stop"
+          }
+        }
+      },
+      "confirmation": {
+        "mode": "required",
+        "request_hash_fields": [
+          "engine",
+          "container_id",
+          "timeout_sec"
+        ],
+        "plan_hash_required": false
+      },
+      "cancel_policy": {
+        "cancelable": true,
+        "disable_behavior": "cancel",
+        "uninstall_behavior": "cancel_then_block_delete",
+        "ack_timeout_ms": 2000
+      },
+      "quota": {
+        "max_concurrent": 4,
+        "max_duration_ms": 120000
+      }
+    },
+    {
+      "name": "containers.restart",
+      "client_method": "restart",
+      "effect": "execute",
+      "execution": "operation",
+      "required_permissions": [
+        "containers.execute"
+      ],
+      "target_fields": [
+        "engine",
+        "container_id"
+      ],
+      "target_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "engine",
+          "container_id"
+        ],
+        "properties": {
+          "engine": {
+            "enum": [
+              "docker",
+              "podman"
+            ],
+            "type": "string"
+          },
+          "container_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "request_type_name": "ContainersRestartRequest",
+      "response_type_name": "ContainersRestartResponse",
+      "request_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "engine",
+          "container_id"
+        ],
+        "properties": {
+          "engine": {
+            "enum": [
+              "docker",
+              "podman"
+            ],
+            "type": "string"
+          },
+          "container_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "timeout_sec": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "response_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "accepted",
+          "engine",
+          "container_id",
+          "method"
+        ],
+        "properties": {
+          "accepted": {
+            "type": "boolean"
+          },
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "container_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "method": {
+            "type": "string",
+            "const": "containers.restart"
+          }
+        }
+      },
+      "confirmation": {
+        "mode": "required",
+        "request_hash_fields": [
+          "engine",
+          "container_id",
+          "timeout_sec"
+        ],
+        "plan_hash_required": false
+      },
+      "cancel_policy": {
+        "cancelable": true,
+        "disable_behavior": "cancel",
+        "uninstall_behavior": "cancel_then_block_delete",
+        "ack_timeout_ms": 2000
+      },
+      "quota": {
+        "max_concurrent": 4,
+        "max_duration_ms": 120000
+      }
+    },
+    {
+      "name": "containers.remove",
+      "client_method": "remove",
+      "effect": "delete",
+      "execution": "operation",
+      "required_permissions": [
+        "containers.delete"
+      ],
+      "target_fields": [
+        "engine",
+        "container_id"
+      ],
+      "target_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "engine",
+          "container_id"
+        ],
+        "properties": {
+          "engine": {
+            "enum": [
+              "docker",
+              "podman"
+            ],
+            "type": "string"
+          },
+          "container_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "request_type_name": "ContainersRemoveRequest",
+      "response_type_name": "ContainersRemoveResponse",
+      "request_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "engine",
+          "container_id"
+        ],
+        "properties": {
+          "engine": {
+            "enum": [
+              "docker",
+              "podman"
+            ],
+            "type": "string"
+          },
+          "container_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "force": {
+            "type": "boolean"
+          }
+        }
+      },
+      "response_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "accepted",
+          "engine",
+          "container_id",
+          "method"
+        ],
+        "properties": {
+          "accepted": {
+            "type": "boolean"
+          },
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "container_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "method": {
+            "type": "string",
+            "const": "containers.remove"
+          }
+        }
+      },
+      "confirmation": {
+        "mode": "required",
+        "request_hash_fields": [
+          "engine",
+          "container_id",
+          "force"
+        ],
+        "plan_hash_required": false
+      },
+      "cancel_policy": {
+        "cancelable": true,
+        "disable_behavior": "cancel",
+        "uninstall_behavior": "cancel_then_block_delete",
+        "ack_timeout_ms": 2000
+      },
+      "quota": {
+        "max_concurrent": 4,
+        "max_duration_ms": 120000
+      }
+    },
+    {
+      "name": "containers.logs.tail",
+      "client_method": "tailLogs",
+      "effect": "read",
+      "execution": "subscription",
+      "required_permissions": [
+        "containers.read"
+      ],
+      "target_fields": [
+        "engine",
+        "container_id"
+      ],
+      "target_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "engine",
+          "container_id"
+        ],
+        "properties": {
+          "engine": {
+            "enum": [
+              "docker",
+              "podman"
+            ],
+            "type": "string"
+          },
+          "container_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "request_type_name": "ContainersTailLogsRequest",
+      "response_type_name": "ContainersTailLogsResponse",
+      "request_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "engine",
+          "container_id"
+        ],
+        "properties": {
+          "engine": {
+            "enum": [
+              "docker",
+              "podman"
+            ],
+            "type": "string"
+          },
+          "container_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "tail_lines": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000
+          },
+          "since_unix_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "follow": {
+            "type": "boolean"
+          }
+        }
+      },
+      "response_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "engine",
+          "container_id",
+          "subscribed"
+        ],
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "container_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "subscribed": {
+            "type": "boolean"
+          }
+        }
+      },
+      "event_type_name": "ContainerLogEvent",
+      "event_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "message"
+        ],
+        "properties": {
+          "timestamp_unix_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "cancel_policy": {
+        "cancelable": true,
+        "disable_behavior": "orphan",
+        "uninstall_behavior": "force_cleanup_allowed",
+        "ack_timeout_ms": 2000
+      },
+      "quota": {
+        "max_concurrent": 4,
+        "max_stream_bytes": 16777216
+      }
+    },
+    {
+      "name": "images.pull",
+      "client_method": "pullImage",
+      "effect": "write",
+      "execution": "operation",
+      "required_permissions": [
+        "containers.images.write"
+      ],
+      "target_fields": [
+        "engine",
+        "image_ref"
+      ],
+      "target_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "engine",
+          "image_ref"
+        ],
+        "properties": {
+          "engine": {
+            "enum": [
+              "docker",
+              "podman"
+            ],
+            "type": "string"
+          },
+          "image_ref": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "request_type_name": "ImagesPullRequest",
+      "response_type_name": "ImagesPullResponse",
+      "request_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "engine",
+          "image_ref"
+        ],
+        "properties": {
+          "engine": {
+            "enum": [
+              "docker",
+              "podman"
+            ],
+            "type": "string"
+          },
+          "image_ref": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "response_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "accepted",
+          "engine",
+          "image_ref"
+        ],
+        "properties": {
+          "accepted": {
+            "type": "boolean"
+          },
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "image_ref": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "cancel_policy": {
+        "cancelable": true,
+        "disable_behavior": "cancel",
+        "uninstall_behavior": "cancel_then_block_delete",
+        "ack_timeout_ms": 2000
+      },
+      "quota": {
+        "max_concurrent": 2,
+        "max_duration_ms": 600000
+      }
+    },
+    {
+      "name": "containers.stats.snapshot",
+      "client_method": "statsSnapshot",
+      "effect": "read",
+      "execution": "sync",
+      "required_permissions": [
+        "containers.stats.read"
+      ],
+      "target_fields": [
+        "engine",
+        "container_id"
+      ],
+      "target_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "container_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "engine",
+          "container_id"
+        ],
+        "type": "object"
+      },
+      "request_type_name": "StatsRequest",
+      "response_type_name": "StatsResponse",
+      "request_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "container_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "engine",
+          "container_id"
+        ],
+        "type": "object"
+      },
+      "response_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "stats": {
+            "additionalProperties": false,
+            "properties": {
+              "container_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "cpu_percent": {
+                "type": "number",
+                "minimum": 0
+              },
+              "memory_bytes": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "memory_limit": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "network_rx_bytes": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "network_tx_bytes": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "container_id",
+              "cpu_percent",
+              "memory_bytes",
+              "memory_limit",
+              "network_rx_bytes",
+              "network_tx_bytes"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "engine",
+          "stats"
+        ],
+        "type": "object"
+      },
+      "quota": {}
+    },
+    {
+      "name": "containers.create.preflight",
+      "client_method": "createPreflight",
+      "effect": "read",
+      "execution": "sync",
+      "required_permissions": [
+        "containers.create"
+      ],
+      "target_fields": [
+        "engine",
+        "name"
+      ],
+      "target_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "image": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "engine",
+          "image"
+        ],
+        "type": "object"
+      },
+      "request_type_name": "CreatePreflightRequest",
+      "response_type_name": "CreatePreflightResponse",
+      "request_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "image": {
+            "type": "string",
+            "minLength": 1
+          },
+          "command": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "env": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "restart_policy": {
+            "type": "string"
+          },
+          "network_mode": {
+            "type": "string"
+          },
+          "privileged": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "engine",
+          "image"
+        ],
+        "type": "object"
+      },
+      "response_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "method": {
+            "type": "string",
+            "minLength": 1
+          },
+          "target": {
+            "additionalProperties": false,
+            "properties": {
+              "engine": {
+                "type": "string",
+                "enum": [
+                  "docker",
+                  "podman"
+                ]
+              },
+              "container_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "target_hash": {
+                "type": "string",
+                "minLength": 1
+              },
+              "container_name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "engine",
+              "container_id",
+              "target_hash"
+            ],
+            "type": "object"
+          },
+          "request": {
+            "additionalProperties": false,
+            "properties": {
+              "engine": {
+                "type": "string",
+                "enum": [
+                  "docker",
+                  "podman"
+                ]
+              },
+              "container_id": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "engine",
+              "container_id"
+            ],
+            "type": "object"
+          },
+          "risk_level": {
+            "type": "string",
+            "enum": [
+              "none",
+              "low",
+              "medium",
+              "high",
+              "critical"
+            ]
+          },
+          "risk_flags": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "severity": {
+                  "type": "string",
+                  "enum": [
+                    "low",
+                    "medium",
+                    "high",
+                    "critical"
+                  ]
+                },
+                "title": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "detail": {
+                  "type": "string"
+                },
+                "admin_required": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "id",
+                "severity",
+                "title"
+              ],
+              "type": "object"
+            }
+          },
+          "requires_admin": {
+            "type": "boolean"
+          },
+          "summary": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "plan_digest": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "method",
+          "target",
+          "request",
+          "risk_level",
+          "risk_flags",
+          "requires_admin",
+          "plan_digest"
+        ],
+        "type": "object"
+      },
+      "preflight_only": true,
+      "quota": {}
+    },
+    {
+      "name": "containers.create",
+      "client_method": "create",
+      "effect": "execute",
+      "execution": "operation",
+      "required_permissions": [
+        "containers.create"
+      ],
+      "target_fields": [
+        "engine",
+        "name"
+      ],
+      "target_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "image": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "engine",
+          "image"
+        ],
+        "type": "object"
+      },
+      "request_type_name": "CreateRequest",
+      "response_type_name": "CreateResponse",
+      "request_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "image": {
+            "type": "string",
+            "minLength": 1
+          },
+          "command": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "env": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "restart_policy": {
+            "type": "string"
+          },
+          "network_mode": {
+            "type": "string"
+          },
+          "privileged": {
+            "type": "boolean"
+          },
+          "plan_digest": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "engine",
+          "image",
+          "plan_digest"
+        ],
+        "type": "object"
+      },
+      "response_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "accepted": {
+            "type": "boolean"
+          },
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "method": {
+            "type": "string",
+            "const": "containers.create"
+          },
+          "container_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "accepted",
+          "engine",
+          "method"
+        ],
+        "type": "object"
+      },
+      "confirmation": {
+        "mode": "risk_based",
+        "preflight_method": "containers.create.preflight",
+        "request_hash_fields": [
+          "engine",
+          "name",
+          "image",
+          "command",
+          "env",
+          "restart_policy",
+          "network_mode",
+          "privileged",
+          "plan_digest"
+        ],
+        "plan_hash_required": true
+      },
+      "cancel_policy": {
+        "cancelable": true,
+        "disable_behavior": "cancel",
+        "uninstall_behavior": "cancel_then_block_delete",
+        "ack_timeout_ms": 2000
+      },
+      "quota": {
+        "max_concurrent": 2,
+        "max_duration_ms": 180000
+      }
+    },
+    {
+      "name": "containers.pause",
+      "client_method": "pause",
+      "effect": "execute",
+      "execution": "operation",
+      "required_permissions": [
+        "containers.execute"
+      ],
+      "target_fields": [
+        "engine",
+        "container_id"
+      ],
+      "target_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "container_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "engine",
+          "container_id"
+        ],
+        "type": "object"
+      },
+      "request_type_name": "PauseRequest",
+      "response_type_name": "PauseResponse",
+      "request_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "container_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "timeout_sec": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "engine",
+          "container_id"
+        ],
+        "type": "object"
+      },
+      "response_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "accepted": {
+            "type": "boolean"
+          },
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "method": {
+            "type": "string",
+            "const": "containers.pause"
+          },
+          "container_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "accepted",
+          "engine",
+          "method"
+        ],
+        "type": "object"
+      },
+      "confirmation": {
+        "mode": "required",
+        "request_hash_fields": [
+          "engine",
+          "container_id"
+        ]
+      },
+      "cancel_policy": {
+        "cancelable": true,
+        "disable_behavior": "cancel",
+        "uninstall_behavior": "cancel_then_block_delete",
+        "ack_timeout_ms": 2000
+      },
+      "quota": {
+        "max_concurrent": 4,
+        "max_duration_ms": 120000
+      }
+    },
+    {
+      "name": "containers.unpause",
+      "client_method": "unpause",
+      "effect": "execute",
+      "execution": "operation",
+      "required_permissions": [
+        "containers.execute"
+      ],
+      "target_fields": [
+        "engine",
+        "container_id"
+      ],
+      "target_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "container_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "engine",
+          "container_id"
+        ],
+        "type": "object"
+      },
+      "request_type_name": "UnpauseRequest",
+      "response_type_name": "UnpauseResponse",
+      "request_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "container_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "timeout_sec": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "engine",
+          "container_id"
+        ],
+        "type": "object"
+      },
+      "response_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "accepted": {
+            "type": "boolean"
+          },
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "method": {
+            "type": "string",
+            "const": "containers.unpause"
+          },
+          "container_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "accepted",
+          "engine",
+          "method"
+        ],
+        "type": "object"
+      },
+      "confirmation": {
+        "mode": "required",
+        "request_hash_fields": [
+          "engine",
+          "container_id"
+        ]
+      },
+      "cancel_policy": {
+        "cancelable": true,
+        "disable_behavior": "cancel",
+        "uninstall_behavior": "cancel_then_block_delete",
+        "ack_timeout_ms": 2000
+      },
+      "quota": {
+        "max_concurrent": 4,
+        "max_duration_ms": 120000
+      }
+    },
+    {
+      "name": "containers.kill",
+      "client_method": "kill",
+      "effect": "execute",
+      "execution": "operation",
+      "required_permissions": [
+        "containers.execute"
+      ],
+      "target_fields": [
+        "engine",
+        "container_id"
+      ],
+      "target_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "container_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "engine",
+          "container_id"
+        ],
+        "type": "object"
+      },
+      "request_type_name": "KillRequest",
+      "response_type_name": "KillResponse",
+      "request_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "container_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "timeout_sec": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "engine",
+          "container_id"
+        ],
+        "type": "object"
+      },
+      "response_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "accepted": {
+            "type": "boolean"
+          },
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "method": {
+            "type": "string",
+            "const": "containers.kill"
+          },
+          "container_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "accepted",
+          "engine",
+          "method"
+        ],
+        "type": "object"
+      },
+      "confirmation": {
+        "mode": "required",
+        "request_hash_fields": [
+          "engine",
+          "container_id"
+        ]
+      },
+      "cancel_policy": {
+        "cancelable": true,
+        "disable_behavior": "cancel",
+        "uninstall_behavior": "cancel_then_block_delete",
+        "ack_timeout_ms": 2000
+      },
+      "quota": {
+        "max_concurrent": 4,
+        "max_duration_ms": 120000
+      }
+    },
+    {
+      "name": "containers.remove.preflight",
+      "client_method": "removePreflight",
+      "effect": "read",
+      "execution": "sync",
+      "required_permissions": [
+        "containers.delete"
+      ],
+      "target_fields": [
+        "engine",
+        "container_id"
+      ],
+      "target_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "container_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "engine",
+          "container_id"
+        ],
+        "type": "object"
+      },
+      "request_type_name": "RemoveRequest",
+      "response_type_name": "RemovePlanResponse",
+      "request_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "container_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "force": {
+            "type": "boolean"
+          },
+          "confirmation_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "engine",
+          "container_id"
+        ],
+        "type": "object"
+      },
+      "response_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "method": {
+            "type": "string",
+            "minLength": 1
+          },
+          "target": {
+            "additionalProperties": false,
+            "properties": {
+              "engine": {
+                "type": "string",
+                "enum": [
+                  "docker",
+                  "podman"
+                ]
+              },
+              "container_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "target_hash": {
+                "type": "string",
+                "minLength": 1
+              },
+              "container_name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "engine",
+              "container_id",
+              "target_hash"
+            ],
+            "type": "object"
+          },
+          "request": {
+            "additionalProperties": false,
+            "properties": {
+              "engine": {
+                "type": "string",
+                "enum": [
+                  "docker",
+                  "podman"
+                ]
+              },
+              "container_id": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "engine",
+              "container_id"
+            ],
+            "type": "object"
+          },
+          "risk_level": {
+            "type": "string",
+            "enum": [
+              "none",
+              "low",
+              "medium",
+              "high",
+              "critical"
+            ]
+          },
+          "risk_flags": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "severity": {
+                  "type": "string",
+                  "enum": [
+                    "low",
+                    "medium",
+                    "high",
+                    "critical"
+                  ]
+                },
+                "title": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "detail": {
+                  "type": "string"
+                },
+                "admin_required": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "id",
+                "severity",
+                "title"
+              ],
+              "type": "object"
+            }
+          },
+          "requires_admin": {
+            "type": "boolean"
+          },
+          "summary": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "plan_digest": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "method",
+          "target",
+          "request",
+          "risk_level",
+          "risk_flags",
+          "requires_admin",
+          "plan_digest"
+        ],
+        "type": "object"
+      },
+      "preflight_only": true,
+      "quota": {}
+    },
+    {
+      "name": "images.list",
+      "client_method": "listImages",
+      "effect": "read",
+      "execution": "sync",
+      "required_permissions": [
+        "containers.images.read"
+      ],
+      "target_fields": [
+        "engine"
+      ],
+      "target_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          }
+        },
+        "required": [
+          "engine"
+        ],
+        "type": "object"
+      },
+      "request_type_name": "ImageListRequest",
+      "response_type_name": "ImagesResponse",
+      "request_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          }
+        },
+        "required": [
+          "engine"
+        ],
+        "type": "object"
+      },
+      "response_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "images": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "reference": {
+                  "type": "string"
+                },
+                "digest": {
+                  "type": "string"
+                },
+                "tags": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "size_bytes": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "created_at_unix_ms": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "referenced_containers": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "id",
+                "referenced_containers"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "required": [
+          "engine",
+          "images"
+        ],
+        "type": "object"
+      },
+      "quota": {}
+    },
+    {
+      "name": "images.inspect",
+      "client_method": "inspectImage",
+      "effect": "read",
+      "execution": "sync",
+      "required_permissions": [
+        "containers.images.read"
+      ],
+      "target_fields": [
+        "engine",
+        "image"
+      ],
+      "target_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "image": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "engine",
+          "image"
+        ],
+        "type": "object"
+      },
+      "request_type_name": "ImageInspectRequest",
+      "response_type_name": "ImageResponse",
+      "request_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "image": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "engine",
+          "image"
+        ],
+        "type": "object"
+      },
+      "response_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "image": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "reference": {
+                "type": "string"
+              },
+              "digest": {
+                "type": "string"
+              },
+              "tags": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "size_bytes": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "created_at_unix_ms": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "referenced_containers": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "id",
+              "referenced_containers"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "engine",
+          "image"
+        ],
+        "type": "object"
+      },
+      "quota": {}
+    },
+    {
+      "name": "images.history",
+      "client_method": "imageHistory",
+      "effect": "read",
+      "execution": "sync",
+      "required_permissions": [
+        "containers.images.read"
+      ],
+      "target_fields": [
+        "engine",
+        "image"
+      ],
+      "target_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "image": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "engine",
+          "image"
+        ],
+        "type": "object"
+      },
+      "request_type_name": "ImageHistoryRequest",
+      "response_type_name": "HistoryResponse",
+      "request_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "image": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "engine",
+          "image"
+        ],
+        "type": "object"
+      },
+      "response_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "image": {
+            "type": "string",
+            "minLength": 1
+          },
+          "history": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "created_at_unix_ms": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "size_bytes": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "created_by": {
+                  "type": "string"
+                }
+              },
+              "required": [],
+              "type": "object"
+            }
+          }
+        },
+        "required": [
+          "engine",
+          "image",
+          "history"
+        ],
+        "type": "object"
+      },
+      "quota": {}
+    },
+    {
+      "name": "images.tag",
+      "client_method": "tagImage",
+      "effect": "execute",
+      "execution": "operation",
+      "required_permissions": [
+        "containers.images.write"
+      ],
+      "target_fields": [
+        "engine",
+        "image",
+        "tag"
+      ],
+      "target_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "image": {
+            "type": "string",
+            "minLength": 1
+          },
+          "tag": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "engine",
+          "image",
+          "tag"
+        ],
+        "type": "object"
+      },
+      "request_type_name": "ImageTagRequest",
+      "response_type_name": "ImageTagResponse",
+      "request_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "image": {
+            "type": "string",
+            "minLength": 1
+          },
+          "tag": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "engine",
+          "image",
+          "tag"
+        ],
+        "type": "object"
+      },
+      "response_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "accepted": {
+            "type": "boolean"
+          },
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "method": {
+            "type": "string",
+            "const": "images.tag"
+          }
+        },
+        "required": [
+          "accepted",
+          "engine",
+          "method"
+        ],
+        "type": "object"
+      },
+      "cancel_policy": {
+        "cancelable": true,
+        "disable_behavior": "cancel",
+        "uninstall_behavior": "cancel_then_block_delete",
+        "ack_timeout_ms": 2000
+      },
+      "quota": {
+        "max_concurrent": 2,
+        "max_duration_ms": 120000
+      }
+    },
+    {
+      "name": "images.remove",
+      "client_method": "removeImage",
+      "effect": "delete",
+      "execution": "operation",
+      "required_permissions": [
+        "containers.images.delete"
+      ],
+      "target_fields": [
+        "engine",
+        "image"
+      ],
+      "target_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "image": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "engine",
+          "image"
+        ],
+        "type": "object"
+      },
+      "request_type_name": "ImageRemoveRequest",
+      "response_type_name": "ImageRemoveResponse",
+      "request_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "image": {
+            "type": "string",
+            "minLength": 1
+          },
+          "force": {
+            "type": "boolean"
+          },
+          "confirmation_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "engine",
+          "image"
+        ],
+        "type": "object"
+      },
+      "response_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "accepted": {
+            "type": "boolean"
+          },
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "method": {
+            "type": "string",
+            "const": "images.remove"
+          }
+        },
+        "required": [
+          "accepted",
+          "engine",
+          "method"
+        ],
+        "type": "object"
+      },
+      "confirmation": {
+        "mode": "required",
+        "request_hash_fields": [
+          "engine",
+          "image",
+          "force",
+          "confirmation_name"
+        ]
+      },
+      "cancel_policy": {
+        "cancelable": true,
+        "disable_behavior": "cancel",
+        "uninstall_behavior": "cancel_then_block_delete",
+        "ack_timeout_ms": 2000
+      },
+      "quota": {
+        "max_concurrent": 2,
+        "max_duration_ms": 120000
+      }
+    },
+    {
+      "name": "images.prune",
+      "client_method": "pruneImages",
+      "effect": "delete",
+      "execution": "operation",
+      "required_permissions": [
+        "containers.images.delete"
+      ],
+      "target_fields": [
+        "engine",
+        "plan_digest"
+      ],
+      "target_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "plan_digest": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "engine",
+          "plan_digest"
+        ],
+        "type": "object"
+      },
+      "request_type_name": "ImagePruneRequest",
+      "response_type_name": "ImagePruneResponse",
+      "request_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "plan_digest": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "engine",
+          "plan_digest"
+        ],
+        "type": "object"
+      },
+      "response_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "accepted": {
+            "type": "boolean"
+          },
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "method": {
+            "type": "string",
+            "const": "images.prune"
+          }
+        },
+        "required": [
+          "accepted",
+          "engine",
+          "method"
+        ],
+        "type": "object"
+      },
+      "confirmation": {
+        "mode": "required",
+        "request_hash_fields": [
+          "engine",
+          "plan_digest"
+        ],
+        "plan_hash_required": true
+      },
+      "cancel_policy": {
+        "cancelable": true,
+        "disable_behavior": "cancel",
+        "uninstall_behavior": "cancel_then_block_delete",
+        "ack_timeout_ms": 2000
+      },
+      "quota": {
+        "max_concurrent": 1,
+        "max_duration_ms": 180000
+      }
+    },
+    {
+      "name": "volumes.list",
+      "client_method": "listVolumes",
+      "effect": "read",
+      "execution": "sync",
+      "required_permissions": [
+        "containers.volumes.read"
+      ],
+      "target_fields": [
+        "engine"
+      ],
+      "target_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          }
+        },
+        "required": [
+          "engine"
+        ],
+        "type": "object"
+      },
+      "request_type_name": "VolumeListRequest",
+      "response_type_name": "VolumesResponse",
+      "request_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          }
+        },
+        "required": [
+          "engine"
+        ],
+        "type": "object"
+      },
+      "response_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "volumes": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "driver": {
+                  "type": "string"
+                },
+                "scope": {
+                  "type": "string"
+                },
+                "created_at_unix_ms": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "referenced_containers": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "name",
+                "referenced_containers"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "required": [
+          "engine",
+          "volumes"
+        ],
+        "type": "object"
+      },
+      "quota": {}
+    },
+    {
+      "name": "volumes.inspect",
+      "client_method": "inspectVolume",
+      "effect": "read",
+      "execution": "sync",
+      "required_permissions": [
+        "containers.volumes.read"
+      ],
+      "target_fields": [
+        "engine",
+        "name"
+      ],
+      "target_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "engine",
+          "name"
+        ],
+        "type": "object"
+      },
+      "request_type_name": "VolumeInspectRequest",
+      "response_type_name": "VolumeResponse",
+      "request_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "engine",
+          "name"
+        ],
+        "type": "object"
+      },
+      "response_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "volume": {
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "driver": {
+                "type": "string"
+              },
+              "scope": {
+                "type": "string"
+              },
+              "created_at_unix_ms": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "referenced_containers": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "name",
+              "referenced_containers"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "engine",
+          "volume"
+        ],
+        "type": "object"
+      },
+      "quota": {}
+    },
+    {
+      "name": "volumes.create.preflight",
+      "client_method": "createVolumePreflight",
+      "effect": "read",
+      "execution": "sync",
+      "required_permissions": [
+        "containers.volumes.write"
+      ],
+      "target_fields": [
+        "engine",
+        "name"
+      ],
+      "target_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "engine",
+          "name"
+        ],
+        "type": "object"
+      },
+      "request_type_name": "VolumeCreatePreflightRequest",
+      "response_type_name": "VolumeCreatePreflightResponse",
+      "request_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "driver": {
+            "type": "string"
+          },
+          "options": {
+            "additionalProperties": false,
+            "properties": {},
+            "required": [],
+            "type": "object"
+          }
+        },
+        "required": [
+          "engine"
+        ],
+        "type": "object"
+      },
+      "response_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "method": {
+            "type": "string",
+            "minLength": 1
+          },
+          "target": {
+            "additionalProperties": false,
+            "properties": {
+              "engine": {
+                "type": "string",
+                "enum": [
+                  "docker",
+                  "podman"
+                ]
+              },
+              "container_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "target_hash": {
+                "type": "string",
+                "minLength": 1
+              },
+              "container_name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "engine",
+              "container_id",
+              "target_hash"
+            ],
+            "type": "object"
+          },
+          "request": {
+            "additionalProperties": false,
+            "properties": {
+              "engine": {
+                "type": "string",
+                "enum": [
+                  "docker",
+                  "podman"
+                ]
+              },
+              "container_id": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "engine",
+              "container_id"
+            ],
+            "type": "object"
+          },
+          "risk_level": {
+            "type": "string",
+            "enum": [
+              "none",
+              "low",
+              "medium",
+              "high",
+              "critical"
+            ]
+          },
+          "risk_flags": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "severity": {
+                  "type": "string",
+                  "enum": [
+                    "low",
+                    "medium",
+                    "high",
+                    "critical"
+                  ]
+                },
+                "title": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "detail": {
+                  "type": "string"
+                },
+                "admin_required": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "id",
+                "severity",
+                "title"
+              ],
+              "type": "object"
+            }
+          },
+          "requires_admin": {
+            "type": "boolean"
+          },
+          "summary": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "plan_digest": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "method",
+          "target",
+          "request",
+          "risk_level",
+          "risk_flags",
+          "requires_admin",
+          "plan_digest"
+        ],
+        "type": "object"
+      },
+      "preflight_only": true,
+      "quota": {}
+    },
+    {
+      "name": "volumes.create",
+      "client_method": "createVolume",
+      "effect": "execute",
+      "execution": "operation",
+      "required_permissions": [
+        "containers.volumes.write"
+      ],
+      "target_fields": [
+        "engine",
+        "name"
+      ],
+      "target_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "engine",
+          "name"
+        ],
+        "type": "object"
+      },
+      "request_type_name": "VolumeCreateRequestV3",
+      "response_type_name": "VolumeCreateResponse",
+      "request_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "driver": {
+            "type": "string"
+          },
+          "options": {
+            "additionalProperties": false,
+            "properties": {},
+            "required": [],
+            "type": "object"
+          },
+          "plan_digest": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "engine",
+          "plan_digest"
+        ],
+        "type": "object"
+      },
+      "response_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "accepted": {
+            "type": "boolean"
+          },
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "method": {
+            "type": "string",
+            "const": "volumes.create"
+          }
+        },
+        "required": [
+          "accepted",
+          "engine",
+          "method"
+        ],
+        "type": "object"
+      },
+      "confirmation": {
+        "mode": "required",
+        "preflight_method": "volumes.create.preflight",
+        "request_hash_fields": [
+          "engine",
+          "name",
+          "driver",
+          "options",
+          "plan_digest"
+        ],
+        "plan_hash_required": true
+      },
+      "cancel_policy": {
+        "cancelable": true,
+        "disable_behavior": "cancel",
+        "uninstall_behavior": "cancel_then_block_delete",
+        "ack_timeout_ms": 2000
+      },
+      "quota": {
+        "max_concurrent": 2,
+        "max_duration_ms": 120000
+      }
+    },
+    {
+      "name": "volumes.remove.preflight",
+      "client_method": "removeVolumePreflight",
+      "effect": "read",
+      "execution": "sync",
+      "required_permissions": [
+        "containers.volumes.delete"
+      ],
+      "target_fields": [
+        "engine",
+        "name"
+      ],
+      "target_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "engine",
+          "name"
+        ],
+        "type": "object"
+      },
+      "request_type_name": "VolumeRemovePreflightRequest",
+      "response_type_name": "VolumeRemovePreflightResponse",
+      "request_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "confirmation_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "engine",
+          "name"
+        ],
+        "type": "object"
+      },
+      "response_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "method": {
+            "type": "string",
+            "minLength": 1
+          },
+          "target": {
+            "additionalProperties": false,
+            "properties": {
+              "engine": {
+                "type": "string",
+                "enum": [
+                  "docker",
+                  "podman"
+                ]
+              },
+              "container_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "target_hash": {
+                "type": "string",
+                "minLength": 1
+              },
+              "container_name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "engine",
+              "container_id",
+              "target_hash"
+            ],
+            "type": "object"
+          },
+          "request": {
+            "additionalProperties": false,
+            "properties": {
+              "engine": {
+                "type": "string",
+                "enum": [
+                  "docker",
+                  "podman"
+                ]
+              },
+              "container_id": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "engine",
+              "container_id"
+            ],
+            "type": "object"
+          },
+          "risk_level": {
+            "type": "string",
+            "enum": [
+              "none",
+              "low",
+              "medium",
+              "high",
+              "critical"
+            ]
+          },
+          "risk_flags": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "severity": {
+                  "type": "string",
+                  "enum": [
+                    "low",
+                    "medium",
+                    "high",
+                    "critical"
+                  ]
+                },
+                "title": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "detail": {
+                  "type": "string"
+                },
+                "admin_required": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "id",
+                "severity",
+                "title"
+              ],
+              "type": "object"
+            }
+          },
+          "requires_admin": {
+            "type": "boolean"
+          },
+          "summary": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "plan_digest": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "method",
+          "target",
+          "request",
+          "risk_level",
+          "risk_flags",
+          "requires_admin",
+          "plan_digest"
+        ],
+        "type": "object"
+      },
+      "preflight_only": true,
+      "quota": {}
+    },
+    {
+      "name": "volumes.remove",
+      "client_method": "removeVolume",
+      "effect": "delete",
+      "execution": "operation",
+      "required_permissions": [
+        "containers.volumes.delete"
+      ],
+      "target_fields": [
+        "engine",
+        "name"
+      ],
+      "target_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "engine",
+          "name"
+        ],
+        "type": "object"
+      },
+      "request_type_name": "VolumeRemoveRequestV3",
+      "response_type_name": "VolumeRemoveResponse",
+      "request_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "plan_digest": {
+            "type": "string",
+            "minLength": 1
+          },
+          "confirmation_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "engine",
+          "name",
+          "plan_digest"
+        ],
+        "type": "object"
+      },
+      "response_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "accepted": {
+            "type": "boolean"
+          },
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "method": {
+            "type": "string",
+            "const": "volumes.remove"
+          }
+        },
+        "required": [
+          "accepted",
+          "engine",
+          "method"
+        ],
+        "type": "object"
+      },
+      "confirmation": {
+        "mode": "required",
+        "preflight_method": "volumes.remove.preflight",
+        "request_hash_fields": [
+          "engine",
+          "name",
+          "plan_digest",
+          "confirmation_name"
+        ],
+        "plan_hash_required": true
+      },
+      "cancel_policy": {
+        "cancelable": true,
+        "disable_behavior": "cancel",
+        "uninstall_behavior": "cancel_then_block_delete",
+        "ack_timeout_ms": 2000
+      },
+      "quota": {
+        "max_concurrent": 2,
+        "max_duration_ms": 120000
+      }
+    },
+    {
+      "name": "volumes.prune",
+      "client_method": "pruneVolumes",
+      "effect": "delete",
+      "execution": "operation",
+      "required_permissions": [
+        "containers.volumes.delete"
+      ],
+      "target_fields": [
+        "engine",
+        "plan_digest"
+      ],
+      "target_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "plan_digest": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "engine",
+          "plan_digest"
+        ],
+        "type": "object"
+      },
+      "request_type_name": "VolumePruneRequest",
+      "response_type_name": "VolumePruneResponse",
+      "request_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "plan_digest": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "engine",
+          "plan_digest"
+        ],
+        "type": "object"
+      },
+      "response_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "accepted": {
+            "type": "boolean"
+          },
+          "engine": {
+            "type": "string",
+            "enum": [
+              "docker",
+              "podman"
+            ]
+          },
+          "method": {
+            "type": "string",
+            "const": "volumes.prune"
+          }
+        },
+        "required": [
+          "accepted",
+          "engine",
+          "method"
+        ],
+        "type": "object"
+      },
+      "confirmation": {
+        "mode": "required",
+        "request_hash_fields": [
+          "engine",
+          "plan_digest"
+        ],
+        "plan_hash_required": true
+      },
+      "cancel_policy": {
+        "cancelable": true,
+        "disable_behavior": "cancel",
+        "uninstall_behavior": "cancel_then_block_delete",
+        "ack_timeout_ms": 2000
+      },
+      "quota": {
+        "max_concurrent": 1,
+        "max_duration_ms": 180000
+      }
+    }
+  ],
+  "errors": [
+    {
+      "code": "CONTAINER_ENGINE_UNAVAILABLE",
+      "message": "The selected container engine is unavailable"
+    },
+    {
+      "code": "CONTAINER_NOT_FOUND",
+      "message": "The requested container does not exist",
+      "details_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "container_id"
+        ],
+        "properties": {
+          "container_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    {
+      "code": "CONTAINER_OPERATION_FAILED",
+      "message": "The container operation failed"
+    },
+    {
+      "code": "CONTAINER_LOGS_UNAVAILABLE",
+      "message": "Container logs are unavailable"
+    },
+    {
+      "code": "CONTAINER_RESOURCE_UNSUPPORTED",
+      "message": "The selected resource operation is unsupported"
+    },
+    {
+      "code": "CONTAINER_PLAN_STALE",
+      "message": "The requested operation plan is stale"
+    },
+    {
+      "code": "CONTAINER_IMAGE_NOT_FOUND",
+      "message": "The requested image does not exist"
+    },
+    {
+      "code": "CONTAINER_VOLUME_IN_USE",
+      "message": "The volume is attached to a container"
+    }
+  ]
+}
