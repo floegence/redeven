@@ -8,13 +8,13 @@ import {
 } from './desktopTheme';
 
 describe('desktop shell theme contract', () => {
-  it('keeps eleven unique presets for each mode', () => {
+  it('keeps the published unique presets for each mode', () => {
     expect(DESKTOP_SHELL_THEME_PRESETS.light).toHaveLength(11);
-    expect(DESKTOP_SHELL_THEME_PRESETS.dark).toHaveLength(11);
+    expect(DESKTOP_SHELL_THEME_PRESETS.dark).toHaveLength(13);
     expect(new Set([
       ...DESKTOP_SHELL_THEME_PRESETS.light,
       ...DESKTOP_SHELL_THEME_PRESETS.dark,
-    ]).size).toBe(22);
+    ]).size).toBe(24);
   });
 
   it('normalizes persisted selections per mode and version', () => {
