@@ -187,13 +187,13 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 	root := repoRootForTest(t)
 	expectedPackages := map[string][]string{
 		"desktop/package.json": {
-			"\"@floegence/floe-webapp-core\": \"^0.39.3\"",
+			"\"@floegence/floe-webapp-core\": \"0.39.10\"",
 		},
 		"desktop/package-lock.json": {
-			"floe-webapp-core-0.39.3.tgz",
+			"floe-webapp-core-0.39.10.tgz",
 		},
 		"desktop/pnpm-lock.yaml": {
-			"@floegence/floe-webapp-core@0.39.3",
+			"@floegence/floe-webapp-core@0.39.10",
 		},
 		"internal/envapp/ui_src/package.json": {
 			"\"@floegence/floe-webapp-boot\": \"0.39.10\"",
@@ -226,7 +226,6 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 		},
 		"THIRD_PARTY_NOTICES.md": {
 			"@floegence/floe-webapp-boot | 0.39.10",
-			"@floegence/floe-webapp-core | 0.39.3",
 			"@floegence/floe-webapp-core | 0.39.10",
 			"@floegence/floe-webapp-protocol | 0.39.10",
 			"@floegence/floeterm-terminal-web | 0.10.1",
@@ -259,6 +258,11 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 			t.Fatalf("%s must not retain previous @floegence/floe-webapp 0.36.74 release", file)
 		}
 		for _, previousMarker := range []string{
+			"\"@floegence/floe-webapp-core\": \"^0.39.3\"",
+			"\"@floegence/floe-webapp-core\": \"0.39.3\"",
+			"@floegence/floe-webapp-core@0.39.3",
+			"floe-webapp-core-0.39.3.tgz",
+			"@floegence/floe-webapp-core | 0.39.3",
 			"\"@floegence/floe-webapp-boot\": \"^0.39.2\"",
 			"\"@floegence/floe-webapp-core\": \"^0.39.2\"",
 			"\"@floegence/floe-webapp-protocol\": \"^0.39.2\"",
