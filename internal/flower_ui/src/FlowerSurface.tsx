@@ -6103,6 +6103,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const question = activeInputQuestion();
     return question ? questionDraft(question.id).text ?? '' : '';
   });
+  const composerReferences = createMemo(() => currentComposerSessionDraft().references);
+  const composerHasReferences = createMemo(() => composerReferences().length > 0);
   const companionSummaryEligible = createMemo(() => (
     companionCollapsed()
     && !companionActionVisible()
@@ -6184,8 +6186,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return inputSubmitting() || !activeInputQuestion();
   });
 
-  const composerReferences = createMemo(() => currentComposerSessionDraft().references);
-  const composerHasReferences = createMemo(() => composerReferences().length > 0);
   const composerReferenceEditingAllowed = createMemo(() => (
     composerAttachmentEditingAllowed()
     && !composerTextareaDisabled()
