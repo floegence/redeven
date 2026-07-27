@@ -792,7 +792,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
               input: {
                 turn_id: proposedTurnID,
                 text: prompt,
-                attachment_ids: attachmentIDs,
+                attachments: attachmentIDs.map((attachmentID) => ({ attachment_id: attachmentID })),
                 ...(contextAction ? { context_action: contextAction } : {}),
               },
               options: {
