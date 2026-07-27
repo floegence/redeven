@@ -50,10 +50,16 @@ export default mergeConfig(viteConfig, defineConfig({
     exclude: ['@floegence/floe-webapp-core'],
   },
   test: {
+    fileParallelism: false,
     include: ['src/**/*.browser.test.tsx'],
     browser: {
       enabled: true,
-      provider: playwright(),
+      headless: true,
+      provider: playwright({
+        launchOptions: {
+          args: ['--enable-gpu', '--disable-background-timer-throttling', '--disable-renderer-backgrounding'],
+        },
+      }),
       api: Number.isInteger(configuredBrowserPort) && configuredBrowserPort > 0
         ? { port: configuredBrowserPort }
         : undefined,

@@ -17,7 +17,10 @@ import {
   terminalCarrierSampleMarkerName,
 } from './terminalCarrierThreshold.mjs';
 import { installReDevPluginRuntimeFixture } from './redevpluginRuntimeFixture.mjs';
-import { classifyTerminalCarrierConsoleMessage } from './terminalCarrierRunnerPolicy.mjs';
+import {
+  classifyTerminalCarrierConsoleMessage,
+  resolveTerminalCarrierBrowserMode,
+} from './terminalCarrierRunnerPolicy.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, '../../../..');
@@ -1317,21 +1320,23 @@ async function main(options) {
   const tempDir = await mkdtemp(path.join(tempRoot, 'redeven-terminal-carrier-'));
   let runtime = null;
   let browser = null;
+  carrierProgress.runner = {
+    platform: process.platform,
+    arch: process.arch,
+    node: process.version,
+    chromium: null,
+    browser_mode: options.browserMode,
+    cpu_count: os.cpus().length,
+    browser_driver_diagnostic_count: 0,
+  };
   try {
     runtime = await runStage('runtime_start', () => startRuntime(tempDir));
     const entryURL = new URL('_redeven_proxy/env/', runtime.startup.local_ui_url).toString();
     browser = await runStage('browser_launch', () => chromium.launch({
-      headless: false,
-      args: ['--disable-background-timer-throttling', '--disable-renderer-backgrounding'],
+      headless: options.headless,
+      args: ['--enable-gpu', '--disable-background-timer-throttling', '--disable-renderer-backgrounding'],
     }));
-    carrierProgress.runner = {
-      platform: process.platform,
-      arch: process.arch,
-      node: process.version,
-      chromium: browser.version(),
-      cpu_count: os.cpus().length,
-      browser_driver_diagnostic_count: 0,
-    };
+    carrierProgress.runner.chromium = browser.version();
     const reusedContext = await browser.newContext({ viewport: { width: 1280, height: 800 } });
     const seed = await openEnvPage(reusedContext, entryURL);
     await seed.page.getByRole('tab', { name: 'Workbench', exact: true }).click();
@@ -1455,6 +1460,7 @@ async function main(options) {
 }
 
 const args = process.argv.slice(2).filter((value) => value !== '--');
+const browserMode = resolveTerminalCarrierBrowserMode(args);
 const reportPath = readOption(args, '--report');
 const fixtureBytes = parsePositiveInteger(
   readOption(args, '--fixture-bytes', String(defaultFixtureBytes)),
@@ -1487,6 +1493,7 @@ const freshContextSamples = parsePositiveInteger(
 );
 
 main({
+  ...browserMode,
   fixtureBytes,
   maxInteractiveMs,
   maxSharedPreparedP95Ms,

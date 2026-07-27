@@ -195,8 +195,8 @@ describe('GitEntityContextMenu browser behavior', () => {
 
     const menuItems = Array.from(menu!.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
     expect(menu!.classList.contains('min-w-[180px]')).toBe(true);
-    expect(menuRect.width).toBeGreaterThanOrEqual(FLOATING_CONTEXT_MENU_WIDTH_PX - 2);
-    expect(menuRect.width).toBeLessThanOrEqual(FLOATING_CONTEXT_MENU_WIDTH_PX + 2);
+    expect(menuRect.width).toBeGreaterThanOrEqual(FLOATING_CONTEXT_MENU_WIDTH_PX - 3);
+    expect(menuRect.width).toBeLessThanOrEqual(FLOATING_CONTEXT_MENU_WIDTH_PX + 3);
     expect(menu!.scrollWidth).toBeLessThanOrEqual(menu!.clientWidth);
     expect(menuItems[0]!.classList.contains('items-center')).toBe(true);
     expect(menuItems[0]!.classList.contains('py-1.5')).toBe(true);

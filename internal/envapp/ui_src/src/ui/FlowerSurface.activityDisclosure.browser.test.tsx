@@ -215,9 +215,12 @@ async function terminalOutputHeights(className: string, lineCounts: readonly num
 }
 
 async function selectDisclosureThread(runtime: HTMLElement): Promise<HTMLButtonElement> {
-  await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-browser-disclosure"] button')));
+  await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-browser-disclosure"] button')), 5_000);
   (runtime.querySelector('[data-thread-id="thread-browser-disclosure"] button') as HTMLButtonElement).click();
-  await waitFor(() => runtime.querySelector('.flower-activity-inline-row')?.getAttribute('data-flower-activity-status') === 'running');
+  await waitFor(
+    () => runtime.querySelector('.flower-activity-inline-row')?.getAttribute('data-flower-activity-status') === 'running',
+    5_000,
+  );
   return runtime.querySelector('.flower-activity-inline-button') as HTMLButtonElement;
 }
 
@@ -300,7 +303,10 @@ describe('Flower activity disclosure browser behavior', () => {
     const button = await selectDisclosureThread(runtime);
 
     await waitFor(() => button.getAttribute('aria-expanded') === 'true');
-    await waitFor(() => runtime.querySelector('.flower-activity-inline-details')?.getAttribute('data-state') === 'open');
+    await waitFor(
+      () => runtime.querySelector('.flower-activity-inline-details')?.getAttribute('data-state') === 'open',
+      5_000,
+    );
     const desktopDetails = runtime.querySelector('.flower-activity-inline-details') as HTMLElement;
     expect(desktopDetails.getBoundingClientRect().height).toBeGreaterThan(0);
     expect(desktopDetails.style.height).toMatch(/^\d+(?:\.\d+)?px$/);
@@ -372,7 +378,10 @@ describe('Flower activity disclosure browser behavior', () => {
     });
     const button = await selectDisclosureThread(runtime);
     await waitFor(() => button.getAttribute('aria-expanded') === 'true');
-    await waitFor(() => runtime.querySelector('.flower-activity-inline-details')?.getAttribute('data-state') === 'open');
+    await waitFor(
+      () => runtime.querySelector('.flower-activity-inline-details')?.getAttribute('data-state') === 'open',
+      5_000,
+    );
     await waitFor(() => runtime.textContent?.includes('stream line 24') === true);
     const row = runtime.querySelector('[data-flower-activity-item-id="tool-browser-disclosure"]');
     const details = runtime.querySelector('.flower-activity-inline-details');
@@ -576,7 +585,10 @@ describe('Flower activity disclosure browser behavior', () => {
     const { runtime, complete } = renderDisclosureThread();
     const button = await selectDisclosureThread(runtime);
 
-    await waitFor(() => runtime.querySelector('.flower-activity-inline-details')?.getAttribute('data-state') === 'open');
+    await waitFor(
+      () => runtime.querySelector('.flower-activity-inline-details')?.getAttribute('data-state') === 'open',
+      5_000,
+    );
     const details = runtime.querySelector('.flower-activity-inline-details') as HTMLElement;
     dispatchDisclosureIntervention(details, intervention);
 

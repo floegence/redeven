@@ -5,7 +5,7 @@ import { LayoutProvider } from '@floegence/floe-webapp-core';
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { page } from 'vitest/browser';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../../flower_ui/src/copy';
 import { SubagentDetailWindow, type SubagentDetailWindowProps } from '../../../../../flower_ui/src/SubagentDetailWindow';
@@ -273,8 +273,9 @@ describe('Subagent detail window boundary', () => {
 
     geometry.focus();
     geometry.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-    await nextFrame(10);
     expect(open()).toBe(false);
-    expect(document.querySelector('.flower-subagent-detail-window')).toBeNull();
+    await vi.waitFor(() => {
+      expect(document.querySelector('.flower-subagent-detail-window')).toBeNull();
+    }, { timeout: 1_000 });
   });
 });

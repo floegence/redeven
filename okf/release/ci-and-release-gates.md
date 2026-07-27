@@ -35,6 +35,11 @@ generated assets, ReDevPlugin/Gateway/Flower integration, UI/Desktop checks,
 Docker Runtime E2E, OKF, serial uncached Go tests, and golangci-lint. Any
 generator that changes the tree fails the gate.
 
+The exact-main UI and renderer steps invoke the canonical headless browser and
+terminal carrier gates without a display server. Explicit headed runs are
+manual diagnostics and cannot replace exact-main evidence. Browser-mode and
+runner-evidence semantics are owned by [Env App upstream web dependencies](../architecture/env-app-upstream-web-dependencies.md).
+
 The Desktop gate protects real Electron preload coverage from local process
 collisions. Every preload run uses a temporary real working directory and
 separate utility/session user-data directories, then verifies both paths inside

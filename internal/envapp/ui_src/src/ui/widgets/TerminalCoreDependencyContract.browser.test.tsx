@@ -228,7 +228,7 @@ describe('published Floeterm TerminalCore dependency contract', () => {
       await vi.waitFor(() => {
         expect(manager.getSnapshot().entries[0]?.warm).toBe(true);
         expect(resumedCore).not.toBeNull();
-      });
+      }, { timeout: 15_000 });
 
       expect(resumedCore).not.toBe(firstCore);
       expect(bufferContains(resumedCore!, restoredMarker)).toBe(true);

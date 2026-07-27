@@ -156,6 +156,24 @@ export const requiredFixedTerminalPerformanceMetrics = Object.freeze([
   'terminal_warm_core_switch',
 ]);
 
+export function assertFixedTerminalPerformanceBrowserMode({ runner, carrierReport }) {
+  const browserMode = String(runner?.browser_mode ?? '').trim();
+  if (browserMode !== 'headless' && browserMode !== 'headed') {
+    throw new Error('terminal fixed-performance runner browser_mode must be headless or headed');
+  }
+  const carrierBrowserMode = String(carrierReport?.runner?.browser_mode ?? '').trim();
+  if (!carrierBrowserMode) {
+    throw new Error('terminal carrier evidence runner browser_mode is required');
+  }
+  if (carrierBrowserMode !== browserMode) {
+    throw new Error(
+      'terminal fixed-performance browser mode does not match carrier evidence '
+        + `(runner=${browserMode}, carrier=${carrierBrowserMode})`,
+    );
+  }
+  return browserMode;
+}
+
 function normalizeFixedTerminalPerformanceMetric(value, { requireSamples = false } = {}) {
   if (!value || typeof value !== 'object') {
     throw new Error('terminal fixed-performance metric must be an object');
@@ -298,6 +316,7 @@ export function buildFixedTerminalPerformanceReport({
   if (carrierReport?.status !== 'passed') {
     throw new Error(`terminal carrier evidence status is ${String(carrierReport?.status ?? 'missing')}`);
   }
+  assertFixedTerminalPerformanceBrowserMode({ runner, carrierReport });
   const carrierSampleCount = Number(carrierReport.shared_prepared_history_summary?.sample_count);
   const carrierP95Ms = Number(carrierReport.shared_prepared_history_summary?.interactive_p95_ms);
   const carrierSamplesMs = Array.isArray(carrierReport.shared_prepared_history_samples)
