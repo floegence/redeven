@@ -297,6 +297,7 @@ vi.mock('@floegence/floe-webapp-core/ui', async () => ({
 }));
 
 vi.mock('../services/localApi', () => ({
+  prepareLocalApiRequestInit: vi.fn(async (init: RequestInit) => init),
   fetchLocalApiJSON: mocks.fetchLocalApiJSONMock,
   fetchLocalApiJSONResponse: vi.fn(async (url: string, init?: RequestInit) => ({
     data: await mocks.fetchLocalApiJSONMock(url, init),
