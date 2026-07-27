@@ -9,7 +9,9 @@ timestamp: 2026-07-28T00:00:00Z
 
 Env App treats each visible Git workspace projection as a revision-bound generation owned by one protocol client and repository. Git Changes, Branch status, and Files decorations have independent owners but share a provider-level monotonic invalidation bus. Files navigation never waits for Git, never downloads a complete workspace inventory, and preserves the last committed decoration while one bounded replacement generation is built. A stale or invalidated response cannot restore old state after navigation, remount, capability probing, or an effect with an unknown outcome.
 
-# Capability and generation contract
+# Contract
+
+## Capability and generation
 
 Git workspace-v1 behavior starts only after `git.getCapabilities` confirms revision, path-status, directory-scope, and stash-section support for the exact protocol client object. Only a capability-method 404 is cached as an old Agent. Other probe failures are transient and retry on an explicit refresh or later mount. Replacing the protocol client discards the old capability state, generation state, and late responses; old Agents never trigger a fallback to the unbounded legacy workspace call for Files decoration.
 
@@ -17,7 +19,7 @@ Every owner starts with a fresh response that establishes its `workspace_revisio
 
 Changes, staged, and conflicted directory scopes remain explicit. Directory rows are aggregates, not representative descendants, and menu routing uses a deterministic priority: pending changes first, then conflicted, then staged. Moving from a Files-owned revision to the main Workspace opens a fresh Workspace generation before applying the requested section and directory scope; it cannot splice Files revision data into an older Workspace owner.
 
-# Invalidation contract
+## Invalidation
 
 The stable protocol provider owns `GitWorkspaceInvalidationBus`. Each client identity has a monotonically increasing global watermark and per-repository watermarks. A repository event advances that repository; an event without a reliable repository advances the client-global watermark. Other protocol clients are isolated.
 
@@ -25,7 +27,7 @@ Mounted Files, Workbench, Activity, launcher, and preview owners subscribe for l
 
 All Files and Git effects use one `executeWorkspaceEffect` boundary. Once an effect has been dispatched, its `finally` path publishes invalidation whether the result is success, an application error, or transport-unknown. Create, save, mkdir, copy, rename, duplicate, delete, stage, unstage, discard, commit, stash, checkout, pull, merge, and related effects cannot bypass this boundary. Preview and pure validation requests do not publish mutation invalidation.
 
-# Files decoration contract
+## Files decoration
 
 Files renders filesystem results immediately. Git decoration runs in the background only for paths already loaded by the current Files scope; it never expands filesystem pages or traverses workspace pages to discover more paths. At most one decoration request is active for an owner, and rapid navigation records only the latest pending scope. Late work from another client, repository, directory, generation, or watermark is ignored.
 
