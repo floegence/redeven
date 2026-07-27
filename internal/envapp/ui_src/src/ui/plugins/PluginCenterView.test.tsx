@@ -306,9 +306,10 @@ describe('PluginCenterView', () => {
     const search = mount.querySelector('[data-plugin-center-search]') as HTMLInputElement;
     const searchField = search.parentElement as HTMLElement;
     const actions = searchField.parentElement as HTMLElement;
-    expect(actions.classList).toContain('w-full');
-    expect(actions.classList).toContain('min-w-0');
+    // Toolbar wraps on narrow viewports: actions container has flex-wrap and w-full
     expect(actions.classList).toContain('flex-wrap');
+    expect(actions.classList).toContain('w-full');
+    // Search label uses order-first so it leads on small screens
     expect(searchField.classList).toContain('order-first');
     expect(searchField.classList).toContain('w-full');
     expect(searchField.classList).toContain('min-w-0');
