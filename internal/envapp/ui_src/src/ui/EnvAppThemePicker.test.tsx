@@ -107,7 +107,7 @@ describe('EnvAppThemePicker', () => {
     }
   });
 
-  it('shows all 11 dark themes and selects Nord without changing the source', () => {
+  it('shows all 13 dark themes and selects Nord without changing the source', () => {
     themeHarness.setSource('dark');
     themeHarness.setResolved('dark');
     const { dispose, onSourceChange, onShellThemeChange } = mountPicker();
@@ -116,7 +116,7 @@ describe('EnvAppThemePicker', () => {
       const presets = Array.from(host.querySelectorAll<HTMLElement>('[data-envapp-theme-preset]'));
       const nord = host.querySelector<HTMLButtonElement>('[data-envapp-theme-preset="nord"]');
 
-      expect(presets).toHaveLength(11);
+      expect(presets).toHaveLength(13);
       expect(presets.map((preset) => preset.dataset.envappThemePreset)).toContain('classic-dark');
       expect(presets.map((preset) => preset.dataset.envappThemePreset)).not.toContain('classic-light');
       nord?.click();

@@ -161,16 +161,23 @@ function runtimeMonitorPalette(profile: ThemeProfile): readonly [Rgb, Rgb, Rgb] 
       graph[2],
     ];
   }
+  if (profile.name === 'graphite') {
+    return [
+      graph[0],
+      graph[1],
+      mix(graph[4], parseColor(profile.foreground), 0.85),
+    ];
+  }
   return [graph[0], graph[1], graph[4]];
 }
 
-describe('Redeven 22-preset color quality', () => {
+describe('Redeven 24-preset color quality', () => {
   const profiles = publishedThemeProfiles();
 
   it('keeps all published light and dark presets in the executable matrix', () => {
-    expect(profiles).toHaveLength(22);
+    expect(profiles).toHaveLength(24);
     expect(profiles.filter((profile) => profile.mode === 'light')).toHaveLength(11);
-    expect(profiles.filter((profile) => profile.mode === 'dark')).toHaveLength(11);
+    expect(profiles.filter((profile) => profile.mode === 'dark')).toHaveLength(13);
   });
 
   it('keeps graph roles visible, adjacent roles distinct, and text roles readable', () => {
@@ -224,5 +231,7 @@ describe('Redeven 22-preset color quality', () => {
     expect(css).toContain(":root.dark[data-floe-shell-theme='nord']");
     expect(css).toContain('--redeven-runtime-monitor-download-line: color-mix(in srgb, var(--redeven-categorical-graph-2) 75%, var(--foreground) 25%);');
     expect(css).toContain('--redeven-runtime-monitor-upload-line: var(--redeven-categorical-graph-3);');
+    expect(css).toContain(":root.dark[data-floe-shell-theme='graphite']");
+    expect(css).toContain('--redeven-runtime-monitor-upload-line: color-mix(in srgb, var(--redeven-categorical-graph-5) 85%, var(--foreground) 15%);');
   });
 });

@@ -431,6 +431,10 @@
   --redeven-runtime-monitor-upload-line: var(--redeven-categorical-graph-3);
 }
 
+:root.dark[data-floe-shell-theme='graphite'] {
+  --redeven-runtime-monitor-upload-line: color-mix(in srgb, var(--redeven-categorical-graph-5) 85%, var(--foreground) 15%);
+}
+
 :root[data-floe-shell-theme='classic-light'],
 :root:not([data-floe-shell-theme]):not(.dark),
 :root:not([data-floe-shell-theme]).light {
