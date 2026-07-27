@@ -293,7 +293,7 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
         </div>
       )}
     >
-      <div ref={dialogContent} data-external-plugin-dialog class="space-y-4">
+      <div ref={dialogContent} data-external-plugin-dialog class="space-y-4 overflow-hidden">
         <InstallProgress stage={stage()} operation={reviewOperation()} />
         <Show when={error()}>
           {(currentError) => (
@@ -385,14 +385,15 @@ function InstallProgress(props: { stage: InstallStage; operation: ExternalReview
     i18n.t('common.status.ready'),
   ];
   return (
-    <div data-install-progress class="border-b pb-3">
-      <div class="flex items-center justify-between gap-3 text-xs">
-        <span class="min-w-0 truncate font-semibold" data-install-progress-current>{steps()[activeIndex()]}</span>
-        <span class="shrink-0 text-muted-foreground">
-          {i18n.t('uiCopy.plugin.external.stepProgress', { current: activeIndex() + 1, total: steps().length })}
-        </span>
-      </div>
-      <ol class="mt-2 grid grid-cols-4 gap-1" aria-label={i18n.t('uiCopy.plugin.external.dialogDescription')}>
+    <div data-install-progress class="overflow-hidden border-b pb-4 pt-1">
+      <span class="sr-only">
+        {i18n.t('uiCopy.plugin.external.stepProgress', { current: activeIndex() + 1, total: steps().length })}
+      </span>
+      <ol
+        class="grid gap-0"
+        style={`grid-template-columns: repeat(${steps().length}, 1fr)`}
+        aria-label={i18n.t('uiCopy.plugin.external.dialogDescription')}
+      >
         <For each={steps()}>
           {(label, index) => {
             const complete = () => index() < activeIndex();
@@ -400,13 +401,42 @@ function InstallProgress(props: { stage: InstallStage; operation: ExternalReview
             return (
               <li
                 data-install-progress-segment
-                class={cn(
-                  'h-1 min-w-0 rounded-full transition-colors duration-200 motion-reduce:transition-none',
-                  active() || complete() ? 'bg-primary' : 'bg-border',
-                )}
+                class="relative flex min-w-0 flex-col items-center gap-1.5 overflow-hidden"
                 aria-current={active() ? 'step' : undefined}
               >
-                <span class="sr-only">{label}</span>
+                {/* Connector line — drawn left of dot */}
+                <Show when={index() > 0}>
+                  <div
+                    aria-hidden="true"
+                    class={cn(
+                      'absolute top-[9px] right-1/2 h-px w-full transition-colors duration-200 motion-reduce:transition-none',
+                      complete() || active() ? 'bg-primary/40' : 'bg-border',
+                    )}
+                  />
+                </Show>
+                {/* Step dot */}
+                <div
+                  class={cn(
+                    'relative z-10 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border text-[9px] font-bold transition-colors duration-200 motion-reduce:transition-none',
+                    complete()
+                      ? 'border-[var(--success,var(--primary))] bg-[var(--success,var(--primary))] text-[var(--success-foreground,var(--primary-foreground))]'
+                      : active()
+                        ? 'border-primary bg-primary text-primary-foreground'
+                        : 'border-border bg-background text-muted-foreground',
+                  )}
+                >
+                  {complete() ? '✓' : index() + 1}
+                </div>
+                {/* Step label */}
+                <span
+                  data-install-progress-current={active() ? 'true' : undefined}
+                  class={cn(
+                    'max-w-full truncate px-1 text-center text-[10px] font-medium leading-tight transition-colors duration-200 motion-reduce:transition-none',
+                    active() ? 'text-foreground' : complete() ? 'text-muted-foreground' : 'text-muted-foreground/60',
+                  )}
+                >
+                  {label}
+                </span>
               </li>
             );
           }}
@@ -608,7 +638,7 @@ function SourceForm(props: {
             aria-invalid={validationVisible() && !validation().valid ? 'true' : undefined}
             aria-describedby={validationVisible() && !validation().valid ? 'external-plugin-source-error' : undefined}
             class={cn(
-              'h-[46px] w-full rounded-md border bg-background px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 sm:h-10',
+              'h-[46px] w-full min-w-0 rounded-md border bg-background px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 sm:h-10',
               validationVisible() && !validation().valid && 'border-destructive focus:border-destructive focus:ring-destructive/20',
             )}
             onInput={(event) => props.onURL(event.currentTarget.value)}
@@ -629,7 +659,7 @@ function SourceForm(props: {
             value={props.tag}
             disabled={props.pending}
             placeholder={i18n.t('uiCopy.plugin.external.latestRelease')}
-            class="h-[46px] w-full rounded-md border bg-background px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 sm:h-10"
+            class="h-[46px] w-full min-w-0 rounded-md border bg-background px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 sm:h-10"
             onInput={(event) => props.onTag(event.currentTarget.value)}
           />
         </label>

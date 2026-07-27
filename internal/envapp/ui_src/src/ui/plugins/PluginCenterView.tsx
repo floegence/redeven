@@ -379,7 +379,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
                     'flex w-full cursor-pointer items-start gap-3 px-4 py-3 text-left transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                     activeTab() === 'discover' ? 'min-h-36 rounded-md border bg-background' : 'border-b',
                     selectedItem()?.inventoryKey === item.inventoryKey
-                      ? activeTab() === 'discover' ? 'border-primary bg-primary/5' : 'bg-primary/10 shadow-[inset_3px_0_0_var(--primary)]'
+                      ? activeTab() === 'discover' ? 'border-primary bg-primary/5' : 'bg-primary/[0.08] shadow-[inset_3px_0_0_var(--primary)]'
                       : 'bg-background',
                   )}
                   onClick={(event) => openDetails(item.inventoryKey, event.currentTarget)}
@@ -520,17 +520,15 @@ export function PluginCenterShell(props: {
   }];
   return (
     <section ref={rootRef} data-plugin-center-view tabIndex={-1} class="flex h-full min-h-0 flex-col bg-background text-foreground">
-      <div class="shrink-0 border-b bg-background px-4 py-3">
-        <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div class="min-w-0">
-            <div class="flex items-center gap-2">
-              <h1 class="truncate text-lg font-semibold">{i18n.t('uiCopy.plugin.centerTitle')}</h1>
-              <span class="rounded-full border border-primary/25 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-primary">{i18n.t('uiCopy.plugin.openSources')}</span>
-            </div>
-            <p class="mt-1 text-sm text-muted-foreground">{i18n.t('uiCopy.plugin.catalogDescription')}</p>
+      <div class="shrink-0 bg-background">
+        {/* Row 1: Toolbar — title + search + actions */}
+        <div class="flex items-center gap-2 px-4 py-2">
+          <div class="flex min-w-0 items-center gap-2">
+            <h1 class="truncate text-sm font-semibold">{i18n.t('uiCopy.plugin.centerTitle')}</h1>
+            <span class="rounded border border-primary/25 bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-primary">{i18n.t('uiCopy.plugin.openSources')}</span>
           </div>
-          <div class="flex w-full min-w-0 flex-wrap items-center gap-2 lg:w-auto lg:max-w-[min(760px,65vw)] lg:justify-end">
-            <label class="relative order-first block w-full min-w-0 sm:order-none sm:min-w-48 sm:flex-1 lg:w-[min(320px,52vw)] lg:flex-none">
+          <div class="flex w-full flex-1 flex-wrap items-center justify-end gap-1.5">
+            <label class="relative order-first block w-full min-w-0 sm:order-none sm:max-w-[min(260px,40vw)] sm:flex-1 lg:flex-none">
               <span class="sr-only">{i18n.t('uiCopy.plugin.searchPlaceholder')}</span>
               <Search class="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <input
@@ -540,7 +538,7 @@ export function PluginCenterShell(props: {
                 value={props.query}
                 onInput={(event) => props.onQueryInput(event.currentTarget.value)}
                 placeholder={i18n.t('uiCopy.plugin.searchPlaceholder')}
-                class="h-[44px] w-full rounded-md border bg-background pl-8 pr-2 text-sm outline-none transition placeholder:text-muted-foreground/60 focus:border-primary focus:ring-2 focus:ring-primary/20 sm:h-8"
+                class="h-[44px] w-full rounded-md border bg-background pl-8 pr-2 text-sm outline-none transition placeholder:text-muted-foreground/60 focus:border-primary focus:ring-1 focus:ring-ring/50 sm:h-8"
               />
             </label>
             <Show when={props.canManage}>
@@ -578,7 +576,7 @@ export function PluginCenterShell(props: {
             <Show when={props.onClose}>
               <button
                 type="button"
-                class="inline-flex h-[44px] w-[44px] cursor-pointer items-center justify-center rounded-md border text-muted-foreground transition hover:bg-muted hover:text-foreground sm:h-8 sm:w-8"
+                class="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-md border text-muted-foreground transition hover:bg-muted hover:text-foreground"
                 aria-label={i18n.t('uiCopy.plugin.closeCenter')}
                 onClick={() => props.onClose?.()}
               >
@@ -587,22 +585,27 @@ export function PluginCenterShell(props: {
             </Show>
           </div>
         </div>
-        <div class="mt-3 flex flex-wrap gap-1" role="tablist" aria-label={i18n.t('uiCopy.plugin.centerTitle')}>
+        {/* Row 2: Nav — tabs + category pills on same line */}
+        <div class="flex items-center overflow-x-auto border-t px-4" role="tablist" aria-label={i18n.t('uiCopy.plugin.centerTitle')}>
           <TabButton id="discover" active={props.activeTab} onSelect={props.onTabSelect} label={i18n.t('uiCopy.plugin.discoverCount', { count: props.discoverCount })} />
           <TabButton id="installed" active={props.activeTab} onSelect={props.onTabSelect} label={i18n.t('uiCopy.plugin.installedCount', { count: props.installedCount })} />
           <TabButton id="updates" active={props.activeTab} onSelect={props.onTabSelect} label={i18n.t('uiCopy.plugin.updatesCount', { count: props.updatesCount })} />
+          <Show when={props.activeTab === 'discover' || props.activeTab === 'installed' || props.activeTab === 'updates'}>
+            <div class="mx-3 h-4 w-px shrink-0 bg-border" aria-hidden="true" />
+            <div class="flex gap-1 overflow-x-auto py-1.5" role="group" aria-label={i18n.t('uiCopy.plugin.categories')}>
+              <CenterCategoryButton id="all" active={props.category} label={i18n.t('uiCopy.plugin.categoryAll')} onSelect={props.onCategorySelect} />
+              <CenterCategoryButton id="development" active={props.category} label={i18n.t('uiCopy.plugin.categoryDevelopment')} onSelect={props.onCategorySelect} />
+              <CenterCategoryButton id="infrastructure" active={props.category} label={i18n.t('uiCopy.plugin.categoryInfrastructure')} onSelect={props.onCategorySelect} />
+              <CenterCategoryButton id="data" active={props.category} label={i18n.t('uiCopy.plugin.categoryData')} onSelect={props.onCategorySelect} />
+              <CenterCategoryButton id="collaboration" active={props.category} label={i18n.t('uiCopy.plugin.categoryCollaboration')} onSelect={props.onCategorySelect} />
+              <CenterCategoryButton id="productivity" active={props.category} label={i18n.t('uiCopy.plugin.categoryProductivity')} onSelect={props.onCategorySelect} />
+              <CenterCategoryButton id="other" active={props.category} label={i18n.t('uiCopy.plugin.categoryOther')} onSelect={props.onCategorySelect} />
+            </div>
+          </Show>
         </div>
-        <div class="mt-2 flex gap-1 overflow-x-auto pb-0.5" role="group" aria-label={i18n.t('uiCopy.plugin.categories')}>
-          <CenterCategoryButton id="all" active={props.category} label={i18n.t('uiCopy.plugin.categoryAll')} onSelect={props.onCategorySelect} />
-          <CenterCategoryButton id="development" active={props.category} label={i18n.t('uiCopy.plugin.categoryDevelopment')} onSelect={props.onCategorySelect} />
-          <CenterCategoryButton id="infrastructure" active={props.category} label={i18n.t('uiCopy.plugin.categoryInfrastructure')} onSelect={props.onCategorySelect} />
-          <CenterCategoryButton id="data" active={props.category} label={i18n.t('uiCopy.plugin.categoryData')} onSelect={props.onCategorySelect} />
-          <CenterCategoryButton id="collaboration" active={props.category} label={i18n.t('uiCopy.plugin.categoryCollaboration')} onSelect={props.onCategorySelect} />
-          <CenterCategoryButton id="productivity" active={props.category} label={i18n.t('uiCopy.plugin.categoryProductivity')} onSelect={props.onCategorySelect} />
-          <CenterCategoryButton id="other" active={props.category} label={i18n.t('uiCopy.plugin.categoryOther')} onSelect={props.onCategorySelect} />
-        </div>
-        <div class="mt-2 flex min-w-0 items-start gap-2" data-plugin-center-filters>
-          <div class="flex min-w-0 flex-1 gap-2 overflow-x-auto border-x border-transparent pb-1" data-plugin-center-filter-scroll>
+        {/* Row 3: Filter row — always rendered so filters stay in DOM */}
+        <div class="flex items-center gap-2 border-t px-4 py-1.5" data-plugin-center-filters>
+          <div class="flex min-w-0 flex-1 gap-2 overflow-x-auto" data-plugin-center-filter-scroll>
             <CenterFilterMenu
               id="source"
               dimension={i18n.t('uiCopy.plugin.external.source')}
@@ -649,13 +652,14 @@ export function PluginCenterShell(props: {
             <button
               type="button"
               data-plugin-center-clear-filters
-              class="h-11 shrink-0 cursor-pointer whitespace-nowrap rounded-md px-2.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:h-8"
+              class="min-h-[44px] shrink-0 cursor-pointer whitespace-nowrap rounded-md px-2.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:h-8 sm:min-h-0"
               onClick={props.onClearFilters}
             >
               {i18n.t('uiCopy.plugin.clearFilters')}
             </button>
           </Show>
         </div>
+        <div class="border-b" />
       </div>
       {props.children}
     </section>
@@ -1096,7 +1100,7 @@ function TabButton(props: {
       aria-controls="plugin-center-panel"
       tabIndex={isActive() ? 0 : -1}
       class={cn(
-        'min-h-[44px] cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium transition sm:min-h-8',
+        'min-h-[44px] min-w-[44px] cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium transition sm:min-h-8 sm:min-w-0',
         isActive() ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted hover:text-foreground',
       )}
       onClick={() => props.onSelect(props.id)}
