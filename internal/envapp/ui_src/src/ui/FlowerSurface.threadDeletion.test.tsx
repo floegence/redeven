@@ -158,6 +158,7 @@ describe('FlowerSurface thread deletion', () => {
     await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${target.thread_id}"]`)));
     (runtime.querySelector(`[data-thread-id="${target.thread_id}"] .flower-thread-card-select-button`) as HTMLButtonElement).click();
     await waitFor(() => runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-id') === target.thread_id);
+    await waitFor(() => runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-loading') === 'false');
     const composer = runtime.querySelector('textarea') as HTMLTextAreaElement;
     composer.value = 'Preserve this draft';
     composer.dispatchEvent(new InputEvent('input', { bubbles: true }));
