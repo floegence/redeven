@@ -22,6 +22,25 @@ function blockedSnapshot(): AIReadinessSnapshot {
   };
 }
 
+function degradedSnapshot(): AIReadinessSnapshot {
+  return {
+    state: 'degraded',
+    reason_code: 'host_thread_settings_missing',
+    issue_count: 1,
+    retryable: false,
+    safe_to_retry: false,
+    committed: false,
+    rolled_back: false,
+  };
+}
+
+function orphanReview(threadID = 'thread_orphan') {
+  return {
+    issue_count: 1,
+    items: [{ thread_id: threadID, phase: 'idle', status: 'idle', can_append_message: true, recoverable: false }],
+  };
+}
+
 function deferred<T>(): Readonly<{
   promise: Promise<T>;
   resolve: (value: T) => void;
@@ -39,6 +58,7 @@ function deferred<T>(): Readonly<{
 function mountSettings(refreshResult?: ReturnType<typeof deferred<AIReadinessSnapshot>>, initial = blockedSnapshot()) {
   const [snapshot, setSnapshot] = createSignal(initial);
   const [loading, setLoading] = createSignal(false);
+  const [canAdmin, setCanAdmin] = createSignal(true);
   const refresh = vi.fn(() => {
     setLoading(true);
     const pending = refreshResult?.promise ?? Promise.resolve(snapshot());
@@ -64,7 +84,7 @@ function mountSettings(refreshResult?: ReturnType<typeof deferred<AIReadinessSna
     <I18nProvider>
       <AIReadinessSettingsSection
         controller={controller}
-        canAdmin
+        canAdmin={canAdmin()}
         endpointID="env_a"
         namespacePublicID="ns_a"
         modelID="provider/model"
@@ -73,7 +93,7 @@ function mountSettings(refreshResult?: ReturnType<typeof deferred<AIReadinessSna
       />
     </I18nProvider>
   ), host);
-  return { host, dispose, refresh };
+  return { host, dispose, refresh, setCanAdmin };
 }
 
 function buttonWithText(host: HTMLElement, text: string): HTMLButtonElement {
@@ -115,6 +135,92 @@ describe('AIReadinessSettingsSection', () => {
         model_id: 'provider/model', permission_type: 'approval_required', working_dir: '/workspace',
       }),
     });
+    fixture.dispose();
+  });
+
+  it('clears loaded review state, drafts, and delete confirmation immediately when admin access is revoked', async () => {
+    fetchLocalApiJSON
+      .mockResolvedValueOnce(orphanReview())
+      .mockResolvedValueOnce(orphanReview());
+    const fixture = mountSettings(undefined, degradedSnapshot());
+
+    buttonWithText(fixture.host, 'Review').click();
+    await flushMicrotasks();
+    const workingDirectory = fixture.host.querySelector<HTMLInputElement>('input:not([readonly])')!;
+    workingDirectory.value = '/sensitive/draft';
+    workingDirectory.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    buttonWithText(fixture.host, 'Delete').click();
+    expect(buttonWithText(fixture.host, 'Confirm canonical delete')).not.toBeNull();
+
+    fixture.setCanAdmin(false);
+    expect(fixture.host.querySelector('[data-testid="ai-orphan-root-review"]')).toBeNull();
+    expect(fixture.host.textContent).not.toContain('thread_orphan');
+
+    fixture.setCanAdmin(true);
+    expect(fixture.host.querySelector('[data-testid="ai-orphan-root-review"]')).toBeNull();
+    buttonWithText(fixture.host, 'Review').click();
+    await flushMicrotasks();
+    expect(fixture.host.querySelector<HTMLInputElement>('input:not([readonly])')?.value).toBe('/workspace');
+    expect(buttonWithText(fixture.host, 'Delete').textContent).not.toContain('Confirm canonical delete');
+    fixture.dispose();
+  });
+
+  it('discards an in-flight review response after admin access is revoked', async () => {
+    const pendingReview = deferred<ReturnType<typeof orphanReview>>();
+    fetchLocalApiJSON.mockImplementationOnce(() => pendingReview.promise);
+    const fixture = mountSettings(undefined, degradedSnapshot());
+
+    buttonWithText(fixture.host, 'Review').click();
+    fixture.setCanAdmin(false);
+    pendingReview.resolve(orphanReview('thread_from_revoked_request'));
+    await flushMicrotasks();
+    fixture.setCanAdmin(true);
+
+    expect(fixture.host.textContent).not.toContain('thread_from_revoked_request');
+    expect(fixture.host.querySelector('[data-testid="ai-orphan-root-review"]')).toBeNull();
+    expect(buttonWithText(fixture.host, 'Review').disabled).toBe(false);
+    fixture.dispose();
+  });
+
+  it.each([
+    { name: 'adopt', start: (host: HTMLElement) => buttonWithText(host, 'Adopt with these settings').click() },
+    { name: 'delete', start: (host: HTMLElement) => { buttonWithText(host, 'Delete').click(); buttonWithText(host, 'Confirm canonical delete').click(); } },
+  ])('does not restore sensitive state from an in-flight $name callback after admin access is revoked', async ({ start }) => {
+    const pendingAction = deferred<unknown>();
+    fetchLocalApiJSON
+      .mockResolvedValueOnce(orphanReview())
+      .mockImplementationOnce(() => pendingAction.promise)
+      .mockResolvedValueOnce(orphanReview());
+    const fixture = mountSettings(undefined, degradedSnapshot());
+    buttonWithText(fixture.host, 'Review').click();
+    await flushMicrotasks();
+
+    start(fixture.host);
+    fixture.setCanAdmin(false);
+    pendingAction.resolve({ issue_count: 0 });
+    await flushMicrotasks();
+    expect(fixture.refresh).not.toHaveBeenCalled();
+
+    fixture.setCanAdmin(true);
+    expect(fixture.host.textContent).not.toContain('thread_orphan');
+    buttonWithText(fixture.host, 'Review').click();
+    await flushMicrotasks();
+    expect(buttonWithText(fixture.host, 'Adopt with these settings').disabled).toBe(false);
+    expect(buttonWithText(fixture.host, 'Delete').textContent).not.toContain('Confirm canonical delete');
+    fixture.dispose();
+  });
+
+  it('clears admin review errors when access is revoked', async () => {
+    fetchLocalApiJSON.mockRejectedValueOnce(new Error('sensitive maintenance failure'));
+    const fixture = mountSettings(undefined, degradedSnapshot());
+
+    buttonWithText(fixture.host, 'Review').click();
+    await flushMicrotasks();
+    expect(fixture.host.querySelector('[role="alert"]')?.textContent).toContain('sensitive maintenance failure');
+
+    fixture.setCanAdmin(false);
+    fixture.setCanAdmin(true);
+    expect(fixture.host.querySelector('[role="alert"]')).toBeNull();
     fixture.dispose();
   });
 
