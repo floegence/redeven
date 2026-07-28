@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createSignal } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
 import { AlertTriangle, Check, Copy, Database, RefreshIcon, Trash } from '@floegence/floe-webapp-core/icons';
 
 import { useI18n } from '../../i18n';
@@ -39,6 +39,20 @@ export function AIReadinessSettingsSection(props: AIReadinessSettingsSectionProp
   const [drafts, setDrafts] = createSignal<Record<string, AdoptionDraft>>({});
   const [actionPending, setActionPending] = createSignal<string | null>(null);
   const [deleteConfirmID, setDeleteConfirmID] = createSignal<string | null>(null);
+  let adminEpoch = 0;
+
+  const hasCurrentAdminAccess = (epoch: number): boolean => Boolean(props.canAdmin) && epoch === adminEpoch;
+
+  createEffect(() => {
+    if (props.canAdmin) return;
+    adminEpoch += 1;
+    setReview(null);
+    setReviewLoading(false);
+    setReviewError(null);
+    setDrafts({});
+    setActionPending(null);
+    setDeleteConfirmID(null);
+  });
 
   const defaultDraft = (): AdoptionDraft => ({
     endpoint_id: String(props.endpointID ?? '').trim(),
@@ -56,60 +70,73 @@ export function AIReadinessSettingsSection(props: AIReadinessSettingsSectionProp
 
   const loadReview = async (): Promise<void> => {
     if (!props.canAdmin || reviewLoading()) return;
+    const requestEpoch = adminEpoch;
     setReviewLoading(true);
     setReviewError(null);
     try {
       const next = await fetchLocalApiJSON<OrphanRootReview>('/_redeven_proxy/api/ai/maintenance/orphan_roots', { method: 'GET' });
+      if (!hasCurrentAdminAccess(requestEpoch)) return;
       setReview(next);
       setDrafts((current) => Object.fromEntries(next.items.map((item) => [item.thread_id, current[item.thread_id] ?? defaultDraft()])));
     } catch (error) {
+      if (!hasCurrentAdminAccess(requestEpoch)) return;
       setReviewError(formatUnknownError(error) || i18n.t('aiReadiness.settings.reviewFailed'));
     } finally {
-      setReviewLoading(false);
+      if (hasCurrentAdminAccess(requestEpoch)) setReviewLoading(false);
     }
   };
 
   const updateDraft = (threadID: string, field: keyof AdoptionDraft, value: string): void => {
+    if (!props.canAdmin) return;
     setDrafts((current) => ({ ...current, [threadID]: { ...(current[threadID] ?? defaultDraft()), [field]: value } }));
   };
 
   const adopt = async (threadID: string): Promise<void> => {
     const draft = drafts()[threadID] ?? defaultDraft();
-    if (Object.values(draft).some((value) => !String(value).trim()) || actionPending()) return;
+    if (!props.canAdmin || Object.values(draft).some((value) => !String(value).trim()) || actionPending()) return;
+    const requestEpoch = adminEpoch;
     setActionPending(threadID);
     setReviewError(null);
     try {
       await fetchLocalApiJSON('/_redeven_proxy/api/ai/maintenance/orphan_roots/adopt', {
         method: 'POST', body: JSON.stringify({ thread_id: threadID, ...draft }),
       });
+      if (!hasCurrentAdminAccess(requestEpoch)) return;
       await props.controller.refresh();
+      if (!hasCurrentAdminAccess(requestEpoch)) return;
       await loadReview();
     } catch (error) {
+      if (!hasCurrentAdminAccess(requestEpoch)) return;
       setReviewError(formatUnknownError(error) || i18n.t('aiReadiness.settings.adoptFailed'));
     } finally {
-      setActionPending(null);
+      if (hasCurrentAdminAccess(requestEpoch)) setActionPending(null);
     }
   };
 
   const deleteRoot = async (threadID: string): Promise<void> => {
+    if (!props.canAdmin) return;
     if (deleteConfirmID() !== threadID) {
       setDeleteConfirmID(threadID);
       return;
     }
     if (actionPending()) return;
+    const requestEpoch = adminEpoch;
     setActionPending(threadID);
     setReviewError(null);
     try {
       await fetchLocalApiJSON('/_redeven_proxy/api/ai/maintenance/orphan_roots/delete', {
         method: 'POST', body: JSON.stringify({ thread_id: threadID }),
       });
+      if (!hasCurrentAdminAccess(requestEpoch)) return;
       setDeleteConfirmID(null);
       await props.controller.refresh();
+      if (!hasCurrentAdminAccess(requestEpoch)) return;
       await loadReview();
     } catch (error) {
+      if (!hasCurrentAdminAccess(requestEpoch)) return;
       setReviewError(formatUnknownError(error) || i18n.t('aiReadiness.settings.deleteFailed'));
     } finally {
-      setActionPending(null);
+      if (hasCurrentAdminAccess(requestEpoch)) setActionPending(null);
     }
   };
 
@@ -226,8 +253,8 @@ export function AIReadinessSettingsSection(props: AIReadinessSettingsSectionProp
               </Show>
             </div>
           </Show>
-          <Show when={reviewError()}>{(message) => <p role="alert" class="mt-3 text-xs text-destructive">{message()}</p>}</Show>
-          <Show when={review()}>{(loaded) => (
+          <Show when={props.canAdmin && reviewError()}>{(message) => <p role="alert" class="mt-3 text-xs text-destructive">{message()}</p>}</Show>
+          <Show when={props.canAdmin && review()}>{(loaded) => (
             <div class="mt-3 border-t border-border pt-3" data-testid="ai-orphan-root-review">
               <div class="flex items-center justify-between gap-3">
                 <p class="text-xs font-semibold text-foreground">{i18n.t('aiReadiness.settings.reviewTitle')}</p>
