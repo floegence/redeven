@@ -412,9 +412,13 @@ describe('Env App i18n dictionaries', () => {
     expect(dictionaries['ja-JP'].terminal.searchSessions).toBe('セッションを検索...');
     expect(dictionaries['ja-JP'].terminal.activityWithUnreadOutput).toBe('{activity}。{unread}');
     expect(dictionaries['ja-JP'].terminal.sessionsWithWaitingAttention).toBe('{sessions}。{attention}');
+    expect(dictionaries['ja-JP'].terminal.statusSentence).toBe('{status}。');
     expect(dictionaries['ja-JP'].terminal.statusAnnouncement).toBe('{identity}。{status}');
+    expect(dictionaries['ja-JP'].terminal.statusAnnouncementPair).toBe('{first}{second}');
     expect(dictionaries['zh-CN'].terminal.sessionIdentityWithTitle).toBe('{label}：{title}');
+    expect(dictionaries['zh-CN'].terminal.statusSentence).toBe('{status}。');
     expect(dictionaries['zh-TW'].terminal.statusAnnouncement).toBe('{identity}。{status}');
+    expect(dictionaries['zh-TW'].terminal.statusAnnouncementPair).toBe('{first}{second}');
     expect(dictionaries['ko-KR'].terminal.refresh).toBe('새로 고침');
     expect(dictionaries['ko-KR'].terminal.moreOptions).toBe('추가 옵션');
     expect(dictionaries['ko-KR'].terminal.searchPlaceholder).toBe('검색...');
@@ -423,6 +427,25 @@ describe('Env App i18n dictionaries', () => {
     expect(dictionaries['ko-KR'].terminal.settings.mobileInputTitle).toBe('모바일 입력');
     expect(dictionaries['ko-KR'].terminal.sessions).toBe('세션');
     expect(dictionaries['ko-KR'].terminal.searchSessions).toBe('세션 검색...');
+  });
+
+  it('keeps reviewed terminal settings labels aligned and theme names literal', () => {
+    for (const locale of SUPPORTED_LOCALES) {
+      expect(dictionaries[locale].terminal.settings.solarizedDark).toBe('Solarized Dark');
+      expect(dictionaries[locale].terminal.settings.monokai).toBe('Monokai');
+      expect(dictionaries[locale].terminal.settings.tokyoNight).toBe('Tokyo Night');
+    }
+
+    expect(dictionaries['de-DE'].terminal.settings.mobileInputTitle).toBe('Mobile Eingabe');
+    expect(dictionaries['es-ES'].terminal.executePermissionDescription).toContain('permisos de escritura y ejecución');
+    expect(dictionaries['fr-FR'].terminal.settings.shown).toBe('Affichée');
+    expect(dictionaries['fr-FR'].terminal.settings.hidden).toBe('Masquée');
+    expect(dictionaries['fr-FR'].terminal.settings.fontTitle).toBe('Police');
+    expect(dictionaries['ja-JP'].terminal.creatingStatus).toBe('ターミナルを作成しています');
+    expect(dictionaries['pt-BR'].terminal.waitingForActivation).toBe('Selecione este terminal para continuar.');
+    expect(dictionaries['ru-RU'].terminal.settings.fontSize).toBe('Размер шрифта');
+    expect(dictionaries['zh-CN'].terminal.settings.floeKeyboardDescription).toContain('路径补全');
+    expect(dictionaries['zh-TW'].terminal.settings.fontSize).toBe('字型大小');
   });
 
   it('preserves protected product terms across localized dictionaries', () => {
@@ -612,7 +635,7 @@ describe('Env App i18n dictionaries', () => {
   it('keeps file and terminal duplicate actions context-specific in every locale', () => {
     const expected = {
       'en-US': ['Files', 'Duplicate', 'Duplicate session'],
-      'zh-CN': ['文件', '创建副本', '复制会话'],
+      'zh-CN': ['文件', '创建副本', '创建会话副本'],
       'zh-TW': ['檔案', '建立副本', '複製工作階段'],
       'ja-JP': ['ファイル', '複製', 'セッションを複製'],
       'ko-KR': ['파일', '사본 만들기', '세션 복제'],

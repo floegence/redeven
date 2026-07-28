@@ -7006,7 +7006,7 @@ describe('TerminalPanel', () => {
     await settleTerminalPanel();
 
     const announcement = host.querySelector<HTMLElement>('[data-terminal-status-announcement]');
-    expect(announcement?.textContent).toBe('Build agent: Codex. User input required');
+    expect(announcement?.textContent).toBe('Build agent: Codex. User input required.');
     expect(announcement?.textContent).not.toContain('Review agent');
     expect(announcement?.dataset.terminalStatusAnnouncementSequence).toBe('1');
 
@@ -7629,6 +7629,69 @@ describe('TerminalPanel', () => {
     const escapeEvent = dispatchTerminalKeydown(externalButton, { key: 'Escape' });
     expect(tabEvent.defaultPrevented).toBe(false);
     expect(escapeEvent.defaultPrevented).toBe(false);
+    expect(document.activeElement).toBe(externalButton);
+  });
+
+  it('releases the mobile drawer before handing a session path to Files', async () => {
+    layoutState.mobile = true;
+    terminalPrefsState.mobileInputMode = 'system';
+    envContextState.viewMode = 'workbench';
+    const host = document.createElement('div');
+    const externalButton = document.createElement('button');
+    externalButton.textContent = 'Files surface';
+    document.body.append(host, externalButton);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanelAfterPaint();
+    host.querySelector<HTMLButtonElement>('[data-testid="terminal-session-drawer-open"]')?.click();
+    await settleTerminalPanel();
+    expect(host.querySelector('[role="dialog"][aria-modal="true"]')).not.toBeNull();
+
+    host.querySelector<HTMLButtonElement>('[data-testid="terminal-session-files-session-1"]')?.click();
+    await settleTerminalPanel();
+
+    expect(host.querySelector('[role="dialog"][aria-modal="true"]')).toBeNull();
+    expect(host.querySelector('[data-testid="terminal-session-drawer-backdrop"]')).toBeNull();
+    expect(openFileBrowserAtPathSpy).toHaveBeenCalledWith('/workspace', {
+      homePath: '/workspace',
+      title: 'workspace',
+      openStrategy: 'create_new',
+    });
+    externalButton.focus();
+    expect(document.activeElement).toBe(externalButton);
+  });
+
+  it('releases the mobile drawer before opening Ask Flower from a session row', async () => {
+    layoutState.mobile = true;
+    terminalPrefsState.mobileInputMode = 'system';
+    const host = document.createElement('div');
+    const externalButton = document.createElement('button');
+    externalButton.textContent = 'Flower surface';
+    document.body.append(host, externalButton);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanelAfterPaint();
+    host.querySelector<HTMLButtonElement>('[data-testid="terminal-session-drawer-open"]')?.click();
+    await settleTerminalPanel();
+    const row = findTerminalTab(host, 'Terminal 1')!;
+    row.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 24,
+      clientY: 32,
+    }));
+    await settleTerminalPanelAfterPaint();
+    const askButton = Array.from(host.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'))
+      .find((button) => button.textContent?.includes('Ask Flower'));
+    expect(askButton).toBeTruthy();
+
+    askButton?.click();
+    await settleTerminalPanelAfterPaint();
+
+    expect(host.querySelector('[role="dialog"][aria-modal="true"]')).toBeNull();
+    expect(host.querySelector('[data-testid="terminal-session-drawer-backdrop"]')).toBeNull();
+    expect(openFlowerTurnLauncherSpy).toHaveBeenCalledTimes(1);
+    externalButton.focus();
     expect(document.activeElement).toBe(externalButton);
   });
 

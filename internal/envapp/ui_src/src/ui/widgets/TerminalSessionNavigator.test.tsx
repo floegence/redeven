@@ -6,6 +6,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   TerminalSessionNavigator,
   describeTerminalSessionNavigationItem,
+  joinTerminalStatusAnnouncements,
+  terminalStatusSentence,
   type TerminalSessionNavigationItem,
 } from './TerminalSessionNavigator';
 
@@ -316,7 +318,13 @@ describe('TerminalSessionNavigator agent status presentation', () => {
       'terminal.terminalUnavailable': 'Dieses Terminal konnte nicht wiederhergestellt werden.',
       'terminal.creatingStatus': 'Creating terminal',
     };
-    const t = ((key: string) => messages[key] ?? '') as Parameters<typeof describeTerminalSessionNavigationItem>[1];
+    const t = ((key: string, params?: Record<string, unknown>) => (
+      key === 'terminal.statusSentence'
+        ? `${String(params?.status ?? '')}.`
+        : key === 'terminal.statusAnnouncementPair'
+          ? `${String(params?.first ?? '')} ${String(params?.second ?? '')}`
+        : messages[key] ?? ''
+    )) as Parameters<typeof describeTerminalSessionNavigationItem>[1];
     const base = navigationItem({
       avatar: { kind: 'initial' },
       outputState: 'none',
@@ -337,6 +345,23 @@ describe('TerminalSessionNavigator agent status presentation', () => {
       ...base,
       transitionState: 'creating',
     }, t)).toBe('Creating terminal.');
+  });
+
+  it('uses CJK sentence punctuation and joins complete announcements without ASCII separators', () => {
+    const t = ((key: string, params?: Record<string, unknown>) => {
+      if (key === 'terminal.statusSentence') return `${String(params?.status ?? '')}。`;
+      if (key === 'terminal.statusAnnouncementPair') {
+        return `${String(params?.first ?? '')}${String(params?.second ?? '')}`;
+      }
+      return '';
+    }) as Parameters<typeof terminalStatusSentence>[1];
+
+    expect(terminalStatusSentence('入力が必要です', t)).toBe('入力が必要です。');
+    expect(terminalStatusSentence('復元に失敗しました。', t)).toBe('復元に失敗しました。');
+    expect(joinTerminalStatusAnnouncements([
+      'ビルド。入力が必要です。',
+      'レビュー。未読の出力があります。',
+    ], t)).toBe('ビルド。入力が必要です。レビュー。未読の出力があります。');
   });
 
   it('reserves four explicit trailing action cells even when actions are unavailable', () => {

@@ -226,10 +226,24 @@ export function TerminalOutputStatusGlyph(props: {
   );
 }
 
-function terminalStatusSentence(value: string): string {
+export function terminalStatusSentence(
+  value: string,
+  t: ReturnType<typeof useI18n>['t'],
+): string {
   const normalized = value.trim();
   if (!normalized || /[.!?…。！？]$/u.test(normalized)) return normalized;
-  return `${normalized}.`;
+  return t('terminal.statusSentence', { status: normalized });
+}
+
+export function joinTerminalStatusAnnouncements(
+  values: readonly string[],
+  t: ReturnType<typeof useI18n>['t'],
+): string {
+  return values.reduce((combined, current) => (
+    combined
+      ? t('terminal.statusAnnouncementPair', { first: combined, second: current })
+      : current
+  ), '');
 }
 
 function terminalActivityTooltip(
@@ -240,7 +254,12 @@ function terminalActivityTooltip(
   const activity = source === 'semantic'
     ? t('codexActivity.status.working')
     : t('terminal.outputStreaming');
-  return unread ? `${terminalStatusSentence(activity)} ${t('terminal.unreadOutputDescription')}` : activity;
+  return unread
+    ? t('terminal.activityWithUnreadOutput', {
+      activity,
+      unread: t('terminal.unreadOutputDescription'),
+    })
+    : activity;
 }
 
 export function describeTerminalSessionNavigationItem(
@@ -250,19 +269,20 @@ export function describeTerminalSessionNavigationItem(
   const agentPresentation = item.avatar.kind === 'agent'
     ? TERMINAL_AGENT_CLI_PRESENTATIONS[item.avatar.identity]
     : null;
-  return [
+  const descriptions = [
     agentPresentation ? t('terminal.agentCliDescription', { name: agentPresentation.label }) : '',
-    item.transitionState === 'creating' ? terminalStatusSentence(t('terminal.creatingStatus')) : '',
-    item.transitionState === 'reconnecting' ? terminalStatusSentence(t('terminal.reconnecting')) : '',
-    item.transitionState === 'opening' ? terminalStatusSentence(t('terminal.remoteOpeningStatus')) : '',
-    item.failureKind === 'creation' ? terminalStatusSentence(t('terminal.creationFailedStatus')) : '',
-    item.failureKind === 'runtime' ? terminalStatusSentence(t('terminal.terminalUnavailable')) : '',
+    item.transitionState === 'creating' ? t('terminal.creatingStatus') : '',
+    item.transitionState === 'reconnecting' ? t('terminal.reconnecting') : '',
+    item.transitionState === 'opening' ? t('terminal.remoteOpeningStatus') : '',
+    item.failureKind === 'creation' ? t('terminal.creationFailedStatus') : '',
+    item.failureKind === 'runtime' ? t('terminal.terminalUnavailable') : '',
     item.processState === 'running' && item.transitionState === 'none' ? t('terminal.processRunningDescription') : '',
-    item.outputState !== 'none' && item.activitySource === 'semantic' ? terminalStatusSentence(t('codexActivity.status.working')) : '',
-    item.outputState !== 'none' && item.activitySource === 'output' ? terminalStatusSentence(t('terminal.outputStreaming')) : '',
+    item.outputState !== 'none' && item.activitySource === 'semantic' ? t('codexActivity.status.working') : '',
+    item.outputState !== 'none' && item.activitySource === 'output' ? t('terminal.outputStreaming') : '',
     item.attentionState === 'waiting' ? t('codex.pendingRequests.titleByType.userInput') : '',
     item.attentionState === 'unread' ? t('terminal.unreadOutputDescription') : '',
-  ].filter(Boolean).join(' ');
+  ].filter(Boolean).map((description) => terminalStatusSentence(description, t));
+  return joinTerminalStatusAnnouncements(descriptions, t);
 }
 
 export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
