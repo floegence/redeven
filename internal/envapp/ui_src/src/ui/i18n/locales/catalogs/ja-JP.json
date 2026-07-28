@@ -2464,6 +2464,8 @@
     "activityWithUnreadOutput": "{activity}。{unread}",
     "sessionsWithWaitingAttention": "{sessions}。{attention}",
     "sessionsWithUnreadOutput": "{sessions}。{unread}",
+    "sessionIdentityWithTitle": "{label}：{title}",
+    "statusAnnouncement": "{identity}。{status}",
     "invalidWorkingDirectory": "作業ディレクトリが無効です。",
     "invalidCreateResponse": "無効な作成応答",
     "sessionCouldNotBeCreated": "ターミナル セッションを作成できませんでした。",

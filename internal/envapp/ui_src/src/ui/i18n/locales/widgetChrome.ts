@@ -624,6 +624,8 @@ export const enUSWidgetChrome = defineDictionary({
     activityWithUnreadOutput: '{activity}. {unread}',
     sessionsWithWaitingAttention: '{sessions}. {attention}',
     sessionsWithUnreadOutput: '{sessions}. {unread}',
+    sessionIdentityWithTitle: '{label}: {title}',
+    statusAnnouncement: '{identity}. {status}',
     invalidWorkingDirectory: 'Invalid working directory.',
     invalidCreateResponse: 'Invalid create response',
     sessionCouldNotBeCreated: 'Terminal session could not be created.',

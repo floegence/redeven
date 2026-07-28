@@ -2464,6 +2464,8 @@
     "activityWithUnreadOutput": "{activity}. {unread}",
     "sessionsWithWaitingAttention": "{sessions}. {attention}",
     "sessionsWithUnreadOutput": "{sessions}. {unread}",
+    "sessionIdentityWithTitle": "{label} : {title}",
+    "statusAnnouncement": "{identity}. {status}",
     "invalidWorkingDirectory": "Répertoire de travail invalide.",
     "invalidCreateResponse": "Réponse de création non valide",
     "sessionCouldNotBeCreated": "La session de terminal n'a pas pu être créée.",

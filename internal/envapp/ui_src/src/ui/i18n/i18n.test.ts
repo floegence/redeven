@@ -412,6 +412,9 @@ describe('Env App i18n dictionaries', () => {
     expect(dictionaries['ja-JP'].terminal.searchSessions).toBe('セッションを検索...');
     expect(dictionaries['ja-JP'].terminal.activityWithUnreadOutput).toBe('{activity}。{unread}');
     expect(dictionaries['ja-JP'].terminal.sessionsWithWaitingAttention).toBe('{sessions}。{attention}');
+    expect(dictionaries['ja-JP'].terminal.statusAnnouncement).toBe('{identity}。{status}');
+    expect(dictionaries['zh-CN'].terminal.sessionIdentityWithTitle).toBe('{label}：{title}');
+    expect(dictionaries['zh-TW'].terminal.statusAnnouncement).toBe('{identity}。{status}');
     expect(dictionaries['ko-KR'].terminal.sessions).toBe('세션');
     expect(dictionaries['ko-KR'].terminal.searchSessions).toBe('세션 검색...');
   });
