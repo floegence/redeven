@@ -120,9 +120,9 @@ func seedFloretReferenceThreadTurn(t *testing.T, stateDir string, threadID strin
 	if err != nil {
 		t.Fatalf("bind turn execution host: %v", err)
 	}
-	host, err := turnFactory.NewHost(context.Background(), flruntime.TurnExecutionHostOptions{Config: flconfig.Config{
+	host, err := turnFactory.NewHost(context.Background(), requireAppserverFloretTurnOptions(t, flconfig.Config{
 		Provider: flconfig.ProviderFake, Model: "fake-model", FakeResponse: "canonical response", SystemPrompt: "test",
-	}})
+	}))
 	if err != nil {
 		t.Fatalf("flruntime.NewHost: %v", err)
 	}

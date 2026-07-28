@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	flconfig "github.com/floegence/floret/config"
 	"github.com/floegence/floret/observation"
 	flruntime "github.com/floegence/floret/runtime"
 	fltools "github.com/floegence/floret/tools"
@@ -110,7 +111,7 @@ func TestFloretProviderAdapter_ReasoningSelectionControlsProviderRequest(t *test
 		Model:           "deepseek-v4-pro",
 		Messages:        []flruntime.ModelMessage{{Role: flruntime.ModelMessageRoleUser, Text: "请生成标题"}},
 		MaxOutputTokens: 64,
-		Reasoning:       flruntime.ReasoningSelection{Level: flruntime.ReasoningLevelOff},
+		Reasoning:       flconfig.ReasoningSelection{Level: flconfig.ReasoningLevelOff},
 	})
 	if err != nil {
 		t.Fatalf("StreamModel: %v", err)

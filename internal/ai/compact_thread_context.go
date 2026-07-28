@@ -593,17 +593,16 @@ func (s *Service) runIdleThreadCompaction(ctx context.Context, meta *session.Met
 	if err != nil {
 		return err
 	}
-	host, err := r.floretCompactionHostFactory(execCtx, flruntime.ThreadCompactionHostOptions{
-		Config:                   flconfig.Config{SystemPrompt: systemPrompt, ContextPolicy: floretModelContextPolicy(contextWindow, 0), Reasoning: reasoning},
-		ModelGateway:             flProvider,
-		ModelGatewayIdentity:     gatewayIdentity,
-		ModelGatewayCapabilities: floretModelGatewayCapabilities(modelCapability.ReasoningCapability),
-		Sink:                     floretEventSink{run: r},
-		LoopLimits: flruntime.LoopLimits{
-			NoProgressLimit:    2,
-			DuplicateToolLimit: 3,
-		},
-	})
+	compactionOptions, err := flruntime.NewThreadCompactionHostOptions(
+		flconfig.Config{SystemPrompt: systemPrompt, ContextPolicy: floretModelContextPolicy(contextWindow, 0), Reasoning: reasoning},
+		flruntime.WithThreadCompactionModelGateway(flProvider, gatewayIdentity, floretModelGatewayCapabilities(modelCapability.ReasoningCapability)),
+		flruntime.WithThreadCompactionEventSink(floretEventSink{run: r}),
+		flruntime.WithThreadCompactionLoopLimits(flruntime.LoopLimits{NoProgressLimit: 2, DuplicateToolLimit: 3}),
+	)
+	if err != nil {
+		return err
+	}
+	host, err := r.floretCompactionHostFactory(execCtx, compactionOptions)
 	if err != nil {
 		return err
 	}

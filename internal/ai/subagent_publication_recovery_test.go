@@ -123,8 +123,22 @@ func TestSubAgentPublicationRecoveryRebuildsPersistedRunConfiguration(t *testing
 	if err != nil || len(operations) != 1 {
 		t.Fatalf("pending operations=%#v err=%v", operations, err)
 	}
+	canonicalStore := flruntime.NewMemoryStore()
+	t.Cleanup(func() { _ = canonicalStore.Close() })
+	canonicalRuntime := testFloretBootstrap(t, canonicalStore)
+	create, err := canonicalRuntime.newThreadCreate(parentThreadID, "create-"+parentThreadID)
+	if err != nil {
+		t.Fatalf("bind canonical parent creation: %v", err)
+	}
+	if _, err := create.CreateThread(context.Background(), flruntime.CreateThreadRequest{ThreadID: parentThreadID, CreateIntentID: "create-" + parentThreadID}); err != nil {
+		t.Fatalf("create canonical parent: %v", err)
+	}
+	canonicalCapabilities, err := canonicalRuntime.bindThreadRuntime(parentThreadID)
+	if err != nil {
+		t.Fatalf("bind canonical parent runtime: %v", err)
+	}
 	recoveredHost := &recordingFloretHost{}
-	var recoveredOptions flruntime.SubAgentHostOptions
+	recoveredOptionsAccepted := false
 	svc := &Service{
 		threadsDB:         store,
 		persistOpTO:       time.Second,
@@ -142,8 +156,11 @@ func TestSubAgentPublicationRecoveryRebuildsPersistedRunConfiguration(t *testing
 		floretRuntime: &floretRuntimeCapabilityIssuer{bind: func(threadID flruntime.ThreadID) (floretThreadRuntimeCapabilities, error) {
 			capabilities := floretThreadRuntimeCapabilities{}
 			if strings.TrimSpace(string(threadID)) == parentThreadID {
-				capabilities.SubAgent = func(_ context.Context, options flruntime.SubAgentHostOptions) (floretSubagentHost, error) {
-					recoveredOptions = options
+				capabilities.SubAgent = func(ctx context.Context, options flruntime.SubAgentHostOptions) (floretSubagentHost, error) {
+					if _, err := canonicalCapabilities.SubAgent(ctx, options); err != nil {
+						return nil, fmt.Errorf("validate recovered SubAgent host options: %w", err)
+					}
+					recoveredOptionsAccepted = true
 					return recoveredHost, nil
 				}
 			}
@@ -168,19 +185,8 @@ func TestSubAgentPublicationRecoveryRebuildsPersistedRunConfiguration(t *testing
 	if err := svc.replayPendingSubAgentPublication(context.Background(), operations[0]); err != nil {
 		t.Fatalf("replayPendingSubAgentPublication: %v", err)
 	}
-	if recoveredOptions.ToolSurfaceProvider == nil {
-		t.Fatal("recovered SubAgent host did not retain its tool surface provider")
-	}
-	if _, err := recoveredOptions.ToolSurfaceProvider(context.Background(), flruntime.ToolSurfaceRequest{
-		ThreadID: childThreadID,
-		TurnID:   "turn_child_recovery",
-		RunID:    childRunID,
-		HostContext: map[string]string{
-			subagentToolHostContextChildThreadIDKey: childThreadID,
-			subagentToolHostContextChildRunIDKey:    childRunID,
-		},
-	}); err != nil {
-		t.Fatalf("recovered child tool surface: %v", err)
+	if !recoveredOptionsAccepted {
+		t.Fatal("recovered SubAgent host options were not accepted by the canonical Floret factory")
 	}
 	committed, ok, err := store.GetSubAgentPublication(context.Background(), string(request.PublicationID))
 	if err != nil || !ok || committed.State != threadstore.SubAgentPublicationCommitted {

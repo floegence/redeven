@@ -129,9 +129,9 @@ func TestFloretRuntimeAdapterRejectsCrossAuthorityReads(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	turnHost, err := threadRuntime.Turn(context.Background(), flruntime.TurnExecutionHostOptions{
-		Config: flconfig.Config{Provider: flconfig.ProviderFake, Model: "fake-model", FakeResponse: "done"},
-	})
+	turnHost, err := threadRuntime.Turn(context.Background(), requireFloretTurnOptions(t,
+		flconfig.Config{Provider: flconfig.ProviderFake, Model: "fake-model", FakeResponse: "done"},
+	))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,9 +143,9 @@ func TestFloretRuntimeAdapterRejectsCrossAuthorityReads(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	subagentHost, err := parentRuntime.SubAgent(context.Background(), flruntime.SubAgentHostOptions{
-		Config: flconfig.Config{Provider: flconfig.ProviderFake, Model: "fake-model", FakeResponse: "done"},
-	})
+	subagentHost, err := parentRuntime.SubAgent(context.Background(), requireFloretSubAgentOptions(t,
+		flconfig.Config{Provider: flconfig.ProviderFake, Model: "fake-model", FakeResponse: "done"},
+	))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,9 +170,9 @@ func TestFloretTurnSettlementDoesNotFallbackAfterActiveAuthorityEnds(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	host, err := threadRuntime.Turn(ctx, flruntime.TurnExecutionHostOptions{
-		Config: flconfig.Config{Provider: flconfig.ProviderFake, Model: "fake-model", FakeResponse: "done"},
-	})
+	host, err := threadRuntime.Turn(ctx, requireFloretTurnOptions(t,
+		flconfig.Config{Provider: flconfig.ProviderFake, Model: "fake-model", FakeResponse: "done"},
+	))
 	if err != nil {
 		t.Fatal(err)
 	}

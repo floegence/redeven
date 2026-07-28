@@ -497,8 +497,8 @@ func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 
 	const (
 		floretModule   = "github.com/floegence/floret"
-		floretVersion  = "v0.31.2"
-		floretSum      = "h1:OfNcfMLqyqos+3lvFQWizHGi2F5sGjix2kLCR2QkwSg="
+		floretVersion  = "v1.0.0"
+		floretSum      = "h1:lvneTk4hEMPRfgjdOZRCbwLxvOUq7lEESGX20p8X2zE="
 		floretGoModSum = "h1:u2oNhsSB8OppYPHo/cTmXITL+3pxv7ckjYDiq3SjoCg="
 	)
 	root := repoRootForTest(t)
@@ -582,7 +582,7 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"TurnInput.References",
 			"MessageReference",
 			"raw `ResourceRef` never reaches the browser",
-			"v0.31.2",
+			"v1.0.0",
 		},
 		filepath.Join("okf", "ui", "flower-turn-launcher.md"): {
 			"file_path",
@@ -608,8 +608,8 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"complete immutable snapshot",
 		},
 		filepath.Join("internal", "runtimeservice", "compatibility_contract.json"): {
-			"Floret v0.31.2",
-			"floret-v0-31-2-exact-read-adoption",
+			"Floret v1.0.0",
+			"floret-v1-0-0-public-contract-adoption",
 			"single persistent source of truth",
 			"provider-owned thread titles",
 			"public contracts",
@@ -901,11 +901,18 @@ func TestFloretGatewayBoundaryUsesGatewayIdentity(t *testing.T) {
 	t.Parallel()
 
 	root := repoRootForTest(t)
-	for _, rel := range []string{
-		filepath.Join("internal", "ai", "floret_runtime.go"),
-		filepath.Join("internal", "ai", "compact_thread_context.go"),
-		filepath.Join("internal", "ai", "subagents_floret.go"),
-	} {
+	expectedConstructors := map[string][]string{
+		filepath.Join("internal", "ai", "floret_runtime.go"): {
+			"flruntime.NewTurnExecutionHostOptions", "flruntime.WithTurnModelGateway", "flruntime.WithTurnThreadTitleMode",
+		},
+		filepath.Join("internal", "ai", "compact_thread_context.go"): {
+			"flruntime.NewThreadCompactionHostOptions", "flruntime.WithThreadCompactionModelGateway",
+		},
+		filepath.Join("internal", "ai", "subagents_floret.go"): {
+			"flruntime.NewSubAgentHostOptions", "flruntime.WithSubAgentModelGateway", "flruntime.WithSubAgentThreadTitleMode",
+		},
+	}
+	for rel, requiredConstructors := range expectedConstructors {
 		content := readRepoFile(t, root, rel)
 		for _, marker := range []string{
 			"flconfig." + "ProviderFake",
@@ -915,15 +922,22 @@ func TestFloretGatewayBoundaryUsesGatewayIdentity(t *testing.T) {
 				t.Fatalf("%s must not configure gateway-backed Floret hosts with fake provider marker %q", rel, marker)
 			}
 		}
-		if !strings.Contains(content, "ModelGatewayIdentity:") {
-			t.Fatalf("%s must pass Floret ModelGatewayIdentity for gateway-backed hosts", rel)
+		for _, constructor := range requiredConstructors {
+			if !strings.Contains(content, constructor) {
+				t.Fatalf("%s must use scoped Floret v1 constructor %q", rel, constructor)
+			}
 		}
 		if strings.HasSuffix(rel, "compact_thread_context.go") {
-			if strings.Contains(content, "ThreadTitleMode:") {
+			if strings.Contains(content, "WithThreadCompactionThreadTitleMode") {
 				t.Fatalf("%s must not receive title authority through the compaction capability", rel)
 			}
-		} else if !strings.Contains(content, "ThreadTitleMode:") || !strings.Contains(content, "flruntime.ThreadTitleModeProvider") {
+		} else if !strings.Contains(content, "flruntime.ThreadTitleModeProvider") {
 			t.Fatalf("%s must delegate provider title ownership to Floret", rel)
+		}
+		for _, forbidden := range []string{"TurnExecutionHostOptions{", "ThreadCompactionHostOptions{", "SubAgentHostOptions{"} {
+			if strings.Contains(content, forbidden) {
+				t.Fatalf("%s must not construct opaque Floret v1 options with %q", rel, forbidden)
+			}
 		}
 	}
 }

@@ -177,21 +177,19 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 		return r.failRun("Failed to validate message attachments", err)
 	}
 	flProvider.attachmentResolver = r.floretAttachmentResolver(frozenAttachments, flProvider)
-	host, err := r.floretHostFactory(ctx, flruntime.TurnExecutionHostOptions{
-		Config:                   floretCfg,
-		ModelGateway:             flProvider,
-		ModelGatewayIdentity:     gatewayIdentity,
-		ModelGatewayCapabilities: floretModelGatewayCapabilities(req.ModelCapability.ReasoningCapability),
-		Tools:                    initialSurface.FloretTools,
-		EffectAuthorizationGate:  floretEffectAuthorizationGateForRun(r),
-		Sink:                     floretEventSink{run: r},
-		ToolSurfaceProvider:      toolSurfaceProvider,
-		ThreadTitleMode:          flruntime.ThreadTitleModeProvider,
-		LoopLimits: flruntime.LoopLimits{
-			NoProgressLimit:    2,
-			DuplicateToolLimit: 3,
-		},
-	})
+	turnOptions := []flruntime.TurnExecutionOption{
+		flruntime.WithTurnModelGateway(flProvider, gatewayIdentity, floretModelGatewayCapabilities(req.ModelCapability.ReasoningCapability)),
+		flruntime.WithTurnEffectfulTools(initialSurface.FloretTools, floretEffectAuthorizationGateForRun(r)),
+		flruntime.WithTurnEventSink(floretEventSink{run: r}),
+		flruntime.WithTurnDynamicToolSurface(toolSurfaceProvider),
+		flruntime.WithTurnThreadTitleMode(flruntime.ThreadTitleModeProvider),
+		flruntime.WithTurnLoopLimits(flruntime.LoopLimits{NoProgressLimit: 2, DuplicateToolLimit: 3}),
+	}
+	turnHostOptions, err := flruntime.NewTurnExecutionHostOptions(floretCfg, turnOptions...)
+	if err != nil {
+		return r.failRun("Failed to initialize Floret host", err)
+	}
+	host, err := r.floretHostFactory(ctx, turnHostOptions)
 	if err != nil {
 		return r.failRun("Failed to initialize Floret host", err)
 	}

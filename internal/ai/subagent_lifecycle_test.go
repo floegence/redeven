@@ -599,17 +599,15 @@ func newTestFloretHostFromService(t *testing.T, svc *Service, parentThreadID str
 	if err != nil {
 		t.Fatalf("bind thread runtime: %v", err)
 	}
-	turnHost, err := runtimeCaps.Turn(context.Background(), flruntime.TurnExecutionHostOptions{
-		Config:                  flconfig.Config{Provider: flconfig.ProviderFake, Model: "fake-model", FakeResponse: fakeResponse},
-		EffectAuthorizationGate: allowFloretEffectGateForTest{},
-	})
+	turnHost, err := runtimeCaps.Turn(context.Background(), requireFloretTurnOptions(t,
+		flconfig.Config{Provider: flconfig.ProviderFake, Model: "fake-model", FakeResponse: fakeResponse},
+	))
 	if err != nil {
 		t.Fatalf("NewHost: %v", err)
 	}
-	subagentHost, err := runtimeCaps.SubAgent(context.Background(), flruntime.SubAgentHostOptions{
-		Config:                  flconfig.Config{Provider: flconfig.ProviderFake, Model: "fake-model", FakeResponse: fakeResponse},
-		EffectAuthorizationGate: allowFloretEffectGateForTest{},
-	})
+	subagentHost, err := runtimeCaps.SubAgent(context.Background(), requireFloretSubAgentOptions(t,
+		flconfig.Config{Provider: flconfig.ProviderFake, Model: "fake-model", FakeResponse: fakeResponse},
+	))
 	if err != nil {
 		t.Fatalf("NewSubagentHost: %v", err)
 	}
@@ -631,20 +629,20 @@ func seedTestFloretSubagentTree(t *testing.T, ctx context.Context, svc *Service,
 		t.Fatalf("bind thread runtime: %v", err)
 	}
 	gateway := &blockingFloretModelGateway{started: make(chan struct{}), release: make(chan struct{})}
-	turnHost, err := runtimeCaps.Turn(ctx, flruntime.TurnExecutionHostOptions{
-		Config:                   redevenFloretAdapterConfig("", floretModelContextPolicy(128000, 4096), config.AIReasoningSelection{}),
-		ModelGateway:             gateway,
-		ModelGatewayCapabilities: floretModelGatewayCapabilities(config.AIReasoningCapability{}),
-		ModelGatewayIdentity:     flruntime.ModelGatewayIdentity{Provider: "test", Model: "blocking-parent", StateCompatibilityKey: "test:blocking-parent"},
-		EffectAuthorizationGate:  allowFloretEffectGateForTest{},
-	})
+	turnHost, err := runtimeCaps.Turn(ctx, requireFloretTurnOptions(t,
+		redevenFloretAdapterConfig("", floretModelContextPolicy(128000, 4096), config.AIReasoningSelection{}),
+		flruntime.WithTurnModelGateway(
+			gateway,
+			flruntime.ModelGatewayIdentity{Provider: "test", Model: "blocking-parent", StateCompatibilityKey: "test:blocking-parent"},
+			floretModelGatewayCapabilities(config.AIReasoningCapability{}),
+		),
+	))
 	if err != nil {
 		t.Fatalf("open parent turn host: %v", err)
 	}
-	subagentHost, err := runtimeCaps.SubAgent(ctx, flruntime.SubAgentHostOptions{
-		Config:                  flconfig.Config{Provider: flconfig.ProviderFake, Model: "fake-model", FakeResponse: "child done"},
-		EffectAuthorizationGate: allowFloretEffectGateForTest{},
-	})
+	subagentHost, err := runtimeCaps.SubAgent(ctx, requireFloretSubAgentOptions(t,
+		flconfig.Config{Provider: flconfig.ProviderFake, Model: "fake-model", FakeResponse: "child done"},
+	))
 	if err != nil {
 		t.Fatalf("open parent SubAgent host: %v", err)
 	}
