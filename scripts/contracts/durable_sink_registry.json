@@ -64,6 +64,20 @@
       "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
     },
     {
+      "path": "cmd/redeven/desktop_bridge.go",
+      "sha256": "816c17d023bab5faec2602b9be46603be98fcac962758c859fdb1bd10c1b8a58",
+      "sink_kinds": [
+        "file"
+      ],
+      "review_status": "reviewed",
+      "owner": "redeven CLI",
+      "authority": "product_configuration",
+      "data_classes": [
+        "CLI transport, product configuration, or runtime handoff"
+      ],
+      "review_note": "Writes or invokes CLI-owned transport and product configuration only; Floret remains canonical after admission."
+    },
+    {
       "path": "cmd/redeven/desktop_launch_report.go",
       "sha256": "2b87505ab0421cf771f273a94df99b56de13d1a65cc3159bc84f126426a370b3",
       "sink_kinds": [
@@ -85,6 +99,108 @@
       "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
     },
     {
+      "path": "cmd/redeven/desktop_model_source.go",
+      "sha256": "65249aa4e0298375a5e5130280c267c4da5ba47c5f83db489ca9281773183771",
+      "sink_kinds": [
+        "file"
+      ],
+      "review_status": "reviewed",
+      "owner": "redeven CLI",
+      "authority": "product_configuration",
+      "data_classes": [
+        "CLI transport, product configuration, or runtime handoff"
+      ],
+      "review_note": "Writes or invokes CLI-owned transport and product configuration only; Floret remains canonical after admission."
+    },
+    {
+      "path": "cmd/redeven/desktop_runtime_daemon.go",
+      "sha256": "1fbd0a6158f5a30c596f1f74e3df86daa0b2c9384818da5988e049651f3a3f96",
+      "sink_kinds": [
+        "file",
+        "json_file"
+      ],
+      "review_status": "reviewed",
+      "owner": "redeven CLI",
+      "authority": "product_configuration",
+      "data_classes": [
+        "CLI transport, product configuration, or runtime handoff"
+      ],
+      "codecs": [
+        "encoding/json.MarshalIndent",
+        "encoding/json.NewEncoder"
+      ],
+      "dtos": [
+        "body",
+        "inventory",
+        "report",
+        "result"
+      ],
+      "review_note": "Writes or invokes CLI-owned transport and product configuration only; Floret remains canonical after admission."
+    },
+    {
+      "path": "cmd/redeven/desktop_startup_coordination.go",
+      "sha256": "4230ccf1c3ab07feeb7dc6800e2ee155491e84f782de1cbe473aa82697e16ea1",
+      "sink_kinds": [
+        "file",
+        "json_file"
+      ],
+      "review_status": "reviewed",
+      "owner": "redeven CLI",
+      "authority": "product_configuration",
+      "data_classes": [
+        "CLI transport, product configuration, or runtime handoff"
+      ],
+      "codecs": [
+        "encoding/json.MarshalIndent"
+      ],
+      "dtos": [
+        "report"
+      ],
+      "review_note": "Writes or invokes CLI-owned transport and product configuration only; Floret remains canonical after admission."
+    },
+    {
+      "path": "cmd/redeven/env.go",
+      "sha256": "6debc68907265662a9c88e806d8d2ea52ab51ff50b0198b59f55b345aa94f5d6",
+      "sink_kinds": [
+        "file"
+      ],
+      "review_status": "reviewed",
+      "owner": "redeven CLI",
+      "authority": "product_configuration",
+      "data_classes": [
+        "CLI transport, product configuration, or runtime handoff"
+      ],
+      "review_note": "Writes or invokes CLI-owned transport and product configuration only; Floret remains canonical after admission."
+    },
+    {
+      "path": "cmd/redeven/help.go",
+      "sha256": "f116fc39cf8e89b9647d426f5d912caa1636153a39b80c069ea8257f93646fb1",
+      "sink_kinds": [
+        "file"
+      ],
+      "review_status": "reviewed",
+      "owner": "redeven CLI",
+      "authority": "product_configuration",
+      "data_classes": [
+        "CLI transport, product configuration, or runtime handoff"
+      ],
+      "tables": [
+        "a",
+        "commands",
+        "desktop",
+        "flags",
+        "handoff",
+        "plan",
+        "requests",
+        "return",
+        "source",
+        "stdin",
+        "the",
+        "this"
+      ],
+      "review_note": "Writes or invokes CLI-owned transport and product configuration only; Floret remains canonical after admission."
+    },
+    {
       "path": "cmd/redeven/main.go",
       "sha256": "f43b9818f6a28e755b2fa05c84a494cd79833a1a3c08a71a9b38d7854cc71661",
       "sink_kinds": [
@@ -92,10 +208,10 @@
         "json_file"
       ],
       "review_status": "reviewed",
-      "owner": "redeven",
+      "owner": "redeven CLI",
       "authority": "product_configuration",
       "data_classes": [
-        "product-owned state"
+        "CLI transport, product configuration, or runtime handoff"
       ],
       "tables": [
         "a",
@@ -106,12 +222,29 @@
         "stdin"
       ],
       "codecs": [
+        "encoding/json.Marshal",
         "encoding/json.MarshalIndent"
       ],
       "dtos": [
-        "metadata"
+        "metadata",
+        "report",
+        "result"
       ],
-      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+      "review_note": "Writes or invokes CLI-owned transport and product configuration only; Floret remains canonical after admission."
+    },
+    {
+      "path": "cmd/redeven/okf.go",
+      "sha256": "1ecb9b5f26de10f650610178aa790d03507d56210ed2cfaa5d70e1907f0e001b",
+      "sink_kinds": [
+        "file"
+      ],
+      "review_status": "reviewed",
+      "owner": "redeven CLI",
+      "authority": "product_configuration",
+      "data_classes": [
+        "CLI transport, product configuration, or runtime handoff"
+      ],
+      "review_note": "Writes or invokes CLI-owned transport and product configuration only; Floret remains canonical after admission."
     },
     {
       "path": "cmd/redeven/password.go",
@@ -126,6 +259,65 @@
         "product-owned state"
       ],
       "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "cmd/redeven/plugin_state_recovery.go",
+      "sha256": "6054b8ead247b96d4058acc1667665197cc2f187cdced572da44d3c0dc2f3fee",
+      "sink_kinds": [
+        "file",
+        "json_file"
+      ],
+      "review_status": "reviewed",
+      "owner": "redeven CLI",
+      "authority": "product_configuration",
+      "data_classes": [
+        "CLI transport, product configuration, or runtime handoff"
+      ],
+      "tables": [
+        "the"
+      ],
+      "codecs": [
+        "encoding/json.Marshal"
+      ],
+      "dtos": [
+        "report"
+      ],
+      "review_note": "Writes or invokes CLI-owned transport and product configuration only; Floret remains canonical after admission."
+    },
+    {
+      "path": "cmd/redeven/search.go",
+      "sha256": "072a27fdf5a65db7bb1031d7de6d9df3390754ebdafe89f8057e1cae2c3f1248",
+      "sink_kinds": [
+        "file",
+        "json_file"
+      ],
+      "review_status": "reviewed",
+      "owner": "redeven CLI",
+      "authority": "product_configuration",
+      "data_classes": [
+        "CLI transport, product configuration, or runtime handoff"
+      ],
+      "codecs": [
+        "encoding/json.MarshalIndent"
+      ],
+      "dtos": [
+        "result"
+      ],
+      "review_note": "Writes or invokes CLI-owned transport and product configuration only; Floret remains canonical after admission."
+    },
+    {
+      "path": "cmd/redeven/targets.go",
+      "sha256": "7fae3a85377f30110018cc31431db87aefa4fe9954da4579a8a0fabbd05c725c",
+      "sink_kinds": [
+        "file"
+      ],
+      "review_status": "reviewed",
+      "owner": "redeven CLI",
+      "authority": "product_configuration",
+      "data_classes": [
+        "CLI transport, product configuration, or runtime handoff"
+      ],
+      "review_note": "Writes or invokes CLI-owned transport and product configuration only; Floret remains canonical after admission."
     },
     {
       "path": "desktop/src/main/codeWorkspaceEnginePackageJobs.ts",
@@ -315,10 +507,10 @@
         "json_file"
       ],
       "review_status": "reviewed",
-      "owner": "redeven",
-      "authority": "product_configuration",
+      "owner": "redeven Floret host adapter",
+      "authority": "product_coordination",
       "data_classes": [
-        "product-owned state"
+        "host runtime integration and product coordination calls"
       ],
       "codecs": [
         "encoding/json.Marshal",
@@ -329,7 +521,42 @@
         "report",
         "v"
       ],
-      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+      "review_note": "Invokes reviewed host coordination or transport sinks; admitted conversation state remains exclusively in Floret."
+    },
+    {
+      "path": "internal/ai/run.go",
+      "sha256": "aaabb2f4b4632c556adf9f1c8e94afc317ee6ec8b2ea04c64b4e1942becff08d",
+      "sink_kinds": [
+        "file",
+        "json_file"
+      ],
+      "review_status": "reviewed",
+      "owner": "redeven Floret host adapter",
+      "authority": "product_coordination",
+      "data_classes": [
+        "host runtime integration and product coordination calls"
+      ],
+      "tables": [
+        "assistantmarkdownupdate"
+      ],
+      "codecs": [
+        "encoding/json.Marshal"
+      ],
+      "dtos": [
+        "args",
+        "block",
+        "cursor",
+        "data",
+        "forwardedArgs",
+        "items",
+        "msg",
+        "payload",
+        "snapshot",
+        "structured",
+        "v",
+        "value"
+      ],
+      "review_note": "Invokes reviewed host coordination or transport sinks; admitted conversation state remains exclusively in Floret."
     },
     {
       "path": "internal/ai/skill_manager.go",
@@ -360,10 +587,10 @@
         "json_file"
       ],
       "review_status": "reviewed",
-      "owner": "redeven",
-      "authority": "product_configuration",
+      "owner": "redeven Floret host adapter",
+      "authority": "product_coordination",
       "data_classes": [
-        "product-owned state"
+        "host runtime integration and product coordination calls"
       ],
       "tables": [
         "github",
@@ -375,7 +602,28 @@
       "dtos": [
         "payload"
       ],
-      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+      "review_note": "Invokes reviewed host coordination or transport sinks; admitted conversation state remains exclusively in Floret."
+    },
+    {
+      "path": "internal/ai/stream.go",
+      "sha256": "b39878545a4dc1311979edb1df312fe11679022b7673e9f44e409ae7b0d32996",
+      "sink_kinds": [
+        "file",
+        "json_file"
+      ],
+      "review_status": "reviewed",
+      "owner": "redeven Floret host adapter",
+      "authority": "product_coordination",
+      "data_classes": [
+        "host runtime integration and product coordination calls"
+      ],
+      "codecs": [
+        "encoding/json.Marshal"
+      ],
+      "dtos": [
+        "v"
+      ],
+      "review_note": "Invokes reviewed host coordination or transport sinks; admitted conversation state remains exclusively in Floret."
     },
     {
       "path": "internal/ai/structured_tools.go",
@@ -387,12 +635,12 @@
       "owner": "redeven tool effect",
       "authority": "user_effect",
       "data_classes": [
-        "explicitly authorized user filesystem effect"
+        "explicitly authorized user filesystem or process effect"
       ],
       "tables": [
         "old_string"
       ],
-      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+      "review_note": "Executes or invokes an explicitly authorized user effect; admitted conversation state remains exclusively in Floret."
     },
     {
       "path": "internal/ai/terminal_process.go",
@@ -401,15 +649,15 @@
         "file"
       ],
       "review_status": "reviewed",
-      "owner": "redeven terminal tool effect",
+      "owner": "redeven tool effect",
       "authority": "user_effect",
       "data_classes": [
-        "explicitly authorized terminal process input"
+        "explicitly authorized user filesystem or process effect"
       ],
       "tables": [
         "the"
       ],
-      "review_note": "Writes only approved user input to an active terminal process; no Agent lifecycle state is persisted."
+      "review_note": "Executes or invokes an explicitly authorized user effect; admitted conversation state remains exclusively in Floret."
     },
     {
       "path": "internal/ai/threadstore/context_planes.go",
@@ -453,6 +701,8 @@
       ],
       "tables": [
         "ai_flower_thread_routing",
+        "ai_thread_delete_operations",
+        "ai_thread_fork_operations",
         "set"
       ],
       "codecs": [
@@ -461,7 +711,7 @@
       "dtos": [
         "out"
       ],
-      "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
+      "review_note": "Stores or invokes only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
     },
     {
       "path": "internal/ai/threadstore/followups.go",
@@ -482,9 +732,13 @@
       ],
       "tables": [
         "ai_queued_turns",
-        "ai_thread_settings"
+        "ai_thread_delete_operations",
+        "ai_thread_fork_operations",
+        "ai_thread_settings",
+        "expression:`\nSELECT thread_id, COUNT(1)\nFROM ai_queued_turns\nWHERE endpoint_id = ? AND lane = ? AND thread_id IN (` + placeholders + `)\nGROUP BY thread_id\n`",
+        "expression:query"
       ],
-      "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
+      "review_note": "Stores or invokes only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
     },
     {
       "path": "internal/ai/threadstore/fork_operation.go",
@@ -506,11 +760,15 @@
       "tables": [
         "ai_flower_thread_routing",
         "ai_thread_create_operations",
+        "ai_thread_delete_operations",
         "ai_thread_fork_operations",
         "ai_thread_settings",
         "ai_upload_refs",
+        "expression:`UPDATE ai_thread_fork_operations SET ` + column + ` = ?, updated_at_unix_ms = ? WHERE operation_id = ? AND status = ? AND ` + column + ` = 0`",
         "expression:fmt.Sprintf(`SELECT %s FROM ai_thread_settings WHERE endpoint_id = ? AND thread_id = ?`, threadSelectColumnsSQL)",
-        "expression:forkOperationSelectSQL + ` WHERE operation_id = ?`"
+        "expression:forkOperationSelectSQL + ` WHERE ` + where + ` ORDER BY updated_at_unix_ms ASC, operation_id ASC LIMIT ?`",
+        "expression:forkOperationSelectSQL + ` WHERE operation_id = ?`",
+        "set"
       ],
       "codecs": [
         "encoding/json.Marshal"
@@ -519,7 +777,7 @@
         "req",
         "snapshot"
       ],
-      "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
+      "review_note": "Stores or invokes only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
     },
     {
       "path": "internal/ai/threadstore/orphan_adoption.go",
@@ -541,9 +799,10 @@
       "tables": [
         "ai_thread_create_operations",
         "ai_thread_fork_operations",
-        "ai_thread_settings"
+        "ai_thread_settings",
+        "expression:fmt.Sprintf(`SELECT %s FROM ai_thread_settings WHERE thread_id = ? ORDER BY endpoint_id LIMIT 1`, threadSelectColumnsSQL)"
       ],
-      "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
+      "review_note": "Stores or invokes only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
     },
     {
       "path": "internal/ai/threadstore/permission_snapshot.go",
@@ -564,9 +823,11 @@
       ],
       "tables": [
         "ai_child_permission_snapshots",
-        "ai_permission_snapshots"
+        "ai_permission_snapshots",
+        "ai_thread_delete_operations",
+        "ai_thread_fork_operations"
       ],
-      "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
+      "review_note": "Stores or invokes only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
     },
     {
       "path": "internal/ai/threadstore/product_migrations.go",
@@ -594,26 +855,39 @@
         "ai_flower_transfers",
         "ai_permission_snapshots",
         "ai_queued_turns",
+        "ai_subagent_publication_operations",
+        "ai_thread_create_operations",
         "ai_thread_delete_operations",
         "ai_thread_fork_operations",
         "ai_thread_settings",
         "ai_threads",
+        "ai_upload_attempts",
         "ai_upload_refs",
+        "ai_upload_staging_scopes",
         "ai_uploads",
+        "expression:`\nCREATE TABLE ai_composer_drafts (\n  endpoint_id TEXT NOT NULL,\n  owner_user_hash TEXT NOT NULL CHECK(length(owner_user_hash) = 64),\n  scope_id TEXT NOT NULL,\n  revision INTEGER NOT NULL DEFAULT 0 CHECK(revision >= 0),\n  value_json TEXT NOT NULL DEFAULT '` + valueDefault + `',\n  lease_id TEXT NOT NULL DEFAULT '',\n  lease_holder_id TEXT NOT NULL DEFAULT '',\n  lease_expires_at_unix_ms INTEGER NOT NULL DEFAULT 0,\n  created_at_unix_ms INTEGER NOT NULL,\n  updated_at_unix_ms INTEGER NOT NULL,\n  expires_at_unix_ms INTEGER NOT NULL,\n  PRIMARY KEY(endpoint_id, owner_user_hash, scope_id)\n);\nCREATE INDEX idx_ai_composer_drafts_expiry ON ai_composer_drafts(expires_at_unix_ms, endpoint_id, scope_id);\n`",
+        "expression:fmt.Sprintf(`PRAGMA index_list(%s)`, quoteReviewedIdentifier(name))",
+        "expression:fmt.Sprintf(`PRAGMA index_xinfo(%s)`, quoteReviewedIdentifier(name))",
+        "expression:fmt.Sprintf(`PRAGMA table_xinfo(%s)`, quoteReviewedIdentifier(name))",
         "product_v2_ai_child_permission_snapshots",
         "product_v2_ai_threads",
         "product_v2_ai_upload_refs",
         "product_v4_ai_uploads",
-        "product_v6_ai_composer_drafts"
+        "product_v6_ai_composer_drafts",
+        "set",
+        "sqlite_master"
       ],
       "codecs": [
         "encoding/json.Marshal"
       ],
       "dtos": [
+        "out",
+        "req",
         "snapshot",
+        "struct {\n\tEndpointID\tstring\t\t\t`json:\"endpoint_id\"`\n\tThreadID\tstring\t\t\t`json:\"thread_id\"`\n\tSnapshot\tThreadDeleteSnapshotV1\t`json:\"snapshot\"`\n}{\n\tEndpointID:\tstrings.TrimSpace(endpointID),\n\tThreadID:\tstrings.TrimSpace(threadID),\n\tSnapshot:\tsnapshot,\n}",
         "value"
       ],
-      "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
+      "review_note": "Stores or invokes only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
     },
     {
       "path": "internal/ai/threadstore/reviewed_schema.go",
@@ -676,10 +950,20 @@
         "ai_upload_refs",
         "ai_upload_staging_scopes",
         "ai_uploads",
-        "expression:`\nCREATE TABLE ai_composer_drafts (\n  endpoint_id TEXT NOT NULL,\n  owner_user_hash TEXT NOT NULL CHECK(length(owner_user_hash) = 64),\n  scope_id TEXT NOT NULL,\n  revision INTEGER NOT NULL DEFAULT 0 CHECK(revision \u003e= 0),\n  value_json TEXT NOT NULL DEFAULT '` + valueDefault + `',\n  lease_id TEXT NOT NULL DEFAULT '',\n  lease_holder_id TEXT NOT NULL DEFAULT '',\n  lease_expires_at_unix_ms INTEGER NOT NULL DEFAULT 0,\n  created_at_unix_ms INTEGER NOT NULL,\n  updated_at_unix_ms INTEGER NOT NULL,\n  expires_at_unix_ms INTEGER NOT NULL,\n  PRIMARY KEY(endpoint_id, owner_user_hash, scope_id)\n);\nCREATE INDEX idx_ai_composer_drafts_expiry ON ai_composer_drafts(expires_at_unix_ms, endpoint_id, scope_id);\n`",
-        "provider_capabilities"
+        "expression:`\nCREATE TABLE ai_composer_drafts (\n  endpoint_id TEXT NOT NULL,\n  owner_user_hash TEXT NOT NULL CHECK(length(owner_user_hash) = 64),\n  scope_id TEXT NOT NULL,\n  revision INTEGER NOT NULL DEFAULT 0 CHECK(revision >= 0),\n  value_json TEXT NOT NULL DEFAULT '` + valueDefault + `',\n  lease_id TEXT NOT NULL DEFAULT '',\n  lease_holder_id TEXT NOT NULL DEFAULT '',\n  lease_expires_at_unix_ms INTEGER NOT NULL DEFAULT 0,\n  created_at_unix_ms INTEGER NOT NULL,\n  updated_at_unix_ms INTEGER NOT NULL,\n  expires_at_unix_ms INTEGER NOT NULL,\n  PRIMARY KEY(endpoint_id, owner_user_hash, scope_id)\n);\nCREATE INDEX idx_ai_composer_drafts_expiry ON ai_composer_drafts(expires_at_unix_ms, endpoint_id, scope_id);\n`",
+        "expression:fmt.Sprintf(`PRAGMA index_list(%s)`, quoteReviewedIdentifier(name))",
+        "expression:fmt.Sprintf(`PRAGMA index_xinfo(%s)`, quoteReviewedIdentifier(name))",
+        "expression:fmt.Sprintf(`PRAGMA table_xinfo(%s)`, quoteReviewedIdentifier(name))",
+        "provider_capabilities",
+        "sqlite_master"
       ],
-      "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
+      "codecs": [
+        "encoding/json.Marshal"
+      ],
+      "dtos": [
+        "value"
+      ],
+      "review_note": "Stores or invokes only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
     },
     {
       "path": "internal/ai/threadstore/schema_preflight.go",
@@ -700,13 +984,31 @@
       ],
       "tables": [
         "__redeven_db_meta",
+        "ai_child_permission_snapshots",
         "ai_composer_drafts",
+        "ai_permission_snapshots",
+        "ai_queued_turns",
+        "ai_thread_delete_operations",
+        "ai_thread_fork_operations",
         "ai_threads",
         "ai_upload_refs",
         "ai_uploads",
+        "expression:fmt.Sprintf(`PRAGMA index_list(%s)`, quoteReviewedIdentifier(name))",
+        "expression:fmt.Sprintf(`PRAGMA index_xinfo(%s)`, quoteReviewedIdentifier(name))",
+        "expression:fmt.Sprintf(`PRAGMA table_xinfo(%s)`, quoteReviewedIdentifier(name))",
         "sqlite_master"
       ],
-      "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
+      "codecs": [
+        "encoding/json.Marshal"
+      ],
+      "dtos": [
+        "out",
+        "req",
+        "snapshot",
+        "struct {\n\tEndpointID\tstring\t\t\t`json:\"endpoint_id\"`\n\tThreadID\tstring\t\t\t`json:\"thread_id\"`\n\tSnapshot\tThreadDeleteSnapshotV1\t`json:\"snapshot\"`\n}{\n\tEndpointID:\tstrings.TrimSpace(endpointID),\n\tThreadID:\tstrings.TrimSpace(threadID),\n\tSnapshot:\tsnapshot,\n}",
+        "value"
+      ],
+      "review_note": "Stores or invokes only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
     },
     {
       "path": "internal/ai/threadstore/schema_verification.go",
@@ -748,16 +1050,39 @@
         "permission audit"
       ],
       "tables": [
+        "__redeven_db_meta",
+        "ai_child_permission_snapshots",
+        "ai_composer_drafts",
+        "ai_permission_snapshots",
         "ai_queued_turns",
         "ai_thread_delete_operations",
+        "ai_thread_fork_operations",
         "ai_thread_settings",
+        "ai_threads",
+        "ai_upload_refs",
+        "ai_upload_staging_scopes",
+        "ai_uploads",
         "expression:`\nSELECT thread_id, COUNT(1)\nFROM ai_queued_turns\nWHERE endpoint_id = ? AND thread_id IN (` + placeholders + `) AND lane = ?\nGROUP BY thread_id\n`",
         "expression:fmt.Sprintf(`\nSELECT\n%s\nFROM ai_thread_settings\nWHERE endpoint_id = ? AND thread_id = ?\n`, threadSelectColumnsSQL)",
+        "expression:fmt.Sprintf(`PRAGMA index_list(%s)`, quoteReviewedIdentifier(name))",
+        "expression:fmt.Sprintf(`PRAGMA index_xinfo(%s)`, quoteReviewedIdentifier(name))",
+        "expression:fmt.Sprintf(`PRAGMA table_xinfo(%s)`, quoteReviewedIdentifier(name))",
         "expression:fmt.Sprintf(`SELECT %s FROM ai_thread_settings WHERE endpoint_id = ? AND thread_id = ?`, threadSelectColumnsSQL)",
         "expression:q",
-        "expression:query"
+        "expression:query",
+        "sqlite_master"
       ],
-      "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
+      "codecs": [
+        "encoding/json.Marshal"
+      ],
+      "dtos": [
+        "out",
+        "req",
+        "snapshot",
+        "struct {\n\tEndpointID\tstring\t\t\t`json:\"endpoint_id\"`\n\tThreadID\tstring\t\t\t`json:\"thread_id\"`\n\tSnapshot\tThreadDeleteSnapshotV1\t`json:\"snapshot\"`\n}{\n\tEndpointID:\tstrings.TrimSpace(endpointID),\n\tThreadID:\tstrings.TrimSpace(threadID),\n\tSnapshot:\tsnapshot,\n}",
+        "value"
+      ],
+      "review_note": "Stores or invokes only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
     },
     {
       "path": "internal/ai/threadstore/subagent_publication.go",
@@ -778,9 +1103,12 @@
       ],
       "tables": [
         "ai_child_permission_snapshots",
-        "ai_subagent_publication_operations"
+        "ai_subagent_publication_operations",
+        "ai_thread_delete_operations",
+        "ai_thread_fork_operations",
+        "expression:query"
       ],
-      "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
+      "review_note": "Stores or invokes only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
     },
     {
       "path": "internal/ai/threadstore/thread_create_operation.go",
@@ -801,8 +1129,13 @@
       ],
       "tables": [
         "ai_thread_create_operations",
+        "ai_thread_delete_operations",
+        "ai_thread_fork_operations",
         "ai_thread_settings",
-        "expression:threadCreateOperationSelectSQL + ` WHERE operation_id = ?`"
+        "expression:fmt.Sprintf(`SELECT %s FROM ai_thread_settings WHERE endpoint_id = ? AND thread_id = ?`, threadSelectColumnsSQL)",
+        "expression:fmt.Sprintf(`UPDATE ai_thread_create_operations SET %s = CASE WHEN %s = 0 THEN ? ELSE %s END, error_code = '', error_message = '', updated_at_unix_ms = ? WHERE operation_id = ? AND status = ?`, column, column, column)",
+        "expression:threadCreateOperationSelectSQL + ` WHERE operation_id = ?`",
+        "expression:threadCreateOperationSelectSQL + ` WHERE status = ? ORDER BY updated_at_unix_ms, operation_id LIMIT ?`"
       ],
       "codecs": [
         "encoding/json.Marshal"
@@ -810,7 +1143,7 @@
       "dtos": [
         "snapshot"
       ],
-      "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
+      "review_note": "Stores or invokes only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
     },
     {
       "path": "internal/ai/threadstore/thread_delete_operation.go",
@@ -833,9 +1166,16 @@
         "ai_thread_delete_operations",
         "ai_thread_fork_operations",
         "ai_thread_settings",
+        "ai_upload_refs",
+        "expression:fmt.Sprintf(`SELECT %s FROM ai_thread_settings WHERE endpoint_id = ? AND thread_id = ?`, threadSelectColumnsSQL)",
         "expression:query",
+        "expression:step.query",
+        "expression:threadDeleteOperationSelectSQL + `\nWHERE status = ?\nORDER BY updated_at_unix_ms ASC, operation_id ASC\nLIMIT 1`",
         "expression:threadDeleteOperationSelectSQL + ` WHERE endpoint_id = ? AND thread_id = ?`",
-        "expression:threadDeleteOperationSelectSQL + ` WHERE operation_id = ?`"
+        "expression:threadDeleteOperationSelectSQL + ` WHERE operation_id = ?`",
+        "expression:threadDeleteOperationSelectSQL + ` WHERE status = ? AND operation_id > ? ORDER BY operation_id ASC LIMIT ?`",
+        "expression:threadDeleteOperationSelectSQL + ` WHERE status = ? ORDER BY updated_at_unix_ms ASC, operation_id ASC LIMIT ?`",
+        "expression:updateSQL"
       ],
       "codecs": [
         "encoding/json.Marshal"
@@ -844,7 +1184,7 @@
         "snapshot",
         "struct {\n\tEndpointID\tstring\t\t\t`json:\"endpoint_id\"`\n\tThreadID\tstring\t\t\t`json:\"thread_id\"`\n\tSnapshot\tThreadDeleteSnapshotV1\t`json:\"snapshot\"`\n}{\n\tEndpointID:\tstrings.TrimSpace(endpointID),\n\tThreadID:\tstrings.TrimSpace(threadID),\n\tSnapshot:\tsnapshot,\n}"
       ],
-      "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
+      "review_note": "Stores or invokes only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
     },
     {
       "path": "internal/ai/threadstore/thread_fork.go",
@@ -916,11 +1256,14 @@
       "tables": [
         "ai_queued_turns",
         "ai_thread_create_operations",
+        "ai_thread_delete_operations",
+        "ai_thread_fork_operations",
         "ai_thread_settings",
         "ai_upload_attempts",
         "ai_upload_refs",
         "ai_upload_staging_scopes",
-        "ai_uploads"
+        "ai_uploads",
+        "expression:threadCreateOperationSelectSQL + ` WHERE operation_id = ?`"
       ],
       "codecs": [
         "encoding/json.Marshal"
@@ -928,7 +1271,7 @@
       "dtos": [
         "snapshot"
       ],
-      "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
+      "review_note": "Stores or invokes only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
     },
     {
       "path": "internal/ai/threadstore/uploads.go",
@@ -949,8 +1292,12 @@
       ],
       "tables": [
         "ai_queued_turns",
+        "ai_thread_delete_operations",
+        "ai_thread_fork_operations",
+        "ai_thread_settings",
         "ai_upload_attempts",
         "ai_upload_refs",
+        "ai_upload_staging_scopes",
         "ai_uploads",
         "expression:`\nDELETE FROM ai_upload_refs\nWHERE upload_id IN (` + placeholders + `)\n`",
         "expression:`\nDELETE FROM ai_uploads\nWHERE LOWER(COALESCE(state, '')) = ? AND upload_id IN (` + placeholders + `)\n`",
@@ -959,7 +1306,7 @@
         "expression:query",
         "expression:updateSQL"
       ],
-      "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
+      "review_note": "Stores or invokes only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
     },
     {
       "path": "internal/ai/unified_diff_apply.go",
@@ -971,13 +1318,13 @@
       "owner": "redeven tool effect",
       "authority": "user_effect",
       "data_classes": [
-        "explicitly authorized user filesystem effect"
+        "explicitly authorized user filesystem or process effect"
       ],
       "tables": [
         "file",
         "line"
       ],
-      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+      "review_note": "Executes or invokes an explicitly authorized user effect; admitted conversation state remains exclusively in Floret."
     },
     {
       "path": "internal/ai/uploads.go",
@@ -1004,7 +1351,7 @@
       "dtos": [
         "struct {\n\tVersion\tstring\t\t\t`json:\"version\"`\n\tValue\tAttachmentCapabilities\t`json:\"value\"`\n}{Version: \"redeven-attachment-capabilities-v1\", Value: out}"
       ],
-      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+      "review_note": "Stores or invokes host-owned upload resources only; Floret owns admitted message references."
     },
     {
       "path": "internal/auditlog/store.go",
@@ -1023,9 +1370,61 @@
         "encoding/json.NewEncoder"
       ],
       "dtos": [
-        "\u0026e"
+        "&e"
       ],
       "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/codeapp/appserver/notes_api.go",
+      "sha256": "9fd93d28f6925ba385f01d62e8076e982ba107eed25c7b28182540f2071b3440",
+      "sink_kinds": [
+        "file",
+        "json_file"
+      ],
+      "review_status": "reviewed",
+      "owner": "redeven app server transport",
+      "authority": "product_resource",
+      "data_classes": [
+        "HTTP and event-stream transport output"
+      ],
+      "codecs": [
+        "encoding/json.Marshal"
+      ],
+      "dtos": [
+        "event"
+      ],
+      "review_note": "Writes response transport bytes only; it is not durable conversation storage."
+    },
+    {
+      "path": "internal/codeapp/appserver/server.go",
+      "sha256": "06a989516ae7f2b1282b50ae64807098cc3d5ce4cbbdfdb7e5706547949cf861",
+      "sink_kinds": [
+        "file",
+        "json_file"
+      ],
+      "review_status": "reviewed",
+      "owner": "redeven app server transport",
+      "authority": "product_resource",
+      "data_classes": [
+        "HTTP and event-stream transport output"
+      ],
+      "tables": [
+        "configpath",
+        "runtime",
+        "set",
+        "the"
+      ],
+      "codecs": [
+        "encoding/json.Marshal",
+        "encoding/json.NewEncoder"
+      ],
+      "dtos": [
+        "ev",
+        "event",
+        "v",
+        "value"
+      ],
+      "review_note": "Writes or invokes response transport bytes only; it is not durable conversation storage."
     },
     {
       "path": "internal/codeapp/codeserver/artifact.go",
@@ -1049,18 +1448,19 @@
         "json_file"
       ],
       "review_status": "reviewed",
-      "owner": "redeven",
+      "owner": "redeven code server",
       "authority": "product_configuration",
       "data_classes": [
-        "product-owned state"
+        "code server setup, download, and runtime state"
       ],
       "codecs": [
         "encoding/json.MarshalIndent"
       ],
       "dtos": [
-        "manifest"
+        "manifest",
+        "state"
       ],
-      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+      "review_note": "Stores or invokes product-owned code server resources only."
     },
     {
       "path": "internal/codeapp/codeserver/runner.go",
@@ -1077,6 +1477,27 @@
       "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
     },
     {
+      "path": "internal/codeapp/codeserver/runtime.go",
+      "sha256": "f9659a5b9e552b00a7ca9c98af07c46a9e0f26b9b3b4c347032043cd4fd34ee5",
+      "sink_kinds": [
+        "file",
+        "json_file"
+      ],
+      "review_status": "reviewed",
+      "owner": "redeven code server",
+      "authority": "product_configuration",
+      "data_classes": [
+        "code server setup and runtime state"
+      ],
+      "codecs": [
+        "encoding/json.MarshalIndent"
+      ],
+      "dtos": [
+        "state"
+      ],
+      "review_note": "Stores or invokes product-owned code server setup state only."
+    },
+    {
       "path": "internal/codeapp/codeserver/setup_operation.go",
       "sha256": "064a2f5ad1e065e7008a7bf0440457210209472b2e977e49d7162b1a03ce9a97",
       "sink_kinds": [
@@ -1084,10 +1505,10 @@
         "json_file"
       ],
       "review_status": "reviewed",
-      "owner": "redeven",
+      "owner": "redeven code server",
       "authority": "product_configuration",
       "data_classes": [
-        "product-owned state"
+        "code server setup, download, and runtime state"
       ],
       "tables": [
         "the",
@@ -1097,9 +1518,11 @@
         "encoding/json.MarshalIndent"
       ],
       "dtos": [
-        "session"
+        "manifest",
+        "session",
+        "state"
       ],
-      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+      "review_note": "Stores or invokes product-owned code server resources only."
     },
     {
       "path": "internal/codeapp/codeserver/shared_state.go",
@@ -1178,6 +1601,53 @@
       "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
     },
     {
+      "path": "internal/codexbridge/manager.go",
+      "sha256": "0193e6576487341816d6e413c139b7b0bc8f37d6c5f23b01b9310c68cb40b59a",
+      "sink_kinds": [
+        "file",
+        "json_file"
+      ],
+      "review_status": "reviewed",
+      "owner": "redeven Codex bridge",
+      "authority": "product_coordination",
+      "data_classes": [
+        "Codex process transport output"
+      ],
+      "tables": [
+        "projected"
+      ],
+      "codecs": [
+        "encoding/json.Marshal"
+      ],
+      "dtos": [
+        "msg",
+        "v"
+      ],
+      "review_note": "Writes or invokes process transport output only; it is not canonical conversation storage."
+    },
+    {
+      "path": "internal/codexbridge/process.go",
+      "sha256": "f997a382e9bdbea76569fe12a7c43a93466a6d694f7a70ac2d88aff96c964f95",
+      "sink_kinds": [
+        "file",
+        "json_file"
+      ],
+      "review_status": "reviewed",
+      "owner": "redeven Codex bridge",
+      "authority": "product_coordination",
+      "data_classes": [
+        "Codex process transport output"
+      ],
+      "codecs": [
+        "encoding/json.Marshal"
+      ],
+      "dtos": [
+        "msg",
+        "v"
+      ],
+      "review_note": "Writes or invokes process transport output only; it is not canonical conversation storage."
+    },
+    {
       "path": "internal/config/catalog.go",
       "sha256": "cc62578f578eb0b3630e06c43e38244eec8ca5649c645cae49cdaf916c023d87",
       "sink_kinds": [
@@ -1223,6 +1693,49 @@
       "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
     },
     {
+      "path": "internal/desktopbridge/protocol.go",
+      "sha256": "284b544c7fa9fec0e23bcc0bc5073cd71f829437857b34002361eae628703c31",
+      "sink_kinds": [
+        "file",
+        "json_file"
+      ],
+      "review_status": "reviewed",
+      "owner": "redeven Desktop bridge",
+      "authority": "product_coordination",
+      "data_classes": [
+        "Desktop process transport frames"
+      ],
+      "codecs": [
+        "encoding/json.Marshal"
+      ],
+      "dtos": [
+        "header"
+      ],
+      "review_note": "Writes framed process transport output only; it is not durable conversation storage."
+    },
+    {
+      "path": "internal/desktopbridge/server.go",
+      "sha256": "04a0b40cfaf49a57121cb443da5459f4b40a2fa4fb224467023bb28bb6287d8f",
+      "sink_kinds": [
+        "file",
+        "json_file"
+      ],
+      "review_status": "reviewed",
+      "owner": "redeven Desktop bridge",
+      "authority": "product_coordination",
+      "data_classes": [
+        "Desktop process transport frames"
+      ],
+      "codecs": [
+        "encoding/json.Marshal"
+      ],
+      "dtos": [
+        "header",
+        "value"
+      ],
+      "review_note": "Writes framed process transport output only; it is not durable conversation storage."
+    },
+    {
       "path": "internal/diagnostics/store.go",
       "sha256": "3d52a237489368bbb7c91b0640df5f741cb6866c47a61484275f0d01fecfc018",
       "sink_kinds": [
@@ -1239,7 +1752,7 @@
         "encoding/json.NewEncoder"
       ],
       "dtos": [
-        "\u0026e"
+        "&e"
       ],
       "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
     },
@@ -1357,6 +1870,20 @@
       "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
     },
     {
+      "path": "internal/fs/entries.go",
+      "sha256": "76d5e3d98a44891bd3b878b335be13b3ad24951f5d6a16a6d8975abc6243a022",
+      "sink_kinds": [
+        "file"
+      ],
+      "review_status": "reviewed",
+      "owner": "redeven filesystem capability",
+      "authority": "user_effect",
+      "data_classes": [
+        "authorized user filesystem or stream effect"
+      ],
+      "review_note": "Executes or invokes an explicitly authorized filesystem capability; it does not own admitted conversation state."
+    },
+    {
       "path": "internal/fs/service.go",
       "sha256": "32aa626eb04941c462ef5fe36659c224eb64c3711b538d2e5806cc64fa78b6b8",
       "sink_kinds": [
@@ -1372,6 +1899,23 @@
         "src"
       ],
       "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/fs/stream_read_file.go",
+      "sha256": "cdfe347e515dad3bfece916ec68680ad32e4746914691a467c1a64a583502cae",
+      "sink_kinds": [
+        "file"
+      ],
+      "review_status": "reviewed",
+      "owner": "redeven filesystem capability",
+      "authority": "user_effect",
+      "data_classes": [
+        "authorized user filesystem or stream effect"
+      ],
+      "tables": [
+        "session_meta"
+      ],
+      "review_note": "Executes or invokes an explicitly authorized filesystem capability; it does not own admitted conversation state."
     },
     {
       "path": "internal/lockfile/lockfile.go",
@@ -1534,6 +2078,34 @@
       "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
     },
     {
+      "path": "internal/redevpluginintegration/integration.go",
+      "sha256": "c1eaaac55c7d6e8e707944a9800729c80db752cba131564ce00159955ab908c6",
+      "sink_kinds": [
+        "file"
+      ],
+      "review_status": "reviewed",
+      "owner": "redeven ReDevPlugin adapter",
+      "authority": "upstream_adapter",
+      "data_classes": [
+        "product adapter audit, trust, or lifecycle records"
+      ],
+      "review_note": "Stores or invokes upstream product adapter records only; Floret remains authoritative for admitted Agent state."
+    },
+    {
+      "path": "internal/redevpluginintegration/release_module.go",
+      "sha256": "f9589e841ea105850652625a9d5a9c56b09a40e5867f72c7b3fd67f3fc12bfdf",
+      "sink_kinds": [
+        "file"
+      ],
+      "review_status": "reviewed",
+      "owner": "redeven ReDevPlugin adapter",
+      "authority": "upstream_adapter",
+      "data_classes": [
+        "product adapter audit, trust, or lifecycle records"
+      ],
+      "review_note": "Stores or invokes upstream product adapter records only; Floret remains authoritative for admitted Agent state."
+    },
+    {
       "path": "internal/redevpluginintegration/release_trust_store.go",
       "sha256": "8e12f60225baf54084d10af42afcc00144715205f94dc6db12e4fffd906aeb73",
       "sink_kinds": [
@@ -1626,6 +2198,34 @@
         "state"
       ],
       "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/runtimepresentation/interactive.go",
+      "sha256": "bc5e50d6fc268283e2b8e31065b73f79030b591a894f8498d73ebb49bda31a83",
+      "sink_kinds": [
+        "file"
+      ],
+      "review_status": "reviewed",
+      "owner": "redeven runtime presentation",
+      "authority": "product_resource",
+      "data_classes": [
+        "CLI presentation transport output"
+      ],
+      "review_note": "Writes presentation output only; it is not durable conversation storage."
+    },
+    {
+      "path": "internal/runtimepresentation/renderer.go",
+      "sha256": "37a088a99a99dd71343b412f7bf19e6303d91b2a69e6892b6e15498f2bfff502",
+      "sink_kinds": [
+        "file"
+      ],
+      "review_status": "reviewed",
+      "owner": "redeven runtime presentation",
+      "authority": "product_resource",
+      "data_classes": [
+        "CLI presentation transport output"
+      ],
+      "review_note": "Writes presentation output only; it is not durable conversation storage."
     },
     {
       "path": "internal/settings/secrets_store.go",
