@@ -2464,6 +2464,8 @@
     "activityWithUnreadOutput": "{activity}. {unread}",
     "sessionsWithWaitingAttention": "{sessions}. {attention}",
     "sessionsWithUnreadOutput": "{sessions}. {unread}",
+    "sessionIdentityWithTitle": "{label}: {title}",
+    "statusAnnouncement": "{identity}. {status}",
     "invalidWorkingDirectory": "작업 디렉터리가 잘못되었습니다.",
     "invalidCreateResponse": "잘못된 생성 응답",
     "sessionCouldNotBeCreated": "터미널 세션을 생성할 수 없습니다.",

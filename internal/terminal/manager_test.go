@@ -757,6 +757,87 @@ func TestWidgetDeleteFailureStaysHiddenAndRevokesLocalPathCapability(t *testing.
 	}
 }
 
+func TestMixedDeleteSessionFailureUsesWidgetSemanticsInBothOrderings(t *testing.T) {
+	for _, widgetFirst := range []bool{false, true} {
+		name := "strict_first"
+		if widgetFirst {
+			name = "widget_first"
+		}
+		t.Run(name, func(t *testing.T) {
+			m := newQuietTestManager(t, t.TempDir())
+			t.Cleanup(m.Cleanup)
+
+			events := make(chan SessionLifecycleEvent, 8)
+			removeHook := m.AddSessionLifecycleHook(func(event SessionLifecycleEvent) {
+				events <- event
+			})
+			defer removeHook()
+
+			sess, err := m.createSession("test", "")
+			if err != nil {
+				t.Fatalf("createSession() error = %v", err)
+			}
+			if got := m.localPathCapability(sess.ID); got == "" {
+				t.Fatal("local path capability is empty after create")
+			}
+
+			deleteErr := errors.New("mixed cleanup failed")
+			releaseDelete := make(chan struct{})
+			var cleanupCalls atomic.Int32
+			m.deleteSessionFunc = func(string) error {
+				cleanupCalls.Add(1)
+				<-releaseDelete
+				return deleteErr
+			}
+
+			results := make(chan error, 2)
+			strictDelete := func() { results <- m.DeleteSession(sess.ID) }
+			widgetDelete := func() { results <- m.DeleteSessionForWidget(sess.ID, "widget-1") }
+			if widgetFirst {
+				go widgetDelete()
+			} else {
+				go strictDelete()
+			}
+			waitForDeleteParticipants(t, m, sess.ID, 1, time.Second)
+			if widgetFirst {
+				go strictDelete()
+			} else {
+				go widgetDelete()
+			}
+			waitForDeleteParticipants(t, m, sess.ID, 2, time.Second)
+			close(releaseDelete)
+
+			for range 2 {
+				if err := <-results; !errors.Is(err, deleteErr) {
+					t.Fatalf("mixed delete error = %v, want %v", err, deleteErr)
+				}
+			}
+			if got := cleanupCalls.Load(); got != 1 {
+				t.Fatalf("cleanup calls = %d, want 1", got)
+			}
+
+			record, ok := m.lifecycleRecord(sess.ID)
+			if !ok || record.Lifecycle != SessionLifecycleCloseFailedHidden || record.OwnerWidgetID != "widget-1" {
+				t.Fatalf("lifecycleRecord() = %+v, %v, want hidden widget failure", record, ok)
+			}
+			if got := m.visibleSessionInfos(); len(got) != 0 {
+				t.Fatalf("visibleSessionInfos() = %#v, want mixed failure hidden", got)
+			}
+			if m.sessionAvailableForInteraction(sess.ID) {
+				t.Fatal("mixed failed session remained available for interaction")
+			}
+			if got := m.localPathCapability(sess.ID); got != "" {
+				t.Fatalf("local path capability after mixed delete failure = %q, want empty", got)
+			}
+
+			event := waitForLifecycleEvent(t, events, sess.ID, SessionLifecycleCloseFailedHidden, time.Second)
+			if event.Reason != "close_failed_hidden" || !event.Hidden || event.OwnerWidgetID != "widget-1" {
+				t.Fatalf("lifecycle event = %+v, want hidden mixed cleanup failure", event)
+			}
+		})
+	}
+}
+
 func TestConcurrentDeleteSessionFailureSharesOneResult(t *testing.T) {
 	root := t.TempDir()
 	m := newQuietTestManager(t, root)

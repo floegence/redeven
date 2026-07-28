@@ -2464,6 +2464,8 @@
     "activityWithUnreadOutput": "{activity}。{unread}",
     "sessionsWithWaitingAttention": "{sessions}。{attention}",
     "sessionsWithUnreadOutput": "{sessions}。{unread}",
+    "sessionIdentityWithTitle": "{label}：{title}",
+    "statusAnnouncement": "{identity}。{status}",
     "invalidWorkingDirectory": "工作目錄無效。",
     "invalidCreateResponse": "建立回應無效。",
     "sessionCouldNotBeCreated": "終端會話無法建立。",

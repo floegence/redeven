@@ -73,6 +73,7 @@ import { sortContextActionMenuItems } from '../contextActions/menu';
 import { PermissionEmptyState } from './PermissionEmptyState';
 import { attachAskFlowerContextAction, type EnvFlowerTurnLauncherContextItem } from '../contextActions/askFlower';
 import { basenameFromAbsolutePath, normalizeAbsolutePath as normalizeAskFlowerAbsolutePath } from '../utils/askFlowerPath';
+import { canonicalAbsolutePath } from '../utils/canonicalAbsolutePath';
 import { resolveTerminalSurfaceTouchAction } from '../mobileViewportPolicy';
 import { resolveTerminalFontFamily, TerminalSettingsDialog } from './TerminalSettingsDialog';
 import { resolveTerminalMobileKeyboardInsetPx } from './terminalMobileKeyboardInset';
@@ -589,13 +590,11 @@ function sameTerminalWorkState(
 function normalizeTerminalSessionInfo(value: TerminalSessionInfo): TerminalSessionInfo | null {
   const id = String(value?.id ?? '').trim();
   if (!id) return null;
-  const localCapabilityWorkingDir = normalizeAskFlowerAbsolutePath(
-    String(value?.localPathCapability?.workingDir ?? '').trim(),
-  );
+  const localCapabilityWorkingDir = canonicalAbsolutePath(value?.localPathCapability?.workingDir);
   return {
     id,
     name: String(value?.name ?? '').trim(),
-    workingDir: normalizeAskFlowerAbsolutePath(String(value?.workingDir ?? '').trim()),
+    workingDir: String(value?.workingDir ?? ''),
     createdAtMs: normalizeTerminalSessionTimestamp(value?.createdAtMs),
     lastActiveAtMs: normalizeTerminalSessionTimestamp(value?.lastActiveAtMs),
     isActive: Boolean(value?.isActive),
@@ -1035,8 +1034,11 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   createEffect(() => {
     if (terminalFocusOwner()) return;
-    // Reset focus state when the view becomes inactive to avoid stale focus affecting autoFocus decisions.
+    // Inactive KeepAlive views must release every document-level focus owner without restoring focus into hidden DOM.
     setPanelHasFocus(false);
+    setSessionDrawerOpen(false);
+    setTerminalSidebarMenu(null);
+    setTerminalAskMenu(null);
   });
 
   createEffect(() => {
@@ -3316,8 +3318,21 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
           : 'none' as const;
       nextBoundaries.set(item.id, boundary);
       if (boundary !== 'none' && statusBoundaryBySessionId.get(item.id) !== boundary) {
-        const description = describeTerminalSessionNavigationItem(item, i18n.t).trim();
-        if (description) enteredDescriptions.push(description);
+        const status = item.failureKind === 'creation'
+          ? i18n.t('terminal.creationFailedStatus')
+          : item.failureKind === 'runtime'
+            ? i18n.t('terminal.terminalUnavailable')
+            : item.attentionState === 'waiting'
+              ? i18n.t('codex.pendingRequests.titleByType.userInput')
+              : '';
+        if (status) {
+          const label = item.label.trim();
+          const title = item.title.trim();
+          const identity = label && title && label !== title
+            ? i18n.t('terminal.sessionIdentityWithTitle', { label, title })
+            : label || title;
+          enteredDescriptions.push(i18n.t('terminal.statusAnnouncement', { identity, status }));
+        }
       }
     }
     statusBoundaryBySessionId = nextBoundaries;

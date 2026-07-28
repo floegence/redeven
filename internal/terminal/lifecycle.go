@@ -38,9 +38,11 @@ type SessionLifecycleEvent struct {
 type SessionLifecycleHook func(SessionLifecycleEvent)
 
 type sessionDeleteOperation struct {
-	done         chan struct{}
-	err          error
-	participants int
+	done          chan struct{}
+	err           error
+	participants  int
+	hideOnFailure bool
+	ownerWidgetID string
 }
 
 func (r SessionLifecycleRecord) hiddenFromUI() bool {
@@ -205,6 +207,15 @@ func (m *Manager) requestSessionDelete(sessionID string, widgetID string, strict
 	m.mu.Lock()
 	if operation := m.deleteOperations[sessionID]; operation != nil {
 		operation.participants++
+		if ownerWidgetID := strings.TrimSpace(widgetID); ownerWidgetID != "" {
+			operation.hideOnFailure = true
+			if operation.ownerWidgetID == "" {
+				operation.ownerWidgetID = ownerWidgetID
+			}
+			record := m.sessionLifecycle[sessionID]
+			record.OwnerWidgetID = operation.ownerWidgetID
+			m.sessionLifecycle[sessionID] = record
+		}
 		m.mu.Unlock()
 		<-operation.done
 		return operation.err
@@ -227,7 +238,12 @@ func (m *Manager) requestSessionDelete(sessionID string, widgetID string, strict
 	record.FailureCode = ""
 	record.FailureMessage = ""
 	m.sessionLifecycle[sessionID] = record
-	operation := &sessionDeleteOperation{done: make(chan struct{}), participants: 1}
+	operation := &sessionDeleteOperation{
+		done:          make(chan struct{}),
+		participants:  1,
+		hideOnFailure: record.OwnerWidgetID != "",
+		ownerWidgetID: record.OwnerWidgetID,
+	}
 	if m.deleteOperations == nil {
 		m.deleteOperations = make(map[string]*sessionDeleteOperation)
 	}
@@ -260,59 +276,50 @@ func (m *Manager) runAsyncDeleteSession(sessionID string, operation *sessionDele
 	if err != nil {
 		if _, exists := m.term.GetSession(sessionID); !exists {
 			err = nil
-		} else {
-			m.markSessionDeleteFailure(sessionID, "DELETE_FAILED", err.Error())
 		}
 	}
-	m.completeSessionDelete(sessionID, operation, err)
+	m.completeSessionDelete(sessionID, operation, err, "DELETE_FAILED")
 }
 
-func (m *Manager) completeSessionDelete(sessionID string, operation *sessionDeleteOperation, err error) {
+func (m *Manager) completeSessionDelete(
+	sessionID string,
+	operation *sessionDeleteOperation,
+	err error,
+	failureCode string,
+) {
 	if m == nil || operation == nil {
 		return
 	}
+	var failurePayload *terminalSessionsChangedPayload
 	m.mu.Lock()
+	if err != nil {
+		record := m.sessionLifecycle[sessionID]
+		reason := "close_failed"
+		if operation.hideOnFailure {
+			record.Lifecycle = SessionLifecycleCloseFailedHidden
+			record.OwnerWidgetID = operation.ownerWidgetID
+			reason = "close_failed_hidden"
+			delete(m.localPathCapabilities, sessionID)
+		} else {
+			record.Lifecycle = SessionLifecycleOpen
+		}
+		record.CloseFinishedAtMs = time.Now().UnixMilli()
+		record.FailureCode = strings.TrimSpace(failureCode)
+		record.FailureMessage = strings.TrimSpace(err.Error())
+		m.sessionLifecycle[sessionID] = record
+		payload := buildTerminalSessionsChangedPayload(reason, sessionID, record)
+		failurePayload = &payload
+	}
 	operation.err = err
 	if m.deleteOperations[sessionID] == operation {
 		delete(m.deleteOperations, sessionID)
 	}
 	close(operation.done)
 	m.mu.Unlock()
-}
-
-func (m *Manager) markSessionDeleteFailure(sessionID string, failureCode string, failureMessage string) {
-	if m == nil {
-		return
+	if failurePayload != nil {
+		m.broadcastSessionsChanged(*failurePayload)
+		m.emitSessionLifecycleEvent(sessionLifecycleEventFromPayload(*failurePayload))
 	}
-	sessionID = strings.TrimSpace(sessionID)
-	if sessionID == "" {
-		return
-	}
-
-	nowUnixMs := time.Now().UnixMilli()
-
-	m.mu.Lock()
-	record, ok := m.sessionLifecycle[sessionID]
-	if !ok {
-		record = SessionLifecycleRecord{}
-	}
-	reason := "close_failed"
-	if strings.TrimSpace(record.OwnerWidgetID) != "" {
-		record.Lifecycle = SessionLifecycleCloseFailedHidden
-		reason = "close_failed_hidden"
-		delete(m.localPathCapabilities, sessionID)
-	} else {
-		record.Lifecycle = SessionLifecycleOpen
-	}
-	record.CloseFinishedAtMs = nowUnixMs
-	record.FailureCode = strings.TrimSpace(failureCode)
-	record.FailureMessage = strings.TrimSpace(failureMessage)
-	m.sessionLifecycle[sessionID] = record
-	m.mu.Unlock()
-
-	payload := buildTerminalSessionsChangedPayload(reason, sessionID, record)
-	m.broadcastSessionsChanged(payload)
-	m.emitSessionLifecycleEvent(sessionLifecycleEventFromPayload(payload))
 }
 
 func (m *Manager) finalizeSessionClosed(sessionID string) string {

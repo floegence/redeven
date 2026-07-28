@@ -2464,6 +2464,8 @@
     "activityWithUnreadOutput": "{activity}. {unread}",
     "sessionsWithWaitingAttention": "{sessions}. {attention}",
     "sessionsWithUnreadOutput": "{sessions}. {unread}",
+    "sessionIdentityWithTitle": "{label}: {title}",
+    "statusAnnouncement": "{identity}. {status}",
     "invalidWorkingDirectory": "Ungültiges Arbeitsverzeichnis.",
     "invalidCreateResponse": "Ungültige Erstellungsantwort",
     "sessionCouldNotBeCreated": "Terminalsitzung konnte nicht erstellt werden.",

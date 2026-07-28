@@ -2464,6 +2464,8 @@
     "activityWithUnreadOutput": "{activity}。{unread}",
     "sessionsWithWaitingAttention": "{sessions}。{attention}",
     "sessionsWithUnreadOutput": "{sessions}。{unread}",
+    "sessionIdentityWithTitle": "{label}：{title}",
+    "statusAnnouncement": "{identity}。{status}",
     "invalidWorkingDirectory": "工作目录无效。",
     "invalidCreateResponse": "创建响应无效。",
     "sessionCouldNotBeCreated": "终端会话无法创建。",

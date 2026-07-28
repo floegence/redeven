@@ -2576,6 +2576,8 @@
     "activityWithUnreadOutput": "{activity}. {unread}",
     "sessionsWithWaitingAttention": "{sessions}. {attention}",
     "sessionsWithUnreadOutput": "{sessions}. {unread}",
+    "sessionIdentityWithTitle": "{label}: {title}",
+    "statusAnnouncement": "{identity}. {status}",
     "invalidWorkingDirectory": "Неверный рабочий каталог.",
     "invalidCreateResponse": "Неверный ответ на создание.",
     "sessionCouldNotBeCreated": "Не удалось создать сеанс терминала.",

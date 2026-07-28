@@ -6289,6 +6289,53 @@ describe('TerminalPanel', () => {
     expect(rpcFsMocks.readFile).not.toHaveBeenCalled();
   });
 
+  it('keeps local path controls disabled when catalog updates contain non-canonical path aliases', async () => {
+    terminalSessionsState.sessions = [{
+      id: 'session-1',
+      name: 'Terminal 1',
+      workingDir: '/workspace/redeven',
+      localPathCapability: { workingDir: '/workspace/redeven' },
+      createdAtMs: 1,
+      isActive: true,
+      lastActiveAtMs: 10,
+      executionContext: localPresentationExecutionContext('/workspace/redeven'),
+    }];
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanelAfterPaint();
+
+    for (const [index, workingDir] of [
+      '/workspace\\redeven',
+      '/workspace//redeven',
+      '/workspace/redeven/',
+      ' /workspace/redeven',
+      '/workspace/redeven ',
+    ].entries()) {
+      terminalSessionsState.sessions = terminalSessionsState.sessions.map((session) => ({
+        ...session,
+        name: `Merged terminal ${index + 1}`,
+        workingDir,
+      }));
+      publishTerminalSessions();
+      await settleTerminalPanelAfterPaint();
+
+      const menu = await openSidebarContextMenu(host, `Merged terminal ${index + 1}`);
+      for (const label of ['Ask Flower', 'Files', 'Duplicate session']) {
+        const button = findContextMenuButton(menu, label);
+        expect(button).toBeTruthy();
+        expect(button?.disabled).toBe(true);
+        button?.click();
+      }
+      expect(openFlowerTurnLauncherSpy).not.toHaveBeenCalled();
+      expect(openFileBrowserAtPathSpy).not.toHaveBeenCalled();
+      expect(sessionsCoordinatorMocks.createSession).not.toHaveBeenCalled();
+      menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await settleTerminalPanel();
+    }
+  });
+
   it('revokes open menu path actions when a local session becomes remote', async () => {
     terminalSessionsState.sessions = [{
       id: 'session-1',
@@ -6914,6 +6961,57 @@ describe('TerminalPanel', () => {
     expect(host.querySelector('[data-terminal-session-avatar="session-agent"]')?.textContent).toContain('R');
   });
 
+  it('announces the affected identity when one of two Codex sessions needs input', async () => {
+    const codexSession = (id: string, name: string, workingDir: string) => ({
+      id,
+      name,
+      workingDir,
+      localPathCapability: { workingDir },
+      createdAtMs: id === 'session-review' ? 1 : 2,
+      isActive: id === 'session-review',
+      lastActiveAtMs: 10,
+      foregroundCommand: { phase: 'running' as const, displayName: 'codex', revision: 1, updatedAtMs: 10 },
+      executionContext: {
+        location: { kind: 'local' as const, phase: 'ready' as const, label: '', authority: '', workingDirectory: workingDir, source: 'shell_integration' as const },
+        application: { kind: 'agent_cli' as const, identity: 'codex' as const, displayName: 'Codex' },
+        revision: 1,
+        updatedAtMs: 10,
+      },
+      workState: {
+        phase: 'idle' as const,
+        source: 'semantic' as const,
+        contextRevision: 1,
+        foregroundCommandRevision: 1,
+        revision: 1,
+        updatedAtMs: 10,
+      },
+    });
+    terminalSessionsState.sessions = [
+      codexSession('session-review', 'Review agent', '/workspace/review'),
+      codexSession('session-build', 'Build agent', '/workspace/build'),
+    ];
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+
+    publishTerminalWorkState('session-build', {
+      phase: 'waiting_user', source: 'semantic', contextRevision: 1, foregroundCommandRevision: 1, revision: 2, updatedAtMs: 20,
+    });
+    await settleTerminalPanel();
+
+    const announcement = host.querySelector<HTMLElement>('[data-terminal-status-announcement]');
+    expect(announcement?.textContent).toBe('Build agent: Codex. User input required');
+    expect(announcement?.textContent).not.toContain('Review agent');
+    expect(announcement?.dataset.terminalStatusAnnouncementSequence).toBe('1');
+
+    publishTerminalOutputActivity('session-build', { phase: 'streaming', revision: 1, updatedAtMs: 21 });
+    publishTerminalOutputActivity('session-build', { phase: 'settled', revision: 2, updatedAtMs: 22 });
+    await settleTerminalPanel();
+    expect(host.querySelector<HTMLElement>('[data-terminal-status-announcement]')
+      ?.dataset.terminalStatusAnnouncementSequence).toBe('1');
+  });
+
   it('announces a retained waiting state again when the catalog connection epoch changes', async () => {
     terminalSessionsState.sessions = [{
       id: 'session-agent',
@@ -7495,6 +7593,38 @@ describe('TerminalPanel', () => {
     publishTerminalSessions();
     await settleTerminalPanel();
     expect(document.activeElement).toBe(findTerminalTab(host, 'Terminal 2'));
+  });
+
+  it('releases the mobile drawer and portaled menu focus ownership when a KeepAlive view becomes inactive', async () => {
+    layoutState.mobile = true;
+    terminalPrefsState.mobileInputMode = 'system';
+    const host = document.createElement('div');
+    const externalButton = document.createElement('button');
+    externalButton.textContent = 'External action';
+    document.body.append(host, externalButton);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanelAfterPaint();
+    host.querySelector<HTMLButtonElement>('[data-testid="terminal-session-drawer-open"]')?.click();
+    await settleTerminalPanel();
+    const row = findTerminalTab(host, 'Terminal 1')!;
+    row.focus();
+    dispatchTerminalKeydown(row, { key: 'F10', shiftKey: true });
+    await settleTerminalPanelAfterPaint();
+    expect(host.querySelector('[role="dialog"][aria-modal="true"]')).not.toBeNull();
+    expect(host.querySelector('[role="menu"]')).not.toBeNull();
+
+    setViewActivationActive(false);
+    await settleTerminalPanel();
+    expect(host.querySelector('[role="dialog"][aria-modal="true"]')).toBeNull();
+    expect(host.querySelector('[role="menu"]')).toBeNull();
+
+    externalButton.focus();
+    const tabEvent = dispatchTerminalKeydown(externalButton, { key: 'Tab' });
+    const escapeEvent = dispatchTerminalKeydown(externalButton, { key: 'Escape' });
+    expect(tabEvent.defaultPrevented).toBe(false);
+    expect(escapeEvent.defaultPrevented).toBe(false);
+    expect(document.activeElement).toBe(externalButton);
   });
 
   it('closes the mobile drawer without native terminal focus in Floe keyboard mode', async () => {
