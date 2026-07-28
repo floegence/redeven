@@ -174,6 +174,96 @@ func stream(file *disk.File) { encoder := wire.NewEncoder(file); _ = encoder.Enc
 	}
 }
 
+func TestScanPropagatesGoDurableCapabilitiesAcrossFilesAndWrappers(t *testing.T) {
+	root := t.TempDir()
+	writeFixture(t, root, "internal/store/open.go", `package store
+import ("io"; disk "os")
+func OpenProductWriter(path string) (io.WriteCloser, error) { return openProductWriter(path) }
+func openProductWriter(path string) (io.WriteCloser, error) { return disk.Create(path) }
+`)
+	writeFixture(t, root, "internal/store/codec_leaf.go", `package store
+import wire "encoding/json"
+type BloomParcel struct { Value string }
+func encodeLeaf(value BloomParcel) []byte { body, _ := wire.Marshal(value); return body }
+`)
+	writeFixture(t, root, "internal/store/codec_wrapper.go", `package store
+func encodeMiddle(value BloomParcel) []byte { return encodeLeaf(value) }
+func encodeOuter(value BloomParcel) []byte { return encodeMiddle(value) }
+`)
+	writeFixture(t, root, "internal/store/write.go", `package store
+import ("bufio"; "io")
+func save(path string, value BloomParcel) error {
+	raw, err := OpenProductWriter(path)
+	if err != nil { return err }
+	buffered := bufio.NewWriter(raw)
+	if _, err := buffered.Write(encodeOuter(value)); err != nil { return err }
+	_, err = io.WriteString(buffered, "\n")
+	return err
+}
+`)
+	writeFixture(t, root, "internal/store/sql_types.go", `package store
+type statementRunner interface {
+	Exec(statement string, args ...any) (any, error)
+	ExecContext(ctx any, statement string, args ...any) (any, error)
+	Query(statement string, args ...any) (any, error)
+	QueryContext(ctx any, statement string, args ...any) (any, error)
+	Prepare(statement string) (any, error)
+	PrepareContext(ctx any, statement string) (any, error)
+}
+`)
+	writeFixture(t, root, "internal/store/sql_wrapper.go", `package store
+func applyStatement(handle statementRunner, statement string) {
+	_, _ = handle.Exec(statement)
+	_, _ = handle.ExecContext(nil, statement)
+	_, _ = handle.Query(statement)
+	_, _ = handle.QueryContext(nil, statement)
+	_, _ = handle.Prepare(statement)
+	_, _ = handle.PrepareContext(nil, statement)
+}
+`)
+	writeFixture(t, root, "internal/store/method.go", `package store
+import (dbsql "database/sql"; "io")
+type durableRepo struct {
+	db *dbsql.DB
+	output io.WriteCloser
+}
+func (repo *durableRepo) save(statement string, body []byte) {
+	_, _ = repo.db.Exec(statement)
+	_, _ = repo.output.Write(body)
+}
+`)
+	writeFixture(t, root, "internal/store/method_caller.go", `package store
+func delegateSave(repo *durableRepo, statement string, body []byte) {
+	repo.save(statement, body)
+}
+`)
+
+	findings, err := Scan(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byPath := findingsByPath(findings)
+	writer := byPath["internal/store/write.go"]
+	if !contains(writer.SinkKinds, "file") || !contains(writer.SinkKinds, "json_file") {
+		t.Fatalf("wrapped writer capability was not propagated: %#v", writer)
+	}
+	if !contains(writer.Codecs, "encoding/json.Marshal") || !contains(writer.DTOs, "value") {
+		t.Fatalf("multi-layer codec capability was not propagated: %#v", writer)
+	}
+	sqlWrapper := byPath["internal/store/sql_wrapper.go"]
+	if !contains(sqlWrapper.SinkKinds, "sqlite") || !contains(sqlWrapper.Tables, "expression:statement") {
+		t.Fatalf("interface SQL capability was not propagated: %#v", sqlWrapper)
+	}
+	method := byPath["internal/store/method.go"]
+	if !contains(method.SinkKinds, "file") || !contains(method.SinkKinds, "sqlite") || !contains(method.Tables, "expression:statement") {
+		t.Fatalf("struct receiver durable capabilities were not propagated: %#v", method)
+	}
+	methodCaller := byPath["internal/store/method_caller.go"]
+	if !contains(methodCaller.SinkKinds, "file") || !contains(methodCaller.SinkKinds, "sqlite") || !contains(methodCaller.Tables, "expression:statement") {
+		t.Fatalf("method durable effects were not propagated to caller: %#v", methodCaller)
+	}
+}
+
 func TestScanRecognizesAliasedSQLCallsAndDynamicExpressions(t *testing.T) {
 	root := t.TempDir()
 	writeFixture(t, root, "internal/store/sql.go", `package store
@@ -223,6 +313,25 @@ window.caches.open("agent-cache");
 		if !contains(finding.Keys, key) {
 			t.Errorf("missing key %s in %#v", key, finding)
 		}
+	}
+}
+
+func TestScanPropagatesTypeScriptStorageAliasesToFixedPoint(t *testing.T) {
+	root := t.TempDir()
+	writeFixture(t, root, "internal/ui/preferences.ts", `
+const first = globalThis.localStorage;
+const second = first;
+let third: Storage;
+third = second;
+const fourth = third;
+fourth.setItem("redeven.garden.layout", "dense");
+`)
+	findings, err := Scan(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(findings) != 1 || !contains(findings[0].SinkKinds, "web_storage") || !contains(findings[0].Keys, "redeven.garden.layout") {
+		t.Fatalf("multi-level browser storage alias escaped scanning: %#v", findings)
 	}
 }
 
@@ -318,6 +427,122 @@ renamedWriteAPI("payload", "x", () => {});
 		if !strings.Contains(issues, identifier) {
 			t.Errorf("renamed shadow identifier %q escaped validation: %s", identifier, issues)
 		}
+	}
+}
+
+func TestEndToEndRequiresReviewForNovelDurableShapeWithoutForbiddenNames(t *testing.T) {
+	root := t.TempDir()
+	writeFixture(t, root, "internal/garden/reviewed.go", `package garden
+import disk "os"
+func saveTheme(body []byte) error { return disk.WriteFile("theme", body, 0600) }
+`)
+	initialFindings, err := Scan(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	initial := Registry{Version: RegistryVersion}
+	for _, finding := range initialFindings {
+		entry := NewReviewedEntry(finding)
+		entry.Owner = "garden settings"
+		entry.Authority = "product_configuration"
+		entry.DataClasses = []string{"garden theme preference"}
+		entry.ReviewNote = "Reviewed legal host preference fixture."
+		initial.Entries = append(initial.Entries, entry)
+	}
+	initial = roundTripRegistry(t, root, initial)
+	if issues := Validate(initial, initialFindings); len(issues) != 0 {
+		t.Fatalf("initial legal host chain failed: %v", issues)
+	}
+
+	writeFixture(t, root, "internal/garden/codec.go", `package garden
+import wire "encoding/json"
+type BloomParcel struct { Petal string }
+func foldBloom(value BloomParcel) []byte { body, _ := wire.Marshal(value); return body }
+func wrapBloom(value BloomParcel) []byte { return foldBloom(value) }
+`)
+	writeFixture(t, root, "internal/garden/delegated.go", `package garden
+import wire "encoding/json"
+type CedarParcel struct { Ring string }
+func encodeCedar(value CedarParcel) []byte { body, _ := wire.Marshal(value); return body }
+func saveCedar(value CedarParcel) error { return saveTheme(encodeCedar(value)) }
+func forwardCedar(value CedarParcel) error { return saveCedar(value) }
+`)
+	writeFixture(t, root, "internal/garden/output.go", `package garden
+import ("io"; disk "os")
+func openBloom(path string) (io.WriteCloser, error) { return disk.Create(path) }
+func emitBloom(path string, value BloomParcel) error {
+	stream, err := openBloom(path)
+	if err != nil { return err }
+	_, err = stream.Write(wrapBloom(value))
+	return err
+}
+`)
+	writeFixture(t, root, "internal/garden/records.go", `package garden
+type orchardExecutor interface { Exec(string, ...any) (any, error) }
+const orchardDDL = "CREATE TABLE orchard_records (seed TEXT PRIMARY KEY)"
+func alterOrchard(db orchardExecutor, statement string) { _, _ = db.Exec(statement) }
+func cultivateOrchard(db orchardExecutor) { alterOrchard(db, orchardDDL) }
+`)
+	writeFixture(t, root, "internal/garden/layout.ts", `
+const gardenRoot = window.localStorage;
+const gardenShelf = gardenRoot;
+gardenShelf.setItem("redeven.garden.layout", "dense");
+`)
+
+	changedFindings, err := Scan(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byPath := findingsByPath(changedFindings)
+	for path, kind := range map[string]string{
+		"internal/garden/delegated.go": "json_file",
+		"internal/garden/output.go":    "json_file",
+		"internal/garden/records.go":   "sqlite",
+		"internal/garden/layout.ts":    "web_storage",
+	} {
+		if !contains(byPath[path].SinkKinds, kind) {
+			t.Fatalf("novel %s shape was not discovered in %s: %#v", kind, path, byPath[path])
+		}
+	}
+	if !contains(byPath["internal/garden/output.go"].Codecs, "encoding/json.Marshal") || !contains(byPath["internal/garden/output.go"].DTOs, "value") {
+		t.Fatalf("renamed codec/DTO inventory missing: %#v", byPath["internal/garden/output.go"])
+	}
+	if !contains(byPath["internal/garden/records.go"].Tables, "orchard_records") {
+		t.Fatalf("renamed table inventory missing: %#v", byPath["internal/garden/records.go"])
+	}
+	if !contains(byPath["internal/garden/layout.ts"].Keys, "redeven.garden.layout") {
+		t.Fatalf("renamed key inventory missing: %#v", byPath["internal/garden/layout.ts"])
+	}
+	refreshed := RefreshRegistry(initial, changedFindings)
+	loaded := roundTripRegistry(t, root, refreshed)
+	issues := strings.Join(Validate(loaded, changedFindings), "\n")
+	if !strings.Contains(issues, "requires explicit review") {
+		t.Fatalf("novel durable shape passed without review: %s", issues)
+	}
+	for _, entry := range loaded.Entries {
+		if entry.Path == "internal/garden/reviewed.go" {
+			if entry.ReviewStatus != ReviewStatusReviewed {
+				t.Fatalf("unchanged reviewed helper lost approval: %#v", entry)
+			}
+			continue
+		}
+		if entry.ReviewStatus != ReviewStatusPendingReview || entry.Owner != "" || entry.Authority != "" || len(entry.DataClasses) != 0 {
+			t.Fatalf("novel durable shape was implicitly signed: %#v", entry)
+		}
+	}
+
+	approved := Registry{Version: RegistryVersion}
+	for _, finding := range changedFindings {
+		entry := NewReviewedEntry(finding)
+		entry.Owner = "garden product state"
+		entry.Authority = "product_configuration"
+		entry.DataClasses = []string{"garden layout and orchard records"}
+		entry.ReviewNote = "Explicitly reviewed legal host facts."
+		approved.Entries = append(approved.Entries, entry)
+	}
+	approved = roundTripRegistry(t, root, approved)
+	if issues := Validate(approved, changedFindings); len(issues) != 0 {
+		t.Fatalf("explicitly reviewed legal host chain failed: %v", issues)
 	}
 }
 

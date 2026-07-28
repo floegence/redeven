@@ -85,6 +85,8 @@ var (
 	typeScriptFSRequirePattern             = regexp.MustCompile(`(?m)\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["'](?:node:)?fs(?:/promises)?["']\s*\)`)
 	typeScriptFSDestructuredRequirePattern = regexp.MustCompile(`(?m)\b(?:const|let|var)\s*\{([^}]*)\}\s*=\s*require\s*\(\s*["'](?:node:)?fs(?:/promises)?["']\s*\)`)
 	typeScriptStorageAliasPattern          = regexp.MustCompile(`(?m)\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:(?:window|globalThis|self)\s*\.\s*)?(localStorage|sessionStorage|indexedDB|caches)\b`)
+	typeScriptIdentifierAliasPattern       = regexp.MustCompile(`(?m)\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*([A-Za-z_$][\w$]*)\s*;?`)
+	typeScriptIdentifierAssignmentPattern  = regexp.MustCompile(`(?m)^\s*([A-Za-z_$][\w$]*)\s*=\s*([A-Za-z_$][\w$]*)\s*;?\s*$`)
 )
 
 var forbiddenAgentDataClassPatterns = []string{
@@ -125,6 +127,7 @@ func Scan(root string) ([]Finding, error) {
 		source []byte
 	}
 	var sources []sourceFile
+	goSources := make(map[string][]byte)
 	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -152,8 +155,15 @@ func Scan(root string) ([]Finding, error) {
 			return err
 		}
 		sources = append(sources, sourceFile{path: rel, source: source})
+		if extension == ".go" {
+			goSources[rel] = source
+		}
 		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
+	packageFindings, err := inspectGoPackageCapabilities(goSources)
 	if err != nil {
 		return nil, err
 	}
@@ -193,6 +203,7 @@ func Scan(root string) ([]Finding, error) {
 				finding.DTOs = uniqueSorted(append(finding.DTOs, inventory.dtos...))
 			}
 		}
+		finding = mergeFindings(finding, packageFindings[source.path])
 		if len(finding.SinkKinds) == 0 {
 			continue
 		}
@@ -203,6 +214,15 @@ func Scan(root string) ([]Finding, error) {
 	}
 	sort.Slice(findings, func(i, j int) bool { return findings[i].Path < findings[j].Path })
 	return findings, nil
+}
+
+func mergeFindings(left, right Finding) Finding {
+	left.SinkKinds = uniqueSorted(append(left.SinkKinds, right.SinkKinds...))
+	left.Tables = uniqueSorted(append(left.Tables, right.Tables...))
+	left.Keys = uniqueSorted(append(left.Keys, right.Keys...))
+	left.Codecs = uniqueSorted(append(left.Codecs, right.Codecs...))
+	left.DTOs = uniqueSorted(append(left.DTOs, right.DTOs...))
+	return left
 }
 
 type goCodecInventory struct {
@@ -727,6 +747,19 @@ func inspectTypeScriptSource(source []byte) Finding {
 	}
 	for _, match := range typeScriptStorageAliasPattern.FindAllStringSubmatch(text, -1) {
 		storageAliases[match[1]] = storageAliases[match[2]]
+	}
+	for changed := true; changed; {
+		changed = false
+		matches := typeScriptIdentifierAliasPattern.FindAllStringSubmatch(text, -1)
+		matches = append(matches, typeScriptIdentifierAssignmentPattern.FindAllStringSubmatch(text, -1)...)
+		for _, match := range matches {
+			kind, ok := storageAliases[match[2]]
+			if !ok || storageAliases[match[1]] == kind {
+				continue
+			}
+			storageAliases[match[1]] = kind
+			changed = true
+		}
 	}
 	var keys []string
 	for alias, kind := range storageAliases {
