@@ -426,7 +426,7 @@ async function verifyForegroundCommandPresentation(page, panel, runtime, session
   }
 
   await delay(200);
-  if (await panel.locator('[data-terminal-tab-status="running"]').count() > 0) {
+  if (await panel.locator('[data-terminal-tab-status="spinner"]').count() > 0) {
     throw new Error('idle terminal session rendered a foreground-command spinner');
   }
 
@@ -441,7 +441,7 @@ async function verifyForegroundCommandPresentation(page, panel, runtime, session
     ));
     return commandTitles.length >= 2
       && commandTitles.every((element) => (element.textContent ?? '').trim() === 'top')
-      && targetPanel.querySelector('[data-terminal-tab-status="running"]') === null;
+      && targetPanel.querySelector('[data-terminal-tab-status="spinner"]') === null;
   }, {
     expectedSessionID: sessionID,
     expectedPanelVariant: panelVariant,
@@ -453,7 +453,7 @@ async function verifyForegroundCommandPresentation(page, panel, runtime, session
     const targetPanel = globalThis.document.querySelector(
       `[data-floe-workbench-widget-id="${expectedWidgetID}"] [data-terminal-panel-variant="${expectedPanelVariant}"]`,
     );
-    if (!targetPanel || targetPanel.querySelector('[data-terminal-tab-status="running"]') !== null) return false;
+    if (!targetPanel || targetPanel.querySelector('[data-terminal-tab-status="spinner"]') !== null) return false;
     const restoredTitles = Array.from(targetPanel.querySelectorAll(
       `[data-terminal-session-title="${expectedSessionID}"]`,
     ));

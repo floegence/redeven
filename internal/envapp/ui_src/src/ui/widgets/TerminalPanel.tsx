@@ -113,14 +113,14 @@ import {
 import {
   TerminalSessionNavigator,
   TerminalSessionChromeIcon,
-  TerminalSessionProcessBadge,
+  TerminalSessionTransitionBadge,
   TerminalOutputStatusGlyph,
   describeTerminalSessionNavigationItem,
   joinTerminalStatusAnnouncements,
   terminalStatusSentence,
   type TerminalSessionAttentionState,
   type TerminalSessionNavigationItem,
-  type TerminalSessionProcessState,
+  type TerminalSessionTransitionIndicator,
 } from './TerminalSessionNavigator';
 import { TerminalSearchOverlay } from './TerminalSearchOverlay';
 import { TerminalSharedGeometryNotice } from './TerminalSharedGeometryNotice';
@@ -500,9 +500,9 @@ function resolveTerminalChromeTransition(
   return 'none';
 }
 
-function resolveTerminalSidebarProcessState(chrome: TerminalSessionChrome): TerminalSessionProcessState {
+function resolveTerminalTransitionIndicator(chrome: TerminalSessionChrome): TerminalSessionTransitionIndicator {
   if (chrome.status === 'failed') return 'failed';
-  return chrome.status === 'spinner' ? 'running' : 'none';
+  return chrome.status === 'spinner' ? 'spinner' : 'none';
 }
 
 function resolveTerminalSidebarAttentionState(
@@ -2109,14 +2109,15 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return sessions().find((session) => session.id === sid) ?? null;
   });
 
-  const [terminalChromeNowMs, setTerminalChromeNowMs] = createSignal(Date.now());
+  const [terminalChromeDeadlineRevision, setTerminalChromeDeadlineRevision] = createSignal(0);
   const fallbackRemoteOpeningObservedAtBySession = new Map<string, number>();
   const agentInitializationObservedAtBySession = new Map<string, number>();
   const agentIdentityBySession = new Map<string, string>();
 
   createEffect(() => {
     const currentSessions = sessions();
-    const nowMs = Math.max(Date.now(), terminalChromeNowMs());
+    terminalChromeDeadlineRevision();
+    const nowMs = Date.now();
     let nextExpiryMs = Number.POSITIVE_INFINITY;
     const openingSessionIds = new Set<string>();
 
@@ -2128,7 +2129,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       if (agentIdentity) {
         if (agentIdentityBySession.get(session.id) !== agentIdentity) {
           agentIdentityBySession.set(session.id, agentIdentity);
-          agentInitializationObservedAtBySession.set(session.id, Date.now());
+          agentInitializationObservedAtBySession.set(session.id, nowMs);
         }
         const workStateReady = session.workState?.phase !== undefined
           && session.workState.phase !== 'unknown'
@@ -2141,7 +2142,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         } else {
           const observedAtMs = agentInitializationObservedAtBySession.get(session.id);
           if (observedAtMs !== undefined) {
-            nextExpiryMs = Math.min(nextExpiryMs, observedAtMs + TERMINAL_AGENT_INITIALIZATION_SPINNER_MS);
+            const deadlineMs = observedAtMs + TERMINAL_AGENT_INITIALIZATION_SPINNER_MS;
+            if (deadlineMs > nowMs) nextExpiryMs = Math.min(nextExpiryMs, deadlineMs);
           }
         }
       } else {
@@ -2154,14 +2156,12 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       const hasSharedObservation = typeof sharedObservedAtMs === 'number' && Number.isFinite(sharedObservedAtMs);
       const observedAtMs = hasSharedObservation
         ? sharedObservedAtMs
-        : (fallbackRemoteOpeningObservedAtBySession.get(session.id) ?? Date.now());
+        : (fallbackRemoteOpeningObservedAtBySession.get(session.id) ?? nowMs);
       if (!hasSharedObservation) {
         fallbackRemoteOpeningObservedAtBySession.set(session.id, observedAtMs);
       }
-      nextExpiryMs = Math.min(
-        nextExpiryMs,
-        observedAtMs + TERMINAL_REMOTE_OPENING_SPINNER_MS,
-      );
+      const deadlineMs = observedAtMs + TERMINAL_REMOTE_OPENING_SPINNER_MS;
+      if (deadlineMs > nowMs) nextExpiryMs = Math.min(nextExpiryMs, deadlineMs);
     }
 
     for (const sessionId of fallbackRemoteOpeningObservedAtBySession.keys()) {
@@ -2175,10 +2175,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       if (!currentSessionIds.has(sessionId)) agentInitializationObservedAtBySession.delete(sessionId);
     }
 
-    if (!Number.isFinite(nextExpiryMs) || nextExpiryMs <= nowMs) return;
+    if (!Number.isFinite(nextExpiryMs)) return;
     const timer = globalThis.setTimeout(() => {
-      setTerminalChromeNowMs(Date.now());
-    }, Math.max(1, nextExpiryMs - nowMs + 1));
+      setTerminalChromeDeadlineRevision((value) => value + 1);
+    }, Math.max(1, nextExpiryMs - nowMs));
     onCleanup(() => globalThis.clearTimeout(timer));
   });
 
@@ -2186,7 +2186,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     const foregroundPresentations = foregroundPresentationBySession();
     const tabStates = tabVisualStateBySession();
     const runtimeStatuses = runtimeStatusBySession();
-    const nowMs = terminalChromeNowMs();
+    terminalChromeDeadlineRevision();
+    const nowMs = Date.now();
     const chromeBySession = new Map<string, TerminalSessionChrome>();
 
     sessions().forEach((session, index) => {
@@ -3290,7 +3291,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         subtitle: chrome.subtitle,
         fullPath: chrome.displayPath,
         localWorkingDir: chrome.localWorkingDir,
-        processState: resolveTerminalSidebarProcessState(chrome),
+        transitionIndicator: resolveTerminalTransitionIndicator(chrome),
         processRunning: chrome.processRunning,
         transitionState: chrome.status === 'failed'
           ? 'failed' as const
@@ -3340,7 +3341,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         subtitle: fullPath,
         fullPath,
         localWorkingDir: '',
-        processState: session.status,
+        transitionIndicator: session.status === 'failed' ? 'failed' as const : 'spinner' as const,
         processRunning: false,
         transitionState: session.status === 'failed' ? 'failed' as const : 'creating' as const,
         failureKind: session.status === 'failed' ? 'creation' as const : 'none' as const,
@@ -4428,7 +4429,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   });
   const activeToolbarTitle = createMemo(() => activeSessionListItem()?.title ?? i18n.t('terminal.title'));
   const activeToolbarAvatar = createMemo(() => activeSessionListItem()?.avatar ?? { kind: 'initial' as const });
-  const activeToolbarProcessState = createMemo(() => activeSessionListItem()?.processState ?? 'none');
+  const activeToolbarTransitionIndicator = createMemo(() => activeSessionListItem()?.transitionIndicator ?? 'none');
   const activeToolbarSubtitleIcon = createMemo(() => activeSessionListItem()?.subtitleIcon ?? 'none');
   const activeToolbarSubtitle = createMemo(() => {
     const activeItem = activeSessionListItem();
@@ -4595,7 +4596,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
               <div class="contents">
                 <div class="relative flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border bg-muted/40 text-muted-foreground">
                   <TerminalSessionChromeIcon avatar={activeToolbarAvatar()} class="h-3.5 w-3.5" />
-                  <TerminalSessionProcessBadge state={activeToolbarProcessState()} />
+                  <TerminalSessionTransitionBadge state={activeToolbarTransitionIndicator()} />
                 </div>
                 <div class="min-w-0 flex-1 overflow-hidden">
                   <Tooltip

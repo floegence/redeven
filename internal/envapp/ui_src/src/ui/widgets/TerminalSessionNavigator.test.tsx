@@ -74,7 +74,7 @@ function navigationItem(overrides: Partial<TerminalSessionNavigationItem> = {}):
     subtitle: '/workspace/redeven',
     fullPath: '/workspace/redeven',
     localWorkingDir: '/workspace/redeven',
-    processState: 'none',
+    transitionIndicator: 'none',
     processRunning: false,
     transitionState: 'none',
     failureKind: 'none',
@@ -153,7 +153,7 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     const { host } = renderNavigator(navigationItem());
 
     expect(host.querySelector('[data-terminal-agent-identity="codex"]')).not.toBeNull();
-    expect(host.querySelector('[data-terminal-process-state="running"]')).toBeNull();
+    expect(host.querySelector('[data-terminal-transition-indicator="spinner"]')).toBeNull();
     expect(host.querySelector('[data-terminal-output-state="streaming"]')).not.toBeNull();
     expect(host.querySelector('[data-terminal-output-attention="unread"]')).toBeNull();
     expect(host.querySelector('[data-terminal-attention-state="unread"]')).toBeNull();
@@ -204,7 +204,35 @@ describe('TerminalSessionNavigator agent status presentation', () => {
 
     expect(host.querySelector('[data-terminal-output-state]')).toBeNull();
     expect(host.querySelector('[data-terminal-attention-state]')).toBeNull();
-    expect(host.querySelector('[data-terminal-process-state="running"]')).toBeNull();
+    expect(host.querySelector('[data-terminal-transition-indicator="spinner"]')).toBeNull();
+  });
+
+  it.each([
+    ['creating', 'initial', 'Creating terminal'],
+    ['reconnecting', 'initial', 'Reconnecting'],
+    ['opening', 'link', 'Connecting to SSH'],
+    ['creating', 'agent', 'Agent CLI: Codex'],
+  ] as const)('shows an explicit spinner for %s %s initialization', (transitionState, avatarKind, description) => {
+    const avatar = avatarKind === 'agent'
+      ? { kind: 'agent' as const, identity: 'codex' as const }
+      : avatarKind === 'link'
+        ? { kind: 'link' as const }
+        : { kind: 'initial' as const };
+    const { host } = renderNavigator(navigationItem({
+      avatar,
+      transitionIndicator: 'spinner',
+      transitionState,
+      processRunning: false,
+      outputState: 'none',
+      activitySource: 'none',
+      attentionState: 'none',
+    }));
+    const rowButton = host.querySelector<HTMLButtonElement>('button[data-terminal-session-id="agent-session"]')!;
+    const descriptionId = rowButton.getAttribute('aria-describedby') ?? '';
+
+    expect(host.querySelector('[data-terminal-transition-indicator="spinner"]')).not.toBeNull();
+    expect(host.querySelector('[data-terminal-tab-status="spinner"]')).not.toBeNull();
+    expect(host.querySelector(`#${descriptionId}`)?.textContent).toContain(description);
   });
 
   it('describes semantic Agent work without claiming terminal output', () => {
@@ -261,7 +289,7 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     const { host } = renderNavigator(navigationItem({
       title: 'top',
       avatar: { kind: 'initial' },
-      processState: 'none',
+      transitionIndicator: 'none',
       processRunning: true,
       outputState: 'none',
       attentionState: 'unread',
@@ -269,7 +297,7 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     const rowButton = host.querySelector<HTMLButtonElement>('button[data-terminal-session-id="agent-session"]')!;
     const descriptionId = rowButton.getAttribute('aria-describedby') ?? '';
 
-    expect(host.querySelector('[data-terminal-process-state="running"]')).toBeNull();
+    expect(host.querySelector('[data-terminal-transition-indicator="spinner"]')).toBeNull();
     expect(host.querySelector('[data-terminal-attention-state="unread"]')).not.toBeNull();
     expect(host.querySelector(`#${descriptionId}`)?.textContent).toContain('The foreground process is running.');
     expect(host.querySelector(`#${descriptionId}`)?.textContent).toContain('Unread terminal output.');
@@ -315,7 +343,7 @@ describe('TerminalSessionNavigator agent status presentation', () => {
       subtitle: '/root/project',
       fullPath: '/root/project',
       localWorkingDir: '',
-      processState: 'none',
+      transitionIndicator: 'none',
       outputState: 'none',
       attentionState: 'none',
       canBrowsePath: false,
@@ -323,7 +351,7 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     }));
 
     expect(host.querySelector('[data-terminal-session-title="agent-session"]')?.textContent).toBe('root@host');
-    expect(host.querySelector('[data-terminal-process-state="running"]')).toBeNull();
+    expect(host.querySelector('[data-terminal-transition-indicator="spinner"]')).toBeNull();
     expect(host.querySelector('[data-terminal-session-avatar="agent-session"] svg')).not.toBeNull();
   });
 
@@ -341,7 +369,7 @@ describe('TerminalSessionNavigator agent status presentation', () => {
 
   it('describes a pending session creation failure precisely', () => {
     const { host } = renderNavigator(navigationItem({
-      processState: 'failed',
+      transitionIndicator: 'failed',
       transitionState: 'failed',
       failureKind: 'creation',
       outputState: 'none',
@@ -358,7 +386,7 @@ describe('TerminalSessionNavigator agent status presentation', () => {
 
   it('describes a blocking terminal runtime failure precisely', () => {
     const { host } = renderNavigator(navigationItem({
-      processState: 'failed',
+      transitionIndicator: 'failed',
       transitionState: 'failed',
       failureKind: 'runtime',
       outputState: 'none',

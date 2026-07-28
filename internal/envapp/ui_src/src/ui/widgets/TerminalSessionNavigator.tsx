@@ -13,7 +13,7 @@ import {
 import type { TerminalAgentCliIdentity } from '@floegence/floeterm-terminal-web/sessions';
 import type { TerminalSessionChromeAvatar } from '../services/terminalSessionChrome';
 
-export type TerminalSessionProcessState = 'none' | 'running' | 'creating' | 'failed';
+export type TerminalSessionTransitionIndicator = 'none' | 'spinner' | 'failed';
 export type TerminalSessionAttentionState = 'none' | 'waiting' | 'unread';
 export type TerminalSessionTransitionState = 'none' | 'creating' | 'reconnecting' | 'opening' | 'failed';
 export type TerminalSessionFailureKind = 'none' | 'creation' | 'runtime';
@@ -34,7 +34,7 @@ export type TerminalSessionNavigationItem = Readonly<{
   subtitle: string;
   fullPath: string;
   localWorkingDir: string;
-  processState: TerminalSessionProcessState;
+  transitionIndicator: TerminalSessionTransitionIndicator;
   processRunning: boolean;
   transitionState: TerminalSessionTransitionState;
   failureKind: TerminalSessionFailureKind;
@@ -81,27 +81,14 @@ export type TerminalSessionNavigatorProps = Readonly<{
   onOpenFiles: (item: TerminalSessionNavigationItem) => void;
 }>;
 
-export function TerminalSessionProcessBadge(props: { state: TerminalSessionProcessState }) {
+export function TerminalSessionTransitionBadge(props: { state: TerminalSessionTransitionIndicator }) {
   return (
     <>
-      <Show when={props.state === 'running'}>
+      <Show when={props.state === 'spinner'}>
         <span
           class="absolute -bottom-1 -right-1 inline-flex h-4 w-4 items-center justify-center rounded-full border-2 border-sidebar bg-sidebar text-sidebar-foreground shadow-sm"
-          data-terminal-process-state="running"
-          data-terminal-tab-status="running"
-          aria-hidden="true"
-        >
-          <svg class="h-2.5 w-2.5 animate-spin motion-reduce:animate-none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
-            <circle cx="12" cy="12" r="8" class="opacity-20" stroke="currentColor" stroke-width="3" />
-            <path d="M20 12a8 8 0 0 0-8-8" class="opacity-100" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
-          </svg>
-        </span>
-      </Show>
-      <Show when={props.state === 'creating'}>
-        <span
-          class="absolute -bottom-1 -right-1 inline-flex h-4 w-4 items-center justify-center rounded-full border-2 border-sidebar bg-sidebar text-muted-foreground shadow-sm"
-          data-terminal-process-state="creating"
-          data-terminal-tab-status="creating"
+          data-terminal-transition-indicator="spinner"
+          data-terminal-tab-status="spinner"
           aria-hidden="true"
         >
           <svg class="h-2.5 w-2.5 animate-spin motion-reduce:animate-none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
@@ -111,10 +98,10 @@ export function TerminalSessionProcessBadge(props: { state: TerminalSessionProce
         </span>
       </Show>
       <Show when={props.state === 'failed'}>
-        <span class="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-sidebar bg-error shadow-sm" data-terminal-process-state="failed" data-terminal-tab-status="failed" aria-hidden="true" />
+        <span class="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-sidebar bg-error shadow-sm" data-terminal-transition-indicator="failed" data-terminal-tab-status="failed" aria-hidden="true" />
       </Show>
       <Show when={props.state === 'none'}>
-        <span class="hidden" data-terminal-process-state="none" aria-hidden="true" />
+        <span class="hidden" data-terminal-transition-indicator="none" aria-hidden="true" />
       </Show>
     </>
   );
@@ -123,7 +110,7 @@ export function TerminalSessionProcessBadge(props: { state: TerminalSessionProce
 function TerminalAgentIdentity(props: {
   identity: TerminalAgentCliIdentity;
   sessionId: string;
-  processState: TerminalSessionProcessState;
+  transitionIndicator: TerminalSessionTransitionIndicator;
 }) {
   const presentation = createMemo(() => TERMINAL_AGENT_CLI_PRESENTATIONS[props.identity]);
   const themeAdaptiveImage = createMemo(() => Boolean(presentation().lightIconPath && presentation().darkIconPath));
@@ -162,7 +149,7 @@ function TerminalAgentIdentity(props: {
           }}
         />
       </Show>
-      <TerminalSessionProcessBadge state={props.processState} />
+      <TerminalSessionTransitionBadge state={props.transitionIndicator} />
     </span>
   );
 }
@@ -607,13 +594,13 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                               onKeyDown={(event) => props.onOpenKeyboardMenu(event, item())}
                             >
                               <span class="sr-only">{item().label}</span>
-                              <Show when={item().processState !== 'none'}>
-                                <span class="sr-only" data-terminal-tab-status={item().processState} />
+                              <Show when={item().transitionIndicator !== 'none'}>
+                                <span class="sr-only" data-terminal-tab-status={item().transitionIndicator} />
                               </Show>
                               <Show when={item().attentionState !== 'none'}>
                                 <span class="sr-only" data-terminal-tab-status={item().attentionState} />
                               </Show>
-                              <Show when={item().processState === 'none' && item().attentionState === 'none'}>
+                              <Show when={item().transitionIndicator === 'none' && item().attentionState === 'none'}>
                                 <span class="sr-only" data-terminal-tab-status="none" />
                               </Show>
                               <Show when={statusDescription()}>
@@ -644,7 +631,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                                   >
                                     <Link class="h-4 w-4" />
                                   </Show>
-                                  <TerminalSessionProcessBadge state={item().processState} />
+                                  <TerminalSessionTransitionBadge state={item().transitionIndicator} />
                                 </span>
                               )}
                             >
@@ -652,7 +639,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                                 <TerminalAgentIdentity
                                   identity={identity()}
                                   sessionId={sessionId}
-                                  processState={item().processState}
+                                  transitionIndicator={item().transitionIndicator}
                                 />
                               )}
                             </Show>

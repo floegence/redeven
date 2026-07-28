@@ -758,7 +758,7 @@ function findTerminalTab(host: HTMLElement, label: string): HTMLElement | undefi
   return Array.from(host.querySelectorAll<HTMLElement>('button[data-terminal-session-id]')).find((button) => button.textContent?.includes(label));
 }
 
-function findTerminalTabStatus(host: HTMLElement, label: string, status: 'running' | 'unread'): Element | null {
+function findTerminalTabStatus(host: HTMLElement, label: string, status: 'spinner' | 'unread'): Element | null {
   return findTerminalTab(host, label)?.querySelector(`[data-terminal-tab-status="${status}"]`) ?? null;
 }
 
@@ -1771,7 +1771,7 @@ describe('TerminalPanel browser activity integration', () => {
     emitTerminalData('session-2', '\x1b]633;B\u0007', 1);
     emitTerminalData('session-2', 'working...\n', 2);
     await settleTerminalPanel();
-    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).toBeNull();
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'spinner')).toBeNull();
   });
 
   it('shows a confirmed ordinary program title without a spinner, then restores the directory on idle', async () => {
@@ -1783,11 +1783,11 @@ describe('TerminalPanel browser activity integration', () => {
     publishTerminalForegroundCommand('session-2', {
       phase: 'running', displayName: 'top', revision: 1, updatedAtMs: 10,
     });
-    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).toBeNull();
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'spinner')).toBeNull();
     await new Promise<void>((resolve) => setTimeout(resolve, 170));
     await settleTerminalPanel();
 
-    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).toBeNull();
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'spinner')).toBeNull();
     expect(host.querySelector('[data-terminal-session-title="session-2"]')?.textContent).toBe('top');
     expect(host.querySelector('[data-testid="terminal-session-path-session-2"]')?.textContent).toBe('/workspace/repo');
 
@@ -1795,8 +1795,82 @@ describe('TerminalPanel browser activity integration', () => {
       phase: 'idle', displayName: '', revision: 2, updatedAtMs: 20,
     });
     await settleTerminalPanel();
-    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).toBeNull();
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'spinner')).toBeNull();
     expect(host.querySelector('[data-terminal-session-title="session-2"]')?.textContent).toBe('repo');
+  });
+
+  it('settles a continuously revised SSH opening indicator at the shared deadline', async () => {
+    const observedAtMs = Date.now();
+    const openingContext = {
+      location: {
+        kind: 'remote', phase: 'opening', label: 'udesk', authority: '', workingDirectory: '', source: 'foreground_candidate',
+      },
+      application: { kind: 'shell', identity: '', displayName: '' },
+      revision: 1,
+      updatedAtMs: observedAtMs,
+    };
+    const [openingSessions, setOpeningSessions] = createSignal([{
+      id: 'session-ssh-opening',
+      name: 'SSH',
+      workingDir: '',
+      createdAtMs: observedAtMs,
+      isActive: true,
+      lastActiveAtMs: observedAtMs,
+      executionContext: openingContext,
+    }]);
+    const catalog = {
+      sessions: openingSessions,
+      hydrated: () => true,
+      loading: () => false,
+      stale: () => false,
+      error: () => null,
+      permissionDenied: () => false,
+      connectionEpoch: () => 1,
+      remoteOpeningObservedAtMs: () => observedAtMs,
+      coordinator: () => sessionsCoordinatorMocks,
+      getCoordinator: () => sessionsCoordinatorMocks,
+      refresh: sessionsCoordinatorMocks.refresh,
+      upsertSession: vi.fn(),
+      removeSession: vi.fn(),
+      updateSessionMeta: vi.fn(),
+      clearForPermissionDenied: vi.fn(),
+      requestPreparedHistory: vi.fn().mockResolvedValue(null),
+      startHistoryWarmup: vi.fn(),
+      invalidateHistory: vi.fn(),
+      setSurfaceActive: vi.fn(),
+    } as any;
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <TerminalSessionCatalogContext.Provider value={catalog}>
+        <TerminalPanel variant="workbench" />
+      </TerminalSessionCatalogContext.Provider>
+    ), host);
+    await settleTerminalPanel();
+    expect(host.querySelector('[data-terminal-transition-indicator="spinner"]')).not.toBeNull();
+
+    let revision = 1;
+    while (Date.now() - observedAtMs < 900) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 80));
+      revision += 1;
+      setOpeningSessions((sessions) => sessions.map((session) => ({
+        ...session,
+        executionContext: {
+          ...openingContext,
+          revision,
+          updatedAtMs: Date.now(),
+        },
+      })));
+      await settleTerminalPanel();
+    }
+
+    const row = host.querySelector<HTMLButtonElement>('button[data-terminal-session-id="session-ssh-opening"]');
+    const descriptionId = row?.getAttribute('aria-describedby') ?? '';
+    expect(host.querySelector('[data-terminal-transition-indicator="spinner"]')).toBeNull();
+    expect(host.querySelector('[data-terminal-session-title="session-ssh-opening"]')?.textContent).toBe('udesk');
+    expect(host.querySelector('[data-terminal-session-avatar="session-ssh-opening"] svg')).not.toBeNull();
+    expect(host.querySelector(`#${descriptionId}`)?.textContent).toContain('Connecting to SSH');
   });
 
   it('renders audited agent identity and keeps semantic work stable when raw output settles', async () => {
@@ -1852,7 +1926,7 @@ describe('TerminalPanel browser activity integration', () => {
     expect(codexScreenshot.distinctColorBuckets).toBeGreaterThan(1);
     expect(codexScreenshot.screenshotHash).not.toBe(linkScreenshot.screenshotHash);
     expect(host.querySelector('[data-terminal-output-state="streaming"]')).not.toBeNull();
-    expect(identity?.querySelector('[data-terminal-process-state="running"]')).toBeNull();
+    expect(identity?.querySelector('[data-terminal-transition-indicator="spinner"]')).toBeNull();
     const before = slot!.getBoundingClientRect();
 
     publishTerminalOutputActivity('session-2', {
@@ -1992,7 +2066,7 @@ describe('TerminalPanel browser activity integration', () => {
     expect(parseFloat(dotStyle.borderRadius)).toBeGreaterThanOrEqual(3);
     expect(dotStyle.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
     expect([slotUnread.width, slotUnread.height]).toEqual([slotBefore.width, slotBefore.height]);
-    expect(host.querySelector('[data-terminal-process-state="running"]')).toBeNull();
+    expect(host.querySelector('[data-terminal-transition-indicator="spinner"]')).toBeNull();
     expect(host.querySelector('[data-terminal-output-attention="unread"]')).toBeNull();
 
     await page.elementLocator(findTerminalTab(host, 'Terminal 2')!).click();
@@ -2115,7 +2189,7 @@ describe('TerminalPanel browser activity integration', () => {
       expect([unreadDotRect.width, unreadDotRect.height]).toEqual([6, 6]);
       expect(unreadDotStyle.borderTopStyle).toBe('solid');
       expect(unreadDotStyle.animationName).toBe('none');
-      expect(host.querySelector('[data-terminal-process-state="running"]')).toBeNull();
+      expect(host.querySelector('[data-terminal-transition-indicator="spinner"]')).toBeNull();
     } finally {
       await mediaCommands.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'none' });
     }
@@ -2199,14 +2273,14 @@ describe('TerminalPanel browser activity integration', () => {
 
     const terminal2TabBeforeSwitch = findTerminalTab(host, 'Terminal 2');
     expect(terminal2TabBeforeSwitch?.dataset.terminalSessionActive).toBe('false');
-    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).toBeNull();
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'spinner')).toBeNull();
 
     terminal2TabBeforeSwitch?.click();
     await settleTerminalPanel();
 
     const terminal2TabAfterSwitch = findTerminalTab(host, 'Terminal 2');
     expect(terminal2TabAfterSwitch?.dataset.terminalSessionActive).toBe('true');
-    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).toBeNull();
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'spinner')).toBeNull();
   });
 
   it('switches ten warm cores by the next animation frame without new runtime calls', async () => {
