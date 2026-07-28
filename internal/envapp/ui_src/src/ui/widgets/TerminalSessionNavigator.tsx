@@ -62,6 +62,7 @@ export type TerminalSessionNavigatorProps = Readonly<{
   activeSessionId: string | null;
   copiedPathSessionId: string | null;
   emptyListLoading: boolean;
+  ownedLayerIds?: readonly string[];
   isFocusWithinOwnedLayer?: (target: Node | null) => boolean;
   onCloseDrawer: () => void;
   onCreateSession: () => void;
@@ -336,6 +337,16 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
 
   let previousDrawerItemIds: readonly string[] = props.itemIds;
   let lastFocusedDrawerSessionId: string | null = null;
+  const focusDrawerSessionOrFallback = (sessionId: string | null) => {
+    const replacement = sessionId
+      ? Array.from(drawerDialogEl?.querySelectorAll<HTMLButtonElement>('button[data-terminal-session-id]') ?? [])
+          .find((button) => button.dataset.terminalSessionId === sessionId)
+      : null;
+    const fallback = replacement
+      ?? drawerDialogEl?.querySelector<HTMLElement>('[data-testid="terminal-session-filter"]')
+      ?? drawerFocusableElements()[0];
+    fallback?.focus({ preventScroll: true });
+  };
   createEffect(() => {
     if (!props.mobile || !props.drawerOpen) return;
     const keepFocusInDrawer = (event: FocusEvent) => {
@@ -374,14 +385,28 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
     queueMicrotask(() => {
       const active = document.activeElement;
       if (drawerDialogEl?.contains(active) || props.isFocusWithinOwnedLayer?.(active)) return;
-      const replacement = replacementSessionId
-        ? Array.from(drawerDialogEl?.querySelectorAll<HTMLButtonElement>('button[data-terminal-session-id]') ?? [])
-            .find((button) => button.dataset.terminalSessionId === replacementSessionId)
-        : null;
-      const fallback = replacement
-        ?? drawerDialogEl?.querySelector<HTMLElement>('[data-testid="terminal-session-filter"]')
-        ?? drawerFocusableElements()[0];
-      fallback?.focus({ preventScroll: true });
+      focusDrawerSessionOrFallback(replacementSessionId);
+    });
+  });
+
+  createEffect(() => {
+    const focusTopology = props.itemIds.map((sessionId) => {
+      const item = props.itemById.get(sessionId);
+      return [
+        sessionId,
+        item?.attentionState,
+        item?.outputState,
+        item?.closable,
+        Boolean(item?.fullPath),
+        item?.canBrowsePath,
+      ].join(':');
+    }).join('|');
+    if (!focusTopology || !props.mobile || !props.drawerOpen) return;
+    queueMicrotask(() => {
+      if (!props.mobile || !props.drawerOpen) return;
+      const active = document.activeElement;
+      if (drawerDialogEl?.contains(active) || props.isFocusWithinOwnedLayer?.(active)) return;
+      focusDrawerSessionOrFallback(lastFocusedDrawerSessionId);
     });
   });
 
@@ -401,6 +426,9 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
         role={props.mobile && props.drawerOpen ? 'dialog' : undefined}
         aria-modal={props.mobile && props.drawerOpen ? 'true' : undefined}
         aria-label={props.mobile && props.drawerOpen ? i18n.t('terminal.sessions') : undefined}
+        aria-owns={props.mobile && props.drawerOpen && props.ownedLayerIds?.length
+          ? props.ownedLayerIds.join(' ')
+          : undefined}
       >
         <Sidebar
           width={sidebarWidth()}
