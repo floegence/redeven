@@ -1,5 +1,6 @@
 const allowedFloetermInitialModules = new Set([
   '@floegence/floeterm-terminal-web/dist/entries/sessions.js',
+  '@floegence/floeterm-terminal-web/dist/sessions/TerminalExecutionContextMetadata.js',
   '@floegence/floeterm-terminal-web/dist/sessions/TerminalForegroundCommandMetadata.js',
   '@floegence/floeterm-terminal-web/dist/sessions/TerminalSessionsCoordinator.js',
   '@floegence/floeterm-terminal-web/dist/utils/logger.js',
