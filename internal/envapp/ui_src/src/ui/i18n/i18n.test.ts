@@ -407,6 +407,15 @@ describe('Env App i18n dictionaries', () => {
     expect(source).not.toMatch(/from ['"]\.\/(?:zh-CN|zh-TW|ja-JP|ko-KR|de-DE|fr-FR|es-ES|pt-BR|ru-RU)['"]/);
   });
 
+  it('keeps CJK terminal session labels distinct from search and uses localized sentence joins', () => {
+    expect(dictionaries['ja-JP'].terminal.sessions).toBe('セッション');
+    expect(dictionaries['ja-JP'].terminal.searchSessions).toBe('セッションを検索...');
+    expect(dictionaries['ja-JP'].terminal.activityWithUnreadOutput).toBe('{activity}。{unread}');
+    expect(dictionaries['ja-JP'].terminal.sessionsWithWaitingAttention).toBe('{sessions}。{attention}');
+    expect(dictionaries['ko-KR'].terminal.sessions).toBe('세션');
+    expect(dictionaries['ko-KR'].terminal.searchSessions).toBe('세션 검색...');
+  });
+
   it('preserves protected product terms across localized dictionaries', () => {
     const violations = SUPPORTED_LOCALES.flatMap((locale) => (
       findProtectedTermViolations(enUS, dictionaries[locale], locale)
