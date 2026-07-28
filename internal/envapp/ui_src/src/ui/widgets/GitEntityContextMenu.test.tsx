@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -86,6 +87,43 @@ describe('Git context action grouping', () => {
 });
 
 describe('FloatingContextMenu keyboard contract', () => {
+  it('preserves focus across item rebuilds and advances when the focused action becomes unavailable', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const buildItems = (filesDisabled: boolean): FloatingContextMenuItem[] => [
+      action('ask', 'assistant'),
+      { ...action('files', 'navigate'), disabled: filesDisabled },
+      action('close', 'destructive'),
+    ];
+    const [items, setItems] = createSignal(buildItems(false));
+    const dispose = render(() => (
+      <FloatingContextMenu
+        x={0}
+        y={0}
+        ariaLabel="Session actions"
+        items={items()}
+        onDismiss={() => undefined}
+      />
+    ), host);
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+    try {
+      const files = host.querySelector<HTMLButtonElement>('[data-floating-menu-item-id="files"]')!;
+      files.focus();
+      setItems(buildItems(false));
+      await Promise.resolve();
+      expect(document.activeElement).toBe(files);
+
+      setItems(buildItems(true));
+      await Promise.resolve();
+      expect(files.disabled).toBe(true);
+      expect(document.activeElement)
+        .toBe(host.querySelector('[data-floating-menu-item-id="close"]'));
+    } finally {
+      dispose();
+    }
+  });
+
   it('keeps unavailable actions focusable and supports complete menu navigation and activation', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

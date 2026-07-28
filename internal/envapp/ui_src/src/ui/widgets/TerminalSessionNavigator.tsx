@@ -335,9 +335,10 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
     }
   };
 
-  let previousDrawerItemIds: readonly string[] = props.itemIds;
-  let lastFocusedDrawerSessionId: string | null = null;
-  const focusDrawerSessionOrFallback = (sessionId: string | null) => {
+  let previousItemIds: readonly string[] = props.itemIds;
+  let lastFocusedSessionId: string | null = null;
+  let focusOwnedByNavigator = false;
+  const focusSessionOrFallback = (sessionId: string | null) => {
     const replacement = sessionId
       ? Array.from(drawerDialogEl?.querySelectorAll<HTMLButtonElement>('button[data-terminal-session-id]') ?? [])
           .find((button) => button.dataset.terminalSessionId === sessionId)
@@ -348,44 +349,53 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
     fallback?.focus({ preventScroll: true });
   };
   createEffect(() => {
-    if (!props.mobile || !props.drawerOpen) return;
-    const keepFocusInDrawer = (event: FocusEvent) => {
+    const trackFocusOwnership = (event: FocusEvent) => {
       const target = event.target as Node | null;
       if (drawerDialogEl?.contains(target)) {
         const row = target instanceof Element
           ? target.closest<HTMLElement>('[data-terminal-session-row]')
           : null;
         if (row?.dataset.terminalSessionRow) {
-          lastFocusedDrawerSessionId = row.dataset.terminalSessionRow;
+          lastFocusedSessionId = row.dataset.terminalSessionRow;
         }
+        focusOwnedByNavigator = true;
         return;
       }
-      if (props.isFocusWithinOwnedLayer?.(target)) return;
-      const fallback = drawerDialogEl?.querySelector<HTMLElement>('[data-testid="terminal-session-filter"]')
-        ?? drawerFocusableElements()[0];
-      fallback?.focus({ preventScroll: true });
+      if (props.isFocusWithinOwnedLayer?.(target)) {
+        focusOwnedByNavigator = true;
+        return;
+      }
+      if (props.mobile && props.drawerOpen) {
+        focusOwnedByNavigator = true;
+        const fallback = drawerDialogEl?.querySelector<HTMLElement>('[data-testid="terminal-session-filter"]')
+          ?? drawerFocusableElements()[0];
+        fallback?.focus({ preventScroll: true });
+        return;
+      }
+      focusOwnedByNavigator = false;
     };
     document.addEventListener('keydown', handleDrawerKeyDown);
-    document.addEventListener('focusin', keepFocusInDrawer);
+    document.addEventListener('focusin', trackFocusOwnership);
     onCleanup(() => {
       document.removeEventListener('keydown', handleDrawerKeyDown);
-      document.removeEventListener('focusin', keepFocusInDrawer);
+      document.removeEventListener('focusin', trackFocusOwnership);
     });
   });
 
   createEffect(() => {
     const nextItemIds = props.itemIds;
-    const previousItemIds = previousDrawerItemIds;
-    previousDrawerItemIds = nextItemIds;
-    if (!props.mobile || !props.drawerOpen || !lastFocusedDrawerSessionId) return;
-    const previousIndex = previousItemIds.indexOf(lastFocusedDrawerSessionId);
-    if (previousIndex < 0 || nextItemIds.includes(lastFocusedDrawerSessionId)) return;
+    const previousIds = previousItemIds;
+    previousItemIds = nextItemIds;
+    if (!focusOwnedByNavigator || !lastFocusedSessionId) return;
+    const previousIndex = previousIds.indexOf(lastFocusedSessionId);
+    if (previousIndex < 0 || nextItemIds.includes(lastFocusedSessionId)) return;
     const replacementSessionId = nextItemIds[Math.min(previousIndex, nextItemIds.length - 1)] ?? null;
-    lastFocusedDrawerSessionId = replacementSessionId;
+    lastFocusedSessionId = replacementSessionId;
     queueMicrotask(() => {
+      if (!focusOwnedByNavigator) return;
       const active = document.activeElement;
       if (drawerDialogEl?.contains(active) || props.isFocusWithinOwnedLayer?.(active)) return;
-      focusDrawerSessionOrFallback(replacementSessionId);
+      focusSessionOrFallback(replacementSessionId);
     });
   });
 
@@ -401,12 +411,12 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
         item?.canBrowsePath,
       ].join(':');
     }).join('|');
-    if (!focusTopology || !props.mobile || !props.drawerOpen) return;
+    if (!focusTopology || !focusOwnedByNavigator) return;
     queueMicrotask(() => {
-      if (!props.mobile || !props.drawerOpen) return;
+      if (!focusOwnedByNavigator) return;
       const active = document.activeElement;
       if (drawerDialogEl?.contains(active) || props.isFocusWithinOwnedLayer?.(active)) return;
-      focusDrawerSessionOrFallback(lastFocusedDrawerSessionId);
+      focusSessionOrFallback(lastFocusedSessionId);
     });
   });
 
