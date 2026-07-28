@@ -2460,6 +2460,12 @@ describe('TerminalPanel browser activity integration', () => {
         const titleRect = host.querySelector<HTMLElement>('[data-terminal-session-title="session-2"]')?.getBoundingClientRect();
         const attentionRect = host.querySelector<HTMLElement>('[data-terminal-attention-slot="session-2"]')?.getBoundingClientRect();
         expect((titleRect?.right ?? Number.POSITIVE_INFINITY) <= (attentionRect?.left ?? 0) + 1).toBe(true);
+        const pathRect = host.querySelector<HTMLElement>('[data-terminal-session-path="session-2"]')?.getBoundingClientRect();
+        const actionRailRect = host.querySelector<HTMLElement>('[data-terminal-session-actions="session-2"]')?.getBoundingClientRect();
+        expect(
+          (pathRect?.right ?? Number.POSITIVE_INFINITY) <= (actionRailRect?.left ?? 0),
+          `mobile path must not overlap action rail: path=${JSON.stringify(pathRect?.toJSON())} rail=${JSON.stringify(actionRailRect?.toJSON())}`,
+        ).toBe(true);
         const closeButton = host.querySelector<HTMLElement>('[data-testid="close-session-session-2"]');
         const filesButton = host.querySelector<HTMLElement>('[data-testid="terminal-session-files-session-2"]');
         expect(closeButton ? getComputedStyle(closeButton).opacity : null).toBe('1');
