@@ -1926,7 +1926,7 @@ function findTerminalTabsRoot(host: HTMLElement): HTMLElement | null {
   return host.querySelector('[data-testid="terminal-session-list"]') as HTMLElement | null;
 }
 
-function findTerminalTabStatus(host: HTMLElement, label: string, status: 'running' | 'unread' | 'none'): Element | null {
+function findTerminalTabStatus(host: HTMLElement, label: string, status: 'spinner' | 'unread' | 'none'): Element | null {
   const tab = findTerminalTab(host, label);
   return tab?.closest('[data-terminal-session-row]')?.querySelector(`[data-terminal-tab-status="${status}"]`) ?? tab?.querySelector(`[data-terminal-tab-status="${status}"]`) ?? null;
 }
@@ -1936,7 +1936,7 @@ function findTerminalActivityWave(host: HTMLElement, label: string): SVGElement 
   return tab?.closest('[data-terminal-session-row]')?.querySelector<SVGElement>('[data-terminal-output-state="streaming"]') ?? null;
 }
 
-function findPendingTerminalTabStatus(host: HTMLElement, label: string, status: 'creating' | 'failed'): Element | null {
+function findPendingTerminalTabStatus(host: HTMLElement, label: string, status: 'spinner' | 'failed'): Element | null {
   const tab = findTerminalTab(host, label);
   return tab?.closest('[data-terminal-session-row]')?.querySelector(`[data-terminal-tab-status="${status}"]`) ?? tab?.querySelector(`[data-terminal-tab-status="${status}"]`) ?? null;
 }
@@ -5416,7 +5416,7 @@ describe('TerminalPanel', () => {
 
     expect(sessionOperations.createSession).toHaveBeenCalledWith('Terminal 2', '/workspace');
     expect(sessionsCoordinatorMocks.createSession).not.toHaveBeenCalled();
-    expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'creating')).toBeNull();
+    expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'spinner')).toBeNull();
     expect(host.querySelector('[data-testid="close-session-session-2"]')).toBeTruthy();
 
     await settleTerminalPanelAfterPaint();
@@ -5505,7 +5505,7 @@ describe('TerminalPanel', () => {
 
     expect(upsertSession).not.toHaveBeenCalled();
     expect(host.querySelector('[data-testid="close-session-session-late"]')).toBeNull();
-    expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'creating')).toBeNull();
+    expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'spinner')).toBeNull();
     expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'failed')).toBeNull();
   });
 
@@ -5556,7 +5556,7 @@ describe('TerminalPanel', () => {
     await settleTerminalPanel();
 
     expect(upsertSession).not.toHaveBeenCalled();
-    expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'creating')).toBeNull();
+    expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'spinner')).toBeNull();
     expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'failed')).toBeNull();
   });
 
@@ -5806,7 +5806,7 @@ describe('TerminalPanel', () => {
 
     expect(findTerminalTab(host, 'Terminal 2')).toBeTruthy();
     expect(findTerminalTab(host, 'Terminal 2')?.dataset.terminalSessionActive).toBe('true');
-    expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'creating')).not.toBeNull();
+    expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'spinner')).not.toBeNull();
     expect(host.textContent).toContain('Creating terminal...');
     const pendingSurface = host.querySelector('[data-terminal-pending-surface="true"]') as HTMLElement | null;
     expect(pendingSurface).toBeTruthy();
@@ -5848,7 +5848,7 @@ describe('TerminalPanel', () => {
 
     expect(findTerminalTab(host, 'Terminal 2')).toBeTruthy();
     expect(findTerminalTab(host, 'Terminal 2')?.dataset.terminalSessionActive).toBe('true');
-    expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'creating')).toBeNull();
+    expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'spinner')).toBeNull();
     expect(host.querySelector('[data-testid="close-session-session-2"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="terminal-status-bar"]')?.textContent).toContain('Session: session-2');
     expect(host.querySelector('[data-terminal-deferred-surface="true"]')).toBeNull();
@@ -5880,7 +5880,7 @@ describe('TerminalPanel', () => {
     addButton?.click();
     await settleTerminalPanelAfterPaint();
 
-    expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'creating')).not.toBeNull();
+    expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'spinner')).not.toBeNull();
 
     const createdSession = {
       id: 'session-2',
@@ -5898,7 +5898,7 @@ describe('TerminalPanel', () => {
     await settleTerminalPanel();
 
     expect(findTerminalTabs(host, 'Terminal 2')).toHaveLength(1);
-    expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'creating')).toBeNull();
+    expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'spinner')).toBeNull();
     expect(host.textContent).not.toContain('Creating terminal...');
     expect(host.querySelector('[data-testid="close-session-session-2"]')).toBeTruthy();
 
@@ -5909,7 +5909,7 @@ describe('TerminalPanel', () => {
     await settleTerminalPanel();
 
     expect(findTerminalTabs(host, 'Terminal 2')).toHaveLength(1);
-    expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'creating')).toBeNull();
+    expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'spinner')).toBeNull();
     expect(host.querySelector('[data-testid="close-session-session-2"]')).toBeTruthy();
   });
 
@@ -5946,7 +5946,7 @@ describe('TerminalPanel', () => {
     rejectCreate(new Error('create response lost'));
     await settleTerminalPanel();
     expect(findTerminalTabs(host, 'Terminal 2')).toHaveLength(1);
-    expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'creating')).toBeNull();
+    expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'spinner')).toBeNull();
 
     terminalSessionsState.sessions = [terminalSessionsState.sessions[0]!];
     publishTerminalSessions();
@@ -6242,7 +6242,7 @@ describe('TerminalPanel', () => {
     expect(titles.map((element) => element.textContent)).toEqual(titles.map(() => 'root@host'));
     expect(titleChanges).toHaveBeenLastCalledWith('Terminal · root@host');
     expect(host.querySelector('[data-terminal-session-avatar="session-ssh"] > span')).not.toBeNull();
-    expect(host.querySelector('[data-terminal-process-state="running"]')).toBeNull();
+    expect(host.querySelector('[data-terminal-transition-indicator="spinner"]')).toBeNull();
     expect(host.querySelector('[data-testid="terminal-session-path-session-ssh"]')?.textContent).toBe('/root/project');
     const remoteFiles = host.querySelector<HTMLButtonElement>('[data-testid="terminal-session-files-session-ssh"]');
     expect(remoteFiles?.getAttribute('aria-disabled')).toBe('true');
@@ -6612,7 +6612,7 @@ describe('TerminalPanel', () => {
       </TerminalSessionCatalogContext.Provider>
     ), firstHost);
     await settleTerminalPanelAfterPaint();
-    expect(firstHost.querySelector('[data-terminal-process-state="running"]')).not.toBeNull();
+    expect(firstHost.querySelector('[data-terminal-transition-indicator="spinner"]')).not.toBeNull();
 
     nowMs = 1_900;
     render(() => (
@@ -6621,7 +6621,7 @@ describe('TerminalPanel', () => {
       </TerminalSessionCatalogContext.Provider>
     ), secondHost);
     await settleTerminalPanelAfterPaint();
-    expect(secondHost.querySelector('[data-terminal-process-state="running"]')).toBeNull();
+    expect(secondHost.querySelector('[data-terminal-transition-indicator="spinner"]')).toBeNull();
     const secondRow = secondHost.querySelector<HTMLButtonElement>('button[data-terminal-session-id="session-ssh-opening"]');
     const statusDescriptionId = secondRow?.getAttribute('aria-describedby') ?? '';
     expect(secondHost.querySelector(`#${statusDescriptionId}`)?.textContent).toContain('Connecting to SSH');
@@ -6644,6 +6644,226 @@ describe('TerminalPanel', () => {
       expect(firstHost.querySelector(`#${id}`)).toBeNull();
     }
     nowSpy.mockRestore();
+  });
+
+  it('settles the SSH opening indicator when a context update lands on its deadline', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
+    const openingContext = {
+      location: {
+        kind: 'remote', phase: 'opening', label: 'udesk', authority: '', workingDirectory: '', source: 'foreground_candidate',
+      },
+      application: { kind: 'shell', identity: '', displayName: '' },
+      revision: 1,
+      updatedAtMs: 10,
+    };
+    const initialSessions = [{
+      id: 'session-ssh-opening',
+      name: 'SSH',
+      workingDir: '',
+      createdAtMs: 1,
+      isActive: true,
+      lastActiveAtMs: 10,
+      executionContext: openingContext,
+    }];
+    const [openingSessions, setOpeningSessions] = createSignal(initialSessions);
+    const catalog = {
+      sessions: openingSessions,
+      hydrated: () => true,
+      loading: () => false,
+      stale: () => false,
+      error: () => null,
+      permissionDenied: () => false,
+      connectionEpoch: () => 1,
+      remoteOpeningObservedAtMs: () => 1_000,
+      coordinator: () => sessionsCoordinatorMocks,
+      getCoordinator: () => sessionsCoordinatorMocks,
+      refresh: sessionsCoordinatorMocks.refresh,
+      upsertSession: vi.fn(),
+      removeSession: vi.fn(),
+      updateSessionMeta: vi.fn(),
+      clearForPermissionDenied: vi.fn(),
+      requestPreparedHistory: vi.fn().mockResolvedValue(null),
+      startHistoryWarmup: vi.fn(),
+      invalidateHistory: vi.fn(),
+      setSurfaceActive: vi.fn(),
+    } as any;
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <TerminalSessionCatalogContext.Provider value={catalog}>
+        <TerminalPanel variant="workbench" />
+      </TerminalSessionCatalogContext.Provider>
+    ), host);
+    await settleTerminalPanelAfterPaint();
+    expect(host.querySelector('[data-terminal-transition-indicator="spinner"]')).not.toBeNull();
+
+    await vi.advanceTimersByTimeAsync(798);
+    setOpeningSessions((sessions) => sessions.map((session) => ({
+      ...session,
+      executionContext: { ...openingContext, revision: 2, updatedAtMs: 20 },
+    })));
+    await settleTerminalPanel();
+    expect(host.querySelector('[data-terminal-transition-indicator="spinner"]')).not.toBeNull();
+
+    vi.setSystemTime(1_800);
+    setOpeningSessions((sessions) => sessions.map((session) => ({
+      ...session,
+      executionContext: { ...openingContext, revision: 3, updatedAtMs: 30 },
+    })));
+    await settleTerminalPanel();
+    const row = host.querySelector<HTMLButtonElement>('button[data-terminal-session-id="session-ssh-opening"]');
+    const sessionRow = row?.closest('[data-terminal-session-row]');
+    expect(sessionRow?.querySelector('[data-terminal-transition-indicator="spinner"]')).toBeNull();
+    expect(host.querySelector('[data-terminal-panel-variant] > div [data-terminal-transition-indicator="spinner"]')).toBeNull();
+    const descriptionId = row?.getAttribute('aria-describedby') ?? '';
+    expect(host.querySelector(`#${descriptionId}`)?.textContent).toContain('Connecting to SSH');
+  });
+
+  it('lets a later SSH opening deadline settle after an older deadline has expired', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_900);
+    const openingContext = {
+      location: {
+        kind: 'remote', phase: 'opening', label: 'SSH', authority: '', workingDirectory: '', source: 'foreground_candidate',
+      },
+      application: { kind: 'shell', identity: '', displayName: '' },
+      revision: 1,
+      updatedAtMs: 10,
+    };
+    terminalSessionsState.sessions = [
+      {
+        id: 'session-expired', name: 'Expired', workingDir: '', createdAtMs: 1, isActive: false, lastActiveAtMs: 10, executionContext: openingContext,
+      },
+      {
+        id: 'session-current', name: 'Current', workingDir: '', createdAtMs: 2, isActive: true, lastActiveAtMs: 20, executionContext: openingContext,
+      },
+    ];
+    const observedAtBySession = new Map([
+      ['session-expired', 1_000],
+      ['session-current', 1_800],
+    ]);
+    const catalog = {
+      sessions: () => terminalSessionsState.sessions,
+      hydrated: () => true,
+      loading: () => false,
+      stale: () => false,
+      error: () => null,
+      permissionDenied: () => false,
+      connectionEpoch: () => 1,
+      remoteOpeningObservedAtMs: (sessionId: string) => observedAtBySession.get(sessionId),
+      coordinator: () => sessionsCoordinatorMocks,
+      getCoordinator: () => sessionsCoordinatorMocks,
+      refresh: sessionsCoordinatorMocks.refresh,
+      upsertSession: vi.fn(),
+      removeSession: vi.fn(),
+      updateSessionMeta: vi.fn(),
+      clearForPermissionDenied: vi.fn(),
+      requestPreparedHistory: vi.fn().mockResolvedValue(null),
+      startHistoryWarmup: vi.fn(),
+      invalidateHistory: vi.fn(),
+      setSurfaceActive: vi.fn(),
+    } as any;
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <TerminalSessionCatalogContext.Provider value={catalog}>
+        <TerminalPanel variant="workbench" />
+      </TerminalSessionCatalogContext.Provider>
+    ), host);
+    await settleTerminalPanelAfterPaint();
+    expect(findTerminalTab(host, 'Expired')?.closest('[data-terminal-session-row]')
+      ?.querySelector('[data-terminal-transition-indicator="spinner"]')).toBeNull();
+    expect(findTerminalTab(host, 'Current')?.closest('[data-terminal-session-row]')
+      ?.querySelector('[data-terminal-transition-indicator="spinner"]')).not.toBeNull();
+
+    await vi.advanceTimersByTimeAsync(700);
+    await settleTerminalPanel();
+    expect(findTerminalTab(host, 'Current')?.closest('[data-terminal-session-row]')
+      ?.querySelector('[data-terminal-transition-indicator="spinner"]')).toBeNull();
+  });
+
+  it('lets Agent initialization settle while an older SSH deadline is expired', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_900);
+    terminalSessionsState.sessions = [
+      {
+        id: 'session-expired',
+        name: 'Expired SSH',
+        workingDir: '',
+        createdAtMs: 1,
+        isActive: false,
+        lastActiveAtMs: 10,
+        executionContext: {
+          location: {
+            kind: 'remote', phase: 'opening', label: 'SSH', authority: '', workingDirectory: '', source: 'foreground_candidate',
+          },
+          application: { kind: 'shell', identity: '', displayName: '' },
+          revision: 1,
+          updatedAtMs: 10,
+        },
+      },
+      {
+        id: 'session-agent',
+        name: 'Agent',
+        workingDir: '/workspace/repo',
+        createdAtMs: 2,
+        isActive: true,
+        lastActiveAtMs: 20,
+        foregroundCommand: {
+          phase: 'running', displayName: 'codex', revision: 1, updatedAtMs: 20,
+        },
+        executionContext: {
+          location: {
+            kind: 'local', phase: 'ready', label: '', authority: '', workingDirectory: '/workspace/repo', source: 'shell_integration',
+          },
+          application: { kind: 'agent_cli', identity: 'codex', displayName: 'Codex' },
+          revision: 1,
+          updatedAtMs: 20,
+        },
+      },
+    ];
+    const catalog = {
+      sessions: () => terminalSessionsState.sessions,
+      hydrated: () => true,
+      loading: () => false,
+      stale: () => false,
+      error: () => null,
+      permissionDenied: () => false,
+      connectionEpoch: () => 1,
+      remoteOpeningObservedAtMs: (sessionId: string) => sessionId === 'session-expired' ? 1_000 : undefined,
+      coordinator: () => sessionsCoordinatorMocks,
+      getCoordinator: () => sessionsCoordinatorMocks,
+      refresh: sessionsCoordinatorMocks.refresh,
+      upsertSession: vi.fn(),
+      removeSession: vi.fn(),
+      updateSessionMeta: vi.fn(),
+      clearForPermissionDenied: vi.fn(),
+      requestPreparedHistory: vi.fn().mockResolvedValue(null),
+      startHistoryWarmup: vi.fn(),
+      invalidateHistory: vi.fn(),
+      setSurfaceActive: vi.fn(),
+    } as any;
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <TerminalSessionCatalogContext.Provider value={catalog}>
+        <TerminalPanel variant="workbench" />
+      </TerminalSessionCatalogContext.Provider>
+    ), host);
+    await settleTerminalPanelAfterPaint();
+    expect(findTerminalTab(host, 'Expired SSH')?.closest('[data-terminal-session-row]')
+      ?.querySelector('[data-terminal-transition-indicator="spinner"]')).toBeNull();
+    expect(findTerminalTab(host, 'Agent')?.closest('[data-terminal-session-row]')
+      ?.querySelector('[data-terminal-transition-indicator="spinner"]')).not.toBeNull();
+
+    await vi.advanceTimersByTimeAsync(801);
+    await settleTerminalPanel();
+    expect(findTerminalTab(host, 'Agent')?.closest('[data-terminal-session-row]')
+      ?.querySelector('[data-terminal-transition-indicator="spinner"]')).toBeNull();
   });
 
   it('marks inactive sessions after a bell with an unread dot and clears it when the session becomes active', async () => {
@@ -6732,7 +6952,7 @@ describe('TerminalPanel', () => {
     await settleTerminalPanel();
 
     let terminal2Tab = findTerminalTab(host, 'Terminal 2');
-    expect(terminal2Tab?.parentElement?.querySelector('[data-terminal-tab-status="running"]')).toBeNull();
+    expect(terminal2Tab?.parentElement?.querySelector('[data-terminal-tab-status="spinner"]')).toBeNull();
     expect(findTerminalWorkIndicator(host)?.dataset.terminalWorkState).toBe('idle');
 
     emitTerminalData('session-2', '\x1b]633;D;0\u0007', 2);
@@ -6742,7 +6962,7 @@ describe('TerminalPanel', () => {
     await settleTerminalPanelAfterPaint();
 
     terminal2Tab = findTerminalTab(host, 'Terminal 2');
-    expect(terminal2Tab?.querySelector('[data-terminal-tab-status="running"]')).toBeNull();
+    expect(terminal2Tab?.querySelector('[data-terminal-tab-status="spinner"]')).toBeNull();
     expect(terminal2Tab?.querySelector('[data-terminal-tab-status="unread"]')).toBeNull();
     expect(findTerminalWorkIndicator(host)?.dataset.terminalWorkState).toBe('idle');
   });
@@ -6849,7 +7069,7 @@ describe('TerminalPanel', () => {
     emitTerminalData('session-2', 'working...\n', 2);
     await settleTerminalPanel();
 
-    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).toBeNull();
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'spinner')).toBeNull();
   });
 
   it('uses confirmed command metadata for a quiet program title and restores the directory on idle', async () => {
@@ -6892,11 +7112,11 @@ describe('TerminalPanel', () => {
     publishTerminalForegroundCommand('session-2', {
       phase: 'running', displayName: 'top', revision: 1, updatedAtMs: 10,
     });
-    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).toBeNull();
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'spinner')).toBeNull();
     await vi.waitFor(() => {
       expect(host.querySelector('[data-terminal-session-title="session-2"]')?.textContent).toBe('top');
     });
-    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).toBeNull();
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'spinner')).toBeNull();
     expect(host.querySelector('[data-testid="terminal-session-path-session-2"]')?.textContent).toBe('/workspace/repo');
     expect(findTerminalTabStatus(host, 'Terminal 2', 'unread')).toBeNull();
     expect(findTerminalWorkIndicator(host)?.dataset.terminalWorkState).toBe('idle');
@@ -6913,7 +7133,7 @@ describe('TerminalPanel', () => {
       phase: 'idle', displayName: '', revision: 2, updatedAtMs: 20,
     });
     await settleTerminalPanel();
-    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).toBeNull();
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'spinner')).toBeNull();
     expect(findTerminalWorkIndicator(host)?.dataset.terminalWorkState).toBe('idle');
     expect(Array.from(host.querySelectorAll('[data-terminal-session-title="session-2"]')).map((element) => element.textContent)).toEqual(['repo', 'repo']);
     expect(titleChanges).toHaveBeenLastCalledWith('Terminal · repo');
@@ -6962,7 +7182,7 @@ describe('TerminalPanel', () => {
 
     const activityWave = host.querySelector('[data-terminal-output-state="streaming"]');
     expect(activityWave).not.toBeNull();
-    expect(host.querySelector('[data-terminal-process-state="running"]')).toBeNull();
+    expect(host.querySelector('[data-terminal-transition-indicator="spinner"]')).toBeNull();
 
     publishTerminalOutputActivity('session-agent', {
       phase: 'settled', revision: 2, updatedAtMs: 20,
@@ -7275,7 +7495,7 @@ describe('TerminalPanel', () => {
     await vi.advanceTimersByTimeAsync(200);
     await settleTerminalPanel();
 
-    expect(findTerminalTabStatus(host, 'Terminal 1', 'running')).toBeNull();
+    expect(findTerminalTabStatus(host, 'Terminal 1', 'spinner')).toBeNull();
     expect(Array.from(host.querySelectorAll('[data-terminal-session-title="session-1"]')).map((element) => element.textContent)).toEqual(['repo', 'repo']);
     expect(titleChanges.mock.calls.some(([title]) => title === 'Terminal · top')).toBe(false);
   });
@@ -7316,7 +7536,7 @@ describe('TerminalPanel', () => {
     emitTerminalData('session-2', 'thinking...\n', 2);
     await settleTerminalPanel();
 
-    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).toBeNull();
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'spinner')).toBeNull();
     expect(findTerminalWorkIndicator(host)?.dataset.terminalWorkState).toBe('idle');
 
     emitTerminalData('session-2', '\x1b]633;P;RedevenActivity=idle\u0007', 3);
@@ -7325,7 +7545,7 @@ describe('TerminalPanel', () => {
     findTerminalTab(host, 'Terminal 2')?.click();
     await settleTerminalPanelAfterPaint();
 
-    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).toBeNull();
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'spinner')).toBeNull();
     expect(findTerminalTabStatus(host, 'Terminal 2', 'unread')).toBeNull();
     expect(findTerminalWorkIndicator(host)?.dataset.terminalWorkState).toBe('idle');
   });
@@ -7472,7 +7692,7 @@ describe('TerminalPanel', () => {
     const disclosure = host.querySelector<HTMLButtonElement>('[data-testid="terminal-active-context-disclosure"]');
     const descriptionId = disclosure?.getAttribute('aria-describedby') ?? '';
     expect(host.querySelector(`#${descriptionId}`)?.textContent).toContain('The foreground process is running');
-    expect(host.querySelector('[data-terminal-process-state="running"]')).toBeNull();
+    expect(host.querySelector('[data-terminal-transition-indicator="spinner"]')).toBeNull();
   });
 
   it('announces a reconnecting active session from the mobile context disclosure', async () => {
@@ -8296,7 +8516,7 @@ describe('TerminalPanel', () => {
     await settleTerminalPanel();
 
     expect(inactiveCore?.write).not.toHaveBeenCalled();
-    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).toBeNull();
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'spinner')).toBeNull();
 
     findTerminalTab(host, 'Terminal 2')?.click();
     await settleTerminalPanel();
