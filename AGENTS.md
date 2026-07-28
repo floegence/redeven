@@ -12,6 +12,23 @@ Goals:
   Redeven-specific business adapters in this repository;
 - standardize repository rules on `AGENTS.md` instead of a committed `.develop.md`.
 
+## Agent Delegation
+
+- The primary agent owns implementation, debugging, testing, localization,
+  integration, and delivery.
+- Subagents are optional and should be used only for bounded solution review
+  when independent analysis materially improves a significant architecture or
+  product decision, or when the user explicitly requests delegation.
+- Do not spawn subagents for routine implementation, translation, test
+  execution, repeated diff review, approval collection, progress confirmation,
+  or work the primary agent can complete directly.
+- Prefer one bounded solution-review round before implementation. Do not create
+  recurring reviewer loops or restart reviewers merely because a commit hash
+  changed.
+- Agent count, reviewer identity, and approval count are not quality evidence.
+  Source inspection, explicit contracts, focused tests, and observable product
+  behavior remain authoritative.
+
 ## Git Workflow (Worktree, Required)
 
 - Never develop directly on `main`.
@@ -99,6 +116,16 @@ Use staged validation so full gates run only on the final rebased tip:
 - Do not repeatedly run the full repository or product quality gate on
   intermediate feature tips. A passing full gate on a commit that is later
   rebased is not final integration evidence.
+- When a focused or full test run reports a failure, fix the failure and rerun
+  the smallest directly corresponding test first. Do not immediately restart
+  the full suite.
+- After the failing test passes, run the affected focused test file, package,
+  or subsystem checks to detect nearby regressions.
+- Expand validation only when the failure reveals a shared-contract or
+  cross-module risk that justifies broader coverage.
+- Do not rerun the full repository or product integration gate after each
+  individual fix. The full gate runs once for the final, frozen, rebased main
+  tip through the required pre-push workflow.
 - Once implementation, required reviews, localization work, and generated
   artifacts are complete, fetch `origin`, rebase onto the latest `origin/main`,
   inspect `git diff origin/main...HEAD`, and run the affected focused checks.
@@ -231,7 +258,9 @@ Rules:
 - User-visible JSX text, titles, tooltips, placeholders, empty states, notifications, and accessibility labels must use i18n keys. User content, AI output, terminal output, filenames, commands, code, and protocol fields remain literal.
 - Any identical-English exception must be a named product, a documented technical term, a code literal, or a native same-spelling term. Broad module-level allowlists are not permitted.
 - Translation changes must keep dictionary shape, placeholders, rich text, and locale-specific plural forms aligned with `en-US`; Traditional Chinese must not inherit Simplified Chinese copy.
-- Each locale requires an independent locale-review subagent instructed to perform native-language-quality review and familiar with developer-tool terminology before integration. The implementation agent must not self-review a locale; the review subagent must compare semantic parity, terminology, naturalness, and protected literals against the canonical source and report actionable findings before approval.
+- Every changed translation must read naturally to fluent users of that locale, preserve semantic parity with `en-US`, use established developer-tool terminology, and preserve protected literals, placeholders, rich text, and plural behavior.
+- Translation quality is an outcome requirement, not a reviewer-identity or agent-delegation requirement. Do not spawn per-locale review subagents. The primary agent is responsible for reviewing changed locale entries against the canonical source and the repository terminology rules.
+- Keep localization review scoped to keys changed by the feature and shared templates directly affected by those keys. Do not turn feature work into an audit of unrelated existing catalog entries; record unrelated findings as follow-up work.
 
 ## README Localization Quality
 
@@ -239,9 +268,10 @@ Rules:
 - Supported translations live at the repository root as `README.<locale>.md`. Their locale set and order must exactly match the Desktop and Env App language switchers and the manifest in `assets/readme/locales.json`.
 - Every README must provide the same native-name language selector, stable section anchors, heading structure, link targets, executable command content, protected product terms, and documented fixed English domain terms. Explanatory prose and shell comments may be localized; commands, flags, paths, URLs, environment variables, protocol fields, version identifiers, and the matching `Provider` term forms remain literal.
 - The existing `assets/readme/architecture-overview.png` is the only shared English visual exception. Localized README files must provide localized alternative text and surrounding explanation, and new shared visual exceptions require an explicit manifest entry and review.
-- Each non-English README records the canonical source hash, localized content hash, review status, review method, reviewer subagent identifier, and review date in `assets/readme/locales.json`. Any canonical or localized content change invalidates the corresponding review metadata.
-- `pending_subagent_review` is allowed only on an unmerged feature branch. Before integration, every non-English README must be marked `reviewed` through an independent `subagent` review, the `reviewed_by` value must identify the locale-review subagent, and `node scripts/check_readme_localizations.mjs --require-reviewed` must pass.
-- Run `node --test scripts/check_readme_localizations.test.mjs` and `node scripts/check_readme_localizations.mjs` while editing README translations. Do not weaken structural, link, literal, Traditional Chinese, hash, or review checks to make a draft pass.
+- Each non-English README records the canonical source hash and localized content hash in `assets/readme/locales.json`. Any canonical or localized content change invalidates the stored synchronization hashes.
+- Before integration, every localized README must match the canonical structure, links, commands, protected literals, terminology rules, and current source/content hashes enforced by `scripts/check_readme_localizations.mjs`.
+- README localization quality is an outcome requirement. It must not depend on a subagent review method, reviewer identity, approval count, or per-locale agent workflow.
+- Run `node --test scripts/check_readme_localizations.test.mjs` and `node scripts/check_readme_localizations.mjs` while editing README translations. Do not weaken structural, link, literal, Traditional Chinese, terminology, or hash checks to make a draft pass.
 
 ## OKF Maintenance Contract
 

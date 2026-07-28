@@ -62,9 +62,10 @@ test-runtime rules do not change Dev Desktop launch or shutdown behavior.
 ## Documentation and generated assets
 
 `README.md` is canonical. Every supported localized README must preserve
-structure, links, executable literals, protected terms, hashes, and independent
-subagent review recorded in `assets/readme/locales.json`. Main requires
-`--require-reviewed`.
+structure, links, executable and inline-code literals, protected terms, and the
+current canonical and localized content hashes recorded as synchronization
+metadata in `assets/readme/locales.json`. The machine gate does not accept or
+require reviewer identity, review method, or approval-count metadata.
 
 `okf/` is the maintained knowledge corpus. Source concepts must match code and
 contracts, and `okf/dist/okf_bundle.json`, manifest, and checksum are generated
@@ -239,5 +240,5 @@ not become a fallback, shim, or local artifact path.
 - `redeven:scripts/install.sh:1` - Verifies exact release identity and atomically activates the complete versioned runtime suite.
 - `redeven:.github/workflows/release.yml:1` - Makes least-privilege four-target runtime and installer proof mandatory.
 - `redeven:internal/envapp/ui_src/scripts/checkPackagedRenderer.mjs:1` - Verifies the production Plugin entry and built renderer.
-- `redeven:scripts/check_readme_localizations.mjs:1` - Enforces public README localization and review metadata.
+- `redeven:scripts/check_readme_localizations.mjs:1` - Enforces public README localization structure, terminology, literals, and synchronization hashes.
 - `redeven:scripts/okf/check_source_integrity.sh:1` - Validates the maintained OKF corpus.

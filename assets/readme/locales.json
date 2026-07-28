@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "source": {
     "locale": "en-US",
     "file": "README.md"
@@ -127,13 +127,9 @@
       "native_name": "简体中文",
       "english_name": "Simplified Chinese",
       "file": "README.zh-CN.md",
-      "review": {
-        "status": "reviewed",
+      "synchronization": {
         "source_sha256": "81d9bafa9790c3784e846074ca8b80ac70440cfe597265019e3a987000d7bbb8",
-        "content_sha256": "da524de727e3c6c13ca680b788f2c0888a644077cdbfaccdb191383839c6639c",
-        "method": "subagent",
-        "reviewed_by": "subagent:review_readme_zh_cn",
-        "reviewed_at": "2026-07-24"
+        "content_sha256": "da524de727e3c6c13ca680b788f2c0888a644077cdbfaccdb191383839c6639c"
       }
     },
     {
@@ -141,13 +137,9 @@
       "native_name": "繁體中文",
       "english_name": "Traditional Chinese",
       "file": "README.zh-TW.md",
-      "review": {
-        "status": "reviewed",
+      "synchronization": {
         "source_sha256": "81d9bafa9790c3784e846074ca8b80ac70440cfe597265019e3a987000d7bbb8",
-        "content_sha256": "d3a1ce135b1988f1aebf8121d09ad0cfeab7aa320c35ebf0f428405b87008360",
-        "method": "subagent",
-        "reviewed_by": "subagent:review_readme_zh_tw",
-        "reviewed_at": "2026-07-24"
+        "content_sha256": "d3a1ce135b1988f1aebf8121d09ad0cfeab7aa320c35ebf0f428405b87008360"
       }
     },
     {
@@ -155,13 +147,9 @@
       "native_name": "日本語",
       "english_name": "Japanese",
       "file": "README.ja-JP.md",
-      "review": {
-        "status": "reviewed",
+      "synchronization": {
         "source_sha256": "81d9bafa9790c3784e846074ca8b80ac70440cfe597265019e3a987000d7bbb8",
-        "content_sha256": "68a8f4bee3bbb63bc2342742dd01491cf790754a69808d0830b600f989a7c13f",
-        "method": "subagent",
-        "reviewed_by": "subagent:review_readme_ja_jp",
-        "reviewed_at": "2026-07-24"
+        "content_sha256": "68a8f4bee3bbb63bc2342742dd01491cf790754a69808d0830b600f989a7c13f"
       }
     },
     {
@@ -169,13 +157,9 @@
       "native_name": "한국어",
       "english_name": "Korean",
       "file": "README.ko-KR.md",
-      "review": {
-        "status": "reviewed",
+      "synchronization": {
         "source_sha256": "81d9bafa9790c3784e846074ca8b80ac70440cfe597265019e3a987000d7bbb8",
-        "content_sha256": "632e47091af521016f9bec6b53f4d0604b5def4c62df2bea7483da7f12158d61",
-        "method": "subagent",
-        "reviewed_by": "subagent:review_readme_ko_kr",
-        "reviewed_at": "2026-07-24"
+        "content_sha256": "632e47091af521016f9bec6b53f4d0604b5def4c62df2bea7483da7f12158d61"
       }
     },
     {
@@ -183,13 +167,9 @@
       "native_name": "Deutsch",
       "english_name": "German",
       "file": "README.de-DE.md",
-      "review": {
-        "status": "reviewed",
+      "synchronization": {
         "source_sha256": "81d9bafa9790c3784e846074ca8b80ac70440cfe597265019e3a987000d7bbb8",
-        "content_sha256": "4ed8f969935af48b7f91cc92768fd7ed684b0ae1e9872b37c1cfa12bdc6d33b4",
-        "method": "subagent",
-        "reviewed_by": "subagent:review_readme_de_de",
-        "reviewed_at": "2026-07-24"
+        "content_sha256": "4ed8f969935af48b7f91cc92768fd7ed684b0ae1e9872b37c1cfa12bdc6d33b4"
       }
     },
     {
@@ -197,13 +177,9 @@
       "native_name": "Français",
       "english_name": "French",
       "file": "README.fr-FR.md",
-      "review": {
-        "status": "reviewed",
+      "synchronization": {
         "source_sha256": "81d9bafa9790c3784e846074ca8b80ac70440cfe597265019e3a987000d7bbb8",
-        "content_sha256": "2938cd1d03efff7a40748a1bda35de6afdecca33725b6d9e62cfe0d9ea34191d",
-        "method": "subagent",
-        "reviewed_by": "subagent:review_readme_fr_fr",
-        "reviewed_at": "2026-07-24"
+        "content_sha256": "2938cd1d03efff7a40748a1bda35de6afdecca33725b6d9e62cfe0d9ea34191d"
       }
     },
     {
@@ -211,13 +187,9 @@
       "native_name": "Español",
       "english_name": "Spanish",
       "file": "README.es-ES.md",
-      "review": {
-        "status": "reviewed",
+      "synchronization": {
         "source_sha256": "81d9bafa9790c3784e846074ca8b80ac70440cfe597265019e3a987000d7bbb8",
-        "content_sha256": "e3190f66df506c8820ccb9f3dfcf47abb97b6d00154b873e39a33f96001c0806",
-        "method": "subagent",
-        "reviewed_by": "subagent:review_readme_es_es",
-        "reviewed_at": "2026-07-24"
+        "content_sha256": "e3190f66df506c8820ccb9f3dfcf47abb97b6d00154b873e39a33f96001c0806"
       }
     },
     {
@@ -225,13 +197,9 @@
       "native_name": "Português do Brasil",
       "english_name": "Brazilian Portuguese",
       "file": "README.pt-BR.md",
-      "review": {
-        "status": "reviewed",
+      "synchronization": {
         "source_sha256": "81d9bafa9790c3784e846074ca8b80ac70440cfe597265019e3a987000d7bbb8",
-        "content_sha256": "4ff15de76d610c70beaecefe6d7094466f42463666a011a77367fb1a9109233d",
-        "method": "subagent",
-        "reviewed_by": "subagent:review_readme_pt_br",
-        "reviewed_at": "2026-07-24"
+        "content_sha256": "4ff15de76d610c70beaecefe6d7094466f42463666a011a77367fb1a9109233d"
       }
     },
     {
@@ -239,13 +207,9 @@
       "native_name": "Русский",
       "english_name": "Russian",
       "file": "README.ru-RU.md",
-      "review": {
-        "status": "reviewed",
+      "synchronization": {
         "source_sha256": "81d9bafa9790c3784e846074ca8b80ac70440cfe597265019e3a987000d7bbb8",
-        "content_sha256": "867b5536c46673d1d75db1b7627b30f1df964aee83363bb9cd5e7eea38427d3c",
-        "method": "subagent",
-        "reviewed_by": "subagent:review_readme_ru_ru",
-        "reviewed_at": "2026-07-24"
+        "content_sha256": "867b5536c46673d1d75db1b7627b30f1df964aee83363bb9cd5e7eea38427d3c"
       }
     }
   ]

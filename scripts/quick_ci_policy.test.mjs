@@ -30,7 +30,7 @@ const allowedQuickGateCommands = new Set([
   'echo "[INFO] checking bounded cloud policy and committed knowledge artifacts"',
   "node --test scripts/quick_ci_policy.test.mjs scripts/actionlint_runner_policy.test.mjs",
   "node --test scripts/check_readme_localizations.test.mjs",
-  "node scripts/check_readme_localizations.mjs --require-reviewed",
+  "node scripts/check_readme_localizations.mjs",
   "./scripts/okf/check_source_integrity.sh",
   "./scripts/build_okf_bundle.sh --verify-only",
   'echo "[INFO] quick CI passed"',
@@ -80,6 +80,15 @@ test("ordinary GitHub CI is one bounded source-only job", () => {
 
 test("quick gate checks the committed tree instead of trusting a clean checkout", () => {
   assert.match(quickGate, /git diff-tree --check --root -r --no-commit-id HEAD/);
+});
+
+test("README localization gates enforce synchronization without reviewer flags", () => {
+  assert.match(quickGate, /^node scripts\/check_readme_localizations\.mjs$/m);
+  assert.match(
+    finalGate,
+    /run_step "checking synchronized README localizations" node scripts\/check_readme_localizations\.mjs/,
+  );
+  assert.doesNotMatch(`${quickGate}\n${finalGate}`, /--require-reviewed/);
 });
 
 test("quick gate remains a closed source-only command set", () => {

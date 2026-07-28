@@ -22,7 +22,7 @@ python3 -c 'from pathlib import Path; [compile(Path(name).read_text(encoding="ut
 echo "[INFO] checking bounded cloud policy and committed knowledge artifacts"
 node --test scripts/quick_ci_policy.test.mjs scripts/actionlint_runner_policy.test.mjs
 node --test scripts/check_readme_localizations.test.mjs
-node scripts/check_readme_localizations.mjs --require-reviewed
+node scripts/check_readme_localizations.mjs
 ./scripts/okf/check_source_integrity.sh
 ./scripts/build_okf_bundle.sh --verify-only
 

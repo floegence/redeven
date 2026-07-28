@@ -29,6 +29,12 @@ const SOURCE_README = `<p align="center">Redeven</p>
 
 Choose Provider and one provider Environment.
 
+Use \`desktop/.bundle/<goos>-<goarch>/redeven\`.
+
+\`\`\`bash
+redeven bootstrap --listen <address>
+\`\`\`
+
 [Asset](asset.txt)
 `;
 
@@ -50,6 +56,12 @@ const TRANSLATED_README = `<p align="center">Redeven</p>
 
 選擇 Provider 與一個 provider 環境。
 
+使用 \`desktop/.bundle/<goos>-<goarch>/redeven\`。
+
+\`\`\`bash
+redeven bootstrap --listen <address>
+\`\`\`
+
 [資產](asset.txt)
 `;
 
@@ -64,7 +76,7 @@ function writeFixture() {
 
   const sourceHash = contentSha256(SOURCE_README);
   const manifest = {
-    schema_version: 1,
+    schema_version: 2,
     source: { locale: 'en-US', file: 'README.md' },
     sections: [{ id: 'about', level: 2 }],
     required_literals: ['Redeven'],
@@ -92,13 +104,9 @@ function writeFixture() {
         native_name: '繁體中文',
         english_name: 'Traditional Chinese',
         file: 'README.zh-TW.md',
-        review: {
-          status: 'pending_subagent_review',
+        synchronization: {
           source_sha256: sourceHash,
           content_sha256: contentSha256(TRANSLATED_README),
-          method: null,
-          reviewed_by: null,
-          reviewed_at: null,
         },
       },
     ],
@@ -130,38 +138,38 @@ function expectValidationError(run, messagePart) {
   });
 }
 
-test('accepts synchronized translations while subagent review is pending', () => {
+test('accepts synchronized translations without reviewer metadata', () => {
   withFixture((root) => {
     const result = validateRepository(root);
-    assert.deepEqual(result.warnings, [
-      'zh-TW (README.zh-TW.md): independent locale-review subagent approval is still pending',
-    ]);
+    assert.deepEqual(result.warnings, []);
   });
 });
 
-test('strict mode rejects a pending locale-review subagent approval', () => {
+test('rejects missing README synchronization metadata', () => {
   withFixture((root) => {
+    const manifestPath = join(root, 'assets/readme/locales.json');
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+    delete manifest.locales[1].synchronization;
+    writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
     expectValidationError(
-      () => validateRepository(root, { requireReviewed: true }),
-      'locale-review subagent approval is still pending',
+      () => validateRepository(root),
+      'missing README synchronization metadata',
     );
   });
 });
 
-test('strict mode accepts an audited locale-review subagent approval', () => {
+test('rejects legacy reviewer metadata', () => {
   withFixture((root) => {
     const manifestPath = join(root, 'assets/readme/locales.json');
     const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
     manifest.locales[1].review = {
-      ...manifest.locales[1].review,
       status: 'reviewed',
       method: 'subagent',
       reviewed_by: 'subagent:readme_review_test',
       reviewed_at: '2026-07-15',
     };
     writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
-    const result = validateRepository(root, { requireReviewed: true });
-    assert.deepEqual(result.warnings, []);
+    expectValidationError(() => validateRepository(root), 'must not contain legacy review metadata');
   });
 });
 
@@ -176,6 +184,34 @@ test('rejects stale translation content hashes', () => {
   withFixture((root) => {
     writeFileSync(join(root, 'README.zh-TW.md'), `${TRANSLATED_README}\n新增內容\n`);
     expectValidationError(() => validateRepository(root), 'content_sha256 is stale');
+  });
+});
+
+test('rejects stale canonical source hashes', () => {
+  withFixture((root) => {
+    const manifestPath = join(root, 'assets/readme/locales.json');
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+    manifest.locales[1].synchronization.source_sha256 = '0'.repeat(64);
+    writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    expectValidationError(() => validateRepository(root), 'source_sha256 is stale');
+  });
+});
+
+test('rejects changed executable commands', () => {
+  withFixture((root) => {
+    const path = join(root, 'README.zh-TW.md');
+    const content = readFileSync(path, 'utf8').replace('redeven bootstrap --listen', 'redeven start --listen');
+    writeFileSync(path, content);
+    expectValidationError(() => validateRepository(root), 'executable fenced-code content differs');
+  });
+});
+
+test('rejects missing inline code placeholders', () => {
+  withFixture((root) => {
+    const path = join(root, 'README.zh-TW.md');
+    const content = readFileSync(path, 'utf8').replace('<goos>-<goarch>', '<platform>');
+    writeFileSync(path, content);
+    expectValidationError(() => validateRepository(root), 'inline code literal');
   });
 });
 
