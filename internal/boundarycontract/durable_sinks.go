@@ -136,6 +136,15 @@ func Scan(root string) ([]Finding, error) {
 			if shouldSkipDirectory(rel, entry.Name()) {
 				return filepath.SkipDir
 			}
+			if rel != "." {
+				nestedRepository, err := isNestedGitRepositoryRoot(path)
+				if err != nil {
+					return err
+				}
+				if nestedRepository {
+					return filepath.SkipDir
+				}
+			}
 			return nil
 		}
 		if shouldSkipFile(rel) {
@@ -906,6 +915,47 @@ func shouldSkipDirectory(rel, name string) bool {
 		return false
 	}
 	return contains([]string{".git", "node_modules", "vendor", "dist", "build", "coverage", "testdata"}, name)
+}
+
+func isNestedGitRepositoryRoot(path string) (bool, error) {
+	markerPath := filepath.Join(path, ".git")
+	markerInfo, err := os.Lstat(markerPath)
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if markerInfo.IsDir() {
+		return true, nil
+	}
+	if !markerInfo.Mode().IsRegular() {
+		return false, nil
+	}
+
+	marker, err := os.ReadFile(markerPath)
+	if err != nil {
+		return false, err
+	}
+	line := strings.TrimSpace(string(marker))
+	if strings.ContainsAny(line, "\r\n") || !strings.HasPrefix(line, "gitdir: ") {
+		return false, nil
+	}
+	gitDir := strings.TrimSpace(strings.TrimPrefix(line, "gitdir: "))
+	if gitDir == "" {
+		return false, nil
+	}
+	if !filepath.IsAbs(gitDir) {
+		gitDir = filepath.Join(path, gitDir)
+	}
+	gitDirInfo, err := os.Stat(filepath.Clean(gitDir))
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return gitDirInfo.IsDir(), nil
 }
 
 func shouldSkipFile(rel string) bool {
