@@ -2508,7 +2508,7 @@
       "mobileInputDescription": "Choisissez un mode de saisie par défaut pour chaque session de terminal mobile.",
       "mobileInputNote": "Un seul mode peut être actif à la fois. Utilisez Floe Keyboard pour garder le clavier système masqué jusqu'à ce que vous reveniez explicitement à System IME.",
       "floeKeyboard": "Floe Keyboard",
-      "floeKeyboardDescription": "Conserve le focus des appuis dans le terminal et affiche les suggestions Floe, les insertions rapides, les scripts et les complétions de chemin.",
+      "floeKeyboardDescription": "Conserve le focus dans le terminal lorsque vous appuyez sur sa surface et affiche les suggestions Floe, les insertions rapides, les scripts et les complétions de chemin.",
       "systemIme": "System IME",
       "systemImeDescription": "Place le focus sur le champ de saisie natif du terminal afin que vous puissiez utiliser le clavier de l’appareil, la barre de candidats de l’IME et les fonctions de texte de la plateforme.",
       "themeTitle": "Thème",

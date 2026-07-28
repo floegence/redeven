@@ -9432,7 +9432,7 @@
         "title": "Workbench terminal interaction",
         "type": "UI Contract"
       },
-      "body_length": 16511,
+      "body_length": 16943,
       "summary": "Activity and Workbench terminals use Floeterm's single binary `terminal/live_v1` data path over a Flowersec named Yamux stream. Each mounted view owns an independent connection identity and reports its own host capacity, while Floeterm owns the shared PTY geometry, atomic history boundary, ordered output, input, resize acknowledgement, and explicit close/error states. Redeven keeps catalog and history RPCs as a control plane and never falls back to the removed RPC live transport.",
       "sections": [
         {
@@ -9446,8 +9446,8 @@
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Redeven may map Flowersec `openStream(\"terminal/live_v1\")` into Floeterm's byte-stream adapter and may provide RPC catalog/history operations. It must not recreate Floeterm framing, attachment arbitration, effective-grid calculation, input sequencing, resize acknowledgement, output batching, slow-consumer policy, context inference, semantic-work parsing, or error-code semantics. RPC type ids 2003 through 2006 are intentionally unregistered and have no SDK codec, debug projection, queue, or fallback path. Control notifications such as session-list, name/working-directory, foreground-command, output-activity, execution-context, and work-state changes remain RPC control-plane events and are synchronously offered only to clients whose access-gate channel is currently unlocked and whose immutable session permissions still allow process launch. The global catalog accepts only complete, validated payloads, retains bounded early truth, and delegates equal-revision payloads to Floeterm's conflict detector. Conflicting execution context becomes unknown immediately so it cannot retain local-path authority, records only a content-free diagnostic, and schedules one bounded reconcile whose authoritative list value wins the equal revision. Overflow also reconciles authoritatively.",
-          "char_count": 1286
+          "body": "Redeven may map Flowersec `openStream(\"terminal/live_v1\")` into Floeterm's byte-stream adapter and may provide RPC catalog/history operations. It must not recreate Floeterm framing, attachment arbitration, effective-grid calculation, input sequencing, resize acknowledgement, output batching, slow-consumer policy, context inference, semantic-work parsing, or error-code semantics. RPC type ids 2003 through 2006 are intentionally unregistered and have no SDK codec, debug projection, queue, or fallback path. Control notifications such as session-list, name/working-directory, foreground-command, output-activity, execution-context, and work-state changes remain RPC control-plane events and are synchronously offered only to clients whose access-gate channel is currently unlocked and whose immutable session permissions still allow process launch. The global catalog accepts only complete, validated payloads, retains bounded early truth, and delegates equal-revision payloads to Floeterm's conflict detector. Conflicting execution context becomes unknown immediately so it cannot retain local-path authority, records only a content-free diagnostic, and schedules one bounded reconcile whose authoritative list value wins the equal revision. Overflow also reconciles authoritatively.\n\nHydration does not weaken this conflict boundary. If two early context notifications for one session carry the same revision with different payloads before the first catalog list completes, the retained context becomes `unknown` at that revision. The initial list cannot restore path authority while the conflict reconcile is pending; only the subsequent authoritative list may replace the unknown projection at an equal revision.",
+          "char_count": 1718
         }
       ],
       "evidence": [
@@ -9551,5 +9551,5 @@
       ]
     }
   ],
-  "source_sha256": "65a21f44a70a71a53c2796cdd2781f93af322579ea79d4fe2097de47e93c242f"
+  "source_sha256": "9500acac5a58607176abf56c444d3fee0228e1d63d546d3b1560dbf64c3e190e"
 }

@@ -181,6 +181,7 @@ import {
   terminalHistoryWarmupPerformanceStage,
   useTerminalSessionCatalog,
 } from './terminalSessionCatalog';
+import { deriveTerminalSessionChrome } from './terminalSessionChrome';
 
 function Consumer(props: { onValue: (value: ReturnType<typeof useTerminalSessionCatalog>) => void }) {
   const catalog = useTerminalSessionCatalog();
@@ -576,6 +577,7 @@ describe('TerminalSessionCatalogProvider', () => {
     };
     const authoritativeSession = {
       ...rpcState.sessions[0],
+      localPathCapability: { workingDir: '/' },
       foregroundCommand: { phase: 'running', displayName: 'codex', revision: 2, updatedAtMs: 20 },
       executionContext: localContext,
       workState: idleWork,
@@ -605,12 +607,94 @@ describe('TerminalSessionCatalogProvider', () => {
 
     resolveInitialList({ sessions: [{ ...authoritativeSession, executionContext: { ...localContext, revision: 2 } }] });
     await vi.waitFor(() => expect(rpcState.list).toHaveBeenCalledTimes(2));
+    expect(latest.sessions()[0]?.executionContext).toEqual({
+      location: {
+        kind: 'unknown', phase: 'unknown', label: '', authority: '', workingDirectory: '', source: 'unknown',
+      },
+      application: { kind: 'unknown', identity: '', displayName: '' },
+      revision: 3,
+      updatedAtMs: 30,
+    });
+    expect(deriveTerminalSessionChrome({
+      session: latest.sessions()[0],
+      directoryTitle: 'workspace',
+      fallbackTitle: 'Terminal',
+    }).canUseLocalPath).toBe(false);
     resolveReconcile({ sessions: [authoritativeSession] });
     await vi.waitFor(() => {
       expect(latest.sessions()[0]?.executionContext).toEqual(localContext);
       expect(latest.sessions()[0]?.workState).toEqual(idleWork);
     });
+    expect(deriveTerminalSessionChrome({
+      session: latest.sessions()[0],
+      directoryTitle: 'workspace',
+      fallbackTitle: 'Terminal',
+    }).canUseLocalPath).toBe(true);
     expect(rpcState.list).toHaveBeenCalledTimes(2);
+    dispose();
+  });
+
+  it('keeps early context conflicts fail closed while a failed reconcile retries', async () => {
+    const localContext = {
+      location: { kind: 'local', phase: 'ready', label: '', authority: '', workingDirectory: '/', source: 'shell_integration' },
+      application: { kind: 'shell', identity: '', displayName: '' },
+      revision: 3,
+      updatedAtMs: 30,
+    };
+    const remoteConflict = {
+      location: { kind: 'remote', phase: 'ready', label: 'root@host', authority: 'host', workingDirectory: '/root', source: 'osc7' },
+      application: { kind: 'shell', identity: '', displayName: '' },
+      revision: 3,
+      updatedAtMs: 31,
+    };
+    const authoritativeSession = {
+      ...rpcState.sessions[0],
+      localPathCapability: { workingDir: '/' },
+      executionContext: localContext,
+    };
+    let resolveInitialList!: (value: any) => void;
+    let resolveRetry!: (value: any) => void;
+    rpcState.list
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveInitialList = resolve; }))
+      .mockRejectedValueOnce(new Error('reconcile failed'))
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveRetry = resolve; }));
+
+    let latest: any = null;
+    const host = document.createElement('div');
+    const dispose = render(() => (
+      <TerminalSessionCatalogProvider>
+        <Consumer onValue={(value) => { latest = value; }} />
+      </TerminalSessionCatalogProvider>
+    ), host);
+    await vi.waitFor(() => expect(rpcState.onExecutionContextUpdate).toHaveBeenCalled());
+
+    rpcState.executionContextHandler?.({ sessionId: 's1', executionContext: localContext });
+    rpcState.executionContextHandler?.({ sessionId: 's1', executionContext: remoteConflict });
+    resolveInitialList({
+      sessions: [{ ...authoritativeSession, executionContext: { ...localContext, revision: 2 } }],
+    });
+
+    await vi.waitFor(() => expect(rpcState.list).toHaveBeenCalledTimes(2));
+    expect(deriveTerminalSessionChrome({
+      session: latest.sessions()[0],
+      directoryTitle: 'workspace',
+      fallbackTitle: 'Terminal',
+    }).canUseLocalPath).toBe(false);
+
+    await vi.waitFor(() => expect(rpcState.list).toHaveBeenCalledTimes(3));
+    expect(latest.sessions()[0]?.executionContext?.location.kind).toBe('unknown');
+    expect(deriveTerminalSessionChrome({
+      session: latest.sessions()[0],
+      directoryTitle: 'workspace',
+      fallbackTitle: 'Terminal',
+    }).canUseLocalPath).toBe(false);
+
+    resolveRetry({ sessions: [authoritativeSession] });
+    await vi.waitFor(() => expect(deriveTerminalSessionChrome({
+      session: latest.sessions()[0],
+      directoryTitle: 'workspace',
+      fallbackTitle: 'Terminal',
+    }).canUseLocalPath).toBe(true));
     dispose();
   });
 
