@@ -62,6 +62,7 @@ export type TerminalSessionNavigatorProps = Readonly<{
   activeSessionId: string | null;
   copiedPathSessionId: string | null;
   emptyListLoading: boolean;
+  isFocusWithinOwnedLayer?: (target: Node | null) => boolean;
   onCloseDrawer: () => void;
   onCreateSession: () => void;
   onRefresh: () => void;
@@ -288,6 +289,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
 
   const handleDrawerKeyDown = (event: KeyboardEvent) => {
     if (!props.mobile || !props.drawerOpen) return;
+    if (props.isFocusWithinOwnedLayer?.(event.target as Node | null)) return;
     if (event.key === 'Escape') {
       event.preventDefault();
       event.stopPropagation();
@@ -312,10 +314,22 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
     }
   };
 
+  let previousDrawerItemIds: readonly string[] = props.itemIds;
+  let lastFocusedDrawerSessionId: string | null = null;
   createEffect(() => {
     if (!props.mobile || !props.drawerOpen) return;
     const keepFocusInDrawer = (event: FocusEvent) => {
-      if (drawerDialogEl?.contains(event.target as Node | null)) return;
+      const target = event.target as Node | null;
+      if (drawerDialogEl?.contains(target)) {
+        const row = target instanceof Element
+          ? target.closest<HTMLElement>('[data-terminal-session-row]')
+          : null;
+        if (row?.dataset.terminalSessionRow) {
+          lastFocusedDrawerSessionId = row.dataset.terminalSessionRow;
+        }
+        return;
+      }
+      if (props.isFocusWithinOwnedLayer?.(target)) return;
       const fallback = drawerDialogEl?.querySelector<HTMLElement>('[data-testid="terminal-session-filter"]')
         ?? drawerFocusableElements()[0];
       fallback?.focus({ preventScroll: true });
@@ -325,6 +339,29 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
     onCleanup(() => {
       document.removeEventListener('keydown', handleDrawerKeyDown);
       document.removeEventListener('focusin', keepFocusInDrawer);
+    });
+  });
+
+  createEffect(() => {
+    const nextItemIds = props.itemIds;
+    const previousItemIds = previousDrawerItemIds;
+    previousDrawerItemIds = nextItemIds;
+    if (!props.mobile || !props.drawerOpen || !lastFocusedDrawerSessionId) return;
+    const previousIndex = previousItemIds.indexOf(lastFocusedDrawerSessionId);
+    if (previousIndex < 0 || nextItemIds.includes(lastFocusedDrawerSessionId)) return;
+    const replacementSessionId = nextItemIds[Math.min(previousIndex, nextItemIds.length - 1)] ?? null;
+    lastFocusedDrawerSessionId = replacementSessionId;
+    queueMicrotask(() => {
+      const active = document.activeElement;
+      if (drawerDialogEl?.contains(active) || props.isFocusWithinOwnedLayer?.(active)) return;
+      const replacement = replacementSessionId
+        ? Array.from(drawerDialogEl?.querySelectorAll<HTMLButtonElement>('button[data-terminal-session-id]') ?? [])
+            .find((button) => button.dataset.terminalSessionId === replacementSessionId)
+        : null;
+      const fallback = replacement
+        ?? drawerDialogEl?.querySelector<HTMLElement>('[data-testid="terminal-session-filter"]')
+        ?? drawerFocusableElements()[0];
+      fallback?.focus({ preventScroll: true });
     });
   });
 

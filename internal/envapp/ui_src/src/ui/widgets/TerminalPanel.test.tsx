@@ -2950,7 +2950,7 @@ describe('TerminalPanel', () => {
     expect(sessionsCoordinatorMocks.createSession).toHaveBeenCalledWith('redeven', '/workspace/redeven');
   });
 
-  it('disables clear and duplicate actions for pending sidebar terminal sessions', async () => {
+  it('keeps all local path actions disabled until a pending session receives an authoritative capability', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -2961,8 +2961,11 @@ describe('TerminalPanel', () => {
     await settleTerminalPanel();
 
     const menu = await openSidebarContextMenu(host, 'Terminal 2');
+    expect(findContextMenuButton(menu, 'Ask Flower')?.disabled).toBe(true);
+    expect(findContextMenuButton(menu, 'Files')?.disabled).toBe(true);
     expect(findContextMenuButton(menu, 'Duplicate session')?.disabled).toBe(true);
     expect(findContextMenuButton(menu, 'Clear terminal content')?.disabled).toBe(true);
+    expect(host.querySelector('[data-testid="terminal-session-files-pending-1"]')).toBeNull();
   });
 
   it('configures TerminalCore with focus-triggered remote resize handoff enabled', async () => {
@@ -7410,11 +7413,26 @@ describe('TerminalPanel', () => {
     const externalDrawerButton = host.querySelector<HTMLButtonElement>('[data-testid="terminal-session-drawer-open"]')!;
     externalDrawerButton.focus();
     expect(document.activeElement).toBe(drawerFilter);
-    lastDrawerControl.focus();
-    lastDrawerControl.remove();
-    const recoverDetachedFocus = dispatchTerminalKeydown(document.body, { key: 'Tab' });
-    expect(recoverDetachedFocus.defaultPrevented).toBe(true);
-    expect(document.activeElement).toBe(firstDrawerControl);
+    const menuRow = findTerminalTab(host, 'Terminal 2')!;
+    menuRow.focus();
+    const openMenu = dispatchTerminalKeydown(menuRow, { key: 'F10', shiftKey: true });
+    await settleTerminalPanelAfterPaint();
+    expect(openMenu.defaultPrevented).toBe(true);
+    expect(document.activeElement?.getAttribute('role')).toBe('menuitem');
+    expect(sidebar.classList.contains('hidden')).toBe(false);
+    const closeMenu = dispatchTerminalKeydown(document.activeElement!, { key: 'Escape' });
+    await settleTerminalPanelAfterPaint();
+    expect(closeMenu.defaultPrevented).toBe(true);
+    expect(host.querySelector('[role="menu"]')).toBeNull();
+    expect(document.activeElement).toBe(menuRow);
+
+    dispatchTerminalKeydown(menuRow, { key: 'F10', shiftKey: true });
+    await settleTerminalPanelAfterPaint();
+    const leaveMenu = dispatchTerminalKeydown(document.activeElement!, { key: 'Tab' });
+    await settleTerminalPanel();
+    expect(leaveMenu.defaultPrevented).toBe(true);
+    expect(host.querySelector('[role="menu"]')).toBeNull();
+    expect(document.activeElement).toBe(menuRow);
     for (const selector of [
       '[data-testid="terminal-session-path-copy-session-2"]',
       '[data-testid="terminal-session-files-session-2"]',
@@ -7468,6 +7486,15 @@ describe('TerminalPanel', () => {
     await settleTerminalPanel();
     expect(sidebar.classList.contains('hidden')).toBe(true);
     await vi.waitFor(() => expect(document.activeElement).toBe(drawerButton));
+
+    drawerButton?.click();
+    await settleTerminalPanel();
+    const sessionOneClose = host.querySelector<HTMLButtonElement>('[data-testid="close-session-session-1"]')!;
+    sessionOneClose.focus();
+    terminalSessionsState.sessions = terminalSessionsState.sessions.filter((session) => session.id !== 'session-1');
+    publishTerminalSessions();
+    await settleTerminalPanel();
+    expect(document.activeElement).toBe(findTerminalTab(host, 'Terminal 2'));
   });
 
   it('closes the mobile drawer without native terminal focus in Floe keyboard mode', async () => {

@@ -3266,7 +3266,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         subtitleIcon: 'none' as const,
         subtitle: fullPath,
         fullPath,
-        localWorkingDir: fullPath,
+        localWorkingDir: '',
         processState: session.status,
         transitionState: session.status === 'failed' ? 'failed' as const : 'creating' as const,
         failureKind: session.status === 'failed' ? 'creation' as const : 'none' as const,
@@ -3274,7 +3274,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         activitySource: 'none' as const,
         attentionState: 'none' as const,
         remote: false,
-        canBrowsePath: Boolean(fullPath) && canOpenPath,
+        canBrowsePath: false,
         canClear: false,
         canDuplicate: false,
         closable: session.status === 'failed',
@@ -4432,6 +4432,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
             activeSessionId={activeDisplaySessionId()}
             copiedPathSessionId={copiedSidebarPathSessionId()}
             emptyListLoading={emptySessionListLoading()}
+            isFocusWithinOwnedLayer={(target) => Boolean(
+              terminalSidebarMenuEl?.contains(target)
+              || terminalAskMenuEl?.contains(target),
+            )}
             onCloseDrawer={dismissSessionDrawer}
             onCreateSession={createSession}
             onRefresh={handleRefresh}
@@ -4965,6 +4969,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
             ariaLabel={i18n.t('terminal.sessions')}
             focusAnchor={menu.triggerElement}
             focusDisabledItems={sessionListItemById().get(menu.sessionId)?.remote === true}
+            restoreFocusOnTab={isMobileLayout() && sessionDrawerOpen()}
             items={buildTerminalSidebarMenuItems(menu)}
             onDismiss={dismissTerminalSidebarMenu}
             menuRef={(el) => {
