@@ -13,6 +13,8 @@
       "migratingDescription": "正在進行相容的資料更新。Redeven 的其他工具仍可使用。",
       "verifyingTitle": "正在驗證 Agent 資料",
       "verifyingDescription": "Redeven 正在確認更新後的 Floret Store，完成後 Flower 才會可用。",
+      "degradedTitle": "Flower 需要檢查執行緒歸屬",
+      "degradedDescription": "部分由 Floret 管理的 Agent 執行緒缺少明確的主機設定。已完成設定的現有執行緒仍可使用。",
       "busyTitle": "Agent 資料暫時正在使用中",
       "busyDescription": "另一個處理程序正在使用 Floret Store。Redeven 將再次檢查，不會強制存取。",
       "updateRequiredTitle": "Redeven 需要更新",
@@ -42,7 +44,8 @@
       "unopened": "此檢查完成前，Flower 將保持關閉。Redeven 不會重建任何 Agent 對話狀態。",
       "preserved": "現有 Floret Store 已原樣保留。",
       "rolledBack": "本次更新嘗試已復原，原有 Floret Store 保持不變。",
-      "committed": "資料更新已提交。Redeven 會再次檢查，然後再開啟 Flower。"
+      "committed": "資料更新已提交。Redeven 會再次檢查，然後再開啟 Flower。",
+      "degraded": "Redeven 未推斷或建立受影響執行緒的主機授權。"
     },
     "actions": {
       "retry": "再次檢查",
@@ -50,6 +53,7 @@
       "nextCheck": "{seconds} 秒後再次檢查",
       "openUpdate": "開啟執行階段更新",
       "openPermissions": "開啟環境存取設定",
+      "reviewIssues": "檢查",
       "showDiagnostics": "檢視診斷資訊",
       "hideDiagnostics": "隱藏診斷資訊",
       "copyDiagnostics": "複製診斷資訊",
@@ -65,10 +69,12 @@
       "status": "狀態",
       "statusChecking": "檢查中",
       "statusReady": "就緒",
+      "statusDegraded": "需要檢查",
       "statusBlocked": "受阻",
       "retry": "允許再次檢查",
       "committed": "資料更新已提交",
       "rolledBack": "資料更新已復原",
+      "issueCount": "歸屬問題",
       "yes": "是",
       "no": "否"
     },
@@ -82,7 +88,20 @@
       "upstreamDescription": "每個上游元件各自保有其維護權責。",
       "notChecked": "未在此處檢查",
       "noIssue": "未偵測到可用性問題",
-      "refreshing": "正在重新整理..."
+      "refreshing": "正在重新整理...",
+      "reviewing": "正在載入檢查結果...",
+      "reviewTitle": "缺少主機設定的 Floret 執行緒",
+      "reviewClear": "所有歸屬問題均已解決。",
+      "reviewFailed": "無法載入歸屬檢查結果。",
+      "adoptFailed": "未能套用明確的主機繫結。",
+      "deleteFailed": "未能刪除 Floret 中的執行緒。",
+      "endpoint": "環境 ID",
+      "namespace": "命名空間 ID",
+      "model": "模型 ID",
+      "permission": "權限",
+      "workingDirectory": "工作目錄",
+      "adopt": "套用這些設定並接管",
+      "confirmDelete": "確認刪除 Floret 執行緒"
     }
   },
   "common": {

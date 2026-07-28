@@ -13,6 +13,8 @@
       "migratingDescription": "Hay una actualización de datos compatible en curso. Las demás herramientas de Redeven siguen disponibles.",
       "verifyingTitle": "Verificando los datos del agente",
       "verifyingDescription": "Redeven está confirmando el Floret Store actualizado antes de que Flower esté disponible.",
+      "degradedTitle": "Flower requiere revisar la responsabilidad sobre los hilos",
+      "degradedDescription": "Algunos hilos canónicos de Agent no tienen una configuración explícita del host. Los hilos ya configurados siguen disponibles.",
       "busyTitle": "Los datos del agente están en uso temporalmente",
       "busyDescription": "Otro proceso está utilizando el Floret Store. Redeven volverá a comprobarlo sin forzar el acceso.",
       "updateRequiredTitle": "Redeven necesita una actualización",
@@ -42,7 +44,8 @@
       "unopened": "Flower permanece cerrado hasta que finalice esta comprobación. Redeven no reconstruye ningún estado de conversación del agente.",
       "preserved": "El Floret Store existente se ha dejado en su lugar.",
       "rolledBack": "El intento de actualización se revirtió y el Floret Store anterior permanece en su lugar.",
-      "committed": "Se aplicó una actualización de datos. Redeven volverá a revisarla antes de abrir Flower."
+      "committed": "Se aplicó una actualización de datos. Redeven volverá a revisarla antes de abrir Flower.",
+      "degraded": "Redeven no ha inferido ni creado autorización del host para los hilos afectados."
     },
     "actions": {
       "retry": "Comprobar de nuevo",
@@ -50,6 +53,7 @@
       "nextCheck": "Próxima comprobación en {seconds} s",
       "openUpdate": "Abrir las actualizaciones del entorno de ejecución",
       "openPermissions": "Abrir el acceso al entorno",
+      "reviewIssues": "Revisar",
       "showDiagnostics": "Ver diagnóstico",
       "hideDiagnostics": "Ocultar diagnóstico",
       "copyDiagnostics": "Copiar diagnóstico",
@@ -65,10 +69,12 @@
       "status": "Estado",
       "statusChecking": "Comprobando",
       "statusReady": "Listo",
+      "statusDegraded": "Revisión necesaria",
       "statusBlocked": "Bloqueado",
       "retry": "Se permite comprobar de nuevo",
       "committed": "Actualización de datos aplicada",
       "rolledBack": "Actualización de datos revertida",
+      "issueCount": "Problemas de responsabilidad",
       "yes": "Sí",
       "no": "No"
     },
@@ -82,7 +88,20 @@
       "upstreamDescription": "Cada componente anterior en la cadena conserva la autoridad sobre su propio mantenimiento.",
       "notChecked": "No se comprueba aquí",
       "noIssue": "No se detectaron problemas de disponibilidad",
-      "refreshing": "Actualizando..."
+      "refreshing": "Actualizando...",
+      "reviewing": "Cargando la revisión...",
+      "reviewTitle": "Hilos canónicos sin configuración del host",
+      "reviewClear": "No quedan problemas de responsabilidad.",
+      "reviewFailed": "No se pudo cargar la revisión de responsabilidad.",
+      "adoptFailed": "No se aplicó la vinculación explícita con el host.",
+      "deleteFailed": "No se eliminó el hilo canónico.",
+      "endpoint": "ID del entorno",
+      "namespace": "ID del espacio de nombres",
+      "model": "ID del modelo",
+      "permission": "Permiso",
+      "workingDirectory": "Directorio de trabajo",
+      "adopt": "Vincular al host con esta configuración",
+      "confirmDelete": "Confirmar la eliminación del hilo canónico"
     }
   },
   "common": {

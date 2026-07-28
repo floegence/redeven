@@ -401,7 +401,16 @@ export function FlowerSection() {
   );
   return (
     <>
-      <AIReadinessSettingsSection controller={readinessController} />
+      <AIReadinessSettingsSection
+        controller={readinessController}
+        canAdmin={ctx.canAdmin()}
+        endpointID={ctx.env.env_id()}
+        namespacePublicID={ctx.env.env()?.namespace_public_id ?? ''}
+        modelID={currentModelID()}
+        modelOptions={aiModelOptions().map((option) => ({ id: option.id, label: option.label }))}
+        permissionType={confirmedPermissionType()}
+        workingDir={ctx.settings()?.runtime?.agent_home_dir ?? ''}
+      />
       <SettingsSection
         icon={Bot} title={i18n.t('aiChrome.flowerTitle')} description={i18n.t('flowerSettings.description')}
         badge={aiModelOptions().length > 0 ? i18n.t('flowerSettings.activeBadge') : i18n.t('flowerSettings.noModelSelected')}

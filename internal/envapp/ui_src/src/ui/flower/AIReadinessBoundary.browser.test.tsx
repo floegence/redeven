@@ -109,7 +109,9 @@ function mountHarness(
         controller={controller}
         onOpenUpdate={() => undefined}
         onOpenPermissions={() => undefined}
-        canRetryGeneration
+	        onReviewIssues={() => undefined}
+	        canReviewIssues
+	        canRetryGeneration
         focusEnabled
       >
         <button type="button">Flower child</button>

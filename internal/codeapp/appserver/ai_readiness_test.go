@@ -25,6 +25,9 @@ type controlledAIServiceProvider struct {
 	retryErr       error
 	updates        []AIServiceStartupOptions
 	scopeRevisions []uint64
+	orphanReview   ai.OrphanCanonicalRootReview
+	adoptCount     int
+	deleteCount    int
 }
 
 type invalidAIServiceProvider struct {
@@ -49,7 +52,7 @@ func (p *controlledAIServiceProvider) AcquireAIService(ctx context.Context) (*ai
 	service := p.service
 	snapshot := p.snapshot
 	p.mu.Unlock()
-	if service == nil || snapshot.State != AIReadinessReady {
+	if service == nil || (snapshot.State != AIReadinessReady && snapshot.State != AIReadinessDegraded) {
 		return nil, nil, 0, nil, ErrAIServiceUnavailable
 	}
 	var once sync.Once
@@ -60,6 +63,26 @@ func (p *controlledAIServiceProvider) AcquireAIService(ctx context.Context) (*ai
 			p.mu.Unlock()
 		})
 	}, nil
+}
+
+func (p *controlledAIServiceProvider) ReviewOrphanCanonicalRoots(context.Context) (ai.OrphanCanonicalRootReview, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.orphanReview, nil
+}
+
+func (p *controlledAIServiceProvider) AdoptOrphanCanonicalRoot(context.Context, ai.AdoptOrphanCanonicalRootRequest) (int, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.adoptCount++
+	return 0, nil
+}
+
+func (p *controlledAIServiceProvider) DeleteOrphanCanonicalRoot(context.Context, ai.DeleteOrphanCanonicalRootRequest) (int, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.deleteCount++
+	return 0, nil
 }
 
 func (p *controlledAIServiceProvider) AIReadiness() AIReadinessSnapshot {
@@ -162,6 +185,54 @@ func TestAIReadinessDoesNotBlockSettingsOrSecretRoutes(t *testing.T) {
 	}
 	if acquires, _, retries := provider.counts(); acquires != after || retries != 1 {
 		t.Fatalf("readiness calls counts = acquires %d retries %d", acquires, retries)
+	}
+}
+
+func TestAIOrphanMaintenanceKeepsThreadIDsAdminOnly(t *testing.T) {
+	provider := &controlledAIServiceProvider{
+		service:      new(ai.Service),
+		snapshot:     AIReadinessSnapshot{State: AIReadinessDegraded, ReasonCode: AIHostThreadSettingsMissingReasonCode, IssueCount: 1},
+		orphanReview: ai.OrphanCanonicalRootReview{IssueCount: 1, Items: []ai.OrphanCanonicalRoot{{ThreadID: "thread_secret", Phase: "idle", Status: "idle", CanAppendMessage: true}}},
+	}
+	readServer, readOrigin := newAIReadinessTestServer(t, provider, session.Meta{CanRead: true})
+	readiness := serveAIReadinessTestRequest(readServer, readOrigin, http.MethodGet, "/_redeven_proxy/api/ai/readiness", nil)
+	if readiness.Code != http.StatusOK || bytes.Contains(readiness.Body.Bytes(), []byte("thread_secret")) || !bytes.Contains(readiness.Body.Bytes(), []byte(`"issue_count":1`)) {
+		t.Fatalf("ordinary readiness leaked or omitted degraded facts: %s", readiness.Body.String())
+	}
+	denied := serveAIReadinessTestRequest(readServer, readOrigin, http.MethodGet, "/_redeven_proxy/api/ai/maintenance/orphan_roots", nil)
+	if denied.Code != http.StatusForbidden || bytes.Contains(denied.Body.Bytes(), []byte("thread_secret")) {
+		t.Fatalf("non-admin maintenance response = %d %s", denied.Code, denied.Body.String())
+	}
+
+	adminServer, adminOrigin := newAIReadinessTestServer(t, provider, session.Meta{EndpointID: "env_a", NamespacePublicID: "ns_a", UserPublicID: "operator_a", CanRead: true, CanAdmin: true})
+	review := serveAIReadinessTestRequest(adminServer, adminOrigin, http.MethodGet, "/_redeven_proxy/api/ai/maintenance/orphan_roots", nil)
+	if review.Code != http.StatusOK || !bytes.Contains(review.Body.Bytes(), []byte("thread_secret")) {
+		t.Fatalf("admin review = %d %s", review.Code, review.Body.String())
+	}
+	mismatch := serveAIReadinessTestRequest(adminServer, adminOrigin, http.MethodPost, "/_redeven_proxy/api/ai/maintenance/orphan_roots/adopt", []byte(`{"thread_id":"thread_secret","endpoint_id":"env_other","namespace_public_id":"ns_a","model_id":"provider/model","permission_type":"approval_required","working_dir":"/workspace"}`))
+	if mismatch.Code != http.StatusForbidden {
+		t.Fatalf("cross-endpoint adoption status = %d, body=%s", mismatch.Code, mismatch.Body.String())
+	}
+	namespaceMismatch := serveAIReadinessTestRequest(adminServer, adminOrigin, http.MethodPost, "/_redeven_proxy/api/ai/maintenance/orphan_roots/adopt", []byte(`{"thread_id":"thread_secret","endpoint_id":"env_a","namespace_public_id":"ns_other","model_id":"provider/model","permission_type":"approval_required","working_dir":"/workspace"}`))
+	if namespaceMismatch.Code != http.StatusForbidden {
+		t.Fatalf("cross-namespace adoption status = %d, body=%s", namespaceMismatch.Code, namespaceMismatch.Body.String())
+	}
+	adopted := serveAIReadinessTestRequest(adminServer, adminOrigin, http.MethodPost, "/_redeven_proxy/api/ai/maintenance/orphan_roots/adopt", []byte(`{"thread_id":"thread_secret","endpoint_id":"env_a","namespace_public_id":"ns_a","model_id":"provider/model","permission_type":"approval_required","working_dir":"/workspace"}`))
+	if adopted.Code != http.StatusOK {
+		t.Fatalf("explicit adoption status = %d, body=%s", adopted.Code, adopted.Body.String())
+	}
+	deleted := serveAIReadinessTestRequest(adminServer, adminOrigin, http.MethodPost, "/_redeven_proxy/api/ai/maintenance/orphan_roots/delete", []byte(`{"thread_id":"thread_secret"}`))
+	if deleted.Code != http.StatusOK {
+		t.Fatalf("explicit deletion status = %d, body=%s", deleted.Code, deleted.Body.String())
+	}
+	provider.mu.Lock()
+	adoptCount, deleteCount := provider.adoptCount, provider.deleteCount
+	provider.mu.Unlock()
+	if adoptCount != 1 || deleteCount != 1 {
+		t.Fatalf("maintenance calls = adopt %d delete %d", adoptCount, deleteCount)
+	}
+	if acquires, releases, _ := provider.counts(); acquires != 0 || releases != 0 {
+		t.Fatalf("maintenance routes bypassed dedicated provider capability: acquires=%d releases=%d", acquires, releases)
 	}
 }
 

@@ -13,6 +13,8 @@
       "migratingDescription": "正在进行兼容的数据更新。Redeven 的其他工具仍可使用。",
       "verifyingTitle": "正在验证 Agent 数据",
       "verifyingDescription": "Redeven 正在确认更新后的 Floret Store，完成后 Flower 才会可用。",
+      "degradedTitle": "Flower 需要审查线程归属",
+      "degradedDescription": "部分规范 Agent 线程缺少明确的主机设置。已完成配置的现有线程仍可使用。",
       "busyTitle": "Agent 数据暂时正在使用中",
       "busyDescription": "另一个进程正在使用 Floret Store。Redeven 将再次检查，不会强制访问。",
       "updateRequiredTitle": "Redeven 需要更新",
@@ -42,7 +44,8 @@
       "unopened": "此检查完成前，Flower 将保持关闭。Redeven 不会重建任何 Agent 对话状态。",
       "preserved": "现有 Floret Store 已原样保留。",
       "rolledBack": "本次更新尝试已回滚，原有 Floret Store 保持不变。",
-      "committed": "数据更新已提交。Redeven 会再次检查，然后再打开 Flower。"
+      "committed": "数据更新已提交。Redeven 会再次检查，然后再打开 Flower。",
+      "degraded": "Redeven 未推断或创建受影响线程的主机授权。"
     },
     "actions": {
       "retry": "再次检查",
@@ -50,6 +53,7 @@
       "nextCheck": "{seconds} 秒后再次检查",
       "openUpdate": "打开运行时更新",
       "openPermissions": "打开环境访问设置",
+      "reviewIssues": "审查",
       "showDiagnostics": "查看诊断信息",
       "hideDiagnostics": "隐藏诊断信息",
       "copyDiagnostics": "复制诊断信息",
@@ -65,10 +69,12 @@
       "status": "状态",
       "statusChecking": "检查中",
       "statusReady": "就绪",
+      "statusDegraded": "需要审查",
       "statusBlocked": "受阻",
       "retry": "允许再次检查",
       "committed": "数据更新已提交",
       "rolledBack": "数据更新已回滚",
+      "issueCount": "归属问题",
       "yes": "是",
       "no": "否"
     },
@@ -82,7 +88,20 @@
       "upstreamDescription": "每个上游组件都保有自己的维护权限。",
       "notChecked": "未在此处检查",
       "noIssue": "未检测到可用性问题",
-      "refreshing": "正在刷新..."
+      "refreshing": "正在刷新...",
+      "reviewing": "正在加载审查结果...",
+      "reviewTitle": "缺少主机设置的规范线程",
+      "reviewClear": "所有归属问题均已解决。",
+      "reviewFailed": "无法加载归属审查结果。",
+      "adoptFailed": "未能应用明确的主机绑定。",
+      "deleteFailed": "未能删除规范线程。",
+      "endpoint": "环境 ID",
+      "namespace": "命名空间 ID",
+      "model": "模型 ID",
+      "permission": "权限",
+      "workingDirectory": "工作目录",
+      "adopt": "按这些设置接管",
+      "confirmDelete": "确认删除规范线程"
     }
   },
   "common": {

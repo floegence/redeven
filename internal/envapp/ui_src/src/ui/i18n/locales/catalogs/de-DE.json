@@ -13,6 +13,8 @@
       "migratingDescription": "Eine kompatible Datenaktualisierung wird ausgeführt. Andere Redeven-Werkzeuge bleiben verfügbar.",
       "verifyingTitle": "Agent-Daten werden verifiziert",
       "verifyingDescription": "Redeven prüft den aktualisierten Floret Store, bevor Flower verfügbar wird.",
+      "degradedTitle": "Flower benötigt eine Prüfung der Thread-Zuordnung",
+      "degradedDescription": "Für einige kanonische Agent-Threads fehlen ausdrückliche Host-Einstellungen. Bereits konfigurierte Threads bleiben verfügbar.",
       "busyTitle": "Agent-Daten werden vorübergehend verwendet",
       "busyDescription": "Ein anderer Prozess verwendet den Floret Store. Redeven prüft erneut, ohne den Zugriff zu erzwingen.",
       "updateRequiredTitle": "Redeven muss aktualisiert werden",
@@ -42,7 +44,8 @@
       "unopened": "Flower bleibt geschlossen, bis diese Prüfung abgeschlossen ist. Redeven rekonstruiert keinen Zustand von Agent-Unterhaltungen.",
       "preserved": "Der vorhandene Floret Store wurde beibehalten.",
       "rolledBack": "Der Aktualisierungsversuch wurde zurückgesetzt und der vorherige Floret Store bleibt bestehen.",
-      "committed": "Eine Datenaktualisierung wurde festgeschrieben. Redeven prüft sie erneut, bevor Flower geöffnet wird."
+      "committed": "Eine Datenaktualisierung wurde festgeschrieben. Redeven prüft sie erneut, bevor Flower geöffnet wird.",
+      "degraded": "Redeven hat keine Host-Berechtigung für die betroffenen Threads abgeleitet oder erstellt."
     },
     "actions": {
       "retry": "Erneut prüfen",
@@ -50,6 +53,7 @@
       "nextCheck": "Nächste Prüfung in {seconds} s",
       "openUpdate": "Laufzeitaktualisierungen öffnen",
       "openPermissions": "Umgebungszugriff öffnen",
+      "reviewIssues": "Prüfen",
       "showDiagnostics": "Diagnosedaten anzeigen",
       "hideDiagnostics": "Diagnosedaten ausblenden",
       "copyDiagnostics": "Diagnosedaten kopieren",
@@ -65,10 +69,12 @@
       "status": "Status",
       "statusChecking": "Wird geprüft",
       "statusReady": "Bereit",
+      "statusDegraded": "Prüfung erforderlich",
       "statusBlocked": "Blockiert",
       "retry": "Erneute Prüfung zulässig",
       "committed": "Datenaktualisierung festgeschrieben",
       "rolledBack": "Datenaktualisierung zurückgesetzt",
+      "issueCount": "Zuordnungsprobleme",
       "yes": "Ja",
       "no": "Nein"
     },
@@ -82,7 +88,20 @@
       "upstreamDescription": "Jede vorgelagerte Komponente behält ihre eigene Wartungshoheit.",
       "notChecked": "Hier nicht geprüft",
       "noIssue": "Kein Verfügbarkeitsproblem erkannt",
-      "refreshing": "Wird aktualisiert..."
+      "refreshing": "Wird aktualisiert...",
+      "reviewing": "Prüfung wird geladen...",
+      "reviewTitle": "Kanonische Threads ohne Host-Einstellungen",
+      "reviewClear": "Alle Zuordnungsprobleme sind behoben.",
+      "reviewFailed": "Die Zuordnungsprüfung konnte nicht geladen werden.",
+      "adoptFailed": "Die ausdrückliche Host-Zuordnung wurde nicht übernommen.",
+      "deleteFailed": "Der kanonische Thread wurde nicht gelöscht.",
+      "endpoint": "Umgebungs-ID",
+      "namespace": "Namespace-ID",
+      "model": "Modell-ID",
+      "permission": "Berechtigung",
+      "workingDirectory": "Arbeitsverzeichnis",
+      "adopt": "Mit diesen Einstellungen übernehmen",
+      "confirmDelete": "Löschen des kanonischen Threads bestätigen"
     }
   },
   "common": {

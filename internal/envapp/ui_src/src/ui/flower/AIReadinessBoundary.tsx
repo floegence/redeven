@@ -21,6 +21,8 @@ export type AIReadinessBoundaryProps = Readonly<{
   presentation?: 'full' | 'companion';
   onOpenUpdate: () => void;
   onOpenPermissions: () => void;
+  onReviewIssues: () => void;
+  canReviewIssues?: boolean;
   canRetryGeneration: boolean;
   focusEnabled: boolean;
   children: JSX.Element;
@@ -57,7 +59,7 @@ export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
   createEffect(() => {
     const state = props.controller.snapshot().state;
     setBusyVisible(false);
-    if (state === 'ready' || state === 'blocked') return;
+    if (state === 'ready' || state === 'degraded' || state === 'blocked') return;
     const timer = window.setTimeout(() => setBusyVisible(true), 150);
     onCleanup(() => window.clearTimeout(timer));
   });
@@ -76,14 +78,14 @@ export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
   });
 
   createEffect(() => {
-    const ready = props.controller.snapshot().state === 'ready';
+    const ready = props.controller.snapshot().state === 'ready' || props.controller.snapshot().state === 'degraded';
     if (props.focusEnabled && !ready && wasReady && surfaceRoot?.contains(document.activeElement)) {
       previousSurfaceFocus = document.activeElement as HTMLElement;
       restoreSurfaceFocus = true;
     }
     if (props.focusEnabled && !ready && (props.controller.snapshot().state === 'blocked' || busyVisible()) && !maintenanceFocused && focusStillBelongsToBoundary()) {
       queueMicrotask(() => {
-        if (!props.focusEnabled || props.controller.snapshot().state === 'ready' || !focusStillBelongsToBoundary()) return;
+        if (!props.focusEnabled || props.controller.snapshot().state === 'ready' || props.controller.snapshot().state === 'degraded' || !focusStillBelongsToBoundary()) return;
         maintenanceFocused = true;
         maintenanceHeading?.focus({ preventScroll: true });
       });
@@ -128,6 +130,9 @@ export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
       case 'open_permissions':
         props.onOpenPermissions();
         return;
+      case 'review_issues':
+        if (props.canReviewIssues) props.onReviewIssues();
+        return;
       case 'show_diagnostics':
         toggleDiagnostics();
         return;
@@ -144,6 +149,8 @@ export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
         return i18n.t('aiReadiness.actions.openUpdate');
       case 'open_permissions':
         return i18n.t('aiReadiness.actions.openPermissions');
+      case 'review_issues':
+        return i18n.t('aiReadiness.actions.reviewIssues');
       case 'show_diagnostics':
         return diagnosticsOpen()
           ? i18n.t('aiReadiness.actions.hideDiagnostics')
@@ -174,6 +181,8 @@ export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
         return <Download class="h-4 w-4" aria-hidden="true" />;
       case 'open_permissions':
         return <ShieldCheck class="h-4 w-4" aria-hidden="true" />;
+      case 'review_issues':
+        return <AlertTriangle class="h-4 w-4" aria-hidden="true" />;
       case 'show_diagnostics':
         return <ChevronDown class={`h-4 w-4 transition-transform motion-reduce:transition-none ${diagnosticsOpen() ? 'rotate-180' : ''}`} aria-hidden="true" />;
     }
@@ -211,9 +220,20 @@ export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
         ref={surfaceRoot}
         class="h-full min-h-0 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
         tabindex={-1}
-        hidden={props.controller.snapshot().state !== 'ready'}
+        hidden={props.controller.snapshot().state !== 'ready' && props.controller.snapshot().state !== 'degraded'}
         data-ai-readiness-content
       >
+        <Show when={props.controller.snapshot().state === 'degraded'}>
+          <aside class="ai-readiness-degraded" role="status" aria-label={projection().title}>
+            <AlertTriangle class="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span class="min-w-0 flex-1">{projection().description}</span>
+            <Show when={props.canReviewIssues}>
+              <button type="button" class={`ai-readiness-degraded__review ${INTERACTIVE_CLASS}`} onClick={props.onReviewIssues}>
+                {i18n.t('aiReadiness.actions.reviewIssues')}
+              </button>
+            </Show>
+          </aside>
+        </Show>
         {props.children}
       </div>
 

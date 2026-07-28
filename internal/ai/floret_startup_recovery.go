@@ -29,6 +29,7 @@ type floretRootThreadInventory interface {
 
 type floretStartupRecoverySettingsStore interface {
 	ListThreadSettingsForRecoveryPage(context.Context, threadstore.ThreadSettingsRecoveryCursor, int) ([]threadstore.ThreadSettings, threadstore.ThreadSettingsRecoveryCursor, bool, error)
+	ListPendingCanonicalRootOwnershipClaims(context.Context) ([]string, error)
 }
 
 type floretRootThreadInventoryReconciliation struct {
@@ -54,6 +55,21 @@ func reconcileFloretRootThreadInventory(ctx context.Context, db floretStartupRec
 	}
 	ctx = ctxOrBackground(ctx)
 	productRoots := make(map[flruntime.ThreadID]struct{})
+	pendingOwnershipClaims := make(map[flruntime.ThreadID]struct{})
+	claims, err := db.ListPendingCanonicalRootOwnershipClaims(ctx)
+	if err != nil {
+		return floretRootThreadInventoryReconciliation{}, fmt.Errorf("list pending canonical root ownership claims: %w", err)
+	}
+	for _, rawThreadID := range claims {
+		threadID := flruntime.ThreadID(strings.TrimSpace(rawThreadID))
+		if threadID == "" || string(threadID) != rawThreadID {
+			return floretRootThreadInventoryReconciliation{}, errors.New("pending canonical root ownership contains an invalid thread identity")
+		}
+		if _, duplicate := pendingOwnershipClaims[threadID]; duplicate {
+			return floretRootThreadInventoryReconciliation{}, fmt.Errorf("pending canonical root ownership contains duplicate thread %q", threadID)
+		}
+		pendingOwnershipClaims[threadID] = struct{}{}
+	}
 	var settingsCursor threadstore.ThreadSettingsRecoveryCursor
 	for {
 		settings, next, hasMore, err := db.ListThreadSettingsForRecoveryPage(ctx, settingsCursor, 200)
@@ -99,7 +115,9 @@ func reconcileFloretRootThreadInventory(ctx context.Context, db floretStartupRec
 			}
 			canonicalRoots[thread.ID] = struct{}{}
 			result.RootThreadIDs = append(result.RootThreadIDs, thread.ID)
-			if _, exists := productRoots[thread.ID]; !exists {
+			_, hasSettings := productRoots[thread.ID]
+			_, hasPendingOwnership := pendingOwnershipClaims[thread.ID]
+			if !hasSettings && !hasPendingOwnership {
 				result.OrphanedRootThreadIDs = append(result.OrphanedRootThreadIDs, thread.ID)
 			}
 		}
@@ -282,6 +300,9 @@ func (s *Service) completePostTurnStartupRecovery(ctx context.Context) ([]queued
 	targets, err := s.recoverQueuedTurnCommandsForStartup(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("recover queued turn admissions: %w", err)
+	}
+	if _, err := s.ReconcileCanonicalRootOwnership(ctx); err != nil {
+		return nil, fmt.Errorf("reconcile canonical roots after pending operation recovery: %w", err)
 	}
 	return targets, nil
 }

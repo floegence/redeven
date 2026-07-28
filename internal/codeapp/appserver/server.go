@@ -3577,6 +3577,117 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusAccepted, apiResp{OK: true, Data: g.aiReadinessSnapshot()})
 		return
 
+	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/maintenance/orphan_roots":
+		meta, ok := g.requirePermission(w, r, requiredPermissionAdmin)
+		if !ok {
+			return
+		}
+		maintenance, ok := g.aiProvider.(AIOrphanRootMaintenanceProvider)
+		if !ok {
+			writeAIServiceUnavailable(w, g.aiReadinessSnapshot())
+			return
+		}
+		review, err := maintenance.ReviewOrphanCanonicalRoots(r.Context())
+		if err != nil {
+			g.appendAudit(meta, "ai_orphan_root_review", "failure", nil, err)
+			writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: "failed to review Agent maintenance issues"})
+			return
+		}
+		g.appendAudit(meta, "ai_orphan_root_review", "success", map[string]any{"issue_count": review.IssueCount}, nil)
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: review})
+		return
+
+	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/maintenance/orphan_roots/adopt":
+		meta, ok := g.requirePermission(w, r, requiredPermissionAdmin)
+		if !ok {
+			return
+		}
+		maintenance, ok := g.aiProvider.(AIOrphanRootMaintenanceProvider)
+		if !ok {
+			writeAIServiceUnavailable(w, g.aiReadinessSnapshot())
+			return
+		}
+		var body struct {
+			ThreadID          string `json:"thread_id"`
+			EndpointID        string `json:"endpoint_id"`
+			NamespacePublicID string `json:"namespace_public_id"`
+			ModelID           string `json:"model_id"`
+			PermissionType    string `json:"permission_type"`
+			WorkingDir        string `json:"working_dir"`
+		}
+		dec := json.NewDecoder(r.Body)
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&body); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		if err := dec.Decode(&struct{}{}); err != io.EOF {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		if strings.TrimSpace(body.EndpointID) != strings.TrimSpace(meta.EndpointID) {
+			writeJSON(w, http.StatusForbidden, apiResp{OK: false, Error: "environment identity mismatch"})
+			return
+		}
+		if strings.TrimSpace(body.NamespacePublicID) != strings.TrimSpace(meta.NamespacePublicID) {
+			writeJSON(w, http.StatusForbidden, apiResp{OK: false, Error: "namespace identity mismatch"})
+			return
+		}
+		request := ai.AdoptOrphanCanonicalRootRequest{
+			ThreadID: strings.TrimSpace(body.ThreadID), EndpointID: strings.TrimSpace(body.EndpointID),
+			NamespacePublicID: strings.TrimSpace(body.NamespacePublicID), ModelID: strings.TrimSpace(body.ModelID),
+			PermissionType: strings.TrimSpace(body.PermissionType), WorkingDir: strings.TrimSpace(body.WorkingDir),
+			OperatorPublicID: strings.TrimSpace(meta.UserPublicID), OperatorEmail: strings.TrimSpace(meta.UserEmail),
+		}
+		issueCount, err := maintenance.AdoptOrphanCanonicalRoot(r.Context(), request)
+		auditDetail := map[string]any{"thread_id": request.ThreadID, "endpoint_id": request.EndpointID}
+		if err != nil {
+			g.appendAudit(meta, "ai_orphan_root_adopt", "failure", auditDetail, err)
+			status := http.StatusConflict
+			if !errors.Is(err, ai.ErrCanonicalRootNotOrphaned) && !errors.Is(err, ai.ErrCanonicalRootIdentityConflict) {
+				status = http.StatusBadRequest
+			}
+			writeJSON(w, status, apiResp{OK: false, Error: "orphan Agent thread adoption was not applied"})
+			return
+		}
+		g.appendAudit(meta, "ai_orphan_root_adopt", "success", map[string]any{"thread_id": request.ThreadID, "endpoint_id": request.EndpointID, "issue_count": issueCount}, nil)
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"issue_count": issueCount}})
+		return
+
+	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/maintenance/orphan_roots/delete":
+		meta, ok := g.requirePermission(w, r, requiredPermissionAdmin)
+		if !ok {
+			return
+		}
+		maintenance, ok := g.aiProvider.(AIOrphanRootMaintenanceProvider)
+		if !ok {
+			writeAIServiceUnavailable(w, g.aiReadinessSnapshot())
+			return
+		}
+		var body struct {
+			ThreadID string `json:"thread_id"`
+		}
+		dec := json.NewDecoder(r.Body)
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&body); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		if err := dec.Decode(&struct{}{}); err != io.EOF {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		request := ai.DeleteOrphanCanonicalRootRequest{ThreadID: strings.TrimSpace(body.ThreadID), OperatorPublicID: strings.TrimSpace(meta.UserPublicID)}
+		issueCount, err := maintenance.DeleteOrphanCanonicalRoot(r.Context(), request)
+		if err != nil {
+			g.appendAudit(meta, "ai_orphan_root_delete", "failure", map[string]any{"thread_id": request.ThreadID}, err)
+			writeJSON(w, http.StatusConflict, apiResp{OK: false, Error: "orphan Agent thread deletion was not applied"})
+			return
+		}
+		g.appendAudit(meta, "ai_orphan_root_delete", "success", map[string]any{"thread_id": request.ThreadID, "issue_count": issueCount}, nil)
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"issue_count": issueCount}})
+		return
+
 	case r.Method == http.MethodPut && r.URL.Path == "/_redeven_proxy/api/ai/default_permission":
 		meta, ok := g.requirePermission(w, r, requiredPermissionAdmin)
 		if !ok {

@@ -53,7 +53,10 @@ func (a *Agent) RuntimeServiceSnapshot() runtimeservice.Snapshot {
 	}
 	var aiSvcAvailable bool
 	var aiTaskCount int
+	aiReadiness := runtimeservice.AIReadiness{State: "unavailable"}
 	if a.code != nil {
+		readiness := a.code.AIReadiness()
+		aiReadiness = runtimeservice.AIReadiness{State: string(readiness.State), ReasonCode: readiness.ReasonCode, IssueCount: readiness.IssueCount}
 		ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
 		aiSvc, leaseCtx, _, release, err := a.code.AcquireAIService(ctx)
 		if err == nil && aiSvc != nil && release != nil {
@@ -86,6 +89,7 @@ func (a *Agent) RuntimeServiceSnapshot() runtimeservice.Snapshot {
 		DesktopManaged:   a.desktopManaged,
 		EffectiveRunMode: strings.TrimSpace(a.effectiveRunMode),
 		RemoteEnabled:    a.remoteEnabled,
+		AIReadiness:      aiReadiness,
 		ActiveWorkload: runtimeservice.Workload{
 			TerminalCount:    terminalCount,
 			SessionCount:     len(sessions),

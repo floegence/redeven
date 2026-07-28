@@ -2085,7 +2085,7 @@
         "title": "Flower storage ownership and migrations",
         "type": "Storage Contract"
       },
-      "body_length": 8677,
+      "body_length": 10138,
       "summary": "- Authority: Floret owns admitted Agent state. Redeven owns host settings, upload bytes, unadmitted commands, routing/read state, audit, and cross-store operation intent.\n- Outcome: schema v8 replaces durable editable drafts with capability-bound upload staging. Editable text, references, and composer preferences exist only in the current connection's Flower coordinator.\n- Invariants: connections cannot recover or conflict with each other's drafts; staging rows contain no editable message or reference projection; Send atomically freezes an unadmitted command before Floret admission.\n- Failure boundary: unsupported schema, drift, malformed legacy drafts, uncertain canonical reads, membership mismatch, or failed migration effects stop startup without repair or substitute database creation.",
       "sections": [
         {
@@ -2099,8 +2099,8 @@
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "The repository-wide automatic migration and database ownership contract is defined by [Database schema migration ownership](../architecture/database-schema-migrations.md). Redeven migration code may call only public Floret maintenance APIs and must not inspect or alter Floret storage.\n\nAn upload staging scope is a byte-retention capability, not a draft record or authorization for canonical history. Product-local reference chips remain connection memory until Send. After admission, the ordered canonical references and attachment membership come only from Floret public snapshots; paths and opaque resource identities are never filesystem authorization.\n\nFresh product stores have an exact reviewed table inventory, and `ai_thread_settings` has an exact reviewed column inventory. Any additional table or setting column is a boundary change that must fail the schema ownership test until its product responsibility is reviewed. AST and reflection checks separately keep removed Agent-shaped declarations, serialization tags, and durable shadow JSON keys out of production code.",
-          "char_count": 1081
+          "body": "The repository-wide automatic migration and database ownership contract is defined by [Database schema migration ownership](../architecture/database-schema-migrations.md). Redeven migration code may call only public Floret maintenance APIs and must not inspect or alter Floret storage.\n\nAn upload staging scope is a byte-retention capability, not a draft record or authorization for canonical history. Product-local reference chips remain connection memory until Send. After admission, the ordered canonical references and attachment membership come only from Floret public snapshots; paths and opaque resource identities are never filesystem authorization.\n\nThe checked-in v2-through-v8 schema manifest is independent of the DDL builders. It freezes every `sqlite_master.sql` row, `table_xinfo`, `index_list`, and `index_xinfo` row, including automatic unique indexes, triggers, CHECK clauses, and UNIQUE clauses. Runtime preflight and final verification compare real historical and fresh databases against that manifest, so a builder cannot redefine its own expected shape. Migration tests additionally require every supported historical schema to reach the exact reviewed current schema.\n\nThe repository durable-sink registry is a closed set over production Go, SQL, TypeScript, TSX, Desktop, JSON/file, Web Storage, IndexedDB, and Cache Storage writes. Each discovered sink file is bound to its complete source digest, sink kinds, owner, authority, data classes, and applicable table, key, codec, and DTO inventory. A new sink, changed reviewed file, stale entry, unsupported authority, canonical Agent data class, or shadow table fails the Floret dependency boundary gate. Legal entries remain limited to product configuration and resources, unadmitted command and cross-store coordination, permission/security audit, diagnostics, user effects, upstream adapters, and UI preferences or caches.",
+          "char_count": 1898
         }
       ],
       "evidence": [
@@ -2150,14 +2150,34 @@
           "description": "Migration tests enforce contiguous upgrades, rollback, drift rejection, and unsupported-version rejection."
         },
         {
+          "id": "redeven:internal/ai/threadstore/reviewed_schema_manifest.json:0:static v2-through-v8 sqlite object, column, index, trigger, check, and unique contracts.",
+          "source": "redeven:internal/ai/threadstore/reviewed_schema_manifest.json",
+          "description": "Static v2-through-v8 SQLite object, column, index, trigger, CHECK, and UNIQUE contracts."
+        },
+        {
+          "id": "redeven:internal/ai/threadstore/reviewed_schema_test.go:0:fresh, historical, migration-equivalence, constraint-drift, and index-drift checks.",
+          "source": "redeven:internal/ai/threadstore/reviewed_schema_test.go",
+          "description": "Fresh, historical, migration-equivalence, constraint-drift, and index-drift checks."
+        },
+        {
           "id": "redeven:internal/ai/agent_shadow_boundary_test.go:0:ast and reflection checks reject removed agent contracts and durable shadow state.",
           "source": "redeven:internal/ai/agent_shadow_boundary_test.go",
           "description": "AST and reflection checks reject removed Agent contracts and durable shadow state."
         },
         {
-          "id": "redeven:scripts/check_floret_dependency_boundary.sh:0:the boundary gate rejects floret storage access and local dependency wiring.",
+          "id": "redeven:scripts/contracts/durable_sink_registry.json:0:reviewed closed inventory of production durable sink files and their ownership metadata.",
+          "source": "redeven:scripts/contracts/durable_sink_registry.json",
+          "description": "Reviewed closed inventory of production durable sink files and their ownership metadata."
+        },
+        {
+          "id": "redeven:internal/boundarycontract/durable_sinks.go:0:cross-language discovery, exact digest enforcement, and forbidden authority validation.",
+          "source": "redeven:internal/boundarycontract/durable_sinks.go",
+          "description": "Cross-language discovery, exact digest enforcement, and forbidden authority validation."
+        },
+        {
+          "id": "redeven:scripts/check_floret_dependency_boundary.sh:0:the boundary gate rejects floret storage access, local dependency wiring, and durable sinks outside the reviewed closed set.",
           "source": "redeven:scripts/check_floret_dependency_boundary.sh",
-          "description": "The boundary gate rejects Floret storage access and local dependency wiring."
+          "description": "The boundary gate rejects Floret storage access, local dependency wiring, and durable sinks outside the reviewed closed set."
         }
       ],
       "snippet": "- Authority: Floret owns admitted Agent state. Redeven owns host settings, upload bytes, unadmitted commands, routing/read state, audit, and cross-store operation intent. - Outcome: schema v8 replaces durable editable drafts with capability",
@@ -9517,5 +9537,5 @@
       ]
     }
   ],
-  "source_sha256": "3e0a35a615b3d125054c17da93463cc2cfb7c7e7d9bd28e19fcc9997d7f4aff2"
+  "source_sha256": "3aa2eb379d67bd53c477621e4c5d0243fcb0cd882045c0dac8640b4cc4082128"
 }

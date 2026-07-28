@@ -8,6 +8,9 @@ import { I18nProvider } from '../../i18n';
 import type { AIReadinessController, AIReadinessSnapshot } from '../../flower/aiReadiness';
 import { AIReadinessSettingsSection } from './AIReadinessSettingsSection';
 
+const fetchLocalApiJSON = vi.hoisted(() => vi.fn());
+vi.mock('../../services/localApi', () => ({ fetchLocalApiJSON }));
+
 function blockedSnapshot(): AIReadinessSnapshot {
   return {
     state: 'blocked',
@@ -33,8 +36,8 @@ function deferred<T>(): Readonly<{
   return { promise, resolve, reject };
 }
 
-function mountSettings(refreshResult?: ReturnType<typeof deferred<AIReadinessSnapshot>>) {
-  const [snapshot, setSnapshot] = createSignal(blockedSnapshot());
+function mountSettings(refreshResult?: ReturnType<typeof deferred<AIReadinessSnapshot>>, initial = blockedSnapshot()) {
+  const [snapshot, setSnapshot] = createSignal(initial);
   const [loading, setLoading] = createSignal(false);
   const refresh = vi.fn(() => {
     setLoading(true);
@@ -59,7 +62,15 @@ function mountSettings(refreshResult?: ReturnType<typeof deferred<AIReadinessSna
   document.body.appendChild(host);
   const dispose = render(() => (
     <I18nProvider>
-      <AIReadinessSettingsSection controller={controller} />
+      <AIReadinessSettingsSection
+        controller={controller}
+        canAdmin
+        endpointID="env_a"
+        namespacePublicID="ns_a"
+        modelID="provider/model"
+        permissionType="approval_required"
+        workingDir="/workspace"
+      />
     </I18nProvider>
   ), host);
   return { host, dispose, refresh };
@@ -79,9 +90,34 @@ async function flushMicrotasks(): Promise<void> {
 afterEach(() => {
   document.body.replaceChildren();
   vi.restoreAllMocks();
+  fetchLocalApiJSON.mockReset();
 });
 
 describe('AIReadinessSettingsSection', () => {
+  it('loads the admin orphan review and submits every explicit host setting', async () => {
+    fetchLocalApiJSON
+      .mockResolvedValueOnce({ issue_count: 1, items: [{ thread_id: 'thread_orphan', phase: 'idle', status: 'idle', can_append_message: true, recoverable: false }] })
+      .mockResolvedValueOnce({ issue_count: 0 })
+      .mockResolvedValueOnce({ issue_count: 0, items: [] });
+    const fixture = mountSettings(undefined, {
+      state: 'degraded', reason_code: 'host_thread_settings_missing', issue_count: 1,
+      retryable: false, safe_to_retry: false, committed: false, rolled_back: false,
+    });
+    buttonWithText(fixture.host, 'Review').click();
+    await flushMicrotasks();
+    expect(fixture.host.querySelector('[data-orphan-thread-id="thread_orphan"]')).not.toBeNull();
+    buttonWithText(fixture.host, 'Adopt with these settings').click();
+    await flushMicrotasks();
+    expect(fetchLocalApiJSON).toHaveBeenNthCalledWith(2, '/_redeven_proxy/api/ai/maintenance/orphan_roots/adopt', {
+      method: 'POST',
+      body: JSON.stringify({
+        thread_id: 'thread_orphan', endpoint_id: 'env_a', namespace_public_id: 'ns_a',
+        model_id: 'provider/model', permission_type: 'approval_required', working_dir: '/workspace',
+      }),
+    });
+    fixture.dispose();
+  });
+
   it('keeps three ownership groups distinct and marks non-Floret stores as not checked', () => {
     const fixture = mountSettings();
     const rows = fixture.host.querySelectorAll('.redeven-setting-row');

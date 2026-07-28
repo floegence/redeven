@@ -48,7 +48,9 @@ The repository-wide automatic migration and database ownership contract is defin
 
 An upload staging scope is a byte-retention capability, not a draft record or authorization for canonical history. Product-local reference chips remain connection memory until Send. After admission, the ordered canonical references and attachment membership come only from Floret public snapshots; paths and opaque resource identities are never filesystem authorization.
 
-Fresh product stores have an exact reviewed table inventory, and `ai_thread_settings` has an exact reviewed column inventory. Any additional table or setting column is a boundary change that must fail the schema ownership test until its product responsibility is reviewed. AST and reflection checks separately keep removed Agent-shaped declarations, serialization tags, and durable shadow JSON keys out of production code.
+The checked-in v2-through-v8 schema manifest is independent of the DDL builders. It freezes every `sqlite_master.sql` row, `table_xinfo`, `index_list`, and `index_xinfo` row, including automatic unique indexes, triggers, CHECK clauses, and UNIQUE clauses. Runtime preflight and final verification compare real historical and fresh databases against that manifest, so a builder cannot redefine its own expected shape. Migration tests additionally require every supported historical schema to reach the exact reviewed current schema.
+
+The repository durable-sink registry is a closed set over production Go, SQL, TypeScript, TSX, Desktop, JSON/file, Web Storage, IndexedDB, and Cache Storage writes. Each discovered sink file is bound to its complete source digest, sink kinds, owner, authority, data classes, and applicable table, key, codec, and DTO inventory. A new sink, changed reviewed file, stale entry, unsupported authority, canonical Agent data class, or shadow table fails the Floret dependency boundary gate. Legal entries remain limited to product configuration and resources, unadmitted command and cross-store coordination, permission/security audit, diagnostics, user effects, upstream adapters, and UI preferences or caches.
 
 # Evidence
 
@@ -61,5 +63,9 @@ Fresh product stores have an exact reviewed table inventory, and `ai_thread_sett
 - `redeven:internal/flower_ui/src/composer/createFlowerComposerDraftCoordinator.ts` - Editable composer scopes are connection-local memory shared by shell surfaces.
 - `redeven:internal/ai/threadstore/schema_v6_test.go` - Fresh v8 tests enforce staging-scope presence and composer-draft absence.
 - `redeven:internal/ai/threadstore/schema_migration_test.go` - Migration tests enforce contiguous upgrades, rollback, drift rejection, and unsupported-version rejection.
+- `redeven:internal/ai/threadstore/reviewed_schema_manifest.json` - Static v2-through-v8 SQLite object, column, index, trigger, CHECK, and UNIQUE contracts.
+- `redeven:internal/ai/threadstore/reviewed_schema_test.go` - Fresh, historical, migration-equivalence, constraint-drift, and index-drift checks.
 - `redeven:internal/ai/agent_shadow_boundary_test.go` - AST and reflection checks reject removed Agent contracts and durable shadow state.
-- `redeven:scripts/check_floret_dependency_boundary.sh` - The boundary gate rejects Floret storage access and local dependency wiring.
+- `redeven:scripts/contracts/durable_sink_registry.json` - Reviewed closed inventory of production durable sink files and their ownership metadata.
+- `redeven:internal/boundarycontract/durable_sinks.go` - Cross-language discovery, exact digest enforcement, and forbidden authority validation.
+- `redeven:scripts/check_floret_dependency_boundary.sh` - The boundary gate rejects Floret storage access, local dependency wiring, and durable sinks outside the reviewed closed set.

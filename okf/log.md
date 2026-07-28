@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-07-28
+* **Boundary**: Replaced dynamic threadstore schema expectations with a checked-in v2-through-v8 manifest covering complete SQLite object SQL, columns, indexes, triggers, CHECK clauses, and UNIQUE clauses, verified against fresh, historical, and migrated databases.
+* **Boundary**: Added a repository-wide durable sink closed set for Go, SQL, TypeScript, TSX, Desktop, JSON/file, and browser persistence, with exact source digests and reviewed owner, authority, table, key, codec, and DTO metadata.
+
 ## 2026-07-27
 * **Breaking**: Removed persistent Flower composer drafts, leases, conflict/takeover recovery, and cross-connection hydration; Activity, Workbench, floating drawers, and remounts now share only one connection-local in-memory coordinator.
 * **Storage**: Advanced threadstore to schema v8 with capability-hash upload staging scopes, isolated legacy-draft migration, and atomic new-thread settings/create intent/immutable first-command/staging-claim freeze.

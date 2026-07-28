@@ -52,6 +52,19 @@ func TestApplyCompatibilityContractFillsSnapshot(t *testing.T) {
 	}
 }
 
+func TestDegradedAIReadinessKeepsEnvironmentOpenable(t *testing.T) {
+	snapshot := ApplyCompatibilityContract(Snapshot{
+		RuntimeVersion: "dev", ServiceOwner: OwnerDesktop, DesktopManaged: true,
+		AIReadiness: AIReadiness{State: "degraded", ReasonCode: "host_thread_settings_missing", IssueCount: 2},
+	})
+	if snapshot.OpenReadiness.State != OpenReadinessOpenable {
+		t.Fatalf("OpenReadiness.State = %q, want openable", snapshot.OpenReadiness.State)
+	}
+	if snapshot.AIReadiness.State != "degraded" || snapshot.AIReadiness.ReasonCode != "host_thread_settings_missing" || snapshot.AIReadiness.IssueCount != 2 {
+		t.Fatalf("AIReadiness = %#v", snapshot.AIReadiness)
+	}
+}
+
 func TestNormalizeSnapshotBlocksOpenReadinessForHardCompatibilityFailures(t *testing.T) {
 	snapshot := NormalizeSnapshot(Snapshot{
 		ProtocolVersion:      ProtocolVersion,

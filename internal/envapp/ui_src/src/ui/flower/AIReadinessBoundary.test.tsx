@@ -37,6 +37,7 @@ function mount(
   options: Readonly<{
     focusEnabled?: boolean;
     canRetryGeneration?: boolean;
+    canReviewIssues?: boolean;
     nextCheckAt?: number | null;
   }> = {},
 ) {
@@ -64,6 +65,7 @@ function mount(
   };
   const openUpdate = vi.fn();
   const openPermissions = vi.fn();
+  const reviewIssues = vi.fn();
   const host = document.createElement('div');
   document.body.appendChild(host);
   const dispose = render(() => (
@@ -72,6 +74,8 @@ function mount(
         controller={controller}
         onOpenUpdate={openUpdate}
         onOpenPermissions={openPermissions}
+        onReviewIssues={reviewIssues}
+        canReviewIssues={options.canReviewIssues ?? true}
         canRetryGeneration={options.canRetryGeneration ?? true}
         focusEnabled={options.focusEnabled ?? true}
       >
@@ -79,7 +83,7 @@ function mount(
       </AIReadinessBoundary>
     </I18nProvider>
   ), host);
-  return { host, dispose, setCurrent, retry, openUpdate, openPermissions };
+  return { host, dispose, setCurrent, retry, openUpdate, openPermissions, reviewIssues };
 }
 
 function buttonWithText(host: HTMLElement, text: string): HTMLButtonElement {
@@ -99,6 +103,28 @@ afterEach(() => {
 });
 
 describe('AIReadinessBoundary', () => {
+  it('keeps Flower usable in degraded state and exposes the review entry', () => {
+    const fixture = mount(snapshot('host_thread_settings_missing', {
+      state: 'degraded', issue_count: 2, retryable: false, safe_to_retry: false,
+    }));
+    const content = fixture.host.querySelector<HTMLElement>('[data-ai-readiness-content]');
+    expect(content?.hasAttribute('hidden')).toBe(false);
+    expect(fixture.host.querySelector('[data-testid="flower-child"]')).not.toBeNull();
+    buttonWithText(fixture.host, 'Review').click();
+    expect(fixture.reviewIssues).toHaveBeenCalledOnce();
+    expect(fixture.host.querySelector('.ai-readiness-surface')).toBeNull();
+    fixture.dispose();
+  });
+
+  it('does not expose the admin review entry to non-admin users', () => {
+    const fixture = mount(snapshot('host_thread_settings_missing', {
+      state: 'degraded', issue_count: 1, retryable: false, safe_to_retry: false,
+    }), undefined, { canReviewIssues: false });
+    expect(fixture.host.textContent).not.toContain('Review');
+    expect(fixture.host.querySelector('[data-testid="flower-child"]')).not.toBeNull();
+    fixture.dispose();
+  });
+
   it('keeps terminal, files, and settings siblings operable while Flower is blocked', () => {
     const fixture = mount(snapshot('store_integrity_error', { retryable: false, safe_to_retry: false }));
     const clicks = vi.fn();

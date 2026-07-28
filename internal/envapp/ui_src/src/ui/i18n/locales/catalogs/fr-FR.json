@@ -13,6 +13,8 @@
       "migratingDescription": "Une mise à jour de données compatible est en cours. Les autres outils Redeven restent disponibles.",
       "verifyingTitle": "Validation des données Agent",
       "verifyingDescription": "Redeven valide le Floret Store mis à jour avant de rendre Flower disponible.",
+      "degradedTitle": "Flower nécessite une vérification du rattachement à l’hôte",
+      "degradedDescription": "Certains fils Agent canoniques ne disposent pas de paramètres d’hôte explicites. Les fils déjà configurés restent disponibles.",
       "busyTitle": "Les données Agent sont temporairement utilisées",
       "busyDescription": "Un autre processus utilise le Floret Store. Redeven vérifiera de nouveau sans forcer l’accès.",
       "updateRequiredTitle": "Redeven doit être mis à jour",
@@ -42,7 +44,8 @@
       "unopened": "Flower reste fermé jusqu’à la fin de cette vérification. Redeven ne reconstruit aucun état de conversation Agent.",
       "preserved": "Le Floret Store existant a été conservé en l’état.",
       "rolledBack": "La tentative de mise à jour a fait l’objet d’un retour arrière et le Floret Store précédent reste en place.",
-      "committed": "Une mise à jour des données a été enregistrée. Redeven l’examinera de nouveau avant d’ouvrir Flower."
+      "committed": "Une mise à jour des données a été enregistrée. Redeven l’examinera de nouveau avant d’ouvrir Flower.",
+      "degraded": "Redeven n’a ni déduit ni créé d’autorisation de l’hôte pour les fils concernés."
     },
     "actions": {
       "retry": "Vérifier de nouveau",
@@ -50,6 +53,7 @@
       "nextCheck": "Prochaine vérification dans {seconds} s",
       "openUpdate": "Ouvrir les mises à jour de l’environnement d’exécution",
       "openPermissions": "Ouvrir les accès à l’environnement",
+      "reviewIssues": "Vérifier",
       "showDiagnostics": "Afficher le diagnostic",
       "hideDiagnostics": "Masquer le diagnostic",
       "copyDiagnostics": "Copier le diagnostic",
@@ -65,10 +69,12 @@
       "status": "État",
       "statusChecking": "Vérification",
       "statusReady": "Prêt",
+      "statusDegraded": "Vérification requise",
       "statusBlocked": "Bloqué",
       "retry": "Nouvelle vérification autorisée",
       "committed": "Mise à jour des données enregistrée",
       "rolledBack": "Retour arrière effectué sur la mise à jour des données",
+      "issueCount": "Problèmes de rattachement",
       "yes": "Oui",
       "no": "Non"
     },
@@ -82,7 +88,20 @@
       "upstreamDescription": "Chaque composant en amont reste responsable de sa propre maintenance.",
       "notChecked": "Non vérifié ici",
       "noIssue": "Aucun problème de disponibilité détecté",
-      "refreshing": "Actualisation..."
+      "refreshing": "Actualisation...",
+      "reviewing": "Chargement de la vérification...",
+      "reviewTitle": "Fils canoniques sans paramètres d’hôte",
+      "reviewClear": "Aucun problème de rattachement ne subsiste.",
+      "reviewFailed": "Impossible de charger la vérification du rattachement.",
+      "adoptFailed": "Le rattachement explicite à l’hôte n’a pas été appliqué.",
+      "deleteFailed": "Le fil canonique n’a pas été supprimé.",
+      "endpoint": "ID d’environnement",
+      "namespace": "ID d’espace de noms",
+      "model": "ID du modèle",
+      "permission": "Autorisation",
+      "workingDirectory": "Répertoire de travail",
+      "adopt": "Rattacher avec ces paramètres",
+      "confirmDelete": "Confirmer la suppression du fil canonique"
     }
   },
   "common": {

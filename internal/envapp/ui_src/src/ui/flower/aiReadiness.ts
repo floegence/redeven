@@ -8,6 +8,7 @@ export type AIReadinessState =
   | 'migrating'
   | 'verifying'
   | 'ready'
+  | 'degraded'
   | 'blocked';
 
 export type AIReadinessReasonCode =
@@ -23,6 +24,7 @@ export type AIReadinessReasonCode =
   | 'cancelled'
   | 'contract_error'
   | 'ai_service_startup_error'
+  | 'host_thread_settings_missing'
   | 'ai_readiness_contract_error';
 
 export type AIReadinessSnapshot = Readonly<{
@@ -32,6 +34,7 @@ export type AIReadinessSnapshot = Readonly<{
   safe_to_retry: boolean;
   committed: boolean;
   rolled_back: boolean;
+  issue_count?: number;
 }>;
 
 export type AIReadinessController = Readonly<{
@@ -75,6 +78,7 @@ const readinessStates = new Set<AIReadinessState>([
   'migrating',
   'verifying',
   'ready',
+  'degraded',
   'blocked',
 ]);
 
@@ -91,6 +95,7 @@ const readinessReasonCodes = new Set<AIReadinessReasonCode>([
   'cancelled',
   'contract_error',
   'ai_service_startup_error',
+  'host_thread_settings_missing',
   CONTRACT_ERROR_REASON,
 ]);
 
@@ -151,8 +156,24 @@ export function normalizeAIReadinessSnapshot(value: unknown): AIReadinessSnapsho
     return contractErrorSnapshot;
   }
 
+  const issueCount = value.issue_count === undefined ? 0 : value.issue_count;
+  if (!Number.isSafeInteger(issueCount) || (issueCount as number) < 0) return contractErrorSnapshot;
+
+  if (state === 'degraded') {
+    if (reasonCode !== 'host_thread_settings_missing' || issueCount === 0
+      || value.retryable || value.safe_to_retry || value.committed || value.rolled_back) {
+      return contractErrorSnapshot;
+    }
+    return Object.freeze({
+      ...unavailableSnapshot,
+      state: 'degraded',
+      reason_code: 'host_thread_settings_missing',
+      issue_count: issueCount as number,
+    });
+  }
+
   if (state !== 'blocked') {
-    if (reasonCode || value.retryable || value.safe_to_retry || value.committed || value.rolled_back) {
+    if (reasonCode || issueCount !== 0 || value.retryable || value.safe_to_retry || value.committed || value.rolled_back) {
       return contractErrorSnapshot;
     }
     return stableSnapshot(state as Exclude<AIReadinessState, 'blocked'>);

@@ -32,6 +32,9 @@ func TestWriteDesktopLaunchReportReady(t *testing.T) {
 			EffectiveRunMode: "hybrid",
 			RemoteEnabled:    true,
 			Compatibility:    runtimeservice.CompatibilityCompatible,
+			AIReadiness: runtimeservice.AIReadiness{
+				State: "degraded", ReasonCode: "host_thread_settings_missing", IssueCount: 2,
+			},
 			ActiveWorkload: runtimeservice.Workload{
 				TerminalCount: 1,
 			},
@@ -83,6 +86,9 @@ func TestWriteDesktopLaunchReportReady(t *testing.T) {
 	}
 	if report.RuntimeService.OpenReadiness.State != runtimeservice.OpenReadinessOpenable {
 		t.Fatalf("OpenReadiness.State = %q", report.RuntimeService.OpenReadiness.State)
+	}
+	if report.RuntimeService.AIReadiness.State != "degraded" || report.RuntimeService.AIReadiness.ReasonCode != "host_thread_settings_missing" || report.RuntimeService.AIReadiness.IssueCount != 2 {
+		t.Fatalf("AIReadiness = %#v, want degraded maintenance finding", report.RuntimeService.AIReadiness)
 	}
 }
 

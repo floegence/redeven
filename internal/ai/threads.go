@@ -536,13 +536,16 @@ func (s *Service) CreateThreadWithOptions(ctx context.Context, meta *session.Met
 		return nil, err
 	}
 	now := t.SettingsCreatedAtUnixMs
+	s.orphanMaintenanceMu.Lock()
 	operation, err := db.PrepareThreadCreateOperation(ctx, threadstore.PrepareThreadCreateRequest{
 		Settings: t, ExplicitTitle: strings.TrimSpace(req.Title), CreatedAtMS: now,
 	})
 	if err != nil {
+		s.orphanMaintenanceMu.Unlock()
 		return nil, err
 	}
 	t, err = s.resumeThreadCreateOperation(ctx, operation)
+	s.orphanMaintenanceMu.Unlock()
 	if err != nil {
 		return nil, fmt.Errorf("create thread: %w", err)
 	}
@@ -684,6 +687,7 @@ func (s *Service) ForkThread(ctx context.Context, meta *session.Meta, sourceThre
 	}
 	title = strings.TrimSpace(title)
 	createdAtUnixMs := time.Now().UnixMilli()
+	s.orphanMaintenanceMu.Lock()
 	operation, err := func() (*threadstore.ForkOperation, error) {
 		if s.threadMgr == nil {
 			return nil, errors.New("thread manager not ready")
@@ -729,9 +733,11 @@ func (s *Service) ForkThread(ctx context.Context, meta *session.Meta, sourceThre
 		})
 	}()
 	if err != nil {
+		s.orphanMaintenanceMu.Unlock()
 		return nil, err
 	}
 	forked, err := s.resumeThreadForkOperation(ctx, db, operation)
+	s.orphanMaintenanceMu.Unlock()
 	if err != nil {
 		return nil, err
 	}

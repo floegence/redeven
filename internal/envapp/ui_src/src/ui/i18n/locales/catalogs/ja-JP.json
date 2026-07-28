@@ -13,6 +13,8 @@
       "migratingDescription": "互換性のあるデータ更新を実行中です。Redeven のほかのツールは引き続き利用できます。",
       "verifyingTitle": "Agent データを検証しています",
       "verifyingDescription": "Flower を利用可能にする前に、Redeven が更新後の Floret Store を確認しています。",
+      "degradedTitle": "Flower のスレッド所有権を確認する必要があります",
+      "degradedDescription": "一部の正規 Agent スレッドには、明示的なホスト設定がありません。設定済みの既存スレッドは引き続き利用できます。",
       "busyTitle": "Agent データは一時的に使用中です",
       "busyDescription": "別のプロセスが Floret Store を使用しています。Redeven はアクセスを強制せず、再度確認します。",
       "updateRequiredTitle": "Redeven の更新が必要です",
@@ -42,7 +44,8 @@
       "unopened": "確認が完了するまで Flower は閉じたままです。Redeven が Agent の会話状態を再構築することはありません。",
       "preserved": "既存の Floret Store はそのまま残されています。",
       "rolledBack": "更新は元に戻され、以前の Floret Store はそのまま残っています。",
-      "committed": "データ更新は確定しました。Redeven が再確認してから Flower を開きます。"
+      "committed": "データ更新は確定しました。Redeven が再確認してから Flower を開きます。",
+      "degraded": "Redeven は対象スレッドに対するホスト認可を推測も作成もしていません。"
     },
     "actions": {
       "retry": "再確認",
@@ -50,6 +53,7 @@
       "nextCheck": "次回の確認まで {seconds} 秒",
       "openUpdate": "ランタイムの更新を開く",
       "openPermissions": "環境のアクセス設定を開く",
+      "reviewIssues": "問題を確認",
       "showDiagnostics": "診断情報を表示",
       "hideDiagnostics": "診断情報を非表示",
       "copyDiagnostics": "診断情報をコピー",
@@ -65,10 +69,12 @@
       "status": "状態",
       "statusChecking": "確認中",
       "statusReady": "準備完了",
+      "statusDegraded": "確認が必要",
       "statusBlocked": "ブロック中",
       "retry": "再確認が可能",
       "committed": "データ更新は確定済み",
       "rolledBack": "データ更新は元に戻されました",
+      "issueCount": "所有権の問題",
       "yes": "はい",
       "no": "いいえ"
     },
@@ -82,7 +88,20 @@
       "upstreamDescription": "各アップストリームコンポーネントが、それぞれのメンテナンス権限を保持します。",
       "notChecked": "ここでは未確認",
       "noIssue": "利用を妨げる問題は検出されていません",
-      "refreshing": "更新中..."
+      "refreshing": "更新中...",
+      "reviewing": "確認結果を読み込んでいます...",
+      "reviewTitle": "ホスト設定のない正規スレッド",
+      "reviewClear": "所有権に関する問題はすべて解決しました。",
+      "reviewFailed": "所有権の確認結果を読み込めませんでした。",
+      "adoptFailed": "ホストへの明示的な関連付けを適用できませんでした。",
+      "deleteFailed": "正規スレッドを削除できませんでした。",
+      "endpoint": "環境 ID",
+      "namespace": "名前空間 ID",
+      "model": "モデル ID",
+      "permission": "権限",
+      "workingDirectory": "作業ディレクトリ",
+      "adopt": "この設定で引き継ぐ",
+      "confirmDelete": "正規スレッドを削除する"
     }
   },
   "common": {
