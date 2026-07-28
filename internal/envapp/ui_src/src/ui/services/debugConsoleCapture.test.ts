@@ -154,6 +154,52 @@ describe('debugConsoleCapture', () => {
     unsubscribe();
   });
 
+  it('projects terminal list and create calls without retaining session context or paths', async () => {
+    const secret = 'terminal-context-secret-7f34';
+    const events: any[] = [];
+    const unsubscribe = subscribeDebugConsoleClientEvents((event) => events.push(event));
+    setDebugConsoleCaptureEnabled(true);
+
+    const session = {
+      id: `session-${secret}`,
+      name: `name-${secret}`,
+      working_dir: `/workspace/${secret}`,
+      created_at_ms: 1,
+      last_active_at_ms: 2,
+      is_active: true,
+      local_path_capability: { working_dir: `/trusted/${secret}` },
+      execution_context: {
+        location: {
+          kind: 'remote', phase: 'ready', label: `root@${secret}`, authority: secret,
+          working_directory: `/remote/${secret}`, source: 'osc7',
+        },
+        application: { kind: 'agent_cli', identity: 'codex', display_name: 'Codex' },
+        revision: 7,
+        updated_at_ms: 8,
+      },
+    };
+
+    await captureDebugConsoleProtocolCall({
+      typeID: redevenV1TypeIds.terminal.sessionList,
+      payload: {},
+      execute: async () => ({ sessions: [session] }),
+    });
+    await captureDebugConsoleProtocolCall({
+      typeID: redevenV1TypeIds.terminal.sessionCreate,
+      payload: { name: `name-${secret}`, working_dir: `/workspace/${secret}` },
+      execute: async () => ({ session }),
+    });
+
+    expect(events).toHaveLength(2);
+    expect(events[0]?.detail?.request?.payload).toEqual({});
+    expect(events[0]?.detail?.response?.payload).toEqual({ session_count: 1, active_session_count: 1 });
+    expect(events[1]?.detail?.request?.payload).toEqual({ has_name: true, has_working_directory: true });
+    expect(events[1]?.detail?.response?.payload).toEqual({ session_count: 1, active_session_count: 1 });
+    expect(JSON.stringify(events)).not.toContain(secret);
+
+    unsubscribe();
+  });
+
   it('does not retain terminal content embedded in protocol failure messages', async () => {
     const secret = 'terminal-failure-secret-a767';
     const encodedSecret = btoa(secret);

@@ -172,6 +172,9 @@ export function fromWireTerminalOutputActivityInfo(
 }
 
 function toTerminalSessionInfo(s: wire_terminal_session_info): TerminalSessionInfo {
+  const localCapabilityWorkingDir = typeof s?.local_path_capability?.working_dir === 'string'
+    ? s.local_path_capability.working_dir.trim()
+    : '';
   return {
     id: String(s?.id ?? ''),
     name: String(s?.name ?? ''),
@@ -187,6 +190,9 @@ function toTerminalSessionInfo(s: wire_terminal_session_info): TerminalSessionIn
       ?? { ...UNKNOWN_EXECUTION_CONTEXT, location: { ...UNKNOWN_EXECUTION_CONTEXT.location }, application: { ...UNKNOWN_EXECUTION_CONTEXT.application } },
     workState: fromWireTerminalWorkStateInfo(s?.work_state)
       ?? { ...UNKNOWN_WORK_STATE },
+    ...(localCapabilityWorkingDir
+      ? { localPathCapability: { workingDir: localCapabilityWorkingDir } }
+      : {}),
   };
 }
 

@@ -518,11 +518,38 @@ function projectTerminalHistoryResponse(response: unknown): Record<string, unkno
   };
 }
 
+function projectTerminalCatalogRequest(operation: string, payload: unknown): Record<string, unknown> {
+  if (operation === 'terminal.sessionList') return {};
+  const record = objectRecord(payload);
+  return {
+    has_name: compact(record.name).length > 0,
+    has_working_directory: compact(record.working_dir).length > 0,
+  };
+}
+
+function projectTerminalCatalogResponse(operation: string, response: unknown): Record<string, unknown> {
+  const record = objectRecord(response);
+  const sessions = operation === 'terminal.sessionCreate'
+    ? (record.session && typeof record.session === 'object' ? [record.session] : [])
+    : Array.isArray(record.sessions) ? record.sessions : [];
+  return {
+    session_count: sessions.length,
+    active_session_count: sessions.reduce((count, session) => (
+      objectRecord(session).is_active === true ? count + 1 : count
+    ), 0),
+  };
+}
+
 function projectProtocolPayload(operation: string, direction: 'request' | 'response', value: unknown): unknown {
   if (operation === 'terminal.history') {
     return direction === 'request'
       ? projectTerminalHistoryRequest(value)
       : projectTerminalHistoryResponse(value);
+  }
+  if (operation === 'terminal.sessionCreate' || operation === 'terminal.sessionList') {
+    return direction === 'request'
+      ? projectTerminalCatalogRequest(operation, value)
+      : projectTerminalCatalogResponse(operation, value);
   }
   return sanitizeUnknown(value);
 }

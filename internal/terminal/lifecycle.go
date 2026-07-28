@@ -216,6 +216,7 @@ func (m *Manager) requestSessionDelete(sessionID string, widgetID string, strict
 			return ErrSessionNotFound
 		}
 		delete(m.sessionLifecycle, sessionID)
+		delete(m.localPathCapabilities, sessionID)
 		m.mu.Unlock()
 		return nil
 	}
@@ -332,6 +333,7 @@ func (m *Manager) finalizeSessionClosed(sessionID string) string {
 	record.Lifecycle = SessionLifecycleClosed
 	record.CloseFinishedAtMs = nowUnixMs
 	delete(m.sessionLifecycle, sessionID)
+	delete(m.localPathCapabilities, sessionID)
 	m.mu.Unlock()
 
 	return reason

@@ -33,6 +33,9 @@ describe('terminal codec', () => {
           revision: 5,
           updated_at_ms: 6,
         },
+        local_path_capability: {
+          working_dir: '/workspace/repo',
+        },
       }, {
         id: 'session-2',
         name: 'legacy',
@@ -44,14 +47,17 @@ describe('terminal codec', () => {
     }).sessions.map((session) => ({
       foregroundCommand: session.foregroundCommand,
       outputActivity: session.outputActivity,
+      localPathCapability: session.localPathCapability,
     }))).toEqual([
       {
         foregroundCommand: { phase: 'running', displayName: 'top', revision: 3, updatedAtMs: 4 },
         outputActivity: { phase: 'settled', revision: 5, updatedAtMs: 6 },
+        localPathCapability: { workingDir: '/workspace/repo' },
       },
       {
         foregroundCommand: { phase: 'unknown', displayName: '', revision: 0, updatedAtMs: 0 },
         outputActivity: { phase: 'unknown', revision: 0, updatedAtMs: 0 },
+        localPathCapability: undefined,
       },
     ]);
   });
@@ -90,10 +96,46 @@ describe('terminal codec', () => {
           revision: 3,
           updated_at_ms: 4,
         },
+        local_path_capability: { working_dir: '/workspace/repo' },
       },
     }).session.outputActivity).toEqual({
       phase: 'streaming', revision: 3, updatedAtMs: 4,
     });
+  });
+
+  it('decodes the product-owned local path target without deriving it from working_dir', () => {
+    const decoded = fromWireTerminalSessionCreateResponse({
+      session: {
+        id: 'session-created',
+        name: 'agent',
+        working_dir: '/terminal-controlled/path',
+        created_at_ms: 1,
+        last_active_at_ms: 2,
+        is_active: true,
+        local_path_capability: { working_dir: '/workspace/repo' },
+      },
+    }).session;
+
+    expect(decoded.workingDir).toBe('/terminal-controlled/path');
+    expect(decoded.localPathCapability).toEqual({ workingDir: '/workspace/repo' });
+  });
+
+  it('omits missing and malformed local path capability fields', () => {
+    const base = {
+      id: 'session-created',
+      name: 'agent',
+      working_dir: '/workspace/repo',
+      created_at_ms: 1,
+      last_active_at_ms: 2,
+      is_active: true,
+    };
+    expect(fromWireTerminalSessionCreateResponse({ session: base }).session.localPathCapability).toBeUndefined();
+    expect(fromWireTerminalSessionCreateResponse({
+      session: { ...base, local_path_capability: { working_dir: '   ' } },
+    }).session.localPathCapability).toBeUndefined();
+    expect(fromWireTerminalSessionCreateResponse({
+      session: { ...base, local_path_capability: { working_dir: 42 as unknown as string } },
+    }).session.localPathCapability).toBeUndefined();
   });
 
   it('accepts complete command notifications and rejects malformed high revisions', () => {

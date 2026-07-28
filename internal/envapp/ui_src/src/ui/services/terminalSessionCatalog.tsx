@@ -3,10 +3,10 @@ import type {
   TerminalExecutionContextInfo,
   TerminalForegroundCommandInfo,
   TerminalOutputActivityInfo,
-  TerminalSessionInfo,
   TerminalSessionsCoordinator,
   TerminalWorkStateInfo,
 } from '@floegence/floeterm-terminal-web/sessions';
+import type { TerminalSessionInfo } from '../protocol/redeven_v1/sdk/terminal';
 import type { PreparedPagedTerminalHistory } from '@floegence/floeterm-terminal-web/history';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { useRedevenRpc } from '../protocol/redeven_v1';

@@ -42,6 +42,10 @@ export type wire_terminal_work_state_info = {
   updated_at_ms: number;
 };
 
+export type wire_terminal_local_path_capability = {
+  working_dir: string;
+};
+
 export type wire_terminal_session_info = {
   id: string;
   name: string;
@@ -53,6 +57,7 @@ export type wire_terminal_session_info = {
   output_activity?: wire_terminal_output_activity_info;
   execution_context?: wire_terminal_execution_context_info;
   work_state?: wire_terminal_work_state_info;
+  local_path_capability?: wire_terminal_local_path_capability;
 };
 
 export type wire_terminal_session_create_req = {

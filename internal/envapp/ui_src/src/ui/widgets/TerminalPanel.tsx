@@ -23,11 +23,11 @@ import {
   type TerminalAppearance,
   type TerminalExecutionContextInfo,
   type TerminalOutputActivityInfo,
-  type TerminalSessionInfo,
   type TerminalThemeName,
   type TerminalTouchScrollRuntime,
   type TerminalWorkStateInfo,
 } from '@floegence/floeterm-terminal-web';
+import type { TerminalSessionInfo } from '../protocol/redeven_v1/sdk/terminal';
 import {
   createRedevenTerminalLiveBundle,
   createTerminalConnId,
@@ -589,6 +589,9 @@ function sameTerminalWorkState(
 function normalizeTerminalSessionInfo(value: TerminalSessionInfo): TerminalSessionInfo | null {
   const id = String(value?.id ?? '').trim();
   if (!id) return null;
+  const localCapabilityWorkingDir = normalizeAskFlowerAbsolutePath(
+    String(value?.localPathCapability?.workingDir ?? '').trim(),
+  );
   return {
     id,
     name: String(value?.name ?? '').trim(),
@@ -600,6 +603,9 @@ function normalizeTerminalSessionInfo(value: TerminalSessionInfo): TerminalSessi
     outputActivity: normalizeTerminalOutputActivity(value?.outputActivity),
     executionContext: normalizeTerminalExecutionContextInfo(value?.executionContext),
     workState: normalizeTerminalWorkStateInfo(value?.workState),
+    ...(localCapabilityWorkingDir
+      ? { localPathCapability: { workingDir: localCapabilityWorkingDir } }
+      : {}),
   };
 }
 
@@ -639,7 +645,8 @@ function sameTerminalSessionInfo(a: TerminalSessionInfo | null | undefined, b: T
     && sameTerminalForegroundCommand(a.foregroundCommand, b.foregroundCommand)
     && sameTerminalOutputActivity(a.outputActivity, b.outputActivity)
     && sameTerminalExecutionContext(a.executionContext, b.executionContext)
-    && sameTerminalWorkState(a.workState, b.workState),
+    && sameTerminalWorkState(a.workState, b.workState)
+    && (a.localPathCapability?.workingDir ?? '') === (b.localPathCapability?.workingDir ?? ''),
   );
 }
 
@@ -933,6 +940,12 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const [searchQuery, setSearchQuery] = createSignal('');
   const [sessionFilterQuery, setSessionFilterQuery] = createSignal('');
   const [sessionDrawerOpen, setSessionDrawerOpen] = createSignal(false);
+  const [terminalStatusAnnouncement, setTerminalStatusAnnouncement] = createSignal<Readonly<{
+    sequence: number;
+    text: string;
+  }> | null>(null);
+  let terminalStatusAnnouncementSequence = 0;
+  let sessionDrawerTriggerEl: HTMLButtonElement | null = null;
   const [searchResultCount, setSearchResultCount] = createSignal(0);
   const [searchResultIndex, setSearchResultIndex] = createSignal(-1);
   const [panelHasFocus, setPanelHasFocus] = createSignal(false);
@@ -2391,6 +2404,17 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     if (sid) restoreTerminalSessionFocus(captureTerminalFocusRestoreIntent(sid));
   };
 
+  const dismissSessionDrawer = () => {
+    setSessionDrawerOpen(false);
+    queueMicrotask(() => {
+      if (isMobileLayout() && sessionDrawerTriggerEl?.isConnected) {
+        sessionDrawerTriggerEl.focus({ preventScroll: true });
+        return;
+      }
+      restoreActiveTerminalFocus();
+    });
+  };
+
   const commitSidebarSessionSelection = (sessionId: string) => {
     requestSessionSelection(sessionId, true);
   };
@@ -3263,10 +3287,35 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     const query = sessionFilterQuery().trim().toLocaleLowerCase();
     const next = sessionListItems().filter((item) => {
       if (!query) return true;
-      return [item.label, item.title, item.fullPath, item.id]
+      return [item.label, item.title, item.subtitle, item.fullPath, item.id]
         .some((value) => value.toLocaleLowerCase().includes(query));
     }).map((item) => item.id);
     return sameSessionIdList(previous, next) ? previous : next;
+  });
+  let statusBoundaryBySessionId = new Map<string, 'none' | 'waiting' | 'failed'>();
+  createEffect(() => {
+    const nextBoundaries = new Map<string, 'none' | 'waiting' | 'failed'>();
+    const enteredDescriptions: string[] = [];
+    for (const item of sessionListItems()) {
+      const boundary = item.failureKind !== 'none'
+        ? 'failed' as const
+        : item.attentionState === 'waiting'
+          ? 'waiting' as const
+          : 'none' as const;
+      nextBoundaries.set(item.id, boundary);
+      if (boundary !== 'none' && statusBoundaryBySessionId.get(item.id) !== boundary) {
+        const description = describeTerminalSessionNavigationItem(item, i18n.t).trim();
+        if (description) enteredDescriptions.push(description);
+      }
+    }
+    statusBoundaryBySessionId = nextBoundaries;
+    if (enteredDescriptions.length > 0) {
+      terminalStatusAnnouncementSequence += 1;
+      setTerminalStatusAnnouncement({
+        sequence: terminalStatusAnnouncementSequence,
+        text: enteredDescriptions.join(' '),
+      });
+    }
   });
 
   let searchInputEl: HTMLInputElement | null = null;
@@ -4172,7 +4221,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   createEffect(() => {
     if (!isMobileLayout() || !sessionDrawerOpen()) return;
-    const closeDrawerFromHistory = () => setSessionDrawerOpen(false);
+    const closeDrawerFromHistory = dismissSessionDrawer;
     window.addEventListener('popstate', closeDrawerFromHistory);
     onCleanup(() => window.removeEventListener('popstate', closeDrawerFromHistory));
   });
@@ -4206,8 +4255,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
     if (e.key === 'Escape' && sessionDrawerOpen()) {
       e.preventDefault();
-      setSessionDrawerOpen(false);
-      restoreActiveTerminalFocus();
+      dismissSessionDrawer();
       return;
     }
 
@@ -4348,6 +4396,18 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         });
       }}
     >
+      <div class="sr-only" aria-live="polite" aria-atomic="true" data-terminal-status-live-region="">
+        <Show when={terminalStatusAnnouncement()} keyed>
+          {(announcement) => (
+            <span
+              data-terminal-status-announcement=""
+              data-terminal-status-announcement-sequence={announcement.sequence}
+            >
+              {announcement.text}
+            </span>
+          )}
+        </Show>
+      </div>
       <Show when={connected()} fallback={<div class="p-4 text-xs text-muted-foreground">{i18n.t('terminal.notConnected')}</div>}>
         <div class="relative flex min-h-0 flex-1 overflow-hidden bg-background">
           <TerminalSessionNavigator
@@ -4366,10 +4426,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
             activeSessionId={activeDisplaySessionId()}
             copiedPathSessionId={copiedSidebarPathSessionId()}
             emptyListLoading={emptySessionListLoading()}
-            onCloseDrawer={() => {
-              setSessionDrawerOpen(false);
-              restoreActiveTerminalFocus();
-            }}
+            onCloseDrawer={dismissSessionDrawer}
             onCreateSession={createSession}
             onRefresh={handleRefresh}
             onFilterQueryChange={setSessionFilterQuery}
@@ -4393,6 +4450,9 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
             >
               <Show when={isMobileLayout()}>
                 <Button
+                  ref={(element) => {
+                    sessionDrawerTriggerEl = element;
+                  }}
                   size="sm"
                   variant="ghost"
                   class="relative h-7 w-7 shrink-0 p-0"

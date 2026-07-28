@@ -1,4 +1,4 @@
-import { For, Show, createMemo } from 'solid-js';
+import { For, Show, createEffect, createMemo } from 'solid-js';
 import { Sidebar, SidebarContent, SidebarItemList, SidebarSection } from '@floegence/floe-webapp-core/layout';
 import { Button, Input } from '@floegence/floe-webapp-core/ui';
 import { Check, Copy, ExternalLink, Link, Plus, Refresh, Search, Terminal, X } from '@floegence/floe-webapp-core/icons';
@@ -267,6 +267,50 @@ export function describeTerminalSessionNavigationItem(
 export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
   const i18n = useI18n();
   const sidebarWidth = () => (props.mobile ? 232 : 286);
+  let drawerDialogEl: HTMLDivElement | undefined;
+
+  const drawerFocusableElements = () => {
+    if (!drawerDialogEl) return [];
+    return Array.from(drawerDialogEl.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
+    )).filter((element) => element.getAttribute('aria-hidden') !== 'true');
+  };
+
+  createEffect(() => {
+    if (!props.mobile || !props.drawerOpen) return;
+    queueMicrotask(() => {
+      if (!props.mobile || !props.drawerOpen || !drawerDialogEl) return;
+      const initialFocus = drawerDialogEl.querySelector<HTMLElement>('[data-testid="terminal-session-filter"]')
+        ?? drawerFocusableElements()[0];
+      initialFocus?.focus({ preventScroll: true });
+    });
+  });
+
+  const handleDrawerKeyDown = (event: KeyboardEvent) => {
+    if (!props.mobile || !props.drawerOpen) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      props.onCloseDrawer();
+      return;
+    }
+    if (event.key !== 'Tab') return;
+    const focusable = drawerFocusableElements();
+    if (focusable.length === 0) {
+      event.preventDefault();
+      return;
+    }
+    const first = focusable[0]!;
+    const last = focusable[focusable.length - 1]!;
+    const active = document.activeElement;
+    if (event.shiftKey && (active === first || !drawerDialogEl?.contains(active))) {
+      event.preventDefault();
+      last.focus({ preventScroll: true });
+    } else if (!event.shiftKey && (active === last || !drawerDialogEl?.contains(active))) {
+      event.preventDefault();
+      first.focus({ preventScroll: true });
+    }
+  };
 
   return (
     <>
@@ -280,10 +324,12 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
         />
       </Show>
       <div
+        ref={drawerDialogEl}
         class="contents"
         role={props.mobile && props.drawerOpen ? 'dialog' : undefined}
         aria-modal={props.mobile && props.drawerOpen ? 'true' : undefined}
         aria-label={props.mobile && props.drawerOpen ? i18n.t('terminal.sessions') : undefined}
+        onKeyDown={handleDrawerKeyDown}
       >
         <Sidebar
           width={sidebarWidth()}
@@ -402,7 +448,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                       return (
                         <div
                           data-terminal-session-row={sessionId}
-                          class={`group relative overflow-hidden rounded-md border px-2.5 py-2 pr-16 text-xs transition-colors duration-75 ${sidebarActive()
+                          class={`group relative overflow-hidden rounded-md border px-2.5 py-2 pr-16 text-xs transition-colors duration-75 ${props.mobile ? 'min-h-16' : ''} ${sidebarActive()
                             ? 'border-border/20 bg-sidebar-accent text-sidebar-accent-foreground shadow-[0_1px_3px_color-mix(in_srgb,var(--foreground)_6%,transparent)]'
                             : 'border-transparent text-sidebar-foreground/80 hover:border-border/15 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground'}`}
                           onContextMenu={(event) => props.onOpenContextMenu(event, item())}
@@ -575,11 +621,13 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                             </span>
                           </div>
                           <div
-                            class="pointer-events-none absolute right-1.5 top-1.5 z-20 grid grid-cols-[20px_20px] grid-rows-[20px_20px] gap-1"
+                            class={`pointer-events-none absolute right-1.5 z-20 grid gap-1 ${props.mobile
+                              ? 'top-0.5 grid-cols-[28px_28px] grid-rows-[28px_28px]'
+                              : 'top-1.5 grid-cols-[20px_20px] grid-rows-[20px_20px]'}`}
                             data-terminal-session-actions={sessionId}
                           >
                             <span
-                              class="col-start-1 row-start-1 flex h-5 w-5 items-center justify-center"
+                              class={`col-start-1 row-start-1 flex items-center justify-center ${props.mobile ? 'h-7 w-7' : 'h-5 w-5'}`}
                               data-terminal-session-action-cell="index"
                               aria-hidden="true"
                             >
@@ -590,13 +638,15 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                               </Show>
                             </span>
                             <span
-                              class="col-start-2 row-start-1 flex h-5 w-5 items-center justify-center"
+                              class={`col-start-2 row-start-1 flex items-center justify-center ${props.mobile ? 'h-7 w-7' : 'h-5 w-5'}`}
                               data-terminal-session-action-cell="close"
                             >
                               <Show when={item().closable}>
                                 <button
                                   type="button"
-                                  class={`flex h-5 w-5 cursor-pointer items-center justify-center rounded text-[11px] text-muted-foreground/70 transition-[opacity,color,background-color] duration-75 hover:bg-error/10 hover:text-error focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring group-focus-within:pointer-events-auto group-focus-within:opacity-100 ${props.mobile
+                                  class={`flex cursor-pointer items-center justify-center rounded text-[11px] text-muted-foreground/70 transition-[opacity,color,background-color] duration-75 hover:bg-error/10 hover:text-error focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring group-focus-within:pointer-events-auto group-focus-within:opacity-100 ${props.mobile
+                                    ? 'h-7 w-7'
+                                    : 'h-5 w-5'} ${props.mobile
                                     ? 'pointer-events-auto opacity-100'
                                     : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100'}`}
                                   data-testid={`close-session-${sessionId}`}
@@ -612,13 +662,13 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                               </Show>
                             </span>
                             <span
-                              class="col-start-1 row-start-2 flex h-5 w-5 items-center justify-center"
+                              class={`col-start-1 row-start-2 flex items-center justify-center ${props.mobile ? 'h-7 w-7' : 'h-5 w-5'}`}
                               data-terminal-session-action-cell="copy"
                             >
                               <Show when={item().fullPath}>
                                 <button
                                   type="button"
-                                  class={`pointer-events-auto flex h-5 w-5 cursor-pointer items-center justify-center rounded text-muted-foreground/70 transition-colors duration-75 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring ${props.copiedPathSessionId === sessionId
+                                  class={`pointer-events-auto flex cursor-pointer items-center justify-center rounded text-muted-foreground/70 transition-colors duration-75 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring ${props.mobile ? 'h-7 w-7' : 'h-5 w-5'} ${props.copiedPathSessionId === sessionId
                                     ? 'bg-primary/10 text-primary'
                                     : 'hover:bg-sidebar-accent hover:text-sidebar-foreground'}`}
                                   title={props.copiedPathSessionId === sessionId ? i18n.t('terminal.pathCopied') : i18n.t('terminal.copyPath')}
@@ -636,13 +686,13 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                               </Show>
                             </span>
                             <span
-                              class="col-start-2 row-start-2 flex h-5 w-5 items-center justify-center"
+                              class={`col-start-2 row-start-2 flex items-center justify-center ${props.mobile ? 'h-7 w-7' : 'h-5 w-5'}`}
                               data-terminal-session-action-cell="files"
                             >
                               <Show when={item().canBrowsePath}>
                                 <button
                                   type="button"
-                                  class={`flex h-5 w-5 cursor-pointer items-center justify-center rounded text-muted-foreground/70 transition-[opacity,color,background-color] duration-75 hover:bg-sidebar-accent hover:text-sidebar-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring group-focus-within:pointer-events-auto group-focus-within:opacity-100 ${props.mobile
+                                  class={`flex cursor-pointer items-center justify-center rounded text-muted-foreground/70 transition-[opacity,color,background-color] duration-75 hover:bg-sidebar-accent hover:text-sidebar-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring group-focus-within:pointer-events-auto group-focus-within:opacity-100 ${props.mobile ? 'h-7 w-7' : 'h-5 w-5'} ${props.mobile
                                     ? 'pointer-events-auto opacity-100'
                                     : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100'}`}
                                   data-testid={`terminal-session-files-${sessionId}`}

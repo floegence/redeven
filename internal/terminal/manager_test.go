@@ -230,6 +230,43 @@ func TestCreateSessionReportsWorkingDirErrors(t *testing.T) {
 	}
 }
 
+func TestCreateSessionPublishesProductOwnedLocalPathCapability(t *testing.T) {
+	root := t.TempDir()
+	workingDir := filepath.Join(root, "repo")
+	if err := os.Mkdir(workingDir, 0o755); err != nil {
+		t.Fatalf("Mkdir(%q): %v", workingDir, err)
+	}
+	m := newQuietTestManager(t, root)
+	t.Cleanup(m.Cleanup)
+	capabilityAtCreatedEvent := ""
+	removeHook := m.AddSessionLifecycleHook(func(event SessionLifecycleEvent) {
+		if event.Reason == "created" {
+			capabilityAtCreatedEvent = m.localPathCapability(event.SessionID)
+		}
+	})
+	t.Cleanup(removeHook)
+
+	created, err := m.CreateSession("repo", workingDir)
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+	trustedWorkingDir := created.WorkingDir
+	if created.LocalPathCapability == nil || created.LocalPathCapability.WorkingDir != trustedWorkingDir {
+		t.Fatalf("local path capability = %#v, want %q", created.LocalPathCapability, trustedWorkingDir)
+	}
+	if capabilityAtCreatedEvent != trustedWorkingDir {
+		t.Fatalf("created event capability = %q, want %q", capabilityAtCreatedEvent, trustedWorkingDir)
+	}
+
+	wire := toWireSessionInfo(termgo.TerminalSessionInfo{
+		ID:         created.ID,
+		WorkingDir: "/terminal-controlled/path",
+	}, m.localPathCapability(created.ID))
+	if wire.LocalPathCapability == nil || wire.LocalPathCapability.WorkingDir != trustedWorkingDir {
+		t.Fatalf("wire local path capability = %#v, want immutable %q", wire.LocalPathCapability, trustedWorkingDir)
+	}
+}
+
 func TestTerminalHistoryDeterministicFixtureMatrix(t *testing.T) {
 	type fixtureReport struct {
 		FixtureID              string `json:"fixture_id"`
@@ -638,6 +675,10 @@ func TestDeleteSessionFailureReturnsSharedErrorAndCanRetry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("createSession() error = %v", err)
 	}
+	trustedWorkingDir := m.localPathCapability(sess.ID)
+	if trustedWorkingDir == "" {
+		t.Fatal("local path capability is empty after create")
+	}
 
 	deleteErr := errors.New("delete failed")
 	m.deleteSessionFunc = func(string) error {
@@ -655,12 +696,18 @@ func TestDeleteSessionFailureReturnsSharedErrorAndCanRetry(t *testing.T) {
 	if !ok || record.FailureCode != "DELETE_FAILED" || record.FailureMessage != deleteErr.Error() {
 		t.Fatalf("lifecycleRecord() = %+v, %v, want retry diagnostics", record, ok)
 	}
+	if got := m.localPathCapability(sess.ID); got != trustedWorkingDir {
+		t.Fatalf("local path capability after delete failure = %q, want %q", got, trustedWorkingDir)
+	}
 
 	m.deleteSessionFunc = m.deleteSessionNow
 	if err := m.DeleteSession(sess.ID); err != nil {
 		t.Fatalf("DeleteSession(retry) error = %v", err)
 	}
 	waitForSessionGone(t, m, sess.ID, time.Second)
+	if got := m.localPathCapability(sess.ID); got != "" {
+		t.Fatalf("local path capability after close = %q, want empty", got)
+	}
 }
 
 func TestConcurrentDeleteSessionFailureSharesOneResult(t *testing.T) {
@@ -1353,7 +1400,7 @@ func TestWireSessionInfoIncludesExecutionContextAndWorkSnapshots(t *testing.T) {
 			Revision:                  4,
 			UpdatedAt:                 41,
 		},
-	})
+	}, "")
 	if wire.ExecutionContext.Location.Label != "root@host" || wire.ExecutionContext.Application.Identity != "claude" || wire.ExecutionContext.Revision != 3 {
 		t.Fatalf("execution context snapshot = %#v", wire.ExecutionContext)
 	}
@@ -1373,7 +1420,7 @@ func TestWireSessionInfoIncludesForegroundCommandSnapshot(t *testing.T) {
 			Revision:    7,
 			UpdatedAt:   99,
 		},
-	})
+	}, "")
 
 	if wire.ForegroundCommand.Phase != "running" || wire.ForegroundCommand.DisplayName != "top" || wire.ForegroundCommand.Revision != 7 || wire.ForegroundCommand.UpdatedAtMs != 99 {
 		t.Fatalf("foreground command = %#v", wire.ForegroundCommand)
@@ -1388,7 +1435,7 @@ func TestWireSessionInfoIncludesOptionalOutputActivitySnapshot(t *testing.T) {
 			Revision:  7,
 			UpdatedAt: 99,
 		},
-	})
+	}, "")
 
 	if wire.OutputActivity == nil {
 		t.Fatal("output activity snapshot is nil")
@@ -1407,7 +1454,7 @@ func TestWireSessionInfoIncludesOptionalOutputActivitySnapshot(t *testing.T) {
 }
 
 func TestWireSessionInfoOutputActivitySupportsMixedVersions(t *testing.T) {
-	wire := toWireSessionInfo(termgo.TerminalSessionInfo{ID: "session-1"})
+	wire := toWireSessionInfo(termgo.TerminalSessionInfo{ID: "session-1"}, "")
 	payload, err := json.Marshal(wire)
 	if err != nil {
 		t.Fatalf("Marshal() error = %v", err)
@@ -1442,7 +1489,7 @@ func TestWireSessionInfoOutputActivitySupportsMixedVersions(t *testing.T) {
 			Revision:  9,
 			UpdatedAt: 101,
 		},
-	})
+	}, "")
 	if malformed.OutputActivity == nil || malformed.OutputActivity.Phase != "unknown" || malformed.OutputActivity.Revision != 9 || malformed.OutputActivity.UpdatedAtMs != 101 {
 		t.Fatalf("malformed output_activity = %#v, want normalized unknown snapshot", malformed.OutputActivity)
 	}
