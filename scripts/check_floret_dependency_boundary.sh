@@ -176,6 +176,7 @@ check_no_agent_shadow_storage() {
     --glob '*.go' \
     --glob '!**/*_test.go' \
     --glob '!internal/testutil/legacydb/**' \
+		--glob '!internal/boundarycontract/durable_sinks.go' \
     "$shadow_pattern" internal 2>/dev/null); then
     printf '%s\n' "$matches"
     fail "Redeven production code must not define, query, or persist Agent shadow conversation state."
@@ -199,6 +200,15 @@ check_agent_shadow_contract_semantics() {
 	fi
 
 	echo "[INFO] Agent shadow contract semantics checked"
+}
+
+check_durable_sink_closed_set() {
+	if ! GOWORK=off go run ./internal/cmd/durable-sink-contract --check --root .; then
+		fail "Every production Go, SQL, TypeScript, Desktop, browser, and file persistence sink must stay inside the reviewed closed set."
+		return
+	fi
+
+	echo "[INFO] durable sink closed set checked"
 }
 
 check_canonical_subagent_and_root_inventory_boundaries() {
@@ -624,6 +634,7 @@ check_no_floret_internal_imports
 check_no_floret_schema_access
 check_no_agent_shadow_storage
 check_agent_shadow_contract_semantics
+check_durable_sink_closed_set
 check_canonical_subagent_and_root_inventory_boundaries
 check_exact_turn_read_boundaries
 check_floret_capability_bootstrap_boundary
