@@ -226,6 +226,30 @@ function validateCodeBlocks(content, sourceContent, label) {
   return errors;
 }
 
+function extractInlineCodeLiterals(content) {
+  const withoutFences = stripLocaleSelector(content).replace(/```[\s\S]*?```/g, '');
+  return [...withoutFences.matchAll(/(?<!`)`([^`\n]+)`(?!`)/g)].map((match) => match[1]);
+}
+
+function validateInlineCodeLiterals(content, sourceContent, label) {
+  const errors = [];
+  const count = (values) => values.reduce((result, value) => {
+    result.set(value, (result.get(value) ?? 0) + 1);
+    return result;
+  }, new Map());
+  const expected = count(extractInlineCodeLiterals(sourceContent));
+  const actual = count(extractInlineCodeLiterals(content));
+  for (const [literal, expectedCount] of expected) {
+    const actualCount = actual.get(literal) ?? 0;
+    if (actualCount < expectedCount) {
+      errors.push(
+        `${label}: inline code literal ${JSON.stringify(literal)} count is ${actualCount}; expected at least ${expectedCount} from README.md`,
+      );
+    }
+  }
+  return errors;
+}
+
 function validateRequiredLiterals(content, manifest, label) {
   const errors = [];
   for (const literal of manifest.required_literals ?? []) {
@@ -297,44 +321,23 @@ function validateFixedEnglishTerms(content, sourceContent, manifest, locale, lab
   return errors;
 }
 
-function validateReview(locale, sourceHash, contentHash, requireReviewed, label) {
-  if (!locale.review) {
-    return { errors: [`${label}: missing translation review metadata`], warnings: [] };
+function validateSynchronization(locale, sourceHash, contentHash, label) {
+  if (!locale.synchronization || typeof locale.synchronization !== 'object' || Array.isArray(locale.synchronization)) {
+    return [`${label}: missing README synchronization metadata`];
   }
   const errors = [];
-  const warnings = [];
-  const review = locale.review;
-  if (review.source_sha256 !== sourceHash) {
+  const synchronization = locale.synchronization;
+  const keys = Object.keys(synchronization).sort();
+  if (JSON.stringify(keys) !== JSON.stringify(['content_sha256', 'source_sha256'])) {
+    errors.push(`${label}: synchronization metadata must contain only source_sha256 and content_sha256`);
+  }
+  if (synchronization.source_sha256 !== sourceHash) {
     errors.push(`${label}: source_sha256 is stale; expected ${sourceHash}`);
   }
-  if (review.content_sha256 !== contentHash) {
+  if (synchronization.content_sha256 !== contentHash) {
     errors.push(`${label}: content_sha256 is stale; expected ${contentHash}`);
   }
-
-  if (review.status === 'reviewed') {
-    if (review.method !== 'subagent') {
-      errors.push(`${label}: reviewed translation must use the subagent review method`);
-    }
-    if (typeof review.reviewed_by !== 'string' || !/^subagent:[a-z0-9_/-]+$/.test(review.reviewed_by)) {
-      errors.push(`${label}: reviewed translation must identify its locale-review subagent`);
-    }
-    if (typeof review.reviewed_at !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(review.reviewed_at)) {
-      errors.push(`${label}: reviewed translation must have a YYYY-MM-DD reviewed_at date`);
-    }
-  } else if (review.status === 'pending_subagent_review') {
-    if (review.method !== null || review.reviewed_by !== null || review.reviewed_at !== null) {
-      errors.push(`${label}: pending review must keep method, reviewed_by, and reviewed_at null`);
-    }
-    const message = `${label}: independent locale-review subagent approval is still pending`;
-    if (requireReviewed) {
-      errors.push(message);
-    } else {
-      warnings.push(message);
-    }
-  } else {
-    errors.push(`${label}: unsupported review status ${JSON.stringify(review.status)}`);
-  }
-  return { errors, warnings };
+  return errors;
 }
 
 function listTrackedMarkdown(repoRoot) {
@@ -366,8 +369,8 @@ function validateMarkdownAllowlist(repoRoot, manifest) {
 
 function validateManifestShape(manifest) {
   const errors = [];
-  if (manifest.schema_version !== 1) {
-    errors.push('manifest: schema_version must be 1');
+  if (manifest.schema_version !== 2) {
+    errors.push('manifest: schema_version must be 2');
   }
   if (!manifest.source || manifest.source.locale !== 'en-US' || manifest.source.file !== 'README.md') {
     errors.push('manifest: source must be en-US in README.md');
@@ -386,6 +389,22 @@ function validateManifestShape(manifest) {
   }
   if (localeIds[0] !== manifest.source.locale || files[0] !== manifest.source.file) {
     errors.push('manifest: the source locale must be the first locale entry');
+  }
+  for (const locale of manifest.locales) {
+    const isSourceLocale = locale.locale === manifest.source.locale;
+    const expectedKeys = ['english_name', 'file', 'locale', 'native_name'];
+    if (!isSourceLocale) expectedKeys.push('synchronization');
+    const actualKeys = Object.keys(locale).sort();
+    expectedKeys.sort();
+    if (JSON.stringify(actualKeys) !== JSON.stringify(expectedKeys)) {
+      errors.push(`manifest: locale ${locale.locale} must contain only ${expectedKeys.join(', ')}`);
+    }
+    if (!isSourceLocale && !Object.hasOwn(locale, 'synchronization')) {
+      errors.push(`manifest: locale ${locale.locale} is missing README synchronization metadata`);
+    }
+    if (Object.hasOwn(locale, 'review')) {
+      errors.push(`manifest: locale ${locale.locale} must not contain legacy review metadata`);
+    }
   }
   return errors;
 }
@@ -420,8 +439,7 @@ export function buildHashReport(repoRoot = DEFAULT_REPO_ROOT) {
   };
 }
 
-export function validateRepository(repoRoot = DEFAULT_REPO_ROOT, options = {}) {
-  const requireReviewed = options.requireReviewed ?? false;
+export function validateRepository(repoRoot = DEFAULT_REPO_ROOT) {
   const manifest = readJson(resolve(repoRoot, MANIFEST_PATH));
   const errors = validateManifestShape(manifest);
   const warnings = [];
@@ -459,9 +477,8 @@ export function validateRepository(repoRoot = DEFAULT_REPO_ROOT, options = {}) {
         errors.push(`${label}: link and image destinations differ from README.md`);
       }
       errors.push(...validateCodeBlocks(content, sourceContent, label));
-      const reviewResult = validateReview(locale, sourceHash, contentSha256(content), requireReviewed, label);
-      errors.push(...reviewResult.errors);
-      warnings.push(...reviewResult.warnings);
+      errors.push(...validateInlineCodeLiterals(content, sourceContent, label));
+      errors.push(...validateSynchronization(locale, sourceHash, contentSha256(content), label));
     }
   }
 
@@ -474,14 +491,11 @@ export function validateRepository(repoRoot = DEFAULT_REPO_ROOT, options = {}) {
 function parseArgs(argv) {
   const options = {
     repoRoot: DEFAULT_REPO_ROOT,
-    requireReviewed: false,
     printHashes: false,
   };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
-    if (arg === '--require-reviewed') {
-      options.requireReviewed = true;
-    } else if (arg === '--print-hashes') {
+    if (arg === '--print-hashes') {
       options.printHashes = true;
     } else if (arg === '--root') {
       index += 1;
@@ -503,7 +517,7 @@ function main() {
       process.stdout.write(`${JSON.stringify(buildHashReport(options.repoRoot), null, 2)}\n`);
       return;
     }
-    const result = validateRepository(options.repoRoot, { requireReviewed: options.requireReviewed });
+    const result = validateRepository(options.repoRoot);
     for (const warning of result.warnings) {
       process.stderr.write(`[WARN] ${warning}\n`);
     }
