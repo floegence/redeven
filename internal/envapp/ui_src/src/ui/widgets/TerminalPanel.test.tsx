@@ -7521,6 +7521,38 @@ describe('TerminalPanel', () => {
     expect(focusSpy).not.toHaveBeenCalled();
   });
 
+  it('dismisses an owned mobile row menu and focuses the next row when its session disappears', async () => {
+    layoutState.mobile = true;
+    terminalPrefsState.mobileInputMode = 'system';
+    terminalSessionsState.sessions = [
+      {
+        id: 'session-1', name: 'Terminal 1', workingDir: '/workspace', createdAtMs: 1, isActive: true, lastActiveAtMs: 10,
+      },
+      {
+        id: 'session-2', name: 'Terminal 2', workingDir: '/workspace/repo', createdAtMs: 2, isActive: false, lastActiveAtMs: 5,
+      },
+    ];
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+    host.querySelector<HTMLButtonElement>('[data-testid="terminal-session-drawer-open"]')?.click();
+    await settleTerminalPanel();
+    const targetRow = findTerminalTab(host, 'Terminal 1')!;
+    targetRow.focus();
+    dispatchTerminalKeydown(targetRow, { key: 'F10', shiftKey: true });
+    await settleTerminalPanelAfterPaint();
+    expect(document.activeElement?.getAttribute('role')).toBe('menuitem');
+
+    terminalSessionsState.sessions = terminalSessionsState.sessions.filter((session) => session.id !== 'session-1');
+    publishTerminalSessions();
+    await settleTerminalPanel();
+
+    expect(host.querySelector('[role="menu"]')).toBeNull();
+    expect(document.activeElement).toBe(findTerminalTab(host, 'Terminal 2'));
+  });
+
   it('hibernates only the core and keeps background output subscribed', async () => {
     terminalSessionsState.sessions = [
       {

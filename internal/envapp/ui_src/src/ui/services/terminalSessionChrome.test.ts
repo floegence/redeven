@@ -70,6 +70,13 @@ describe('deriveTerminalSessionChrome', () => {
       session({ localPathCapability: undefined }),
       session({ workingDir: '/workspace/forged' }),
       session({ localPathCapability: { workingDir: 'workspace/redeven' } }),
+      session({ workingDir: '/workspace\\redeven' }),
+      session({ workingDir: '/workspace//redeven' }),
+      session({ workingDir: '/workspace/redeven/' }),
+      session({ workingDir: ' /workspace/redeven' }),
+      session({ workingDir: '/workspace/redeven ' }),
+      session({ workingDir: '/workspace/./redeven' }),
+      session({ workingDir: '/workspace/line\nbreak' }),
     ]) {
       expect(derive(value)).toMatchObject({
         localWorkingDir: '',

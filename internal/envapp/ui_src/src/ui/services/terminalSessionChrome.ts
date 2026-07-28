@@ -3,7 +3,7 @@ import {
   type TerminalAgentCliIdentity,
 } from '@floegence/floeterm-terminal-web/sessions';
 import type { TerminalSessionInfo } from '../protocol/redeven_v1/sdk/terminal';
-import { normalizeAbsolutePath } from '../utils/askFlowerPath';
+import { canonicalAbsolutePath } from '../utils/canonicalAbsolutePath';
 
 export const TERMINAL_REMOTE_OPENING_SPINNER_MS = 800;
 
@@ -57,10 +57,11 @@ export function deriveTerminalSessionChrome(input: Readonly<{
   const remote = location?.kind === 'remote';
   const remotePhase = remote ? location?.phase ?? 'unknown' : 'unknown';
   const sessionWorkingDir = compact(session.workingDir);
-  const localCapabilityWorkingDir = normalizeAbsolutePath(session.localPathCapability?.workingDir ?? '');
+  const canonicalDisplayWorkingDir = canonicalAbsolutePath(session.workingDir);
+  const localCapabilityWorkingDir = canonicalAbsolutePath(session.localPathCapability?.workingDir);
   const canUseLocalPath = !remote
     && Boolean(localCapabilityWorkingDir)
-    && normalizeAbsolutePath(sessionWorkingDir) === localCapabilityWorkingDir;
+    && canonicalDisplayWorkingDir === localCapabilityWorkingDir;
   const localWorkingDir = canUseLocalPath ? localCapabilityWorkingDir : '';
   const remoteWorkingDir = remote ? compact(location?.workingDirectory) : '';
   const agentIdentity = application?.kind === 'agent_cli'
