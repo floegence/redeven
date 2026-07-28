@@ -8,6 +8,7 @@
         "file",
         "json_file"
       ],
+      "review_status": "reviewed",
       "owner": "redeven developer tooling",
       "authority": "build_or_test_artifact",
       "data_classes": [
@@ -30,6 +31,7 @@
       "sink_kinds": [
         "file"
       ],
+      "review_status": "reviewed",
       "owner": "redeven developer tooling",
       "authority": "build_or_test_artifact",
       "data_classes": [
@@ -44,6 +46,7 @@
         "file",
         "json_file"
       ],
+      "review_status": "reviewed",
       "owner": "redeven",
       "authority": "product_configuration",
       "data_classes": [
@@ -67,6 +70,7 @@
         "file",
         "json_file"
       ],
+      "review_status": "reviewed",
       "owner": "redeven",
       "authority": "product_configuration",
       "data_classes": [
@@ -84,8 +88,10 @@
       "path": "cmd/redeven/main.go",
       "sha256": "f43b9818f6a28e755b2fa05c84a494cd79833a1a3c08a71a9b38d7854cc71661",
       "sink_kinds": [
-        "file"
+        "file",
+        "json_file"
       ],
+      "review_status": "reviewed",
       "owner": "redeven",
       "authority": "product_configuration",
       "data_classes": [
@@ -99,6 +105,12 @@
         "runtime",
         "stdin"
       ],
+      "codecs": [
+        "encoding/json.MarshalIndent"
+      ],
+      "dtos": [
+        "metadata"
+      ],
       "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
     },
     {
@@ -107,6 +119,7 @@
       "sink_kinds": [
         "file"
       ],
+      "review_status": "reviewed",
       "owner": "redeven",
       "authority": "product_configuration",
       "data_classes": [
@@ -120,6 +133,7 @@
       "sink_kinds": [
         "file"
       ],
+      "review_status": "reviewed",
       "owner": "redeven Desktop",
       "authority": "product_configuration",
       "data_classes": [
@@ -133,6 +147,7 @@
       "sink_kinds": [
         "file"
       ],
+      "review_status": "reviewed",
       "owner": "redeven Desktop",
       "authority": "product_configuration",
       "data_classes": [
@@ -146,6 +161,7 @@
       "sink_kinds": [
         "file"
       ],
+      "review_status": "reviewed",
       "owner": "redeven Desktop",
       "authority": "product_configuration",
       "data_classes": [
@@ -159,6 +175,7 @@
       "sink_kinds": [
         "file"
       ],
+      "review_status": "reviewed",
       "owner": "redeven Desktop",
       "authority": "product_configuration",
       "data_classes": [
@@ -172,6 +189,7 @@
       "sink_kinds": [
         "file"
       ],
+      "review_status": "reviewed",
       "owner": "redeven Desktop",
       "authority": "product_configuration",
       "data_classes": [
@@ -180,11 +198,26 @@
       "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
     },
     {
+      "path": "desktop/src/main/desktopStateStore.ts",
+      "sha256": "7610837d3e0243d38c01464c023da47eab8379a32a3923351dcdb073f34fbee7",
+      "sink_kinds": [
+        "file"
+      ],
+      "review_status": "reviewed",
+      "owner": "redeven Desktop",
+      "authority": "product_configuration",
+      "data_classes": [
+        "Desktop runtime state handoff"
+      ],
+      "review_note": "Stores only Desktop-owned runtime state; canonical Agent lifecycle data is excluded."
+    },
+    {
       "path": "desktop/src/main/diagnostics.ts",
       "sha256": "34ac1ee559e144eddaff1b32c77b449a791f031de99c03590a2a03e78a5131bb",
       "sink_kinds": [
         "file"
       ],
+      "review_status": "reviewed",
       "owner": "redeven Desktop",
       "authority": "product_configuration",
       "data_classes": [
@@ -198,6 +231,7 @@
       "sink_kinds": [
         "file"
       ],
+      "review_status": "reviewed",
       "owner": "redeven Desktop",
       "authority": "product_configuration",
       "data_classes": [
@@ -211,6 +245,7 @@
       "sink_kinds": [
         "file"
       ],
+      "review_status": "reviewed",
       "owner": "redeven Desktop",
       "authority": "product_configuration",
       "data_classes": [
@@ -224,6 +259,7 @@
       "sink_kinds": [
         "file"
       ],
+      "review_status": "reviewed",
       "owner": "redeven Desktop",
       "authority": "product_configuration",
       "data_classes": [
@@ -237,6 +273,7 @@
       "sink_kinds": [
         "file"
       ],
+      "review_status": "reviewed",
       "owner": "redeven Desktop",
       "authority": "product_configuration",
       "data_classes": [
@@ -251,6 +288,7 @@
         "file",
         "json_file"
       ],
+      "review_status": "reviewed",
       "owner": "redeven",
       "authority": "product_configuration",
       "data_classes": [
@@ -276,6 +314,7 @@
         "file",
         "json_file"
       ],
+      "review_status": "reviewed",
       "owner": "redeven",
       "authority": "product_configuration",
       "data_classes": [
@@ -299,6 +338,7 @@
         "file",
         "json_file"
       ],
+      "review_status": "reviewed",
       "owner": "redeven",
       "authority": "product_configuration",
       "data_classes": [
@@ -319,6 +359,7 @@
         "file",
         "json_file"
       ],
+      "review_status": "reviewed",
       "owner": "redeven",
       "authority": "product_configuration",
       "data_classes": [
@@ -342,6 +383,7 @@
       "sink_kinds": [
         "file"
       ],
+      "review_status": "reviewed",
       "owner": "redeven tool effect",
       "authority": "user_effect",
       "data_classes": [
@@ -353,11 +395,29 @@
       "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
     },
     {
+      "path": "internal/ai/terminal_process.go",
+      "sha256": "21f53a9978963f0246de321c98d1f74831a03208ffa3ec74c636143ca1a7c762",
+      "sink_kinds": [
+        "file"
+      ],
+      "review_status": "reviewed",
+      "owner": "redeven terminal tool effect",
+      "authority": "user_effect",
+      "data_classes": [
+        "explicitly authorized terminal process input"
+      ],
+      "tables": [
+        "the"
+      ],
+      "review_note": "Writes only approved user input to an active terminal process; no Agent lifecycle state is persisted."
+    },
+    {
       "path": "internal/ai/threadstore/context_planes.go",
       "sha256": "8a3be870cff65ed0638ec88b96bc382955446ddeb5d91ca8b8bc86ec64a7b1f9",
       "sink_kinds": [
         "sqlite"
       ],
+      "review_status": "reviewed",
       "owner": "redeven threadstore",
       "authority": "product_coordination",
       "data_classes": [
@@ -380,6 +440,7 @@
       "sink_kinds": [
         "sqlite"
       ],
+      "review_status": "reviewed",
       "owner": "redeven threadstore",
       "authority": "product_coordination",
       "data_classes": [
@@ -408,6 +469,7 @@
       "sink_kinds": [
         "sqlite"
       ],
+      "review_status": "reviewed",
       "owner": "redeven threadstore",
       "authority": "product_coordination",
       "data_classes": [
@@ -430,6 +492,7 @@
       "sink_kinds": [
         "sqlite"
       ],
+      "review_status": "reviewed",
       "owner": "redeven threadstore",
       "authority": "product_coordination",
       "data_classes": [
@@ -445,7 +508,9 @@
         "ai_thread_create_operations",
         "ai_thread_fork_operations",
         "ai_thread_settings",
-        "ai_upload_refs"
+        "ai_upload_refs",
+        "expression:fmt.Sprintf(`SELECT %s FROM ai_thread_settings WHERE endpoint_id = ? AND thread_id = ?`, threadSelectColumnsSQL)",
+        "expression:forkOperationSelectSQL + ` WHERE operation_id = ?`"
       ],
       "codecs": [
         "encoding/json.Marshal"
@@ -462,6 +527,7 @@
       "sink_kinds": [
         "sqlite"
       ],
+      "review_status": "reviewed",
       "owner": "redeven threadstore",
       "authority": "product_coordination",
       "data_classes": [
@@ -485,6 +551,7 @@
       "sink_kinds": [
         "sqlite"
       ],
+      "review_status": "reviewed",
       "owner": "redeven threadstore",
       "authority": "product_coordination",
       "data_classes": [
@@ -507,6 +574,7 @@
       "sink_kinds": [
         "sqlite"
       ],
+      "review_status": "reviewed",
       "owner": "redeven threadstore",
       "authority": "product_coordination",
       "data_classes": [
@@ -548,11 +616,37 @@
       "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
     },
     {
+      "path": "internal/ai/threadstore/reviewed_schema.go",
+      "sha256": "a9d96b0713bb4be9fbc0ea58a39f8597fbe847ba3bf96efc989cce522d633d38",
+      "sink_kinds": [
+        "sqlite"
+      ],
+      "review_status": "reviewed",
+      "owner": "redeven threadstore",
+      "authority": "product_coordination",
+      "data_classes": [
+        "host thread settings",
+        "unadmitted commands",
+        "product routing",
+        "resource claims",
+        "cross-store operation intent",
+        "permission audit"
+      ],
+      "tables": [
+        "expression:fmt.Sprintf(`PRAGMA index_list(%s)`, quoteReviewedIdentifier(name))",
+        "expression:fmt.Sprintf(`PRAGMA index_xinfo(%s)`, quoteReviewedIdentifier(name))",
+        "expression:fmt.Sprintf(`PRAGMA table_xinfo(%s)`, quoteReviewedIdentifier(name))",
+        "sqlite_master"
+      ],
+      "review_note": "Inspects only the reviewed Redeven product schema; Floret remains canonical after admission."
+    },
+    {
       "path": "internal/ai/threadstore/schema.go",
       "sha256": "aee74943158c140fca10583c5023d5141ceed8ed51005c557ca19e17b4e58569",
       "sink_kinds": [
         "sqlite"
       ],
+      "review_status": "reviewed",
       "owner": "redeven threadstore",
       "authority": "product_coordination",
       "data_classes": [
@@ -582,6 +676,7 @@
         "ai_upload_refs",
         "ai_upload_staging_scopes",
         "ai_uploads",
+        "expression:`\nCREATE TABLE ai_composer_drafts (\n  endpoint_id TEXT NOT NULL,\n  owner_user_hash TEXT NOT NULL CHECK(length(owner_user_hash) = 64),\n  scope_id TEXT NOT NULL,\n  revision INTEGER NOT NULL DEFAULT 0 CHECK(revision \u003e= 0),\n  value_json TEXT NOT NULL DEFAULT '` + valueDefault + `',\n  lease_id TEXT NOT NULL DEFAULT '',\n  lease_holder_id TEXT NOT NULL DEFAULT '',\n  lease_expires_at_unix_ms INTEGER NOT NULL DEFAULT 0,\n  created_at_unix_ms INTEGER NOT NULL,\n  updated_at_unix_ms INTEGER NOT NULL,\n  expires_at_unix_ms INTEGER NOT NULL,\n  PRIMARY KEY(endpoint_id, owner_user_hash, scope_id)\n);\nCREATE INDEX idx_ai_composer_drafts_expiry ON ai_composer_drafts(expires_at_unix_ms, endpoint_id, scope_id);\n`",
         "provider_capabilities"
       ],
       "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
@@ -592,6 +687,7 @@
       "sink_kinds": [
         "sqlite"
       ],
+      "review_status": "reviewed",
       "owner": "redeven threadstore",
       "authority": "product_coordination",
       "data_classes": [
@@ -613,11 +709,34 @@
       "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
     },
     {
+      "path": "internal/ai/threadstore/schema_verification.go",
+      "sha256": "903c627b89aeb7c680feb00687c08fdd548dd8ba2a6a4fe5759bf88e2f88d400",
+      "sink_kinds": [
+        "sqlite"
+      ],
+      "review_status": "reviewed",
+      "owner": "redeven threadstore",
+      "authority": "product_coordination",
+      "data_classes": [
+        "host thread settings",
+        "unadmitted commands",
+        "product routing",
+        "resource claims",
+        "cross-store operation intent",
+        "permission audit"
+      ],
+      "tables": [
+        "sqlite_master"
+      ],
+      "review_note": "Inspects only the reviewed Redeven product schema; Floret remains canonical after admission."
+    },
+    {
       "path": "internal/ai/threadstore/store.go",
       "sha256": "7113489b8f6e9abb96549006d7b3e736032b075660d35e3932ab16f2491bfebe",
       "sink_kinds": [
         "sqlite"
       ],
+      "review_status": "reviewed",
       "owner": "redeven threadstore",
       "authority": "product_coordination",
       "data_classes": [
@@ -631,7 +750,12 @@
       "tables": [
         "ai_queued_turns",
         "ai_thread_delete_operations",
-        "ai_thread_settings"
+        "ai_thread_settings",
+        "expression:`\nSELECT thread_id, COUNT(1)\nFROM ai_queued_turns\nWHERE endpoint_id = ? AND thread_id IN (` + placeholders + `) AND lane = ?\nGROUP BY thread_id\n`",
+        "expression:fmt.Sprintf(`\nSELECT\n%s\nFROM ai_thread_settings\nWHERE endpoint_id = ? AND thread_id = ?\n`, threadSelectColumnsSQL)",
+        "expression:fmt.Sprintf(`SELECT %s FROM ai_thread_settings WHERE endpoint_id = ? AND thread_id = ?`, threadSelectColumnsSQL)",
+        "expression:q",
+        "expression:query"
       ],
       "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
     },
@@ -641,6 +765,7 @@
       "sink_kinds": [
         "sqlite"
       ],
+      "review_status": "reviewed",
       "owner": "redeven threadstore",
       "authority": "product_coordination",
       "data_classes": [
@@ -663,6 +788,7 @@
       "sink_kinds": [
         "sqlite"
       ],
+      "review_status": "reviewed",
       "owner": "redeven threadstore",
       "authority": "product_coordination",
       "data_classes": [
@@ -675,7 +801,8 @@
       ],
       "tables": [
         "ai_thread_create_operations",
-        "ai_thread_settings"
+        "ai_thread_settings",
+        "expression:threadCreateOperationSelectSQL + ` WHERE operation_id = ?`"
       ],
       "codecs": [
         "encoding/json.Marshal"
@@ -691,6 +818,7 @@
       "sink_kinds": [
         "sqlite"
       ],
+      "review_status": "reviewed",
       "owner": "redeven threadstore",
       "authority": "product_coordination",
       "data_classes": [
@@ -704,7 +832,10 @@
       "tables": [
         "ai_thread_delete_operations",
         "ai_thread_fork_operations",
-        "ai_thread_settings"
+        "ai_thread_settings",
+        "expression:query",
+        "expression:threadDeleteOperationSelectSQL + ` WHERE endpoint_id = ? AND thread_id = ?`",
+        "expression:threadDeleteOperationSelectSQL + ` WHERE operation_id = ?`"
       ],
       "codecs": [
         "encoding/json.Marshal"
@@ -721,6 +852,7 @@
       "sink_kinds": [
         "sqlite"
       ],
+      "review_status": "reviewed",
       "owner": "redeven threadstore",
       "authority": "product_coordination",
       "data_classes": [
@@ -742,6 +874,7 @@
       "sink_kinds": [
         "sqlite"
       ],
+      "review_status": "reviewed",
       "owner": "redeven threadstore",
       "authority": "product_coordination",
       "data_classes": [
@@ -758,7 +891,8 @@
         "ai_permission_snapshots",
         "ai_queued_turns",
         "ai_subagent_publication_operations",
-        "ai_upload_staging_scopes"
+        "ai_upload_staging_scopes",
+        "expression:step.query"
       ],
       "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
     },
@@ -768,6 +902,7 @@
       "sink_kinds": [
         "sqlite"
       ],
+      "review_status": "reviewed",
       "owner": "redeven threadstore",
       "authority": "product_coordination",
       "data_classes": [
@@ -801,6 +936,7 @@
       "sink_kinds": [
         "sqlite"
       ],
+      "review_status": "reviewed",
       "owner": "redeven threadstore",
       "authority": "product_coordination",
       "data_classes": [
@@ -815,7 +951,13 @@
         "ai_queued_turns",
         "ai_upload_attempts",
         "ai_upload_refs",
-        "ai_uploads"
+        "ai_uploads",
+        "expression:`\nDELETE FROM ai_upload_refs\nWHERE upload_id IN (` + placeholders + `)\n`",
+        "expression:`\nDELETE FROM ai_uploads\nWHERE LOWER(COALESCE(state, '')) = ? AND upload_id IN (` + placeholders + `)\n`",
+        "expression:`\nUPDATE ai_uploads\nSET state = ?, delete_after_unix_ms = ?\nWHERE upload_id IN (` + placeholders + `)\n`",
+        "expression:fmt.Sprintf(`PRAGMA incremental_vacuum(%d);`, plan.PagesToRelease)",
+        "expression:query",
+        "expression:updateSQL"
       ],
       "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
     },
@@ -825,6 +967,7 @@
       "sink_kinds": [
         "file"
       ],
+      "review_status": "reviewed",
       "owner": "redeven tool effect",
       "authority": "user_effect",
       "data_classes": [
@@ -843,6 +986,7 @@
         "file",
         "json_file"
       ],
+      "review_status": "reviewed",
       "owner": "redeven uploads",
       "authority": "product_resource",
       "data_classes": [
@@ -869,6 +1013,7 @@
         "file",
         "json_file"
       ],
+      "review_status": "reviewed",
       "owner": "redeven audit log",
       "authority": "security_audit",
       "data_classes": [
@@ -888,6 +1033,7 @@
       "sink_kinds": [
         "file"
       ],
+      "review_status": "reviewed",
       "owner": "redeven",
       "authority": "product_configuration",
       "data_classes": [
@@ -902,6 +1048,7 @@
         "file",
         "json_file"
       ],
+      "review_status": "reviewed",
       "owner": "redeven",
       "authority": "product_configuration",
       "data_classes": [
@@ -921,6 +1068,7 @@
       "sink_kinds": [
         "file"
       ],
+      "review_status": "reviewed",
       "owner": "redeven",
       "authority": "product_configuration",
       "data_classes": [
@@ -935,6 +1083,7 @@
         "file",
         "json_file"
       ],
+      "review_status": "reviewed",
       "owner": "redeven",
       "authority": "product_configuration",
       "data_classes": [
@@ -959,6 +1108,7 @@
         "file",
         "json_file"
       ],
+      "review_status": "reviewed",
       "owner": "redeven",
       "authority": "product_configuration",
       "data_classes": [
@@ -978,6 +1128,7 @@
       "sink_kinds": [
         "sqlite"
       ],
+      "review_status": "reviewed",
       "owner": "redeven",
       "authority": "product_configuration",
       "data_classes": [
@@ -994,6 +1145,7 @@
       "sink_kinds": [
         "sqlite"
       ],
+      "review_status": "reviewed",
       "owner": "redeven",
       "authority": "product_configuration",
       "data_classes": [
@@ -1003,6 +1155,7 @@
         "code_spaces",
         "code_spaces_legacy_v1",
         "code_spaces_migration_v1",
+        "expression:registryCurrentTableSQL",
         "sqlite_master"
       ],
       "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
@@ -1013,6 +1166,7 @@
       "sink_kinds": [
         "web_storage"
       ],
+      "review_status": "reviewed",
       "owner": "redeven UI",
       "authority": "browser_ui_preference",
       "data_classes": [
@@ -1030,6 +1184,7 @@
         "file",
         "json_file"
       ],
+      "review_status": "reviewed",
       "owner": "redeven",
       "authority": "product_configuration",
       "data_classes": [
@@ -1050,6 +1205,7 @@
         "file",
         "json_file"
       ],
+      "review_status": "reviewed",
       "owner": "redeven",
       "authority": "product_configuration",
       "data_classes": [
@@ -1073,6 +1229,7 @@
         "file",
         "json_file"
       ],
+      "review_status": "reviewed",
       "owner": "redeven diagnostics",
       "authority": "diagnostics",
       "data_classes": [
@@ -1092,6 +1249,7 @@
       "sink_kinds": [
         "web_storage"
       ],
+      "review_status": "reviewed",
       "owner": "redeven UI",
       "authority": "browser_ui_preference",
       "data_classes": [
@@ -1108,6 +1266,7 @@
       "sink_kinds": [
         "web_storage"
       ],
+      "review_status": "reviewed",
       "owner": "redeven UI",
       "authority": "browser_ui_preference",
       "data_classes": [
@@ -1124,6 +1283,7 @@
       "sink_kinds": [
         "web_storage"
       ],
+      "review_status": "reviewed",
       "owner": "redeven UI",
       "authority": "browser_ui_preference",
       "data_classes": [
@@ -1140,6 +1300,7 @@
       "sink_kinds": [
         "file"
       ],
+      "review_status": "reviewed",
       "owner": "redeven UI",
       "authority": "browser_ui_preference",
       "data_classes": [
@@ -1153,6 +1314,7 @@
       "sink_kinds": [
         "web_storage"
       ],
+      "review_status": "reviewed",
       "owner": "redeven UI",
       "authority": "browser_ui_preference",
       "data_classes": [
@@ -1169,6 +1331,7 @@
       "sink_kinds": [
         "file"
       ],
+      "review_status": "reviewed",
       "owner": "redeven UI",
       "authority": "browser_ui_preference",
       "data_classes": [
@@ -1182,6 +1345,7 @@
       "sink_kinds": [
         "web_storage"
       ],
+      "review_status": "reviewed",
       "owner": "redeven UI",
       "authority": "browser_ui_preference",
       "data_classes": [
@@ -1198,6 +1362,7 @@
       "sink_kinds": [
         "file"
       ],
+      "review_status": "reviewed",
       "owner": "redeven",
       "authority": "product_configuration",
       "data_classes": [
@@ -1214,6 +1379,7 @@
       "sink_kinds": [
         "file"
       ],
+      "review_status": "reviewed",
       "owner": "redeven",
       "authority": "product_configuration",
       "data_classes": [
@@ -1227,6 +1393,7 @@
       "sink_kinds": [
         "sqlite"
       ],
+      "review_status": "reviewed",
       "owner": "redeven",
       "authority": "product_configuration",
       "data_classes": [
@@ -1246,6 +1413,7 @@
       "sink_kinds": [
         "sqlite"
       ],
+      "review_status": "reviewed",
       "owner": "redeven",
       "authority": "product_configuration",
       "data_classes": [
@@ -1272,6 +1440,7 @@
         "file",
         "json_file"
       ],
+      "review_status": "reviewed",
       "owner": "redeven developer tooling",
       "authority": "build_or_test_artifact",
       "data_classes": [
@@ -1292,6 +1461,7 @@
       "sink_kinds": [
         "sqlite"
       ],
+      "review_status": "reviewed",
       "owner": "redeven",
       "authority": "product_configuration",
       "data_classes": [
@@ -1299,6 +1469,8 @@
       ],
       "tables": [
         "__redeven_db_meta",
+        "expression:fmt.Sprintf(`PRAGMA user_version=%d;`, version)",
+        "expression:stmt",
         "kind",
         "legacy",
         "sqlite_master",
@@ -1308,17 +1480,37 @@
       "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
     },
     {
+      "path": "internal/persistence/sqliteutil/inspect.go",
+      "sha256": "c457672916355a9c84b4c163bdd5ef0fa5698b96e5d46e311c28ccd10ad1f225",
+      "sink_kinds": [
+        "sqlite"
+      ],
+      "review_status": "reviewed",
+      "owner": "redeven SQLite schema inspector",
+      "authority": "product_configuration",
+      "data_classes": [
+        "product database schema metadata"
+      ],
+      "tables": [
+        "expression:fmt.Sprintf(`PRAGMA table_info(%s)`, quoteIdentifier(tableName))",
+        "sqlite_master"
+      ],
+      "review_note": "Inspects product database schema metadata only; canonical Agent lifecycle data is excluded."
+    },
+    {
       "path": "internal/portforward/registry/registry.go",
       "sha256": "9859f4012cc11f31d074dccc1fd4c27f1c091b41605312c3a731139795c1ea10",
       "sink_kinds": [
         "sqlite"
       ],
+      "review_status": "reviewed",
       "owner": "redeven",
       "authority": "product_configuration",
       "data_classes": [
         "product-owned state"
       ],
       "tables": [
+        "expression:q",
         "port_forwards",
         "with"
       ],
@@ -1330,6 +1522,7 @@
       "sink_kinds": [
         "sqlite"
       ],
+      "review_status": "reviewed",
       "owner": "redeven",
       "authority": "product_configuration",
       "data_classes": [
@@ -1348,6 +1541,7 @@
         "json_file",
         "sqlite"
       ],
+      "review_status": "reviewed",
       "owner": "redeven ReDevPlugin adapter",
       "authority": "upstream_adapter",
       "data_classes": [
@@ -1375,6 +1569,7 @@
         "file",
         "json_file"
       ],
+      "review_status": "reviewed",
       "owner": "redeven ReDevPlugin adapter",
       "authority": "upstream_adapter",
       "data_classes": [
@@ -1397,6 +1592,7 @@
         "file",
         "json_file"
       ],
+      "review_status": "reviewed",
       "owner": "redeven",
       "authority": "product_configuration",
       "data_classes": [
@@ -1417,6 +1613,7 @@
         "file",
         "json_file"
       ],
+      "review_status": "reviewed",
       "owner": "redeven",
       "authority": "product_configuration",
       "data_classes": [
@@ -1437,6 +1634,7 @@
         "file",
         "json_file"
       ],
+      "review_status": "reviewed",
       "owner": "redeven",
       "authority": "product_configuration",
       "data_classes": [
@@ -1459,6 +1657,7 @@
       "sink_kinds": [
         "sqlite"
       ],
+      "review_status": "reviewed",
       "owner": "redeven",
       "authority": "product_configuration",
       "data_classes": [
@@ -1476,12 +1675,14 @@
       "sink_kinds": [
         "sqlite"
       ],
+      "review_status": "reviewed",
       "owner": "redeven",
       "authority": "product_configuration",
       "data_classes": [
         "product-owned state"
       ],
       "tables": [
+        "expression:query",
         "set",
         "thread_read_state",
         "thread_read_state_retirements"
@@ -1494,6 +1695,7 @@
       "sink_kinds": [
         "sqlite"
       ],
+      "review_status": "reviewed",
       "owner": "redeven",
       "authority": "product_configuration",
       "data_classes": [
@@ -1516,12 +1718,14 @@
       "sink_kinds": [
         "sqlite"
       ],
+      "review_status": "reviewed",
       "owner": "redeven",
       "authority": "product_configuration",
       "data_classes": [
         "product-owned state"
       ],
       "tables": [
+        "expression:fmt.Sprintf(\"DELETE FROM workbench_widget_states WHERE widget_id IN (%s)\", strings.Join(placeholders, \",\"))",
         "set",
         "workbench_layout_annotations",
         "workbench_layout_background_layers",
@@ -1547,6 +1751,7 @@
       "sink_kinds": [
         "file"
       ],
+      "review_status": "reviewed",
       "owner": "redeven",
       "authority": "product_configuration",
       "data_classes": [
@@ -1560,6 +1765,7 @@
       "sink_kinds": [
         "file"
       ],
+      "review_status": "reviewed",
       "owner": "redeven",
       "authority": "product_configuration",
       "data_classes": [
