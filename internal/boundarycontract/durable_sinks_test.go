@@ -34,6 +34,61 @@ func TestClosedSetRejectsUnregisteredDurableSinksAcrossLanguages(t *testing.T) {
 	}
 }
 
+func TestScanStopsOnlyAtValidNestedGitRepositoryRoots(t *testing.T) {
+	const sink = `package nested; import "os"; func save() { _ = os.WriteFile("state.json", nil, 0600) }`
+
+	t.Run("repository directory", func(t *testing.T) {
+		root := t.TempDir()
+		writeFixture(t, root, "tools/checkout/.git/HEAD", "ref: refs/heads/main\n")
+		writeFixture(t, root, "tools/checkout/internal/store.go", sink)
+
+		findings, err := Scan(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(findings) != 0 {
+			t.Fatalf("nested repository escaped its boundary: %#v", findings)
+		}
+	})
+
+	t.Run("worktree marker", func(t *testing.T) {
+		root := t.TempDir()
+		gitDir := filepath.Join(root, "git-metadata", "worktrees", "feature")
+		if err := os.MkdirAll(gitDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		writeFixture(t, root, "tools/worktree/.git", "gitdir: "+gitDir+"\n")
+		writeFixture(t, root, "tools/worktree/internal/store.go", sink)
+
+		findings, err := Scan(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(findings) != 0 {
+			t.Fatalf("nested worktree escaped its boundary: %#v", findings)
+		}
+	})
+
+	for name, marker := range map[string]string{
+		"malformed marker": "not-a-git-marker\n",
+		"missing gitdir":   "gitdir: ../missing\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			writeFixture(t, root, "tools/source/.git", marker)
+			writeFixture(t, root, "tools/source/internal/store.go", sink)
+
+			findings, err := Scan(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(findings) != 1 || findings[0].Path != "tools/source/internal/store.go" {
+				t.Fatalf("invalid Git marker hid a durable sink: %#v", findings)
+			}
+		})
+	}
+}
+
 func TestClosedSetAcceptsExplicitReviewedProductSinks(t *testing.T) {
 	root := t.TempDir()
 	fixtures := map[string]string{
