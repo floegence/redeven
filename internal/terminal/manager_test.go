@@ -666,6 +666,51 @@ func TestConcurrentDeleteSessionStartsOneCleanup(t *testing.T) {
 	}
 }
 
+func TestWidgetJoinAfterSuccessfulCloseDoesNotRecreateLifecycle(t *testing.T) {
+	m := newQuietTestManager(t, t.TempDir())
+	t.Cleanup(m.Cleanup)
+
+	sess, err := m.createSession("test", "")
+	if err != nil {
+		t.Fatalf("createSession() error = %v", err)
+	}
+	closedBeforeDeleteReturn := make(chan struct{})
+	releaseDeleteReturn := make(chan struct{})
+	m.deleteSessionFunc = func(sessionID string) error {
+		err := m.deleteSessionNow(sessionID)
+		close(closedBeforeDeleteReturn)
+		<-releaseDeleteReturn
+		return err
+	}
+
+	results := make(chan error, 2)
+	go func() { results <- m.DeleteSession(sess.ID) }()
+	select {
+	case <-closedBeforeDeleteReturn:
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for terminal close callback")
+	}
+	if _, ok := m.lifecycleRecord(sess.ID); ok {
+		t.Fatal("closed session retained a lifecycle record before the joining caller")
+	}
+
+	go func() { results <- m.DeleteSessionForWidget(sess.ID, "widget-1") }()
+	waitForDeleteParticipants(t, m, sess.ID, 2, time.Second)
+	close(releaseDeleteReturn)
+	for range 2 {
+		if err := <-results; err != nil {
+			t.Fatalf("successful mixed delete error = %v", err)
+		}
+	}
+
+	if _, ok := m.lifecycleRecord(sess.ID); ok {
+		t.Fatal("widget join recreated a lifecycle record after successful close")
+	}
+	if got := m.localPathCapability(sess.ID); got != "" {
+		t.Fatalf("local path capability after successful close = %q, want empty", got)
+	}
+}
+
 func TestDeleteSessionFailureReturnsSharedErrorAndCanRetry(t *testing.T) {
 	root := t.TempDir()
 	m := newQuietTestManager(t, root)

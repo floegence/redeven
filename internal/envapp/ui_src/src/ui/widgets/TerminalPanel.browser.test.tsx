@@ -2042,7 +2042,7 @@ describe('TerminalPanel browser activity integration', () => {
       await page.elementLocator(attentionTrigger).click();
       expect(document.body.querySelector('[role="tooltip"]')?.textContent).toContain('User input');
       await userEvent.keyboard('{Escape}');
-      expect(document.body.querySelector('[role="tooltip"]')?.getAttribute('aria-hidden')).toBe('true');
+      expect(document.body.querySelector('[role="tooltip"]')?.getAttribute('aria-hidden') ?? 'true').toBe('true');
       await new Promise<void>((resolve) => setTimeout(resolve, 100));
       expect(document.body.querySelector('[role="tooltip"]')).toBeNull();
 

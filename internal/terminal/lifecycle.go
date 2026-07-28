@@ -212,9 +212,10 @@ func (m *Manager) requestSessionDelete(sessionID string, widgetID string, strict
 			if operation.ownerWidgetID == "" {
 				operation.ownerWidgetID = ownerWidgetID
 			}
-			record := m.sessionLifecycle[sessionID]
-			record.OwnerWidgetID = operation.ownerWidgetID
-			m.sessionLifecycle[sessionID] = record
+			if record, ok := m.sessionLifecycle[sessionID]; ok {
+				record.OwnerWidgetID = operation.ownerWidgetID
+				m.sessionLifecycle[sessionID] = record
+			}
 		}
 		m.mu.Unlock()
 		<-operation.done
@@ -309,6 +310,9 @@ func (m *Manager) completeSessionDelete(
 		m.sessionLifecycle[sessionID] = record
 		payload := buildTerminalSessionsChangedPayload(reason, sessionID, record)
 		failurePayload = &payload
+	} else {
+		delete(m.sessionLifecycle, sessionID)
+		delete(m.localPathCapabilities, sessionID)
 	}
 	operation.err = err
 	if m.deleteOperations[sessionID] == operation {

@@ -1989,13 +1989,11 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     source: 'history' | 'live',
   ) => {
     if (event.kind === 'cwd-update') {
-      const workingDir = normalizeAskFlowerAbsolutePath(event.workingDir);
-      if (workingDir) {
-        if (terminalCatalog) {
-          terminalCatalog.updateSessionMeta(sessionId, { workingDir });
-        } else {
-          fallbackSessionsCoordinator?.updateSessionMeta(sessionId, { workingDir });
-        }
+      const workingDir = String(event.workingDir ?? '');
+      if (terminalCatalog) {
+        terminalCatalog.updateSessionMeta(sessionId, { workingDir });
+      } else {
+        fallbackSessionsCoordinator?.updateSessionMeta(sessionId, { workingDir });
       }
       return;
     }

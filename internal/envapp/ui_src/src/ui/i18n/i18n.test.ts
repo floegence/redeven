@@ -415,6 +415,12 @@ describe('Env App i18n dictionaries', () => {
     expect(dictionaries['ja-JP'].terminal.statusAnnouncement).toBe('{identity}。{status}');
     expect(dictionaries['zh-CN'].terminal.sessionIdentityWithTitle).toBe('{label}：{title}');
     expect(dictionaries['zh-TW'].terminal.statusAnnouncement).toBe('{identity}。{status}');
+    expect(dictionaries['ko-KR'].terminal.refresh).toBe('새로 고침');
+    expect(dictionaries['ko-KR'].terminal.moreOptions).toBe('추가 옵션');
+    expect(dictionaries['ko-KR'].terminal.searchPlaceholder).toBe('검색...');
+    expect(dictionaries['ko-KR'].terminal.loadingSessions).toBe('세션 로드 중...');
+    expect(dictionaries['ko-KR'].terminal.settings.selected).toBe('선택됨');
+    expect(dictionaries['ko-KR'].terminal.settings.mobileInputTitle).toBe('모바일 입력');
     expect(dictionaries['ko-KR'].terminal.sessions).toBe('세션');
     expect(dictionaries['ko-KR'].terminal.searchSessions).toBe('세션 검색...');
   });
