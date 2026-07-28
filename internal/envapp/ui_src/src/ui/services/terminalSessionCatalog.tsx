@@ -78,6 +78,24 @@ function normalizeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function conflictedExecutionContext(
+  context: TerminalExecutionContextInfo,
+): TerminalExecutionContextInfo {
+  return {
+    location: {
+      kind: 'unknown',
+      phase: 'unknown',
+      label: '',
+      authority: '',
+      workingDirectory: '',
+      source: 'unknown',
+    },
+    application: { kind: 'unknown', identity: '', displayName: '' },
+    revision: context.revision,
+    updatedAtMs: context.updatedAtMs,
+  };
+}
+
 export function terminalHistoryWarmupPerformanceStage(
   event: TerminalHistoryWarmupEvent['event'],
 ): TerminalPerformanceStage {
@@ -130,6 +148,7 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
   const latestExecutionContexts = new Map<string, TerminalExecutionContextInfo>();
   const latestWorkStates = new Map<string, TerminalWorkStateInfo>();
   const pendingMetadataConflictKeys = new Set<string>();
+  const pendingExecutionContextConflicts = new Map<string, TerminalExecutionContextInfo>();
   const remoteOpeningObservedAtBySession = new Map<string, number>();
   const pendingMetadataLimit = 512;
   let pendingMetadataOverflowRevision = 0;
@@ -202,9 +221,13 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     if (existing && existing.revision >= executionContext.revision) {
       if (existing.revision === executionContext.revision
         && JSON.stringify(existing) !== JSON.stringify(executionContext)) {
+        pendingExecutionContextConflicts.set(sessionId, conflictedExecutionContext(existing));
         scheduleEarlyMetadataConflictReconcile(`context:${sessionId}:${executionContext.revision}`);
       }
       return false;
+    }
+    if ((pendingExecutionContextConflicts.get(sessionId)?.revision ?? -1) < executionContext.revision) {
+      pendingExecutionContextConflicts.delete(sessionId);
     }
     latestExecutionContexts.delete(sessionId);
     latestExecutionContexts.set(sessionId, executionContext);
@@ -388,13 +411,20 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     const visible = next
       .filter((session) => !removedSessionIds.has(session.id))
       .map((session) => {
+        let projected = session;
         const latest = latestOutputActivities.get(session.id);
         const snapshotActivity = session.outputActivity;
         if (latest && latest.revision > (snapshotActivity?.revision ?? -1)) {
-          return { ...session, outputActivity: latest };
+          projected = { ...projected, outputActivity: latest };
+        } else if (snapshotActivity) {
+          latestOutputActivities.set(session.id, snapshotActivity);
         }
-        if (snapshotActivity) latestOutputActivities.set(session.id, snapshotActivity);
-        return session;
+        const contextConflict = pendingExecutionContextConflicts.get(session.id);
+        if (contextConflict
+          && contextConflict.revision >= (projected.executionContext?.revision ?? -1)) {
+          projected = { ...projected, executionContext: contextConflict };
+        }
+        return projected;
       });
     if (authoritative) {
       for (const removedId of [...removedSessionIds]) {
@@ -407,6 +437,9 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
       }
       for (const sessionId of latestExecutionContexts.keys()) {
         if (!authoritativeIds.has(sessionId)) latestExecutionContexts.delete(sessionId);
+      }
+      for (const sessionId of pendingExecutionContextConflicts.keys()) {
+        if (!authoritativeIds.has(sessionId)) pendingExecutionContextConflicts.delete(sessionId);
       }
       for (const sessionId of latestWorkStates.keys()) {
         if (!authoritativeIds.has(sessionId)) latestWorkStates.delete(sessionId);
@@ -469,6 +502,7 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     latestExecutionContexts.clear();
     latestWorkStates.clear();
     pendingMetadataConflictKeys.clear();
+    pendingExecutionContextConflicts.clear();
     if (remoteOpeningObservedAtBySession.size > 0) {
       remoteOpeningObservedAtBySession.clear();
       setRemoteOpeningEpochRevision((value) => value + 1);
@@ -655,11 +689,12 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
         && scheduledLifecycleRevision === lifecycleRevision
         && reconciledOverflowRevision !== pendingMetadataOverflowRevision
       ) {
-        const targetOverflowRevision = pendingMetadataOverflowRevision;
+        let targetOverflowRevision = pendingMetadataOverflowRevision;
         const joinedExistingRefresh = loading();
         try {
           await refresh();
           if (joinedExistingRefresh && scheduledLifecycleRevision === lifecycleRevision) {
+            targetOverflowRevision = pendingMetadataOverflowRevision;
             await refresh();
           }
         } catch {
@@ -668,6 +703,11 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
         }
         reconciledOverflowRevision = targetOverflowRevision;
         pendingMetadataConflictKeys.clear();
+        pendingExecutionContextConflicts.clear();
+        const reconciledCoordinator = activeCoordinator;
+        if (reconciledCoordinator && scheduledLifecycleRevision === lifecycleRevision) {
+          applySnapshot(reconciledCoordinator.getSnapshot(), true);
+        }
         pendingMetadataRetryDelayMs = 50;
       }
     })();
@@ -719,6 +759,7 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
       latestOutputActivities.delete(normalized);
       latestExecutionContexts.delete(normalized);
       latestWorkStates.delete(normalized);
+      pendingExecutionContextConflicts.delete(normalized);
       historyWarmup?.invalidate(normalized, 'removed');
       const current = getCoordinator();
       if (current) current.removeSession(normalized);
