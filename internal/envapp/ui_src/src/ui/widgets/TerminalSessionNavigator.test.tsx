@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { createMemo, createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -89,6 +90,63 @@ function navigationItem(overrides: Partial<TerminalSessionNavigationItem> = {}):
 }
 
 describe('TerminalSessionNavigator agent status presentation', () => {
+  it('restores desktop focus when a session control or its row disappears', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const [items, setItems] = createSignal([
+      navigationItem({ id: 'session-1', title: 'alpha' }),
+      navigationItem({ id: 'session-2', title: 'beta' }),
+    ]);
+    const itemIds = createMemo(() => items().map((item) => item.id));
+    const itemById = createMemo(() => new Map(items().map((item) => [item.id, item])));
+    disposers.push(render(() => (
+      <TerminalSessionNavigator
+        accessibilityIdPrefix="terminal-panel-test"
+        mobile={false}
+        drawerOpen={false}
+        connected
+        refreshing={false}
+        activeTitle="alpha"
+        activeAvatar={{ kind: 'initial' }}
+        shortcutModLabel="Ctrl"
+        filterQuery=""
+        itemIds={itemIds()}
+        itemById={itemById()}
+        sidebarActiveSessionId="session-1"
+        activeSessionId="session-1"
+        copiedPathSessionId={null}
+        emptyListLoading={false}
+        onCloseDrawer={() => undefined}
+        onCreateSession={() => undefined}
+        onRefresh={() => undefined}
+        onFilterQueryChange={() => undefined}
+        onPreviewSession={() => undefined}
+        onResetSessionPreview={() => undefined}
+        onSelectSession={() => undefined}
+        onOpenKeyboardMenu={() => undefined}
+        onOpenContextMenu={() => undefined}
+        onCopyPath={() => undefined}
+        onCloseSession={() => undefined}
+        onOpenFiles={() => undefined}
+      />
+    ), host));
+
+    const sessionOneRow = host.querySelector<HTMLButtonElement>('button[data-terminal-session-id="session-1"]')!;
+    host.querySelector<HTMLButtonElement>('[data-testid="terminal-session-files-session-1"]')?.focus();
+    setItems((current) => current.map((item) => (
+      item.id === 'session-1' ? { ...item, canBrowsePath: false } : item
+    )));
+    await Promise.resolve();
+    expect(host.querySelector('[data-testid="terminal-session-files-session-1"]')).toBeNull();
+    expect(document.activeElement).toBe(sessionOneRow);
+
+    host.querySelector<HTMLButtonElement>('[data-testid="close-session-session-1"]')?.focus();
+    setItems((current) => current.filter((item) => item.id !== 'session-1'));
+    await Promise.resolve();
+    expect(document.activeElement)
+      .toBe(host.querySelector('button[data-terminal-session-id="session-2"]'));
+  });
+
   it('keeps the streaming wave primary while unread output accumulates', () => {
     const { host } = renderNavigator(navigationItem());
 

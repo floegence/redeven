@@ -1,4 +1,4 @@
-import { For, createUniqueId, onCleanup, onMount, type Component } from 'solid-js';
+import { For, createEffect, createMemo, createUniqueId, onCleanup, onMount, type Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import {
   SurfaceFloatingLayer,
@@ -62,7 +62,10 @@ export function estimateFloatingContextMenuHeight(actionCount: number, separator
 
 export const FloatingContextMenu: Component<FloatingContextMenuProps> = (props) => {
   let menuEl: HTMLDivElement | null = null;
+  let lastFocusedItemId: string | null = null;
+  let lastFocusedItemIndex = 0;
   const disabledDescriptionPrefix = createUniqueId();
+  const itemsById = createMemo(() => new Map(props.items.map((item) => [item.id, item])));
 
   const dismiss = (reason: MenuDismissReason) => {
     const focusAnchor = props.focusAnchor;
@@ -80,6 +83,35 @@ export const FloatingContextMenu: Component<FloatingContextMenuProps> = (props) 
       includeAriaDisabledItems: props.focusDisabledItems,
     }));
     onCleanup(() => cancelAnimationFrame(frame));
+  });
+
+  createEffect(() => {
+    const focusTopology = props.items.map((item) => (
+      item.kind === 'action'
+        ? `${item.id}:${Boolean(item.disabled || item.disabledReason)}:${Boolean(props.focusDisabledItems)}`
+        : `${item.id}:separator`
+    )).join('|');
+    if (!focusTopology || !lastFocusedItemId) return;
+    queueMicrotask(() => {
+      if (!menuEl?.isConnected || !lastFocusedItemId) return;
+      const active = document.activeElement;
+      const focusableItems = Array.from(menuEl.querySelectorAll<HTMLButtonElement>(
+        '[role="menuitem"]:not([disabled])',
+      ));
+      if (active instanceof HTMLButtonElement && focusableItems.includes(active)) return;
+      if (active !== document.body && !menuEl.contains(active)) return;
+
+      const sameItem = focusableItems.find(
+        (item) => item.dataset.floatingMenuItemId === lastFocusedItemId,
+      );
+      const nextItem = sameItem ?? focusableItems.find((item) => {
+        const itemIndex = props.items.findIndex(
+          (candidate) => candidate.id === item.dataset.floatingMenuItemId,
+        );
+        return itemIndex >= lastFocusedItemIndex;
+      }) ?? focusableItems.at(-1);
+      nextItem?.focus({ preventScroll: true });
+    });
   });
 
   return (
@@ -121,6 +153,12 @@ export const FloatingContextMenu: Component<FloatingContextMenuProps> = (props) 
         redevenSurfaceRoleClass('overlay'),
       )}
       onContextMenu={(event) => event.preventDefault()}
+      onFocusIn={(event) => {
+        const item = (event.target as Element | null)?.closest<HTMLElement>('[data-floating-menu-item-id]');
+        if (!item?.dataset.floatingMenuItemId) return;
+        lastFocusedItemId = item.dataset.floatingMenuItemId;
+        lastFocusedItemIndex = Math.max(0, props.items.findIndex((candidate) => candidate.id === lastFocusedItemId));
+      }}
       onKeyDown={(event) => {
         handleMenuKeyboardNavigation(event, {
           includeAriaDisabledItems: props.focusDisabledItems,
@@ -130,38 +168,41 @@ export const FloatingContextMenu: Component<FloatingContextMenuProps> = (props) 
         });
       }}
     >
-      <For each={props.items}>
-        {(item, index) => {
-          if (!isActionItem(item)) {
+      <For each={props.items.map((item) => item.id)}>
+        {(itemId, index) => {
+          const item = () => itemsById().get(itemId)!;
+          if (!isActionItem(item())) {
             return <div role="separator" aria-orientation="horizontal" class={cn('my-1 border-t', redevenDividerRoleClass('strong'))} />;
           }
 
-          const Icon = item.icon;
-          const itemDisabled = Boolean(item.disabled || item.disabledReason);
-          const focusableDisabled = Boolean(props.focusDisabledItems && itemDisabled);
-          const disabledDescriptionID = item.disabledReason
+          const actionItem = () => item() as FloatingContextMenuActionItem;
+          const Icon = actionItem().icon;
+          const itemDisabled = () => Boolean(actionItem().disabled || actionItem().disabledReason);
+          const focusableDisabled = () => Boolean(props.focusDisabledItems && itemDisabled());
+          const disabledDescriptionID = () => actionItem().disabledReason
             ? `${disabledDescriptionPrefix}-disabled-${index()}`
             : undefined;
-          const itemClass = item.destructive
+          const itemClass = () => actionItem().destructive
             ? 'w-full flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors duration-75 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40 aria-disabled:cursor-not-allowed aria-disabled:opacity-40 text-destructive hover:bg-destructive/10 hover:text-destructive focus-visible:bg-destructive/10 focus-visible:text-destructive'
             : 'w-full flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors duration-75 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40 aria-disabled:cursor-not-allowed aria-disabled:opacity-40 hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground';
           return (
             <button
               type="button"
               role="menuitem"
-              class={itemClass}
-              disabled={itemDisabled && !focusableDisabled}
-              aria-disabled={focusableDisabled ? 'true' : undefined}
-              aria-describedby={disabledDescriptionID}
-              title={item.disabledReason || (props.width ? item.label : undefined)}
+              class={itemClass()}
+              disabled={itemDisabled() && !focusableDisabled()}
+              aria-disabled={focusableDisabled() ? 'true' : undefined}
+              aria-describedby={disabledDescriptionID()}
+              title={actionItem().disabledReason || (props.width ? actionItem().label : undefined)}
+              data-floating-menu-item-id={itemId}
               onClick={() => {
-                if (!itemDisabled) item.onSelect();
+                if (!itemDisabled()) actionItem().onSelect();
               }}
             >
               <Icon class="w-3.5 h-3.5 opacity-60" />
-              <span class={props.width ? 'min-w-0 flex-1 truncate text-left' : 'flex-1 text-left'}>{item.label}</span>
-              {item.disabledReason ? (
-                <span id={disabledDescriptionID} class="sr-only">{item.disabledReason}</span>
+              <span class={props.width ? 'min-w-0 flex-1 truncate text-left' : 'flex-1 text-left'}>{actionItem().label}</span>
+              {actionItem().disabledReason ? (
+                <span id={disabledDescriptionID()} class="sr-only">{actionItem().disabledReason}</span>
               ) : null}
             </button>
           );
