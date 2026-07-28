@@ -1,0 +1,1571 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "path": "cmd/ai-loop-eval/main.go",
+      "sha256": "c0210da9edb3660875135fe182f3494fdaaefb056a3d33c34d62a3d78e4ec6fa",
+      "sink_kinds": [
+        "file",
+        "json_file"
+      ],
+      "owner": "redeven developer tooling",
+      "authority": "build_or_test_artifact",
+      "data_classes": [
+        "developer-owned generated or test artifact"
+      ],
+      "codecs": [
+        "encoding/json.Marshal",
+        "encoding/json.MarshalIndent"
+      ],
+      "dtos": [
+        "payload",
+        "rawMessage",
+        "v"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "cmd/ai-loop-eval/workspace.go",
+      "sha256": "a583f10853f1774b213d4baf572a2bafa7e923eceb1d6c05e4ea4fc6d61be545",
+      "sink_kinds": [
+        "file"
+      ],
+      "owner": "redeven developer tooling",
+      "authority": "build_or_test_artifact",
+      "data_classes": [
+        "developer-owned generated or test artifact"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "cmd/redeven-gateway/main.go",
+      "sha256": "be632c47cdf8b2b6cb4b91eacaf3bc037e6c4d7663fe7f65c00fd203b443df49",
+      "sink_kinds": [
+        "file",
+        "json_file"
+      ],
+      "owner": "redeven",
+      "authority": "product_configuration",
+      "data_classes": [
+        "product-owned state"
+      ],
+      "codecs": [
+        "encoding/json.MarshalIndent",
+        "encoding/json.NewEncoder"
+      ],
+      "dtos": [
+        "serviceStatus{\n\tStatus:\t\t\"running\",\n\tPID:\t\tpid,\n\tListen:\t\tstrings.TrimSpace(listen),\n\tStateRoot:\tstateRoot,\n\tExecutable:\tstrings.TrimSpace(exe),\n}",
+        "serviceStatus{Status: \"not_running\", StateRoot: stateRootValue}",
+        "status"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "cmd/redeven/desktop_launch_report.go",
+      "sha256": "2b87505ab0421cf771f273a94df99b56de13d1a65cc3159bc84f126426a370b3",
+      "sink_kinds": [
+        "file",
+        "json_file"
+      ],
+      "owner": "redeven",
+      "authority": "product_configuration",
+      "data_classes": [
+        "product-owned state"
+      ],
+      "codecs": [
+        "encoding/json.MarshalIndent"
+      ],
+      "dtos": [
+        "report"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "cmd/redeven/main.go",
+      "sha256": "f43b9818f6a28e755b2fa05c84a494cd79833a1a3c08a71a9b38d7854cc71661",
+      "sink_kinds": [
+        "file"
+      ],
+      "owner": "redeven",
+      "authority": "product_configuration",
+      "data_classes": [
+        "product-owned state"
+      ],
+      "tables": [
+        "a",
+        "environment",
+        "interception",
+        "managing",
+        "runtime",
+        "stdin"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "cmd/redeven/password.go",
+      "sha256": "0f66abb7e2cd147fb877b251b452ac4f9bd6219a617c951048d28c4ad1abab24",
+      "sink_kinds": [
+        "file"
+      ],
+      "owner": "redeven",
+      "authority": "product_configuration",
+      "data_classes": [
+        "product-owned state"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "desktop/src/main/codeWorkspaceEnginePackageJobs.ts",
+      "sha256": "4a62ab7538a0ee9f5484ed0b42fa2d9783200e2e01538e360646c5ac62c7495f",
+      "sink_kinds": [
+        "file"
+      ],
+      "owner": "redeven Desktop",
+      "authority": "product_configuration",
+      "data_classes": [
+        "Desktop preferences, runtime handoff, download, or product cache"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "desktop/src/main/codeWorkspaceEngineReleaseAssets.ts",
+      "sha256": "eac5f7e8c5f7cc25cdfd899a5941542ec092d4e655a8a3fec852afccb82408b2",
+      "sink_kinds": [
+        "file"
+      ],
+      "owner": "redeven Desktop",
+      "authority": "product_configuration",
+      "data_classes": [
+        "Desktop preferences, runtime handoff, download, or product cache"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "desktop/src/main/desktopDownloadWriter.ts",
+      "sha256": "d375790458c8210c1ad4a9ecbaf35c8e4d0506e4bbc2e5901d258d183cf599ff",
+      "sink_kinds": [
+        "file"
+      ],
+      "owner": "redeven Desktop",
+      "authority": "product_configuration",
+      "data_classes": [
+        "Desktop preferences, runtime handoff, download, or product cache"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "desktop/src/main/desktopPreferences.ts",
+      "sha256": "bca5154b3f1d8d5496bc8337dcd497cb02a9878ccc769cf33a79080095e413f3",
+      "sink_kinds": [
+        "file"
+      ],
+      "owner": "redeven Desktop",
+      "authority": "product_configuration",
+      "data_classes": [
+        "Desktop preferences, runtime handoff, download, or product cache"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "desktop/src/main/desktopRuntimeOwner.ts",
+      "sha256": "7091909f5cc40ed4cb6724ba804b544d95313177464c41b4413b3825570d8628",
+      "sink_kinds": [
+        "file"
+      ],
+      "owner": "redeven Desktop",
+      "authority": "product_configuration",
+      "data_classes": [
+        "Desktop preferences, runtime handoff, download, or product cache"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "desktop/src/main/diagnostics.ts",
+      "sha256": "34ac1ee559e144eddaff1b32c77b449a791f031de99c03590a2a03e78a5131bb",
+      "sink_kinds": [
+        "file"
+      ],
+      "owner": "redeven Desktop",
+      "authority": "product_configuration",
+      "data_classes": [
+        "Desktop preferences, runtime handoff, download, or product cache"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "desktop/src/main/gatewayStore.ts",
+      "sha256": "dce1fbba4bc69582e1ebfd83af6fb75183fedd7df442adbd92cb6cf24e5c29db",
+      "sink_kinds": [
+        "file"
+      ],
+      "owner": "redeven Desktop",
+      "authority": "product_configuration",
+      "data_classes": [
+        "Desktop preferences, runtime handoff, download, or product cache"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "desktop/src/main/main.ts",
+      "sha256": "f55ed8e8ee66469c7522da533d6a71c260928a3ad0a51fe97d911897e622418b",
+      "sink_kinds": [
+        "file"
+      ],
+      "owner": "redeven Desktop",
+      "authority": "product_configuration",
+      "data_classes": [
+        "Desktop preferences, runtime handoff, download, or product cache"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "desktop/src/main/sshReleaseAssets.ts",
+      "sha256": "4f891ee3b87c6e4748393f9d4d242df65139291741e41df297f7c5323b7a759c",
+      "sink_kinds": [
+        "file"
+      ],
+      "owner": "redeven Desktop",
+      "authority": "product_configuration",
+      "data_classes": [
+        "Desktop preferences, runtime handoff, download, or product cache"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "desktop/src/shared/releaseArtifactNames.ts",
+      "sha256": "3ec16ec7fa9381d186264cd08547f26dc2d0568cd17d19f1c69408c74c2b2ed7",
+      "sink_kinds": [
+        "file"
+      ],
+      "owner": "redeven Desktop",
+      "authority": "product_configuration",
+      "data_classes": [
+        "Desktop preferences, runtime handoff, download, or product cache"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/agent/maintenance.go",
+      "sha256": "48ec094f46955a21e98acc2fe6787e8dd3d646a7c0c29654a475edeb8e45be55",
+      "sink_kinds": [
+        "file",
+        "json_file"
+      ],
+      "owner": "redeven",
+      "authority": "product_configuration",
+      "data_classes": [
+        "product-owned state"
+      ],
+      "tables": [
+        "completed",
+        "could",
+        "did"
+      ],
+      "codecs": [
+        "encoding/json.MarshalIndent"
+      ],
+      "dtos": [
+        "marker"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/ai/desktop_model_source.go",
+      "sha256": "5e4653c868745b395d14c16ccb22d7afd5348dc75e6a1e39b750174f7a4877d7",
+      "sink_kinds": [
+        "file",
+        "json_file"
+      ],
+      "owner": "redeven",
+      "authority": "product_configuration",
+      "data_classes": [
+        "product-owned state"
+      ],
+      "codecs": [
+        "encoding/json.Marshal",
+        "encoding/json.NewEncoder"
+      ],
+      "dtos": [
+        "body",
+        "report",
+        "v"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/ai/skill_manager.go",
+      "sha256": "d13b06d1a5b1213b003ba464d776a45c6c61e106a4e4f60e41c807c4c04a1fb2",
+      "sink_kinds": [
+        "file",
+        "json_file"
+      ],
+      "owner": "redeven",
+      "authority": "product_configuration",
+      "data_classes": [
+        "product-owned state"
+      ],
+      "codecs": [
+        "encoding/json.MarshalIndent"
+      ],
+      "dtos": [
+        "payload"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/ai/skill_manager_remote.go",
+      "sha256": "42895f0a84559f142a0bef3c4324be876ca18c824f5cbc012812c06205a51ef8",
+      "sink_kinds": [
+        "file",
+        "json_file"
+      ],
+      "owner": "redeven",
+      "authority": "product_configuration",
+      "data_classes": [
+        "product-owned state"
+      ],
+      "tables": [
+        "github",
+        "request"
+      ],
+      "codecs": [
+        "encoding/json.MarshalIndent"
+      ],
+      "dtos": [
+        "payload"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/ai/structured_tools.go",
+      "sha256": "d5bfe5c9e0bfa8aac2d3b2eedf59ad3582edef1c62eaea31207032d79ca2c549",
+      "sink_kinds": [
+        "file"
+      ],
+      "owner": "redeven tool effect",
+      "authority": "user_effect",
+      "data_classes": [
+        "explicitly authorized user filesystem effect"
+      ],
+      "tables": [
+        "old_string"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/ai/threadstore/context_planes.go",
+      "sha256": "8a3be870cff65ed0638ec88b96bc382955446ddeb5d91ca8b8bc86ec64a7b1f9",
+      "sink_kinds": [
+        "sqlite"
+      ],
+      "owner": "redeven threadstore",
+      "authority": "product_coordination",
+      "data_classes": [
+        "host thread settings",
+        "unadmitted commands",
+        "product routing",
+        "resource claims",
+        "cross-store operation intent",
+        "permission audit"
+      ],
+      "tables": [
+        "provider_capabilities",
+        "set"
+      ],
+      "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
+    },
+    {
+      "path": "internal/ai/threadstore/flower_records.go",
+      "sha256": "11e5d26be15ef7c53b7f4cd5d3f94af78d2115886ed09b3442db68045c2a49e8",
+      "sink_kinds": [
+        "sqlite"
+      ],
+      "owner": "redeven threadstore",
+      "authority": "product_coordination",
+      "data_classes": [
+        "host thread settings",
+        "unadmitted commands",
+        "product routing",
+        "resource claims",
+        "cross-store operation intent",
+        "permission audit"
+      ],
+      "tables": [
+        "ai_flower_thread_routing",
+        "set"
+      ],
+      "codecs": [
+        "encoding/json.Marshal"
+      ],
+      "dtos": [
+        "out"
+      ],
+      "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
+    },
+    {
+      "path": "internal/ai/threadstore/followups.go",
+      "sha256": "5901538b9fda39e0aa654d4ebde54bb598a41ddd3bdbe310c5b4a57e365e83fb",
+      "sink_kinds": [
+        "sqlite"
+      ],
+      "owner": "redeven threadstore",
+      "authority": "product_coordination",
+      "data_classes": [
+        "host thread settings",
+        "unadmitted commands",
+        "product routing",
+        "resource claims",
+        "cross-store operation intent",
+        "permission audit"
+      ],
+      "tables": [
+        "ai_queued_turns",
+        "ai_thread_settings"
+      ],
+      "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
+    },
+    {
+      "path": "internal/ai/threadstore/fork_operation.go",
+      "sha256": "2992eb689aac02133f5b062b6f35a340c888d2d664f6a02f68e653bd28436cf9",
+      "sink_kinds": [
+        "sqlite"
+      ],
+      "owner": "redeven threadstore",
+      "authority": "product_coordination",
+      "data_classes": [
+        "host thread settings",
+        "unadmitted commands",
+        "product routing",
+        "resource claims",
+        "cross-store operation intent",
+        "permission audit"
+      ],
+      "tables": [
+        "ai_flower_thread_routing",
+        "ai_thread_create_operations",
+        "ai_thread_fork_operations",
+        "ai_thread_settings",
+        "ai_upload_refs"
+      ],
+      "codecs": [
+        "encoding/json.Marshal"
+      ],
+      "dtos": [
+        "req",
+        "snapshot"
+      ],
+      "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
+    },
+    {
+      "path": "internal/ai/threadstore/orphan_adoption.go",
+      "sha256": "fd5347e39e28f16ce572ed6af0a4ee5c417396da671d2be80e7c8ee8a13ffce0",
+      "sink_kinds": [
+        "sqlite"
+      ],
+      "owner": "redeven threadstore",
+      "authority": "product_coordination",
+      "data_classes": [
+        "host thread settings",
+        "unadmitted commands",
+        "product routing",
+        "resource claims",
+        "cross-store operation intent",
+        "permission audit"
+      ],
+      "tables": [
+        "ai_thread_create_operations",
+        "ai_thread_fork_operations",
+        "ai_thread_settings"
+      ],
+      "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
+    },
+    {
+      "path": "internal/ai/threadstore/permission_snapshot.go",
+      "sha256": "92204979f1d05b9bb1babcd087354b294f5bf49e468e05f5a8fa4c6f7893f5f3",
+      "sink_kinds": [
+        "sqlite"
+      ],
+      "owner": "redeven threadstore",
+      "authority": "product_coordination",
+      "data_classes": [
+        "host thread settings",
+        "unadmitted commands",
+        "product routing",
+        "resource claims",
+        "cross-store operation intent",
+        "permission audit"
+      ],
+      "tables": [
+        "ai_child_permission_snapshots",
+        "ai_permission_snapshots"
+      ],
+      "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
+    },
+    {
+      "path": "internal/ai/threadstore/product_migrations.go",
+      "sha256": "20b55f9daeb0db800f5f9de590aed8e05d06b3bdf903a739634b54e762ee3904",
+      "sink_kinds": [
+        "sqlite"
+      ],
+      "owner": "redeven threadstore",
+      "authority": "product_coordination",
+      "data_classes": [
+        "host thread settings",
+        "unadmitted commands",
+        "product routing",
+        "resource claims",
+        "cross-store operation intent",
+        "permission audit"
+      ],
+      "tables": [
+        "ai_child_permission_snapshots",
+        "ai_composer_drafts",
+        "ai_flower_handoffs",
+        "ai_flower_thread_metadata",
+        "ai_flower_thread_routing",
+        "ai_flower_transfers",
+        "ai_permission_snapshots",
+        "ai_queued_turns",
+        "ai_thread_delete_operations",
+        "ai_thread_fork_operations",
+        "ai_thread_settings",
+        "ai_threads",
+        "ai_upload_refs",
+        "ai_uploads",
+        "product_v2_ai_child_permission_snapshots",
+        "product_v2_ai_threads",
+        "product_v2_ai_upload_refs",
+        "product_v4_ai_uploads",
+        "product_v6_ai_composer_drafts"
+      ],
+      "codecs": [
+        "encoding/json.Marshal"
+      ],
+      "dtos": [
+        "snapshot",
+        "value"
+      ],
+      "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
+    },
+    {
+      "path": "internal/ai/threadstore/schema.go",
+      "sha256": "aee74943158c140fca10583c5023d5141ceed8ed51005c557ca19e17b4e58569",
+      "sink_kinds": [
+        "sqlite"
+      ],
+      "owner": "redeven threadstore",
+      "authority": "product_coordination",
+      "data_classes": [
+        "host thread settings",
+        "unadmitted commands",
+        "product routing",
+        "resource claims",
+        "cross-store operation intent",
+        "permission audit"
+      ],
+      "tables": [
+        "ai_child_permission_snapshots",
+        "ai_composer_drafts",
+        "ai_flower_handoffs",
+        "ai_flower_thread_metadata",
+        "ai_flower_thread_routing",
+        "ai_flower_transfers",
+        "ai_permission_snapshots",
+        "ai_queued_turns",
+        "ai_subagent_publication_operations",
+        "ai_thread_create_operations",
+        "ai_thread_delete_operations",
+        "ai_thread_fork_operations",
+        "ai_thread_settings",
+        "ai_threads",
+        "ai_upload_attempts",
+        "ai_upload_refs",
+        "ai_upload_staging_scopes",
+        "ai_uploads",
+        "provider_capabilities"
+      ],
+      "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
+    },
+    {
+      "path": "internal/ai/threadstore/schema_preflight.go",
+      "sha256": "0b96c0a92d2aa32071692f8c3aef3d94d473c87f414337a172d4a8cb6511887d",
+      "sink_kinds": [
+        "sqlite"
+      ],
+      "owner": "redeven threadstore",
+      "authority": "product_coordination",
+      "data_classes": [
+        "host thread settings",
+        "unadmitted commands",
+        "product routing",
+        "resource claims",
+        "cross-store operation intent",
+        "permission audit"
+      ],
+      "tables": [
+        "__redeven_db_meta",
+        "ai_composer_drafts",
+        "ai_threads",
+        "ai_upload_refs",
+        "ai_uploads",
+        "sqlite_master"
+      ],
+      "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
+    },
+    {
+      "path": "internal/ai/threadstore/store.go",
+      "sha256": "7113489b8f6e9abb96549006d7b3e736032b075660d35e3932ab16f2491bfebe",
+      "sink_kinds": [
+        "sqlite"
+      ],
+      "owner": "redeven threadstore",
+      "authority": "product_coordination",
+      "data_classes": [
+        "host thread settings",
+        "unadmitted commands",
+        "product routing",
+        "resource claims",
+        "cross-store operation intent",
+        "permission audit"
+      ],
+      "tables": [
+        "ai_queued_turns",
+        "ai_thread_delete_operations",
+        "ai_thread_settings"
+      ],
+      "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
+    },
+    {
+      "path": "internal/ai/threadstore/subagent_publication.go",
+      "sha256": "187bc3695dff179dd6f51895b73412f330639a9881bff5ae3e3b4ea99ee735eb",
+      "sink_kinds": [
+        "sqlite"
+      ],
+      "owner": "redeven threadstore",
+      "authority": "product_coordination",
+      "data_classes": [
+        "host thread settings",
+        "unadmitted commands",
+        "product routing",
+        "resource claims",
+        "cross-store operation intent",
+        "permission audit"
+      ],
+      "tables": [
+        "ai_child_permission_snapshots",
+        "ai_subagent_publication_operations"
+      ],
+      "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
+    },
+    {
+      "path": "internal/ai/threadstore/thread_create_operation.go",
+      "sha256": "09527aea3bae2bdc14f70ffc54ace4578684ed31b0251b6d15cd98c58cff1042",
+      "sink_kinds": [
+        "sqlite"
+      ],
+      "owner": "redeven threadstore",
+      "authority": "product_coordination",
+      "data_classes": [
+        "host thread settings",
+        "unadmitted commands",
+        "product routing",
+        "resource claims",
+        "cross-store operation intent",
+        "permission audit"
+      ],
+      "tables": [
+        "ai_thread_create_operations",
+        "ai_thread_settings"
+      ],
+      "codecs": [
+        "encoding/json.Marshal"
+      ],
+      "dtos": [
+        "snapshot"
+      ],
+      "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
+    },
+    {
+      "path": "internal/ai/threadstore/thread_delete_operation.go",
+      "sha256": "4c78ea939f2f701361a2634d0da78bc14227d6e01d23c7ab25957542aa5406e7",
+      "sink_kinds": [
+        "sqlite"
+      ],
+      "owner": "redeven threadstore",
+      "authority": "product_coordination",
+      "data_classes": [
+        "host thread settings",
+        "unadmitted commands",
+        "product routing",
+        "resource claims",
+        "cross-store operation intent",
+        "permission audit"
+      ],
+      "tables": [
+        "ai_thread_delete_operations",
+        "ai_thread_fork_operations",
+        "ai_thread_settings"
+      ],
+      "codecs": [
+        "encoding/json.Marshal"
+      ],
+      "dtos": [
+        "snapshot",
+        "struct {\n\tEndpointID\tstring\t\t\t`json:\"endpoint_id\"`\n\tThreadID\tstring\t\t\t`json:\"thread_id\"`\n\tSnapshot\tThreadDeleteSnapshotV1\t`json:\"snapshot\"`\n}{\n\tEndpointID:\tstrings.TrimSpace(endpointID),\n\tThreadID:\tstrings.TrimSpace(threadID),\n\tSnapshot:\tsnapshot,\n}"
+      ],
+      "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
+    },
+    {
+      "path": "internal/ai/threadstore/thread_fork.go",
+      "sha256": "ae206ec59db04532f9ee3384bc1c2a776a1aece3e58d5fd8f1e8818860051279",
+      "sink_kinds": [
+        "sqlite"
+      ],
+      "owner": "redeven threadstore",
+      "authority": "product_coordination",
+      "data_classes": [
+        "host thread settings",
+        "unadmitted commands",
+        "product routing",
+        "resource claims",
+        "cross-store operation intent",
+        "permission audit"
+      ],
+      "tables": [
+        "ai_thread_settings"
+      ],
+      "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
+    },
+    {
+      "path": "internal/ai/threadstore/thread_lifecycle.go",
+      "sha256": "59145bc3a19ecc13279f51cdd88141c4f5f7034d22cf77fdd71742421428936e",
+      "sink_kinds": [
+        "sqlite"
+      ],
+      "owner": "redeven threadstore",
+      "authority": "product_coordination",
+      "data_classes": [
+        "host thread settings",
+        "unadmitted commands",
+        "product routing",
+        "resource claims",
+        "cross-store operation intent",
+        "permission audit"
+      ],
+      "tables": [
+        "ai_child_permission_snapshots",
+        "ai_flower_thread_routing",
+        "ai_permission_snapshots",
+        "ai_queued_turns",
+        "ai_subagent_publication_operations",
+        "ai_upload_staging_scopes"
+      ],
+      "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
+    },
+    {
+      "path": "internal/ai/threadstore/upload_staging.go",
+      "sha256": "dc26ef058d850d5616a397f156996cb8f9e4c9a5dbf9fe94ebc94506d06d29ff",
+      "sink_kinds": [
+        "sqlite"
+      ],
+      "owner": "redeven threadstore",
+      "authority": "product_coordination",
+      "data_classes": [
+        "host thread settings",
+        "unadmitted commands",
+        "product routing",
+        "resource claims",
+        "cross-store operation intent",
+        "permission audit"
+      ],
+      "tables": [
+        "ai_queued_turns",
+        "ai_thread_create_operations",
+        "ai_thread_settings",
+        "ai_upload_attempts",
+        "ai_upload_refs",
+        "ai_upload_staging_scopes",
+        "ai_uploads"
+      ],
+      "codecs": [
+        "encoding/json.Marshal"
+      ],
+      "dtos": [
+        "snapshot"
+      ],
+      "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
+    },
+    {
+      "path": "internal/ai/threadstore/uploads.go",
+      "sha256": "054e1827a067311a58f66df67083fa01f50fe6e45a06f04aff6ceba0ec29049e",
+      "sink_kinds": [
+        "sqlite"
+      ],
+      "owner": "redeven threadstore",
+      "authority": "product_coordination",
+      "data_classes": [
+        "host thread settings",
+        "unadmitted commands",
+        "product routing",
+        "resource claims",
+        "cross-store operation intent",
+        "permission audit"
+      ],
+      "tables": [
+        "ai_queued_turns",
+        "ai_upload_attempts",
+        "ai_upload_refs",
+        "ai_uploads"
+      ],
+      "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
+    },
+    {
+      "path": "internal/ai/unified_diff_apply.go",
+      "sha256": "9ca78557794638eb4e7028274b4ebc02c3f8049f1bf3b9d3fda75a46e00420e7",
+      "sink_kinds": [
+        "file"
+      ],
+      "owner": "redeven tool effect",
+      "authority": "user_effect",
+      "data_classes": [
+        "explicitly authorized user filesystem effect"
+      ],
+      "tables": [
+        "file",
+        "line"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/ai/uploads.go",
+      "sha256": "4a511e9de4b5b4a333518b099e4ee08dc2e48dfbab682689379b4e54d309c361",
+      "sink_kinds": [
+        "file",
+        "json_file"
+      ],
+      "owner": "redeven uploads",
+      "authority": "product_resource",
+      "data_classes": [
+        "user-owned upload bytes"
+      ],
+      "tables": [
+        "canonical",
+        "declared",
+        "immutable",
+        "the"
+      ],
+      "codecs": [
+        "encoding/json.Marshal"
+      ],
+      "dtos": [
+        "struct {\n\tVersion\tstring\t\t\t`json:\"version\"`\n\tValue\tAttachmentCapabilities\t`json:\"value\"`\n}{Version: \"redeven-attachment-capabilities-v1\", Value: out}"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/auditlog/store.go",
+      "sha256": "e2b376a168815e3b9628c3681c0405c5cfe5b421a4d5f79c195a8044919b9a46",
+      "sink_kinds": [
+        "file",
+        "json_file"
+      ],
+      "owner": "redeven audit log",
+      "authority": "security_audit",
+      "data_classes": [
+        "append-only product security audit"
+      ],
+      "codecs": [
+        "encoding/json.NewEncoder"
+      ],
+      "dtos": [
+        "\u0026e"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/codeapp/codeserver/artifact.go",
+      "sha256": "f0dbdc9885d1638b9ab2edbbf1225830ad9178fa307cd3669b6b80c42aa1d6cf",
+      "sink_kinds": [
+        "file"
+      ],
+      "owner": "redeven",
+      "authority": "product_configuration",
+      "data_classes": [
+        "product-owned state"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/codeapp/codeserver/remote_download.go",
+      "sha256": "9ed4e9155ffdc302ea8cca6b90d65f1c06135416f2ce73d9c941d4e3e18c1c03",
+      "sink_kinds": [
+        "file",
+        "json_file"
+      ],
+      "owner": "redeven",
+      "authority": "product_configuration",
+      "data_classes": [
+        "product-owned state"
+      ],
+      "codecs": [
+        "encoding/json.MarshalIndent"
+      ],
+      "dtos": [
+        "manifest"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/codeapp/codeserver/runner.go",
+      "sha256": "73642697b9ec0d98ae779a0fc60a9149b0d3ba1d2d1acf9414e42eaf106d0c62",
+      "sink_kinds": [
+        "file"
+      ],
+      "owner": "redeven",
+      "authority": "product_configuration",
+      "data_classes": [
+        "product-owned state"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/codeapp/codeserver/setup_operation.go",
+      "sha256": "064a2f5ad1e065e7008a7bf0440457210209472b2e977e49d7162b1a03ce9a97",
+      "sink_kinds": [
+        "file",
+        "json_file"
+      ],
+      "owner": "redeven",
+      "authority": "product_configuration",
+      "data_classes": [
+        "product-owned state"
+      ],
+      "tables": [
+        "the",
+        "this"
+      ],
+      "codecs": [
+        "encoding/json.MarshalIndent"
+      ],
+      "dtos": [
+        "session"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/codeapp/codeserver/shared_state.go",
+      "sha256": "2b6e7e5f12dca4e8e8493aebd5fad2ec4a101a84ab379ec7e1af1eaf577a6af3",
+      "sink_kinds": [
+        "file",
+        "json_file"
+      ],
+      "owner": "redeven",
+      "authority": "product_configuration",
+      "data_classes": [
+        "product-owned state"
+      ],
+      "codecs": [
+        "encoding/json.MarshalIndent"
+      ],
+      "dtos": [
+        "state"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/codeapp/registry/registry.go",
+      "sha256": "2fe5c27c0abf033a45cd14f4fea2dba794bb2dac9b322f9e89f291bbdeea9cbf",
+      "sink_kinds": [
+        "sqlite"
+      ],
+      "owner": "redeven",
+      "authority": "product_configuration",
+      "data_classes": [
+        "product-owned state"
+      ],
+      "tables": [
+        "code_spaces"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/codeapp/registry/schema.go",
+      "sha256": "fe04350e6a510d11b135564355d11e88f09506ddd0e35e3af7c2206e9a4495f9",
+      "sink_kinds": [
+        "sqlite"
+      ],
+      "owner": "redeven",
+      "authority": "product_configuration",
+      "data_classes": [
+        "product-owned state"
+      ],
+      "tables": [
+        "code_spaces",
+        "code_spaces_legacy_v1",
+        "code_spaces_migration_v1",
+        "sqlite_master"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/codeapp/ui_src/src/inject.ts",
+      "sha256": "25e605315ead295aa59cf54e4a8653af6dbd77eee0c465bfb95e4f9a4ee84f6b",
+      "sink_kinds": [
+        "web_storage"
+      ],
+      "owner": "redeven UI",
+      "authority": "browser_ui_preference",
+      "data_classes": [
+        "product UI preference or cache"
+      ],
+      "keys": [
+        "expression:key"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/config/catalog.go",
+      "sha256": "cc62578f578eb0b3630e06c43e38244eec8ca5649c645cae49cdaf916c023d87",
+      "sink_kinds": [
+        "file",
+        "json_file"
+      ],
+      "owner": "redeven",
+      "authority": "product_configuration",
+      "data_classes": [
+        "product-owned state"
+      ],
+      "codecs": [
+        "encoding/json.MarshalIndent"
+      ],
+      "dtos": [
+        "record"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/config/config_persistence.go",
+      "sha256": "3d2fed31094f47ecb78748d56597a3e43ae4134510fda7a04b0157d174e9e74e",
+      "sink_kinds": [
+        "file",
+        "json_file"
+      ],
+      "owner": "redeven",
+      "authority": "product_configuration",
+      "data_classes": [
+        "product-owned state"
+      ],
+      "tables": [
+        "secrets"
+      ],
+      "codecs": [
+        "encoding/json.MarshalIndent"
+      ],
+      "dtos": [
+        "cfg"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/diagnostics/store.go",
+      "sha256": "3d52a237489368bbb7c91b0640df5f741cb6866c47a61484275f0d01fecfc018",
+      "sink_kinds": [
+        "file",
+        "json_file"
+      ],
+      "owner": "redeven diagnostics",
+      "authority": "diagnostics",
+      "data_classes": [
+        "bounded product diagnostics"
+      ],
+      "codecs": [
+        "encoding/json.NewEncoder"
+      ],
+      "dtos": [
+        "\u0026e"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/envapp/ui_src/src/ui/EnvAppShell.tsx",
+      "sha256": "caa7bf752b1b222e5c5ea9fde301c67fb4624eb9d6c7c4af2e85ac3ea46894d6",
+      "sink_kinds": [
+        "web_storage"
+      ],
+      "owner": "redeven UI",
+      "authority": "browser_ui_preference",
+      "data_classes": [
+        "product UI preference or cache"
+      ],
+      "keys": [
+        "redeven_env_public_id"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/envapp/ui_src/src/ui/services/controlplaneApi.ts",
+      "sha256": "3d998784512ad6a23bf56f5eb51bf9c1ef51a4a8af28ec4738703ac78a96cebe",
+      "sink_kinds": [
+        "web_storage"
+      ],
+      "owner": "redeven UI",
+      "authority": "browser_ui_preference",
+      "data_classes": [
+        "product UI preference or cache"
+      ],
+      "keys": [
+        "expression:key"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/envapp/ui_src/src/ui/services/uiStorage.ts",
+      "sha256": "c89a7fc49a9d2d75cf910bace2fc30bd0079e16281f380daeb1cff0932e6695d",
+      "sink_kinds": [
+        "web_storage"
+      ],
+      "owner": "redeven UI",
+      "authority": "browser_ui_preference",
+      "data_classes": [
+        "product UI preference or cache"
+      ],
+      "keys": [
+        "expression:key"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/envapp/ui_src/src/ui/widgets/RemoteFileBrowser.tsx",
+      "sha256": "3671d1e0573ec1fcbcc9d738ebb692004cc2c1ea2e8a768bc50bc239f5e1e50c",
+      "sink_kinds": [
+        "file"
+      ],
+      "owner": "redeven UI",
+      "authority": "browser_ui_preference",
+      "data_classes": [
+        "product UI preference or cache"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx",
+      "sha256": "1480b84310ffff513ddc3f619c5ea2ff881a88e430cb682094903182ca7bd473",
+      "sink_kinds": [
+        "web_storage"
+      ],
+      "owner": "redeven UI",
+      "authority": "browser_ui_preference",
+      "data_classes": [
+        "product UI preference or cache"
+      ],
+      "keys": [
+        "expression:storageKey"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/envapp/ui_src/src/ui/widgets/createFilePreviewController.ts",
+      "sha256": "b028d703f3df3a7b66708f952e059e93579bd4292d157052a6c2a87a28c2bbfb",
+      "sink_kinds": [
+        "file"
+      ],
+      "owner": "redeven UI",
+      "authority": "browser_ui_preference",
+      "data_classes": [
+        "product UI preference or cache"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/flower_ui/src/FlowerSurface.tsx",
+      "sha256": "0b6138c6f43afcf063c31f2130a89fb5b90670165955f7d52bb39d89f97c5599",
+      "sink_kinds": [
+        "web_storage"
+      ],
+      "owner": "redeven UI",
+      "authority": "browser_ui_preference",
+      "data_classes": [
+        "product UI preference or cache"
+      ],
+      "keys": [
+        "expression:THREAD_RAIL_WIDTH_STORAGE_KEY"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/fs/service.go",
+      "sha256": "32aa626eb04941c462ef5fe36659c224eb64c3711b538d2e5806cc64fa78b6b8",
+      "sink_kinds": [
+        "file"
+      ],
+      "owner": "redeven",
+      "authority": "product_configuration",
+      "data_classes": [
+        "product-owned state"
+      ],
+      "tables": [
+        "src"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/lockfile/lockfile.go",
+      "sha256": "498b78d77f688f5d99891b51b1326d6ab0c79b296ac981271a7ea4cba40b375f",
+      "sink_kinds": [
+        "file"
+      ],
+      "owner": "redeven",
+      "authority": "product_configuration",
+      "data_classes": [
+        "product-owned state"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/notes/schema.go",
+      "sha256": "2e16f0c48cca6106277195cb8ebf9f813be65f46f4c808ebb2405a5ef17261b8",
+      "sink_kinds": [
+        "sqlite"
+      ],
+      "owner": "redeven",
+      "authority": "product_configuration",
+      "data_classes": [
+        "product-owned state"
+      ],
+      "tables": [
+        "notes_events",
+        "notes_items",
+        "notes_items_v1",
+        "notes_topics"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/notes/service.go",
+      "sha256": "2bc52e26f4825e5de322ee53f4cdc49ec59226f5845e5c5467a18087a4cded77",
+      "sink_kinds": [
+        "sqlite"
+      ],
+      "owner": "redeven",
+      "authority": "product_configuration",
+      "data_classes": [
+        "product-owned state"
+      ],
+      "tables": [
+        "notes_events",
+        "notes_items",
+        "notes_topics"
+      ],
+      "codecs": [
+        "encoding/json.Marshal"
+      ],
+      "dtos": [
+        "deletedSnapshot{\n\tTopicID:\t\ttopic.TopicID,\n\tTopicName:\t\ttopic.Name,\n\tTopicIconKey:\t\ttopic.IconKey,\n\tTopicIconAccent:\ttopic.IconAccent,\n\tTopicSortOrder:\t\ttopic.SortOrder,\n\tX:\t\t\titem.X,\n\tY:\t\t\titem.Y,\n\tZIndex:\t\t\titem.ZIndex,\n\tStyleVersion:\t\titem.StyleVersion,\n\tColorToken:\t\titem.ColorToken,\n\tSizeBucket:\t\titem.SizeBucket,\n}",
+        "env.Payload"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/okf/builder.go",
+      "sha256": "866ba627b806aeadcce7e5b15955466db49e31d3bc6cb10a7fe605609a994b3c",
+      "sink_kinds": [
+        "file",
+        "json_file"
+      ],
+      "owner": "redeven developer tooling",
+      "authority": "build_or_test_artifact",
+      "data_classes": [
+        "developer-owned generated or test artifact"
+      ],
+      "codecs": [
+        "encoding/json.MarshalIndent"
+      ],
+      "dtos": [
+        "bundle",
+        "manifest"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/persistence/sqliteutil/engine.go",
+      "sha256": "0878494843c13d180d90129bcd1ba90097534a91616c1aadbad2e367cf70a71d",
+      "sink_kinds": [
+        "sqlite"
+      ],
+      "owner": "redeven",
+      "authority": "product_configuration",
+      "data_classes": [
+        "product-owned state"
+      ],
+      "tables": [
+        "__redeven_db_meta",
+        "kind",
+        "legacy",
+        "sqlite_master",
+        "v",
+        "version"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/portforward/registry/registry.go",
+      "sha256": "9859f4012cc11f31d074dccc1fd4c27f1c091b41605312c3a731139795c1ea10",
+      "sink_kinds": [
+        "sqlite"
+      ],
+      "owner": "redeven",
+      "authority": "product_configuration",
+      "data_classes": [
+        "product-owned state"
+      ],
+      "tables": [
+        "port_forwards",
+        "with"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/portforward/registry/schema.go",
+      "sha256": "ae591793e658a40984f2189df9ff8e47b9ab2dab3d43148c231424c80e4e8db6",
+      "sink_kinds": [
+        "sqlite"
+      ],
+      "owner": "redeven",
+      "authority": "product_configuration",
+      "data_classes": [
+        "product-owned state"
+      ],
+      "tables": [
+        "port_forwards"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/redevpluginintegration/release_trust_store.go",
+      "sha256": "8e12f60225baf54084d10af42afcc00144715205f94dc6db12e4fffd906aeb73",
+      "sink_kinds": [
+        "file",
+        "json_file",
+        "sqlite"
+      ],
+      "owner": "redeven ReDevPlugin adapter",
+      "authority": "upstream_adapter",
+      "data_classes": [
+        "product adapter audit, trust, or lifecycle records"
+      ],
+      "tables": [
+        "release_trust_state",
+        "trusted_time_leaves"
+      ],
+      "codecs": [
+        "encoding/json.Marshal"
+      ],
+      "dtos": [
+        "evidence",
+        "leaf",
+        "struct {\n\tDomain\t\tstring\t`json:\"domain\"`\n\tLeafSHA256\tstring\t`json:\"leaf_sha256\"`\n\tIntegratedTime\tstring\t`json:\"integrated_time\"`\n\tLogID\t\tstring\t`json:\"log_id\"`\n}{\n\tDomain:\t\"redevplugin.trusted-time.set.v1\", LeafSHA256: leafSHA256,\n\tIntegratedTime:\tintegrated.Format(time.RFC3339Nano), LogID: request.LogID(),\n}",
+        "struct {\n\tDomain\t\tstring\t`json:\"domain\"`\n\tSchemaVersion\tstring\t`json:\"schema_version\"`\n\tLogID\t\tstring\t`json:\"log_id\"`\n\tTreeSize\tuint64\t`json:\"tree_size\"`\n\tRootHash\tstring\t`json:\"root_hash\"`\n\tCheckpointTime\tstring\t`json:\"checkpoint_time\"`\n\tKeyID\t\tstring\t`json:\"key_id\"`\n}{\n\tDomain:\t\"redevplugin.trusted-time.checkpoint.v1\", SchemaVersion: checkpoint.SchemaVersion,\n\tLogID:\tcheckpoint.LogID, TreeSize: checkpoint.TreeSize, RootHash: checkpoint.RootHash,\n\tCheckpointTime:\tcheckpoint.CheckpointTime, KeyID: checkpoint.KeyID,\n}"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/redevpluginintegration/session_lifecycle_adapter.go",
+      "sha256": "a2fd9a066bdd29246d0cae39526928d8bc0fea5e72d88a6da0660f214fcb3774",
+      "sink_kinds": [
+        "file",
+        "json_file"
+      ],
+      "owner": "redeven ReDevPlugin adapter",
+      "authority": "upstream_adapter",
+      "data_classes": [
+        "product adapter audit, trust, or lifecycle records"
+      ],
+      "codecs": [
+        "encoding/json.Marshal",
+        "encoding/json.MarshalIndent"
+      ],
+      "dtos": [
+        "sessionLifecycleChecksumPayload{\n\tGenerationID:\tgenerationID,\n\tRevision:\trevision,\n\tRecords:\trecords,\n}",
+        "value"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/runtimegateway/envprofiles/store.go",
+      "sha256": "b2c5f36b79e2dc48cf1a1775726203cc69112d4eff490174384414d5f069a785",
+      "sink_kinds": [
+        "file",
+        "json_file"
+      ],
+      "owner": "redeven",
+      "authority": "product_configuration",
+      "data_classes": [
+        "product-owned state"
+      ],
+      "codecs": [
+        "encoding/json.MarshalIndent"
+      ],
+      "dtos": [
+        "state"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/runtimegateway/trust/store.go",
+      "sha256": "e27baa8f8f9d15fedcd2358c9e7618c66228a1787c6945dbcc1ae6993d4ef953",
+      "sink_kinds": [
+        "file",
+        "json_file"
+      ],
+      "owner": "redeven",
+      "authority": "product_configuration",
+      "data_classes": [
+        "product-owned state"
+      ],
+      "codecs": [
+        "encoding/json.MarshalIndent"
+      ],
+      "dtos": [
+        "state"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/settings/secrets_store.go",
+      "sha256": "1876912cc41b31224fe44886db56d0e407508183ebdb37aaa2e84aa02ddebbd4",
+      "sink_kinds": [
+        "file",
+        "json_file"
+      ],
+      "owner": "redeven",
+      "authority": "product_configuration",
+      "data_classes": [
+        "product-owned state"
+      ],
+      "tables": [
+        "config"
+      ],
+      "codecs": [
+        "encoding/json.MarshalIndent"
+      ],
+      "dtos": [
+        "sf"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/threadreadstate/schema.go",
+      "sha256": "1dc4540b2e3e6d04c34f65b792e8468994cafcb8d90117f1a13bab90cbc14ea1",
+      "sink_kinds": [
+        "sqlite"
+      ],
+      "owner": "redeven",
+      "authority": "product_configuration",
+      "data_classes": [
+        "product-owned state"
+      ],
+      "tables": [
+        "thread_read_state",
+        "thread_read_state_retirements"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/threadreadstate/store.go",
+      "sha256": "14994d4d96f7c4e4f31aef762bd6a2a190566413de27aa4c547bcb0c5f32d67e",
+      "sink_kinds": [
+        "sqlite"
+      ],
+      "owner": "redeven",
+      "authority": "product_configuration",
+      "data_classes": [
+        "product-owned state"
+      ],
+      "tables": [
+        "set",
+        "thread_read_state",
+        "thread_read_state_retirements"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/workbenchlayout/schema.go",
+      "sha256": "e1eb63c638092c289755c31a9d034393c906bedbb2bc7d8198e593b770a4854b",
+      "sink_kinds": [
+        "sqlite"
+      ],
+      "owner": "redeven",
+      "authority": "product_configuration",
+      "data_classes": [
+        "product-owned state"
+      ],
+      "tables": [
+        "workbench_layout_annotations",
+        "workbench_layout_background_layers",
+        "workbench_layout_events",
+        "workbench_layout_snapshot",
+        "workbench_layout_sticky_notes",
+        "workbench_layout_widgets",
+        "workbench_widget_states"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "internal/workbenchlayout/service.go",
+      "sha256": "c7179b9feba9403ccd0b9a8211b14a6f6588c048ccfbb1b15ccfe2ced9dc9529",
+      "sink_kinds": [
+        "sqlite"
+      ],
+      "owner": "redeven",
+      "authority": "product_configuration",
+      "data_classes": [
+        "product-owned state"
+      ],
+      "tables": [
+        "set",
+        "workbench_layout_annotations",
+        "workbench_layout_background_layers",
+        "workbench_layout_events",
+        "workbench_layout_snapshot",
+        "workbench_layout_sticky_notes",
+        "workbench_layout_widgets",
+        "workbench_widget_states"
+      ],
+      "codecs": [
+        "encoding/json.Marshal"
+      ],
+      "dtos": [
+        "nextSnapshot",
+        "state",
+        "state.State"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "scripts/redevplugin_candidate_client/main.go",
+      "sha256": "75b5964b14908100a436451d0ee93fe6816eb0a879c242ff0af83404b79d7d66",
+      "sink_kinds": [
+        "file"
+      ],
+      "owner": "redeven",
+      "authority": "product_configuration",
+      "data_classes": [
+        "product-owned state"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
+      "path": "scripts/redevplugin_unsigned_package/main.go",
+      "sha256": "50b20a81e169a4e2e02463434f2374c9f8cfbcb9896422bf6637c94e09f5fa77",
+      "sink_kinds": [
+        "file"
+      ],
+      "owner": "redeven",
+      "authority": "product_configuration",
+      "data_classes": [
+        "product-owned state"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    }
+  ]
+}

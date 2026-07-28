@@ -4,8 +4,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"reflect"
-	"sync"
 
 	"github.com/floegence/redeven/internal/persistence/sqliteutil"
 )
@@ -703,90 +701,20 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 	return verifyProductSchemaVersion(tx, threadstoreCurrentSchemaVersion)
 }
 
-var (
-	productSchemaContractsMu sync.Mutex
-	productSchemaContracts   = make(map[int][]canonicalSchemaObject, threadstoreCurrentSchemaVersion-1)
-)
-
 func verifyProductSchemaVersion(tx *sql.Tx, version int) error {
-	expected, err := expectedProductSchemaContract(version)
+	expected, err := reviewedProductSchemaContract(version)
 	if err != nil {
 		return err
 	}
-	actual, err := readCanonicalSchemaObjects(tx)
+	actual, err := inspectReviewedSchemaTx(tx)
 	if err != nil {
 		return err
 	}
-	if !reflect.DeepEqual(actual, expected) {
-		for index := 0; index < len(actual) && index < len(expected); index++ {
-			if actual[index] != expected[index] {
-				return fmt.Errorf(
-					"product threadstore schema v%d contract mismatch at object %d: actual=%#v expected=%#v",
-					version,
-					index,
-					actual[index],
-					expected[index],
-				)
-			}
-		}
-		return fmt.Errorf(
-			"product threadstore schema v%d contract mismatch: actual object count=%d expected=%d",
-			version,
-			len(actual),
-			len(expected),
-		)
+	// Migration Apply functions verify their target shape before sqliteutil
+	// advances PRAGMA user_version to the target version.
+	actual.Version = version
+	if err := compareReviewedSchemas(actual, expected); err != nil {
+		return fmt.Errorf("product threadstore schema v%d contract mismatch: %w", version, err)
 	}
 	return nil
-}
-
-func expectedProductSchemaContract(version int) ([]canonicalSchemaObject, error) {
-	var build func(*sql.Tx) error
-	switch version {
-	case 2:
-		build = createThreadstoreSchemaV2
-	case 3:
-		build = createThreadstoreSchemaV3
-	case 4:
-		build = createThreadstoreSchemaV4
-	case 5:
-		build = createThreadstoreSchemaV5
-	case 6:
-		build = createThreadstoreSchemaV6
-	case 7:
-		build = createThreadstoreSchemaV7
-	case threadstoreCurrentSchemaVersion:
-		build = createThreadstoreSchema
-	default:
-		return nil, fmt.Errorf("unsupported product threadstore schema version %d", version)
-	}
-	productSchemaContractsMu.Lock()
-	defer productSchemaContractsMu.Unlock()
-	if cached, ok := productSchemaContracts[version]; ok {
-		return append([]canonicalSchemaObject(nil), cached...), nil
-	}
-	db, err := sql.Open("sqlite", fmt.Sprintf("file:redeven-product-contract-v%d?mode=memory&cache=shared&_txlock=immediate", version))
-	if err != nil {
-		return nil, err
-	}
-	db.SetMaxOpenConns(1)
-	db.SetMaxIdleConns(1)
-	tx, err := db.Begin()
-	if err == nil {
-		err = build(tx)
-	}
-	var objects []canonicalSchemaObject
-	if err == nil {
-		objects, err = readCanonicalSchemaObjects(tx)
-	}
-	if err == nil {
-		err = tx.Commit()
-	} else if tx != nil {
-		_ = tx.Rollback()
-	}
-	_ = db.Close()
-	if err != nil {
-		return nil, fmt.Errorf("build product threadstore v%d contract: %w", version, err)
-	}
-	productSchemaContracts[version] = append([]canonicalSchemaObject(nil), objects...)
-	return objects, nil
 }
