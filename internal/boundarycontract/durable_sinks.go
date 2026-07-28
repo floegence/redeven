@@ -71,9 +71,9 @@ var allowedAuthorities = map[string]struct{}{
 }
 
 var (
-	sqlMutationPattern  = regexp.MustCompile(`(?is)\b(?:create\s+(?:table|index|trigger)|alter\s+table|drop\s+(?:table|index|trigger)|insert\s+into|replace\s+into|update\s+[a-z_][a-z0-9_]*\s+set|delete\s+from)\b`)
-	sqlTablePattern     = regexp.MustCompile(`(?is)\b(?:create\s+table(?:\s+if\s+not\s+exists)?|alter\s+table|drop\s+table(?:\s+if\s+exists)?|insert\s+into|replace\s+into|update|delete\s+from)\s+[\x60"\[]?([a-z_][a-z0-9_]*)`)
-	sqlReadTablePattern = regexp.MustCompile(`(?is)\b(?:from|join)\s+[\x60"\[]?([a-z_][a-z0-9_]*)`)
+	sqlMutationPattern                     = regexp.MustCompile(`(?is)\b(?:create\s+(?:table|index|trigger)|alter\s+table|drop\s+(?:table|index|trigger)|insert\s+into|replace\s+into|update\s+[a-z_][a-z0-9_]*\s+set|delete\s+from)\b`)
+	sqlTablePattern                        = regexp.MustCompile(`(?is)\b(?:create\s+table(?:\s+if\s+not\s+exists)?|alter\s+table|drop\s+table(?:\s+if\s+exists)?|insert\s+into|replace\s+into|update|delete\s+from)\s+[\x60"\[]?([a-z_][a-z0-9_]*)`)
+	sqlReadTablePattern                    = regexp.MustCompile(`(?is)\b(?:from|join)\s+[\x60"\[]?([a-z_][a-z0-9_]*)`)
 	typeScriptFSNamespaceImportPattern     = regexp.MustCompile(`(?m)\bimport\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+["'](?:node:)?fs(?:/promises)?["']`)
 	typeScriptFSDefaultImportPattern       = regexp.MustCompile(`(?m)\bimport\s+([A-Za-z_$][\w$]*)\s+from\s+["'](?:node:)?fs(?:/promises)?["']`)
 	typeScriptFSNamedImportPattern         = regexp.MustCompile(`(?m)\bimport\s*\{([^}]*)\}\s*from\s*["'](?:node:)?fs(?:/promises)?["']`)
