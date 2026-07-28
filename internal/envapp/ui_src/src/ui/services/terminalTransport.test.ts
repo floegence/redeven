@@ -64,7 +64,12 @@ const decodeSingleWrite = (data: Uint8Array) => {
 };
 
 const createRpcMock = () => {
-  let nameHandler: ((event: { sessionId: string; newName: string; workingDir: string }) => void) | undefined;
+  let nameHandler: ((event: {
+    sessionId: string;
+    newName: string;
+    workingDir: string;
+    localPathCapability: { workingDir: string } | null;
+  }) => void) | undefined;
   let commandHandler: ((event: {
     sessionId: string;
     foregroundCommand: { phase: 'unknown' | 'idle' | 'running'; displayName: string; revision: number; updatedAtMs: number };
@@ -101,7 +106,12 @@ const createRpcMock = () => {
   };
   return {
     rpc: { terminal } as any,
-    emitName: (event: { sessionId: string; newName: string; workingDir: string }) => nameHandler?.(event),
+    emitName: (event: {
+      sessionId: string;
+      newName: string;
+      workingDir: string;
+      localPathCapability: { workingDir: string } | null;
+    }) => nameHandler?.(event),
     emitCommand: (event: {
       sessionId: string;
       foregroundCommand: { phase: 'unknown' | 'idle' | 'running'; displayName: string; revision: number; updatedAtMs: number };
@@ -204,12 +214,18 @@ describe('terminal live transport', () => {
     }));
     expect(page).toMatchObject({ coveredThroughSequence: 4, historyGeneration: 2 });
 
-    emitName({ sessionId: 'other', newName: 'ignored', workingDir: '/' });
-    emitName({ sessionId: 'session-1', newName: 'shell', workingDir: '/workspace' });
+    emitName({ sessionId: 'other', newName: 'ignored', workingDir: '/', localPathCapability: null });
+    emitName({
+      sessionId: 'session-1',
+      newName: 'shell',
+      workingDir: '/workspace',
+      localPathCapability: { workingDir: '/workspace' },
+    });
     expect(names).toEqual([{
       sessionId: 'session-1',
       newName: 'shell',
       workingDir: '/workspace',
+      localPathCapability: { workingDir: '/workspace' },
     }]);
     unsubscribe?.();
   });

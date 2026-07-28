@@ -350,6 +350,7 @@ const terminalEventSourceState = vi.hoisted(() => ({
     sessionId: string;
     newName: string;
     workingDir: string;
+    localPathCapability: { workingDir: string } | null;
   }) => void>>(),
   geometryHandlers: new Map<string, Set<(event: {
     sessionId: string;
@@ -446,6 +447,8 @@ const sessionsCoordinatorMocks = vi.hoisted(() => ({
   }),
   deleteSession: vi.fn(),
   updateSessionMeta: vi.fn(),
+  getSnapshot: () => terminalSessionsState.sessions,
+  upsertSession: vi.fn(),
   subscribe: (callback: (value: typeof terminalSessionsState.sessions) => void) => {
     terminalSessionsState.subscribers.push(callback);
     callback(terminalSessionsState.sessions);
@@ -1835,6 +1838,19 @@ function publishTerminalSessions() {
   }
 }
 
+function emitTerminalNameUpdate(
+  sessionId: string,
+  event: {
+    newName: string;
+    workingDir: string;
+    localPathCapability: { workingDir: string } | null;
+  },
+) {
+  for (const handler of terminalEventSourceState.nameHandlers.get(sessionId) ?? []) {
+    handler({ sessionId, ...event });
+  }
+}
+
 function localPresentationExecutionContext(workingDirectory: string, revision = 1) {
   return {
     location: {
@@ -2180,6 +2196,7 @@ describe('TerminalPanel', () => {
     sessionsCoordinatorMocks.createSession.mockClear();
     sessionsCoordinatorMocks.deleteSession.mockClear();
     sessionsCoordinatorMocks.updateSessionMeta.mockClear();
+    sessionsCoordinatorMocks.upsertSession.mockClear();
     clientIdState.next = 0;
 
     installRequestAnimationFrameMock();
@@ -2699,7 +2716,7 @@ describe('TerminalPanel', () => {
     });
   });
 
-  it('shows the terminal path without a browse action when files cannot be read', async () => {
+  it('shows the terminal path with a disabled browse action when files cannot be read', async () => {
     terminalEnvPermissionsState.canRead = false;
     terminalSessionsState.sessions = [
       {
@@ -2720,7 +2737,10 @@ describe('TerminalPanel', () => {
     render(() => <TerminalPanel variant="workbench" />, host);
     await settleTerminalPanel();
 
-    expect(host.querySelector('[data-testid="terminal-session-files-session-1"]')).toBeNull();
+    const disabledFiles = host.querySelector<HTMLButtonElement>('[data-testid="terminal-session-files-session-1"]');
+    expect(disabledFiles?.getAttribute('aria-disabled')).toBe('true');
+    expect(disabledFiles?.dataset.terminalFilesAvailability).toBe('permission');
+    expect(disabledFiles?.getAttribute('aria-label')).toContain('Read permission');
     expect(host.querySelector('[data-terminal-session-path="session-1"]')?.textContent).toContain('/workspace/redeven');
     expect(host.querySelector('[data-testid="terminal-session-path-copy-session-1"]')).toBeTruthy();
     expect(host.querySelector('[data-terminal-session-path="session-1"]')?.className).toContain('pointer-events-none');
@@ -4694,6 +4714,45 @@ describe('TerminalPanel', () => {
     expect(core?.write.mock.calls.map((call: unknown[]) => decodeTerminalWrite(call[0]))).toEqual(['live-six']);
   });
 
+  it('forwards authoritative name-update path capability replacement and revocation', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="panel" />, host);
+    await vi.waitFor(() => {
+      expect(terminalEventSourceState.nameHandlers.get('session-1')?.size).toBe(1);
+    });
+    sessionsCoordinatorMocks.updateSessionMeta.mockClear();
+
+    emitTerminalNameUpdate('session-1', {
+      newName: 'repo',
+      workingDir: '/workspace/repo',
+      localPathCapability: { workingDir: '/workspace/repo' },
+    });
+    expect(sessionsCoordinatorMocks.updateSessionMeta).toHaveBeenLastCalledWith('session-1', {
+      name: 'repo',
+      workingDir: '/workspace/repo',
+    });
+    expect(sessionsCoordinatorMocks.upsertSession).toHaveBeenLastCalledWith(expect.objectContaining({
+      id: 'session-1',
+      localPathCapability: { workingDir: '/workspace/repo' },
+    }));
+
+    emitTerminalNameUpdate('session-1', {
+      newName: 'remote',
+      workingDir: '/root',
+      localPathCapability: null,
+    });
+    expect(sessionsCoordinatorMocks.updateSessionMeta).toHaveBeenLastCalledWith('session-1', {
+      name: 'remote',
+      workingDir: '/root',
+    });
+    expect(sessionsCoordinatorMocks.updateSessionMeta).toHaveBeenCalledTimes(2);
+    const revokedSession = sessionsCoordinatorMocks.upsertSession.mock.calls.at(-1)?.[0];
+    expect(revokedSession).toMatchObject({ id: 'session-1' });
+    expect(revokedSession).not.toHaveProperty('localPathCapability');
+  });
+
   it('runs buffered activity catchup after loading settles and keeps input live', async () => {
     let releaseInitialHistoryPage: (page: TestTerminalHistoryPage) => void = () => {};
     const initialHistoryPage = new Promise<TestTerminalHistoryPage>((resolve) => {
@@ -6185,7 +6244,10 @@ describe('TerminalPanel', () => {
     expect(host.querySelector('[data-terminal-session-avatar="session-ssh"] > span')).not.toBeNull();
     expect(host.querySelector('[data-terminal-process-state="running"]')).toBeNull();
     expect(host.querySelector('[data-testid="terminal-session-path-session-ssh"]')?.textContent).toBe('/root/project');
-    expect(host.querySelector('[data-testid="terminal-session-files-session-ssh"]')).toBeNull();
+    const remoteFiles = host.querySelector<HTMLButtonElement>('[data-testid="terminal-session-files-session-ssh"]');
+    expect(remoteFiles?.getAttribute('aria-disabled')).toBe('true');
+    expect(remoteFiles?.dataset.terminalFilesAvailability).toBe('remote');
+    expect(remoteFiles?.getAttribute('aria-label')).toContain('SSH path');
 
     const provider = terminalCoreInstances[0]?.registeredLinkProviders[0];
     expect(provider).toBeTruthy();
@@ -6834,10 +6896,10 @@ describe('TerminalPanel', () => {
     await vi.waitFor(() => {
       expect(host.querySelector('[data-terminal-session-title="session-2"]')?.textContent).toBe('top');
     });
-    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).not.toBeNull();
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).toBeNull();
     expect(host.querySelector('[data-testid="terminal-session-path-session-2"]')?.textContent).toBe('/workspace/repo');
     expect(findTerminalTabStatus(host, 'Terminal 2', 'unread')).toBeNull();
-    expect(findTerminalWorkIndicator(host)?.dataset.terminalWorkState).toBe('running');
+    expect(findTerminalWorkIndicator(host)?.dataset.terminalWorkState).toBe('idle');
     const runningRow = findTerminalTab(host, 'Terminal 2');
     expect(host.querySelector(`#${runningRow?.getAttribute('aria-describedby')}`)?.textContent)
       .toContain('The foreground process is running.');
@@ -7410,7 +7472,7 @@ describe('TerminalPanel', () => {
     const disclosure = host.querySelector<HTMLButtonElement>('[data-testid="terminal-active-context-disclosure"]');
     const descriptionId = disclosure?.getAttribute('aria-describedby') ?? '';
     expect(host.querySelector(`#${descriptionId}`)?.textContent).toContain('The foreground process is running');
-    expect(host.querySelector('[data-terminal-process-state="running"]')).not.toBeNull();
+    expect(host.querySelector('[data-terminal-process-state="running"]')).toBeNull();
   });
 
   it('announces a reconnecting active session from the mobile context disclosure', async () => {
@@ -7659,8 +7721,10 @@ describe('TerminalPanel', () => {
       updatedAtMs: 30,
     });
     await settleTerminalPanel();
-    expect(host.querySelector('[data-testid="terminal-session-files-session-1"]')).toBeNull();
-    expect(document.activeElement).toBe(row);
+    const revokedFilesControl = host.querySelector<HTMLButtonElement>('[data-testid="terminal-session-files-session-1"]');
+    expect(revokedFilesControl?.getAttribute('aria-disabled')).toBe('true');
+    expect(revokedFilesControl?.dataset.terminalFilesAvailability).toBe('verifying');
+    expect(document.activeElement).toBe(revokedFilesControl);
   });
 
   it('releases the mobile drawer and portaled menu focus ownership when a KeepAlive view becomes inactive', async () => {

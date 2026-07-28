@@ -3,6 +3,7 @@ import type { TerminalSessionInfo } from '../protocol/redeven_v1/sdk/terminal';
 
 import {
   deriveTerminalSessionChrome,
+  TERMINAL_AGENT_INITIALIZATION_SPINNER_MS,
   TERMINAL_REMOTE_OPENING_SPINNER_MS,
 } from './terminalSessionChrome';
 
@@ -152,6 +153,27 @@ describe('deriveTerminalSessionChrome', () => {
     });
   });
 
+  it('presents the safe SSH target candidate while the connection remains opening', () => {
+    expect(derive(session({
+      executionContext: {
+        location: {
+          kind: 'remote', phase: 'opening', label: 'deploy@build-host', authority: '', workingDirectory: '', source: 'foreground_candidate',
+        },
+        application: { kind: 'shell', identity: '', displayName: '' },
+        revision: 2,
+        updatedAtMs: 2,
+      },
+    }), {
+      nowMs: 1_100,
+      remoteOpeningObservedAtMs: 1_000,
+    })).toMatchObject({
+      title: 'deploy@build-host',
+      remotePhase: 'opening',
+      status: 'spinner',
+      canUseLocalPath: false,
+    });
+  });
+
   it('presents ready SSH identity and remote path without granting local Files access', () => {
     const chrome = derive(session({
       executionContext: {
@@ -195,6 +217,44 @@ describe('deriveTerminalSessionChrome', () => {
       workState: { ...codex.workState!, phase: 'idle', revision: 4 },
       outputActivity: { phase: 'streaming', revision: 7, updatedAtMs: 7 },
     })).toMatchObject({ title: 'Codex', status: 'none' });
+  });
+
+  it('bounds Agent initialization and ends it on the first semantic or output state', () => {
+    const initializing = session({
+      executionContext: {
+        location: { kind: 'local', phase: 'ready', label: '', authority: '', workingDirectory: '/workspace/redeven', source: 'shell_integration' },
+        application: { kind: 'agent_cli', identity: 'codex', displayName: 'Codex' },
+        revision: 2,
+        updatedAtMs: 2,
+      },
+      foregroundCommand: { phase: 'running', displayName: 'codex', revision: 2, updatedAtMs: 2 },
+      outputActivity: { phase: 'unknown', revision: 0, updatedAtMs: 0 },
+      workState: { phase: 'unknown', source: '', contextRevision: 0, foregroundCommandRevision: 0, revision: 0, updatedAtMs: 0 },
+    });
+    expect(derive(initializing, {
+      nowMs: 1_400,
+      agentInitializationObservedAtMs: 1_000,
+    })).toMatchObject({ status: 'spinner', statusSource: 'transition' });
+    expect(derive(initializing, {
+      nowMs: 1_000 + TERMINAL_AGENT_INITIALIZATION_SPINNER_MS,
+      agentInitializationObservedAtMs: 1_000,
+    })).toMatchObject({ status: 'none' });
+    expect(derive({
+      ...initializing,
+      workState: {
+        phase: 'idle', source: 'semantic', contextRevision: 2, foregroundCommandRevision: 2, revision: 1, updatedAtMs: 3,
+      },
+    }, {
+      nowMs: 1_100,
+      agentInitializationObservedAtMs: 1_000,
+    })).toMatchObject({ status: 'none' });
+    expect(derive({
+      ...initializing,
+      outputActivity: { phase: 'streaming', revision: 1, updatedAtMs: 3 },
+    }, {
+      nowMs: 1_100,
+      agentInitializationObservedAtMs: 1_000,
+    })).toMatchObject({ status: 'wave', statusSource: 'output' });
   });
 
   it('projects an Agent identity accepted by the upstream context normalizer without a local whitelist', () => {

@@ -14,6 +14,7 @@ import {
 import type { Client } from '@floegence/flowersec-core';
 import { ProtocolNotConnectedError, RpcError } from '@floegence/floe-webapp-protocol';
 import type { RedevenV1Rpc } from '../protocol/redeven_v1';
+import type { TerminalNameUpdateEvent } from '../protocol/redeven_v1/sdk/terminal';
 import {
   TERMINAL_HISTORY_DRAIN_MAX_PAGES,
   createHistoryPageRequester,
@@ -30,7 +31,9 @@ export function createTerminalConnId(): string {
 export type TerminalSessionStats = { history: { totalBytes: number } };
 export type RedevenTerminalAttachResult = TerminalLiveAttachResult;
 export type RedevenTerminalResizeAppliedResult = TerminalLiveResizeAppliedResult;
-export type RedevenTerminalEventSource = TerminalLiveEventSource;
+export type RedevenTerminalEventSource = Omit<TerminalLiveEventSource, 'onTerminalNameUpdate'> & Readonly<{
+  onTerminalNameUpdate?: (sessionId: string, handler: (event: TerminalNameUpdateEvent) => void) => () => void;
+}>;
 
 export type RedevenTerminalTransport = TerminalTransport & Readonly<{
   attachWithHistoryBoundary(sessionId: string, cols: number, rows: number): Promise<RedevenTerminalAttachResult>;
@@ -163,5 +166,14 @@ export function createRedevenTerminalLiveBundle(
       return { history: { totalBytes: Number.isFinite(totalBytes) && totalBytes > 0 ? totalBytes : 0 } };
     },
   };
-  return { transport, eventSource: live.eventSource };
+  return {
+    transport,
+    eventSource: {
+      ...live.eventSource,
+      onTerminalNameUpdate: (sessionId, handler) => rpc.terminal.onNameUpdate((event) => {
+        if (event.sessionId !== sessionId) return;
+        handler(event);
+      }),
+    } as RedevenTerminalEventSource,
+  };
 }

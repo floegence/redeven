@@ -230,7 +230,7 @@ func TestCreateSessionReportsWorkingDirErrors(t *testing.T) {
 	}
 }
 
-func TestCreateSessionPublishesProductOwnedLocalPathCapability(t *testing.T) {
+func TestLocalPathCapabilityRequiresConfirmedLocalShellContext(t *testing.T) {
 	root := t.TempDir()
 	workingDir := filepath.Join(root, "repo")
 	if err := os.Mkdir(workingDir, 0o755); err != nil {
@@ -251,19 +251,74 @@ func TestCreateSessionPublishesProductOwnedLocalPathCapability(t *testing.T) {
 		t.Fatalf("CreateSession() error = %v", err)
 	}
 	trustedWorkingDir := created.WorkingDir
-	if created.LocalPathCapability == nil || created.LocalPathCapability.WorkingDir != trustedWorkingDir {
-		t.Fatalf("local path capability = %#v, want %q", created.LocalPathCapability, trustedWorkingDir)
+	if created.LocalPathCapability != nil {
+		t.Fatalf("local path capability = %#v, want nil before shell confirmation", created.LocalPathCapability)
 	}
-	if capabilityAtCreatedEvent != trustedWorkingDir {
-		t.Fatalf("created event capability = %q, want %q", capabilityAtCreatedEvent, trustedWorkingDir)
+	if capabilityAtCreatedEvent != "" {
+		t.Fatalf("created event capability = %q, want empty before shell confirmation", capabilityAtCreatedEvent)
 	}
 
-	wire := toWireSessionInfo(termgo.TerminalSessionInfo{
-		ID:         created.ID,
-		WorkingDir: "/terminal-controlled/path",
-	}, m.localPathCapability(created.ID))
-	if wire.LocalPathCapability == nil || wire.LocalPathCapability.WorkingDir != trustedWorkingDir {
-		t.Fatalf("wire local path capability = %#v, want immutable %q", wire.LocalPathCapability, trustedWorkingDir)
+	localReady := termgo.TerminalExecutionContextInfo{Location: termgo.TerminalLocationInfo{
+		Kind:             termgo.TerminalLocationLocal,
+		Phase:            termgo.TerminalLocationPhaseReady,
+		WorkingDirectory: trustedWorkingDir,
+		Source:           termgo.TerminalContextSourceShellIntegration,
+	}}
+	capability := m.reconcileLocalPathCapability(created.ID, trustedWorkingDir, &localReady)
+	if capability == nil || capability.WorkingDir != trustedWorkingDir {
+		t.Fatalf("confirmed local capability = %#v, want %q", capability, trustedWorkingDir)
+	}
+
+	mismatched := localReady
+	mismatched.Location.WorkingDirectory = root
+	if capability := m.reconcileLocalPathCapability(created.ID, trustedWorkingDir, &mismatched); capability != nil {
+		t.Fatalf("mismatched cwd capability = %#v, want nil", capability)
+	}
+	if got := m.localPathCapability(created.ID); got != "" {
+		t.Fatalf("capability after cwd mismatch = %q, want empty", got)
+	}
+
+	nextWorkingDir := filepath.Join(root, "next-repo")
+	if err := os.Mkdir(nextWorkingDir, 0o755); err != nil {
+		t.Fatalf("Mkdir(next working dir): %v", err)
+	}
+	resolvedNextWorkingDir, err := m.resolveWorkingDir(nextWorkingDir)
+	if err != nil {
+		t.Fatalf("resolve next working dir: %v", err)
+	}
+	rotated := localReady
+	rotated.Location.WorkingDirectory = nextWorkingDir
+	if capability := m.reconcileLocalPathCapability(created.ID, nextWorkingDir, &rotated); capability == nil || capability.WorkingDir != resolvedNextWorkingDir {
+		t.Fatalf("rotated local capability = %#v, want %q", capability, resolvedNextWorkingDir)
+	}
+	if got := m.localPathCapability(created.ID); got != resolvedNextWorkingDir {
+		t.Fatalf("stored rotated capability = %q, want %q", got, resolvedNextWorkingDir)
+	}
+
+	if err := os.Remove(nextWorkingDir); err != nil {
+		t.Fatalf("Remove(next working dir): %v", err)
+	}
+	if capability := m.reconcileLocalPathCapability(created.ID, nextWorkingDir, &rotated); capability != nil {
+		t.Fatalf("deleted directory capability = %#v, want nil", capability)
+	}
+	if got := m.localPathCapability(created.ID); got != "" {
+		t.Fatalf("capability after directory deletion = %q, want empty", got)
+	}
+	if err := os.Mkdir(nextWorkingDir, 0o755); err != nil {
+		t.Fatalf("restore next working dir: %v", err)
+	}
+	if capability := m.reconcileLocalPathCapability(created.ID, nextWorkingDir, &rotated); capability == nil || capability.WorkingDir != resolvedNextWorkingDir {
+		t.Fatalf("restored local capability = %#v, want %q", capability, resolvedNextWorkingDir)
+	}
+
+	remote := localReady
+	remote.Location.Kind = termgo.TerminalLocationRemote
+	remote.Location.Source = termgo.TerminalContextSourceOSC7
+	if capability := m.reconcileLocalPathCapability(created.ID, trustedWorkingDir, &remote); capability != nil {
+		t.Fatalf("remote capability = %#v, want nil", capability)
+	}
+	if capability := m.reconcileLocalPathCapability(created.ID, nextWorkingDir, &rotated); capability == nil || capability.WorkingDir != resolvedNextWorkingDir {
+		t.Fatalf("local capability after remote transition = %#v, want %q", capability, resolvedNextWorkingDir)
 	}
 }
 
@@ -720,7 +775,8 @@ func TestDeleteSessionFailureReturnsSharedErrorAndCanRetry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("createSession() error = %v", err)
 	}
-	trustedWorkingDir := m.localPathCapability(sess.ID)
+	trustedWorkingDir := sess.ToSessionInfo().WorkingDir
+	m.setLocalPathCapability(sess.ID, trustedWorkingDir)
 	if trustedWorkingDir == "" {
 		t.Fatal("local path capability is empty after create")
 	}
@@ -770,9 +826,7 @@ func TestWidgetDeleteFailureStaysHiddenAndRevokesLocalPathCapability(t *testing.
 	if err != nil {
 		t.Fatalf("createSession() error = %v", err)
 	}
-	if got := m.localPathCapability(sess.ID); got == "" {
-		t.Fatal("local path capability is empty after create")
-	}
+	m.setLocalPathCapability(sess.ID, sess.ToSessionInfo().WorkingDir)
 
 	deleteErr := errors.New("widget cleanup failed")
 	m.deleteSessionFunc = func(string) error {
@@ -822,9 +876,7 @@ func TestMixedDeleteSessionFailureUsesWidgetSemanticsInBothOrderings(t *testing.
 			if err != nil {
 				t.Fatalf("createSession() error = %v", err)
 			}
-			if got := m.localPathCapability(sess.ID); got == "" {
-				t.Fatal("local path capability is empty after create")
-			}
+			m.setLocalPathCapability(sess.ID, sess.ToSessionInfo().WorkingDir)
 
 			deleteErr := errors.New("mixed cleanup failed")
 			releaseDelete := make(chan struct{})

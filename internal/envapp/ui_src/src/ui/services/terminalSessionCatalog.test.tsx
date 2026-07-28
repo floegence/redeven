@@ -257,6 +257,62 @@ describe('TerminalSessionCatalogProvider', () => {
     dispose();
   });
 
+  it('atomically replaces local path capabilities without deriving them from metadata', async () => {
+    rpcState.sessions = [{
+      id: 's1',
+      name: 'Terminal 1',
+      workingDir: '/',
+      localPathCapability: { workingDir: '/' },
+      createdAtMs: 1,
+      lastActiveAtMs: 2,
+      isActive: true,
+    }] as any;
+    rpcState.list.mockResolvedValue({ sessions: rpcState.sessions });
+    let latest: any = null;
+    const host = document.createElement('div');
+    const dispose = render(() => (
+      <TerminalSessionCatalogProvider>
+        <Consumer onValue={(value) => { latest = value; }} />
+      </TerminalSessionCatalogProvider>
+    ), host);
+    await vi.waitFor(() => expect(latest?.hydrated()).toBe(true));
+    expect(latest.sessions()[0]?.localPathCapability).toEqual({ workingDir: '/' });
+
+    latest.updateSessionMeta('s1', {
+      workingDir: '/workspace/repo',
+      localPathCapability: { workingDir: '/workspace/repo' },
+    });
+    expect(latest.sessions()[0]).toMatchObject({
+      workingDir: '/workspace/repo',
+      localPathCapability: { workingDir: '/workspace/repo' },
+    });
+
+    latest.updateSessionMeta('s1', { name: 'Renamed' });
+    expect(latest.sessions()[0]?.localPathCapability).toEqual({ workingDir: '/workspace/repo' });
+
+    latest.updateSessionMeta('s1', {
+      workingDir: '/root/remote',
+      localPathCapability: null,
+    });
+    expect(latest.sessions()[0]?.workingDir).toBe('/root/remote');
+    expect(latest.sessions()[0]?.localPathCapability).toBeUndefined();
+
+    latest.updateSessionMeta('s1', { workingDir: '/workspace/forged' });
+    expect(latest.sessions()[0]?.localPathCapability).toBeUndefined();
+
+    rpcState.list.mockResolvedValueOnce({ sessions: [{
+      ...rpcState.sessions[0],
+      workingDir: '/workspace/authoritative',
+      localPathCapability: { workingDir: '/workspace/authoritative' },
+      lastActiveAtMs: 3,
+    }] });
+    await latest.refresh();
+    expect(latest.sessions()[0]?.localPathCapability).toEqual({
+      workingDir: '/workspace/authoritative',
+    });
+    dispose();
+  });
+
   it('falls back to authoritative refresh when optional metadata subscriptions are unavailable', async () => {
     rpcState.foregroundSubscriptionAvailable = false;
     rpcState.outputSubscriptionAvailable = false;

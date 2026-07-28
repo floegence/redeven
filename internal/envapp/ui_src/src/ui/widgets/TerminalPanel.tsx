@@ -36,6 +36,7 @@ import { disposeRedevenTerminalSessionsCoordinator, getRedevenTerminalSessionsCo
 import { useTerminalSessionCatalog } from '../services/terminalSessionCatalog';
 import {
   deriveTerminalSessionChrome,
+  TERMINAL_AGENT_INITIALIZATION_SPINNER_MS,
   TERMINAL_REMOTE_OPENING_SPINNER_MS,
   type TerminalSessionChrome,
   type TerminalSessionChromeTransition,
@@ -501,7 +502,7 @@ function resolveTerminalChromeTransition(
 
 function resolveTerminalSidebarProcessState(chrome: TerminalSessionChrome): TerminalSessionProcessState {
   if (chrome.status === 'failed') return 'failed';
-  return chrome.status === 'spinner' || chrome.processRunning ? 'running' : 'none';
+  return chrome.status === 'spinner' ? 'running' : 'none';
 }
 
 function resolveTerminalSidebarAttentionState(
@@ -1869,11 +1870,31 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return viewport instanceof HTMLDivElement ? viewport : null;
   };
 
-  const handleNameUpdate = (sessionId: string, newName: string, workingDir: string) => {
+  const handleNameUpdate = (
+    sessionId: string,
+    newName: string,
+    workingDir: string,
+    localPathCapability: TerminalSessionInfo['localPathCapability'] | null,
+  ) => {
     if (terminalCatalog) {
-      terminalCatalog.updateSessionMeta(sessionId, { name: newName, workingDir });
+      terminalCatalog.updateSessionMeta(sessionId, {
+        name: newName,
+        workingDir,
+        localPathCapability,
+      });
     } else {
       fallbackSessionsCoordinator?.updateSessionMeta(sessionId, { name: newName, workingDir });
+      const current = fallbackSessionsCoordinator?.getSnapshot()
+        .find((session) => session.id === sessionId) as TerminalSessionInfo | undefined;
+      if (current) {
+        if (localPathCapability) {
+          const nextSession: TerminalSessionInfo = { ...current, localPathCapability };
+          fallbackSessionsCoordinator?.upsertSession(nextSession);
+        } else {
+          const { localPathCapability: _revoked, ...withoutCapability } = current;
+          fallbackSessionsCoordinator?.upsertSession(withoutCapability);
+        }
+      }
     }
   };
 
@@ -2090,6 +2111,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const [terminalChromeNowMs, setTerminalChromeNowMs] = createSignal(Date.now());
   const fallbackRemoteOpeningObservedAtBySession = new Map<string, number>();
+  const agentInitializationObservedAtBySession = new Map<string, number>();
+  const agentIdentityBySession = new Map<string, string>();
 
   createEffect(() => {
     const currentSessions = sessions();
@@ -2099,6 +2122,32 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
     for (const session of currentSessions) {
       const context = session.executionContext;
+      const agentIdentity = context?.application.kind === 'agent_cli'
+        ? String(context.application.identity ?? '').trim()
+        : '';
+      if (agentIdentity) {
+        if (agentIdentityBySession.get(session.id) !== agentIdentity) {
+          agentIdentityBySession.set(session.id, agentIdentity);
+          agentInitializationObservedAtBySession.set(session.id, Date.now());
+        }
+        const workStateReady = session.workState?.phase !== undefined
+          && session.workState.phase !== 'unknown'
+          && session.workState.contextRevision === (session.executionContext?.revision ?? 0)
+          && session.workState.foregroundCommandRevision === (session.foregroundCommand?.revision ?? 0);
+        const outputStateReady = session.outputActivity?.phase !== undefined
+          && session.outputActivity.phase !== 'unknown';
+        if (workStateReady || outputStateReady) {
+          agentInitializationObservedAtBySession.delete(session.id);
+        } else {
+          const observedAtMs = agentInitializationObservedAtBySession.get(session.id);
+          if (observedAtMs !== undefined) {
+            nextExpiryMs = Math.min(nextExpiryMs, observedAtMs + TERMINAL_AGENT_INITIALIZATION_SPINNER_MS);
+          }
+        }
+      } else {
+        agentIdentityBySession.delete(session.id);
+        agentInitializationObservedAtBySession.delete(session.id);
+      }
       if (context?.location.kind !== 'remote' || context.location.phase !== 'opening') continue;
       openingSessionIds.add(session.id);
       const sharedObservedAtMs = terminalCatalog?.remoteOpeningObservedAtMs?.(session.id);
@@ -2117,6 +2166,13 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
     for (const sessionId of fallbackRemoteOpeningObservedAtBySession.keys()) {
       if (!openingSessionIds.has(sessionId)) fallbackRemoteOpeningObservedAtBySession.delete(sessionId);
+    }
+    const currentSessionIds = new Set(currentSessions.map((session) => session.id));
+    for (const sessionId of agentIdentityBySession.keys()) {
+      if (!currentSessionIds.has(sessionId)) agentIdentityBySession.delete(sessionId);
+    }
+    for (const sessionId of agentInitializationObservedAtBySession.keys()) {
+      if (!currentSessionIds.has(sessionId)) agentInitializationObservedAtBySession.delete(sessionId);
     }
 
     if (!Number.isFinite(nextExpiryMs) || nextExpiryMs <= nowMs) return;
@@ -2150,6 +2206,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         nowMs,
         remoteOpeningObservedAtMs: terminalCatalog?.remoteOpeningObservedAtMs?.(session.id)
           ?? fallbackRemoteOpeningObservedAtBySession.get(session.id),
+        agentInitializationObservedAtMs: agentInitializationObservedAtBySession.get(session.id),
       }));
     });
 
@@ -2215,7 +2272,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     let hasTransition = false;
     for (const chrome of terminalChromeBySession().values()) {
       if (chrome.status === 'wave') return 'active';
-      if (chrome.status === 'spinner' || chrome.processRunning) hasTransition = true;
+      if (chrome.status === 'spinner') hasTransition = true;
     }
     return hasTransition ? 'running' : 'idle';
   });
@@ -3234,6 +3291,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         fullPath: chrome.displayPath,
         localWorkingDir: chrome.localWorkingDir,
         processState: resolveTerminalSidebarProcessState(chrome),
+        processRunning: chrome.processRunning,
         transitionState: chrome.status === 'failed'
           ? 'failed' as const
           : resolveTerminalChromeTransition(runtimeStatuses[s.id]) === 'reconnecting'
@@ -3251,6 +3309,17 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         attentionState: resolveTerminalSidebarAttentionState(chrome),
         remote: chrome.remote,
         canBrowsePath: chrome.canUseLocalPath && Boolean(chrome.localWorkingDir) && canOpenPath,
+        filesAvailability: chrome.remote
+          ? 'remote' as const
+          : !canOpenPath
+            ? 'permission' as const
+            : s.executionContext?.location.kind !== 'local'
+              || s.executionContext.location.phase !== 'ready'
+              || s.executionContext.location.source !== 'shell_integration'
+              ? 'verifying' as const
+              : !chrome.canUseLocalPath || !chrome.localWorkingDir
+                ? 'invalid' as const
+                : 'available' as const,
         canClear: true,
         canDuplicate: chrome.canUseLocalPath && Boolean(chrome.localWorkingDir),
         closable: true,
@@ -3272,6 +3341,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         fullPath,
         localWorkingDir: '',
         processState: session.status,
+        processRunning: false,
         transitionState: session.status === 'failed' ? 'failed' as const : 'creating' as const,
         failureKind: session.status === 'failed' ? 'creation' as const : 'none' as const,
         outputState: 'none' as const,
@@ -3279,6 +3349,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         attentionState: 'none' as const,
         remote: false,
         canBrowsePath: false,
+        filesAvailability: 'verifying' as const,
         canClear: false,
         canDuplicate: false,
         closable: session.status === 'failed',

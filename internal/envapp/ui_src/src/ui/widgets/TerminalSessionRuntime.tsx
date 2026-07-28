@@ -21,6 +21,7 @@ import {
   type RedevenTerminalEventSource,
   type RedevenTerminalTransport,
 } from '../services/terminalTransport';
+import type { TerminalNameUpdateEvent } from '../protocol/redeven_v1/sdk/terminal';
 import { createTerminalFileLinkProvider, type TerminalResolvedLinkTarget } from '../services/terminalLinkProvider';
 import type { TerminalShellIntegrationEvent } from '../services/terminalShellIntegration';
 import {
@@ -175,7 +176,7 @@ export type TerminalSessionRuntimeProps = Readonly<{
     sequence: number | undefined,
   ) => void;
   onTerminalFileLinkOpen?: (target: TerminalResolvedLinkTarget) => Promise<void> | void;
-  onNameUpdate?: (sessionId: string, newName: string, workingDir: string) => void;
+  onNameUpdate?: (sessionId: string, newName: string, workingDir: string, localPathCapability: TerminalNameUpdateEvent['localPathCapability']) => void;
   requestPreparedHistory?: (sessionId: string) => Promise<PreparedPagedTerminalHistory | null>;
 }>;
 
@@ -1248,7 +1249,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
 
       if (props.eventSource.onTerminalNameUpdate) {
         unsubNameUpdate = props.eventSource.onTerminalNameUpdate(id, (ev) => {
-          props.onNameUpdate?.(ev.sessionId, ev.newName, ev.workingDir);
+          props.onNameUpdate?.(ev.sessionId, ev.newName, ev.workingDir, ev.localPathCapability);
         });
       }
 

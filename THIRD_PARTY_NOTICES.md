@@ -39,7 +39,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | github.com/dustin/go-humanize | v1.0.1 | MIT | Runtime | https://pkg.go.dev/github.com/dustin/go-humanize@v1.0.1 | Detected from LICENSE. |
 | github.com/ebitengine/purego | v0.9.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/ebitengine/purego@v0.9.1 | Detected from LICENSE. |
 | github.com/felixge/httpsnoop | v1.0.4 | MIT | Runtime | https://pkg.go.dev/github.com/felixge/httpsnoop@v1.0.4 | Detected from LICENSE.txt. |
-| github.com/floegence/floeterm/terminal-go | v0.7.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.7.1 | Floegence first-party dependency. |
+| github.com/floegence/floeterm/terminal-go | v0.8.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.8.0 | Floegence first-party dependency. |
 | github.com/floegence/floret | v0.31.2 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret@v0.31.2 | Detected from LICENSE. |
 | github.com/floegence/flowersec/flowersec-go | v0.27.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go@v0.27.0 | Floegence first-party dependency. |
 | github.com/floegence/redevplugin | v0.6.20 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redevplugin@v0.6.20 | Floegence first-party dependency. |
@@ -237,7 +237,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @floegence/floe-webapp-boot | 0.40.2 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.40.2 | License inherited from floegence/floe-webapp root LICENSE. |
 | @floegence/floe-webapp-core | 0.40.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.40.2 | License inherited from floegence/floe-webapp root LICENSE. |
 | @floegence/floe-webapp-protocol | 0.40.2 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.40.2 | License inherited from floegence/floe-webapp root LICENSE. |
-| @floegence/floeterm-terminal-web | 0.11.2 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.11.2 | Built-in theme attribution and license texts are reproduced below from the verified 0.11.2 package. |
+| @floegence/floeterm-terminal-web | 0.12.0 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.12.0 | Built-in theme attribution and license texts are reproduced below from the verified 0.12.0 package. |
 | @floegence/flowersec-core | 0.27.0 | MIT | Code App UI, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/0.27.0 |  |
 | @floegence/redevplugin-contracts | 0.6.20 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-contracts/v/0.6.20 |  |
 | @floegence/redevplugin-ui | 0.6.20 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-ui/v/0.6.20 | License inherited from floegence/redevplugin root LICENSE. |
@@ -1221,7 +1221,7 @@ SOFTWARE.
 
 ## Floeterm Built-in Theme Notices
 
-Redeven embeds the built-in terminal theme catalog from `@floegence/floeterm-terminal-web@0.11.2`. The following attribution and license texts are reproduced in Redeven's distributed root notice from the installed registry package. Notice generation verifies the upstream provenance, quality evidence, notice, and license artifacts against these fixed SHA-256 values before emitting this section:
+Redeven embeds the built-in terminal theme catalog from `@floegence/floeterm-terminal-web@0.12.0`. The following attribution and license texts are reproduced in Redeven's distributed root notice from the installed registry package. Notice generation verifies the upstream provenance, quality evidence, notice, and license artifacts against these fixed SHA-256 values before emitting this section:
 
 - `2b6b2d07297ace181564890b79e2c488e67f4747512b8adad08b4bd3ea8dfc06`
 - `e9fdd068550001f555f1bb52ca475b68bc56a12c00da25f9ec28fe03dbdb9005`

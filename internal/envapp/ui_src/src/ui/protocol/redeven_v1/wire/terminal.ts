@@ -78,6 +78,7 @@ export type wire_terminal_name_update_notify = {
   session_id: string;
   new_name: string;
   working_dir: string;
+  local_path_capability: wire_terminal_local_path_capability | null;
 };
 
 export type wire_terminal_foreground_command_update_notify = {

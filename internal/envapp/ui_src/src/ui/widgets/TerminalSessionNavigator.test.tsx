@@ -75,6 +75,7 @@ function navigationItem(overrides: Partial<TerminalSessionNavigationItem> = {}):
     fullPath: '/workspace/redeven',
     localWorkingDir: '/workspace/redeven',
     processState: 'none',
+    processRunning: false,
     transitionState: 'none',
     failureKind: 'none',
     outputState: 'streaming',
@@ -82,6 +83,7 @@ function navigationItem(overrides: Partial<TerminalSessionNavigationItem> = {}):
     attentionState: 'unread',
     remote: false,
     canBrowsePath: true,
+    filesAvailability: 'available',
     canClear: true,
     canDuplicate: true,
     closable: true,
@@ -131,14 +133,14 @@ describe('TerminalSessionNavigator agent status presentation', () => {
       />
     ), host));
 
-    const sessionOneRow = host.querySelector<HTMLButtonElement>('button[data-terminal-session-id="session-1"]')!;
     host.querySelector<HTMLButtonElement>('[data-testid="terminal-session-files-session-1"]')?.focus();
     setItems((current) => current.map((item) => (
-      item.id === 'session-1' ? { ...item, canBrowsePath: false } : item
+      item.id === 'session-1' ? { ...item, canBrowsePath: false, filesAvailability: 'invalid' } : item
     )));
     await Promise.resolve();
-    expect(host.querySelector('[data-testid="terminal-session-files-session-1"]')).toBeNull();
-    expect(document.activeElement).toBe(sessionOneRow);
+    const disabledFiles = host.querySelector<HTMLButtonElement>('[data-testid="terminal-session-files-session-1"]');
+    expect(disabledFiles?.getAttribute('aria-disabled')).toBe('true');
+    expect(document.activeElement).toBe(disabledFiles);
 
     host.querySelector<HTMLButtonElement>('[data-testid="close-session-session-1"]')?.focus();
     setItems((current) => current.filter((item) => item.id !== 'session-1'));
@@ -259,14 +261,15 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     const { host } = renderNavigator(navigationItem({
       title: 'top',
       avatar: { kind: 'initial' },
-      processState: 'running',
+      processState: 'none',
+      processRunning: true,
       outputState: 'none',
       attentionState: 'unread',
     }));
     const rowButton = host.querySelector<HTMLButtonElement>('button[data-terminal-session-id="agent-session"]')!;
     const descriptionId = rowButton.getAttribute('aria-describedby') ?? '';
 
-    expect(host.querySelector('[data-terminal-process-state="running"]')).not.toBeNull();
+    expect(host.querySelector('[data-terminal-process-state="running"]')).toBeNull();
     expect(host.querySelector('[data-terminal-attention-state="unread"]')).not.toBeNull();
     expect(host.querySelector(`#${descriptionId}`)?.textContent).toContain('The foreground process is running.');
     expect(host.querySelector(`#${descriptionId}`)?.textContent).toContain('Unread terminal output.');

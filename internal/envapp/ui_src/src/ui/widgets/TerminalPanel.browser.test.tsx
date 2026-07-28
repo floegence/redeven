@@ -1,7 +1,7 @@
 import '../../index.css';
 
 import { For, Show, createSignal } from 'solid-js';
-import { render } from 'solid-js/web';
+import { render as solidRender } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
 import { getThemeColors } from '@floegence/floeterm-terminal-web';
@@ -29,7 +29,20 @@ const browserProtocolState = vi.hoisted(() => ({
   setClient: null as ((client: object | null) => void) | null,
 }));
 
+const activeRenderDisposers = new Set<() => void>();
+
+const render: typeof solidRender = ((...args: Parameters<typeof solidRender>) => {
+  const disposeRoot = solidRender(...args);
+  const dispose = () => {
+    if (!activeRenderDisposers.delete(dispose)) return;
+    disposeRoot();
+  };
+  activeRenderDisposers.add(dispose);
+  return dispose;
+}) as typeof solidRender;
+
 const mediaCommands = commands as unknown as Readonly<{
+  installTerminalAgentIconRoutes: () => Promise<void>;
   emulateMediaPreferences: (preferences: Readonly<{
     forcedColors?: null | 'active' | 'none';
     reducedMotion?: null | 'reduce' | 'no-preference';
@@ -39,6 +52,16 @@ const mediaCommands = commands as unknown as Readonly<{
     safeCanvasHash: string;
     canvasWidth: number;
     canvasHeight: number;
+  }>>;
+  inspectTerminalAvatarScreenshot: (sessionId: string) => Promise<Readonly<{
+    screenshotHash: string;
+    avatarWidth: number;
+    avatarHeight: number;
+    markWidth: number;
+    markHeight: number;
+    totalPixels: number;
+    paintedPixels: number;
+    distinctColorBuckets: number;
   }>>;
 }>;
 
@@ -824,6 +847,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  for (const dispose of [...activeRenderDisposers].reverse()) dispose();
   document.body.innerHTML = '';
 });
 
@@ -1750,7 +1774,7 @@ describe('TerminalPanel browser activity integration', () => {
     expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).toBeNull();
   });
 
-  it('shows a confirmed ordinary program title with a running spinner, then restores the directory on idle', async () => {
+  it('shows a confirmed ordinary program title without a spinner, then restores the directory on idle', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     render(() => <TerminalPanel variant="workbench" />, host);
@@ -1763,7 +1787,7 @@ describe('TerminalPanel browser activity integration', () => {
     await new Promise<void>((resolve) => setTimeout(resolve, 170));
     await settleTerminalPanel();
 
-    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).not.toBeNull();
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).toBeNull();
     expect(host.querySelector('[data-terminal-session-title="session-2"]')?.textContent).toBe('top');
     expect(host.querySelector('[data-testid="terminal-session-path-session-2"]')?.textContent).toBe('/workspace/repo');
 
@@ -1776,10 +1800,23 @@ describe('TerminalPanel browser activity integration', () => {
   });
 
   it('renders audited agent identity and keeps semantic work stable when raw output settles', async () => {
+    await mediaCommands.installTerminalAgentIconRoutes();
     const host = document.createElement('div');
     document.body.appendChild(host);
     render(() => <TerminalPanel variant="workbench" />, host);
     await settleTerminalPanel();
+
+    publishTerminalExecutionContext('session-2', {
+      location: { kind: 'remote', phase: 'ready', label: 'root@host', authority: 'host', workingDirectory: '/root', source: 'osc7' },
+      application: { kind: 'shell', identity: '', displayName: '' },
+      revision: 1,
+      updatedAtMs: 9,
+    });
+    await settleTerminalPanel();
+    const linkScreenshot = await mediaCommands.inspectTerminalAvatarScreenshot('session-2');
+    expect([linkScreenshot.avatarWidth, linkScreenshot.avatarHeight]).toEqual([36, 36]);
+    expect([linkScreenshot.markWidth, linkScreenshot.markHeight]).toEqual([16, 16]);
+    expect(linkScreenshot.paintedPixels).toBeGreaterThan(0);
 
     publishTerminalForegroundCommand('session-2', {
       phase: 'running', displayName: 'codex', revision: 1, updatedAtMs: 10,
@@ -1803,8 +1840,17 @@ describe('TerminalPanel browser activity integration', () => {
     const slot = host.querySelector<HTMLElement>('[data-terminal-output-slot="session-2"]');
     expect(identity).not.toBeNull();
     const identityStyle = getComputedStyle(identity!);
+    expect([identity!.getBoundingClientRect().width, identity!.getBoundingClientRect().height]).toEqual([36, 36]);
     expect(parseFloat(identityStyle.borderRadius)).toBeGreaterThanOrEqual(identity!.getBoundingClientRect().width / 2);
-    expect(getComputedStyle(identity!.querySelector<HTMLElement>('.bg-current')!).webkitMaskImage).toContain('/_redeven_proxy/env/agent-cli-icons/codex.svg');
+    const codexMark = identity!.querySelector<HTMLElement>('.bg-current')!;
+    expect(getComputedStyle(codexMark).webkitMaskImage).toContain('/_redeven_proxy/env/agent-cli-icons/codex.svg');
+    expect([codexMark.getBoundingClientRect().width, codexMark.getBoundingClientRect().height]).toEqual([21, 21]);
+    const codexScreenshot = await mediaCommands.inspectTerminalAvatarScreenshot('session-2');
+    expect([codexScreenshot.avatarWidth, codexScreenshot.avatarHeight]).toEqual([36, 36]);
+    expect([codexScreenshot.markWidth, codexScreenshot.markHeight]).toEqual([21, 21]);
+    expect(codexScreenshot.paintedPixels).toBeGreaterThan(0);
+    expect(codexScreenshot.distinctColorBuckets).toBeGreaterThan(1);
+    expect(codexScreenshot.screenshotHash).not.toBe(linkScreenshot.screenshotHash);
     expect(host.querySelector('[data-terminal-output-state="streaming"]')).not.toBeNull();
     expect(identity?.querySelector('[data-terminal-process-state="running"]')).toBeNull();
     const before = slot!.getBoundingClientRect();
@@ -1833,7 +1879,18 @@ describe('TerminalPanel browser activity integration', () => {
     await settleTerminalPanel();
     const claudeIdentity = host.querySelector<HTMLElement>('[data-terminal-agent-identity="claude"]')!;
     const claudeIcon = claudeIdentity.querySelector<HTMLImageElement>('img')!;
+    expect([claudeIdentity.getBoundingClientRect().width, claudeIdentity.getBoundingClientRect().height]).toEqual([36, 36]);
+    expect([claudeIcon.getBoundingClientRect().width, claudeIcon.getBoundingClientRect().height]).toEqual([20, 20]);
     expect(new URL(claudeIcon.src).pathname).toBe('/_redeven_proxy/env/agent-cli-icons/claude.svg');
+    const claudeScreenshot = await mediaCommands.inspectTerminalAvatarScreenshot('session-2');
+    expect([claudeScreenshot.avatarWidth, claudeScreenshot.avatarHeight]).toEqual([36, 36]);
+    expect([claudeScreenshot.markWidth, claudeScreenshot.markHeight]).toEqual([20, 20]);
+    expect(claudeScreenshot.paintedPixels).toBeGreaterThan(0);
+    expect(claudeScreenshot.distinctColorBuckets).toBeGreaterThan(1);
+    expect(claudeScreenshot.screenshotHash).not.toBe(codexScreenshot.screenshotHash);
+    const agentCoverageRatio = codexScreenshot.paintedPixels / claudeScreenshot.paintedPixels;
+    expect(agentCoverageRatio).toBeGreaterThanOrEqual(0.8);
+    expect(agentCoverageRatio).toBeLessThanOrEqual(1.4);
   });
 
   it('keeps the four trailing controls aligned in a fixed two-by-two grid beside long paths', async () => {
@@ -2469,7 +2526,9 @@ describe('TerminalPanel browser activity integration', () => {
         const closeButton = host.querySelector<HTMLElement>('[data-testid="close-session-session-2"]');
         const filesButton = host.querySelector<HTMLElement>('[data-testid="terminal-session-files-session-2"]');
         expect(closeButton ? getComputedStyle(closeButton).opacity : null).toBe('1');
-        expect(filesButton).toBeNull();
+        expect(filesButton?.dataset.terminalFilesAvailability).toBe('remote');
+        expect(filesButton?.getAttribute('aria-disabled')).toBe('true');
+        expect(filesButton ? getComputedStyle(filesButton).opacity : null).toBe('1');
 
         findTerminalTab(host, 'Terminal 2')?.click();
         await settleTerminalPanel();

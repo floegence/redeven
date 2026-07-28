@@ -301,10 +301,15 @@ export function fromWireTerminalSessionStatsResponse(resp: wire_terminal_session
 export function fromWireTerminalNameUpdateNotify(payload: wire_terminal_name_update_notify): TerminalNameUpdateEvent | null {
   const sessionId = String(payload?.session_id ?? '').trim();
   if (!sessionId) return null;
+  const rawCapability = payload?.local_path_capability;
+  const capabilityWorkingDir = rawCapability && typeof rawCapability === 'object'
+    ? canonicalAbsolutePath(rawCapability.working_dir)
+    : '';
   return {
     sessionId,
     newName: String(payload?.new_name ?? ''),
     workingDir: String(payload?.working_dir ?? ''),
+    localPathCapability: capabilityWorkingDir ? { workingDir: capabilityWorkingDir } : null,
   };
 }
 

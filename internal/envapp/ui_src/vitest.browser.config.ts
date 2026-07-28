@@ -3,6 +3,7 @@ import { playwright } from '@vitest/browser-playwright';
 import axe from 'axe-core';
 import { PNG } from 'pngjs';
 import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import type { Frame, Page } from 'playwright';
 import viteConfig from './vite.config';
 
@@ -39,6 +40,32 @@ function hashPngRegion(
   return hash.digest('hex');
 }
 
+function inspectPaintedPixels(image: ReturnType<typeof PNG.sync.read>): Readonly<{
+  paintedPixels: number;
+  distinctColorBuckets: number;
+}> {
+  const buckets = new Map<string, number>();
+  for (let offset = 0; offset < image.data.length; offset += 4) {
+    if (image.data[offset + 3] === 0) continue;
+    const key = `${image.data[offset] >> 3}:${image.data[offset + 1] >> 3}:${image.data[offset + 2] >> 3}`;
+    buckets.set(key, (buckets.get(key) ?? 0) + 1);
+  }
+  const [backgroundKey = '0:0:0'] = [...buckets.entries()]
+    .sort((left, right) => right[1] - left[1])[0] ?? [];
+  const [backgroundRed, backgroundGreen, backgroundBlue] = backgroundKey
+    .split(':')
+    .map((value) => Number(value) << 3);
+  let paintedPixels = 0;
+  for (let offset = 0; offset < image.data.length; offset += 4) {
+    if (image.data[offset + 3] === 0) continue;
+    const distance = Math.abs(image.data[offset] - backgroundRed)
+      + Math.abs(image.data[offset + 1] - backgroundGreen)
+      + Math.abs(image.data[offset + 2] - backgroundBlue);
+    if (distance > 36) paintedPixels += 1;
+  }
+  return { paintedPixels, distinctColorBuckets: buckets.size };
+}
+
 export default mergeConfig(viteConfig, defineConfig({
   optimizeDeps: {
     include: [
@@ -64,6 +91,21 @@ export default mergeConfig(viteConfig, defineConfig({
         ? { port: configuredBrowserPort }
         : undefined,
       commands: {
+        installTerminalAgentIconRoutes: async ({ page }) => {
+          await page.route('**/_redeven_proxy/env/agent-cli-icons/*.svg', async (route) => {
+            const fileName = new URL(route.request().url()).pathname.split('/').at(-1) ?? '';
+            if (!/^[a-z-]+\.svg$/.test(fileName)) {
+              await route.abort();
+              return;
+            }
+            try {
+              const body = await readFile(new URL(`./public/agent-cli-icons/${fileName}`, import.meta.url));
+              await route.fulfill({ status: 200, contentType: 'image/svg+xml', body });
+            } catch {
+              await route.fulfill({ status: 404, body: 'Not found' });
+            }
+          });
+        },
         auditReadinessAccessibility: async ({ page }) => {
           const frame = await readinessFrame(page);
           await frame.addScriptTag({ content: axe.source });
@@ -141,6 +183,32 @@ export default mergeConfig(viteConfig, defineConfig({
             safeCanvasHash: hashPngRegion(image, safeCanvasRegion),
             canvasWidth: terminalBox.width,
             canvasHeight: terminalBox.height,
+          };
+        },
+        inspectTerminalAvatarScreenshot: async ({ page }, sessionId: string) => {
+          const frame = await terminalPanelFrame(page);
+          const avatar = frame.locator(`[data-terminal-session-avatar="${sessionId}"]`).first();
+          const mark = avatar.locator('svg, img, .bg-current').filter({ visible: true }).first();
+          const [avatarBox, markBox, screenshot] = await Promise.all([
+            avatar.evaluate((element) => {
+              const rect = element.getBoundingClientRect();
+              return { width: rect.width, height: rect.height };
+            }),
+            mark.evaluate((element) => {
+              const rect = element.getBoundingClientRect();
+              return { width: rect.width, height: rect.height };
+            }),
+            avatar.screenshot({ type: 'png' }),
+          ]);
+          const image = PNG.sync.read(screenshot);
+          return {
+            screenshotHash: createHash('sha256').update(image.data).digest('hex'),
+            avatarWidth: avatarBox.width,
+            avatarHeight: avatarBox.height,
+            markWidth: markBox.width,
+            markHeight: markBox.height,
+            totalPixels: image.width * image.height,
+            ...inspectPaintedPixels(image),
           };
         },
         sizeReadinessFrame: async ({ page }, size: Readonly<{ width: number; height: number }>) => {
