@@ -95,8 +95,15 @@ class FakeCoordinator {
       if (incomingContext.revision === currentContext.revision
         && JSON.stringify(incomingContext) !== JSON.stringify(currentContext)) {
         this.scheduleMetadataConflictReconcile(`${id}:context:${incomingContext.revision}`);
+        next.executionContext = {
+          location: { kind: 'unknown', phase: 'unknown', label: '', authority: '', workingDirectory: '', source: 'unknown' },
+          application: { kind: 'unknown', identity: '', displayName: '' },
+          revision: currentContext.revision,
+          updatedAtMs: currentContext.updatedAtMs,
+        };
+      } else {
+        next.executionContext = currentContext;
       }
-      next.executionContext = currentContext;
     }
     const currentWork = existing.workState;
     const incomingWork = patch.workState;
@@ -500,8 +507,8 @@ describe('TerminalSessionCatalogProvider', () => {
     dispose();
   });
 
-  it('routes equal-revision context conflicts through one authoritative reconcile', async () => {
-    const authoritativeSession = {
+  it('fails closed during an equal-revision context conflict and accepts the authoritative value', async () => {
+    const localSession = {
       ...rpcState.sessions[0],
       foregroundCommand: { phase: 'running', displayName: 'ssh', revision: 2, updatedAtMs: 20 },
       executionContext: {
@@ -512,8 +519,19 @@ describe('TerminalSessionCatalogProvider', () => {
       },
       workState: { phase: 'idle', source: 'semantic', contextRevision: 3, foregroundCommandRevision: 2, revision: 4, updatedAtMs: 40 },
     };
+    const authoritativeSession = {
+      ...localSession,
+      executionContext: {
+        location: { kind: 'remote', phase: 'ready', label: 'root@host', authority: 'host', workingDirectory: '/root', source: 'osc7' },
+        application: { kind: 'shell', identity: '', displayName: '' },
+        revision: 3,
+        updatedAtMs: 31,
+      },
+    };
     rpcState.list.mockReset();
-    rpcState.list.mockResolvedValue({ sessions: [authoritativeSession] });
+    rpcState.list
+      .mockResolvedValueOnce({ sessions: [localSession] })
+      .mockResolvedValueOnce({ sessions: [authoritativeSession] });
     let latest: any = null;
     const host = document.createElement('div');
     const dispose = render(() => (
@@ -525,12 +543,11 @@ describe('TerminalSessionCatalogProvider', () => {
 
     rpcState.executionContextHandler?.({
       sessionId: 's1',
-      executionContext: {
-        location: { kind: 'remote', phase: 'ready', label: 'root@host', authority: 'host', workingDirectory: '/root', source: 'osc7' },
-        application: { kind: 'shell', identity: '', displayName: '' },
-        revision: 3,
-        updatedAtMs: 31,
-      },
+      executionContext: authoritativeSession.executionContext,
+    });
+    expect(latest.sessions()[0]?.executionContext).toMatchObject({
+      location: { kind: 'unknown', phase: 'unknown' },
+      revision: 3,
     });
 
     await vi.waitFor(() => expect(rpcState.list).toHaveBeenCalledTimes(2));
