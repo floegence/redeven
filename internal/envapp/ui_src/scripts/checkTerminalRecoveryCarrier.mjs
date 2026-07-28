@@ -441,7 +441,7 @@ async function verifyForegroundCommandPresentation(page, panel, runtime, session
     ));
     return commandTitles.length >= 2
       && commandTitles.every((element) => (element.textContent ?? '').trim() === 'top')
-      && targetPanel.querySelector('[data-terminal-tab-status="running"]') !== null;
+      && targetPanel.querySelector('[data-terminal-tab-status="running"]') === null;
   }, {
     expectedSessionID: sessionID,
     expectedPanelVariant: panelVariant,
@@ -470,7 +470,7 @@ async function verifyForegroundCommandPresentation(page, panel, runtime, session
 
   return {
     idle_without_spinner: true,
-    running_title_and_spinner: true,
+    running_title_without_spinner: true,
     idle_title_restored: true,
   };
 }
