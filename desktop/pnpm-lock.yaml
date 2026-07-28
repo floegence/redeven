@@ -28,8 +28,8 @@ importers:
   .:
     dependencies:
       '@floegence/floe-webapp-core':
-        specifier: 0.40.0
-        version: 0.40.0(solid-js@1.9.13)
+        specifier: 0.40.2
+        version: 0.40.2(solid-js@1.9.13)
       qrcode-generator:
         specifier: ^2.0.4
         version: 2.0.4
@@ -500,7 +500,7 @@ packages:
       '@noble/hashes':
         optional: true
 
-  '@floegence/floe-webapp-core@0.40.0':
+  '@floegence/floe-webapp-core@0.40.2':
     resolution: {integrity: sha512-bli0m/PxjxFgFawUX1mYCFEFoEvIZb4FNw/kiFgCFku15GP+ps3VoQ4eBwXJGygMXI5xSCFu/QFQCwJajjVmcQ==}
     engines: {node: '>=24.0.0'}
     peerDependencies:
@@ -3480,7 +3480,7 @@ snapshots:
     optionalDependencies:
       '@noble/hashes': 2.2.0
 
-  '@floegence/floe-webapp-core@0.40.0(solid-js@1.9.13)':
+  '@floegence/floe-webapp-core@0.40.2(solid-js@1.9.13)':
     dependencies:
       clsx: 2.1.1
       diff: 8.0.4

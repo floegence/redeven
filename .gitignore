@@ -26,3 +26,6 @@ plugins/official/containers/dist/
 .agent.md
 
 \.*\.md
+
+# Claude session state
+.claude/

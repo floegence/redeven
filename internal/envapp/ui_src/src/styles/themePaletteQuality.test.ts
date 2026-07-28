@@ -154,6 +154,13 @@ function graphPalette(profile: ThemeProfile): readonly Rgb[] {
 
 function runtimeMonitorPalette(profile: ThemeProfile): readonly [Rgb, Rgb, Rgb] {
   const graph = graphPalette(profile);
+  if (profile.name === 'studio') {
+    return [
+      graph[0],
+      mix(graph[1], parseColor(profile.foreground), 0.75),
+      graph[4],
+    ];
+  }
   if (profile.name === 'nord') {
     return [
       graph[0],
@@ -228,6 +235,7 @@ describe('Redeven 24-preset color quality', () => {
     expect(css).toContain('--redeven-runtime-monitor-cpu-line: var(--redeven-categorical-graph-1);');
     expect(css).toContain('--redeven-runtime-monitor-download-line: var(--redeven-categorical-graph-2);');
     expect(css).toContain('--redeven-runtime-monitor-upload-line: var(--redeven-categorical-graph-5);');
+    expect(css).toContain(":root.dark[data-floe-shell-theme='studio']");
     expect(css).toContain(":root.dark[data-floe-shell-theme='nord']");
     expect(css).toContain('--redeven-runtime-monitor-download-line: color-mix(in srgb, var(--redeven-categorical-graph-2) 75%, var(--foreground) 25%);');
     expect(css).toContain('--redeven-runtime-monitor-upload-line: var(--redeven-categorical-graph-3);');
