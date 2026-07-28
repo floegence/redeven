@@ -47,6 +47,7 @@ import type {
   TerminalSessionsChangedEvent,
   TerminalWorkStateUpdateEvent,
 } from '../sdk/terminal';
+import { canonicalAbsolutePath } from '../../../utils/canonicalAbsolutePath';
 
 import type {
   TerminalExecutionContextInfo,
@@ -171,22 +172,8 @@ export function fromWireTerminalOutputActivityInfo(
   return { phase, revision, updatedAtMs };
 }
 
-function canonicalLocalCapabilityWorkingDir(value: unknown): string {
-  if (typeof value !== 'string' || value !== value.trim() || !value.startsWith('/')) return '';
-  const containsControl = Array.from(value).some((character) => {
-    const codePoint = character.codePointAt(0) ?? 0;
-    return codePoint <= 0x1f || codePoint === 0x7f;
-  });
-  if (value.includes('\\') || containsControl) return '';
-  if (value === '/') return value;
-  if (value !== '/' && value.endsWith('/')) return '';
-  const segments = value.slice(1).split('/');
-  if (segments.some((segment) => !segment || segment === '.' || segment === '..')) return '';
-  return value;
-}
-
 function toTerminalSessionInfo(s: wire_terminal_session_info): TerminalSessionInfo {
-  const localCapabilityWorkingDir = canonicalLocalCapabilityWorkingDir(
+  const localCapabilityWorkingDir = canonicalAbsolutePath(
     s?.local_path_capability?.working_dir,
   );
   return {

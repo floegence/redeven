@@ -296,14 +296,21 @@ func (m *Manager) markSessionDeleteFailure(sessionID string, failureCode string,
 	if !ok {
 		record = SessionLifecycleRecord{}
 	}
-	record.Lifecycle = SessionLifecycleOpen
+	reason := "close_failed"
+	if strings.TrimSpace(record.OwnerWidgetID) != "" {
+		record.Lifecycle = SessionLifecycleCloseFailedHidden
+		reason = "close_failed_hidden"
+		delete(m.localPathCapabilities, sessionID)
+	} else {
+		record.Lifecycle = SessionLifecycleOpen
+	}
 	record.CloseFinishedAtMs = nowUnixMs
 	record.FailureCode = strings.TrimSpace(failureCode)
 	record.FailureMessage = strings.TrimSpace(failureMessage)
 	m.sessionLifecycle[sessionID] = record
 	m.mu.Unlock()
 
-	payload := buildTerminalSessionsChangedPayload("close_failed", sessionID, record)
+	payload := buildTerminalSessionsChangedPayload(reason, sessionID, record)
 	m.broadcastSessionsChanged(payload)
 	m.emitSessionLifecycleEvent(sessionLifecycleEventFromPayload(payload))
 }

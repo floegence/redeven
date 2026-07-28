@@ -3283,6 +3283,12 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return [...sessionItems, ...pendingItems];
   });
   const sessionListItemById = createMemo(() => new Map(sessionListItems().map((item) => [item.id, item])));
+  createEffect(() => {
+    const menu = terminalSidebarMenu();
+    if (menu && !sessionListItemById().has(menu.sessionId)) {
+      setTerminalSidebarMenu(null);
+    }
+  });
   const sessionListItemIds = createMemo((previous: readonly string[] = []) => {
     const query = sessionFilterQuery().trim().toLocaleLowerCase();
     const next = sessionListItems().filter((item) => {

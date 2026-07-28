@@ -710,6 +710,53 @@ func TestDeleteSessionFailureReturnsSharedErrorAndCanRetry(t *testing.T) {
 	}
 }
 
+func TestWidgetDeleteFailureStaysHiddenAndRevokesLocalPathCapability(t *testing.T) {
+	root := t.TempDir()
+	m := newQuietTestManager(t, root)
+	t.Cleanup(m.Cleanup)
+
+	events := make(chan SessionLifecycleEvent, 8)
+	removeHook := m.AddSessionLifecycleHook(func(event SessionLifecycleEvent) {
+		events <- event
+	})
+	defer removeHook()
+
+	sess, err := m.createSession("test", "")
+	if err != nil {
+		t.Fatalf("createSession() error = %v", err)
+	}
+	if got := m.localPathCapability(sess.ID); got == "" {
+		t.Fatal("local path capability is empty after create")
+	}
+
+	deleteErr := errors.New("widget cleanup failed")
+	m.deleteSessionFunc = func(string) error {
+		return deleteErr
+	}
+	if err := m.DeleteSessionForWidget(sess.ID, "widget-1"); !errors.Is(err, deleteErr) {
+		t.Fatalf("DeleteSessionForWidget() error = %v, want %v", err, deleteErr)
+	}
+
+	record, ok := m.lifecycleRecord(sess.ID)
+	if !ok || record.Lifecycle != SessionLifecycleCloseFailedHidden || record.OwnerWidgetID != "widget-1" {
+		t.Fatalf("lifecycleRecord() = %+v, %v, want hidden widget failure", record, ok)
+	}
+	if got := m.visibleSessionInfos(); len(got) != 0 {
+		t.Fatalf("visibleSessionInfos() = %#v, want failed widget session hidden", got)
+	}
+	if m.sessionAvailableForInteraction(sess.ID) {
+		t.Fatal("failed widget session remained available for interaction")
+	}
+	if got := m.localPathCapability(sess.ID); got != "" {
+		t.Fatalf("local path capability after widget delete failure = %q, want empty", got)
+	}
+
+	event := waitForLifecycleEvent(t, events, sess.ID, SessionLifecycleCloseFailedHidden, time.Second)
+	if event.Reason != "close_failed_hidden" || !event.Hidden || event.OwnerWidgetID != "widget-1" {
+		t.Fatalf("lifecycle event = %+v, want hidden widget cleanup failure", event)
+	}
+}
+
 func TestConcurrentDeleteSessionFailureSharesOneResult(t *testing.T) {
 	root := t.TempDir()
 	m := newQuietTestManager(t, root)
