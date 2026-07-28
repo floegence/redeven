@@ -9422,6 +9422,7 @@
       "timestamp": "2026-07-28T00:00:00Z",
       "frontmatter": {
         "description": "Terminal attachment, shared-geometry presentation, input ownership, retained history, and performance validation.",
+        "quality_exception": "Cross-surface terminal interaction contract spanning live transport, shared geometry, product chrome, path capability, focus recovery, and performance validation.",
         "tags": [
           "performance",
           "terminal",
@@ -9551,5 +9552,5 @@
       ]
     }
   ],
-  "source_sha256": "dce0848860809250a019df61bbacb07b41ac175897af5e0a4e80b03ce9062260"
+  "source_sha256": "427cdb849d10fcfb02b042413c675cd3f0223db49f916f72ff64a70722778a29"
 }

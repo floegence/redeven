@@ -4,6 +4,7 @@ title: Workbench terminal interaction
 description: Terminal attachment, shared-geometry presentation, input ownership, retained history, and performance validation.
 tags: [ui, workbench, terminal, performance]
 timestamp: 2026-07-28T00:00:00Z
+quality_exception: Cross-surface terminal interaction contract spanning live transport, shared geometry, product chrome, path capability, focus recovery, and performance validation.
 ---
 # Summary
 
