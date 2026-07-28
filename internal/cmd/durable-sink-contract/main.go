@@ -25,15 +25,26 @@ func main() {
 	}
 	registryPath := filepath.Join(*root, "scripts", "contracts", "durable_sink_registry.json")
 	if *write {
-		registry := boundarycontract.Registry{Version: boundarycontract.RegistryVersion}
-		for _, finding := range findings {
-			registry.Entries = append(registry.Entries, boundarycontract.NewReviewedEntry(finding))
+		existing := boundarycontract.Registry{Version: boundarycontract.RegistryVersion}
+		if loaded, loadErr := boundarycontract.LoadRegistry(registryPath); loadErr == nil {
+			existing = loaded
+		} else if !os.IsNotExist(loadErr) {
+			fmt.Fprintln(os.Stderr, loadErr)
+			os.Exit(1)
 		}
+		registry := boundarycontract.RefreshRegistry(existing, findings)
 		if err := boundarycontract.WriteRegistry(registryPath, registry); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
-		fmt.Printf("wrote %d reviewed durable sink entries\n", len(registry.Entries))
+		issues := boundarycontract.Validate(registry, findings)
+		fmt.Printf("wrote %d durable sink entries\n", len(registry.Entries))
+		for _, issue := range issues {
+			fmt.Fprintf(os.Stderr, "[ERROR] %s\n", issue)
+		}
+		if len(issues) > 0 {
+			os.Exit(1)
+		}
 		return
 	}
 	registry, err := boundarycontract.LoadRegistry(registryPath)

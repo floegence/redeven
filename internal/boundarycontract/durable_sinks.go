@@ -17,6 +17,7 @@ import (
 	"reflect"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -28,17 +29,18 @@ type Registry struct {
 }
 
 type RegistryEntry struct {
-	Path        string   `json:"path"`
-	SHA256      string   `json:"sha256"`
-	SinkKinds   []string `json:"sink_kinds"`
-	Owner       string   `json:"owner"`
-	Authority   string   `json:"authority"`
-	DataClasses []string `json:"data_classes"`
-	Tables      []string `json:"tables,omitempty"`
-	Keys        []string `json:"keys,omitempty"`
-	Codecs      []string `json:"codecs,omitempty"`
-	DTOs        []string `json:"dtos,omitempty"`
-	ReviewNote  string   `json:"review_note"`
+	Path         string   `json:"path"`
+	SHA256       string   `json:"sha256"`
+	SinkKinds    []string `json:"sink_kinds"`
+	ReviewStatus string   `json:"review_status"`
+	Owner        string   `json:"owner"`
+	Authority    string   `json:"authority"`
+	DataClasses  []string `json:"data_classes"`
+	Tables       []string `json:"tables,omitempty"`
+	Keys         []string `json:"keys,omitempty"`
+	Codecs       []string `json:"codecs,omitempty"`
+	DTOs         []string `json:"dtos,omitempty"`
+	ReviewNote   string   `json:"review_note"`
 }
 
 type Finding struct {
@@ -50,6 +52,11 @@ type Finding struct {
 	Codecs    []string
 	DTOs      []string
 }
+
+const (
+	ReviewStatusReviewed      = "reviewed"
+	ReviewStatusPendingReview = "pending_review"
+)
 
 var allowedAuthorities = map[string]struct{}{
 	"build_or_test_artifact": {},
@@ -72,8 +79,12 @@ var (
 	cacheStoragePattern = regexp.MustCompile(
 		`(?m)(?:\bcaches\s*\.\s*(?:open|delete)\s*\(|\bCacheStorage\b)`,
 	)
-	typeScriptFilePattern = regexp.MustCompile(`(?m)\b(?:fs|promises)\s*\.\s*(?:writeFile|appendFile|open|createWriteStream|rename)\s*\(`)
-	browserCallArgPattern = regexp.MustCompile(`(?m)\b(?:(?:window\s*\.\s*)?(?:localStorage|sessionStorage)\s*\.\s*(?:setItem|removeItem)\s*\(\s*([^,\)\n]+)|indexedDB\s*\.\s*(?:open|deleteDatabase)\s*\(\s*([^,\)\n]+)|caches\s*\.\s*(?:open|delete)\s*\(\s*([^,\)\n]+))`)
+	typeScriptFSNamespaceImportPattern     = regexp.MustCompile(`(?m)\bimport\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+["'](?:node:)?fs(?:/promises)?["']`)
+	typeScriptFSDefaultImportPattern       = regexp.MustCompile(`(?m)\bimport\s+([A-Za-z_$][\w$]*)\s+from\s+["'](?:node:)?fs(?:/promises)?["']`)
+	typeScriptFSNamedImportPattern         = regexp.MustCompile(`(?m)\bimport\s*\{([^}]*)\}\s*from\s*["'](?:node:)?fs(?:/promises)?["']`)
+	typeScriptFSRequirePattern             = regexp.MustCompile(`(?m)\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*["'](?:node:)?fs(?:/promises)?["']\s*\)`)
+	typeScriptFSDestructuredRequirePattern = regexp.MustCompile(`(?m)\b(?:const|let|var)\s*\{([^}]*)\}\s*=\s*require\s*\(\s*["'](?:node:)?fs(?:/promises)?["']\s*\)`)
+	typeScriptStorageAliasPattern          = regexp.MustCompile(`(?m)\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:(?:window|globalThis|self)\s*\.\s*)?(localStorage|sessionStorage|indexedDB|caches)\b`)
 )
 
 var forbiddenAgentDataClassPatterns = []string{
@@ -109,7 +120,11 @@ func LoadRegistry(path string) (Registry, error) {
 
 func Scan(root string) ([]Finding, error) {
 	root = filepath.Clean(root)
-	var findings []Finding
+	type sourceFile struct {
+		path   string
+		source []byte
+	}
+	var sources []sourceFile
 	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -136,24 +151,69 @@ func Scan(root string) ([]Finding, error) {
 		if err != nil {
 			return err
 		}
-		finding, err := inspectSource(rel, source)
-		if err != nil {
-			return err
-		}
-		if len(finding.SinkKinds) == 0 {
-			return nil
-		}
-		digest := sha256.Sum256(source)
-		finding.Path = rel
-		finding.SHA256 = hex.EncodeToString(digest[:])
-		findings = append(findings, finding)
+		sources = append(sources, sourceFile{path: rel, source: source})
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
+
+	packageCodecs := make(map[string]map[string]goCodecInventory)
+	for _, source := range sources {
+		if strings.EqualFold(filepath.Ext(source.path), ".go") {
+			inventory, err := inspectGoCodecInventory(source.path, source.source)
+			if err != nil {
+				return nil, err
+			}
+			key := goPackageKey(source.path, inventory.packageName)
+			if packageCodecs[key] == nil {
+				packageCodecs[key] = make(map[string]goCodecInventory)
+			}
+			for name, functionInventory := range inventory.functions {
+				packageCodecs[key][name] = functionInventory
+			}
+		}
+	}
+
+	var findings []Finding
+	for _, source := range sources {
+		finding, packageName, err := inspectSource(source.path, source.source)
+		if err != nil {
+			return nil, err
+		}
+		if contains(finding.SinkKinds, "file") && strings.EqualFold(filepath.Ext(source.path), ".go") {
+			inventory, err := referencedCodecInventory(source.path, source.source, packageCodecs[goPackageKey(source.path, packageName)])
+			if err != nil {
+				return nil, err
+			}
+			if len(inventory.codecs) > 0 {
+				finding.SinkKinds = append(finding.SinkKinds, "json_file")
+				finding.SinkKinds = uniqueSorted(finding.SinkKinds)
+				finding.Codecs = uniqueSorted(append(finding.Codecs, inventory.codecs...))
+				finding.DTOs = uniqueSorted(append(finding.DTOs, inventory.dtos...))
+			}
+		}
+		if len(finding.SinkKinds) == 0 {
+			continue
+		}
+		digest := sha256.Sum256(source.source)
+		finding.Path = source.path
+		finding.SHA256 = hex.EncodeToString(digest[:])
+		findings = append(findings, finding)
+	}
 	sort.Slice(findings, func(i, j int) bool { return findings[i].Path < findings[j].Path })
 	return findings, nil
+}
+
+type goCodecInventory struct {
+	packageName string
+	codecs      []string
+	dtos        []string
+	functions   map[string]goCodecInventory
+}
+
+func goPackageKey(path, packageName string) string {
+	return filepath.ToSlash(filepath.Dir(path)) + "\x00" + packageName
 }
 
 func Validate(registry Registry, findings []Finding) []string {
@@ -202,17 +262,18 @@ func Validate(registry Registry, findings []Finding) []string {
 
 func NewReviewedEntry(finding Finding) RegistryEntry {
 	entry := RegistryEntry{
-		Path:        finding.Path,
-		SHA256:      finding.SHA256,
-		SinkKinds:   append([]string(nil), finding.SinkKinds...),
-		Owner:       "redeven",
-		Authority:   "product_configuration",
-		DataClasses: []string{"product-owned state"},
-		ReviewNote:  "Reviewed durable product state; canonical Agent lifecycle data is excluded.",
-		Tables:      append([]string(nil), finding.Tables...),
-		Keys:        append([]string(nil), finding.Keys...),
-		Codecs:      append([]string(nil), finding.Codecs...),
-		DTOs:        append([]string(nil), finding.DTOs...),
+		Path:         finding.Path,
+		SHA256:       finding.SHA256,
+		SinkKinds:    append([]string(nil), finding.SinkKinds...),
+		ReviewStatus: ReviewStatusReviewed,
+		Owner:        "redeven",
+		Authority:    "product_configuration",
+		DataClasses:  []string{"product-owned state"},
+		ReviewNote:   "Reviewed durable product state; canonical Agent lifecycle data is excluded.",
+		Tables:       append([]string(nil), finding.Tables...),
+		Keys:         append([]string(nil), finding.Keys...),
+		Codecs:       append([]string(nil), finding.Codecs...),
+		DTOs:         append([]string(nil), finding.DTOs...),
 	}
 	path := finding.Path
 	switch {
@@ -257,73 +318,65 @@ func NewReviewedEntry(finding Finding) RegistryEntry {
 	return entry
 }
 
-func inspectSource(path string, source []byte) (Finding, error) {
+// RefreshRegistry preserves review metadata only when the previously reviewed
+// source fingerprint and scanner inventory still match exactly. Every other
+// finding requires an explicit human or agent review before validation passes.
+func RefreshRegistry(existing Registry, findings []Finding) Registry {
+	previous := make(map[string]RegistryEntry, len(existing.Entries))
+	for _, entry := range existing.Entries {
+		previous[filepath.ToSlash(strings.TrimSpace(entry.Path))] = entry
+	}
+	refreshed := Registry{Version: RegistryVersion}
+	for _, finding := range findings {
+		if entry, ok := previous[finding.Path]; ok && reviewedFindingMatches(entry, finding) {
+			entry.ReviewStatus = ReviewStatusReviewed
+			refreshed.Entries = append(refreshed.Entries, entry)
+			continue
+		}
+		refreshed.Entries = append(refreshed.Entries, RegistryEntry{
+			Path:         finding.Path,
+			SHA256:       finding.SHA256,
+			SinkKinds:    append([]string(nil), finding.SinkKinds...),
+			ReviewStatus: ReviewStatusPendingReview,
+			Tables:       append([]string(nil), finding.Tables...),
+			Keys:         append([]string(nil), finding.Keys...),
+			Codecs:       append([]string(nil), finding.Codecs...),
+			DTOs:         append([]string(nil), finding.DTOs...),
+		})
+	}
+	return refreshed
+}
+
+func reviewedFindingMatches(entry RegistryEntry, finding Finding) bool {
+	if entry.ReviewStatus != "" && entry.ReviewStatus != ReviewStatusReviewed {
+		return false
+	}
+	return entry.SHA256 == finding.SHA256 &&
+		reflect.DeepEqual(uniqueSorted(entry.SinkKinds), uniqueSorted(finding.SinkKinds)) &&
+		reflect.DeepEqual(uniqueSorted(entry.Tables), uniqueSorted(finding.Tables)) &&
+		reflect.DeepEqual(uniqueSorted(entry.Keys), uniqueSorted(finding.Keys)) &&
+		reflect.DeepEqual(uniqueSorted(entry.Codecs), uniqueSorted(finding.Codecs)) &&
+		reflect.DeepEqual(uniqueSorted(entry.DTOs), uniqueSorted(finding.DTOs))
+}
+
+func inspectSource(path string, source []byte) (Finding, string, error) {
 	kinds := map[string]struct{}{}
 	var tables, keys, codecs, dtos []string
+	var packageName string
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".go":
-		fileSet := token.NewFileSet()
-		file, err := parser.ParseFile(fileSet, path, source, parser.SkipObjectResolution)
+		goFinding, name, err := inspectGoSource(path, source)
 		if err != nil {
-			return Finding{}, fmt.Errorf("parse %s: %w", path, err)
+			return Finding{}, "", err
 		}
-		hasFileSink := false
-		hasJSONCodec := false
-		ast.Inspect(file, func(node ast.Node) bool {
-			call, ok := node.(*ast.CallExpr)
-			if !ok {
-				return true
-			}
-			selector, ok := call.Fun.(*ast.SelectorExpr)
-			if !ok {
-				return true
-			}
-			packageName := selectorRootName(selector.X)
-			switch {
-			case packageName == "os" && contains([]string{"WriteFile", "Create", "CreateTemp", "OpenFile"}, selector.Sel.Name):
-				hasFileSink = true
-			case packageName == "sql" && selector.Sel.Name == "Open":
-				kinds["sqlite"] = struct{}{}
-			case packageName == "json" && contains([]string{"Marshal", "MarshalIndent", "NewEncoder"}, selector.Sel.Name):
-				hasJSONCodec = true
-				codecs = append(codecs, "encoding/json."+selector.Sel.Name)
-				if len(call.Args) > 0 && selector.Sel.Name != "NewEncoder" {
-					dtos = append(dtos, renderExpression(fileSet, call.Args[0]))
-				}
-			case selector.Sel.Name == "Encode" && len(call.Args) > 0:
-				dtos = append(dtos, renderExpression(fileSet, call.Args[0]))
-			}
-			return true
-		})
-		if hasFileSink {
-			kinds["file"] = struct{}{}
-			if hasJSONCodec {
-				kinds["json_file"] = struct{}{}
-			}
-		}
-		if sqlMutationPattern.Match(source) {
-			kinds["sqlite"] = struct{}{}
-		}
-		tables = extractSQLTables(source)
+		return goFinding, name, nil
 	case ".sql":
 		if sqlMutationPattern.Match(source) {
 			kinds["sql_file"] = struct{}{}
 		}
 		tables = extractSQLTables(source)
 	case ".ts", ".tsx":
-		if webStoragePattern.Match(source) {
-			kinds["web_storage"] = struct{}{}
-		}
-		if indexedDBPattern.Match(source) {
-			kinds["indexed_db"] = struct{}{}
-		}
-		if cacheStoragePattern.Match(source) {
-			kinds["cache_storage"] = struct{}{}
-		}
-		if typeScriptFilePattern.Match(source) {
-			kinds["file"] = struct{}{}
-		}
-		keys = extractBrowserKeys(source)
+		return inspectTypeScriptSource(source), "", nil
 	}
 	result := make([]string, 0, len(kinds))
 	for kind := range kinds {
@@ -336,11 +389,435 @@ func inspectSource(path string, source []byte) (Finding, error) {
 		Keys:      uniqueSorted(keys),
 		Codecs:    uniqueSorted(codecs),
 		DTOs:      uniqueSorted(dtos),
-	}, nil
+	}, packageName, nil
+}
+
+func inspectGoCodecInventory(path string, source []byte) (goCodecInventory, error) {
+	fileSet := token.NewFileSet()
+	file, err := parser.ParseFile(fileSet, path, source, parser.SkipObjectResolution)
+	if err != nil {
+		return goCodecInventory{}, fmt.Errorf("parse %s: %w", path, err)
+	}
+	imports := goImportAliases(file)
+	jsonAliases := aliasesForImport(imports, "encoding/json")
+	encoders := assignedCallResults(file, jsonAliases, []string{"NewEncoder"})
+	inspect := func(node ast.Node) goCodecInventory {
+		var codecs, dtos []string
+		ast.Inspect(node, func(node ast.Node) bool {
+			call, ok := node.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			selector, ok := call.Fun.(*ast.SelectorExpr)
+			if !ok {
+				return true
+			}
+			root := selectorRootName(selector.X)
+			if contains(jsonAliases, root) && contains([]string{"Marshal", "MarshalIndent"}, selector.Sel.Name) {
+				codecs = append(codecs, "encoding/json."+selector.Sel.Name)
+				if len(call.Args) > 0 {
+					dtos = append(dtos, renderExpression(fileSet, call.Args[0]))
+				}
+			}
+			if selector.Sel.Name == "Encode" && len(call.Args) > 0 && (contains(encoders, root) || isPackageCall(selector.X, jsonAliases, "NewEncoder")) {
+				codecs = append(codecs, "encoding/json.NewEncoder")
+				dtos = append(dtos, renderExpression(fileSet, call.Args[0]))
+			}
+			return true
+		})
+		return goCodecInventory{codecs: uniqueSorted(codecs), dtos: uniqueSorted(dtos)}
+	}
+	all := inspect(file)
+	all.packageName = file.Name.Name
+	all.functions = make(map[string]goCodecInventory)
+	for _, declaration := range file.Decls {
+		function, ok := declaration.(*ast.FuncDecl)
+		if !ok || function.Body == nil {
+			continue
+		}
+		inventory := inspect(function.Body)
+		if len(inventory.codecs) > 0 {
+			all.functions[function.Name.Name] = inventory
+		}
+	}
+	return all, nil
+}
+
+func referencedCodecInventory(path string, source []byte, functions map[string]goCodecInventory) (goCodecInventory, error) {
+	if len(functions) == 0 {
+		return goCodecInventory{}, nil
+	}
+	fileSet := token.NewFileSet()
+	file, err := parser.ParseFile(fileSet, path, source, parser.SkipObjectResolution)
+	if err != nil {
+		return goCodecInventory{}, fmt.Errorf("parse %s: %w", path, err)
+	}
+	var result goCodecInventory
+	ast.Inspect(file, func(node ast.Node) bool {
+		call, ok := node.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		ident, ok := call.Fun.(*ast.Ident)
+		if !ok {
+			return true
+		}
+		if inventory, ok := functions[ident.Name]; ok {
+			result.codecs = append(result.codecs, inventory.codecs...)
+			result.dtos = append(result.dtos, inventory.dtos...)
+		}
+		return true
+	})
+	result.codecs = uniqueSorted(result.codecs)
+	result.dtos = uniqueSorted(result.dtos)
+	return result, nil
+}
+
+func inspectGoSource(path string, source []byte) (Finding, string, error) {
+	fileSet := token.NewFileSet()
+	file, err := parser.ParseFile(fileSet, path, source, parser.SkipObjectResolution)
+	if err != nil {
+		return Finding{}, "", fmt.Errorf("parse %s: %w", path, err)
+	}
+	imports := goImportAliases(file)
+	osAliases := aliasesForImport(imports, "os")
+	ioAliases := aliasesForImport(imports, "io")
+	sqlAliases := aliasesForImport(imports, "database/sql")
+	jsonAliases := aliasesForImport(imports, "encoding/json")
+	fileVars := assignedCallResults(file, osAliases, []string{"Create", "CreateTemp", "OpenFile"})
+	fileVars = append(fileVars, typedVariables(file, osAliases, "File")...)
+	sqlVars := typedVariables(file, sqlAliases, "DB", "Tx", "Conn", "Stmt")
+	sqlVars = append(sqlVars, assignedCallResults(file, sqlAliases, []string{"Open"})...)
+	sqlVars = expandAssignedReceiverResults(file, uniqueSorted(sqlVars), []string{"Begin", "BeginTx", "Conn", "Prepare", "PrepareContext"})
+	fileVars = expandAssignedAliases(file, uniqueSorted(fileVars))
+	codecInventory, err := inspectGoCodecInventory(path, source)
+	if err != nil {
+		return Finding{}, "", err
+	}
+
+	kinds := map[string]struct{}{}
+	tables := extractSQLTables(source)
+	ast.Inspect(file, func(node ast.Node) bool {
+		call, ok := node.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		selector, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+		root := selectorRootName(selector.X)
+		name := selector.Sel.Name
+		switch {
+		case contains(osAliases, root) && contains([]string{"WriteFile", "Create", "CreateTemp", "OpenFile"}, name):
+			kinds["file"] = struct{}{}
+		case (contains(fileVars, root) || contains(fileVars, selectorLeafName(selector.X))) && contains([]string{"Write", "WriteString"}, name):
+			kinds["file"] = struct{}{}
+		case contains(ioAliases, root) && name == "WriteString" && len(call.Args) > 0 && isFileExpression(call.Args[0], fileVars, osAliases):
+			kinds["file"] = struct{}{}
+		case contains(sqlAliases, root) && name == "Open":
+			kinds["sqlite"] = struct{}{}
+		case contains(jsonAliases, root) && name == "NewEncoder" && len(call.Args) > 0 && isFileExpression(call.Args[0], fileVars, osAliases):
+			kinds["file"] = struct{}{}
+		}
+		if isSQLMethod(name) && (contains(sqlVars, root) || contains(sqlVars, selectorLeafName(selector.X))) {
+			kinds["sqlite"] = struct{}{}
+			if arg := sqlCallArgument(call, name); arg != nil {
+				tables = append(tables, extractSQLArgumentTables(fileSet, arg)...)
+			}
+		}
+		return true
+	})
+	if sqlMutationPattern.Match(source) {
+		kinds["sqlite"] = struct{}{}
+	}
+	resultKinds := mapKeys(kinds)
+	codecs, dtos := codecInventory.codecs, codecInventory.dtos
+	if contains(resultKinds, "file") && len(codecInventory.codecs) > 0 {
+		resultKinds = uniqueSorted(append(resultKinds, "json_file"))
+	}
+	return Finding{SinkKinds: resultKinds, Tables: uniqueSorted(tables), Codecs: codecs, DTOs: dtos}, file.Name.Name, nil
+}
+
+func isFileExpression(expression ast.Expr, fileVars, osAliases []string) bool {
+	if ident, ok := expression.(*ast.Ident); ok {
+		return contains(fileVars, ident.Name)
+	}
+	return isAnyPackageCall(expression, osAliases, []string{"Create", "CreateTemp", "OpenFile"})
+}
+
+func goImportAliases(file *ast.File) map[string]string {
+	result := make(map[string]string)
+	for _, spec := range file.Imports {
+		path, err := strconv.Unquote(spec.Path.Value)
+		if err != nil || spec.Name != nil && (spec.Name.Name == "_" || spec.Name.Name == ".") {
+			continue
+		}
+		name := filepath.Base(path)
+		if spec.Name != nil {
+			name = spec.Name.Name
+		}
+		result[name] = path
+	}
+	return result
+}
+
+func aliasesForImport(imports map[string]string, importPath string) []string {
+	var aliases []string
+	for alias, path := range imports {
+		if path == importPath {
+			aliases = append(aliases, alias)
+		}
+	}
+	return uniqueSorted(aliases)
+}
+
+func assignedCallResults(file *ast.File, packageAliases, functionNames []string) []string {
+	var variables []string
+	ast.Inspect(file, func(node ast.Node) bool {
+		switch typed := node.(type) {
+		case *ast.AssignStmt:
+			for i, rhs := range typed.Rhs {
+				if i < len(typed.Lhs) && isAnyPackageCall(rhs, packageAliases, functionNames) {
+					if ident, ok := typed.Lhs[i].(*ast.Ident); ok {
+						variables = append(variables, ident.Name)
+					}
+				}
+			}
+		case *ast.ValueSpec:
+			for i, rhs := range typed.Values {
+				if i < len(typed.Names) && isAnyPackageCall(rhs, packageAliases, functionNames) {
+					variables = append(variables, typed.Names[i].Name)
+				}
+			}
+		}
+		return true
+	})
+	return uniqueSorted(variables)
+}
+
+func expandAssignedAliases(file *ast.File, variables []string) []string {
+	changed := true
+	for changed {
+		changed = false
+		ast.Inspect(file, func(node ast.Node) bool {
+			assignment, ok := node.(*ast.AssignStmt)
+			if !ok {
+				return true
+			}
+			for i, rhs := range assignment.Rhs {
+				if i >= len(assignment.Lhs) || (!contains(variables, selectorRootName(rhs)) && !contains(variables, selectorLeafName(rhs))) {
+					continue
+				}
+				if ident, ok := assignment.Lhs[i].(*ast.Ident); ok && !contains(variables, ident.Name) {
+					variables = append(variables, ident.Name)
+					changed = true
+				}
+			}
+			return true
+		})
+	}
+	return uniqueSorted(variables)
+}
+
+func expandAssignedReceiverResults(file *ast.File, variables, methods []string) []string {
+	changed := true
+	for changed {
+		changed = false
+		ast.Inspect(file, func(node ast.Node) bool {
+			assignment, ok := node.(*ast.AssignStmt)
+			if !ok {
+				return true
+			}
+			for i, rhs := range assignment.Rhs {
+				if i >= len(assignment.Lhs) {
+					continue
+				}
+				call, ok := rhs.(*ast.CallExpr)
+				if !ok {
+					continue
+				}
+				selector, ok := call.Fun.(*ast.SelectorExpr)
+				if !ok || !contains(methods, selector.Sel.Name) || (!contains(variables, selectorRootName(selector.X)) && !contains(variables, selectorLeafName(selector.X))) {
+					continue
+				}
+				if ident, ok := assignment.Lhs[i].(*ast.Ident); ok && !contains(variables, ident.Name) {
+					variables = append(variables, ident.Name)
+					changed = true
+				}
+			}
+			return true
+		})
+	}
+	return uniqueSorted(variables)
+}
+
+func typedVariables(file *ast.File, packageAliases []string, typeNames ...string) []string {
+	var variables []string
+	ast.Inspect(file, func(node ast.Node) bool {
+		field, ok := node.(*ast.Field)
+		if !ok {
+			return true
+		}
+		typeExpr := field.Type
+		if star, ok := typeExpr.(*ast.StarExpr); ok {
+			typeExpr = star.X
+		}
+		selector, ok := typeExpr.(*ast.SelectorExpr)
+		if !ok || !contains(packageAliases, selectorRootName(selector.X)) || !contains(typeNames, selector.Sel.Name) {
+			return true
+		}
+		for _, name := range field.Names {
+			variables = append(variables, name.Name)
+		}
+		return true
+	})
+	return uniqueSorted(variables)
+}
+
+func isAnyPackageCall(expression ast.Expr, aliases, names []string) bool {
+	for _, name := range names {
+		if isPackageCall(expression, aliases, name) {
+			return true
+		}
+	}
+	return false
+}
+
+func isPackageCall(expression ast.Expr, aliases []string, name string) bool {
+	call, ok := expression.(*ast.CallExpr)
+	if !ok {
+		return false
+	}
+	selector, ok := call.Fun.(*ast.SelectorExpr)
+	return ok && selector.Sel.Name == name && contains(aliases, selectorRootName(selector.X))
+}
+
+func isSQLMethod(name string) bool {
+	return contains([]string{"Exec", "ExecContext", "Query", "QueryContext", "QueryRow", "QueryRowContext", "Prepare", "PrepareContext"}, name)
+}
+
+func sqlCallArgument(call *ast.CallExpr, method string) ast.Expr {
+	index := 0
+	if strings.HasSuffix(method, "Context") {
+		index = 1
+	}
+	if index >= len(call.Args) {
+		return nil
+	}
+	return call.Args[index]
+}
+
+func extractSQLArgumentTables(fileSet *token.FileSet, expression ast.Expr) []string {
+	if literal, ok := expression.(*ast.BasicLit); ok && literal.Kind == token.STRING {
+		value, err := strconv.Unquote(literal.Value)
+		if err == nil {
+			return extractSQLTables([]byte(value))
+		}
+	}
+	return []string{"expression:" + renderExpression(fileSet, expression)}
+}
+
+func inspectTypeScriptSource(source []byte) Finding {
+	text := string(source)
+	kinds := map[string]struct{}{}
+	storageAliases := map[string]string{
+		"localStorage": "web_storage", "sessionStorage": "web_storage",
+		"indexedDB": "indexed_db", "caches": "cache_storage",
+	}
+	for _, match := range typeScriptStorageAliasPattern.FindAllStringSubmatch(text, -1) {
+		storageAliases[match[1]] = storageAliases[match[2]]
+	}
+	var keys []string
+	for alias, kind := range storageAliases {
+		methods := "setItem|removeItem|clear"
+		if kind == "indexed_db" {
+			methods = "open|deleteDatabase"
+		} else if kind == "cache_storage" {
+			methods = "open|delete"
+		}
+		pattern := regexp.MustCompile(`(?m)\b(?:(?:window|globalThis|self)\s*\.\s*)?` + regexp.QuoteMeta(alias) + `\s*\.\s*(?:` + methods + `)\s*\(\s*([^,\)\n]*)`)
+		for _, match := range pattern.FindAllStringSubmatch(text, -1) {
+			kinds[kind] = struct{}{}
+			if len(match) > 1 && strings.TrimSpace(match[1]) != "" {
+				keys = append(keys, normalizeCallArgument(match[1]))
+			}
+		}
+	}
+	fsNamespaces := []string{"fs", "promises"}
+	for _, match := range typeScriptFSNamespaceImportPattern.FindAllStringSubmatch(text, -1) {
+		fsNamespaces = append(fsNamespaces, match[1])
+	}
+	for _, match := range typeScriptFSDefaultImportPattern.FindAllStringSubmatch(text, -1) {
+		fsNamespaces = append(fsNamespaces, match[1])
+	}
+	for _, match := range typeScriptFSRequirePattern.FindAllStringSubmatch(text, -1) {
+		fsNamespaces = append(fsNamespaces, match[1])
+	}
+	var fsFunctions []string
+	for _, match := range typeScriptFSNamedImportPattern.FindAllStringSubmatch(text, -1) {
+		for _, part := range strings.Split(match[1], ",") {
+			fields := strings.Fields(strings.TrimSpace(part))
+			if len(fields) == 1 && isTypeScriptWriteFunction(fields[0]) {
+				fsFunctions = append(fsFunctions, fields[0])
+			} else if len(fields) == 3 && fields[1] == "as" {
+				if fields[0] == "promises" {
+					fsNamespaces = append(fsNamespaces, fields[2])
+				} else if isTypeScriptWriteFunction(fields[0]) {
+					fsFunctions = append(fsFunctions, fields[2])
+				}
+			}
+		}
+	}
+	for _, match := range typeScriptFSDestructuredRequirePattern.FindAllStringSubmatch(text, -1) {
+		for _, part := range strings.Split(match[1], ",") {
+			fields := strings.FieldsFunc(strings.TrimSpace(part), func(r rune) bool { return r == ':' || r == ' ' || r == '\t' })
+			if len(fields) == 1 && isTypeScriptWriteFunction(fields[0]) {
+				fsFunctions = append(fsFunctions, fields[0])
+			} else if len(fields) >= 2 && isTypeScriptWriteFunction(fields[0]) {
+				fsFunctions = append(fsFunctions, fields[len(fields)-1])
+			}
+		}
+	}
+	for _, namespace := range uniqueSorted(fsNamespaces) {
+		pattern := regexp.MustCompile(`(?m)\b` + regexp.QuoteMeta(namespace) + `\s*\.\s*(?:writeFile|writeFileSync|appendFile|appendFileSync|open|openSync|createWriteStream|rename|renameSync)\s*\(`)
+		if pattern.MatchString(text) {
+			kinds["file"] = struct{}{}
+		}
+	}
+	for _, function := range uniqueSorted(fsFunctions) {
+		if regexp.MustCompile(`(?m)\b` + regexp.QuoteMeta(function) + `\s*\(`).MatchString(text) {
+			kinds["file"] = struct{}{}
+		}
+	}
+	return Finding{SinkKinds: mapKeys(kinds), Keys: uniqueSorted(keys)}
+}
+
+func isTypeScriptWriteFunction(name string) bool {
+	return contains([]string{"writeFile", "writeFileSync", "appendFile", "appendFileSync", "open", "openSync", "createWriteStream", "rename", "renameSync"}, name)
+}
+
+func normalizeCallArgument(value string) string {
+	value = strings.TrimSpace(value)
+	if len(value) >= 2 && strings.ContainsRune("'\"`", rune(value[0])) && value[len(value)-1] == value[0] {
+		return value[1 : len(value)-1]
+	}
+	return "expression:" + value
+}
+
+func mapKeys(values map[string]struct{}) []string {
+	result := make([]string, 0, len(values))
+	for value := range values {
+		result = append(result, value)
+	}
+	return uniqueSorted(result)
 }
 
 func validateEntry(entry RegistryEntry) []string {
 	var issues []string
+	if entry.ReviewStatus != ReviewStatusReviewed {
+		issues = append(issues, fmt.Sprintf("registry entry %s requires explicit review (status=%q)", entry.Path, entry.ReviewStatus))
+	}
 	if len(entry.SHA256) != 64 {
 		issues = append(issues, fmt.Sprintf("registry entry %s has invalid SHA-256", entry.Path))
 	}
@@ -421,6 +898,17 @@ func selectorRootName(expression ast.Expr) string {
 	}
 }
 
+func selectorLeafName(expression ast.Expr) string {
+	switch typed := expression.(type) {
+	case *ast.Ident:
+		return typed.Name
+	case *ast.SelectorExpr:
+		return typed.Sel.Name
+	default:
+		return ""
+	}
+}
+
 func extractSQLTables(source []byte) []string {
 	var tables []string
 	for _, match := range sqlTablePattern.FindAllSubmatch(source, -1) {
@@ -434,24 +922,6 @@ func extractSQLTables(source []byte) []string {
 		}
 	}
 	return uniqueSorted(tables)
-}
-
-func extractBrowserKeys(source []byte) []string {
-	var keys []string
-	for _, match := range browserCallArgPattern.FindAllSubmatch(source, -1) {
-		for _, candidate := range match[1:] {
-			if len(candidate) > 0 {
-				value := strings.TrimSpace(string(candidate))
-				if len(value) >= 2 && strings.ContainsRune("'\"`", rune(value[0])) && value[len(value)-1] == value[0] {
-					value = value[1 : len(value)-1]
-				} else {
-					value = "expression:" + value
-				}
-				keys = append(keys, value)
-			}
-		}
-	}
-	return uniqueSorted(keys)
 }
 
 func renderExpression(fileSet *token.FileSet, expression ast.Expr) string {
