@@ -610,6 +610,8 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 		filepath.Join("internal", "runtimeservice", "compatibility_contract.json"): {
 			"Floret v1.0.0",
 			"floret-v1-0-0-public-contract-adoption",
+			"schemas v2 through v8",
+			"Fresh stores initialize directly at v8",
 			"single persistent source of truth",
 			"provider-owned thread titles",
 			"public contracts",
