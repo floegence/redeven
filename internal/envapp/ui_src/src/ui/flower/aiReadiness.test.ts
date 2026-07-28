@@ -78,6 +78,20 @@ class TestVisibilitySource {
 }
 
 describe('AI readiness model', () => {
+  it('accepts only a counted host-settings degraded state', () => {
+    expect(normalizeAIReadinessSnapshot({
+      state: 'degraded', reason_code: 'host_thread_settings_missing', issue_count: 2,
+      retryable: false, safe_to_retry: false, committed: false, rolled_back: false,
+    })).toEqual({
+      state: 'degraded', reason_code: 'host_thread_settings_missing', issue_count: 2,
+      retryable: false, safe_to_retry: false, committed: false, rolled_back: false,
+    });
+    expect(normalizeAIReadinessSnapshot({
+      state: 'degraded', reason_code: 'host_thread_settings_missing', issue_count: 0,
+      retryable: false, safe_to_retry: false, committed: false, rolled_back: false,
+    }).state).toBe('blocked');
+  });
+
   it('normalizes only the six sanitized wire facts', () => {
     expect(normalizeAIReadinessSnapshot({
       state: 'blocked',

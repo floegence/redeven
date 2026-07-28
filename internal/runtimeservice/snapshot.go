@@ -52,6 +52,12 @@ type Workload struct {
 	PortForwardCount int `json:"port_forward_count"`
 }
 
+type AIReadiness struct {
+	State      string `json:"state"`
+	ReasonCode string `json:"reason_code,omitempty"`
+	IssueCount int    `json:"issue_count"`
+}
+
 const RuntimeControlBindMethodV1 = "runtime_control_v1"
 
 type Capability struct {
@@ -136,6 +142,7 @@ type Snapshot struct {
 	MinimumRuntimeVersion string        `json:"minimum_runtime_version,omitempty"`
 	CompatibilityReviewID string        `json:"compatibility_review_id,omitempty"`
 	OpenReadiness         OpenReadiness `json:"open_readiness"`
+	AIReadiness           AIReadiness   `json:"ai_readiness"`
 	ActiveWorkload        Workload      `json:"active_workload"`
 	Capabilities          Capabilities  `json:"capabilities"`
 	Bindings              Bindings      `json:"bindings"`
@@ -216,6 +223,7 @@ func NormalizeSnapshot(snapshot Snapshot) Snapshot {
 	snapshot.MinimumRuntimeVersion = strings.TrimSpace(snapshot.MinimumRuntimeVersion)
 	snapshot.CompatibilityReviewID = strings.TrimSpace(snapshot.CompatibilityReviewID)
 	snapshot.OpenReadiness = NormalizeOpenReadiness(snapshot.OpenReadiness, snapshot)
+	snapshot.AIReadiness = NormalizeAIReadiness(snapshot.AIReadiness)
 	snapshot.ActiveWorkload.TerminalCount = normalizeCount(snapshot.ActiveWorkload.TerminalCount)
 	snapshot.ActiveWorkload.SessionCount = normalizeCount(snapshot.ActiveWorkload.SessionCount)
 	snapshot.ActiveWorkload.TaskCount = normalizeCount(snapshot.ActiveWorkload.TaskCount)
@@ -223,6 +231,29 @@ func NormalizeSnapshot(snapshot Snapshot) Snapshot {
 	snapshot.Capabilities = NormalizeCapabilities(snapshot.Capabilities)
 	snapshot.Bindings = NormalizeBindings(snapshot.Bindings, snapshot.Capabilities)
 	return snapshot
+}
+
+func NormalizeAIReadiness(readiness AIReadiness) AIReadiness {
+	readiness.State = strings.TrimSpace(readiness.State)
+	readiness.ReasonCode = strings.TrimSpace(readiness.ReasonCode)
+	if readiness.IssueCount < 0 {
+		readiness.IssueCount = 0
+	}
+	switch readiness.State {
+	case "ready":
+		return AIReadiness{State: "ready"}
+	case "degraded":
+		if readiness.ReasonCode == "host_thread_settings_missing" && readiness.IssueCount > 0 {
+			return readiness
+		}
+	case "unavailable", "inspecting", "migrating", "verifying":
+		return AIReadiness{State: readiness.State}
+	case "blocked":
+		if readiness.ReasonCode != "" {
+			return AIReadiness{State: "blocked", ReasonCode: readiness.ReasonCode}
+		}
+	}
+	return AIReadiness{State: "unavailable"}
 }
 
 func NormalizeCapabilities(capabilities Capabilities) Capabilities {

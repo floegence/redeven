@@ -33,6 +33,7 @@ type aiReadinessController struct {
 	scopeRevision uint64
 	create        aiServiceFactory
 	close         aiServiceCloser
+	reconcile     func(context.Context, *ai.Service) (int, error)
 
 	snapshot    appserver.AIReadinessSnapshot
 	current     *aiServiceGeneration
@@ -68,6 +69,9 @@ func newAIReadinessController(parent context.Context, opts ai.Options, create ai
 		snapshot:  appserver.AIReadinessSnapshot{State: appserver.AIReadinessUnavailable},
 		closeDone: make(chan struct{}),
 	}
+	controller.reconcile = func(ctx context.Context, service *ai.Service) (int, error) {
+		return service.ReconcileCanonicalRootOwnership(ctx)
+	}
 	controller.opts.StoreStartupProgress = controller.observeStoreStartupPhase
 	go func() {
 		<-ctx.Done()
@@ -87,7 +91,97 @@ func (c *aiReadinessController) RetryAIReadiness() error {
 	if c == nil {
 		return appserver.ErrAIServiceUnavailable
 	}
+	c.mu.Lock()
+	if c.closed || c.terminalErr != nil {
+		c.mu.Unlock()
+		return appserver.ErrAIServiceUnavailable
+	}
+	if c.running {
+		c.mu.Unlock()
+		return appserver.ErrAIRetryInProgress
+	}
+	if c.snapshot.State == appserver.AIReadinessDegraded && c.current != nil && !c.current.draining && c.current.service != nil {
+		c.running = true
+		generation := c.current
+		generation.leases++
+		c.workers.Add(1)
+		c.mu.Unlock()
+		go c.runDegradedRecheck(generation)
+		return nil
+	}
+	c.mu.Unlock()
 	return c.startAttempt()
+}
+
+func (c *aiReadinessController) runDegradedRecheck(generation *aiServiceGeneration) {
+	defer c.workers.Done()
+	defer c.releaseGenerationLease(generation)
+	issueCount, err := c.reconcile(generation.ctx, generation.service)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closed || c.current != generation || generation.draining {
+		c.running = false
+		return
+	}
+	if err != nil {
+		// A maintenance recheck is observational. Its failure must not revoke the
+		// still-valid service generation or pretend that the orphan was repaired.
+		c.running = false
+		return
+	}
+	c.snapshot = aiReadinessSnapshotForIssueCount(issueCount)
+	c.running = false
+}
+
+func (c *aiReadinessController) ReviewOrphanCanonicalRoots(ctx context.Context) (ai.OrphanCanonicalRootReview, error) {
+	service, leaseCtx, generation, release, err := c.AcquireAIService(ctx)
+	if err != nil {
+		return ai.OrphanCanonicalRootReview{}, err
+	}
+	defer release()
+	review, err := service.ReviewOrphanCanonicalRoots(leaseCtx)
+	if err != nil {
+		return ai.OrphanCanonicalRootReview{}, err
+	}
+	c.applyAIReadinessIssueCount(generation, service, review.IssueCount)
+	return review, nil
+}
+
+func (c *aiReadinessController) AdoptOrphanCanonicalRoot(ctx context.Context, req ai.AdoptOrphanCanonicalRootRequest) (int, error) {
+	service, leaseCtx, generation, release, err := c.AcquireAIService(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer release()
+	issueCount, err := service.AdoptOrphanCanonicalRoot(leaseCtx, req)
+	if err != nil {
+		return 0, err
+	}
+	c.applyAIReadinessIssueCount(generation, service, issueCount)
+	return issueCount, nil
+}
+
+func (c *aiReadinessController) DeleteOrphanCanonicalRoot(ctx context.Context, req ai.DeleteOrphanCanonicalRootRequest) (int, error) {
+	service, leaseCtx, generation, release, err := c.AcquireAIService(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer release()
+	issueCount, err := service.DeleteOrphanCanonicalRoot(leaseCtx, req)
+	if err != nil {
+		return 0, err
+	}
+	c.applyAIReadinessIssueCount(generation, service, issueCount)
+	return issueCount, nil
+}
+
+func (c *aiReadinessController) applyAIReadinessIssueCount(generationID uint64, service *ai.Service, issueCount int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closed || c.current == nil || c.current.id != generationID || c.current.service != service || c.current.draining {
+		return
+	}
+	c.snapshot = aiReadinessSnapshotForIssueCount(issueCount)
 }
 
 func (c *aiReadinessController) startAttempt() error {
@@ -159,7 +253,7 @@ func (c *aiReadinessController) runAttempt(previous *aiServiceGeneration) {
 				id: c.nextID, service: service, ctx: generationCtx, cancel: generationCancel,
 				drained: make(chan struct{}),
 			}
-			c.snapshot = appserver.AIReadinessSnapshot{State: appserver.AIReadinessReady}
+			c.snapshot = aiReadinessSnapshotForIssueCount(service.OrphanCanonicalRootIssueCount())
 			c.running = false
 			c.mu.Unlock()
 			return
@@ -287,7 +381,7 @@ func (c *aiReadinessController) AcquireAIService(ctx context.Context) (*ai.Servi
 	}
 	c.mu.Lock()
 	generation := c.current
-	if c.closed || c.snapshot.State != appserver.AIReadinessReady || generation == nil || generation.draining || generation.service == nil {
+	if c.closed || (c.snapshot.State != appserver.AIReadinessReady && c.snapshot.State != appserver.AIReadinessDegraded) || generation == nil || generation.draining || generation.service == nil {
 		c.mu.Unlock()
 		return nil, nil, 0, nil, appserver.ErrAIServiceUnavailable
 	}
@@ -301,15 +395,34 @@ func (c *aiReadinessController) AcquireAIService(ctx context.Context) (*ai.Servi
 		once.Do(func() {
 			stopGenerationCancel()
 			cancelLease()
-			c.mu.Lock()
-			generation.leases--
-			if generation.draining && generation.leases == 0 {
-				close(generation.drained)
-			}
-			c.mu.Unlock()
+			c.releaseGenerationLease(generation)
 		})
 	}
 	return generation.service, leaseCtx, generation.id, release, nil
+}
+
+func (c *aiReadinessController) releaseGenerationLease(generation *aiServiceGeneration) {
+	if c == nil || generation == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if generation.leases <= 0 {
+		return
+	}
+	generation.leases--
+	if generation.draining && generation.leases == 0 {
+		close(generation.drained)
+	}
+}
+
+func aiReadinessSnapshotForIssueCount(issueCount int) appserver.AIReadinessSnapshot {
+	if issueCount <= 0 {
+		return appserver.AIReadinessSnapshot{State: appserver.AIReadinessReady}
+	}
+	return appserver.AIReadinessSnapshot{
+		State: appserver.AIReadinessDegraded, ReasonCode: appserver.AIHostThreadSettingsMissingReasonCode, IssueCount: issueCount,
+	}
 }
 
 func (c *aiReadinessController) AIReadiness() appserver.AIReadinessSnapshot {

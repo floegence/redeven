@@ -27,6 +27,7 @@ type floretBootstrapResult struct {
 	threadTitle  floretThreadTitleAuthority
 	threadFork   floretThreadForkAuthority
 	threadDelete floretThreadDeleteAuthority
+	orphanRoots  *floretOrphanRootMaintenanceCoordinator
 }
 
 type floretStartupRecoveryCapabilities struct {
@@ -415,6 +416,10 @@ func configureFloretRuntime(store *flruntime.Store) (*floretBootstrapResult, flo
 	result.threadTitle = floretThreadTitleAuthorityAdapter{title: result.newThreadTitle}
 	result.threadFork = floretThreadForkAuthorityAdapter{fork: result.newThreadFork, title: result.newThreadTitle}
 	result.threadDelete = floretThreadDeleteAuthorityAdapter{delete: result.newThreadDelete}
+	result.orphanRoots = &floretOrphanRootMaintenanceCoordinator{
+		inventory: threadInventory,
+		delete:    result.threadDelete,
+	}
 	recovery := floretStartupRecoveryCapabilities{
 		inventory: threadInventory,
 		root: func(ctx context.Context, threadID flruntime.ThreadID) (floretInterruptedTurnRecoveryHostFactory, error) {

@@ -156,6 +156,7 @@ type Service struct {
 	threadTitleFloret   *threadTitleFloretCoordinator
 	threadForkFloret    *threadForkFloretCoordinator
 	threadDeleteFloret  *threadDeleteFloretCoordinator
+	orphanRoots         *floretOrphanRootMaintenanceCoordinator
 
 	capabilityResolver *contextadapter.Resolver
 	skillManager       *skillManager
@@ -167,6 +168,8 @@ type Service struct {
 	maintenanceDoneCh      chan struct{}
 	compactionScheduled    bool
 	recoveryMu             sync.RWMutex
+	orphanMaintenanceMu    sync.Mutex
+	orphanCanonicalRootIDs map[string]struct{}
 	recoveryPending        bool
 	recoveryErr            error
 	recoveryStopCh         chan struct{}
@@ -405,6 +408,7 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 		threadTitleFloret:      &threadTitleFloretCoordinator{authority: floretBootstrap.threadTitle},
 		threadForkFloret:       &threadForkFloretCoordinator{authority: floretBootstrap.threadFork},
 		threadDeleteFloret:     &threadDeleteFloretCoordinator{authority: floretBootstrap.threadDelete},
+		orphanRoots:            floretBootstrap.orphanRoots,
 		capabilityResolver:     capabilityResolver,
 		skillManager:           newSkillManager(agentHomeDir, strings.TrimSpace(opts.StateDir)),
 		flowerReadStateCleaner: opts.FlowerReadStateCleaner,
@@ -448,6 +452,7 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 	recoveryTargetsCtx, recoveryTargetsCancel := context.WithTimeout(ctx, persistTO)
 	reconciliation, recoveryTargetsErr := reconcileFloretRootThreadInventory(recoveryTargetsCtx, ts, floretRecovery.inventory)
 	if recoveryTargetsErr == nil {
+		svc.setOrphanCanonicalRootIDs(reconciliation.OrphanedRootThreadIDs)
 		for _, threadID := range reconciliation.OrphanedRootThreadIDs {
 			logger.Warn("ai: canonical Floret root has no product settings", "thread_id", threadID)
 		}

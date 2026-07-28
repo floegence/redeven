@@ -19,13 +19,15 @@ const (
 	AIReadinessMigrating   AIReadinessState = "migrating"
 	AIReadinessVerifying   AIReadinessState = "verifying"
 	AIReadinessReady       AIReadinessState = "ready"
+	AIReadinessDegraded    AIReadinessState = "degraded"
 	AIReadinessBlocked     AIReadinessState = "blocked"
 )
 
 const (
-	AIServiceUnavailableErrorCode      = "AI_SERVICE_UNAVAILABLE"
-	AIReadinessContractErrorReasonCode = "ai_readiness_contract_error"
-	AIServiceStartupErrorReasonCode    = "ai_service_startup_error"
+	AIServiceUnavailableErrorCode         = "AI_SERVICE_UNAVAILABLE"
+	AIReadinessContractErrorReasonCode    = "ai_readiness_contract_error"
+	AIServiceStartupErrorReasonCode       = "ai_service_startup_error"
+	AIHostThreadSettingsMissingReasonCode = "host_thread_settings_missing"
 )
 
 var (
@@ -42,6 +44,7 @@ type AIReadinessSnapshot struct {
 	SafeToRetry bool             `json:"safe_to_retry"`
 	Committed   bool             `json:"committed"`
 	RolledBack  bool             `json:"rolled_back"`
+	IssueCount  int              `json:"issue_count,omitempty"`
 }
 
 // AIServiceStartupOptions contains the Redeven-owned inputs that may change
@@ -58,6 +61,12 @@ type AIServiceProvider interface {
 	AIReadiness() AIReadinessSnapshot
 	RetryAIReadiness() error
 	UpdateAIServiceStartupOptions(AIServiceStartupOptions)
+}
+
+type AIOrphanRootMaintenanceProvider interface {
+	ReviewOrphanCanonicalRoots(context.Context) (ai.OrphanCanonicalRootReview, error)
+	AdoptOrphanCanonicalRoot(context.Context, ai.AdoptOrphanCanonicalRootRequest) (int, error)
+	DeleteOrphanCanonicalRoot(context.Context, ai.DeleteOrphanCanonicalRootRequest) (int, error)
 }
 
 type aiServiceContextKey struct{}
@@ -100,6 +109,9 @@ func routeUsesAIService(r *http.Request) bool {
 	switch path {
 	case "/_redeven_proxy/api/ai/readiness",
 		"/_redeven_proxy/api/ai/readiness/retry",
+		"/_redeven_proxy/api/ai/maintenance/orphan_roots",
+		"/_redeven_proxy/api/ai/maintenance/orphan_roots/adopt",
+		"/_redeven_proxy/api/ai/maintenance/orphan_roots/delete",
 		"/_redeven_proxy/api/ai/provider_keys/status",
 		"/_redeven_proxy/api/ai/provider_keys",
 		"/_redeven_proxy/api/ai/web_search_provider_keys/status",
@@ -136,6 +148,12 @@ func sanitizeAIReadinessSnapshot(snapshot AIReadinessSnapshot) AIReadinessSnapsh
 		return AIReadinessSnapshot{State: snapshot.State}
 	case AIReadinessReady:
 		return AIReadinessSnapshot{State: AIReadinessReady}
+	case AIReadinessDegraded:
+		if strings.TrimSpace(snapshot.ReasonCode) != AIHostThreadSettingsMissingReasonCode || snapshot.IssueCount <= 0 ||
+			snapshot.Retryable || snapshot.SafeToRetry || snapshot.Committed || snapshot.RolledBack {
+			return AIReadinessSnapshot{State: AIReadinessBlocked, ReasonCode: AIReadinessContractErrorReasonCode}
+		}
+		return AIReadinessSnapshot{State: AIReadinessDegraded, ReasonCode: AIHostThreadSettingsMissingReasonCode, IssueCount: snapshot.IssueCount}
 	case AIReadinessBlocked:
 		if !knownAIReadinessReasonCode(snapshot.ReasonCode) {
 			return AIReadinessSnapshot{State: AIReadinessBlocked, ReasonCode: AIReadinessContractErrorReasonCode}
@@ -173,7 +191,7 @@ func (g *Server) requireAIService(w http.ResponseWriter, service *ai.Service) bo
 		return true
 	}
 	snapshot := g.aiReadinessSnapshot()
-	if snapshot.State == AIReadinessReady {
+	if snapshot.State == AIReadinessReady || snapshot.State == AIReadinessDegraded {
 		snapshot = AIReadinessSnapshot{State: AIReadinessBlocked, ReasonCode: AIReadinessContractErrorReasonCode}
 	}
 	writeAIServiceUnavailable(w, snapshot)

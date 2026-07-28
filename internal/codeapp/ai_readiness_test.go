@@ -172,6 +172,98 @@ func TestAIReadinessControllerPublishesObservedMaintenancePhases(t *testing.T) {
 	_ = controller.Close()
 }
 
+func TestAIReadinessControllerKeepsDegradedGenerationAcquirableAndRetryOnlyRechecks(t *testing.T) {
+	service := new(ai.Service)
+	var creates atomic.Int32
+	controller := newAIReadinessController(context.Background(), ai.Options{}, func(context.Context, ai.Options) (*ai.Service, error) {
+		creates.Add(1)
+		return service, nil
+	}, func(*ai.Service) error { return nil })
+	controller.Start()
+	waitForAIReadinessState(t, controller, appserver.AIReadinessReady)
+	controller.mu.Lock()
+	controller.snapshot = aiReadinessSnapshotForIssueCount(2)
+	generation := controller.current
+	controller.mu.Unlock()
+
+	got, _, gotGeneration, release, err := controller.AcquireAIService(context.Background())
+	if err != nil || got != service || gotGeneration != generation.id {
+		t.Fatalf("degraded acquire = (%p, %d, %v)", got, gotGeneration, err)
+	}
+	release()
+	if err := controller.RetryAIReadiness(); err != nil {
+		t.Fatalf("degraded retry: %v", err)
+	}
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		controller.mu.Lock()
+		running := controller.running
+		current := controller.current
+		controller.mu.Unlock()
+		if !running {
+			if current != generation || creates.Load() != 1 {
+				t.Fatalf("degraded retry replaced generation: current=%p original=%p creates=%d", current, generation, creates.Load())
+			}
+			if snapshot := controller.AIReadiness(); snapshot.State != appserver.AIReadinessDegraded || snapshot.IssueCount != 2 {
+				t.Fatalf("failed observational recheck changed snapshot: %#v", snapshot)
+			}
+			_ = controller.Close()
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatal("degraded recheck did not settle")
+}
+
+func TestAIReadinessControllerDegradedRecheckHoldsGenerationLeaseUntilItExits(t *testing.T) {
+	service := new(ai.Service)
+	recheckStarted := make(chan struct{})
+	allowRecheck := make(chan struct{})
+	serviceClosed := make(chan struct{}, 1)
+	controller := newAIReadinessController(context.Background(), ai.Options{}, func(context.Context, ai.Options) (*ai.Service, error) {
+		return service, nil
+	}, func(*ai.Service) error {
+		serviceClosed <- struct{}{}
+		return nil
+	})
+	controller.reconcile = func(context.Context, *ai.Service) (int, error) {
+		close(recheckStarted)
+		<-allowRecheck
+		return 1, nil
+	}
+	controller.Start()
+	waitForAIReadinessState(t, controller, appserver.AIReadinessReady)
+	controller.mu.Lock()
+	controller.snapshot = aiReadinessSnapshotForIssueCount(1)
+	controller.mu.Unlock()
+
+	if err := controller.RetryAIReadiness(); err != nil {
+		t.Fatalf("degraded retry: %v", err)
+	}
+	<-recheckStarted
+	closeDone := make(chan struct{})
+	go func() {
+		_ = controller.Close()
+		close(closeDone)
+	}()
+	select {
+	case <-serviceClosed:
+		t.Fatal("service closed while degraded reconciliation still held its generation lease")
+	case <-time.After(20 * time.Millisecond):
+	}
+	close(allowRecheck)
+	select {
+	case <-closeDone:
+	case <-time.After(time.Second):
+		t.Fatal("controller close did not finish after degraded reconciliation released its lease")
+	}
+	select {
+	case <-serviceClosed:
+	default:
+		t.Fatal("service was not closed after degraded reconciliation exited")
+	}
+}
+
 func TestAIReadinessControllerFailsClosedWhenGenerationCloseFails(t *testing.T) {
 	service := new(ai.Service)
 	closeErr := errors.New("close failed")

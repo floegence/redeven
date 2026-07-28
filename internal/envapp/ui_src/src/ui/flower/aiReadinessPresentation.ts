@@ -1,7 +1,7 @@
 import type { I18nHelpers } from '../i18n';
 import type { AIReadinessSnapshot } from './aiReadiness';
 
-export type AIReadinessAction = 'retry' | 'open_update' | 'open_permissions' | 'show_diagnostics';
+export type AIReadinessAction = 'retry' | 'open_update' | 'open_permissions' | 'review_issues' | 'show_diagnostics';
 
 export type AIReadinessDiagnosticRow = Readonly<{
   label: string;
@@ -9,7 +9,7 @@ export type AIReadinessDiagnosticRow = Readonly<{
 }>;
 
 export type AIReadinessPresentation = Readonly<{
-  mode: 'busy' | 'blocked' | 'ready';
+  mode: 'busy' | 'blocked' | 'degraded' | 'ready';
   tone: 'neutral' | 'warning' | 'danger';
   title: string;
   description: string;
@@ -28,6 +28,7 @@ function text(i18n: I18nHelpers, key: TranslationKey): string {
 
 function diagnosticStatus(snapshot: AIReadinessSnapshot, i18n: I18nHelpers): string {
   if (snapshot.state === 'ready') return text(i18n, 'aiReadiness.diagnostics.statusReady');
+  if (snapshot.state === 'degraded') return text(i18n, 'aiReadiness.diagnostics.statusDegraded');
   if (snapshot.state === 'blocked') return text(i18n, 'aiReadiness.diagnostics.statusBlocked');
   return text(i18n, 'aiReadiness.diagnostics.statusChecking');
 }
@@ -41,6 +42,9 @@ function diagnosticRows(snapshot: AIReadinessSnapshot, i18n: I18nHelpers): reado
     { label: text(i18n, 'aiReadiness.diagnostics.retry'), value: snapshot.retryable && snapshot.safe_to_retry ? yes : no },
     { label: text(i18n, 'aiReadiness.diagnostics.committed'), value: snapshot.committed ? yes : no },
     { label: text(i18n, 'aiReadiness.diagnostics.rolledBack'), value: snapshot.rolled_back ? yes : no },
+    ...(snapshot.state === 'degraded'
+      ? [{ label: text(i18n, 'aiReadiness.diagnostics.issueCount'), value: String(snapshot.issue_count ?? 0) }]
+      : []),
   ];
 }
 
@@ -82,6 +86,9 @@ function stateCopy(snapshot: AIReadinessSnapshot): Readonly<{
   description: TranslationKey;
   tone: AIReadinessPresentation['tone'];
 }> {
+  if (snapshot.state === 'degraded') {
+    return { title: 'aiReadiness.states.degradedTitle', description: 'aiReadiness.states.degradedDescription', tone: 'warning' };
+  }
   if (snapshot.state !== 'blocked') {
     switch (snapshot.state) {
       case 'inspecting':
@@ -131,6 +138,7 @@ function stateCopy(snapshot: AIReadinessSnapshot): Readonly<{
 function dataStatement(snapshot: AIReadinessSnapshot, i18n: I18nHelpers): string {
   if (snapshot.rolled_back) return text(i18n, 'aiReadiness.data.rolledBack');
   if (snapshot.committed) return text(i18n, 'aiReadiness.data.committed');
+  if (snapshot.state === 'degraded') return text(i18n, 'aiReadiness.data.degraded');
   if (snapshot.state === 'blocked') return text(i18n, 'aiReadiness.data.preserved');
   return text(i18n, 'aiReadiness.data.unopened');
 }
@@ -143,12 +151,12 @@ export function createAIReadinessPresentation(
   const copy = stateCopy(snapshot);
   const rows = diagnosticRows(snapshot, i18n);
   return {
-    mode: snapshot.state === 'ready' ? 'ready' : snapshot.state === 'blocked' ? 'blocked' : 'busy',
+    mode: snapshot.state === 'ready' ? 'ready' : snapshot.state === 'degraded' ? 'degraded' : snapshot.state === 'blocked' ? 'blocked' : 'busy',
     tone: copy.tone,
     title: text(i18n, copy.title),
     description: text(i18n, copy.description),
     dataStatement: dataStatement(snapshot, i18n),
-    ...presentationActions(snapshot, options.canRetryGeneration !== false),
+    ...(snapshot.state === 'degraded' ? { primaryAction: 'review_issues' as const } : presentationActions(snapshot, options.canRetryGeneration !== false)),
     diagnosticRows: rows,
     diagnosticText: rows.map((row) => `${row.label}: ${row.value}`).join('\n'),
   };

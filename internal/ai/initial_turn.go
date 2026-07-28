@@ -94,17 +94,21 @@ func (s *Service) sendInitialUserTurn(ctx context.Context, meta *session.Meta, r
 	if persistTO <= 0 {
 		persistTO = defaultPersistOpTimeout
 	}
+	s.orphanMaintenanceMu.Lock()
 	pctx, cancel := context.WithTimeout(ctxOrBackground(ctx), persistTO)
 	operation, frozen, err := db.PrepareThreadCreateWithInitialTurn(pctx, threadstore.PrepareThreadCreateRequest{
 		Settings: settings, ExplicitTitle: strings.TrimSpace(create.Title), CreatedAtMS: preparedUser.CreatedAtUnixMs,
 	}, record, preparedUser.UploadIDs, preparedUser.CreatedAtUnixMs, preparedUser.AttachmentAdmission, preparedUser.StagingScope)
 	cancel()
 	if err != nil {
+		s.orphanMaintenanceMu.Unlock()
 		return SendUserTurnResponse{}, err
 	}
 	if _, err := s.resumeThreadCreateOperation(ctxOrBackground(ctx), operation); err != nil {
+		s.orphanMaintenanceMu.Unlock()
 		return SendUserTurnResponse{}, err
 	}
+	s.orphanMaintenanceMu.Unlock()
 	startReq := RunStartRequest{
 		ThreadID: settings.ThreadID, Model: frozen.ModelID,
 		Input:   RunInput{TurnID: frozen.TurnID, Text: frozen.TextContent, Attachments: normalizedInput.Attachments, ContextAction: normalizedInput.ContextAction},

@@ -13,6 +13,8 @@
       "migratingDescription": "Uma atualização de dados compatível está em andamento. As outras ferramentas do Redeven continuam disponíveis.",
       "verifyingTitle": "Validando os dados do Agent",
       "verifyingDescription": "O Redeven está confirmando o Floret Store atualizado antes de disponibilizar o Flower.",
+      "degradedTitle": "O Flower precisa de uma revisão da responsabilidade pelas threads",
+      "degradedDescription": "Algumas threads canônicas do Agent não têm configurações explícitas do host. As threads já configuradas continuam disponíveis.",
       "busyTitle": "Os dados do Agent estão temporariamente em uso",
       "busyDescription": "Outro processo está usando o Floret Store. O Redeven verificará novamente sem forçar o acesso.",
       "updateRequiredTitle": "O Redeven precisa ser atualizado",
@@ -42,7 +44,8 @@
       "unopened": "O Flower permanece fechado até o fim desta verificação. O Redeven não reconstrói nenhum estado de conversa do Agent.",
       "preserved": "O Floret Store existente foi mantido no local.",
       "rolledBack": "A tentativa de atualização foi revertida, e o Floret Store anterior permanece no local.",
-      "committed": "Uma atualização de dados foi efetivada. O Redeven fará uma nova verificação antes de abrir o Flower."
+      "committed": "Uma atualização de dados foi efetivada. O Redeven fará uma nova verificação antes de abrir o Flower.",
+      "degraded": "O Redeven não inferiu nem criou autorização de host para as threads afetadas."
     },
     "actions": {
       "retry": "Verificar novamente",
@@ -50,6 +53,7 @@
       "nextCheck": "Nova verificação em {seconds} s",
       "openUpdate": "Abrir atualizações do ambiente de execução",
       "openPermissions": "Abrir acesso ao ambiente",
+      "reviewIssues": "Revisar",
       "showDiagnostics": "Ver diagnóstico",
       "hideDiagnostics": "Ocultar diagnóstico",
       "copyDiagnostics": "Copiar diagnóstico",
@@ -65,10 +69,12 @@
       "status": "Status",
       "statusChecking": "Verificando",
       "statusReady": "Pronto",
+      "statusDegraded": "Revisão necessária",
       "statusBlocked": "Bloqueado",
       "retry": "Nova verificação permitida",
       "committed": "Atualização de dados efetivada",
       "rolledBack": "Atualização de dados revertida",
+      "issueCount": "Problemas de responsabilidade",
       "yes": "Sim",
       "no": "Não"
     },
@@ -82,7 +88,20 @@
       "upstreamDescription": "Cada componente anterior na cadeia mantém sua própria autoridade de manutenção.",
       "notChecked": "Não verificado aqui",
       "noIssue": "Nenhum problema de disponibilidade detectado",
-      "refreshing": "Atualizando..."
+      "refreshing": "Atualizando...",
+      "reviewing": "Carregando a revisão...",
+      "reviewTitle": "Threads canônicas sem configurações de host",
+      "reviewClear": "Não restam problemas de responsabilidade.",
+      "reviewFailed": "Não foi possível carregar a revisão de responsabilidade.",
+      "adoptFailed": "A vinculação explícita ao host não foi aplicada.",
+      "deleteFailed": "A thread canônica não foi excluída.",
+      "endpoint": "ID do ambiente",
+      "namespace": "ID do namespace",
+      "model": "ID do modelo",
+      "permission": "Permissão",
+      "workingDirectory": "Diretório de trabalho",
+      "adopt": "Adotar com estas configurações",
+      "confirmDelete": "Confirmar exclusão da thread canônica"
     }
   },
   "common": {
