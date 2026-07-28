@@ -3293,7 +3293,13 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return sameSessionIdList(previous, next) ? previous : next;
   });
   let statusBoundaryBySessionId = new Map<string, 'none' | 'waiting' | 'failed'>();
+  let statusBoundaryConnectionEpoch = terminalCatalog?.connectionEpoch() ?? 0;
   createEffect(() => {
+    const connectionEpoch = terminalCatalog?.connectionEpoch() ?? 0;
+    if (connectionEpoch !== statusBoundaryConnectionEpoch) {
+      statusBoundaryBySessionId = new Map();
+      statusBoundaryConnectionEpoch = connectionEpoch;
+    }
     const nextBoundaries = new Map<string, 'none' | 'waiting' | 'failed'>();
     const enteredDescriptions: string[] = [];
     for (const item of sessionListItems()) {

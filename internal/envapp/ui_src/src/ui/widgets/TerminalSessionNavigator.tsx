@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo } from 'solid-js';
+import { For, Show, createEffect, createMemo, onCleanup } from 'solid-js';
 import { Sidebar, SidebarContent, SidebarItemList, SidebarSection } from '@floegence/floe-webapp-core/layout';
 import { Button, Input } from '@floegence/floe-webapp-core/ui';
 import { Check, Copy, ExternalLink, Link, Plus, Refresh, Search, Terminal, X } from '@floegence/floe-webapp-core/icons';
@@ -312,13 +312,28 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
     }
   };
 
+  createEffect(() => {
+    if (!props.mobile || !props.drawerOpen) return;
+    const keepFocusInDrawer = (event: FocusEvent) => {
+      if (drawerDialogEl?.contains(event.target as Node | null)) return;
+      const fallback = drawerDialogEl?.querySelector<HTMLElement>('[data-testid="terminal-session-filter"]')
+        ?? drawerFocusableElements()[0];
+      fallback?.focus({ preventScroll: true });
+    };
+    document.addEventListener('keydown', handleDrawerKeyDown);
+    document.addEventListener('focusin', keepFocusInDrawer);
+    onCleanup(() => {
+      document.removeEventListener('keydown', handleDrawerKeyDown);
+      document.removeEventListener('focusin', keepFocusInDrawer);
+    });
+  });
+
   return (
     <>
       <Show when={props.mobile && props.drawerOpen}>
-        <button
-          type="button"
+        <div
           class="absolute inset-0 z-30 cursor-default bg-[var(--redeven-overlay-scrim)]"
-          aria-label={i18n.t('terminal.closeSessions')}
+          aria-hidden="true"
           data-testid="terminal-session-drawer-backdrop"
           onClick={props.onCloseDrawer}
         />
@@ -329,7 +344,6 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
         role={props.mobile && props.drawerOpen ? 'dialog' : undefined}
         aria-modal={props.mobile && props.drawerOpen ? 'true' : undefined}
         aria-label={props.mobile && props.drawerOpen ? i18n.t('terminal.sessions') : undefined}
-        onKeyDown={handleDrawerKeyDown}
       >
         <Sidebar
           width={sidebarWidth()}
@@ -448,7 +462,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                       return (
                         <div
                           data-terminal-session-row={sessionId}
-                          class={`group relative overflow-hidden rounded-md border px-2.5 py-2 pr-16 text-xs transition-colors duration-75 ${props.mobile ? 'min-h-16' : ''} ${sidebarActive()
+                          class={`group relative overflow-hidden rounded-md border px-2.5 py-2 text-xs transition-colors duration-75 ${props.mobile ? 'min-h-16 pr-[68px]' : 'pr-16'} ${sidebarActive()
                             ? 'border-border/20 bg-sidebar-accent text-sidebar-accent-foreground shadow-[0_1px_3px_color-mix(in_srgb,var(--foreground)_6%,transparent)]'
                             : 'border-transparent text-sidebar-foreground/80 hover:border-border/15 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground'}`}
                           onContextMenu={(event) => props.onOpenContextMenu(event, item())}

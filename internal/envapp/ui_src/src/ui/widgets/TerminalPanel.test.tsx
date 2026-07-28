@@ -6911,6 +6911,65 @@ describe('TerminalPanel', () => {
     expect(host.querySelector('[data-terminal-session-avatar="session-agent"]')?.textContent).toContain('R');
   });
 
+  it('announces a retained waiting state again when the catalog connection epoch changes', async () => {
+    terminalSessionsState.sessions = [{
+      id: 'session-agent',
+      name: 'Agent',
+      workingDir: '/workspace/repo',
+      createdAtMs: 1,
+      isActive: true,
+      lastActiveAtMs: 10,
+      foregroundCommand: { phase: 'running', displayName: 'codex', revision: 1, updatedAtMs: 10 },
+      executionContext: {
+        location: { kind: 'local', phase: 'ready', label: '', authority: '', workingDirectory: '/workspace/repo', source: 'shell_integration' },
+        application: { kind: 'agent_cli', identity: 'codex', displayName: 'Codex' },
+        revision: 1,
+        updatedAtMs: 10,
+      },
+      workState: {
+        phase: 'waiting_user', source: 'semantic', contextRevision: 1, foregroundCommandRevision: 1, revision: 1, updatedAtMs: 11,
+      },
+    }];
+    const [connectionEpoch, setConnectionEpoch] = createSignal(1);
+    const catalog = {
+      sessions: () => terminalSessionsState.sessions,
+      hydrated: () => true,
+      loading: () => false,
+      stale: () => false,
+      error: () => null,
+      permissionDenied: () => false,
+      connectionEpoch,
+      remoteOpeningObservedAtMs: () => null,
+      coordinator: () => sessionsCoordinatorMocks,
+      getCoordinator: () => sessionsCoordinatorMocks,
+      refresh: sessionsCoordinatorMocks.refresh,
+      upsertSession: vi.fn(),
+      removeSession: vi.fn(),
+      updateSessionMeta: vi.fn(),
+      clearForPermissionDenied: vi.fn(),
+      requestPreparedHistory: vi.fn().mockResolvedValue(null),
+      startHistoryWarmup: vi.fn(),
+      invalidateHistory: vi.fn(),
+      setSurfaceActive: vi.fn(),
+    } as any;
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <TerminalSessionCatalogContext.Provider value={catalog}>
+        <TerminalPanel variant="workbench" />
+      </TerminalSessionCatalogContext.Provider>
+    ), host);
+    await settleTerminalPanel();
+    expect(host.querySelector<HTMLElement>('[data-terminal-status-announcement]')
+      ?.dataset.terminalStatusAnnouncementSequence).toBe('1');
+
+    setConnectionEpoch(2);
+    await settleTerminalPanel();
+    expect(host.querySelector<HTMLElement>('[data-terminal-status-announcement]')
+      ?.dataset.terminalStatusAnnouncementSequence).toBe('2');
+  });
+
   it('keeps the SSH Link location marker when an Agent owns the primary identity', async () => {
     terminalSessionsState.sessions = [{
       id: 'session-remote-agent',
@@ -7327,7 +7386,10 @@ describe('TerminalPanel', () => {
     expect(sidebar.classList.contains('hidden')).toBe(false);
     const drawerDialog = host.querySelector('[role="dialog"][aria-modal="true"]') as HTMLDivElement | null;
     const drawerFilter = host.querySelector('[data-testid="terminal-session-filter"]') as HTMLInputElement | null;
+    const drawerBackdrop = host.querySelector<HTMLElement>('[data-testid="terminal-session-drawer-backdrop"]');
     expect(drawerDialog).not.toBeNull();
+    expect(drawerBackdrop?.tagName).toBe('DIV');
+    expect(drawerBackdrop?.getAttribute('aria-hidden')).toBe('true');
     expect(document.activeElement).toBe(drawerFilter);
     const drawerFocusable = Array.from(drawerDialog!.querySelectorAll<HTMLElement>(
       'button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
@@ -7342,7 +7404,17 @@ describe('TerminalPanel', () => {
     const wrapBackward = dispatchTerminalKeydown(firstDrawerControl, { key: 'Tab', shiftKey: true });
     expect(wrapBackward.defaultPrevented).toBe(true);
     expect(document.activeElement).toBe(lastDrawerControl);
-    expect(host.querySelector('[data-terminal-session-row="session-2"]')?.className).toContain('min-h-16');
+    const mobileSessionRow = host.querySelector('[data-terminal-session-row="session-2"]');
+    expect(mobileSessionRow?.className).toContain('min-h-16');
+    expect(mobileSessionRow?.className).toContain('pr-[68px]');
+    const externalDrawerButton = host.querySelector<HTMLButtonElement>('[data-testid="terminal-session-drawer-open"]')!;
+    externalDrawerButton.focus();
+    expect(document.activeElement).toBe(drawerFilter);
+    lastDrawerControl.focus();
+    lastDrawerControl.remove();
+    const recoverDetachedFocus = dispatchTerminalKeydown(document.body, { key: 'Tab' });
+    expect(recoverDetachedFocus.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(firstDrawerControl);
     for (const selector of [
       '[data-testid="terminal-session-path-copy-session-2"]',
       '[data-testid="terminal-session-files-session-2"]',
