@@ -634,7 +634,105 @@ describe('TerminalSessionCatalogProvider', () => {
     dispose();
   });
 
-  it('keeps early context conflicts fail closed while a failed reconcile retries', async () => {
+  it('preserves newer conflict masks while an older reconcile completes and the next retry fails', async () => {
+    const sessionOneLocalContext = {
+      location: { kind: 'local', phase: 'ready', label: '', authority: '', workingDirectory: '/', source: 'shell_integration' },
+      application: { kind: 'shell', identity: '', displayName: '' },
+      revision: 3,
+      updatedAtMs: 30,
+    };
+    const sessionOneRemoteConflict = {
+      location: { kind: 'remote', phase: 'ready', label: 'root@host', authority: 'host', workingDirectory: '/root', source: 'osc7' },
+      application: { kind: 'shell', identity: '', displayName: '' },
+      revision: 3,
+      updatedAtMs: 31,
+    };
+    const sessionTwoLocalContext = {
+      location: { kind: 'local', phase: 'ready', label: '', authority: '', workingDirectory: '/workspace/two', source: 'shell_integration' },
+      application: { kind: 'shell', identity: '', displayName: '' },
+      revision: 5,
+      updatedAtMs: 50,
+    };
+    const sessionTwoRemoteConflict = {
+      location: { kind: 'remote', phase: 'ready', label: 'root@two', authority: 'two', workingDirectory: '/root/two', source: 'osc7' },
+      application: { kind: 'shell', identity: '', displayName: '' },
+      revision: 5,
+      updatedAtMs: 51,
+    };
+    const sessionOne = {
+      ...rpcState.sessions[0],
+      localPathCapability: { workingDir: '/' },
+      executionContext: sessionOneLocalContext,
+    };
+    const sessionTwo = {
+      id: 's2',
+      name: 'Terminal 2',
+      workingDir: '/workspace/two',
+      createdAtMs: 2,
+      lastActiveAtMs: 2,
+      isActive: false,
+      localPathCapability: { workingDir: '/workspace/two' },
+      executionContext: sessionTwoLocalContext,
+    };
+    let resolveInitialList!: (value: any) => void;
+    let resolveFirstReconcile!: (value: any) => void;
+    let resolveRetry!: (value: any) => void;
+    rpcState.list
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveInitialList = resolve; }))
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveFirstReconcile = resolve; }))
+      .mockRejectedValueOnce(new Error('newer reconcile failed'))
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveRetry = resolve; }));
+
+    let latest: any = null;
+    const host = document.createElement('div');
+    const dispose = render(() => (
+      <TerminalSessionCatalogProvider>
+        <Consumer onValue={(value) => { latest = value; }} />
+      </TerminalSessionCatalogProvider>
+    ), host);
+    await vi.waitFor(() => expect(rpcState.onExecutionContextUpdate).toHaveBeenCalled());
+
+    rpcState.executionContextHandler?.({ sessionId: 's1', executionContext: sessionOneLocalContext });
+    rpcState.executionContextHandler?.({ sessionId: 's1', executionContext: sessionOneRemoteConflict });
+    resolveInitialList({
+      sessions: [{ ...sessionOne, executionContext: { ...sessionOneLocalContext, revision: 2 } }],
+    });
+
+    await vi.waitFor(() => expect(rpcState.list).toHaveBeenCalledTimes(2));
+    rpcState.executionContextHandler?.({ sessionId: 's2', executionContext: sessionTwoLocalContext });
+    rpcState.executionContextHandler?.({ sessionId: 's2', executionContext: sessionTwoRemoteConflict });
+    resolveFirstReconcile({
+      sessions: [sessionOne, { ...sessionTwo, executionContext: { ...sessionTwoLocalContext, revision: 4 } }],
+    });
+
+    await vi.waitFor(() => expect(rpcState.list).toHaveBeenCalledTimes(3));
+    const conflictedSession = () => latest.sessions().find((session: any) => session.id === 's2');
+    expect(conflictedSession()?.executionContext?.location.kind).toBe('unknown');
+    expect(deriveTerminalSessionChrome({
+      session: conflictedSession(),
+      directoryTitle: 'two',
+      fallbackTitle: 'Terminal',
+    }).canUseLocalPath).toBe(false);
+
+    await vi.waitFor(() => expect(rpcState.list).toHaveBeenCalledTimes(4));
+    expect(conflictedSession()?.executionContext?.location.kind).toBe('unknown');
+    expect(deriveTerminalSessionChrome({
+      session: conflictedSession(),
+      directoryTitle: 'two',
+      fallbackTitle: 'Terminal',
+    }).canUseLocalPath).toBe(false);
+
+    resolveRetry({ sessions: [sessionOne, sessionTwo] });
+    await vi.waitFor(() => expect(deriveTerminalSessionChrome({
+      session: conflictedSession(),
+      directoryTitle: 'two',
+      fallbackTitle: 'Terminal',
+    }).canUseLocalPath).toBe(true));
+    dispose();
+  });
+
+  it('keeps path authority fail closed when the bounded conflict-key buffer overflows', async () => {
+    const sessionCount = 513;
     const localContext = {
       location: { kind: 'local', phase: 'ready', label: '', authority: '', workingDirectory: '/', source: 'shell_integration' },
       application: { kind: 'shell', identity: '', displayName: '' },
@@ -647,17 +745,21 @@ describe('TerminalSessionCatalogProvider', () => {
       revision: 3,
       updatedAtMs: 31,
     };
-    const authoritativeSession = {
-      ...rpcState.sessions[0],
+    const authoritativeSessions = Array.from({ length: sessionCount }, (_, index) => ({
+      id: `conflict-session-${index}`,
+      name: `Terminal ${index}`,
+      workingDir: '/',
+      createdAtMs: index + 1,
+      lastActiveAtMs: index + 1,
+      isActive: index === 0,
       localPathCapability: { workingDir: '/' },
       executionContext: localContext,
-    };
+    }));
     let resolveInitialList!: (value: any) => void;
-    let resolveRetry!: (value: any) => void;
+    let resolveReconcile!: (value: any) => void;
     rpcState.list
       .mockImplementationOnce(() => new Promise((resolve) => { resolveInitialList = resolve; }))
-      .mockRejectedValueOnce(new Error('reconcile failed'))
-      .mockImplementationOnce(() => new Promise((resolve) => { resolveRetry = resolve; }));
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveReconcile = resolve; }));
 
     let latest: any = null;
     const host = document.createElement('div');
@@ -668,30 +770,26 @@ describe('TerminalSessionCatalogProvider', () => {
     ), host);
     await vi.waitFor(() => expect(rpcState.onExecutionContextUpdate).toHaveBeenCalled());
 
-    rpcState.executionContextHandler?.({ sessionId: 's1', executionContext: localContext });
-    rpcState.executionContextHandler?.({ sessionId: 's1', executionContext: remoteConflict });
-    resolveInitialList({
-      sessions: [{ ...authoritativeSession, executionContext: { ...localContext, revision: 2 } }],
-    });
+    for (const session of authoritativeSessions) {
+      rpcState.executionContextHandler?.({ sessionId: session.id, executionContext: localContext });
+      rpcState.executionContextHandler?.({ sessionId: session.id, executionContext: remoteConflict });
+    }
+    resolveInitialList({ sessions: authoritativeSessions });
 
     await vi.waitFor(() => expect(rpcState.list).toHaveBeenCalledTimes(2));
+    const overflowSession = () => latest.sessions().find(
+      (session: any) => session.id === `conflict-session-${sessionCount - 1}`,
+    );
+    expect(overflowSession()?.executionContext?.location.kind).toBe('unknown');
     expect(deriveTerminalSessionChrome({
-      session: latest.sessions()[0],
+      session: overflowSession(),
       directoryTitle: 'workspace',
       fallbackTitle: 'Terminal',
     }).canUseLocalPath).toBe(false);
 
-    await vi.waitFor(() => expect(rpcState.list).toHaveBeenCalledTimes(3));
-    expect(latest.sessions()[0]?.executionContext?.location.kind).toBe('unknown');
-    expect(deriveTerminalSessionChrome({
-      session: latest.sessions()[0],
-      directoryTitle: 'workspace',
-      fallbackTitle: 'Terminal',
-    }).canUseLocalPath).toBe(false);
-
-    resolveRetry({ sessions: [authoritativeSession] });
+    resolveReconcile({ sessions: authoritativeSessions });
     await vi.waitFor(() => expect(deriveTerminalSessionChrome({
-      session: latest.sessions()[0],
+      session: overflowSession(),
       directoryTitle: 'workspace',
       fallbackTitle: 'Terminal',
     }).canUseLocalPath).toBe(true));

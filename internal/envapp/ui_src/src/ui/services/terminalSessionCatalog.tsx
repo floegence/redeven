@@ -147,22 +147,31 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
   const latestOutputActivities = new Map<string, TerminalOutputActivityInfo>();
   const latestExecutionContexts = new Map<string, TerminalExecutionContextInfo>();
   const latestWorkStates = new Map<string, TerminalWorkStateInfo>();
-  const pendingMetadataConflictKeys = new Set<string>();
-  const pendingExecutionContextConflicts = new Map<string, TerminalExecutionContextInfo>();
+  const pendingMetadataConflictKeys = new Map<string, number>();
+  const pendingExecutionContextConflicts = new Map<string, Readonly<{
+    context: TerminalExecutionContextInfo;
+    generation: number;
+  }>>();
   const remoteOpeningObservedAtBySession = new Map<string, number>();
   const pendingMetadataLimit = 512;
   let pendingMetadataOverflowRevision = 0;
   let pendingMetadataReconcile: Promise<void> | null = null;
   let pendingMetadataRetryTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
   let pendingMetadataRetryDelayMs = 50;
+  let pendingExecutionContextConflictOverflowGeneration = 0;
   let schedulePendingMetadataReconcile = () => undefined;
 
-  const scheduleEarlyMetadataConflictReconcile = (key: string) => {
-    if (pendingMetadataConflictKeys.has(key)) return;
-    if (pendingMetadataConflictKeys.size >= pendingMetadataLimit) return;
-    pendingMetadataConflictKeys.add(key);
+  const scheduleEarlyMetadataConflictReconcile = (key: string): Readonly<{
+    generation: number;
+    tracked: boolean;
+  }> => {
+    const existingGeneration = pendingMetadataConflictKeys.get(key);
+    if (existingGeneration != null) return { generation: existingGeneration, tracked: true };
     pendingMetadataOverflowRevision += 1;
+    const tracked = pendingMetadataConflictKeys.size < pendingMetadataLimit;
+    if (tracked) pendingMetadataConflictKeys.set(key, pendingMetadataOverflowRevision);
     schedulePendingMetadataReconcile();
+    return { generation: pendingMetadataOverflowRevision, tracked };
   };
 
   const schedulePendingMetadataReconcileRetry = () => {
@@ -221,12 +230,24 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     if (existing && existing.revision >= executionContext.revision) {
       if (existing.revision === executionContext.revision
         && JSON.stringify(existing) !== JSON.stringify(executionContext)) {
-        pendingExecutionContextConflicts.set(sessionId, conflictedExecutionContext(existing));
-        scheduleEarlyMetadataConflictReconcile(`context:${sessionId}:${executionContext.revision}`);
+        const scheduled = scheduleEarlyMetadataConflictReconcile(
+          `context:${sessionId}:${executionContext.revision}`,
+        );
+        if (scheduled.tracked) {
+          pendingExecutionContextConflicts.set(sessionId, {
+            context: conflictedExecutionContext(existing),
+            generation: scheduled.generation,
+          });
+        } else {
+          pendingExecutionContextConflictOverflowGeneration = Math.max(
+            pendingExecutionContextConflictOverflowGeneration,
+            scheduled.generation,
+          );
+        }
       }
       return false;
     }
-    if ((pendingExecutionContextConflicts.get(sessionId)?.revision ?? -1) < executionContext.revision) {
+    if ((pendingExecutionContextConflicts.get(sessionId)?.context.revision ?? -1) < executionContext.revision) {
       pendingExecutionContextConflicts.delete(sessionId);
     }
     latestExecutionContexts.delete(sessionId);
@@ -420,9 +441,14 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
           latestOutputActivities.set(session.id, snapshotActivity);
         }
         const contextConflict = pendingExecutionContextConflicts.get(session.id);
-        if (contextConflict
-          && contextConflict.revision >= (projected.executionContext?.revision ?? -1)) {
-          projected = { ...projected, executionContext: contextConflict };
+        if (pendingExecutionContextConflictOverflowGeneration > 0 && projected.executionContext) {
+          projected = {
+            ...projected,
+            executionContext: conflictedExecutionContext(projected.executionContext),
+          };
+        } else if (contextConflict
+          && contextConflict.context.revision >= (projected.executionContext?.revision ?? -1)) {
+          projected = { ...projected, executionContext: contextConflict.context };
         }
         return projected;
       });
@@ -503,6 +529,7 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     latestWorkStates.clear();
     pendingMetadataConflictKeys.clear();
     pendingExecutionContextConflicts.clear();
+    pendingExecutionContextConflictOverflowGeneration = 0;
     if (remoteOpeningObservedAtBySession.size > 0) {
       remoteOpeningObservedAtBySession.clear();
       setRemoteOpeningEpochRevision((value) => value + 1);
@@ -702,8 +729,17 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
           return;
         }
         reconciledOverflowRevision = targetOverflowRevision;
-        pendingMetadataConflictKeys.clear();
-        pendingExecutionContextConflicts.clear();
+        for (const [key, generation] of pendingMetadataConflictKeys) {
+          if (generation <= targetOverflowRevision) pendingMetadataConflictKeys.delete(key);
+        }
+        for (const [sessionId, conflict] of pendingExecutionContextConflicts) {
+          if (conflict.generation <= targetOverflowRevision) {
+            pendingExecutionContextConflicts.delete(sessionId);
+          }
+        }
+        if (pendingExecutionContextConflictOverflowGeneration <= targetOverflowRevision) {
+          pendingExecutionContextConflictOverflowGeneration = 0;
+        }
         const reconciledCoordinator = activeCoordinator;
         if (reconciledCoordinator && scheduledLifecycleRevision === lifecycleRevision) {
           applySnapshot(reconciledCoordinator.getSnapshot(), true);
