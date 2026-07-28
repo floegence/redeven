@@ -136,6 +136,24 @@ describe('terminal codec', () => {
     expect(fromWireTerminalSessionCreateResponse({
       session: { ...base, local_path_capability: { working_dir: 42 as unknown as string } },
     }).session.localPathCapability).toBeUndefined();
+    for (const workingDir of [
+      'relative/path',
+      ' /workspace/repo',
+      '/workspace/repo ',
+      '/workspace//repo',
+      '/workspace/./repo',
+      '/workspace/../repo',
+      '/workspace/repo/',
+      '/workspace\\repo',
+      '/workspace/line\nbreak',
+    ]) {
+      expect(fromWireTerminalSessionCreateResponse({
+        session: { ...base, local_path_capability: { working_dir: workingDir } },
+      }).session.localPathCapability, workingDir).toBeUndefined();
+    }
+    expect(fromWireTerminalSessionCreateResponse({
+      session: { ...base, local_path_capability: { working_dir: '/' } },
+    }).session.localPathCapability).toEqual({ workingDir: '/' });
   });
 
   it('accepts complete command notifications and rejects malformed high revisions', () => {
