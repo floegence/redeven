@@ -115,6 +115,8 @@ import {
   TerminalSessionProcessBadge,
   TerminalOutputStatusGlyph,
   describeTerminalSessionNavigationItem,
+  joinTerminalStatusAnnouncements,
+  terminalStatusSentence,
   type TerminalSessionAttentionState,
   type TerminalSessionNavigationItem,
   type TerminalSessionProcessState,
@@ -3329,7 +3331,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
           const identity = label && title && label !== title
             ? i18n.t('terminal.sessionIdentityWithTitle', { label, title })
             : label || title;
-          enteredDescriptions.push(i18n.t('terminal.statusAnnouncement', { identity, status }));
+          enteredDescriptions.push(i18n.t('terminal.statusAnnouncement', {
+            identity,
+            status: terminalStatusSentence(status, i18n.t),
+          }));
         }
       }
     }
@@ -3338,7 +3343,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       terminalStatusAnnouncementSequence += 1;
       setTerminalStatusAnnouncement({
         sequence: terminalStatusAnnouncementSequence,
-        text: enteredDescriptions.join(' '),
+        text: joinTerminalStatusAnnouncements(enteredDescriptions, i18n.t),
       });
     }
   });
@@ -3819,11 +3824,17 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     if (!currentItem?.canBrowsePath || currentItem.remote || !currentItem.localWorkingDir) return;
 
     setTerminalSidebarMenu(null);
-    void env.openFileBrowserAtPath(currentItem.localWorkingDir, {
+    const handoff = () => void env.openFileBrowserAtPath(currentItem.localWorkingDir, {
       homePath: normalizeAskFlowerAbsolutePath(agentHomePathAbs()) || undefined,
       title: buildTerminalSidebarDirectoryTitle(currentItem.localWorkingDir, currentItem.label),
       openStrategy: env.viewMode() === 'workbench' ? 'create_new' : undefined,
     });
+    if (isMobileLayout() && sessionDrawerOpen()) {
+      setSessionDrawerOpen(false);
+      queueMicrotask(handoff);
+    } else {
+      handoff();
+    }
   };
 
   const copySidebarItemPath = (item: TerminalSessionNavigationItem) => {
@@ -3874,13 +3885,15 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     if (!currentItem || currentItem.remote) return;
     const workingDir = normalizeAskFlowerAbsolutePath(currentItem.localWorkingDir);
     if (!workingDir) return;
+    const selection = buildTerminalContextSnapshot(currentItem.id, coreRegistry.get(currentItem.id) ?? null);
     setTerminalSidebarMenu(null);
-    openTerminalAskFlowerContext({
-      x: anchor.x,
-      y: anchor.y,
-      workingDir,
-      selection: buildTerminalContextSnapshot(currentItem.id, coreRegistry.get(currentItem.id) ?? null),
-    });
+    const handoff = () => openTerminalAskFlowerContext({ x: anchor.x, y: anchor.y, workingDir, selection });
+    if (isMobileLayout() && sessionDrawerOpen()) {
+      setSessionDrawerOpen(false);
+      queueMicrotask(handoff);
+    } else {
+      handoff();
+    }
   };
 
   const openTerminalAskFlowerContext = (context: {
