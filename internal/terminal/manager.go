@@ -986,7 +986,7 @@ func toExecutionContextInfo(info termgo.TerminalExecutionContextInfo) ExecutionC
 
 func toWorkStateInfo(info termgo.TerminalWorkStateInfo) WorkStateInfo {
 	phase := info.Phase
-	source := info.Source
+	source := ""
 	contextRevision := info.ContextRevision
 	foregroundCommandRevision := info.ForegroundCommandRevision
 	switch phase {
