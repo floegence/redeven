@@ -100,6 +100,37 @@ describe('TerminalSessionsLifecycleSync', () => {
     expect(refresh).toHaveBeenCalledTimes(1);
   });
 
+  it('revokes hidden sessions immediately even when authoritative refresh fails', async () => {
+    const refresh = vi.fn().mockRejectedValue(new Error('temporary disconnect'));
+    const removeSession = vi.fn();
+    render(() => (
+      <TerminalSessionsLifecycleSync
+        refresh={refresh}
+        removeSession={removeSession}
+        refreshOnConnect={false}
+      />
+    ), host);
+    await flushLifecycleSync();
+
+    rpcMocks.handler?.({ reason: 'closing', sessionId: 'session-closing', lifecycle: 'closing', hidden: true });
+    expect(removeSession).toHaveBeenLastCalledWith('session-closing');
+    rpcMocks.handler?.({
+      reason: 'close_failed_hidden',
+      sessionId: 'session-failed',
+      lifecycle: 'close_failed_hidden',
+      hidden: true,
+      failureCode: 'DELETE_FAILED',
+    });
+    expect(removeSession).toHaveBeenLastCalledWith('session-failed');
+
+    await flushLifecycleSync();
+    expect(removeSession.mock.calls).toEqual([
+      ['session-closing'],
+      ['session-failed'],
+    ]);
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
   it('cancels a queued refresh when the lifecycle sync unmounts', async () => {
     const refresh = vi.fn().mockResolvedValue(undefined);
     const dispose = render(() => <TerminalSessionsLifecycleSync refresh={refresh} />, host);

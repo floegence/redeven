@@ -56,10 +56,14 @@ export function deriveTerminalSessionChrome(input: Readonly<{
   const application = context.application;
   const remote = location?.kind === 'remote';
   const remotePhase = remote ? location?.phase ?? 'unknown' : 'unknown';
+  const transition = input.transition ?? 'none';
   const sessionWorkingDir = compact(session.workingDir);
   const canonicalDisplayWorkingDir = canonicalAbsolutePath(session.workingDir);
   const localCapabilityWorkingDir = canonicalAbsolutePath(session.localPathCapability?.workingDir);
-  const canUseLocalPath = !remote
+  const canUseLocalPath = transition === 'none'
+    && location?.kind === 'local'
+    && location.phase === 'ready'
+    && location.source === 'shell_integration'
     && Boolean(localCapabilityWorkingDir)
     && canonicalDisplayWorkingDir === localCapabilityWorkingDir;
   const localWorkingDir = canUseLocalPath ? localCapabilityWorkingDir : '';
@@ -102,7 +106,6 @@ export function deriveTerminalSessionChrome(input: Readonly<{
       ? 'unread' as const
       : 'none' as const;
 
-  const transition = input.transition ?? 'none';
   if (transition === 'failed') {
     return {
       title, subtitle, displayPath, localWorkingDir, canUseLocalPath, subtitleIcon,

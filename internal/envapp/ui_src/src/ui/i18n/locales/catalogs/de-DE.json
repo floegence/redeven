@@ -2508,7 +2508,7 @@
       "mobileInputDescription": "Wählen Sie einen Standardeingabemodus für jede mobile Terminalsitzung.",
       "mobileInputNote": "Es kann jeweils nur ein Modus aktiv sein. Verwenden Sie Floe Keyboard, um die Systemtastatur ausgeblendet zu halten, bis Sie explizit wieder zu System IME wechseln.",
       "floeKeyboard": "Floe Keyboard",
-      "floeKeyboardDescription": "Hält Berührungen auf die Terminaloberfläche fokussiert und zeigt Floe-Vorschläge, Schnelleinfügungen, Skripte und Pfadvervollständigungen an.",
+      "floeKeyboardDescription": "Hält beim Tippen auf die Terminaloberfläche den Fokus im Terminal und zeigt Floe-Vorschläge, Schnelleinfügungen, Skripte und Pfadvervollständigungen an.",
       "systemIme": "System IME",
       "systemImeDescription": "Fokussiert die native Terminaleingabe, sodass Sie die Gerätetastatur, die IME-Kandidatenleiste und Plattformtextfunktionen verwenden können.",
       "themeTitle": "Thema",

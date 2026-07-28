@@ -35,6 +35,7 @@ type FloatingContextMenuSeparatorItem = Readonly<{
 export type FloatingContextMenuItem = FloatingContextMenuActionItem | FloatingContextMenuSeparatorItem;
 
 export interface FloatingContextMenuProps {
+  id?: string;
   x: number;
   y: number;
   ariaLabel: string;
@@ -83,6 +84,7 @@ export const FloatingContextMenu: Component<FloatingContextMenuProps> = (props) 
 
   return (
     <SurfaceFloatingLayer
+      id={props.id}
       layerRef={(element) => {
         menuEl = element;
         props.menuRef?.(element);

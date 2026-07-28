@@ -6239,6 +6239,7 @@ describe('TerminalPanel', () => {
       id: 'session-unknown',
       name: 'Terminal 1',
       workingDir: '/workspace',
+      localPathCapability: { workingDir: '/workspace' },
       createdAtMs: 1,
       isActive: true,
       lastActiveAtMs: 10,
@@ -7522,6 +7523,9 @@ describe('TerminalPanel', () => {
     await settleTerminalPanelAfterPaint();
     expect(openMenu.defaultPrevented).toBe(true);
     expect(document.activeElement?.getAttribute('role')).toBe('menuitem');
+    const ownedMenu = host.querySelector<HTMLElement>('[role="menu"]');
+    expect(ownedMenu?.id).not.toBe('');
+    expect(drawerDialog?.getAttribute('aria-owns')?.split(/\s+/)).toContain(ownedMenu?.id);
     expect(sidebar.classList.contains('hidden')).toBe(false);
     const closeMenu = dispatchTerminalKeydown(document.activeElement!, { key: 'Escape' });
     await settleTerminalPanelAfterPaint();
@@ -7598,6 +7602,65 @@ describe('TerminalPanel', () => {
     publishTerminalSessions();
     await settleTerminalPanel();
     expect(document.activeElement).toBe(findTerminalTab(host, 'Terminal 2'));
+  });
+
+  it('keeps focus in the mobile drawer when waiting and Files controls are revoked', async () => {
+    layoutState.mobile = true;
+    terminalPrefsState.mobileInputMode = 'system';
+    terminalSessionsState.sessions = [{
+      id: 'session-1',
+      name: 'Terminal 1',
+      workingDir: '/workspace',
+      localPathCapability: { workingDir: '/workspace' },
+      createdAtMs: 1,
+      isActive: true,
+      lastActiveAtMs: 10,
+      executionContext: localPresentationExecutionContext('/workspace'),
+      workState: {
+        phase: 'waiting_user',
+        source: 'semantic',
+        contextRevision: 1,
+        foregroundCommandRevision: 0,
+        revision: 1,
+        updatedAtMs: 10,
+      },
+    }];
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanelAfterPaint();
+    host.querySelector<HTMLButtonElement>('[data-testid="terminal-session-drawer-open"]')?.click();
+    await settleTerminalPanel();
+
+    const row = findTerminalTab(host, 'Terminal 1')!;
+    const waitingControl = host.querySelector<HTMLButtonElement>('[data-terminal-attention-trigger="session-1"]')!;
+    waitingControl.focus();
+    publishTerminalWorkState('session-1', {
+      phase: 'idle',
+      source: 'semantic',
+      contextRevision: 1,
+      foregroundCommandRevision: 0,
+      revision: 2,
+      updatedAtMs: 20,
+    });
+    await settleTerminalPanel();
+    expect(host.querySelector('[data-terminal-attention-trigger="session-1"]')).toBeNull();
+    expect(document.activeElement).toBe(row);
+
+    const filesControl = host.querySelector<HTMLButtonElement>('[data-testid="terminal-session-files-session-1"]')!;
+    filesControl.focus();
+    publishTerminalExecutionContext('session-1', {
+      location: {
+        kind: 'unknown', phase: 'unknown', label: '', authority: '', workingDirectory: '', source: 'unknown',
+      },
+      application: { kind: 'unknown', identity: '', displayName: '' },
+      revision: 2,
+      updatedAtMs: 30,
+    });
+    await settleTerminalPanel();
+    expect(host.querySelector('[data-testid="terminal-session-files-session-1"]')).toBeNull();
+    expect(document.activeElement).toBe(row);
   });
 
   it('releases the mobile drawer and portaled menu focus ownership when a KeepAlive view becomes inactive', async () => {

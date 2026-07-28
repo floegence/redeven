@@ -129,6 +129,7 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
   const latestOutputActivities = new Map<string, TerminalOutputActivityInfo>();
   const latestExecutionContexts = new Map<string, TerminalExecutionContextInfo>();
   const latestWorkStates = new Map<string, TerminalWorkStateInfo>();
+  const pendingMetadataConflictKeys = new Set<string>();
   const remoteOpeningObservedAtBySession = new Map<string, number>();
   const pendingMetadataLimit = 512;
   let pendingMetadataOverflowRevision = 0;
@@ -136,6 +137,14 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
   let pendingMetadataRetryTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
   let pendingMetadataRetryDelayMs = 50;
   let schedulePendingMetadataReconcile = () => undefined;
+
+  const scheduleEarlyMetadataConflictReconcile = (key: string) => {
+    if (pendingMetadataConflictKeys.has(key)) return;
+    if (pendingMetadataConflictKeys.size >= pendingMetadataLimit) return;
+    pendingMetadataConflictKeys.add(key);
+    pendingMetadataOverflowRevision += 1;
+    schedulePendingMetadataReconcile();
+  };
 
   const schedulePendingMetadataReconcileRetry = () => {
     if (pendingMetadataRetryTimer != null || providerDisposed) return;
@@ -190,7 +199,13 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     executionContext: TerminalExecutionContextInfo,
   ): boolean => {
     const existing = latestExecutionContexts.get(sessionId);
-    if (existing && existing.revision > executionContext.revision) return false;
+    if (existing && existing.revision >= executionContext.revision) {
+      if (existing.revision === executionContext.revision
+        && JSON.stringify(existing) !== JSON.stringify(executionContext)) {
+        scheduleEarlyMetadataConflictReconcile(`context:${sessionId}:${executionContext.revision}`);
+      }
+      return false;
+    }
     latestExecutionContexts.delete(sessionId);
     latestExecutionContexts.set(sessionId, executionContext);
     while (latestExecutionContexts.size > pendingMetadataLimit) {
@@ -206,7 +221,13 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
 
   const retainLatestWorkState = (sessionId: string, workState: TerminalWorkStateInfo): boolean => {
     const existing = latestWorkStates.get(sessionId);
-    if (existing && existing.revision > workState.revision) return false;
+    if (existing && existing.revision >= workState.revision) {
+      if (existing.revision === workState.revision
+        && JSON.stringify(existing) !== JSON.stringify(workState)) {
+        scheduleEarlyMetadataConflictReconcile(`work:${sessionId}:${workState.revision}`);
+      }
+      return false;
+    }
     latestWorkStates.delete(sessionId);
     latestWorkStates.set(sessionId, workState);
     while (latestWorkStates.size > pendingMetadataLimit) {
@@ -447,6 +468,7 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     latestOutputActivities.clear();
     latestExecutionContexts.clear();
     latestWorkStates.clear();
+    pendingMetadataConflictKeys.clear();
     if (remoteOpeningObservedAtBySession.size > 0) {
       remoteOpeningObservedAtBySession.clear();
       setRemoteOpeningEpochRevision((value) => value + 1);
@@ -645,6 +667,7 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
           return;
         }
         reconciledOverflowRevision = targetOverflowRevision;
+        pendingMetadataConflictKeys.clear();
         pendingMetadataRetryDelayMs = 50;
       }
     })();

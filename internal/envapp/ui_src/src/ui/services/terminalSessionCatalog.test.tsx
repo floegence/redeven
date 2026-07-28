@@ -538,6 +538,65 @@ describe('TerminalSessionCatalogProvider', () => {
     dispose();
   });
 
+  it('retains the first equal-revision early metadata and reconciles conflicting content once', async () => {
+    const localContext = {
+      location: { kind: 'local', phase: 'ready', label: '', authority: '', workingDirectory: '/', source: 'shell_integration' },
+      application: { kind: 'shell', identity: '', displayName: '' },
+      revision: 3,
+      updatedAtMs: 30,
+    };
+    const remoteConflict = {
+      location: { kind: 'remote', phase: 'ready', label: 'root@host', authority: 'host', workingDirectory: '/root', source: 'osc7' },
+      application: { kind: 'shell', identity: '', displayName: '' },
+      revision: 3,
+      updatedAtMs: 31,
+    };
+    const idleWork = {
+      phase: 'idle', source: 'semantic', contextRevision: 3, foregroundCommandRevision: 2, revision: 4, updatedAtMs: 40,
+    };
+    const workingConflict = {
+      phase: 'working', source: 'semantic', contextRevision: 3, foregroundCommandRevision: 2, revision: 4, updatedAtMs: 41,
+    };
+    const authoritativeSession = {
+      ...rpcState.sessions[0],
+      foregroundCommand: { phase: 'running', displayName: 'codex', revision: 2, updatedAtMs: 20 },
+      executionContext: localContext,
+      workState: idleWork,
+    };
+    let resolveInitialList!: (value: any) => void;
+    let resolveReconcile!: (value: any) => void;
+    rpcState.list
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveInitialList = resolve; }))
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveReconcile = resolve; }));
+
+    let latest: any = null;
+    const host = document.createElement('div');
+    const dispose = render(() => (
+      <TerminalSessionCatalogProvider>
+        <Consumer onValue={(value) => { latest = value; }} />
+      </TerminalSessionCatalogProvider>
+    ), host);
+    await vi.waitFor(() => expect(rpcState.onExecutionContextUpdate).toHaveBeenCalled());
+    await vi.waitFor(() => expect(rpcState.onWorkStateUpdate).toHaveBeenCalled());
+
+    rpcState.executionContextHandler?.({ sessionId: 's1', executionContext: localContext });
+    rpcState.executionContextHandler?.({ sessionId: 's1', executionContext: remoteConflict });
+    rpcState.executionContextHandler?.({ sessionId: 's1', executionContext: remoteConflict });
+    rpcState.workStateHandler?.({ sessionId: 's1', workState: idleWork });
+    rpcState.workStateHandler?.({ sessionId: 's1', workState: workingConflict });
+    rpcState.workStateHandler?.({ sessionId: 's1', workState: workingConflict });
+
+    resolveInitialList({ sessions: [{ ...authoritativeSession, executionContext: { ...localContext, revision: 2 } }] });
+    await vi.waitFor(() => expect(rpcState.list).toHaveBeenCalledTimes(2));
+    resolveReconcile({ sessions: [authoritativeSession] });
+    await vi.waitFor(() => {
+      expect(latest.sessions()[0]?.executionContext).toEqual(localContext);
+      expect(latest.sessions()[0]?.workState).toEqual(idleWork);
+    });
+    expect(rpcState.list).toHaveBeenCalledTimes(2);
+    dispose();
+  });
+
   it('reconciles a fence-valid equal work conflict but ignores a fence-stale one', async () => {
     const authoritativeSession = {
       ...rpcState.sessions[0],

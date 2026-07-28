@@ -899,6 +899,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const i18n = useI18n();
   const accessibilityIdPrefix = `terminal-panel-${createUniqueId()}`;
   const activeContextStatusId = `${accessibilityIdPrefix}-active-context-status`;
+  const terminalAskMenuId = `${accessibilityIdPrefix}-ask-menu`;
+  const terminalSidebarMenuId = `${accessibilityIdPrefix}-sidebar-menu`;
   const variant: TerminalPanelVariant = props.variant ?? 'panel';
   const protocol = useProtocol();
   const rpc = useRedevenRpc();
@@ -4464,6 +4466,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
             activeSessionId={activeDisplaySessionId()}
             copiedPathSessionId={copiedSidebarPathSessionId()}
             emptyListLoading={emptySessionListLoading()}
+            ownedLayerIds={[
+              ...(terminalSidebarMenu() ? [terminalSidebarMenuId] : []),
+              ...(terminalAskMenu() ? [terminalAskMenuId] : []),
+            ]}
             isFocusWithinOwnedLayer={(target) => Boolean(
               terminalSidebarMenuEl?.contains(target)
               || terminalAskMenuEl?.contains(target),
@@ -4979,6 +4985,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       <Show when={terminalAskMenu()} keyed>
         {(menu) => (
           <FloatingContextMenu
+            id={terminalAskMenuId}
             x={menu.x}
             y={menu.y}
             ariaLabel={i18n.t('terminal.title')}
@@ -4996,6 +5003,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       <Show when={terminalSidebarMenu()} keyed>
         {(menu) => (
           <FloatingContextMenu
+            id={terminalSidebarMenuId}
             x={menu.x}
             y={menu.y}
             ariaLabel={i18n.t('terminal.sessions')}

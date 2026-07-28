@@ -47,7 +47,7 @@ describe('deriveTerminalSessionChrome', () => {
     });
   });
 
-  it('keeps the product-owned local target independent from display-only context metadata', () => {
+  it('requires an authoritative ready local shell context for product-owned path actions', () => {
     for (const executionContext of [
       undefined,
       {
@@ -58,8 +58,30 @@ describe('deriveTerminalSessionChrome', () => {
       },
     ] as const) {
       expect(derive(session({ executionContext }))).toMatchObject({
-        localWorkingDir: '/workspace/redeven',
-        canUseLocalPath: true,
+        localWorkingDir: '',
+        canUseLocalPath: false,
+        remote: false,
+      });
+    }
+  });
+
+  it('revokes local path actions for untrusted local context and non-authoritative transitions', () => {
+    const context = session().executionContext!;
+    for (const value of [
+      derive(session({ executionContext: {
+        ...context,
+        location: { ...context.location, phase: 'opening' },
+      } })),
+      derive(session({ executionContext: {
+        ...context,
+        location: { ...context.location, source: 'unknown' },
+      } })),
+      derive(session(), { transition: 'reconnecting' }),
+      derive(session(), { transition: 'failed' }),
+    ]) {
+      expect(value).toMatchObject({
+        localWorkingDir: '',
+        canUseLocalPath: false,
         remote: false,
       });
     }
