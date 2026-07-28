@@ -372,6 +372,7 @@ const terminalSessionsState = vi.hoisted(() => ({
       id: 'session-1',
       name: 'Terminal 1',
       workingDir: '/workspace',
+      localPathCapability: { workingDir: '/workspace' },
       createdAtMs: 1,
       isActive: true,
       lastActiveAtMs: 10,
@@ -396,6 +397,7 @@ const terminalSessionsState = vi.hoisted(() => ({
     };
     executionContext?: any;
     workState?: any;
+    localPathCapability?: { workingDir: string };
   }>,
   subscribers: [] as Array<(value: Array<{
     id: string;
@@ -417,16 +419,18 @@ const terminalSessionsState = vi.hoisted(() => ({
     };
     executionContext?: any;
     workState?: any;
+    localPathCapability?: { workingDir: string };
   }>) => void>,
 }));
 
 const sessionsCoordinatorMocks = vi.hoisted(() => ({
   refresh: vi.fn().mockResolvedValue(undefined),
-  createSession: vi.fn(async (name?: string, workingDir?: string) => {
+  createSession: vi.fn(async (name?: string, workingDir?: string): Promise<typeof terminalSessionsState.sessions[number]> => {
     const session = {
       id: 'session-2',
       name: String(name ?? '').trim() || 'Terminal 2',
       workingDir: String(workingDir ?? '').trim() || '/workspace',
+      localPathCapability: { workingDir: String(workingDir ?? '').trim() || '/workspace' },
       createdAtMs: 2,
       isActive: true,
       lastActiveAtMs: 20,
@@ -629,6 +633,7 @@ vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => ({
   WORKBENCH_WIDGET_ACTIVATION_SURFACE_ATTR: 'data-floe-workbench-widget-activation-surface',
   Button: (props: any) => (
     <button
+      ref={props.ref}
       type="button"
       data-testid={props['data-testid']}
       data-terminal-clear-state={props['data-terminal-clear-state']}
@@ -1830,7 +1835,7 @@ function publishTerminalSessions() {
   }
 }
 
-function trustedLocalExecutionContext(workingDirectory: string, revision = 1) {
+function localPresentationExecutionContext(workingDirectory: string, revision = 1) {
   return {
     location: {
       kind: 'local' as const,
@@ -2166,7 +2171,8 @@ describe('TerminalPanel', () => {
         createdAtMs: 1,
         isActive: true,
         lastActiveAtMs: 10,
-        executionContext: trustedLocalExecutionContext('/workspace'),
+        executionContext: localPresentationExecutionContext('/workspace'),
+        localPathCapability: { workingDir: '/workspace' },
       },
     ];
     terminalSessionsState.subscribers = [];
@@ -2334,7 +2340,8 @@ describe('TerminalPanel', () => {
         createdAtMs: 1,
         isActive: true,
         lastActiveAtMs: 10,
-        executionContext: trustedLocalExecutionContext('/workspace/redeven'),
+        executionContext: localPresentationExecutionContext('/workspace/redeven'),
+        localPathCapability: { workingDir: '/workspace/redeven' },
       },
     ];
 
@@ -2378,7 +2385,8 @@ describe('TerminalPanel', () => {
         createdAtMs: 1,
         isActive: true,
         lastActiveAtMs: 10,
-        executionContext: trustedLocalExecutionContext('/workspace/alpha'),
+        executionContext: localPresentationExecutionContext('/workspace/alpha'),
+        localPathCapability: { workingDir: '/workspace/alpha' },
       },
       {
         id: 'session-2',
@@ -2387,7 +2395,8 @@ describe('TerminalPanel', () => {
         createdAtMs: 2,
         isActive: false,
         lastActiveAtMs: 20,
-        executionContext: trustedLocalExecutionContext('/workspace/beta'),
+        executionContext: localPresentationExecutionContext('/workspace/beta'),
+        localPathCapability: { workingDir: '/workspace/beta' },
       },
     ];
 
@@ -2438,7 +2447,8 @@ describe('TerminalPanel', () => {
         createdAtMs: 1,
         isActive: true,
         lastActiveAtMs: 10,
-        executionContext: trustedLocalExecutionContext('/workspace/alpha'),
+        executionContext: localPresentationExecutionContext('/workspace/alpha'),
+        localPathCapability: { workingDir: '/workspace/alpha' },
       },
       {
         id: 'session-2',
@@ -2447,7 +2457,8 @@ describe('TerminalPanel', () => {
         createdAtMs: 2,
         isActive: false,
         lastActiveAtMs: 20,
-        executionContext: trustedLocalExecutionContext('/workspace/beta'),
+        executionContext: localPresentationExecutionContext('/workspace/beta'),
+        localPathCapability: { workingDir: '/workspace/beta' },
       },
     ];
 
@@ -2488,7 +2499,8 @@ describe('TerminalPanel', () => {
         createdAtMs: 1,
         isActive: true,
         lastActiveAtMs: 10,
-        executionContext: trustedLocalExecutionContext('/workspace/redeven'),
+        executionContext: localPresentationExecutionContext('/workspace/redeven'),
+        localPathCapability: { workingDir: '/workspace/redeven' },
       },
     ];
 
@@ -2513,7 +2525,8 @@ describe('TerminalPanel', () => {
         createdAtMs: 1,
         isActive: true,
         lastActiveAtMs: 10,
-        executionContext: trustedLocalExecutionContext('/workspace/alpha'),
+        executionContext: localPresentationExecutionContext('/workspace/alpha'),
+        localPathCapability: { workingDir: '/workspace/alpha' },
       },
       {
         id: 'session-2',
@@ -2522,7 +2535,8 @@ describe('TerminalPanel', () => {
         createdAtMs: 2,
         isActive: false,
         lastActiveAtMs: 20,
-        executionContext: trustedLocalExecutionContext('/workspace/beta'),
+        executionContext: localPresentationExecutionContext('/workspace/beta'),
+        localPathCapability: { workingDir: '/workspace/beta' },
       },
     ];
 
@@ -2555,7 +2569,8 @@ describe('TerminalPanel', () => {
         createdAtMs: 1,
         isActive: true,
         lastActiveAtMs: 10,
-        executionContext: trustedLocalExecutionContext('/workspace/alpha'),
+        executionContext: localPresentationExecutionContext('/workspace/alpha'),
+        localPathCapability: { workingDir: '/workspace/alpha' },
       },
       {
         id: 'session-2',
@@ -2564,7 +2579,8 @@ describe('TerminalPanel', () => {
         createdAtMs: 2,
         isActive: false,
         lastActiveAtMs: 20,
-        executionContext: trustedLocalExecutionContext('/workspace/beta'),
+        executionContext: localPresentationExecutionContext('/workspace/beta'),
+        localPathCapability: { workingDir: '/workspace/beta' },
       },
     ];
 
@@ -2662,7 +2678,8 @@ describe('TerminalPanel', () => {
         createdAtMs: 1,
         isActive: true,
         lastActiveAtMs: 10,
-        executionContext: trustedLocalExecutionContext('/workspace/redeven'),
+        executionContext: localPresentationExecutionContext('/workspace/redeven'),
+        localPathCapability: { workingDir: '/workspace/redeven' },
       },
     ];
 
@@ -2692,7 +2709,8 @@ describe('TerminalPanel', () => {
         createdAtMs: 1,
         isActive: true,
         lastActiveAtMs: 10,
-        executionContext: trustedLocalExecutionContext('/workspace/redeven'),
+        executionContext: localPresentationExecutionContext('/workspace/redeven'),
+        localPathCapability: { workingDir: '/workspace/redeven' },
       },
     ];
 
@@ -2724,7 +2742,8 @@ describe('TerminalPanel', () => {
         createdAtMs: 1,
         isActive: true,
         lastActiveAtMs: 10,
-        executionContext: trustedLocalExecutionContext('/workspace/alpha'),
+        executionContext: localPresentationExecutionContext('/workspace/alpha'),
+        localPathCapability: { workingDir: '/workspace/alpha' },
       },
       {
         id: 'session-2',
@@ -2733,7 +2752,8 @@ describe('TerminalPanel', () => {
         createdAtMs: 2,
         isActive: false,
         lastActiveAtMs: 20,
-        executionContext: trustedLocalExecutionContext('/workspace/beta'),
+        executionContext: localPresentationExecutionContext('/workspace/beta'),
+        localPathCapability: { workingDir: '/workspace/beta' },
       },
     ];
     terminalBufferLinesState.lines.set(24, '$ pnpm test');
@@ -2912,7 +2932,8 @@ describe('TerminalPanel', () => {
         createdAtMs: 1,
         isActive: true,
         lastActiveAtMs: 10,
-        executionContext: trustedLocalExecutionContext('/workspace/redeven'),
+        executionContext: localPresentationExecutionContext('/workspace/redeven'),
+        localPathCapability: { workingDir: '/workspace/redeven' },
       },
     ];
 
@@ -5881,7 +5902,8 @@ describe('TerminalPanel', () => {
       createdAtMs: 1,
       isActive: true,
       lastActiveAtMs: 10,
-      executionContext: trustedLocalExecutionContext('/workspace/redeven'),
+      executionContext: localPresentationExecutionContext('/workspace/redeven'),
+      localPathCapability: { workingDir: '/workspace/redeven' },
     }];
     let rejectFirstCreate!: (error: Error) => void;
     let resolveSecondCreate!: (session: typeof terminalSessionsState.sessions[number]) => void;
@@ -5948,7 +5970,8 @@ describe('TerminalPanel', () => {
       createdAtMs: 1,
       isActive: true,
       lastActiveAtMs: 10,
-      executionContext: trustedLocalExecutionContext('/workspace/redeven'),
+      executionContext: localPresentationExecutionContext('/workspace/redeven'),
+      localPathCapability: { workingDir: '/workspace/redeven' },
     }];
     let rejectFirstCreate!: (error: Error) => void;
     let resolveSecondCreate!: (session: typeof terminalSessionsState.sessions[number]) => void;
@@ -6038,6 +6061,12 @@ describe('TerminalPanel', () => {
     expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'failed')).not.toBeNull();
     expect(host.textContent).toContain('Terminal creation failed');
     expect(host.textContent).toContain('shell unavailable');
+    const failureAnnouncement = host.querySelector<HTMLElement>('[data-terminal-status-announcement]');
+    expect(failureAnnouncement?.textContent).toContain('Creation failed');
+    expect(failureAnnouncement?.dataset.terminalStatusAnnouncementSequence).toBe('1');
+    await settleTerminalPanel();
+    expect(host.querySelector<HTMLElement>('[data-terminal-status-announcement]')
+      ?.dataset.terminalStatusAnnouncementSequence).toBe('1');
 
     const retryButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'Retry') as HTMLButtonElement | undefined;
     retryButton?.click();
@@ -6714,7 +6743,8 @@ describe('TerminalPanel', () => {
         createdAtMs: 1,
         isActive: true,
         lastActiveAtMs: 10,
-        executionContext: trustedLocalExecutionContext('/workspace'),
+        executionContext: localPresentationExecutionContext('/workspace'),
+        localPathCapability: { workingDir: '/workspace' },
       },
       {
         id: 'session-2',
@@ -6723,7 +6753,8 @@ describe('TerminalPanel', () => {
         createdAtMs: 2,
         isActive: false,
         lastActiveAtMs: 5,
-        executionContext: trustedLocalExecutionContext('/workspace/repo'),
+        executionContext: localPresentationExecutionContext('/workspace/repo'),
+        localPathCapability: { workingDir: '/workspace/repo' },
       },
     ];
 
@@ -6826,6 +6857,19 @@ describe('TerminalPanel', () => {
     });
     await settleTerminalPanel();
     expect(host.querySelector('[data-terminal-attention-state="waiting"]')).not.toBeNull();
+    const firstAnnouncement = host.querySelector<HTMLElement>('[data-terminal-status-announcement]');
+    expect(firstAnnouncement?.textContent).toContain('User input required');
+    expect(firstAnnouncement?.dataset.terminalStatusAnnouncementSequence).toBe('1');
+
+    publishTerminalOutputActivity('session-agent', {
+      phase: 'streaming', revision: 3, updatedAtMs: 26,
+    });
+    publishTerminalOutputActivity('session-agent', {
+      phase: 'settled', revision: 4, updatedAtMs: 27,
+    });
+    await settleTerminalPanel();
+    expect(host.querySelector<HTMLElement>('[data-terminal-status-announcement]')
+      ?.dataset.terminalStatusAnnouncementSequence).toBe('1');
 
     publishTerminalWorkState('session-agent', {
       phase: 'idle', source: 'semantic', contextRevision: 1, foregroundCommandRevision: 1, revision: 3, updatedAtMs: 28,
@@ -6834,6 +6878,17 @@ describe('TerminalPanel', () => {
     expect(host.querySelector('[data-terminal-agent-identity="codex"]')).not.toBeNull();
     expect(host.querySelector('[data-terminal-output-state]')).toBeNull();
     expect(host.querySelector('[data-terminal-attention-state="waiting"]')).toBeNull();
+
+    publishTerminalWorkState('session-agent', {
+      phase: 'waiting_user', source: 'semantic', contextRevision: 1, foregroundCommandRevision: 1, revision: 4, updatedAtMs: 29,
+    });
+    await settleTerminalPanel();
+    expect(host.querySelector<HTMLElement>('[data-terminal-status-announcement]')
+      ?.dataset.terminalStatusAnnouncementSequence).toBe('2');
+    publishTerminalWorkState('session-agent', {
+      phase: 'idle', source: 'semantic', contextRevision: 1, foregroundCommandRevision: 1, revision: 5, updatedAtMs: 30,
+    });
+    await settleTerminalPanel();
 
     publishTerminalForegroundCommand('session-agent', {
       phase: 'idle', displayName: '', revision: 2, updatedAtMs: 30,
@@ -6845,10 +6900,10 @@ describe('TerminalPanel', () => {
       updatedAtMs: 30,
     });
     publishTerminalWorkState('session-agent', {
-      phase: 'idle', source: 'semantic', contextRevision: 2, foregroundCommandRevision: 2, revision: 4, updatedAtMs: 30,
+      phase: 'idle', source: 'semantic', contextRevision: 2, foregroundCommandRevision: 2, revision: 6, updatedAtMs: 31,
     });
     publishTerminalOutputActivity('session-agent', {
-      phase: 'unknown', revision: 3, updatedAtMs: 30,
+      phase: 'unknown', revision: 5, updatedAtMs: 31,
     });
     await settleTerminalPanel();
     expect(host.querySelector('[data-terminal-agent-identity="codex"]')).toBeNull();
@@ -7109,7 +7164,7 @@ describe('TerminalPanel', () => {
     expect(terminalCoreInstances.every((core) => core.dispose.mock.calls.length === 0)).toBe(true);
   });
 
-  it('filters 200 sessions by title, working directory, and session id without mounting their cores', async () => {
+  it('filters 200 sessions by title, path, id, and visible SSH Agent subtitle without mounting their cores', async () => {
     terminalSessionsState.sessions = Array.from({ length: 200 }, (_, index) => ({
       id: `session-${index + 1}`,
       name: `Build Shell ${index + 1}`,
@@ -7117,6 +7172,21 @@ describe('TerminalPanel', () => {
       createdAtMs: index + 1,
       isActive: index === 0,
       lastActiveAtMs: 200 - index,
+      ...(index === 156 ? {
+        executionContext: {
+          location: {
+            kind: 'remote',
+            phase: 'ready',
+            label: 'root@build-runner-157.example.internal',
+            authority: 'build-runner-157.example.internal',
+            workingDirectory: '/srv/redeven/feature-terminal-context',
+            source: 'osc7',
+          },
+          application: { kind: 'agent_cli', identity: 'codex', displayName: 'Codex' },
+          revision: 1,
+          updatedAtMs: 1,
+        },
+      } : {}),
     }));
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -7128,14 +7198,20 @@ describe('TerminalPanel', () => {
     expect(terminalCoreInstances).toHaveLength(1);
 
     const filter = host.querySelector('[data-testid="terminal-session-filter"]') as HTMLInputElement;
-    filter.value = 'team-157';
+    filter.value = 'team-156';
     filter.dispatchEvent(new InputEvent('input', { bubbles: true }));
     await settleTerminalPanel();
 
     const filteredRows = host.querySelectorAll('[data-terminal-session-id]');
     expect(filteredRows).toHaveLength(1);
-    expect(filteredRows[0]?.getAttribute('data-terminal-session-id')).toBe('session-157');
+    expect(filteredRows[0]?.getAttribute('data-terminal-session-id')).toBe('session-156');
     expect(terminalCoreInstances).toHaveLength(1);
+
+    filter.value = 'build-runner-157.example.internal';
+    filter.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    await settleTerminalPanel();
+    expect(host.querySelectorAll('[data-terminal-session-id]')).toHaveLength(1);
+    expect(host.querySelector('[data-terminal-session-id="session-157"]')).not.toBeNull();
 
     filter.value = 'session-42';
     filter.dispatchEvent(new InputEvent('input', { bubbles: true }));
@@ -7249,7 +7325,35 @@ describe('TerminalPanel', () => {
     (host.querySelector('[data-testid="terminal-session-drawer-open"]') as HTMLButtonElement).click();
     await settleTerminalPanel();
     expect(sidebar.classList.contains('hidden')).toBe(false);
-    expect(host.querySelector('[role="dialog"][aria-modal="true"]')).not.toBeNull();
+    const drawerDialog = host.querySelector('[role="dialog"][aria-modal="true"]') as HTMLDivElement | null;
+    const drawerFilter = host.querySelector('[data-testid="terminal-session-filter"]') as HTMLInputElement | null;
+    expect(drawerDialog).not.toBeNull();
+    expect(document.activeElement).toBe(drawerFilter);
+    const drawerFocusable = Array.from(drawerDialog!.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
+    ));
+    const firstDrawerControl = drawerFocusable[0]!;
+    const lastDrawerControl = drawerFocusable.at(-1)!;
+    lastDrawerControl.focus();
+    const wrapForward = dispatchTerminalKeydown(lastDrawerControl, { key: 'Tab' });
+    expect(wrapForward.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(firstDrawerControl);
+    firstDrawerControl.focus();
+    const wrapBackward = dispatchTerminalKeydown(firstDrawerControl, { key: 'Tab', shiftKey: true });
+    expect(wrapBackward.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(lastDrawerControl);
+    expect(host.querySelector('[data-terminal-session-row="session-2"]')?.className).toContain('min-h-16');
+    for (const selector of [
+      '[data-testid="terminal-session-path-copy-session-2"]',
+      '[data-testid="terminal-session-files-session-2"]',
+      '[data-testid="close-session-session-2"]',
+    ]) {
+      const control = host.querySelector<HTMLElement>(selector);
+      if (control) {
+        expect(control.className).toContain('h-7');
+        expect(control.className).toContain('w-7');
+      }
+    }
 
     findTerminalTab(host, 'Terminal 2')?.click();
     await settleTerminalPanelAfterPaint();
@@ -7291,6 +7395,7 @@ describe('TerminalPanel', () => {
     sidebar.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     await settleTerminalPanel();
     expect(sidebar.classList.contains('hidden')).toBe(true);
+    await vi.waitFor(() => expect(document.activeElement).toBe(drawerButton));
   });
 
   it('closes the mobile drawer without native terminal focus in Floe keyboard mode', async () => {

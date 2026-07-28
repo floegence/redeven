@@ -2,20 +2,14 @@ import type {
   TerminalExecutionContextInfo,
   TerminalForegroundCommandInfo,
   TerminalOutputActivityInfo,
+  TerminalSessionInfo as FloetermTerminalSessionInfo,
   TerminalWorkStateInfo,
 } from '@floegence/floeterm-terminal-web';
 
-export type TerminalSessionInfo = {
-  id: string;
-  name: string;
-  workingDir: string;
-  createdAtMs: number;
-  lastActiveAtMs: number;
-  isActive: boolean;
-  foregroundCommand: TerminalForegroundCommandInfo;
-  outputActivity: TerminalOutputActivityInfo;
-  executionContext: TerminalExecutionContextInfo;
-  workState: TerminalWorkStateInfo;
+export type TerminalSessionInfo = FloetermTerminalSessionInfo & {
+  localPathCapability?: {
+    workingDir: string;
+  };
 };
 
 export type TerminalSessionCreateRequest = {

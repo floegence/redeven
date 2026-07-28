@@ -57,25 +57,31 @@ type Manager struct {
 	deleteSessionFunc   func(sessionID string) error
 	activateSessionFunc func(ctx context.Context, sessionID string, cols int, rows int) error
 
-	mu               sync.Mutex
-	writers          map[*rpc.Server]*controlSink
-	sessionLifecycle map[string]SessionLifecycleRecord
-	deleteOperations map[string]*sessionDeleteOperation
-	lifecycleHooks   map[int]SessionLifecycleHook
-	nextLifecycleID  int
+	mu                    sync.Mutex
+	writers               map[*rpc.Server]*controlSink
+	sessionLifecycle      map[string]SessionLifecycleRecord
+	localPathCapabilities map[string]string
+	deleteOperations      map[string]*sessionDeleteOperation
+	lifecycleHooks        map[int]SessionLifecycleHook
+	nextLifecycleID       int
 }
 
 type SessionInfo struct {
-	ID                string                `json:"id"`
-	Name              string                `json:"name"`
-	WorkingDir        string                `json:"working_dir"`
-	CreatedAtMs       int64                 `json:"created_at_ms"`
-	LastActiveAtMs    int64                 `json:"last_active_at_ms"`
-	IsActive          bool                  `json:"is_active"`
-	ForegroundCommand ForegroundCommandInfo `json:"foreground_command"`
-	OutputActivity    *OutputActivityInfo   `json:"output_activity,omitempty"`
-	ExecutionContext  ExecutionContextInfo  `json:"execution_context"`
-	WorkState         WorkStateInfo         `json:"work_state"`
+	ID                  string                   `json:"id"`
+	Name                string                   `json:"name"`
+	WorkingDir          string                   `json:"working_dir"`
+	CreatedAtMs         int64                    `json:"created_at_ms"`
+	LastActiveAtMs      int64                    `json:"last_active_at_ms"`
+	IsActive            bool                     `json:"is_active"`
+	ForegroundCommand   ForegroundCommandInfo    `json:"foreground_command"`
+	OutputActivity      *OutputActivityInfo      `json:"output_activity,omitempty"`
+	ExecutionContext    ExecutionContextInfo     `json:"execution_context"`
+	WorkState           WorkStateInfo            `json:"work_state"`
+	LocalPathCapability *LocalPathCapabilityInfo `json:"local_path_capability,omitempty"`
+}
+
+type LocalPathCapabilityInfo struct {
+	WorkingDir string `json:"working_dir"`
 }
 
 type ForegroundCommandInfo struct {
@@ -188,13 +194,14 @@ func NewManagerWithScope(shell string, scope *filesystemscope.Registry, log *slo
 	}
 
 	m := &Manager{
-		agentHomeAbs:     scope.HomePathAbs(),
-		scope:            scope,
-		log:              log,
-		writers:          make(map[*rpc.Server]*controlSink),
-		sessionLifecycle: make(map[string]SessionLifecycleRecord),
-		deleteOperations: make(map[string]*sessionDeleteOperation),
-		lifecycleHooks:   make(map[int]SessionLifecycleHook),
+		agentHomeAbs:          scope.HomePathAbs(),
+		scope:                 scope,
+		log:                   log,
+		writers:               make(map[*rpc.Server]*controlSink),
+		sessionLifecycle:      make(map[string]SessionLifecycleRecord),
+		localPathCapabilities: make(map[string]string),
+		deleteOperations:      make(map[string]*sessionDeleteOperation),
+		lifecycleHooks:        make(map[int]SessionLifecycleHook),
 	}
 
 	m.term = termgo.NewManager(newTerminalGoManagerConfig(shell, log))
@@ -210,7 +217,7 @@ func (m *Manager) CreateSession(name string, workingDir string) (*SessionInfo, e
 	if err != nil {
 		return nil, err
 	}
-	return toSessionInfo(sess.ToSessionInfo()), nil
+	return toSessionInfo(sess.ToSessionInfo(), m.localPathCapability(sess.ID)), nil
 }
 
 func (m *Manager) DeleteSession(sessionID string) error {
@@ -244,7 +251,7 @@ func (m *Manager) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, stre
 			return nil, err
 		}
 
-		return &terminalCreateResp{Session: toWireSessionInfo(sess.ToSessionInfo())}, nil
+		return &terminalCreateResp{Session: toWireSessionInfo(sess.ToSessionInfo(), m.localPathCapability(sess.ID))}, nil
 	})
 
 	// List sessions
@@ -256,7 +263,7 @@ func (m *Manager) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, stre
 		sessions := m.visibleSessionInfos()
 		out := make([]*terminalSessionInfo, 0, len(sessions))
 		for _, s := range sessions {
-			out = append(out, toWireSessionInfo(s))
+			out = append(out, toWireSessionInfo(s, m.localPathCapability(s.ID)))
 		}
 		return &terminalListResp{Sessions: out}, nil
 	})
@@ -452,6 +459,7 @@ func (m *Manager) Cleanup() {
 	m.term.Cleanup()
 	m.mu.Lock()
 	clear(m.sessionLifecycle)
+	clear(m.localPathCapabilities)
 	m.mu.Unlock()
 }
 
@@ -682,7 +690,35 @@ func (m *Manager) createSession(name string, workingDir string) (*termgo.Session
 		m.log.Warn("terminal create failed", "error", err)
 		return nil, &rpc.Error{Code: 500, Message: "failed to create terminal session"}
 	}
+	m.setLocalPathCapability(sess.ID, workingDirAbs)
 	return sess, nil
+}
+
+func (m *Manager) setLocalPathCapability(sessionID string, workingDir string) {
+	if m == nil {
+		return
+	}
+	sessionID = strings.TrimSpace(sessionID)
+	workingDir = strings.TrimSpace(workingDir)
+	if sessionID == "" || workingDir == "" {
+		return
+	}
+	m.mu.Lock()
+	if m.localPathCapabilities == nil {
+		m.localPathCapabilities = make(map[string]string)
+	}
+	m.localPathCapabilities[sessionID] = workingDir
+	m.mu.Unlock()
+}
+
+func (m *Manager) localPathCapability(sessionID string) string {
+	if m == nil {
+		return ""
+	}
+	m.mu.Lock()
+	workingDir := m.localPathCapabilities[strings.TrimSpace(sessionID)]
+	m.mu.Unlock()
+	return workingDir
 }
 
 type eventHandler struct{ m *Manager }
@@ -747,6 +783,9 @@ func (h *eventHandler) OnTerminalSessionCreated(session *termgo.Session) {
 	if sessionID == "" {
 		return
 	}
+	if workingDir, err := h.m.resolveWorkingDir(info.WorkingDir); err == nil {
+		h.m.setLocalPathCapability(sessionID, workingDir)
+	}
 	h.m.trackSessionOpen(sessionID)
 
 	payload := terminalSessionsChangedPayload{
@@ -789,46 +828,59 @@ func (h *eventHandler) OnTerminalError(sessionID string, err error) {
 // --- wire types (snake_case JSON) ---
 
 type terminalSessionInfo struct {
-	ID                string                `json:"id"`
-	Name              string                `json:"name"`
-	WorkingDir        string                `json:"working_dir"`
-	CreatedAtMs       int64                 `json:"created_at_ms"`
-	LastActiveAtMs    int64                 `json:"last_active_at_ms"`
-	IsActive          bool                  `json:"is_active"`
-	ForegroundCommand ForegroundCommandInfo `json:"foreground_command"`
-	OutputActivity    *OutputActivityInfo   `json:"output_activity,omitempty"`
-	ExecutionContext  ExecutionContextInfo  `json:"execution_context"`
-	WorkState         WorkStateInfo         `json:"work_state"`
+	ID                  string                   `json:"id"`
+	Name                string                   `json:"name"`
+	WorkingDir          string                   `json:"working_dir"`
+	CreatedAtMs         int64                    `json:"created_at_ms"`
+	LastActiveAtMs      int64                    `json:"last_active_at_ms"`
+	IsActive            bool                     `json:"is_active"`
+	ForegroundCommand   ForegroundCommandInfo    `json:"foreground_command"`
+	OutputActivity      *OutputActivityInfo      `json:"output_activity,omitempty"`
+	ExecutionContext    ExecutionContextInfo     `json:"execution_context"`
+	WorkState           WorkStateInfo            `json:"work_state"`
+	LocalPathCapability *LocalPathCapabilityInfo `json:"local_path_capability,omitempty"`
 }
 
-func toWireSessionInfo(info termgo.TerminalSessionInfo) *terminalSessionInfo {
+func toWireSessionInfo(info termgo.TerminalSessionInfo, localWorkingDir string) *terminalSessionInfo {
+	localPathCapability := localPathCapabilityInfo(localWorkingDir)
 	return &terminalSessionInfo{
-		ID:                info.ID,
-		Name:              info.Name,
-		WorkingDir:        info.WorkingDir,
-		CreatedAtMs:       info.CreatedAt,
-		LastActiveAtMs:    info.LastActive,
-		IsActive:          info.IsActive,
-		ForegroundCommand: toForegroundCommandInfo(info.ForegroundCommand),
-		OutputActivity:    toOptionalOutputActivityInfo(info.OutputActivity),
-		ExecutionContext:  toExecutionContextInfo(info.ExecutionContext),
-		WorkState:         toWorkStateInfo(info.WorkState),
+		ID:                  info.ID,
+		Name:                info.Name,
+		WorkingDir:          info.WorkingDir,
+		CreatedAtMs:         info.CreatedAt,
+		LastActiveAtMs:      info.LastActive,
+		IsActive:            info.IsActive,
+		ForegroundCommand:   toForegroundCommandInfo(info.ForegroundCommand),
+		OutputActivity:      toOptionalOutputActivityInfo(info.OutputActivity),
+		ExecutionContext:    toExecutionContextInfo(info.ExecutionContext),
+		WorkState:           toWorkStateInfo(info.WorkState),
+		LocalPathCapability: localPathCapability,
 	}
 }
 
-func toSessionInfo(info termgo.TerminalSessionInfo) *SessionInfo {
+func toSessionInfo(info termgo.TerminalSessionInfo, localWorkingDir string) *SessionInfo {
+	localPathCapability := localPathCapabilityInfo(localWorkingDir)
 	return &SessionInfo{
-		ID:                info.ID,
-		Name:              info.Name,
-		WorkingDir:        info.WorkingDir,
-		CreatedAtMs:       info.CreatedAt,
-		LastActiveAtMs:    info.LastActive,
-		IsActive:          info.IsActive,
-		ForegroundCommand: toForegroundCommandInfo(info.ForegroundCommand),
-		OutputActivity:    toOptionalOutputActivityInfo(info.OutputActivity),
-		ExecutionContext:  toExecutionContextInfo(info.ExecutionContext),
-		WorkState:         toWorkStateInfo(info.WorkState),
+		ID:                  info.ID,
+		Name:                info.Name,
+		WorkingDir:          info.WorkingDir,
+		CreatedAtMs:         info.CreatedAt,
+		LastActiveAtMs:      info.LastActive,
+		IsActive:            info.IsActive,
+		ForegroundCommand:   toForegroundCommandInfo(info.ForegroundCommand),
+		OutputActivity:      toOptionalOutputActivityInfo(info.OutputActivity),
+		ExecutionContext:    toExecutionContextInfo(info.ExecutionContext),
+		WorkState:           toWorkStateInfo(info.WorkState),
+		LocalPathCapability: localPathCapability,
 	}
+}
+
+func localPathCapabilityInfo(localWorkingDir string) *LocalPathCapabilityInfo {
+	workingDir := strings.TrimSpace(localWorkingDir)
+	if workingDir == "" {
+		return nil
+	}
+	return &LocalPathCapabilityInfo{WorkingDir: workingDir}
 }
 
 func toForegroundCommandInfo(info termgo.TerminalForegroundCommandInfo) ForegroundCommandInfo {

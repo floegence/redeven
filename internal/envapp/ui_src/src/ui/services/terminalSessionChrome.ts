@@ -1,8 +1,9 @@
 import {
   normalizeTerminalExecutionContextInfo,
   type TerminalAgentCliIdentity,
-  type TerminalSessionInfo,
 } from '@floegence/floeterm-terminal-web/sessions';
+import type { TerminalSessionInfo } from '../protocol/redeven_v1/sdk/terminal';
+import { normalizeAbsolutePath } from '../utils/askFlowerPath';
 
 export const TERMINAL_REMOTE_OPENING_SPINNER_MS = 800;
 
@@ -55,11 +56,12 @@ export function deriveTerminalSessionChrome(input: Readonly<{
   const application = context.application;
   const remote = location?.kind === 'remote';
   const remotePhase = remote ? location?.phase ?? 'unknown' : 'unknown';
-  const canUseLocalPath = location?.kind === 'local'
-    && location.phase === 'ready'
-    && location.source === 'shell_integration';
   const sessionWorkingDir = compact(session.workingDir);
-  const localWorkingDir = canUseLocalPath ? sessionWorkingDir : '';
+  const localCapabilityWorkingDir = normalizeAbsolutePath(session.localPathCapability?.workingDir ?? '');
+  const canUseLocalPath = !remote
+    && Boolean(localCapabilityWorkingDir)
+    && normalizeAbsolutePath(sessionWorkingDir) === localCapabilityWorkingDir;
+  const localWorkingDir = canUseLocalPath ? localCapabilityWorkingDir : '';
   const remoteWorkingDir = remote ? compact(location?.workingDirectory) : '';
   const agentIdentity = application?.kind === 'agent_cli'
     ? application.identity as TerminalAgentCliIdentity
@@ -76,8 +78,8 @@ export function deriveTerminalSessionChrome(input: Readonly<{
     ? agentIdentity
       ? [remoteIdentity, remoteWorkingDir].filter(Boolean).join(' · ')
       : remoteWorkingDir
-    : localWorkingDir;
-  const displayPath = remote ? remoteWorkingDir : localWorkingDir;
+    : sessionWorkingDir;
+  const displayPath = remote ? remoteWorkingDir : sessionWorkingDir;
   const avatar: TerminalSessionChromeAvatar = agentIdentity
     ? { kind: 'agent', identity: agentIdentity }
     : remote

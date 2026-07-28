@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { TerminalSessionInfo } from '@floegence/floeterm-terminal-web/sessions';
+import type { TerminalSessionInfo } from '../protocol/redeven_v1/sdk/terminal';
 
 import {
   deriveTerminalSessionChrome,
@@ -23,6 +23,7 @@ function session(patch: Partial<TerminalSessionInfo> = {}): TerminalSessionInfo 
       updatedAtMs: 1,
     },
     workState: { phase: 'unknown', source: '', contextRevision: 0, foregroundCommandRevision: 0, revision: 0, updatedAtMs: 0 },
+    localPathCapability: { workingDir: '/workspace/redeven' },
     ...patch,
   };
 }
@@ -46,7 +47,7 @@ describe('deriveTerminalSessionChrome', () => {
     });
   });
 
-  it('fails closed when execution context is missing or unknown', () => {
+  it('keeps the product-owned local target independent from display-only context metadata', () => {
     for (const executionContext of [
       undefined,
       {
@@ -57,26 +58,20 @@ describe('deriveTerminalSessionChrome', () => {
       },
     ] as const) {
       expect(derive(session({ executionContext }))).toMatchObject({
-        localWorkingDir: '',
-        canUseLocalPath: false,
+        localWorkingDir: '/workspace/redeven',
+        canUseLocalPath: true,
         remote: false,
       });
     }
   });
 
-  it('requires authoritative ready shell integration before granting local path capabilities', () => {
-    for (const location of [
-      { kind: 'local', phase: 'opening', label: '', authority: '', workingDirectory: '', source: 'shell_integration' },
-      { kind: 'local', phase: 'ready', label: '', authority: '', workingDirectory: '', source: 'foreground_candidate' },
-    ] as const) {
-      expect(derive(session({
-        executionContext: {
-          location,
-          application: { kind: 'shell', identity: '', displayName: '' },
-          revision: 2,
-          updatedAtMs: 2,
-        },
-      }))).toMatchObject({
+  it('fails closed when display-only context lacks a product target or selects another path', () => {
+    for (const value of [
+      session({ localPathCapability: undefined }),
+      session({ workingDir: '/workspace/forged' }),
+      session({ localPathCapability: { workingDir: 'workspace/redeven' } }),
+    ]) {
+      expect(derive(value)).toMatchObject({
         localWorkingDir: '',
         canUseLocalPath: false,
         remote: false,

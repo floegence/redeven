@@ -177,6 +177,7 @@ const terminalSessionsState = vi.hoisted(() => ({
       id: 'session-1',
       name: 'Terminal 1',
       workingDir: '/workspace',
+      localPathCapability: { workingDir: '/workspace' },
       createdAtMs: 1,
       isActive: true,
       lastActiveAtMs: 10,
@@ -185,6 +186,7 @@ const terminalSessionsState = vi.hoisted(() => ({
       id: 'session-2',
       name: 'Terminal 2',
       workingDir: '/workspace/repo',
+      localPathCapability: { workingDir: '/workspace/repo' },
       createdAtMs: 2,
       isActive: false,
       lastActiveAtMs: 5,
@@ -209,6 +211,7 @@ const terminalSessionsState = vi.hoisted(() => ({
     };
     executionContext?: any;
     workState?: any;
+    localPathCapability?: { workingDir: string };
   }>,
   subscribers: [] as Array<(value: Array<{
     id: string;
@@ -230,6 +233,7 @@ const terminalSessionsState = vi.hoisted(() => ({
     };
     executionContext?: any;
     workState?: any;
+    localPathCapability?: { workingDir: string };
   }>) => void>,
 }));
 
@@ -735,7 +739,7 @@ function findTerminalTabStatus(host: HTMLElement, label: string, status: 'runnin
   return findTerminalTab(host, label)?.querySelector(`[data-terminal-tab-status="${status}"]`) ?? null;
 }
 
-function trustedLocalExecutionContext(workingDirectory: string) {
+function localPresentationExecutionContext(workingDirectory: string) {
   return {
     location: {
       kind: 'local',
@@ -778,7 +782,8 @@ beforeEach(() => {
       createdAtMs: 1,
       isActive: true,
       lastActiveAtMs: 10,
-      executionContext: trustedLocalExecutionContext('/workspace'),
+      executionContext: localPresentationExecutionContext('/workspace'),
+      localPathCapability: { workingDir: '/workspace' },
     },
     {
       id: 'session-2',
@@ -787,7 +792,8 @@ beforeEach(() => {
       createdAtMs: 2,
       isActive: false,
       lastActiveAtMs: 5,
-      executionContext: trustedLocalExecutionContext('/workspace/repo'),
+      executionContext: localPresentationExecutionContext('/workspace/repo'),
+      localPathCapability: { workingDir: '/workspace/repo' },
     },
   ];
   terminalSessionsState.subscribers = [];
@@ -1833,7 +1839,11 @@ describe('TerminalPanel browser activity integration', () => {
   it('keeps the four trailing controls aligned in a fixed two-by-two grid beside long paths', async () => {
     terminalSessionsState.sessions = terminalSessionsState.sessions.map((session) => (
       session.id === 'session-2'
-        ? { ...session, workingDir: `/workspace/${'deeply-nested-directory/'.repeat(8)}redeven` }
+        ? {
+            ...session,
+            workingDir: `/workspace/${'deeply-nested-directory/'.repeat(8)}redeven`,
+            localPathCapability: { workingDir: `/workspace/${'deeply-nested-directory/'.repeat(8)}redeven` },
+          }
         : session
     ));
     const host = document.createElement('div');
