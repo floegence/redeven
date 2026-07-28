@@ -62,8 +62,8 @@ export function TerminalSessionsLifecycleSync(props: TerminalSessionsLifecycleSy
     const unsub = rpc.terminal.onSessionsChanged((event) => {
       resetHiddenCloseFailureNotification(event);
       notifyHiddenCloseFailure(event);
-      const terminalBecameHidden = event.hidden === true
-        && (event.reason === 'closing' || event.reason === 'close_failed_hidden');
+      const terminalBecameHidden = event.reason === 'closing'
+        || event.reason === 'close_failed_hidden';
       if (event.sessionId && (terminalBecameHidden || event.reason === 'deleted' || event.reason === 'closed')) {
         props.removeSession?.(event.sessionId);
       }

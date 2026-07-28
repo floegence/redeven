@@ -112,13 +112,13 @@ describe('TerminalSessionsLifecycleSync', () => {
     ), host);
     await flushLifecycleSync();
 
-    rpcMocks.handler?.({ reason: 'closing', sessionId: 'session-closing', lifecycle: 'closing', hidden: true });
+    rpcMocks.handler?.({ reason: 'closing', sessionId: 'session-closing', lifecycle: 'closing' });
     expect(removeSession).toHaveBeenLastCalledWith('session-closing');
     rpcMocks.handler?.({
       reason: 'close_failed_hidden',
       sessionId: 'session-failed',
       lifecycle: 'close_failed_hidden',
-      hidden: true,
+      hidden: false,
       failureCode: 'DELETE_FAILED',
     });
     expect(removeSession).toHaveBeenLastCalledWith('session-failed');
