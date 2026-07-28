@@ -426,6 +426,10 @@
   --redeven-categorical-graph-8: oklch(0.78 0.15 320);
 }
 
+:root.dark[data-floe-shell-theme='studio'] {
+  --redeven-runtime-monitor-download-line: color-mix(in srgb, var(--redeven-categorical-graph-2) 75%, var(--foreground) 25%);
+}
+
 :root.dark[data-floe-shell-theme='nord'] {
   --redeven-runtime-monitor-download-line: color-mix(in srgb, var(--redeven-categorical-graph-2) 75%, var(--foreground) 25%);
   --redeven-runtime-monitor-upload-line: var(--redeven-categorical-graph-3);
