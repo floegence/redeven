@@ -4286,7 +4286,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         ? i18n.t('codexActivity.status.working')
         : i18n.t('terminal.outputStreaming');
       return item.attentionState === 'unread'
-        ? `${activity}. ${i18n.t('terminal.unreadOutputDescription')}`
+        ? i18n.t('terminal.activityWithUnreadOutput', {
+          activity,
+          unread: i18n.t('terminal.unreadOutputDescription'),
+        })
         : activity;
     }
     if (item.attentionState === 'waiting') {
@@ -4314,10 +4317,16 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const mobileSessionDrawerLabel = createMemo(() => {
     const attention = mobileBackgroundAttention();
     if (attention === 'waiting') {
-      return `${i18n.t('terminal.sessions')}. ${i18n.t('codex.pendingRequests.titleByType.userInput')}`;
+      return i18n.t('terminal.sessionsWithWaitingAttention', {
+        sessions: i18n.t('terminal.sessions'),
+        attention: i18n.t('codex.pendingRequests.titleByType.userInput'),
+      });
     }
     if (attention === 'unread') {
-      return `${i18n.t('terminal.sessions')}. ${i18n.t('terminal.unreadOutputDescription')}`;
+      return i18n.t('terminal.sessionsWithUnreadOutput', {
+        sessions: i18n.t('terminal.sessions'),
+        unread: i18n.t('terminal.unreadOutputDescription'),
+      });
     }
     return i18n.t('terminal.sessions');
   });

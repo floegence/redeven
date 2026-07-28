@@ -7243,7 +7243,7 @@ describe('TerminalPanel', () => {
     expect(sidebar.classList.contains('hidden')).toBe(true);
     const drawerButton = host.querySelector<HTMLButtonElement>('[data-testid="terminal-session-drawer-open"]');
     expect(drawerButton).not.toBeNull();
-    expect(drawerButton?.getAttribute('aria-label')).toContain('User input');
+    expect(drawerButton?.getAttribute('aria-label')).toBe('Sessions. User input required');
     expect(host.querySelector('[data-terminal-background-attention="waiting"]')).not.toBeNull();
 
     (host.querySelector('[data-testid="terminal-session-drawer-open"]') as HTMLButtonElement).click();
