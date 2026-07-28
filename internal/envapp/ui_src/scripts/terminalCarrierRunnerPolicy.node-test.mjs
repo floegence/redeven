@@ -36,6 +36,12 @@ test('keeps the supported terminal carriers explicit in the exact-main pre-push 
 
   assert.doesNotMatch(prePushSource, /--fixture-bytes 8388608/u);
   assert.doesNotMatch(releaseSource, /--fixture-bytes 8388608/u);
+  assert.match(
+    carrierSource,
+    /commandTitles\.every[\s\S]*?querySelector\('\[data-terminal-tab-status="running"\]'\) === null/u,
+  );
+  assert.match(carrierSource, /running_title_without_spinner: true/u);
+  assert.doesNotMatch(carrierSource, /running_title_and_spinner/u);
 });
 
 test('defaults browser gates to headless while preserving explicit headed diagnostics', () => {
