@@ -501,7 +501,7 @@ packages:
         optional: true
 
   '@floegence/floe-webapp-core@0.40.2':
-    resolution: {integrity: sha512-bli0m/PxjxFgFawUX1mYCFEFoEvIZb4FNw/kiFgCFku15GP+ps3VoQ4eBwXJGygMXI5xSCFu/QFQCwJajjVmcQ==}
+    resolution: {integrity: sha512-fRLFdB157JPt4pgENjgg659TX6TM4Alh/f7c1A4VBwIKZiOdEMuS8MVkbgTMd7dz4fnkXHCgfDXzjHPBha7SUA==}
     engines: {node: '>=24.0.0'}
     peerDependencies:
       solid-js: ^1.8.0
