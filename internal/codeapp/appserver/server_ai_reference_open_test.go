@@ -279,9 +279,9 @@ func seedFloretReferenceOpenTurn(t *testing.T, stateDir string, threadID string,
 	if err != nil {
 		t.Fatal(err)
 	}
-	host, err := turnFactory.NewHost(context.Background(), flruntime.TurnExecutionHostOptions{Config: flconfig.Config{
+	host, err := turnFactory.NewHost(context.Background(), requireAppserverFloretTurnOptions(t, flconfig.Config{
 		Provider: flconfig.ProviderFake, Model: "fake-model", FakeResponse: "done", SystemPrompt: "test",
-	}})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}

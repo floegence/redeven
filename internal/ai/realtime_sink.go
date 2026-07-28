@@ -478,7 +478,7 @@ func (s *Service) threadSummaryRealtimeEvent(endpointID string, threadID string)
 		RunErrorCode:        runErrorCode,
 		RunError:            runError,
 		Title:               strings.TrimSpace(snapshot.Title),
-		TitleStatus:         strings.TrimSpace(snapshot.TitleStatus),
+		TitleStatus:         strings.TrimSpace(string(snapshot.TitleStatus)),
 		ModelID:             strings.TrimSpace(th.ModelID),
 		UpdatedAtUnixMs:     snapshot.UpdatedAt.UnixMilli(),
 		LastMessagePreview:  lastMessagePreview,

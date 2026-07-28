@@ -276,15 +276,15 @@ func TestPermissionPolicy_SubagentCanonicalQueueConcurrentResolveOneWins(t *test
 	)); err != nil {
 		t.Fatal(err)
 	}
-	childHost, err := runtimeCaps.SubAgent(ctx, flruntime.SubAgentHostOptions{
-		Config:       flconfig.Config{ContextPolicy: flconfig.ContextPolicy{ContextWindowTokens: flconfig.DefaultContextWindowTokens}},
-		ModelGateway: canonicalChildApprovalGateway{}, ModelGatewayCapabilities: floretModelGatewayCapabilities(config.AIReasoningCapability{}), ModelGatewayIdentity: flruntime.ModelGatewayIdentity{Provider: "fake", Model: "fake-model", StateCompatibilityKey: "permission-test"},
-		Tools: toolsRegistry, EffectAuthorizationGate: allowFloretEffectGateForTest{},
-	})
+	childHost, err := runtimeCaps.SubAgent(ctx, requireFloretSubAgentOptions(t,
+		flconfig.Config{ContextPolicy: flconfig.ContextPolicy{ContextWindowTokens: flconfig.DefaultContextWindowTokens}},
+		flruntime.WithSubAgentModelGateway(canonicalChildApprovalGateway{}, flruntime.ModelGatewayIdentity{Provider: "fake", Model: "fake-model", StateCompatibilityKey: "permission-test"}, floretModelGatewayCapabilities(config.AIReasoningCapability{})),
+		flruntime.WithSubAgentEffectfulTools(toolsRegistry, allowFloretEffectGateForTest{}),
+	))
 	if err != nil {
 		t.Fatal(err)
 	}
-	rootHost, err := runtimeCaps.Turn(ctx, flruntime.TurnExecutionHostOptions{Config: flconfig.Config{Provider: flconfig.ProviderFake, Model: "fake-model"}})
+	rootHost, err := runtimeCaps.Turn(ctx, requireFloretTurnOptions(t, flconfig.Config{Provider: flconfig.ProviderFake, Model: "fake-model"}))
 	if err != nil {
 		t.Fatal(err)
 	}

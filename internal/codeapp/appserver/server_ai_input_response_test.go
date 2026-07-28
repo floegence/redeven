@@ -222,14 +222,16 @@ func seedAppserverWaitingPrompt(t *testing.T, stateDir string, threadID string, 
 	if err != nil {
 		t.Fatalf("bind turn execution host: %v", err)
 	}
-	host, err := turnFactory.NewHost(context.Background(), flruntime.TurnExecutionHostOptions{
-		Config: flconfig.Config{ContextPolicy: flconfig.ContextPolicy{
+	host, err := turnFactory.NewHost(context.Background(), requireAppserverFloretTurnOptions(t,
+		flconfig.Config{ContextPolicy: flconfig.ContextPolicy{
 			ContextWindowTokens: 128000, MaxOutputTokens: 4096, ReservedOutputTokens: 4096, MaxCompactionFailures: 2,
 		}},
-		ModelGateway:             appserverAskUserGateway{toolID: toolID, args: string(args)},
-		ModelGatewayCapabilities: flruntime.ModelGatewayCapabilities{Reasoning: &flconfig.ReasoningCapability{Kind: flconfig.ReasoningKindNone}},
-		ModelGatewayIdentity:     flruntime.ModelGatewayIdentity{Provider: "test", Model: "ask-user-test", StateCompatibilityKey: "test:ask-user-test"},
-	})
+		flruntime.WithTurnModelGateway(
+			appserverAskUserGateway{toolID: toolID, args: string(args)},
+			flruntime.ModelGatewayIdentity{Provider: "test", Model: "ask-user-test", StateCompatibilityKey: "test:ask-user-test"},
+			flruntime.ModelGatewayCapabilities{Reasoning: &flconfig.ReasoningCapability{Kind: flconfig.ReasoningKindNone}},
+		),
+	))
 	if err != nil {
 		t.Fatalf("NewHost: %v", err)
 	}

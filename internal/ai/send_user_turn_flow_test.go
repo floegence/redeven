@@ -539,10 +539,10 @@ func TestPendingTurnCommandIsDeletedOnCanonicalUserEntryEvent(t *testing.T) {
 	r.setPendingTurnCommand(command.QueueID)
 	r.awaitFloretAdmission.Store(true)
 	r.expectFloretRuntimeEventIdentity(command.RunID, thread.ThreadID, command.TurnID, true)
-	turnHost, err := floretRuntime.Turn(ctx, flruntime.TurnExecutionHostOptions{
-		Config: flconfig.Config{Provider: flconfig.ProviderFake, Model: "fake-model", FakeResponse: "accepted"},
-		Sink:   floretEventSink{run: r},
-	})
+	turnHost, err := floretRuntime.Turn(ctx, requireFloretTurnOptions(t,
+		flconfig.Config{Provider: flconfig.ProviderFake, Model: "fake-model", FakeResponse: "accepted"},
+		flruntime.WithTurnEventSink(floretEventSink{run: r}),
+	))
 	if err != nil {
 		t.Fatal(err)
 	}

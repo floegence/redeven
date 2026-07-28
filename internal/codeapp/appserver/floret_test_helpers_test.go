@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	flconfig "github.com/floegence/floret/config"
 	flruntime "github.com/floegence/floret/runtime"
 	"github.com/floegence/redeven/internal/ai"
 )
@@ -75,4 +76,13 @@ func configureAppserverFloretTestTurnBinder(t *testing.T, store *flruntime.Store
 		t.Fatalf("configure Floret test capabilities: %v", err)
 	}
 	return turnBinder
+}
+
+func requireAppserverFloretTurnOptions(t *testing.T, cfg flconfig.Config, options ...flruntime.TurnExecutionOption) flruntime.TurnExecutionHostOptions {
+	t.Helper()
+	result, err := flruntime.NewTurnExecutionHostOptions(cfg, options...)
+	if err != nil {
+		t.Fatalf("NewTurnExecutionHostOptions: %v", err)
+	}
+	return result
 }

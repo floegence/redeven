@@ -472,22 +472,20 @@ func (s *floretSubagentRuntime) newHostLocked(ctx context.Context, parent *run, 
 	if err != nil {
 		return nil, err
 	}
-	host, err := parent.floretSubagentHostFactory(ctx, flruntime.SubAgentHostOptions{
-		Config:                   flconfig.Config{SystemPrompt: systemPrompt, ContextPolicy: floretModelContextPolicy(contextWindow, maxOutputTokens), Reasoning: config.NormalizeAIReasoningSelection(parent.currentReasoning)},
-		ModelGateway:             flProvider,
-		ModelGatewayIdentity:     gatewayIdentity,
-		ModelGatewayCapabilities: floretModelGatewayCapabilities(modelCapability.ReasoningCapability),
-		Tools:                    flTools,
-		EffectAuthorizationGate:  floretEffectAuthorizationGateForRun(parent),
-		Sink:                     floretSubagentEventSink{runtime: s},
-		ToolSurfaceProvider:      surfaceProvider,
-		SubAgentRunTimeout:       subagentRunTimeout,
-		ThreadTitleMode:          flruntime.ThreadTitleModeProvider,
-		LoopLimits: flruntime.LoopLimits{
-			NoProgressLimit:    2,
-			DuplicateToolLimit: 3,
-		},
-	})
+	subagentOptions, err := flruntime.NewSubAgentHostOptions(
+		flconfig.Config{SystemPrompt: systemPrompt, ContextPolicy: floretModelContextPolicy(contextWindow, maxOutputTokens), Reasoning: config.NormalizeAIReasoningSelection(parent.currentReasoning)},
+		flruntime.WithSubAgentModelGateway(flProvider, gatewayIdentity, floretModelGatewayCapabilities(modelCapability.ReasoningCapability)),
+		flruntime.WithSubAgentEffectfulTools(flTools, floretEffectAuthorizationGateForRun(parent)),
+		flruntime.WithSubAgentEventSink(floretSubagentEventSink{runtime: s}),
+		flruntime.WithSubAgentDynamicToolSurface(surfaceProvider),
+		flruntime.WithSubAgentRunTimeout(subagentRunTimeout),
+		flruntime.WithSubAgentThreadTitleMode(flruntime.ThreadTitleModeProvider),
+		flruntime.WithSubAgentLoopLimits(flruntime.LoopLimits{NoProgressLimit: 2, DuplicateToolLimit: 3}),
+	)
+	if err != nil {
+		return nil, err
+	}
+	host, err := parent.floretSubagentHostFactory(ctx, subagentOptions)
 	if err != nil {
 		return nil, err
 	}

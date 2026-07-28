@@ -103,7 +103,7 @@ func TestRunFloretHostedTurnPublishesCanonicalChineseTitleWhileMainProviderRuns(
 			t.Fatalf("read canonical title: %v", err)
 		}
 		title = strings.TrimSpace(snapshot.Title)
-		titleStatus = strings.TrimSpace(snapshot.TitleStatus)
+		titleStatus = strings.TrimSpace(string(snapshot.TitleStatus))
 		runStatus = string(snapshot.Status)
 		if titleStatus == "ready" {
 			break

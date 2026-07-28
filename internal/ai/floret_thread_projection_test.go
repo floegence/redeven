@@ -135,14 +135,14 @@ func TestFloretTurnResultProjectionDoesNotDowngradeFullAssistantMarkdown(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	host, err := threadRuntime.Turn(ctx, flruntime.TurnExecutionHostOptions{
-		Config: flconfig.Config{
+	host, err := threadRuntime.Turn(ctx, requireFloretTurnOptions(t,
+		flconfig.Config{
 			Provider:     flconfig.ProviderFake,
 			Model:        "fake-model",
 			FakeResponse: fullAnswer,
 			SystemPrompt: "test",
 		},
-	})
+	))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -350,20 +350,17 @@ func TestFloretHostPublishesRunningToolProjectionToFlowerLiveEvents(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	host, err := threadRuntime.Turn(ctx, flruntime.TurnExecutionHostOptions{
-		Config: flconfig.Config{
+	host, err := threadRuntime.Turn(ctx, requireFloretTurnOptions(t,
+		flconfig.Config{
 			SystemPrompt: "test",
 			ContextPolicy: flconfig.ContextPolicy{
 				ContextWindowTokens: flconfig.DefaultContextWindowTokens,
 			},
 		},
-		ModelGateway:             gateway,
-		ModelGatewayCapabilities: floretModelGatewayCapabilities(config.AIReasoningCapability{}),
-		ModelGatewayIdentity:     flruntime.ModelGatewayIdentity{Provider: "fake", Model: "fake-model", StateCompatibilityKey: "fake-model:test"},
-		Tools:                    registry,
-		EffectAuthorizationGate:  allowFloretEffectGateForTest{},
-		Sink:                     capture,
-	})
+		flruntime.WithTurnModelGateway(gateway, flruntime.ModelGatewayIdentity{Provider: "fake", Model: "fake-model", StateCompatibilityKey: "fake-model:test"}, floretModelGatewayCapabilities(config.AIReasoningCapability{})),
+		flruntime.WithTurnEffectfulTools(registry, allowFloretEffectGateForTest{}),
+		flruntime.WithTurnEventSink(capture),
+	))
 	if err != nil {
 		t.Fatalf("NewHost: %v", err)
 	}

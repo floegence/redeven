@@ -93,7 +93,7 @@ func (s *Service) threadViewFromRecord(ctx context.Context, th *threadstore.Thre
 	view := ThreadView{
 		ThreadID:            strings.TrimSpace(th.ThreadID),
 		Title:               strings.TrimSpace(snapshot.Title),
-		TitleStatus:         strings.TrimSpace(snapshot.TitleStatus),
+		TitleStatus:         strings.TrimSpace(string(snapshot.TitleStatus)),
 		ModelID:             strings.TrimSpace(th.ModelID),
 		PermissionType:      permissionTypeString(permissionType),
 		WorkingDir:          workingDir,
