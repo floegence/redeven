@@ -478,6 +478,11 @@ func (m *Manager) ensureWriter(streamServer *rpc.Server, meta *session.Meta, gat
 // broadcastNameUpdate sends a name/working directory update notification to all
 // connected clients attached to the given session.
 func (m *Manager) broadcastNameUpdate(sessionID string, newName string, workingDir string) {
+	capability := m.reconcileLocalPathCapability(sessionID, workingDir, nil)
+	m.broadcastNameUpdateWithCapability(sessionID, newName, workingDir, capability)
+}
+
+func (m *Manager) broadcastNameUpdateWithCapability(sessionID string, newName string, workingDir string, capability *LocalPathCapabilityInfo) {
 	if m == nil || sessionID == "" {
 		return
 	}
@@ -502,9 +507,10 @@ func (m *Manager) broadcastNameUpdate(sessionID string, newName string, workingD
 	}
 
 	payload := terminalNameUpdatePayload{
-		SessionID:  sessionID,
-		NewName:    newName,
-		WorkingDir: workingDir,
+		SessionID:           sessionID,
+		NewName:             newName,
+		WorkingDir:          workingDir,
+		LocalPathCapability: capability,
 	}
 	b, err := json.Marshal(payload)
 	if err != nil {
@@ -690,7 +696,6 @@ func (m *Manager) createSession(name string, workingDir string) (*termgo.Session
 		m.log.Warn("terminal create failed", "error", err)
 		return nil, &rpc.Error{Code: 500, Message: "failed to create terminal session"}
 	}
-	m.setLocalPathCapability(sess.ID, workingDirAbs)
 	return sess, nil
 }
 
@@ -709,6 +714,50 @@ func (m *Manager) setLocalPathCapability(sessionID string, workingDir string) {
 	}
 	m.localPathCapabilities[sessionID] = workingDir
 	m.mu.Unlock()
+}
+
+func (m *Manager) reconcileLocalPathCapability(sessionID string, workingDir string, context *termgo.TerminalExecutionContextInfo) *LocalPathCapabilityInfo {
+	if m == nil {
+		return nil
+	}
+	sessionID = strings.TrimSpace(sessionID)
+	workingDir = strings.TrimSpace(workingDir)
+	var currentContext termgo.TerminalExecutionContextInfo
+	if context != nil {
+		currentContext = *context
+	} else if sess, ok := m.term.GetSession(sessionID); ok && sess != nil {
+		currentContext = sess.ToSessionInfo().ExecutionContext
+	}
+	valid := sessionID != "" && workingDir != ""
+	if valid {
+		location := currentContext.Location
+		valid = location.Kind == termgo.TerminalLocationLocal &&
+			location.Phase == termgo.TerminalLocationPhaseReady &&
+			location.Source == termgo.TerminalContextSourceShellIntegration &&
+			strings.TrimSpace(location.WorkingDirectory) == workingDir
+	}
+	resolved := ""
+	if valid {
+		if candidate, err := m.resolveWorkingDir(workingDir); err == nil {
+			resolved = candidate
+		} else {
+			valid = false
+		}
+	}
+	m.mu.Lock()
+	if m.localPathCapabilities == nil {
+		m.localPathCapabilities = make(map[string]string)
+	}
+	if valid && resolved != "" {
+		m.localPathCapabilities[sessionID] = resolved
+	} else {
+		delete(m.localPathCapabilities, sessionID)
+	}
+	m.mu.Unlock()
+	if !valid || resolved == "" {
+		return nil
+	}
+	return &LocalPathCapabilityInfo{WorkingDir: resolved}
 }
 
 func (m *Manager) localPathCapability(sessionID string) string {
@@ -764,6 +813,16 @@ func (h *eventHandler) OnTerminalExecutionContextChanged(sessionID string, info 
 	if h == nil || h.m == nil {
 		return
 	}
+	if sess, ok := h.m.term.GetSession(sessionID); ok && sess != nil {
+		sessionInfo := sess.ToSessionInfo()
+		// Keep the product capability in lockstep with the authoritative context.
+		// The name update is sent first so a stale local context can never retain
+		// a previously granted Files target during a remote transition.
+		capability := h.m.reconcileLocalPathCapability(sessionID, sessionInfo.WorkingDir, &info)
+		h.m.broadcastNameUpdateWithCapability(sessionID, sessionInfo.Name, sessionInfo.WorkingDir, capability)
+	} else {
+		h.m.reconcileLocalPathCapability(sessionID, "", &info)
+	}
 	h.m.broadcastExecutionContextUpdate(sessionID, info)
 }
 
@@ -782,9 +841,6 @@ func (h *eventHandler) OnTerminalSessionCreated(session *termgo.Session) {
 	sessionID := strings.TrimSpace(info.ID)
 	if sessionID == "" {
 		return
-	}
-	if workingDir, err := h.m.resolveWorkingDir(info.WorkingDir); err == nil {
-		h.m.setLocalPathCapability(sessionID, workingDir)
 	}
 	h.m.trackSessionOpen(sessionID)
 
@@ -1024,9 +1080,10 @@ type terminalListResp struct {
 }
 
 type terminalNameUpdatePayload struct {
-	SessionID  string `json:"session_id"`
-	NewName    string `json:"new_name"`
-	WorkingDir string `json:"working_dir"`
+	SessionID           string                   `json:"session_id"`
+	NewName             string                   `json:"new_name"`
+	WorkingDir          string                   `json:"working_dir"`
+	LocalPathCapability *LocalPathCapabilityInfo `json:"local_path_capability"`
 }
 
 type terminalForegroundCommandUpdatePayload struct {

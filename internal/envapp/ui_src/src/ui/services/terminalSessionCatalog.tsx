@@ -55,6 +55,7 @@ export type TerminalSessionCatalogValue = Readonly<{
     outputActivity?: TerminalOutputActivityInfo;
     executionContext?: TerminalExecutionContextInfo;
     workState?: TerminalWorkStateInfo;
+    localPathCapability?: TerminalSessionInfo['localPathCapability'] | null;
   }) => void;
   clearForPermissionDenied: () => void;
   requestPreparedHistory: (sessionId: string) => Promise<PreparedPagedTerminalHistory | null>;
@@ -152,6 +153,10 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     context: TerminalExecutionContextInfo;
     generation: number;
   }>>();
+  const localPathCapabilityOverrides = new Map<
+    string,
+    TerminalSessionInfo['localPathCapability'] | null
+  >();
   const remoteOpeningObservedAtBySession = new Map<string, number>();
   const pendingMetadataLimit = 512;
   let pendingMetadataOverflowRevision = 0;
@@ -429,10 +434,25 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
 
   const applySnapshot = (next: TerminalSessionInfo[], authoritative = false) => {
     const authoritativeIds = new Set(next.map((session) => session.id));
+    if (authoritative) {
+      for (const sessionId of authoritativeIds) localPathCapabilityOverrides.delete(sessionId);
+      for (const sessionId of localPathCapabilityOverrides.keys()) {
+        if (!authoritativeIds.has(sessionId)) localPathCapabilityOverrides.delete(sessionId);
+      }
+    }
     const visible = next
       .filter((session) => !removedSessionIds.has(session.id))
       .map((session) => {
         let projected = session;
+        if (localPathCapabilityOverrides.has(session.id)) {
+          const capability = localPathCapabilityOverrides.get(session.id) ?? null;
+          if (capability) {
+            projected = { ...projected, localPathCapability: capability };
+          } else {
+            const { localPathCapability: _revoked, ...withoutCapability } = projected;
+            projected = withoutCapability;
+          }
+        }
         const latest = latestOutputActivities.get(session.id);
         const snapshotActivity = session.outputActivity;
         if (latest && latest.revision > (snapshotActivity?.revision ?? -1)) {
@@ -796,6 +816,7 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
       latestExecutionContexts.delete(normalized);
       latestWorkStates.delete(normalized);
       pendingExecutionContextConflicts.delete(normalized);
+      localPathCapabilityOverrides.delete(normalized);
       historyWarmup?.invalidate(normalized, 'removed');
       const current = getCoordinator();
       if (current) current.removeSession(normalized);
@@ -812,16 +833,26 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     outputActivity?: TerminalOutputActivityInfo;
     executionContext?: TerminalExecutionContextInfo;
     workState?: TerminalWorkStateInfo;
+    localPathCapability?: TerminalSessionInfo['localPathCapability'] | null;
   }) => {
     const normalized = String(sessionId ?? '').trim();
     if (!normalized) return;
+    const replacesLocalPathCapability = Object.prototype.hasOwnProperty.call(
+      patch,
+      'localPathCapability',
+    );
+    if (replacesLocalPathCapability) {
+      localPathCapabilityOverrides.set(normalized, patch.localPathCapability ?? null);
+    }
+    const { localPathCapability: _localPathCapability, ...coordinatorPatch } = patch;
     const current = getCoordinator();
     if (current) {
-      current.updateSessionMeta(normalized, patch);
+      current.updateSessionMeta(normalized, coordinatorPatch);
+      if (replacesLocalPathCapability) applySnapshot(current.getSnapshot());
       return;
     }
     applySnapshot(sessions().map((session) => (
-      session.id === normalized ? { ...session, ...patch } : session
+      session.id === normalized ? { ...session, ...coordinatorPatch } : session
     )));
   };
 

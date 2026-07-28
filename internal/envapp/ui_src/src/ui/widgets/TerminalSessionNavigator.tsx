@@ -17,6 +17,7 @@ export type TerminalSessionProcessState = 'none' | 'running' | 'creating' | 'fai
 export type TerminalSessionAttentionState = 'none' | 'waiting' | 'unread';
 export type TerminalSessionTransitionState = 'none' | 'creating' | 'reconnecting' | 'opening' | 'failed';
 export type TerminalSessionFailureKind = 'none' | 'creation' | 'runtime';
+export type TerminalFilesAvailability = 'available' | 'remote' | 'verifying' | 'invalid' | 'permission';
 
 export type TerminalSessionNavigationItem = Readonly<{
   id: string;
@@ -34,6 +35,7 @@ export type TerminalSessionNavigationItem = Readonly<{
   fullPath: string;
   localWorkingDir: string;
   processState: TerminalSessionProcessState;
+  processRunning: boolean;
   transitionState: TerminalSessionTransitionState;
   failureKind: TerminalSessionFailureKind;
   outputState: TerminalSessionOutputState;
@@ -41,6 +43,7 @@ export type TerminalSessionNavigationItem = Readonly<{
   attentionState: TerminalSessionAttentionState;
   remote: boolean;
   canBrowsePath: boolean;
+  filesAvailability: TerminalFilesAvailability;
   canClear: boolean;
   canDuplicate: boolean;
   closable: boolean;
@@ -126,9 +129,7 @@ function TerminalAgentIdentity(props: {
   const themeAdaptiveImage = createMemo(() => Boolean(presentation().lightIconPath && presentation().darkIconPath));
   return (
     <span
-      class={`relative mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-sidebar-border/70 text-sidebar-foreground shadow-[inset_0_1px_0_color-mix(in_srgb,var(--background)_18%,transparent)] ${presentation().render === 'mask' || themeAdaptiveImage()
-        ? 'bg-sidebar/65'
-        : 'bg-[var(--redeven-surface-control)]'}`}
+      class="relative mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-sidebar-border/70 bg-[var(--redeven-surface-control)] text-sidebar-foreground shadow-[inset_0_1px_0_color-mix(in_srgb,var(--background)_18%,transparent)]"
       data-terminal-session-avatar={props.sessionId}
       data-terminal-agent-identity={props.identity}
       aria-hidden="true"
@@ -138,16 +139,18 @@ function TerminalAgentIdentity(props: {
         fallback={(
           <Show
             when={themeAdaptiveImage()}
-            fallback={<img class="h-5 w-5 object-contain" src={presentation().iconPath} alt="" draggable={false} />}
+              fallback={<img style={{ width: `${presentation().opticalSizePx}px`, height: `${presentation().opticalSizePx}px` }} class="object-contain" src={presentation().iconPath} alt="" draggable={false} />}
           >
-            <img class="h-5 w-5 object-contain dark:hidden" src={presentation().lightIconPath} alt="" draggable={false} />
-            <img class="hidden h-5 w-5 object-contain dark:block" src={presentation().darkIconPath} alt="" draggable={false} />
+            <img style={{ width: `${presentation().opticalSizePx}px`, height: `${presentation().opticalSizePx}px` }} class="object-contain dark:hidden" src={presentation().lightIconPath} alt="" draggable={false} />
+            <img style={{ width: `${presentation().opticalSizePx}px`, height: `${presentation().opticalSizePx}px` }} class="hidden object-contain dark:block" src={presentation().darkIconPath} alt="" draggable={false} />
           </Show>
         )}
       >
         <span
-          class="h-5 w-5 bg-current"
+          class="bg-current"
           style={{
+            width: `${presentation().opticalSizePx}px`,
+            height: `${presentation().opticalSizePx}px`,
             'mask-image': `url(${presentation().iconPath})`,
             '-webkit-mask-image': `url(${presentation().iconPath})`,
             'mask-position': 'center',
@@ -263,6 +266,19 @@ function terminalActivityTooltip(
     : activity;
 }
 
+function terminalFilesTooltip(
+  item: TerminalSessionNavigationItem,
+  t: ReturnType<typeof useI18n>['t'],
+): string {
+  switch (item.filesAvailability) {
+    case 'remote': return t('terminal.remotePathActionsUnavailable');
+    case 'verifying': return t('terminal.localPathVerificationPending');
+    case 'invalid': return t('terminal.localPathUnavailable');
+    case 'permission': return t('terminal.filesReadPermissionRequired');
+    case 'available': return `${t('terminal.files')}: ${item.localWorkingDir}`;
+  }
+}
+
 export function describeTerminalSessionNavigationItem(
   item: TerminalSessionNavigationItem,
   t: ReturnType<typeof useI18n>['t'],
@@ -277,7 +293,7 @@ export function describeTerminalSessionNavigationItem(
     item.transitionState === 'opening' ? t('terminal.remoteOpeningStatus') : '',
     item.failureKind === 'creation' ? t('terminal.creationFailedStatus') : '',
     item.failureKind === 'runtime' ? t('terminal.terminalUnavailable') : '',
-    item.processState === 'running' && item.transitionState === 'none' ? t('terminal.processRunningDescription') : '',
+    item.processRunning && item.transitionState === 'none' ? t('terminal.processRunningDescription') : '',
     item.outputState !== 'none' && item.activitySource === 'semantic' ? t('codexActivity.status.working') : '',
     item.outputState !== 'none' && item.activitySource === 'output' ? t('terminal.outputStreaming') : '',
     item.attentionState === 'waiting' ? t('codex.pendingRequests.titleByType.userInput') : '',
@@ -554,6 +570,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                         ? TERMINAL_AGENT_CLI_PRESENTATIONS[agentIdentity()!]
                         : null);
                       const statusDescription = createMemo(() => describeTerminalSessionNavigationItem(item(), i18n.t));
+                      const filesTooltip = createMemo(() => terminalFilesTooltip(item(), i18n.t));
                       return (
                         <div
                           data-terminal-session-row={sessionId}
@@ -798,23 +815,27 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                               class={`col-start-2 row-start-2 flex items-center justify-center ${props.mobile ? 'h-7 w-7' : 'h-5 w-5'}`}
                               data-terminal-session-action-cell="files"
                             >
-                              <Show when={item().canBrowsePath}>
+                              <Tooltip content={filesTooltip()} placement="top" delay={0}>
                                 <button
                                   type="button"
-                                  class={`flex cursor-pointer items-center justify-center rounded text-muted-foreground/70 transition-[opacity,color,background-color] duration-75 hover:bg-sidebar-accent hover:text-sidebar-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring group-focus-within:pointer-events-auto group-focus-within:opacity-100 ${props.mobile ? 'h-7 w-7' : 'h-5 w-5'} ${props.mobile
+                                  class={`flex items-center justify-center rounded text-muted-foreground/70 transition-[opacity,color,background-color] duration-75 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring group-focus-within:pointer-events-auto group-focus-within:opacity-100 ${item().canBrowsePath
+                                    ? 'cursor-pointer hover:bg-sidebar-accent hover:text-sidebar-foreground'
+                                    : 'cursor-not-allowed opacity-45'} ${props.mobile ? 'h-7 w-7' : 'h-5 w-5'} ${props.mobile
                                     ? 'pointer-events-auto opacity-100'
                                     : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100'}`}
                                   data-testid={`terminal-session-files-${sessionId}`}
-                                  aria-label={`${i18n.t('terminal.files')}: ${item().fullPath}`}
-                                  title={`${i18n.t('terminal.files')}: ${item().fullPath}`}
+                                  data-terminal-files-availability={item().filesAvailability}
+                                  aria-disabled={item().canBrowsePath ? undefined : 'true'}
+                                  aria-label={filesTooltip()}
                                   onClick={(event) => {
                                     event.stopPropagation();
+                                    if (!item().canBrowsePath) return;
                                     props.onOpenFiles(item());
                                   }}
                                 >
                                   <ExternalLink class="h-3 w-3" />
                                 </button>
-                              </Show>
+                              </Tooltip>
                             </span>
                           </div>
                         </div>

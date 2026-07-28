@@ -4,6 +4,7 @@ import {
   fromWireTerminalExecutionContextUpdateNotify,
   fromWireTerminalForegroundCommandUpdateNotify,
   fromWireTerminalHistoryResponse,
+  fromWireTerminalNameUpdateNotify,
   fromWireTerminalOutputActivityUpdateNotify,
   fromWireTerminalSessionCreateResponse,
   fromWireTerminalSessionListResponse,
@@ -154,6 +155,34 @@ describe('terminal codec', () => {
     expect(fromWireTerminalSessionCreateResponse({
       session: { ...base, local_path_capability: { working_dir: '/' } },
     }).session.localPathCapability).toEqual({ workingDir: '/' });
+  });
+
+  it('replaces name-update path capabilities and fails closed for missing or malformed values', () => {
+    const base = { session_id: ' session-1 ', new_name: 'repo', working_dir: '/workspace/repo' };
+    expect(fromWireTerminalNameUpdateNotify({
+      ...base,
+      local_path_capability: { working_dir: '/workspace/repo' },
+    })).toEqual({
+      sessionId: 'session-1',
+      newName: 'repo',
+      workingDir: '/workspace/repo',
+      localPathCapability: { workingDir: '/workspace/repo' },
+    });
+    for (const localPathCapability of [
+      null,
+      undefined,
+      { working_dir: 'relative/path' },
+      { working_dir: '/workspace/repo/' },
+      { working_dir: 42 },
+      'invalid',
+    ]) {
+      expect(fromWireTerminalNameUpdateNotify({
+        ...base,
+        ...(localPathCapability === undefined
+          ? {}
+          : { local_path_capability: localPathCapability }),
+      } as any)?.localPathCapability).toBeNull();
+    }
   });
 
   it('accepts complete command notifications and rejects malformed high revisions', () => {

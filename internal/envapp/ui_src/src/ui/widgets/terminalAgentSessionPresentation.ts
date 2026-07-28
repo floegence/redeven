@@ -13,6 +13,7 @@ export type TerminalAgentCliPresentation = Readonly<{
   lightIconPath?: string;
   darkIconPath?: string;
   render: 'image' | 'mask';
+  opticalSizePx: 20 | 21;
 }>;
 
 const terminalAgentIconBasePath = `${REDEVEN_ENV_APP_BASE_PATH}agent-cli-icons/`;
@@ -22,39 +23,42 @@ function terminalAgentIconPath(fileName: string): string {
 }
 
 export const TERMINAL_AGENT_CLI_PRESENTATIONS: Readonly<Record<TerminalAgentCliIdentity, TerminalAgentCliPresentation>> = Object.freeze({
-  codex: { label: 'Codex', iconPath: terminalAgentIconPath('codex.svg'), render: 'mask' },
-  claude: { label: 'Claude Code', iconPath: terminalAgentIconPath('claude.svg'), render: 'image' },
-  opencode: { label: 'OpenCode', iconPath: terminalAgentIconPath('opencode.svg'), render: 'mask' },
-  kimi: { label: 'Kimi Code', iconPath: terminalAgentIconPath('kimi.svg'), render: 'image' },
-  gemini: { label: 'Gemini CLI', iconPath: terminalAgentIconPath('gemini.svg'), render: 'image' },
-  qwen: { label: 'Qwen Code', iconPath: terminalAgentIconPath('qwen.svg'), render: 'mask' },
+  codex: { label: 'Codex', iconPath: terminalAgentIconPath('codex.svg'), render: 'mask', opticalSizePx: 21 },
+  claude: { label: 'Claude Code', iconPath: terminalAgentIconPath('claude.svg'), render: 'image', opticalSizePx: 20 },
+  opencode: { label: 'OpenCode', iconPath: terminalAgentIconPath('opencode.svg'), render: 'mask', opticalSizePx: 20 },
+  kimi: { label: 'Kimi Code', iconPath: terminalAgentIconPath('kimi.svg'), render: 'image', opticalSizePx: 20 },
+  gemini: { label: 'Gemini CLI', iconPath: terminalAgentIconPath('gemini.svg'), render: 'image', opticalSizePx: 20 },
+  qwen: { label: 'Qwen Code', iconPath: terminalAgentIconPath('qwen.svg'), render: 'mask', opticalSizePx: 20 },
   copilot: {
     label: 'GitHub Copilot CLI',
     iconPath: terminalAgentIconPath('copilot.svg'),
     lightIconPath: terminalAgentIconPath('copilot-light.svg'),
     darkIconPath: terminalAgentIconPath('copilot-dark.svg'),
     render: 'image',
+    opticalSizePx: 20,
   },
-  cline: { label: 'Cline', iconPath: terminalAgentIconPath('cline.svg'), render: 'mask' },
-  roo: { label: 'Roo Code', iconPath: terminalAgentIconPath('roo.svg'), render: 'mask' },
-  vibe: { label: 'Mistral Vibe', iconPath: terminalAgentIconPath('vibe.svg'), render: 'image' },
+  cline: { label: 'Cline', iconPath: terminalAgentIconPath('cline.svg'), render: 'mask', opticalSizePx: 20 },
+  roo: { label: 'Roo Code', iconPath: terminalAgentIconPath('roo.svg'), render: 'mask', opticalSizePx: 20 },
+  vibe: { label: 'Mistral Vibe', iconPath: terminalAgentIconPath('vibe.svg'), render: 'image', opticalSizePx: 20 },
   cursor: {
     label: 'Cursor Agent',
     iconPath: terminalAgentIconPath('cursor.svg'),
     lightIconPath: terminalAgentIconPath('cursor-light.svg'),
     darkIconPath: terminalAgentIconPath('cursor-dark.svg'),
     render: 'image',
+    opticalSizePx: 20,
   },
-  junie: { label: 'Junie CLI', iconPath: terminalAgentIconPath('junie.svg'), render: 'image' },
-  kiro: { label: 'Kiro CLI', iconPath: terminalAgentIconPath('kiro.svg'), render: 'image' },
-  openhands: { label: 'OpenHands', iconPath: terminalAgentIconPath('openhands.svg'), render: 'mask' },
-  trae: { label: 'TRAE Agent', iconPath: terminalAgentIconPath('trae.svg'), render: 'image' },
+  junie: { label: 'Junie CLI', iconPath: terminalAgentIconPath('junie.svg'), render: 'image', opticalSizePx: 20 },
+  kiro: { label: 'Kiro CLI', iconPath: terminalAgentIconPath('kiro.svg'), render: 'image', opticalSizePx: 20 },
+  openhands: { label: 'OpenHands', iconPath: terminalAgentIconPath('openhands.svg'), render: 'mask', opticalSizePx: 20 },
+  trae: { label: 'TRAE Agent', iconPath: terminalAgentIconPath('trae.svg'), render: 'image', opticalSizePx: 20 },
   kilo: {
     label: 'Kilo Code',
     iconPath: terminalAgentIconPath('kilo.svg'),
     lightIconPath: terminalAgentIconPath('kilo-light.svg'),
     darkIconPath: terminalAgentIconPath('kilo-dark.svg'),
     render: 'image',
+    opticalSizePx: 20,
   },
 });
 

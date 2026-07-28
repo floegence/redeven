@@ -82,6 +82,7 @@ export type TerminalNameUpdateEvent = {
   sessionId: string;
   newName: string;
   workingDir: string;
+  localPathCapability: TerminalSessionInfo['localPathCapability'] | null;
 };
 
 export type TerminalForegroundCommandUpdateEvent = {

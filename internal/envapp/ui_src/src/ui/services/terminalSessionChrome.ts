@@ -6,6 +6,7 @@ import type { TerminalSessionInfo } from '../protocol/redeven_v1/sdk/terminal';
 import { canonicalAbsolutePath } from '../utils/canonicalAbsolutePath';
 
 export const TERMINAL_REMOTE_OPENING_SPINNER_MS = 800;
+export const TERMINAL_AGENT_INITIALIZATION_SPINNER_MS = 800;
 
 export type TerminalSessionChromeTransition = 'none' | 'creating' | 'connecting' | 'reconnecting' | 'failed';
 export type TerminalSessionChromeStatus = 'none' | 'spinner' | 'wave' | 'attention' | 'unread' | 'failed';
@@ -49,6 +50,7 @@ export function deriveTerminalSessionChrome(input: Readonly<{
   unread?: boolean;
   nowMs?: number;
   remoteOpeningObservedAtMs?: number;
+  agentInitializationObservedAtMs?: number;
 }>): TerminalSessionChrome {
   const session = input.session;
   const context = normalizeTerminalExecutionContextInfo(session.executionContext);
@@ -105,6 +107,10 @@ export function deriveTerminalSessionChrome(input: Readonly<{
     : input.unread
       ? 'unread' as const
       : 'none' as const;
+  const outputPhase = session.outputActivity?.phase ?? 'unknown';
+  const agentInitialized = workPhase !== 'unknown'
+    || outputPhase !== 'unknown'
+    || Boolean(input.outputStreaming);
 
   if (transition === 'failed') {
     return {
@@ -133,6 +139,20 @@ export function deriveTerminalSessionChrome(input: Readonly<{
     };
   }
 
+  const agentObservedAtMs = Number(input.agentInitializationObservedAtMs ?? Number.NaN);
+  if (
+    agentIdentity
+    && !agentInitialized
+    && Number.isFinite(agentObservedAtMs)
+    && Number.isFinite(nowMs)
+    && nowMs - agentObservedAtMs < TERMINAL_AGENT_INITIALIZATION_SPINNER_MS
+  ) {
+    return {
+      title, subtitle, displayPath, localWorkingDir, canUseLocalPath, subtitleIcon,
+      avatar, status: 'spinner', statusSource: 'transition', processRunning, attention, remote, remotePhase,
+    };
+  }
+
   if (workPhase === 'waiting_user') {
     return {
       title, subtitle, displayPath, localWorkingDir, canUseLocalPath, subtitleIcon,
@@ -145,7 +165,7 @@ export function deriveTerminalSessionChrome(input: Readonly<{
       avatar, status: 'wave', statusSource: 'semantic', processRunning, attention, remote, remotePhase,
     };
   }
-  if (workPhase === 'unknown' && (input.outputStreaming || session.outputActivity?.phase === 'streaming')) {
+  if (workPhase === 'unknown' && (input.outputStreaming || outputPhase === 'streaming')) {
     return {
       title, subtitle, displayPath, localWorkingDir, canUseLocalPath, subtitleIcon,
       avatar, status: 'wave', statusSource: 'output', processRunning, attention, remote, remotePhase,
