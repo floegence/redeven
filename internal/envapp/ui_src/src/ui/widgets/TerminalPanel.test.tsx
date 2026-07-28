@@ -6313,6 +6313,11 @@ describe('TerminalPanel', () => {
       ' /workspace/redeven',
       '/workspace/redeven ',
     ].entries()) {
+      emitTerminalData('session-1', `\x1b]633;P;Cwd=${workingDir}\u0007`, index + 1);
+      await settleTerminalPanel();
+      expect(sessionsCoordinatorMocks.updateSessionMeta)
+        .toHaveBeenLastCalledWith('session-1', { workingDir });
+
       terminalSessionsState.sessions = terminalSessionsState.sessions.map((session) => ({
         ...session,
         name: `Merged terminal ${index + 1}`,
