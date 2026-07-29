@@ -14,8 +14,8 @@ import (
 	"testing"
 	"testing/fstest"
 
-	flconfig "github.com/floegence/floret/config"
-	flruntime "github.com/floegence/floret/runtime"
+	flprovider "github.com/floegence/floret/v2/provider"
+	flruntime "github.com/floegence/floret/v2/runtime"
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	redevenconfig "github.com/floegence/redeven/internal/config"
@@ -270,31 +270,14 @@ func referenceOpenTargetLocatorForTest(t *testing.T, endpointID string, targetID
 
 func seedFloretReferenceOpenTurn(t *testing.T, stateDir string, threadID string, turnID string, references []flruntime.MessageReference) {
 	t.Helper()
-	store, err := openTestFloretStore(t, filepath.Join(stateDir, "ai", "floret_threads.sqlite"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = store.Close() }()
-	turnFactory, err := configureAppserverFloretTestTurnBinder(t, store).Bind(flruntime.ThreadID(threadID))
-	if err != nil {
-		t.Fatal(err)
-	}
-	host, err := turnFactory.NewHost(context.Background(), requireAppserverFloretTurnOptions(t, flconfig.Config{
-		Provider: flconfig.ProviderFake, Model: "fake-model", FakeResponse: "done", SystemPrompt: "test",
-	}))
-	if err != nil {
-		t.Fatal(err)
-	}
 	supplemental := make([]flruntime.TurnSupplementalContextItem, 0, len(references))
 	for _, reference := range references {
 		supplemental = append(supplemental, flruntime.TurnSupplementalContextItem{
 			Kind: "file_path", Title: reference.Label, Metadata: map[string]string{"reference_id": reference.ReferenceID}, Sensitive: true,
 		})
 	}
-	if _, err := host.RunTurn(context.Background(), flruntime.RunTurnRequest{
-		ThreadID: flruntime.ThreadID(threadID), TurnID: flruntime.TurnID(turnID), RunID: flruntime.RunID("run_" + turnID),
+	runAppserverTestFloretTurn(t, filepath.Join(stateDir, "ai", "floret_threads.sqlite"), flruntime.ThreadID(threadID), appserverTestGateway{events: []flprovider.Event{{Type: flprovider.EventDelta, Text: "done"}, {Type: flprovider.EventDone, Reason: "stop"}}}, flruntime.TurnRequest{
+		TurnID: flruntime.TurnID(turnID), RunID: flruntime.RunID("run_" + turnID),
 		Input: flruntime.TurnInput{References: references}, SupplementalContext: supplemental,
-	}); err != nil {
-		t.Fatal(err)
-	}
+	})
 }

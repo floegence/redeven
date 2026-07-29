@@ -69,7 +69,7 @@ func TestRedevenOwnedSQLiteOpeningsUseMigrationEngine(t *testing.T) {
 
 			sqlAliases := importAliases(parsed, "database/sql", "sql")
 			sqliteutilAliases := importAliases(parsed, "github.com/floegence/redeven/internal/persistence/sqliteutil", "sqliteutil")
-			floretRuntimeAliases := importAliases(parsed, "github.com/floegence/floret/runtime", "runtime")
+			floretStorageAliases := importAliases(parsed, "github.com/floegence/floret/v2/storage", "storage")
 			ast.Inspect(parsed, func(node ast.Node) bool {
 				call, ok := node.(*ast.CallExpr)
 				if !ok {
@@ -88,7 +88,7 @@ func TestRedevenOwnedSQLiteOpeningsUseMigrationEngine(t *testing.T) {
 					gotMigratingOpeners[rel] = struct{}{}
 				case selector.Sel.Name == "Open" && hasAlias(sqlAliases, receiver.Name) && firstStringArgument(call) == "sqlite":
 					gotDirectOpeners[rel] = struct{}{}
-				case selector.Sel.Name == "StartSQLiteStore" && hasAlias(floretRuntimeAliases, receiver.Name):
+				case selector.Sel.Name == "SQLite" && hasAlias(floretStorageAliases, receiver.Name):
 					gotFloretOpeners[rel] = struct{}{}
 				}
 				return true

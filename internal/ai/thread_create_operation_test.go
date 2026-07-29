@@ -8,7 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	flruntime "github.com/floegence/floret/runtime"
+	flruntime "github.com/floegence/floret/v2/runtime"
+	flstorage "github.com/floegence/floret/v2/storage"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
@@ -29,7 +30,7 @@ func TestServiceResumesThreadCreateFromEveryCanonicalBoundary(t *testing.T) {
 				t.Fatal(err)
 			}
 			t.Cleanup(func() { _ = db.Close() })
-			floretStore := flruntime.NewMemoryStore()
+			floretStore := openTestFloretRuntimeHost(t, flstorage.Memory())
 			t.Cleanup(func() { _ = floretStore.Close() })
 			adapter := testFloretBootstrap(t, floretStore)
 			service := &Service{threadsDB: db}
@@ -49,10 +50,7 @@ func TestServiceResumesThreadCreateFromEveryCanonicalBoundary(t *testing.T) {
 				t.Fatal(err)
 			}
 			if testCase.createFloret {
-				if _, err := host.CreateThread(ctx, flruntime.CreateThreadRequest{
-					ThreadID:       flruntime.ThreadID(settings.ThreadID),
-					CreateIntentID: flruntime.CreateIntentID(operation.OperationID),
-				}); err != nil {
+				if _, err := host.Create(ctx); err != nil {
 					t.Fatal(err)
 				}
 				operation, err = db.ConfirmThreadCreateFloretCreated(ctx, operation.OperationID)
@@ -61,11 +59,11 @@ func TestServiceResumesThreadCreateFromEveryCanonicalBoundary(t *testing.T) {
 				}
 			}
 			if testCase.setTitle {
-				titleHost, err := adapter.newThreadTitle(ctx, flruntime.ThreadID(settings.ThreadID), nil)
+				titleHost, err := adapter.newThreadTitle(ctx, flruntime.ThreadID(settings.ThreadID))
 				if err != nil {
 					t.Fatal(err)
 				}
-				if _, err := titleHost.SetThreadTitle(ctx, flruntime.SetThreadTitleRequest{ThreadID: flruntime.ThreadID(settings.ThreadID), Title: "Canonical title"}); err != nil {
+				if _, err := titleHost.Set(ctx, "Canonical title"); err != nil {
 					t.Fatal(err)
 				}
 				operation, err = db.ConfirmThreadCreateTitleSet(ctx, operation.OperationID)
@@ -85,7 +83,7 @@ func TestServiceResumesThreadCreateFromEveryCanonicalBoundary(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			overview, err := readHost.ReadThreadOverview(ctx, flruntime.ThreadID(settings.ThreadID))
+			overview, err := readHost.ReadThreadOverview(ctx)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -123,7 +121,7 @@ func TestThreadCreateReplayRejectsDamagedSnapshotBeforeFloretCreate(t *testing.T
 	if _, err := rawDB.ExecContext(ctx, `UPDATE ai_thread_create_operations SET snapshot_json = '' WHERE operation_id = ?`, operation.OperationID); err != nil {
 		t.Fatal(err)
 	}
-	floretStore := flruntime.NewMemoryStore()
+	floretStore := openTestFloretRuntimeHost(t, flstorage.Memory())
 	t.Cleanup(func() { _ = floretStore.Close() })
 	adapter := testFloretBootstrap(t, floretStore)
 	service := &Service{threadsDB: db}

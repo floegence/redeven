@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/floegence/floret/observation"
-	flruntime "github.com/floegence/floret/runtime"
+	"github.com/floegence/floret/v2/observation"
+	flruntime "github.com/floegence/floret/v2/runtime"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -121,11 +121,10 @@ func TestFlowerLiveBootstrapReadsCanonicalFloretContextAfterServiceRestart(t *te
 		t.Fatalf("CreateThread: %v", err)
 	}
 	host := newTestFloretHostFromService(t, first, thread.ThreadID, "canonical context answer")
-	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
-		ThreadID: flruntime.ThreadID(thread.ThreadID),
-		TurnID:   "turn_context_restart",
-		RunID:    "run_context_restart",
-		Input:    flruntime.TurnInput{Text: "record canonical context"},
+	if _, err := host.Run(ctx, flruntime.TurnRequest{
+		TurnID: "turn_context_restart",
+		RunID:  "run_context_restart",
+		Input:  flruntime.TurnInput{Text: "record canonical context"},
 	}); err != nil {
 		_ = first.Close()
 		t.Fatalf("RunTurn: %v", err)
@@ -135,7 +134,7 @@ func TestFlowerLiveBootstrapReadsCanonicalFloretContextAfterServiceRestart(t *te
 		_ = first.Close()
 		t.Fatalf("openFloretMaintenanceHost: %v", err)
 	}
-	snapshot, err := maintenance.ReadThreadContext(ctx, flruntime.ThreadID(thread.ThreadID))
+	snapshot, err := maintenance.ReadThreadContext(ctx)
 	if err != nil {
 		_ = first.Close()
 		t.Fatalf("ReadThreadContext: %v", err)
@@ -986,7 +985,7 @@ func TestRunContextCompactionAnchorRemainsStableAcrossOperationEvents(t *testing
 		t.Fatalf("CreateThread: %v", err)
 	}
 	host := newTestFloretHostFromService(t, svc, th.ThreadID, "visible output before compact")
-	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{ThreadID: flruntime.ThreadID(th.ThreadID), TurnID: "message-before-compact", RunID: "run-before-compact", Input: flruntime.TurnInput{Text: "prepare"}}); err != nil {
+	if _, err := host.Run(ctx, flruntime.TurnRequest{TurnID: "message-before-compact", RunID: "run-before-compact", Input: flruntime.TurnInput{Text: "prepare"}}); err != nil {
 		t.Fatalf("seed canonical timeline: %v", err)
 	}
 
@@ -1221,7 +1220,7 @@ func TestFlowerLiveCanonicalApprovalQueueSupportsIdentityCheckedResolution(t *te
 		CurrentApprovalID: record.ApprovalID, Items: []flruntime.ApprovalRecord{record}, GeneratedAt: requestedAt,
 	}
 	host := &recordingFloretHost{approvalQueue: queue}
-	host.resolveApproval = func(req flruntime.ResolveApprovalRequest) (flruntime.ResolveApprovalResult, error) {
+	host.resolveApproval = func(req flruntime.ApprovalResolutionRequest) (flruntime.ResolveApprovalResult, error) {
 		resolvedAt := time.Now()
 		resolvedRecord := record
 		resolvedRecord.State = "rejected"
@@ -1410,8 +1409,8 @@ func TestFlowerLiveCanonicalApprovalQueueSupportsIdentityCheckedResolution(t *te
 	}
 	resolveReq := host.resolveApprovalReq[0]
 	host.mu.Unlock()
-	if resolveReq.ExpectedRootThreadID != queue.RootThreadID || resolveReq.ExpectedGeneration != queue.Generation ||
-		resolveReq.ExpectedRevision != queue.Revision || resolveReq.ExpectedCurrent.ApprovalID != record.ApprovalID ||
+	if resolveReq.ExpectedGeneration != queue.Generation || resolveReq.ExpectedRevision != queue.Revision ||
+		resolveReq.ExpectedCurrent.ApprovalID != record.ApprovalID ||
 		resolveReq.ExpectedCurrent.EffectAttemptID != record.EffectAttemptID || resolveReq.ExpectedApprovalRevision != record.Revision ||
 		resolveReq.Decision != flruntime.ApprovalDecisionReject {
 		t.Fatalf("ResolveApproval request=%#v", resolveReq)

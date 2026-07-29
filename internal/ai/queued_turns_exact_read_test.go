@@ -6,23 +6,23 @@ import (
 	"fmt"
 	"testing"
 
-	flruntime "github.com/floegence/floret/runtime"
+	flruntime "github.com/floegence/floret/v2/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
 type exactTurnReadTestHost struct {
 	floretThreadReadHost
-	read          func(flruntime.ReadThreadTurnRequest) (flruntime.ThreadTurnSnapshot, error)
-	exactRequests []flruntime.ReadThreadTurnRequest
-	listRequests  []flruntime.ListThreadTurnsRequest
+	read          func(flruntime.TurnID) (flruntime.ThreadTurnSnapshot, error)
+	exactRequests []flruntime.TurnID
+	listRequests  []flruntime.ThreadTurnsRequest
 }
 
-func (h *exactTurnReadTestHost) ReadThreadTurn(_ context.Context, req flruntime.ReadThreadTurnRequest) (flruntime.ThreadTurnSnapshot, error) {
-	h.exactRequests = append(h.exactRequests, req)
-	return h.read(req)
+func (h *exactTurnReadTestHost) ReadThreadTurn(_ context.Context, turnID flruntime.TurnID) (flruntime.ThreadTurnSnapshot, error) {
+	h.exactRequests = append(h.exactRequests, turnID)
+	return h.read(turnID)
 }
 
-func (h *exactTurnReadTestHost) ListThreadTurns(_ context.Context, req flruntime.ListThreadTurnsRequest) (flruntime.ThreadTurnsPage, error) {
+func (h *exactTurnReadTestHost) ListThreadTurns(_ context.Context, req flruntime.ThreadTurnsRequest) (flruntime.ThreadTurnsPage, error) {
 	h.listRequests = append(h.listRequests, req)
 	return flruntime.ThreadTurnsPage{}, errors.New("unexpected canonical history scan")
 }
@@ -74,17 +74,17 @@ func TestFloretThreadContainsTurnUsesOneExactReadAndFailsClosed(t *testing.T) {
 	canonicalErr := errors.New("canonical authority corrupt")
 	for _, testCase := range []struct {
 		name      string
-		read      func(flruntime.ReadThreadTurnRequest) (flruntime.ThreadTurnSnapshot, error)
+		read      func(flruntime.TurnID) (flruntime.ThreadTurnSnapshot, error)
 		want      bool
 		wantError error
 	}{
-		{name: "present", read: func(req flruntime.ReadThreadTurnRequest) (flruntime.ThreadTurnSnapshot, error) {
-			return flruntime.ThreadTurnSnapshot{TurnID: req.TurnID}, nil
+		{name: "present", read: func(turnID flruntime.TurnID) (flruntime.ThreadTurnSnapshot, error) {
+			return flruntime.ThreadTurnSnapshot{TurnID: turnID}, nil
 		}, want: true},
-		{name: "absent", read: func(flruntime.ReadThreadTurnRequest) (flruntime.ThreadTurnSnapshot, error) {
+		{name: "absent", read: func(flruntime.TurnID) (flruntime.ThreadTurnSnapshot, error) {
 			return flruntime.ThreadTurnSnapshot{}, fmt.Errorf("missing: %w", flruntime.ErrTurnNotFound)
 		}},
-		{name: "corrupt", read: func(flruntime.ReadThreadTurnRequest) (flruntime.ThreadTurnSnapshot, error) {
+		{name: "corrupt", read: func(flruntime.TurnID) (flruntime.ThreadTurnSnapshot, error) {
 			return flruntime.ThreadTurnSnapshot{}, canonicalErr
 		}, wantError: canonicalErr},
 	} {
@@ -94,7 +94,7 @@ func TestFloretThreadContainsTurnUsesOneExactReadAndFailsClosed(t *testing.T) {
 			if got != testCase.want || !errors.Is(err, testCase.wantError) {
 				t.Fatalf("contains=%v err=%v, want=%v err=%v", got, err, testCase.want, testCase.wantError)
 			}
-			if len(host.exactRequests) != 1 || host.exactRequests[0].ThreadID != "thread_exact" || host.exactRequests[0].TurnID != "turn_exact" || len(host.listRequests) != 0 {
+			if len(host.exactRequests) != 1 || host.exactRequests[0] != "turn_exact" || len(host.listRequests) != 0 {
 				t.Fatalf("exact requests=%#v list requests=%#v", host.exactRequests, host.listRequests)
 			}
 		})
@@ -115,9 +115,9 @@ func TestCanonicalPendingTurnReconciliationExhaustsKeysetPagesAndIsIdempotent(t 
 			accepted[flruntime.TurnID(command.TurnID)] = struct{}{}
 		}
 	}
-	host := &exactTurnReadTestHost{read: func(req flruntime.ReadThreadTurnRequest) (flruntime.ThreadTurnSnapshot, error) {
-		if _, ok := accepted[req.TurnID]; ok {
-			return flruntime.ThreadTurnSnapshot{TurnID: req.TurnID}, nil
+	host := &exactTurnReadTestHost{read: func(turnID flruntime.TurnID) (flruntime.ThreadTurnSnapshot, error) {
+		if _, ok := accepted[turnID]; ok {
+			return flruntime.ThreadTurnSnapshot{TurnID: turnID}, nil
 		}
 		return flruntime.ThreadTurnSnapshot{}, flruntime.ErrTurnNotFound
 	}}
@@ -153,9 +153,9 @@ func TestStartupPendingTurnReconciliationExhaustsKeysetPages(t *testing.T) {
 	}
 	commands := seedPendingTurnCommands(t, svc, thread.ThreadID, 501)
 	acceptedTurnID := flruntime.TurnID(commands[0].TurnID)
-	host := &exactTurnReadTestHost{read: func(req flruntime.ReadThreadTurnRequest) (flruntime.ThreadTurnSnapshot, error) {
-		if req.TurnID == acceptedTurnID {
-			return flruntime.ThreadTurnSnapshot{TurnID: req.TurnID}, nil
+	host := &exactTurnReadTestHost{read: func(turnID flruntime.TurnID) (flruntime.ThreadTurnSnapshot, error) {
+		if turnID == acceptedTurnID {
+			return flruntime.ThreadTurnSnapshot{TurnID: turnID}, nil
 		}
 		return flruntime.ThreadTurnSnapshot{}, flruntime.ErrTurnNotFound
 	}}
@@ -184,10 +184,10 @@ func TestStartupPendingTurnReconciliationResumesAfterPartialFailure(t *testing.T
 	}
 	commands := seedPendingTurnCommands(t, svc, thread.ThreadID, 3)
 	canonicalErr := errors.New("canonical authority corrupt")
-	host := &exactTurnReadTestHost{read: func(req flruntime.ReadThreadTurnRequest) (flruntime.ThreadTurnSnapshot, error) {
-		switch req.TurnID {
+	host := &exactTurnReadTestHost{read: func(turnID flruntime.TurnID) (flruntime.ThreadTurnSnapshot, error) {
+		switch turnID {
 		case flruntime.TurnID(commands[0].TurnID):
-			return flruntime.ThreadTurnSnapshot{TurnID: req.TurnID}, nil
+			return flruntime.ThreadTurnSnapshot{TurnID: turnID}, nil
 		case flruntime.TurnID(commands[1].TurnID):
 			return flruntime.ThreadTurnSnapshot{}, canonicalErr
 		default:
@@ -205,7 +205,7 @@ func TestStartupPendingTurnReconciliationResumesAfterPartialFailure(t *testing.T
 		t.Fatalf("partial progress=%#v", remaining)
 	}
 
-	host.read = func(flruntime.ReadThreadTurnRequest) (flruntime.ThreadTurnSnapshot, error) {
+	host.read = func(flruntime.TurnID) (flruntime.ThreadTurnSnapshot, error) {
 		return flruntime.ThreadTurnSnapshot{}, flruntime.ErrTurnNotFound
 	}
 	if err := svc.reconcileStartupPendingTurnCommands(t.Context(), meta.EndpointID, thread.ThreadID, svc.threadsDB); err != nil {
@@ -234,7 +234,7 @@ func TestCanonicalReadFailureBlocksForkAndDeleteIntents(t *testing.T) {
 			canonicalErr := errors.New("canonical authority corrupt")
 			host := &exactTurnReadTestHost{
 				floretThreadReadHost: realReadHost,
-				read: func(flruntime.ReadThreadTurnRequest) (flruntime.ThreadTurnSnapshot, error) {
+				read: func(flruntime.TurnID) (flruntime.ThreadTurnSnapshot, error) {
 					return flruntime.ThreadTurnSnapshot{}, canonicalErr
 				},
 			}

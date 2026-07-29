@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	flruntime "github.com/floegence/floret/runtime"
+	flruntime "github.com/floegence/floret/v2/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/filesystemscope"
@@ -126,8 +126,7 @@ func (s *Service) readCanonicalThreadState(ctx context.Context, threadID string)
 	if err != nil {
 		return flruntime.ThreadSnapshot{}, nil, err
 	}
-	canonicalThreadID := flruntime.ThreadID(strings.TrimSpace(threadID))
-	overview, err := host.ReadThreadOverview(ctx, canonicalThreadID)
+	overview, err := host.ReadThreadOverview(ctx)
 	if err != nil {
 		return flruntime.ThreadSnapshot{}, nil, err
 	}
@@ -1205,7 +1204,7 @@ func (s *Service) GetThreadTodos(ctx context.Context, meta *session.Meta, thread
 	if err != nil {
 		return nil, err
 	}
-	snapshot, err := host.ReadThreadAgentTodos(ctx, flruntime.ThreadID(threadID))
+	snapshot, err := host.ReadThreadAgentTodos(ctx)
 	if err != nil {
 		return nil, err
 	}

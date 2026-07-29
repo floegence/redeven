@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	flruntime "github.com/floegence/floret/runtime"
-	fltools "github.com/floegence/floret/tools"
+	flruntime "github.com/floegence/floret/v2/runtime"
+	fltools "github.com/floegence/floret/v2/tools"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 )

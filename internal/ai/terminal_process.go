@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/creack/pty"
-	flruntime "github.com/floegence/floret/runtime"
+	flruntime "github.com/floegence/floret/v2/runtime"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 	"github.com/floegence/redeven/internal/processenv"
 )

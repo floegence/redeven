@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/floegence/floret/observation"
-	flruntime "github.com/floegence/floret/runtime"
+	"github.com/floegence/floret/v2/observation"
+	flruntime "github.com/floegence/floret/v2/runtime"
 	"github.com/floegence/redeven/internal/config"
 )
 

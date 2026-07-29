@@ -7,26 +7,63 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"testing"
 
-	flruntime "github.com/floegence/floret/runtime"
+	flconfig "github.com/floegence/floret/v2/config"
+	flprovider "github.com/floegence/floret/v2/provider"
+	flruntime "github.com/floegence/floret/v2/runtime"
+	"github.com/floegence/redeven/internal/config"
 )
+
+func testFloretGatewayIdentity() flprovider.Identity {
+	return flprovider.Identity{Provider: "test", Model: "test-model", StateCompatibilityKey: "test:v2"}
+}
+
+func testFloretGatewayCapabilities() flprovider.Capabilities {
+	return flprovider.Capabilities{Reasoning: flprovider.ReasoningUnsupported, AttachmentPayload: flprovider.AttachmentDescriptors}
+}
+
+func newTestFloretAgent(t *testing.T, gateway flprovider.Gateway, options ...flruntime.AgentOption) *flruntime.Agent {
+	t.Helper()
+	agent, err := flruntime.NewAgent(
+		redevenFloretAgentConfig("You are a deterministic test agent.", floretModelContextPolicy(128000, 4096), config.AIReasoningSelection{}),
+		gateway,
+		options...,
+	)
+	if err != nil {
+		t.Fatalf("runtime.NewAgent: %v", err)
+	}
+	return agent
+}
+
+func newStaticTestFloretAgent(t *testing.T, response string, options ...flruntime.AgentOption) *flruntime.Agent {
+	t.Helper()
+	gateway := floretModelGatewayFunc(func(context.Context, flprovider.Request) (<-chan flprovider.Event, error) {
+		events := make(chan flprovider.Event, 2)
+		events <- flprovider.Event{Type: flprovider.EventDelta, Text: response}
+		events <- flprovider.Event{Type: flprovider.EventDone, Reason: "stop"}
+		close(events)
+		return events, nil
+	})
+	return newTestFloretAgent(t, gateway, options...)
+}
 
 type preparedTestFloretRequest struct {
 	mu          sync.Mutex
-	gateway     flruntime.ModelGateway
-	request     flruntime.ModelRequest
-	estimate    flruntime.ModelRequestTokenEstimate
+	gateway     flprovider.Gateway
+	request     flprovider.Request
+	estimate    flprovider.TokenEstimate
 	fingerprint string
 	streamed    bool
 	closed      bool
 }
 
-func prepareTestFloretRequest(gateway flruntime.ModelGateway, req flruntime.ModelRequest) (flruntime.PreparedModelRequest, error) {
+func prepareTestFloretRequest(gateway flprovider.Gateway, req flprovider.Request) (flprovider.PreparedRequest, error) {
 	payload, err := json.Marshal(req)
 	if err != nil {
 		return nil, err
 	}
-	var frozen flruntime.ModelRequest
+	var frozen flprovider.Request
 	if err := json.Unmarshal(payload, &frozen); err != nil {
 		return nil, err
 	}
@@ -34,18 +71,18 @@ func prepareTestFloretRequest(gateway flruntime.ModelGateway, req flruntime.Mode
 	return &preparedTestFloretRequest{
 		gateway: gateway,
 		request: frozen,
-		estimate: flruntime.ModelRequestTokenEstimate{
+		estimate: flprovider.TokenEstimate{
 			EstimatedInputTokens: int64(len(payload)),
 			Source:               "redeven_test_gateway_rendered_json_utf8_bytes_v1",
-			Method:               "provider_rendered_payload",
+			Method:               string(flconfig.EstimateMethodProviderRenderedPayload),
 			Confidence:           "conservative",
-			Coverage:             flruntime.ModelRequestTokenEstimateCoverageComplete,
+			Coverage:             "complete_request",
 		},
 		fingerprint: fmt.Sprintf("sha256:%x", digest[:]),
 	}, nil
 }
 
-func (p *preparedTestFloretRequest) StreamModel(ctx context.Context) (<-chan flruntime.ModelEvent, error) {
+func (p *preparedTestFloretRequest) Stream(ctx context.Context) (<-chan flprovider.Event, error) {
 	p.mu.Lock()
 	if p.closed {
 		p.mu.Unlock()
@@ -59,10 +96,10 @@ func (p *preparedTestFloretRequest) StreamModel(ctx context.Context) (<-chan flr
 	gateway := p.gateway
 	request := p.request
 	p.mu.Unlock()
-	return gateway.StreamModel(ctx, request)
+	return gateway.Stream(ctx, request)
 }
 
-func (p *preparedTestFloretRequest) TokenEstimate() flruntime.ModelRequestTokenEstimate {
+func (p *preparedTestFloretRequest) TokenEstimate() flprovider.TokenEstimate {
 	return p.estimate
 }
 
@@ -75,22 +112,22 @@ func (p *preparedTestFloretRequest) Close() error {
 	defer p.mu.Unlock()
 	p.closed = true
 	p.gateway = nil
-	p.request = flruntime.ModelRequest{}
+	p.request = flprovider.Request{}
 	return nil
 }
 
-func (f floretModelGatewayFunc) PrepareModelRequest(_ context.Context, req flruntime.ModelRequest) (flruntime.PreparedModelRequest, error) {
+func (f floretModelGatewayFunc) Prepare(_ context.Context, req flprovider.Request) (flprovider.PreparedRequest, error) {
 	return prepareTestFloretRequest(f, req)
 }
 
-func (g canonicalChildApprovalGateway) PrepareModelRequest(_ context.Context, req flruntime.ModelRequest) (flruntime.PreparedModelRequest, error) {
+func (g canonicalChildApprovalGateway) Prepare(_ context.Context, req flprovider.Request) (flprovider.PreparedRequest, error) {
 	return prepareTestFloretRequest(g, req)
 }
 
-func (g testAskUserGateway) PrepareModelRequest(_ context.Context, req flruntime.ModelRequest) (flruntime.PreparedModelRequest, error) {
+func (g testAskUserGateway) Prepare(_ context.Context, req flprovider.Request) (flprovider.PreparedRequest, error) {
 	return prepareTestFloretRequest(g, req)
 }
 
-func (g *blockingFloretModelGateway) PrepareModelRequest(_ context.Context, req flruntime.ModelRequest) (flruntime.PreparedModelRequest, error) {
+func (g *blockingFloretModelGateway) Prepare(_ context.Context, req flprovider.Request) (flprovider.PreparedRequest, error) {
 	return prepareTestFloretRequest(g, req)
 }

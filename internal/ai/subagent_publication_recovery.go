@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	flruntime "github.com/floegence/floret/runtime"
+	flruntime "github.com/floegence/floret/v2/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 )
@@ -78,8 +78,7 @@ func (s *Service) newSubAgentPublicationRecoveryRun(ctx context.Context, operati
 	if s == nil || s.threadsDB == nil {
 		return nil, errors.New("SubAgent publication recovery service is unavailable")
 	}
-	request, err := decodePendingSubAgentPublicationRequest(operation)
-	if err != nil {
+	if _, err := decodePendingSubAgentPublicationRequest(operation); err != nil {
 		return nil, err
 	}
 	meta, err := unmarshalQueuedTurnSessionMeta(operation.SessionMetaJSON)
@@ -126,7 +125,7 @@ func (s *Service) newSubAgentPublicationRecoveryRun(ctx context.Context, operati
 			return nil, err
 		}
 	}
-	runtimeCapabilities, err := s.bindFloretSubAgentRecoveryRuntime(request.ParentThreadID)
+	runtimeCapabilities, err := s.bindFloretSubAgentRecoveryRuntime(flruntime.ThreadID(operation.ParentThreadID))
 	if err != nil {
 		return nil, err
 	}
@@ -139,33 +138,33 @@ func (s *Service) newSubAgentPublicationRecoveryRun(ctx context.Context, operati
 		return nil, err
 	}
 	parent := newRun(runOptions{
-		Log:                       s.log,
-		StateDir:                  s.stateDir,
-		AgentHomeDir:              s.agentHomeDir,
-		WorkingDir:                workingDir,
-		FilesystemScope:           s.scope,
-		Shell:                     s.shell,
-		HostCapabilities:          hostCapabilities,
-		AIConfig:                  s.cfg,
-		SessionMeta:               &meta,
-		ResolveProviderKey:        s.resolveProviderKey,
-		ResolveWebSearchKey:       s.resolveWebSearchKey,
-		DesktopModelSource:        s.desktopModelSource,
-		RunID:                     operation.ParentRunID,
-		ChannelID:                 strings.TrimSpace(meta.ChannelID),
-		EndpointID:                operation.EndpointID,
-		ThreadID:                  operation.ParentThreadID,
-		TurnID:                    operation.ParentTurnID,
-		UserPublicID:              strings.TrimSpace(meta.UserPublicID),
-		MessageID:                 operation.ParentTurnID,
-		UploadsDir:                s.uploadsDir,
-		ProductCapabilities:       productCapabilities,
-		FloretSubagentHostFactory: runtimeCapabilities.SubAgent,
-		PersistOpTimeout:          s.persistTimeout(),
-		ToolApprovalTimeout:       s.approvalTimeout,
-		SkillManager:              s.skillManager,
-		ToolTargetPolicy:          s.toolTargetPolicy,
-		TargetToolExecutor:        s.targetToolExecutor,
+		Log:                  s.log,
+		StateDir:             s.stateDir,
+		AgentHomeDir:         s.agentHomeDir,
+		WorkingDir:           workingDir,
+		FilesystemScope:      s.scope,
+		Shell:                s.shell,
+		HostCapabilities:     hostCapabilities,
+		AIConfig:             s.cfg,
+		SessionMeta:          &meta,
+		ResolveProviderKey:   s.resolveProviderKey,
+		ResolveWebSearchKey:  s.resolveWebSearchKey,
+		DesktopModelSource:   s.desktopModelSource,
+		RunID:                operation.ParentRunID,
+		ChannelID:            strings.TrimSpace(meta.ChannelID),
+		EndpointID:           operation.EndpointID,
+		ThreadID:             operation.ParentThreadID,
+		TurnID:               operation.ParentTurnID,
+		UserPublicID:         strings.TrimSpace(meta.UserPublicID),
+		MessageID:            operation.ParentTurnID,
+		UploadsDir:           s.uploadsDir,
+		ProductCapabilities:  productCapabilities,
+		FloretSubagentOpener: runtimeCapabilities.SubAgent,
+		PersistOpTimeout:     s.persistTimeout(),
+		ToolApprovalTimeout:  s.approvalTimeout,
+		SkillManager:         s.skillManager,
+		ToolTargetPolicy:     s.toolTargetPolicy,
+		TargetToolExecutor:   s.targetToolExecutor,
 	})
 	parent.currentModelID = strings.TrimSpace(operation.ModelID)
 	parent.currentReasoning = config.NormalizeAIReasoningSelection(reasoning)

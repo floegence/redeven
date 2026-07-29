@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/floegence/floret/observation"
+	"github.com/floegence/floret/v2/observation"
 	"github.com/floegence/redeven/internal/session"
 )
 

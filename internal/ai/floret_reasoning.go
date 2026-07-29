@@ -1,19 +1,21 @@
 package ai
 
 import (
-	flconfig "github.com/floegence/floret/config"
-	flruntime "github.com/floegence/floret/runtime"
+	flconfig "github.com/floegence/floret/v2/config"
+	flprovider "github.com/floegence/floret/v2/provider"
 	"github.com/floegence/redeven/internal/config"
 )
 
 // floretModelGatewayCapabilities adapts Redeven's resolved model contract to
 // Floret's host contract. The host must always provide an explicit capability:
 // Kind=none is authoritative for models that do not support reasoning.
-func floretModelGatewayCapabilities(capability config.AIReasoningCapability) flruntime.ModelGatewayCapabilities {
+func floretModelGatewayCapabilities(capability config.AIReasoningCapability) flprovider.Capabilities {
 	capability = capability.Normalize()
 	if capability.IsZero() {
-		none := flconfig.ReasoningCapability{Kind: flconfig.ReasoningKindNone}
-		return flruntime.ModelGatewayCapabilities{Reasoning: &none, AttachmentPayload: flruntime.ModelGatewayAttachmentPayloadExpanded}
+		return flprovider.Capabilities{
+			Reasoning:         flprovider.ReasoningUnsupported,
+			AttachmentPayload: flprovider.AttachmentExpanded,
+		}
 	}
 	kind := capability.Kind
 	if kind == "dynamic" {
@@ -32,5 +34,9 @@ func floretModelGatewayCapabilities(capability config.AIReasoningCapability) flr
 		Budget:            flconfig.ReasoningBudget{MinTokens: int64(capability.MinBudgetTokens), MaxTokens: int64(capability.MaxBudgetTokens)},
 		DynamicModelValue: capability.DynamicProviderMetadata,
 	}
-	return flruntime.ModelGatewayCapabilities{Reasoning: &reasoning, AttachmentPayload: flruntime.ModelGatewayAttachmentPayloadExpanded}
+	return flprovider.Capabilities{
+		Reasoning:           flprovider.ReasoningSupported,
+		ReasoningCapability: reasoning,
+		AttachmentPayload:   flprovider.AttachmentExpanded,
+	}
 }

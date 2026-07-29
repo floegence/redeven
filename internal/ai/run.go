@@ -18,8 +18,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/floegence/floret/observation"
-	flruntime "github.com/floegence/floret/runtime"
+	"github.com/floegence/floret/v2/observation"
+	flruntime "github.com/floegence/floret/v2/runtime"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
@@ -60,13 +60,13 @@ type runOptions struct {
 	ToolApprovalTimeout time.Duration
 	StreamWriteTimeout  time.Duration
 
-	UploadsDir                  string
-	ProductCapabilities         runProductCapabilities
-	FloretHostFactory           floretHostFactory
-	FloretCompactionHostFactory floretCompactionHostFactory
-	FloretSubagentHostFactory   floretSubagentHostFactory
-	EffectAuthorizations        *floretEffectAuthorizationRegistry
-	PersistOpTimeout            time.Duration
+	UploadsDir            string
+	ProductCapabilities   runProductCapabilities
+	FloretTurnOpener      floretTurnRunnerOpener
+	FloretCompactorOpener floretCompactorOpener
+	FloretSubagentOpener  floretSubagentManagerOpener
+	EffectAuthorizations  *floretEffectAuthorizationRegistry
+	PersistOpTimeout      time.Duration
 
 	OnStreamEvent func(any)
 	Writer        http.ResponseWriter
@@ -125,35 +125,35 @@ type run struct {
 	muStopFinalization      sync.Mutex
 	stopFinalizationAttempt *stopFinalizationAttempt
 
-	muCancel                    sync.Mutex
-	cancelReason                string // "canceled"|"timed_out"|""
-	endReason                   string // "complete"|"canceled"|"timed_out"|"disconnected"|"error"
-	runErrorCode                string
-	cancelRequested             bool
-	cancelFn                    context.CancelFunc
-	muExecution                 sync.Mutex
-	executionClosed             bool
-	executionContext            context.Context
-	executionCancel             context.CancelCauseFunc
-	nextExecutionAdmissionID    uint64
-	executionAdmissions         map[uint64]context.CancelCauseFunc
-	detached                    atomic.Bool // hard-canceled: stop emitting realtime events and skip thread state updates
-	awaitFloretAdmission        atomic.Bool
-	floretAdmitted              atomic.Bool
-	floretRunTurnStarted        atomic.Bool
-	floretPresentationReady     atomic.Bool
-	admissionOnce               sync.Once
-	admissionCh                 chan userTurnAdmissionOutcome
-	busyCount                   atomic.Int32
-	runtimeToolCalls            atomic.Int64
-	runtimeTokens               atomic.Int64
-	uploadsDir                  string
-	product                     runProductCapabilities
-	floretHostFactory           floretHostFactory
-	floretCompactionHostFactory floretCompactionHostFactory
-	floretSubagentHostFactory   floretSubagentHostFactory
-	effectAuthorizations        *floretEffectAuthorizationRegistry
-	persistOpTimeout            time.Duration
+	muCancel                 sync.Mutex
+	cancelReason             string // "canceled"|"timed_out"|""
+	endReason                string // "complete"|"canceled"|"timed_out"|"disconnected"|"error"
+	runErrorCode             string
+	cancelRequested          bool
+	cancelFn                 context.CancelFunc
+	muExecution              sync.Mutex
+	executionClosed          bool
+	executionContext         context.Context
+	executionCancel          context.CancelCauseFunc
+	nextExecutionAdmissionID uint64
+	executionAdmissions      map[uint64]context.CancelCauseFunc
+	detached                 atomic.Bool // hard-canceled: stop emitting realtime events and skip thread state updates
+	awaitFloretAdmission     atomic.Bool
+	floretAdmitted           atomic.Bool
+	floretRunTurnStarted     atomic.Bool
+	floretPresentationReady  atomic.Bool
+	admissionOnce            sync.Once
+	admissionCh              chan userTurnAdmissionOutcome
+	busyCount                atomic.Int32
+	runtimeToolCalls         atomic.Int64
+	runtimeTokens            atomic.Int64
+	uploadsDir               string
+	product                  runProductCapabilities
+	floretTurnOpener         floretTurnRunnerOpener
+	floretCompactorOpener    floretCompactorOpener
+	floretSubagentOpener     floretSubagentManagerOpener
+	effectAuthorizations     *floretEffectAuthorizationRegistry
+	persistOpTimeout         time.Duration
 
 	onStreamEvent func(any)
 	w             http.ResponseWriter
@@ -325,9 +325,9 @@ func newRun(opts runOptions) *run {
 		settlementTurnID:            strings.TrimSpace(opts.TurnID),
 		uploadsDir:                  strings.TrimSpace(opts.UploadsDir),
 		product:                     opts.ProductCapabilities,
-		floretHostFactory:           opts.FloretHostFactory,
-		floretCompactionHostFactory: opts.FloretCompactionHostFactory,
-		floretSubagentHostFactory:   opts.FloretSubagentHostFactory,
+		floretTurnOpener:            opts.FloretTurnOpener,
+		floretCompactorOpener:       opts.FloretCompactorOpener,
+		floretSubagentOpener:        opts.FloretSubagentOpener,
 		effectAuthorizations:        effectAuthorizations,
 		persistOpTimeout:            opts.PersistOpTimeout,
 		onStreamEvent:               opts.OnStreamEvent,

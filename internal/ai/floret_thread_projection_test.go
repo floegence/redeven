@@ -8,17 +8,26 @@ import (
 	"testing"
 	"time"
 
-	flconfig "github.com/floegence/floret/config"
-	"github.com/floegence/floret/observation"
-	flruntime "github.com/floegence/floret/runtime"
-	fltools "github.com/floegence/floret/tools"
+	"github.com/floegence/floret/v2/observation"
+	flprovider "github.com/floegence/floret/v2/provider"
+	flruntime "github.com/floegence/floret/v2/runtime"
+	flstorage "github.com/floegence/floret/v2/storage"
+	fltools "github.com/floegence/floret/v2/tools"
 	"github.com/floegence/redeven/internal/config"
 )
 
-type floretModelGatewayFunc func(context.Context, flruntime.ModelRequest) (<-chan flruntime.ModelEvent, error)
+type floretModelGatewayFunc func(context.Context, flprovider.Request) (<-chan flprovider.Event, error)
 
-func (f floretModelGatewayFunc) StreamModel(ctx context.Context, req flruntime.ModelRequest) (<-chan flruntime.ModelEvent, error) {
+func (f floretModelGatewayFunc) Stream(ctx context.Context, req flprovider.Request) (<-chan flprovider.Event, error) {
 	return f(ctx, req)
+}
+
+func (floretModelGatewayFunc) Identity() flprovider.Identity {
+	return testFloretGatewayIdentity()
+}
+
+func (floretModelGatewayFunc) Capabilities() flprovider.Capabilities {
+	return testFloretGatewayCapabilities()
 }
 
 type capturingFloretEventSink struct {
@@ -121,36 +130,28 @@ func TestFloretTurnResultProjectionDoesNotDowngradeFullAssistantMarkdown(t *test
 	}
 
 	ctx := context.Background()
-	floretStore := flruntime.NewMemoryStore()
+	floretStore := openTestFloretRuntimeHost(t, flstorage.Memory())
 	defer floretStore.Close()
 	adapter := testFloretBootstrap(t, floretStore)
 	create, err := adapter.newThreadCreate("thread_full_result_projection", "create-thread-full-result-projection")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := create.CreateThread(ctx, flruntime.CreateThreadRequest{ThreadID: "thread_full_result_projection", CreateIntentID: "create-thread-full-result-projection"}); err != nil {
+	if _, err := create.Create(ctx); err != nil {
 		t.Fatal(err)
 	}
 	threadRuntime, err := adapter.bindThreadRuntime("thread_full_result_projection")
 	if err != nil {
 		t.Fatal(err)
 	}
-	host, err := threadRuntime.Turn(ctx, requireFloretTurnOptions(t,
-		flconfig.Config{
-			Provider:     flconfig.ProviderFake,
-			Model:        "fake-model",
-			FakeResponse: fullAnswer,
-			SystemPrompt: "test",
-		},
-	))
+	host, err := threadRuntime.Turn(ctx, newStaticTestFloretAgent(t, fullAnswer))
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
-		RunID:    "run_full_result_projection",
-		ThreadID: "thread_full_result_projection",
-		TurnID:   "msg_full_result_projection",
-		Input:    flruntime.TurnInput{Text: "find options"},
+	result, err := host.Run(ctx, flruntime.TurnRequest{
+		RunID:  "run_full_result_projection",
+		TurnID: "msg_full_result_projection",
+		Input:  flruntime.TurnInput{Text: "find options"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -278,8 +279,7 @@ func TestFloretHostPublishesRunningToolProjectionToFlowerLiveEvents(t *testing.T
 
 	started := make(chan struct{})
 	release := make(chan struct{})
-	registry := fltools.NewRegistry()
-	if err := registry.Register(fltools.Define[blockingProjectionToolArgs](
+	tool := fltools.Define[blockingProjectionToolArgs](
 		fltools.Definition{
 			Name:        "blocking_projection_tool",
 			Title:       "Blocking projection tool",
@@ -319,48 +319,41 @@ func TestFloretHostPublishesRunningToolProjectionToFlowerLiveEvents(t *testing.T
 				return fltools.Result{}, toolCtx.Err()
 			}
 		},
-	)); err != nil {
-		t.Fatalf("register blocking tool: %v", err)
-	}
+	)
 
-	gateway := floretModelGatewayFunc(func(_ context.Context, req flruntime.ModelRequest) (<-chan flruntime.ModelEvent, error) {
-		events := make(chan flruntime.ModelEvent, 3)
+	gateway := floretModelGatewayFunc(func(_ context.Context, req flprovider.Request) (<-chan flprovider.Event, error) {
+		events := make(chan flprovider.Event, 3)
 		if req.Step == 1 {
-			events <- flruntime.ModelEvent{Type: flruntime.ModelEventToolCalls, ToolCalls: []fltools.ToolCall{{ID: toolID, Name: "blocking_projection_tool", Args: `{"value":"work"}`}}}
-			events <- flruntime.ModelEvent{Type: flruntime.ModelEventDone, Reason: "tool_calls"}
+			events <- flprovider.Event{Type: flprovider.EventToolCalls, ToolCalls: []flprovider.ToolCall{{ID: toolID, Name: "blocking_projection_tool", Args: `{"value":"work"}`}}}
+			events <- flprovider.Event{Type: flprovider.EventDone, Reason: "tool_calls"}
 		} else {
-			events <- flruntime.ModelEvent{Type: flruntime.ModelEventDelta, Text: "Tool finished."}
-			events <- flruntime.ModelEvent{Type: flruntime.ModelEventDone, Reason: "stop"}
+			events <- flprovider.Event{Type: flprovider.EventDelta, Text: "Tool finished."}
+			events <- flprovider.Event{Type: flprovider.EventDone, Reason: "stop"}
 		}
 		close(events)
 		return events, nil
 	})
 	capture := &capturingFloretEventSink{downstream: floretEventSink{run: r}}
-	floretStore := flruntime.NewMemoryStore()
+	floretStore := openTestFloretRuntimeHost(t, flstorage.Memory())
 	defer floretStore.Close()
 	adapter := testFloretBootstrap(t, floretStore)
 	create, err := adapter.newThreadCreate(flruntime.ThreadID(thread.ThreadID), flruntime.CreateIntentID("create-"+thread.ThreadID))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := create.CreateThread(ctx, flruntime.CreateThreadRequest{ThreadID: flruntime.ThreadID(thread.ThreadID), CreateIntentID: flruntime.CreateIntentID("create-" + thread.ThreadID)}); err != nil {
+	if _, err := create.Create(ctx); err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
 	threadRuntime, err := adapter.bindThreadRuntime(flruntime.ThreadID(thread.ThreadID))
 	if err != nil {
 		t.Fatal(err)
 	}
-	host, err := threadRuntime.Turn(ctx, requireFloretTurnOptions(t,
-		flconfig.Config{
-			SystemPrompt: "test",
-			ContextPolicy: flconfig.ContextPolicy{
-				ContextWindowTokens: flconfig.DefaultContextWindowTokens,
-			},
-		},
-		flruntime.WithTurnModelGateway(gateway, flruntime.ModelGatewayIdentity{Provider: "fake", Model: "fake-model", StateCompatibilityKey: "fake-model:test"}, floretModelGatewayCapabilities(config.AIReasoningCapability{})),
-		flruntime.WithTurnEffectfulTools(registry, allowFloretEffectGateForTest{}),
-		flruntime.WithTurnEventSink(capture),
-	))
+	agent := newTestFloretAgent(t, gateway,
+		flruntime.WithAgentTools(tool),
+		flruntime.WithAgentEffectAuthorization(allowFloretEffectGateForTest{}),
+		flruntime.WithAgentEventSink(capture),
+	)
+	host, err := threadRuntime.Turn(ctx, agent)
 	if err != nil {
 		t.Fatalf("NewHost: %v", err)
 	}
@@ -371,12 +364,11 @@ func TestFloretHostPublishesRunningToolProjectionToFlowerLiveEvents(t *testing.T
 	}
 	outcomeCh := make(chan turnOutcome, 1)
 	go func() {
-		result, runErr := host.RunTurn(ctx, flruntime.RunTurnRequest{
-			RunID:    flruntime.RunID(runID),
-			ThreadID: flruntime.ThreadID(thread.ThreadID),
-			TurnID:   flruntime.TurnID(turnID),
-			Input:    flruntime.TurnInput{Text: "run the blocking tool"},
-			Limits:   flruntime.TurnLimits{MaxToolCalls: 4},
+		result, runErr := host.Run(ctx, flruntime.TurnRequest{
+			RunID:  flruntime.RunID(runID),
+			TurnID: flruntime.TurnID(turnID),
+			Input:  flruntime.TurnInput{Text: "run the blocking tool"},
+			Limits: flruntime.TurnLimits{MaxToolCalls: 4},
 		})
 		outcomeCh <- turnOutcome{result: result, err: runErr}
 	}()
@@ -1294,11 +1286,10 @@ func TestApplyFloretPendingToolSettlementProjectionPublishesTimelineReplacement(
 	turnID := "turn_terminal_settlement_live"
 	messageID := "msg_terminal_settlement_live"
 	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "canonical terminal output")
-	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
-		ThreadID: flruntime.ThreadID(thread.ThreadID),
-		TurnID:   flruntime.TurnID(turnID),
-		RunID:    flruntime.RunID(runID),
-		Input:    flruntime.TurnInput{Text: "run terminal command"},
+	if _, err := host.Run(ctx, flruntime.TurnRequest{
+		TurnID: flruntime.TurnID(turnID),
+		RunID:  flruntime.RunID(runID),
+		Input:  flruntime.TurnInput{Text: "run terminal command"},
 	}); err != nil {
 		t.Fatalf("seed canonical turn: %v", err)
 	}
@@ -1411,19 +1402,19 @@ func TestRunFloretHostedTurnTerminalProjectionPublishesCanonicalReplacement(t *t
 		t.Fatal(err)
 	}
 	r := newRunWithProductStoreForTest(t, runOptions{
-		HostCapabilities:  bindTestRunHostCapabilities(t, svc, meta.EndpointID, thread.ThreadID),
-		FloretHostFactory: floretRuntime.Turn,
-		StateDir:          svc.stateDir,
-		AgentHomeDir:      t.TempDir(),
-		WorkingDir:        t.TempDir(),
-		Shell:             "bash",
-		AIConfig:          &config.AIConfig{},
-		SessionMeta:       meta,
-		RunID:             runID,
-		EndpointID:        meta.EndpointID,
-		ThreadID:          thread.ThreadID,
-		TurnID:            turnID,
-		MessageID:         turnID,
+		HostCapabilities: bindTestRunHostCapabilities(t, svc, meta.EndpointID, thread.ThreadID),
+		FloretTurnOpener: floretRuntime.Turn,
+		StateDir:         svc.stateDir,
+		AgentHomeDir:     t.TempDir(),
+		WorkingDir:       t.TempDir(),
+		Shell:            "bash",
+		AIConfig:         &config.AIConfig{},
+		SessionMeta:      meta,
+		RunID:            runID,
+		EndpointID:       meta.EndpointID,
+		ThreadID:         thread.ThreadID,
+		TurnID:           turnID,
+		MessageID:        turnID,
 		OnStreamEvent: func(event any) {
 			svc.broadcastStreamEvent(meta.EndpointID, thread.ThreadID, turnID, runID, event)
 		},

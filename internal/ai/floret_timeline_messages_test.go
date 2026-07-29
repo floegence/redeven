@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	flruntime "github.com/floegence/floret/runtime"
+	flruntime "github.com/floegence/floret/v2/runtime"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -23,11 +23,10 @@ func TestThreadTimelineUsesCanonicalFloretOrdinalOrder(t *testing.T) {
 	}
 	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "done")
 	for i := 1; i <= 3; i++ {
-		_, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
-			ThreadID: flruntime.ThreadID(thread.ThreadID),
-			TurnID:   flruntime.TurnID(fmt.Sprintf("turn_%d", i)),
-			RunID:    flruntime.RunID(fmt.Sprintf("run_%d", i)),
-			Input:    flruntime.TurnInput{Text: fmt.Sprintf("user %d", i)},
+		_, err := host.Run(ctx, flruntime.TurnRequest{
+			TurnID: flruntime.TurnID(fmt.Sprintf("turn_%d", i)),
+			RunID:  flruntime.RunID(fmt.Sprintf("run_%d", i)),
+			Input:  flruntime.TurnInput{Text: fmt.Sprintf("user %d", i)},
 		})
 		if err != nil {
 			t.Fatalf("RunTurn %d: %v", i, err)
@@ -152,10 +151,9 @@ func TestCanonicalReferencesRoundTripThroughTimelineBootstrapAndReplacement(t *t
 	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "canonical response")
 	const sentinelPath = "/private/workspace/secret/main.ts"
 	const sentinelLocator = "redeven-context:v1:sentinel-host-locator"
-	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
-		ThreadID: flruntime.ThreadID(thread.ThreadID),
-		TurnID:   "turn_reference_round_trip",
-		RunID:    "run_reference_round_trip",
+	if _, err := host.Run(ctx, flruntime.TurnRequest{
+		TurnID: "turn_reference_round_trip",
+		RunID:  "run_reference_round_trip",
 		Input: flruntime.TurnInput{References: []flruntime.MessageReference{
 			{ReferenceID: "context:0", Kind: flruntime.MessageReferenceFile, Label: "main.ts", Text: sentinelPath, ResourceRef: sentinelLocator},
 			{ReferenceID: "context:1", Kind: flruntime.MessageReferenceText, Label: "Quote", Text: "visible excerpt", Truncated: true},
@@ -239,7 +237,7 @@ func TestThreadTimelineBeforeAndAfterPaginationPreservesCanonicalOrder(t *testin
 	}
 	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "done")
 	for i := 1; i <= 3; i++ {
-		if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{ThreadID: flruntime.ThreadID(thread.ThreadID), TurnID: flruntime.TurnID(fmt.Sprintf("turn_%d", i)), RunID: flruntime.RunID(fmt.Sprintf("run_%d", i)), Input: flruntime.TurnInput{Text: fmt.Sprintf("user %d", i)}}); err != nil {
+		if _, err := host.Run(ctx, flruntime.TurnRequest{TurnID: flruntime.TurnID(fmt.Sprintf("turn_%d", i)), RunID: flruntime.RunID(fmt.Sprintf("run_%d", i)), Input: flruntime.TurnInput{Text: fmt.Sprintf("user %d", i)}}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -275,7 +273,7 @@ func TestThreadTimelineRejectsUnknownPaginationCursor(t *testing.T) {
 		t.Fatal(err)
 	}
 	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "done")
-	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{ThreadID: flruntime.ThreadID(thread.ThreadID), TurnID: "turn_1", RunID: "run_1", Input: flruntime.TurnInput{Text: "hello"}}); err != nil {
+	if _, err := host.Run(ctx, flruntime.TurnRequest{TurnID: "turn_1", RunID: "run_1", Input: flruntime.TurnInput{Text: "hello"}}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -296,7 +294,7 @@ func TestReadCanonicalThreadStateUsesLatestAdmittedTurn(t *testing.T) {
 		t.Fatal(err)
 	}
 	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "done")
-	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{ThreadID: flruntime.ThreadID(thread.ThreadID), TurnID: "turn_1", RunID: "run_1", Input: flruntime.TurnInput{Text: "hello"}}); err != nil {
+	if _, err := host.Run(ctx, flruntime.TurnRequest{TurnID: "turn_1", RunID: "run_1", Input: flruntime.TurnInput{Text: "hello"}}); err != nil {
 		t.Fatal(err)
 	}
 	snapshot, latest, err := svc.readCanonicalThreadState(ctx, thread.ThreadID)
@@ -326,7 +324,7 @@ func TestUnmatchedLiveDraftTriggersResyncAndUsesCanonicalTimeline(t *testing.T) 
 		t.Fatal(err)
 	}
 	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "done")
-	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{ThreadID: flruntime.ThreadID(thread.ThreadID), TurnID: "turn_1", RunID: "run_1", Input: flruntime.TurnInput{Text: "hello"}}); err != nil {
+	if _, err := host.Run(ctx, flruntime.TurnRequest{TurnID: "turn_1", RunID: "run_1", Input: flruntime.TurnInput{Text: "hello"}}); err != nil {
 		t.Fatal(err)
 	}
 	state := FlowerLiveMaterializedState{Messages: map[string]FlowerLiveMessageDraft{
@@ -359,8 +357,8 @@ func TestMismatchedLiveDraftIdentityResyncsBootstrapWithoutSendFailure(t *testin
 		t.Fatal(err)
 	}
 	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "canonical answer")
-	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
-		ThreadID: flruntime.ThreadID(thread.ThreadID), TurnID: "turn_identity", RunID: "run_identity", Input: flruntime.TurnInput{Text: "hello"},
+	if _, err := host.Run(ctx, flruntime.TurnRequest{
+		TurnID: "turn_identity", RunID: "run_identity", Input: flruntime.TurnInput{Text: "hello"},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -411,8 +409,8 @@ func TestTerminalCanonicalTurnDropsStaleLiveDraftBeforeRendering(t *testing.T) {
 		t.Fatal(err)
 	}
 	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "canonical terminal")
-	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
-		ThreadID: flruntime.ThreadID(thread.ThreadID), TurnID: "turn_terminal", RunID: "run_terminal", Input: flruntime.TurnInput{Text: "hello"},
+	if _, err := host.Run(ctx, flruntime.TurnRequest{
+		TurnID: "turn_terminal", RunID: "run_terminal", Input: flruntime.TurnInput{Text: "hello"},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -458,8 +456,8 @@ func TestTerminalCanonicalReplacementRecoversMismatchedLiveDraft(t *testing.T) {
 		t.Fatal(err)
 	}
 	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "canonical terminal")
-	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
-		ThreadID: flruntime.ThreadID(thread.ThreadID), TurnID: "turn_terminal_identity", RunID: "run_terminal_identity", Input: flruntime.TurnInput{Text: "hello"},
+	if _, err := host.Run(ctx, flruntime.TurnRequest{
+		TurnID: "turn_terminal_identity", RunID: "run_terminal_identity", Input: flruntime.TurnInput{Text: "hello"},
 	}); err != nil {
 		t.Fatal(err)
 	}

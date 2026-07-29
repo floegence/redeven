@@ -6,7 +6,6 @@ require (
 	github.com/anthropics/anthropic-sdk-go v1.22.1
 	github.com/creack/pty v1.1.24
 	github.com/floegence/floeterm/terminal-go v0.8.0
-	github.com/floegence/floret v1.0.0
 	github.com/floegence/flowersec/flowersec-go v0.27.0
 	github.com/floegence/redevplugin v0.6.20
 	github.com/gorilla/websocket v1.5.3
@@ -23,6 +22,7 @@ require (
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/ebitengine/purego v0.9.1 // indirect
+	github.com/floegence/floret/v2 v2.2.0
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/libp2p/go-buffer-pool v0.0.2 // indirect

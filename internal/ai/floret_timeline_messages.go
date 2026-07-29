@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"strings"
 
-	flruntime "github.com/floegence/floret/runtime"
+	flruntime "github.com/floegence/floret/v2/runtime"
 )
 
 type threadTimelineMessage struct {
@@ -226,14 +226,14 @@ func (s *Service) threadTimelineMessagesFromTurns(endpointID string, threadID st
 }
 
 func listAllFloretThreadTurns(ctx context.Context, host interface {
-	ListThreadTurns(context.Context, flruntime.ListThreadTurnsRequest) (flruntime.ThreadTurnsPage, error)
+	ListThreadTurns(context.Context, flruntime.ThreadTurnsRequest) (flruntime.ThreadTurnsPage, error)
 }, threadID string) ([]flruntime.ThreadTurnSnapshot, error) {
 	newerThroughOrdinal := int64(-1)
 	newerOldestTurnOrdinal := int64(-1)
 	out := make([]flruntime.ThreadTurnSnapshot, 0)
 	var before *flruntime.ThreadTurnCursor
 	for {
-		request := flruntime.ListThreadTurnsRequest{ThreadID: flruntime.ThreadID(threadID)}
+		request := flruntime.ThreadTurnsRequest{}
 		if before == nil {
 			request.Tail = 200
 		} else {

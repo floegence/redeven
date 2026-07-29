@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	flruntime "github.com/floegence/floret/runtime"
+	flruntime "github.com/floegence/floret/v2/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
@@ -182,7 +182,7 @@ func buildFloretStartupRecoveryTargets(ctx context.Context, rootThreadIDs []flru
 			if err != nil {
 				return nil, fmt.Errorf("bind SubAgent recovery read for %q: %w", parentThreadID, err)
 			}
-			children, err := readHost.ListSubAgents(ctx, parentID)
+			children, err := readHost.ListSubAgents(ctx)
 			if err != nil {
 				return nil, fmt.Errorf("list SubAgents for recovery parent %q: %w", parentThreadID, err)
 			}
@@ -370,7 +370,7 @@ func recoverOneInterruptedFloretTurn(ctx context.Context, factory floretInterrup
 	if err != nil {
 		return false, false, err
 	}
-	_, err = host.RecoverInterruptedTurn(ctx)
+	_, err = host.Recover(ctx)
 	switch {
 	case err == nil:
 		return true, false, nil

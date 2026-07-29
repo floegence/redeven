@@ -18,7 +18,8 @@ import (
 	"testing"
 	"time"
 
-	flruntime "github.com/floegence/floret/runtime"
+	flruntime "github.com/floegence/floret/v2/runtime"
+	flstorage "github.com/floegence/floret/v2/storage"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
@@ -383,7 +384,7 @@ func prepareSubagentPermissionSnapshot(t *testing.T, r *run) {
 		svc = registered.(*Service)
 	}
 	if svc == nil || svc.floretRuntime == nil {
-		store := flruntime.NewMemoryStore()
+		store := openTestFloretRuntimeHost(t, flstorage.Memory())
 		t.Cleanup(func() { _ = store.Close() })
 		svc = &Service{threadsDB: productStore, persistOpTO: time.Second}
 		installTestFloretCapabilities(svc, testFloretBootstrap(t, store))
@@ -404,9 +405,9 @@ func prepareSubagentPermissionSnapshot(t *testing.T, r *run) {
 	if err != nil {
 		t.Fatalf("bind Floret runtime capability: %v", err)
 	}
-	r.floretHostFactory = floretRuntime.Turn
-	r.floretCompactionHostFactory = floretRuntime.Compaction
-	r.floretSubagentHostFactory = floretRuntime.SubAgent
+	r.floretTurnOpener = floretRuntime.Turn
+	r.floretCompactorOpener = floretRuntime.Compaction
+	r.floretSubagentOpener = floretRuntime.SubAgent
 	settings, err := productStore.GetThreadSettings(context.Background(), r.endpointID, r.threadID)
 	if err != nil {
 		t.Fatalf("GetThread: %v", err)
@@ -1560,7 +1561,7 @@ func (h *fakeCloseAllFloretHost) ReadThread(context.Context, flruntime.ThreadID)
 	return flruntime.ThreadSnapshot{}, nil
 }
 
-func (h *fakeCloseAllFloretHost) RunTurn(context.Context, flruntime.RunTurnRequest) (flruntime.TurnResult, error) {
+func (h *fakeCloseAllFloretHost) RunTurn(context.Context, flruntime.TurnRequest) (flruntime.TurnResult, error) {
 	return flruntime.TurnResult{}, nil
 }
 
@@ -1596,19 +1597,19 @@ func (h *fakeCloseAllFloretHost) SettlePendingTool(context.Context, flruntime.Pe
 	return flruntime.PendingToolSettlementResult{}, errors.New("settle pending tool not implemented")
 }
 
-func (h *fakeCloseAllFloretHost) SpawnSubAgent(context.Context, flruntime.SpawnSubAgentRequest) (flruntime.SubAgentSnapshot, error) {
+func (h *fakeCloseAllFloretHost) SpawnSubAgent(context.Context, flruntime.SpawnSubAgent) (flruntime.SubAgentSnapshot, error) {
 	return flruntime.SubAgentSnapshot{}, nil
 }
 
-func (h *fakeCloseAllFloretHost) SendSubAgentInput(context.Context, flruntime.SendSubAgentInputRequest) (flruntime.SubAgentSnapshot, error) {
+func (h *fakeCloseAllFloretHost) SendSubAgentInput(context.Context, flruntime.SendSubAgentInput) (flruntime.SubAgentSnapshot, error) {
 	return flruntime.SubAgentSnapshot{}, nil
 }
 
-func (h *fakeCloseAllFloretHost) WaitSubAgents(context.Context, flruntime.WaitSubAgentsRequest) (flruntime.WaitSubAgentsResult, error) {
+func (h *fakeCloseAllFloretHost) WaitSubAgents(context.Context, flruntime.WaitSubAgents) (flruntime.WaitSubAgentsResult, error) {
 	return flruntime.WaitSubAgentsResult{}, nil
 }
 
-func (h *fakeCloseAllFloretHost) ListSubAgents(context.Context, flruntime.ThreadID) ([]flruntime.SubAgentSnapshot, error) {
+func (h *fakeCloseAllFloretHost) ListSubAgents(context.Context) ([]flruntime.SubAgentSnapshot, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return append([]flruntime.SubAgentSnapshot(nil), h.snapshots...), nil
@@ -1618,7 +1619,7 @@ func (h *fakeCloseAllFloretHost) ListSubAgentActivityTimeline(context.Context, f
 	return flruntime.SubAgentActivityTimelineResult{}, nil
 }
 
-func (h *fakeCloseAllFloretHost) CloseSubAgent(_ context.Context, req flruntime.CloseSubAgentRequest) (flruntime.SubAgentSnapshot, error) {
+func (h *fakeCloseAllFloretHost) CloseSubAgent(_ context.Context, req flruntime.CloseSubAgent) (flruntime.SubAgentSnapshot, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for index := range h.snapshots {

@@ -14,9 +14,8 @@ import (
 	"testing/fstest"
 	"time"
 
-	flconfig "github.com/floegence/floret/config"
-	flruntime "github.com/floegence/floret/runtime"
-	fltools "github.com/floegence/floret/tools"
+	flprovider "github.com/floegence/floret/v2/provider"
+	flruntime "github.com/floegence/floret/v2/runtime"
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
@@ -191,10 +190,18 @@ type appserverAskUserGateway struct {
 	args   string
 }
 
-func (g appserverAskUserGateway) StreamModel(context.Context, flruntime.ModelRequest) (<-chan flruntime.ModelEvent, error) {
-	events := make(chan flruntime.ModelEvent, 2)
-	events <- flruntime.ModelEvent{Type: flruntime.ModelEventToolCalls, ToolCalls: []fltools.ToolCall{{ID: g.toolID, Name: "ask_user", Args: g.args}}}
-	events <- flruntime.ModelEvent{Type: flruntime.ModelEventDone, Reason: "tool_calls"}
+func (appserverAskUserGateway) Identity() flprovider.Identity {
+	return flprovider.Identity{Provider: "test", Model: "ask-user-test", StateCompatibilityKey: "test:ask-user:v2"}
+}
+
+func (appserverAskUserGateway) Capabilities() flprovider.Capabilities {
+	return flprovider.Capabilities{Reasoning: flprovider.ReasoningUnsupported}
+}
+
+func (g appserverAskUserGateway) Stream(context.Context, flprovider.Request) (<-chan flprovider.Event, error) {
+	events := make(chan flprovider.Event, 2)
+	events <- flprovider.Event{Type: flprovider.EventToolCalls, ToolCalls: []flprovider.ToolCall{{ID: g.toolID, Name: "ask_user", Args: g.args}}}
+	events <- flprovider.Event{Type: flprovider.EventDone, Reason: "tool_calls"}
 	close(events)
 	return events, nil
 }
@@ -212,37 +219,11 @@ func seedAppserverWaitingPrompt(t *testing.T, stateDir string, threadID string, 
 	if err != nil {
 		t.Fatal(err)
 	}
-	store, err := openTestFloretStore(t, filepath.Join(stateDir, "ai", "floret_threads.sqlite"))
-	if err != nil {
-		t.Fatalf("OpenSQLiteStore: %v", err)
-	}
-	defer func() { _ = store.Close() }()
-	turnBinder := configureAppserverFloretTestTurnBinder(t, store)
-	turnFactory, err := turnBinder.Bind(flruntime.ThreadID(threadID))
-	if err != nil {
-		t.Fatalf("bind turn execution host: %v", err)
-	}
-	host, err := turnFactory.NewHost(context.Background(), requireAppserverFloretTurnOptions(t,
-		flconfig.Config{ContextPolicy: flconfig.ContextPolicy{
-			ContextWindowTokens: 128000, MaxOutputTokens: 4096, ReservedOutputTokens: 4096, MaxCompactionFailures: 2,
-		}},
-		flruntime.WithTurnModelGateway(
-			appserverAskUserGateway{toolID: toolID, args: string(args)},
-			flruntime.ModelGatewayIdentity{Provider: "test", Model: "ask-user-test", StateCompatibilityKey: "test:ask-user-test"},
-			flruntime.ModelGatewayCapabilities{Reasoning: &flconfig.ReasoningCapability{Kind: flconfig.ReasoningKindNone}},
-		),
-	))
-	if err != nil {
-		t.Fatalf("NewHost: %v", err)
-	}
-	result, err := host.RunTurn(context.Background(), flruntime.RunTurnRequest{
-		ThreadID: flruntime.ThreadID(threadID), TurnID: flruntime.TurnID(turnID), RunID: flruntime.RunID(runID),
+	result := runAppserverTestFloretTurn(t, filepath.Join(stateDir, "ai", "floret_threads.sqlite"), flruntime.ThreadID(threadID), appserverAskUserGateway{toolID: toolID, args: string(args)}, flruntime.TurnRequest{
+		TurnID: flruntime.TurnID(turnID), RunID: flruntime.RunID(runID),
 		Input:   flruntime.TurnInput{Text: "wait for user input"},
 		Signals: flruntime.TurnSignalSpec{Definitions: flruntime.CoreControlDefinitions(false), Project: flruntime.ProjectCoreControlSignal},
 	})
-	if err != nil {
-		t.Fatalf("RunTurn: %v", err)
-	}
 	if result.Status != flruntime.TurnStatusWaiting {
 		t.Fatalf("waiting turn status=%q, want waiting", result.Status)
 	}

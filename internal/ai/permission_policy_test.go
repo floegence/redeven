@@ -14,9 +14,10 @@ import (
 	"testing"
 	"time"
 
-	flconfig "github.com/floegence/floret/config"
-	flruntime "github.com/floegence/floret/runtime"
-	fltools "github.com/floegence/floret/tools"
+	flprovider "github.com/floegence/floret/v2/provider"
+	flruntime "github.com/floegence/floret/v2/runtime"
+	flstorage "github.com/floegence/floret/v2/storage"
+	fltools "github.com/floegence/floret/v2/tools"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 	"github.com/floegence/redeven/internal/config"
@@ -25,16 +26,24 @@ import (
 
 type canonicalChildApprovalGateway struct{}
 
-func (canonicalChildApprovalGateway) StreamModel(_ context.Context, req flruntime.ModelRequest) (<-chan flruntime.ModelEvent, error) {
-	events := make(chan flruntime.ModelEvent, 3)
+func (canonicalChildApprovalGateway) Identity() flprovider.Identity {
+	return testFloretGatewayIdentity()
+}
+
+func (canonicalChildApprovalGateway) Capabilities() flprovider.Capabilities {
+	return testFloretGatewayCapabilities()
+}
+
+func (canonicalChildApprovalGateway) Stream(_ context.Context, req flprovider.Request) (<-chan flprovider.Event, error) {
+	events := make(chan flprovider.Event, 3)
 	if req.Step == 1 {
-		events <- flruntime.ModelEvent{Type: flruntime.ModelEventToolCalls, ToolCalls: []fltools.ToolCall{{
+		events <- flprovider.Event{Type: flprovider.EventToolCalls, ToolCalls: []flprovider.ToolCall{{
 			ID: "child-write", Name: "write_note", Args: `{"path":"notes.md"}`,
 		}}}
-		events <- flruntime.ModelEvent{Type: flruntime.ModelEventDone, Reason: "tool_calls"}
+		events <- flprovider.Event{Type: flprovider.EventDone, Reason: "tool_calls"}
 	} else {
-		events <- flruntime.ModelEvent{Type: flruntime.ModelEventDelta, Text: "done"}
-		events <- flruntime.ModelEvent{Type: flruntime.ModelEventDone, Reason: "stop"}
+		events <- flprovider.Event{Type: flprovider.EventDelta, Text: "done"}
+		events <- flprovider.Event{Type: flprovider.EventDone, Reason: "stop"}
 	}
 	close(events)
 	return events, nil
@@ -247,22 +256,21 @@ func newPermissionPolicyBridgeService(t *testing.T) *Service {
 func TestPermissionPolicy_SubagentCanonicalQueueConcurrentResolveOneWins(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	store := flruntime.NewMemoryStore()
+	store := openTestFloretRuntimeHost(t, flstorage.Memory())
 	t.Cleanup(func() { _ = store.Close() })
 	adapter := testFloretBootstrap(t, store)
 	create, err := adapter.newThreadCreate("permission-root", "create-permission-root")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := create.CreateThread(ctx, flruntime.CreateThreadRequest{ThreadID: "permission-root", CreateIntentID: "create-permission-root"}); err != nil {
+	if _, err := create.Create(ctx); err != nil {
 		t.Fatal(err)
 	}
 	runtimeCaps, err := adapter.bindThreadRuntime("permission-root")
 	if err != nil {
 		t.Fatal(err)
 	}
-	toolsRegistry := fltools.NewRegistry()
-	if err := toolsRegistry.Register(fltools.Define[map[string]any](
+	writeNoteTool := fltools.Define[map[string]any](
 		fltools.Definition{
 			Name: "write_note", InputSchema: fltools.StrictObject(map[string]any{"path": fltools.String("path")}, []string{"path"}),
 			Effects: []fltools.Effect{fltools.EffectWrite}, Permission: fltools.PermissionSpec{Mode: fltools.PermissionAsk},
@@ -273,23 +281,21 @@ func TestPermissionPolicy_SubagentCanonicalQueueConcurrentResolveOneWins(t *test
 		func(context.Context, fltools.Invocation[map[string]any]) (fltools.Result, error) {
 			return fltools.Result{Text: "written"}, nil
 		},
-	)); err != nil {
-		t.Fatal(err)
-	}
-	childHost, err := runtimeCaps.SubAgent(ctx, requireFloretSubAgentOptions(t,
-		flconfig.Config{ContextPolicy: flconfig.ContextPolicy{ContextWindowTokens: flconfig.DefaultContextWindowTokens}},
-		flruntime.WithSubAgentModelGateway(canonicalChildApprovalGateway{}, flruntime.ModelGatewayIdentity{Provider: "fake", Model: "fake-model", StateCompatibilityKey: "permission-test"}, floretModelGatewayCapabilities(config.AIReasoningCapability{})),
-		flruntime.WithSubAgentEffectfulTools(toolsRegistry, allowFloretEffectGateForTest{}),
-	))
+	)
+	childAgent := newTestFloretAgent(t, canonicalChildApprovalGateway{},
+		flruntime.WithAgentTools(writeNoteTool),
+		flruntime.WithAgentEffectAuthorization(allowFloretEffectGateForTest{}),
+	)
+	childHost, err := runtimeCaps.SubAgent(ctx, childAgent)
 	if err != nil {
 		t.Fatal(err)
 	}
-	rootHost, err := runtimeCaps.Turn(ctx, requireFloretTurnOptions(t, flconfig.Config{Provider: flconfig.ProviderFake, Model: "fake-model"}))
+	rootHost, err := runtimeCaps.Turn(ctx, newStaticTestFloretAgent(t, "done"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := childHost.SpawnSubAgent(ctx, flruntime.SpawnSubAgentRequest{
-		PublicationID: "permission-publication", ParentThreadID: "permission-root", ThreadID: "permission-child",
+	if _, err := childHost.SpawnSubAgent(ctx, flruntime.SpawnSubAgent{
+		PublicationID: "permission-publication", ThreadID: "permission-child",
 		TaskName: "permission worker", Message: "write a note", ForkMode: flruntime.SubAgentForkNone,
 	}); err != nil {
 		t.Fatal(err)
@@ -300,15 +306,15 @@ func TestPermissionPolicy_SubagentCanonicalQueueConcurrentResolveOneWins(t *test
 	}
 	waitDone := make(chan waitOutcome, 1)
 	go func() {
-		result, waitErr := childHost.WaitSubAgents(ctx, flruntime.WaitSubAgentsRequest{
-			ParentThreadID: "permission-root", ChildThreadIDs: []flruntime.ThreadID{"permission-child"}, Timeout: 3 * time.Second,
+		result, waitErr := childHost.WaitSubAgents(ctx, flruntime.WaitSubAgents{
+			ChildThreadIDs: []flruntime.ThreadID{"permission-child"}, Timeout: 3 * time.Second,
 		})
 		waitDone <- waitOutcome{result: result, err: waitErr}
 	}()
 	var queue flruntime.ApprovalQueue
 	deadline := time.Now().Add(3 * time.Second)
 	for {
-		queue, err = rootHost.ReadApprovalQueue(ctx, flruntime.ReadApprovalQueueRequest{ThreadID: "permission-root"})
+		queue, err = rootHost.ReadApprovalQueue(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -316,7 +322,7 @@ func TestPermissionPolicy_SubagentCanonicalQueueConcurrentResolveOneWins(t *test
 			break
 		}
 		if time.Now().After(deadline) {
-			children, listErr := childHost.ListSubAgents(ctx, "permission-root")
+			children, listErr := childHost.ListSubAgents(ctx)
 			t.Fatalf("timed out waiting for canonical child approval: queue=%#v children=%#v list_err=%v", queue, children, listErr)
 		}
 		time.Sleep(time.Millisecond)
@@ -326,8 +332,8 @@ func TestPermissionPolicy_SubagentCanonicalQueueConcurrentResolveOneWins(t *test
 		t.Fatalf("canonical child approval identity=%#v", pending)
 	}
 	resolve := func(decisionID string) error {
-		_, err := rootHost.ResolveApproval(ctx, flruntime.ResolveApprovalRequest{
-			DecisionID: decisionID, ExpectedRootThreadID: queue.RootThreadID, ExpectedGeneration: queue.Generation, ExpectedRevision: queue.Revision,
+		_, err := rootHost.ResolveApproval(ctx, flruntime.ApprovalResolutionRequest{
+			DecisionID: decisionID, ExpectedGeneration: queue.Generation, ExpectedRevision: queue.Revision,
 			ExpectedCurrent:          flruntime.ApprovalIdentity{ApprovalID: pending.ApprovalID, ThreadID: pending.ThreadID, TurnID: pending.TurnID, RunID: pending.RunID, ToolCallID: pending.ToolCallID, EffectAttemptID: pending.EffectAttemptID},
 			ExpectedApprovalRevision: pending.Revision, Decision: flruntime.ApprovalDecisionApprove,
 		})
@@ -899,7 +905,7 @@ func TestPermissionPolicy_SubagentsRuntimeActionsDoNotRequestApproval(t *testing
 					childThreadID := "child_runtime_no_approval"
 					insertPermissionPolicyChildSnapshot(t, r, childThreadID, "okf.search")
 					now := time.Now()
-					host := &recordingFloretHost{snapshots: []flruntime.SubAgentSnapshot{{
+					host := &recordingFloretHost{parentThreadID: flruntime.ThreadID(r.threadID), snapshots: []flruntime.SubAgentSnapshot{{
 						ThreadID:       flruntime.ThreadID(childThreadID),
 						ParentThreadID: flruntime.ThreadID(r.threadID),
 						TaskName:       "runtime no approval child",

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	flruntime "github.com/floegence/floret/runtime"
+	flruntime "github.com/floegence/floret/v2/runtime"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -224,7 +224,7 @@ func (s *Service) flowerLiveCanonicalContextState(ctx context.Context, endpointI
 	if err != nil {
 		return emptyFlowerLiveMaterializedState(), err
 	}
-	snapshot, err := host.ReadThreadContext(ctx, flruntime.ThreadID(threadID))
+	snapshot, err := host.ReadThreadContext(ctx)
 	if err != nil {
 		return emptyFlowerLiveMaterializedState(), err
 	}
@@ -873,8 +873,8 @@ func (s *Service) SubmitFlowerApproval(meta *session.Meta, req SubmitFlowerAppro
 	if req.Approved {
 		decision = flruntime.ApprovalDecisionApprove
 	}
-	result, err := authorityRun.activeFloretHost().ResolveApproval(context.Background(), flruntime.ResolveApprovalRequest{
-		DecisionID: decisionID, ExpectedRootThreadID: queue.RootThreadID,
+	result, err := authorityRun.activeFloretHost().ResolveApproval(context.Background(), flruntime.ApprovalResolutionRequest{
+		DecisionID:         decisionID,
 		ExpectedGeneration: queue.Generation, ExpectedRevision: queue.Revision,
 		ExpectedCurrent: flruntime.ApprovalIdentity{
 			ApprovalID: pending.ApprovalID, ThreadID: pending.ThreadID, TurnID: pending.TurnID, RunID: pending.RunID,

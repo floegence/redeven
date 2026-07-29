@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	flruntime "github.com/floegence/floret/runtime"
+	flruntime "github.com/floegence/floret/v2/runtime"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -29,11 +29,11 @@ type stopThreadTerminalProvider struct {
 
 type stopThreadReadHost struct {
 	floretThreadReadHost
-	readOverview func(context.Context, flruntime.ThreadID) (flruntime.ThreadOverview, error)
+	readOverview func(context.Context) (flruntime.ThreadOverview, error)
 }
 
-func (h stopThreadReadHost) ReadThreadOverview(ctx context.Context, threadID flruntime.ThreadID) (flruntime.ThreadOverview, error) {
-	return h.readOverview(ctx, threadID)
+func (h stopThreadReadHost) ReadThreadOverview(ctx context.Context) (flruntime.ThreadOverview, error) {
+	return h.readOverview(ctx)
 }
 
 func newStopThreadStateMachineTestService(t *testing.T) (*Service, *session.Meta, string) {
@@ -74,8 +74,8 @@ func overrideStopThreadOverviewReader(
 		}
 		return stopThreadReadHost{
 			floretThreadReadHost: host,
-			readOverview: func(readCtx context.Context, readThreadID flruntime.ThreadID) (flruntime.ThreadOverview, error) {
-				return read(readCtx, readThreadID, host)
+			readOverview: func(readCtx context.Context) (flruntime.ThreadOverview, error) {
+				return read(readCtx, threadID, host)
 			},
 		}, nil
 	}
@@ -364,7 +364,7 @@ func TestStopThreadUsesOneTotalBudgetAcrossCanonicalReads(t *testing.T) {
 		case <-ctx.Done():
 			return flruntime.ThreadOverview{}, ctx.Err()
 		case <-timer.C:
-			return host.ReadThreadOverview(ctx, threadID)
+			return host.ReadThreadOverview(ctx)
 		}
 	})
 

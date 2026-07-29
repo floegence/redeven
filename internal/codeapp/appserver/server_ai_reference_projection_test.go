@@ -12,8 +12,8 @@ import (
 	"testing"
 	"testing/fstest"
 
-	flconfig "github.com/floegence/floret/config"
-	flruntime "github.com/floegence/floret/runtime"
+	flprovider "github.com/floegence/floret/v2/provider"
+	flruntime "github.com/floegence/floret/v2/runtime"
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -111,23 +111,8 @@ func TestServer_AIThreadLiveBootstrapProjectsCanonicalReferencesWithoutHostSecre
 func seedFloretReferenceThreadTurn(t *testing.T, stateDir string, threadID string, path string, resourceRef string) {
 	t.Helper()
 
-	store, err := openTestFloretStore(t, filepath.Join(stateDir, "ai", "floret_threads.sqlite"))
-	if err != nil {
-		t.Fatalf("OpenSQLiteStore: %v", err)
-	}
-	defer func() { _ = store.Close() }()
-	turnFactory, err := configureAppserverFloretTestTurnBinder(t, store).Bind(flruntime.ThreadID(threadID))
-	if err != nil {
-		t.Fatalf("bind turn execution host: %v", err)
-	}
-	host, err := turnFactory.NewHost(context.Background(), requireAppserverFloretTurnOptions(t, flconfig.Config{
-		Provider: flconfig.ProviderFake, Model: "fake-model", FakeResponse: "canonical response", SystemPrompt: "test",
-	}))
-	if err != nil {
-		t.Fatalf("flruntime.NewHost: %v", err)
-	}
-	if _, err := host.RunTurn(context.Background(), flruntime.RunTurnRequest{
-		ThreadID: flruntime.ThreadID(threadID), TurnID: "turn_reference_projection", RunID: "run_reference_projection",
+	runAppserverTestFloretTurn(t, filepath.Join(stateDir, "ai", "floret_threads.sqlite"), flruntime.ThreadID(threadID), appserverTestGateway{events: []flprovider.Event{{Type: flprovider.EventDelta, Text: "canonical response"}, {Type: flprovider.EventDone, Reason: "stop"}}}, flruntime.TurnRequest{
+		TurnID: "turn_reference_projection", RunID: "run_reference_projection",
 		Input: flruntime.TurnInput{References: []flruntime.MessageReference{
 			{ReferenceID: "context:0", Kind: flruntime.MessageReferenceFile, Label: "main.ts", Text: path, ResourceRef: resourceRef},
 			{ReferenceID: "context:1", Kind: flruntime.MessageReferenceText, Label: "Quote", Text: "visible excerpt", Truncated: true},
@@ -136,7 +121,5 @@ func seedFloretReferenceThreadTurn(t *testing.T, stateDir string, threadID strin
 			{Kind: "file_path", Title: "Linked file path", Metadata: map[string]string{"path": path}, Sensitive: true},
 			{Kind: "text", Title: "Quote", Text: "visible excerpt", Truncated: true},
 		},
-	}); err != nil {
-		t.Fatalf("RunTurn: %v", err)
-	}
+	})
 }

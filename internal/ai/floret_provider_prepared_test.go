@@ -8,7 +8,8 @@ import (
 	"sync"
 	"testing"
 
-	flruntime "github.com/floegence/floret/runtime"
+	flprovider "github.com/floegence/floret/v2/provider"
+	flruntime "github.com/floegence/floret/v2/runtime"
 )
 
 type recordingPreparedGateway struct {
@@ -45,11 +46,11 @@ func TestFloretProviderPreparedRequestFreezesCompleteRenderedPayload(t *testing.
 		}, false, true),
 	)
 
-	prepared, err := adapter.PrepareModelRequest(context.Background(), flruntime.ModelRequest{
-		Model: "gpt-test",
-		Messages: []flruntime.ModelMessage{{
-			Role: flruntime.ModelMessageRoleUser,
-			Attachments: []flruntime.MessageAttachment{{
+	prepared, err := adapter.Prepare(context.Background(), flprovider.Request{
+
+		Messages: []flprovider.Message{{
+			Role: flprovider.RoleUser,
+			Attachments: []flprovider.Attachment{{
 				ResourceRef: "redeven-upload:upl_123456789012345678901234:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 				Name:        "notes.txt", MIMEType: "text/plain", SizeBytes: 24,
 			}},
@@ -72,15 +73,15 @@ func TestFloretProviderPreparedRequestFreezesCompleteRenderedPayload(t *testing.
 	estimate := prepared.TokenEstimate()
 	if estimate.EstimatedInputTokens != int64(len(payload)) ||
 		estimate.PrefixTokens+estimate.MessageTokens+estimate.ToolDefinitionTokens != estimate.EstimatedInputTokens ||
-		estimate.Coverage != flruntime.ModelRequestTokenEstimateCoverageComplete ||
-		estimate.Confidence != "conservative" || estimate.Method != "provider_rendered_payload" {
+		estimate.Coverage != "complete_request" ||
+		estimate.Confidence != "conservative" || estimate.Method != "provider_rendered_payload_estimate" {
 		t.Fatalf("prepared estimate = %#v, payload bytes = %d", estimate, len(payload))
 	}
 	if !strings.HasPrefix(prepared.RenderedPayloadFingerprint(), "sha256:") || len(prepared.RenderedPayloadFingerprint()) != len("sha256:")+64 {
 		t.Fatalf("prepared fingerprint = %q", prepared.RenderedPayloadFingerprint())
 	}
 
-	stream, err := prepared.StreamModel(context.Background())
+	stream, err := prepared.Stream(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +90,7 @@ func TestFloretProviderPreparedRequestFreezesCompleteRenderedPayload(t *testing.
 	if resolveCalls != 1 {
 		t.Fatalf("attachment was re-resolved while streaming: calls=%d", resolveCalls)
 	}
-	if _, err := prepared.StreamModel(context.Background()); err == nil {
+	if _, err := prepared.Stream(context.Background()); err == nil {
 		t.Fatal("prepared request allowed a second stream")
 	}
 	if err := prepared.Close(); err != nil {

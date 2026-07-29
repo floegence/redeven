@@ -21,8 +21,8 @@ import (
 	"testing/fstest"
 	"time"
 
-	flconfig "github.com/floegence/floret/config"
-	flruntime "github.com/floegence/floret/runtime"
+	flprovider "github.com/floegence/floret/v2/provider"
+	flruntime "github.com/floegence/floret/v2/runtime"
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/auditlog"
 	"github.com/floegence/redeven/internal/codeapp/codeserver"
@@ -3152,39 +3152,14 @@ func seedFloretForkSourceThread(t *testing.T, stateDir string, threadID string) 
 func seedFloretThreadTurn(t *testing.T, stateDir string, threadID string, turnID string, runID string, input string, output string) {
 	t.Helper()
 
-	store, err := openTestFloretStore(t, filepath.Join(stateDir, "ai", "floret_threads.sqlite"))
-	if err != nil {
-		t.Fatalf("OpenSQLiteStore: %v", err)
-	}
-	turnBinder := configureAppserverFloretTestTurnBinder(t, store)
-	turnFactory, err := turnBinder.Bind(flruntime.ThreadID(threadID))
-	if err != nil {
-		_ = store.Close()
-		t.Fatalf("bind turn execution host: %v", err)
-	}
-	host, err := turnFactory.NewHost(context.Background(), requireAppserverFloretTurnOptions(t,
-		flconfig.Config{
-			Provider:     flconfig.ProviderFake,
-			Model:        "fake-model",
-			FakeResponse: output,
-			SystemPrompt: "test",
-		},
-	))
-	if err != nil {
-		_ = store.Close()
-		t.Fatalf("flruntime.NewHost: %v", err)
-	}
-	defer func() { _ = store.Close() }()
-
-	ctx := context.Background()
-	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
-		ThreadID: flruntime.ThreadID(threadID),
-		TurnID:   flruntime.TurnID(turnID),
-		RunID:    flruntime.RunID(runID),
-		Input:    flruntime.TurnInput{Text: input},
-	}); err != nil {
-		t.Fatalf("RunTurn: %v", err)
-	}
+	runAppserverTestFloretTurn(t, filepath.Join(stateDir, "ai", "floret_threads.sqlite"), flruntime.ThreadID(threadID), appserverTestGateway{events: []flprovider.Event{
+		{Type: flprovider.EventDelta, Text: output},
+		{Type: flprovider.EventDone, Reason: "stop"},
+	}}, flruntime.TurnRequest{
+		TurnID: flruntime.TurnID(turnID),
+		RunID:  flruntime.RunID(runID),
+		Input:  flruntime.TurnInput{Text: input},
+	})
 }
 
 func TestParseThreadDeleteForceQuery(t *testing.T) {

@@ -11,7 +11,8 @@ import (
 	"sync"
 	"testing"
 
-	flruntime "github.com/floegence/floret/runtime"
+	flruntime "github.com/floegence/floret/v2/runtime"
+	flstorage "github.com/floegence/floret/v2/storage"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
@@ -113,7 +114,7 @@ func deleteCanonicalThreadForTest(t *testing.T, svc *Service, threadID string) f
 	if err != nil {
 		t.Fatalf("openFloretMaintenanceHost: %v", err)
 	}
-	if err := host.DeleteThread(context.Background(), flruntime.ThreadID(threadID)); err != nil {
+	if err := host.Delete(context.Background()); err != nil {
 		t.Fatalf("DeleteThread canonical journal: %v", err)
 	}
 	return host
@@ -121,7 +122,7 @@ func deleteCanonicalThreadForTest(t *testing.T, svc *Service, threadID string) f
 
 func assertCanonicalThreadStillMissing(t *testing.T, host floretMaintenanceHost, threadID string) {
 	t.Helper()
-	if _, err := host.ReadThread(context.Background(), flruntime.ThreadID(threadID)); !errors.Is(err, flruntime.ErrThreadDeleted) {
+	if _, err := host.ReadThread(context.Background()); !errors.Is(err, flruntime.ErrThreadDeleted) {
 		t.Fatalf("ReadThread error=%v, want %v", err, flruntime.ErrThreadDeleted)
 	}
 }
@@ -137,7 +138,7 @@ func TestRunFloretHostedTurnDoesNotRecreateMissingCanonicalThread(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := host.DeleteThread(context.Background(), flruntime.ThreadID(r.threadID)); err != nil {
+	if err := host.Delete(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	err = r.runFloretHostedTurn(context.Background(), RunRequest{
@@ -157,7 +158,7 @@ func TestRunFloretHostedTurnDoesNotRecreateMissingCanonicalThread(t *testing.T) 
 	if _, ok, err := runThreadStoreForTest(t, r).GetPermissionSnapshot(context.Background(), r.endpointID, preparedSnapshotID); err != nil || ok {
 		t.Fatalf("permission snapshot persisted before canonical authority validation: ok=%v err=%v", ok, err)
 	}
-	if _, err := host.ReadThread(context.Background(), flruntime.ThreadID(r.threadID)); !errors.Is(err, flruntime.ErrThreadDeleted) {
+	if _, err := host.ReadThread(context.Background()); !errors.Is(err, flruntime.ErrThreadDeleted) {
 		t.Fatalf("canonical thread was recreated: %v", err)
 	}
 }
@@ -267,7 +268,7 @@ func TestSubagentHostDoesNotRecreateMissingParentCanonicalThread(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := host.DeleteThread(context.Background(), flruntime.ThreadID(r.threadID)); err != nil {
+	if err := host.Delete(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	runtime := &floretSubagentRuntime{parent: r}
@@ -277,7 +278,7 @@ func TestSubagentHostDoesNotRecreateMissingParentCanonicalThread(t *testing.T) {
 	if runtime.currentHost() != nil {
 		t.Fatal("subagent runtime retained a host after canonical parent validation failed")
 	}
-	if _, err := host.ReadThread(context.Background(), flruntime.ThreadID(r.threadID)); !errors.Is(err, flruntime.ErrThreadDeleted) {
+	if _, err := host.ReadThread(context.Background()); !errors.Is(err, flruntime.ErrThreadDeleted) {
 		t.Fatalf("canonical parent was recreated: %v", err)
 	}
 }
@@ -411,7 +412,7 @@ func TestRootRunProductCapabilitiesAcceptDurableChildLineageFromEarlierTurn(t *t
 }
 
 func TestFloretReadAdaptersDoNotExposeConcreteHostMethodSets(t *testing.T) {
-	store := flruntime.NewMemoryStore()
+	store := openTestFloretRuntimeHost(t, flstorage.Memory())
 	t.Cleanup(func() { _ = store.Close() })
 	bootstrap := testFloretBootstrap(t, store)
 	if _, err := bootstrap.threadCreate.CreateThread(context.Background(), "thread_read_adapter", "create_read_adapter"); err != nil {
@@ -421,14 +422,14 @@ func TestFloretReadAdaptersDoNotExposeConcreteHostMethodSets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, leaked := threadRead.(*flruntime.ThreadReadHost); leaked {
-		t.Fatal("thread read adapter exposed the Floret concrete host through dynamic type assertion")
+	if _, ok := threadRead.(floretThreadReadHostAdapter); !ok {
+		t.Fatalf("thread read adapter dynamic type=%T, want responsibility-local adapter", threadRead)
 	}
 	subagentRead, err := bootstrap.newSubagentRead(context.Background(), "thread_read_adapter")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, leaked := subagentRead.(*flruntime.SubAgentReadHost); leaked {
-		t.Fatal("SubAgent read adapter exposed the Floret concrete host through dynamic type assertion")
+	if _, ok := subagentRead.(floretSubagentReadHostAdapter); !ok {
+		t.Fatalf("SubAgent read adapter dynamic type=%T, want responsibility-local adapter", subagentRead)
 	}
 }

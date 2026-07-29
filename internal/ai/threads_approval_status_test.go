@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	flruntime "github.com/floegence/floret/runtime"
+	flruntime "github.com/floegence/floret/v2/runtime"
 )
 
 func TestGetThreadAndListThreadsUseCanonicalFloretStatus(t *testing.T) {
@@ -16,7 +16,7 @@ func TestGetThreadAndListThreadsUseCanonicalFloretStatus(t *testing.T) {
 		t.Fatal(err)
 	}
 	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "complete")
-	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{ThreadID: flruntime.ThreadID(thread.ThreadID), TurnID: "turn_status", RunID: "run_status", Input: flruntime.TurnInput{Text: "work"}}); err != nil {
+	if _, err := host.Run(ctx, flruntime.TurnRequest{TurnID: "turn_status", RunID: "run_status", Input: flruntime.TurnInput{Text: "work"}}); err != nil {
 		t.Fatal(err)
 	}
 	view, err := svc.GetThread(ctx, meta, thread.ThreadID)
@@ -47,7 +47,7 @@ func TestGetThreadReturnsConsistencyErrorWhenFloretThreadIsMissing(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := host.DeleteThread(ctx, flruntime.ThreadID(thread.ThreadID)); err != nil {
+	if err := host.Delete(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := svc.GetThread(ctx, meta, thread.ThreadID); err == nil {

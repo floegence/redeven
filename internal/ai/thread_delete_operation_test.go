@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	flruntime "github.com/floegence/floret/runtime"
+	flruntime "github.com/floegence/floret/v2/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/session"
 	_ "modernc.org/sqlite"
@@ -434,7 +434,7 @@ func TestServiceRenameDoesNotMutateCanonicalTitleAfterDeleteIntent(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	overview, err := canonical.ReadThreadOverview(context.Background(), flruntime.ThreadID(thread.ThreadID))
+	overview, err := canonical.ReadThreadOverview(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
