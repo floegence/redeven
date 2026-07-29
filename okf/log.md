@@ -3,6 +3,7 @@
 ## 2026-07-29
 * **Dependency**: Upgraded to published Floret v1.0.0 with exact module checksums and adopted its scoped validated turn, compaction, and SubAgent Host constructors.
 * **Boundary**: Kept Redeven execution on narrow caller-owned capabilities, consumed typed Floret title and provider contracts, and preserved threadstore schema v8 plus the existing Runtime Service and Flower wire shapes.
+* **Fix**: Restored first-message admission by resolving the atomic create operation and immutable command before canonical reads, reusing frozen identities across retries and restarts, and permitting exact `ReadThreadTurn` verification only after canonical root commit.
 
 ## 2026-07-28
 * **Boundary**: Replaced dynamic threadstore schema expectations with a checked-in v2-through-v8 manifest covering complete SQLite object SQL, columns, indexes, triggers, CHECK clauses, and UNIQUE clauses, verified against fresh, historical, and migrated databases.

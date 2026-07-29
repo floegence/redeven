@@ -9,7 +9,7 @@ timestamp: 2026-07-27T00:00:00Z
 
 - Authority: Floret owns admitted Agent state. Redeven owns host settings, upload bytes, unadmitted commands, routing/read state, audit, and cross-store operation intent.
 - Outcome: schema v8 replaces durable editable drafts with capability-bound upload staging. Editable text, references, and composer preferences exist only in the current connection's Flower coordinator.
-- Invariants: connections cannot recover or conflict with each other's drafts; staging rows contain no editable message or reference projection; Send atomically freezes an unadmitted command before Floret admission.
+- Invariants: connections cannot recover or conflict with each other's drafts; staging rows contain no editable message or reference projection; Send atomically freezes an unadmitted command before Floret admission; initial-send lookup never opens a Floret read Host before durable create intent exists.
 - Failure boundary: unsupported schema, drift, malformed legacy drafts, uncertain canonical reads, membership mismatch, or failed migration effects stop startup without repair or substitute database creation.
 
 # Contract
@@ -22,7 +22,9 @@ The shared Flower coordinator stores editable text, ordered references, attachme
 
 `ai_upload_staging_scopes` stores an opaque scope identity, endpoint, authenticated owner hash, target thread identity, capability hash, creation time, expiry, and release state. The plaintext capability is returned only at creation and is accepted only through the exact staging headers. The scope may retain uploaded bytes while a connection is active, but it stores no prompt text, references, model choice, or UI draft snapshot and cannot hydrate a later connection. Release or expiry removes its claims; last-reference cleanup owns physical deletion.
 
-Clicking Send is the persistence boundary. Redeven validates the current request and atomically converts the selected staging claims into one immutable `ai_queued_turns` command. For a new conversation, the same transaction creates the thread-create operation and settings, freezes the proposed TurnID/RunID and command payload, and transfers attachment claims. Retry with the same exact identity and frozen payload returns the existing operation; a conflicting payload fails without overwriting it. Post-commit recovery and settlement operate on that command, not on an editable draft.
+Clicking Send is the persistence boundary. Redeven validates the current request and atomically converts the selected staging claims into one immutable `ai_queued_turns` command. For a new conversation, the same transaction freezes the settings intent and thread-create operation, proposed TurnID/RunID, complete command payload, and attachment claim transfer. Product settings do not become visible until the create coordinator has established the canonical Floret root and completed the recorded title step. Retry with the same exact identity and frozen payload returns the first QueueID/RunID; a conflicting payload fails without overwriting it. Post-commit recovery and settlement operate on that command, not on an editable draft.
+
+Initial-send recovery reads product state before canonical state. It first matches the stable create operation fingerprint and exact queued command by ThreadID/TurnID. An absent operation plus absent command may enter the atomic prepare transaction. A matching ready command resumes canonical creation and starts only that frozen command; a matching in-flight command returns its frozen identity while startup reconciliation retains recovery ownership. Only a committed operation with no remaining command may verify the exact TurnID through public Floret `ReadThreadTurn` and return the canonical receipt. Any other operation, command, settings, or canonical combination is a typed conflict or corruption error; Redeven never creates a substitute root, derives history from product metadata, or treats a canonical storage or authority error as not-found.
 
 After Floret admits the canonical turn, settlement moves attachment ownership to the thread and removes the command. Restart reconciliation asks public Floret `ReadThreadTurn` for the exact TurnID; only `ErrTurnNotFound` proves absence. Redeven stores no admitted message, reference projection, lifecycle copy, or TurnID-to-entry mapping.
 
@@ -57,9 +59,9 @@ The repository durable-sink registry is a closed set over production Go, SQL, Ty
 - `redeven:internal/ai/threadstore/schema.go` - Threadstore declares schema v8, the contiguous migration chain, and fresh staging-scope storage without composer drafts.
 - `redeven:internal/ai/threadstore/legacy_composer_migration.go` - Legacy v7 draft decoding is isolated to migration.
 - `redeven:internal/ai/threadstore/product_migrations.go` - The v7-to-v8 transaction applies preflight decisions and removes legacy draft ownership.
-- `redeven:internal/ai/threadstore/upload_staging.go` - Capability-hash authorization, staging claims, release, and claim transfer are transactional.
-- `redeven:internal/ai/threadstore/thread_create_operation.go` - New-thread settings, immutable initial command, create operation, and staging claim transfer freeze atomically.
-- `redeven:internal/ai/initial_turn.go` - The service uses the frozen initial-turn transaction before canonical admission.
+- `redeven:internal/ai/threadstore/upload_staging.go` - Capability-hash authorization and the atomic create-operation, initial-command, and staging-claim freeze are transactional and idempotent.
+- `redeven:internal/ai/threadstore/thread_create_operation.go` - Stable create fingerprints remain verifiable after settings commit and snapshot clearing.
+- `redeven:internal/ai/initial_turn.go` - The service resolves product create/command state before canonical creation, admission, or exact receipt verification.
 - `redeven:internal/flower_ui/src/composer/createFlowerComposerDraftCoordinator.ts` - Editable composer scopes are connection-local memory shared by shell surfaces.
 - `redeven:internal/ai/threadstore/schema_v6_test.go` - Fresh v8 tests enforce staging-scope presence and composer-draft absence.
 - `redeven:internal/ai/threadstore/schema_migration_test.go` - Migration tests enforce contiguous upgrades, rollback, drift rejection, and unsupported-version rejection.
