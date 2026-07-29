@@ -5546,6 +5546,7 @@
       "timestamp": "2026-07-29T00:00:00Z",
       "frontmatter": {
         "description": "Desktop serializes Runtime lifecycle ownership and reconciles managed processes through a scoped, digest-protected inventory.",
+        "quality_exception": "Cross-placement runtime process contract spanning identity, reconciliation, lifecycle ordering, and mutation ownership.",
         "tags": [
           "coordination",
           "desktop",
@@ -9567,5 +9568,5 @@
       ]
     }
   ],
-  "source_sha256": "1a05c5bcd392c4ceb3ac57def2cec8557e3b034d1e301316509984db4fe51ade"
+  "source_sha256": "a0030cc05d4ae8b4eb2fd6f7590670dda7f96fd4e1dd27c883777be8942fbe9a"
 }

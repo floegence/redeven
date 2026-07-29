@@ -4,6 +4,7 @@ title: Desktop runtime process lifecycle
 description: Desktop serializes Runtime lifecycle ownership and reconciles managed processes through a scoped, digest-protected inventory.
 tags: [desktop, runtime, lifecycle, coordination, process, inventory]
 timestamp: 2026-07-29T00:00:00Z
+quality_exception: Cross-placement runtime process contract spanning identity, reconciliation, lifecycle ordering, and mutation ownership.
 ---
 # Summary
 
