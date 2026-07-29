@@ -580,6 +580,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
     Download: Icon,
     ExternalLink: Icon,
     Folder: Icon,
+    FolderOpen: Icon,
     LayoutDashboard: Icon,
     Link: Icon,
     Menu: Icon,
@@ -7834,8 +7835,9 @@ describe('TerminalPanel', () => {
     expect(wrapBackward.defaultPrevented).toBe(true);
     expect(document.activeElement).toBe(lastDrawerControl);
     const mobileSessionRow = host.querySelector('[data-terminal-session-row="session-2"]');
-    expect(mobileSessionRow?.className).toContain('min-h-16');
-    expect(mobileSessionRow?.className).toContain('pr-[68px]');
+    expect(mobileSessionRow?.className).toContain('min-h-[68px]');
+    expect(mobileSessionRow?.className).toContain('grid-cols-[36px_minmax(0,1fr)_60px]');
+    expect(mobileSessionRow?.className).not.toContain('pr-[68px]');
     const externalDrawerButton = host.querySelector<HTMLButtonElement>('[data-testid="terminal-session-drawer-open"]')!;
     externalDrawerButton.focus();
     expect(document.activeElement).toBe(drawerFilter);

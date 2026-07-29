@@ -1974,7 +1974,7 @@ describe('TerminalPanel browser activity integration', () => {
     expect(agentCoverageRatio).toBeLessThanOrEqual(1.4);
   });
 
-  it('keeps the four trailing controls aligned in a fixed two-by-two grid beside long paths', async () => {
+  it('aligns identity, two-line content, and the fixed action rail on one session-row grid', async () => {
     terminalSessionsState.sessions = terminalSessionsState.sessions.map((session) => (
       session.id === 'session-2'
         ? {
@@ -1991,14 +1991,34 @@ describe('TerminalPanel browser activity integration', () => {
     render(() => <TerminalPanel variant="workbench" />, host);
     await settleTerminalPanel();
 
+    const row = host.querySelector<HTMLElement>('[data-terminal-session-row="session-2"]')!;
+    const avatar = host.querySelector<HTMLElement>('[data-terminal-session-avatar="session-2"]')!;
+    const content = host.querySelector<HTMLElement>('[data-terminal-session-content="session-2"]')!;
+    const title = host.querySelector<HTMLElement>('[data-terminal-session-title="session-2"]')!;
     const grid = host.querySelector<HTMLElement>('[data-terminal-session-actions="session-2"]')!;
     const cell = (name: string) => grid.querySelector<HTMLElement>(`[data-terminal-session-action-cell="${name}"]`)!.getBoundingClientRect();
+    const rowRect = row.getBoundingClientRect();
+    const avatarRect = avatar.getBoundingClientRect();
+    const contentRect = content.getBoundingClientRect();
+    const titleRect = title.getBoundingClientRect();
+    const gridRect = grid.getBoundingClientRect();
     const indexRect = cell('index');
     const closeRect = cell('close');
     const copyRect = cell('copy');
     const filesRect = cell('files');
     const pathRect = host.querySelector<HTMLElement>('[data-terminal-session-path="session-2"]')!.getBoundingClientRect();
+    const verticalCenter = (rect: DOMRect) => rect.top + rect.height / 2;
 
+    expect(getComputedStyle(row).display).toBe('grid');
+    expect(getComputedStyle(grid).position).not.toBe('absolute');
+    expect(rowRect.height).toBe(64);
+    expect(Math.abs(verticalCenter(avatarRect) - verticalCenter(rowRect))).toBeLessThanOrEqual(1);
+    expect(Math.abs(verticalCenter(contentRect) - verticalCenter(rowRect))).toBeLessThanOrEqual(1);
+    expect(Math.abs(verticalCenter(gridRect) - verticalCenter(rowRect))).toBeLessThanOrEqual(1);
+    expect(Math.abs(titleRect.left - pathRect.left)).toBeLessThanOrEqual(1);
+    expect(avatarRect.right).toBeLessThanOrEqual(contentRect.left - 8);
+    expect(contentRect.right).toBeLessThanOrEqual(gridRect.left - 8);
+    expect(gridRect.right).toBeLessThanOrEqual(rowRect.right - 8);
     expect([indexRect.width, indexRect.height]).toEqual([20, 20]);
     expect([closeRect.width, closeRect.height]).toEqual([20, 20]);
     expect([copyRect.width, copyRect.height]).toEqual([20, 20]);
@@ -2009,7 +2029,7 @@ describe('TerminalPanel browser activity integration', () => {
     expect(Math.abs(copyRect.top - filesRect.top)).toBeLessThanOrEqual(1);
     expect(indexRect.right).toBeLessThanOrEqual(closeRect.left);
     expect(indexRect.bottom).toBeLessThanOrEqual(copyRect.top);
-    expect(pathRect.right).toBeLessThanOrEqual(grid.getBoundingClientRect().left - 4);
+    expect(pathRect.right).toBeLessThanOrEqual(gridRect.left - 8);
     const closeButton = host.querySelector<HTMLElement>('[data-testid="close-session-session-2"]')!;
     const filesButton = host.querySelector<HTMLElement>('[data-testid="terminal-session-files-session-2"]')!;
     expect(getComputedStyle(closeButton).opacity).toBe('0');
