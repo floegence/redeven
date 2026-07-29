@@ -1809,7 +1809,7 @@
       "effect": "read",
       "execution": "sync",
       "required_permissions": [
-        "containers.stats.read"
+        "containers.read"
       ],
       "target_fields": [
         "engine",
@@ -1948,7 +1948,7 @@
       "effect": "read",
       "execution": "subscription",
       "required_permissions": [
-        "containers.stats.read"
+        "containers.read"
       ],
       "target_fields": [
         "engine",
@@ -2110,7 +2110,7 @@
       "effect": "read",
       "execution": "sync",
       "required_permissions": [
-        "containers.create"
+        "containers.execute"
       ],
       "target_fields": [
         "engine",
@@ -2542,7 +2542,7 @@
       "effect": "execute",
       "execution": "operation",
       "required_permissions": [
-        "containers.create"
+        "containers.execute"
       ],
       "target_fields": [
         "engine",
@@ -3529,7 +3529,7 @@
       "effect": "read",
       "execution": "sync",
       "required_permissions": [
-        "containers.images.read"
+        "containers.read"
       ],
       "target_fields": [
         "engine",
@@ -3661,7 +3661,7 @@
       "effect": "read",
       "execution": "sync",
       "required_permissions": [
-        "containers.images.read"
+        "containers.read"
       ],
       "target_fields": [
         "engine",
@@ -3798,7 +3798,7 @@
       "effect": "read",
       "execution": "sync",
       "required_permissions": [
-        "containers.images.read"
+        "containers.read"
       ],
       "target_fields": [
         "engine",
@@ -4052,7 +4052,7 @@
       "effect": "read",
       "execution": "sync",
       "required_permissions": [
-        "containers.images.delete"
+        "containers.delete"
       ],
       "target_fields": [
         "engine",
@@ -4337,7 +4337,7 @@
       "effect": "delete",
       "execution": "operation",
       "required_permissions": [
-        "containers.images.delete"
+        "containers.delete"
       ],
       "target_fields": [
         "engine",
@@ -4471,7 +4471,7 @@
       "effect": "read",
       "execution": "sync",
       "required_permissions": [
-        "containers.images.delete"
+        "containers.delete"
       ],
       "target_fields": [
         "engine",
@@ -4746,7 +4746,7 @@
       "effect": "delete",
       "execution": "operation",
       "required_permissions": [
-        "containers.images.delete"
+        "containers.delete"
       ],
       "target_fields": [
         "engine",
@@ -4870,7 +4870,7 @@
       "effect": "read",
       "execution": "sync",
       "required_permissions": [
-        "containers.volumes.read"
+        "containers.read"
       ],
       "target_fields": [
         "engine",
@@ -4992,7 +4992,7 @@
       "effect": "read",
       "execution": "sync",
       "required_permissions": [
-        "containers.volumes.read"
+        "containers.read"
       ],
       "target_fields": [
         "engine",
@@ -5121,7 +5121,7 @@
       "effect": "read",
       "execution": "sync",
       "required_permissions": [
-        "containers.volumes.write"
+        "containers.execute"
       ],
       "target_fields": [
         "engine",
@@ -5426,7 +5426,7 @@
       "effect": "execute",
       "execution": "operation",
       "required_permissions": [
-        "containers.volumes.write"
+        "containers.execute"
       ],
       "target_fields": [
         "engine",
@@ -5580,7 +5580,7 @@
       "effect": "read",
       "execution": "sync",
       "required_permissions": [
-        "containers.volumes.delete"
+        "containers.delete"
       ],
       "target_fields": [
         "engine",
@@ -5864,7 +5864,7 @@
       "effect": "delete",
       "execution": "operation",
       "required_permissions": [
-        "containers.volumes.delete"
+        "containers.delete"
       ],
       "target_fields": [
         "engine",
@@ -5996,7 +5996,7 @@
       "effect": "read",
       "execution": "sync",
       "required_permissions": [
-        "containers.volumes.delete"
+        "containers.delete"
       ],
       "target_fields": [
         "engine",
@@ -6271,7 +6271,7 @@
       "effect": "delete",
       "execution": "operation",
       "required_permissions": [
-        "containers.volumes.delete"
+        "containers.delete"
       ],
       "target_fields": [
         "engine",

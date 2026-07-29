@@ -74,7 +74,8 @@ type Options struct {
 	// ThreadReadStateStore persists scoped per-surface thread read watermarks.
 	ThreadReadStateStore *threadreadstate.Store
 	// PluginPlatform is the released ReDevPlugin HTTP handler mounted behind Redeven routes.
-	PluginPlatform http.Handler
+	PluginPlatform            http.Handler
+	PluginDevelopmentDelivery *redevpluginintegration.DevelopmentDelivery
 	// AgentHomeDir is the canonical absolute path to the default home directory.
 	AgentHomeDir    string
 	FilesystemScope *filesystemscope.Registry
@@ -234,16 +235,17 @@ type Server struct {
 	acquirePluginSession    func(channelID string) (*session.Meta, func(), bool)
 	endPluginSession        func(channelID string)
 
-	configPath            string
-	stateDir              string
-	localPermissionPolicy *config.PermissionPolicy
-	localPermissionCap    *config.PermissionSet
-	configMu              sync.Mutex
-	secrets               *settings.SecretsStore
-	threadReadState       *threadreadstate.Store
-	pluginPlatform        http.Handler
-	pluginConnMu          sync.Mutex
-	pluginConns           map[*pluginAdmissionConn]struct{}
+	configPath                string
+	stateDir                  string
+	localPermissionPolicy     *config.PermissionPolicy
+	localPermissionCap        *config.PermissionSet
+	configMu                  sync.Mutex
+	secrets                   *settings.SecretsStore
+	threadReadState           *threadreadstate.Store
+	pluginPlatform            http.Handler
+	pluginDevelopmentDelivery *redevpluginintegration.DevelopmentDelivery
+	pluginConnMu              sync.Mutex
+	pluginConns               map[*pluginAdmissionConn]struct{}
 
 	agentHomeDir string
 	scope        *filesystemscope.Registry
@@ -365,32 +367,33 @@ func New(opts Options) (*Server, error) {
 		}
 	}
 	return &Server{
-		log:                     logger,
-		agentHomeDir:            scope.HomePathAbs(),
-		scope:                   scope,
-		fs:                      runtimefs.NewServiceWithScope(scope),
-		backend:                 opts.Backend,
-		pf:                      opts.PortForward,
-		aiProvider:              opts.AIServiceProvider,
-		notes:                   opts.Notes,
-		layouts:                 opts.WorkbenchLayout,
-		term:                    opts.Terminal,
-		codex:                   opts.Codex,
-		audit:                   opts.Audit,
-		diag:                    opts.Diagnostics,
-		resolveSessionMeta:      opts.ResolveSessionMeta,
-		resolveSessionTunnelURL: opts.ResolveSessionTunnelURL,
-		acquirePluginSession:    opts.AcquirePluginSession,
-		endPluginSession:        opts.EndPluginSession,
-		configPath:              strings.TrimSpace(opts.ConfigPath),
-		stateDir:                stateDir,
-		localPermissionPolicy:   localPermissionPolicy,
-		secrets:                 secrets,
-		threadReadState:         opts.ThreadReadStateStore,
-		pluginPlatform:          opts.PluginPlatform,
-		pluginConns:             make(map[*pluginAdmissionConn]struct{}),
-		distFS:                  opts.DistFS,
-		addr:                    addr,
+		log:                       logger,
+		agentHomeDir:              scope.HomePathAbs(),
+		scope:                     scope,
+		fs:                        runtimefs.NewServiceWithScope(scope),
+		backend:                   opts.Backend,
+		pf:                        opts.PortForward,
+		aiProvider:                opts.AIServiceProvider,
+		notes:                     opts.Notes,
+		layouts:                   opts.WorkbenchLayout,
+		term:                      opts.Terminal,
+		codex:                     opts.Codex,
+		audit:                     opts.Audit,
+		diag:                      opts.Diagnostics,
+		resolveSessionMeta:        opts.ResolveSessionMeta,
+		resolveSessionTunnelURL:   opts.ResolveSessionTunnelURL,
+		acquirePluginSession:      opts.AcquirePluginSession,
+		endPluginSession:          opts.EndPluginSession,
+		configPath:                strings.TrimSpace(opts.ConfigPath),
+		stateDir:                  stateDir,
+		localPermissionPolicy:     localPermissionPolicy,
+		secrets:                   secrets,
+		threadReadState:           opts.ThreadReadStateStore,
+		pluginPlatform:            opts.PluginPlatform,
+		pluginDevelopmentDelivery: opts.PluginDevelopmentDelivery,
+		pluginConns:               make(map[*pluginAdmissionConn]struct{}),
+		distFS:                    opts.DistFS,
+		addr:                      addr,
 	}, nil
 }
 
@@ -2648,6 +2651,32 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 	}))
 	defer func() { releaseAI() }()
 	switch {
+	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/plugins/development-delivery/containers":
+		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
+			return
+		}
+		if g.pluginDevelopmentDelivery == nil {
+			writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: g.pluginDevelopmentDelivery.Metadata()})
+		return
+
+	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/plugins/development-delivery/containers/package":
+		if _, ok := g.requirePermission(w, r, requiredPermissionAdmin); !ok {
+			return
+		}
+		if g.pluginDevelopmentDelivery == nil {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		packageData := g.pluginDevelopmentDelivery.PackageBytes()
+		w.Header().Set("Content-Type", "application/vnd.redevplugin.package+zip")
+		w.Header().Set("Content-Length", strconv.Itoa(len(packageData)))
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(packageData)
+		return
+
 	case r.Method == http.MethodGet && r.URL.Path == localAPIFSPathContextEndpointPath:
 		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
 			return

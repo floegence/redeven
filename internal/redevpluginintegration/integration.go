@@ -32,26 +32,28 @@ import (
 )
 
 type Options struct {
-	StateDir           string
-	PermissionPolicy   *config.PermissionPolicy
-	RuntimePath        string
-	ResolveSessionMeta func(channelID string) (*session.Meta, bool)
-	Audit              *auditlog.Store
-	Diagnostics        *diagnostics.Store
-	Containers         *containers.Adapter
-	RuntimeAuthority   *RuntimeProcessAuthority
-	releaseTrustNow    func() time.Time
-	newReleaseModule   func(string) (*host.ReleaseModule, host.PluginReleaseRef, func() error, error)
-	newExternalFetcher func(*externalsource.StageStore) (host.ExternalPackageFetcher, error)
-	closeExternalStage func(*externalsource.StageStore) error
+	StateDir                string
+	PermissionPolicy        *config.PermissionPolicy
+	RuntimePath             string
+	ResolveSessionMeta      func(channelID string) (*session.Meta, bool)
+	Audit                   *auditlog.Store
+	Diagnostics             *diagnostics.Store
+	Containers              *containers.Adapter
+	RuntimeAuthority        *RuntimeProcessAuthority
+	DevelopmentDeliveryPath string
+	releaseTrustNow         func() time.Time
+	newReleaseModule        func(string) (*host.ReleaseModule, host.PluginReleaseRef, func() error, error)
+	newExternalFetcher      func(*externalsource.StageStore) (host.ExternalPackageFetcher, error)
+	closeExternalStage      func(*externalsource.StageStore) error
 }
 
 type Integration struct {
-	handler          http.Handler
-	host             *host.Host
-	capabilities     *containersCapabilityAdapter
-	sessionLifecycle *sessionLifecycleAdapter
-	closers          []func() error
+	handler             http.Handler
+	host                *host.Host
+	capabilities        *containersCapabilityAdapter
+	sessionLifecycle    *sessionLifecycleAdapter
+	developmentDelivery *DevelopmentDelivery
+	closers             []func() error
 }
 
 func New(ctx context.Context, opts Options) (*Integration, error) {
@@ -76,6 +78,10 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 		return nil, err
 	}
 	if err := opts.Containers.Validate(); err != nil {
+		return nil, err
+	}
+	developmentDelivery, err := loadDevelopmentDelivery(opts.DevelopmentDeliveryPath)
+	if err != nil {
 		return nil, err
 	}
 	packageTrustVerifier, err := newPackageTrustVerifier()
@@ -231,14 +237,14 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 		return nil, err
 	}
 
-	sessions, err := newSessionAdapter(opts.ResolveSessionMeta, opts.PermissionPolicy)
+	sessions, err := newSessionAdapter(opts.ResolveSessionMeta, opts.PermissionPolicy, developmentDelivery != nil)
 	if err != nil {
 		_ = pluginData.Close()
 		_ = assetStore.Close()
 		closeOnError()
 		return nil, err
 	}
-	capabilities, capabilityAdapter, err := newContainersCapabilityRegistry(opts.Containers, observability)
+	capabilities, capabilityAdapter, err := newContainersCapabilityRegistry(opts.Containers, observability, developmentDelivery)
 	if err != nil {
 		_ = pluginData.Close()
 		_ = assetStore.Close()
@@ -313,13 +319,21 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 		return nil, err
 	}
 	integration := &Integration{
-		handler:          handler,
-		host:             h,
-		capabilities:     capabilityAdapter,
-		sessionLifecycle: sessionLifecycle,
-		closers:          closers,
+		handler:             handler,
+		host:                h,
+		capabilities:        capabilityAdapter,
+		sessionLifecycle:    sessionLifecycle,
+		developmentDelivery: developmentDelivery,
+		closers:             closers,
 	}
 	return integration, nil
+}
+
+func (i *Integration) DevelopmentDelivery() *DevelopmentDelivery {
+	if i == nil {
+		return nil
+	}
+	return i.developmentDelivery
 }
 
 func (i *Integration) Handler() http.Handler {

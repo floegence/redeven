@@ -64,6 +64,24 @@ export const OFFICIAL_PLUGIN_CATALOG_SEED: readonly OfficialPluginCatalogItem[] 
   },
 ]);
 
-export function officialPluginCatalog(): readonly OfficialPluginCatalogItem[] {
-  return OFFICIAL_PLUGIN_CATALOG_SEED;
+export function officialPluginCatalog(developmentDelivery?: import('./pluginTypes').PluginDevelopmentDelivery): readonly OfficialPluginCatalogItem[] {
+  if (!developmentDelivery) return OFFICIAL_PLUGIN_CATALOG_SEED;
+  const containers = OFFICIAL_PLUGIN_CATALOG_SEED[0]!;
+  if (developmentDelivery.plugin_id !== containers.pluginID
+    || developmentDelivery.publisher_id !== containers.publisherID
+    || developmentDelivery.plugin_instance_id !== containers.pluginInstanceID
+    || developmentDelivery.version !== '4.0.0'
+    || developmentDelivery.capability_version !== '3.0.0'
+    || developmentDelivery.development_only !== true) {
+    throw new Error('Containers development delivery metadata is invalid');
+  }
+  return Object.freeze([{
+    ...containers,
+    latestVersion: developmentDelivery.version,
+    stableVersion: developmentDelivery.version,
+    distribution: {
+      ...containers.distribution,
+      developmentDelivery,
+    },
+  }]);
 }

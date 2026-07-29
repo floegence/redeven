@@ -272,6 +272,11 @@ function catalogPluginKey(publisherID: string, pluginID: string): string {
 
 function isCatalogPackageRecord(record: ReDevPluginRecord, item: OfficialPluginCatalogItem): boolean {
   const release = item.distribution.releaseRef;
+  const development = item.distribution.developmentDelivery;
+  if (development && record.version === development.version
+    && record.trust_state === 'unsigned_local') {
+    return record.publisher_id === item.publisherID && record.plugin_id === item.pluginID;
+  }
   const currentReleaseMatches = record.version === release.version
     && record.package_hash === release.expected_hashes.package_sha256
     && record.manifest_hash === release.expected_hashes.manifest_sha256
@@ -301,6 +306,7 @@ function installedLifecycleState(
   authorization?: PluginAuthorizationInventory,
 ): PluginInventoryItem['lifecycleState'] {
   if (catalogItem.rolloutState === 'revoked' || catalogItem.rolloutState === 'disabled') return 'needs_attention';
+  if (isStaleDevelopmentPackage(installed, catalogItem)) return 'update_available';
   if (!isRunnableInstalledTrust(installed)) return 'needs_attention';
   if (installed.enable_state !== 'enabled') return 'disabled';
   if (compareVersion(installed.version, catalogItem.stableVersion) < 0) return 'update_available';
@@ -308,6 +314,19 @@ function installedLifecycleState(
     permission.requiredToOpen && (!permission.granted || permission.deniedByGrant || permission.blockedToOpen)
   ))) return 'needs_attention';
   return 'enabled';
+}
+
+function isStaleDevelopmentPackage(
+  installed: ReDevPluginRecord,
+  catalogItem: OfficialPluginCatalogItem,
+): boolean {
+  const development = catalogItem.distribution.developmentDelivery;
+  return Boolean(development
+    && installed.version === development.version
+    && installed.trust_state === 'unsigned_local'
+    && (installed.package_hash !== development.package_hash
+      || installed.manifest_hash !== development.manifest_hash
+      || installed.entries_hash !== development.entries_hash));
 }
 
 function installedTrustBadge(installed: ReDevPluginRecord, catalogItem: OfficialPluginCatalogItem): PluginInventoryItem['trustBadge'] {

@@ -10,6 +10,7 @@ import { sanitizeDesktopChildEnvironment } from './desktopProcessEnvironment';
 import { canonicalLocalUIBind, isLoopbackOnlyBind, parseLocalUIBind } from './localUIBind';
 
 export const DESKTOP_OWNER_ID_ENV_NAME = 'REDEVEN_DESKTOP_OWNER_ID';
+export const PLUGIN_DEVELOPMENT_DELIVERY_ENV_NAME = 'REDEVEN_PLUGIN_DEVELOPMENT_DELIVERY';
 export { RUNTIME_SECRET_ENV_NAMES } from './desktopProcessEnvironment';
 
 const STARTUP_SECRETS_MAX_BYTES = 64 * 1024;
@@ -37,6 +38,7 @@ type BuildDesktopRuntimeArgsOptions = Readonly<{
   localUIBind?: string;
   bootstrap?: DesktopRuntimeBootstrap | null;
   stateRoot?: string;
+  pluginDevelopmentDelivery?: string;
 }>;
 
 function resolvedRuntimeBootstrap(
@@ -70,6 +72,10 @@ export function buildDesktopRuntimeArgs(
     '--local-ui-bind',
     localUIBind,
   ];
+  const developmentDelivery = String(options.pluginDevelopmentDelivery ?? '').trim();
+  if (developmentDelivery !== '') {
+    args.push('--plugin-development-delivery', developmentDelivery);
+  }
   if (!isLoopbackOnlyBind(parsedBind)) {
     const acknowledgement = access.plaintext_network_exposure_acknowledgement;
     if (!access.local_ui_password_configured || String(access.local_ui_password ?? '') === '') {
@@ -145,6 +151,7 @@ function buildDesktopRuntimePlan(
     localUIBind: options?.localUIBind,
     bootstrap: options?.bootstrap,
     stateRoot: stateLayout.stateRoot,
+    pluginDevelopmentDelivery: baseEnv[PLUGIN_DEVELOPMENT_DELIVERY_ENV_NAME],
   });
   const access = localEnvironmentAccess(environment);
   const bootstrap = resolvedRuntimeBootstrap(options?.bootstrap);

@@ -50,7 +50,7 @@ type containerCapabilityTask struct {
 	cancel context.CancelCauseFunc
 }
 
-func newContainersCapabilityRegistry(adapter *containers.Adapter, diagnostics observability.DiagnosticsSink) (*capability.Registry, *containersCapabilityAdapter, error) {
+func newContainersCapabilityRegistry(adapter *containers.Adapter, diagnostics observability.DiagnosticsSink, development ...*DevelopmentDelivery) (*capability.Registry, *containersCapabilityAdapter, error) {
 	if err := adapter.Validate(); err != nil {
 		return nil, nil, err
 	}
@@ -80,6 +80,13 @@ func newContainersCapabilityRegistry(adapter *containers.Adapter, diagnostics ob
 		Adapter:         bridge,
 	}); err != nil {
 		return nil, nil, fmt.Errorf("register containers capability: %w", err)
+	}
+	if len(development) == 1 && development[0] != nil {
+		if err := registry.Register(capability.Registration{
+			Contract: development[0].contract, TargetProjector: bridge, Adapter: bridge,
+		}); err != nil {
+			return nil, nil, fmt.Errorf("register development containers capability: %w", err)
+		}
 	}
 	return registry, bridge, nil
 }

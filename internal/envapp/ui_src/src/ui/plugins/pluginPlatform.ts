@@ -10,6 +10,7 @@ import {
   type PluginSurfaceHost,
   type PluginSurfaceInteractionEvent,
 } from '@floegence/redevplugin-ui';
+import { PluginLocalImportClient } from '@floegence/redevplugin-ui/local-import';
 
 import { prepareLocalApiRequestInit } from '../services/localApi';
 import { applyPluginSessionCredential } from '../services/pluginSessionCredential';
@@ -20,6 +21,7 @@ export const redevPluginAPIPath = '/_redevplugin/api/plugins';
 
 export type RedevenPluginPlatform = Readonly<{
   client: PluginPlatformClient;
+  localImport: PluginLocalImportClient;
   close: () => Promise<void>;
 }>;
 
@@ -41,10 +43,16 @@ export function createRedevenPluginPlatform(options: Readonly<{
     surfaceTransport,
     onMutationOutcomeUnknown: options.onMutationOutcomeUnknown,
   });
+  const localImport = new PluginLocalImportClient({
+    fetch,
+    surfaceScope,
+    onMutationOutcomeUnknown: options.onMutationOutcomeUnknown,
+  });
   let closePromise: Promise<void> | undefined;
   let closed = false;
   return {
     client,
+    localImport,
     close() {
       if (closed) return Promise.resolve();
       closePromise ??= client.revokeSessionScope().then(() => {
