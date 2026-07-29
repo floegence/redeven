@@ -646,6 +646,8 @@ func toAIRPCError(err error) *rpc.Error {
 	case errors.Is(err, ErrThreadBusy),
 		errors.Is(err, ErrRunChanged),
 		errors.Is(err, ErrWaitingPromptChanged),
+		errors.Is(err, ErrTurnIdempotencyConflict),
+		errors.Is(err, ErrInitialTurnStateConflict),
 		errors.Is(err, ErrFollowupsRevisionChanged),
 		errors.Is(err, ErrCompactAlreadyPending),
 		errors.Is(err, ErrNoCompactableContext),

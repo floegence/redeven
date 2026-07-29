@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -118,6 +119,120 @@ func TestUploadStagingAuthorizationAndInitialTurnFreeze(t *testing.T) {
 	}
 	if replayOperation, replayQueued, replayErr := store.PrepareThreadCreateWithInitialTurn(ctx, PrepareThreadCreateRequest{Settings: settings}, rec, []string{uploadID}, 10, admission, &scope); replayErr != nil || replayOperation.OperationID != operation.OperationID || replayQueued.RunID != rec.RunID {
 		t.Fatalf("replay operation=%#v queued=%#v err=%v", replayOperation, replayQueued, replayErr)
+	}
+}
+
+func TestPrepareThreadCreateWithInitialTurnReusesFirstFrozenIdentity(t *testing.T) {
+	store := openStoreForTest(t)
+	ctx := t.Context()
+	settings := ThreadSettings{
+		ThreadID: "th_123456789012345678901234", EndpointID: "env_initial_retry", NamespacePublicID: "ns_initial_retry",
+		ModelID: "openai/gpt-5-mini", PermissionType: "approval_required", WorkingDir: "/tmp",
+		CreatedByUserPublicID: "user_initial", CreatedByUserEmail: "initial@example.com",
+		UpdatedByUserPublicID: "user_initial", UpdatedByUserEmail: "initial@example.com",
+		SettingsCreatedAtUnixMs: 10, SettingsUpdatedAtUnixMs: 10,
+	}
+	first := QueuedTurn{
+		QueueID: "qt_first", EndpointID: settings.EndpointID, ThreadID: settings.ThreadID, ChannelID: "channel_initial", Lane: FollowupLaneQueued,
+		TurnID: "turn_initial", RunID: "run_first", ModelID: settings.ModelID, TextContent: "hello",
+		AttachmentsJSON: `[]`, ContextActionJSON: "", OptionsJSON: `{"permission_type":"approval_required"}`,
+		SessionMetaJSON: `{"channel_id":"channel_initial"}`, CreatedByUserPublicID: "user_initial", CreatedByUserEmail: "initial@example.com",
+		CreatedAtUnixMs: 10, UpdatedAtUnixMs: 10,
+	}
+	admission := attachmentAdmissionForTest(strings.Repeat("a", 64), strings.Repeat("b", 64), nil)
+	operation, frozen, err := store.PrepareThreadCreateWithInitialTurn(ctx, PrepareThreadCreateRequest{Settings: settings}, first, nil, 10, admission, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	retry := first
+	retry.QueueID = "qt_retry"
+	retry.RunID = "run_retry"
+	retry.SortIndex = 99
+	retry.AdmissionState = PendingTurnAdmissionInFlight
+	retry.CreatedAtUnixMs = 20
+	retry.UpdatedAtUnixMs = 20
+	replayedOperation, replayed, err := store.PrepareThreadCreateWithInitialTurn(ctx, PrepareThreadCreateRequest{Settings: settings}, retry, nil, 20, admission, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replayedOperation.OperationID != operation.OperationID || replayed.QueueID != frozen.QueueID || replayed.RunID != frozen.RunID {
+		t.Fatalf("operation=%#v queued=%#v, want first operation=%#v queued=%#v", replayedOperation, replayed, operation, frozen)
+	}
+
+	conflicts := []struct {
+		name   string
+		mutate func(*QueuedTurn)
+	}{
+		{name: "model", mutate: func(rec *QueuedTurn) { rec.ModelID = "openai/gpt-4o-mini" }},
+		{name: "text", mutate: func(rec *QueuedTurn) { rec.TextContent = "different" }},
+		{name: "attachments", mutate: func(rec *QueuedTurn) { rec.AttachmentsJSON = `[{"attachment_id":"upl_other"}]` }},
+		{name: "context action", mutate: func(rec *QueuedTurn) { rec.ContextActionJSON = `{"schema_version":1}` }},
+		{name: "options", mutate: func(rec *QueuedTurn) { rec.OptionsJSON = `{"permission_type":"full_access"}` }},
+		{name: "session", mutate: func(rec *QueuedTurn) { rec.SessionMetaJSON = `{"channel_id":"other"}` }},
+		{name: "channel", mutate: func(rec *QueuedTurn) { rec.ChannelID = "other" }},
+	}
+	for _, testCase := range conflicts {
+		t.Run(testCase.name, func(t *testing.T) {
+			changed := retry
+			testCase.mutate(&changed)
+			if _, _, err := store.PrepareThreadCreateWithInitialTurn(ctx, PrepareThreadCreateRequest{Settings: settings}, changed, nil, 20, admission, nil); !errors.Is(err, ErrFollowupReplacementConflict) {
+				t.Fatalf("error=%v, want %v", err, ErrFollowupReplacementConflict)
+			}
+		})
+	}
+}
+
+func TestPrepareThreadCreateWithInitialTurnConcurrentRetryReturnsOneIdentity(t *testing.T) {
+	store := openStoreForTest(t)
+	settings := ThreadSettings{
+		ThreadID: "th_123456789012345678901245", EndpointID: "env_initial_concurrent", NamespacePublicID: "ns_initial_concurrent",
+		ModelID: "openai/gpt-5-mini", PermissionType: "approval_required", WorkingDir: "/tmp",
+		SettingsCreatedAtUnixMs: 10, SettingsUpdatedAtUnixMs: 10,
+	}
+	base := QueuedTurn{
+		EndpointID: settings.EndpointID, ThreadID: settings.ThreadID, ChannelID: "channel_initial", Lane: FollowupLaneQueued,
+		TurnID: "turn_initial_concurrent", ModelID: settings.ModelID, TextContent: "same intent",
+		AttachmentsJSON: `[]`, OptionsJSON: `{}`, SessionMetaJSON: `{}`, CreatedAtUnixMs: 10,
+	}
+	admission := attachmentAdmissionForTest(strings.Repeat("a", 64), strings.Repeat("b", 64), nil)
+	type result struct {
+		operation ThreadCreateOperation
+		queued    QueuedTurn
+		err       error
+	}
+	results := make([]result, 2)
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	for index := range results {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			rec := base
+			rec.QueueID = fmt.Sprintf("qt_concurrent_%d", index)
+			rec.RunID = fmt.Sprintf("run_concurrent_%d", index)
+			<-start
+			results[index].operation, results[index].queued, results[index].err = store.PrepareThreadCreateWithInitialTurn(
+				context.Background(), PrepareThreadCreateRequest{Settings: settings}, rec, nil, 10, admission, nil,
+			)
+		}(index)
+	}
+	close(start)
+	wg.Wait()
+	for index, result := range results {
+		if result.err != nil {
+			t.Fatalf("result %d: %v", index, result.err)
+		}
+	}
+	if results[0].operation.OperationID != results[1].operation.OperationID ||
+		results[0].queued.QueueID != results[1].queued.QueueID || results[0].queued.RunID != results[1].queued.RunID {
+		t.Fatalf("results=%#v", results)
+	}
+	if got := countRowsForTest(t, store.db, `SELECT COUNT(1) FROM ai_thread_create_operations WHERE endpoint_id = ? AND thread_id = ?`, settings.EndpointID, settings.ThreadID); got != 1 {
+		t.Fatalf("operation count=%d, want 1", got)
+	}
+	if got := countRowsForTest(t, store.db, `SELECT COUNT(1) FROM ai_queued_turns WHERE endpoint_id = ? AND thread_id = ?`, settings.EndpointID, settings.ThreadID); got != 1 {
+		t.Fatalf("command count=%d, want 1", got)
 	}
 }
 

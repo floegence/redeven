@@ -494,30 +494,8 @@ func (s *Service) frozenTurnReceipt(ctx context.Context, meta *session.Meta, req
 	}
 	rec, err := db.GetFollowupByLaneAndTurnID(ctxOrBackground(ctx), meta.EndpointID, req.ThreadID, threadstore.FollowupLaneQueued, turnID)
 	if err == nil {
-		contextAction, normalizeErr := normalizeAskFlowerContextActionEnvelope(req.Input.ContextAction)
-		if normalizeErr != nil {
-			return nil, normalizeErr
-		}
-		contextJSON, marshalErr := marshalQueuedTurnContextAction(contextAction)
-		if marshalErr != nil {
-			return nil, marshalErr
-		}
-		attachmentsJSON, marshalErr := marshalQueuedTurnAttachments(req.Input.Attachments)
-		if marshalErr != nil {
-			return nil, marshalErr
-		}
-		optionsJSON, marshalErr := marshalQueuedTurnOptions(req.Options)
-		if marshalErr != nil {
-			return nil, marshalErr
-		}
-		sessionJSON, marshalErr := marshalQueuedTurnSessionMeta(meta)
-		if marshalErr != nil {
-			return nil, marshalErr
-		}
-		if strings.TrimSpace(rec.ModelID) != strings.TrimSpace(req.Model) || rec.TextContent != req.Input.Text ||
-			rec.AttachmentsJSON != attachmentsJSON || rec.ContextActionJSON != contextJSON ||
-			rec.OptionsJSON != optionsJSON || rec.SessionMetaJSON != sessionJSON || strings.TrimSpace(rec.ChannelID) != strings.TrimSpace(meta.ChannelID) {
-			return nil, ErrTurnIdempotencyConflict
+		if err := matchFrozenTurnRequest(meta, req, rec); err != nil {
+			return nil, err
 		}
 		kind := "queued"
 		position := 0
@@ -539,6 +517,47 @@ func (s *Service) frozenTurnReceipt(ctx context.Context, meta *session.Meta, req
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
+	}
+	return s.canonicalFrozenTurnReceipt(ctx, meta, db, req)
+}
+
+func matchFrozenTurnRequest(meta *session.Meta, req SendUserTurnRequest, rec threadstore.QueuedTurn) error {
+	if meta == nil || strings.TrimSpace(rec.EndpointID) != strings.TrimSpace(meta.EndpointID) ||
+		strings.TrimSpace(rec.ThreadID) != strings.TrimSpace(req.ThreadID) || strings.TrimSpace(rec.TurnID) != strings.TrimSpace(req.Input.TurnID) {
+		return ErrTurnIdempotencyConflict
+	}
+	contextAction, err := normalizeAskFlowerContextActionEnvelope(req.Input.ContextAction)
+	if err != nil {
+		return err
+	}
+	contextJSON, err := marshalQueuedTurnContextAction(contextAction)
+	if err != nil {
+		return err
+	}
+	attachmentsJSON, err := marshalQueuedTurnAttachments(req.Input.Attachments)
+	if err != nil {
+		return err
+	}
+	optionsJSON, err := marshalQueuedTurnOptions(req.Options)
+	if err != nil {
+		return err
+	}
+	sessionJSON, err := marshalQueuedTurnSessionMeta(meta)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(rec.ModelID) != strings.TrimSpace(req.Model) || rec.TextContent != req.Input.Text ||
+		rec.AttachmentsJSON != attachmentsJSON || rec.ContextActionJSON != contextJSON ||
+		rec.OptionsJSON != optionsJSON || rec.SessionMetaJSON != sessionJSON || strings.TrimSpace(rec.ChannelID) != strings.TrimSpace(meta.ChannelID) {
+		return ErrTurnIdempotencyConflict
+	}
+	return nil
+}
+
+func (s *Service) canonicalFrozenTurnReceipt(ctx context.Context, meta *session.Meta, db *threadstore.Store, req SendUserTurnRequest) (*SendUserTurnResponse, error) {
+	turnID := strings.TrimSpace(req.Input.TurnID)
+	if db == nil || turnID == "" {
+		return nil, errors.New("canonical frozen turn verification is unavailable")
 	}
 	host, err := s.openFloretThreadReadHost(ctxOrBackground(ctx), strings.TrimSpace(req.ThreadID))
 	if err != nil {

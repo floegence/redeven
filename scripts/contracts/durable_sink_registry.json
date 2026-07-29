@@ -1090,7 +1090,7 @@
     },
     {
       "path": "internal/ai/threadstore/thread_create_operation.go",
-      "sha256": "09527aea3bae2bdc14f70ffc54ace4578684ed31b0251b6d15cd98c58cff1042",
+      "sha256": "a2bad8187056d72df95431e6073bfad0c4989b23d22bb3af5d390a0c65008293",
       "sink_kinds": [
         "sqlite"
       ],
@@ -1110,6 +1110,7 @@
         "ai_thread_delete_operations",
         "ai_thread_fork_operations",
         "ai_thread_settings",
+        "expression:fmt.Sprintf(`\nSELECT\n%s\nFROM ai_thread_settings\nWHERE endpoint_id = ? AND thread_id = ?\n`, threadSelectColumnsSQL)",
         "expression:fmt.Sprintf(`SELECT %s FROM ai_thread_settings WHERE endpoint_id = ? AND thread_id = ?`, threadSelectColumnsSQL)",
         "expression:fmt.Sprintf(`UPDATE ai_thread_create_operations SET %s = CASE WHEN %s = 0 THEN ? ELSE %s END, error_code = '', error_message = '', updated_at_unix_ms = ? WHERE operation_id = ? AND status = ?`, column, column, column)",
         "expression:threadCreateOperationSelectSQL + ` WHERE operation_id = ?`",
@@ -1216,7 +1217,7 @@
     },
     {
       "path": "internal/ai/threadstore/upload_staging.go",
-      "sha256": "dc26ef058d850d5616a397f156996cb8f9e4c9a5dbf9fe94ebc94506d06d29ff",
+      "sha256": "1dc3446812bb8a8fdd981a6d2527752a3cf9af54a7d0060796304df43465858e",
       "sink_kinds": [
         "sqlite"
       ],
@@ -1375,7 +1376,7 @@
     },
     {
       "path": "internal/codeapp/appserver/server.go",
-      "sha256": "06a989516ae7f2b1282b50ae64807098cc3d5ce4cbbdfdb7e5706547949cf861",
+      "sha256": "b8fc37ddffb63319642449bb8afe44214c73a294b6bcfa54fea3573f3a7e01b1",
       "sink_kinds": [
         "file",
         "json_file"

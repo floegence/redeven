@@ -1458,6 +1458,8 @@ func aiThreadActionHTTPStatus(err error) int {
 	case errors.Is(err, ai.ErrThreadBusy),
 		errors.Is(err, ai.ErrRunChanged),
 		errors.Is(err, ai.ErrWaitingPromptChanged),
+		errors.Is(err, ai.ErrTurnIdempotencyConflict),
+		errors.Is(err, ai.ErrInitialTurnStateConflict),
 		errors.Is(err, ai.ErrFollowupsRevisionChanged),
 		errors.Is(err, ai.ErrCompactAlreadyPending),
 		errors.Is(err, ai.ErrNoCompactableContext),
