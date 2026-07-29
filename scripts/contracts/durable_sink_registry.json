@@ -433,7 +433,7 @@
     },
     {
       "path": "desktop/src/main/main.ts",
-      "sha256": "f55ed8e8ee66469c7522da533d6a71c260928a3ad0a51fe97d911897e622418b",
+      "sha256": "3abb54f1e405488024a988924eb5708ecbe4c066dbd86b3696dc6d0310cbea8f",
       "sink_kinds": [
         "file"
       ],
