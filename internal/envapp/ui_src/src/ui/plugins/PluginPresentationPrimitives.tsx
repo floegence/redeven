@@ -63,7 +63,7 @@ export function PluginStatusDot(props: { item: PluginInventoryItem; class?: stri
         <span
           aria-hidden="true"
           class={cn(
-            'pointer-events-none absolute right-0 top-0 h-3 w-3 rounded-full border-2 border-background shadow-sm',
+            'pointer-events-none absolute right-0 top-0 h-3 w-3 rounded-full border-2 border-background shadow-sm transition-[background-color,transform] duration-200 ease-out group-hover:scale-110 group-hover/card:scale-110 motion-reduce:transform-none motion-reduce:transition-none',
             className(),
             props.class,
           )}
@@ -88,7 +88,7 @@ export function PluginStatusBadge(props: { item: PluginInventoryItem; class?: st
     return 'bg-muted text-muted-foreground';
   };
   return (
-    <span class={cn('inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-semibold', tone(), props.class)}>
+    <span class={cn('inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-semibold transition-[background-color,color,transform] duration-150 ease-out motion-reduce:transition-none', tone(), props.class)}>
       {pluginLifecycleLabel(props.item, i18n)}
     </span>
   );
@@ -106,7 +106,7 @@ export function PluginTrustBadge(props: { item: PluginInventoryItem; class?: str
     return 'bg-[var(--redeven-status-warning-soft)] text-[var(--redeven-status-warning-foreground)]';
   };
   return (
-    <span class={cn('inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-semibold', tone(), props.class)}>
+    <span class={cn('inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-semibold transition-[background-color,color,transform] duration-150 ease-out motion-reduce:transition-none', tone(), props.class)}>
       {pluginTrustLabel(props.item, i18n)}
     </span>
   );

@@ -14,7 +14,7 @@ import { useI18n, type I18nHelpers } from '../i18n';
 import { useEnvContext } from '../pages/EnvContext';
 import { hasRWXPermissions } from '../pages/aiPermissions';
 import { PluginSurfaceBody } from '../plugins/PluginSurfaceFrame';
-import { PLUGIN_MOBILE_TOUCH_TARGET_CLASS } from '../plugins/pluginPresentation';
+import { PLUGIN_ENTER_MOTION_CLASS, PLUGIN_MOBILE_TOUCH_TARGET_CLASS } from '../plugins/pluginPresentation';
 import { useEnvWorkbenchInstancesContext } from './EnvWorkbenchInstancesContext';
 import { useWorkbenchPluginSurfaceContext } from './WorkbenchPluginSurfaceContext';
 import { WorkbenchFilePreviewWidget } from './WorkbenchFilePreviewWidget';
@@ -170,8 +170,8 @@ function PluginWidget(props: RedevenWorkbenchWidgetBodyProps) {
       keyed
       when={pluginHost && surfaceLease()}
       fallback={(
-        <div class="flex h-full min-h-0 items-center justify-center bg-background p-5" data-plugin-workbench-unavailable>
-          <div class="w-full max-w-md text-center">
+        <div class="flex h-full min-h-0 items-center justify-center bg-background p-5 animate-in fade-in duration-150 motion-reduce:animate-none" data-plugin-workbench-unavailable>
+          <div class={`w-full max-w-md text-center ${PLUGIN_ENTER_MOTION_CLASS}`}>
             <span class="mx-auto flex h-12 w-12 items-center justify-center rounded-xl border bg-muted text-muted-foreground">
               <Package class="h-5 w-5" />
             </span>
@@ -209,7 +209,7 @@ function PluginWidget(props: RedevenWorkbenchWidgetBodyProps) {
           {...REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS}
           {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS}
           {...{ [WORKBENCH_WIDGET_ACTIVATION_SURFACE_ATTR]: 'true' }}
-          class="redeven-workbench-body-surface h-full min-h-0 overflow-hidden"
+          class="redeven-workbench-body-surface h-full min-h-0 overflow-hidden animate-in fade-in duration-200 motion-reduce:animate-none"
           data-redeven-plugin-workbench-surface
         >
           <PluginSurfaceBody

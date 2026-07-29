@@ -252,6 +252,8 @@ describe('ExternalPluginInstallDialog', () => {
     expect(progress.textContent).toContain('Install plugin');
     expect(progress.textContent).toContain('Ready');
     expect(progress.querySelectorAll('[data-install-progress-segment]')).toHaveLength(4);
+    expect(document.querySelector('[data-install-progress-track]')).not.toBeNull();
+    expect(document.querySelector<HTMLElement>('[data-install-progress-track-active]')?.style.width).toBe('0%');
     expect(document.querySelector('[data-install-progress-current]')?.textContent).toBe('Plugin source');
     expect(document.querySelector('[data-install-progress]')?.textContent).toContain('Step 1 of 4');
   });
@@ -410,7 +412,7 @@ describe('ExternalPluginInstallDialog', () => {
       expect(document.body.textContent).toContain(confirmationDigest);
       const confirmation = document.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
       expect(confirmation.disabled).toBe(false);
-      expect(confirmation.closest('footer')).toBeNull();
+      expect(confirmation.closest('footer')).not.toBeNull();
       expect(confirmation.closest('[data-external-plugin-confirmation-region]')).not.toBeNull();
       expect(confirmation.closest('label')?.className).toContain('min-h-[46px]');
       confirmation.click();
@@ -450,7 +452,8 @@ describe('ExternalPluginInstallDialog', () => {
     expect(confirmation.querySelector('input[type="checkbox"]')).not.toBeNull();
     expect(confirmation.textContent).toContain('Confirm installation of this plugin package');
     expect(confirmation.textContent).toContain('start Disabled with no permission grants');
-    expect(confirmation.textContent).toContain(confirmationDigest);
+    expect(confirmation.textContent).not.toContain(confirmationDigest);
+    expect(report.textContent).toContain(confirmationDigest);
     button('Back').click();
     await flush();
     expect(document.activeElement).toBe(inputWithPlaceholder('https://example.com/plugin.redevplugin'));
@@ -486,7 +489,7 @@ describe('ExternalPluginInstallDialog', () => {
     },
   );
 
-  it('separates requested permissions from declared operation impact and keeps raw methods in the report', async () => {
+  it('presents one concise access-impact summary and keeps raw methods in the report', async () => {
     const inspected = inspection('absent');
     const method = (name: string, effect: 'read' | 'write' | 'execute' | 'delete' | 'admin', dangerous = false, preflightOnly = false) => ({
       method: name,
@@ -512,16 +515,15 @@ describe('ExternalPluginInstallDialog', () => {
     button('Review package').click();
     await flush();
 
-    const permissions = document.querySelector<HTMLElement>('[data-external-plugin-requested-permissions]')!;
+    const summary = document.querySelector<HTMLElement>('[data-external-plugin-access-summary]')!;
     const operations = document.querySelector<HTMLElement>('[data-external-plugin-declared-operations]')!;
-    expect(permissions.textContent).toContain('does not declare any permissions to request');
     for (const label of ['View information', 'Change content', 'Run actions', 'Delete content', 'Administrative control', 'Other high-attention operations']) {
       expect(operations.textContent).toContain(label);
     }
-    expect(operations.textContent).toContain('1 operation needs extra attention');
+    expect(document.querySelector('[data-external-plugin-review-highlights]')?.textContent).toContain('1 operation needs extra attention');
     expect(operations.textContent).toContain('1 operation is limited to preflight checks');
-    expect(operations.textContent).not.toContain('workspace.inspect');
-    expect(operations.textContent).not.toContain('effect=');
+    expect(summary.textContent).not.toContain('workspace.inspect');
+    expect(summary.textContent).not.toContain('effect=');
     const report = document.querySelector<HTMLDetailsElement>('[data-external-plugin-report]')!;
     expect(report.textContent).toContain('workspace.inspect');
     expect(report.textContent).toContain('effect=read');
@@ -535,9 +537,7 @@ describe('ExternalPluginInstallDialog', () => {
     button('Review package').click();
     await flush();
     expect(document.querySelector('[data-external-plugin-review-highlights]')?.textContent)
-      .toContain('does not declare any permissions to request');
-    expect(document.querySelector('[data-external-plugin-review-highlights]')?.textContent)
-      .toContain('does not declare any plugin operations');
+      .toContain('declares no plugin capabilities or access');
 
     dispose?.();
     document.body.innerHTML = '';
@@ -548,10 +548,11 @@ describe('ExternalPluginInstallDialog', () => {
     button('Review package').click();
     await flush();
     const highlights = document.querySelector('[data-external-plugin-review-highlights]')?.textContent ?? '';
-    expect(highlights).toContain('Permissions this plugin may request');
-    expect(highlights).toContain('Workspace read');
+    expect(highlights).toContain('Protected access');
+    expect(highlights).not.toContain('Workspace read');
     expect(highlights).not.toContain('Methods');
     expect(highlights).not.toContain('safe');
+    expect(document.querySelector('[data-external-plugin-report]')?.textContent).toContain('workspace.read');
   });
 
   it('identifies standard added access by category before the full report', async () => {
@@ -575,8 +576,9 @@ describe('ExternalPluginInstallDialog', () => {
     await flush();
 
     const requestedPermissions = document.querySelector<HTMLElement>('[data-external-plugin-requested-permissions]')!;
-    expect(requestedPermissions.textContent).toContain('Workspace read');
-    expect(requestedPermissions.textContent).toContain('Added');
+    expect(requestedPermissions.textContent).toContain('Protected access');
+    expect(requestedPermissions.textContent).not.toContain('Workspace read');
+    expect(document.querySelector('[data-external-plugin-standard-changes]')?.textContent).toContain('Added');
     expect(document.querySelector<HTMLDetailsElement>('[data-external-plugin-report]')?.open).toBe(false);
   });
 
@@ -749,7 +751,8 @@ describe('ExternalPluginInstallDialog', () => {
     const highlights = document.querySelector<HTMLElement>('[data-external-plugin-review-highlights]')!;
     expect(highlights.textContent).toContain('Network rules');
     expect(highlights.textContent).toContain('api.github.com:443');
-    expect(highlights.textContent).toContain('Workspace read');
+    expect(highlights.textContent).toContain('Protected access');
+    expect(highlights.textContent).not.toContain('Workspace read');
     const report = document.querySelector<HTMLDetailsElement>('[data-external-plugin-report]')!;
     expect(report.open).toBe(false);
     expect(report.textContent).toContain('permissions the plugin may ask');

@@ -5,6 +5,7 @@ import { Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 
 import { useI18n } from '../i18n';
 import type { PluginCenterTab, PluginInventoryItem } from './pluginTypes';
+import { PLUGIN_ENTER_MOTION_CLASS, PLUGIN_PRESS_MOTION_CLASS } from './pluginPresentation';
 import { PluginIcon, PluginStatusBadge, PluginTrustBadge } from './PluginPresentationPrimitives';
 
 export function PluginCenterItem(props: {
@@ -14,6 +15,7 @@ export function PluginCenterItem(props: {
   canManage: boolean;
   canOpenSurfaces: boolean;
   pending: boolean;
+  entranceDelayMs?: number;
   onOpenDetails: (target: HTMLButtonElement) => void;
   onInstall: () => void;
   onUpdate: () => void;
@@ -44,10 +46,13 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
   return (
     <article
       class={cn(
-        'group/card flex min-h-[208px] min-w-0 flex-col rounded-lg border bg-card p-4 text-card-foreground transition-[border-color,box-shadow,transform] duration-150 hover:-translate-y-0.5 hover:shadow-sm motion-reduce:transform-none motion-reduce:transition-none',
+        'group/card flex min-h-[208px] min-w-0 flex-col rounded-lg border bg-card p-4 text-card-foreground hover:-translate-y-0.5 hover:shadow-md',
+        PLUGIN_ENTER_MOTION_CLASS,
+        PLUGIN_PRESS_MOTION_CLASS,
         props.selected && 'border-primary bg-primary/[0.035] ring-1 ring-primary/20',
         update() && 'border-t-2 border-t-[var(--redeven-status-info-foreground)]',
       )}
+      style={`animation-delay: ${props.entranceDelayMs ?? 0}ms`}
       aria-current={props.selected ? 'true' : undefined}
     >
       <button
@@ -59,7 +64,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
         onClick={(event) => props.onOpenDetails(event.currentTarget)}
       >
         <span class="flex min-w-0 items-start gap-3">
-          <PluginIcon item={props.item} size="card" />
+          <PluginIcon item={props.item} size="card" class="transition-transform duration-200 ease-out group-hover/card:scale-[1.04] motion-reduce:transform-none motion-reduce:transition-none" />
           <span class="min-w-0 flex-1 pt-0.5">
             <span class="line-clamp-2 text-sm font-semibold leading-5">{props.item.displayName}</span>
             <span class="mt-1 flex flex-wrap gap-1">
@@ -83,7 +88,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
             type="button"
             data-plugin-center-card-primary={props.item.inventoryKey}
             data-plugin-center-update={update() ? props.item.inventoryKey : undefined}
-            class="inline-flex min-h-[44px] flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold text-primary-foreground transition-colors duration-150 hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-8 motion-reduce:transition-none"
+            class={cn('inline-flex min-h-[44px] flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-8', PLUGIN_PRESS_MOTION_CLASS)}
             disabled={props.pending || (!update() && !props.canOpenSurfaces)}
             onClick={update() ? props.onUpdate : props.onOpenActivity}
           >
@@ -94,7 +99,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
           <button
             type="button"
             data-plugin-center-install={props.item.inventoryKey}
-            class="inline-flex min-h-[44px] flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold text-primary-foreground transition-colors duration-150 hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-8 motion-reduce:transition-none"
+            class={cn('inline-flex min-h-[44px] flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-8', PLUGIN_PRESS_MOTION_CLASS)}
             disabled={!props.canManage || props.pending}
             onClick={props.onInstall}
           >
@@ -105,7 +110,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
         <Show when={installed() && props.item.defaultLaunchTarget}>
           <button
             type="button"
-            class="inline-flex min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center rounded-md border bg-background text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-8 sm:min-w-8 motion-reduce:transition-none"
+            class={cn('inline-flex min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center rounded-md border bg-background text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-8 sm:min-w-8', PLUGIN_PRESS_MOTION_CLASS)}
             aria-label={i18n.t('uiCopy.plugin.openInWorkbench')}
             title={i18n.t('uiCopy.plugin.openInWorkbench')}
             disabled={props.pending || !props.canOpenSurfaces}
@@ -127,7 +132,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
               ref={menuTrigger}
               type="button"
               data-plugin-center-card-menu={props.item.inventoryKey}
-              class="inline-flex min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center rounded-md border text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-8 sm:min-w-8 motion-reduce:transition-none"
+              class={cn('inline-flex min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center rounded-md border text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-8 sm:min-w-8', PLUGIN_PRESS_MOTION_CLASS)}
               title={i18n.t('uiCopy.plugin.moreActions')}
             >
               <MoreHorizontal class="h-4 w-4" />

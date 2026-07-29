@@ -325,7 +325,7 @@ export function ActivityPluginSurfaceWindow(props: ActivityPluginSurfaceWindowPr
         <div
           role="status"
           aria-live="polite"
-          class="absolute inset-0 z-20 flex items-center justify-center bg-background/95 px-6 text-center text-sm text-muted-foreground"
+          class="absolute inset-0 z-20 flex items-center justify-center bg-background/95 px-6 text-center text-sm text-muted-foreground animate-in fade-in duration-150 motion-reduce:animate-none"
           data-plugin-surface-close-queued
         >
           {i18n.t('uiCopy.plugin.closingSurface')}
@@ -341,11 +341,11 @@ export function ActivityPluginSurfaceWindow(props: ActivityPluginSurfaceWindowPr
           tabIndex={-1}
           aria-labelledby={`plugin-surface-recovery-title-${props.instanceID}`}
           aria-describedby={`plugin-surface-recovery-description-${props.instanceID}`}
-          class="absolute inset-0 z-20 flex items-center justify-center bg-background p-6"
+          class="absolute inset-0 z-20 flex items-center justify-center bg-background p-6 animate-in fade-in duration-150 motion-reduce:animate-none"
           data-plugin-surface-recovery
           onKeyDown={handleRecoveryKeyDown}
         >
-          <div class="max-w-md text-center">
+          <div class="max-w-md text-center animate-in fade-in zoom-in-95 duration-200 motion-reduce:animate-none">
             <AlertTriangle class="mx-auto h-6 w-6 text-destructive" />
             <h2 id={`plugin-surface-recovery-title-${props.instanceID}`} class="mt-3 text-sm font-semibold">{i18n.t('uiCopy.plugin.needsAttention')}</h2>
             <p id={`plugin-surface-recovery-description-${props.instanceID}`} class="mt-2 text-sm leading-6 text-muted-foreground">{i18n.t('uiCopy.plugin.surfaceCleanupFailed')}</p>
