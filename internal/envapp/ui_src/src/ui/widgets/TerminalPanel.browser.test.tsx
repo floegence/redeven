@@ -106,6 +106,11 @@ const rpcFsMocks = vi.hoisted(() => ({
   readFile: vi.fn().mockResolvedValue({ content: '{"scripts":{}}' }),
 }));
 
+const envContextMocks = vi.hoisted(() => ({
+  openFlowerTurnLauncher: vi.fn(),
+  openFileBrowserAtPath: vi.fn(async () => undefined),
+}));
+
 const transportAttachState = vi.hoisted(() => ({
   historyBoundarySequence: 0,
   effectiveCols: null as number | null,
@@ -595,11 +600,11 @@ vi.mock('../pages/EnvContext', () => ({
       { state: 'ready' },
     ),
     viewMode: () => 'activity',
-    openFlowerTurnLauncher: vi.fn(),
+    openFlowerTurnLauncher: envContextMocks.openFlowerTurnLauncher,
     openTerminalInDirectoryRequestSeq: () => 0,
     openTerminalInDirectoryRequest: () => null,
     openTerminalInDirectory: vi.fn(),
-    openFileBrowserAtPath: vi.fn(async () => undefined),
+    openFileBrowserAtPath: envContextMocks.openFileBrowserAtPath,
     consumeOpenTerminalInDirectoryRequest: vi.fn(),
     connectionOverlayVisible: () => false,
     connectionOverlayMessage: () => '',
@@ -820,6 +825,8 @@ beforeEach(() => {
     },
   ];
   terminalSessionsState.subscribers = [];
+  envContextMocks.openFlowerTurnLauncher.mockClear();
+  envContextMocks.openFileBrowserAtPath.mockClear();
   Object.values(transportMocks).forEach((mock) => mock.mockClear());
   transportMocks.attach.mockReset();
   transportMocks.attach.mockImplementation(async (_sessionId: string, cols: number, rows: number) => ({
@@ -2416,6 +2423,68 @@ describe('TerminalPanel browser activity integration', () => {
       await vi.waitFor(() => {
         expect(document.body.querySelector('[role="menu"]')).toBeNull();
       });
+    } finally {
+      dispose();
+      host.remove();
+    }
+  });
+
+  it('opens Ask Flower without local path metadata while SSH Files remains disabled', async () => {
+    terminalSessionsState.sessions = [{
+      id: 'session-ssh',
+      name: 'SSH',
+      workingDir: '/root/project',
+      createdAtMs: 1,
+      isActive: true,
+      lastActiveAtMs: 10,
+      executionContext: {
+        location: {
+          kind: 'remote',
+          phase: 'ready',
+          label: 'root@host',
+          authority: 'host',
+          workingDirectory: '/root/project',
+          source: 'osc7',
+        },
+        application: { kind: 'shell', identity: '', displayName: '' },
+        revision: 1,
+        updatedAtMs: 10,
+      },
+    }];
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => <TerminalPanel variant="workbench" />, host);
+
+    try {
+      await settleTerminalPanel();
+      const filesSlot = host.querySelector<HTMLButtonElement>('[data-testid="terminal-session-files-session-ssh"]');
+      expect(filesSlot).toBeTruthy();
+      expect(filesSlot?.dataset.terminalFilesAvailability).toBe('remote');
+      expect(filesSlot?.getAttribute('aria-disabled')).toBe('true');
+
+      const terminalInput = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="Terminal input"]');
+      expect(terminalInput).toBeTruthy();
+      terminalInput?.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'ContextMenu',
+        bubbles: true,
+        cancelable: true,
+      }));
+      await settleTerminalPanel();
+
+      const menu = document.body.querySelector<HTMLElement>('[role="menu"]');
+      const askFlowerButton = menu?.querySelector<HTMLButtonElement>('[data-floating-menu-item-id="ask-flower"]');
+      const browseFilesButton = menu?.querySelector<HTMLButtonElement>('[data-floating-menu-item-id="browse-files"]');
+      expect(askFlowerButton?.getAttribute('aria-disabled')).not.toBe('true');
+      expect(browseFilesButton?.getAttribute('aria-disabled')).toBe('true');
+
+      await page.elementLocator(askFlowerButton!).click();
+      await vi.waitFor(() => {
+        expect(envContextMocks.openFlowerTurnLauncher).toHaveBeenCalledTimes(1);
+      });
+      const serializedIntent = JSON.stringify(envContextMocks.openFlowerTurnLauncher.mock.calls[0]?.[0]);
+      expect(serializedIntent).not.toContain('working_dir');
+      expect(serializedIntent).not.toContain('suggested_working_dir');
+      expect(envContextMocks.openFileBrowserAtPath).not.toHaveBeenCalled();
     } finally {
       dispose();
       host.remove();

@@ -210,6 +210,32 @@ func TestFloretSupplementalContextTruncatesLargeTerminalSelection(t *testing.T) 
 	}
 }
 
+func TestFloretContextProjectionOmitsUnverifiedTerminalWorkingDirectory(t *testing.T) {
+	t.Parallel()
+
+	projection, err := floretContextProjectionForInput(RunInput{
+		ContextAction: &ContextActionEnvelope{
+			SchemaVersion: ContextActionSchemaVersion,
+			ActionID:      "assistant.ask.flower",
+			Provider:      "flower",
+			Target:        ContextActionTarget{TargetID: "current", Locality: "auto"},
+			Source:        ContextActionSource{Surface: "terminal"},
+			Context:       []ContextActionContextItem{{Kind: "terminal_selection", SelectionChars: 0}},
+			Presentation:  ContextActionPresentation{Label: "Ask Flower", Priority: 100},
+		},
+	})
+	if err != nil {
+		t.Fatalf("floretContextProjectionForInput: %v", err)
+	}
+	if len(projection.References) != 0 || len(projection.Items) != 1 {
+		t.Fatalf("projection=%#v, want no empty reference and one supplemental item", projection)
+	}
+	item := projection.Items[0]
+	if item.Text != "" || item.Metadata["working_dir"] != "" || item.Metadata["suggested_working_dir_abs"] != "" {
+		t.Fatalf("terminal supplemental item=%#v, want no unverified working-directory context", item)
+	}
+}
+
 func TestFloretContextProjectionBuildsCanonicalReferencesAndSupplementalContextTogether(t *testing.T) {
 	t.Parallel()
 

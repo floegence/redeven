@@ -642,6 +642,7 @@ export const enUSWidgetChrome = defineDictionary({
     failedToCopyClipboard: 'Failed to copy text to clipboard.',
     largeSelectionMetadataOnly: 'Large terminal selection was linked by length only.',
     noSelectionContextOnly: 'No terminal text selected. Added working directory context only.',
+    noTerminalContextAvailable: 'No terminal text or verified local working directory is currently available. You can still ask Flower.',
     askFlower: 'Ask Flower',
     browseFiles: 'Browse files',
     files: 'Files',

@@ -230,7 +230,7 @@ func TestCreateSessionReportsWorkingDirErrors(t *testing.T) {
 	}
 }
 
-func TestLocalPathCapabilityRequiresConfirmedLocalShellContext(t *testing.T) {
+func TestLocalPathCapabilityExistsBeforeCreatedSessionBecomesVisible(t *testing.T) {
 	root := t.TempDir()
 	workingDir := filepath.Join(root, "repo")
 	if err := os.Mkdir(workingDir, 0o755); err != nil {
@@ -251,11 +251,11 @@ func TestLocalPathCapabilityRequiresConfirmedLocalShellContext(t *testing.T) {
 		t.Fatalf("CreateSession() error = %v", err)
 	}
 	trustedWorkingDir := created.WorkingDir
-	if created.LocalPathCapability != nil {
-		t.Fatalf("local path capability = %#v, want nil before shell confirmation", created.LocalPathCapability)
+	if created.LocalPathCapability == nil || created.LocalPathCapability.WorkingDir != trustedWorkingDir {
+		t.Fatalf("local path capability = %#v, want validated initial directory %q", created.LocalPathCapability, trustedWorkingDir)
 	}
-	if capabilityAtCreatedEvent != "" {
-		t.Fatalf("created event capability = %q, want empty before shell confirmation", capabilityAtCreatedEvent)
+	if capabilityAtCreatedEvent != trustedWorkingDir {
+		t.Fatalf("created event capability = %q, want %q before visibility notification", capabilityAtCreatedEvent, trustedWorkingDir)
 	}
 
 	localReady := termgo.TerminalExecutionContextInfo{Location: termgo.TerminalLocationInfo{
@@ -319,6 +319,38 @@ func TestLocalPathCapabilityRequiresConfirmedLocalShellContext(t *testing.T) {
 	}
 	if capability := m.reconcileLocalPathCapability(created.ID, nextWorkingDir, &rotated); capability == nil || capability.WorkingDir != resolvedNextWorkingDir {
 		t.Fatalf("local capability after remote transition = %#v, want %q", capability, resolvedNextWorkingDir)
+	}
+}
+
+func TestLocalPathCapabilityProjectionRevalidatesWithoutMinting(t *testing.T) {
+	root := t.TempDir()
+	workingDir := filepath.Join(root, "repo")
+	if err := os.Mkdir(workingDir, 0o755); err != nil {
+		t.Fatalf("Mkdir(%q): %v", workingDir, err)
+	}
+	m := newQuietTestManager(t, root)
+	t.Cleanup(m.Cleanup)
+
+	created, err := m.createSession("repo", workingDir)
+	if err != nil {
+		t.Fatalf("createSession() error = %v", err)
+	}
+	info := created.ToSessionInfo()
+	if got := m.validatedLocalPathCapability(info); got != info.WorkingDir {
+		t.Fatalf("validated capability = %q, want %q", got, info.WorkingDir)
+	}
+
+	if err := os.Remove(workingDir); err != nil {
+		t.Fatalf("Remove(%q): %v", workingDir, err)
+	}
+	if got := m.validatedLocalPathCapability(info); got != "" {
+		t.Fatalf("deleted-directory capability = %q, want empty", got)
+	}
+	if err := os.Mkdir(workingDir, 0o755); err != nil {
+		t.Fatalf("restore directory: %v", err)
+	}
+	if got := m.validatedLocalPathCapability(info); got != "" {
+		t.Fatalf("projection minted capability after restore = %q, want empty", got)
 	}
 }
 
@@ -776,7 +808,6 @@ func TestDeleteSessionFailureReturnsSharedErrorAndCanRetry(t *testing.T) {
 		t.Fatalf("createSession() error = %v", err)
 	}
 	trustedWorkingDir := sess.ToSessionInfo().WorkingDir
-	m.setLocalPathCapability(sess.ID, trustedWorkingDir)
 	if trustedWorkingDir == "" {
 		t.Fatal("local path capability is empty after create")
 	}
@@ -826,8 +857,6 @@ func TestWidgetDeleteFailureStaysHiddenAndRevokesLocalPathCapability(t *testing.
 	if err != nil {
 		t.Fatalf("createSession() error = %v", err)
 	}
-	m.setLocalPathCapability(sess.ID, sess.ToSessionInfo().WorkingDir)
-
 	deleteErr := errors.New("widget cleanup failed")
 	m.deleteSessionFunc = func(string) error {
 		return deleteErr
@@ -876,8 +905,6 @@ func TestMixedDeleteSessionFailureUsesWidgetSemanticsInBothOrderings(t *testing.
 			if err != nil {
 				t.Fatalf("createSession() error = %v", err)
 			}
-			m.setLocalPathCapability(sess.ID, sess.ToSessionInfo().WorkingDir)
-
 			deleteErr := errors.New("mixed cleanup failed")
 			releaseDelete := make(chan struct{})
 			var cleanupCalls atomic.Int32

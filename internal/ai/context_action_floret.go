@@ -72,6 +72,7 @@ func floretContextActionItemsWithAuthority(action *ContextActionEnvelope, author
 	items := make([]flruntime.TurnSupplementalContextItem, 0, len(action.Context))
 	for index, item := range action.Context {
 		var reference flruntime.MessageReference
+		hasReference := true
 		var supplemental flruntime.TurnSupplementalContextItem
 		switch strings.TrimSpace(item.Kind) {
 		case contextActionKindFilePath:
@@ -83,7 +84,7 @@ func floretContextActionItemsWithAuthority(action *ContextActionEnvelope, author
 				Sensitive: true,
 			}
 		case contextActionKindTerminal:
-			reference = floretTerminalSelectionReference(item, index)
+			reference, hasReference = floretTerminalSelectionReference(item, index)
 			supplemental = floretTerminalSelectionSupplementalItem(action, item)
 		case contextActionKindProcess:
 			reference = floretProcessReference(item, index)
@@ -102,13 +103,15 @@ func floretContextActionItemsWithAuthority(action *ContextActionEnvelope, author
 		if err != nil {
 			return nil, nil, err
 		}
-		if err := reference.Validate(); err != nil {
-			return nil, nil, fmt.Errorf("context reference %d: %w", index, err)
+		if hasReference {
+			if err := reference.Validate(); err != nil {
+				return nil, nil, fmt.Errorf("context reference %d: %w", index, err)
+			}
+			references = append(references, reference)
 		}
-		references = append(references, reference)
 		items = append(items, supplemental)
 	}
-	if len(references) != len(action.Context) || len(items) != len(action.Context) {
+	if len(items) != len(action.Context) {
 		return nil, nil, ErrInvalidContextAction
 	}
 	return references, items, nil
@@ -137,14 +140,17 @@ func floretFilePathReferenceWithAuthority(action *ContextActionEnvelope, item Co
 	}, nil
 }
 
-func floretTerminalSelectionReference(item ContextActionContextItem, index int) flruntime.MessageReference {
+func floretTerminalSelectionReference(item ContextActionContextItem, index int) (flruntime.MessageReference, bool) {
 	selection := strings.TrimSpace(item.Selection)
 	truncated := false
 	if selection == "" && item.SelectionChars > floretTerminalSelectionInlineChars {
 		selection = fmt.Sprintf("%s characters selected; content is not embedded.", formatContextActionNumber(item.SelectionChars))
 		truncated = true
-	} else if selection == "" {
-		selection = "Working directory: " + strings.TrimSpace(item.WorkingDir)
+	} else if workingDir := strings.TrimSpace(item.WorkingDir); selection == "" && workingDir != "" {
+		selection = "Working directory: " + workingDir
+	}
+	if selection == "" {
+		return flruntime.MessageReference{}, false
 	}
 	return flruntime.MessageReference{
 		ReferenceID: floretContextReferenceID(index),
@@ -152,7 +158,7 @@ func floretTerminalSelectionReference(item ContextActionContextItem, index int) 
 		Label:       nonEmptyString(item.Title, "Terminal selection"),
 		Text:        selection,
 		Truncated:   truncated,
-	}
+	}, true
 }
 
 func floretProcessReference(item ContextActionContextItem, index int) flruntime.MessageReference {

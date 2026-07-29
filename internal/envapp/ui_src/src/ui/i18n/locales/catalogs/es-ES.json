@@ -2482,6 +2482,7 @@
     "failedToCopyClipboard": "No se pudo copiar el texto al portapapeles.",
     "largeSelectionMetadataOnly": "La selección extensa del terminal se vinculó únicamente mediante su longitud.",
     "noSelectionContextOnly": "No se ha seleccionado ningún texto de terminal. Se agregó contexto del directorio de trabajo únicamente.",
+    "noTerminalContextAvailable": "En este momento no hay texto del terminal ni un directorio de trabajo local verificado que se puedan adjuntar. Aun así, puedes preguntar a Flower.",
     "askFlower": "Preguntar a Flower",
     "browseFiles": "Explorar archivos",
     "files": "Archivos",

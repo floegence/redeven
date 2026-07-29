@@ -2482,6 +2482,7 @@
     "failedToCopyClipboard": "テキストをクリップボードにコピーできませんでした。",
     "largeSelectionMetadataOnly": "大きなターミナル選択範囲では、選択内容ではなく長さのみをリンクしました。",
     "noSelectionContextOnly": "ターミナルのテキストが選択されていません。作業ディレクトリのコンテキストのみを追加しました。",
+    "noTerminalContextAvailable": "現在、添付できるターミナルのテキストも、検証済みのローカル作業ディレクトリもありません。それでも Flower に質問できます。",
     "askFlower": "Flower に質問",
     "browseFiles": "ファイルを参照",
     "files": "ファイル",

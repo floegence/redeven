@@ -377,6 +377,50 @@ func TestQueuedTurnContextActionRejectsUnknownFlowerComposerFields(t *testing.T)
 	}
 }
 
+func TestQueuedTurnTerminalContextWorkingDirectoryPresence(t *testing.T) {
+	t.Parallel()
+
+	const envelopePrefix = `{
+		"schema_version": 2,
+		"action_id": "assistant.ask.flower",
+		"provider": "flower",
+		"target": {"target_id": "current", "locality": "auto"},
+		"source": {"surface": "terminal"},
+		"context": [`
+	const envelopeSuffix = `],
+		"presentation": {"label": "Ask Flower", "priority": 100}
+	}`
+
+	withoutWorkingDirectory := envelopePrefix + `{
+		"kind": "terminal_selection",
+		"selection": "npm test",
+		"selection_chars": 8
+	}` + envelopeSuffix
+	if action, err := unmarshalQueuedTurnContextAction(withoutWorkingDirectory); err != nil || action == nil {
+		t.Fatalf("terminal context without working_dir = (%#v, %v), want valid", action, err)
+	}
+
+	withEmptyWorkingDirectory := envelopePrefix + `{
+		"kind": "terminal_selection",
+		"working_dir": "",
+		"selection": "npm test",
+		"selection_chars": 8
+	}` + envelopeSuffix
+	if action, err := unmarshalQueuedTurnContextAction(withEmptyWorkingDirectory); !errors.Is(err, ErrInvalidContextAction) || action != nil {
+		t.Fatalf("terminal context with empty working_dir = (%#v, %v), want invalid", action, err)
+	}
+
+	withEmptySuggestedWorkingDirectory := strings.Replace(
+		withoutWorkingDirectory,
+		`"context": [`,
+		`"suggested_working_dir_abs": "", "context": [`,
+		1,
+	)
+	if action, err := unmarshalQueuedTurnContextAction(withEmptySuggestedWorkingDirectory); !errors.Is(err, ErrInvalidContextAction) || action != nil {
+		t.Fatalf("terminal context with empty suggested_working_dir_abs = (%#v, %v), want invalid", action, err)
+	}
+}
+
 func TestContextActionNormalizationPreservesUserTextPayload(t *testing.T) {
 	action := normalizeContextActionEnvelope(&ContextActionEnvelope{
 		SchemaVersion: ContextActionSchemaVersion,
@@ -565,9 +609,8 @@ func TestNormalizeAskFlowerContextActionEnforcesSourceKindPrivacyMatrix(t *testi
 			wantErr: true,
 		},
 		{
-			name:    "terminal selection requires working directory",
-			action:  base("terminal", ContextActionContextItem{Kind: "terminal_selection", Selection: "npm test", SelectionChars: 8}),
-			wantErr: true,
+			name:   "terminal selection may omit unverified working directory",
+			action: base("terminal", ContextActionContextItem{Kind: "terminal_selection", Selection: "npm test", SelectionChars: 8}),
 		},
 		{
 			name:    "terminal selection rejects multiline working directory",

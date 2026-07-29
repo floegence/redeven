@@ -3956,9 +3956,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const askFlowerFromSidebarItem = (item: TerminalSessionNavigationItem, anchor: { x: number; y: number }) => {
     const currentItem = sessionListItemById().get(item.id);
-    if (!currentItem || currentItem.remote) return;
+    if (!currentItem) return;
     const workingDir = normalizeAskFlowerAbsolutePath(currentItem.localWorkingDir);
-    if (!workingDir) return;
     const selection = buildTerminalContextSnapshot(currentItem.id, coreRegistry.get(currentItem.id) ?? null);
     setTerminalSidebarMenu(null);
     const handoff = () => openTerminalAskFlowerContext({ x: anchor.x, y: anchor.y, workingDir, selection });
@@ -3973,11 +3972,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const openTerminalAskFlowerContext = (context: {
     x: number;
     y: number;
-    workingDir: string;
+    workingDir?: string;
     selection: terminal_context_snapshot;
   }) => {
-    const workingDir = normalizeAskFlowerAbsolutePath(context.workingDir);
-    if (!workingDir) return;
+    const workingDir = normalizeAskFlowerAbsolutePath(context.workingDir ?? '');
 
     const selection = context.selection.hasSelection
       ? context.selection.selectionText
@@ -3986,38 +3984,25 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     const selectionChars = Array.from(trimmedSelection).length;
     const notes: string[] = [];
     let contextItems: EnvFlowerTurnLauncherContextItem[] = [];
+    const terminalContextItem = (text: string, characters: number): EnvFlowerTurnLauncherContextItem => ({
+      kind: 'terminal_selection',
+      ...(workingDir ? { working_dir: workingDir } : {}),
+      selection: text,
+      selection_chars: characters,
+    });
 
     if (trimmedSelection) {
       if (selectionChars > MAX_INLINE_TERMINAL_CONTEXT_CHARS) {
         notes.push(i18n.t('terminal.largeSelectionMetadataOnly'));
-        contextItems = [
-          {
-            kind: 'terminal_selection',
-            working_dir: workingDir,
-            selection: '',
-            selection_chars: selectionChars,
-          },
-        ];
+        contextItems = [terminalContextItem('', selectionChars)];
       } else {
-        contextItems = [
-          {
-            kind: 'terminal_selection',
-            working_dir: workingDir,
-            selection: trimmedSelection,
-            selection_chars: selectionChars,
-          },
-        ];
+        contextItems = [terminalContextItem(trimmedSelection, selectionChars)];
       }
     } else {
-      notes.push(i18n.t('terminal.noSelectionContextOnly'));
-      contextItems = [
-        {
-          kind: 'terminal_selection',
-          working_dir: workingDir,
-          selection: '',
-          selection_chars: 0,
-        },
-      ];
+      notes.push(i18n.t(workingDir
+        ? 'terminal.noSelectionContextOnly'
+        : 'terminal.noTerminalContextAvailable'));
+      contextItems = [terminalContextItem('', 0)];
     }
 
     env.openFlowerTurnLauncher(attachAskFlowerContextAction({
@@ -4034,9 +4019,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     const menu = terminalAskMenu();
     if (!menu) return;
     const item = sessionListItemById().get(menu.selection.sessionId);
-    if (!item || item.remote) return;
+    if (!item) return;
     const workingDir = normalizeAskFlowerAbsolutePath(item.localWorkingDir);
-    if (!workingDir) return;
     setTerminalAskMenu(null);
     openTerminalAskFlowerContext({
       x: menu.x,
@@ -4048,34 +4032,23 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const buildTerminalAskMenuItems = (menu: NonNullable<ReturnType<typeof terminalAskMenu>>): FloatingContextMenuItem[] => {
     const item = sessionListItemById().get(menu.selection.sessionId);
-    const remote = item?.remote === true;
-    const workingDir = remote
-      ? ''
-      : normalizeAskFlowerAbsolutePath(item?.localWorkingDir ?? '');
-    const localPathUnavailable = !remote && !workingDir;
     const primaryItems: FloatingContextMenuItem[] = [
       {
         id: 'ask-flower',
         kind: 'action',
         label: i18n.t('terminal.askFlower'),
         icon: FlowerContextMenuIcon,
-        disabled: remote || localPathUnavailable,
-        disabledReason: remote
-          ? i18n.t('terminal.remotePathActionsUnavailable')
-          : localPathUnavailable
-            ? i18n.t('terminal.invalidWorkingDirectory')
-            : undefined,
         onSelect: askFlowerFromTerminal,
       },
     ];
-    if (item?.canBrowsePath || remote) {
+    if (item?.canBrowsePath || item?.remote) {
       primaryItems.push({
         id: 'browse-files',
         kind: 'action',
         label: i18n.t('terminal.browseFiles'),
         icon: Folder,
-        disabled: remote || !item?.canBrowsePath,
-        disabledReason: remote ? i18n.t('terminal.remotePathActionsUnavailable') : undefined,
+        disabled: item?.remote || !item?.canBrowsePath,
+        disabledReason: item?.remote ? i18n.t('terminal.remotePathActionsUnavailable') : undefined,
         onSelect: handleBrowseFilesFromTerminal,
       });
     }
@@ -4114,12 +4087,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         kind: 'action',
         label: i18n.t('terminal.askFlower'),
         icon: FlowerContextMenuIcon,
-        disabled: item.remote || !item.localWorkingDir,
-        disabledReason: item.remote
-          ? i18n.t('terminal.remotePathActionsUnavailable')
-          : !item.localWorkingDir
-            ? i18n.t('terminal.invalidWorkingDirectory')
-            : undefined,
         onSelect: () => askFlowerFromSidebarItem(item, { x: menu.x, y: menu.y }),
       },
       {

@@ -2482,6 +2482,7 @@
     "failedToCopyClipboard": "Text konnte nicht in die Zwischenablage kopiert werden.",
     "largeSelectionMetadataOnly": "Große Terminalauswahl wurde nur nach Länge verknüpft.",
     "noSelectionContextOnly": "Kein Terminaltext ausgewählt. Nur Arbeitsverzeichniskontext hinzugefügt.",
+    "noTerminalContextAvailable": "Derzeit sind weder Terminaltext noch ein verifiziertes lokales Arbeitsverzeichnis zum Anhängen verfügbar. Flower kann trotzdem gefragt werden.",
     "askFlower": "Flower fragen",
     "browseFiles": "Dateien durchsuchen",
     "files": "Dateien",

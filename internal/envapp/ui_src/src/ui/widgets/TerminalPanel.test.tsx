@@ -2970,7 +2970,7 @@ describe('TerminalPanel', () => {
     expect(sessionsCoordinatorMocks.createSession).toHaveBeenCalledWith('redeven', '/workspace/redeven');
   });
 
-  it('keeps all local path actions disabled until a pending session receives an authoritative capability', async () => {
+  it('keeps Ask Flower available while pending local path actions remain disabled', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -2981,11 +2981,18 @@ describe('TerminalPanel', () => {
     await settleTerminalPanel();
 
     const menu = await openSidebarContextMenu(host, 'Terminal 2');
-    expect(findContextMenuButton(menu, 'Ask Flower')?.disabled).toBe(true);
+    const askFlowerButton = findContextMenuButton(menu, 'Ask Flower');
+    expect(askFlowerButton?.disabled).toBe(false);
     expect(findContextMenuButton(menu, 'Files')?.disabled).toBe(true);
     expect(findContextMenuButton(menu, 'Duplicate session')?.disabled).toBe(true);
     expect(findContextMenuButton(menu, 'Clear terminal content')?.disabled).toBe(true);
     expect(host.querySelector('[data-testid="terminal-session-files-pending-1"]')).toBeNull();
+
+    askFlowerButton?.click();
+    await settleTerminalPanel();
+    expect(openFlowerTurnLauncherSpy).toHaveBeenCalledTimes(1);
+    const intent = openFlowerTurnLauncherSpy.mock.calls[0]?.[0];
+    expect(JSON.stringify(intent)).not.toContain('working_dir');
   });
 
   it('configures TerminalCore with focus-triggered remote resize handoff enabled', async () => {
@@ -6130,6 +6137,14 @@ describe('TerminalPanel', () => {
     expect(host.querySelector<HTMLElement>('[data-terminal-status-announcement]')
       ?.dataset.terminalStatusAnnouncementSequence).toBe('1');
 
+    const failedMenu = await openSidebarContextMenu(host, 'Terminal 2');
+    const failedAskFlowerButton = findContextMenuButton(failedMenu, 'Ask Flower');
+    expect(failedAskFlowerButton?.disabled).toBe(false);
+    failedAskFlowerButton?.click();
+    await settleTerminalPanel();
+    expect(openFlowerTurnLauncherSpy).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(openFlowerTurnLauncherSpy.mock.calls[0]?.[0])).not.toContain('working_dir');
+
     const retryButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'Retry') as HTMLButtonElement | undefined;
     retryButton?.click();
     await settleTerminalPanelAfterPaint();
@@ -6260,7 +6275,8 @@ describe('TerminalPanel', () => {
     const askFlowerButton = findContextMenuButton(menu, 'Ask Flower');
     const filesButton = findContextMenuButton(menu, 'Files');
     const duplicateButton = findContextMenuButton(menu, 'Duplicate session');
-    for (const button of [askFlowerButton, filesButton, duplicateButton]) {
+    expect(askFlowerButton?.getAttribute('aria-disabled')).not.toBe('true');
+    for (const button of [filesButton, duplicateButton]) {
       expect(button?.disabled).toBe(false);
       expect(button?.getAttribute('aria-disabled')).toBe('true');
       const descriptionId = button?.getAttribute('aria-describedby') ?? '';
@@ -6271,7 +6287,8 @@ describe('TerminalPanel', () => {
     expect(document.activeElement).toBe(askFlowerButton);
     askFlowerButton?.click();
     await settleTerminalPanel();
-    expect(openFlowerTurnLauncherSpy).not.toHaveBeenCalled();
+    expect(openFlowerTurnLauncherSpy).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(openFlowerTurnLauncherSpy.mock.calls[0]?.[0])).not.toContain('working_dir');
 
     menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     await settleTerminalPanel();
@@ -6286,11 +6303,12 @@ describe('TerminalPanel', () => {
     const surfaceMenu = host.querySelector('[role="menu"]') as HTMLDivElement | null;
     const surfaceAskButton = surfaceMenu ? findContextMenuButton(surfaceMenu, 'Ask Flower') : undefined;
     const surfaceFilesButton = surfaceMenu ? findContextMenuButton(surfaceMenu, 'Browse files') : undefined;
-    expect(surfaceAskButton?.getAttribute('aria-disabled')).toBe('true');
+    expect(surfaceAskButton?.getAttribute('aria-disabled')).not.toBe('true');
     expect(surfaceFilesButton?.getAttribute('aria-disabled')).toBe('true');
     surfaceAskButton?.click();
     await settleTerminalPanel();
-    expect(openFlowerTurnLauncherSpy).not.toHaveBeenCalled();
+    expect(openFlowerTurnLauncherSpy).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify(openFlowerTurnLauncherSpy.mock.calls[1]?.[0])).not.toContain('working_dir');
   });
 
   it('fails closed for missing execution context across local path actions and mobile filesystem RPCs', async () => {
@@ -6325,14 +6343,18 @@ describe('TerminalPanel', () => {
     expect(rpcFsMocks.readFile).not.toHaveBeenCalled();
 
     const menu = await openSidebarContextMenu(host, 'Terminal 1');
-    for (const label of ['Ask Flower', 'Files', 'Duplicate session']) {
+    const askFlowerButton = findContextMenuButton(menu, 'Ask Flower');
+    expect(askFlowerButton?.disabled).toBe(false);
+    for (const label of ['Files', 'Duplicate session']) {
       const button = findContextMenuButton(menu, label);
       expect(button).toBeTruthy();
       expect(button?.disabled).toBe(true);
       button?.click();
     }
+    askFlowerButton?.click();
     await settleTerminalPanel();
-    expect(openFlowerTurnLauncherSpy).not.toHaveBeenCalled();
+    expect(openFlowerTurnLauncherSpy).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(openFlowerTurnLauncherSpy.mock.calls[0]?.[0])).not.toContain('working_dir');
     expect(openFileBrowserAtPathSpy).not.toHaveBeenCalled();
     expect(sessionsCoordinatorMocks.createSession).not.toHaveBeenCalled();
     expect(openPreviewSpy).not.toHaveBeenCalled();
@@ -6390,17 +6412,20 @@ describe('TerminalPanel', () => {
       await settleTerminalPanelAfterPaint();
 
       const menu = await openSidebarContextMenu(host, `Merged terminal ${index + 1}`);
-      for (const label of ['Ask Flower', 'Files', 'Duplicate session']) {
+      const askFlowerButton = findContextMenuButton(menu, 'Ask Flower');
+      expect(askFlowerButton?.disabled).toBe(false);
+      for (const label of ['Files', 'Duplicate session']) {
         const button = findContextMenuButton(menu, label);
         expect(button).toBeTruthy();
         expect(button?.disabled).toBe(true);
         button?.click();
       }
-      expect(openFlowerTurnLauncherSpy).not.toHaveBeenCalled();
+      askFlowerButton?.click();
+      await settleTerminalPanel();
+      expect(openFlowerTurnLauncherSpy).toHaveBeenCalledTimes(index + 1);
+      expect(JSON.stringify(openFlowerTurnLauncherSpy.mock.calls[index]?.[0])).not.toContain('working_dir');
       expect(openFileBrowserAtPathSpy).not.toHaveBeenCalled();
       expect(sessionsCoordinatorMocks.createSession).not.toHaveBeenCalled();
-      menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-      await settleTerminalPanel();
     }
   });
 
@@ -6409,6 +6434,7 @@ describe('TerminalPanel', () => {
       id: 'session-1',
       name: 'Terminal 1',
       workingDir: '/workspace/repo',
+      localPathCapability: { workingDir: '/workspace/repo' },
       createdAtMs: 1,
       isActive: true,
       lastActiveAtMs: 10,
@@ -6443,18 +6469,20 @@ describe('TerminalPanel', () => {
     await settleTerminalPanelAfterPaint();
 
     const liveSidebarMenu = host.querySelector('[role="menu"]') as HTMLDivElement;
-    const sidebarPathActions = [
-      findContextMenuButton(liveSidebarMenu, 'Ask Flower'),
+    const sidebarAskFlowerButton = findContextMenuButton(liveSidebarMenu, 'Ask Flower');
+    expect(sidebarAskFlowerButton?.getAttribute('aria-disabled')).not.toBe('true');
+    for (const button of [
       findContextMenuButton(liveSidebarMenu, 'Files'),
       findContextMenuButton(liveSidebarMenu, 'Duplicate session'),
-    ];
-    for (const button of sidebarPathActions) {
+    ]) {
       expect(button?.disabled).toBe(false);
       expect(button?.getAttribute('aria-disabled')).toBe('true');
       button?.click();
     }
+    sidebarAskFlowerButton?.click();
     await settleTerminalPanel();
-    expect(openFlowerTurnLauncherSpy).not.toHaveBeenCalled();
+    expect(openFlowerTurnLauncherSpy).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(openFlowerTurnLauncherSpy.mock.calls[0]?.[0])).not.toContain('working_dir');
     expect(openFileBrowserAtPathSpy).not.toHaveBeenCalled();
     expect(sessionsCoordinatorMocks.createSession).not.toHaveBeenCalled();
 
@@ -6492,22 +6520,27 @@ describe('TerminalPanel', () => {
     await settleTerminalPanelAfterPaint();
 
     const liveSurfaceMenu = host.querySelector('[role="menu"]') as HTMLDivElement;
-    for (const label of ['Ask Flower', 'Browse files']) {
-      const button = findContextMenuButton(liveSurfaceMenu, label);
+    const surfaceAskFlowerButton = findContextMenuButton(liveSurfaceMenu, 'Ask Flower');
+    expect(surfaceAskFlowerButton?.getAttribute('aria-disabled')).not.toBe('true');
+    const browseFilesButton = findContextMenuButton(liveSurfaceMenu, 'Browse files');
+    for (const button of [browseFilesButton]) {
       expect(button?.disabled).toBe(false);
       expect(button?.getAttribute('aria-disabled')).toBe('true');
       button?.click();
     }
+    surfaceAskFlowerButton?.click();
     await settleTerminalPanel();
-    expect(openFlowerTurnLauncherSpy).not.toHaveBeenCalled();
+    expect(openFlowerTurnLauncherSpy).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify(openFlowerTurnLauncherSpy.mock.calls[1]?.[0])).not.toContain('working_dir');
     expect(openFileBrowserAtPathSpy).not.toHaveBeenCalled();
   });
 
-  it('revokes an open surface Ask Flower action when the current local path disappears', async () => {
+  it('keeps an open surface Ask Flower action available when the current local path disappears', async () => {
     terminalSessionsState.sessions = [{
       id: 'session-1',
       name: 'Terminal 1',
       workingDir: '/workspace/repo',
+      localPathCapability: { workingDir: '/workspace/repo' },
       createdAtMs: 1,
       isActive: true,
       lastActiveAtMs: 10,
@@ -6553,12 +6586,12 @@ describe('TerminalPanel', () => {
 
     const liveMenu = host.querySelector('[role="menu"]') as HTMLDivElement;
     const askFlowerButton = findContextMenuButton(liveMenu, 'Ask Flower');
-    expect(askFlowerButton?.disabled).toBe(true);
-    const descriptionId = askFlowerButton?.getAttribute('aria-describedby') ?? '';
-    expect(liveMenu.querySelector(`#${descriptionId}`)?.textContent).toContain('valid working directory');
+    expect(askFlowerButton?.disabled).toBe(false);
+    expect(askFlowerButton?.getAttribute('aria-disabled')).not.toBe('true');
     askFlowerButton?.click();
     await settleTerminalPanel();
-    expect(openFlowerTurnLauncherSpy).not.toHaveBeenCalled();
+    expect(openFlowerTurnLauncherSpy).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(openFlowerTurnLauncherSpy.mock.calls[0]?.[0])).not.toContain('working_dir');
   });
 
   it('does not restart the shared SSH opening budget when a second panel mounts late', async () => {
@@ -6613,6 +6646,13 @@ describe('TerminalPanel', () => {
     ), firstHost);
     await settleTerminalPanelAfterPaint();
     expect(firstHost.querySelector('[data-terminal-transition-indicator="spinner"]')).not.toBeNull();
+    const openingMenu = await openSidebarContextMenu(firstHost, 'SSH');
+    const openingAskFlowerButton = findContextMenuButton(openingMenu, 'Ask Flower');
+    expect(openingAskFlowerButton?.getAttribute('aria-disabled')).not.toBe('true');
+    openingAskFlowerButton?.click();
+    await settleTerminalPanel();
+    expect(openFlowerTurnLauncherSpy).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(openFlowerTurnLauncherSpy.mock.calls[0]?.[0])).not.toContain('working_dir');
 
     nowMs = 1_900;
     render(() => (

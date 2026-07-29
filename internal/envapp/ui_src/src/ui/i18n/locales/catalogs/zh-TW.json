@@ -2482,6 +2482,7 @@
     "failedToCopyClipboard": "無法將文字複製到剪貼簿。",
     "largeSelectionMetadataOnly": "較大的終端選取範圍僅按長度關聯。",
     "noSelectionContextOnly": "未選擇終端文字。僅新增工作目錄上下文。",
+    "noTerminalContextAvailable": "目前沒有可附加的終端文字或已驗證的本機工作目錄，但你仍可詢問 Flower。",
     "askFlower": "詢問 Flower",
     "browseFiles": "瀏覽檔案",
     "files": "檔案",

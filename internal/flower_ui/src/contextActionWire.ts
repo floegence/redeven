@@ -57,7 +57,7 @@ export type ContextActionContextItem =
     }>
   | Readonly<{
       kind: 'terminal_selection';
-      working_dir: string;
+      working_dir?: string;
       selection: string;
       selection_chars: number;
     }>
@@ -192,9 +192,14 @@ function parseContextItem(value: unknown): ContextActionContextItem | null {
       };
     }
     case 'terminal_selection': {
-      if (!validSingleLineString(value.working_dir)) return null;
+      const workingDir = optionalString(value, 'working_dir');
+      if (workingDir === null || (workingDir !== undefined && !validSingleLineString(workingDir))) return null;
       const selection = parseSelectionItem(value);
-      return selection ? { kind, working_dir: value.working_dir.trim(), ...selection } : null;
+      return selection ? {
+        kind,
+        ...(workingDir !== undefined ? { working_dir: workingDir.trim() } : {}),
+        ...selection,
+      } : null;
     }
     case 'process_snapshot': {
       if (typeof value.pid !== 'number' || !Number.isInteger(value.pid) || value.pid <= 0) return null;
@@ -248,7 +253,8 @@ export function parseAskFlowerContextActionEnvelope(value: unknown): ContextActi
   if (value.schema_version !== CONTEXT_ACTION_SCHEMA_VERSION || value.action_id !== 'assistant.ask.flower' || value.provider !== 'flower') return null;
   if (!isRecord(value.target) || !validNonEmptyString(value.target.target_id) || !isStringMember(value.target.locality, ASK_FLOWER_LOCALITIES)) return null;
   if (!isRecord(value.source) || !isStringMember(value.source.surface, ASK_FLOWER_SURFACES)) return null;
-  if (value.source.surface === 'flower_composer') {
+  const strictWireSurface = value.source.surface === 'flower_composer' || value.source.surface === 'terminal';
+  if (strictWireSurface) {
     if (!hasOnlyKeys(value, ['schema_version', 'action_id', 'provider', 'target', 'source', 'execution_context', 'context', 'presentation', 'suggested_working_dir_abs'])) return null;
     if (!hasOnlyKeys(value.target, ['target_id', 'locality']) || !hasOnlyKeys(value.source, ['surface', 'surface_id'])) return null;
     if (isRecord(value.execution_context) && !hasOnlyKeys(value.execution_context, ['current_target_id', 'source_env_public_id', 'runtime_hint', 'session_source'])) return null;
@@ -270,10 +276,14 @@ export function parseAskFlowerContextActionEnvelope(value: unknown): ContextActi
     if (optionalString(value.presentation, key) === null) return null;
   }
   if (!Array.isArray(value.context) || value.context.length === 0) return null;
+  const suggestedWorkingDirectory = optionalString(value, 'suggested_working_dir_abs');
+  if (suggestedWorkingDirectory === null
+    || (suggestedWorkingDirectory !== undefined && !validSingleLineString(suggestedWorkingDirectory))) return null;
 
   const context: ContextActionContextItem[] = [];
   for (const rawItem of value.context) {
     if (value.source.surface === 'flower_composer' && (!isRecord(rawItem) || !hasOnlyKeys(rawItem, ['kind', 'path', 'is_directory']))) return null;
+    if (value.source.surface === 'terminal' && (!isRecord(rawItem) || !hasOnlyKeys(rawItem, ['kind', 'working_dir', 'selection', 'selection_chars']))) return null;
     const rawKind = isRecord(rawItem) && typeof rawItem.kind === 'string' ? rawItem.kind : '';
     if (!KNOWN_CONTEXT_KINDS.has(rawKind) || !surfaceAllowsKind(value.source.surface, rawKind)) return null;
     const item = parseContextItem(rawItem);
@@ -308,7 +318,9 @@ export function parseAskFlowerContextActionEnvelope(value: unknown): ContextActi
       ...(typeof value.presentation.status_label === 'string' ? { status_label: value.presentation.status_label } : {}),
       ...(typeof value.presentation.disabled_reason === 'string' ? { disabled_reason: value.presentation.disabled_reason } : {}),
     },
-    ...(typeof value.suggested_working_dir_abs === 'string' ? { suggested_working_dir_abs: value.suggested_working_dir_abs } : {}),
+    ...(suggestedWorkingDirectory !== undefined
+      ? { suggested_working_dir_abs: suggestedWorkingDirectory.trim() }
+      : {}),
   };
 }
 

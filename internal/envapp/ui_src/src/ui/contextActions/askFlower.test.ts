@@ -43,6 +43,24 @@ describe('Ask Flower context actions', () => {
     });
   });
 
+  it('omits terminal working-directory metadata when no local capability exists', () => {
+    const action = buildAskFlowerContextAction({
+      source: 'terminal',
+      context_items: [{
+        kind: 'terminal_selection',
+        selection: 'ssh output',
+        selection_chars: 10,
+      }],
+    });
+
+    expect(action.context).toEqual([{
+      kind: 'terminal_selection',
+      selection: 'ssh output',
+      selection_chars: 10,
+    }]);
+    expect(action).not.toHaveProperty('suggested_working_dir_abs');
+  });
+
   it('carries execution context as routing hints, not permissions', () => {
     const action = buildAskFlowerContextAction({
       source: 'file_browser',
