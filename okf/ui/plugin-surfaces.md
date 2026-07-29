@@ -3,7 +3,7 @@ type: UI Contract
 title: Plugin surfaces
 description: Env App manages official and external plugins through an accessible Launcher, searchable category discovery, exact inventory identities, explicit review, SDK-owned surfaces, Activity windows, and Workbench widgets.
 tags: [ui, plugins, activity, workbench, plugin-center]
-timestamp: 2026-07-27T00:00:00Z
+timestamp: 2026-07-29T00:00:00Z
 quality_exception: Cross-surface UI contract spanning exact plugin identity, Launcher discovery, Center governance, Activity placement, and Workbench placement.
 ---
 # Summary
@@ -11,8 +11,8 @@ quality_exception: Cross-surface UI contract spanning exact plugin identity, Lau
 Plugin UI embeds released ReDevPlugin sandbox surfaces in Redeven chrome.
 Activity opens Shell-root windows; Workbench opens `redeven.plugin` widgets.
 Activity Bar opens a search-first Launcher with stable categories, keyboard
-navigation, and exact inventory routing. Plugin Center combines trust, lifecycle,
-access, and launch state into one action. External installs use explicit source,
+navigation, and exact inventory routing. Plugin Center presents trust, lifecycle,
+access, and launch state through a compact directory and structured inspector. External installs use explicit source,
 review, commit, and completion. Fresh installs start disabled with zero grants;
 updates retain Host-managed state and grants without adding any. Redeven owns
 navigation, review, placement, and filters; ReDevPlugin owns admission, iframe
@@ -25,29 +25,41 @@ close stays retryable without wider authority.
 
 The Activity Bar `Plugins` entry opens a Shell-root Launcher without changing
 the current normal surface. Desktop uses a centered modal with a search field,
-category rail, and responsive icon grid; mobile uses a bottom sheet with the
-same controls and at least 44px touch targets. Search normalizes Unicode with
+responsive icon grid, stable scrolling body, and fixed footer; mobile uses a
+bottom sheet with the same controls and at least 44px touch targets. Search normalizes Unicode with
 NFKC and locale-aware case folding, matches display name, canonical keywords,
 and the locale's explicit alias key, and intersects with the selected category.
 The category set is stable (`development`, `infrastructure`, `data`,
 `collaboration`, `productivity`, `other`) and never inferred from localized
-labels. Empty results provide a single clear-filters action. Ready items open
-their default Activity surface; disabled, unavailable, not-installed,
-permission-required, and policy-restricted items open exact management details.
+labels. Category controls stay hidden below six installed plugins and appear at
+six without changing category identity. Empty results provide a single
+clear-filters action. A launchable plugin tile's primary action opens its
+declared default surface directly; plugins that cannot launch fall back to
+their exact management detail by `inventoryKey`.
 Escape clears search before closing, focus is trapped and restored, background
 content is inert, and arrow/Home/End navigation remains within the visible grid.
 Each plugin is a semantic list item containing a native primary button. Its
 secondary menu exposes only real Activity, Workbench, and exact management
-actions supported by that item; its layout and hit target do not overlap the
-primary launch button. Absent product mutation APIs are not simulated.
+actions supported by that item. The menu is reachable through its button,
+right-click, the `ContextMenu` key, and `Shift+F10`; touch does not depend on a
+long-press gesture. Menu layout and hit targets do not overlap the primary
+launch button. Absent product mutation APIs are not simulated.
 Plugin Center remains a dedicated Activity surface with a separate Launcher
 entry and uses the same category/search projection. Its local filters combine
 source (official catalog or external), trust, and lifecycle without rebuilding
 identity. Every filter trigger permanently names its dimension and current
 value, exposes a dropdown affordance, and keeps one clear-all action visible
 whenever search, category, source, trust, or lifecycle filtering is active.
-Discover is a responsive 2-4 column card grid; Installed and Updates
-stay denser management lists so scanning and state comparison remain efficient.
+The title, search, refresh, and administrative menu form a compact primary
+toolbar; tabs, categories, and filters form a second scroll-contained band
+without page-level horizontal overflow. Discover, Installed, and Updates use
+one responsive compact card directory with 48px identity icons and independent
+primary, surface, overflow, and detail commands. Updates carry an explicit
+information treatment and update command. Refresh status remains outside the
+card grid, so a pending refresh cannot appear as a duplicate card. The inspector
+orders identity, primary actions, required and optional
+permissions, issue evidence, and collapsed technical information. Policy caps,
+effective grants, revocation, and required-to-open semantics remain distinct.
 The directory opens with no inspector selected. Only an explicit item selection
 or Shell exact-key request opens detail; closing detail preserves the directory
 tab, query, and filters, then restores the originating exact item when it is
@@ -193,6 +205,11 @@ Each Activity window owns one fresh `PluginSurfaceSlot` and opens it only throug
 worker readiness, and first-commit boundary. Redeven creates no iframe,
 bootstrap, asset session, or bridge.
 
+Opening and closing show quiet placement-owned status layers. An opening or
+bridge failure replaces the iframe area with a recovery panel. Retry first
+retires the failed slot, then creates and opens a fresh slot; it never reuses the
+failed iframe, host, bridge, or surface instance.
+
 The Shell owns the only Activity registry, exact-target deduplication, activation
 stack, bounded z-order, and geometry persistence. Reopening activates the stable
 window. Capacity eviction awaits the least-recently-active exact close; failure
@@ -263,7 +280,9 @@ or call business adapters directly.
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:1` - Owns inventory, client lifetime, lifecycle commands, and cross-placement serialization.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginPanel.tsx:1` - Carries exact inventory keys from tiles into management navigation.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterView.tsx:1` - Selects exact inventory items and hosts external installation.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterItems.tsx:1` - Presents the compact Discover, Installed, and Updates card directory without owning selection or mutations.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginPresentation.ts:1` - Combines trust, policy, authorization, lifecycle, and launch readiness into one primary action.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/externalPluginSecurityProjection.ts:1` - Projects security declarations, update deltas, and operation impact without UI state.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/ExternalPluginInstallDialog.tsx:1` - Implements source, review, explicit confirmation, commit, and terminal result UX.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginInventoryProjection.ts:1` - Isolates official and external identity, trust, provenance, grants, and requirements.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/ActivityPluginSurfaceWindow.tsx:1` - Owns Activity floating chrome, mobile modality, focus, and close.
