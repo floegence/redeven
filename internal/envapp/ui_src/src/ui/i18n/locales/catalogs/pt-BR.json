@@ -2482,6 +2482,7 @@
     "failedToCopyClipboard": "Falha ao copiar o texto para a área de transferência.",
     "largeSelectionMetadataOnly": "A seleção grande do terminal foi vinculada apenas pelo comprimento.",
     "noSelectionContextOnly": "Nenhum texto do terminal foi selecionado. Apenas o contexto do diretório de trabalho foi adicionado.",
+    "noTerminalContextAvailable": "No momento, não há texto do terminal nem diretório de trabalho local verificado disponível para anexar. Ainda assim, você pode perguntar ao Flower.",
     "askFlower": "Perguntar ao Flower",
     "browseFiles": "Procurar arquivos",
     "files": "Arquivos",

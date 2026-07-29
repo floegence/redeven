@@ -2482,6 +2482,7 @@
     "failedToCopyClipboard": "无法将文本复制到剪贴板。",
     "largeSelectionMetadataOnly": "较大的终端选区仅按其长度添加为上下文。",
     "noSelectionContextOnly": "未选择终端文本。仅添加工作目录上下文。",
+    "noTerminalContextAvailable": "当前没有可附加的终端文本或已验证的本地工作目录，但你仍可询问 Flower。",
     "askFlower": "询问 Flower",
     "browseFiles": "浏览文件",
     "files": "文件",

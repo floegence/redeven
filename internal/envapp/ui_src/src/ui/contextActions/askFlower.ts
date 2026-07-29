@@ -35,7 +35,7 @@ function toContextActionItem(item: EnvFlowerTurnLauncherContextItem): ContextAct
   if (item.kind === 'terminal_selection') {
     return {
       kind: 'terminal_selection',
-      working_dir: item.working_dir,
+      ...(item.working_dir ? { working_dir: item.working_dir } : {}),
       selection: item.selection,
       selection_chars: item.selection_chars,
     };
@@ -86,7 +86,9 @@ export function buildAskFlowerContextAction(params: {
       label: 'Ask Flower',
       priority: 100,
     },
-    suggested_working_dir_abs: params.suggested_working_dir,
+    ...(params.suggested_working_dir
+      ? { suggested_working_dir_abs: params.suggested_working_dir }
+      : {}),
   };
 }
 

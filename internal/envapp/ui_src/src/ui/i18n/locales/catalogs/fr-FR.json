@@ -2482,6 +2482,7 @@
     "failedToCopyClipboard": "Échec de la copie du texte dans le presse-papiers.",
     "largeSelectionMetadataOnly": "La grande sélection de terminaux était liée uniquement par la longueur.",
     "noSelectionContextOnly": "Aucun texte de terminal sélectionné. Ajout du contexte du répertoire de travail uniquement.",
+    "noTerminalContextAvailable": "Aucun texte de terminal ni répertoire de travail local vérifié n’est actuellement disponible pour être joint. Vous pouvez tout de même demander à Flower.",
     "askFlower": "Demander à Flower",
     "browseFiles": "Parcourir les fichiers",
     "files": "Fichiers",

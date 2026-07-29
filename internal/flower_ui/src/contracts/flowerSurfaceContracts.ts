@@ -1158,7 +1158,7 @@ export type FlowerTurnLauncherContextItem =
     }>
   | Readonly<{
       kind: 'terminal_selection';
-      working_dir: string;
+      working_dir?: string;
       selection: string;
       selection_chars: number;
     }>

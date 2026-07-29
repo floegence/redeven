@@ -217,7 +217,8 @@ func (m *Manager) CreateSession(name string, workingDir string) (*SessionInfo, e
 	if err != nil {
 		return nil, err
 	}
-	return toSessionInfo(sess.ToSessionInfo(), m.localPathCapability(sess.ID)), nil
+	info := sess.ToSessionInfo()
+	return toSessionInfo(info, m.validatedLocalPathCapability(info)), nil
 }
 
 func (m *Manager) DeleteSession(sessionID string) error {
@@ -251,7 +252,8 @@ func (m *Manager) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, stre
 			return nil, err
 		}
 
-		return &terminalCreateResp{Session: toWireSessionInfo(sess.ToSessionInfo(), m.localPathCapability(sess.ID))}, nil
+		info := sess.ToSessionInfo()
+		return &terminalCreateResp{Session: toWireSessionInfo(info, m.validatedLocalPathCapability(info))}, nil
 	})
 
 	// List sessions
@@ -263,7 +265,7 @@ func (m *Manager) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, stre
 		sessions := m.visibleSessionInfos()
 		out := make([]*terminalSessionInfo, 0, len(sessions))
 		for _, s := range sessions {
-			out = append(out, toWireSessionInfo(s, m.localPathCapability(s.ID)))
+			out = append(out, toWireSessionInfo(s, m.validatedLocalPathCapability(s)))
 		}
 		return &terminalListResp{Sessions: out}, nil
 	})
@@ -699,23 +701,6 @@ func (m *Manager) createSession(name string, workingDir string) (*termgo.Session
 	return sess, nil
 }
 
-func (m *Manager) setLocalPathCapability(sessionID string, workingDir string) {
-	if m == nil {
-		return
-	}
-	sessionID = strings.TrimSpace(sessionID)
-	workingDir = strings.TrimSpace(workingDir)
-	if sessionID == "" || workingDir == "" {
-		return
-	}
-	m.mu.Lock()
-	if m.localPathCapabilities == nil {
-		m.localPathCapabilities = make(map[string]string)
-	}
-	m.localPathCapabilities[sessionID] = workingDir
-	m.mu.Unlock()
-}
-
 func (m *Manager) reconcileLocalPathCapability(sessionID string, workingDir string, context *termgo.TerminalExecutionContextInfo) *LocalPathCapabilityInfo {
 	if m == nil {
 		return nil
@@ -758,6 +743,37 @@ func (m *Manager) reconcileLocalPathCapability(sessionID string, workingDir stri
 		return nil
 	}
 	return &LocalPathCapabilityInfo{WorkingDir: resolved}
+}
+
+func (m *Manager) validatedLocalPathCapability(info termgo.TerminalSessionInfo) string {
+	if m == nil {
+		return ""
+	}
+	sessionID := strings.TrimSpace(info.ID)
+	grantedWorkingDir := m.localPathCapability(sessionID)
+	if sessionID == "" || grantedWorkingDir == "" {
+		return ""
+	}
+	location := info.ExecutionContext.Location
+	valid := info.WorkingDir == grantedWorkingDir &&
+		location.Kind == termgo.TerminalLocationLocal &&
+		location.Phase == termgo.TerminalLocationPhaseReady &&
+		location.Source == termgo.TerminalContextSourceShellIntegration &&
+		location.WorkingDirectory == grantedWorkingDir
+	if valid {
+		resolved, err := m.resolveWorkingDir(grantedWorkingDir)
+		valid = err == nil && resolved == grantedWorkingDir
+	}
+	if valid {
+		return grantedWorkingDir
+	}
+
+	m.mu.Lock()
+	if m.localPathCapabilities[sessionID] == grantedWorkingDir {
+		delete(m.localPathCapabilities, sessionID)
+	}
+	m.mu.Unlock()
+	return ""
 }
 
 func (m *Manager) localPathCapability(sessionID string) string {
@@ -842,6 +858,9 @@ func (h *eventHandler) OnTerminalSessionCreated(session *termgo.Session) {
 	if sessionID == "" {
 		return
 	}
+	// The product selected and resolved this launch directory. Establish the
+	// grant before any client can observe the newly created session.
+	h.m.reconcileLocalPathCapability(sessionID, info.WorkingDir, &info.ExecutionContext)
 	h.m.trackSessionOpen(sessionID)
 
 	payload := terminalSessionsChangedPayload{

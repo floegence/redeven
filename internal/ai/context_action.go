@@ -55,6 +55,30 @@ type ContextActionEnvelope struct {
 	Context             []ContextActionContextItem  `json:"context"`
 	Presentation        ContextActionPresentation   `json:"presentation"`
 	SuggestedWorkingDir string                      `json:"suggested_working_dir_abs,omitempty"`
+	wireFields          map[string]json.RawMessage
+}
+
+func (envelope *ContextActionEnvelope) UnmarshalJSON(data []byte) error {
+	type contextActionEnvelopeWire ContextActionEnvelope
+	var decoded contextActionEnvelopeWire
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	for field := range fields {
+		switch field {
+		case "schema_version", "action_id", "provider", "target", "source", "execution_context",
+			"context", "presentation", "suggested_working_dir_abs":
+		default:
+			return fmt.Errorf("json: unknown field %q", field)
+		}
+	}
+	*envelope = ContextActionEnvelope(decoded)
+	envelope.wireFields = fields
+	return nil
 }
 
 type ContextActionTarget struct {
@@ -145,7 +169,7 @@ func (item ContextActionContextItem) MarshalJSON() ([]byte, error) {
 	case contextActionKindTerminal:
 		return json.Marshal(struct {
 			Kind           string `json:"kind"`
-			WorkingDir     string `json:"working_dir"`
+			WorkingDir     string `json:"working_dir,omitempty"`
 			Selection      string `json:"selection"`
 			SelectionChars int    `json:"selection_chars"`
 		}{contextActionKindTerminal, item.WorkingDir, item.Selection, item.SelectionChars})
@@ -223,6 +247,12 @@ func normalizeAskFlowerContextActionEnvelope(in *ContextActionEnvelope) (*Contex
 	}
 	if out.ActionID != contextActionAskFlowerID ||
 		out.Provider != contextActionFlowerProvider {
+		return nil, ErrInvalidContextAction
+	}
+	_, suggestedWorkingDirWasPresent := in.wireFields["suggested_working_dir_abs"]
+	rawSuggestedWorkingDir := in.SuggestedWorkingDir
+	if (suggestedWorkingDirWasPresent && strings.TrimSpace(rawSuggestedWorkingDir) == "") ||
+		strings.ContainsAny(rawSuggestedWorkingDir, "\r\n") {
 		return nil, ErrInvalidContextAction
 	}
 	switch out.Target.Locality {
@@ -369,8 +399,10 @@ func contextActionItemPayloadAllowed(item ContextActionContextItem) bool {
 	case contextActionKindTerminal:
 		selection := strings.TrimSpace(item.Selection)
 		selectionRunes := len([]rune(selection))
-		return strings.TrimSpace(item.WorkingDir) != "" &&
-			!strings.ContainsAny(item.WorkingDir, "\r\n") &&
+		_, workingDirWasPresent := item.wireFields["working_dir"]
+		workingDir := strings.TrimSpace(item.WorkingDir)
+		return (!workingDirWasPresent || workingDir != "") &&
+			!strings.ContainsAny(workingDir, "\r\n") &&
 			item.SelectionChars >= 0 &&
 			(selection == "" || item.SelectionChars == selectionRunes) &&
 			strings.TrimSpace(item.Content) == "" &&
