@@ -47,6 +47,7 @@ func (a *Adapter) CreatePreflight(req ContainerCreateRequest) (ResourcePlan, err
 		identity = strings.TrimSpace(req.Image)
 	}
 	target := map[string]any{"engine": string(req.Engine), "resource_kind": "container", "identity": identity}
+	addEndpointTarget(target, req.EndpointID)
 	return BuildResourcePlan(MethodContainersCreate, target, req, maxRiskLevel(flags), flags, requiresAdmin(flags), "Create the container with the reviewed configuration")
 }
 
@@ -76,6 +77,7 @@ func (a *Adapter) RemovePreflight(ctx context.Context, req ContainerRemovePrefli
 		flags = append(flags, RiskFlag{ID: "force_running_container", Severity: RiskSeverityCritical, Title: "Force running container removal", Detail: "The running container will be terminated and removed.", AdminRequired: true})
 	}
 	target := map[string]any{"engine": string(req.Engine), "resource_kind": "container", "container_id": item.ContainerID, "state": string(item.State)}
+	addEndpointTarget(target, req.EndpointID)
 	if name != "" {
 		target["container_name"] = name
 	}
@@ -218,6 +220,7 @@ func (a *Adapter) RemoveImagePreflight(ctx context.Context, req ImageRemovePrefl
 		return ResourcePlan{}, errors.New("confirmation_name must match the image reference")
 	}
 	target := map[string]any{"engine": string(req.Engine), "resource_kind": "image", "image": image, "referenced_containers": item.ReferencedContainers, "reclaimable_bytes": item.SizeBytes}
+	addEndpointTarget(target, req.EndpointID)
 	risk := RiskLevelHigh
 	if req.Force {
 		risk = RiskLevelCritical
@@ -251,8 +254,9 @@ func (a *Adapter) PruneImagesPreflight(ctx context.Context, req ResourcePruneReq
 	for _, identity := range identities {
 		bytes += available[identity].SizeBytes
 	}
-	request := ResourcePruneRequest{Engine: req.Engine, ResourceIdentities: identities}
+	request := ResourcePruneRequest{Engine: req.Engine, EndpointID: req.EndpointID, ResourceIdentities: identities}
 	target := map[string]any{"engine": string(req.Engine), "resource_kind": "images", "resource_count": len(identities), "reclaimable_bytes": bytes, "resource_identities": identities}
+	addEndpointTarget(target, req.EndpointID)
 	return BuildResourcePlan(MethodImagesPrune, target, request, RiskLevelHigh, nil, false, "Remove the exact unused image set in this plan")
 }
 
@@ -330,6 +334,7 @@ func (a *Adapter) CreateVolumePreflight(req VolumeCreateRequest) (ResourcePlan, 
 	}
 	sort.Strings(optionKeys)
 	target := map[string]any{"engine": string(req.Engine), "resource_kind": "volume", "name": identity, "driver": strings.TrimSpace(req.Driver), "option_keys": optionKeys}
+	addEndpointTarget(target, req.EndpointID)
 	return BuildResourcePlan(MethodVolumesCreate, target, req, RiskLevelLow, nil, false, "Create the volume with the reviewed driver configuration")
 }
 
@@ -372,6 +377,7 @@ func (a *Adapter) RemoveVolumePreflight(ctx context.Context, req VolumeRemovePre
 		return ResourcePlan{}, errors.New("confirmation_name must match the volume name")
 	}
 	target := map[string]any{"engine": string(req.Engine), "resource_kind": "volume", "name": item.Name, "referenced_containers": 0}
+	addEndpointTarget(target, req.EndpointID)
 	return BuildResourcePlan(MethodVolumesRemove, target, req, RiskLevelHigh, nil, false, "Remove the selected volume using the reviewed reference plan")
 }
 
@@ -393,8 +399,9 @@ func (a *Adapter) PruneVolumesPreflight(ctx context.Context, req ResourcePruneRe
 	if err != nil {
 		return ResourcePlan{}, err
 	}
-	request := ResourcePruneRequest{Engine: req.Engine, ResourceIdentities: identities}
+	request := ResourcePruneRequest{Engine: req.Engine, EndpointID: req.EndpointID, ResourceIdentities: identities}
 	target := map[string]any{"engine": string(req.Engine), "resource_kind": "volumes", "resource_count": len(identities), "resource_identities": identities}
+	addEndpointTarget(target, req.EndpointID)
 	return BuildResourcePlan(MethodVolumesPrune, target, request, RiskLevelHigh, nil, false, "Remove the exact unused volume set in this plan")
 }
 
@@ -521,4 +528,10 @@ func BuildResourcePlan(method Method, target map[string]any, request any, risk R
 		RequiresAdmin: requiresAdmin,
 		Summary:       summary,
 	}, nil
+}
+
+func addEndpointTarget(target map[string]any, endpointID EndpointID) {
+	if endpointID != "" {
+		target["endpoint_id"] = endpointID
+	}
 }

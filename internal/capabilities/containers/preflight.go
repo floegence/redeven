@@ -16,6 +16,7 @@ const containerTargetHashVersion = "redeven.container_target.v1"
 
 type StartPreflightInput struct {
 	Engine        Engine
+	EndpointID    EndpointID
 	ContainerID   string
 	ContainerName string
 	Image         ImageInput
@@ -86,11 +87,13 @@ func BuildStartPreflightPlan(input StartPreflightInput) (StartPreflightPlan, err
 
 	target := TargetSummary{
 		Engine:        engine,
+		EndpointID:    input.EndpointID,
 		ContainerID:   containerID,
 		ContainerName: strings.TrimSpace(input.ContainerName),
 		TargetHash: hashTarget(targetHashInput{
 			Version:        containerTargetHashVersion,
 			Engine:         engine,
+			EndpointID:     input.EndpointID,
 			ContainerID:    containerID,
 			ContainerName:  strings.TrimSpace(input.ContainerName),
 			ImageReference: image.Reference,
@@ -120,12 +123,13 @@ func BuildStartPreflightPlan(input StartPreflightInput) (StartPreflightPlan, err
 }
 
 type targetHashInput struct {
-	Version        string `json:"version"`
-	Engine         Engine `json:"engine"`
-	ContainerID    string `json:"container_id"`
-	ContainerName  string `json:"container_name,omitempty"`
-	ImageReference string `json:"image_reference,omitempty"`
-	ImageDigest    string `json:"image_digest,omitempty"`
+	Version        string     `json:"version"`
+	Engine         Engine     `json:"engine"`
+	EndpointID     EndpointID `json:"endpoint_id,omitempty"`
+	ContainerID    string     `json:"container_id"`
+	ContainerName  string     `json:"container_name,omitempty"`
+	ImageReference string     `json:"image_reference,omitempty"`
+	ImageDigest    string     `json:"image_digest,omitempty"`
 }
 
 func hashTarget(input targetHashInput) string {

@@ -169,8 +169,8 @@ func TestBuildResourcePlanProducesStableDigest(t *testing.T) {
 
 func TestResourceCapabilityMethodCatalogIsClosedAndComplete(t *testing.T) {
 	methods := Methods()
-	if len(methods) != 34 {
-		t.Fatalf("Methods() count = %d, want 34", len(methods))
+	if len(methods) != 52 {
+		t.Fatalf("Methods() count = %d, want 52", len(methods))
 	}
 	seen := make(map[Method]struct{}, len(methods))
 	for _, method := range methods {

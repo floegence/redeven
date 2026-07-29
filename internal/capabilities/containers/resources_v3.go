@@ -22,6 +22,7 @@ var (
 
 type ContainerCreateRequest struct {
 	Engine        Engine                 `json:"engine"`
+	EndpointID    EndpointID             `json:"endpoint_id,omitempty"`
 	Name          string                 `json:"name,omitempty"`
 	Image         string                 `json:"image"`
 	Command       []string               `json:"command,omitempty"`
@@ -61,44 +62,53 @@ type ContainerDevice struct {
 }
 
 type ImageListRequest struct {
-	Engine Engine `json:"engine"`
+	Engine     Engine     `json:"engine"`
+	EndpointID EndpointID `json:"endpoint_id,omitempty"`
 }
 type ImageInspectRequest struct {
-	Engine Engine `json:"engine"`
-	Image  string `json:"image"`
+	Engine     Engine     `json:"engine"`
+	EndpointID EndpointID `json:"endpoint_id,omitempty"`
+	Image      string     `json:"image"`
 }
 type ImageHistoryRequest struct {
-	Engine Engine `json:"engine"`
-	Image  string `json:"image"`
+	Engine     Engine     `json:"engine"`
+	EndpointID EndpointID `json:"endpoint_id,omitempty"`
+	Image      string     `json:"image"`
 }
 type ImageTagRequest struct {
-	Engine Engine `json:"engine"`
-	Image  string `json:"image"`
-	Tag    string `json:"tag"`
+	Engine     Engine     `json:"engine"`
+	EndpointID EndpointID `json:"endpoint_id,omitempty"`
+	Image      string     `json:"image"`
+	Tag        string     `json:"tag"`
 }
 type ImageRemoveRequest struct {
-	Engine Engine `json:"engine"`
-	Image  string `json:"image"`
-	Force  bool   `json:"force,omitempty"`
+	Engine     Engine     `json:"engine"`
+	EndpointID EndpointID `json:"endpoint_id,omitempty"`
+	Image      string     `json:"image"`
+	Force      bool       `json:"force,omitempty"`
 }
 type ImageRemovePreflightRequest struct {
-	Engine           Engine `json:"engine"`
-	Image            string `json:"image"`
-	Force            bool   `json:"force,omitempty"`
-	ConfirmationName string `json:"confirmation_name,omitempty"`
+	Engine           Engine     `json:"engine"`
+	EndpointID       EndpointID `json:"endpoint_id,omitempty"`
+	Image            string     `json:"image"`
+	Force            bool       `json:"force,omitempty"`
+	ConfirmationName string     `json:"confirmation_name,omitempty"`
 }
 type VolumeListRequest struct {
-	Engine Engine `json:"engine"`
+	Engine     Engine     `json:"engine"`
+	EndpointID EndpointID `json:"endpoint_id,omitempty"`
 }
 type VolumeInspectRequest struct {
-	Engine Engine `json:"engine"`
-	Name   string `json:"name"`
+	Engine     Engine     `json:"engine"`
+	EndpointID EndpointID `json:"endpoint_id,omitempty"`
+	Name       string     `json:"name"`
 }
 type VolumeCreateRequest struct {
-	Engine  Engine         `json:"engine"`
-	Name    string         `json:"name"`
-	Driver  string         `json:"driver,omitempty"`
-	Options []VolumeOption `json:"options,omitempty"`
+	Engine     Engine         `json:"engine"`
+	EndpointID EndpointID     `json:"endpoint_id,omitempty"`
+	Name       string         `json:"name"`
+	Driver     string         `json:"driver,omitempty"`
+	Options    []VolumeOption `json:"options,omitempty"`
 }
 
 type VolumeOption struct {
@@ -106,26 +116,30 @@ type VolumeOption struct {
 	Value string `json:"value"`
 }
 type VolumeRemoveRequest struct {
-	Engine Engine `json:"engine"`
-	Name   string `json:"name"`
+	Engine     Engine     `json:"engine"`
+	EndpointID EndpointID `json:"endpoint_id,omitempty"`
+	Name       string     `json:"name"`
 }
 
 type VolumeRemovePreflightRequest struct {
-	Engine           Engine `json:"engine"`
-	Name             string `json:"name"`
-	ConfirmationName string `json:"confirmation_name"`
+	Engine           Engine     `json:"engine"`
+	EndpointID       EndpointID `json:"endpoint_id,omitempty"`
+	Name             string     `json:"name"`
+	ConfirmationName string     `json:"confirmation_name"`
 }
 
 type ResourcePruneRequest struct {
-	Engine             Engine   `json:"engine"`
-	ResourceIdentities []string `json:"resource_identities,omitempty"`
+	Engine             Engine     `json:"engine"`
+	EndpointID         EndpointID `json:"endpoint_id,omitempty"`
+	ResourceIdentities []string   `json:"resource_identities,omitempty"`
 }
 
 type ContainerRemovePreflightRequest struct {
-	Engine           Engine `json:"engine"`
-	ContainerID      string `json:"container_id"`
-	Force            bool   `json:"force,omitempty"`
-	ConfirmationName string `json:"confirmation_name,omitempty"`
+	Engine           Engine     `json:"engine"`
+	EndpointID       EndpointID `json:"endpoint_id,omitempty"`
+	ContainerID      string     `json:"container_id"`
+	Force            bool       `json:"force,omitempty"`
+	ConfirmationName string     `json:"confirmation_name,omitempty"`
 }
 
 type ExtendedEngineClient interface {
