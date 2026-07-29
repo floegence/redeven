@@ -1029,20 +1029,35 @@ describe('plugin management browser geometry and interaction', () => {
     expect(getComputedStyle(host.querySelector<HTMLElement>('[data-plugin-center-master]')!).display).not.toBe('none');
   });
 
-  it('uses restrained entrance and press motion for plugin directory transitions', async () => {
+  it('uses coordinated lift, depth, and icon motion for plugin directory transitions', async () => {
     const host = mountPluginCenter();
     await settle();
 
     const root = host.querySelector<HTMLElement>('[data-plugin-center-view]')!;
     const card = host.querySelector<HTMLElement>('[data-plugin-center-item="instance:containers"]')!.closest('article')!;
+    const icon = card.querySelector<HTMLElement>('.redeven-plugin-directory-card-icon')!;
     expect(getComputedStyle(root).animationName).toBe('animate-in');
     expect(getComputedStyle(root).animationDuration).toBe('0.2s');
     expect(getComputedStyle(card).getPropertyValue('--tw-enter-translate-y').trim()).toBe('0.25rem');
     expect(getComputedStyle(card).transitionProperty).toContain('transform');
-    expect(getComputedStyle(card).transitionDuration).toBe('0.15s');
+    expect(getComputedStyle(card).transitionDuration).toBe('0.18s');
+    expect(getComputedStyle(card).transitionTimingFunction).toContain('cubic-bezier(0.22, 1, 0.36, 1)');
+
+    await page.elementLocator(card).hover();
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 220));
+    const hoveredCardStyle = getComputedStyle(card);
+    const hoveredCardTransform = new DOMMatrixReadOnly(hoveredCardStyle.transform);
+    const hoveredIconTransform = new DOMMatrixReadOnly(getComputedStyle(icon).transform);
+    expect(hoveredCardTransform.m42).toBeCloseTo(-1, 1);
+    expect(hoveredCardStyle.boxShadow).not.toBe('none');
+    expect(hoveredIconTransform.m11).toBeGreaterThan(1);
+    expect(hoveredIconTransform.m11).toBeLessThan(1.03);
+    await expectScreenshotHasPixelVariance();
 
     host.querySelector<HTMLButtonElement>('[data-plugin-center-item="instance:containers"]')!.click();
     await Promise.resolve();
+    expect(card.getAttribute('aria-current')).toBe('true');
+    expect(getComputedStyle(card).boxShadow).not.toBe('none');
     const details = host.querySelector<HTMLElement>('[data-plugin-center-details]')!;
     expect(getComputedStyle(details).animationName).toBe('animate-in');
     expect(getComputedStyle(details).animationDuration).toBe('0.2s');

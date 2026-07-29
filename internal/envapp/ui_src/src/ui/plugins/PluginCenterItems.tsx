@@ -45,10 +45,10 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
   };
   return (
     <article
+      data-plugin-directory-card={props.item.inventoryKey}
       class={cn(
-        'group/card flex min-h-[208px] min-w-0 flex-col rounded-lg border bg-card p-4 text-card-foreground hover:-translate-y-0.5 hover:shadow-md',
+        'redeven-plugin-directory-card group/card flex min-h-[208px] min-w-0 flex-col rounded-lg border bg-card p-4 text-card-foreground [transition-duration:180ms] [transition-timing-function:cubic-bezier(0.22,1,0.36,1)]',
         PLUGIN_ENTER_MOTION_CLASS,
-        PLUGIN_PRESS_MOTION_CLASS,
         props.selected && 'border-primary bg-primary/[0.035] ring-1 ring-primary/20',
         update() && 'border-t-2 border-t-[var(--redeven-status-info-foreground)]',
       )}
@@ -64,7 +64,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
         onClick={(event) => props.onOpenDetails(event.currentTarget)}
       >
         <span class="flex min-w-0 items-start gap-3">
-          <PluginIcon item={props.item} size="card" class="transition-transform duration-200 ease-out group-hover/card:scale-[1.04] motion-reduce:transform-none motion-reduce:transition-none" />
+          <PluginIcon item={props.item} size="card" class="redeven-plugin-directory-card-icon" />
           <span class="min-w-0 flex-1 pt-0.5">
             <span class="line-clamp-2 text-sm font-semibold leading-5">{props.item.displayName}</span>
             <span class="mt-1 flex flex-wrap gap-1">
