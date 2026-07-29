@@ -138,6 +138,109 @@ func TestRuntimeProcessInventoryUsesMatchingLockAsOwnerEvidence(t *testing.T) {
 	}
 }
 
+func TestRuntimeProcessInventoryAllowsVerifiedAlternateDesktopBundle(t *testing.T) {
+	for _, test := range []struct {
+		name          string
+		processOwner  string
+		lockOwner     string
+		wantOwner     RuntimeProcessOwnerStatus
+		wantAuthority RuntimeProcessStopAuthority
+		wantReason    string
+	}{
+		{
+			name:          "current owner stops alternate bundle automatically",
+			processOwner:  "desktop-owner",
+			lockOwner:     "desktop-owner",
+			wantOwner:     RuntimeProcessOwnerCurrent,
+			wantAuthority: RuntimeProcessStopAutomatic,
+		},
+		{
+			name:          "foreign owner requires confirmed takeover",
+			processOwner:  "another-desktop",
+			lockOwner:     "another-desktop",
+			wantOwner:     RuntimeProcessOwnerForeign,
+			wantAuthority: RuntimeProcessStopConfirmedTakeover,
+			wantReason:    "runtime_owned_by_another_desktop",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			options := testInventoryOptions(t)
+			alternateExecutable := filepath.Join(filepath.Dir(options.RuntimeRoot), "Redeven Preview.app", "Contents", "Resources", "redeven")
+			snapshot := testSnapshot(options, 21, 210, alternateExecutable, options.StateRoot, test.processOwner)
+			body, err := json.Marshal(runtimeLockMetadata{
+				PID:            snapshot.PID,
+				InstanceID:     "alternate-runtime",
+				RuntimeVersion: "v4.0.0",
+				DesktopOwnerID: test.lockOwner,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			writeRuntimeLeaseTestFile(t, filepath.Join(options.StateRoot, "local-environment", "agent.lock"), body)
+
+			inventory := buildRuntimeProcessInventory(
+				options,
+				runtimeProcessExecutionScope{UserIdentity: "tester", NamespaceID: "mnt:[current]"},
+				[]runtimeProcessSnapshot{snapshot},
+			)
+			if len(inventory.Instances) != 1 {
+				t.Fatalf("instances = %#v", inventory.Instances)
+			}
+			instance := inventory.Instances[0]
+			if instance.IdentityStatus != RuntimeProcessIdentityVerified ||
+				instance.LayoutStatus != RuntimeProcessLayoutVerifiedAlternate ||
+				instance.OwnerStatus != test.wantOwner ||
+				instance.StopAuthority != test.wantAuthority ||
+				instance.ReasonCode != test.wantReason ||
+				instance.InstanceID != "alternate-runtime" ||
+				instance.RuntimeVersion != "v4.0.0" {
+				t.Fatalf("instance = %#v", instance)
+			}
+		})
+	}
+}
+
+func TestRuntimeProcessInventoryBlocksUnprovenAlternateDesktopBundle(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		lock *runtimeLockMetadata
+	}{
+		{name: "missing lock"},
+		{name: "different pid", lock: &runtimeLockMetadata{PID: 99, InstanceID: "alternate-runtime", RuntimeVersion: "v4.0.0"}},
+		{name: "missing instance id", lock: &runtimeLockMetadata{PID: 22, RuntimeVersion: "v4.0.0"}},
+		{name: "missing runtime version", lock: &runtimeLockMetadata{PID: 22, InstanceID: "alternate-runtime"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			options := testInventoryOptions(t)
+			alternateExecutable := filepath.Join(filepath.Dir(options.RuntimeRoot), "Redeven Preview.app", "Contents", "Resources", "redeven")
+			snapshot := testSnapshot(options, 22, 220, alternateExecutable, options.StateRoot, options.DesktopOwnerID)
+			if test.lock != nil {
+				body, err := json.Marshal(test.lock)
+				if err != nil {
+					t.Fatal(err)
+				}
+				writeRuntimeLeaseTestFile(t, filepath.Join(options.StateRoot, "local-environment", "agent.lock"), body)
+			}
+
+			inventory := buildRuntimeProcessInventory(
+				options,
+				runtimeProcessExecutionScope{UserIdentity: "tester", NamespaceID: "mnt:[current]"},
+				[]runtimeProcessSnapshot{snapshot},
+			)
+			if len(inventory.Instances) != 1 {
+				t.Fatalf("instances = %#v", inventory.Instances)
+			}
+			instance := inventory.Instances[0]
+			if instance.IdentityStatus != RuntimeProcessIdentityIncomplete ||
+				instance.LayoutStatus != RuntimeProcessLayoutUnknown ||
+				instance.StopAuthority != RuntimeProcessStopBlocked ||
+				instance.ReasonCode != "runtime_layout_untrusted" {
+				t.Fatalf("instance = %#v", instance)
+			}
+		})
+	}
+}
+
 func TestRuntimeProcessInventoryBlocksMissingUserOrExecutableIdentity(t *testing.T) {
 	options := testInventoryOptions(t)
 	executable := filepath.Join(options.RuntimeRoot, "runtime", "managed", "bin", "redeven")
@@ -379,6 +482,41 @@ func TestStopRuntimeProcessesRejectsPIDReuseBeforeSignal(t *testing.T) {
 	}
 	if len(controller.interrupts) != 0 || len(controller.kills) != 0 {
 		t.Fatalf("signals were sent after PID reuse")
+	}
+}
+
+func TestStopRuntimeProcessesRejectsAlternateExecutableIdentityChangeBeforeSignal(t *testing.T) {
+	options := testInventoryOptions(t)
+	alternateExecutable := filepath.Join(filepath.Dir(options.RuntimeRoot), "Redeven Preview.app", "Contents", "Resources", "redeven")
+	snapshot := testSnapshot(options, 84, 840, alternateExecutable, options.StateRoot, options.DesktopOwnerID)
+	body, err := json.Marshal(runtimeLockMetadata{
+		PID:            snapshot.PID,
+		InstanceID:     "alternate-runtime",
+		RuntimeVersion: "v4.0.0",
+		DesktopOwnerID: options.DesktopOwnerID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeRuntimeLeaseTestFile(t, filepath.Join(options.StateRoot, "local-environment", "agent.lock"), body)
+	before := buildRuntimeProcessInventory(
+		options,
+		runtimeProcessExecutionScope{UserIdentity: "tester", NamespaceID: "mnt:[current]"},
+		[]runtimeProcessSnapshot{snapshot},
+	)
+	snapshot.ExecutableInode++
+	changed := buildRuntimeProcessInventory(
+		options,
+		runtimeProcessExecutionScope{UserIdentity: "tester", NamespaceID: "mnt:[current]"},
+		[]runtimeProcessSnapshot{snapshot},
+	)
+	controller := &fakeRuntimeProcessController{inventories: []RuntimeProcessInventory{before, changed}}
+	_, err = stopRuntimeProcesses(context.Background(), controller, options, before.InventoryDigest, time.Second, RuntimeProcessReconciliationAutomatic)
+	if RuntimeProcessErrorCode(err) != RuntimeProcessErrorIdentityChanged {
+		t.Fatalf("error = %v", err)
+	}
+	if len(controller.interrupts) != 0 || len(controller.kills) != 0 {
+		t.Fatalf("signals were sent after executable identity changed")
 	}
 }
 

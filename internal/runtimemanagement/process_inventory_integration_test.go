@@ -218,3 +218,54 @@ func TestRuntimeProcessInventoryFindsDeletedCurrentExecutableOnLinux(t *testing.
 	}
 	waitRuntimeProcessHelper(t, process)
 }
+
+func TestRuntimeProcessInventoryStopsVerifiedAlternateDesktopBundle(t *testing.T) {
+	root := t.TempDir()
+	runtimeRoot := filepath.Join(root, ".redeven")
+	stateRoot := runtimeRoot
+	managedExecutable := filepath.Join(runtimeRoot, "runtime", "managed", "bin", "redeven")
+	alternateExecutable := filepath.Join(root, "Redeven Preview.app", "Contents", "Resources", "redeven")
+	buildRuntimeProcessHelper(t, alternateExecutable)
+	process := startRuntimeProcessHelper(
+		t,
+		alternateExecutable,
+		stateRoot,
+		"desktop-owner",
+		filepath.Join(root, "alternate.ready"),
+	)
+	writeRuntimeProcessLock(t, stateRoot, process.Process.Pid, "desktop-owner")
+
+	options := RuntimeProcessInventoryOptions{
+		RuntimeRoot:        runtimeRoot,
+		StateRoot:          stateRoot,
+		DesktopOwnerID:     "desktop-owner",
+		CurrentExecutables: []string{managedExecutable},
+	}
+	inventory, err := InspectRuntimeProcesses(context.Background(), options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(inventory.Instances) != 1 {
+		t.Fatalf("inventory = %#v", inventory)
+	}
+	instance := inventory.Instances[0]
+	if instance.LayoutStatus != RuntimeProcessLayoutVerifiedAlternate ||
+		instance.IdentityStatus != RuntimeProcessIdentityVerified ||
+		instance.StopAuthority != RuntimeProcessStopAutomatic {
+		t.Fatalf("instance = %#v", instance)
+	}
+
+	result, err := StopRuntimeProcesses(
+		context.Background(),
+		options,
+		inventory.InventoryDigest,
+		2*time.Second,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Stopped) != 1 || len(result.After.Instances) != 0 {
+		t.Fatalf("result = %#v", result)
+	}
+	waitRuntimeProcessHelper(t, process)
+}

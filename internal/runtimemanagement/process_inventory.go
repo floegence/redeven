@@ -42,8 +42,9 @@ const (
 type RuntimeProcessLayoutStatus string
 
 const (
-	RuntimeProcessLayoutCurrent RuntimeProcessLayoutStatus = "current"
-	RuntimeProcessLayoutUnknown RuntimeProcessLayoutStatus = "unknown"
+	RuntimeProcessLayoutCurrent           RuntimeProcessLayoutStatus = "current"
+	RuntimeProcessLayoutVerifiedAlternate RuntimeProcessLayoutStatus = "verified_alternate"
+	RuntimeProcessLayoutUnknown           RuntimeProcessLayoutStatus = "unknown"
 )
 
 type RuntimeProcessOwnerEvidence string
@@ -125,6 +126,7 @@ type runtimeProcessSnapshot struct {
 	OwnerEvidence          RuntimeProcessOwnerEvidence
 	InstanceID             string
 	RuntimeVersion         string
+	RuntimeLockVerified    bool
 }
 
 type runtimeProcessExecutionScope struct {
@@ -372,9 +374,6 @@ func currentManagedExecutable(options RuntimeProcessInventoryOptions, executable
 }
 
 func enrichRuntimeProcessSnapshot(snapshot runtimeProcessSnapshot, stateRoot string) runtimeProcessSnapshot {
-	if snapshot.DesktopOwnerID != "" && snapshot.InstanceID != "" && snapshot.RuntimeVersion != "" {
-		return snapshot
-	}
 	for _, lockPath := range runtimeLockPaths(stateRoot) {
 		body, err := os.ReadFile(lockPath)
 		if err != nil {
@@ -392,6 +391,7 @@ func enrichRuntimeProcessSnapshot(snapshot runtimeProcessSnapshot, stateRoot str
 		}
 		snapshot.InstanceID = strings.TrimSpace(metadata.InstanceID)
 		snapshot.RuntimeVersion = strings.TrimSpace(metadata.RuntimeVersion)
+		snapshot.RuntimeLockVerified = snapshot.InstanceID != "" && snapshot.RuntimeVersion != ""
 		break
 	}
 	return snapshot
@@ -441,6 +441,8 @@ func classifyRuntimeProcess(
 	layoutStatus := RuntimeProcessLayoutUnknown
 	if currentManagedExecutable(options, snapshot.ExecutablePath) {
 		layoutStatus = RuntimeProcessLayoutCurrent
+	} else if snapshot.RuntimeLockVerified {
+		layoutStatus = RuntimeProcessLayoutVerifiedAlternate
 	}
 	if layoutStatus == RuntimeProcessLayoutUnknown {
 		identityComplete = false

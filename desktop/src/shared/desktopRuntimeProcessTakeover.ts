@@ -16,7 +16,7 @@ export type DesktopRuntimeProcessTakeoverInstance = Readonly<{
   process_started_at_unix_ms: number;
   owner_status: 'current' | 'missing' | 'foreign';
   owner_evidence: 'process_environment' | 'runtime_lock' | 'missing';
-  layout_status: 'current';
+  layout_status: 'current' | 'verified_alternate';
   state_root: string;
   runtime_version?: string;
   reason_code?: string;
