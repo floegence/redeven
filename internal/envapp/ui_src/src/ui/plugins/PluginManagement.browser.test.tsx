@@ -874,10 +874,18 @@ describe('plugin management browser geometry and interaction', () => {
         .toBeLessThanOrEqual(sourceTabs[index].getBoundingClientRect().left + 1);
     }
     const segments = Array.from(dialog.querySelectorAll<HTMLElement>('[data-install-progress-segment]'));
+    const nodes = Array.from(dialog.querySelectorAll<HTMLElement>('[data-install-progress-node]'));
+    const track = dialog.querySelector<HTMLElement>('[data-install-progress-track]')!;
     expect(segments).toHaveLength(4);
+    expect(nodes).toHaveLength(4);
     expect(dialog.querySelector('[data-install-progress-current]')?.textContent).toBe('Plugin source');
     expect(dialog.querySelector('[data-install-progress]')?.textContent).toContain('Step 1 of 4');
     segments.forEach(expectNoHorizontalOverflow);
+    const trackRect = track.getBoundingClientRect();
+    const firstNodeRect = nodes[0].getBoundingClientRect();
+    const lastNodeRect = nodes[nodes.length - 1].getBoundingClientRect();
+    expect(Math.abs(trackRect.left - (firstNodeRect.left + firstNodeRect.width / 2))).toBeLessThanOrEqual(1);
+    expect(Math.abs(trackRect.right - (lastNodeRect.left + lastNodeRect.width / 2))).toBeLessThanOrEqual(1);
     if (viewport.width === 320) {
       expectTouchTargets([
         ...sourceTabs,
@@ -907,11 +915,12 @@ describe('plugin management browser geometry and interaction', () => {
     expect(trustReview.textContent).toContain('Confirm this package source');
     expect(trustReview.textContent).not.toContain('Waiting for your approval');
     expect(highlights.textContent).toContain('api.github.com:443');
-    expect(highlights.textContent).toContain('Permissions this plugin may request');
-    expect(highlights.textContent).toContain('Operations this plugin can request');
+    expect(highlights.textContent).toContain('What this plugin can do');
+    expect(highlights.textContent).toContain('Other access to review');
+    expect(highlights.textContent).not.toContain('declares no plugin capabilities or access');
     expect(report.open).toBe(false);
     expect(document.activeElement).toBe(trustReview);
-    expect(consent.closest('footer')).toBeNull();
+    expect(footer.contains(consent)).toBe(true);
     expectInsideViewport(dialog, viewport);
     expectNoHorizontalOverflow(consent);
     expectNoHorizontalOverflow(trustReview);
@@ -920,9 +929,7 @@ describe('plugin management browser geometry and interaction', () => {
     expectNoHorizontalOverflow(footer);
     if (viewport.width === 320) {
       expectTouchTarget(consent);
-      consent.scrollIntoView({ block: 'end' });
-      await settle();
-      expect(consent.getBoundingClientRect().bottom).toBeLessThanOrEqual(footer.getBoundingClientRect().top + 1);
+      expectInsideViewport(consent, viewport);
       const touchContractHost = mountMobileTouchTargetContract();
       await settle();
       expectTouchTarget(touchContractHost.querySelector<HTMLElement>('[data-plugin-mobile-touch-contract]')!);
@@ -1009,12 +1016,36 @@ describe('plugin management browser geometry and interaction', () => {
     await settle();
 
     expect(window.matchMedia('(prefers-reduced-motion: reduce)').matches).toBe(true);
+    const card = host.querySelector<HTMLElement>('[data-plugin-center-item="instance:containers"]')!.closest('article')!;
+    expect(getComputedStyle(card).animationName).toBe('none');
+    expect(getComputedStyle(card).transitionDuration).toBe('0s');
     host.querySelector<HTMLButtonElement>('[data-plugin-center-item="instance:containers"]')!.click();
     await Promise.resolve();
-    expect(getComputedStyle(host.querySelector<HTMLElement>('[data-plugin-center-details]')!).display).not.toBe('none');
+    const details = host.querySelector<HTMLElement>('[data-plugin-center-details]')!;
+    expect(getComputedStyle(details).display).not.toBe('none');
+    expect(getComputedStyle(details).animationName).toBe('none');
     host.querySelector<HTMLButtonElement>('[data-plugin-center-mobile-back]')!.click();
     await Promise.resolve();
     expect(getComputedStyle(host.querySelector<HTMLElement>('[data-plugin-center-master]')!).display).not.toBe('none');
+  });
+
+  it('uses restrained entrance and press motion for plugin directory transitions', async () => {
+    const host = mountPluginCenter();
+    await settle();
+
+    const root = host.querySelector<HTMLElement>('[data-plugin-center-view]')!;
+    const card = host.querySelector<HTMLElement>('[data-plugin-center-item="instance:containers"]')!.closest('article')!;
+    expect(getComputedStyle(root).animationName).toBe('animate-in');
+    expect(getComputedStyle(root).animationDuration).toBe('0.2s');
+    expect(getComputedStyle(card).getPropertyValue('--tw-enter-translate-y').trim()).toBe('0.25rem');
+    expect(getComputedStyle(card).transitionProperty).toContain('transform');
+    expect(getComputedStyle(card).transitionDuration).toBe('0.15s');
+
+    host.querySelector<HTMLButtonElement>('[data-plugin-center-item="instance:containers"]')!.click();
+    await Promise.resolve();
+    const details = host.querySelector<HTMLElement>('[data-plugin-center-details]')!;
+    expect(getComputedStyle(details).animationName).toBe('animate-in');
+    expect(getComputedStyle(details).animationDuration).toBe('0.2s');
   });
 
   it('keeps the external review report operable with reduced motion and forced colors', async () => {

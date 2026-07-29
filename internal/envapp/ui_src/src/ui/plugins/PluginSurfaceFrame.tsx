@@ -2,6 +2,7 @@ import {
   PluginSurfaceSlot,
   type PluginSurfaceHost,
 } from '@floegence/redevplugin-ui';
+import { cn } from '@floegence/floe-webapp-core';
 import { AlertTriangle, Loader2, Refresh } from '@floegence/floe-webapp-core/icons';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import { Show, createEffect, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
@@ -209,20 +210,20 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
     >
       <div class="relative min-h-0 flex-1 bg-muted/20">
         <Show when={loadState() === 'opening'}>
-          <div role="status" aria-live="polite" class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-background px-6 text-center text-sm text-muted-foreground">
+          <div role="status" aria-live="polite" class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-background px-6 text-center text-sm text-muted-foreground animate-in fade-in duration-150 motion-reduce:animate-none">
             <Loader2 class="h-5 w-5 animate-spin motion-reduce:animate-none" />
             <span>{i18n.t('uiCopy.plugin.openingSurface')}</span>
           </div>
         </Show>
         <Show when={loadState() === 'closing'}>
-          <div role="status" aria-live="polite" class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-background px-6 text-center text-sm text-muted-foreground">
+          <div role="status" aria-live="polite" class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-background px-6 text-center text-sm text-muted-foreground animate-in fade-in duration-150 motion-reduce:animate-none">
             <Loader2 class="h-5 w-5 animate-spin motion-reduce:animate-none" />
             <span>{i18n.t('uiCopy.plugin.closingSurface')}</span>
           </div>
         </Show>
         <Show when={loadState() === 'error'}>
-          <div role="alert" class="absolute inset-0 z-10 flex items-center justify-center bg-background p-6" data-plugin-surface-error>
-            <div class="max-w-md text-center">
+          <div role="alert" class="absolute inset-0 z-10 flex items-center justify-center bg-background p-6 animate-in fade-in duration-150 motion-reduce:animate-none" data-plugin-surface-error>
+            <div class="max-w-md text-center animate-in fade-in zoom-in-95 duration-200 motion-reduce:animate-none">
               <span class="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-destructive/10 text-destructive">
                 <AlertTriangle class="h-5 w-5" />
               </span>
@@ -247,7 +248,10 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
         <div
           ref={stage}
           data-plugin-surface-stage
-          class="h-full min-h-0 w-full bg-background [&>iframe]:block [&>iframe]:h-full [&>iframe]:w-full [&>iframe]:border-0"
+          class={cn(
+            'h-full min-h-0 w-full bg-background transition-opacity duration-200 ease-out [&>iframe]:block [&>iframe]:h-full [&>iframe]:w-full [&>iframe]:border-0 motion-reduce:transition-none',
+            loadState() === 'ready' ? 'opacity-100' : 'opacity-0',
+          )}
         />
       </div>
     </section>

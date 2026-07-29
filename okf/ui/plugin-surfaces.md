@@ -70,6 +70,15 @@ bound to its requested item even when retained filters exclude it. External
 installation is visible only to administrators as a lower-weight overflow action
 and does not compete with primary discovery.
 
+Plugin motion is progressive feedback rather than an interaction gate. New
+Launcher, directory, detail, review, confirmation, loading, error, and recovery
+states enter over 150–200ms; repeated directory items use a bounded stagger, and
+interactive controls transition only explicit color, border, shadow, opacity,
+and transform properties. Press feedback begins immediately and never delays the
+underlying command. `prefers-reduced-motion: reduce` removes entry animations,
+transform feedback, disclosure motion, and nonessential transitions while
+preserving the same focus, selection, loading, and recovery behavior.
+
 The Shell owns inventory loading, one platform client, shared scope, placement
 controllers, and the selected product inventory key. Every catalog or installed
 item has a stable `inventoryKey`; Panel tiles, Center rows, detail selection, and
@@ -125,12 +134,13 @@ temporarily unavailable signatures remain top-level caution decisions that
 require exact-package confirmation. Verified, user-approved, and policy-approved
 assessments still require product confirmation and never imply a permission grant.
 
-The review separates `security_summary.permissions` from methods. Permissions
-lead as permissions the plugin may later request. Methods are grouped by the
-released `read|write|execute|delete|admin` effect set as declared operation
-impact, never as granted permissions or completed actions. Dangerous methods
-remain prominent regardless of effect, and an unrecognized runtime value fails
-visible as an additional high-attention group. Raw identifiers, effects, route,
+The review presents one outcome-led access and operation-impact summary instead
+of separate permission and method inventories. Host permission declarations are
+shown only as a protected-access count in that summary. Methods are grouped by
+the released `read|write|execute|delete|admin` effect set, never as granted
+permissions or completed actions. Dangerous methods remain prominent regardless
+of effect, and an unrecognized runtime value fails visible as an additional
+high-attention group. Raw permission identifiers, method names, effects, routes,
 preflight, confirmation, and contract facts remain in the complete report.
 Network destinations, worker artifacts, secret references, and contract-proven
 storage writes use observable capability language without inferred business
@@ -153,11 +163,12 @@ Progressive disclosure changes prominence only and never removes authoritative
 inspection facts. Policy-blocked results retain their exact reason codes instead
 of collapsing into an unsigned-package warning.
 
-The exact-package confirmation control follows the collapsed report in the
-scrolling review body, directly before the fixed action footer. First install
-confirmation states the disabled, zero-grant result. Update or reinstall
-confirmation states that the Host retains enabled state and existing grants and
-adds no grants automatically.
+The exact-package confirmation control stays in the fixed action footer and
+remains visible while the review body scrolls. Its concise decision copy does
+not repeat the confirmation digest; the complete report retains that exact
+evidence. First install confirmation states the disabled, zero-grant result.
+Update or reinstall confirmation states that the Host retains enabled state and
+existing grants and adds no grants automatically.
 
 Invalid, revoked, or policy-blocked assessment disables commit. Absent,
 unknown-signer, and temporarily unavailable signatures show a prominent risk
@@ -282,6 +293,8 @@ or call business adapters directly.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterView.tsx:1` - Selects exact inventory items and hosts external installation.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterItems.tsx:1` - Presents the compact Discover, Installed, and Updates card directory without owning selection or mutations.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginPresentation.ts:1` - Combines trust, policy, authorization, lifecycle, and launch readiness into one primary action.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/plugin-motion.css:1` - Defines the scoped subtle entrance and disclosure motion with a reduced-motion override.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginManagement.browser.test.tsx:1` - Verifies responsive plugin geometry, real motion timing, and reduced-motion operability.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/externalPluginSecurityProjection.ts:1` - Projects security declarations, update deltas, and operation impact without UI state.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/ExternalPluginInstallDialog.tsx:1` - Implements source, review, explicit confirmation, commit, and terminal result UX.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginInventoryProjection.ts:1` - Isolates official and external identity, trust, provenance, grants, and requirements.

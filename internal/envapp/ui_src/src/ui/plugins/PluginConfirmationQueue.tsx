@@ -213,7 +213,7 @@ function PluginConfirmationDialogEntry(props: {
         </div>
       )}
     >
-      <div class="space-y-4 text-sm" data-plugin-confirmation-dialog>
+      <div class="redeven-plugin-enter-up space-y-4 text-sm animate-in fade-in duration-200 motion-reduce:animate-none" data-plugin-confirmation-dialog>
         <div class="flex min-w-0 items-start gap-3 rounded-md border bg-muted/20 p-3">
           <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border bg-background text-muted-foreground">
             <Shield class="h-4 w-4" />

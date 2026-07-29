@@ -20,7 +20,7 @@ import type {
 } from './pluginTypes';
 import { createUIPresentationEventRecorder } from '../services/uiPresentationTransactions';
 import { ExternalPluginInstallDialog } from './ExternalPluginInstallDialog';
-import { PLUGIN_MOBILE_TOUCH_TARGET_CLASS, pluginLifecycleLabel, pluginTrustLabel, presentPlugin, type PluginPrimaryAction } from './pluginPresentation';
+import { PLUGIN_ENTER_MOTION_CLASS, PLUGIN_MOBILE_TOUCH_TARGET_CLASS, PLUGIN_PRESS_MOTION_CLASS, pluginLifecycleLabel, pluginTrustLabel, presentPlugin, type PluginPrimaryAction } from './pluginPresentation';
 import { PluginCenterItem } from './PluginCenterItems';
 import { PluginIdentityHeader } from './PluginPresentationPrimitives';
 
@@ -336,7 +336,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
       onClose={props.onClose}
     >
       <Show when={errorMessage()}>
-        <div role="alert" data-plugin-center-error class="flex flex-wrap items-center gap-3 border-b border-destructive bg-background px-4 py-3 text-sm text-destructive">
+        <div role="alert" data-plugin-center-error class={cn('flex flex-wrap items-center gap-3 border-b border-destructive bg-background px-4 py-3 text-sm text-destructive', PLUGIN_ENTER_MOTION_CLASS)}>
           <AlertTriangle class="h-4 w-4 shrink-0" />
           <div class="min-w-0 flex-1">
             <div>{errorMessage()}</div>
@@ -346,7 +346,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
           </div>
           <button
             type="button"
-            class="min-h-[44px] cursor-pointer rounded-md border border-destructive px-3 text-xs font-semibold hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-9"
+              class={cn('min-h-[44px] cursor-pointer rounded-md border border-destructive px-3 text-xs font-semibold hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-9', PLUGIN_PRESS_MOTION_CLASS)}
             disabled={loading()}
             onClick={() => void refreshInventory()}
           >
@@ -379,7 +379,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
             class="grid min-h-0 flex-1 auto-rows-min grid-cols-[repeat(auto-fill,minmax(min(240px,100%),1fr))] gap-3 overflow-y-auto p-3 sm:p-4"
           >
             <For each={visibleItems()}>
-              {(item) => (
+              {(item, index) => (
                 <PluginCenterItem
                   item={item}
                   tab={activeTab()}
@@ -387,6 +387,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
                   canManage={canManage()}
                   canOpenSurfaces={canOpenSurfaces()}
                   pending={loading() || commandPending()}
+                  entranceDelayMs={Math.min(index() * 18, 126)}
                   onOpenDetails={(target) => openDetails(item.inventoryKey, target)}
                   onInstall={() => openExternalDialog(undefined, item.officialCatalog?.distribution.installSource)}
                   onUpdate={() => openExternalDialog(item, item.officialCatalog?.distribution.installSource)}
@@ -396,13 +397,13 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
               )}
             </For>
             <Show when={!loading() && visibleItems().length === 0}>
-              <div class="col-span-full flex min-h-52 flex-col items-center justify-center px-4 py-10 text-center text-sm text-muted-foreground">
+              <div class={cn('col-span-full flex min-h-52 flex-col items-center justify-center px-4 py-10 text-center text-sm text-muted-foreground', PLUGIN_ENTER_MOTION_CLASS)}>
                 <Search class="h-6 w-6" />
                 <p class="mt-3">{i18n.t('uiCopy.plugin.emptyView')}</p>
                 <Show when={filtersActive()}>
                   <button
                     type="button"
-                    class="mt-3 min-h-[44px] cursor-pointer rounded-md border px-3 text-xs font-semibold text-foreground hover:bg-muted"
+                    class={cn('mt-3 min-h-[44px] cursor-pointer rounded-md border px-3 text-xs font-semibold text-foreground hover:bg-muted', PLUGIN_PRESS_MOTION_CLASS)}
                     onClick={clearAllFilters}
                   >
                     {i18n.t('uiCopy.plugin.clearFilters')}
@@ -412,10 +413,10 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
             </Show>
           </div>
         </div>
-        <Show when={selectedItem()}>
+        <Show keyed when={selectedItem()}>
           {(item) => (
             <PluginCenterDetails
-              item={item()}
+              item={item}
               mobileOpen={mobileDetailOpen()}
               mobileBackRef={(element) => { mobileDetailBackButton = element; }}
               detailHeadingRef={(element) => { detailHeadingRef = element; }}
@@ -513,7 +514,7 @@ export function PluginCenterShell(props: {
     disabled: !props.canManage || props.loading,
   }];
   return (
-    <section ref={rootRef} data-plugin-center-view tabIndex={-1} class="flex h-full min-h-0 flex-col bg-background text-foreground">
+    <section ref={rootRef} data-plugin-center-view tabIndex={-1} class="redeven-plugin-motion flex h-full min-h-0 flex-col bg-background text-foreground animate-in fade-in duration-200 motion-reduce:animate-none">
       <header class="w-full shrink-0 border-b bg-background" data-plugin-center-toolbar>
         <div class="flex w-full min-w-0 flex-wrap items-center gap-3 px-3 py-2.5 sm:flex-nowrap sm:px-4" data-plugin-center-toolbar-primary>
           <div class="flex min-w-0 shrink-0 items-center gap-2">
@@ -676,7 +677,7 @@ export function PluginCenterDetails(props: {
   return (
     <aside
       data-plugin-center-details
-      class={cn('min-h-0 w-full overflow-y-auto bg-background sm:w-[360px] sm:max-w-[42vw] sm:flex-none sm:border-l', props.mobileOpen === false ? 'hidden sm:block' : 'block')}
+      class={cn('min-h-0 w-full overflow-y-auto bg-background sm:w-[360px] sm:max-w-[42vw] sm:flex-none sm:border-l', props.mobileOpen === false ? 'hidden sm:block' : 'redeven-plugin-motion block animate-in fade-in duration-200 ease-out motion-reduce:animate-none')}
     >
       <Show
         when={props.item}
@@ -718,9 +719,9 @@ export function PluginCenterDetails(props: {
 
             <PluginIssueDetails item={item()} />
 
-            <details class="rounded-md border px-3 py-2.5" data-plugin-technical-details>
+            <details class="group rounded-md border px-3 py-2.5 transition-[border-color,background-color] duration-150 open:bg-muted/10 motion-reduce:transition-none" data-plugin-technical-details>
               <summary tabIndex={0} class="min-h-7 cursor-pointer text-xs font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{i18n.t('uiCopy.plugin.technicalDetails')}</summary>
-              <div class="mt-3 grid gap-2.5">
+              <div class="redeven-plugin-disclosure-content mt-3 grid gap-2.5">
                 <DetailStat label={i18n.t('uiCopy.plugin.publisher')} value={item().publisher} />
                 <DetailStat label={i18n.t('uiCopy.plugin.installedVersion')} value={item().version ?? i18n.t('uiCopy.plugin.notInstalled')} />
                 <DetailStat label={i18n.t('uiCopy.plugin.stableVersion')} value={item().officialCatalog?.stableVersion ?? '-'} />

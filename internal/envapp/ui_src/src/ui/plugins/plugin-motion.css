@@ -1,0 +1,32 @@
+@layer components {
+  .redeven-plugin-enter-up {
+    --tw-enter-translate-y: 0.25rem;
+  }
+
+  details[open] > .redeven-plugin-disclosure-content {
+    --tw-enter-opacity: 0;
+    --tw-enter-translate-y: -0.25rem;
+    animation: animate-in 180ms cubic-bezier(0, 0, 0.2, 1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-plugin-launcher-backdrop] .animate-in,
+  [data-plugin-center-view] .animate-in,
+  [data-external-plugin-dialog] .animate-in,
+  [data-external-plugin-footer] .animate-in,
+  [data-plugin-surface-host] .animate-in,
+  [data-plugin-confirmation-dialog].animate-in,
+  .redeven-plugin-motion.animate-in {
+    animation: none !important;
+  }
+
+  .redeven-plugin-motion {
+    transform: none !important;
+    transition: none !important;
+  }
+
+  details[open] > .redeven-plugin-disclosure-content {
+    animation: none !important;
+  }
+}

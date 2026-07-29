@@ -14,7 +14,7 @@ import type {
 import { useI18n, type I18nHelpers } from '../i18n';
 import { isolateDocumentBranch } from './modalIsolation';
 import { PluginIcon, PluginStatusDot } from './PluginPresentationPrimitives';
-import { pluginLifecycleLabel } from './pluginPresentation';
+import { PLUGIN_ENTER_MOTION_CLASS, PLUGIN_PRESS_MOTION_CLASS, pluginLifecycleLabel } from './pluginPresentation';
 
 const FOCUSABLE_SELECTOR = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 const CATEGORY_FILTER_THRESHOLD = 6;
@@ -185,7 +185,7 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
         <div
           data-plugin-launcher-backdrop
           class={cn(
-            'fixed inset-0 z-50 flex bg-[var(--redeven-overlay-scrim)]',
+            'redeven-plugin-motion fixed inset-0 z-50 flex bg-[var(--redeven-overlay-scrim)] animate-in fade-in duration-150 motion-reduce:animate-none',
             props.mobile ? 'items-end' : 'items-center justify-center p-4',
           )}
           onPointerDown={(event) => {
@@ -201,10 +201,10 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
             aria-labelledby="plugin-launcher-title"
             aria-describedby="plugin-launcher-description"
             class={cn(
-              'flex min-h-0 w-full flex-col overflow-hidden border bg-popover text-popover-foreground shadow-2xl',
+              'redeven-plugin-motion flex min-h-0 w-full origin-bottom flex-col overflow-hidden border bg-popover text-popover-foreground shadow-2xl ease-out motion-reduce:animate-none',
               props.mobile
-                ? 'h-[min(680px,92dvh)] rounded-t-lg border-x-0 border-b-0'
-                : 'h-[min(680px,78dvh)] max-w-[820px] rounded-lg',
+                ? 'h-[min(680px,92dvh)] rounded-t-lg border-x-0 border-b-0 animate-in fade-in duration-200'
+                : 'h-[min(680px,78dvh)] max-w-[820px] rounded-lg animate-in fade-in zoom-in-95 duration-200',
             )}
           >
             <header class="shrink-0 border-b px-4 py-3 sm:px-5">
@@ -268,21 +268,22 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
                 <For each={visibleTiles()}>
                   {(tile, index) => (
                     <li
-                      class="group relative min-w-0"
+                      class={cn('group relative min-w-0', PLUGIN_ENTER_MOTION_CLASS)}
+                      style={`animation-delay: ${Math.min(index() * 18, 126)}ms`}
                       onContextMenu={(event) => openTileMenu(event, tile.item.inventoryKey)}
                     >
                       <button
                         type="button"
                         data-plugin-panel-tile={tile.item.inventoryKey}
                         aria-describedby={`plugin-launcher-tile-status-${index()}`}
-                        class="flex w-full min-w-0 cursor-pointer flex-col items-center gap-2.5 rounded-lg border border-transparent px-2 py-3 text-center transition-[background-color,border-color,box-shadow,transform] duration-150 hover:-translate-y-0.5 hover:border-border hover:bg-background hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transform-none motion-reduce:transition-none"
+                        class={cn('flex w-full min-w-0 cursor-pointer flex-col items-center gap-2.5 rounded-lg border border-transparent px-2 py-3 text-center hover:-translate-y-0.5 hover:border-border hover:bg-background hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', PLUGIN_PRESS_MOTION_CLASS)}
                         onKeyDown={(event) => {
                           if (!openTileMenu(event, tile.item.inventoryKey)) moveGridFocus(event, index());
                         }}
                         onClick={() => activateTile(tile)}
                       >
                         <div class="relative">
-                          <PluginIcon item={tile.item} size="launcher" />
+                          <PluginIcon item={tile.item} size="launcher" class="transition-transform duration-200 ease-out group-hover:scale-[1.04] motion-reduce:transform-none motion-reduce:transition-none" />
                           <PluginStatusDot item={tile.item} />
                         </div>
                         <span class="block min-w-0 max-w-full truncate text-xs font-medium leading-4">
@@ -319,18 +320,18 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
               </ul>
 
               <Show when={!props.model.loading && pluginTiles().length === 0}>
-                <div class="flex min-h-40 flex-col items-center justify-center text-center">
+                <div class={cn('flex min-h-40 flex-col items-center justify-center text-center', PLUGIN_ENTER_MOTION_CLASS)}>
                   <Package class="h-7 w-7 text-muted-foreground" />
                   <p class="mt-3 max-w-sm text-sm text-muted-foreground">{i18n.t('uiCopy.plugin.noInstalled')}</p>
                 </div>
               </Show>
               <Show when={!props.model.loading && pluginTiles().length > 0 && visibleTiles().length === 0}>
-                <div class="flex min-h-40 flex-col items-center justify-center text-center">
+                <div class={cn('flex min-h-40 flex-col items-center justify-center text-center', PLUGIN_ENTER_MOTION_CLASS)}>
                   <Search class="h-7 w-7 text-muted-foreground" />
                   <p class="mt-3 text-sm font-medium">{i18n.t('uiCopy.plugin.launcherNoResults')}</p>
                   <button
                     type="button"
-                    class="mt-3 min-h-[44px] cursor-pointer rounded-md border px-3 text-xs font-semibold hover:bg-muted"
+                    class={cn('mt-3 min-h-[44px] cursor-pointer rounded-md border px-3 text-xs font-semibold hover:bg-muted', PLUGIN_PRESS_MOTION_CLASS)}
                     onClick={() => { setQuery(''); setCategory('all'); searchRef?.focus(); }}
                   >
                     {i18n.t('uiCopy.plugin.clearFilters')}
@@ -348,7 +349,7 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
                   <button
                     type="button"
                     data-plugin-panel-tile="plugin-center"
-                    class="inline-flex min-h-[44px] shrink-0 cursor-pointer items-center gap-2 rounded-md border bg-background px-3 text-sm font-medium transition-colors duration-150 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none"
+                    class={cn('inline-flex min-h-[44px] shrink-0 cursor-pointer items-center gap-2 rounded-md border bg-background px-3 text-sm font-medium hover:bg-accent hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', PLUGIN_PRESS_MOTION_CLASS)}
                     onClick={() => activateTile(tile())}
                   >
                     <Settings class="h-4 w-4" />
