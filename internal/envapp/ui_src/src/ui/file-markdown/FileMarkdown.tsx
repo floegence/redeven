@@ -15,12 +15,12 @@ import {
   ChevronRight,
   Copy,
 } from '@floegence/floe-webapp-core/icons';
+import 'katex/dist/katex.min.css';
 import './FileMarkdown.css';
 import { extractMath, reinjectMath } from './mathPlugin';
 import {
   resolveMermaidThemeContext,
   runMermaid,
-  setupMermaid,
 } from './mermaidPlugin';
 import { extractFrontmatter } from './frontmatterParser';
 import { buildToc, type TocItem } from './tocBuilder';
@@ -234,8 +234,6 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
   });
 
   onMount(() => {
-    setupMermaid(resolveMermaidThemeContext());
-
     if (typeof MutationObserver === 'function') {
       themeObserver = new MutationObserver((records) => {
         const shouldRefreshThemeAdapters = records.some((record) => record.type === 'attributes');
@@ -443,7 +441,6 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
 
     const target = containerRef;
     const taskSeq = (renderTaskSeq += 1);
-    const theme = resolveMermaidThemeContext();
     const isCurrentTask = () => (
       !disposed
       && taskSeq === renderTaskSeq
@@ -451,8 +448,11 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
       && target.isConnected
     );
 
-    void runMermaid(target, { shouldContinue: isCurrentTask, theme })
-      .catch((error) => {
+    void (async () => {
+      try {
+        const theme = resolveMermaidThemeContext();
+        await runMermaid(target, { shouldContinue: isCurrentTask, theme });
+      } catch (error) {
         if (!isCurrentTask()) return;
         console.error('Markdown preview Mermaid theme refresh failed:', error);
         commitWarningIssue({
@@ -460,11 +460,12 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
           phase: 'mermaid',
           message: formatMarkdownPreviewError(error),
         });
-      })
-      .then(() => {
-        if (!isCurrentTask()) return;
-        runPostProcessForVisibleDocument();
-      });
+      } finally {
+        if (isCurrentTask()) {
+          runPostProcessForVisibleDocument();
+        }
+      }
+    })();
   }
 
   function getTocHeadings(): HTMLElement[] {
