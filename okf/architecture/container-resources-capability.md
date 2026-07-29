@@ -15,7 +15,9 @@ and `redeven.container_resources.v2@2.0.0` capability. The unsigned
 `redeven.container_resources.v4@4.0.0` candidate adds opaque endpoint identity,
 Docker Compose Projects, Podman Pods, and the redesigned Containers `4.0.0`
 surface, but it is not registered or installable as an official release without
-the authorized signing outputs. Unknown endpoints, stale plans, partial
+the authorized signing outputs. Dev Desktop may register it for local
+verification only after an ephemeral delivery passes exact startup validation.
+Unknown endpoints, stale plans, partial
 inventory, and unavailable terminal reconciliation fail closed.
 
 # Contract
@@ -128,9 +130,11 @@ The in-process task map is not a durable operation store, replay protocol,
 lifecycle authority, audit store, or token issuer.
 
 The v4 bridge and generated client are exercised against the unsigned source
-contract, but startup does not construct or register a verified v4 capability.
-This is the required fail-closed boundary until authorized release artifacts
-exist.
+contract. Production startup does not construct or register a v4 capability.
+Dev Desktop is the narrow exception: it registers the exact verified ephemeral
+v4 contract for the current process and exposes the matching package to the
+authenticated Env App for ReDevPlugin local import. Missing or altered delivery
+evidence fails startup rather than falling back to an unverified contract.
 
 ## Product surface
 
@@ -174,6 +178,8 @@ actions are disabled when inventory is stale, partial, or unavailable.
 - `redeven:internal/capabilities/containers/resources_v4_test.go` - Proves opaque endpoint binding, Compose volume retention, Pod confirmation, and rootless projection.
 - `redeven:internal/redevpluginintegration/containers_capability_v4.go` - Dispatches v4 requests through ReDevPlugin-owned invocation, operation, and stream contexts.
 - `redeven:scripts/check_containers_plugin_v4_candidate.sh` - Rebuilds and validates the fail-closed v4 contract and plugin package.
+- `redeven:scripts/build_containers_v4_development_delivery.mjs` - Builds the ephemeral development package, capability, and descriptor without retaining the private key.
+- `redeven:internal/redevpluginintegration/development_delivery.go` - Verifies the development delivery before v4 registration and local-import enablement.
 - `redeven:spec/redevplugin/official-containers-capability/host-capability.pin.json` - Pins the currently active signed v2 capability.
 - `redeven:internal/redevpluginintegration/release_module.go` - Closes the current official package source, signature, revocation, and capability pin.
 - `redeven:plugins/official/containers/src/controller.ts` - Owns endpoint, workspace, stream, dialog, and operation state for the redesigned surface.

@@ -4,8 +4,10 @@ import {
   type PluginPlatformClient,
   type PluginRequestOptions,
 } from '@floegence/redevplugin-ui';
+import type { PluginLocalImportClient } from '@floegence/redevplugin-ui/local-import';
 
 import { officialPluginCatalog } from './officialPluginCatalog';
+import { fetchLocalApiJSON, prepareLocalApiRequestInit } from '../services/localApi';
 import { projectPluginInventory } from './pluginInventoryProjection';
 import type {
   OfficialPluginCatalogItem,
@@ -15,6 +17,7 @@ import type {
   PluginInventoryProjection,
   PluginManagementCommand,
   ReDevPluginRecord,
+  PluginDevelopmentDelivery,
 } from './pluginTypes';
 
 const EXTERNAL_COMMIT_RECONCILIATION_TIMEOUT_MS = 60_000;
@@ -25,9 +28,14 @@ export class ExternalPackageInspectionTerminalError extends Error {}
 
 export function createPluginLifecycleAPI(
   client: PluginPlatformClient,
-  catalog: readonly OfficialPluginCatalogItem[] = officialPluginCatalog(),
+  localImport?: PluginLocalImportClient,
+  catalogSeed: readonly OfficialPluginCatalogItem[] = officialPluginCatalog(),
+  loadDevelopment: (signal?: AbortSignal) => Promise<PluginDevelopmentDelivery | undefined> = loadDevelopmentDelivery,
 ) {
-  const officialByPluginID = new Map(catalog.map((item) => [item.pluginID, item]));
+  let catalog: readonly OfficialPluginCatalogItem[] = catalogSeed;
+  let developmentDelivery: PluginDevelopmentDelivery | undefined;
+  let developmentUpdateTargets = new Map<string, number>();
+  const officialByPluginID = () => new Map(catalog.map((item) => [item.pluginID, item]));
   const externalCommitQueryOnlyInspections = new Set<string>();
 
   const listInstalledPlugins = async (options: PluginRequestOptions = {}): Promise<ReDevPluginRecord[]> => {
@@ -36,21 +44,38 @@ export function createPluginLifecycleAPI(
   };
 
   const loadInventoryProjection = async (options: PluginRequestOptions = {}): Promise<PluginInventoryProjection> => {
-    const installedPlugins = await listInstalledPlugins(options);
-    const [permissions, securityPolicies, permissionRequirements] = await Promise.all([
+    const installedPluginsPromise = listInstalledPlugins(options);
+    developmentDelivery = await loadDevelopment(options.signal);
+    catalog = developmentDelivery ? officialPluginCatalog(developmentDelivery) : catalogSeed;
+    const installedPlugins = await installedPluginsPromise;
+    const [permissions, securityPolicies, permissionRequirementResults] = await Promise.all([
       client.listPermissions({ active_only: true }, options),
       client.listSecurityPolicies(options),
-      Promise.all(installedPlugins.map((plugin) => client.getPermissionRequirements({
+      Promise.allSettled(installedPlugins.map((plugin) => client.getPermissionRequirements({
         plugin_instance_id: plugin.plugin_instance_id,
       }, options))),
     ]);
-    return projectPluginInventory({
+    const permissionRequirements = permissionRequirementResults.flatMap((result, index) => {
+      if (result.status === 'fulfilled') return [result.value];
+      const plugin = installedPlugins[index];
+      if (plugin && isRecoverableContainersDevelopmentInstance(plugin, developmentDelivery)) return [];
+      throw result.reason;
+    });
+    const projection = projectPluginInventory({
       officialCatalog: catalog,
       installedPlugins,
       permissionGrants: permissions.permissions,
       permissionRequirements,
       securityPolicies: securityPolicies.security_policies,
     });
+    developmentUpdateTargets = new Map(projection.items.flatMap((item) => (
+      item.pluginInstanceID
+        && item.managementRevision !== undefined
+        && item.officialCatalog?.distribution.developmentDelivery
+        ? [[item.pluginInstanceID, item.managementRevision] as const]
+        : []
+    )));
+    return projection;
   };
 
   const inspectExternalPackage = async (
@@ -127,7 +152,7 @@ export function createPluginLifecycleAPI(
   ) => {
     switch (command.type) {
       case 'install': {
-        const official = requireOfficialPlugin(officialByPluginID, command.pluginID);
+        const official = requireOfficialPlugin(officialByPluginID(), command.pluginID);
         return client.installReleaseRef({
           plugin_instance_id: official.pluginInstanceID,
           release_ref: official.distribution.releaseRef,
@@ -151,7 +176,25 @@ export function createPluginLifecycleAPI(
           delete_data: command.dataRetention === 'delete_data',
         }, options);
       case 'update': {
-        const official = requireOfficialPlugin(officialByPluginID, command.pluginID);
+        const official = requireOfficialPlugin(officialByPluginID(), command.pluginID);
+        const development = official.distribution.developmentDelivery;
+        if (development && command.targetVersion === development.version) {
+          if (!localImport
+            || developmentUpdateTargets.get(command.pluginInstanceID) !== command.expectedManagementRevision) {
+            throw new Error('Containers development update target is invalid');
+          }
+          const response = await fetch(development.package_url, await prepareLocalApiRequestInit({ signal: options.signal }));
+          if (!response.ok) throw new Error(`Containers development package could not be loaded (HTTP ${response.status})`);
+          const blob = await response.blob();
+          if (await sha256Hex(blob) !== development.package_sha256) {
+            throw new Error('Containers development package hash does not match the reviewed delivery');
+          }
+          const result = await localImport.updateLocalPackage(
+            command.pluginInstanceID, command.expectedManagementRevision, blob, { signal: options.signal },
+          );
+          developmentUpdateTargets.delete(command.pluginInstanceID);
+          return result;
+        }
         if (command.targetVersion !== official.distribution.releaseRef.version) {
           throw new Error('Official plugin update target does not match its signed release reference');
         }
@@ -190,6 +233,36 @@ export function createPluginLifecycleAPI(
     commitExternalPackage,
     execute,
   });
+}
+
+function isRecoverableContainersDevelopmentInstance(
+  plugin: ReDevPluginRecord,
+  delivery?: PluginDevelopmentDelivery,
+): boolean {
+  return Boolean(delivery
+    && delivery.development_only === true
+    && plugin.publisher_id === delivery.publisher_id
+    && plugin.plugin_id === delivery.plugin_id
+    && plugin.version === delivery.version
+    && plugin.trust_state === 'unsigned_local');
+}
+
+async function loadDevelopmentDelivery(signal?: AbortSignal): Promise<PluginDevelopmentDelivery | undefined> {
+  if (typeof window === 'undefined') return undefined;
+  try {
+    return await fetchLocalApiJSON<PluginDevelopmentDelivery>(
+      '/_redeven_proxy/api/plugins/development-delivery/containers',
+      { method: 'GET', signal },
+    );
+  } catch (error) {
+    if (error instanceof Error && 'status' in error && (error as { status?: number }).status === 404) return undefined;
+    throw error;
+  }
+}
+
+async function sha256Hex(blob: Blob): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', await blob.arrayBuffer());
+  return [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, '0')).join('');
 }
 
 function waitForExternalCommitRetry(delayMs: number, signal?: AbortSignal, remainingMs = 5_000): Promise<void> {

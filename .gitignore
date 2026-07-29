@@ -19,6 +19,7 @@ internal/codeapp/ui/dist/
 desktop/dist/
 desktop/release/
 desktop/.bundle/
+desktop/.containers-v4-development/
 desktop/diagnostics/
 plugins/official/containers/dist/
 

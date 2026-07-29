@@ -38,6 +38,21 @@ export type PluginPresentationCategory =
 export type OfficialPluginDistribution = {
   releaseRef: PluginReleaseRef;
   installSource: ExternalPluginSourcePreset;
+  developmentDelivery?: PluginDevelopmentDelivery;
+};
+
+export type PluginDevelopmentDelivery = {
+  plugin_instance_id: string;
+  publisher_id: string;
+  plugin_id: string;
+  version: string;
+  package_url: string;
+  package_sha256: string;
+  package_hash: string;
+  manifest_hash: string;
+  entries_hash: string;
+  capability_version: string;
+  development_only: true;
 };
 
 export type OfficialPluginPermission = {

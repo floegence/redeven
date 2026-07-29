@@ -225,6 +225,20 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     setExternalSourcePreset(sourcePreset);
     setExternalDialogOpen(true);
   };
+  const requestUpdate = (item: PluginInventoryItem) => {
+    const development = item.officialCatalog?.distribution.developmentDelivery;
+    if (development && item.pluginInstanceID && item.managementRevision !== undefined) {
+      void runCommand({
+        type: 'update',
+        pluginID: item.pluginID,
+        pluginInstanceID: item.pluginInstanceID,
+        expectedManagementRevision: item.managementRevision,
+        targetVersion: development.version,
+      });
+      return;
+    }
+    openExternalDialog(item, item.officialCatalog?.distribution.installSource);
+  };
 
   const runCommand = async (command: PluginLifecycleCommand) => {
     if (commandPending()) return;
@@ -390,7 +404,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
                   entranceDelayMs={Math.min(index() * 18, 126)}
                   onOpenDetails={(target) => openDetails(item.inventoryKey, target)}
                   onInstall={() => openExternalDialog(undefined, item.officialCatalog?.distribution.installSource)}
-                  onUpdate={() => openExternalDialog(item, item.officialCatalog?.distribution.installSource)}
+                  onUpdate={() => requestUpdate(item)}
                   onOpenActivity={() => openItemSurface(item, 'activity')}
                   onOpenWorkbench={() => openItemSurface(item, 'workbench')}
                 />
@@ -429,7 +443,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
               onCommand={(command) => void runCommand(command)}
               onAskUninstall={setUninstallChoiceFor}
               onExternalInstall={(selected) => openExternalDialog(undefined, selected.officialCatalog?.distribution.installSource)}
-              onExternalUpdate={(selected) => openExternalDialog(selected, selected.officialCatalog?.distribution.installSource)}
+              onExternalUpdate={requestUpdate}
             />
           )}
         </Show>

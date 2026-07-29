@@ -364,7 +364,7 @@ ensure_desktop_workspace() {
 
 start_desktop() {
   local cmd=("./node_modules/.bin/electron")
-  local ssh_runtime_release_tag
+  local ssh_runtime_release_tag development_delivery
 
   ui_pkg_log "Starting Redeven Desktop from the current checkout..."
   ui_pkg_log "ROOT_DIR: $ROOT_DIR"
@@ -413,6 +413,12 @@ start_desktop() {
     return 0
   fi
 
+  ui_pkg_log "Building Containers 4.0.0 development delivery..."
+  development_delivery="$(node "$SCRIPT_DIR/build_containers_v4_development_delivery.mjs")"
+  if [ ! -f "$development_delivery" ]; then
+    ui_pkg_die "Containers development delivery descriptor was not generated"
+  fi
+
   (
     cd "$DESKTOP_DIR"
     if ui_pkg_need_install "$DESKTOP_DIR"; then
@@ -425,6 +431,7 @@ start_desktop() {
     fi
     export REDEVEN_DESKTOP_BUNDLE_COMMIT="${REDEVEN_DESKTOP_BUNDLE_COMMIT:-$(git -C "$ROOT_DIR" rev-parse --short=12 HEAD)}"
     export REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT="${REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT:-$ROOT_DIR}"
+    export REDEVEN_PLUGIN_DEVELOPMENT_DELIVERY="$development_delivery"
     npm run build
     npm run prepare:bundled-runtime
     exec "${cmd[@]}"

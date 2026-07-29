@@ -102,6 +102,8 @@ type Options struct {
 	// DesktopManaged disables CLI self-upgrade behaviors that do not apply when the
 	// agent lifecycle is owned by a desktop shell package.
 	DesktopManaged bool
+	// PluginDevelopmentDelivery is a dev-only, exact local delivery descriptor.
+	PluginDevelopmentDelivery string
 	// EffectiveRunMode reports the current runtime mode exposed to the UI/control plane.
 	EffectiveRunMode string
 	// RemoteEnabled reports whether the current process has the remote control channel enabled.
@@ -340,23 +342,24 @@ func New(opts Options) (*Agent, error) {
 		return nil, err
 	}
 	codeSvc, err := codeapp.New(context.Background(), codeapp.Options{
-		Logger:                 logger,
-		StateDir:               stateDir,
-		StateRoot:              stateRoot,
-		ConfigPath:             cfgPathAbs,
-		PermissionPolicy:       opts.Config.PermissionPolicy,
-		ReDevPluginRuntimePath: redevpluginRuntimePath,
-		ControlplaneBaseURL:    strings.TrimSpace(opts.Config.ControlplaneBaseURL),
-		CodeServerPortMin:      opts.Config.CodeServerPortMin,
-		CodeServerPortMax:      opts.Config.CodeServerPortMax,
-		AgentHomeDir:           agentHomeAbs,
-		FilesystemScope:        filesystemScope,
-		Shell:                  shell,
-		AIConfig:               opts.Config.AI,
-		Audit:                  auditStore,
-		Diagnostics:            a.diag,
-		Terminal:               a.term,
-		LocalUIEnabled:         a.localUIEnabled,
+		Logger:                    logger,
+		StateDir:                  stateDir,
+		StateRoot:                 stateRoot,
+		ConfigPath:                cfgPathAbs,
+		PermissionPolicy:          opts.Config.PermissionPolicy,
+		ReDevPluginRuntimePath:    redevpluginRuntimePath,
+		PluginDevelopmentDelivery: opts.PluginDevelopmentDelivery,
+		ControlplaneBaseURL:       strings.TrimSpace(opts.Config.ControlplaneBaseURL),
+		CodeServerPortMin:         opts.Config.CodeServerPortMin,
+		CodeServerPortMax:         opts.Config.CodeServerPortMax,
+		AgentHomeDir:              agentHomeAbs,
+		FilesystemScope:           filesystemScope,
+		Shell:                     shell,
+		AIConfig:                  opts.Config.AI,
+		Audit:                     auditStore,
+		Diagnostics:               a.diag,
+		Terminal:                  a.term,
+		LocalUIEnabled:            a.localUIEnabled,
 		ResolveSessionMeta: func(channelID string) (*session.Meta, bool) {
 			if a == nil {
 				return nil, false

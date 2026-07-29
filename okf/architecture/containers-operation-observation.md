@@ -13,8 +13,10 @@ observation record. The resource stays locked until terminal observation and
 fresh authoritative inventory prove the result; unrelated resources remain
 usable. Lost submissions, partial mutations, stale plans, unavailable engines,
 and failed reconciliation are never replayed or shown as success. Production
-still uses the signed Containers `2.0.0` release. The endpoint-aware `4.0.0`
-surface and capability are unsigned candidates and remain outside active trust.
+still uses the signed Containers `2.0.0` release. Dev Desktop may activate the
+endpoint-aware `4.0.0` candidate only through an ephemeral, exact local delivery
+whose package and capability are verified at startup; it remains outside
+official release trust.
 
 # Contract
 
@@ -132,7 +134,14 @@ Stable and latest catalog metadata remain pinned to signed Containers `2.0.0`.
 An official `4.0.0` release requires authorized capability and package signing
 plus matching root, pin, policy, revocation, ledger, and release metadata.
 Candidate bytes cannot substitute for those materials and must not be merged as
-an active release.
+an active release. For local product verification, `dev_desktop.sh` creates a
+temporary capability signing identity, packages all 52 exact routes, deletes the
+private key, and supplies a descriptor only to the Desktop-managed development
+Runtime. The Runtime verifies every artifact and enables ReDevPlugin local
+import only for that process. Env App then updates the fixed Containers instance
+through the released local-import client after checking the package SHA-256 and
+current management revision. Production policy and the signed catalog are
+unchanged.
 
 # Boundaries
 
@@ -153,4 +162,6 @@ package and integration ownership remains in [Plugin platform integration](plugi
 - `redeven:plugins/official/containers/test/main.integration.test.mjs` - Proves endpoint routing, workspace behavior, reconciliation locks, progress, context updates, and disposal semantics.
 - `redeven:plugins/official/containers/test/styles.test.mjs` - Enforces responsive shell, fixed confirmation footer, token use, reduced motion, forced colors, and stable row hover.
 - `redeven:scripts/check_containers_plugin_v4_candidate.sh` - Rebuilds and verifies the deterministic unsigned v4 candidate without granting release trust.
+- `redeven:scripts/build_containers_v4_development_delivery.mjs` - Produces the ephemeral Dev Desktop package and verified v4 capability delivery.
+- `redeven:internal/redevpluginintegration/development_delivery.go` - Fails closed on descriptor, package, key, pin, contract, or method-route mismatch.
 - `redeven:spec/redevplugin/candidate-containers-plugin/4.0.0/plugin.redevplugin` - Contains the fail-closed unsigned Containers v4 package candidate.

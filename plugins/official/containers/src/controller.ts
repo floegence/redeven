@@ -1154,9 +1154,10 @@ function imagesTable(items: Image[]): PluginUIVNode {
   if (!items.length) return resourceEmptyState(c(hasRefinements('images') ? 'noMatchingImages' : 'noImages'), 'images');
   return el('image-table', 'div', { class: 'resource-table table-images' }, [tableHeader('image-header', [c('name'), c('digest'), c('size'), c('usedBy'), c('created'), c('actions')]), ...items.map((item) => {
     const ref = imageName(item);
-    return el(`image-${item.id}`, 'article', { class: 'resource-row image-row' }, [
-      rowIdentity(`image-${item.id}`, ref, short(item.id), 'image-details', ref, item.referenced_containers ? 'used' : 'neutral'), tableCell(`image-${item.id}-digest`, short(item.digest || item.id)), tableCell(`image-${item.id}-size`, formatBytes(item.size_bytes)), tableCell(`image-${item.id}-used`, referenceCount('images', item.referenced_containers)), tableCell(`image-${item.id}-created`, formatDate(item.created_at_unix_ms)),
-      genericMenu(`image-${item.id}-menu`, [[c('details'), 'image-details', ref], [c('history'), 'image-history', ref], [c('tag'), 'image-tag', ref, '', mutationDisabled('images')], [c('remove'), 'image-remove', ref, 'danger', destructiveDisabled('images')]]),
+    const key = `image-${hash(item.id)}-${hash(ref)}`;
+    return el(key, 'article', { class: 'resource-row image-row' }, [
+      rowIdentity(key, ref, short(item.id), 'image-details', ref, item.referenced_containers ? 'used' : 'neutral'), tableCell(`${key}-digest`, short(item.digest || item.id)), tableCell(`${key}-size`, formatBytes(item.size_bytes)), tableCell(`${key}-used`, referenceCount('images', item.referenced_containers)), tableCell(`${key}-created`, formatDate(item.created_at_unix_ms)),
+      genericMenu(`${key}-menu`, [[c('details'), 'image-details', ref], [c('history'), 'image-history', ref], [c('tag'), 'image-tag', ref, '', mutationDisabled('images')], [c('remove'), 'image-remove', ref, 'danger', destructiveDisabled('images')]]),
     ]);
   })]);
 }

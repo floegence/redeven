@@ -605,7 +605,7 @@ export function EnvAppShell() {
     },
   });
   const pluginSurfaceCoordinator = createPluginSurfacePlacementCoordinator(pluginPlatform.client);
-  const pluginLifecycle = createPluginLifecycleAPI(pluginPlatform.client);
+  const pluginLifecycle = createPluginLifecycleAPI(pluginPlatform.client, pluginPlatform.localImport);
   const performEndPluginSession = async (): Promise<boolean> => {
     pluginConfirmationQueue.cancelAll();
     const localCleanup = await Promise.allSettled([

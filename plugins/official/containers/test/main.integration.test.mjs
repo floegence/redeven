@@ -58,6 +58,30 @@ test('switches across Containers, Images, and Volumes with local search', { conc
   assert.deepEqual(fixture.calls.listVolumes, ['docker']);
 });
 
+test('renders separate tagged references that share one Docker image id', { concurrency: false }, async (t) => {
+  const sharedID = 'sha256:shared-image';
+  const fixture = await loadFixture({
+    listImages: async ({ engine }) => ({
+      engine,
+      images: [
+        { ...image(sharedID), reference: 'ghcr.io/example/api:latest' },
+        { ...image(sharedID), reference: 'ghcr.io/example/api:stable' },
+      ],
+    }),
+  });
+  t.after(() => fixture.dispose());
+
+  fixture.action('select-view', { value: 'images' });
+  await eventually(() => {
+    if (fixture.errors().length) throw fixture.errors().at(-1);
+    assert.match(fixture.text(), /ghcr\.io\/example\/api:latest/u);
+    assert.match(fixture.text(), /ghcr\.io\/example\/api:stable/u);
+    const rows = findNodes(fixture.tree(), (node) => node.attributes?.class === 'resource-row image-row');
+    assert.equal(rows.length, 2);
+    assert.equal(new Set(rows.map((row) => row.key)).size, 2);
+  });
+});
+
 test('defaults to Overview and exposes only the selected engine workspace', { concurrency: false }, async (t) => {
   const fixture = await loadFixture({
     listEndpoints: async ({ engine }) => ({ engine, endpoints: engine === 'docker'

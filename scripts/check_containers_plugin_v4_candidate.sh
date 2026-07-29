@@ -75,6 +75,24 @@ for (const method of contract.methods) {
     throw new Error(`${method.name} does not require an authoritative plan digest`);
   }
 }
+const expectedPermissionByMethod = new Map([
+  ['containers.create.preflight', 'containers.execute'],
+  ['containers.create', 'containers.execute'],
+  ['images.pull', 'containers.images.write'],
+  ['images.tag', 'containers.images.write'],
+  ['volumes.create.preflight', 'containers.execute'],
+  ['volumes.create', 'containers.execute'],
+]);
+for (const method of contract.methods) {
+  const expectedPermission = expectedPermissionByMethod.get(method.name)
+    ?? (method.effect === 'delete' || method.name.includes('.remove') || method.name.includes('.prune')
+      ? 'containers.delete'
+      : method.effect === 'read' ? 'containers.read' : 'containers.execute');
+  if (method.required_permissions?.length !== 1
+    || method.required_permissions[0] !== expectedPermission) {
+    throw new Error(`${method.name} does not use the established Containers permission groups`);
+  }
+}
 for (const [methodName, permission] of [
   ['compose.projects.down', 'containers.delete'],
   ['pods.remove', 'containers.delete'],

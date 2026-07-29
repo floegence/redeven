@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { OFFICIAL_PLUGIN_CATALOG_SEED } from './officialPluginCatalog';
+import { OFFICIAL_PLUGIN_CATALOG_SEED, officialPluginCatalog } from './officialPluginCatalog';
 import {
   buildPluginCenterModel,
   buildPluginPanelModel,
@@ -19,6 +19,19 @@ const readGrant = {
   effect: 'grant',
   granted_at: '2026-07-04T10:02:00Z',
 } as const;
+const developmentDelivery = {
+  plugin_instance_id: officialContainers.pluginInstanceID,
+  publisher_id: officialContainers.publisherID,
+  plugin_id: officialContainers.pluginID,
+  version: '4.0.0',
+  package_url: '/_redeven_proxy/api/plugins/development-delivery/containers/package',
+  package_sha256: 'a90df057416662b93a9c1f9b0737d832198e3e6eb51fe54ba96619d69d622d0f',
+  package_hash: 'sha256:development-package',
+  manifest_hash: 'sha256:development-manifest',
+  entries_hash: 'sha256:development-entries',
+  capability_version: '3.0.0',
+  development_only: true as const,
+};
 
 function installedRecord(overrides: Partial<ReDevPluginRecord> = {}): ReDevPluginRecord {
   return {
@@ -628,6 +641,31 @@ describe('v0.6.7 plugin inventory projection', () => {
       lifecycleState: 'update_available',
       managementRevision: 7,
     });
+  });
+
+  it('offers an exact development update when the version matches but package hashes changed', () => {
+    const projection = projectPluginInventory({
+      officialCatalog: officialPluginCatalog(developmentDelivery),
+      installedPlugins: [installedRecord({
+        plugin_instance_id: 'plugin_development_containers',
+        version: developmentDelivery.version,
+        trust_state: 'unsigned_local',
+        package_hash: 'sha256:previous-development-package',
+        manifest_hash: 'sha256:previous-development-manifest',
+        entries_hash: 'sha256:previous-development-entries',
+      })],
+      permissionGrants: [{ ...readGrant, plugin_instance_id: 'plugin_development_containers' }],
+    });
+
+    expect(projection.items).toHaveLength(1);
+    expect(projection.items[0]).toMatchObject({
+      pluginInstanceID: 'plugin_development_containers',
+      version: developmentDelivery.version,
+      lifecycleState: 'update_available',
+      attentionReason: 'update_required',
+      managementRevision: 7,
+    });
+    expect(buildPluginCenterModel(projection, 'updates').updates).toHaveLength(1);
   });
 
   it('orders strict SemVer prereleases before the matching stable release', () => {

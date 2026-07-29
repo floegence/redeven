@@ -14,7 +14,7 @@ contract.contract_id = 'redeven.container_resources.v4';
 contract.contract_version = '4.0.0';
 contract.capability_version = '3.0.0';
 contract.client_name = 'RedevenContainerResourcesV4Client';
-contract.methods = contract.methods.map(addEndpointIdentity);
+contract.methods = contract.methods.map((method) => normalizePermissionGroups(addEndpointIdentity(method)));
 contract.methods.push(...workspaceMethods());
 
 addContainerGrouping(contract.methods.find((item) => item.name === 'containers.list')?.response_schema?.properties?.containers?.items);
@@ -46,6 +46,34 @@ function addEndpointIdentity(method) {
     if (!copy.response_schema.required.includes('plan_digest')) copy.response_schema.required.push('plan_digest');
   }
   return copy;
+}
+
+function normalizePermissionGroups(method) {
+  const copy = structuredClone(method);
+  if (copy.effect === 'read') {
+    copy.required_permissions = [permissionForReadMethod(copy.name)];
+    return copy;
+  }
+  if (copy.name === 'images.pull' || copy.name === 'images.tag') {
+    copy.required_permissions = ['containers.images.write'];
+    return copy;
+  }
+  if (copy.effect === 'delete' || copy.name.includes('.remove') || copy.name.includes('.prune')) {
+    copy.required_permissions = ['containers.delete'];
+    return copy;
+  }
+  copy.required_permissions = ['containers.execute'];
+  return copy;
+}
+
+function permissionForReadMethod(name) {
+  if (name === 'containers.create.preflight' || name === 'volumes.create.preflight') {
+    return 'containers.execute';
+  }
+  if (name.includes('.remove.') || name.endsWith('.remove.preflight') || name.includes('.prune.')) {
+    return 'containers.delete';
+  }
+  return 'containers.read';
 }
 
 function addEndpointSchema(schema) {

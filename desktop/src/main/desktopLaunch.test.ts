@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   DESKTOP_OWNER_ID_ENV_NAME,
+  PLUGIN_DEVELOPMENT_DELIVERY_ENV_NAME,
   RUNTIME_SECRET_ENV_NAMES,
   buildDesktopRuntimeArgs,
   buildDesktopRuntimeEnvironment,
@@ -37,6 +38,27 @@ describe('desktopLaunch', () => {
       '--acknowledge-plaintext-network-exposure',
       '--startup-secrets-stdin',
     ]);
+  });
+
+  it('adds the exact development delivery only when explicitly configured', () => {
+    const environment = testLocalEnvironment({
+      access: testLocalAccess({ local_ui_bind: '127.0.0.1:0' }),
+    });
+    const descriptor = '/private/tmp/redeven-containers-development/delivery.json';
+
+    expect(buildDesktopRuntimeArgs(environment)).not.toContain('--plugin-development-delivery');
+    expect(buildDesktopRuntimeArgs(environment, { pluginDevelopmentDelivery: descriptor })).toEqual([
+      'run', '--mode', 'desktop', '--desktop-managed', '--presentation', 'machine',
+      '--local-ui-bind', '127.0.0.1:0',
+      '--plugin-development-delivery', descriptor,
+      '--startup-secrets-stdin',
+    ]);
+
+    const plan = buildDesktopRuntimeLaunchPlan(environment, {
+      HOME: '/Users/tester',
+      [PLUGIN_DEVELOPMENT_DELIVERY_ENV_NAME]: descriptor,
+    });
+    expect(plan.args).toContain(descriptor);
   });
 
   it('blocks a saved network bind until its exact canonical bind is reviewed', () => {

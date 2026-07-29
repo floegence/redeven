@@ -1,15 +1,17 @@
 import { PluginTransportError, type PluginPlatformClient } from '@floegence/redevplugin-ui';
+import type { PluginLocalImportClient } from '@floegence/redevplugin-ui/local-import';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createPluginLifecycleAPI } from './pluginApi';
 import { OFFICIAL_PLUGIN_CATALOG_SEED } from './officialPluginCatalog';
 import { OFFICIAL_CONTAINERS_RELEASE_REF } from './officialContainersRelease.generated';
+import type { ReDevPluginRecord } from './pluginTypes';
 
 const officialContainers = OFFICIAL_PLUGIN_CATALOG_SEED[0];
 
 function createClientHarness() {
   const mocks = {
-    catalog: vi.fn(async () => ({ plugins: [] })),
+    catalog: vi.fn(async (): Promise<{ plugins: ReDevPluginRecord[] }> => ({ plugins: [] })),
     listPermissions: vi.fn(async () => ({ permissions: [] })),
     listSecurityPolicies: vi.fn(async () => ({ security_policies: [] })),
     installReleaseRef: vi.fn(async () => ({})),
@@ -31,9 +33,70 @@ function createClientHarness() {
   };
   return {
     mocks,
-    lifecycle: createPluginLifecycleAPI(mocks as unknown as PluginPlatformClient),
+    lifecycle: createPluginLifecycleAPI(
+      mocks as unknown as PluginPlatformClient, undefined, OFFICIAL_PLUGIN_CATALOG_SEED, async () => undefined,
+    ),
   };
 }
+
+const developmentPackageBytes = new TextEncoder().encode('containers-development-package');
+const developmentPackage = {
+  arrayBuffer: async () => developmentPackageBytes.buffer.slice(0),
+} as unknown as Blob;
+const developmentPackageSHA256 = 'a90df057416662b93a9c1f9b0737d832198e3e6eb51fe54ba96619d69d622d0f';
+const developmentDelivery = {
+  plugin_instance_id: officialContainers.pluginInstanceID,
+  publisher_id: officialContainers.publisherID,
+  plugin_id: officialContainers.pluginID,
+  version: '4.0.0',
+  package_url: '/_redeven_proxy/api/plugins/development-delivery/containers/package',
+  package_sha256: developmentPackageSHA256,
+  package_hash: 'sha256:package',
+  manifest_hash: 'sha256:manifest',
+  entries_hash: 'sha256:entries',
+  capability_version: '3.0.0',
+  development_only: true as const,
+};
+const generatedContainersInstanceID = 'plugin_dea00daa09166c33302f92c9b090f62a';
+const generatedContainersRecord: ReDevPluginRecord = {
+  plugin_instance_id: generatedContainersInstanceID,
+  publisher_id: officialContainers.publisherID,
+  plugin_id: officialContainers.pluginID,
+  version: OFFICIAL_CONTAINERS_RELEASE_REF.version,
+  active_fingerprint: OFFICIAL_CONTAINERS_RELEASE_REF.expected_hashes.package_sha256,
+  package_hash: OFFICIAL_CONTAINERS_RELEASE_REF.expected_hashes.package_sha256,
+  manifest_hash: OFFICIAL_CONTAINERS_RELEASE_REF.expected_hashes.manifest_sha256,
+  entries_hash: OFFICIAL_CONTAINERS_RELEASE_REF.expected_hashes.entries_sha256,
+  trust_state: 'untrusted',
+  trust_assessment: {
+    trust_state: 'untrusted',
+    verified_hashes: {
+      package_sha256: OFFICIAL_CONTAINERS_RELEASE_REF.expected_hashes.package_sha256,
+      manifest_sha256: OFFICIAL_CONTAINERS_RELEASE_REF.expected_hashes.manifest_sha256,
+      entries_sha256: OFFICIAL_CONTAINERS_RELEASE_REF.expected_hashes.entries_sha256,
+    },
+  },
+  enable_state: 'enabled',
+  policy_revision: 3,
+  management_revision: 23,
+  revoke_epoch: 0,
+  manifest: {
+    schema_version: 'redevplugin.manifest.v5',
+    publisher: { publisher_id: officialContainers.publisherID, display_name: officialContainers.publisher },
+    plugin: {
+      plugin_id: officialContainers.pluginID, display_name: officialContainers.displayName,
+      version: OFFICIAL_CONTAINERS_RELEASE_REF.version, api_version: 'plugin-v1',
+      min_runtime_version: '0.6.5', ui_protocol_version: 'plugin-ui-v5',
+    },
+    surfaces: [{
+      surface_id: officialContainers.defaultSurfaceID, kind: 'view', intent: 'primary',
+      label: officialContainers.displayName, entry: 'ui/index.html',
+    }],
+  },
+  package_entries: [],
+  installed_at: '2026-07-04T10:00:00Z',
+  updated_at: '2026-07-04T10:01:00Z',
+};
 
 describe('v0.6.7 plugin lifecycle client integration', () => {
   it('loads inventory exclusively through the platform catalog client', async () => {
@@ -62,6 +125,43 @@ describe('v0.6.7 plugin lifecycle client integration', () => {
     expect(mocks.listPermissions).toHaveBeenCalledWith({ active_only: true }, {});
     expect(mocks.listSecurityPolicies).toHaveBeenCalledWith({});
     expect(mocks.getPermissionRequirements).not.toHaveBeenCalled();
+  });
+
+  it('keeps a stale Containers development instance updateable when its old capability pin cannot be resolved', async () => {
+    const { mocks } = createClientHarness();
+    const staleDevelopmentRecord: ReDevPluginRecord = {
+      ...generatedContainersRecord,
+      version: developmentDelivery.version,
+      trust_state: 'unsigned_local',
+      package_hash: 'sha256:previous-development-package',
+      manifest_hash: 'sha256:previous-development-manifest',
+      entries_hash: 'sha256:previous-development-entries',
+      management_revision: 29,
+    };
+    mocks.catalog.mockResolvedValue({ plugins: [staleDevelopmentRecord] });
+    mocks.getPermissionRequirements.mockRejectedValue(new Error('old development capability pin is unavailable'));
+    const lifecycle = createPluginLifecycleAPI(
+      mocks as unknown as PluginPlatformClient,
+      { updateLocalPackage: vi.fn(async () => ({})) } as unknown as PluginLocalImportClient,
+      OFFICIAL_PLUGIN_CATALOG_SEED,
+      async () => developmentDelivery,
+    );
+
+    await expect(lifecycle.loadInventoryProjection()).resolves.toMatchObject({
+      items: [expect.objectContaining({
+        pluginInstanceID: generatedContainersInstanceID,
+        managementRevision: 29,
+        lifecycleState: 'update_available',
+      })],
+    });
+  });
+
+  it('keeps permission requirement failures fatal outside the exact Containers development recovery path', async () => {
+    const { lifecycle, mocks } = createClientHarness();
+    mocks.catalog.mockResolvedValue({ plugins: [generatedContainersRecord] });
+    mocks.getPermissionRequirements.mockRejectedValue(new Error('permission requirements unavailable'));
+
+    await expect(lifecycle.loadInventoryProjection()).rejects.toThrow('permission requirements unavailable');
   });
 
   it('installs the generated signed release under the fixed official identity', async () => {
@@ -100,6 +200,81 @@ describe('v0.6.7 plugin lifecycle client integration', () => {
       expected_management_revision: 17,
       release_ref: OFFICIAL_CONTAINERS_RELEASE_REF,
     }, {});
+  });
+
+  it('updates the exact Containers instance from a hash-verified development package', async () => {
+    const { mocks } = createClientHarness();
+    mocks.catalog.mockResolvedValue({ plugins: [generatedContainersRecord] });
+    const updateLocalPackage = vi.fn(async () => ({}));
+    const lifecycle = createPluginLifecycleAPI(
+      mocks as unknown as PluginPlatformClient,
+      { updateLocalPackage } as unknown as PluginLocalImportClient,
+      OFFICIAL_PLUGIN_CATALOG_SEED,
+      async () => developmentDelivery,
+    );
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true, status: 200, blob: async () => developmentPackage,
+    })));
+    try {
+      await lifecycle.loadInventoryProjection();
+      await lifecycle.execute({
+        type: 'update',
+        pluginID: officialContainers.pluginID,
+        pluginInstanceID: generatedContainersInstanceID,
+        expectedManagementRevision: 23,
+        targetVersion: '4.0.0',
+      });
+      expect(updateLocalPackage).toHaveBeenCalledWith(
+        generatedContainersInstanceID, 23, developmentPackage, { signal: undefined },
+      );
+      expect(mocks.updateReleaseRef).not.toHaveBeenCalled();
+
+      await expect(lifecycle.execute({
+        type: 'update',
+        pluginID: officialContainers.pluginID,
+        pluginInstanceID: 'plugini_other_instance',
+        expectedManagementRevision: 23,
+        targetVersion: '4.0.0',
+      })).rejects.toThrow('development update target is invalid');
+      await expect(lifecycle.execute({
+        type: 'update',
+        pluginID: officialContainers.pluginID,
+        pluginInstanceID: generatedContainersInstanceID,
+        expectedManagementRevision: 22,
+        targetVersion: '4.0.0',
+      })).rejects.toThrow('development update target is invalid');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('rejects a tampered Containers development package before local import', async () => {
+    const { mocks } = createClientHarness();
+    mocks.catalog.mockResolvedValue({ plugins: [generatedContainersRecord] });
+    const updateLocalPackage = vi.fn(async () => ({}));
+    const lifecycle = createPluginLifecycleAPI(
+      mocks as unknown as PluginPlatformClient,
+      { updateLocalPackage } as unknown as PluginLocalImportClient,
+      OFFICIAL_PLUGIN_CATALOG_SEED,
+      async () => developmentDelivery,
+    );
+    const tampered = new TextEncoder().encode('tampered');
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true, status: 200, blob: async () => ({ arrayBuffer: async () => tampered.buffer.slice(0) }),
+    })));
+    try {
+      await lifecycle.loadInventoryProjection();
+      await expect(lifecycle.execute({
+        type: 'update',
+        pluginID: officialContainers.pluginID,
+        pluginInstanceID: generatedContainersInstanceID,
+        expectedManagementRevision: 23,
+        targetVersion: '4.0.0',
+      })).rejects.toThrow('package hash does not match');
+      expect(updateLocalPackage).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('rejects an update whose requested version is not the signed release version', async () => {
