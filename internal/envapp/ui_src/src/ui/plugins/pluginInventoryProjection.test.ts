@@ -103,6 +103,7 @@ describe('v0.6.7 plugin inventory projection', () => {
       pluginID: officialContainers.pluginID,
       pluginInstanceID: officialContainers.pluginInstanceID,
       displayName: officialContainers.displayName,
+      iconURL: officialContainers.iconURL,
       lifecycleState: 'enabled',
       trustBadge: 'official',
       managementRevision: 7,

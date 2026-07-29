@@ -36,6 +36,17 @@ function methodsByPermissionFromContract(): Record<string, string[]> {
 }
 
 describe('official plugin catalog contracts', () => {
+  it('ships the transparent Containers icon at the expected application resolution', () => {
+    const iconPath = path.resolve(process.cwd(), 'src/ui/plugins/assets/containers-plugin.png');
+    const icon = fs.readFileSync(iconPath);
+
+    expect(icon.subarray(1, 4).toString('ascii')).toBe('PNG');
+    expect(icon.readUInt32BE(16)).toBe(512);
+    expect(icon.readUInt32BE(20)).toBe(512);
+    expect(icon[25]).toBe(6);
+    expect(OFFICIAL_PLUGIN_CATALOG_SEED[0]?.iconURL).toContain('containers-plugin.png');
+  });
+
   it('keeps Containers permissions and methods aligned with the pinned capability contract', () => {
     const containersCatalogItem = OFFICIAL_PLUGIN_CATALOG_SEED.find(
       (item) => item.pluginID === 'com.redeven.official.containers',

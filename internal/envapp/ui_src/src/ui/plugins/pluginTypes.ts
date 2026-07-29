@@ -62,6 +62,7 @@ export type OfficialPluginCatalogItem = {
   rolloutState: 'stable' | 'staged' | 'disabled' | 'revoked';
   defaultSurfaceID: string;
   defaultSurfaceDisplayNameKey?: 'uiCopy.plugin.containersDashboardSurface';
+  iconURL?: string;
   iconFallback: 'containers' | 'database' | 'github' | 'generic';
   category: PluginPresentationCategory;
   searchKeywords: readonly string[];
