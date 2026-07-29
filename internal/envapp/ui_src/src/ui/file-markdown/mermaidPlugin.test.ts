@@ -1,11 +1,9 @@
 // @vitest-environment jsdom
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   renderMermaidSvg,
-  resolveMermaidThemeContext,
   runMermaid,
-  setupMermaid,
   type MermaidThemeContext,
 } from './mermaidPlugin';
 
@@ -19,57 +17,22 @@ vi.mock('mermaid', () => ({
   },
 }));
 
-describe('mermaidPlugin', () => {
-  beforeEach(() => {
-    setupMermaid('light');
-  });
+function createTheme(preset: string, primaryColor: string): MermaidThemeContext {
+  return {
+    key: `${preset}|dark|${primaryColor}`,
+    mode: 'dark',
+    preset,
+    variables: { primaryColor },
+  };
+}
 
+describe('mermaidPlugin', () => {
   afterEach(() => {
     document.body.innerHTML = '';
-    document.documentElement.removeAttribute('class');
-    document.documentElement.removeAttribute('data-floe-shell-theme');
-    for (const property of ['--background', '--foreground', '--card', '--border', '--primary', '--redeven-categorical-graph-1', '--redeven-categorical-graph-8']) {
-      document.documentElement.style.removeProperty(property);
-    }
     vi.clearAllMocks();
   });
 
-  it('builds diagram variables and identity from the active shell preset', () => {
-    const root = document.documentElement;
-    root.classList.add('dark');
-    root.dataset.floeShellTheme = 'midnight';
-    root.style.setProperty('--background', 'rgb(10 20 30)');
-    root.style.setProperty('--foreground', 'rgb(240 245 250)');
-    root.style.setProperty('--card', 'rgb(20 30 40)');
-    root.style.setProperty('--border', 'rgb(70 80 90)');
-    root.style.setProperty('--primary', 'rgb(100 120 240)');
-    root.style.setProperty('--redeven-categorical-graph-1', 'rgb(220 80 120)');
-    root.style.setProperty('--redeven-categorical-graph-8', 'rgb(80 200 220)');
-
-    const theme = resolveMermaidThemeContext(root);
-
-    expect(theme).toMatchObject({
-      mode: 'dark',
-      preset: 'midnight',
-      variables: {
-        background: 'rgb(10 20 30)',
-        primaryTextColor: 'rgb(240 245 250)',
-        primaryColor: 'rgb(20 30 40)',
-        primaryBorderColor: 'rgb(70 80 90)',
-        cScale0: 'rgb(220 80 120)',
-        cScale7: 'rgb(80 200 220)',
-      },
-    });
-    expect(theme.key).toContain('midnight|dark|rgb(10 20 30)');
-  });
-
   it('keeps cached SVGs isolated between shell presets', async () => {
-    const createTheme = (preset: string, primaryColor: string): MermaidThemeContext => ({
-      key: `${preset}|dark|${primaryColor}`,
-      mode: 'dark',
-      preset,
-      variables: { primaryColor },
-    });
     renderMock
       .mockResolvedValueOnce({ svg: '<svg data-theme="midnight"></svg>' })
       .mockResolvedValueOnce({ svg: '<svg data-theme="aurora"></svg>' });
@@ -86,12 +49,6 @@ describe('mermaidPlugin', () => {
   });
 
   it('serializes theme initialization with rendering and caches the matching SVG', async () => {
-    const createTheme = (preset: string, primaryColor: string): MermaidThemeContext => ({
-      key: `${preset}|dark|${primaryColor}`,
-      mode: 'dark',
-      preset,
-      variables: { primaryColor },
-    });
     const midnightTheme = createTheme('queued-midnight', '#111111');
     const auroraTheme = createTheme('queued-aurora', '#eeeeee');
     let activePrimaryColor = '';
@@ -133,12 +90,6 @@ describe('mermaidPlugin', () => {
   });
 
   it('drops invalidated queued renders before initialization and cache writes', async () => {
-    const createTheme = (preset: string, primaryColor: string): MermaidThemeContext => ({
-      key: `${preset}|dark|${primaryColor}`,
-      mode: 'dark',
-      preset,
-      variables: { primaryColor },
-    });
     const blockingTheme = createTheme('blocking', '#111111');
     const staleTheme = createTheme('stale', '#eeeeee');
     let resolveBlocking!: () => void;
@@ -178,7 +129,10 @@ describe('mermaidPlugin', () => {
       resolveRender = () => resolve({ svg: '<svg data-testid="rendered-mermaid"></svg>' });
     }));
 
-    const run = runMermaid(root, { shouldContinue: () => current });
+    const run = runMermaid(root, {
+      shouldContinue: () => current,
+      theme: createTheme('stale-root', '#111111'),
+    });
     await vi.waitFor(() => {
       expect(renderMock).toHaveBeenCalledTimes(1);
     });
@@ -199,7 +153,10 @@ describe('mermaidPlugin', () => {
     document.body.appendChild(root);
     renderMock.mockResolvedValueOnce({ svg: '<svg data-testid="rendered-mermaid"></svg>' });
 
-    await runMermaid(root, { shouldContinue: () => true });
+    await runMermaid(root, {
+      shouldContinue: () => true,
+      theme: createTheme('current-root', '#222222'),
+    });
 
     const mermaidElement = root.querySelector<HTMLElement>('.mermaid');
     expect(mermaidElement?.querySelector('svg')?.getAttribute('data-testid')).toBe('rendered-mermaid');

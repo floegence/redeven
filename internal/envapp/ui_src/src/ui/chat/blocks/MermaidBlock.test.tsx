@@ -27,6 +27,19 @@ vi.mock('mermaid', () => ({
   },
 }));
 
+vi.mock('../../file-markdown/mermaidPlugin', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../file-markdown/mermaidPlugin')>();
+  return {
+    ...actual,
+    resolveMermaidThemeContext: () => ({
+      key: 'midnight|dark|#111111',
+      mode: 'dark' as const,
+      preset: 'midnight',
+      variables: { primaryColor: '#111111' },
+    }),
+  };
+});
+
 async function flushAsync(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();

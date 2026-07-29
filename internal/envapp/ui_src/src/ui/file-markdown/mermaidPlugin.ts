@@ -1,6 +1,22 @@
 import mermaid from 'mermaid';
 
 const MAX_MERMAID_CACHE_SIZE = 64;
+const MERMAID_COLOR_TOKENS = {
+  background: '--background',
+  foreground: '--foreground',
+  card: '--card',
+  popover: '--popover',
+  muted: '--muted',
+  mutedForeground: '--muted-foreground',
+  border: '--border',
+  primary: '--primary',
+  primaryForeground: '--primary-foreground',
+  accent: '--accent',
+} as const;
+const MERMAID_CATEGORICAL_COLOR_TOKENS = Array.from(
+  { length: 8 },
+  (_, index) => `--redeven-categorical-graph-${index + 1}`,
+);
 
 let mermaidThemeKey = '';
 let mermaidRenderQueue: Promise<void> = Promise.resolve();
@@ -22,8 +38,65 @@ export interface MermaidRenderOptions {
   shouldContinue?: () => boolean;
 }
 
-function readSemanticColor(style: CSSStyleDeclaration, name: string, fallback: string): string {
-  return style.getPropertyValue(name).trim() || fallback;
+function byteToHex(value: number): string {
+  return value.toString(16).padStart(2, '0');
+}
+
+function resolveMermaidColors(root: HTMLElement): Record<string, string> {
+  const rootStyle = getComputedStyle(root);
+  const document = root.ownerDocument;
+  const host = document.body && root.contains(document.body) ? document.body : root;
+  const probe = document.createElement('span');
+  probe.style.cssText = 'position:fixed;left:-99999px;top:0;visibility:hidden;pointer-events:none;';
+  host.appendChild(probe);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = 1;
+  canvas.height = 1;
+  const context = canvas.getContext('2d');
+  if (!context) {
+    probe.remove();
+    throw new Error('Mermaid theme color projection requires a 2D canvas context.');
+  }
+
+  const projectToken = (token: string): string => {
+    const declared = rootStyle.getPropertyValue(token).trim();
+    if (!declared) {
+      throw new Error(`Mermaid theme requires the ${token} color token.`);
+    }
+    if (!document.defaultView?.CSS.supports('color', declared)) {
+      throw new Error(`Mermaid theme token ${token} is not a valid browser color.`);
+    }
+
+    probe.style.color = `var(${token})`;
+    const resolved = getComputedStyle(probe).color.trim();
+    if (!resolved) {
+      throw new Error(`Mermaid theme could not resolve the ${token} color token.`);
+    }
+
+    context.fillStyle = '#010203';
+    context.fillStyle = resolved;
+    const firstProjection = context.fillStyle;
+    context.fillStyle = '#040506';
+    context.fillStyle = resolved;
+    if (context.fillStyle !== firstProjection) {
+      throw new Error(`Mermaid theme token ${token} is not a valid browser color.`);
+    }
+
+    context.clearRect(0, 0, 1, 1);
+    context.fillRect(0, 0, 1, 1);
+    const [red, green, blue, alpha] = context.getImageData(0, 0, 1, 1).data;
+    return `#${byteToHex(red)}${byteToHex(green)}${byteToHex(blue)}${alpha < 255 ? byteToHex(alpha) : ''}`;
+  };
+
+  try {
+    return Object.fromEntries([
+      ...Object.entries(MERMAID_COLOR_TOKENS),
+      ...MERMAID_CATEGORICAL_COLOR_TOKENS.map((token, index) => [`categorical${index + 1}`, token]),
+    ].map(([name, token]) => [name, projectToken(token)]));
+  } finally {
+    probe.remove();
+  }
 }
 
 function resolveMode(root: HTMLElement, forcedMode?: 'dark' | 'light'): 'dark' | 'light' {
@@ -39,30 +112,18 @@ export function resolveMermaidThemeContext(
   forcedPreset?: string,
 ): MermaidThemeContext {
   const mode = resolveMode(root, forcedMode);
-  const style = getComputedStyle(root);
-  const light = mode === 'light';
-  const background = readSemanticColor(style, '--background', light ? '#ffffff' : '#171b22');
-  const foreground = readSemanticColor(style, '--foreground', light ? '#1f2937' : '#f3f4f6');
-  const card = readSemanticColor(style, '--card', background);
-  const popover = readSemanticColor(style, '--popover', card);
-  const muted = readSemanticColor(style, '--muted', card);
-  const mutedForeground = readSemanticColor(style, '--muted-foreground', foreground);
-  const border = readSemanticColor(style, '--border', mutedForeground);
-  const primary = readSemanticColor(style, '--primary', foreground);
-  const primaryForeground = readSemanticColor(style, '--primary-foreground', background);
-  const accent = readSemanticColor(style, '--accent', muted);
-  const categorical = Array.from({ length: 8 }, (_, index) => (
-    readSemanticColor(style, `--redeven-categorical-graph-${index + 1}`, [
-      primary,
-      readSemanticColor(style, '--info', primary),
-      readSemanticColor(style, '--success', primary),
-      readSemanticColor(style, '--warning', primary),
-      readSemanticColor(style, '--error', primary),
-      accent,
-      mutedForeground,
-      foreground,
-    ][index] ?? primary)
-  ));
+  const colors = resolveMermaidColors(root);
+  const background = colors.background;
+  const foreground = colors.foreground;
+  const card = colors.card;
+  const popover = colors.popover;
+  const muted = colors.muted;
+  const mutedForeground = colors.mutedForeground;
+  const border = colors.border;
+  const primary = colors.primary;
+  const primaryForeground = colors.primaryForeground;
+  const accent = colors.accent;
+  const categorical = MERMAID_CATEGORICAL_COLOR_TOKENS.map((_, index) => colors[`categorical${index + 1}`]);
   const preset = String(
     forcedPreset
     ?? root.dataset.floeShellTheme
@@ -128,12 +189,6 @@ export function resolveMermaidThemeContext(
   };
 }
 
-export function setupMermaid(theme: 'dark' | 'light' | MermaidThemeContext): MermaidThemeContext {
-  return typeof theme === 'string'
-    ? resolveMermaidThemeContext(document.documentElement, theme)
-    : theme;
-}
-
 function initializeMermaid(context: MermaidThemeContext): void {
   if (mermaidThemeKey === context.key) return;
 
@@ -191,9 +246,8 @@ const renderMermaidSvgImpl = async (
   theme: MermaidThemeContext = resolveMermaidThemeContext(),
   options: MermaidRenderOptions = {},
 ): Promise<string | null> => {
-  const context = setupMermaid(theme);
   const shouldContinue = options.shouldContinue ?? (() => true);
-  const key = mermaidCacheKey(source, context);
+  const key = mermaidCacheKey(source, theme);
   if (!shouldContinue()) return null;
 
   const cached = mermaidSvgCache.get(key);
@@ -205,7 +259,7 @@ const renderMermaidSvgImpl = async (
     const queuedCached = mermaidSvgCache.get(key);
     if (queuedCached) return queuedCached;
 
-    initializeMermaid(context);
+    initializeMermaid(theme);
     const { svg } = await mermaid.render(id, source);
     if (!shouldContinue()) return null;
 
@@ -220,7 +274,7 @@ export async function runMermaid(root: HTMLElement, options: MermaidRunOptions =
   const shouldContinue = options.shouldContinue ?? (() => true);
   if (!shouldContinue() || !root.isConnected) return;
 
-  const theme = setupMermaid(options.theme ?? resolveMermaidThemeContext());
+  const theme = options.theme ?? resolveMermaidThemeContext();
   const elements = root.querySelectorAll<HTMLElement>('.mermaid');
   const sandbox = document.createElement('div');
   sandbox.style.cssText = 'position:fixed;left:-99999px;top:0;width:1200px;';

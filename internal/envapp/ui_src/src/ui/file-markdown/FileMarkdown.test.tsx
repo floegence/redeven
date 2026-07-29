@@ -20,7 +20,6 @@ vi.mock('./mermaidPlugin', () => ({
     preset: 'midnight',
     variables: {},
   })),
-  setupMermaid: vi.fn(),
   runMermaid: (...args: unknown[]) => runMermaidMock(...args),
 }));
 

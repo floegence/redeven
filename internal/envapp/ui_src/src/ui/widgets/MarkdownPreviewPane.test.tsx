@@ -14,7 +14,6 @@ vi.mock('../file-markdown/mermaidPlugin', () => ({
     preset: 'classic-light',
     variables: {},
   })),
-  setupMermaid: vi.fn(),
   runMermaid: vi.fn().mockResolvedValue(undefined),
 }));
 

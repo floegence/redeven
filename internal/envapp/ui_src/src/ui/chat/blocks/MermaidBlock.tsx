@@ -73,7 +73,6 @@ export const MermaidBlock: Component<MermaidBlockProps> = (props) => {
     const content = props.content;
     const resolvedTheme = theme.resolvedTheme();
     const shellTheme = theme.shellPresetForMode(resolvedTheme)?.name ?? resolvedTheme;
-    const mermaidTheme = resolveMermaidThemeContext(document.documentElement, resolvedTheme, shellTheme);
     const seq = (renderRequestSeq += 1);
     let disposed = false;
     let cancelScheduledRender = () => {};
@@ -97,6 +96,7 @@ export const MermaidBlock: Component<MermaidBlockProps> = (props) => {
 
         void (async () => {
           try {
+            const mermaidTheme = resolveMermaidThemeContext(document.documentElement, resolvedTheme, shellTheme);
             const id = `mermaid-${++mermaidIdCounter}`;
             const renderedSvg = await renderMermaidSvg(content, id, mermaidTheme);
             if (disposed || seq !== renderRequestSeq) return;
