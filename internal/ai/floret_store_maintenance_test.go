@@ -102,7 +102,8 @@ func TestPrepareFloretStorageRejectsUnsupportedDatabaseWithoutMigration(t *testi
 }
 
 func TestPrepareFloretStorageRejectsInvalidInputAndCancellation(t *testing.T) {
-	if _, err := prepareFloretStorage(nil, "x", nil); err == nil {
+	var nilContext context.Context
+	if _, err := prepareFloretStorage(nilContext, "x", nil); err == nil {
 		t.Fatal("nil context was accepted")
 	}
 	if _, err := prepareFloretStorage(context.Background(), "", nil); err == nil {
