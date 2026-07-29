@@ -1,146 +1,156 @@
 ---
 type: Architecture Contract
 title: Containers operation observation
-description: Observe each Containers mutation to terminal state, reconcile authoritative inventory, and keep unsigned candidate artifacts outside official release trust.
+description: Keep endpoint-bound Containers mutations locked through terminal observation and authoritative reconciliation.
 tags: [architecture, plugins, containers, operations]
-timestamp: 2026-07-26T00:00:00Z
+timestamp: 2026-07-29T00:00:00Z
 ---
 # Summary
 
-The production Containers `2.0.0` release remains the signed, trust-closed
-artifact. Earlier candidates remain historical and immutable. The current
-repository UI candidate is `3.0.0`, built against the released ReDevPlugin
-`0.6.20` operation handles and surface context through manifest v7 and
-`plugin-ui-v7`; it is not an
-official catalog release. Every exact Docker or Podman resource mutation owns one
-operation record and resource-local lock. The same resource remains locked until
-terminal observation and authoritative inventory reconciliation, while unrelated
-resources remain usable. Unknown mutation outcomes are never replayed or presented
-as success.
+Every Containers mutation binds one exact engine, opaque endpoint, resource
+kind, and canonical identity to one ReDevPlugin operation handle and one local
+observation record. The resource stays locked until terminal observation and
+fresh authoritative inventory prove the result; unrelated resources remain
+usable. Lost submissions, partial mutations, stale plans, unavailable engines,
+and failed reconciliation are never replayed or shown as success. Production
+still uses the signed Containers `2.0.0` release. The endpoint-aware `4.0.0`
+surface and capability are unsigned candidates and remain outside active trust.
 
 # Contract
 
 ## Resource-local lifecycle
 
-The operation key binds the exact engine, resource kind, and canonical identity.
-One key keeps one operation record and may submit only one mutation at a time;
-different keys proceed concurrently. The record retains its Host handle and one
-local observation abort controller until exact reconciliation releases the lock.
-Inventory refresh uses a separate monotonic generation so a superseded refresh
-cannot publish stale evidence. The active detail stream retains its exact engine
-and container identity, and replacement closes that stream before a new detail
-stream may publish logs.
+Operation keys include engine, endpoint ID, resource kind, and canonical
+identity. Compose Project and Pod operations use their canonical project or Pod
+ID; creation uses the stable requested name. One key can submit only one
+mutation at a time, while different keys may proceed concurrently. The record
+retains its Host handle, visible Host-reported status, optional revisioned
+progress, reconciliation function, and one local abort controller until exact
+reconciliation releases it.
 
-The generated capability client returns the released operation handle. The UI
-uses its bounded `wait` method for terminal authority and the same SDK handle's
-revisioned `snapshot` method for visible Host-reported progress. Both observations
-share one surface-local abort controller; this is SDK observation, not a second
-protocol or state authority. Completed, failed, canceled, and orphaned terminal
-states all trigger a fresh capability `list` call. Conflicting controls unlock
-only after that authoritative call succeeds. Failed reconciliation pauses
-observation and offers an explicit resume action; resuming the same handle retries
-terminal observation and exact reconciliation.
+The generated client returns a released ReDevPlugin operation handle. The
+surface uses that handle's bounded `wait` for terminal authority and `snapshot`
+for revisioned progress. Both are local observation of Host authority, not a
+second operation protocol. Completed, failed, canceled, and orphaned terminal
+states trigger fresh endpoint-bound inventory. Controls unlock only after the
+matching authoritative inventory is non-partial and proves the desired state,
+absence, stable creation identity, or a fully unchanged failed attempt. A
+failed reconciliation pauses observation and exposes an explicit resume action
+on the same handle.
 
-Surface disposal aborts local `wait` and `snapshot` observation. It never calls
-operation `cancel`, because closing a view is not authority to cancel Host work. A user
-cancel action remains distinct: a confirmed response leaves observation running
-until terminal status, a proven `not_committed` response may be retried, and an
-unknown or lost response disables repeated cancel while terminal observation
-continues.
+Surface disposal aborts local wait and snapshot observation but never calls
+operation cancel. Closing Activity, Workbench, an inspector, or a stream is not
+authority to cancel Host work. User cancellation is separate: a confirmed
+request keeps terminal observation active, a proven `not_committed` response
+may be retried, and an unknown or lost response disables repeated cancellation
+while observation continues.
 
-## Unknown mutation outcomes
+## Refresh and stream fencing
 
-A submission proven `not_committed` removes the resource lock and permits a new
-attempt. Committed, unknown, or missing mutation outcome retains a visible
-submission-uncertain state and prevents duplicate mutations in that view. A list
-refresh may show current resource state but cannot prove that a lost operation
-handle reached terminal state, so refresh never clears this lock or fabricates
-exactly-once behavior. Reopening a disposed surface creates new in-memory UI state;
-the product does not claim cross-surface recovery for a handle that was never
-received.
+Every inventory refresh captures engine, endpoint, and a monotonic generation.
+Starting a refresh first marks every resource inventory non-authoritative. A
+superseded response cannot publish data or release a resource lock. Existing
+arrays may be shown as explicitly stale during refresh failure, but stale,
+partial, unavailable, or wrong-endpoint data cannot authorize destructive work
+or satisfy reconciliation.
 
-Operation status uses accessible live regions and only displays phase or unit
-progress reported by the Host-owned revisioned operation snapshot. It never
-invents progress from elapsed time. Cancel and resume controls remain keyboard-accessible, interactive
-controls retain pointer affordance, touch targets remain at least 40-44 pixels,
-and narrow layouts collapse actions and operation details without hiding the
-resource-local state. Operations whose resource disappears from inventory remain
-visible in a dedicated reconciliation section.
+Changing engine or endpoint closes the active container detail stream, clears
+endpoint-specific detail and statistics state, and fences older reads. It does
+not cancel Host operations. The operation drawer persists while the surface
+remains open and keeps endpoint identity visible through its resource target.
 
-## Candidate UI and release trust
+Container Usage and Logs streams bind exact engine, endpoint, and container ID.
+Only real Host stats are shown; elapsed time never generates synthetic metrics.
+Replacing or closing detail cancels the old stream before a new stream may
+publish. Surface teardown uses the released stream lifecycle and cannot leave a
+detached Redeven polling path.
 
-The 3.0.0 candidate presents dense, responsive Containers, Images, and Volumes
-views with per-view search, resource inspection, creation, lifecycle actions,
-statistics, history, tagging, removal, and pruning from the exact unsigned v3
-candidate contract. Destructive and plan-bound actions show reviewed preflight
-facts, while ReDevPlugin independently reruns that preflight and binds its exact
-Host-owned `plan_hash` before execution. The displayed `plan_digest` never enters
-the operation request. Prune previews instead return their normalized
-`resource_identities`; execution submits and hashes that exact non-empty set,
-revalidates every member before mutation, and issues one identity-specific image
-or volume removal invocation at a time. The adapter then compares every planned
-identity with authoritative terminal inventory. A partial removal or unavailable
-inventory reports an unknown mutation outcome so the surface refreshes and does
-not retry the batch blindly. Semantic theme variables, locale, and direction come from
-the released revisioned surface context and update the same iframe without a
-remount. The candidate ships independent `en-US`, `zh-CN`, `zh-TW`, `ja-JP`,
-`ko-KR`, `de-DE`, `fr-FR`, `es-ES`, `pt-BR`, and `ru-RU` dictionaries. Known
-progress phases, plan methods, and stable risk ids resolve through those
-dictionaries; unknown Host text remains literal instead of being guessed.
-Reduced-motion behavior and mobile controls remain first-class. Search and
-inspection are presentation state only and do not alter operation identity,
-permissions, or reconciliation locks.
+## Unknown and partial outcomes
 
-Every candidate mutation keeps its resource-local operation lock through a fresh
-authoritative inventory refresh and exact desired-state reconciliation. Container
-state changes reconcile the exact container id and expected state; create, pull,
-and tag operations reconcile a stable name or reference; removal reconciles
-absence; and prune reconciles every preflight identity. Each refresh invalidates
-all per-view freshness flags before any asynchronous work, and only a successfully
-reloaded, non-partial matching inventory can release the lock. A failed,
-unavailable, or superseded refresh must not treat retained UI arrays as current
-evidence. An unchanged failed terminal result may release only where the exact
-before/after state proves no mutation; ambiguous restart and partial outcomes stay
-locked for reconciliation.
+A submission proven `not_committed` removes its local lock and permits a new
+attempt. A committed, unknown, or missing mutation outcome retains a visible
+uncertain record and blocks duplicate work in that surface. Refresh alone cannot
+prove that a lost operation handle reached terminal state and therefore cannot
+clear the lock.
 
-Create Container and Create Volume use structured, repeatable command,
-environment, port, mount, device, and driver-option rows instead of private
-textarea grammars. Stable row keys preserve neighboring input while rows are
-added or removed. Container and volume creation require stable names so terminal
-results can be reconciled exactly. Progressive disclosure keeps network,
-resource, and security settings available without making the primary creation
-path visually dense.
+Container lifecycle reconciliation compares the exact canonical ID and desired
+state. Container, volume, Pod, and image creation use stable name or reference
+identity. Removal proves absence. Compose and Pod lifecycle reload their exact
+workspace. Image and volume prune reconcile every preflight identity. Partial
+removal, changed references, missing terminal inventory, or ambiguous restart
+keeps the operation locked. The UI does not claim durable cross-surface recovery
+for a handle that was never received.
 
-`spec/redevplugin/candidate-containers-plugin/3.0.0/plugin.redevplugin` is an
-unsigned build candidate. The local integration gate installs exact npm
-dependencies, runs focused state and bundled-client tests, rebuilds the source,
-packages it with the released ReDevPlugin `v0.6.20` CLI, compares exact bytes,
-validates manifest v7, version `3.0.0`, minimum runtime `0.6.20`, and
-`plugin-ui-v7`, and rejects any package signature entry.
+Progress presentation uses only Host-reported phases and completed or total
+units. It never draws an elapsed-time percentage or decorative progress line.
+Operation status uses accessible live regions; Cancel and Resume are real
+keyboard-accessible controls with pointer affordance and touch targets of at
+least 44 px on touch layouts.
 
-Production catalog installation remains pinned to the signed, trust-closed
-Containers `2.0.0` release. The candidate does not change stable/latest catalog
-metadata, generated release refs, signed release artifacts, or trust roots. The
-v3 capability candidate intentionally has no signature or activatable pin, so
-Host registration fails closed. A real `3.0.0` official release requires external signing keys plus fresh root, policy,
-revocation, ledger, release metadata, and package signature evidence. Candidate
-bytes never become official, verified, auto-update eligible, or stable by their
-presence in this repository.
+## Candidate application behavior
+
+The v4 candidate opens on an operation-oriented Overview and provides endpoint-
+scoped Containers, Images, Volumes, Docker Projects, and Podman Pods
+workspaces. Docker and Podman specializations are mutually exclusive. Dense
+resource tables expose one state-appropriate primary action and one menu;
+secondary and destructive actions remain in the menu. No UI batch action exists
+without an exact capability contract.
+
+Desktop uses a persistent 168 px navigation and side inspector. Intermediate
+widths use a 56 px navigation. Mobile uses a top resource selector and a
+full-screen detail drill-in. Closing detail returns focus to the resource row.
+Menus remain available to pointer and keyboard users, including Context Menu
+and Shift+F10 behavior supplied by the validated native control path. The
+surface uses semantic appearance tokens, supports forced colors, removes motion
+under reduced-motion preference, and never moves table geometry on hover.
+
+Create Container, Create Volume, and Create Pod use structured forms. Common
+fields appear first and advanced container settings are grouped by meaning.
+Preflight review prioritizes action, exact target, operation impact, and risk;
+technical evidence is secondary. The exact-name confirmation sits beside the
+danger summary, and a fixed footer keeps the final action visible without
+requiring the user to scroll to the end. Submission disables closing and repeat
+submission until the Host outcome is known.
+
+The candidate has independent `en-US`, `zh-CN`, `zh-TW`, `ja-JP`, `ko-KR`,
+`de-DE`, `fr-FR`, `es-ES`, `pt-BR`, and `ru-RU` catalogs. Locale, direction,
+theme, and appearance revisions update the existing iframe. Search uses NFKC
+normalization, and known status, progress, method, and risk identifiers map to
+localized product copy. Unknown Host text stays literal instead of being
+guessed.
+
+## Release trust
+
+`spec/redevplugin/candidate-containers-plugin/4.0.0/plugin.redevplugin` is a
+deterministic unsigned build candidate. Its gate rebuilds the source and v4
+contract, packages through the released ReDevPlugin CLI, compares exact bytes,
+validates manifest v7, version `4.0.0`, minimum runtime `0.6.20`,
+`plugin-ui-v7`, all 52 generated methods, endpoint identity, and destructive
+method policy, and rejects package signatures or activatable unsigned routes.
+
+Stable and latest catalog metadata remain pinned to signed Containers `2.0.0`.
+An official `4.0.0` release requires authorized capability and package signing
+plus matching root, pin, policy, revocation, ledger, and release metadata.
+Candidate bytes cannot substitute for those materials and must not be merged as
+an active release.
 
 # Boundaries
 
-ReDevPlugin owns operation handle, snapshot, wait, cancel, surface audience, and
-mutation-outcome contracts. Redeven owns this Containers UI state and the concrete
-Docker/Podman capability adapter. The UI does not copy an operation store or
-polling route from ReDevPlugin, and ReDevPlugin does not import Redeven container
-semantics. Canonical integration and package-source ownership remain in
-[Plugin platform integration](plugin-platform-integration.md).
+ReDevPlugin owns operation handles, wait, snapshot, cancel, mutation outcome,
+surface audience, and stream lifecycle. Redeven owns endpoint-aware application
+state, concrete Docker and Podman behavior, resource projection, and exact
+inventory reconciliation. The UI does not copy an operation store or polling
+route, and ReDevPlugin does not import Redeven container semantics. Canonical
+package and integration ownership remains in [Plugin platform integration](plugin-platform-integration.md).
 
 # Evidence
 
-- `redeven:plugins/official/containers/src/main.ts:649` - Keeps one exact resource operation record, SDK handle, local observation controller, and reconciliation function through terminal reconciliation and accessible UI states until authoritative evidence releases the lock.
-- `redeven:plugins/official/containers/src/i18n.ts:1` - Owns complete independent candidate dictionaries, stable Host message mappings, and locale fallback.
-- `redeven:plugins/official/containers/src/operation-policy.ts:1` - Separates retryable not-committed outcomes from uncertain mutations and cancellations.
-- `redeven:plugins/official/containers/test/main.integration.test.mjs:1` - Proves structured creation, resource concurrency, partial-reference safety, stale-inventory fail-closed behavior, exact prune reconciliation, unknown-outcome locking, and dispose-without-cancel behavior.
-- `redeven:scripts/check_containers_plugin_candidate.sh:1` - Rebuilds and validates the unsigned candidate without treating it as a signed release.
-- `redeven:spec/redevplugin/candidate-containers-plugin/3.0.0/plugin.redevplugin:0` - Carries the deterministic unsigned candidate bytes.
+- `redeven:plugins/official/containers/src/controller.ts` - Owns endpoint-scoped async commands, refresh generations, streams, dialogs, and operation observation.
+- `redeven:plugins/official/containers/src/model.ts` - Defines the single application state model and exact operation records.
+- `redeven:plugins/official/containers/src/resource-projection.ts` - Provides pure NFKC search, filtering, sorting, endpoint, and action-availability projection.
+- `redeven:plugins/official/containers/src/i18n.ts` - Provides ten complete candidate locale catalogs and stable message mappings.
+- `redeven:plugins/official/containers/src/operation-policy.ts` - Separates retryable not-committed results from unknown submission and cancellation outcomes.
+- `redeven:plugins/official/containers/test/main.integration.test.mjs` - Proves endpoint routing, workspace behavior, reconciliation locks, progress, context updates, and disposal semantics.
+- `redeven:plugins/official/containers/test/styles.test.mjs` - Enforces responsive shell, fixed confirmation footer, token use, reduced motion, forced colors, and stable row hover.
+- `redeven:scripts/check_containers_plugin_v4_candidate.sh` - Rebuilds and verifies the deterministic unsigned v4 candidate without granting release trust.
+- `redeven:spec/redevplugin/candidate-containers-plugin/4.0.0/plugin.redevplugin` - Contains the fail-closed unsigned Containers v4 package candidate.
