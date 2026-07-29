@@ -3,7 +3,7 @@ type: Desktop Contract
 title: Desktop runtime process lifecycle
 description: Desktop serializes Runtime lifecycle ownership and reconciles managed processes through a scoped, digest-protected inventory.
 tags: [desktop, runtime, lifecycle, coordination, process, inventory]
-timestamp: 2026-07-16T00:00:00Z
+timestamp: 2026-07-29T00:00:00Z
 ---
 # Summary
 
@@ -34,6 +34,8 @@ All verified targets receive a graceful interrupt before one shared grace deadli
 ## Lifecycle ordering
 
 Start and Open are observational. They inventory the target and may reuse one verified current-owner process, but they never terminate a foreign-owner, missing-owner, duplicate, blocked, or takeover-eligible process. Local health inspection also inventories processes when lease and Runtime status cannot attach, so a live ownerless or foreign process remains a managed maintenance state instead of appearing stopped. A verified missing-owner or foreign-owner process becomes `runtime_process_takeover_required` maintenance rather than a startup failure. If a takeover-eligible process appears after Start's initial observation but before its final inventory, Desktop finishes the launcher attempt as terminal `needs_confirmation`, stores the maintenance in Runtime Presence, and returns the successful `runtime_maintenance_required` outcome without opening the destructive Dialog or sending a signal. A hard-blocked identity remains non-forceable. Explicit Stop, Restart, and Update without a matching confirmation return the existing structured `confirmation_required` outcome before sessions close, packages switch, or signals are sent.
+
+Local process inventory execution has a dedicated bounded cold-process budget of 10 seconds. Runtime Service status and attachment probes retain their separate short 1.5-second budget, while process stop retains its grace-period-derived command budget. A slow or unavailable status probe therefore cannot extend background health work, and cold executable admission cannot consume the status budget or weaken the authoritative inventory check. Desktop invokes each inventory once; it does not retry after timeout. Timeout errors identify the controlled command phase without exposing raw arguments.
 
 Welcome receives a sanitized `DesktopRuntimeProcessTakeoverProposal` containing the operation, physical location, inventory digest, process count, PID/create-time identities, owner status and evidence source, state root, Runtime version, and reason. It lists every process that the confirmed transaction will stop, including automatic current-owner instances in a mixed inventory. It does not contain a raw owner id, environment data, token, command line, or executable path. The destructive Dialog focuses Cancel first, explains possible active-work loss, and submits only the server-provided continuation with `runtime_process_reconciliation: { mode: 'confirmed_takeover', expected_inventory_digest }`. IPC accepts that reconciliation object only for Stop, Restart, and Update. Cancel leaves the existing process running and keeps a maintenance entry. A changed inventory produces a fresh proposal and requires another review; prior confirmation is never reused.
 

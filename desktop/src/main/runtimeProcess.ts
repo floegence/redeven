@@ -34,11 +34,13 @@ const STARTUP_REPORT_POLL_MS = 100;
 const DEFAULT_STARTUP_TIMEOUT_MS = 30_000;
 const DEFAULT_STOP_TIMEOUT_MS = 5_000;
 const DEFAULT_RUNTIME_ATTACH_TIMEOUT_MS = 1_500;
+const DEFAULT_RUNTIME_INVENTORY_TIMEOUT_MS = 10_000;
 const DEFAULT_RUNTIME_STABILITY_WINDOW_MS = 1_200;
 const DEFAULT_RUNTIME_STABILITY_POLL_MS = 250;
 const MAX_RECENT_LOG_CHARS = 8_000;
 
 type SpawnedRuntimeProcess = ChildProcessByStdio<Writable, Readable, Readable>;
+type RuntimeProcessCommand = 'desktop-runtime-inventory' | 'desktop-runtime-stop';
 
 export type ManagedRuntime = Readonly<{
   child: SpawnedRuntimeProcess | null;
@@ -58,6 +60,7 @@ export type StartManagedRuntimeArgs = Readonly<{
   startupTimeoutMs?: number;
   stopTimeoutMs?: number;
   runtimeAttachTimeoutMs?: number;
+  runtimeInventoryTimeoutMs?: number;
   runtimeStabilityWindowMs?: number;
   runtimeStabilityPollMs?: number;
   desktopOwnerID?: string;
@@ -274,7 +277,7 @@ async function readRuntimeStatus(args: Readonly<{
 
 async function runRuntimeProcessCommand(args: Readonly<{
   executablePath: string;
-  commandArgs: readonly string[];
+  commandArgs: readonly [RuntimeProcessCommand, ...string[]];
   env: NodeJS.ProcessEnv;
   timeoutMs: number;
 }>): Promise<string> {
@@ -286,12 +289,13 @@ async function runRuntimeProcessCommand(args: Readonly<{
     let stdout = '';
     let stderr = '';
     let settled = false;
+    const timeoutMs = Math.max(100, Math.floor(args.timeoutMs));
     const timer = setTimeout(() => {
       if (settled) return;
       settled = true;
       child.kill('SIGKILL');
-      reject(new Error('Runtime process command timed out.'));
-    }, Math.max(100, args.timeoutMs));
+      reject(new Error(`Runtime process command "${args.commandArgs[0]}" timed out after ${timeoutMs} ms.`));
+    }, timeoutMs);
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
     child.stdout.on('data', (chunk: string) => { stdout += chunk; });
@@ -336,7 +340,7 @@ export async function inspectLocalManagedRuntimeProcesses(args: Readonly<{
       '--current-executable', args.executablePath,
     ],
     env: args.env,
-    timeoutMs: args.timeoutMs ?? DEFAULT_RUNTIME_ATTACH_TIMEOUT_MS,
+    timeoutMs: args.timeoutMs ?? DEFAULT_RUNTIME_INVENTORY_TIMEOUT_MS,
   }));
 }
 
@@ -377,15 +381,29 @@ function localManagedRuntimeStop(args: Readonly<{
   stateRoot: string;
   desktopOwnerID: string;
   env: NodeJS.ProcessEnv;
-  timeoutMs: number;
+  inventoryTimeoutMs: number;
+  stopTimeoutMs: number;
 }>): () => Promise<void> {
   return async () => {
-    const inventory = await inspectLocalManagedRuntimeProcesses(args);
+    const inventory = await inspectLocalManagedRuntimeProcesses({
+      executablePath: args.executablePath,
+      stateRoot: args.stateRoot,
+      desktopOwnerID: args.desktopOwnerID,
+      env: args.env,
+      timeoutMs: args.inventoryTimeoutMs,
+    });
     requireDesktopRuntimeProcessReconciliation(inventory);
     if (inventory.instances.length === 0) {
       return;
     }
-    await stopLocalManagedRuntimeProcesses({ ...args, inventory });
+    await stopLocalManagedRuntimeProcesses({
+      executablePath: args.executablePath,
+      stateRoot: args.stateRoot,
+      desktopOwnerID: args.desktopOwnerID,
+      env: args.env,
+      timeoutMs: args.stopTimeoutMs,
+      inventory,
+    });
   };
 }
 
@@ -791,7 +809,7 @@ async function verifyManagedLocalRuntimeProcessIdentity(args: Readonly<{
   startup: StartupReport;
   runtimeProcessIntent: 'start' | 'restart' | 'update';
   beforeInventory: DesktopRuntimeProcessInventory | null;
-  timeoutMs: number;
+  inventoryTimeoutMs: number;
 }>): Promise<void> {
   const stateRoot = String(args.stateRoot ?? '').trim();
   const desktopOwnerID = String(args.desktopOwnerID ?? '').trim();
@@ -803,7 +821,7 @@ async function verifyManagedLocalRuntimeProcessIdentity(args: Readonly<{
     stateRoot,
     desktopOwnerID,
     env: args.env,
-    timeoutMs: args.timeoutMs,
+    timeoutMs: args.inventoryTimeoutMs,
   });
   const instance = inventory.instances[0];
   const expectedVersion = String(args.startup.runtime_service?.runtime_version ?? '').trim();
@@ -867,6 +885,7 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
   });
   const stateRoot = String(args.stateRoot ?? '').trim() || undefined;
   const runtimeAttachTimeoutMs = args.runtimeAttachTimeoutMs ?? DEFAULT_RUNTIME_ATTACH_TIMEOUT_MS;
+  const runtimeInventoryTimeoutMs = args.runtimeInventoryTimeoutMs ?? DEFAULT_RUNTIME_INVENTORY_TIMEOUT_MS;
   const runtimeStabilityWindowMs = args.runtimeStabilityWindowMs ?? DEFAULT_RUNTIME_STABILITY_WINDOW_MS;
   const runtimeStabilityPollMs = args.runtimeStabilityPollMs ?? DEFAULT_RUNTIME_STABILITY_POLL_MS;
   const desktopOwnerID = String(args.desktopOwnerID ?? '').trim();
@@ -878,7 +897,8 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
         stateRoot,
         desktopOwnerID,
         env: mergedEnv,
-        timeoutMs: args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS,
+        inventoryTimeoutMs: runtimeInventoryTimeoutMs,
+        stopTimeoutMs: args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS,
       })
     : null;
   emitManagedRuntimeProgress(
@@ -901,7 +921,7 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
       stateRoot,
       desktopOwnerID,
       env: mergedEnv,
-      timeoutMs: runtimeAttachTimeoutMs,
+      timeoutMs: runtimeInventoryTimeoutMs,
     });
     requireDesktopRuntimeProcessReconciliation(observedInventory, args.runtimeProcessReconciliation);
     if (runtimeProcessIntent === 'start' && observedInventory.instances.length > 1) {
@@ -972,7 +992,7 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
         startup: existingRuntime,
         runtimeProcessIntent,
         beforeInventory: observedInventory,
-        timeoutMs: runtimeAttachTimeoutMs,
+        inventoryTimeoutMs: runtimeInventoryTimeoutMs,
       });
       emitManagedRuntimeProgress(
         args.onProgress,
@@ -1118,7 +1138,7 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
         startup: attachedStartup,
         runtimeProcessIntent,
         beforeInventory: observedInventory,
-        timeoutMs: runtimeAttachTimeoutMs,
+        inventoryTimeoutMs: runtimeInventoryTimeoutMs,
       });
       emitManagedRuntimeProgress(
         args.onProgress,
@@ -1181,7 +1201,7 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
         startup: attachedStartup,
         runtimeProcessIntent,
         beforeInventory: observedInventory,
-        timeoutMs: runtimeAttachTimeoutMs,
+        inventoryTimeoutMs: runtimeInventoryTimeoutMs,
       });
       emitManagedRuntimeProgress(
         args.onProgress,
@@ -1225,7 +1245,7 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
       startup: stableStartup,
       runtimeProcessIntent,
       beforeInventory: observedInventory,
-      timeoutMs: runtimeAttachTimeoutMs,
+      inventoryTimeoutMs: runtimeInventoryTimeoutMs,
     });
     emitManagedRuntimeProgress(
       args.onProgress,
@@ -1270,6 +1290,7 @@ export async function attachManagedRuntimeFromStatus(args: Readonly<{
   stateRoot?: string;
   env?: NodeJS.ProcessEnv;
   runtimeAttachTimeoutMs?: number;
+  runtimeInventoryTimeoutMs?: number;
   stopTimeoutMs?: number;
   desktopOwnerID?: string;
 }>): Promise<ManagedRuntime | null> {
@@ -1285,7 +1306,8 @@ export async function attachManagedRuntimeFromStatus(args: Readonly<{
         stateRoot,
         desktopOwnerID,
         env,
-        timeoutMs: args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS,
+        inventoryTimeoutMs: args.runtimeInventoryTimeoutMs ?? DEFAULT_RUNTIME_INVENTORY_TIMEOUT_MS,
+        stopTimeoutMs: args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS,
       })
     : null;
   const inventory = stateRoot && desktopOwnerID
@@ -1294,7 +1316,7 @@ export async function attachManagedRuntimeFromStatus(args: Readonly<{
         stateRoot,
         desktopOwnerID,
         env,
-        timeoutMs: args.runtimeAttachTimeoutMs ?? DEFAULT_RUNTIME_ATTACH_TIMEOUT_MS,
+        timeoutMs: args.runtimeInventoryTimeoutMs ?? DEFAULT_RUNTIME_INVENTORY_TIMEOUT_MS,
       })
     : null;
   if (inventory) {

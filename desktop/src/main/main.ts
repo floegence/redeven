@@ -3461,7 +3461,6 @@ async function probeLocalEnvironmentRuntimeHealth(
       stateRoot: localEnvironmentStateRoot(localEnvironment),
       desktopOwnerID: await desktopRuntimeOwnerID(),
       env: process.env,
-      timeoutMs: DESKTOP_RUNTIME_PROBE_TIMEOUT_MS,
     });
     let maintenance: DesktopRuntimeMaintenanceRequirement | undefined;
     if (inventory.summary.blocked > 0) {
@@ -9306,7 +9305,6 @@ async function assertLocalEnvironmentRuntimeStopped(
     stateRoot: localEnvironmentStateRoot(environment),
     desktopOwnerID: await desktopRuntimeOwnerID(),
     env: process.env,
-    timeoutMs: DESKTOP_RUNTIME_PROBE_TIMEOUT_MS,
   });
   if (inventory.instances.length > 0) {
     throw new Error('Desktop could not stop the local runtime because matching runtime processes remain.');
@@ -15591,7 +15589,6 @@ async function stopEnvironmentRuntimeFromLauncherUncoordinated(
       stateRoot: localEnvironmentStateRoot(environment),
       desktopOwnerID: await desktopRuntimeOwnerID(),
       env: process.env,
-      timeoutMs: DESKTOP_RUNTIME_PROBE_TIMEOUT_MS,
     };
     updateRuntimeLifecycleOperation(operationKey, lifecycleAttemptOwner, {
       hostAccess,
