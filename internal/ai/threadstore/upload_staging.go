@@ -35,13 +35,11 @@ func (s *Store) PrepareThreadCreateWithInitialTurn(ctx context.Context, createRe
 	if createReq.OperationID = strings.TrimSpace(createReq.OperationID); createReq.OperationID == "" {
 		createReq.OperationID = stableThreadCreateOperationID(rec.EndpointID, rec.ThreadID)
 	}
-	createReq.Settings.QueueRevision = 1
-	snapshot := threadCreateSnapshotV1{SchemaVersion: ThreadCreateSnapshotSchemaVersion, Settings: createReq.Settings, ExplicitTitle: createReq.ExplicitTitle}
-	snapshotJSON, err := json.Marshal(snapshot)
+	createReq, snapshot, fingerprint, err := normalizeThreadCreateRequest(createReq, true)
 	if err != nil {
 		return ThreadCreateOperation{}, QueuedTurn{}, err
 	}
-	fingerprint, err := threadCreateRequestFingerprint(snapshot)
+	snapshotJSON, err := json.Marshal(snapshot)
 	if err != nil {
 		return ThreadCreateOperation{}, QueuedTurn{}, err
 	}
@@ -63,10 +61,10 @@ func (s *Store) PrepareThreadCreateWithInitialTurn(ctx context.Context, createRe
 	}
 	if loadErr == nil {
 		if existingOperation.RequestFingerprint != fingerprint || existingOperation.EndpointID != rec.EndpointID || existingOperation.ThreadID != rec.ThreadID {
-			return ThreadCreateOperation{}, QueuedTurn{}, errors.New("thread create operation conflicts with existing request")
+			return ThreadCreateOperation{}, QueuedTurn{}, ErrThreadCreateConflict
 		}
 		existingCommand, commandErr := getFollowupByLaneAndTurnIDTx(ctxOrBackground(ctx), tx, rec.EndpointID, rec.ThreadID, FollowupLaneQueued, rec.TurnID)
-		if commandErr != nil || !sameFrozenQueuedTurn(existingCommand, rec) {
+		if commandErr != nil || !sameInitialTurnIntent(existingCommand, rec) {
 			return ThreadCreateOperation{}, QueuedTurn{}, ErrFollowupReplacementConflict
 		}
 		if err := tx.Commit(); err != nil {
@@ -102,12 +100,13 @@ INSERT INTO ai_thread_create_operations(
 		return ThreadCreateOperation{}, QueuedTurn{}, err
 	}
 	rec.SortIndex = 1
+	rec.AdmissionState = PendingTurnAdmissionReady
 	if _, err := tx.ExecContext(ctxOrBackground(ctx), `
 INSERT INTO ai_queued_turns(
   queue_id, endpoint_id, thread_id, channel_id, lane, admission_state, sort_index, turn_id, run_id, model_id, text_content, attachments_json, context_action_json, options_json, session_meta_json,
   created_by_user_public_id, created_by_user_email, created_at_unix_ms, updated_at_unix_ms
 ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-`, rec.QueueID, rec.EndpointID, rec.ThreadID, rec.ChannelID, rec.Lane, PendingTurnAdmissionReady, rec.SortIndex, rec.TurnID, rec.RunID, rec.ModelID, rec.TextContent, rec.AttachmentsJSON, rec.ContextActionJSON, rec.OptionsJSON, rec.SessionMetaJSON,
+`, rec.QueueID, rec.EndpointID, rec.ThreadID, rec.ChannelID, rec.Lane, rec.AdmissionState, rec.SortIndex, rec.TurnID, rec.RunID, rec.ModelID, rec.TextContent, rec.AttachmentsJSON, rec.ContextActionJSON, rec.OptionsJSON, rec.SessionMetaJSON,
 		rec.CreatedByUserPublicID, rec.CreatedByUserEmail, rec.CreatedAtUnixMs, rec.UpdatedAtUnixMs); err != nil {
 		return ThreadCreateOperation{}, QueuedTurn{}, err
 	}
@@ -289,6 +288,15 @@ func sameFrozenQueuedTurn(a, b QueuedTurn) bool {
 		a.RunID == b.RunID && a.ModelID == b.ModelID && a.TextContent == b.TextContent &&
 		a.AttachmentsJSON == b.AttachmentsJSON && a.ContextActionJSON == b.ContextActionJSON &&
 		a.OptionsJSON == b.OptionsJSON && a.SessionMetaJSON == b.SessionMetaJSON && a.ChannelID == b.ChannelID
+}
+
+func sameInitialTurnIntent(a, b QueuedTurn) bool {
+	return a.EndpointID == b.EndpointID && a.ThreadID == b.ThreadID && a.TurnID == b.TurnID &&
+		a.ModelID == b.ModelID && a.TextContent == b.TextContent &&
+		a.AttachmentsJSON == b.AttachmentsJSON && a.ContextActionJSON == b.ContextActionJSON &&
+		a.OptionsJSON == b.OptionsJSON && a.SessionMetaJSON == b.SessionMetaJSON &&
+		a.ChannelID == b.ChannelID && a.Lane == b.Lane &&
+		a.CreatedByUserPublicID == b.CreatedByUserPublicID && a.CreatedByUserEmail == b.CreatedByUserEmail
 }
 
 func (s *Store) CreateFollowupFromStaging(ctx context.Context, rec QueuedTurn, uploadIDs []string, claimedAtUnixMs int64, attachmentAdmission AttachmentAdmission, scope UploadStagingScope) (QueuedTurn, int, int64, error) {

@@ -20,6 +20,8 @@ const (
 	ThreadCreateOperationFailed    = "failed"
 )
 
+var ErrThreadCreateConflict = errors.New("thread create operation conflicts with existing request")
+
 type PrepareThreadCreateRequest struct {
 	OperationID   string
 	Settings      ThreadSettings
@@ -65,37 +67,14 @@ func (s *Store) PrepareThreadCreateOperation(ctx context.Context, req PrepareThr
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	req.Settings.ThreadID = strings.TrimSpace(req.Settings.ThreadID)
-	req.Settings.EndpointID = strings.TrimSpace(req.Settings.EndpointID)
-	req.Settings.NamespacePublicID = strings.TrimSpace(req.Settings.NamespacePublicID)
-	req.Settings.ModelID = strings.TrimSpace(req.Settings.ModelID)
-	req.Settings.ReasoningSelectionJSON = strings.TrimSpace(req.Settings.ReasoningSelectionJSON)
-	permissionType, err := canonicalPermissionType(req.Settings.PermissionType)
+	var snapshot threadCreateSnapshotV1
+	var fingerprint string
+	var err error
+	req, snapshot, fingerprint, err = normalizeThreadCreateRequest(req, false)
 	if err != nil {
 		return ThreadCreateOperation{}, err
 	}
-	req.Settings.PermissionType = permissionType
-	req.Settings.WorkingDir = strings.TrimSpace(req.Settings.WorkingDir)
-	req.Settings.CreatedByUserPublicID = strings.TrimSpace(req.Settings.CreatedByUserPublicID)
-	req.Settings.CreatedByUserEmail = strings.TrimSpace(req.Settings.CreatedByUserEmail)
-	req.Settings.UpdatedByUserPublicID = strings.TrimSpace(req.Settings.UpdatedByUserPublicID)
-	req.Settings.UpdatedByUserEmail = strings.TrimSpace(req.Settings.UpdatedByUserEmail)
-	req.ExplicitTitle = strings.TrimSpace(req.ExplicitTitle)
-	if req.Settings.ThreadID == "" || req.Settings.EndpointID == "" {
-		return ThreadCreateOperation{}, errors.New("invalid thread create request")
-	}
-	if req.OperationID = strings.TrimSpace(req.OperationID); req.OperationID == "" {
-		req.OperationID = stableThreadCreateOperationID(req.Settings.EndpointID, req.Settings.ThreadID)
-	}
-	if req.CreatedAtMS <= 0 {
-		req.CreatedAtMS = time.Now().UnixMilli()
-	}
-	snapshot := threadCreateSnapshotV1{SchemaVersion: ThreadCreateSnapshotSchemaVersion, Settings: req.Settings, ExplicitTitle: req.ExplicitTitle}
 	snapshotJSON, err := json.Marshal(snapshot)
-	if err != nil {
-		return ThreadCreateOperation{}, err
-	}
-	fingerprint, err := threadCreateRequestFingerprint(snapshot)
 	if err != nil {
 		return ThreadCreateOperation{}, err
 	}
@@ -113,7 +92,7 @@ func (s *Store) PrepareThreadCreateOperation(ctx context.Context, req PrepareThr
 	}
 	if err == nil {
 		if existing.RequestFingerprint != fingerprint || existing.EndpointID != req.Settings.EndpointID || existing.ThreadID != req.Settings.ThreadID {
-			return ThreadCreateOperation{}, errors.New("thread create operation conflicts with existing request")
+			return ThreadCreateOperation{}, ErrThreadCreateConflict
 		}
 		if err := tx.Commit(); err != nil {
 			return ThreadCreateOperation{}, err
@@ -143,6 +122,43 @@ INSERT INTO ai_thread_create_operations(
 		return ThreadCreateOperation{}, err
 	}
 	return operation, nil
+}
+
+func normalizeThreadCreateRequest(req PrepareThreadCreateRequest, initialTurn bool) (PrepareThreadCreateRequest, threadCreateSnapshotV1, string, error) {
+	req.Settings.ThreadID = strings.TrimSpace(req.Settings.ThreadID)
+	req.Settings.EndpointID = strings.TrimSpace(req.Settings.EndpointID)
+	req.Settings.NamespacePublicID = strings.TrimSpace(req.Settings.NamespacePublicID)
+	req.Settings.ModelID = strings.TrimSpace(req.Settings.ModelID)
+	req.Settings.ReasoningSelectionJSON = strings.TrimSpace(req.Settings.ReasoningSelectionJSON)
+	permissionType, err := canonicalPermissionType(req.Settings.PermissionType)
+	if err != nil {
+		return PrepareThreadCreateRequest{}, threadCreateSnapshotV1{}, "", err
+	}
+	req.Settings.PermissionType = permissionType
+	req.Settings.WorkingDir = strings.TrimSpace(req.Settings.WorkingDir)
+	req.Settings.CreatedByUserPublicID = strings.TrimSpace(req.Settings.CreatedByUserPublicID)
+	req.Settings.CreatedByUserEmail = strings.TrimSpace(req.Settings.CreatedByUserEmail)
+	req.Settings.UpdatedByUserPublicID = strings.TrimSpace(req.Settings.UpdatedByUserPublicID)
+	req.Settings.UpdatedByUserEmail = strings.TrimSpace(req.Settings.UpdatedByUserEmail)
+	req.ExplicitTitle = strings.TrimSpace(req.ExplicitTitle)
+	if initialTurn {
+		req.Settings.QueueRevision = 1
+	}
+	if req.Settings.ThreadID == "" || req.Settings.EndpointID == "" {
+		return PrepareThreadCreateRequest{}, threadCreateSnapshotV1{}, "", errors.New("invalid thread create request")
+	}
+	if req.OperationID = strings.TrimSpace(req.OperationID); req.OperationID == "" {
+		req.OperationID = stableThreadCreateOperationID(req.Settings.EndpointID, req.Settings.ThreadID)
+	}
+	if req.CreatedAtMS <= 0 {
+		req.CreatedAtMS = time.Now().UnixMilli()
+	}
+	snapshot := threadCreateSnapshotV1{SchemaVersion: ThreadCreateSnapshotSchemaVersion, Settings: req.Settings, ExplicitTitle: req.ExplicitTitle}
+	fingerprint, err := threadCreateRequestFingerprint(snapshot)
+	if err != nil {
+		return PrepareThreadCreateRequest{}, threadCreateSnapshotV1{}, "", err
+	}
+	return req, snapshot, fingerprint, nil
 }
 
 func threadCreateRequestFingerprint(snapshot threadCreateSnapshotV1) (string, error) {
@@ -240,6 +256,38 @@ func (s *Store) GetThreadCreateOperation(ctx context.Context, operationID string
 		return ThreadCreateOperation{}, errors.New("store not initialized")
 	}
 	return loadThreadCreateOperationRow(s.db.QueryRowContext(operationContext(ctx), threadCreateOperationSelectSQL+` WHERE operation_id = ?`, strings.TrimSpace(operationID)))
+}
+
+// GetMatchingInitialThreadCreateOperation loads the stable operation for an
+// initial-turn create request and rejects any differing durable create intent.
+func (s *Store) GetMatchingInitialThreadCreateOperation(ctx context.Context, req PrepareThreadCreateRequest) (ThreadCreateOperation, error) {
+	if s == nil || s.db == nil {
+		return ThreadCreateOperation{}, errors.New("store not initialized")
+	}
+	var fingerprint string
+	var err error
+	req, _, fingerprint, err = normalizeThreadCreateRequest(req, true)
+	if err != nil {
+		return ThreadCreateOperation{}, err
+	}
+	operation, err := s.GetThreadCreateOperation(ctx, req.OperationID)
+	if err != nil {
+		return ThreadCreateOperation{}, err
+	}
+	if operation.EndpointID != req.Settings.EndpointID || operation.ThreadID != req.Settings.ThreadID || operation.RequestFingerprint != fingerprint {
+		return ThreadCreateOperation{}, ErrThreadCreateConflict
+	}
+	if operation.Status == ThreadCreateOperationCommitted {
+		settings, err := s.GetThreadSettings(ctx, operation.EndpointID, operation.ThreadID)
+		if err != nil {
+			return ThreadCreateOperation{}, err
+		}
+		if settings == nil {
+			return ThreadCreateOperation{}, errors.New("committed thread create operation is missing settings")
+		}
+		operation.Settings = *settings
+	}
+	return operation, nil
 }
 
 func (s *Store) ListPendingThreadCreateOperations(ctx context.Context, limit int) ([]ThreadCreateOperation, error) {

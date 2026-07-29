@@ -90,6 +90,51 @@ func TestThreadCreateOperationRejectsConflictingIntent(t *testing.T) {
 	}
 }
 
+func TestGetMatchingInitialThreadCreateOperationSurvivesCommit(t *testing.T) {
+	store := openStoreForTest(t)
+	ctx := t.Context()
+	settings := ThreadSettings{
+		ThreadID: "thread_initial_match", EndpointID: "env_initial_match", NamespacePublicID: "ns_initial_match",
+		ModelID: "openai/gpt-5-mini", PermissionType: "approval_required", WorkingDir: "/workspace",
+		SettingsCreatedAtUnixMs: 100, SettingsUpdatedAtUnixMs: 100,
+	}
+	request := PrepareThreadCreateRequest{Settings: settings, ExplicitTitle: "Initial title", CreatedAtMS: 100}
+	operation, _, err := store.PrepareThreadCreateWithInitialTurn(ctx, request, QueuedTurn{
+		QueueID: "qt_initial_match", EndpointID: settings.EndpointID, ThreadID: settings.ThreadID, ChannelID: "channel_initial_match", Lane: FollowupLaneQueued,
+		TurnID: "turn_initial_match", RunID: "run_initial_match", ModelID: settings.ModelID, TextContent: "hello",
+		AttachmentsJSON: `[]`, OptionsJSON: `{}`, SessionMetaJSON: `{}`, CreatedAtUnixMs: 100,
+	}, nil, 100, attachmentAdmissionForTest(strings.Repeat("a", 64), strings.Repeat("b", 64), nil), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	matched, err := store.GetMatchingInitialThreadCreateOperation(ctx, request)
+	if err != nil || matched.OperationID != operation.OperationID || matched.Status != ThreadCreateOperationPending {
+		t.Fatalf("pending match=%#v err=%v", matched, err)
+	}
+	operation, err = store.ConfirmThreadCreateFloretCreated(ctx, operation.OperationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	operation, err = store.ConfirmThreadCreateTitleSet(ctx, operation.OperationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.CommitThreadCreateSettings(ctx, operation.OperationID); err != nil {
+		t.Fatal(err)
+	}
+	matched, err = store.GetMatchingInitialThreadCreateOperation(ctx, request)
+	if err != nil || matched.OperationID != operation.OperationID || matched.Status != ThreadCreateOperationCommitted || matched.SnapshotJSON != "" ||
+		matched.Settings.ThreadID != settings.ThreadID || matched.Settings.ModelID != settings.ModelID {
+		t.Fatalf("committed match=%#v err=%v", matched, err)
+	}
+
+	conflicting := request
+	conflicting.ExplicitTitle = "Different title"
+	if _, err := store.GetMatchingInitialThreadCreateOperation(ctx, conflicting); err == nil || !strings.Contains(err.Error(), "conflicts") {
+		t.Fatalf("conflicting match error=%v", err)
+	}
+}
+
 func TestThreadCreateOperationRejectsDamagedPendingSnapshot(t *testing.T) {
 	for _, testCase := range []struct {
 		name       string
