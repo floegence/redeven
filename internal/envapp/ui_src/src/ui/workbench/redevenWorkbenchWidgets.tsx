@@ -3,7 +3,7 @@ import type {
   WorkbenchWidgetDefinition,
   WorkbenchWidgetType,
 } from '@floegence/floe-webapp-core/workbench';
-import { DockCpu, DockFolder, DockLayers, DockTerminal, Search } from '@floegence/floe-webapp-core/icons';
+import { AlertTriangle, DockCpu, DockFolder, DockLayers, DockTerminal, Package, Search } from '@floegence/floe-webapp-core/icons';
 import { Button, WORKBENCH_WIDGET_ACTIVATION_SURFACE_ATTR } from '@floegence/floe-webapp-core/ui';
 import { Show, createMemo, lazy, type JSX } from 'solid-js';
 
@@ -170,11 +170,19 @@ function PluginWidget(props: RedevenWorkbenchWidgetBodyProps) {
       keyed
       when={pluginHost && surfaceLease()}
       fallback={(
-        <WorkbenchBodyNotice
-          eyebrow={state()?.display_name ?? props.title}
-          title={i18n.t('uiCopy.plugin.needsAttention')}
-          description={i18n.t('uiCopy.plugin.unavailable')}
-          action={pluginHost && inventoryKey() ? (
+        <div class="flex h-full min-h-0 items-center justify-center bg-background p-5" data-plugin-workbench-unavailable>
+          <div class="w-full max-w-md text-center">
+            <span class="mx-auto flex h-12 w-12 items-center justify-center rounded-xl border bg-muted text-muted-foreground">
+              <Package class="h-5 w-5" />
+            </span>
+            <div class="mt-4 flex items-center justify-center gap-2 text-xs font-medium text-[var(--redeven-status-warning-foreground)]">
+              <AlertTriangle class="h-3.5 w-3.5" />
+              {i18n.t('uiCopy.plugin.needsAttention')}
+            </div>
+            <h2 class="mt-2 truncate text-sm font-semibold">{state()?.display_name ?? props.title}</h2>
+            <p class="mt-2 text-sm leading-6 text-muted-foreground">{i18n.t('uiCopy.plugin.unavailable')}</p>
+            <Show when={pluginHost && inventoryKey()}>
+              <div class="mt-4 flex justify-center">
             <Button
               {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS}
               data-plugin-workbench-view-issue
@@ -184,13 +192,15 @@ function PluginWidget(props: RedevenWorkbenchWidgetBodyProps) {
               icon={DockLayers}
               onClick={() => {
                 const currentInventoryKey = inventoryKey();
-                if (currentInventoryKey) pluginHost.onOpenPluginDetails(currentInventoryKey);
+                if (currentInventoryKey) pluginHost!.onOpenPluginDetails(currentInventoryKey);
               }}
             >
               {i18n.t('uiCopy.plugin.centerTitle')}
             </Button>
-          ) : undefined}
-        />
+              </div>
+            </Show>
+          </div>
+        </div>
       )}
     >
       {(_lease) => {

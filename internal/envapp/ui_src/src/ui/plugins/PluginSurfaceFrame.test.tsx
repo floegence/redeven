@@ -11,6 +11,9 @@ import type { PluginSurfacePlacementCoordinator } from './pluginPlatform';
 import type { PluginSurfaceLaunchTarget } from './pluginTypes';
 
 vi.mock('@floegence/floe-webapp-core/icons', () => ({
+  AlertTriangle: () => <span />,
+  Loader2: () => <span />,
+  Refresh: () => <span />,
   X: () => <span />,
 }));
 
@@ -398,5 +401,36 @@ describe('PluginSurfaceBody', () => {
 
     expect(coordinator.fail).toHaveBeenCalledWith(expect.anything(), terminalError);
     expect(mount.querySelector('[data-plugin-surface-error]')?.textContent).toContain('surface terminated');
+  });
+
+  it('releases a failed slot before retrying with a fresh slot', async () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    const coordinator = createCoordinator(createHost());
+    vi.mocked(coordinator.open)
+      .mockRejectedValueOnce(new Error('surface failed to open'))
+      .mockResolvedValueOnce(createHost());
+
+    dispose = render(() => (
+      <PluginSurfaceBody
+        coordinator={coordinator}
+        confirmationQueue={createConfirmationQueue()}
+        target={target}
+        visible
+        onRetirementError={vi.fn()}
+      />
+    ), mount);
+    await flushAsync();
+
+    const firstSlot = vi.mocked(coordinator.open).mock.calls[0]?.[0];
+    expect(mount.querySelector('[data-plugin-surface-error]')?.textContent).toContain('surface failed to open');
+    (mount.querySelector('[data-plugin-surface-open-retry]') as HTMLButtonElement).click();
+    await flushAsync();
+
+    const secondSlot = vi.mocked(coordinator.open).mock.calls[1]?.[0];
+    expect(coordinator.release).toHaveBeenCalledWith(firstSlot);
+    expect(secondSlot).not.toBe(firstSlot);
+    expect(coordinator.open).toHaveBeenCalledTimes(2);
+    expect(mount.querySelector('[data-plugin-surface-error]')).toBeNull();
   });
 });
