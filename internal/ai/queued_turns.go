@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	flruntime "github.com/floegence/floret/runtime"
+	flruntime "github.com/floegence/floret/v2/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -31,9 +31,7 @@ func floretThreadContainsTurn(ctx context.Context, host floretThreadReadHost, th
 	if host == nil || threadID == "" || turnID == "" {
 		return false, errors.New("invalid Floret exact turn read identity")
 	}
-	_, err := host.ReadThreadTurn(ctxOrBackground(ctx), flruntime.ReadThreadTurnRequest{
-		ThreadID: flruntime.ThreadID(threadID), TurnID: flruntime.TurnID(turnID),
-	})
+	_, err := host.ReadThreadTurn(ctxOrBackground(ctx), flruntime.TurnID(turnID))
 	if errors.Is(err, flruntime.ErrTurnNotFound) {
 		return false, nil
 	}
@@ -563,7 +561,7 @@ func (s *Service) canonicalFrozenTurnReceipt(ctx context.Context, meta *session.
 	if err != nil {
 		return nil, err
 	}
-	turn, err := host.ReadThreadTurn(ctxOrBackground(ctx), flruntime.ReadThreadTurnRequest{ThreadID: flruntime.ThreadID(strings.TrimSpace(req.ThreadID)), TurnID: flruntime.TurnID(turnID)})
+	turn, err := host.ReadThreadTurn(ctxOrBackground(ctx), flruntime.TurnID(turnID))
 	if errors.Is(err, flruntime.ErrTurnNotFound) {
 		return nil, nil
 	}

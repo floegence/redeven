@@ -7,8 +7,8 @@ import (
 	"strings"
 	"sync"
 
-	flruntime "github.com/floegence/floret/runtime"
-	fltools "github.com/floegence/floret/tools"
+	flruntime "github.com/floegence/floret/v2/runtime"
+	fltools "github.com/floegence/floret/v2/tools"
 )
 
 type runToolSurface struct {
@@ -18,6 +18,7 @@ type runToolSurface struct {
 	ControlTools       []ToolDef
 	PermissionSnapshot PermissionSnapshot
 	CapabilityContract runCapabilityContract
+	FloretToolItems    []fltools.Tool
 	FloretTools        *fltools.Registry
 	SystemPrompt       string
 	HostContext        map[string]string
@@ -120,7 +121,11 @@ func (r *run) buildRunToolSurfaceWithSnapshotCommit(ctx context.Context, cfg run
 	}
 	capabilityContract := resolveRunCapabilityContract(r, activeTools, activeSignals, cfg.SupportsAskUserQuestionBatches)
 	controlTools := floretControlToolsForContract(activeSignals, capabilityContract)
-	flTools, err := buildFloretToolRegistry(r, activeTools, cfg.State)
+	floretToolItems, err := buildFloretTools(r, activeTools, cfg.State)
+	if err != nil {
+		return runToolSurface{}, err
+	}
+	flTools, err := fltools.NewRegistryE(floretToolItems...)
 	if err != nil {
 		return runToolSurface{}, err
 	}
@@ -153,6 +158,7 @@ func (r *run) buildRunToolSurfaceWithSnapshotCommit(ctx context.Context, cfg run
 		ControlTools:       controlTools,
 		PermissionSnapshot: permissionSnapshot,
 		CapabilityContract: capabilityContract,
+		FloretToolItems:    floretToolItems,
 		FloretTools:        flTools,
 		SystemPrompt:       systemPrompt,
 		HostContext:        hostContext,

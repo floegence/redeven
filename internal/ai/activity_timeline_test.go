@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/floegence/floret/observation"
-	flruntime "github.com/floegence/floret/runtime"
+	"github.com/floegence/floret/v2/observation"
+	flruntime "github.com/floegence/floret/v2/runtime"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 	"github.com/floegence/redeven/internal/session"
 )

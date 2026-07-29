@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	flruntime "github.com/floegence/floret/runtime"
+	flruntime "github.com/floegence/floret/v2/runtime"
 )
 
 type floretLiveAttachmentAuthority struct {
@@ -33,9 +33,7 @@ func (a floretLiveAttachmentAuthority) ReadCanonicalAttachmentMembership(ctx con
 func (a floretLiveAttachmentAuthority) find(ctx context.Context, exactTurnID string, attachmentID string) (CanonicalAttachmentMembership, error) {
 	exactTurnID = strings.TrimSpace(exactTurnID)
 	if exactTurnID != "" {
-		turn, err := a.host.ReadThreadTurn(ctxOrBackground(ctx), flruntime.ReadThreadTurnRequest{
-			ThreadID: flruntime.ThreadID(a.threadID), TurnID: flruntime.TurnID(exactTurnID),
-		})
+		turn, err := a.host.ReadThreadTurn(ctxOrBackground(ctx), flruntime.TurnID(exactTurnID))
 		if errors.Is(err, flruntime.ErrTurnNotFound) {
 			return CanonicalAttachmentMembership{}, sql.ErrNoRows
 		}
@@ -46,7 +44,7 @@ func (a floretLiveAttachmentAuthority) find(ctx context.Context, exactTurnID str
 	}
 	var before *flruntime.ThreadTurnCursor
 	for {
-		req := flruntime.ListThreadTurnsRequest{ThreadID: flruntime.ThreadID(a.threadID)}
+		req := flruntime.ThreadTurnsRequest{}
 		if before == nil {
 			req.Tail = 200
 		} else {

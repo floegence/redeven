@@ -14,7 +14,8 @@ import (
 	"testing"
 	"time"
 
-	flruntime "github.com/floegence/floret/runtime"
+	flprovider "github.com/floegence/floret/v2/provider"
+	flruntime "github.com/floegence/floret/v2/runtime"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
@@ -207,12 +208,12 @@ func TestRunFloretHostedTurnFreezesAttachmentBytesBeforeCanonicalAdmission(t *te
 	}
 	r.setPendingTurnCommand(commandID)
 	r.awaitFloretAdmission.Store(true)
-	originalHostFactory := r.floretHostFactory
-	r.floretHostFactory = func(ctx context.Context, options flruntime.TurnExecutionHostOptions) (floretTurnHost, error) {
+	originalTurnOpener := r.floretTurnOpener
+	r.floretTurnOpener = func(ctx context.Context, agent *flruntime.Agent) (floretTurnHost, error) {
 		if err := os.WriteFile(filepath.Join(uploadsDir, record.UploadID+".data"), mutatedBody, 0o600); err != nil {
 			return nil, err
 		}
-		return originalHostFactory(ctx, options)
+		return originalTurnOpener(ctx, agent)
 	}
 	provider := &capturingTurnProvider{}
 	err = r.runFloretHostedTurn(t.Context(), RunRequest{
@@ -231,7 +232,7 @@ func TestRunFloretHostedTurnFreezesAttachmentBytesBeforeCanonicalAdmission(t *te
 	if err != nil {
 		t.Fatal(err)
 	}
-	overview, err := readHost.ReadThreadOverview(context.Background(), flruntime.ThreadID(r.threadID))
+	overview, err := readHost.ReadThreadOverview(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -259,7 +260,7 @@ func TestFullHistorySubagentResolvesOnlyParentOwnedCanonicalAttachments(t *testi
 		ParentThreadID: flruntime.ThreadID(parent.threadID), ThreadID: childThreadID, ForkMode: flruntime.SubAgentForkFullPath,
 	}}}
 	runtime := &floretSubagentRuntime{parent: parent, host: host}
-	attachment := flruntime.MessageAttachment{
+	attachment := flprovider.Attachment{
 		ResourceRef: immutableAttachmentRefForTest(t, record.UploadID, body), Name: record.Name, MIMEType: record.MimeType, SizeBytes: record.SizeBytes,
 	}
 	_, digest, err := immutableUploadIdentityFromFloretResourceRef(attachment.ResourceRef)
@@ -278,9 +279,9 @@ func TestFullHistorySubagentResolvesOnlyParentOwnedCanonicalAttachments(t *testi
 			}, FilePath: filepath.Join(uploadsDir, record.UploadID+".data")},
 		}, nil
 	}
-	part, err := runtime.resolveSubagentMessageAttachment(context.Background(), flruntime.ModelRequest{
+	part, err := runtime.resolveSubagentMessageAttachment(context.Background(), flprovider.Request{
 		ThreadID: childThreadID,
-		Labels:   flruntime.RunLabels{Host: map[string]string{subagentToolHostContextChildThreadIDKey: childThreadID}},
+		Labels:   flprovider.Labels{Host: map[string]string{subagentToolHostContextChildThreadIDKey: childThreadID}},
 	}, attachment)
 	if err != nil {
 		t.Fatal(err)
@@ -289,15 +290,15 @@ func TestFullHistorySubagentResolvesOnlyParentOwnedCanonicalAttachments(t *testi
 		t.Fatalf("resolved inherited attachment=%#v", part)
 	}
 	host.snapshots[0].ForkMode = flruntime.SubAgentForkNone
-	if _, err := runtime.resolveSubagentMessageAttachment(context.Background(), flruntime.ModelRequest{ThreadID: childThreadID}, attachment); err == nil || !strings.Contains(err.Error(), "outside the child context authority") {
+	if _, err := runtime.resolveSubagentMessageAttachment(context.Background(), flprovider.Request{ThreadID: childThreadID}, attachment); err == nil || !strings.Contains(err.Error(), "outside the child context authority") {
 		t.Fatalf("mission-only attachment error=%v", err)
 	}
 }
 
 func TestFloretProviderAttachmentProjectionRequiresCapabilitiesAndSupportedMIME(t *testing.T) {
-	message := flruntime.ModelMessage{
-		Role: flruntime.ModelMessageRoleUser,
-		Attachments: []flruntime.MessageAttachment{{
+	message := flprovider.Message{
+		Role: flprovider.RoleUser,
+		Attachments: []flprovider.Attachment{{
 			ResourceRef: "redeven-upload:upl_dddddddddddddddddddddddd", Name: "image.png", MIMEType: "image/png", SizeBytes: 4,
 		}},
 	}
@@ -305,11 +306,11 @@ func TestFloretProviderAttachmentProjectionRequiresCapabilitiesAndSupportedMIME(
 		return ContentPart{Type: "image", Text: "image.png", MimeType: "image/png", FileURI: "data:image/png;base64,cG5n"}, nil
 	}
 	unsupportedModel := newFloretProviderAdapter(nil, "openai", "gpt-test", ProviderControls{}, TurnBudgets{}, "", withFloretAttachmentResolver(imageResolver, false, false))
-	if _, err := unsupportedModel.floretMessagesToFlower(context.Background(), []flruntime.ModelMessage{message}); err == nil || !strings.Contains(err.Error(), "does not support image input") {
+	if _, err := unsupportedModel.floretMessagesToFlower(context.Background(), []flprovider.Message{message}); err == nil || !strings.Contains(err.Error(), "does not support image input") {
 		t.Fatalf("unsupported image model error=%v", err)
 	}
 	supportedModel := newFloretProviderAdapter(nil, "openai", "gpt-test", ProviderControls{}, TurnBudgets{}, "", withFloretAttachmentResolver(imageResolver, true, false))
-	messages, err := supportedModel.floretMessagesToFlower(context.Background(), []flruntime.ModelMessage{message})
+	messages, err := supportedModel.floretMessagesToFlower(context.Background(), []flprovider.Message{message})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -319,13 +320,13 @@ func TestFloretProviderAttachmentProjectionRequiresCapabilitiesAndSupportedMIME(
 	unsupportedMIME := newFloretProviderAdapter(nil, "openai", "gpt-test", ProviderControls{}, TurnBudgets{}, "", withFloretAttachmentResolver(func(context.Context, flruntime.MessageAttachment) (ContentPart, error) {
 		return ContentPart{Type: "image", Text: "vector.svg", MimeType: "image/svg+xml", FileURI: "data:image/svg+xml;base64,PHN2Zy8+"}, nil
 	}, true, false))
-	if _, err := unsupportedMIME.floretMessagesToFlower(context.Background(), []flruntime.ModelMessage{message}); err == nil || !strings.Contains(err.Error(), "unsupported image MIME") {
+	if _, err := unsupportedMIME.floretMessagesToFlower(context.Background(), []flprovider.Message{message}); err == nil || !strings.Contains(err.Error(), "unsupported image MIME") {
 		t.Fatalf("unsupported MIME error=%v", err)
 	}
 	unsupportedRoute := newFloretProviderAdapter(nil, "openai_compatible", "gpt-test", ProviderControls{}, TurnBudgets{}, "", withFloretAttachmentResolver(func(context.Context, flruntime.MessageAttachment) (ContentPart, error) {
 		return ContentPart{Type: "file", Text: "notes.txt", MimeType: "text/plain", FileURI: "data:text/plain;base64,bm90ZXM="}, nil
 	}, false, true))
-	if _, err := unsupportedRoute.floretMessagesToFlower(context.Background(), []flruntime.ModelMessage{message}); err == nil || !strings.Contains(err.Error(), "does not support file input") {
+	if _, err := unsupportedRoute.floretMessagesToFlower(context.Background(), []flprovider.Message{message}); err == nil || !strings.Contains(err.Error(), "does not support file input") {
 		t.Fatalf("unsupported provider route error=%v", err)
 	}
 }
@@ -361,9 +362,22 @@ func TestFloretProviderToolReadUsesCanonicalBoundedManifestWithoutBody(t *testin
 	}
 	provider := newFloretProviderAdapter(nil, "openai_compatible", "tool-model", ProviderControls{}, TurnBudgets{}, "",
 		withFloretAttachmentResolver(nil, false, false), withFloretAttachmentToolRead(true))
-	provider.attachmentResolver = r.floretAttachmentResolver(nil, provider)
-	messages, err := provider.floretMessagesToFlower(context.Background(), []flruntime.ModelMessage{{
-		Role: flruntime.ModelMessageRoleUser, Text: "inspect", Attachments: []flruntime.MessageAttachment{attachment},
+	runtimeResolver := r.floretAttachmentResolver(nil, provider)
+	provider.attachmentResolver = func(ctx context.Context, attachment flprovider.Attachment) (ContentPart, error) {
+		return runtimeResolver(ctx, runtimeAttachmentFromProvider(attachment))
+	}
+	providerAttachment := flprovider.Attachment{
+		ResourceRef: attachment.ResourceRef,
+		Name:        attachment.Name,
+		MIMEType:    attachment.MIMEType,
+		SizeBytes:   attachment.SizeBytes,
+		TextStats: &flprovider.AttachmentTextStats{
+			UnicodeCodePointCount: attachment.TextStats.UnicodeCodePointCount,
+			LogicalLineCount:      attachment.TextStats.LogicalLineCount,
+		},
+	}
+	messages, err := provider.floretMessagesToFlower(context.Background(), []flprovider.Message{{
+		Role: flprovider.RoleUser, Text: "inspect", Attachments: []flprovider.Attachment{providerAttachment},
 	}})
 	if err != nil {
 		t.Fatal(err)
@@ -376,10 +390,10 @@ func TestFloretProviderToolReadUsesCanonicalBoundedManifestWithoutBody(t *testin
 		t.Fatalf("tool-read manifest leaked attachment body: %q", requestText)
 	}
 
-	mismatched := attachment
+	mismatched := providerAttachment
 	mismatched.SizeBytes++
-	if _, err := provider.floretMessagesToFlower(context.Background(), []flruntime.ModelMessage{{
-		Role: flruntime.ModelMessageRoleUser, Attachments: []flruntime.MessageAttachment{mismatched},
+	if _, err := provider.floretMessagesToFlower(context.Background(), []flprovider.Message{{
+		Role: flprovider.RoleUser, Attachments: []flprovider.Attachment{mismatched},
 	}}); err == nil || !strings.Contains(err.Error(), "canonical metadata differs") {
 		t.Fatalf("canonical metadata mismatch error=%v", err)
 	}
@@ -485,7 +499,7 @@ func TestRunFloretHostedTurnRejectsInvalidAttachmentBeforeAdmission(t *testing.T
 			if err != nil {
 				t.Fatal(err)
 			}
-			overview, err := readHost.ReadThreadOverview(context.Background(), flruntime.ThreadID(r.threadID))
+			overview, err := readHost.ReadThreadOverview(context.Background())
 			if err != nil {
 				t.Fatal(err)
 			}

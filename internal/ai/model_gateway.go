@@ -13,8 +13,7 @@ import (
 
 	anthropic "github.com/anthropics/anthropic-sdk-go"
 	aoption "github.com/anthropics/anthropic-sdk-go/option"
-	"github.com/floegence/floret/observation"
-	flruntime "github.com/floegence/floret/runtime"
+	"github.com/floegence/floret/v2/observation"
 	"github.com/floegence/redeven/internal/config"
 	openai "github.com/openai/openai-go"
 	ooption "github.com/openai/openai-go/option"
@@ -2830,7 +2829,7 @@ func (r *run) hydrateTodoRuntimeState(ctx context.Context, state *todoRuntimeSta
 			readCtx, cancel = context.WithTimeout(readCtx, 2*time.Second)
 			defer cancel()
 		}
-		snapshot, err := r.activeFloretHost().ReadThreadAgentTodos(readCtx, flruntime.ThreadID(threadID))
+		snapshot, err := r.activeFloretHost().ReadThreadAgentTodos(readCtx)
 		if err == nil {
 			hasSnapshot := !snapshot.UpdatedAt.IsZero() || snapshot.Version > 0 || strings.TrimSpace(string(snapshot.UpdatedByRunID)) != "" || strings.TrimSpace(snapshot.UpdatedByToolCall) != ""
 			if hasSnapshot {

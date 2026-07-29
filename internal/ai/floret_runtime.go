@@ -11,8 +11,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	flconfig "github.com/floegence/floret/config"
-	flruntime "github.com/floegence/floret/runtime"
+	flconfig "github.com/floegence/floret/v2/config"
+	flprovider "github.com/floegence/floret/v2/provider"
+	flruntime "github.com/floegence/floret/v2/runtime"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 	"github.com/floegence/redeven/internal/config"
 )
@@ -156,9 +157,8 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 		"turn_id":    strings.TrimSpace(r.turnID),
 		"message_id": strings.TrimSpace(r.messageID),
 	}, Host: initialSurface.HostContext}
-	floretCfg := redevenFloretAdapterConfig(initialSurface.SystemPrompt, floretModelContextPolicy(contextWindow, req.Options.MaxOutputTokens), req.Options.ReasoningSelection)
-	if r.floretHostFactory == nil {
-		return r.failRun("Failed to initialize Floret host", errors.New("floret host factory not ready"))
+	if r.floretTurnOpener == nil {
+		return r.failRun("Failed to initialize Floret host", errors.New("floret turn opener not ready"))
 	}
 	gatewayIdentity, err := redevenFloretGatewayIdentity(providerCfg.ID, providerType, providerCfg.BaseURL, capability.WireModelName, flProvider.stateCompatibilityRoute())
 	if err != nil {
@@ -176,20 +176,25 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 	if err != nil {
 		return r.failRun("Failed to validate message attachments", err)
 	}
-	flProvider.attachmentResolver = r.floretAttachmentResolver(frozenAttachments, flProvider)
-	turnOptions := []flruntime.TurnExecutionOption{
-		flruntime.WithTurnModelGateway(flProvider, gatewayIdentity, floretModelGatewayCapabilities(req.ModelCapability.ReasoningCapability)),
-		flruntime.WithTurnEffectfulTools(initialSurface.FloretTools, floretEffectAuthorizationGateForRun(r)),
-		flruntime.WithTurnEventSink(floretEventSink{run: r}),
-		flruntime.WithTurnDynamicToolSurface(toolSurfaceProvider),
-		flruntime.WithTurnThreadTitleMode(flruntime.ThreadTitleModeProvider),
-		flruntime.WithTurnLoopLimits(flruntime.LoopLimits{NoProgressLimit: 2, DuplicateToolLimit: 3}),
+	attachmentResolver := r.floretAttachmentResolver(frozenAttachments, flProvider)
+	flProvider.attachmentResolver = func(ctx context.Context, attachment flprovider.Attachment) (ContentPart, error) {
+		return attachmentResolver(ctx, runtimeAttachmentFromProvider(attachment))
 	}
-	turnHostOptions, err := flruntime.NewTurnExecutionHostOptions(floretCfg, turnOptions...)
+	flProvider.identity = gatewayIdentity
+	agent, err := flruntime.NewAgent(
+		redevenFloretAgentConfig(initialSurface.SystemPrompt, floretModelContextPolicy(contextWindow, req.Options.MaxOutputTokens), req.Options.ReasoningSelection),
+		flProvider,
+		flruntime.WithAgentTools(initialSurface.FloretToolItems...),
+		flruntime.WithAgentEffectAuthorization(floretEffectAuthorizationGateForRun(r)),
+		flruntime.WithAgentEventSink(floretEventSink{run: r}),
+		flruntime.WithAgentDynamicToolSurface(toolSurfaceProvider),
+		flruntime.WithAgentThreadTitleMode(flruntime.ThreadTitleModeProvider),
+		flruntime.WithAgentLoopLimits(flruntime.LoopLimits{NoProgressLimit: 2, DuplicateToolLimit: 3}),
+	)
 	if err != nil {
 		return r.failRun("Failed to initialize Floret host", err)
 	}
-	host, err := r.floretHostFactory(ctx, turnHostOptions)
+	host, err := r.floretTurnOpener(ctx, agent)
 	if err != nil {
 		return r.failRun("Failed to initialize Floret host", err)
 	}
@@ -199,13 +204,11 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 	var turnHost floretTurnHost = host
 	r.setActiveFloretHost(turnHost)
 	defer r.setActiveFloretHost(nil)
-	threadID := flruntime.ThreadID(strings.TrimSpace(r.threadID))
 	r.expectFloretRuntimeEventIdentity(r.id, r.threadID, r.turnID, true)
 	r.emitLifecyclePhase("executing", map[string]any{"engine": "floret"})
 	r.floretRunTurnStarted.Store(true)
-	result, err := turnHost.RunTurn(ctx, flruntime.RunTurnRequest{
+	result, err := turnHost.Run(ctx, flruntime.TurnRequest{
 		RunID:               flruntime.RunID(strings.TrimSpace(r.id)),
-		ThreadID:            threadID,
 		TurnID:              flruntime.TurnID(strings.TrimSpace(r.turnID)),
 		Input:               turnInput,
 		SupplementalContext: contextProjection.Items,
@@ -517,28 +520,29 @@ func enableFlowerWebSearchTool(providerCfg config.AIProvider, capability provide
 	return strings.EqualFold(strings.TrimSpace(providerCfg.Type), "openai_compatible")
 }
 
-func redevenFloretAdapterConfig(systemPrompt string, contextPolicy flconfig.ContextPolicy, reasoning config.AIReasoningSelection) flconfig.Config {
-	return flconfig.Config{
-		SystemPrompt:  systemPrompt,
-		ContextPolicy: contextPolicy,
-		Reasoning:     reasoning,
+func redevenFloretAgentConfig(systemPrompt string, contextPolicy flconfig.ContextPolicy, reasoning config.AIReasoningSelection) flconfig.AgentConfig {
+	return flconfig.AgentConfig{
+		Profile:      flconfig.AgentProfile{ID: "redeven-flower", Name: "Flower"},
+		SystemPrompt: systemPrompt,
+		Context:      contextPolicy,
+		Reasoning:    reasoning,
 	}
 }
 
-func redevenFloretGatewayIdentity(providerID string, providerType string, baseURL string, modelName string, route string) (flruntime.ModelGatewayIdentity, error) {
+func redevenFloretGatewayIdentity(providerID string, providerType string, baseURL string, modelName string, route string) (flprovider.Identity, error) {
 	providerID = strings.TrimSpace(providerID)
 	providerType = strings.ToLower(strings.TrimSpace(providerType))
 	modelName = strings.TrimSpace(modelName)
 	route = strings.TrimSpace(route)
 	if providerID == "" || providerType == "" || modelName == "" || route == "" {
-		return flruntime.ModelGatewayIdentity{}, errors.New("Floret model gateway identity requires provider, type, model, and route")
+		return flprovider.Identity{}, errors.New("Floret model gateway identity requires provider, type, model, and route")
 	}
 	endpoint, err := normalizedFloretGatewayBaseURL(baseURL)
 	if err != nil {
-		return flruntime.ModelGatewayIdentity{}, err
+		return flprovider.Identity{}, err
 	}
 	digest := sha256.Sum256([]byte(strings.Join([]string{providerID, providerType, endpoint, modelName, route}, "\x00")))
-	return flruntime.ModelGatewayIdentity{
+	return flprovider.Identity{
 		Provider:              providerID,
 		Model:                 modelName,
 		StateCompatibilityKey: hex.EncodeToString(digest[:]),

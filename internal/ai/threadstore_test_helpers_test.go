@@ -5,19 +5,22 @@ import (
 	"errors"
 	"testing"
 
-	flruntime "github.com/floegence/floret/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 )
 
 type floretMaintenanceHost interface {
 	floretThreadReadHost
-	ThreadDeleteHost
+	Delete(context.Context) error
 }
 
 type floretMaintenanceTestFacade struct {
 	floretThreadReadHost
-	ThreadDeleteHost
+	delete func(context.Context) error
+}
+
+func (host floretMaintenanceTestFacade) Delete(ctx context.Context) error {
+	return host.delete(ctx)
 }
 
 func (s *Service) openFloretMaintenanceHost(ctx context.Context, threadID string) (floretMaintenanceHost, error) {
@@ -28,10 +31,10 @@ func (s *Service) openFloretMaintenanceHost(ctx context.Context, threadID string
 	if s.threadDeleteFloret == nil {
 		return nil, errors.New("Floret test delete authority is unavailable")
 	}
-	deleteHost := testFloretThreadDeleteAuthorityFunc(func(ctx context.Context, threadID flruntime.ThreadID) error {
-		return s.threadDeleteFloret.delete(ctx, string(threadID))
-	})
-	return floretMaintenanceTestFacade{floretThreadReadHost: read, ThreadDeleteHost: deleteHost}, nil
+	return floretMaintenanceTestFacade{
+		floretThreadReadHost: read,
+		delete:               func(ctx context.Context) error { return s.threadDeleteFloret.delete(ctx, threadID) },
+	}, nil
 }
 
 func ensureThreadstoreThreadForTest(t *testing.T, store *threadstore.Store, endpointID string, threadID string) {

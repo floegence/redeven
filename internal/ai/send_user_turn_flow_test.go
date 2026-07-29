@@ -13,8 +13,7 @@ import (
 	"testing"
 	"time"
 
-	flconfig "github.com/floegence/floret/config"
-	flruntime "github.com/floegence/floret/runtime"
+	flruntime "github.com/floegence/floret/v2/runtime"
 	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
@@ -499,7 +498,7 @@ func TestPendingTurnCommandIsDeletedAfterCanonicalAcceptance(t *testing.T) {
 	}
 	command := createPendingCommandForTest(t, svc, meta, thread.ThreadID, "command_1", "turn_1", "run_1")
 	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "accepted")
-	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{ThreadID: flruntime.ThreadID(thread.ThreadID), TurnID: flruntime.TurnID(command.TurnID), RunID: flruntime.RunID(command.RunID), Input: flruntime.TurnInput{Text: command.TextContent}}); err != nil {
+	if _, err := host.Run(ctx, flruntime.TurnRequest{TurnID: flruntime.TurnID(command.TurnID), RunID: flruntime.RunID(command.RunID), Input: flruntime.TurnInput{Text: command.TextContent}}); err != nil {
 		t.Fatal(err)
 	}
 	accepted, err := svc.reconcilePendingTurnCommand(ctx, meta.EndpointID, thread.ThreadID, command.QueueID, command.TurnID, nil)
@@ -531,7 +530,7 @@ func TestPendingTurnCommandIsDeletedOnCanonicalUserEntryEvent(t *testing.T) {
 	r := newRunWithProductStoreForTest(t, runOptions{
 		Log: svc.log, HostCapabilities: bindTestRunHostCapabilities(t, svc, meta.EndpointID, thread.ThreadID), RunID: command.RunID, EndpointID: meta.EndpointID,
 		ThreadID: thread.ThreadID, TurnID: command.TurnID, MessageID: "message_event",
-		FloretHostFactory: floretRuntime.Turn, PersistOpTimeout: time.Second,
+		FloretTurnOpener: floretRuntime.Turn, PersistOpTimeout: time.Second,
 	}, svc.threadsDB)
 	if r.turnID != command.TurnID || r.messageID == r.turnID {
 		t.Fatalf("admission identity turn=%q message=%q, want exact distinct identities", r.turnID, r.messageID)
@@ -539,16 +538,15 @@ func TestPendingTurnCommandIsDeletedOnCanonicalUserEntryEvent(t *testing.T) {
 	r.setPendingTurnCommand(command.QueueID)
 	r.awaitFloretAdmission.Store(true)
 	r.expectFloretRuntimeEventIdentity(command.RunID, thread.ThreadID, command.TurnID, true)
-	turnHost, err := floretRuntime.Turn(ctx, requireFloretTurnOptions(t,
-		flconfig.Config{Provider: flconfig.ProviderFake, Model: "fake-model", FakeResponse: "accepted"},
-		flruntime.WithTurnEventSink(floretEventSink{run: r}),
+	turnHost, err := floretRuntime.Turn(ctx, newStaticTestFloretAgent(t, "accepted",
+		flruntime.WithAgentEventSink(floretEventSink{run: r}),
 	))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := turnHost.RunTurn(ctx, flruntime.RunTurnRequest{
-		ThreadID: flruntime.ThreadID(thread.ThreadID), TurnID: flruntime.TurnID(command.TurnID),
-		RunID: flruntime.RunID(command.RunID), Input: flruntime.TurnInput{Text: command.TextContent},
+	if _, err := turnHost.Run(ctx, flruntime.TurnRequest{
+		TurnID: flruntime.TurnID(command.TurnID),
+		RunID:  flruntime.RunID(command.RunID), Input: flruntime.TurnInput{Text: command.TextContent},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -567,7 +565,7 @@ func TestPendingTurnReconciliationMatchesExactTurnID(t *testing.T) {
 	}
 	command := createPendingCommandForTest(t, svc, meta, thread.ThreadID, "command_2", "turn_expected", "run_expected")
 	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "other")
-	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{ThreadID: flruntime.ThreadID(thread.ThreadID), TurnID: "turn_other", RunID: "run_other", Input: flruntime.TurnInput{Text: command.TextContent}}); err != nil {
+	if _, err := host.Run(ctx, flruntime.TurnRequest{TurnID: "turn_other", RunID: "run_other", Input: flruntime.TurnInput{Text: command.TextContent}}); err != nil {
 		t.Fatal(err)
 	}
 	accepted, err := svc.reconcilePendingTurnCommand(ctx, meta.EndpointID, thread.ThreadID, command.QueueID, command.TurnID, nil)
@@ -605,7 +603,7 @@ func TestRunEndReleasesUnadmittedPendingCommandByCancelIntent(t *testing.T) {
 			r := newRunWithProductStoreForTest(t, runOptions{
 				HostCapabilities: bindTestRunHostCapabilities(t, svc, meta.EndpointID, thread.ThreadID), RunID: command.RunID, EndpointID: meta.EndpointID,
 				ThreadID: thread.ThreadID, TurnID: command.TurnID, MessageID: "message_release_" + testCase.id,
-				FloretHostFactory: floretRuntime.Turn, PersistOpTimeout: time.Second,
+				FloretTurnOpener: floretRuntime.Turn, PersistOpTimeout: time.Second,
 			}, svc.threadsDB)
 			r.setPendingTurnCommand(command.QueueID)
 			if testCase.cancel {

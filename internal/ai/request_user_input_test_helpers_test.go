@@ -6,9 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	flruntime "github.com/floegence/floret/runtime"
-	fltools "github.com/floegence/floret/tools"
-	"github.com/floegence/redeven/internal/config"
+	flprovider "github.com/floegence/floret/v2/provider"
+	flruntime "github.com/floegence/floret/v2/runtime"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -52,10 +51,18 @@ type testAskUserGateway struct {
 	args   string
 }
 
-func (g testAskUserGateway) StreamModel(_ context.Context, _ flruntime.ModelRequest) (<-chan flruntime.ModelEvent, error) {
-	events := make(chan flruntime.ModelEvent, 2)
-	events <- flruntime.ModelEvent{Type: flruntime.ModelEventToolCalls, ToolCalls: []fltools.ToolCall{{ID: g.toolID, Name: "ask_user", Args: g.args}}}
-	events <- flruntime.ModelEvent{Type: flruntime.ModelEventDone, Reason: "tool_calls"}
+func (testAskUserGateway) Identity() flprovider.Identity {
+	return testFloretGatewayIdentity()
+}
+
+func (testAskUserGateway) Capabilities() flprovider.Capabilities {
+	return testFloretGatewayCapabilities()
+}
+
+func (g testAskUserGateway) Stream(_ context.Context, _ flprovider.Request) (<-chan flprovider.Event, error) {
+	events := make(chan flprovider.Event, 2)
+	events <- flprovider.Event{Type: flprovider.EventToolCalls, ToolCalls: []flprovider.ToolCall{{ID: g.toolID, Name: "ask_user", Args: g.args}}}
+	events <- flprovider.Event{Type: flprovider.EventDone, Reason: "tool_calls"}
 	close(events)
 	return events, nil
 }
@@ -81,20 +88,13 @@ func seedWaitingUserPrompt(t *testing.T, svc *Service, ctx context.Context, _ *s
 	if err != nil {
 		t.Fatal(err)
 	}
-	host, err := threadRuntime.Turn(ctx, requireFloretTurnOptions(t,
-		redevenFloretAdapterConfig("", floretModelContextPolicy(128000, 4096), config.AIReasoningSelection{}),
-		flruntime.WithTurnModelGateway(
-			testAskUserGateway{toolID: prompt.ToolID, args: string(args)},
-			flruntime.ModelGatewayIdentity{Provider: "test", Model: "ask-user-test", StateCompatibilityKey: "test:ask-user-test"},
-			floretModelGatewayCapabilities(config.AIReasoningCapability{}),
-		),
-	))
+	host, err := threadRuntime.Turn(ctx, newTestFloretAgent(t, testAskUserGateway{toolID: prompt.ToolID, args: string(args)}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
-		ThreadID: flruntime.ThreadID(threadID), TurnID: flruntime.TurnID(prompt.MessageID),
-		RunID: flruntime.RunID(r.id), Input: flruntime.TurnInput{Text: "wait for user input"}, Signals: signalSpec,
+	result, err := host.Run(ctx, flruntime.TurnRequest{
+		TurnID: flruntime.TurnID(prompt.MessageID),
+		RunID:  flruntime.RunID(r.id), Input: flruntime.TurnInput{Text: "wait for user input"}, Signals: signalSpec,
 	})
 	if err != nil {
 		t.Fatalf("seed Floret waiting turn: %v", err)
@@ -106,17 +106,14 @@ func seedWaitingUserPrompt(t *testing.T, svc *Service, ctx context.Context, _ *s
 	if err != nil {
 		t.Fatalf("open seeded Floret waiting turn reader: %v", err)
 	}
-	page, err := readHost.ListThreadTurns(ctx, flruntime.ListThreadTurnsRequest{
-		ThreadID: flruntime.ThreadID(threadID),
-		Tail:     1,
-	})
+	page, err := readHost.ListThreadTurns(ctx, flruntime.ThreadTurnsRequest{Tail: 1})
 	if err != nil {
 		t.Fatalf("read seeded Floret waiting turn: %v", err)
 	}
 	if len(page.Turns) != 1 || page.Turns[0].Status != flruntime.TurnStatusWaiting {
 		t.Fatalf("seeded Floret waiting turn = %#v, want one waiting turn", page.Turns)
 	}
-	if _, err := readHost.ReadThreadOverview(ctx, flruntime.ThreadID(threadID)); err != nil {
+	if _, err := readHost.ReadThreadOverview(ctx); err != nil {
 		t.Fatalf("read seeded Floret waiting overview: %v", err)
 	}
 }

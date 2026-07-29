@@ -11,7 +11,8 @@ import (
 	"testing"
 	"time"
 
-	flruntime "github.com/floegence/floret/runtime"
+	flruntime "github.com/floegence/floret/v2/runtime"
+	flstorage "github.com/floegence/floret/v2/storage"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
@@ -67,7 +68,7 @@ func TestThreadForkReplayRejectsDamagedSnapshotBeforeFloretFork(t *testing.T) {
 	if _, err := rawDB.ExecContext(ctx, `UPDATE ai_thread_fork_operations SET request_fingerprint = 'damaged' WHERE operation_id = ?`, operation.OperationID); err != nil {
 		t.Fatal(err)
 	}
-	floretStore := flruntime.NewMemoryStore()
+	floretStore := openTestFloretRuntimeHost(t, flstorage.Memory())
 	t.Cleanup(func() { _ = floretStore.Close() })
 	adapter := testFloretBootstrap(t, floretStore)
 	createIntentID := flruntime.CreateIntentID("test-create-fork-source")
@@ -75,7 +76,7 @@ func TestThreadForkReplayRejectsDamagedSnapshotBeforeFloretFork(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := host.CreateThread(ctx, flruntime.CreateThreadRequest{ThreadID: flruntime.ThreadID(operation.SourceThreadID), CreateIntentID: createIntentID}); err != nil {
+	if _, err := host.Create(ctx); err != nil {
 		t.Fatal(err)
 	}
 	service := &Service{threadsDB: db}

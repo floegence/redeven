@@ -23,13 +23,13 @@ public Floret Inspect, Migrate, and Verify calls. Failures are mapped from the
 typed Redeven startup projection into sanitized product reason codes plus
 `retryable`, `safe_to_retry`, `committed`, and `rolled_back` facts. Generic
 service construction failures use `ai_service_startup_error`; raw errors,
-paths, schema identities, fingerprints, SQL, and Store content are not exposed.
+paths, schema identities, fingerprints, SQL, and backend content are not exposed.
 An old generation close failure is terminal for the process: the controller
 publishes a sanitized blocked snapshot, refuses retry, and never opens another
-service against a Store whose previous owner did not close successfully.
+service against a Floret backend whose previous owner did not close successfully.
 
 Readiness is memory-only. It is not written to threadstore, audit records, or a
-Floret Store, and it cannot reconstruct a thread, turn, approval, todo, tool,
+Floret backend, and it cannot reconstruct a thread, turn, approval, todo, tool,
 provider, or Activity lifecycle. `GET /_redeven_proxy/api/ai/readiness` returns
 the sanitized snapshot. Settings includes the same snapshot while keeping its
 non-AI configuration readable. Retry is explicit, asynchronous, and admits at
@@ -45,7 +45,7 @@ lease for as long as its current generation remains active. A generation
 entering drain stops new leases and cancels its shared generation context. The
 controller waits for every idempotent release, closes the old service once, and
 only then constructs and publishes a replacement. Two `NewServiceContext`
-calls therefore cannot compete for the same Floret Store.
+calls therefore cannot compete for the same Floret `runtime.Host` and backend.
 
 The controller derives its lifecycle from Code App rather than a background
 context. Parent cancellation stops startup, cancels the generation, drains
@@ -116,7 +116,7 @@ failures, require current product admin authority, slow down while the document
 is hidden, and reset their allowance only after that blocked episode settles.
 Manual retry is single-flight and is offered only when the current user and the
 mapped reason policy allow a new generation. Update and environment-access actions route
-to Redeven-owned Settings. No force, reset, repair, ignore, or Store mutation
+to Redeven-owned Settings. No force, reset, repair, ignore, or backend mutation
 action exists. Returning to `ready` reveals the same Flower DOM and restores the
 previous valid target without a success notification.
 
@@ -125,7 +125,7 @@ six sanitized readiness fields. The projection maps reason codes to localized
 copy and never includes a raw reason, path, schema or SQL detail, credential,
 message, provider state, or tool output. Unknown states, reasons, and
 contradictory retry, commit, or rollback facts become one non-retryable contract
-failure. Settings groups the Floret Store separately from Redeven product stores
+failure. Settings groups the Floret backend separately from Redeven product stores
 and other upstream stores; only Floret receives a readiness result, while the
 other owners are explicitly marked as outside this check instead of receiving a
 fabricated health claim. All interactive controls publish pending state in the
@@ -135,7 +135,7 @@ localized copy for clipboard failure.
 # Boundaries
 
 The readiness controller must not import Floret, SQLite, or threadstore
-packages; inspect storage; hold a Store or `HostBootstrap`; or retain canonical
+packages; inspect storage; hold `runtime.Host` or `storage.Backend`; or retain canonical
 Agent DTOs. AppServer must not hold `*ai.Service`, and Code App must not expose
 a raw `AI()` pointer. Service construction and closure belong to the controller;
 callers receive only scoped leases.

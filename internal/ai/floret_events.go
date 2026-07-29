@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/floegence/floret/observation"
-	flruntime "github.com/floegence/floret/runtime"
+	"github.com/floegence/floret/v2/observation"
+	flprovider "github.com/floegence/floret/v2/provider"
+	flruntime "github.com/floegence/floret/v2/runtime"
 )
 
 const (
@@ -622,7 +623,7 @@ func (r *run) floretContractError() error {
 	return r.floretContractErr
 }
 
-func (r *run) applyFloretSourceObservation(sources []flruntime.SourceRef) {
+func (r *run) applyFloretSourceObservation(sources []flprovider.Source) {
 	if r == nil || len(sources) == 0 {
 		return
 	}

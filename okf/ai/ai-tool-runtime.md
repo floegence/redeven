@@ -22,7 +22,7 @@ This concept is the stable overview for the subject. Detailed contracts are main
 - [Floret thread runtime integration](floret-thread-runtime.md)
 - [Flower subagent runtime](subagent-runtime.md)
 
-Floret receives user-visible linked context through ordered `TurnInput.References` and current-turn model-only `TurnSupplementalContextItem` values through `RunTurnRequest.SupplementalContext`; Redeven creates both in one admission mapping pass and stores neither after admission. File and directory references keep their opaque `ResourceRef` only in Floret, while the browser receives no locator or path authority. Structured message attachments travel separately through `TurnInput.Attachments`. Floret owns canonical history, references, attachments, provider-visible history, and continuation state.
+Floret receives user-visible linked context through ordered `TurnInput.References` and current-turn model-only `TurnSupplementalContextItem` values through `TurnRequest.SupplementalContext`; Redeven creates both in one admission mapping pass and stores neither after admission. File and directory references keep their opaque `ResourceRef` only in Floret, while the browser receives no locator or path authority. Structured message attachments travel separately through `TurnInput.Attachments`. Floret owns canonical history, references, attachments, provider-visible history, and continuation state.
 
 # Boundaries
 

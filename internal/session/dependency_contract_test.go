@@ -496,10 +496,10 @@ func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 	t.Parallel()
 
 	const (
-		floretModule   = "github.com/floegence/floret"
-		floretVersion  = "v1.0.0"
-		floretSum      = "h1:lvneTk4hEMPRfgjdOZRCbwLxvOUq7lEESGX20p8X2zE="
-		floretGoModSum = "h1:u2oNhsSB8OppYPHo/cTmXITL+3pxv7ckjYDiq3SjoCg="
+		floretModule   = "github.com/floegence/floret/v2"
+		floretVersion  = "v2.2.0"
+		floretSum      = "h1:JUiqMOBCexZsBPERi8DFp17aTEJXjfQklzbXjONeUk0="
+		floretGoModSum = "h1:4oJLc82ilKhbvJ13xFyWMngbHJbxKQjDWxf3hMFT34s="
 	)
 	root := repoRootForTest(t)
 	goMod := readRepoFile(t, root, "go.mod")
@@ -578,11 +578,11 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 	root := repoRootForTest(t)
 	expectedMarkers := map[string][]string{
 		filepath.Join("okf", "ai", "flower-context-action-records.md"): {
-			"RunTurnRequest.SupplementalContext",
+			"TurnRequest.SupplementalContext",
 			"TurnInput.References",
 			"MessageReference",
 			"raw `ResourceRef` never reaches the browser",
-			"v1.0.0",
+			"v2.2.0",
 		},
 		filepath.Join("okf", "ui", "flower-turn-launcher.md"): {
 			"file_path",
@@ -590,7 +590,7 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"pending text attachment",
 		},
 		filepath.Join("okf", "ai", "ai-tool-runtime.md"): {
-			"RunTurnRequest.SupplementalContext",
+			"TurnRequest.SupplementalContext",
 			"TurnSupplementalContextItem",
 			"TurnInput.Attachments",
 			"ResourceRef",
@@ -608,8 +608,8 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"complete immutable snapshot",
 		},
 		filepath.Join("internal", "runtimeservice", "compatibility_contract.json"): {
-			"Floret v1.0.0",
-			"floret-v1-0-0-public-contract-adoption",
+			"Floret v2.2.0",
+			"floret-v2-2-0-public-contract-adoption",
 			"schemas v2 through v8",
 			"Fresh stores initialize directly at v8",
 			"single persistent source of truth",
@@ -713,38 +713,28 @@ func TestFloretCapabilitiesAreMintedOnlyDuringBootstrap(t *testing.T) {
 	for _, marker := range []string{
 		"flconfig." + "ProviderFake",
 		"Fake" + "Response",
-		"flruntime." + "StartSQLiteStore",
-		"flruntime." + "ConfigureHostCapabilities",
-		"flruntime." + "NewTurnExecutionHostBinder",
-		"flruntime." + "NewSubAgentHostBinder",
-		"flruntime." + "NewThreadCreateHostBinder",
-		"flruntime." + "NewThreadDeleteHostBinder",
+		"flruntime." + "Open",
+		"*flruntime." + "Host",
 	} {
 		if strings.Contains(service, marker) {
 			t.Fatalf("service.go must not mint Floret runtime capabilities directly, found %q", marker)
 		}
 	}
 	maintenance := readRepoFile(t, root, filepath.Join("internal", "ai", "floret_store_maintenance.go"))
-	if !strings.Contains(maintenance, "flruntime."+"StartSQLiteStore") {
-		t.Fatal("floret_store_maintenance.go must own the public Floret Store startup operation")
+	for _, marker := range []string{"flstorage.SQLite", "flstorage.MigrateV2", "flstorage.ErrMigrationRequired"} {
+		if !strings.Contains(maintenance, marker) {
+			t.Fatalf("floret_store_maintenance.go must own the explicit v2 storage cutover marker %q", marker)
+		}
 	}
 	bootstrap := readRepoFile(t, root, filepath.Join("internal", "ai", "floret_bootstrap.go"))
-	if strings.Contains(bootstrap, "flruntime."+"StartSQLiteStore") {
-		t.Fatal("floret_bootstrap.go must obtain the Store through the maintenance adapter")
+	if !strings.Contains(bootstrap, "flruntime.Open") || !strings.Contains(bootstrap, "*flruntime.Host") {
+		t.Fatal("floret_bootstrap.go must be the composition root that opens and consumes runtime.Host")
 	}
 	for _, marker := range []string{
-		"flruntime." + "ConfigureHostCapabilities",
-		"flruntime." + "NewTurnExecutionHostBinder",
-		"flruntime." + "NewThreadCompactionHostBinder",
-		"flruntime." + "NewSubAgentHostBinder",
-		"flruntime." + "NewSubAgentReadHostBinder",
-		"flruntime." + "NewPendingToolRecoveryHostBinder",
-		"flruntime." + "NewInterruptedTurnRecoveryHostBinder",
-		"flruntime." + "NewThreadReadHostBinder",
-		"flruntime." + "NewThreadCreateHostBinder",
-		"flruntime." + "NewThreadTitleHostBinder",
-		"flruntime." + "NewThreadForkHostBinder",
-		"flruntime." + "NewThreadDeleteHostBinder",
+		"host.ThreadCreator", "host.ThreadReader", "host.ThreadTitleEditor",
+		"host.ThreadForker", "host.ThreadDeleter", "host.TurnRunner",
+		"host.ThreadCompactor", "host.SubAgentManager", "host.SubAgentReader",
+		"host.InterruptedTurnRecovery", "host.PendingToolRecovery",
 	} {
 		if !strings.Contains(bootstrap, marker) {
 			t.Fatalf("floret_bootstrap.go is missing capability constructor %q", marker)
@@ -768,15 +758,15 @@ func TestFloretActiveSettlementHasNoRecoveryFallback(t *testing.T) {
 			t.Fatalf("floret_bootstrap.go must derive active settlement capability with %q", required)
 		}
 	}
-	if !strings.Contains(bootstrap, "newFloretPendingToolRecoveryCoordinator") {
+	if !strings.Contains(bootstrap, "boundFloretPendingToolRecoveryCoordinator") {
 		t.Fatal("floret_bootstrap.go must construct recovery settlement only through the explicit coordinator")
 	}
 	recoverySource := readRepoFile(t, root, filepath.Join("internal", "ai", "floret_pending_tool_recovery.go"))
-	if strings.Contains(recoverySource, "PendingToolRecoveryHostBinder") || strings.Contains(recoverySource, "github.com/floegence/floret/runtime") {
+	if strings.Contains(recoverySource, "PendingToolRecoveryHostBinder") || strings.Contains(recoverySource, "github.com/floegence/floret/v2/runtime") {
 		t.Fatal("Floret recovery interface must not retain concrete runtime capability types")
 	}
-	if !strings.Contains(bootstrap, "NewPendingToolRecoveryHostBinder") || !strings.Contains(bootstrap, "boundFloretPendingToolRecoveryCoordinator") {
-		t.Fatal("Floret recovery binder must be minted and encapsulated inside the composition root")
+	if !strings.Contains(bootstrap, "host.PendingToolRecovery") || !strings.Contains(bootstrap, "boundFloretPendingToolRecoveryCoordinator") {
+		t.Fatal("Floret recovery handle must be issued and encapsulated inside the composition root")
 	}
 	runHost := readRepoFile(t, root, filepath.Join("internal", "ai", "run_host_capabilities.go"))
 	if strings.Contains(runSource, "*Service") || strings.Contains(runSource, "service *Service") || strings.Contains(runHost, "floretBootstrapResult") {
@@ -852,7 +842,7 @@ func TestFloretCanonicalThreadCreationIsCreateCoordinatorOnly(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			if importPath != "github.com/floegence/floret/runtime" {
+			if importPath != "github.com/floegence/floret/v2/runtime" {
 				continue
 			}
 			alias := "runtime"
@@ -905,13 +895,13 @@ func TestFloretGatewayBoundaryUsesGatewayIdentity(t *testing.T) {
 	root := repoRootForTest(t)
 	expectedConstructors := map[string][]string{
 		filepath.Join("internal", "ai", "floret_runtime.go"): {
-			"flruntime.NewTurnExecutionHostOptions", "flruntime.WithTurnModelGateway", "flruntime.WithTurnThreadTitleMode",
+			"flruntime.NewAgent", "flruntime.WithAgentThreadTitleMode", "flruntime.WithAgentDynamicToolSurface",
 		},
 		filepath.Join("internal", "ai", "compact_thread_context.go"): {
-			"flruntime.NewThreadCompactionHostOptions", "flruntime.WithThreadCompactionModelGateway",
+			"flruntime.NewAgent",
 		},
 		filepath.Join("internal", "ai", "subagents_floret.go"): {
-			"flruntime.NewSubAgentHostOptions", "flruntime.WithSubAgentModelGateway", "flruntime.WithSubAgentThreadTitleMode",
+			"flruntime.NewAgent", "flruntime.WithAgentThreadTitleMode", "flruntime.WithAgentDynamicToolSurface",
 		},
 	}
 	for rel, requiredConstructors := range expectedConstructors {
@@ -926,17 +916,17 @@ func TestFloretGatewayBoundaryUsesGatewayIdentity(t *testing.T) {
 		}
 		for _, constructor := range requiredConstructors {
 			if !strings.Contains(content, constructor) {
-				t.Fatalf("%s must use scoped Floret v1 constructor %q", rel, constructor)
+				t.Fatalf("%s must construct immutable Floret v2 Agent with %q", rel, constructor)
 			}
 		}
 		if strings.HasSuffix(rel, "compact_thread_context.go") {
-			if strings.Contains(content, "WithThreadCompactionThreadTitleMode") {
+			if strings.Contains(content, "WithAgentThreadTitleMode") {
 				t.Fatalf("%s must not receive title authority through the compaction capability", rel)
 			}
 		} else if !strings.Contains(content, "flruntime.ThreadTitleModeProvider") {
 			t.Fatalf("%s must delegate provider title ownership to Floret", rel)
 		}
-		for _, forbidden := range []string{"TurnExecutionHostOptions{", "ThreadCompactionHostOptions{", "SubAgentHostOptions{"} {
+		for _, forbidden := range []string{"TurnExecutionHostOptions", "ThreadCompactionHostOptions", "SubAgentHostOptions", "RunTurnRequest"} {
 			if strings.Contains(content, forbidden) {
 				t.Fatalf("%s must not construct opaque Floret v1 options with %q", rel, forbidden)
 			}
@@ -1053,7 +1043,7 @@ func TestFloretContextLifecycleBoundaryDoesNotUseHostHistoryAPIs(t *testing.T) {
 
 	root := repoRootForTest(t)
 	forbidden := []string{
-		"github.com/floegence/floret/" + "internal",
+		"github.com/floegence/floret/v2/" + "internal",
 		"Run" + "ProjectedTurn",
 		"ProjectedTurn" + "Request",
 		"ProjectedTurn" + "Result",

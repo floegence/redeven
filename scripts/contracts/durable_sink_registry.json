@@ -525,7 +525,7 @@
     },
     {
       "path": "internal/ai/run.go",
-      "sha256": "aaabb2f4b4632c556adf9f1c8e94afc317ee6ec8b2ea04c64b4e1942becff08d",
+      "sha256": "a5b59c52f8d9156c3292ae4166dae750cc218ee415db8b617779c6b296a7eee5",
       "sink_kinds": [
         "file",
         "json_file"
@@ -644,7 +644,7 @@
     },
     {
       "path": "internal/ai/terminal_process.go",
-      "sha256": "21f53a9978963f0246de321c98d1f74831a03208ffa3ec74c636143ca1a7c762",
+      "sha256": "0071523294d36f42bfea5df5a65ea4d5f91a0878fd7bbd5953576ffafd1cd226",
       "sink_kinds": [
         "file"
       ],

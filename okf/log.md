@@ -1,6 +1,8 @@
 # Redeven OKF Update Log
 
 ## 2026-07-29
+* **Dependency**: Upgraded Redeven to published Floret v2.2.0 with exact checksums, one composition-root `runtime.Host`, immutable `runtime.Agent` values, and identity-bound public handles.
+* **Boundary**: Removed the v1 Store, binder, factory, and host-option integration path; explicit v2 storage migration and public runtime contracts now preserve Floret as the only admitted Agent authority.
 * **Dependency**: Upgraded to published Floret v1.0.0 with exact module checksums and adopted its scoped validated turn, compaction, and SubAgent Host constructors.
 * **Boundary**: Kept Redeven execution on narrow caller-owned capabilities, consumed typed Floret title and provider contracts, and preserved threadstore schema v8 plus the existing Runtime Service and Flower wire shapes.
 * **Fix**: Restored first-message admission by resolving the atomic create operation and immutable command before canonical reads, reusing frozen identities across retries and restarts, and permitting exact `ReadThreadTurn` verification only after canonical root commit.

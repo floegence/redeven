@@ -2,11 +2,12 @@ package appserver
 
 import (
 	"context"
-	"errors"
 	"testing"
 
-	flconfig "github.com/floegence/floret/config"
-	flruntime "github.com/floegence/floret/runtime"
+	flconfig "github.com/floegence/floret/v2/config"
+	flprovider "github.com/floegence/floret/v2/provider"
+	flruntime "github.com/floegence/floret/v2/runtime"
+	flstorage "github.com/floegence/floret/v2/storage"
 	"github.com/floegence/redeven/internal/ai"
 )
 
@@ -38,51 +39,61 @@ func (p staticAIServiceProvider) RetryAIReadiness() error {
 
 func (p staticAIServiceProvider) UpdateAIServiceStartupOptions(AIServiceStartupOptions) {}
 
-func openTestFloretStore(t *testing.T, path string) (*flruntime.Store, error) {
+func openAppserverTestFloretHost(t *testing.T, path string) (*flruntime.Host, error) {
 	t.Helper()
-	ctx := context.Background()
-	inspection, err := flruntime.InspectSQLiteStore(ctx, path)
-	if err != nil {
-		return nil, err
-	}
-	request := flruntime.SQLiteStoreOpenRequest{ExpectedState: inspection.State}
-	if inspection.State == flruntime.SQLiteStoreStateCurrent {
-		verification, verifyErr := flruntime.VerifySQLiteStore(ctx, path)
-		if verifyErr != nil {
-			return nil, verifyErr
-		}
-		if verification.Inspection.State != flruntime.SQLiteStoreStateCurrent || verification.Inspection.LeasePolicyState != flruntime.SQLiteStoreLeasePolicyMatches {
-			return nil, errors.New("Floret test Store verification is not current")
-		}
-		for _, check := range verification.Checks {
-			if !check.Passed {
-				return nil, errors.New("Floret test Store verification failed")
-			}
-		}
-		request.ExpectedState = verification.Inspection.State
-		request.ExpectedSchema = verification.Inspection.Observed
-	}
-	return flruntime.OpenSQLiteStore(ctx, path, request)
+	return flruntime.Open(context.Background(), flruntime.Options{Storage: flstorage.SQLite(path)})
 }
 
-func configureAppserverFloretTestTurnBinder(t *testing.T, store *flruntime.Store) *flruntime.TurnExecutionHostBinder {
-	t.Helper()
-	var turnBinder *flruntime.TurnExecutionHostBinder
-	if err := flruntime.ConfigureHostCapabilities(store, func(bootstrap *flruntime.HostBootstrap) error {
-		var err error
-		turnBinder, err = flruntime.NewTurnExecutionHostBinder(bootstrap)
-		return err
-	}); err != nil {
-		t.Fatalf("configure Floret test capabilities: %v", err)
-	}
-	return turnBinder
+type appserverTestGateway struct {
+	events []flprovider.Event
 }
 
-func requireAppserverFloretTurnOptions(t *testing.T, cfg flconfig.Config, options ...flruntime.TurnExecutionOption) flruntime.TurnExecutionHostOptions {
+func (appserverTestGateway) Identity() flprovider.Identity {
+	return flprovider.Identity{Provider: "test", Model: "appserver-test", StateCompatibilityKey: "test:appserver:v2"}
+}
+
+func (appserverTestGateway) Capabilities() flprovider.Capabilities {
+	return flprovider.Capabilities{Reasoning: flprovider.ReasoningUnsupported}
+}
+
+func (gateway appserverTestGateway) Stream(context.Context, flprovider.Request) (<-chan flprovider.Event, error) {
+	events := make(chan flprovider.Event, len(gateway.events))
+	for _, event := range gateway.events {
+		events <- event
+	}
+	close(events)
+	return events, nil
+}
+
+func newAppserverTestFloretAgent(t *testing.T, gateway flprovider.Gateway) *flruntime.Agent {
 	t.Helper()
-	result, err := flruntime.NewTurnExecutionHostOptions(cfg, options...)
+	agent, err := flruntime.NewAgent(flconfig.AgentConfig{
+		Profile:      flconfig.AgentProfile{ID: "appserver-test", Name: "AppServer test agent"},
+		SystemPrompt: "You are a deterministic AppServer test agent.",
+		Context: flconfig.ContextPolicy{
+			ContextWindowTokens: 128000, MaxOutputTokens: 4096, ReservedOutputTokens: 4096, MaxCompactionFailures: 2,
+		},
+	}, gateway)
 	if err != nil {
-		t.Fatalf("NewTurnExecutionHostOptions: %v", err)
+		t.Fatalf("runtime.NewAgent: %v", err)
+	}
+	return agent
+}
+
+func runAppserverTestFloretTurn(t *testing.T, path string, threadID flruntime.ThreadID, gateway flprovider.Gateway, request flruntime.TurnRequest) flruntime.TurnResult {
+	t.Helper()
+	host, err := openAppserverTestFloretHost(t, path)
+	if err != nil {
+		t.Fatalf("runtime.Open: %v", err)
+	}
+	defer func() { _ = host.Close() }()
+	runner, err := host.TurnRunner(context.Background(), threadID, newAppserverTestFloretAgent(t, gateway))
+	if err != nil {
+		t.Fatalf("Host.TurnRunner: %v", err)
+	}
+	result, err := runner.Run(context.Background(), request)
+	if err != nil {
+		t.Fatalf("TurnRunner.Run: %v", err)
 	}
 	return result
 }

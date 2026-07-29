@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	flruntime "github.com/floegence/floret/runtime"
+	flruntime "github.com/floegence/floret/v2/runtime"
 	openai "github.com/openai/openai-go"
 	oresponses "github.com/openai/openai-go/responses"
 )

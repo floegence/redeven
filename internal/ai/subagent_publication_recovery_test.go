@@ -7,7 +7,8 @@ import (
 	"testing"
 	"time"
 
-	flruntime "github.com/floegence/floret/runtime"
+	flruntime "github.com/floegence/floret/v2/runtime"
+	flstorage "github.com/floegence/floret/v2/storage"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
@@ -104,14 +105,13 @@ func TestSubAgentPublicationRecoveryRebuildsPersistedRunConfiguration(t *testing
 		childThreadID,
 		childRunID,
 	)
-	request := flruntime.SpawnSubAgentRequest{
-		PublicationID:  "publication_recovery",
-		ParentThreadID: parentThreadID,
-		ParentTurnID:   parentTurnID,
-		ThreadID:       childThreadID,
-		ForkMode:       flruntime.SubAgentForkNone,
-		TaskName:       "Recovery Check",
-		Message:        "recover the persisted publication",
+	request := flruntime.SpawnSubAgent{
+		PublicationID: "publication_recovery",
+		ParentTurnID:  parentTurnID,
+		ThreadID:      childThreadID,
+		ForkMode:      flruntime.SubAgentForkNone,
+		TaskName:      "Recovery Check",
+		Message:       "recover the persisted publication",
 		Labels: flruntime.RunLabels{Host: map[string]string{
 			subagentToolHostContextChildRunIDKey: childRunID,
 		}},
@@ -123,21 +123,21 @@ func TestSubAgentPublicationRecoveryRebuildsPersistedRunConfiguration(t *testing
 	if err != nil || len(operations) != 1 {
 		t.Fatalf("pending operations=%#v err=%v", operations, err)
 	}
-	canonicalStore := flruntime.NewMemoryStore()
+	canonicalStore := openTestFloretRuntimeHost(t, flstorage.Memory())
 	t.Cleanup(func() { _ = canonicalStore.Close() })
 	canonicalRuntime := testFloretBootstrap(t, canonicalStore)
 	create, err := canonicalRuntime.newThreadCreate(parentThreadID, "create-"+parentThreadID)
 	if err != nil {
 		t.Fatalf("bind canonical parent creation: %v", err)
 	}
-	if _, err := create.CreateThread(context.Background(), flruntime.CreateThreadRequest{ThreadID: parentThreadID, CreateIntentID: "create-" + parentThreadID}); err != nil {
+	if _, err := create.Create(context.Background()); err != nil {
 		t.Fatalf("create canonical parent: %v", err)
 	}
 	canonicalCapabilities, err := canonicalRuntime.bindThreadRuntime(parentThreadID)
 	if err != nil {
 		t.Fatalf("bind canonical parent runtime: %v", err)
 	}
-	recoveredHost := &recordingFloretHost{}
+	recoveredHost := &recordingFloretHost{parentThreadID: flruntime.ThreadID(parentThreadID)}
 	recoveredOptionsAccepted := false
 	svc := &Service{
 		threadsDB:         store,
@@ -156,8 +156,8 @@ func TestSubAgentPublicationRecoveryRebuildsPersistedRunConfiguration(t *testing
 		floretRuntime: &floretRuntimeCapabilityIssuer{bind: func(threadID flruntime.ThreadID) (floretThreadRuntimeCapabilities, error) {
 			capabilities := floretThreadRuntimeCapabilities{}
 			if strings.TrimSpace(string(threadID)) == parentThreadID {
-				capabilities.SubAgent = func(ctx context.Context, options flruntime.SubAgentHostOptions) (floretSubagentHost, error) {
-					if _, err := canonicalCapabilities.SubAgent(ctx, options); err != nil {
+				capabilities.SubAgent = func(ctx context.Context, agent *flruntime.Agent) (floretSubagentHost, error) {
+					if _, err := canonicalCapabilities.SubAgent(ctx, agent); err != nil {
 						return nil, fmt.Errorf("validate recovered SubAgent host options: %w", err)
 					}
 					recoveredOptionsAccepted = true

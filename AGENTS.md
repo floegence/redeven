@@ -854,7 +854,7 @@ Use this checklist when reviewing any Redeven plugin integration change:
 
 ## Flower / Floret Boundary
 
-Redeven consumes Floret only through published `github.com/floegence/floret`
+Redeven consumes Floret only through published `github.com/floegence/floret/v2`
 module versions. Do not use `replace`, `go.work`, `go.work.sum`, local sibling
 paths, package-manager links, or build aliases to point Redeven at a local
 Floret checkout. Run Floret dependency checks with `GOWORK=off`.
@@ -881,7 +881,7 @@ Redeven code must not bypass those Floret lifecycles:
   and `EffectAuthorizationGate`; Redeven owns the current product permission
   read and approval UX, while the gate returns one exact, one-shot proof to the
   Floret invocation that requested the effect;
-- provider adapters may map provider bytes to Floret `ModelEvent`, but must not
+- provider adapters may map provider bytes to Floret `provider.Event`, but must not
   create durable Flower messages, mutate canonical order, or publish an
   independent activity timeline;
 - tool handlers may execute only with the exact one-shot authorization proof
@@ -944,10 +944,10 @@ Redeven code must not bypass those Floret lifecycles:
 - Redeven product tables may reference opaque Floret `ThreadID`/`TurnID`/`RunID`
   values, but must not store their content, status, ordinal, projection,
   lifecycle, control, approval, todo, context, provider, or tool-state copies;
-- Floret `Store`, `HostBootstrap`, binders, and aggregate bootstrap results exist
-  only in the AI composition root. Lifecycle binders are converted there into
-  responsibility-specific coordinator authorities rather than one
-  full-capability object. A normal run receives only runtime authority already
+- Floret `runtime.Host`, `storage.Backend`, identity-bound public handles, and
+  aggregate bootstrap results exist only in the AI composition root. Public
+  handles are converted there into responsibility-specific local coordinator
+  authorities rather than one full-capability object. A normal run receives only runtime authority already
   bound to its exact root `ThreadID`. Its product capability shape is an exact
   allowlist, and current-run permission reads cannot accept caller-supplied
   owner identity. Derived child execution is constructed only after canonical
@@ -956,16 +956,15 @@ Redeven code must not bypass those Floret lifecycles:
   never created by copying the root capability object and has no further
   lifecycle, queue, publication, presentation, or resource-authority derivation.
   The run-reachable SubAgent runtime contains only a validated exact-child
-  resolver; the arbitrary-child binder remains a composition-owned object that
+  resolver; the arbitrary-child handle opener remains a composition-owned object that
   cannot be recovered through a concrete runtime type assertion.
   A child audit's original `ParentRunID` is lineage, not a requirement that the
   durable child may be used only from the creating parent turn;
 - interrupted-turn recovery capability belongs only to the startup recovery
-  coordinator. Composition must use arbitrary-ID recovery binders once to
-  produce an immutable list of recovery factories already bound to exact root
-  or parent-child identity and durable proof before retry ownership is retained.
+  coordinator. Composition must issue recovery handles already bound to exact
+  root or parent-child identity and durable proof before retry ownership is retained.
   Root enumeration must come from a composition-owned Floret
-  `ThreadInventoryHost`; paged Redeven settings are only a product-configuration
+  `ThreadInventory` handle; paged Redeven settings are only a product-configuration
   reconciliation input and must not create, omit, or replace canonical roots.
   Runtime binding stays closed until interrupted-turn and pending SubAgent
   publication recovery completes, and Redeven must not mint pending-tool

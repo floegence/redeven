@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	flruntime "github.com/floegence/floret/runtime"
+	flruntime "github.com/floegence/floret/v2/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
@@ -318,9 +318,9 @@ func TestCanonicalAdmissionSettlementFailureBlocksForkAndDeleteIntents(t *testin
 			}
 			command := createPendingCommandForTest(t, svc, meta, thread.ThreadID, "queue_settlement_"+operationName, "turn_settlement_"+operationName, "run_settlement_"+operationName)
 			host := newTestFloretHostFromService(t, svc, thread.ThreadID, "done")
-			if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
-				ThreadID: flruntime.ThreadID(thread.ThreadID), TurnID: flruntime.TurnID(command.TurnID),
-				RunID: flruntime.RunID(command.RunID), Input: flruntime.TurnInput{Text: command.TextContent},
+			if _, err := host.Run(ctx, flruntime.TurnRequest{
+				TurnID: flruntime.TurnID(command.TurnID),
+				RunID:  flruntime.RunID(command.RunID), Input: flruntime.TurnInput{Text: command.TextContent},
 			}); err != nil {
 				t.Fatal(err)
 			}
@@ -367,9 +367,9 @@ func TestQueuedRecoveryDoesNotCompeteWithActiveAdmissionSettlementOwner(t *testi
 	}
 	command := createPendingCommandForTest(t, svc, meta, thread.ThreadID, "queue_single_owner", "turn_single_owner", "run_single_owner")
 	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "admitted")
-	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
-		ThreadID: flruntime.ThreadID(thread.ThreadID), TurnID: flruntime.TurnID(command.TurnID),
-		RunID: flruntime.RunID(command.RunID), Input: flruntime.TurnInput{Text: command.TextContent},
+	if _, err := host.Run(ctx, flruntime.TurnRequest{
+		TurnID: flruntime.TurnID(command.TurnID),
+		RunID:  flruntime.RunID(command.RunID), Input: flruntime.TurnInput{Text: command.TextContent},
 	}); err != nil {
 		t.Fatal(err)
 	}

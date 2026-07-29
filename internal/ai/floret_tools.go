@@ -9,9 +9,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/floegence/floret/observation"
-	flruntime "github.com/floegence/floret/runtime"
-	fltools "github.com/floegence/floret/tools"
+	"github.com/floegence/floret/v2/observation"
+	flruntime "github.com/floegence/floret/v2/runtime"
+	fltools "github.com/floegence/floret/v2/tools"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 )
 
@@ -56,7 +56,7 @@ func (s *floretToolRuntimeState) updateFromToolResult(call ToolCall, result Tool
 	updateTodoRuntimeState(&s.state, []ToolCall{call}, []ToolResult{result}, round)
 }
 
-func buildFloretToolRegistry(r *run, activeTools []ToolDef, state *floretToolRuntimeState) (*fltools.Registry, error) {
+func buildFloretTools(r *run, activeTools []ToolDef, state *floretToolRuntimeState) ([]fltools.Tool, error) {
 	if r == nil {
 		return nil, errors.New("missing Floret tool registry run")
 	}
@@ -64,7 +64,7 @@ func buildFloretToolRegistry(r *run, activeTools []ToolDef, state *floretToolRun
 	if !permissionSnapshotActive(authorizationSnapshot) || strings.TrimSpace(authorizationSnapshot.SnapshotID) == "" {
 		return nil, errors.New("Floret tool registry permission snapshot is unavailable")
 	}
-	registry := fltools.NewRegistry()
+	items := make([]fltools.Tool, 0, len(activeTools))
 	for _, def := range activeTools {
 		name := strings.TrimSpace(def.Name)
 		if name == "" || isFlowerControlTool(name) {
@@ -134,11 +134,17 @@ func buildFloretToolRegistry(r *run, activeTools []ToolDef, state *floretToolRun
 				return toolResult, nil
 			},
 		)
-		if err := registry.Register(tool); err != nil {
-			return nil, err
-		}
+		items = append(items, tool)
 	}
-	return registry, nil
+	return items, nil
+}
+
+func buildFloretToolRegistry(r *run, activeTools []ToolDef, state *floretToolRuntimeState) (*fltools.Registry, error) {
+	items, err := buildFloretTools(r, activeTools, state)
+	if err != nil {
+		return nil, err
+	}
+	return fltools.NewRegistryE(items...)
 }
 
 func validateFloretToolPermissionHostContext(hostContext map[string]string, snapshot PermissionSnapshot) error {

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	flruntime "github.com/floegence/floret/runtime"
+	flruntime "github.com/floegence/floret/v2/runtime"
 )
 
 func visibilityForToolName(toolName string) ToolVisibilityClass {
@@ -135,7 +135,7 @@ func (r *run) syncFloretApprovalQueue(ctx context.Context) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	queue, err := host.ReadApprovalQueue(ctx, flruntime.ReadApprovalQueueRequest{ThreadID: flruntime.ThreadID(rootThreadID)})
+	queue, err := host.ReadApprovalQueue(ctx)
 	if err != nil {
 		return err
 	}
@@ -206,7 +206,7 @@ func (r *run) currentFloretApproval(ctx context.Context, actionID string, runID 
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	queue, err := host.ReadApprovalQueue(ctx, flruntime.ReadApprovalQueueRequest{ThreadID: flruntime.ThreadID(rootThreadID)})
+	queue, err := host.ReadApprovalQueue(ctx)
 	if err != nil {
 		return flruntime.ApprovalQueue{}, flruntime.ApprovalRecord{}, false, err
 	}

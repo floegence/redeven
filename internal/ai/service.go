@@ -16,7 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	flruntime "github.com/floegence/floret/runtime"
+	flruntime "github.com/floegence/floret/v2/runtime"
 	"github.com/floegence/flowersec/flowersec-go/rpc"
 	contextadapter "github.com/floegence/redeven/internal/ai/context/adapter"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
@@ -287,18 +287,18 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 		if err != nil {
 			return fmt.Errorf("bind canonical Floret title read: %w", err)
 		}
-		overview, err := readHost.ReadThreadOverview(ctx, threadID)
+		overview, err := readHost.ReadThreadOverview(ctx)
 		if err != nil {
 			return fmt.Errorf("read canonical Floret title: %w", err)
 		}
 		canonicalTitle := strings.TrimSpace(overview.Thread.Title)
 		switch {
 		case canonicalTitle == "":
-			titleHost, bindErr := floretBootstrap.newThreadTitle(ctx, threadID, nil)
+			titleHost, bindErr := floretBootstrap.newThreadTitle(ctx, threadID)
 			if bindErr != nil {
 				return fmt.Errorf("bind canonical Floret title write: %w", bindErr)
 			}
-			_, err = titleHost.SetThreadTitle(ctx, flruntime.SetThreadTitleRequest{ThreadID: threadID, Title: legacy.Title})
+			_, err = titleHost.Set(ctx, legacy.Title)
 			return err
 		case canonicalTitle == strings.TrimSpace(legacy.Title):
 			return nil
@@ -314,7 +314,7 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 		if err != nil {
 			return threadstore.LegacyComposerAdmissionDecision{}, fmt.Errorf("bind canonical Floret turn read: %w", err)
 		}
-		turn, err := readHost.ReadThreadTurn(preflightCtx, flruntime.ReadThreadTurnRequest{ThreadID: threadID, TurnID: turnID})
+		turn, err := readHost.ReadThreadTurn(preflightCtx, turnID)
 		if errors.Is(err, flruntime.ErrTurnNotFound) {
 			return threadstore.LegacyComposerAdmissionDecision{State: threadstore.LegacyComposerAdmissionMissing}, nil
 		}
@@ -587,7 +587,7 @@ func (s *Service) recoverQueuedTurnCommandsForStartup(ctx context.Context) ([]qu
 			host, hostErr := s.openFloretThreadReadHost(recoveryCtx, threadID)
 			var snapshot flruntime.ThreadSnapshot
 			if hostErr == nil {
-				snapshot, hostErr = host.ReadThread(recoveryCtx, flruntime.ThreadID(threadID))
+				snapshot, hostErr = host.ReadThread(recoveryCtx)
 			}
 			if hostErr != nil {
 				return false, hostErr
@@ -833,7 +833,7 @@ func (s *Service) requireNoUnownedActiveSubagents(ctx context.Context, threadID 
 	if err != nil {
 		return err
 	}
-	snapshots, err := host.ListSubAgents(ctx, flruntime.ThreadID(threadID))
+	snapshots, err := host.ListSubAgents(ctx)
 	if err != nil {
 		return err
 	}
@@ -2044,9 +2044,9 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 		MessageID:                   turnID,
 		UploadsDir:                  uploadsDir,
 		ProductCapabilities:         productCapabilities,
-		FloretHostFactory:           floretRuntime.Turn,
-		FloretCompactionHostFactory: floretRuntime.Compaction,
-		FloretSubagentHostFactory:   floretRuntime.SubAgent,
+		FloretTurnOpener:            floretRuntime.Turn,
+		FloretCompactorOpener:       floretRuntime.Compaction,
+		FloretSubagentOpener:        floretRuntime.SubAgent,
 		PersistOpTimeout:            persistTO,
 		SkillManager:                s.skillManager,
 		ToolAllowlist:               append([]string(nil), req.Options.ToolAllowlist...),

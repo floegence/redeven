@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	flruntime "github.com/floegence/floret/runtime"
+	flruntime "github.com/floegence/floret/v2/runtime"
 )
 
 type todoTestHost struct {
@@ -16,15 +16,15 @@ type todoTestHost struct {
 	state flruntime.ThreadAgentTodoState
 }
 
-func (h *todoTestHost) RunTurn(context.Context, flruntime.RunTurnRequest) (flruntime.TurnResult, error) {
+func (h *todoTestHost) Run(context.Context, flruntime.TurnRequest) (flruntime.TurnResult, error) {
 	return flruntime.TurnResult{}, nil
 }
 
-func (h *todoTestHost) ReadApprovalQueue(_ context.Context, req flruntime.ReadApprovalQueueRequest) (flruntime.ApprovalQueue, error) {
-	return flruntime.ApprovalQueue{RootThreadID: req.ThreadID, GeneratedAt: time.Now()}, nil
+func (h *todoTestHost) ReadApprovalQueue(context.Context) (flruntime.ApprovalQueue, error) {
+	return flruntime.ApprovalQueue{RootThreadID: "thread_1", GeneratedAt: time.Now()}, nil
 }
 
-func (h *todoTestHost) ResolveApproval(context.Context, flruntime.ResolveApprovalRequest) (flruntime.ResolveApprovalResult, error) {
+func (h *todoTestHost) ResolveApproval(context.Context, flruntime.ApprovalResolutionRequest) (flruntime.ResolveApprovalResult, error) {
 	return flruntime.ResolveApprovalResult{}, errors.New("unexpected approval resolution")
 }
 
@@ -32,23 +32,23 @@ func (h *todoTestHost) SettlePendingTool(context.Context, flruntime.PendingToolS
 	return flruntime.PendingToolSettlementResult{}, nil
 }
 
-func (h *todoTestHost) ReadThreadAgentTodos(_ context.Context, threadID flruntime.ThreadID) (flruntime.ThreadAgentTodoState, error) {
+func (h *todoTestHost) ReadThreadAgentTodos(context.Context) (flruntime.ThreadAgentTodoState, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	state := h.state
-	state.ThreadID = threadID
+	state.ThreadID = "thread_1"
 	state.Items = append([]flruntime.AgentTodo(nil), state.Items...)
 	return state, nil
 }
 
-func (h *todoTestHost) UpdateThreadAgentTodos(_ context.Context, req flruntime.UpdateThreadAgentTodosRequest) (flruntime.ThreadAgentTodoState, error) {
+func (h *todoTestHost) UpdateThreadAgentTodos(_ context.Context, req flruntime.AgentTodoUpdateRequest) (flruntime.ThreadAgentTodoState, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if req.ExpectedVersion != h.state.Version {
 		return flruntime.ThreadAgentTodoState{}, flruntime.ErrAgentTodoVersionConflict
 	}
 	h.state = flruntime.ThreadAgentTodoState{
-		ThreadID:          req.ThreadID,
+		ThreadID:          "thread_1",
 		Version:           h.state.Version + 1,
 		Items:             append([]flruntime.AgentTodo(nil), req.Items...),
 		UpdatedAt:         time.Now(),
@@ -68,7 +68,7 @@ func TestRunToolWriteTodosUsesCanonicalFloretState(t *testing.T) {
 	if result.(map[string]any)["version"] != int64(1) {
 		t.Fatalf("unexpected result: %#v", result)
 	}
-	snapshot, err := host.ReadThreadAgentTodos(context.Background(), flruntime.ThreadID(r.threadID))
+	snapshot, err := host.ReadThreadAgentTodos(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +99,7 @@ func TestRunToolWriteTodosHydratesExistingContent(t *testing.T) {
 	if _, err := r.toolWriteTodos(ctx, "tool_1", []TodoItem{{ID: "todo_1", Status: TodoStatusCompleted}}, &expected, ""); err != nil {
 		t.Fatal(err)
 	}
-	snapshot, err := host.ReadThreadAgentTodos(ctx, flruntime.ThreadID(r.threadID))
+	snapshot, err := host.ReadThreadAgentTodos(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +117,7 @@ func TestRunToolWriteTodosRejectsControlSignalTodo(t *testing.T) {
 	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "control signal") {
 		t.Fatalf("control todo error = %v", err)
 	}
-	snapshot, readErr := host.ReadThreadAgentTodos(context.Background(), flruntime.ThreadID(r.threadID))
+	snapshot, readErr := host.ReadThreadAgentTodos(context.Background())
 	if readErr != nil {
 		t.Fatal(readErr)
 	}

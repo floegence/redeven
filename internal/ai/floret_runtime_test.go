@@ -17,22 +17,34 @@ import (
 	"testing"
 	"time"
 
-	flconfig "github.com/floegence/floret/config"
-	"github.com/floegence/floret/observation"
-	flruntime "github.com/floegence/floret/runtime"
+	flconfig "github.com/floegence/floret/v2/config"
+	"github.com/floegence/floret/v2/observation"
+	flprovider "github.com/floegence/floret/v2/provider"
+	flruntime "github.com/floegence/floret/v2/runtime"
+	flstorage "github.com/floegence/floret/v2/storage"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
 
-func testFloretBootstrap(t *testing.T, store *flruntime.Store) *floretBootstrapResult {
+func testFloretBootstrap(t *testing.T, host *flruntime.Host) *floretBootstrapResult {
 	t.Helper()
-	bootstrap, err := newFloretBootstrapResult(store)
+	bootstrap, err := newFloretBootstrapResult(host)
 	if err != nil {
 		t.Fatalf("newFloretBootstrapResult: %v", err)
 	}
 	return bootstrap
+}
+
+func openTestFloretRuntimeHost(t *testing.T, source flstorage.Source) *flruntime.Host {
+	t.Helper()
+	host, err := flruntime.Open(context.Background(), flruntime.Options{Storage: source})
+	if err != nil {
+		t.Fatalf("runtime.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = host.Close() })
+	return host
 }
 
 func installTestFloretCapabilities(svc *Service, bootstrap *floretBootstrapResult) {
@@ -57,7 +69,7 @@ type panicFloretTurnHost struct {
 	*recordingFloretHost
 }
 
-func (*panicFloretTurnHost) RunTurn(context.Context, flruntime.RunTurnRequest) (flruntime.TurnResult, error) {
+func (*panicFloretTurnHost) Run(context.Context, flruntime.TurnRequest) (flruntime.TurnResult, error) {
 	panic("deterministic RunTurn panic")
 }
 
@@ -111,8 +123,8 @@ func (allowFloretEffectGateForTest) Dispatch(ctx context.Context, req flruntime.
 	})
 }
 
-func TestFloretRuntimeAdapterRejectsCrossAuthorityReads(t *testing.T) {
-	store := flruntime.NewMemoryStore()
+func TestFloretRuntimeAdaptersBindAuthorityStructurally(t *testing.T) {
+	store := openTestFloretRuntimeHost(t, flstorage.Memory())
 	t.Cleanup(func() { _ = store.Close() })
 	adapter := testFloretBootstrap(t, store)
 	for _, threadID := range []string{"thread-a", "parent-a"} {
@@ -120,7 +132,7 @@ func TestFloretRuntimeAdapterRejectsCrossAuthorityReads(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := create.CreateThread(context.Background(), flruntime.CreateThreadRequest{ThreadID: flruntime.ThreadID(threadID), CreateIntentID: flruntime.CreateIntentID("create-" + threadID)}); err != nil {
+		if _, err := create.Create(context.Background()); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -129,58 +141,52 @@ func TestFloretRuntimeAdapterRejectsCrossAuthorityReads(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	turnHost, err := threadRuntime.Turn(context.Background(), requireFloretTurnOptions(t,
-		flconfig.Config{Provider: flconfig.ProviderFake, Model: "fake-model", FakeResponse: "done"},
-	))
+	turnHost, err := threadRuntime.Turn(context.Background(), newStaticTestFloretAgent(t, "done"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := turnHost.ReadThreadAgentTodos(context.Background(), "thread-b"); err == nil || !strings.Contains(err.Error(), "authority mismatch") {
-		t.Fatalf("cross-thread todo read error=%v, want authority mismatch", err)
+	todos, err := turnHost.ReadThreadAgentTodos(context.Background())
+	if err != nil || todos.ThreadID != "thread-a" {
+		t.Fatalf("bound thread todos=%#v error=%v", todos, err)
 	}
 
 	parentRuntime, err := adapter.bindThreadRuntime("parent-a")
 	if err != nil {
 		t.Fatal(err)
 	}
-	subagentHost, err := parentRuntime.SubAgent(context.Background(), requireFloretSubAgentOptions(t,
-		flconfig.Config{Provider: flconfig.ProviderFake, Model: "fake-model", FakeResponse: "done"},
-	))
+	subagentHost, err := parentRuntime.SubAgent(context.Background(), newStaticTestFloretAgent(t, "done"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := subagentHost.ListSubAgents(context.Background(), "parent-b"); err == nil || !strings.Contains(err.Error(), "bound to thread") {
-		t.Fatalf("cross-parent read error=%v, want authority mismatch", err)
+	if snapshots, err := subagentHost.ListSubAgents(context.Background()); err != nil || len(snapshots) != 0 {
+		t.Fatalf("bound parent SubAgents=%#v error=%v", snapshots, err)
 	}
 }
 
 func TestFloretTurnSettlementDoesNotFallbackAfterActiveAuthorityEnds(t *testing.T) {
 	ctx := context.Background()
-	store := flruntime.NewMemoryStore()
+	store := openTestFloretRuntimeHost(t, flstorage.Memory())
 	t.Cleanup(func() { _ = store.Close() })
 	adapter := testFloretBootstrap(t, store)
 	create, err := adapter.newThreadCreate("thread-settlement-owner", "create-thread-settlement-owner")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := create.CreateThread(ctx, flruntime.CreateThreadRequest{ThreadID: "thread-settlement-owner", CreateIntentID: "create-thread-settlement-owner"}); err != nil {
+	if _, err := create.Create(ctx); err != nil {
 		t.Fatal(err)
 	}
 	threadRuntime, err := adapter.bindThreadRuntime("thread-settlement-owner")
 	if err != nil {
 		t.Fatal(err)
 	}
-	host, err := threadRuntime.Turn(ctx, requireFloretTurnOptions(t,
-		flconfig.Config{Provider: flconfig.ProviderFake, Model: "fake-model", FakeResponse: "done"},
-	))
+	host, err := threadRuntime.Turn(ctx, newStaticTestFloretAgent(t, "done"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
-		ThreadID: "thread-settlement-owner",
-		TurnID:   "turn-settlement-owner",
-		RunID:    "run-settlement-owner",
-		Input:    flruntime.TurnInput{Text: "finish"},
+	if _, err := host.Run(ctx, flruntime.TurnRequest{
+		TurnID: "turn-settlement-owner",
+		RunID:  "run-settlement-owner",
+		Input:  flruntime.TurnInput{Text: "finish"},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -243,8 +249,8 @@ func isFloretThreadTitleRequest(req ModelGatewayRequest) bool {
 func newFloretRuntimeTestRun(t *testing.T, opts runOptions, providedStores ...*threadstore.Store) *run {
 	t.Helper()
 	var bootstrap *floretBootstrapResult
-	if opts.FloretHostFactory == nil {
-		store := flruntime.NewMemoryStore()
+	if opts.FloretTurnOpener == nil {
+		store := openTestFloretRuntimeHost(t, flstorage.Memory())
 		t.Cleanup(func() { _ = store.Close() })
 		var err error
 		bootstrap, err = newFloretBootstrapResult(store)
@@ -298,17 +304,17 @@ func newFloretRuntimeTestRun(t *testing.T, opts runOptions, providedStores ...*t
 			t.Fatalf("CreateThread: %v", err)
 		}
 	}
-	if opts.FloretHostFactory == nil {
+	if opts.FloretTurnOpener == nil {
 		floretRuntime, err := svc.bindFloretThreadRuntime(opts.ThreadID)
 		if err != nil {
 			t.Fatalf("bind Floret runtime capability: %v", err)
 		}
-		opts.FloretHostFactory = floretRuntime.Turn
-		if opts.FloretCompactionHostFactory == nil {
-			opts.FloretCompactionHostFactory = floretRuntime.Compaction
+		opts.FloretTurnOpener = floretRuntime.Turn
+		if opts.FloretCompactorOpener == nil {
+			opts.FloretCompactorOpener = floretRuntime.Compaction
 		}
-		if opts.FloretSubagentHostFactory == nil {
-			opts.FloretSubagentHostFactory = floretRuntime.SubAgent
+		if opts.FloretSubagentOpener == nil {
+			opts.FloretSubagentOpener = floretRuntime.SubAgent
 		}
 	}
 	if strings.TrimSpace(opts.HostCapabilities.authorityThreadID) == "" {
@@ -524,7 +530,7 @@ func TestRunFloretHostedTurnPublishesFailClosedAuthorityProofOnPanic(t *testing.
 		Shell:            "/bin/bash",
 		HostCapabilities: bindTestRunHostCapabilities(t, svc, "env_panic_authority", "thread_panic_authority"),
 		AIConfig:         &config.AIConfig{},
-		FloretHostFactory: func(context.Context, flruntime.TurnExecutionHostOptions) (floretTurnHost, error) {
+		FloretTurnOpener: func(context.Context, *flruntime.Agent) (floretTurnHost, error) {
 			return &panicFloretTurnHost{recordingFloretHost: &recordingFloretHost{}}, nil
 		},
 		SessionMeta: &session.Meta{EndpointID: "env_panic_authority", CanRead: true, CanWrite: true, CanExecute: true},
@@ -558,7 +564,7 @@ func TestRunFloretHostedTurnTerminatesPendingCommandWithoutCompensation(t *testi
 	workspace := t.TempDir()
 	store := openTerminalProcessTestStore(t)
 	t.Cleanup(func() { _ = store.Close() })
-	floretStore := flruntime.NewMemoryStore()
+	floretStore := openTestFloretRuntimeHost(t, flstorage.Memory())
 	t.Cleanup(func() { _ = floretStore.Close() })
 	const endpointID = "env_terminal_termination"
 	const threadID = "thread_terminal_termination"
@@ -587,19 +593,19 @@ func TestRunFloretHostedTurnTerminatesPendingCommandWithoutCompensation(t *testi
 		t.Fatal(err)
 	}
 	r := newFloretRuntimeTestRun(t, runOptions{
-		Log:               slog.New(slog.NewTextHandler(io.Discard, nil)),
-		StateDir:          svc.stateDir,
-		AgentHomeDir:      workspace,
-		WorkingDir:        workspace,
-		Shell:             "/bin/bash",
-		HostCapabilities:  bindTestRunHostCapabilities(t, svc, endpointID, threadID),
-		AIConfig:          &config.AIConfig{},
-		FloretHostFactory: threadRuntime.Turn,
-		PersistOpTimeout:  5 * time.Second,
-		RunID:             runID,
-		EndpointID:        endpointID,
-		ThreadID:          threadID,
-		MessageID:         turnID,
+		Log:              slog.New(slog.NewTextHandler(io.Discard, nil)),
+		StateDir:         svc.stateDir,
+		AgentHomeDir:     workspace,
+		WorkingDir:       workspace,
+		Shell:            "/bin/bash",
+		HostCapabilities: bindTestRunHostCapabilities(t, svc, endpointID, threadID),
+		AIConfig:         &config.AIConfig{},
+		FloretTurnOpener: threadRuntime.Turn,
+		PersistOpTimeout: 5 * time.Second,
+		RunID:            runID,
+		EndpointID:       endpointID,
+		ThreadID:         threadID,
+		MessageID:        turnID,
 		SessionMeta: &session.Meta{
 			EndpointID: endpointID,
 			CanRead:    true,
@@ -660,9 +666,7 @@ func TestRunFloretHostedTurnTerminatesPendingCommandWithoutCompensation(t *testi
 		readHost, readErr := svc.openFloretThreadReadHost(context.Background(), threadID)
 		var canonical flruntime.ThreadTurnProjection
 		if readErr == nil {
-			canonical, readErr = readHost.ReadTurnProjection(context.Background(), flruntime.ReadTurnProjectionRequest{
-				ThreadID: flruntime.ThreadID(threadID), TurnID: flruntime.TurnID(turnID), RunID: flruntime.RunID(runID),
-			})
+			canonical, readErr = readHost.ReadTurnProjection(context.Background(), flruntime.TurnID(turnID), flruntime.RunID(runID))
 		}
 		canonicalItems := make([]string, 0)
 		for _, segment := range canonical.Segments {
@@ -1410,14 +1414,14 @@ func TestRunFloretHostedTurnNaturalCompactionContinuesStreaming(t *testing.T) {
 
 	events := make([]any, 0, 16)
 	provider := &naturalCompactionProvider{}
-	store := flruntime.NewMemoryStore()
+	store := openTestFloretRuntimeHost(t, flstorage.Memory())
 	t.Cleanup(func() { _ = store.Close() })
 	adapter := testFloretBootstrap(t, store)
 	createHost, err := adapter.newThreadCreate("thread_floret_natural_compact_streaming", "test-create-thread_floret_natural_compact_streaming")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := createHost.CreateThread(context.Background(), flruntime.CreateThreadRequest{ThreadID: "thread_floret_natural_compact_streaming", CreateIntentID: "test-create-thread_floret_natural_compact_streaming"}); err != nil {
+	if _, err := createHost.Create(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	threadRuntime, err := adapter.bindThreadRuntime("thread_floret_natural_compact_streaming")
@@ -1437,10 +1441,10 @@ func TestRunFloretHostedTurnNaturalCompactionContinuesStreaming(t *testing.T) {
 			CanExecute: true,
 			CanAdmin:   true,
 		},
-		RunID:             "run_floret_natural_compact_streaming",
-		ThreadID:          "thread_floret_natural_compact_streaming",
-		MessageID:         "msg_floret_natural_compact_streaming",
-		FloretHostFactory: threadRuntime.Turn,
+		RunID:            "run_floret_natural_compact_streaming",
+		ThreadID:         "thread_floret_natural_compact_streaming",
+		MessageID:        "msg_floret_natural_compact_streaming",
+		FloretTurnOpener: threadRuntime.Turn,
 	})
 	r.onStreamEvent = func(ev any) { events = append(events, ev) }
 
@@ -1476,10 +1480,10 @@ func TestRunFloretHostedTurnNaturalCompactionContinuesStreaming(t *testing.T) {
 			CanExecute: true,
 			CanAdmin:   true,
 		},
-		RunID:             "run_floret_natural_compact_streaming_next",
-		ThreadID:          "thread_floret_natural_compact_streaming",
-		MessageID:         "msg_floret_natural_compact_streaming_next",
-		FloretHostFactory: threadRuntime.Turn,
+		RunID:            "run_floret_natural_compact_streaming_next",
+		ThreadID:         "thread_floret_natural_compact_streaming",
+		MessageID:        "msg_floret_natural_compact_streaming_next",
+		FloretTurnOpener: threadRuntime.Turn,
 	})
 	r.onStreamEvent = func(ev any) { events = append(events, ev) }
 
@@ -1808,7 +1812,7 @@ func TestFloretEventSinkProjectsToolCallStreamObservationToModelIO(t *testing.T)
 	sink := floretEventSink{run: r}
 	sink.EmitEvent(flruntime.Event{Type: observation.EventTypeProviderToolCallDelta, Stream: &flruntime.StreamObservation{
 		Type: flruntime.StreamObservationToolCallDelta,
-		ToolCallStream: &flruntime.ModelToolCallStream{
+		ToolCallStream: &flruntime.ToolCallStream{
 			ID:   "call-1",
 			Name: "read_file",
 		},
@@ -1998,7 +2002,7 @@ func TestFloretEventSinkRecordsSourceObservations(t *testing.T) {
 
 	r := &run{}
 	sink := floretEventSink{run: r}
-	sink.EmitEvent(flruntime.Event{Type: observation.EventTypeProviderSources, Sources: []flruntime.SourceRef{{
+	sink.EmitEvent(flruntime.Event{Type: observation.EventTypeProviderSources, Sources: []flprovider.Source{{
 		Title: "Example docs",
 		URL:   "https://example.test/docs",
 	}}})
@@ -2012,18 +2016,12 @@ func TestFloretEventSinkRecordsSourceObservations(t *testing.T) {
 	}
 }
 
-func TestRedevenFloretGatewayConfigDoesNotCarryProviderConfiguration(t *testing.T) {
+func TestRedevenFloretAgentConfigContainsOnlyProviderNeutralPolicy(t *testing.T) {
 	t.Parallel()
 
-	cfg := redevenFloretAdapterConfig("system", floretModelContextPolicy(1000, 200), config.AIReasoningSelection{Level: config.AIReasoningLevelLow})
-	if cfg.Provider != "" {
-		t.Fatalf("provider=%q, want empty transport field", cfg.Provider)
-	}
-	if cfg.Model != "" {
-		t.Fatalf("model=%q, want empty transport field", cfg.Model)
-	}
-	if cfg.BaseURL != "" || cfg.APIKey != "" {
-		t.Fatalf("Floret config must not carry Redeven provider endpoint or secret: base_url=%q api_key=%q", cfg.BaseURL, cfg.APIKey)
+	cfg := redevenFloretAgentConfig("system", floretModelContextPolicy(1000, 200), config.AIReasoningSelection{Level: config.AIReasoningLevelLow})
+	if cfg.Profile.ID == "" || cfg.SystemPrompt != "system" {
+		t.Fatalf("agent config=%+v, want explicit profile and prompt", cfg)
 	}
 	if cfg.Reasoning.Level != config.AIReasoningLevelLow {
 		t.Fatalf("reasoning=%+v, want low selection", cfg.Reasoning)

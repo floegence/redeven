@@ -3,19 +3,19 @@ package ai
 import (
 	"context"
 
-	flruntime "github.com/floegence/floret/runtime"
+	flruntime "github.com/floegence/floret/v2/runtime"
 )
 
-type floretHostFactory func(context.Context, flruntime.TurnExecutionHostOptions) (floretTurnHost, error)
+type floretTurnRunnerOpener func(context.Context, *flruntime.Agent) (floretTurnHost, error)
 
-type floretCompactionHostFactory func(context.Context, flruntime.ThreadCompactionHostOptions) (floretCompactionHost, error)
+type floretCompactorOpener func(context.Context, *flruntime.Agent) (floretCompactionHost, error)
 
-type floretSubagentHostFactory func(context.Context, flruntime.SubAgentHostOptions) (floretSubagentHost, error)
+type floretSubagentManagerOpener func(context.Context, *flruntime.Agent) (floretSubagentHost, error)
 
 type floretThreadRuntimeCapabilities struct {
-	Turn       floretHostFactory
-	Compaction floretCompactionHostFactory
-	SubAgent   floretSubagentHostFactory
+	Turn       floretTurnRunnerOpener
+	Compaction floretCompactorOpener
+	SubAgent   floretSubagentManagerOpener
 }
 
 type floretThreadReadHostFactory func(context.Context, flruntime.ThreadID) (floretThreadReadHost, error)
@@ -24,9 +24,9 @@ type floretSubagentReadHostFactory func(context.Context, flruntime.ThreadID) (fl
 
 type floretThreadCreateHostFactory func(flruntime.ThreadID, flruntime.CreateIntentID) (floretThreadCreateHost, error)
 
-type floretThreadTitleHostFactory func(context.Context, flruntime.ThreadID, flruntime.EventSink) (floretThreadTitleHost, error)
+type floretThreadTitleHostFactory func(context.Context, flruntime.ThreadID) (floretThreadTitleHost, error)
 
-type floretThreadForkHostFactory func(context.Context, flruntime.ThreadID, flruntime.EventSink) (floretForkHost, error)
+type floretThreadForkHostFactory func(context.Context, flruntime.ThreadID) (floretForkHost, error)
 
 type floretThreadDeleteHostFactory func(context.Context, flruntime.ThreadID) (ThreadDeleteHost, error)
 
@@ -49,7 +49,7 @@ type floretThreadDeleteAuthority interface {
 }
 
 type floretInterruptedTurnRecoveryHost interface {
-	RecoverInterruptedTurn(context.Context) (flruntime.RecoverInterruptedTurnResult, error)
+	Recover(context.Context) (flruntime.RecoverInterruptedTurnResult, error)
 }
 
 type floretInterruptedTurnRecoveryHostFactory interface {
@@ -61,11 +61,11 @@ type floretRootTurnRecoveryBinder func(context.Context, flruntime.ThreadID) (flo
 type floretSubagentTurnRecoveryBinder func(context.Context, flruntime.ThreadID, flruntime.ThreadID) (floretInterruptedTurnRecoveryHostFactory, error)
 
 type floretThreadCreateHost interface {
-	CreateThread(context.Context, flruntime.CreateThreadRequest) (flruntime.ThreadSummary, error)
+	Create(context.Context) (flruntime.ThreadSummary, error)
 }
 
 type floretTurnRunner interface {
-	RunTurn(context.Context, flruntime.RunTurnRequest) (flruntime.TurnResult, error)
+	Run(context.Context, flruntime.TurnRequest) (flruntime.TurnResult, error)
 }
 
 type floretTurnHost interface {
@@ -74,8 +74,8 @@ type floretTurnHost interface {
 }
 
 type floretApprovalAuthority interface {
-	ReadApprovalQueue(context.Context, flruntime.ReadApprovalQueueRequest) (flruntime.ApprovalQueue, error)
-	ResolveApproval(context.Context, flruntime.ResolveApprovalRequest) (flruntime.ResolveApprovalResult, error)
+	ReadApprovalQueue(context.Context) (flruntime.ApprovalQueue, error)
+	ResolveApproval(context.Context, flruntime.ApprovalResolutionRequest) (flruntime.ResolveApprovalResult, error)
 }
 
 type floretPendingToolSettler interface {
@@ -85,41 +85,41 @@ type floretPendingToolSettler interface {
 type floretActiveRunHost interface {
 	floretApprovalAuthority
 	floretPendingToolSettler
-	ReadThreadAgentTodos(context.Context, flruntime.ThreadID) (flruntime.ThreadAgentTodoState, error)
-	UpdateThreadAgentTodos(context.Context, flruntime.UpdateThreadAgentTodosRequest) (flruntime.ThreadAgentTodoState, error)
+	ReadThreadAgentTodos(context.Context) (flruntime.ThreadAgentTodoState, error)
+	UpdateThreadAgentTodos(context.Context, flruntime.AgentTodoUpdateRequest) (flruntime.ThreadAgentTodoState, error)
 }
 
 type floretForkHost interface {
-	ForkThread(context.Context, flruntime.ForkThreadRequest) (flruntime.ForkThreadResult, error)
+	Fork(context.Context, flruntime.ThreadForkRequest) (flruntime.ForkThreadResult, error)
 }
 
 type floretCompactionHost interface {
-	CompactThread(context.Context, flruntime.CompactThreadRequest) (flruntime.CompactThreadResult, error)
+	Compact(context.Context, flruntime.ThreadCompactionRequest) (flruntime.CompactThreadResult, error)
 }
 
 type floretThreadReadHost interface {
-	ReadThread(context.Context, flruntime.ThreadID) (flruntime.ThreadSnapshot, error)
-	ReadThreadOverview(context.Context, flruntime.ThreadID) (flruntime.ThreadOverview, error)
-	ReadThreadTurn(context.Context, flruntime.ReadThreadTurnRequest) (flruntime.ThreadTurnSnapshot, error)
-	ListThreadTurns(context.Context, flruntime.ListThreadTurnsRequest) (flruntime.ThreadTurnsPage, error)
-	ReadThreadAgentTodos(context.Context, flruntime.ThreadID) (flruntime.ThreadAgentTodoState, error)
-	ReadThreadContext(context.Context, flruntime.ThreadID) (flruntime.ThreadContextSnapshot, error)
-	ReadTurnProjection(context.Context, flruntime.ReadTurnProjectionRequest) (flruntime.ThreadTurnProjection, error)
+	ReadThread(context.Context) (flruntime.ThreadSnapshot, error)
+	ReadThreadOverview(context.Context) (flruntime.ThreadOverview, error)
+	ReadThreadTurn(context.Context, flruntime.TurnID) (flruntime.ThreadTurnSnapshot, error)
+	ListThreadTurns(context.Context, flruntime.ThreadTurnsRequest) (flruntime.ThreadTurnsPage, error)
+	ReadThreadAgentTodos(context.Context) (flruntime.ThreadAgentTodoState, error)
+	ReadThreadContext(context.Context) (flruntime.ThreadContextSnapshot, error)
+	ReadTurnProjection(context.Context, flruntime.TurnID, flruntime.RunID) (flruntime.ThreadTurnProjection, error)
 }
 
 type floretSubagentReadHost interface {
-	ListSubAgents(context.Context, flruntime.ThreadID) ([]flruntime.SubAgentSnapshot, error)
-	ReadThreadTurn(context.Context, flruntime.ReadThreadTurnRequest) (flruntime.ThreadTurnSnapshot, error)
-	ListThreadTurns(context.Context, flruntime.ListThreadTurnsRequest) (flruntime.ThreadTurnsPage, error)
-	ReadSubAgentDetail(context.Context, flruntime.ReadSubAgentDetailRequest) (flruntime.SubAgentDetail, error)
+	ListSubAgents(context.Context) ([]flruntime.SubAgentSnapshot, error)
+	ReadThreadTurn(context.Context, flruntime.ThreadID, flruntime.TurnID) (flruntime.ThreadTurnSnapshot, error)
+	ListThreadTurns(context.Context, flruntime.ThreadID, flruntime.ThreadTurnsRequest) (flruntime.ThreadTurnsPage, error)
+	ReadSubAgentDetail(context.Context, flruntime.SubAgentDetailRequest) (flruntime.SubAgentDetail, error)
 }
 
 type floretThreadTitleHost interface {
-	SetThreadTitle(context.Context, flruntime.SetThreadTitleRequest) (flruntime.ThreadSnapshot, error)
+	Set(context.Context, string) (flruntime.ThreadSnapshot, error)
 }
 
 type ThreadDeleteHost interface {
-	DeleteThread(context.Context, flruntime.ThreadID) error
+	Delete(context.Context) error
 }
 
 type FlowerReadStateCleaner interface {
@@ -127,10 +127,10 @@ type FlowerReadStateCleaner interface {
 }
 
 type floretSubagentHost interface {
-	floretPendingToolSettler
-	SpawnSubAgent(context.Context, flruntime.SpawnSubAgentRequest) (flruntime.SubAgentSnapshot, error)
-	SendSubAgentInput(context.Context, flruntime.SendSubAgentInputRequest) (flruntime.SubAgentSnapshot, error)
-	WaitSubAgents(context.Context, flruntime.WaitSubAgentsRequest) (flruntime.WaitSubAgentsResult, error)
-	ListSubAgents(context.Context, flruntime.ThreadID) ([]flruntime.SubAgentSnapshot, error)
-	CloseSubAgent(context.Context, flruntime.CloseSubAgentRequest) (flruntime.SubAgentSnapshot, error)
+	SettlePendingTool(context.Context, flruntime.PendingToolSettlementRequest) (flruntime.PendingToolSettlementResult, error)
+	SpawnSubAgent(context.Context, flruntime.SpawnSubAgent) (flruntime.SubAgentSnapshot, error)
+	SendSubAgentInput(context.Context, flruntime.SendSubAgentInput) (flruntime.SubAgentSnapshot, error)
+	WaitSubAgents(context.Context, flruntime.WaitSubAgents) (flruntime.WaitSubAgentsResult, error)
+	ListSubAgents(context.Context) ([]flruntime.SubAgentSnapshot, error)
+	CloseSubAgent(context.Context, flruntime.CloseSubAgent) (flruntime.SubAgentSnapshot, error)
 }

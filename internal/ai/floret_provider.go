@@ -9,13 +9,15 @@ import (
 	"strings"
 	"sync"
 
-	flruntime "github.com/floegence/floret/runtime"
-	fltools "github.com/floegence/floret/tools"
+	flconfig "github.com/floegence/floret/v2/config"
+	flprovider "github.com/floegence/floret/v2/provider"
+	flruntime "github.com/floegence/floret/v2/runtime"
 	"github.com/floegence/redeven/internal/config"
 )
 
 type floretProviderAdapter struct {
-	base ModelGateway
+	base     ModelGateway
+	identity flprovider.Identity
 
 	providerType string
 	modelName    string
@@ -25,8 +27,8 @@ type floretProviderAdapter struct {
 	budgets                    TurnBudgets
 	disabledCoreControlTools   map[string]struct{}
 	continuationSupported      bool
-	attachmentResolver         func(context.Context, flruntime.MessageAttachment) (ContentPart, error)
-	requestAttachmentResolver  func(context.Context, flruntime.ModelRequest, flruntime.MessageAttachment) (ContentPart, error)
+	attachmentResolver         func(context.Context, flprovider.Attachment) (ContentPart, error)
+	requestAttachmentResolver  func(context.Context, flprovider.Request, flprovider.Attachment) (ContentPart, error)
 	supportsImageInput         bool
 	supportsFileInput          bool
 	supportsAttachmentToolRead bool
@@ -39,7 +41,7 @@ type preparedFloretModelRequest struct {
 	mu          sync.Mutex
 	adapter     *floretProviderAdapter
 	request     ModelGatewayRequest
-	estimate    flruntime.ModelRequestTokenEstimate
+	estimate    flprovider.TokenEstimate
 	fingerprint string
 	streamed    bool
 	closed      bool
@@ -61,6 +63,20 @@ func newFloretProviderAdapter(base ModelGateway, providerType string, modelName 
 	}
 	adapter.continuationSupported = adapter.stateCompatibilityRoute() == "openai-responses"
 	return adapter
+}
+
+func (p *floretProviderAdapter) Identity() flprovider.Identity {
+	if p == nil {
+		return flprovider.Identity{}
+	}
+	return p.identity
+}
+
+func (p *floretProviderAdapter) Capabilities() flprovider.Capabilities {
+	if p == nil {
+		return flprovider.Capabilities{}
+	}
+	return floretModelGatewayCapabilities(p.controls.ReasoningCapability)
 }
 
 func withDisabledFloretCoreControlTools(names ...string) floretProviderAdapterOption {
@@ -85,7 +101,11 @@ func withFloretAttachmentResolver(resolver func(context.Context, flruntime.Messa
 		if adapter == nil {
 			return
 		}
-		adapter.attachmentResolver = resolver
+		if resolver != nil {
+			adapter.attachmentResolver = func(ctx context.Context, attachment flprovider.Attachment) (ContentPart, error) {
+				return resolver(ctx, runtimeAttachmentFromProvider(attachment))
+			}
+		}
 		adapter.supportsImageInput = supportsImageInput
 		adapter.supportsFileInput = supportsFileInput
 	}
@@ -99,7 +119,7 @@ func withFloretAttachmentToolRead(enabled bool) floretProviderAdapterOption {
 	}
 }
 
-func withFloretRequestAttachmentResolver(resolver func(context.Context, flruntime.ModelRequest, flruntime.MessageAttachment) (ContentPart, error), supportsImageInput bool, supportsFileInput bool) floretProviderAdapterOption {
+func withFloretRequestAttachmentResolver(resolver func(context.Context, flprovider.Request, flprovider.Attachment) (ContentPart, error), supportsImageInput bool, supportsFileInput bool) floretProviderAdapterOption {
 	return func(adapter *floretProviderAdapter) {
 		if adapter == nil {
 			return
@@ -118,21 +138,21 @@ func withFloretRequestAdmission(admit func(context.Context) (context.Context, fu
 	}
 }
 
-func (p *floretProviderAdapter) StreamModel(ctx context.Context, req flruntime.ModelRequest) (<-chan flruntime.ModelEvent, error) {
+func (p *floretProviderAdapter) Stream(ctx context.Context, req flprovider.Request) (<-chan flprovider.Event, error) {
 	if p == nil || p.base == nil {
 		return nil, errors.New("nil floret provider adapter")
 	}
 	turnReq, err := p.turnRequest(ctx, req)
 	if err != nil {
-		out := make(chan flruntime.ModelEvent, 1)
-		out <- flruntime.ModelEvent{Type: flruntime.ModelEventError, Err: err, Reason: err.Error()}
+		out := make(chan flprovider.Event, 1)
+		out <- flprovider.Event{Type: flprovider.EventError, Err: err, Reason: err.Error()}
 		close(out)
 		return out, nil
 	}
 	return p.streamPreparedTurn(ctx, turnReq), nil
 }
 
-func (p *floretProviderAdapter) PrepareModelRequest(ctx context.Context, req flruntime.ModelRequest) (flruntime.PreparedModelRequest, error) {
+func (p *floretProviderAdapter) Prepare(ctx context.Context, req flprovider.Request) (flprovider.PreparedRequest, error) {
 	if p == nil || p.base == nil {
 		return nil, errors.New("nil floret provider adapter")
 	}
@@ -158,17 +178,17 @@ func (p *floretProviderAdapter) PrepareModelRequest(ctx context.Context, req flr
 	}, nil
 }
 
-func conservativeRenderedGatewayRequestEstimate(payload []byte, req ModelGatewayRequest) (flruntime.ModelRequestTokenEstimate, error) {
+func conservativeRenderedGatewayRequestEstimate(payload []byte, req ModelGatewayRequest) (flprovider.TokenEstimate, error) {
 	if len(payload) == 0 {
-		return flruntime.ModelRequestTokenEstimate{}, errors.New("prepared model request payload is empty")
+		return flprovider.TokenEstimate{}, errors.New("prepared model request payload is empty")
 	}
 	messages, err := json.Marshal(req.Messages)
 	if err != nil {
-		return flruntime.ModelRequestTokenEstimate{}, fmt.Errorf("marshal prepared model gateway messages: %w", err)
+		return flprovider.TokenEstimate{}, fmt.Errorf("marshal prepared model gateway messages: %w", err)
 	}
 	tools, err := json.Marshal(req.Tools)
 	if err != nil {
-		return flruntime.ModelRequestTokenEstimate{}, fmt.Errorf("marshal prepared model gateway tools: %w", err)
+		return flprovider.TokenEstimate{}, fmt.Errorf("marshal prepared model gateway tools: %w", err)
 	}
 	total := int64(len(payload))
 	messageTokens := int64(len(messages))
@@ -179,16 +199,16 @@ func conservativeRenderedGatewayRequestEstimate(payload []byte, req ModelGateway
 		messageTokens = 0
 		toolTokens = 0
 	}
-	return flruntime.ModelRequestTokenEstimate{
+	return flprovider.TokenEstimate{
 		PrefixTokens: prefixTokens, MessageTokens: messageTokens, ToolDefinitionTokens: toolTokens,
 		EstimatedInputTokens: total, Source: "redeven_gateway_rendered_json_utf8_bytes_v1",
-		Method: "provider_rendered_payload", Confidence: "conservative",
-		Coverage: flruntime.ModelRequestTokenEstimateCoverageComplete,
+		Method: string(flconfig.EstimateMethodProviderRenderedPayload), Confidence: "conservative",
+		Coverage: "complete_request",
 	}, nil
 }
 
-func (p *floretProviderAdapter) streamPreparedTurn(ctx context.Context, turnReq ModelGatewayRequest) <-chan flruntime.ModelEvent {
-	out := make(chan flruntime.ModelEvent, 32)
+func (p *floretProviderAdapter) streamPreparedTurn(ctx context.Context, turnReq ModelGatewayRequest) <-chan flprovider.Event {
+	out := make(chan flprovider.Event, 32)
 	go func() {
 		defer close(out)
 		var err error
@@ -197,7 +217,7 @@ func (p *floretProviderAdapter) streamPreparedTurn(ctx context.Context, turnReq 
 		if p.admitRequest != nil {
 			requestContext, releaseRequest, err = p.admitRequest(ctx)
 			if err != nil {
-				sendFloretProviderEvent(ctx, out, flruntime.ModelEvent{Type: flruntime.ModelEventError, Err: err, Reason: err.Error()})
+				sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventError, Err: err, Reason: err.Error()})
 				return
 			}
 		}
@@ -214,77 +234,77 @@ func (p *floretProviderAdapter) streamPreparedTurn(ctx context.Context, turnReq 
 					return
 				}
 				streamedText.WriteString(ev.Text)
-				sendFloretProviderEvent(ctx, out, flruntime.ModelEvent{Type: flruntime.ModelEventDelta, Text: ev.Text})
+				sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventDelta, Text: ev.Text})
 			case StreamEventThinkingDelta:
 				if ev.Text == "" {
 					return
 				}
 				streamedReasoning.WriteString(ev.Text)
-				sendFloretProviderEvent(ctx, out, flruntime.ModelEvent{Type: flruntime.ModelEventReasoning, Text: ev.Text})
+				sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventReasoning, Text: ev.Text})
 			case StreamEventToolCallStart:
 				if stream := floretToolCallStreamFromFlower(ev.ToolCall); stream != nil {
-					sendFloretProviderEvent(ctx, out, flruntime.ModelEvent{Type: flruntime.ModelEventToolCallStart, ToolCallStream: stream})
+					sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventToolCallStart, ToolCallStream: stream})
 				}
 			case StreamEventToolCallDelta:
 				if stream := floretToolCallStreamFromFlower(ev.ToolCall); stream != nil {
-					sendFloretProviderEvent(ctx, out, flruntime.ModelEvent{Type: flruntime.ModelEventToolCallDelta, ToolCallStream: stream})
+					sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventToolCallDelta, ToolCallStream: stream})
 				}
 			case StreamEventToolCallEnd:
 				if stream := floretToolCallStreamFromFlower(ev.ToolCall); stream != nil {
-					sendFloretProviderEvent(ctx, out, flruntime.ModelEvent{Type: flruntime.ModelEventToolCallEnd, ToolCallStream: stream})
+					sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventToolCallEnd, ToolCallStream: stream})
 				}
 			}
 		}
 		result, err := p.base.StreamTurn(requestContext, turnReq, onEvent)
 		if err != nil {
-			sendFloretProviderEvent(ctx, out, flruntime.ModelEvent{Type: flruntime.ModelEventError, Err: err, Reason: err.Error()})
+			sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventError, Err: err, Reason: err.Error()})
 			return
 		}
 		if strings.TrimSpace(streamedText.String()) == "" && strings.TrimSpace(result.Text) != "" {
-			sendFloretProviderEvent(ctx, out, flruntime.ModelEvent{Type: flruntime.ModelEventDelta, Text: result.Text})
+			sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventDelta, Text: result.Text})
 		}
 		if strings.TrimSpace(streamedReasoning.String()) == "" && strings.TrimSpace(result.Reasoning) != "" {
-			sendFloretProviderEvent(ctx, out, flruntime.ModelEvent{Type: flruntime.ModelEventReasoning, Text: result.Reasoning})
+			sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventReasoning, Text: result.Reasoning})
 		}
 		if len(result.Sources) > 0 {
-			sendFloretProviderEvent(ctx, out, flruntime.ModelEvent{Type: flruntime.ModelEventSources, Sources: flowerSourcesToFloret(result.Sources)})
+			sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventSources, Sources: flowerSourcesToFloret(result.Sources)})
 		}
 		if len(result.ToolCalls) > 0 {
 			if toolName := p.firstDisabledCoreControlToolCall(result.ToolCalls); toolName != "" {
 				err := fmt.Errorf("Floret core control tool %q is disabled for this run", toolName)
-				sendFloretProviderEvent(ctx, out, flruntime.ModelEvent{Type: flruntime.ModelEventError, Err: err, Reason: err.Error()})
+				sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventError, Err: err, Reason: err.Error()})
 				return
 			}
 			toolCalls, err := floretToolCallsFromFlower(result.ToolCalls)
 			if err != nil {
-				sendFloretProviderEvent(ctx, out, flruntime.ModelEvent{Type: flruntime.ModelEventError, Err: err, Reason: err.Error()})
+				sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventError, Err: err, Reason: err.Error()})
 				return
 			}
-			sendFloretProviderEvent(ctx, out, flruntime.ModelEvent{Type: flruntime.ModelEventToolCalls, ToolCalls: toolCalls})
+			sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventToolCalls, ToolCalls: toolCalls})
 		}
 		usage := floretUsageFromFlower(result.Usage)
 		if usage.InputTokens > 0 || usage.OutputTokens > 0 || usage.ReasoningTokens > 0 {
-			sendFloretProviderEvent(ctx, out, flruntime.ModelEvent{Type: flruntime.ModelEventUsage, Usage: usage})
+			sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventUsage, Usage: usage})
 		}
 		responseState, err := flowerProviderStateToFloret(result.ProviderState)
 		if err != nil {
-			sendFloretProviderEvent(ctx, out, flruntime.ModelEvent{Type: flruntime.ModelEventError, Err: err, Reason: err.Error()})
+			sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventError, Err: err, Reason: err.Error()})
 			return
 		}
-		terminal := flruntime.ModelEvent{
-			Type:          flruntime.ModelEventDone,
+		terminal := flprovider.Event{
+			Type:          flprovider.EventDone,
 			Reason:        normalizeReplyFinishReason(result.FinishReason),
 			ResponseState: responseState,
 		}
 		if terminal.Reason == "length" {
-			terminal.Type = flruntime.ModelEventTruncated
+			terminal.Type = flprovider.EventTruncated
 		}
 		sendFloretProviderEvent(ctx, out, terminal)
 	}()
 	return out
 }
 
-func (p *preparedFloretModelRequest) StreamModel(ctx context.Context) (<-chan flruntime.ModelEvent, error) {
+func (p *preparedFloretModelRequest) Stream(ctx context.Context) (<-chan flprovider.Event, error) {
 	if p == nil {
 		return nil, errors.New("nil prepared model request")
 	}
@@ -303,9 +323,9 @@ func (p *preparedFloretModelRequest) StreamModel(ctx context.Context) (<-chan fl
 	return p.adapter.streamPreparedTurn(ctx, p.request), nil
 }
 
-func (p *preparedFloretModelRequest) TokenEstimate() flruntime.ModelRequestTokenEstimate {
+func (p *preparedFloretModelRequest) TokenEstimate() flprovider.TokenEstimate {
 	if p == nil {
-		return flruntime.ModelRequestTokenEstimate{}
+		return flprovider.TokenEstimate{}
 	}
 	return p.estimate
 }
@@ -332,10 +352,11 @@ func (p *preparedFloretModelRequest) Close() error {
 	return nil
 }
 
-var _ flruntime.ModelGatewayRequestPreparer = (*floretProviderAdapter)(nil)
-var _ flruntime.PreparedModelRequest = (*preparedFloretModelRequest)(nil)
+var _ flprovider.Gateway = (*floretProviderAdapter)(nil)
+var _ flprovider.RequestPreparer = (*floretProviderAdapter)(nil)
+var _ flprovider.PreparedRequest = (*preparedFloretModelRequest)(nil)
 
-func floretToolCallStreamFromFlower(call *PartialToolCall) *flruntime.ModelToolCallStream {
+func floretToolCallStreamFromFlower(call *PartialToolCall) *flprovider.ToolCallStream {
 	if call == nil {
 		return nil
 	}
@@ -344,19 +365,19 @@ func floretToolCallStreamFromFlower(call *PartialToolCall) *flruntime.ModelToolC
 	if id == "" || name == "" {
 		return nil
 	}
-	return &flruntime.ModelToolCallStream{
+	return &flprovider.ToolCallStream{
 		ID:   id,
 		Name: name,
 	}
 }
 
-func flowerSourcesToFloret(in []SourceRef) []flruntime.SourceRef {
-	out := make([]flruntime.SourceRef, 0, len(in))
+func flowerSourcesToFloret(in []SourceRef) []flprovider.Source {
+	out := make([]flprovider.Source, 0, len(in))
 	for _, src := range in {
 		if strings.TrimSpace(src.Title) == "" && strings.TrimSpace(src.URL) == "" {
 			continue
 		}
-		out = append(out, flruntime.SourceRef{
+		out = append(out, flprovider.Source{
 			Title: strings.TrimSpace(src.Title),
 			URL:   strings.TrimSpace(src.URL),
 		})
@@ -364,7 +385,7 @@ func flowerSourcesToFloret(in []SourceRef) []flruntime.SourceRef {
 	return out
 }
 
-func (p *floretProviderAdapter) turnRequest(ctx context.Context, req flruntime.ModelRequest) (ModelGatewayRequest, error) {
+func (p *floretProviderAdapter) turnRequest(ctx context.Context, req flprovider.Request) (ModelGatewayRequest, error) {
 	controls := p.controls
 	previous := cloneFloretModelState(req.PreviousState)
 	previousResponseID, err := p.previousResponseID(previous)
@@ -378,7 +399,7 @@ func (p *floretProviderAdapter) turnRequest(ctx context.Context, req flruntime.M
 
 	resolver := p.attachmentResolver
 	if p.requestAttachmentResolver != nil {
-		resolver = func(ctx context.Context, attachment flruntime.MessageAttachment) (ContentPart, error) {
+		resolver = func(ctx context.Context, attachment flprovider.Attachment) (ContentPart, error) {
 			return p.requestAttachmentResolver(ctx, req, attachment)
 		}
 	}
@@ -447,7 +468,7 @@ func (p *floretProviderAdapter) firstDisabledCoreControlToolCall(calls []ToolCal
 	return ""
 }
 
-func (p *floretProviderAdapter) previousResponseID(state *flruntime.ModelState) (string, error) {
+func (p *floretProviderAdapter) previousResponseID(state *flprovider.State) (string, error) {
 	if state == nil {
 		return "", nil
 	}
@@ -484,18 +505,18 @@ func (p *floretProviderAdapter) stateCompatibilityRoute() string {
 	}
 }
 
-func sendFloretProviderEvent(ctx context.Context, out chan<- flruntime.ModelEvent, ev flruntime.ModelEvent) {
+func sendFloretProviderEvent(ctx context.Context, out chan<- flprovider.Event, ev flprovider.Event) {
 	select {
 	case <-ctx.Done():
 	case out <- ev:
 	}
 }
 
-func (p *floretProviderAdapter) floretMessagesToFlower(ctx context.Context, messages []flruntime.ModelMessage) ([]Message, error) {
+func (p *floretProviderAdapter) floretMessagesToFlower(ctx context.Context, messages []flprovider.Message) ([]Message, error) {
 	return p.floretMessagesToFlowerWithResolver(ctx, messages, p.attachmentResolver)
 }
 
-func (p *floretProviderAdapter) floretMessagesToFlowerWithResolver(ctx context.Context, messages []flruntime.ModelMessage, resolver func(context.Context, flruntime.MessageAttachment) (ContentPart, error)) ([]Message, error) {
+func (p *floretProviderAdapter) floretMessagesToFlowerWithResolver(ctx context.Context, messages []flprovider.Message, resolver func(context.Context, flprovider.Attachment) (ContentPart, error)) ([]Message, error) {
 	out := make([]Message, 0, len(messages))
 	for i, msg := range messages {
 		if err := msg.Validate(); err != nil {
@@ -529,6 +550,9 @@ func (p *floretProviderAdapter) floretMessagesToFlowerWithResolver(ctx context.C
 			parts = append(parts, ContentPart{Type: "reasoning", Text: msg.Reasoning})
 		}
 		for _, call := range msg.ToolCalls {
+			if !json.Valid([]byte(call.Args)) {
+				return nil, fmt.Errorf("Floret model message %d tool %q has invalid JSON args", i, call.Name)
+			}
 			parts = append(parts, ContentPart{
 				Type:       "tool_call",
 				ToolCallID: call.ID,
@@ -573,8 +597,8 @@ func (p *floretProviderAdapter) validateResolvedAttachment(part ContentPart) err
 	return p.validateResolvedAttachmentForProvider(part)
 }
 
-func floretToolCallsFromFlower(calls []ToolCall) ([]fltools.ToolCall, error) {
-	out := make([]fltools.ToolCall, 0, len(calls))
+func floretToolCallsFromFlower(calls []ToolCall) ([]flprovider.ToolCall, error) {
+	out := make([]flprovider.ToolCall, 0, len(calls))
 	for _, call := range calls {
 		id := strings.TrimSpace(call.ID)
 		name := strings.TrimSpace(call.Name)
@@ -585,12 +609,12 @@ func floretToolCallsFromFlower(calls []ToolCall) ([]fltools.ToolCall, error) {
 		if err != nil || !json.Valid(b) {
 			return nil, fmt.Errorf("invalid Flower tool args for %s", name)
 		}
-		out = append(out, fltools.ToolCall{ID: id, Name: name, Args: string(b)})
+		out = append(out, flprovider.ToolCall{ID: id, Name: name, Args: string(b)})
 	}
 	return out, nil
 }
 
-func flowerToolsFromFloret(defs []fltools.ToolDefinition) ([]ToolDef, error) {
+func flowerToolsFromFloret(defs []flprovider.ToolDefinition) ([]ToolDef, error) {
 	out := make([]ToolDef, 0, len(defs))
 	for _, def := range defs {
 		name := strings.TrimSpace(def.Name)
@@ -610,7 +634,7 @@ func flowerToolsFromFloret(defs []fltools.ToolDefinition) ([]ToolDef, error) {
 	return out, nil
 }
 
-func flowerProviderStateToFloret(state *ModelGatewayState) (*flruntime.ModelState, error) {
+func flowerProviderStateToFloret(state *ModelGatewayState) (*flprovider.State, error) {
 	if state == nil {
 		return nil, nil
 	}
@@ -619,10 +643,10 @@ func flowerProviderStateToFloret(state *ModelGatewayState) (*flruntime.ModelStat
 	if kind == "" || id == "" {
 		return nil, errors.New("Flower provider state requires kind and id")
 	}
-	return &flruntime.ModelState{Kind: kind, ID: id, Attributes: cloneStringMap(state.Attributes)}, nil
+	return &flprovider.State{Kind: kind, ID: id, Attributes: cloneStringMap(state.Attributes)}, nil
 }
 
-func floretProviderStateToFlower(state *flruntime.ModelState) *ModelGatewayState {
+func floretProviderStateToFlower(state *flprovider.State) *ModelGatewayState {
 	if state == nil {
 		return nil
 	}
@@ -634,8 +658,8 @@ func floretProviderStateToFlower(state *flruntime.ModelState) *ModelGatewayState
 	return &ModelGatewayState{Kind: kind, ID: id, Attributes: cloneStringMap(state.Attributes)}
 }
 
-func floretUsageFromFlower(usage TurnUsage) flruntime.ProviderUsage {
-	out := flruntime.ProviderUsage{
+func floretUsageFromFlower(usage TurnUsage) flprovider.Usage {
+	out := flprovider.Usage{
 		InputTokens:     usage.InputTokens,
 		OutputTokens:    usage.OutputTokens,
 		ReasoningTokens: usage.ReasoningTokens,
@@ -643,7 +667,7 @@ func floretUsageFromFlower(usage TurnUsage) flruntime.ProviderUsage {
 	return normalizeFloretUsage(out)
 }
 
-func flowerUsageFromFloret(usage flruntime.ProviderUsage) TurnUsage {
+func flowerUsageFromFloret(usage flprovider.Usage) TurnUsage {
 	usage = normalizeFloretUsage(usage)
 	return TurnUsage{
 		InputTokens:     usage.InputTokens,
@@ -652,11 +676,11 @@ func flowerUsageFromFloret(usage flruntime.ProviderUsage) TurnUsage {
 	}
 }
 
-func cloneFloretModelState(state *flruntime.ModelState) *flruntime.ModelState {
+func cloneFloretModelState(state *flprovider.State) *flprovider.State {
 	if state == nil {
 		return nil
 	}
-	out := &flruntime.ModelState{
+	out := &flprovider.State{
 		Kind: strings.TrimSpace(state.Kind),
 		ID:   strings.TrimSpace(state.ID),
 	}
@@ -680,7 +704,23 @@ func cloneStringMap(in map[string]string) map[string]string {
 	return out
 }
 
-func normalizeFloretUsage(usage flruntime.ProviderUsage) flruntime.ProviderUsage {
+func runtimeAttachmentFromProvider(attachment flprovider.Attachment) flruntime.MessageAttachment {
+	out := flruntime.MessageAttachment{
+		ResourceRef: attachment.ResourceRef,
+		Name:        attachment.Name,
+		MIMEType:    attachment.MIMEType,
+		SizeBytes:   attachment.SizeBytes,
+	}
+	if attachment.TextStats != nil {
+		out.TextStats = &flruntime.MessageAttachmentTextStats{
+			UnicodeCodePointCount: attachment.TextStats.UnicodeCodePointCount,
+			LogicalLineCount:      attachment.TextStats.LogicalLineCount,
+		}
+	}
+	return out
+}
+
+func normalizeFloretUsage(usage flprovider.Usage) flprovider.Usage {
 	if usage.TotalTokens <= 0 {
 		usage.TotalTokens = usage.InputTokens + usage.OutputTokens + usage.ReasoningTokens + usage.CacheReadTokens + usage.CacheWriteTokens
 	}

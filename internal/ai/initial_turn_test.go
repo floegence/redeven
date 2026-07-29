@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	flruntime "github.com/floegence/floret/runtime"
+	flruntime "github.com/floegence/floret/v2/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -53,10 +53,7 @@ func TestSendInitialUserTurnCreatesCanonicalThreadBeforeAdmission(t *testing.T) 
 	if err != nil {
 		t.Fatalf("open canonical thread: %v", err)
 	}
-	turn, err := host.ReadThreadTurn(t.Context(), flruntime.ReadThreadTurnRequest{
-		ThreadID: flruntime.ThreadID(threadID),
-		TurnID:   flruntime.TurnID(turnID),
-	})
+	turn, err := host.ReadThreadTurn(t.Context(), flruntime.TurnID(turnID))
 	if err != nil {
 		t.Fatalf("ReadThreadTurn: %v", err)
 	}
@@ -175,9 +172,7 @@ func TestSendInitialUserTurnTransfersStagingAttachmentToCanonicalTurn(t *testing
 	if err != nil || retried != first {
 		t.Fatalf("retry=%#v err=%v, want %#v", retried, err, first)
 	}
-	turn, err := mustOpenInitialTurnReadHost(t, svc, req.ThreadID).ReadThreadTurn(t.Context(), flruntime.ReadThreadTurnRequest{
-		ThreadID: flruntime.ThreadID(req.ThreadID), TurnID: flruntime.TurnID(req.Input.TurnID),
-	})
+	turn, err := mustOpenInitialTurnReadHost(t, svc, req.ThreadID).ReadThreadTurn(t.Context(), flruntime.TurnID(req.Input.TurnID))
 	if err != nil {
 		t.Fatal(err)
 	}

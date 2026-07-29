@@ -5,7 +5,7 @@ import (
 	"errors"
 	"strings"
 
-	flruntime "github.com/floegence/floret/runtime"
+	flruntime "github.com/floegence/floret/v2/runtime"
 )
 
 type floretReadCapabilities struct {

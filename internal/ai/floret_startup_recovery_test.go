@@ -10,7 +10,8 @@ import (
 	"testing"
 	"time"
 
-	flruntime "github.com/floegence/floret/runtime"
+	flruntime "github.com/floegence/floret/v2/runtime"
+	flstorage "github.com/floegence/floret/v2/storage"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
@@ -39,7 +40,7 @@ func (f *scriptedInterruptedTurnRecoveryFactory) NewHost(context.Context) (flore
 	return f.host, nil
 }
 
-func (h *scriptedInterruptedTurnRecoveryHost) RecoverInterruptedTurn(context.Context) (flruntime.RecoverInterruptedTurnResult, error) {
+func (h *scriptedInterruptedTurnRecoveryHost) Recover(context.Context) (flruntime.RecoverInterruptedTurnResult, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	index := h.calls
@@ -81,7 +82,7 @@ type lifecycleBoundStartupRecoveryHost struct {
 	backgroundCanceled chan struct{}
 }
 
-func (h *lifecycleBoundStartupRecoveryHost) RecoverInterruptedTurn(ctx context.Context) (flruntime.RecoverInterruptedTurnResult, error) {
+func (h *lifecycleBoundStartupRecoveryHost) Recover(ctx context.Context) (flruntime.RecoverInterruptedTurnResult, error) {
 	h.mu.Lock()
 	h.calls++
 	call := h.calls
@@ -95,19 +96,19 @@ func (h *lifecycleBoundStartupRecoveryHost) RecoverInterruptedTurn(ctx context.C
 	return flruntime.RecoverInterruptedTurnResult{}, ctx.Err()
 }
 
-func (h startupRecoverySubagentReadHost) ListSubAgents(context.Context, flruntime.ThreadID) ([]flruntime.SubAgentSnapshot, error) {
+func (h startupRecoverySubagentReadHost) ListSubAgents(context.Context) ([]flruntime.SubAgentSnapshot, error) {
 	return append([]flruntime.SubAgentSnapshot(nil), h.snapshots...), nil
 }
 
-func (startupRecoverySubagentReadHost) ListThreadTurns(context.Context, flruntime.ListThreadTurnsRequest) (flruntime.ThreadTurnsPage, error) {
+func (startupRecoverySubagentReadHost) ListThreadTurns(context.Context, flruntime.ThreadID, flruntime.ThreadTurnsRequest) (flruntime.ThreadTurnsPage, error) {
 	return flruntime.ThreadTurnsPage{}, errors.New("unexpected SubAgent turn read")
 }
 
-func (startupRecoverySubagentReadHost) ReadThreadTurn(context.Context, flruntime.ReadThreadTurnRequest) (flruntime.ThreadTurnSnapshot, error) {
+func (startupRecoverySubagentReadHost) ReadThreadTurn(context.Context, flruntime.ThreadID, flruntime.TurnID) (flruntime.ThreadTurnSnapshot, error) {
 	return flruntime.ThreadTurnSnapshot{}, errors.New("unexpected SubAgent exact turn read")
 }
 
-func (startupRecoverySubagentReadHost) ReadSubAgentDetail(context.Context, flruntime.ReadSubAgentDetailRequest) (flruntime.SubAgentDetail, error) {
+func (startupRecoverySubagentReadHost) ReadSubAgentDetail(context.Context, flruntime.SubAgentDetailRequest) (flruntime.SubAgentDetail, error) {
 	return flruntime.SubAgentDetail{}, errors.New("unexpected SubAgent detail read")
 }
 
@@ -403,7 +404,7 @@ func TestFloretStartupRecoveryCompletesResolvedExactTarget(t *testing.T) {
 }
 
 func TestFloretStartupRecoveryRejectsMissingCanonicalAuthority(t *testing.T) {
-	floretStore := flruntime.NewMemoryStore()
+	floretStore := openTestFloretRuntimeHost(t, flstorage.Memory())
 	t.Cleanup(func() { _ = floretStore.Close() })
 	_, recovery, err := configureFloretRuntime(floretStore)
 	if err != nil {

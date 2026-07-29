@@ -12,23 +12,23 @@ import (
 	"strings"
 	"testing"
 
-	flruntime "github.com/floegence/floret/runtime"
+	flruntime "github.com/floegence/floret/v2/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/session"
 )
 
 type canonicalReferenceCountingReadHost struct {
 	floretThreadReadHost
-	exactRequests []flruntime.ReadThreadTurnRequest
-	listRequests  []flruntime.ListThreadTurnsRequest
+	exactRequests []flruntime.TurnID
+	listRequests  []flruntime.ThreadTurnsRequest
 }
 
-func (h *canonicalReferenceCountingReadHost) ReadThreadTurn(ctx context.Context, req flruntime.ReadThreadTurnRequest) (flruntime.ThreadTurnSnapshot, error) {
-	h.exactRequests = append(h.exactRequests, req)
-	return h.floretThreadReadHost.ReadThreadTurn(ctx, req)
+func (h *canonicalReferenceCountingReadHost) ReadThreadTurn(ctx context.Context, turnID flruntime.TurnID) (flruntime.ThreadTurnSnapshot, error) {
+	h.exactRequests = append(h.exactRequests, turnID)
+	return h.floretThreadReadHost.ReadThreadTurn(ctx, turnID)
 }
 
-func (h *canonicalReferenceCountingReadHost) ListThreadTurns(ctx context.Context, req flruntime.ListThreadTurnsRequest) (flruntime.ThreadTurnsPage, error) {
+func (h *canonicalReferenceCountingReadHost) ListThreadTurns(ctx context.Context, req flruntime.ThreadTurnsRequest) (flruntime.ThreadTurnsPage, error) {
 	h.listRequests = append(h.listRequests, req)
 	return h.floretThreadReadHost.ListThreadTurns(ctx, req)
 }
@@ -55,10 +55,9 @@ func TestResolveFlowerCanonicalReferenceOpenTargetUsesExactFloretIdentity(t *tes
 	fileLocator := canonicalReferenceLocatorForTest(t, meta.EndpointID, filePath, false)
 	directoryLocator := canonicalReferenceLocatorForTest(t, meta.EndpointID, directoryPath, true)
 	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "done")
-	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
-		ThreadID: flruntime.ThreadID(thread.ThreadID),
-		TurnID:   "turn_reference_open",
-		RunID:    "run_reference_open",
+	if _, err := host.Run(ctx, flruntime.TurnRequest{
+		TurnID: "turn_reference_open",
+		RunID:  "run_reference_open",
 		Input: flruntime.TurnInput{References: []flruntime.MessageReference{
 			{ReferenceID: "context:0", Kind: flruntime.MessageReferenceFile, Label: "main.ts", ResourceRef: fileLocator},
 			{ReferenceID: "context:1", Kind: flruntime.MessageReferenceDirectory, Label: "src", ResourceRef: directoryLocator},
@@ -88,7 +87,7 @@ func TestResolveFlowerCanonicalReferenceOpenTargetUsesExactFloretIdentity(t *tes
 	if fileTarget.Kind != "file" || fileTarget.Path != filePath || fileTarget.Label != "main.ts" {
 		t.Fatalf("file target=%#v", fileTarget)
 	}
-	if len(countingReadHost.exactRequests) != 1 || countingReadHost.exactRequests[0].TurnID != "turn_reference_open" || len(countingReadHost.listRequests) != 0 {
+	if len(countingReadHost.exactRequests) != 1 || countingReadHost.exactRequests[0] != "turn_reference_open" || len(countingReadHost.listRequests) != 0 {
 		t.Fatalf("exact requests=%#v list requests=%#v", countingReadHost.exactRequests, countingReadHost.listRequests)
 	}
 
@@ -150,8 +149,8 @@ func TestResolveFlowerCanonicalReferenceOpenTargetReauthorizesCurrentSessionAndS
 	}
 
 	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "done")
-	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
-		ThreadID: flruntime.ThreadID(thread.ThreadID), TurnID: "turn_reference_authority", RunID: "run_reference_authority",
+	if _, err := host.Run(ctx, flruntime.TurnRequest{
+		TurnID: "turn_reference_authority", RunID: "run_reference_authority",
 		Input: flruntime.TurnInput{References: []flruntime.MessageReference{
 			{ReferenceID: "context:0", Kind: flruntime.MessageReferenceFile, Label: "allowed.txt", ResourceRef: canonicalReferenceLocatorForTest(t, "env_other", allowedPath, false)},
 			{ReferenceID: "context:1", Kind: flruntime.MessageReferenceFile, Label: "escaped.txt", ResourceRef: canonicalReferenceLocatorForTest(t, meta.EndpointID, linkPath, false)},
@@ -230,8 +229,8 @@ func TestResolveFlowerCanonicalReferenceOpenTargetRequiresExactCurrentTargetIden
 	})
 
 	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "done")
-	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
-		ThreadID: flruntime.ThreadID(thread.ThreadID), TurnID: "turn_reference_target", RunID: "run_reference_target",
+	if _, err := host.Run(ctx, flruntime.TurnRequest{
+		TurnID: "turn_reference_target", RunID: "run_reference_target",
 		Input: flruntime.TurnInput{References: []flruntime.MessageReference{
 			{ReferenceID: "context:0", Kind: flruntime.MessageReferenceFile, Label: "target.txt", ResourceRef: exactLocator},
 			{ReferenceID: "context:1", Kind: flruntime.MessageReferenceFile, Label: "target.txt", ResourceRef: forgedLocator},
@@ -298,8 +297,8 @@ func TestResolveFlowerCanonicalReferenceOpenTargetRejectsReferenceAfterCurrentTa
 		Path:              path,
 	})
 	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "done")
-	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
-		ThreadID: flruntime.ThreadID(thread.ThreadID), TurnID: "turn_reference_reauth", RunID: "run_reference_reauth",
+	if _, err := host.Run(ctx, flruntime.TurnRequest{
+		TurnID: "turn_reference_reauth", RunID: "run_reference_reauth",
 		Input: flruntime.TurnInput{References: []flruntime.MessageReference{{
 			ReferenceID: "context:0", Kind: flruntime.MessageReferenceFile, Label: "reauth.txt", ResourceRef: resourceRef,
 		}}},
@@ -341,8 +340,8 @@ func TestResolveFlowerCanonicalReferenceOpenTargetFindsReferenceBeforeTailPage(t
 	}
 
 	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "done")
-	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
-		ThreadID: flruntime.ThreadID(thread.ThreadID), TurnID: "turn_001", RunID: "run_001",
+	if _, err := host.Run(ctx, flruntime.TurnRequest{
+		TurnID: "turn_001", RunID: "run_001",
 		Input: flruntime.TurnInput{References: []flruntime.MessageReference{{
 			ReferenceID: "context:0", Kind: flruntime.MessageReferenceFile, Label: "oldest.txt",
 			ResourceRef: canonicalReferenceLocatorForTest(t, meta.EndpointID, path, false),
@@ -354,11 +353,10 @@ func TestResolveFlowerCanonicalReferenceOpenTargetFindsReferenceBeforeTailPage(t
 		t.Fatalf("RunTurn 1: %v", err)
 	}
 	for index := 2; index <= 201; index++ {
-		if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
-			ThreadID: flruntime.ThreadID(thread.ThreadID),
-			TurnID:   flruntime.TurnID(fmt.Sprintf("turn_%03d", index)),
-			RunID:    flruntime.RunID(fmt.Sprintf("run_%03d", index)),
-			Input:    flruntime.TurnInput{Text: fmt.Sprintf("message %d", index)},
+		if _, err := host.Run(ctx, flruntime.TurnRequest{
+			TurnID: flruntime.TurnID(fmt.Sprintf("turn_%03d", index)),
+			RunID:  flruntime.RunID(fmt.Sprintf("run_%03d", index)),
+			Input:  flruntime.TurnInput{Text: fmt.Sprintf("message %d", index)},
 		}); err != nil {
 			t.Fatalf("RunTurn %d: %v", index, err)
 		}
@@ -368,18 +366,14 @@ func TestResolveFlowerCanonicalReferenceOpenTargetFindsReferenceBeforeTailPage(t
 	if err != nil {
 		t.Fatalf("open read host: %v", err)
 	}
-	tail, err := readHost.ListThreadTurns(ctx, flruntime.ListThreadTurnsRequest{
-		ThreadID: flruntime.ThreadID(thread.ThreadID), Tail: 200,
-	})
+	tail, err := readHost.ListThreadTurns(ctx, flruntime.ThreadTurnsRequest{Tail: 200})
 	if err != nil {
 		t.Fatalf("list tail: %v", err)
 	}
 	if len(tail.Turns) != 200 || !tail.HasMore || tail.BeforeCursor == nil || strings.TrimSpace(string(*tail.BeforeCursor)) == "" {
 		t.Fatalf("tail page=%#v, want 200 turns and an advancing before cursor", tail)
 	}
-	older, err := readHost.ListThreadTurns(ctx, flruntime.ListThreadTurnsRequest{
-		ThreadID: flruntime.ThreadID(thread.ThreadID), BeforeCursor: tail.BeforeCursor, Limit: 200,
-	})
+	older, err := readHost.ListThreadTurns(ctx, flruntime.ThreadTurnsRequest{BeforeCursor: tail.BeforeCursor, Limit: 200})
 	if err != nil {
 		t.Fatalf("list older: %v", err)
 	}
@@ -416,8 +410,8 @@ func TestResolveFlowerCanonicalReferenceOpenTargetRejectsDeletedOrReplacedResour
 		t.Fatal(err)
 	}
 	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "done")
-	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
-		ThreadID: flruntime.ThreadID(thread.ThreadID), TurnID: "turn_reference_stale", RunID: "run_reference_stale",
+	if _, err := host.Run(ctx, flruntime.TurnRequest{
+		TurnID: "turn_reference_stale", RunID: "run_reference_stale",
 		Input: flruntime.TurnInput{References: []flruntime.MessageReference{{
 			ReferenceID: "context:0", Kind: flruntime.MessageReferenceFile, Label: "stale.txt", ResourceRef: canonicalReferenceLocatorForTest(t, meta.EndpointID, path, false),
 		}}},

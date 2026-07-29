@@ -9,9 +9,8 @@ import (
 	"sync"
 	"time"
 
-	flconfig "github.com/floegence/floret/config"
-	"github.com/floegence/floret/observation"
-	flruntime "github.com/floegence/floret/runtime"
+	"github.com/floegence/floret/v2/observation"
+	flruntime "github.com/floegence/floret/v2/runtime"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
@@ -496,31 +495,31 @@ func (s *Service) runIdleThreadCompaction(ctx context.Context, meta *session.Met
 		return err
 	}
 	r := newRun(runOptions{
-		Log:                         s.log,
-		StateDir:                    s.stateDir,
-		AgentHomeDir:                s.agentHomeDir,
-		WorkingDir:                  runWorkingDir,
-		FilesystemScope:             s.scope,
-		Shell:                       s.shell,
-		HostCapabilities:            runHost,
-		AIConfig:                    cfg,
-		SessionMeta:                 &metaCopy,
-		ResolveProviderKey:          s.resolveProviderKey,
-		ResolveWebSearchKey:         s.resolveWebSearchKey,
-		DesktopModelSource:          desktopModelSource,
-		RunID:                       runID,
-		ChannelID:                   strings.TrimSpace(meta.ChannelID),
-		EndpointID:                  endpointID,
-		ThreadID:                    threadID,
-		UserPublicID:                strings.TrimSpace(meta.UserPublicID),
-		MessageID:                   messageID,
-		UploadsDir:                  uploadsDir,
-		ProductCapabilities:         productCapabilities,
-		FloretHostFactory:           floretRuntime.Turn,
-		FloretCompactionHostFactory: floretRuntime.Compaction,
-		PersistOpTimeout:            persistTO,
-		MaxWallTime:                 runMaxWallTime,
-		IdleTimeout:                 runIdleTimeout,
+		Log:                   s.log,
+		StateDir:              s.stateDir,
+		AgentHomeDir:          s.agentHomeDir,
+		WorkingDir:            runWorkingDir,
+		FilesystemScope:       s.scope,
+		Shell:                 s.shell,
+		HostCapabilities:      runHost,
+		AIConfig:              cfg,
+		SessionMeta:           &metaCopy,
+		ResolveProviderKey:    s.resolveProviderKey,
+		ResolveWebSearchKey:   s.resolveWebSearchKey,
+		DesktopModelSource:    desktopModelSource,
+		RunID:                 runID,
+		ChannelID:             strings.TrimSpace(meta.ChannelID),
+		EndpointID:            endpointID,
+		ThreadID:              threadID,
+		UserPublicID:          strings.TrimSpace(meta.UserPublicID),
+		MessageID:             messageID,
+		UploadsDir:            uploadsDir,
+		ProductCapabilities:   productCapabilities,
+		FloretTurnOpener:      floretRuntime.Turn,
+		FloretCompactorOpener: floretRuntime.Compaction,
+		PersistOpTimeout:      persistTO,
+		MaxWallTime:           runMaxWallTime,
+		IdleTimeout:           runIdleTimeout,
 		OnStreamEvent: func(ev any) {
 			s.broadcastStreamEvent(endpointID, threadID, "", runID, ev)
 		},
@@ -586,30 +585,30 @@ func (s *Service) runIdleThreadCompaction(ctx context.Context, meta *session.Met
 		contextWindow = modelCapability.MaxContextTokens
 	}
 	systemPrompt := r.buildLayeredSystemPrompt("", permissionTypeString(permissionType), TaskComplexityStandard, 0, true, nil, todoRuntimeState{}, "", runCapabilityContract{})
-	if r.floretCompactionHostFactory == nil {
-		return errors.New("floret compaction host factory not ready")
+	if r.floretCompactorOpener == nil {
+		return errors.New("floret compactor opener not ready")
 	}
 	gatewayIdentity, err := redevenFloretGatewayIdentity(providerCfg.ID, providerType, providerCfg.BaseURL, modelCapability.WireModelName, flProvider.stateCompatibilityRoute())
 	if err != nil {
 		return err
 	}
-	compactionOptions, err := flruntime.NewThreadCompactionHostOptions(
-		flconfig.Config{SystemPrompt: systemPrompt, ContextPolicy: floretModelContextPolicy(contextWindow, 0), Reasoning: reasoning},
-		flruntime.WithThreadCompactionModelGateway(flProvider, gatewayIdentity, floretModelGatewayCapabilities(modelCapability.ReasoningCapability)),
-		flruntime.WithThreadCompactionEventSink(floretEventSink{run: r}),
-		flruntime.WithThreadCompactionLoopLimits(flruntime.LoopLimits{NoProgressLimit: 2, DuplicateToolLimit: 3}),
+	flProvider.identity = gatewayIdentity
+	agent, err := flruntime.NewAgent(
+		redevenFloretAgentConfig(systemPrompt, floretModelContextPolicy(contextWindow, 0), reasoning),
+		flProvider,
+		flruntime.WithAgentEventSink(floretEventSink{run: r}),
+		flruntime.WithAgentLoopLimits(flruntime.LoopLimits{NoProgressLimit: 2, DuplicateToolLimit: 3}),
 	)
 	if err != nil {
 		return err
 	}
-	host, err := r.floretCompactionHostFactory(execCtx, compactionOptions)
+	host, err := r.floretCompactorOpener(execCtx, agent)
 	if err != nil {
 		return err
 	}
 	var compactionHost floretCompactionHost = host
 	r.expectFloretRuntimeEventIdentity("", threadID, "", false)
-	result, err := compactionHost.CompactThread(execCtx, flruntime.CompactThreadRequest{
-		ThreadID:  flruntime.ThreadID(threadID),
+	result, err := compactionHost.Compact(execCtx, flruntime.ThreadCompactionRequest{
 		RequestID: strings.TrimSpace(manual.RequestID),
 		Source:    strings.TrimSpace(manual.Source),
 		Labels:    labels,
