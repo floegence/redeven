@@ -74,12 +74,10 @@ function resolveMermaidColors(root: HTMLElement): Record<string, string> {
       throw new Error(`Mermaid theme could not resolve the ${token} color token.`);
     }
 
-    context.fillStyle = '#010203';
+    const invalidColorSentinel = context.createLinearGradient(0, 0, 1, 1);
+    context.fillStyle = invalidColorSentinel;
     context.fillStyle = resolved;
-    const firstProjection = context.fillStyle;
-    context.fillStyle = '#040506';
-    context.fillStyle = resolved;
-    if (context.fillStyle !== firstProjection) {
+    if (typeof context.fillStyle !== 'string') {
       throw new Error(`Mermaid theme token ${token} is not a valid browser color.`);
     }
 
