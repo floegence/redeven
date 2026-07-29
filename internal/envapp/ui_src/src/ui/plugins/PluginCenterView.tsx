@@ -20,7 +20,9 @@ import type {
 } from './pluginTypes';
 import { createUIPresentationEventRecorder } from '../services/uiPresentationTransactions';
 import { ExternalPluginInstallDialog } from './ExternalPluginInstallDialog';
-import { PLUGIN_MOBILE_TOUCH_TARGET_CLASS, presentPlugin, type PluginPrimaryAction } from './pluginPresentation';
+import { PLUGIN_MOBILE_TOUCH_TARGET_CLASS, pluginLifecycleLabel, pluginTrustLabel, presentPlugin, type PluginPrimaryAction } from './pluginPresentation';
+import { PluginCenterItem } from './PluginCenterItems';
+import { PluginIdentityHeader } from './PluginPresentationPrimitives';
 
 export type PluginCenterViewProps = {
   projection: PluginInventoryProjection;
@@ -362,7 +364,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
             data-plugin-center-list
             class={cn(
               'min-h-0 flex-1 overflow-y-auto',
-              activeTab() === 'discover' && 'grid auto-rows-min grid-cols-1 gap-3 p-4 md:grid-cols-2',
+              activeTab() === 'discover' && 'grid auto-rows-min grid-cols-1 gap-4 p-4 md:grid-cols-2',
               activeTab() === 'discover' && !selectedItem() && 'lg:grid-cols-3 xl:grid-cols-4',
             )}
           >
@@ -371,34 +373,16 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
             </Show>
             <For each={visibleItems()}>
               {(item) => (
-                <button
-                  type="button"
-                  data-plugin-center-item={item.inventoryKey}
-                  aria-current={selectedItem()?.inventoryKey === item.inventoryKey ? 'true' : undefined}
-                  class={cn(
-                    'flex w-full cursor-pointer items-start gap-3 px-4 py-3 text-left transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                    activeTab() === 'discover' ? 'min-h-36 rounded-md border bg-background' : 'border-b',
-                    selectedItem()?.inventoryKey === item.inventoryKey
-                      ? activeTab() === 'discover' ? 'border-primary bg-primary/5' : 'bg-primary/[0.08] shadow-[inset_3px_0_0_var(--primary)]'
-                      : 'bg-background',
-                  )}
-                  onClick={(event) => openDetails(item.inventoryKey, event.currentTarget)}
-                >
-                  <PluginIcon item={item} class="mt-0.5" />
-                  <span class="min-w-0 flex-1">
-                    <span class="flex min-w-0 items-center gap-2">
-                      <span class="truncate text-sm font-semibold text-foreground">{item.displayName}</span>
-                      <TrustBadge item={item} />
-                    </span>
-                    <span class="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{item.description}</span>
-                    <span class="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
-                      <span class={statusPillClass(item)}>{statusLabel(item, i18n)}</span>
-                      <Show when={item.version}>
-                        <span class="text-muted-foreground">v{item.version}</span>
-                      </Show>
-                    </span>
-                  </span>
-                </button>
+                <PluginCenterItem
+                  item={item}
+                  tab={activeTab()}
+                  selected={selectedItem()?.inventoryKey === item.inventoryKey}
+                  canManage={canManage()}
+                  pending={loading() || commandPending()}
+                  onOpenDetails={(target) => openDetails(item.inventoryKey, target)}
+                  onInstall={() => openExternalDialog(undefined, item.officialCatalog?.distribution.installSource)}
+                  onUpdate={() => openExternalDialog(item, item.officialCatalog?.distribution.installSource)}
+                />
               )}
             </For>
             <Show when={!loading() && visibleItems().length === 0}>
@@ -520,15 +504,12 @@ export function PluginCenterShell(props: {
   }];
   return (
     <section ref={rootRef} data-plugin-center-view tabIndex={-1} class="flex h-full min-h-0 flex-col bg-background text-foreground">
-      <div class="shrink-0 bg-background">
-        {/* Row 1: Toolbar — title + search + actions */}
-        <div class="flex items-center gap-2 px-4 py-2">
-          <div class="flex min-w-0 items-center gap-2">
+      <header class="flex w-full shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b bg-background px-3 py-2 sm:px-4" data-plugin-center-toolbar>
+          <div class="flex min-w-0 shrink-0 items-center gap-2">
             <h1 class="truncate text-sm font-semibold">{i18n.t('uiCopy.plugin.centerTitle')}</h1>
             <span class="rounded border border-primary/25 bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-primary">{i18n.t('uiCopy.plugin.openSources')}</span>
           </div>
-          <div class="flex w-full flex-1 flex-wrap items-center justify-end gap-1.5">
-            <label class="relative order-first block w-full min-w-0 sm:order-none sm:max-w-[min(260px,40vw)] sm:flex-1 lg:flex-none">
+          <label class="relative order-first block w-full min-w-0 basis-full sm:order-none sm:min-w-[180px] sm:max-w-[280px] sm:flex-1 sm:basis-auto">
               <span class="sr-only">{i18n.t('uiCopy.plugin.searchPlaceholder')}</span>
               <Search class="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <input
@@ -538,61 +519,16 @@ export function PluginCenterShell(props: {
                 value={props.query}
                 onInput={(event) => props.onQueryInput(event.currentTarget.value)}
                 placeholder={i18n.t('uiCopy.plugin.searchPlaceholder')}
-                class="h-[44px] w-full rounded-md border bg-background pl-8 pr-2 text-sm outline-none transition placeholder:text-muted-foreground/60 focus:border-primary focus:ring-1 focus:ring-ring/50 sm:h-8"
+                class="h-[44px] w-full rounded-md border bg-muted/30 pl-8 pr-2 text-sm outline-none transition-[background-color,border-color,box-shadow] duration-150 placeholder:text-muted-foreground/60 focus:border-ring focus:bg-background focus:ring-2 focus:ring-ring/20 sm:h-9 motion-reduce:transition-none"
               />
-            </label>
-            <Show when={props.canManage}>
-              <Dropdown
-                align="end"
-                disabled={props.loading}
-                items={administrationItems()}
-                onSelect={(id) => {
-                  if (id === 'install-external') props.onInstallExternal();
-                }}
-                triggerAriaLabel={i18n.t('uiCopy.plugin.moreActions')}
-                trigger={(
-                  <button
-                    type="button"
-                    data-plugin-center-install-external
-                    class="inline-flex h-[44px] w-[44px] cursor-pointer items-center justify-center rounded-md border text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 sm:h-8 sm:w-8"
-                    disabled={props.loading}
-                    title={i18n.t('uiCopy.plugin.moreActions')}
-                  >
-                    <MoreHorizontal class="h-3.5 w-3.5" />
-                  </button>
-                )}
-              />
-            </Show>
-            <button
-              type="button"
-              data-plugin-center-refresh
-              class="inline-flex h-[44px] w-[44px] cursor-pointer items-center justify-center rounded-md border text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 sm:h-8 sm:w-8"
-              aria-label={i18n.t('uiCopy.plugin.refreshOfficial')}
-              disabled={props.loading}
-              onClick={props.onRefresh}
-            >
-              <RefreshIcon class="h-3.5 w-3.5" />
-            </button>
-            <Show when={props.onClose}>
-              <button
-                type="button"
-                class="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-md border text-muted-foreground transition hover:bg-muted hover:text-foreground"
-                aria-label={i18n.t('uiCopy.plugin.closeCenter')}
-                onClick={() => props.onClose?.()}
-              >
-                <X class="h-3.5 w-3.5" />
-              </button>
-            </Show>
-          </div>
-        </div>
-        {/* Row 2: Nav — tabs + category pills on same line */}
-        <div class="flex items-center overflow-x-auto border-t px-4" role="tablist" aria-label={i18n.t('uiCopy.plugin.centerTitle')}>
+          </label>
+        <div class="order-3 flex min-w-0 max-w-full shrink items-center overflow-x-auto" role="tablist" aria-label={i18n.t('uiCopy.plugin.centerTitle')}>
           <TabButton id="discover" active={props.activeTab} onSelect={props.onTabSelect} label={i18n.t('uiCopy.plugin.discoverCount', { count: props.discoverCount })} />
           <TabButton id="installed" active={props.activeTab} onSelect={props.onTabSelect} label={i18n.t('uiCopy.plugin.installedCount', { count: props.installedCount })} />
           <TabButton id="updates" active={props.activeTab} onSelect={props.onTabSelect} label={i18n.t('uiCopy.plugin.updatesCount', { count: props.updatesCount })} />
-          <Show when={props.activeTab === 'discover' || props.activeTab === 'installed' || props.activeTab === 'updates'}>
-            <div class="mx-3 h-4 w-px shrink-0 bg-border" aria-hidden="true" />
-            <div class="flex gap-1 overflow-x-auto py-1.5" role="group" aria-label={i18n.t('uiCopy.plugin.categories')}>
+        </div>
+        <div class="order-4 flex min-w-0 flex-1 items-center gap-2 overflow-x-auto" data-plugin-center-filter-scroll>
+            <div class="flex gap-1" role="group" aria-label={i18n.t('uiCopy.plugin.categories')}>
               <CenterCategoryButton id="all" active={props.category} label={i18n.t('uiCopy.plugin.categoryAll')} onSelect={props.onCategorySelect} />
               <CenterCategoryButton id="development" active={props.category} label={i18n.t('uiCopy.plugin.categoryDevelopment')} onSelect={props.onCategorySelect} />
               <CenterCategoryButton id="infrastructure" active={props.category} label={i18n.t('uiCopy.plugin.categoryInfrastructure')} onSelect={props.onCategorySelect} />
@@ -601,11 +537,7 @@ export function PluginCenterShell(props: {
               <CenterCategoryButton id="productivity" active={props.category} label={i18n.t('uiCopy.plugin.categoryProductivity')} onSelect={props.onCategorySelect} />
               <CenterCategoryButton id="other" active={props.category} label={i18n.t('uiCopy.plugin.categoryOther')} onSelect={props.onCategorySelect} />
             </div>
-          </Show>
-        </div>
-        {/* Row 3: Filter row — always rendered so filters stay in DOM */}
-        <div class="flex items-center gap-2 border-t px-4 py-1.5" data-plugin-center-filters>
-          <div class="flex min-w-0 flex-1 gap-2 overflow-x-auto" data-plugin-center-filter-scroll>
+          <div class="flex items-center gap-2" data-plugin-center-filters>
             <CenterFilterMenu
               id="source"
               dimension={i18n.t('uiCopy.plugin.external.source')}
@@ -648,19 +580,62 @@ export function PluginCenterShell(props: {
               ]}
             />
           </div>
-          <Show when={props.filtersActive}>
+        </div>
+        <div class="order-2 ml-auto flex shrink-0 items-center gap-1.5 sm:order-5">
+            <Show when={props.filtersActive}>
             <button
               type="button"
               data-plugin-center-clear-filters
-              class="min-h-[44px] shrink-0 cursor-pointer whitespace-nowrap rounded-md px-2.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:h-8 sm:min-h-0"
+              class="min-h-[44px] shrink-0 cursor-pointer whitespace-nowrap rounded-md px-2.5 text-xs font-semibold text-primary transition-colors duration-150 hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-9 motion-reduce:transition-none"
               onClick={props.onClearFilters}
             >
               {i18n.t('uiCopy.plugin.clearFilters')}
             </button>
           </Show>
+          <Show when={props.canManage}>
+            <Dropdown
+              align="end"
+              disabled={props.loading}
+              items={administrationItems()}
+              onSelect={(id) => { if (id === 'install-external') props.onInstallExternal(); }}
+              triggerAriaLabel={i18n.t('uiCopy.plugin.moreActions')}
+              trigger={(
+                <button
+                  type="button"
+                  data-plugin-center-install-external
+                  class="inline-flex h-[44px] w-[44px] cursor-pointer items-center justify-center rounded-md border text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 sm:h-9 sm:w-9 motion-reduce:transition-none"
+                  disabled={props.loading}
+                  title={i18n.t('uiCopy.plugin.moreActions')}
+                >
+                  <MoreHorizontal class="h-3.5 w-3.5" />
+                </button>
+              )}
+            />
+          </Show>
+          <button
+            type="button"
+            data-plugin-center-refresh
+            class="inline-flex h-[44px] w-[44px] cursor-pointer items-center justify-center rounded-md border text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 sm:h-9 sm:w-9 motion-reduce:transition-none"
+            aria-label={i18n.t('uiCopy.plugin.refreshOfficial')}
+            title={i18n.t('uiCopy.plugin.refreshOfficial')}
+            disabled={props.loading}
+            onClick={props.onRefresh}
+          >
+            <RefreshIcon class="h-3.5 w-3.5" />
+          </button>
+          <Show when={props.onClose}>
+            <button
+              type="button"
+              class="inline-flex h-[44px] w-[44px] cursor-pointer items-center justify-center rounded-md border text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground sm:h-9 sm:w-9 motion-reduce:transition-none"
+              aria-label={i18n.t('uiCopy.plugin.closeCenter')}
+              title={i18n.t('uiCopy.plugin.closeCenter')}
+              onClick={() => props.onClose?.()}
+            >
+              <X class="h-3.5 w-3.5" />
+            </button>
+          </Show>
         </div>
-        <div class="border-b" />
-      </div>
+      </header>
       {props.children}
     </section>
   );
@@ -686,36 +661,26 @@ export function PluginCenterDetails(props: {
   return (
     <aside
       data-plugin-center-details
-      class={cn('min-h-0 flex-1 overflow-y-auto', props.mobileOpen === false ? 'hidden sm:block' : 'block')}
+      class={cn('min-h-0 flex-1 overflow-y-auto bg-background', props.mobileOpen === false ? 'hidden sm:block' : 'block')}
     >
       <Show
         when={props.item}
         fallback={<div class="px-5 py-10 text-sm text-muted-foreground">{i18n.t('uiCopy.plugin.selectOfficial')}</div>}
       >
         {(item) => (
-          <div class="space-y-6 px-4 py-4 sm:px-6 sm:py-5">
+          <div class="mx-auto max-w-4xl space-y-5 px-4 py-4 sm:px-6 sm:py-5">
             <Button
               ref={props.mobileBackRef}
               data-plugin-center-mobile-back
               size="sm"
               variant="ghost"
               icon={ArrowLeft}
-              class="min-h-[44px]"
+              class="min-h-[44px] sm:hidden"
               onClick={props.onMobileBack}
             >
               {i18n.t('uiCopy.plugin.backToList')}
             </Button>
-            <div class="flex items-start gap-3">
-              <PluginIcon item={item()} size="lg" />
-              <div class="min-w-0">
-                <div class="flex flex-wrap items-center gap-2">
-                  <h2 ref={props.detailHeadingRef} tabIndex={-1} data-plugin-center-detail-heading class="truncate text-xl font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{item().displayName}</h2>
-                  <TrustBadge item={item()} />
-                  <span class={statusPillClass(item())}>{statusLabel(item(), i18n)}</span>
-                </div>
-                <p class="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">{item().description}</p>
-              </div>
-            </div>
+            <PluginIdentityHeader item={item()} description headingRef={props.detailHeadingRef} />
 
             <PluginActions
               item={item()}
@@ -728,8 +693,6 @@ export function PluginCenterDetails(props: {
               onExternalUpdate={props.onExternalUpdate}
             />
 
-            <PluginIssueDetails item={item()} />
-
             <PluginPermissionInventory
               item={item()}
               canManage={props.canManage}
@@ -738,15 +701,17 @@ export function PluginCenterDetails(props: {
               focusTargetRef={props.permissionsRef}
             />
 
-            <details class="border-t pt-4" data-plugin-technical-details>
-              <summary tabIndex={0} class="cursor-pointer text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{i18n.t('uiCopy.plugin.technicalDetails')}</summary>
+            <PluginIssueDetails item={item()} />
+
+            <details class="rounded-md border px-4 py-3" data-plugin-technical-details>
+              <summary tabIndex={0} class="min-h-8 cursor-pointer text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{i18n.t('uiCopy.plugin.technicalDetails')}</summary>
               <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 <DetailStat label={i18n.t('uiCopy.plugin.publisher')} value={item().publisher} />
                 <DetailStat label={i18n.t('uiCopy.plugin.installedVersion')} value={item().version ?? i18n.t('uiCopy.plugin.notInstalled')} />
                 <DetailStat label={i18n.t('uiCopy.plugin.stableVersion')} value={item().officialCatalog?.stableVersion ?? '-'} />
                 <DetailStat label={i18n.t('uiCopy.plugin.minimumRedeven')} value={item().officialCatalog?.minRedevenVersion ?? '-'} />
                 <DetailStat label={i18n.t('uiCopy.plugin.minimumReDevPlugin')} value={item().officialCatalog?.minReDevPluginVersion ?? '-'} />
-                <DetailStat label={i18n.t('uiCopy.plugin.trust')} value={trustLabel(item(), i18n)} />
+                <DetailStat label={i18n.t('uiCopy.plugin.trust')} value={pluginTrustLabel(item(), i18n)} />
               </div>
               <code class="mt-4 block break-all text-xs text-muted-foreground">{item().pluginID}</code>
             </details>
@@ -813,8 +778,18 @@ function PluginPermissionInventory(props: {
               </span>
             </Show>
           </div>
-          <div class="divide-y">
-            <For each={inventory().permissions}>
+          <div class="space-y-5 pt-3">
+            <For each={[true, false] as const}>
+              {(required) => {
+                const permissions = () => inventory().permissions.filter((permission) => permission.requiredToOpen === required);
+                return (
+                  <Show when={permissions().length > 0}>
+                    <section data-plugin-permission-group={required ? 'required' : 'optional'}>
+                      <h4 class="text-xs font-semibold text-foreground">
+                        {required ? i18n.t('uiCopy.plugin.requiredToOpen') : i18n.t('uiCopy.plugin.optionalPermission')}
+                      </h4>
+                      <div class="mt-1 divide-y">
+                        <For each={permissions()}>
               {(permission) => {
                 const effective = () => permission.granted && !permission.deniedByGrant && !permission.grantBlockedByPolicy;
                 const granted = () => permission.granted && !permission.deniedByGrant;
@@ -881,16 +856,16 @@ function PluginPermissionInventory(props: {
                           disabled={disabled()}
                           aria-label={i18n.t('uiCopy.plugin.permissionToggleLabel', { permission: permissionName() })}
                           class={cn(
-                            'relative mt-0.5 inline-flex h-[44px] w-[44px] shrink-0 cursor-pointer items-center justify-center rounded-md transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 sm:h-6 sm:w-10',
+                            'relative mt-0.5 inline-flex h-[44px] w-[44px] shrink-0 cursor-pointer items-center justify-center rounded-md transition-opacity duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 sm:h-6 sm:w-10 motion-reduce:transition-none',
                           )}
                           onClick={() => {
                             setConfirmation({ permissionID: permission.permissionID, grant: !granted() });
                           }}
                         >
-                          <span aria-hidden="true" class={cn('relative inline-flex h-6 w-10 items-center rounded-full border transition', granted() ? 'border-primary bg-primary' : 'bg-muted')}>
+                          <span aria-hidden="true" class={cn('relative inline-flex h-6 w-10 items-center rounded-full border transition-[background-color,border-color] duration-150 motion-reduce:transition-none', granted() ? 'border-primary bg-primary' : 'bg-muted')}>
                             <span
                               class={cn(
-                                'absolute left-1 h-4 w-4 rounded-full bg-background shadow transition-transform',
+                                'absolute left-1 h-4 w-4 rounded-full bg-background shadow transition-transform duration-150 motion-reduce:transition-none',
                                 granted() && 'translate-x-4',
                               )}
                             />
@@ -899,6 +874,12 @@ function PluginPermissionInventory(props: {
                       </Show>
                     </div>
                   </div>
+                );
+              }}
+                        </For>
+                      </div>
+                    </section>
+                  </Show>
                 );
               }}
             </For>
@@ -1100,7 +1081,7 @@ function TabButton(props: {
       aria-controls="plugin-center-panel"
       tabIndex={isActive() ? 0 : -1}
       class={cn(
-        'min-h-[44px] min-w-[44px] cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium transition sm:min-h-8 sm:min-w-0',
+        'min-h-[44px] min-w-[44px] cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium transition-colors duration-150 sm:min-h-8 sm:min-w-0 motion-reduce:transition-none',
         isActive() ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted hover:text-foreground',
       )}
       onClick={() => props.onSelect(props.id)}
@@ -1416,7 +1397,7 @@ function DataRetentionChoice(props: {
       role="radio"
       aria-checked={props.checked}
       class={cn(
-        'flex min-h-[44px] w-full cursor-pointer items-start gap-3 rounded-md border p-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        'flex min-h-[44px] w-full cursor-pointer items-start gap-3 rounded-md border p-3 text-left transition-[background-color,border-color] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none',
         props.checked ? 'border-primary bg-primary/5' : 'hover:bg-muted/50',
         props.destructive && props.checked && 'border-destructive bg-destructive/5',
       )}
@@ -1461,27 +1442,6 @@ function DetailStat(props: { label: string; value: string }): JSX.Element {
   );
 }
 
-function PluginIcon(props: { item: PluginInventoryItem; class?: string; size?: 'sm' | 'lg' }): JSX.Element {
-  const [imageFailed, setImageFailed] = createSignal(false);
-  return (
-    <span
-      class={cn(
-        'flex shrink-0 items-center justify-center overflow-hidden rounded-md border bg-muted text-foreground',
-        props.size === 'lg' ? 'h-12 w-12' : 'h-10 w-10',
-        props.class,
-      )}
-    >
-      <Show when={props.item.iconURL && !imageFailed()} fallback={(
-        props.item.iconFallback === 'containers'
-          ? <Grid3x3 class={props.size === 'lg' ? 'h-5 w-5' : 'h-4 w-4'} />
-          : <Settings class={props.size === 'lg' ? 'h-5 w-5' : 'h-4 w-4'} />
-      )}>
-        <img src={props.item.iconURL ?? ''} alt="" class="h-full w-full object-cover" onError={() => setImageFailed(true)} />
-      </Show>
-    </span>
-  );
-}
-
 function filterItems(
   items: readonly PluginInventoryItem[],
   filters: Readonly<{
@@ -1507,7 +1467,7 @@ function filterItems(
       item.description,
       item.publisher,
       item.pluginID,
-      statusLabel(item, i18n),
+      pluginLifecycleLabel(item, i18n),
       item.officialCatalog?.stableVersion,
       item.version,
       centerCategoryLabel(item.category, i18n),
@@ -1540,69 +1500,6 @@ function tabForItem(item: PluginInventoryItem): PluginCenterTab {
   if (item.lifecycleState === 'update_available') return 'updates';
   if (item.pluginInstanceID) return 'installed';
   return 'discover';
-}
-
-function statusLabel(item: PluginInventoryItem, i18n: I18nHelpers): string {
-  switch (item.lifecycleState) {
-    case 'not_installed':
-      return i18n.t('uiCopy.plugin.available');
-    case 'installed':
-      return i18n.t('uiCopy.plugin.installed');
-    case 'enabled':
-      return i18n.t('uiCopy.plugin.enabled');
-    case 'disabled':
-      return i18n.t('uiCopy.plugin.disabled');
-    case 'update_available':
-      return i18n.t('uiCopy.plugin.updateAvailable');
-    case 'needs_attention':
-      return i18n.t('uiCopy.plugin.needsAttention');
-    default:
-      return i18n.t('uiCopy.plugin.unavailable');
-  }
-}
-
-function statusPillClass(item: PluginInventoryItem): string {
-  if (item.lifecycleState === 'enabled') return 'rounded-full bg-[var(--redeven-status-success-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--redeven-status-success-foreground)]';
-  if (item.lifecycleState === 'needs_attention') return 'rounded-full bg-[var(--redeven-status-warning-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--redeven-status-warning-foreground)]';
-  if (item.lifecycleState === 'update_available') return 'rounded-full bg-[var(--redeven-status-info-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--redeven-status-info-foreground)]';
-  return 'rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground';
-}
-
-function TrustBadge(props: { item: PluginInventoryItem }): JSX.Element {
-  const i18n = useI18n();
-  return (
-    <span class={cn(
-      'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold',
-      props.item.trustBadge === 'official' || props.item.trustBadge === 'verified'
-        ? 'bg-primary/10 text-primary'
-        : props.item.trustBadge === 'blocked' || props.item.trustBadge === 'revoked'
-          ? 'bg-destructive/10 text-destructive'
-          : 'bg-[var(--redeven-status-warning-soft)] text-[var(--redeven-status-warning-foreground)]',
-    )}>
-      {trustLabel(props.item, i18n)}
-    </span>
-  );
-}
-
-function trustLabel(item: PluginInventoryItem, i18n: I18nHelpers): string {
-  switch (item.trustBadge) {
-    case 'official':
-      return i18n.t('uiCopy.plugin.official');
-    case 'verified':
-      return i18n.t('uiCopy.plugin.verified');
-    case 'unsigned':
-      return i18n.t('uiCopy.plugin.unsigned');
-    case 'community':
-      return i18n.t('uiCopy.plugin.community');
-    case 'revoked':
-      return i18n.t('uiCopy.plugin.revoked');
-    case 'blocked':
-      return i18n.t('uiCopy.plugin.blocked');
-    case 'unavailable':
-      return i18n.t('uiCopy.plugin.unavailable');
-    default:
-      return i18n.t('uiCopy.plugin.unavailable');
-  }
 }
 
 function messageFromUnknown(error: unknown): string | null {

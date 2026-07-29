@@ -4269,6 +4269,7 @@
       "trustIssueRecovery": "Examinez ci-dessous les codes de motif liés à la confiance et à l’approbation, ainsi que leur source. Choisissez un autre paquet ou demandez à un administrateur de modifier la stratégie avant de réessayer.",
       "diagnosticIssueRecovery": "Résolvez le problème d’hôte ou de paquet indiqué ci-dessous, puis actualisez le Centre de plugins avant de réessayer.",
       "moreActions": "Autres actions du plugin",
+      "viewDetails": "Afficher les détails du plugin",
       "technicalDetails": "Détails techniques",
       "keepData": "Conserver les données",
       "deleteData": "Supprimer les données",

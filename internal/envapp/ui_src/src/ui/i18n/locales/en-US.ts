@@ -215,6 +215,7 @@ export const enUS = defineDictionary({
       trustIssueRecovery: 'Review the trust and approval reason codes and source below. Choose another package or ask an administrator to change policy before retrying.',
       diagnosticIssueRecovery: 'Resolve the reported host or package issue shown below, then refresh Plugin Center before retrying.',
       moreActions: 'More plugin actions',
+      viewDetails: 'View plugin details',
       technicalDetails: 'Technical details',
       keepData: 'Keep data',
       deleteData: 'Delete data',

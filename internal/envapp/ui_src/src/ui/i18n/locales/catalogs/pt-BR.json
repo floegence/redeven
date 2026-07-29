@@ -4269,6 +4269,7 @@
       "trustIssueRecovery": "Revise abaixo os códigos de motivo de confiança e aprovação, bem como a origem. Escolha outro pacote ou peça a um administrador para alterar a política antes de tentar novamente.",
       "diagnosticIssueRecovery": "Resolva o problema relatado abaixo no host ou no pacote e, em seguida, recarregue a Central de Plugins antes de tentar novamente.",
       "moreActions": "Mais ações do plugin",
+      "viewDetails": "Ver detalhes do plugin",
       "technicalDetails": "Detalhes técnicos",
       "keepData": "Manter dados",
       "deleteData": "Excluir dados",
