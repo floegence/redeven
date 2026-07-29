@@ -172,6 +172,25 @@ function expectTouchTargets(elements: readonly Element[]): void {
   expect(undersized).toEqual([]);
 }
 
+async function expectScreenshotHasPixelVariance(): Promise<void> {
+  const screenshot = await page.screenshot({ save: false });
+  expect(screenshot.length).toBeGreaterThan(1_000);
+  const image = new Image();
+  image.src = screenshot.startsWith('data:') ? screenshot : `data:image/png;base64,${screenshot}`;
+  await image.decode();
+  const canvas = document.createElement('canvas');
+  canvas.width = 64;
+  canvas.height = 64;
+  const context = canvas.getContext('2d', { willReadFrequently: true })!;
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+  const luminanceBuckets = new Set<number>();
+  for (let index = 0; index < pixels.length; index += 16) {
+    luminanceBuckets.add(Math.round((pixels[index] + pixels[index + 1] + pixels[index + 2]) / 24));
+  }
+  expect(luminanceBuckets.size).toBeGreaterThan(4);
+}
+
 function mountPanel(mobile: boolean): Readonly<{
   host: HTMLElement;
   trigger: () => HTMLButtonElement | undefined;
@@ -595,7 +614,10 @@ describe('plugin management browser geometry and interaction', () => {
     item.click();
     await settle();
     const details = host.querySelector<HTMLElement>('[data-plugin-center-details]')!;
-    expect(getComputedStyle(item).boxShadow).toContain('inset');
+    const selectedRow = item.closest<HTMLElement>('article')!;
+    expect(selectedRow.getAttribute('aria-current')).toBe('true');
+    expect(getComputedStyle(selectedRow).boxShadow).not.toBe('none');
+    expect(host.querySelector<HTMLElement>('[data-plugin-center-list]')!.className).toContain('grid-cols-[repeat(auto-fill');
 
     if (viewport.width >= 640) {
       expect(getComputedStyle(master).display).not.toBe('none');
@@ -604,7 +626,49 @@ describe('plugin management browser geometry and interaction', () => {
       const detailsRect = details.getBoundingClientRect();
       expect(Math.abs(masterRect.top - detailsRect.top)).toBeLessThanOrEqual(1);
       expect(masterRect.right).toBeLessThanOrEqual(detailsRect.left + 1);
+      if (viewport.width >= 1280) {
+        expect(detailsRect.width).toBeGreaterThanOrEqual(360);
+        expect(detailsRect.width).toBeLessThanOrEqual(420);
+        expect(masterRect.width).toBeGreaterThan(detailsRect.width);
+      }
     }
+  });
+
+  it('renders the selected Plugin Center detail with nonblank pixels in dark mode', async () => {
+    await page.viewport(1440, 900);
+    document.documentElement.classList.add('dark');
+    const host = mountPluginCenter();
+    await settle();
+    host.querySelector<HTMLButtonElement>('[data-plugin-center-item="instance:containers"]')!.click();
+    await settle();
+
+    const view = host.querySelector<HTMLElement>('[data-plugin-center-view]')!;
+    expect(document.documentElement.classList.contains('dark')).toBe(true);
+    expect(view.querySelector('[data-plugin-center-details]')).not.toBeNull();
+    expectNoHorizontalOverflow(view);
+    await expectScreenshotHasPixelVariance();
+  });
+
+  it('opens the Plugin Center card overflow menu in the browser', async () => {
+    await page.viewport(1440, 900);
+    const host = mountPluginCenter();
+    await settle();
+
+    const card = host.querySelector<HTMLElement>('[data-plugin-center-item="instance:containers"]')!.closest('article')!;
+    expect(card.getBoundingClientRect().height).toBeLessThanOrEqual(240);
+    host.querySelector<HTMLButtonElement>('[data-plugin-center-card-menu="instance:containers"]')!.click();
+    await settle();
+
+    const menu = document.querySelector<HTMLElement>('[role="menu"]')!;
+    expect(menu).not.toBeNull();
+    expect(menu.textContent).toContain('Open in Activity');
+    expect(menu.textContent).toContain('Open in Workbench');
+    expect(menu.textContent).toContain('View plugin details');
+    const detailsAction = [...menu.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent?.trim() === 'View plugin details')!;
+    detailsAction.click();
+    await settle();
+    expect(host.querySelector('[data-plugin-center-details]')?.textContent).toContain('Containers');
   });
 
   it('opens a filter from the keyboard and restores focus when dismissed', async () => {
@@ -862,7 +926,7 @@ describe('plugin management browser geometry and interaction', () => {
       const touchContractHost = mountMobileTouchTargetContract();
       await settle();
       expectTouchTarget(touchContractHost.querySelector<HTMLElement>('[data-plugin-mobile-touch-contract]')!);
-      expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
+      await expectScreenshotHasPixelVariance();
     }
     report.querySelector<HTMLElement>('summary')!.click();
     await settle();

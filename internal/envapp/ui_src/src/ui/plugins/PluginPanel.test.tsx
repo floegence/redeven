@@ -54,6 +54,32 @@ function panelModel(item: PluginInventoryItem = pluginItem()): PluginPanelModel 
   };
 }
 
+function panelModelWithPluginCount(count: number): PluginPanelModel {
+  return {
+    loading: false,
+    tiles: [
+      { kind: 'open_center', id: 'plugin-center', label: 'Plugin Center' },
+      ...Array.from({ length: count }, (_, index) => {
+        const item = pluginItem({
+          inventoryKey: `instance:plugininst_${index}`,
+          pluginID: `com.example.plugin-${index}`,
+          pluginInstanceID: `plugininst_${index}`,
+          displayName: `Plugin ${index}`,
+          category: index === 0 ? 'infrastructure' : 'development',
+          defaultLaunchTarget: {
+            pluginID: `com.example.plugin-${index}`,
+            pluginInstanceID: `plugininst_${index}`,
+            surfaceID: `plugin-${index}.main`,
+            expectedManagementRevision: 23,
+            preferredPlacement: 'activity' as const,
+          },
+        });
+        return { kind: 'plugin' as const, item, action: 'open_surface' as const };
+      }),
+    ],
+  };
+}
+
 function createTrigger(): HTMLButtonElement {
   const trigger = document.createElement('button');
   trigger.textContent = 'Plugins';
@@ -132,18 +158,18 @@ describe('PluginPanel', () => {
     expect(dialog.querySelector('[data-plugin-panel-tile="plugin-center"]')).not.toBeNull();
   });
 
-  it('opens enabled plugins through the existing surface action', () => {
+  it('opens the plugin default surface from the primary tile action', () => {
+    const onOpenPluginDetails = vi.fn();
     const onOpenPluginSurface = vi.fn();
-    mountPanel({ onOpenPluginSurface });
+    mountPanel({ onOpenPluginDetails, onOpenPluginSurface });
 
     (document.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]') as HTMLButtonElement).click();
-    expect(onOpenPluginSurface).toHaveBeenCalledWith({
-      pluginID: 'com.redeven.official.containers',
+    expect(onOpenPluginSurface).toHaveBeenCalledWith(expect.objectContaining({
       pluginInstanceID: 'plugininst_containers',
       surfaceID: 'containers.dashboard',
-      expectedManagementRevision: 23,
       preferredPlacement: 'activity',
-    });
+    }));
+    expect(onOpenPluginDetails).not.toHaveBeenCalled();
   });
 
   it('offers real Activity, Workbench, and detail secondary actions', async () => {
@@ -163,6 +189,43 @@ describe('PluginPanel', () => {
       preferredPlacement: 'workbench',
     }));
     expect(onOpenPluginDetails).not.toHaveBeenCalled();
+  });
+
+  it('keeps the secondary action trigger positioned inside its plugin tile', () => {
+    mountPanel();
+
+    const trigger = document.querySelector('[data-plugin-panel-tile-menu="instance:plugininst_containers"]') as HTMLButtonElement;
+    const tile = trigger.closest('li');
+    const triggerHost = trigger.closest('[data-floe-dropdown-trigger]');
+    const dropdown = trigger.closest('[data-floe-dropdown]');
+    expect(tile).not.toBeNull();
+    expect(dropdown?.parentElement).toBe(tile);
+    expect(dropdown?.className).toContain('absolute');
+    expect(dropdown?.className).toContain('right-1');
+    expect(dropdown?.className).toContain('top-1');
+    expect(triggerHost?.className).not.toContain('absolute');
+  });
+
+  it.each([
+    ['right click', () => document.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]')
+      ?.parentElement?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))],
+    ['ContextMenu', () => document.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]')
+      ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ContextMenu', bubbles: true, cancelable: true }))],
+    ['Shift+F10', () => document.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]')
+      ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'F10', shiftKey: true, bubbles: true, cancelable: true }))],
+  ])('opens the secondary action menu with %s', async (_name, openMenu) => {
+    const onOpenPluginSurface = vi.fn();
+    mountPanel({ onOpenPluginSurface });
+
+    openMenu();
+    await Promise.resolve();
+    findDocumentButton('Open in Activity').click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(onOpenPluginSurface).toHaveBeenCalledWith(expect.objectContaining({
+      pluginInstanceID: 'plugininst_containers',
+      preferredPlacement: 'activity',
+    }));
   });
 
   it('shows lifecycle state and routes disabled plugins to details', () => {
@@ -226,7 +289,13 @@ describe('PluginPanel', () => {
     expect(document.querySelector('[role="dialog"]')).toBeNull();
   });
 
-  it('filters installed plugins by normalized search and explicit category', () => {
+  it('hides category filters below six installed plugins', () => {
+    mountPanel({ model: panelModelWithPluginCount(5) });
+
+    expect(document.querySelector('[data-plugin-launcher-category="all"]')).toBeNull();
+  });
+
+  it('filters installed plugins by normalized search and explicit category at the disclosure threshold', () => {
     const toolbox = pluginItem({
       inventoryKey: 'instance:plugininst_toolbox',
       pluginID: 'com.example.toolbox',
@@ -244,16 +313,10 @@ describe('PluginPanel', () => {
         preferredPlacement: 'activity',
       },
     });
-    mountPanel({
-      model: {
-        loading: false,
-        tiles: [
-          { kind: 'open_center', id: 'plugin-center', label: 'Plugin Center' },
-          { kind: 'plugin', item: pluginItem(), action: 'open_surface' },
-          { kind: 'plugin', item: toolbox, action: 'open_surface' },
-        ],
-      },
-    });
+    const model = panelModelWithPluginCount(6);
+    model.tiles[1] = { kind: 'plugin', item: pluginItem(), action: 'open_surface' };
+    model.tiles[2] = { kind: 'plugin', item: toolbox, action: 'open_surface' };
+    mountPanel({ model });
 
     const search = document.querySelector('[data-plugin-launcher-search]') as HTMLInputElement;
     search.value = 'ＴＥＲＭＩＮＡＬ';
@@ -358,7 +421,7 @@ describe('PluginPanel', () => {
     expect(preExistingInert.inert).toBe(true);
   });
 
-  it('does not steal focus back after navigating to a plugin surface', () => {
+  it('does not steal focus back after opening Activity from the secondary menu', async () => {
     const trigger = createTrigger();
     const target = document.createElement('button');
     document.body.append(target);
@@ -378,7 +441,10 @@ describe('PluginPanel', () => {
       />
     ), mount);
 
-    (document.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]') as HTMLButtonElement).click();
+    (document.querySelector('[data-plugin-panel-tile-menu="instance:plugininst_containers"]') as HTMLButtonElement).click();
+    await Promise.resolve();
+    findDocumentButton('Open in Activity').click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(document.activeElement).toBe(target);
   });
 });
