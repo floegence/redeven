@@ -1,4 +1,5 @@
 import type { OfficialPluginCatalogItem } from './pluginTypes';
+import containersPluginIconURL from './assets/containers-plugin.png';
 import { OFFICIAL_CONTAINERS_RELEASE_REF } from './officialContainersRelease.generated';
 import officialContainersDistribution from './officialContainersDistribution.json';
 
@@ -20,6 +21,7 @@ export const OFFICIAL_PLUGIN_CATALOG_SEED: readonly OfficialPluginCatalogItem[] 
     rolloutState: 'stable',
     defaultSurfaceID: 'containers.dashboard',
     defaultSurfaceDisplayNameKey: 'uiCopy.plugin.containersDashboardSurface',
+    iconURL: containersPluginIconURL,
     iconFallback: 'containers',
     category: 'infrastructure',
     searchKeywords: ['container', 'docker', 'podman', 'image', 'volume', 'runtime'],
