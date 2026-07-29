@@ -140,6 +140,47 @@ describe('runtimeProcessInventory', () => {
     });
   });
 
+  it('accepts a verified alternate bundle without treating it as the current bundle', () => {
+    const alternateCurrentOwner = parseDesktopRuntimeProcessInventory(JSON.stringify({
+      ...inventory,
+      instances: [{
+        ...inventory.instances[0],
+        instance_id: 'alternate-runtime',
+        runtime_version: 'v4.0.0',
+        executable_path: '/Applications/Redeven Preview.app/Contents/Resources/redeven',
+        layout_status: 'verified_alternate',
+      }],
+    }));
+    expect(alternateCurrentOwner.instances[0]).toMatchObject({
+      layout_status: 'verified_alternate',
+      stop_authority: 'automatic',
+    });
+    expect(desktopRuntimeProcessInventoryNeedsMaintenance(alternateCurrentOwner)).toBe(true);
+
+    const alternateForeignOwner = parseDesktopRuntimeProcessInventory(JSON.stringify({
+      ...alternateCurrentOwner,
+      instances: [{
+        ...alternateCurrentOwner.instances[0],
+        desktop_owner_id: 'another-owner',
+        owner_status: 'foreign',
+        stop_authority: 'confirmed_takeover',
+        reason_code: 'runtime_owned_by_another_desktop',
+      }],
+      summary: { automatic: 0, confirmed_takeover: 1, blocked: 0 },
+    }));
+    const proposal = buildDesktopRuntimeProcessTakeoverProposal(alternateForeignOwner, {
+      operation: 'stop',
+      location: 'local_host',
+      environment_id: 'env-1',
+      target_id: 'local',
+      target_label: 'Local Environment',
+    });
+    expect(proposal.instances).toEqual([expect.objectContaining({
+      layout_status: 'verified_alternate',
+      owner_status: 'foreign',
+    })]);
+  });
+
   it('never reuses a confirmed takeover after the inventory becomes automatic', () => {
     const automaticInventory = parseDesktopRuntimeProcessInventory(JSON.stringify(inventory));
     let error: unknown;

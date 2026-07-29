@@ -6,7 +6,7 @@ import type {
 
 export type DesktopRuntimeProcessIdentityStatus = 'verified' | 'incomplete';
 export type DesktopRuntimeProcessOwnerStatus = 'current' | 'missing' | 'foreign';
-export type DesktopRuntimeProcessLayoutStatus = 'current' | 'unknown';
+export type DesktopRuntimeProcessLayoutStatus = 'current' | 'verified_alternate' | 'unknown';
 export type DesktopRuntimeProcessOwnerEvidence = 'process_environment' | 'runtime_lock' | 'missing';
 export type DesktopRuntimeProcessStopAuthority = 'automatic' | 'confirmed_takeover' | 'blocked';
 
@@ -158,7 +158,7 @@ function parseInstance(value: unknown): DesktopRuntimeProcessInstance {
     reason_code: compact(record.reason_code) || undefined,
     identity_status: parseEnum(record.identity_status, ['verified', 'incomplete'] as const, 'identity status'),
     owner_status: parseEnum(record.owner_status, ['current', 'missing', 'foreign'] as const, 'owner status'),
-    layout_status: parseEnum(record.layout_status, ['current', 'unknown'] as const, 'layout status'),
+    layout_status: parseEnum(record.layout_status, ['current', 'verified_alternate', 'unknown'] as const, 'layout status'),
     owner_evidence: parseEnum(record.owner_evidence, ['process_environment', 'runtime_lock', 'missing'] as const, 'owner evidence'),
     stop_authority: parseEnum(record.stop_authority, ['automatic', 'confirmed_takeover', 'blocked'] as const, 'stop authority'),
   };
@@ -201,14 +201,16 @@ export function parseDesktopRuntimeProcessInventory(raw: string): DesktopRuntime
     throw new Error('Runtime process inventory summary does not match its instances.');
   }
   for (const instance of instances) {
+    const verifiedLayout = instance.layout_status === 'current'
+      || instance.layout_status === 'verified_alternate';
     const automaticInstance = instance.stop_authority === 'automatic'
       && instance.identity_status === 'verified'
       && instance.owner_status === 'current'
-      && instance.layout_status === 'current';
+      && verifiedLayout;
     const takeoverInstance = instance.stop_authority === 'confirmed_takeover'
       && instance.identity_status === 'verified'
       && (instance.owner_status === 'missing' || instance.owner_status === 'foreign')
-      && instance.layout_status === 'current';
+      && verifiedLayout;
     const blockedInstance = instance.stop_authority === 'blocked'
       && (
         instance.identity_status === 'incomplete'
@@ -289,7 +291,7 @@ export function buildDesktopRuntimeProcessTakeoverProposal(
       && (instance.owner_status === 'missing' || instance.owner_status === 'foreign');
     if (
       instance.identity_status !== 'verified'
-      || instance.layout_status !== 'current'
+      || (instance.layout_status !== 'current' && instance.layout_status !== 'verified_alternate')
       || (!automatic && !confirmed)
     ) {
       throw new Error('Runtime process takeover inventory contains an invalid stop target.');
