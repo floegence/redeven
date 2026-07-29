@@ -82,35 +82,37 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
           <PluginStatusBadge item={props.item} />
         </span>
       </button>
-      <div class="mt-3 flex items-center gap-1.5">
+      <div class="mt-3 flex min-w-0 items-center gap-1.5" data-plugin-center-card-actions>
         <Show when={!installed()} fallback={(
           <button
             type="button"
             data-plugin-center-card-primary={props.item.inventoryKey}
             data-plugin-center-update={update() ? props.item.inventoryKey : undefined}
-            class={cn('inline-flex min-h-[44px] flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-8', PLUGIN_PRESS_MOTION_CLASS)}
+            class={cn('inline-flex min-h-[44px] min-w-0 flex-1 cursor-pointer items-center justify-center gap-1 rounded-md bg-primary px-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-8', PLUGIN_PRESS_MOTION_CLASS)}
             disabled={props.pending || (!update() && !props.canOpenSurfaces)}
             onClick={update() ? props.onUpdate : props.onOpenActivity}
           >
-            {update() ? <RefreshIcon class="h-4 w-4" /> : <CheckCircle class="h-4 w-4" />}
-            {update() ? i18n.t('uiCopy.plugin.reviewUpdate') : i18n.t('uiCopy.plugin.openInActivity')}
+            {update() ? <RefreshIcon class="h-4 w-4 shrink-0" /> : <CheckCircle class="h-4 w-4 shrink-0" />}
+            <span data-plugin-center-card-primary-label class="shrink-0 whitespace-nowrap">
+              {update() ? i18n.t('uiCopy.plugin.reviewUpdate') : i18n.t('uiCopy.plugin.openInActivity')}
+            </span>
           </button>
         )}>
           <button
             type="button"
             data-plugin-center-install={props.item.inventoryKey}
-            class={cn('inline-flex min-h-[44px] flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-8', PLUGIN_PRESS_MOTION_CLASS)}
+            class={cn('inline-flex min-h-[44px] min-w-0 flex-1 cursor-pointer items-center justify-center gap-1 rounded-md bg-primary px-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-8', PLUGIN_PRESS_MOTION_CLASS)}
             disabled={!props.canManage || props.pending}
             onClick={props.onInstall}
           >
-            <Download class="h-4 w-4" />
-            {i18n.t('uiCopy.plugin.install')}
+            <Download class="h-4 w-4 shrink-0" />
+            <span data-plugin-center-card-primary-label class="shrink-0 whitespace-nowrap">{i18n.t('uiCopy.plugin.install')}</span>
           </button>
         </Show>
         <Show when={installed() && props.item.defaultLaunchTarget}>
           <button
             type="button"
-            class={cn('inline-flex min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center rounded-md border bg-background text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-8 sm:min-w-8', PLUGIN_PRESS_MOTION_CLASS)}
+            class={cn('inline-flex min-h-[44px] min-w-[44px] shrink-0 cursor-pointer items-center justify-center rounded-md border bg-background text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-8 sm:min-w-8', PLUGIN_PRESS_MOTION_CLASS)}
             aria-label={i18n.t('uiCopy.plugin.openInWorkbench')}
             title={i18n.t('uiCopy.plugin.openInWorkbench')}
             disabled={props.pending || !props.canOpenSurfaces}
@@ -126,13 +128,13 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
             if (menuTrigger) selectMenuItem(id, menuTrigger);
           }}
           triggerAriaLabel={`${props.item.displayName}: ${i18n.t('uiCopy.plugin.moreActions')}`}
-          triggerClass="rounded-md"
+          triggerClass="shrink-0 rounded-md"
           trigger={(
             <button
               ref={menuTrigger}
               type="button"
               data-plugin-center-card-menu={props.item.inventoryKey}
-              class={cn('inline-flex min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center rounded-md border text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-8 sm:min-w-8', PLUGIN_PRESS_MOTION_CLASS)}
+              class={cn('inline-flex min-h-[44px] min-w-[44px] shrink-0 cursor-pointer items-center justify-center rounded-md border text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-8 sm:min-w-8', PLUGIN_PRESS_MOTION_CLASS)}
               title={i18n.t('uiCopy.plugin.moreActions')}
             >
               <MoreHorizontal class="h-4 w-4" />

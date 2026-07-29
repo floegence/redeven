@@ -649,6 +649,30 @@ describe('plugin management browser geometry and interaction', () => {
     await expectScreenshotHasPixelVariance();
   });
 
+  it('keeps the localized primary card action on one line before and after selection', async () => {
+    await page.viewport(2048, 1200);
+    const host = await mountLocalizedPluginCenter('zh-CN');
+    await settle();
+
+    const card = host.querySelector<HTMLElement>('[data-plugin-directory-card="instance:containers"]')!;
+    const primary = card.querySelector<HTMLButtonElement>('[data-plugin-center-card-primary="instance:containers"]')!;
+    const label = primary.querySelector<HTMLElement>('[data-plugin-center-card-primary-label]')!;
+    const actions = card.querySelector<HTMLElement>('[data-plugin-center-card-actions]')!;
+    const initialHeight = primary.getBoundingClientRect().height;
+    expect(label.textContent?.trim()).toBe('在 Activity 中打开');
+    expect(getComputedStyle(label).whiteSpace).toBe('nowrap');
+    expect(primary.scrollWidth).toBeLessThanOrEqual(primary.clientWidth + 1);
+    expectNoHorizontalOverflow(actions);
+
+    card.querySelector<HTMLButtonElement>('[data-plugin-center-item="instance:containers"]')!.click();
+    await settle();
+
+    expect(card.getAttribute('aria-current')).toBe('true');
+    expect(primary.getBoundingClientRect().height).toBe(initialHeight);
+    expect(primary.scrollWidth).toBeLessThanOrEqual(primary.clientWidth + 1);
+    expectNoHorizontalOverflow(actions);
+  });
+
   it('opens the Plugin Center card overflow menu in the browser', async () => {
     await page.viewport(1440, 900);
     const host = mountPluginCenter();
