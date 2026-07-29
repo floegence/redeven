@@ -53,6 +53,15 @@ func TestFloretDependencyIsExactPublishedV2(t *testing.T) {
 			return walkErr
 		}
 		if entry.IsDir() {
+			if filePath != root {
+				nested, nestedErr := isNestedRepositoryRoot(filePath)
+				if nestedErr != nil {
+					return nestedErr
+				}
+				if nested {
+					return filepath.SkipDir
+				}
+			}
 			if entry.Name() == ".git" || entry.Name() == "node_modules" {
 				return filepath.SkipDir
 			}
