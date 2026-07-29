@@ -215,6 +215,7 @@ func (c *CLIClient) run(ctx context.Context, engine Engine, args ...string) ([]b
 	}
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
+	args = endpointArgs(ctx, engine, args)
 	out, err := runner.Run(runCtx, string(engine), args...)
 	if ctxErr := runCtx.Err(); ctxErr != nil {
 		if parentErr := ctx.Err(); parentErr != nil {
@@ -248,6 +249,7 @@ func (c *CLIClient) stream(ctx context.Context, engine Engine, args []string, on
 		streamCtx, cancel = context.WithTimeout(ctx, c.StreamTimeout)
 		defer cancel()
 	}
+	args = endpointArgs(ctx, engine, args)
 	return streamer.Stream(streamCtx, string(engine), args, func(line []byte) error {
 		return onStdoutLine(streamCtx, line)
 	})
@@ -569,7 +571,10 @@ func parseContainerInspect(engine Engine, raw []byte) (EngineContainer, error) {
 			CapAdd:        append([]string(nil), doc.HostConfig.CapAdd...),
 			CapDrop:       append([]string(nil), doc.HostConfig.CapDrop...),
 		},
-		Ports: inspectPortSummaries(doc.NetworkSettings.Ports),
+		Ports:     inspectPortSummaries(doc.NetworkSettings.Ports),
+		GroupKind: containerGroup(engine, doc.Config.Labels, "", "").Kind,
+		GroupID:   containerGroup(engine, doc.Config.Labels, "", "").ID,
+		GroupName: containerGroup(engine, doc.Config.Labels, "", "").Name,
 	}, nil
 }
 
@@ -586,6 +591,9 @@ type listEntry struct {
 	ExposedPorts map[string][]string `json:"ExposedPorts"`
 	CreatedAt    string              `json:"CreatedAt"`
 	Created      json.Number         `json:"Created"`
+	Labels       json.RawMessage     `json:"Labels"`
+	Pod          string              `json:"Pod"`
+	PodName      string              `json:"PodName"`
 }
 
 type listPortMapping struct {
@@ -651,6 +659,7 @@ func parseContainerList(engine Engine, raw []byte) ([]EngineContainer, error) {
 		if err != nil {
 			return nil, fmt.Errorf("parse container list ports: %w", err)
 		}
+		group := listContainerGroup(engine, entry.Labels, entry.Pod, entry.PodName)
 		out = append(out, EngineContainer{
 			Engine:          engine,
 			ContainerID:     id,
@@ -660,6 +669,9 @@ func parseContainerList(engine Engine, raw []byte) ([]EngineContainer, error) {
 			Health:          listHealth(entry.Status),
 			CreatedAtUnixMs: createdAt,
 			Ports:           ports,
+			GroupKind:       group.Kind,
+			GroupID:         group.ID,
+			GroupName:       group.Name,
 		})
 	}
 	return out, nil

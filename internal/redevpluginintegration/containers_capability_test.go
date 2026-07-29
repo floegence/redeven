@@ -93,6 +93,26 @@ func TestContainersCapabilitySyncResponsesMatchSignedContract(t *testing.T) {
 	}
 }
 
+func TestContainersCapabilityProjectsGroupingOnlyForV4(t *testing.T) {
+	t.Parallel()
+	item := containers.ContainerSummary{
+		ContainerID: "container_1",
+		Image:       containers.ImageSummary{Reference: "example:test"},
+		State:       containers.ContainerStateRunning,
+		GroupKind:   "compose_project",
+		GroupID:     "project_1",
+		GroupName:   "application",
+	}
+	legacy := projectContainerSummaryForBinding(capability.ExecutionBinding{CapabilityVersion: containersCapabilityV3Version}, item)
+	if _, exists := legacy["group_kind"]; exists {
+		t.Fatalf("v3 projection leaked v4 grouping fields: %#v", legacy)
+	}
+	v4 := projectContainerSummaryForBinding(capability.ExecutionBinding{CapabilityVersion: containersCapabilityV4Version}, item)
+	if v4["group_kind"] != "compose_project" || v4["group_id"] != "project_1" || v4["group_name"] != "application" {
+		t.Fatalf("v4 projection = %#v", v4)
+	}
+}
+
 func TestContainersCapabilityReturnsPublishedBusinessError(t *testing.T) {
 	adapter := newTestContainersCapabilityAdapter(&capabilityEngineClient{
 		status: containers.EngineStatus{Engine: containers.EngineDocker, Available: false},

@@ -55,6 +55,24 @@ const (
 	MethodPause                     Method = "containers.pause"
 	MethodUnpause                   Method = "containers.unpause"
 	MethodKill                      Method = "containers.kill"
+	MethodEndpointsList             Method = "endpoints.list"
+	MethodEndpointsStatus           Method = "endpoints.status"
+	MethodComposeProjectsList       Method = "compose.projects.list"
+	MethodComposeProjectsInspect    Method = "compose.projects.inspect"
+	MethodComposeProjectsPreflight  Method = "compose.projects.action.preflight"
+	MethodComposeProjectsStart      Method = "compose.projects.start"
+	MethodComposeProjectsStop       Method = "compose.projects.stop"
+	MethodComposeProjectsRestart    Method = "compose.projects.restart"
+	MethodComposeProjectsDown       Method = "compose.projects.down"
+	MethodPodsList                  Method = "pods.list"
+	MethodPodsInspect               Method = "pods.inspect"
+	MethodPodsCreatePreflight       Method = "pods.create.preflight"
+	MethodPodsCreate                Method = "pods.create"
+	MethodPodsActionPreflight       Method = "pods.action.preflight"
+	MethodPodsStart                 Method = "pods.start"
+	MethodPodsStop                  Method = "pods.stop"
+	MethodPodsRestart               Method = "pods.restart"
+	MethodPodsRemove                Method = "pods.remove"
 )
 
 func Methods() []Method {
@@ -75,7 +93,19 @@ func Methods() []Method {
 		MethodVolumesList, MethodVolumesInspect, MethodVolumesCreatePreflight, MethodVolumesCreate, MethodVolumesRemovePreflight, MethodVolumesRemove, MethodVolumesPrunePreflight, MethodVolumesPrune,
 		MethodContainersCreatePreflight, MethodContainersCreate, MethodContainersRemovePreflight,
 		MethodPause, MethodUnpause, MethodKill,
+		MethodEndpointsList, MethodEndpointsStatus,
+		MethodComposeProjectsList, MethodComposeProjectsInspect, MethodComposeProjectsPreflight,
+		MethodComposeProjectsStart, MethodComposeProjectsStop, MethodComposeProjectsRestart, MethodComposeProjectsDown,
+		MethodPodsList, MethodPodsInspect, MethodPodsCreatePreflight, MethodPodsCreate, MethodPodsActionPreflight,
+		MethodPodsStart, MethodPodsStop, MethodPodsRestart, MethodPodsRemove,
 	}
+}
+
+type EndpointID string
+
+func (id EndpointID) Valid() bool {
+	value := strings.TrimSpace(string(id))
+	return strings.HasPrefix(value, "endpoint_") && len(value) == len("endpoint_")+64
 }
 
 type ContainerState string
@@ -110,71 +140,83 @@ const (
 )
 
 type StatusRequest struct {
-	Engine Engine `json:"engine"`
+	Engine     Engine     `json:"engine"`
+	EndpointID EndpointID `json:"endpoint_id,omitempty"`
 }
 
 type StatusResponse struct {
-	Engine        Engine `json:"engine"`
-	Available     bool   `json:"available"`
-	EngineVersion string `json:"engine_version,omitempty"`
+	Engine        Engine     `json:"engine"`
+	EndpointID    EndpointID `json:"endpoint_id,omitempty"`
+	Available     bool       `json:"available"`
+	EngineVersion string     `json:"engine_version,omitempty"`
 }
 
 type ContainerListRequest struct {
-	Engine Engine `json:"engine"`
-	All    bool   `json:"all,omitempty"`
+	Engine     Engine     `json:"engine"`
+	EndpointID EndpointID `json:"endpoint_id,omitempty"`
+	All        bool       `json:"all,omitempty"`
 }
 
 type ContainerListResponse struct {
 	Engine     Engine             `json:"engine"`
+	EndpointID EndpointID         `json:"endpoint_id,omitempty"`
 	Containers []ContainerSummary `json:"containers"`
 }
 
 type ContainerInspectRequest struct {
-	Engine      Engine `json:"engine"`
-	ContainerID string `json:"container_id"`
+	Engine      Engine     `json:"engine"`
+	EndpointID  EndpointID `json:"endpoint_id,omitempty"`
+	ContainerID string     `json:"container_id"`
 }
 
 type ContainerInspectResponse struct {
-	Engine    Engine           `json:"engine"`
-	Container ContainerInspect `json:"container"`
+	Engine     Engine           `json:"engine"`
+	EndpointID EndpointID       `json:"endpoint_id,omitempty"`
+	Container  ContainerInspect `json:"container"`
 }
 
 type ContainerActionResponse struct {
-	Engine      Engine `json:"engine"`
-	Method      Method `json:"method"`
-	ContainerID string `json:"container_id"`
-	Completed   bool   `json:"completed"`
+	Engine      Engine     `json:"engine"`
+	EndpointID  EndpointID `json:"endpoint_id,omitempty"`
+	Method      Method     `json:"method"`
+	ContainerID string     `json:"container_id"`
+	Completed   bool       `json:"completed"`
 }
 
 type ContainerActionRequest struct {
-	Engine      Engine `json:"engine"`
-	ContainerID string `json:"container_id"`
-	Force       bool   `json:"force,omitempty"`
-	TimeoutSec  int    `json:"timeout_sec,omitempty"`
+	Engine      Engine     `json:"engine"`
+	EndpointID  EndpointID `json:"endpoint_id,omitempty"`
+	ContainerID string     `json:"container_id"`
+	Force       bool       `json:"force,omitempty"`
+	TimeoutSec  int        `json:"timeout_sec,omitempty"`
 }
 
 type ContainerStartRequest struct {
-	Engine      Engine `json:"engine"`
-	ContainerID string `json:"container_id"`
+	Engine      Engine     `json:"engine"`
+	EndpointID  EndpointID `json:"endpoint_id,omitempty"`
+	ContainerID string     `json:"container_id"`
 }
 
 type LogsTailRequest struct {
-	Engine      Engine `json:"engine"`
-	ContainerID string `json:"container_id"`
-	TailLines   int    `json:"tail_lines,omitempty"`
-	SinceUnixMs int64  `json:"since_unix_ms,omitempty"`
-	Follow      bool   `json:"follow,omitempty"`
+	Engine      Engine     `json:"engine"`
+	EndpointID  EndpointID `json:"endpoint_id,omitempty"`
+	ContainerID string     `json:"container_id"`
+	TailLines   int        `json:"tail_lines,omitempty"`
+	SinceUnixMs int64      `json:"since_unix_ms,omitempty"`
+	Follow      bool       `json:"follow,omitempty"`
 }
 
 type ImagePullRequest struct {
-	Engine   Engine `json:"engine"`
-	ImageRef string `json:"image_ref"`
+	Engine     Engine     `json:"engine"`
+	EndpointID EndpointID `json:"endpoint_id,omitempty"`
+	ImageRef   string     `json:"image_ref"`
 }
 
 type LogsTailResponse struct {
-	Engine      Engine    `json:"engine"`
-	ContainerID string    `json:"container_id"`
-	Lines       []LogLine `json:"lines"`
+	Engine      Engine     `json:"engine"`
+	EndpointID  EndpointID `json:"endpoint_id,omitempty"`
+	ContainerID string     `json:"container_id"`
+	Lines       []LogLine  `json:"lines"`
 }
 
 type LogLine struct {
@@ -183,9 +225,10 @@ type LogLine struct {
 }
 
 type ImagePullResponse struct {
-	Engine    Engine       `json:"engine"`
-	Image     ImageSummary `json:"image"`
-	Completed bool         `json:"completed"`
+	Engine     Engine       `json:"engine"`
+	EndpointID EndpointID   `json:"endpoint_id,omitempty"`
+	Image      ImageSummary `json:"image"`
+	Completed  bool         `json:"completed"`
 }
 
 type ContainerStats struct {
@@ -198,9 +241,10 @@ type ContainerStats struct {
 }
 
 type ContainerStatsWatchRequest struct {
-	Engine      Engine `json:"engine"`
-	ContainerID string `json:"container_id"`
-	IntervalMS  int    `json:"interval_ms,omitempty"`
+	Engine      Engine     `json:"engine"`
+	EndpointID  EndpointID `json:"endpoint_id,omitempty"`
+	ContainerID string     `json:"container_id"`
+	IntervalMS  int        `json:"interval_ms,omitempty"`
 }
 
 type ImageRecord struct {
@@ -248,6 +292,9 @@ type ContainerSummary struct {
 	Health          string         `json:"health,omitempty"`
 	CreatedAtUnixMs int64          `json:"created_at_unix_ms,omitempty"`
 	Ports           []PortSummary  `json:"ports,omitempty"`
+	GroupKind       string         `json:"group_kind,omitempty"`
+	GroupID         string         `json:"group_id,omitempty"`
+	GroupName       string         `json:"group_name,omitempty"`
 }
 
 type ContainerInspect struct {
@@ -262,6 +309,9 @@ type ContainerInspect struct {
 	Ports           []PortSummary   `json:"ports,omitempty"`
 	Mounts          []MountSummary  `json:"mounts,omitempty"`
 	Devices         []DeviceSummary `json:"devices,omitempty"`
+	GroupKind       string          `json:"group_kind,omitempty"`
+	GroupID         string          `json:"group_id,omitempty"`
+	GroupName       string          `json:"group_name,omitempty"`
 }
 
 type ImageSummary struct {
@@ -340,10 +390,11 @@ type PortSummary struct {
 }
 
 type TargetSummary struct {
-	Engine        Engine `json:"engine"`
-	ContainerID   string `json:"container_id"`
-	ContainerName string `json:"container_name,omitempty"`
-	TargetHash    string `json:"target_hash"`
+	Engine        Engine     `json:"engine"`
+	EndpointID    EndpointID `json:"endpoint_id,omitempty"`
+	ContainerID   string     `json:"container_id"`
+	ContainerName string     `json:"container_name,omitempty"`
+	TargetHash    string     `json:"target_hash"`
 }
 
 type RiskFlag struct {

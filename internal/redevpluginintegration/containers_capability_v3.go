@@ -13,39 +13,45 @@ import (
 )
 
 type imageArguments struct {
-	Engine containers.Engine `json:"engine"`
-	Image  string            `json:"image"`
+	Engine     containers.Engine     `json:"engine"`
+	EndpointID containers.EndpointID `json:"endpoint_id,omitempty"`
+	Image      string                `json:"image"`
 }
 
 type imageTagArguments struct {
-	Engine containers.Engine `json:"engine"`
-	Image  string            `json:"image"`
-	Tag    string            `json:"tag"`
+	Engine     containers.Engine     `json:"engine"`
+	EndpointID containers.EndpointID `json:"endpoint_id,omitempty"`
+	Image      string                `json:"image"`
+	Tag        string                `json:"tag"`
 }
 
 type imageRemoveArguments struct {
-	Engine           containers.Engine `json:"engine"`
-	Image            string            `json:"image"`
-	Force            bool              `json:"force,omitempty"`
-	ConfirmationName string            `json:"confirmation_name,omitempty"`
+	Engine           containers.Engine     `json:"engine"`
+	EndpointID       containers.EndpointID `json:"endpoint_id,omitempty"`
+	Image            string                `json:"image"`
+	Force            bool                  `json:"force,omitempty"`
+	ConfirmationName string                `json:"confirmation_name,omitempty"`
 }
 
 type volumeArguments struct {
-	Engine           containers.Engine `json:"engine"`
-	Name             string            `json:"name"`
-	ConfirmationName string            `json:"confirmation_name,omitempty"`
+	Engine           containers.Engine     `json:"engine"`
+	EndpointID       containers.EndpointID `json:"endpoint_id,omitempty"`
+	Name             string                `json:"name"`
+	ConfirmationName string                `json:"confirmation_name,omitempty"`
 }
 
 type volumeCreateArguments struct {
-	Engine  containers.Engine         `json:"engine"`
-	Name    string                    `json:"name,omitempty"`
-	Driver  string                    `json:"driver,omitempty"`
-	Options []containers.VolumeOption `json:"options,omitempty"`
+	Engine     containers.Engine         `json:"engine"`
+	EndpointID containers.EndpointID     `json:"endpoint_id,omitempty"`
+	Name       string                    `json:"name,omitempty"`
+	Driver     string                    `json:"driver,omitempty"`
+	Options    []containers.VolumeOption `json:"options,omitempty"`
 }
 
 type resourcePruneArguments struct {
-	Engine             containers.Engine `json:"engine"`
-	ResourceIdentities []string          `json:"resource_identities,omitempty"`
+	Engine             containers.Engine     `json:"engine"`
+	EndpointID         containers.EndpointID `json:"endpoint_id,omitempty"`
+	ResourceIdentities []string              `json:"resource_identities,omitempty"`
 }
 
 func (a *containersCapabilityAdapter) invokeResourceSync(ctx context.Context, method containers.Method, arguments map[string]any) (capability.Result, error) {
@@ -55,11 +61,15 @@ func (a *containersCapabilityAdapter) invokeResourceSync(ctx context.Context, me
 		if err := decodeCapabilityArguments(arguments, &input); err != nil {
 			return capability.Result{}, err
 		}
-		stats, err := a.containers.Stats(ctx, input.Engine, input.ContainerID)
+		bound, err := a.bindEndpoint(ctx, input.Engine, input.EndpointID)
 		if err != nil {
 			return capability.Result{}, containerResourceBusinessError(err)
 		}
-		return resourceResult(map[string]any{"engine": string(input.Engine), "stats": stats})
+		stats, err := a.containers.Stats(bound, input.Engine, input.ContainerID)
+		if err != nil {
+			return capability.Result{}, containerResourceBusinessError(err)
+		}
+		return resourceResult(acceptedWithEndpoint(map[string]any{"engine": string(input.Engine), "stats": stats}, input.EndpointID))
 	case containers.MethodContainersCreatePreflight:
 		var input containers.ContainerCreateRequest
 		if err := decodeCapabilityArguments(arguments, &input); err != nil {
@@ -75,7 +85,11 @@ func (a *containersCapabilityAdapter) invokeResourceSync(ctx context.Context, me
 		if err := decodeCapabilityArguments(arguments, &input); err != nil {
 			return capability.Result{}, err
 		}
-		plan, err := a.containers.RemovePreflight(ctx, input)
+		bound, err := a.bindEndpoint(ctx, input.Engine, input.EndpointID)
+		if err != nil {
+			return capability.Result{}, containerResourceBusinessError(err)
+		}
+		plan, err := a.containers.RemovePreflight(bound, input)
 		if err != nil {
 			return capability.Result{}, containerResourceBusinessError(err)
 		}
@@ -85,37 +99,53 @@ func (a *containersCapabilityAdapter) invokeResourceSync(ctx context.Context, me
 		if err := decodeCapabilityArguments(arguments, &input); err != nil {
 			return capability.Result{}, err
 		}
-		items, err := a.containers.ListImages(ctx, input.Engine)
+		bound, err := a.bindEndpoint(ctx, input.Engine, input.EndpointID)
 		if err != nil {
 			return capability.Result{}, containerResourceBusinessError(err)
 		}
-		return resourceResult(map[string]any{"engine": string(input.Engine), "images": items, "partial_failure_count": imageReferenceFailureCount(items)})
+		items, err := a.containers.ListImages(bound, input.Engine)
+		if err != nil {
+			return capability.Result{}, containerResourceBusinessError(err)
+		}
+		return resourceResult(acceptedWithEndpoint(map[string]any{"engine": string(input.Engine), "images": items, "partial_failure_count": imageReferenceFailureCount(items)}, input.EndpointID))
 	case containers.MethodImagesInspect:
 		var input imageArguments
 		if err := decodeCapabilityArguments(arguments, &input); err != nil {
 			return capability.Result{}, err
 		}
-		item, err := a.containers.InspectImage(ctx, containers.ImageInspectRequest{Engine: input.Engine, Image: input.Image})
+		bound, err := a.bindEndpoint(ctx, input.Engine, input.EndpointID)
 		if err != nil {
 			return capability.Result{}, containerResourceBusinessError(err)
 		}
-		return resourceResult(map[string]any{"engine": string(input.Engine), "image": item})
+		item, err := a.containers.InspectImage(bound, containers.ImageInspectRequest{Engine: input.Engine, EndpointID: input.EndpointID, Image: input.Image})
+		if err != nil {
+			return capability.Result{}, containerResourceBusinessError(err)
+		}
+		return resourceResult(acceptedWithEndpoint(map[string]any{"engine": string(input.Engine), "image": item}, input.EndpointID))
 	case containers.MethodImagesHistory:
 		var input imageArguments
 		if err := decodeCapabilityArguments(arguments, &input); err != nil {
 			return capability.Result{}, err
 		}
-		items, err := a.containers.HistoryImage(ctx, containers.ImageHistoryRequest{Engine: input.Engine, Image: input.Image})
+		bound, err := a.bindEndpoint(ctx, input.Engine, input.EndpointID)
 		if err != nil {
 			return capability.Result{}, containerResourceBusinessError(err)
 		}
-		return resourceResult(map[string]any{"engine": string(input.Engine), "image": input.Image, "history": items})
+		items, err := a.containers.HistoryImage(bound, containers.ImageHistoryRequest{Engine: input.Engine, EndpointID: input.EndpointID, Image: input.Image})
+		if err != nil {
+			return capability.Result{}, containerResourceBusinessError(err)
+		}
+		return resourceResult(acceptedWithEndpoint(map[string]any{"engine": string(input.Engine), "image": input.Image, "history": items}, input.EndpointID))
 	case containers.MethodImagesRemovePreflight:
 		var input containers.ImageRemovePreflightRequest
 		if err := decodeCapabilityArguments(arguments, &input); err != nil {
 			return capability.Result{}, err
 		}
-		plan, err := a.containers.RemoveImagePreflight(ctx, input)
+		bound, err := a.bindEndpoint(ctx, input.Engine, input.EndpointID)
+		if err != nil {
+			return capability.Result{}, containerResourceBusinessError(err)
+		}
+		plan, err := a.containers.RemoveImagePreflight(bound, input)
 		if err != nil {
 			return capability.Result{}, containerResourceBusinessError(err)
 		}
@@ -125,21 +155,29 @@ func (a *containersCapabilityAdapter) invokeResourceSync(ctx context.Context, me
 		if err := decodeCapabilityArguments(arguments, &input); err != nil {
 			return capability.Result{}, err
 		}
-		items, err := a.containers.ListVolumes(ctx, input.Engine)
+		bound, err := a.bindEndpoint(ctx, input.Engine, input.EndpointID)
 		if err != nil {
 			return capability.Result{}, containerResourceBusinessError(err)
 		}
-		return resourceResult(map[string]any{"engine": string(input.Engine), "volumes": items, "partial_failure_count": volumeReferenceFailureCount(items)})
+		items, err := a.containers.ListVolumes(bound, input.Engine)
+		if err != nil {
+			return capability.Result{}, containerResourceBusinessError(err)
+		}
+		return resourceResult(acceptedWithEndpoint(map[string]any{"engine": string(input.Engine), "volumes": items, "partial_failure_count": volumeReferenceFailureCount(items)}, input.EndpointID))
 	case containers.MethodVolumesInspect:
 		var input volumeArguments
 		if err := decodeCapabilityArguments(arguments, &input); err != nil {
 			return capability.Result{}, err
 		}
-		item, err := a.containers.InspectVolume(ctx, containers.VolumeInspectRequest{Engine: input.Engine, Name: input.Name})
+		bound, err := a.bindEndpoint(ctx, input.Engine, input.EndpointID)
 		if err != nil {
 			return capability.Result{}, containerResourceBusinessError(err)
 		}
-		return resourceResult(map[string]any{"engine": string(input.Engine), "volume": item})
+		item, err := a.containers.InspectVolume(bound, containers.VolumeInspectRequest{Engine: input.Engine, EndpointID: input.EndpointID, Name: input.Name})
+		if err != nil {
+			return capability.Result{}, containerResourceBusinessError(err)
+		}
+		return resourceResult(acceptedWithEndpoint(map[string]any{"engine": string(input.Engine), "volume": item}, input.EndpointID))
 	case containers.MethodVolumesCreatePreflight:
 		var input containers.VolumeCreateRequest
 		if err := decodeCapabilityArguments(arguments, &input); err != nil {
@@ -155,7 +193,11 @@ func (a *containersCapabilityAdapter) invokeResourceSync(ctx context.Context, me
 		if err := decodeCapabilityArguments(arguments, &input); err != nil {
 			return capability.Result{}, err
 		}
-		plan, err := a.containers.RemoveVolumePreflight(ctx, input)
+		bound, err := a.bindEndpoint(ctx, input.Engine, input.EndpointID)
+		if err != nil {
+			return capability.Result{}, containerResourceBusinessError(err)
+		}
+		plan, err := a.containers.RemoveVolumePreflight(bound, input)
 		if err != nil {
 			return capability.Result{}, containerResourceBusinessError(err)
 		}
@@ -167,10 +209,14 @@ func (a *containersCapabilityAdapter) invokeResourceSync(ctx context.Context, me
 		}
 		var plan containers.ResourcePlan
 		var err error
+		bound, bindErr := a.bindEndpoint(ctx, input.Engine, input.EndpointID)
+		if bindErr != nil {
+			return capability.Result{}, containerResourceBusinessError(bindErr)
+		}
 		if method == containers.MethodImagesPrunePreflight {
-			plan, err = a.containers.PruneImagesPreflight(ctx, containers.ResourcePruneRequest{Engine: input.Engine, ResourceIdentities: input.ResourceIdentities})
+			plan, err = a.containers.PruneImagesPreflight(bound, containers.ResourcePruneRequest{Engine: input.Engine, EndpointID: input.EndpointID, ResourceIdentities: input.ResourceIdentities})
 		} else {
-			plan, err = a.containers.PruneVolumesPreflight(ctx, containers.ResourcePruneRequest{Engine: input.Engine, ResourceIdentities: input.ResourceIdentities})
+			plan, err = a.containers.PruneVolumesPreflight(bound, containers.ResourcePruneRequest{Engine: input.Engine, EndpointID: input.EndpointID, ResourceIdentities: input.ResourceIdentities})
 		}
 		if err != nil {
 			return capability.Result{}, containerResourceBusinessError(err)
@@ -188,8 +234,12 @@ func (a *containersCapabilityAdapter) resourceOperation(method containers.Method
 		if err := decodeCapabilityArguments(arguments, &input); err != nil {
 			return nil, nil, err
 		}
-		return acceptedResourceOperation(method, input.Engine, ""), func(ctx context.Context) error {
-			_, err := a.containers.Create(ctx, input)
+		return acceptedWithEndpoint(acceptedResourceOperation(method, input.Engine, ""), input.EndpointID), func(ctx context.Context) error {
+			bound, err := a.bindEndpoint(ctx, input.Engine, input.EndpointID)
+			if err != nil {
+				return err
+			}
+			_, err = a.containers.Create(bound, input)
 			return err
 		}, nil
 	case containers.MethodPause, containers.MethodUnpause, containers.MethodKill:
@@ -197,17 +247,20 @@ func (a *containersCapabilityAdapter) resourceOperation(method containers.Method
 		if err := decodeCapabilityArguments(arguments, &input); err != nil {
 			return nil, nil, err
 		}
-		accepted := acceptedResourceOperation(method, input.Engine, input.ContainerID)
+		accepted := acceptedWithEndpoint(acceptedResourceOperation(method, input.Engine, input.ContainerID), input.EndpointID)
 		return accepted, func(ctx context.Context) error {
-			req := containers.ContainerActionRequest{Engine: input.Engine, ContainerID: input.ContainerID, TimeoutSec: input.TimeoutSec}
-			var err error
+			bound, err := a.bindEndpoint(ctx, input.Engine, input.EndpointID)
+			if err != nil {
+				return err
+			}
+			req := containers.ContainerActionRequest{Engine: input.Engine, EndpointID: input.EndpointID, ContainerID: input.ContainerID, TimeoutSec: input.TimeoutSec}
 			switch method {
 			case containers.MethodPause:
-				_, err = a.containers.Pause(ctx, req)
+				_, err = a.containers.Pause(bound, req)
 			case containers.MethodUnpause:
-				_, err = a.containers.Unpause(ctx, req)
+				_, err = a.containers.Unpause(bound, req)
 			case containers.MethodKill:
-				_, err = a.containers.Kill(ctx, req)
+				_, err = a.containers.Kill(bound, req)
 			}
 			return err
 		}, nil
@@ -216,32 +269,48 @@ func (a *containersCapabilityAdapter) resourceOperation(method containers.Method
 		if err := decodeCapabilityArguments(arguments, &input); err != nil {
 			return nil, nil, err
 		}
-		return acceptedResourceOperation(method, input.Engine, ""), func(ctx context.Context) error {
-			return a.containers.TagImage(ctx, containers.ImageTagRequest{Engine: input.Engine, Image: input.Image, Tag: input.Tag})
+		return acceptedWithEndpoint(acceptedResourceOperation(method, input.Engine, ""), input.EndpointID), func(ctx context.Context) error {
+			bound, err := a.bindEndpoint(ctx, input.Engine, input.EndpointID)
+			if err != nil {
+				return err
+			}
+			return a.containers.TagImage(bound, containers.ImageTagRequest{Engine: input.Engine, EndpointID: input.EndpointID, Image: input.Image, Tag: input.Tag})
 		}, nil
 	case containers.MethodImagesRemove:
 		var input imageRemoveArguments
 		if err := decodeCapabilityArguments(arguments, &input); err != nil {
 			return nil, nil, err
 		}
-		return acceptedResourceOperation(method, input.Engine, ""), func(ctx context.Context) error {
-			return a.containers.RemoveImage(ctx, containers.ImageRemoveRequest{Engine: input.Engine, Image: input.Image, Force: input.Force})
+		return acceptedWithEndpoint(acceptedResourceOperation(method, input.Engine, ""), input.EndpointID), func(ctx context.Context) error {
+			bound, err := a.bindEndpoint(ctx, input.Engine, input.EndpointID)
+			if err != nil {
+				return err
+			}
+			return a.containers.RemoveImage(bound, containers.ImageRemoveRequest{Engine: input.Engine, EndpointID: input.EndpointID, Image: input.Image, Force: input.Force})
 		}, nil
 	case containers.MethodImagesPrune:
 		var input resourcePruneArguments
 		if err := decodeCapabilityArguments(arguments, &input); err != nil {
 			return nil, nil, err
 		}
-		return acceptedResourceOperation(method, input.Engine, ""), func(ctx context.Context) error {
-			return a.containers.PruneImages(ctx, containers.ResourcePruneRequest{Engine: input.Engine, ResourceIdentities: input.ResourceIdentities})
+		return acceptedWithEndpoint(acceptedResourceOperation(method, input.Engine, ""), input.EndpointID), func(ctx context.Context) error {
+			bound, err := a.bindEndpoint(ctx, input.Engine, input.EndpointID)
+			if err != nil {
+				return err
+			}
+			return a.containers.PruneImages(bound, containers.ResourcePruneRequest{Engine: input.Engine, EndpointID: input.EndpointID, ResourceIdentities: input.ResourceIdentities})
 		}, nil
 	case containers.MethodVolumesCreate:
 		var input volumeCreateArguments
 		if err := decodeCapabilityArguments(arguments, &input); err != nil {
 			return nil, nil, err
 		}
-		return acceptedResourceOperation(method, input.Engine, ""), func(ctx context.Context) error {
-			_, err := a.containers.CreateVolume(ctx, containers.VolumeCreateRequest{Engine: input.Engine, Name: input.Name, Driver: input.Driver, Options: input.Options})
+		return acceptedWithEndpoint(acceptedResourceOperation(method, input.Engine, ""), input.EndpointID), func(ctx context.Context) error {
+			bound, err := a.bindEndpoint(ctx, input.Engine, input.EndpointID)
+			if err != nil {
+				return err
+			}
+			_, err = a.containers.CreateVolume(bound, containers.VolumeCreateRequest{Engine: input.Engine, EndpointID: input.EndpointID, Name: input.Name, Driver: input.Driver, Options: input.Options})
 			return err
 		}, nil
 	case containers.MethodVolumesRemove:
@@ -249,16 +318,24 @@ func (a *containersCapabilityAdapter) resourceOperation(method containers.Method
 		if err := decodeCapabilityArguments(arguments, &input); err != nil {
 			return nil, nil, err
 		}
-		return acceptedResourceOperation(method, input.Engine, ""), func(ctx context.Context) error {
-			return a.containers.RemoveVolume(ctx, containers.VolumeRemoveRequest{Engine: input.Engine, Name: input.Name})
+		return acceptedWithEndpoint(acceptedResourceOperation(method, input.Engine, ""), input.EndpointID), func(ctx context.Context) error {
+			bound, err := a.bindEndpoint(ctx, input.Engine, input.EndpointID)
+			if err != nil {
+				return err
+			}
+			return a.containers.RemoveVolume(bound, containers.VolumeRemoveRequest{Engine: input.Engine, EndpointID: input.EndpointID, Name: input.Name})
 		}, nil
 	case containers.MethodVolumesPrune:
 		var input resourcePruneArguments
 		if err := decodeCapabilityArguments(arguments, &input); err != nil {
 			return nil, nil, err
 		}
-		return acceptedResourceOperation(method, input.Engine, ""), func(ctx context.Context) error {
-			return a.containers.PruneVolumes(ctx, containers.ResourcePruneRequest{Engine: input.Engine, ResourceIdentities: input.ResourceIdentities})
+		return acceptedWithEndpoint(acceptedResourceOperation(method, input.Engine, ""), input.EndpointID), func(ctx context.Context) error {
+			bound, err := a.bindEndpoint(ctx, input.Engine, input.EndpointID)
+			if err != nil {
+				return err
+			}
+			return a.containers.PruneVolumes(bound, containers.ResourcePruneRequest{Engine: input.Engine, EndpointID: input.EndpointID, ResourceIdentities: input.ResourceIdentities})
 		}, nil
 	default:
 		return nil, nil, fmt.Errorf("%w: %q is not a resource operation method", containers.ErrInvalidMethod, method)
@@ -301,6 +378,9 @@ func containerResourceBusinessError(cause error) error {
 	case errors.Is(cause, containers.ErrReferenceStateIncomplete):
 		code = "CONTAINER_REFERENCE_STATE_INCOMPLETE"
 		message = "Container reference state is incomplete"
+	case errors.Is(cause, containers.ErrEndpointNotFound):
+		code = "CONTAINER_ENDPOINT_NOT_FOUND"
+		message = "The selected container engine endpoint is unavailable"
 	default:
 		return containerBusinessError(cause)
 	}
@@ -313,7 +393,7 @@ func containerResourceBusinessError(cause error) error {
 
 func containerBusinessErrorForBinding(binding capability.ExecutionBinding, cause error) error {
 	var mapped error
-	if binding.CapabilityVersion == containersCapabilityV3Version {
+	if binding.CapabilityVersion == containersCapabilityV3Version || binding.CapabilityVersion == containersCapabilityV4Version {
 		mapped = containerResourceBusinessError(cause)
 	} else {
 		mapped = containerBusinessError(cause)
@@ -375,7 +455,7 @@ func projectResourcePlanRequest(plan containers.ResourcePlan) (map[string]any, e
 		return nil, errors.New("container resource plan request is not an object")
 	}
 	out := make(map[string]any)
-	for _, key := range []string{"engine", "container_id", "name", "force", "confirmation_name", "resource_identities"} {
+	for _, key := range []string{"engine", "endpoint_id", "container_id", "name", "force", "confirmation_name", "resource_identities", "project_id", "pod_id"} {
 		if value, exists := source[key]; exists {
 			out[key] = value
 		}
@@ -392,7 +472,7 @@ func projectResourcePlanRequest(plan containers.ResourcePlan) (map[string]any, e
 func projectResourcePlanTarget(target map[string]any) map[string]any {
 	out := make(map[string]any)
 	for _, key := range []string{
-		"engine", "resource_kind", "identity", "image", "container_id", "container_name", "state", "name", "driver",
+		"engine", "endpoint_id", "resource_kind", "identity", "image", "container_id", "container_name", "state", "name", "driver", "project_id", "pod_id", "container_count",
 		"option_keys", "referenced_containers", "reclaimable_bytes", "resource_count", "resource_identities",
 	} {
 		if value, exists := target[key]; exists {

@@ -132,6 +132,9 @@ type EngineContainer struct {
 	CreatedAtUnixMs int64
 	Runtime         RuntimeInput
 	Ports           []PortSummary
+	GroupKind       string
+	GroupID         string
+	GroupName       string
 }
 
 type EngineActionRequest struct {
@@ -255,6 +258,7 @@ func (a *Adapter) Status(ctx context.Context, req StatusRequest) (StatusResponse
 	}
 	return StatusResponse{
 		Engine:        engine,
+		EndpointID:    req.EndpointID,
 		Available:     status.Available,
 		EngineVersion: status.Version,
 	}, nil
@@ -275,6 +279,7 @@ func (a *Adapter) List(ctx context.Context, req ContainerListRequest) (Container
 	}
 	return ContainerListResponse{
 		Engine:     engine,
+		EndpointID: req.EndpointID,
 		Containers: out,
 	}, nil
 }
@@ -292,8 +297,9 @@ func (a *Adapter) Inspect(ctx context.Context, req ContainerInspectRequest) (Con
 		return ContainerInspectResponse{}, normalizeContainerResourceError(containerID, err)
 	}
 	return ContainerInspectResponse{
-		Engine:    req.Engine,
-		Container: containerInspect(container),
+		Engine:     req.Engine,
+		EndpointID: req.EndpointID,
+		Container:  containerInspect(container),
 	}, nil
 }
 
@@ -311,6 +317,7 @@ func (a *Adapter) StartPreflight(ctx context.Context, req ContainerStartRequest)
 	}
 	return BuildStartPreflightPlan(StartPreflightInput{
 		Engine:        req.Engine,
+		EndpointID:    req.EndpointID,
 		ContainerID:   container.ContainerID,
 		ContainerName: container.Name,
 		Image:         container.Image,
@@ -373,6 +380,7 @@ func (a *Adapter) TailLogs(ctx context.Context, req LogsTailRequest) (LogsTailRe
 	}
 	return LogsTailResponse{
 		Engine:      result.Engine,
+		EndpointID:  req.EndpointID,
 		ContainerID: strings.TrimSpace(result.ContainerID),
 		Lines:       append([]LogLine(nil), result.Lines...),
 	}, nil
@@ -417,9 +425,10 @@ func (a *Adapter) pullImage(ctx context.Context, engine Engine, imageRef string)
 		return ImagePullResponse{}, err
 	}
 	return ImagePullResponse{
-		Engine:    result.Engine,
-		Image:     imageSummary(result.Image),
-		Completed: result.Completed,
+		Engine:     result.Engine,
+		EndpointID: endpointIDFromContext(ctx, engine),
+		Image:      imageSummary(result.Image),
+		Completed:  result.Completed,
 	}, nil
 }
 
@@ -448,6 +457,7 @@ func (a *Adapter) action(ctx context.Context, req EngineActionRequest) (Containe
 	}
 	return ContainerActionResponse{
 		Engine:      result.Engine,
+		EndpointID:  endpointIDFromContext(ctx, req.Engine),
 		Method:      result.Method,
 		ContainerID: strings.TrimSpace(result.ContainerID),
 		Completed:   result.Completed,
@@ -520,6 +530,9 @@ func containerSummary(container EngineContainer) ContainerSummary {
 		Health:          strings.TrimSpace(container.Health),
 		CreatedAtUnixMs: container.CreatedAtUnixMs,
 		Ports:           append([]PortSummary(nil), container.Ports...),
+		GroupKind:       strings.TrimSpace(container.GroupKind),
+		GroupID:         strings.TrimSpace(container.GroupID),
+		GroupName:       strings.TrimSpace(container.GroupName),
 	}
 }
 
@@ -549,6 +562,9 @@ func containerInspect(container EngineContainer) ContainerInspect {
 		Ports:           append([]PortSummary(nil), container.Ports...),
 		Mounts:          append([]MountSummary(nil), runtime.Mounts...),
 		Devices:         append([]DeviceSummary(nil), runtime.Devices...),
+		GroupKind:       strings.TrimSpace(container.GroupKind),
+		GroupID:         strings.TrimSpace(container.GroupID),
+		GroupName:       strings.TrimSpace(container.GroupName),
 	}
 }
 
