@@ -718,7 +718,7 @@
               "sqlite",
               "storage"
             ],
-            "summary": "- Authority: Floret owns admitted Agent state. Redeven owns host settings, upload bytes, unadmitted commands, routing/read state, audit, and cross-store operation intent.\n- Outcome: schema v8 replaces durable editable drafts with capability-bound upload staging. Editable text, references, and composer preferences exist only in the current connection's Flower coordinator.\n- Invariants: connections cannot recover or conflict with each other's drafts; staging rows contain no editable message or reference projection; Send atomically freezes an unadmitted command before Floret admission; initial-send lookup never opens a Floret read Host before durable create intent exists.\n- Failure boundary: unsupported schema, drift, malformed legacy drafts, uncertain canonical reads, membership mismatch, or failed migration effects stop startup without repair or substitute database creation.",
+            "summary": "- Authority: Floret owns admitted Agent state. Redeven owns host settings, upload bytes, unadmitted commands, routing/read state, audit, and cross-store intent.\n- Outcome: schema v8 replaces durable drafts with capability-bound upload staging; editable composer state is connection-local.\n- Invariants: staging contains no message or reference projection; Send atomically freezes one command before admission; initial send reads product create intent before opening Floret authority.\n- Failure boundary: unsupported schema, drift, malformed legacy drafts, uncertain canonical reads, membership mismatch, or failed migration effects stop startup without repair or substitute database creation.",
             "section_count": 2
           },
           {
@@ -2085,8 +2085,8 @@
         "title": "Flower storage ownership and migrations",
         "type": "Storage Contract"
       },
-      "body_length": 11293,
-      "summary": "- Authority: Floret owns admitted Agent state. Redeven owns host settings, upload bytes, unadmitted commands, routing/read state, audit, and cross-store operation intent.\n- Outcome: schema v8 replaces durable editable drafts with capability-bound upload staging. Editable text, references, and composer preferences exist only in the current connection's Flower coordinator.\n- Invariants: connections cannot recover or conflict with each other's drafts; staging rows contain no editable message or reference projection; Send atomically freezes an unadmitted command before Floret admission; initial-send lookup never opens a Floret read Host before durable create intent exists.\n- Failure boundary: unsupported schema, drift, malformed legacy drafts, uncertain canonical reads, membership mismatch, or failed migration effects stop startup without repair or substitute database creation.",
+      "body_length": 11099,
+      "summary": "- Authority: Floret owns admitted Agent state. Redeven owns host settings, upload bytes, unadmitted commands, routing/read state, audit, and cross-store intent.\n- Outcome: schema v8 replaces durable drafts with capability-bound upload staging; editable composer state is connection-local.\n- Invariants: staging contains no message or reference projection; Send atomically freezes one command before admission; initial send reads product create intent before opening Floret authority.\n- Failure boundary: unsupported schema, drift, malformed legacy drafts, uncertain canonical reads, membership mismatch, or failed migration effects stop startup without repair or substitute database creation.",
       "sections": [
         {
           "id": "contract",
@@ -2180,7 +2180,7 @@
           "description": "The boundary gate rejects Floret storage access, local dependency wiring, and durable sinks outside the reviewed closed set."
         }
       ],
-      "snippet": "- Authority: Floret owns admitted Agent state. Redeven owns host settings, upload bytes, unadmitted commands, routing/read state, audit, and cross-store operation intent. - Outcome: schema v8 replaces durable editable drafts with capability",
+      "snippet": "- Authority: Floret owns admitted Agent state. Redeven owns host settings, upload bytes, unadmitted commands, routing/read state, audit, and cross-store intent. - Outcome: schema v8 replaces durable drafts with capability-bound upload stagi",
       "links": [
         {
           "label": "Database schema migration ownership",
@@ -9557,5 +9557,5 @@
       ]
     }
   ],
-  "source_sha256": "65acf34110d286d788b1065deb300c25d69e53d4c6835fb7cd4da5f8bfca0239"
+  "source_sha256": "4a0e6a83335856e05c15d3c0de68324b49e568f08c93925f140090c0d02b1ec8"
 }
