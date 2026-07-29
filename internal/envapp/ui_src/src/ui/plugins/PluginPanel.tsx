@@ -122,7 +122,11 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
       props.onClose();
       return;
     }
-    props.onOpenPluginDetails(tile.item.inventoryKey);
+    if (tile.action === 'open_surface' && tile.item.defaultLaunchTarget) {
+      props.onOpenPluginSurface(tile.item.defaultLaunchTarget);
+    } else {
+      props.onOpenPluginDetails(tile.item.inventoryKey);
+    }
     props.onClose();
   };
 
@@ -291,6 +295,8 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
                       <Show when={tileMenuItems(tile).length > 0}>
                         <Dropdown
                           align="end"
+                          class="absolute right-1 top-1 z-10"
+                          triggerClass="rounded-md"
                           items={tileMenuItems(tile)}
                           onSelect={(action) => activateTileMenu(tile, action)}
                           triggerAriaLabel={`${tile.item.displayName}: ${i18n.t('uiCopy.plugin.moreActions')}`}
@@ -299,7 +305,7 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
                               ref={(element) => tileMenuButtons.set(tile.item.inventoryKey, element)}
                               type="button"
                               data-plugin-panel-tile-menu={tile.item.inventoryKey}
-                              class="absolute right-0 top-0 inline-flex min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-[background-color,color,opacity] duration-150 hover:bg-muted hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:h-7 sm:min-h-0 sm:w-7 sm:min-w-0 sm:opacity-0 sm:group-hover:opacity-100 motion-reduce:transition-none"
+                              class="inline-flex min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center rounded-md bg-background/80 text-muted-foreground opacity-100 shadow-sm transition-[background-color,color,opacity] duration-150 hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:h-7 sm:min-h-0 sm:w-7 sm:min-w-0 sm:opacity-0 sm:shadow-none sm:group-hover:opacity-100 motion-reduce:transition-none"
                               title={i18n.t('uiCopy.plugin.moreActions')}
                             >
                               <MoreHorizontal class="h-3.5 w-3.5" />

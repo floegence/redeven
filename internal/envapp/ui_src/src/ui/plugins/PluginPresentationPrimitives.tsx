@@ -6,7 +6,7 @@ import { useI18n } from '../i18n';
 import type { PluginInventoryItem } from './pluginTypes';
 import { pluginLifecycleLabel, pluginTrustLabel } from './pluginPresentation';
 
-export type PluginIconSize = 'row' | 'detail' | 'launcher';
+export type PluginIconSize = 'row' | 'card' | 'detail' | 'launcher';
 
 export function PluginIcon(props: {
   item: PluginInventoryItem;
@@ -17,15 +17,16 @@ export function PluginIcon(props: {
   const size = () => props.size ?? 'row';
   const iconClass = () => size() === 'launcher'
     ? 'h-7 w-7'
-    : size() === 'detail'
-      ? 'h-6 w-6'
+    : size() === 'detail' || size() === 'card'
+      ? 'h-5 w-5'
       : 'h-4 w-4';
   return (
     <span
       class={cn(
         'flex shrink-0 items-center justify-center overflow-hidden border bg-muted text-foreground shadow-sm',
         size() === 'launcher' && 'h-16 w-16 rounded-2xl',
-        size() === 'detail' && 'h-14 w-14 rounded-xl',
+        size() === 'detail' && 'h-12 w-12 rounded-xl',
+        size() === 'card' && 'h-12 w-12 rounded-lg',
         size() === 'row' && 'h-10 w-10 rounded-lg',
         props.class,
       )}
@@ -126,7 +127,7 @@ export function PluginIdentityHeader(props: {
             ref={props.headingRef}
             tabIndex={props.headingRef ? -1 : undefined}
             data-plugin-center-detail-heading={props.headingRef ? '' : undefined}
-            class="min-w-0 truncate text-base font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            class="min-w-0 truncate text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {props.item.displayName}
           </h2>
@@ -138,7 +139,7 @@ export function PluginIdentityHeader(props: {
           <Show when={props.item.version}><span>v{props.item.version}</span></Show>
         </div>
         <Show when={props.description}>
-          <p class="mt-2 text-sm leading-5 text-muted-foreground">{props.item.description}</p>
+          <p class="mt-1.5 text-xs leading-5 text-muted-foreground">{props.item.description}</p>
         </Show>
       </div>
     </div>

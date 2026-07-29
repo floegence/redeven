@@ -292,6 +292,19 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     }
   };
 
+  const openItemSurface = (item: PluginInventoryItem, placement: 'activity' | 'workbench') => {
+    const target = item.defaultLaunchTarget;
+    if (!target || !canOpenSurfaces()) return;
+    void runCommand({
+      type: 'open_surface',
+      pluginID: target.pluginID,
+      pluginInstanceID: target.pluginInstanceID,
+      surfaceID: target.surfaceID,
+      expectedManagementRevision: target.expectedManagementRevision,
+      placement,
+    });
+  };
+
   return (
     <PluginCenterShell
       query={query()}
@@ -353,24 +366,18 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
         <div
           data-plugin-center-master
           class={cn(
-            'min-h-0 w-full flex-col border-b sm:border-b-0 sm:border-r',
-            selectedItem()
-              ? activeTab() === 'discover' ? 'sm:w-[min(560px,58vw)]' : 'sm:w-[280px] lg:w-[min(340px,42vw)]'
-              : 'sm:w-full sm:border-r-0',
+            'min-h-0 min-w-0 w-full flex-1 flex-col border-b sm:border-b-0',
             mobileDetailOpen() ? 'hidden sm:flex' : 'flex',
           )}
         >
+          <Show when={loading()}>
+            <div role="status" data-plugin-center-loading class="sr-only">{i18n.t('uiCopy.plugin.loadingOfficial')}</div>
+          </Show>
           <div
             data-plugin-center-list
-            class={cn(
-              'min-h-0 flex-1 overflow-y-auto',
-              activeTab() === 'discover' && 'grid auto-rows-min grid-cols-1 gap-4 p-4 md:grid-cols-2',
-              activeTab() === 'discover' && !selectedItem() && 'lg:grid-cols-3 xl:grid-cols-4',
-            )}
+            aria-busy={loading()}
+            class="grid min-h-0 flex-1 auto-rows-min grid-cols-[repeat(auto-fill,minmax(min(240px,100%),1fr))] gap-3 overflow-y-auto p-3 sm:p-4"
           >
-            <Show when={loading()}>
-              <div class="border-b px-4 py-3 text-sm text-muted-foreground">{i18n.t('uiCopy.plugin.loadingOfficial')}</div>
-            </Show>
             <For each={visibleItems()}>
               {(item) => (
                 <PluginCenterItem
@@ -378,10 +385,13 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
                   tab={activeTab()}
                   selected={selectedItem()?.inventoryKey === item.inventoryKey}
                   canManage={canManage()}
+                  canOpenSurfaces={canOpenSurfaces()}
                   pending={loading() || commandPending()}
                   onOpenDetails={(target) => openDetails(item.inventoryKey, target)}
                   onInstall={() => openExternalDialog(undefined, item.officialCatalog?.distribution.installSource)}
                   onUpdate={() => openExternalDialog(item, item.officialCatalog?.distribution.installSource)}
+                  onOpenActivity={() => openItemSurface(item, 'activity')}
+                  onOpenWorkbench={() => openItemSurface(item, 'workbench')}
                 />
               )}
             </For>
@@ -504,12 +514,13 @@ export function PluginCenterShell(props: {
   }];
   return (
     <section ref={rootRef} data-plugin-center-view tabIndex={-1} class="flex h-full min-h-0 flex-col bg-background text-foreground">
-      <header class="flex w-full shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b bg-background px-3 py-2 sm:px-4" data-plugin-center-toolbar>
+      <header class="w-full shrink-0 border-b bg-background" data-plugin-center-toolbar>
+        <div class="flex w-full min-w-0 flex-wrap items-center gap-3 px-3 py-2.5 sm:flex-nowrap sm:px-4" data-plugin-center-toolbar-primary>
           <div class="flex min-w-0 shrink-0 items-center gap-2">
             <h1 class="truncate text-sm font-semibold">{i18n.t('uiCopy.plugin.centerTitle')}</h1>
             <span class="rounded border border-primary/25 bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-primary">{i18n.t('uiCopy.plugin.openSources')}</span>
           </div>
-          <label class="relative order-first block w-full min-w-0 basis-full sm:order-none sm:min-w-[180px] sm:max-w-[280px] sm:flex-1 sm:basis-auto">
+          <label class="relative order-last block w-full min-w-0 basis-full sm:order-none sm:ml-auto sm:max-w-[360px] sm:flex-1 sm:basis-auto">
               <span class="sr-only">{i18n.t('uiCopy.plugin.searchPlaceholder')}</span>
               <Search class="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <input
@@ -522,12 +533,69 @@ export function PluginCenterShell(props: {
                 class="h-[44px] w-full rounded-md border bg-muted/30 pl-8 pr-2 text-sm outline-none transition-[background-color,border-color,box-shadow] duration-150 placeholder:text-muted-foreground/60 focus:border-ring focus:bg-background focus:ring-2 focus:ring-ring/20 sm:h-9 motion-reduce:transition-none"
               />
           </label>
-        <div class="order-3 flex min-w-0 max-w-full shrink items-center overflow-x-auto" role="tablist" aria-label={i18n.t('uiCopy.plugin.centerTitle')}>
+          <div class="ml-auto flex shrink-0 items-center gap-1.5">
+            <Show when={props.filtersActive}>
+              <button
+                type="button"
+                data-plugin-center-clear-filters
+                class="min-h-[44px] shrink-0 cursor-pointer whitespace-nowrap rounded-md px-2.5 text-xs font-semibold text-primary transition-colors duration-150 hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-9 motion-reduce:transition-none"
+                onClick={props.onClearFilters}
+              >
+                {i18n.t('uiCopy.plugin.clearFilters')}
+              </button>
+            </Show>
+            <Show when={props.canManage}>
+              <Dropdown
+                align="end"
+                disabled={props.loading}
+                items={administrationItems()}
+                onSelect={(id) => { if (id === 'install-external') props.onInstallExternal(); }}
+                triggerAriaLabel={i18n.t('uiCopy.plugin.moreActions')}
+                trigger={(
+                  <button
+                    type="button"
+                    data-plugin-center-install-external
+                    class="inline-flex h-[44px] w-[44px] cursor-pointer items-center justify-center rounded-md border text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 sm:h-9 sm:w-9 motion-reduce:transition-none"
+                    disabled={props.loading}
+                    title={i18n.t('uiCopy.plugin.moreActions')}
+                  >
+                    <MoreHorizontal class="h-3.5 w-3.5" />
+                  </button>
+                )}
+              />
+            </Show>
+            <button
+              type="button"
+              data-plugin-center-refresh
+              class="inline-flex h-[44px] w-[44px] cursor-pointer items-center justify-center rounded-md border text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 sm:h-9 sm:w-9 motion-reduce:transition-none"
+              aria-label={i18n.t('uiCopy.plugin.refreshOfficial')}
+              title={i18n.t('uiCopy.plugin.refreshOfficial')}
+              disabled={props.loading}
+              onClick={props.onRefresh}
+            >
+              <RefreshIcon class={cn('h-3.5 w-3.5', props.loading && 'animate-spin motion-reduce:animate-none')} />
+            </button>
+            <Show when={props.onClose}>
+              <button
+                type="button"
+                class="inline-flex h-[44px] w-[44px] cursor-pointer items-center justify-center rounded-md border text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground sm:h-9 sm:w-9 motion-reduce:transition-none"
+                aria-label={i18n.t('uiCopy.plugin.closeCenter')}
+                title={i18n.t('uiCopy.plugin.closeCenter')}
+                onClick={() => props.onClose?.()}
+              >
+                <X class="h-3.5 w-3.5" />
+              </button>
+            </Show>
+          </div>
+        </div>
+        <div class="flex min-w-0 items-center gap-3 overflow-x-auto border-t px-3 py-2 sm:px-4" data-plugin-center-toolbar-secondary>
+          <div class="flex shrink-0 items-center" role="tablist" aria-label={i18n.t('uiCopy.plugin.centerTitle')}>
           <TabButton id="discover" active={props.activeTab} onSelect={props.onTabSelect} label={i18n.t('uiCopy.plugin.discoverCount', { count: props.discoverCount })} />
           <TabButton id="installed" active={props.activeTab} onSelect={props.onTabSelect} label={i18n.t('uiCopy.plugin.installedCount', { count: props.installedCount })} />
           <TabButton id="updates" active={props.activeTab} onSelect={props.onTabSelect} label={i18n.t('uiCopy.plugin.updatesCount', { count: props.updatesCount })} />
-        </div>
-        <div class="order-4 flex min-w-0 flex-1 items-center gap-2 overflow-x-auto" data-plugin-center-filter-scroll>
+          </div>
+          <span aria-hidden="true" class="h-5 w-px shrink-0 bg-border" />
+          <div class="flex min-w-max flex-1 items-center gap-2" data-plugin-center-filter-scroll>
             <div class="flex gap-1" role="group" aria-label={i18n.t('uiCopy.plugin.categories')}>
               <CenterCategoryButton id="all" active={props.category} label={i18n.t('uiCopy.plugin.categoryAll')} onSelect={props.onCategorySelect} />
               <CenterCategoryButton id="development" active={props.category} label={i18n.t('uiCopy.plugin.categoryDevelopment')} onSelect={props.onCategorySelect} />
@@ -580,60 +648,7 @@ export function PluginCenterShell(props: {
               ]}
             />
           </div>
-        </div>
-        <div class="order-2 ml-auto flex shrink-0 items-center gap-1.5 sm:order-5">
-            <Show when={props.filtersActive}>
-            <button
-              type="button"
-              data-plugin-center-clear-filters
-              class="min-h-[44px] shrink-0 cursor-pointer whitespace-nowrap rounded-md px-2.5 text-xs font-semibold text-primary transition-colors duration-150 hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-9 motion-reduce:transition-none"
-              onClick={props.onClearFilters}
-            >
-              {i18n.t('uiCopy.plugin.clearFilters')}
-            </button>
-          </Show>
-          <Show when={props.canManage}>
-            <Dropdown
-              align="end"
-              disabled={props.loading}
-              items={administrationItems()}
-              onSelect={(id) => { if (id === 'install-external') props.onInstallExternal(); }}
-              triggerAriaLabel={i18n.t('uiCopy.plugin.moreActions')}
-              trigger={(
-                <button
-                  type="button"
-                  data-plugin-center-install-external
-                  class="inline-flex h-[44px] w-[44px] cursor-pointer items-center justify-center rounded-md border text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 sm:h-9 sm:w-9 motion-reduce:transition-none"
-                  disabled={props.loading}
-                  title={i18n.t('uiCopy.plugin.moreActions')}
-                >
-                  <MoreHorizontal class="h-3.5 w-3.5" />
-                </button>
-              )}
-            />
-          </Show>
-          <button
-            type="button"
-            data-plugin-center-refresh
-            class="inline-flex h-[44px] w-[44px] cursor-pointer items-center justify-center rounded-md border text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 sm:h-9 sm:w-9 motion-reduce:transition-none"
-            aria-label={i18n.t('uiCopy.plugin.refreshOfficial')}
-            title={i18n.t('uiCopy.plugin.refreshOfficial')}
-            disabled={props.loading}
-            onClick={props.onRefresh}
-          >
-            <RefreshIcon class="h-3.5 w-3.5" />
-          </button>
-          <Show when={props.onClose}>
-            <button
-              type="button"
-              class="inline-flex h-[44px] w-[44px] cursor-pointer items-center justify-center rounded-md border text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground sm:h-9 sm:w-9 motion-reduce:transition-none"
-              aria-label={i18n.t('uiCopy.plugin.closeCenter')}
-              title={i18n.t('uiCopy.plugin.closeCenter')}
-              onClick={() => props.onClose?.()}
-            >
-              <X class="h-3.5 w-3.5" />
-            </button>
-          </Show>
+          </div>
         </div>
       </header>
       {props.children}
@@ -661,14 +676,14 @@ export function PluginCenterDetails(props: {
   return (
     <aside
       data-plugin-center-details
-      class={cn('min-h-0 flex-1 overflow-y-auto bg-background', props.mobileOpen === false ? 'hidden sm:block' : 'block')}
+      class={cn('min-h-0 w-full overflow-y-auto bg-background sm:w-[360px] sm:max-w-[42vw] sm:flex-none sm:border-l', props.mobileOpen === false ? 'hidden sm:block' : 'block')}
     >
       <Show
         when={props.item}
-        fallback={<div class="px-5 py-10 text-sm text-muted-foreground">{i18n.t('uiCopy.plugin.selectOfficial')}</div>}
+        fallback={<div class="px-4 py-8 text-xs text-muted-foreground">{i18n.t('uiCopy.plugin.selectOfficial')}</div>}
       >
         {(item) => (
-          <div class="mx-auto max-w-4xl space-y-5 px-4 py-4 sm:px-6 sm:py-5">
+          <div class="space-y-4 px-4 py-4">
             <Button
               ref={props.mobileBackRef}
               data-plugin-center-mobile-back
@@ -703,9 +718,9 @@ export function PluginCenterDetails(props: {
 
             <PluginIssueDetails item={item()} />
 
-            <details class="rounded-md border px-4 py-3" data-plugin-technical-details>
-              <summary tabIndex={0} class="min-h-8 cursor-pointer text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{i18n.t('uiCopy.plugin.technicalDetails')}</summary>
-              <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <details class="rounded-md border px-3 py-2.5" data-plugin-technical-details>
+              <summary tabIndex={0} class="min-h-7 cursor-pointer text-xs font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{i18n.t('uiCopy.plugin.technicalDetails')}</summary>
+              <div class="mt-3 grid gap-2.5">
                 <DetailStat label={i18n.t('uiCopy.plugin.publisher')} value={item().publisher} />
                 <DetailStat label={i18n.t('uiCopy.plugin.installedVersion')} value={item().version ?? i18n.t('uiCopy.plugin.notInstalled')} />
                 <DetailStat label={i18n.t('uiCopy.plugin.stableVersion')} value={item().officialCatalog?.stableVersion ?? '-'} />
@@ -713,7 +728,7 @@ export function PluginCenterDetails(props: {
                 <DetailStat label={i18n.t('uiCopy.plugin.minimumReDevPlugin')} value={item().officialCatalog?.minReDevPluginVersion ?? '-'} />
                 <DetailStat label={i18n.t('uiCopy.plugin.trust')} value={pluginTrustLabel(item(), i18n)} />
               </div>
-              <code class="mt-4 block break-all text-xs text-muted-foreground">{item().pluginID}</code>
+              <code class="mt-3 block break-all text-[11px] text-muted-foreground">{item().pluginID}</code>
             </details>
             <PluginUninstallDialog
               item={item()}
@@ -778,7 +793,7 @@ function PluginPermissionInventory(props: {
               </span>
             </Show>
           </div>
-          <div class="space-y-5 pt-3">
+          <div class="space-y-4 pt-2.5">
             <For each={[true, false] as const}>
               {(required) => {
                 const permissions = () => inventory().permissions.filter((permission) => permission.requiredToOpen === required);
@@ -803,11 +818,11 @@ function PluginPermissionInventory(props: {
                     ? i18n.t('uiCopy.plugin.permissionChangeInProgress')
                     : undefined;
                 return (
-                  <div class="py-3" data-plugin-permission={permission.permissionID}>
-                    <div class="flex items-start justify-between gap-4">
+                  <div class="py-2.5" data-plugin-permission={permission.permissionID}>
+                    <div class="flex items-start justify-between gap-3">
                       <div class="min-w-0">
                         <div class="flex flex-wrap items-center gap-2">
-                          <span data-plugin-permission-name class="text-sm font-medium">{permissionName()}</span>
+                          <span data-plugin-permission-name class="text-xs font-medium">{permissionName()}</span>
                           <Show when={permission.requiredToOpen}>
                             <span class="rounded-full bg-[var(--redeven-status-warning-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--redeven-status-warning-foreground)]">
                               {i18n.t('uiCopy.plugin.requiredToOpen')}
@@ -912,10 +927,18 @@ function PluginPermissionInventory(props: {
                     </div>
                   )}
                 >
-                  <div class="text-sm text-muted-foreground">
-                    {pending().grant
-                      ? i18n.t('uiCopy.plugin.permissionGrantImpact')
-                      : i18n.t('uiCopy.plugin.permissionRevokeImpact')}
+                  <div class="space-y-4" data-plugin-permission-confirmation>
+                    <PluginIdentityHeader item={props.item} />
+                    <div class="flex items-start gap-3 rounded-md border bg-muted/20 p-3 text-sm text-muted-foreground">
+                      <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border bg-background text-muted-foreground">
+                        <Shield class="h-4 w-4" />
+                      </span>
+                      <p class="min-w-0 leading-6">
+                        {pending().grant
+                          ? i18n.t('uiCopy.plugin.permissionGrantImpact')
+                          : i18n.t('uiCopy.plugin.permissionRevokeImpact')}
+                      </p>
+                    </div>
                   </div>
                 </Dialog>
               );
@@ -1250,13 +1273,13 @@ function PluginActions(props: {
     }
   };
   return (
-    <section class="border-y bg-muted/20 py-4" data-plugin-primary-actions>
-      <div class="flex flex-col gap-2 px-3 sm:flex-row sm:items-center">
+    <section class="border-y bg-muted/20 px-3 py-3" data-plugin-primary-actions>
+      <div class="flex flex-col gap-2">
         <Button
           data-plugin-action={primaryActionDataID(presentation().primaryAction)}
           variant="primary"
-          size="md"
-          class="min-h-[44px] w-full justify-center sm:min-h-9 sm:w-auto"
+          size="sm"
+          class="min-h-[44px] w-full justify-center text-xs sm:min-h-8"
           loading={props.commandPending}
           disabled={primaryDisabled()}
           icon={primaryActionIcon(presentation().primaryAction)}
@@ -1264,37 +1287,42 @@ function PluginActions(props: {
         >
           {primaryActionLabel(presentation().primaryAction)}
         </Button>
-        <Show when={presentation().canOpenWorkbench}>
-          <Button
-            data-plugin-action="open-workbench"
-            variant="outline"
-            size="md"
-            class="min-h-[44px] w-full justify-center sm:min-h-9 sm:w-auto"
-            disabled={disabledOpen()}
-            icon={Grid3x3}
-            onClick={() => openSurface('workbench')}
-          >
-            {i18n.t('uiCopy.plugin.openInWorkbench')}
-          </Button>
-        </Show>
-        <Show when={overflowItems().length > 0}>
-          <Dropdown
-            align="end"
-            items={overflowItems()}
-            onSelect={selectOverflowAction}
-            triggerAriaLabel={i18n.t('uiCopy.plugin.moreActions')}
-            trigger={(
+        <Show when={presentation().canOpenWorkbench || overflowItems().length > 0}>
+          <div class="flex items-center gap-2">
+            <Show when={presentation().canOpenWorkbench}>
               <Button
-                data-plugin-action="more"
-                variant="ghost"
-                size="icon"
-                class="min-h-[44px] min-w-[44px] sm:min-h-9 sm:min-w-9"
-                title={i18n.t('uiCopy.plugin.moreActions')}
+                data-plugin-action="open-workbench"
+                variant="outline"
+                size="sm"
+                class="min-h-[44px] min-w-0 flex-1 justify-center text-xs sm:min-h-8"
+                disabled={disabledOpen()}
+                icon={Grid3x3}
+                onClick={() => openSurface('workbench')}
               >
-                <MoreHorizontal class="h-4 w-4" />
+                {i18n.t('uiCopy.plugin.openInWorkbench')}
               </Button>
-            )}
-          />
+            </Show>
+            <Show when={overflowItems().length > 0}>
+              <Dropdown
+                align="end"
+                items={overflowItems()}
+                onSelect={selectOverflowAction}
+                triggerAriaLabel={i18n.t('uiCopy.plugin.moreActions')}
+                triggerClass="rounded-md"
+                trigger={(
+                  <Button
+                    data-plugin-action="more"
+                    variant="outline"
+                    size="icon"
+                    class="min-h-[44px] min-w-[44px] sm:min-h-8 sm:min-w-8"
+                    title={i18n.t('uiCopy.plugin.moreActions')}
+                  >
+                    <MoreHorizontal class="h-4 w-4" />
+                  </Button>
+                )}
+              />
+            </Show>
+          </div>
         </Show>
       </div>
     </section>
@@ -1376,8 +1404,12 @@ function PluginUninstallDialog(props: {
           </div>
         )}
       >
-        <div role="alert" data-plugin-uninstall-delete-warning class="rounded-md border border-destructive bg-background p-4 text-sm text-destructive">
-          {i18n.t('uiCopy.plugin.deleteDataDescription')}
+        <div class="space-y-4">
+          <PluginIdentityHeader item={props.item} />
+          <div role="alert" data-plugin-uninstall-delete-warning class="flex items-start gap-3 rounded-md border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
+            <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{i18n.t('uiCopy.plugin.deleteDataDescription')}</span>
+          </div>
         </div>
       </Show>
     </Dialog>
@@ -1437,7 +1469,7 @@ function DetailStat(props: { label: string; value: string }): JSX.Element {
   return (
     <div class="border-t pt-2">
       <div class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{props.label}</div>
-      <div class="mt-1 truncate text-sm text-foreground">{props.value}</div>
+      <div class="mt-1 truncate text-xs text-foreground">{props.value}</div>
     </div>
   );
 }

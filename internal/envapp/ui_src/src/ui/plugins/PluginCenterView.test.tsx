@@ -224,6 +224,152 @@ function externalCommitForCenter(source: ExternalPluginInspection): ExternalPlug
 }
 
 describe('PluginCenterView', () => {
+  it('presents Discover plugins with a compact identity and independent install and detail actions', async () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginCenterView
+        projection={{ items: [containersPlugin] }}
+        loading={false}
+        onCommand={vi.fn()}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces={false}
+      />
+    ), mount);
+
+    const details = mount.querySelector('[data-plugin-center-item="catalog:containers"]') as HTMLButtonElement;
+    const install = mount.querySelector('[data-plugin-center-install="catalog:containers"]') as HTMLButtonElement;
+    expect(details).not.toBeNull();
+    expect(install.textContent).toContain('Install');
+    expect(install.closest('article')?.querySelector('.h-12.w-12')).not.toBeNull();
+    install.click();
+    await Promise.resolve();
+    expect(document.querySelector('[data-external-plugin-dialog]')).not.toBeNull();
+  });
+
+  it('opens a real card action menu instead of treating the ellipsis as a detail button', async () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    const installed = {
+      ...containersPlugin,
+      pluginInstanceID: 'plugininst_containers',
+      version: '2.0.0',
+      managementRevision: 23,
+      lifecycleState: 'enabled' as const,
+      defaultLaunchTarget: {
+        pluginID: containersPlugin.pluginID,
+        pluginInstanceID: 'plugininst_containers',
+        surfaceID: 'containers.dashboard',
+        expectedManagementRevision: 23,
+        preferredPlacement: 'activity' as const,
+      },
+    };
+    dispose = render(() => (
+      <PluginCenterView
+        projection={{ items: [installed] }}
+        loading={false}
+        onCommand={vi.fn()}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces
+      />
+    ), mount);
+
+    (mount.querySelector('[data-plugin-center-card-menu="catalog:containers"]') as HTMLButtonElement).click();
+    await Promise.resolve();
+
+    expect(findDocumentButton('Open in Activity')).not.toBeNull();
+    expect(findDocumentButton('Open in Workbench')).not.toBeNull();
+    findDocumentButton('View plugin details').click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(mount.querySelector('[data-plugin-center-details]')?.textContent).toContain('Containers');
+  });
+
+  it('keeps refresh status outside the card grid', () => {
+    const [loading, setLoading] = createSignal(false);
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginCenterView
+        projection={{ items: [containersPlugin] }}
+        loading={loading()}
+        onCommand={vi.fn()}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces={false}
+      />
+    ), mount);
+
+    const grid = mount.querySelector('[data-plugin-center-list]')!;
+    expect(grid.children).toHaveLength(1);
+    setLoading(true);
+    expect(grid.children).toHaveLength(1);
+    expect(grid.getAttribute('aria-busy')).toBe('true');
+    expect(mount.querySelector('[data-plugin-center-loading]')?.parentElement).not.toBe(grid);
+  });
+
+  it('offers an update action directly in the Updates list', async () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    const updateItem = {
+      ...containersPlugin,
+      pluginInstanceID: 'plugininst_containers',
+      version: '1.9.0',
+      managementRevision: 13,
+      lifecycleState: 'update_available' as const,
+    };
+    dispose = render(() => (
+      <PluginCenterView
+        projection={{ items: [updateItem] }}
+        loading={false}
+        onCommand={vi.fn()}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces={false}
+      />
+    ), mount);
+
+    (mount.querySelector('#plugin-center-tab-updates') as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(mount.querySelector('[data-plugin-center-update="catalog:containers"]')).not.toBeNull());
+    const update = mount.querySelector('[data-plugin-center-update="catalog:containers"]') as HTMLButtonElement;
+    expect(update.textContent).toContain('Review update');
+    expect(update.closest('article')?.className).toContain('border-t-2');
+    expect(mount.querySelector('[data-plugin-center-list]')?.className).toContain('grid');
+  });
+
+  it('groups required and optional permissions without changing switch semantics', () => {
+    const permissionProjection = containersPermissionProjection();
+    permissionProjection.items[0].authorization!.permissions = [
+      ...permissionProjection.items[0].authorization!.permissions,
+      {
+        ...permissionProjection.items[0].authorization!.permissions[0],
+        permissionID: 'containers.delete',
+        group: 'delete',
+        requiredToOpen: false,
+        methods: ['containers.delete'],
+        requiredToOpenMethods: [],
+      },
+    ];
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginCenterView
+        projection={permissionProjection}
+        loading={false}
+        selectedInventoryKey="catalog:containers"
+        onCommand={vi.fn()}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces={false}
+      />
+    ), mount);
+
+    expect(mount.querySelector('[data-plugin-permission-group="required"] [data-plugin-permission="containers.read"]')).not.toBeNull();
+    expect(mount.querySelector('[data-plugin-permission-group="optional"] [data-plugin-permission="containers.delete"]')).not.toBeNull();
+    expect(mount.querySelectorAll('[data-plugin-permission] [role="switch"]')).toHaveLength(2);
+  });
+
   it('exposes the active Plugin Center view with tab semantics', () => {
     const mount = document.createElement('div');
     document.body.append(mount);
@@ -309,8 +455,8 @@ describe('PluginCenterView', () => {
     // Toolbar wraps on narrow viewports: actions container has flex-wrap and w-full
     expect(actions.classList).toContain('flex-wrap');
     expect(actions.classList).toContain('w-full');
-    // Search label uses order-first so it leads on small screens
-    expect(searchField.classList).toContain('order-first');
+    // Search occupies a controlled second row on narrow screens.
+    expect(searchField.classList).toContain('order-last');
     expect(searchField.classList).toContain('w-full');
     expect(searchField.classList).toContain('min-w-0');
   });
