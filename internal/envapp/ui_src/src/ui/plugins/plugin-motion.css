@@ -3,6 +3,49 @@
     --tw-enter-translate-y: 0.25rem;
   }
 
+  .redeven-plugin-directory-card {
+    transform: translateY(0);
+    transition-property: transform, border-color, background-color, box-shadow;
+    transition-duration: 180ms;
+    transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .redeven-plugin-directory-card-icon {
+    transform: translateY(0) scale(1);
+    transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .redeven-plugin-directory-card:hover {
+      transform: translateY(-1px);
+      border-color: color-mix(in srgb, var(--foreground) 16%, var(--border));
+      background-color: color-mix(in srgb, var(--card) 97%, var(--foreground) 3%);
+      box-shadow:
+        0 10px 22px -18px color-mix(in srgb, var(--foreground) 40%, transparent),
+        0 3px 8px -7px color-mix(in srgb, var(--foreground) 26%, transparent),
+        0 1px 0 color-mix(in srgb, var(--foreground) 7%, transparent) inset;
+    }
+
+    .redeven-plugin-directory-card[aria-current='true']:hover {
+      border-color: var(--primary);
+      background-color: color-mix(in srgb, var(--card) 96%, var(--primary) 4%);
+      box-shadow:
+        0 0 0 1px color-mix(in srgb, var(--primary) 20%, transparent),
+        0 10px 22px -18px color-mix(in srgb, var(--foreground) 40%, transparent),
+        0 3px 8px -7px color-mix(in srgb, var(--foreground) 26%, transparent),
+        0 1px 0 color-mix(in srgb, var(--foreground) 7%, transparent) inset;
+    }
+
+    .redeven-plugin-directory-card:hover .redeven-plugin-directory-card-icon {
+      transform: translateY(-0.5px) scale(1.018);
+    }
+
+    .redeven-plugin-directory-card:active {
+      transform: translateY(0);
+      transition-duration: 90ms;
+    }
+  }
+
   details[open] > .redeven-plugin-disclosure-content {
     --tw-enter-opacity: 0;
     --tw-enter-translate-y: -0.25rem;
@@ -22,6 +65,11 @@
   }
 
   .redeven-plugin-motion {
+    transform: none !important;
+    transition: none !important;
+  }
+
+  .redeven-plugin-directory-card-icon {
     transform: none !important;
     transition: none !important;
   }
