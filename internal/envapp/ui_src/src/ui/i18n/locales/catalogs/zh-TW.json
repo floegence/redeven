@@ -4269,6 +4269,7 @@
       "trustIssueRecovery": "檢查下方的信任與核准原因代碼及來源。重試前，請選擇其他外掛套件，或請管理員調整政策。",
       "diagnosticIssueRecovery": "解決下方顯示的主機或外掛套件問題，然後重新整理外掛程式中心再重試。",
       "moreActions": "更多外掛程式操作",
+      "viewDetails": "檢視外掛程式詳情",
       "technicalDetails": "技術詳細資料",
       "keepData": "保留資料",
       "deleteData": "刪除資料",

@@ -4269,6 +4269,7 @@
       "trustIssueRecovery": "检查下方的信任与批准原因代码以及来源。重试前，请选择其他插件包，或联系管理员调整策略。",
       "diagnosticIssueRecovery": "解决下方显示的主机或插件包问题，刷新插件中心后再重试。",
       "moreActions": "更多插件操作",
+      "viewDetails": "查看插件详情",
       "technicalDetails": "技术详情",
       "keepData": "保留数据",
       "deleteData": "删除数据",

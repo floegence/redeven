@@ -1,4 +1,5 @@
 import type { PluginInventoryItem } from './pluginTypes';
+import type { I18nHelpers } from '../i18n';
 
 export const PLUGIN_MOBILE_TOUCH_TARGET_CLASS = 'min-h-[46px] min-w-[46px] sm:min-h-0 sm:min-w-0';
 
@@ -82,4 +83,29 @@ export function presentPlugin(item: PluginInventoryItem): PluginPresentation {
     canCheckForUpdate: installed && !trustBlocked && Boolean(item.externalPackage || item.officialCatalog),
     canUninstall: installed,
   });
+}
+
+export function pluginLifecycleLabel(item: PluginInventoryItem, i18n: I18nHelpers): string {
+  switch (item.lifecycleState) {
+    case 'not_installed': return i18n.t('uiCopy.plugin.available');
+    case 'installed': return i18n.t('uiCopy.plugin.installed');
+    case 'enabled': return i18n.t('uiCopy.plugin.enabled');
+    case 'disabled': return i18n.t('uiCopy.plugin.disabled');
+    case 'update_available': return i18n.t('uiCopy.plugin.updateAvailable');
+    case 'needs_attention': return i18n.t('uiCopy.plugin.needsAttention');
+    default: return i18n.t('uiCopy.plugin.unavailable');
+  }
+}
+
+export function pluginTrustLabel(item: PluginInventoryItem, i18n: I18nHelpers): string {
+  switch (item.trustBadge) {
+    case 'official': return i18n.t('uiCopy.plugin.official');
+    case 'verified': return i18n.t('uiCopy.plugin.verified');
+    case 'unsigned': return i18n.t('uiCopy.plugin.unsigned');
+    case 'community': return i18n.t('uiCopy.plugin.community');
+    case 'revoked': return i18n.t('uiCopy.plugin.revoked');
+    case 'blocked': return i18n.t('uiCopy.plugin.blocked');
+    case 'unavailable': return i18n.t('uiCopy.plugin.unavailable');
+    default: return i18n.t('uiCopy.plugin.unavailable');
+  }
 }

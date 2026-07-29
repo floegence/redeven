@@ -1,7 +1,7 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { cn } from '@floegence/floe-webapp-core';
-import { ChevronRight, Grid3x3, MoreHorizontal, Package, Search, Settings, X } from '@floegence/floe-webapp-core/icons';
+import { ChevronRight, MoreHorizontal, Package, Search, Settings, X } from '@floegence/floe-webapp-core/icons';
 import { Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 
 import type {
@@ -13,8 +13,11 @@ import type {
 } from './pluginTypes';
 import { useI18n, type I18nHelpers } from '../i18n';
 import { isolateDocumentBranch } from './modalIsolation';
+import { PluginIcon, PluginStatusDot } from './PluginPresentationPrimitives';
+import { pluginLifecycleLabel } from './pluginPresentation';
 
 const FOCUSABLE_SELECTOR = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+const CATEGORY_FILTER_THRESHOLD = 6;
 const CATEGORY_IDS: readonly PluginPresentationCategory[] = [
   'development',
   'infrastructure',
@@ -43,6 +46,7 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
   let panelRef: HTMLDivElement | undefined;
   let searchRef: HTMLInputElement | undefined;
   let gridRef: HTMLUListElement | undefined;
+  const tileMenuButtons = new Map<string, HTMLButtonElement>();
   let restoreFocusAfterClose = false;
   let focusRestoreTarget: HTMLElement | null = null;
 
@@ -118,11 +122,6 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
       props.onClose();
       return;
     }
-    if (tile.action === 'open_surface' && tile.item.defaultLaunchTarget) {
-      props.onOpenPluginSurface(tile.item.defaultLaunchTarget);
-      props.onClose();
-      return;
-    }
     props.onOpenPluginDetails(tile.item.inventoryKey);
     props.onClose();
   };
@@ -166,6 +165,16 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
     buttons[next]?.focus({ preventScroll: true });
   };
 
+  const openTileMenu = (event: MouseEvent | KeyboardEvent, inventoryKey: string) => {
+    const keyboardRequest = event instanceof KeyboardEvent
+      && (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'));
+    if (event instanceof KeyboardEvent && !keyboardRequest) return false;
+    event.preventDefault();
+    event.stopPropagation();
+    tileMenuButtons.get(inventoryKey)?.click();
+    return true;
+  };
+
   return (
     <Show when={props.open}>
       <Portal>
@@ -190,27 +199,27 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
             class={cn(
               'flex min-h-0 w-full flex-col overflow-hidden border bg-popover text-popover-foreground shadow-2xl',
               props.mobile
-                ? 'max-h-[92dvh] rounded-t-lg border-x-0 border-b-0'
-                : 'max-h-[min(680px,78dvh)] max-w-[820px] rounded-lg',
+                ? 'h-[min(680px,92dvh)] rounded-t-lg border-x-0 border-b-0'
+                : 'h-[min(680px,78dvh)] max-w-[820px] rounded-lg',
             )}
           >
-            <header class="shrink-0 border-b px-4 py-2 sm:px-5">
-              <div class="flex items-center gap-2">
+            <header class="shrink-0 border-b px-4 py-3 sm:px-5">
+              <div class="flex items-center gap-3">
                 <button
                   type="button"
-                  class="order-last inline-flex h-[44px] w-[44px] shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:h-8 sm:w-8"
+                  class="order-last inline-flex h-[44px] w-[44px] shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:h-8 sm:w-8 motion-reduce:transition-none"
                   aria-label={i18n.t('uiCopy.plugin.closePanel')}
                   title={i18n.t('uiCopy.plugin.closePanel')}
                   onClick={dismiss}
                 >
                   <X class="h-3.5 w-3.5" />
                 </button>
-                <h2 id="plugin-launcher-title" class="shrink-0 text-sm font-semibold">
+                <h2 id="plugin-launcher-title" class="shrink-0 text-base font-semibold">
                   {i18n.t('uiCopy.plugin.launcherTitle')}
                 </h2>
                 <label class="relative min-w-0 flex-1">
                   <span class="sr-only">{i18n.t('uiCopy.plugin.launcherSearchLabel')}</span>
-                  <Search class="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <input
                     ref={searchRef}
                     type="search"
@@ -218,15 +227,15 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
                     value={query()}
                     onInput={(event) => setQuery(event.currentTarget.value)}
                     placeholder={i18n.t('uiCopy.plugin.launcherSearchPlaceholder')}
-                    class="h-8 w-full rounded-md border bg-muted/40 pl-8 pr-2 text-sm outline-none transition placeholder:text-muted-foreground/60 focus:border-border focus:bg-background focus:ring-1 focus:ring-ring/50"
+                    class="h-10 w-full rounded-md border bg-muted/40 pl-9 pr-3 text-sm outline-none transition-[background-color,border-color,box-shadow] duration-150 placeholder:text-muted-foreground/60 focus:border-ring focus:bg-background focus:ring-2 focus:ring-ring/20 motion-reduce:transition-none"
                   />
                 </label>
               </div>
               <p id="plugin-launcher-description" class="sr-only">
                 {i18n.t('uiCopy.plugin.launcherDescription')}
               </p>
-              <Show when={pluginTiles().length >= 2}>
-                <div class="mt-2 flex gap-1 overflow-x-auto pb-0.5" role="group" aria-label={i18n.t('uiCopy.plugin.categories')}>
+              <Show when={pluginTiles().length >= CATEGORY_FILTER_THRESHOLD}>
+                <div class="mt-3 flex gap-1.5 overflow-x-auto pb-0.5" role="group" aria-label={i18n.t('uiCopy.plugin.categories')}>
                   <CategoryButton id="all" active={category()} onSelect={setCategory} label={i18n.t('uiCopy.plugin.categoryAll')} />
                   <For each={CATEGORY_IDS}>
                     {(id) => <CategoryButton id={id} active={category()} onSelect={setCategory} label={categoryLabel(id, i18n)} />}
@@ -235,7 +244,7 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
               </Show>
             </header>
 
-            <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
+            <div class="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-5">
               <Show when={props.model.errorMessage}>
                 <div role="alert" class="mb-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs leading-4 text-destructive">
                   {props.model.errorMessage}
@@ -250,24 +259,29 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
               <ul
                 ref={gridRef}
                 data-plugin-launcher-grid
-                class="grid grid-cols-4 gap-1 sm:grid-cols-5"
+                class="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5"
               >
                 <For each={visibleTiles()}>
                   {(tile, index) => (
-                    <li class="group relative min-w-0">
+                    <li
+                      class="group relative min-w-0"
+                      onContextMenu={(event) => openTileMenu(event, tile.item.inventoryKey)}
+                    >
                       <button
                         type="button"
                         data-plugin-panel-tile={tile.item.inventoryKey}
                         aria-describedby={`plugin-launcher-tile-status-${index()}`}
-                        class="flex w-full min-w-0 cursor-pointer flex-col items-center gap-2 rounded-lg px-2 py-2.5 text-center transition-colors hover:bg-muted/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        onKeyDown={(event) => moveGridFocus(event, index())}
+                        class="flex w-full min-w-0 cursor-pointer flex-col items-center gap-2.5 rounded-lg border border-transparent px-2 py-3 text-center transition-[background-color,border-color,box-shadow,transform] duration-150 hover:-translate-y-0.5 hover:border-border hover:bg-background hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transform-none motion-reduce:transition-none"
+                        onKeyDown={(event) => {
+                          if (!openTileMenu(event, tile.item.inventoryKey)) moveGridFocus(event, index());
+                        }}
                         onClick={() => activateTile(tile)}
                       >
                         <div class="relative">
-                          <PluginTileIcon item={tile.item} />
-                          <TileDot item={tile.item} />
+                          <PluginIcon item={tile.item} size="launcher" />
+                          <PluginStatusDot item={tile.item} />
                         </div>
-                        <span class="line-clamp-2 min-w-0 max-w-full text-xs font-medium leading-4">
+                        <span class="block min-w-0 max-w-full truncate text-xs font-medium leading-4">
                           {tile.item.displayName}
                         </span>
                       </button>
@@ -282,9 +296,10 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
                           triggerAriaLabel={`${tile.item.displayName}: ${i18n.t('uiCopy.plugin.moreActions')}`}
                           trigger={(
                             <button
+                              ref={(element) => tileMenuButtons.set(tile.item.inventoryKey, element)}
                               type="button"
                               data-plugin-panel-tile-menu={tile.item.inventoryKey}
-                              class="absolute right-0.5 top-0.5 inline-flex min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center rounded-md text-muted-foreground opacity-0 transition hover:bg-muted hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover:opacity-70 sm:h-6 sm:min-h-0 sm:w-6 sm:min-w-0"
+                              class="absolute right-0 top-0 inline-flex min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-[background-color,color,opacity] duration-150 hover:bg-muted hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:h-7 sm:min-h-0 sm:w-7 sm:min-w-0 sm:opacity-0 sm:group-hover:opacity-100 motion-reduce:transition-none"
                               title={i18n.t('uiCopy.plugin.moreActions')}
                             >
                               <MoreHorizontal class="h-3.5 w-3.5" />
@@ -321,13 +336,13 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
             <Show when={centerTile()}>
               {(tile) => (
                 <footer class="flex shrink-0 items-center justify-between gap-3 border-t bg-muted/25 px-4 py-3 sm:px-5">
-                  <div class="min-w-0 text-xs text-muted-foreground">
+                  <div class="min-w-0 text-xs leading-5 text-muted-foreground">
                     {i18n.t('uiCopy.plugin.launcherSummary', { count: pluginTiles().length, attention: attentionCount() })}
                   </div>
                   <button
                     type="button"
                     data-plugin-panel-tile="plugin-center"
-                    class="inline-flex min-h-[44px] shrink-0 cursor-pointer items-center gap-2 rounded-md border bg-background px-3 text-sm font-medium transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    class="inline-flex min-h-[44px] shrink-0 cursor-pointer items-center gap-2 rounded-md border bg-background px-3 text-sm font-medium transition-colors duration-150 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none"
                     onClick={() => activateTile(tile())}
                   >
                     <Settings class="h-4 w-4" />
@@ -355,7 +370,7 @@ function CategoryButton(props: {
       type="button"
       data-plugin-launcher-category={props.id}
       aria-pressed={props.id === props.active}
-      class={cn('min-h-[44px] min-w-[44px] h-7 shrink-0 cursor-pointer rounded-full px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-0 sm:min-w-0', props.id === props.active ? 'bg-foreground/[0.08] border border-border/60 text-foreground' : 'bg-transparent text-muted-foreground hover:text-foreground')}
+      class={cn('min-h-[44px] min-w-[44px] h-8 shrink-0 cursor-pointer rounded-full px-3 text-xs font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-0 sm:min-w-0 motion-reduce:transition-none', props.id === props.active ? 'bg-foreground text-background' : 'bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground')}
       onClick={() => props.onSelect(props.id)}
     >
       {props.label}
@@ -365,51 +380,6 @@ function CategoryButton(props: {
 
 function isPluginTile(tile: PluginPanelTile): tile is Extract<PluginPanelTile, { kind: 'plugin' }> {
   return tile.kind === 'plugin';
-}
-
-function TileDot(props: { item: PluginInventoryItem }): JSX.Element {
-  const dotClass = () => {
-    switch (props.item.lifecycleState) {
-      case 'enabled': return 'bg-[var(--success)]';
-      case 'needs_attention': return 'bg-[var(--warning)]';
-      case 'update_available': return 'bg-[var(--info,var(--redeven-status-info))]';
-      case 'disabled': return 'bg-muted-foreground/40';
-      default: return '';
-    }
-  };
-  return (
-    <Show when={dotClass()}>
-      {(cls) => (
-        <span
-          aria-hidden="true"
-          class={cn(
-            'pointer-events-none absolute bottom-0.5 right-0.5 h-[9px] w-[9px] rounded-full border-[1.5px] border-background',
-            cls(),
-          )}
-        />
-      )}
-    </Show>
-  );
-}
-
-function PluginTileIcon(props: { item: PluginInventoryItem }) {
-  const [imageFailed, setImageFailed] = createSignal(false);
-  return (
-    <span class="flex h-[52px] w-[52px] shrink-0 items-center justify-center overflow-hidden rounded-xl border bg-background text-foreground shadow-sm">
-      <Show when={props.item.iconURL && !imageFailed()} fallback={(
-        props.item.iconFallback === 'containers'
-          ? <Grid3x3 class="h-6 w-6" />
-          : <Settings class="h-6 w-6" />
-      )}>
-        <img
-          src={props.item.iconURL ?? ''}
-          alt=""
-          class="h-full w-full object-cover"
-          onError={() => setImageFailed(true)}
-        />
-      </Show>
-    </span>
-  );
 }
 
 function normalizeSearchText(value: string, locale: string): string {
@@ -440,13 +410,5 @@ function categoryLabel(category: PluginPresentationCategory, i18n: I18nHelpers):
 }
 
 function statusLabel(item: PluginInventoryItem, i18n: I18nHelpers): string {
-  switch (item.lifecycleState) {
-    case 'enabled': return i18n.t('common.status.ready');
-    case 'disabled': return i18n.t('uiCopy.plugin.disabled');
-    case 'not_installed': return i18n.t('uiCopy.plugin.available');
-    case 'update_available': return i18n.t('uiCopy.plugin.update');
-    case 'needs_attention': return i18n.t('uiCopy.plugin.needsAttention');
-    case 'installed': return i18n.t('uiCopy.plugin.installed');
-    default: return i18n.t('uiCopy.plugin.unavailable');
-  }
+  return pluginLifecycleLabel(item, i18n);
 }

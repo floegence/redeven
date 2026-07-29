@@ -4269,6 +4269,7 @@
       "trustIssueRecovery": "Prüfen Sie unten die Codes für die Vertrauens- und Genehmigungsgründe sowie die Quelle. Wählen Sie ein anderes Paket oder bitten Sie einen Administrator, die Richtlinie zu ändern, bevor Sie es erneut versuchen.",
       "diagnosticIssueRecovery": "Beheben Sie das unten angezeigte Host- oder Paketproblem und aktualisieren Sie anschließend das Plugin Center, bevor Sie es erneut versuchen.",
       "moreActions": "Weitere Plugin-Aktionen",
+      "viewDetails": "Plugin-Details anzeigen",
       "technicalDetails": "Technische Details",
       "keepData": "Daten behalten",
       "deleteData": "Daten löschen",
