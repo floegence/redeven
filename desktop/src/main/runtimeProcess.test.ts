@@ -6,7 +6,12 @@ import { describe, expect, it } from 'vitest';
 
 import { RUNTIME_SERVICE_COMPATIBILITY_EPOCH } from '../shared/runtimeService';
 import { DesktopOperationFailureError } from './desktopOperationFailure';
-import { launchStartedFreshManagedRuntime, startManagedRuntime } from './runtimeProcess';
+import {
+  attachManagedRuntimeFromStatus,
+  inspectLocalManagedRuntimeProcesses,
+  launchStartedFreshManagedRuntime,
+  startManagedRuntime,
+} from './runtimeProcess';
 import {
   RuntimeProcessCommandError,
   runtimeProcessCommandErrorFromOutput,
@@ -157,6 +162,30 @@ function readJSON(file) {
 const statusFile = process.env.REDEVEN_TEST_STATUS_FILE;
 const counterFile = process.env.REDEVEN_TEST_STATUS_COUNTER_FILE;
 const inventoryFile = process.env.REDEVEN_TEST_PROCESS_INVENTORY_FILE;
+const commandCounterFile = process.env.REDEVEN_TEST_PROCESS_COMMAND_COUNTER_FILE;
+
+function commandDelayMs(name) {
+  const key = name === 'desktop-runtime-inventory'
+    ? 'REDEVEN_TEST_INVENTORY_DELAY_MS'
+    : name === 'desktop-runtime-status'
+      ? 'REDEVEN_TEST_STATUS_DELAY_MS'
+      : '';
+  return key ? Math.max(0, Number(process.env[key]) || 0) : 0;
+}
+
+function runCommand(name, callback) {
+  if (commandCounterFile) {
+    const counters = fs.existsSync(commandCounterFile) ? readJSON(commandCounterFile) : {};
+    counters[name] = Number(counters[name] || 0) + 1;
+    writeJSON(commandCounterFile, counters);
+  }
+  const delayMs = commandDelayMs(name);
+  if (delayMs > 0) {
+    setTimeout(callback, delayMs);
+    return;
+  }
+  callback();
+}
 
 function emptyInventory() {
   return {
@@ -179,8 +208,11 @@ function readInventory() {
 }
 
 if (process.argv[2] === 'desktop-runtime-inventory') {
-  process.stdout.write(JSON.stringify(readInventory()) + '\\n');
-  process.exit(0);
+  runCommand('desktop-runtime-inventory', () => {
+    process.stdout.write(JSON.stringify(readInventory()) + '\\n');
+    process.exit(0);
+  });
+  return;
 }
 
 if (process.argv[2] === 'desktop-runtime-stop') {
@@ -201,27 +233,30 @@ if (process.argv[2] === 'desktop-runtime-stop') {
 }
 
 if (process.argv[2] === 'desktop-runtime-status') {
-  if (!statusFile || !fs.existsSync(statusFile)) {
-    process.stdout.write(JSON.stringify({ status: 'blocked', code: 'not_running', message: 'Runtime daemon is not running.' }) + '\\n');
-    process.exit(0);
-  }
-  if (counterFile) {
-    const count = fs.existsSync(counterFile) ? Number(fs.readFileSync(counterFile, 'utf8')) || 0 : 0;
-    fs.writeFileSync(counterFile, String(count + 1));
-    const payload = readJSON(statusFile);
-    if (process.env.REDEVEN_TEST_RUNTIME_MODE === 'attach_existing_update_required' && count === 0) {
+  runCommand('desktop-runtime-status', () => {
+    if (!statusFile || !fs.existsSync(statusFile)) {
       process.stdout.write(JSON.stringify({ status: 'blocked', code: 'not_running', message: 'Runtime daemon is not running.' }) + '\\n');
       process.exit(0);
     }
-    if (count >= 2 && payload.runtime_service) {
-      payload.runtime_service.open_readiness = { state: 'openable' };
-      writeJSON(statusFile, payload);
-      process.stdout.write(JSON.stringify(payload) + '\\n');
-      process.exit(0);
+    if (counterFile) {
+      const count = fs.existsSync(counterFile) ? Number(fs.readFileSync(counterFile, 'utf8')) || 0 : 0;
+      fs.writeFileSync(counterFile, String(count + 1));
+      const payload = readJSON(statusFile);
+      if (process.env.REDEVEN_TEST_RUNTIME_MODE === 'attach_existing_update_required' && count === 0) {
+        process.stdout.write(JSON.stringify({ status: 'blocked', code: 'not_running', message: 'Runtime daemon is not running.' }) + '\\n');
+        process.exit(0);
+      }
+      if (count >= 2 && payload.runtime_service) {
+        payload.runtime_service.open_readiness = { state: 'openable' };
+        writeJSON(statusFile, payload);
+        process.stdout.write(JSON.stringify(payload) + '\\n');
+        process.exit(0);
+      }
     }
-  }
-  process.stdout.write(fs.readFileSync(statusFile, 'utf8'));
-  process.exit(0);
+    process.stdout.write(fs.readFileSync(statusFile, 'utf8'));
+    process.exit(0);
+  });
+  return;
 }
 
 if (process.env.REDEVEN_TEST_RUNTIME_MODE === 'attach_existing_update_required') {
@@ -306,6 +341,59 @@ process.on('SIGTERM', stopRuntime);
 }
 
 describe('runtimeProcess', () => {
+  it('keeps cold inventory execution independent from the short status probe budget', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-runtime-process-'));
+    const stateRoot = path.join(dir, 'state');
+    const executablePath = await writeFakeRuntimeExecutable(dir);
+    const commandCounterFile = path.join(dir, 'command-counters.json');
+    try {
+      const attached = await attachManagedRuntimeFromStatus({
+        executablePath,
+        stateRoot,
+        desktopOwnerID: 'desktop-owner-1',
+        runtimeAttachTimeoutMs: 100,
+        env: {
+          REDEVEN_TEST_INVENTORY_DELAY_MS: '1650',
+          REDEVEN_TEST_STATUS_DELAY_MS: '300',
+          REDEVEN_TEST_PROCESS_COMMAND_COUNTER_FILE: commandCounterFile,
+        },
+      });
+
+      expect(attached).toBeNull();
+      expect(JSON.parse(await fs.readFile(commandCounterFile, 'utf8'))).toEqual({
+        'desktop-runtime-inventory': 1,
+        'desktop-runtime-status': 1,
+      });
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('reports the timed-out inventory phase without retrying the command', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-runtime-process-'));
+    const stateRoot = path.join(dir, 'state');
+    const executablePath = await writeFakeRuntimeExecutable(dir);
+    const commandCounterFile = path.join(dir, 'command-counters.json');
+    try {
+      await expect(inspectLocalManagedRuntimeProcesses({
+        executablePath,
+        stateRoot,
+        desktopOwnerID: 'desktop-owner-1',
+        env: {
+          ...process.env,
+          REDEVEN_TEST_INVENTORY_DELAY_MS: '1500',
+          REDEVEN_TEST_PROCESS_COMMAND_COUNTER_FILE: commandCounterFile,
+        },
+        timeoutMs: 500,
+      })).rejects.toThrow('Runtime process command "desktop-runtime-inventory" timed out after 500 ms.');
+      expect(JSON.parse(await fs.readFile(commandCounterFile, 'utf8'))).toEqual({
+        'desktop-runtime-inventory': 1,
+      });
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it('preserves structured runtime inventory command conflicts', () => {
     const error = runtimeProcessCommandErrorFromOutput(
       JSON.stringify({
