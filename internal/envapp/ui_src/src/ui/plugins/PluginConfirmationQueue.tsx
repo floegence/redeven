@@ -4,6 +4,7 @@ import type {
   PluginConfirmationIntent,
 } from '@floegence/redevplugin-ui';
 import { Dialog } from '@floegence/floe-webapp-core/ui';
+import { AlertTriangle, Shield } from '@floegence/floe-webapp-core/icons';
 import { Show, createEffect, createSignal, onCleanup, type Accessor, type JSX } from 'solid-js';
 
 import { useI18n } from '../i18n';
@@ -184,12 +185,13 @@ function PluginConfirmationDialogEntry(props: {
         if (!open) settle(false);
       }}
       title={title}
+      class="w-[min(36rem,calc(100%-1rem))] max-w-[36rem] bg-background"
       footer={(
         <div class="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <button
             ref={cancelButton}
             type="button"
-            class={`${PLUGIN_MOBILE_TOUCH_TARGET_CLASS} cursor-pointer rounded-md border px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50`}
+            class={`${PLUGIN_MOBILE_TOUCH_TARGET_CLASS} cursor-pointer rounded-md border px-4 py-2 text-sm font-medium text-foreground transition-colors duration-150 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none`}
             data-floe-autofocus
             data-plugin-confirmation-reject
             disabled={deciding()}
@@ -199,7 +201,7 @@ function PluginConfirmationDialogEntry(props: {
           </button>
           <button
             type="button"
-            class={`${PLUGIN_MOBILE_TOUCH_TARGET_CLASS} cursor-pointer rounded-md px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 ${presentation.highRisk
+            class={`${PLUGIN_MOBILE_TOUCH_TARGET_CLASS} cursor-pointer rounded-md px-4 py-2 text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none ${presentation.highRisk
               ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90'
               : 'bg-primary text-primary-foreground hover:bg-primary/90'}`}
             data-plugin-confirmation-approve
@@ -212,8 +214,11 @@ function PluginConfirmationDialogEntry(props: {
       )}
     >
       <div class="space-y-4 text-sm" data-plugin-confirmation-dialog>
-        <div class="flex min-w-0 items-start justify-between gap-3">
-          <div class="min-w-0">
+        <div class="flex min-w-0 items-start gap-3 rounded-md border bg-muted/20 p-3">
+          <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border bg-background text-muted-foreground">
+            <Shield class="h-4 w-4" />
+          </span>
+          <div class="min-w-0 flex-1">
             <p class="text-xs font-medium text-muted-foreground">{i18n.t('uiCopy.plugin.surfaceTitle')}</p>
             <p class="mt-1 truncate font-semibold text-foreground" data-plugin-confirmation-owner title={pluginName}>{pluginName}</p>
           </div>
@@ -229,7 +234,7 @@ function PluginConfirmationDialogEntry(props: {
         </div>
 
         <Show when={presentation.summary.length > 1}>
-          <ul class="space-y-1.5 text-foreground" data-plugin-confirmation-summary>
+          <ul class="space-y-1.5 border-l-2 border-primary/30 pl-3 text-foreground" data-plugin-confirmation-summary>
             {presentation.summary.slice(1).map((line) => <li class="break-words">{line}</li>)}
           </ul>
         </Show>
@@ -241,7 +246,7 @@ function PluginConfirmationDialogEntry(props: {
         </Show>
 
         <Show when={presentation.target}>
-          <div class="rounded-md border bg-muted/30 px-3 py-2.5" data-plugin-confirmation-target>
+          <div class="rounded-md border px-3 py-2.5" data-plugin-confirmation-target>
             <p class="break-words font-medium text-foreground">{i18n.t('uiCopy.pluginRuntime.target', { value: presentation.target })}</p>
             <Show when={presentation.targetIdentity}>
               <p class="mt-1 break-all font-mono text-xs text-muted-foreground" data-plugin-confirmation-target-identity>
@@ -252,7 +257,8 @@ function PluginConfirmationDialogEntry(props: {
         </Show>
 
         <Show when={presentation.riskLevel || presentation.destructive || presentation.dataLoss || presentation.dataLossRisk || presentation.adminRequired || presentation.privileged}>
-          <div class="flex flex-wrap items-center gap-2" data-plugin-confirmation-risk-status>
+          <div class="flex flex-wrap items-center gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3" data-plugin-confirmation-risk-status>
+            <AlertTriangle class="h-4 w-4 shrink-0 text-destructive" />
             <Show when={presentation.riskLevel}>
               <span class="rounded border border-destructive/30 bg-destructive/10 px-2 py-1 text-xs font-semibold uppercase text-destructive" data-plugin-confirmation-risk-level>
                 {presentation.riskLevel}
@@ -287,7 +293,7 @@ function PluginConfirmationDialogEntry(props: {
         </Show>
 
         <Show when={presentation.riskFlags.length > 0}>
-          <ul class="space-y-2 border-l-2 border-destructive/40 pl-3" data-plugin-confirmation-impact>
+          <ul class="space-y-2 rounded-md border border-destructive/30 px-3 py-2.5" data-plugin-confirmation-impact>
             {presentation.riskFlags.map((flag) => (
               <li>
                 <p class="font-medium text-foreground">{flag.title}</p>

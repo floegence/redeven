@@ -2,6 +2,8 @@ import {
   PluginSurfaceSlot,
   type PluginSurfaceHost,
 } from '@floegence/redevplugin-ui';
+import { AlertTriangle, Loader2, Refresh } from '@floegence/floe-webapp-core/icons';
+import { Button } from '@floegence/floe-webapp-core/ui';
 import { Show, createEffect, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
 
 import { useI18n } from '../i18n';
@@ -9,6 +11,7 @@ import type { PluginConfirmationOwner, PluginConfirmationQueue } from './PluginC
 import type { PluginSurfaceInteractionEvent, PluginSurfacePlacementCoordinator } from './pluginPlatform';
 import { createRedevenPluginSurfaceContext, pluginSurfaceContextFingerprint } from './pluginSurfaceContext';
 import type { PluginSurfaceLaunchTarget } from './pluginTypes';
+import { PLUGIN_MOBILE_TOUCH_TARGET_CLASS } from './pluginPresentation';
 
 export type PluginSurfaceBodyProps = {
   coordinator: PluginSurfacePlacementCoordinator;
@@ -37,6 +40,7 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
   const [pageVisible, setPageVisible] = createSignal(!document.hidden);
   const [loadState, setLoadState] = createSignal<SurfaceLoadState>('opening');
   const [errorMessage, setErrorMessage] = createSignal('');
+  const [retrying, setRetrying] = createSignal(false);
   const confirmationOwner: PluginConfirmationOwner = {
     pluginID: props.target.pluginID,
     displayName: props.target.displayName,
@@ -45,19 +49,57 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
     canConfirm: () => mounted && Boolean(host()) && props.visible && pageVisible(),
   };
 
-  onMount(() => {
-    const handleVisibilityChange = () => setPageVisible(!document.hidden);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    slot = PluginSurfaceSlot.create({
+  const openFreshSurface = () => {
+    setLoadState('opening');
+    setErrorMessage('');
+    setHost(undefined);
+    const ownedSlot = PluginSurfaceSlot.create({
       stage,
       onStateChange(state, error) {
+        if (slot !== ownedSlot) return;
         if (state !== 'error') return;
         setLoadState('error');
         setErrorMessage(error?.message || i18n.t('uiCopy.plugin.surfaceFailed'));
       },
     });
-    const ownedSlot = slot;
+    slot = ownedSlot;
+    props.coordinator.setVisible(ownedSlot, props.visible && pageVisible());
+    void props.coordinator.open(ownedSlot, {
+      plugin_instance_id: props.target.pluginInstanceID,
+      surface_id: props.target.surfaceID,
+      expected_management_revision: props.target.expectedManagementRevision,
+    }, {
+      confirm: props.confirmationQueue.createHandler(confirmationOwner),
+      onInteraction: props.onInteraction,
+      surfaceContext: currentSurfaceContext,
+      onError(error) {
+        if (!mounted || slot !== ownedSlot) return;
+        setLoadState('error');
+        setErrorMessage(error.message || error.errorCode || i18n.t('uiCopy.plugin.surfaceFailed'));
+        void props.coordinator.fail(ownedSlot, error).catch((cleanupError: unknown) => {
+          if (!mounted || slot !== ownedSlot) return;
+          setErrorMessage(cleanupError instanceof Error ? cleanupError.message : i18n.t('uiCopy.plugin.surfaceFailed'));
+        });
+      },
+    }).then((openedHost) => {
+      if (!mounted || slot !== ownedSlot) return;
+      openedHost.element.dataset.pluginSurfaceIframe = '';
+      setHost(openedHost);
+      if (currentSurfaceContext.revision > initialSurfaceContextRevision) {
+        openedHost.updateContext(currentSurfaceContext);
+      }
+      setLoadState('ready');
+    }).catch((error: unknown) => {
+      if (!mounted || slot !== ownedSlot) return;
+      setLoadState('error');
+      setErrorMessage(error instanceof Error ? error.message : i18n.t('uiCopy.plugin.surfaceFailed'));
+    });
+  };
+
+  onMount(() => {
+    const handleVisibilityChange = () => setPageVisible(!document.hidden);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     const refreshSurfaceContext = () => {
       const candidate = createRedevenPluginSurfaceContext(surfaceContextRevision + 1, i18n.locale());
       const fingerprint = pluginSurfaceContextFingerprint(candidate);
@@ -74,37 +116,7 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
         attributeFilter: ['class', 'dir', 'lang', 'style', 'data-theme', 'data-floe-shell-theme'],
       });
     }
-    props.coordinator.setVisible(ownedSlot, props.visible && pageVisible());
-    void props.coordinator.open(ownedSlot, {
-      plugin_instance_id: props.target.pluginInstanceID,
-      surface_id: props.target.surfaceID,
-      expected_management_revision: props.target.expectedManagementRevision,
-    }, {
-      confirm: props.confirmationQueue.createHandler(confirmationOwner),
-      onInteraction: props.onInteraction,
-      surfaceContext: currentSurfaceContext,
-      onError(error) {
-        if (!mounted) return;
-        setLoadState('error');
-        setErrorMessage(error.message || error.errorCode || i18n.t('uiCopy.plugin.surfaceFailed'));
-        void props.coordinator.fail(ownedSlot, error).catch((cleanupError: unknown) => {
-          if (!mounted) return;
-          setErrorMessage(cleanupError instanceof Error ? cleanupError.message : i18n.t('uiCopy.plugin.surfaceFailed'));
-        });
-      },
-    }).then((openedHost) => {
-      if (!mounted) return;
-      openedHost.element.dataset.pluginSurfaceIframe = '';
-      setHost(openedHost);
-      if (currentSurfaceContext.revision > initialSurfaceContextRevision) {
-        openedHost.updateContext(currentSurfaceContext);
-      }
-      setLoadState('ready');
-    }).catch((error: unknown) => {
-      if (!mounted) return;
-      setLoadState('error');
-      setErrorMessage(error instanceof Error ? error.message : i18n.t('uiCopy.plugin.surfaceFailed'));
-    });
+    openFreshSurface();
 
     onCleanup(() => {
       mounted = false;
@@ -112,7 +124,8 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       themeObserver?.disconnect();
       props.confirmationQueue.cancelOwner(confirmationOwner);
-      void props.coordinator.release(ownedSlot).catch(props.onRetirementError);
+      const ownedSlot = slot;
+      if (ownedSlot) void props.coordinator.release(ownedSlot).catch(props.onRetirementError);
     });
   });
 
@@ -164,6 +177,25 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
     return closePromise;
   };
 
+  const retrySurface = async () => {
+    const failedSlot = slot;
+    if (!failedSlot || retrying() || loadState() !== 'error') return;
+    setRetrying(true);
+    props.confirmationQueue.cancelOwner(confirmationOwner);
+    try {
+      await props.coordinator.release(failedSlot);
+      if (!mounted || slot !== failedSlot) return;
+      slot = undefined;
+      openFreshSurface();
+    } catch (error) {
+      if (!mounted || slot !== failedSlot) return;
+      setErrorMessage(error instanceof Error ? error.message : i18n.t('uiCopy.plugin.surfaceFailed'));
+      props.onRetirementError(error);
+    } finally {
+      if (mounted) setRetrying(false);
+    }
+  };
+
   onMount(() => props.registerClose?.(closeSurface));
 
   return (
@@ -175,21 +207,41 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
       data-surface-instance-id={host()?.surfaceInstanceId}
       class="flex h-full min-h-0 flex-col bg-background text-foreground"
     >
-      <Show when={errorMessage()}>
-        <div role="alert" class="border-b border-destructive/25 bg-destructive/10 px-4 py-2 text-xs text-destructive" data-plugin-surface-error>
-          {errorMessage()}
-        </div>
-      </Show>
-
       <div class="relative min-h-0 flex-1 bg-muted/20">
         <Show when={loadState() === 'opening'}>
-          <div role="status" aria-live="polite" class="absolute inset-0 z-10 flex items-center justify-center bg-background/85 text-sm text-muted-foreground">
-            {i18n.t('uiCopy.plugin.openingSurface')}
+          <div role="status" aria-live="polite" class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-background px-6 text-center text-sm text-muted-foreground">
+            <Loader2 class="h-5 w-5 animate-spin motion-reduce:animate-none" />
+            <span>{i18n.t('uiCopy.plugin.openingSurface')}</span>
           </div>
         </Show>
         <Show when={loadState() === 'closing'}>
-          <div role="status" aria-live="polite" class="absolute inset-0 z-10 flex items-center justify-center bg-background/85 text-sm text-muted-foreground">
-            {i18n.t('uiCopy.plugin.closingSurface')}
+          <div role="status" aria-live="polite" class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-background px-6 text-center text-sm text-muted-foreground">
+            <Loader2 class="h-5 w-5 animate-spin motion-reduce:animate-none" />
+            <span>{i18n.t('uiCopy.plugin.closingSurface')}</span>
+          </div>
+        </Show>
+        <Show when={loadState() === 'error'}>
+          <div role="alert" class="absolute inset-0 z-10 flex items-center justify-center bg-background p-6" data-plugin-surface-error>
+            <div class="max-w-md text-center">
+              <span class="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+                <AlertTriangle class="h-5 w-5" />
+              </span>
+              <h2 class="mt-3 text-sm font-semibold">{i18n.t('uiCopy.plugin.surfaceFailed')}</h2>
+              <p class="mt-2 break-words text-sm leading-6 text-muted-foreground">{errorMessage()}</p>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                icon={Refresh}
+                loading={retrying()}
+                disabled={retrying()}
+                class={`${PLUGIN_MOBILE_TOUCH_TARGET_CLASS} mt-4`}
+                data-plugin-surface-open-retry
+                onClick={() => void retrySurface()}
+              >
+                {i18n.t('common.actions.retry')}
+              </Button>
+            </div>
           </div>
         </Show>
         <div
