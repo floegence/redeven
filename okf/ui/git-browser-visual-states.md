@@ -7,7 +7,7 @@ timestamp: 2026-07-30T00:00:00Z
 ---
 # Summary
 
-Env App's Git browser uses one theme-safe blue interaction system for selected navigation and rows, while Git status colors remain reserved for repository meaning. The currently checked-out branch is a repository fact and the selected branch is the user's inspection target; either may exist without the other, and both remain visible when they coincide. Hover and keyboard focus provide separate transient feedback. If a theme cannot preserve these distinctions and readable text, the visual contract fails rather than falling back to ambiguous neutral styling.
+Env App's Git browser uses each Floe theme's native selection and focus roles for selected navigation and rows, while Classic Light and Classic Dark retain Redeven's established blue interaction system and Git status colors remain reserved for repository meaning. The currently checked-out branch is a repository fact and the selected branch is the user's inspection target; either may exist without the other, and both remain visible when they coincide. Hover and keyboard focus provide separate transient feedback. If a theme cannot preserve these distinctions and readable text, the visual contract fails rather than falling back to an unrelated fixed palette or ambiguous neutral styling.
 
 # Contract
 
@@ -19,11 +19,11 @@ The Current branch chip is independent of selection styling. It always uses the 
 
 ## Theme and accessibility
 
-Every built-in light and dark shell preset inherits the complete Git interaction token set. Light themes use a restrained blue selection mixture over the panel; dark themes use a stronger blue mixture so selection does not disappear into gray panels. Selected text and current-chip text meet a 4.5:1 contrast target. Selection indicators and focus rings meet a 3:1 adjacent-color target, while selected, hover, and idle surfaces retain measurable perceptual separation. Forced-colors mode exposes selected borders, indicators, focus outlines, and current-chip boundaries through system colors.
+Every built-in light and dark shell preset inherits the complete Git interaction token set. Non-Classic themes derive selected surfaces from Floe's published `selection-bg` and derive selection indicators and focus rings from the theme `ring`, with a small foreground mixture in dark themes where needed to preserve adjacent-color contrast. This keeps warm, green, violet, neutral, and blue themes within their own interaction identity. Light themes use a restrained selection mixture over the panel; dark themes use a stronger mixture so selection does not disappear into dark panels. Classic Light and Classic Dark explicitly override those sources with Redeven's validated blue roles. Selected text and current-chip text meet a 4.5:1 contrast target. Selection indicators and focus rings meet a 3:1 adjacent-color target, while selected, hover, and idle surfaces retain measurable perceptual separation. Forced-colors mode exposes selected borders, indicators, focus outlines, and current-chip boundaries through system colors.
 
 # Boundaries
 
-This contract changes presentation only. It does not alter Git state, selection ownership, keyboard navigation, ARIA state, workspace generation, or Files decoration. Product themes may vary surrounding surfaces, but they must not replace the blue interaction roles with Git semantic status colors or make Current a proxy for selection.
+This contract changes presentation only. It does not alter Git state, selection ownership, keyboard navigation, ARIA state, workspace generation, or Files decoration. Product themes may vary selection hue and surrounding surfaces, but they must not replace interaction roles with Git semantic status colors, inherit a fixed palette from another theme, or make Current a proxy for selection.
 
 # Evidence
 
