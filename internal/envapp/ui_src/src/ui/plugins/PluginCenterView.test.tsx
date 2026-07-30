@@ -338,6 +338,39 @@ describe('PluginCenterView', () => {
     expect(mount.querySelector('[data-plugin-center-list]')?.className).toContain('grid');
   });
 
+  it('keeps the detail primary action and overflow menu in one action row', () => {
+    const updateItem = {
+      ...containersPlugin,
+      pluginInstanceID: 'plugininst_containers',
+      version: '1.9.0',
+      managementRevision: 13,
+      lifecycleState: 'update_available' as const,
+      canDisable: true,
+    };
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginCenterView
+        projection={{ items: [updateItem] }}
+        loading={false}
+        selectedInventoryKey="catalog:containers"
+        onCommand={vi.fn()}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces={false}
+      />
+    ), mount);
+
+    const row = mount.querySelector('[data-plugin-action-row]');
+    const primary = mount.querySelector('[data-plugin-action="update-external"]');
+    const overflow = mount.querySelector('[data-plugin-action="more"]');
+    expect(row).not.toBeNull();
+    expect(primary?.parentElement).toBe(row);
+    expect(overflow?.closest('[data-plugin-action-row]')).toBe(row);
+    expect(row?.className).toContain('items-center');
+    expect(row?.className).not.toContain('flex-col');
+  });
+
   it('groups required and optional permissions without changing switch semantics', () => {
     const permissionProjection = containersPermissionProjection();
     permissionProjection.items[0].authorization!.permissions = [
