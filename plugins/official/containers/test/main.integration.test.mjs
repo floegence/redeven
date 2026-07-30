@@ -90,6 +90,8 @@ test('defaults to Overview and exposes only the selected engine workspace', { co
   });
   t.after(() => fixture.dispose());
   assert.match(fixture.text(), /Operational summary for Docker/u);
+  assert.match(fixture.text(), /Runtime target/u);
+  assert.ok(findNode(fixture.tree(), (node) => node.attributes?.['data-redevplugin-action'] === 'select-endpoint'));
   assert.ok(findNode(fixture.tree(), (node) => node.attributes?.['data-redevplugin-action'] === 'select-view' && node.attributes?.value === 'projects'));
 
   fixture.action('select-endpoint', { value: 'endpoint-docker-build' });
@@ -108,6 +110,22 @@ test('defaults to Overview and exposes only the selected engine workspace', { co
   await eventually(() => {
     assert.match(fixture.text(), /application-pod/u);
     assert.match(fixture.text(), /8080:80\/tcp/u);
+  });
+});
+
+test('keeps a single runtime target quiet while preserving its exact identity', { concurrency: false }, async (t) => {
+  const fixture = await loadFixture();
+  t.after(() => fixture.dispose());
+  assert.equal(findNode(fixture.tree(), (node) => node.attributes?.['data-redevplugin-action'] === 'select-endpoint'), undefined);
+  assert.doesNotMatch(fixture.text(), /Docker context|Runtime target/u);
+  assert.match(fixture.text(), /default/u);
+
+  fixture.action('select-view', { value: 'containers' });
+  await eventually(() => {
+    const icon = findNode(fixture.tree(), (node) => node.attributes?.class?.includes('resource-icon icon-container'));
+    assert.ok(icon);
+    const created = findNode(fixture.tree(), (node) => node.attributes?.class === 'table-cell cell-created');
+    assert.ok(created);
   });
 });
 
@@ -696,8 +714,10 @@ async function loadFixture(overrides = {}) {
     if (renderErrors.length > 0) throw renderErrors[0];
     const text = textContent(renders.at(-1));
     assert.match(text, /Operational summary for Docker/u);
-    assert.match(text, /Volumes 1/u);
-    assert.match(text, /Projects 1/u);
+    const volumeMetric = findNode(renders.at(-1), (node) => node.key === 'overview-metric-volumes');
+    const projectMetric = findNode(renders.at(-1), (node) => node.key === 'overview-metric-engine-specific');
+    assert.match(textContent(volumeMetric), /1 Volumes/u);
+    assert.match(textContent(projectMetric), /1 Projects/u);
   });
   return {
     calls,

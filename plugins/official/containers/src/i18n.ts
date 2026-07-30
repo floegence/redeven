@@ -17,6 +17,7 @@ export type CopyParams = Record<string, string | number>;
 
 const EN_US = {
   appTitle: "Containers",
+  runtimeTarget: "Runtime target",
   dockerContext: "Docker context",
   podmanConnection: "Podman connection",
   connected: "Connected",
@@ -346,6 +347,7 @@ export type CopyKey = keyof typeof EN_US;
 
 const ZH_CN = {
   appTitle: "Containers",
+  runtimeTarget: "运行目标",
   dockerContext: "Docker 上下文",
   podmanConnection: "Podman 连接",
   connected: "已连接",
@@ -655,6 +657,7 @@ const ZH_CN = {
 
 const ZH_TW = {
   appTitle: "Containers",
+  runtimeTarget: "執行目標",
   dockerContext: "Docker 上下文",
   podmanConnection: "Podman 連線",
   connected: "已連線",
@@ -964,6 +967,7 @@ const ZH_TW = {
 
 const JA_JP = {
   appTitle: "Containers",
+  runtimeTarget: "実行先",
   dockerContext: "Docker コンテキスト",
   podmanConnection: "Podman 接続",
   connected: "接続済み",
@@ -1292,6 +1296,7 @@ const JA_JP = {
 
 const KO_KR = {
   appTitle: "Containers",
+  runtimeTarget: "실행 대상",
   dockerContext: "Docker 컨텍스트",
   podmanConnection: "Podman 연결",
   connected: "연결됨",
@@ -1616,6 +1621,7 @@ const KO_KR = {
 
 const DE_DE = {
   appTitle: "Containers",
+  runtimeTarget: "Laufzeitziel",
   dockerContext: "Docker-Kontext",
   podmanConnection: "Podman-Verbindung",
   connected: "Verbunden",
@@ -1949,6 +1955,7 @@ const DE_DE = {
 
 const FR_FR = {
   appTitle: "Containers",
+  runtimeTarget: "Cible d’exécution",
   dockerContext: "Contexte Docker",
   podmanConnection: "Connexion Podman",
   connected: "Connecté",
@@ -2282,6 +2289,7 @@ const FR_FR = {
 
 const ES_ES = {
   appTitle: "Containers",
+  runtimeTarget: "Destino de ejecución",
   dockerContext: "Contexto de Docker",
   podmanConnection: "Conexión de Podman",
   connected: "Conectado",
@@ -2616,6 +2624,7 @@ const ES_ES = {
 
 const PT_BR = {
   appTitle: "Containers",
+  runtimeTarget: "Destino de execução",
   dockerContext: "Contexto do Docker",
   podmanConnection: "Conexão do Podman",
   connected: "Conectado",
@@ -2947,6 +2956,7 @@ const PT_BR = {
 
 const RU_RU = {
   appTitle: "Containers",
+  runtimeTarget: "Среда выполнения",
   dockerContext: "Контекст Docker",
   podmanConnection: "Подключение Podman",
   connected: "Подключено",
