@@ -29,6 +29,31 @@ func mustEvalPath(t *testing.T, path string) string {
 	return filepath.Clean(resolved)
 }
 
+func TestListDirectoryRPCErrorClassification(t *testing.T) {
+	tests := []struct {
+		name        string
+		err         error
+		wantCode    uint32
+		wantMessage string
+	}{
+		{name: "outside scope", err: filesystemscope.ErrPathOutsideScope, wantCode: 403, wantMessage: fsErrorPathOutsideScope},
+		{name: "root read denied", err: filesystemscope.ErrReadDenied, wantCode: 403, wantMessage: fsErrorReadPermissionDenied},
+		{name: "host permission denied", err: fmt.Errorf("read directory: %w", os.ErrPermission), wantCode: 403, wantMessage: fsErrorHostFilesystemDenied},
+		{name: "not found", err: fmt.Errorf("resolve directory: %w", os.ErrNotExist), wantCode: 404, wantMessage: fsErrorNotFound},
+		{name: "not directory", err: filesystemscope.ErrPathNotDirectory, wantCode: 400, wantMessage: fsErrorPathNotDirectory},
+		{name: "invalid path", err: errors.New("malformed path"), wantCode: 400, wantMessage: fsErrorInvalidPath},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := listDirectoryRPCError(test.err)
+			if got.Code != test.wantCode || got.Message != test.wantMessage {
+				t.Fatalf("listDirectoryRPCError(%v) = %#v, want code %d message %q", test.err, got, test.wantCode, test.wantMessage)
+			}
+		})
+	}
+}
+
 type recordingMutationCoordinator struct {
 	ctx    context.Context
 	effect gitruntime.FilesystemEffect

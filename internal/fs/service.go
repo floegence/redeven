@@ -27,6 +27,13 @@ const (
 	TypeID_FS_DELETE           uint32 = 1006
 	TypeID_FS_MKDIR            uint32 = 1007
 	TypeID_FS_GET_PATH_CONTEXT uint32 = 1010
+
+	fsErrorReadPermissionDenied = "read permission denied"
+	fsErrorPathOutsideScope     = "path outside filesystem scope"
+	fsErrorHostFilesystemDenied = "host filesystem permission denied"
+	fsErrorNotFound             = "not found"
+	fsErrorPathNotDirectory     = "path is not a directory"
+	fsErrorInvalidPath          = "invalid path"
 )
 
 type Service struct {
@@ -80,6 +87,23 @@ func mutationCoordinationRPCError(err error) error {
 	return err
 }
 
+func listDirectoryRPCError(err error) *rpc.Error {
+	switch {
+	case errors.Is(err, filesystemscope.ErrPathOutsideScope):
+		return &rpc.Error{Code: 403, Message: fsErrorPathOutsideScope}
+	case errors.Is(err, filesystemscope.ErrReadDenied):
+		return &rpc.Error{Code: 403, Message: fsErrorReadPermissionDenied}
+	case errors.Is(err, os.ErrPermission):
+		return &rpc.Error{Code: 403, Message: fsErrorHostFilesystemDenied}
+	case errors.Is(err, os.ErrNotExist):
+		return &rpc.Error{Code: 404, Message: fsErrorNotFound}
+	case errors.Is(err, filesystemscope.ErrPathNotDirectory):
+		return &rpc.Error{Code: 400, Message: fsErrorPathNotDirectory}
+	default:
+		return &rpc.Error{Code: 400, Message: fsErrorInvalidPath}
+	}
+}
+
 func (s *Service) Register(r *rpc.Router, meta *session.Meta) {
 	s.RegisterWithAccessGate(r, meta, nil)
 }
@@ -91,31 +115,19 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 
 	accessgate.RegisterTyped[fsGetPathContextReq, fsGetPathContextResp](r, TypeID_FS_GET_PATH_CONTEXT, gate, meta, accessgate.RPCAccessProtected, func(_ctx context.Context, _ *fsGetPathContextReq) (*fsGetPathContextResp, error) {
 		if meta == nil || !meta.CanRead {
-			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
+			return nil, &rpc.Error{Code: 403, Message: fsErrorReadPermissionDenied}
 		}
 		return s.getPathContext(), nil
 	})
 
 	accessgate.RegisterTyped[fsListReq, fsListResp](r, TypeID_FS_LIST, gate, meta, accessgate.RPCAccessProtected, func(_ctx context.Context, req *fsListReq) (*fsListResp, error) {
 		if meta == nil || !meta.CanRead {
-			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
+			return nil, &rpc.Error{Code: 403, Message: fsErrorReadPermissionDenied}
 		}
 		showHidden := req.ShowHidden != nil && *req.ShowHidden
 		out, err := s.listDirectoryEntries(req.Path, showHidden)
 		if err != nil {
-			if errors.Is(err, filesystemscope.ErrPathOutsideScope) {
-				return nil, &rpc.Error{Code: 403, Message: "path outside filesystem scope"}
-			}
-			if errors.Is(err, filesystemscope.ErrReadDenied) {
-				return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
-			}
-			if os.IsNotExist(err) {
-				return nil, &rpc.Error{Code: 404, Message: "not found"}
-			}
-			if errors.Is(err, filesystemscope.ErrPathNotDirectory) {
-				return nil, &rpc.Error{Code: 400, Message: "path is not a directory"}
-			}
-			return nil, &rpc.Error{Code: 400, Message: "invalid path"}
+			return nil, listDirectoryRPCError(err)
 		}
 		return &fsListResp{Entries: out}, nil
 	})

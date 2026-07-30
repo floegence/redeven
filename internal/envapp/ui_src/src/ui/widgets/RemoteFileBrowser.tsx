@@ -1,6 +1,6 @@
 import { Show, batch, createEffect, createMemo, createSignal, onCleanup, untrack, type JSX } from 'solid-js';
 import { cn, createUIFirstSelection, useLayout, useNotification, useResolvedFloeConfig } from '@floegence/floe-webapp-core';
-import { Copy, Download, FileText, Folder, MoreHorizontal, Pencil, Plus, Refresh, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
+import { AlertTriangle, Copy, Download, FileText, Folder, MoreHorizontal, Pencil, Plus, Refresh, Settings, Terminal, Trash, X } from '@floegence/floe-webapp-core/icons';
 import {
   type ContextMenuCallbacks,
   type ContextMenuEvent,
@@ -160,11 +160,26 @@ import {
 
 type DirCache = Map<string, FileItem[]>;
 
-type PathLoadStatus = 'canceled' | 'invalid_path' | 'permission_denied' | 'transport_error';
+type PathLoadStatus =
+  | 'canceled'
+  | 'outside_scope'
+  | 'permission_denied'
+  | 'host_permission_denied'
+  | 'not_found'
+  | 'not_directory'
+  | 'invalid_path'
+  | 'transport_error';
 
 type PathLoadResult = {
   status: PathLoadStatus;
-  message?: string;
+};
+
+type DirectedNavigationFailure = {
+  requestId: string;
+  requestedPath: string;
+  committedPath: string;
+  result: PathLoadResult;
+  fallback: boolean;
 };
 
 type DirTargetLoadPolicy = 'use_cache' | 'revalidate_target' | 'force_reload';
@@ -187,7 +202,8 @@ type DirectoryPrepareResult =
   | (PathLoadResult & { rootPath?: string });
 
 type DirectoryNavigationResult =
-  | { status: 'ready' | 'fallback'; state: PreparedDirectoryState }
+  | { status: 'ready'; state: PreparedDirectoryState }
+  | { status: 'fallback'; state: PreparedDirectoryState; result: PathLoadResult; requestedPath: string }
   | { status: 'canceled' }
   | { status: 'error'; result: PathLoadResult };
 
@@ -195,6 +211,9 @@ type DirectoryNavigationOptions = {
   fallbackPath?: string;
   persistEnvId?: string;
   persistOnReady?: boolean;
+  persistOnFallback?: boolean;
+  refreshPathContext?: boolean;
+  directedRequestId?: string;
   targetPolicy?: DirTargetLoadPolicy;
   showBlockingOverlay?: boolean;
   seed?: DirectoryStateSeed;
@@ -204,7 +223,7 @@ type DirectoryNavigationOptions = {
 
 type ManualDirectoryNavigationResult =
   | { status: 'ready' | 'refreshed'; committedPath: string }
-  | { status: 'invalid_path' | 'permission_denied' | 'transport_error'; message: string }
+  | { status: Exclude<PathLoadStatus, 'canceled'>; message: string }
   | { status: 'canceled' };
 
 type BrowserPageMode = GitHistoryMode;
@@ -447,6 +466,7 @@ export interface RemoteFileBrowserProps {
   stateScope?: string;
   persistenceTarget?: 'page' | 'workbench';
   initialPathOverride?: string;
+  /** Display hint used to render the Home path as ~. Filesystem roots remain server-authoritative. */
   homePathOverride?: string;
   openPathRequest?: {
     requestId: string;
@@ -468,23 +488,20 @@ function normalizeBrowserStateScope(value: unknown): string {
 
 function classifyPathLoadError(err: unknown): PathLoadResult {
   if (err instanceof RpcError) {
-    if (err.code === 400 || err.code === 404 || err.code === 416) {
-      return { status: 'invalid_path', message: err.message };
-    }
-    if (err.code === 403) {
-      return { status: 'permission_denied', message: err.message };
-    }
-    return { status: 'transport_error', message: err.message };
-  }
-
-  if (err instanceof Error) {
-    const msg = String(err.message ?? '').trim();
-    if (msg) return { status: 'transport_error', message: msg };
+    const message = String(err.message ?? '').trim().toLowerCase();
+    if (err.code === 403 && message.includes('outside filesystem scope')) return { status: 'outside_scope' };
+    if (err.code === 403 && message.includes('host filesystem permission denied')) return { status: 'host_permission_denied' };
+    if (err.code === 403) return { status: 'permission_denied' };
+    if (err.code === 404) return { status: 'not_found' };
+    if (err.code === 400 && message.includes('not a directory')) return { status: 'not_directory' };
+    if (err.code === 400 || err.code === 416) return { status: 'invalid_path' };
     return { status: 'transport_error' };
   }
+  return { status: 'transport_error' };
+}
 
-  const text = String(err ?? '').trim();
-  return text ? { status: 'transport_error', message: text } : { status: 'transport_error' };
+function isDeterministicPathFailure(status: PathLoadStatus): boolean {
+  return status !== 'canceled' && status !== 'transport_error';
 }
 
 function normalizeRpcErrorMessage(err: unknown): string {
@@ -647,6 +664,27 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     }
   };
 
+  const pathLoadFailureMessage = (result: PathLoadResult): string => {
+    switch (result.status) {
+      case 'outside_scope':
+        return i18n.t('files.navigationFailure.outsideScope');
+      case 'permission_denied':
+        return i18n.t('files.navigationFailure.sessionPermissionDenied');
+      case 'host_permission_denied':
+        return i18n.t('files.navigationFailure.hostPermissionDenied');
+      case 'not_found':
+        return i18n.t('files.navigationFailure.notFound');
+      case 'not_directory':
+        return i18n.t('files.navigationFailure.notDirectory');
+      case 'invalid_path':
+        return i18n.t('files.navigationFailure.invalidPath');
+      case 'transport_error':
+        return i18n.t('files.navigationFailure.connectionFailed');
+      case 'canceled':
+        return i18n.t('files.pathNavigationCanceled');
+    }
+  };
+
   function readPersistedSidebarWidth(): number {
     return normalizePageSidebarWidth(
       floe.persist.load<number>(scopedStorageKey(PAGE_SIDEBAR_WIDTH_STORAGE_KEY), PAGE_SIDEBAR_DEFAULT_WIDTH)
@@ -690,7 +728,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   const [currentBrowserPath, setCurrentBrowserPath] = createSignal('');
   const [lastLoadedBrowserPath, setLastLoadedBrowserPath] = createSignal('');
-  const [requestedHomePathOverride, setRequestedHomePathOverride] = createSignal('');
+  const [homePathDisplayHint, setHomePathDisplayHint] = createSignal('');
+  const [directedNavigationFailure, setDirectedNavigationFailure] = createSignal<DirectedNavigationFailure | null>(null);
   const [titleOverridePath, setTitleOverridePath] = createSignal('');
   const [titleOverride, setTitleOverride] = createSignal('');
 
@@ -1053,9 +1092,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const readPersistedLastPath = (id: string): string => {
     const eid = id.trim();
     if (!eid) return '';
-    const override = initialPathOverride();
-    if (override) return override;
-
     const saved = floe.persist.load<string>(scopedStorageKeyByEnv('files:lastPath', eid), '');
     return saved ? normalizePath(saved) : '';
   };
@@ -1117,42 +1153,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   };
 
   const resolveFsRootAbs = async (): Promise<string> => {
-    const requestedOverride = normalizeAbsolutePath(requestedHomePathOverride());
-    if (requestedOverride) {
-      setFilesystemContext({
-        homePathAbs: requestedOverride,
-        defaultRootId: 'home',
-        roots: [{
-          id: 'home',
-          label: i18n.t('files.homeLabel'),
-          pathAbs: requestedOverride,
-          kind: 'home',
-          permissions: { read: true, write: true },
-          system: true,
-        }],
-      });
-      setAgentHomePathAbs(requestedOverride);
-      return requestedOverride;
-    }
-
-    const override = homePathOverride();
-    if (override) {
-      setFilesystemContext({
-        homePathAbs: override,
-        defaultRootId: 'home',
-        roots: [{
-          id: 'home',
-          label: i18n.t('files.homeLabel'),
-          pathAbs: override,
-          kind: 'home',
-          permissions: { read: true, write: true },
-          system: true,
-        }],
-      });
-      setAgentHomePathAbs(override);
-      return override;
-    }
-
     if (filesystemContext().roots.length > 0) {
       const cachedRoot = normalizeAbsolutePath(defaultFilesystemPath(filesystemContext()));
       if (cachedRoot) return cachedRoot;
@@ -1170,7 +1170,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       throw new Error(i18n.t('files.notifications.failedToResolveHomeDirectory'));
     }
     setFilesystemContext(ctx);
-    setAgentHomePathAbs(home);
+    setAgentHomePathAbs(home || homePathDisplayHint() || homePathOverride());
     return root;
   };
 
@@ -1296,19 +1296,19 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       if (seq !== repoReqSeq) return null;
       const result = classifyPathLoadError(err);
       if (!options.silent) {
-        if (result.status === 'invalid_path') {
+        if (isDeterministicPathFailure(result.status)) {
           setRepoInfo({
             available: false,
             gitAvailable: true,
-            unavailableReason: result.message || i18n.t('git.notifications.currentPathNotGitRepo'),
+            unavailableReason: i18n.t('git.notifications.currentPathNotGitRepo'),
           });
           setRepoInfoError('');
         } else {
           setRepoInfo(null);
-          setRepoInfoError(result.message ?? i18n.t('git.notifications.failedToInspectGitRepository'));
+          setRepoInfoError(i18n.t('git.notifications.failedToInspectGitRepository'));
         }
       } else if (shouldNotifyGitLoadError(options)) {
-        notification.warning(i18n.t('git.notifications.refreshIncompleteTitle'), result.message ?? i18n.t('git.notifications.failedToInspectUpdatedRepository'));
+        notification.warning(i18n.t('git.notifications.refreshIncompleteTitle'), i18n.t('git.notifications.failedToInspectUpdatedRepository'));
       }
       return null;
     } finally {
@@ -3533,10 +3533,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       let rootPath = '';
       try {
         rootPath = normalizePath(await resolveFsRootAbs());
-      } catch (error) {
+      } catch {
         notifyPathLoadFailure({
           status: 'transport_error',
-          message: error instanceof Error ? error.message : i18n.t('files.notifications.failedToResolveHomeDirectory'),
         });
         return;
       }
@@ -3614,7 +3613,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     }));
 
     clearDirectoryState();
-    setCurrentBrowserPath(restored.nextPath);
+    setCurrentBrowserPath(initialPathOverride() ? '' : restored.nextPath);
     setAgentHomePathAbs('');
     setShowHidden(restored.nextShowHidden);
     setGitSubview(restored.nextSubview);
@@ -3628,6 +3627,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     resetGitWorkbenchData();
     setDragMoveLoading(false);
     setPendingCreatedEntryReveal(null);
+    setDirectedNavigationFailure(null);
     resetFileBrowser();
 
     repoReqSeq += 1;
@@ -3638,8 +3638,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   });
 
   const notifyPathLoadFailure = (result: PathLoadResult) => {
-    if (result.status === 'canceled' || result.status === 'invalid_path') return;
-    notification.error(i18n.t('files.notifications.failedToLoadDirectoryTitle'), result.message ?? i18n.t('files.notifications.unableToLoadDirectory'));
+    if (result.status === 'canceled') return;
+    notification.error(i18n.t('files.notifications.failedToLoadDirectoryTitle'), pathLoadFailureMessage(result));
   };
 
   const prepareDirectoryState = async (
@@ -3654,25 +3654,21 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     if (seq !== dirReqSeq) return { status: 'canceled' };
 
     if (!protocol.client()) {
-      return { status: 'transport_error', message: i18n.t('files.notifications.connectionNotReady') };
+      return { status: 'transport_error' };
     }
 
     let rootPath = '';
     try {
       rootPath = normalizePath(await resolveFsRootAbs());
-    } catch (error) {
-      return {
-        status: 'transport_error',
-        message: error instanceof Error ? error.message : i18n.t('files.notifications.failedToResolveHomeDirectory'),
-      };
+    } catch {
+      return { status: 'transport_error' };
     }
 
     const normalizedRequestedPath = normalizePath(requestedPath);
     const activeRoot = matchFilesystemRoot(normalizedRequestedPath, filesystemRoots());
     if (!activeRoot) {
       return {
-        status: 'invalid_path',
-        message: i18n.t('files.notifications.pathOutsideRoots'),
+        status: 'outside_scope',
         rootPath,
       };
     }
@@ -3752,7 +3748,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     if (prepared.status === 'canceled') {
       return { status: 'canceled' };
     }
-    if (prepared.status !== 'invalid_path' || options.allowInvalidTargetFallback === false) {
+    if (!isDeterministicPathFailure(prepared.status) || options.allowInvalidTargetFallback === false) {
       return { status: 'error', result: prepared };
     }
 
@@ -3775,12 +3771,17 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         showHiddenOverride: options.showHiddenOverride,
       });
       if (fallbackPrepared.status === 'ok') {
-        return { status: 'fallback', state: fallbackPrepared.state };
+        return {
+          status: 'fallback',
+          state: fallbackPrepared.state,
+          result: prepared,
+          requestedPath: normalizedRequestedPath,
+        };
       }
       if (fallbackPrepared.status === 'canceled') {
         return { status: 'canceled' };
       }
-      if (fallbackPrepared.status !== 'invalid_path') {
+      if (!isDeterministicPathFailure(fallbackPrepared.status)) {
         return { status: 'error', result: fallbackPrepared };
       }
     }
@@ -3793,10 +3794,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     options: DirectoryNavigationOptions = {},
   ): Promise<DirectoryNavigationResult> => {
     const normalizedRequestedPath = normalizePath(requestedPath);
-    if (pathLoadInFlight() === normalizedRequestedPath) {
-      return { status: 'canceled' };
-    }
-
     const seq = ++dirReqSeq;
     setPendingBrowserPath(normalizedRequestedPath);
     setPathLoadInFlight(normalizedRequestedPath);
@@ -3804,6 +3801,15 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       setLoading(true);
     }
     try {
+      if (options.refreshPathContext) {
+        try {
+          await refreshFilesystemPathContext();
+        } catch {
+          if (seq !== dirReqSeq) return { status: 'canceled' };
+          return { status: 'error', result: { status: 'transport_error' } };
+        }
+        if (seq !== dirReqSeq) return { status: 'canceled' };
+      }
       const result = await resolveDirectoryNavigation(normalizedRequestedPath, seq, {
         fallbackPath: options.fallbackPath,
         targetPolicy: options.targetPolicy,
@@ -3818,10 +3824,24 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         return result;
       }
       applyPreparedDirectoryState(result.state, {
-        persistEnvId: options.persistEnvId && (result.status === 'fallback' || options.persistOnReady === true)
+        persistEnvId: options.persistEnvId && (
+          (result.status === 'ready' && options.persistOnReady === true)
+          || (result.status === 'fallback' && options.persistOnFallback === true)
+        )
           ? options.persistEnvId
           : undefined,
       });
+      if (options.directedRequestId) {
+        setDirectedNavigationFailure(result.status === 'fallback'
+          ? {
+              requestId: options.directedRequestId,
+              requestedPath: result.requestedPath,
+              committedPath: result.state.committedPath,
+              result: result.result,
+              fallback: true,
+            }
+          : null);
+      }
       return result;
     } finally {
       if (seq === dirReqSeq) {
@@ -3835,24 +3855,35 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const requestDirectoryNavigation = async (
     requestedPath: string,
     options: DirectoryNavigationOptions = {},
-  ): Promise<void> => {
+  ): Promise<DirectoryNavigationResult> => {
     const result = await runDirectoryNavigationRequest(requestedPath, {
       ...options,
       allowInvalidTargetFallback: options.allowInvalidTargetFallback ?? true,
     });
     if (result.status === 'error') {
-      notifyPathLoadFailure(result.result);
+      if (options.directedRequestId) {
+        setDirectedNavigationFailure({
+          requestId: options.directedRequestId,
+          requestedPath: normalizePath(requestedPath),
+          committedPath: normalizeAbsolutePath(currentBrowserPath()),
+          result: result.result,
+          fallback: false,
+        });
+      } else {
+        notifyPathLoadFailure(result.result);
+      }
     }
+    return result;
   };
 
   const requestManualDirectoryNavigation = async (requestedPath: string): Promise<ManualDirectoryNavigationResult> => {
     let rootPath = '';
     try {
       rootPath = normalizePath(await resolveFsRootAbs());
-    } catch (error) {
+    } catch {
       return {
         status: 'transport_error',
-        message: error instanceof Error ? error.message : i18n.t('files.notifications.failedToResolveHomeDirectory'),
+        message: i18n.t('files.navigationFailure.connectionFailed'),
       };
     }
 
@@ -3883,7 +3914,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     if (result.status === 'error') {
       return {
         status: result.result.status,
-        message: result.result.message ?? i18n.t('files.notifications.unableToOpenPath'),
+        message: pathLoadFailureMessage(result.result),
       };
     }
 
@@ -3900,7 +3931,11 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     };
   };
 
-  const refreshCurrentDirectory = async (options: { forceReload?: boolean } = {}): Promise<void> => {
+  const refreshCurrentDirectory = async (options: {
+    forceReload?: boolean;
+    directedRequestId?: string;
+    refreshPathContext?: boolean;
+  } = {}): Promise<void> => {
     const id = envId();
     const path = normalizeAbsolutePath(currentBrowserPath());
     if (!id || !path) return;
@@ -3914,8 +3949,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     await requestDirectoryNavigation(path, {
       fallbackPath: lastLoadedBrowserPath() || defaultRootPath(),
       persistEnvId: id,
+      persistOnReady: Boolean(options.directedRequestId),
+      persistOnFallback: !options.directedRequestId,
       targetPolicy: options.forceReload ? 'force_reload' : 'revalidate_target',
       showBlockingOverlay: lastLoadedBrowserPath() === '',
+      refreshPathContext: options.refreshPathContext,
+      directedRequestId: options.directedRequestId,
     });
   };
 
@@ -3925,6 +3964,143 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const currentPath = normalizeAbsolutePath(currentBrowserPath());
     return normalizePath(pendingPath) === normalizePath(currentPath) ? i18n.t('files.refreshing') : i18n.t('files.opening');
   });
+
+  const canManageFilesystemAccess = createMemo(() => Boolean(
+    ctx.env()?.permissions?.can_admin || ctx.env()?.permissions?.is_owner,
+  ));
+
+  const retryDirectedNavigation = (failure: DirectedNavigationFailure) => {
+    setDirectedNavigationFailure(null);
+    void requestDirectoryNavigation(failure.requestedPath, {
+      fallbackPath: lastLoadedBrowserPath() || defaultRootPath(),
+      showBlockingOverlay: lastLoadedBrowserPath() === '',
+      persistEnvId: envId(),
+      persistOnReady: true,
+      persistOnFallback: false,
+      targetPolicy: 'force_reload',
+      refreshPathContext: true,
+      directedRequestId: failure.requestId,
+      allowInvalidTargetFallback: !failure.committedPath,
+    });
+  };
+
+  const openHomeAfterDirectedFailure = () => {
+    const homePath = normalizeAbsolutePath(agentHomePathAbs()) || normalizeAbsolutePath(defaultRootPath());
+    if (!homePath) return;
+    setDirectedNavigationFailure(null);
+    void requestDirectoryNavigation(homePath, {
+      persistEnvId: envId(),
+      persistOnReady: true,
+      targetPolicy: 'force_reload',
+      allowInvalidTargetFallback: false,
+    });
+  };
+
+  const openParentAfterDirectedFailure = (failure: DirectedNavigationFailure) => {
+    const parentPath = normalizeAbsolutePath(getParentDir(failure.requestedPath));
+    if (!parentPath || parentPath === normalizeAbsolutePath(failure.requestedPath)) return;
+    setDirectedNavigationFailure(null);
+    void requestDirectoryNavigation(parentPath, {
+      persistEnvId: envId(),
+      persistOnReady: true,
+      targetPolicy: 'force_reload',
+      allowInvalidTargetFallback: false,
+    });
+  };
+
+  const copyDirectedNavigationPath = (path: string) => {
+    void (async () => {
+      try {
+        await writeTextToClipboard(path);
+        notification.success(
+          i18n.t('files.notifications.copiedTitle'),
+          i18n.t('files.notifications.copiedValue', { value: path }),
+        );
+      } catch {
+        notification.error(
+          i18n.t('files.notifications.copyFailedTitle'),
+          i18n.t('git.contextMenu.copyFailedMessage'),
+        );
+      }
+    })();
+  };
+
+  const directedNavigationFailurePanel = () => (
+    <Show when={directedNavigationFailure()}>
+      {(failureAccessor) => {
+        const failure = failureAccessor();
+        const accessFailure = failure.result.status === 'outside_scope' || failure.result.status === 'permission_denied';
+        const parentRecovery = failure.result.status === 'host_permission_denied'
+          || failure.result.status === 'not_found'
+          || failure.result.status === 'not_directory'
+          || failure.result.status === 'invalid_path';
+        return (
+          <section
+            class="mx-2 mt-2 shrink-0 rounded-md border border-warning/35 bg-warning/5 px-3 py-2.5"
+            role="status"
+            aria-live="polite"
+            data-testid="file-browser-navigation-failure"
+          >
+            <div class="flex items-start gap-2.5">
+              <AlertTriangle class="mt-0.5 size-4 shrink-0 text-warning" aria-hidden="true" />
+              <div class="min-w-0 flex-1">
+                <div class="text-sm font-medium text-foreground">{i18n.t('files.navigationFailure.title')}</div>
+                <p class="mt-0.5 text-xs leading-5 text-muted-foreground">
+                  {pathLoadFailureMessage(failure.result)}
+                </p>
+                <dl class="mt-1.5 grid min-w-0 gap-1 text-[11px] leading-4 text-muted-foreground">
+                  <div class="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-2">
+                    <dt>{i18n.t('files.navigationFailure.requestedPath')}</dt>
+                    <dd class="truncate font-mono text-foreground" title={failure.requestedPath}>{failure.requestedPath}</dd>
+                  </div>
+                  <Show when={failure.committedPath}>
+                    <div class="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-2">
+                      <dt>{i18n.t('files.navigationFailure.currentLocation')}</dt>
+                      <dd class="truncate font-mono text-foreground" title={failure.committedPath}>{failure.committedPath}</dd>
+                    </div>
+                  </Show>
+                </dl>
+                <div class="mt-2 flex flex-wrap items-center gap-1.5">
+                  <Button size="sm" variant="outline" icon={Refresh} onClick={() => retryDirectedNavigation(failure)}>
+                    {i18n.t('files.navigationFailure.retry')}
+                  </Button>
+                  <Button size="sm" variant="outline" icon={Folder} onClick={openHomeAfterDirectedFailure}>
+                    {i18n.t('files.navigationFailure.openHome')}
+                  </Button>
+                  <Show when={parentRecovery}>
+                    <Button size="sm" variant="outline" icon={Folder} onClick={() => openParentAfterDirectedFailure(failure)}>
+                      {i18n.t('files.navigationFailure.openParent')}
+                    </Button>
+                  </Show>
+                  <Button size="sm" variant="ghost" icon={Copy} onClick={() => copyDirectedNavigationPath(failure.requestedPath)}>
+                    {i18n.t('files.navigationFailure.copyPath')}
+                  </Button>
+                  <Show when={accessFailure && canManageFilesystemAccess()}>
+                    <Button size="sm" variant="ghost" icon={Settings} onClick={() => ctx.openSettings('runtime')}>
+                      {i18n.t('files.navigationFailure.manageAccess')}
+                    </Button>
+                  </Show>
+                  <Show when={accessFailure && !canManageFilesystemAccess()}>
+                    <span class="text-[11px] text-muted-foreground">{i18n.t('files.navigationFailure.askAdministrator')}</span>
+                  </Show>
+                </div>
+              </div>
+              <Show when={Boolean(failure.committedPath)}>
+                <button
+                  type="button"
+                  class="inline-flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+                  aria-label={i18n.t('files.navigationFailure.dismiss')}
+                  onClick={() => setDirectedNavigationFailure(null)}
+                >
+                  <X class="size-3.5" />
+                </button>
+              </Show>
+            </div>
+          </section>
+        );
+      }}
+    </Show>
+  );
 
   const applyLocalMove = (item: FileItem, destDir: string) => {
     const from = normalizePath(item.path);
@@ -4286,19 +4462,46 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const scopeRefreshKey = filesystemScopeRefreshKey();
     if (!id) return;
     void (async () => {
+      const persistedPath = normalizeAbsolutePath(untrack(() => readPersistedLastPath(id)));
+      const directedInitialPath = initialPathOverride();
+      if (directedInitialPath) {
+        const directedRequestId = `initial:${browserStateScope()}:${id}:${directedInitialPath}`;
+        if (directedRequestId !== lastHandledInitialPathRequestId) {
+          lastHandledInitialPathRequestId = directedRequestId;
+          setHomePathDisplayHint(homePathOverride());
+          setDirectedNavigationFailure(null);
+          await requestDirectoryNavigation(directedInitialPath, {
+            fallbackPath: persistedPath,
+            showBlockingOverlay: lastLoadedBrowserPath() === '',
+            persistEnvId: id,
+            persistOnReady: true,
+            persistOnFallback: false,
+            targetPolicy: 'force_reload',
+            refreshPathContext: true,
+            directedRequestId,
+            allowInvalidTargetFallback: lastLoadedBrowserPath() === '',
+          });
+        } else if (scopeRefreshKey > 0) {
+          try {
+            await refreshFilesystemPathContext();
+          } catch {
+            notifyPathLoadFailure({ status: 'transport_error' });
+          }
+        }
+        return;
+      }
+
       let rootPath = '';
       try {
         rootPath = normalizePath(scopeRefreshKey > 0 ? await refreshFilesystemPathContext() : await resolveFsRootAbs());
-      } catch (e) {
+      } catch {
         notifyPathLoadFailure({
           status: 'transport_error',
-          message: e instanceof Error ? e.message : i18n.t('files.notifications.failedToResolveHomeDirectory'),
         });
         return;
       }
 
       const rememberedPath = normalizeAbsolutePath(currentBrowserPath());
-      const persistedPath = normalizeAbsolutePath(untrack(() => readPersistedLastPath(id)));
       const showHiddenEnabled = untrack(() => showHidden());
       const requestedStartPath = rememberedPath || persistedPath || rootPath;
       const startPath = showHiddenEnabled
@@ -4333,6 +4536,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     ));
   });
 
+  let lastHandledInitialPathRequestId = '';
   let lastHandledOpenPathRequestId = '';
   createEffect(() => {
     const request = props.openPathRequest;
@@ -4356,7 +4560,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const requestedTitle = String(request?.title ?? '').trim();
 
     lastHandledOpenPathRequestId = requestId;
-    setRequestedHomePathOverride(requestedHomePath);
+    setHomePathDisplayHint(requestedHomePath);
+    setDirectedNavigationFailure(null);
     setTitleOverridePath(requestedPath);
     setTitleOverride(requestedTitle);
 
@@ -4367,7 +4572,11 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
           showBlockingOverlay: lastLoadedBrowserPath() === '',
           persistEnvId: envId(),
           persistOnReady: true,
+          persistOnFallback: false,
           targetPolicy: 'force_reload',
+          refreshPathContext: true,
+          directedRequestId: requestId,
+          allowInvalidTargetFallback: lastLoadedBrowserPath() === '',
         });
       } finally {
         props.onOpenPathRequestHandled?.(requestId);
@@ -5279,9 +5488,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         fallback={<div class="h-full" />}
       >
         {(id) => (
-          <div class="h-full min-h-0">
+          <div class="flex h-full min-h-0 flex-col">
+            <Show when={pageMode() === 'files'}>
+              {directedNavigationFailurePanel()}
+            </Show>
             <BrowserModeTransitionStack
-              class="h-full"
+              class="min-h-0 flex-1"
               activeId={pageMode()}
               prewarmGit={gitSurfacePrewarmed()}
               files={() => (
@@ -5345,7 +5557,11 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                               message: i18n.t('files.pathNavigationCanceled'),
                             };
                           case 'invalid_path':
+                          case 'outside_scope':
                           case 'permission_denied':
+                          case 'host_permission_denied':
+                          case 'not_found':
+                          case 'not_directory':
                           case 'transport_error':
                             return {
                               status: 'error',
