@@ -129,6 +129,8 @@ contract, packages through the released ReDevPlugin CLI, compares exact bytes,
 validates manifest v7, version `4.0.0`, minimum runtime `0.6.20`,
 `plugin-ui-v7`, all 52 generated methods, endpoint identity, and destructive
 method policy, and rejects package signatures or activatable unsigned routes.
+The final integration gate invokes that v4 candidate check directly; it must not
+rebuild current v4 source through the retired v3 candidate comparison path.
 
 Stable and latest catalog metadata remain pinned to signed Containers `2.0.0`.
 An official `4.0.0` release requires authorized capability and package signing
@@ -162,6 +164,7 @@ package and integration ownership remains in [Plugin platform integration](plugi
 - `redeven:plugins/official/containers/test/main.integration.test.mjs` - Proves endpoint routing, workspace behavior, reconciliation locks, progress, context updates, and disposal semantics.
 - `redeven:plugins/official/containers/test/styles.test.mjs` - Enforces responsive shell, fixed confirmation footer, token use, reduced motion, forced colors, and stable row hover.
 - `redeven:scripts/check_containers_plugin_v4_candidate.sh` - Rebuilds and verifies the deterministic unsigned v4 candidate without granting release trust.
+- `redeven:scripts/check_plugin_integration.sh` - Routes final ReDevPlugin integration validation through the current v4 candidate gate.
 - `redeven:scripts/build_containers_v4_development_delivery.mjs` - Produces the ephemeral Dev Desktop package and verified v4 capability delivery.
 - `redeven:internal/redevpluginintegration/development_delivery.go` - Fails closed on descriptor, package, key, pin, contract, or method-route mismatch.
 - `redeven:spec/redevplugin/candidate-containers-plugin/4.0.0/plugin.redevplugin` - Contains the fail-closed unsigned Containers v4 package candidate.
