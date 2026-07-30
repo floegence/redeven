@@ -3,6 +3,7 @@ import { cpSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
+import { generateDesignAssets } from './build-design-assets.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const dist = join(root, 'dist');
@@ -12,6 +13,7 @@ mkdirSync(join(dist, 'ui', 'assets'), { recursive: true });
 cpSync(join(root, 'manifest.json'), join(dist, 'manifest.json'));
 cpSync(join(root, 'ui', 'index.html'), join(dist, 'ui', 'index.html'));
 cpSync(join(root, 'ui', 'assets', 'styles.css'), join(dist, 'ui', 'assets', 'styles.css'));
+generateDesignAssets(root, dist);
 
 const result = await build({
   entryPoints: [join(root, 'src', 'main.ts')],

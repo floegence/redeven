@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 
 const css = await readFile(new URL('../ui/assets/styles.css', import.meta.url), 'utf8');
+const index = await readFile(new URL('../ui/index.html', import.meta.url), 'utf8');
 
 test('consumes the complete plugin surface appearance palette', () => {
   for (const token of ['canvas', 'surface', 'surface-elevated', 'text', 'text-muted', 'border', 'accent', 'accent-text', 'success', 'warning', 'danger', 'focus']) {
@@ -11,6 +12,11 @@ test('consumes the complete plugin surface appearance palette', () => {
   assert.doesNotMatch(css, /transition-all/u);
   assert.doesNotMatch(css, /letter-spacing:\s*-/u);
   assert.doesNotMatch(css, /border-radius:\s*(?:1[0-9]|[2-9][0-9])px/u);
+  for (const token of ['radius-control', 'radius-panel', 'shadow-xs', 'shadow-sm', 'duration-fast', 'duration-base', 'ease-out']) {
+    assert.match(css, new RegExp('--appica-' + token, 'u'));
+  }
+  assert.match(index, /assets\/appica-theme\.css/u);
+  assert.match(index, /assets\/lucide-icons\.css/u);
 });
 
 test('implements the desktop, compact, and mobile application shell', () => {
@@ -33,8 +39,12 @@ test('uses dense resource-specific tables without hover layout movement', () => 
   assert.doesNotMatch(css, /\.resource-table\s*\{[^}]*min-width:\s*760px/isu);
   assert.match(css, /@media \(max-width:\s*1279px\) and \(min-width:\s*960px\)[\s\S]*?\.cell-created[^}]*display:\s*none/isu);
   assert.match(css, /@media \(max-width:\s*959px\) and \(min-width:\s*768px\)[\s\S]*?\.cell-group[^}]*display:\s*none/isu);
-  for (const icon of ['overview', 'containers', 'images', 'volumes', 'projects', 'pods']) assert.match(css, new RegExp(`\\.navigation-link\\.icon-${icon}::before`, 'u'));
-  for (const icon of ['container', 'image', 'volume', 'project', 'pod']) assert.match(css, new RegExp(`\\.resource-icon\\.icon-${icon}::before`, 'u'));
+  assert.match(css, /\.navigation-link::before\s*\{[^}]*font-size:\s*16px/isu);
+  assert.match(css, /\.resource-icon\s*\{[^}]*place-items:\s*center[^}]*font-size:\s*15px/isu);
+  assert.match(css, /\.appica-action\s*\{[^}]*white-space:\s*nowrap/isu);
+  assert.doesNotMatch(css, /content:\s*["'](?:↻|⋯|−|\+)["']/u);
+  assert.doesNotMatch(css, /\.(?:brand-mark|search|resource-icon)::after/u);
+  assert.doesNotMatch(css, /\.navigation-link\.icon-/u);
   assert.match(css, /@media \(max-width:\s*767px\)[\s\S]*?\.row-menu > summary\s*\{[^}]*width:\s*44px[^}]*height:\s*44px/isu);
   assert.match(css, /\.filter-group,\s*\.toolbar-actions\s*\{[^}]*scrollbar-width:\s*none/isu);
   assert.match(css, /@media \(max-width:\s*767px\)[\s\S]*?\.navigation-links\s*\{[^}]*scrollbar-width:\s*none/isu);

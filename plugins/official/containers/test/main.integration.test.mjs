@@ -122,7 +122,7 @@ test('keeps a single runtime target quiet while preserving its exact identity', 
 
   fixture.action('select-view', { value: 'containers' });
   await eventually(() => {
-    const icon = findNode(fixture.tree(), (node) => node.attributes?.class?.includes('resource-icon icon-container'));
+    const icon = findNode(fixture.tree(), (node) => node.attributes?.class?.includes('lucide-box resource-icon'));
     assert.ok(icon);
     const created = findNode(fixture.tree(), (node) => node.attributes?.class === 'table-cell cell-created');
     assert.ok(created);

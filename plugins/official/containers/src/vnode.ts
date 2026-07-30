@@ -20,6 +20,13 @@ export function empty(key: string): PluginUIVNode {
   return element(key, 'span', { hidden: true });
 }
 
+export function icon(key: string, name: string, className = ''): PluginUIVNode {
+  return element(key, 'span', {
+    class: `lucide-icon lucide-${name}${className ? ` ${className}` : ''}`,
+    'aria-hidden': true,
+  });
+}
+
 export function button(
   key: string,
   label: string,

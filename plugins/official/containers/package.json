@@ -11,7 +11,9 @@
     "@floegence/redevplugin-ui": "0.6.20"
   },
   "devDependencies": {
+    "@appica/ui-react": "1.0.0",
     "esbuild": "0.28.1",
+    "lucide-static": "1.27.0",
     "typescript": "5.9.3"
   }
 }
