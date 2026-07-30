@@ -18,7 +18,7 @@ import {
   type CopyParams,
 } from './i18n';
 import { cancellationFailurePolicy, mutationOutcome, submissionFailurePolicy } from './operation-policy';
-import { button, element as el, empty, text as txt } from './vnode';
+import { button, element as el, empty, icon, text as txt } from './vnode';
 import { ResourceProjection } from './resource-projection';
 import {
   createInitialContainersState,
@@ -1012,20 +1012,20 @@ function appHeader(): PluginUIVNode {
   const endpoint = selectedEndpoint();
   const hasMultipleTargets = state.endpoints.length > 1;
   return el('context-bar', 'header', { class: `context-bar${hasMultipleTargets ? ' has-target-picker' : ''}` }, [
-    el('mobile-brand', 'div', { class: 'mobile-brand' }, [el('mobile-brand-mark', 'span', { class: 'brand-mark', 'aria-hidden': true }), el('mobile-brand-title', 'strong', {}, [txt('mobile-brand-title-text', c('appTitle'))])]),
+    el('mobile-brand', 'div', { class: 'mobile-brand' }, [icon('mobile-brand-mark', 'boxes', 'brand-mark'), el('mobile-brand-title', 'strong', {}, [txt('mobile-brand-title-text', c('appTitle'))])]),
     el('engine-switch', 'div', { class: 'engine-switch', role: 'group', 'aria-label': c('containerEngine') }, (['docker', 'podman'] as Engine[]).map((engine) => button(`engine-${engine}`, title(engine), 'select-engine', engine, state.engine === engine ? `engine-option active ${engine}` : `engine-option ${engine}`, state.loading, { 'aria-pressed': state.engine === engine }))),
     hasMultipleTargets
       ? el('endpoint-context', 'label', { class: 'endpoint-context' }, [el('endpoint-label', 'span', {}, [txt('endpoint-label-text', c('runtimeTarget'))]), el('endpoint-select', 'select', { name: 'endpoint', 'data-redevplugin-action': 'select-endpoint', disabled: state.loading }, state.endpoints.map((item) => el(`endpoint-${item.endpoint_id}`, 'option', { value: item.endpoint_id, selected: item.endpoint_id === state.endpointID }, [txt(`endpoint-${item.endpoint_id}-text`, item.display_name)])))])
       : empty('endpoint-context-empty'),
     el('endpoint-status', 'div', { class: `endpoint-status ${state.available ? 'online' : 'offline'}`, role: 'status', title: endpoint?.display_name ?? '' }, [el('endpoint-status-dot', 'span', { class: 'status-dot', 'aria-hidden': true }), el('endpoint-status-copy', 'span', {}, [txt('endpoint-status-copy-text', state.available ? c('connected') : c('disconnected'))]), !hasMultipleTargets && endpoint?.display_name ? el('endpoint-identity', 'span', { class: 'endpoint-identity' }, [txt('endpoint-identity-text', endpoint.display_name)]) : empty('endpoint-identity-empty'), state.version ? el('endpoint-version', 'code', {}, [txt('endpoint-version-text', state.version)]) : empty('endpoint-version-empty'), state.engine === 'podman' && endpoint?.rootless !== undefined ? el('endpoint-mode', 'span', { class: 'endpoint-mode' }, [txt('endpoint-mode-text', c(endpoint.rootless ? 'rootless' : 'rootful'))]) : empty('endpoint-mode-empty')]),
-    button('refresh', state.updating ? c('refreshing') : c('refresh'), 'refresh-resources', '', 'refresh-button', state.loading || state.updating, { 'aria-label': c('refreshResources'), title: c('refreshResources') }),
+    button('refresh', state.updating ? c('refreshing') : c('refresh'), 'refresh-resources', '', 'refresh-button lucide-icon lucide-refresh-cw', state.loading || state.updating, { 'aria-label': c('refreshResources'), title: c('refreshResources') }),
   ]);
 }
 
 function resourceNavigation(): PluginUIVNode {
   return el('resource-navigation', 'aside', { class: 'resource-navigation' }, [
-    el('navigation-brand', 'div', { class: 'navigation-brand' }, [el('navigation-brand-mark', 'span', { class: 'brand-mark', 'aria-hidden': true }), el('navigation-brand-copy', 'div', {}, [el('navigation-brand-title', 'strong', {}, [txt('navigation-brand-title-text', c('appTitle'))]), el('navigation-brand-subtitle', 'span', {}, [txt('navigation-brand-subtitle-text', c('runtimeResources'))])])]),
-    el('navigation-links', 'nav', { class: 'navigation-links', 'aria-label': c('containerResources') }, availableViews().map((view) => button(`navigation-${view}`, viewLabel(view), 'select-view', view, state.view === view ? `navigation-link active icon-${view}` : `navigation-link icon-${view}`, false, { 'aria-current': state.view === view ? 'page' : false }))),
+    el('navigation-brand', 'div', { class: 'navigation-brand' }, [icon('navigation-brand-mark', 'boxes', 'brand-mark'), el('navigation-brand-copy', 'div', {}, [el('navigation-brand-title', 'strong', {}, [txt('navigation-brand-title-text', c('appTitle'))]), el('navigation-brand-subtitle', 'span', {}, [txt('navigation-brand-subtitle-text', c('runtimeResources'))])])]),
+    el('navigation-links', 'nav', { class: 'navigation-links', 'aria-label': c('containerResources') }, availableViews().map((view) => button(`navigation-${view}`, viewLabel(view), 'select-view', view, `navigation-link lucide-icon lucide-${viewIcon(view)}${state.view === view ? ' active' : ''}`, false, { 'aria-current': state.view === view ? 'page' : false }))),
     el('navigation-footer', 'div', { class: 'navigation-footer' }, [el('navigation-engine', 'span', { class: `engine-mark ${state.engine}` }, [txt('navigation-engine-text', state.engine === 'docker' ? 'D' : 'P')]), el('navigation-engine-name', 'span', {}, [txt('navigation-engine-name-text', title(state.engine))])]),
   ]);
 }
@@ -1078,7 +1078,7 @@ function overviewWorkspace(): PluginUIVNode {
 function resourceWorkspace(notices: PluginUIVNode[]): PluginUIVNode {
   return el('resource-workspace', 'div', { class: 'resource-workspace' }, [
     workspaceHeading(viewLabel(state.view), resourceCount(), primaryActions()),
-    el('resource-toolbar', 'div', { class: 'resource-toolbar' }, [el('search-label', 'label', { class: 'search' }, [el('search-label-copy', 'span', { class: 'sr-only' }, [txt('search-label-text', searchLabel(state.view))]), el('search-input', 'input', { type: 'search', value: state.query, placeholder: searchLabel(state.view), autocomplete: 'off', 'data-redevplugin-action': 'filter-resources' })]), resourceRefinements()]),
+    el('resource-toolbar', 'div', { class: 'resource-toolbar' }, [el('search-label', 'label', { class: 'search' }, [icon('search-icon', 'search', 'search-icon'), el('search-label-copy', 'span', { class: 'sr-only' }, [txt('search-label-text', searchLabel(state.view))]), el('search-input', 'input', { type: 'search', value: state.query, placeholder: searchLabel(state.view), autocomplete: 'off', 'data-redevplugin-action': 'filter-resources' })]), resourceRefinements()]),
     ...notices,
     state.loading ? resourceSkeleton() : !state.available ? stateMessage(c('unavailableSentence', { engine: title(state.engine) }), true) : resourceList(),
   ]);
@@ -1089,11 +1089,11 @@ function workspaceHeading(titleText: string, subtitle: string, actions: PluginUI
 }
 
 function overviewActions(): PluginUIVNode {
-  return el('overview-actions', 'div', { class: 'toolbar-actions' }, [button('overview-create-container', c('createContainer'), 'open-create-container', '', 'primary-button', !state.available), button('overview-pull-image', c('pullImage'), 'open-pull-image', '', 'secondary-button', !state.available), state.engine === 'podman' ? button('overview-create-pod', c('createPod'), 'open-create-pod', '', 'secondary-button', !state.available) : empty('overview-create-pod-empty')]);
+  return el('overview-actions', 'div', { class: 'toolbar-actions' }, [button('overview-create-container', c('createContainer'), 'open-create-container', '', actionButtonClass('primary-button', 'plus'), !state.available), button('overview-pull-image', c('pullImage'), 'open-pull-image', '', actionButtonClass('secondary-button', 'download'), !state.available), state.engine === 'podman' ? button('overview-create-pod', c('createPod'), 'open-create-pod', '', actionButtonClass('secondary-button', 'package-plus'), !state.available) : empty('overview-create-pod-empty')]);
 }
 
 function overviewMetric(key: string, label: string, value: number, view: View): PluginUIVNode {
-  return el(`overview-metric-${key}`, 'button', { type: 'button', class: `overview-metric metric-${key}`, value: view, 'aria-label': `${label}: ${value}`, 'data-redevplugin-action': 'select-view' }, [el(`overview-metric-${key}-icon`, 'span', { class: 'overview-metric-icon', 'aria-hidden': true }), el(`overview-metric-${key}-copy`, 'span', { class: 'overview-metric-copy' }, [el(`overview-metric-${key}-value`, 'strong', {}, [txt(`overview-metric-${key}-value-text`, String(value))]), el(`overview-metric-${key}-label`, 'span', {}, [txt(`overview-metric-${key}-label-text`, label)])])]);
+  return el(`overview-metric-${key}`, 'button', { type: 'button', class: `overview-metric metric-${key}`, value: view, 'aria-label': `${label}: ${value}`, 'data-redevplugin-action': 'select-view' }, [icon(`overview-metric-${key}-icon`, viewIcon(view), 'overview-metric-icon'), el(`overview-metric-${key}-copy`, 'span', { class: 'overview-metric-copy' }, [el(`overview-metric-${key}-value`, 'strong', {}, [txt(`overview-metric-${key}-value-text`, String(value))]), el(`overview-metric-${key}-label`, 'span', {}, [txt(`overview-metric-${key}-label-text`, label)])])]);
 }
 
 function resourceRefinements(): PluginUIVNode {
@@ -1120,10 +1120,10 @@ function resourceSkeleton(): PluginUIVNode {
 }
 
 function primaryActions(): PluginUIVNode {
-  if (state.view === 'containers') return button('create-container', c('createContainer'), 'open-create-container', '', 'primary-button', !state.available);
-  if (state.view === 'images') return el('image-actions', 'div', { class: 'toolbar-actions' }, [button('pull-image', c('pullImage'), 'open-pull-image', '', 'primary-button', !state.available), button('prune-images', c('prune'), 'prune-images', '', 'secondary-button', destructiveDisabled('images'))]);
-  if (state.view === 'volumes') return el('volume-actions', 'div', { class: 'toolbar-actions' }, [button('create-volume', c('createVolume'), 'open-create-volume', '', 'primary-button', !state.available), button('prune-volumes', c('prune'), 'prune-volumes', '', 'secondary-button', destructiveDisabled('volumes'))]);
-  if (state.view === 'pods') return button('create-pod', c('createPod'), 'open-create-pod', '', 'primary-button', !state.available);
+  if (state.view === 'containers') return button('create-container', c('createContainer'), 'open-create-container', '', actionButtonClass('primary-button', 'plus'), !state.available);
+  if (state.view === 'images') return el('image-actions', 'div', { class: 'toolbar-actions' }, [button('pull-image', c('pullImage'), 'open-pull-image', '', actionButtonClass('primary-button', 'download'), !state.available), button('prune-images', c('prune'), 'prune-images', '', actionButtonClass('secondary-button', 'trash-2'), destructiveDisabled('images'))]);
+  if (state.view === 'volumes') return el('volume-actions', 'div', { class: 'toolbar-actions' }, [button('create-volume', c('createVolume'), 'open-create-volume', '', actionButtonClass('primary-button', 'plus'), !state.available), button('prune-volumes', c('prune'), 'prune-volumes', '', actionButtonClass('secondary-button', 'trash-2'), destructiveDisabled('volumes'))]);
+  if (state.view === 'pods') return button('create-pod', c('createPod'), 'open-create-pod', '', actionButtonClass('primary-button', 'package-plus'), !state.available);
   return empty('primary-actions-empty');
 }
 
@@ -1184,12 +1184,12 @@ function podsTable(items: Pod[]): PluginUIVNode {
 }
 
 function tableHeader(key: string, columns: Array<[string, string]>): PluginUIVNode { return el(key, 'div', { class: 'table-header', role: 'row' }, columns.map(([label, className], index) => el(`${key}-${index}`, 'span', { class: className, role: 'columnheader' }, [txt(`${key}-${index}-text`, label)]))); }
-function rowIdentity(key: string, name: string, subtitle: string, actionName: string, value: string, kind: 'container' | 'image' | 'volume' | 'project' | 'pod', tone: string): PluginUIVNode { return el(`${key}-identity`, 'div', { class: 'row-identity cell-name' }, [el(`${key}-icon`, 'span', { class: `resource-icon icon-${kind} ${tone}`, 'aria-hidden': true }), button(`${key}-open`, name, actionName, value, 'row-identity-button', false, { title: name }), el(`${key}-subtitle`, 'code', { title: subtitle }, [txt(`${key}-subtitle-text`, subtitle)])]); }
+function rowIdentity(key: string, name: string, subtitle: string, actionName: string, value: string, kind: 'container' | 'image' | 'volume' | 'project' | 'pod', tone: string): PluginUIVNode { return el(`${key}-identity`, 'div', { class: 'row-identity cell-name' }, [icon(`${key}-icon`, resourceIcon(kind), `resource-icon ${tone}`), button(`${key}-open`, name, actionName, value, 'row-identity-button', false, { title: name }), el(`${key}-subtitle`, 'code', { title: subtitle }, [txt(`${key}-subtitle-text`, subtitle)])]); }
 function tableCell(key: string, value: string, secondary = '', className = ''): PluginUIVNode { return el(key, 'div', { class: `table-cell ${className}`.trim(), title: value }, [el(`${key}-value`, 'span', {}, [txt(`${key}-value-text`, value)]), secondary ? el(`${key}-secondary`, 'small', {}, [txt(`${key}-secondary-text`, secondary)]) : empty(`${key}-secondary-empty`)]); }
 function statusCell(key: string, value: string, secondary: string, tone: string, className = ''): PluginUIVNode { return el(key, 'div', { class: `status-cell ${className}`.trim() }, [el(`${key}-badge`, 'span', { class: `status-badge ${tone}` }, [txt(`${key}-badge-text`, value)]), secondary ? el(`${key}-secondary`, 'small', {}, [txt(`${key}-secondary-text`, secondary)]) : empty(`${key}-secondary-empty`)]); }
 function rowActionMenu(key: string, primary: string[], target: string, secondary: string[]): PluginUIVNode { const method = primary[0]; return el(`${key}-actions`, 'div', { class: 'compact-actions' }, [action(`${key}-primary`, c(method === 'unpause' ? 'resume' : method as CopyKey), method, target, '', mutationDisabled('containers')), genericMenu(`${key}-menu`, secondary.map((item) => { const readOnly = item === 'details' || item === 'stats' || item === 'logs'; return [c(item === 'unpause' ? 'resume' : item as CopyKey), item === 'details' ? 'container-details' : item === 'stats' ? 'container-stats' : item === 'logs' ? 'container-logs' : 'container-action', readOnly ? target : `${item}|${target}`, item === 'remove' || item === 'kill' ? 'danger' : '', !readOnly && (item === 'remove' ? destructiveDisabled('containers') : mutationDisabled('containers'))] as [string, string, string, string, boolean]; }))]); }
-function genericMenu(key: string, items: Array<[string, string, string, string?, boolean?]>): PluginUIVNode { return el(key, 'details', { class: 'row-menu' }, [el(`${key}-summary`, 'summary', { 'aria-label': c('actions'), title: c('actions') }, [txt(`${key}-summary-text`, '...')]), el(`${key}-popover`, 'div', { class: 'row-menu-popover', role: 'menu' }, items.map(([label, actionName, value, tone, disabled], index) => button(`${key}-item-${index}`, label, actionName, value, `menu-item ${tone ?? ''}`.trim(), disabled))) ]); }
-function workspaceActionMenu(key: string, kind: 'compose' | 'pod', id: string, name: string, status: string): PluginUIVNode { const running = status === 'running'; const primaryMethod = kind === 'compose' ? `compose.projects.${running ? 'stop' : 'start'}` : `pods.${running ? 'stop' : 'start'}`; const actionName = kind === 'compose' ? 'compose-action' : 'pod-action'; const detailsAction = kind === 'compose' ? 'compose-details' : 'pod-details'; const prefix = `${primaryMethod}|${id}|${name}`; const methods = kind === 'compose' ? ['compose.projects.restart', 'compose.projects.down'] : ['pods.restart', 'pods.remove']; const view = kind === 'compose' ? 'projects' : 'pods'; return el(`${key}-actions`, 'div', { class: 'compact-actions' }, [button(`${key}-primary`, c(running ? 'stop' : 'start'), actionName, prefix, 'row-primary', mutationDisabled(view)), genericMenu(`${key}-menu`, [[c('details'), detailsAction, id], ...methods.map((method) => { const destructive = method.endsWith('remove') || method.endsWith('down'); return [c(destructive ? 'remove' : 'restart'), actionName, `${method}|${id}|${name}`, destructive ? 'danger' : '', destructive ? destructiveDisabled(view) : mutationDisabled(view)] as [string, string, string, string, boolean]; })])]); }
+function genericMenu(key: string, items: Array<[string, string, string, string?, boolean?]>): PluginUIVNode { return el(key, 'details', { class: 'row-menu' }, [el(`${key}-summary`, 'summary', { 'aria-label': c('actions'), title: c('actions') }, [icon(`${key}-summary-icon`, 'ellipsis')]), el(`${key}-popover`, 'div', { class: 'row-menu-popover', role: 'menu' }, items.map(([label, actionName, value, tone, disabled], index) => button(`${key}-item-${index}`, label, actionName, value, `menu-item ${tone ?? ''}`.trim(), disabled))) ]); }
+function workspaceActionMenu(key: string, kind: 'compose' | 'pod', id: string, name: string, status: string): PluginUIVNode { const running = status === 'running'; const primaryMethod = kind === 'compose' ? `compose.projects.${running ? 'stop' : 'start'}` : `pods.${running ? 'stop' : 'start'}`; const actionName = kind === 'compose' ? 'compose-action' : 'pod-action'; const detailsAction = kind === 'compose' ? 'compose-details' : 'pod-details'; const prefix = `${primaryMethod}|${id}|${name}`; const methods = kind === 'compose' ? ['compose.projects.restart', 'compose.projects.down'] : ['pods.restart', 'pods.remove']; const view = kind === 'compose' ? 'projects' : 'pods'; return el(`${key}-actions`, 'div', { class: 'compact-actions' }, [button(`${key}-primary`, c(running ? 'stop' : 'start'), actionName, prefix, actionButtonClass('row-primary', running ? 'square' : 'play'), mutationDisabled(view)), genericMenu(`${key}-menu`, [[c('details'), detailsAction, id], ...methods.map((method) => { const destructive = method.endsWith('remove') || method.endsWith('down'); return [c(destructive ? 'remove' : 'restart'), actionName, `${method}|${id}|${name}`, destructive ? 'danger' : '', destructive ? destructiveDisabled(view) : mutationDisabled(view)] as [string, string, string, string, boolean]; })])]); }
 
 function dialog(): PluginUIVNode {
   const current = state.dialog; if (current.kind === 'none') return empty('dialog-empty');
@@ -1205,7 +1205,7 @@ function dialog(): PluginUIVNode {
   else body = current.body();
   const titleText = current.kind === 'details' || current.kind === 'plan' ? messageText(current.title) : current.kind === 'create-container' ? c('createContainer') : current.kind === 'pull-image' ? c('pullImage') : current.kind === 'tag-image' ? c('tagImage', { image: current.image }) : current.kind === 'create-volume' ? c('createVolume') : current.kind === 'create-pod' ? c('createPod') : current.kind === 'remove-container' ? c('removeContainer') : c('removeImage');
   const isContainerInspector = current.kind === 'details' && Boolean(current.containerID);
-  const panelChildren: PluginUIVNode[] = [el('dialog-header', 'header', { class: 'dialog-header' }, [el('dialog-title', 'h2', {}, [txt('dialog-title-text', titleText)]), button('dialog-close', c('close'), 'close-dialog', '', 'close-button', false, { autofocus: true, 'data-redevplugin-escape-action': 'close-dialog' })])];
+  const panelChildren: PluginUIVNode[] = [el('dialog-header', 'header', { class: 'dialog-header' }, [el('dialog-title', 'h2', {}, [txt('dialog-title-text', titleText)]), button('dialog-close', c('close'), 'close-dialog', '', 'close-button lucide-icon lucide-x', false, { autofocus: true, 'aria-label': c('close'), title: c('close'), 'data-redevplugin-escape-action': 'close-dialog' })])];
   if (current.kind === 'details' && current.containerID) panelChildren.push(el('inspector-tabs', 'nav', { class: 'inspector-tabs', 'aria-label': c('containerDetails') }, (['overview', 'usage', 'logs', 'technical'] as InspectorTab[]).map((tab) => button(`inspector-${tab}`, c(tab === 'technical' ? 'technicalInformation' : tab), 'select-inspector-tab', `${tab}|${current.containerID}`, current.tab === tab ? 'inspector-tab active' : 'inspector-tab', false, { 'aria-pressed': current.tab === tab }))));
   if (current.kind === 'details' && current.resourceKind && current.resourceID && current.resourceTab) {
     const tabs: ResourceInspectorTab[] = current.resourceKind === 'image' ? ['overview', 'usage', 'history'] : ['overview', 'usage', 'technical'];
@@ -1248,7 +1248,7 @@ function repeatableSection(key: string, label: string, kind: FormRowKind, rows: 
   return el(`${key}-group`, 'fieldset', { class: `repeatable-field repeatable-${kind}` }, [
     el(`${key}-legend`, 'legend', {}, [txt(`${key}-legend-text`, label)]),
     el(`${key}-rows`, 'div', { class: 'repeatable-rows' }, rows),
-    button(`${key}-add`, c('addEntry'), 'add-form-row', kind, 'add-row-button', state.formRows[kind].length >= 24),
+    button(`${key}-add`, c('addEntry'), 'add-form-row', kind, actionButtonClass('add-row-button', 'plus'), state.formRows[kind].length >= 24),
   ]);
 }
 
@@ -1260,7 +1260,7 @@ function deviceRows(): PluginUIVNode[] { return state.formRows.devices.map((id) 
 function optionRows(): PluginUIVNode[] { return state.formRows['volume-options'].map((id) => repeatableRow('volume-options', id, [compactField(`volume-options-${id}-key`, c('key'), `volume_options_key_${id}`, 'type'), compactField(`volume-options-${id}-value`, c('value'), `volume_options_value_${id}`, 'nfs')])); }
 
 function repeatableRow(kind: FormRowKind, id: number, fields: PluginUIVNode[]): PluginUIVNode {
-  return el(`${kind}-${id}-row`, 'div', { class: 'repeatable-row' }, [...fields, button(`${kind}-${id}-remove`, c('removeEntry'), 'remove-form-row', `${kind}|${id}`, 'remove-row-button', state.formRows[kind].length <= 1, { 'aria-label': c('removeEntry'), title: c('removeEntry') })]);
+  return el(`${kind}-${id}-row`, 'div', { class: 'repeatable-row' }, [...fields, button(`${kind}-${id}-remove`, c('removeEntry'), 'remove-form-row', `${kind}|${id}`, 'remove-row-button lucide-icon lucide-minus', state.formRows[kind].length <= 1, { 'aria-label': c('removeEntry'), title: c('removeEntry') })]);
 }
 function compactField(key: string, labelText: string, name: string, placeholder: string, type = 'text'): PluginUIVNode { return el(`${key}-label`, 'label', { class: 'compact-field' }, [el(`${key}-copy`, 'span', {}, [txt(`${key}-copy-text`, labelText)]), el(key, 'input', { type, name, placeholder })]); }
 function compactSelect(key: string, labelText: string, name: string, options: Array<[string, string]>): PluginUIVNode { return el(`${key}-label`, 'label', { class: 'compact-field' }, [el(`${key}-copy`, 'span', {}, [txt(`${key}-copy-text`, labelText)]), el(key, 'select', { name }, options.map(([value, label]) => el(`${key}-${value}`, 'option', { value }, [txt(`${key}-${value}-text`, label)])))]); }
@@ -1302,10 +1302,9 @@ function composeProjectDetails(project: { name: string; status: string; service_
 function podRecordDetails(pod: { name: string; status: string; infra_id?: string; container_count: number; running_count: number; created_at_unix_ms?: number; containers: Array<{ container_id: string; name?: string; state: string; infra: boolean }> }): PluginUIVNode { return el('pod-record-details', 'div', { class: 'detail-sections' }, [detailSections([[c('overview'), [[c('name'), pod.name], [c('status'), localizeStatus(pod.status)], [c('containers'), String(pod.container_count)], [c('running'), String(pod.running_count)], [c('created'), formatDate(pod.created_at_unix_ms)]]], [c('technicalInformation'), [[c('infraContainer'), pod.infra_id ? short(pod.infra_id) : c('notAvailable')]]]]), el('pod-containers', 'section', { class: 'detail-section' }, [el('pod-containers-title', 'h3', {}, [txt('pod-containers-title-text', c('viewContainers'))]), el('pod-containers-list', 'div', { class: 'detail-resource-list' }, pod.containers.map((item) => el(`pod-child-${item.container_id}`, 'div', { class: 'detail-resource-row' }, [el(`pod-child-${item.container_id}-name`, 'strong', {}, [txt(`pod-child-${item.container_id}-name-text`, item.name || short(item.container_id))]), el(`pod-child-${item.container_id}-role`, 'span', {}, [txt(`pod-child-${item.container_id}-role-text`, item.infra ? c('infraContainer') : c('container'))]), el(`pod-child-${item.container_id}-state`, 'span', {}, [txt(`pod-child-${item.container_id}-state-text`, localizeStatus(item.state))])])) )])]); }
 function stateMessage(message: string, error = false): PluginUIVNode { return el(`state-${hash(message)}`, 'div', { class: `state-message ${error ? 'error' : ''}`, role: error ? 'alert' : 'status' }, [txt(`state-${hash(message)}-text`, message)]); }
 function resourceEmptyState(message: string, view: View): PluginUIVNode { return el(`empty-${view}`, 'div', { class: 'state-message', role: 'status' }, [txt(`empty-${view}-text`, message), hasRefinements(view) ? button(`empty-${view}-reset`, c('clearFilters'), 'reset-refinements', '', 'secondary-button') : empty(`empty-${view}-reset-empty`)]); }
-function identity(key: string, name: string, subtitle: string, tone: string): PluginUIVNode { return el(`${key}-identity`, 'div', { class: 'identity' }, [el(`${key}-icon`, 'span', { class: `resource-icon ${tone}`, 'aria-hidden': true }), el(`${key}-copy`, 'div', {}, [el(`${key}-name`, 'h3', { title: name }, [txt(`${key}-name-text`, name)]), el(`${key}-subtitle`, 'code', { title: subtitle }, [txt(`${key}-subtitle-text`, subtitle)])])]); }
 function metric(key: string, label: string, value: string): PluginUIVNode { return el(key, 'div', { class: 'metric' }, [el(`${key}-label`, 'span', {}, [txt(`${key}-label-text`, label)]), el(`${key}-value`, 'strong', { title: value }, [txt(`${key}-value-text`, value)])]); }
 function referenceCount(view: 'images' | 'volumes', count: number): string { return state.partialFailures[view] > 0 ? c('notVerified') : c('containerCount', { count }); }
-function action(key: string, label: string, method: string, target: string, tone = '', disabled = false): PluginUIVNode { return button(key, label, 'container-action', `${method}|${target}`, `row-button ${tone}`.trim(), disabled); }
+function action(key: string, label: string, method: string, target: string, tone = '', disabled = false): PluginUIVNode { return button(key, label, 'container-action', `${method}|${target}`, actionButtonClass(`row-button ${tone}`.trim(), actionIcon(method)), disabled); }
 function filteredContainers(): Container[] { return projection.containers(); }
 function filteredImages(): Image[] { return projection.images(); }
 function filteredVolumes(): Volume[] { return projection.volumes(); }
@@ -1336,6 +1335,17 @@ function rowValues<T>(kind: FormRowKind, project: (id: number) => T): T[] { retu
 function present<T>(value: T | undefined): value is T { return value !== undefined; }
 function resetFormRows(): void { state.formRows = initialFormRows(); state.nextFormRowID = 2; }
 function title(value: string): string { return value ? value[0].toUpperCase() + value.slice(1) : ''; }
+function viewIcon(view: View): string { return ({ overview: 'layout-dashboard', containers: 'box', images: 'images', volumes: 'database', projects: 'folder-kanban', pods: 'boxes' } as const)[view]; }
+function resourceIcon(kind: 'container' | 'image' | 'volume' | 'project' | 'pod'): string { return ({ container: 'box', image: 'images', volume: 'database', project: 'folder-kanban', pod: 'boxes' } as const)[kind]; }
+function actionButtonClass(base: string, name: string): string { return `${base} appica-action lucide-icon lucide-${name}`; }
+function actionIcon(method: string): string {
+  if (method === 'start' || method === 'unpause') return 'play';
+  if (method === 'stop' || method === 'pause') return 'square';
+  if (method === 'restart') return 'rotate-cw';
+  if (method === 'kill') return 'circle-stop';
+  if (method === 'remove') return 'trash-2';
+  return 'activity';
+}
 function short(value: string): string { return value.length > 16 ? value.slice(0, 12) : value; }
 function formatBytes(value?: number): string { if (!value) return '0 B'; const units = ['B', 'KB', 'MB', 'GB', 'TB']; const index = Math.min(Math.floor(Math.log(value) / Math.log(1000)), units.length - 1); return `${new Intl.NumberFormat(currentLanguageTag(), { maximumFractionDigits: 1 }).format(value / (1000 ** index))} ${units[index]}`; }
 function formatDate(value?: number): string { return value ? new Intl.DateTimeFormat(currentLanguageTag(), { dateStyle: 'medium', timeStyle: 'short' }).format(value) : c('unknown'); }
