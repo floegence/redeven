@@ -19,6 +19,7 @@ test('implements the desktop, compact, and mobile application shell', () => {
   assert.match(css, /@media \(max-width:\s*767px\)[\s\S]*?\.navigation-links\s*\{[^}]*flex-direction:\s*row/isu);
   assert.match(css, /@media \(max-width:\s*767px\)[\s\S]*?\.dialog-panel\s*\{[^}]*width:\s*100vw/isu);
   assert.match(css, /\.context-bar\s*\{[^}]*grid-template-columns:/isu);
+  assert.match(css, /\.context-bar\.has-target-picker\s*\{[^}]*grid-template-columns:/isu);
 });
 
 test('uses dense resource-specific tables without hover layout movement', () => {
@@ -26,8 +27,18 @@ test('uses dense resource-specific tables without hover layout movement', () => 
   assert.match(css, /\.table-images \.table-header,\s*\.image-row/isu);
   assert.match(css, /\.table-projects \.table-header,\s*\.project-row/isu);
   assert.match(css, /\.resource-row:hover[^}]*background:/isu);
-  assert.doesNotMatch(css, /\.resource-row:hover[^}]*transform:/isu);
+  const resourceRowHoverRules = css.match(/\.resource-row:hover\s*,\s*\.resource-row:focus-within\s*\{[^}]*\}/gisu) ?? [];
+  assert.ok(resourceRowHoverRules.length > 0);
+  for (const rule of resourceRowHoverRules) assert.doesNotMatch(rule, /transform\s*:/iu);
+  assert.doesNotMatch(css, /\.resource-table\s*\{[^}]*min-width:\s*760px/isu);
+  assert.match(css, /@media \(max-width:\s*1279px\) and \(min-width:\s*960px\)[\s\S]*?\.cell-created[^}]*display:\s*none/isu);
+  assert.match(css, /@media \(max-width:\s*959px\) and \(min-width:\s*768px\)[\s\S]*?\.cell-group[^}]*display:\s*none/isu);
+  for (const icon of ['overview', 'containers', 'images', 'volumes', 'projects', 'pods']) assert.match(css, new RegExp(`\\.navigation-link\\.icon-${icon}::before`, 'u'));
+  for (const icon of ['container', 'image', 'volume', 'project', 'pod']) assert.match(css, new RegExp(`\\.resource-icon\\.icon-${icon}::before`, 'u'));
   assert.match(css, /@media \(max-width:\s*767px\)[\s\S]*?\.row-menu > summary\s*\{[^}]*width:\s*44px[^}]*height:\s*44px/isu);
+  assert.match(css, /\.filter-group,\s*\.toolbar-actions\s*\{[^}]*scrollbar-width:\s*none/isu);
+  assert.match(css, /@media \(max-width:\s*767px\)[\s\S]*?\.navigation-links\s*\{[^}]*scrollbar-width:\s*none/isu);
+  assert.match(css, /\.navigation-links::?-webkit-scrollbar\s*\{[^}]*display:\s*none/isu);
 });
 
 test('keeps operations, confirmations, and accessibility states stable', () => {
