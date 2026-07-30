@@ -9,6 +9,7 @@ const output = join(root, 'desktop', '.containers-v4-development');
 const staging = `${output}.staging`;
 const pluginRoot = join(root, 'plugins', 'official', 'containers');
 const contractPath = join(root, 'spec', 'capabilities', 'container-resources-v4.contract.json');
+const releaseNotesPath = join(root, 'internal', 'envapp', 'ui_src', 'src', 'ui', 'plugins', 'officialPluginReleaseNotes.json');
 const cli = ['run', 'github.com/floegence/redevplugin/cmd/redevplugin@v0.6.20'];
 
 rmSync(staging, { recursive: true, force: true });
@@ -33,6 +34,13 @@ run('go', [...cli, 'host-capability', 'build', join(staging, 'capability-build.j
 
 const pin = JSON.parse(readFileSync(join(staging, 'capability', 'host-capability.pin.json'), 'utf8'));
 const contract = JSON.parse(readFileSync(contractPath, 'utf8'));
+const releaseNotesCatalog = JSON.parse(readFileSync(releaseNotesPath, 'utf8'));
+const releaseNotes = releaseNotesCatalog.releases.find((release) => (
+  release.plugin_id === 'com.redeven.official.containers' && release.target_version === '4.0.0'
+));
+if (!releaseNotes || !/^[a-f0-9]{64}$/u.test(releaseNotes.summary_sha256)) {
+  throw new Error('Containers 4.0.0 release notes binding is missing or invalid');
+}
 const packageRoot = join(staging, 'package-root');
 cpSync(join(pluginRoot, 'dist'), packageRoot, { recursive: true });
 const manifestPath = join(packageRoot, 'manifest.json');
@@ -48,7 +56,7 @@ run('go', [...cli, 'package', packageRoot, packagePath], root);
 run('go', [...cli, 'validate', packagePath], root);
 
 const descriptor = {
-  schema_version: 'redeven.plugin_development_delivery.v1',
+  schema_version: 'redeven.plugin_development_delivery.v2',
   plugin_instance_id: 'plugini_redeven_official_containers',
   publisher_id: 'com.redeven.official',
   plugin_id: 'com.redeven.official.containers',
@@ -59,6 +67,8 @@ const descriptor = {
   capability_pin_path: join(staging, 'capability', 'host-capability.pin.json'),
   capability_public_key_path: join(staging, 'public.json'),
   contract_sha256: pin.artifact_sha256,
+  release_notes_id: releaseNotes.release_id,
+  release_notes_summary_sha256: releaseNotes.summary_sha256,
 };
 writeFileSync(join(staging, 'delivery.json'), `${JSON.stringify(descriptor, null, 2)}\n`, { mode: 0o600 });
 rmSync(join(staging, 'private.json'), { force: true });

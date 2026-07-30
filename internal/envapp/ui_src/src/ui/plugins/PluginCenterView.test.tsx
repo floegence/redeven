@@ -6,8 +6,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { PluginCenterView } from './PluginCenterView';
 import { OFFICIAL_CONTAINERS_RELEASE_REF } from './officialContainersRelease.generated';
-import { OFFICIAL_CONTAINERS_PACKAGE_URL } from './officialPluginCatalog';
-import type { ExternalPluginCommitResult, ExternalPluginInspection, PluginInventoryProjection } from './pluginTypes';
+import { OFFICIAL_CONTAINERS_PACKAGE_URL, officialPluginCatalog } from './officialPluginCatalog';
+import type { ExternalPluginCommitResult, ExternalPluginInspection, PluginDevelopmentDelivery, PluginInventoryItem, PluginInventoryProjection } from './pluginTypes';
 
 let dispose: (() => void) | undefined;
 
@@ -71,6 +71,48 @@ const databasePlugin = {
 const projection: PluginInventoryProjection = {
   items: [containersPlugin, databasePlugin],
 };
+
+const developmentDelivery: PluginDevelopmentDelivery = {
+  plugin_instance_id: 'plugini_redeven_official_containers',
+  publisher_id: 'com.redeven.official',
+  plugin_id: 'com.redeven.official.containers',
+  version: '4.0.0',
+  package_url: '/development/containers.redevplugin',
+  package_sha256: 'a'.repeat(64),
+  package_hash: 'sha256:target-package',
+  manifest_hash: 'sha256:target-manifest',
+  entries_hash: 'sha256:target-entries',
+  capability_version: '3.0.0',
+  release_notes_id: 'containers-4.0.0',
+  release_notes_summary_sha256: '0bdb5e7ab960173b2855cf31fef9f3d635f90325b90215fa10e6bb639459504e',
+  development_only: true,
+};
+
+function developmentUpdateItem(): PluginInventoryItem {
+  const officialCatalogItem = officialPluginCatalog(developmentDelivery)[0]!;
+  return {
+    inventoryKey: `instance:${developmentDelivery.plugin_instance_id}`,
+    pluginID: developmentDelivery.plugin_id,
+    pluginInstanceID: developmentDelivery.plugin_instance_id,
+    displayName: 'Containers',
+    description: 'Manage Docker and Podman resources.',
+    iconFallback: 'containers',
+    category: 'infrastructure',
+    searchKeywords: ['docker', 'podman'],
+    publisher: 'Redeven',
+    version: '4.0.0',
+    managementRevision: 21,
+    installedPackage: {
+      packageHash: 'sha256:previous-package',
+      manifestHash: 'sha256:previous-manifest',
+      entriesHash: 'sha256:previous-entries',
+    },
+    lifecycleState: 'update_available',
+    trustBadge: 'unsigned',
+    pinned: false,
+    officialCatalog: officialCatalogItem,
+  };
+}
 
 function containersPermissionProjection(granted = false): PluginInventoryProjection {
   return {
@@ -982,17 +1024,20 @@ describe('PluginCenterView', () => {
     openInventoryDetails(mount);
     expect(mount.querySelector('[data-plugin-center-install-external]')).toBeNull();
     const openActivity = mount.querySelector('[data-plugin-action="open"]') as HTMLButtonElement;
-    const openWorkbench = mount.querySelector('[data-plugin-action="open-workbench"]') as HTMLButtonElement;
     expect(openActivity.disabled).toBe(false);
-    expect(openWorkbench.disabled).toBe(false);
+    expect(mount.querySelector('[data-plugin-action="open-workbench"]')).toBeNull();
     (mount.querySelector('[data-plugin-action="more"]') as HTMLButtonElement).click();
     await Promise.resolve();
+    expect(findDocumentButton('Open in Workbench').disabled).toBe(false);
     expect(findDocumentButton('Disable').disabled).toBe(true);
     expect(findDocumentButton('Uninstall').disabled).toBe(true);
     openActivity.click();
+    await vi.waitFor(() => expect(onCommand).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect((mount.querySelector('[data-plugin-action="more"]') as HTMLButtonElement).disabled).toBe(false));
+    (mount.querySelector('[data-plugin-action="more"]') as HTMLButtonElement).click();
     await Promise.resolve();
-    await Promise.resolve();
-    openWorkbench.click();
+    findDocumentButton('Open in Workbench').click();
+    await vi.waitFor(() => expect(onCommand).toHaveBeenCalledTimes(2));
     expect(onCommand).toHaveBeenNthCalledWith(1, expect.objectContaining({ type: 'open_surface', placement: 'activity' }), expect.any(AbortSignal));
     expect(onCommand).toHaveBeenNthCalledWith(2, expect.objectContaining({ type: 'open_surface', placement: 'workbench' }), expect.any(AbortSignal));
   });
@@ -1282,8 +1327,20 @@ describe('PluginCenterView', () => {
     }, expect.any(AbortSignal));
   });
 
-  it('updates official catalog packages through the reviewed package URL flow', async () => {
+  it('opens official catalog updates in the dedicated review without submitting', async () => {
     const onCommand = vi.fn();
+    const inspection = externalInspectionForCenter();
+    const onInspectExternal = vi.fn(async () => ({
+      ...inspection,
+      intent: {
+        action: 'update' as const,
+        plugin_instance_id: 'plugininst_containers',
+        expected_management_revision: 13,
+      },
+      plugin_id: containersPlugin.pluginID,
+      publisher_id: containersPlugin.officialCatalog.publisherID,
+      version: '2.0.0',
+    }));
     const updatesProjection: PluginInventoryProjection = {
       items: [
         {
@@ -1304,6 +1361,7 @@ describe('PluginCenterView', () => {
         loading={false}
         error={null}
         onCommand={onCommand}
+        onInspectExternal={onInspectExternal}
         onRefresh={vi.fn()}
         canManagePlugins
         canOpenPluginSurfaces={false}
@@ -1314,10 +1372,88 @@ describe('PluginCenterView', () => {
     const update = mount.querySelector('[data-plugin-action="update-external"]') as HTMLButtonElement;
     expect(update.disabled).toBe(false);
     update.click();
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await vi.waitFor(() => expect(document.querySelector('[data-plugin-update-dialog]')).not.toBeNull());
     expect(onCommand).not.toHaveBeenCalled();
-    expect((document.querySelector('[data-external-plugin-dialog] input[type="url"]') as HTMLInputElement).value)
-      .toBe(OFFICIAL_CONTAINERS_PACKAGE_URL);
+    expect(document.querySelector('[data-external-plugin-dialog]')).toBeNull();
+    expect(onInspectExternal).toHaveBeenCalledWith({
+      sourceKind: 'package_url',
+      url: OFFICIAL_CONTAINERS_PACKAGE_URL,
+      intent: {
+        action: 'update',
+        plugin_instance_id: 'plugininst_containers',
+        expected_management_revision: 13,
+      },
+    }, expect.any(AbortSignal));
+    await vi.waitFor(() => expect(document.querySelector('[data-plugin-update-submit]')).not.toBeNull());
+    expect(onCommand).not.toHaveBeenCalled();
+  });
+
+  it('reviews a development update from both entry points and submits exactly once', async () => {
+    const original = developmentUpdateItem();
+    const updated: PluginInventoryItem = {
+      ...original,
+      managementRevision: 22,
+      lifecycleState: 'disabled',
+      installedPackage: {
+        packageHash: developmentDelivery.package_hash,
+        manifestHash: developmentDelivery.manifest_hash,
+        entriesHash: developmentDelivery.entries_hash,
+      },
+    };
+    const [currentProjection, setCurrentProjection] = createSignal<PluginInventoryProjection>({ items: [original] });
+    const onCommand = vi.fn(async () => undefined);
+    const onRefresh = vi.fn(async () => setCurrentProjection({ items: [updated] }));
+    const mount = document.createElement('div');
+    document.body.append(mount);
+
+    dispose = render(() => (
+      <PluginCenterView
+        projection={currentProjection()}
+        loading={false}
+        error={null}
+        onCommand={onCommand}
+        onRefresh={onRefresh}
+        canManagePlugins
+        canOpenPluginSurfaces
+      />
+    ), mount);
+
+    (mount.querySelector('#plugin-center-tab-updates') as HTMLButtonElement).click();
+    expect((mount.querySelector('#plugin-center-tab-updates') as HTMLButtonElement).getAttribute('aria-selected')).toBe('true');
+    (mount.querySelector('[data-plugin-center-update]') as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(document.querySelector('[data-plugin-update-submit]')).not.toBeNull());
+    expect(onCommand).not.toHaveBeenCalled();
+    findDocumentButton('Cancel').click();
+    await vi.waitFor(() => expect(document.querySelector('[data-plugin-update-dialog]')).toBeNull());
+
+    openInventoryDetails(mount, original.inventoryKey);
+    (mount.querySelector('[data-plugin-action="update-external"]') as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(document.querySelector('[data-plugin-update-submit]')).not.toBeNull());
+    expect(onCommand).not.toHaveBeenCalled();
+    document.querySelector<HTMLInputElement>('[role="dialog"] input[type="checkbox"]')!.click();
+    const submit = document.querySelector<HTMLButtonElement>('[data-plugin-update-submit]')!;
+    submit.click();
+    submit.click();
+
+    await vi.waitFor(() => expect(document.querySelector('[data-plugin-update-complete]')).not.toBeNull());
+    expect(onCommand).toHaveBeenCalledTimes(1);
+    expect(onCommand).toHaveBeenCalledWith({
+      type: 'update',
+      pluginID: developmentDelivery.plugin_id,
+      pluginInstanceID: developmentDelivery.plugin_instance_id,
+      expectedManagementRevision: 21,
+      targetVersion: '4.0.0',
+    }, expect.any(AbortSignal));
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('[data-plugin-update-open-activity]')).toBeNull();
+    expect(document.querySelector('[data-plugin-update-view-permissions]')).not.toBeNull();
+    expect((mount.querySelector('#plugin-center-tab-updates') as HTMLButtonElement).getAttribute('aria-selected')).toBe('true');
+
+    findDocumentButton('Done').click();
+    await vi.waitFor(() => expect(document.querySelector('[data-plugin-update-dialog]')).toBeNull());
+    expect((mount.querySelector('#plugin-center-tab-updates') as HTMLButtonElement).getAttribute('aria-selected')).toBe('true');
+    expect(mount.querySelector('[data-plugin-center-details]')).toBeNull();
+    expect(mount.textContent).toContain('All plugins are up to date.');
   });
 
   it('does not offer enable for plugins that need trust attention or updates', () => {

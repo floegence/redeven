@@ -20,8 +20,9 @@ import (
 	"github.com/floegence/redevplugin/pkg/version"
 )
 
-const developmentDeliverySchemaVersion = "redeven.plugin_development_delivery.v1"
+const developmentDeliverySchemaVersion = "redeven.plugin_development_delivery.v2"
 const officialContainersPluginInstanceID = "plugini_redeven_official_containers"
+const officialContainersReleaseNotesID = "containers-4.0.0"
 
 type developmentDeliveryDescriptor struct {
 	SchemaVersion           string `json:"schema_version"`
@@ -35,6 +36,8 @@ type developmentDeliveryDescriptor struct {
 	CapabilityPinPath       string `json:"capability_pin_path"`
 	CapabilityPublicKeyPath string `json:"capability_public_key_path"`
 	ContractSHA256          string `json:"contract_sha256"`
+	ReleaseNotesID          string `json:"release_notes_id"`
+	ReleaseNotesSummarySHA  string `json:"release_notes_summary_sha256"`
 }
 
 type developmentSigningPublicKey struct {
@@ -68,17 +71,19 @@ func (d *DevelopmentDelivery) Metadata() map[string]any {
 		return nil
 	}
 	return map[string]any{
-		"plugin_instance_id": d.descriptor.PluginInstanceID,
-		"plugin_id":          d.descriptor.PluginID,
-		"publisher_id":       d.descriptor.PublisherID,
-		"version":            d.descriptor.Version,
-		"package_url":        "/_redeven_proxy/api/plugins/development-delivery/containers/package",
-		"package_sha256":     d.descriptor.PackageSHA256,
-		"package_hash":       d.packageHash,
-		"manifest_hash":      d.manifestHash,
-		"entries_hash":       d.entriesHash,
-		"capability_version": d.contract.Contract.CapabilityVersion,
-		"development_only":   true,
+		"plugin_instance_id":           d.descriptor.PluginInstanceID,
+		"plugin_id":                    d.descriptor.PluginID,
+		"publisher_id":                 d.descriptor.PublisherID,
+		"version":                      d.descriptor.Version,
+		"package_url":                  "/_redeven_proxy/api/plugins/development-delivery/containers/package",
+		"package_sha256":               d.descriptor.PackageSHA256,
+		"package_hash":                 d.packageHash,
+		"manifest_hash":                d.manifestHash,
+		"entries_hash":                 d.entriesHash,
+		"capability_version":           d.contract.Contract.CapabilityVersion,
+		"release_notes_id":             d.descriptor.ReleaseNotesID,
+		"release_notes_summary_sha256": d.descriptor.ReleaseNotesSummarySHA,
+		"development_only":             true,
 	}
 }
 
@@ -96,6 +101,9 @@ func loadDevelopmentDelivery(filename string) (*DevelopmentDelivery, error) {
 		descriptor.PublisherID != officialPublisherID ||
 		descriptor.PluginID != officialContainersPluginID || descriptor.Version != "4.0.0" {
 		return nil, errors.New("plugin development delivery identity is invalid")
+	}
+	if descriptor.ReleaseNotesID != officialContainersReleaseNotesID || !isSHA256Hex(descriptor.ReleaseNotesSummarySHA) {
+		return nil, errors.New("plugin development delivery release notes binding is invalid")
 	}
 	for name, value := range map[string]string{
 		"package_path":               descriptor.PackagePath,
@@ -217,4 +225,13 @@ func matchesSHA256(data []byte, expected string) bool {
 	got := hex.EncodeToString(digest[:])
 	expected = strings.TrimPrefix(strings.TrimSpace(expected), "sha256:")
 	return len(expected) == 64 && strings.EqualFold(got, expected)
+}
+
+func isSHA256Hex(value string) bool {
+	value = strings.TrimPrefix(strings.TrimSpace(value), "sha256:")
+	if len(value) != 64 {
+		return false
+	}
+	_, err := hex.DecodeString(value)
+	return err == nil
 }

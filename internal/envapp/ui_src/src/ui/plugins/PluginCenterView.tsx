@@ -1,6 +1,6 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from 'solid-js';
 import { cn, createUIFirstSelection } from '@floegence/floe-webapp-core';
-import { AlertTriangle, ArrowLeft, CheckCircle, ChevronDown, Download, Grid3x3, MoreHorizontal, RefreshIcon, Search, Settings, Shield, X } from '@floegence/floe-webapp-core/icons';
+import { AlertTriangle, ArrowLeft, CheckCircle, ChevronDown, Download, MoreHorizontal, RefreshIcon, Search, Settings, Shield, X } from '@floegence/floe-webapp-core/icons';
 import { Button, Dialog, Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 
 import { buildPluginCenterModel } from './pluginInventoryProjection';
@@ -17,12 +17,14 @@ import type {
   PluginLifecycleState,
   PluginPresentationCategory,
   PluginTrustBadge,
+  PluginUpdateCandidate,
 } from './pluginTypes';
 import { createUIPresentationEventRecorder } from '../services/uiPresentationTransactions';
 import { ExternalPluginInstallDialog } from './ExternalPluginInstallDialog';
 import { PLUGIN_ENTER_MOTION_CLASS, PLUGIN_MOBILE_TOUCH_TARGET_CLASS, PLUGIN_PRESS_MOTION_CLASS, pluginLifecycleLabel, pluginTrustLabel, presentPlugin, type PluginPrimaryAction } from './pluginPresentation';
 import { PluginCenterItem } from './PluginCenterItems';
 import { PluginIdentityHeader } from './PluginPresentationPrimitives';
+import { PluginUpdateReviewDialog } from './PluginUpdateReviewDialog';
 
 export type PluginCenterViewProps = {
   projection: PluginInventoryProjection;
@@ -61,6 +63,9 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   const [externalDialogOpen, setExternalDialogOpen] = createSignal(false);
   const [externalUpdateItem, setExternalUpdateItem] = createSignal<PluginInventoryItem | undefined>();
   const [externalSourcePreset, setExternalSourcePreset] = createSignal<ExternalPluginSourcePreset | undefined>();
+  const [updateReviewItem, setUpdateReviewItem] = createSignal<PluginInventoryItem>();
+  const [updateReviewOpen, setUpdateReviewOpen] = createSignal(false);
+  const [updateSuccess, setUpdateSuccess] = createSignal(false);
   const [permissionsFocusRequest, setPermissionsFocusRequest] = createSignal<{ id: number; inventoryKey: string }>();
   const [permissionsFocusTarget, setPermissionsFocusTarget] = createSignal<HTMLElement>();
   let commandController: AbortController | undefined;
@@ -226,19 +231,15 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     setExternalDialogOpen(true);
   };
   const requestUpdate = (item: PluginInventoryItem) => {
-    const development = item.officialCatalog?.distribution.developmentDelivery;
-    if (development && item.pluginInstanceID && item.managementRevision !== undefined) {
-      void runCommand({
-        type: 'update',
-        pluginID: item.pluginID,
-        pluginInstanceID: item.pluginInstanceID,
-        expectedManagementRevision: item.managementRevision,
-        targetVersion: development.version,
-      });
-      return;
-    }
-    openExternalDialog(item, item.officialCatalog?.distribution.installSource);
+    setUpdateSuccess(false);
+    setUpdateReviewItem(item);
+    setUpdateReviewOpen(true);
   };
+  const currentUpdateReviewItem = createMemo(() => {
+    const reviewed = updateReviewItem();
+    if (!reviewed) return undefined;
+    return allItems().find((item) => item.inventoryKey === reviewed.inventoryKey) ?? reviewed;
+  });
 
   const runCommand = async (command: PluginLifecycleCommand) => {
     if (commandPending()) return;
@@ -412,8 +413,10 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
             </For>
             <Show when={!loading() && visibleItems().length === 0}>
               <div class={cn('col-span-full flex min-h-52 flex-col items-center justify-center px-4 py-10 text-center text-sm text-muted-foreground', PLUGIN_ENTER_MOTION_CLASS)}>
-                <Search class="h-6 w-6" />
-                <p class="mt-3">{i18n.t('uiCopy.plugin.emptyView')}</p>
+                <Show when={activeTab() === 'updates' && updateSuccess()} fallback={<Search class="h-6 w-6" />}>
+                  <CheckCircle class="h-6 w-6 text-[var(--redeven-status-success-foreground)]" />
+                </Show>
+                <p class="mt-3">{activeTab() === 'updates' && updateSuccess() ? i18n.t('uiCopy.plugin.updateReview.allCurrent') : i18n.t('uiCopy.plugin.emptyView')}</p>
                 <Show when={filtersActive()}>
                   <button
                     type="button"
@@ -480,6 +483,51 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
           setMobileDetailOpen(true);
           nextPermissionsFocusRequest += 1;
           setPermissionsFocusRequest({ id: nextPermissionsFocusRequest, inventoryKey });
+        }}
+      />
+      <PluginUpdateReviewDialog
+        open={updateReviewOpen()}
+        item={currentUpdateReviewItem()}
+        canManage={canManage()}
+        onOpenChange={(open) => {
+          if (!open) {
+            setUpdateReviewOpen(false);
+            clearDetailSelection();
+          }
+        }}
+        onInspect={props.onInspectExternal ?? (async () => {
+          throw new Error(i18n.t('uiCopy.plugin.external.inspectFailed'));
+        })}
+        onCommitExternal={props.onCommitExternal ?? (async () => {
+          throw new Error(i18n.t('uiCopy.plugin.external.commitFailed'));
+        })}
+        onCommitDevelopment={async (candidate: PluginUpdateCandidate, signal) => {
+          await props.onCommand({
+            type: 'update',
+            pluginID: candidate.intent.pluginID,
+            pluginInstanceID: candidate.intent.pluginInstanceID,
+            expectedManagementRevision: candidate.intent.expectedManagementRevision,
+            targetVersion: candidate.targetVersion,
+          }, signal);
+        }}
+        onRefresh={async () => {
+          await props.onRefresh();
+        }}
+        onCommitted={() => setUpdateSuccess(true)}
+        onOpenActivity={() => {
+          const item = currentUpdateReviewItem();
+          if (item) openItemSurface(item, 'activity');
+          setUpdateReviewOpen(false);
+        }}
+        onViewPermissions={() => {
+          const item = currentUpdateReviewItem();
+          if (item) {
+            setSelectedInventoryKey(item.inventoryKey);
+            setMobileDetailOpen(true);
+            nextPermissionsFocusRequest += 1;
+            setPermissionsFocusRequest({ id: nextPermissionsFocusRequest, inventoryKey: item.inventoryKey });
+          }
+          setUpdateReviewOpen(false);
         }}
       />
     </PluginCenterShell>
@@ -1267,6 +1315,7 @@ function PluginActions(props: {
     return false;
   };
   const overflowItems = (): DropdownItem[] => [
+    ...(presentation().canOpenWorkbench ? [{ id: 'workbench', label: i18n.t('uiCopy.plugin.openInWorkbench'), disabled: disabledOpen() }] : []),
     ...(presentation().canDisable ? [{ id: 'disable', label: i18n.t('uiCopy.plugin.disable'), disabled: disabledManagement() }] : []),
     ...(presentation().canCheckForUpdate ? [{ id: 'update', label: i18n.t('uiCopy.plugin.checkForUpdate'), disabled: disabledManagement() }] : []),
     ...(presentation().canUninstall ? [
@@ -1275,7 +1324,9 @@ function PluginActions(props: {
     ] : []),
   ];
   const selectOverflowAction = (action: string) => {
-    if (action === 'disable') {
+    if (action === 'workbench') {
+      openSurface('workbench');
+    } else if (action === 'disable') {
       props.onCommand({
         type: 'disable',
         pluginInstanceID: item().pluginInstanceID!,
@@ -1302,19 +1353,6 @@ function PluginActions(props: {
         >
           {primaryActionLabel(presentation().primaryAction)}
         </Button>
-        <Show when={presentation().canOpenWorkbench}>
-          <Button
-            data-plugin-action="open-workbench"
-            variant="outline"
-            size="sm"
-            class="min-h-[44px] min-w-0 flex-1 justify-center text-xs sm:min-h-8"
-            disabled={disabledOpen()}
-            icon={Grid3x3}
-            onClick={() => openSurface('workbench')}
-          >
-            {i18n.t('uiCopy.plugin.openInWorkbench')}
-          </Button>
-        </Show>
         <Show when={overflowItems().length > 0}>
           <Dropdown
             align="end"

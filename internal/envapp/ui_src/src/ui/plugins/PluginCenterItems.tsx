@@ -1,6 +1,6 @@
 import { Show, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { CheckCircle, Download, Grid3x3, MoreHorizontal, RefreshIcon } from '@floegence/floe-webapp-core/icons';
+import { CheckCircle, Download, MoreHorizontal, RefreshIcon } from '@floegence/floe-webapp-core/icons';
 import { Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 
 import { useI18n } from '../i18n';
@@ -88,7 +88,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
             type="button"
             data-plugin-center-card-primary={props.item.inventoryKey}
             data-plugin-center-update={update() ? props.item.inventoryKey : undefined}
-            class={cn('inline-flex min-h-[44px] min-w-0 flex-1 cursor-pointer items-center justify-center gap-1 rounded-md bg-primary px-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-8', PLUGIN_PRESS_MOTION_CLASS)}
+            class={cn('inline-flex min-h-[44px] min-w-0 flex-1 cursor-pointer items-center justify-center gap-1 overflow-hidden whitespace-nowrap rounded-md bg-primary px-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-8', PLUGIN_PRESS_MOTION_CLASS)}
             disabled={props.pending || (!update() && !props.canOpenSurfaces)}
             onClick={update() ? props.onUpdate : props.onOpenActivity}
           >
@@ -107,18 +107,6 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
           >
             <Download class="h-4 w-4 shrink-0" />
             <span data-plugin-center-card-primary-label class="shrink-0 whitespace-nowrap">{i18n.t('uiCopy.plugin.install')}</span>
-          </button>
-        </Show>
-        <Show when={installed() && props.item.defaultLaunchTarget}>
-          <button
-            type="button"
-            class={cn('inline-flex min-h-[44px] min-w-[44px] shrink-0 cursor-pointer items-center justify-center rounded-md border bg-background text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-8 sm:min-w-8', PLUGIN_PRESS_MOTION_CLASS)}
-            aria-label={i18n.t('uiCopy.plugin.openInWorkbench')}
-            title={i18n.t('uiCopy.plugin.openInWorkbench')}
-            disabled={props.pending || !props.canOpenSurfaces}
-            onClick={props.onOpenWorkbench}
-          >
-            <Grid3x3 class="h-4 w-4" />
           </button>
         </Show>
         <Dropdown

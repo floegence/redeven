@@ -55,6 +55,8 @@ const developmentDelivery = {
   manifest_hash: 'sha256:manifest',
   entries_hash: 'sha256:entries',
   capability_version: '3.0.0',
+  release_notes_id: 'containers-4.0.0',
+  release_notes_summary_sha256: '0bdb5e7ab960173b2855cf31fef9f3d635f90325b90215fa10e6bb639459504e',
   development_only: true as const,
 };
 const generatedContainersInstanceID = 'plugin_dea00daa09166c33302f92c9b090f62a';

@@ -25,6 +25,8 @@ import { ExternalPluginInstallDialog } from './ExternalPluginInstallDialog';
 import { PluginConfirmationDialog, createPluginConfirmationQueue } from './PluginConfirmationQueue';
 import { PluginCenterView } from './PluginCenterView';
 import { PluginPanel } from './PluginPanel';
+import { PluginUpdateReviewDialog } from './PluginUpdateReviewDialog';
+import { officialPluginCatalog } from './officialPluginCatalog';
 import { PLUGIN_MOBILE_TOUCH_TARGET_CLASS } from './pluginPresentation';
 import type { PluginSurfacePlacementCoordinator } from './pluginPlatform';
 import type {
@@ -33,6 +35,7 @@ import type {
   PluginInventoryItem,
   PluginInventoryProjection,
   PluginPanelModel,
+  PluginDevelopmentDelivery,
 } from './pluginTypes';
 
 const mediaCommands = commands as unknown as Readonly<{
@@ -48,6 +51,31 @@ const viewportCases = [
   { width: 768, height: 820 },
   { width: 1440, height: 900 },
 ] as const;
+
+const updateDialogViewportCases = [
+  { width: 320, height: 568 },
+  { width: 320, height: 720 },
+  { width: 390, height: 844 },
+  { width: 768, height: 820 },
+  { width: 1180, height: 800 },
+  { width: 1440, height: 900 },
+] as const;
+
+const browserDevelopmentDelivery: PluginDevelopmentDelivery = {
+  plugin_instance_id: 'plugini_redeven_official_containers',
+  publisher_id: 'com.redeven.official',
+  plugin_id: 'com.redeven.official.containers',
+  version: '4.0.0',
+  package_url: '/development/containers.redevplugin',
+  package_sha256: 'a'.repeat(64),
+  package_hash: 'sha256:target-package',
+  manifest_hash: 'sha256:target-manifest',
+  entries_hash: 'sha256:target-entries',
+  capability_version: '3.0.0',
+  release_notes_id: 'containers-4.0.0',
+  release_notes_summary_sha256: '0bdb5e7ab960173b2855cf31fef9f3d635f90325b90215fa10e6bb639459504e',
+  development_only: true,
+};
 
 const containersItem: PluginInventoryItem = {
   inventoryKey: 'instance:containers',
@@ -120,6 +148,24 @@ const panelModel: PluginPanelModel = {
     { kind: 'plugin', item: toolboxItem, action: 'open_details' },
     { kind: 'open_center', id: 'plugin-center', label: 'Plugin Center' },
   ],
+};
+
+const updateDialogItem: PluginInventoryItem = {
+  ...containersItem,
+  version: '4.0.0',
+  managementRevision: 18,
+  lifecycleState: 'update_available',
+  trustBadge: 'unsigned',
+  installedPackage: {
+    packageHash: 'sha256:previous-package',
+    manifestHash: 'sha256:previous-manifest',
+    entriesHash: 'sha256:previous-entries',
+  },
+  officialCatalog: officialPluginCatalog(browserDevelopmentDelivery)[0],
+  defaultLaunchTarget: {
+    ...containersItem.defaultLaunchTarget!,
+    expectedManagementRevision: 18,
+  },
 };
 
 const disposers: Array<() => void> = [];
@@ -316,6 +362,26 @@ function mountExternalDialog(
       onInspect={onInspect}
       onCommit={async () => unavailableCommit()}
       onCommitted={() => undefined}
+    />
+  ), host));
+  return host;
+}
+
+function mountUpdateReviewDialog(): HTMLElement {
+  const host = fixedHost();
+  disposers.push(render(() => (
+    <PluginUpdateReviewDialog
+      open
+      item={updateDialogItem}
+      canManage
+      onOpenChange={() => undefined}
+      onInspect={async () => unavailableInspection()}
+      onCommitExternal={async () => unavailableCommit()}
+      onCommitDevelopment={async () => undefined}
+      onRefresh={() => undefined}
+      onCommitted={() => undefined}
+      onOpenActivity={() => undefined}
+      onViewPermissions={() => undefined}
     />
   ), host));
   return host;
@@ -541,6 +607,7 @@ afterEach(async () => {
   while (disposers.length > 0) disposers.pop()?.();
   document.body.replaceChildren();
   document.documentElement.classList.remove('dark', 'light');
+  document.documentElement.style.zoom = '';
   localStorage.removeItem(REDEVEN_LANGUAGE_PREFERENCE_STORAGE_KEY);
   await mediaCommands.emulateMediaPreferences({ forcedColors: 'none', reducedMotion: 'no-preference' });
 });
@@ -994,6 +1061,52 @@ describe('plugin management browser geometry and interaction', () => {
     await userEvent.keyboard('{Space}');
     await settle();
     expect(report.open).toBe(false);
+  });
+
+  it.each(updateDialogViewportCases)(
+    'keeps the update review footer visible and actions unwrapped at $width x $height',
+    async (viewport) => {
+      await page.viewport(viewport.width, viewport.height);
+      mountUpdateReviewDialog();
+      await settle();
+
+      const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+      const content = dialog.querySelector<HTMLElement>('[data-plugin-update-dialog]')!;
+      const footer = dialog.querySelector<HTMLElement>('[data-plugin-update-footer]')!;
+      const submit = dialog.querySelector<HTMLButtonElement>('[data-plugin-update-submit]')!;
+      const consent = footer.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+      expectInsideViewport(dialog, viewport);
+      expectInsideViewport(footer, viewport);
+      expectNoHorizontalOverflow(dialog);
+      expectNoHorizontalOverflow(content);
+      expectNoHorizontalOverflow(footer);
+      expect(getComputedStyle(submit).whiteSpace).toBe('nowrap');
+      expect(submit.scrollWidth).toBeLessThanOrEqual(submit.clientWidth + 1);
+      if (viewport.width < 640) {
+        expectTouchTarget(submit);
+        expectTouchTarget(footer.querySelector<HTMLButtonElement>('button')!);
+      } else {
+        expect(submit.getBoundingClientRect().height).toBeGreaterThanOrEqual(32);
+        expect(footer.querySelector<HTMLButtonElement>('button')!.getBoundingClientRect().height).toBeGreaterThanOrEqual(32);
+      }
+      expect(consent).not.toBeNull();
+      if (viewport.width === 320 && viewport.height === 568) await expectScreenshotHasPixelVariance();
+    },
+  );
+
+  it('keeps update review controls operable at the 320 px effective layout of 200 percent zoom', async () => {
+    await page.viewport(320, 568);
+    mountUpdateReviewDialog();
+    await settle();
+
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    const footer = dialog.querySelector<HTMLElement>('[data-plugin-update-footer]')!;
+    const submit = dialog.querySelector<HTMLButtonElement>('[data-plugin-update-submit]')!;
+    expectInsideViewport(dialog, { width: 320, height: 568 });
+    expectInsideViewport(footer, { width: 320, height: 568 });
+    expectNoHorizontalOverflow(dialog);
+    expect(getComputedStyle(submit).whiteSpace).toBe('nowrap');
+    expectTouchTarget(submit);
   });
 
   it.each(viewportCases)(
