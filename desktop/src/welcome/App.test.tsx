@@ -2300,13 +2300,15 @@ describe('DesktopWelcomeShell', () => {
 
     expect(dialogSrc).toContain('data-floe-dialog-overlay-root');
     expect(dialogSrc).toContain('data-floe-dialog-mode');
-    expect(dialogSrc).toContain('return r() ? "surface" : "global";');
+    expect(dialogSrc).toMatch(/return \w+\(\) \? "surface" : "global";/);
     expect(dialogSrc).toContain('"global"');
-    expect(dialogSrc).toContain('"fixed inset-0 box-border z-50 p-4"');
+    expect(dialogSrc).toContain('"fixed inset-0 box-border p-4"');
+    expect(dialogSrc).toContain('globalZIndex === void 0 && "z-50"');
+    expect(dialogSrc).toContain('"z-index": e.globalZIndex');
     expect(dialogSrc).toContain('data-floe-dialog-backdrop');
     expect(dialogSrc).toContain('data-floe-dialog-panel');
     expect(dialogSrc).toContain('"flex flex-col", e.class');
-    expect(dialogSrc).toContain('return r() ? void 0 : "true";');
+    expect(dialogSrc).toMatch(/return \w+\(\) \? void 0 : "true";/);
     expect(dialogSrc).toContain('return e.children ??');
     expect(dialogSrc).toContain('as ConfirmDialog');
     expect(chromeSrc).toContain("'--redeven-desktop-titlebar-height': `${snapshot.titleBarHeight}px`");
