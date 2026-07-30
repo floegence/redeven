@@ -1289,12 +1289,12 @@ function PluginActions(props: {
   };
   return (
     <section class="border-y bg-muted/20 px-3 py-3" data-plugin-primary-actions>
-      <div class="flex flex-col gap-2">
+      <div class="flex min-w-0 items-center gap-2" data-plugin-action-row>
         <Button
           data-plugin-action={primaryActionDataID(presentation().primaryAction)}
           variant="primary"
           size="sm"
-          class="min-h-[44px] w-full justify-center text-xs sm:min-h-8"
+          class="min-h-[44px] min-w-0 flex-1 justify-center text-xs sm:min-h-8"
           loading={props.commandPending}
           disabled={primaryDisabled()}
           icon={primaryActionIcon(presentation().primaryAction)}
@@ -1302,42 +1302,38 @@ function PluginActions(props: {
         >
           {primaryActionLabel(presentation().primaryAction)}
         </Button>
-        <Show when={presentation().canOpenWorkbench || overflowItems().length > 0}>
-          <div class="flex items-center gap-2">
-            <Show when={presentation().canOpenWorkbench}>
+        <Show when={presentation().canOpenWorkbench}>
+          <Button
+            data-plugin-action="open-workbench"
+            variant="outline"
+            size="sm"
+            class="min-h-[44px] min-w-0 flex-1 justify-center text-xs sm:min-h-8"
+            disabled={disabledOpen()}
+            icon={Grid3x3}
+            onClick={() => openSurface('workbench')}
+          >
+            {i18n.t('uiCopy.plugin.openInWorkbench')}
+          </Button>
+        </Show>
+        <Show when={overflowItems().length > 0}>
+          <Dropdown
+            align="end"
+            items={overflowItems()}
+            onSelect={selectOverflowAction}
+            triggerAriaLabel={i18n.t('uiCopy.plugin.moreActions')}
+            triggerClass="shrink-0 rounded-md"
+            trigger={(
               <Button
-                data-plugin-action="open-workbench"
+                data-plugin-action="more"
                 variant="outline"
-                size="sm"
-                class="min-h-[44px] min-w-0 flex-1 justify-center text-xs sm:min-h-8"
-                disabled={disabledOpen()}
-                icon={Grid3x3}
-                onClick={() => openSurface('workbench')}
+                size="icon"
+                class="min-h-[44px] min-w-[44px] shrink-0 sm:min-h-8 sm:min-w-8"
+                title={i18n.t('uiCopy.plugin.moreActions')}
               >
-                {i18n.t('uiCopy.plugin.openInWorkbench')}
+                <MoreHorizontal class="h-4 w-4" />
               </Button>
-            </Show>
-            <Show when={overflowItems().length > 0}>
-              <Dropdown
-                align="end"
-                items={overflowItems()}
-                onSelect={selectOverflowAction}
-                triggerAriaLabel={i18n.t('uiCopy.plugin.moreActions')}
-                triggerClass="rounded-md"
-                trigger={(
-                  <Button
-                    data-plugin-action="more"
-                    variant="outline"
-                    size="icon"
-                    class="min-h-[44px] min-w-[44px] sm:min-h-8 sm:min-w-8"
-                    title={i18n.t('uiCopy.plugin.moreActions')}
-                  >
-                    <MoreHorizontal class="h-4 w-4" />
-                  </Button>
-                )}
-              />
-            </Show>
-          </div>
+            )}
+          />
         </Show>
       </div>
     </section>
