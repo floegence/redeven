@@ -2,6 +2,7 @@ import type { OfficialPluginCatalogItem } from './pluginTypes';
 import containersPluginIconURL from './assets/containers-plugin.png';
 import { OFFICIAL_CONTAINERS_RELEASE_REF } from './officialContainersRelease.generated';
 import officialContainersDistribution from './officialContainersDistribution.json';
+import { officialReleaseNotes } from './pluginReleaseNotes';
 
 export const OFFICIAL_CONTAINERS_PACKAGE_URL =
   `https://raw.githubusercontent.com/${officialContainersDistribution.repository}/${officialContainersDistribution.commit}/${officialContainersDistribution.artifact_path.join('/')}`;
@@ -54,6 +55,7 @@ export const OFFICIAL_PLUGIN_CATALOG_SEED: readonly OfficialPluginCatalogItem[] 
         methods: ['images.pull'],
       },
     ],
+    releaseNotes: officialReleaseNotes('com.redeven.official.containers', OFFICIAL_CONTAINERS_RELEASE_REF),
     distribution: {
       releaseRef: OFFICIAL_CONTAINERS_RELEASE_REF,
       installSource: {

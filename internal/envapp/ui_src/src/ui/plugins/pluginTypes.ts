@@ -41,6 +41,22 @@ export type OfficialPluginDistribution = {
   developmentDelivery?: PluginDevelopmentDelivery;
 };
 
+export type PluginReleaseNotes = Readonly<{
+  releaseID: string;
+  targetVersion: string;
+  summaryKey: string;
+  featureKeys: readonly string[];
+  improvementKeys: readonly string[];
+  fixKeys: readonly string[];
+  noticeKeys: readonly string[];
+  binding?: Readonly<{
+    packageHash: string;
+    manifestHash: string;
+    entriesHash: string;
+    summaryHash: string;
+  }>;
+}>;
+
 export type PluginDevelopmentDelivery = {
   plugin_instance_id: string;
   publisher_id: string;
@@ -52,6 +68,8 @@ export type PluginDevelopmentDelivery = {
   manifest_hash: string;
   entries_hash: string;
   capability_version: string;
+  release_notes_id: string;
+  release_notes_summary_sha256: string;
   development_only: true;
 };
 
@@ -84,8 +102,15 @@ export type OfficialPluginCatalogItem = {
   searchAliasesKey?: 'uiCopy.plugin.containersSearchAliases';
   trustedSigningKeyIDs: readonly string[];
   permissions?: readonly OfficialPluginPermission[];
+  releaseNotes?: PluginReleaseNotes;
   distribution: OfficialPluginDistribution;
 };
+
+export type PluginPackageIdentity = Readonly<{
+  packageHash: string;
+  manifestHash: string;
+  entriesHash: string;
+}>;
 
 export type PluginPermissionState = OfficialPluginPermission & {
   granted: boolean;
@@ -130,6 +155,7 @@ export type PluginInventoryItem = {
   publisher: string;
   version?: string;
   managementRevision?: number;
+  installedPackage?: PluginPackageIdentity;
   canDisable?: boolean;
   lifecycleState: PluginLifecycleState;
   trustBadge: PluginTrustBadge;
@@ -147,6 +173,27 @@ export type PluginInventoryItem = {
     securitySummary: PluginExternalPackageSecuritySummary;
   };
 };
+
+export type PluginUpdateIntent = Readonly<{
+  inventoryKey: string;
+  pluginID: string;
+  pluginInstanceID: string;
+  expectedManagementRevision: number;
+}>;
+
+export type PluginUpdateCandidate = Readonly<{
+  intent: PluginUpdateIntent;
+  displayName: string;
+  publisher: string;
+  installedVersion: string;
+  targetVersion: string;
+  kind: 'version_update' | 'development_build' | 'replace' | 'noop' | 'blocked';
+  target: PluginPackageIdentity;
+  releaseNotes?: PluginReleaseNotes;
+  reviewEvidence:
+    | Readonly<{ kind: 'development_delivery'; packageInspection: 'unavailable'; capabilityVersion: string }>
+    | Readonly<{ kind: 'external_inspection'; inspection: ExternalPluginInspection }>;
+}>;
 
 export type PluginInventoryProjection = {
   items: PluginInventoryItem[];

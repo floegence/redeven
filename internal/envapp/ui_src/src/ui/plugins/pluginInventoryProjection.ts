@@ -141,6 +141,11 @@ function projectCatalogItem(
     publisher: catalogItem.publisher,
     version: installed.version,
     managementRevision: installed.management_revision,
+    installedPackage: {
+      packageHash: installed.package_hash,
+      manifestHash: installed.manifest_hash,
+      entriesHash: installed.entries_hash,
+    },
     canDisable: installed.enable_state === 'enabled',
     lifecycleState,
     trustBadge: installedTrustBadge(installed, catalogItem),
@@ -195,6 +200,11 @@ function projectInstalledItem(
     publisher,
     version: installed.version,
     managementRevision: installed.management_revision,
+    installedPackage: {
+      packageHash: installed.package_hash,
+      manifestHash: installed.manifest_hash,
+      entriesHash: installed.entries_hash,
+    },
     canDisable: installed.enable_state === 'enabled',
     lifecycleState,
     trustBadge: installedTrustBadgeForRecord(installed),

@@ -30,6 +30,8 @@ const developmentDelivery = {
   manifest_hash: 'sha256:development-manifest',
   entries_hash: 'sha256:development-entries',
   capability_version: '3.0.0',
+  release_notes_id: 'containers-4.0.0',
+  release_notes_summary_sha256: '0bdb5e7ab960173b2855cf31fef9f3d635f90325b90215fa10e6bb639459504e',
   development_only: true as const,
 };
 
