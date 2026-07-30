@@ -89,6 +89,15 @@ function mountPanel(): HTMLDivElement {
   return panel;
 }
 
+function resolvedThemeColor(variable: string): string {
+  const probe = document.createElement('span');
+  probe.style.color = `var(${variable})`;
+  document.body.appendChild(probe);
+  const color = getComputedStyle(probe).color;
+  probe.remove();
+  return color;
+}
+
 afterEach(() => {
   document.body.replaceChildren();
   document.documentElement.classList.remove('dark', 'light');
@@ -126,6 +135,10 @@ describe('Git browser rendered selection contract', () => {
       const currentStyle = getComputedStyle(current);
       const currentOnSelectedStyle = getComputedStyle(currentOnSelected);
       const panelBackground = panelStyle.backgroundColor;
+      const selectionSource = resolvedThemeColor('--git-browser-selection-source');
+      const selectionAccent = resolvedThemeColor('--git-browser-selection-accent');
+      const themeSelection = resolvedThemeColor('--selection-bg');
+      const themeRing = resolvedThemeColor('--ring');
 
       expect(contrastRatio(selectedStyle.color, selectedStyle.backgroundColor), `${preset.name} selected text`).toBeGreaterThanOrEqual(4.5);
       expect(contrastRatio(selectedStyle.borderLeftColor, panelBackground), `${preset.name} selection indicator`).toBeGreaterThanOrEqual(3);
@@ -137,11 +150,26 @@ describe('Git browser rendered selection contract', () => {
       expect(currentOnSelectedStyle.color, `${preset.name} current selected color`).toBe(currentStyle.color);
       expect(currentOnSelectedStyle.backgroundColor, `${preset.name} current selected background`).toBe(currentStyle.backgroundColor);
       expect(currentOnSelectedStyle.borderColor, `${preset.name} current selected border`).toBe(currentStyle.borderColor);
+      if (preset.name !== 'classic-light' && preset.name !== 'classic-dark') {
+        expect(deltaEOK(selectionSource, themeSelection), `${preset.name} native selection source`).toBeLessThanOrEqual(0.004);
+        expect(deltaEOK(selectionAccent, themeRing), `${preset.name} native focus accent`).toBeLessThanOrEqual(0.04);
+      }
     }
   });
 
   it('renders real branch selection clearly across representative themes and sidebar widths', async () => {
-    const themeNames = ['classic-dark', 'classic-light', 'nord', 'abyss'] as const;
+    const themeNames = [
+      'classic-dark',
+      'classic-light',
+      'citrus',
+      'meadow',
+      'lilac',
+      'ember',
+      'forest',
+      'dracula',
+      'nord',
+      'abyss',
+    ] as const;
     const widths = [280, 360] as const;
 
     for (const themeName of themeNames) {

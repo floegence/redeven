@@ -106,10 +106,13 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('--redeven-link-code-bg: color-mix(in srgb, var(--redeven-link-fg) 9%, var(--background));');
     expect(src).toContain('--card: #fffdfa;');
     expect(src).toContain('--popover: #fffdfa;');
-    expect(src).toContain('--git-browser-selection-accent: var(--color-blue-600);');
+    expect(src).toContain('--git-browser-selection-source: var(--selection-bg, var(--ring));');
+    expect(src).toContain('--git-browser-selection-accent: var(--ring);');
     expect(src).toContain('--git-browser-hover-bg: color-mix(in srgb, var(--foreground) 5%, var(--redeven-surface-panel));');
-    expect(src).toContain('--git-browser-selection-bg: color-mix(in srgb, var(--git-browser-selection-accent) 10%, var(--redeven-surface-panel));');
-    expect(src).toContain('--git-browser-selection-border: color-mix(in srgb, var(--git-browser-selection-accent) 35%, var(--redeven-stroke-divider));');
+    expect(src).toContain('--git-browser-selection-source: var(--color-blue-600);');
+    expect(src).toContain('--git-browser-selection-accent: var(--color-blue-600);');
+    expect(src).toContain('--git-browser-selection-bg: color-mix(in srgb, var(--git-browser-selection-source) 10%, var(--redeven-surface-panel));');
+    expect(src).toContain('--git-browser-selection-border: color-mix(in srgb, var(--git-browser-selection-source) 35%, var(--redeven-stroke-divider));');
     expect(src).toContain('--git-browser-selection-indicator: var(--git-browser-selection-accent);');
     expect(src).toContain('--git-browser-focus-ring: var(--git-browser-selection-accent);');
     expect(src).toContain('--git-browser-current-chip-fg: color-mix(in srgb, var(--git-browser-selection-accent) 48%, var(--foreground) 52%);');
@@ -138,10 +141,12 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('--redeven-link-fg: var(--color-sky-400);');
     expect(src).toContain('--redeven-link-hover-fg: var(--color-sky-300);');
     expect(src).toContain('--redeven-link-code-bg: color-mix(in srgb, var(--redeven-link-fg) 13%, var(--background));');
+    expect(src).toContain('--git-browser-selection-source: var(--color-sky-400);');
     expect(src).toContain('--git-browser-selection-accent: var(--color-sky-400);');
-    expect(src).toContain('--git-browser-hover-bg: color-mix(in srgb, var(--foreground) 7%, var(--redeven-surface-panel));');
-    expect(src).toContain('--git-browser-selection-bg: color-mix(in srgb, var(--git-browser-selection-accent) 18%, var(--redeven-surface-panel));');
-    expect(src).toContain('--git-browser-selection-border: color-mix(in srgb, var(--git-browser-selection-accent) 38%, var(--redeven-stroke-divider));');
+    expect(src).toContain('--git-browser-selection-accent: color-mix(in srgb, var(--ring) 92%, var(--foreground) 8%);');
+    expect(src).toContain('--git-browser-hover-bg: color-mix(in srgb, var(--foreground) 1%, var(--redeven-surface-panel));');
+    expect(src).toContain('--git-browser-selection-bg: color-mix(in srgb, var(--git-browser-selection-source) 18%, var(--redeven-surface-panel));');
+    expect(src).toContain('--git-browser-selection-border: color-mix(in srgb, var(--git-browser-selection-source) 38%, var(--redeven-stroke-divider));');
     expect(src).toContain('--git-browser-current-chip-fg: color-mix(in srgb, var(--git-browser-selection-accent) 45%, var(--foreground) 55%);');
   });
 
