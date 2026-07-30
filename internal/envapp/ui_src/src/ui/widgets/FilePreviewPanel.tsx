@@ -1,7 +1,8 @@
 import { Show, createMemo } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
-import { Button, ConfirmDialog } from '@floegence/floe-webapp-core/ui';
+import { Button } from '@floegence/floe-webapp-core/ui';
+import { ConfirmDialog } from '../primitives/EnvAppModal';
 
 import type { FilePreviewDescriptor } from '../utils/filePreview';
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';

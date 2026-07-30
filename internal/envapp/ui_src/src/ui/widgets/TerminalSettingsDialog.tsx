@@ -1,6 +1,7 @@
 import { createSignal, For, Show } from 'solid-js';
 import { cn, useLayout } from '@floegence/floe-webapp-core';
-import { Button, Checkbox, Dialog, NumberInput } from '@floegence/floe-webapp-core/ui';
+import { Button, Checkbox, NumberInput } from '@floegence/floe-webapp-core/ui';
+import { Dialog } from '../primitives/EnvAppModal';
 import { Check } from '@floegence/floe-webapp-core/icons';
 import {
   getThemeColors,

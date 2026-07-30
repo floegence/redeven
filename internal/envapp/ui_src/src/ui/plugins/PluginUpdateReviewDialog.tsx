@@ -1,10 +1,10 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { AlertTriangle, CheckCircle, ChevronDown, Loader2, Shield } from '@floegence/floe-webapp-core/icons';
-import { Dialog } from '@floegence/floe-webapp-core/ui';
 import { pluginMutationOutcome } from '@floegence/redevplugin-ui';
 
 import { useI18n, type EnvAppTranslationKey } from '../i18n';
+import { Dialog } from '../primitives/EnvAppModal';
 import { PLUGIN_MOBILE_TOUCH_TARGET_CLASS, PLUGIN_PRESS_MOTION_CLASS } from './pluginPresentation';
 import { PluginIdentityHeader } from './PluginPresentationPrimitives';
 import {

@@ -1,7 +1,8 @@
 import { For, Show, createEffect, createMemo, createSignal, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Bot, Key, Settings, Sparkles } from '@floegence/floe-webapp-core/icons';
-import { Button, Checkbox, Dialog, Input, Select } from '@floegence/floe-webapp-core/ui';
+import { Button, Checkbox, Input, Select } from '@floegence/floe-webapp-core/ui';
+import { Dialog } from '../../primitives/EnvAppModal';
 import { localizedFlowerProviderModelNote } from '../../../../../../flower_ui/src/settings/providerModelNotes';
 import {
   AI_PROVIDER_TYPE_OPTIONS,

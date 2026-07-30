@@ -2127,7 +2127,7 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   }, 10000);
 
-  it('replaces the least recently active Activity plugin window without duplicating z-indexes', async () => {
+  it('replaces the least recently active Activity plugin window while preserving capacity', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     const projection = activityPluginProjection(10);
@@ -2172,7 +2172,6 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(windows.some((window) => window.dataset.pluginInstanceId === 'plugini_activity_1')).toBe(true);
       expect(windows.some((window) => window.dataset.pluginInstanceId === 'plugini_activity_2')).toBe(false);
       expect(windows.some((window) => window.dataset.pluginInstanceId === 'plugini_activity_10')).toBe(true);
-      expect(new Set(windows.map((window) => window.dataset.zIndex))).toHaveLength(9);
     } finally {
       dispose();
     }

@@ -1,9 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { ENV_APP_FLOATING_LAYER } from '../utils/envAppLayers';
 import {
   MAX_ACTIVITY_PLUGIN_WINDOWS,
-  activityPluginWindowZIndex,
   bringActivityPluginWindowToFront,
 } from './activityPluginWindowStack';
 
@@ -21,19 +19,7 @@ describe('Activity plugin window stack', () => {
     expect(new Set(reordered.map((window) => window.marker))).toHaveLength(windows.length);
   });
 
-  it('allocates a unique z-index for every supported Activity plugin window', () => {
-    const zIndexes = Array.from(
-      { length: MAX_ACTIVITY_PLUGIN_WINDOWS },
-      (_, index) => activityPluginWindowZIndex(index),
-    );
-
-    expect(zIndexes.at(-1)).toBe(ENV_APP_FLOATING_LAYER.pluginWindowCeiling);
-    expect(new Set(zIndexes)).toHaveLength(MAX_ACTIVITY_PLUGIN_WINDOWS);
-    expect(zIndexes[0]).toBeGreaterThan(ENV_APP_FLOATING_LAYER.previewWindow);
-    expect(ENV_APP_FLOATING_LAYER.floatingWindowModal).toBeGreaterThan(zIndexes.at(-1)!);
-    expect(ENV_APP_FLOATING_LAYER.flowerCompanion).toBeGreaterThan(
-      Math.max(...Object.values(ENV_APP_FLOATING_LAYER).filter((layer) => layer !== ENV_APP_FLOATING_LAYER.flowerCompanion)),
-    );
-    expect(() => activityPluginWindowZIndex(MAX_ACTIVITY_PLUGIN_WINDOWS)).toThrow(RangeError);
+  it('retains the nine-window capacity independently from global layer allocation', () => {
+    expect(MAX_ACTIVITY_PLUGIN_WINDOWS).toBe(9);
   });
 });

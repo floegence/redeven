@@ -29,7 +29,8 @@ import {
   Terminal,
   Trash,
 } from "@floegence/floe-webapp-core/icons";
-import { Button, Dialog, Dropdown, type DropdownItem } from "@floegence/floe-webapp-core/ui";
+import { Button, Dropdown, type DropdownItem } from "@floegence/floe-webapp-core/ui";
+import { Dialog } from '../primitives/EnvAppModal';
 import { GitBranch } from '@floegence/floe-webapp-core/icons';
 import { FlowerIcon } from "../icons/FlowerIcon";
 import {

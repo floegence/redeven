@@ -10,11 +10,16 @@ import { ActivityPluginSurfaceWindow } from './ActivityPluginSurfaceWindow';
 import type { PluginSurfaceLaunchTarget } from './pluginTypes';
 
 const harness = vi.hoisted(() => ({
+  activateFloatingWindow: vi.fn(),
   closeBody: vi.fn<() => Promise<boolean>>(),
   mobile: true,
   onInteraction: undefined as ((event: { kind: string }) => void) | undefined,
   registerClose: undefined as ((close: (() => Promise<boolean>) | null) => void) | undefined,
   registerCloseImmediately: true,
+}));
+
+vi.mock('../context/EnvAppFloatingWindowStackContext', () => ({
+  useEnvAppFloatingWindowStack: () => ({ activate: harness.activateFloatingWindow }),
 }));
 
 vi.mock('@floegence/floe-webapp-core', () => ({
@@ -73,14 +78,12 @@ vi.mock('../widgets/PersistentFloatingWindow', () => ({
     surfaceRef?: (element: HTMLElement | null) => void;
     onOpenChange: (open: boolean) => void;
     children: JSX.Element;
-    zIndex: number;
     class?: string;
   }) => (
     <section
       ref={(element) => props.surfaceRef?.(element)}
       data-floating-window
       data-floe-geometry-surface="floating-window"
-      data-z-index={props.zIndex}
     >
       <div class={props.class} data-floating-interaction-surface>
         <button type="button" data-window-close onClick={() => props.onOpenChange(false)}>
@@ -118,6 +121,7 @@ const target: PluginSurfaceLaunchTarget = {
 let dispose: (() => void) | undefined;
 
 beforeEach(() => {
+  harness.activateFloatingWindow.mockReset();
   harness.closeBody.mockReset();
   harness.closeBody.mockResolvedValue(true);
   harness.mobile = true;
@@ -143,7 +147,6 @@ function mountWindow(overrides: Partial<Parameters<typeof ActivityPluginSurfaceW
     confirmationQueue: {} as Parameters<typeof ActivityPluginSurfaceWindow>[0]['confirmationQueue'],
     visible: true,
     active: true,
-    zIndex: 159,
     focusRequest: 1,
     onActivate: vi.fn(),
     onClosed: vi.fn(),
@@ -321,6 +324,10 @@ describe('ActivityPluginSurfaceWindow', () => {
 
     expect(props.onActivate).toHaveBeenCalledTimes(3);
     expect(props.onActivate).toHaveBeenNthCalledWith(1, 'activity_plugin_surface_1');
+    expect(harness.activateFloatingWindow).toHaveBeenCalledTimes(3);
+    expect(harness.activateFloatingWindow).toHaveBeenCalledWith(
+      'plugin-surface:activity_plugin_surface_1',
+    );
   });
 
   it('retries the same exact surface after close failure and closes only after retry succeeds', async () => {

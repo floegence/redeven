@@ -59,6 +59,7 @@ export type FlowerTurnLauncherWindowProps = FlowerTurnLauncherPanelProps & Reado
   anchor?: FlowerTurnLauncherAnchor | null;
   zIndex?: number;
   windowClass?: string;
+  onActivate?: () => void;
 }>;
 
 type ViewportSize = Readonly<{
@@ -577,13 +578,22 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
 
   createEffect(() => {
     if (!props.open) return;
+    const activateFromWindowEvent = (event: Event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest('.flower-turn-launcher-window')) props.onActivate?.();
+    };
     const onPointerDown = (event: PointerEvent) => {
+      activateFromWindowEvent(event);
       if (controller.sending()) return;
       if (isPointerInsideLauncher(event)) return;
       props.onClose();
     };
     window.addEventListener('pointerdown', onPointerDown, true);
-    onCleanup(() => window.removeEventListener('pointerdown', onPointerDown, true));
+    window.addEventListener('focusin', activateFromWindowEvent, true);
+    onCleanup(() => {
+      window.removeEventListener('pointerdown', onPointerDown, true);
+      window.removeEventListener('focusin', activateFromWindowEvent, true);
+    });
   });
 
   return (

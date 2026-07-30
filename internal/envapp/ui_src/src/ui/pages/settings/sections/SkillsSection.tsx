@@ -1,6 +1,7 @@
 import { For, Show, createMemo, createSignal } from 'solid-js';
 import { Download, Layers, Plus, RefreshIcon, Search } from '@floegence/floe-webapp-core/icons';
-import { Button, Input, Select, Dialog, ConfirmDialog, Checkbox } from '@floegence/floe-webapp-core/ui';
+import { Button, Input, Select, Checkbox } from '@floegence/floe-webapp-core/ui';
+import { ConfirmDialog, Dialog } from '../../../primitives/EnvAppModal';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
 import { SettingsSection, FieldLabel } from '../SettingsPrimitives';
 import { SkillsCatalogTable } from '../SkillsCatalogTable';

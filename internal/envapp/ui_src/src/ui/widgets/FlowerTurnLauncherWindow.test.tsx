@@ -147,7 +147,6 @@ vi.mock('./PreviewWindow', () => ({
       </div>
     </Show>
   ),
-  PREVIEW_WINDOW_Z_INDEX: 150,
 }));
 
 vi.mock('./PersistentFloatingWindow', () => ({
@@ -218,7 +217,7 @@ afterEach(() => {
 });
 
 describe('FlowerTurnLauncherWindow', () => {
-  it('stays above the standard file preview surface', () => {
+  it('uses the shared floating-window band and keeps its intended geometry', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -233,7 +232,7 @@ describe('FlowerTurnLauncherWindow', () => {
 
     const floatingWindow = host.querySelector('[data-testid="floating-window"]');
 
-    expect(floatingWindow?.getAttribute('data-z-index')).toBe('160');
+    expect(floatingWindow?.getAttribute('data-z-index')).toBe('1000');
     expect(floatingWindow?.getAttribute('data-default-width')).toBe('560');
     expect(floatingWindow?.getAttribute('data-default-height')).toBe('592');
     expect(host.querySelector('[data-testid="floating-window-footer"]')).toBeNull();

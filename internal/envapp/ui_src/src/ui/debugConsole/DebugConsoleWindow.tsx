@@ -10,7 +10,7 @@ import {
   type DiagnosticsSummaryItem,
 } from '../services/diagnosticsApi';
 import { PersistentFloatingWindow } from '../widgets/PersistentFloatingWindow';
-import { ENV_APP_FLOATING_LAYER, ENV_APP_FLOATING_LAYER_CLASS } from '../utils/envAppLayers';
+import { ENV_APP_FLOATING_LAYER } from '../utils/envAppLayers';
 import { useI18n, type I18nHelpers } from '../i18n';
 import type { EnvAppTranslationKey } from '../i18n/locales';
 import type { DebugConsoleController, DebugConsoleTrace } from './createDebugConsoleController';
@@ -1350,10 +1350,9 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
           type="button"
           class={cn(
             'fixed bottom-4 right-4 inline-flex cursor-pointer items-center gap-2 rounded-md border border-border/80 bg-background/96 px-3 py-2 text-left shadow-[0_20px_36px_-30px_var(--redeven-shadow-color)] backdrop-blur transition-colors hover:border-primary/25',
-            ENV_APP_FLOATING_LAYER_CLASS.debugConsole,
           )}
           onClick={props.controller.restore}
-          style={semanticInteractiveStyle(props.controller.streamConnected() ? 'success' : 'warning', 'strong')}
+          style={{ ...semanticInteractiveStyle(props.controller.streamConnected() ? 'success' : 'warning', 'strong'), 'z-index': ENV_APP_FLOATING_LAYER.windowBase }}
         >
           <StatusDot tone={props.controller.streamConnected() ? 'success' : 'warning'} />
           <span class="text-[9px] font-semibold uppercase tracking-[0.14em] text-foreground">{i18n.t('debugConsole.windowTitle')}</span>
@@ -1372,13 +1371,13 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
             }
           }}
           title={i18n.t('debugConsole.windowTitle')}
+          stackId="debug-console"
           persistenceKey="debug-console-window"
           defaultPosition={{ x: 48, y: 76 }}
           defaultSize={{ width: 1120, height: 720 }}
           minSize={{ width: 760, height: 520 }}
           class="debug-console-window border-border/80 shadow-[0_38px_92px_-56px_var(--redeven-shadow-color)]"
           contentClass="!p-0"
-          zIndex={ENV_APP_FLOATING_LAYER.debugConsole}
           footer={<DebugConsoleFooter controller={props.controller} />}
         >
           <DebugConsolePanel

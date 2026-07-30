@@ -1,13 +1,14 @@
 // @vitest-environment jsdom
 
 import { render } from 'solid-js/web';
-import { createSignal } from 'solid-js';
+import { Show, createSignal } from 'solid-js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createUIStorageAdapter, readUIStorageJSON, removeUIStorageItem, writeUIStorageJSON } from '../services/uiStorage';
 import { PersistentFloatingWindow, floatingWindowStorageKey } from './PersistentFloatingWindow';
 import { LOCAL_INTERACTION_SURFACE_ATTR } from '@floegence/floe-webapp-core/ui';
 import { DESKTOP_WINDOW_CHROME_NO_DRAG_ATTR } from '../../../../../../desktop/src/shared/windowChromeContract';
+import { EnvAppFloatingWindowStackProvider } from '../context/EnvAppFloatingWindowStackContext';
 
 vi.mock('@floegence/floe-webapp-core', () => ({
   cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' '),
@@ -29,6 +30,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
         data-default-y={String(props.defaultPosition?.y ?? '')}
         data-default-width={String(props.defaultSize?.width ?? '')}
         data-default-height={String(props.defaultSize?.height ?? '')}
+        data-z-index={String(props.zIndex ?? '')}
         data-viewport-insets={JSON.stringify(props.viewportInsets ?? null)}
         style={{
           transform: `translate3d(${props.defaultPosition?.x ?? 0}px, ${props.defaultPosition?.y ?? 0}px, 0)`,
@@ -265,5 +267,58 @@ describe('PersistentFloatingWindow', () => {
       bottom: 8,
       left: 4,
     }));
+  });
+
+  it('shares a compact stack and activates windows from pointer and focus interactions', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const [secondOpen, setSecondOpen] = createSignal(true);
+    const onActivateFirst = vi.fn();
+
+    render(() => (
+      <EnvAppFloatingWindowStackProvider>
+        <PersistentFloatingWindow
+          open
+          onOpenChange={() => undefined}
+          title="First"
+          stackId="first"
+          onActivate={onActivateFirst}
+        >
+          <button type="button">First action</button>
+        </PersistentFloatingWindow>
+        <Show when={secondOpen()}>
+          <PersistentFloatingWindow
+            open
+            onOpenChange={() => undefined}
+            title="Second"
+            stackId="second"
+          >
+            <button type="button">Second action</button>
+          </PersistentFloatingWindow>
+        </Show>
+      </EnvAppFloatingWindowStackProvider>
+    ), host);
+
+    await Promise.resolve();
+    vi.advanceTimersByTime(1);
+    await Promise.resolve();
+
+    const roots = () => [...host.querySelectorAll<HTMLElement>('[data-testid="floating-root"]')];
+    expect(roots().map((root) => root.dataset.zIndex)).toEqual(['1000', '1001']);
+
+    roots()[0].dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+    await Promise.resolve();
+    expect(roots().map((root) => root.dataset.zIndex)).toEqual(['1001', '1000']);
+    expect(onActivateFirst).toHaveBeenCalledTimes(1);
+
+    const secondAction = roots()[1].querySelector('button');
+    secondAction?.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    await Promise.resolve();
+    expect(roots().map((root) => root.dataset.zIndex)).toEqual(['1000', '1001']);
+
+    setSecondOpen(false);
+    await Promise.resolve();
+    expect(roots()).toHaveLength(1);
+    expect(roots()[0].dataset.zIndex).toBe('1000');
   });
 });

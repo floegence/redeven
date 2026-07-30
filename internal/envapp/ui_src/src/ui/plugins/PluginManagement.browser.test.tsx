@@ -521,7 +521,6 @@ function mountActivityWindow(): HTMLElement {
         confirmationQueue={queue}
         visible
         active
-        zIndex={160}
         focusRequest={1}
         onActivate={() => undefined}
         onClosed={() => undefined}

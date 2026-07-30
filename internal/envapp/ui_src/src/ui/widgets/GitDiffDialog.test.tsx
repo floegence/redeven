@@ -13,7 +13,7 @@ const previewWindowRenderStore = vi.hoisted(() => ({
   snapshots: [] as Array<{
     open: boolean;
     title: string;
-    zIndex: number;
+    stackId: string;
   }>,
 }));
 
@@ -35,19 +35,19 @@ vi.mock("./PreviewWindow", () => ({
   PreviewWindow: (props: {
     open?: boolean;
     title?: string;
-    zIndex?: number;
+    stackId?: string;
     children?: JSX.Element;
   }) => {
     previewWindowRenderStore.snapshots.push({
       open: Boolean(props.open),
       title: String(props.title ?? ""),
-      zIndex: Number(props.zIndex ?? 0),
+      stackId: String(props.stackId ?? ''),
     });
     return props.open ? (
       <div
         data-testid="preview-window"
         data-title={String(props.title ?? "")}
-        data-z-index={String(props.zIndex ?? "")}
+        data-stack-id={String(props.stackId ?? "")}
       >
         {props.children}
       </div>
@@ -142,7 +142,8 @@ describe("GitDiffDialog", () => {
               title="Stash Diff"
               description="src/app.ts"
               emptyMessage="Select a file to inspect its diff."
-              desktopWindowZIndex={220}
+              desktopFloatingWindow
+              stackId="stash-diff"
             />
           </NotificationProvider>
         </LayoutProvider>
@@ -158,13 +159,13 @@ describe("GitDiffDialog", () => {
       ) as HTMLDivElement | null;
       expect(previewWindow).toBeTruthy();
       expect(previewWindow?.dataset.title).toBe("Stash Diff");
-      expect(previewWindow?.dataset.zIndex).toBe("220");
+      expect(previewWindow?.dataset.stackId).toBe("stash-diff");
       expect(document.body.textContent).toContain("src/app.ts");
       expect(document.body.textContent).toContain("Patch");
       expect(previewWindowRenderStore.snapshots.at(-1)).toMatchObject({
         open: true,
         title: "Stash Diff",
-        zIndex: 220,
+        stackId: "stash-diff",
       });
     } finally {
       dispose();

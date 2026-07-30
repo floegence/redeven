@@ -12,13 +12,13 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-  Dialog,
   DirectoryInput,
   Dropdown,
   Input,
   Tag,
   type DropdownItem,
 } from "@floegence/floe-webapp-core/ui";
+import { Dialog } from "../primitives/EnvAppModal";
 import { useProtocol } from "@floegence/floe-webapp-protocol";
 import { useEnvContext } from "./EnvContext";
 import { FlowerContextMenuIcon } from "../icons/FlowerSoftAuraIcon";

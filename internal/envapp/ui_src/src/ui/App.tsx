@@ -28,6 +28,8 @@ import { installDesktopWindowChromeDocumentSync } from './services/desktopWindow
 import { resolveEnvAppStorageBinding } from './services/uiPersistence';
 import { requestWorkbenchRenderTransaction } from './workbench/workbenchRenderBoundary';
 import { I18nProvider, useI18n, type I18nHelpers } from './i18n';
+import { EnvAppFloatingWindowStackProvider } from './context/EnvAppFloatingWindowStackContext';
+import { ENV_APP_FLOATING_LAYER } from './utils/envAppLayers';
 
 function readSessionStorage(key: string): string {
   try {
@@ -219,9 +221,11 @@ function EnvAppProviders() {
                   <LayoutProvider>
                     <WidgetRegistryProvider>
                       <CommandProvider>
-                        <EnvAppShell />
-                        <CommandPalette />
-                        <NotificationContainer />
+                        <EnvAppFloatingWindowStackProvider>
+                          <EnvAppShell />
+                          <CommandPalette zIndex={ENV_APP_FLOATING_LAYER.commandPalette} />
+                          <NotificationContainer />
+                        </EnvAppFloatingWindowStackProvider>
                       </CommandProvider>
                     </WidgetRegistryProvider>
                   </LayoutProvider>

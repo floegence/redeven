@@ -11,12 +11,11 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-  ConfirmDialog,
-  Dialog,
   Input,
   Tag,
   type TagProps,
 } from '@floegence/floe-webapp-core/ui';
+import { ConfirmDialog, Dialog } from '../primitives/EnvAppModal';
 
 import {
   getEnvPublicIDFromSession,

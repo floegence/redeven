@@ -1,9 +1,10 @@
 import { useLayout } from '@floegence/floe-webapp-core';
 import { AlertTriangle, Refresh } from '@floegence/floe-webapp-core/icons';
-import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
+import { Button } from '@floegence/floe-webapp-core/ui';
 import { Show, createEffect, createSignal, onCleanup, type JSX } from 'solid-js';
 
 import { useI18n } from '../i18n';
+import { Dialog } from '../primitives/EnvAppModal';
 import { PersistentFloatingWindow } from '../widgets/PersistentFloatingWindow';
 import { PluginSurfaceBody } from './PluginSurfaceFrame';
 import { isolateDocumentBranch } from './modalIsolation';
@@ -11,6 +12,7 @@ import { PLUGIN_MOBILE_TOUCH_TARGET_CLASS } from './pluginPresentation';
 import type { PluginConfirmationQueue } from './PluginConfirmationQueue';
 import type { PluginSurfacePlacementCoordinator } from './pluginPlatform';
 import type { PluginSurfaceLaunchTarget } from './pluginTypes';
+import { useEnvAppFloatingWindowStack } from '../context/EnvAppFloatingWindowStackContext';
 
 export type ActivityPluginSurfaceWindowProps = {
   instanceID: string;
@@ -19,7 +21,6 @@ export type ActivityPluginSurfaceWindowProps = {
   confirmationQueue: PluginConfirmationQueue;
   visible: boolean;
   active: boolean;
-  zIndex: number;
   focusRequest: number;
   onActivate: (instanceID: string) => void;
   onClosed: (instanceID: string) => void;
@@ -48,6 +49,8 @@ export function ActivityPluginSurfaceWindow(props: ActivityPluginSurfaceWindowPr
   const [endSessionConfirmationOpen, setEndSessionConfirmationOpen] = createSignal(false);
   const [endingSession, setEndingSession] = createSignal(false);
   const [surface, setSurface] = createSignal<HTMLElement | null>(null);
+  const floatingWindowStack = useEnvAppFloatingWindowStack();
+  const stackId = `plugin-surface:${props.instanceID}`;
   let closeBody: (() => Promise<boolean>) | null = null;
   let closeAttempt: Promise<void> | null = null;
   let continueQueuedClose: (() => void) | null = null;
@@ -131,20 +134,17 @@ export function ActivityPluginSurfaceWindow(props: ActivityPluginSurfaceWindowPr
 
   const bindSurface = (next: HTMLElement | null) => {
     const previous = surface();
-    previous?.removeEventListener('pointerdown', handlePointerDown, true);
     previous?.removeEventListener('keydown', handleKeyDown);
     previous?.removeAttribute('data-redeven-plugin-activity-window');
     setSurface(next);
     next?.setAttribute('data-redeven-plugin-activity-window', 'true');
-    next?.addEventListener('pointerdown', handlePointerDown, true);
     next?.addEventListener('keydown', handleKeyDown);
   };
 
-  function handlePointerDown(event: PointerEvent) {
-    const target = event.target;
-    if (!(target instanceof Element) || target.closest('[data-plugin-surface-stage]')) return;
+  const activateWindow = () => {
+    floatingWindowStack?.activate(stackId);
     props.onActivate(props.instanceID);
-  }
+  };
 
   function handleKeyDown(event: KeyboardEvent) {
     if (closeFailed()) return;
@@ -294,10 +294,11 @@ export function ActivityPluginSurfaceWindow(props: ActivityPluginSurfaceWindowPr
         if (!open) void requestClose();
       }}
       title={title()}
+      stackId={stackId}
+      onActivate={() => props.onActivate(props.instanceID)}
       persistenceKey={`plugin-surface:${props.target.pluginInstanceID}:${props.target.surfaceID}:activity`}
       defaultSize={{ width: 920, height: 680 }}
       minSize={{ width: 460, height: 360 }}
-      zIndex={props.zIndex}
       surfaceRef={bindSurface}
       class="redeven-plugin-activity-window overflow-hidden rounded-md"
       contentClass="min-h-0 flex flex-1 flex-col !overflow-hidden !p-0"
@@ -316,7 +317,7 @@ export function ActivityPluginSurfaceWindow(props: ActivityPluginSurfaceWindowPr
         registerClose={registerCloseBody}
         onInteraction={(event) => {
           if (event.kind === 'activation' || event.kind === 'focus' || event.kind === 'action') {
-            props.onActivate(props.instanceID);
+            activateWindow();
           }
         }}
         onRetirementError={props.onRetirementError}

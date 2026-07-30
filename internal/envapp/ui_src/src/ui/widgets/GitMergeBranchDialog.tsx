@@ -1,6 +1,7 @@
 import { For, Show, createSignal } from 'solid-js';
 import { cn, useLayout } from '@floegence/floe-webapp-core';
-import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
+import { Button } from '@floegence/floe-webapp-core/ui';
+import { Dialog } from '../primitives/EnvAppModal';
 import type { GitBranchSummary, GitCommitFileSummary, GitPreviewMergeBranchResponse, GitWorkspaceSummary } from '../protocol/redeven_v1';
 import { branchDisplayName, changeSecondaryPath, exactGitPath, gitDiffEntryIdentity, type GitStashWindowRequest } from '../utils/gitWorkbench';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
