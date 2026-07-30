@@ -13,8 +13,9 @@ Activity opens Shell-root windows; Workbench opens `redeven.plugin` widgets.
 Activity Bar opens a search-first Launcher with stable categories, keyboard
 navigation, and exact inventory routing. Plugin Center presents trust, lifecycle,
 access, and launch state through a compact directory and structured inspector. External installs use explicit source,
-review, commit, and completion. Fresh installs start disabled with zero grants;
-updates retain Host-managed state and grants without adding any. Redeven owns
+review, commit, and completion. Fresh installs start disabled with zero grants.
+Every update first opens a side-effect-free, target-bound update review; updates
+retain Host-managed state and grants without adding any. Redeven owns
 navigation, review, placement, and filters; ReDevPlugin owns admission, iframe
 and bridge lifecycle, confirmation, streams, and revocation. Failed exact-surface
 close stays retryable without wider authority.
@@ -104,6 +105,48 @@ destructive confirmation before mutation submission. On narrow screens, list
 selection enters a detail view, focuses its explicit back action, and restores
 focus to the originating inventory row on return. Tablet and desktop layouts
 keep the inventory master and selected detail side by side.
+
+## Update review and confirmation
+
+Plugin Center's Updates card and inspector expose one primary `Review update`
+action. Opening it creates an exact update intent and never submits a mutation,
+refreshes inventory, changes tabs, or replaces the current selection. Activity
+and Workbench remain overflow actions while an update is available. The dedicated
+update dialog owns source-required, loading-review, review, committing,
+reconciling, and complete states. Its fixed footer always exposes an explicit,
+single-line target action such as `Update to vX`, `Install new build`, or
+`Replace current build`; low-height and narrow layouts scroll only the body.
+
+The immutable update candidate binds the exact plugin instance, management
+revision, current and target versions, package, manifest, and entries hashes,
+and release-notes identity. Before commit, Redeven rechecks the current inventory
+revision, inspection expiry or development-delivery hashes, and release-notes
+summary. A changed target is stale and requires a fresh review; it is never
+silently substituted. Version upgrades, same-version development builds,
+same-version external replacements, exact-package no-ops, and downgrades are
+projected centrally rather than inferred separately by cards and dialogs.
+
+Product release notes and Host security evidence have separate authority.
+Official notes render only when their target version and package, manifest, and
+entries hashes match the release reference. A development-delivery v2 descriptor
+binds its notes ID and summary hash to the Host-projected delivery identity.
+ReDevPlugin 0.6.20 has no read-only local-package inspection, so a development
+review states only that Redeven verified the exact delivery and capability
+contract identity. It explicitly states that package signature and declaration-
+difference inspection are unavailable and never claims unchanged access. External
+updates use the released inspection result; only that evidence may claim no
+security-declaration changes. Missing publisher notes remain visibly absent and
+are never synthesized from manifests or source history.
+
+Commit starts only from the review footer. Development builds and external
+replacements require a concise adjacent risk acknowledgement; ordinary verified
+version upgrades need no redundant checkbox. Commit prevents close and duplicate
+submission. A typed not-committed result returns to the same review, while an
+unknown result enters query-only reconciliation and never resubmits. Successful
+commit remains in a complete dialog until the user chooses Activity, permissions,
+or Done. Inventory refresh failure is reported separately from mutation failure.
+Closing completion preserves the Updates tab, clears obsolete exact selection,
+and shows an `All plugins are up to date` success state when no updates remain.
 
 ## External package review
 
@@ -290,7 +333,10 @@ or call business adapters directly.
 
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:1` - Owns inventory, client lifetime, lifecycle commands, and cross-placement serialization.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginPanel.tsx:1` - Carries exact inventory keys from tiles into management navigation.
-- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterView.tsx:1` - Selects exact inventory items and hosts external installation.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterView.tsx:1` - Selects exact inventory items and owns install and update-review entry state.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginUpdateReviewDialog.tsx:1` - Presents the target-bound review, fixed confirmation footer, reconciliation, and retained completion state.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/pluginUpdateProjection.ts:1` - Classifies update targets and fences revision, inspection, hash, and release-note identity.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/officialPluginReleaseNotes.json:1` - Stores machine-readable product release-note bindings used by catalog and development delivery.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterItems.tsx:1` - Presents the compact Discover, Installed, and Updates card directory without owning selection or mutations.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginPresentation.ts:1` - Combines trust, policy, authorization, lifecycle, and launch readiness into one primary action.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/plugin-motion.css:1` - Defines the scoped subtle entrance and disclosure motion with a reduced-motion override.
