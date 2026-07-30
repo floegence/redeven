@@ -9,16 +9,16 @@ quality_exception: Cross-surface UI contract spanning exact plugin identity, Lau
 # Summary
 
 Plugin UI embeds released ReDevPlugin sandbox surfaces in Redeven chrome.
-Activity opens Shell-root windows; Workbench opens `redeven.plugin` widgets.
-Activity Bar opens a search-first Launcher with stable categories, keyboard
-navigation, and exact inventory routing. Plugin Center presents trust, lifecycle,
-access, and launch state through a compact directory and structured inspector. External installs use explicit source,
-review, commit, and completion. Fresh installs start disabled with zero grants.
-Every update first opens a side-effect-free, target-bound update review; updates
-retain Host-managed state and grants without adding any. Redeven owns
-navigation, review, placement, and filters; ReDevPlugin owns admission, iframe
-and bridge lifecycle, confirmation, streams, and revocation. Failed exact-surface
-close stays retryable without wider authority.
+Activity opens Shell-root windows; Workbench opens `redeven.plugin` widgets. The
+Activity Bar Launcher provides stable categories, keyboard navigation, search,
+and exact inventory routing, while Plugin Center presents trust, lifecycle,
+access, and launch state. External installs require explicit source review and
+commit; fresh installs start disabled with zero grants. Updates require a
+side-effect-free, target-bound review and retain Host-managed state and grants
+without adding any. Redeven owns navigation, review, placement, and filters;
+ReDevPlugin owns admission, sandbox and bridge lifecycle, confirmations, streams,
+and revocation. Failed exact-surface close remains retryable without wider
+authority.
 
 # Contract
 
