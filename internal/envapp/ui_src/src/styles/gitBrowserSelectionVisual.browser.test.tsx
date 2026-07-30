@@ -187,7 +187,10 @@ describe('Git browser rendered selection contract', () => {
           const selected = host.querySelector<HTMLElement>('[data-git-sidebar-branch-key="refs/heads/codex/git-selection"]');
           expect(current?.textContent, `${themeName} ${width}px current`).toBe('Current');
           expect(selected?.className, `${themeName} ${width}px selected`).toContain('git-browser-selection-row');
-          expect((await page.elementLocator(host).screenshot()).length, `${themeName} ${width}px screenshot`).toBeGreaterThan(200);
+          expect(
+            (await page.elementLocator(host).screenshot({ save: false })).length,
+            `${themeName} ${width}px screenshot`,
+          ).toBeGreaterThan(200);
         } finally {
           dispose();
         }
