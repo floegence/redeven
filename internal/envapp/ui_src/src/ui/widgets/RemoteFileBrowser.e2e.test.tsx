@@ -2290,6 +2290,246 @@ describe('RemoteFileBrowser persistence', () => {
     }
   });
 
+  it('uses authoritative Computer roots for directed navigation outside the Home display hint', async () => {
+    widgetStateStore.values['widget-1'] = {
+      browserSidebarWidth: 312,
+      lastPathByEnv: { 'env-1': '/workspace/repo/src' },
+      showHiddenByEnv: { 'env-1': false },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+    mockRpc.fs.getPathContext.mockResolvedValue({
+      agentHomePathAbs: '/workspace',
+      homePathAbs: '/workspace',
+      defaultRootId: 'home',
+      roots: [
+        { id: 'home', label: 'Home', pathAbs: '/workspace', kind: 'home', permissions: { read: true, write: true }, system: true },
+        { id: 'computer', label: 'Computer', pathAbs: '/', kind: 'computer', permissions: { read: true, write: false }, system: true },
+      ],
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    let setOpenPathRequest!: (request: { requestId: string; path: string; homePath?: string } | null) => void;
+    const dispose = render(() => {
+      const [openPathRequest, nextOpenPathRequest] = createSignal<{ requestId: string; path: string; homePath?: string } | null>(null);
+      setOpenPathRequest = nextOpenPathRequest;
+      return (
+        <LayoutProvider>
+          <EnvContext.Provider value={createEnvContext()}>
+            <RemoteFileBrowser widgetId="widget-1" openPathRequest={openPathRequest()} />
+          </EnvContext.Provider>
+        </LayoutProvider>
+      );
+    }, host);
+
+    try {
+      await flush();
+      mockRpc.fs.list.mockClear();
+      mockRpc.fs.getPathContext.mockClear();
+      widgetStateStore.updateCalls = [];
+
+      setOpenPathRequest({
+        requestId: 'open-volume-repo',
+        path: '/Volumes/JianDisk/code/find-disk-killer',
+        homePath: '/workspace',
+      });
+      await flush();
+      await flush();
+
+      expect(mockRpc.fs.getPathContext).toHaveBeenCalledTimes(1);
+      expect(mockRpc.fs.list.mock.calls.map(([request]) => request.path)).toEqual([
+        '/',
+        '/Volumes',
+        '/Volumes/JianDisk',
+        '/Volumes/JianDisk/code',
+        '/Volumes/JianDisk/code/find-disk-killer',
+      ]);
+      expect(host.querySelector('[data-testid="mock-current-path"]')?.textContent).toBe('/Volumes/JianDisk/code/find-disk-killer');
+      expect(host.querySelector('[data-testid="file-browser-navigation-failure"]')).toBeNull();
+      expect(widgetStateStore.updateCalls).toContainEqual({
+        widgetId: 'widget-1',
+        key: 'lastPathByEnv',
+        value: { 'env-1': '/Volumes/JianDisk/code/find-disk-killer' },
+      });
+    } finally {
+      dispose();
+    }
+  });
+
+  it('keeps the committed directory and shows recovery actions when directed navigation is denied', async () => {
+    widgetStateStore.values['widget-1'] = {
+      browserSidebarWidth: 312,
+      lastPathByEnv: { 'env-1': '/workspace/repo/src' },
+      showHiddenByEnv: { 'env-1': false },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    let setOpenPathRequest!: (request: { requestId: string; path: string; homePath?: string } | null) => void;
+    const dispose = render(() => {
+      const [openPathRequest, nextOpenPathRequest] = createSignal<{ requestId: string; path: string; homePath?: string } | null>(null);
+      setOpenPathRequest = nextOpenPathRequest;
+      return (
+        <LayoutProvider>
+          <EnvContext.Provider value={createEnvContext()}>
+            <RemoteFileBrowser widgetId="widget-1" openPathRequest={openPathRequest()} />
+          </EnvContext.Provider>
+        </LayoutProvider>
+      );
+    }, host);
+
+    try {
+      await flush();
+      widgetStateStore.updateCalls = [];
+      setOpenPathRequest({ requestId: 'denied-volume', path: '/Volumes/Private', homePath: '/workspace' });
+      await flush();
+      await flush();
+
+      const panel = host.querySelector('[data-testid="file-browser-navigation-failure"]');
+      expect(host.querySelector('[data-testid="mock-current-path"]')?.textContent).toBe('/workspace/repo/src');
+      expect(panel?.textContent).toContain('/Volumes/Private');
+      expect(panel?.textContent).toContain('outside the filesystem roots authorized for this environment');
+      expect(panel?.textContent).toContain('Retry');
+      expect(panel?.textContent).toContain('Open Home');
+      expect(panel?.textContent).toContain('Copy path');
+      expect(panel?.textContent).toContain('Ask an environment administrator');
+      expect(widgetStateStore.updateCalls).toEqual([]);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('does not fall back or persist when a directed request fails transiently', async () => {
+    widgetStateStore.values['widget-1'] = {
+      browserSidebarWidth: 312,
+      lastPathByEnv: { 'env-1': '/workspace/repo/src' },
+      showHiddenByEnv: { 'env-1': false },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    let setOpenPathRequest!: (request: { requestId: string; path: string; homePath?: string } | null) => void;
+    const dispose = render(() => {
+      const [openPathRequest, nextOpenPathRequest] = createSignal<{ requestId: string; path: string; homePath?: string } | null>(null);
+      setOpenPathRequest = nextOpenPathRequest;
+      return (
+        <LayoutProvider>
+          <EnvContext.Provider value={createEnvContext()}>
+            <RemoteFileBrowser widgetId="widget-1" openPathRequest={openPathRequest()} />
+          </EnvContext.Provider>
+        </LayoutProvider>
+      );
+    }, host);
+
+    try {
+      await flush();
+      mockRpc.fs.getPathContext.mockRejectedValueOnce(new Error('connection lost'));
+      mockRpc.fs.list.mockClear();
+      widgetStateStore.updateCalls = [];
+      setOpenPathRequest({ requestId: 'offline-target', path: '/workspace/other', homePath: '/workspace' });
+      await flush();
+      const panel = host.querySelector('[data-testid="file-browser-navigation-failure"]');
+      expect(host.querySelector('[data-testid="mock-current-path"]')?.textContent).toBe('/workspace/repo/src');
+      expect(panel?.textContent).toContain('temporarily unavailable');
+      expect(mockRpc.fs.list).not.toHaveBeenCalledWith({ path: '/workspace', showHidden: false });
+      expect(widgetStateStore.updateCalls).toEqual([]);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('validates a floating browser initial path against refreshed authoritative roots', async () => {
+    mockRpc.fs.getPathContext.mockResolvedValue({
+      agentHomePathAbs: '/workspace',
+      homePathAbs: '/workspace',
+      defaultRootId: 'home',
+      roots: [
+        { id: 'home', label: 'Home', pathAbs: '/workspace', kind: 'home', permissions: { read: true, write: true }, system: true },
+        { id: 'computer', label: 'Computer', pathAbs: '/', kind: 'computer', permissions: { read: true, write: false }, system: true },
+      ],
+    });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser
+            stateScope="floating-volume"
+            initialPathOverride="/Volumes/JianDisk/code/find-disk-killer"
+            homePathOverride="/workspace"
+          />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      await flush();
+      expect(host.querySelector('[data-testid="mock-current-path"]')?.textContent).toBe('/Volumes/JianDisk/code/find-disk-killer');
+      expect(mockRpc.fs.getPathContext).toHaveBeenCalled();
+      expect(host.querySelector('[data-testid="file-browser-navigation-failure"]')).toBeNull();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('suppresses late results from a directed request superseded by a newer request', async () => {
+    widgetStateStore.values['widget-1'] = {
+      browserSidebarWidth: 312,
+      lastPathByEnv: { 'env-1': '/workspace/repo/src' },
+      showHiddenByEnv: { 'env-1': false },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    let setOpenPathRequest!: (request: { requestId: string; path: string; homePath?: string } | null) => void;
+    const dispose = render(() => {
+      const [openPathRequest, nextOpenPathRequest] = createSignal<{ requestId: string; path: string; homePath?: string } | null>(null);
+      setOpenPathRequest = nextOpenPathRequest;
+      return (
+        <LayoutProvider>
+          <EnvContext.Provider value={createEnvContext()}>
+            <RemoteFileBrowser widgetId="widget-1" openPathRequest={openPathRequest()} />
+          </EnvContext.Provider>
+        </LayoutProvider>
+      );
+    }, host);
+
+    try {
+      await flush();
+      const staleContext = deferred<{ agentHomePathAbs: string }>();
+      mockRpc.fs.getPathContext
+        .mockImplementationOnce(() => staleContext.promise)
+        .mockResolvedValue({ agentHomePathAbs: '/workspace' });
+      widgetStateStore.updateCalls = [];
+
+      setOpenPathRequest({ requestId: 'stale-request', path: '/workspace/stale', homePath: '/workspace' });
+      await Promise.resolve();
+      setOpenPathRequest({ requestId: 'latest-request', path: '/workspace/latest', homePath: '/workspace' });
+      await flush();
+      await flush();
+
+      expect(host.querySelector('[data-testid="mock-current-path"]')?.textContent).toBe('/workspace/latest');
+      staleContext.resolve({ agentHomePathAbs: '/workspace' });
+      await flush();
+      await flush();
+
+      expect(host.querySelector('[data-testid="mock-current-path"]')?.textContent).toBe('/workspace/latest');
+      expect(host.querySelector('[data-testid="file-browser-navigation-failure"]')).toBeNull();
+      expect(widgetStateStore.updateCalls).toEqual([{
+        widgetId: 'widget-1',
+        key: 'lastPathByEnv',
+        value: { 'env-1': '/workspace/latest' },
+      }]);
+    } finally {
+      dispose();
+    }
+  });
+
   it('restores the persisted git mode, subview, and directory on mount', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -3015,7 +3255,7 @@ describe('RemoteFileBrowser persistence', () => {
       expect(host.textContent).toContain('files:files:/workspace/repo:312:0');
       expect(notificationStore.info).toContainEqual({
         title: 'mock-path-submit',
-        message: 'error:not found',
+        message: 'error:This folder no longer exists or its volume is not mounted.',
       });
       expect(widgetStateStore.updateCalls).not.toContainEqual({
         widgetId: 'widget-1',
