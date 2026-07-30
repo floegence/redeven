@@ -23,6 +23,8 @@ import (
 const developmentDeliverySchemaVersion = "redeven.plugin_development_delivery.v2"
 const officialContainersPluginInstanceID = "plugini_redeven_official_containers"
 const officialContainersReleaseNotesID = "containers-4.0.0"
+const officialContainersSourceRepository = "https://github.com/floegence/redeven-official-plugins.git"
+const officialContainersSourceCommit = "37d4dfff0cfa88c7a00ee0b89f55bfbcdde4b251"
 
 type developmentDeliveryDescriptor struct {
 	SchemaVersion           string `json:"schema_version"`
@@ -38,6 +40,8 @@ type developmentDeliveryDescriptor struct {
 	ContractSHA256          string `json:"contract_sha256"`
 	ReleaseNotesID          string `json:"release_notes_id"`
 	ReleaseNotesSummarySHA  string `json:"release_notes_summary_sha256"`
+	SourceRepository        string `json:"source_repository"`
+	SourceCommit            string `json:"source_commit"`
 }
 
 type developmentSigningPublicKey struct {
@@ -83,6 +87,8 @@ func (d *DevelopmentDelivery) Metadata() map[string]any {
 		"capability_version":           d.contract.Contract.CapabilityVersion,
 		"release_notes_id":             d.descriptor.ReleaseNotesID,
 		"release_notes_summary_sha256": d.descriptor.ReleaseNotesSummarySHA,
+		"source_repository":            d.descriptor.SourceRepository,
+		"source_commit":                d.descriptor.SourceCommit,
 		"development_only":             true,
 	}
 }
@@ -104,6 +110,9 @@ func loadDevelopmentDelivery(filename string) (*DevelopmentDelivery, error) {
 	}
 	if descriptor.ReleaseNotesID != officialContainersReleaseNotesID || !isSHA256Hex(descriptor.ReleaseNotesSummarySHA) {
 		return nil, errors.New("plugin development delivery release notes binding is invalid")
+	}
+	if descriptor.SourceRepository != officialContainersSourceRepository || descriptor.SourceCommit != officialContainersSourceCommit {
+		return nil, errors.New("plugin development delivery source identity is invalid")
 	}
 	for name, value := range map[string]string{
 		"package_path":               descriptor.PackagePath,

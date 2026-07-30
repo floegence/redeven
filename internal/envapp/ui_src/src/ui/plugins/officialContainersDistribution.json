@@ -1,12 +1,13 @@
 {
-  "repository": "floegence/redeven",
-  "commit": "c40d4ade758b465dbe70f693e504cda79fa9e702",
+  "repository": "floegence/redeven-official-plugins",
+  "commit": "37d4dfff0cfa88c7a00ee0b89f55bfbcdde4b251",
   "artifact_path": [
-    "spec",
-    "redevplugin",
-    "catalog-containers-plugin",
+    "official",
+    "containers",
     "2.0.0",
-    "plugin.redevplugin"
+    "containers-2.0.0.redevplugin"
   ],
-  "artifact_sha256": "77986bc4b193ee1e5c60e596fb0c06ac7f9571cc78ea5d15abd646ab21176441"
+  "artifact_sha256": "6535a574a8a2ab6e8901509934634c2772d2f0cf52088e34530de4df589c1d9b",
+  "icon_path": ["plugins", "containers", "assets", "containers-plugin.png"],
+  "icon_sha256": "949adb221cd3e990ebe350947cc17d1b415d6175f99df98aeb5c47d70fb3cce1"
 }

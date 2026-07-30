@@ -3,7 +3,8 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -12,16 +13,17 @@ const distributionPath = path.join(
   root,
   'internal/envapp/ui_src/src/ui/plugins/officialContainersDistribution.json',
 );
-const expectedRepository = 'floegence/redeven';
-const expectedArtifactPath = 'spec/redevplugin/catalog-containers-plugin/2.0.0/plugin.redevplugin';
+const expectedRepository = 'floegence/redeven-official-plugins';
+const expectedArtifactPath = 'official/containers/2.0.0/containers-2.0.0.redevplugin';
+const expectedIconPath = 'plugins/containers/assets/containers-plugin.png';
 
 function sha256(bytes) {
   return createHash('sha256').update(bytes).digest('hex');
 }
 
-function git(args, options = {}) {
+function git(cwd, args, options = {}) {
   return execFileSync('git', args, {
-    cwd: root,
+    cwd,
     encoding: options.encoding ?? 'utf8',
     stdio: options.stdio ?? ['ignore', 'pipe', 'pipe'],
   });
@@ -30,46 +32,40 @@ function git(args, options = {}) {
 const distribution = JSON.parse(await readFile(distributionPath, 'utf8'));
 assert.equal(distribution.repository, expectedRepository);
 assert.match(distribution.commit, /^[0-9a-f]{40}$/u, 'catalog package URL must pin a full Git commit SHA');
-assert.ok(Array.isArray(distribution.artifact_path), 'catalog artifact_path must be an array');
-const artifactPath = distribution.artifact_path.join('/');
-assert.equal(artifactPath, expectedArtifactPath);
+assert.equal(distribution.artifact_path.join('/'), expectedArtifactPath);
+assert.equal(distribution.icon_path.join('/'), expectedIconPath);
 assert.match(distribution.artifact_sha256, /^[0-9a-f]{64}$/u, 'catalog artifact SHA-256 must be lowercase hex');
-const catalogURL = `https://raw.githubusercontent.com/${distribution.repository}/${distribution.commit}/${artifactPath}`;
+assert.match(distribution.icon_sha256, /^[0-9a-f]{64}$/u, 'catalog icon SHA-256 must be lowercase hex');
 
-const parsedURL = new URL(catalogURL);
-const segments = parsedURL.pathname.split('/').filter(Boolean);
-assert.equal(parsedURL.protocol, 'https:');
-assert.equal(parsedURL.hostname, 'raw.githubusercontent.com');
-assert.equal(`${segments[0]}/${segments[1]}`, expectedRepository);
-const commit = segments[2];
-assert.equal(commit, distribution.commit);
-assert.equal(segments.slice(3).join('/'), artifactPath);
+const repositoryURL = `https://github.com/${distribution.repository}.git`;
+const catalogURL = `https://raw.githubusercontent.com/${distribution.repository}/${distribution.commit}/${expectedArtifactPath}`;
+const iconURL = `https://raw.githubusercontent.com/${distribution.repository}/${distribution.commit}/${expectedIconPath}`;
+for (const [value, expectedPath] of [[catalogURL, expectedArtifactPath], [iconURL, expectedIconPath]]) {
+  const parsed = new URL(value);
+  const segments = parsed.pathname.split('/').filter(Boolean);
+  assert.equal(parsed.protocol, 'https:');
+  assert.equal(parsed.hostname, 'raw.githubusercontent.com');
+  assert.equal(`${segments[0]}/${segments[1]}`, expectedRepository);
+  assert.equal(segments[2], distribution.commit);
+  assert.equal(segments.slice(3).join('/'), expectedPath);
+}
 
-const workingTreeArtifact = await readFile(path.join(root, artifactPath));
-assert.equal(sha256(workingTreeArtifact), distribution.artifact_sha256, 'working-tree catalog artifact SHA-256 changed');
-
-let commitAvailable = true;
+const checkout = await mkdtemp(path.join(tmpdir(), 'redeven-official-plugins-'));
 try {
-  git(['cat-file', '-e', `${commit}^{commit}`]);
-} catch {
-  commitAvailable = false;
+  git(checkout, ['init', '--quiet']);
+  git(checkout, ['remote', 'add', 'origin', repositoryURL]);
+  git(checkout, ['fetch', '--quiet', '--depth', '1', 'origin', distribution.commit]);
+  assert.equal(git(checkout, ['rev-parse', 'FETCH_HEAD']).trim(), distribution.commit);
+  const artifact = git(checkout, ['show', `FETCH_HEAD:${expectedArtifactPath}`], { encoding: 'buffer' });
+  const icon = git(checkout, ['show', `FETCH_HEAD:${expectedIconPath}`], { encoding: 'buffer' });
+  assert.equal(sha256(artifact), distribution.artifact_sha256, 'pinned catalog artifact SHA-256 mismatch');
+  assert.equal(sha256(icon), distribution.icon_sha256, 'pinned catalog icon SHA-256 mismatch');
+  assert.equal(icon.subarray(1, 4).toString('ascii'), 'PNG');
+  assert.equal(icon.readUInt32BE(16), 512);
+  assert.equal(icon.readUInt32BE(20), 512);
+  assert.equal(icon[25], 6, 'pinned catalog icon must retain alpha transparency');
+} finally {
+  await rm(checkout, { recursive: true, force: true });
 }
 
-let pinnedArtifact;
-if (commitAvailable) {
-  try {
-    git(['merge-base', '--is-ancestor', commit, 'HEAD']);
-  } catch {
-    throw new Error(`catalog package URL commit ${commit} is not an ancestor of HEAD`);
-  }
-  pinnedArtifact = git(['show', `${commit}:${artifactPath}`], { encoding: 'buffer' });
-} else {
-  const response = await fetch(catalogURL, { redirect: 'error' });
-  assert.equal(response.status, 200, `catalog package URL returned HTTP ${response.status}`);
-  pinnedArtifact = Buffer.from(await response.arrayBuffer());
-}
-
-assert.equal(sha256(pinnedArtifact), distribution.artifact_sha256, 'pinned catalog artifact SHA-256 mismatch');
-assert.deepEqual(pinnedArtifact, workingTreeArtifact, 'pinned and working-tree catalog artifacts differ');
-
-process.stdout.write(`catalog package URL verified: ${catalogURL}\n`);
+process.stdout.write(`catalog package and icon verified: ${catalogURL}\n`);

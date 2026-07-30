@@ -7,13 +7,17 @@ import { spawnSync } from 'node:child_process';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const output = join(root, 'desktop', '.containers-v4-development');
 const staging = `${output}.staging`;
-const pluginRoot = join(root, 'plugins', 'official', 'containers');
+const officialPluginsRepository = 'https://github.com/floegence/redeven-official-plugins.git';
+const officialPluginsCommit = '37d4dfff0cfa88c7a00ee0b89f55bfbcdde4b251';
+const sourceRoot = join(staging, 'official-plugins-source');
+const pluginRoot = join(sourceRoot, 'plugins', 'containers');
 const contractPath = join(root, 'spec', 'capabilities', 'container-resources-v4.contract.json');
 const releaseNotesPath = join(root, 'internal', 'envapp', 'ui_src', 'src', 'ui', 'plugins', 'officialPluginReleaseNotes.json');
 const cli = ['run', 'github.com/floegence/redevplugin/cmd/redevplugin@v0.6.20'];
 
 rmSync(staging, { recursive: true, force: true });
 mkdirSync(staging, { recursive: true, mode: 0o700 });
+checkoutOfficialPluginSource();
 ensurePluginDependencies();
 run('npm', ['run', 'build'], pluginRoot);
 run('go', [...cli, 'keygen', 'redeven-containers-v4-development', join(staging, 'private.json'), join(staging, 'public.json')], root);
@@ -69,11 +73,14 @@ const descriptor = {
   contract_sha256: pin.artifact_sha256,
   release_notes_id: releaseNotes.release_id,
   release_notes_summary_sha256: releaseNotes.summary_sha256,
+  source_repository: officialPluginsRepository,
+  source_commit: officialPluginsCommit,
 };
 writeFileSync(join(staging, 'delivery.json'), `${JSON.stringify(descriptor, null, 2)}\n`, { mode: 0o600 });
 rmSync(join(staging, 'private.json'), { force: true });
 rmSync(join(staging, 'capability-build.json'), { force: true });
 rmSync(join(staging, 'package-root'), { recursive: true, force: true });
+rmSync(sourceRoot, { recursive: true, force: true });
 rmSync(output, { recursive: true, force: true });
 renameSync(staging, output);
 
@@ -100,6 +107,18 @@ function ensurePluginDependencies() {
     || statSync(packageManifest).mtimeMs > statSync(installMarker).mtimeMs
     || statSync(packageLock).mtimeMs > statSync(installMarker).mtimeMs;
   if (needsInstall) run('npm', ['ci', '--no-audit', '--no-fund'], pluginRoot);
+}
+
+function checkoutOfficialPluginSource() {
+  mkdirSync(sourceRoot, { recursive: true, mode: 0o700 });
+  run('git', ['init', '--quiet'], sourceRoot);
+  run('git', ['remote', 'add', 'origin', officialPluginsRepository], sourceRoot);
+  run('git', ['fetch', '--quiet', '--depth', '1', 'origin', officialPluginsCommit], sourceRoot);
+  run('git', ['checkout', '--quiet', '--detach', 'FETCH_HEAD'], sourceRoot);
+  const resolved = run('git', ['rev-parse', 'HEAD'], sourceRoot).trim();
+  if (resolved !== officialPluginsCommit) {
+    throw new Error(`Containers source resolved to unexpected commit ${resolved}`);
+  }
 }
 
 function run(command, args, cwd) {

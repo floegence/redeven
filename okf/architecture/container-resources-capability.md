@@ -174,9 +174,9 @@ actions are disabled when inventory is stale, partial, or unavailable.
 - `redeven:internal/capabilities/containers/resources_v4_cli.go` - Resolves opaque endpoints and constructs explicit Docker context and Podman connection commands.
 - `redeven:internal/capabilities/containers/resources_v4_test.go` - Proves opaque endpoint binding, Compose volume retention, Pod confirmation, and rootless projection.
 - `redeven:internal/redevpluginintegration/containers_capability_v4.go` - Dispatches v4 requests through ReDevPlugin-owned invocation, operation, and stream contexts.
-- `redeven:scripts/check_containers_plugin_v4_candidate.sh` - Rebuilds and validates the fail-closed v4 contract and plugin package.
+- `redeven:scripts/check_containers_plugin_v4_candidate.sh` - Fetches the pinned official-plugin commit and validates the fail-closed v4 contract and plugin package.
 - `redeven:scripts/build_containers_v4_development_delivery.mjs` - Builds the ephemeral development package, capability, and descriptor without retaining the private key.
 - `redeven:internal/redevpluginintegration/development_delivery.go` - Verifies the development delivery before v4 registration and local-import enablement.
 - `redeven:spec/redevplugin/official-containers-capability/host-capability.pin.json` - Pins the currently active signed v2 capability.
 - `redeven:internal/redevpluginintegration/release_module.go` - Closes the current official package source, signature, revocation, and capability pin.
-- `redeven:plugins/official/containers/src/controller.ts` - Owns endpoint, workspace, stream, dialog, and operation state for the redesigned surface.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/officialContainersDistribution.json` - Pins the external official-plugin source, stable package, and icon identities.

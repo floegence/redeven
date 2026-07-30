@@ -70,6 +70,8 @@ export type PluginDevelopmentDelivery = {
   capability_version: string;
   release_notes_id: string;
   release_notes_summary_sha256: string;
+  source_repository: string;
+  source_commit: string;
   development_only: true;
 };
 
