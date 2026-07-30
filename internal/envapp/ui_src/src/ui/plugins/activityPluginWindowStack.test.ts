@@ -31,6 +31,9 @@ describe('Activity plugin window stack', () => {
     expect(new Set(zIndexes)).toHaveLength(MAX_ACTIVITY_PLUGIN_WINDOWS);
     expect(zIndexes[0]).toBeGreaterThan(ENV_APP_FLOATING_LAYER.previewWindow);
     expect(ENV_APP_FLOATING_LAYER.floatingWindowModal).toBeGreaterThan(zIndexes.at(-1)!);
+    expect(ENV_APP_FLOATING_LAYER.flowerCompanion).toBeGreaterThan(
+      Math.max(...Object.values(ENV_APP_FLOATING_LAYER).filter((layer) => layer !== ENV_APP_FLOATING_LAYER.flowerCompanion)),
+    );
     expect(() => activityPluginWindowZIndex(MAX_ACTIVITY_PLUGIN_WINDOWS)).toThrow(RangeError);
   });
 });

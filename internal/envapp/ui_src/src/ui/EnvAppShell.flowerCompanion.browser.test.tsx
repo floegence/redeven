@@ -1267,6 +1267,9 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     await userEvent.click(close);
     await flushAsync();
     expect(fixture.product.dataset.presentation).toBe('collapsed');
+    expect(document.activeElement).not.toBe(fixture.textarea);
+    await settleFrames(2);
+    expect(fixture.product.dataset.presentation).toBe('collapsed');
     expect(document.querySelector('[data-testid="env-ai-page"]')).toBe(flowerSurface);
 
     const activityBarFlower = document.querySelector('[data-floe-shell-slot="activity-bar"] button[aria-label="Flower"]');

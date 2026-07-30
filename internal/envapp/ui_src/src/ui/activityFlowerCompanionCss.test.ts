@@ -38,6 +38,16 @@ function expectDrawerPhases(rule: CssRule): void {
 }
 
 describe('Flower bottom companion visual contract', () => {
+  it('leaves application stacking ownership to the Env App floating-layer contract', () => {
+    const src = readCompanionCss();
+    const hostRule = [...src.matchAll(/([^{}]+)\{([^{}]*)\}/gu)]
+      .map((match) => ({ selectors: match[1].trim(), body: match[2].trim() }))
+      .find((rule) => rule.selectors === '.flower-activity-overlay-host');
+
+    expect(hostRule?.body).toContain('--floe-bottom-bar-companion-z-index: 1;');
+    expect(hostRule?.body).not.toMatch(/(?:^|;)\s*z-index\s*:/u);
+  });
+
   it('keeps calm expanded styling through the collapse transition', () => {
     const rules = companionRules(readCompanionCss());
     const frameRule = findRule(rules, '.flower-activity-companion.floe-bottom-bar-companion');
