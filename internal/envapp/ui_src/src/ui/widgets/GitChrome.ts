@@ -119,7 +119,7 @@ export function gitToneHeaderActionButtonClass(): string {
 
 export function gitToneSelectableCardClass(_tone: GitChromeTone | undefined, active: boolean): string {
   const interactiveBase =
-    'cursor-pointer select-none border border-transparent transition-[background-color,border-color,color] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1';
+    'git-browser-interactive cursor-pointer select-none border border-transparent transition-[background-color,border-color,color] duration-150 focus-visible:outline-none';
 
   if (active) {
     return `${interactiveBase} border-l-[2px] git-browser-selection-row`;
@@ -127,8 +127,16 @@ export function gitToneSelectableCardClass(_tone: GitChromeTone | undefined, act
 
   return cn(
     interactiveBase,
-    'bg-transparent text-foreground hover:bg-muted/[0.18] hover:text-foreground hover:shadow-sm',
+    'bg-transparent text-foreground hover:text-foreground',
   );
+}
+
+export function gitNavigationItemClass(active: boolean): string {
+  const base =
+    'git-browser-interactive border-l-[2px] border-l-transparent focus-visible:outline-none';
+  return active
+    ? `${base} git-browser-selection-surface git-browser-selection-nav font-medium`
+    : `${base} bg-transparent text-muted-foreground hover:text-foreground`;
 }
 
 export function gitSelectedSecondaryTextClass(active: boolean): string {
@@ -137,6 +145,10 @@ export function gitSelectedSecondaryTextClass(active: boolean): string {
 
 export function gitSelectedChipClass(active: boolean): string {
   return active ? 'git-browser-selection-chip' : '';
+}
+
+export function gitCurrentBranchChipClass(): string {
+  return 'git-browser-current-chip';
 }
 
 export function gitSubviewTone(view: GitWorkbenchSubview): GitChromeTone {

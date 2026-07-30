@@ -844,7 +844,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
                                                     <tr
                                                       data-git-stash-file={file.path}
                                                       aria-selected={active()}
-                                                      class={`${gitChangedFilesRowClass(active())} cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70`}
+                                                      class={`${gitChangedFilesRowClass(active())} cursor-pointer`}
                                                       onClick={() => openDiffDialog(file)}
                                                       tabIndex={0}
                                                       onContextMenu={(event) => openContextMenu(event, fileTarget(detail, file))}

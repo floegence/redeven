@@ -318,10 +318,50 @@ describe('GitWorkbenchSidebar interactions', () => {
       expect(host.textContent).toContain('Local');
       expect(host.textContent).toContain('Remote');
       expect(host.textContent).not.toContain('Compare');
-      const mainButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('main'));
+      const mainButton = findBranchButton(host, 'refs/heads/main');
+      const selectedFeatureButton = findBranchButton(host, 'refs/heads/feature/demo');
       expect(mainButton).toBeTruthy();
+      expect(mainButton.className).not.toContain('git-browser-selection-row');
+      expect(mainButton.querySelector('.git-browser-current-chip')?.textContent).toBe('Current');
+      expect(selectedFeatureButton.className).toContain('git-browser-selection-row');
+      expect(selectedFeatureButton.querySelector('.git-browser-current-chip')).toBeNull();
       mainButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       expect(selectedBranch).toBe('refs/heads/main');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('keeps current branch identity independent when the current branch is selected', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <div class="relative h-[320px]">
+          <GitWorkbenchSidebar
+            subview="branches"
+            repoAvailable
+            branches={{
+              repoRootPath: '/workspace/repo',
+              currentRef: 'main',
+              local: [
+                { name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true },
+                { name: 'feature/demo', fullName: 'refs/heads/feature/demo', kind: 'local' },
+              ],
+              remote: [],
+            }}
+            selectedBranchKey="refs/heads/main"
+          />
+        </div>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      const mainButton = findBranchButton(host, 'refs/heads/main');
+      expect(mainButton.className).toContain('git-browser-selection-row');
+      expect(mainButton.querySelector('.git-browser-current-chip')?.textContent).toBe('Current');
+      expect(mainButton.querySelector('.git-browser-selection-chip')).toBeNull();
     } finally {
       dispose();
     }

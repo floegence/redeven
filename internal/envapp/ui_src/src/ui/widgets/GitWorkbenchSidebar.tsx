@@ -33,6 +33,7 @@ import {
 } from '../utils/localizedGitWorkbench';
 import {
   gitBranchTone,
+  gitCurrentBranchChipClass,
   gitSelectedChipClass,
   gitSelectedSecondaryTextClass,
   gitToneActionButtonClass,
@@ -622,7 +623,7 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                                           <span class="truncate text-[11.5px] font-medium text-current">{branchDisplayName(branch)}</span>
                                         </span>
                                         <Show when={branch.current}>
-                                          <span class={cn('rounded px-1.5 py-0.5 text-[10px] font-medium', active() ? gitSelectedChipClass(true) : 'bg-primary/[0.12] text-primary')}>{i18n.t('uiCopy.git.current')}</span>
+                                          <span class={cn('rounded px-1.5 py-0.5 text-[10px] font-medium', gitCurrentBranchChipClass())}>{i18n.t('uiCopy.git.current')}</span>
                                         </Show>
                                       </div>
                                       <div class={cn('mt-0.5 min-h-4 truncate text-[10px]', gitSelectedSecondaryTextClass(active()))} title={localizedBranchStatusSummary(branch, i18n)}>{localizedBranchContextSummary(branch, i18n)}</div>

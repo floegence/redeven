@@ -383,14 +383,14 @@ export function GitTableBadge(props: { tone?: GitChromeTone; children: JSX.Eleme
 
 export function gitChangedFilesRowClass(active: boolean): string {
   return active
-    ? cn('group border-b git-browser-selection-surface transition-all duration-150 ease-out last:border-b-0', redevenDividerRoleClass())
-    : cn('group border-b bg-transparent transition-all duration-150 ease-out hover:bg-muted/[0.14] last:border-b-0', redevenDividerRoleClass());
+    ? cn('git-browser-interactive group border-b git-browser-selection-surface transition-all duration-150 ease-out focus-visible:outline-none last:border-b-0', redevenDividerRoleClass())
+    : cn('git-browser-interactive group border-b bg-transparent transition-all duration-150 ease-out focus-visible:outline-none last:border-b-0', redevenDividerRoleClass());
 }
 
 export function gitChangedFilesStickyCellClass(active: boolean): string {
   return active
     ? cn('sticky right-0 z-10 border-l px-3 py-2 text-right align-middle git-browser-selection-surface transition-colors duration-150', redevenDividerRoleClass())
-    : cn('sticky right-0 z-10 border-l px-3 py-2 text-right align-middle transition-colors duration-150 group-hover:bg-muted/[0.14]', redevenDividerRoleClass(), redevenSurfaceRoleClass('panel'));
+    : cn('sticky right-0 z-10 border-l px-3 py-2 text-right align-middle transition-colors duration-150 group-hover:bg-[var(--git-browser-hover-bg)]', redevenDividerRoleClass(), redevenSurfaceRoleClass('panel'));
 }
 
 export interface GitMetaPillProps {

@@ -108,7 +108,6 @@ import {
   gitToneAccentColor,
   gitToneActionButtonClass,
   gitToneDotClass,
-  gitToneSurfaceClass,
   workspaceSectionTone,
 } from "./GitChrome";
 import { GitChangesBreadcrumb } from "./GitChangesBreadcrumb";
@@ -3048,7 +3047,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     "cursor-pointer rounded-md border border-destructive/20 bg-destructive/[0.06] px-3 text-destructive hover:bg-destructive/[0.12] hover:text-destructive";
   const branchSubviewTabClass = (active: boolean) =>
     cn(
-      "cursor-pointer rounded-md px-3 py-1.5 text-center text-xs font-medium transition-colors duration-150",
+      "git-browser-segmented-tab cursor-pointer rounded-md px-3 py-1.5 text-center text-xs font-medium transition-colors duration-150",
       redevenSegmentedItemClass(active),
       active
         ? "text-foreground"
@@ -3827,10 +3826,9 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                 <button
                   type="button"
                   class={cn(
-                    "flex cursor-pointer items-center gap-3 rounded-md border px-3 py-2.5 text-left transition-all duration-150",
-                    "hover:bg-muted/[0.12] hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70",
+                    "git-browser-interactive flex cursor-pointer items-center gap-3 rounded-md border px-3 py-2.5 text-left transition-all duration-150 focus-visible:outline-none",
                     item.active
-                      ? cn("border-l-[3px]", gitToneSurfaceClass(tone), "git-browser-selection-surface")
+                      ? "border-l-[3px] git-browser-selection-surface git-browser-selection-nav"
                       : "border-transparent bg-transparent",
                   )}
                   aria-pressed={item.active}

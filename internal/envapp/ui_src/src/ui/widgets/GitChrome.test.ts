@@ -8,6 +8,8 @@ import {
   gitChangePathClass,
   gitChangeTone,
   gitCompareTone,
+  gitCurrentBranchChipClass,
+  gitNavigationItemClass,
   gitSelectedChipClass,
   gitSelectedSecondaryTextClass,
   gitSubviewTone,
@@ -108,11 +110,12 @@ describe('GitChrome semantic tone helpers', () => {
     expect(gitToneSelectableCardClass('brand', true)).toContain('border-l-[2px]');
     expect(gitToneSelectableCardClass('brand', true)).not.toContain('git-browser-selection-surface');
     expect(gitToneSelectableCardClass('brand', true)).toContain('cursor-pointer');
-    expect(gitToneSelectableCardClass('brand', true)).toContain('focus-visible:ring-2');
+    expect(gitToneSelectableCardClass('brand', true)).toContain('git-browser-interactive');
+    expect(gitToneSelectableCardClass('brand', true)).toContain('focus-visible:outline-none');
 
     expect(gitToneSelectableCardClass('info', false)).toContain('border-transparent');
     expect(gitToneSelectableCardClass('info', false)).toContain('bg-transparent');
-    expect(gitToneSelectableCardClass('info', false)).toContain('hover:bg-muted/[0.18]');
+    expect(gitToneSelectableCardClass('info', false)).not.toContain('hover:bg-muted');
     expect(gitToneSelectableCardClass('info', false)).toContain('hover:text-foreground');
     expect(gitToneSelectableCardClass('info', false)).toContain('cursor-pointer');
     expect(gitToneSelectableCardClass('neutral', false)).not.toContain('redeven-surface-control');
@@ -121,6 +124,12 @@ describe('GitChrome semantic tone helpers', () => {
     expect(gitSelectedSecondaryTextClass(false)).toBe('text-muted-foreground');
     expect(gitSelectedChipClass(true)).toBe('git-browser-selection-chip');
     expect(gitSelectedChipClass(false)).toBe('');
+
+    expect(gitNavigationItemClass(true)).toContain('git-browser-selection-surface');
+    expect(gitNavigationItemClass(true)).toContain('git-browser-selection-nav');
+    expect(gitNavigationItemClass(false)).toContain('git-browser-interactive');
+    expect(gitNavigationItemClass(false)).toContain('border-l-transparent');
+    expect(gitCurrentBranchChipClass()).toBe('git-browser-current-chip');
   });
 
   it('uses rounded action buttons for git toolbar actions', () => {

@@ -140,7 +140,7 @@ function CommitFilesCompactList(props: CommitFilesCompactListProps) {
               role="listitem"
               aria-selected={active()}
               class={cn(
-                "grid w-full cursor-pointer gap-1.5 px-3 py-2.5 text-left transition-colors duration-150 hover:bg-muted/[0.14] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1",
+                "git-browser-interactive grid w-full cursor-pointer gap-1.5 border-l-2 border-l-transparent px-3 py-2.5 text-left transition-colors duration-150 focus-visible:outline-none",
                 active() && "git-browser-selection-row",
               )}
               onClick={() => props.onOpenDiff?.(file)}

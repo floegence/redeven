@@ -106,11 +106,13 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('--redeven-link-code-bg: color-mix(in srgb, var(--redeven-link-fg) 9%, var(--background));');
     expect(src).toContain('--card: #fffdfa;');
     expect(src).toContain('--popover: #fffdfa;');
-    expect(src).toContain('--git-browser-selection-bg: color-mix(in srgb, var(--primary) 8%, var(--background));');
-    expect(src).toContain('--git-browser-selection-secondary-fg: color-mix(in srgb, var(--muted-foreground) 88%, var(--foreground) 12%);');
-    expect(src).toContain('--git-browser-selection-chip-bg: color-mix(in srgb, var(--primary) 9%, transparent);');
-    expect(src).toContain('--git-browser-selection-chip-border: color-mix(in srgb, var(--primary) 18%, transparent);');
-    expect(src).toContain('--git-browser-selection-chip-fg: color-mix(in srgb, var(--primary) 78%, var(--foreground) 22%);');
+    expect(src).toContain('--git-browser-selection-accent: var(--color-blue-600);');
+    expect(src).toContain('--git-browser-hover-bg: color-mix(in srgb, var(--foreground) 5%, var(--redeven-surface-panel));');
+    expect(src).toContain('--git-browser-selection-bg: color-mix(in srgb, var(--git-browser-selection-accent) 10%, var(--redeven-surface-panel));');
+    expect(src).toContain('--git-browser-selection-border: color-mix(in srgb, var(--git-browser-selection-accent) 35%, var(--redeven-stroke-divider));');
+    expect(src).toContain('--git-browser-selection-indicator: var(--git-browser-selection-accent);');
+    expect(src).toContain('--git-browser-focus-ring: var(--git-browser-selection-accent);');
+    expect(src).toContain('--git-browser-current-chip-fg: color-mix(in srgb, var(--git-browser-selection-accent) 48%, var(--foreground) 52%);');
     expect(src).toContain('--git-browser-selection-shadow: none;');
     expect(src).not.toContain(':root {\n  /* Keep the Env App light surface contract on the document scope so body portals inherit it too. */\n  --background:');
 
@@ -136,11 +138,11 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('--redeven-link-fg: var(--color-sky-400);');
     expect(src).toContain('--redeven-link-hover-fg: var(--color-sky-300);');
     expect(src).toContain('--redeven-link-code-bg: color-mix(in srgb, var(--redeven-link-fg) 13%, var(--background));');
-    expect(src).toContain('--git-browser-selection-bg: color-mix(in srgb, var(--primary) 13%, var(--redeven-surface-panel));');
-    expect(src).toContain('--git-browser-selection-secondary-fg: color-mix(in srgb, var(--muted-foreground) 86%, var(--foreground) 14%);');
-    expect(src).toContain('--git-browser-selection-chip-bg: color-mix(in srgb, var(--primary) 13%, transparent);');
-    expect(src).toContain('--git-browser-selection-chip-border: color-mix(in srgb, var(--primary) 24%, transparent);');
-    expect(src).toContain('--git-browser-selection-chip-fg: color-mix(in srgb, var(--primary) 62%, var(--foreground) 38%);');
+    expect(src).toContain('--git-browser-selection-accent: var(--color-sky-400);');
+    expect(src).toContain('--git-browser-hover-bg: color-mix(in srgb, var(--foreground) 7%, var(--redeven-surface-panel));');
+    expect(src).toContain('--git-browser-selection-bg: color-mix(in srgb, var(--git-browser-selection-accent) 18%, var(--redeven-surface-panel));');
+    expect(src).toContain('--git-browser-selection-border: color-mix(in srgb, var(--git-browser-selection-accent) 38%, var(--redeven-stroke-divider));');
+    expect(src).toContain('--git-browser-current-chip-fg: color-mix(in srgb, var(--git-browser-selection-accent) 45%, var(--foreground) 55%);');
   });
 
   it('keeps the main content surface separate from shell chrome while pairing its Classic Dark strokes', () => {
@@ -490,6 +492,10 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('.git-browser-selection-nav {');
     expect(src).toContain('.git-browser-selection-secondary {');
     expect(src).toContain('.git-browser-selection-chip {');
+    expect(src).toContain('.git-browser-current-chip {');
+    expect(src).toContain('.git-browser-segmented-tab.redeven-surface-segmented__item--active {');
+    expect(src).toContain('.git-browser-interactive:hover');
+    expect(src).toContain('.git-browser-interactive:focus-visible {');
     expect(src).toContain('--tag-surface: var(--git-browser-selection-chip-bg);');
     expect(src).toContain('--tag-line: var(--git-browser-selection-chip-border);');
     expect(src).toContain('--tag-ink: var(--git-browser-selection-chip-fg);');

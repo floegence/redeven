@@ -2602,6 +2602,7 @@ describe("GitBranchesPanel interactions", () => {
       ) as HTMLButtonElement | null;
       expect(activeTab?.className).toContain("cursor-pointer");
       expect(activeTab?.className).toContain("redeven-surface-segmented__item");
+      expect(activeTab?.className).toContain("git-browser-segmented-tab");
       expect(activeTab?.className).toContain(
         "redeven-surface-segmented__item--active",
       );
