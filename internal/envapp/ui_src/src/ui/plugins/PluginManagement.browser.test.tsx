@@ -168,6 +168,14 @@ const updateDialogItem: PluginInventoryItem = {
   },
 };
 
+const updatePanelModel: PluginPanelModel = {
+  loading: false,
+  tiles: [
+    { kind: 'plugin', item: updateDialogItem, action: 'open_surface' },
+    { kind: 'open_center', id: 'plugin-center', label: 'Plugin Center' },
+  ],
+};
+
 const disposers: Array<() => void> = [];
 
 function fixedHost(): HTMLDivElement {
@@ -237,7 +245,7 @@ async function expectScreenshotHasPixelVariance(): Promise<void> {
   expect(luminanceBuckets.size).toBeGreaterThan(4);
 }
 
-function mountPanel(mobile: boolean): Readonly<{
+function mountPanel(mobile: boolean, model: PluginPanelModel = panelModel): Readonly<{
   host: HTMLElement;
   trigger: () => HTMLButtonElement | undefined;
 }> {
@@ -262,7 +270,7 @@ function mountPanel(mobile: boolean): Readonly<{
         open={open()}
         mobile={mobile}
         trigger={trigger()}
-        model={panelModel}
+        model={model}
         onClose={() => setOpen(false)}
         onOpenCenter={() => undefined}
         onOpenPluginSurface={() => undefined}
@@ -653,6 +661,31 @@ describe('plugin management browser geometry and interaction', () => {
     lastAction.focus();
     await userEvent.tab();
     expect(dialog.contains(document.activeElement)).toBe(true);
+  });
+
+  it.each([
+    { width: 320, height: 568, mobile: true },
+    { width: 1440, height: 900, mobile: false },
+  ])('renders only the New update badge without overlapping plugin actions at $width px', async (viewport) => {
+    await page.viewport(viewport.width, viewport.height);
+    mountPanel(viewport.mobile, updatePanelModel);
+    await settle();
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 220));
+
+    const tile = document.querySelector<HTMLElement>('[data-plugin-panel-tile="instance:containers"]')!;
+    const badge = tile.querySelector<HTMLElement>('[data-plugin-update-badge]')!;
+    const menu = document.querySelector<HTMLElement>('[data-plugin-panel-tile-menu="instance:containers"]')!;
+    const tileRect = tile.getBoundingClientRect();
+    const badgeRect = badge.getBoundingClientRect();
+    const menuRect = menu.getBoundingClientRect();
+
+    expect(badge.textContent).toBe('New');
+    expect(badgeRect.width).toBeGreaterThanOrEqual(28);
+    expect(badgeRect.height).toBeGreaterThanOrEqual(16);
+    expect(badgeRect.left).toBeGreaterThanOrEqual(tileRect.left);
+    expect(badgeRect.right).toBeLessThanOrEqual(tileRect.right);
+    expect(badgeRect.right <= menuRect.left || badgeRect.left >= menuRect.right).toBe(true);
+    await expectScreenshotHasPixelVariance();
   });
 
   it.each(viewportCases)('keeps Plugin Center readable and non-overlapping at $width px', async (viewport) => {

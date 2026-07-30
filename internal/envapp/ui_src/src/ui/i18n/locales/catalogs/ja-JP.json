@@ -4296,6 +4296,7 @@
       "enabled": "有効",
       "disabled": "無効",
       "updateAvailable": "更新可能",
+      "launcherUpdateBadge": "新規",
       "needsAttention": "注意が必要",
       "unavailable": "利用不可",
       "revoked": "失効済み",

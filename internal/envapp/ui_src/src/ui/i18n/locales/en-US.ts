@@ -310,6 +310,7 @@ export const enUS = defineDictionary({
       enabled: 'Enabled',
       disabled: 'Disabled',
       updateAvailable: 'Update available',
+      launcherUpdateBadge: 'New',
       needsAttention: 'Needs attention',
       unavailable: 'Unavailable',
       revoked: 'Revoked',

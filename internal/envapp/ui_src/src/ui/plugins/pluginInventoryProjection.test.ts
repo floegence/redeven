@@ -446,6 +446,26 @@ describe('v0.6.7 plugin inventory projection', () => {
     });
   });
 
+  it('keeps an enabled plugin launchable from the panel when an update is available', () => {
+    const projection = projectPluginInventory({
+      officialCatalog: [officialContainers],
+      installedPlugins: [installedRecord({ version: '1.9.0' })],
+      permissionGrants: [readGrant],
+    });
+
+    expect(projection.items[0]).toMatchObject({
+      lifecycleState: 'update_available',
+      attentionReason: 'update_required',
+      defaultLaunchTarget: {
+        expectedManagementRevision: 7,
+      },
+    });
+    expect(buildPluginPanelModel(projection, undefined, { canOpenSurfaces: true }).tiles[1]).toMatchObject({
+      kind: 'plugin',
+      action: 'open_surface',
+    });
+  });
+
   it('requires an active read grant before exposing the Containers launch target', () => {
     const projection = projectPluginInventory({
       officialCatalog: [officialContainers],

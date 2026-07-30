@@ -13,7 +13,7 @@ import type {
 } from './pluginTypes';
 import { useI18n, type I18nHelpers } from '../i18n';
 import { isolateDocumentBranch } from './modalIsolation';
-import { PluginIcon, PluginStatusDot } from './PluginPresentationPrimitives';
+import { PluginIcon, PluginUpdateBadge } from './PluginPresentationPrimitives';
 import { PLUGIN_ENTER_MOTION_CLASS, PLUGIN_PRESS_MOTION_CLASS, pluginLifecycleLabel } from './pluginPresentation';
 
 const FOCUSABLE_SELECTOR = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -284,7 +284,7 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
                       >
                         <div class="relative">
                           <PluginIcon item={tile.item} size="launcher" class="transition-transform duration-200 ease-out group-hover:scale-[1.04] motion-reduce:transform-none motion-reduce:transition-none" />
-                          <PluginStatusDot item={tile.item} />
+                          <PluginUpdateBadge item={tile.item} />
                         </div>
                         <span class="block min-w-0 max-w-full truncate text-xs font-medium leading-4">
                           {tile.item.displayName}
