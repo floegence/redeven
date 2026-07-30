@@ -160,12 +160,32 @@ func (s *Service) sendInitialUserTurn(ctx context.Context, meta *session.Meta, r
 		return fail(initialTurnPhaseStartAdmission, err)
 	}
 	admitted, _, err := s.startUserTurnDetached(ctxOrBackground(ctx), frozenMeta, frozen.RunID, startRequest, frozen.QueueID)
+	if errors.Is(err, ErrThreadBusy) {
+		admitted, err = s.waitForMatchingInitialTurnAdmission(ctxOrBackground(ctx), frozen)
+	}
 	if err != nil {
 		return fail(initialTurnPhaseStartAdmission, err)
 	}
 	return SendUserTurnResponse{
 		RunID: admitted.RunID, TurnID: admitted.TurnID, Kind: "start", AppliedPermissionType: committedSettings.PermissionType,
 	}, nil
+}
+
+func (s *Service) waitForMatchingInitialTurnAdmission(ctx context.Context, frozen threadstore.QueuedTurn) (admittedUserTurn, error) {
+	if s == nil {
+		return admittedUserTurn{}, ErrThreadBusy
+	}
+	threadKey := runThreadKey(frozen.EndpointID, frozen.ThreadID)
+	runID := strings.TrimSpace(frozen.RunID)
+	turnID := strings.TrimSpace(frozen.TurnID)
+	s.mu.Lock()
+	activeRunID := strings.TrimSpace(s.activeRunByTh[threadKey])
+	active := s.runs[activeRunID]
+	s.mu.Unlock()
+	if activeRunID != runID || active == nil || strings.TrimSpace(active.threadID) != strings.TrimSpace(frozen.ThreadID) || strings.TrimSpace(active.turnID) != turnID {
+		return admittedUserTurn{}, ErrThreadBusy
+	}
+	return active.waitForUserTurnAdmission(ctxOrBackground(ctx))
 }
 
 func buildInitialQueuedTurn(meta *session.Meta, req SendUserTurnRequest, settings threadstore.ThreadSettings, prepared preparedUserTurn) (threadstore.QueuedTurn, error) {
