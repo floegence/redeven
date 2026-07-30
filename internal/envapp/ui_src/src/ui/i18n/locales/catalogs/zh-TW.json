@@ -4296,6 +4296,7 @@
       "enabled": "已啟用",
       "disabled": "已停用",
       "updateAvailable": "有可用更新",
+      "launcherUpdateBadge": "新版",
       "needsAttention": "需要留意",
       "unavailable": "無法使用",
       "revoked": "已撤銷",

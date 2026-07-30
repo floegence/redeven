@@ -84,7 +84,7 @@ export function buildPluginPanelModel(
     ...projection.items.filter((item) => Boolean(item.pluginInstanceID)).map((item): PluginPanelTile => ({
       kind: 'plugin',
       item,
-      action: options.canOpenSurfaces && item.lifecycleState === 'enabled' && item.defaultLaunchTarget ? 'open_surface' : 'open_details',
+      action: options.canOpenSurfaces && item.defaultLaunchTarget ? 'open_surface' : 'open_details',
     })),
   ];
   return { loading: Boolean(options.loading), errorMessage, tiles };
@@ -151,7 +151,7 @@ function projectCatalogItem(
     trustBadge: installedTrustBadge(installed, catalogItem),
     pinned: installed.metadata?.pinned === 'true',
     lastOpenedAt: installed.metadata?.last_opened_at,
-    defaultLaunchTarget: lifecycleState === 'enabled'
+    defaultLaunchTarget: canLaunchInstalledCatalogPlugin(installed, catalogItem, authorization)
       ? {
           pluginID: installed.plugin_id,
           pluginInstanceID: installed.plugin_instance_id,
@@ -324,6 +324,18 @@ function installedLifecycleState(
     permission.requiredToOpen && (!permission.granted || permission.deniedByGrant || permission.blockedToOpen)
   ))) return 'needs_attention';
   return 'enabled';
+}
+
+function canLaunchInstalledCatalogPlugin(
+  installed: ReDevPluginRecord,
+  catalogItem: OfficialPluginCatalogItem,
+  authorization?: PluginAuthorizationInventory,
+): boolean {
+  if (catalogItem.rolloutState === 'revoked' || catalogItem.rolloutState === 'disabled') return false;
+  if (!isRunnableInstalledTrust(installed) || installed.enable_state !== 'enabled') return false;
+  return !authorization?.permissions.some((permission) => (
+    permission.requiredToOpen && (!permission.granted || permission.deniedByGrant || permission.blockedToOpen)
+  ));
 }
 
 function isStaleDevelopmentPackage(

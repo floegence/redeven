@@ -135,6 +135,7 @@ describe('PluginPanel', () => {
     expect(plugin.tagName).toBe('BUTTON');
     expect(plugin.getAttribute('role')).toBeNull();
     expect(plugin.parentElement?.tagName).toBe('LI');
+    expect(plugin.querySelector('[data-plugin-update-badge]')).toBeNull();
     expect(dialog.getAttribute('aria-describedby')).toBe('plugin-launcher-description');
     expect(center.textContent).toContain('Plugin Center');
     expect(plugin.compareDocumentPosition(center) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -169,6 +170,27 @@ describe('PluginPanel', () => {
       surfaceID: 'containers.dashboard',
       preferredPlacement: 'activity',
     }));
+    expect(onOpenPluginDetails).not.toHaveBeenCalled();
+  });
+
+  it('shows only the New update badge and still opens the plugin surface', () => {
+    const onOpenPluginDetails = vi.fn();
+    const onOpenPluginSurface = vi.fn();
+    const update = pluginItem({
+      lifecycleState: 'update_available',
+      attentionReason: 'update_required',
+    });
+    mountPanel({
+      model: buildPluginPanelModel({ items: [update] }, undefined, { canOpenSurfaces: true }),
+      onOpenPluginDetails,
+      onOpenPluginSurface,
+    });
+
+    const tile = document.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]') as HTMLButtonElement;
+    const badge = tile.querySelector('[data-plugin-update-badge]');
+    expect(badge?.textContent).toBe('New');
+    tile.click();
+    expect(onOpenPluginSurface).toHaveBeenCalledWith(update.defaultLaunchTarget);
     expect(onOpenPluginDetails).not.toHaveBeenCalled();
   });
 

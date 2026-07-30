@@ -4296,6 +4296,7 @@
       "enabled": "Aktiviert",
       "disabled": "Deaktiviert",
       "updateAvailable": "Update verfügbar",
+      "launcherUpdateBadge": "Neu",
       "needsAttention": "Aktion erforderlich",
       "unavailable": "Nicht verfügbar",
       "revoked": "Widerrufen",

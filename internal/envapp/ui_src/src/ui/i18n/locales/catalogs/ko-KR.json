@@ -4296,6 +4296,7 @@
       "enabled": "활성화됨",
       "disabled": "비활성화됨",
       "updateAvailable": "업데이트 사용 가능",
+      "launcherUpdateBadge": "새 버전",
       "needsAttention": "주의 필요",
       "unavailable": "사용할 수 없음",
       "revoked": "철회됨",

@@ -153,7 +153,7 @@ const officialContainersCatalog = {
 } as const;
 
 function officialContainersProjection(
-  state: 'not_installed' | 'disabled' | 'enabled' = 'not_installed',
+  state: 'not_installed' | 'disabled' | 'enabled' | 'update_available' = 'not_installed',
 ): PluginInventoryProjection {
   const installed = state !== 'not_installed';
   return {
@@ -162,7 +162,7 @@ function officialContainersProjection(
       pluginID: officialContainersCatalog.pluginID,
       ...(installed ? {
         pluginInstanceID: officialContainersCatalog.pluginInstanceID,
-        version: officialContainersCatalog.stableVersion,
+        version: state === 'update_available' ? '1.9.0' : officialContainersCatalog.stableVersion,
         managementRevision: 11,
       } : {}),
       displayName: officialContainersCatalog.displayName,
@@ -175,7 +175,8 @@ function officialContainersProjection(
       trustBadge: 'official',
       pinned: false,
       ...(state === 'disabled' ? { attentionReason: 'disabled' as const } : {}),
-      ...(state === 'enabled' ? {
+      ...(state === 'update_available' ? { attentionReason: 'update_required' as const } : {}),
+      ...(state === 'enabled' || state === 'update_available' ? {
         defaultLaunchTarget: {
           pluginID: officialContainersCatalog.pluginID,
           pluginInstanceID: officialContainersCatalog.pluginInstanceID,
@@ -1970,6 +1971,42 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(settingsPageState.focusSection).not.toBe('plugins');
       expect(sidebarActiveTabValue).toBe('plugin-center');
       expect((host.querySelector('[data-plugin-center-view]') as HTMLElement).contains(document.activeElement)).toBe(true);
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
+  it('opens an update-available plugin from the panel instead of routing to Plugin Center', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(officialContainersProjection('update_available'));
+    protocolStatus = 'connected';
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+      await flushAsync();
+
+      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="instance:plugini_redeven_official_containers"]')));
+      const tile = host.querySelector('[data-plugin-panel-tile="instance:plugini_redeven_official_containers"]') as HTMLButtonElement;
+      expect(tile.dataset.pluginPanelAction).toBe('open_surface');
+      tile.click();
+      await flushUntil(() => Boolean(document.querySelector('[data-plugin-surface-host]')));
+
+      expect(host.querySelector('[data-plugin-center-view]')).toBeNull();
+      expect(document.querySelector('[data-plugin-surface-host]')).toMatchObject({
+        dataset: expect.objectContaining({
+          pluginInstanceId: officialContainersCatalog.pluginInstanceID,
+          surfaceId: officialContainersCatalog.defaultSurfaceID,
+        }),
+      });
     } finally {
       dispose();
     }

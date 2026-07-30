@@ -47,28 +47,20 @@ export function PluginIcon(props: {
   );
 }
 
-export function PluginStatusDot(props: { item: PluginInventoryItem; class?: string }): JSX.Element {
-  const tone = () => {
-    switch (props.item.lifecycleState) {
-      case 'enabled': return 'bg-[var(--redeven-status-success-foreground)]';
-      case 'needs_attention': return 'bg-[var(--redeven-status-warning-foreground)]';
-      case 'update_available': return 'bg-[var(--redeven-status-info-foreground)]';
-      case 'disabled': return 'bg-muted-foreground/50';
-      default: return '';
-    }
-  };
+export function PluginUpdateBadge(props: { item: PluginInventoryItem; class?: string }): JSX.Element {
+  const i18n = useI18n();
   return (
-    <Show when={tone()}>
-      {(className) => (
-        <span
-          aria-hidden="true"
-          class={cn(
-            'pointer-events-none absolute right-0 top-0 h-3 w-3 rounded-full border-2 border-background shadow-sm transition-[background-color,transform] duration-200 ease-out group-hover:scale-110 group-hover/card:scale-110 motion-reduce:transform-none motion-reduce:transition-none',
-            className(),
-            props.class,
-          )}
-        />
-      )}
+    <Show when={props.item.lifecycleState === 'update_available'}>
+      <span
+        aria-hidden="true"
+        data-plugin-update-badge
+        class={cn(
+          'pointer-events-none absolute -top-1 right-3 inline-flex h-4 min-w-7 items-center justify-center rounded-full border border-background bg-primary px-1.5 text-[9px] font-bold leading-none text-primary-foreground shadow-sm transition-transform duration-200 ease-out group-hover:scale-105 motion-reduce:transform-none motion-reduce:transition-none',
+          props.class,
+        )}
+      >
+        {i18n.t('uiCopy.plugin.launcherUpdateBadge')}
+      </span>
     </Show>
   );
 }

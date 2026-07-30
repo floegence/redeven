@@ -4424,6 +4424,7 @@
       "enabled": "Включено",
       "disabled": "Отключено",
       "updateAvailable": "Доступно обновление",
+      "launcherUpdateBadge": "Новое",
       "needsAttention": "Требует внимания",
       "unavailable": "Недоступно",
       "revoked": "Отозвано",
