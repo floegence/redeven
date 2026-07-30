@@ -234,9 +234,9 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @fast-csv/format | 4.3.5 | MIT | Env App UI | https://www.npmjs.com/package/%40fast-csv%2Fformat/v/4.3.5 |  |
 | @fast-csv/parse | 4.3.6 | MIT | Env App UI | https://www.npmjs.com/package/%40fast-csv%2Fparse/v/4.3.6 |  |
 | @floegence/beamterm-renderer | 1.0.1 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fbeamterm-renderer/v/1.0.1 |  |
-| @floegence/floe-webapp-boot | 0.40.2 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.40.2 | License inherited from floegence/floe-webapp root LICENSE. |
-| @floegence/floe-webapp-core | 0.40.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.40.2 | License inherited from floegence/floe-webapp root LICENSE. |
-| @floegence/floe-webapp-protocol | 0.40.2 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.40.2 | License inherited from floegence/floe-webapp root LICENSE. |
+| @floegence/floe-webapp-boot | 0.40.3 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.40.3 | License inherited from floegence/floe-webapp root LICENSE. |
+| @floegence/floe-webapp-core | 0.40.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.40.3 | License inherited from floegence/floe-webapp root LICENSE. |
+| @floegence/floe-webapp-protocol | 0.40.3 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.40.3 | License inherited from floegence/floe-webapp root LICENSE. |
 | @floegence/floeterm-terminal-web | 0.12.0 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.12.0 | Built-in theme attribution and license texts are reproduced below from the verified 0.12.0 package. |
 | @floegence/flowersec-core | 0.27.0 | MIT | Code App UI, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/0.27.0 |  |
 | @floegence/redevplugin-contracts | 0.6.20 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-contracts/v/0.6.20 |  |
