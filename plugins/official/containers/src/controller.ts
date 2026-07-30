@@ -1003,16 +1003,17 @@ function dialogError(message: Message): void { if (state.dialog.kind !== 'none' 
 function render(): Promise<void> {
   if (disposed) return Promise.resolve();
   const context = state.context;
+  const unavailable = !state.loading && !state.available;
   return bridge.render(el('containers-root', 'main', {
     class: 'containers-app', lang: context?.locale.language_tag ?? 'en-US', dir: context?.locale.direction ?? 'ltr',
-  }, [el('application-shell', 'div', { class: 'application-shell' }, [resourceNavigation(), el('application-frame', 'div', { class: 'application-frame' }, [appHeader(), resourceContent()])]), operationsBar(), dialog()]));
+  }, [el('application-shell', 'div', { class: `application-shell${unavailable ? ' unavailable-shell' : ''}` }, [unavailable ? empty('resource-navigation-empty') : resourceNavigation(), el('application-frame', 'div', { class: 'application-frame' }, [appHeader(), resourceContent()])]), operationsBar(), dialog()]));
 }
 
 function appHeader(): PluginUIVNode {
   const endpoint = selectedEndpoint();
   const hasMultipleTargets = state.endpoints.length > 1;
   return el('context-bar', 'header', { class: `context-bar${hasMultipleTargets ? ' has-target-picker' : ''}` }, [
-    el('mobile-brand', 'div', { class: 'mobile-brand' }, [icon('mobile-brand-mark', 'boxes', 'brand-mark'), el('mobile-brand-title', 'strong', {}, [txt('mobile-brand-title-text', c('appTitle'))])]),
+    el('mobile-brand', 'div', { class: 'mobile-brand' }, [brandIcon('mobile-brand-mark'), el('mobile-brand-title', 'strong', {}, [txt('mobile-brand-title-text', c('appTitle'))])]),
     el('engine-switch', 'div', { class: 'engine-switch', role: 'group', 'aria-label': c('containerEngine') }, (['docker', 'podman'] as Engine[]).map((engine) => button(`engine-${engine}`, title(engine), 'select-engine', engine, state.engine === engine ? `engine-option active ${engine}` : `engine-option ${engine}`, state.loading, { 'aria-pressed': state.engine === engine }))),
     hasMultipleTargets
       ? el('endpoint-context', 'label', { class: 'endpoint-context' }, [el('endpoint-label', 'span', {}, [txt('endpoint-label-text', c('runtimeTarget'))]), el('endpoint-select', 'select', { name: 'endpoint', 'data-redevplugin-action': 'select-endpoint', disabled: state.loading }, state.endpoints.map((item) => el(`endpoint-${item.endpoint_id}`, 'option', { value: item.endpoint_id, selected: item.endpoint_id === state.endpointID }, [txt(`endpoint-${item.endpoint_id}-text`, item.display_name)])))])
@@ -1024,7 +1025,7 @@ function appHeader(): PluginUIVNode {
 
 function resourceNavigation(): PluginUIVNode {
   return el('resource-navigation', 'aside', { class: 'resource-navigation' }, [
-    el('navigation-brand', 'div', { class: 'navigation-brand' }, [icon('navigation-brand-mark', 'boxes', 'brand-mark'), el('navigation-brand-copy', 'div', {}, [el('navigation-brand-title', 'strong', {}, [txt('navigation-brand-title-text', c('appTitle'))]), el('navigation-brand-subtitle', 'span', {}, [txt('navigation-brand-subtitle-text', c('runtimeResources'))])])]),
+    el('navigation-brand', 'div', { class: 'navigation-brand' }, [brandIcon('navigation-brand-mark'), el('navigation-brand-copy', 'div', {}, [el('navigation-brand-title', 'strong', {}, [txt('navigation-brand-title-text', c('appTitle'))]), el('navigation-brand-subtitle', 'span', {}, [txt('navigation-brand-subtitle-text', c('runtimeResources'))])])]),
     el('navigation-links', 'nav', { class: 'navigation-links', 'aria-label': c('containerResources') }, availableViews().map((view) => button(`navigation-${view}`, viewLabel(view), 'select-view', view, `navigation-link lucide-icon lucide-${viewIcon(view)}${state.view === view ? ' active' : ''}`, false, { 'aria-current': state.view === view ? 'page' : false }))),
     el('navigation-footer', 'div', { class: 'navigation-footer' }, [el('navigation-engine', 'span', { class: `engine-mark ${state.engine}` }, [txt('navigation-engine-text', state.engine === 'docker' ? 'D' : 'P')]), el('navigation-engine-name', 'span', {}, [txt('navigation-engine-name-text', title(state.engine))])]),
   ]);
@@ -1049,11 +1050,36 @@ function operationsBar(): PluginUIVNode {
 }
 
 function resourceContent(): PluginUIVNode {
+  if (!state.loading && !state.available) return engineUnavailableWorkspace();
   const notices = inventoryNotices();
   return el('workspace', 'section', { class: `workspace workspace-${state.view}` }, [
     state.error ? el('workspace-error', 'div', { class: 'workspace-alert danger', role: 'alert' }, [txt('workspace-error-text', messageText(state.error))]) : empty('workspace-error-empty'),
     state.notice ? el('workspace-notice', 'div', { class: 'workspace-alert', role: 'status' }, [txt('workspace-notice-text', messageText(state.notice))]) : empty('workspace-notice-empty'),
     state.view === 'overview' ? overviewWorkspace() : resourceWorkspace(notices),
+  ]);
+}
+
+function engineUnavailableWorkspace(): PluginUIVNode {
+  const endpoint = selectedEndpoint();
+  const reason = state.error ? messageText(state.error) : c('unavailableSentence', { engine: title(state.engine) });
+  return el('engine-unavailable-workspace', 'section', { class: 'engine-unavailable-workspace', role: 'alert' }, [
+    el('engine-unavailable-content', 'div', { class: 'engine-unavailable-content' }, [
+      el('engine-unavailable-identity', 'div', { class: 'engine-unavailable-identity' }, [
+        brandIcon('engine-unavailable-brand'),
+        el('engine-unavailable-status', 'span', { class: 'status-badge danger' }, [txt('engine-unavailable-status-text', c('disconnected'))]),
+      ]),
+      el('engine-unavailable-copy', 'div', { class: 'engine-unavailable-copy' }, [
+        el('engine-unavailable-title', 'h1', {}, [txt('engine-unavailable-title-text', c('unavailable', { engine: title(state.engine) }))]),
+        el('engine-unavailable-reason', 'p', {}, [txt('engine-unavailable-reason-text', reason)]),
+        el('engine-unavailable-facts', 'dl', { class: 'engine-unavailable-facts' }, [
+          el('engine-unavailable-engine-label', 'dt', {}, [txt('engine-unavailable-engine-label-text', c('containerEngine'))]),
+          el('engine-unavailable-engine-value', 'dd', {}, [txt('engine-unavailable-engine-value-text', title(state.engine))]),
+          el('engine-unavailable-target-label', 'dt', {}, [txt('engine-unavailable-target-label-text', c('runtimeTarget'))]),
+          el('engine-unavailable-target-value', 'dd', { title: endpoint?.display_name ?? '' }, [txt('engine-unavailable-target-value-text', endpoint?.display_name ?? c('notAvailable'))]),
+        ]),
+      ]),
+      button('engine-unavailable-refresh', c('refreshResources'), 'refresh-resources', '', actionButtonClass('primary-button', 'refresh-cw'), state.updating),
+    ]),
   ]);
 }
 
@@ -1204,15 +1230,15 @@ function dialog(): PluginUIVNode {
   else if (current.kind === 'plan') body = planBody(current);
   else body = current.body();
   const titleText = current.kind === 'details' || current.kind === 'plan' ? messageText(current.title) : current.kind === 'create-container' ? c('createContainer') : current.kind === 'pull-image' ? c('pullImage') : current.kind === 'tag-image' ? c('tagImage', { image: current.image }) : current.kind === 'create-volume' ? c('createVolume') : current.kind === 'create-pod' ? c('createPod') : current.kind === 'remove-container' ? c('removeContainer') : c('removeImage');
-  const isContainerInspector = current.kind === 'details' && Boolean(current.containerID);
+  const isInspector = current.kind === 'details';
   const panelChildren: PluginUIVNode[] = [el('dialog-header', 'header', { class: 'dialog-header' }, [el('dialog-title', 'h2', {}, [txt('dialog-title-text', titleText)]), button('dialog-close', c('close'), 'close-dialog', '', 'close-button lucide-icon lucide-x', false, { autofocus: true, 'aria-label': c('close'), title: c('close'), 'data-redevplugin-escape-action': 'close-dialog' })])];
   if (current.kind === 'details' && current.containerID) panelChildren.push(el('inspector-tabs', 'nav', { class: 'inspector-tabs', 'aria-label': c('containerDetails') }, (['overview', 'usage', 'logs', 'technical'] as InspectorTab[]).map((tab) => button(`inspector-${tab}`, c(tab === 'technical' ? 'technicalInformation' : tab), 'select-inspector-tab', `${tab}|${current.containerID}`, current.tab === tab ? 'inspector-tab active' : 'inspector-tab', false, { 'aria-pressed': current.tab === tab }))));
   if (current.kind === 'details' && current.resourceKind && current.resourceID && current.resourceTab) {
     const tabs: ResourceInspectorTab[] = current.resourceKind === 'image' ? ['overview', 'usage', 'history'] : ['overview', 'usage', 'technical'];
     panelChildren.push(el('resource-inspector-tabs', 'nav', { class: 'inspector-tabs', 'aria-label': titleText }, tabs.map((tab) => button(`resource-inspector-${tab}`, c(tab === 'technical' ? 'technicalInformation' : tab), 'select-resource-inspector-tab', `${current.resourceKind}|${tab}|${current.resourceID}`, current.resourceTab === tab ? 'inspector-tab active' : 'inspector-tab', false, { 'aria-pressed': current.resourceTab === tab }))));
   }
-  panelChildren.push(body);
-  return el('dialog-backdrop', 'div', { class: 'dialog-backdrop' }, [el('dialog-panel', 'aside', { class: `dialog-panel${isContainerInspector ? ' container-inspector' : ''}`, role: 'dialog', 'aria-modal': true, 'aria-label': titleText }, panelChildren)]);
+  panelChildren.push(isInspector ? el('inspector-body', 'div', { class: 'inspector-body' }, [body]) : body);
+  return el('dialog-backdrop', 'div', { class: `dialog-backdrop${isInspector ? ' inspector-backdrop' : ''}` }, [el('dialog-panel', 'aside', { class: `dialog-panel${isInspector ? ' inspector-panel' : ''}`, role: isInspector ? 'complementary' : 'dialog', 'aria-modal': isInspector ? false : true, 'aria-label': titleText }, panelChildren)]);
 }
 
 function createContainerForm(error?: Message): PluginUIVNode {
@@ -1301,6 +1327,7 @@ function detailSections(sections: Array<[string, Array<[string, string]>]>): Plu
 function composeProjectDetails(project: { name: string; status: string; service_count: number; container_count: number; running_count: number; containers: Array<{ container_id: string; name?: string; service?: string; state: string }> }): PluginUIVNode { return el('compose-project-details', 'div', { class: 'detail-sections' }, [detailSections([[c('overview'), [[c('name'), project.name], [c('status'), localizeStatus(project.status)], [c('services'), String(project.service_count)], [c('containers'), String(project.container_count)], [c('running'), String(project.running_count)]]]]), el('compose-project-containers', 'section', { class: 'detail-section' }, [el('compose-project-containers-title', 'h3', {}, [txt('compose-project-containers-title-text', c('viewContainers'))]), el('compose-project-containers-list', 'div', { class: 'detail-resource-list' }, project.containers.map((item) => el(`compose-child-${item.container_id}`, 'div', { class: 'detail-resource-row' }, [el(`compose-child-${item.container_id}-name`, 'strong', {}, [txt(`compose-child-${item.container_id}-name-text`, item.name || short(item.container_id))]), el(`compose-child-${item.container_id}-service`, 'span', {}, [txt(`compose-child-${item.container_id}-service-text`, item.service || c('unknown'))]), el(`compose-child-${item.container_id}-state`, 'span', {}, [txt(`compose-child-${item.container_id}-state-text`, localizeStatus(item.state))])])) )])]); }
 function podRecordDetails(pod: { name: string; status: string; infra_id?: string; container_count: number; running_count: number; created_at_unix_ms?: number; containers: Array<{ container_id: string; name?: string; state: string; infra: boolean }> }): PluginUIVNode { return el('pod-record-details', 'div', { class: 'detail-sections' }, [detailSections([[c('overview'), [[c('name'), pod.name], [c('status'), localizeStatus(pod.status)], [c('containers'), String(pod.container_count)], [c('running'), String(pod.running_count)], [c('created'), formatDate(pod.created_at_unix_ms)]]], [c('technicalInformation'), [[c('infraContainer'), pod.infra_id ? short(pod.infra_id) : c('notAvailable')]]]]), el('pod-containers', 'section', { class: 'detail-section' }, [el('pod-containers-title', 'h3', {}, [txt('pod-containers-title-text', c('viewContainers'))]), el('pod-containers-list', 'div', { class: 'detail-resource-list' }, pod.containers.map((item) => el(`pod-child-${item.container_id}`, 'div', { class: 'detail-resource-row' }, [el(`pod-child-${item.container_id}-name`, 'strong', {}, [txt(`pod-child-${item.container_id}-name-text`, item.name || short(item.container_id))]), el(`pod-child-${item.container_id}-role`, 'span', {}, [txt(`pod-child-${item.container_id}-role-text`, item.infra ? c('infraContainer') : c('container'))]), el(`pod-child-${item.container_id}-state`, 'span', {}, [txt(`pod-child-${item.container_id}-state-text`, localizeStatus(item.state))])])) )])]); }
 function stateMessage(message: string, error = false): PluginUIVNode { return el(`state-${hash(message)}`, 'div', { class: `state-message ${error ? 'error' : ''}`, role: error ? 'alert' : 'status' }, [txt(`state-${hash(message)}-text`, message)]); }
+function brandIcon(key: string): PluginUIVNode { return el(key, 'span', { class: 'brand-mark plugin-brand-icon', 'aria-hidden': true }); }
 function resourceEmptyState(message: string, view: View): PluginUIVNode { return el(`empty-${view}`, 'div', { class: 'state-message', role: 'status' }, [txt(`empty-${view}-text`, message), hasRefinements(view) ? button(`empty-${view}-reset`, c('clearFilters'), 'reset-refinements', '', 'secondary-button') : empty(`empty-${view}-reset-empty`)]); }
 function metric(key: string, label: string, value: string): PluginUIVNode { return el(key, 'div', { class: 'metric' }, [el(`${key}-label`, 'span', {}, [txt(`${key}-label-text`, label)]), el(`${key}-value`, 'strong', { title: value }, [txt(`${key}-value-text`, value)])]); }
 function referenceCount(view: 'images' | 'volumes', count: number): string { return state.partialFailures[view] > 0 ? c('notVerified') : c('containerCount', { count }); }

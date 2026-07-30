@@ -13,7 +13,11 @@ mkdirSync(join(dist, 'ui', 'assets'), { recursive: true });
 cpSync(join(root, 'manifest.json'), join(dist, 'manifest.json'));
 cpSync(join(root, 'ui', 'index.html'), join(dist, 'ui', 'index.html'));
 cpSync(join(root, 'ui', 'assets', 'styles.css'), join(dist, 'ui', 'assets', 'styles.css'));
-generateDesignAssets(root, dist);
+cpSync(
+  join(root, 'assets', 'containers-plugin.png'),
+  join(dist, 'ui', 'assets', 'containers-plugin.png'),
+);
+await generateDesignAssets(root, dist);
 
 const result = await build({
   entryPoints: [join(root, 'src', 'main.ts')],

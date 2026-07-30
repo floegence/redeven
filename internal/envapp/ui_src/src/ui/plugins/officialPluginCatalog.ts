@@ -1,5 +1,5 @@
 import type { OfficialPluginCatalogItem } from './pluginTypes';
-import containersPluginIconURL from './assets/containers-plugin.png';
+import containersPluginIconURL from '../../../../../../plugins/official/containers/assets/containers-plugin.png';
 import { OFFICIAL_CONTAINERS_RELEASE_REF } from './officialContainersRelease.generated';
 import officialContainersDistribution from './officialContainersDistribution.json';
 import { officialReleaseNotes } from './pluginReleaseNotes';

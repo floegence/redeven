@@ -37,7 +37,7 @@ function methodsByPermissionFromContract(): Record<string, string[]> {
 
 describe('official plugin catalog contracts', () => {
   it('ships the transparent Containers icon at the expected application resolution', () => {
-    const iconPath = path.resolve(process.cwd(), 'src/ui/plugins/assets/containers-plugin.png');
+    const iconPath = path.resolve(process.cwd(), '../../../plugins/official/containers/assets/containers-plugin.png');
     const icon = fs.readFileSync(iconPath);
 
     expect(icon.subarray(1, 4).toString('ascii')).toBe('PNG');

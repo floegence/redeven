@@ -1,5 +1,6 @@
 import { cpSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import sharp from 'sharp';
 
 const APPICA_VERSION = '1.0.0';
 const LUCIDE_VERSION = '1.27.0';
@@ -10,9 +11,11 @@ const ICONS = [
   'plus', 'refresh-cw', 'rotate-cw', 'search', 'square', 'trash-2', 'x',
 ];
 
-export function generateDesignAssets(root, dist) {
+export async function generateDesignAssets(root, dist) {
   const licensesRoot = join(dist, 'licenses');
+  const iconAssetsRoot = join(dist, 'ui', 'assets', 'icons');
   mkdirSync(licensesRoot, { recursive: true });
+  mkdirSync(iconAssetsRoot, { recursive: true });
   const appicaRoot = join(root, 'node_modules', '@appica', 'ui-react');
   assertPackageVersion(appicaRoot, '@appica/ui-react', APPICA_VERSION);
   const appicaSource = readFileSync(join(appicaRoot, 'styles.css'), 'utf8');
@@ -24,13 +27,19 @@ export function generateDesignAssets(root, dist) {
 
   const lucideRoot = join(root, 'node_modules', 'lucide-static');
   assertPackageVersion(lucideRoot, 'lucide-static', LUCIDE_VERSION);
-  const codepoints = JSON.parse(readFileSync(join(lucideRoot, 'font', 'codepoints.json'), 'utf8'));
-  const rules = ICONS.map((name) => {
-    const codepoint = codepoints[name];
-    if (!Number.isInteger(codepoint)) throw new Error('Lucide codepoint is missing: ' + name);
-    return '.lucide-' + name + '::before { content: "\\' + codepoint.toString(16) + '"; }';
-  });
-  cpSync(join(lucideRoot, 'font', 'lucide.woff2'), join(dist, 'ui', 'assets', 'lucide.woff2'));
+  const rules = await Promise.all(ICONS.map(async (name) => {
+    const source = readFileSync(join(lucideRoot, 'icons', name + '.svg'), 'utf8');
+    if (!source.includes('<svg') || !source.includes('</svg>')) {
+      throw new Error('Lucide SVG icon is invalid: ' + name);
+    }
+    const svg = source
+      .replace(/\r?\n|\t/gu, ' ')
+      .replace(/\s{2,}/gu, ' ')
+      .replaceAll('currentColor', '#000000')
+      .trim();
+    await sharp(Buffer.from(svg)).resize(48, 48).png({ compressionLevel: 9, palette: true }).toFile(join(iconAssetsRoot, name + '.png'));
+    return '.lucide-' + name + '::before { --lucide-icon: url("icons/' + name + '.png"); }';
+  }));
   cpSync(join(lucideRoot, 'LICENSE'), join(licensesRoot, 'lucide-ISC-MIT.txt'));
   writeFileSync(join(dist, 'ui', 'assets', 'lucide-icons.css'), lucideCSS(rules));
 }
@@ -62,8 +71,8 @@ function appicaThemeCSS() {
 function lucideCSS(rules) {
   return [
     '/* Generated from lucide-static@1.27.0. */',
-    '@font-face { font-family: "Lucide"; src: url("lucide.woff2") format("woff2"); font-display: block; }',
-    '.lucide-icon::before { display: block; font-family: "Lucide"; font-style: normal; font-weight: 400; line-height: 1; speak: never; -webkit-font-smoothing: antialiased; }',
+    '/* Package-local masks are rewritten to opaque surface asset bindings by ReDevPlugin. */',
+    '.lucide-icon::before { content: ""; display: block; width: 1em; height: 1em; flex: 0 0 auto; background-color: currentColor; -webkit-mask: var(--lucide-icon) center / contain no-repeat; mask: var(--lucide-icon) center / contain no-repeat; }',
     ...rules,
     '',
   ].join('\n');

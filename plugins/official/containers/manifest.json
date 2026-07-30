@@ -19,6 +19,7 @@
       "intent": "primary",
       "label": "Containers",
       "entry": "ui/index.html",
+      "icon": "ui/assets/containers-plugin.png",
       "default_size": {
         "width": 1180,
         "height": 800
