@@ -14,6 +14,7 @@
     "@appica/ui-react": "1.0.0",
     "esbuild": "0.28.1",
     "lucide-static": "1.27.0",
+    "sharp": "0.35.3",
     "typescript": "5.9.3"
   }
 }

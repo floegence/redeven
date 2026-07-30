@@ -156,7 +156,9 @@ test('marks an endpoint offline when status refresh fails', { concurrency: false
   fixture.action('refresh-resources');
   await eventually(() => {
     assert.match(fixture.text(), /Disconnected/u);
-    assert.equal(findNode(fixture.tree(), (node) => node.attributes?.['data-redevplugin-action'] === 'open-create-container').attributes.disabled, true);
+    assert.ok(findNode(fixture.tree(), (node) => node.attributes?.class === 'engine-unavailable-workspace'));
+    assert.ok(findNode(fixture.tree(), (node) => node.attributes?.['data-redevplugin-action'] === 'refresh-resources'));
+    assert.equal(findNode(fixture.tree(), (node) => node.attributes?.['data-redevplugin-action'] === 'open-create-container'), undefined);
   });
 });
 
@@ -289,7 +291,13 @@ test('provides resource-specific inspector tabs for containers, images, and volu
 
   fixture.action('select-view', { value: 'containers' });
   fixture.action('container-details', { value: 'container-a' });
-  await eventually(() => assert.ok(findNode(fixture.tree(), (node) => node.attributes?.value === 'technical|container-a')));
+  await eventually(() => {
+    assert.ok(findNode(fixture.tree(), (node) => node.attributes?.value === 'technical|container-a'));
+    const inspector = findNode(fixture.tree(), (node) => node.attributes?.class === 'dialog-panel inspector-panel');
+    assert.ok(inspector);
+    assert.equal(inspector.attributes.role, 'complementary');
+    assert.equal(inspector.attributes['aria-modal'], false);
+  });
   fixture.action('select-inspector-tab', { value: 'technical|container-a' });
   await eventually(() => assert.match(fixture.text(), /Technical information/u));
 
@@ -304,6 +312,20 @@ test('provides resource-specific inspector tabs for containers, images, and volu
   fixture.action('select-view', { value: 'volumes' });
   fixture.action('volume-details', { value: 'app-data' });
   await eventually(() => assert.ok(findNode(fixture.tree(), (node) => node.attributes?.value === 'volume|technical|app-data')));
+});
+
+test('renders a dedicated recovery workspace when the selected engine is unavailable', { concurrency: false }, async (t) => {
+  const fixture = await loadFixture({ status: async ({ engine }) => ({ engine, available: false, engine_version: '' }) }, { expectAvailable: false });
+  t.after(() => fixture.dispose());
+
+  const root = fixture.tree();
+  assert.ok(findNode(root, (node) => node.attributes?.class === 'engine-unavailable-workspace'));
+  assert.ok(findNode(root, (node) => node.attributes?.class === 'application-shell unavailable-shell'));
+  assert.equal(findNode(root, (node) => node.attributes?.class === 'resource-navigation'), undefined);
+  assert.ok(findNode(root, (node) => node.attributes?.class === 'brand-mark plugin-brand-icon'));
+  assert.ok(findNode(root, (node) => node.attributes?.['data-redevplugin-action'] === 'refresh-resources'));
+  assert.equal(findNode(root, (node) => node.key === 'overview-metrics'), undefined);
+  assert.equal(findNode(root, (node) => node.attributes?.['data-redevplugin-action'] === 'open-create-container'), undefined);
 });
 
 test('previews authoritative prune plans without injecting display digests into execution params', { concurrency: false }, async (t) => {
@@ -652,7 +674,7 @@ test('aborts local observation without canceling Host work on surface disposal',
   assert.equal(cancelCalls, 0);
 });
 
-async function loadFixture(overrides = {}) {
+async function loadFixture(overrides = {}, options = {}) {
   const actions = new Map();
   const lifecycle = [];
   const contexts = [];
@@ -713,6 +735,10 @@ async function loadFixture(overrides = {}) {
   await eventually(() => {
     if (renderErrors.length > 0) throw renderErrors[0];
     const text = textContent(renders.at(-1));
+    if (options.expectAvailable === false) {
+      assert.match(text, /Docker unavailable/u);
+      return;
+    }
     assert.match(text, /Operational summary for Docker/u);
     const volumeMetric = findNode(renders.at(-1), (node) => node.key === 'overview-metric-volumes');
     const projectMetric = findNode(renders.at(-1), (node) => node.key === 'overview-metric-engine-specific');

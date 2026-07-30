@@ -17,10 +17,12 @@ test('consumes the complete plugin surface appearance palette', () => {
   }
   assert.match(index, /assets\/appica-theme\.css/u);
   assert.match(index, /assets\/lucide-icons\.css/u);
+  assert.match(css, /\.plugin-brand-icon\s*\{[^}]*background-image:\s*url\(["']containers-plugin\.png["']\)/isu);
 });
 
 test('implements the desktop, compact, and mobile application shell', () => {
   assert.match(css, /\.application-shell\s*\{[^}]*grid-template-columns:\s*168px\s+minmax\(0,\s*1fr\)/isu);
+  assert.match(css, /\.application-shell\.unavailable-shell\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/isu);
   assert.match(css, /@media \(max-width:\s*959px\) and \(min-width:\s*768px\)[\s\S]*?\.application-shell\s*\{[^}]*grid-template-columns:\s*56px/isu);
   assert.match(css, /@media \(max-width:\s*767px\)[\s\S]*?\.navigation-links\s*\{[^}]*flex-direction:\s*row/isu);
   assert.match(css, /@media \(max-width:\s*767px\)[\s\S]*?\.dialog-panel\s*\{[^}]*width:\s*100vw/isu);
@@ -58,4 +60,10 @@ test('keeps operations, confirmations, and accessibility states stable', () => {
   assert.match(css, /@media \(prefers-reduced-motion:\s*reduce\)/u);
   assert.match(css, /@media \(forced-colors:\s*active\)/u);
   assert.match(css, /\.operation progress::-webkit-progress-value\s*\{[^}]*180ms/isu);
+  assert.match(css, /\.dialog-panel\.inspector-panel\s*\{[^}]*grid-template-rows:\s*54px\s+auto\s+minmax\(0,\s*1fr\)/isu);
+  assert.match(css, /\.inspector-tabs\s*\{[^}]*display:\s*flex[^}]*min-height:\s*40px[^}]*overflow-x:\s*auto/isu);
+  assert.match(css, /\.inspector-tab\s*\{[^}]*min-height:\s*40px[^}]*white-space:\s*nowrap/isu);
+  assert.match(css, /\.inspector-backdrop\s*\{[^}]*pointer-events:\s*none[^}]*background:\s*transparent/isu);
+  assert.match(css, /\.engine-unavailable-workspace\s*\{[^}]*width:\s*100%[^}]*height:\s*100%[^}]*place-items:\s*center/isu);
+  assert.match(css, /\.engine-unavailable-content\s*\{[^}]*grid-template-columns:/isu);
 });
