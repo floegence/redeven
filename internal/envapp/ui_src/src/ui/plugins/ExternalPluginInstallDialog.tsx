@@ -12,7 +12,6 @@ import {
   Upload,
   X,
 } from '@floegence/floe-webapp-core/icons';
-import { Dialog } from '@floegence/floe-webapp-core/ui';
 import {
   PluginPlatformRequestError,
   PluginTransportError,
@@ -20,6 +19,7 @@ import {
 } from '@floegence/redevplugin-ui';
 
 import { useI18n } from '../i18n';
+import { Dialog } from '../primitives/EnvAppModal';
 import { ExternalPackageInspectionTerminalError } from './pluginApi';
 import { PLUGIN_MOBILE_TOUCH_TARGET_CLASS } from './pluginPresentation';
 import type {

@@ -1,5 +1,6 @@
 import { createEffect, createSignal } from 'solid-js';
-import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
+import { Button } from '@floegence/floe-webapp-core/ui';
+import { Dialog } from '../primitives/EnvAppModal';
 import { useI18n } from '../i18n';
 
 export interface InputDialogProps {

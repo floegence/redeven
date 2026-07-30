@@ -1,6 +1,7 @@
 import { For, Show, createSignal, createEffect, onCleanup } from 'solid-js';
 import { Terminal, Plus, Trash, Home, FolderOpen } from '@floegence/floe-webapp-core/icons';
-import { Button, Input, ConfirmDialog } from '@floegence/floe-webapp-core/ui';
+import { Button, Input } from '@floegence/floe-webapp-core/ui';
+import { ConfirmDialog } from '../../../primitives/EnvAppModal';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
 import { SettingsSection, SettingsList, AutoSaveIndicator, DotIndicator, SettingRow } from '../SettingsPrimitives';
 import { formatUnknownError } from '../../../maintenance/shared';

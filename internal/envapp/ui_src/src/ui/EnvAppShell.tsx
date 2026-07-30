@@ -20,7 +20,8 @@ import {
   Terminal,
   X,
 } from '@floegence/floe-webapp-core/icons';
-import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
+import { Button } from '@floegence/floe-webapp-core/ui';
+import { Dialog } from './primitives/EnvAppModal';
 import { CodexNavigationIcon } from './icons/CodexIcon';
 import {
   ActivityBarCodespacesIcon,
@@ -99,7 +100,6 @@ import type {
 import type { WorkbenchPluginSurfaceController } from './workbench/WorkbenchPluginSurfaceContext';
 import {
   MAX_ACTIVITY_PLUGIN_WINDOWS,
-  activityPluginWindowZIndex,
   bringActivityPluginWindowToFront,
 } from './plugins/activityPluginWindowStack';
 import { hasRWXPermissions } from './pages/aiPermissions';
@@ -4589,7 +4589,6 @@ export function EnvAppShell() {
             confirmationQueue={pluginConfirmationQueue}
             visible={viewMode() === 'activity'}
             active={index() === activityPluginWindows().length - 1}
-            zIndex={activityPluginWindowZIndex(index())}
             focusRequest={activityPluginFocusRequests()[window.instanceID] ?? 0}
             onActivate={activatePluginSurfaceWindow}
             onClosed={closePluginSurfaceWindow}

@@ -1,7 +1,8 @@
 import { Show, createEffect, createSignal, onCleanup, type JSX } from 'solid-js';
 import { cn, useLayout, useNotification } from '@floegence/floe-webapp-core';
 import { Check, Copy } from '@floegence/floe-webapp-core/icons';
-import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
+import { Button } from '@floegence/floe-webapp-core/ui';
+import { Dialog } from '../primitives/EnvAppModal';
 import type { GitBranchSummary, GitPreviewDeleteBranchResponse } from '../protocol/redeven_v1';
 import { branchDisplayName } from '../utils/gitWorkbench';
 import { writeTextToClipboard } from '../utils/clipboard';

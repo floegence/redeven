@@ -8,7 +8,7 @@ import {
   on,
 } from "solid-js";
 import { cn, useLayout } from "@floegence/floe-webapp-core";
-import { Dialog } from "@floegence/floe-webapp-core/ui";
+import { Dialog } from '../primitives/EnvAppModal';
 import {
   useRedevenRpc,
   type GitCommitDiffPresentation,
@@ -147,7 +147,8 @@ export interface GitDiffDialogProps {
     | string
     | ((item: GitDiffFileContent) => string | undefined);
   errorFormatter?: GitDiffDialogErrorFormatter;
-  desktopWindowZIndex?: number;
+  desktopFloatingWindow?: boolean;
+  stackId?: string;
   class?: string;
 }
 
@@ -597,8 +598,7 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
   const title = createMemo(() => props.title ?? i18n.t('gitDiff.title'));
   const useDesktopFloatingWindow = createMemo(
     () =>
-      typeof props.desktopWindowZIndex === "number" &&
-      Number.isFinite(props.desktopWindowZIndex) &&
+      props.desktopFloatingWindow === true &&
       !layout.isMobile(),
   );
   const fullContextLoading = createMemo(
@@ -1050,10 +1050,10 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
         onOpenChange={props.onOpenChange}
         title={title()}
         description={props.description}
+        stackId={props.stackId ?? "git-diff"}
         persistenceKey="git-diff-dialog"
         defaultSize={GIT_DIFF_WINDOW_DEFAULT_SIZE}
         minSize={GIT_DIFF_WINDOW_MIN_SIZE}
-        zIndex={props.desktopWindowZIndex}
         floatingClass="bg-background"
         mobileClass="bg-background"
       >

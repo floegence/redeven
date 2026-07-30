@@ -1,7 +1,8 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { AlertTriangle, CheckCircle, Copy, Eye, FileText, Folder, Minus, MoreHorizontal, Package, Plus, Search, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
 import { FileItemIcon } from '@floegence/floe-webapp-core/file-browser';
-import { Button, ConfirmDialog, Dropdown, SegmentedControl, type DropdownItem } from '@floegence/floe-webapp-core/ui';
+import { Button, Dropdown, SegmentedControl, type DropdownItem } from '@floegence/floe-webapp-core/ui';
+import { ConfirmDialog } from '../primitives/EnvAppModal';
 import { FlowerIcon } from '../icons/FlowerIcon';
 import type { GitRepoSummaryResponse } from '../protocol/redeven_v1';
 import {

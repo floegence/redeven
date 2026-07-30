@@ -3,7 +3,9 @@
 import { createSignal, createEffect, Show, onCleanup } from 'solid-js';
 import type { Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
+import { Portal } from 'solid-js/web';
 import { useI18n } from '../../i18n';
+import { ENV_APP_FLOATING_LAYER } from '../../utils/envAppLayers';
 
 export interface ImageBlockProps {
   src: string;
@@ -74,7 +76,7 @@ export const ImageBlock: Component<ImageBlockProps> = (props) => {
       />
 
       <Show when={isOpen()}>
-        <div
+        <Portal><div
           class="chat-image-dialog-overlay"
           onClick={handleBackdropClick}
           style={{
@@ -83,7 +85,7 @@ export const ImageBlock: Component<ImageBlockProps> = (props) => {
             left: '0',
             right: '0',
             bottom: '0',
-            'z-index': '9999',
+            'z-index': ENV_APP_FLOATING_LAYER.productModal,
             display: 'flex',
             'align-items': 'center',
             'justify-content': 'center',
@@ -99,7 +101,7 @@ export const ImageBlock: Component<ImageBlockProps> = (props) => {
               right: '16px',
               display: 'flex',
               gap: '8px',
-              'z-index': '10000',
+              'z-index': '1',
             }}
           >
             <button
@@ -163,7 +165,7 @@ export const ImageBlock: Component<ImageBlockProps> = (props) => {
             }}
             onClick={(e) => e.stopPropagation()}
           />
-        </div>
+        </div></Portal>
       </Show>
     </div>
   );

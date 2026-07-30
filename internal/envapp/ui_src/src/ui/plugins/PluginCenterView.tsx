@@ -1,10 +1,11 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from 'solid-js';
 import { cn, createUIFirstSelection } from '@floegence/floe-webapp-core';
 import { AlertTriangle, ArrowLeft, CheckCircle, ChevronDown, Download, MoreHorizontal, RefreshIcon, Search, Settings, Shield, X } from '@floegence/floe-webapp-core/icons';
-import { Button, Dialog, Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
+import { Button, Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 
 import { buildPluginCenterModel } from './pluginInventoryProjection';
 import { useI18n, type I18nHelpers } from '../i18n';
+import { Dialog } from '../primitives/EnvAppModal';
 import type {
   ExternalPluginCommitResult,
   ExternalPluginInspection,

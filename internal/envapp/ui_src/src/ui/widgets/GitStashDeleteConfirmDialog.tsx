@@ -1,6 +1,7 @@
 import { Show, createMemo } from 'solid-js';
 import { cn, useLayout } from '@floegence/floe-webapp-core';
-import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
+import { Button } from '@floegence/floe-webapp-core/ui';
+import { Dialog } from '../primitives/EnvAppModal';
 import type { GitStashSummary } from '../protocol/redeven_v1';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { GitSubtleNote } from './GitWorkbenchPrimitives';

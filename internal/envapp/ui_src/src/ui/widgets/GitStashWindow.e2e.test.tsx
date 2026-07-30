@@ -13,7 +13,8 @@ const gitDiffDialogRenderStore = vi.hoisted(() => ({
     sourceKind: string;
     stashId: string;
     description: string;
-    desktopWindowZIndex: number;
+    desktopFloatingWindow: boolean;
+    stackId: string;
   }>,
 }));
 
@@ -30,7 +31,6 @@ vi.mock('../protocol/redeven_v1', async () => {
 });
 
 vi.mock('./PreviewWindow', () => ({
-  PREVIEW_WINDOW_Z_INDEX: 150,
   PreviewWindow: (props: { open?: boolean; children?: JSX.Element; surfaceRef?: (element: HTMLElement | null) => void }) => (
     props.open ? <div ref={(element) => props.surfaceRef?.(element)} data-testid="preview-window">{props.children}</div> : null
   ),
@@ -42,7 +42,8 @@ vi.mock('./GitDiffDialog', () => ({
     item?: { path?: string } | null;
     source?: { kind?: string; stashId?: string } | null;
     description?: string;
-    desktopWindowZIndex?: number;
+    desktopFloatingWindow?: boolean;
+    stackId?: string;
   }) => {
     createEffect(() => {
       gitDiffDialogRenderStore.snapshots.push({
@@ -51,7 +52,8 @@ vi.mock('./GitDiffDialog', () => ({
         sourceKind: String(props.source?.kind ?? ''),
         stashId: String(props.source?.stashId ?? ''),
         description: String(props.description ?? ''),
-        desktopWindowZIndex: Number(props.desktopWindowZIndex ?? 0),
+        desktopFloatingWindow: Boolean(props.desktopFloatingWindow),
+        stackId: String(props.stackId ?? ''),
       });
     });
     return (
@@ -425,7 +427,8 @@ describe('GitStashWindow', () => {
         itemPath: 'src/app.ts',
         sourceKind: 'stash',
         stashId: 'stash-1',
-        desktopWindowZIndex: 160,
+        desktopFloatingWindow: true,
+        stackId: 'git-stash-diff',
       });
       expect(latestDialog?.description).toContain('src/app.ts');
       expect(host.textContent).toContain('diff-open:yes');

@@ -1401,6 +1401,18 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     expect(fixture.product.getAttribute('aria-hidden')).toBeNull();
     expect(fixture.product.contains(document.activeElement)).toBe(false);
     expect(document.querySelector('[data-testid="env-ai-page"]')).not.toBeNull();
+
+    await userEvent.click(fixture.input);
+    await flushAsync();
+    expect(fixture.product.dataset.presentation).toBe('expanded');
+    fixture.input.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'Escape',
+      bubbles: true,
+      composed: true,
+      cancelable: true,
+    }));
+    await flushAsync();
+    expect(fixture.product.dataset.presentation).toBe('collapsed');
   });
 
   it('keeps IME composition in the same Flower textarea and opens after commit', async () => {

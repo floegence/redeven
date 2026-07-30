@@ -1,17 +1,12 @@
 export const ENV_APP_FLOATING_LAYER = {
-  fileBrowserSurface: 144,
-  debugConsole: 145,
-  pluginWindow: 151,
-  pluginWindowCeiling: 159,
-  previewWindow: 150,
-  floatingWindowModal: 160,
-  flowerTurnLauncher: 160,
-  flowerTurnContextBrowser: 161,
-  flowerTurnContextPreview: 162,
-  flowerCompanion: 163,
+  windowBase: 1000,
+  windowCeiling: 1099,
+  flowerCompanion: 2000,
+  pluginPanel: 3000,
+  productModal: 4000,
+  commandPalette: 5000,
 } as const;
 
 export const ENV_APP_FLOATING_LAYER_CLASS = {
-  debugConsole: 'z-[145]',
-  previewWindow: 'z-[150]',
+  productModal: 'z-[4000]',
 } as const;

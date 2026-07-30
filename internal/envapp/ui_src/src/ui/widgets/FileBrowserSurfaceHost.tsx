@@ -6,7 +6,6 @@ import {
 import { useFileBrowserSurfaceContext } from './FileBrowserSurfaceContext';
 import { PersistentFloatingWindow } from './PersistentFloatingWindow';
 import { RemoteFileBrowser } from './RemoteFileBrowser';
-import { ENV_APP_FLOATING_LAYER } from '../utils/envAppLayers';
 
 export function FileBrowserSurfaceHost() {
   const fileBrowserSurface = useFileBrowserSurfaceContext();
@@ -17,9 +16,9 @@ export function FileBrowserSurfaceHost() {
       onOpenChange={fileBrowserSurface.controller.handleOpenChange}
       title={fileBrowserSurface.controller.surface()?.title ?? DEFAULT_FILE_BROWSER_SURFACE_TITLE}
       persistenceKey={fileBrowserSurface.controller.surface()?.persistenceKey ?? DEFAULT_FILE_BROWSER_SURFACE_PERSISTENCE_KEY}
+      stackId="file-browser"
       defaultSize={{ width: 760, height: 580 }}
       minSize={{ width: 420, height: 320 }}
-      zIndex={ENV_APP_FLOATING_LAYER.fileBrowserSurface}
     >
       <div class="h-full min-h-0 overflow-hidden bg-background">
         <Show when={fileBrowserSurface.controller.surface()} keyed>

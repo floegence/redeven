@@ -13,6 +13,8 @@ import {
   type DesktopFloatingWindowSafeArea,
 } from '../services/desktopWindowChrome';
 import { readUIStorageJSON, writeUIStorageJSON } from '../services/uiStorage';
+import { useEnvAppFloatingWindowStack } from '../context/EnvAppFloatingWindowStackContext';
+import { ENV_APP_FLOATING_LAYER } from '../utils/envAppLayers';
 
 type PersistentFloatingWindowRect = Readonly<{
   x: number;
@@ -157,8 +159,10 @@ function applyFloatingWindowInputSurfaceContracts(binding: PersistentFloatingWin
   }
 }
 
-export interface PersistentFloatingWindowProps extends FloatingWindowProps {
+export interface PersistentFloatingWindowProps extends Omit<FloatingWindowProps, 'zIndex'> {
   persistenceKey?: string;
+  stackId?: string;
+  onActivate?: () => void;
   contentClass?: string;
   footerClass?: string;
   surfaceRef?: PersistentFloatingWindowSurfaceRef;
@@ -166,6 +170,8 @@ export interface PersistentFloatingWindowProps extends FloatingWindowProps {
 
 export function PersistentFloatingWindow(props: PersistentFloatingWindowProps): JSX.Element {
   const markerClass = `redeven-persistent-floating-window-${createUniqueId()}`;
+  const fallbackStackId = `floating-window:${createUniqueId()}`;
+  const floatingWindowStack = useEnvAppFloatingWindowStack();
   const [desktopSafeArea, setDesktopSafeArea] = createSignal(readDesktopFloatingWindowSafeArea(), {
     equals: sameDesktopFloatingWindowSafeArea,
   });
@@ -173,12 +179,22 @@ export function PersistentFloatingWindow(props: PersistentFloatingWindowProps): 
     mergeFloatingWindowViewportInsets(desktopSafeArea(), props.viewportInsets)
   ));
   const persistenceKey = () => compact(props.persistenceKey);
+  const stackId = () => compact(props.stackId) || persistenceKey() || fallbackStackId;
+  const windowZIndex = createMemo(() => (
+    floatingWindowStack?.zIndex(stackId()) ?? ENV_APP_FLOATING_LAYER.windowBase
+  ));
   const persistedRect = createMemo(() => {
     const key = persistenceKey();
     if (!key) {
       return null;
     }
     return readPersistentRect(key);
+  });
+
+  createEffect(() => {
+    if (!props.open || !floatingWindowStack) return;
+    const unregister = floatingWindowStack.register(stackId());
+    onCleanup(unregister);
   });
 
   createEffect(() => {
@@ -198,6 +214,11 @@ export function PersistentFloatingWindow(props: PersistentFloatingWindowProps): 
 
     let disposed = false;
     let cancelBind: (() => void) | null = null;
+    let boundRoot: HTMLElement | null = null;
+    const activate = () => {
+      floatingWindowStack?.activate(stackId());
+      props.onActivate?.();
+    };
 
     const bindSurfaceContract = () => {
       if (disposed) {
@@ -211,6 +232,9 @@ export function PersistentFloatingWindow(props: PersistentFloatingWindowProps): 
       }
 
       applyFloatingWindowInputSurfaceContracts(binding);
+      boundRoot = binding.geometryRoot;
+      boundRoot.addEventListener('pointerdown', activate, true);
+      boundRoot.addEventListener('focusin', activate, true);
     };
 
     bindSurfaceContract();
@@ -218,6 +242,8 @@ export function PersistentFloatingWindow(props: PersistentFloatingWindowProps): 
     onCleanup(() => {
       disposed = true;
       cancelBind?.();
+      boundRoot?.removeEventListener('pointerdown', activate, true);
+      boundRoot?.removeEventListener('focusin', activate, true);
     });
   });
 
@@ -384,7 +410,7 @@ export function PersistentFloatingWindow(props: PersistentFloatingWindowProps): 
       draggable={props.draggable}
       class={cn(markerClass, props.class)}
       viewportInsets={floatingWindowViewportInsets()}
-      zIndex={props.zIndex}
+      zIndex={windowZIndex()}
     >
       {props.children}
     </FloatingWindow>

@@ -2,7 +2,7 @@ import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'so
 import { cn, useFileBrowserDrag } from '@floegence/floe-webapp-core';
 import { ChevronRight } from '@floegence/floe-webapp-core/icons';
 import { FileItemIcon, useFileBrowser, type FileItem } from '@floegence/floe-webapp-core/file-browser';
-import { ConfirmDialog } from '@floegence/floe-webapp-core/ui';
+import { ConfirmDialog } from '../primitives/EnvAppModal';
 import type { NormalizedFilesystemRoot } from '../utils/filesystemRoots';
 import { matchFilesystemRoot } from '../utils/filesystemRoots';
 import { REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS } from '../workbench/surface/workbenchActionSurface';

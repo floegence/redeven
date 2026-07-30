@@ -1,6 +1,7 @@
 import { For, Show, createMemo, createSignal, type JSX } from 'solid-js';
 import { Code, RefreshIcon } from '@floegence/floe-webapp-core/icons';
-import { Button, ConfirmDialog, HighlightBlock } from '@floegence/floe-webapp-core/ui';
+import { Button, HighlightBlock } from '@floegence/floe-webapp-core/ui';
+import { ConfirmDialog } from '../../primitives/EnvAppModal';
 
 import {
   codeRuntimeOperationCancelled,

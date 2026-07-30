@@ -8,7 +8,8 @@ import {
   type FileBrowserRevealRequest,
   type FileItem,
 } from '@floegence/floe-webapp-core/file-browser';
-import { Button, ConfirmDialog, Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
+import { Button, Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
+import { ConfirmDialog } from '../primitives/EnvAppModal';
 import { RpcError, useProtocol } from '@floegence/floe-webapp-protocol';
 import {
   useRedevenRpc,

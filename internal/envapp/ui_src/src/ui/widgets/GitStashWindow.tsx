@@ -64,7 +64,6 @@ import {
   gitChangedFilesStickyCellClass,
 } from './GitWorkbenchPrimitives';
 import { PreviewWindow } from './PreviewWindow';
-import { ENV_APP_FLOATING_LAYER } from '../utils/envAppLayers';
 import { FlowerIcon } from '../icons/FlowerIcon';
 import {
   buildGitDirectoryShortcutRequest,
@@ -85,8 +84,6 @@ type StashPatchErrorState = {
   message: string;
   detail?: string;
 };
-
-const STASH_DIFF_DIALOG_Z_INDEX = ENV_APP_FLOATING_LAYER.floatingWindowModal;
 
 export interface GitStashWindowProps {
   open: boolean;
@@ -708,6 +705,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
         open={props.open}
         onOpenChange={props.onOpenChange}
         title={`${i18n.t('git.common.stashes')} · ${repoName()}`}
+        stackId="git-stash"
         persistenceKey="git-stash-window"
         defaultSize={{ width: 1040, height: 760 }}
         minSize={{ width: 720, height: 520 }}
@@ -1048,7 +1046,8 @@ export function GitStashWindow(props: GitStashWindowProps) {
           emptyMessage={i18n.t('uiCopy.git.selectChangedFile')}
           unavailableMessage={(item) => (item.isBinary ? i18n.t('git.patchViewer.binaryDiffUnavailable') : undefined)}
           errorFormatter={(error) => buildStashPatchErrorState(error, i18n)}
-          desktopWindowZIndex={STASH_DIFF_DIALOG_Z_INDEX}
+          desktopFloatingWindow
+          stackId="git-stash-diff"
         />
         <GitEntityContextMenu controller={contextMenu} items={contextMenuItems} />
       </PreviewWindow>

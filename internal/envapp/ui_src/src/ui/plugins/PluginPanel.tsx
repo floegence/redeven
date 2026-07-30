@@ -3,6 +3,7 @@ import { Portal } from 'solid-js/web';
 import { cn } from '@floegence/floe-webapp-core';
 import { ChevronRight, MoreHorizontal, Package, Search, Settings, X } from '@floegence/floe-webapp-core/icons';
 import { Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
+import { ENV_APP_FLOATING_LAYER } from '../utils/envAppLayers';
 
 import type {
   PluginInventoryItem,
@@ -185,9 +186,10 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
         <div
           data-plugin-launcher-backdrop
           class={cn(
-            'redeven-plugin-motion fixed inset-0 z-50 flex bg-[var(--redeven-overlay-scrim)] animate-in fade-in duration-150 motion-reduce:animate-none',
+            'redeven-plugin-motion fixed inset-0 flex bg-[var(--redeven-overlay-scrim)] animate-in fade-in duration-150 motion-reduce:animate-none',
             props.mobile ? 'items-end' : 'items-center justify-center p-4',
           )}
+          style={{ 'z-index': ENV_APP_FLOATING_LAYER.pluginPanel }}
           onPointerDown={(event) => {
             if (event.target === event.currentTarget) dismiss();
           }}

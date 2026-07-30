@@ -1,4 +1,4 @@
-import { Show, createSignal, onCleanup } from 'solid-js';
+import { Show, createEffect, createSignal, onCleanup } from 'solid-js';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import {
@@ -27,15 +27,14 @@ import { useFilePreviewContext } from './FilePreviewContext';
 import { FilePreviewContent } from './FilePreviewContent';
 import { PreviewWindow } from './PreviewWindow';
 import { RemoteFileBrowser } from './RemoteFileBrowser';
-import { ENV_APP_FLOATING_LAYER } from '../utils/envAppLayers';
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
+import { useEnvAppFloatingWindowStack } from '../context/EnvAppFloatingWindowStackContext';
+import { ENV_APP_FLOATING_LAYER } from '../utils/envAppLayers';
 
 const INLINE_TEXT_PREVIEW_MAX_CHARS = 120_000;
 const CONTEXT_PREVIEW_DEFAULT_SIZE = { width: 880, height: 640 };
 const CONTEXT_PREVIEW_MIN_SIZE = { width: 380, height: 280 };
-const FLOWER_TURN_LAUNCHER_Z_INDEX = ENV_APP_FLOATING_LAYER.flowerTurnLauncher;
-const FLOWER_TURN_CONTEXT_BROWSER_Z_INDEX = ENV_APP_FLOATING_LAYER.flowerTurnContextBrowser;
-const FLOWER_TURN_CONTEXT_PREVIEW_Z_INDEX = ENV_APP_FLOATING_LAYER.flowerTurnContextPreview;
+const FLOWER_TURN_LAUNCHER_STACK_ID = 'flower-turn-launcher';
 
 function createFlowerTurnLauncherCopy(i18n: ReturnType<typeof useI18n>): FlowerTurnLauncherWindowCopyInput {
   return {
@@ -447,9 +446,18 @@ async function buildFileLikeContextPreview(params: {
 export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
   const filePreview = useFilePreviewContext();
   const i18n = useI18n();
+  const floatingWindowStack = useEnvAppFloatingWindowStack();
   const [contextPreview, setContextPreview] = createSignal<ContextPreviewState | null>(null);
   const [contextBrowser, setContextBrowser] = createSignal<ContextBrowserState | null>(null);
   let previewRequestSeq = 0;
+
+  createEffect(() => {
+    if (!props.open || props.placement === 'panel' || !floatingWindowStack) return;
+    const unregister = floatingWindowStack.register(FLOWER_TURN_LAUNCHER_STACK_ID);
+    onCleanup(unregister);
+  });
+
+  const activateLauncher = () => floatingWindowStack?.activate(FLOWER_TURN_LAUNCHER_STACK_ID);
 
   const updateContextPreview = (next: ContextPreviewState | null) => {
     setContextPreview((current) => {
@@ -617,7 +625,8 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
             onClose={props.onClose}
             onSubmit={props.onSubmit}
             onContextAction={executeContextAction}
-            zIndex={FLOWER_TURN_LAUNCHER_Z_INDEX}
+            zIndex={floatingWindowStack?.zIndex(FLOWER_TURN_LAUNCHER_STACK_ID) ?? ENV_APP_FLOATING_LAYER.windowBase}
+            onActivate={activateLauncher}
             windowClass="flower-turn-launcher-window"
             localScrollProps={REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
           />
@@ -645,10 +654,10 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
         }}
         title={contextBrowser()?.title || i18n.t('flowerTurnLauncher.linkedContextTitle')}
         description={contextBrowser()?.subtitle || undefined}
+        stackId="flower-turn-context-browser"
         persistenceKey="flower-turn-context-browser"
         defaultSize={{ width: 760, height: 580 }}
         minSize={{ width: 420, height: 320 }}
-        zIndex={FLOWER_TURN_CONTEXT_BROWSER_Z_INDEX}
         floatingClass="flower-turn-launcher-related-surface flower-turn-context-surface"
         mobileClass="flower-turn-launcher-related-surface flower-turn-context-surface"
       >
@@ -671,10 +680,10 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
         }}
         title={contextPreview()?.title || i18n.t('flowerTurnLauncher.contextPreviewTitle')}
         description={contextPreview()?.subtitle || undefined}
+        stackId="flower-turn-context-preview"
         persistenceKey="flower-turn-context-preview"
         defaultSize={CONTEXT_PREVIEW_DEFAULT_SIZE}
         minSize={CONTEXT_PREVIEW_MIN_SIZE}
-        zIndex={FLOWER_TURN_CONTEXT_PREVIEW_Z_INDEX}
         floatingClass="flower-turn-launcher-related-surface flower-turn-context-surface"
         mobileClass="flower-turn-launcher-related-surface flower-turn-context-surface"
         footer={(

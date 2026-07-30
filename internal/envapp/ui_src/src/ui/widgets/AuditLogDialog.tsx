@@ -1,6 +1,7 @@
 import { For, Show, createMemo, createResource } from 'solid-js';
 import { useNotification } from '@floegence/floe-webapp-core';
-import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
+import { Button } from '@floegence/floe-webapp-core/ui';
+import { Dialog } from '../primitives/EnvAppModal';
 
 import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
 import { listAgentAuditLogs, type AgentAuditEntry } from '../services/auditApi';

@@ -1,5 +1,6 @@
 import { For, Show, createMemo } from 'solid-js';
-import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
+import { Button } from '@floegence/floe-webapp-core/ui';
+import { Dialog } from '../primitives/EnvAppModal';
 import type { GitWorkspaceChange } from '../protocol/redeven_v1';
 import { exactGitPath } from '../utils/gitWorkbench';
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';

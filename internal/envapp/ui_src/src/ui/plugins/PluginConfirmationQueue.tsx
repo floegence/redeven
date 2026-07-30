@@ -3,11 +3,11 @@ import type {
   PluginConfirmationHandler,
   PluginConfirmationIntent,
 } from '@floegence/redevplugin-ui';
-import { Dialog } from '@floegence/floe-webapp-core/ui';
 import { AlertTriangle, Shield } from '@floegence/floe-webapp-core/icons';
 import { Show, createEffect, createSignal, onCleanup, type Accessor, type JSX } from 'solid-js';
 
 import { useI18n } from '../i18n';
+import { Dialog } from '../primitives/EnvAppModal';
 import { PLUGIN_MOBILE_TOUCH_TARGET_CLASS } from './pluginPresentation';
 
 const CONFIRMATION_ENTRY_REARM_DELAY_MS = 750;

@@ -99,7 +99,8 @@ describe('file preview wiring', () => {
     expect(contentSrc).toContain("import { classifyFilePreviewError } from './filePreviewErrorUtils';");
     expect(contentSrc).toContain('<FilePreviewErrorState');
 
-    expect(panelSrc).toContain("import { Button, ConfirmDialog } from '@floegence/floe-webapp-core/ui';");
+    expect(panelSrc).toContain("import { Button } from '@floegence/floe-webapp-core/ui';");
+    expect(panelSrc).toContain("import { ConfirmDialog } from '../primitives/EnvAppModal';");
     expect(panelSrc).toContain("import { FilePreviewContent } from './FilePreviewContent';");
     expect(panelSrc).toContain("import { WindowModal } from './WindowModal';");
     expect(panelSrc).toContain('onAskFlower={props.onAskFlower}');
@@ -112,7 +113,7 @@ describe('file preview wiring', () => {
 
     expect(surfaceSrc).toContain("import type { FilePreviewPanelProps } from './FilePreviewPanel';");
     expect(surfaceSrc).toContain("import { FilePreviewPanel } from './FilePreviewPanel';");
-    expect(surfaceSrc).toContain("import { PREVIEW_WINDOW_Z_INDEX, PreviewWindow } from './PreviewWindow';");
+    expect(surfaceSrc).toContain("import { PreviewWindow } from './PreviewWindow';");
     expect(surfaceSrc).toContain('layout.isMobile()');
     expect(surfaceSrc).toContain('<PreviewWindow');
     expect(surfaceSrc).toContain('surfaceRef={setFloatingSurfaceEl}');
@@ -123,28 +124,26 @@ describe('file preview wiring', () => {
     expect(surfaceSrc).not.toContain('[&>div:last-child]:!w-full');
     expect(surfaceSrc).not.toContain('[&>div>div:last-child]:!w-full');
 
-    expect(envAppLayersSrc).toContain('fileBrowserSurface: 144');
-    expect(envAppLayersSrc).toContain('previewWindow: 150');
-    expect(envAppLayersSrc).toContain('flowerTurnLauncher: 160');
-    expect(envAppLayersSrc).toContain('flowerCompanion: 163');
-    expect(envAppLayersSrc).toContain("previewWindow: 'z-[150]'");
+    expect(envAppLayersSrc).toContain('windowBase: 1000');
+    expect(envAppLayersSrc).toContain('windowCeiling: 1099');
+    expect(envAppLayersSrc).toContain('flowerCompanion: 2000');
+    expect(envAppLayersSrc).toContain('pluginPanel: 3000');
+    expect(envAppLayersSrc).toContain('productModal: 4000');
+    expect(envAppLayersSrc).toContain('commandPalette: 5000');
 
-    expect(previewWindowSrc).toContain("import { Dialog } from '@floegence/floe-webapp-core/ui';");
+    expect(previewWindowSrc).toContain("import { Dialog } from '../primitives/EnvAppModal';");
     expect(previewWindowSrc).toContain("from './PersistentFloatingWindow';");
-    expect(previewWindowSrc).toContain("from '../utils/envAppLayers';");
     expect(previewWindowSrc).toContain('layout.isMobile()');
     expect(previewWindowSrc).toContain('<Dialog');
     expect(previewWindowSrc).toContain('<PersistentFloatingWindow');
     expect(previewWindowSrc).toContain('surfaceRef={props.surfaceRef}');
     expect(previewWindowSrc).toContain("h-[calc(100dvh-0.5rem)] w-[calc(100vw-0.5rem)] max-h-none");
     expect(previewWindowSrc).toContain('file-preview-floating-window');
-    expect(previewWindowSrc).toContain('PREVIEW_WINDOW_Z_INDEX = ENV_APP_FLOATING_LAYER.previewWindow');
-    expect(flowerTurnLauncherSrc).toContain('const FLOWER_TURN_LAUNCHER_Z_INDEX = ENV_APP_FLOATING_LAYER.flowerTurnLauncher;');
-    expect(flowerTurnLauncherSrc).toContain('const FLOWER_TURN_CONTEXT_BROWSER_Z_INDEX = ENV_APP_FLOATING_LAYER.flowerTurnContextBrowser;');
-    expect(flowerTurnLauncherSrc).toContain('const FLOWER_TURN_CONTEXT_PREVIEW_Z_INDEX = ENV_APP_FLOATING_LAYER.flowerTurnContextPreview;');
-    expect(flowerTurnLauncherSrc).toContain('zIndex={FLOWER_TURN_LAUNCHER_Z_INDEX}');
-    expect(flowerTurnLauncherSrc).toContain('zIndex={FLOWER_TURN_CONTEXT_BROWSER_Z_INDEX}');
-    expect(flowerTurnLauncherSrc).toContain('zIndex={FLOWER_TURN_CONTEXT_PREVIEW_Z_INDEX}');
+    expect(previewWindowSrc).toContain('stackId={props.stackId}');
+    expect(flowerTurnLauncherSrc).toContain("const FLOWER_TURN_LAUNCHER_STACK_ID = 'flower-turn-launcher';");
+    expect(flowerTurnLauncherSrc).toContain('onActivate={activateLauncher}');
+    expect(flowerTurnLauncherSrc).toContain('stackId="flower-turn-context-browser"');
+    expect(flowerTurnLauncherSrc).toContain('stackId="flower-turn-context-preview"');
   });
 
   it('routes remote previews through the shared controller and browser entry points through the app-level browser host', () => {
