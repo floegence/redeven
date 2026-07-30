@@ -1788,7 +1788,7 @@
     },
     {
       "path": "internal/envapp/ui_src/src/ui/widgets/RemoteFileBrowser.tsx",
-      "sha256": "7c65f98dfda1a812d3afd5a1f920e4d71d99b2a5eb244bbba45d0ab6c71ea061",
+      "sha256": "1ebfdea2a16980a1b3d1617e369273cbc8c7318d9c4e59f2968574ff26a1265e",
       "sink_kinds": [
         "file"
       ],
@@ -1864,7 +1864,7 @@
     },
     {
       "path": "internal/fs/service.go",
-      "sha256": "32aa626eb04941c462ef5fe36659c224eb64c3711b538d2e5806cc64fa78b6b8",
+      "sha256": "d4f7f7e1187bddb8f179cd51949e8efffeb4d80167c0334502a86d3f581d3726",
       "sink_kinds": [
         "file"
       ],
