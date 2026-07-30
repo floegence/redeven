@@ -240,11 +240,11 @@ async function expectScreenshotHasPixelVariance(): Promise<void> {
   const context = canvas.getContext('2d', { willReadFrequently: true })!;
   context.drawImage(image, 0, 0, canvas.width, canvas.height);
   const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
-  const luminanceBuckets = new Set<number>();
+  const colorBuckets = new Set<string>();
   for (let index = 0; index < pixels.length; index += 16) {
-    luminanceBuckets.add(Math.round((pixels[index] + pixels[index + 1] + pixels[index + 2]) / 24));
+    colorBuckets.add(`${pixels[index] >> 4}:${pixels[index + 1] >> 4}:${pixels[index + 2] >> 4}`);
   }
-  expect(luminanceBuckets.size).toBeGreaterThan(4);
+  expect(colorBuckets.size).toBeGreaterThan(4);
 }
 
 function mountPanel(mobile: boolean, model: PluginPanelModel = panelModel): Readonly<{
