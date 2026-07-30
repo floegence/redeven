@@ -1737,7 +1737,7 @@
     },
     {
       "path": "internal/envapp/ui_src/src/ui/EnvAppShell.tsx",
-      "sha256": "e33b3712017b31e937ebe156b15f922a6a6e38dac065f2ffa033714736402849",
+      "sha256": "783058960e30fc1892ed15f1db9195202b7c4a1508f0e5c32cd787bb1b0e06de",
       "sink_kinds": [
         "web_storage"
       ],
@@ -1788,7 +1788,7 @@
     },
     {
       "path": "internal/envapp/ui_src/src/ui/widgets/RemoteFileBrowser.tsx",
-      "sha256": "3671d1e0573ec1fcbcc9d738ebb692004cc2c1ea2e8a768bc50bc239f5e1e50c",
+      "sha256": "7c65f98dfda1a812d3afd5a1f920e4d71d99b2a5eb244bbba45d0ab6c71ea061",
       "sink_kinds": [
         "file"
       ],
