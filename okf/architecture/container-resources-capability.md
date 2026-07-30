@@ -7,18 +7,15 @@ timestamp: 2026-07-29T00:00:00Z
 ---
 # Summary
 
-Redeven owns Docker and Podman resource semantics, CLI execution, redacted
-domain DTOs, and risk projection. ReDevPlugin owns plugin identity, grants,
-confirmation, operation and stream handles, quotas, revocation, and audit around
-every call. Production remains pinned to the signed Containers `2.0.0` release
-and `redeven.container_resources.v2@2.0.0` capability. The unsigned
-`redeven.container_resources.v4@4.0.0` candidate adds opaque endpoint identity,
-Docker Compose Projects, Podman Pods, and the redesigned Containers `4.0.0`
-surface, but it is not registered or installable as an official release without
-the authorized signing outputs. Dev Desktop may register it for local
-verification only after an ephemeral delivery passes exact startup validation.
-Unknown endpoints, stale plans, partial
-inventory, and unavailable terminal reconciliation fail closed.
+Redeven owns Docker and Podman semantics, CLI execution, redacted DTOs, and risk
+projection; ReDevPlugin owns plugin identity, grants, confirmations, operation
+and stream handles, quotas, revocation, and audit. Production remains pinned to
+the signed Containers `2.0.0` and `redeven.container_resources.v2@2.0.0` release.
+The unsigned v4 candidate adds endpoint identity, Compose Projects, Podman Pods,
+and a redesigned surface, but only Dev Desktop may load an exactly validated
+ephemeral delivery. It cannot become an official release without authorized
+signing outputs. Unknown endpoints, stale plans, partial inventory, and
+unavailable terminal reconciliation fail closed.
 
 # Contract
 

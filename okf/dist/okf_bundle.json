@@ -206,7 +206,7 @@
               "containers",
               "plugins"
             ],
-            "summary": "Redeven owns Docker and Podman resource semantics, CLI execution, redacted\ndomain DTOs, and risk projection. ReDevPlugin owns plugin identity, grants,\nconfirmation, operation and stream handles, quotas, revocation, and audit around\nevery call. Production remains pinned to the signed Containers `2.0.0` release\nand `redeven.container_resources.v2@2.0.0` capability. The unsigned\n`redeven.container_resources.v4@4.0.0` candidate adds opaque endpoint identity,\nDocker Compose Projects, Podman Pods, and the redesigned Containers `4.0.0`\nsurface, but it is not registered or installable as an official release without\nthe authorized signing outputs. Dev Desktop may register it for local\nverification only after an ephemeral delivery passes exact startup validation.\nUnknown endpoints, stale plans, partial\ninventory, and unavailable terminal reconciliation fail closed.",
+            "summary": "Redeven owns Docker and Podman semantics, CLI execution, redacted DTOs, and risk\nprojection; ReDevPlugin owns plugin identity, grants, confirmations, operation\nand stream handles, quotas, revocation, and audit. Production remains pinned to\nthe signed Containers `2.0.0` and `redeven.container_resources.v2@2.0.0` release.\nThe unsigned v4 candidate adds endpoint identity, Compose Projects, Podman Pods,\nand a redesigned surface, but only Dev Desktop may load an exactly validated\nephemeral delivery. It cannot become an official release without authorized\nsigning outputs. Unknown endpoints, stale plans, partial inventory, and\nunavailable terminal reconciliation fail closed.",
             "section_count": 2
           }
         ]
@@ -526,7 +526,7 @@
               "ui",
               "workbench"
             ],
-            "summary": "Plugin UI embeds released ReDevPlugin sandbox surfaces in Redeven chrome.\nActivity opens Shell-root windows; Workbench opens `redeven.plugin` widgets.\nActivity Bar opens a search-first Launcher with stable categories, keyboard\nnavigation, and exact inventory routing. Plugin Center presents trust, lifecycle,\naccess, and launch state through a compact directory and structured inspector. External installs use explicit source,\nreview, commit, and completion. Fresh installs start disabled with zero grants.\nEvery update first opens a side-effect-free, target-bound update review; updates\nretain Host-managed state and grants without adding any. Redeven owns\nnavigation, review, placement, and filters; ReDevPlugin owns admission, iframe\nand bridge lifecycle, confirmation, streams, and revocation. Failed exact-surface\nclose stays retryable without wider authority.",
+            "summary": "Plugin UI embeds released ReDevPlugin sandbox surfaces in Redeven chrome.\nActivity opens Shell-root windows; Workbench opens `redeven.plugin` widgets. The\nActivity Bar Launcher provides stable categories, keyboard navigation, search,\nand exact inventory routing, while Plugin Center presents trust, lifecycle,\naccess, and launch state. External installs require explicit source review and\ncommit; fresh installs start disabled with zero grants. Updates require a\nside-effect-free, target-bound review and retain Host-managed state and grants\nwithout adding any. Redeven owns navigation, review, placement, and filters;\nReDevPlugin owns admission, sandbox and bridge lifecycle, confirmations, streams,\nand revocation. Failed exact-surface close remains retryable without wider\nauthority.",
             "section_count": 2
           },
           {
@@ -3632,8 +3632,8 @@
         "title": "Container resources capability",
         "type": "Architecture Contract"
       },
-      "body_length": 11239,
-      "summary": "Redeven owns Docker and Podman resource semantics, CLI execution, redacted\ndomain DTOs, and risk projection. ReDevPlugin owns plugin identity, grants,\nconfirmation, operation and stream handles, quotas, revocation, and audit around\nevery call. Production remains pinned to the signed Containers `2.0.0` release\nand `redeven.container_resources.v2@2.0.0` capability. The unsigned\n`redeven.container_resources.v4@4.0.0` candidate adds opaque endpoint identity,\nDocker Compose Projects, Podman Pods, and the redesigned Containers `4.0.0`\nsurface, but it is not registered or installable as an official release without\nthe authorized signing outputs. Dev Desktop may register it for local\nverification only after an ephemeral delivery passes exact startup validation.\nUnknown endpoints, stale plans, partial\ninventory, and unavailable terminal reconciliation fail closed.",
+      "body_length": 11048,
+      "summary": "Redeven owns Docker and Podman semantics, CLI execution, redacted DTOs, and risk\nprojection; ReDevPlugin owns plugin identity, grants, confirmations, operation\nand stream handles, quotas, revocation, and audit. Production remains pinned to\nthe signed Containers `2.0.0` and `redeven.container_resources.v2@2.0.0` release.\nThe unsigned v4 candidate adds endpoint identity, Compose Projects, Podman Pods,\nand a redesigned surface, but only Dev Desktop may load an exactly validated\nephemeral delivery. It cannot become an official release without authorized\nsigning outputs. Unknown endpoints, stale plans, partial inventory, and\nunavailable terminal reconciliation fail closed.",
       "sections": [
         {
           "id": "contract",
@@ -3712,7 +3712,7 @@
           "description": "Owns endpoint, workspace, stream, dialog, and operation state for the redesigned surface."
         }
       ],
-      "snippet": "Redeven owns Docker and Podman resource semantics, CLI execution, redacted domain DTOs, and risk projection. ReDevPlugin owns plugin identity, grants, confirmation, operation and stream handles, quotas, revocation, and audit around",
+      "snippet": "Redeven owns Docker and Podman semantics, CLI execution, redacted DTOs, and risk projection; ReDevPlugin owns plugin identity, grants, confirmations, operation and stream handles, quotas, revocation, and audit. Production remains pinned to",
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -8833,8 +8833,8 @@
         "title": "Plugin surfaces",
         "type": "UI Contract"
       },
-      "body_length": 23529,
-      "summary": "Plugin UI embeds released ReDevPlugin sandbox surfaces in Redeven chrome.\nActivity opens Shell-root windows; Workbench opens `redeven.plugin` widgets.\nActivity Bar opens a search-first Launcher with stable categories, keyboard\nnavigation, and exact inventory routing. Plugin Center presents trust, lifecycle,\naccess, and launch state through a compact directory and structured inspector. External installs use explicit source,\nreview, commit, and completion. Fresh installs start disabled with zero grants.\nEvery update first opens a side-effect-free, target-bound update review; updates\nretain Host-managed state and grants without adding any. Redeven owns\nnavigation, review, placement, and filters; ReDevPlugin owns admission, iframe\nand bridge lifecycle, confirmation, streams, and revocation. Failed exact-surface\nclose stays retryable without wider authority.",
+      "body_length": 23450,
+      "summary": "Plugin UI embeds released ReDevPlugin sandbox surfaces in Redeven chrome.\nActivity opens Shell-root windows; Workbench opens `redeven.plugin` widgets. The\nActivity Bar Launcher provides stable categories, keyboard navigation, search,\nand exact inventory routing, while Plugin Center presents trust, lifecycle,\naccess, and launch state. External installs require explicit source review and\ncommit; fresh installs start disabled with zero grants. Updates require a\nside-effect-free, target-bound review and retain Host-managed state and grants\nwithout adding any. Redeven owns navigation, review, placement, and filters;\nReDevPlugin owns admission, sandbox and bridge lifecycle, confirmations, streams,\nand revocation. Failed exact-surface close remains retryable without wider\nauthority.",
       "sections": [
         {
           "id": "contract",
@@ -8955,7 +8955,7 @@
           "description": "Covers persisted `redeven.plugin` widget state."
         }
       ],
-      "snippet": "Plugin UI embeds released ReDevPlugin sandbox surfaces in Redeven chrome. Activity opens Shell-root windows; Workbench opens `redeven.plugin` widgets. Activity Bar opens a search-first Launcher with stable categories, keyboard",
+      "snippet": "Plugin UI embeds released ReDevPlugin sandbox surfaces in Redeven chrome. Activity opens Shell-root windows; Workbench opens `redeven.plugin` widgets. The Activity Bar Launcher provides stable categories, keyboard navigation, search,",
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -9599,5 +9599,5 @@
       ]
     }
   ],
-  "source_sha256": "22e770799d88a0f1b6a8ef84ac45a8ba455550647fd24a3103668bd5773a2b6e"
+  "source_sha256": "51fa6a667f36c5a6558ede5cc65f9b77e9f4005ad2b94df999df2e921e5d03a5"
 }
