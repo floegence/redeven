@@ -64,8 +64,8 @@ log "checking ReDevPlugin published dependency boundary"
 log "checking immutable catalog plugin package URL"
 node ./scripts/check_catalog_plugin_package_url.mjs
 
-log "checking unsigned Containers plugin candidate"
-./scripts/check_containers_plugin_candidate.sh
+log "checking unsigned Containers v4 plugin candidate"
+./scripts/check_containers_plugin_v4_candidate.sh
 
 log "checking controlled release archive extraction"
 python3 -c 'from pathlib import Path; [compile(Path(name).read_text(encoding="utf-8"), name, "exec") for name in ("scripts/safe_extract_tar.py", "scripts/extract_desktop_runtime.py")]'
