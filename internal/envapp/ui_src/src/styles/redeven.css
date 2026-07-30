@@ -350,6 +350,21 @@
   --redeven-stroke-control-strong: color-mix(in srgb, var(--redeven-stroke-control) 72%, var(--foreground) 28%);
   --redeven-stroke-divider: color-mix(in srgb, var(--redeven-stroke-panel) 72%, transparent);
   --git-table-gridline: var(--redeven-stroke-divider);
+  --git-browser-selection-accent: var(--color-blue-600);
+  --git-browser-hover-bg: color-mix(in srgb, var(--foreground) 5%, var(--redeven-surface-panel));
+  --git-browser-selection-bg: color-mix(in srgb, var(--git-browser-selection-accent) 10%, var(--redeven-surface-panel));
+  --git-browser-selection-border: color-mix(in srgb, var(--git-browser-selection-accent) 35%, var(--redeven-stroke-divider));
+  --git-browser-selection-indicator: var(--git-browser-selection-accent);
+  --git-browser-focus-ring: var(--git-browser-selection-accent);
+  --git-browser-selection-fg: var(--foreground);
+  --git-browser-selection-secondary-fg: color-mix(in srgb, var(--muted-foreground) 72%, var(--foreground) 28%);
+  --git-browser-selection-chip-bg: color-mix(in srgb, var(--git-browser-selection-accent) 12%, var(--redeven-surface-panel));
+  --git-browser-selection-chip-border: color-mix(in srgb, var(--git-browser-selection-accent) 30%, var(--redeven-surface-panel));
+  --git-browser-selection-chip-fg: color-mix(in srgb, var(--git-browser-selection-accent) 78%, var(--foreground) 22%);
+  --git-browser-current-chip-bg: color-mix(in srgb, var(--git-browser-selection-accent) 14%, var(--redeven-surface-panel));
+  --git-browser-current-chip-border: color-mix(in srgb, var(--git-browser-selection-accent) 38%, var(--redeven-surface-panel));
+  --git-browser-current-chip-fg: color-mix(in srgb, var(--git-browser-selection-accent) 48%, var(--foreground) 52%);
+  --git-browser-selection-shadow: none;
   --redeven-shadow-color: color-mix(in srgb, var(--redeven-surface-shadow-source) 18%, transparent);
   --redeven-shadow-soft: 0 1px 2px color-mix(in srgb, var(--redeven-surface-shadow-source) 10%, transparent), 0 10px 24px -20px color-mix(in srgb, var(--redeven-surface-shadow-source) 22%, transparent);
   --redeven-overlay-scrim: color-mix(in srgb, var(--redeven-surface-shadow-source) 46%, transparent);
@@ -421,6 +436,17 @@
 
 :root.dark {
   --redeven-overlay-scrim: color-mix(in srgb, var(--redeven-surface-shadow-source) 68%, transparent);
+  --git-browser-selection-accent: var(--color-sky-400);
+  --git-browser-hover-bg: color-mix(in srgb, var(--foreground) 7%, var(--redeven-surface-panel));
+  --git-browser-selection-bg: color-mix(in srgb, var(--git-browser-selection-accent) 18%, var(--redeven-surface-panel));
+  --git-browser-selection-border: color-mix(in srgb, var(--git-browser-selection-accent) 38%, var(--redeven-stroke-divider));
+  --git-browser-selection-secondary-fg: color-mix(in srgb, var(--muted-foreground) 68%, var(--foreground) 32%);
+  --git-browser-selection-chip-bg: color-mix(in srgb, var(--git-browser-selection-accent) 15%, var(--redeven-surface-panel));
+  --git-browser-selection-chip-border: color-mix(in srgb, var(--git-browser-selection-accent) 34%, var(--redeven-surface-panel));
+  --git-browser-selection-chip-fg: color-mix(in srgb, var(--git-browser-selection-accent) 58%, var(--foreground) 42%);
+  --git-browser-current-chip-bg: color-mix(in srgb, var(--git-browser-selection-accent) 18%, var(--redeven-surface-panel));
+  --git-browser-current-chip-border: color-mix(in srgb, var(--git-browser-selection-accent) 46%, var(--redeven-surface-panel));
+  --git-browser-current-chip-fg: color-mix(in srgb, var(--git-browser-selection-accent) 45%, var(--foreground) 55%);
   --redeven-categorical-graph-6: oklch(0.78 0.15 30);
   --redeven-categorical-graph-7: oklch(0.78 0.13 195);
   --redeven-categorical-graph-8: oklch(0.78 0.15 320);
@@ -524,15 +550,6 @@
   --git-title-dot-warning: color-mix(in srgb, var(--warning) 75%, transparent);
   --git-title-dot-danger: color-mix(in srgb, var(--error) 75%, transparent);
   --git-title-dot-violet: color-mix(in srgb, var(--color-violet-500) 75%, transparent);
-  --git-browser-selection-bg: color-mix(in srgb, var(--primary) 8%, var(--background));
-  --git-browser-selection-border: color-mix(in srgb, var(--primary) 18%, var(--redeven-stroke-divider));
-  --git-browser-selection-border-strong: color-mix(in srgb, var(--primary) 58%, var(--redeven-stroke-control));
-  --git-browser-selection-fg: var(--foreground);
-  --git-browser-selection-secondary-fg: color-mix(in srgb, var(--muted-foreground) 88%, var(--foreground) 12%);
-  --git-browser-selection-chip-bg: color-mix(in srgb, var(--primary) 9%, transparent);
-  --git-browser-selection-chip-border: color-mix(in srgb, var(--primary) 18%, transparent);
-  --git-browser-selection-chip-fg: color-mix(in srgb, var(--primary) 78%, var(--foreground) 22%);
-  --git-browser-selection-shadow: none;
 }
 
 :root {
@@ -618,15 +635,6 @@
   --git-title-dot-warning: color-mix(in srgb, var(--warning) 75%, transparent);
   --git-title-dot-danger: color-mix(in srgb, var(--error) 75%, transparent);
   --git-title-dot-violet: color-mix(in srgb, var(--color-violet-500) 75%, transparent);
-  --git-browser-selection-bg: color-mix(in srgb, var(--primary) 13%, var(--redeven-surface-panel));
-  --git-browser-selection-border: color-mix(in srgb, var(--primary) 24%, var(--redeven-stroke-divider));
-  --git-browser-selection-border-strong: color-mix(in srgb, var(--primary) 62%, var(--redeven-stroke-control));
-  --git-browser-selection-fg: var(--foreground);
-  --git-browser-selection-secondary-fg: color-mix(in srgb, var(--muted-foreground) 86%, var(--foreground) 14%);
-  --git-browser-selection-chip-bg: color-mix(in srgb, var(--primary) 13%, transparent);
-  --git-browser-selection-chip-border: color-mix(in srgb, var(--primary) 24%, transparent);
-  --git-browser-selection-chip-fg: color-mix(in srgb, var(--primary) 62%, var(--foreground) 38%);
-  --git-browser-selection-shadow: none;
 }
 
 @media (max-width: 960px) {
@@ -818,14 +826,23 @@ body[data-redeven-notes-overlay-viewport='active'] .notes-flyout--paste {
 }
 
 .git-browser-selection-row {
-  border-left-color: var(--git-browser-selection-border-strong);
+  border-left-color: var(--git-browser-selection-indicator);
   background: var(--git-browser-selection-bg);
   color: var(--git-browser-selection-fg);
   box-shadow: var(--git-browser-selection-shadow);
 }
 
 .git-browser-selection-nav {
-  border-left-color: var(--git-browser-selection-border-strong);
+  border-left-color: var(--git-browser-selection-indicator);
+}
+
+.git-browser-interactive:hover:not(:disabled):not([aria-disabled='true']):not([aria-selected='true']):not([aria-pressed='true']):not(.git-browser-selection-row):not(.git-browser-selection-surface) {
+  background: var(--git-browser-hover-bg);
+}
+
+.git-browser-interactive:focus-visible {
+  outline: 2px solid var(--git-browser-focus-ring);
+  outline-offset: 1px;
 }
 
 .git-browser-selection-secondary {
@@ -837,6 +854,41 @@ body[data-redeven-notes-overlay-viewport='active'] .notes-flyout--paste {
   --tag-line: var(--git-browser-selection-chip-border);
   --tag-ink: var(--git-browser-selection-chip-fg);
   box-shadow: none;
+}
+
+.git-browser-current-chip {
+  border: 1px solid var(--git-browser-current-chip-border);
+  background: var(--git-browser-current-chip-bg);
+  color: var(--git-browser-current-chip-fg);
+}
+
+.git-browser-segmented-tab.redeven-surface-segmented__item--active {
+  border-color: color-mix(in srgb, var(--git-browser-selection-accent) 22%, var(--redeven-stroke-divider)) !important;
+  background: color-mix(in srgb, var(--git-browser-selection-accent) 9%, var(--redeven-surface-control)) !important;
+}
+
+@media (forced-colors: active) {
+  .git-browser-selection-surface,
+  .git-browser-selection-row {
+    border-color: Highlight;
+  }
+
+  .git-browser-selection-row,
+  .git-browser-selection-nav {
+    border-left-color: Highlight;
+  }
+
+  .git-browser-interactive:focus-visible {
+    outline-color: Highlight;
+  }
+
+  .git-browser-current-chip {
+    border-color: CanvasText;
+  }
+
+  .git-browser-segmented-tab.redeven-surface-segmented__item--active {
+    border-color: Highlight !important;
+  }
 }
 
 .browser-mode-switch {

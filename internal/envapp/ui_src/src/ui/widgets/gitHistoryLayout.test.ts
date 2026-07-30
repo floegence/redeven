@@ -150,8 +150,7 @@ describe('browser workspace layout wiring', () => {
     expect(navSrc).toContain('space-y-0.5 rounded-md bg-muted/[0.14] p-0.5');
     expect(navSrc).toContain('rounded px-2.5 py-2.5');
     expect(navSrc).toContain('sm:py-1.5');
-    expect(navSrc).toContain('border-l-[2px] git-browser-selection-surface git-browser-selection-nav font-medium');
-    expect(navSrc).toContain('bg-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground');
+    expect(navSrc).toContain('gitNavigationItemClass(active())');
     expect(navSrc).toContain('gitSelectedChipClass(true)');
     expect(navSrc).not.toContain('gitSubviewTone');
     expect(navSrc).not.toContain('gitToneBadgeClass');

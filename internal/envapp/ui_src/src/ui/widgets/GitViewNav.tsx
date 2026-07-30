@@ -3,7 +3,7 @@ import { Dynamic } from 'solid-js/web';
 import { cn } from '@floegence/floe-webapp-core';
 import type { GitWorkbenchSubview, GitWorkbenchSubviewItem } from '../utils/gitWorkbench';
 import { buildTabElementId, buildTabPanelElementId, resolveRovingTabTargetId } from '../utils/tabNavigation';
-import { gitSelectedChipClass } from './GitChrome';
+import { gitNavigationItemClass, gitSelectedChipClass } from './GitChrome';
 import { useI18n } from '../i18n';
 
 export interface GitViewNavProps {
@@ -18,7 +18,7 @@ const GIT_WORKBENCH_SUBVIEW_ID_PREFIX = 'git-workbench-subview';
 export function GitViewNav(props: GitViewNavProps) {
   const i18n = useI18n();
   const buttonBaseClass =
-    'cursor-pointer flex w-full items-center justify-between gap-2 rounded px-2.5 py-2.5 text-left text-xs transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 sm:py-1.5';
+    'cursor-pointer flex w-full items-center justify-between gap-2 rounded px-2.5 py-2.5 text-left text-xs transition-all duration-150 sm:py-1.5';
   const badgeBaseClass =
     'inline-flex min-w-[1.5rem] items-center justify-center rounded px-1 py-0.5 text-[10px] font-medium tabular-nums transition-colors duration-150';
   const tabRefs = new Map<GitWorkbenchSubview, HTMLButtonElement>();
@@ -55,9 +55,7 @@ export function GitViewNav(props: GitViewNavProps) {
               tabIndex={active() ? 0 : -1}
               class={cn(
                 buttonBaseClass,
-                active()
-                  ? 'border-l-[2px] git-browser-selection-surface git-browser-selection-nav font-medium'
-                  : 'bg-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground',
+                gitNavigationItemClass(active()),
               )}
               onClick={() => props.onChange(item.id)}
               onKeyDown={(event) => handleKeyDown(event, item.id)}
