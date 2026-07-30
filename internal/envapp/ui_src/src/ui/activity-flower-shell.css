@@ -24,8 +24,8 @@
   --floe-bottom-bar-companion-safe-area-right: env(safe-area-inset-right, 0px);
   --floe-bottom-bar-companion-safe-area-bottom: env(safe-area-inset-bottom, 0px);
   --floe-bottom-bar-companion-safe-area-left: env(safe-area-inset-left, 0px);
+  --floe-bottom-bar-companion-z-index: 1;
   position: fixed;
-  z-index: 71;
   inset: 0;
   overflow: visible;
   pointer-events: none;

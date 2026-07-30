@@ -8,6 +8,7 @@ export const ENV_APP_FLOATING_LAYER = {
   flowerTurnLauncher: 160,
   flowerTurnContextBrowser: 161,
   flowerTurnContextPreview: 162,
+  flowerCompanion: 163,
 } as const;
 
 export const ENV_APP_FLOATING_LAYER_CLASS = {

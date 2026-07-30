@@ -126,6 +126,7 @@ describe('file preview wiring', () => {
     expect(envAppLayersSrc).toContain('fileBrowserSurface: 144');
     expect(envAppLayersSrc).toContain('previewWindow: 150');
     expect(envAppLayersSrc).toContain('flowerTurnLauncher: 160');
+    expect(envAppLayersSrc).toContain('flowerCompanion: 163');
     expect(envAppLayersSrc).toContain("previewWindow: 'z-[150]'");
 
     expect(previewWindowSrc).toContain("import { Dialog } from '@floegence/floe-webapp-core/ui';");

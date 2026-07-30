@@ -134,6 +134,7 @@ import { FilePreviewContext, type FilePreviewOpenOptions } from './widgets/FileP
 import { openFileBrowserSurface } from './widgets/openFileBrowserSurface';
 import { basenameFromAbsolutePath, normalizeAbsolutePath } from './utils/askFlowerPath';
 import { createClientId } from './utils/clientId';
+import { ENV_APP_FLOATING_LAYER } from './utils/envAppLayers';
 import { fileItemFromPath } from './utils/filePreviewItem';
 import { reloadCurrentPage } from './utils/windowNavigation';
 import { resolveEnvSidebarVisibilityMotion, shouldEnvTabOpenSidebar } from './envSidebarVisibilityMotion';
@@ -4254,7 +4255,10 @@ export function EnvAppShell() {
           type="button"
           class="flower-activity-companion-icon-button"
           aria-label={i18n.t('shell.flowerCompanion.collapse')}
-          onClick={() => collapseActivityFlowerCompanion()}
+          onClick={() => {
+            activityNotesViewportAnchor()?.focus({ preventScroll: true });
+            collapseActivityFlowerCompanion(false);
+          }}
         >
           <X class="h-4 w-4" />
         </button>
@@ -4571,6 +4575,7 @@ export function EnvAppShell() {
       <div
         ref={setActivityFlowerOverlayHost}
         class="flower-activity-overlay-host"
+        style={{ 'z-index': ENV_APP_FLOATING_LAYER.flowerCompanion }}
         data-activity-flower-overlay-host
         inert={mobilePluginModalOpen()}
         aria-hidden={mobilePluginModalOpen() ? 'true' : undefined}
