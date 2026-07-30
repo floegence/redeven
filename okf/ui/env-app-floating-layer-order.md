@@ -25,7 +25,7 @@ The stack recomputes consecutive layers after every registration, activation, or
 
 ## Flower dismissal
 
-The Flower companion remains above all movable windows while expanded. Its explicit close control first transfers focus to the neutral Activity content anchor, then collapses with an explicit non-focus-restoring path. It must not return focus to the retained composer because composer focus is an expansion intent. Outside pointer and Escape dismissal retain their published companion ownership and focus rules.
+The Flower companion remains above all movable windows while expanded. Its explicit close control first transfers focus to the neutral Activity content anchor, then collapses with an explicit non-focus-restoring path. It must not return focus to the retained composer because composer focus is an expansion intent. Outside pointer and Escape dismissal retain their published companion ownership and focus rules. Activity plugin window interaction is also outside Flower: host pointer or focus input and trusted plugin bridge activation, focus, or action events collapse the companion without consuming the destination interaction, including when the event originates inside a cross-origin iframe and cannot bubble through the product document.
 
 # Boundaries
 
@@ -40,3 +40,4 @@ This contract governs cross-surface Env App stacking only. Workbench projected o
 - `redeven:internal/envapp/ui_src/src/ui/primitives/EnvAppModal.tsx` - Applies the product modal band to global dialogs while preserving surface-local behavior upstream.
 - `redeven:internal/envapp/ui_src/src/ui/envAppFloatingLayers.browser.test.tsx` - Uses actual overlapping DOM hit results to verify window MRU and every global band.
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.flowerCompanion.browser.test.tsx` - Verifies explicit close, focus handoff, persistent collapse, and outside dismissal.
+- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx` - Verifies trusted plugin window interaction dismisses the expanded companion across the iframe boundary.

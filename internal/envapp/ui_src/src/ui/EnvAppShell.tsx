@@ -2660,6 +2660,10 @@ export function EnvAppShell() {
     }
     collapseActivityFlowerCompanion(reason === 'escape');
   };
+  const handleActivityPluginSurfaceWindowInteraction = (instanceID: string) => {
+    dismissActivityFlowerCompanion('outside-pointer');
+    activatePluginSurfaceWindow(instanceID);
+  };
 
   let activityFlowerWasVisible = false;
   createRenderEffect(() => {
@@ -4590,7 +4594,7 @@ export function EnvAppShell() {
             visible={viewMode() === 'activity'}
             active={index() === activityPluginWindows().length - 1}
             focusRequest={activityPluginFocusRequests()[window.instanceID] ?? 0}
-            onActivate={activatePluginSurfaceWindow}
+            onActivate={handleActivityPluginSurfaceWindowInteraction}
             onClosed={closePluginSurfaceWindow}
             serializeClose={(close) => serializePluginPlacementOperation(close)}
             registerRequestClose={(instanceID, close) => {

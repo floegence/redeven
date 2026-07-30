@@ -2127,6 +2127,48 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   }, 10000);
 
+  it('collapses the expanded Flower companion when an Activity plugin window reports interaction', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(officialContainersProjection('enabled'));
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+      await flushAsync();
+      const composer = host.querySelector('[data-testid="activity-flower-composer"]') as HTMLTextAreaElement;
+      composer.focus();
+      await flushUntil(() => (
+        host.querySelector('#redeven-activity-flower-product')?.getAttribute('data-presentation') === 'expanded'
+      ));
+
+      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="instance:plugini_redeven_official_containers"]')));
+      await pluginPanelState.lastProps.onOpenPluginSurface(
+        officialContainersProjection('enabled').items[0].defaultLaunchTarget,
+      );
+      await flushUntil(() => Boolean(document.querySelector('[data-plugin-surface-host]')));
+
+      const pluginWindow = pluginSurfaceFrameState.lastProps;
+      expect(host.querySelector('#redeven-activity-flower-product')?.getAttribute('data-presentation'))
+        .toBe('expanded');
+
+      pluginWindow.onActivate(pluginWindow.instanceID);
+      await flushAsync();
+
+      expect(host.querySelector('#redeven-activity-flower-product')?.getAttribute('data-presentation'))
+        .toBe('collapsed');
+      expect(document.activeElement).not.toBe(composer);
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
   it('replaces the least recently active Activity plugin window while preserving capacity', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
