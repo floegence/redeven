@@ -12,6 +12,7 @@ const distDir = path.resolve(scriptDir, '../../ui/dist/env');
 const terminalAgentIconManifestPath = path.join(repoRoot, 'assets/terminal_agent_icons.json');
 const entryPath = '/_redeven_proxy/env/';
 const assetPrefix = `${entryPath}assets/`;
+const optionalDevelopmentDeliveryPath = '/_redeven_proxy/api/plugins/development-delivery/containers';
 const hashedAssetPattern = /-[A-Za-z0-9_-]{8,}\.(?:css|js|wasm)$/;
 const officialContainersDistribution = JSON.parse(await readFile(path.join(
   repoRoot,
@@ -247,6 +248,11 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
           committed: false,
           rolled_back: false,
         });
+        return;
+      }
+      if (requestURL.pathname === optionalDevelopmentDeliveryPath) {
+        response.writeHead(404, { 'content-type': 'application/json; charset=utf-8' });
+        response.end(JSON.stringify({ ok: false, error: 'not found' }));
         return;
       }
       if (accessReady && (
@@ -822,10 +828,30 @@ async function main() {
         throw new Error(`non-hashed built-dist ${kind.toUpperCase()} asset loaded: ${assets.join(', ')}`);
       }
     }
-    if (consoleProblems.length > 0) throw new Error(`renderer console problems: ${JSON.stringify(consoleProblems)}`);
+    const expectedOptionalResponses = badResponses.filter(({ path: responsePath, status }) => (
+      responsePath === optionalDevelopmentDeliveryPath && status === 404
+    ));
+    const genericResourceConsoleProblems = consoleProblems.filter(({ type, text: messageText }) => (
+      type === 'error'
+      && messageText === 'Failed to load resource: the server responded with a status of 404 (Not Found)'
+    ));
+    const unexpectedConsoleProblems = consoleProblems.filter((problem) => (
+      !genericResourceConsoleProblems.includes(problem)
+    )).concat(genericResourceConsoleProblems.slice(expectedOptionalResponses.length));
+    const unexpectedBadResponses = badResponses.filter(({ path: responsePath, status }) => (
+      responsePath !== optionalDevelopmentDeliveryPath || status !== 404
+    ));
+    if (unexpectedConsoleProblems.length > 0) {
+      throw new Error(`renderer console problems: ${JSON.stringify({
+        consoleProblems: unexpectedConsoleProblems,
+        badResponses: unexpectedBadResponses,
+      })}`);
+    }
     if (pageErrors.length > 0) throw new Error(`renderer page errors: ${JSON.stringify(pageErrors)}`);
     if (requestFailures.length > 0) throw new Error(`renderer request failures: ${JSON.stringify(requestFailures)}`);
-    if (badResponses.length > 0) throw new Error(`renderer HTTP failures: ${JSON.stringify(badResponses)}`);
+    if (unexpectedBadResponses.length > 0) {
+      throw new Error(`renderer HTTP failures: ${JSON.stringify(unexpectedBadResponses)}`);
+    }
 
     const pluginInstall = await verifyBuiltPluginInstallRouting(browser);
     const flowerLifecycle = await verifyBuiltFlowerLifecycle(browser);
