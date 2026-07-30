@@ -202,7 +202,7 @@
     },
     {
       "path": "cmd/redeven/main.go",
-      "sha256": "f43b9818f6a28e755b2fa05c84a494cd79833a1a3c08a71a9b38d7854cc71661",
+      "sha256": "adb96b0ec562a56d4f6af379e9dacb8f7e547145d9987ef1dc5c26310b33486c",
       "sink_kinds": [
         "file",
         "json_file"
@@ -1376,7 +1376,7 @@
     },
     {
       "path": "internal/codeapp/appserver/server.go",
-      "sha256": "b8fc37ddffb63319642449bb8afe44214c73a294b6bcfa54fea3573f3a7e01b1",
+      "sha256": "1c9ea106651945c45726ad578b36395a4a03d8889bac0ce057ec185cb35e9394",
       "sink_kinds": [
         "file",
         "json_file"
@@ -1737,7 +1737,7 @@
     },
     {
       "path": "internal/envapp/ui_src/src/ui/EnvAppShell.tsx",
-      "sha256": "caa7bf752b1b222e5c5ea9fde301c67fb4624eb9d6c7c4af2e85ac3ea46894d6",
+      "sha256": "e33b3712017b31e937ebe156b15f922a6a6e38dac065f2ffa033714736402849",
       "sink_kinds": [
         "web_storage"
       ],
@@ -2058,7 +2058,7 @@
     },
     {
       "path": "internal/redevpluginintegration/integration.go",
-      "sha256": "c1eaaac55c7d6e8e707944a9800729c80db752cba131564ce00159955ab908c6",
+      "sha256": "232498d7d1787b815cc54d75fc7993ad1a1dfa362acca47cb27c3631375732ce",
       "sink_kinds": [
         "file"
       ],
