@@ -64,7 +64,7 @@ log "checking ReDevPlugin published dependency boundary"
 log "checking immutable catalog plugin package URL"
 node ./scripts/check_catalog_plugin_package_url.mjs
 
-log "checking unsigned Containers v4 plugin candidate"
+log "checking immutable remote Containers v4 plugin source"
 ./scripts/check_containers_plugin_v4_candidate.sh
 
 log "checking controlled release archive extraction"

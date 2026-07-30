@@ -3,12 +3,20 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)
 ROOT_DIR=$(cd -- "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd)
-PLUGIN_DIR="$ROOT_DIR/plugins/official/containers"
-CANDIDATE="$ROOT_DIR/spec/redevplugin/candidate-containers-plugin/4.0.0/plugin.redevplugin"
 CAPABILITY_DIR="$ROOT_DIR/spec/redevplugin/candidate-containers-capability/capabilities/redeven.container_resources.v4/v4.0.0"
 SOURCE_CONTRACT="$ROOT_DIR/spec/capabilities/container-resources-v4.contract.json"
 TEMP_DIR=$(mktemp -d)
 trap 'rm -rf "$TEMP_DIR"' EXIT
+SOURCE_DIR="$TEMP_DIR/redeven-official-plugins"
+PLUGIN_DIR="$SOURCE_DIR/plugins/containers"
+SOURCE_REPOSITORY="https://github.com/floegence/redeven-official-plugins.git"
+SOURCE_COMMIT="37d4dfff0cfa88c7a00ee0b89f55bfbcdde4b251"
+
+git -C "$TEMP_DIR" init --quiet redeven-official-plugins
+git -C "$SOURCE_DIR" remote add origin "$SOURCE_REPOSITORY"
+git -C "$SOURCE_DIR" fetch --quiet --depth 1 origin "$SOURCE_COMMIT"
+git -C "$SOURCE_DIR" checkout --quiet --detach FETCH_HEAD
+test "$(git -C "$SOURCE_DIR" rev-parse HEAD)" = "$SOURCE_COMMIT"
 
 cd "$PLUGIN_DIR"
 npm ci --no-audit --no-fund
@@ -19,16 +27,15 @@ cd "$ROOT_DIR"
 node scripts/build_containers_v4_contract.mjs --verify
 GOWORK=off go run github.com/floegence/redevplugin/cmd/redevplugin@v0.6.20 \
   package "$PLUGIN_DIR/dist" "$TEMP_DIR/plugin.redevplugin" >/dev/null
-cmp "$TEMP_DIR/plugin.redevplugin" "$CANDIDATE"
 GOWORK=off go run github.com/floegence/redevplugin/cmd/redevplugin@v0.6.20 \
-  validate "$CANDIDATE" >/dev/null
+  validate "$TEMP_DIR/plugin.redevplugin" >/dev/null
 
-if unzip -Z1 "$CANDIDATE" | grep -Fxq 'signatures/package.sig'; then
+if unzip -Z1 "$TEMP_DIR/plugin.redevplugin" | grep -Fxq 'signatures/package.sig'; then
   echo "Containers v4 candidate unexpectedly contains official signature evidence" >&2
   exit 1
 fi
 
-unzip -p "$CANDIDATE" manifest.json | node -e '
+unzip -p "$TEMP_DIR/plugin.redevplugin" manifest.json | node -e '
   let source = "";
   process.stdin.setEncoding("utf8");
   process.stdin.on("data", (chunk) => { source += chunk; });
@@ -127,4 +134,4 @@ for (const symbol of ['RedevenContainerResourcesV4Client', 'listEndpoints', 'end
 }
 NODE
 
-echo "Containers plugin 4.0.0 unsigned fail-closed candidate verified"
+echo "Containers plugin 4.0.0 immutable remote source and fail-closed package verified"

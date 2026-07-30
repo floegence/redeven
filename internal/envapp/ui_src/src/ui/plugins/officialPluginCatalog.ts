@@ -1,11 +1,15 @@
 import type { OfficialPluginCatalogItem } from './pluginTypes';
-import containersPluginIconURL from '../../../../../../plugins/official/containers/assets/containers-plugin.png';
 import { OFFICIAL_CONTAINERS_RELEASE_REF } from './officialContainersRelease.generated';
 import officialContainersDistribution from './officialContainersDistribution.json';
 import { officialReleaseNotes } from './pluginReleaseNotes';
 
+const OFFICIAL_CONTAINERS_SOURCE_REPOSITORY = 'https://github.com/floegence/redeven-official-plugins.git';
+const OFFICIAL_CONTAINERS_SOURCE_COMMIT = officialContainersDistribution.commit;
+
 export const OFFICIAL_CONTAINERS_PACKAGE_URL =
   `https://raw.githubusercontent.com/${officialContainersDistribution.repository}/${officialContainersDistribution.commit}/${officialContainersDistribution.artifact_path.join('/')}`;
+export const OFFICIAL_CONTAINERS_ICON_URL =
+  `https://raw.githubusercontent.com/${officialContainersDistribution.repository}/${officialContainersDistribution.commit}/${officialContainersDistribution.icon_path.join('/')}`;
 
 export const OFFICIAL_PLUGIN_CATALOG_SEED: readonly OfficialPluginCatalogItem[] = Object.freeze([
   {
@@ -22,7 +26,7 @@ export const OFFICIAL_PLUGIN_CATALOG_SEED: readonly OfficialPluginCatalogItem[] 
     rolloutState: 'stable',
     defaultSurfaceID: 'containers.dashboard',
     defaultSurfaceDisplayNameKey: 'uiCopy.plugin.containersDashboardSurface',
-    iconURL: containersPluginIconURL,
+    iconURL: OFFICIAL_CONTAINERS_ICON_URL,
     iconFallback: 'containers',
     category: 'infrastructure',
     searchKeywords: ['container', 'docker', 'podman', 'image', 'volume', 'runtime'],
@@ -74,6 +78,8 @@ export function officialPluginCatalog(developmentDelivery?: import('./pluginType
     || developmentDelivery.plugin_instance_id !== containers.pluginInstanceID
     || developmentDelivery.version !== '4.0.0'
     || developmentDelivery.capability_version !== '3.0.0'
+    || developmentDelivery.source_repository !== OFFICIAL_CONTAINERS_SOURCE_REPOSITORY
+    || developmentDelivery.source_commit !== OFFICIAL_CONTAINERS_SOURCE_COMMIT
     || developmentDelivery.development_only !== true) {
     throw new Error('Containers development delivery metadata is invalid');
   }

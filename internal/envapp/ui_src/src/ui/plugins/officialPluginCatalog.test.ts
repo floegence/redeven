@@ -2,7 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { OFFICIAL_PLUGIN_CATALOG_SEED } from './officialPluginCatalog';
+import { OFFICIAL_PLUGIN_CATALOG_SEED, officialPluginCatalog } from './officialPluginCatalog';
+import type { PluginDevelopmentDelivery } from './pluginTypes';
 
 type CapabilityContract = {
   methods: Array<{
@@ -36,15 +37,10 @@ function methodsByPermissionFromContract(): Record<string, string[]> {
 }
 
 describe('official plugin catalog contracts', () => {
-  it('ships the transparent Containers icon at the expected application resolution', () => {
-    const iconPath = path.resolve(process.cwd(), '../../../plugins/official/containers/assets/containers-plugin.png');
-    const icon = fs.readFileSync(iconPath);
-
-    expect(icon.subarray(1, 4).toString('ascii')).toBe('PNG');
-    expect(icon.readUInt32BE(16)).toBe(512);
-    expect(icon.readUInt32BE(20)).toBe(512);
-    expect(icon[25]).toBe(6);
-    expect(OFFICIAL_PLUGIN_CATALOG_SEED[0]?.iconURL).toContain('containers-plugin.png');
+  it('loads the Containers icon from the immutable official plugin source', () => {
+    expect(OFFICIAL_PLUGIN_CATALOG_SEED[0]?.iconURL).toBe(
+      'https://raw.githubusercontent.com/floegence/redeven-official-plugins/37d4dfff0cfa88c7a00ee0b89f55bfbcdde4b251/plugins/containers/assets/containers-plugin.png',
+    );
   });
 
   it('keeps Containers permissions and methods aligned with the pinned capability contract', () => {
@@ -60,5 +56,29 @@ describe('official plugin catalog contracts', () => {
     );
 
     expect(catalogMethodsByPermission).toEqual(methodsByPermissionFromContract());
+  });
+
+  it('rejects development delivery metadata from any unpinned source identity', () => {
+    const delivery: PluginDevelopmentDelivery = {
+      plugin_instance_id: 'plugini_redeven_official_containers',
+      publisher_id: 'com.redeven.official',
+      plugin_id: 'com.redeven.official.containers',
+      version: '4.0.0',
+      package_url: '/_redeven_proxy/api/plugins/development-delivery/containers/package',
+      package_sha256: 'a'.repeat(64),
+      package_hash: 'sha256:package',
+      manifest_hash: 'sha256:manifest',
+      entries_hash: 'sha256:entries',
+      capability_version: '3.0.0',
+      release_notes_id: 'containers-4.0.0',
+      release_notes_summary_sha256: 'b'.repeat(64),
+      source_repository: 'https://github.com/example/untrusted-plugins.git',
+      source_commit: '37d4dfff0cfa88c7a00ee0b89f55bfbcdde4b251',
+      development_only: true,
+    };
+
+    expect(() => officialPluginCatalog(delivery)).toThrow(
+      'Containers development delivery metadata is invalid',
+    );
   });
 });
