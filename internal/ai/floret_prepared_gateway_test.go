@@ -127,7 +127,3 @@ func (g canonicalChildApprovalGateway) Prepare(_ context.Context, req flprovider
 func (g testAskUserGateway) Prepare(_ context.Context, req flprovider.Request) (flprovider.PreparedRequest, error) {
 	return prepareTestFloretRequest(g, req)
 }
-
-func (g *blockingFloretModelGateway) Prepare(_ context.Context, req flprovider.Request) (flprovider.PreparedRequest, error) {
-	return prepareTestFloretRequest(g, req)
-}

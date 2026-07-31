@@ -267,17 +267,3 @@ func (c runProductCapabilities) bindSubAgentPublication(ctx context.Context, pub
 	}
 	return c.bindPublication(ctx, publicationID, snapshot, committedAtUnixMs)
 }
-
-func (c runProductCapabilities) finalizeSubAgentPublication(ctx context.Context, publicationID string, childSnapshotID string, childThreadID string, childRunID string, committedAtUnixMs int64) (bool, error) {
-	if c.finalizePublication == nil {
-		return false, errors.New("SubAgent publication capability is unavailable")
-	}
-	return c.finalizePublication(ctx, publicationID, childSnapshotID, childThreadID, childRunID, committedAtUnixMs)
-}
-
-func (c runProductCapabilities) failSubAgentPublication(ctx context.Context, publicationID string, childSnapshotID string, childThreadID string, childRunID string, failedAtUnixMs int64) (bool, error) {
-	if c.failPublication == nil {
-		return false, errors.New("SubAgent publication capability is unavailable")
-	}
-	return c.failPublication(ctx, publicationID, childSnapshotID, childThreadID, childRunID, failedAtUnixMs)
-}

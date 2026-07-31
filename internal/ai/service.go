@@ -1542,14 +1542,6 @@ func newMessageID() (string, error) {
 	return "m_ai_" + base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-func newTurnID() (string, error) {
-	b := make([]byte, 18)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	return "turn_" + base64.RawURLEncoding.EncodeToString(b), nil
-}
-
 func newToolID() (string, error) {
 	b := make([]byte, 12)
 	if _, err := rand.Read(b); err != nil {

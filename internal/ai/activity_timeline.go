@@ -104,29 +104,6 @@ func cloneFlowerActivityFileActions(in map[string]FlowerActivityFileAction) map[
 	return out
 }
 
-func activityPayloadString(payload map[string]any, key string) string {
-	if len(payload) == 0 {
-		return ""
-	}
-	return strings.TrimSpace(anyToString(payload[key]))
-}
-
-func activityPayloadRecords(payload map[string]any, key string) []map[string]any {
-	if len(payload) == 0 {
-		return nil
-	}
-	items, _ := payload[key].([]any)
-	out := make([]map[string]any, 0, len(items))
-	for _, item := range items {
-		record, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		out = append(out, record)
-	}
-	return out
-}
-
 func (r *run) activityTimelineFileActions(timeline observation.ActivityTimeline) map[string]FlowerActivityFileAction {
 	if r == nil || len(timeline.Items) == 0 {
 		return nil

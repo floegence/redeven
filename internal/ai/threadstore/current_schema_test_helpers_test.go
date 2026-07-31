@@ -18,14 +18,3 @@ func stagingScopeForTest(endpointID, targetID, ownerHash, scopeID string) Upload
 		ExpiresAtUnixMs: time.Now().Add(time.Hour).UnixMilli(),
 	}
 }
-
-func attachmentAdmissionForTest(ownerHash, revision string, routes map[string]string) AttachmentAdmission {
-	return AttachmentAdmission{
-		OwnerUserHash:      ownerHash,
-		CapabilityRevision: revision,
-		MaxCount:           AttachmentAdmissionMaxCount,
-		MaxTurnBytes:       AttachmentAdmissionMaxTurnBytes,
-		SupportsLongText:   true,
-		Routes:             routes,
-	}
-}

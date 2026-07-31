@@ -42,7 +42,7 @@ func TestPrepareFloretStorageRejectsUnsupportedDatabaseWithoutMigration(t *testi
 		t.Fatal(err)
 	}
 	_, err = prepareFloretStorage(context.Background(), path, nil)
-	requireFloretStartupError(t, err, FloretStoreStartupIOError)
+	_ = requireFloretStartupError(t, err, FloretStoreStartupIOError)
 	after, readErr := os.ReadFile(path)
 	if readErr != nil {
 		t.Fatal(readErr)

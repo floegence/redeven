@@ -17,7 +17,6 @@ import (
 	flconfig "github.com/floegence/floret/v3/config"
 	"github.com/floegence/floret/v3/identity"
 	"github.com/floegence/floret/v3/observation"
-	flprovider "github.com/floegence/floret/v3/provider"
 	flruntime "github.com/floegence/floret/v3/runtime"
 	fltools "github.com/floegence/floret/v3/tools"
 	"github.com/floegence/flowersec/flowersec-go/rpc"
@@ -593,35 +592,6 @@ func (h *testFloretHost) Run(ctx context.Context, command flruntime.StartTurnCom
 		return flruntime.TurnResult{}, err
 	}
 	return floretTurnResultFromSnapshot(started.ThreadID, snapshot), nil
-}
-
-type blockingFloretModelGateway struct {
-	started chan struct{}
-	release chan struct{}
-	once    sync.Once
-}
-
-func (*blockingFloretModelGateway) Identity() flprovider.Identity {
-	return testFloretGatewayIdentity()
-}
-
-func (*blockingFloretModelGateway) Capabilities() flprovider.Capabilities {
-	return testFloretGatewayCapabilities()
-}
-
-func (g *blockingFloretModelGateway) Stream(ctx context.Context, _ flprovider.Request) (<-chan flprovider.Event, error) {
-	g.once.Do(func() { close(g.started) })
-	events := make(chan flprovider.Event, 2)
-	go func() {
-		defer close(events)
-		select {
-		case <-g.release:
-			events <- flprovider.Event{Type: flprovider.EventDelta, Text: "parent done"}
-			events <- flprovider.Event{Type: flprovider.EventDone, Reason: "stop"}
-		case <-ctx.Done():
-		}
-	}()
-	return events, nil
 }
 
 func newTestFloretHostFromService(t *testing.T, svc *Service, parentThreadID string, fakeResponse string) *testFloretHost {
@@ -1432,7 +1402,11 @@ func TestDeleteThreadDeletesFloretTreeWithoutCachedRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer reopenedStore.Shutdown(context.Background())
+	t.Cleanup(func() {
+		if err := reopenedStore.Shutdown(context.Background()); err != nil {
+			t.Errorf("shutdown reopened store: %v", err)
+		}
+	})
 	bootstrap := testFloretBootstrap(t, reopenedStore)
 	parentRead, err := bootstrap.newThreadRead(ctx, identity.ThreadID(parent.ThreadID))
 	if err == nil {
@@ -1469,7 +1443,11 @@ func TestCancelThreadRejectsUnownedSubagentLifecycleWithoutCachedRuntime(t *test
 	assertLegacyFloretSubagentStoreNotCreated(t, svc)
 
 	reopenedHost, reopenedStore := openTestFloretHost(t, storePath, parent.ThreadID, "unused")
-	defer reopenedStore.Shutdown(context.Background())
+	t.Cleanup(func() {
+		if err := reopenedStore.Shutdown(context.Background()); err != nil {
+			t.Errorf("shutdown reopened store: %v", err)
+		}
+	})
 	snapshot, err := reopenedHost.ReadSubAgentDetail(ctx, identity.ThreadID(childID), flruntime.ThreadDetailRequest{})
 	if err != nil {
 		t.Fatalf("ReadSubAgentDetail child: %v", err)

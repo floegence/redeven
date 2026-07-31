@@ -718,7 +718,7 @@
     },
     {
       "path": "internal/ai/threadstore/flower_records.go",
-      "sha256": "11e5d26be15ef7c53b7f4cd5d3f94af78d2115886ed09b3442db68045c2a49e8",
+      "sha256": "3916c3cbbcd1c60a9034b6a65cb9e2f6a25c35cee46805827e61f990b89cb65e",
       "sink_kinds": [
         "sqlite"
       ],
@@ -936,7 +936,7 @@
     },
     {
       "path": "internal/ai/threadstore/store.go",
-      "sha256": "f0a1bbdbe1d186bc14711665a1052af0392e1a848fe12bf7c7c2bd47ce40e953",
+      "sha256": "01d02c12181b287999841af525731c7baf69d80e12a7f479218213a0014b11aa",
       "sink_kinds": [
         "sqlite"
       ],
@@ -1128,7 +1128,7 @@
     },
     {
       "path": "internal/ai/threadstore/upload_staging.go",
-      "sha256": "cf68a9ecf400b0e5d3be0fa1e9bd6fa0b2eecc86c24cafc5ec4340676415128a",
+      "sha256": "c35bc5efbf616bb8f6085c8fbf1fad8824e92a242e3856590c107d6063c3fbc5",
       "sink_kinds": [
         "sqlite"
       ],
