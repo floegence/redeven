@@ -71,8 +71,8 @@ var allowedAuthorities = map[string]struct{}{
 }
 
 var (
-	sqlMutationPattern                     = regexp.MustCompile(`(?is)\b(?:create\s+(?:table|index|trigger)|alter\s+table|drop\s+(?:table|index|trigger)|insert\s+into|replace\s+into|update\s+[a-z_][a-z0-9_]*\s+set|delete\s+from)\b`)
-	sqlTablePattern                        = regexp.MustCompile(`(?is)\b(?:create\s+table(?:\s+if\s+not\s+exists)?|alter\s+table|drop\s+table(?:\s+if\s+exists)?|insert\s+into|replace\s+into|update|delete\s+from)\s+[\x60"\[]?([a-z_][a-z0-9_]*)`)
+	sqlMutationPattern                     = regexp.MustCompile(`(?is)\b(?:create\s+(?:table|index|trigger)|alter\s+table|drop\s+(?:table|index|trigger)|insert(?:\s+or\s+(?:rollback|abort|replace|fail|ignore))?\s+into|replace\s+into|update\s+[a-z_][a-z0-9_]*\s+set|delete\s+from)\b`)
+	sqlTablePattern                        = regexp.MustCompile(`(?is)\b(?:create\s+table(?:\s+if\s+not\s+exists)?|alter\s+table|drop\s+table(?:\s+if\s+exists)?|insert(?:\s+or\s+(?:rollback|abort|replace|fail|ignore))?\s+into|replace\s+into|update|delete\s+from)\s+[\x60"\[]?([a-z_][a-z0-9_]*)`)
 	sqlReadTablePattern                    = regexp.MustCompile(`(?is)\b(?:from|join)\s+[\x60"\[]?([a-z_][a-z0-9_]*)`)
 	typeScriptFSNamespaceImportPattern     = regexp.MustCompile(`(?m)\bimport\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+["'](?:node:)?fs(?:/promises)?["']`)
 	typeScriptFSDefaultImportPattern       = regexp.MustCompile(`(?m)\bimport\s+([A-Za-z_$][\w$]*)\s+from\s+["'](?:node:)?fs(?:/promises)?["']`)
@@ -962,7 +962,7 @@ func shouldSkipFile(rel string) bool {
 	base := filepath.Base(rel)
 	return strings.HasSuffix(base, "_test.go") || strings.Contains(base, ".test.") || strings.Contains(base, ".spec.") ||
 		strings.HasSuffix(base, ".gen.go") || strings.HasPrefix(rel, "internal/boundarycontract/") ||
-		strings.HasPrefix(rel, "internal/cmd/durable-sink-contract/") || strings.HasPrefix(rel, "internal/testutil/")
+		strings.HasPrefix(rel, "internal/cmd/durable-sink-contract/") || strings.HasPrefix(rel, "internal/cmd/threadstore-boundary-contract/") || strings.HasPrefix(rel, "internal/testutil/")
 }
 
 func selectorRootName(expression ast.Expr) string {

@@ -155,7 +155,7 @@ check_no_floret_schema_access() {
   local floret_schema_pattern='active_turn_leases|schema_meta|raw_encoder_version|provider_states|agent_todo_states|prompt_segments|prompt_toolsets|prompt_requests|prompt_responses|tool_output_artifacts|metadata_records'
   local floret_raw_sql_pattern='(?i)(CREATE[[:space:]]+TABLE|ALTER[[:space:]]+TABLE|DROP[[:space:]]+TABLE|INSERT[[:space:]]+INTO|UPDATE|DELETE[[:space:]]+FROM|FROM|JOIN)[[:space:]]+(schema_meta|fork_operations|threads|entries|provider_states|agent_todo_states|prompt_segments|prompt_toolsets|prompt_requests|prompt_responses|tool_output_artifacts|metadata_records|active_turn_leases)\b'
 
-  if matches=$(rg -n --pcre2 --glob '!scripts/check_floret_dependency_boundary.sh' --glob '!internal/session/dependency_contract_test.go' "$floret_schema_pattern" "${scan_paths[@]}" 2>/dev/null); then
+  if matches=$(rg -n --pcre2 --glob '!scripts/check_floret_dependency_boundary.sh' --glob '!scripts/contracts/threadstore_boundary_manifest.json' --glob '!internal/boundarycontract/threadstore_sql.go' --glob '!internal/session/dependency_contract_test.go' "$floret_schema_pattern" "${scan_paths[@]}" 2>/dev/null); then
     printf '%s\n' "$matches"
     fail "Redeven must not reference Floret-owned storage schema tables or columns."
   fi
@@ -214,6 +214,21 @@ check_durable_sink_closed_set() {
 	fi
 
 	echo "[INFO] durable sink closed set checked"
+}
+
+check_threadstore_boundary_manifest() {
+	if ! GOWORK=off go run ./internal/cmd/threadstore-boundary-contract --check --root .; then
+		fail "The threadstore owner/consumer manifest and production SQL call-site catalog must remain exact."
+		return
+	fi
+	if ! GOWORK=off go test ./internal/ai/threadstore \
+		-run '^(TestThreadstoreBoundaryManifestCoversExactSchemaAndProductionSQL|TestAdmissionReceiptQueriesStayExactCoordinationOnly)$' \
+		-count=1; then
+		fail "The threadstore physical schema and receipt lookup boundary must remain fully reviewed."
+		return
+	fi
+
+	echo "[INFO] threadstore ownership and SQL catalog checked"
 }
 
 check_canonical_subagent_and_root_inventory_boundaries() {
@@ -640,6 +655,7 @@ check_no_floret_schema_access
 check_no_agent_shadow_storage
 check_agent_shadow_contract_semantics
 check_durable_sink_closed_set
+check_threadstore_boundary_manifest
 check_canonical_subagent_and_root_inventory_boundaries
 check_exact_turn_read_boundaries
 check_floret_capability_bootstrap_boundary
