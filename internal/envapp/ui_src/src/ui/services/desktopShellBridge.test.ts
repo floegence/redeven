@@ -307,10 +307,12 @@ describe('desktopShellBridge', () => {
     await expect(openWebServiceWindowInDesktopShell({
       url: 'http://127.0.0.1:43123/pf/demo/docs',
       forward_id: 'demo',
+      target_url: 'http://localhost:3000',
     })).resolves.toEqual({ ok: true });
     expect(openWebServiceWindow).toHaveBeenCalledWith({
       url: 'http://127.0.0.1:43123/pf/demo/docs',
       forward_id: 'demo',
+      target_url: 'http://localhost:3000',
     });
   });
 

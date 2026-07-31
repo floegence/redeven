@@ -3,7 +3,7 @@ export const DESKTOP_WEB_SERVICE_BROWSER_ACTION_CHANNEL = 'redeven-desktop:web-s
 export const DESKTOP_WEB_SERVICE_BROWSER_STATE_UPDATED_CHANNEL = 'redeven-desktop:web-service-browser-state-updated';
 
 export type DesktopWebServiceBrowserAction =
-  | Readonly<{ action: 'back' | 'forward' | 'reload' | 'stop' | 'open_external' }>
+  | Readonly<{ action: 'back' | 'forward' | 'reload' | 'stop' | 'toggle_devtools' | 'open_external' }>
   | Readonly<{ action: 'navigate'; address: string }>;
 
 export type DesktopWebServiceBrowserState = Readonly<{
@@ -12,6 +12,7 @@ export type DesktopWebServiceBrowserState = Readonly<{
   loading: boolean;
   can_go_back: boolean;
   can_go_forward: boolean;
+  devtools_open: boolean;
   error_message?: string;
 }>;
 
@@ -33,6 +34,7 @@ export function normalizeDesktopWebServiceBrowserAction(value: unknown): Desktop
     || action === 'forward'
     || action === 'reload'
     || action === 'stop'
+    || action === 'toggle_devtools'
     || action === 'open_external'
   ) {
     return { action };
@@ -52,6 +54,7 @@ export function normalizeDesktopWebServiceBrowserState(value: unknown): DesktopW
     loading: candidate.loading === true,
     can_go_back: candidate.can_go_back === true,
     can_go_forward: candidate.can_go_forward === true,
+    devtools_open: candidate.devtools_open === true,
     ...(errorMessage ? { error_message: errorMessage } : {}),
   };
 }

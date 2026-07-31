@@ -543,10 +543,20 @@
     "reload": "再読み込み",
     "stop": "読み込みを停止",
     "navigate": "アドレスに移動",
+    "developerTools": "デベロッパーツール (F12)",
     "openInBrowser": "ブラウザで開く",
     "secureRoute": "このページは現在の環境の Web Service ルートを使用します",
     "invalidAddress": "この Web Service 内の HTTP(S) アドレスまたはパスを入力してください。",
-    "loadFailed": "Web Service でこのアドレスを読み込めませんでした。"
+    "loadFailed": "Web Service でこのアドレスを読み込めませんでした。",
+    "unavailableDocumentTitle": "Web Service を利用できません",
+    "unavailableEyebrow": "接続できません",
+    "unavailableTitle": "この Web Service は応答していません",
+    "unavailableSummary": "Redeven は現在の環境に接続しましたが、このアドレスで応答するサービスがありません。",
+    "unavailableTargetLabel": "要求したサービス",
+    "unavailableChecksTitle": "再試行する前に",
+    "unavailableServiceCheck": "サービスが起動していることを確認してください。",
+    "unavailablePortCheck": "サービスがこのポートで待ち受けていることを確認してください。",
+    "retry": "再試行"
   },
   "language": {
     "systemDefault": "システム既定",

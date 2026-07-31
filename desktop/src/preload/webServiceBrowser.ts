@@ -23,12 +23,13 @@ function bootstrap(): void {
   const back = elementByID<HTMLButtonElement>('browser-back');
   const forward = elementByID<HTMLButtonElement>('browser-forward');
   const reload = elementByID<HTMLButtonElement>('browser-reload');
+  const developerTools = elementByID<HTMLButtonElement>('browser-devtools');
   const openExternal = elementByID<HTMLButtonElement>('browser-open-external');
   const status = elementByID<HTMLDivElement>('browser-status');
   const progress = elementByID<HTMLDivElement>('browser-progress');
   const reloadIcon = reload?.querySelector<SVGElement>('.reload-icon') ?? null;
   const stopIcon = reload?.querySelector<SVGElement>('.stop-icon') ?? null;
-  if (!form || !address || !back || !forward || !reload || !openExternal || !status || !progress) return;
+  if (!form || !address || !back || !forward || !reload || !developerTools || !openExternal || !status || !progress) return;
 
   let state = normalizeDesktopWebServiceBrowserState(null);
   let editingAddress = false;
@@ -44,6 +45,7 @@ function bootstrap(): void {
     reloadIcon?.toggleAttribute('hidden', next.loading);
     stopIcon?.toggleAttribute('hidden', !next.loading);
     progress.dataset.loading = String(next.loading);
+    developerTools.setAttribute('aria-pressed', String(next.devtools_open));
     status.textContent = next.error_message ?? '';
     status.dataset.visible = String(Boolean(next.error_message));
     document.title = next.title ? `${next.title} - ${browserTitle}` : browserTitle;
@@ -87,6 +89,7 @@ function bootstrap(): void {
   back.addEventListener('click', () => void perform({ action: 'back' }));
   forward.addEventListener('click', () => void perform({ action: 'forward' }));
   reload.addEventListener('click', () => void perform({ action: state.loading ? 'stop' : 'reload' }));
+  developerTools.addEventListener('click', () => void perform({ action: 'toggle_devtools' }));
   openExternal.addEventListener('click', () => void perform({ action: 'open_external' }));
 
   ipcRenderer.on(DESKTOP_WEB_SERVICE_BROWSER_STATE_UPDATED_CHANNEL, (_event, value) => {

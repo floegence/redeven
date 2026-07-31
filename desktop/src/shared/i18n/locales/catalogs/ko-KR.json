@@ -543,10 +543,20 @@
     "reload": "새로 고침",
     "stop": "로딩 중지",
     "navigate": "주소로 이동",
+    "developerTools": "개발자 도구 (F12)",
     "openInBrowser": "브라우저에서 열기",
     "secureRoute": "이 페이지는 현재 환경의 Web Service 경로를 사용합니다",
     "invalidAddress": "이 Web Service 안의 HTTP(S) 주소 또는 경로를 입력하세요.",
-    "loadFailed": "Web Service에서 이 주소를 불러올 수 없습니다."
+    "loadFailed": "Web Service에서 이 주소를 불러올 수 없습니다.",
+    "unavailableDocumentTitle": "Web Service를 사용할 수 없음",
+    "unavailableEyebrow": "연결할 수 없음",
+    "unavailableTitle": "이 Web Service가 응답하지 않습니다",
+    "unavailableSummary": "Redeven은 현재 환경에 연결했지만 이 주소에서 응답하는 서비스가 없습니다.",
+    "unavailableTargetLabel": "요청한 서비스",
+    "unavailableChecksTitle": "다시 시도하기 전에",
+    "unavailableServiceCheck": "서비스가 실행 중인지 확인하세요.",
+    "unavailablePortCheck": "서비스가 이 포트에서 수신 중인지 확인하세요.",
+    "retry": "다시 시도"
   },
   "language": {
     "systemDefault": "시스템 기본값",

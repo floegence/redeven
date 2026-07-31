@@ -200,6 +200,12 @@ describe('main routing', () => {
     expect(helperSrc).toContain('DESKTOP_WEB_SERVICE_BROWSER_STATE_UPDATED_CHANNEL');
     expect(helperSrc).toContain('isAllowedWebServiceWindowNavigation(targetURL, sessionRecord.allowed_base_url, request.forward_id)');
     expect(helperSrc).toContain("case 'open_external':");
+    expect(helperSrc).toContain("case 'toggle_devtools':");
+    expect(helperSrc).toContain("contentView.webContents.openDevTools({ mode: 'detach' });");
+    expect(helperSrc).toContain("contentView.webContents.on('before-input-event', handleDevToolsShortcut);");
+    expect(helperSrc).toContain('isMarkedWebServiceUpstreamUnavailable(details)');
+    expect(helperSrc).toContain('webServiceUnavailableDocumentURL(targetAddress)');
+    expect(helperSrc).toContain('callback({ cancel: true });');
     expect(helperSrc).toContain('await openExternalURL(targetURL);');
     expect(helperSrc).toContain('blockExternalNavigation(url);');
     expect(helperSrc).toContain('blockExternalNavigation(targetURL);');
@@ -210,6 +216,7 @@ describe('main routing', () => {
     expect(helperSrc).toContain('webSession.clearCache()');
     expect(helperSrc).toContain('current?.webContentsID !== closedWindow.webContentsID');
     expect(helperSrc).toContain('clearWebServiceWindowPartition(partition);');
+    expect(helperSrc).toContain('webSession.webRequest.onHeadersReceived(null);');
     expect(helperSrc).not.toContain('sessionRecord.session_partition');
   });
 

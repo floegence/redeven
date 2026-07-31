@@ -543,10 +543,20 @@
     "reload": "Actualiser",
     "stop": "Arrêter le chargement",
     "navigate": "Accéder à l’adresse",
+    "developerTools": "Outils de développement (F12)",
     "openInBrowser": "Ouvrir dans le navigateur",
     "secureRoute": "Cette page utilise la route Web Service de l’environnement actuel",
     "invalidAddress": "Saisissez une adresse HTTP(S) ou un chemin dans ce Web Service.",
-    "loadFailed": "Le Web Service n’a pas pu charger cette adresse."
+    "loadFailed": "Le Web Service n’a pas pu charger cette adresse.",
+    "unavailableDocumentTitle": "Web Service indisponible",
+    "unavailableEyebrow": "Connexion indisponible",
+    "unavailableTitle": "Ce Web Service ne répond pas",
+    "unavailableSummary": "Redeven a joint l’environnement, mais aucun service ne répond à cette adresse.",
+    "unavailableTargetLabel": "Service demandé",
+    "unavailableChecksTitle": "Avant de réessayer",
+    "unavailableServiceCheck": "Vérifiez que le service est en cours d’exécution.",
+    "unavailablePortCheck": "Vérifiez que le service écoute sur ce port.",
+    "retry": "Réessayer"
   },
   "language": {
     "systemDefault": "Valeur système",

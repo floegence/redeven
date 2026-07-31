@@ -456,6 +456,50 @@ func TestServer_LocalUIPortForwardProxyKeepsLocalPrefixInTargetRedirects(t *test
 	}
 }
 
+func TestServer_LocalUIPortForwardProxyMarksUnavailableUpstream(t *testing.T) {
+	t.Parallel()
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("net.Listen() error = %v", err)
+	}
+	targetURL := "http://" + listener.Addr().String()
+	if err := listener.Close(); err != nil {
+		t.Fatalf("listener.Close() error = %v", err)
+	}
+
+	srv, err := New(Options{
+		Backend: &stubBackend{},
+		PortForward: &stubPortForwardBackend{forwards: map[string]pfregistry.Forward{
+			"offline": {
+				ForwardID: "offline",
+				TargetURL: targetURL,
+			},
+		}},
+		DistFS:             fstest.MapFS{"env/index.html": {Data: []byte("<html>env</html>")}},
+		ConfigPath:         writeLocalUITestConfig(t),
+		ResolveSessionMeta: func(string) (*session.Meta, bool) { return nil, false },
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "http://localhost:23998/pf/offline/", nil)
+	req = WithLocalUIPortForwardRoute(req, "offline")
+	rr := httptest.NewRecorder()
+	srv.serveHTTP(rr, req)
+
+	if rr.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d, want %d, body=%s", rr.Code, http.StatusBadGateway, rr.Body.String())
+	}
+	if got := rr.Header().Get(portForwardProxyErrorHeader); got != portForwardProxyUpstreamUnavailable {
+		t.Fatalf("%s = %q, want %q", portForwardProxyErrorHeader, got, portForwardProxyUpstreamUnavailable)
+	}
+	if got := rr.Header().Get("Cache-Control"); got != "no-store" {
+		t.Fatalf("Cache-Control = %q, want %q", got, "no-store")
+	}
+}
+
 func TestProbePortForwardHealth_UsesConfiguredHealthPath(t *testing.T) {
 	t.Parallel()
 
