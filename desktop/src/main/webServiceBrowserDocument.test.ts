@@ -36,6 +36,8 @@ describe('webServiceBrowserDocument', () => {
     expect(document).toContain('id="browser-devtools"');
     expect(document).toContain('aria-label="Developer tools (F12)"');
     expect(document).toContain('aria-pressed="false"');
+    expect(document).toContain('<circle cx="12" cy="12" r="9"/>');
+    expect(document).not.toContain('<rect x="5" y="11" width="14" height="9" rx="2"/>');
     expect(document).toContain('aria-label="Open in browser"');
     expect(document).toContain('data-stop-label="Stop loading"');
     expect(document).toContain('.nav-button svg[hidden] { display: none; }');

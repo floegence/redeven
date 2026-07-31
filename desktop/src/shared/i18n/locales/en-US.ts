@@ -50,6 +50,7 @@ export const enUS = {
     unavailableServiceCheck: 'Make sure the service is running.',
     unavailablePortCheck: 'Confirm that the service is listening on this port.',
     retry: 'Try again',
+    retrying: 'Trying again...',
   },
   language: {
     systemDefault: 'System default',

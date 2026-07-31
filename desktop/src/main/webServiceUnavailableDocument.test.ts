@@ -19,6 +19,7 @@ const copy = {
   serviceCheck: 'Make sure the service is running.',
   portCheck: 'Confirm that the service is listening on this port.',
   retryLabel: 'Try again',
+  retryingLabel: 'Trying again...',
 } as const;
 
 describe('webServiceUnavailableDocument', () => {
@@ -27,7 +28,9 @@ describe('webServiceUnavailableDocument', () => {
 
     expect(document).toContain('This Web Service is not responding');
     expect(document).toContain('<code title="http://localhost:3000">http://localhost:3000</code>');
-    expect(document).toContain('href="#retry"');
+    expect(document).toContain('id="retry" class="retry" href="#retry"');
+    expect(document).toContain('<span class="retrying-label">Trying again...</span>');
+    expect(document).toContain('.retry:target svg { animation: spin');
     expect(document).toContain("script-src 'none'");
     expect(document).not.toContain('<script');
     expect(document).not.toContain('upstream unavailable');

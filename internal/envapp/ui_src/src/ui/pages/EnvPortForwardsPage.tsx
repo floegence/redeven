@@ -801,6 +801,7 @@ export function EnvPortForwardsPage() {
           body: JSON.stringify({ target }),
         });
         setRecentSession(session);
+        setAddress(new URL(session.app_path, session.forward.target_url).toString());
         return { forward: session.forward, appPath: session.app_path };
       },
     );

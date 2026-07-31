@@ -197,6 +197,8 @@ describe('main routing', () => {
     expect(helperSrc).toContain('contextIsolation: true,');
     expect(helperSrc).toContain('nodeIntegration: false,');
     expect(helperSrc).toContain('resolveWebServiceBrowserAddress(');
+    expect(helperSrc).toContain('webServiceBrowserDisplayURL(routeAddress, request.target_url, request.forward_id)');
+    expect(helperSrc).toContain('request.target_url,');
     expect(helperSrc).toContain('DESKTOP_WEB_SERVICE_BROWSER_STATE_UPDATED_CHANNEL');
     expect(helperSrc).toContain('isAllowedWebServiceWindowNavigation(targetURL, sessionRecord.allowed_base_url, request.forward_id)');
     expect(helperSrc).toContain("case 'open_external':");
@@ -206,6 +208,9 @@ describe('main routing', () => {
     expect(helperSrc).toContain('isMarkedWebServiceUpstreamUnavailable(details)');
     expect(helperSrc).toContain('webServiceUnavailableDocumentURL(targetAddress)');
     expect(helperSrc).toContain('callback({ cancel: true });');
+    expect(helperSrc).toContain('WEB_SERVICE_BROWSER_RETRY_FEEDBACK_MS');
+    expect(helperSrc).toContain('if (unavailablePageURL !== retryPageURL) return;');
+    expect(helperSrc).toContain('if (contentView.webContents.getURL() !== `${retryPageURL}#retry`) return;');
     expect(helperSrc).toContain('await openExternalURL(targetURL);');
     expect(helperSrc).toContain('blockExternalNavigation(url);');
     expect(helperSrc).toContain('blockExternalNavigation(targetURL);');

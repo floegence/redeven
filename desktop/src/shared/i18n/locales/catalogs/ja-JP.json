@@ -556,7 +556,8 @@
     "unavailableChecksTitle": "再試行する前に",
     "unavailableServiceCheck": "サービスが起動していることを確認してください。",
     "unavailablePortCheck": "サービスがこのポートで待ち受けていることを確認してください。",
-    "retry": "再試行"
+    "retry": "再試行",
+    "retrying": "再試行しています..."
   },
   "language": {
     "systemDefault": "システム既定",

@@ -7,6 +7,7 @@ import {
   isCodespaceURLForCodeSpace,
   isPortForwardURLForForward,
   resolveWebServiceBrowserAddress,
+  webServiceBrowserDisplayURL,
 } from './navigation';
 import { isLoopbackHost } from './localUIURL';
 
@@ -114,33 +115,77 @@ describe('navigation', () => {
     expect(resolveWebServiceBrowserAddress(
       '/docs?q=1#api',
       'http://127.0.0.1:43123/pf/demo/',
+      'http://localhost:3000/',
       'http://127.0.0.1:43123/',
       'demo',
     )).toBe('http://127.0.0.1:43123/pf/demo/docs?q=1#api');
     expect(resolveWebServiceBrowserAddress(
       'settings',
       'https://pf-demo.sg.redeven.online/app/',
+      'http://localhost:3000/',
       'https://env-session.sg.redeven.online/',
       'demo',
     )).toBe('https://pf-demo.sg.redeven.online/settings');
     expect(resolveWebServiceBrowserAddress(
       '?tab=logs',
       'https://pf-demo.sg.redeven.online/app',
+      'http://localhost:3000/',
       'https://env-session.sg.redeven.online/',
       'demo',
     )).toBe('https://pf-demo.sg.redeven.online/app?tab=logs');
+    expect(resolveWebServiceBrowserAddress(
+      'localhost:3000/docs',
+      'http://127.0.0.1:43123/pf/demo/',
+      'http://localhost:3000/',
+      'http://127.0.0.1:43123/',
+      'demo',
+    )).toBe('http://127.0.0.1:43123/pf/demo/docs');
+  });
+
+  it('projects protected Web Service routes as the user-facing target address', () => {
+    expect(webServiceBrowserDisplayURL(
+      'http://127.0.0.1:43123/pf/demo/docs?q=1#api',
+      'http://localhost:3000/',
+      'demo',
+    )).toBe('http://localhost:3000/docs?q=1#api');
+    expect(webServiceBrowserDisplayURL(
+      'https://pf-demo.sg.redeven.online/app/settings?tab=logs',
+      'http://127.0.0.1:8080/',
+      'demo',
+    )).toBe('http://127.0.0.1:8080/app/settings?tab=logs');
+    expect(webServiceBrowserDisplayURL(
+      'https://pf-demo.sg.redeven.online/_redeven_boot/?env=env_demo#redeven=secret',
+      'http://localhost:3000/',
+      'demo',
+    )).toBe('http://localhost:3000/');
   });
 
   it('rejects browser address input outside the current forward', () => {
     expect(resolveWebServiceBrowserAddress(
       'https://pf-other.sg.redeven.online/',
       'https://pf-demo.sg.redeven.online/',
+      'http://localhost:3000/',
       'https://env-session.sg.redeven.online/',
       'demo',
     )).toBeNull();
     expect(resolveWebServiceBrowserAddress(
       'file:///tmp/demo',
       'http://127.0.0.1:43123/pf/demo/',
+      'http://localhost:3000/',
+      'http://127.0.0.1:43123/',
+      'demo',
+    )).toBeNull();
+    expect(resolveWebServiceBrowserAddress(
+      'http://localhost:4000/',
+      'http://127.0.0.1:43123/pf/demo/',
+      'http://localhost:3000/',
+      'http://127.0.0.1:43123/',
+      'demo',
+    )).toBeNull();
+    expect(resolveWebServiceBrowserAddress(
+      'baidu.com',
+      'http://127.0.0.1:43123/pf/demo/',
+      'http://localhost:3000/',
       'http://127.0.0.1:43123/',
       'demo',
     )).toBeNull();
