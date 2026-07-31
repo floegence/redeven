@@ -483,7 +483,7 @@
               "themes",
               "ui"
             ],
-            "summary": "Env App's Git browser uses each Floe theme's native selection and focus roles for selected navigation and rows, while Classic Light and Classic Dark retain Redeven's established blue interaction system and Git status colors remain reserved for repository meaning. The currently checked-out branch is a repository fact and the selected branch is the user's inspection target; either may exist without the other, and both remain visible when they coincide. Hover and keyboard focus provide separate transient feedback. If a theme cannot preserve these distinctions and readable text, the visual contract fails rather than falling back to an unrelated fixed palette or ambiguous neutral styling.",
+            "summary": "Env App's Git browser uses each Floe theme's native selection and focus roles for selected navigation and rows, while Classic Light retains Redeven's established blue interaction system and Git status colors remain reserved for repository meaning. The currently checked-out branch is a repository fact and the selected branch is the user's inspection target; either may exist without the other, and both remain visible when they coincide. Hover and keyboard focus provide separate transient feedback. If a theme cannot preserve these distinctions and readable text, the visual contract fails rather than falling back to an unrelated fixed palette or ambiguous neutral styling.",
             "section_count": 2
           },
           {
@@ -8893,15 +8893,15 @@
         "title": "Git browser visual states",
         "type": "UI Contract"
       },
-      "body_length": 3721,
-      "summary": "Env App's Git browser uses each Floe theme's native selection and focus roles for selected navigation and rows, while Classic Light and Classic Dark retain Redeven's established blue interaction system and Git status colors remain reserved for repository meaning. The currently checked-out branch is a repository fact and the selected branch is the user's inspection target; either may exist without the other, and both remain visible when they coincide. Hover and keyboard focus provide separate transient feedback. If a theme cannot preserve these distinctions and readable text, the visual contract fails rather than falling back to an unrelated fixed palette or ambiguous neutral styling.",
+      "body_length": 3763,
+      "summary": "Env App's Git browser uses each Floe theme's native selection and focus roles for selected navigation and rows, while Classic Light retains Redeven's established blue interaction system and Git status colors remain reserved for repository meaning. The currently checked-out branch is a repository fact and the selected branch is the user's inspection target; either may exist without the other, and both remain visible when they coincide. Hover and keyboard focus provide separate transient feedback. If a theme cannot preserve these distinctions and readable text, the visual contract fails rather than falling back to an unrelated fixed palette or ambiguous neutral styling.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## State ownership\n\nSelected navigation, branch rows, history rows, status summaries, and changed-file rows share the Git selection accent, background, border, and indicator tokens. List-like selections use a filled surface plus a solid left indicator. Segmented tabs keep their contained active-item presentation and do not adopt list indicators. Hover uses a lower-emphasis neutral surface and never overrides an active selection. Keyboard focus uses a distinct outline that remains visible on selected and unselected controls.\n\nThe Current branch chip is independent of selection styling. It always uses the current-branch chip tokens, including when the current branch is selected. Git change and health tones such as success, warning, danger, info, and remote-branch violet remain on semantic icons, badges, paths, and values; they must not determine a selection indicator or focus ring.\n\n## Theme and accessibility\n\nEvery built-in light and dark shell preset inherits the complete Git interaction token set. Non-Classic themes derive selected surfaces from Floe's published `selection-bg` and derive selection indicators and focus rings from the theme `ring`, with a small foreground mixture in dark themes where needed to preserve adjacent-color contrast. This keeps warm, green, violet, neutral, and blue themes within their own interaction identity. Light themes use a restrained selection mixture over the panel; dark themes use a stronger mixture so selection does not disappear into dark panels. Classic Light and Classic Dark explicitly override those sources with Redeven's validated blue roles. Selected text and current-chip text meet a 4.5:1 contrast target. Selection indicators and focus rings meet a 3:1 adjacent-color target, while selected, hover, and idle surfaces retain measurable perceptual separation. Forced-colors mode exposes selected borders, indicators, focus outlines, and current-chip boundaries through system colors.",
-          "char_count": 1952
+          "body": "## State ownership\n\nSelected navigation, branch rows, history rows, status summaries, and changed-file rows share the Git selection accent, background, border, and indicator tokens. List-like selections use a filled surface plus a solid left indicator. Segmented tabs keep their contained active-item presentation and do not adopt list indicators. Hover uses a lower-emphasis neutral surface and never overrides an active selection. Keyboard focus uses a distinct outline that remains visible on selected and unselected controls.\n\nThe Current branch chip is independent of selection styling. It always uses the current-branch chip tokens, including when the current branch is selected. Git change and health tones such as success, warning, danger, info, and remote-branch violet remain on semantic icons, badges, paths, and values; they must not determine a selection indicator or focus ring.\n\n## Theme and accessibility\n\nEvery built-in light and dark shell preset inherits the complete Git interaction token set. Themes, including Classic Dark, derive selected surfaces from Floe's published `selection-bg` and derive selection indicators and focus rings from the theme `ring`, with a small foreground mixture in dark themes where needed to preserve adjacent-color contrast. This keeps warm, green, violet, neutral, and blue themes within their own interaction identity. Light themes use a restrained selection mixture over the panel; dark themes use a stronger mixture so selection does not disappear into dark panels, while Classic Dark keeps a quieter surface mixture suited to its elevated panels. Classic Light explicitly retains Redeven's validated blue roles. Selected text and current-chip text meet a 4.5:1 contrast target. Selection indicators and focus rings meet a 3:1 adjacent-color target, while selected, hover, and idle surfaces retain measurable perceptual separation. Forced-colors mode exposes selected borders, indicators, focus outlines, and current-chip boundaries through system colors.",
+          "char_count": 2010
         },
         {
           "id": "boundaries",
@@ -8911,7 +8911,7 @@
           "char_count": 390
         }
       ],
-      "snippet": "Env App's Git browser uses each Floe theme's native selection and focus roles for selected navigation and rows, while Classic Light and Classic Dark retain Redeven's established blue interaction system and Git status colors remain reserved ",
+      "snippet": "Env App's Git browser uses each Floe theme's native selection and focus roles for selected navigation and rows, while Classic Light retains Redeven's established blue interaction system and Git status colors remain reserved for repository m",
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -9810,5 +9810,5 @@
       ]
     }
   ],
-  "source_sha256": "46434611c91be4046712975e66803139a04531ae3048425cd92c47b741366c3b"
+  "source_sha256": "9d78960a1b04c7f57f4c1977cfba9a32a01d55f394a83af2e5ce0443ca1d6e81"
 }
