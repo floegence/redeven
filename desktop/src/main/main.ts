@@ -866,9 +866,16 @@ type DesktopWebServiceBrowserController = Readonly<{
   contentView: WebContentsView;
   navigate: (address: string) => DesktopWebServiceBrowserActionResponse;
   perform: (action: DesktopWebServiceBrowserAction) => Promise<DesktopWebServiceBrowserActionResponse>;
+  refreshTheme: () => void;
   snapshot: () => DesktopWebServiceBrowserState;
 }>;
 const webServiceBrowserByToolbarWebContentsID = new Map<number, DesktopWebServiceBrowserController>();
+
+function refreshWebServiceBrowserDocuments(): void {
+  for (const controller of webServiceBrowserByToolbarWebContentsID.values()) {
+    controller.refreshTheme();
+  }
+}
 const sessionCloseTasks = new Map<DesktopSessionKey, Promise<void>>();
 const desktopDiagnosticsHookSessions = new WeakSet<Session>();
 const directDesktopSessionTasks = new Map<string, Promise<Session>>();
@@ -3001,7 +3008,10 @@ function desktopThemeState(): DesktopThemeState {
       desktopStateStore(),
       nativeTheme,
       process.platform,
-      refreshCodespaceLoadingDocuments,
+      () => {
+        refreshCodespaceLoadingDocuments();
+        refreshWebServiceBrowserDocuments();
+      },
     );
   }
   desktopThemeStateCache.initialize();
@@ -7949,7 +7959,7 @@ function webServiceBrowserDocumentURL(): string {
     developerToolsLabel: i18n.t('webServiceBrowser.developerTools'),
     openExternalLabel: i18n.t('webServiceBrowser.openInBrowser'),
     secureRouteLabel: i18n.t('webServiceBrowser.secureRoute'),
-  });
+  }, desktopThemeState().getSnapshot());
 }
 
 function webServiceUnavailableDocumentURL(targetAddress: string): string {
@@ -7967,7 +7977,7 @@ function webServiceUnavailableDocumentURL(targetAddress: string): string {
     portCheck: i18n.t('webServiceBrowser.unavailablePortCheck'),
     retryLabel: i18n.t('webServiceBrowser.retry'),
     retryingLabel: i18n.t('webServiceBrowser.retrying'),
-  }, targetAddress);
+  }, targetAddress, desktopThemeState().getSnapshot());
 }
 
 function createWebServiceBrowserController(
@@ -8084,6 +8094,14 @@ function createWebServiceBrowserController(
       contentView.webContents.openDevTools({ mode: 'detach' });
     }
     publishState();
+  };
+  const refreshTheme = (): void => {
+    if (win.isDestroyed()) return;
+    void win.loadURL(webServiceBrowserDocumentURL());
+    if (!unavailablePageURL || contentView.webContents.isDestroyed()) return;
+    unavailablePageURL = webServiceUnavailableDocumentURL(targetAddress);
+    loadingUnavailablePage = true;
+    void contentView.webContents.loadURL(unavailablePageURL);
   };
   const perform = async (action: DesktopWebServiceBrowserAction): Promise<DesktopWebServiceBrowserActionResponse> => {
     if (contentView.webContents.isDestroyed()) {
@@ -8254,6 +8272,7 @@ function createWebServiceBrowserController(
     contentView,
     navigate,
     perform,
+    refreshTheme,
     snapshot,
   };
   webServiceBrowserByToolbarWebContentsID.set(windowRecord.webContentsID, controller);

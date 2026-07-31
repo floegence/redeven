@@ -1,6 +1,20 @@
 import { describe, expect, it } from 'vitest';
 
 import { buildWebServiceBrowserDocumentURL } from './webServiceBrowserDocument';
+import {
+  desktopSemanticPaletteForShellTheme,
+  desktopWindowThemeSnapshotForShellTheme,
+} from './desktopTheme';
+import type { DesktopThemeSnapshot } from '../shared/desktopTheme';
+
+const theme: DesktopThemeSnapshot = {
+  source: 'dark',
+  resolvedTheme: 'dark',
+  shellThemes: { version: 1, light: 'mist', dark: 'forest' },
+  activeShellTheme: 'forest',
+  window: desktopWindowThemeSnapshotForShellTheme('forest'),
+  semantic: desktopSemanticPaletteForShellTheme('forest'),
+};
 
 function decodeDataDocument(url: string): string {
   const prefix = 'data:text/html;charset=utf-8,';
@@ -23,7 +37,7 @@ describe('webServiceBrowserDocument', () => {
       developerToolsLabel: 'Developer tools (F12)',
       openExternalLabel: 'Open in browser',
       secureRouteLabel: 'Protected route',
-    }));
+    }, theme));
 
     expect(document).toContain('Content-Security-Policy');
     expect(document).toContain("default-src 'none'");
@@ -40,6 +54,8 @@ describe('webServiceBrowserDocument', () => {
     expect(document).not.toContain('<rect x="5" y="11" width="14" height="9" rx="2"/>');
     expect(document).toContain('aria-label="Open in browser"');
     expect(document).toContain('data-stop-label="Stop loading"');
+    expect(document).toContain('data-floe-shell-theme="forest"');
+    expect(document).toContain(`--primary: ${theme.semantic.primary}`);
     expect(document).toContain('.nav-button svg[hidden] { display: none; }');
     expect(document).toContain('class="stop-icon" viewBox="0 0 24 24" aria-hidden="true" hidden');
     expect(document).not.toContain('<script');
@@ -59,7 +75,7 @@ describe('webServiceBrowserDocument', () => {
       developerToolsLabel: 'Developer tools',
       openExternalLabel: 'Open externally',
       secureRouteLabel: 'A & B',
-    }));
+    }, theme));
 
     expect(document).toContain('&lt;Service&gt;');
     expect(document).toContain('&quot;Address&quot;');
