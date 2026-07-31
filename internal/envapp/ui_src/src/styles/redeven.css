@@ -640,8 +640,6 @@
   --git-title-dot-warning: color-mix(in srgb, var(--warning) 75%, transparent);
   --git-title-dot-danger: color-mix(in srgb, var(--error) 75%, transparent);
   --git-title-dot-violet: color-mix(in srgb, var(--color-violet-500) 75%, transparent);
-  --git-browser-selection-source: var(--color-sky-400);
-  --git-browser-selection-accent: var(--color-sky-400);
   --git-browser-selection-bg: color-mix(in srgb, var(--git-browser-selection-source) 18%, var(--redeven-surface-panel));
   --git-browser-selection-border: color-mix(in srgb, var(--git-browser-selection-source) 38%, var(--redeven-stroke-divider));
 }

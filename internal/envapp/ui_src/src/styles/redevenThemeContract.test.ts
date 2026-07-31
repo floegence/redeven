@@ -61,6 +61,9 @@ describe('Redeven Env App surface theme contract', () => {
 
   it('defines the light demo palette, root surface family, and paired stroke tokens', () => {
     const src = readRedevenCss();
+    const classicDarkStart = src.indexOf(":root[data-floe-shell-theme='classic-dark'],");
+    const classicDarkEnd = src.indexOf('@media (max-width: 960px)', classicDarkStart);
+    const classicDarkScope = src.slice(classicDarkStart, classicDarkEnd);
 
     expect(src).toContain(":root[data-floe-shell-theme='classic-light'],");
     expect(src).toContain(":root:not([data-floe-shell-theme]):not(.dark),");
@@ -141,12 +144,12 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('--redeven-link-fg: var(--color-sky-400);');
     expect(src).toContain('--redeven-link-hover-fg: var(--color-sky-300);');
     expect(src).toContain('--redeven-link-code-bg: color-mix(in srgb, var(--redeven-link-fg) 13%, var(--background));');
-    expect(src).toContain('--git-browser-selection-source: var(--color-sky-400);');
-    expect(src).toContain('--git-browser-selection-accent: var(--color-sky-400);');
     expect(src).toContain('--git-browser-selection-accent: color-mix(in srgb, var(--ring) 92%, var(--foreground) 8%);');
     expect(src).toContain('--git-browser-hover-bg: color-mix(in srgb, var(--foreground) 1%, var(--redeven-surface-panel));');
-    expect(src).toContain('--git-browser-selection-bg: color-mix(in srgb, var(--git-browser-selection-source) 18%, var(--redeven-surface-panel));');
-    expect(src).toContain('--git-browser-selection-border: color-mix(in srgb, var(--git-browser-selection-source) 38%, var(--redeven-stroke-divider));');
+    expect(classicDarkScope).not.toContain('--git-browser-selection-source: var(--color-sky-400);');
+    expect(classicDarkScope).not.toContain('--git-browser-selection-accent: var(--color-sky-400);');
+    expect(classicDarkScope).toContain('--git-browser-selection-bg: color-mix(in srgb, var(--git-browser-selection-source) 18%, var(--redeven-surface-panel));');
+    expect(classicDarkScope).toContain('--git-browser-selection-border: color-mix(in srgb, var(--git-browser-selection-source) 38%, var(--redeven-stroke-divider));');
     expect(src).toContain('--git-browser-current-chip-fg: color-mix(in srgb, var(--git-browser-selection-accent) 45%, var(--foreground) 55%);');
   });
 
