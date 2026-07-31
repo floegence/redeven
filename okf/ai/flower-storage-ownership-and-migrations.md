@@ -7,9 +7,9 @@ timestamp: 2026-07-31T00:00:00Z
 ---
 # Summary
 
-- Authority: Floret owns admitted Agent state and every canonical `ThreadID`, `TurnID`, and `RunID`; Redeven owns product settings, uploads, unadmitted queue state, routing, authorization evidence, and durable cross-store operations.
+- Authority: Floret owns admitted Agent state and canonical identities; Redeven owns product settings, uploads, unadmitted queue state, routing, authorization evidence, and durable cross-store operations.
 - Outcome: `ai_threadstore_product_v1` version 1 is the sole first-release baseline and opens only after a read-only complete-schema preflight.
-- Invariants: admission identities begin empty, bind once from validated Floret facts, and settle product state atomically; unsupported databases are rejected without mutation. The v3.0.2 event-based acknowledgement is a documented contract gap, not a signed long-term bind boundary.
+- Invariants: admission identities begin empty, bind once from validated Floret facts, and settle product state atomically. Unsupported databases are rejected without mutation. The v3.0.2 event acknowledgement is a documented gap, not a long-term bind boundary.
 - Failure boundary: schema drift, an unsupported identity, incomplete canonical evidence, or a conflicting replay stops startup or admission without repair, reset, or substitute state.
 
 # Contract

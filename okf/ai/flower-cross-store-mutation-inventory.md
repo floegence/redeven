@@ -5,13 +5,17 @@ description: Reviewed commit points, legal Redeven state, recovery entry points,
 tags: [ai, floret, boundary, saga, recovery]
 timestamp: 2026-07-31T00:00:00Z
 ---
-# Decision
+# Summary
 
-Floret is authoritative for every admitted Agent fact. Redeven records only product resources, authorization, unadmitted work, and the minimum coordination evidence needed to settle a mutation across two independent stores. A Redeven record never proves canonical lifecycle state and cannot be used for lifecycle inventory, timeline, status, or search.
+Floret is authoritative for every admitted Agent fact. Redeven records only product resources, authorization, unadmitted work, and the minimum coordination evidence needed to settle a mutation across two independent stores. Redeven evidence never proves canonical lifecycle state or supports lifecycle inventory, timeline, status, or search. Recovery accepts only the same logical-request receipt or a public exact read; conflicting or incomplete proof fails closed. The v3.0.2 event acknowledgement remains a public-contract gap for Phase 1B.
+
+# Contract
+
+## Admission acknowledgement gap
 
 The v3.0.2 turn path still discovers the canonical admission through an observation callback. `EventSink.EmitEvent` cannot report a bind failure to Floret, and an event can be lost after the Floret commit. The current replay path reduces this risk but does not provide a durable public admission acknowledgement before provider execution. This is a confirmed product-neutral Floret contract gap and requires Phase 1B's explicit two-stage admission API; it cannot be closed inside Redeven Phase 1A.
 
-# Inventory
+## Mutation inventory
 
 | Mutation | Floret canonical commit | Legal Redeven state | Restart entry and convergence rule | Phase 1A result |
 | --- | --- | --- | --- | --- |
@@ -24,7 +28,7 @@ The v3.0.2 turn path still discovers the canonical admission through an observat
 | Pending tool settlement | canonical invocation, effect proof, and result | external-effect audit and host resource handle only | Reopen the bound Floret pending-tool recovery capability and settle the same proof; never execute an unknown effect twice | No tool-call/result ledger is permitted in Redeven |
 | Artifact/resource publication | canonical Artifact or message reference | physical upload object, claims, staging scope, and cleanup attempt | Resolve the opaque canonical reference under current authorization; physical cleanup must not mutate canonical membership | Upload tables cannot rebuild message membership |
 
-# Machine-Enforced Evidence
+## Machine-enforced contract
 
 - `internal/ai/threadstore/reviewed_schema_manifest.json` freezes the complete physical schema: version, tables, columns, indexes, triggers, constraints, and SQL.
 - `scripts/contracts/threadstore_boundary_manifest.json` assigns every physical table, inherited column/index/trigger, and every production SQL call site to a reviewed owner and consumer contract.
@@ -34,7 +38,9 @@ The v3.0.2 turn path still discovers the canonical admission through an observat
 - `terminal_committed` and `terminal_replayed` have no production consumer. Phase 1C must remove them in the required product schema migration; canonical receipt indexes must be retained only if their integrity value is proven.
 - `scripts/check_floret_dependency_boundary.sh --ci` runs both the durable-sink closed set and the threadstore schema/query contract.
 
-# Recovery Invariants
+# Boundaries
+
+## Recovery invariants
 
 1. A Floret commit is recovered only by the same logical request receipt or a public exact read.
 2. Conflicting proof, fingerprint, identity, or stage fails closed; no history scan or audit reconstruction is allowed.
@@ -42,7 +48,7 @@ The v3.0.2 turn path still discovers the canonical admission through an observat
 4. Deleting expired coordination evidence cannot delete or make Floret canonical state unreadable.
 5. Phase 1C must add deterministic subprocess checkpoints and oracles for every inventory row before the boundary can be signed at runtime.
 
-# Evidence Links
+# Evidence
 
 - `redeven:internal/ai/thread_create_operation.go`
 - `redeven:internal/ai/thread_fork_operation.go`
