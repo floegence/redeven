@@ -3246,9 +3246,11 @@
     "address": {
       "label": "Webdienst-Adresse",
       "placeholder": "Port oder Adresse eingeben, z. B. 3000 oder localhost:8080/docs",
-      "scopeTitle": "Aus dieser Umgebung erreichbar.",
-      "scopeDescription": "Geben Sie einen Port oder eine Loopback-Adresse mit localhost, 127.0.0.0/8 oder ::1 ein. Öffentliche und LAN-Adressen können nicht geöffnet werden. Jedes Redeven-Fenster bleibt auf den hier geöffneten Web Service beschränkt.",
-      "invalid": "Diese Adresse kann nicht geöffnet werden. Web Services können nur auf einen lokalen Port oder eine HTTP(S)-Loopback-Adresse wie localhost:3000, 127.0.0.1:3000 oder [::1]:3000 zugreifen."
+      "scopeTitle": "Nur lokale Dienste.",
+      "scopeDescription": "Geben Sie einen Port oder eine Loopback-Adresse aus dieser Umgebung ein.",
+      "invalidTitle": "Nur innerhalb dieser Umgebung verfügbar",
+      "invalid": "Öffentliche Websites und LAN-Adressen liegen außerhalb des Zugriffsbereichs von Web Service.",
+      "examples": "Möglich: 3000 · localhost:3000 · 127.0.0.1:3000 · [::1]:3000"
     },
     "session": {
       "temporary": "Temporär"

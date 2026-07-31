@@ -3246,9 +3246,11 @@
     "address": {
       "label": "Web サービスのアドレス",
       "placeholder": "ポートまたはアドレスを入力（例: 3000、localhost:8080/docs）",
-      "scopeTitle": "この環境からアクセスできます。",
-      "scopeDescription": "ポート、または localhost、127.0.0.0/8、::1 を使ったループバックアドレスを入力してください。公開アドレスや LAN アドレスは開けません。各 Redeven ウィンドウはここで開いた Web Service 内に限定されます。",
-      "invalid": "このアドレスは開けません。Web Services がアクセスできるのは、ローカルポート、または localhost:3000、127.0.0.1:3000、[::1]:3000 などの HTTP(S) ループバックアドレスだけです。"
+      "scopeTitle": "ローカルサービスのみ。",
+      "scopeDescription": "この環境のポートまたはループバックアドレスを入力してください。",
+      "invalidTitle": "この環境内でのみ利用できます",
+      "invalid": "公開 Web サイトと LAN アドレスは Web Service のアクセス範囲外です。",
+      "examples": "入力例: 3000 · localhost:3000 · 127.0.0.1:3000 · [::1]:3000"
     },
     "session": {
       "temporary": "一時"

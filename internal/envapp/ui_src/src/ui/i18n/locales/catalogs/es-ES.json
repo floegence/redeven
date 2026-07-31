@@ -3246,9 +3246,11 @@
     "address": {
       "label": "Dirección del servicio web",
       "placeholder": "Introduce un puerto o dirección, por ejemplo 3000 o localhost:8080/docs",
-      "scopeTitle": "Disponible desde este entorno.",
-      "scopeDescription": "Introduce un puerto o una dirección de bucle invertido con localhost, 127.0.0.0/8 o ::1. No se pueden abrir direcciones públicas ni de LAN. Cada ventana de Redeven queda limitada al Web Service abierto aquí.",
-      "invalid": "Esta dirección no se puede abrir. Web Services solo puede acceder a un puerto local o a una dirección HTTP(S) de bucle invertido como localhost:3000, 127.0.0.1:3000 o [::1]:3000."
+      "scopeTitle": "Solo servicios locales.",
+      "scopeDescription": "Introduce un puerto o una dirección de bucle invertido de este entorno.",
+      "invalidTitle": "Disponible solo dentro de este entorno",
+      "invalid": "Los sitios web públicos y las direcciones LAN están fuera del alcance de Web Service.",
+      "examples": "Prueba 3000 · localhost:3000 · 127.0.0.1:3000 · [::1]:3000"
     },
     "session": {
       "temporary": "Temporal"

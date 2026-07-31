@@ -1,6 +1,6 @@
 import { For, Show, createMemo, createResource, createSignal } from 'solid-js';
 import { cn, useNotification } from '@floegence/floe-webapp-core';
-import { ExternalLink, Globe, Plus, RefreshIcon, Save, Search, Trash } from '@floegence/floe-webapp-core/icons';
+import { AlertTriangle, ExternalLink, Globe, Plus, RefreshIcon, Save, Search, Trash } from '@floegence/floe-webapp-core/icons';
 import { Panel, PanelContent } from '@floegence/floe-webapp-core/layout';
 import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import {
@@ -885,7 +885,7 @@ export function EnvPortForwardsPage() {
                     size="sm"
                     class={cn(
                       'h-10 w-full pl-9 font-mono text-sm',
-                      addressValidationVisible() && 'border-destructive focus-visible:ring-destructive/30',
+                      addressValidationVisible() && 'border-warning/45 focus-visible:border-warning/60 focus-visible:ring-warning/20',
                     )}
                     disabled={!canExecute() || !!busyID()}
                     data-testid="web-service-address-input"
@@ -905,19 +905,30 @@ export function EnvPortForwardsPage() {
               <div
                 id="web-service-address-guidance"
                 class={cn(
-                  'mt-2 flex items-start gap-2 text-xs leading-5',
-                  addressValidationVisible() ? 'text-destructive' : 'text-muted-foreground',
+                  'mt-2 text-xs',
+                  addressValidationVisible()
+                    ? 'flex items-start gap-2.5 rounded-md border border-warning/25 bg-warning/[0.06] px-3 py-2.5 text-foreground'
+                    : 'flex items-center gap-2 px-0.5 leading-5 text-muted-foreground',
                 )}
                 role={addressValidationVisible() ? 'alert' : undefined}
                 data-testid="web-service-address-guidance"
               >
-                <Globe class="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                <span>
-                  <span class="font-medium text-foreground">{i18n.t('webServices.address.scopeTitle')}</span>{' '}
-                  {addressValidationVisible()
-                    ? i18n.t('webServices.address.invalid')
-                    : i18n.t('webServices.address.scopeDescription')}
-                </span>
+                <Show
+                  when={addressValidationVisible()}
+                  fallback={<>
+                    <Globe class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                    <span><span class="font-medium text-foreground">{i18n.t('webServices.address.scopeTitle')}</span>{' '}{i18n.t('webServices.address.scopeDescription')}</span>
+                  </>}
+                >
+                  <span class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-warning/12 text-warning" aria-hidden="true">
+                    <AlertTriangle class="h-3.5 w-3.5" />
+                  </span>
+                  <span class="min-w-0">
+                    <span class="block font-medium leading-5">{i18n.t('webServices.address.invalidTitle')}</span>
+                    <span class="block leading-5 text-muted-foreground">{i18n.t('webServices.address.invalid')}</span>
+                    <span class="mt-1 block font-mono text-[11px] leading-4 text-foreground/80">{i18n.t('webServices.address.examples')}</span>
+                  </span>
+                </Show>
               </div>
             </div>
 

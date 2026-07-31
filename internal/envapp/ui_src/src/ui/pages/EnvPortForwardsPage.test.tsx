@@ -45,6 +45,7 @@ vi.mock('@floegence/floe-webapp-core', () => ({
 }));
 
 vi.mock('@floegence/floe-webapp-core/icons', () => ({
+  AlertTriangle: (props: any) => <span class={props.class} data-testid="alert-triangle-icon" />,
   ExternalLink: (props: any) => <span class={props.class} data-testid="external-link-icon" />,
   Globe: (props: any) => <span class={props.class} data-testid="globe-icon" />,
   Plus: (props: any) => <span class={props.class} data-testid="plus-icon" />,
@@ -562,8 +563,8 @@ describe('EnvPortForwardsPage', () => {
 
     const input = host.querySelector<HTMLInputElement>('[data-testid="web-service-address-input"]');
     const guidance = host.querySelector<HTMLElement>('[data-testid="web-service-address-guidance"]');
-    expect(guidance?.textContent).toContain('Available from this Environment');
-    expect(guidance?.textContent).toContain('localhost');
+    expect(guidance?.textContent).toContain('Local services only');
+    expect(guidance?.textContent).toContain('loopback address');
 
     if (input) {
       input.value = 'baidu.com';
@@ -576,7 +577,9 @@ describe('EnvPortForwardsPage', () => {
 
     expect(input?.getAttribute('aria-invalid')).toBe('true');
     expect(guidance?.getAttribute('role')).toBe('alert');
-    expect(guidance?.textContent).toContain('This address cannot be opened');
+    expect(guidance?.className).toContain('border-warning/25');
+    expect(guidance?.className).not.toContain('text-destructive');
+    expect(guidance?.textContent).toContain('Available only inside this Environment');
     expect(guidance?.textContent).toContain('127.0.0.1');
     expect(openWindow).not.toHaveBeenCalled();
     expect(localApiMocks.fetchLocalApiJSON).not.toHaveBeenCalledWith(
