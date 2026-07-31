@@ -57,6 +57,12 @@ Goals:
   gate in `scripts/check_final_integration.sh`. Tag release workflows retain
   only the build, signing, attestation, registry readback, and publication work
   that requires the release ref or hosted platform runners.
+- CodeQL is an asynchronous security-discovery lane, not an ordinary push or
+  pull-request gate. The checked-in workflow runs daily and by manual dispatch;
+  scheduled runs skip the language matrix when `main` has not changed since the
+  latest successful scheduled analysis, while lookup failures fail safe by
+  scanning. Keep GitHub CodeQL default setup disabled so it cannot add implicit
+  push scanning or block the normal development path.
 - Default sync strategy for a feature branch: `git rebase origin/main`.
 - Do not merge `origin/main` into a feature branch in the normal flow.
 - Preserve intentional commit history when integrating:
