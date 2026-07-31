@@ -862,7 +862,7 @@ type DesktopWebServiceBrowserController = Readonly<{
   windowRecord: DesktopTrackedWindow;
   contentView: WebContentsView;
   navigate: (address: string) => DesktopWebServiceBrowserActionResponse;
-  perform: (action: DesktopWebServiceBrowserAction) => DesktopWebServiceBrowserActionResponse;
+  perform: (action: DesktopWebServiceBrowserAction) => Promise<DesktopWebServiceBrowserActionResponse>;
   snapshot: () => DesktopWebServiceBrowserState;
 }>;
 const webServiceBrowserByToolbarWebContentsID = new Map<number, DesktopWebServiceBrowserController>();
@@ -7942,6 +7942,7 @@ function webServiceBrowserDocumentURL(): string {
     reloadLabel: i18n.t('webServiceBrowser.reload'),
     stopLabel: i18n.t('webServiceBrowser.stop'),
     navigateLabel: i18n.t('webServiceBrowser.navigate'),
+    openExternalLabel: i18n.t('webServiceBrowser.openInBrowser'),
     secureRouteLabel: i18n.t('webServiceBrowser.secureRoute'),
   });
 }
@@ -7952,6 +7953,7 @@ function createWebServiceBrowserController(
   partition: string,
 ): DesktopWebServiceBrowserController {
   let errorMessage = '';
+  let pendingExternalURL = '';
   const windowRecord = createBrowserWindow({
     targetURL: webServiceBrowserDocumentURL(),
     stateKey: sessionWebServiceWindowStateKey(sessionRecord.session_key, request.forward_id),
@@ -8028,11 +8030,12 @@ function createWebServiceBrowserController(
       return { ok: false, message: errorMessage };
     }
     errorMessage = '';
+    pendingExternalURL = '';
     publishState();
     void contentView.webContents.loadURL(targetURL);
     return { ok: true };
   };
-  const perform = (action: DesktopWebServiceBrowserAction): DesktopWebServiceBrowserActionResponse => {
+  const perform = async (action: DesktopWebServiceBrowserAction): Promise<DesktopWebServiceBrowserActionResponse> => {
     if (contentView.webContents.isDestroyed()) {
       return { ok: false, message: DESKTOP_STALE_WINDOW_MESSAGE };
     }
@@ -8056,28 +8059,55 @@ function createWebServiceBrowserController(
         contentView.webContents.stop();
         publishState();
         return { ok: true };
+      case 'open_external': {
+        const targetURL = pendingExternalURL || contentView.webContents.getURL() || request.url;
+        try {
+          await openExternalURL(targetURL);
+          pendingExternalURL = '';
+          errorMessage = '';
+          publishState();
+          return { ok: true };
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          errorMessage = message;
+          publishState();
+          return { ok: false, message };
+        }
+      }
     }
   };
 
   const allowTargetNavigation = (targetURL: string): boolean => (
     isAllowedWebServiceWindowNavigation(targetURL, sessionRecord.allowed_base_url, request.forward_id)
   );
+  const blockExternalNavigation = (targetURL: string): void => {
+    try {
+      const parsed = new URL(targetURL);
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') pendingExternalURL = parsed.toString();
+    } catch {
+      // Invalid targets remain blocked and cannot replace the last reviewable URL.
+    }
+    errorMessage = createDesktopI18n(desktopLanguageState().getSnapshot().resolved_locale)
+      .t('webServiceBrowser.blockedNavigation');
+    publishState();
+  };
   contentView.webContents.setWindowOpenHandler(({ url }) => {
     if (allowTargetNavigation(url)) void contentView.webContents.loadURL(url);
-    else openExternal(url);
+    else blockExternalNavigation(url);
     return { action: 'deny' };
   });
   contentView.webContents.on('will-navigate', (event, targetURL) => {
     if (allowTargetNavigation(targetURL)) return;
     event.preventDefault();
-    openExternal(targetURL);
+    blockExternalNavigation(targetURL);
   });
   contentView.webContents.on('will-redirect', (event, targetURL) => {
     if (allowTargetNavigation(targetURL)) return;
     event.preventDefault();
-    openExternal(targetURL);
+    blockExternalNavigation(targetURL);
   });
   contentView.webContents.on('did-start-loading', () => {
+    pendingExternalURL = '';
     errorMessage = '';
     publishState();
   });
@@ -18305,12 +18335,12 @@ if (!app.requestSingleInstanceLock()) {
       error_message: DESKTOP_STALE_WINDOW_MESSAGE,
     };
   });
-  ipcMain.handle(DESKTOP_WEB_SERVICE_BROWSER_ACTION_CHANNEL, (event, request): DesktopWebServiceBrowserActionResponse => {
+  ipcMain.handle(DESKTOP_WEB_SERVICE_BROWSER_ACTION_CHANNEL, async (event, request): Promise<DesktopWebServiceBrowserActionResponse> => {
     const action = normalizeDesktopWebServiceBrowserAction(request);
     if (!action) return { ok: false, message: 'Invalid Web Service browser action.' };
     const controller = webServiceBrowserByToolbarWebContentsID.get(event.sender.id);
     if (!controller) return { ok: false, message: DESKTOP_STALE_WINDOW_MESSAGE };
-    return controller.perform(action);
+    return await controller.perform(action);
   });
   ipcMain.handle(DESKTOP_SHELL_OPEN_DASHBOARD_CHANNEL, async (): Promise<DesktopShellOpenExternalURLResponse> => {
     try {

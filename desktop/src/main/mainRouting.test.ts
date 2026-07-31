@@ -199,6 +199,12 @@ describe('main routing', () => {
     expect(helperSrc).toContain('resolveWebServiceBrowserAddress(');
     expect(helperSrc).toContain('DESKTOP_WEB_SERVICE_BROWSER_STATE_UPDATED_CHANNEL');
     expect(helperSrc).toContain('isAllowedWebServiceWindowNavigation(targetURL, sessionRecord.allowed_base_url, request.forward_id)');
+    expect(helperSrc).toContain("case 'open_external':");
+    expect(helperSrc).toContain('await openExternalURL(targetURL);');
+    expect(helperSrc).toContain('blockExternalNavigation(url);');
+    expect(helperSrc).toContain('blockExternalNavigation(targetURL);');
+    expect(helperSrc).not.toContain('else openExternal(url);');
+    expect(helperSrc).not.toContain('openExternal(targetURL);');
     expect(helperSrc).toContain('webSession.clearStorageData()');
     expect(helperSrc).toContain('webSession.clearCache()');
     expect(helperSrc).toContain('current?.webContentsID !== closedWindow.webContentsID');

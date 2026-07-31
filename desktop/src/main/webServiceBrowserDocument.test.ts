@@ -20,6 +20,7 @@ describe('webServiceBrowserDocument', () => {
       reloadLabel: 'Reload',
       stopLabel: 'Stop loading',
       navigateLabel: 'Go to address',
+      openExternalLabel: 'Open in browser',
       secureRouteLabel: 'Protected route',
     }));
 
@@ -30,6 +31,8 @@ describe('webServiceBrowserDocument', () => {
     expect(document).toContain('id="browser-back"');
     expect(document).toContain('id="browser-forward"');
     expect(document).toContain('id="browser-reload"');
+    expect(document).toContain('id="browser-open-external"');
+    expect(document).toContain('aria-label="Open in browser"');
     expect(document).toContain('data-stop-label="Stop loading"');
     expect(document).not.toContain('<script');
   });
@@ -45,6 +48,7 @@ describe('webServiceBrowserDocument', () => {
       reloadLabel: 'Reload',
       stopLabel: 'Stop',
       navigateLabel: 'Go',
+      openExternalLabel: 'Open externally',
       secureRouteLabel: 'A & B',
     }));
 
