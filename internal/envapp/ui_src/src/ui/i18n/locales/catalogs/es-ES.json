@@ -3209,7 +3209,7 @@
   },
   "webServices": {
     "title": "Servicios web",
-    "description": "Abra servicios HTTP accesibles en tiempo de ejecución en una ventana aislada de Desktop o mediante la ruta disponible más segura.",
+    "description": "Abre servicios HTTP que escuchan en la interfaz de bucle invertido de este entorno, en una ventana aislada de Desktop o mediante la ruta disponible más segura.",
     "loadingEyebrow": "Servicios web",
     "loadingMessage": "Cargando servicios web...",
     "time": {
@@ -3247,8 +3247,8 @@
       "label": "Dirección del servicio web",
       "placeholder": "Introduce un puerto o dirección, por ejemplo 3000 o localhost:8080/docs",
       "scopeTitle": "Disponible desde este entorno.",
-      "scopeDescription": "Usa un puerto, host:puerto o una dirección HTTP(S) accesible desde el entorno de ejecución. Cada ventana de Redeven queda limitada al Web Service abierto aquí; introduce aquí otro servicio para abrirlo por separado.",
-      "invalid": "Esta dirección no se puede abrir. Usa un puerto como 3000, host:puerto o una dirección HTTP(S) sin credenciales."
+      "scopeDescription": "Introduce un puerto o una dirección de bucle invertido con localhost, 127.0.0.0/8 o ::1. No se pueden abrir direcciones públicas ni de LAN. Cada ventana de Redeven queda limitada al Web Service abierto aquí.",
+      "invalid": "Esta dirección no se puede abrir. Web Services solo puede acceder a un puerto local o a una dirección HTTP(S) de bucle invertido como localhost:3000, 127.0.0.1:3000 o [::1]:3000."
     },
     "session": {
       "temporary": "Temporal"
@@ -3258,13 +3258,13 @@
     },
     "empty": {
       "title": "Aún no hay servicios web",
-      "description": "Registre un servicio HTTP que se ejecuta en el host de ejecución o al que se puede acceder desde él."
+      "description": "Registra un servicio HTTP que escucha en la interfaz de bucle invertido de este entorno."
     },
     "dialog": {
       "addTitle": "Agregar servicio web",
       "targetPlaceholder": "localhost:3000",
-      "targetHelp": "Usa host:port o una URL http(s)://.",
-      "targetError": "Introduce un host:port o una URL http(s):// válidos.",
+      "targetHelp": "Usa un puerto o una dirección HTTP(S) de bucle invertido con localhost, 127.0.0.0/8 o ::1.",
+      "targetError": "Introduce un puerto local o una dirección HTTP(S) de bucle invertido válida.",
       "namePlaceholder": "Mi servicio",
       "nameHelp": "Nombre visible para identificar este servicio.",
       "descriptionPlaceholder": "Servidor de desarrollo para mi proyecto",

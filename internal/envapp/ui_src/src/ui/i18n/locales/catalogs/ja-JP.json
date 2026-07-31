@@ -3209,7 +3209,7 @@
   },
   "webServices": {
     "title": "Webサービス",
-    "description": "ランタイムで到達可能な HTTP サービスを、隔離された Desktop ウィンドウまたは利用可能な最も安全なルートで開きます。",
+    "description": "この環境のループバックインターフェースで待ち受ける HTTP サービスを、隔離された Desktop ウィンドウまたは利用可能な最も安全なルートで開きます。",
     "loadingEyebrow": "Webサービス",
     "loadingMessage": "Web サービスを読み込み中...",
     "time": {
@@ -3247,8 +3247,8 @@
       "label": "Web サービスのアドレス",
       "placeholder": "ポートまたはアドレスを入力（例: 3000、localhost:8080/docs）",
       "scopeTitle": "この環境からアクセスできます。",
-      "scopeDescription": "ランタイムから到達できるポート、host:port、または HTTP(S) アドレスを使用してください。各 Redeven ウィンドウはここで開いた Web Service 内に限定されます。別のサービスはここに入力して個別に開いてください。",
-      "invalid": "このアドレスは開けません。3000 のようなポート、host:port、または認証情報を含まない HTTP(S) アドレスを使用してください。"
+      "scopeDescription": "ポート、または localhost、127.0.0.0/8、::1 を使ったループバックアドレスを入力してください。公開アドレスや LAN アドレスは開けません。各 Redeven ウィンドウはここで開いた Web Service 内に限定されます。",
+      "invalid": "このアドレスは開けません。Web Services がアクセスできるのは、ローカルポート、または localhost:3000、127.0.0.1:3000、[::1]:3000 などの HTTP(S) ループバックアドレスだけです。"
     },
     "session": {
       "temporary": "一時"
@@ -3258,13 +3258,13 @@
     },
     "empty": {
       "title": "Web サービスはまだありません",
-      "description": "ランタイム ホスト上で実行されている、またはランタイム ホストから到達可能な HTTP サービスを登録します。"
+      "description": "この環境のループバックインターフェースで待ち受ける HTTP サービスを登録します。"
     },
     "dialog": {
       "addTitle": "Web サービスを追加",
       "targetPlaceholder": "localhost:3000",
-      "targetHelp": "host:port または http(s):// URL を使います。",
-      "targetError": "有効な host:port または http(s):// URL を入力してください。",
+      "targetHelp": "ポート、または localhost、127.0.0.0/8、::1 を使った HTTP(S) ループバックアドレスを入力してください。",
+      "targetError": "ローカルポートまたは有効な HTTP(S) ループバックアドレスを入力してください。",
       "namePlaceholder": "自分のサービス",
       "nameHelp": "このサービスを識別する表示名です。",
       "descriptionPlaceholder": "自分のプロジェクトの開発サーバー",

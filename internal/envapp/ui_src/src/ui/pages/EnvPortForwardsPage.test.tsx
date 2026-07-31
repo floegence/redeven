@@ -180,7 +180,13 @@ describe('web service route helpers', () => {
     expect(isSupportedWebServiceTarget('localhost:3000')).toBe(true);
     expect(isSupportedWebServiceTarget('http://localhost:3000')).toBe(true);
     expect(isSupportedWebServiceTarget('https://127.0.0.1')).toBe(true);
+    expect(isSupportedWebServiceTarget('http://127.42.8.9:8080')).toBe(true);
+    expect(isSupportedWebServiceTarget('http://[::1]:8080')).toBe(true);
     expect(isSupportedWebServiceTarget('3000/docs?tab=api')).toBe(true);
+    expect(isSupportedWebServiceTarget('baidu.com')).toBe(false);
+    expect(isSupportedWebServiceTarget('https://8.8.8.8')).toBe(false);
+    expect(isSupportedWebServiceTarget('http://192.168.1.10:3000')).toBe(false);
+    expect(isSupportedWebServiceTarget('http://127.example.com:3000')).toBe(false);
     expect(isSupportedWebServiceTarget('ftp://localhost:3000')).toBe(false);
   });
 
@@ -557,10 +563,10 @@ describe('EnvPortForwardsPage', () => {
     const input = host.querySelector<HTMLInputElement>('[data-testid="web-service-address-input"]');
     const guidance = host.querySelector<HTMLElement>('[data-testid="web-service-address-guidance"]');
     expect(guidance?.textContent).toContain('Available from this Environment');
-    expect(guidance?.textContent).toContain('port, host:port, or HTTP(S) address');
+    expect(guidance?.textContent).toContain('localhost');
 
     if (input) {
-      input.value = 'ftp://example.test';
+      input.value = 'baidu.com';
       input.dispatchEvent(new InputEvent('input', { bubbles: true }));
     }
     host.querySelector<HTMLFormElement>('[data-testid="web-service-address-form"]')?.dispatchEvent(
@@ -571,7 +577,7 @@ describe('EnvPortForwardsPage', () => {
     expect(input?.getAttribute('aria-invalid')).toBe('true');
     expect(guidance?.getAttribute('role')).toBe('alert');
     expect(guidance?.textContent).toContain('This address cannot be opened');
-    expect(guidance?.textContent).toContain('without credentials');
+    expect(guidance?.textContent).toContain('127.0.0.1');
     expect(openWindow).not.toHaveBeenCalled();
     expect(localApiMocks.fetchLocalApiJSON).not.toHaveBeenCalledWith(
       '/_redeven_proxy/api/forward-sessions',

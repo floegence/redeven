@@ -105,9 +105,18 @@ func (s *Service) GetForward(ctx context.Context, forwardID string) (*registry.F
 	defer s.ephemeralMu.Unlock()
 	persisted, err := s.reg.GetForward(ctx, id)
 	if err != nil || persisted != nil {
+		if err == nil {
+			if err := validateForwardTarget(persisted); err != nil {
+				return nil, err
+			}
+		}
 		return persisted, err
 	}
-	return s.getEphemeralForwardLocked(id), nil
+	ephemeral := s.getEphemeralForwardLocked(id)
+	if err := validateForwardTarget(ephemeral); err != nil {
+		return nil, err
+	}
+	return ephemeral, nil
 }
 
 func (s *Service) OpenForwardSession(ctx context.Context, req OpenForwardSessionRequest) (*ForwardSession, error) {
@@ -192,6 +201,11 @@ func (s *Service) SaveForwardSession(ctx context.Context, forwardID string, req 
 	s.ephemeralMu.Lock()
 	defer s.ephemeralMu.Unlock()
 	if persisted, err := s.reg.GetForward(ctx, id); err != nil || persisted != nil {
+		if err == nil {
+			if err := validateForwardTarget(persisted); err != nil {
+				return nil, err
+			}
+		}
 		return persisted, err
 	}
 	s.removeExpiredEphemeralLocked(s.currentTime())
@@ -275,6 +289,9 @@ func (s *Service) UpdateForward(ctx context.Context, forwardID string, req Updat
 	}
 	if cur == nil {
 		return nil, ErrForwardNotFound
+	}
+	if err := validateForwardTarget(cur); err != nil {
+		return nil, err
 	}
 
 	var targetURL *string
@@ -380,6 +397,9 @@ func (s *Service) TouchLastOpened(ctx context.Context, forwardID string) (*regis
 		out := ephemeral.forward
 		return &out, nil
 	}
+	if err := validateForwardTarget(persisted); err != nil {
+		return nil, err
+	}
 	if err := s.reg.TouchLastOpened(ctx, id); err != nil {
 		return nil, err
 	}
@@ -463,9 +483,7 @@ func normalizeTargetURL(raw string) (string, error) {
 		return "", errors.New("missing target")
 	}
 
-	// Accept both:
-	// - host[:port] (default scheme=http)
-	// - http(s)://host[:port]
+	// Accept loopback host[:port] or http(s)://loopback-host[:port].
 	if !strings.Contains(s, "://") {
 		s = "http://" + s
 	}
@@ -486,6 +504,9 @@ func normalizeTargetURL(raw string) (string, error) {
 	host := strings.TrimSpace(u.Hostname())
 	if host == "" {
 		return "", errors.New("missing target host")
+	}
+	if !isLoopbackHost(host) {
+		return "", errors.New("target host must be loopback (localhost, 127.0.0.0/8, or ::1)")
 	}
 
 	portStr := strings.TrimSpace(u.Port())
@@ -511,6 +532,25 @@ func normalizeTargetURL(raw string) (string, error) {
 	}
 
 	return fmt.Sprintf("%s://%s", scheme, hostPort), nil
+}
+
+func isLoopbackHost(host string) bool {
+	host = strings.TrimSpace(host)
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
+func validateForwardTarget(forward *registry.Forward) error {
+	if forward == nil {
+		return nil
+	}
+	if _, err := normalizeTargetURL(forward.TargetURL); err != nil {
+		return fmt.Errorf("forward %q has an unsupported target: %w", forward.ForwardID, err)
+	}
+	return nil
 }
 
 func normalizeBrowserTarget(raw string) (string, string, error) {

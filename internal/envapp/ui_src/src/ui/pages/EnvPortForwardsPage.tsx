@@ -132,7 +132,7 @@ function parseSupportedWebServiceTarget(raw: string): URL | null {
 
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
   if (parsed.username || parsed.password) return null;
-  if (!compact(parsed.hostname)) return null;
+  if (!isLoopbackHostname(parsed.hostname)) return null;
   const port = parsed.port ? Number(parsed.port) : parsed.protocol === 'https:' ? 443 : 80;
   if (!Number.isInteger(port) || port <= 0 || port > 65535) return null;
   return parsed;
@@ -148,7 +148,11 @@ function normalizedHostname(hostname: string): string {
 
 function isLoopbackHostname(hostname: string): boolean {
   const host = normalizedHostname(hostname);
-  return host === 'localhost' || host === '::1' || host.startsWith('127.');
+  if (host === 'localhost' || host === '::1') return true;
+  const octets = host.split('.');
+  return octets.length === 4
+    && octets[0] === '127'
+    && octets.every((octet) => /^\d{1,3}$/u.test(octet) && Number(octet) <= 255);
 }
 
 function hasSameDeviceBrowserConfidence(desktopContext: DesktopSessionContextSnapshot | null | undefined): boolean {

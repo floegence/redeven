@@ -3209,7 +3209,7 @@
   },
   "webServices": {
     "title": "Web服務",
-    "description": "在隔離的 Desktop 視窗或目前最安全的可用路由中開啟運行時可達的 HTTP 服務。",
+    "description": "在隔離的 Desktop 視窗或目前最安全的可用路由中，開啟監聽於目前環境回送介面的 HTTP 服務。",
     "loadingEyebrow": "Web服務",
     "loadingMessage": "正在載入 Web 服務...",
     "time": {
@@ -3247,8 +3247,8 @@
       "label": "Web 服務位址",
       "placeholder": "輸入連接埠或位址，例如 3000 或 localhost:8080/docs",
       "scopeTitle": "可存取目前環境內的服務。",
-      "scopeDescription": "請輸入執行階段可存取的連接埠、主機:連接埠或 HTTP(S) 位址。每個 Redeven 視窗僅限於在此開啟的 Web Service；如需存取其他服務，請在此另行輸入並開啟。",
-      "invalid": "無法開啟此位址。請輸入 3000 這類連接埠、主機:連接埠，或不含登入憑證的 HTTP(S) 位址。"
+      "scopeDescription": "請輸入連接埠，或使用 localhost、127.0.0.0/8、::1 的回送位址。無法開啟公網或區域網路位址。每個 Redeven 視窗僅限於在此開啟的 Web Service。",
+      "invalid": "無法開啟此位址。Web Service 只能存取本機連接埠，或 localhost:3000、127.0.0.1:3000、[::1]:3000 這類 HTTP(S) 回送位址。"
     },
     "session": {
       "temporary": "暫時"
@@ -3258,13 +3258,13 @@
     },
     "empty": {
       "title": "尚無 Web 服務",
-      "description": "註冊在執行時間主機上執行或可從執行時間主機存取的 HTTP 服務。"
+      "description": "註冊監聽於目前環境回送介面的 HTTP 服務。"
     },
     "dialog": {
       "addTitle": "新增 Web 服務",
       "targetPlaceholder": "localhost:3000",
-      "targetHelp": "使用 host:port 或 http(s):// URL。",
-      "targetError": "請輸入有效的 host:port 或 http(s):// URL。",
+      "targetHelp": "請輸入連接埠，或使用 localhost、127.0.0.0/8、::1 的 HTTP(S) 回送位址。",
+      "targetError": "請輸入本機連接埠或有效的 HTTP(S) 回送位址。",
       "namePlaceholder": "我的服務",
       "nameHelp": "用來識別此服務的顯示名稱。",
       "descriptionPlaceholder": "我的專案開發伺服器",
