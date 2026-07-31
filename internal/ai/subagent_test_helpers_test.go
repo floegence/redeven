@@ -29,6 +29,7 @@ func newBoundSubagentRuntimeForTest(t *testing.T, parentThreadID string, host fl
 		ThreadID:   parentThreadID,
 		RunID:      "run_" + parentThreadID,
 	}, store)
+	parent.expectFloretRuntimeEventIdentity(parent.id, parent.threadID, parent.messageID, true)
 	parent.host = bindTestRunHostCapabilities(t, svc, parent.endpointID, parent.threadID)
 	registerTestServiceForRun(t, parent, svc)
 	if err := store.CreateThreadSettings(context.Background(), threadstore.ThreadSettings{

@@ -8,7 +8,8 @@ import (
 	"testing"
 	"time"
 
-	flruntime "github.com/floegence/floret/v2/runtime"
+	"github.com/floegence/floret/v3/identity"
+	flruntime "github.com/floegence/floret/v3/runtime"
 )
 
 var (
@@ -72,9 +73,7 @@ func TestCanonicalReferencePerformanceBudgets(t *testing.T) {
 		lookupCalls := 0
 		lookup := func() error {
 			lookupCalls++
-			turn, err := reader.ReadThreadTurn(context.Background(), flruntime.ReadThreadTurnRequest{
-				ThreadID: "thread_budget", TurnID: "turn_0000",
-			})
+			turn, err := reader.ReadThreadTurn(context.Background(), "turn_0000")
 			if err != nil {
 				return err
 			}
@@ -216,15 +215,15 @@ type canonicalReferenceBenchmarkTurnReader struct {
 	listCalls  int
 }
 
-func (r *canonicalReferenceBenchmarkTurnReader) ReadThreadTurn(_ context.Context, req flruntime.ReadThreadTurnRequest) (flruntime.ThreadTurnSnapshot, error) {
+func (r *canonicalReferenceBenchmarkTurnReader) ReadThreadTurn(_ context.Context, turnID identity.TurnID) (flruntime.ThreadTurnSnapshot, error) {
 	r.exactCalls++
-	if req.TurnID != r.turn.TurnID {
+	if turnID != r.turn.TurnID {
 		return flruntime.ThreadTurnSnapshot{}, flruntime.ErrTurnNotFound
 	}
 	return r.turn, nil
 }
 
-func (r *canonicalReferenceBenchmarkTurnReader) ListThreadTurns(context.Context, flruntime.ListThreadTurnsRequest) (flruntime.ThreadTurnsPage, error) {
+func (r *canonicalReferenceBenchmarkTurnReader) ListThreadTurns(context.Context, flruntime.ThreadTurnsRequest) (flruntime.ThreadTurnsPage, error) {
 	r.listCalls++
 	return flruntime.ThreadTurnsPage{}, errors.New("unexpected canonical history scan")
 }
@@ -240,9 +239,7 @@ func BenchmarkCanonicalReferenceLookupAcross1000Turns(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for range b.N {
-		turn, err := reader.ReadThreadTurn(context.Background(), flruntime.ReadThreadTurnRequest{
-			ThreadID: threadID, TurnID: "turn_0000",
-		})
+		turn, err := reader.ReadThreadTurn(context.Background(), "turn_0000")
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -262,8 +259,8 @@ func canonicalReferenceBenchmarkTurns(turnCount int, referenceID string) []flrun
 	turns := make([]flruntime.ThreadTurnSnapshot, 0, turnCount)
 	for index := range turnCount {
 		turn := flruntime.ThreadTurnSnapshot{
-			TurnID:      flruntime.TurnID(fmt.Sprintf("turn_%04d", index)),
-			RunID:       flruntime.RunID(fmt.Sprintf("run_%04d", index)),
+			TurnID:      identity.TurnID(fmt.Sprintf("turn_%04d", index)),
+			RunID:       identity.RunID(fmt.Sprintf("run_%04d", index)),
 			Ordinal:     int64(index + 1),
 			UserEntryID: fmt.Sprintf("entry_%04d", index),
 		}

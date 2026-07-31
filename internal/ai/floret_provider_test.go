@@ -8,11 +8,12 @@ import (
 	"strings"
 	"testing"
 
-	flconfig "github.com/floegence/floret/v2/config"
-	"github.com/floegence/floret/v2/observation"
-	flprovider "github.com/floegence/floret/v2/provider"
-	flruntime "github.com/floegence/floret/v2/runtime"
-	fltools "github.com/floegence/floret/v2/tools"
+	flconfig "github.com/floegence/floret/v3/config"
+	"github.com/floegence/floret/v3/identity"
+	"github.com/floegence/floret/v3/observation"
+	flprovider "github.com/floegence/floret/v3/provider"
+	flruntime "github.com/floegence/floret/v3/runtime"
+	fltools "github.com/floegence/floret/v3/tools"
 
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
@@ -259,7 +260,7 @@ func TestFloretProviderAdapter_FiltersDisabledCoreControlToolsFromRequest(t *tes
 	stream, err := adapter.Stream(context.Background(), flprovider.Request{
 
 		Messages: []flprovider.Message{{Role: flprovider.RoleUser, Text: "hello"}},
-		Tools: []flprovider.ToolDefinition{
+		Tools: []fltools.ToolDefinition{
 			{Name: "ask_user", InputSchema: map[string]any{"type": "object"}},
 			{Name: "terminal.exec", InputSchema: map[string]any{"type": "object"}},
 		},
@@ -385,7 +386,7 @@ func TestFloretProviderAdapter_CompatibleResponsesRouteUsesProjectedPreviousStat
 
 		Messages:      []flprovider.Message{{Role: flprovider.RoleUser, Text: "search"}},
 		PreviousState: &flprovider.State{Kind: providerContinuationKindOpenAIResponses, ID: "resp_prev"},
-		Tools: []flprovider.ToolDefinition{{
+		Tools: []fltools.ToolDefinition{{
 			Name:        "web.search",
 			InputSchema: fltools.StrictObject(map[string]any{"query": fltools.String("query")}, []string{"query"}),
 		}},
@@ -649,8 +650,8 @@ func TestFloretProviderAdapter_ProjectsThinkingWithoutVisibleTextPollution(t *te
 		resultText:      "Final transcript answer.",
 	})
 	sink := floretEventSink{run: r}
-	sink.EmitEvent(flruntime.Event{Type: observation.EventTypeProviderReasoning, Stream: &flruntime.StreamObservation{Type: flruntime.StreamObservationReasoningDelta, Text: "Inspecting transcript contract."}})
-	sink.EmitEvent(flruntime.Event{Type: observation.EventTypeProviderDelta, Stream: &flruntime.StreamObservation{Type: flruntime.StreamObservationAssistantDelta, Text: "Final transcript answer."}})
+	sink.EmitEvent(flruntime.Event{Type: observation.EventTypeProviderReasoning, RunID: identity.RunID(r.id), ThreadID: identity.ThreadID(r.threadID), TurnID: identity.TurnID(r.turnID), Stream: &flruntime.StreamObservation{Type: flruntime.StreamObservationReasoningDelta, Text: "Inspecting transcript contract."}})
+	sink.EmitEvent(flruntime.Event{Type: observation.EventTypeProviderDelta, RunID: identity.RunID(r.id), ThreadID: identity.ThreadID(r.threadID), TurnID: identity.TurnID(r.turnID), Stream: &flruntime.StreamObservation{Type: flruntime.StreamObservationAssistantDelta, Text: "Final transcript answer."}})
 
 	r.assistantCreatedAtUnixMs = 1700000000000
 	assistantJSON, assistantText, _, err := r.snapshotAssistantMessageJSON()
@@ -775,7 +776,7 @@ func TestFloretMessagesToFlowerRejectsInvalidToolArgs(t *testing.T) {
 func TestFlowerToolsFromFloretRejectsInvalidSchema(t *testing.T) {
 	t.Parallel()
 
-	_, err := flowerToolsFromFloret([]flprovider.ToolDefinition{{
+	_, err := flowerToolsFromFloret([]fltools.ToolDefinition{{
 		Name:        "terminal.exec",
 		InputSchema: map[string]any{"bad": func() {}},
 	}})

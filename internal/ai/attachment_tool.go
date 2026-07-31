@@ -178,6 +178,10 @@ func (r *run) toolAttachmentRead(ctx context.Context, meta *session.Meta, args a
 	if r == nil || meta == nil || !meta.CanRead || r.host.openLiveAttachment == nil {
 		return nil, errors.New("attachment read is unavailable")
 	}
+	canonicalRunID, canonicalThreadID, _ := r.floretCanonicalIdentity()
+	if canonicalRunID == "" || canonicalThreadID == "" {
+		return nil, errors.New("attachment read canonical identity is unavailable")
+	}
 	if strings.TrimSpace(meta.EndpointID) != strings.TrimSpace(r.endpointID) ||
 		strings.TrimSpace(meta.UserPublicID) != strings.TrimSpace(r.userPublicID) ||
 		strings.TrimSpace(meta.ChannelID) != strings.TrimSpace(r.channelID) {
@@ -199,7 +203,7 @@ func (r *run) toolAttachmentRead(ctx context.Context, meta *session.Meta, args a
 	if info.Name != displayName || logicalAttachmentLocator(info.AttachmentID, info.Name) != strings.TrimSpace(args.Locator) {
 		return nil, errors.New("attachment not found")
 	}
-	if opened.Membership.ThreadID != r.threadID || opened.Membership.AttachmentID != attachmentID ||
+	if opened.Membership.ThreadID != canonicalThreadID || opened.Membership.AttachmentID != attachmentID ||
 		opened.Membership.Name != info.Name || normalizeMediaType(opened.Membership.DetectedMediaType) != normalizeMediaType(info.DetectedMediaType) ||
 		opened.Membership.SizeBytes != info.SizeBytes || !strings.EqualFold(opened.Membership.ContentSHA256, info.ContentSHA256) {
 		return nil, errors.New("attachment not found")
@@ -223,7 +227,7 @@ func (r *run) toolAttachmentRead(ctx context.Context, meta *session.Meta, args a
 	cursorKeyID := attachmentReadKeyID(time.Now())
 	if strings.TrimSpace(args.Cursor) != "" {
 		cursor, err := verifyAttachmentReadCursor(strings.TrimSpace(args.Cursor))
-		if err != nil || cursor.ThreadID != r.threadID || cursor.RunID != r.id || cursor.AttachmentID != attachmentID || cursor.Digest != info.ContentSHA256 {
+		if err != nil || cursor.ThreadID != canonicalThreadID || cursor.RunID != canonicalRunID || cursor.AttachmentID != attachmentID || cursor.Digest != info.ContentSHA256 {
 			return nil, errors.New("invalid attachment read cursor")
 		}
 		effectiveBytes, effectiveLines := attachmentReadLimits(args)
@@ -270,7 +274,7 @@ func (r *run) toolAttachmentRead(ctx context.Context, meta *session.Meta, args a
 	if end < len(body) {
 		nextCursor, err = signAttachmentReadCursor(attachmentReadCursor{
 			Version: 1, KeyID: cursorKeyID, AttachmentID: attachmentID, Digest: info.ContentSHA256,
-			ThreadID: r.threadID, RunID: r.id, Offset: end, MaxBytes: maxBytes, MaxLines: maxLines,
+			ThreadID: canonicalThreadID, RunID: canonicalRunID, Offset: end, MaxBytes: maxBytes, MaxLines: maxLines,
 			ExpiresAtMS: cursorExpiry,
 		})
 		if err != nil {

@@ -3,8 +3,10 @@ package ai
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,20 +14,20 @@ import (
 	"strings"
 	"time"
 
-	flruntime "github.com/floegence/floret/v2/runtime"
+	"github.com/floegence/floret/v3/identity"
+	flruntime "github.com/floegence/floret/v3/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/session"
 )
 
-// NewThreadID generates a cryptographically random thread id.
-func NewThreadID() (string, error) {
+func newProductRequestID(prefix string) (string, error) {
 	b := make([]byte, 18)
 	if _, err := rand.Read(b); err != nil {
 		return "", err
 	}
-	return "th_" + base64.RawURLEncoding.EncodeToString(b), nil
+	return strings.TrimSpace(prefix) + base64.RawURLEncoding.EncodeToString(b), nil
 }
 
 func threadPermissionType(th *threadstore.ThreadSettings) (FlowerPermissionType, error) {
@@ -413,19 +415,20 @@ func (s *Service) ListThreads(ctx context.Context, meta *session.Meta, limit int
 }
 
 func (s *Service) CreateThread(ctx context.Context, meta *session.Meta, title string, modelID string, permissionType string, workingDir string) (*ThreadView, error) {
+	clientRequestID, err := newProductRequestID("create_")
+	if err != nil {
+		return nil, err
+	}
 	return s.CreateThreadWithOptions(ctx, meta, CreateThreadRequest{
-		Title:          title,
-		ModelID:        modelID,
-		PermissionType: strings.TrimSpace(permissionType),
-		WorkingDir:     workingDir,
+		ClientRequestID: clientRequestID,
+		Title:           title,
+		ModelID:         modelID,
+		PermissionType:  strings.TrimSpace(permissionType),
+		WorkingDir:      workingDir,
 	})
 }
 
 func (s *Service) buildThreadCreateSettings(ctx context.Context, meta *session.Meta, req CreateThreadRequest) (threadstore.ThreadSettings, error) {
-	id := strings.TrimSpace(req.ThreadID)
-	if !validUploadStagingThreadID(id) {
-		return threadstore.ThreadSettings{}, errors.New("invalid thread id")
-	}
 	s.mu.Lock()
 	cfg := s.cfg
 	s.mu.Unlock()
@@ -496,7 +499,7 @@ func (s *Service) buildThreadCreateSettings(ctx context.Context, meta *session.M
 	}
 	now := time.Now().UnixMilli()
 	return threadstore.ThreadSettings{
-		ThreadID: id, EndpointID: strings.TrimSpace(meta.EndpointID), NamespacePublicID: strings.TrimSpace(meta.NamespacePublicID),
+		EndpointID: strings.TrimSpace(meta.EndpointID), NamespacePublicID: strings.TrimSpace(meta.NamespacePublicID),
 		ModelID: modelID, ReasoningSelectionJSON: reasoningSelectionJSON, PermissionType: permissionTypeString(permissionType), WorkingDir: workingDir,
 		CreatedByUserPublicID: strings.TrimSpace(meta.UserPublicID), CreatedByUserEmail: strings.TrimSpace(meta.UserEmail),
 		UpdatedByUserPublicID: strings.TrimSpace(meta.UserPublicID), UpdatedByUserEmail: strings.TrimSpace(meta.UserEmail),
@@ -518,18 +521,10 @@ func (s *Service) CreateThreadWithOptions(ctx context.Context, meta *session.Met
 		return nil, errors.New("threads store not ready")
 	}
 
-	id := strings.TrimSpace(req.ThreadID)
-	if id == "" {
-		var err error
-		id, err = NewThreadID()
-		if err != nil {
-			return nil, err
-		}
-	} else if len(id) != 27 || !strings.HasPrefix(id, "th_") || strings.ContainsAny(id, "\r\n\x00") {
-		return nil, errors.New("invalid thread id")
+	clientRequestID := strings.TrimSpace(req.ClientRequestID)
+	if !validUploadStagingTargetID(clientRequestID) {
+		return nil, errors.New("invalid client_request_id")
 	}
-
-	req.ThreadID = id
 	t, err := s.buildThreadCreateSettings(ctxOrBackground(ctx), meta, req)
 	if err != nil {
 		return nil, err
@@ -537,7 +532,7 @@ func (s *Service) CreateThreadWithOptions(ctx context.Context, meta *session.Met
 	now := t.SettingsCreatedAtUnixMs
 	s.orphanMaintenanceMu.Lock()
 	operation, err := db.PrepareThreadCreateOperation(ctx, threadstore.PrepareThreadCreateRequest{
-		Settings: t, ExplicitTitle: strings.TrimSpace(req.Title), CreatedAtMS: now,
+		ClientRequestID: clientRequestID, Settings: t, ExplicitTitle: strings.TrimSpace(req.Title), CreatedAtMS: now,
 	})
 	if err != nil {
 		s.orphanMaintenanceMu.Unlock()
@@ -548,7 +543,7 @@ func (s *Service) CreateThreadWithOptions(ctx context.Context, meta *session.Met
 	if err != nil {
 		return nil, fmt.Errorf("create thread: %w", err)
 	}
-	snapshot, latest, err := s.readCanonicalThreadState(ctx, id)
+	snapshot, latest, err := s.readCanonicalThreadState(ctx, t.ThreadID)
 	if err != nil {
 		return nil, err
 	}
@@ -598,11 +593,20 @@ type threadTitleFloretCoordinator struct {
 	authority floretThreadTitleAuthority
 }
 
+func stableThreadTitleRequestID(threadID string, title string) identity.LogicalRequestID {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(threadID) + "\x00" + title))
+	return identity.LogicalRequestID("thread_title_" + hex.EncodeToString(sum[:18]))
+}
+
 func (c *threadTitleFloretCoordinator) set(ctx context.Context, threadID string, title string) (flruntime.ThreadSnapshot, error) {
 	if c == nil || c.authority == nil {
 		return flruntime.ThreadSnapshot{}, errors.New("Floret title coordinator authority is unavailable")
 	}
-	return c.authority.SetThreadTitle(ctxOrBackground(ctx), flruntime.ThreadID(strings.TrimSpace(threadID)), title)
+	result, err := c.authority.SetThreadTitle(ctxOrBackground(ctx), identity.ThreadID(strings.TrimSpace(threadID)), flruntime.SetThreadTitleCommand{
+		LogicalRequestID: stableThreadTitleRequestID(threadID, title),
+		Title:            title,
+	})
+	return result.Thread, err
 }
 
 func (s *Service) RenameThread(ctx context.Context, meta *session.Meta, threadID string, title string) error {
@@ -660,6 +664,14 @@ func (s *Service) SetThreadPinned(ctx context.Context, meta *session.Meta, threa
 }
 
 func (s *Service) ForkThread(ctx context.Context, meta *session.Meta, sourceThreadID string, title string) (*ThreadView, error) {
+	clientRequestID, err := newProductRequestID("fork_")
+	if err != nil {
+		return nil, err
+	}
+	return s.ForkThreadWithOptions(ctx, meta, sourceThreadID, ForkThreadRequest{ClientRequestID: clientRequestID, Title: title})
+}
+
+func (s *Service) ForkThreadWithOptions(ctx context.Context, meta *session.Meta, sourceThreadID string, req ForkThreadRequest) (*ThreadView, error) {
 	if s == nil {
 		return nil, errors.New("nil service")
 	}
@@ -680,11 +692,11 @@ func (s *Service) ForkThread(ctx context.Context, meta *session.Meta, sourceThre
 	if endpointID == "" {
 		return nil, errors.New("invalid request")
 	}
-	destinationID, err := NewThreadID()
-	if err != nil {
-		return nil, err
+	clientRequestID := strings.TrimSpace(req.ClientRequestID)
+	if !validUploadStagingTargetID(clientRequestID) {
+		return nil, errors.New("invalid client_request_id")
 	}
-	title = strings.TrimSpace(title)
+	title := strings.TrimSpace(req.Title)
 	createdAtUnixMs := time.Now().UnixMilli()
 	s.orphanMaintenanceMu.Lock()
 	operation, err := func() (*threadstore.ForkOperation, error) {
@@ -717,14 +729,13 @@ func (s *Service) ForkThread(ctx context.Context, meta *session.Meta, sourceThre
 		if activeRunID != "" || finalizingRunID != "" || idleBusy || threadForkBlockedByRunState(sourceSnapshot) {
 			return nil, ErrThreadForkUnavailable
 		}
-		if err := s.reconcileCanonicalPendingTurnCommands(ctx, endpointID, sourceThreadID, db); err != nil {
-			return nil, fmt.Errorf("reconcile canonical pending turns before fork: %w", err)
+		if err := validatePendingTurnRecoveryState(ctx, endpointID, sourceThreadID, db, false); err != nil {
+			return nil, fmt.Errorf("validate pending turns before fork: %w", err)
 		}
 		return db.PrepareForkOperation(ctx, threadstore.ForkThreadRequest{
-			OperationID:           "fork_" + destinationID,
+			ClientRequestID:       clientRequestID,
 			EndpointID:            endpointID,
 			SourceThreadID:        sourceThreadID,
-			DestinationThreadID:   destinationID,
 			Title:                 title,
 			CreatedByUserPublicID: strings.TrimSpace(meta.UserPublicID),
 			CreatedByUserEmail:    strings.TrimSpace(meta.UserEmail),
@@ -1064,8 +1075,8 @@ func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID
 				return threadstore.ThreadDeleteOperation{}, ErrThreadBusy
 			}
 			if !threadBusy {
-				if err := s.reconcileCanonicalPendingTurnCommands(ctxOrBackground(ctx), endpointID, threadID, db); err != nil {
-					return threadstore.ThreadDeleteOperation{}, fmt.Errorf("reconcile canonical pending turns before delete: %w", err)
+				if err := validatePendingTurnRecoveryState(ctxOrBackground(ctx), endpointID, threadID, db, false); err != nil {
+					return threadstore.ThreadDeleteOperation{}, fmt.Errorf("validate pending turns before delete: %w", err)
 				}
 			}
 			deleteCtx, cancel := context.WithTimeout(ctxOrBackground(ctx), persistTO)

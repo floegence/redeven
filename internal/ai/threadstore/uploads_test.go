@@ -29,7 +29,7 @@ func completeUploadAttemptForTest(t *testing.T, store *Store, attempt UploadAtte
 		StagingScopeID:  "scope_" + rec.UploadID,
 		EndpointID:      rec.EndpointID,
 		OwnerUserHash:   rec.OwnerUserHash,
-		ThreadID:        "thread_" + rec.UploadID,
+		TargetID:        "thread_" + rec.UploadID,
 		CapabilityHash:  fmt.Sprintf("%x", capabilityHash),
 		CreatedAtUnixMs: now.Add(-time.Minute).UnixMilli(),
 		ExpiresAtUnixMs: now.Add(time.Hour).UnixMilli(),
@@ -112,11 +112,11 @@ func TestStagingUploadRefsProtectResourcesUntilScopeRelease(t *testing.T) {
 	if err := store.CreateUploadStagingScope(t.Context(), scope); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.db.Exec(`INSERT INTO ai_upload_refs(endpoint_id, upload_id, thread_id, ref_kind, ref_id, created_at_unix_ms) VALUES(?, ?, ?, ?, ?, ?)`, rec.EndpointID, rec.UploadID, scope.ThreadID, UploadRefKindStaging, stagingUploadRefID(ownerHash, scope.StagingScopeID), 3); err != nil {
+	if _, err := store.db.Exec(`INSERT INTO ai_upload_refs(endpoint_id, upload_id, thread_id, ref_kind, ref_id, created_at_unix_ms) VALUES(?, ?, ?, ?, ?, ?)`, rec.EndpointID, rec.UploadID, scope.TargetID, UploadRefKindStaging, stagingUploadRefID(ownerHash, scope.StagingScopeID), 3); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.PrepareUserStagedUploadDeletion(context.Background(), rec.EndpointID, ownerHash, rec.UploadID, 5); err == nil {
-		t.Fatal("deletion ignored an active draft ref")
+		t.Fatal("deletion ignored an active staging ref")
 	}
 	cleanup, err := store.ReleaseUploadStagingScope(context.Background(), scope, 6)
 	if err != nil || len(cleanup) != 1 || cleanup[0].State != UploadStateDeleting {
@@ -162,7 +162,7 @@ func TestStagedOwnerQuotaSerializesConcurrentCompletions(t *testing.T) {
 			now := time.Now()
 			scope := UploadStagingScope{
 				StagingScopeID: "scope_" + item.record.UploadID, EndpointID: item.record.EndpointID,
-				OwnerUserHash: item.record.OwnerUserHash, ThreadID: "thread_" + item.record.UploadID,
+				OwnerUserHash: item.record.OwnerUserHash, TargetID: "thread_" + item.record.UploadID,
 				CapabilityHash: fmt.Sprintf("%x", sha256.Sum256([]byte(item.record.UploadID))), CreatedAtUnixMs: now.Add(-time.Minute).UnixMilli(), ExpiresAtUnixMs: now.Add(time.Hour).UnixMilli(),
 			}
 			if err := store.CreateUploadStagingScope(context.Background(), scope); err != nil {
@@ -239,7 +239,7 @@ func TestStagedByteQuotaAndLastLiveRefReleaseCapacity(t *testing.T) {
 	if err := store.CreateUploadStagingScope(ctx, nextScope); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.db.Exec(`INSERT INTO ai_upload_refs(endpoint_id, upload_id, thread_id, ref_kind, ref_id, created_at_unix_ms) VALUES(?, ?, ?, ?, ?, ?)`, "env_quota", next.UploadID, nextScope.ThreadID, UploadRefKindStaging, stagingUploadRefID(ownerHash, nextScope.StagingScopeID), 3); err != nil {
+	if _, err := store.db.Exec(`INSERT INTO ai_upload_refs(endpoint_id, upload_id, thread_id, ref_kind, ref_id, created_at_unix_ms) VALUES(?, ?, ?, ?, ?, ?)`, "env_quota", next.UploadID, nextScope.TargetID, UploadRefKindStaging, stagingUploadRefID(ownerHash, nextScope.StagingScopeID), 3); err != nil {
 		t.Fatal(err)
 	}
 	bindNext := func(claimedAt int64) error {

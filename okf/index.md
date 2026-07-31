@@ -63,7 +63,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Flower live timeline](ui/flower-live-timeline.md) - Canonical live thread timeline projection, replacement events, and cursor ownership.
 - [Flower timeline ordering](ui/flower-timeline-ordering.md) - Consume canonical turn pages, projections, decorations, cursors, and replacement events.
 - [Flower model and navigation presentation](ui/flower-model-navigation.md) - Keep model-source controls, notifications, and staged thread selection explicit.
-- [Flower composer attachments](ui/flower-composer-attachments.md) - Stage files and long text through one shared, revisioned composer workflow.
+- [Flower composer attachments](ui/flower-composer-attachments.md) - Stage files and long text through one shared connection-local composer workflow.
 - [Flower terminal activity presentation](ui/flower-terminal-activity.md) - Preserve canonical terminal activity, disclosure, animation, and scrolling state.
 - [Flower approval and context state](ui/flower-approval-context.md) - Project approval queues, compaction, context usage, and read acknowledgement.
 - [Flower subagent detail presentation](ui/flower-subagent-detail.md) - Render parent-owned membership and read-only child execution detail.
@@ -71,7 +71,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 ## AI
 
 - [AI tool runtime](ai/ai-tool-runtime.md) - Builtin tool registry, permission checks, and activity projection.
-- [Flower storage ownership and migrations](ai/flower-storage-ownership-and-migrations.md) - Apply host-only schema v8, capability-bound upload staging, immutable commands, and strict contiguous migration boundaries.
+- [Flower storage ownership and migrations](ai/flower-storage-ownership-and-migrations.md) - Use the product v1 first-release baseline, capability-bound upload staging, canonical identity binding, and future contiguous migrations.
 - [Flower attachment resources](ai/flower-attachment-resources.md) - Enforce owner-scoped uploads, canonical reads, quotas, and last-reference cleanup.
 - [AI tool permissions and dispatch](ai/tool-permission-runtime.md) - Apply tool registration, scheduling, permission, approval, readonly, and target-routing contracts.
 - [AI tool approval runtime](ai/tool-approval-runtime.md) - Reconcile pending approval queues, conflicts, decisions, and authoritative live state.

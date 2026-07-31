@@ -7,7 +7,8 @@ import (
 	"fmt"
 	"strings"
 
-	flruntime "github.com/floegence/floret/v2/runtime"
+	"github.com/floegence/floret/v3/identity"
+	flruntime "github.com/floegence/floret/v3/runtime"
 )
 
 type floretLiveAttachmentAuthority struct {
@@ -33,7 +34,7 @@ func (a floretLiveAttachmentAuthority) ReadCanonicalAttachmentMembership(ctx con
 func (a floretLiveAttachmentAuthority) find(ctx context.Context, exactTurnID string, attachmentID string) (CanonicalAttachmentMembership, error) {
 	exactTurnID = strings.TrimSpace(exactTurnID)
 	if exactTurnID != "" {
-		turn, err := a.host.ReadThreadTurn(ctxOrBackground(ctx), flruntime.TurnID(exactTurnID))
+		turn, err := a.host.ReadThreadTurn(ctxOrBackground(ctx), identity.TurnID(exactTurnID))
 		if errors.Is(err, flruntime.ErrTurnNotFound) {
 			return CanonicalAttachmentMembership{}, sql.ErrNoRows
 		}
@@ -83,8 +84,8 @@ func canonicalAttachmentMembershipForTurn(threadID string, turn flruntime.Thread
 		return CanonicalAttachmentMembership{}, errors.New("Floret returned an empty turn identity")
 	}
 	for _, attachment := range turn.UserAttachments {
-		id, digest, legacy, err := floretUploadIdentityFromResourceRef(attachment.ResourceRef)
-		if err != nil || id != attachmentID || (digest == "" && !legacy) {
+		id, digest, err := immutableUploadIdentityFromFloretResourceRef(attachment.ResourceRef)
+		if err != nil || id != attachmentID {
 			continue
 		}
 		return CanonicalAttachmentMembership{
@@ -109,11 +110,6 @@ func (s *Service) openCanonicalLiveAttachment(ctx context.Context, owner UploadO
 	upload, err := s.OpenLiveUpload(ctx, owner, membership.ThreadID, membership.TurnID, membership.AttachmentID, authority)
 	if err != nil {
 		return openedCanonicalAttachment{}, err
-	}
-	// Legacy refs predate digests. Enrich only this authorized projection; the
-	// canonical Floret attachment and its resource_ref remain unchanged.
-	if upload != nil && upload.Info != nil && strings.TrimSpace(membership.ContentSHA256) == "" {
-		membership.ContentSHA256 = strings.ToLower(strings.TrimSpace(upload.Info.ContentSHA256))
 	}
 	return openedCanonicalAttachment{Membership: membership, Upload: upload}, nil
 }

@@ -17,11 +17,13 @@ import (
 	"testing"
 	"time"
 
-	flconfig "github.com/floegence/floret/v2/config"
-	"github.com/floegence/floret/v2/observation"
-	flprovider "github.com/floegence/floret/v2/provider"
-	flruntime "github.com/floegence/floret/v2/runtime"
-	flstorage "github.com/floegence/floret/v2/storage"
+	flconfig "github.com/floegence/floret/v3/config"
+	"github.com/floegence/floret/v3/identity"
+	"github.com/floegence/floret/v3/observation"
+	flprovider "github.com/floegence/floret/v3/provider"
+	flruntime "github.com/floegence/floret/v3/runtime"
+	flstorage "github.com/floegence/floret/v3/storage"
+	fltools "github.com/floegence/floret/v3/tools"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
@@ -43,7 +45,7 @@ func openTestFloretRuntimeHost(t *testing.T, source flstorage.Source) *flruntime
 	if err != nil {
 		t.Fatalf("runtime.Open: %v", err)
 	}
-	t.Cleanup(func() { _ = host.Close() })
+	t.Cleanup(func() { _ = host.Shutdown(context.Background()) })
 	return host
 }
 
@@ -69,8 +71,12 @@ type panicFloretTurnHost struct {
 	*recordingFloretHost
 }
 
-func (*panicFloretTurnHost) Run(context.Context, flruntime.TurnRequest) (flruntime.TurnResult, error) {
+func (*panicFloretTurnHost) StartTurn(context.Context, flruntime.StartTurnCommand) (flruntime.StartTurnResult, error) {
 	panic("deterministic RunTurn panic")
+}
+
+func (*panicFloretTurnHost) ReadTurn(context.Context, identity.TurnID) (flruntime.ThreadTurnSnapshot, error) {
+	return flruntime.ThreadTurnSnapshot{}, errors.New("unexpected exact turn read after panic")
 }
 
 func (c testPendingToolRecoveryCoordinator) Settle(ctx context.Context, _ string, _ string, settle func(context.Context, floretPendingToolSettler) error) error {
@@ -83,31 +89,31 @@ func (c testPendingToolRecoveryCoordinator) Settle(ctx context.Context, _ string
 	return settle(ctx, c.owner)
 }
 
-func createCanonicalFloretThreadForTest(t *testing.T, svc *Service, threadID string, createIntentID string) flruntime.ThreadSummary {
+func createCanonicalFloretThreadForTest(t *testing.T, svc *Service, _ string, createIntentID string) flruntime.CreateThreadResult {
 	t.Helper()
 	if svc == nil || svc.threadCreateFloret == nil {
 		t.Fatal("Floret test create authority is unavailable")
 	}
-	created, err := svc.threadCreateFloret.create(context.Background(), threadID, createIntentID)
+	created, err := svc.threadCreateFloret.create(context.Background(), createIntentID)
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
 	return created
 }
 
-func deleteCanonicalFloretThreadForTest(t *testing.T, svc *Service, threadID string) {
+func deleteCanonicalFloretThreadForTest(t *testing.T, svc *Service, operationID string, threadID string) {
 	t.Helper()
 	if svc == nil || svc.threadDeleteFloret == nil {
 		t.Fatal("Floret test delete authority is unavailable")
 	}
-	if err := svc.threadDeleteFloret.delete(context.Background(), threadID); err != nil {
+	if err := svc.threadDeleteFloret.delete(context.Background(), operationID, threadID); err != nil {
 		t.Fatalf("DeleteThread: %v", err)
 	}
 }
 
-type testFloretThreadDeleteAuthorityFunc func(context.Context, flruntime.ThreadID) error
+type testFloretThreadDeleteAuthorityFunc func(context.Context, identity.ThreadID) error
 
-func (f testFloretThreadDeleteAuthorityFunc) DeleteThread(ctx context.Context, threadID flruntime.ThreadID) error {
+func (f testFloretThreadDeleteAuthorityFunc) DeleteThread(ctx context.Context, threadID identity.ThreadID, _ flruntime.DeleteThreadCommand) error {
 	return f(ctx, threadID)
 }
 
@@ -125,19 +131,17 @@ func (allowFloretEffectGateForTest) Dispatch(ctx context.Context, req flruntime.
 
 func TestFloretRuntimeAdaptersBindAuthorityStructurally(t *testing.T) {
 	store := openTestFloretRuntimeHost(t, flstorage.Memory())
-	t.Cleanup(func() { _ = store.Close() })
 	adapter := testFloretBootstrap(t, store)
-	for _, threadID := range []string{"thread-a", "parent-a"} {
-		create, err := adapter.newThreadCreate(flruntime.ThreadID(threadID), flruntime.CreateIntentID("create-"+threadID))
+	created := make([]identity.ThreadID, 0, 2)
+	for _, requestID := range []identity.LogicalRequestID{"create-thread-a", "create-parent-a"} {
+		result, err := adapter.threadCreate.CreateThread(context.Background(), requestID)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := create.Create(context.Background()); err != nil {
-			t.Fatal(err)
-		}
+		created = append(created, result.ThreadID)
 	}
 
-	threadRuntime, err := adapter.bindThreadRuntime("thread-a")
+	threadRuntime, err := adapter.bindThreadRuntime(created[0])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,11 +150,11 @@ func TestFloretRuntimeAdaptersBindAuthorityStructurally(t *testing.T) {
 		t.Fatal(err)
 	}
 	todos, err := turnHost.ReadThreadAgentTodos(context.Background())
-	if err != nil || todos.ThreadID != "thread-a" {
+	if err != nil || todos.ThreadID != created[0] {
 		t.Fatalf("bound thread todos=%#v error=%v", todos, err)
 	}
 
-	parentRuntime, err := adapter.bindThreadRuntime("parent-a")
+	parentRuntime, err := adapter.bindThreadRuntime(created[1])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,16 +170,12 @@ func TestFloretRuntimeAdaptersBindAuthorityStructurally(t *testing.T) {
 func TestFloretTurnSettlementDoesNotFallbackAfterActiveAuthorityEnds(t *testing.T) {
 	ctx := context.Background()
 	store := openTestFloretRuntimeHost(t, flstorage.Memory())
-	t.Cleanup(func() { _ = store.Close() })
 	adapter := testFloretBootstrap(t, store)
-	create, err := adapter.newThreadCreate("thread-settlement-owner", "create-thread-settlement-owner")
+	created, err := adapter.threadCreate.CreateThread(ctx, "create-thread-settlement-owner")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := create.Create(ctx); err != nil {
-		t.Fatal(err)
-	}
-	threadRuntime, err := adapter.bindThreadRuntime("thread-settlement-owner")
+	threadRuntime, err := adapter.bindThreadRuntime(created.ThreadID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,18 +183,19 @@ func TestFloretTurnSettlementDoesNotFallbackAfterActiveAuthorityEnds(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := host.Run(ctx, flruntime.TurnRequest{
-		TurnID: "turn-settlement-owner",
-		RunID:  "run-settlement-owner",
-		Input:  flruntime.TurnInput{Text: "finish"},
-	}); err != nil {
+	started, err := host.StartTurn(ctx, flruntime.StartTurnCommand{
+		LogicalRequestID: identity.LogicalRequestID("turn-settlement-owner"),
+		UserMessage:      flruntime.TurnInput{Text: "finish"},
+	})
+	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = host.SettlePendingTool(ctx, flruntime.PendingToolSettlementRequest{
+	_, err = host.SettlePendingTool(ctx, floretPendingToolSettlementRequest{
+		LogicalRequestID: "settle-after-active-authority",
 		Target: flruntime.PendingToolSettlementTarget{
-			ThreadID:   "thread-settlement-owner",
-			TurnID:     "turn-settlement-owner",
-			RunID:      "run-settlement-owner",
+			ThreadID:   started.ThreadID,
+			TurnID:     started.TurnID,
+			RunID:      started.RunID,
 			ToolCallID: "tool-settlement-owner",
 			ToolName:   "terminal.exec",
 			Handle:     "process-settlement-owner",
@@ -226,6 +227,7 @@ type terminalTerminationHostedProvider struct {
 	endpointID string
 	threadID   string
 	runID      string
+	run        *run
 	processID  string
 	toolCalls  []ToolCall
 }
@@ -251,7 +253,6 @@ func newFloretRuntimeTestRun(t *testing.T, opts runOptions, providedStores ...*t
 	var bootstrap *floretBootstrapResult
 	if opts.FloretTurnOpener == nil {
 		store := openTestFloretRuntimeHost(t, flstorage.Memory())
-		t.Cleanup(func() { _ = store.Close() })
 		var err error
 		bootstrap, err = newFloretBootstrapResult(store)
 		if err != nil {
@@ -293,7 +294,8 @@ func newFloretRuntimeTestRun(t *testing.T, opts runOptions, providedStores ...*t
 	svc.threadMgr = newThreadManager(svc)
 	t.Cleanup(svc.threadMgr.Close)
 	if bootstrap != nil {
-		createCanonicalFloretThreadForTest(t, svc, opts.ThreadID, "test-create-"+opts.ThreadID)
+		created := createCanonicalFloretThreadForTest(t, svc, opts.ThreadID, "test-create-"+opts.ThreadID)
+		opts.ThreadID = strings.TrimSpace(string(created.ThreadID))
 	}
 	if settings, err := productStore.GetThreadSettings(context.Background(), opts.EndpointID, opts.ThreadID); err != nil {
 		t.Fatalf("GetThread: %v", err)
@@ -320,7 +322,7 @@ func newFloretRuntimeTestRun(t *testing.T, opts runOptions, providedStores ...*t
 	if strings.TrimSpace(opts.HostCapabilities.authorityThreadID) == "" {
 		opts.HostCapabilities = bindTestRunHostCapabilities(t, svc, opts.EndpointID, opts.ThreadID)
 	}
-	productCapabilities, err := bindRootRunProductCapabilities(productStore, opts.EndpointID, opts.ThreadID, opts.RunID)
+	productCapabilities, err := bindRootRunProductCapabilities(productStore, opts.EndpointID, opts.ThreadID)
 	if err != nil {
 		t.Fatalf("bindRootRunProductCapabilities: %v", err)
 	}
@@ -380,6 +382,91 @@ func bindTestRunHostCapabilities(t *testing.T, svc *Service, endpointID string, 
 	return host
 }
 
+func TestCommittedStartTurnReplayUsesExactReadAdmissionBinder(t *testing.T) {
+	for _, testCase := range []struct {
+		name         string
+		expectedText string
+		wantBound    bool
+	}{
+		{name: "matching frozen command", expectedText: "pending prompt", wantBound: true},
+		{name: "different frozen command", expectedText: "different prompt"},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			svc := newSendTurnTestService(t)
+			meta := testSendTurnMeta()
+			thread, err := svc.CreateThread(t.Context(), meta, "committed replay", "", "", "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			command := createPendingCommandForTest(t, svc, meta, thread.ThreadID, "queue-committed-replay-"+strings.ReplaceAll(testCase.name, " ", "-"), "", "")
+			runtimeCapabilities, err := svc.bindFloretThreadRuntime(thread.ThreadID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			turnHost, err := runtimeCapabilities.Turn(t.Context(), newStaticTestFloretAgent(t, "accepted"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			logicalRequestID := identity.LogicalRequestID(command.QueueID)
+			input := flruntime.TurnInput{Text: command.TextContent}
+			first, err := turnHost.StartTurn(t.Context(), flruntime.StartTurnCommand{LogicalRequestID: logicalRequestID, UserMessage: input})
+			if err != nil {
+				t.Fatal(err)
+			}
+			replayed, err := turnHost.StartTurn(t.Context(), flruntime.StartTurnCommand{LogicalRequestID: logicalRequestID, UserMessage: input})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if replayed.ThreadID != first.ThreadID || replayed.TurnID != first.TurnID || replayed.RunID != first.RunID ||
+				!replayed.Receipt.Replayed || !replayed.Receipt.Committed {
+				t.Fatalf("committed replay=%#v first=%#v", replayed, first)
+			}
+			exact, err := turnHost.ReadTurn(t.Context(), replayed.TurnID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			r := newRunWithProductStoreForTest(t, runOptions{
+				ExecutionKey: command.QueueID, EndpointID: meta.EndpointID, ThreadID: thread.ThreadID,
+			}, svc.threadsDB)
+			r.awaitFloretAdmission.Store(true)
+			r.setPendingTurnCommand(command.QueueID)
+			snapshot := permissionSnapshotWithOwnerIdentity(
+				buildPermissionSnapshot(FlowerPermissionApprovalRequired, nil, nil),
+				meta.EndpointID, thread.ThreadID, string(replayed.RunID),
+			)
+			r.setPermissionState(snapshot.PermissionType, snapshot)
+
+			err = r.bindFloretCanonicalAdmissionReplay(
+				logicalRequestID, replayed, exact, nil, flruntime.TurnInput{Text: testCase.expectedText},
+			)
+			if testCase.wantBound {
+				if err != nil {
+					t.Fatal(err)
+				}
+				receipt, err := svc.threadsDB.GetPendingTurnAdmissionReceipt(t.Context(), command.QueueID)
+				if err != nil || receipt.Stage != threadstore.PendingTurnAdmissionStageSettled ||
+					receipt.ThreadID != thread.ThreadID || receipt.TurnID != string(replayed.TurnID) ||
+					receipt.RunID != string(replayed.RunID) || receipt.EntryID != exact.UserEntryID {
+					t.Fatalf("settled receipt=%#v err=%v", receipt, err)
+				}
+				if _, err := svc.threadsDB.GetQueuedTurn(t.Context(), meta.EndpointID, thread.ThreadID, command.QueueID); !errors.Is(err, sql.ErrNoRows) {
+					t.Fatalf("settled queued command error=%v, want sql.ErrNoRows", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), "frozen command") {
+				t.Fatalf("mismatch error=%v, want frozen command rejection", err)
+			}
+			queued, queuedErr := svc.threadsDB.GetQueuedTurn(t.Context(), meta.EndpointID, thread.ThreadID, command.QueueID)
+			receipt, receiptErr := svc.threadsDB.GetPendingTurnAdmissionReceipt(t.Context(), command.QueueID)
+			if queuedErr != nil || queued.AdmissionState != threadstore.PendingTurnAdmissionInFlight ||
+				receiptErr != nil || receipt.Stage != threadstore.PendingTurnAdmissionStageInFlight || receipt.TurnID != "" || receipt.RunID != "" {
+				t.Fatalf("mismatch mutated queued=%#v queuedErr=%v receipt=%#v receiptErr=%v", queued, queuedErr, receipt, receiptErr)
+			}
+		})
+	}
+}
+
 func (failingTurnProvider) StreamTurn(context.Context, ModelGatewayRequest, func(StreamEvent)) (ModelGatewayResult, error) {
 	return ModelGatewayResult{}, errors.New("primary engine failure")
 }
@@ -435,7 +522,11 @@ func (p *terminalTerminationHostedProvider) StreamTurn(_ context.Context, req Mo
 		p.recordToolCall(toolCall)
 		return ModelGatewayResult{FinishReason: "tool_calls", ToolCalls: []ToolCall{toolCall}}, nil
 	case 2:
-		processes := p.manager.ProcessesForRun(p.endpointID, p.threadID, p.runID)
+		canonicalRunID := p.runID
+		if p.run != nil {
+			canonicalRunID, _ = p.run.canonicalRunTurnIdentity()
+		}
+		processes := p.manager.ProcessesForRun(p.endpointID, p.threadID, canonicalRunID)
 		if len(processes) != 1 {
 			return ModelGatewayResult{}, fmt.Errorf("running terminal processes=%d, want 1", len(processes))
 		}
@@ -485,22 +576,18 @@ func (p *terminalTerminationHostedProvider) snapshot() (int, string, []ToolCall)
 func TestRunFloretHostedTurnExecutesSameResponseTerminalCallsConcurrently(t *testing.T) {
 	t.Parallel()
 	workspace := t.TempDir()
-	manager := newTerminalProcessManager()
-	t.Cleanup(func() { _ = manager.Close(context.Background()) })
-	svc := &Service{terminalProcesses: manager}
 	r := newFloretRuntimeTestRun(t, runOptions{
-		Log:              slog.New(slog.NewTextHandler(io.Discard, nil)),
-		StateDir:         t.TempDir(),
-		AgentHomeDir:     t.TempDir(),
-		WorkingDir:       workspace,
-		Shell:            "/bin/bash",
-		HostCapabilities: bindTestRunHostCapabilities(t, svc, "env_concurrent_terminal_batch", "thread_concurrent_terminal_batch"),
-		AIConfig:         &config.AIConfig{},
-		SessionMeta:      &session.Meta{CanRead: true, CanWrite: true, CanExecute: true, CanAdmin: true},
-		RunID:            "run_concurrent_terminal_batch",
-		EndpointID:       "env_concurrent_terminal_batch",
-		ThreadID:         "thread_concurrent_terminal_batch",
-		MessageID:        "msg_concurrent_terminal_batch",
+		Log:          slog.New(slog.NewTextHandler(io.Discard, nil)),
+		StateDir:     t.TempDir(),
+		AgentHomeDir: t.TempDir(),
+		WorkingDir:   workspace,
+		Shell:        "/bin/bash",
+		AIConfig:     &config.AIConfig{},
+		SessionMeta:  &session.Meta{CanRead: true, CanWrite: true, CanExecute: true, CanAdmin: true},
+		RunID:        "run_concurrent_terminal_batch",
+		EndpointID:   "env_concurrent_terminal_batch",
+		ThreadID:     "thread_concurrent_terminal_batch",
+		MessageID:    "msg_concurrent_terminal_batch",
 	})
 	provider := &concurrentTerminalBatchProvider{cwd: workspace}
 	err := r.runFloretHostedTurn(t.Context(), RunRequest{
@@ -565,15 +652,9 @@ func TestRunFloretHostedTurnTerminatesPendingCommandWithoutCompensation(t *testi
 	store := openTerminalProcessTestStore(t)
 	t.Cleanup(func() { _ = store.Close() })
 	floretStore := openTestFloretRuntimeHost(t, flstorage.Memory())
-	t.Cleanup(func() { _ = floretStore.Close() })
 	const endpointID = "env_terminal_termination"
-	const threadID = "thread_terminal_termination"
 	const runID = "run_terminal_termination"
 	const turnID = "turn_terminal_termination"
-	upsertTerminalProcessTestRun(t, store, endpointID, threadID, runID, turnID)
-	if err := store.UpdateThreadPermissionType(context.Background(), endpointID, threadID, config.AIPermissionFullAccess); err != nil {
-		t.Fatalf("UpdateThreadPermissionType: %v", err)
-	}
 
 	manager := newTerminalProcessManager()
 	t.Cleanup(func() { _ = manager.Close(context.Background()) })
@@ -584,10 +665,16 @@ func TestRunFloretHostedTurnTerminatesPendingCommandWithoutCompensation(t *testi
 		log:               slog.New(slog.NewTextHandler(io.Discard, nil)),
 		persistOpTO:       5 * time.Second,
 		runs:              map[string]*run{},
-		activeRunByTh:     map[string]string{runThreadKey(endpointID, threadID): runID},
+		activeRunByTh:     map[string]string{},
 	}
 	installTestFloretCapabilities(svc, testFloretBootstrap(t, floretStore))
-	createCanonicalFloretThreadForTest(t, svc, threadID, "test-create-"+threadID)
+	created := createCanonicalFloretThreadForTest(t, svc, "", "test-create-thread-terminal-termination")
+	threadID := string(created.ThreadID)
+	upsertTerminalProcessTestRun(t, store, endpointID, threadID, runID, turnID)
+	if err := store.UpdateThreadPermissionType(context.Background(), endpointID, threadID, config.AIPermissionFullAccess); err != nil {
+		t.Fatalf("UpdateThreadPermissionType: %v", err)
+	}
+	svc.activeRunByTh[runThreadKey(endpointID, threadID)] = runID
 	threadRuntime, err := svc.bindFloretThreadRuntime(threadID)
 	if err != nil {
 		t.Fatal(err)
@@ -620,6 +707,7 @@ func TestRunFloretHostedTurnTerminatesPendingCommandWithoutCompensation(t *testi
 		endpointID: endpointID,
 		threadID:   threadID,
 		runID:      runID,
+		run:        r,
 	}
 
 	err = r.runFloretHostedTurn(t.Context(), RunRequest{
@@ -666,7 +754,8 @@ func TestRunFloretHostedTurnTerminatesPendingCommandWithoutCompensation(t *testi
 		readHost, readErr := svc.openFloretThreadReadHost(context.Background(), threadID)
 		var canonical flruntime.ThreadTurnProjection
 		if readErr == nil {
-			canonical, readErr = readHost.ReadTurnProjection(context.Background(), flruntime.TurnID(turnID), flruntime.RunID(runID))
+			canonicalRunID, canonicalTurnID := r.canonicalRunTurnIdentity()
+			canonical, readErr = readHost.ReadTurnProjection(context.Background(), identity.TurnID(canonicalTurnID), identity.RunID(canonicalRunID))
 		}
 		canonicalItems := make([]string, 0)
 		for _, segment := range canonical.Segments {
@@ -679,11 +768,12 @@ func TestRunFloretHostedTurnTerminatesPendingCommandWithoutCompensation(t *testi
 		}
 		t.Fatalf("terminal activity mismatch: exec=%#v terminate=%#v canonical_items=%v read_error=%v", execItem, terminateItem, canonicalItems, readErr)
 	}
-	if terminateItem.Status != observation.ActivityStatusSuccess || terminateItem.Label != "Stop the sleeping test command" {
+	if terminateItem.Presentation == nil || terminateItem.Status != observation.ActivityStatusSuccess || terminateItem.Presentation.Label != "Stop the sleeping test command" {
 		t.Fatalf("terminal.terminate item=%#v, want successful descriptive result", terminateItem)
 	}
-	if terminateItem.Payload["process_id"] != processID || strings.TrimSpace(processID) == "" {
-		t.Fatalf("terminal.terminate payload=%#v process_id=%q", terminateItem.Payload, processID)
+	terminalPayload, ok := terminateItem.Presentation.Payload.(fltools.TerminalActivityPayload)
+	if !ok || terminalPayload.ProcessID != processID || strings.TrimSpace(processID) == "" {
+		t.Fatalf("terminal.terminate payload=%#v process_id=%q", terminateItem.Presentation.Payload, processID)
 	}
 }
 
@@ -821,7 +911,7 @@ func (p *permissionDowngradeToolCallProvider) StreamTurn(ctx context.Context, re
 		return ModelGatewayResult{FinishReason: "stop", Text: "stale tool was rejected"}, nil
 	}
 	if err := p.store.UpdateThreadPermissionType(ctx, p.endpointID, p.threadID, config.AIPermissionReadonly); err != nil {
-		return ModelGatewayResult{}, err
+		return ModelGatewayResult{}, fmt.Errorf("downgrade test permission: %w", err)
 	}
 	return ModelGatewayResult{
 		FinishReason: "tool_calls",
@@ -1126,13 +1216,14 @@ func TestRunFloretHostedTurnInjectsAskFlowerLinkedContext(t *testing.T) {
 		ThreadID:        r.threadID,
 		ChannelID:       "channel_floret_linked_context",
 		Lane:            threadstore.FollowupLaneQueued,
-		TurnID:          r.turnID,
-		RunID:           r.id,
 		TextContent:     "what is this process",
 		AttachmentsJSON: `[{"attachment_id":"upl_hhhhhhhhhhhhhhhhhhhhhhhh"}]`,
 		CreatedAtUnixMs: time.Now().UnixMilli(),
 	}, []string{uploadID}, time.Now().UnixMilli()); err != nil {
 		t.Fatalf("CreateFollowupWithUploadRefs: %v", err)
+	}
+	if _, err := store.BeginPendingTurnAdmission(context.Background(), r.endpointID, r.threadID, commandID, commandID); err != nil {
+		t.Fatalf("BeginPendingTurnAdmission: %v", err)
 	}
 	r.setPendingTurnCommand(commandID)
 	r.awaitFloretAdmission.Store(true)
@@ -1215,15 +1306,6 @@ func TestRunFloretHostedTurnRefreshesPermissionBeforeDispatch(t *testing.T) {
 	const endpointID = "env_floret_dynamic_permission"
 	const threadID = "thread_floret_dynamic_permission"
 	const runID = "run_floret_dynamic_permission"
-	if err := store.CreateThreadSettings(ctx, threadstore.ThreadSettings{
-		EndpointID:              endpointID,
-		ThreadID:                threadID,
-		PermissionType:          config.AIPermissionApprovalRequired,
-		SettingsCreatedAtUnixMs: 1,
-		SettingsUpdatedAtUnixMs: 1,
-	}); err != nil {
-		t.Fatalf("CreateThread: %v", err)
-	}
 	r := newFloretRuntimeTestRun(t, runOptions{
 		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
 		StateDir:     t.TempDir(),
@@ -1240,14 +1322,19 @@ func TestRunFloretHostedTurnRefreshesPermissionBeforeDispatch(t *testing.T) {
 		RunID:     runID,
 		ThreadID:  threadID,
 		MessageID: "msg_floret_dynamic_permission",
-	})
-	r.endpointID = endpointID
-	setRunThreadStoreForTest(t, r, store)
+	}, store)
+	settings, err := store.GetThreadSettingsByCanonicalThreadID(ctx, r.threadID)
+	if err != nil || settings == nil {
+		t.Fatalf("GetThreadSettingsByCanonicalThreadID: settings=%#v err=%v", settings, err)
+	}
+	if err := store.UpdateThreadPermissionType(ctx, settings.EndpointID, r.threadID, config.AIPermissionApprovalRequired); err != nil {
+		t.Fatalf("UpdateThreadPermissionType: %v", err)
+	}
 
 	provider := &permissionDowngradeToolCallProvider{
 		store:      store,
-		endpointID: endpointID,
-		threadID:   threadID,
+		endpointID: settings.EndpointID,
+		threadID:   r.threadID,
 	}
 	err = r.runFloretHostedTurn(ctx, RunRequest{
 		Model: "compat/gpt-5-mini",
@@ -1296,21 +1383,19 @@ func TestRunFloretHostedTurnStopsBeforeToolHandlerWhenPermissionRefreshIsInvalid
 	workspace := t.TempDir()
 	const endpointID = "env_invalid_permission_refresh"
 	const threadID = "thread_invalid_permission_refresh"
-	if err := store.CreateThreadSettings(ctx, threadstore.ThreadSettings{
-		EndpointID: endpointID, ThreadID: threadID, PermissionType: config.AIPermissionFullAccess,
-		WorkingDir: workspace, SettingsCreatedAtUnixMs: 1, SettingsUpdatedAtUnixMs: 1,
-	}); err != nil {
-		t.Fatal(err)
-	}
 	r := newFloretRuntimeTestRun(t, runOptions{
 		StateDir: t.TempDir(), AgentHomeDir: workspace, WorkingDir: workspace, Shell: "/bin/bash",
 		AIConfig: &config.AIConfig{}, RunID: "run_invalid_permission_refresh",
 		EndpointID: endpointID, ThreadID: threadID, MessageID: "turn_invalid_permission_refresh",
 		SessionMeta: &session.Meta{EndpointID: endpointID, CanRead: true, CanWrite: true, CanExecute: true, CanAdmin: true},
 	}, store)
+	settings, err := store.GetThreadSettingsByCanonicalThreadID(ctx, r.threadID)
+	if err != nil || settings == nil {
+		t.Fatalf("GetThreadSettingsByCanonicalThreadID: settings=%#v err=%v", settings, err)
+	}
 	marker := filepath.Join(workspace, "handler_called")
 	provider := &permissionCorruptingToolCallProvider{
-		store: store, endpointID: endpointID, threadID: threadID,
+		store: store, endpointID: endpointID, threadID: r.threadID,
 		command: "touch " + marker,
 	}
 	err = r.runFloretHostedTurn(ctx, RunRequest{
@@ -1415,16 +1500,12 @@ func TestRunFloretHostedTurnNaturalCompactionContinuesStreaming(t *testing.T) {
 	events := make([]any, 0, 16)
 	provider := &naturalCompactionProvider{}
 	store := openTestFloretRuntimeHost(t, flstorage.Memory())
-	t.Cleanup(func() { _ = store.Close() })
 	adapter := testFloretBootstrap(t, store)
-	createHost, err := adapter.newThreadCreate("thread_floret_natural_compact_streaming", "test-create-thread_floret_natural_compact_streaming")
+	created, err := adapter.threadCreate.CreateThread(context.Background(), identity.LogicalRequestID("test-create-thread-floret-natural-compact-streaming"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := createHost.Create(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	threadRuntime, err := adapter.bindThreadRuntime("thread_floret_natural_compact_streaming")
+	threadRuntime, err := adapter.bindThreadRuntime(created.ThreadID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1442,7 +1523,7 @@ func TestRunFloretHostedTurnNaturalCompactionContinuesStreaming(t *testing.T) {
 			CanAdmin:   true,
 		},
 		RunID:            "run_floret_natural_compact_streaming",
-		ThreadID:         "thread_floret_natural_compact_streaming",
+		ThreadID:         string(created.ThreadID),
 		MessageID:        "msg_floret_natural_compact_streaming",
 		FloretTurnOpener: threadRuntime.Turn,
 	})
@@ -1481,7 +1562,7 @@ func TestRunFloretHostedTurnNaturalCompactionContinuesStreaming(t *testing.T) {
 			CanAdmin:   true,
 		},
 		RunID:            "run_floret_natural_compact_streaming_next",
-		ThreadID:         "thread_floret_natural_compact_streaming",
+		ThreadID:         string(created.ThreadID),
 		MessageID:        "msg_floret_natural_compact_streaming_next",
 		FloretTurnOpener: threadRuntime.Turn,
 	})
@@ -1727,6 +1808,9 @@ func TestFloretEventSinkProjectsStreamObservationDeltas(t *testing.T) {
 
 	events := make([]any, 0, 4)
 	r := &run{
+		id:                        "run_floret_stream",
+		threadID:                  "thread_floret_stream",
+		turnID:                    "turn_floret_stream",
 		messageID:                 "msg_floret_stream",
 		onStreamEvent:             func(ev any) { events = append(events, ev) },
 		currentTextBlockIndex:     -1,
@@ -1734,9 +1818,10 @@ func TestFloretEventSinkProjectsStreamObservationDeltas(t *testing.T) {
 		needNewTextBlock:          true,
 		needNewThinkingBlock:      true,
 	}
+	r.expectFloretRuntimeEventIdentity(r.id, r.threadID, r.turnID, true)
 	sink := floretEventSink{run: r}
-	sink.EmitEvent(flruntime.Event{Type: observation.EventTypeProviderReasoning, Stream: &flruntime.StreamObservation{Type: flruntime.StreamObservationReasoningDelta, Text: "thinking"}})
-	sink.EmitEvent(flruntime.Event{Type: observation.EventTypeProviderDelta, Stream: &flruntime.StreamObservation{Type: flruntime.StreamObservationAssistantDelta, Text: "answer"}})
+	sink.EmitEvent(flruntime.Event{Type: observation.EventTypeProviderReasoning, RunID: identity.RunID(r.id), ThreadID: identity.ThreadID(r.threadID), TurnID: identity.TurnID(r.turnID), Stream: &flruntime.StreamObservation{Type: flruntime.StreamObservationReasoningDelta, Text: "thinking"}})
+	sink.EmitEvent(flruntime.Event{Type: observation.EventTypeProviderDelta, RunID: identity.RunID(r.id), ThreadID: identity.ThreadID(r.threadID), TurnID: identity.TurnID(r.turnID), Stream: &flruntime.StreamObservation{Type: flruntime.StreamObservationAssistantDelta, Text: "answer"}})
 
 	if len(r.assistantBlocks) != 2 {
 		t.Fatalf("assistantBlocks len=%d, want thinking and markdown: %#v", len(r.assistantBlocks), r.assistantBlocks)
@@ -1779,14 +1864,14 @@ func TestFloretEventSinkRejectsUnknownContractsBeforePresentation(t *testing.T) 
 	})
 	sink.EmitEvent(flruntime.Event{
 		Type:     observation.EventTypeProviderDelta,
-		ThreadID: flruntime.ThreadID(r.threadID),
-		TurnID:   flruntime.TurnID(r.turnID),
-		RunID:    flruntime.RunID(r.id),
+		ThreadID: identity.ThreadID(r.threadID),
+		TurnID:   identity.TurnID(r.turnID),
+		RunID:    identity.RunID(r.id),
 		Stream:   &flruntime.StreamObservation{Type: flruntime.StreamObservationAssistantDelta, Text: "must not render"},
 		Projection: &flruntime.ThreadTurnProjection{
-			ThreadID:       flruntime.ThreadID(r.threadID),
-			TurnID:         flruntime.TurnID(r.turnID),
-			RunID:          flruntime.RunID(r.id),
+			ThreadID:       identity.ThreadID(r.threadID),
+			TurnID:         identity.TurnID(r.turnID),
+			RunID:          identity.RunID(r.id),
 			Status:         flruntime.TurnStatusCompleted,
 			ThroughOrdinal: 1,
 			Segments:       []flruntime.ThreadTurnProjectionSegment{{Kind: "unknown"}},
@@ -1802,6 +1887,9 @@ func TestFloretEventSinkProjectsToolCallStreamObservationToModelIO(t *testing.T)
 
 	events := make([]any, 0, 1)
 	r := &run{
+		id:                        "run_floret_tool_stream",
+		threadID:                  "thread_floret_tool_stream",
+		turnID:                    "turn_floret_tool_stream",
 		messageID:                 "msg_floret_tool_stream",
 		onStreamEvent:             func(ev any) { events = append(events, ev) },
 		currentTextBlockIndex:     -1,
@@ -1809,8 +1897,9 @@ func TestFloretEventSinkProjectsToolCallStreamObservationToModelIO(t *testing.T)
 		needNewTextBlock:          true,
 		needNewThinkingBlock:      true,
 	}
+	r.expectFloretRuntimeEventIdentity(r.id, r.threadID, r.turnID, true)
 	sink := floretEventSink{run: r}
-	sink.EmitEvent(flruntime.Event{Type: observation.EventTypeProviderToolCallDelta, Stream: &flruntime.StreamObservation{
+	sink.EmitEvent(flruntime.Event{Type: observation.EventTypeProviderToolCallDelta, RunID: identity.RunID(r.id), ThreadID: identity.ThreadID(r.threadID), TurnID: identity.TurnID(r.turnID), Stream: &flruntime.StreamObservation{
 		Type: flruntime.StreamObservationToolCallDelta,
 		ToolCallStream: &flruntime.ToolCallStream{
 			ID:   "call-1",
@@ -1927,16 +2016,18 @@ func TestFloretActivityClearsModelIOBeforeLocalToolExecution(t *testing.T) {
 	r := &run{
 		id:            "run_model_io_activity",
 		threadID:      "thread_model_io_activity",
+		turnID:        "turn_model_io_activity",
 		messageID:     "msg_model_io_activity",
 		onStreamEvent: func(ev any) { events = append(events, ev) },
 	}
+	r.expectFloretRuntimeEventIdentity(r.id, r.threadID, r.turnID, true)
 	sink := floretEventSink{run: r}
-	sink.EmitEvent(flruntime.Event{Type: "provider_finish", Step: 1, FinishReason: "tool_calls"})
+	sink.EmitEvent(flruntime.Event{Type: "provider_finish", RunID: identity.RunID(r.id), ThreadID: identity.ThreadID(r.threadID), TurnID: identity.TurnID(r.turnID), Step: 1, FinishReason: "tool_calls"})
 	r.recordObservationActivityEvent(observation.Event{
 		Type:       observation.EventTypeToolCall,
 		RunID:      "run_model_io_activity",
 		ThreadID:   "thread_model_io_activity",
-		TurnID:     "msg_model_io_activity",
+		TurnID:     "turn_model_io_activity",
 		ToolID:     "tool_read",
 		ToolName:   "file.read",
 		ToolKind:   "local",
@@ -1964,6 +2055,9 @@ func TestFloretEventSinkPreservesWhitespaceStreamObservationDeltas(t *testing.T)
 	t.Parallel()
 
 	r := &run{
+		id:                        "run_floret_stream_whitespace",
+		threadID:                  "thread_floret_stream_whitespace",
+		turnID:                    "turn_floret_stream_whitespace",
 		messageID:                 "msg_floret_stream_whitespace",
 		onStreamEvent:             func(any) {},
 		currentTextBlockIndex:     -1,
@@ -1971,12 +2065,13 @@ func TestFloretEventSinkPreservesWhitespaceStreamObservationDeltas(t *testing.T)
 		needNewTextBlock:          true,
 		needNewThinkingBlock:      true,
 	}
+	r.expectFloretRuntimeEventIdentity(r.id, r.threadID, r.turnID, true)
 	sink := floretEventSink{run: r}
 	for _, text := range []string{"foo", " ", "bar", "\n"} {
-		sink.EmitEvent(flruntime.Event{Type: observation.EventTypeProviderDelta, Stream: &flruntime.StreamObservation{Type: flruntime.StreamObservationAssistantDelta, Text: text}})
+		sink.EmitEvent(flruntime.Event{Type: observation.EventTypeProviderDelta, RunID: identity.RunID(r.id), ThreadID: identity.ThreadID(r.threadID), TurnID: identity.TurnID(r.turnID), Stream: &flruntime.StreamObservation{Type: flruntime.StreamObservationAssistantDelta, Text: text}})
 	}
 	for _, text := range []string{"think", " ", "step", "\n"} {
-		sink.EmitEvent(flruntime.Event{Type: observation.EventTypeProviderReasoning, Stream: &flruntime.StreamObservation{Type: flruntime.StreamObservationReasoningDelta, Text: text}})
+		sink.EmitEvent(flruntime.Event{Type: observation.EventTypeProviderReasoning, RunID: identity.RunID(r.id), ThreadID: identity.ThreadID(r.threadID), TurnID: identity.TurnID(r.turnID), Stream: &flruntime.StreamObservation{Type: flruntime.StreamObservationReasoningDelta, Text: text}})
 	}
 
 	var markdown *persistedMarkdownBlock
@@ -2000,9 +2095,10 @@ func TestFloretEventSinkPreservesWhitespaceStreamObservationDeltas(t *testing.T)
 func TestFloretEventSinkRecordsSourceObservations(t *testing.T) {
 	t.Parallel()
 
-	r := &run{}
+	r := &run{id: "run_floret_sources", threadID: "thread_floret_sources", turnID: "turn_floret_sources"}
+	r.expectFloretRuntimeEventIdentity(r.id, r.threadID, r.turnID, true)
 	sink := floretEventSink{run: r}
-	sink.EmitEvent(flruntime.Event{Type: observation.EventTypeProviderSources, Sources: []flprovider.Source{{
+	sink.EmitEvent(flruntime.Event{Type: observation.EventTypeProviderSources, RunID: identity.RunID(r.id), ThreadID: identity.ThreadID(r.threadID), TurnID: identity.TurnID(r.turnID), Sources: []flprovider.Source{{
 		Title: "Example docs",
 		URL:   "https://example.test/docs",
 	}}})

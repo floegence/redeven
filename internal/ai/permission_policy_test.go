@@ -14,10 +14,11 @@ import (
 	"testing"
 	"time"
 
-	flprovider "github.com/floegence/floret/v2/provider"
-	flruntime "github.com/floegence/floret/v2/runtime"
-	flstorage "github.com/floegence/floret/v2/storage"
-	fltools "github.com/floegence/floret/v2/tools"
+	"github.com/floegence/floret/v3/identity"
+	flprovider "github.com/floegence/floret/v3/provider"
+	flruntime "github.com/floegence/floret/v3/runtime"
+	flstorage "github.com/floegence/floret/v3/storage"
+	fltools "github.com/floegence/floret/v3/tools"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 	"github.com/floegence/redeven/internal/config"
@@ -89,6 +90,9 @@ func newPermissionPolicyTestRun(t *testing.T, workspace string, permissionType F
 	}
 	owner := &terminalProcessTestOwner{}
 	r.setPendingToolSettlementOwnerResolver(func() floretPendingToolSettler { return owner })
+	if err := r.observeFloretCanonicalIdentity(r.id, r.threadID, r.turnID); err != nil {
+		t.Fatalf("observe canonical permission owner: %v", err)
+	}
 	freezePermissionPolicyTestSnapshot(t, r)
 	return r
 }
@@ -184,6 +188,7 @@ func configurePermissionPolicyDelegatedChild(t *testing.T, parent *run, child *r
 		child.subagentDepth = 1
 		child.threadID = childThreadID
 		child.id = permissionPolicyTestChildRunID(childThreadID)
+		child.expectFloretRuntimeEventIdentity(child.id, child.threadID, child.turnID, true)
 		if parent != nil {
 			capabilities, err := bindChildRunProductCapabilities(runThreadStoreForTest(t, parent), parent.endpointID, parent.threadID, child.threadID, child.id)
 			if err != nil {
@@ -257,16 +262,12 @@ func TestPermissionPolicy_SubagentCanonicalQueueConcurrentResolveOneWins(t *test
 	t.Parallel()
 	ctx := context.Background()
 	store := openTestFloretRuntimeHost(t, flstorage.Memory())
-	t.Cleanup(func() { _ = store.Close() })
 	adapter := testFloretBootstrap(t, store)
-	create, err := adapter.newThreadCreate("permission-root", "create-permission-root")
+	created, err := adapter.threadCreate.CreateThread(ctx, identity.LogicalRequestID("create-permission-root"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := create.Create(ctx); err != nil {
-		t.Fatal(err)
-	}
-	runtimeCaps, err := adapter.bindThreadRuntime("permission-root")
+	runtimeCaps, err := adapter.bindThreadRuntime(created.ThreadID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -294,20 +295,22 @@ func TestPermissionPolicy_SubagentCanonicalQueueConcurrentResolveOneWins(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := childHost.SpawnSubAgent(ctx, flruntime.SpawnSubAgent{
-		PublicationID: "permission-publication", ThreadID: "permission-child",
-		TaskName: "permission worker", Message: "write a note", ForkMode: flruntime.SubAgentForkNone,
-	}); err != nil {
+	spawned, err := childHost.SpawnSubAgent(ctx, flruntime.SpawnSubAgentCommand{
+		LogicalRequestID: "permission-publication", TaskName: "permission worker",
+		Input: flruntime.TurnInput{Text: "write a note"}, ForkMode: flruntime.SubAgentForkNone,
+	})
+	if err != nil {
 		t.Fatal(err)
 	}
+	childThreadID := spawned.ThreadID
 	type waitOutcome struct {
 		result flruntime.WaitSubAgentsResult
 		err    error
 	}
 	waitDone := make(chan waitOutcome, 1)
 	go func() {
-		result, waitErr := childHost.WaitSubAgents(ctx, flruntime.WaitSubAgents{
-			ChildThreadIDs: []flruntime.ThreadID{"permission-child"}, Timeout: 3 * time.Second,
+		result, waitErr := childHost.WaitSubAgents(ctx, flruntime.WaitSubAgentsCommand{
+			ChildThreadIDs: []identity.ThreadID{childThreadID}, Timeout: 3 * time.Second,
 		})
 		waitDone <- waitOutcome{result: result, err: waitErr}
 	}()
@@ -328,12 +331,12 @@ func TestPermissionPolicy_SubagentCanonicalQueueConcurrentResolveOneWins(t *test
 		time.Sleep(time.Millisecond)
 	}
 	pending := queue.Items[0]
-	if pending.ThreadID != "permission-child" || pending.ParentThreadID != "permission-root" || pending.RunID == "permission-child" {
+	if pending.ThreadID != childThreadID || pending.ParentThreadID != created.ThreadID || pending.RunID == identity.RunID(childThreadID) {
 		t.Fatalf("canonical child approval identity=%#v", pending)
 	}
 	resolve := func(decisionID string) error {
-		_, err := rootHost.ResolveApproval(ctx, flruntime.ApprovalResolutionRequest{
-			DecisionID: decisionID, ExpectedGeneration: queue.Generation, ExpectedRevision: queue.Revision,
+		_, err := rootHost.ResolveApproval(ctx, flruntime.ResolveApprovalCommand{
+			LogicalRequestID: identity.LogicalRequestID(decisionID), DecisionID: decisionID, ExpectedGeneration: queue.Generation, ExpectedRevision: queue.Revision,
 			ExpectedCurrent:          flruntime.ApprovalIdentity{ApprovalID: pending.ApprovalID, ThreadID: pending.ThreadID, TurnID: pending.TurnID, RunID: pending.RunID, ToolCallID: pending.ToolCallID, EffectAttemptID: pending.EffectAttemptID},
 			ExpectedApprovalRevision: pending.Revision, Decision: flruntime.ApprovalDecisionApprove,
 		})
@@ -371,8 +374,8 @@ func TestPermissionPolicy_ParentInvocationRejectsMismatchedFloretRunID(t *testin
 
 	execRun, err := floretInvocationRunContext(context.Background(), parent, fltools.Invocation[map[string]any]{
 		RunID:    "wrong_floret_run",
-		ThreadID: parent.threadID,
-		TurnID:   parent.turnID,
+		ThreadID: identity.ThreadID(parent.threadID),
+		TurnID:   identity.TurnID(parent.turnID),
 	}, parent.currentPermissionSnapshot())
 	if err == nil || !strings.Contains(err.Error(), "run identity mismatch") {
 		t.Fatalf("floretInvocationRunContext err=%v, want run identity mismatch", err)
@@ -449,10 +452,10 @@ func permissionPolicyTestRunOptions(r *run) fltools.DispatchOptions {
 		return fltools.DispatchOptions{Step: 1}
 	}
 	opts := fltools.DispatchOptions{
-		RunID:         strings.TrimSpace(r.id),
-		ThreadID:      strings.TrimSpace(r.threadID),
-		TurnID:        strings.TrimSpace(r.turnID),
-		PromptScopeID: strings.TrimSpace(r.threadID),
+		RunID:         identity.RunID(strings.TrimSpace(r.id)),
+		ThreadID:      identity.ThreadID(strings.TrimSpace(r.threadID)),
+		TurnID:        identity.TurnID(strings.TrimSpace(r.turnID)),
+		PromptScopeID: identity.PromptScopeID(strings.TrimSpace(r.threadID)),
 		Step:          1,
 	}
 	snapshot := r.currentPermissionSnapshot()
@@ -905,9 +908,9 @@ func TestPermissionPolicy_SubagentsRuntimeActionsDoNotRequestApproval(t *testing
 					childThreadID := "child_runtime_no_approval"
 					insertPermissionPolicyChildSnapshot(t, r, childThreadID, "okf.search")
 					now := time.Now()
-					host := &recordingFloretHost{parentThreadID: flruntime.ThreadID(r.threadID), snapshots: []flruntime.SubAgentSnapshot{{
-						ThreadID:       flruntime.ThreadID(childThreadID),
-						ParentThreadID: flruntime.ThreadID(r.threadID),
+					host := &recordingFloretHost{parentThreadID: identity.ThreadID(r.threadID), snapshots: []flruntime.SubAgentSnapshot{{
+						ThreadID:       identity.ThreadID(childThreadID),
+						ParentThreadID: identity.ThreadID(r.threadID),
 						TaskName:       "runtime no approval child",
 						HostProfileRef: subagentAgentTypeWorker,
 						Status:         flruntime.SubAgentStatusRunning,
@@ -922,6 +925,15 @@ func TestPermissionPolicy_SubagentsRuntimeActionsDoNotRequestApproval(t *testing
 					})
 					runtime.host = host
 					r.subagentRuntime = runtime
+					if tc.name == "spawn" {
+						surfaceProvider := runtime.dynamicSubagentToolSurfaceProvider(newFloretToolRuntimeState(newTodoRuntimeState()))
+						host.afterSpawn = func(req flruntime.SpawnSubAgentCommand, snapshot flruntime.SubAgentSnapshot) error {
+							_, err := surfaceProvider(context.Background(), flruntime.ToolSurfaceRequest{
+								RunID: identity.RunID("run_" + string(snapshot.ThreadID)), ThreadID: snapshot.ThreadID, TurnID: identity.TurnID("turn_" + string(snapshot.ThreadID)), Labels: req.Labels,
+							})
+							return err
+						}
+					}
 
 					toolID := "tool_subagents_runtime_" + permissionTypeString(permissionType) + "_" + tc.name
 					outcome, err := r.runBuiltInToolThroughFloret(context.Background(), toolID, "subagents", tc.args)

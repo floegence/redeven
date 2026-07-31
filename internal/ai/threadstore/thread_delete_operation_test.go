@@ -26,12 +26,10 @@ func TestStorePrepareThreadDeleteOperationPersistsReplaySnapshotAndRetiresThread
 		t.Fatalf("CreateThread: %v", err)
 	}
 	if err := store.InsertUpload(ctx, UploadRecord{
-		UploadID:       "upload_delete_operation",
-		EndpointID:     endpointID,
-		StorageRelPath: "upload_delete_operation.data",
-		Name:           "attachment.txt",
-		MimeType:       "text/plain",
-		SizeBytes:      4,
+		UploadID: "upload_delete_operation", EndpointID: endpointID,
+		OwnerScopeKind: UploadOwnerScopeUser, OwnerUserHash: strings.Repeat("a", 64),
+		StorageRelPath: "upload_delete_operation.data", Name: "attachment.txt",
+		MimeType: "text/plain", SizeBytes: 4, ContentSHA256: strings.Repeat("b", 64), State: UploadStateLive,
 	}); err != nil {
 		t.Fatalf("InsertUpload: %v", err)
 	}
@@ -152,13 +150,14 @@ func TestStoreThreadDeleteIntentFreezesThreadScopedWrites(t *testing.T) {
 	}
 	if err := store.InsertUpload(ctx, UploadRecord{
 		UploadID: "upload_write_freeze", EndpointID: endpointID, StorageRelPath: "upload_write_freeze.data",
-		Name: "queued.txt", MimeType: "text/plain", SizeBytes: 6, State: UploadStateStaged,
+		OwnerScopeKind: UploadOwnerScopeUser, OwnerUserHash: strings.Repeat("a", 64),
+		Name: "queued.txt", MimeType: "text/plain", SizeBytes: 6, ContentSHA256: strings.Repeat("b", 64), State: UploadStateLive,
 	}); err != nil {
 		t.Fatalf("InsertUpload: %v", err)
 	}
 	queued, _, revision, err := store.CreateFollowupWithUploadRefs(ctx, QueuedTurn{
 		QueueID: "queue_write_freeze", EndpointID: endpointID, ThreadID: threadID, ChannelID: "channel_write_freeze",
-		Lane: FollowupLaneQueued, TurnID: "turn_write_freeze", RunID: "run_write_freeze", TextContent: "queued",
+		Lane: FollowupLaneQueued, TextContent: "queued",
 	}, []string{"upload_write_freeze"}, 100)
 	if err != nil {
 		t.Fatalf("CreateFollowupWithUploadRefs: %v", err)
@@ -203,7 +202,7 @@ func TestStoreThreadDeleteIntentFreezesThreadScopedWrites(t *testing.T) {
 		{name: "create queue item", run: func() error {
 			_, _, _, err := store.CreateFollowup(ctx, QueuedTurn{
 				QueueID: "queue_after_delete", EndpointID: endpointID, ThreadID: threadID, ChannelID: "channel_write_freeze",
-				Lane: FollowupLaneQueued, TurnID: "turn_after_delete", RunID: "run_after_delete", TextContent: "blocked",
+				Lane: FollowupLaneQueued, TextContent: "blocked",
 			})
 			return err
 		}},
@@ -238,7 +237,8 @@ func TestStoreThreadDeleteIntentFreezesThreadScopedWrites(t *testing.T) {
 			return store.BindUploadsToRef(ctx, endpointID, threadID, UploadRefKindThread, threadID, []string{"upload_write_freeze"}, 200)
 		}},
 		{name: "admission", run: func() error {
-			return store.CommitPendingTurnAdmission(ctx, endpointID, threadID, queued.QueueID, queued.TurnID, nil, 200)
+			_, err := store.BeginPendingTurnAdmission(ctx, endpointID, threadID, queued.QueueID, "logical_write_freeze")
+			return err
 		}},
 		{name: "queue resource delete", run: func() error {
 			_, err := store.DeleteFollowupResources(ctx, endpointID, threadID, queued.QueueID)
@@ -246,8 +246,8 @@ func TestStoreThreadDeleteIntentFreezesThreadScopedWrites(t *testing.T) {
 		}},
 		{name: "fork", run: func() error {
 			_, err := store.PrepareForkOperation(ctx, ForkThreadRequest{
-				OperationID: "fork_after_delete", EndpointID: endpointID, SourceThreadID: threadID,
-				DestinationThreadID: "fork_destination_after_delete", CreatedAtUnixMs: 300,
+				OperationID: "fork_after_delete", ClientRequestID: "fork_after_delete_request", EndpointID: endpointID, SourceThreadID: threadID,
+				DestinationThreadID: "fork_destination_after_delete", CreatedByUserPublicID: "user_write_freeze", CreatedAtUnixMs: 300,
 			})
 			return err
 		}},

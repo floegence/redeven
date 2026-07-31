@@ -4,8 +4,9 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/floegence/floret/v2/observation"
-	flruntime "github.com/floegence/floret/v2/runtime"
+	"github.com/floegence/floret/v3/identity"
+	"github.com/floegence/floret/v3/observation"
+	flruntime "github.com/floegence/floret/v3/runtime"
 	"github.com/floegence/redeven/internal/config"
 )
 
@@ -43,21 +44,22 @@ func newActivityTimelineBlockWithPublicIdentity(timeline observation.ActivityTim
 func (r *run) newActivityTimelineBlock(timeline observation.ActivityTimeline, fileActions map[string]FlowerActivityFileAction) ActivityTimelineBlock {
 	publicIdentity := activityTimelinePublicIdentity{}
 	if r != nil {
+		runID, threadID, turnID := r.floretCanonicalIdentity()
 		publicIdentity = activityTimelinePublicIdentity{
-			RunID:    strings.TrimSpace(r.id),
-			ThreadID: strings.TrimSpace(r.threadID),
-			TurnID:   strings.TrimSpace(r.turnID),
-			TraceID:  strings.TrimSpace(r.id),
+			RunID:    runID,
+			ThreadID: threadID,
+			TurnID:   turnID,
+			TraceID:  runID,
 		}
 	}
 	return newActivityTimelineBlockWithPublicIdentity(timeline, fileActions, publicIdentity)
 }
 
 func publicActivityTimelineForBlock(timeline observation.ActivityTimeline, publicIdentity activityTimelinePublicIdentity) observation.ActivityTimeline {
-	timeline.RunID = strings.TrimSpace(publicIdentity.RunID)
-	timeline.ThreadID = strings.TrimSpace(publicIdentity.ThreadID)
-	timeline.TurnID = strings.TrimSpace(publicIdentity.TurnID)
-	timeline.TraceID = strings.TrimSpace(publicIdentity.TraceID)
+	timeline.RunID = identity.RunID(strings.TrimSpace(publicIdentity.RunID))
+	timeline.ThreadID = identity.ThreadID(strings.TrimSpace(publicIdentity.ThreadID))
+	timeline.TurnID = identity.TurnID(strings.TrimSpace(publicIdentity.TurnID))
+	timeline.TraceID = identity.TraceID(strings.TrimSpace(publicIdentity.TraceID))
 	if len(timeline.Items) == 0 {
 		return timeline
 	}
@@ -65,10 +67,13 @@ func publicActivityTimelineForBlock(timeline observation.ActivityTimeline, publi
 	copy(items, timeline.Items)
 	for index := range items {
 		toolName := strings.TrimSpace(items[index].ToolName)
-		if toolName != "subagents" || len(items[index].Payload) == 0 {
+		if toolName != "subagents" || items[index].Presentation == nil || items[index].Presentation.Payload == nil {
 			continue
 		}
-		items[index].Payload = publicActivityPayloadForTool(toolName, items[index].Payload)
+		payload := activityPayloadMap(items[index].Presentation.Payload)
+		publicPayload := publicActivityPayloadForTool(toolName, payload)
+		items[index].Presentation = cloneActivityPresentation(items[index].Presentation)
+		items[index].Presentation.Payload = activityPayloadForRenderer(items[index].Presentation.Renderer, publicPayload)
 	}
 	timeline.Items = items
 	return timeline
@@ -144,9 +149,13 @@ func (r *run) activityTimelineFileActions(timeline observation.ActivityTimeline)
 		out[actionID] = action
 	}
 	for _, item := range timeline.Items {
-		addAction(activityPayloadString(item.Payload, "file_action_id"))
-		for _, mutation := range activityPayloadRecords(item.Payload, "mutations") {
-			addAction(activityPayloadString(mutation, "file_action_id"))
+		if item.Presentation == nil {
+			continue
+		}
+		for _, target := range item.Presentation.TargetRefs {
+			if actionID, ok := strings.CutPrefix(strings.TrimSpace(target.Kind), "file_action:"); ok {
+				addAction(actionID)
+			}
 		}
 	}
 	return cloneFlowerActivityFileActions(out)

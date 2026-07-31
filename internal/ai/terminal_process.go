@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/creack/pty"
-	flruntime "github.com/floegence/floret/v2/runtime"
+	flruntime "github.com/floegence/floret/v3/runtime"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 	"github.com/floegence/redeven/internal/processenv"
 )
@@ -584,54 +584,10 @@ func (p *terminalProcess) TerminateForActiveTurn(ctx context.Context) (terminalP
 	if err := p.waitForReap(ctx, terminateErr); err != nil {
 		return p.Snapshot(), err
 	}
-	if err := p.finalizePendingForActiveTurn(ctx); err != nil {
-		return p.Snapshot(), errors.Join(terminateErr, err)
-	}
 	p.mu.Lock()
 	snapshot := p.snapshotLocked(terminalProcessTailCapBytes)
-	finalizationErr := p.finalizationErr
 	p.mu.Unlock()
-	return snapshot, errors.Join(terminateErr, finalizationErr)
-}
-
-func (p *terminalProcess) finalizePendingForActiveTurn(ctx context.Context) error {
-	if p == nil {
-		return errors.New("terminal process not found")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	p.mu.Lock()
-	pending := p.pending
-	reaped := p.reaped
-	owner := p.activeSettlementOwner
-	target := p.settlementTarget
-	finalize := p.finalize
-	snapshot := p.snapshotLocked(terminalProcessTailCapBytes)
-	p.mu.Unlock()
-	if !pending {
-		return nil
-	}
-	if !reaped || owner == nil || finalize == nil {
-		return errors.New("terminal process active settlement authority is unavailable")
-	}
-	started := false
-	p.finalizeOnce.Do(func() {
-		started = true
-		err := finalize(ctx, owner, target, snapshot)
-		p.finishFinalization(err)
-	})
-	if !started {
-		select {
-		case <-p.finalizationDone:
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
-	p.mu.Lock()
-	err := p.finalizationErr
-	p.mu.Unlock()
-	return err
+	return snapshot, terminateErr
 }
 
 func (p *terminalProcess) requestTermination() error {

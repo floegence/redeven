@@ -7,7 +7,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/floegence/floret/v2/observation"
+	"github.com/floegence/floret/v3/observation"
+	fltools "github.com/floegence/floret/v3/tools"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -239,17 +240,33 @@ func activityTimelineItemReferencesAction(items []observation.ActivityItem, item
 		if strings.TrimSpace(item.ItemID) != itemID {
 			continue
 		}
-		if activityPayloadString(item.Payload, "file_action_id") == actionID {
-			return true
+		if item.Presentation == nil {
+			return false
 		}
-		for _, mutation := range activityPayloadRecords(item.Payload, "mutations") {
-			if activityPayloadString(mutation, "file_action_id") == actionID {
+		for _, target := range item.Presentation.TargetRefs {
+			targetActionID, ok := strings.CutPrefix(strings.TrimSpace(target.Kind), "file_action:")
+			if ok && strings.TrimSpace(targetActionID) == actionID {
 				return true
 			}
 		}
 		return false
 	}
 	return false
+}
+
+func activityPayloadMap(payload fltools.ActivityPayload) map[string]any {
+	if payload == nil {
+		return nil
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return nil
+	}
+	var out map[string]any
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil
+	}
+	return out
 }
 
 func sanitizeActivityTimelineBlockRecord(block map[string]any) error {
@@ -270,7 +287,7 @@ func sanitizeActivityTimelineBlockRecord(block map[string]any) error {
 		} else {
 			delete(item, "metadata")
 		}
-		renderer := observation.ActivityRenderer(strings.TrimSpace(fmt.Sprint(item["renderer"])))
+		renderer := fltools.ActivityRenderer(strings.TrimSpace(fmt.Sprint(item["renderer"])))
 		toolName := strings.TrimSpace(fmt.Sprint(item["tool_name"]))
 		if payload, ok := sanitizeActivityPayloadValue(item["payload"], renderer, toolName); ok {
 			item["payload"] = payload
@@ -425,7 +442,7 @@ func sanitizeActivityMetadataValue(value any) map[string]any {
 	return out
 }
 
-func sanitizeActivityPayloadValue(value any, renderer observation.ActivityRenderer, toolName string) (map[string]any, bool) {
+func sanitizeActivityPayloadValue(value any, renderer fltools.ActivityRenderer, toolName string) (map[string]any, bool) {
 	payload, ok := value.(map[string]any)
 	if !ok || len(payload) == 0 {
 		return nil, false
@@ -636,23 +653,23 @@ func activityPayloadKeyPolicyToken(key string) string {
 	return strings.Trim(out.String(), "_")
 }
 
-func activityPayloadAllowedKeys(renderer observation.ActivityRenderer) map[string]struct{} {
+func activityPayloadAllowedKeys(renderer fltools.ActivityRenderer) map[string]struct{} {
 	switch renderer {
-	case observation.ActivityRendererTerminal:
+	case fltools.ActivityRendererTerminal:
 		return stringSet("command", "description", "process_id", "execution_location", "output", "first_seq", "last_seq", "latest_seq", "has_more", "total_bytes", "started_at_ms", "ended_at_ms", "exit_code", "duration_ms", "truncated", "summary", "details", "status", "error", "content_ref")
-	case observation.ActivityRendererFile:
+	case fltools.ActivityRendererFile:
 		return stringSet("operation", "display_name", "file_action_id", "content", "line_offset", "line_count", "total_lines", "change_type", "additions", "deletions", "unified_diff", "diff_unavailable_reason", "truncated", "summary", "details", "status", "error", "content_ref")
-	case observation.ActivityRendererPatch:
+	case fltools.ActivityRendererPatch:
 		return stringSet("operation", "files_changed", "hunks", "additions", "deletions", "input_format", "normalized_format", "mutations", "truncated", "summary", "details", "status", "error", "content_ref")
-	case observation.ActivityRendererTodos:
+	case fltools.ActivityRendererTodos:
 		return stringSet("todos", "counts", "result", "args", "expected_version", "explanation", "truncated", "summary", "details", "status", "error", "content_ref")
-	case observation.ActivityRendererWebSearch:
+	case fltools.ActivityRendererWebSearch:
 		return stringSet("query", "provider", "count", "sources", "results", "truncated", "summary", "details", "status", "error", "content_ref")
-	case observation.ActivityRendererQuestion:
+	case fltools.ActivityRendererQuestion:
 		return stringSet("reason_code", "required_from_user", "questions", "contains_secret", "summary", "details", "status", "error", "content_ref")
-	case observation.ActivityRendererCompletion:
+	case fltools.ActivityRendererCompletion:
 		return stringSet("result", "evidence_refs", "remaining_risks", "next_actions", "truncated", "summary", "details", "status", "error", "content_ref")
-	case observation.ActivityRendererStructured:
+	case fltools.ActivityRendererStructured:
 		return stringSet(
 			"operation", "query", "count", "provider", "name", "action", "limit",
 			"data", "result", "content", "content_ref", "activation_id", "already_active",

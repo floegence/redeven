@@ -44,7 +44,10 @@ func newRunWithProductStoreForTest(t *testing.T, opts runOptions, providedStores
 	if strings.TrimSpace(opts.TurnID) == "" {
 		opts.TurnID = "turn_run_product_test"
 	}
-	capabilities, err := bindRootRunProductCapabilities(store, opts.EndpointID, opts.ThreadID, opts.RunID)
+	// Floret v3 allocates the canonical RunID at admission. Tests that exercise
+	// normal turn startup must bind product authority to the thread only until
+	// that identity is observed.
+	capabilities, err := bindRootRunProductCapabilities(store, opts.EndpointID, opts.ThreadID)
 	if err != nil {
 		t.Fatalf("bindRootRunProductCapabilities: %v", err)
 	}
@@ -94,6 +97,15 @@ func ensureToolExecutionAuthorityForTest(t *testing.T, r *run) {
 	}
 	if strings.TrimSpace(r.threadID) == "" {
 		r.threadID = "thread_tool_authority_test"
+	}
+	if strings.TrimSpace(r.turnID) == "" {
+		r.turnID = "turn_tool_authority_test"
+	}
+	if strings.TrimSpace(r.id) == "" {
+		r.id = "run_tool_authority_test"
+	}
+	if err := r.observeFloretCanonicalIdentity(r.id, r.threadID, r.turnID); err != nil {
+		t.Fatalf("observe canonical tool execution owner: %v", err)
 	}
 	if _, ok := runThreadStoresForTest.Load(r); !ok {
 		store, err := threadstore.Open(filepath.Join(t.TempDir(), "threads.sqlite"))

@@ -14,15 +14,16 @@ import (
 	"testing"
 	"time"
 
-	flruntime "github.com/floegence/floret/v2/runtime"
+	"github.com/floegence/floret/v3/identity"
+	flruntime "github.com/floegence/floret/v3/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/session"
 )
 
 type terminalProcessTestOwner struct {
 	mu       sync.Mutex
-	requests []flruntime.PendingToolSettlementRequest
-	settle   func(context.Context, flruntime.PendingToolSettlementRequest) (flruntime.PendingToolSettlementResult, error)
+	requests []floretPendingToolSettlementRequest
+	settle   func(context.Context, floretPendingToolSettlementRequest) (flruntime.PendingToolSettlementResult, error)
 }
 
 type terminalProcessTestRecoveryCoordinator struct {
@@ -120,7 +121,7 @@ func pendingToolSettlementResultForTest(target flruntime.PendingToolSettlementTa
 	}
 }
 
-func (o *terminalProcessTestOwner) SettlePendingTool(ctx context.Context, req flruntime.PendingToolSettlementRequest) (flruntime.PendingToolSettlementResult, error) {
+func (o *terminalProcessTestOwner) SettlePendingTool(ctx context.Context, req floretPendingToolSettlementRequest) (flruntime.PendingToolSettlementResult, error) {
 	o.mu.Lock()
 	o.requests = append(o.requests, req)
 	settle := o.settle
@@ -529,7 +530,7 @@ func TestTerminalProcessTerminateWaitsForReapAndSettlement(t *testing.T) {
 	}
 }
 
-func TestTerminalProcessTerminateForActiveTurnSettlesWithActiveOwnerOnce(t *testing.T) {
+func TestTerminalProcessTerminateForActiveTurnDefersSettlementUntilAuthorityRelease(t *testing.T) {
 	manager := newTerminalProcessManager()
 	defer func() { _ = manager.Close(context.Background()) }()
 	owner := &terminalProcessTestOwner{}
@@ -555,21 +556,33 @@ func TestTerminalProcessTerminateForActiveTurnSettlesWithActiveOwnerOnce(t *test
 		t.Fatalf("TerminateForActiveTurn: %v", err)
 	}
 	if elapsed := time.Since(started); elapsed > 2*time.Second {
-		t.Fatalf("TerminateForActiveTurn took %s, want active settlement completion", elapsed)
+		t.Fatalf("TerminateForActiveTurn took %s, want process termination without settlement wait", elapsed)
 	}
 	if snapshot.Status != terminalProcessStatusCanceled || !proc.reaped {
 		t.Fatalf("snapshot=%#v reaped=%v, want canceled and reaped", snapshot, proc.reaped)
 	}
 	select {
 	case <-settlementStarted:
+		t.Fatal("canonical settlement started before active-turn authority release")
 	default:
-		t.Fatal("active-turn termination returned before canonical settlement")
+	}
+	if recoveryCalls.Load() != 0 {
+		t.Fatalf("recovery settlement calls=%d before authority release, want zero", recoveryCalls.Load())
 	}
 
 	barrier.release(nil)
-	time.Sleep(50 * time.Millisecond)
-	if recoveryCalls.Load() != 0 {
-		t.Fatalf("recovery settlement calls=%d, want zero after active settlement", recoveryCalls.Load())
+	select {
+	case <-proc.finalizationDone:
+	case <-time.After(3 * time.Second):
+		t.Fatal("canonical settlement did not finish after authority release")
+	}
+	if recoveryCalls.Load() != 1 {
+		t.Fatalf("recovery settlement calls=%d, want one after authority release", recoveryCalls.Load())
+	}
+	select {
+	case <-settlementStarted:
+	default:
+		t.Fatal("canonical settlement did not use finalizer after authority release")
 	}
 }
 
@@ -962,7 +975,7 @@ func TestServiceCloseFinalizesBeforeClosingThreadstore(t *testing.T) {
 	upsertTerminalProcessTestRun(t, store, endpointID, threadID, runID, turnID)
 	manager := newTerminalProcessManager()
 	owner := &terminalProcessTestOwner{}
-	owner.settle = func(_ context.Context, req flruntime.PendingToolSettlementRequest) (flruntime.PendingToolSettlementResult, error) {
+	owner.settle = func(_ context.Context, req floretPendingToolSettlementRequest) (flruntime.PendingToolSettlementResult, error) {
 		thread, err := store.GetThreadSettings(context.Background(), endpointID, threadID)
 		if err != nil || thread == nil {
 			return flruntime.PendingToolSettlementResult{}, errors.New("threadstore closed before terminal settlement")
@@ -1037,9 +1050,9 @@ func terminalProcessTestStartRequestWithIdentity(workspace string, owner floretP
 		RecoveryAuthorityThreadID: threadID,
 		AuthorityBarrier:          barrier,
 		SettlementTarget: flruntime.PendingToolSettlementTarget{
-			ThreadID:        flruntime.ThreadID(threadID),
-			TurnID:          flruntime.TurnID(settlementTurnID),
-			RunID:           flruntime.RunID(settlementRunID),
+			ThreadID:        identity.ThreadID(threadID),
+			TurnID:          identity.TurnID(settlementTurnID),
+			RunID:           identity.RunID(settlementRunID),
 			ToolCallID:      toolID,
 			ToolName:        "terminal.exec",
 			Handle:          processID,
@@ -1107,6 +1120,9 @@ func newTerminalProcessTestRun(t *testing.T, workspace string, svc *Service, sto
 		options.ProductCapabilities = capabilities
 	}
 	r := newRun(options)
+	if err := r.observeFloretCanonicalIdentity(runID, threadID, turnID); err != nil {
+		t.Fatalf("observe canonical terminal owner: %v", err)
+	}
 	// This helper models terminal-process unit tests without a live Floret turn;
 	// production runs publish the barrier from RunTurn's exact terminal result.
 	r.floretAuthorityBarrier.release(nil)
@@ -1124,10 +1140,10 @@ func newTerminalProcessTestRun(t *testing.T, workspace string, svc *Service, sto
 
 func terminalProcessTestProjection(runID string, threadID string, turnID string, toolID string) flruntime.ThreadTurnProjection {
 	return flruntime.ThreadTurnProjection{
-		ThreadID:       flruntime.ThreadID(threadID),
-		TurnID:         flruntime.TurnID(turnID),
-		RunID:          flruntime.RunID(runID),
-		TraceID:        flruntime.TraceID(runID),
+		ThreadID:       identity.ThreadID(threadID),
+		TurnID:         identity.TurnID(turnID),
+		RunID:          identity.RunID(runID),
+		TraceID:        identity.TraceID(runID),
 		Status:         flruntime.TurnStatusCompleted,
 		ThroughOrdinal: 1,
 		Segments: []flruntime.ThreadTurnProjectionSegment{{

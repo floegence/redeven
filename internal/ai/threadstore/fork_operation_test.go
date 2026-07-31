@@ -7,16 +7,31 @@ import (
 	"testing"
 )
 
-func TestForkOperationCopiesOnlyProductMetadataAndReplays(t *testing.T) {
-	store := openStoreForTest(t)
-	ctx := context.Background()
-	if err := store.CreateThreadSettings(ctx, ThreadSettings{
-		ThreadID: "source", EndpointID: "env", NamespacePublicID: "ns",
+func prepareForkSource(t *testing.T, store *Store, threadID string) {
+	t.Helper()
+	if err := store.CreateThreadSettings(context.Background(), ThreadSettings{
+		ThreadID: threadID, EndpointID: "env", NamespacePublicID: "ns",
 		ModelID: "openai/gpt-5", ReasoningSelectionJSON: `{"effort":"high"}`,
-		PermissionType: "approval_required", WorkingDir: "/workspace", SettingsCreatedAtUnixMs: 1, SettingsUpdatedAtUnixMs: 1,
+		PermissionType: "approval_required", WorkingDir: "/workspace",
+		CreatedByUserPublicID: "user_1", CreatedByUserEmail: "user@example.com",
+		UpdatedByUserPublicID: "user_1", UpdatedByUserEmail: "user@example.com",
+		SettingsCreatedAtUnixMs: 1, SettingsUpdatedAtUnixMs: 1,
 	}); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func forkRequest(source, clientRequestID, title string) ForkThreadRequest {
+	return ForkThreadRequest{
+		ClientRequestID: clientRequestID, EndpointID: "env", SourceThreadID: source, Title: title,
+		CreatedByUserPublicID: "user_1", CreatedByUserEmail: "user@example.com", CreatedAtUnixMs: 2,
+	}
+}
+
+func TestForkOperationBindsCanonicalDestinationAndCompletes(t *testing.T) {
+	store := openStoreForTest(t)
+	ctx := context.Background()
+	prepareForkSource(t, store, "source")
 	if err := store.UpsertFlowerThreadRouting(ctx, FlowerThreadRouting{
 		EndpointID: "env", ThreadID: "source", HomeRuntimeID: "runtime_1",
 		HomeRuntimeKind: "local_environment", PrimaryTargetID: "target_primary",
@@ -24,15 +39,12 @@ func TestForkOperationCopiesOnlyProductMetadataAndReplays(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	request := ForkThreadRequest{
-		OperationID: "fork_1", EndpointID: "env", SourceThreadID: "source", DestinationThreadID: "destination",
-		Title: "Forked", CreatedByUserPublicID: "user_1", CreatedByUserEmail: "user@example.com", CreatedAtUnixMs: 2,
-	}
-	prepared, err := store.PrepareForkOperation(ctx, request)
+
+	prepared, err := store.PrepareForkOperation(ctx, forkRequest("source", "fork_client_1", "Forked"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if prepared.Status != ForkOperationPending || prepared.SnapshotSchemaVersion != ForkSnapshotSchemaVersion || prepared.SnapshotJSON == "" || prepared.RequestedTitle != "Forked" {
+	if prepared.Stage != ForkStagePrepared || prepared.DestinationThreadID != "" || prepared.LogicalRequestID == "" || prepared.TitleLogicalRequestID == "" {
 		t.Fatalf("unexpected prepared operation: %#v", prepared)
 	}
 	for _, forbidden := range []string{"flower_metadata", "owner_kind", "parent_thread_id", "context_json", "action_json"} {
@@ -40,71 +52,110 @@ func TestForkOperationCopiesOnlyProductMetadataAndReplays(t *testing.T) {
 			t.Fatalf("fork snapshot retained Agent shadow field %q: %s", forbidden, prepared.SnapshotJSON)
 		}
 	}
-	forked, err := store.CommitForkOperation(ctx, CommitForkOperationRequest{OperationID: "fork_1", UpdatedAtUnixMs: 3})
+
+	bound, err := store.BindForkCanonicalDestination(ctx, prepared.OperationID, "destination")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bound.Stage != ForkStageFloretForked || bound.DestinationThreadID != "destination" {
+		t.Fatalf("unexpected bound operation: %#v", bound)
+	}
+	replayedBind, err := store.BindForkCanonicalDestination(ctx, prepared.OperationID, "destination")
+	if err != nil || replayedBind.DestinationThreadID != "destination" {
+		t.Fatalf("replayed bind=%#v err=%v", replayedBind, err)
+	}
+	if _, err := store.BindForkCanonicalDestination(ctx, prepared.OperationID, "different"); !errors.Is(err, ErrForkDestinationConflict) {
+		t.Fatalf("conflicting bind error=%v", err)
+	}
+
+	forked, err := store.MaterializeForkProduct(ctx, prepared.OperationID, 3)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if forked.ThreadID != "destination" || forked.ModelID != "openai/gpt-5" || forked.PermissionType != "approval_required" {
 		t.Fatalf("unexpected forked metadata: %#v", forked)
 	}
+	materialized, err := store.GetForkOperation(ctx, prepared.OperationID)
+	if err != nil || materialized.Stage != ForkStageProductMaterialized {
+		t.Fatalf("materialized operation=%#v err=%v", materialized, err)
+	}
 	routing, err := store.GetFlowerThreadRouting(ctx, "env", "destination")
-	if err != nil {
+	if err != nil || routing == nil || routing.HomeRuntimeID != "runtime_1" || routing.PrimaryTargetID != "target_primary" {
+		t.Fatalf("unexpected forked routing: %#v err=%v", routing, err)
+	}
+	if _, err := store.ConfirmForkTitleApplied(ctx, prepared.OperationID, 4); err != nil {
 		t.Fatal(err)
 	}
-	if routing == nil || routing.HomeRuntimeID != "runtime_1" || routing.PrimaryTargetID != "target_primary" || routing.UpdatedAtUnixMs != 2 {
-		t.Fatalf("unexpected forked routing: %#v", routing)
+	completed, err := store.CompleteForkOperation(ctx, prepared.OperationID, 5)
+	if err != nil || completed.Stage != ForkStageCompleted {
+		t.Fatalf("completed operation=%#v err=%v", completed, err)
 	}
-	replayed, err := store.CommitForkOperation(ctx, CommitForkOperationRequest{OperationID: "fork_1", UpdatedAtUnixMs: 4})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if replayed.ThreadID != forked.ThreadID || replayed.SettingsCreatedAtUnixMs != forked.SettingsCreatedAtUnixMs {
-		t.Fatalf("unexpected replay: %#v", replayed)
+	replayed, err := store.MaterializeForkProduct(ctx, prepared.OperationID, 6)
+	if err != nil || replayed.ThreadID != forked.ThreadID || replayed.SettingsCreatedAtUnixMs != forked.SettingsCreatedAtUnixMs {
+		t.Fatalf("materialize replay=%#v err=%v", replayed, err)
 	}
 }
 
-func TestForkOperationRejectsRequestAndDestinationConflicts(t *testing.T) {
+func TestForkOperationSkipsEmptyTitle(t *testing.T) {
 	store := openStoreForTest(t)
 	ctx := context.Background()
-	if err := store.CreateThreadSettings(ctx, ThreadSettings{ThreadID: "source", EndpointID: "env", PermissionType: "approval_required", SettingsCreatedAtUnixMs: 1, SettingsUpdatedAtUnixMs: 1}); err != nil {
+	prepareForkSource(t, store, "source_no_title")
+	op, err := store.PrepareForkOperation(ctx, forkRequest("source_no_title", "fork_client_no_title", ""))
+	if err != nil {
 		t.Fatal(err)
 	}
-	request := ForkThreadRequest{OperationID: "fork_1", EndpointID: "env", SourceThreadID: "source", DestinationThreadID: "destination", Title: "Fork", CreatedAtUnixMs: 2}
+	if _, err := store.BindForkCanonicalDestination(ctx, op.OperationID, "destination_no_title"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.MaterializeForkProduct(ctx, op.OperationID, 3); err != nil {
+		t.Fatal(err)
+	}
+	materialized, err := store.GetForkOperation(ctx, op.OperationID)
+	if err != nil || materialized.Stage != ForkStageTitleSkipped {
+		t.Fatalf("operation=%#v err=%v", materialized, err)
+	}
+	completed, err := store.CompleteForkOperation(ctx, op.OperationID, 4)
+	if err != nil || completed.Stage != ForkStageCompleted {
+		t.Fatalf("completed=%#v err=%v", completed, err)
+	}
+}
+
+func TestForkOperationRejectsRequestAndCanonicalDestinationConflicts(t *testing.T) {
+	store := openStoreForTest(t)
+	ctx := context.Background()
+	prepareForkSource(t, store, "source_conflict")
+	request := forkRequest("source_conflict", "fork_client_conflict", "Fork")
 	first, err := store.PrepareForkOperation(ctx, request)
 	if err != nil {
 		t.Fatal(err)
 	}
 	replay, err := store.PrepareForkOperation(ctx, request)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if replay.RequestFingerprint != first.RequestFingerprint || replay.SnapshotJSON != first.SnapshotJSON {
-		t.Fatalf("idempotent prepare changed snapshot")
+	if err != nil || replay.RequestFingerprint != first.RequestFingerprint || replay.SnapshotJSON != first.SnapshotJSON {
+		t.Fatalf("prepare replay=%#v err=%v", replay, err)
 	}
 	changed := request
 	changed.Title = "Different"
 	if _, err := store.PrepareForkOperation(ctx, changed); !errors.Is(err, ErrForkOperationConflict) {
-		t.Fatalf("request conflict error = %v", err)
+		t.Fatalf("request conflict error=%v", err)
 	}
-	other := request
-	other.OperationID = "fork_2"
-	if _, err := store.PrepareForkOperation(ctx, other); !errors.Is(err, ErrForkDestinationConflict) {
-		t.Fatalf("destination conflict error = %v", err)
+	prepareForkSource(t, store, "source_conflict_2")
+	second, err := store.PrepareForkOperation(ctx, forkRequest("source_conflict_2", "fork_client_conflict_2", "Fork 2"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.BindForkCanonicalDestination(ctx, first.OperationID, "destination_claimed"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.BindForkCanonicalDestination(ctx, second.OperationID, "destination_claimed"); !errors.Is(err, ErrForkDestinationConflict) {
+		t.Fatalf("destination conflict error=%v", err)
 	}
 }
 
-func TestThreadDeleteIntentWaitsForPendingForkCoordinator(t *testing.T) {
+func TestThreadDeleteIntentWaitsForActiveForkCoordinator(t *testing.T) {
 	store := openStoreForTest(t)
 	ctx := context.Background()
-	if err := store.CreateThreadSettings(ctx, ThreadSettings{
-		ThreadID: "source_pending_fork", EndpointID: "env", PermissionType: "approval_required", WorkingDir: "/workspace",
-	}); err != nil {
-		t.Fatal(err)
-	}
-	operation, err := store.PrepareForkOperation(ctx, ForkThreadRequest{
-		OperationID: "fork_pending_delete", EndpointID: "env", SourceThreadID: "source_pending_fork",
-		DestinationThreadID: "destination_pending_fork", CreatedAtUnixMs: 10,
-	})
+	prepareForkSource(t, store, "source_pending_fork")
+	operation, err := store.PrepareForkOperation(ctx, forkRequest("source_pending_fork", "fork_client_delete", ""))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,118 +170,53 @@ func TestThreadDeleteIntentWaitsForPendingForkCoordinator(t *testing.T) {
 	}
 }
 
-func TestPendingForkClaimsDestinationAgainstCreateAndWrites(t *testing.T) {
+func TestPendingCanonicalRootOwnershipClaimsRequireFloretBinding(t *testing.T) {
 	store := openStoreForTest(t)
 	ctx := context.Background()
-	if err := store.CreateThreadSettings(ctx, ThreadSettings{
-		ThreadID: "source_destination_claim", EndpointID: "env", PermissionType: "approval_required",
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := store.PrepareForkOperation(ctx, ForkThreadRequest{
-		OperationID: "fork_destination_claim", EndpointID: "env", SourceThreadID: "source_destination_claim",
-		DestinationThreadID: "destination_claimed", CreatedAtUnixMs: 10,
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := store.PrepareThreadCreateOperation(ctx, PrepareThreadCreateRequest{
-		Settings: ThreadSettings{ThreadID: "destination_claimed", EndpointID: "env", PermissionType: "approval_required"}, CreatedAtMS: 11,
-	}); !errors.Is(err, ErrThreadOperationInProgress) {
-		t.Fatalf("PrepareThreadCreateOperation error=%v, want %v", err, ErrThreadOperationInProgress)
-	}
-	if err := store.CreateThreadSettings(ctx, ThreadSettings{ThreadID: "destination_claimed", EndpointID: "env", PermissionType: "approval_required"}); !errors.Is(err, ErrThreadOperationInProgress) {
-		t.Fatalf("CreateThreadSettings error=%v, want %v", err, ErrThreadOperationInProgress)
-	}
-}
-
-func TestPendingCreateClaimsDestinationAgainstFork(t *testing.T) {
-	store := openStoreForTest(t)
-	ctx := context.Background()
-	if err := store.CreateThreadSettings(ctx, ThreadSettings{
-		ThreadID: "source_create_claim", EndpointID: "env", PermissionType: "approval_required",
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := store.PrepareThreadCreateOperation(ctx, PrepareThreadCreateRequest{
-		Settings: ThreadSettings{ThreadID: "destination_create_claim", EndpointID: "env", PermissionType: "approval_required"}, CreatedAtMS: 10,
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := store.PrepareForkOperation(ctx, ForkThreadRequest{
-		OperationID: "fork_conflicts_with_create", EndpointID: "env", SourceThreadID: "source_create_claim",
-		DestinationThreadID: "destination_create_claim", CreatedAtUnixMs: 11,
-	}); !errors.Is(err, ErrForkDestinationConflict) {
-		t.Fatalf("PrepareForkOperation error=%v, want %v", err, ErrForkDestinationConflict)
-	}
-}
-
-func TestPendingForkFreezesSourceSettingsAndAdmission(t *testing.T) {
-	store := openStoreForTest(t)
-	ctx := context.Background()
-	if err := store.CreateThreadSettings(ctx, ThreadSettings{
-		ThreadID: "source_frozen", EndpointID: "env", ModelID: "model_before",
-		PermissionType: "approval_required", WorkingDir: "/workspace",
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if err := store.InsertUpload(ctx, UploadRecord{
-		UploadID: "upload_frozen", EndpointID: "env", StorageRelPath: "upload_frozen.data",
-		Name: "frozen.txt", MimeType: "text/plain", SizeBytes: 6, CreatedAtUnixMs: 1,
-	}); err != nil {
-		t.Fatal(err)
-	}
-	command, _, _, err := store.CreateFollowupWithUploadRefs(ctx, QueuedTurn{
-		QueueID: "queue_frozen", EndpointID: "env", ThreadID: "source_frozen", ChannelID: "channel",
-		Lane: FollowupLaneQueued, TurnID: "turn_frozen", RunID: "run_frozen", TextContent: "queued",
-	}, []string{"upload_frozen"}, 2)
+	prepareForkSource(t, store, "source_claim")
+	fork, err := store.PrepareForkOperation(ctx, forkRequest("source_claim", "fork_client_claim", ""))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.PrepareForkOperation(ctx, ForkThreadRequest{
-		OperationID: "fork_freeze", EndpointID: "env", SourceThreadID: "source_frozen",
-		DestinationThreadID: "destination_frozen", CreatedAtUnixMs: 3,
-	}); err != nil {
+	create, err := store.PrepareThreadCreateOperation(ctx, PrepareThreadCreateRequest{
+		ClientRequestID: "create_client_claim", Settings: ThreadSettings{EndpointID: "env", PermissionType: "approval_required"}, CreatedAtMS: 10,
+	})
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.UpdateThreadModelID(ctx, "env", "source_frozen", "model_after"); !errors.Is(err, ErrThreadOperationInProgress) {
-		t.Fatalf("UpdateThreadModelID error=%v, want %v", err, ErrThreadOperationInProgress)
+	claims, err := store.ListPendingCanonicalRootOwnershipClaims(ctx)
+	if err != nil || len(claims) != 0 {
+		t.Fatalf("unbound claims=%v err=%v", claims, err)
 	}
-	if err := store.CommitPendingTurnAdmission(ctx, "env", "source_frozen", command.QueueID, command.TurnID, []string{"upload_frozen"}, 4); !errors.Is(err, ErrThreadOperationInProgress) {
-		t.Fatalf("CommitPendingTurnAdmission error=%v, want %v", err, ErrThreadOperationInProgress)
+	if _, err := store.BindForkCanonicalDestination(ctx, fork.OperationID, "fork_claim"); err != nil {
+		t.Fatal(err)
 	}
-	if count := countRowsForTest(t, store.db, `SELECT COUNT(1) FROM ai_queued_turns WHERE queue_id = ?`, command.QueueID); count != 1 {
-		t.Fatalf("queued commands=%d, want 1", count)
+	if _, err := store.BindThreadCreateCanonicalID(ctx, create.OperationID, "create_claim"); err != nil {
+		t.Fatal(err)
 	}
-	if count := countRowsForTest(t, store.db, `SELECT COUNT(1) FROM ai_upload_refs WHERE upload_id = ? AND ref_kind = ? AND ref_id = ?`, "upload_frozen", UploadRefKindQueuedTurn, command.QueueID); count != 1 {
-		t.Fatalf("queued upload refs=%d, want 1", count)
-	}
-	if count := countRowsForTest(t, store.db, `SELECT COUNT(1) FROM ai_upload_refs WHERE upload_id = ? AND ref_kind = ?`, "upload_frozen", UploadRefKindThread); count != 0 {
-		t.Fatalf("thread upload refs=%d, want 0", count)
+	claims, err = store.ListPendingCanonicalRootOwnershipClaims(ctx)
+	if err != nil || strings.Join(claims, ",") != "create_claim,fork_claim" {
+		t.Fatalf("bound claims=%v err=%v", claims, err)
 	}
 }
 
-func TestForkOperationRejectsDamagedPendingSnapshot(t *testing.T) {
+func TestForkOperationRejectsDamagedSnapshot(t *testing.T) {
 	for _, testCase := range []struct {
 		name      string
 		updateSQL string
 		want      string
 	}{
-		{name: "empty", updateSQL: `UPDATE ai_thread_fork_operations SET snapshot_json = '' WHERE operation_id = ?`, want: "snapshot is empty"},
+		{name: "empty", updateSQL: `UPDATE ai_thread_fork_operations SET snapshot_json = '' WHERE operation_id = ?`, want: "snapshot is invalid"},
 		{name: "unknown field", updateSQL: `UPDATE ai_thread_fork_operations SET snapshot_json = json_set(snapshot_json, '$.unknown', 1) WHERE operation_id = ?`, want: "unknown field"},
-		{name: "identity mismatch", updateSQL: `UPDATE ai_thread_fork_operations SET snapshot_json = replace(snapshot_json, 'destination_damage', 'destination_other') WHERE operation_id = ?`, want: "identity mismatch"},
-		{name: "source settings fingerprint mismatch", updateSQL: `UPDATE ai_thread_fork_operations SET snapshot_json = json_set(snapshot_json, '$.source_thread.model_id', 'tampered-model') WHERE operation_id = ?`, want: "snapshot fingerprint mismatch"},
-		{name: "fingerprint mismatch", updateSQL: `UPDATE ai_thread_fork_operations SET request_fingerprint = 'damaged' WHERE operation_id = ?`, want: "fingerprint mismatch"},
+		{name: "identity mismatch", updateSQL: `UPDATE ai_thread_fork_operations SET snapshot_json = replace(snapshot_json, 'source_damage', 'source_other') WHERE operation_id = ?`, want: "identity mismatch"},
+		{name: "snapshot fingerprint mismatch", updateSQL: `UPDATE ai_thread_fork_operations SET snapshot_json = json_set(snapshot_json, '$.source_thread.model_id', 'tampered-model') WHERE operation_id = ?`, want: "snapshot fingerprint mismatch"},
+		{name: "request fingerprint mismatch", updateSQL: `UPDATE ai_thread_fork_operations SET request_fingerprint = 'damaged' WHERE operation_id = ?`, want: "request fingerprint mismatch"},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			store := openStoreForTest(t)
 			ctx := context.Background()
-			if err := store.CreateThreadSettings(ctx, ThreadSettings{ThreadID: "source_damage", EndpointID: "env_damage", PermissionType: "approval_required"}); err != nil {
-				t.Fatal(err)
-			}
-			operation, err := store.PrepareForkOperation(ctx, ForkThreadRequest{
-				OperationID: "fork_damage", EndpointID: "env_damage", SourceThreadID: "source_damage",
-				DestinationThreadID: "destination_damage", Title: "Fork damage", CreatedAtUnixMs: 100,
-			})
+			prepareForkSource(t, store, "source_damage")
+			operation, err := store.PrepareForkOperation(ctx, forkRequest("source_damage", "fork_client_damage", "Fork damage"))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -239,12 +225,6 @@ func TestForkOperationRejectsDamagedPendingSnapshot(t *testing.T) {
 			}
 			if _, err := store.GetForkOperation(ctx, operation.OperationID); err == nil || !strings.Contains(err.Error(), testCase.want) {
 				t.Fatalf("GetForkOperation error=%v, want %q", err, testCase.want)
-			}
-			if _, err := store.CommitForkOperation(ctx, CommitForkOperationRequest{OperationID: operation.OperationID, UpdatedAtUnixMs: 200}); err == nil || !strings.Contains(err.Error(), testCase.want) {
-				t.Fatalf("CommitForkOperation error=%v, want %q", err, testCase.want)
-			}
-			if destination, err := store.GetThreadSettings(ctx, "env_damage", "destination_damage"); err != nil || destination != nil {
-				t.Fatalf("destination settings=%#v err=%v, want no materialization", destination, err)
 			}
 		})
 	}

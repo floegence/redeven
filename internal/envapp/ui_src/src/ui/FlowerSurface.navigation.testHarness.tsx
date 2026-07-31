@@ -393,13 +393,23 @@ export function liveBootstrap(threadValue: FlowerThreadSnapshot, cursor = 0): Fl
   };
 }
 
-export function launchReceipt(threadID: string, turnID: string, kind: 'start' | 'queued' = 'start'): FlowerTurnLaunchReceipt {
-  return {
-    thread_id: threadID,
-    turn_id: turnID,
-    run_id: `run-${turnID}`,
-    kind,
-  };
+export const TEST_CLIENT_REQUEST_ID = 'client_test_request';
+
+export function launchReceipt(
+  threadID: string,
+  canonicalID: string,
+  kind: 'start' | 'queued' = 'start',
+  clientRequestID = TEST_CLIENT_REQUEST_ID,
+): FlowerTurnLaunchReceipt {
+  return kind === 'queued'
+    ? { client_request_id: clientRequestID, thread_id: threadID, queue_id: canonicalID, kind }
+    : {
+      client_request_id: clientRequestID,
+      thread_id: threadID,
+      turn_id: canonicalID,
+      run_id: `run-${canonicalID}`,
+      kind,
+    };
 }
 
 export function activityItem(overrides: Partial<FlowerActivityItem> = {}): FlowerActivityItem {
@@ -794,14 +804,17 @@ export function adapter(configured = true): FlowerSurfaceAdapter {
     })),
     resolveHandler: vi.fn(async () => decision()),
     persistDefaultModel: vi.fn(async () => settingsSnapshot(configured)),
-    createAttachmentStagingScope: vi.fn(async (threadID?: string) => ({
-      staging_scope_id: `staging_${threadID ?? 'new'}`,
-      thread_id: threadID ?? 'th_test_new',
-      capability: `secret_${threadID ?? 'new'}`,
+    createAttachmentStagingScope: vi.fn(async (targetID?: string) => ({
+      staging_scope_id: `staging_${targetID ?? 'new'}`,
+      target_id: targetID ?? TEST_CLIENT_REQUEST_ID,
+      capability: `secret_${targetID ?? 'new'}`,
       expires_at_unix_ms: Date.now() + 60_000,
     })),
     releaseAttachmentStagingScope: vi.fn(async () => undefined),
-    launchTurn: vi.fn(async (input) => launchReceipt(input.thread_id ?? 'thread-1', input.turn_id ?? 'turn-launch')),
+    launchTurn: vi.fn(async (input) => {
+      const receipt = launchReceipt(input.thread_id ?? 'thread-1', 'turn-launch');
+      return { ...receipt, client_request_id: input.client_request_id };
+    }),
     compactThreadContext: vi.fn(async (input) => liveBootstrap(thread({
       thread_id: input.thread_id,
       status: 'running',

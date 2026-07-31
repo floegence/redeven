@@ -68,7 +68,7 @@ type uploadRouteStagingScope struct {
 
 func createUploadRouteStagingScope(t *testing.T, srv *Server, origin, threadID string) uploadRouteStagingScope {
 	t.Helper()
-	response := performServerRequest(srv, http.MethodPost, "/_redeven_proxy/api/ai/upload-staging-scopes", origin, `{"thread_id":"`+threadID+`"}`)
+	response := performServerRequest(srv, http.MethodPost, "/_redeven_proxy/api/ai/upload-staging-scopes", origin, `{"target_id":"`+threadID+`"}`)
 	if response.Code != http.StatusCreated {
 		t.Fatalf("create staging scope status=%d body=%s", response.Code, response.Body.String())
 	}

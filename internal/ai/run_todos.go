@@ -6,7 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	flruntime "github.com/floegence/floret/v2/runtime"
+	"github.com/floegence/floret/v3/identity"
+	flruntime "github.com/floegence/floret/v3/runtime"
 )
 
 func (r *run) toolWriteTodos(ctx context.Context, toolID string, todos []TodoItem, expectedVersion *int64, explanation string) (any, error) {
@@ -17,9 +18,7 @@ func (r *run) toolWriteTodos(ctx context.Context, toolID string, todos []TodoIte
 	if host == nil {
 		return nil, errors.New("Floret host is not ready")
 	}
-	threadID := strings.TrimSpace(r.threadID)
-	turnID := strings.TrimSpace(r.turnID)
-	runID := strings.TrimSpace(r.id)
+	runID, threadID, turnID := r.floretCanonicalIdentity()
 	toolID = strings.TrimSpace(toolID)
 	if threadID == "" || turnID == "" || runID == "" || toolID == "" {
 		return nil, errors.New("canonical todo update identity is incomplete")
@@ -50,9 +49,10 @@ func (r *run) toolWriteTodos(ctx context.Context, toolID string, todos []TodoIte
 	for _, item := range normalized {
 		items = append(items, flruntime.AgentTodo{ID: item.ID, Content: item.Content, Status: flruntime.AgentTodoStatus(item.Status)})
 	}
-	snapshot, err := host.UpdateThreadAgentTodos(ctx, flruntime.AgentTodoUpdateRequest{
-		ExpectedVersion: expected, Items: items,
-		TurnID: flruntime.TurnID(turnID), RunID: flruntime.RunID(runID), ToolCallID: toolID,
+	snapshot, err := host.UpdateThreadAgentTodos(ctx, flruntime.UpdateTodosCommand{
+		LogicalRequestID: identity.LogicalRequestID("todo-" + toolID),
+		ExpectedVersion:  expected, Items: items,
+		TurnID: identity.TurnID(turnID), RunID: identity.RunID(runID), ToolCallID: toolID,
 	})
 	if err != nil {
 		if errors.Is(err, flruntime.ErrAgentTodoVersionConflict) {

@@ -38,7 +38,7 @@ import {
   FLOWER_THREAD_DELETE_OPERATION_FAILED_CODE,
 } from '../../../../../flower_ui/src/runtimeFlowerSurfaceAdapter';
 import {
-  createFlowerClientTurnID,
+  createFlowerClientRequestID,
   flowerTurnAdmissionUncertainIdentity,
   flowerTurnAdmissionUncertainFailure,
 } from '../../../../../flower_ui/src/flowerTurnAdmission';
@@ -48,7 +48,6 @@ import {
 } from '../../../../../flower_ui/src/reasoning';
 import { normalizeFlowerAttachmentCapability } from '../../../../../flower_ui/src/attachments/flowerAttachmentModel';
 import {
-  createFlowerClientThreadID,
   flowerAttachmentStagingHeaders,
   flowerStagingCapabilityHeaderName,
   normalizeFlowerAttachmentStagingScope,
@@ -106,12 +105,16 @@ type ThreadView = Readonly<{
 type ThreadReadStatus = FlowerThreadReadStatus;
 
 type LoadThreadResponse = Readonly<{
+  client_request_id?: string;
   thread?: ThreadView;
 }>;
 
 type SendTurnResponse = Readonly<{
+  client_request_id?: string;
+  thread_id?: string;
   run_id?: string;
   turn_id?: string;
+  queue_id?: string;
   kind?: string;
 }>;
 
@@ -216,16 +219,16 @@ function mapEnvStagedLongText(raw: unknown, expected: FlowerStagedAttachment): F
   return { attachment: expected, text: record.text };
 }
 
-async function createEnvAttachmentStagingScope(threadID?: string): Promise<FlowerAttachmentStagingScope> {
-  const targetThreadID = trim(threadID) || createFlowerClientThreadID();
+async function createEnvAttachmentStagingScope(targetID?: string): Promise<FlowerAttachmentStagingScope> {
+  const resolvedTargetID = trim(targetID) || createFlowerClientRequestID();
   const response = await fetchLocalApiJSONResponse<unknown>(
     '/_redeven_proxy/api/ai/upload-staging-scopes',
-    { method: 'POST', body: JSON.stringify({ thread_id: targetThreadID }) },
+    { method: 'POST', body: JSON.stringify({ target_id: resolvedTargetID }) },
   );
   return normalizeFlowerAttachmentStagingScope(
     response.data,
     response.headers.get(flowerStagingCapabilityHeaderName()),
-    targetThreadID,
+    resolvedTargetID,
   );
 }
 
@@ -678,9 +681,9 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         method: 'PATCH',
         body: JSON.stringify(body),
       }),
-      forkThread: (threadID) => fetchLocalApiJSON<LoadThreadResponse>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/fork`, {
+      forkThread: (threadID, body) => fetchLocalApiJSON<LoadThreadResponse>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/fork`, {
         method: 'POST',
-        body: JSON.stringify({}),
+        body: JSON.stringify(body),
       }),
       deleteThread: async (threadID) => {
         try {
@@ -794,22 +797,24 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       const snapshot = await loadSettingsSnapshot(options);
       const permissionType = normalizePermissionType(input.permission_type ?? snapshot.defaults.permission_type);
       const existingThreadID = trim(input.thread_id);
+      const clientRequestID = trim(input.client_request_id);
+      if (!clientRequestID) throw new Error('Missing client request id.');
       const stagingScope = input.staging_scope;
-      const threadID = existingThreadID || trim(stagingScope?.thread_id) || createFlowerClientThreadID();
-      if (stagingScope && trim(stagingScope.thread_id) !== threadID) {
-        throw new Error('Flower attachment staging scope targets a different thread.');
+      const expectedStagingTargetID = existingThreadID || clientRequestID;
+      if (stagingScope && trim(stagingScope.target_id) !== expectedStagingTargetID) {
+        throw new Error('Flower attachment staging scope targets a different request.');
       }
       if (attachmentIDs.length > 0 && !stagingScope) {
         throw new Error('Flower attachments require a staging scope.');
       }
       let turnModelID = trim(input.model_id);
-      const proposedTurnID = trim(input.turn_id) || createFlowerClientTurnID();
       let createBody: Record<string, unknown> | undefined;
       if (!existingThreadID) {
         const models = await loadModels();
         turnModelID = turnModelID || currentModelID(snapshot, models);
         if (!turnModelID) throw new Error(copy.selectModelBeforeChat);
         createBody = {
+          client_request_id: clientRequestID,
           title: '',
           model_id: turnModelID,
           permission_type: permissionType,
@@ -824,17 +829,19 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       }
       try {
         const stagingHeaders = stagingScope ? flowerAttachmentStagingHeaders(stagingScope) : undefined;
+        const endpoint = existingThreadID
+          ? `/_redeven_proxy/api/ai/threads/${encodeURIComponent(existingThreadID)}/turns`
+          : '/_redeven_proxy/api/ai/turns';
         const response = await fetchLocalApiJSON<SendTurnResponse>(
-          `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/turns`,
+          endpoint,
           {
             method: 'POST',
             ...(stagingHeaders ? { headers: stagingHeaders } : {}),
             body: JSON.stringify({
-              thread_id: threadID,
+              ...(existingThreadID ? { thread_id: existingThreadID } : {}),
               ...(stagingScope ? { staging_scope_id: stagingScope.staging_scope_id } : {}),
               ...(turnModelID ? { model: turnModelID } : {}),
               input: {
-                turn_id: proposedTurnID,
                 text: prompt,
                 attachments: attachmentIDs.map((attachmentID) => ({ attachment_id: attachmentID })),
                 ...(contextAction ? { context_action: contextAction } : {}),
@@ -847,31 +854,38 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
             }),
           },
         );
+        const responseClientRequestID = trim(response.client_request_id);
+        const responseThreadID = trim(response.thread_id) || existingThreadID;
         const turnID = trim(response.turn_id);
         const runID = trim(response.run_id);
+        const queueID = trim(response.queue_id);
         const kind = trim(response.kind);
-        if (!turnID || !runID || (kind !== 'start' && kind !== 'queued')) {
+        const clientIdentityValid = existingThreadID
+          ? !responseClientRequestID || responseClientRequestID === clientRequestID
+          : responseClientRequestID === clientRequestID;
+        const receiptValid = Boolean(responseThreadID && clientIdentityValid) && (
+          (kind === 'start' && Boolean(turnID && runID) && !queueID)
+          || (kind === 'queued' && Boolean(queueID) && !turnID && !runID)
+        );
+        if (!receiptValid) {
           throw flowerTurnAdmissionUncertainFailure(
             new Error('Flower turn admission returned an invalid receipt.'),
-            threadID,
-            proposedTurnID,
+            clientRequestID,
+            { ...(responseThreadID ? { thread_id: responseThreadID } : {}) },
           );
         }
-        if (proposedTurnID !== turnID) {
-          throw flowerTurnAdmissionUncertainFailure(
-            new Error('Flower turn admission returned a different turn identity.'),
-            threadID,
-            proposedTurnID,
-          );
-        }
-        void options.rpc.ai.subscribeThread({ threadId: threadID }).catch(() => undefined);
-        return { thread_id: threadID, turn_id: turnID, run_id: runID, kind };
+        void options.rpc.ai.subscribeThread({ threadId: responseThreadID }).catch(() => undefined);
+        return kind === 'start'
+          ? { client_request_id: clientRequestID, thread_id: responseThreadID, turn_id: turnID, run_id: runID, kind }
+          : { client_request_id: clientRequestID, thread_id: responseThreadID, queue_id: queueID, kind: 'queued' };
       } catch (error) {
         if (error instanceof LocalApiError && error.code !== 'INVALID_JSON_RESPONSE') throw error;
         if (flowerTurnAdmissionUncertainIdentity(error)) {
           throw error;
         }
-        throw flowerTurnAdmissionUncertainFailure(error, threadID, proposedTurnID);
+        throw flowerTurnAdmissionUncertainFailure(error, clientRequestID, {
+          ...(existingThreadID ? { thread_id: existingThreadID } : {}),
+        });
       }
     },
     stopThread: async (threadID) => {

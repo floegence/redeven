@@ -9,9 +9,9 @@ import (
 	"sync"
 	"testing"
 
-	flconfig "github.com/floegence/floret/v2/config"
-	flprovider "github.com/floegence/floret/v2/provider"
-	flruntime "github.com/floegence/floret/v2/runtime"
+	flconfig "github.com/floegence/floret/v3/config"
+	flprovider "github.com/floegence/floret/v3/provider"
+	flruntime "github.com/floegence/floret/v3/runtime"
 	"github.com/floegence/redeven/internal/config"
 )
 

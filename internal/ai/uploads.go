@@ -658,8 +658,8 @@ func (s *Service) OpenLiveUpload(ctx context.Context, owner UploadOwner, threadI
 	if strings.TrimSpace(membership.ThreadID) != threadID || strings.TrimSpace(membership.TurnID) != turnID || strings.TrimSpace(membership.AttachmentID) != uploadID || strings.TrimSpace(membership.ResourceRef) == "" {
 		return nil, NewUploadError(UploadErrorIntegrityMismatch, false, errors.New("canonical attachment membership is inconsistent"))
 	}
-	resourceUploadID, resourceDigest, legacyResourceRef, err := floretUploadIdentityFromResourceRef(membership.ResourceRef)
-	if err != nil || resourceUploadID != uploadID || (resourceDigest == "" && !legacyResourceRef) {
+	resourceUploadID, resourceDigest, err := immutableUploadIdentityFromFloretResourceRef(membership.ResourceRef)
+	if err != nil || resourceUploadID != uploadID {
 		return nil, NewUploadError(UploadErrorIntegrityMismatch, false, errors.New("canonical attachment identity differs from the resource"))
 	}
 	membershipDigest := strings.ToLower(strings.TrimSpace(membership.ContentSHA256))
@@ -677,64 +677,22 @@ func (s *Service) OpenLiveUpload(ctx context.Context, owner UploadOwner, threadI
 	if err != nil || rec == nil || rec.State != threadstore.UploadStateLive {
 		return nil, NewUploadError(UploadErrorNotFound, false, errors.New("attachment not found"))
 	}
-	if rec.OwnerScopeKind == threadstore.UploadOwnerScopeUser && rec.OwnerUserHash != owner.OwnerUserHash {
-		return nil, NewUploadError(UploadErrorNotFound, false, errors.New("attachment not found"))
-	}
-	if rec.OwnerScopeKind != threadstore.UploadOwnerScopeUser && rec.OwnerScopeKind != threadstore.UploadOwnerScopeLegacyThread {
-		return nil, NewUploadError(UploadErrorNotFound, false, errors.New("attachment not found"))
-	}
-	if legacyResourceRef && rec.OwnerScopeKind != threadstore.UploadOwnerScopeLegacyThread {
+	if rec.OwnerScopeKind != threadstore.UploadOwnerScopeUser || rec.OwnerUserHash != owner.OwnerUserHash {
 		return nil, NewUploadError(UploadErrorNotFound, false, errors.New("attachment not found"))
 	}
 	if strings.TrimSpace(membership.Name) != rec.Name || normalizeMediaType(membership.DetectedMediaType) != normalizeMediaType(rec.DetectedMediaType) || membership.SizeBytes != rec.SizeBytes {
 		return nil, NewUploadError(UploadErrorIntegrityMismatch, false, errors.New("canonical attachment metadata differs from the resource"))
 	}
-	canonicalDigest := membershipDigest
 	storedDigest := strings.ToLower(strings.TrimSpace(rec.ContentSHA256))
-	if canonicalDigest != "" && storedDigest != "" && canonicalDigest != storedDigest {
+	if len(storedDigest) != sha256.Size*2 || membershipDigest != storedDigest {
 		return nil, NewUploadError(UploadErrorIntegrityMismatch, false, errors.New("canonical attachment digest differs from the resource"))
 	}
 	filePath := filepath.Join(dir, filepath.Base(rec.StorageRelPath))
-	resolved := *rec
-	sealedLegacyTextMetadata := false
-	legacyStrictText := rec.OwnerScopeKind == threadstore.UploadOwnerScopeLegacyThread && normalizeMediaType(rec.DetectedMediaType) == "text/plain; charset=utf-8"
-	if legacyStrictText && (storedDigest == "" || rec.UnicodeCodePoints == nil || rec.LogicalLineCount == nil) {
-		inspectedDigest, codePoints, lineCount, inspectErr := inspectLegacyTextUploadArtifact(rec, filePath)
-		if inspectErr != nil || (canonicalDigest != "" && canonicalDigest != inspectedDigest) {
-			return nil, NewUploadError(UploadErrorIntegrityMismatch, false, errors.New("attachment failed strict UTF-8 integrity validation"))
-		}
-		canonicalDigest = inspectedDigest
-		canonicalDigest, err = db.SealLegacyTextUploadMetadata(ctxOrBackground(ctx), owner.EndpointID, uploadID, canonicalDigest, codePoints, lineCount)
-		if err != nil {
-			return nil, NewUploadError(UploadErrorIntegrityMismatch, false, errors.New("attachment failed integrity validation"))
-		}
-		resolved.ContentSHA256 = canonicalDigest
-		resolved.UnicodeCodePoints = &codePoints
-		resolved.LogicalLineCount = &lineCount
-		sealedLegacyTextMetadata = true
-	} else if canonicalDigest == "" {
-		if rec.OwnerScopeKind != threadstore.UploadOwnerScopeLegacyThread {
-			return nil, NewUploadError(UploadErrorIntegrityMismatch, false, errors.New("canonical attachment digest differs from the resource"))
-		}
-		if storedDigest == "" {
-			canonicalDigest, err = digestUploadArtifact(rec, filePath)
-		} else {
-			canonicalDigest = storedDigest
-			err = verifyUploadArtifactAgainstDigest(rec, filePath, canonicalDigest)
-		}
-		if err != nil {
-			return nil, NewUploadError(UploadErrorIntegrityMismatch, false, errors.New("attachment failed integrity validation"))
-		}
-	} else if err := verifyUploadArtifactAgainstDigest(rec, filePath, canonicalDigest); err != nil {
+	if err := verifyUploadArtifactAgainstDigest(rec, filePath, storedDigest); err != nil {
 		return nil, NewUploadError(UploadErrorIntegrityMismatch, false, errors.New("attachment failed integrity validation"))
 	}
-	if rec.OwnerScopeKind == threadstore.UploadOwnerScopeLegacyThread && strings.TrimSpace(rec.ContentSHA256) == "" && !sealedLegacyTextMetadata {
-		canonicalDigest, err = db.SealLegacyUploadDigest(ctxOrBackground(ctx), owner.EndpointID, uploadID, canonicalDigest)
-		if err != nil {
-			return nil, NewUploadError(UploadErrorIntegrityMismatch, false, errors.New("attachment failed integrity validation"))
-		}
-	}
-	resolved.ContentSHA256 = canonicalDigest
+	resolved := *rec
+	resolved.ContentSHA256 = storedDigest
 	return &OpenUploadResult{Info: uploadResponseFromRecord(&resolved), FilePath: filePath}, nil
 }
 
@@ -806,38 +764,6 @@ func digestUploadArtifact(rec *threadstore.UploadRecord, filePath string) (strin
 		return "", errors.New("attachment digest differs from immutable metadata")
 	}
 	return actualDigest, nil
-}
-
-func inspectLegacyTextUploadArtifact(rec *threadstore.UploadRecord, filePath string) (string, int64, int64, error) {
-	if rec == nil || rec.OwnerScopeKind != threadstore.UploadOwnerScopeLegacyThread || normalizeMediaType(rec.DetectedMediaType) != "text/plain; charset=utf-8" {
-		return "", 0, 0, errors.New("attachment is not a legacy strict-text candidate")
-	}
-	f, err := os.Open(filePath)
-	if err != nil {
-		return "", 0, 0, err
-	}
-	inspector := newUploadInspector()
-	written, copyErr := io.Copy(inspector, f)
-	closeErr := f.Close()
-	if copyErr != nil {
-		return "", 0, 0, copyErr
-	}
-	if closeErr != nil {
-		return "", 0, 0, closeErr
-	}
-	if written != rec.SizeBytes {
-		return "", 0, 0, errors.New("attachment size differs from immutable metadata")
-	}
-	digest := inspector.digest()
-	if stored := strings.ToLower(strings.TrimSpace(rec.ContentSHA256)); stored != "" && stored != digest {
-		return "", 0, 0, errors.New("attachment digest differs from immutable metadata")
-	}
-	inspector.finish()
-	codePoints, lineCount := inspector.textStats()
-	if codePoints == nil || lineCount == nil {
-		return "", 0, 0, errors.New("attachment is not strict UTF-8 text")
-	}
-	return digest, *codePoints, *lineCount, nil
 }
 
 func validUploadID(uploadID string) bool {

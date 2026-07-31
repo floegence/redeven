@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	flruntime "github.com/floegence/floret/v2/runtime"
+	flruntime "github.com/floegence/floret/v3/runtime"
 )
 
 func visibilityForToolName(toolName string) ToolVisibilityClass {
@@ -464,8 +464,7 @@ func (r *run) publishThreadApprovalState(status string) {
 		return
 	}
 	endpointID := strings.TrimSpace(r.endpointID)
-	threadID := strings.TrimSpace(r.threadID)
-	runID := strings.TrimSpace(r.id)
+	runID, threadID, _ := r.floretCanonicalIdentity()
 	if endpointID == "" || threadID == "" || runID == "" {
 		return
 	}

@@ -59,8 +59,7 @@ func TestNewService_RecoversDurableQueuedTurnAfterRestart(t *testing.T) {
 		ThreadID: th.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Input: RunInput{
-			TurnID: "m_restart_queued",
-			Text:   "resume this queued turn",
+			Text: "resume this queued turn",
 			ContextAction: &ContextActionEnvelope{
 				SchemaVersion: ContextActionSchemaVersion,
 				ActionID:      contextActionAskFlowerID,
@@ -107,7 +106,7 @@ func TestNewService_RecoversDurableQueuedTurnAfterRestart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListQueuedTurns: %v", err)
 	}
-	if len(queued) != 1 || queued[0].TextContent != "resume this queued turn" || queued[0].TurnID == "" || queued[0].RunID == "" {
+	if len(queued) != 1 || queued[0].QueueID == "" || queued[0].TextContent != "resume this queued turn" || queued[0].TurnID != "" || queued[0].RunID != "" {
 		t.Fatalf("unaccepted command was not retained across restart: %#v", queued)
 	}
 }

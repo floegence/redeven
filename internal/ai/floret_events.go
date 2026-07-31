@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/floegence/floret/v2/observation"
-	flprovider "github.com/floegence/floret/v2/provider"
-	flruntime "github.com/floegence/floret/v2/runtime"
+	"github.com/floegence/floret/v3/observation"
+	flprovider "github.com/floegence/floret/v3/provider"
+	flruntime "github.com/floegence/floret/v3/runtime"
 )
 
 const (
@@ -36,11 +36,46 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 	if r == nil {
 		return
 	}
-	if err := r.validateFloretRuntimeEvent(ev); err != nil {
+	isTitleEvent := ev.Type == floretEventThreadTitlePending || ev.Type == floretEventThreadTitleUpdated || ev.Type == floretEventThreadTitleFailed
+	if err := ev.Validate(); err != nil {
 		r.rejectFloretContract("event", err)
 		return
 	}
 	canonicalUserEntry := ev.Type == observation.EventTypeThreadEntryCommitted && ev.Committed != nil && ev.Committed.Kind == flruntime.ThreadDetailEventUserMessage
+	if canonicalUserEntry {
+		var err error
+		if r.awaitFloretAdmission.Load() {
+			err = r.bindFloretCanonicalAdmission(string(ev.RunID), string(ev.ThreadID), string(ev.TurnID), ev.Committed.ID)
+		} else {
+			err = r.observeFloretCanonicalIdentity(string(ev.RunID), string(ev.ThreadID), string(ev.TurnID))
+		}
+		if err != nil {
+			r.rejectFloretContract("turn_admission", err)
+			return
+		}
+	} else if !isTitleEvent {
+		var err error
+		if r.awaitFloretAdmission.Load() {
+			identity := r.floretRuntimeEventIdentitySnapshot()
+			if !identity.configured {
+				if strings.TrimSpace(string(ev.ThreadID)) != strings.TrimSpace(r.threadID) {
+					r.rejectFloretContract("event_identity", errors.New("pre-admission Floret event is bound to another thread"))
+				}
+				return
+			}
+			err = r.bindFloretCanonicalIdentity(string(ev.RunID), string(ev.ThreadID), string(ev.TurnID))
+		} else {
+			err = r.observeFloretCanonicalIdentity(string(ev.RunID), string(ev.ThreadID), string(ev.TurnID))
+		}
+		if err != nil {
+			r.rejectFloretContract("event_identity", err)
+			return
+		}
+	}
+	if err := r.validateFloretRuntimeEvent(ev); err != nil {
+		r.rejectFloretContract("event", err)
+		return
+	}
 	if canonicalUserEntry {
 		r.floretAdmitted.Store(true)
 		if r.awaitFloretAdmission.Load() {
@@ -124,8 +159,9 @@ func (r *run) publishCanonicalUserAdmission() error {
 	if r == nil {
 		return errors.New("run admission coordinator is unavailable")
 	}
-	if err := r.commitPendingTurnCommandAdmission(false); err != nil {
-		return err
+	canonicalRunID, _, canonicalTurnID := r.floretCanonicalIdentity()
+	if canonicalRunID == "" || canonicalTurnID == "" {
+		return errors.New("canonical admission identity is unavailable")
 	}
 	if r.host.broadcastThreadSummary == nil {
 		return errors.New("run thread snapshot publisher is unavailable")
@@ -138,7 +174,7 @@ func (r *run) publishCanonicalUserAdmission() error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), r.persistTimeout())
 	defer cancel()
-	if err := r.host.replaceLiveDraftWithCanonicalTimeline(ctx, r.id, r.turnID, r.messageID, "canonical_admission"); err != nil {
+	if err := r.host.replaceLiveDraftWithCanonicalTimeline(ctx, canonicalRunID, canonicalTurnID, r.messageID, "canonical_admission"); err != nil {
 		return fmt.Errorf("publish canonical admission timeline: %w", err)
 	}
 	return nil
@@ -148,7 +184,7 @@ func (r *run) validateFloretRuntimeEvent(ev flruntime.Event) error {
 	if err := ev.Validate(); err != nil {
 		return err
 	}
-	identity := r.floretEventIdentity
+	identity := r.floretRuntimeEventIdentitySnapshot()
 	if identity.configured {
 		eventThreadID := strings.TrimSpace(string(ev.ThreadID))
 		eventTurnID := strings.TrimSpace(string(ev.TurnID))
@@ -179,6 +215,7 @@ func (r *run) expectFloretRuntimeEventIdentity(runID string, threadID string, tu
 	if r == nil {
 		return
 	}
+	r.muFloretIdentity.Lock()
 	r.floretEventIdentity = floretRuntimeEventIdentity{
 		configured: true,
 		checkRunID: checkRunID,
@@ -186,6 +223,7 @@ func (r *run) expectFloretRuntimeEventIdentity(runID string, threadID string, tu
 		threadID:   strings.TrimSpace(threadID),
 		turnID:     strings.TrimSpace(turnID),
 	}
+	r.muFloretIdentity.Unlock()
 }
 
 func (r *run) applyFloretContextStatus(status *observation.ContextStatus) {
@@ -461,7 +499,7 @@ func flowerContextUsageFromFloret(status *observation.ContextStatus) (FlowerCont
 	if updatedAt <= 0 {
 		updatedAt = 0
 	}
-	runID := strings.TrimSpace(status.RunID)
+	runID := strings.TrimSpace(string(status.RunID))
 	if runID == "" {
 		return FlowerContextUsage{}, errors.New("Floret context status missing run id")
 	}
@@ -501,7 +539,7 @@ func flowerContextCompactionFromFloret(compaction *observation.CompactionEvent) 
 	if updatedAt <= 0 {
 		updatedAt = 0
 	}
-	runID := strings.TrimSpace(compaction.RunID)
+	runID := strings.TrimSpace(string(compaction.RunID))
 	if runID == "" {
 		return FlowerContextCompaction{}, errors.New("Floret compaction missing run id")
 	}

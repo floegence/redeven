@@ -6,6 +6,8 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"net/url"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -24,86 +26,15 @@ type Store struct {
 	db *sql.DB
 }
 
-type OpenOption func(*openOptions)
-
-type openOptions struct {
-	migrateTitle             func(context.Context, LegacyThreadTitle) error
-	legacyUploadsDir         string
-	preflightLegacyAdmission func(context.Context, LegacyComposerAdmission) (LegacyComposerAdmissionDecision, error)
-}
-
-type LegacyComposerAdmission struct {
-	EndpointID    string
-	OwnerUserHash string
-	ScopeID       string
-	ThreadID      string
-	TurnID        string
-	Attachments   []LegacyComposerAttachment
-}
-
-type LegacyComposerAttachment struct {
-	UploadID          string
-	Name              string
-	DetectedMediaType string
-	SizeBytes         int64
-	ContentSHA256     string
-}
-
-type LegacyComposerCanonicalAttachment struct {
-	UploadID      string
-	ResourceRef   string
-	Name          string
-	MIMEType      string
-	SizeBytes     int64
-	ContentSHA256 string
-}
-
-type LegacyComposerAdmissionState string
-
-const (
-	LegacyComposerAdmissionAdmitted LegacyComposerAdmissionState = "admitted"
-	LegacyComposerAdmissionMissing  LegacyComposerAdmissionState = "missing"
-)
-
-type LegacyComposerAdmissionDecision struct {
-	State       LegacyComposerAdmissionState
-	Attachments []LegacyComposerCanonicalAttachment
-}
-
-// WithLegacyThreadTitleMigrator supplies the Floret-side title migration used
-// before the product schema v2 to v3 SQL migration starts.
-func WithLegacyThreadTitleMigrator(migrateTitle func(context.Context, LegacyThreadTitle) error) OpenOption {
-	return func(options *openOptions) {
-		options.migrateTitle = migrateTitle
-	}
-}
-
-func WithLegacyComposerAdmissionPreflight(uploadsDir string, preflight func(context.Context, LegacyComposerAdmission) (LegacyComposerAdmissionDecision, error)) OpenOption {
-	return func(options *openOptions) {
-		options.legacyUploadsDir = strings.TrimSpace(uploadsDir)
-		options.preflightLegacyAdmission = preflight
-	}
-}
-
-func Open(path string, optionList ...OpenOption) (*Store, error) {
+func Open(path string) (*Store, error) {
 	p := filepath.Clean(strings.TrimSpace(path))
 	if p == "" {
 		return nil, errors.New("missing db path")
 	}
-	options := openOptions{}
-	for _, option := range optionList {
-		if option != nil {
-			option(&options)
-		}
-	}
-	if err := migrateLegacyThreadTitles(p, options.migrateTitle); err != nil {
+	if err := preflightCurrentThreadstore(p); err != nil {
 		return nil, err
 	}
-	legacyAdmissionDecisions, err := preflightLegacyComposerAdmissions(p, options.legacyUploadsDir, options.preflightLegacyAdmission)
-	if err != nil {
-		return nil, err
-	}
-	db, err := sqliteutil.Open(p, threadstoreSchemaSpec(legacyAdmissionDecisions))
+	db, err := sqliteutil.Open(p, threadstoreSchemaSpec())
 	if err != nil {
 		return nil, err
 	}
@@ -113,6 +44,76 @@ func Open(path string, optionList ...OpenOption) (*Store, error) {
 	}
 
 	return &Store{db: db}, nil
+}
+
+func preflightCurrentThreadstore(path string) error {
+	info, err := os.Stat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("inspect threadstore file: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return errors.New("threadstore path is not a regular file")
+	}
+	if info.Size() == 0 {
+		return nil
+	}
+	u := url.URL{Scheme: "file", Path: path}
+	query := u.Query()
+	query.Set("mode", "ro")
+	query.Set("immutable", "1")
+	u.RawQuery = query.Encode()
+	db, err := sql.Open("sqlite", u.String())
+	if err != nil {
+		return fmt.Errorf("open threadstore preflight: %w", err)
+	}
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
+	defer db.Close()
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin threadstore preflight: %w", err)
+	}
+	defer tx.Rollback()
+	var version int
+	if err := tx.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
+		return fmt.Errorf("read threadstore preflight version: %w", err)
+	}
+	var metaTableCount int
+	if err := tx.QueryRow("SELECT COUNT(1) FROM sqlite_master WHERE type = 'table' AND name = '__redeven_db_meta'").Scan(&metaTableCount); err != nil {
+		return fmt.Errorf("inspect threadstore metadata table: %w", err)
+	}
+	if metaTableCount != 1 {
+		return &sqliteutil.WrongDatabaseKindError{ExpectedKind: threadstoreSchemaKind}
+	}
+	var kind string
+	if err := tx.QueryRow("SELECT db_kind FROM __redeven_db_meta WHERE singleton = 1").Scan(&kind); err != nil {
+		return fmt.Errorf("read threadstore database kind: %w", err)
+	}
+	kind = strings.TrimSpace(kind)
+	if kind != threadstoreSchemaKind {
+		return &sqliteutil.WrongDatabaseKindError{ExpectedKind: threadstoreSchemaKind, ActualKind: kind}
+	}
+	if version > threadstoreCurrentSchemaVersion {
+		return &sqliteutil.DatabaseTooNewError{Kind: kind, Version: version, CurrentVersion: threadstoreCurrentSchemaVersion}
+	}
+	if version < threadstoreCurrentSchemaVersion {
+		return &sqliteutil.DatabaseTooOldError{Kind: kind, Version: version, MinimumVersion: threadstoreCurrentSchemaVersion}
+	}
+	expected, err := reviewedProductSchemaContract(threadstoreCurrentSchemaVersion)
+	if err != nil {
+		return err
+	}
+	actual, err := inspectReviewedSchemaTx(tx)
+	if err != nil {
+		return fmt.Errorf("inspect threadstore reviewed schema: %w", err)
+	}
+	if err := compareReviewedSchemas(actual, expected); err != nil {
+		return &sqliteutil.SchemaVerifyError{Kind: threadstoreSchemaKind, Err: err}
+	}
+	return nil
 }
 
 func (s *Store) Close() error {

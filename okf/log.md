@@ -1,5 +1,12 @@
 # Redeven OKF Update Log
 
+## 2026-07-31
+* **Dependency**: Upgraded Redeven to published Floret v3.0.2 and adopted its command/result, canonical identity, exact-read recovery, pending settlement, Todo, approval, reference, attachment, and SubAgent contracts.
+* **Storage**: Established `ai_threadstore_product_v1` version 1 as the one-time pre-launch baseline, removed all discarded product migrations and legacy readers, and required read-only complete-schema rejection before any writable open.
+* **Boundary**: Made Floret the sole allocator of ThreadID, TurnID, and RunID; Redeven now carries only stable client request and queue identities before canonical create, fork, or turn admission.
+* **Recovery**: Added durable create, fork, and admission receipts with exact replay validation, atomic product binding, and committed-receipt exact-read recovery without reconstructing Agent lifecycle.
+* **Fix**: Deferred pending terminal settlement until the exact turn authority barrier is released, preventing tool-callback mutation re-entry while preserving one canonical recovery settlement and timeline replacement.
+
 ## 2026-07-29
 * **Dependency**: Upgraded Redeven to published Floret v2.2.0 with exact checksums, one composition-root `runtime.Host`, immutable `runtime.Agent` values, and identity-bound public handles.
 * **Boundary**: Removed the v1 Store, binder, factory, and host-option integration path; explicit v2 storage migration and public runtime contracts now preserve Floret as the only admitted Agent authority.

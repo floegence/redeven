@@ -25,7 +25,8 @@ import { FlowerChatContextChips } from './chat/FlowerChatContextChips';
 import { FlowerChatContextPreview } from './chat/FlowerChatContextPreview';
 import { parseChatContextAction, parseChatMessageReferences } from './chat/flowerChatContextModel';
 import {
-  createFlowerClientTurnID,
+  createFlowerClientRequestID,
+  flowerTurnAdmissionUncertainFailure,
   flowerTurnAdmissionUncertainIdentity,
 } from './flowerTurnAdmission';
 import { FlowerContextCompactionDivider } from './chat/FlowerContextCompactionDivider';
@@ -137,6 +138,7 @@ import {
   type FlowerComposerDraftReference,
   type FlowerComposerDraftSession,
   type FlowerComposerDraftSnapshot,
+  type FlowerComposerDraftValue,
 } from './composer/createFlowerComposerDraftCoordinator';
 import {
   createFlowerComposerAutosizeController,
@@ -993,6 +995,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [threadLoadError, setThreadLoadError] = createSignal('');
   const [localReadVisibilityRevision, setLocalReadVisibilityRevision] = createSignal(0);
   const [threadActionBusy, setThreadActionBusy] = createSignal<{ threadID: string; action: FlowerThreadMenuAction } | null>(null);
+  const forkRequestIDs = new Map<string, string>();
   const [renameThreadID, setRenameThreadID] = createSignal('');
   const [renameDraft, setRenameDraft] = createSignal('');
   const [renameError, setRenameError] = createSignal('');
@@ -1637,9 +1640,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const updateCurrentComposerSessionDraft = (updater: (draft: FlowerComposerSessionDraft) => FlowerComposerSessionDraft) => {
     updateComposerSessionDraft(currentComposerSessionKey(), updater);
   };
+  const draftSubmissionActive = (value: FlowerComposerDraftValue): boolean => (
+    value.mode === 'preparing_long_text_submission' || value.mode === 'admission_in_flight'
+  );
   const updateComposerSessionText = (rawSessionKey: string, text: string) => {
     const sessionKey = trimString(rawSessionKey) || PENDING_NEW_THREAD_ID;
-    if (draftSessionFor(sessionKey).snapshot().value.proposed_turn_id) return;
+    if (draftSubmissionActive(draftSessionFor(sessionKey).snapshot().value)) return;
     updateComposerSessionDraft(sessionKey, (draft) => (
       draft.chatDraft === text ? draft : { ...draft, chatDraft: text }
     ));
@@ -1678,11 +1684,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (!props.adapter.createAttachmentStagingScope) {
       return Promise.reject(new Error('Attachment staging is unavailable.'));
     }
+    const session = draftSessionFor(sessionKey);
+    const targetID = sessionKey === PENDING_NEW_THREAD_ID
+      ? session.mutate((value) => value.client_request_id
+        ? value
+        : { ...value, client_request_id: createFlowerClientRequestID() }).snapshot.value.client_request_id
+      : sessionKey;
+    if (!targetID) return Promise.reject(new Error('Attachment staging request identity is unavailable.'));
     return draftCoordinator.ensureAttachmentStagingScope(
       sessionKey,
-      () => props.adapter.createAttachmentStagingScope!(
-        sessionKey === PENDING_NEW_THREAD_ID ? undefined : sessionKey,
-      ),
+      () => props.adapter.createAttachmentStagingScope!(targetID),
       (scope) => props.adapter.releaseAttachmentStagingScope?.(scope) ?? Promise.resolve(),
     );
   };
@@ -1714,7 +1725,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return currentAttachmentController().snapshot();
   });
   const composerSharedOperationActive = createMemo(() => Boolean(
-    reactiveDraftSnapshotFor(currentComposerSessionKey()).value.proposed_turn_id,
+    draftSubmissionActive(reactiveDraftSnapshotFor(currentComposerSessionKey()).value),
   ));
   const composerPermissionInteractive = createMemo(() => (
     !composerSharedOperationActive()
@@ -1748,7 +1759,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       session: draftSessionFor(sessionKey),
       controller: attachmentControllerFor(sessionKey),
     };
-    if (operation.session.snapshot().value.proposed_turn_id) return;
+    if (draftSubmissionActive(operation.session.snapshot().value)) return;
     batch(() => {
       operation.controller.batch(() => {
         if (intent.kind === 'add') operation.controller.addFiles(intent.files, intent.source);
@@ -1824,10 +1835,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const inspection = inspectFlowerText(draft.chatDraft);
     const shared = reactiveDraftSnapshotFor(sessionKey);
     if (hydratedDraftSessionRevisions.get(sessionKey) !== shared.revision) return;
-    if (shared.value.proposed_turn_id) return;
-    const mode = shared.value.proposed_turn_id
-      ? shared.value.mode
-      : inspection && inspection.codePoints > FLOWER_INLINE_TEXT_CODE_POINT_LIMIT
+    if (draftSubmissionActive(shared.value)) return;
+    const mode = inspection && inspection.codePoints > FLOWER_INLINE_TEXT_CODE_POINT_LIMIT
         ? 'over_limit_editing' as const
         : 'ordinary' as const;
     if (composerReferenceMutationCount() > 0) return;
@@ -1876,7 +1885,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           mode: (inspectFlowerText(value.text)?.codePoints ?? 0) > FLOWER_INLINE_TEXT_CODE_POINT_LIMIT
             ? 'over_limit_editing'
             : 'ordinary',
-          proposed_turn_id: undefined,
+          client_request_id: undefined,
           admission_started: undefined,
         }));
       }
@@ -3473,7 +3482,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           if (!props.adapter.forkThread) return;
           setThreadActionBusy({ threadID: item.thread_id, action });
           {
-            const forked = applyLiveBootstrap(await props.adapter.forkThread(item.thread_id));
+            const clientRequestID = forkRequestIDs.get(item.thread_id) ?? createFlowerClientRequestID();
+            forkRequestIDs.set(item.thread_id, clientRequestID);
+            const forked = applyLiveBootstrap(await props.adapter.forkThread(item.thread_id, clientRequestID));
+            forkRequestIDs.delete(item.thread_id);
             await loadAndSelectThread(forked.thread_id);
           }
           return;
@@ -4344,9 +4356,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       notifyComposerError('message' in state ? state.message : copy().chat.handlerStillStarting);
       return;
     }
-    const turnID = createFlowerClientTurnID();
     const operation = currentComposerDraftOperation();
     if (!composerDraftOperationCurrent(operation)) return;
+    const clientRequestID = operation.session.snapshot().value.client_request_id || createFlowerClientRequestID();
     const operationMode = inspection.codePoints > FLOWER_INLINE_TEXT_CODE_POINT_LIMIT
       ? 'preparing_long_text_submission' as const
       : 'admission_in_flight' as const;
@@ -4357,13 +4369,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const frozenWorkingDir = draftWorkingDirectory();
     const frozenCapabilityRevision = currentAttachmentSnapshot().capability?.revision;
     const operationClaim = operation.session.mutate((value) => (
-      value.proposed_turn_id && value.proposed_turn_id !== turnID
+      value.client_request_id && value.client_request_id !== clientRequestID
         ? value
         : {
           ...value,
           text: promptInput,
           mode: operationMode,
-          proposed_turn_id: turnID,
+          client_request_id: clientRequestID,
           admission_started: false,
           model_id: frozenModelID,
           permission_type: frozenPermissionType,
@@ -4375,7 +4387,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (
       !operationClaim
       || operationClaim.kind !== 'committed'
-      || operationClaim.snapshot.value.proposed_turn_id !== turnID
+      || operationClaim.snapshot.value.client_request_id !== clientRequestID
       || !composerDraftOperationCurrent(operation)
     ) return;
     const launchController = operation.controller;
@@ -4404,7 +4416,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       !cancelRequested
       && launchContextCurrent()
       && ordinaryTurnContextCurrent()
-      && operation.session.snapshot().value.proposed_turn_id === turnID
+      && operation.session.snapshot().value.client_request_id === clientRequestID
     );
     let preparedLongTextLocalID = '';
     let consumedAttachmentLocalIDs: readonly string[] = [];
@@ -4430,7 +4442,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           attachments: [],
           references: [],
           mode: 'ordinary',
-          proposed_turn_id: undefined,
+          client_request_id: undefined,
           admission_started: undefined,
           prepared_long_text_local_id: undefined,
           prepared_long_text_attachment_id: undefined,
@@ -4448,12 +4460,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         }));
       }
     };
-    const threadOwnsTurn = (thread: FlowerThreadSnapshot | null, acceptedTurnID: string): boolean => {
-      const tid = trimString(acceptedTurnID);
-      if (!thread || !tid) return false;
-      return thread.messages.some((message) => message.role === 'user' && trimString(message.turn_id) === tid)
-        || (thread.queued_turns ?? []).some((turn) => trimString(turn.turn_id) === tid);
-    };
+    let preserveClientRequestID = false;
     setChatRunning(true);
     try {
       let attachmentSnapshot = launchController.snapshot();
@@ -4521,7 +4528,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           return;
         }
         const transitioned = operation.session.mutate((value) => (
-          value.proposed_turn_id === turnID
+          value.client_request_id === clientRequestID
             ? {
               ...value,
               mode: 'admission_in_flight',
@@ -4542,7 +4549,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         ));
         if (
           transitioned.kind !== 'committed'
-          || transitioned.snapshot.value.proposed_turn_id !== turnID
+          || transitioned.snapshot.value.client_request_id !== clientRequestID
           || !submissionCurrent()
         ) {
           launchController.remove(preparedLongTextLocalID);
@@ -4581,13 +4588,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         }
         if (!submissionCurrent()) return;
         const admission = operation.session.mutate((value) => (
-          value.proposed_turn_id === turnID
+          value.client_request_id === clientRequestID
             ? { ...value, admission_started: true }
             : value
         ));
         if (
           admission.kind !== 'committed'
-          || admission.snapshot.value.proposed_turn_id !== turnID
+          || admission.snapshot.value.client_request_id !== clientRequestID
           || admission.snapshot.value.admission_started !== true
           || !submissionCurrent()
         ) return;
@@ -4606,9 +4613,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             presentation: { label: copy().chat.titleFallback, priority: 100 },
           }
           : undefined;
-        receipt = await props.adapter.launchTurn({
+        const returnedReceipt = await props.adapter.launchTurn({
+          client_request_id: clientRequestID,
           thread_id: selectedID || undefined,
-          turn_id: turnID,
           ...(launchStagingScope ? { staging_scope: launchStagingScope } : {}),
           prompt,
           ...(attachmentIDs.length > 0 ? { attachment_ids: attachmentIDs } : {}),
@@ -4619,6 +4626,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           ...(!selectedID && draftReasoningSelection ? { reasoning_selection: draftReasoningSelection } : {}),
           ...(!selectedID && draftWorkingDir ? { working_dir: draftWorkingDir } : {}),
         });
+        if (trimString(returnedReceipt.client_request_id) !== clientRequestID) {
+          throw flowerTurnAdmissionUncertainFailure(
+            new Error('Flower turn admission returned a different client request identity.'),
+            clientRequestID,
+            {
+              thread_id: returnedReceipt.thread_id,
+              ...(returnedReceipt.kind === 'queued'
+                ? { queue_id: returnedReceipt.queue_id }
+                : { turn_id: returnedReceipt.turn_id }),
+            },
+          );
+        }
+        receipt = returnedReceipt;
       } catch (error) {
         const failure = error as FlowerTurnLaunchFailure;
         if (failure.fresh_decision) {
@@ -4626,6 +4646,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         }
         const uncertain = flowerTurnAdmissionUncertainIdentity(failure);
         if (uncertain) {
+          preserveClientRequestID = true;
+          if (uncertain.client_request_id !== clientRequestID) {
+            throw new Error('Flower turn admission returned a different client request identity.');
+          }
           const uncertainSessionKey = trimString(uncertain.thread_id);
           if (uncertainSessionKey && uncertainSessionKey !== launchSessionKey) {
             const sourceSnapshot = operation.session.snapshot();
@@ -4638,9 +4662,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               text: promptInput,
               attachments: sourceSnapshot.value.attachments,
               references: sourceSnapshot.value.references,
-              mode: 'admission_in_flight',
-              proposed_turn_id: uncertain.turn_id,
-              admission_started: true,
+              mode: inspection.codePoints > FLOWER_INLINE_TEXT_CODE_POINT_LIMIT ? 'over_limit_editing' : 'ordinary',
+              client_request_id: clientRequestID,
+              admission_started: undefined,
               prepared_long_text_local_id: sourceSnapshot.value.prepared_long_text_local_id,
               prepared_long_text_attachment_id: sourceSnapshot.value.prepared_long_text_attachment_id,
             }));
@@ -4650,15 +4674,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               references: sourceSnapshot.value.references,
             }));
           }
-          const selectionCurrent = setSelectedThreadWithDetailIfSessionCurrent(launchSessionKey, uncertain.thread_id);
+          const selectionCurrent = uncertainSessionKey
+            ? setSelectedThreadWithDetailIfSessionCurrent(launchSessionKey, uncertainSessionKey)
+            : false;
           if (selectionCurrent) {
             setThreadLoadError(getErrorMessage(error));
             returnToChat();
-            await refreshSelectedThread(uncertain.thread_id);
-            const serverThread = threads().find((thread) => thread.thread_id === uncertain.thread_id) ?? null;
-            if (threadOwnsTurn(serverThread, uncertain.turn_id)) {
-              clearAcceptedComposerDraft(uncertainSessionKey);
-            }
+            await refreshSelectedThread(uncertainSessionKey);
+          } else if (composerSessionStillCurrent(launchSessionKey)) {
+            notifyComposerError(getErrorMessage(error));
+            operation.session.mutate((value) => value.client_request_id === clientRequestID
+              ? { ...value, mode: inspection.codePoints > FLOWER_INLINE_TEXT_CODE_POINT_LIMIT ? 'over_limit_editing' : 'ordinary', admission_started: undefined }
+              : value);
           }
           return;
         }
@@ -4668,11 +4695,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         if (preparedLongTextLocalID) launchController.remove(preparedLongTextLocalID);
         if (composerDraftOperationActive(operation)) {
           const rejected = operation.session.snapshot();
-          if (rejected.value.proposed_turn_id === turnID) {
+          if (rejected.value.client_request_id === clientRequestID) {
+            releaseAttachmentStagingScope(launchSessionKey);
             operation.session.mutate((value) => ({
               ...value,
               mode: inspection.codePoints > FLOWER_INLINE_TEXT_CODE_POINT_LIMIT ? 'over_limit_editing' : 'ordinary',
-              proposed_turn_id: undefined,
+              client_request_id: undefined,
               admission_started: undefined,
               prepared_long_text_local_id: undefined,
               prepared_long_text_attachment_id: undefined,
@@ -4695,11 +4723,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       setChatRunning(false);
       if (composerDraftOperationActive(operation)) {
         const shared = operation.session.snapshot();
-        if (shared.value.proposed_turn_id === turnID && shared.value.admission_started !== true) {
+        if (!preserveClientRequestID && shared.value.client_request_id === clientRequestID && shared.value.admission_started !== true) {
+          releaseAttachmentStagingScope(launchSessionKey);
           operation.session.mutate((value) => ({
             ...value,
             mode: inspection.codePoints > FLOWER_INLINE_TEXT_CODE_POINT_LIMIT ? 'over_limit_editing' : 'ordinary',
-            proposed_turn_id: undefined,
+            client_request_id: undefined,
             admission_started: undefined,
             prepared_long_text_local_id: undefined,
             prepared_long_text_attachment_id: undefined,
@@ -5201,7 +5230,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       entry.type === 'message' && entry.message.id === preview.message_id
     ));
     const queuedSource = selectedTimelineEntries().find((entry) => (
-      entry.type === 'queued_turn' && `queued:${entry.turn.turn_id}` === preview.message_id
+      entry.type === 'queued_turn' && `queued:${entry.turn.queue_id}` === preview.message_id
     ));
     const display = sourceEntry?.type === 'message'
       ? parseChatMessageReferences(sourceEntry.message.references)
@@ -5954,6 +5983,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         const retained = operation.session.mutate((value) => ({
           ...value,
           text: retainedPaste.value,
+          ...(operation.sessionKey === PENDING_NEW_THREAD_ID && !value.client_request_id
+            ? { client_request_id: createFlowerClientRequestID() }
+            : {}),
         }));
         if (retained.kind !== 'committed' || !composerDraftOperationCurrent(operation)) return;
         if (currentComposerSessionDraft().chatDraft !== retainedPaste.value) return;
@@ -5967,7 +5999,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         if (
           !composerDraftOperationCurrent(operation)
           || beforeAdd.revision !== retained.snapshot.revision
-          || beforeAdd.value.proposed_turn_id
+          || draftSubmissionActive(beforeAdd.value)
           || beforeAdd.value.text !== retainedPaste.value
           || currentComposerSessionDraft().chatDraft !== retainedPaste.value
         ) return;
@@ -5981,7 +6013,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         }
         await operation.controller.waitForIdle();
         const afterUpload = operation.session.snapshot();
-        if (!composerDraftOperationCurrent(operation) || afterUpload.value.proposed_turn_id) {
+        if (!composerDraftOperationCurrent(operation) || draftSubmissionActive(afterUpload.value)) {
           operation.controller.cancel(added.local_id);
           return;
         }
@@ -5993,7 +6025,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           return;
         }
         const unchanged = composerDraftOperationCurrent(operation)
-          && !afterUpload.value.proposed_turn_id
+          && !draftSubmissionActive(afterUpload.value)
           && currentComposerSessionDraft().chatDraft === retainedPaste.value
           && afterUpload.value.text === retainedPaste.value
           && (!(composerRef instanceof HTMLTextAreaElement) || composerRef.value === retainedPaste.value);
@@ -6009,7 +6041,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           );
           return;
         }
-        if (composerDraftOperationActive(operation) && !operation.session.snapshot().value.proposed_turn_id) {
+        if (composerDraftOperationActive(operation) && !draftSubmissionActive(operation.session.snapshot().value)) {
           operation.session.mutate((value) => ({
             ...value,
             attachments: value.attachments.filter((attachment) => attachment.local_id !== added.local_id),
@@ -6044,7 +6076,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const operation = currentComposerDraftOperation();
       if (!composerDraftOperationCurrent(operation)) return;
       const shared = operation.session.snapshot();
-      if (shared.value.proposed_turn_id) return;
+      if (draftSubmissionActive(shared.value)) return;
       const attachment = shared.value.attachments.find((item) => item.local_id === localID);
       if (!attachment || attachment.source !== 'long_text') throw new Error('attachment_restore_failed');
       const current = shared.value.text;
@@ -6055,13 +6087,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (
         !composerDraftOperationCurrent(operation)
         || afterRestore.revision !== shared.revision
-        || afterRestore.value.proposed_turn_id
+        || draftSubmissionActive(afterRestore.value)
         || afterRestore.value.text !== current
         || !afterRestore.value.attachments.some((item) => item.local_id === localID && item.source === 'long_text')
       ) return;
       const restored = replaceFlowerTextSelection(current, text, start, end);
       const committed = operation.session.mutate((value) => (
-        value.proposed_turn_id
+        draftSubmissionActive(value)
           || value.text !== current
           || !value.attachments.some((item) => item.local_id === localID && item.source === 'long_text')
           ? value
@@ -6074,7 +6106,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (
         committed.kind !== 'committed'
         || committed.snapshot.revision === afterRestore.revision
-        || committed.snapshot.value.proposed_turn_id
+        || draftSubmissionActive(committed.snapshot.value)
         || !composerDraftOperationCurrent(operation)
       ) return;
       updateComposerSessionDraft(operation.sessionKey, (draft) => ({ ...draft, chatDraft: restored.value }));
@@ -6292,7 +6324,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (!token) return;
       const operation = currentComposerDraftOperation();
       if (!composerDraftOperationCurrent(operation)) return;
-      if (operation.session.snapshot().value.proposed_turn_id) return;
+      if (draftSubmissionActive(operation.session.snapshot().value)) return;
       if (currentComposerSessionDraft().chatDraft !== localDraft.chatDraft) return;
       const replacement = replaceFlowerComposerReferenceToken(localDraft.chatDraft, token.range);
       const normalizedPath = normalizeFlowerComposerReferencePath(candidate.path);
@@ -6349,7 +6381,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     try {
       const operation = currentComposerDraftOperation();
       if (!composerDraftOperationCurrent(operation)) return;
-      if (operation.session.snapshot().value.proposed_turn_id) return;
+      if (draftSubmissionActive(operation.session.snapshot().value)) return;
       const result = operation.session.mutate((value) => ({
         ...value,
         references: value.references.filter((item) => item.local_id !== reference.local_id),
@@ -8358,7 +8390,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const action = chip.action;
       const display = contextDisplay();
       if (!action || !display) return;
-      const entryID = `queued:${turn().turn_id}`;
+      const entryID = `queued:${turn().queue_id}`;
       if (action.type === 'open_text_preview' || action.type === 'open_process_preview') {
         setContextSnapshotPreview({
           title: chip.label,
@@ -8418,7 +8450,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return (
       <div
         class="flower-message-row flower-message-row-user flower-queued-turn-row"
-        data-flower-queued-turn-id={turn().turn_id}
+        data-flower-queued-turn-id={turn().queue_id}
         data-flower-queued-turn-state="queued"
       >
         <div class="flower-message-block-stack flower-message-block-stack-user">
@@ -9743,10 +9775,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     onRetry={(localID) => {
                       const operation = currentComposerDraftOperation();
                       void ensureAttachmentStagingScope(operation.sessionKey).then(() => {
-                        if (!composerDraftOperationCurrent(operation) || operation.session.snapshot().value.proposed_turn_id) return;
+                        if (!composerDraftOperationCurrent(operation) || draftSubmissionActive(operation.session.snapshot().value)) return;
                         operation.controller.retry(localID);
                       }).catch(() => {
-                        if (!composerDraftOperationCurrent(operation) || operation.session.snapshot().value.proposed_turn_id) return;
+                        if (!composerDraftOperationCurrent(operation) || draftSubmissionActive(operation.session.snapshot().value)) return;
                         operation.controller.markStagingUnavailable();
                         notifyComposerError(attachmentCopy().unavailable);
                       });

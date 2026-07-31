@@ -5,7 +5,7 @@ import (
 	"errors"
 	"strings"
 
-	flruntime "github.com/floegence/floret/v2/runtime"
+	flruntime "github.com/floegence/floret/v3/runtime"
 	"github.com/floegence/redeven/internal/config"
 )
 
@@ -18,8 +18,6 @@ type runHostCapabilities struct {
 	broadcastThreadSummary                func() error
 	replaceLiveDraftWithCanonicalTimeline func(context.Context, string, string, string, string) error
 	lastVisibleTimelineAnchor             func(context.Context) (FlowerTimelineAnchor, error)
-	reconcilePendingTurnCommand           func(context.Context, string, string, []string) (bool, error)
-	commitPendingTurnCommandAdmission     func(context.Context, string, string, []string) error
 	releasePendingTurnCommandAdmission    func(context.Context, string, string, string, string) error
 	lockEffectAuthority                   func(threadEffectJoin) (func(), error)
 	resolveRunModel                       func(context.Context, *config.AIConfig, string, string, *run) (resolvedRunModel, error)
@@ -56,12 +54,6 @@ func (s *Service) bindRunHostCapabilities(endpointID string, threadID string) (r
 	}
 	host.lastVisibleTimelineAnchor = func(ctx context.Context) (FlowerTimelineAnchor, error) {
 		return s.lastVisibleFlowerTimelineAnchor(ctx, endpointID, threadID)
-	}
-	host.reconcilePendingTurnCommand = func(ctx context.Context, commandID string, turnID string, uploadIDs []string) (bool, error) {
-		return s.reconcilePendingTurnCommand(ctx, endpointID, threadID, commandID, turnID, uploadIDs)
-	}
-	host.commitPendingTurnCommandAdmission = func(ctx context.Context, commandID string, turnID string, uploadIDs []string) error {
-		return s.commitPendingTurnCommandAdmission(ctx, endpointID, threadID, commandID, turnID, uploadIDs)
 	}
 	host.releasePendingTurnCommandAdmission = func(ctx context.Context, commandID string, turnID string, runID string, targetLane string) error {
 		return s.releasePendingTurnCommandAdmission(ctx, endpointID, threadID, commandID, turnID, runID, targetLane)

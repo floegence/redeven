@@ -7,7 +7,8 @@ import (
 	"strings"
 	"time"
 
-	flruntime "github.com/floegence/floret/v2/runtime"
+	"github.com/floegence/floret/v3/identity"
+	flruntime "github.com/floegence/floret/v3/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
@@ -17,25 +18,26 @@ type threadForkFloretCoordinator struct {
 	authority floretThreadForkAuthority
 }
 
-func (c *threadForkFloretCoordinator) fork(ctx context.Context, operationID string, sourceThreadID string, destinationThreadID string) (flruntime.ForkThreadResult, error) {
+func (c *threadForkFloretCoordinator) fork(ctx context.Context, logicalRequestID string, sourceThreadID string) (flruntime.ForkThreadResultV3, error) {
 	if c == nil || c.authority == nil {
-		return flruntime.ForkThreadResult{}, errors.New("Floret fork coordinator authority is unavailable")
+		return flruntime.ForkThreadResultV3{}, errors.New("Floret fork coordinator authority is unavailable")
 	}
-	return c.authority.ForkThread(ctxOrBackground(ctx), flruntime.ForkOperationID(strings.TrimSpace(operationID)), flruntime.ThreadID(strings.TrimSpace(sourceThreadID)), flruntime.ThreadID(strings.TrimSpace(destinationThreadID)))
+	return c.authority.ForkThread(ctxOrBackground(ctx), identity.ThreadID(strings.TrimSpace(sourceThreadID)), flruntime.ForkThreadCommand{LogicalRequestID: identity.LogicalRequestID(strings.TrimSpace(logicalRequestID))})
 }
 
-func (c *threadForkFloretCoordinator) setTitle(ctx context.Context, threadID string, title string) (flruntime.ThreadSnapshot, error) {
+func (c *threadForkFloretCoordinator) setTitle(ctx context.Context, logicalRequestID string, threadID string, title string) (flruntime.ThreadSnapshot, error) {
 	if c == nil || c.authority == nil {
 		return flruntime.ThreadSnapshot{}, errors.New("Floret fork coordinator authority is unavailable")
 	}
-	return c.authority.SetForkedThreadTitle(ctxOrBackground(ctx), flruntime.ThreadID(strings.TrimSpace(threadID)), title)
+	result, err := c.authority.SetForkedThreadTitle(ctxOrBackground(ctx), identity.ThreadID(strings.TrimSpace(threadID)), flruntime.SetThreadTitleCommand{LogicalRequestID: identity.LogicalRequestID(strings.TrimSpace(logicalRequestID)), Title: title})
+	return result.Thread, err
 }
 
-func (s *Service) forkFloretThread(ctx context.Context, operationID string, sourceThreadID string, destinationThreadID string) (flruntime.ForkThreadResult, error) {
+func (s *Service) forkFloretThread(ctx context.Context, logicalRequestID string, sourceThreadID string) (flruntime.ForkThreadResultV3, error) {
 	if s == nil || s.threadForkFloret == nil {
-		return flruntime.ForkThreadResult{}, errors.New("nil service")
+		return flruntime.ForkThreadResultV3{}, errors.New("nil service")
 	}
-	return s.threadForkFloret.fork(ctx, operationID, sourceThreadID, destinationThreadID)
+	return s.threadForkFloret.fork(ctx, logicalRequestID, sourceThreadID)
 }
 
 func (s *Service) resumeThreadForkOperation(ctx context.Context, db *threadstore.Store, operation *threadstore.ForkOperation) (*threadstore.ThreadSettings, error) {
@@ -48,62 +50,75 @@ func (s *Service) resumeThreadForkOperation(ctx context.Context, db *threadstore
 	if operation == nil {
 		return nil, errors.New("nil thread fork operation")
 	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	switch operation.Status {
-	case threadstore.ForkOperationCommitted:
-		forked, err := db.GetThreadSettings(ctx, operation.EndpointID, operation.DestinationThreadID)
-		if err != nil {
-			return nil, err
-		}
-		if forked == nil {
-			return nil, threadstore.ErrForkDestinationConflict
-		}
-		s.publishCommittedThreadForkOperation(db, operation)
-		return forked, nil
-	case threadstore.ForkOperationFailed:
-		return nil, fmt.Errorf("thread fork operation failed: %s", strings.TrimSpace(operation.ErrorMessage))
-	case threadstore.ForkOperationPending:
-	default:
-		return nil, fmt.Errorf("unsupported thread fork operation status %q", operation.Status)
-	}
+	ctx = ctxOrBackground(ctx)
 
-	floretResult, err := s.forkFloretThread(ctx, operation.OperationID, operation.SourceThreadID, operation.DestinationThreadID)
-	if err != nil {
-		code, terminal := classifyFloretForkOperationError(err)
-		return nil, s.recordThreadForkOperationError(ctx, db, operation.OperationID, code, err, terminal)
-	}
-	if strings.TrimSpace(string(floretResult.OperationID)) != operation.OperationID || strings.TrimSpace(string(floretResult.Thread.ID)) != operation.DestinationThreadID {
-		err := errors.New("Floret fork result identity mismatch")
-		return nil, s.recordThreadForkOperationError(ctx, db, operation.OperationID, "floret_contract_mismatch", err, true)
-	}
-	if title := strings.TrimSpace(operation.RequestedTitle); title != "" {
-		if _, titleErr := s.threadForkFloret.setTitle(ctx, operation.DestinationThreadID, title); titleErr != nil {
-			return nil, s.recordThreadForkOperationError(ctx, db, operation.OperationID, "floret_title_failed", titleErr, false)
+	for {
+		switch operation.Stage {
+		case threadstore.ForkStagePrepared:
+			floretResult, err := s.forkFloretThread(ctx, operation.LogicalRequestID, operation.SourceThreadID)
+			if err != nil {
+				code, terminal := classifyFloretForkOperationError(err)
+				return nil, s.recordThreadForkOperationError(ctx, db, operation.OperationID, code, err, terminal)
+			}
+			operation, err = db.BindForkCanonicalDestination(ctx, operation.OperationID, string(floretResult.ThreadID))
+			if err != nil {
+				return nil, s.recordThreadForkOperationError(ctx, db, operation.OperationID, "redeven_bind_failed", err, true)
+			}
+
+		case threadstore.ForkStageFloretForked:
+			if _, err := db.MaterializeForkProduct(ctx, operation.OperationID, time.Now().UnixMilli()); err != nil {
+				terminal := errors.Is(err, threadstore.ErrForkDestinationConflict) || errors.Is(err, threadstore.ErrForkOperationConflict) || errors.Is(err, threadstore.ErrForkResultConflict)
+				return nil, s.recordThreadForkOperationError(ctx, db, operation.OperationID, "redeven_materialize_failed", err, terminal)
+			}
+			var err error
+			operation, err = db.GetForkOperation(ctx, operation.OperationID)
+			if err != nil {
+				return nil, err
+			}
+
+		case threadstore.ForkStageProductMaterialized:
+			title := strings.TrimSpace(operation.RequestedTitle)
+			if title == "" {
+				return nil, errors.New("thread fork title stage is missing its title")
+			}
+			set, err := s.threadForkFloret.setTitle(ctx, operation.TitleLogicalRequestID, operation.DestinationThreadID, title)
+			if err != nil {
+				return nil, s.recordThreadForkOperationError(ctx, db, operation.OperationID, "floret_title_failed", err, false)
+			}
+			if strings.TrimSpace(string(set.ID)) != operation.DestinationThreadID || strings.TrimSpace(set.Title) != title {
+				err := errors.New("Floret title result identity/title mismatch")
+				return nil, s.recordThreadForkOperationError(ctx, db, operation.OperationID, "floret_contract_mismatch", err, true)
+			}
+			operation, err = db.ConfirmForkTitleApplied(ctx, operation.OperationID, time.Now().UnixMilli())
+			if err != nil {
+				return nil, err
+			}
+
+		case threadstore.ForkStageTitleApplied, threadstore.ForkStageTitleSkipped:
+			var err error
+			operation, err = db.CompleteForkOperation(ctx, operation.OperationID, time.Now().UnixMilli())
+			if err != nil {
+				return nil, err
+			}
+
+		case threadstore.ForkStageCompleted:
+			forked, err := db.GetThreadSettings(ctx, operation.EndpointID, operation.DestinationThreadID)
+			if err != nil {
+				return nil, err
+			}
+			if forked == nil {
+				return nil, threadstore.ErrForkDestinationConflict
+			}
+			s.publishCommittedThreadForkOperation(db, operation)
+			return forked, nil
+
+		case threadstore.ForkStageFailed:
+			return nil, fmt.Errorf("thread fork operation failed: %s", strings.TrimSpace(operation.ErrorMessage))
+
+		default:
+			return nil, fmt.Errorf("unsupported thread fork operation stage %q", operation.Stage)
 		}
 	}
-	committedAt := time.Now().UnixMilli()
-	forked, err := db.CommitForkOperation(ctx, threadstore.CommitForkOperationRequest{
-		OperationID:     operation.OperationID,
-		UpdatedAtUnixMs: committedAt,
-	})
-	if err != nil {
-		terminal := errors.Is(err, threadstore.ErrForkDestinationConflict) ||
-			errors.Is(err, threadstore.ErrForkOperationConflict) ||
-			errors.Is(err, threadstore.ErrForkOperationFailed) ||
-			errors.Is(err, threadstore.ErrForkResultConflict)
-		return nil, s.recordThreadForkOperationError(ctx, db, operation.OperationID, "redeven_commit_failed", err, terminal)
-	}
-	committed, loadErr := db.GetForkOperation(ctx, operation.OperationID)
-	if loadErr != nil {
-		if s.log != nil {
-			s.log.Warn("ai: load committed thread fork operation failed", "operation_id", operation.OperationID, "error", loadErr)
-		}
-		return forked, nil
-	}
-	s.publishCommittedThreadForkOperation(db, committed)
-	return forked, nil
 }
 
 func classifyFloretForkOperationError(err error) (string, bool) {
@@ -131,7 +146,7 @@ func (s *Service) recordThreadForkOperationError(ctx context.Context, db *thread
 }
 
 func (s *Service) publishCommittedThreadForkOperation(db *threadstore.Store, operation *threadstore.ForkOperation) {
-	if s == nil || db == nil || operation == nil || operation.Status != threadstore.ForkOperationCommitted {
+	if s == nil || db == nil || operation == nil || operation.Stage != threadstore.ForkStageCompleted {
 		return
 	}
 	s.threadForkBroadcastMu.Lock()
@@ -139,17 +154,14 @@ func (s *Service) publishCommittedThreadForkOperation(db *threadstore.Store, ope
 	loadCtx, loadCancel := context.WithTimeout(context.Background(), s.persistTimeout())
 	current, err := db.GetForkOperation(loadCtx, operation.OperationID)
 	loadCancel()
-	if err != nil || current == nil || current.Status != threadstore.ForkOperationCommitted {
+	if err != nil || current == nil || current.Stage != threadstore.ForkStageCompleted {
 		if err != nil && s.log != nil {
 			s.log.Warn("ai: load thread fork broadcast state failed", "operation_id", operation.OperationID, "error", err)
 		}
 		return
 	}
 	publish := func(source bool, endpointID string, threadID string, acknowledgedAt int64) {
-		if acknowledgedAt != 0 {
-			return
-		}
-		if strings.TrimSpace(endpointID) == "" || strings.TrimSpace(threadID) == "" {
+		if acknowledgedAt != 0 || strings.TrimSpace(endpointID) == "" || strings.TrimSpace(threadID) == "" {
 			return
 		}
 		if err := s.broadcastThreadSummaryChecked(endpointID, threadID); err != nil {
@@ -178,7 +190,7 @@ func (s *Service) replayPendingThreadForkOperations(ctx context.Context) (int, e
 	if db == nil {
 		return 0, errors.New("thread fork recovery store is unavailable")
 	}
-	operations, err := db.ListPendingForkOperations(ctx, threadForkReplayBatchSize)
+	operations, err := db.ListPendingForkOperations(ctxOrBackground(ctx), threadForkReplayBatchSize)
 	if err != nil {
 		return 0, err
 	}

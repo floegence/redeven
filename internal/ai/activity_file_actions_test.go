@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/floegence/floret/v2/observation"
+	fltools "github.com/floegence/floret/v3/tools"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -302,15 +302,15 @@ func TestSanitizeActivityTimelineMessageJSONFiltersTerminalHostPaths(t *testing.
 func TestActivityPayloadAllowedKeysExcludeForbiddenKeys(t *testing.T) {
 	t.Parallel()
 
-	renderers := []observation.ActivityRenderer{
-		observation.ActivityRendererStructured,
-		observation.ActivityRendererTerminal,
-		observation.ActivityRendererFile,
-		observation.ActivityRendererPatch,
-		observation.ActivityRendererWebSearch,
-		observation.ActivityRendererTodos,
-		observation.ActivityRendererQuestion,
-		observation.ActivityRendererCompletion,
+	renderers := []fltools.ActivityRenderer{
+		fltools.ActivityRendererStructured,
+		fltools.ActivityRendererTerminal,
+		fltools.ActivityRendererFile,
+		fltools.ActivityRendererPatch,
+		fltools.ActivityRendererWebSearch,
+		fltools.ActivityRendererTodos,
+		fltools.ActivityRendererQuestion,
+		fltools.ActivityRendererCompletion,
 	}
 	for _, renderer := range renderers {
 		renderer := renderer

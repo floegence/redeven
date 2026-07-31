@@ -6,7 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	flruntime "github.com/floegence/floret/v2/runtime"
+	"github.com/floegence/floret/v3/identity"
+	flruntime "github.com/floegence/floret/v3/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
@@ -16,18 +17,22 @@ type threadCreateFloretCoordinator struct {
 	authority floretThreadCreateAuthority
 }
 
-func (c *threadCreateFloretCoordinator) create(ctx context.Context, threadID string, operationID string) (flruntime.ThreadSummary, error) {
+func (c *threadCreateFloretCoordinator) create(ctx context.Context, logicalRequestID string) (flruntime.CreateThreadResult, error) {
 	if c == nil || c.authority == nil {
-		return flruntime.ThreadSummary{}, errors.New("Floret create coordinator authority is unavailable")
+		return flruntime.CreateThreadResult{}, errors.New("Floret create coordinator authority is unavailable")
 	}
-	return c.authority.CreateThread(ctxOrBackground(ctx), flruntime.ThreadID(strings.TrimSpace(threadID)), flruntime.CreateIntentID(strings.TrimSpace(operationID)))
+	return c.authority.CreateThread(ctxOrBackground(ctx), identity.LogicalRequestID(strings.TrimSpace(logicalRequestID)))
 }
 
-func (c *threadCreateFloretCoordinator) setTitle(ctx context.Context, threadID string, title string) (flruntime.ThreadSnapshot, error) {
+func (c *threadCreateFloretCoordinator) setTitle(ctx context.Context, logicalRequestID string, threadID string, title string) (flruntime.ThreadSnapshot, error) {
 	if c == nil || c.authority == nil {
 		return flruntime.ThreadSnapshot{}, errors.New("Floret create coordinator authority is unavailable")
 	}
-	return c.authority.SetCreatedThreadTitle(ctxOrBackground(ctx), flruntime.ThreadID(strings.TrimSpace(threadID)), title)
+	result, err := c.authority.SetCreatedThreadTitle(ctxOrBackground(ctx), identity.ThreadID(strings.TrimSpace(threadID)), flruntime.SetThreadTitleCommand{
+		LogicalRequestID: identity.LogicalRequestID(strings.TrimSpace(logicalRequestID)),
+		Title:            title,
+	})
+	return result.Thread, err
 }
 
 func (s *Service) resumeThreadCreateOperation(ctx context.Context, operation threadstore.ThreadCreateOperation) (threadstore.ThreadSettings, error) {
@@ -40,50 +45,77 @@ func (s *Service) resumeThreadCreateOperation(ctx context.Context, operation thr
 	if db == nil {
 		return threadstore.ThreadSettings{}, errors.New("threads store not ready")
 	}
-	if operation.Status == threadstore.ThreadCreateOperationCommitted {
-		settings, err := db.GetThreadSettings(ctxOrBackground(ctx), operation.EndpointID, operation.ThreadID)
-		if err != nil || settings == nil {
-			return threadstore.ThreadSettings{}, errors.New("committed thread create operation is missing settings")
-		}
-		return *settings, nil
-	}
-	if operation.Status != threadstore.ThreadCreateOperationPending {
-		return threadstore.ThreadSettings{}, fmt.Errorf("unsupported thread create operation status %q", operation.Status)
-	}
 	if s.threadCreateFloret == nil {
 		return threadstore.ThreadSettings{}, errors.New("Floret create coordinator authority is unavailable")
 	}
-	created, err := s.threadCreateFloret.create(ctx, operation.ThreadID, operation.OperationID)
-	if err != nil {
-		_ = db.RecordThreadCreateRetry(ctx, operation.OperationID, "floret_host_open_failed", err.Error())
-		return threadstore.ThreadSettings{}, err
-	}
-	if strings.TrimSpace(string(created.ID)) != strings.TrimSpace(operation.ThreadID) {
-		return threadstore.ThreadSettings{}, fmt.Errorf("Floret create result identity mismatch: got %q, want %q", created.ID, operation.ThreadID)
-	}
-	if operation.FloretCreatedAtMS <= 0 {
-		operation, err = db.ConfirmThreadCreateFloretCreated(ctx, operation.OperationID)
-		if err != nil {
-			return threadstore.ThreadSettings{}, err
-		}
-	}
-	if title := strings.TrimSpace(operation.ExplicitTitle); title != "" {
-		set, err := s.threadCreateFloret.setTitle(ctx, operation.ThreadID, title)
-		if err != nil {
-			_ = db.RecordThreadCreateRetry(ctx, operation.OperationID, "floret_title_failed", err.Error())
-			return threadstore.ThreadSettings{}, err
-		}
-		if strings.TrimSpace(string(set.ID)) != strings.TrimSpace(operation.ThreadID) || strings.TrimSpace(set.Title) != title {
-			return threadstore.ThreadSettings{}, fmt.Errorf("Floret title result identity/title mismatch for thread %q", operation.ThreadID)
-		}
-		if operation.TitleSetAtMS <= 0 {
+	ctx = ctxOrBackground(ctx)
+
+	for {
+		switch operation.Stage {
+		case threadstore.ThreadCreateStagePrepared:
+			created, err := s.threadCreateFloret.create(ctx, operation.LogicalRequestID)
+			if err != nil {
+				_ = db.RecordThreadCreateRetry(ctx, operation.OperationID, "floret_host_open_failed", err.Error())
+				return threadstore.ThreadSettings{}, err
+			}
+			operation, err = db.BindThreadCreateCanonicalID(ctx, operation.OperationID, string(created.ThreadID))
+			if err != nil {
+				return threadstore.ThreadSettings{}, err
+			}
+
+		case threadstore.ThreadCreateStageFloretCreated:
+			if _, err := db.MaterializeThreadCreateProduct(ctx, operation.OperationID); err != nil {
+				_ = db.RecordThreadCreateRetry(ctx, operation.OperationID, "redeven_materialize_failed", err.Error())
+				return threadstore.ThreadSettings{}, err
+			}
+			var err error
+			operation, err = db.GetThreadCreateOperation(ctx, operation.OperationID)
+			if err != nil {
+				return threadstore.ThreadSettings{}, err
+			}
+
+		case threadstore.ThreadCreateStageProductMaterialized:
+			title := strings.TrimSpace(operation.ExplicitTitle)
+			if title == "" {
+				return threadstore.ThreadSettings{}, errors.New("thread create title stage is missing its title")
+			}
+			set, err := s.threadCreateFloret.setTitle(ctx, operation.TitleLogicalRequestID, operation.CanonicalThreadID, title)
+			if err != nil {
+				_ = db.RecordThreadCreateRetry(ctx, operation.OperationID, "floret_title_failed", err.Error())
+				return threadstore.ThreadSettings{}, err
+			}
+			if strings.TrimSpace(string(set.ID)) != operation.CanonicalThreadID || strings.TrimSpace(set.Title) != title {
+				return threadstore.ThreadSettings{}, fmt.Errorf("Floret title result identity/title mismatch for thread %q", operation.CanonicalThreadID)
+			}
 			operation, err = db.ConfirmThreadCreateTitleSet(ctx, operation.OperationID)
 			if err != nil {
 				return threadstore.ThreadSettings{}, err
 			}
+
+		case threadstore.ThreadCreateStageTitleApplied, threadstore.ThreadCreateStageTitleSkipped:
+			var err error
+			operation, err = db.CompleteThreadCreateOperation(ctx, operation.OperationID)
+			if err != nil {
+				return threadstore.ThreadSettings{}, err
+			}
+
+		case threadstore.ThreadCreateStageCompleted:
+			settings, err := db.GetThreadSettings(ctx, operation.EndpointID, operation.CanonicalThreadID)
+			if err != nil {
+				return threadstore.ThreadSettings{}, err
+			}
+			if settings == nil {
+				return threadstore.ThreadSettings{}, errors.New("completed thread create operation is missing settings")
+			}
+			return *settings, nil
+
+		case threadstore.ThreadCreateStageFailed:
+			return threadstore.ThreadSettings{}, fmt.Errorf("thread create operation failed: %s", strings.TrimSpace(operation.ErrorMessage))
+
+		default:
+			return threadstore.ThreadSettings{}, fmt.Errorf("unsupported thread create operation stage %q", operation.Stage)
 		}
 	}
-	return db.CommitThreadCreateSettings(ctx, operation.OperationID)
 }
 
 func (s *Service) replayPendingThreadCreateOperations(ctx context.Context) (int, error) {

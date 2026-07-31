@@ -9,7 +9,8 @@ import (
 	"testing"
 	"time"
 
-	flruntime "github.com/floegence/floret/v2/runtime"
+	"github.com/floegence/floret/v3/identity"
+	flruntime "github.com/floegence/floret/v3/runtime"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -22,15 +23,16 @@ func TestThreadTimelineUsesCanonicalFloretOrdinalOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "done")
+	results := make([]flruntime.TurnResult, 0, 3)
 	for i := 1; i <= 3; i++ {
-		_, err := host.Run(ctx, flruntime.TurnRequest{
-			TurnID: flruntime.TurnID(fmt.Sprintf("turn_%d", i)),
-			RunID:  flruntime.RunID(fmt.Sprintf("run_%d", i)),
-			Input:  flruntime.TurnInput{Text: fmt.Sprintf("user %d", i)},
+		result, err := host.Run(ctx, flruntime.StartTurnCommand{
+			LogicalRequestID: identity.LogicalRequestID(identity.TurnID(fmt.Sprintf("turn_%d", i))),
+			UserMessage:      flruntime.TurnInput{Text: fmt.Sprintf("user %d", i)},
 		})
 		if err != nil {
 			t.Fatalf("RunTurn %d: %v", i, err)
 		}
+		results = append(results, result)
 	}
 	response, err := svc.ListThreadMessages(ctx, meta, thread.ThreadID, 20, 0)
 	if err != nil {
@@ -40,15 +42,14 @@ func TestThreadTimelineUsesCanonicalFloretOrdinalOrder(t *testing.T) {
 		t.Fatalf("message count = %d, want 6", len(response.Messages))
 	}
 	wantRoles := []string{"user", "assistant", "user", "assistant", "user", "assistant"}
-	wantIDs := []string{"", "turn_1", "", "turn_2", "", "turn_3"}
 	for index, value := range response.Messages {
 		record := decodeTimelineMessageForTest(t, value)
-		wantTurnID := fmt.Sprintf("turn_%d", index/2+1)
+		wantTurnID := string(results[index/2].TurnID)
 		if record.Role != wantRoles[index] {
 			t.Fatalf("message %d role = %q, want %q", index, record.Role, wantRoles[index])
 		}
-		if wantIDs[index] != "" && record.ID != wantIDs[index] {
-			t.Fatalf("message %d id = %q, want %q", index, record.ID, wantIDs[index])
+		if index%2 == 1 && record.ID != wantTurnID {
+			t.Fatalf("message %d id = %q, want %q", index, record.ID, wantTurnID)
 		}
 		if record.TurnID != wantTurnID {
 			t.Fatalf("message %d turn_id = %q, want %q", index, record.TurnID, wantTurnID)
@@ -151,10 +152,9 @@ func TestCanonicalReferencesRoundTripThroughTimelineBootstrapAndReplacement(t *t
 	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "canonical response")
 	const sentinelPath = "/private/workspace/secret/main.ts"
 	const sentinelLocator = "redeven-context:v1:sentinel-host-locator"
-	if _, err := host.Run(ctx, flruntime.TurnRequest{
-		TurnID: "turn_reference_round_trip",
-		RunID:  "run_reference_round_trip",
-		Input: flruntime.TurnInput{References: []flruntime.MessageReference{
+	if _, err := host.Run(ctx, flruntime.StartTurnCommand{
+		LogicalRequestID: identity.LogicalRequestID("turn_reference_round_trip"),
+		UserMessage: flruntime.TurnInput{References: []flruntime.MessageReference{
 			{ReferenceID: "context:0", Kind: flruntime.MessageReferenceFile, Label: "main.ts", Text: sentinelPath, ResourceRef: sentinelLocator},
 			{ReferenceID: "context:1", Kind: flruntime.MessageReferenceText, Label: "Quote", Text: "visible excerpt", Truncated: true},
 		}},
@@ -236,30 +236,33 @@ func TestThreadTimelineBeforeAndAfterPaginationPreservesCanonicalOrder(t *testin
 		t.Fatal(err)
 	}
 	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "done")
+	results := make([]flruntime.TurnResult, 0, 3)
 	for i := 1; i <= 3; i++ {
-		if _, err := host.Run(ctx, flruntime.TurnRequest{TurnID: flruntime.TurnID(fmt.Sprintf("turn_%d", i)), RunID: flruntime.RunID(fmt.Sprintf("run_%d", i)), Input: flruntime.TurnInput{Text: fmt.Sprintf("user %d", i)}}); err != nil {
+		result, err := host.Run(ctx, flruntime.StartTurnCommand{LogicalRequestID: identity.LogicalRequestID(identity.TurnID(fmt.Sprintf("turn_%d", i))), UserMessage: flruntime.TurnInput{Text: fmt.Sprintf("user %d", i)}})
+		if err != nil {
 			t.Fatal(err)
 		}
+		results = append(results, result)
 	}
 	latest, nextBefore, hasMore, err := svc.listThreadTimelineMessages(ctx, meta.EndpointID, thread.ThreadID, 2, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(latest) != 2 || !hasMore || nextBefore <= 0 || latest[0].MessageID == "" || latest[1].MessageID != "turn_3" {
+	if len(latest) != 2 || !hasMore || nextBefore <= 0 || latest[0].MessageID == "" || latest[1].MessageID != string(results[2].TurnID) {
 		t.Fatalf("unexpected latest page: %#v next=%d more=%v", latest, nextBefore, hasMore)
 	}
 	older, _, _, err := svc.listThreadTimelineMessages(ctx, meta.EndpointID, thread.ThreadID, 2, nextBefore)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(older) != 2 || older[1].MessageID != "turn_2" {
+	if len(older) != 2 || older[1].MessageID != string(results[1].TurnID) {
 		t.Fatalf("unexpected older page: %#v", older)
 	}
 	after, _, moreAfter, err := svc.listThreadTimelineMessagesAfter(ctx, meta.EndpointID, thread.ThreadID, 2, older[1].RowID, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(after) != 2 || after[1].MessageID != "turn_3" || moreAfter {
+	if len(after) != 2 || after[1].MessageID != string(results[2].TurnID) || moreAfter {
 		t.Fatalf("unexpected after page: %#v more=%v", after, moreAfter)
 	}
 }
@@ -273,7 +276,8 @@ func TestThreadTimelineRejectsUnknownPaginationCursor(t *testing.T) {
 		t.Fatal(err)
 	}
 	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "done")
-	if _, err := host.Run(ctx, flruntime.TurnRequest{TurnID: "turn_1", RunID: "run_1", Input: flruntime.TurnInput{Text: "hello"}}); err != nil {
+	_, err = host.Run(ctx, flruntime.StartTurnCommand{LogicalRequestID: identity.LogicalRequestID("turn_1"), UserMessage: flruntime.TurnInput{Text: "hello"}})
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -294,14 +298,15 @@ func TestReadCanonicalThreadStateUsesLatestAdmittedTurn(t *testing.T) {
 		t.Fatal(err)
 	}
 	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "done")
-	if _, err := host.Run(ctx, flruntime.TurnRequest{TurnID: "turn_1", RunID: "run_1", Input: flruntime.TurnInput{Text: "hello"}}); err != nil {
+	result, err := host.Run(ctx, flruntime.StartTurnCommand{LogicalRequestID: identity.LogicalRequestID("turn_1"), UserMessage: flruntime.TurnInput{Text: "hello"}})
+	if err != nil {
 		t.Fatal(err)
 	}
 	snapshot, latest, err := svc.readCanonicalThreadState(ctx, thread.ThreadID)
 	if err != nil {
 		t.Fatalf("canonical state: %v", err)
 	}
-	if snapshot.ID != flruntime.ThreadID(thread.ThreadID) || latest == nil || latest.TurnID != "turn_1" || latest.RunID != "run_1" {
+	if snapshot.ID != identity.ThreadID(thread.ThreadID) || latest == nil || latest.TurnID != result.TurnID || latest.RunID != result.RunID {
 		t.Fatalf("latest = %#v", latest)
 	}
 
@@ -310,7 +315,7 @@ func TestReadCanonicalThreadStateUsesLatestAdmittedTurn(t *testing.T) {
 		t.Fatal(err)
 	}
 	emptySnapshot, emptyLatest, err := svc.readCanonicalThreadState(ctx, empty.ThreadID)
-	if err != nil || emptySnapshot.ID != flruntime.ThreadID(empty.ThreadID) || emptyLatest != nil {
+	if err != nil || emptySnapshot.ID != identity.ThreadID(empty.ThreadID) || emptyLatest != nil {
 		t.Fatalf("empty canonical state: snapshot=%#v latest=%#v err=%v", emptySnapshot, emptyLatest, err)
 	}
 }
@@ -324,7 +329,8 @@ func TestUnmatchedLiveDraftTriggersResyncAndUsesCanonicalTimeline(t *testing.T) 
 		t.Fatal(err)
 	}
 	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "done")
-	if _, err := host.Run(ctx, flruntime.TurnRequest{TurnID: "turn_1", RunID: "run_1", Input: flruntime.TurnInput{Text: "hello"}}); err != nil {
+	result, err := host.Run(ctx, flruntime.StartTurnCommand{LogicalRequestID: identity.LogicalRequestID("turn_1"), UserMessage: flruntime.TurnInput{Text: "hello"}})
+	if err != nil {
 		t.Fatal(err)
 	}
 	state := FlowerLiveMaterializedState{Messages: map[string]FlowerLiveMessageDraft{
@@ -334,7 +340,7 @@ func TestUnmatchedLiveDraftTriggersResyncAndUsesCanonicalTimeline(t *testing.T) 
 	if err != nil {
 		t.Fatalf("buildFlowerTimelineProjection: %v", err)
 	}
-	if len(projection.Messages) != 2 || projection.Messages[0].Role != "user" || projection.Messages[1].MessageID != "turn_1" {
+	if len(projection.Messages) != 2 || projection.Messages[0].Role != "user" || projection.Messages[1].MessageID != string(result.TurnID) {
 		t.Fatalf("projection messages=%#v, want canonical timeline without stale draft", projection.Messages)
 	}
 	svc.mu.Lock()
@@ -357,23 +363,25 @@ func TestMismatchedLiveDraftIdentityResyncsBootstrapWithoutSendFailure(t *testin
 		t.Fatal(err)
 	}
 	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "canonical answer")
-	if _, err := host.Run(ctx, flruntime.TurnRequest{
-		TurnID: "turn_identity", RunID: "run_identity", Input: flruntime.TurnInput{Text: "hello"},
-	}); err != nil {
+	result, err := host.Run(ctx, flruntime.StartTurnCommand{
+		LogicalRequestID: identity.LogicalRequestID("turn_identity"), UserMessage: flruntime.TurnInput{Text: "hello"},
+	})
+	if err != nil {
 		t.Fatal(err)
 	}
+	turnID, runID := string(result.TurnID), string(result.RunID)
 
 	for name, draft := range map[string]FlowerLiveMessageDraft{
-		"wrong thread":  {ThreadID: "other", TurnID: "turn_identity", RunID: "run_identity", MessageID: "turn_identity", Role: "assistant", Status: "streaming"},
-		"wrong turn":    {ThreadID: thread.ThreadID, TurnID: "other", RunID: "run_identity", MessageID: "turn_identity", Role: "assistant", Status: "streaming"},
-		"wrong run":     {ThreadID: thread.ThreadID, TurnID: "turn_identity", RunID: "other", MessageID: "turn_identity", Role: "assistant", Status: "streaming"},
-		"wrong message": {ThreadID: thread.ThreadID, TurnID: "turn_identity", RunID: "run_identity", MessageID: "other", Role: "assistant", Status: "streaming"},
+		"wrong thread":  {ThreadID: "other", TurnID: turnID, RunID: runID, MessageID: turnID, Role: "assistant", Status: "streaming"},
+		"wrong turn":    {ThreadID: thread.ThreadID, TurnID: "other", RunID: runID, MessageID: turnID, Role: "assistant", Status: "streaming"},
+		"wrong run":     {ThreadID: thread.ThreadID, TurnID: turnID, RunID: "other", MessageID: turnID, Role: "assistant", Status: "streaming"},
+		"wrong message": {ThreadID: thread.ThreadID, TurnID: turnID, RunID: runID, MessageID: "other", Role: "assistant", Status: "streaming"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			threadKey := runThreadKey(meta.EndpointID, thread.ThreadID)
 			svc.mu.Lock()
 			stream := newFlowerLiveThreadStream()
-			stream.State.Messages["turn_identity"] = draft
+			stream.State.Messages[turnID] = draft
 			svc.flowerLiveByThread[threadKey] = stream
 			svc.mu.Unlock()
 
@@ -381,7 +389,7 @@ func TestMismatchedLiveDraftIdentityResyncsBootstrapWithoutSendFailure(t *testin
 			if err != nil {
 				t.Fatalf("GetFlowerThreadLiveBootstrap: %v", err)
 			}
-			if len(bootstrap.TimelineMessages) != 2 || bootstrap.TimelineMessages[1].MessageID != "turn_identity" || bootstrap.TimelineMessages[1].Content != "canonical answer" {
+			if len(bootstrap.TimelineMessages) != 2 || bootstrap.TimelineMessages[1].MessageID != turnID || bootstrap.TimelineMessages[1].Content != "canonical answer" {
 				t.Fatalf("timeline=%#v, want canonical Floret replacement", bootstrap.TimelineMessages)
 			}
 			if len(bootstrap.LiveState.Messages) != 0 {
@@ -409,18 +417,20 @@ func TestTerminalCanonicalTurnDropsStaleLiveDraftBeforeRendering(t *testing.T) {
 		t.Fatal(err)
 	}
 	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "canonical terminal")
-	if _, err := host.Run(ctx, flruntime.TurnRequest{
-		TurnID: "turn_terminal", RunID: "run_terminal", Input: flruntime.TurnInput{Text: "hello"},
-	}); err != nil {
+	result, err := host.Run(ctx, flruntime.StartTurnCommand{
+		LogicalRequestID: identity.LogicalRequestID("turn_terminal"), UserMessage: flruntime.TurnInput{Text: "hello"},
+	})
+	if err != nil {
 		t.Fatal(err)
 	}
+	turnID, runID := string(result.TurnID), string(result.RunID)
 
 	state := FlowerLiveMaterializedState{Messages: map[string]FlowerLiveMessageDraft{
-		"turn_terminal": {
+		turnID: {
 			ThreadID:  thread.ThreadID,
-			TurnID:    "turn_terminal",
-			RunID:     "run_terminal",
-			MessageID: "turn_terminal",
+			TurnID:    turnID,
+			RunID:     runID,
+			MessageID: turnID,
 			Role:      "assistant",
 			Status:    "streaming",
 		},
@@ -428,7 +438,7 @@ func TestTerminalCanonicalTurnDropsStaleLiveDraftBeforeRendering(t *testing.T) {
 	threadKey := runThreadKey(meta.EndpointID, thread.ThreadID)
 	svc.mu.Lock()
 	stream := newFlowerLiveThreadStream()
-	stream.State.Messages["turn_terminal"] = state.Messages["turn_terminal"]
+	stream.State.Messages[turnID] = state.Messages[turnID]
 	svc.flowerLiveByThread[threadKey] = stream
 	svc.mu.Unlock()
 
@@ -436,11 +446,11 @@ func TestTerminalCanonicalTurnDropsStaleLiveDraftBeforeRendering(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildFlowerTimelineProjection: %v", err)
 	}
-	if len(projection.Messages) != 2 || projection.Messages[1].MessageID != "turn_terminal" || projection.Messages[1].Content != "canonical terminal" {
+	if len(projection.Messages) != 2 || projection.Messages[1].MessageID != turnID || projection.Messages[1].Content != "canonical terminal" {
 		t.Fatalf("projection messages=%#v, want canonical terminal replacement", projection.Messages)
 	}
 	svc.mu.Lock()
-	_, stillLive := svc.flowerLiveByThread[threadKey].State.Messages["turn_terminal"]
+	_, stillLive := svc.flowerLiveByThread[threadKey].State.Messages[turnID]
 	svc.mu.Unlock()
 	if stillLive {
 		t.Fatal("terminal canonical turn retained stale live draft")
@@ -456,29 +466,31 @@ func TestTerminalCanonicalReplacementRecoversMismatchedLiveDraft(t *testing.T) {
 		t.Fatal(err)
 	}
 	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "canonical terminal")
-	if _, err := host.Run(ctx, flruntime.TurnRequest{
-		TurnID: "turn_terminal_identity", RunID: "run_terminal_identity", Input: flruntime.TurnInput{Text: "hello"},
-	}); err != nil {
+	result, err := host.Run(ctx, flruntime.StartTurnCommand{
+		LogicalRequestID: identity.LogicalRequestID("turn_terminal_identity"), UserMessage: flruntime.TurnInput{Text: "hello"},
+	})
+	if err != nil {
 		t.Fatal(err)
 	}
+	turnID, runID := string(result.TurnID), string(result.RunID)
 
 	threadKey := runThreadKey(meta.EndpointID, thread.ThreadID)
 	svc.mu.Lock()
 	stream := newFlowerLiveThreadStream()
-	stream.State.Messages["turn_terminal_identity"] = FlowerLiveMessageDraft{
-		ThreadID: thread.ThreadID, TurnID: "turn_terminal_identity", RunID: "other_run", MessageID: "turn_terminal_identity", Role: "assistant", Status: "streaming",
+	stream.State.Messages[turnID] = FlowerLiveMessageDraft{
+		ThreadID: thread.ThreadID, TurnID: turnID, RunID: "other_run", MessageID: turnID, Role: "assistant", Status: "streaming",
 	}
 	svc.flowerLiveByThread[threadKey] = stream
 	svc.mu.Unlock()
 
 	settlementTarget := flruntime.PendingToolSettlementTarget{
-		ThreadID: flruntime.ThreadID(thread.ThreadID), TurnID: "turn_terminal_identity", RunID: "run_terminal_identity", ToolCallID: "exec-1", ToolName: "terminal.exec", Handle: "process-1",
+		ThreadID: identity.ThreadID(thread.ThreadID), TurnID: result.TurnID, RunID: result.RunID, ToolCallID: "exec-1", ToolName: "terminal.exec", Handle: "process-1",
 	}
 	settledProjection := flruntime.ThreadTurnProjection{
-		ThreadID: flruntime.ThreadID(thread.ThreadID), TurnID: "turn_terminal_identity", RunID: "run_terminal_identity", TraceID: "run_terminal_identity", Status: flruntime.TurnStatusCompleted, ThroughOrdinal: 2,
-		Segments: []flruntime.ThreadTurnProjectionSegment{{Kind: flruntime.ThreadTurnProjectionSegmentActivityTimeline, ActivityTimeline: floretProjectionTimeline("run_terminal_identity", thread.ThreadID, "turn_terminal_identity", "exec-1", "terminal.exec")}},
+		ThreadID: identity.ThreadID(thread.ThreadID), TurnID: result.TurnID, RunID: result.RunID, TraceID: identity.TraceID(runID), Status: flruntime.TurnStatusCompleted, ThroughOrdinal: 2,
+		Segments: []flruntime.ThreadTurnProjectionSegment{{Kind: flruntime.ThreadTurnProjectionSegmentActivityTimeline, ActivityTimeline: floretProjectionTimeline(runID, thread.ThreadID, turnID, "exec-1", "terminal.exec")}},
 	}
-	if err := svc.applyFloretPendingToolSettlementProjection(ctx, meta.EndpointID, thread.ThreadID, "run_terminal_identity", "turn_terminal_identity", pendingToolSettlementResultForTest(settlementTarget, flruntime.TurnProjectionAvailabilityReady, &settledProjection, "")); err != nil {
+	if err := svc.applyFloretPendingToolSettlementProjection(ctx, meta.EndpointID, thread.ThreadID, runID, turnID, pendingToolSettlementResultForTest(settlementTarget, flruntime.TurnProjectionAvailabilityReady, &settledProjection, "")); err != nil {
 		t.Fatalf("applyFloretPendingToolSettlementProjection: %v", err)
 	}
 
@@ -497,7 +509,7 @@ func TestTerminalCanonicalReplacementRecoversMismatchedLiveDraft(t *testing.T) {
 			if !decodeFlowerPayload(event.Payload, &payload) {
 				t.Fatalf("replacement payload decode failed: %#v", event)
 			}
-			if len(payload.Messages) != 2 || payload.Messages[1].MessageID != "turn_terminal_identity" || payload.Messages[1].Content != "canonical terminal" {
+			if len(payload.Messages) != 2 || payload.Messages[1].MessageID != turnID || payload.Messages[1].Content != "canonical terminal" {
 				t.Fatalf("replacement messages=%#v, want canonical timeline", payload.Messages)
 			}
 			if len(payload.LiveState.Messages) != 0 {

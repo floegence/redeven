@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type {
   FlowerLiveBootstrap,
   FlowerThreadSnapshot,
+  FlowerTurnLaunchInput,
 } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import {
   activityItem,
@@ -332,7 +333,7 @@ describe('FlowerSurface navigation structured input', () => {
         },
       ],
     });
-    const launchTurn = vi.fn(async (input: { turn_id?: string }) => launchReceipt(staleThread.thread_id, input.turn_id ?? 'turn-stale-input'));
+    const launchTurn = vi.fn(async (input: FlowerTurnLaunchInput) => launchReceipt(staleThread.thread_id, 'turn-stale-input', 'start', input.client_request_id));
     const submitInput = vi.fn(async () => liveBootstrap(staleThread));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),

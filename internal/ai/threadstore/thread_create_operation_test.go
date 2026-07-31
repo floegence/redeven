@@ -2,171 +2,112 @@ package threadstore
 
 import (
 	"context"
-	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 )
 
-func TestThreadCreateOperationCommitsSettingsOnlyAfterCanonicalSteps(t *testing.T) {
+func createRequestForTest(clientRequestID, endpointID, title string) PrepareThreadCreateRequest {
+	return PrepareThreadCreateRequest{
+		ClientRequestID: clientRequestID,
+		Settings: ThreadSettings{
+			EndpointID: endpointID, NamespacePublicID: "ns", ModelID: "openai/gpt-5",
+			PermissionType: "approval_required", WorkingDir: "/workspace",
+			CreatedByUserPublicID: "user_1", UpdatedByUserPublicID: "user_1",
+			SettingsCreatedAtUnixMs: 100, SettingsUpdatedAtUnixMs: 100,
+		},
+		ExplicitTitle: title, CreatedAtMS: 100,
+	}
+}
+
+func TestThreadCreateOperationBindsCanonicalIdentityAndAdvancesStages(t *testing.T) {
 	store := openStoreForTest(t)
 	ctx := context.Background()
-	settings := ThreadSettings{
-		ThreadID: "thread_create", EndpointID: "env_create", NamespacePublicID: "ns_create",
-		ModelID: "openai/gpt-5", PermissionType: "approval_required", WorkingDir: "/workspace",
-		CreatedByUserPublicID: "user_1", UpdatedByUserPublicID: "user_1",
-		SettingsCreatedAtUnixMs: 100, SettingsUpdatedAtUnixMs: 100,
-	}
-	operation, err := store.PrepareThreadCreateOperation(ctx, PrepareThreadCreateRequest{
-		Settings: settings, ExplicitTitle: "Canonical title", CreatedAtMS: 100,
-	})
+	request := createRequestForTest("create_request_1", "env_create", "Canonical title")
+	operation, err := store.PrepareThreadCreateOperation(ctx, request)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if operation.Status != ThreadCreateOperationPending || operation.Settings.ThreadID != settings.ThreadID || operation.ExplicitTitle != "Canonical title" {
+	if operation.Stage != ThreadCreateStagePrepared || operation.CanonicalThreadID != "" || operation.Settings.ThreadID != "" {
 		t.Fatalf("prepared operation=%#v", operation)
 	}
-	if got, err := store.GetThreadSettings(ctx, settings.EndpointID, settings.ThreadID); err != nil || got != nil {
-		t.Fatalf("settings existed before canonical Floret steps: %#v err=%v", got, err)
+	if _, err := store.MaterializeThreadCreateProduct(ctx, operation.OperationID); err == nil {
+		t.Fatal("materialization succeeded before canonical binding")
 	}
-	var snapshot map[string]any
-	if err := json.Unmarshal([]byte(operation.SnapshotJSON), &snapshot); err != nil {
-		t.Fatal(err)
+	operation, err = store.BindThreadCreateCanonicalID(ctx, operation.OperationID, "th_canonical_create")
+	if err != nil || operation.Stage != ThreadCreateStageFloretCreated || operation.CanonicalThreadID != "th_canonical_create" {
+		t.Fatalf("bound operation=%#v err=%v", operation, err)
 	}
-	settingsSnapshot, _ := snapshot["settings"].(map[string]any)
-	for _, forbidden := range []string{"title", "status", "phase", "latest_turn", "last_message_preview"} {
-		if _, exists := settingsSnapshot[forbidden]; exists {
-			t.Fatalf("create snapshot copied canonical field %q: %#v", forbidden, settingsSnapshot)
-		}
+	if _, err := store.BindThreadCreateCanonicalID(ctx, operation.OperationID, "th_other"); !errors.Is(err, ErrThreadCreateConflict) {
+		t.Fatalf("conflicting bind error=%v", err)
 	}
-	if _, err := store.CommitThreadCreateSettings(ctx, operation.OperationID); err == nil || !strings.Contains(err.Error(), "canonical Floret thread") {
-		t.Fatalf("commit before CreateThread error=%v", err)
-	}
-	operation, err = store.ConfirmThreadCreateFloretCreated(ctx, operation.OperationID)
-	if err != nil || operation.FloretCreatedAtMS <= 0 {
-		t.Fatalf("ConfirmThreadCreateFloretCreated operation=%#v err=%v", operation, err)
-	}
-	if _, err := store.CommitThreadCreateSettings(ctx, operation.OperationID); err == nil || !strings.Contains(err.Error(), "canonical title") {
-		t.Fatalf("commit before SetThreadTitle error=%v", err)
+	settings, err := store.MaterializeThreadCreateProduct(ctx, operation.OperationID)
+	if err != nil || settings.ThreadID != "th_canonical_create" {
+		t.Fatalf("materialized settings=%#v err=%v", settings, err)
 	}
 	operation, err = store.ConfirmThreadCreateTitleSet(ctx, operation.OperationID)
-	if err != nil || operation.TitleSetAtMS <= 0 {
-		t.Fatalf("ConfirmThreadCreateTitleSet operation=%#v err=%v", operation, err)
+	if err != nil || operation.Stage != ThreadCreateStageTitleApplied {
+		t.Fatalf("title operation=%#v err=%v", operation, err)
 	}
-	committed, err := store.CommitThreadCreateSettings(ctx, operation.OperationID)
-	if err != nil {
-		t.Fatal(err)
+	operation, err = store.CompleteThreadCreateOperation(ctx, operation.OperationID)
+	if err != nil || operation.Stage != ThreadCreateStageCompleted {
+		t.Fatalf("completed operation=%#v err=%v", operation, err)
 	}
-	if committed.ThreadID != settings.ThreadID || committed.ModelID != settings.ModelID {
-		t.Fatalf("committed settings=%#v", committed)
-	}
-	replayed, err := store.CommitThreadCreateSettings(ctx, operation.OperationID)
-	if err != nil || replayed.ThreadID != committed.ThreadID {
-		t.Fatalf("idempotent commit settings=%#v err=%v", replayed, err)
-	}
-	operation, err = store.GetThreadCreateOperation(ctx, operation.OperationID)
-	if err != nil || operation.Status != ThreadCreateOperationCommitted || operation.SnapshotJSON != "" || operation.SettingsCommittedAtMS <= 0 {
-		t.Fatalf("committed operation=%#v err=%v", operation, err)
+	replayed, err := store.MaterializeThreadCreateProduct(ctx, operation.OperationID)
+	if err != nil || replayed.ThreadID != settings.ThreadID {
+		t.Fatalf("materialization replay=%#v err=%v", replayed, err)
 	}
 }
 
-func TestThreadCreateOperationRejectsConflictingIntent(t *testing.T) {
+func TestThreadCreateOperationReplaysStableClientRequestAndRejectsConflict(t *testing.T) {
 	store := openStoreForTest(t)
-	ctx := context.Background()
-	request := PrepareThreadCreateRequest{
-		Settings:      ThreadSettings{ThreadID: "thread_conflict", EndpointID: "env_create", PermissionType: "approval_required"},
-		ExplicitTitle: "First", CreatedAtMS: 100,
-	}
-	first, err := store.PrepareThreadCreateOperation(ctx, request)
+	request := createRequestForTest("create_request_replay", "env_create", "First")
+	first, err := store.PrepareThreadCreateOperation(t.Context(), request)
 	if err != nil {
 		t.Fatal(err)
 	}
-	repeated, err := store.PrepareThreadCreateOperation(ctx, request)
-	if err != nil || repeated.OperationID != first.OperationID || repeated.RequestFingerprint != first.RequestFingerprint {
-		t.Fatalf("idempotent prepare=%#v err=%v", repeated, err)
+	replayed, err := store.PrepareThreadCreateOperation(t.Context(), request)
+	if err != nil || replayed.OperationID != first.OperationID || replayed.LogicalRequestID != first.LogicalRequestID {
+		t.Fatalf("replayed operation=%#v err=%v", replayed, err)
 	}
 	request.ExplicitTitle = "Different"
-	if _, err := store.PrepareThreadCreateOperation(ctx, request); err == nil || !strings.Contains(err.Error(), "conflicts") {
-		t.Fatalf("conflicting prepare error=%v", err)
+	if _, err := store.PrepareThreadCreateOperation(t.Context(), request); !errors.Is(err, ErrThreadCreateConflict) {
+		t.Fatalf("conflicting request error=%v", err)
 	}
 }
 
-func TestGetMatchingInitialThreadCreateOperationSurvivesCommit(t *testing.T) {
+func TestThreadCreateOperationSkipsEmptyTitle(t *testing.T) {
 	store := openStoreForTest(t)
-	ctx := t.Context()
-	settings := ThreadSettings{
-		ThreadID: "thread_initial_match", EndpointID: "env_initial_match", NamespacePublicID: "ns_initial_match",
-		ModelID: "openai/gpt-5-mini", PermissionType: "approval_required", WorkingDir: "/workspace",
-		SettingsCreatedAtUnixMs: 100, SettingsUpdatedAtUnixMs: 100,
-	}
-	request := PrepareThreadCreateRequest{Settings: settings, ExplicitTitle: "Initial title", CreatedAtMS: 100}
-	operation, _, err := store.PrepareThreadCreateWithInitialTurn(ctx, request, QueuedTurn{
-		QueueID: "qt_initial_match", EndpointID: settings.EndpointID, ThreadID: settings.ThreadID, ChannelID: "channel_initial_match", Lane: FollowupLaneQueued,
-		TurnID: "turn_initial_match", RunID: "run_initial_match", ModelID: settings.ModelID, TextContent: "hello",
-		AttachmentsJSON: `[]`, OptionsJSON: `{}`, SessionMetaJSON: `{}`, CreatedAtUnixMs: 100,
-	}, nil, 100, attachmentAdmissionForTest(strings.Repeat("a", 64), strings.Repeat("b", 64), nil), nil)
+	op, err := store.PrepareThreadCreateOperation(t.Context(), createRequestForTest("create_no_title", "env_create", ""))
 	if err != nil {
 		t.Fatal(err)
 	}
-	matched, err := store.GetMatchingInitialThreadCreateOperation(ctx, request)
-	if err != nil || matched.OperationID != operation.OperationID || matched.Status != ThreadCreateOperationPending {
-		t.Fatalf("pending match=%#v err=%v", matched, err)
-	}
-	operation, err = store.ConfirmThreadCreateFloretCreated(ctx, operation.OperationID)
+	op, err = store.BindThreadCreateCanonicalID(t.Context(), op.OperationID, "th_no_title")
 	if err != nil {
 		t.Fatal(err)
 	}
-	operation, err = store.ConfirmThreadCreateTitleSet(ctx, operation.OperationID)
-	if err != nil {
+	if _, err := store.MaterializeThreadCreateProduct(t.Context(), op.OperationID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.CommitThreadCreateSettings(ctx, operation.OperationID); err != nil {
+	op, err = store.GetThreadCreateOperation(t.Context(), op.OperationID)
+	if err != nil || op.Stage != ThreadCreateStageTitleSkipped {
+		t.Fatalf("operation=%#v err=%v", op, err)
+	}
+	if _, err := store.CompleteThreadCreateOperation(t.Context(), op.OperationID); err != nil {
 		t.Fatal(err)
-	}
-	matched, err = store.GetMatchingInitialThreadCreateOperation(ctx, request)
-	if err != nil || matched.OperationID != operation.OperationID || matched.Status != ThreadCreateOperationCommitted || matched.SnapshotJSON != "" ||
-		matched.Settings.ThreadID != settings.ThreadID || matched.Settings.ModelID != settings.ModelID {
-		t.Fatalf("committed match=%#v err=%v", matched, err)
-	}
-
-	conflicting := request
-	conflicting.ExplicitTitle = "Different title"
-	if _, err := store.GetMatchingInitialThreadCreateOperation(ctx, conflicting); err == nil || !strings.Contains(err.Error(), "conflicts") {
-		t.Fatalf("conflicting match error=%v", err)
 	}
 }
 
-func TestThreadCreateOperationRejectsDamagedPendingSnapshot(t *testing.T) {
-	for _, testCase := range []struct {
-		name       string
-		updateSQL  string
-		updateArgs []any
-		want       string
-	}{
-		{name: "empty", updateSQL: `UPDATE ai_thread_create_operations SET snapshot_json = '' WHERE operation_id = ?`, want: "snapshot is empty"},
-		{name: "unknown field", updateSQL: `UPDATE ai_thread_create_operations SET snapshot_json = json_set(snapshot_json, '$.unknown', 1) WHERE operation_id = ?`, want: "unknown field"},
-		{name: "identity mismatch", updateSQL: `UPDATE ai_thread_create_operations SET snapshot_json = replace(snapshot_json, 'thread_damage', 'thread_other') WHERE operation_id = ?`, want: "identity mismatch"},
-		{name: "fingerprint mismatch", updateSQL: `UPDATE ai_thread_create_operations SET request_fingerprint = 'damaged' WHERE operation_id = ?`, want: "fingerprint mismatch"},
-	} {
-		t.Run(testCase.name, func(t *testing.T) {
-			store := openStoreForTest(t)
-			ctx := context.Background()
-			operation, err := store.PrepareThreadCreateOperation(ctx, PrepareThreadCreateRequest{
-				Settings:    ThreadSettings{ThreadID: "thread_damage", EndpointID: "env_damage", PermissionType: "approval_required"},
-				CreatedAtMS: 100,
-			})
-			if err != nil {
-				t.Fatal(err)
-			}
-			args := append(append([]any(nil), testCase.updateArgs...), operation.OperationID)
-			if _, err := store.db.ExecContext(ctx, testCase.updateSQL, args...); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := store.GetThreadCreateOperation(ctx, operation.OperationID); err == nil || !strings.Contains(err.Error(), testCase.want) {
-				t.Fatalf("GetThreadCreateOperation error=%v, want %q", err, testCase.want)
-			}
-			if _, err := store.CommitThreadCreateSettings(ctx, operation.OperationID); err == nil || !strings.Contains(err.Error(), testCase.want) {
-				t.Fatalf("CommitThreadCreateSettings error=%v, want %q", err, testCase.want)
-			}
-		})
+func TestThreadCreateOperationRejectsDamagedSnapshot(t *testing.T) {
+	store := openStoreForTest(t)
+	op, err := store.PrepareThreadCreateOperation(t.Context(), createRequestForTest("create_damage", "env_damage", "Damage"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.ExecContext(t.Context(), `UPDATE ai_thread_create_operations SET request_fingerprint = 'damaged' WHERE operation_id = ?`, op.OperationID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.GetThreadCreateOperation(t.Context(), op.OperationID); err == nil || !strings.Contains(err.Error(), "fingerprint mismatch") {
+		t.Fatalf("damaged snapshot error=%v", err)
 	}
 }

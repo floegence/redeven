@@ -9,11 +9,14 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 
-	flconfig "github.com/floegence/floret/v2/config"
-	flprovider "github.com/floegence/floret/v2/provider"
-	flruntime "github.com/floegence/floret/v2/runtime"
+	flconfig "github.com/floegence/floret/v3/config"
+	"github.com/floegence/floret/v3/identity"
+	"github.com/floegence/floret/v3/observation"
+	flprovider "github.com/floegence/floret/v3/provider"
+	flruntime "github.com/floegence/floret/v3/runtime"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 	"github.com/floegence/redeven/internal/config"
 )
@@ -189,6 +192,7 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 		flruntime.WithAgentEventSink(floretEventSink{run: r}),
 		flruntime.WithAgentDynamicToolSurface(toolSurfaceProvider),
 		flruntime.WithAgentThreadTitleMode(flruntime.ThreadTitleModeProvider),
+		flruntime.WithAgentManualCompactions(r),
 		flruntime.WithAgentLoopLimits(flruntime.LoopLimits{NoProgressLimit: 2, DuplicateToolLimit: 3}),
 	)
 	if err != nil {
@@ -198,19 +202,18 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 	if err != nil {
 		return r.failRun("Failed to initialize Floret host", err)
 	}
-	if err := r.commitPermissionSnapshot(initialSurface.PermissionSnapshot); err != nil {
-		return r.failRun("Failed to persist permission snapshot", err)
-	}
 	var turnHost floretTurnHost = host
 	r.setActiveFloretHost(turnHost)
 	defer r.setActiveFloretHost(nil)
-	r.expectFloretRuntimeEventIdentity(r.id, r.threadID, r.turnID, true)
 	r.emitLifecyclePhase("executing", map[string]any{"engine": "floret"})
 	r.floretRunTurnStarted.Store(true)
-	result, err := turnHost.Run(ctx, flruntime.TurnRequest{
-		RunID:               flruntime.RunID(strings.TrimSpace(r.id)),
-		TurnID:              flruntime.TurnID(strings.TrimSpace(r.turnID)),
-		Input:               turnInput,
+	logicalRequestID, logicalRequestErr := r.floretTurnLogicalRequestID()
+	if logicalRequestErr != nil {
+		return r.failRun("Failed to prepare Floret turn request", logicalRequestErr)
+	}
+	startResult, err := turnHost.StartTurn(ctx, flruntime.StartTurnCommand{
+		LogicalRequestID:    logicalRequestID,
+		UserMessage:         turnInput,
 		SupplementalContext: contextProjection.Items,
 		Labels:              labels,
 		Completion:          completionPolicy,
@@ -221,10 +224,29 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 			MaxCostUSD:             req.Options.MaxCostUSD,
 			MaxLengthContinuations: 2,
 		},
-		Reasoning:         req.Options.ReasoningSelection,
-		ManualCompactions: r,
+		Reasoning: req.Options.ReasoningSelection,
 	})
-	authorityErr := validateFloretAuthorityRelease(r, result)
+	var snapshot flruntime.ThreadTurnSnapshot
+	var snapshotErr error
+	if startResult.TurnID != "" {
+		readCtx, readCancel := context.WithTimeout(context.Background(), r.persistTimeout())
+		snapshot, snapshotErr = turnHost.ReadTurn(readCtx, startResult.TurnID)
+		readCancel()
+	}
+	if startResult.RunID != "" || startResult.ThreadID != "" || startResult.TurnID != "" {
+		var bindErr error
+		identity := r.floretRuntimeEventIdentitySnapshot()
+		if r.awaitFloretAdmission.Load() && !identity.configured && startResult.Receipt.Replayed && startResult.Receipt.Committed {
+			bindErr = r.bindFloretCanonicalAdmissionReplay(logicalRequestID, startResult, snapshot, snapshotErr, turnInput)
+		} else {
+			bindErr = r.bindFloretCanonicalIdentity(string(startResult.RunID), string(startResult.ThreadID), string(startResult.TurnID))
+		}
+		if bindErr != nil {
+			r.rejectFloretContract("start_turn_identity", bindErr)
+		}
+	}
+	result := floretTurnResultFromSnapshot(startResult.ThreadID, snapshot)
+	authorityErr := validateFloretAuthorityRelease(r, startResult, snapshot, snapshotErr)
 	r.floretAuthorityBarrier.release(authorityErr)
 	authorityReleasePublished = true
 	if contractErr := r.floretContractError(); contractErr != nil {
@@ -237,7 +259,7 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 		if r.isDetached() {
 			return nil
 		}
-		return r.failRunWithCode(runErrorCodeFloretEngineFailed, "", authorityErr)
+		return r.failRunWithCode(runErrorCodeFloretEngineFailed, "", errors.Join(err, authorityErr))
 	}
 	projectionUnavailable := false
 	if result.Status != "" {
@@ -337,20 +359,126 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 	return r.projectFloretResult(ctx, result, req)
 }
 
-func validateFloretAuthorityRelease(r *run, result flruntime.TurnResult) error {
+func (r *run) bindFloretCanonicalAdmissionReplay(
+	logicalRequestID identity.LogicalRequestID,
+	result flruntime.StartTurnResult,
+	snapshot flruntime.ThreadTurnSnapshot,
+	snapshotErr error,
+	expected flruntime.TurnInput,
+) error {
+	if r == nil {
+		return errors.New("Floret admission replay owner is unavailable")
+	}
+	receipt := result.Receipt
+	if !receipt.Replayed || !receipt.Committed || receipt.Revision <= 0 ||
+		strings.TrimSpace(receipt.LogicalRequestID.String()) == "" || receipt.LogicalRequestID != logicalRequestID ||
+		receipt.ThreadID == "" || receipt.TurnID == "" || receipt.RunID == "" ||
+		receipt.ThreadID != result.ThreadID || receipt.TurnID != result.TurnID || receipt.RunID != result.RunID {
+		return errors.New("Floret committed replay receipt identity is invalid")
+	}
+	if result.ThreadID != identity.ThreadID(strings.TrimSpace(r.threadID)) {
+		return errors.New("Floret committed replay is bound to another thread")
+	}
+	if snapshotErr != nil {
+		return fmt.Errorf("read exact Floret turn for committed replay: %w", snapshotErr)
+	}
+	if err := snapshot.Validate(); err != nil {
+		return fmt.Errorf("validate exact Floret turn for committed replay: %w", err)
+	}
+	if snapshot.TurnID != result.TurnID || snapshot.RunID != result.RunID ||
+		snapshot.RetrySource != nil || snapshot.UserMessageOrigin != flruntime.ThreadUserMessageOriginUser ||
+		strings.TrimSpace(snapshot.UserEntryID) == "" {
+		return errors.New("Floret committed replay exact turn identity is invalid")
+	}
+	if snapshot.UserInput != expected.Text || !reflect.DeepEqual(snapshot.UserAttachments, expected.Attachments) ||
+		!reflect.DeepEqual(snapshot.UserReferences, expected.References) {
+		return errors.New("Floret committed replay command fingerprint evidence differs from the frozen command")
+	}
+	return r.bindFloretCanonicalAdmission(
+		string(result.RunID),
+		string(result.ThreadID),
+		string(result.TurnID),
+		snapshot.UserEntryID,
+	)
+}
+
+func (r *run) floretTurnLogicalRequestID() (identity.LogicalRequestID, error) {
+	if r == nil {
+		return "", errors.New("Floret logical request owner is unavailable")
+	}
+	r.muPendingCommand.Lock()
+	requestID := strings.TrimSpace(r.pendingCommandID)
+	r.muPendingCommand.Unlock()
+	if requestID == "" {
+		executionKey := strings.TrimSpace(r.executionKey)
+		if executionKey == "" {
+			return "", errors.New("Floret logical request owner is unavailable")
+		}
+		sum := sha256.Sum256([]byte("redeven-floret-turn-v1\x00" + executionKey))
+		requestID = "redeven-turn-" + hex.EncodeToString(sum[:16])
+	}
+	parsed, err := identity.ParseLogicalRequestID(requestID)
+	if err != nil {
+		return "", fmt.Errorf("invalid Floret logical request identity: %w", err)
+	}
+	return parsed, nil
+}
+
+func floretTurnResultFromSnapshot(threadID identity.ThreadID, snapshot flruntime.ThreadTurnSnapshot) flruntime.TurnResult {
+	if threadID == "" || snapshot.TurnID == "" || snapshot.RunID == "" {
+		return flruntime.TurnResult{}
+	}
+	projection := snapshot.Projection
+	result := flruntime.TurnResult{
+		ThreadID: threadID, TurnID: snapshot.TurnID, RunID: snapshot.RunID, Status: snapshot.Status, Failure: snapshot.Failure,
+		ProjectionAvailability: flruntime.TurnProjectionAvailabilityReady, Projection: &projection,
+		ActivityTimeline: observation.ActivityTimeline{
+			SchemaVersion: observation.ActivityTimelineSchemaVersion,
+			ThreadID:      threadID, TurnID: snapshot.TurnID, RunID: snapshot.RunID, TraceID: identity.TraceID(snapshot.RunID),
+			Summary: observation.ActivitySummary{Status: observation.ActivityStatusSuccess, Severity: observation.ActivitySeverityQuiet},
+		},
+	}
+	if snapshot.Status == flruntime.TurnStatusFailed {
+		result.ActivityTimeline.Summary.Status = observation.ActivityStatusError
+		result.ActivityTimeline.Summary.Severity = observation.ActivitySeverityError
+	} else if snapshot.Status == flruntime.TurnStatusCancelled || snapshot.Status == flruntime.TurnStatusInterrupted {
+		result.ActivityTimeline.Summary.Status = observation.ActivityStatusCanceled
+		result.ActivityTimeline.Summary.Severity = observation.ActivitySeverityWarning
+	}
+	for index := len(snapshot.ControlSignals) - 1; index >= 0; index-- {
+		signal := snapshot.ControlSignals[index]
+		if signal.Disposition != string(flruntime.SignalWaiting) && signal.Disposition != string(flruntime.SignalTerminal) {
+			continue
+		}
+		result.Signal = &flruntime.TurnSignal{
+			Disposition: flruntime.SignalDisposition(signal.Disposition), Name: signal.Name, CallID: signal.CallID,
+			Payload: cloneAnyMap(signal.Payload), OutputText: signal.Text, ArgsHash: signal.ArgsHash,
+		}
+		break
+	}
+	return result
+}
+
+func validateFloretAuthorityRelease(r *run, start flruntime.StartTurnResult, snapshot flruntime.ThreadTurnSnapshot, readErr error) error {
 	if r == nil {
 		return errors.New("Floret authority release run is unavailable")
 	}
-	if err := result.Validate(); err != nil {
-		return fmt.Errorf("Floret authority release result is invalid: %w", err)
+	if readErr != nil {
+		return fmt.Errorf("read exact Floret terminal turn: %w", readErr)
 	}
-	if strings.TrimSpace(string(result.ThreadID)) != strings.TrimSpace(r.threadID) ||
-		strings.TrimSpace(string(result.TurnID)) != strings.TrimSpace(r.turnID) ||
-		strings.TrimSpace(string(result.RunID)) != strings.TrimSpace(r.id) {
+	if strings.TrimSpace(string(start.ThreadID)) == "" || strings.TrimSpace(string(start.TurnID)) == "" || strings.TrimSpace(string(start.RunID)) == "" {
+		return errors.New("Floret StartTurn did not return complete canonical identity")
+	}
+	if err := snapshot.Validate(); err != nil {
+		return fmt.Errorf("Floret authority release snapshot is invalid: %w", err)
+	}
+	canonicalRunID, canonicalThreadID, canonicalTurnID := r.floretCanonicalIdentity()
+	if string(start.ThreadID) != canonicalThreadID || string(start.TurnID) != canonicalTurnID || string(start.RunID) != canonicalRunID ||
+		snapshot.TurnID != start.TurnID || snapshot.RunID != start.RunID {
 		return errors.New("Floret authority release identity does not match exact run")
 	}
-	if !result.Status.IsTerminal() {
-		return fmt.Errorf("Floret authority release status %q is not terminal", result.Status)
+	if !snapshot.Status.IsTerminal() {
+		return fmt.Errorf("Floret authority release status %q is not terminal", snapshot.Status)
 	}
 	return nil
 }

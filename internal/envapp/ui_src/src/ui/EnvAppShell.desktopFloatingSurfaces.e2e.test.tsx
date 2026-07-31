@@ -1106,8 +1106,8 @@ describe('EnvAppShell desktop floating surfaces', () => {
     desktopViewMode = 'activity';
     flowerLaunchTurnMock.mockRejectedValueOnce(flowerTurnAdmissionUncertainFailure(
       new Error('Admission response was lost.'),
-      'thread-uncertain-launcher',
-      'turn-uncertain-launcher',
+      'client-uncertain-launcher',
+      { thread_id: 'thread-uncertain-launcher', turn_id: 'turn-uncertain-launcher' },
     ));
     const host = document.createElement('div');
     document.body.appendChild(host);

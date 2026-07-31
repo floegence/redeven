@@ -5,7 +5,7 @@ import (
 	"errors"
 	"strings"
 
-	flruntime "github.com/floegence/floret/v2/runtime"
+	"github.com/floegence/floret/v3/identity"
 )
 
 type floretReadCapabilities struct {
@@ -21,7 +21,7 @@ func (c *floretReadCapabilities) openThread(ctx context.Context, threadID string
 	if threadID == "" {
 		return nil, errors.New("Floret thread read identity is incomplete")
 	}
-	return c.thread(ctxOrBackground(ctx), flruntime.ThreadID(threadID))
+	return c.thread(ctxOrBackground(ctx), identity.ThreadID(threadID))
 }
 
 func (c *floretReadCapabilities) openSubagent(ctx context.Context, parentThreadID string) (floretSubagentReadHost, error) {
@@ -32,7 +32,7 @@ func (c *floretReadCapabilities) openSubagent(ctx context.Context, parentThreadI
 	if parentThreadID == "" {
 		return nil, errors.New("Floret SubAgent read identity is incomplete")
 	}
-	return c.subagent(ctxOrBackground(ctx), flruntime.ThreadID(parentThreadID))
+	return c.subagent(ctxOrBackground(ctx), identity.ThreadID(parentThreadID))
 }
 
 type floretRuntimeCapabilityIssuer struct {
@@ -47,5 +47,5 @@ func (i *floretRuntimeCapabilityIssuer) bindThread(threadID string) (floretThrea
 	if threadID == "" {
 		return floretThreadRuntimeCapabilities{}, errors.New("Floret runtime authority identity is incomplete")
 	}
-	return i.bind(flruntime.ThreadID(threadID))
+	return i.bind(identity.ThreadID(threadID))
 }

@@ -1041,8 +1041,8 @@ function mapFlowerQueuedTurns(raw: unknown): FlowerThreadSnapshot['queued_turns'
   const turns = raw.map((value, index) => {
     const record = recordValue(value);
     if (!record) throw new Error(`Flower contract error: queued turn ${index} must be an object.`);
-    const turnID = trim(record.turn_id);
-    if (!turnID) throw new Error('Flower contract error: queued turn requires turn_id.');
+    const queueID = trim(record.queue_id);
+    if (!queueID) throw new Error('Flower contract error: queued turn requires queue_id.');
     const contextAction = recordValue(record.context_action);
     if (record.attachments !== undefined && !Array.isArray(record.attachments)) {
       throw new Error(`Flower contract error: queued turn ${index} attachments must be an array.`);
@@ -1079,7 +1079,7 @@ function mapFlowerQueuedTurns(raw: unknown): FlowerThreadSnapshot['queued_turns'
         })
       : undefined;
     return {
-      turn_id: turnID,
+      queue_id: queueID,
       prompt: trim(record.text),
       created_at_ms: unixMs(record.created_at_unix_ms, 'queued_turn.created_at_unix_ms'),
       ...(attachments && attachments.length > 0 ? { attachments } : {}),

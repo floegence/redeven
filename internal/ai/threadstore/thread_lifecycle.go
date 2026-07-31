@@ -19,7 +19,7 @@ func deleteThreadScopedRowsTx(ctx context.Context, tx *sql.Tx, endpointID string
 		query string
 		args  []any
 	}{
-		{`DELETE FROM ai_upload_staging_scopes WHERE endpoint_id = ? AND thread_id = ?`, []any{endpointID, threadID}},
+		{`DELETE FROM ai_upload_staging_scopes WHERE endpoint_id = ? AND target_id = ?`, []any{endpointID, threadID}},
 		{`DELETE FROM ai_queued_turns WHERE endpoint_id = ? AND thread_id = ?`, []any{endpointID, threadID}},
 		{`DELETE FROM ai_flower_thread_routing WHERE endpoint_id = ? AND thread_id = ?`, []any{endpointID, threadID}},
 		{`DELETE FROM ai_subagent_publication_operations WHERE endpoint_id = ? AND (parent_thread_id = ? OR child_thread_id = ?)`, []any{endpointID, threadID, threadID}},

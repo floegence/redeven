@@ -13,7 +13,7 @@ import (
 
 	anthropic "github.com/anthropics/anthropic-sdk-go"
 	aoption "github.com/anthropics/anthropic-sdk-go/option"
-	"github.com/floegence/floret/v2/observation"
+	"github.com/floegence/floret/v3/observation"
 	"github.com/floegence/redeven/internal/config"
 	openai "github.com/openai/openai-go"
 	ooption "github.com/openai/openai-go/option"

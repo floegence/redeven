@@ -33,7 +33,9 @@ func (s *Service) openFloretMaintenanceHost(ctx context.Context, threadID string
 	}
 	return floretMaintenanceTestFacade{
 		floretThreadReadHost: read,
-		delete:               func(ctx context.Context) error { return s.threadDeleteFloret.delete(ctx, threadID) },
+		delete: func(ctx context.Context) error {
+			return s.threadDeleteFloret.delete(ctx, "test-delete-"+threadID, threadID)
+		},
 	}, nil
 }
 

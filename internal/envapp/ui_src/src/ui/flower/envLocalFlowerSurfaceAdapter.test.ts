@@ -45,11 +45,11 @@ function errorResponse(code: string, data: unknown): Response {
 
 const DESKTOP_MODEL_ID = `desktop:model_${'a'.repeat(64)}`;
 
-function stagingScope(threadID: string): FlowerAttachmentStagingScope {
+function stagingScope(targetID: string): FlowerAttachmentStagingScope {
   return {
-    staging_scope_id: `staging_${threadID}`,
-    thread_id: threadID,
-    capability: `secret_${threadID}`,
+    staging_scope_id: `staging_${targetID}`,
+    target_id: targetID,
+    capability: `secret_${targetID}`,
     expires_at_unix_ms: 10_000,
   };
 }
@@ -113,7 +113,7 @@ describe('Env local Flower surface adapter', () => {
 					text: async () => JSON.stringify({
 						data: {
 							staging_scope_id: 'staging_thread-staged',
-							thread_id: 'thread-staged',
+							target_id: 'thread-staged',
 							expires_at_unix_ms: 123_456,
 						},
 					}),
@@ -138,14 +138,14 @@ describe('Env local Flower surface adapter', () => {
 		const scope = await adapter.createAttachmentStagingScope?.('thread-staged');
 		expect(scope).toEqual({
 			staging_scope_id: 'staging_thread-staged',
-			thread_id: 'thread-staged',
+			target_id: 'thread-staged',
 			capability: 'secret-from-response-header',
 			expires_at_unix_ms: 123_456,
 		});
 		await adapter.releaseAttachmentStagingScope?.(scope!);
 
 		const createBody = String(fetchMock.mock.calls[0]?.[1]?.body);
-		expect(JSON.parse(createBody)).toEqual({ thread_id: 'thread-staged' });
+		expect(JSON.parse(createBody)).toEqual({ target_id: 'thread-staged' });
 		expect(createBody).not.toContain('secret-from-response-header');
 		const releaseURL = String(fetchMock.mock.calls[1]?.[0]);
 		const releaseInit = fetchMock.mock.calls[1]?.[1];
@@ -163,9 +163,9 @@ describe('Env local Flower surface adapter', () => {
 			status: 200,
 			headers: new Headers({ 'Upload-Staging-Capability': 'secret-from-response-header' }),
 			text: async () => JSON.stringify({
-				data: {
+			data: {
 					staging_scope_id: 'staging_wrong',
-					thread_id: 'thread-other',
+					target_id: 'thread-other',
 					expires_at_unix_ms: 123_456,
 				},
 			}),
@@ -984,6 +984,7 @@ describe('Env local Flower surface adapter', () => {
     });
 
     await expect(adapter.launchTurn({
+      client_request_id: 'client_invalid_context',
       prompt: 'inspect env',
       thread_id: 'thread_1',
       context_action: {
@@ -1012,8 +1013,7 @@ describe('Env local Flower surface adapter', () => {
       if (url === '/_redeven_proxy/api/ai/threads/thread_upload/turns' && init?.method === 'POST') {
         turnBodies.push(JSON.parse(String(init.body)));
         turnHeaders.push(init.headers ?? {});
-        const body = turnBodies[0] as { input: { turn_id: string } };
-        return jsonResponse({ run_id: 'run_upload', turn_id: body.input.turn_id, kind: 'start' });
+        return jsonResponse({ run_id: 'run_upload', turn_id: 'turn_upload', kind: 'start' });
       }
       throw new Error(`unexpected fetch: ${url}`);
     });
@@ -1049,6 +1049,7 @@ describe('Env local Flower surface adapter', () => {
     };
 
     await adapter.launchTurn({
+      client_request_id: 'client_upload',
       thread_id: 'thread_upload',
       staging_scope: stagingScope('thread_upload'),
       prompt: 'review notes',
@@ -1083,8 +1084,7 @@ describe('Env local Flower surface adapter', () => {
         });
       }
       if (url === '/_redeven_proxy/api/ai/threads/thread_upload/turns' && init?.method === 'POST') {
-        const body = JSON.parse(String(init.body)) as { input: { turn_id: string } };
-        return jsonResponse({ run_id: 'run_upload', turn_id: body.input.turn_id, kind: 'start' });
+        return jsonResponse({ run_id: 'run_upload', turn_id: 'turn_upload', kind: 'start' });
       }
       throw new Error(`unexpected fetch: ${url}`);
     });
@@ -1094,12 +1094,14 @@ describe('Env local Flower surface adapter', () => {
       rpc: { ai: { subscribeThread: vi.fn(async () => ({ runId: '' })) } } as any,
     });
     await expect(adapter.launchTurn({
+      client_request_id: 'client_upload',
       thread_id: 'thread_upload',
       staging_scope: stagingScope('thread_upload'),
       prompt: '',
       attachment_ids: ['upl_notes'],
     })).resolves.toMatchObject({ thread_id: 'thread_upload', run_id: 'run_upload' });
     await expect(adapter.launchTurn({
+      client_request_id: 'client_empty',
       thread_id: 'thread_upload',
       prompt: '',
     })).rejects.toThrow();
@@ -1127,10 +1129,9 @@ describe('Env local Flower surface adapter', () => {
       if (url === '/_redeven_proxy/api/ai/models') {
         return jsonResponse({ current_model: 'default/gpt-4.1' });
       }
-      if (url === '/_redeven_proxy/api/ai/threads/thread_reference/turns' && init?.method === 'POST') {
+      if (url === '/_redeven_proxy/api/ai/turns' && init?.method === 'POST') {
         rawBodies.push(String(init.body));
-        const body = JSON.parse(String(init.body)) as { input: { turn_id: string } };
-        return jsonResponse({ run_id: 'run_reference', turn_id: body.input.turn_id, kind: 'start' });
+        return jsonResponse({ client_request_id: 'client_reference', thread_id: 'thread_reference', run_id: 'run_reference', turn_id: 'turn_reference', kind: 'start' });
       }
       throw new Error(`unexpected fetch: ${url}`);
     });
@@ -1151,7 +1152,8 @@ describe('Env local Flower surface adapter', () => {
     } as const;
 
     await expect(adapter.launchTurn({
-      staging_scope: stagingScope('thread_reference'),
+      client_request_id: 'client_reference',
+      staging_scope: stagingScope('client_reference'),
       prompt: '',
       context_action: contextAction,
     })).resolves.toMatchObject({
@@ -1162,9 +1164,9 @@ describe('Env local Flower surface adapter', () => {
     expect(rawBodies).toHaveLength(1);
     const [turnBody] = rawBodies.map((body) => JSON.parse(body) as Record<string, unknown>);
     expect(turnBody).toMatchObject({
-      thread_id: 'thread_reference',
-      staging_scope_id: 'staging_thread_reference',
+      staging_scope_id: 'staging_client_reference',
       create: {
+        client_request_id: 'client_reference',
         model_id: 'default/gpt-4.1',
         permission_type: 'approval_required',
       },
@@ -1211,9 +1213,9 @@ describe('Env local Flower surface adapter', () => {
       if (url === '/_redeven_proxy/api/ai/models') {
         return jsonResponse({ current_model: 'default/gpt-5.4' });
       }
-      if (url === '/_redeven_proxy/api/ai/threads/thread_reasoning/turns' && init?.method === 'POST') {
+      if (url === '/_redeven_proxy/api/ai/turns' && init?.method === 'POST') {
         turnBodies.push(JSON.parse(String(init.body)));
-        return jsonResponse({ run_id: 'run_reasoning', turn_id: 'client_reasoning-message', kind: 'start' });
+        return jsonResponse({ client_request_id: 'client_reasoning', thread_id: 'thread_reasoning', run_id: 'run_reasoning', turn_id: 'turn_reasoning', kind: 'start' });
       }
       throw new Error(`unexpected fetch: ${url}`);
     });
@@ -1229,24 +1231,25 @@ describe('Env local Flower surface adapter', () => {
     });
 
     const receipt = await adapter.launchTurn({
-      turn_id: 'client_reasoning-message',
-      staging_scope: stagingScope('thread_reasoning'),
+      client_request_id: 'client_reasoning',
+      staging_scope: stagingScope('client_reasoning'),
       prompt: 'reason about this',
       reasoning_selection: { level: 'high' },
     });
 
     expect(receipt.thread_id).toBe('thread_reasoning');
-    expect(receipt.turn_id).toBe('client_reasoning-message');
+    expect(receipt.kind).toBe('start');
+    if (receipt.kind !== 'start') throw new Error('expected start receipt');
+    expect(receipt.turn_id).toBe('turn_reasoning');
     expect(turnBodies[0]).toMatchObject({
-      thread_id: 'thread_reasoning',
-      staging_scope_id: 'staging_thread_reasoning',
+      staging_scope_id: 'staging_client_reasoning',
       create: {
+        client_request_id: 'client_reasoning',
         model_id: 'default/gpt-5.4',
         reasoning_selection: { level: 'high' },
       },
       model: 'default/gpt-5.4',
       input: {
-        turn_id: 'client_reasoning-message',
         text: 'reason about this',
         attachments: [],
       },
@@ -1257,7 +1260,7 @@ describe('Env local Flower surface adapter', () => {
     expect(subscribeThread).toHaveBeenCalledWith({ threadId: 'thread_reasoning' });
   });
 
-  it('rejects a receipt that changes the client-proposed turn identity', async () => {
+  it('rejects a receipt that changes the echoed client request identity', async () => {
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/settings') {
         return jsonResponse({
@@ -1275,7 +1278,7 @@ describe('Env local Flower surface adapter', () => {
         return jsonResponse({ current_model: 'default/gpt-5.4' });
       }
       if (url === '/_redeven_proxy/api/ai/threads/thread_existing/turns' && init?.method === 'POST') {
-        return jsonResponse({ run_id: 'run_other', turn_id: 'turn_other', kind: 'start' });
+        return jsonResponse({ client_request_id: 'client_other', run_id: 'run_other', turn_id: 'turn_other', kind: 'start' });
       }
       throw new Error(`unexpected fetch: ${url}`);
     });
@@ -1290,12 +1293,12 @@ describe('Env local Flower surface adapter', () => {
     });
 
     await expect(adapter.launchTurn({
+      client_request_id: 'client_existing',
       thread_id: 'thread_existing',
-      turn_id: 'turn_client',
       prompt: 'send once',
     })).rejects.toMatchObject({
-      message: 'Flower turn admission returned a different turn identity.',
-      uncertain_admission: { thread_id: 'thread_existing', turn_id: 'turn_client' },
+      message: 'Flower turn admission returned an invalid receipt.',
+      uncertain_admission: { client_request_id: 'client_existing', thread_id: 'thread_existing' },
     });
   });
 
@@ -1340,36 +1343,40 @@ describe('Env local Flower surface adapter', () => {
     });
 
     const definiteFailure = await createAdapter().launchTurn({
+      client_request_id: 'client_definite',
       thread_id: 'thread_existing',
-      turn_id: 'turn_definite', prompt: 'send once',
+      prompt: 'send once',
     }).catch((error: unknown) => error);
     expect(definiteFailure).toMatchObject({ name: 'LocalApiError', code: 'turn_rejected' });
     expect(definiteFailure).not.toHaveProperty('uncertain_admission');
 
     turnOutcome = 'transport';
     await expect(createAdapter().launchTurn({
+      client_request_id: 'client_transport',
       thread_id: 'thread_existing',
-      turn_id: 'turn_transport', prompt: 'send once',
+      prompt: 'send once',
     })).rejects.toMatchObject({
-      uncertain_admission: { thread_id: 'thread_existing', turn_id: 'turn_transport' },
+      uncertain_admission: { client_request_id: 'client_transport', thread_id: 'thread_existing' },
     });
 
     turnOutcome = 'malformed';
     await expect(createAdapter().launchTurn({
+      client_request_id: 'client_malformed',
       thread_id: 'thread_existing',
-      turn_id: 'turn_malformed', prompt: 'send once',
+      prompt: 'send once',
     })).rejects.toMatchObject({
       message: 'Flower turn admission returned an invalid receipt.',
-      uncertain_admission: { thread_id: 'thread_existing', turn_id: 'turn_malformed' },
+      uncertain_admission: { client_request_id: 'client_malformed', thread_id: 'thread_existing' },
     });
 
     turnOutcome = 'invalid_json';
     await expect(createAdapter().launchTurn({
+      client_request_id: 'client_invalid_json',
       thread_id: 'thread_existing',
-      turn_id: 'turn_invalid_json', prompt: 'send once',
+      prompt: 'send once',
     })).rejects.toMatchObject({
       code: 'INVALID_JSON_RESPONSE',
-      uncertain_admission: { thread_id: 'thread_existing', turn_id: 'turn_invalid_json' },
+      uncertain_admission: { client_request_id: 'client_invalid_json', thread_id: 'thread_existing' },
     });
   });
 
@@ -1396,7 +1403,7 @@ describe('Env local Flower surface adapter', () => {
       if (url === '/_redeven_proxy/api/ai/threads/thread_existing/turns' && init?.method === 'POST') {
         const body = JSON.parse(String(init.body));
         turnBodies.push(body);
-        return jsonResponse({ run_id: 'run_existing', turn_id: body.input.turn_id, kind: 'start' });
+        return jsonResponse({ run_id: 'run_existing', turn_id: 'turn_existing', kind: 'start' });
       }
       throw new Error(`unexpected fetch: ${url}`);
     });
@@ -1411,6 +1418,7 @@ describe('Env local Flower surface adapter', () => {
     });
 
     await adapter.launchTurn({
+      client_request_id: 'client_existing',
       thread_id: 'thread_existing',
       prompt: 'continue existing thread',
     });

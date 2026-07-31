@@ -28,7 +28,14 @@ The current startup composition opens the Code App registry, port-forward
 registry, thread read state, Notes, Workbench layout, and release-trust state
 before returning the product service. The AI product threadstore opens inside
 the isolated AI readiness generation, so its failure blocks Agent surfaces
-without preventing unrelated Code App capabilities from starting. Their individual migration tests
+without preventing unrelated Code App capabilities from starting. Its current
+`ai_threadstore_product_v1` version 1 is a one-time user-approved pre-launch
+baseline with no historical migration paths: missing or empty storage initializes
+directly, the exact current reviewed shape reopens, and every prior, unknown,
+future, or drifted shape is rejected read-only. After this baseline is
+distributed, all later versions must retain the same kind and add contiguous
+automatic migrations. Other product stores retain their existing supported
+migration histories. Their individual migration tests
 remain responsible for historical shape validation and preservation of their
 domain records. The shared engine rejects incomplete migration chains,
 unsupported old versions, future versions, malformed metadata, wrong database
@@ -40,19 +47,17 @@ Every schema change must add the next explicit version step and tests for the
 new upgrade edge, rollback, drift, future-version rejection, and user-data
 preservation. The repository-level SQLite opening inventory makes any new
 physical database entrypoint an explicit ownership review: production
-Redeven-owned stores use the shared migration engine, while the two reviewed
-direct openings are limited to threadstore migration preflight and in-memory
-canonical-schema verification.
+Redeven-owned stores use the shared migration engine, while reviewed direct
+openings are limited to the threadstore existing-only, read-only full-schema
+gate and in-memory canonical-schema verification.
 
 ## Upstream-owned schemas
 
-Floret owns Agent journal storage and its schema lifecycle. Redeven supplies a
-path through the published v2 `storage.SQLite` source. Startup first opens the
-exact v2 backend; only `ErrMigrationRequired` permits the explicit
-`storage.MigrateV2` operation, after which Redeven reopens the backend to verify
-the committed cutover. Floret owns inspection, migration, verification, exact
-open, and conflict classification; Redeven does not query, patch, version, or
-migrate Floret records.
+Floret v3 owns Agent journal storage and its schema lifecycle. Redeven supplies
+the configured path to the published runtime startup API and consumes its typed
+readiness result. Floret owns inspection, migration, verification, exact open,
+and conflict classification; Redeven does not query, patch, version, migrate,
+or provide a compatibility fallback for Floret records.
 Redeven migrations may call public Floret maintenance APIs only when moving a
 Redeven-owned field across the ownership boundary, and must complete their
 product preflight before making such an upstream effect.
@@ -82,7 +87,7 @@ opens an upstream database directly to manufacture a cross-store transaction.
 - `redeven:internal/persistence/sqliteutil/repository_contract_test.go:14` - Locks the reviewed Redeven, direct, and Floret SQLite opening inventories.
 - `redeven:internal/codeapp/codeapp.go:156` - Opens product stores during service composition before returning the Code App service.
 - `redeven:okf/architecture/ai-readiness-lifecycle.md:1` - Defines isolated AI startup and generation failure behavior.
-- `redeven:internal/ai/threadstore/store.go:43` - Preflights and automatically migrates the Redeven-owned AI product database.
-- `redeven:internal/ai/floret_store_maintenance.go:77` - Probes, explicitly migrates when required, and verifies the Floret-owned backend only through published v2 storage APIs.
+- `redeven:internal/ai/threadstore/store.go` - Performs the existing-only read-only current-v1 gate before writable product open.
+- `redeven:internal/ai/floret_store_maintenance.go` - Adapts published Floret v3 startup and readiness contracts without direct storage access.
 - `redeven:scripts/check_floret_dependency_boundary.sh:118` - Rejects Redeven access to Floret-owned storage schemas and raw SQL.
 - `redeven:okf/ai/flower-storage-ownership-and-migrations.md:1` - Defines the specialized cross-owner Flower product migration.

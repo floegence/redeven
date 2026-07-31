@@ -85,7 +85,7 @@ func TestRedevenHostedRunAskUserWaitsAndResumesWithoutAuthorityCorruption(t *tes
 	}
 	start, err := svc.SendUserTurn(context.Background(), meta, SendUserTurnRequest{
 		ThreadID: thread.ThreadID, Model: "openai/gpt-5-mini",
-		Input:   RunInput{TurnID: "turn_ask_user_initial", Text: "Deploy the application."},
+		Input:   RunInput{Text: "Deploy the application."},
 		Options: RunOptions{PermissionType: config.AIPermissionFullAccess},
 	})
 	if err != nil || start.Kind != "start" {
@@ -106,7 +106,7 @@ func TestRedevenHostedRunAskUserWaitsAndResumesWithoutAuthorityCorruption(t *tes
 			PromptID: prompt.PromptID,
 			Answers:  map[string]RequestUserInputAnswer{"target": {Text: "production"}},
 		},
-		Input:   RunInput{TurnID: "turn_ask_user_response", Text: "production"},
+		Input:   RunInput{Text: "production"},
 		Options: RunOptions{PermissionType: config.AIPermissionFullAccess},
 	})
 	if err != nil || response.Kind != "start" || response.ConsumedWaitingPromptID != prompt.PromptID {

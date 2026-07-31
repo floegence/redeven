@@ -32,7 +32,7 @@ func TestSubAgentPublicationStorePreparesAndFinalizesAuditAtomically(t *testing.
 
 	ctx := context.Background()
 	store := openStoreForTest(t)
-	requestJSON := `{"publication_id":"publication_1","parent_thread_id":"thread_parent","parent_turn_id":"turn_parent","thread_id":"thread_child"}`
+	requestJSON := `{"logical_request_id":"publication_1","parent_thread_id":"thread_parent","parent_turn_id":"turn_parent"}`
 	requestHash := sha256.Sum256([]byte(requestJSON))
 	childJSON, childHash, childRegistry, childSchema, childPresentation := permissionSnapshotPayloadForTest(t, "psnap_child_publication", permissionsnapshot.PermissionApprovalRequired)
 	child := ChildPermissionSnapshotRecord{
@@ -43,11 +43,11 @@ func TestSubAgentPublicationStorePreparesAndFinalizesAuditAtomically(t *testing.
 	}
 	operation := SubAgentPublicationOperation{
 		PublicationID: "publication_1", EndpointID: "env_publication", ParentThreadID: "thread_parent", ParentTurnID: "turn_parent",
-		ParentRunID: "run_parent", SpawnToolCallID: "spawn_publication", ChildThreadID: "thread_child", ChildRunID: "run_child",
-		ChildSnapshotID: child.ChildSnapshotID, RequestJSON: requestJSON, RequestHash: hex.EncodeToString(requestHash[:]),
+		ParentRunID: "run_parent", ParentSnapshotID: child.ParentSnapshotID, SpawnToolCallID: "spawn_publication",
+		RequestJSON: requestJSON, RequestHash: hex.EncodeToString(requestHash[:]),
 		SessionMetaJSON: `{"endpoint_id":"env_publication"}`, ModelID: "provider/model", ReasoningSelectionJSON: `{}`, CreatedAtUnixMs: 100,
 	}
-	if err := store.PrepareSubAgentPublication(ctx, operation, child); err != nil {
+	if err := store.PrepareSubAgentPublication(ctx, operation); err != nil {
 		t.Fatalf("PrepareSubAgentPublication: %v", err)
 	}
 	pending, err := store.ListPendingSubAgentPublicationsForParent(ctx, operation.EndpointID, operation.ParentThreadID, 10)
@@ -57,8 +57,14 @@ func TestSubAgentPublicationStorePreparesAndFinalizesAuditAtomically(t *testing.
 	if len(pending) != 1 || pending[0].PublicationID != operation.PublicationID {
 		t.Fatalf("pending publications=%#v", pending)
 	}
-	if ok, err := store.FinalizeSubAgentPublication(ctx, operation.PublicationID, operation.ChildSnapshotID, operation.ChildThreadID, operation.ChildRunID, 200); err != nil || !ok {
-		t.Fatalf("FinalizeSubAgentPublication ok=%v err=%v", ok, err)
+	if pending[0].ChildThreadID != "" || pending[0].ChildRunID != "" || pending[0].ChildSnapshotID != "" {
+		t.Fatalf("pending publication preallocated child identity: %#v", pending[0])
+	}
+	if _, ok, err := store.GetChildPermissionSnapshotBySpawnToolCall(ctx, operation.EndpointID, operation.SpawnToolCallID); err != nil || ok {
+		t.Fatalf("pending publication child audit ok=%v err=%v, want absent", ok, err)
+	}
+	if ok, err := store.BindAndFinalizeSubAgentPublication(ctx, operation.PublicationID, child, 200); err != nil || !ok {
+		t.Fatalf("BindAndFinalizeSubAgentPublication ok=%v err=%v", ok, err)
 	}
 	committed, ok, err := store.GetSubAgentPublication(ctx, operation.PublicationID)
 	if err != nil || !ok {
@@ -67,25 +73,25 @@ func TestSubAgentPublicationStorePreparesAndFinalizesAuditAtomically(t *testing.
 	if committed.State != SubAgentPublicationCommitted || committed.RequestJSON != "" || committed.SessionMetaJSON != "" || committed.ModelID != "" || committed.ReasoningSelectionJSON != "" {
 		t.Fatalf("committed publication retained pending payload: %#v", committed)
 	}
-	if finalized, ok, err := store.GetFinalizedChildPermissionSnapshot(ctx, operation.EndpointID, operation.ChildThreadID, operation.ChildRunID); err != nil || !ok || finalized.ChildSnapshotID != operation.ChildSnapshotID {
+	if finalized, ok, err := store.GetFinalizedChildPermissionSnapshot(ctx, operation.EndpointID, child.ChildThreadID, child.ChildRunID); err != nil || !ok || finalized.ChildSnapshotID != child.ChildSnapshotID {
 		t.Fatalf("finalized audit=%#v ok=%v err=%v", finalized, ok, err)
 	}
-	if ok, err := store.FinalizeSubAgentPublication(ctx, operation.PublicationID, operation.ChildSnapshotID, operation.ChildThreadID, operation.ChildRunID, 300); err != nil || !ok {
-		t.Fatalf("idempotent finalize ok=%v err=%v", ok, err)
+	if ok, err := store.BindAndFinalizeSubAgentPublication(ctx, operation.PublicationID, child, 200); err != nil || !ok {
+		t.Fatalf("idempotent bind ok=%v err=%v", ok, err)
 	}
 	conflict := operation
 	conflict.RequestHash = strings.Repeat("0", 64)
-	if err := store.PrepareSubAgentPublication(ctx, conflict, child); err == nil {
+	if err := store.PrepareSubAgentPublication(ctx, conflict); err == nil {
 		t.Fatal("PrepareSubAgentPublication accepted conflicting committed identity")
 	}
 }
 
-func TestSubAgentPublicationStoreMarksFailedSpawnTerminal(t *testing.T) {
+func TestSubAgentPublicationStoreKeepsUnboundSpawnRecoverable(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	store := openStoreForTest(t)
-	requestJSON := `{"publication_id":"publication_failed","parent_thread_id":"thread_parent","parent_turn_id":"turn_parent","thread_id":"thread_child_failed"}`
+	requestJSON := `{"logical_request_id":"publication_failed","parent_thread_id":"thread_parent","parent_turn_id":"turn_parent"}`
 	requestHash := sha256.Sum256([]byte(requestJSON))
 	childJSON, childHash, childRegistry, childSchema, childPresentation := permissionSnapshotPayloadForTest(t, "psnap_child_failed", permissionsnapshot.PermissionApprovalRequired)
 	child := ChildPermissionSnapshotRecord{
@@ -96,39 +102,21 @@ func TestSubAgentPublicationStoreMarksFailedSpawnTerminal(t *testing.T) {
 	}
 	operation := SubAgentPublicationOperation{
 		PublicationID: "publication_failed", EndpointID: "env_publication", ParentThreadID: "thread_parent", ParentTurnID: "turn_parent",
-		ParentRunID: "run_parent", SpawnToolCallID: "spawn_failed", ChildThreadID: "thread_child_failed", ChildRunID: "run_child_failed",
-		ChildSnapshotID: child.ChildSnapshotID, RequestJSON: requestJSON, RequestHash: hex.EncodeToString(requestHash[:]),
+		ParentRunID: "run_parent", ParentSnapshotID: child.ParentSnapshotID, SpawnToolCallID: "spawn_failed",
+		RequestJSON: requestJSON, RequestHash: hex.EncodeToString(requestHash[:]),
 		SessionMetaJSON: `{"endpoint_id":"env_publication"}`, ModelID: "provider/model", ReasoningSelectionJSON: `{}`, CreatedAtUnixMs: 100,
 	}
-	if err := store.PrepareSubAgentPublication(ctx, operation, child); err != nil {
+	if err := store.PrepareSubAgentPublication(ctx, operation); err != nil {
 		t.Fatalf("PrepareSubAgentPublication: %v", err)
 	}
-	if ok, err := store.FailSubAgentPublication(ctx, operation.PublicationID, operation.ChildSnapshotID, operation.ChildThreadID, operation.ChildRunID, 200); err != nil || !ok {
-		t.Fatalf("FailSubAgentPublication ok=%v err=%v", ok, err)
+	if _, err := store.FailSubAgentPublication(ctx, operation.PublicationID, child.ChildSnapshotID, child.ChildThreadID, child.ChildRunID, 200); err == nil {
+		t.Fatal("FailSubAgentPublication accepted an unbound publication")
 	}
-	failed, ok, err := store.GetSubAgentPublication(ctx, operation.PublicationID)
-	if err != nil || !ok {
-		t.Fatalf("GetSubAgentPublication failed=%#v ok=%v err=%v", failed, ok, err)
+	if pending, err := store.ListPendingSubAgentPublications(ctx, 10); err != nil || len(pending) != 1 || pending[0].PublicationID != operation.PublicationID {
+		t.Fatalf("pending publications=%#v err=%v, want recoverable intent", pending, err)
 	}
-	if failed.State != SubAgentPublicationFailed || failed.FailedAtUnixMs != 200 || failed.CommittedAtUnixMs != 0 ||
-		failed.RequestJSON != "" || failed.SessionMetaJSON != "" || failed.ModelID != "" || failed.ReasoningSelectionJSON != "" {
-		t.Fatalf("failed publication retained replay state: %#v", failed)
-	}
-	aborted, ok, err := store.GetChildPermissionSnapshotBySpawnToolCall(ctx, operation.EndpointID, operation.SpawnToolCallID)
-	if err != nil || !ok {
-		t.Fatalf("GetChildPermissionSnapshotBySpawnToolCall aborted=%#v ok=%v err=%v", aborted, ok, err)
-	}
-	if aborted.State != "aborted" || aborted.FinalizedAtUnixMs != 0 {
-		t.Fatalf("failed publication permission audit=%#v, want aborted and never finalized", aborted)
-	}
-	if pending, err := store.ListPendingSubAgentPublications(ctx, 10); err != nil || len(pending) != 0 {
-		t.Fatalf("pending publications=%#v err=%v, want none", pending, err)
-	}
-	if ok, err := store.FailSubAgentPublication(ctx, operation.PublicationID, operation.ChildSnapshotID, operation.ChildThreadID, operation.ChildRunID, 300); err != nil || !ok {
-		t.Fatalf("idempotent FailSubAgentPublication ok=%v err=%v", ok, err)
-	}
-	if err := store.PrepareSubAgentPublication(ctx, operation, child); err == nil {
-		t.Fatal("PrepareSubAgentPublication retried a failed publication")
+	if err := store.PrepareSubAgentPublication(ctx, operation); err != nil {
+		t.Fatalf("idempotent PrepareSubAgentPublication: %v", err)
 	}
 }
 

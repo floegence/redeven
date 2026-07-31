@@ -28,11 +28,11 @@ The index bounds recursion depth, listed directories, entries per directory, tot
 
 ## Draft and admission
 
-The connection-local composer stores ordered file/directory chips with a product-local identity, host-derived label, and opaque normalized path. It is never written to Redeven, Floret, local storage, IndexedDB, or another connection. Removal of the legacy server draft and its schema-v7 migration boundary are defined by [Flower storage ownership and migrations](../ai/flower-storage-ownership-and-migrations.md).
+The connection-local composer stores ordered file/directory chips with a product-local identity, host-derived label, and opaque normalized path. It is never written to Redeven, Floret, local storage, IndexedDB, or another connection. The first-release product v1 baseline has no server draft, draft migration, or compatibility reader; [Flower storage ownership and migrations](../ai/flower-storage-ownership-and-migrations.md) defines that boundary.
 
-Send freezes the ordered references with the text, attachments, model, and proposed TurnID. It creates one schema-v2 Ask Flower action whose source surface is `flower_composer`; each context item contains exactly `kind=file_path`, `path`, and `is_directory`. Unknown envelope, target, source, presentation, execution-context, or item fields are invalid. The action never accepts a client-authored root or display label. Prepare, direct admission, queued creation, and queued replacement carry the same normalized JSON.
+Send freezes the ordered references with the text, attachments, model, and stable product request identity. It creates one strict Ask Flower action whose source surface is `flower_composer`; each context item contains exactly `kind=file_path`, `path`, and `is_directory`. Unknown envelope, target, source, presentation, execution-context, or item fields are invalid. The action never accepts a client-authored root, display label, TurnID, or RunID. Prepare, direct admission, queued creation, and queued replacement carry the same normalized JSON.
 
-The host freezes the editor value and strict context action under the exact TurnID before admission. Path, order, directory bit, action source, or JSON changes under the same TurnID reject the attempt without replacing the accepted command. After admission, the one-pass mapping defined by [AI tool runtime](../ai/ai-tool-runtime.md) gives Floret the canonical ordered `MessageReference` values and current-turn supplemental context.
+The host freezes the editor value and strict context action under the exact `client_request_id` or `queue_id` before admission. Path, order, directory bit, action source, or JSON changes under the same product identity reject the attempt without replacing the accepted command. After admission, the one-pass mapping defined by [AI tool runtime](../ai/ai-tool-runtime.md) gives Floret the canonical ordered `MessageReference` values and current-turn supplemental context.
 
 # Boundaries
 

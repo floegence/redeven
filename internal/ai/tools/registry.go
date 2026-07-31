@@ -394,7 +394,7 @@ var builtinDefinitions = map[string]Definition{
 		Mutating:         false,
 		RequiresApproval: false,
 		Presentation: withPresentationOptions(
-			presentation(ToolPresentationDelegation, "readonly", "structured", "delegation", "args", "result", "error"),
+			presentation(ToolPresentationDelegation, "readonly", "subagent", "delegation", "args", "result", "error"),
 			operation("subagents"),
 			labelFields("task_name", "action"),
 			callPayloadFields("action", "task_name", "task_description", "agent_type", "context_mode", "target", "thread_id", "ids", "interrupt", "limit", "running_only"),

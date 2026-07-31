@@ -18,8 +18,10 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/floegence/floret/v2/observation"
-	flruntime "github.com/floegence/floret/v2/runtime"
+	"github.com/floegence/floret/v3/identity"
+	"github.com/floegence/floret/v3/observation"
+	flruntime "github.com/floegence/floret/v3/runtime"
+	fltools "github.com/floegence/floret/v3/tools"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
@@ -48,6 +50,7 @@ type runOptions struct {
 	DesktopModelSource  *desktopModelSourceClient
 
 	RunID        string
+	ExecutionKey string
 	ChannelID    string
 	EndpointID   string
 	ThreadID     string
@@ -105,11 +108,12 @@ type run struct {
 	resolveWebSearchKey func(providerID string) (string, bool, error)
 	desktopModelSource  *desktopModelSourceClient
 
-	id                 string
+	id                 string // Floret canonical RunID; empty before durable admission.
+	executionKey       string
 	channelID          string
 	endpointID         string
 	threadID           string
-	turnID             string
+	turnID             string // Floret canonical TurnID; empty before durable admission.
 	userPublicID       string
 	messageID          string
 	settlementThreadID string
@@ -143,7 +147,9 @@ type run struct {
 	floretRunTurnStarted     atomic.Bool
 	floretPresentationReady  atomic.Bool
 	admissionOnce            sync.Once
-	admissionCh              chan userTurnAdmissionOutcome
+	admissionMu              sync.Mutex
+	admissionOutcome         userTurnAdmissionOutcome
+	admissionDone            chan struct{}
 	busyCount                atomic.Int32
 	runtimeToolCalls         atomic.Int64
 	runtimeTokens            atomic.Int64
@@ -191,6 +197,7 @@ type run struct {
 
 	muFloretProjection      sync.Mutex
 	floretProjectionOrdinal map[string]int64
+	muFloretIdentity        sync.Mutex
 	floretEventIdentity     floretRuntimeEventIdentity
 	muFloretContract        sync.Mutex
 	floretContractErr       error
@@ -248,6 +255,134 @@ type floretRuntimeEventIdentity struct {
 	turnID     string
 }
 
+func (r *run) floretCanonicalIdentity() (string, string, string) {
+	if r == nil {
+		return "", "", ""
+	}
+	r.muFloretIdentity.Lock()
+	defer r.muFloretIdentity.Unlock()
+	return r.floretEventIdentity.runID, r.floretEventIdentity.threadID, r.floretEventIdentity.turnID
+}
+
+func (r *run) canonicalRunTurnIdentity() (string, string) {
+	runID, _, turnID := r.floretCanonicalIdentity()
+	return runID, turnID
+}
+
+func (r *run) bindFloretCanonicalIdentity(runID, threadID, turnID string) error {
+	if r == nil {
+		return errors.New("Floret canonical identity owner is unavailable")
+	}
+	runID, threadID, turnID = strings.TrimSpace(runID), strings.TrimSpace(threadID), strings.TrimSpace(turnID)
+	if runID == "" || threadID == "" || turnID == "" || threadID != strings.TrimSpace(r.threadID) {
+		return errors.New("Floret canonical identity is incomplete or bound to another thread")
+	}
+	r.muFloretIdentity.Lock()
+	defer r.muFloretIdentity.Unlock()
+	identity := r.floretEventIdentity
+	if !identity.configured {
+		return errors.New("Floret canonical identity has not crossed the durable admission boundary")
+	}
+	if identity.runID != runID || identity.threadID != threadID || identity.turnID != turnID {
+		return errors.New("Floret canonical identity changed during execution")
+	}
+	return nil
+}
+
+func (r *run) observeFloretCanonicalIdentity(runID, threadID, turnID string) error {
+	if r == nil {
+		return errors.New("Floret canonical identity owner is unavailable")
+	}
+	runID, threadID, turnID = strings.TrimSpace(runID), strings.TrimSpace(threadID), strings.TrimSpace(turnID)
+	if runID == "" || threadID == "" || turnID == "" || threadID != strings.TrimSpace(r.threadID) {
+		return errors.New("Floret canonical identity is incomplete or bound to another thread")
+	}
+	r.muFloretIdentity.Lock()
+	defer r.muFloretIdentity.Unlock()
+	if r.floretEventIdentity.configured {
+		if r.floretEventIdentity.runID != runID || r.floretEventIdentity.threadID != threadID || r.floretEventIdentity.turnID != turnID {
+			return errors.New("Floret canonical identity changed during execution")
+		}
+		return nil
+	}
+	if r.awaitFloretAdmission.Load() {
+		return errors.New("Floret canonical identity must cross the durable admission boundary")
+	}
+	r.floretEventIdentity = floretRuntimeEventIdentity{configured: true, checkRunID: true, runID: runID, threadID: threadID, turnID: turnID}
+	r.id, r.turnID, r.messageID = runID, turnID, turnID
+	r.settlementRunID, r.settlementThreadID, r.settlementTurnID = runID, threadID, turnID
+	return nil
+}
+
+func (r *run) bindFloretCanonicalAdmission(runID, threadID, turnID, entryID string) error {
+	if r == nil {
+		return errors.New("Floret canonical admission owner is unavailable")
+	}
+	runID, threadID, turnID, entryID = strings.TrimSpace(runID), strings.TrimSpace(threadID), strings.TrimSpace(turnID), strings.TrimSpace(entryID)
+	if runID == "" || threadID == "" || turnID == "" || entryID == "" || threadID != strings.TrimSpace(r.threadID) {
+		return errors.New("Floret canonical admission identity is incomplete or bound to another thread")
+	}
+	r.muFloretIdentity.Lock()
+	identity := r.floretEventIdentity
+	r.muFloretIdentity.Unlock()
+	if identity.configured {
+		return r.bindFloretCanonicalIdentity(runID, threadID, turnID)
+	}
+	r.muPendingCommand.Lock()
+	commandID := strings.TrimSpace(r.pendingCommandID)
+	uploadIDs := append([]string(nil), r.canonicalAttachmentIDs...)
+	r.muPendingCommand.Unlock()
+	if commandID == "" {
+		if r.awaitFloretAdmission.Load() {
+			return errors.New("canonical user admission requires a pending command")
+		}
+		return r.observeFloretCanonicalIdentity(runID, threadID, turnID)
+	}
+	snapshot := r.currentPermissionSnapshot()
+	record, err := permissionSnapshotRecordForCanonicalOwner(snapshot, r.endpointID, threadID, runID, time.Now().UnixMilli())
+	if err != nil {
+		return err
+	}
+	ctx, cancel := persistContextForRun(r)
+	defer cancel()
+	_, _, err = r.product.bindCanonicalPendingAdmission(ctx, threadstore.PendingTurnAdmissionBinding{
+		QueueID: commandID, EndpointID: r.endpointID, ThreadID: threadID, LogicalRequestID: commandID,
+		TurnID: turnID, RunID: runID, EntryID: entryID, PermissionSnapshot: record, UploadIDs: uploadIDs,
+		AdmittedAtUnixMs: time.Now().UnixMilli(),
+	})
+	if err != nil {
+		return err
+	}
+	snapshot = permissionSnapshotWithOwnerIdentity(snapshot, r.endpointID, threadID, runID)
+	r.setPermissionState(snapshot.PermissionType, snapshot)
+	r.muFloretIdentity.Lock()
+	defer r.muFloretIdentity.Unlock()
+	if r.floretEventIdentity.configured {
+		if r.floretEventIdentity.runID != runID || r.floretEventIdentity.threadID != threadID || r.floretEventIdentity.turnID != turnID {
+			return errors.New("Floret canonical identity changed after durable admission")
+		}
+	} else {
+		r.floretEventIdentity = floretRuntimeEventIdentity{configured: true, checkRunID: true, runID: runID, threadID: threadID, turnID: turnID}
+		r.id = runID
+		r.turnID = turnID
+		r.messageID = turnID
+		r.settlementRunID, r.settlementThreadID, r.settlementTurnID = runID, threadID, turnID
+	}
+	r.muPendingCommand.Lock()
+	r.pendingCommandReconciled = true
+	r.muPendingCommand.Unlock()
+	return nil
+}
+
+func (r *run) floretRuntimeEventIdentitySnapshot() floretRuntimeEventIdentity {
+	if r == nil {
+		return floretRuntimeEventIdentity{}
+	}
+	r.muFloretIdentity.Lock()
+	defer r.muFloretIdentity.Unlock()
+	return r.floretEventIdentity
+}
+
 type canonicalMarkdownSource string
 
 const (
@@ -283,10 +418,9 @@ func newRun(opts runOptions) *run {
 	}
 
 	runID := strings.TrimSpace(opts.RunID)
-	if runID == "" {
-		if id, err := NewRunID(); err == nil {
-			runID = id
-		}
+	executionKey := strings.TrimSpace(opts.ExecutionKey)
+	if executionKey == "" {
+		executionKey = runID
 	}
 
 	agentHomeDir := strings.TrimSpace(opts.AgentHomeDir)
@@ -314,6 +448,7 @@ func newRun(opts runOptions) *run {
 		resolveWebSearchKey:         opts.ResolveWebSearchKey,
 		desktopModelSource:          opts.DesktopModelSource,
 		id:                          runID,
+		executionKey:                executionKey,
 		channelID:                   strings.TrimSpace(opts.ChannelID),
 		endpointID:                  strings.TrimSpace(opts.EndpointID),
 		threadID:                    strings.TrimSpace(opts.ThreadID),
@@ -339,7 +474,7 @@ func newRun(opts runOptions) *run {
 		doneCh:                      make(chan struct{}),
 		floretAuthorityBarrier:      newFloretAuthorityBarrier(),
 		executionAdmissions:         make(map[uint64]context.CancelCauseFunc),
-		admissionCh:                 make(chan userTurnAdmissionOutcome, 1),
+		admissionDone:               make(chan struct{}),
 		lifecycleMinEmitGap:         600 * time.Millisecond,
 		collectedWebSources:         make(map[string]SourceRef),
 		collectedWebSourceOrder:     make([]string, 0, 8),
@@ -620,6 +755,9 @@ func (r *run) beginExecutionAdmission(ctx context.Context) (context.Context, fun
 
 func (r *run) admitFloretProviderRequest(ctx context.Context) (context.Context, func(), error) {
 	if err := r.floretContractError(); err != nil {
+		return nil, nil, err
+	}
+	if err := r.ensureCanonicalPermissionSnapshotPersisted(ctx); err != nil {
 		return nil, nil, err
 	}
 	return r.beginExecutionAdmission(ctx)
@@ -1076,17 +1214,19 @@ func (r *run) setPendingTurnCommand(commandID string) {
 }
 
 func (r *run) completeUserTurnAdmission(err error) {
-	if r == nil || r.admissionCh == nil {
+	if r == nil || r.admissionDone == nil {
 		return
 	}
-	outcome := userTurnAdmissionOutcome{
-		TurnID: strings.TrimSpace(r.turnID),
-		RunID:  strings.TrimSpace(r.id),
-		err:    err,
+	canonicalRunID, _, canonicalTurnID := r.floretCanonicalIdentity()
+	outcome := userTurnAdmissionOutcome{TurnID: canonicalTurnID, RunID: canonicalRunID, err: err}
+	if err == nil && (outcome.TurnID == "" || outcome.RunID == "") {
+		outcome.err = errors.New("canonical admission identity is unavailable")
 	}
 	r.admissionOnce.Do(func() {
-		r.admissionCh <- outcome
-		close(r.admissionCh)
+		r.admissionMu.Lock()
+		r.admissionOutcome = outcome
+		r.admissionMu.Unlock()
+		close(r.admissionDone)
 	})
 }
 
@@ -1105,7 +1245,7 @@ func (r *run) completeUserTurnAdmissionAfterExecution(runErr error) {
 }
 
 func (r *run) waitForUserTurnAdmission(ctx context.Context) (admittedUserTurn, error) {
-	if r == nil || r.admissionCh == nil {
+	if r == nil || r.admissionDone == nil {
 		return admittedUserTurn{}, errors.New("run admission signal is unavailable")
 	}
 	if ctx == nil {
@@ -1114,69 +1254,18 @@ func (r *run) waitForUserTurnAdmission(ctx context.Context) (admittedUserTurn, e
 	select {
 	case <-ctx.Done():
 		return admittedUserTurn{}, ctx.Err()
-	case outcome, ok := <-r.admissionCh:
-		if !ok {
-			return admittedUserTurn{}, errors.New("run admission signal closed without an outcome")
-		}
+	case <-r.admissionDone:
+		r.admissionMu.Lock()
+		outcome := r.admissionOutcome
+		r.admissionMu.Unlock()
 		if outcome.err != nil {
 			return admittedUserTurn{}, outcome.err
 		}
-		if outcome.TurnID == "" || outcome.RunID == "" || outcome.TurnID != strings.TrimSpace(r.turnID) || outcome.RunID != strings.TrimSpace(r.id) {
+		canonicalRunID, _, canonicalTurnID := r.floretCanonicalIdentity()
+		if outcome.TurnID == "" || outcome.RunID == "" || outcome.TurnID != canonicalTurnID || outcome.RunID != canonicalRunID {
 			return admittedUserTurn{}, errors.New("run admission outcome identity mismatch")
 		}
 		return admittedUserTurn{TurnID: outcome.TurnID, RunID: outcome.RunID}, nil
-	}
-}
-
-func (r *run) commitPendingTurnCommandAdmission(verifyCanonicalTurn bool) error {
-	if r == nil {
-		return errors.New("run admission coordinator is unavailable")
-	}
-	r.muPendingCommand.Lock()
-	defer r.muPendingCommand.Unlock()
-	if r.pendingCommandReconciled {
-		return nil
-	}
-	if strings.TrimSpace(r.pendingCommandID) == "" {
-		if len(r.canonicalAttachmentIDs) != 0 {
-			return errors.New("attachment admission requires a pending command")
-		}
-		r.pendingCommandReconciled = true
-		return nil
-	}
-	if r.host.reconcilePendingTurnCommand == nil || r.host.commitPendingTurnCommandAdmission == nil || r.host.releasePendingTurnCommandAdmission == nil {
-		return errors.New("run admission coordinator is unavailable")
-	}
-	timeout := r.persistTimeout()
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	accepted := true
-	var err error
-	if verifyCanonicalTurn {
-		accepted, err = r.host.reconcilePendingTurnCommand(ctx, r.pendingCommandID, r.turnID, r.canonicalAttachmentIDs)
-	} else {
-		err = r.host.commitPendingTurnCommandAdmission(ctx, r.pendingCommandID, r.turnID, r.canonicalAttachmentIDs)
-	}
-	cancel()
-	if err != nil {
-		return err
-	}
-	if !accepted {
-		targetLane := threadstore.FollowupLaneDraft
-		timeout := r.persistTimeout()
-		releaseCtx, releaseCancel := context.WithTimeout(context.Background(), timeout)
-		err = r.host.releasePendingTurnCommandAdmission(releaseCtx, r.pendingCommandID, r.turnID, r.id, targetLane)
-		releaseCancel()
-		if err != nil {
-			return err
-		}
-	}
-	r.pendingCommandReconciled = true
-	return nil
-}
-
-func (r *run) reconcilePendingTurnCommand() {
-	if err := r.commitPendingTurnCommandAdmission(true); err != nil {
-		r.rejectFloretContract("turn_admission", err)
 	}
 }
 
@@ -2057,13 +2146,13 @@ type toolCallOutcome struct {
 	RecoveryAction string
 }
 
-type toolActivityUpdater func(activity *observation.ActivityPresentation, metadata map[string]any)
+type toolActivityUpdater func(activity *fltools.ActivityPresentation, metadata map[string]any)
 
 const (
 	toolCallStatusRunning = "running"
 )
 
-func toolStartActivityPresentation(toolName string, args map[string]any) *observation.ActivityPresentation {
+func toolStartActivityPresentation(toolName string, args map[string]any) *fltools.ActivityPresentation {
 	toolName = strings.TrimSpace(toolName)
 	activity := floretActivityForToolCall(toolName, args)
 	if activity == nil {
@@ -2071,32 +2160,22 @@ func toolStartActivityPresentation(toolName string, args map[string]any) *observ
 		if label == "" {
 			label = "tool"
 		}
-		activity = &observation.ActivityPresentation{
+		activity = &fltools.ActivityPresentation{
 			Label:    label,
-			Renderer: observation.ActivityRendererStructured,
-			Payload:  map[string]any{},
+			Renderer: fltools.ActivityRendererStructured,
+			Payload:  fltools.StructuredActivityPayload{},
 		}
 	}
 	activity = cloneActivityPresentation(activity)
 	if toolName == "terminal.exec" && strings.TrimSpace(anyToString(args["command"])) == "" {
 		activity.Label = toolName
 	}
-	if activity.Payload == nil {
-		activity.Payload = map[string]any{}
-	}
-	activity.Payload["status"] = toolCallStatusRunning
+	activity = fltools.FinalizeActivityPresentation(activity, toolCallStatusRunning)
 	return contractSafeActivityPresentation(activity)
 }
 
-func cloneActivityPresentation(in *observation.ActivityPresentation) *observation.ActivityPresentation {
-	if in == nil {
-		return nil
-	}
-	out := *in
-	out.Chips = append([]observation.ActivityChip(nil), in.Chips...)
-	out.TargetRefs = append([]observation.ActivityTargetRef(nil), in.TargetRefs...)
-	out.Payload = cloneAnyMap(in.Payload)
-	return &out
+func cloneActivityPresentation(in *fltools.ActivityPresentation) *fltools.ActivityPresentation {
+	return fltools.CloneActivityPresentation(in)
 }
 
 func (r *run) recordToolResultActivity(toolID string, toolName string, status string, result any, toolErr *aitools.ToolError, observedAt time.Time) {
@@ -4226,9 +4305,9 @@ func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.M
 		return outcome, aitools.ClassifyError(aitools.Invocation{ToolName: "terminal.exec", Args: args, WorkingDir: r.workingDir, AgentHomeDir: r.agentHomeDir}, err)
 	}
 	settlementTarget := flruntime.PendingToolSettlementTarget{
-		ThreadID:        flruntime.ThreadID(strings.TrimSpace(r.settlementThreadID)),
-		TurnID:          flruntime.TurnID(strings.TrimSpace(r.settlementTurnID)),
-		RunID:           flruntime.RunID(strings.TrimSpace(r.settlementRunID)),
+		ThreadID:        identity.ThreadID(strings.TrimSpace(r.settlementThreadID)),
+		TurnID:          identity.TurnID(strings.TrimSpace(r.settlementTurnID)),
+		RunID:           identity.RunID(strings.TrimSpace(r.settlementRunID)),
 		ToolCallID:      strings.TrimSpace(toolID),
 		ToolName:        "terminal.exec",
 		Handle:          processID,

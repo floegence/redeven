@@ -12,7 +12,8 @@ import (
 	"strings"
 	"time"
 
-	flruntime "github.com/floegence/floret/v2/runtime"
+	"github.com/floegence/floret/v3/identity"
+	flruntime "github.com/floegence/floret/v3/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -25,32 +26,6 @@ func NewQueuedTurnID() (string, error) {
 	return "qt_" + base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-func floretThreadContainsTurn(ctx context.Context, host floretThreadReadHost, threadID, turnID string) (bool, error) {
-	threadID = strings.TrimSpace(threadID)
-	turnID = strings.TrimSpace(turnID)
-	if host == nil || threadID == "" || turnID == "" {
-		return false, errors.New("invalid Floret exact turn read identity")
-	}
-	_, err := host.ReadThreadTurn(ctxOrBackground(ctx), flruntime.TurnID(turnID))
-	if errors.Is(err, flruntime.ErrTurnNotFound) {
-		return false, nil
-	}
-	return err == nil, err
-}
-
-func (s *Service) commitPendingTurnCommandAdmission(ctx context.Context, endpointID string, threadID string, commandID string, turnID string, uploadIDs []string) error {
-	if s == nil {
-		return errors.New("nil service")
-	}
-	s.mu.Lock()
-	db := s.threadsDB
-	s.mu.Unlock()
-	if db == nil {
-		return errors.New("threads store not ready")
-	}
-	return db.CommitPendingTurnAdmission(ctx, endpointID, threadID, commandID, turnID, uploadIDs, time.Now().UnixMilli())
-}
-
 func (s *Service) releasePendingTurnCommandAdmission(ctx context.Context, endpointID string, threadID string, commandID string, turnID string, runID string, targetLane string) error {
 	if s == nil {
 		return errors.New("nil service")
@@ -61,52 +36,17 @@ func (s *Service) releasePendingTurnCommandAdmission(ctx context.Context, endpoi
 	if db == nil {
 		return errors.New("threads store not ready")
 	}
-	return db.ReleasePendingTurnAdmission(ctx, endpointID, threadID, commandID, turnID, runID, targetLane)
+	return db.ReleasePendingTurnAdmission(ctx, endpointID, threadID, commandID, commandID, targetLane)
 }
 
-func (s *Service) reconcilePendingTurnCommand(ctx context.Context, endpointID string, threadID string, commandID string, turnID string, uploadIDs []string) (bool, error) {
-	if s == nil {
-		return false, errors.New("nil service")
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
-	commandID = strings.TrimSpace(commandID)
-	turnID = strings.TrimSpace(turnID)
-	if endpointID == "" || threadID == "" || commandID == "" || turnID == "" {
-		return false, errors.New("invalid pending turn command identity")
-	}
-	host, err := s.openFloretThreadReadHost(ctxOrBackground(ctx), threadID)
-	if err != nil {
-		return false, err
-	}
-	accepted, err := floretThreadContainsTurn(ctx, host, threadID, turnID)
-	if err != nil {
-		return false, err
-	}
-	if !accepted {
-		return false, nil
-	}
-	if err := s.commitPendingTurnCommandAdmission(ctx, endpointID, threadID, commandID, turnID, uploadIDs); err != nil {
-		return false, err
-	}
-	return true, nil
-}
-
-func (s *Service) reconcileCanonicalPendingTurnCommands(ctx context.Context, endpointID string, threadID string, db *threadstore.Store) error {
-	if s == nil {
-		return errors.New("nil service")
-	}
+func validatePendingTurnRecoveryState(ctx context.Context, endpointID string, threadID string, db *threadstore.Store, allowInFlight bool) error {
 	if db == nil {
-		return errors.New("threads store not ready")
+		return errors.New("pending turn recovery store is unavailable")
 	}
 	endpointID = strings.TrimSpace(endpointID)
 	threadID = strings.TrimSpace(threadID)
 	if endpointID == "" || threadID == "" {
-		return errors.New("invalid pending turn reconciliation identity")
-	}
-	host, err := s.openFloretThreadReadHost(ctxOrBackground(ctx), threadID)
-	if err != nil {
-		return err
+		return errors.New("invalid pending turn recovery identity")
 	}
 	var afterSortIndex int64
 	var afterQueueID string
@@ -119,68 +59,25 @@ func (s *Service) reconcileCanonicalPendingTurnCommands(ctx context.Context, end
 			return nil
 		}
 		for _, command := range commands {
-			turnID := strings.TrimSpace(command.TurnID)
-			if turnID == "" {
-				return fmt.Errorf("pending turn command %q has no turn identity", command.QueueID)
+			if strings.TrimSpace(command.TurnID) != "" || strings.TrimSpace(command.RunID) != "" {
+				return fmt.Errorf("pending turn command %q contains preallocated canonical identity", command.QueueID)
 			}
-			accepted, err := floretThreadContainsTurn(ctx, host, threadID, turnID)
-			if err != nil {
-				return err
-			}
-			if accepted {
-				if err := s.commitPendingTurnCommandAdmission(ctx, endpointID, threadID, command.QueueID, turnID, nil); err != nil {
-					return fmt.Errorf("settle admitted pending turn %q: %w", command.QueueID, err)
+			switch command.AdmissionState {
+			case threadstore.PendingTurnAdmissionReady:
+			case threadstore.PendingTurnAdmissionInFlight:
+				if !allowInFlight {
+					return fmt.Errorf("pending turn command %q admission is still in flight", command.QueueID)
 				}
-			}
-			afterSortIndex = command.SortIndex
-			afterQueueID = command.QueueID
-		}
-		if len(commands) < 500 {
-			return nil
-		}
-	}
-}
-
-func (s *Service) reconcileStartupPendingTurnCommands(ctx context.Context, endpointID string, threadID string, db *threadstore.Store) error {
-	if s == nil || db == nil {
-		return errors.New("pending turn startup reconciliation is unavailable")
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
-	if endpointID == "" || threadID == "" {
-		return errors.New("invalid pending turn startup reconciliation identity")
-	}
-	host, err := s.openFloretThreadReadHost(ctxOrBackground(ctx), threadID)
-	if err != nil {
-		return err
-	}
-	var afterSortIndex int64
-	var afterQueueID string
-	for {
-		commands, err := db.ListFollowupsByLaneAfter(ctx, endpointID, threadID, threadstore.FollowupLaneQueued, afterSortIndex, afterQueueID, 500)
-		if err != nil {
-			return err
-		}
-		if len(commands) == 0 {
-			return nil
-		}
-		for _, command := range commands {
-			turnID := strings.TrimSpace(command.TurnID)
-			if turnID == "" {
-				return fmt.Errorf("pending turn command %q has no turn identity", command.QueueID)
-			}
-			accepted, err := floretThreadContainsTurn(ctx, host, threadID, turnID)
-			if err != nil {
-				return err
-			}
-			if accepted {
-				if err := s.commitPendingTurnCommandAdmission(ctx, endpointID, threadID, command.QueueID, turnID, nil); err != nil {
-					return fmt.Errorf("settle admitted command %q turn %q: %w", command.QueueID, turnID, err)
+				// Re-entering Begin is intentionally idempotent for in-flight rows and
+				// validates both the durable receipt and the frozen command fingerprint.
+				receipt, err := db.BeginPendingTurnAdmission(ctxOrBackground(ctx), endpointID, threadID, command.QueueID, command.QueueID)
+				if err != nil || receipt.QueueID != command.QueueID || receipt.EndpointID != endpointID || receipt.ThreadID != threadID ||
+					receipt.LogicalRequestID != command.QueueID || receipt.Stage != threadstore.PendingTurnAdmissionStageInFlight ||
+					strings.TrimSpace(receipt.TurnID) != "" || strings.TrimSpace(receipt.RunID) != "" || strings.TrimSpace(receipt.EntryID) != "" {
+					return fmt.Errorf("in-flight pending turn command %q has invalid durable admission receipt", command.QueueID)
 				}
-			} else if command.AdmissionState == threadstore.PendingTurnAdmissionInFlight {
-				if err := s.releasePendingTurnCommandAdmission(ctx, endpointID, threadID, command.QueueID, turnID, command.RunID, threadstore.FollowupLaneQueued); err != nil {
-					return fmt.Errorf("release unadmitted command %q turn %q run %q: %w", command.QueueID, turnID, command.RunID, err)
-				}
+			default:
+				return fmt.Errorf("pending turn command %q has unsupported admission state %q", command.QueueID, command.AdmissionState)
 			}
 			afterSortIndex = command.SortIndex
 			afterQueueID = command.QueueID
@@ -364,7 +261,7 @@ func queuedTurnRecordToThreadView(rec threadstore.QueuedTurn, attachmentViews ..
 		}
 	}
 	view := QueuedTurnView{
-		TurnID:          strings.TrimSpace(rec.TurnID),
+		QueueID:         strings.TrimSpace(rec.QueueID),
 		Text:            strings.TrimSpace(rec.TextContent),
 		CreatedAtUnixMs: rec.CreatedAtUnixMs,
 	}
@@ -450,7 +347,6 @@ func queuedTurnRecordToRunStartRequest(rec threadstore.QueuedTurn, threadPermiss
 		ThreadID: strings.TrimSpace(rec.ThreadID),
 		Model:    strings.TrimSpace(rec.ModelID),
 		Input: RunInput{
-			TurnID:        strings.TrimSpace(rec.TurnID),
 			Text:          strings.TrimSpace(rec.TextContent),
 			Attachments:   attachments,
 			ContextAction: contextAction,
@@ -561,7 +457,7 @@ func (s *Service) canonicalFrozenTurnReceipt(ctx context.Context, meta *session.
 	if err != nil {
 		return nil, err
 	}
-	turn, err := host.ReadThreadTurn(ctxOrBackground(ctx), flruntime.TurnID(turnID))
+	turn, err := host.ReadThreadTurn(ctxOrBackground(ctx), identity.TurnID(turnID))
 	if errors.Is(err, flruntime.ErrTurnNotFound) {
 		return nil, nil
 	}
@@ -671,14 +567,8 @@ func (s *Service) enqueueQueuedTurn(ctx context.Context, meta *session.Meta, req
 	}
 	req.Model = resolvedModel.ID
 
-	turnID, err := normalizeOrCreateTurnID(req.Input.TurnID)
-	if err != nil {
-		return threadstore.QueuedTurn{}, 0, err
-	}
-	req.Input.TurnID = turnID
-	runID, err := NewRunID()
-	if err != nil {
-		return threadstore.QueuedTurn{}, 0, err
+	if strings.TrimSpace(req.Input.TurnID) != "" {
+		return threadstore.QueuedTurn{}, 0, errors.New("turn_id must be omitted before canonical admission")
 	}
 	owner, err := NewUploadOwner(meta.EndpointID, meta.UserPublicID, meta.ChannelID)
 	if err != nil {
@@ -690,7 +580,7 @@ func (s *Service) enqueueQueuedTurn(ctx context.Context, meta *session.Meta, req
 		if authorizeErr != nil {
 			return threadstore.QueuedTurn{}, 0, authorizeErr
 		}
-		if strings.TrimSpace(scope.ThreadID) != strings.TrimSpace(req.ThreadID) {
+		if strings.TrimSpace(scope.TargetID) != strings.TrimSpace(req.ThreadID) {
 			return threadstore.QueuedTurn{}, 0, errors.New("upload staging target changed")
 		}
 		stagingScope = &scope
@@ -729,8 +619,8 @@ func (s *Service) enqueueQueuedTurn(ctx context.Context, meta *session.Meta, req
 		ThreadID:              strings.TrimSpace(req.ThreadID),
 		ChannelID:             strings.TrimSpace(meta.ChannelID),
 		Lane:                  threadstore.FollowupLaneQueued,
-		TurnID:                turnID,
-		RunID:                 runID,
+		TurnID:                "",
+		RunID:                 "",
 		ModelID:               strings.TrimSpace(req.Model),
 		TextContent:           normalizedInput.Text,
 		AttachmentsJSON:       attachmentsJSON,

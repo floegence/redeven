@@ -98,7 +98,7 @@ func TestRunFloretHostedTurnPublishesCanonicalChineseTitleWhileMainProviderRuns(
 	var titleStatus string
 	var runStatus string
 	for time.Now().Before(deadline) {
-		snapshot, _, err := svc.readCanonicalThreadState(context.Background(), threadID)
+		snapshot, _, err := svc.readCanonicalThreadState(context.Background(), r.threadID)
 		if err != nil {
 			t.Fatalf("read canonical title: %v", err)
 		}

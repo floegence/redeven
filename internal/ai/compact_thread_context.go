@@ -9,8 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/floegence/floret/v2/observation"
-	flruntime "github.com/floegence/floret/v2/runtime"
+	"github.com/floegence/floret/v3/identity"
+	"github.com/floegence/floret/v3/observation"
+	flruntime "github.com/floegence/floret/v3/runtime"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
@@ -338,9 +339,13 @@ func (a *threadActor) handleCompactThreadContext(ctx context.Context, meta *sess
 		return CompactThreadContextResponse{}, ErrWaitingUserQueueConflict
 	}
 
-	activeRunID, activeRun := a.lookupActiveRun(endpointID, threadID)
+	_, activeRun := a.lookupActiveRun(endpointID, threadID)
+	activeRunID := ""
+	if activeRun != nil {
+		activeRunID, _ = activeRun.canonicalRunTurnIdentity()
+	}
 	activeRunRequestID := strings.TrimSpace(req.ActiveRunID)
-	if activeRunID != "" {
+	if activeRun != nil {
 		if activeRunRequestID != "" && activeRunRequestID != activeRunID {
 			return CompactThreadContextResponse{}, ErrRunChanged
 		}
@@ -608,10 +613,10 @@ func (s *Service) runIdleThreadCompaction(ctx context.Context, meta *session.Met
 	}
 	var compactionHost floretCompactionHost = host
 	r.expectFloretRuntimeEventIdentity("", threadID, "", false)
-	result, err := compactionHost.Compact(execCtx, flruntime.ThreadCompactionRequest{
-		RequestID: strings.TrimSpace(manual.RequestID),
-		Source:    strings.TrimSpace(manual.Source),
-		Labels:    labels,
+	result, err := compactionHost.Compact(execCtx, flruntime.CompactThreadCommand{
+		LogicalRequestID: identity.LogicalRequestID(strings.TrimSpace(manual.RequestID)),
+		Source:           strings.TrimSpace(manual.Source),
+		Labels:           labels,
 		Limits: flruntime.TurnLimits{
 			MaxToolCalls:           modelGatewayHardMaxToolCalls,
 			MaxLengthContinuations: 2,
@@ -622,7 +627,7 @@ func (s *Service) runIdleThreadCompaction(ctx context.Context, meta *session.Met
 		if validationErr := result.Validate(); validationErr != nil {
 			return validationErr
 		}
-		if result.ThreadID != flruntime.ThreadID(threadID) || strings.TrimSpace(result.RequestID) != strings.TrimSpace(manual.RequestID) {
+		if result.ThreadID != identity.ThreadID(threadID) || strings.TrimSpace(result.RequestID) != strings.TrimSpace(manual.RequestID) {
 			return errors.New("Floret compact thread result identity mismatch")
 		}
 	}

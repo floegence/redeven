@@ -267,7 +267,7 @@ func (s *Store) CreateFollowup(ctx context.Context, rec QueuedTurn) (QueuedTurn,
 	rec.SessionMetaJSON = strings.TrimSpace(rec.SessionMetaJSON)
 	rec.CreatedByUserPublicID = strings.TrimSpace(rec.CreatedByUserPublicID)
 	rec.CreatedByUserEmail = strings.TrimSpace(rec.CreatedByUserEmail)
-	if rec.QueueID == "" || rec.EndpointID == "" || rec.ThreadID == "" || rec.ChannelID == "" || rec.TurnID == "" || rec.RunID == "" {
+	if rec.QueueID == "" || rec.EndpointID == "" || rec.ThreadID == "" || rec.ChannelID == "" || rec.TurnID != "" || rec.RunID != "" {
 		return QueuedTurn{}, 0, 0, errors.New("invalid request")
 	}
 	if rec.AttachmentsJSON == "" {
@@ -322,9 +322,9 @@ WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ?
 	return nil
 }
 
-func (s *Store) BeginPendingTurnAdmission(ctx context.Context, endpointID string, threadID string, queueID string, turnID string, runID string) error {
+func (s *Store) BeginPendingTurnAdmission(ctx context.Context, endpointID string, threadID string, queueID string, logicalRequestID string) (PendingTurnAdmissionReceipt, error) {
 	if s == nil || s.db == nil {
-		return errors.New("store not initialized")
+		return PendingTurnAdmissionReceipt{}, errors.New("store not initialized")
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -332,70 +332,79 @@ func (s *Store) BeginPendingTurnAdmission(ctx context.Context, endpointID string
 	endpointID = strings.TrimSpace(endpointID)
 	threadID = strings.TrimSpace(threadID)
 	queueID = strings.TrimSpace(queueID)
-	turnID = strings.TrimSpace(turnID)
-	runID = strings.TrimSpace(runID)
-	if endpointID == "" || threadID == "" || queueID == "" || turnID == "" || runID == "" {
-		return errors.New("invalid pending turn admission identity")
+	logicalRequestID = strings.TrimSpace(logicalRequestID)
+	if endpointID == "" || threadID == "" || queueID == "" || logicalRequestID == "" {
+		return PendingTurnAdmissionReceipt{}, errors.New("invalid pending turn admission identity")
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return PendingTurnAdmissionReceipt{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
 	if err := requireThreadWritableTx(ctx, tx, endpointID, threadID); err != nil {
-		return err
+		return PendingTurnAdmissionReceipt{}, err
 	}
-	var storedTurnID, storedRunID, lane, admissionState string
-	var sortIndex int64
-	err = tx.QueryRowContext(ctx, `
-SELECT turn_id, run_id, lane, admission_state, sort_index
-FROM ai_queued_turns
-WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ?
-`, endpointID, threadID, queueID).Scan(&storedTurnID, &storedRunID, &lane, &admissionState, &sortIndex)
+	queued, err := getQueuedTurnTx(ctx, tx, endpointID, threadID, queueID)
 	if err != nil {
-		return err
+		return PendingTurnAdmissionReceipt{}, err
 	}
-	lane, err = parseFollowupLane(lane)
+	if queued.TurnID != "" || queued.RunID != "" {
+		return PendingTurnAdmissionReceipt{}, errors.New("pending turn command contains a preallocated canonical identity")
+	}
+	fingerprint, err := queuedTurnCommandFingerprint(queued)
 	if err != nil {
-		return err
+		return PendingTurnAdmissionReceipt{}, err
 	}
-	admissionState, err = parsePendingTurnAdmissionState(admissionState)
-	if err != nil {
-		return err
-	}
-	if strings.TrimSpace(storedTurnID) != turnID || strings.TrimSpace(storedRunID) != runID {
-		return errors.New("pending turn command identity mismatch")
-	}
-	if admissionState == PendingTurnAdmissionInFlight {
-		if lane != FollowupLaneQueued {
-			return errors.New("in-flight pending turn is not queued")
+	if queued.AdmissionState == PendingTurnAdmissionInFlight {
+		receipt, loadErr := loadPendingTurnAdmissionReceiptTx(ctx, tx, queueID)
+		if loadErr != nil || receipt.EndpointID != endpointID || receipt.ThreadID != threadID || receipt.LogicalRequestID != logicalRequestID || receipt.CommandFingerprint != fingerprint || receipt.Stage != PendingTurnAdmissionStageInFlight {
+			return PendingTurnAdmissionReceipt{}, errors.New("in-flight pending turn receipt mismatch")
 		}
-		return tx.Commit()
+		if err := tx.Commit(); err != nil {
+			return PendingTurnAdmissionReceipt{}, err
+		}
+		return receipt, nil
 	}
-	if lane == FollowupLaneDraft {
+	sortIndex := queued.SortIndex
+	if queued.Lane == FollowupLaneDraft {
 		sortIndex, err = getNextFollowupSortIndexTx(ctx, tx, endpointID, threadID, FollowupLaneQueued)
 		if err != nil {
-			return err
+			return PendingTurnAdmissionReceipt{}, err
 		}
 	}
+	now := time.Now().UnixMilli()
 	result, err := tx.ExecContext(ctx, `
 UPDATE ai_queued_turns
 SET lane = ?, admission_state = ?, sort_index = ?, updated_at_unix_ms = ?
 WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ? AND admission_state = ?
-`, FollowupLaneQueued, PendingTurnAdmissionInFlight, sortIndex, time.Now().UnixMilli(), endpointID, threadID, queueID, PendingTurnAdmissionReady)
+`, FollowupLaneQueued, PendingTurnAdmissionInFlight, sortIndex, now, endpointID, threadID, queueID, PendingTurnAdmissionReady)
 	if err != nil {
-		return err
+		return PendingTurnAdmissionReceipt{}, err
 	}
 	if affected, _ := result.RowsAffected(); affected != 1 {
-		return ErrPendingTurnAdmissionInProgress
+		return PendingTurnAdmissionReceipt{}, ErrPendingTurnAdmissionInProgress
+	}
+	if _, err := tx.ExecContext(ctx, `
+INSERT INTO ai_turn_admission_receipts(
+  queue_id, endpoint_id, thread_id, logical_request_id, command_fingerprint, stage, created_at_unix_ms, updated_at_unix_ms
+) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+`, queueID, endpointID, threadID, logicalRequestID, fingerprint, PendingTurnAdmissionStageInFlight, now, now); err != nil {
+		return PendingTurnAdmissionReceipt{}, err
 	}
 	if _, err := bumpThreadFollowupsRevisionTx(ctx, tx, endpointID, threadID); err != nil {
-		return err
+		return PendingTurnAdmissionReceipt{}, err
 	}
-	return tx.Commit()
+	receipt, err := loadPendingTurnAdmissionReceiptTx(ctx, tx, queueID)
+	if err != nil {
+		return PendingTurnAdmissionReceipt{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return PendingTurnAdmissionReceipt{}, err
+	}
+	return receipt, nil
 }
 
-func (s *Store) ReleasePendingTurnAdmission(ctx context.Context, endpointID string, threadID string, queueID string, turnID string, runID string, targetLane string) error {
+func (s *Store) ReleasePendingTurnAdmission(ctx context.Context, endpointID string, threadID string, queueID string, logicalRequestID string, targetLane string) error {
 	if s == nil || s.db == nil {
 		return errors.New("store not initialized")
 	}
@@ -405,14 +414,13 @@ func (s *Store) ReleasePendingTurnAdmission(ctx context.Context, endpointID stri
 	endpointID = strings.TrimSpace(endpointID)
 	threadID = strings.TrimSpace(threadID)
 	queueID = strings.TrimSpace(queueID)
-	turnID = strings.TrimSpace(turnID)
-	runID = strings.TrimSpace(runID)
+	logicalRequestID = strings.TrimSpace(logicalRequestID)
 	var err error
 	targetLane, err = parseFollowupLane(targetLane)
 	if err != nil {
 		return err
 	}
-	if endpointID == "" || threadID == "" || queueID == "" || turnID == "" || runID == "" {
+	if endpointID == "" || threadID == "" || queueID == "" || logicalRequestID == "" {
 		return errors.New("invalid pending turn admission identity")
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -441,8 +449,12 @@ WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ?
 	if err != nil {
 		return err
 	}
-	if strings.TrimSpace(storedTurnID) != turnID || strings.TrimSpace(storedRunID) != runID || lane != FollowupLaneQueued || admissionState != PendingTurnAdmissionInFlight {
+	if strings.TrimSpace(storedTurnID) != "" || strings.TrimSpace(storedRunID) != "" || lane != FollowupLaneQueued || admissionState != PendingTurnAdmissionInFlight {
 		return errors.New("pending turn admission release identity mismatch")
+	}
+	receipt, err := loadPendingTurnAdmissionReceiptTx(ctx, tx, queueID)
+	if err != nil || receipt.LogicalRequestID != logicalRequestID || receipt.Stage != PendingTurnAdmissionStageInFlight {
+		return errors.New("pending turn admission release receipt mismatch")
 	}
 	if targetLane == FollowupLaneDraft {
 		sortIndex, err = getNextFollowupSortIndexTx(ctx, tx, endpointID, threadID, FollowupLaneDraft)
@@ -453,13 +465,16 @@ WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ?
 	result, err := tx.ExecContext(ctx, `
 UPDATE ai_queued_turns
 SET lane = ?, admission_state = ?, sort_index = ?, updated_at_unix_ms = ?
-WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ? AND turn_id = ? AND run_id = ? AND lane = ? AND admission_state = ?
-`, targetLane, PendingTurnAdmissionReady, sortIndex, time.Now().UnixMilli(), endpointID, threadID, queueID, turnID, runID, FollowupLaneQueued, PendingTurnAdmissionInFlight)
+WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ? AND turn_id = '' AND run_id = '' AND lane = ? AND admission_state = ?
+`, targetLane, PendingTurnAdmissionReady, sortIndex, time.Now().UnixMilli(), endpointID, threadID, queueID, FollowupLaneQueued, PendingTurnAdmissionInFlight)
 	if err != nil {
 		return err
 	}
 	if affected, _ := result.RowsAffected(); affected != 1 {
 		return errors.New("pending turn admission changed during release")
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM ai_turn_admission_receipts WHERE queue_id = ? AND logical_request_id = ? AND stage = ?`, queueID, logicalRequestID, PendingTurnAdmissionStageInFlight); err != nil {
+		return err
 	}
 	if _, err := bumpThreadFollowupsRevisionTx(ctx, tx, endpointID, threadID); err != nil {
 		return err

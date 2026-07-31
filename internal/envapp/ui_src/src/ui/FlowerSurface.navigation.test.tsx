@@ -3,6 +3,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type {
+  FlowerTurnLaunchInput,
   FlowerPermissionType,
   FlowerRouterDecision,
   FlowerSettingsSnapshot,
@@ -182,7 +183,7 @@ describe('FlowerSurface navigation', () => {
   });
 
   it('keeps the remote provider editor visible when Desktop models are also available', async () => {
-    const launchTurn = vi.fn(async (input: { thread_id?: string; turn_id?: string }) => launchReceipt(input.thread_id ?? 'thread-1', input.turn_id ?? 'turn-desktop-model'));
+    const launchTurn = vi.fn(async (input: FlowerTurnLaunchInput) => launchReceipt(input.thread_id ?? 'thread-1', 'turn-desktop-model', 'start', input.client_request_id));
     const desktopSourceSnapshot: FlowerSettingsSnapshot = {
       ...settingsSnapshot(true),
       model_source: {
@@ -385,7 +386,7 @@ describe('FlowerSurface navigation', () => {
       available_handlers: secondDecision.available_handlers,
       handler_selection: secondDecision.handler_selection,
     }));
-    const launchTurn = vi.fn(async (input: { thread_id?: string; turn_id?: string }) => launchReceipt(input.thread_id ?? 'thread-1', input.turn_id ?? 'turn-handler'));
+    const launchTurn = vi.fn(async (input: FlowerTurnLaunchInput) => launchReceipt(input.thread_id ?? 'thread-1', 'turn-handler', 'start', input.client_request_id));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       resolveHandler,
@@ -418,9 +419,9 @@ describe('FlowerSurface navigation', () => {
       messages: [],
     });
     let acceptedTurnID = '';
-    const launchTurn = vi.fn(async (input: { turn_id?: string }) => {
-      acceptedTurnID = input.turn_id ?? 'turn-accepted-without-messages';
-      return launchReceipt(acceptedThread.thread_id, acceptedTurnID);
+    const launchTurn = vi.fn(async (input: FlowerTurnLaunchInput) => {
+      acceptedTurnID = 'turn-accepted-without-messages';
+      return launchReceipt(acceptedThread.thread_id, acceptedTurnID, 'start', input.client_request_id);
     });
     const loadThread = vi.fn(async () => liveBootstrap(thread({
       ...acceptedThread,

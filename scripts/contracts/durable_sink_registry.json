@@ -525,7 +525,7 @@
     },
     {
       "path": "internal/ai/run.go",
-      "sha256": "a5b59c52f8d9156c3292ae4166dae750cc218ee415db8b617779c6b296a7eee5",
+      "sha256": "113b9ce2bdac950f45501ee71d7db62d4ff6844e90012edff2d74a711993f48b",
       "sink_kinds": [
         "file",
         "json_file"
@@ -644,7 +644,7 @@
     },
     {
       "path": "internal/ai/terminal_process.go",
-      "sha256": "0071523294d36f42bfea5df5a65ea4d5f91a0878fd7bbd5953576ffafd1cd226",
+      "sha256": "d479355a3626cdce119fbfabd2f0031b776a74baddef5bdc537e39921c54b66a",
       "sink_kinds": [
         "file"
       ],
@@ -658,6 +658,40 @@
         "the"
       ],
       "review_note": "Executes or invokes an explicitly authorized user effect; admitted conversation state remains exclusively in Floret."
+    },
+    {
+      "path": "internal/ai/threadstore/admission_receipt.go",
+      "sha256": "f8931642749a985c8053c577c5f67d0c4b10235d16c0427d183956da5e565759",
+      "sink_kinds": [
+        "sqlite"
+      ],
+      "review_status": "reviewed",
+      "owner": "redeven threadstore",
+      "authority": "product_coordination",
+      "data_classes": [
+        "unadmitted command binding",
+        "permission authorization proof",
+        "cross-store admission receipt",
+        "resource settlement evidence"
+      ],
+      "tables": [
+        "ai_permission_snapshots",
+        "ai_queued_turns",
+        "ai_thread_delete_operations",
+        "ai_thread_fork_operations",
+        "ai_thread_settings",
+        "ai_turn_admission_receipts",
+        "ai_upload_refs",
+        "ai_uploads",
+        "canonical"
+      ],
+      "codecs": [
+        "encoding/json.Marshal"
+      ],
+      "dtos": [
+        "command{\n\tQueueID:\tstrings.TrimSpace(rec.QueueID), EndpointID: strings.TrimSpace(rec.EndpointID), ThreadID: strings.TrimSpace(rec.ThreadID),\n\tChannelID:\tstrings.TrimSpace(rec.ChannelID), ModelID: strings.TrimSpace(rec.ModelID), TextContent: rec.TextContent,\n\tAttachmentsJSON:\tstrings.TrimSpace(rec.AttachmentsJSON), ContextActionJSON: strings.TrimSpace(rec.ContextActionJSON),\n\tOptionsJSON:\tstrings.TrimSpace(rec.OptionsJSON), SessionMetaJSON: strings.TrimSpace(rec.SessionMetaJSON),\n\tCreatedByUserPublicID:\tstrings.TrimSpace(rec.CreatedByUserPublicID), CreatedByUserEmail: strings.TrimSpace(rec.CreatedByUserEmail),\n}"
+      ],
+      "review_note": "Stores minimal Redeven-owned admission and recovery evidence; canonical Agent lifecycle and message history remain exclusively in Floret."
     },
     {
       "path": "internal/ai/threadstore/context_planes.go",
@@ -715,7 +749,7 @@
     },
     {
       "path": "internal/ai/threadstore/followups.go",
-      "sha256": "5901538b9fda39e0aa654d4ebde54bb598a41ddd3bdbe310c5b4a57e365e83fb",
+      "sha256": "dd4dfed31dfdb24e940a99359e3c098174f4b3a1bebbd20ee4a5102c24db7b0a",
       "sink_kinds": [
         "sqlite"
       ],
@@ -735,14 +769,21 @@
         "ai_thread_delete_operations",
         "ai_thread_fork_operations",
         "ai_thread_settings",
+        "ai_turn_admission_receipts",
         "expression:`\nSELECT thread_id, COUNT(1)\nFROM ai_queued_turns\nWHERE endpoint_id = ? AND lane = ? AND thread_id IN (` + placeholders + `)\nGROUP BY thread_id\n`",
         "expression:query"
       ],
-      "review_note": "Stores or invokes only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
+      "codecs": [
+        "encoding/json.Marshal"
+      ],
+      "dtos": [
+        "command{\n\tQueueID:\tstrings.TrimSpace(rec.QueueID), EndpointID: strings.TrimSpace(rec.EndpointID), ThreadID: strings.TrimSpace(rec.ThreadID),\n\tChannelID:\tstrings.TrimSpace(rec.ChannelID), ModelID: strings.TrimSpace(rec.ModelID), TextContent: rec.TextContent,\n\tAttachmentsJSON:\tstrings.TrimSpace(rec.AttachmentsJSON), ContextActionJSON: strings.TrimSpace(rec.ContextActionJSON),\n\tOptionsJSON:\tstrings.TrimSpace(rec.OptionsJSON), SessionMetaJSON: strings.TrimSpace(rec.SessionMetaJSON),\n\tCreatedByUserPublicID:\tstrings.TrimSpace(rec.CreatedByUserPublicID), CreatedByUserEmail: strings.TrimSpace(rec.CreatedByUserEmail),\n}"
+      ],
+      "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
     },
     {
       "path": "internal/ai/threadstore/fork_operation.go",
-      "sha256": "2992eb689aac02133f5b062b6f35a340c888d2d664f6a02f68e653bd28436cf9",
+      "sha256": "f5b2337cc534280bf44cac265b35a10cacf734881c976a2d00ea9c5e7cc9b21f",
       "sink_kinds": [
         "sqlite"
       ],
@@ -759,14 +800,13 @@
       ],
       "tables": [
         "ai_flower_thread_routing",
-        "ai_thread_create_operations",
         "ai_thread_delete_operations",
         "ai_thread_fork_operations",
         "ai_thread_settings",
         "ai_upload_refs",
-        "expression:`UPDATE ai_thread_fork_operations SET ` + column + ` = ?, updated_at_unix_ms = ? WHERE operation_id = ? AND status = ? AND ` + column + ` = 0`",
+        "expression:`UPDATE ai_thread_fork_operations SET ` + column + ` = ?, updated_at_unix_ms = ? WHERE operation_id = ? AND stage = ? AND ` + column + ` = 0`",
         "expression:fmt.Sprintf(`SELECT %s FROM ai_thread_settings WHERE endpoint_id = ? AND thread_id = ?`, threadSelectColumnsSQL)",
-        "expression:forkOperationSelectSQL + ` WHERE ` + where + ` ORDER BY updated_at_unix_ms ASC, operation_id ASC LIMIT ?`",
+        "expression:forkOperationSelectSQL + ` WHERE ` + where + ` ORDER BY updated_at_unix_ms, operation_id LIMIT ?`",
         "expression:forkOperationSelectSQL + ` WHERE operation_id = ?`",
         "set"
       ],
@@ -777,11 +817,11 @@
         "req",
         "snapshot"
       ],
-      "review_note": "Stores or invokes only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
+      "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
     },
     {
       "path": "internal/ai/threadstore/orphan_adoption.go",
-      "sha256": "fd5347e39e28f16ce572ed6af0a4ee5c417396da671d2be80e7c8ee8a13ffce0",
+      "sha256": "5507b4a78cf1fbbc915bbe9a304e5e9210db6bed85134c0734a4675dec872a48",
       "sink_kinds": [
         "sqlite"
       ],
@@ -802,11 +842,11 @@
         "ai_thread_settings",
         "expression:fmt.Sprintf(`SELECT %s FROM ai_thread_settings WHERE thread_id = ? ORDER BY endpoint_id LIMIT 1`, threadSelectColumnsSQL)"
       ],
-      "review_note": "Stores or invokes only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
+      "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
     },
     {
       "path": "internal/ai/threadstore/permission_snapshot.go",
-      "sha256": "92204979f1d05b9bb1babcd087354b294f5bf49e468e05f5a8fa4c6f7893f5f3",
+      "sha256": "5375d83f5b37d3c1cb03256d26f40c8020d39c7ddf0fd5e32a8d2b832b6e20bd",
       "sink_kinds": [
         "sqlite"
       ],
@@ -827,67 +867,7 @@
         "ai_thread_delete_operations",
         "ai_thread_fork_operations"
       ],
-      "review_note": "Stores or invokes only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
-    },
-    {
-      "path": "internal/ai/threadstore/product_migrations.go",
-      "sha256": "20b55f9daeb0db800f5f9de590aed8e05d06b3bdf903a739634b54e762ee3904",
-      "sink_kinds": [
-        "sqlite"
-      ],
-      "review_status": "reviewed",
-      "owner": "redeven threadstore",
-      "authority": "product_coordination",
-      "data_classes": [
-        "host thread settings",
-        "unadmitted commands",
-        "product routing",
-        "resource claims",
-        "cross-store operation intent",
-        "permission audit"
-      ],
-      "tables": [
-        "ai_child_permission_snapshots",
-        "ai_composer_drafts",
-        "ai_flower_handoffs",
-        "ai_flower_thread_metadata",
-        "ai_flower_thread_routing",
-        "ai_flower_transfers",
-        "ai_permission_snapshots",
-        "ai_queued_turns",
-        "ai_subagent_publication_operations",
-        "ai_thread_create_operations",
-        "ai_thread_delete_operations",
-        "ai_thread_fork_operations",
-        "ai_thread_settings",
-        "ai_threads",
-        "ai_upload_attempts",
-        "ai_upload_refs",
-        "ai_upload_staging_scopes",
-        "ai_uploads",
-        "expression:`\nCREATE TABLE ai_composer_drafts (\n  endpoint_id TEXT NOT NULL,\n  owner_user_hash TEXT NOT NULL CHECK(length(owner_user_hash) = 64),\n  scope_id TEXT NOT NULL,\n  revision INTEGER NOT NULL DEFAULT 0 CHECK(revision \u003e= 0),\n  value_json TEXT NOT NULL DEFAULT '` + valueDefault + `',\n  lease_id TEXT NOT NULL DEFAULT '',\n  lease_holder_id TEXT NOT NULL DEFAULT '',\n  lease_expires_at_unix_ms INTEGER NOT NULL DEFAULT 0,\n  created_at_unix_ms INTEGER NOT NULL,\n  updated_at_unix_ms INTEGER NOT NULL,\n  expires_at_unix_ms INTEGER NOT NULL,\n  PRIMARY KEY(endpoint_id, owner_user_hash, scope_id)\n);\nCREATE INDEX idx_ai_composer_drafts_expiry ON ai_composer_drafts(expires_at_unix_ms, endpoint_id, scope_id);\n`",
-        "expression:fmt.Sprintf(`PRAGMA index_list(%s)`, quoteReviewedIdentifier(name))",
-        "expression:fmt.Sprintf(`PRAGMA index_xinfo(%s)`, quoteReviewedIdentifier(name))",
-        "expression:fmt.Sprintf(`PRAGMA table_xinfo(%s)`, quoteReviewedIdentifier(name))",
-        "product_v2_ai_child_permission_snapshots",
-        "product_v2_ai_threads",
-        "product_v2_ai_upload_refs",
-        "product_v4_ai_uploads",
-        "product_v6_ai_composer_drafts",
-        "set",
-        "sqlite_master"
-      ],
-      "codecs": [
-        "encoding/json.Marshal"
-      ],
-      "dtos": [
-        "out",
-        "req",
-        "snapshot",
-        "struct {\n\tEndpointID\tstring\t\t\t`json:\"endpoint_id\"`\n\tThreadID\tstring\t\t\t`json:\"thread_id\"`\n\tSnapshot\tThreadDeleteSnapshotV1\t`json:\"snapshot\"`\n}{\n\tEndpointID:\tstrings.TrimSpace(endpointID),\n\tThreadID:\tstrings.TrimSpace(threadID),\n\tSnapshot:\tsnapshot,\n}",
-        "value"
-      ],
-      "review_note": "Stores or invokes only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
+      "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
     },
     {
       "path": "internal/ai/threadstore/reviewed_schema.go",
@@ -916,7 +896,7 @@
     },
     {
       "path": "internal/ai/threadstore/schema.go",
-      "sha256": "aee74943158c140fca10583c5023d5141ceed8ed51005c557ca19e17b4e58569",
+      "sha256": "8727cec1c79219c1d52ce38ff75f0ddbdbcd5c84694258b869f574259e2a4361",
       "sink_kinds": [
         "sqlite"
       ],
@@ -933,11 +913,7 @@
       ],
       "tables": [
         "ai_child_permission_snapshots",
-        "ai_composer_drafts",
-        "ai_flower_handoffs",
-        "ai_flower_thread_metadata",
         "ai_flower_thread_routing",
-        "ai_flower_transfers",
         "ai_permission_snapshots",
         "ai_queued_turns",
         "ai_subagent_publication_operations",
@@ -945,74 +921,22 @@
         "ai_thread_delete_operations",
         "ai_thread_fork_operations",
         "ai_thread_settings",
-        "ai_threads",
+        "ai_turn_admission_receipts",
         "ai_upload_attempts",
         "ai_upload_refs",
         "ai_upload_staging_scopes",
         "ai_uploads",
-        "expression:`\nCREATE TABLE ai_composer_drafts (\n  endpoint_id TEXT NOT NULL,\n  owner_user_hash TEXT NOT NULL CHECK(length(owner_user_hash) = 64),\n  scope_id TEXT NOT NULL,\n  revision INTEGER NOT NULL DEFAULT 0 CHECK(revision \u003e= 0),\n  value_json TEXT NOT NULL DEFAULT '` + valueDefault + `',\n  lease_id TEXT NOT NULL DEFAULT '',\n  lease_holder_id TEXT NOT NULL DEFAULT '',\n  lease_expires_at_unix_ms INTEGER NOT NULL DEFAULT 0,\n  created_at_unix_ms INTEGER NOT NULL,\n  updated_at_unix_ms INTEGER NOT NULL,\n  expires_at_unix_ms INTEGER NOT NULL,\n  PRIMARY KEY(endpoint_id, owner_user_hash, scope_id)\n);\nCREATE INDEX idx_ai_composer_drafts_expiry ON ai_composer_drafts(expires_at_unix_ms, endpoint_id, scope_id);\n`",
         "expression:fmt.Sprintf(`PRAGMA index_list(%s)`, quoteReviewedIdentifier(name))",
         "expression:fmt.Sprintf(`PRAGMA index_xinfo(%s)`, quoteReviewedIdentifier(name))",
         "expression:fmt.Sprintf(`PRAGMA table_xinfo(%s)`, quoteReviewedIdentifier(name))",
         "provider_capabilities",
         "sqlite_master"
       ],
-      "codecs": [
-        "encoding/json.Marshal"
-      ],
-      "dtos": [
-        "value"
-      ],
-      "review_note": "Stores or invokes only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
-    },
-    {
-      "path": "internal/ai/threadstore/schema_preflight.go",
-      "sha256": "0b96c0a92d2aa32071692f8c3aef3d94d473c87f414337a172d4a8cb6511887d",
-      "sink_kinds": [
-        "sqlite"
-      ],
-      "review_status": "reviewed",
-      "owner": "redeven threadstore",
-      "authority": "product_coordination",
-      "data_classes": [
-        "host thread settings",
-        "unadmitted commands",
-        "product routing",
-        "resource claims",
-        "cross-store operation intent",
-        "permission audit"
-      ],
-      "tables": [
-        "__redeven_db_meta",
-        "ai_child_permission_snapshots",
-        "ai_composer_drafts",
-        "ai_permission_snapshots",
-        "ai_queued_turns",
-        "ai_thread_delete_operations",
-        "ai_thread_fork_operations",
-        "ai_threads",
-        "ai_upload_refs",
-        "ai_uploads",
-        "expression:fmt.Sprintf(`PRAGMA index_list(%s)`, quoteReviewedIdentifier(name))",
-        "expression:fmt.Sprintf(`PRAGMA index_xinfo(%s)`, quoteReviewedIdentifier(name))",
-        "expression:fmt.Sprintf(`PRAGMA table_xinfo(%s)`, quoteReviewedIdentifier(name))",
-        "sqlite_master"
-      ],
-      "codecs": [
-        "encoding/json.Marshal"
-      ],
-      "dtos": [
-        "out",
-        "req",
-        "snapshot",
-        "struct {\n\tEndpointID\tstring\t\t\t`json:\"endpoint_id\"`\n\tThreadID\tstring\t\t\t`json:\"thread_id\"`\n\tSnapshot\tThreadDeleteSnapshotV1\t`json:\"snapshot\"`\n}{\n\tEndpointID:\tstrings.TrimSpace(endpointID),\n\tThreadID:\tstrings.TrimSpace(threadID),\n\tSnapshot:\tsnapshot,\n}",
-        "value"
-      ],
-      "review_note": "Stores or invokes only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
+      "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
     },
     {
       "path": "internal/ai/threadstore/store.go",
-      "sha256": "7113489b8f6e9abb96549006d7b3e736032b075660d35e3932ab16f2491bfebe",
+      "sha256": "f0a1bbdbe1d186bc14711665a1052af0392e1a848fe12bf7c7c2bd47ce40e953",
       "sink_kinds": [
         "sqlite"
       ],
@@ -1029,17 +953,10 @@
       ],
       "tables": [
         "__redeven_db_meta",
-        "ai_child_permission_snapshots",
-        "ai_composer_drafts",
-        "ai_permission_snapshots",
         "ai_queued_turns",
         "ai_thread_delete_operations",
         "ai_thread_fork_operations",
         "ai_thread_settings",
-        "ai_threads",
-        "ai_upload_refs",
-        "ai_upload_staging_scopes",
-        "ai_uploads",
         "expression:`\nSELECT thread_id, COUNT(1)\nFROM ai_queued_turns\nWHERE endpoint_id = ? AND thread_id IN (` + placeholders + `) AND lane = ?\nGROUP BY thread_id\n`",
         "expression:fmt.Sprintf(`\nSELECT\n%s\nFROM ai_thread_settings\nWHERE endpoint_id = ? AND thread_id = ?\n`, threadSelectColumnsSQL)",
         "expression:fmt.Sprintf(`PRAGMA index_list(%s)`, quoteReviewedIdentifier(name))",
@@ -1050,21 +967,11 @@
         "expression:query",
         "sqlite_master"
       ],
-      "codecs": [
-        "encoding/json.Marshal"
-      ],
-      "dtos": [
-        "out",
-        "req",
-        "snapshot",
-        "struct {\n\tEndpointID\tstring\t\t\t`json:\"endpoint_id\"`\n\tThreadID\tstring\t\t\t`json:\"thread_id\"`\n\tSnapshot\tThreadDeleteSnapshotV1\t`json:\"snapshot\"`\n}{\n\tEndpointID:\tstrings.TrimSpace(endpointID),\n\tThreadID:\tstrings.TrimSpace(threadID),\n\tSnapshot:\tsnapshot,\n}",
-        "value"
-      ],
-      "review_note": "Stores or invokes only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
+      "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
     },
     {
       "path": "internal/ai/threadstore/subagent_publication.go",
-      "sha256": "187bc3695dff179dd6f51895b73412f330639a9881bff5ae3e3b4ea99ee735eb",
+      "sha256": "8364a8b04fc76b6cfd42fbc74939061d8f8f71ad849858a653466466ab191884",
       "sink_kinds": [
         "sqlite"
       ],
@@ -1086,11 +993,11 @@
         "ai_thread_fork_operations",
         "expression:query"
       ],
-      "review_note": "Stores or invokes only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
+      "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
     },
     {
       "path": "internal/ai/threadstore/thread_create_operation.go",
-      "sha256": "a2bad8187056d72df95431e6073bfad0c4989b23d22bb3af5d390a0c65008293",
+      "sha256": "c0125663fc83ddf1ce8f51cd83ac08f5b553ad2f572226ed1fb5affb30154d60",
       "sink_kinds": [
         "sqlite"
       ],
@@ -1106,27 +1013,31 @@
         "permission audit"
       ],
       "tables": [
+        "ai_queued_turns",
         "ai_thread_create_operations",
         "ai_thread_delete_operations",
         "ai_thread_fork_operations",
         "ai_thread_settings",
-        "expression:fmt.Sprintf(`\nSELECT\n%s\nFROM ai_thread_settings\nWHERE endpoint_id = ? AND thread_id = ?\n`, threadSelectColumnsSQL)",
+        "ai_upload_refs",
+        "ai_upload_staging_scopes",
+        "ai_uploads",
         "expression:fmt.Sprintf(`SELECT %s FROM ai_thread_settings WHERE endpoint_id = ? AND thread_id = ?`, threadSelectColumnsSQL)",
-        "expression:fmt.Sprintf(`UPDATE ai_thread_create_operations SET %s = CASE WHEN %s = 0 THEN ? ELSE %s END, error_code = '', error_message = '', updated_at_unix_ms = ? WHERE operation_id = ? AND status = ?`, column, column, column)",
+        "expression:threadCreateOperationSelectSQL + ` WHERE endpoint_id = ? AND client_request_id = ?`",
         "expression:threadCreateOperationSelectSQL + ` WHERE operation_id = ?`",
-        "expression:threadCreateOperationSelectSQL + ` WHERE status = ? ORDER BY updated_at_unix_ms, operation_id LIMIT ?`"
+        "expression:threadCreateOperationSelectSQL + ` WHERE stage NOT IN (?, ?) ORDER BY updated_at_unix_ms, operation_id LIMIT ?`"
       ],
       "codecs": [
         "encoding/json.Marshal"
       ],
       "dtos": [
-        "snapshot"
+        "snapshot",
+        "struct {\n\tClientRequestID\t\tstring\t\t\t`json:\"client_request_id\"`\n\tLogicalRequestID\tstring\t\t\t`json:\"logical_request_id\"`\n\tTitleLogicalRequestID\tstring\t\t\t`json:\"title_logical_request_id\"`\n\tSnapshot\t\tthreadCreateSnapshotV1\t`json:\"snapshot\"`\n}{clientRequestID, logicalRequestID, titleLogicalRequestID, snapshot}"
       ],
-      "review_note": "Stores or invokes only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
+      "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
     },
     {
       "path": "internal/ai/threadstore/thread_delete_operation.go",
-      "sha256": "4c78ea939f2f701361a2634d0da78bc14227d6e01d23c7ab25957542aa5406e7",
+      "sha256": "c1eee30dcce7dcacf3076a2193d2c6999004af112524fe6127561838aba46943",
       "sink_kinds": [
         "sqlite"
       ],
@@ -1163,11 +1074,11 @@
         "snapshot",
         "struct {\n\tEndpointID\tstring\t\t\t`json:\"endpoint_id\"`\n\tThreadID\tstring\t\t\t`json:\"thread_id\"`\n\tSnapshot\tThreadDeleteSnapshotV1\t`json:\"snapshot\"`\n}{\n\tEndpointID:\tstrings.TrimSpace(endpointID),\n\tThreadID:\tstrings.TrimSpace(threadID),\n\tSnapshot:\tsnapshot,\n}"
       ],
-      "review_note": "Stores or invokes only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
+      "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
     },
     {
       "path": "internal/ai/threadstore/thread_fork.go",
-      "sha256": "ae206ec59db04532f9ee3384bc1c2a776a1aece3e58d5fd8f1e8818860051279",
+      "sha256": "0dccdd18be21455a21e4fc6d337f6708d34525e2d4e4388f42c1a72846cf4c33",
       "sink_kinds": [
         "sqlite"
       ],
@@ -1189,7 +1100,7 @@
     },
     {
       "path": "internal/ai/threadstore/thread_lifecycle.go",
-      "sha256": "59145bc3a19ecc13279f51cdd88141c4f5f7034d22cf77fdd71742421428936e",
+      "sha256": "b5273413a70dd0927f2b28409bb560b1f43ddde6052dc6f1da1398f2b7e899d7",
       "sink_kinds": [
         "sqlite"
       ],
@@ -1217,7 +1128,7 @@
     },
     {
       "path": "internal/ai/threadstore/upload_staging.go",
-      "sha256": "1dc3446812bb8a8fdd981a6d2527752a3cf9af54a7d0060796304df43465858e",
+      "sha256": "cf68a9ecf400b0e5d3be0fa1e9bd6fa0b2eecc86c24cafc5ec4340676415128a",
       "sink_kinds": [
         "sqlite"
       ],
@@ -1248,13 +1159,14 @@
         "encoding/json.Marshal"
       ],
       "dtos": [
-        "snapshot"
+        "snapshot",
+        "struct {\n\tClientRequestID\t\tstring\t\t\t`json:\"client_request_id\"`\n\tLogicalRequestID\tstring\t\t\t`json:\"logical_request_id\"`\n\tTitleLogicalRequestID\tstring\t\t\t`json:\"title_logical_request_id\"`\n\tSnapshot\t\tthreadCreateSnapshotV1\t`json:\"snapshot\"`\n}{clientRequestID, logicalRequestID, titleLogicalRequestID, snapshot}"
       ],
-      "review_note": "Stores or invokes only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
+      "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
     },
     {
       "path": "internal/ai/threadstore/uploads.go",
-      "sha256": "054e1827a067311a58f66df67083fa01f50fe6e45a06f04aff6ceba0ec29049e",
+      "sha256": "5cfcdfe6732b2f3363470b149d8d6777d0c075218592e4a5bf44571029f23af0",
       "sink_kinds": [
         "sqlite"
       ],
@@ -1285,7 +1197,7 @@
         "expression:query",
         "expression:updateSQL"
       ],
-      "review_note": "Stores or invokes only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
+      "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
     },
     {
       "path": "internal/ai/unified_diff_apply.go",
@@ -1307,7 +1219,7 @@
     },
     {
       "path": "internal/ai/uploads.go",
-      "sha256": "4a511e9de4b5b4a333518b099e4ee08dc2e48dfbab682689379b4e54d309c361",
+      "sha256": "3e37cbbbcc5c6922203118e6ba2cabb1c081900a28a35f7a879d08402aea1933",
       "sink_kinds": [
         "file",
         "json_file"
@@ -1376,7 +1288,7 @@
     },
     {
       "path": "internal/codeapp/appserver/server.go",
-      "sha256": "1c9ea106651945c45726ad578b36395a4a03d8889bac0ce057ec185cb35e9394",
+      "sha256": "6beac0a18feeada9ee7caa1b328889920bc9af75633d8389a92e4874b1adc239",
       "sink_kinds": [
         "file",
         "json_file"
@@ -1737,7 +1649,7 @@
     },
     {
       "path": "internal/envapp/ui_src/src/ui/EnvAppShell.tsx",
-      "sha256": "5285dfe893b937727b265804b3747a5e8853e4c0214e334b53f41e73b8fc3e8e",
+      "sha256": "be5d1e275ee953557008280446a158275a2b935c664589580304762638aad349",
       "sink_kinds": [
         "web_storage"
       ],
@@ -1833,7 +1745,7 @@
     },
     {
       "path": "internal/flower_ui/src/FlowerSurface.tsx",
-      "sha256": "0b6138c6f43afcf063c31f2130a89fb5b90670165955f7d52bb39d89f97c5599",
+      "sha256": "d43a5e76a2e78f6df076d6db47899132a020526e0a8190096a6dffbae9f4f096",
       "sink_kinds": [
         "web_storage"
       ],

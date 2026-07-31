@@ -12,14 +12,15 @@ import (
 	"testing"
 	"time"
 
-	flruntime "github.com/floegence/floret/v2/runtime"
+	"github.com/floegence/floret/v3/identity"
+	flruntime "github.com/floegence/floret/v3/runtime"
 	"github.com/floegence/redeven/internal/session"
 )
 
 type attachmentAuthorityReadHost struct {
 	page          flruntime.ThreadTurnsPage
 	exactErr      error
-	exactRequests *[]flruntime.TurnID
+	exactRequests *[]identity.TurnID
 	listRequests  *[]flruntime.ThreadTurnsRequest
 }
 
@@ -29,7 +30,7 @@ func (h attachmentAuthorityReadHost) ReadThread(context.Context) (flruntime.Thre
 func (h attachmentAuthorityReadHost) ReadThreadOverview(context.Context) (flruntime.ThreadOverview, error) {
 	return flruntime.ThreadOverview{}, errors.New("not used")
 }
-func (h attachmentAuthorityReadHost) ReadThreadTurn(_ context.Context, turnID flruntime.TurnID) (flruntime.ThreadTurnSnapshot, error) {
+func (h attachmentAuthorityReadHost) ReadThreadTurn(_ context.Context, turnID identity.TurnID) (flruntime.ThreadTurnSnapshot, error) {
 	if h.exactRequests != nil {
 		*h.exactRequests = append(*h.exactRequests, turnID)
 	}
@@ -55,7 +56,7 @@ func (h attachmentAuthorityReadHost) ReadThreadAgentTodos(context.Context) (flru
 func (h attachmentAuthorityReadHost) ReadThreadContext(context.Context) (flruntime.ThreadContextSnapshot, error) {
 	return flruntime.ThreadContextSnapshot{}, errors.New("not used")
 }
-func (h attachmentAuthorityReadHost) ReadTurnProjection(context.Context, flruntime.TurnID, flruntime.RunID) (flruntime.ThreadTurnProjection, error) {
+func (h attachmentAuthorityReadHost) ReadTurnProjection(context.Context, identity.TurnID, identity.RunID) (flruntime.ThreadTurnProjection, error) {
 	return flruntime.ThreadTurnProjection{}, errors.New("not used")
 }
 
@@ -67,7 +68,7 @@ func TestFloretLiveAttachmentAuthorityReadsExactCanonicalTurn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var exactRequests []flruntime.TurnID
+	var exactRequests []identity.TurnID
 	var listRequests []flruntime.ThreadTurnsRequest
 	authority := floretLiveAttachmentAuthority{threadID: "thread_1", host: attachmentAuthorityReadHost{
 		exactRequests: &exactRequests, listRequests: &listRequests,
@@ -104,7 +105,7 @@ func TestFloretLiveAttachmentAuthorityScansOnlyWithoutTurnIdentity(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var exactRequests []flruntime.TurnID
+	var exactRequests []identity.TurnID
 	var listRequests []flruntime.ThreadTurnsRequest
 	authority := floretLiveAttachmentAuthority{threadID: "thread_1", host: attachmentAuthorityReadHost{
 		exactRequests: &exactRequests, listRequests: &listRequests,
@@ -137,6 +138,7 @@ func TestAttachmentReadToolPagesUTF8AndRejectsCursorTampering(t *testing.T) {
 	}
 	locator := logicalAttachmentLocator(attachmentID, info.Name)
 	r := &run{id: "run_1", threadID: "thread_1", endpointID: "env_1", userPublicID: "user_1", channelID: "channel_1"}
+	r.expectFloretRuntimeEventIdentity(r.id, r.threadID, "turn_1", true)
 	r.host.openLiveAttachment = func(context.Context, UploadOwner, string) (openedCanonicalAttachment, error) {
 		return openedCanonicalAttachment{
 			Membership: CanonicalAttachmentMembership{
@@ -202,6 +204,7 @@ func TestAttachmentReadToolPagesUTF8AndRejectsCursorTampering(t *testing.T) {
 		t.Fatalf("changed cursor limits error=%v", err)
 	}
 	wrongAudience := &run{id: "run_other", threadID: r.threadID, endpointID: r.endpointID, userPublicID: r.userPublicID, channelID: r.channelID}
+	wrongAudience.expectFloretRuntimeEventIdentity(wrongAudience.id, wrongAudience.threadID, "turn_other", true)
 	wrongAudience.host.openLiveAttachment = r.host.openLiveAttachment
 	if _, err := wrongAudience.toolAttachmentRead(context.Background(), meta, attachmentReadArgs{Locator: locator, Cursor: firstCursor}); err == nil || !strings.Contains(err.Error(), "invalid attachment read cursor") {
 		t.Fatalf("wrong cursor audience error=%v", err)
@@ -216,6 +219,7 @@ func TestAttachmentReadToolRejectsNonTextAndRegistrationWithoutAuthority(t *test
 		t.Fatal(err)
 	}
 	r := &run{id: "run_2", threadID: "thread_2", endpointID: "env_2", userPublicID: "user_2", channelID: "channel_2"}
+	r.expectFloretRuntimeEventIdentity(r.id, r.threadID, "turn_2", true)
 	r.host.openLiveAttachment = func(context.Context, UploadOwner, string) (openedCanonicalAttachment, error) {
 		info := &UploadResponse{
 			AttachmentID: attachmentID, Name: "document.pdf", DetectedMediaType: "application/pdf", SizeBytes: 4,
@@ -316,6 +320,7 @@ func TestAttachmentReadToolReportsEmptyAndTrailingLineBoundaries(t *testing.T) {
 				SizeBytes: int64(len(testCase.body)), ContentSHA256: digest, UnicodeCodePoints: &points, LogicalLineCount: &testCase.lineCount,
 			}
 			r := &run{id: "run_lines", threadID: "thread_lines", endpointID: "env_lines", userPublicID: "user_lines", channelID: "channel_lines"}
+			r.expectFloretRuntimeEventIdentity(r.id, r.threadID, "turn_lines", true)
 			r.host.openLiveAttachment = func(context.Context, UploadOwner, string) (openedCanonicalAttachment, error) {
 				return openedCanonicalAttachment{
 					Membership: CanonicalAttachmentMembership{

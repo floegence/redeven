@@ -266,7 +266,7 @@ function createAdapterHarness(overrides: Partial<FlowerSurfaceAdapter> = {}): Ad
     markThreadRead,
     persistDefaultModel: async () => settings(),
     resolveHandler: async () => routerDecision(),
-    launchTurn: async () => ({ thread_id: 'new-thread', turn_id: 'turn', run_id: 'run', kind: 'start' }),
+    launchTurn: async (input) => ({ client_request_id: input.client_request_id, thread_id: 'new-thread', turn_id: 'turn', run_id: 'run', kind: 'start' }),
     compactThreadContext: async () => bootstrap(),
     stopThread: async () => bootstrap(),
     submitInput: async () => bootstrap(),

@@ -74,8 +74,9 @@ func TestServiceCreateThreadInitializesDefaultReasoningSelection(t *testing.T) {
 	svc := newSendTurnTestService(t)
 	meta := testSendTurnMeta()
 	view, err := svc.CreateThreadWithOptions(context.Background(), meta, CreateThreadRequest{
-		Title:   "reasoning defaults",
-		ModelID: "openai/gpt-5-mini",
+		ClientRequestID: "create_reasoning_defaults",
+		Title:           "reasoning defaults",
+		ModelID:         "openai/gpt-5-mini",
 	})
 	if err != nil {
 		t.Fatalf("CreateThreadWithOptions: %v", err)
@@ -95,8 +96,9 @@ func TestServiceSetThreadReasoningSelectionRejectsUnsupportedLevel(t *testing.T)
 	meta := testSendTurnMeta()
 	ctx := context.Background()
 	view, err := svc.CreateThreadWithOptions(ctx, meta, CreateThreadRequest{
-		Title:   "reject unsupported",
-		ModelID: "openai/gpt-5-mini",
+		ClientRequestID: "create_reasoning_reject_unsupported",
+		Title:           "reject unsupported",
+		ModelID:         "openai/gpt-5-mini",
 	})
 	if err != nil {
 		t.Fatalf("CreateThreadWithOptions: %v", err)
@@ -121,6 +123,7 @@ func TestServiceClearThreadReasoningSelectionRemovesThreadOverride(t *testing.T)
 	meta := testSendTurnMeta()
 	ctx := context.Background()
 	view, err := svc.CreateThreadWithOptions(ctx, meta, CreateThreadRequest{
+		ClientRequestID:    "create_reasoning_clear_override",
 		Title:              "clear reasoning override",
 		ModelID:            "openai/gpt-5-mini",
 		ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelHigh},
@@ -153,6 +156,7 @@ func TestServiceSetThreadModelNormalizesReasoningSelection(t *testing.T) {
 	meta := testSendTurnMeta()
 	ctx := context.Background()
 	view, err := svc.CreateThreadWithOptions(ctx, meta, CreateThreadRequest{
+		ClientRequestID:    "create_reasoning_model_switch",
 		Title:              "model switch",
 		ModelID:            "openai/gpt-5-mini",
 		ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelHigh},

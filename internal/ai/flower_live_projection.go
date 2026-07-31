@@ -11,7 +11,8 @@ import (
 	"strings"
 	"time"
 
-	flruntime "github.com/floegence/floret/v2/runtime"
+	"github.com/floegence/floret/v3/identity"
+	flruntime "github.com/floegence/floret/v3/runtime"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -873,7 +874,8 @@ func (s *Service) SubmitFlowerApproval(meta *session.Meta, req SubmitFlowerAppro
 	if req.Approved {
 		decision = flruntime.ApprovalDecisionApprove
 	}
-	result, err := authorityRun.activeFloretHost().ResolveApproval(context.Background(), flruntime.ApprovalResolutionRequest{
+	result, err := authorityRun.activeFloretHost().ResolveApproval(context.Background(), flruntime.ResolveApprovalCommand{
+		LogicalRequestID:   identity.LogicalRequestID(decisionID),
 		DecisionID:         decisionID,
 		ExpectedGeneration: queue.Generation, ExpectedRevision: queue.Revision,
 		ExpectedCurrent: flruntime.ApprovalIdentity{
@@ -934,11 +936,15 @@ func (s *Service) publishFloretApprovalResult(endpointID string, threadID string
 	if err != nil {
 		return 0, err
 	}
+	canonicalRunID, canonicalThreadID, canonicalTurnID := r.floretCanonicalIdentity()
+	if canonicalRunID == "" || canonicalThreadID != strings.TrimSpace(threadID) || canonicalTurnID == "" {
+		return 0, errors.New("canonical approval projection identity is unavailable")
+	}
 	cursor, err := s.appendFlowerLiveEventCursor(FlowerLiveEvent{
 		EndpointID: endpointID,
 		ThreadID:   threadID,
-		RunID:      strings.TrimSpace(r.id),
-		TurnID:     strings.TrimSpace(r.turnID),
+		RunID:      canonicalRunID,
+		TurnID:     canonicalTurnID,
 		Kind:       FlowerLiveApprovalQueueReplaced,
 		Payload: mustFlowerPayload(FlowerLiveApprovalQueuePayload{
 			Actions:       actions,
@@ -2130,6 +2136,7 @@ func (r *run) snapshotControlConfirmationApproval(toolID string) (FlowerApproval
 }
 
 func (r *run) controlConfirmationApprovalActionLocked(toolID string, approval *toolApprovalRequest) FlowerApprovalAction {
+	runID, _, turnID := r.floretCanonicalIdentity()
 	toolName := strings.TrimSpace(approval.toolName)
 	if toolName == "" {
 		toolName = "tool"
@@ -2138,10 +2145,10 @@ func (r *run) controlConfirmationApprovalActionLocked(toolID string, approval *t
 	cwd := strings.TrimSpace(approval.cwd)
 	targets := append([]FlowerSafeTarget(nil), approval.targets...)
 	return FlowerApprovalAction{
-		ActionID:      flowerApprovalActionID(r.id, toolID),
+		ActionID:      flowerApprovalActionID(runID, toolID),
 		Origin:        FlowerApprovalOriginControlConfirm,
-		RunID:         strings.TrimSpace(r.id),
-		TurnID:        strings.TrimSpace(r.turnID),
+		RunID:         runID,
+		TurnID:        turnID,
 		ToolID:        toolID,
 		ToolName:      toolName,
 		State:         FlowerApprovalStateRequested,

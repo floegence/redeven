@@ -193,30 +193,30 @@ function contentBlocksFromMessage(threadID: string, message: FlowerChatMessage):
 }
 
 function queuedTurnBlocks(turn: FlowerQueuedTurn): readonly FlowerRenderableMessageBlock[] {
-  const turnID = trimString(turn.turn_id);
+  const queueID = trimString(turn.queue_id);
   const blocks: FlowerRenderableMessageBlock[] = (turn.attachments ?? []).map((attachment, index) => {
     const mimeType = trimString(attachment.mime_type);
     const url = trimString(attachment.url);
     const attachmentID = trimString(attachment.attachment_id);
     const name = trimString(attachment.name);
     if (!attachmentID || !name || !mimeType || !Number.isFinite(attachment.size_bytes) || attachment.size_bytes < 0) {
-      throw new Error(`Flower contract error: queued turn ${turnID} attachment ${index} is invalid.`);
+      throw new Error(`Flower contract error: queued turn ${queueID} attachment ${index} is invalid.`);
     }
     if (mimeType.toLowerCase().startsWith('image/') && url) {
       return {
-        type: 'image', key: `queued-turn:${turnID}:attachment:${attachmentID}`, block_index: index,
+        type: 'image', key: `queued-turn:${queueID}:attachment:${attachmentID}`, block_index: index,
         src: url, alt: name,
       };
     }
     return {
-      type: 'file', key: `queued-turn:${turnID}:attachment:${attachmentID}`, block_index: index,
+      type: 'file', key: `queued-turn:${queueID}:attachment:${attachmentID}`, block_index: index,
       name, size: attachment.size_bytes, mimeType, ...(url ? { url } : {}),
     };
   });
   const prompt = trimString(turn.prompt);
   if (prompt) {
     blocks.push({
-      type: 'content', key: `queued-turn:${turnID}:content`, block_index: blocks.length,
+      type: 'content', key: `queued-turn:${queueID}:content`, block_index: blocks.length,
       block_type: 'markdown', content: prompt,
     });
   }
@@ -450,21 +450,17 @@ export function buildFlowerTimelineEntries(thread: FlowerThreadSnapshot | null |
       : { ...message, active_cursor: activeCursor };
     return messageTimelineEntries(thread.thread_id, projectedMessage, decorations);
   });
-  const canonicalUserTurnIDs = new Set(thread.messages.flatMap((message) => (
-    message.role === 'user' && trimString(message.turn_id) ? [trimString(message.turn_id)] : []
-  )));
-  const queuedTurnIDs = new Set<string>();
+  const queuedIDs = new Set<string>();
   for (const turn of thread.queued_turns ?? []) {
-    const turnID = trimString(turn.turn_id);
-    if (!turnID) throw new Error('Flower contract error: queued turn requires turn_id.');
-    if (queuedTurnIDs.has(turnID)) throw new Error(`Flower contract error: queued turn ${turnID} is duplicated.`);
-    queuedTurnIDs.add(turnID);
-    if (canonicalUserTurnIDs.has(turnID)) continue;
+    const queueID = trimString(turn.queue_id);
+    if (!queueID) throw new Error('Flower contract error: queued turn requires queue_id.');
+    if (queuedIDs.has(queueID)) throw new Error(`Flower contract error: queued turn ${queueID} is duplicated.`);
+    queuedIDs.add(queueID);
     const blocks = queuedTurnBlocks(turn);
-    if (blocks.length === 0) throw new Error(`Flower contract error: queued turn ${turnID} has no content.`);
+    if (blocks.length === 0) throw new Error(`Flower contract error: queued turn ${queueID} has no content.`);
     entries.push({
       type: 'queued_turn',
-      key: `queued-turn:${thread.thread_id}:${turnID}`,
+      key: `queued-turn:${thread.thread_id}:${queueID}`,
       turn,
       blocks,
     });

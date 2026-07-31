@@ -310,6 +310,7 @@ func TestExecutePreparedRun_DesktopReasoningPrecedence(t *testing.T) {
 	meta := testSendTurnMeta()
 	ctx := context.Background()
 	thread, err := svc.CreateThreadWithOptions(ctx, meta, CreateThreadRequest{
+		ClientRequestID:    "create_desktop_reasoning_precedence",
 		Title:              "desktop reasoning precedence",
 		ModelID:            modelID,
 		ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelMax},
@@ -323,18 +324,17 @@ func TestExecutePreparedRun_DesktopReasoningPrecedence(t *testing.T) {
 
 	run := func(runID string, text string, selection config.AIReasoningSelection) ModelGatewayRequest {
 		t.Helper()
-		prepared, err := svc.prepareRun(meta, runID, RunStartRequest{
+		response, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{
 			ThreadID: thread.ThreadID,
+			Model:    modelID,
 			Input:    RunInput{Text: text},
 			Options:  RunOptions{ReasoningSelection: selection},
-		}, nil)
+		})
 		if err != nil {
-			t.Fatalf("prepareRun(%s): %v", runID, err)
+			t.Fatalf("SendUserTurn(%s): %v", runID, err)
 		}
-		execCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		defer cancel()
-		if err := svc.executePreparedRun(execCtx, prepared); err != nil {
-			t.Fatalf("executePreparedRun(%s): %v", runID, err)
+		if response.Kind != "start" || response.RunID == "" || response.TurnID == "" {
+			t.Fatalf("SendUserTurn(%s) response=%#v, want canonical admission", runID, response)
 		}
 		deadline := time.NewTimer(2 * time.Second)
 		defer deadline.Stop()
@@ -344,7 +344,20 @@ func TestExecutePreparedRun_DesktopReasoningPrecedence(t *testing.T) {
 				for _, message := range request.Messages {
 					for _, part := range message.Content {
 						if part.Text == text {
-							return request
+							for {
+								svc.mu.Lock()
+								active := strings.TrimSpace(svc.activeRunByTh[runThreadKey(meta.EndpointID, thread.ThreadID)])
+								svc.mu.Unlock()
+								if active == "" {
+									return request
+								}
+								select {
+								case <-time.After(10 * time.Millisecond):
+								case <-deadline.C:
+									t.Fatalf("run %s did not finish after provider response", runID)
+									return ModelGatewayRequest{}
+								}
+							}
 						}
 					}
 				}
@@ -355,11 +368,11 @@ func TestExecutePreparedRun_DesktopReasoningPrecedence(t *testing.T) {
 		}
 	}
 
-	explicit := run("run_desktop_reasoning_explicit", "use explicit reasoning", config.AIReasoningSelection{Level: config.AIReasoningLevelHigh})
+	explicit := run("run-desktop-reasoning-explicit", "use explicit reasoning", config.AIReasoningSelection{Level: config.AIReasoningLevelHigh})
 	if explicit.ProviderControls.ReasoningSelection.Level != config.AIReasoningLevelHigh {
 		t.Fatalf("explicit reasoning=%+v, want high single-turn override", explicit.ProviderControls.ReasoningSelection)
 	}
-	threadDefault := run("run_desktop_reasoning_thread", "use thread reasoning", config.AIReasoningSelection{})
+	threadDefault := run("run-desktop-reasoning-thread", "use thread reasoning", config.AIReasoningSelection{})
 	if threadDefault.ProviderControls.ReasoningSelection.Level != config.AIReasoningLevelMax {
 		t.Fatalf("thread reasoning=%+v, want max thread default", threadDefault.ProviderControls.ReasoningSelection)
 	}
@@ -396,6 +409,7 @@ func TestCreateThreadRejectsUnsupportedDesktopReasoning(t *testing.T) {
 	svc.desktopModelSource = modelSource
 	svc.mu.Unlock()
 	_, err := svc.CreateThreadWithOptions(context.Background(), testSendTurnMeta(), CreateThreadRequest{
+		ClientRequestID:    "create_unsupported_desktop_reasoning",
 		Title:              "unsupported desktop reasoning",
 		ModelID:            modelID,
 		ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelHigh},

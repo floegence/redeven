@@ -2,12 +2,14 @@ package appserver
 
 import (
 	"context"
+	"errors"
 	"testing"
 
-	flconfig "github.com/floegence/floret/v2/config"
-	flprovider "github.com/floegence/floret/v2/provider"
-	flruntime "github.com/floegence/floret/v2/runtime"
-	flstorage "github.com/floegence/floret/v2/storage"
+	flconfig "github.com/floegence/floret/v3/config"
+	"github.com/floegence/floret/v3/identity"
+	flprovider "github.com/floegence/floret/v3/provider"
+	flruntime "github.com/floegence/floret/v3/runtime"
+	flstorage "github.com/floegence/floret/v3/storage"
 	"github.com/floegence/redeven/internal/ai"
 )
 
@@ -42,6 +44,41 @@ func (p staticAIServiceProvider) UpdateAIServiceStartupOptions(AIServiceStartupO
 func openAppserverTestFloretHost(t *testing.T, path string) (*flruntime.Host, error) {
 	t.Helper()
 	return flruntime.Open(context.Background(), flruntime.Options{Storage: flstorage.SQLite(path)})
+}
+
+type appserverTestIDSource struct {
+	turnID identity.TurnID
+	runID  identity.RunID
+}
+
+func (source *appserverTestIDSource) NewThreadID() (identity.ThreadID, error) {
+	return "", errors.New("appserver fixture must use an existing canonical thread")
+}
+
+func (source *appserverTestIDSource) NewTurnID() (identity.TurnID, error) {
+	if source == nil || source.turnID == "" {
+		return "", errors.New("appserver fixture turn identity is unavailable")
+	}
+	turnID := source.turnID
+	source.turnID = ""
+	return turnID, nil
+}
+
+func (source *appserverTestIDSource) NewRunID() (identity.RunID, error) {
+	if source == nil || source.runID == "" {
+		return "", errors.New("appserver fixture run identity is unavailable")
+	}
+	runID := source.runID
+	source.runID = ""
+	return runID, nil
+}
+
+type appserverTestFloretTurnRequest struct {
+	TurnID              identity.TurnID
+	RunID               identity.RunID
+	Input               flruntime.TurnInput
+	SupplementalContext []flruntime.TurnSupplementalContextItem
+	Signals             flruntime.TurnSignalSpec
 }
 
 type appserverTestGateway struct {
@@ -80,20 +117,36 @@ func newAppserverTestFloretAgent(t *testing.T, gateway flprovider.Gateway) *flru
 	return agent
 }
 
-func runAppserverTestFloretTurn(t *testing.T, path string, threadID flruntime.ThreadID, gateway flprovider.Gateway, request flruntime.TurnRequest) flruntime.TurnResult {
+func runAppserverTestFloretTurn(t *testing.T, path string, threadID identity.ThreadID, gateway flprovider.Gateway, request appserverTestFloretTurnRequest) flruntime.ThreadTurnSnapshot {
 	t.Helper()
-	host, err := openAppserverTestFloretHost(t, path)
+	host, err := flruntime.Open(context.Background(), flruntime.Options{
+		Storage:  flstorage.SQLite(path),
+		IDSource: &appserverTestIDSource{turnID: request.TurnID, runID: request.RunID},
+	})
 	if err != nil {
 		t.Fatalf("runtime.Open: %v", err)
 	}
-	defer func() { _ = host.Close() }()
-	runner, err := host.TurnRunner(context.Background(), threadID, newAppserverTestFloretAgent(t, gateway))
+	defer func() { _ = host.Shutdown(context.Background()) }()
+	thread, err := host.Thread(context.Background(), threadID)
 	if err != nil {
-		t.Fatalf("Host.TurnRunner: %v", err)
+		t.Fatalf("Host.Thread: %v", err)
 	}
-	result, err := runner.Run(context.Background(), request)
+	turns, err := thread.Turns(newAppserverTestFloretAgent(t, gateway))
 	if err != nil {
-		t.Fatalf("TurnRunner.Run: %v", err)
+		t.Fatalf("Thread.Turns: %v", err)
+	}
+	started, err := turns.StartTurn(context.Background(), flruntime.StartTurnCommand{
+		LogicalRequestID:    identity.LogicalRequestID("fixture_" + string(request.TurnID)),
+		UserMessage:         request.Input,
+		SupplementalContext: request.SupplementalContext,
+		Signals:             request.Signals,
+	})
+	if err != nil {
+		t.Fatalf("Turns.StartTurn: %v", err)
+	}
+	result, err := thread.ReadTurn(context.Background(), started.TurnID)
+	if err != nil {
+		t.Fatalf("Thread.ReadTurn: %v", err)
 	}
 	return result
 }

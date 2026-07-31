@@ -202,7 +202,6 @@ func TestQueuedTurnContextActionPersistsThroughStoreRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
-	const turnID = "msg_context_action"
 	action := &ContextActionEnvelope{
 		SchemaVersion: ContextActionSchemaVersion,
 		ActionID:      "assistant.ask.flower",
@@ -226,7 +225,6 @@ func TestQueuedTurnContextActionPersistsThroughStoreRoundTrip(t *testing.T) {
 		ThreadID: thread.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Input: RunInput{
-			TurnID:        turnID,
 			Text:          "queued with context",
 			ContextAction: action,
 		},

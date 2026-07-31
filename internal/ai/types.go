@@ -278,7 +278,7 @@ type FlowerSubagentDetailResponse struct {
 }
 
 type CreateThreadRequest struct {
-	ThreadID           string                      `json:"-"`
+	ClientRequestID    string                      `json:"client_request_id"`
 	Title              string                      `json:"title"`
 	ModelID            string                      `json:"model_id,omitempty"`
 	PermissionType     string                      `json:"permission_type,omitempty"`
@@ -287,7 +287,18 @@ type CreateThreadRequest struct {
 }
 
 type CreateThreadResponse struct {
-	Thread ThreadView `json:"thread"`
+	ClientRequestID string     `json:"client_request_id"`
+	Thread          ThreadView `json:"thread"`
+}
+
+type ForkThreadRequest struct {
+	ClientRequestID string `json:"client_request_id"`
+	Title           string `json:"title,omitempty"`
+}
+
+type ForkThreadResponse struct {
+	ClientRequestID string     `json:"client_request_id"`
+	Thread          ThreadView `json:"thread"`
 }
 
 type PatchThreadRequest struct {
@@ -320,7 +331,7 @@ type FollowupAttachmentView struct {
 type FollowupItemView struct {
 	FollowupID      string                   `json:"followup_id"`
 	Lane            string                   `json:"lane"`
-	TurnID          string                   `json:"turn_id"`
+	TurnID          string                   `json:"turn_id,omitempty"`
 	Text            string                   `json:"text"`
 	ModelID         string                   `json:"model_id,omitempty"`
 	PermissionType  string                   `json:"permission_type,omitempty"`
@@ -331,7 +342,7 @@ type FollowupItemView struct {
 }
 
 type QueuedTurnView struct {
-	TurnID          string                   `json:"turn_id"`
+	QueueID         string                   `json:"queue_id"`
 	Text            string                   `json:"text"`
 	CreatedAtUnixMs int64                    `json:"created_at_unix_ms"`
 	Attachments     []FollowupAttachmentView `json:"attachments,omitempty"`
@@ -384,9 +395,8 @@ type RunRequest struct {
 }
 
 type RunInput struct {
-	// TurnID is an optional client-proposed identity for the Floret turn. A
-	// missing value is allocated by Redeven; an invalid non-empty value is
-	// rejected instead of being replaced.
+	// TurnID is populated only from Floret canonical admission. Clients must
+	// omit it when submitting a new user command.
 	TurnID             string                          `json:"turn_id,omitempty"`
 	Text               string                          `json:"text"`
 	Attachments        []RunAttachmentIn               `json:"attachments"`

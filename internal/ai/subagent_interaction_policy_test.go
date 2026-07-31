@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	flruntime "github.com/floegence/floret/v2/runtime"
+	flruntime "github.com/floegence/floret/v3/runtime"
 )
 
 func containsString(list []string, target string) bool {

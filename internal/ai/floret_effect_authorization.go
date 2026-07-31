@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	flruntime "github.com/floegence/floret/v2/runtime"
-	fltools "github.com/floegence/floret/v2/tools"
+	flruntime "github.com/floegence/floret/v3/runtime"
+	fltools "github.com/floegence/floret/v3/tools"
 )
 
 type floretEffectAuthorizationKey struct {
@@ -70,7 +70,7 @@ func (r *floretEffectAuthorizationRegistry) snapshotForInvocation(inv fltools.In
 		return PermissionSnapshot{}, "", errors.New("Floret effect authorization registry is unavailable")
 	}
 	key := floretEffectAuthorizationKey{
-		ThreadID: strings.TrimSpace(inv.ThreadID), TurnID: strings.TrimSpace(inv.TurnID), RunID: strings.TrimSpace(inv.RunID),
+		ThreadID: strings.TrimSpace(string(inv.ThreadID)), TurnID: strings.TrimSpace(string(inv.TurnID)), RunID: strings.TrimSpace(string(inv.RunID)),
 		ToolCallID: strings.TrimSpace(inv.CallID), ArgumentHash: floretEffectArgumentHash(inv.RawArgs),
 	}
 	r.mu.Lock()

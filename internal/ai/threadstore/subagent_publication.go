@@ -22,6 +22,7 @@ type SubAgentPublicationOperation struct {
 	ParentThreadID         string
 	ParentTurnID           string
 	ParentRunID            string
+	ParentSnapshotID       string
 	SpawnToolCallID        string
 	ChildThreadID          string
 	ChildRunID             string
@@ -37,7 +38,7 @@ type SubAgentPublicationOperation struct {
 	FailedAtUnixMs         int64
 }
 
-func (s *Store) PrepareSubAgentPublication(ctx context.Context, operation SubAgentPublicationOperation, snapshot ChildPermissionSnapshotRecord) error {
+func (s *Store) PrepareSubAgentPublication(ctx context.Context, operation SubAgentPublicationOperation) error {
 	if s == nil || s.db == nil {
 		return errors.New("store not initialized")
 	}
@@ -48,20 +49,11 @@ func (s *Store) PrepareSubAgentPublication(ctx context.Context, operation SubAge
 	operation.State = SubAgentPublicationPending
 	operation.CommittedAtUnixMs = 0
 	operation.FailedAtUnixMs = 0
-	snapshot = normalizeChildPermissionSnapshotRecord(snapshot)
-	snapshot.State = "provisional"
-	snapshot.FinalizedAtUnixMs = 0
 	if err := validateSubAgentPublicationOperation(operation, true); err != nil {
 		return err
 	}
-	if err := validateChildPermissionSnapshotRecord(snapshot); err != nil {
-		return err
-	}
-	if operation.EndpointID != snapshot.EndpointID || operation.ParentThreadID != snapshot.ParentThreadID ||
-		operation.ParentRunID != snapshot.ParentRunID || operation.SpawnToolCallID != snapshot.SpawnToolCallID ||
-		operation.ChildThreadID != snapshot.ChildThreadID || operation.ChildRunID != snapshot.ChildRunID ||
-		operation.ChildSnapshotID != snapshot.ChildSnapshotID {
-		return errors.New("SubAgent publication operation conflicts with its permission audit")
+	if operation.ChildThreadID != "" || operation.ChildRunID != "" || operation.ChildSnapshotID != "" {
+		return errors.New("pending SubAgent publication must not preallocate child identity")
 	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -92,21 +84,119 @@ func (s *Store) PrepareSubAgentPublication(ctx context.Context, operation SubAge
 		if _, err := tx.ExecContext(ctx, `
 INSERT INTO ai_subagent_publication_operations(
   publication_id, endpoint_id, parent_thread_id, parent_turn_id, parent_run_id,
-  spawn_tool_call_id, child_thread_id, child_run_id, child_snapshot_id,
+  parent_snapshot_id, spawn_tool_call_id, child_thread_id, child_run_id, child_snapshot_id,
   request_json, request_hash, session_meta_json, model_id, reasoning_selection_json,
 	  state, created_at_unix_ms, committed_at_unix_ms, failed_at_unix_ms
-	) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `, operation.PublicationID, operation.EndpointID, operation.ParentThreadID, operation.ParentTurnID, operation.ParentRunID,
-			operation.SpawnToolCallID, operation.ChildThreadID, operation.ChildRunID, operation.ChildSnapshotID,
+			operation.ParentSnapshotID, operation.SpawnToolCallID, operation.ChildThreadID, operation.ChildRunID, operation.ChildSnapshotID,
 			operation.RequestJSON, operation.RequestHash, operation.SessionMetaJSON, operation.ModelID, operation.ReasoningSelectionJSON,
 			operation.State, operation.CreatedAtUnixMs, operation.CommittedAtUnixMs, operation.FailedAtUnixMs); err != nil {
 			return err
 		}
 	}
-	if err := insertChildPermissionSnapshotTx(ctx, tx, snapshot); err != nil {
-		return err
-	}
 	return tx.Commit()
+}
+
+// BindAndFinalizeSubAgentPublication atomically binds the first canonical
+// child execution identity to a prepared publication and records its exact
+// permission audit. Floret allocates every child identity before this call.
+func (s *Store) BindAndFinalizeSubAgentPublication(ctx context.Context, publicationID string, snapshot ChildPermissionSnapshotRecord, committedAtUnixMs int64) (bool, error) {
+	if s == nil || s.db == nil {
+		return false, errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	publicationID = strings.TrimSpace(publicationID)
+	snapshot = normalizeChildPermissionSnapshotRecord(snapshot)
+	snapshot.State = "finalized"
+	snapshot.FinalizedAtUnixMs = committedAtUnixMs
+	if publicationID == "" || committedAtUnixMs <= 0 {
+		return false, errors.New("invalid SubAgent publication binding request")
+	}
+	if err := validateChildPermissionSnapshotRecord(snapshot); err != nil {
+		return false, err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	operation, found, err := loadSubAgentPublicationOperationTx(ctx, tx, publicationID)
+	if err != nil {
+		return false, err
+	}
+	if !found {
+		return false, fmt.Errorf("SubAgent publication %q is missing", publicationID)
+	}
+	if operation.EndpointID != snapshot.EndpointID || operation.ParentSnapshotID != snapshot.ParentSnapshotID ||
+		operation.ParentThreadID != snapshot.ParentThreadID || operation.ParentRunID != snapshot.ParentRunID ||
+		operation.SpawnToolCallID != snapshot.SpawnToolCallID {
+		return false, errors.New("SubAgent publication permission audit mismatch")
+	}
+	if operation.State == SubAgentPublicationCommitted {
+		if operation.ChildThreadID != snapshot.ChildThreadID || operation.ChildRunID != snapshot.ChildRunID || operation.ChildSnapshotID != snapshot.ChildSnapshotID {
+			return false, errors.New("SubAgent publication binding identity mismatch")
+		}
+		return true, tx.Commit()
+	}
+	if operation.State != SubAgentPublicationPending {
+		return false, errors.New("SubAgent publication cannot be bound after failure")
+	}
+	if operation.ChildThreadID != "" && (operation.ChildThreadID != snapshot.ChildThreadID || operation.ChildRunID != snapshot.ChildRunID || operation.ChildSnapshotID != snapshot.ChildSnapshotID) {
+		return false, errors.New("SubAgent publication canonical identity mismatch")
+	}
+	storedSnapshot, snapshotFound, err := loadOptionalChildPermissionSnapshotTx(ctx, tx, snapshot.ChildSnapshotID)
+	if err != nil {
+		return false, err
+	}
+	if snapshotFound {
+		if !sameChildPermissionSnapshotIntent(storedSnapshot, snapshot) || (storedSnapshot.State != "provisional" && storedSnapshot.State != "finalized") {
+			return false, errors.New("SubAgent publication permission audit conflicts with stored record")
+		}
+		if storedSnapshot.State == "provisional" {
+			if _, err := tx.ExecContext(ctx, `UPDATE ai_child_permission_snapshots SET state = 'finalized', finalized_at_unix_ms = ? WHERE child_snapshot_id = ? AND state = 'provisional'`, committedAtUnixMs, snapshot.ChildSnapshotID); err != nil {
+				return false, err
+			}
+		}
+	} else if err := insertChildPermissionSnapshotTx(ctx, tx, snapshot); err != nil {
+		return false, err
+	}
+	res, err := tx.ExecContext(ctx, `
+UPDATE ai_subagent_publication_operations
+SET child_thread_id = ?, child_run_id = ?, child_snapshot_id = ?, state = ?,
+    request_json = '', session_meta_json = '', model_id = '', reasoning_selection_json = '', committed_at_unix_ms = ?
+WHERE publication_id = ? AND state = ?
+`, snapshot.ChildThreadID, snapshot.ChildRunID, snapshot.ChildSnapshotID, SubAgentPublicationCommitted, committedAtUnixMs, publicationID, SubAgentPublicationPending)
+	if err != nil {
+		return false, err
+	}
+	if changed, _ := res.RowsAffected(); changed != 1 {
+		return false, errors.New("SubAgent publication changed during canonical binding")
+	}
+	if err := tx.Commit(); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func loadOptionalChildPermissionSnapshotTx(ctx context.Context, tx *sql.Tx, snapshotID string) (ChildPermissionSnapshotRecord, bool, error) {
+	record, err := loadChildPermissionSnapshotTx(ctx, tx, snapshotID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ChildPermissionSnapshotRecord{}, false, nil
+	}
+	return record, err == nil, err
+}
+
+func sameChildPermissionSnapshotIntent(left, right ChildPermissionSnapshotRecord) bool {
+	return left.ChildSnapshotID == right.ChildSnapshotID && left.EndpointID == right.EndpointID &&
+		left.ParentSnapshotID == right.ParentSnapshotID && left.SpawnToolCallID == right.SpawnToolCallID &&
+		left.ParentThreadID == right.ParentThreadID && left.ParentRunID == right.ParentRunID &&
+		left.ChildThreadID == right.ChildThreadID && left.ChildRunID == right.ChildRunID &&
+		left.SnapshotJSON == right.SnapshotJSON && left.SnapshotHash == right.SnapshotHash &&
+		left.RegistryHash == right.RegistryHash && left.SchemaHash == right.SchemaHash &&
+		left.PresentationHash == right.PresentationHash && left.CreatedAtUnixMs == right.CreatedAtUnixMs
 }
 
 func (s *Store) FinalizeSubAgentPublication(ctx context.Context, publicationID string, childSnapshotID string, childThreadID string, childRunID string, committedAtUnixMs int64) (bool, error) {
@@ -296,7 +386,7 @@ func (s *Store) listPendingSubAgentPublications(ctx context.Context, endpointID 
 	}
 	query := `
 SELECT publication_id, endpoint_id, parent_thread_id, parent_turn_id, parent_run_id,
-       spawn_tool_call_id, child_thread_id, child_run_id, child_snapshot_id,
+       parent_snapshot_id, spawn_tool_call_id, child_thread_id, child_run_id, child_snapshot_id,
 	       request_json, request_hash, session_meta_json, model_id, reasoning_selection_json,
 	       state, created_at_unix_ms, committed_at_unix_ms, failed_at_unix_ms
 FROM ai_subagent_publication_operations
@@ -347,7 +437,7 @@ func (s *Store) GetSubAgentPublication(ctx context.Context, publicationID string
 	}
 	row := s.db.QueryRowContext(ctx, `
 SELECT publication_id, endpoint_id, parent_thread_id, parent_turn_id, parent_run_id,
-       spawn_tool_call_id, child_thread_id, child_run_id, child_snapshot_id,
+       parent_snapshot_id, spawn_tool_call_id, child_thread_id, child_run_id, child_snapshot_id,
 	       request_json, request_hash, session_meta_json, model_id, reasoning_selection_json,
 	       state, created_at_unix_ms, committed_at_unix_ms, failed_at_unix_ms
 FROM ai_subagent_publication_operations
@@ -369,7 +459,7 @@ WHERE publication_id = ?
 func loadSubAgentPublicationOperationTx(ctx context.Context, tx *sql.Tx, publicationID string) (SubAgentPublicationOperation, bool, error) {
 	row := tx.QueryRowContext(ctx, `
 SELECT publication_id, endpoint_id, parent_thread_id, parent_turn_id, parent_run_id,
-       spawn_tool_call_id, child_thread_id, child_run_id, child_snapshot_id,
+       parent_snapshot_id, spawn_tool_call_id, child_thread_id, child_run_id, child_snapshot_id,
 	       request_json, request_hash, session_meta_json, model_id, reasoning_selection_json,
 	       state, created_at_unix_ms, committed_at_unix_ms, failed_at_unix_ms
 FROM ai_subagent_publication_operations
@@ -392,7 +482,7 @@ func scanSubAgentPublicationOperation(scanner interface{ Scan(...any) error }) (
 	var record SubAgentPublicationOperation
 	err := scanner.Scan(
 		&record.PublicationID, &record.EndpointID, &record.ParentThreadID, &record.ParentTurnID, &record.ParentRunID,
-		&record.SpawnToolCallID, &record.ChildThreadID, &record.ChildRunID, &record.ChildSnapshotID,
+		&record.ParentSnapshotID, &record.SpawnToolCallID, &record.ChildThreadID, &record.ChildRunID, &record.ChildSnapshotID,
 		&record.RequestJSON, &record.RequestHash, &record.SessionMetaJSON, &record.ModelID, &record.ReasoningSelectionJSON,
 		&record.State, &record.CreatedAtUnixMs, &record.CommittedAtUnixMs, &record.FailedAtUnixMs,
 	)
@@ -405,6 +495,7 @@ func normalizeSubAgentPublicationOperation(record SubAgentPublicationOperation) 
 	record.ParentThreadID = strings.TrimSpace(record.ParentThreadID)
 	record.ParentTurnID = strings.TrimSpace(record.ParentTurnID)
 	record.ParentRunID = strings.TrimSpace(record.ParentRunID)
+	record.ParentSnapshotID = strings.TrimSpace(record.ParentSnapshotID)
 	record.SpawnToolCallID = strings.TrimSpace(record.SpawnToolCallID)
 	record.ChildThreadID = strings.TrimSpace(record.ChildThreadID)
 	record.ChildRunID = strings.TrimSpace(record.ChildRunID)
@@ -420,10 +511,16 @@ func normalizeSubAgentPublicationOperation(record SubAgentPublicationOperation) 
 
 func validateSubAgentPublicationOperation(record SubAgentPublicationOperation, requirePendingPayload bool) error {
 	if record.PublicationID == "" || record.EndpointID == "" || record.ParentThreadID == "" || record.ParentTurnID == "" ||
-		record.ParentRunID == "" || record.SpawnToolCallID == "" || record.ChildThreadID == "" || record.ChildRunID == "" ||
-		record.ChildSnapshotID == "" || record.RequestHash == "" || record.CreatedAtUnixMs <= 0 ||
-		record.ChildRunID == record.ChildThreadID || record.ChildRunID == record.ParentRunID {
+		record.ParentRunID == "" || record.ParentSnapshotID == "" || record.SpawnToolCallID == "" ||
+		record.RequestHash == "" || record.CreatedAtUnixMs <= 0 {
 		return errors.New("invalid SubAgent publication operation")
+	}
+	bound := record.ChildThreadID != "" || record.ChildRunID != "" || record.ChildSnapshotID != ""
+	if bound && (record.ChildThreadID == "" || record.ChildRunID == "" || record.ChildSnapshotID == "" || record.ChildRunID == record.ChildThreadID || record.ChildRunID == record.ParentRunID) {
+		return errors.New("invalid SubAgent publication child identity")
+	}
+	if record.State != SubAgentPublicationPending && !bound {
+		return errors.New("terminal SubAgent publication is missing child identity")
 	}
 	if decoded, err := hex.DecodeString(record.RequestHash); err != nil || len(decoded) != 32 {
 		return errors.New("invalid SubAgent publication request hash")
@@ -459,6 +556,6 @@ func validateSubAgentPublicationOperation(record SubAgentPublicationOperation, r
 func sameSubAgentPublicationIdentity(left, right SubAgentPublicationOperation) bool {
 	return left.PublicationID == right.PublicationID && left.EndpointID == right.EndpointID &&
 		left.ParentThreadID == right.ParentThreadID && left.ParentTurnID == right.ParentTurnID && left.ParentRunID == right.ParentRunID &&
-		left.SpawnToolCallID == right.SpawnToolCallID && left.ChildThreadID == right.ChildThreadID && left.ChildRunID == right.ChildRunID &&
+		left.ParentSnapshotID == right.ParentSnapshotID && left.SpawnToolCallID == right.SpawnToolCallID && left.ChildThreadID == right.ChildThreadID && left.ChildRunID == right.ChildRunID &&
 		left.ChildSnapshotID == right.ChildSnapshotID && left.RequestHash == right.RequestHash
 }
