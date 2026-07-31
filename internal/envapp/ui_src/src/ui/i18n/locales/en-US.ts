@@ -2916,9 +2916,11 @@ export const enUS = defineDictionary({
     address: {
       label: 'Web Service address',
       placeholder: 'Enter a port or address, for example 3000 or localhost:8080/docs',
-      scopeTitle: 'Available from this Environment.',
-      scopeDescription: 'Enter a port or a loopback address using localhost, 127.0.0.0/8, or ::1. Public and LAN addresses cannot be opened. Each Redeven window stays within the Web Service opened here.',
-      invalid: 'This address cannot be opened. Web Services can only access a local port or an HTTP(S) loopback address such as localhost:3000, 127.0.0.1:3000, or [::1]:3000.',
+      scopeTitle: 'Local services only.',
+      scopeDescription: 'Enter a port or loopback address from this Environment.',
+      invalidTitle: 'Available only inside this Environment',
+      invalid: 'Public websites and LAN addresses are outside the Web Service access scope.',
+      examples: 'Try 3000 | localhost:3000 | 127.0.0.1:3000 | [::1]:3000',
     },
     session: {
       temporary: 'Temporary',

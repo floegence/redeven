@@ -3246,9 +3246,11 @@
     "address": {
       "label": "Web 服务地址",
       "placeholder": "输入端口或地址，例如 3000 或 localhost:8080/docs",
-      "scopeTitle": "可访问当前环境内的服务。",
-      "scopeDescription": "请输入端口，或使用 localhost、127.0.0.0/8、::1 的回环地址。无法打开公网或局域网地址。每个 Redeven 窗口仅限于在此打开的 Web Service。",
-      "invalid": "无法打开此地址。Web Service 只能访问本地端口，或 localhost:3000、127.0.0.1:3000、[::1]:3000 这类 HTTP(S) 回环地址。"
+      "scopeTitle": "仅限本机服务。",
+      "scopeDescription": "请输入当前环境中的端口或回环地址。",
+      "invalidTitle": "仅可访问当前环境内的服务",
+      "invalid": "公网网站和局域网地址不在 Web Service 的访问范围内。",
+      "examples": "可输入 3000 · localhost:3000 · 127.0.0.1:3000 · [::1]:3000"
     },
     "session": {
       "temporary": "临时"

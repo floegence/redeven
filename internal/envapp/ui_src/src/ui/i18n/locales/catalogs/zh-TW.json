@@ -3246,9 +3246,11 @@
     "address": {
       "label": "Web 服務位址",
       "placeholder": "輸入連接埠或位址，例如 3000 或 localhost:8080/docs",
-      "scopeTitle": "可存取目前環境內的服務。",
-      "scopeDescription": "請輸入連接埠，或使用 localhost、127.0.0.0/8、::1 的回送位址。無法開啟公網或區域網路位址。每個 Redeven 視窗僅限於在此開啟的 Web Service。",
-      "invalid": "無法開啟此位址。Web Service 只能存取本機連接埠，或 localhost:3000、127.0.0.1:3000、[::1]:3000 這類 HTTP(S) 回送位址。"
+      "scopeTitle": "僅限本機服務。",
+      "scopeDescription": "請輸入目前環境中的連接埠或回送位址。",
+      "invalidTitle": "僅可存取目前環境內的服務",
+      "invalid": "公網網站和區域網路位址不在 Web Service 的存取範圍內。",
+      "examples": "可輸入 3000 · localhost:3000 · 127.0.0.1:3000 · [::1]:3000"
     },
     "session": {
       "temporary": "暫時"

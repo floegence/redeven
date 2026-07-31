@@ -3246,9 +3246,11 @@
     "address": {
       "label": "Adresse du service web",
       "placeholder": "Saisissez un port ou une adresse, par exemple 3000 ou localhost:8080/docs",
-      "scopeTitle": "Accessible depuis cet environnement.",
-      "scopeDescription": "Saisissez un port ou une adresse de bouclage avec localhost, 127.0.0.0/8 ou ::1. Les adresses publiques et LAN ne peuvent pas être ouvertes. Chaque fenêtre Redeven reste limitée au Web Service ouvert ici.",
-      "invalid": "Cette adresse ne peut pas être ouverte. Web Services ne peut accéder qu’à un port local ou une adresse HTTP(S) de bouclage telle que localhost:3000, 127.0.0.1:3000 ou [::1]:3000."
+      "scopeTitle": "Services locaux uniquement.",
+      "scopeDescription": "Saisissez un port ou une adresse de bouclage de cet environnement.",
+      "invalidTitle": "Disponible uniquement dans cet environnement",
+      "invalid": "Les sites web publics et les adresses LAN sont hors du périmètre d’accès de Web Service.",
+      "examples": "Essayez 3000 · localhost:3000 · 127.0.0.1:3000 · [::1]:3000"
     },
     "session": {
       "temporary": "Temporaire"
