@@ -2879,7 +2879,7 @@ export const enUS = defineDictionary({
   },
   webServices: {
     title: 'Web Services',
-    description: 'Open runtime-reachable HTTP services in an isolated Desktop window or the safest route available.',
+    description: 'Open HTTP services listening on this Environment\'s loopback interface in an isolated Desktop window or the safest route available.',
     loadingEyebrow: 'Web Services',
     loadingMessage: 'Loading web services...',
     time: {
@@ -2917,8 +2917,8 @@ export const enUS = defineDictionary({
       label: 'Web Service address',
       placeholder: 'Enter a port or address, for example 3000 or localhost:8080/docs',
       scopeTitle: 'Available from this Environment.',
-      scopeDescription: 'Use a port, host:port, or HTTP(S) address reachable from the runtime. Each Redeven window stays within the Web Service opened here; enter another service here to open it separately.',
-      invalid: 'This address cannot be opened. Use a port such as 3000, host:port, or an HTTP(S) address without credentials.',
+      scopeDescription: 'Enter a port or a loopback address using localhost, 127.0.0.0/8, or ::1. Public and LAN addresses cannot be opened. Each Redeven window stays within the Web Service opened here.',
+      invalid: 'This address cannot be opened. Web Services can only access a local port or an HTTP(S) loopback address such as localhost:3000, 127.0.0.1:3000, or [::1]:3000.',
     },
     session: {
       temporary: 'Temporary',
@@ -2928,13 +2928,13 @@ export const enUS = defineDictionary({
     },
     empty: {
       title: 'No web services yet',
-      description: 'Register an HTTP service running on, or reachable from, the runtime host.',
+      description: 'Register an HTTP service listening on the Environment loopback interface.',
     },
     dialog: {
       addTitle: 'Add Web Service',
       targetPlaceholder: 'localhost:3000',
-      targetHelp: 'Use host:port or an http(s):// URL.',
-      targetError: 'Enter a valid host:port or http(s):// URL.',
+      targetHelp: 'Use a port or an HTTP(S) loopback address with localhost, 127.0.0.0/8, or ::1.',
+      targetError: 'Enter a local port or a valid HTTP(S) loopback address.',
       namePlaceholder: 'My Service',
       nameHelp: 'A display name to identify this service.',
       descriptionPlaceholder: 'Development server for my project',

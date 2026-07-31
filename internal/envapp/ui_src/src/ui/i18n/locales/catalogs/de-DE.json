@@ -3209,7 +3209,7 @@
   },
   "webServices": {
     "title": "Webdienste",
-    "description": "Öffnen Sie zur Laufzeit erreichbare HTTP-Dienste in einem isolierten Desktop-Fenster oder über die sicherste verfügbare Route.",
+    "description": "Öffnen Sie HTTP-Dienste an der Loopback-Schnittstelle dieser Umgebung in einem isolierten Desktop-Fenster oder über die sicherste verfügbare Route.",
     "loadingEyebrow": "Webdienste",
     "loadingMessage": "Webdienste werden geladen...",
     "time": {
@@ -3247,8 +3247,8 @@
       "label": "Webdienst-Adresse",
       "placeholder": "Port oder Adresse eingeben, z. B. 3000 oder localhost:8080/docs",
       "scopeTitle": "Aus dieser Umgebung erreichbar.",
-      "scopeDescription": "Verwenden Sie einen Port, Host:Port oder eine HTTP(S)-Adresse, die von der Laufzeitumgebung erreichbar ist. Jedes Redeven-Fenster bleibt auf den hier geöffneten Web Service beschränkt; geben Sie hier einen anderen Dienst ein, um ihn separat zu öffnen.",
-      "invalid": "Diese Adresse kann nicht geöffnet werden. Verwenden Sie einen Port wie 3000, Host:Port oder eine HTTP(S)-Adresse ohne Anmeldedaten."
+      "scopeDescription": "Geben Sie einen Port oder eine Loopback-Adresse mit localhost, 127.0.0.0/8 oder ::1 ein. Öffentliche und LAN-Adressen können nicht geöffnet werden. Jedes Redeven-Fenster bleibt auf den hier geöffneten Web Service beschränkt.",
+      "invalid": "Diese Adresse kann nicht geöffnet werden. Web Services können nur auf einen lokalen Port oder eine HTTP(S)-Loopback-Adresse wie localhost:3000, 127.0.0.1:3000 oder [::1]:3000 zugreifen."
     },
     "session": {
       "temporary": "Temporär"
@@ -3258,13 +3258,13 @@
     },
     "empty": {
       "title": "Noch keine Webdienste",
-      "description": "Registrieren Sie einen HTTP-Dienst, der auf dem Laufzeithost ausgeführt wird oder von dort aus erreichbar ist."
+      "description": "Registrieren Sie einen HTTP-Dienst an der Loopback-Schnittstelle dieser Umgebung."
     },
     "dialog": {
       "addTitle": "Webdienst hinzufügen",
       "targetPlaceholder": "localhost:3000",
-      "targetHelp": "Verwenden Sie host:port oder eine http(s):// URL.",
-      "targetError": "Geben Sie eine gültige host:port- oder http(s):// URL ein.",
+      "targetHelp": "Verwenden Sie einen Port oder eine HTTP(S)-Loopback-Adresse mit localhost, 127.0.0.0/8 oder ::1.",
+      "targetError": "Geben Sie einen lokalen Port oder eine gültige HTTP(S)-Loopback-Adresse ein.",
       "namePlaceholder": "Mein Dienst",
       "nameHelp": "Ein Anzeigename zur Identifikation dieses Dienstes.",
       "descriptionPlaceholder": "Entwicklungsserver für mein Projekt",

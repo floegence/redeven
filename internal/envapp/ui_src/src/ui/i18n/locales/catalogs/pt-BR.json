@@ -3209,7 +3209,7 @@
   },
   "webServices": {
     "title": "Serviços web",
-    "description": "Abra serviços HTTP acessíveis em tempo de execução em uma janela Desktop isolada ou pela rota disponível mais segura.",
+    "description": "Abra serviços HTTP que escutam na interface de loopback deste ambiente em uma janela Desktop isolada ou pela rota disponível mais segura.",
     "loadingEyebrow": "Serviços web",
     "loadingMessage": "Carregando serviços web...",
     "time": {
@@ -3247,8 +3247,8 @@
       "label": "Endereço do serviço web",
       "placeholder": "Digite uma porta ou endereço, por exemplo 3000 ou localhost:8080/docs",
       "scopeTitle": "Acessível a partir deste ambiente.",
-      "scopeDescription": "Use uma porta, host:porta ou endereço HTTP(S) acessível pelo ambiente de execução. Cada janela do Redeven permanece limitada ao Web Service aberto aqui; informe outro serviço aqui para abri-lo separadamente.",
-      "invalid": "Este endereço não pode ser aberto. Use uma porta como 3000, host:porta ou um endereço HTTP(S) sem credenciais."
+      "scopeDescription": "Informe uma porta ou um endereço de loopback com localhost, 127.0.0.0/8 ou ::1. Endereços públicos e da LAN não podem ser abertos. Cada janela do Redeven permanece limitada ao Web Service aberto aqui.",
+      "invalid": "Este endereço não pode ser aberto. Web Services só pode acessar uma porta local ou um endereço HTTP(S) de loopback, como localhost:3000, 127.0.0.1:3000 ou [::1]:3000."
     },
     "session": {
       "temporary": "Temporário"
@@ -3258,13 +3258,13 @@
     },
     "empty": {
       "title": "Ainda não há serviços web",
-      "description": "Registre um serviço HTTP em execução ou acessível a partir do host de tempo de execução."
+      "description": "Registre um serviço HTTP que escuta na interface de loopback deste ambiente."
     },
     "dialog": {
       "addTitle": "Adicionar serviço web",
       "targetPlaceholder": "localhost:3000",
-      "targetHelp": "Use host:port ou uma URL http(s)://.",
-      "targetError": "Informe um host:port ou uma URL http(s):// válida.",
+      "targetHelp": "Use uma porta ou um endereço HTTP(S) de loopback com localhost, 127.0.0.0/8 ou ::1.",
+      "targetError": "Informe uma porta local ou um endereço HTTP(S) de loopback válido.",
       "namePlaceholder": "Meu serviço",
       "nameHelp": "Nome de exibição para identificar este serviço.",
       "descriptionPlaceholder": "Servidor de desenvolvimento do meu projeto",

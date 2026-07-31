@@ -51,6 +51,98 @@ func newTestService(t *testing.T) *Service {
 	return svc
 }
 
+func TestParseTargetURLRequiresLoopbackHost(t *testing.T) {
+	t.Parallel()
+
+	accepted := map[string]string{
+		"localhost:3000":     "http://localhost:3000",
+		"https://127.42.8.9": "https://127.42.8.9:443",
+		"http://[::1]:8080":  "http://[::1]:8080",
+	}
+	for input, want := range accepted {
+		input, want := input, want
+		t.Run(input, func(t *testing.T) {
+			t.Parallel()
+			got, err := ParseTargetURL(input)
+			if err != nil {
+				t.Fatalf("ParseTargetURL: %v", err)
+			}
+			if got.String() != want {
+				t.Fatalf("URL = %q, want %q", got.String(), want)
+			}
+		})
+	}
+
+	rejected := []string{
+		"baidu.com",
+		"https://8.8.8.8",
+		"http://192.168.1.10:3000",
+		"http://user:password@localhost:3000",
+		"ftp://localhost:3000",
+	}
+	for _, input := range rejected {
+		input := input
+		t.Run(input, func(t *testing.T) {
+			t.Parallel()
+			if _, err := ParseTargetURL(input); err == nil {
+				t.Fatal("ParseTargetURL unexpectedly accepted target")
+			}
+		})
+	}
+}
+
+func TestServiceRejectsNonLoopbackTargetsAcrossMutationAndSessionPaths(t *testing.T) {
+	t.Parallel()
+	svc := newTestService(t)
+	ctx := context.Background()
+
+	if _, err := svc.CreateForward(ctx, CreateForwardRequest{Target: "baidu.com"}); err == nil {
+		t.Fatal("CreateForward unexpectedly accepted a public host")
+	}
+	if _, err := svc.OpenForwardSession(ctx, OpenForwardSessionRequest{Target: "baidu.com"}); err == nil {
+		t.Fatal("OpenForwardSession unexpectedly accepted a public host")
+	}
+	created, err := svc.CreateForward(ctx, CreateForwardRequest{Target: "localhost:3000"})
+	if err != nil {
+		t.Fatalf("CreateForward loopback: %v", err)
+	}
+	external := "http://192.168.1.10:3000"
+	if _, err := svc.UpdateForward(ctx, created.ForwardID, UpdateForwardRequest{Target: &external}); err == nil {
+		t.Fatal("UpdateForward unexpectedly accepted a LAN host")
+	}
+}
+
+func TestServicePersistedNonLoopbackTargetFailsClosedWithoutMutation(t *testing.T) {
+	t.Parallel()
+	svc := newTestService(t)
+	ctx := context.Background()
+	legacy := registry.Forward{ForwardID: "legacy-external", TargetURL: "http://baidu.com:80"}
+	if err := svc.reg.CreateForward(ctx, legacy); err != nil {
+		t.Fatalf("seed legacy forward: %v", err)
+	}
+
+	if _, err := svc.GetForward(ctx, legacy.ForwardID); err == nil {
+		t.Fatal("GetForward unexpectedly exposed a non-loopback target")
+	}
+	if _, err := svc.TouchLastOpened(ctx, legacy.ForwardID); err == nil {
+		t.Fatal("TouchLastOpened unexpectedly used a non-loopback target")
+	}
+	name := "changed"
+	if _, err := svc.UpdateForward(ctx, legacy.ForwardID, UpdateForwardRequest{Name: &name}); err == nil {
+		t.Fatal("UpdateForward unexpectedly mutated a non-loopback target")
+	}
+	if _, err := svc.SaveForwardSession(ctx, legacy.ForwardID, SaveForwardSessionRequest{Name: name}); err == nil {
+		t.Fatal("SaveForwardSession unexpectedly accepted a non-loopback target")
+	}
+	persisted, err := svc.reg.GetForward(ctx, legacy.ForwardID)
+	if err != nil {
+		t.Fatalf("read seeded forward: %v", err)
+	}
+	if persisted == nil || persisted.TargetURL != legacy.TargetURL || persisted.LastOpenedAtUnixMs != 0 {
+		t.Fatalf("legacy forward was mutated: %#v", persisted)
+	}
+}
+
 func TestService_OpenForwardSessionNormalizesPortAndDeepLinkWithoutPersisting(t *testing.T) {
 	t.Parallel()
 	svc := newTestService(t)

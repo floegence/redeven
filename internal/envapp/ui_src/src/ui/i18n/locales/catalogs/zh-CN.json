@@ -3209,7 +3209,7 @@
   },
   "webServices": {
     "title": "Web服务",
-    "description": "在隔离的 Desktop 窗口或当前最安全的可用路由中打开运行时可访问的 HTTP 服务。",
+    "description": "在隔离的 Desktop 窗口或当前最安全的可用路由中，打开监听于当前环境回环接口的 HTTP 服务。",
     "loadingEyebrow": "Web服务",
     "loadingMessage": "正在加载 Web服务...",
     "time": {
@@ -3247,8 +3247,8 @@
       "label": "Web 服务地址",
       "placeholder": "输入端口或地址，例如 3000 或 localhost:8080/docs",
       "scopeTitle": "可访问当前环境内的服务。",
-      "scopeDescription": "请输入运行时可访问的端口、主机:端口或 HTTP(S) 地址。每个 Redeven 窗口仅限于在此打开的 Web Service；如需访问其他服务，请在这里另行输入并打开。",
-      "invalid": "无法打开此地址。请输入 3000 这类端口、主机:端口，或不包含登录凭据的 HTTP(S) 地址。"
+      "scopeDescription": "请输入端口，或使用 localhost、127.0.0.0/8、::1 的回环地址。无法打开公网或局域网地址。每个 Redeven 窗口仅限于在此打开的 Web Service。",
+      "invalid": "无法打开此地址。Web Service 只能访问本地端口，或 localhost:3000、127.0.0.1:3000、[::1]:3000 这类 HTTP(S) 回环地址。"
     },
     "session": {
       "temporary": "临时"
@@ -3258,13 +3258,13 @@
     },
     "empty": {
       "title": "还没有 Web 服务",
-      "description": "注册在运行时主机上运行或可从运行时主机访问的 HTTP 服务。"
+      "description": "注册监听于当前环境回环接口的 HTTP 服务。"
     },
     "dialog": {
       "addTitle": "添加 Web 服务",
       "targetPlaceholder": "localhost:3000",
-      "targetHelp": "使用 host:port 或 http(s):// URL。",
-      "targetError": "请输入有效的 host:port 或 http(s):// URL。",
+      "targetHelp": "请输入端口，或使用 localhost、127.0.0.0/8、::1 的 HTTP(S) 回环地址。",
+      "targetError": "请输入本地端口或有效的 HTTP(S) 回环地址。",
       "namePlaceholder": "我的服务",
       "nameHelp": "用于识别此服务的显示名称。",
       "descriptionPlaceholder": "我的项目开发服务器",

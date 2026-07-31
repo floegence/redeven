@@ -3209,7 +3209,7 @@
   },
   "webServices": {
     "title": "Services web",
-    "description": "Ouvrez les services HTTP accessibles à l’exécution dans une fenêtre Desktop isolée ou via la route disponible la plus sûre.",
+    "description": "Ouvrez les services HTTP à l’écoute sur l’interface de bouclage de cet environnement dans une fenêtre Desktop isolée ou via la route disponible la plus sûre.",
     "loadingEyebrow": "Services web",
     "loadingMessage": "Chargement des services web...",
     "time": {
@@ -3247,8 +3247,8 @@
       "label": "Adresse du service web",
       "placeholder": "Saisissez un port ou une adresse, par exemple 3000 ou localhost:8080/docs",
       "scopeTitle": "Accessible depuis cet environnement.",
-      "scopeDescription": "Utilisez un port, hôte:port ou une adresse HTTP(S) accessible depuis l’environnement d’exécution. Chaque fenêtre Redeven reste limitée au Web Service ouvert ici ; saisissez un autre service ici pour l’ouvrir séparément.",
-      "invalid": "Cette adresse ne peut pas être ouverte. Utilisez un port comme 3000, hôte:port ou une adresse HTTP(S) sans identifiants."
+      "scopeDescription": "Saisissez un port ou une adresse de bouclage avec localhost, 127.0.0.0/8 ou ::1. Les adresses publiques et LAN ne peuvent pas être ouvertes. Chaque fenêtre Redeven reste limitée au Web Service ouvert ici.",
+      "invalid": "Cette adresse ne peut pas être ouverte. Web Services ne peut accéder qu’à un port local ou une adresse HTTP(S) de bouclage telle que localhost:3000, 127.0.0.1:3000 ou [::1]:3000."
     },
     "session": {
       "temporary": "Temporaire"
@@ -3258,13 +3258,13 @@
     },
     "empty": {
       "title": "Aucun service web pour le moment",
-      "description": "Enregistrez un service HTTP exécuté sur l'hôte d'exécution ou accessible depuis celui-ci."
+      "description": "Enregistrez un service HTTP à l’écoute sur l’interface de bouclage de cet environnement."
     },
     "dialog": {
       "addTitle": "Ajouter un service web",
       "targetPlaceholder": "localhost:3000",
-      "targetHelp": "Utilisez host:port ou une URL http(s)://.",
-      "targetError": "Saisissez un host:port ou une URL http(s):// valide.",
+      "targetHelp": "Utilisez un port ou une adresse HTTP(S) de bouclage avec localhost, 127.0.0.0/8 ou ::1.",
+      "targetError": "Saisissez un port local ou une adresse HTTP(S) de bouclage valide.",
       "namePlaceholder": "Mon service",
       "nameHelp": "Nom d’affichage pour identifier ce service.",
       "descriptionPlaceholder": "Serveur de développement pour mon projet",
