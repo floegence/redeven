@@ -165,6 +165,18 @@ const mocks = vi.hoisted(() => {
         : {};
       return { turn_id: body.input?.turn_id, run_id: 'run-1', kind: 'start' };
     }
+    if (url.endsWith('/_redeven_proxy/api/ai/turns') && init?.method === 'POST') {
+      const body = typeof init.body === 'string'
+        ? JSON.parse(init.body) as { create?: { client_request_id?: string } }
+        : {};
+      return {
+        client_request_id: body.create?.client_request_id,
+        thread_id: `th_${'6'.repeat(24)}`,
+        turn_id: `turn_${'7'.repeat(24)}`,
+        run_id: `run_${'8'.repeat(24)}`,
+        kind: 'start',
+      };
+    }
     if (url.includes('/_redeven_proxy/api/ai/threads') && init?.method === 'POST') {
       return { thread: { thread_id: 'thread-new', title: 'New Env Flower chat', title_status: 'ready', model_id: 'openai/gpt-5.2', run_status: 'running', working_dir: '/workspace/env-flower', created_at_unix_ms: 3, updated_at_unix_ms: 4, read_status: readStatus(4_000) } };
     }
@@ -1265,21 +1277,22 @@ export function registerEnvAIPageSendTests() {
         const admittedThreadID = String(mocks.subscribeThreadMock.mock.calls[0]?.[0]?.threadId ?? '');
         expect(admittedThreadID).toMatch(/^th_[A-Za-z0-9_-]{24}$/u);
         const turnRequest = mocks.fetchLocalApiJSONMock.mock.calls.find(([url, init]) => (
-          String(url).endsWith(`/_redeven_proxy/api/ai/threads/${admittedThreadID}/turns`) && init?.method === 'POST'
+          String(url).endsWith('/_redeven_proxy/api/ai/turns') && init?.method === 'POST'
         ));
         expect(turnRequest).toBeTruthy();
         const turnBody = JSON.parse(String(turnRequest?.[1]?.body ?? '{}')) as {
           input: Record<string, unknown>;
         };
         expect(turnBody).toEqual(expect.objectContaining({
-          thread_id: admittedThreadID,
           model: 'openai/gpt-5.2',
           input: expect.objectContaining({ text: '你好，Flower', attachments: [] }),
           create: expect.objectContaining({
+            client_request_id: expect.stringMatching(/^client_/u),
             model_id: 'openai/gpt-5.2',
             permission_type: 'approval_required',
           }),
         }));
+        expect(turnBody).not.toHaveProperty('thread_id');
         expect(turnBody.input).not.toHaveProperty('attachment_ids');
       } finally {
         dispose();
