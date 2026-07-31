@@ -126,6 +126,7 @@ import {
   FlowerSurface,
   FlowerTurnLauncherWindow,
   createFlowerComposerDraftCoordinator,
+  createFlowerClientRequestID,
   flowerTurnAdmissionUncertainIdentity,
   type FlowerTurnLauncherAnchor,
   type FlowerTurnLauncherIntent,
@@ -6125,6 +6126,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
     try {
       const receipt = await launchLocalEnvironmentFlowerTurn(props.runtime.settings, {
+        client_request_id: createFlowerClientRequestID(),
         prompt,
         context_action: input.intent.context_action,
         working_dir: input.intent.suggested_working_dir,
@@ -6143,7 +6145,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       showActionToast(i18n().t('toast.flowerPromptQueued'), 'success');
     } catch (error) {
       const uncertain = flowerTurnAdmissionUncertainIdentity(error);
-      if (uncertain) {
+      if (uncertain?.thread_id) {
         flowerFocusThreadRequestSequence += 1;
         setFlowerFocusThreadRequest({
           request_id: `welcome-flower-focus-${flowerFocusThreadRequestSequence}`,

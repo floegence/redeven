@@ -1169,7 +1169,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('const threadID = trimString(receipt.thread_id);');
     expect(appSrc).toContain('const uncertain = flowerTurnAdmissionUncertainIdentity(error);');
     expect(appSrc).toContain('thread_id: uncertain.thread_id,');
-    expect(appSrc).toContain('if (uncertain) {');
+    expect(appSrc).toContain('if (uncertain?.thread_id) {');
     expect(appSrc).toContain('flowerFocusThreadRequestSequence += 1;');
     expect(appSrc).toContain('request_id: `welcome-flower-focus-${flowerFocusThreadRequestSequence}`');
     expect(appSrc).toContain('onFocusThreadRequestConsumed={(requestID) => {');
