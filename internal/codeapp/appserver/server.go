@@ -134,7 +134,11 @@ type CodexBackend interface {
 	RespondToRequest(ctx context.Context, threadID string, requestID string, resp codexbridge.PendingRequestResponse) error
 }
 
-const codexEventBatchWindow = 16 * time.Millisecond
+const (
+	codexEventBatchWindow               = 16 * time.Millisecond
+	portForwardProxyErrorHeader         = "X-Redeven-Proxy-Error"
+	portForwardProxyUpstreamUnavailable = "port-forward-upstream-unavailable"
+)
 
 type SpaceStatus struct {
 	CodeSpaceID        string `json:"code_space_id"`
@@ -6776,6 +6780,8 @@ func (g *Server) handlePortForwardProxy(w http.ResponseWriter, r *http.Request) 
 			return nil
 		},
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, e error) {
+			w.Header().Set(portForwardProxyErrorHeader, portForwardProxyUpstreamUnavailable)
+			w.Header().Set("Cache-Control", "no-store")
 			http.Error(w, "upstream unavailable", http.StatusBadGateway)
 		},
 	}

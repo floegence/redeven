@@ -543,10 +543,20 @@
     "reload": "重新加载",
     "stop": "停止加载",
     "navigate": "前往该地址",
+    "developerTools": "开发者工具 (F12)",
     "openInBrowser": "在浏览器中打开",
     "secureRoute": "此页面使用当前环境的 Web Service 路由",
     "invalidAddress": "请输入此 Web Service 内的 HTTP(S) 地址或路径。",
-    "loadFailed": "Web Service 无法加载此地址。"
+    "loadFailed": "Web Service 无法加载此地址。",
+    "unavailableDocumentTitle": "Web Service 暂不可用",
+    "unavailableEyebrow": "连接不可用",
+    "unavailableTitle": "此 Web Service 暂无响应",
+    "unavailableSummary": "Redeven 已连接到当前环境，但此地址上没有服务响应。",
+    "unavailableTargetLabel": "请求的服务",
+    "unavailableChecksTitle": "重新尝试前",
+    "unavailableServiceCheck": "确认服务已经启动。",
+    "unavailablePortCheck": "确认服务正在监听此端口。",
+    "retry": "重新尝试"
   },
   "language": {
     "systemDefault": "跟随系统",

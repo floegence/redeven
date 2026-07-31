@@ -3,6 +3,7 @@ export const DESKTOP_SHELL_OPEN_WEB_SERVICE_WINDOW_CHANNEL = 'redeven-desktop:sh
 export type DesktopShellOpenWebServiceWindowRequest = Readonly<{
   url: string;
   forward_id: string;
+  target_url: string;
 }>;
 
 export type DesktopShellOpenWebServiceWindowResponse = Readonly<{
@@ -14,6 +15,16 @@ function compact(value: unknown): string {
   return String(value ?? '').trim();
 }
 
+function isLoopbackTargetOrigin(targetURL: URL): boolean {
+  if (!targetURL.port || targetURL.pathname !== '/' || targetURL.search || targetURL.hash) return false;
+  const hostname = targetURL.hostname.toLowerCase();
+  if (hostname === 'localhost' || hostname === '[::1]') return true;
+  const octets = hostname.split('.');
+  return octets.length === 4
+    && octets.every((octet) => /^\d{1,3}$/u.test(octet) && Number(octet) <= 255)
+    && octets[0] === '127';
+}
+
 export function normalizeDesktopShellOpenWebServiceWindowRequest(value: unknown): DesktopShellOpenWebServiceWindowRequest | null {
   if (!value || typeof value !== 'object') return null;
   const candidate = value as Record<string, unknown>;
@@ -22,9 +33,13 @@ export function normalizeDesktopShellOpenWebServiceWindowRequest(value: unknown)
 
   try {
     const url = new URL(compact(candidate.url));
+    const targetURL = new URL(compact(candidate.target_url));
     if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+    if (targetURL.protocol !== 'http:' && targetURL.protocol !== 'https:') return null;
     if (url.username || url.password) return null;
-    return { url: url.toString(), forward_id: forwardID };
+    if (targetURL.username || targetURL.password) return null;
+    if (!isLoopbackTargetOrigin(targetURL)) return null;
+    return { url: url.toString(), forward_id: forwardID, target_url: targetURL.toString() };
   } catch {
     return null;
   }

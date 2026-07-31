@@ -210,6 +210,9 @@ import {
 import { isAllowedAppNavigation, isAllowedCodespaceWindowNavigation, isAllowedWebServiceWindowNavigation, resolveWebServiceBrowserAddress } from './navigation';
 import { resolveBundledRuntimePath, resolveSessionPreloadPath, resolveUtilityPreloadPath, resolveWebServiceBrowserPreloadPath, resolveWelcomeRendererPath } from './paths';
 import { buildWebServiceBrowserDocumentURL } from './webServiceBrowserDocument';
+import { isMarkedWebServiceUpstreamUnavailable } from './webServiceBrowserProxyFailure';
+import { isWebServiceBrowserDevToolsShortcut } from './webServiceBrowserShortcuts';
+import { buildWebServiceUnavailableDocumentURL } from './webServiceUnavailableDocument';
 import {
   probeExternalLocalUIHealth,
   probeExternalLocalUIStartup,
@@ -7942,9 +7945,27 @@ function webServiceBrowserDocumentURL(): string {
     reloadLabel: i18n.t('webServiceBrowser.reload'),
     stopLabel: i18n.t('webServiceBrowser.stop'),
     navigateLabel: i18n.t('webServiceBrowser.navigate'),
+    developerToolsLabel: i18n.t('webServiceBrowser.developerTools'),
     openExternalLabel: i18n.t('webServiceBrowser.openInBrowser'),
     secureRouteLabel: i18n.t('webServiceBrowser.secureRoute'),
   });
+}
+
+function webServiceUnavailableDocumentURL(targetAddress: string): string {
+  const locale = desktopLanguageState().getSnapshot().resolved_locale;
+  const i18n = createDesktopI18n(locale);
+  return buildWebServiceUnavailableDocumentURL({
+    locale,
+    documentTitle: i18n.t('webServiceBrowser.unavailableDocumentTitle'),
+    eyebrow: i18n.t('webServiceBrowser.unavailableEyebrow'),
+    title: i18n.t('webServiceBrowser.unavailableTitle'),
+    summary: i18n.t('webServiceBrowser.unavailableSummary'),
+    targetLabel: i18n.t('webServiceBrowser.unavailableTargetLabel'),
+    checksTitle: i18n.t('webServiceBrowser.unavailableChecksTitle'),
+    serviceCheck: i18n.t('webServiceBrowser.unavailableServiceCheck'),
+    portCheck: i18n.t('webServiceBrowser.unavailablePortCheck'),
+    retryLabel: i18n.t('webServiceBrowser.retry'),
+  }, targetAddress);
 }
 
 function createWebServiceBrowserController(
@@ -7954,6 +7975,12 @@ function createWebServiceBrowserController(
 ): DesktopWebServiceBrowserController {
   let errorMessage = '';
   let pendingExternalURL = '';
+  let requestedURL = request.url;
+  let unavailableRequestURL = '';
+  let unavailablePageURL = '';
+  let loadingUnavailablePage = false;
+  const webSession = session.fromPartition(partition);
+  const targetAddress = new URL(request.target_url).origin;
   const windowRecord = createBrowserWindow({
     targetURL: webServiceBrowserDocumentURL(),
     stateKey: sessionWebServiceWindowStateKey(sessionRecord.session_key, request.forward_id),
@@ -7968,6 +7995,7 @@ function createWebServiceBrowserController(
       const current = sessionRecord.web_service_windows.get(request.forward_id);
       if (current?.webContentsID !== closedWindow.webContentsID) return;
       sessionRecord.web_service_windows.delete(request.forward_id);
+      webSession.webRequest.onHeadersReceived(null);
       if (!contentView.webContents.isDestroyed()) contentView.webContents.close();
       clearWebServiceWindowPartition(partition);
     },
@@ -8000,7 +8028,9 @@ function createWebServiceBrowserController(
 
   const snapshot = (): DesktopWebServiceBrowserState => {
     const contents = contentView.webContents;
-    const address = contents.isDestroyed() ? request.url : contents.getURL() || request.url;
+    const address = contents.isDestroyed()
+      ? requestedURL
+      : unavailableRequestURL || contents.getURL() || requestedURL;
     const title = contents.isDestroyed() ? '' : contents.getTitle();
     return {
       address,
@@ -8008,6 +8038,7 @@ function createWebServiceBrowserController(
       loading: !contents.isDestroyed() && contents.isLoading(),
       can_go_back: !contents.isDestroyed() && contents.navigationHistory.canGoBack(),
       can_go_forward: !contents.isDestroyed() && contents.navigationHistory.canGoForward(),
+      devtools_open: !contents.isDestroyed() && contents.isDevToolsOpened(),
       ...(errorMessage ? { error_message: errorMessage } : {}),
     };
   };
@@ -8015,8 +8046,18 @@ function createWebServiceBrowserController(
     if (win.isDestroyed() || win.webContents.isDestroyed()) return;
     win.webContents.send(DESKTOP_WEB_SERVICE_BROWSER_STATE_UPDATED_CHANNEL, snapshot());
   };
+  const loadRequestedURL = (targetURL: string): void => {
+    requestedURL = targetURL;
+    unavailableRequestURL = '';
+    unavailablePageURL = '';
+    loadingUnavailablePage = false;
+    errorMessage = '';
+    pendingExternalURL = '';
+    publishState();
+    void contentView.webContents.loadURL(targetURL);
+  };
   const navigate = (address: string): DesktopWebServiceBrowserActionResponse => {
-    const currentURL = contentView.webContents.getURL() || request.url;
+    const currentURL = unavailableRequestURL || requestedURL || request.url;
     const targetURL = resolveWebServiceBrowserAddress(
       address,
       currentURL,
@@ -8030,11 +8071,16 @@ function createWebServiceBrowserController(
           .t('webServiceBrowser.invalidAddress'),
       };
     }
-    errorMessage = '';
-    pendingExternalURL = '';
-    publishState();
-    void contentView.webContents.loadURL(targetURL);
+    loadRequestedURL(targetURL);
     return { ok: true };
+  };
+  const toggleDevTools = (): void => {
+    if (contentView.webContents.isDevToolsOpened()) {
+      contentView.webContents.closeDevTools();
+    } else {
+      contentView.webContents.openDevTools({ mode: 'detach' });
+    }
+    publishState();
   };
   const perform = async (action: DesktopWebServiceBrowserAction): Promise<DesktopWebServiceBrowserActionResponse> => {
     if (contentView.webContents.isDestroyed()) {
@@ -8054,14 +8100,18 @@ function createWebServiceBrowserController(
         }
         return { ok: true };
       case 'reload':
-        contentView.webContents.reload();
+        if (unavailableRequestURL) loadRequestedURL(unavailableRequestURL);
+        else contentView.webContents.reload();
         return { ok: true };
       case 'stop':
         contentView.webContents.stop();
         publishState();
         return { ok: true };
+      case 'toggle_devtools':
+        toggleDevTools();
+        return { ok: true };
       case 'open_external': {
-        const targetURL = pendingExternalURL || contentView.webContents.getURL() || request.url;
+        const targetURL = pendingExternalURL || unavailableRequestURL || requestedURL || request.url;
         try {
           await openExternalURL(targetURL);
           pendingExternalURL = '';
@@ -8081,6 +8131,12 @@ function createWebServiceBrowserController(
   const allowTargetNavigation = (targetURL: string): boolean => (
     isAllowedWebServiceWindowNavigation(targetURL, sessionRecord.allowed_base_url, request.forward_id)
   );
+  const markRequestedNavigation = (targetURL: string): void => {
+    requestedURL = targetURL;
+    unavailableRequestURL = '';
+    unavailablePageURL = '';
+    loadingUnavailablePage = false;
+  };
   const blockExternalNavigation = (targetURL: string): void => {
     try {
       const parsed = new URL(targetURL);
@@ -8090,29 +8146,53 @@ function createWebServiceBrowserController(
     }
   };
   contentView.webContents.setWindowOpenHandler(({ url }) => {
-    if (allowTargetNavigation(url)) void contentView.webContents.loadURL(url);
+    if (allowTargetNavigation(url)) {
+      markRequestedNavigation(url);
+      void contentView.webContents.loadURL(url);
+    }
     else blockExternalNavigation(url);
     return { action: 'deny' };
   });
   contentView.webContents.on('will-navigate', (event, targetURL) => {
-    if (allowTargetNavigation(targetURL)) return;
+    if (targetURL === unavailablePageURL) return;
+    if (allowTargetNavigation(targetURL)) {
+      markRequestedNavigation(targetURL);
+      return;
+    }
     event.preventDefault();
     blockExternalNavigation(targetURL);
   });
   contentView.webContents.on('will-redirect', (event, targetURL) => {
-    if (allowTargetNavigation(targetURL)) return;
+    if (allowTargetNavigation(targetURL)) {
+      markRequestedNavigation(targetURL);
+      return;
+    }
     event.preventDefault();
     blockExternalNavigation(targetURL);
   });
   contentView.webContents.on('did-start-loading', () => {
     pendingExternalURL = '';
     errorMessage = '';
+    if (!loadingUnavailablePage) {
+      unavailableRequestURL = '';
+      unavailablePageURL = '';
+    }
     publishState();
   });
   contentView.webContents.on('did-stop-loading', publishState);
-  contentView.webContents.on('did-navigate', publishState);
-  contentView.webContents.on('did-navigate-in-page', (_event, _url, isMainFrame) => {
-    if (isMainFrame) publishState();
+  contentView.webContents.on('did-navigate', (_event, targetURL) => {
+    if (targetURL === unavailablePageURL) loadingUnavailablePage = false;
+    else requestedURL = targetURL;
+    publishState();
+  });
+  contentView.webContents.on('did-navigate-in-page', (_event, targetURL, isMainFrame) => {
+    if (!isMainFrame) return;
+    if (unavailablePageURL && targetURL === `${unavailablePageURL}#retry`) {
+      loadRequestedURL(unavailableRequestURL || requestedURL);
+      return;
+    }
+    requestedURL = targetURL;
+    publishState();
   });
   contentView.webContents.on('page-title-updated', (_event, title) => {
     const cleanTitle = compact(title);
@@ -8126,6 +8206,36 @@ function createWebServiceBrowserController(
     errorMessage = compact(errorDescription)
       || createDesktopI18n(desktopLanguageState().getSnapshot().resolved_locale).t('webServiceBrowser.loadFailed');
     publishState();
+  });
+  contentView.webContents.on('devtools-opened', publishState);
+  contentView.webContents.on('devtools-closed', publishState);
+
+  const handleDevToolsShortcut = (event: Electron.Event, input: Electron.Input): void => {
+    if (!isWebServiceBrowserDevToolsShortcut(input)) return;
+    event.preventDefault();
+    toggleDevTools();
+  };
+  win.webContents.on('before-input-event', handleDevToolsShortcut);
+  contentView.webContents.on('before-input-event', handleDevToolsShortcut);
+
+  webSession.webRequest.onHeadersReceived((details, callback) => {
+    const isTargetDocument = details.webContentsId === contentView.webContents.id;
+    if (!isTargetDocument || !isMarkedWebServiceUpstreamUnavailable(details)) {
+      callback({});
+      return;
+    }
+    const failedRequestURL = requestedURL;
+    callback({ cancel: true });
+    setImmediate(() => {
+      if (win.isDestroyed() || contentView.webContents.isDestroyed()) return;
+      unavailableRequestURL = failedRequestURL;
+      unavailablePageURL = webServiceUnavailableDocumentURL(targetAddress);
+      loadingUnavailablePage = true;
+      pendingExternalURL = '';
+      errorMessage = '';
+      publishState();
+      void contentView.webContents.loadURL(unavailablePageURL);
+    });
   });
 
   const controller: DesktopWebServiceBrowserController = {
@@ -18330,6 +18440,7 @@ if (!app.requestSingleInstanceLock()) {
       loading: false,
       can_go_back: false,
       can_go_forward: false,
+      devtools_open: false,
       error_message: DESKTOP_STALE_WINDOW_MESSAGE,
     };
   });

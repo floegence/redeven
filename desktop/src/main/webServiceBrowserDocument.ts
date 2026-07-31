@@ -8,6 +8,7 @@ export type WebServiceBrowserCopy = Readonly<{
   reloadLabel: string;
   stopLabel: string;
   navigateLabel: string;
+  developerToolsLabel: string;
   openExternalLabel: string;
   secureRouteLabel: string;
 }>;
@@ -37,6 +38,7 @@ export function buildWebServiceBrowserDocumentURL(copy: WebServiceBrowserCopy): 
     .browser-bar { height: 54px; display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-bottom: 1px solid light-dark(#d9dce1, #34373e); background: light-dark(#f4f5f7, #202228); }
     .nav-button { width: 34px; height: 34px; flex: 0 0 34px; display: grid; place-items: center; border: 0; border-radius: 6px; background: transparent; color: inherit; cursor: default; }
     .nav-button:not(:disabled):hover { background: light-dark(#e3e5e9, #30333a); cursor: pointer; }
+    .nav-button[aria-pressed="true"] { background: light-dark(#dce8f7, #263a52); color: light-dark(#1f5f9f, #8fbae8); }
     .nav-button:focus-visible, .address-input:focus-visible, .go-button:focus-visible { outline: 2px solid #2f75d6; outline-offset: 1px; }
     .nav-button:disabled { opacity: .34; }
     .nav-button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
@@ -78,6 +80,9 @@ export function buildWebServiceBrowserDocumentURL(copy: WebServiceBrowserCopy): 
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
       </button>
     </div>
+    <button id="browser-devtools" class="nav-button" type="button" aria-label="${htmlEscape(copy.developerToolsLabel)}" title="${htmlEscape(copy.developerToolsLabel)}" aria-pressed="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 9-3 3 3 3"/><path d="m16 9 3 3-3 3"/><path d="m14 6-4 12"/></svg>
+    </button>
     <button id="browser-open-external" class="nav-button" type="button" aria-label="${htmlEscape(copy.openExternalLabel)}" title="${htmlEscape(copy.openExternalLabel)}">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4h5v5"/><path d="m10 14 10-10"/><path d="M18 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h6"/></svg>
     </button>

@@ -543,10 +543,20 @@
     "reload": "Перезагрузить",
     "stop": "Остановить загрузку",
     "navigate": "Перейти по адресу",
+    "developerTools": "Инструменты разработчика (F12)",
     "openInBrowser": "Открыть в браузере",
     "secureRoute": "Эта страница использует маршрут Web Service текущего окружения",
     "invalidAddress": "Введите HTTP(S)-адрес или путь внутри этого Web Service.",
-    "loadFailed": "Web Service не удалось загрузить этот адрес."
+    "loadFailed": "Web Service не удалось загрузить этот адрес.",
+    "unavailableDocumentTitle": "Web Service недоступен",
+    "unavailableEyebrow": "Подключение недоступно",
+    "unavailableTitle": "Этот Web Service не отвечает",
+    "unavailableSummary": "Redeven подключился к среде, но по этому адресу ни один сервис не отвечает.",
+    "unavailableTargetLabel": "Запрошенный сервис",
+    "unavailableChecksTitle": "Перед повторной попыткой",
+    "unavailableServiceCheck": "Убедитесь, что сервис запущен.",
+    "unavailablePortCheck": "Убедитесь, что сервис прослушивает этот порт.",
+    "retry": "Повторить"
   },
   "language": {
     "systemDefault": "Системный язык",

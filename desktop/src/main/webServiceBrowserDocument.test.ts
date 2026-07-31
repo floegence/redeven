@@ -20,6 +20,7 @@ describe('webServiceBrowserDocument', () => {
       reloadLabel: 'Reload',
       stopLabel: 'Stop loading',
       navigateLabel: 'Go to address',
+      developerToolsLabel: 'Developer tools (F12)',
       openExternalLabel: 'Open in browser',
       secureRouteLabel: 'Protected route',
     }));
@@ -32,6 +33,9 @@ describe('webServiceBrowserDocument', () => {
     expect(document).toContain('id="browser-forward"');
     expect(document).toContain('id="browser-reload"');
     expect(document).toContain('id="browser-open-external"');
+    expect(document).toContain('id="browser-devtools"');
+    expect(document).toContain('aria-label="Developer tools (F12)"');
+    expect(document).toContain('aria-pressed="false"');
     expect(document).toContain('aria-label="Open in browser"');
     expect(document).toContain('data-stop-label="Stop loading"');
     expect(document).toContain('.nav-button svg[hidden] { display: none; }');
@@ -50,6 +54,7 @@ describe('webServiceBrowserDocument', () => {
       reloadLabel: 'Reload',
       stopLabel: 'Stop',
       navigateLabel: 'Go',
+      developerToolsLabel: 'Developer tools',
       openExternalLabel: 'Open externally',
       secureRouteLabel: 'A & B',
     }));

@@ -543,10 +543,20 @@
     "reload": "重新載入",
     "stop": "停止載入",
     "navigate": "前往此位址",
+    "developerTools": "開發者工具 (F12)",
     "openInBrowser": "在瀏覽器中開啟",
     "secureRoute": "此頁面使用目前環境的 Web Service 路由",
     "invalidAddress": "請輸入此 Web Service 內的 HTTP(S) 位址或路徑。",
-    "loadFailed": "Web Service 無法載入此位址。"
+    "loadFailed": "Web Service 無法載入此位址。",
+    "unavailableDocumentTitle": "Web Service 暫時無法使用",
+    "unavailableEyebrow": "連線無法使用",
+    "unavailableTitle": "此 Web Service 暫無回應",
+    "unavailableSummary": "Redeven 已連線到目前環境，但此位址上沒有服務回應。",
+    "unavailableTargetLabel": "要求的服務",
+    "unavailableChecksTitle": "再次嘗試前",
+    "unavailableServiceCheck": "確認服務已經啟動。",
+    "unavailablePortCheck": "確認服務正在監聽此連接埠。",
+    "retry": "再次嘗試"
   },
   "language": {
     "systemDefault": "跟隨系統",

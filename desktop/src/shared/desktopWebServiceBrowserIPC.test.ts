@@ -16,6 +16,9 @@ describe('desktopWebServiceBrowserIPC', () => {
     expect(normalizeDesktopWebServiceBrowserAction({ action: 'forward' })).toEqual({ action: 'forward' });
     expect(normalizeDesktopWebServiceBrowserAction({ action: 'reload' })).toEqual({ action: 'reload' });
     expect(normalizeDesktopWebServiceBrowserAction({ action: 'stop' })).toEqual({ action: 'stop' });
+    expect(normalizeDesktopWebServiceBrowserAction({ action: 'toggle_devtools' })).toEqual({
+      action: 'toggle_devtools',
+    });
     expect(normalizeDesktopWebServiceBrowserAction({ action: 'open_external' })).toEqual({
       action: 'open_external',
     });
@@ -34,6 +37,7 @@ describe('desktopWebServiceBrowserIPC', () => {
       loading: true,
       can_go_back: true,
       can_go_forward: false,
+      devtools_open: true,
       error_message: ' ',
     })).toEqual({
       address: 'https://example.test/app',
@@ -41,6 +45,7 @@ describe('desktopWebServiceBrowserIPC', () => {
       loading: true,
       can_go_back: true,
       can_go_forward: false,
+      devtools_open: true,
     });
     expect(normalizeDesktopWebServiceBrowserActionResponse(null)).toEqual({
       ok: false,

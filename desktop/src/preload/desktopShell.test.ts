@@ -61,7 +61,11 @@ describe('bootstrapDesktopShellBridge', () => {
     await bridge.openExternalURL('http://127.0.0.1:43123/cs/demo/');
     await bridge.openCodespaceWindow({ mode: 'loading', code_space_id: 'demo', title: 'Opening Codespace', detail: 'Preparing editor.' });
     await bridge.openCodespaceWindow({ mode: 'navigate', url: 'http://127.0.0.1:43123/cs/demo/', code_space_id: 'demo' });
-    await bridge.openWebServiceWindow({ url: 'http://127.0.0.1:43123/pf/service/', forward_id: 'service' });
+    await bridge.openWebServiceWindow({
+      url: 'http://127.0.0.1:43123/pf/service/',
+      forward_id: 'service',
+      target_url: 'http://localhost:3000',
+    });
     await bridge.openDashboard();
     await bridge.getRuntimeMaintenanceContext();
     bridge.notifyRuntimeMaintenanceStarted('restart');
@@ -83,7 +87,11 @@ describe('bootstrapDesktopShellBridge', () => {
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(11, 'redeven-desktop:shell-open-external-url', { url: 'http://127.0.0.1:43123/cs/demo/' });
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(12, 'redeven-desktop:shell-open-codespace-window', { mode: 'loading', code_space_id: 'demo', title: 'Opening Codespace', detail: 'Preparing editor.' });
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(13, 'redeven-desktop:shell-open-codespace-window', { mode: 'navigate', url: 'http://127.0.0.1:43123/cs/demo/', code_space_id: 'demo' });
-    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(14, 'redeven-desktop:shell-open-web-service-window', { url: 'http://127.0.0.1:43123/pf/service/', forward_id: 'service' });
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(14, 'redeven-desktop:shell-open-web-service-window', {
+      url: 'http://127.0.0.1:43123/pf/service/',
+      forward_id: 'service',
+      target_url: 'http://localhost:3000',
+    });
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(15, 'redeven-desktop:shell-open-dashboard');
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(16, 'redeven-desktop:shell-runtime-maintenance-context');
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(17, 'redeven-desktop:shell-runtime-action', { action: 'restart_runtime' });

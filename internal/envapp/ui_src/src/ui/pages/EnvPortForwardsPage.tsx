@@ -555,31 +555,36 @@ async function preparePortForwardTunnel(
 async function openWebServiceRoute(
   route: WebServiceOpenRoute,
   forwardID: string,
+  serviceTargetURL: string,
   appPath: string,
   useDesktopWindow: boolean,
   setStatus: (s: string) => void,
   copy: OpenWebServiceCopy,
   win?: Window | null,
 ): Promise<void> {
-  let targetURL: string;
+  let browserTargetURL: string;
   if (route.kind === 'e2ee_tunnel') {
     const prepared = await preparePortForwardTunnel(forwardID, appPath, setStatus, copy);
-    targetURL = prepared.url;
+    browserTargetURL = prepared.url;
     if (win) registerSandboxWindow(win, { origin: prepared.origin, floe_app: FLOE_APP_PORT_FORWARD, code_space_id: forwardID, app_path: normalizeAppPath(appPath) });
   } else {
     await touchWebService(forwardID, setStatus, copy);
     setStatus(route.kind === 'browser_direct' ? copy.openingDirectly : copy.openingLocalProxy);
-    targetURL = route.url;
+    browserTargetURL = route.url;
   }
 
   if (useDesktopWindow) {
     setStatus(copy.opening);
-    const response = await openWebServiceWindowInDesktopShell({ url: targetURL, forward_id: forwardID });
+    const response = await openWebServiceWindowInDesktopShell({
+      url: browserTargetURL,
+      forward_id: forwardID,
+      target_url: serviceTargetURL,
+    });
     if (!response?.ok) throw new Error(response?.message || copy.desktopWindowFailed);
     return;
   }
   if (!win) throw new Error(copy.popupBlocked);
-  win.location.assign(targetURL);
+  win.location.assign(browserTargetURL);
 }
 
 // ============================================================================
@@ -718,7 +723,7 @@ export function EnvPortForwardsPage() {
       appPath,
       preferIsolatedDesktop: useDesktopWindow,
     });
-    await openWebServiceRoute(route, fid, appPath, useDesktopWindow, (s) => setBusyText(s), {
+    await openWebServiceRoute(route, fid, f.target_url, appPath, useDesktopWindow, (s) => setBusyText(s), {
       missingEnvContext: i18n.t('webServices.errors.missingEnvContext'),
       opening: i18n.t('webServices.status.opening'),
       openingDirectly: i18n.t('webServices.status.openingDirectly'),

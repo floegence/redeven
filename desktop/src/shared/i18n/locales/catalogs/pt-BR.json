@@ -543,10 +543,20 @@
     "reload": "Recarregar",
     "stop": "Parar carregamento",
     "navigate": "Ir para o endereço",
+    "developerTools": "Ferramentas do desenvolvedor (F12)",
     "openInBrowser": "Abrir no navegador",
     "secureRoute": "Esta página usa a rota de Web Service do ambiente atual",
     "invalidAddress": "Digite um endereço HTTP(S) ou caminho dentro deste Web Service.",
-    "loadFailed": "O Web Service não conseguiu carregar este endereço."
+    "loadFailed": "O Web Service não conseguiu carregar este endereço.",
+    "unavailableDocumentTitle": "Web Service indisponível",
+    "unavailableEyebrow": "Conexão indisponível",
+    "unavailableTitle": "Este Web Service não está respondendo",
+    "unavailableSummary": "O Redeven alcançou o ambiente, mas nenhum serviço respondeu neste endereço.",
+    "unavailableTargetLabel": "Serviço solicitado",
+    "unavailableChecksTitle": "Antes de tentar novamente",
+    "unavailableServiceCheck": "Verifique se o serviço está em execução.",
+    "unavailablePortCheck": "Confirme se o serviço está escutando nesta porta.",
+    "retry": "Tentar novamente"
   },
   "language": {
     "systemDefault": "Padrão do sistema",
