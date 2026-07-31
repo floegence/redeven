@@ -4,6 +4,7 @@ import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  CreateForwardDialog,
   EnvPortForwardsPage,
   isSupportedWebServiceTarget,
   resolveWebServiceOpenRoute,
@@ -498,6 +499,46 @@ describe('EnvPortForwardsPage', () => {
     expect(host.textContent).toContain('Web Services');
     expect(host.textContent).toContain('Add Service');
     expect(host.textContent).not.toContain('Port Forwards');
+  });
+
+  it('explains an unsupported saved service target without a destructive error state', async () => {
+    render(() => (
+      <CreateForwardDialog
+        open
+        loading={false}
+        onOpenChange={() => undefined}
+        onCreate={() => undefined}
+      />
+    ), host);
+    await flushPage();
+
+    const input = host.querySelector<HTMLInputElement>('[data-testid="web-service-dialog-target"]');
+    const guidance = host.querySelector<HTMLElement>('[data-testid="web-service-dialog-target-guidance"]');
+    expect(input).toBeTruthy();
+    expect(guidance?.textContent).toContain('loopback address');
+
+    if (input) {
+      input.value = 'baidu.com';
+      input.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    }
+    await flushMicrotasks();
+
+    expect(input?.getAttribute('aria-invalid')).toBe('true');
+    expect(input?.className).toContain('border-warning/45');
+    expect(input?.className).not.toContain('border-destructive');
+    expect(guidance?.getAttribute('role')).toBe('alert');
+    expect(guidance?.className).toContain('border-warning/25');
+    expect(guidance?.className).not.toContain('text-destructive');
+    expect(guidance?.textContent).toContain('Available only inside this Environment');
+    expect(guidance?.textContent).toContain('Public websites and LAN addresses');
+    expect(guidance?.textContent).toContain('127.0.0.1');
+    const dialogAddButton = Array.from(host.querySelectorAll<HTMLButtonElement>('button'))
+      .find((button) => button.textContent?.trim() === 'Add Service');
+    expect(dialogAddButton?.disabled).toBe(true);
+    expect(localApiMocks.fetchLocalApiJSON).not.toHaveBeenCalledWith(
+      '/_redeven_proxy/api/forwards',
+      expect.objectContaining({ method: 'POST' }),
+    );
   });
 
   it('opens a same-device local service directly after touching it', async () => {

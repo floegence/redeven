@@ -40,6 +40,7 @@ export function buildWebServiceBrowserDocumentURL(copy: WebServiceBrowserCopy): 
     .nav-button:focus-visible, .address-input:focus-visible, .go-button:focus-visible { outline: 2px solid #2f75d6; outline-offset: 1px; }
     .nav-button:disabled { opacity: .34; }
     .nav-button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .nav-button svg[hidden] { display: none; }
     .address-wrap { min-width: 0; height: 38px; flex: 1 1 auto; display: flex; align-items: center; gap: 8px; padding: 0 6px 0 12px; border: 1px solid light-dark(#cfd3da, #3c4048); border-radius: 7px; background: light-dark(#fff, #16181d); box-shadow: 0 1px 2px rgb(0 0 0 / 7%); }
     .route-mark { width: 16px; height: 16px; flex: 0 0 16px; color: light-dark(#4b5563, #aeb6c3); }
     .route-mark svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }

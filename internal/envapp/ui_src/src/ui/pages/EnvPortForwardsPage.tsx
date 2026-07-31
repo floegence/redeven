@@ -388,7 +388,7 @@ function PortForwardCard(props: {
 /**
  * CreateForwardDialog - Dialog for registering a new runtime web service
  */
-function CreateForwardDialog(props: {
+export function CreateForwardDialog(props: {
   open: boolean;
   loading: boolean;
   onOpenChange: (open: boolean) => void;
@@ -397,7 +397,6 @@ function CreateForwardDialog(props: {
   const [target, setTarget] = createSignal('');
   const [name, setName] = createSignal('');
   const [description, setDescription] = createSignal('');
-  const [touched, setTouched] = createSignal(false);
   const outlineControlClass = redevenSurfaceRoleClass('control');
   const i18n = useI18n();
 
@@ -406,7 +405,6 @@ function CreateForwardDialog(props: {
       setTarget('');
       setName('');
       setDescription('');
-      setTouched(false);
     }
     props.onOpenChange(open);
   };
@@ -422,7 +420,7 @@ function CreateForwardDialog(props: {
     return val.length > 0 && isSupportedWebServiceTarget(val);
   };
 
-  const showError = () => touched() && target().trim().length > 0 && !isSupportedWebServiceTarget(target());
+  const showScopeRestriction = () => target().trim().length > 0 && !isSupportedWebServiceTarget(target());
 
   return (
     <Dialog
@@ -451,21 +449,41 @@ function CreateForwardDialog(props: {
           <Input
             value={target()}
             onInput={(e) => setTarget(e.currentTarget.value)}
-            onBlur={() => setTouched(true)}
             placeholder={i18n.t('webServices.dialog.targetPlaceholder')}
+            aria-invalid={showScopeRestriction() ? 'true' : undefined}
+            aria-describedby="web-service-dialog-target-guidance"
             size="sm"
-            class={cn('w-full font-mono', showError() && 'border-destructive focus:ring-destructive')}
+            class={cn(
+              'w-full font-mono',
+              showScopeRestriction() && 'border-warning/45 focus-visible:border-warning/60 focus-visible:ring-warning/20',
+            )}
+            data-testid="web-service-dialog-target"
           />
-          <Show
-            when={showError()}
-            fallback={
-              <p class="text-[11px] text-muted-foreground mt-1">
-                {i18n.t('webServices.dialog.targetHelp')}
-              </p>
-            }
+          <div
+            id="web-service-dialog-target-guidance"
+            class={cn(
+              'mt-1.5 text-[11px]',
+              showScopeRestriction()
+                ? 'flex items-start gap-2 rounded-md border border-warning/25 bg-warning/[0.06] px-2.5 py-2 text-foreground'
+                : 'leading-4 text-muted-foreground',
+            )}
+            role={showScopeRestriction() ? 'alert' : undefined}
+            data-testid="web-service-dialog-target-guidance"
           >
-            <p class="text-[11px] text-destructive mt-1">{i18n.t('webServices.dialog.targetError')}</p>
-          </Show>
+            <Show
+              when={showScopeRestriction()}
+              fallback={i18n.t('webServices.dialog.targetHelp')}
+            >
+              <span class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded bg-warning/12 text-warning" aria-hidden="true">
+                <AlertTriangle class="h-3 w-3" />
+              </span>
+              <span class="min-w-0">
+                <span class="block font-medium leading-4">{i18n.t('webServices.address.invalidTitle')}</span>
+                <span class="block leading-4 text-muted-foreground">{i18n.t('webServices.address.invalid')}</span>
+                <span class="mt-0.5 block font-mono text-[10px] leading-4 text-foreground/80">{i18n.t('webServices.address.examples')}</span>
+              </span>
+            </Show>
+          </div>
         </div>
         <div>
           <label class="block text-xs font-medium mb-1">{i18n.t('webServices.fields.name')}</label>

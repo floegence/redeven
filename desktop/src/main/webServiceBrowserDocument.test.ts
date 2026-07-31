@@ -34,6 +34,8 @@ describe('webServiceBrowserDocument', () => {
     expect(document).toContain('id="browser-open-external"');
     expect(document).toContain('aria-label="Open in browser"');
     expect(document).toContain('data-stop-label="Stop loading"');
+    expect(document).toContain('.nav-button svg[hidden] { display: none; }');
+    expect(document).toContain('class="stop-icon" viewBox="0 0 24 24" aria-hidden="true" hidden');
     expect(document).not.toContain('<script');
   });
 
