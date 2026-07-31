@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, powerMonitor, safeStorage, session, shell, type MessageBoxOptions, type Session, type WebContents } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, powerMonitor, safeStorage, session, shell, WebContentsView, type MessageBoxOptions, type Session, type WebContents } from 'electron';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
@@ -207,8 +207,9 @@ import {
   shouldFailDesktopSessionMainDocument,
   type DesktopSessionTransport,
 } from './desktopSessionTransport';
-import { isAllowedAppNavigation, isAllowedCodespaceWindowNavigation, isAllowedWebServiceWindowNavigation } from './navigation';
-import { resolveBundledRuntimePath, resolveSessionPreloadPath, resolveUtilityPreloadPath, resolveWelcomeRendererPath } from './paths';
+import { isAllowedAppNavigation, isAllowedCodespaceWindowNavigation, isAllowedWebServiceWindowNavigation, resolveWebServiceBrowserAddress } from './navigation';
+import { resolveBundledRuntimePath, resolveSessionPreloadPath, resolveUtilityPreloadPath, resolveWebServiceBrowserPreloadPath, resolveWelcomeRendererPath } from './paths';
+import { buildWebServiceBrowserDocumentURL } from './webServiceBrowserDocument';
 import {
   probeExternalLocalUIHealth,
   probeExternalLocalUIStartup,
@@ -434,6 +435,15 @@ import {
   type DesktopShellOpenWebServiceWindowRequest,
   type DesktopShellOpenWebServiceWindowResponse,
 } from '../shared/desktopShellWebServiceWindowIPC';
+import {
+  DESKTOP_WEB_SERVICE_BROWSER_ACTION_CHANNEL,
+  DESKTOP_WEB_SERVICE_BROWSER_GET_STATE_CHANNEL,
+  DESKTOP_WEB_SERVICE_BROWSER_STATE_UPDATED_CHANNEL,
+  normalizeDesktopWebServiceBrowserAction,
+  type DesktopWebServiceBrowserAction,
+  type DesktopWebServiceBrowserActionResponse,
+  type DesktopWebServiceBrowserState,
+} from '../shared/desktopWebServiceBrowserIPC';
 import {
   DESKTOP_DOWNLOAD_ABORT_CHANNEL,
   DESKTOP_DOWNLOAD_COMPLETE_CHANNEL,
@@ -818,7 +828,7 @@ type CreateBrowserWindowArgs = Readonly<{
   diagnostics?: DesktopDiagnosticsRecorder | null;
   stealAppFocus?: boolean;
   chrome?: 'desktop' | 'native';
-  preload?: 'desktop' | 'none';
+  preload?: 'desktop' | 'web_service_browser' | 'none';
   onWindowOpen?: (url: string, parent: BrowserWindow, frameName: string) => void;
   onWillNavigate?: (url: string, event: Electron.Event) => void;
   onDidFinishLoad?: (win: BrowserWindow) => void;
@@ -848,6 +858,14 @@ const utilityWindowKindByWebContentsID = new Map<number, DesktopUtilityWindowKin
 const UTILITY_WINDOW_KINDS = ['launcher'] as const;
 const sessionsByKey = new Map<DesktopSessionKey, DesktopSessionRecord>();
 const sessionKeyByWebContentsID = new Map<number, DesktopSessionKey>();
+type DesktopWebServiceBrowserController = Readonly<{
+  windowRecord: DesktopTrackedWindow;
+  contentView: WebContentsView;
+  navigate: (address: string) => DesktopWebServiceBrowserActionResponse;
+  perform: (action: DesktopWebServiceBrowserAction) => DesktopWebServiceBrowserActionResponse;
+  snapshot: () => DesktopWebServiceBrowserState;
+}>;
+const webServiceBrowserByToolbarWebContentsID = new Map<number, DesktopWebServiceBrowserController>();
 const sessionCloseTasks = new Map<DesktopSessionKey, Promise<void>>();
 const desktopDiagnosticsHookSessions = new WeakSet<Session>();
 const directDesktopSessionTasks = new Map<string, Promise<Session>>();
@@ -7513,9 +7531,11 @@ function createBrowserWindow(args: CreateBrowserWindowArgs): DesktopTrackedWindo
   const surface = windowSurfaceForRole(args.role);
   const preloadPath = args.preload === 'none'
     ? ''
-    : surface === 'utility'
-      ? resolveUtilityPreloadPath({ appPath: app.getAppPath() })
-      : resolveSessionPreloadPath({ appPath: app.getAppPath() });
+    : args.preload === 'web_service_browser'
+      ? resolveWebServiceBrowserPreloadPath({ appPath: app.getAppPath() })
+      : surface === 'utility'
+        ? resolveUtilityPreloadPath({ appPath: app.getAppPath() })
+        : resolveSessionPreloadPath({ appPath: app.getAppPath() });
   const usesDesktopChrome = args.chrome !== 'native';
   const themeSnapshot = desktopThemeState().getSnapshot();
   const restoredState = desktopStateStore().getWindowState(args.stateKey);
@@ -7907,6 +7927,191 @@ function clearWebServiceWindowPartition(partition: string): void {
   ]).catch(() => undefined);
 }
 
+const WEB_SERVICE_BROWSER_TOOLBAR_HEIGHT = 54;
+
+function webServiceBrowserDocumentURL(): string {
+  const locale = desktopLanguageState().getSnapshot().resolved_locale;
+  const i18n = createDesktopI18n(locale);
+  return buildWebServiceBrowserDocumentURL({
+    locale,
+    title: i18n.t('webServiceBrowser.title'),
+    addressLabel: i18n.t('webServiceBrowser.addressLabel'),
+    addressPlaceholder: i18n.t('webServiceBrowser.addressPlaceholder'),
+    backLabel: i18n.t('webServiceBrowser.back'),
+    forwardLabel: i18n.t('webServiceBrowser.forward'),
+    reloadLabel: i18n.t('webServiceBrowser.reload'),
+    stopLabel: i18n.t('webServiceBrowser.stop'),
+    navigateLabel: i18n.t('webServiceBrowser.navigate'),
+    secureRouteLabel: i18n.t('webServiceBrowser.secureRoute'),
+  });
+}
+
+function createWebServiceBrowserController(
+  sessionRecord: DesktopSessionRecord,
+  request: DesktopShellOpenWebServiceWindowRequest,
+  partition: string,
+): DesktopWebServiceBrowserController {
+  let errorMessage = '';
+  const windowRecord = createBrowserWindow({
+    targetURL: webServiceBrowserDocumentURL(),
+    stateKey: sessionWebServiceWindowStateKey(sessionRecord.session_key, request.forward_id),
+    role: 'web_service_child',
+    diagnostics: sessionRecord.diagnostics,
+    chrome: 'native',
+    preload: 'web_service_browser',
+    stealAppFocus: true,
+    onClosed: (closedWindow) => {
+      webServiceBrowserByToolbarWebContentsID.delete(closedWindow.webContentsID);
+      sessionKeyByWebContentsID.delete(closedWindow.webContentsID);
+      const current = sessionRecord.web_service_windows.get(request.forward_id);
+      if (current?.webContentsID !== closedWindow.webContentsID) return;
+      sessionRecord.web_service_windows.delete(request.forward_id);
+      if (!contentView.webContents.isDestroyed()) contentView.webContents.close();
+      clearWebServiceWindowPartition(partition);
+    },
+  });
+  const win = windowRecord.browserWindow;
+  const contentView = new WebContentsView({
+    webPreferences: {
+      partition,
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false,
+      spellcheck: false,
+      backgroundThrottling: false,
+    },
+  });
+  win.contentView.addChildView(contentView);
+
+  const layoutContent = (): void => {
+    if (win.isDestroyed() || contentView.webContents.isDestroyed()) return;
+    const [width, height] = win.getContentSize();
+    contentView.setBounds({
+      x: 0,
+      y: WEB_SERVICE_BROWSER_TOOLBAR_HEIGHT,
+      width: Math.max(1, width),
+      height: Math.max(1, height - WEB_SERVICE_BROWSER_TOOLBAR_HEIGHT),
+    });
+  };
+  win.on('resize', layoutContent);
+  layoutContent();
+
+  const snapshot = (): DesktopWebServiceBrowserState => {
+    const contents = contentView.webContents;
+    const address = contents.isDestroyed() ? request.url : contents.getURL() || request.url;
+    const title = contents.isDestroyed() ? '' : contents.getTitle();
+    return {
+      address,
+      title,
+      loading: !contents.isDestroyed() && contents.isLoading(),
+      can_go_back: !contents.isDestroyed() && contents.navigationHistory.canGoBack(),
+      can_go_forward: !contents.isDestroyed() && contents.navigationHistory.canGoForward(),
+      ...(errorMessage ? { error_message: errorMessage } : {}),
+    };
+  };
+  const publishState = (): void => {
+    if (win.isDestroyed() || win.webContents.isDestroyed()) return;
+    win.webContents.send(DESKTOP_WEB_SERVICE_BROWSER_STATE_UPDATED_CHANNEL, snapshot());
+  };
+  const navigate = (address: string): DesktopWebServiceBrowserActionResponse => {
+    const currentURL = contentView.webContents.getURL() || request.url;
+    const targetURL = resolveWebServiceBrowserAddress(
+      address,
+      currentURL,
+      sessionRecord.allowed_base_url,
+      request.forward_id,
+    );
+    if (!targetURL) {
+      errorMessage = createDesktopI18n(desktopLanguageState().getSnapshot().resolved_locale)
+        .t('webServiceBrowser.invalidAddress');
+      publishState();
+      return { ok: false, message: errorMessage };
+    }
+    errorMessage = '';
+    publishState();
+    void contentView.webContents.loadURL(targetURL);
+    return { ok: true };
+  };
+  const perform = (action: DesktopWebServiceBrowserAction): DesktopWebServiceBrowserActionResponse => {
+    if (contentView.webContents.isDestroyed()) {
+      return { ok: false, message: DESKTOP_STALE_WINDOW_MESSAGE };
+    }
+    switch (action.action) {
+      case 'navigate':
+        return navigate(action.address);
+      case 'back':
+        if (contentView.webContents.navigationHistory.canGoBack()) {
+          contentView.webContents.navigationHistory.goBack();
+        }
+        return { ok: true };
+      case 'forward':
+        if (contentView.webContents.navigationHistory.canGoForward()) {
+          contentView.webContents.navigationHistory.goForward();
+        }
+        return { ok: true };
+      case 'reload':
+        contentView.webContents.reload();
+        return { ok: true };
+      case 'stop':
+        contentView.webContents.stop();
+        publishState();
+        return { ok: true };
+    }
+  };
+
+  const allowTargetNavigation = (targetURL: string): boolean => (
+    isAllowedWebServiceWindowNavigation(targetURL, sessionRecord.allowed_base_url, request.forward_id)
+  );
+  contentView.webContents.setWindowOpenHandler(({ url }) => {
+    if (allowTargetNavigation(url)) void contentView.webContents.loadURL(url);
+    else openExternal(url);
+    return { action: 'deny' };
+  });
+  contentView.webContents.on('will-navigate', (event, targetURL) => {
+    if (allowTargetNavigation(targetURL)) return;
+    event.preventDefault();
+    openExternal(targetURL);
+  });
+  contentView.webContents.on('will-redirect', (event, targetURL) => {
+    if (allowTargetNavigation(targetURL)) return;
+    event.preventDefault();
+    openExternal(targetURL);
+  });
+  contentView.webContents.on('did-start-loading', () => {
+    errorMessage = '';
+    publishState();
+  });
+  contentView.webContents.on('did-stop-loading', publishState);
+  contentView.webContents.on('did-navigate', publishState);
+  contentView.webContents.on('did-navigate-in-page', (_event, _url, isMainFrame) => {
+    if (isMainFrame) publishState();
+  });
+  contentView.webContents.on('page-title-updated', (_event, title) => {
+    const cleanTitle = compact(title);
+    const browserTitle = createDesktopI18n(desktopLanguageState().getSnapshot().resolved_locale)
+      .t('webServiceBrowser.title');
+    win.setTitle(cleanTitle ? `${cleanTitle} - ${browserTitle}` : browserTitle);
+    publishState();
+  });
+  contentView.webContents.on('did-fail-load', (_event, errorCode, errorDescription, _url, isMainFrame) => {
+    if (!isMainFrame || errorCode === -3) return;
+    errorMessage = compact(errorDescription)
+      || createDesktopI18n(desktopLanguageState().getSnapshot().resolved_locale).t('webServiceBrowser.loadFailed');
+    publishState();
+  });
+
+  const controller: DesktopWebServiceBrowserController = {
+    windowRecord,
+    contentView,
+    navigate,
+    perform,
+    snapshot,
+  };
+  webServiceBrowserByToolbarWebContentsID.set(windowRecord.webContentsID, controller);
+  void contentView.webContents.loadURL(request.url);
+  return controller;
+}
+
 async function openWebServiceWindowFromShell(
   sessionRecord: DesktopSessionRecord | null,
   request: DesktopShellOpenWebServiceWindowRequest,
@@ -7921,7 +8126,7 @@ async function openWebServiceWindowFromShell(
   const existing = sessionRecord.web_service_windows.get(request.forward_id);
   const existingWindow = liveTrackedBrowserWindow(existing);
   if (existing && existingWindow) {
-    void existingWindow.loadURL(request.url);
+    webServiceBrowserByToolbarWebContentsID.get(existing.webContentsID)?.navigate(request.url);
     presentAppWindow(existingWindow, { stealAppFocus: true });
     return { ok: true };
   }
@@ -7946,7 +8151,7 @@ async function openWebServiceWindowFromShell(
   const preparedExisting = sessionRecord.web_service_windows.get(request.forward_id);
   const preparedExistingWindow = liveTrackedBrowserWindow(preparedExisting);
   if (preparedExisting && preparedExistingWindow) {
-    void preparedExistingWindow.loadURL(request.url);
+    webServiceBrowserByToolbarWebContentsID.get(preparedExisting.webContentsID)?.navigate(request.url);
     presentAppWindow(preparedExistingWindow, { stealAppFocus: true });
     return { ok: true };
   }
@@ -7955,36 +8160,8 @@ async function openWebServiceWindowFromShell(
     sessionKeyByWebContentsID.delete(preparedExisting.webContentsID);
   }
 
-  const windowRecord = createBrowserWindow({
-    targetURL: request.url,
-    stateKey: sessionWebServiceWindowStateKey(sessionRecord.session_key, request.forward_id),
-    role: 'web_service_child',
-    sessionPartition: partition,
-    diagnostics: sessionRecord.diagnostics,
-    chrome: 'native',
-    preload: 'none',
-    stealAppFocus: true,
-    onWindowOpen: (nextURL) => {
-      if (isAllowedWebServiceWindowNavigation(nextURL, sessionRecord.allowed_base_url, request.forward_id)) {
-        const current = liveTrackedBrowserWindow(sessionRecord.web_service_windows.get(request.forward_id));
-        void current?.loadURL(nextURL);
-      } else {
-        openExternal(nextURL);
-      }
-    },
-    onWillNavigate: (nextURL, event) => {
-      if (isAllowedWebServiceWindowNavigation(nextURL, sessionRecord.allowed_base_url, request.forward_id)) return;
-      event.preventDefault();
-      openExternal(nextURL);
-    },
-    onClosed: (closedWindow) => {
-      sessionKeyByWebContentsID.delete(closedWindow.webContentsID);
-      const current = sessionRecord.web_service_windows.get(request.forward_id);
-      if (current?.webContentsID !== closedWindow.webContentsID) return;
-      sessionRecord.web_service_windows.delete(request.forward_id);
-      clearWebServiceWindowPartition(partition);
-    },
-  });
+  const controller = createWebServiceBrowserController(sessionRecord, request, partition);
+  const { windowRecord } = controller;
   sessionRecord.web_service_windows.set(request.forward_id, windowRecord);
   sessionKeyByWebContentsID.set(windowRecord.webContentsID, sessionRecord.session_key);
   return { ok: true };
@@ -18117,6 +18294,23 @@ if (!app.requestSingleInstanceLock()) {
       return { ok: false, message: 'Invalid Web Service window request.' };
     }
     return openWebServiceWindowFromShell(sessionRecordForWebContentsID(event.sender.id), normalized);
+  });
+  ipcMain.handle(DESKTOP_WEB_SERVICE_BROWSER_GET_STATE_CHANNEL, (event): DesktopWebServiceBrowserState => {
+    return webServiceBrowserByToolbarWebContentsID.get(event.sender.id)?.snapshot() ?? {
+      address: '',
+      title: '',
+      loading: false,
+      can_go_back: false,
+      can_go_forward: false,
+      error_message: DESKTOP_STALE_WINDOW_MESSAGE,
+    };
+  });
+  ipcMain.handle(DESKTOP_WEB_SERVICE_BROWSER_ACTION_CHANNEL, (event, request): DesktopWebServiceBrowserActionResponse => {
+    const action = normalizeDesktopWebServiceBrowserAction(request);
+    if (!action) return { ok: false, message: 'Invalid Web Service browser action.' };
+    const controller = webServiceBrowserByToolbarWebContentsID.get(event.sender.id);
+    if (!controller) return { ok: false, message: DESKTOP_STALE_WINDOW_MESSAGE };
+    return controller.perform(action);
   });
   ipcMain.handle(DESKTOP_SHELL_OPEN_DASHBOARD_CHANNEL, async (): Promise<DesktopShellOpenExternalURLResponse> => {
     try {

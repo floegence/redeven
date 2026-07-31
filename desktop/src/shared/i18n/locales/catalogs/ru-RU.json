@@ -534,6 +534,19 @@
     "unknown": "Неизвестно",
     "moreInformation": "дополнительная информация"
   },
+  "webServiceBrowser": {
+    "title": "Web Service",
+    "addressLabel": "Адрес Web Service",
+    "addressPlaceholder": "Введите адрес или путь",
+    "back": "Назад",
+    "forward": "Вперёд",
+    "reload": "Перезагрузить",
+    "stop": "Остановить загрузку",
+    "navigate": "Перейти по адресу",
+    "secureRoute": "Эта страница использует маршрут Web Service текущего окружения",
+    "invalidAddress": "Введите HTTP(S)-адрес или путь внутри этого Web Service.",
+    "loadFailed": "Web Service не удалось загрузить этот адрес."
+  },
   "language": {
     "systemDefault": "Системный язык",
     "updatedMessage": "Язык изменен на {language}.",

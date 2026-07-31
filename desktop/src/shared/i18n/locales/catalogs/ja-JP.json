@@ -534,6 +534,19 @@
     "unknown": "不明",
     "moreInformation": "詳細情報"
   },
+  "webServiceBrowser": {
+    "title": "Web Service",
+    "addressLabel": "Web Service のアドレス",
+    "addressPlaceholder": "アドレスまたはパスを入力",
+    "back": "戻る",
+    "forward": "進む",
+    "reload": "再読み込み",
+    "stop": "読み込みを停止",
+    "navigate": "アドレスに移動",
+    "secureRoute": "このページは現在の環境の Web Service ルートを使用します",
+    "invalidAddress": "この Web Service 内の HTTP(S) アドレスまたはパスを入力してください。",
+    "loadFailed": "Web Service でこのアドレスを読み込めませんでした。"
+  },
   "language": {
     "systemDefault": "システム既定",
     "updatedMessage": "言語を {language} に更新しました。",

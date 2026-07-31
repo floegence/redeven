@@ -534,6 +534,19 @@
     "unknown": "未知",
     "moreInformation": "更多資訊"
   },
+  "webServiceBrowser": {
+    "title": "Web Service",
+    "addressLabel": "Web Service 位址",
+    "addressPlaceholder": "輸入位址或路徑",
+    "back": "上一頁",
+    "forward": "下一頁",
+    "reload": "重新載入",
+    "stop": "停止載入",
+    "navigate": "前往此位址",
+    "secureRoute": "此頁面使用目前環境的 Web Service 路由",
+    "invalidAddress": "請輸入此 Web Service 內的 HTTP(S) 位址或路徑。",
+    "loadFailed": "Web Service 無法載入此位址。"
+  },
   "language": {
     "systemDefault": "跟隨系統",
     "updatedMessage": "語言已更新為 {language}。",

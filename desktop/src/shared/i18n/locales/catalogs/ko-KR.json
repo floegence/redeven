@@ -534,6 +534,19 @@
     "unknown": "알 수 없음",
     "moreInformation": "추가 정보"
   },
+  "webServiceBrowser": {
+    "title": "Web Service",
+    "addressLabel": "Web Service 주소",
+    "addressPlaceholder": "주소 또는 경로 입력",
+    "back": "뒤로",
+    "forward": "앞으로",
+    "reload": "새로 고침",
+    "stop": "로딩 중지",
+    "navigate": "주소로 이동",
+    "secureRoute": "이 페이지는 현재 환경의 Web Service 경로를 사용합니다",
+    "invalidAddress": "이 Web Service 안의 HTTP(S) 주소 또는 경로를 입력하세요.",
+    "loadFailed": "Web Service에서 이 주소를 불러올 수 없습니다."
+  },
   "language": {
     "systemDefault": "시스템 기본값",
     "updatedMessage": "언어가 {language}(으)로 업데이트되었습니다.",

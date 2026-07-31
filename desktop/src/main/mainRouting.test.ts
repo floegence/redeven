@@ -176,7 +176,7 @@ describe('main routing', () => {
     expect(helperSrc).toContain('sessionRecord.codespace_windows.set(codeSpaceID, codespaceWindow);');
   });
 
-  it('opens Web Services in bridge-free partitions with the parent network policy', () => {
+  it('opens Web Services in a trusted browser shell with bridge-free target views', () => {
     const mainSrc = readMainSource();
     const helperStart = mainSrc.indexOf('async function prepareWebServiceWindowPartition(');
     const helperEnd = mainSrc.indexOf('function sessionOpenFailureMessage(', helperStart);
@@ -187,12 +187,18 @@ describe('main routing', () => {
     expect(helperSrc).toContain('const webSession = session.fromPartition(partition);');
     expect(helperSrc).toContain('await webSession.setProxy({ mode: sessionRecord.transport.proxyPolicy });');
     expect(helperSrc.indexOf('await prepareWebServiceWindowPartition(sessionRecord, partition);')).toBeLessThan(
-      helperSrc.indexOf('const windowRecord = createBrowserWindow({'),
+      helperSrc.indexOf('const controller = createWebServiceBrowserController(sessionRecord, request, partition);'),
     );
     expect(helperSrc).toContain("role: 'web_service_child'");
-    expect(helperSrc).toContain("preload: 'none'");
-    expect(helperSrc).toContain('sessionPartition: partition');
-    expect(helperSrc).toContain('isAllowedWebServiceWindowNavigation(nextURL, sessionRecord.allowed_base_url, request.forward_id)');
+    expect(helperSrc).toContain("preload: 'web_service_browser'");
+    expect(helperSrc).toContain('const contentView = new WebContentsView({');
+    expect(helperSrc).toContain('partition,');
+    expect(helperSrc).toContain('sandbox: true,');
+    expect(helperSrc).toContain('contextIsolation: true,');
+    expect(helperSrc).toContain('nodeIntegration: false,');
+    expect(helperSrc).toContain('resolveWebServiceBrowserAddress(');
+    expect(helperSrc).toContain('DESKTOP_WEB_SERVICE_BROWSER_STATE_UPDATED_CHANNEL');
+    expect(helperSrc).toContain('isAllowedWebServiceWindowNavigation(targetURL, sessionRecord.allowed_base_url, request.forward_id)');
     expect(helperSrc).toContain('webSession.clearStorageData()');
     expect(helperSrc).toContain('webSession.clearCache()');
     expect(helperSrc).toContain('current?.webContentsID !== closedWindow.webContentsID');
