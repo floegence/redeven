@@ -3209,7 +3209,7 @@
   },
   "webServices": {
     "title": "Web服務",
-    "description": "註冊運行時可達的 HTTP 服務，並透過本次會話的最佳路由開啟它們。",
+    "description": "在隔離的 Desktop 視窗或目前最安全的可用路由中開啟運行時可達的 HTTP 服務。",
     "loadingEyebrow": "Web服務",
     "loadingMessage": "正在載入 Web 服務...",
     "time": {
@@ -3227,6 +3227,9 @@
       "refresh": "重新整理",
       "addService": "新增服務",
       "open": "開啟",
+      "openAddress": "開啟",
+      "saveService": "儲存服務",
+      "saving": "正在儲存...",
       "delete": "刪除",
       "cancel": "取消",
       "openServiceTooltip": "開啟服務",
@@ -3240,6 +3243,13 @@
       "latency": "延遲",
       "lastCheck": "上次檢查"
     },
+    "address": {
+      "label": "Web 服務位址",
+      "placeholder": "輸入連接埠或位址，例如 3000 或 localhost:8080/docs"
+    },
+    "session": {
+      "temporary": "暫時"
+    },
     "card": {
       "fallbackName": "服務 {id}"
     },
@@ -3250,8 +3260,8 @@
     "dialog": {
       "addTitle": "新增 Web 服務",
       "targetPlaceholder": "localhost:3000",
-      "targetHelp": "使用 host:port 或 http(s):// URL。不支援路徑、查詢字串與片段。",
-      "targetError": "請輸入不含路徑的 host:port 或 http(s):// URL。",
+      "targetHelp": "使用 host:port 或 http(s):// URL。",
+      "targetError": "請輸入有效的 host:port 或 http(s):// URL。",
       "namePlaceholder": "我的服務",
       "nameHelp": "用來識別此服務的顯示名稱。",
       "descriptionPlaceholder": "我的專案開發伺服器",
@@ -3276,7 +3286,8 @@
       "requestingEntryTicket": "正在請求 entry ticket...",
       "openingDirectly": "正在直接開啟...",
       "openingLocalProxy": "正在開啟 Local UI proxy...",
-      "working": "處理中..."
+      "working": "處理中...",
+      "creatingSession": "正在準備暫時 Web 服務會話..."
     },
     "notifications": {
       "missingTargetTitle": "缺少目標",
@@ -3288,12 +3299,18 @@
       "serviceDeletedTitle": "服務已刪除",
       "serviceDeletedMessage": "Web 服務已移除",
       "failedToDeleteTitle": "刪除服務失敗",
-      "failedToOpenTitle": "開啟服務失敗"
+      "failedToOpenTitle": "開啟服務失敗",
+      "invalidAddressTitle": "位址無效",
+      "invalidAddressMessage": "請輸入連接埠或 HTTP(S) 位址。",
+      "sessionSavedTitle": "Web 服務已儲存",
+      "sessionSavedMessage": "已將「{name}」儲存到 Web 服務。",
+      "failedToSaveTitle": "儲存 Web 服務失敗"
     },
     "errors": {
       "loadFailedPrefix": "載入 Web 服務失敗",
       "popupBlocked": "彈出視窗被阻擋。請允許彈出視窗後再試。",
-      "missingEnvContext": "缺少環境上下文。請從控制平面重新開啟。"
+      "missingEnvContext": "缺少環境上下文。請從控制平面重新開啟。",
+      "desktopWindowFailed": "Desktop 無法開啟隔離的 Web 服務視窗。"
     }
   },
   "debugConsoleSettings": {

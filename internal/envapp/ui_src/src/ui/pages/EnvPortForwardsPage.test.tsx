@@ -49,6 +49,8 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
   Globe: (props: any) => <span class={props.class} data-testid="globe-icon" />,
   Plus: (props: any) => <span class={props.class} data-testid="plus-icon" />,
   RefreshIcon: (props: any) => <span class={props.class} data-testid="refresh-icon" />,
+  Save: (props: any) => <span class={props.class} data-testid="save-icon" />,
+  Search: (props: any) => <span class={props.class} data-testid="search-icon" />,
   Trash: (props: any) => <span class={props.class} data-testid="trash-icon" />,
 }));
 
@@ -71,13 +73,14 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
   }),
   Button: (props: any) => (
     <button
-      type="button"
+      type={props.type ?? 'button'}
       class={props.class}
       onClick={props.onClick}
       disabled={props.disabled}
       aria-label={props['aria-label']}
       aria-busy={props['aria-busy']}
       title={props.title}
+      data-testid={props['data-testid']}
     >
       {props.children}
     </button>
@@ -90,7 +93,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
   CardTitle: (props: any) => <div class={props.class}>{props.children}</div>,
   ConfirmDialog: (props: any) => (props.open ? <div>{props.children}</div> : null),
   Dialog: (props: any) => (props.open ? <div><h2>{props.title}</h2>{props.children}{props.footer}</div> : null),
-  Input: (props: any) => <input value={props.value} onInput={props.onInput} onBlur={props.onBlur} class={props.class} placeholder={props.placeholder} />,
+  Input: (props: any) => <input value={props.value} onInput={props.onInput} onBlur={props.onBlur} class={props.class} placeholder={props.placeholder} aria-label={props['aria-label']} disabled={props.disabled} data-testid={props['data-testid']} />,
   Tag: (props: any) => <span class={props.class}>{props.children}</span>,
 }));
 
@@ -177,7 +180,7 @@ describe('web service route helpers', () => {
     expect(isSupportedWebServiceTarget('localhost:3000')).toBe(true);
     expect(isSupportedWebServiceTarget('http://localhost:3000')).toBe(true);
     expect(isSupportedWebServiceTarget('https://127.0.0.1')).toBe(true);
-    expect(isSupportedWebServiceTarget('http://localhost:3000/path')).toBe(false);
+    expect(isSupportedWebServiceTarget('3000/docs?tab=api')).toBe(true);
     expect(isSupportedWebServiceTarget('ftp://localhost:3000')).toBe(false);
   });
 
@@ -197,6 +200,23 @@ describe('web service route helpers', () => {
       kind: 'browser_direct',
       url: 'http://localhost:3000',
       label: 'Direct',
+    });
+
+    expect(resolveWebServiceOpenRoute({
+      forwardID: 'forward-1',
+      targetURL: 'http://localhost:3000',
+      appPath: '/docs?tab=api',
+      localRuntime,
+      desktopContext: {
+        local_environment_id: 'local',
+        renderer_storage_scope_id: 'local',
+        target_kind: 'local_environment',
+        target_route: 'local_host',
+      },
+      browserLocation: new URL('http://localhost:23998/_redeven_proxy/env') as any,
+    })).toMatchObject({
+      kind: 'browser_direct',
+      url: 'http://localhost:3000/docs?tab=api',
     });
   });
 
@@ -351,7 +371,7 @@ describe('EnvPortForwardsPage', () => {
     await flushPage();
 
     const currentCard = host.querySelector('[data-testid="port-forward-card"]');
-    const searchInput = host.querySelector('input') as HTMLInputElement | null;
+    const searchInput = host.querySelector('input[placeholder^="Search services"]') as HTMLInputElement | null;
     expect(searchInput).toBeTruthy();
     if (searchInput) {
       searchInput.value = 'Demo';
@@ -369,7 +389,7 @@ describe('EnvPortForwardsPage', () => {
     await flushMicrotasks();
 
     expect(host.querySelector('[data-testid="port-forward-card"]')).toBe(currentCard);
-    expect(host.querySelector('input')).toBe(searchInput);
+    expect(host.querySelector('input[placeholder^="Search services"]')).toBe(searchInput);
     expect(searchInput?.value).toBe('Demo');
     expect(host.querySelector('[data-testid="web-services-list-region"]')?.getAttribute('aria-busy')).toBe('true');
     expect(refreshButton?.getAttribute('aria-busy')).toBe('true');
@@ -440,7 +460,7 @@ describe('EnvPortForwardsPage', () => {
     render(() => <EnvPortForwardsPage />, host);
     await flushPage();
 
-    const openButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Open'));
+    const openButton = host.querySelector<HTMLButtonElement>('[data-testid="port-forward-card"] button');
     openButton?.click();
     await flushMicrotasks();
 
@@ -481,7 +501,7 @@ describe('EnvPortForwardsPage', () => {
     render(() => <EnvPortForwardsPage />, host);
     await flushPage();
 
-    const openButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Open'));
+    const openButton = host.querySelector<HTMLButtonElement>('[data-testid="port-forward-card"] button');
     expect(openButton).toBeTruthy();
     openButton?.click();
 
@@ -490,6 +510,90 @@ describe('EnvPortForwardsPage', () => {
       expect(assign).toHaveBeenCalledWith('http://localhost:3000');
     });
     expect(close).not.toHaveBeenCalled();
+  });
+
+  it('opens a deep-link address as a temporary session without adding a saved service', async () => {
+    const assign = vi.fn();
+    vi.spyOn(window, 'open').mockReturnValue({ location: { assign }, close: vi.fn() } as unknown as Window);
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
+      if (url === '/_redeven_proxy/api/forwards') return { forwards: [] };
+      if (url === '/_redeven_proxy/api/forward-sessions') {
+        return {
+          forward: { forward_id: 'temporary-1', target_url: 'http://localhost:3000' },
+          app_path: '/docs?tab=api',
+          ephemeral: true,
+        };
+      }
+      if (url === '/_redeven_proxy/api/forwards/temporary-1/touch') return { forward_id: 'temporary-1' };
+      throw new Error(`Unexpected local API call: ${url}`);
+    });
+
+    render(() => <EnvPortForwardsPage />, host);
+    await flushPage();
+    const addressInput = host.querySelector('[data-testid="web-service-address-input"]') as HTMLInputElement | null;
+    expect(addressInput).toBeTruthy();
+    if (addressInput) {
+      addressInput.value = '3000/docs?tab=api';
+      addressInput.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    }
+    host.querySelector<HTMLFormElement>('[data-testid="web-service-address-form"]')?.dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true }));
+
+    await waitForAssertion(() => {
+      expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith('/_redeven_proxy/api/forward-sessions', {
+        method: 'POST',
+        body: JSON.stringify({ target: '3000/docs?tab=api' }),
+      });
+      expect(assign).toHaveBeenCalledWith('http://localhost:3000/docs?tab=api');
+      expect(host.textContent).toContain('Temporary');
+      expect(host.textContent).toContain('Save service');
+    });
+  });
+
+  it('keeps one blocking transaction while a temporary session is created and opened', async () => {
+    const sessionRequest = deferred<any>();
+    const runtimeRequest = deferred<typeof localRuntime>();
+    const assign = vi.fn();
+    vi.spyOn(window, 'open').mockReturnValue({ location: { assign }, close: vi.fn() } as unknown as Window);
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
+      if (url === '/_redeven_proxy/api/forwards') return { forwards: [] };
+      if (url === '/_redeven_proxy/api/forward-sessions') return sessionRequest.promise;
+      if (url === '/_redeven_proxy/api/forwards/temporary-1/touch') return { forward_id: 'temporary-1' };
+      throw new Error(`Unexpected local API call: ${url}`);
+    });
+    controlplaneMocks.getLocalRuntime.mockReturnValue(runtimeRequest.promise);
+
+    render(() => <EnvPortForwardsPage />, host);
+    await flushPage();
+    const addressInput = host.querySelector('[data-testid="web-service-address-input"]') as HTMLInputElement | null;
+    if (addressInput) {
+      addressInput.value = '3000';
+      addressInput.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    }
+    host.querySelector<HTMLFormElement>('[data-testid="web-service-address-form"]')?.dispatchEvent(
+      new SubmitEvent('submit', { bubbles: true, cancelable: true }),
+    );
+    await flushMicrotasks();
+
+    expect(host.querySelector('.redeven-loading-curtain')).not.toBeNull();
+    expect(host.textContent).toContain('Preparing a temporary Web Service session');
+    expect(addressInput?.disabled).toBe(true);
+
+    sessionRequest.resolve({
+      forward: { forward_id: 'temporary-1', target_url: 'http://localhost:3000' },
+      app_path: '/',
+      ephemeral: true,
+    });
+    await flushMicrotasks();
+    expect(host.querySelector('.redeven-loading-curtain')).not.toBeNull();
+    expect(host.textContent).toContain('Resolving route');
+    expect(addressInput?.disabled).toBe(true);
+
+    runtimeRequest.resolve(localRuntime);
+    await waitForAssertion(() => {
+      expect(assign).toHaveBeenCalledWith('http://localhost:3000');
+      expect(host.querySelector('.redeven-loading-curtain')).toBeNull();
+      expect(addressInput?.disabled).toBe(false);
+    });
   });
 
   it('opens secure tunnel services with the canonical portforward app id', async () => {
@@ -502,7 +606,7 @@ describe('EnvPortForwardsPage', () => {
     render(() => <EnvPortForwardsPage />, host);
     await flushPage();
 
-    const openButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Open'));
+    const openButton = host.querySelector<HTMLButtonElement>('[data-testid="port-forward-card"] button');
     expect(openButton).toBeTruthy();
     openButton?.click();
 

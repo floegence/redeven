@@ -46,4 +46,4 @@ Keep-alive does not mean eagerly loading every feature. Initial resources still 
 - `redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.browser.test.tsx:875` - Ten warm terminal cores switch without reconstruction or history replay.
 - `redeven:internal/envapp/ui_src/src/ui/debugConsole/createUIPerformanceTracker.test.ts:31` - Tests cover all transaction phases and percentile aggregation.
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvCodespacesPage.tsx:1575` - Codespaces separates delayed initial collection loading from stable background refresh rendering.
-- `redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx:786` - Web Services keeps resolved cards or its empty state mounted while a replacement snapshot loads.
+- `redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx:934` - Web Services keeps resolved cards or its empty state mounted while a replacement snapshot loads.

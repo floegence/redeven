@@ -3209,7 +3209,7 @@
   },
   "webServices": {
     "title": "Webサービス",
-    "description": "ランタイムで到達可能な HTTP サービスを登録し、このセッションに最適なルートを通じてサービスを開きます。",
+    "description": "ランタイムで到達可能な HTTP サービスを、隔離された Desktop ウィンドウまたは利用可能な最も安全なルートで開きます。",
     "loadingEyebrow": "Webサービス",
     "loadingMessage": "Web サービスを読み込み中...",
     "time": {
@@ -3227,6 +3227,9 @@
       "refresh": "更新",
       "addService": "サービスを追加",
       "open": "開く",
+      "openAddress": "開く",
+      "saveService": "サービスを保存",
+      "saving": "保存中...",
       "delete": "削除",
       "cancel": "キャンセル",
       "openServiceTooltip": "サービスを開く",
@@ -3240,6 +3243,13 @@
       "latency": "レイテンシ",
       "lastCheck": "最終チェック"
     },
+    "address": {
+      "label": "Web サービスのアドレス",
+      "placeholder": "ポートまたはアドレスを入力（例: 3000、localhost:8080/docs）"
+    },
+    "session": {
+      "temporary": "一時"
+    },
     "card": {
       "fallbackName": "サービス {id}"
     },
@@ -3250,8 +3260,8 @@
     "dialog": {
       "addTitle": "Web サービスを追加",
       "targetPlaceholder": "localhost:3000",
-      "targetHelp": "host:port または http(s):// URL を使います。パス、クエリ文字列、フラグメントはサポートされません。",
-      "targetError": "パスなしの host:port または http(s):// URL を入力してください。",
+      "targetHelp": "host:port または http(s):// URL を使います。",
+      "targetError": "有効な host:port または http(s):// URL を入力してください。",
       "namePlaceholder": "自分のサービス",
       "nameHelp": "このサービスを識別する表示名です。",
       "descriptionPlaceholder": "自分のプロジェクトの開発サーバー",
@@ -3276,7 +3286,8 @@
       "requestingEntryTicket": "entry ticket を要求中...",
       "openingDirectly": "直接開いています...",
       "openingLocalProxy": "Local UI proxy を開いています...",
-      "working": "処理中..."
+      "working": "処理中...",
+      "creatingSession": "一時 Web サービスセッションを準備しています..."
     },
     "notifications": {
       "missingTargetTitle": "ターゲットがありません",
@@ -3288,12 +3299,18 @@
       "serviceDeletedTitle": "サービスを削除しました",
       "serviceDeletedMessage": "Web サービスを削除しました",
       "failedToDeleteTitle": "サービスの削除に失敗しました",
-      "failedToOpenTitle": "サービスを開けませんでした"
+      "failedToOpenTitle": "サービスを開けませんでした",
+      "invalidAddressTitle": "無効なアドレス",
+      "invalidAddressMessage": "ポートまたは HTTP(S) アドレスを入力してください。",
+      "sessionSavedTitle": "Web サービスを保存しました",
+      "sessionSavedMessage": "「{name}」を Web サービスに保存しました。",
+      "failedToSaveTitle": "Web サービスを保存できませんでした"
     },
     "errors": {
       "loadFailedPrefix": "Web サービスの読み込みに失敗しました",
       "popupBlocked": "ポップアップがブロックされました。ポップアップを許可してから再試行してください。",
-      "missingEnvContext": "環境コンテキストが欠落しています。コントロールプレーンから再度開いてください。"
+      "missingEnvContext": "環境コンテキストが欠落しています。コントロールプレーンから再度開いてください。",
+      "desktopWindowFailed": "Desktop で隔離された Web サービスウィンドウを開けませんでした。"
     }
   },
   "debugConsoleSettings": {

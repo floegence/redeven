@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -39,6 +40,18 @@ func (s *stubPortForwardBackend) GetForward(_ context.Context, forwardID string)
 
 func (s *stubPortForwardBackend) CreateForward(context.Context, portforward.CreateForwardRequest) (*pfregistry.Forward, error) {
 	return nil, nil
+}
+
+func (s *stubPortForwardBackend) OpenForwardSession(_ context.Context, req portforward.OpenForwardSessionRequest) (*portforward.ForwardSession, error) {
+	return &portforward.ForwardSession{
+		Forward:   pfregistry.Forward{ForwardID: "ephemeral", TargetURL: req.Target},
+		AppPath:   "/",
+		Ephemeral: true,
+	}, nil
+}
+
+func (s *stubPortForwardBackend) SaveForwardSession(ctx context.Context, forwardID string, _ portforward.SaveForwardSessionRequest) (*pfregistry.Forward, error) {
+	return s.GetForward(ctx, forwardID)
 }
 
 func (s *stubPortForwardBackend) UpdateForward(context.Context, string, portforward.UpdateForwardRequest) (*pfregistry.Forward, error) {
@@ -221,6 +234,62 @@ func TestServer_LocalUIAllowsPortForwardManagementAPI(t *testing.T) {
 	}
 	if !payload.OK || len(payload.Data.Forwards) != 1 || payload.Data.Forwards[0].ForwardID != "demo" {
 		t.Fatalf("unexpected forwards response: %#v", payload)
+	}
+}
+
+func TestServer_LocalUIOpensAndExplicitlySavesTemporaryForwardSession(t *testing.T) {
+	t.Parallel()
+	reg, err := pfregistry.Open(filepath.Join(t.TempDir(), "forwards.sqlite"))
+	if err != nil {
+		t.Fatalf("registry.Open() error = %v", err)
+	}
+	t.Cleanup(func() { _ = reg.Close() })
+	service, err := portforward.New(reg)
+	if err != nil {
+		t.Fatalf("portforward.New() error = %v", err)
+	}
+	srv, err := New(Options{
+		Backend:            &stubBackend{},
+		PortForward:        service,
+		DistFS:             fstest.MapFS{"env/index.html": {Data: []byte("<html>env</html>")}},
+		ConfigPath:         writeLocalUITestConfig(t),
+		ResolveSessionMeta: func(string) (*session.Meta, bool) { return nil, false },
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	openReq := httptest.NewRequest(http.MethodPost, "http://localhost:23998/_redeven_proxy/api/forward-sessions", strings.NewReader(`{"target":"3000/docs?q=1"}`))
+	openReq = WithLocalUIEnvRoute(openReq)
+	openRR := httptest.NewRecorder()
+	srv.serveHTTP(openRR, openReq)
+	if openRR.Code != http.StatusOK {
+		t.Fatalf("open status = %d, body=%s", openRR.Code, openRR.Body.String())
+	}
+	var opened struct {
+		Data portforward.ForwardSession `json:"data"`
+	}
+	if err := json.Unmarshal(openRR.Body.Bytes(), &opened); err != nil {
+		t.Fatalf("json.Unmarshal(open) error = %v", err)
+	}
+	if !opened.Data.Ephemeral || opened.Data.AppPath != "/docs?q=1" || opened.Data.Forward.TargetURL != "http://localhost:3000" {
+		t.Fatalf("opened session = %#v", opened.Data)
+	}
+	if persisted, err := service.ListForwards(context.Background()); err != nil || len(persisted) != 0 {
+		t.Fatalf("temporary session persisted early: %#v, %v", persisted, err)
+	}
+
+	saveURL := "http://localhost:23998/_redeven_proxy/api/forward-sessions/" + opened.Data.Forward.ForwardID + "/save"
+	saveReq := httptest.NewRequest(http.MethodPost, saveURL, strings.NewReader(`{"name":"Preview","description":"Docs"}`))
+	saveReq = WithLocalUIEnvRoute(saveReq)
+	saveRR := httptest.NewRecorder()
+	srv.serveHTTP(saveRR, saveReq)
+	if saveRR.Code != http.StatusOK {
+		t.Fatalf("save status = %d, body=%s", saveRR.Code, saveRR.Body.String())
+	}
+	persisted, err := service.ListForwards(context.Background())
+	if err != nil || len(persisted) != 1 || persisted[0].ForwardID != opened.Data.Forward.ForwardID || persisted[0].Name != "Preview" {
+		t.Fatalf("persisted forwards = %#v, %v", persisted, err)
 	}
 }
 

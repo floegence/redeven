@@ -2879,7 +2879,7 @@ export const enUS = defineDictionary({
   },
   webServices: {
     title: 'Web Services',
-    description: 'Register runtime-reachable HTTP services and open them through the best route for this session.',
+    description: 'Open runtime-reachable HTTP services in an isolated Desktop window or the safest route available.',
     loadingEyebrow: 'Web Services',
     loadingMessage: 'Loading web services...',
     time: {
@@ -2897,6 +2897,9 @@ export const enUS = defineDictionary({
       refresh: 'Refresh',
       addService: 'Add Service',
       open: 'Open',
+      openAddress: 'Open',
+      saveService: 'Save service',
+      saving: 'Saving...',
       delete: 'Delete',
       cancel: 'Cancel',
       openServiceTooltip: 'Open service',
@@ -2910,6 +2913,13 @@ export const enUS = defineDictionary({
       latency: 'Latency',
       lastCheck: 'Last check',
     },
+    address: {
+      label: 'Web Service address',
+      placeholder: 'Enter a port or address, for example 3000 or localhost:8080/docs',
+    },
+    session: {
+      temporary: 'Temporary',
+    },
     card: {
       fallbackName: 'Service {id}',
     },
@@ -2920,8 +2930,8 @@ export const enUS = defineDictionary({
     dialog: {
       addTitle: 'Add Web Service',
       targetPlaceholder: 'localhost:3000',
-      targetHelp: 'Use host:port or an http(s):// URL. Paths, query strings, and fragments are not supported.',
-      targetError: 'Enter a host:port or http(s):// URL without a path.',
+      targetHelp: 'Use host:port or an http(s):// URL.',
+      targetError: 'Enter a valid host:port or http(s):// URL.',
       namePlaceholder: 'My Service',
       nameHelp: 'A display name to identify this service.',
       descriptionPlaceholder: 'Development server for my project',
@@ -2947,6 +2957,7 @@ export const enUS = defineDictionary({
       openingDirectly: 'Opening directly...',
       openingLocalProxy: 'Opening local proxy...',
       working: 'Working...',
+      creatingSession: 'Preparing a temporary Web Service session...',
     },
     notifications: {
       missingTargetTitle: 'Missing target',
@@ -2959,11 +2970,17 @@ export const enUS = defineDictionary({
       serviceDeletedMessage: 'Web service has been removed',
       failedToDeleteTitle: 'Failed to delete service',
       failedToOpenTitle: 'Failed to open service',
+      invalidAddressTitle: 'Invalid address',
+      invalidAddressMessage: 'Enter a port or an HTTP(S) address.',
+      sessionSavedTitle: 'Web Service saved',
+      sessionSavedMessage: 'Saved "{name}" to Web Services.',
+      failedToSaveTitle: 'Failed to save Web Service',
     },
     errors: {
       loadFailedPrefix: 'Failed to load web services',
       popupBlocked: 'Popup was blocked. Please allow popups and try again.',
       missingEnvContext: 'Missing env context. Please reopen from the control plane.',
+      desktopWindowFailed: 'Desktop failed to open the isolated Web Service window.',
     },
   },
   debugConsoleSettings: {

@@ -3209,7 +3209,7 @@
   },
   "webServices": {
     "title": "Webdienste",
-    "description": "Registrieren Sie zur Laufzeit erreichbare HTTP-Dienste und öffnen Sie sie über die beste Route für diese Sitzung.",
+    "description": "Öffnen Sie zur Laufzeit erreichbare HTTP-Dienste in einem isolierten Desktop-Fenster oder über die sicherste verfügbare Route.",
     "loadingEyebrow": "Webdienste",
     "loadingMessage": "Webdienste werden geladen...",
     "time": {
@@ -3227,6 +3227,9 @@
       "refresh": "Aktualisieren",
       "addService": "Dienst hinzufügen",
       "open": "Öffnen",
+      "openAddress": "Öffnen",
+      "saveService": "Dienst speichern",
+      "saving": "Wird gespeichert...",
       "delete": "Löschen",
       "cancel": "Abbrechen",
       "openServiceTooltip": "Dienst öffnen",
@@ -3240,6 +3243,13 @@
       "latency": "Latenz",
       "lastCheck": "Letzte Prüfung"
     },
+    "address": {
+      "label": "Webdienst-Adresse",
+      "placeholder": "Port oder Adresse eingeben, z. B. 3000 oder localhost:8080/docs"
+    },
+    "session": {
+      "temporary": "Temporär"
+    },
     "card": {
       "fallbackName": "Dienst {id}"
     },
@@ -3250,8 +3260,8 @@
     "dialog": {
       "addTitle": "Webdienst hinzufügen",
       "targetPlaceholder": "localhost:3000",
-      "targetHelp": "Verwenden Sie host:port oder eine http(s):// URL. Pfade, Query-Strings und Fragmente werden nicht unterstützt.",
-      "targetError": "Geben Sie host:port oder eine http(s):// URL ohne Pfad ein.",
+      "targetHelp": "Verwenden Sie host:port oder eine http(s):// URL.",
+      "targetError": "Geben Sie eine gültige host:port- oder http(s):// URL ein.",
       "namePlaceholder": "Mein Dienst",
       "nameHelp": "Ein Anzeigename zur Identifikation dieses Dienstes.",
       "descriptionPlaceholder": "Entwicklungsserver für mein Projekt",
@@ -3276,7 +3286,8 @@
       "requestingEntryTicket": "Entry ticket wird angefordert...",
       "openingDirectly": "Wird direkt geöffnet...",
       "openingLocalProxy": "Local UI proxy wird geöffnet...",
-      "working": "In Arbeit..."
+      "working": "In Arbeit...",
+      "creatingSession": "Temporäre Webdienst-Sitzung wird vorbereitet..."
     },
     "notifications": {
       "missingTargetTitle": "Ziel fehlt",
@@ -3288,12 +3299,18 @@
       "serviceDeletedTitle": "Dienst gelöscht",
       "serviceDeletedMessage": "Webdienst wurde entfernt",
       "failedToDeleteTitle": "Dienst konnte nicht gelöscht werden",
-      "failedToOpenTitle": "Dienst konnte nicht geöffnet werden"
+      "failedToOpenTitle": "Dienst konnte nicht geöffnet werden",
+      "invalidAddressTitle": "Ungültige Adresse",
+      "invalidAddressMessage": "Geben Sie einen Port oder eine HTTP(S)-Adresse ein.",
+      "sessionSavedTitle": "Webdienst gespeichert",
+      "sessionSavedMessage": "„{name}“ wurde unter Webdienste gespeichert.",
+      "failedToSaveTitle": "Webdienst konnte nicht gespeichert werden"
     },
     "errors": {
       "loadFailedPrefix": "Webdienste konnten nicht geladen werden",
       "popupBlocked": "Popup wurde blockiert. Bitte Popups erlauben und erneut versuchen.",
-      "missingEnvContext": "Fehlender Umgebungskontext. Bitte öffnen Sie es erneut von der Steuerungsebene aus."
+      "missingEnvContext": "Fehlender Umgebungskontext. Bitte öffnen Sie es erneut von der Steuerungsebene aus.",
+      "desktopWindowFailed": "Desktop konnte das isolierte Webdienst-Fenster nicht öffnen."
     }
   },
   "debugConsoleSettings": {

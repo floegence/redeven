@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -31,17 +32,51 @@ type UpdateForwardRequest struct {
 	InsecureSkipVerify *bool   `json:"insecure_skip_verify,omitempty"`
 }
 
+type OpenForwardSessionRequest struct {
+	Target string `json:"target"`
+}
+
+type SaveForwardSessionRequest struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+type ForwardSession struct {
+	Forward   registry.Forward `json:"forward"`
+	AppPath   string           `json:"app_path"`
+	Ephemeral bool             `json:"ephemeral"`
+}
+
 var ErrForwardNotFound = registry.ErrForwardNotFound
 
 type Service struct {
 	reg *registry.Registry
+
+	ephemeralMu         sync.Mutex
+	ephemeralByID       map[string]ephemeralForward
+	ephemeralIDByTarget map[string]string
+	now                 func() time.Time
+	newForwardID        func() string
 }
+
+type ephemeralForward struct {
+	forward        registry.Forward
+	lastAccessedAt time.Time
+}
+
+const ephemeralForwardTTL = 2 * time.Hour
 
 func New(reg *registry.Registry) (*Service, error) {
 	if reg == nil {
 		return nil, errors.New("missing registry")
 	}
-	return &Service{reg: reg}, nil
+	return &Service{
+		reg:                 reg,
+		ephemeralByID:       make(map[string]ephemeralForward),
+		ephemeralIDByTarget: make(map[string]string),
+		now:                 time.Now,
+		newForwardID:        randomForwardID,
+	}, nil
 }
 
 func (s *Service) Close() error {
@@ -66,6 +101,112 @@ func (s *Service) GetForward(ctx context.Context, forwardID string) (*registry.F
 	if !IsValidForwardID(id) {
 		return nil, errors.New("invalid forward_id")
 	}
+	s.ephemeralMu.Lock()
+	defer s.ephemeralMu.Unlock()
+	persisted, err := s.reg.GetForward(ctx, id)
+	if err != nil || persisted != nil {
+		return persisted, err
+	}
+	return s.getEphemeralForwardLocked(id), nil
+}
+
+func (s *Service) OpenForwardSession(ctx context.Context, req OpenForwardSessionRequest) (*ForwardSession, error) {
+	if s == nil || s.reg == nil {
+		return nil, errors.New("portforward not ready")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	targetURL, appPath, err := normalizeBrowserTarget(req.Target)
+	if err != nil {
+		return nil, err
+	}
+
+	s.ephemeralMu.Lock()
+	defer s.ephemeralMu.Unlock()
+
+	forwards, err := s.reg.ListForwards(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, forward := range forwards {
+		if forward.TargetURL != targetURL {
+			continue
+		}
+		if err := s.reg.TouchLastOpened(ctx, forward.ForwardID); err != nil {
+			return nil, err
+		}
+		opened, err := s.reg.GetForward(ctx, forward.ForwardID)
+		if err != nil {
+			return nil, err
+		}
+		if opened == nil {
+			return nil, ErrForwardNotFound
+		}
+		return &ForwardSession{Forward: *opened, AppPath: appPath, Ephemeral: false}, nil
+	}
+
+	now := s.currentTime()
+	s.removeExpiredEphemeralLocked(now)
+	if existingID := s.ephemeralIDByTarget[targetURL]; existingID != "" {
+		if existing, ok := s.ephemeralByID[existingID]; ok {
+			existing.lastAccessedAt = now
+			existing.forward.LastOpenedAtUnixMs = now.UnixMilli()
+			s.ephemeralByID[existingID] = existing
+			return &ForwardSession{Forward: existing.forward, AppPath: appPath, Ephemeral: true}, nil
+		}
+	}
+
+	forwardID, err := s.allocateForwardIDLocked(ctx)
+	if err != nil {
+		return nil, err
+	}
+	forward := registry.Forward{
+		ForwardID:          forwardID,
+		TargetURL:          targetURL,
+		CreatedAtUnixMs:    now.UnixMilli(),
+		UpdatedAtUnixMs:    now.UnixMilli(),
+		LastOpenedAtUnixMs: now.UnixMilli(),
+	}
+	s.ephemeralByID[forward.ForwardID] = ephemeralForward{forward: forward, lastAccessedAt: now}
+	s.ephemeralIDByTarget[targetURL] = forward.ForwardID
+	return &ForwardSession{Forward: forward, AppPath: appPath, Ephemeral: true}, nil
+}
+
+func (s *Service) SaveForwardSession(ctx context.Context, forwardID string, req SaveForwardSessionRequest) (*registry.Forward, error) {
+	if s == nil || s.reg == nil {
+		return nil, errors.New("portforward not ready")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	id := strings.TrimSpace(forwardID)
+	if !IsValidForwardID(id) {
+		return nil, errors.New("invalid forward_id")
+	}
+	name, description, err := normalizeMeta(strings.TrimSpace(req.Name), strings.TrimSpace(req.Description))
+	if err != nil {
+		return nil, err
+	}
+
+	s.ephemeralMu.Lock()
+	defer s.ephemeralMu.Unlock()
+	if persisted, err := s.reg.GetForward(ctx, id); err != nil || persisted != nil {
+		return persisted, err
+	}
+	s.removeExpiredEphemeralLocked(s.currentTime())
+	ephemeral, ok := s.ephemeralByID[id]
+	if !ok {
+		return nil, ErrForwardNotFound
+	}
+	ephemeral.forward.Name = name
+	ephemeral.forward.Description = description
+	ephemeral.forward.UpdatedAtUnixMs = s.currentTime().UnixMilli()
+	if err := s.reg.CreateForward(ctx, ephemeral.forward); err != nil {
+		return nil, err
+	}
+	delete(s.ephemeralByID, id)
+	delete(s.ephemeralIDByTarget, ephemeral.forward.TargetURL)
 	return s.reg.GetForward(ctx, id)
 }
 
@@ -87,7 +228,12 @@ func (s *Service) CreateForward(ctx context.Context, req CreateForwardRequest) (
 		return nil, err
 	}
 
-	id := randomForwardID()
+	s.ephemeralMu.Lock()
+	defer s.ephemeralMu.Unlock()
+	id, err := s.allocateForwardIDLocked(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	f := registry.Forward{
 		ForwardID:          id,
@@ -215,6 +361,25 @@ func (s *Service) TouchLastOpened(ctx context.Context, forwardID string) (*regis
 	if !IsValidForwardID(id) {
 		return nil, errors.New("invalid forward_id")
 	}
+	s.ephemeralMu.Lock()
+	defer s.ephemeralMu.Unlock()
+	persisted, err := s.reg.GetForward(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if persisted == nil {
+		now := s.currentTime()
+		s.removeExpiredEphemeralLocked(now)
+		ephemeral, ok := s.ephemeralByID[id]
+		if !ok {
+			return nil, ErrForwardNotFound
+		}
+		ephemeral.forward.LastOpenedAtUnixMs = now.UnixMilli()
+		ephemeral.lastAccessedAt = now
+		s.ephemeralByID[id] = ephemeral
+		out := ephemeral.forward
+		return &out, nil
+	}
 	if err := s.reg.TouchLastOpened(ctx, id); err != nil {
 		return nil, err
 	}
@@ -226,6 +391,58 @@ func (s *Service) TouchLastOpened(ctx context.Context, forwardID string) (*regis
 		return nil, ErrForwardNotFound
 	}
 	return f, nil
+}
+
+func (s *Service) currentTime() time.Time {
+	if s != nil && s.now != nil {
+		return s.now()
+	}
+	return time.Now()
+}
+
+func (s *Service) getEphemeralForwardLocked(forwardID string) *registry.Forward {
+	now := s.currentTime()
+	s.removeExpiredEphemeralLocked(now)
+	ephemeral, ok := s.ephemeralByID[forwardID]
+	if !ok {
+		return nil
+	}
+	ephemeral.lastAccessedAt = now
+	s.ephemeralByID[forwardID] = ephemeral
+	out := ephemeral.forward
+	return &out
+}
+
+func (s *Service) removeExpiredEphemeralLocked(now time.Time) {
+	for id, ephemeral := range s.ephemeralByID {
+		if now.Sub(ephemeral.lastAccessedAt) < ephemeralForwardTTL {
+			continue
+		}
+		delete(s.ephemeralByID, id)
+		if s.ephemeralIDByTarget[ephemeral.forward.TargetURL] == id {
+			delete(s.ephemeralIDByTarget, ephemeral.forward.TargetURL)
+		}
+	}
+}
+
+func (s *Service) allocateForwardIDLocked(ctx context.Context) (string, error) {
+	for attempts := 0; attempts < 32; attempts++ {
+		id := strings.TrimSpace(s.newForwardID())
+		if !IsValidForwardID(id) {
+			continue
+		}
+		if _, exists := s.ephemeralByID[id]; exists {
+			continue
+		}
+		persisted, err := s.reg.GetForward(ctx, id)
+		if err != nil {
+			return "", err
+		}
+		if persisted == nil {
+			return id, nil
+		}
+	}
+	return "", errors.New("could not allocate a unique forward_id")
 }
 
 func ParseTargetURL(targetURL string) (*url.URL, error) {
@@ -294,6 +511,56 @@ func normalizeTargetURL(raw string) (string, error) {
 	}
 
 	return fmt.Sprintf("%s://%s", scheme, hostPort), nil
+}
+
+func normalizeBrowserTarget(raw string) (string, string, error) {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return "", "", errors.New("missing target")
+	}
+	portCandidate := s
+	portSuffix := ""
+	if separator := strings.IndexAny(s, "/?#"); separator >= 0 {
+		portCandidate = s[:separator]
+		portSuffix = s[separator:]
+	}
+	if _, err := strconv.Atoi(portCandidate); err == nil {
+		s = "localhost:" + portCandidate + portSuffix
+	} else if strings.HasPrefix(s, ":") {
+		s = "localhost" + s
+	}
+	if !strings.Contains(s, "://") {
+		s = "http://" + s
+	}
+	u, err := url.Parse(s)
+	if err != nil || u == nil {
+		return "", "", errors.New("invalid target")
+	}
+	if u.User != nil {
+		return "", "", errors.New("target must not contain userinfo")
+	}
+
+	path := u.EscapedPath()
+	if path == "" {
+		path = "/"
+	}
+	if u.RawQuery != "" {
+		path += "?" + u.RawQuery
+	}
+	if u.Fragment != "" {
+		path += "#" + u.EscapedFragment()
+	}
+
+	origin := *u
+	origin.Path = ""
+	origin.RawPath = ""
+	origin.RawQuery = ""
+	origin.Fragment = ""
+	targetURL, err := normalizeTargetURL(origin.String())
+	if err != nil {
+		return "", "", err
+	}
+	return targetURL, path, nil
 }
 
 func randomForwardID() string {

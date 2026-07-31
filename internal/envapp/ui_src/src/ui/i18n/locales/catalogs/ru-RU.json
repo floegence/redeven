@@ -3333,7 +3333,7 @@
   },
   "webServices": {
     "title": "Веб-сервисы",
-    "description": "Зарегистрируйте доступные во время выполнения службы HTTP и откройте их по наилучшему маршруту для этого сеанса.",
+    "description": "Открывайте доступные среде выполнения HTTP-сервисы в изолированном окне Desktop или по самому безопасному доступному маршруту.",
     "loadingEyebrow": "Веб-сервисы",
     "loadingMessage": "Загрузка веб-служб...",
     "time": {
@@ -3351,6 +3351,9 @@
       "refresh": "Обновить",
       "addService": "Добавить сервис",
       "open": "Открыть",
+      "openAddress": "Открыть",
+      "saveService": "Сохранить сервис",
+      "saving": "Сохранение...",
       "delete": "Удалить",
       "cancel": "Отмена",
       "openServiceTooltip": "Открыть сервис",
@@ -3364,6 +3367,13 @@
       "latency": "Задержка",
       "lastCheck": "Последняя проверка"
     },
+    "address": {
+      "label": "Адрес веб-сервиса",
+      "placeholder": "Введите порт или адрес, например 3000 или localhost:8080/docs"
+    },
+    "session": {
+      "temporary": "Временный"
+    },
     "card": {
       "fallbackName": "Сервис {id}"
     },
@@ -3374,8 +3384,8 @@
     "dialog": {
       "addTitle": "Добавить веб-службу",
       "targetPlaceholder": "localhost:3000",
-      "targetHelp": "Используйте host:port или http(s):// URL. Пути, query strings и fragments не поддерживаются.",
-      "targetError": "Введите host:port или http(s):// URL без пути.",
+      "targetHelp": "Используйте host:port или http(s):// URL.",
+      "targetError": "Введите допустимый host:port или http(s):// URL.",
       "namePlaceholder": "Моя служба",
       "nameHelp": "Отображаемое имя для идентификации этого сервиса.",
       "descriptionPlaceholder": "Сервер разработки для моего проекта",
@@ -3400,7 +3410,8 @@
       "requestingEntryTicket": "Запрос entry ticket...",
       "openingDirectly": "Открытие напрямую...",
       "openingLocalProxy": "Открытие Local UI proxy...",
-      "working": "Выполняется..."
+      "working": "Выполняется...",
+      "creatingSession": "Подготовка временного сеанса веб-сервиса..."
     },
     "notifications": {
       "missingTargetTitle": "Цель отсутствует",
@@ -3412,12 +3423,18 @@
       "serviceDeletedTitle": "Сервис удален",
       "serviceDeletedMessage": "Веб-служба удалена",
       "failedToDeleteTitle": "Не удалось удалить сервис",
-      "failedToOpenTitle": "Не удалось открыть сервис"
+      "failedToOpenTitle": "Не удалось открыть сервис",
+      "invalidAddressTitle": "Недопустимый адрес",
+      "invalidAddressMessage": "Введите порт или HTTP(S)-адрес.",
+      "sessionSavedTitle": "Веб-сервис сохранён",
+      "sessionSavedMessage": "«{name}» сохранён в веб-сервисах.",
+      "failedToSaveTitle": "Не удалось сохранить веб-сервис"
     },
     "errors": {
       "loadFailedPrefix": "Не удалось загрузить веб-службы",
       "popupBlocked": "Всплывающее окно заблокировано. Разрешите всплывающие окна и повторите попытку.",
-      "missingEnvContext": "Отсутствует контекст среды. Пожалуйста, откройте снова из плоскости управления."
+      "missingEnvContext": "Отсутствует контекст среды. Пожалуйста, откройте снова из плоскости управления.",
+      "desktopWindowFailed": "Desktop не удалось открыть изолированное окно веб-сервиса."
     }
   },
   "debugConsoleSettings": {

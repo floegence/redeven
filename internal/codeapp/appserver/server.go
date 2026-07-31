@@ -102,6 +102,8 @@ type Backend interface {
 type PortForwardBackend interface {
 	ListForwards(ctx context.Context) ([]pfregistry.Forward, error)
 	GetForward(ctx context.Context, forwardID string) (*pfregistry.Forward, error)
+	OpenForwardSession(ctx context.Context, req portforward.OpenForwardSessionRequest) (*portforward.ForwardSession, error)
+	SaveForwardSession(ctx context.Context, forwardID string, req portforward.SaveForwardSessionRequest) (*pfregistry.Forward, error)
 	CreateForward(ctx context.Context, req portforward.CreateForwardRequest) (*pfregistry.Forward, error)
 	UpdateForward(ctx context.Context, forwardID string, req portforward.UpdateForwardRequest) (*pfregistry.Forward, error)
 	DeleteForward(ctx context.Context, forwardID string) error
@@ -5924,6 +5926,34 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: view})
 		return
 
+	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/forward-sessions":
+		meta, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, requiredPermissionExecute)
+		if !ok {
+			return
+		}
+		if g.pf == nil {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "portforward not ready"})
+			return
+		}
+		var req portforward.OpenForwardSessionRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		scheme, host := auditURLHost(req.Target)
+		auditDetail := map[string]any{"target_scheme": scheme, "target_host": host}
+		forwardSession, err := g.pf.OpenForwardSession(r.Context(), req)
+		if err != nil {
+			g.appendAudit(meta, "port_forward_session_open", "failure", auditDetail, err)
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+			return
+		}
+		auditDetail["forward_id"] = forwardSession.Forward.ForwardID
+		auditDetail["ephemeral"] = forwardSession.Ephemeral
+		g.appendAudit(meta, "port_forward_session_open", "success", auditDetail, nil)
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: forwardSession})
+		return
+
 	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/spaces":
 		meta, ok := g.requirePermission(w, r, requiredPermissionAdmin)
 		if !ok {
@@ -5954,6 +5984,40 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		return
 
 	default:
+		if strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/forward-sessions/") {
+			meta, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, requiredPermissionExecute)
+			if !ok {
+				return
+			}
+			if g.pf == nil {
+				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "portforward not ready"})
+				return
+			}
+			rest := strings.TrimPrefix(r.URL.Path, "/_redeven_proxy/api/forward-sessions/")
+			parts := strings.Split(strings.Trim(rest, "/"), "/")
+			if r.Method != http.MethodPost || len(parts) != 2 || parts[1] != "save" {
+				writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
+				return
+			}
+			var req portforward.SaveForwardSessionRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			forward, err := g.pf.SaveForwardSession(r.Context(), parts[0], req)
+			if err != nil {
+				g.appendAudit(meta, "port_forward_session_save", "failure", map[string]any{"forward_id": parts[0]}, err)
+				status := http.StatusBadRequest
+				if errors.Is(err, portforward.ErrForwardNotFound) {
+					status = http.StatusNotFound
+				}
+				writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			g.appendAudit(meta, "port_forward_session_save", "success", map[string]any{"forward_id": parts[0]}, nil)
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: forward})
+			return
+		}
 		if strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/forwards/") {
 			meta, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, requiredPermissionExecute)
 			if !ok {

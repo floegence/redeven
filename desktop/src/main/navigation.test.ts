@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { isAllowedAppNavigation, isAllowedCodespaceWindowNavigation, isCodespaceURLForCodeSpace } from './navigation';
+import {
+  isAllowedAppNavigation,
+  isAllowedCodespaceWindowNavigation,
+  isAllowedWebServiceWindowNavigation,
+  isCodespaceURLForCodeSpace,
+  isPortForwardURLForForward,
+} from './navigation';
 import { isLoopbackHost } from './localUIURL';
 
 describe('navigation', () => {
@@ -83,6 +89,22 @@ describe('navigation', () => {
     expect(isAllowedCodespaceWindowNavigation(
       'https://cs-demo.usw.redeven.online/',
       'https://env-0123456789abcdef0123456789abcdef.sg.redeven.online/',
+      'demo',
+    )).toBe(false);
+  });
+
+  it('binds Web Service windows to the exact forward route', () => {
+    expect(isPortForwardURLForForward('http://127.0.0.1:43123/pf/demo/docs', 'demo')).toBe(true);
+    expect(isPortForwardURLForForward('https://pf-demo.sg.redeven.online/_redeven_boot/', 'demo')).toBe(true);
+    expect(isPortForwardURLForForward('http://127.0.0.1:43123/pf/other/', 'demo')).toBe(false);
+    expect(isAllowedWebServiceWindowNavigation(
+      'https://pf-demo.sg.redeven.online/app',
+      'https://env-session.sg.redeven.online/',
+      'demo',
+    )).toBe(true);
+    expect(isAllowedWebServiceWindowNavigation(
+      'https://pf-other.sg.redeven.online/app',
+      'https://env-session.sg.redeven.online/',
       'demo',
     )).toBe(false);
   });
