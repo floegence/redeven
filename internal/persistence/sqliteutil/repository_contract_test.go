@@ -26,8 +26,8 @@ func TestRedevenOwnedSQLiteOpeningsUseMigrationEngine(t *testing.T) {
 		"internal/workbenchlayout/service.go":                    {},
 	}
 	wantDirectOpeners := map[string]struct{}{
-		"internal/ai/threadstore/schema_preflight.go": {}, // Read-only validation before a cross-owner migration.
-		"internal/persistence/sqliteutil/engine.go":   {}, // The migration engine owns the physical connection.
+		"internal/ai/threadstore/store.go":          {}, // Existing-only, read-only complete-schema preflight before writable product open.
+		"internal/persistence/sqliteutil/engine.go": {}, // The migration engine owns the physical connection.
 	}
 	wantFloretOpeners := map[string]struct{}{
 		"internal/ai/floret_store_maintenance.go": {},
