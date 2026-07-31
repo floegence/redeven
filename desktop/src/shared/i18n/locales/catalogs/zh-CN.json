@@ -534,6 +534,19 @@
     "unknown": "未知",
     "moreInformation": "更多信息"
   },
+  "webServiceBrowser": {
+    "title": "Web Service",
+    "addressLabel": "Web Service 地址",
+    "addressPlaceholder": "输入地址或路径",
+    "back": "后退",
+    "forward": "前进",
+    "reload": "重新加载",
+    "stop": "停止加载",
+    "navigate": "前往该地址",
+    "secureRoute": "此页面使用当前环境的 Web Service 路由",
+    "invalidAddress": "请输入此 Web Service 内的 HTTP(S) 地址或路径。",
+    "loadFailed": "Web Service 无法加载此地址。"
+  },
   "language": {
     "systemDefault": "跟随系统",
     "updatedMessage": "语言已更新为 {language}。",

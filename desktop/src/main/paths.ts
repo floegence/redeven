@@ -73,6 +73,10 @@ export function resolveSessionPreloadPath(args: ResolvePreloadPathArgs): string 
   return path.join(args.appPath, 'dist', 'preload', 'session.js');
 }
 
+export function resolveWebServiceBrowserPreloadPath(args: ResolvePreloadPathArgs): string {
+  return path.join(args.appPath, 'dist', 'preload', 'web-service-browser.js');
+}
+
 export function resolveWelcomeRendererPath(args: ResolvePreloadPathArgs): string {
   return path.join(args.appPath, 'dist', 'welcome', 'index.html');
 }

@@ -21,7 +21,7 @@ afterEach(async () => {
 });
 
 describe('buildDesktopPreloads', () => {
-  it('produces self-contained utility and session preload bundles', async () => {
+  it('produces self-contained utility, session, and Web Service browser preload bundles', async () => {
     const outDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-desktop-preloads-'));
     tempDirs.push(outDir);
 
@@ -32,6 +32,7 @@ describe('buildDesktopPreloads', () => {
 
     const utilityOutput = await fs.readFile(path.join(outDir, 'utility.js'), 'utf8');
     const sessionOutput = await fs.readFile(path.join(outDir, 'session.js'), 'utf8');
+    const webServiceBrowserOutput = await fs.readFile(path.join(outDir, 'web-service-browser.js'), 'utf8');
 
     expect(utilityOutput).toContain('redevenDesktopLauncher');
     expect(utilityOutput).toContain('redevenDesktopSettings');
@@ -61,5 +62,13 @@ describe('buildDesktopPreloads', () => {
     expect(sessionOutput).not.toContain('createRequire');
     expect(sessionOutput).not.toMatch(/require\((['"])\.\//);
     expect([...new Set(bundledRequireSpecifiers(sessionOutput))]).toEqual(['electron']);
+
+    expect(webServiceBrowserOutput).toContain('redeven-desktop:web-service-browser-action');
+    expect(webServiceBrowserOutput).toContain('browser-address');
+    expect(webServiceBrowserOutput).not.toContain('redevenDesktopShell');
+    expect(webServiceBrowserOutput).not.toContain('node:module');
+    expect(webServiceBrowserOutput).not.toContain('createRequire');
+    expect(webServiceBrowserOutput).not.toMatch(/require\((['"])\.\//);
+    expect([...new Set(bundledRequireSpecifiers(webServiceBrowserOutput))]).toEqual(['electron']);
   });
 });

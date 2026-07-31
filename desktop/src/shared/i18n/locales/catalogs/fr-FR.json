@@ -534,6 +534,19 @@
     "unknown": "Inconnu",
     "moreInformation": "plus d’informations"
   },
+  "webServiceBrowser": {
+    "title": "Web Service",
+    "addressLabel": "Adresse du Web Service",
+    "addressPlaceholder": "Saisir une adresse ou un chemin",
+    "back": "Précédent",
+    "forward": "Suivant",
+    "reload": "Actualiser",
+    "stop": "Arrêter le chargement",
+    "navigate": "Accéder à l’adresse",
+    "secureRoute": "Cette page utilise la route Web Service de l’environnement actuel",
+    "invalidAddress": "Saisissez une adresse HTTP(S) ou un chemin dans ce Web Service.",
+    "loadFailed": "Le Web Service n’a pas pu charger cette adresse."
+  },
   "language": {
     "systemDefault": "Valeur système",
     "updatedMessage": "Langue mise à jour vers {language}.",

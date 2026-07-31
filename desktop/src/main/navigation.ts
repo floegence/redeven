@@ -258,3 +258,35 @@ export function isPortForwardURLForForward(input: string, forwardID: string): bo
 export function isAllowedWebServiceWindowNavigation(input: string, allowedBaseURL: string, forwardID: string): boolean {
   return isAllowedAppNavigation(input, allowedBaseURL) && isPortForwardURLForForward(input, forwardID);
 }
+
+export function resolveWebServiceBrowserAddress(
+  input: string,
+  currentURL: string,
+  allowedBaseURL: string,
+  forwardID: string,
+): string | null {
+  const address = String(input ?? '').trim();
+  if (!address) return null;
+
+  try {
+    const current = new URL(currentURL);
+    let candidate: URL;
+    if (/^[a-z][a-z0-9+.-]*:/iu.test(address)) {
+      candidate = new URL(address);
+    } else if (address.startsWith('?') || address.startsWith('#')) {
+      candidate = new URL(address, current);
+    } else {
+      const labels = splitHostname(current.hostname);
+      const remoteForwardHost = labels[0] === `pf-${compactCodeSpaceID(forwardID).toLowerCase()}`;
+      const serviceRoot = remoteForwardHost
+        ? new URL('/', current)
+        : new URL(`/pf/${encodeURIComponent(compactCodeSpaceID(forwardID))}/`, current);
+      candidate = new URL(address.replace(/^\/+/, ''), serviceRoot);
+    }
+    return isAllowedWebServiceWindowNavigation(candidate.toString(), allowedBaseURL, forwardID)
+      ? candidate.toString()
+      : null;
+  } catch {
+    return null;
+  }
+}

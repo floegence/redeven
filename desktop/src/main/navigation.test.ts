@@ -6,6 +6,7 @@ import {
   isAllowedWebServiceWindowNavigation,
   isCodespaceURLForCodeSpace,
   isPortForwardURLForForward,
+  resolveWebServiceBrowserAddress,
 } from './navigation';
 import { isLoopbackHost } from './localUIURL';
 
@@ -107,5 +108,41 @@ describe('navigation', () => {
       'https://env-session.sg.redeven.online/',
       'demo',
     )).toBe(false);
+  });
+
+  it('resolves browser address input inside the exact Web Service route', () => {
+    expect(resolveWebServiceBrowserAddress(
+      '/docs?q=1#api',
+      'http://127.0.0.1:43123/pf/demo/',
+      'http://127.0.0.1:43123/',
+      'demo',
+    )).toBe('http://127.0.0.1:43123/pf/demo/docs?q=1#api');
+    expect(resolveWebServiceBrowserAddress(
+      'settings',
+      'https://pf-demo.sg.redeven.online/app/',
+      'https://env-session.sg.redeven.online/',
+      'demo',
+    )).toBe('https://pf-demo.sg.redeven.online/settings');
+    expect(resolveWebServiceBrowserAddress(
+      '?tab=logs',
+      'https://pf-demo.sg.redeven.online/app',
+      'https://env-session.sg.redeven.online/',
+      'demo',
+    )).toBe('https://pf-demo.sg.redeven.online/app?tab=logs');
+  });
+
+  it('rejects browser address input outside the current forward', () => {
+    expect(resolveWebServiceBrowserAddress(
+      'https://pf-other.sg.redeven.online/',
+      'https://pf-demo.sg.redeven.online/',
+      'https://env-session.sg.redeven.online/',
+      'demo',
+    )).toBeNull();
+    expect(resolveWebServiceBrowserAddress(
+      'file:///tmp/demo',
+      'http://127.0.0.1:43123/pf/demo/',
+      'http://127.0.0.1:43123/',
+      'demo',
+    )).toBeNull();
   });
 });
