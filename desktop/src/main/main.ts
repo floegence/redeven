@@ -207,7 +207,7 @@ import {
   shouldFailDesktopSessionMainDocument,
   type DesktopSessionTransport,
 } from './desktopSessionTransport';
-import { isAllowedAppNavigation, isAllowedCodespaceWindowNavigation } from './navigation';
+import { isAllowedAppNavigation, isAllowedCodespaceWindowNavigation, isAllowedWebServiceWindowNavigation } from './navigation';
 import { resolveBundledRuntimePath, resolveSessionPreloadPath, resolveUtilityPreloadPath, resolveWelcomeRendererPath } from './paths';
 import {
   probeExternalLocalUIHealth,
@@ -429,6 +429,12 @@ import {
   type DesktopShellOpenCodespaceWindowResponse,
 } from '../shared/desktopShellCodespaceWindowIPC';
 import {
+  DESKTOP_SHELL_OPEN_WEB_SERVICE_WINDOW_CHANNEL,
+  normalizeDesktopShellOpenWebServiceWindowRequest,
+  type DesktopShellOpenWebServiceWindowRequest,
+  type DesktopShellOpenWebServiceWindowResponse,
+} from '../shared/desktopShellWebServiceWindowIPC';
+import {
   DESKTOP_DOWNLOAD_ABORT_CHANNEL,
   DESKTOP_DOWNLOAD_COMPLETE_CHANNEL,
   DESKTOP_DOWNLOAD_OPEN_CHANNEL,
@@ -641,6 +647,7 @@ type DesktopSessionRecord = {
   root_window: DesktopTrackedWindow;
   child_windows: Map<string, DesktopTrackedWindow>;
   codespace_windows: Map<string, DesktopTrackedWindow>;
+  web_service_windows: Map<string, DesktopTrackedWindow>;
   codespace_loading_documents: Map<string, CodespaceLoadingWindowCopy>;
   session_partition: string;
   diagnostics: DesktopDiagnosticsRecorder;
@@ -804,7 +811,7 @@ type PreparedManagedTargetResult = Readonly<
 type CreateBrowserWindowArgs = Readonly<{
   targetURL: string;
   stateKey: string;
-  role: 'launcher' | 'session_root' | 'session_child' | 'codespace_child';
+  role: 'launcher' | 'session_root' | 'session_child' | 'codespace_child' | 'web_service_child';
   parent?: BrowserWindow;
   frameName?: string;
   sessionPartition?: string;
@@ -3297,6 +3304,15 @@ function sessionChildWindowStateKey(sessionKey: DesktopSessionKey, childKey: str
 
 function sessionCodespaceWindowStateKey(sessionKey: DesktopSessionKey, codeSpaceID: string): string {
   return `window:session:${desktopSessionStateKeyFragment(sessionKey)}:codespace:${encodeURIComponent(codeSpaceID)}`;
+}
+
+function sessionWebServiceWindowStateKey(sessionKey: DesktopSessionKey, forwardID: string): string {
+  return `window:session:${desktopSessionStateKeyFragment(sessionKey)}:web-service:${encodeURIComponent(forwardID)}`;
+}
+
+function sessionWebServicePartition(sessionKey: DesktopSessionKey, forwardID: string): string {
+  const digest = crypto.createHash('sha256').update(`${sessionKey}\u0000${forwardID}`).digest('hex').slice(0, 32);
+  return `redeven-web-service-${digest}`;
 }
 
 function openSessionSummaries(): readonly DesktopSessionSummary[] {
@@ -7874,6 +7890,106 @@ function openCodespaceWindowFromShell(
   return { ok: true };
 }
 
+async function prepareWebServiceWindowPartition(
+  sessionRecord: DesktopSessionRecord,
+  partition: string,
+): Promise<void> {
+  const webSession = session.fromPartition(partition);
+  installDesktopDiagnosticsHooks(webSession);
+  await webSession.setProxy({ mode: sessionRecord.transport.proxyPolicy });
+}
+
+function clearWebServiceWindowPartition(partition: string): void {
+  const webSession = session.fromPartition(partition);
+  void Promise.all([
+    webSession.clearStorageData(),
+    webSession.clearCache(),
+  ]).catch(() => undefined);
+}
+
+async function openWebServiceWindowFromShell(
+  sessionRecord: DesktopSessionRecord | null,
+  request: DesktopShellOpenWebServiceWindowRequest,
+): Promise<DesktopShellOpenWebServiceWindowResponse> {
+  if (!sessionRecord || sessionRecord.closing) {
+    return { ok: false, message: DESKTOP_STALE_WINDOW_MESSAGE };
+  }
+  if (!isAllowedWebServiceWindowNavigation(request.url, sessionRecord.allowed_base_url, request.forward_id)) {
+    return { ok: false, message: 'Desktop refused to open a Web Service window outside this environment session.' };
+  }
+
+  const existing = sessionRecord.web_service_windows.get(request.forward_id);
+  const existingWindow = liveTrackedBrowserWindow(existing);
+  if (existing && existingWindow) {
+    void existingWindow.loadURL(request.url);
+    presentAppWindow(existingWindow, { stealAppFocus: true });
+    return { ok: true };
+  }
+  if (existing) {
+    sessionRecord.web_service_windows.delete(request.forward_id);
+    sessionKeyByWebContentsID.delete(existing.webContentsID);
+  }
+
+  const partition = sessionWebServicePartition(sessionRecord.session_key, request.forward_id);
+  try {
+    await prepareWebServiceWindowPartition(sessionRecord, partition);
+  } catch {
+    return {
+      ok: false,
+      message: 'Desktop could not prepare the isolated Web Service network session.',
+    };
+  }
+  if (sessionRecord.closing || sessionsByKey.get(sessionRecord.session_key) !== sessionRecord) {
+    return { ok: false, message: DESKTOP_STALE_WINDOW_MESSAGE };
+  }
+
+  const preparedExisting = sessionRecord.web_service_windows.get(request.forward_id);
+  const preparedExistingWindow = liveTrackedBrowserWindow(preparedExisting);
+  if (preparedExisting && preparedExistingWindow) {
+    void preparedExistingWindow.loadURL(request.url);
+    presentAppWindow(preparedExistingWindow, { stealAppFocus: true });
+    return { ok: true };
+  }
+  if (preparedExisting) {
+    sessionRecord.web_service_windows.delete(request.forward_id);
+    sessionKeyByWebContentsID.delete(preparedExisting.webContentsID);
+  }
+
+  const windowRecord = createBrowserWindow({
+    targetURL: request.url,
+    stateKey: sessionWebServiceWindowStateKey(sessionRecord.session_key, request.forward_id),
+    role: 'web_service_child',
+    sessionPartition: partition,
+    diagnostics: sessionRecord.diagnostics,
+    chrome: 'native',
+    preload: 'none',
+    stealAppFocus: true,
+    onWindowOpen: (nextURL) => {
+      if (isAllowedWebServiceWindowNavigation(nextURL, sessionRecord.allowed_base_url, request.forward_id)) {
+        const current = liveTrackedBrowserWindow(sessionRecord.web_service_windows.get(request.forward_id));
+        void current?.loadURL(nextURL);
+      } else {
+        openExternal(nextURL);
+      }
+    },
+    onWillNavigate: (nextURL, event) => {
+      if (isAllowedWebServiceWindowNavigation(nextURL, sessionRecord.allowed_base_url, request.forward_id)) return;
+      event.preventDefault();
+      openExternal(nextURL);
+    },
+    onClosed: (closedWindow) => {
+      sessionKeyByWebContentsID.delete(closedWindow.webContentsID);
+      const current = sessionRecord.web_service_windows.get(request.forward_id);
+      if (current?.webContentsID !== closedWindow.webContentsID) return;
+      sessionRecord.web_service_windows.delete(request.forward_id);
+      clearWebServiceWindowPartition(partition);
+    },
+  });
+  sessionRecord.web_service_windows.set(request.forward_id, windowRecord);
+  sessionKeyByWebContentsID.set(windowRecord.webContentsID, sessionRecord.session_key);
+  return { ok: true };
+}
+
 function sessionOpenFailureMessage(targetURL: string, errorDescription: string): string {
   const cleanDescription = compact(errorDescription);
   if (cleanDescription !== '') {
@@ -8298,6 +8414,7 @@ async function createSessionRecord(
     root_window: rootWindow,
     child_windows: new Map(),
     codespace_windows: new Map(),
+    web_service_windows: new Map(),
     codespace_loading_documents: new Map(),
     session_partition: sessionPartition,
     diagnostics,
@@ -8427,6 +8544,14 @@ async function finalizeSessionClosure(
     }
     sessionRecord.codespace_windows.clear();
     sessionRecord.codespace_loading_documents.clear();
+
+    for (const [forwardID, webServiceWindow] of sessionRecord.web_service_windows) {
+      sessionKeyByWebContentsID.delete(webServiceWindow.webContentsID);
+      const browserWindow = liveTrackedBrowserWindow(webServiceWindow);
+      if (options.closeWindows !== false && browserWindow) browserWindow.destroy();
+      clearWebServiceWindowPartition(sessionWebServicePartition(sessionKey, forwardID));
+    }
+    sessionRecord.web_service_windows.clear();
 
     const rootWindow = liveTrackedBrowserWindow(sessionRecord.root_window);
     if (options.closeWindows !== false && rootWindow) {
@@ -17985,6 +18110,13 @@ if (!app.requestSingleInstanceLock()) {
     }
 
     return openCodespaceWindowFromShell(sessionRecordForWebContentsID(event.sender.id), normalized);
+  });
+  ipcMain.handle(DESKTOP_SHELL_OPEN_WEB_SERVICE_WINDOW_CHANNEL, async (event, request): Promise<DesktopShellOpenWebServiceWindowResponse> => {
+    const normalized = normalizeDesktopShellOpenWebServiceWindowRequest(request);
+    if (!normalized) {
+      return { ok: false, message: 'Invalid Web Service window request.' };
+    }
+    return openWebServiceWindowFromShell(sessionRecordForWebContentsID(event.sender.id), normalized);
   });
   ipcMain.handle(DESKTOP_SHELL_OPEN_DASHBOARD_CHANNEL, async (): Promise<DesktopShellOpenExternalURLResponse> => {
     try {

@@ -3209,7 +3209,7 @@
   },
   "webServices": {
     "title": "Services web",
-    "description": "Enregistrez les services HTTP accessibles à l'exécution et ouvrez-les via le meilleur itinéraire pour cette session.",
+    "description": "Ouvrez les services HTTP accessibles à l’exécution dans une fenêtre Desktop isolée ou via la route disponible la plus sûre.",
     "loadingEyebrow": "Services web",
     "loadingMessage": "Chargement des services web...",
     "time": {
@@ -3227,6 +3227,9 @@
       "refresh": "Actualiser",
       "addService": "Ajouter un service",
       "open": "Ouvrir",
+      "openAddress": "Ouvrir",
+      "saveService": "Enregistrer le service",
+      "saving": "Enregistrement...",
       "delete": "Supprimer",
       "cancel": "Annuler",
       "openServiceTooltip": "Ouvrir le service",
@@ -3240,6 +3243,13 @@
       "latency": "Latence",
       "lastCheck": "Dernière vérification"
     },
+    "address": {
+      "label": "Adresse du service web",
+      "placeholder": "Saisissez un port ou une adresse, par exemple 3000 ou localhost:8080/docs"
+    },
+    "session": {
+      "temporary": "Temporaire"
+    },
     "card": {
       "fallbackName": "Service {id} Échec de"
     },
@@ -3250,8 +3260,8 @@
     "dialog": {
       "addTitle": "Ajouter un service web",
       "targetPlaceholder": "localhost:3000",
-      "targetHelp": "Utilisez host:port ou une URL http(s)://. Les chemins, chaînes de requête et fragments ne sont pas pris en charge.",
-      "targetError": "Saisissez host:port ou une URL http(s):// sans chemin.",
+      "targetHelp": "Utilisez host:port ou une URL http(s)://.",
+      "targetError": "Saisissez un host:port ou une URL http(s):// valide.",
       "namePlaceholder": "Mon service",
       "nameHelp": "Nom d’affichage pour identifier ce service.",
       "descriptionPlaceholder": "Serveur de développement pour mon projet",
@@ -3276,7 +3286,8 @@
       "requestingEntryTicket": "Demande de entry ticket...",
       "openingDirectly": "Ouverture directe...",
       "openingLocalProxy": "Ouverture du Local UI proxy...",
-      "working": "Traitement..."
+      "working": "Traitement...",
+      "creatingSession": "Préparation d’une session temporaire de service web..."
     },
     "notifications": {
       "missingTargetTitle": "Cible manquante",
@@ -3288,12 +3299,18 @@
       "serviceDeletedTitle": "Service supprimé",
       "serviceDeletedMessage": "Service web supprimé",
       "failedToDeleteTitle": "Échec de la suppression du service",
-      "failedToOpenTitle": "Échec de l’ouverture du service"
+      "failedToOpenTitle": "Échec de l’ouverture du service",
+      "invalidAddressTitle": "Adresse non valide",
+      "invalidAddressMessage": "Saisissez un port ou une adresse HTTP(S).",
+      "sessionSavedTitle": "Service web enregistré",
+      "sessionSavedMessage": "« {name} » a été enregistré dans les services web.",
+      "failedToSaveTitle": "Échec de l’enregistrement du service web"
     },
     "errors": {
       "loadFailedPrefix": "Échec du chargement des services web",
       "popupBlocked": "La fenêtre pop-up a été bloquée. Autorisez les pop-ups puis réessayez.",
-      "missingEnvContext": "Contexte d'environnement manquant. Veuillez rouvrir depuis le plan de contrôle."
+      "missingEnvContext": "Contexte d'environnement manquant. Veuillez rouvrir depuis le plan de contrôle.",
+      "desktopWindowFailed": "Desktop n’a pas pu ouvrir la fenêtre isolée du service web."
     }
   },
   "debugConsoleSettings": {

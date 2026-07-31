@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   closeDesktopWindow,
   desktopShellCodespaceWindowOpenAvailable,
+  desktopShellWebServiceWindowOpenAvailable,
   desktopShellExternalURLOpenAvailable,
   desktopShellBridgeAvailable,
   getRuntimeMaintenanceContextFromDesktopShell,
@@ -14,6 +15,7 @@ import {
   openConnectionCenter,
   openFlowerSettings,
   openCodespaceWindowInDesktopShell,
+  openWebServiceWindowInDesktopShell,
   openDashboardInDesktopShell,
   openExternalURLInDesktopShell,
   performRuntimeMaintenanceActionInDesktopShell,
@@ -294,6 +296,21 @@ describe('desktopShellBridge', () => {
       mode: 'navigate',
       url: 'http://127.0.0.1:43123/cs/demo/',
       code_space_id: 'demo',
+    });
+  });
+
+  it('forwards isolated Web Service window requests when Desktop exposes them', async () => {
+    const openWebServiceWindow = vi.fn().mockResolvedValue({ ok: true });
+    window.redevenDesktopShell = { openWebServiceWindow };
+
+    expect(desktopShellWebServiceWindowOpenAvailable()).toBe(true);
+    await expect(openWebServiceWindowInDesktopShell({
+      url: 'http://127.0.0.1:43123/pf/demo/docs',
+      forward_id: 'demo',
+    })).resolves.toEqual({ ok: true });
+    expect(openWebServiceWindow).toHaveBeenCalledWith({
+      url: 'http://127.0.0.1:43123/pf/demo/docs',
+      forward_id: 'demo',
     });
   });
 

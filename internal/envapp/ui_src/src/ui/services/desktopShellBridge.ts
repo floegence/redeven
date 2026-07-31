@@ -5,6 +5,7 @@ import {
 import {
   type DesktopShellOpenCodespaceWindowRequest,
 } from '../../../../../../desktop/src/shared/desktopShellCodespaceWindowIPC';
+import type { DesktopShellOpenWebServiceWindowRequest } from '../../../../../../desktop/src/shared/desktopShellWebServiceWindowIPC';
 import {
   desktopShellRuntimeMaintenanceMethodUsesDesktop,
   normalizeDesktopShellRuntimeActionResponse,
@@ -46,6 +47,7 @@ export interface DesktopShellBridge {
   toggleFullScreenWindow?: () => Promise<DesktopShellWindowCommandResponse>;
   openExternalURL?: (url: string) => Promise<DesktopShellExternalURLOpenResult>;
   openCodespaceWindow?: (request: DesktopShellCodespaceWindowOpenRequest) => Promise<DesktopShellCodespaceWindowOpenResult>;
+  openWebServiceWindow?: (request: DesktopShellOpenWebServiceWindowRequest) => Promise<DesktopShellCodespaceWindowOpenResult>;
   openDashboard?: () => Promise<DesktopShellExternalURLOpenResult>;
   getRuntimeMaintenanceContext?: () => Promise<DesktopShellRuntimeMaintenanceContext>;
   notifyRuntimeMaintenanceStarted?: (kind: 'restart' | 'update') => void;
@@ -80,6 +82,7 @@ function desktopShellBridge(): DesktopShellBridge | null {
       && typeof candidate.toggleFullScreenWindow !== 'function'
       && typeof candidate.openExternalURL !== 'function'
       && typeof candidate.openCodespaceWindow !== 'function'
+      && typeof candidate.openWebServiceWindow !== 'function'
       && typeof candidate.openDashboard !== 'function'
       && typeof candidate.getRuntimeMaintenanceContext !== 'function'
       && typeof candidate.notifyRuntimeMaintenanceStarted !== 'function'
@@ -218,6 +221,11 @@ export function desktopShellCodespaceWindowOpenAvailable(): boolean {
   return Boolean(bridge && typeof bridge.openCodespaceWindow === 'function');
 }
 
+export function desktopShellWebServiceWindowOpenAvailable(): boolean {
+  const bridge = desktopShellBridge();
+  return Boolean(bridge && typeof bridge.openWebServiceWindow === 'function');
+}
+
 export async function openExternalURLInDesktopShell(url: string): Promise<DesktopShellExternalURLOpenResult | null> {
   const bridge = desktopShellBridge();
   if (!bridge || typeof bridge.openExternalURL !== 'function') {
@@ -234,6 +242,14 @@ export async function openCodespaceWindowInDesktopShell(
     return null;
   }
   return bridge.openCodespaceWindow(request);
+}
+
+export async function openWebServiceWindowInDesktopShell(
+  request: DesktopShellOpenWebServiceWindowRequest,
+): Promise<DesktopShellCodespaceWindowOpenResult | null> {
+  const bridge = desktopShellBridge();
+  if (!bridge || typeof bridge.openWebServiceWindow !== 'function') return null;
+  return bridge.openWebServiceWindow(request);
 }
 
 export async function openDashboardInDesktopShell(): Promise<DesktopShellExternalURLOpenResult | null> {

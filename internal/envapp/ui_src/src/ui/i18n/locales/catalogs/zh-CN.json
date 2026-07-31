@@ -3209,7 +3209,7 @@
   },
   "webServices": {
     "title": "Web服务",
-    "description": "注册运行时可访问的 HTTP 服务，并通过本次会话的最佳路由打开它们。",
+    "description": "在隔离的 Desktop 窗口或当前最安全的可用路由中打开运行时可访问的 HTTP 服务。",
     "loadingEyebrow": "Web服务",
     "loadingMessage": "正在加载 Web服务...",
     "time": {
@@ -3227,6 +3227,9 @@
       "refresh": "刷新",
       "addService": "添加服务",
       "open": "打开",
+      "openAddress": "打开",
+      "saveService": "保存服务",
+      "saving": "正在保存...",
       "delete": "删除",
       "cancel": "取消",
       "openServiceTooltip": "打开服务",
@@ -3240,6 +3243,13 @@
       "latency": "延迟",
       "lastCheck": "上次检查"
     },
+    "address": {
+      "label": "Web 服务地址",
+      "placeholder": "输入端口或地址，例如 3000 或 localhost:8080/docs"
+    },
+    "session": {
+      "temporary": "临时"
+    },
     "card": {
       "fallbackName": "服务 {id}"
     },
@@ -3250,8 +3260,8 @@
     "dialog": {
       "addTitle": "添加 Web 服务",
       "targetPlaceholder": "localhost:3000",
-      "targetHelp": "使用 host:port 或 http(s):// URL。不支持路径、查询字符串和片段。",
-      "targetError": "请输入不带路径的 host:port 或 http(s):// URL。",
+      "targetHelp": "使用 host:port 或 http(s):// URL。",
+      "targetError": "请输入有效的 host:port 或 http(s):// URL。",
       "namePlaceholder": "我的服务",
       "nameHelp": "用于识别此服务的显示名称。",
       "descriptionPlaceholder": "我的项目开发服务器",
@@ -3276,7 +3286,8 @@
       "requestingEntryTicket": "正在请求 entry ticket...",
       "openingDirectly": "正在直接打开...",
       "openingLocalProxy": "正在打开 Local UI proxy...",
-      "working": "处理中..."
+      "working": "处理中...",
+      "creatingSession": "正在准备临时 Web 服务会话..."
     },
     "notifications": {
       "missingTargetTitle": "缺少目标",
@@ -3288,12 +3299,18 @@
       "serviceDeletedTitle": "服务已删除",
       "serviceDeletedMessage": "Web 服务已移除",
       "failedToDeleteTitle": "删除服务失败",
-      "failedToOpenTitle": "打开服务失败"
+      "failedToOpenTitle": "打开服务失败",
+      "invalidAddressTitle": "地址无效",
+      "invalidAddressMessage": "请输入端口或 HTTP(S) 地址。",
+      "sessionSavedTitle": "Web 服务已保存",
+      "sessionSavedMessage": "已将“{name}”保存到 Web 服务。",
+      "failedToSaveTitle": "保存 Web 服务失败"
     },
     "errors": {
       "loadFailedPrefix": "加载 Web 服务失败",
       "popupBlocked": "弹窗被阻止。请允许弹窗后重试。",
-      "missingEnvContext": "缺少环境上下文。请从控制平面重新打开。"
+      "missingEnvContext": "缺少环境上下文。请从控制平面重新打开。",
+      "desktopWindowFailed": "Desktop 无法打开隔离的 Web 服务窗口。"
     }
   },
   "debugConsoleSettings": {

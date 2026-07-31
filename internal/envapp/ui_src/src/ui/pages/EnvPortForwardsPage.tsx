@@ -1,6 +1,6 @@
 import { For, Show, createMemo, createResource, createSignal } from 'solid-js';
 import { cn, useNotification } from '@floegence/floe-webapp-core';
-import { ExternalLink, Globe, Plus, RefreshIcon, Trash } from '@floegence/floe-webapp-core/icons';
+import { ExternalLink, Globe, Plus, RefreshIcon, Save, Search, Trash } from '@floegence/floe-webapp-core/icons';
 import { Panel, PanelContent } from '@floegence/floe-webapp-core/layout';
 import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import {
@@ -38,6 +38,10 @@ import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surf
 import { useI18n, type I18nHelpers } from '../i18n';
 import { useEnvContext } from './EnvContext';
 import { EnvCollectionLoadingSkeleton } from './EnvCollectionLoadingSkeleton';
+import {
+  desktopShellWebServiceWindowOpenAvailable,
+  openWebServiceWindowInDesktopShell,
+} from '../services/desktopShellBridge';
 
 // ============================================================================
 // Types
@@ -61,6 +65,12 @@ type PortForward = Readonly<{
   updated_at_unix_ms: number;
   last_opened_at_unix_ms: number;
   health: Health;
+}>;
+
+type ForwardSession = Readonly<{
+  forward: PortForward;
+  app_path: string;
+  ephemeral: boolean;
 }>;
 
 export type WebServiceOpenRoute =
@@ -109,7 +119,9 @@ function compact(value: unknown): string {
 function parseSupportedWebServiceTarget(raw: string): URL | null {
   const trimmed = compact(raw);
   if (!trimmed) return null;
-  const candidate = trimmed.includes('://') ? trimmed : `http://${trimmed}`;
+  const portMatch = trimmed.match(/^(\d{1,5})([/?#].*)?$/u);
+  const shorthand = portMatch ? `localhost:${portMatch[1]}${portMatch[2] ?? ''}` : trimmed.startsWith(':') ? `localhost${trimmed}` : trimmed;
+  const candidate = shorthand.includes('://') ? shorthand : `http://${shorthand}`;
 
   let parsed: URL;
   try {
@@ -121,8 +133,8 @@ function parseSupportedWebServiceTarget(raw: string): URL | null {
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
   if (parsed.username || parsed.password) return null;
   if (!compact(parsed.hostname)) return null;
-  if (parsed.pathname && parsed.pathname !== '/') return null;
-  if (parsed.search || parsed.hash) return null;
+  const port = parsed.port ? Number(parsed.port) : parsed.protocol === 'https:' ? 443 : 80;
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) return null;
   return parsed;
 }
 
@@ -144,8 +156,18 @@ function hasSameDeviceBrowserConfidence(desktopContext: DesktopSessionContextSna
   return desktopContext.target_kind === 'local_environment' && desktopContext.target_route === 'local_host';
 }
 
-function localWebServiceProxyURL(forwardID: string, locationLike: BrowserLocationLike): string {
-  return new URL(`/pf/${encodeURIComponent(forwardID)}/`, locationLike.origin || locationLike.href).toString();
+function normalizeAppPath(value: string | undefined): string {
+  const raw = compact(value) || '/';
+  return raw.startsWith('/') ? raw : `/${raw}`;
+}
+
+function localWebServiceProxyURL(forwardID: string, appPath: string, locationLike: BrowserLocationLike): string {
+  const navigation = new URL(normalizeAppPath(appPath), 'http://redeven.invalid');
+  const base = new URL(`/pf/${encodeURIComponent(forwardID)}/`, locationLike.origin || locationLike.href);
+  base.pathname += navigation.pathname.replace(/^\//u, '');
+  base.search = navigation.search;
+  base.hash = navigation.hash;
+  return base.toString();
 }
 
 export function resolveWebServiceOpenRoute(args: Readonly<{
@@ -154,6 +176,8 @@ export function resolveWebServiceOpenRoute(args: Readonly<{
   localRuntime: LocalRuntimeInfo | null;
   desktopContext?: DesktopSessionContextSnapshot | null;
   browserLocation?: BrowserLocationLike;
+  appPath?: string;
+  preferIsolatedDesktop?: boolean;
 }>): WebServiceOpenRoute {
   const forwardID = compact(args.forwardID);
   if (!args.localRuntime) {
@@ -164,14 +188,19 @@ export function resolveWebServiceOpenRoute(args: Readonly<{
   const targetURL = parseSupportedWebServiceTarget(args.targetURL);
   if (
     targetURL
+    && !args.preferIsolatedDesktop
     && hasSameDeviceBrowserConfidence(args.desktopContext)
     && isLoopbackHostname(locationLike.hostname)
     && isLoopbackHostname(targetURL.hostname)
   ) {
-    return { kind: 'browser_direct', url: targetURL.origin, label: 'Direct' };
+    return {
+      kind: 'browser_direct',
+      url: normalizeAppPath(args.appPath) === '/' ? targetURL.origin : new URL(normalizeAppPath(args.appPath), targetURL.origin).toString(),
+      label: 'Direct',
+    };
   }
 
-  return { kind: 'local_proxy', url: localWebServiceProxyURL(forwardID, locationLike), label: 'Local proxy' };
+  return { kind: 'local_proxy', url: localWebServiceProxyURL(forwardID, normalizeAppPath(args.appPath), locationLike), label: 'Local proxy' };
 }
 
 // ============================================================================
@@ -466,6 +495,8 @@ type OpenWebServiceCopy = Readonly<{
   openingLocalProxy: string;
   requestingEntryTicket: string;
   updating: string;
+  desktopWindowFailed: string;
+  popupBlocked: string;
 }>;
 
 async function touchWebService(forwardID: string, setStatus: (s: string) => void, copy: Pick<OpenWebServiceCopy, 'updating'>): Promise<void> {
@@ -473,63 +504,60 @@ async function touchWebService(forwardID: string, setStatus: (s: string) => void
   await fetchLocalApiJSON(`/_redeven_proxy/api/forwards/${encodeURIComponent(forwardID)}/touch`, { method: 'POST' });
 }
 
-async function openPortForwardTunnel(
+async function preparePortForwardTunnel(
   forwardID: string,
+  appPath: string,
   setStatus: (s: string) => void,
-  win: Window,
   copy: OpenWebServiceCopy,
-): Promise<void> {
+): Promise<Readonly<{ origin: string; url: string }>> {
   const envPublicID = getEnvPublicIDFromSession();
   if (!envPublicID) throw new Error(copy.missingEnvContext);
 
   const origin = portForwardOrigin(forwardID);
   const bootURL = `${origin}/_redeven_boot/?env=${encodeURIComponent(envPublicID)}`;
 
-  registerSandboxWindow(win, { origin, floe_app: FLOE_APP_PORT_FORWARD, code_space_id: forwardID, app_path: '/' });
-
-  try {
-    await touchWebService(forwardID, setStatus, copy);
-
-    setStatus(copy.requestingEntryTicket);
-    const entryTicket = await mintEnvEntryTicketForApp({ envId: envPublicID, floeApp: FLOE_APP_PORT_FORWARD, codeSpaceId: forwardID });
-
-    const init = {
-      v: 2,
-      env_public_id: envPublicID,
-      floe_app: FLOE_APP_PORT_FORWARD,
-      code_space_id: forwardID,
-      app_path: '/',
-      entry_ticket: entryTicket,
-    };
-    const encoded = base64UrlEncode(JSON.stringify(init));
-
-    setStatus(copy.opening);
-    win.location.assign(`${bootURL}#redeven=${encoded}`);
-  } catch (e) {
-    try {
-      win.close();
-    } catch {
-      // ignore
-    }
-    throw e;
-  }
+  await touchWebService(forwardID, setStatus, copy);
+  setStatus(copy.requestingEntryTicket);
+  const entryTicket = await mintEnvEntryTicketForApp({ envId: envPublicID, floeApp: FLOE_APP_PORT_FORWARD, codeSpaceId: forwardID });
+  const init = {
+    v: 2,
+    env_public_id: envPublicID,
+    floe_app: FLOE_APP_PORT_FORWARD,
+    code_space_id: forwardID,
+    app_path: normalizeAppPath(appPath),
+    entry_ticket: entryTicket,
+  };
+  return { origin, url: `${bootURL}#redeven=${base64UrlEncode(JSON.stringify(init))}` };
 }
 
 async function openWebServiceRoute(
   route: WebServiceOpenRoute,
   forwardID: string,
+  appPath: string,
+  useDesktopWindow: boolean,
   setStatus: (s: string) => void,
-  win: Window,
   copy: OpenWebServiceCopy,
+  win?: Window | null,
 ): Promise<void> {
+  let targetURL: string;
   if (route.kind === 'e2ee_tunnel') {
-    await openPortForwardTunnel(forwardID, setStatus, win, copy);
-    return;
+    const prepared = await preparePortForwardTunnel(forwardID, appPath, setStatus, copy);
+    targetURL = prepared.url;
+    if (win) registerSandboxWindow(win, { origin: prepared.origin, floe_app: FLOE_APP_PORT_FORWARD, code_space_id: forwardID, app_path: normalizeAppPath(appPath) });
+  } else {
+    await touchWebService(forwardID, setStatus, copy);
+    setStatus(route.kind === 'browser_direct' ? copy.openingDirectly : copy.openingLocalProxy);
+    targetURL = route.url;
   }
 
-  await touchWebService(forwardID, setStatus, copy);
-  setStatus(route.kind === 'browser_direct' ? copy.openingDirectly : copy.openingLocalProxy);
-  win.location.assign(route.url);
+  if (useDesktopWindow) {
+    setStatus(copy.opening);
+    const response = await openWebServiceWindowInDesktopShell({ url: targetURL, forward_id: forwardID });
+    if (!response?.ok) throw new Error(response?.message || copy.desktopWindowFailed);
+    return;
+  }
+  if (!win) throw new Error(copy.popupBlocked);
+  win.location.assign(targetURL);
 }
 
 // ============================================================================
@@ -548,6 +576,9 @@ export function EnvPortForwardsPage() {
 
   // Search/filter state
   const [searchQuery, setSearchQuery] = createSignal('');
+  const [address, setAddress] = createSignal('');
+  const [recentSession, setRecentSession] = createSignal<ForwardSession | null>(null);
+  const [savingSession, setSavingSession] = createSignal(false);
 
   // Web services resource
   const [refreshSeq, setRefreshSeq] = createSignal(0);
@@ -646,16 +677,49 @@ export function EnvPortForwardsPage() {
     }
   };
 
-  // Open service handler
-  const doOpen = async (f: PortForward) => {
-    const fid = String(f?.forward_id ?? '').trim();
-    if (!fid) return;
-    if (busyID()) return;
+  const performOpen = async (
+    f: PortForward,
+    appPath: string,
+    useDesktopWindow: boolean,
+    win: Window | null,
+  ) => {
+    const fid = String(f.forward_id).trim();
+    setBusyText(i18n.t('webServices.status.resolvingRoute'));
+    const localRuntime = await getLocalRuntime().catch(() => null);
+    const desktopContext = readDesktopSessionContextSnapshot();
+    const route = resolveWebServiceOpenRoute({
+      forwardID: fid,
+      targetURL: f.target_url,
+      localRuntime,
+      desktopContext,
+      appPath,
+      preferIsolatedDesktop: useDesktopWindow,
+    });
+    await openWebServiceRoute(route, fid, appPath, useDesktopWindow, (s) => setBusyText(s), {
+      missingEnvContext: i18n.t('webServices.errors.missingEnvContext'),
+      opening: i18n.t('webServices.status.opening'),
+      openingDirectly: i18n.t('webServices.status.openingDirectly'),
+      openingLocalProxy: i18n.t('webServices.status.openingLocalProxy'),
+      requestingEntryTicket: i18n.t('webServices.status.requestingEntryTicket'),
+      updating: i18n.t('webServices.status.updating'),
+      desktopWindowFailed: i18n.t('webServices.errors.desktopWindowFailed'),
+      popupBlocked: i18n.t('webServices.errors.popupBlocked'),
+    }, win);
+    bumpRefresh();
+  };
 
-    setBusyID(fid);
-    setBusyText(i18n.t('webServices.status.opening'));
-    const win = window.open('about:blank', `redeven_web_service_${fid}`);
-    if (!win) {
+  const runOpenTransaction = async (
+    transactionID: string,
+    popupName: string,
+    initialStatus: string,
+    resolveTarget: () => Promise<Readonly<{ forward: PortForward; appPath: string }>>,
+  ) => {
+    if (busyID()) return;
+    setBusyID(transactionID);
+    setBusyText(initialStatus);
+    const useDesktopWindow = desktopShellWebServiceWindowOpenAvailable();
+    const win = useDesktopWindow ? null : window.open('about:blank', popupName);
+    if (!useDesktopWindow && !win) {
       setBusyID(null);
       setBusyText('');
       notify.error(i18n.t('webServices.notifications.failedToOpenTitle'), i18n.t('webServices.errors.popupBlocked'));
@@ -663,27 +727,11 @@ export function EnvPortForwardsPage() {
     }
 
     try {
-      setBusyText(i18n.t('webServices.status.resolvingRoute'));
-      const localRuntime = await getLocalRuntime().catch(() => null);
-      const desktopContext = readDesktopSessionContextSnapshot();
-      const route = resolveWebServiceOpenRoute({
-        forwardID: fid,
-        targetURL: f.target_url,
-        localRuntime,
-        desktopContext,
-      });
-      await openWebServiceRoute(route, fid, (s) => setBusyText(s), win, {
-        missingEnvContext: i18n.t('webServices.errors.missingEnvContext'),
-        opening: i18n.t('webServices.status.opening'),
-        openingDirectly: i18n.t('webServices.status.openingDirectly'),
-        openingLocalProxy: i18n.t('webServices.status.openingLocalProxy'),
-        requestingEntryTicket: i18n.t('webServices.status.requestingEntryTicket'),
-        updating: i18n.t('webServices.status.updating'),
-      });
-      bumpRefresh();
+      const target = await resolveTarget();
+      await performOpen(target.forward, target.appPath, useDesktopWindow, win);
     } catch (e) {
       try {
-        win.close();
+        win?.close();
       } catch {
         // ignore
       }
@@ -692,6 +740,59 @@ export function EnvPortForwardsPage() {
     } finally {
       setBusyID(null);
       setBusyText('');
+    }
+  };
+
+  // Open service handler
+  const doOpen = async (f: PortForward, appPath = '/') => {
+    const fid = String(f?.forward_id ?? '').trim();
+    if (!fid) return;
+    await runOpenTransaction(
+      fid,
+      `redeven_web_service_${fid}`,
+      i18n.t('webServices.status.opening'),
+      async () => ({ forward: f, appPath }),
+    );
+  };
+
+  const doOpenAddress = async () => {
+    const target = address().trim();
+    if (!isSupportedWebServiceTarget(target) || busyID()) {
+      notify.error(i18n.t('webServices.notifications.invalidAddressTitle'), i18n.t('webServices.notifications.invalidAddressMessage'));
+      return;
+    }
+    await runOpenTransaction(
+      'new-session',
+      '_blank',
+      i18n.t('webServices.status.creatingSession'),
+      async () => {
+        const session = await fetchLocalApiJSON<ForwardSession>('/_redeven_proxy/api/forward-sessions', {
+          method: 'POST',
+          body: JSON.stringify({ target }),
+        });
+        setRecentSession(session);
+        return { forward: session.forward, appPath: session.app_path };
+      },
+    );
+  };
+
+  const doSaveRecentSession = async () => {
+    const current = recentSession();
+    if (!current?.ephemeral || savingSession()) return;
+    setSavingSession(true);
+    try {
+      const name = new URL(current.forward.target_url).host;
+      const forward = await fetchLocalApiJSON<PortForward>(`/_redeven_proxy/api/forward-sessions/${encodeURIComponent(current.forward.forward_id)}/save`, {
+        method: 'POST',
+        body: JSON.stringify({ name, description: '' }),
+      });
+      setRecentSession({ ...current, forward, ephemeral: false });
+      bumpRefresh();
+      notify.success(i18n.t('webServices.notifications.sessionSavedTitle'), i18n.t('webServices.notifications.sessionSavedMessage', { name }));
+    } catch (error) {
+      notify.error(i18n.t('webServices.notifications.failedToSaveTitle'), error instanceof Error ? error.message : String(error));
+    } finally {
+      setSavingSession(false);
     }
   };
 
@@ -747,6 +848,67 @@ export function EnvPortForwardsPage() {
             </div>
           </div>
 
+          <form
+            class={cn('border-y py-4', redevenDividerRoleClass())}
+            onSubmit={(event) => {
+              event.preventDefault();
+              void doOpenAddress();
+            }}
+            data-testid="web-service-address-form"
+          >
+            <div class="mx-auto flex w-full max-w-3xl flex-col gap-2 sm:flex-row">
+              <div class="relative min-w-0 flex-1">
+                <Globe class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+                <Input
+                  value={address()}
+                  onInput={(event) => setAddress(event.currentTarget.value)}
+                  placeholder={i18n.t('webServices.address.placeholder')}
+                  aria-label={i18n.t('webServices.address.label')}
+                  autocomplete="url"
+                  spellcheck={false}
+                  size="sm"
+                  class="h-10 w-full pl-9 font-mono text-sm"
+                  disabled={!canExecute() || !!busyID()}
+                  data-testid="web-service-address-input"
+                />
+              </div>
+              <Button
+                type="submit"
+                size="sm"
+                class="h-10 shrink-0 px-4"
+                disabled={!canExecute() || !!busyID() || !address().trim()}
+                data-testid="web-service-address-open"
+              >
+                <ExternalLink class="mr-1.5 h-4 w-4" aria-hidden="true" />
+                {i18n.t('webServices.actions.openAddress')}
+              </Button>
+            </div>
+
+            <Show when={recentSession()?.ephemeral && recentSession()} keyed>
+              {(session) => (
+                <div class="mx-auto mt-3 flex w-full max-w-3xl flex-col gap-2 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div class="min-w-0">
+                    <div class="flex items-center gap-2">
+                      <Tag variant="neutral" tone="soft" size="sm">{i18n.t('webServices.session.temporary')}</Tag>
+                      <span class="truncate font-mono text-xs text-foreground">{session.forward.target_url}{session.app_path === '/' ? '' : session.app_path}</span>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    class={cn('h-8 shrink-0', outlineControlClass)}
+                    onClick={() => void doSaveRecentSession()}
+                    disabled={savingSession()}
+                  >
+                    <Save class="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                    {savingSession() ? i18n.t('webServices.actions.saving') : i18n.t('webServices.actions.saveService')}
+                  </Button>
+                </div>
+              )}
+            </Show>
+          </form>
+
           {/* Permission warning */}
           <Show when={permissionReady() && !canExecute()}>
             <div class="flex items-center gap-3 rounded-md border border-warning/30 bg-warning/10 p-3 text-xs text-warning">
@@ -764,13 +926,16 @@ export function EnvPortForwardsPage() {
           {/* Search bar - only show when there are services */}
           <Show when={(forwards()?.length ?? 0) > 0}>
             <div class="flex items-center gap-2">
-              <Input
-                value={searchQuery()}
-                onInput={(e) => setSearchQuery(e.currentTarget.value)}
-                placeholder={i18n.t('webServices.search.placeholder')}
-                size="sm"
-                class="max-w-sm"
-              />
+              <div class="relative w-full max-w-sm">
+                <Search class="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+                <Input
+                  value={searchQuery()}
+                  onInput={(e) => setSearchQuery(e.currentTarget.value)}
+                  placeholder={i18n.t('webServices.search.placeholder')}
+                  size="sm"
+                  class="w-full pl-8"
+                />
+              </div>
               <Show when={searchQuery()}>
                 <Button size="sm" variant="ghost" onClick={() => setSearchQuery('')} class="px-2">
                   <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">

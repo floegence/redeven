@@ -3209,7 +3209,7 @@
   },
   "webServices": {
     "title": "Serviços web",
-    "description": "Registre serviços HTTP acessíveis em tempo de execução e abra-os pela melhor rota para esta sessão.",
+    "description": "Abra serviços HTTP acessíveis em tempo de execução em uma janela Desktop isolada ou pela rota disponível mais segura.",
     "loadingEyebrow": "Serviços web",
     "loadingMessage": "Carregando serviços web...",
     "time": {
@@ -3227,6 +3227,9 @@
       "refresh": "Atualizar",
       "addService": "Adicionar serviço",
       "open": "Abrir",
+      "openAddress": "Abrir",
+      "saveService": "Salvar serviço",
+      "saving": "Salvando...",
       "delete": "Excluir",
       "cancel": "Cancelar",
       "openServiceTooltip": "Abrir serviço",
@@ -3240,6 +3243,13 @@
       "latency": "Latência",
       "lastCheck": "Última verificação"
     },
+    "address": {
+      "label": "Endereço do serviço web",
+      "placeholder": "Digite uma porta ou endereço, por exemplo 3000 ou localhost:8080/docs"
+    },
+    "session": {
+      "temporary": "Temporário"
+    },
     "card": {
       "fallbackName": "Serviço {id}"
     },
@@ -3250,8 +3260,8 @@
     "dialog": {
       "addTitle": "Adicionar serviço web",
       "targetPlaceholder": "localhost:3000",
-      "targetHelp": "Use host:port ou uma URL http(s)://. Caminhos, query strings e fragmentos não são compatíveis.",
-      "targetError": "Informe host:port ou uma URL http(s):// sem caminho.",
+      "targetHelp": "Use host:port ou uma URL http(s)://.",
+      "targetError": "Informe um host:port ou uma URL http(s):// válida.",
       "namePlaceholder": "Meu serviço",
       "nameHelp": "Nome de exibição para identificar este serviço.",
       "descriptionPlaceholder": "Servidor de desenvolvimento do meu projeto",
@@ -3276,7 +3286,8 @@
       "requestingEntryTicket": "Solicitando entry ticket...",
       "openingDirectly": "Abrindo diretamente...",
       "openingLocalProxy": "Abrindo Local UI proxy...",
-      "working": "Trabalhando..."
+      "working": "Trabalhando...",
+      "creatingSession": "Preparando uma sessão temporária de serviço web..."
     },
     "notifications": {
       "missingTargetTitle": "Destino ausente",
@@ -3288,12 +3299,18 @@
       "serviceDeletedTitle": "Serviço excluído",
       "serviceDeletedMessage": "Serviço web removido",
       "failedToDeleteTitle": "Falha ao excluir serviço",
-      "failedToOpenTitle": "Falha ao abrir serviço"
+      "failedToOpenTitle": "Falha ao abrir serviço",
+      "invalidAddressTitle": "Endereço inválido",
+      "invalidAddressMessage": "Digite uma porta ou um endereço HTTP(S).",
+      "sessionSavedTitle": "Serviço web salvo",
+      "sessionSavedMessage": "“{name}” foi salvo em Serviços web.",
+      "failedToSaveTitle": "Falha ao salvar o serviço web"
     },
     "errors": {
       "loadFailedPrefix": "Falha ao carregar serviços web",
       "popupBlocked": "O pop-up foi bloqueado. Permita pop-ups e tente novamente.",
-      "missingEnvContext": "Contexto de ambiente ausente. Por favor, reabra a partir do plano de controle. Somente estado"
+      "missingEnvContext": "Contexto de ambiente ausente. Por favor, reabra a partir do plano de controle. Somente estado",
+      "desktopWindowFailed": "O Desktop não conseguiu abrir a janela isolada do serviço web."
     }
   },
   "debugConsoleSettings": {

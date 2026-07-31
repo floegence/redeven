@@ -3209,7 +3209,7 @@
   },
   "webServices": {
     "title": "Web 서비스",
-    "description": "런타임 연결 가능 HTTP 서비스를 등록하고 이 세션에 가장 적합한 경로를 통해 엽니다.",
+    "description": "런타임에서 접근 가능한 HTTP 서비스를 격리된 Desktop 창이나 사용 가능한 가장 안전한 경로로 엽니다.",
     "loadingEyebrow": "Web 서비스",
     "loadingMessage": "Web 서비스 불러오는 중...",
     "time": {
@@ -3227,6 +3227,9 @@
       "refresh": "새로고침",
       "addService": "서비스 추가",
       "open": "열기",
+      "openAddress": "열기",
+      "saveService": "서비스 저장",
+      "saving": "저장 중...",
       "delete": "삭제",
       "cancel": "취소",
       "openServiceTooltip": "서비스 열기",
@@ -3240,6 +3243,13 @@
       "latency": "지연 시간",
       "lastCheck": "마지막 확인"
     },
+    "address": {
+      "label": "Web 서비스 주소",
+      "placeholder": "포트 또는 주소 입력(예: 3000 또는 localhost:8080/docs)"
+    },
+    "session": {
+      "temporary": "임시"
+    },
     "card": {
       "fallbackName": "서비스 {id}"
     },
@@ -3250,8 +3260,8 @@
     "dialog": {
       "addTitle": "Web 서비스 추가",
       "targetPlaceholder": "localhost:3000",
-      "targetHelp": "host:port 또는 http(s):// URL을 사용하세요. 경로, 쿼리 문자열, 프래그먼트는 지원되지 않습니다.",
-      "targetError": "경로 없는 host:port 또는 http(s):// URL을 입력하세요.",
+      "targetHelp": "host:port 또는 http(s):// URL을 사용하세요.",
+      "targetError": "유효한 host:port 또는 http(s):// URL을 입력하세요.",
       "namePlaceholder": "내 서비스",
       "nameHelp": "이 서비스를 식별할 표시 이름입니다.",
       "descriptionPlaceholder": "내 프로젝트 개발 서버",
@@ -3276,7 +3286,8 @@
       "requestingEntryTicket": "entry ticket 요청 중...",
       "openingDirectly": "직접 여는 중...",
       "openingLocalProxy": "Local UI proxy 여는 중...",
-      "working": "작업 중..."
+      "working": "작업 중...",
+      "creatingSession": "임시 Web 서비스 세션 준비 중..."
     },
     "notifications": {
       "missingTargetTitle": "대상 없음",
@@ -3288,12 +3299,18 @@
       "serviceDeletedTitle": "서비스 삭제됨",
       "serviceDeletedMessage": "Web 서비스가 제거되었습니다",
       "failedToDeleteTitle": "서비스 삭제 실패",
-      "failedToOpenTitle": "서비스 열기 실패"
+      "failedToOpenTitle": "서비스 열기 실패",
+      "invalidAddressTitle": "잘못된 주소",
+      "invalidAddressMessage": "포트 또는 HTTP(S) 주소를 입력하세요.",
+      "sessionSavedTitle": "Web 서비스 저장됨",
+      "sessionSavedMessage": "‘{name}’을(를) Web 서비스에 저장했습니다.",
+      "failedToSaveTitle": "Web 서비스 저장 실패"
     },
     "errors": {
       "loadFailedPrefix": "Web 서비스를 불러오지 못했습니다",
       "popupBlocked": "팝업이 차단되었습니다. 팝업을 허용한 뒤 다시 시도하세요.",
-      "missingEnvContext": "환경 컨텍스트가 누락되었습니다. 제어 영역에서 다시 열어주세요."
+      "missingEnvContext": "환경 컨텍스트가 누락되었습니다. 제어 영역에서 다시 열어주세요.",
+      "desktopWindowFailed": "Desktop에서 격리된 Web 서비스 창을 열지 못했습니다."
     }
   },
   "debugConsoleSettings": {

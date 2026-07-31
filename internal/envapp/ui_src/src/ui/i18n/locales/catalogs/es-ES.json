@@ -3209,7 +3209,7 @@
   },
   "webServices": {
     "title": "Servicios web",
-    "description": "Registre servicios HTTP accesibles en tiempo de ejecución y ábralos a través de la mejor ruta para esta sesión.",
+    "description": "Abra servicios HTTP accesibles en tiempo de ejecución en una ventana aislada de Desktop o mediante la ruta disponible más segura.",
     "loadingEyebrow": "Servicios web",
     "loadingMessage": "Cargando servicios web...",
     "time": {
@@ -3227,6 +3227,9 @@
       "refresh": "Actualizar",
       "addService": "Agregar servicio",
       "open": "Abrir",
+      "openAddress": "Abrir",
+      "saveService": "Guardar servicio",
+      "saving": "Guardando...",
       "delete": "Eliminar",
       "cancel": "Cancelar",
       "openServiceTooltip": "Abrir servicio",
@@ -3240,6 +3243,13 @@
       "latency": "Latencia",
       "lastCheck": "Última comprobación"
     },
+    "address": {
+      "label": "Dirección del servicio web",
+      "placeholder": "Introduce un puerto o dirección, por ejemplo 3000 o localhost:8080/docs"
+    },
+    "session": {
+      "temporary": "Temporal"
+    },
     "card": {
       "fallbackName": "Servicio {id}"
     },
@@ -3250,8 +3260,8 @@
     "dialog": {
       "addTitle": "Agregar servicio web",
       "targetPlaceholder": "localhost:3000",
-      "targetHelp": "Usa host:port o una URL http(s)://. No se admiten rutas, cadenas de consulta ni fragmentos.",
-      "targetError": "Introduce host:port o una URL http(s):// sin ruta.",
+      "targetHelp": "Usa host:port o una URL http(s)://.",
+      "targetError": "Introduce un host:port o una URL http(s):// válidos.",
       "namePlaceholder": "Mi servicio",
       "nameHelp": "Nombre visible para identificar este servicio.",
       "descriptionPlaceholder": "Servidor de desarrollo para mi proyecto",
@@ -3276,7 +3286,8 @@
       "requestingEntryTicket": "Solicitando entry ticket...",
       "openingDirectly": "Abriendo directamente...",
       "openingLocalProxy": "Abriendo Local UI proxy...",
-      "working": "Trabajando..."
+      "working": "Trabajando...",
+      "creatingSession": "Preparando una sesión temporal de servicio web..."
     },
     "notifications": {
       "missingTargetTitle": "Falta destino",
@@ -3288,12 +3299,18 @@
       "serviceDeletedTitle": "Servicio eliminado",
       "serviceDeletedMessage": "Servicio web eliminado",
       "failedToDeleteTitle": "No se pudo eliminar el servicio",
-      "failedToOpenTitle": "No se pudo abrir el servicio"
+      "failedToOpenTitle": "No se pudo abrir el servicio",
+      "invalidAddressTitle": "Dirección no válida",
+      "invalidAddressMessage": "Introduce un puerto o una dirección HTTP(S).",
+      "sessionSavedTitle": "Servicio web guardado",
+      "sessionSavedMessage": "Se guardó «{name}» en Servicios web.",
+      "failedToSaveTitle": "No se pudo guardar el servicio web"
     },
     "errors": {
       "loadFailedPrefix": "No se pudieron cargar los servicios web",
       "popupBlocked": "La ventana emergente fue bloqueada. Permite ventanas emergentes y vuelve a intentarlo.",
-      "missingEnvContext": "Falta el contexto ambiental. Vuelva a abrir desde el plano de control."
+      "missingEnvContext": "Falta el contexto ambiental. Vuelva a abrir desde el plano de control.",
+      "desktopWindowFailed": "Desktop no pudo abrir la ventana aislada del servicio web."
     }
   },
   "debugConsoleSettings": {
