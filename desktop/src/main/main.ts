@@ -8024,10 +8024,11 @@ function createWebServiceBrowserController(
       request.forward_id,
     );
     if (!targetURL) {
-      errorMessage = createDesktopI18n(desktopLanguageState().getSnapshot().resolved_locale)
-        .t('webServiceBrowser.invalidAddress');
-      publishState();
-      return { ok: false, message: errorMessage };
+      return {
+        ok: false,
+        message: createDesktopI18n(desktopLanguageState().getSnapshot().resolved_locale)
+          .t('webServiceBrowser.invalidAddress'),
+      };
     }
     errorMessage = '';
     pendingExternalURL = '';
@@ -8087,9 +8088,6 @@ function createWebServiceBrowserController(
     } catch {
       // Invalid targets remain blocked and cannot replace the last reviewable URL.
     }
-    errorMessage = createDesktopI18n(desktopLanguageState().getSnapshot().resolved_locale)
-      .t('webServiceBrowser.blockedNavigation');
-    publishState();
   };
   contentView.webContents.setWindowOpenHandler(({ url }) => {
     if (allowTargetNavigation(url)) void contentView.webContents.loadURL(url);

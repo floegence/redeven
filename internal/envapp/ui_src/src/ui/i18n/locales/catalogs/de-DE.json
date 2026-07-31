@@ -3245,7 +3245,10 @@
     },
     "address": {
       "label": "Webdienst-Adresse",
-      "placeholder": "Port oder Adresse eingeben, z. B. 3000 oder localhost:8080/docs"
+      "placeholder": "Port oder Adresse eingeben, z. B. 3000 oder localhost:8080/docs",
+      "scopeTitle": "Aus dieser Umgebung erreichbar.",
+      "scopeDescription": "Verwenden Sie einen Port, Host:Port oder eine HTTP(S)-Adresse, die von der Laufzeitumgebung erreichbar ist. Jedes Redeven-Fenster bleibt auf den hier geöffneten Web Service beschränkt; geben Sie hier einen anderen Dienst ein, um ihn separat zu öffnen.",
+      "invalid": "Diese Adresse kann nicht geöffnet werden. Verwenden Sie einen Port wie 3000, Host:Port oder eine HTTP(S)-Adresse ohne Anmeldedaten."
     },
     "session": {
       "temporary": "Temporär"
@@ -3300,8 +3303,6 @@
       "serviceDeletedMessage": "Webdienst wurde entfernt",
       "failedToDeleteTitle": "Dienst konnte nicht gelöscht werden",
       "failedToOpenTitle": "Dienst konnte nicht geöffnet werden",
-      "invalidAddressTitle": "Ungültige Adresse",
-      "invalidAddressMessage": "Geben Sie einen Port oder eine HTTP(S)-Adresse ein.",
       "sessionSavedTitle": "Webdienst gespeichert",
       "sessionSavedMessage": "„{name}“ wurde unter Webdienste gespeichert.",
       "failedToSaveTitle": "Webdienst konnte nicht gespeichert werden"

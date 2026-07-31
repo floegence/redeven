@@ -39,7 +39,6 @@ export const enUS = {
     openInBrowser: 'Open in browser',
     secureRoute: 'This page uses the current Environment Web Service route',
     invalidAddress: 'Enter an HTTP(S) address or path inside this Web Service.',
-    blockedNavigation: 'This page tried to leave the current Web Service. Use Open in browser to continue.',
     loadFailed: 'The Web Service could not load this address.',
   },
   language: {

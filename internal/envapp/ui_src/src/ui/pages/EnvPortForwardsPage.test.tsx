@@ -93,7 +93,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
   CardTitle: (props: any) => <div class={props.class}>{props.children}</div>,
   ConfirmDialog: (props: any) => (props.open ? <div>{props.children}</div> : null),
   Dialog: (props: any) => (props.open ? <div><h2>{props.title}</h2>{props.children}{props.footer}</div> : null),
-  Input: (props: any) => <input value={props.value} onInput={props.onInput} onBlur={props.onBlur} class={props.class} placeholder={props.placeholder} aria-label={props['aria-label']} disabled={props.disabled} data-testid={props['data-testid']} />,
+  Input: (props: any) => <input value={props.value} onInput={props.onInput} onBlur={props.onBlur} class={props.class} placeholder={props.placeholder} aria-label={props['aria-label']} aria-invalid={props['aria-invalid']} aria-describedby={props['aria-describedby']} disabled={props.disabled} data-testid={props['data-testid']} />,
   Tag: (props: any) => <span class={props.class}>{props.children}</span>,
 }));
 
@@ -547,6 +547,37 @@ describe('EnvPortForwardsPage', () => {
       expect(host.textContent).toContain('Temporary');
       expect(host.textContent).toContain('Save service');
     });
+  });
+
+  it('explains the address scope inline and rejects unsupported input without opening a window', async () => {
+    const openWindow = vi.spyOn(window, 'open');
+    render(() => <EnvPortForwardsPage />, host);
+    await flushPage();
+
+    const input = host.querySelector<HTMLInputElement>('[data-testid="web-service-address-input"]');
+    const guidance = host.querySelector<HTMLElement>('[data-testid="web-service-address-guidance"]');
+    expect(guidance?.textContent).toContain('Available from this Environment');
+    expect(guidance?.textContent).toContain('port, host:port, or HTTP(S) address');
+
+    if (input) {
+      input.value = 'ftp://example.test';
+      input.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    }
+    host.querySelector<HTMLFormElement>('[data-testid="web-service-address-form"]')?.dispatchEvent(
+      new SubmitEvent('submit', { bubbles: true, cancelable: true }),
+    );
+    await flushMicrotasks();
+
+    expect(input?.getAttribute('aria-invalid')).toBe('true');
+    expect(guidance?.getAttribute('role')).toBe('alert');
+    expect(guidance?.textContent).toContain('This address cannot be opened');
+    expect(guidance?.textContent).toContain('without credentials');
+    expect(openWindow).not.toHaveBeenCalled();
+    expect(localApiMocks.fetchLocalApiJSON).not.toHaveBeenCalledWith(
+      '/_redeven_proxy/api/forward-sessions',
+      expect.anything(),
+    );
+    expect(notificationMocks.error).not.toHaveBeenCalled();
   });
 
   it('keeps one blocking transaction while a temporary session is created and opened', async () => {

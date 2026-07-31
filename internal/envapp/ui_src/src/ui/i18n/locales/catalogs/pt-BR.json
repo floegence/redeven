@@ -3245,7 +3245,10 @@
     },
     "address": {
       "label": "Endereço do serviço web",
-      "placeholder": "Digite uma porta ou endereço, por exemplo 3000 ou localhost:8080/docs"
+      "placeholder": "Digite uma porta ou endereço, por exemplo 3000 ou localhost:8080/docs",
+      "scopeTitle": "Acessível a partir deste ambiente.",
+      "scopeDescription": "Use uma porta, host:porta ou endereço HTTP(S) acessível pelo ambiente de execução. Cada janela do Redeven permanece limitada ao Web Service aberto aqui; informe outro serviço aqui para abri-lo separadamente.",
+      "invalid": "Este endereço não pode ser aberto. Use uma porta como 3000, host:porta ou um endereço HTTP(S) sem credenciais."
     },
     "session": {
       "temporary": "Temporário"
@@ -3300,8 +3303,6 @@
       "serviceDeletedMessage": "Serviço web removido",
       "failedToDeleteTitle": "Falha ao excluir serviço",
       "failedToOpenTitle": "Falha ao abrir serviço",
-      "invalidAddressTitle": "Endereço inválido",
-      "invalidAddressMessage": "Digite uma porta ou um endereço HTTP(S).",
       "sessionSavedTitle": "Serviço web salvo",
       "sessionSavedMessage": "“{name}” foi salvo em Serviços web.",
       "failedToSaveTitle": "Falha ao salvar o serviço web"

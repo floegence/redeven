@@ -2916,6 +2916,9 @@ export const enUS = defineDictionary({
     address: {
       label: 'Web Service address',
       placeholder: 'Enter a port or address, for example 3000 or localhost:8080/docs',
+      scopeTitle: 'Available from this Environment.',
+      scopeDescription: 'Use a port, host:port, or HTTP(S) address reachable from the runtime. Each Redeven window stays within the Web Service opened here; enter another service here to open it separately.',
+      invalid: 'This address cannot be opened. Use a port such as 3000, host:port, or an HTTP(S) address without credentials.',
     },
     session: {
       temporary: 'Temporary',
@@ -2970,8 +2973,6 @@ export const enUS = defineDictionary({
       serviceDeletedMessage: 'Web service has been removed',
       failedToDeleteTitle: 'Failed to delete service',
       failedToOpenTitle: 'Failed to open service',
-      invalidAddressTitle: 'Invalid address',
-      invalidAddressMessage: 'Enter a port or an HTTP(S) address.',
       sessionSavedTitle: 'Web Service saved',
       sessionSavedMessage: 'Saved "{name}" to Web Services.',
       failedToSaveTitle: 'Failed to save Web Service',

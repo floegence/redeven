@@ -546,7 +546,6 @@
     "openInBrowser": "Abrir en el navegador",
     "secureRoute": "Esta página usa la ruta de Web Service del entorno actual",
     "invalidAddress": "Introduce una dirección HTTP(S) o una ruta dentro de este Web Service.",
-    "blockedNavigation": "Esta página intentó salir del Web Service actual. Usa «Abrir en el navegador» para continuar.",
     "loadFailed": "El Web Service no pudo cargar esta dirección."
   },
   "language": {

@@ -3245,7 +3245,10 @@
     },
     "address": {
       "label": "Web 服務位址",
-      "placeholder": "輸入連接埠或位址，例如 3000 或 localhost:8080/docs"
+      "placeholder": "輸入連接埠或位址，例如 3000 或 localhost:8080/docs",
+      "scopeTitle": "可存取目前環境內的服務。",
+      "scopeDescription": "請輸入執行階段可存取的連接埠、主機:連接埠或 HTTP(S) 位址。每個 Redeven 視窗僅限於在此開啟的 Web Service；如需存取其他服務，請在此另行輸入並開啟。",
+      "invalid": "無法開啟此位址。請輸入 3000 這類連接埠、主機:連接埠，或不含登入憑證的 HTTP(S) 位址。"
     },
     "session": {
       "temporary": "暫時"
@@ -3300,8 +3303,6 @@
       "serviceDeletedMessage": "Web 服務已移除",
       "failedToDeleteTitle": "刪除服務失敗",
       "failedToOpenTitle": "開啟服務失敗",
-      "invalidAddressTitle": "位址無效",
-      "invalidAddressMessage": "請輸入連接埠或 HTTP(S) 位址。",
       "sessionSavedTitle": "Web 服務已儲存",
       "sessionSavedMessage": "已將「{name}」儲存到 Web 服務。",
       "failedToSaveTitle": "儲存 Web 服務失敗"

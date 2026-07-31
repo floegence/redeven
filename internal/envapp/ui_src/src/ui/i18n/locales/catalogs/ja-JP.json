@@ -3245,7 +3245,10 @@
     },
     "address": {
       "label": "Web サービスのアドレス",
-      "placeholder": "ポートまたはアドレスを入力（例: 3000、localhost:8080/docs）"
+      "placeholder": "ポートまたはアドレスを入力（例: 3000、localhost:8080/docs）",
+      "scopeTitle": "この環境からアクセスできます。",
+      "scopeDescription": "ランタイムから到達できるポート、host:port、または HTTP(S) アドレスを使用してください。各 Redeven ウィンドウはここで開いた Web Service 内に限定されます。別のサービスはここに入力して個別に開いてください。",
+      "invalid": "このアドレスは開けません。3000 のようなポート、host:port、または認証情報を含まない HTTP(S) アドレスを使用してください。"
     },
     "session": {
       "temporary": "一時"
@@ -3300,8 +3303,6 @@
       "serviceDeletedMessage": "Web サービスを削除しました",
       "failedToDeleteTitle": "サービスの削除に失敗しました",
       "failedToOpenTitle": "サービスを開けませんでした",
-      "invalidAddressTitle": "無効なアドレス",
-      "invalidAddressMessage": "ポートまたは HTTP(S) アドレスを入力してください。",
       "sessionSavedTitle": "Web サービスを保存しました",
       "sessionSavedMessage": "「{name}」を Web サービスに保存しました。",
       "failedToSaveTitle": "Web サービスを保存できませんでした"

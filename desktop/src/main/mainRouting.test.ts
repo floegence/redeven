@@ -203,6 +203,7 @@ describe('main routing', () => {
     expect(helperSrc).toContain('await openExternalURL(targetURL);');
     expect(helperSrc).toContain('blockExternalNavigation(url);');
     expect(helperSrc).toContain('blockExternalNavigation(targetURL);');
+    expect(helperSrc).not.toContain(".t('webServiceBrowser.blockedNavigation')");
     expect(helperSrc).not.toContain('else openExternal(url);');
     expect(helperSrc).not.toContain('openExternal(targetURL);');
     expect(helperSrc).toContain('webSession.clearStorageData()');
