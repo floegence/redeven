@@ -433,7 +433,7 @@
     },
     {
       "path": "desktop/src/main/main.ts",
-      "sha256": "3abb54f1e405488024a988924eb5708ecbe4c066dbd86b3696dc6d0310cbea8f",
+      "sha256": "64120694e06123ab8ee10f56f095bf728f51764e9f95796c3e26fe3057d67afc",
       "sink_kinds": [
         "file"
       ],
@@ -1288,7 +1288,7 @@
     },
     {
       "path": "internal/codeapp/appserver/server.go",
-      "sha256": "6beac0a18feeada9ee7caa1b328889920bc9af75633d8389a92e4874b1adc239",
+      "sha256": "1697b4be4921333e99314a45e2cefefb1af3add5397ce3bfd73c33860d13edbb",
       "sink_kinds": [
         "file",
         "json_file"
@@ -1297,7 +1297,8 @@
       "owner": "redeven app server transport",
       "authority": "product_resource",
       "data_classes": [
-        "HTTP and event-stream transport output"
+        "HTTP and event-stream transport output",
+        "Explicit Web Service save commands delegated to the portforward owner"
       ],
       "tables": [
         "configpath",
@@ -1315,7 +1316,7 @@
         "v",
         "value"
       ],
-      "review_note": "Writes or invokes response transport bytes only; it is not durable conversation storage."
+      "review_note": "Writes response transport bytes and delegates explicit Web Service save commands to the portforward owner; it does not own or duplicate durable state and is not durable conversation storage."
     },
     {
       "path": "internal/codeapp/codeserver/artifact.go",
