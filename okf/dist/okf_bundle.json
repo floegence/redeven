@@ -767,7 +767,7 @@
               "sqlite",
               "storage"
             ],
-            "summary": "- Authority: Floret owns admitted Agent state and every canonical `ThreadID`, `TurnID`, and `RunID`; Redeven owns product settings, uploads, unadmitted queue state, routing, authorization evidence, and durable cross-store operations.\n- Outcome: `ai_threadstore_product_v1` version 1 is the sole first-release baseline and opens only after a read-only complete-schema preflight.\n- Invariants: admission identities begin empty, bind once from validated Floret facts, and settle product state atomically; unsupported databases are rejected without mutation. The v3.0.2 event-based acknowledgement is a documented contract gap, not a signed long-term bind boundary.\n- Failure boundary: schema drift, an unsupported identity, incomplete canonical evidence, or a conflicting replay stops startup or admission without repair, reset, or substitute state.",
+            "summary": "- Authority: Floret owns admitted Agent state and canonical identities; Redeven owns product settings, uploads, unadmitted queue state, routing, authorization evidence, and durable cross-store operations.\n- Outcome: `ai_threadstore_product_v1` version 1 is the sole first-release baseline and opens only after a read-only complete-schema preflight.\n- Invariants: admission identities begin empty, bind once from validated Floret facts, and settle product state atomically. Unsupported databases are rejected without mutation. The v3.0.2 event acknowledgement is a documented gap, not a long-term bind boundary.\n- Failure boundary: schema drift, an unsupported identity, incomplete canonical evidence, or a conflicting replay stops startup or admission without repair, reset, or substitute state.",
             "section_count": 2
           },
           {
@@ -783,7 +783,8 @@
               "recovery",
               "saga"
             ],
-            "section_count": 5
+            "summary": "Floret is authoritative for every admitted Agent fact. Redeven records only product resources, authorization, unadmitted work, and the minimum coordination evidence needed to settle a mutation across two independent stores. Redeven evidence never proves canonical lifecycle state or supports lifecycle inventory, timeline, status, or search. Recovery accepts only the same logical-request receipt or a public exact read; conflicting or incomplete proof fails closed. The v3.0.2 event acknowledgement remains a public-contract gap for Phase 1B.",
+            "section_count": 2
           },
           {
             "concept_id": "ai.flower-attachment-resources",
@@ -1991,45 +1992,25 @@
         "title": "Flower cross-store mutation inventory",
         "type": "Boundary Inventory"
       },
-      "body_length": 6469,
+      "body_length": 6725,
+      "summary": "Floret is authoritative for every admitted Agent fact. Redeven records only product resources, authorization, unadmitted work, and the minimum coordination evidence needed to settle a mutation across two independent stores. Redeven evidence never proves canonical lifecycle state or supports lifecycle inventory, timeline, status, or search. Recovery accepts only the same logical-request receipt or a public exact read; conflicting or incomplete proof fails closed. The v3.0.2 event acknowledgement remains a public-contract gap for Phase 1B.",
       "sections": [
         {
-          "id": "decision",
-          "title": "Decision",
+          "id": "contract",
+          "title": "Contract",
           "level": 1,
-          "body": "Floret is authoritative for every admitted Agent fact. Redeven records only product resources, authorization, unadmitted work, and the minimum coordination evidence needed to settle a mutation across two independent stores. A Redeven record never proves canonical lifecycle state and cannot be used for lifecycle inventory, timeline, status, or search.\n\nThe v3.0.2 turn path still discovers the canonical admission through an observation callback. `EventSink.EmitEvent` cannot report a bind failure to Floret, and an event can be lost after the Floret commit. The current replay path reduces this risk but does not provide a durable public admission acknowledgement before provider execution. This is a confirmed product-neutral Floret contract gap and requires Phase 1B's explicit two-stage admission API; it cannot be closed inside Redeven Phase 1A.",
-          "char_count": 851
+          "body": "## Admission acknowledgement gap\n\nThe v3.0.2 turn path still discovers the canonical admission through an observation callback. `EventSink.EmitEvent` cannot report a bind failure to Floret, and an event can be lost after the Floret commit. The current replay path reduces this risk but does not provide a durable public admission acknowledgement before provider execution. This is a confirmed product-neutral Floret contract gap and requires Phase 1B's explicit two-stage admission API; it cannot be closed inside Redeven Phase 1A.\n\n## Mutation inventory\n\n| Mutation | Floret canonical commit | Legal Redeven state | Restart entry and convergence rule | Phase 1A result |\n| --- | --- | --- | --- | --- |\n| Root thread creation | `CreateThread` receipt and canonical root | `ai_thread_create_operations`, product settings, routing, upload claims | Replay the same logical request, bind the returned ThreadID once, then resume product materialization | Existing durable coordinator is legal; crash matrix remains Phase 1C work |\n| Thread fork | `ForkThread` receipt and canonical fork origin | `ai_thread_fork_operations`, destination settings/routing/upload claims | Replay exact logical request and bind returned destination once | Existing durable coordinator is legal; crash matrix remains Phase 1C work |\n| Thread deletion | Floret deleted lifecycle | `ai_thread_delete_operations` and product resource-cleanup flags | Exact-read canonical authority, then resume idempotent product cleanup | Local tombstone is not canonical deletion status |\n| Turn admission | canonical user entry and Turn/Run/Entry identity | `ai_queued_turns`, `ai_turn_admission_receipts`, permission snapshot, upload settlement | v3.0.2 replays the same request and exact-reads the returned turn before binding; Phase 1C must consume the Phase 1B admission receipt directly | Observation-based acknowledgement is insufficient and triggers Phase 1B |\n| SubAgent spawn/publication | child Thread, origin, and publication lifecycle | `ai_subagent_publication_operations` and child permission evidence | Replay exact child mutation and use public child exact reads before local publication settlement | Legal coordination only; no child transcript or lifecycle copy |\n| Approval decision | canonical approval request and decision | product authorization basis and security audit only | Exact-read current approval and replay the public decision command under its expected generation/revision | No Redeven approval lifecycle table is permitted |\n| Pending tool settlement | canonical invocation, effect proof, and result | external-effect audit and host resource handle only | Reopen the bound Floret pending-tool recovery capability and settle the same proof; never execute an unknown effect twice | No tool-call/result ledger is permitted in Redeven |\n| Artifact/resource publication | canonical Artifact or message reference | physical upload object, claims, staging scope, and cleanup attempt | Resolve the opaque canonical reference under current authorization; physical cleanup must not mutate canonical membership | Upload tables cannot rebuild message membership |\n\n## Machine-enforced contract\n\n- `internal/ai/threadstore/reviewed_schema_manifest.json` freezes the complete physical schema: version, tables, columns, indexes, triggers, constraints, and SQL.\n- `scripts/contracts/threadstore_boundary_manifest.json` assigns every physical table, inherited column/index/trigger, and every production SQL call site to a reviewed owner and consumer contract.\n- Stable query IDs bind path, receiver/function, SQL method, normalized SQL or rendered expression, action, structured consumer kind, tables, lookup keys, read/write columns, and the full reviewed builder closure for dynamic statements. The catalog currently covers 238 production calls across threadstore and its shared SQLite engine. A source change produces an unreviewed ID or fingerprint and fails CI; non-PRAGMA DML without an owned table, or INSERT/UPDATE without reviewed write columns, is rejected.\n- Dynamic SQL is fail closed. The only exceptions are the explicitly enumerated placeholder batches, constant projections, quoted schema introspection, bounded PRAGMA, and closed enum/branch statements recorded in the catalog.\n- `ai_turn_admission_receipts` access is an exact query-ID/action/consumer-kind closed set limited to admission coordination, its schema maintenance, and startup recovery. Reads are restricted to exact `queue_id` coordination. `logical_request_id` is allowed for exact coordination as Phase 1C adopts the released Floret API. Canonical-ID indexes are integrity-only and do not authorize reads.\n- `terminal_committed` and `terminal_replayed` have no production consumer. Phase 1C must remove them in the required product schema migration; canonical receipt indexes must be retained only if their integrity value is proven.\n- `scripts/check_floret_dependency_boundary.sh --ci` runs both the durable-sink closed set and the threadstore schema/query contract.",
+          "char_count": 5025
         },
         {
-          "id": "inventory",
-          "title": "Inventory",
+          "id": "boundaries",
+          "title": "Boundaries",
           "level": 1,
-          "body": "| Mutation | Floret canonical commit | Legal Redeven state | Restart entry and convergence rule | Phase 1A result |\n| --- | --- | --- | --- | --- |\n| Root thread creation | `CreateThread` receipt and canonical root | `ai_thread_create_operations`, product settings, routing, upload claims | Replay the same logical request, bind the returned ThreadID once, then resume product materialization | Existing durable coordinator is legal; crash matrix remains Phase 1C work |\n| Thread fork | `ForkThread` receipt and canonical fork origin | `ai_thread_fork_operations`, destination settings/routing/upload claims | Replay exact logical request and bind returned destination once | Existing durable coordinator is legal; crash matrix remains Phase 1C work |\n| Thread deletion | Floret deleted lifecycle | `ai_thread_delete_operations` and product resource-cleanup flags | Exact-read canonical authority, then resume idempotent product cleanup | Local tombstone is not canonical deletion status |\n| Turn admission | canonical user entry and Turn/Run/Entry identity | `ai_queued_turns`, `ai_turn_admission_receipts`, permission snapshot, upload settlement | v3.0.2 replays the same request and exact-reads the returned turn before binding; Phase 1C must consume the Phase 1B admission receipt directly | Observation-based acknowledgement is insufficient and triggers Phase 1B |\n| SubAgent spawn/publication | child Thread, origin, and publication lifecycle | `ai_subagent_publication_operations` and child permission evidence | Replay exact child mutation and use public child exact reads before local publication settlement | Legal coordination only; no child transcript or lifecycle copy |\n| Approval decision | canonical approval request and decision | product authorization basis and security audit only | Exact-read current approval and replay the public decision command under its expected generation/revision | No Redeven approval lifecycle table is permitted |\n| Pending tool settlement | canonical invocation, effect proof, and result | external-effect audit and host resource handle only | Reopen the bound Floret pending-tool recovery capability and settle the same proof; never execute an unknown effect twice | No tool-call/result ledger is permitted in Redeven |\n| Artifact/resource publication | canonical Artifact or message reference | physical upload object, claims, staging scope, and cleanup attempt | Resolve the opaque canonical reference under current authorization; physical cleanup must not mutate canonical membership | Upload tables cannot rebuild message membership |",
-          "char_count": 2587
-        },
-        {
-          "id": "machine-enforced-evidence",
-          "title": "Machine-Enforced Evidence",
-          "level": 1,
-          "body": "- `internal/ai/threadstore/reviewed_schema_manifest.json` freezes the complete physical schema: version, tables, columns, indexes, triggers, constraints, and SQL.\n- `scripts/contracts/threadstore_boundary_manifest.json` assigns every physical table, inherited column/index/trigger, and every production SQL call site to a reviewed owner and consumer contract.\n- Stable query IDs bind path, receiver/function, SQL method, normalized SQL or rendered expression, action, structured consumer kind, tables, lookup keys, read/write columns, and the full reviewed builder closure for dynamic statements. The catalog currently covers 238 production calls across threadstore and its shared SQLite engine. A source change produces an unreviewed ID or fingerprint and fails CI; non-PRAGMA DML without an owned table, or INSERT/UPDATE without reviewed write columns, is rejected.\n- Dynamic SQL is fail closed. The only exceptions are the explicitly enumerated placeholder batches, constant projections, quoted schema introspection, bounded PRAGMA, and closed enum/branch statements recorded in the catalog.\n- `ai_turn_admission_receipts` access is an exact query-ID/action/consumer-kind closed set limited to admission coordination, its schema maintenance, and startup recovery. Reads are restricted to exact `queue_id` coordination. `logical_request_id` is allowed for exact coordination as Phase 1C adopts the released Floret API. Canonical-ID indexes are integrity-only and do not authorize reads.\n- `terminal_committed` and `terminal_replayed` have no production consumer. Phase 1C must remove them in the required product schema migration; canonical receipt indexes must be retained only if their integrity value is proven.\n- `scripts/check_floret_dependency_boundary.sh --ci` runs both the durable-sink closed set and the threadstore schema/query contract.",
-          "char_count": 1850
-        },
-        {
-          "id": "recovery-invariants",
-          "title": "Recovery Invariants",
-          "level": 1,
-          "body": "1. A Floret commit is recovered only by the same logical request receipt or a public exact read.\n2. Conflicting proof, fingerprint, identity, or stage fails closed; no history scan or audit reconstruction is allowed.\n3. External effects with unknown or committed outcomes are settled from durable proof and are never blindly repeated.\n4. Deleting expired coordination evidence cannot delete or make Floret canonical state unreadable.\n5. Phase 1C must add deterministic subprocess checkpoints and oracles for every inventory row before the boundary can be signed at runtime.",
-          "char_count": 573
-        },
-        {
-          "id": "evidence-links",
-          "title": "Evidence Links",
-          "level": 1,
-          "body": "- `redeven:internal/ai/thread_create_operation.go`\n- `redeven:internal/ai/thread_fork_operation.go`\n- `redeven:internal/ai/thread_delete_operation.go`\n- `redeven:internal/ai/floret_runtime.go`\n- `redeven:internal/ai/subagent_publication_recovery.go`\n- `redeven:internal/ai/floret_approval.go`\n- `redeven:internal/ai/terminal_process_service.go`\n- `redeven:internal/ai/upload_lifecycle.go`\n- `redeven:internal/ai/threadstore/reviewed_schema_test.go`\n- `redeven:internal/boundarycontract/threadstore_sql.go`",
-          "char_count": 505
+          "body": "## Recovery invariants\n\n1. A Floret commit is recovered only by the same logical request receipt or a public exact read.\n2. Conflicting proof, fingerprint, identity, or stage fails closed; no history scan or audit reconstruction is allowed.\n3. External effects with unknown or committed outcomes are settled from durable proof and are never blindly repeated.\n4. Deleting expired coordination evidence cannot delete or make Floret canonical state unreadable.\n5. Phase 1C must add deterministic subprocess checkpoints and oracles for every inventory row before the boundary can be signed at runtime.",
+          "char_count": 597
         }
       ],
-      "snippet": "Floret is authoritative for every admitted Agent fact. Redeven records only product resources, authorization, unadmitted work, and the minimum coordination evidence needed to settle a mutation across two independent stores. A Redeven record",
+      "snippet": "Floret is authoritative for every admitted Agent fact. Redeven records only product resources, authorization, unadmitted work, and the minimum coordination evidence needed to settle a mutation across two independent stores. Redeven evidence",
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -2131,8 +2112,8 @@
         "title": "Flower storage ownership and migrations",
         "type": "Storage Contract"
       },
-      "body_length": 8048,
-      "summary": "- Authority: Floret owns admitted Agent state and every canonical `ThreadID`, `TurnID`, and `RunID`; Redeven owns product settings, uploads, unadmitted queue state, routing, authorization evidence, and durable cross-store operations.\n- Outcome: `ai_threadstore_product_v1` version 1 is the sole first-release baseline and opens only after a read-only complete-schema preflight.\n- Invariants: admission identities begin empty, bind once from validated Floret facts, and settle product state atomically; unsupported databases are rejected without mutation. The v3.0.2 event-based acknowledgement is a documented contract gap, not a signed long-term bind boundary.\n- Failure boundary: schema drift, an unsupported identity, incomplete canonical evidence, or a conflicting replay stops startup or admission without repair, reset, or substitute state.",
+      "body_length": 7997,
+      "summary": "- Authority: Floret owns admitted Agent state and canonical identities; Redeven owns product settings, uploads, unadmitted queue state, routing, authorization evidence, and durable cross-store operations.\n- Outcome: `ai_threadstore_product_v1` version 1 is the sole first-release baseline and opens only after a read-only complete-schema preflight.\n- Invariants: admission identities begin empty, bind once from validated Floret facts, and settle product state atomically. Unsupported databases are rejected without mutation. The v3.0.2 event acknowledgement is a documented gap, not a long-term bind boundary.\n- Failure boundary: schema drift, an unsupported identity, incomplete canonical evidence, or a conflicting replay stops startup or admission without repair, reset, or substitute state.",
       "sections": [
         {
           "id": "contract",
@@ -2216,7 +2197,7 @@
           "description": "Rejects shadow state, Floret schema access, and unreviewed persistence."
         }
       ],
-      "snippet": "- Authority: Floret owns admitted Agent state and every canonical `ThreadID`, `TurnID`, and `RunID`; Redeven owns product settings, uploads, unadmitted queue state, routing, authorization evidence, and durable cross-store operations.",
+      "snippet": "- Authority: Floret owns admitted Agent state and canonical identities; Redeven owns product settings, uploads, unadmitted queue state, routing, authorization evidence, and durable cross-store operations. - Outcome: `ai_threadstore_product_",
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -9876,5 +9857,5 @@
       ]
     }
   ],
-  "source_sha256": "bcd437d9eecb3644ee80a45680e7bfa77c04fb1299101c80acfeda7485d07bf5"
+  "source_sha256": "9179b132e0f98d4a7a873c506af015516e4cc0dd2c5ebd00b33d699f428e2d9f"
 }
