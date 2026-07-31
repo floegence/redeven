@@ -1,6 +1,20 @@
 import { describe, expect, it } from 'vitest';
 
 import { buildWebServiceUnavailableDocumentURL } from './webServiceUnavailableDocument';
+import {
+  desktopSemanticPaletteForShellTheme,
+  desktopWindowThemeSnapshotForShellTheme,
+} from './desktopTheme';
+import type { DesktopThemeSnapshot } from '../shared/desktopTheme';
+
+const theme: DesktopThemeSnapshot = {
+  source: 'dark',
+  resolvedTheme: 'dark',
+  shellThemes: { version: 1, light: 'mist', dark: 'forest' },
+  activeShellTheme: 'forest',
+  window: desktopWindowThemeSnapshotForShellTheme('forest'),
+  semantic: desktopSemanticPaletteForShellTheme('forest'),
+};
 
 function decodeDataDocument(url: string): string {
   const prefix = 'data:text/html;charset=utf-8,';
@@ -24,13 +38,19 @@ const copy = {
 
 describe('webServiceUnavailableDocument', () => {
   it('builds a polished scriptless unavailable page with a local retry intent', () => {
-    const document = decodeDataDocument(buildWebServiceUnavailableDocumentURL(copy, 'http://localhost:3000'));
+    const document = decodeDataDocument(buildWebServiceUnavailableDocumentURL(
+      copy,
+      'http://localhost:3000',
+      theme,
+    ));
 
     expect(document).toContain('This Web Service is not responding');
     expect(document).toContain('<code title="http://localhost:3000">http://localhost:3000</code>');
     expect(document).toContain('id="retry" class="retry" href="#retry"');
     expect(document).toContain('<span class="retrying-label">Trying again...</span>');
     expect(document).toContain('.retry:target svg { animation: spin');
+    expect(document).toContain('data-floe-shell-theme="forest"');
+    expect(document).toContain(`--warning: ${theme.semantic.warning}`);
     expect(document).toContain("script-src 'none'");
     expect(document).not.toContain('<script');
     expect(document).not.toContain('upstream unavailable');
@@ -41,7 +61,7 @@ describe('webServiceUnavailableDocument', () => {
       ...copy,
       title: '<Unavailable>',
       summary: 'A & B',
-    }, 'http://localhost:3000/<admin>'));
+    }, 'http://localhost:3000/<admin>', theme));
 
     expect(document).toContain('&lt;Unavailable&gt;');
     expect(document).toContain('A &amp; B');

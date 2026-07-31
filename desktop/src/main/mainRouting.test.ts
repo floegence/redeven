@@ -209,6 +209,9 @@ describe('main routing', () => {
     expect(helperSrc).toContain('webServiceUnavailableDocumentURL(targetAddress)');
     expect(helperSrc).toContain('callback({ cancel: true });');
     expect(helperSrc).toContain('WEB_SERVICE_BROWSER_RETRY_FEEDBACK_MS');
+    expect(helperSrc).toContain('const refreshTheme = (): void => {');
+    expect(helperSrc).toContain('void win.loadURL(webServiceBrowserDocumentURL());');
+    expect(helperSrc).toContain('unavailablePageURL = webServiceUnavailableDocumentURL(targetAddress);');
     expect(helperSrc).toContain('if (unavailablePageURL !== retryPageURL) return;');
     expect(helperSrc).toContain('if (contentView.webContents.getURL() !== `${retryPageURL}#retry`) return;');
     expect(helperSrc).toContain('await openExternalURL(targetURL);');
@@ -243,7 +246,7 @@ describe('main routing', () => {
     expect(helperSrc).not.toContain('preload');
   });
 
-  it('refreshes only tracked codespace loading documents after a theme change', () => {
+  it('refreshes tracked local documents after a theme change', () => {
     const mainSrc = readMainSource();
     const helperStart = mainSrc.indexOf('function refreshCodespaceLoadingDocuments(');
     const helperEnd = mainSrc.indexOf('function openCodespaceWindowFromShell(', helperStart);
@@ -251,7 +254,8 @@ describe('main routing', () => {
     expect(helperStart).toBeGreaterThanOrEqual(0);
     expect(helperEnd).toBeGreaterThan(helperStart);
     const helperSrc = mainSrc.slice(helperStart, helperEnd);
-    expect(mainSrc).toContain('refreshCodespaceLoadingDocuments,');
+    expect(mainSrc).toContain('refreshCodespaceLoadingDocuments();');
+    expect(mainSrc).toContain('refreshWebServiceBrowserDocuments();');
     expect(helperSrc).toContain('for (const [codeSpaceID, copy] of sessionRecord.codespace_loading_documents)');
     expect(helperSrc).toContain('buildCodespaceLoadingDocumentURL(codeSpaceID, themeSnapshot, copy)');
     expect(helperSrc).not.toContain('for (const [codeSpaceID, codespaceWindow] of sessionRecord.codespace_windows)');
