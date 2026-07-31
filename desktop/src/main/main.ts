@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, powerMonitor, safeStorage, session, shell, WebContentsView, type MessageBoxOptions, type Session, type WebContents } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, powerMonitor, safeStorage, session, shell, webContents as electronWebContents, WebContentsView, type MessageBoxOptions, type Session, type WebContents } from 'electron';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
@@ -8229,7 +8229,8 @@ function createWebServiceBrowserController(
   contentView.webContents.on('before-input-event', handleDevToolsShortcut);
 
   webSession.webRequest.onHeadersReceived((details, callback) => {
-    const isTargetDocument = details.webContentsId === contentView.webContents.id;
+    const isTargetDocument = details.webContentsId !== undefined
+      && electronWebContents.fromId(details.webContentsId) === contentView.webContents;
     if (!isTargetDocument || !isMarkedWebServiceUpstreamUnavailable(details)) {
       callback({});
       return;

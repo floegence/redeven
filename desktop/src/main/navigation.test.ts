@@ -140,6 +140,27 @@ describe('navigation', () => {
       'http://127.0.0.1:43123/',
       'demo',
     )).toBe('http://127.0.0.1:43123/pf/demo/docs');
+    expect(resolveWebServiceBrowserAddress(
+      '3000',
+      'http://127.0.0.1:43123/pf/demo/docs',
+      'http://localhost:3000/',
+      'http://127.0.0.1:43123/',
+      'demo',
+    )).toBe('http://127.0.0.1:43123/pf/demo/');
+    expect(resolveWebServiceBrowserAddress(
+      '3000/api?tab=routes#public',
+      'http://127.0.0.1:43123/pf/demo/',
+      'http://localhost:3000/',
+      'http://127.0.0.1:43123/',
+      'demo',
+    )).toBe('http://127.0.0.1:43123/pf/demo/api?tab=routes#public');
+    expect(resolveWebServiceBrowserAddress(
+      ':3000',
+      'http://127.0.0.1:43123/pf/demo/docs',
+      'http://localhost:3000/',
+      'http://127.0.0.1:43123/',
+      'demo',
+    )).toBe('http://127.0.0.1:43123/pf/demo/');
   });
 
   it('projects protected Web Service routes as the user-facing target address', () => {
@@ -184,6 +205,20 @@ describe('navigation', () => {
     )).toBeNull();
     expect(resolveWebServiceBrowserAddress(
       'baidu.com',
+      'http://127.0.0.1:43123/pf/demo/',
+      'http://localhost:3000/',
+      'http://127.0.0.1:43123/',
+      'demo',
+    )).toBeNull();
+    expect(resolveWebServiceBrowserAddress(
+      '4000',
+      'http://127.0.0.1:43123/pf/demo/',
+      'http://localhost:3000/',
+      'http://127.0.0.1:43123/',
+      'demo',
+    )).toBeNull();
+    expect(resolveWebServiceBrowserAddress(
+      '65536',
       'http://127.0.0.1:43123/pf/demo/',
       'http://localhost:3000/',
       'http://127.0.0.1:43123/',

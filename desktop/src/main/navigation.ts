@@ -315,6 +315,12 @@ function looksLikeWebServiceAuthority(address: string): boolean {
     || hostname.includes('.');
 }
 
+function expandWebServicePortShorthand(address: string): string {
+  const portMatch = address.match(/^(\d{1,5})([/?#].*)?$/u);
+  if (portMatch) return `localhost:${portMatch[1]}${portMatch[2] ?? ''}`;
+  return address.startsWith(':') ? `localhost${address}` : address;
+}
+
 export function resolveWebServiceBrowserAddress(
   input: string,
   currentRouteURL: string,
@@ -333,16 +339,17 @@ export function resolveWebServiceBrowserAddress(
     if (!routeRoot || !currentDisplay) return null;
 
     let displayCandidate: URL;
-    if (/^https?:\/\//iu.test(address)) {
-      displayCandidate = new URL(address);
-    } else if (looksLikeWebServiceAuthority(address)) {
-      displayCandidate = new URL(`${targetURL.protocol}//${address}`);
-    } else if (/^[a-z][a-z0-9+.-]*:/iu.test(address)) {
+    const expandedAddress = expandWebServicePortShorthand(address);
+    if (/^https?:\/\//iu.test(expandedAddress)) {
+      displayCandidate = new URL(expandedAddress);
+    } else if (looksLikeWebServiceAuthority(expandedAddress)) {
+      displayCandidate = new URL(`${targetURL.protocol}//${expandedAddress}`);
+    } else if (/^[a-z][a-z0-9+.-]*:/iu.test(expandedAddress)) {
       return null;
-    } else if (address.startsWith('?') || address.startsWith('#')) {
-      displayCandidate = new URL(address, currentDisplay);
+    } else if (expandedAddress.startsWith('?') || expandedAddress.startsWith('#')) {
+      displayCandidate = new URL(expandedAddress, currentDisplay);
     } else {
-      displayCandidate = new URL(address.replace(/^\/+/, ''), targetURL.origin + '/');
+      displayCandidate = new URL(expandedAddress.replace(/^\/+/, ''), targetURL.origin + '/');
     }
     if (displayCandidate.origin !== targetURL.origin || displayCandidate.username || displayCandidate.password) {
       return null;
