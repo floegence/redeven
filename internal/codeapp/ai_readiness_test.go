@@ -87,7 +87,7 @@ func TestAIReadinessControllerSerializesAttemptsAndSanitizesFailures(t *testing.
 		if call == 1 {
 			<-allowCreate
 			return nil, &ai.FloretStoreStartupError{
-				Class: ai.FloretStoreStartupMigrationRolledBack, Retryable: true, SafeToRetry: true, RolledBack: true,
+				Class: ai.FloretStoreStartupTemporarilyBlocked, Retryable: true, SafeToRetry: true,
 			}
 		}
 		return nil, errors.New("secret path and raw startup detail")
@@ -100,7 +100,7 @@ func TestAIReadinessControllerSerializesAttemptsAndSanitizesFailures(t *testing.
 	close(allowCreate)
 	waitForAIReadinessState(t, controller, appserver.AIReadinessBlocked)
 	snapshot := controller.AIReadiness()
-	if snapshot.ReasonCode != string(ai.FloretStoreStartupMigrationRolledBack) || !snapshot.Retryable || !snapshot.SafeToRetry || !snapshot.RolledBack {
+	if snapshot.ReasonCode != string(ai.FloretStoreStartupTemporarilyBlocked) || !snapshot.Retryable || !snapshot.SafeToRetry {
 		t.Fatalf("typed failure snapshot = %#v", snapshot)
 	}
 
@@ -154,18 +154,18 @@ func TestAIReadinessControllerClosesLateStartupResult(t *testing.T) {
 }
 
 func TestAIReadinessControllerPublishesObservedMaintenancePhases(t *testing.T) {
-	allowMigrate := make(chan struct{})
+	allowInspect := make(chan struct{})
 	allowVerify := make(chan struct{})
 	controller := newAIReadinessController(context.Background(), ai.Options{}, func(_ context.Context, opts ai.Options) (*ai.Service, error) {
-		opts.StoreStartupProgress(ai.FloretStoreStartupMigrating)
-		<-allowMigrate
+		opts.StoreStartupProgress(ai.FloretStoreStartupInspecting)
+		<-allowInspect
 		opts.StoreStartupProgress(ai.FloretStoreStartupVerifying)
 		<-allowVerify
 		return new(ai.Service), nil
 	}, func(*ai.Service) error { return nil })
 	controller.Start()
-	waitForAIReadinessState(t, controller, appserver.AIReadinessMigrating)
-	close(allowMigrate)
+	waitForAIReadinessState(t, controller, appserver.AIReadinessInspecting)
+	close(allowInspect)
 	waitForAIReadinessState(t, controller, appserver.AIReadinessVerifying)
 	close(allowVerify)
 	waitForAIReadinessState(t, controller, appserver.AIReadinessReady)

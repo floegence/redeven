@@ -276,8 +276,6 @@ func (c *aiReadinessController) runAttempt(previous *aiServiceGeneration) {
 func (c *aiReadinessController) observeStoreStartupPhase(phase ai.FloretStoreStartupPhase) {
 	var state appserver.AIReadinessState
 	switch phase {
-	case ai.FloretStoreStartupMigrating:
-		state = appserver.AIReadinessMigrating
 	case ai.FloretStoreStartupVerifying:
 		state = appserver.AIReadinessVerifying
 	case ai.FloretStoreStartupInspecting:
@@ -307,8 +305,6 @@ func (c *aiReadinessController) finishFailure(err error) {
 		snapshot.ReasonCode = string(startupErr.Class)
 		snapshot.Retryable = startupErr.Retryable
 		snapshot.SafeToRetry = startupErr.SafeToRetry
-		snapshot.Committed = startupErr.Committed
-		snapshot.RolledBack = startupErr.RolledBack
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
