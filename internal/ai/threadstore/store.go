@@ -76,7 +76,7 @@ func preflightCurrentThreadstore(path string) error {
 	if err != nil {
 		return fmt.Errorf("begin threadstore preflight: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	var version int
 	if err := tx.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
 		return fmt.Errorf("read threadstore preflight version: %w", err)

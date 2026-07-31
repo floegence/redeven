@@ -41,11 +41,6 @@ func (p staticAIServiceProvider) RetryAIReadiness() error {
 
 func (p staticAIServiceProvider) UpdateAIServiceStartupOptions(AIServiceStartupOptions) {}
 
-func openAppserverTestFloretHost(t *testing.T, path string) (*flruntime.Host, error) {
-	t.Helper()
-	return flruntime.Open(context.Background(), flruntime.Options{Storage: flstorage.SQLite(path)})
-}
-
 type appserverTestIDSource struct {
 	turnID identity.TurnID
 	runID  identity.RunID

@@ -77,11 +77,6 @@ func normalizeFlowerThreadRouting(rec FlowerThreadRouting) (FlowerThreadRouting,
 	return rec, nil
 }
 
-func hasFlowerThreadRouting(rec FlowerThreadRouting) bool {
-	return rec.HomeRuntimeID != "" || rec.HomeRuntimeKind != "" || rec.OriginEnvPublicID != "" ||
-		rec.PrimaryTargetID != "" || rec.ActiveTargetIDsJSON != "[]"
-}
-
 func (s *Store) UpsertFlowerThreadRouting(ctx context.Context, rec FlowerThreadRouting) error {
 	if s == nil || s.db == nil {
 		return errors.New("store not initialized")

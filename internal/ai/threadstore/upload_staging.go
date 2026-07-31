@@ -189,15 +189,6 @@ func sameFrozenQueuedTurn(a, b QueuedTurn) bool {
 		a.OptionsJSON == b.OptionsJSON && a.SessionMetaJSON == b.SessionMetaJSON && a.ChannelID == b.ChannelID
 }
 
-func sameInitialTurnIntent(a, b QueuedTurn) bool {
-	return a.EndpointID == b.EndpointID && a.ThreadID == b.ThreadID && a.TurnID == b.TurnID &&
-		a.ModelID == b.ModelID && a.TextContent == b.TextContent &&
-		a.AttachmentsJSON == b.AttachmentsJSON && a.ContextActionJSON == b.ContextActionJSON &&
-		a.OptionsJSON == b.OptionsJSON && a.SessionMetaJSON == b.SessionMetaJSON &&
-		a.ChannelID == b.ChannelID && a.Lane == b.Lane &&
-		a.CreatedByUserPublicID == b.CreatedByUserPublicID && a.CreatedByUserEmail == b.CreatedByUserEmail
-}
-
 func (s *Store) CreateFollowupFromStaging(ctx context.Context, rec QueuedTurn, uploadIDs []string, claimedAtUnixMs int64, attachmentAdmission AttachmentAdmission, scope UploadStagingScope) (QueuedTurn, int, int64, error) {
 	if s == nil || s.db == nil {
 		return QueuedTurn{}, 0, 0, errors.New("store not initialized")
