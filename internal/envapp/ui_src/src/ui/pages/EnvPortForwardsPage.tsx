@@ -577,6 +577,7 @@ export function EnvPortForwardsPage() {
   // Search/filter state
   const [searchQuery, setSearchQuery] = createSignal('');
   const [address, setAddress] = createSignal('');
+  const [addressValidationVisible, setAddressValidationVisible] = createSignal(false);
   const [recentSession, setRecentSession] = createSignal<ForwardSession | null>(null);
   const [savingSession, setSavingSession] = createSignal(false);
 
@@ -757,10 +758,12 @@ export function EnvPortForwardsPage() {
 
   const doOpenAddress = async () => {
     const target = address().trim();
-    if (!isSupportedWebServiceTarget(target) || busyID()) {
-      notify.error(i18n.t('webServices.notifications.invalidAddressTitle'), i18n.t('webServices.notifications.invalidAddressMessage'));
+    if (busyID()) return;
+    if (!isSupportedWebServiceTarget(target)) {
+      setAddressValidationVisible(true);
       return;
     }
+    setAddressValidationVisible(false);
     await runOpenTransaction(
       'new-session',
       '_blank',
@@ -856,32 +859,62 @@ export function EnvPortForwardsPage() {
             }}
             data-testid="web-service-address-form"
           >
-            <div class="mx-auto flex w-full max-w-3xl flex-col gap-2 sm:flex-row">
-              <div class="relative min-w-0 flex-1">
-                <Globe class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-                <Input
-                  value={address()}
-                  onInput={(event) => setAddress(event.currentTarget.value)}
-                  placeholder={i18n.t('webServices.address.placeholder')}
-                  aria-label={i18n.t('webServices.address.label')}
-                  autocomplete="url"
-                  spellcheck={false}
+            <div class="mx-auto w-full max-w-3xl">
+              <div class="flex flex-col gap-2 sm:flex-row">
+                <div class="relative min-w-0 flex-1">
+                  <Globe class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+                  <Input
+                    value={address()}
+                    onInput={(event) => {
+                      setAddress(event.currentTarget.value);
+                      setAddressValidationVisible(false);
+                    }}
+                    onBlur={() => {
+                      if (address().trim() && !isSupportedWebServiceTarget(address())) setAddressValidationVisible(true);
+                    }}
+                    placeholder={i18n.t('webServices.address.placeholder')}
+                    aria-label={i18n.t('webServices.address.label')}
+                    aria-invalid={addressValidationVisible() ? 'true' : undefined}
+                    aria-describedby="web-service-address-guidance"
+                    autocomplete="url"
+                    spellcheck={false}
+                    size="sm"
+                    class={cn(
+                      'h-10 w-full pl-9 font-mono text-sm',
+                      addressValidationVisible() && 'border-destructive focus-visible:ring-destructive/30',
+                    )}
+                    disabled={!canExecute() || !!busyID()}
+                    data-testid="web-service-address-input"
+                  />
+                </div>
+                <Button
+                  type="submit"
                   size="sm"
-                  class="h-10 w-full pl-9 font-mono text-sm"
-                  disabled={!canExecute() || !!busyID()}
-                  data-testid="web-service-address-input"
-                />
+                  class="h-10 shrink-0 px-4"
+                  disabled={!canExecute() || !!busyID() || !address().trim()}
+                  data-testid="web-service-address-open"
+                >
+                  <ExternalLink class="mr-1.5 h-4 w-4" aria-hidden="true" />
+                  {i18n.t('webServices.actions.openAddress')}
+                </Button>
               </div>
-              <Button
-                type="submit"
-                size="sm"
-                class="h-10 shrink-0 px-4"
-                disabled={!canExecute() || !!busyID() || !address().trim()}
-                data-testid="web-service-address-open"
+              <div
+                id="web-service-address-guidance"
+                class={cn(
+                  'mt-2 flex items-start gap-2 text-xs leading-5',
+                  addressValidationVisible() ? 'text-destructive' : 'text-muted-foreground',
+                )}
+                role={addressValidationVisible() ? 'alert' : undefined}
+                data-testid="web-service-address-guidance"
               >
-                <ExternalLink class="mr-1.5 h-4 w-4" aria-hidden="true" />
-                {i18n.t('webServices.actions.openAddress')}
-              </Button>
+                <Globe class="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                <span>
+                  <span class="font-medium text-foreground">{i18n.t('webServices.address.scopeTitle')}</span>{' '}
+                  {addressValidationVisible()
+                    ? i18n.t('webServices.address.invalid')
+                    : i18n.t('webServices.address.scopeDescription')}
+                </span>
+              </div>
             </div>
 
             <Show when={recentSession()?.ephemeral && recentSession()} keyed>

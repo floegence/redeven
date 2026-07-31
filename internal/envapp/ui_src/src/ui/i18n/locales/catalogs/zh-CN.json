@@ -3245,7 +3245,10 @@
     },
     "address": {
       "label": "Web 服务地址",
-      "placeholder": "输入端口或地址，例如 3000 或 localhost:8080/docs"
+      "placeholder": "输入端口或地址，例如 3000 或 localhost:8080/docs",
+      "scopeTitle": "可访问当前环境内的服务。",
+      "scopeDescription": "请输入运行时可访问的端口、主机:端口或 HTTP(S) 地址。每个 Redeven 窗口仅限于在此打开的 Web Service；如需访问其他服务，请在这里另行输入并打开。",
+      "invalid": "无法打开此地址。请输入 3000 这类端口、主机:端口，或不包含登录凭据的 HTTP(S) 地址。"
     },
     "session": {
       "temporary": "临时"
@@ -3300,8 +3303,6 @@
       "serviceDeletedMessage": "Web 服务已移除",
       "failedToDeleteTitle": "删除服务失败",
       "failedToOpenTitle": "打开服务失败",
-      "invalidAddressTitle": "地址无效",
-      "invalidAddressMessage": "请输入端口或 HTTP(S) 地址。",
       "sessionSavedTitle": "Web 服务已保存",
       "sessionSavedMessage": "已将“{name}”保存到 Web 服务。",
       "failedToSaveTitle": "保存 Web 服务失败"

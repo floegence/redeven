@@ -546,7 +546,6 @@
     "openInBrowser": "在浏览器中打开",
     "secureRoute": "此页面使用当前环境的 Web Service 路由",
     "invalidAddress": "请输入此 Web Service 内的 HTTP(S) 地址或路径。",
-    "blockedNavigation": "此页面尝试离开当前 Web Service。若要继续，请选择“在浏览器中打开”。",
     "loadFailed": "Web Service 无法加载此地址。"
   },
   "language": {

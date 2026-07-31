@@ -52,20 +52,23 @@ function bootstrap(): void {
   reload.dataset.reloadLabel = reload.getAttribute('title') ?? '';
   reload.dataset.stopLabel = reload.getAttribute('data-stop-label') ?? '';
 
-  const perform = async (action: DesktopWebServiceBrowserAction): Promise<void> => {
+  const perform = async (action: DesktopWebServiceBrowserAction, showFailure = true): Promise<boolean> => {
     const response = normalizeDesktopWebServiceBrowserActionResponse(
       await ipcRenderer.invoke(DESKTOP_WEB_SERVICE_BROWSER_ACTION_CHANNEL, action),
     );
-    if (!response.ok && response.message) {
+    if (showFailure && !response.ok && response.message) {
       render({ ...state, error_message: response.message });
     }
+    return response.ok;
   };
 
   form.addEventListener('submit', (event) => {
     event.preventDefault();
     editingAddress = false;
-    void perform({ action: 'navigate', address: address.value });
-    address.blur();
+    void perform({ action: 'navigate', address: address.value }, false).then((ok) => {
+      if (!ok) address.value = state.address;
+      address.blur();
+    });
   });
   address.addEventListener('focus', () => {
     editingAddress = true;

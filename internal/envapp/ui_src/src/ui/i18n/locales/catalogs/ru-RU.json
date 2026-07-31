@@ -3369,7 +3369,10 @@
     },
     "address": {
       "label": "Адрес веб-сервиса",
-      "placeholder": "Введите порт или адрес, например 3000 или localhost:8080/docs"
+      "placeholder": "Введите порт или адрес, например 3000 или localhost:8080/docs",
+      "scopeTitle": "Доступно из этого окружения.",
+      "scopeDescription": "Укажите порт, host:port или HTTP(S)-адрес, доступный из среды выполнения. Каждое окно Redeven ограничено Web Service, открытым здесь; другой сервис следует отдельно открыть отсюда.",
+      "invalid": "Этот адрес нельзя открыть. Укажите порт, например 3000, host:port или HTTP(S)-адрес без учётных данных."
     },
     "session": {
       "temporary": "Временный"
@@ -3424,8 +3427,6 @@
       "serviceDeletedMessage": "Веб-служба удалена",
       "failedToDeleteTitle": "Не удалось удалить сервис",
       "failedToOpenTitle": "Не удалось открыть сервис",
-      "invalidAddressTitle": "Недопустимый адрес",
-      "invalidAddressMessage": "Введите порт или HTTP(S)-адрес.",
       "sessionSavedTitle": "Веб-сервис сохранён",
       "sessionSavedMessage": "«{name}» сохранён в веб-сервисах.",
       "failedToSaveTitle": "Не удалось сохранить веб-сервис"
