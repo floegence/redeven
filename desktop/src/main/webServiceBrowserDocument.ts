@@ -8,6 +8,7 @@ export type WebServiceBrowserCopy = Readonly<{
   reloadLabel: string;
   stopLabel: string;
   navigateLabel: string;
+  openExternalLabel: string;
   secureRouteLabel: string;
 }>;
 
@@ -76,6 +77,9 @@ export function buildWebServiceBrowserDocumentURL(copy: WebServiceBrowserCopy): 
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
       </button>
     </div>
+    <button id="browser-open-external" class="nav-button" type="button" aria-label="${htmlEscape(copy.openExternalLabel)}" title="${htmlEscape(copy.openExternalLabel)}">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4h5v5"/><path d="m10 14 10-10"/><path d="M18 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h6"/></svg>
+    </button>
   </form>
   <div id="browser-status" class="status" role="status" aria-live="polite"></div>
   <div id="browser-progress" class="progress" aria-hidden="true"></div>

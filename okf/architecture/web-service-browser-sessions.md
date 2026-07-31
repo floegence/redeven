@@ -27,7 +27,7 @@ When the trusted Desktop Shell bridge is present, Env App requests a semantic We
 
 Each forward window uses a trusted local toolbar document plus a separate `WebContentsView` for target content. The target view uses a dedicated non-persistent Electron partition, `sandbox: true`, `contextIsolation: true`, `nodeIntegration: false`, and no preload. The toolbar's narrow preload can only request browser actions and read browser state; it does not enter the target view. Closing the window or its Environment session destroys the target view and clears the partition storage. Reopening the same live forward reuses its isolated window.
 
-Target navigation and popups may remain in the isolated window only while the exact Environment and forward constraints continue to hold. Navigation outside that boundary is denied to the target WebContents and handed to the system browser. The target document never receives the Redeven Desktop bridge, Env App preload, or the parent Environment session partition.
+Target navigation and popups may remain in the isolated window only while the exact Environment and forward constraints continue to hold. Navigation outside that boundary is denied to the target WebContents, retained as a reviewable HTTP(S) target when possible, and reported in the trusted toolbar without automatically opening another application. Only the user's explicit Open in browser toolbar action may hand the retained target, or the current Web Service URL when no target is pending, to the system browser. The target document never receives the Redeven Desktop bridge, Env App preload, or the parent Environment session partition.
 
 # Boundaries
 

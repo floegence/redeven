@@ -16,6 +16,9 @@ describe('desktopWebServiceBrowserIPC', () => {
     expect(normalizeDesktopWebServiceBrowserAction({ action: 'forward' })).toEqual({ action: 'forward' });
     expect(normalizeDesktopWebServiceBrowserAction({ action: 'reload' })).toEqual({ action: 'reload' });
     expect(normalizeDesktopWebServiceBrowserAction({ action: 'stop' })).toEqual({ action: 'stop' });
+    expect(normalizeDesktopWebServiceBrowserAction({ action: 'open_external' })).toEqual({
+      action: 'open_external',
+    });
   });
 
   it('rejects malformed or oversized actions', () => {

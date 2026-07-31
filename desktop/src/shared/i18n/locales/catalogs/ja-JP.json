@@ -543,8 +543,10 @@
     "reload": "再読み込み",
     "stop": "読み込みを停止",
     "navigate": "アドレスに移動",
+    "openInBrowser": "ブラウザで開く",
     "secureRoute": "このページは現在の環境の Web Service ルートを使用します",
     "invalidAddress": "この Web Service 内の HTTP(S) アドレスまたはパスを入力してください。",
+    "blockedNavigation": "このページは現在の Web Service の外へ移動しようとしました。続行するには「ブラウザで開く」を使用してください。",
     "loadFailed": "Web Service でこのアドレスを読み込めませんでした。"
   },
   "language": {

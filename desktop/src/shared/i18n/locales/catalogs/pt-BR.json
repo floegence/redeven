@@ -543,8 +543,10 @@
     "reload": "Recarregar",
     "stop": "Parar carregamento",
     "navigate": "Ir para o endereço",
+    "openInBrowser": "Abrir no navegador",
     "secureRoute": "Esta página usa a rota de Web Service do ambiente atual",
     "invalidAddress": "Digite um endereço HTTP(S) ou caminho dentro deste Web Service.",
+    "blockedNavigation": "Esta página tentou sair do Web Service atual. Use “Abrir no navegador” para continuar.",
     "loadFailed": "O Web Service não conseguiu carregar este endereço."
   },
   "language": {
