@@ -6,7 +6,10 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
+
+	"github.com/floegence/redeven/internal/boundarycontract"
 )
 
 func TestReviewedSchemaManifestMatchesFreshDatabase(t *testing.T) {
@@ -56,8 +59,8 @@ func TestReviewedSchemaComparisonRejectsEveryMetadataPlane(t *testing.T) {
 			actual.Tables[0].Columns = append(actual.Tables[0].Columns, reviewedSchemaColumn{CID: 999, Name: "shadow", Type: "TEXT"})
 		},
 		"nullability": func(actual *reviewedSchemaSnapshot) { actual.Tables[0].Columns[0].NotNull ^= 1 },
-		"default": func(actual *reviewedSchemaSnapshot) { actual.Tables[0].Columns[0].DefaultValue += "changed" },
-		"hidden": func(actual *reviewedSchemaSnapshot) { actual.Tables[0].Columns[0].Hidden++ },
+		"default":     func(actual *reviewedSchemaSnapshot) { actual.Tables[0].Columns[0].DefaultValue += "changed" },
+		"hidden":      func(actual *reviewedSchemaSnapshot) { actual.Tables[0].Columns[0].Hidden++ },
 		"index list": func(actual *reviewedSchemaSnapshot) {
 			actual.Tables[0].Indexes = append(actual.Tables[0].Indexes, reviewedTableIndexEntry{Name: "idx_shadow", Unique: 1, Origin: "c", Partial: 1})
 		},
@@ -86,6 +89,89 @@ func TestReviewedSchemaSQLNormalizationPreservesQuotedWhitespace(t *testing.T) {
 	if first == normalizeReviewedSchemaSQL("CREATE TABLE sample (value TEXT DEFAULT 'a b', note TEXT)") {
 		t.Fatal("quoted literal whitespace was normalized away")
 	}
+}
+
+func TestThreadstoreBoundaryManifestCoversExactSchemaAndProductionSQL(t *testing.T) {
+	reviewed, err := reviewedProductSchemaContract(threadstoreCurrentSchemaVersion)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repositoryRoot := filepath.Clean(filepath.Join("..", "..", ".."))
+	manifestPath := filepath.Join(repositoryRoot, "scripts", "contracts", "threadstore_boundary_manifest.json")
+	manifest, err := boundarycontract.LoadThreadstoreBoundaryManifest(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	queries, err := boundarycontract.ScanThreadstoreSQL(repositoryRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	columns := map[string][]string{}
+	indexes := map[string]string{}
+	triggers := map[string]string{}
+	for _, table := range reviewed.Tables {
+		if len(table.Columns) == 0 {
+			t.Fatalf("reviewed table %s has no columns", table.Name)
+		}
+		for _, column := range table.Columns {
+			columns[table.Name] = append(columns[table.Name], column.Name)
+		}
+	}
+	for _, object := range reviewed.Objects {
+		switch object.Type {
+		case "index":
+			indexes[object.Name] = object.TableName
+		case "trigger":
+			triggers[object.Name] = object.TableName
+		}
+	}
+	if issues := boundarycontract.ValidateThreadstoreBoundaryManifest(manifest, columns, indexes, triggers, queries); len(issues) > 0 {
+		t.Fatalf("threadstore ownership/query boundary drift:\n- %s", strings.Join(issues, "\n- "))
+	}
+}
+
+func TestAdmissionReceiptQueriesStayExactCoordinationOnly(t *testing.T) {
+	repositoryRoot := filepath.Clean(filepath.Join("..", "..", ".."))
+	manifest, err := boundarycontract.LoadThreadstoreBoundaryManifest(filepath.Join(repositoryRoot, "scripts", "contracts", "threadstore_boundary_manifest.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var receiptTable boundarycontract.ThreadstoreTableContract
+	for _, table := range manifest.Tables {
+		if table.Table == "ai_turn_admission_receipts" {
+			receiptTable = table
+			break
+		}
+	}
+	if receiptTable.Table == "" {
+		t.Fatal("ai_turn_admission_receipts is missing from the boundary manifest")
+	}
+	if !reflect.DeepEqual(receiptTable.AllowedLookupKeys, []string{"queue_id", "logical_request_id"}) {
+		t.Fatalf("receipt lookup allowlist = %v", receiptTable.AllowedLookupKeys)
+	}
+	if !strings.Contains(strings.ToLower(receiptTable.CanonicalIdentity), "integrity") || !strings.Contains(strings.ToLower(receiptTable.APIUIVisibility), "not exposed") {
+		t.Fatal("receipt canonical IDs must remain integrity-only and hidden from product APIs/UI")
+	}
+	canonicalKeys := map[string]struct{}{"thread_id": {}, "turn_id": {}, "run_id": {}, "entry_id": {}}
+	for _, query := range manifest.Queries {
+		if query.Action != "read" || !containsString(query.Tables, "ai_turn_admission_receipts") {
+			continue
+		}
+		for _, key := range query.LookupKeys {
+			if _, forbidden := canonicalKeys[key]; forbidden {
+				t.Fatalf("receipt read %s uses forbidden canonical lifecycle lookup key %s", query.ID, key)
+			}
+		}
+	}
+}
+
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 func buildReviewedSchemaManifestForTest(t *testing.T) reviewedSchemaManifest {

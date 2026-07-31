@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -336,6 +337,131 @@ func save(ctx context.Context, db *dbsql.DB, statement string) {
 	if len(findings) != 1 || !contains(findings[0].SinkKinds, "sqlite") || !contains(findings[0].Tables, "expression:statement") {
 		t.Fatalf("dynamic SQL was not fail-closed: %#v", findings)
 	}
+}
+
+func TestThreadstoreBoundaryManifestRejectsSchemaAndQueryDrift(t *testing.T) {
+	table := ThreadstoreTableContract{
+		Table: "product_rows", Columns: []string{"row_id"}, Indexes: []string{"idx_product_rows"},
+		Owner: "redeven", Authority: "product_settings", DataClass: "product setting",
+		AllowedPurpose: "store a product setting", AllowedLookupKeys: []string{"row_id"}, Consumers: []string{"settings service"},
+		RetentionOrDeletion: "deleted with the product setting", CanonicalIdentity: "none", APIUIVisibility: "product setting only",
+		LifecycleProhibition: "must not provide Agent lifecycle inventory, timeline, status, or search",
+	}
+	query := ThreadstoreQueryContract{
+		ID: "threadstore.fixture", Path: "internal/ai/threadstore/fixture.go", Function: "Store.readFixture", Method: "QueryRowContext",
+		SQLSHA256: strings.Repeat("a", 64), Tables: []string{"product_rows"}, LookupKeys: []string{"row_id"}, Action: "read", Consumer: "Store.readFixture", ConsumerKind: "product_operation",
+	}
+	manifest := ThreadstoreBoundaryManifest{Version: ThreadstoreBoundaryManifestVersion, Tables: []ThreadstoreTableContract{table}, Queries: []ThreadstoreQueryContract{query}}
+	manifest = RefreshThreadstoreUsageContracts(manifest)
+	if issues := ValidateThreadstoreBoundaryManifest(manifest, map[string][]string{"product_rows": {"row_id"}}, map[string]string{"idx_product_rows": "product_rows"}, map[string]string{}, []ThreadstoreQueryContract{query}); len(issues) != 0 {
+		t.Fatalf("valid fixture rejected: %v", issues)
+	}
+	if issues := ValidateThreadstoreBoundaryManifest(manifest, map[string][]string{"product_rows": {"row_id"}, "shadow_rows": {"id"}}, map[string]string{"idx_product_rows": "product_rows"}, nil, []ThreadstoreQueryContract{query}); !issuesContain(issues, "schema table shadow_rows has no reviewed owner") {
+		t.Fatalf("schema omission was accepted: %v", issues)
+	}
+	changed := query
+	changed.SQLSHA256 = strings.Repeat("b", 64)
+	if issues := ValidateThreadstoreBoundaryManifest(manifest, map[string][]string{"product_rows": {"row_id"}}, map[string]string{"idx_product_rows": "product_rows"}, nil, []ThreadstoreQueryContract{changed}); !issuesContain(issues, "changed after review") {
+		t.Fatalf("query drift was accepted: %v", issues)
+	}
+	dynamic := query
+	dynamic.SQLSHA256 = ""
+	dynamic.BuilderSHA256 = strings.Repeat("c", 64)
+	dynamic.DynamicReview = "reviewed fixture builder"
+	dynamic.RenderedSQLExpr = "query"
+	manifest.Queries = []ThreadstoreQueryContract{dynamic}
+	manifest = RefreshThreadstoreUsageContracts(manifest)
+	changedDynamic := dynamic
+	changedDynamic.BuilderSHA256 = strings.Repeat("d", 64)
+	if issues := ValidateThreadstoreBoundaryManifest(manifest, map[string][]string{"product_rows": {"row_id"}}, map[string]string{"idx_product_rows": "product_rows"}, nil, []ThreadstoreQueryContract{changedDynamic}); !issuesContain(issues, "changed after review") {
+		t.Fatalf("dynamic builder drift was accepted: %v", issues)
+	}
+}
+
+func TestThreadstoreBoundaryManifestRejectsUnreviewedDynamicSQL(t *testing.T) {
+	table := ThreadstoreTableContract{
+		Table: "product_rows", Columns: []string{"row_id"}, Owner: "redeven", Authority: "product_settings", DataClass: "product setting",
+		AllowedPurpose: "store a product setting", Consumers: []string{"settings service"}, RetentionOrDeletion: "deleted with the product setting",
+		CanonicalIdentity: "none", APIUIVisibility: "product setting only", LifecycleProhibition: "must not provide Agent lifecycle inventory, timeline, status, or search",
+	}
+	query := ThreadstoreQueryContract{
+		ID: "threadstore.dynamic", Path: "internal/ai/threadstore/fixture.go", Function: "Store.readFixture",
+		Method: "QueryContext", BuilderSHA256: strings.Repeat("a", 64), Tables: []string{"product_rows"}, Action: "read", Consumer: "Store.readFixture", ConsumerKind: "product_operation", RenderedSQLExpr: "query",
+	}
+	manifest := ThreadstoreBoundaryManifest{Version: ThreadstoreBoundaryManifestVersion, Tables: []ThreadstoreTableContract{table}, Queries: []ThreadstoreQueryContract{query}}
+	if issues := ValidateThreadstoreBoundaryManifest(manifest, map[string][]string{"product_rows": {"row_id"}}, nil, nil, []ThreadstoreQueryContract{query}); !issuesContain(issues, "requires an explicit review exception") {
+		t.Fatalf("unreviewed dynamic SQL was accepted: %v", issues)
+	}
+}
+
+func TestThreadstoreBoundaryManifestRejectsUnboundDML(t *testing.T) {
+	table := ThreadstoreTableContract{
+		Table: "product_rows", Columns: []string{"row_id"}, Owner: "redeven", Authority: "product_settings", DataClass: "product setting",
+		AllowedPurpose: "store a product setting", Consumers: []string{"settings service"}, RetentionOrDeletion: "deleted with the product setting",
+		CanonicalIdentity: "none", APIUIVisibility: "product setting only", LifecycleProhibition: "must not provide Agent lifecycle inventory, timeline, status, or search",
+	}
+	query := ThreadstoreQueryContract{
+		ID: "threadstore.unbound-dml", Path: "internal/ai/threadstore/fixture.go", Function: "Store.writeFixture", Method: "ExecContext",
+		SQLSHA256: strings.Repeat("a", 64), Action: "insert", Consumer: "Store.writeFixture", ConsumerKind: "product_operation",
+	}
+	manifest := ThreadstoreBoundaryManifest{Version: ThreadstoreBoundaryManifestVersion, Tables: []ThreadstoreTableContract{table}, Queries: []ThreadstoreQueryContract{query}}
+	issues := ValidateThreadstoreBoundaryManifest(manifest, map[string][]string{"product_rows": {"row_id"}}, nil, nil, []ThreadstoreQueryContract{query})
+	if !issuesContain(issues, "has no owned table") || !issuesContain(issues, "has no reviewed write columns") {
+		t.Fatalf("unbound DML was accepted: %v", issues)
+	}
+}
+
+func TestExtractSQLTablesSupportsSQLiteInsertConflictActions(t *testing.T) {
+	for _, action := range []string{"ROLLBACK", "ABORT", "REPLACE", "FAIL", "IGNORE"} {
+		t.Run(action, func(t *testing.T) {
+			sqlText := "INSERT OR " + action + " INTO product_rows(row_id) VALUES(?)"
+			tables := extractSQLTables([]byte(sqlText))
+			if !reflect.DeepEqual(tables, []string{"product_rows"}) {
+				t.Fatalf("INSERT OR %s tables = %v", action, tables)
+			}
+			_, writes := extractThreadstoreColumns(sqlText, "insert", map[string]struct{}{"row_id": {}}, nil)
+			if !reflect.DeepEqual(writes, []string{"row_id"}) {
+				t.Fatalf("INSERT OR %s write columns = %v", action, writes)
+			}
+			root := t.TempDir()
+			writeFixture(t, root, "schema/insert.sql", sqlText)
+			findings, err := Scan(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(findings) != 1 || !contains(findings[0].SinkKinds, "sql_file") || !contains(findings[0].Tables, "product_rows") {
+				t.Fatalf("INSERT OR %s SQL file bypassed durable-sink scan: %#v", action, findings)
+			}
+		})
+	}
+}
+
+func TestThreadstoreBoundaryManifestRejectsReceiptConsumerOutsideClosedSet(t *testing.T) {
+	table := ThreadstoreTableContract{
+		Table: "ai_turn_admission_receipts", Columns: []string{"queue_id"}, Owner: "redeven", Authority: "coordination_operation", DataClass: "coordination receipt",
+		AllowedPurpose: "coordinate admission", AllowedLookupKeys: []string{"queue_id"}, Consumers: []string{"turn admission coordinator"},
+		RetentionOrDeletion: "retry window", CanonicalIdentity: "integrity only", APIUIVisibility: "not exposed",
+		LifecycleProhibition: "must not provide Agent lifecycle inventory, timeline, status, or search",
+	}
+	query := ThreadstoreQueryContract{
+		ID: "threadstore.ae4794b097a41ade", Path: "internal/ai/threadstore/admission_receipt.go", Function: "Store.GetPendingTurnAdmissionReceipt", Method: "QueryRowContext",
+		SQLSHA256: strings.Repeat("a", 64), Tables: []string{"ai_turn_admission_receipts"}, LookupKeys: []string{"queue_id"}, ReadColumns: []string{"queue_id"},
+		Action: "read", Consumer: "Store.GetPendingTurnAdmissionReceipt", ConsumerKind: "product_operation",
+	}
+	manifest := ThreadstoreBoundaryManifest{Version: ThreadstoreBoundaryManifestVersion, Tables: []ThreadstoreTableContract{table}, Queries: []ThreadstoreQueryContract{query}}
+	issues := ValidateThreadstoreBoundaryManifest(manifest, map[string][]string{"ai_turn_admission_receipts": {"queue_id"}}, nil, nil, []ThreadstoreQueryContract{query})
+	if !issuesContain(issues, "use is (read, product_operation), want (read, startup_recovery)") {
+		t.Fatalf("receipt consumer drift was accepted: %v", issues)
+	}
+}
+
+func issuesContain(issues []string, fragment string) bool {
+	for _, issue := range issues {
+		if strings.Contains(issue, fragment) {
+			return true
+		}
+	}
+	return false
 }
 
 func TestScanRecognizesTypeScriptAliasesAndBrowserGlobals(t *testing.T) {
