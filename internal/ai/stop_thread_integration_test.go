@@ -11,7 +11,8 @@ import (
 	"testing"
 	"time"
 
-	flruntime "github.com/floegence/floret/v2/runtime"
+	"github.com/floegence/floret/v3/identity"
+	flruntime "github.com/floegence/floret/v3/runtime"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -24,6 +25,7 @@ type stopThreadTerminalProvider struct {
 	endpointID string
 	threadID   string
 	runID      string
+	run        *run
 	process    *terminalProcess
 }
 
@@ -60,14 +62,14 @@ func newStopThreadStateMachineTestService(t *testing.T) (*Service, *session.Meta
 func overrideStopThreadOverviewReader(
 	t *testing.T,
 	svc *Service,
-	read func(context.Context, flruntime.ThreadID, floretThreadReadHost) (flruntime.ThreadOverview, error),
+	read func(context.Context, identity.ThreadID, floretThreadReadHost) (flruntime.ThreadOverview, error),
 ) {
 	t.Helper()
 	if svc == nil || svc.floretReads == nil || svc.floretReads.thread == nil {
 		t.Fatal("Floret read capability is unavailable")
 	}
 	original := svc.floretReads.thread
-	svc.floretReads.thread = func(ctx context.Context, threadID flruntime.ThreadID) (floretThreadReadHost, error) {
+	svc.floretReads.thread = func(ctx context.Context, threadID identity.ThreadID) (floretThreadReadHost, error) {
 		host, err := original(ctx, threadID)
 		if err != nil {
 			return nil, err
@@ -84,16 +86,19 @@ func overrideStopThreadOverviewReader(
 func exactStoppedThreadOverview(threadID string, runID string, turnID string) flruntime.ThreadOverview {
 	return flruntime.ThreadOverview{
 		Thread: flruntime.ThreadSnapshot{
-			ID: flruntime.ThreadID(threadID), Status: flruntime.ThreadStatusCancelled, LatestRunID: flruntime.RunID(runID),
+			ID: identity.ThreadID(threadID), Status: flruntime.ThreadStatusCancelled, LatestRunID: identity.RunID(runID),
 		},
 		LatestTurn: &flruntime.ThreadTurnSnapshot{
-			TurnID: flruntime.TurnID(turnID), RunID: flruntime.RunID(runID), Status: flruntime.TurnStatusCancelled,
+			TurnID: identity.TurnID(turnID), RunID: identity.RunID(runID), Status: flruntime.TurnStatusCancelled,
 		},
 	}
 }
 
 func installStoppedRunForStopTest(svc *Service, endpointID string, threadID string, runID string, turnID string) *run {
 	r := newRun(runOptions{RunID: runID, EndpointID: endpointID, ThreadID: threadID, TurnID: turnID})
+	if err := r.observeFloretCanonicalIdentity(runID, threadID, turnID); err != nil {
+		panic(err)
+	}
 	r.floretRunTurnStarted.Store(true)
 	r.floretAuthorityBarrier.release(nil)
 	r.markDone()
@@ -124,7 +129,13 @@ func (p *stopThreadTerminalProvider) StreamTurn(ctx context.Context, req ModelGa
 			}},
 		}, nil
 	case 2:
-		processes := p.manager.ProcessesForRun(p.endpointID, p.threadID, p.runID)
+		canonicalRunID := p.runID
+		if p.run != nil {
+			if observedRunID, _ := p.run.canonicalRunTurnIdentity(); observedRunID != "" {
+				canonicalRunID = observedRunID
+			}
+		}
+		processes := p.manager.ProcessesForRun(p.endpointID, p.threadID, canonicalRunID)
 		if len(processes) != 1 {
 			return ModelGatewayResult{}, errors.New("exact run terminal process was not registered")
 		}
@@ -148,7 +159,7 @@ func (p *stopThreadTerminalProvider) terminalProcess() *terminalProcess {
 func TestStopThreadTerminatesExactFloretRunAndWaitsForCanonicalTerminal(t *testing.T) {
 	workspace := t.TempDir()
 	const endpointID = "env_stop_thread_integration"
-	const threadID = "thread_stop_thread_integration"
+	const requestedThreadID = "thread_stop_thread_integration"
 	const runID = "run_stop_thread_integration"
 	const turnID = "turn_stop_thread_integration"
 	meta := &session.Meta{
@@ -166,12 +177,13 @@ func TestStopThreadTerminatesExactFloretRunAndWaitsForCanonicalTerminal(t *testi
 		Shell:        "/bin/bash",
 		RunID:        runID,
 		EndpointID:   endpointID,
-		ThreadID:     threadID,
+		ThreadID:     requestedThreadID,
 		TurnID:       turnID,
 		MessageID:    turnID,
 		SessionMeta:  meta,
 	})
 	svc := testServiceForRun(t, r)
+	threadID := strings.TrimSpace(r.threadID)
 	t.Cleanup(func() { _ = svc.terminalProcesses.Close(context.Background()) })
 	svc.mu.Lock()
 	svc.runs = map[string]*run{runID: r}
@@ -195,6 +207,7 @@ func TestStopThreadTerminatesExactFloretRunAndWaitsForCanonicalTerminal(t *testi
 		endpointID: endpointID,
 		threadID:   threadID,
 		runID:      runID,
+		run:        r,
 	}
 	runCtx, cancelRun := context.WithCancel(context.Background())
 	t.Cleanup(cancelRun)
@@ -212,8 +225,14 @@ func TestStopThreadTerminatesExactFloretRunAndWaitsForCanonicalTerminal(t *testi
 	}()
 	select {
 	case <-provider.started:
+	case runErr := <-runDone:
+		t.Fatalf("Floret turn failed before the pending terminal continuation: %v", runErr)
 	case <-time.After(5 * time.Second):
 		t.Fatal("Floret turn did not reach the pending terminal continuation")
+	}
+	canonicalRunID, canonicalTurnID := r.canonicalRunTurnIdentity()
+	if canonicalRunID == "" || canonicalTurnID == "" {
+		t.Fatal("hosted turn did not expose canonical Floret identity")
 	}
 	r.muCancel.Lock()
 	if r.cancelRequested {
@@ -264,11 +283,11 @@ func TestStopThreadTerminatesExactFloretRunAndWaitsForCanonicalTerminal(t *testi
 	if err != nil {
 		t.Fatalf("read canonical thread after stop: %v", err)
 	}
-	if err := validateStoppedRunCanonicalSnapshot(snapshot, latest, threadID, runID, true); err != nil {
+	if err := validateStoppedRunCanonicalSnapshot(snapshot, latest, threadID, canonicalRunID, true); err != nil {
 		t.Fatalf("canonical stop proof: %v", err)
 	}
-	if latest == nil || strings.TrimSpace(string(latest.TurnID)) != turnID {
-		t.Fatalf("canonical latest turn=%#v, want %q", latest, turnID)
+	if latest == nil || strings.TrimSpace(string(latest.TurnID)) != canonicalTurnID {
+		t.Fatalf("canonical latest turn=%#v, want %q", latest, canonicalTurnID)
 	}
 	repeated, err := svc.StopThread(context.Background(), meta, threadID)
 	if err != nil || !repeated.OK {
@@ -356,7 +375,7 @@ func TestStopActiveRunExecutionReturnsPendingWhenSettlementExceedsDeadline(t *te
 func TestStopThreadUsesOneTotalBudgetAcrossCanonicalReads(t *testing.T) {
 	svc, meta, threadID := newStopThreadStateMachineTestService(t)
 	var reads atomic.Int32
-	overrideStopThreadOverviewReader(t, svc, func(ctx context.Context, threadID flruntime.ThreadID, host floretThreadReadHost) (flruntime.ThreadOverview, error) {
+	overrideStopThreadOverviewReader(t, svc, func(ctx context.Context, threadID identity.ThreadID, host floretThreadReadHost) (flruntime.ThreadOverview, error) {
 		reads.Add(1)
 		timer := time.NewTimer(1200 * time.Millisecond)
 		defer timer.Stop()
@@ -408,7 +427,7 @@ func TestStopThreadRetriesCanonicalFinalizationAfterTransientReadFailure(t *test
 	const turnID = "turn_stop_retry"
 	r := installStoppedRunForStopTest(svc, meta.EndpointID, threadID, runID, turnID)
 	var reads atomic.Int32
-	overrideStopThreadOverviewReader(t, svc, func(context.Context, flruntime.ThreadID, floretThreadReadHost) (flruntime.ThreadOverview, error) {
+	overrideStopThreadOverviewReader(t, svc, func(context.Context, identity.ThreadID, floretThreadReadHost) (flruntime.ThreadOverview, error) {
 		if reads.Add(1) == 1 {
 			return flruntime.ThreadOverview{}, errors.New("transient canonical read failure")
 		}
@@ -446,7 +465,7 @@ func TestConcurrentStopThreadSharesOneFinalizationAttempt(t *testing.T) {
 	releaseRead := make(chan struct{})
 	var reads atomic.Int32
 	var startedOnce sync.Once
-	overrideStopThreadOverviewReader(t, svc, func(ctx context.Context, _ flruntime.ThreadID, _ floretThreadReadHost) (flruntime.ThreadOverview, error) {
+	overrideStopThreadOverviewReader(t, svc, func(ctx context.Context, _ identity.ThreadID, _ floretThreadReadHost) (flruntime.ThreadOverview, error) {
 		call := reads.Add(1)
 		if call == 1 {
 			startedOnce.Do(func() { close(readStarted) })
@@ -523,7 +542,7 @@ func TestStopFinalizerDoesNotDeleteReplacementRunMapping(t *testing.T) {
 	oldRun := installStoppedRunForStopTest(svc, meta.EndpointID, threadID, oldRunID, oldTurnID)
 	readStarted := make(chan struct{})
 	releaseRead := make(chan struct{})
-	overrideStopThreadOverviewReader(t, svc, func(ctx context.Context, _ flruntime.ThreadID, _ floretThreadReadHost) (flruntime.ThreadOverview, error) {
+	overrideStopThreadOverviewReader(t, svc, func(ctx context.Context, _ identity.ThreadID, _ floretThreadReadHost) (flruntime.ThreadOverview, error) {
 		select {
 		case <-readStarted:
 		default:
@@ -578,12 +597,12 @@ func TestReconcileStaleActiveRunRequiresCanonicalIdle(t *testing.T) {
 	svc.mu.Unlock()
 	var busy atomic.Bool
 	busy.Store(true)
-	overrideStopThreadOverviewReader(t, svc, func(context.Context, flruntime.ThreadID, floretThreadReadHost) (flruntime.ThreadOverview, error) {
+	overrideStopThreadOverviewReader(t, svc, func(context.Context, identity.ThreadID, floretThreadReadHost) (flruntime.ThreadOverview, error) {
 		status := flruntime.ThreadStatusIdle
 		if busy.Load() {
 			status = flruntime.ThreadStatusRunning
 		}
-		return flruntime.ThreadOverview{Thread: flruntime.ThreadSnapshot{ID: flruntime.ThreadID(threadID), Status: status}}, nil
+		return flruntime.ThreadOverview{Thread: flruntime.ThreadSnapshot{ID: identity.ThreadID(threadID), Status: status}}, nil
 	})
 
 	if removed, err := svc.reconcileStaleActiveRun(context.Background(), meta.EndpointID, threadID, staleRunID); removed || !errors.Is(err, ErrThreadStopUnavailable) {

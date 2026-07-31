@@ -146,6 +146,9 @@ func RegisterRPCServiceProviderWithAccessGate(r *rpc.Router, meta *session.Meta,
 		if req == nil {
 			return nil, &rpc.Error{Code: 400, Message: "invalid payload"}
 		}
+		if strings.TrimSpace(req.Input.TurnID) != "" {
+			return nil, &rpc.Error{Code: 400, Message: "turn_id must be omitted before canonical admission"}
+		}
 		service, leaseCtx, release, acquireErr := acquireRPCService(ctx, acquire)
 		if acquireErr != nil {
 			return nil, acquireErr
@@ -183,6 +186,9 @@ func RegisterRPCServiceProviderWithAccessGate(r *rpc.Router, meta *session.Meta,
 		}
 		if req == nil {
 			return nil, &rpc.Error{Code: 400, Message: "invalid payload"}
+		}
+		if strings.TrimSpace(req.Input.TurnID) != "" {
+			return nil, &rpc.Error{Code: 400, Message: "turn_id must be omitted before canonical admission"}
 		}
 		service, leaseCtx, release, acquireErr := acquireRPCService(ctx, acquire)
 		if acquireErr != nil {

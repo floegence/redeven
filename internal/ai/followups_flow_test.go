@@ -51,8 +51,7 @@ func TestSendUserTurn_WaitingUserQueueAfterWaitingUser_QueuesWithoutConsumingPro
 		Model:                 "openai/gpt-5-mini",
 		QueueAfterWaitingUser: true,
 		Input: RunInput{
-			TurnID: "m_waiting_queue_later_1",
-			Text:   "queue this until I answer",
+			Text: "queue this until I answer",
 		},
 		Options: RunOptions{},
 	})
@@ -62,8 +61,8 @@ func TestSendUserTurn_WaitingUserQueueAfterWaitingUser_QueuesWithoutConsumingPro
 	if resp.Kind != "queued" {
 		t.Fatalf("resp.Kind=%q, want queued", resp.Kind)
 	}
-	if resp.TurnID != "m_waiting_queue_later_1" || strings.TrimSpace(resp.RunID) == "" {
-		t.Fatalf("queued receipt=%#v, want exact turn and allocated run", resp)
+	if resp.TurnID != "" || resp.RunID != "" || strings.TrimSpace(resp.QueueID) == "" {
+		t.Fatalf("queued receipt=%#v, want product queue identity only", resp)
 	}
 	if strings.TrimSpace(resp.ConsumedWaitingPromptID) != "" {
 		t.Fatalf("ConsumedWaitingPromptID=%q, want empty", resp.ConsumedWaitingPromptID)
@@ -79,8 +78,8 @@ func TestSendUserTurn_WaitingUserQueueAfterWaitingUser_QueuesWithoutConsumingPro
 	if len(queued) != 1 {
 		t.Fatalf("len(queued)=%d, want 1", len(queued))
 	}
-	if queued[0].TurnID == "" || queued[0].RunID == "" || queued[0].TextContent != "queue this until I answer" {
-		t.Fatalf("queued command lacks canonical identity or prompt: %#v", queued[0])
+	if queued[0].QueueID != resp.QueueID || queued[0].TurnID != "" || queued[0].RunID != "" || queued[0].TextContent != "queue this until I answer" {
+		t.Fatalf("queued command has invalid pre-admission identity or prompt: %#v", queued[0])
 	}
 	threadView, err := svc.GetThread(ctx, meta, th.ThreadID)
 	if err != nil {
@@ -92,7 +91,7 @@ func TestSendUserTurn_WaitingUserQueueAfterWaitingUser_QueuesWithoutConsumingPro
 	if got := strings.TrimSpace(threadView.RunStatus); got != "waiting_user" {
 		t.Fatalf("RunStatus=%q, want waiting_user", got)
 	}
-	if got := threadView.WaitingPrompt; got == nil || got.PromptID != waitingPrompt.PromptID {
+	if got := threadView.WaitingPrompt; got == nil || got.ToolID != waitingPrompt.ToolID || len(got.Questions) != 1 || got.Questions[0].ID != waitingPrompt.Questions[0].ID {
 		t.Fatalf("waiting prompt mismatch: %+v", got)
 	}
 
@@ -126,8 +125,6 @@ func TestService_StopThread_RecoversQueuedFollowupsToDraftsAndClearsQueue(t *tes
 		EndpointID:            meta.EndpointID,
 		ChannelID:             meta.ChannelID,
 		Lane:                  threadstore.FollowupLaneQueued,
-		TurnID:                "m_stop_recover_1",
-		RunID:                 "run_stop_recover_1",
 		ModelID:               "openai/gpt-5-mini",
 		TextContent:           "recover this after stop",
 		AttachmentsJSON:       "[]",
@@ -174,7 +171,7 @@ func TestService_StopThread_RecoversQueuedFollowupsToDraftsAndClearsQueue(t *tes
 	if len(drafts) != 1 {
 		t.Fatalf("len(drafts)=%d, want 1", len(drafts))
 	}
-	if drafts[0].TurnID == "" || drafts[0].RunID == "" || drafts[0].TextContent != "recover this after stop" {
+	if drafts[0].QueueID != queuedFollowup.QueueID || drafts[0].TurnID != "" || drafts[0].RunID != "" || drafts[0].TextContent != "recover this after stop" {
 		t.Fatalf("unexpected recovered draft: %#v", drafts[0])
 	}
 }
@@ -207,8 +204,7 @@ func TestService_StopThread_CancelsIdleCompactionAndKeepsQueuedTurnDrafted(t *te
 		ThreadID: th.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Input: RunInput{
-			TurnID: "m_stop_idle_compaction_followup",
-			Text:   "queued behind compaction",
+			Text: "queued behind compaction",
 		},
 		Options: RunOptions{},
 	})
@@ -252,7 +248,7 @@ func TestService_StopThread_CancelsIdleCompactionAndKeepsQueuedTurnDrafted(t *te
 	if err != nil {
 		t.Fatalf("ListFollowupsByLane drafts: %v", err)
 	}
-	if len(drafts) != 1 || drafts[0].TurnID == "" || drafts[0].RunID == "" || drafts[0].TextContent != "queued behind compaction" {
+	if len(drafts) != 1 || drafts[0].QueueID != followupResp.QueueID || drafts[0].TurnID != "" || drafts[0].RunID != "" || drafts[0].TextContent != "queued behind compaction" {
 		t.Fatalf("drafts=%+v, want stopped followup drafted", drafts)
 	}
 }

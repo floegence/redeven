@@ -10,8 +10,9 @@ import (
 	"testing"
 	"time"
 
-	flruntime "github.com/floegence/floret/v2/runtime"
-	flstorage "github.com/floegence/floret/v2/storage"
+	"github.com/floegence/floret/v3/identity"
+	flruntime "github.com/floegence/floret/v3/runtime"
+	flstorage "github.com/floegence/floret/v3/storage"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
@@ -60,17 +61,17 @@ type startupRecoverySubagentReadHost struct {
 
 type scriptedFloretRootInventory struct {
 	mu       sync.Mutex
-	pages    []flruntime.RootThreadsPage
-	requests []flruntime.ListRootThreadsRequest
+	pages    []floretRootThreadsPage
+	requests []floretListRootThreadsRequest
 }
 
-func (i *scriptedFloretRootInventory) ListRootThreads(_ context.Context, req flruntime.ListRootThreadsRequest) (flruntime.RootThreadsPage, error) {
+func (i *scriptedFloretRootInventory) ListRootThreads(_ context.Context, req floretListRootThreadsRequest) (floretRootThreadsPage, error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	index := len(i.requests)
 	i.requests = append(i.requests, req)
 	if index >= len(i.pages) {
-		return flruntime.RootThreadsPage{}, errors.New("unexpected root inventory page")
+		return floretRootThreadsPage{}, errors.New("unexpected root inventory page")
 	}
 	return i.pages[index], nil
 }
@@ -100,15 +101,15 @@ func (h startupRecoverySubagentReadHost) ListSubAgents(context.Context) ([]flrun
 	return append([]flruntime.SubAgentSnapshot(nil), h.snapshots...), nil
 }
 
-func (startupRecoverySubagentReadHost) ListThreadTurns(context.Context, flruntime.ThreadID, flruntime.ThreadTurnsRequest) (flruntime.ThreadTurnsPage, error) {
+func (startupRecoverySubagentReadHost) ListThreadTurns(context.Context, identity.ThreadID, flruntime.ThreadTurnsRequest) (flruntime.ThreadTurnsPage, error) {
 	return flruntime.ThreadTurnsPage{}, errors.New("unexpected SubAgent turn read")
 }
 
-func (startupRecoverySubagentReadHost) ReadThreadTurn(context.Context, flruntime.ThreadID, flruntime.TurnID) (flruntime.ThreadTurnSnapshot, error) {
+func (startupRecoverySubagentReadHost) ReadThreadTurn(context.Context, identity.ThreadID, identity.TurnID) (flruntime.ThreadTurnSnapshot, error) {
 	return flruntime.ThreadTurnSnapshot{}, errors.New("unexpected SubAgent exact turn read")
 }
 
-func (startupRecoverySubagentReadHost) ReadSubAgentDetail(context.Context, flruntime.SubAgentDetailRequest) (flruntime.SubAgentDetail, error) {
+func (startupRecoverySubagentReadHost) ReadSubAgentDetail(context.Context, identity.ThreadID, flruntime.ThreadDetailRequest) (flruntime.SubAgentDetail, error) {
 	return flruntime.SubAgentDetail{}, errors.New("unexpected SubAgent detail read")
 }
 
@@ -134,20 +135,19 @@ func TestFloretStartupInventoryReconcilesPagedCanonicalAndProductRoots(t *testin
 		EndpointID: "env_inventory", ThreadID: "root_product", PermissionType: "approval_required",
 	})
 	now := time.Now().UTC()
-	inventory := &scriptedFloretRootInventory{pages: []flruntime.RootThreadsPage{
+	inventory := &scriptedFloretRootInventory{pages: []floretRootThreadsPage{
 		{
-			Threads: []flruntime.ThreadSummary{{
+			Threads: []flruntime.ThreadSnapshot{{
 				ID: "root_product", CreatedAt: now, UpdatedAt: now,
 				Phase: flruntime.ThreadPhaseIdle, Status: flruntime.ThreadStatusIdle, CanAppendMessage: true,
 			}},
-			NextCursor: "opaque-root-page-2", HasMore: true, GeneratedAt: now,
+			NextCursor: "opaque-root-page-2", HasMore: true,
 		},
 		{
-			Threads: []flruntime.ThreadSummary{{
+			Threads: []flruntime.ThreadSnapshot{{
 				ID: "root_orphan", CreatedAt: now.Add(-time.Second), UpdatedAt: now.Add(-time.Second),
 				Phase: flruntime.ThreadPhaseIdle, Status: flruntime.ThreadStatusIdle, CanAppendMessage: true,
 			}},
-			GeneratedAt: now,
 		},
 	}}
 	reconciliation, err := reconcileFloretRootThreadInventory(context.Background(), store, inventory)
@@ -161,7 +161,7 @@ func TestFloretStartupInventoryReconcilesPagedCanonicalAndProductRoots(t *testin
 		t.Fatalf("orphaned roots=%v", got)
 	}
 	inventory.mu.Lock()
-	requests := append([]flruntime.ListRootThreadsRequest(nil), inventory.requests...)
+	requests := append([]floretListRootThreadsRequest(nil), inventory.requests...)
 	inventory.mu.Unlock()
 	if len(requests) != 2 || requests[0].Cursor != "" || requests[1].Cursor != "opaque-root-page-2" {
 		t.Fatalf("inventory requests=%#v", requests)
@@ -174,7 +174,7 @@ func TestFloretStartupInventoryRejectsProductOnlyRoot(t *testing.T) {
 	store := newStartupRecoveryTestStore(t, threadstore.ThreadSettings{
 		EndpointID: "env_inventory", ThreadID: "root_missing", PermissionType: "approval_required",
 	})
-	inventory := &scriptedFloretRootInventory{pages: []flruntime.RootThreadsPage{{GeneratedAt: time.Now().UTC()}}}
+	inventory := &scriptedFloretRootInventory{pages: []floretRootThreadsPage{{}}}
 	if _, err := reconcileFloretRootThreadInventory(context.Background(), store, inventory); err == nil || !strings.Contains(err.Error(), "root_missing") {
 		t.Fatalf("error=%v, want settings-only canonical integrity failure", err)
 	}
@@ -185,20 +185,20 @@ func TestFloretStartupInventoryRejectsNonAdvancingCanonicalCursor(t *testing.T) 
 
 	store := newStartupRecoveryTestStore(t)
 	now := time.Now().UTC()
-	inventory := &scriptedFloretRootInventory{pages: []flruntime.RootThreadsPage{
+	inventory := &scriptedFloretRootInventory{pages: []floretRootThreadsPage{
 		{
-			Threads: []flruntime.ThreadSummary{{
+			Threads: []flruntime.ThreadSnapshot{{
 				ID: "root_page", CreatedAt: now, UpdatedAt: now,
 				Phase: flruntime.ThreadPhaseIdle, Status: flruntime.ThreadStatusIdle, CanAppendMessage: true,
 			}},
-			NextCursor: "opaque-page", HasMore: true, GeneratedAt: now,
+			NextCursor: "opaque-page", HasMore: true,
 		},
 		{
-			Threads: []flruntime.ThreadSummary{{
+			Threads: []flruntime.ThreadSnapshot{{
 				ID: "root_page_2", CreatedAt: now.Add(-time.Second), UpdatedAt: now.Add(-time.Second),
 				Phase: flruntime.ThreadPhaseIdle, Status: flruntime.ThreadStatusIdle, CanAppendMessage: true,
 			}},
-			NextCursor: "opaque-page", HasMore: true, GeneratedAt: now,
+			NextCursor: "opaque-page", HasMore: true,
 		},
 	}}
 	if _, err := reconcileFloretRootThreadInventory(context.Background(), store, inventory); err == nil || !strings.Contains(err.Error(), "did not advance") {
@@ -211,22 +211,22 @@ func TestFloretStartupRecoveryRetriesBusyExactLeaseWithoutRuntimeFallback(t *tes
 	factory := &scriptedInterruptedTurnRecoveryFactory{host: host}
 	bindCalls := 0
 	capabilities := floretStartupRecoveryCapabilities{
-		root: func(_ context.Context, threadID flruntime.ThreadID) (floretInterruptedTurnRecoveryHostFactory, error) {
+		root: func(_ context.Context, threadID identity.ThreadID) (floretInterruptedTurnRecoveryHostFactory, error) {
 			bindCalls++
 			if threadID != "thread_recovery" {
 				t.Fatalf("root recovery thread=%q", threadID)
 			}
 			return factory, nil
 		},
-		subagent: func(context.Context, flruntime.ThreadID, flruntime.ThreadID) (floretInterruptedTurnRecoveryHostFactory, error) {
+		subagent: func(context.Context, identity.ThreadID, identity.ThreadID) (floretInterruptedTurnRecoveryHostFactory, error) {
 			t.Fatal("unexpected child recovery")
 			return nil, nil
 		},
-		listSubagents: func(context.Context, flruntime.ThreadID) (floretSubagentReadHost, error) {
+		listSubagents: func(context.Context, identity.ThreadID) (floretSubagentReadHost, error) {
 			return startupRecoverySubagentReadHost{}, nil
 		},
 	}
-	targets, err := buildFloretStartupRecoveryTargets(context.Background(), []flruntime.ThreadID{"thread_recovery"}, capabilities)
+	targets, err := buildFloretStartupRecoveryTargets(context.Background(), []identity.ThreadID{"thread_recovery"}, capabilities)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -295,7 +295,7 @@ func TestFloretStartupRecoveryBindsChildToExactCanonicalParent(t *testing.T) {
 	childHost := &scriptedInterruptedTurnRecoveryHost{}
 	childFactory := &scriptedInterruptedTurnRecoveryFactory{host: childHost}
 	capabilities := floretStartupRecoveryCapabilities{
-		listSubagents: func(_ context.Context, parentThreadID flruntime.ThreadID) (floretSubagentReadHost, error) {
+		listSubagents: func(_ context.Context, parentThreadID identity.ThreadID) (floretSubagentReadHost, error) {
 			if parentThreadID == "child_recovery" {
 				return startupRecoverySubagentReadHost{}, nil
 			}
@@ -306,17 +306,17 @@ func TestFloretStartupRecoveryBindsChildToExactCanonicalParent(t *testing.T) {
 				ThreadID: "child_recovery", ParentThreadID: "parent_recovery",
 			}}}, nil
 		},
-		root: func(context.Context, flruntime.ThreadID) (floretInterruptedTurnRecoveryHostFactory, error) {
+		root: func(context.Context, identity.ThreadID) (floretInterruptedTurnRecoveryHostFactory, error) {
 			return nil, flruntime.ErrInterruptedTurnNotFound
 		},
-		subagent: func(_ context.Context, parentThreadID flruntime.ThreadID, childThreadID flruntime.ThreadID) (floretInterruptedTurnRecoveryHostFactory, error) {
+		subagent: func(_ context.Context, parentThreadID identity.ThreadID, childThreadID identity.ThreadID) (floretInterruptedTurnRecoveryHostFactory, error) {
 			if parentThreadID != "parent_recovery" || childThreadID != "child_recovery" {
 				t.Fatalf("child recovery authority parent=%q child=%q", parentThreadID, childThreadID)
 			}
 			return childFactory, nil
 		},
 	}
-	targets, err := buildFloretStartupRecoveryTargets(context.Background(), []flruntime.ThreadID{"parent_recovery"}, capabilities)
+	targets, err := buildFloretStartupRecoveryTargets(context.Background(), []identity.ThreadID{"parent_recovery"}, capabilities)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -332,10 +332,10 @@ func TestFloretStartupRecoveryBindsChildToExactCanonicalParent(t *testing.T) {
 func TestFloretStartupRecoveryWalksNestedSubagents(t *testing.T) {
 	t.Parallel()
 
-	var listed []flruntime.ThreadID
-	var bound [][2]flruntime.ThreadID
+	var listed []identity.ThreadID
+	var bound [][2]identity.ThreadID
 	capabilities := floretStartupRecoveryCapabilities{
-		listSubagents: func(_ context.Context, parentThreadID flruntime.ThreadID) (floretSubagentReadHost, error) {
+		listSubagents: func(_ context.Context, parentThreadID identity.ThreadID) (floretSubagentReadHost, error) {
 			listed = append(listed, parentThreadID)
 			switch parentThreadID {
 			case "root_nested":
@@ -348,21 +348,21 @@ func TestFloretStartupRecoveryWalksNestedSubagents(t *testing.T) {
 				return nil, errors.New("unexpected nested SubAgent parent")
 			}
 		},
-		root: func(context.Context, flruntime.ThreadID) (floretInterruptedTurnRecoveryHostFactory, error) {
+		root: func(context.Context, identity.ThreadID) (floretInterruptedTurnRecoveryHostFactory, error) {
 			return nil, flruntime.ErrInterruptedTurnNotFound
 		},
-		subagent: func(_ context.Context, parentThreadID flruntime.ThreadID, childThreadID flruntime.ThreadID) (floretInterruptedTurnRecoveryHostFactory, error) {
-			bound = append(bound, [2]flruntime.ThreadID{parentThreadID, childThreadID})
+		subagent: func(_ context.Context, parentThreadID identity.ThreadID, childThreadID identity.ThreadID) (floretInterruptedTurnRecoveryHostFactory, error) {
+			bound = append(bound, [2]identity.ThreadID{parentThreadID, childThreadID})
 			return nil, flruntime.ErrInterruptedTurnNotFound
 		},
 	}
-	if _, err := buildFloretStartupRecoveryTargets(context.Background(), []flruntime.ThreadID{"root_nested"}, capabilities); err != nil {
+	if _, err := buildFloretStartupRecoveryTargets(context.Background(), []identity.ThreadID{"root_nested"}, capabilities); err != nil {
 		t.Fatalf("build nested startup recovery targets: %v", err)
 	}
-	if want := []flruntime.ThreadID{"root_nested", "child_nested", "grandchild_nested"}; !slices.Equal(listed, want) {
+	if want := []identity.ThreadID{"root_nested", "child_nested", "grandchild_nested"}; !slices.Equal(listed, want) {
 		t.Fatalf("listed parents=%v, want %v", listed, want)
 	}
-	if want := [][2]flruntime.ThreadID{{"root_nested", "child_nested"}, {"child_nested", "grandchild_nested"}}; !slices.Equal(bound, want) {
+	if want := [][2]identity.ThreadID{{"root_nested", "child_nested"}, {"child_nested", "grandchild_nested"}}; !slices.Equal(bound, want) {
 		t.Fatalf("bound nested children=%v, want %v", bound, want)
 	}
 }
@@ -370,21 +370,21 @@ func TestFloretStartupRecoveryWalksNestedSubagents(t *testing.T) {
 func TestFloretStartupRecoveryRejectsRootReusedAsDescendant(t *testing.T) {
 	t.Parallel()
 	capabilities := floretStartupRecoveryCapabilities{
-		listSubagents: func(_ context.Context, parentThreadID flruntime.ThreadID) (floretSubagentReadHost, error) {
+		listSubagents: func(_ context.Context, parentThreadID identity.ThreadID) (floretSubagentReadHost, error) {
 			if parentThreadID == "root_a" {
 				return startupRecoverySubagentReadHost{snapshots: []flruntime.SubAgentSnapshot{{ThreadID: "root_b", ParentThreadID: parentThreadID}}}, nil
 			}
 			return startupRecoverySubagentReadHost{}, nil
 		},
-		root: func(context.Context, flruntime.ThreadID) (floretInterruptedTurnRecoveryHostFactory, error) {
+		root: func(context.Context, identity.ThreadID) (floretInterruptedTurnRecoveryHostFactory, error) {
 			return nil, flruntime.ErrInterruptedTurnNotFound
 		},
-		subagent: func(context.Context, flruntime.ThreadID, flruntime.ThreadID) (floretInterruptedTurnRecoveryHostFactory, error) {
+		subagent: func(context.Context, identity.ThreadID, identity.ThreadID) (floretInterruptedTurnRecoveryHostFactory, error) {
 			t.Fatal("duplicate root must be rejected before binding a SubAgent target")
 			return nil, nil
 		},
 	}
-	_, err := buildFloretStartupRecoveryTargets(context.Background(), []flruntime.ThreadID{"root_a", "root_b"}, capabilities)
+	_, err := buildFloretStartupRecoveryTargets(context.Background(), []identity.ThreadID{"root_a", "root_b"}, capabilities)
 	if err == nil || !strings.Contains(err.Error(), "duplicate thread") {
 		t.Fatalf("error=%v, want duplicate durable identity rejection", err)
 	}
@@ -405,12 +405,11 @@ func TestFloretStartupRecoveryCompletesResolvedExactTarget(t *testing.T) {
 
 func TestFloretStartupRecoveryRejectsMissingCanonicalAuthority(t *testing.T) {
 	floretStore := openTestFloretRuntimeHost(t, flstorage.Memory())
-	t.Cleanup(func() { _ = floretStore.Close() })
 	_, recovery, err := configureFloretRuntime(floretStore)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = buildFloretStartupRecoveryTargets(context.Background(), []flruntime.ThreadID{"missing_canonical_recovery"}, recovery)
+	_, err = buildFloretStartupRecoveryTargets(context.Background(), []identity.ThreadID{"missing_canonical_recovery"}, recovery)
 	if !errors.Is(err, flruntime.ErrThreadNotFound) {
 		t.Fatalf("recovery error=%v, want %v", err, flruntime.ErrThreadNotFound)
 	}
@@ -418,7 +417,7 @@ func TestFloretStartupRecoveryRejectsMissingCanonicalAuthority(t *testing.T) {
 
 func TestFloretRuntimeBindingFailsWhileStartupRecoveryOwnsSettlement(t *testing.T) {
 	called := false
-	svc := &Service{floretRuntime: &floretRuntimeCapabilityIssuer{bind: func(flruntime.ThreadID) (floretThreadRuntimeCapabilities, error) {
+	svc := &Service{floretRuntime: &floretRuntimeCapabilityIssuer{bind: func(identity.ThreadID) (floretThreadRuntimeCapabilities, error) {
 		called = true
 		return floretThreadRuntimeCapabilities{}, nil
 	}}}

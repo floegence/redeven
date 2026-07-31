@@ -7,8 +7,8 @@ import (
 	"strings"
 	"sync"
 
-	flruntime "github.com/floegence/floret/v2/runtime"
-	fltools "github.com/floegence/floret/v2/tools"
+	flruntime "github.com/floegence/floret/v3/runtime"
+	fltools "github.com/floegence/floret/v3/tools"
 )
 
 type runToolSurface struct {

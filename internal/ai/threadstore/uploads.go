@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -29,9 +28,7 @@ const (
 	UploadRefKindQueuedTurn = "queued_turn"
 	UploadRefKindStaging    = "staging"
 
-	UploadOwnerScopeUser                   = "user"
-	UploadOwnerScopeLegacyThread           = "legacy_thread"
-	UploadOwnerScopeLegacyStagedQuarantine = "legacy_staged_quarantine"
+	UploadOwnerScopeUser = "user"
 
 	UploadSourceFile     = "uploaded_file"
 	UploadSourceLongText = "long_text"
@@ -184,7 +181,7 @@ func normalizeUploadRecord(rec UploadRecord) UploadRecord {
 	rec.EndpointID = strings.TrimSpace(rec.EndpointID)
 	rec.OwnerScopeKind = strings.ToLower(strings.TrimSpace(rec.OwnerScopeKind))
 	if rec.OwnerScopeKind == "" {
-		rec.OwnerScopeKind = UploadOwnerScopeLegacyStagedQuarantine
+		rec.OwnerScopeKind = UploadOwnerScopeUser
 	}
 	rec.OwnerUserHash = strings.ToLower(strings.TrimSpace(rec.OwnerUserHash))
 	rec.StorageRelPath = sanitizeUploadStorageRelPath(rec.StorageRelPath)
@@ -289,7 +286,7 @@ func validateUploadRecordForWrite(rec UploadRecord) error {
 	if rec.UploadID == "" || rec.EndpointID == "" || rec.StorageRelPath == "" {
 		return errors.New("invalid request")
 	}
-	if rec.OwnerScopeKind == UploadOwnerScopeUser && (len(rec.OwnerUserHash) != 64 || len(rec.ContentSHA256) != 64) {
+	if rec.OwnerScopeKind != UploadOwnerScopeUser || len(rec.OwnerUserHash) != 64 || len(rec.ContentSHA256) != 64 {
 		return errors.New("user-owned upload requires owner and content digests")
 	}
 	return nil
@@ -354,86 +351,6 @@ WHERE endpoint_id = ? AND upload_id = ?
 		return nil, err
 	}
 	return &rec, nil
-}
-
-func (s *Store) SealLegacyUploadDigest(ctx context.Context, endpointID, uploadID, digest string) (string, error) {
-	if s == nil || s.db == nil {
-		return "", errors.New("store not initialized")
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	uploadID = strings.TrimSpace(uploadID)
-	digest = strings.ToLower(strings.TrimSpace(digest))
-	decoded, err := hex.DecodeString(digest)
-	if endpointID == "" || uploadID == "" || err != nil || len(decoded) != 32 {
-		return "", errors.New("invalid legacy upload digest seal")
-	}
-	ctx = ctxOrBackground(ctx)
-	result, err := s.db.ExecContext(ctx, `
-UPDATE ai_uploads
-SET content_sha256 = ?
-WHERE endpoint_id = ? AND upload_id = ? AND owner_scope_kind = ? AND state = ? AND content_sha256 = ''
-`, digest, endpointID, uploadID, UploadOwnerScopeLegacyThread, UploadStateLive)
-	if err != nil {
-		return "", err
-	}
-	if affected, _ := result.RowsAffected(); affected == 1 {
-		return digest, nil
-	}
-	var sealed string
-	if err := s.db.QueryRowContext(ctx, `
-SELECT content_sha256
-FROM ai_uploads
-WHERE endpoint_id = ? AND upload_id = ? AND owner_scope_kind = ? AND state = ?
-`, endpointID, uploadID, UploadOwnerScopeLegacyThread, UploadStateLive).Scan(&sealed); err != nil {
-		return "", err
-	}
-	sealed = strings.ToLower(strings.TrimSpace(sealed))
-	if sealed == "" || sealed != digest {
-		return "", errors.New("legacy upload digest changed")
-	}
-	return sealed, nil
-}
-
-func (s *Store) SealLegacyTextUploadMetadata(ctx context.Context, endpointID, uploadID, digest string, unicodeCodePoints, logicalLineCount int64) (string, error) {
-	if s == nil || s.db == nil {
-		return "", errors.New("store not initialized")
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	uploadID = strings.TrimSpace(uploadID)
-	digest = strings.ToLower(strings.TrimSpace(digest))
-	decoded, err := hex.DecodeString(digest)
-	if endpointID == "" || uploadID == "" || err != nil || len(decoded) != 32 || unicodeCodePoints < 0 || logicalLineCount < 0 {
-		return "", errors.New("invalid legacy text upload metadata seal")
-	}
-	ctx = ctxOrBackground(ctx)
-	if _, err := s.db.ExecContext(ctx, `
-UPDATE ai_uploads
-SET content_sha256 = ?, unicode_code_points = ?, logical_line_count = ?
-WHERE endpoint_id = ? AND upload_id = ? AND owner_scope_kind = ? AND state = ?
-  AND (content_sha256 = '' OR content_sha256 = ?)
-  AND (unicode_code_points IS NULL OR unicode_code_points = ?)
-  AND (logical_line_count IS NULL OR logical_line_count = ?)
-`, digest, unicodeCodePoints, logicalLineCount, endpointID, uploadID, UploadOwnerScopeLegacyThread, UploadStateLive,
-		digest, unicodeCodePoints, logicalLineCount); err != nil {
-		return "", err
-	}
-	var sealedDigest string
-	var sealedCodePoints, sealedLineCount sql.NullInt64
-	if err := s.db.QueryRowContext(ctx, `
-SELECT content_sha256, unicode_code_points, logical_line_count
-FROM ai_uploads
-WHERE endpoint_id = ? AND upload_id = ? AND owner_scope_kind = ? AND state = ?
-`, endpointID, uploadID, UploadOwnerScopeLegacyThread, UploadStateLive).Scan(
-		&sealedDigest, &sealedCodePoints, &sealedLineCount,
-	); err != nil {
-		return "", err
-	}
-	sealedDigest = strings.ToLower(strings.TrimSpace(sealedDigest))
-	if sealedDigest != digest || !sealedCodePoints.Valid || sealedCodePoints.Int64 != unicodeCodePoints ||
-		!sealedLineCount.Valid || sealedLineCount.Int64 != logicalLineCount {
-		return "", errors.New("legacy text upload metadata changed")
-	}
-	return sealedDigest, nil
 }
 
 func (s *Store) GetUserOwnedUpload(ctx context.Context, endpointID string, ownerUserHash string, uploadID string) (*UploadRecord, error) {
@@ -878,7 +795,7 @@ func (s *Store) createFollowupWithUploadRefs(ctx context.Context, rec QueuedTurn
 	rec.CreatedByUserPublicID = strings.TrimSpace(rec.CreatedByUserPublicID)
 	rec.CreatedByUserEmail = strings.TrimSpace(rec.CreatedByUserEmail)
 	uploadIDs = dedupeNonEmptyStrings(uploadIDs)
-	if rec.QueueID == "" || rec.EndpointID == "" || rec.ThreadID == "" || rec.ChannelID == "" || rec.TurnID == "" || rec.RunID == "" {
+	if rec.QueueID == "" || rec.EndpointID == "" || rec.ThreadID == "" || rec.ChannelID == "" || rec.TurnID != "" || rec.RunID != "" {
 		return QueuedTurn{}, 0, 0, errors.New("invalid request")
 	}
 	if rec.AttachmentsJSON == "" {
@@ -994,7 +911,7 @@ func (s *Store) replaceFollowupWithUploadRefs(ctx context.Context, sourceFollowu
 	defer func() { _ = tx.Rollback() }()
 	if stagingScope != nil {
 		*stagingScope = normalizeUploadStagingScope(*stagingScope)
-		if stagingScope.EndpointID != rec.EndpointID || stagingScope.ThreadID != rec.ThreadID {
+		if stagingScope.EndpointID != rec.EndpointID || stagingScope.TargetID != rec.ThreadID {
 			return FollowupReplacementResult{}, errors.New("upload staging target changed")
 		}
 		if err := requireUploadStagingScopeActiveTx(ctx, tx, *stagingScope, time.Now().UnixMilli()); err != nil {
@@ -1092,108 +1009,6 @@ WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ? AND admission_state = ?
 		return FollowupReplacementResult{}, err
 	}
 	return FollowupReplacementResult{Queued: rec, Position: position, Revision: revision, UploadsToDelete: uploadsToDelete}, nil
-}
-
-func (s *Store) CommitPendingTurnAdmission(ctx context.Context, endpointID string, threadID string, commandID string, turnID string, uploadIDs []string, admittedAtUnixMs int64) error {
-	if s == nil || s.db == nil {
-		return errors.New("store not initialized")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
-	commandID = strings.TrimSpace(commandID)
-	turnID = strings.TrimSpace(turnID)
-	uploadIDs = dedupeNonEmptyStrings(uploadIDs)
-	if endpointID == "" || threadID == "" || turnID == "" || commandID == "" {
-		return errors.New("invalid request")
-	}
-	if admittedAtUnixMs <= 0 {
-		admittedAtUnixMs = time.Now().UnixMilli()
-	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-	var storedTurnID string
-	if err := requireThreadWritableTx(ctx, tx, endpointID, threadID); err != nil {
-		return err
-	}
-	var lane, admissionState string
-	err = tx.QueryRowContext(ctx, `
-SELECT turn_id, lane, admission_state
-FROM ai_queued_turns
-WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ?
-`, endpointID, threadID, commandID).Scan(&storedTurnID, &lane, &admissionState)
-	if errors.Is(err, sql.ErrNoRows) {
-		return errors.New("pending turn command is missing during admission settlement")
-	}
-	if err != nil {
-		return err
-	}
-	storedLane, err := parseFollowupLane(lane)
-	if err != nil {
-		return err
-	}
-	storedAdmissionState, err := parsePendingTurnAdmissionState(admissionState)
-	if err != nil {
-		return err
-	}
-	if strings.TrimSpace(storedTurnID) != turnID || storedLane != FollowupLaneQueued {
-		return errors.New("pending turn command identity mismatch")
-	}
-	if storedAdmissionState != PendingTurnAdmissionReady && storedAdmissionState != PendingTurnAdmissionInFlight {
-		return errors.New("pending turn command admission state mismatch")
-	}
-	queryRows, err := tx.QueryContext(ctx, `
-SELECT upload_id
-FROM ai_upload_refs
-WHERE endpoint_id = ? AND thread_id = ? AND ref_kind = ? AND ref_id = ?
-`, endpointID, threadID, UploadRefKindQueuedTurn, commandID)
-	if err != nil {
-		return err
-	}
-	for queryRows.Next() {
-		var uploadID string
-		if err := queryRows.Scan(&uploadID); err != nil {
-			_ = queryRows.Close()
-			return err
-		}
-		uploadIDs = append(uploadIDs, strings.TrimSpace(uploadID))
-	}
-	if err := queryRows.Err(); err != nil {
-		_ = queryRows.Close()
-		return err
-	}
-	if err := queryRows.Close(); err != nil {
-		return err
-	}
-	if err := bindUploadsToRefTx(ctx, tx, endpointID, threadID, UploadRefKindThread, threadID, dedupeNonEmptyStrings(uploadIDs), admittedAtUnixMs, "", "", ""); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `
-DELETE FROM ai_upload_refs
-WHERE endpoint_id = ? AND thread_id = ? AND ref_kind = ? AND ref_id = ?
-`, endpointID, threadID, UploadRefKindQueuedTurn, commandID); err != nil {
-		return err
-	}
-	result, err := tx.ExecContext(ctx, `
-DELETE FROM ai_queued_turns
-WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ? AND lane = ? AND turn_id = ?
-`, endpointID, threadID, commandID, FollowupLaneQueued, turnID)
-	if err != nil {
-		return err
-	}
-	rowsAffected, _ := result.RowsAffected()
-	if rowsAffected != 1 {
-		return errors.New("pending turn command changed during admission")
-	}
-	if _, err := bumpThreadFollowupsRevisionTx(ctx, tx, endpointID, threadID); err != nil {
-		return err
-	}
-	return tx.Commit()
 }
 
 func bindUploadsToRefTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string, refKind string, refID string, uploadIDs []string, claimedAtUnixMs int64, sourceRefKind string, sourceRefID string, expectedOwnerUserHash string) error {

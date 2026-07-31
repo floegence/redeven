@@ -77,7 +77,7 @@ import {
   type FlowerTurnLauncherSubmitInput,
   createFlowerComposerDraftCoordinator,
 } from '../../../../flower_ui/src';
-import { flowerTurnAdmissionUncertainIdentity } from '../../../../flower_ui/src/flowerTurnAdmission';
+import { createFlowerClientRequestID, flowerTurnAdmissionUncertainIdentity } from '../../../../flower_ui/src/flowerTurnAdmission';
 import type { ContextActionExecutionContext } from './contextActions/protocol';
 import { createFlowerLinkedContextNavigation } from './flower/linkedContextNavigation';
 import { createAIReadinessController } from './flower/aiReadiness';
@@ -1021,6 +1021,7 @@ export function EnvAppShell() {
 
   const [flowerTurnLauncherOpen, setFlowerTurnLauncherOpen] = createSignal(false);
   const [flowerTurnLauncherIntent, setFlowerTurnLauncherIntent] = createSignal<FlowerTurnLauncherIntent | null>(null);
+  const [flowerTurnLauncherClientRequestID, setFlowerTurnLauncherClientRequestID] = createSignal('');
   const [flowerTurnLauncherAnchor, setFlowerTurnLauncherAnchor] = createSignal<FlowerTurnLauncherAnchor | null>(null);
   const [flowerTurnLauncherHandoff, setFlowerTurnLauncherHandoff] = createSignal<EnvFlowerTurnHandoffContext | null>(null);
   const [notesOverlayOpen, setNotesOverlayOpen] = createSignal(false);
@@ -1790,6 +1791,7 @@ export function EnvAppShell() {
     }
     const contextualIntent = withFlowerTurnExecutionContext(intent);
     setFlowerTurnLauncherIntent(contextualIntent);
+    setFlowerTurnLauncherClientRequestID(createFlowerClientRequestID());
     setFlowerTurnLauncherAnchor(anchor ?? null);
     setFlowerTurnLauncherHandoff({
       mode: capturedMode,
@@ -1986,6 +1988,7 @@ export function EnvAppShell() {
     }
     setFlowerTurnLauncherOpen(false);
     setFlowerTurnLauncherIntent(null);
+    setFlowerTurnLauncherClientRequestID('');
     setFlowerTurnLauncherAnchor(null);
     setFlowerTurnLauncherHandoff(null);
   };
@@ -2051,6 +2054,10 @@ export function EnvAppShell() {
     }
 
     const handoffContext = flowerTurnLauncherHandoff();
+    const clientRequestID = trimString(flowerTurnLauncherClientRequestID());
+    if (!clientRequestID) {
+      throw new Error('Missing Flower launcher request identity.');
+    }
     try {
       const { createEnvLocalFlowerSurfaceAdapter } = await import('./flower/envLocalFlowerSurfaceAdapter');
       const adapter = createEnvLocalFlowerSurfaceAdapter({
@@ -2076,7 +2083,7 @@ export function EnvAppShell() {
       });
       const attachmentIDs: string[] = [];
       const stagingScope = (input.intent.pending_attachments?.length ?? 0) > 0
-        ? await adapter.createAttachmentStagingScope?.()
+        ? await adapter.createAttachmentStagingScope?.(clientRequestID)
         : undefined;
       if ((input.intent.pending_attachments?.length ?? 0) > 0 && !stagingScope) {
         throw new Error('Attachment staging is unavailable for this Flower surface.');
@@ -2098,6 +2105,7 @@ export function EnvAppShell() {
         attachmentIDs.push(staged.attachment_id);
       }
       const receipt = await adapter.launchTurn({
+        client_request_id: clientRequestID,
         prompt: trimmedPrompt,
         context_action: input.intent.context_action,
         working_dir: input.intent.suggested_working_dir,
@@ -2115,12 +2123,13 @@ export function EnvAppShell() {
       handoffFlowerTurn(handoffContext, threadId);
     } catch (e) {
       const uncertain = flowerTurnAdmissionUncertainIdentity(e);
-      if (uncertain) {
+      const uncertainThreadID = trimString(uncertain?.thread_id);
+      if (uncertain && uncertainThreadID) {
         closeFlowerTurnLauncher(false);
         if (handoffContext) {
-          handoffFlowerTurn(handoffContext, uncertain.thread_id);
+          handoffFlowerTurn(handoffContext, uncertainThreadID);
         } else {
-          focusAIThread(uncertain.thread_id);
+          focusAIThread(uncertainThreadID);
         }
         return;
       }

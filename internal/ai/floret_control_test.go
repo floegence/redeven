@@ -4,9 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/floegence/floret/v2/observation"
-	flruntime "github.com/floegence/floret/v2/runtime"
-	fltools "github.com/floegence/floret/v2/tools"
+	flruntime "github.com/floegence/floret/v3/runtime"
+	fltools "github.com/floegence/floret/v3/tools"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 )
 
@@ -54,20 +53,15 @@ func TestFloretControlProjector_ModelAskUserWaits(t *testing.T) {
 		t.Fatal("activity is nil")
 	}
 	spec := aitools.MustPresentationSpec("ask_user")
-	if signal.Activity.Renderer != observation.ActivityRenderer(spec.Renderer) {
+	if signal.Activity.Renderer != fltools.ActivityRenderer(spec.Renderer) {
 		t.Fatalf("activity renderer=%q, want registry renderer %q", signal.Activity.Renderer, spec.Renderer)
 	}
 	if signal.Activity.Label != spec.ResultLabelFallback {
 		t.Fatalf("activity label=%q, want registry fallback %q", signal.Activity.Label, spec.ResultLabelFallback)
 	}
-	if got := strings.TrimSpace(anyToString(signal.Activity.Payload["reason_code"])); got != AskUserReasonMissingExternalInput {
-		t.Fatalf("activity reason_code=%q, want %q", got, AskUserReasonMissingExternalInput)
-	}
-	if got := strings.TrimSpace(anyToString(signal.Activity.Payload["question"])); got != "Which branch should I inspect?" {
-		t.Fatalf("activity question=%q, want normalized first question", got)
-	}
-	if _, ok := signal.Activity.Payload["source"]; ok {
-		t.Fatalf("activity payload must be projected from registry fields only: %#v", signal.Activity.Payload)
+	activityPayload, ok := signal.Activity.Payload.(fltools.QuestionActivityPayload)
+	if !ok || len(activityPayload.Questions) != 1 || activityPayload.Questions[0].Question != "Which branch should I inspect?" {
+		t.Fatalf("activity payload=%#v, want normalized question", signal.Activity.Payload)
 	}
 }
 
@@ -98,20 +92,15 @@ func TestFloretControlProjector_TaskCompleteActivityUsesPresentationSpec(t *test
 		t.Fatal("activity is nil")
 	}
 	spec := aitools.MustPresentationSpec("task_complete")
-	if signal.Activity.Renderer != observation.ActivityRenderer(spec.Renderer) {
+	if signal.Activity.Renderer != fltools.ActivityRenderer(spec.Renderer) {
 		t.Fatalf("activity renderer=%q, want registry renderer %q", signal.Activity.Renderer, spec.Renderer)
 	}
 	if signal.Activity.Label != spec.ResultLabelFallback {
 		t.Fatalf("activity label=%q, want registry fallback %q", signal.Activity.Label, spec.ResultLabelFallback)
 	}
-	if signal.Activity.Payload["result"] != "Done" {
+	activityPayload, ok := signal.Activity.Payload.(fltools.CompletionActivityPayload)
+	if !ok || activityPayload.Summary != "Done" {
 		t.Fatalf("activity payload=%#v, want result", signal.Activity.Payload)
-	}
-	if _, ok := signal.Activity.Payload["output"]; ok {
-		t.Fatalf("activity payload must be projected from registry fields only: %#v", signal.Activity.Payload)
-	}
-	if risks := toAnySlice(signal.Activity.Payload["remaining_risks"]); len(risks) != 1 || risks[0] != "No remote CI run" {
-		t.Fatalf("remaining_risks=%#v, want projected risk", signal.Activity.Payload["remaining_risks"])
 	}
 }
 

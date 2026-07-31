@@ -3,16 +3,15 @@ package ai
 import (
 	"context"
 	"errors"
-	"io"
-	"log/slog"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"sync"
 	"testing"
 
-	flruntime "github.com/floegence/floret/v2/runtime"
-	flstorage "github.com/floegence/floret/v2/storage"
+	"github.com/floegence/floret/v3/identity"
+	flruntime "github.com/floegence/floret/v3/runtime"
+	flstorage "github.com/floegence/floret/v3/storage"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
@@ -46,8 +45,6 @@ func TestFloretRunCapabilityShapesAreExact(t *testing.T) {
 		field("broadcastThreadSummary", (func() error)(nil)),
 		field("replaceLiveDraftWithCanonicalTimeline", (func(context.Context, string, string, string, string) error)(nil)),
 		field("lastVisibleTimelineAnchor", (func(context.Context) (FlowerTimelineAnchor, error))(nil)),
-		field("reconcilePendingTurnCommand", (func(context.Context, string, string, []string) (bool, error))(nil)),
-		field("commitPendingTurnCommandAdmission", (func(context.Context, string, string, []string) error)(nil)),
 		field("releasePendingTurnCommandAdmission", (func(context.Context, string, string, string, string) error)(nil)),
 		field("lockEffectAuthority", (func(threadEffectJoin) (func(), error))(nil)),
 		field("resolveRunModel", (func(context.Context, *config.AIConfig, string, string, *run) (resolvedRunModel, error))(nil)),
@@ -62,9 +59,12 @@ func TestFloretRunCapabilityShapesAreExact(t *testing.T) {
 		field("permissionSnapshot", (func(context.Context, string) (threadstore.PermissionSnapshotRecord, bool, error))(nil)),
 		field("childPermissionSnapshot", (func(context.Context, string, string, string) (threadstore.PermissionSnapshotRecord, bool, error))(nil)),
 		field("insertPermissionSnapshot", (func(context.Context, threadstore.PermissionSnapshotRecord) error)(nil)),
+		field("bindPendingAdmission", (func(context.Context, threadstore.PendingTurnAdmissionBinding) (threadstore.PendingTurnAdmissionReceipt, int64, error))(nil)),
 		field("finalizedChildSnapshot", (func(context.Context, string) (threadstore.ChildPermissionSnapshotRecord, bool, error))(nil)),
 		field("getQueuedTurnOwnedUpload", (func(context.Context, string, string) (*threadstore.UploadRecord, error))(nil)),
-		field("preparePublication", (func(context.Context, threadstore.SubAgentPublicationOperation, threadstore.ChildPermissionSnapshotRecord) error)(nil)),
+		field("preparePublication", (func(context.Context, threadstore.SubAgentPublicationOperation) error)(nil)),
+		field("publication", (func(context.Context, string) (threadstore.SubAgentPublicationOperation, bool, error))(nil)),
+		field("bindPublication", (func(context.Context, string, threadstore.ChildPermissionSnapshotRecord, int64) (bool, error))(nil)),
 		field("finalizePublication", (func(context.Context, string, string, string, string, int64) (bool, error))(nil)),
 		field("failPublication", (func(context.Context, string, string, string, string, int64) (bool, error))(nil)),
 	})
@@ -76,6 +76,7 @@ func TestFloretRunCapabilityShapesAreExact(t *testing.T) {
 		field("muParent", sync.Mutex{}),
 		field("parent", (*run)(nil)),
 		field("resolveExactChildExecution", (func(context.Context, string, string) (subagentExecutionCapabilities, error))(nil)),
+		field("resolveInitialChildExecution", (func(context.Context, string, string, string) (subagentExecutionCapabilities, error))(nil)),
 		field("mu", sync.Mutex{}),
 		interfaceField("host", (*floretSubagentHost)(nil)),
 		field("hostKey", ""),
@@ -190,22 +191,9 @@ func TestServiceOperationsFailWhenSettingsOutliveCanonicalThread(t *testing.T) {
 		assertCanonicalThreadStillMissing(t, host, threadID)
 	})
 
-	t.Run("queue reconciliation", func(t *testing.T) {
-		svc, meta, threadID, host := newMissingCanonical(t)
-		command := createPendingCommandForTest(t, svc, meta, threadID, "queue_missing_canonical", "turn_missing_canonical", "run_missing_canonical")
-		accepted, err := svc.reconcilePendingTurnCommand(context.Background(), meta.EndpointID, threadID, command.QueueID, command.TurnID, nil)
-		if accepted || !errors.Is(err, flruntime.ErrThreadDeleted) {
-			t.Fatalf("reconcile accepted=%v error=%v, want canonical not found", accepted, err)
-		}
-		if stored, getErr := svc.threadsDB.GetQueuedTurn(context.Background(), meta.EndpointID, threadID, command.QueueID); getErr != nil || stored == nil {
-			t.Fatalf("pending command changed: %#v err=%v", stored, getErr)
-		}
-		assertCanonicalThreadStillMissing(t, host, threadID)
-	})
-
 	t.Run("queue drain", func(t *testing.T) {
 		svc, meta, threadID, host := newMissingCanonical(t)
-		command := createPendingCommandForTest(t, svc, meta, threadID, "queue_drain_missing_canonical", "turn_drain_missing_canonical", "run_drain_missing_canonical")
+		command := createPendingCommandForTest(t, svc, meta, threadID, "queue-drain-missing-canonical", "", "")
 		actor := newThreadActor(svc.threadMgr, runThreadKey(meta.EndpointID, threadID), meta.EndpointID, threadID)
 		if err := actor.handleMaybeStartQueuedTurn(context.Background()); !errors.Is(err, flruntime.ErrThreadDeleted) {
 			t.Fatalf("handleMaybeStartQueuedTurn error=%v, want %v", err, flruntime.ErrThreadDeleted)
@@ -247,24 +235,24 @@ func TestServiceOperationsFailWhenSettingsOutliveCanonicalThread(t *testing.T) {
 }
 
 func TestSubagentHostDoesNotRecreateMissingParentCanonicalThread(t *testing.T) {
-	workspace := t.TempDir()
-	cfg := &config.AIConfig{
-		CurrentModelID: "openai/gpt-5-mini",
-		Providers: []config.AIProvider{{
-			ID: "openai", Name: "OpenAI", Type: "openai", BaseURL: "https://api.openai.com/v1",
-			Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
-		}},
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	thread, err := svc.CreateThread(context.Background(), meta, "missing parent", "", "", "")
+	if err != nil {
+		t.Fatal(err)
 	}
-	r := newRun(runOptions{
-		Log: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: workspace, AgentHomeDir: workspace, WorkingDir: workspace,
-		Shell: "bash", AIConfig: cfg, RunID: "run_missing_parent", EndpointID: "env_missing_parent",
-		ThreadID: "thread_missing_parent", MessageID: "turn_missing_parent", ResolveProviderKey: func(providerID string) (string, bool, error) {
-			return "sk-test", strings.TrimSpace(providerID) == "openai", nil
-		},
-	})
+	r := newRunWithProductStoreForTest(t, runOptions{
+		Log: svc.log, StateDir: svc.stateDir, AgentHomeDir: svc.agentHomeDir, WorkingDir: svc.agentHomeDir,
+		Shell: "bash", AIConfig: svc.cfg, RunID: "run_missing_parent", EndpointID: meta.EndpointID,
+		ThreadID: thread.ThreadID, MessageID: "turn_missing_parent",
+		ResolveProviderKey: func(string) (string, bool, error) { return "sk-test", true, nil },
+	}, svc.threadsDB)
+	r.host = bindTestRunHostCapabilities(t, svc, meta.EndpointID, thread.ThreadID)
+	registerTestServiceForRun(t, r, svc)
 	r.currentModelID = "openai/gpt-5-mini"
+	r.expectFloretRuntimeEventIdentity(r.id, r.threadID, r.messageID, true)
 	prepareSubagentPermissionSnapshot(t, r)
-	host, err := testServiceForRun(t, r).openFloretMaintenanceHost(context.Background(), r.threadID)
+	host, err := svc.openFloretMaintenanceHost(context.Background(), r.threadID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -308,8 +296,7 @@ func TestSubagentExecutionCannotDeriveSiblingOrRootResourceAuthority(t *testing.
 		t.Fatal("child execution retained parent SubAgent lifecycle or sibling resource capability")
 	}
 	if child.broadcastThreadState != nil || child.broadcastThreadSummary != nil || child.replaceLiveDraftWithCanonicalTimeline != nil ||
-		child.lastVisibleTimelineAnchor != nil || child.reconcilePendingTurnCommand != nil ||
-		child.commitPendingTurnCommandAdmission != nil || child.releasePendingTurnCommandAdmission != nil ||
+		child.lastVisibleTimelineAnchor != nil || child.releasePendingTurnCommandAdmission != nil ||
 		child.resolveRunModel != nil {
 		t.Fatal("child execution retained root presentation, admission, model, or approval coordination capability")
 	}
@@ -339,8 +326,8 @@ func TestRunReachableSubagentRuntimeExposesOnlyValidatedChildResolution(t *testi
 		t.Fatal(err)
 	}
 	host.snapshots = []flruntime.SubAgentSnapshot{
-		{ParentThreadID: flruntime.ThreadID(parent.threadID), ThreadID: "child_owned", Status: flruntime.SubAgentStatusRunning},
-		{ParentThreadID: flruntime.ThreadID(parent.threadID), ThreadID: "child_without_audit", Status: flruntime.SubAgentStatusRunning},
+		{ParentThreadID: identity.ThreadID(parent.threadID), ThreadID: "child_owned", Status: flruntime.SubAgentStatusRunning},
+		{ParentThreadID: identity.ThreadID(parent.threadID), ThreadID: "child_without_audit", Status: flruntime.SubAgentStatusRunning},
 	}
 
 	var exposed subagentRuntime = runtime
@@ -393,6 +380,7 @@ func TestRootRunProductCapabilitiesAcceptDurableChildLineageFromEarlierTurn(t *t
 	}); err != nil {
 		t.Fatal(err)
 	}
+	ensureToolExecutionAuthorityForTest(t, parent)
 	parent.setPermissionState(FlowerPermissionApprovalRequired, permissionSnapshotWithOwnerIdentity(
 		buildPermissionSnapshot(FlowerPermissionApprovalRequired, nil, nil), parent.endpointID, parent.threadID, parent.id,
 	))
@@ -413,19 +401,19 @@ func TestRootRunProductCapabilitiesAcceptDurableChildLineageFromEarlierTurn(t *t
 
 func TestFloretReadAdaptersDoNotExposeConcreteHostMethodSets(t *testing.T) {
 	store := openTestFloretRuntimeHost(t, flstorage.Memory())
-	t.Cleanup(func() { _ = store.Close() })
 	bootstrap := testFloretBootstrap(t, store)
-	if _, err := bootstrap.threadCreate.CreateThread(context.Background(), "thread_read_adapter", "create_read_adapter"); err != nil {
+	created, err := bootstrap.threadCreate.CreateThread(context.Background(), "create_read_adapter")
+	if err != nil {
 		t.Fatal(err)
 	}
-	threadRead, err := bootstrap.newThreadRead(context.Background(), "thread_read_adapter")
+	threadRead, err := bootstrap.newThreadRead(context.Background(), created.ThreadID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := threadRead.(floretThreadReadHostAdapter); !ok {
 		t.Fatalf("thread read adapter dynamic type=%T, want responsibility-local adapter", threadRead)
 	}
-	subagentRead, err := bootstrap.newSubagentRead(context.Background(), "thread_read_adapter")
+	subagentRead, err := bootstrap.newSubagentRead(context.Background(), created.ThreadID)
 	if err != nil {
 		t.Fatal(err)
 	}

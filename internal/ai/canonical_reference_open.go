@@ -12,7 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	flruntime "github.com/floegence/floret/v2/runtime"
+	"github.com/floegence/floret/v3/identity"
+	flruntime "github.com/floegence/floret/v3/runtime"
 	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -98,7 +99,7 @@ func (s *Service) ResolveFlowerCanonicalReferenceOpenTarget(ctx context.Context,
 		}
 		return FlowerCanonicalReferenceOpenTarget{}, ErrFlowerCanonicalReferenceUnavailable
 	}
-	turn, err := host.ReadThreadTurn(ctxOrBackground(ctx), flruntime.TurnID(turnID))
+	turn, err := host.ReadThreadTurn(ctxOrBackground(ctx), identity.TurnID(turnID))
 	if errors.Is(err, flruntime.ErrTurnNotFound) {
 		return FlowerCanonicalReferenceOpenTarget{}, ErrFlowerCanonicalReferenceNotFound
 	}

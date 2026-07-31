@@ -5,11 +5,12 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/floegence/floret/v2/observation"
-	flruntime "github.com/floegence/floret/v2/runtime"
-	fltools "github.com/floegence/floret/v2/tools"
+	flruntime "github.com/floegence/floret/v3/runtime"
+	fltools "github.com/floegence/floret/v3/tools"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 )
+
+const floretControlProjectorIdentity = "redeven.flower.control-projector.v1"
 
 type floretControlProjector struct {
 	run        *run
@@ -29,6 +30,7 @@ func newFloretControlSpec(r *run, state *floretToolRuntimeState, activeTools []T
 	}
 	return flruntime.TurnSignalSpec{
 		Definitions: definitions,
+		Identity:    floretControlProjectorIdentity,
 		Project:     projector.Project,
 	}, nil
 }
@@ -131,7 +133,7 @@ func (p floretControlProjector) projectAskUser(call ToolCall, _ flruntime.TurnSi
 	}, nil
 }
 
-func floretActivityForControlSignal(toolName string, payload map[string]any, description string) *observation.ActivityPresentation {
+func floretActivityForControlSignal(toolName string, payload map[string]any, description string) *fltools.ActivityPresentation {
 	toolName = strings.TrimSpace(toolName)
 	if toolName == "" {
 		return nil
@@ -141,12 +143,12 @@ func floretActivityForControlSignal(toolName string, payload map[string]any, des
 	activityPayload := activityPayloadFromFieldList(spec.ResultPayloadFields, payload)
 	activityPayload = activityPayloadWithSpecOperation(activityPayload, spec, hasSpec)
 	activityPayload, _ = contractSafePayloadMap(activityPayload, 0)
-	activity := &observation.ActivityPresentation{
+	activity := &fltools.ActivityPresentation{
 		Label:       activityResultLabel(toolName, spec, hasSpec, renderer, activityPayload),
 		Description: activityPresentationDescription(description),
 		Renderer:    renderer,
 		Chips:       activityChipsFromSpec(spec, activityPayload),
-		Payload:     activityPayload,
+		Payload:     activityPayloadForRenderer(renderer, activityPayload),
 	}
 	return contractSafeActivityPresentation(activity)
 }

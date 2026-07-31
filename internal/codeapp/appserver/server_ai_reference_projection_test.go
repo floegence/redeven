@@ -12,8 +12,9 @@ import (
 	"testing"
 	"testing/fstest"
 
-	flprovider "github.com/floegence/floret/v2/provider"
-	flruntime "github.com/floegence/floret/v2/runtime"
+	"github.com/floegence/floret/v3/identity"
+	flprovider "github.com/floegence/floret/v3/provider"
+	flruntime "github.com/floegence/floret/v3/runtime"
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -111,7 +112,7 @@ func TestServer_AIThreadLiveBootstrapProjectsCanonicalReferencesWithoutHostSecre
 func seedFloretReferenceThreadTurn(t *testing.T, stateDir string, threadID string, path string, resourceRef string) {
 	t.Helper()
 
-	runAppserverTestFloretTurn(t, filepath.Join(stateDir, "ai", "floret_threads.sqlite"), flruntime.ThreadID(threadID), appserverTestGateway{events: []flprovider.Event{{Type: flprovider.EventDelta, Text: "canonical response"}, {Type: flprovider.EventDone, Reason: "stop"}}}, flruntime.TurnRequest{
+	runAppserverTestFloretTurn(t, filepath.Join(stateDir, "ai", "floret_threads.sqlite"), identity.ThreadID(threadID), appserverTestGateway{events: []flprovider.Event{{Type: flprovider.EventDelta, Text: "canonical response"}, {Type: flprovider.EventDone, Reason: "stop"}}}, appserverTestFloretTurnRequest{
 		TurnID: "turn_reference_projection", RunID: "run_reference_projection",
 		Input: flruntime.TurnInput{References: []flruntime.MessageReference{
 			{ReferenceID: "context:0", Kind: flruntime.MessageReferenceFile, Label: "main.ts", Text: path, ResourceRef: resourceRef},

@@ -44,9 +44,9 @@ func requireThreadWritableTx(ctx context.Context, tx *sql.Tx, endpointID string,
 	err := tx.QueryRowContext(ctx, `
 SELECT 1
 FROM ai_thread_fork_operations
-WHERE endpoint_id = ? AND status = ? AND (source_thread_id = ? OR destination_thread_id = ?)
+WHERE endpoint_id = ? AND stage NOT IN (?, ?) AND (source_thread_id = ? OR destination_thread_id = ?)
 LIMIT 1
-`, strings.TrimSpace(endpointID), string(ForkOperationPending), strings.TrimSpace(threadID), strings.TrimSpace(threadID)).Scan(&pendingFork)
+`, strings.TrimSpace(endpointID), string(ForkStageCompleted), string(ForkStageFailed), strings.TrimSpace(threadID), strings.TrimSpace(threadID)).Scan(&pendingFork)
 	switch {
 	case err == nil:
 		return ErrThreadOperationInProgress
@@ -166,8 +166,8 @@ func (s *Store) PrepareThreadDeleteOperation(ctx context.Context, endpointID str
 	if err := tx.QueryRowContext(ctx, `
 SELECT COUNT(1)
 FROM ai_thread_fork_operations
-WHERE endpoint_id = ? AND status = ? AND (source_thread_id = ? OR destination_thread_id = ?)
-`, endpointID, string(ForkOperationPending), threadID, threadID).Scan(&pendingForks); err != nil {
+WHERE endpoint_id = ? AND stage NOT IN (?, ?) AND (source_thread_id = ? OR destination_thread_id = ?)
+`, endpointID, string(ForkStageCompleted), string(ForkStageFailed), threadID, threadID).Scan(&pendingForks); err != nil {
 		return ThreadDeleteOperation{}, err
 	}
 	if pendingForks > 0 {

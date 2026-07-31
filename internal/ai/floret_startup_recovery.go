@@ -7,7 +7,8 @@ import (
 	"strings"
 	"time"
 
-	flruntime "github.com/floegence/floret/v2/runtime"
+	"github.com/floegence/floret/v3/identity"
+	flruntime "github.com/floegence/floret/v3/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
@@ -24,7 +25,18 @@ type floretStartupRecoveryTarget struct {
 }
 
 type floretRootThreadInventory interface {
-	ListRootThreads(context.Context, flruntime.ListRootThreadsRequest) (flruntime.RootThreadsPage, error)
+	ListRootThreads(context.Context, floretListRootThreadsRequest) (floretRootThreadsPage, error)
+}
+
+type floretListRootThreadsRequest struct {
+	Cursor string
+	Limit  int
+}
+
+type floretRootThreadsPage struct {
+	Threads    []flruntime.ThreadSnapshot
+	NextCursor string
+	HasMore    bool
 }
 
 type floretStartupRecoverySettingsStore interface {
@@ -33,8 +45,8 @@ type floretStartupRecoverySettingsStore interface {
 }
 
 type floretRootThreadInventoryReconciliation struct {
-	RootThreadIDs         []flruntime.ThreadID
-	OrphanedRootThreadIDs []flruntime.ThreadID
+	RootThreadIDs         []identity.ThreadID
+	OrphanedRootThreadIDs []identity.ThreadID
 }
 
 func (s *Service) recoverPreTurnStartupOperations(ctx context.Context) error {
@@ -54,14 +66,14 @@ func reconcileFloretRootThreadInventory(ctx context.Context, db floretStartupRec
 		return floretRootThreadInventoryReconciliation{}, errors.New("Floret root inventory reconciliation capability is unavailable")
 	}
 	ctx = ctxOrBackground(ctx)
-	productRoots := make(map[flruntime.ThreadID]struct{})
-	pendingOwnershipClaims := make(map[flruntime.ThreadID]struct{})
+	productRoots := make(map[identity.ThreadID]struct{})
+	pendingOwnershipClaims := make(map[identity.ThreadID]struct{})
 	claims, err := db.ListPendingCanonicalRootOwnershipClaims(ctx)
 	if err != nil {
 		return floretRootThreadInventoryReconciliation{}, fmt.Errorf("list pending canonical root ownership claims: %w", err)
 	}
 	for _, rawThreadID := range claims {
-		threadID := flruntime.ThreadID(strings.TrimSpace(rawThreadID))
+		threadID := identity.ThreadID(strings.TrimSpace(rawThreadID))
 		if threadID == "" || string(threadID) != rawThreadID {
 			return floretRootThreadInventoryReconciliation{}, errors.New("pending canonical root ownership contains an invalid thread identity")
 		}
@@ -77,7 +89,7 @@ func reconcileFloretRootThreadInventory(ctx context.Context, db floretStartupRec
 			return floretRootThreadInventoryReconciliation{}, fmt.Errorf("list recovery thread settings: %w", err)
 		}
 		for _, item := range settings {
-			threadID := flruntime.ThreadID(strings.TrimSpace(item.ThreadID))
+			threadID := identity.ThreadID(strings.TrimSpace(item.ThreadID))
 			if threadID == "" || string(threadID) != item.ThreadID {
 				return floretRootThreadInventoryReconciliation{}, errors.New("recovery thread settings contain an invalid thread identity")
 			}
@@ -99,15 +111,12 @@ func reconcileFloretRootThreadInventory(ctx context.Context, db floretStartupRec
 	}
 
 	result := floretRootThreadInventoryReconciliation{}
-	canonicalRoots := make(map[flruntime.ThreadID]struct{})
-	var cursor flruntime.ThreadInventoryCursor
+	canonicalRoots := make(map[identity.ThreadID]struct{})
+	var cursor string
 	for {
-		page, err := inventory.ListRootThreads(ctx, flruntime.ListRootThreadsRequest{Cursor: cursor, Limit: 200})
+		page, err := inventory.ListRootThreads(ctx, floretListRootThreadsRequest{Cursor: cursor, Limit: 200})
 		if err != nil {
 			return floretRootThreadInventoryReconciliation{}, fmt.Errorf("list canonical Floret root threads: %w", err)
-		}
-		if err := page.Validate(); err != nil {
-			return floretRootThreadInventoryReconciliation{}, fmt.Errorf("validate canonical Floret root page: %w", err)
 		}
 		for _, thread := range page.Threads {
 			if _, duplicate := canonicalRoots[thread.ID]; duplicate {
@@ -137,12 +146,12 @@ func reconcileFloretRootThreadInventory(ctx context.Context, db floretStartupRec
 	return result, nil
 }
 
-func buildFloretStartupRecoveryTargets(ctx context.Context, rootThreadIDs []flruntime.ThreadID, capabilities floretStartupRecoveryCapabilities) ([]floretStartupRecoveryTarget, error) {
+func buildFloretStartupRecoveryTargets(ctx context.Context, rootThreadIDs []identity.ThreadID, capabilities floretStartupRecoveryCapabilities) ([]floretStartupRecoveryTarget, error) {
 	if capabilities.root == nil || capabilities.subagent == nil || capabilities.listSubagents == nil {
 		return nil, errors.New("Floret startup recovery capability is unavailable")
 	}
 	targets := make([]floretStartupRecoveryTarget, 0, len(rootThreadIDs))
-	seenRoots := make(map[flruntime.ThreadID]struct{}, len(rootThreadIDs))
+	seenRoots := make(map[identity.ThreadID]struct{}, len(rootThreadIDs))
 	for _, rootThreadID := range rootThreadIDs {
 		threadID := strings.TrimSpace(string(rootThreadID))
 		if threadID == "" || threadID != string(rootThreadID) {
@@ -153,7 +162,7 @@ func buildFloretStartupRecoveryTargets(ctx context.Context, rootThreadIDs []flru
 		}
 		seenRoots[rootThreadID] = struct{}{}
 	}
-	seenThreads := make(map[flruntime.ThreadID]struct{}, len(rootThreadIDs))
+	seenThreads := make(map[identity.ThreadID]struct{}, len(rootThreadIDs))
 	for rootThreadID := range seenRoots {
 		seenThreads[rootThreadID] = struct{}{}
 	}
@@ -173,7 +182,7 @@ func buildFloretStartupRecoveryTargets(ctx context.Context, rootThreadIDs []flru
 			})
 		}
 
-		queue := []flruntime.ThreadID{rootThreadID}
+		queue := []identity.ThreadID{rootThreadID}
 		for len(queue) > 0 {
 			parentID := queue[0]
 			queue = queue[1:]
@@ -191,7 +200,7 @@ func buildFloretStartupRecoveryTargets(ctx context.Context, rootThreadIDs []flru
 				if childThreadID == "" || strings.TrimSpace(string(child.ParentThreadID)) != parentThreadID {
 					return nil, errors.New("Floret SubAgent recovery identity is invalid")
 				}
-				childID := flruntime.ThreadID(childThreadID)
+				childID := identity.ThreadID(childThreadID)
 				if _, duplicate := seenThreads[childID]; duplicate {
 					return nil, fmt.Errorf("Floret SubAgent recovery hierarchy contains duplicate thread %q", childThreadID)
 				}

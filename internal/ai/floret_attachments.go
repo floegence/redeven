@@ -9,18 +9,16 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
-	flruntime "github.com/floegence/floret/v2/runtime"
+	flruntime "github.com/floegence/floret/v3/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
 const (
-	floretUploadResourcePrefix       = "redeven-upload:v1:"
-	legacyFloretUploadResourcePrefix = "redeven-upload:"
-	floretUploadDigestMarker         = ":sha256:"
-	floretAttachmentMaxBytes         = 10 << 20
+	floretUploadResourcePrefix = "redeven-upload:v1:"
+	floretUploadDigestMarker   = ":sha256:"
+	floretAttachmentMaxBytes   = 10 << 20
 )
 
 type frozenFloretAttachment struct {
@@ -56,38 +54,27 @@ func immutableFloretUploadResourceRef(uploadID string, digest string) (string, e
 }
 
 func immutableUploadIdentityFromFloretResourceRef(resourceRef string) (string, string, error) {
-	uploadID, digest, _, err := floretUploadIdentityFromResourceRef(resourceRef)
-	return uploadID, digest, err
-}
-
-func floretUploadIdentityFromResourceRef(resourceRef string) (uploadID string, digest string, legacy bool, err error) {
 	resourceRef = strings.TrimSpace(resourceRef)
-	prefix := floretUploadResourcePrefix
-	if !strings.HasPrefix(resourceRef, prefix) {
-		prefix = legacyFloretUploadResourcePrefix
-		legacy = true
+	if !strings.HasPrefix(resourceRef, floretUploadResourcePrefix) {
+		return "", "", errors.New("unsupported attachment resource reference")
 	}
-	if !strings.HasPrefix(resourceRef, prefix) {
-		return "", "", false, errors.New("unsupported attachment resource reference")
+	remainder := strings.TrimSpace(strings.TrimPrefix(resourceRef, floretUploadResourcePrefix))
+	index := strings.Index(remainder, floretUploadDigestMarker)
+	if index <= 0 || strings.Contains(remainder[index+len(floretUploadDigestMarker):], floretUploadDigestMarker) {
+		return "", "", errors.New("attachment resource reference is not content-addressed")
 	}
-	remainder := strings.TrimSpace(strings.TrimPrefix(resourceRef, prefix))
-	uploadID = remainder
-	if index := strings.Index(remainder, floretUploadDigestMarker); index >= 0 {
-		uploadID = strings.TrimSpace(remainder[:index])
-		digest = strings.ToLower(strings.TrimSpace(remainder[index+len(floretUploadDigestMarker):]))
-	}
+	uploadID := strings.TrimSpace(remainder[:index])
+	digest := strings.ToLower(strings.TrimSpace(remainder[index+len(floretUploadDigestMarker):]))
 	if !validUploadID(uploadID) {
-		return "", "", false, errors.New("invalid attachment resource reference")
+		return "", "", errors.New("invalid attachment resource reference")
 	}
-	if digest != "" {
-		if len(digest) != sha256.Size*2 {
-			return "", "", false, errors.New("invalid attachment content digest")
-		}
-		if _, err := hex.DecodeString(digest); err != nil {
-			return "", "", false, errors.New("invalid attachment content digest")
-		}
+	if len(digest) != sha256.Size*2 {
+		return "", "", errors.New("invalid attachment content digest")
 	}
-	return uploadID, digest, legacy, nil
+	if _, err := hex.DecodeString(digest); err != nil {
+		return "", "", errors.New("invalid attachment content digest")
+	}
+	return uploadID, digest, nil
 }
 
 func (r *run) floretTurnInput(ctx context.Context, input RunInput, references []flruntime.MessageReference) (flruntime.TurnInput, error) {
@@ -135,12 +122,6 @@ func (r *run) floretTurnInput(ctx context.Context, input RunInput, references []
 			return flruntime.TurnInput{}, fmt.Errorf("attachment %d exceeds the supported size limit", index)
 		}
 		digest := strings.ToLower(strings.TrimSpace(record.ContentSHA256))
-		if digest == "" {
-			digest, err = r.legacyQueuedAttachmentDigest(*record)
-			if err != nil {
-				return flruntime.TurnInput{}, fmt.Errorf("attachment %d: %w", index, err)
-			}
-		}
 		resourceRef, err := immutableFloretUploadResourceRef(record.UploadID, digest)
 		if err != nil {
 			return flruntime.TurnInput{}, fmt.Errorf("attachment %d: %w", index, err)
@@ -173,12 +154,9 @@ func (r *run) resolveFloretMessageAttachment(ctx context.Context, attachment flr
 	if r == nil {
 		return ContentPart{}, errors.New("attachment store is unavailable")
 	}
-	uploadID, expectedDigest, legacyResourceRef, err := floretUploadIdentityFromResourceRef(attachment.ResourceRef)
+	uploadID, expectedDigest, err := immutableUploadIdentityFromFloretResourceRef(attachment.ResourceRef)
 	if err != nil {
 		return ContentPart{}, err
-	}
-	if expectedDigest == "" && !legacyResourceRef {
-		return ContentPart{}, errors.New("attachment resource reference is not content-addressed")
 	}
 	if r.host.openLiveAttachment == nil {
 		return ContentPart{}, errors.New("canonical Floret attachment authority is unavailable")
@@ -193,12 +171,6 @@ func (r *run) resolveFloretMessageAttachment(ctx context.Context, attachment flr
 	}
 	if opened.Upload == nil || opened.Upload.Info == nil {
 		return ContentPart{}, fmt.Errorf("attachment resource %q is not canonically readable", uploadID)
-	}
-	if expectedDigest == "" {
-		expectedDigest = strings.ToLower(strings.TrimSpace(opened.Upload.Info.ContentSHA256))
-		if len(expectedDigest) != sha256.Size*2 {
-			return ContentPart{}, errors.New("legacy attachment did not resolve to an immutable digest")
-		}
 	}
 	if opened.Membership.ResourceRef != attachment.ResourceRef || opened.Membership.Name != attachment.Name ||
 		normalizeMediaType(opened.Membership.DetectedMediaType) != normalizeMediaType(attachment.MIMEType) ||
@@ -261,15 +233,6 @@ func (r *run) preflightFloretTurnAttachments(ctx context.Context, input flruntim
 		if err := validateFloretAttachmentRecord(attachment, *record, digest); err != nil {
 			return flruntime.TurnInput{}, nil, fmt.Errorf("preflight attachment %d: %w", index, err)
 		}
-		if strings.TrimSpace(record.ContentSHA256) == "" {
-			actualDigest, digestErr := r.legacyQueuedAttachmentDigest(*record)
-			if digestErr != nil {
-				return flruntime.TurnInput{}, nil, fmt.Errorf("preflight attachment %d: %w", index, digestErr)
-			}
-			if actualDigest != digest {
-				return flruntime.TurnInput{}, nil, fmt.Errorf("preflight attachment %d: attachment content differs from its canonical resource reference", index)
-			}
-		}
 		partType := "file"
 		if strings.HasPrefix(strings.ToLower(record.DetectedMediaType), "image/") {
 			partType = "image"
@@ -320,28 +283,6 @@ func providerContentPartAndDigestForPathWithDigest(attachment flruntime.MessageA
 	}, actualDigest, nil
 }
 
-func (r *run) legacyQueuedAttachmentDigest(record threadstore.UploadRecord) (string, error) {
-	if r == nil || record.OwnerScopeKind != threadstore.UploadOwnerScopeLegacyThread || record.State != threadstore.UploadStateLive || strings.TrimSpace(record.ContentSHA256) != "" {
-		return "", errors.New("attachment resource is missing its immutable digest")
-	}
-	r.mu.Lock()
-	uploadsDir := strings.TrimSpace(r.uploadsDir)
-	r.mu.Unlock()
-	if uploadsDir == "" {
-		return "", errors.New("attachment storage directory is unavailable")
-	}
-	path := filepath.Join(uploadsDir, filepath.Base(strings.TrimSpace(record.StorageRelPath)))
-	body, err := os.ReadFile(path)
-	if err != nil {
-		return "", fmt.Errorf("read attachment resource: %w", err)
-	}
-	if int64(len(body)) != record.SizeBytes {
-		return "", errors.New("attachment size differs from its stored metadata")
-	}
-	sum := sha256.Sum256(body)
-	return hex.EncodeToString(sum[:]), nil
-}
-
 func (r *run) floretAttachmentResolver(frozen map[string]frozenFloretAttachment, provider *floretProviderAdapter) func(context.Context, flruntime.MessageAttachment) (ContentPart, error) {
 	return func(ctx context.Context, attachment flruntime.MessageAttachment) (ContentPart, error) {
 		if entry, ok := frozen[strings.TrimSpace(attachment.ResourceRef)]; ok {
@@ -367,8 +308,8 @@ func attachmentUsesToolRead(provider *floretProviderAdapter, attachment flruntim
 }
 
 func (r *run) resolveFloretAttachmentManifest(ctx context.Context, attachment flruntime.MessageAttachment) (ContentPart, error) {
-	uploadID, digest, legacyResourceRef, err := floretUploadIdentityFromResourceRef(attachment.ResourceRef)
-	if err != nil || (digest == "" && !legacyResourceRef) || r == nil || r.host.openLiveAttachment == nil {
+	uploadID, digest, err := immutableUploadIdentityFromFloretResourceRef(attachment.ResourceRef)
+	if err != nil || r == nil || r.host.openLiveAttachment == nil {
 		return ContentPart{}, errors.New("attachment manifest authority is unavailable")
 	}
 	owner, err := NewUploadOwner(r.endpointID, r.userPublicID, r.channelID)
@@ -406,11 +347,8 @@ func validateFloretAttachmentRecord(attachment flruntime.MessageAttachment, reco
 	}
 	digest = strings.ToLower(strings.TrimSpace(digest))
 	storedDigest := strings.ToLower(strings.TrimSpace(record.ContentSHA256))
-	if len(digest) != sha256.Size*2 || (storedDigest != "" && digest != storedDigest) {
+	if len(digest) != sha256.Size*2 || len(storedDigest) != sha256.Size*2 || digest != storedDigest {
 		return errors.New("attachment content digest differs from the canonical message")
-	}
-	if storedDigest == "" && record.OwnerScopeKind != threadstore.UploadOwnerScopeLegacyThread {
-		return errors.New("attachment resource is missing its immutable digest")
 	}
 	if record.SizeBytes < 0 || record.SizeBytes > floretAttachmentMaxBytes {
 		return errors.New("attachment exceeds the supported size limit")

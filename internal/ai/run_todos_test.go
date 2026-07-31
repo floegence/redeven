@@ -8,7 +8,8 @@ import (
 	"testing"
 	"time"
 
-	flruntime "github.com/floegence/floret/v2/runtime"
+	"github.com/floegence/floret/v3/identity"
+	flruntime "github.com/floegence/floret/v3/runtime"
 )
 
 type todoTestHost struct {
@@ -16,19 +17,23 @@ type todoTestHost struct {
 	state flruntime.ThreadAgentTodoState
 }
 
-func (h *todoTestHost) Run(context.Context, flruntime.TurnRequest) (flruntime.TurnResult, error) {
-	return flruntime.TurnResult{}, nil
+func (h *todoTestHost) StartTurn(context.Context, flruntime.StartTurnCommand) (flruntime.StartTurnResult, error) {
+	return flruntime.StartTurnResult{}, nil
+}
+
+func (h *todoTestHost) ReadTurn(context.Context, identity.TurnID) (flruntime.ThreadTurnSnapshot, error) {
+	return flruntime.ThreadTurnSnapshot{}, flruntime.ErrTurnNotFound
 }
 
 func (h *todoTestHost) ReadApprovalQueue(context.Context) (flruntime.ApprovalQueue, error) {
 	return flruntime.ApprovalQueue{RootThreadID: "thread_1", GeneratedAt: time.Now()}, nil
 }
 
-func (h *todoTestHost) ResolveApproval(context.Context, flruntime.ApprovalResolutionRequest) (flruntime.ResolveApprovalResult, error) {
+func (h *todoTestHost) ResolveApproval(context.Context, flruntime.ResolveApprovalCommand) (flruntime.ResolveApprovalResult, error) {
 	return flruntime.ResolveApprovalResult{}, errors.New("unexpected approval resolution")
 }
 
-func (h *todoTestHost) SettlePendingTool(context.Context, flruntime.PendingToolSettlementRequest) (flruntime.PendingToolSettlementResult, error) {
+func (h *todoTestHost) SettlePendingTool(context.Context, floretPendingToolSettlementRequest) (flruntime.PendingToolSettlementResult, error) {
 	return flruntime.PendingToolSettlementResult{}, nil
 }
 
@@ -41,7 +46,7 @@ func (h *todoTestHost) ReadThreadAgentTodos(context.Context) (flruntime.ThreadAg
 	return state, nil
 }
 
-func (h *todoTestHost) UpdateThreadAgentTodos(_ context.Context, req flruntime.AgentTodoUpdateRequest) (flruntime.ThreadAgentTodoState, error) {
+func (h *todoTestHost) UpdateThreadAgentTodos(_ context.Context, req flruntime.UpdateTodosCommand) (flruntime.ThreadAgentTodoState, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if req.ExpectedVersion != h.state.Version {
@@ -72,7 +77,7 @@ func TestRunToolWriteTodosUsesCanonicalFloretState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if snapshot.Version != 1 || len(snapshot.Items) != 1 || snapshot.Items[0].Content != "Inspect workspace" || snapshot.UpdatedByTurnID != flruntime.TurnID(r.turnID) || snapshot.UpdatedByRunID != flruntime.RunID(r.id) || snapshot.UpdatedByToolCall != "tool_1" {
+	if snapshot.Version != 1 || len(snapshot.Items) != 1 || snapshot.Items[0].Content != "Inspect workspace" || snapshot.UpdatedByTurnID != identity.TurnID(r.turnID) || snapshot.UpdatedByRunID != identity.RunID(r.id) || snapshot.UpdatedByToolCall != "tool_1" {
 		t.Fatalf("unexpected canonical todo state: %#v", snapshot)
 	}
 }
@@ -130,6 +135,9 @@ func newTodoTestRun(t *testing.T) (*run, floretTurnHost) {
 	t.Helper()
 	host := &todoTestHost{}
 	r := &run{id: "run_1", threadID: "thread_1", turnID: "turn_1", messageID: "turn_1"}
+	if err := r.observeFloretCanonicalIdentity("run_1", "thread_1", "turn_1"); err != nil {
+		t.Fatalf("observe canonical todo identity: %v", err)
+	}
 	r.setActiveFloretHost(host)
 	return r, host
 }

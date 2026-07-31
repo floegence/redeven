@@ -6,131 +6,33 @@ import (
 	"crypto/subtle"
 	"database/sql"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 	"unicode/utf8"
 )
 
 func (s *Store) PrepareThreadCreateWithInitialTurn(ctx context.Context, createReq PrepareThreadCreateRequest, rec QueuedTurn, uploadIDs []string, claimedAtUnixMs int64, attachmentAdmission AttachmentAdmission, stagingScope *UploadStagingScope) (ThreadCreateOperation, QueuedTurn, error) {
-	if s == nil || s.db == nil {
-		return ThreadCreateOperation{}, QueuedTurn{}, errors.New("store not initialized")
-	}
-	var err error
-	rec, err = normalizeFrozenQueuedTurn(rec)
-	if err != nil {
-		return ThreadCreateOperation{}, QueuedTurn{}, err
-	}
-	createReq.Settings.ThreadID = strings.TrimSpace(createReq.Settings.ThreadID)
-	createReq.Settings.EndpointID = strings.TrimSpace(createReq.Settings.EndpointID)
-	createReq.ExplicitTitle = strings.TrimSpace(createReq.ExplicitTitle)
-	if createReq.Settings.ThreadID != rec.ThreadID || createReq.Settings.EndpointID != rec.EndpointID {
-		return ThreadCreateOperation{}, QueuedTurn{}, errors.New("initial turn target conflicts with thread create snapshot")
-	}
+	rec.ThreadID = ""
+	rec.TurnID = ""
+	rec.RunID = ""
+	rec.AdmissionState = PendingTurnAdmissionReady
+	createReq.InitialTurn = &rec
+	createReq.UploadIDs = uploadIDs
+	createReq.AttachmentAdmission = attachmentAdmission
+	createReq.StagingScope = stagingScope
 	if createReq.CreatedAtMS <= 0 {
 		createReq.CreatedAtMS = rec.CreatedAtUnixMs
 	}
-	if createReq.OperationID = strings.TrimSpace(createReq.OperationID); createReq.OperationID == "" {
-		createReq.OperationID = stableThreadCreateOperationID(rec.EndpointID, rec.ThreadID)
-	}
-	createReq, snapshot, fingerprint, err := normalizeThreadCreateRequest(createReq, true)
-	if err != nil {
-		return ThreadCreateOperation{}, QueuedTurn{}, err
-	}
-	snapshotJSON, err := json.Marshal(snapshot)
-	if err != nil {
-		return ThreadCreateOperation{}, QueuedTurn{}, err
-	}
-	uploadIDs = dedupeNonEmptyStrings(uploadIDs)
-	if len(uploadIDs) != 0 && stagingScope == nil {
-		return ThreadCreateOperation{}, QueuedTurn{}, errors.New("initial attachments require an upload staging scope")
-	}
-	tx, err := s.db.BeginTx(ctxOrBackground(ctx), nil)
-	if err != nil {
-		return ThreadCreateOperation{}, QueuedTurn{}, err
-	}
-	defer func() { _ = tx.Rollback() }()
-	if err := requireThreadWritableTx(ctxOrBackground(ctx), tx, rec.EndpointID, rec.ThreadID); err != nil {
-		return ThreadCreateOperation{}, QueuedTurn{}, err
-	}
-	existingOperation, loadErr := loadThreadCreateOperationTx(ctxOrBackground(ctx), tx, createReq.OperationID)
-	if loadErr != nil && !errors.Is(loadErr, sql.ErrNoRows) {
-		return ThreadCreateOperation{}, QueuedTurn{}, loadErr
-	}
-	if loadErr == nil {
-		if existingOperation.RequestFingerprint != fingerprint || existingOperation.EndpointID != rec.EndpointID || existingOperation.ThreadID != rec.ThreadID {
-			return ThreadCreateOperation{}, QueuedTurn{}, ErrThreadCreateConflict
-		}
-		existingCommand, commandErr := getFollowupByLaneAndTurnIDTx(ctxOrBackground(ctx), tx, rec.EndpointID, rec.ThreadID, FollowupLaneQueued, rec.TurnID)
-		if commandErr != nil || !sameInitialTurnIntent(existingCommand, rec) {
-			return ThreadCreateOperation{}, QueuedTurn{}, ErrFollowupReplacementConflict
-		}
-		if err := tx.Commit(); err != nil {
-			return ThreadCreateOperation{}, QueuedTurn{}, err
-		}
-		return existingOperation, existingCommand, nil
-	}
-	var settingsCount int
-	if err := tx.QueryRowContext(ctxOrBackground(ctx), `SELECT COUNT(1) FROM ai_thread_settings WHERE endpoint_id = ? AND thread_id = ?`, rec.EndpointID, rec.ThreadID).Scan(&settingsCount); err != nil || settingsCount != 0 {
-		if err != nil {
-			return ThreadCreateOperation{}, QueuedTurn{}, err
-		}
-		return ThreadCreateOperation{}, QueuedTurn{}, errors.New("thread settings already exist")
-	}
-	if stagingScope != nil {
-		*stagingScope = normalizeUploadStagingScope(*stagingScope)
-		if stagingScope.EndpointID != rec.EndpointID || stagingScope.ThreadID != rec.ThreadID {
-			return ThreadCreateOperation{}, QueuedTurn{}, errors.New("upload staging target changed")
-		}
-		if err := requireUploadStagingScopeActiveTx(ctxOrBackground(ctx), tx, *stagingScope, time.Now().UnixMilli()); err != nil {
-			return ThreadCreateOperation{}, QueuedTurn{}, err
-		}
-	}
-	if err := validateAttachmentAdmissionTx(ctxOrBackground(ctx), tx, rec.EndpointID, uploadIDs, attachmentAdmission); err != nil {
-		return ThreadCreateOperation{}, QueuedTurn{}, err
-	}
-	if _, err := tx.ExecContext(ctxOrBackground(ctx), `
-INSERT INTO ai_thread_create_operations(
-  operation_id, endpoint_id, thread_id, request_fingerprint, status,
-  snapshot_schema_version, snapshot_json, created_at_unix_ms, updated_at_unix_ms
-) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
-`, createReq.OperationID, rec.EndpointID, rec.ThreadID, fingerprint, ThreadCreateOperationPending, ThreadCreateSnapshotSchemaVersion, string(snapshotJSON), createReq.CreatedAtMS, createReq.CreatedAtMS); err != nil {
-		return ThreadCreateOperation{}, QueuedTurn{}, err
-	}
-	rec.SortIndex = 1
-	rec.AdmissionState = PendingTurnAdmissionReady
-	if _, err := tx.ExecContext(ctxOrBackground(ctx), `
-INSERT INTO ai_queued_turns(
-  queue_id, endpoint_id, thread_id, channel_id, lane, admission_state, sort_index, turn_id, run_id, model_id, text_content, attachments_json, context_action_json, options_json, session_meta_json,
-  created_by_user_public_id, created_by_user_email, created_at_unix_ms, updated_at_unix_ms
-) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-`, rec.QueueID, rec.EndpointID, rec.ThreadID, rec.ChannelID, rec.Lane, rec.AdmissionState, rec.SortIndex, rec.TurnID, rec.RunID, rec.ModelID, rec.TextContent, rec.AttachmentsJSON, rec.ContextActionJSON, rec.OptionsJSON, rec.SessionMetaJSON,
-		rec.CreatedByUserPublicID, rec.CreatedByUserEmail, rec.CreatedAtUnixMs, rec.UpdatedAtUnixMs); err != nil {
-		return ThreadCreateOperation{}, QueuedTurn{}, err
-	}
-	if stagingScope != nil {
-		refID := stagingUploadRefID(stagingScope.OwnerUserHash, stagingScope.StagingScopeID)
-		if err := bindUploadsToRefTx(ctxOrBackground(ctx), tx, rec.EndpointID, rec.ThreadID, UploadRefKindQueuedTurn, rec.QueueID, uploadIDs, claimedAtUnixMs, UploadRefKindStaging, refID, stagingScope.OwnerUserHash); err != nil {
-			return ThreadCreateOperation{}, QueuedTurn{}, err
-		}
-	}
-	operation, err := loadThreadCreateOperationTx(ctxOrBackground(ctx), tx, createReq.OperationID)
-	if err != nil {
-		return ThreadCreateOperation{}, QueuedTurn{}, fmt.Errorf("load frozen thread create operation: %w", err)
-	}
-	if err := tx.Commit(); err != nil {
-		return ThreadCreateOperation{}, QueuedTurn{}, err
-	}
-	return operation, rec, nil
+	operation, err := s.PrepareThreadCreateOperation(ctx, createReq)
+	return operation, rec, err
 }
 
 type UploadStagingScope struct {
 	StagingScopeID   string `json:"staging_scope_id"`
 	EndpointID       string `json:"endpoint_id"`
 	OwnerUserHash    string `json:"-"`
-	ThreadID         string `json:"thread_id"`
+	TargetID         string `json:"target_id"`
 	CapabilityHash   string `json:"-"`
 	CreatedAtUnixMs  int64  `json:"created_at_unix_ms"`
 	ExpiresAtUnixMs  int64  `json:"expires_at_unix_ms"`
@@ -159,13 +61,10 @@ func (s *Store) CompleteUploadAttemptToStaging(ctx context.Context, attempt Uplo
 	var active int
 	if err := tx.QueryRowContext(ctxOrBackground(ctx), `
 SELECT COUNT(1) FROM ai_upload_staging_scopes
-WHERE staging_scope_id = ? AND endpoint_id = ? AND owner_user_hash = ? AND thread_id = ?
+WHERE staging_scope_id = ? AND endpoint_id = ? AND owner_user_hash = ? AND target_id = ?
   AND capability_hash = ? AND released_at_unix_ms = 0 AND expires_at_unix_ms > ?
-`, scope.StagingScopeID, scope.EndpointID, scope.OwnerUserHash, scope.ThreadID, scope.CapabilityHash, time.Now().UnixMilli()).Scan(&active); err != nil || active != 1 {
+`, scope.StagingScopeID, scope.EndpointID, scope.OwnerUserHash, scope.TargetID, scope.CapabilityHash, time.Now().UnixMilli()).Scan(&active); err != nil || active != 1 {
 		return errors.New("upload staging scope is unavailable")
-	}
-	if err := requireThreadWritableTx(ctxOrBackground(ctx), tx, scope.EndpointID, scope.ThreadID); err != nil {
-		return err
 	}
 	var storedFingerprint, storedUploadID, status string
 	if err := tx.QueryRowContext(ctxOrBackground(ctx), `
@@ -214,7 +113,7 @@ WHERE endpoint_id = ? AND owner_user_hash = ? AND upload_request_id = ? AND stat
 	if _, err := tx.ExecContext(ctxOrBackground(ctx), `
 INSERT INTO ai_upload_refs(endpoint_id, upload_id, thread_id, ref_kind, ref_id, created_at_unix_ms)
 VALUES(?, ?, ?, ?, ?, ?)
-`, rec.EndpointID, rec.UploadID, scope.ThreadID, UploadRefKindStaging, refID, rec.CreatedAtUnixMs); err != nil {
+`, rec.EndpointID, rec.UploadID, scope.TargetID, UploadRefKindStaging, refID, rec.CreatedAtUnixMs); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -228,9 +127,9 @@ func requireUploadStagingScopeActiveTx(ctx context.Context, tx *sql.Tx, scope Up
 	var count int
 	if err := tx.QueryRowContext(ctx, `
 SELECT COUNT(1) FROM ai_upload_staging_scopes
-WHERE staging_scope_id = ? AND endpoint_id = ? AND owner_user_hash = ? AND thread_id = ?
+WHERE staging_scope_id = ? AND endpoint_id = ? AND owner_user_hash = ? AND target_id = ?
   AND capability_hash = ? AND released_at_unix_ms = 0 AND expires_at_unix_ms > ?
-`, scope.StagingScopeID, scope.EndpointID, scope.OwnerUserHash, scope.ThreadID, scope.CapabilityHash, nowUnixMs).Scan(&count); err != nil {
+`, scope.StagingScopeID, scope.EndpointID, scope.OwnerUserHash, scope.TargetID, scope.CapabilityHash, nowUnixMs).Scan(&count); err != nil {
 		return err
 	}
 	if count != 1 {
@@ -261,7 +160,7 @@ func normalizeFrozenQueuedTurn(rec QueuedTurn) (QueuedTurn, error) {
 	rec.SessionMetaJSON = strings.TrimSpace(rec.SessionMetaJSON)
 	rec.CreatedByUserPublicID = strings.TrimSpace(rec.CreatedByUserPublicID)
 	rec.CreatedByUserEmail = strings.TrimSpace(rec.CreatedByUserEmail)
-	if rec.QueueID == "" || rec.EndpointID == "" || rec.ThreadID == "" || rec.ChannelID == "" || rec.TurnID == "" || rec.RunID == "" {
+	if rec.QueueID == "" || rec.EndpointID == "" || rec.ThreadID == "" || rec.ChannelID == "" || rec.TurnID != "" || rec.RunID != "" {
 		return QueuedTurn{}, errors.New("invalid request")
 	}
 	if rec.AttachmentsJSON == "" {
@@ -309,7 +208,7 @@ func (s *Store) CreateFollowupFromStaging(ctx context.Context, rec QueuedTurn, u
 		return QueuedTurn{}, 0, 0, err
 	}
 	scope = normalizeUploadStagingScope(scope)
-	if scope.EndpointID != rec.EndpointID || scope.ThreadID != rec.ThreadID {
+	if scope.EndpointID != rec.EndpointID || scope.TargetID != rec.ThreadID {
 		return QueuedTurn{}, 0, 0, errors.New("upload staging target changed")
 	}
 	uploadIDs = dedupeNonEmptyStrings(uploadIDs)
@@ -348,13 +247,13 @@ func normalizeUploadStagingScope(scope UploadStagingScope) UploadStagingScope {
 	scope.StagingScopeID = strings.TrimSpace(scope.StagingScopeID)
 	scope.EndpointID = strings.TrimSpace(scope.EndpointID)
 	scope.OwnerUserHash = strings.ToLower(strings.TrimSpace(scope.OwnerUserHash))
-	scope.ThreadID = strings.TrimSpace(scope.ThreadID)
+	scope.TargetID = strings.TrimSpace(scope.TargetID)
 	scope.CapabilityHash = strings.ToLower(strings.TrimSpace(scope.CapabilityHash))
 	return scope
 }
 
 func validateUploadStagingScope(scope UploadStagingScope) error {
-	if scope.StagingScopeID == "" || scope.EndpointID == "" || len(scope.OwnerUserHash) != 64 || scope.ThreadID == "" || len(scope.CapabilityHash) != 64 || scope.CreatedAtUnixMs <= 0 || scope.ExpiresAtUnixMs <= scope.CreatedAtUnixMs {
+	if scope.StagingScopeID == "" || scope.EndpointID == "" || len(scope.OwnerUserHash) != 64 || scope.TargetID == "" || len(scope.CapabilityHash) != 64 || scope.CreatedAtUnixMs <= 0 || scope.ExpiresAtUnixMs <= scope.CreatedAtUnixMs {
 		return errors.New("invalid upload staging scope")
 	}
 	return nil
@@ -370,16 +269,16 @@ func (s *Store) CreateUploadStagingScope(ctx context.Context, scope UploadStagin
 	}
 	_, err := s.db.ExecContext(ctxOrBackground(ctx), `
 INSERT INTO ai_upload_staging_scopes(
-  staging_scope_id, endpoint_id, owner_user_hash, thread_id, capability_hash,
+  staging_scope_id, endpoint_id, owner_user_hash, target_id, capability_hash,
   created_at_unix_ms, expires_at_unix_ms, released_at_unix_ms
 ) VALUES(?, ?, ?, ?, ?, ?, ?, 0)
-`, scope.StagingScopeID, scope.EndpointID, scope.OwnerUserHash, scope.ThreadID, scope.CapabilityHash, scope.CreatedAtUnixMs, scope.ExpiresAtUnixMs)
+`, scope.StagingScopeID, scope.EndpointID, scope.OwnerUserHash, scope.TargetID, scope.CapabilityHash, scope.CreatedAtUnixMs, scope.ExpiresAtUnixMs)
 	return err
 }
 
 func loadUploadStagingScopeRow(row *sql.Row) (UploadStagingScope, error) {
 	var scope UploadStagingScope
-	err := row.Scan(&scope.StagingScopeID, &scope.EndpointID, &scope.OwnerUserHash, &scope.ThreadID, &scope.CapabilityHash, &scope.CreatedAtUnixMs, &scope.ExpiresAtUnixMs, &scope.ReleasedAtUnixMs)
+	err := row.Scan(&scope.StagingScopeID, &scope.EndpointID, &scope.OwnerUserHash, &scope.TargetID, &scope.CapabilityHash, &scope.CreatedAtUnixMs, &scope.ExpiresAtUnixMs, &scope.ReleasedAtUnixMs)
 	return normalizeUploadStagingScope(scope), err
 }
 
@@ -395,7 +294,7 @@ func (s *Store) AuthorizeUploadStagingScope(ctx context.Context, endpointID, own
 		return UploadStagingScope{}, sql.ErrNoRows
 	}
 	scope, err := loadUploadStagingScopeRow(s.db.QueryRowContext(ctxOrBackground(ctx), `
-SELECT staging_scope_id, endpoint_id, owner_user_hash, thread_id, capability_hash,
+SELECT staging_scope_id, endpoint_id, owner_user_hash, target_id, capability_hash,
        created_at_unix_ms, expires_at_unix_ms, released_at_unix_ms
 FROM ai_upload_staging_scopes WHERE staging_scope_id = ?
 `, stagingScopeID))
@@ -564,7 +463,7 @@ func (s *Store) ReleaseExpiredUploadStagingScopes(ctx context.Context, nowUnixMs
 	}
 	defer func() { _ = tx.Rollback() }()
 	rows, err := tx.QueryContext(ctxOrBackground(ctx), `
-SELECT staging_scope_id, endpoint_id, owner_user_hash, thread_id, capability_hash,
+SELECT staging_scope_id, endpoint_id, owner_user_hash, target_id, capability_hash,
        created_at_unix_ms, expires_at_unix_ms, released_at_unix_ms
 FROM ai_upload_staging_scopes
 WHERE released_at_unix_ms = 0 AND expires_at_unix_ms <= ?
@@ -577,7 +476,7 @@ LIMIT ?
 	var scopes []UploadStagingScope
 	for rows.Next() {
 		var scope UploadStagingScope
-		if err := rows.Scan(&scope.StagingScopeID, &scope.EndpointID, &scope.OwnerUserHash, &scope.ThreadID, &scope.CapabilityHash, &scope.CreatedAtUnixMs, &scope.ExpiresAtUnixMs, &scope.ReleasedAtUnixMs); err != nil {
+		if err := rows.Scan(&scope.StagingScopeID, &scope.EndpointID, &scope.OwnerUserHash, &scope.TargetID, &scope.CapabilityHash, &scope.CreatedAtUnixMs, &scope.ExpiresAtUnixMs, &scope.ReleasedAtUnixMs); err != nil {
 			_ = rows.Close()
 			return nil, 0, err
 		}

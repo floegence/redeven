@@ -14,8 +14,9 @@ import (
 	"testing"
 	"testing/fstest"
 
-	flprovider "github.com/floegence/floret/v2/provider"
-	flruntime "github.com/floegence/floret/v2/runtime"
+	"github.com/floegence/floret/v3/identity"
+	flprovider "github.com/floegence/floret/v3/provider"
+	flruntime "github.com/floegence/floret/v3/runtime"
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	redevenconfig "github.com/floegence/redeven/internal/config"
@@ -276,8 +277,8 @@ func seedFloretReferenceOpenTurn(t *testing.T, stateDir string, threadID string,
 			Kind: "file_path", Title: reference.Label, Metadata: map[string]string{"reference_id": reference.ReferenceID}, Sensitive: true,
 		})
 	}
-	runAppserverTestFloretTurn(t, filepath.Join(stateDir, "ai", "floret_threads.sqlite"), flruntime.ThreadID(threadID), appserverTestGateway{events: []flprovider.Event{{Type: flprovider.EventDelta, Text: "done"}, {Type: flprovider.EventDone, Reason: "stop"}}}, flruntime.TurnRequest{
-		TurnID: flruntime.TurnID(turnID), RunID: flruntime.RunID("run_" + turnID),
+	runAppserverTestFloretTurn(t, filepath.Join(stateDir, "ai", "floret_threads.sqlite"), identity.ThreadID(threadID), appserverTestGateway{events: []flprovider.Event{{Type: flprovider.EventDelta, Text: "done"}, {Type: flprovider.EventDone, Reason: "stop"}}}, appserverTestFloretTurnRequest{
+		TurnID: identity.TurnID(turnID), RunID: identity.RunID("run_" + turnID),
 		Input: flruntime.TurnInput{References: references}, SupplementalContext: supplemental,
 	})
 }

@@ -46,7 +46,8 @@ func (r *run) loadFloretPermissionSnapshot(ctx context.Context, hostContext map[
 	var rec threadstore.PermissionSnapshotRecord
 	var ok bool
 	var err error
-	if ownerThreadID == strings.TrimSpace(r.threadID) && ownerRunID == strings.TrimSpace(r.id) {
+	canonicalRunID, canonicalThreadID, _ := r.floretCanonicalIdentity()
+	if ownerThreadID == canonicalThreadID && ownerRunID == canonicalRunID {
 		rec, ok, err = r.product.loadPermissionSnapshot(ctx, snapshotID)
 	} else {
 		rec, ok, err = r.product.loadChildPermissionSnapshot(ctx, snapshotID, ownerThreadID, ownerRunID)
@@ -108,12 +109,84 @@ func (r *run) preparePermissionSnapshot(snapshot PermissionSnapshot) (Permission
 	if r == nil {
 		return PermissionSnapshot{}, errors.New("missing permission snapshot owner")
 	}
-	snapshot = permissionSnapshotWithOwnerIdentity(snapshot, r.endpointID, r.threadID, r.id)
+	ownerRunID, ownerThreadID, _ := r.floretCanonicalIdentity()
+	if ownerRunID == "" {
+		r.muPendingCommand.Lock()
+		logicalRequestID := strings.TrimSpace(r.pendingCommandID)
+		r.muPendingCommand.Unlock()
+		if logicalRequestID != "" {
+			ownerRunID, ownerThreadID = logicalRequestID, r.threadID
+		} else {
+			ownerRunID, ownerThreadID = r.id, r.threadID
+		}
+	}
+	snapshot = permissionSnapshotWithOwnerIdentity(snapshot, r.endpointID, ownerThreadID, ownerRunID)
 	if !permissionSnapshotActive(snapshot) || strings.TrimSpace(snapshot.SnapshotHash) == "" {
 		return PermissionSnapshot{}, errors.New("permission snapshot is empty")
 	}
 	r.setPermissionState(snapshot.PermissionType, snapshot)
 	return snapshot, nil
+}
+
+func permissionSnapshotRecordForCanonicalOwner(snapshot PermissionSnapshot, endpointID, threadID, runID string, createdAtUnixMs int64) (threadstore.PermissionSnapshotRecord, error) {
+	snapshot = permissionSnapshotWithOwnerIdentity(snapshot, endpointID, threadID, runID)
+	if !permissionSnapshotActive(snapshot) || strings.TrimSpace(snapshot.SnapshotID) == "" {
+		return threadstore.PermissionSnapshotRecord{}, errors.New("permission snapshot is unavailable")
+	}
+	payload, err := marshalPermissionSnapshot(snapshot)
+	if err != nil {
+		return threadstore.PermissionSnapshotRecord{}, err
+	}
+	if createdAtUnixMs <= 0 {
+		createdAtUnixMs = time.Now().UnixMilli()
+	}
+	return threadstore.PermissionSnapshotRecord{
+		SnapshotID: snapshot.SnapshotID, EndpointID: strings.TrimSpace(endpointID),
+		OwnerThreadID: strings.TrimSpace(threadID), OwnerRunID: strings.TrimSpace(runID),
+		PermissionType: permissionTypeString(snapshot.PermissionType), SnapshotJSON: string(payload),
+		SnapshotHash: snapshot.SnapshotHash, RegistryHash: snapshot.RegistryHash, SchemaHash: snapshot.SchemaHash,
+		PresentationHash: snapshot.PresentationHash, CreatedAtUnixMs: createdAtUnixMs,
+	}, nil
+}
+
+func (r *run) ensureCanonicalPermissionSnapshotPersisted(ctx context.Context) error {
+	if r == nil {
+		return errors.New("missing permission snapshot owner")
+	}
+	ownerRunID, ownerThreadID, _ := r.floretCanonicalIdentity()
+	if strings.TrimSpace(ownerRunID) == "" || strings.TrimSpace(ownerThreadID) == "" {
+		return errors.New("Floret canonical permission owner is unavailable")
+	}
+	snapshot := permissionSnapshotWithOwnerIdentity(r.currentPermissionSnapshot(), r.endpointID, ownerThreadID, ownerRunID)
+	if err := validatePermissionSnapshotConsistency(snapshot); err != nil {
+		return fmt.Errorf("validate canonical permission snapshot: %w", err)
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	record, found, err := r.product.loadPermissionSnapshot(ctx, snapshot.SnapshotID)
+	if err != nil {
+		return fmt.Errorf("load canonical permission snapshot: %w", err)
+	}
+	if !found {
+		if r.awaitFloretAdmission.Load() {
+			return errors.New("canonical permission snapshot is missing after durable admission")
+		}
+		if err := r.persistPermissionSnapshotForOwner(snapshot, ownerThreadID, ownerRunID); err != nil {
+			return err
+		}
+		record, found, err = r.product.loadPermissionSnapshot(ctx, snapshot.SnapshotID)
+		if err != nil {
+			return fmt.Errorf("reload canonical permission snapshot: %w", err)
+		}
+	}
+	if !found || record.OwnerThreadID != ownerThreadID || record.OwnerRunID != ownerRunID ||
+		record.SnapshotHash != snapshot.SnapshotHash || record.RegistryHash != snapshot.RegistryHash ||
+		record.SchemaHash != snapshot.SchemaHash || record.PresentationHash != snapshot.PresentationHash {
+		return errors.New("canonical permission snapshot differs from the admitted tool surface")
+	}
+	r.setPermissionState(snapshot.PermissionType, snapshot)
+	return nil
 }
 
 func (r *run) commitPermissionSnapshot(snapshot PermissionSnapshot) error {
@@ -177,6 +250,14 @@ func persistContextForRun(r *run) (context.Context, context.CancelFunc) {
 }
 
 func (r *run) persistPermissionSnapshot(snapshot PermissionSnapshot) error {
+	ownerRunID, ownerThreadID, _ := r.floretCanonicalIdentity()
+	if ownerRunID == "" {
+		return errors.New("Floret canonical permission owner is unavailable")
+	}
+	return r.persistPermissionSnapshotForOwner(snapshot, ownerThreadID, ownerRunID)
+}
+
+func (r *run) persistPermissionSnapshotForOwner(snapshot PermissionSnapshot, ownerThreadID, ownerRunID string) error {
 	if r == nil || r.product.insertPermissionSnapshot == nil {
 		return errors.New("permission snapshot store is unavailable")
 	}
@@ -192,8 +273,8 @@ func (r *run) persistPermissionSnapshot(snapshot PermissionSnapshot) error {
 	if err := r.product.persistPermissionSnapshot(ctx, threadstore.PermissionSnapshotRecord{
 		SnapshotID:       snapshot.SnapshotID,
 		EndpointID:       strings.TrimSpace(r.endpointID),
-		OwnerThreadID:    strings.TrimSpace(r.threadID),
-		OwnerRunID:       strings.TrimSpace(r.id),
+		OwnerThreadID:    strings.TrimSpace(ownerThreadID),
+		OwnerRunID:       strings.TrimSpace(ownerRunID),
 		PermissionType:   permissionTypeString(snapshot.PermissionType),
 		SnapshotJSON:     string(payload),
 		SnapshotHash:     snapshot.SnapshotHash,
@@ -215,8 +296,8 @@ func (r *run) childPermissionSnapshotRecord(childThreadID string, childRunID str
 	childRunID = strings.TrimSpace(childRunID)
 	spawnToolCallID = strings.TrimSpace(spawnToolCallID)
 	state = strings.TrimSpace(state)
-	parentRunID := strings.TrimSpace(r.id)
-	if childThreadID == "" || childRunID == "" || childRunID == childThreadID || (parentRunID != "" && childRunID == parentRunID) {
+	parentRunID, parentThreadID, _ := r.floretCanonicalIdentity()
+	if parentRunID == "" || parentThreadID == "" || childThreadID == "" || childRunID == "" || childRunID == childThreadID || childRunID == parentRunID {
 		return threadstore.ChildPermissionSnapshotRecord{}, errors.New("invalid child permission snapshot owner identity")
 	}
 	if spawnToolCallID == "" || spawnToolCallID == childThreadID || spawnToolCallID == childRunID {
@@ -235,8 +316,8 @@ func (r *run) childPermissionSnapshotRecord(childThreadID string, childRunID str
 		EndpointID:       strings.TrimSpace(r.endpointID),
 		ParentSnapshotID: parentSnapshot.SnapshotID,
 		SpawnToolCallID:  spawnToolCallID,
-		ParentThreadID:   strings.TrimSpace(r.threadID),
-		ParentRunID:      strings.TrimSpace(r.id),
+		ParentThreadID:   parentThreadID,
+		ParentRunID:      parentRunID,
 		ChildThreadID:    childThreadID,
 		ChildRunID:       childRunID,
 		State:            state,

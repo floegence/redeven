@@ -7,7 +7,8 @@ import (
 	"fmt"
 	"strings"
 
-	flruntime "github.com/floegence/floret/v2/runtime"
+	"github.com/floegence/floret/v3/identity"
+	flruntime "github.com/floegence/floret/v3/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
@@ -21,11 +22,13 @@ type threadDeleteFloretCoordinator struct {
 	authority floretThreadDeleteAuthority
 }
 
-func (c *threadDeleteFloretCoordinator) delete(ctx context.Context, threadID string) error {
+func (c *threadDeleteFloretCoordinator) delete(ctx context.Context, operationID string, threadID string) error {
 	if c == nil || c.authority == nil {
 		return errors.New("Floret delete coordinator authority is unavailable")
 	}
-	return c.authority.DeleteThread(ctxOrBackground(ctx), flruntime.ThreadID(strings.TrimSpace(threadID)))
+	return c.authority.DeleteThread(ctxOrBackground(ctx), identity.ThreadID(strings.TrimSpace(threadID)), flruntime.DeleteThreadCommand{
+		LogicalRequestID: identity.LogicalRequestID(strings.TrimSpace(operationID)),
+	})
 }
 
 type ThreadDeleteStatus string
@@ -198,7 +201,7 @@ func (s *Service) advanceThreadDeleteOperation(ctx context.Context, operationID 
 		if s.threadDeleteFloret == nil {
 			return s.keepThreadDeletePending(ctx, operation, "floret_host_open_failed", errors.New("Floret delete coordinator authority is unavailable"))
 		}
-		deleteErr := s.threadDeleteFloret.delete(ctx, operation.ThreadID)
+		deleteErr := s.threadDeleteFloret.delete(ctx, operation.OperationID, operation.ThreadID)
 		if deleteErr != nil {
 			if errorCode, terminal := classifyFloretThreadDeleteError(deleteErr); terminal {
 				failed, markErr := db.MarkThreadDeleteFailed(ctxOrBackground(ctx), operation.OperationID, errorCode, sanitizeLogText(deleteErr.Error(), 600))

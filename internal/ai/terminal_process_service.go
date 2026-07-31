@@ -7,8 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/floegence/floret/v2/observation"
-	flruntime "github.com/floegence/floret/v2/runtime"
+	"github.com/floegence/floret/v3/identity"
+	flruntime "github.com/floegence/floret/v3/runtime"
+	fltools "github.com/floegence/floret/v3/tools"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -193,17 +194,18 @@ func (s *Service) persistTimeout() time.Duration {
 	return s.persistOpTO
 }
 
-func terminalProcessSettlementRequest(target flruntime.PendingToolSettlementTarget, snapshot terminalProcessSnapshot, resultPayload map[string]any) (flruntime.PendingToolSettlementRequest, error) {
+func terminalProcessSettlementRequest(target flruntime.PendingToolSettlementTarget, snapshot terminalProcessSnapshot, resultPayload map[string]any) (floretPendingToolSettlementRequest, error) {
 	status, err := terminalSettlementStatus(snapshot.Status)
 	if err != nil {
-		return flruntime.PendingToolSettlementRequest{}, err
+		return floretPendingToolSettlementRequest{}, err
 	}
-	return flruntime.PendingToolSettlementRequest{
-		Target:   target,
-		Status:   status,
-		Summary:  terminalSettlementSummary(snapshot),
-		Output:   strings.TrimRight(snapshot.Output, "\n"),
-		Activity: terminalProcessActivity(snapshot, resultPayload),
+	return floretPendingToolSettlementRequest{
+		LogicalRequestID: identity.LogicalRequestID("settle-" + strings.TrimSpace(target.ToolCallID) + "-" + strings.TrimSpace(target.EffectAttemptID)),
+		Target:           target,
+		Status:           status,
+		Summary:          terminalSettlementSummary(snapshot),
+		Output:           strings.TrimRight(snapshot.Output, "\n"),
+		Activity:         terminalProcessActivity(snapshot, resultPayload),
 	}, nil
 }
 
@@ -231,18 +233,18 @@ func terminalSettlementSummary(snapshot terminalProcessSnapshot) string {
 	}
 }
 
-func terminalProcessActivity(snapshot terminalProcessSnapshot, payload map[string]any) *observation.ActivityPresentation {
+func terminalProcessActivity(snapshot terminalProcessSnapshot, payload map[string]any) *fltools.ActivityPresentation {
 	label := activityPresentationLabel(snapshot.Command)
 	if label == "" {
 		label = "terminal.exec"
 	}
-	return contractSafeActivityPresentationForTool("terminal.exec", &observation.ActivityPresentation{
+	return contractSafeActivityPresentationForTool("terminal.exec", &fltools.ActivityPresentation{
 		Label:    label,
-		Renderer: observation.ActivityRendererTerminal,
-		Chips: []observation.ActivityChip{
+		Renderer: fltools.ActivityRendererTerminal,
+		Chips: []fltools.ActivityChip{
 			{Kind: "tool", Label: "shell", Tone: "neutral"},
 			{Kind: "process", Label: "process", Value: snapshot.ProcessID, Tone: "quiet"},
 		},
-		Payload: payload,
+		Payload: activityPayloadForRenderer(fltools.ActivityRendererTerminal, payload),
 	})
 }

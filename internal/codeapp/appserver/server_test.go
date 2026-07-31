@@ -21,8 +21,9 @@ import (
 	"testing/fstest"
 	"time"
 
-	flprovider "github.com/floegence/floret/v2/provider"
-	flruntime "github.com/floegence/floret/v2/runtime"
+	"github.com/floegence/floret/v3/identity"
+	flprovider "github.com/floegence/floret/v3/provider"
+	flruntime "github.com/floegence/floret/v3/runtime"
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/auditlog"
 	"github.com/floegence/redeven/internal/codeapp/codeserver"
@@ -3123,14 +3124,16 @@ func TestServer_AIThreadForkDecodesBodyStrictly(t *testing.T) {
 		t.Fatalf("extra fork path status=%d, want=%d body=%s", extraPath.Code, http.StatusNotFound, extraPath.Body.String())
 	}
 
-	rr := performServerRequest(srv, http.MethodPost, forkPath, origin, `{"title":"Server fork"}`)
+	const clientRequestID = "fork_server_strict_body"
+	rr := performServerRequest(srv, http.MethodPost, forkPath, origin, `{"client_request_id":"`+clientRequestID+`","title":"Server fork"}`)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("fork status=%d, want=%d body=%s", rr.Code, http.StatusOK, rr.Body.String())
 	}
 	var resp struct {
 		OK   bool `json:"ok"`
 		Data struct {
-			Thread struct {
+			ClientRequestID string `json:"client_request_id"`
+			Thread          struct {
 				ThreadID string `json:"thread_id"`
 				Title    string `json:"title"`
 			} `json:"thread"`
@@ -3139,7 +3142,7 @@ func TestServer_AIThreadForkDecodesBodyStrictly(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal fork response: %v", err)
 	}
-	if !resp.OK || strings.TrimSpace(resp.Data.Thread.ThreadID) == "" || resp.Data.Thread.ThreadID == thread.ThreadID || resp.Data.Thread.Title != "Server fork" {
+	if !resp.OK || resp.Data.ClientRequestID != clientRequestID || strings.TrimSpace(resp.Data.Thread.ThreadID) == "" || resp.Data.Thread.ThreadID == thread.ThreadID || resp.Data.Thread.Title != "Server fork" {
 		t.Fatalf("fork response=%+v, want titled fork", resp)
 	}
 }
@@ -3152,12 +3155,12 @@ func seedFloretForkSourceThread(t *testing.T, stateDir string, threadID string) 
 func seedFloretThreadTurn(t *testing.T, stateDir string, threadID string, turnID string, runID string, input string, output string) {
 	t.Helper()
 
-	runAppserverTestFloretTurn(t, filepath.Join(stateDir, "ai", "floret_threads.sqlite"), flruntime.ThreadID(threadID), appserverTestGateway{events: []flprovider.Event{
+	runAppserverTestFloretTurn(t, filepath.Join(stateDir, "ai", "floret_threads.sqlite"), identity.ThreadID(threadID), appserverTestGateway{events: []flprovider.Event{
 		{Type: flprovider.EventDelta, Text: output},
 		{Type: flprovider.EventDone, Reason: "stop"},
-	}}, flruntime.TurnRequest{
-		TurnID: flruntime.TurnID(turnID),
-		RunID:  flruntime.RunID(runID),
+	}}, appserverTestFloretTurnRequest{
+		TurnID: identity.TurnID(turnID),
+		RunID:  identity.RunID(runID),
 		Input:  flruntime.TurnInput{Text: input},
 	})
 }

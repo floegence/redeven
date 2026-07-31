@@ -6,7 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	flruntime "github.com/floegence/floret/v2/runtime"
+	flruntime "github.com/floegence/floret/v3/runtime"
+	fltools "github.com/floegence/floret/v3/tools"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -412,36 +413,19 @@ func TestBuiltInToolHandlerExecute_PreservesLargeApplyPatchActivityPayload(t *te
 	if activity == nil {
 		t.Fatal("activity is nil")
 	}
-	if _, ok := activity.Payload["raw"]; ok {
-		t.Fatalf("activity payload must not collapse to raw: %#v", activity.Payload)
-	}
-	mutations := toAnySlice(activity.Payload["mutations"])
-	if len(mutations) != 1 {
-		t.Fatalf("mutations=%#v, want one mutation", activity.Payload["mutations"])
-	}
-	mutation, ok := mutations[0].(map[string]any)
+	payload, ok := activity.Payload.(fltools.PatchActivityPayload)
 	if !ok {
-		t.Fatalf("mutation type=%T", mutations[0])
+		t.Fatalf("payload=%T, want PatchActivityPayload", activity.Payload)
 	}
-	diff := anyToString(mutation["unified_diff"])
-	if strings.Count(diff, "@@ -") != 2 {
-		t.Fatalf("unified_diff=%q, want two patch hunks", diff)
+	if strings.Count(payload.Diff, "@@ -") != 2 {
+		t.Fatalf("diff=%q, want two patch hunks", payload.Diff)
 	}
-	if anyToString(mutation["display_name"]) != "app.txt" {
-		t.Fatalf("mutation display metadata=%#v", mutation)
+	if payload.Path != "app.txt" {
+		t.Fatalf("path=%q, want app.txt", payload.Path)
 	}
-	if _, ok := mutation["preview_path"]; ok {
-		t.Fatalf("mutation activity payload must not include preview_path: %#v", mutation)
-	}
-	if _, ok := mutation["directory_path"]; ok {
-		t.Fatalf("mutation activity payload must not include directory_path: %#v", mutation)
-	}
-	actionID := anyToString(mutation["file_action_id"])
+	actionID := activityActionIDFromTargetRefs(activity.TargetRefs)
 	if actionID == "" {
-		t.Fatalf("mutation file_action_id=%#v, want action id", mutation)
-	}
-	if strings.Contains(actionID, "workspace") || strings.Contains(actionID, "app") {
-		t.Fatalf("file_action_id=%q must be opaque", actionID)
+		t.Fatalf("target refs=%#v, want file action", activity.TargetRefs)
 	}
 	action := r.activityFileActions[actionID]
 	if action.DisplayName != "app.txt" || canonicalPath(action.PreviewPath) != canonicalPath(filepath.Join(workingDir, "app.txt")) || canonicalPath(action.DirectoryPath) != canonicalPath(workingDir) {

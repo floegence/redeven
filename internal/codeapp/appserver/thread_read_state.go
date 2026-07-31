@@ -44,7 +44,8 @@ type aiListThreadsView struct {
 }
 
 type aiThreadEnvelope struct {
-	Thread aiThreadView `json:"thread"`
+	ClientRequestID string       `json:"client_request_id,omitempty"`
+	Thread          aiThreadView `json:"thread"`
 }
 
 type aiMarkThreadReadRequest struct {

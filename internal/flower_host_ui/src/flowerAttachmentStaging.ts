@@ -12,35 +12,25 @@ function boundedSecret(value: unknown): string {
   return secret && secret.length <= 1024 && !/[\r\n\0]/u.test(secret) ? secret : '';
 }
 
-export function createFlowerClientThreadID(): string {
-  if (typeof crypto === 'undefined' || typeof crypto.getRandomValues !== 'function') {
-    throw new Error('Secure Flower thread identity generation is unavailable.');
-  }
-  const bytes = crypto.getRandomValues(new Uint8Array(18));
-  let binary = '';
-  for (const value of bytes) binary += String.fromCharCode(value);
-  return `th_${btoa(binary).replace(/\+/gu, '-').replace(/\//gu, '_').replace(/=+$/u, '')}`;
-}
-
 export function normalizeFlowerAttachmentStagingScope(
   raw: unknown,
   capabilityHeader: unknown,
-  expectedThreadID: string,
+  expectedTargetID: string,
 ): FlowerAttachmentStagingScope {
   const record = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
   const stagingScopeID = trim(record.staging_scope_id);
-  const threadID = trim(record.thread_id);
+  const targetID = trim(record.target_id);
   const capability = boundedSecret(capabilityHeader);
   const expiresAt = Number(record.expires_at_unix_ms);
   if (!stagingScopeID || stagingScopeID.length > 200 || /[\r\n\0]/u.test(stagingScopeID)
-    || !threadID || threadID !== trim(expectedThreadID)
+    || !targetID || targetID !== trim(expectedTargetID)
     || !capability
     || !Number.isSafeInteger(expiresAt) || expiresAt <= 0) {
     throw new Error('Flower attachment staging scope response is invalid.');
   }
   return {
     staging_scope_id: stagingScopeID,
-    thread_id: threadID,
+    target_id: targetID,
     capability,
     expires_at_unix_ms: expiresAt,
   };

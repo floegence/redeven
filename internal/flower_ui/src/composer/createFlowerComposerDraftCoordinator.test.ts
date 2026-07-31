@@ -118,7 +118,7 @@ describe('createFlowerComposerDraftCoordinator', () => {
     const coordinator = createFlowerComposerDraftCoordinator({ now: () => 100 });
     const create = vi.fn(async () => ({
       staging_scope_id: 'staging-scope-1',
-      thread_id: 'thread-1',
+      target_id: 'thread-1',
       capability: 'connection-secret',
       expires_at_unix_ms: 10_000,
     }));
@@ -143,7 +143,7 @@ describe('createFlowerComposerDraftCoordinator', () => {
     const coordinator = createFlowerComposerDraftCoordinator({ now: () => 100 });
     const stagingScope = {
       staging_scope_id: 'staging-scope-new',
-      thread_id: 'thread-created',
+      target_id: 'client-create',
       capability: 'connection-secret',
       expires_at_unix_ms: 10_000,
     };
@@ -159,7 +159,7 @@ describe('createFlowerComposerDraftCoordinator', () => {
     const coordinator = createFlowerComposerDraftCoordinator({ now: () => 100 });
     let resolveCreation!: (scope: {
       staging_scope_id: string;
-      thread_id: string;
+      target_id: string;
       capability: string;
       expires_at_unix_ms: number;
     }) => void;
@@ -171,7 +171,7 @@ describe('createFlowerComposerDraftCoordinator', () => {
     coordinator.moveScope('', 'thread-created');
     const stagingScope = {
       staging_scope_id: 'staging-scope-moved-pending',
-      thread_id: 'thread-created',
+      target_id: 'client-create',
       capability: 'connection-secret',
       expires_at_unix_ms: 10_000,
     };
@@ -189,11 +189,11 @@ describe('createFlowerComposerDraftCoordinator', () => {
     const coordinator = createFlowerComposerDraftCoordinator({ now: () => now });
     const scopes = [
       {
-        staging_scope_id: 'staging-scope-old', thread_id: 'thread-1', capability: 'old-secret',
+        staging_scope_id: 'staging-scope-old', target_id: 'thread-1', capability: 'old-secret',
         expires_at_unix_ms: 6_000,
       },
       {
-        staging_scope_id: 'staging-scope-new', thread_id: 'thread-1', capability: 'new-secret',
+        staging_scope_id: 'staging-scope-new', target_id: 'thread-1', capability: 'new-secret',
         expires_at_unix_ms: 20_000,
       },
     ];

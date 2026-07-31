@@ -28,10 +28,10 @@ esac
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 ROOT_DIR=$(cd -- "$SCRIPT_DIR/.." &> /dev/null && pwd)
 PARENT_DIR=$(cd -- "$ROOT_DIR/.." &> /dev/null && pwd)
-FLORET_MODULE="github.com/floegence/floret/v2"
-FLORET_VERSION="v2.2.0"
-FLORET_SUM="h1:JUiqMOBCexZsBPERi8DFp17aTEJXjfQklzbXjONeUk0="
-FLORET_GO_MOD_SUM="h1:4oJLc82ilKhbvJ13xFyWMngbHJbxKQjDWxf3hMFT34s="
+FLORET_MODULE="github.com/floegence/floret/v3"
+FLORET_VERSION="v3.0.2"
+FLORET_SUM="h1:fTPUiWMzk9kafKik7vguusr58myc/QQ6VpOJsH6yedg="
+FLORET_GO_MOD_SUM="h1:2M+JA7dpEf62qjtWuLEAzkAo4NYGYOTnAcRWdzCoiLU="
 
 cd "$ROOT_DIR"
 export GOWORK=off
@@ -76,12 +76,12 @@ check_go_module_boundary() {
     fail "Floret must not be wired through a local Go replace target."
   fi
 
-  if matches=$(rg -n --pcre2 '^\s*replace\s+github\.com/floegence/floret(?:/v2)?\b' go.mod 2>/dev/null); then
+  if matches=$(rg -n --pcre2 '^\s*replace\s+github\.com/floegence/floret(?:/v[0-9]+)?\b' go.mod 2>/dev/null); then
     printf '%s\n' "$matches"
     fail "Floret Go module replacements are forbidden in Redeven."
   fi
 
-  if rg -q --pcre2 '"github\.com/floegence/floret/v2(/[^"]*)?"' --glob '*.go' .; then
+  if rg -q --pcre2 '"github\.com/floegence/floret/v3(/[^"]*)?"' --glob '*.go' .; then
     if ! module_contract=$(go list -mod=readonly -m -f '{{.Path}}|{{.Version}}|{{if .Replace}}{{.Replace.Path}}|{{.Replace.Version}}{{end}}' "$FLORET_MODULE"); then
       fail "The published Floret module cannot be resolved."
     elif [ "$module_contract" != "$FLORET_MODULE|$FLORET_VERSION|" ]; then
@@ -129,7 +129,7 @@ check_local_source_wiring() {
 check_no_floret_internal_imports() {
   local matches
 
-  if matches=$(rg -n --pcre2 '"github\.com/floegence/floret/v2/internal(?:/[^"]*)?"' --glob '*.go' . 2>/dev/null); then
+  if matches=$(rg -n --pcre2 '"github\.com/floegence/floret/v3/internal(?:/[^"]*)?"' --glob '*.go' . 2>/dev/null); then
     printf '%s\n' "$matches"
     fail "Redeven must not import Floret internal packages."
   fi
@@ -226,7 +226,7 @@ check_canonical_subagent_and_root_inventory_boundaries() {
 	fi
 	if ! rg -q 'ThreadUserMessageOriginDelegatedMission' internal/ai/subagents_floret.go \
 		|| ! rg -q 'ListThreadTurns' internal/ai/floret_contracts.go \
-		|| ! rg -q 'host.ThreadInventory' internal/ai/floret_bootstrap.go \
+		|| ! rg -q 'host.Threads()' internal/ai/floret_bootstrap.go \
 		|| ! rg -q 'UserMessageOrigin.*UserEntryID' AGENTS.md \
 		|| ! rg -q '`ThreadInventory` handle' AGENTS.md; then
 		fail "Typed SubAgent origin reads and Floret root inventory authority must remain wired through public contracts."
@@ -274,7 +274,7 @@ check_floret_capability_bootstrap_boundary() {
 	local matches file alias
 
 	while IFS= read -r file; do
-		alias=$(sed -nE 's/^[[:space:]]*([[:alnum:]_]+)[[:space:]]+"github\.com\/floegence\/floret\/v2\/runtime".*/\1/p' "$file" | head -n 1)
+		alias=$(sed -nE 's/^[[:space:]]*([[:alnum:]_]+)[[:space:]]+"github\.com\/floegence\/floret\/v3\/runtime".*/\1/p' "$file" | head -n 1)
 		if [ -z "$alias" ]; then
 			alias=runtime
 		fi
@@ -298,7 +298,7 @@ check_floret_capability_bootstrap_boundary() {
 			printf '%s\n' "$matches"
 			fail "Raw Floret runtime tokens, concrete hosts, and capability constructors must stay in floret_bootstrap.go."
 		fi
-	done < <(rg -l --glob '*.go' '"github\.com/floegence/floret/v2/runtime"' internal 2>/dev/null)
+	done < <(rg -l --glob '*.go' '"github\.com/floegence/floret/v3/runtime"' internal 2>/dev/null)
 
 	if matches=$(rg -n --pcre2 \
 		--glob '*.go' \

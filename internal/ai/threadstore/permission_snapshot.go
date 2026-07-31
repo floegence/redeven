@@ -62,6 +62,20 @@ func (s *Store) InsertPermissionSnapshot(ctx context.Context, rec PermissionSnap
 	if err := requireThreadWritableTx(ctx, tx, rec.EndpointID, rec.OwnerThreadID); err != nil {
 		return err
 	}
+	if err := insertPermissionSnapshotTx(ctx, tx, rec); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func insertPermissionSnapshotTx(ctx context.Context, tx *sql.Tx, rec PermissionSnapshotRecord) error {
+	rec = normalizePermissionSnapshotRecord(rec)
+	if err := validatePermissionSnapshotRecord(rec); err != nil {
+		return err
+	}
+	if err := requireThreadWritableTx(ctx, tx, rec.EndpointID, rec.OwnerThreadID); err != nil {
+		return err
+	}
 	if _, err := tx.ExecContext(ctx, `
 INSERT OR IGNORE INTO ai_permission_snapshots(
   snapshot_id, endpoint_id, owner_thread_id, owner_run_id, permission_type,
@@ -98,7 +112,7 @@ WHERE snapshot_id = ?
 		stored.SchemaHash != rec.SchemaHash || stored.PresentationHash != rec.PresentationHash {
 		return fmt.Errorf("permission snapshot %q conflicts with the stored audit record", rec.SnapshotID)
 	}
-	return tx.Commit()
+	return nil
 }
 
 func validatePermissionSnapshotRecord(rec PermissionSnapshotRecord) error {

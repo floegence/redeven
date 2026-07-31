@@ -14,16 +14,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/floegence/floret/v2/observation"
-	flruntime "github.com/floegence/floret/v2/runtime"
-	fltools "github.com/floegence/floret/v2/tools"
+	"github.com/floegence/floret/v3/identity"
+	"github.com/floegence/floret/v3/observation"
+	flruntime "github.com/floegence/floret/v3/runtime"
+	fltools "github.com/floegence/floret/v3/tools"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
 
-func mustFloretToolResultActivity(t *testing.T, r *run, result ToolResult) *observation.ActivityPresentation {
+func mustFloretToolResultActivity(t *testing.T, r *run, result ToolResult) *fltools.ActivityPresentation {
 	t.Helper()
 	activity, err := floretActivityForToolResult(r, result)
 	if err != nil {
@@ -76,10 +77,10 @@ func floretToolRegistryParentRunOptions(r *run, suffix string) fltools.DispatchO
 	}
 	snapshot := r.currentPermissionSnapshot()
 	return fltools.DispatchOptions{
-		RunID:         strings.TrimSpace(r.id),
-		ThreadID:      strings.TrimSpace(r.threadID),
-		TurnID:        strings.TrimSpace(r.turnID),
-		PromptScopeID: strings.TrimSpace(r.threadID),
+		RunID:         identity.RunID(strings.TrimSpace(r.id)),
+		ThreadID:      identity.ThreadID(strings.TrimSpace(r.threadID)),
+		TurnID:        identity.TurnID(strings.TrimSpace(r.turnID)),
+		PromptScopeID: identity.PromptScopeID(strings.TrimSpace(r.threadID)),
 		Step:          1,
 		HostContext: map[string]string{
 			floretToolHostContextPermissionSnapshotIDKey: strings.TrimSpace(snapshot.SnapshotID),
@@ -96,16 +97,16 @@ func floretToolRegistryTestEffectDispatcher(r *run) fltools.EffectDispatcher {
 			return fltools.Result{CallID: req.CallID, Name: req.Name, IsError: true, DispatchErr: errors.New("test effect authorization unavailable")}
 		}
 		argumentHash := floretEffectArgumentHash(req.RawArgs)
-		fingerprint := floretEffectArgumentHash(strings.Join([]string{req.ThreadID, req.TurnID, req.RunID, req.CallID, req.Name, argumentHash}, "\x00"))
+		fingerprint := floretEffectArgumentHash(strings.Join([]string{string(req.ThreadID), string(req.TurnID), string(req.RunID), req.CallID, req.Name, argumentHash}, "\x00"))
 		var result fltools.Result
 		err := r.withAuthorizedFloretEffect(ctx, flruntime.EffectAuthorizationRequest{
 			EffectAttemptID: "test_effect:" + strings.TrimSpace(req.CallID), RequestFingerprint: fingerprint,
-			ThreadID: flruntime.ThreadID(req.ThreadID), TurnID: flruntime.TurnID(req.TurnID), RunID: flruntime.RunID(req.RunID),
+			ThreadID: identity.ThreadID(req.ThreadID), TurnID: identity.TurnID(req.TurnID), RunID: identity.RunID(req.RunID),
 			ToolCallID: req.CallID, ToolName: req.Name, ArgumentHash: argumentHash,
 			Step: req.Step, BatchIndex: req.BatchIndex, BatchSize: req.BatchSize,
 			Labels: req.Labels, HostContext: req.HostContext, Resources: req.Resources, Effects: req.Effects,
 			Permission: req.Permission, ReadOnly: req.ReadOnly, Destructive: req.Destructive, OpenWorld: req.OpenWorld,
-			LeaseOwnerID: "test_lease:" + strings.TrimSpace(req.RunID), LeaseGeneration: 1, ObservedHeartbeat: 1,
+			LeaseOwnerID: "test_lease:" + strings.TrimSpace(string(req.RunID)), LeaseGeneration: 1, ObservedHeartbeat: 1,
 		}, func(executionCtx context.Context, _ flruntime.EffectAuthorizationProof) error {
 			result = invoke(executionCtx)
 			return result.DispatchErr
@@ -258,7 +259,8 @@ func TestFloretTerminalReadActivityKeepsModelIntentAcrossResult(t *testing.T) {
 	if callActivity == nil || callActivity.Label != intent || callActivity.Description != "" {
 		t.Fatalf("call activity=%#v, want intent label without duplicate description", callActivity)
 	}
-	if _, ok := callActivity.Payload["description"]; ok {
+	callPayload := activityPayloadMap(callActivity.Payload)
+	if _, ok := callPayload["description"]; ok {
 		t.Fatalf("call payload duplicated description: %#v", callActivity.Payload)
 	}
 
@@ -288,7 +290,8 @@ func TestFloretTerminalReadActivityKeepsModelIntentAcrossResult(t *testing.T) {
 		t.Fatalf("timeline items=%#v, want one", timeline.Items)
 	}
 	item := timeline.Items[0]
-	if item.Label != intent || item.Payload["command"] != "docker compose up --build -d" || item.Payload["output"] != "building...\n" {
+	itemPayload := activityPayloadMap(item.Presentation.Payload)
+	if item.Presentation == nil || item.Presentation.Label != intent || itemPayload["command"] != "docker compose up --build -d" || itemPayload["output"] != "building...\n" {
 		t.Fatalf("terminal.read timeline item=%#v", item)
 	}
 }
@@ -304,10 +307,11 @@ func TestFloretTerminalTerminateActivityKeepsModelIntentAcrossResult(t *testing.
 	if callActivity == nil || callActivity.Label != intent || callActivity.Description != "" {
 		t.Fatalf("call activity=%#v, want intent label without duplicate description", callActivity)
 	}
-	if callActivity.Payload["process_id"] != "tp_build" {
+	callPayload := activityPayloadMap(callActivity.Payload)
+	if callPayload["process_id"] != "tp_build" {
 		t.Fatalf("call payload=%#v, want process_id detail", callActivity.Payload)
 	}
-	if _, ok := callActivity.Payload["description"]; ok {
+	if _, ok := callPayload["description"]; ok {
 		t.Fatalf("call payload duplicated description: %#v", callActivity.Payload)
 	}
 
@@ -334,7 +338,8 @@ func TestFloretTerminalTerminateActivityKeepsModelIntentAcrossResult(t *testing.
 		t.Fatalf("timeline items=%#v, want one", timeline.Items)
 	}
 	item := timeline.Items[0]
-	if item.Label != intent || item.Payload["process_id"] != "tp_build" || item.Payload["terminated"] != true {
+	itemPayload := activityPayloadMap(item.Presentation.Payload)
+	if item.Presentation == nil || item.Presentation.Label != intent || itemPayload["process_id"] != "tp_build" || itemPayload["terminated"] != true {
 		t.Fatalf("terminal.terminate timeline item=%#v", item)
 	}
 }
@@ -488,22 +493,23 @@ func TestFloretActivityForTerminalCallUsesCommandAsLabel(t *testing.T) {
 	if activity.Label != "npm run build -- --mode production" {
 		t.Fatalf("label=%q, want command", activity.Label)
 	}
-	if activity.Renderer != observation.ActivityRendererTerminal {
+	if activity.Renderer != fltools.ActivityRendererTerminal {
 		t.Fatalf("renderer=%q, want terminal", activity.Renderer)
 	}
-	if activity.Payload["command"] != "npm run build -- --mode production" {
+	payload, ok := activity.Payload.(fltools.TerminalActivityPayload)
+	if !ok || payload.Command != "npm run build -- --mode production" {
 		t.Fatalf("payload=%#v, want command", activity.Payload)
 	}
-	if activity.Payload["yield_ms"] != 120000 {
-		t.Fatalf("payload=%#v, want yield_ms", activity.Payload)
+	if _, ok := activityPayloadMap(activity.Payload)["yield_ms"]; ok {
+		t.Fatalf("terminal activity payload must use the closed v3 shape: %#v", activity.Payload)
 	}
-	if _, ok := activity.Payload["cwd"]; ok {
+	if _, ok := activityPayloadMap(activity.Payload)["cwd"]; ok {
 		t.Fatalf("terminal activity payload must not include cwd: %#v", activity.Payload)
 	}
-	if _, ok := activity.Payload["workdir"]; ok {
+	if _, ok := activityPayloadMap(activity.Payload)["workdir"]; ok {
 		t.Fatalf("terminal activity payload must not include workdir: %#v", activity.Payload)
 	}
-	if _, ok := activity.Payload["stdin"]; ok {
+	if _, ok := activityPayloadMap(activity.Payload)["stdin"]; ok {
 		t.Fatalf("terminal activity payload must not include stdin: %#v", activity.Payload)
 	}
 }
@@ -547,16 +553,17 @@ func TestFloretActivityForFileCallsOmitsSensitiveEditAndWriteBodies(t *testing.T
 	if edit == nil {
 		t.Fatal("edit activity is nil")
 	}
-	if edit.Payload["operation"] != "edit" || edit.Payload["display_name"] != "run.go" || edit.Payload["replace_all"] != true {
+	editPayload, ok := edit.Payload.(fltools.FileActivityPayload)
+	if !ok || editPayload.Operation != "edit" || editPayload.Path != "run.go" {
 		t.Fatalf("edit payload=%#v", edit.Payload)
 	}
-	if _, ok := edit.Payload["file_path"]; ok {
+	if _, ok := activityPayloadMap(edit.Payload)["file_path"]; ok {
 		t.Fatalf("edit activity payload must not include file_path: %#v", edit.Payload)
 	}
-	if _, ok := edit.Payload["old_string"]; ok {
+	if _, ok := activityPayloadMap(edit.Payload)["old_string"]; ok {
 		t.Fatalf("edit activity payload must not include old_string: %#v", edit.Payload)
 	}
-	if _, ok := edit.Payload["new_string"]; ok {
+	if _, ok := activityPayloadMap(edit.Payload)["new_string"]; ok {
 		t.Fatalf("edit activity payload must not include new_string: %#v", edit.Payload)
 	}
 
@@ -567,16 +574,17 @@ func TestFloretActivityForFileCallsOmitsSensitiveEditAndWriteBodies(t *testing.T
 	if write == nil {
 		t.Fatal("write activity is nil")
 	}
-	if write.Payload["operation"] != "write" || write.Payload["display_name"] != "run.go" {
+	writePayload, ok := write.Payload.(fltools.FileActivityPayload)
+	if !ok || writePayload.Operation != "write" || writePayload.Path != "run.go" {
 		t.Fatalf("write payload=%#v", write.Payload)
 	}
-	if _, ok := write.Payload["file_path"]; ok {
+	if _, ok := activityPayloadMap(write.Payload)["file_path"]; ok {
 		t.Fatalf("write activity payload must not include file_path: %#v", write.Payload)
 	}
-	if _, ok := write.Payload["content_utf8"]; ok {
+	if _, ok := activityPayloadMap(write.Payload)["content_utf8"]; ok {
 		t.Fatalf("write activity payload must not include content_utf8: %#v", write.Payload)
 	}
-	if _, ok := write.Payload["content"]; ok {
+	if _, ok := activityPayloadMap(write.Payload)["content"]; ok {
 		t.Fatalf("write activity payload must not include content: %#v", write.Payload)
 	}
 }
@@ -592,8 +600,8 @@ func TestFloretActivityForFileCallKeepsDisplayNameWithinContract(t *testing.T) {
 		t.Fatal("activity is nil")
 	}
 	assertContractSafeActivityPayload(t, activity.Payload, 0)
-	if len([]rune(anyToString(activity.Payload["display_name"]))) > activityPayloadStringLimit {
-		t.Fatalf("display_name length=%d exceeds contract", len([]rune(anyToString(activity.Payload["display_name"]))))
+	if len([]rune(anyToString(activityPayloadMap(activity.Payload)["display_name"]))) > activityPayloadStringLimit {
+		t.Fatalf("display_name length=%d exceeds contract", len([]rune(anyToString(activityPayloadMap(activity.Payload)["display_name"]))))
 	}
 	timeline := observation.BuildActivityTimeline(observation.ActivityRunMeta{RunID: "run_long_display_name"}, []observation.Event{{
 		Type:     observation.EventTypeToolCall,
@@ -621,19 +629,18 @@ func TestFloretActivityForApplyPatchCallOmitsPatchBody(t *testing.T) {
 	if activity == nil {
 		t.Fatal("activity is nil")
 	}
-	if activity.Renderer != observation.ActivityRendererPatch {
+	if activity.Renderer != fltools.ActivityRendererPatch {
 		t.Fatalf("renderer=%q, want patch", activity.Renderer)
 	}
-	if _, ok := activity.Payload["patch"]; ok {
+	if _, ok := activityPayloadMap(activity.Payload)["patch"]; ok {
 		t.Fatalf("apply_patch call payload must not include full patch: %#v", activity.Payload)
 	}
-	for _, key := range []string{"files_changed", "hunks", "additions", "deletions"} {
-		if _, ok := activity.Payload[key]; !ok {
-			t.Fatalf("apply_patch call payload missing %s: %#v", key, activity.Payload)
-		}
+	patchPayload, ok := activity.Payload.(fltools.PatchActivityPayload)
+	if !ok || patchPayload.Diff != "" {
+		t.Fatalf("apply_patch call payload=%#v, want closed summary without patch body", activity.Payload)
 	}
 	for _, key := range []string{"patch_sha256", "patch_bytes", "patch_lines"} {
-		if _, ok := activity.Payload[key]; ok {
+		if _, ok := activityPayloadMap(activity.Payload)[key]; ok {
 			t.Fatalf("apply_patch call payload must not include %s: %#v", key, activity.Payload)
 		}
 	}
@@ -685,7 +692,7 @@ func TestFloretActivityForOKFCallUsesKnowledgeLookupPresentation(t *testing.T) {
 	if indexActivity == nil {
 		t.Fatal("index activity is nil")
 	}
-	if indexActivity.Label != "AI" || indexActivity.Payload["operation"] != "okf.index" {
+	if indexActivity.Label != "AI" || activityPayloadMap(indexActivity.Payload)["operation"] != "okf.index" {
 		t.Fatalf("index activity=%#v", indexActivity)
 	}
 
@@ -696,11 +703,11 @@ func TestFloretActivityForOKFCallUsesKnowledgeLookupPresentation(t *testing.T) {
 	if want := presentationCallFallback(t, "okf.search"); activity.Label != want {
 		t.Fatalf("label=%q, want %q", activity.Label, want)
 	}
-	if activity.Renderer != observation.ActivityRendererStructured {
+	if activity.Renderer != fltools.ActivityRendererStructured {
 		t.Fatalf("renderer=%q, want structured", activity.Renderer)
 	}
-	if activity.Payload["operation"] != "okf.search" {
-		t.Fatalf("operation payload=%v, want okf.search", activity.Payload["operation"])
+	if activityPayloadMap(activity.Payload)["operation"] != "okf.search" {
+		t.Fatalf("operation payload=%v, want okf.search", activityPayloadMap(activity.Payload)["operation"])
 	}
 	if activity.Label == "okf.search" || activity.Label == "Search OKF" {
 		t.Fatalf("label=%q keeps search-engine wording", activity.Label)
@@ -713,10 +720,10 @@ func TestFloretActivityForOKFCallUsesKnowledgeLookupPresentation(t *testing.T) {
 	if withQuery.Label != "Workbench wheel ownership" {
 		t.Fatalf("query label=%q, want query", withQuery.Label)
 	}
-	if withQuery.Payload["operation"] != "okf.search" || withQuery.Payload["query"] != "Workbench wheel ownership" {
+	if activityPayloadMap(withQuery.Payload)["operation"] != "okf.search" {
 		t.Fatalf("query payload=%#v", withQuery.Payload)
 	}
-	if _, ok := withQuery.Payload["provider"]; ok {
+	if _, ok := activityPayloadMap(withQuery.Payload)["provider"]; ok {
 		t.Fatalf("okf.search call payload should not carry web provider: %#v", withQuery.Payload)
 	}
 
@@ -724,7 +731,7 @@ func TestFloretActivityForOKFCallUsesKnowledgeLookupPresentation(t *testing.T) {
 	if openActivity == nil {
 		t.Fatal("open activity is nil")
 	}
-	if openActivity.Label != "ui.workbench-interaction-contracts" || openActivity.Payload["operation"] != "okf.open" {
+	if openActivity.Label != "ui.workbench-interaction-contracts" || activityPayloadMap(openActivity.Payload)["operation"] != "okf.open" {
 		t.Fatalf("open activity=%#v", openActivity)
 	}
 }
@@ -749,16 +756,16 @@ func TestFloretToolResultActivityCarriesExpandableTerminalDetailsWithoutCallOnly
 	if activity == nil {
 		t.Fatal("activity is nil")
 	}
-	if activity.Renderer != observation.ActivityRendererTerminal {
+	if activity.Renderer != fltools.ActivityRendererTerminal {
 		t.Fatalf("renderer=%q, want terminal", activity.Renderer)
 	}
 	if strings.TrimSpace(activity.Label) != "" {
 		t.Fatalf("result-only label=%q, want empty until call/result merge supplies command", activity.Label)
 	}
-	if _, ok := activity.Payload["command"]; ok {
+	if _, ok := activityPayloadMap(activity.Payload)["command"]; ok {
 		t.Fatalf("result-only payload should not invent command: %#v", activity.Payload)
 	}
-	if got := strings.TrimSpace(anyToString(activity.Payload["output"])); got != "ok" {
+	if got := strings.TrimSpace(anyToString(activityPayloadMap(activity.Payload)["output"])); got != "ok" {
 		t.Fatalf("output=%q", got)
 	}
 	if !activityHasChip(activity.Chips, "exit_code", "0") {
@@ -790,7 +797,7 @@ func TestFloretToolResultActivityShowsTerminalProcessChips(t *testing.T) {
 	}
 }
 
-func activityHasChip(chips []observation.ActivityChip, kind string, value string) bool {
+func activityHasChip(chips []fltools.ActivityChip, kind string, value string) bool {
 	for _, chip := range chips {
 		if chip.Kind == kind && chip.Value == value {
 			return true
@@ -821,23 +828,11 @@ func TestFloretToolResultActivityForOKFUsesKnowledgeLookupFallback(t *testing.T)
 	if want := presentationResultFallback(t, "okf.search"); activity.Label != want {
 		t.Fatalf("label=%q, want %q", activity.Label, want)
 	}
-	if activity.Renderer != observation.ActivityRendererStructured {
+	if activity.Renderer != fltools.ActivityRendererStructured {
 		t.Fatalf("renderer=%q, want structured", activity.Renderer)
 	}
-	if activity.Payload["operation"] != "okf.search" {
-		t.Fatalf("operation payload=%v, want okf.search", activity.Payload["operation"])
-	}
-	if _, ok := activity.Payload["results"]; ok {
-		t.Fatalf("okf.search payload should use matches, not results: %#v", activity.Payload)
-	}
-	if _, ok := activity.Payload["matches"]; !ok {
-		t.Fatalf("okf.search payload missing matches: %#v", activity.Payload)
-	}
-	if activity.Payload["truncated"] == true {
-		t.Fatalf("okf.search short list should not report truncation: %#v", activity.Payload)
-	}
-	if !readBoolField(activity.Payload, "has_more") || readIntField(activity.Payload, "omitted_count") != 4 {
-		t.Fatalf("okf.search payload missing bounded-list metadata: %#v", activity.Payload)
+	if activityPayloadMap(activity.Payload)["operation"] != "okf.search" {
+		t.Fatalf("operation payload=%v, want okf.search", activityPayloadMap(activity.Payload)["operation"])
 	}
 	if !activityHasChip(activity.Chips, "has_more", "") {
 		t.Fatalf("okf.search activity should show a neutral more chip: %#v", activity.Chips)
@@ -848,8 +843,8 @@ func TestFloretToolResultActivityForOKFUsesKnowledgeLookupFallback(t *testing.T)
 	if activity.Label == "okf.search" || activity.Label == "Search OKF" {
 		t.Fatalf("label=%q keeps search-engine wording", activity.Label)
 	}
-	if _, ok := activity.Payload["summary"]; ok {
-		t.Fatalf("okf.search should not project summary into Flower detail payload: %#v", activity.Payload)
+	if _, ok := activity.Payload.(fltools.StructuredActivityPayload); !ok {
+		t.Fatalf("okf.search payload=%T, want closed structured payload", activity.Payload)
 	}
 
 	withQuery := mustFloretToolResultActivity(t, r, ToolResult{
@@ -864,7 +859,7 @@ func TestFloretToolResultActivityForOKFUsesKnowledgeLookupFallback(t *testing.T)
 	if withQuery.Label != "Workbench wheel ownership" {
 		t.Fatalf("query label=%q, want query", withQuery.Label)
 	}
-	if withQuery.Payload["operation"] != "okf.search" || withQuery.Payload["query"] != "Workbench wheel ownership" {
+	if activityPayloadMap(withQuery.Payload)["operation"] != "okf.search" {
 		t.Fatalf("query payload=%#v", withQuery.Payload)
 	}
 }
@@ -914,30 +909,11 @@ func TestFloretToolResultActivityForOKFIndexAndOpenUseStructuredFields(t *testin
 			},
 		},
 	})
-	if index.Payload["operation"] != "okf.index" {
+	if activityPayloadMap(index.Payload)["operation"] != "okf.index" {
 		t.Fatalf("index payload=%#v", index.Payload)
-	}
-	if _, ok := index.Payload["sections"]; !ok {
-		t.Fatalf("index payload missing sections: %#v", index.Payload)
-	}
-	if index.Payload["truncated"] == true {
-		t.Fatalf("okf.index structured directory should not report truncation: %#v", index.Payload)
 	}
 	if activityHasChip(index.Chips, "truncated", "") {
 		t.Fatalf("okf.index structured directory should not show truncated chip: %#v", index.Chips)
-	}
-	sections := toAnySlice(index.Payload["sections"])
-	if len(sections) != 2 {
-		t.Fatalf("index sections=%#v, want 2 sections", index.Payload["sections"])
-	}
-	firstSection, _ := sections[0].(map[string]any)
-	entries := toAnySlice(firstSection["entries"])
-	if len(entries) != 1 {
-		t.Fatalf("first section entries=%#v, want one entry", firstSection["entries"])
-	}
-	firstEntry, _ := entries[0].(map[string]any)
-	if got := toAnySlice(firstEntry["tags"]); len(got) != 4 {
-		t.Fatalf("entry tags=%#v, want preserved tags", firstEntry["tags"])
 	}
 
 	open := mustFloretToolResultActivity(t, r, ToolResult{
@@ -955,17 +931,11 @@ func TestFloretToolResultActivityForOKFIndexAndOpenUseStructuredFields(t *testin
 			"truncated":            true,
 		},
 	})
-	if open.Payload["operation"] != "okf.open" {
+	if activityPayloadMap(open.Payload)["operation"] != "okf.open" {
 		t.Fatalf("open payload=%#v", open.Payload)
 	}
 	if open.Label != "OKF search tool" {
 		t.Fatalf("open label=%q, want concept title", open.Label)
-	}
-	if _, ok := open.Payload["concept"]; !ok {
-		t.Fatalf("open payload missing concept: %#v", open.Payload)
-	}
-	if !readBoolField(open.Payload, "truncated") {
-		t.Fatalf("open payload should retain body truncation: %#v", open.Payload)
 	}
 	if !activityHasChip(open.Chips, "truncated", "") {
 		t.Fatalf("open body window truncation should show truncated chip: %#v", open.Chips)
@@ -998,11 +968,11 @@ func TestFloretToolResultActivityUsesContractSafeErrorPayload(t *testing.T) {
 	if activity == nil {
 		t.Fatal("activity is nil")
 	}
-	errorPayload, ok := activity.Payload["error"].(map[string]any)
+	errorPayload, ok := activityPayloadMap(activity.Payload)["error"].(map[string]any)
 	if !ok {
-		t.Fatalf("error payload=%#v, want map", activity.Payload["error"])
+		t.Fatalf("error payload=%#v, want map", activityPayloadMap(activity.Payload)["error"])
 	}
-	if errorPayload["code"] != "CANCELED" || errorPayload["message"] != "Terminal process was canceled" || errorPayload["retryable"] != false {
+	if errorPayload["message"] != "Terminal process was canceled" || len(errorPayload) != 1 {
 		t.Fatalf("error payload=%#v", errorPayload)
 	}
 	timeline := observation.BuildActivityTimeline(observation.ActivityRunMeta{RunID: "run_1"}, []observation.Event{{
@@ -1075,12 +1045,12 @@ func TestFloretToolResultActivitySanitizesStructuredTodoResults(t *testing.T) {
 	if activity == nil {
 		t.Fatal("activity is nil")
 	}
-	items := toAnySlice(activity.Payload["todos"])
-	if len(items) != 1 {
-		t.Fatalf("todos=%#v, want one item", activity.Payload["todos"])
+	payload, ok := activity.Payload.(fltools.TodosActivityPayload)
+	if !ok {
+		t.Fatalf("payload=%T, want TodosActivityPayload", activity.Payload)
 	}
-	if _, ok := items[0].(map[string]any); !ok {
-		t.Fatalf("todo item=%T, want JSON-safe map", items[0])
+	if len(payload.Items) != 1 || payload.Items[0].Text != "Verify activity timeline" || payload.Items[0].Status != string(TodoStatusCompleted) {
+		t.Fatalf("items=%#v, want one completed typed todo", payload.Items)
 	}
 	timeline := observation.BuildActivityTimeline(observation.ActivityRunMeta{RunID: "run_1"}, []observation.Event{{
 		Type:     observation.EventTypeToolResult,
@@ -1099,7 +1069,7 @@ func TestFloretToolResultActivityPayloadsAreJSONSafe(t *testing.T) {
 	r := newRun(runOptions{})
 	cases := []struct {
 		toolName string
-		activity *observation.ActivityPresentation
+		activity *fltools.ActivityPresentation
 	}{
 		{toolName: "terminal.exec", activity: mustFloretToolResultActivity(t, r, ToolResult{
 			ToolID:   "call_terminal_error",
@@ -1148,7 +1118,9 @@ func TestFloretToolResultActivityPayloadsAreJSONSafe(t *testing.T) {
 		if tt.activity == nil {
 			t.Fatal("activity is nil")
 		}
-		assertContractSafeActivityPayload(t, tt.activity.Payload, 0)
+		if _, err := json.Marshal(tt.activity); err != nil {
+			t.Fatalf("marshal typed activity: %v", err)
+		}
 		timeline := observation.BuildActivityTimeline(observation.ActivityRunMeta{RunID: "run_json_safe"}, []observation.Event{{
 			Type:     observation.EventTypeToolResult,
 			ToolID:   "tool_json_safe",
@@ -1188,21 +1160,24 @@ func TestFloretToolResultActivityPayloadsMeetFullContract(t *testing.T) {
 			},
 		},
 	})
-	assertContractSafeActivityPayload(t, activity.Payload, 0)
-	if _, ok := activity.Payload["bad key / with spaces"]; ok {
+	payload, ok := activity.Payload.(fltools.TerminalActivityPayload)
+	if !ok {
+		t.Fatalf("payload=%T, want TerminalActivityPayload", activity.Payload)
+	}
+	if _, ok := activityPayloadMap(activity.Payload)["bad key / with spaces"]; ok {
 		t.Fatalf("payload kept invalid key: %#v", activity.Payload)
 	}
-	if _, ok := activity.Payload["bad_key_with_spaces"]; ok {
+	if _, ok := activityPayloadMap(activity.Payload)["bad_key_with_spaces"]; ok {
 		t.Fatalf("payload kept non-spec field: %#v", activity.Payload)
 	}
-	if _, ok := activity.Payload["cwd"]; ok {
+	if _, ok := activityPayloadMap(activity.Payload)["cwd"]; ok {
 		t.Fatalf("terminal activity payload kept host-only cwd: %#v", activity.Payload)
 	}
-	if len([]rune(anyToString(activity.Payload["output"]))) > activityPayloadStringLimit {
-		t.Fatalf("output length=%d, want <= %d", len([]rune(anyToString(activity.Payload["output"]))), activityPayloadStringLimit)
+	if len([]rune(payload.Output)) > activityPayloadStringLimit {
+		t.Fatalf("output length=%d, want <= %d", len([]rune(payload.Output)), activityPayloadStringLimit)
 	}
-	if activity.Payload["truncated"] != true {
-		t.Fatalf("payload truncated flag=%#v, want true", activity.Payload["truncated"])
+	if !payload.Truncated {
+		t.Fatalf("payload truncated flag=%v, want true", payload.Truncated)
 	}
 	timeline := observation.BuildActivityTimeline(observation.ActivityRunMeta{RunID: "run_contract_payload"}, []observation.Event{{
 		Type:     observation.EventTypeToolResult,
@@ -1227,6 +1202,7 @@ func TestFloretToolResultActivityProjectsPublicSubagentDisplayPayload(t *testing
 		"closed":    true,
 		"items": []any{map[string]any{
 			"thread_id":        "subagent-1",
+			"parent_thread_id": "thread-parent",
 			"task_name":        "Review prompt contract",
 			"task_description": "Review whether the prompt contract is user-facing and concise.",
 			"agent_type":       "reviewer",
@@ -1249,35 +1225,18 @@ func TestFloretToolResultActivityProjectsPublicSubagentDisplayPayload(t *testing
 		Data:      normalized,
 		Truncated: truncated,
 	})
-	for _, field := range []string{"target", "target_ids", "ids", "detail_ref", "detail_available", "detail_strategy", "last_message", "waiting_prompt", "can_send_input", "can_interrupt", "can_close"} {
-		if _, ok := activity.Payload[field]; ok {
-			t.Fatalf("activity retained non-display subagent field %s: %#v", field, activity.Payload)
-		}
-	}
-	items := toAnySlice(activity.Payload["items"])
-	if len(items) != 1 {
-		t.Fatalf("activity items=%#v, want one canonical item", activity.Payload["items"])
-	}
-	item, ok := items[0].(map[string]any)
+	payload, ok := activity.Payload.(fltools.SubAgentActivityPayload)
 	if !ok {
-		t.Fatalf("activity item type=%T payload=%#v", items[0], activity.Payload)
+		t.Fatalf("activity payload type=%T, want SubAgentActivityPayload", activity.Payload)
 	}
-	if anyToString(activity.Payload["action"]) != "close" || anyToString(item["status"]) != "canceled" {
+	if payload.Status != "canceled" || payload.ThreadID != identity.ThreadID("subagent-1") || payload.ParentThreadID != identity.ThreadID("thread-parent") {
 		t.Fatalf("activity lost close lifecycle state: %#v", activity.Payload)
 	}
-	if anyToString(item["task_name"]) != "Review prompt contract" || anyToString(item["task_description"]) == "" || anyToString(item["agent_type"]) != "reviewer" {
-		t.Fatalf("activity lost subagent display fields: %#v", item)
+	if payload.TaskName != "Review prompt contract" || payload.TaskDescription == "" {
+		t.Fatalf("activity lost subagent display fields: %#v", payload)
 	}
-	for _, field := range []string{"context_mode", "last_message", "result_digest", "waiting_prompt", "queued_inputs", "can_send_input", "can_interrupt", "can_close", "detail_ref"} {
-		if _, ok := item[field]; ok {
-			t.Fatalf("activity item retained non-display field %s: %#v", field, item)
-		}
-	}
-	if _, ok := activity.Payload["details"]; ok {
-		t.Fatalf("activity retained generic completion details: %#v", activity.Payload)
-	}
-	if activity.Payload["truncated"] != true {
-		t.Fatalf("activity payload truncated flag=%#v, want true", activity.Payload["truncated"])
+	if payload.LastMessage != "" || payload.WaitingPrompt != "" || payload.QueuedInputs != 0 || payload.CanSendInput || payload.CanInterrupt || payload.CanClose {
+		t.Fatalf("activity retained non-display subagent details: %#v", payload)
 	}
 }
 
@@ -1334,15 +1293,12 @@ func TestFloretToolResultFromFlowerUsesContractSafeStructuredAndText(t *testing.
 	if result.Activity == nil {
 		t.Fatal("activity=nil, want write_todos error activity")
 	}
-	activityError, ok := result.Activity.Payload["error"].(map[string]any)
+	todoPayload, ok := result.Activity.Payload.(fltools.TodosActivityPayload)
 	if !ok {
-		t.Fatalf("activity error=%#v, want map", result.Activity.Payload["error"])
+		t.Fatalf("activity payload=%T, want TodosActivityPayload", result.Activity.Payload)
 	}
-	if got := anyToString(activityError["message"]); got != "Denied" {
-		t.Fatalf("activity error message=%q, want Denied", got)
-	}
-	if _, ok := activityError["suggested_fixes"]; ok {
-		t.Fatalf("activity error kept old envelope: %#v", activityError)
+	if len(todoPayload.Items) != 1 || todoPayload.Items[0].Text != "Do the thing" || todoPayload.Items[0].Status != "pending" {
+		t.Fatalf("activity todos=%#v, want sanitized typed item", todoPayload.Items)
 	}
 	var textPayload map[string]any
 	if err := json.Unmarshal([]byte(result.Text), &textPayload); err != nil {
@@ -1379,7 +1335,7 @@ func TestFloretToolResultFromFlowerMapsAbortedToCanceledActivityStatus(t *testin
 	if got := result.Metadata["tool_result_status"]; got != string(observation.ActivityStatusCanceled) {
 		t.Fatalf("tool_result_status=%#v, want canceled", got)
 	}
-	if result.Activity == nil || result.Activity.Payload["status"] != toolResultStatusAborted {
+	if result.Activity == nil || activityPayloadMap(result.Activity.Payload)["status"] != toolResultStatusAborted {
 		t.Fatalf("activity=%#v, want aborted product payload", result.Activity)
 	}
 }
@@ -1508,46 +1464,36 @@ func TestFloretToolResultActivityCarriesApplyPatchMutations(t *testing.T) {
 	if activity == nil {
 		t.Fatal("activity is nil")
 	}
-	if activity.Renderer != observation.ActivityRendererPatch {
+	if activity.Renderer != fltools.ActivityRendererPatch {
 		t.Fatalf("renderer=%q, want patch", activity.Renderer)
 	}
-	mutations := toAnySlice(activity.Payload["mutations"])
-	if len(mutations) != 1 {
-		t.Fatalf("mutations=%#v, want one mutation", activity.Payload["mutations"])
-	}
-	mutation, ok := mutations[0].(map[string]any)
+	payload, ok := activity.Payload.(fltools.PatchActivityPayload)
 	if !ok {
-		t.Fatalf("mutation=%#v, want map", mutations[0])
+		t.Fatalf("payload=%T, want PatchActivityPayload", activity.Payload)
 	}
-	if anyToString(mutation["change_type"]) != "update" || anyToString(mutation["display_name"]) != "app.ts" {
-		t.Fatalf("mutation=%#v, want display name and change type", mutation)
+	if payload.Path != "app.ts" {
+		t.Fatalf("path=%q, want app.ts", payload.Path)
 	}
-	if _, ok := mutation["file_path"]; ok {
-		t.Fatalf("mutation activity payload must not include file_path: %#v", mutation)
+	if !strings.Contains(payload.Diff, "@@ -1,1 +1,1 @@") || !strings.Contains(payload.Diff, "-old") || !strings.Contains(payload.Diff, "+new") {
+		t.Fatalf("diff=%q", payload.Diff)
 	}
-	if _, ok := mutation["preview_path"]; ok {
-		t.Fatalf("mutation activity payload must not include preview_path: %#v", mutation)
-	}
-	if _, ok := mutation["directory_path"]; ok {
-		t.Fatalf("mutation activity payload must not include directory_path: %#v", mutation)
-	}
-	actionID := anyToString(mutation["file_action_id"])
+	actionID := activityActionIDFromTargetRefs(activity.TargetRefs)
 	if actionID == "" {
-		t.Fatalf("mutation file_action_id=%#v, want action id", mutation)
-	}
-	if strings.Contains(actionID, "workspace") || strings.Contains(actionID, "app") {
-		t.Fatalf("file_action_id=%q must be opaque", actionID)
+		t.Fatalf("target refs=%#v, want file action", activity.TargetRefs)
 	}
 	action := r.activityFileActions[actionID]
 	if action.DisplayName != "app.ts" || action.PreviewPath != "/workspace/app.ts" || action.DirectoryPath != "/workspace" {
 		t.Fatalf("registered file action=%#v", action)
 	}
-	if diff := anyToString(mutation["unified_diff"]); !strings.Contains(diff, "@@ -1,1 +1,1 @@") || !strings.Contains(diff, "-old") || !strings.Contains(diff, "+new") {
-		t.Fatalf("unified_diff=%q", diff)
+}
+
+func activityActionIDFromTargetRefs(refs []fltools.ActivityTargetRef) string {
+	for _, ref := range refs {
+		if actionID, ok := strings.CutPrefix(strings.TrimSpace(ref.Kind), "file_action:"); ok {
+			return strings.TrimSpace(actionID)
+		}
 	}
-	if _, ok := mutation["original_file"]; ok {
-		t.Fatalf("mutation must not carry old file body: %#v", mutation)
-	}
+	return ""
 }
 
 func TestFloretControlDefinitionsRejectInvalidSchema(t *testing.T) {
@@ -1668,7 +1614,7 @@ func TestFloretToolRegistryPublishesTerminalProcessActivityUpdateBeforeYieldResu
 	if update.Activity == nil {
 		t.Fatal("update activity is nil")
 	}
-	payload := update.Activity.Payload
+	payload := activityPayloadMap(update.Activity.Payload)
 	if got := strings.TrimSpace(anyToString(payload["status"])); got != terminalProcessStatusRunning {
 		t.Fatalf("activity status=%q, want running; payload=%#v", got, payload)
 	}
@@ -1678,7 +1624,7 @@ func TestFloretToolRegistryPublishesTerminalProcessActivityUpdateBeforeYieldResu
 	if got := strings.TrimSpace(anyToString(payload["command"])); got != "sleep 0.2" {
 		t.Fatalf("activity command=%q, want command payload", got)
 	}
-	if update.Activity.Renderer != observation.ActivityRendererTerminal {
+	if update.Activity.Renderer != fltools.ActivityRendererTerminal {
 		t.Fatalf("renderer=%q, want terminal", update.Activity.Renderer)
 	}
 }
@@ -1798,8 +1744,9 @@ func TestFloretToolRegistryUsesExplicitChildHostIdentityForSubagentTools(t *test
 	childBase.turnID = "turn_child"
 	childBase.messageID = "turn_child"
 	childBase.settlementThreadID = "thread_child"
-	childBase.settlementRunID = "floret_exec_child_identity"
+	childBase.settlementRunID = childRunID
 	childBase.settlementTurnID = "turn_child"
+	childBase.expectFloretRuntimeEventIdentity(childRunID, "thread_child", "turn_child", true)
 	childBase.toolAllowlist = stringSet("terminal.exec")
 	childBase.setPermissionState(childSnapshot.PermissionType, childSnapshot)
 	if err := childBase.persistPermissionSnapshot(childSnapshot); err != nil {
@@ -1822,7 +1769,7 @@ func TestFloretToolRegistryUsesExplicitChildHostIdentityForSubagentTools(t *test
 		Name: "terminal.exec",
 		Args: `{"command":"pwd"}`,
 	}, fltools.DispatchOptions{
-		RunID:    "floret_exec_child_identity",
+		RunID:    identity.RunID(childRunID),
 		ThreadID: "thread_child",
 		TurnID:   "turn_child",
 		Step:     1,
@@ -1852,7 +1799,7 @@ func TestFloretToolRegistryUsesExplicitChildHostIdentityForSubagentTools(t *test
 	target := childProcesses[0].settlementTarget
 	boundOwner := childProcesses[0].activeSettlementOwner
 	childProcesses[0].mu.Unlock()
-	if target.ThreadID != "thread_child" || target.RunID != "floret_exec_child_identity" || target.TurnID != "turn_child" || target.ToolCallID != "call_child_pwd" {
+	if target.ThreadID != "thread_child" || target.RunID != identity.RunID(childRunID) || target.TurnID != "turn_child" || target.ToolCallID != "call_child_pwd" {
 		t.Fatalf("child settlement target=%#v", target)
 	}
 	if boundOwner != owner {
@@ -1885,18 +1832,20 @@ func TestFloretToolRegistryDoesNotCreateRedevenApprovalForSubagentEffect(t *test
 	}, store)
 	parent.setPermissionType(FlowerPermissionApprovalRequired)
 	ensureToolExecutionAuthorityForTest(t, parent)
-	childExecution, err := svc.bindSubagentExecutionForParent(parent, "thread_worker", "child_run_no_grant")
+	childRunID := permissionPolicyTestChildRunID("thread_worker")
+	childExecution, err := svc.bindSubagentExecutionForParent(parent, "thread_worker", childRunID)
 	if err != nil {
 		t.Fatalf("bind child execution authority: %v", err)
 	}
 	child := parent.subagentChildRun(childExecution)
 	child.threadID = "thread_worker"
-	child.id = "child_run_no_grant"
+	child.id = childRunID
 	child.turnID = "turn_worker"
 	child.messageID = "turn_worker"
 	child.settlementThreadID = "thread_worker"
-	child.settlementRunID = "floret_exec_worker_no_grant"
+	child.settlementRunID = childRunID
 	child.settlementTurnID = "turn_worker"
+	child.expectFloretRuntimeEventIdentity(childRunID, "thread_worker", "turn_worker", true)
 	toolDef := ToolDef{
 		Name: "file.write",
 		InputSchema: json.RawMessage(
@@ -1922,13 +1871,13 @@ func TestFloretToolRegistryDoesNotCreateRedevenApprovalForSubagentEffect(t *test
 		Name: "file.write",
 		Args: `{"file_path":"note.txt","content":"mutate"}`,
 	}, fltools.DispatchOptions{
-		RunID:    "floret_exec_worker_no_grant",
+		RunID:    identity.RunID(childRunID),
 		ThreadID: "thread_worker",
 		TurnID:   "turn_worker",
 		HostContext: map[string]string{
 			subagentToolHostContextAgentTypeKey:          subagentAgentTypeWorker,
 			subagentToolHostContextChildThreadIDKey:      "thread_worker",
-			subagentToolHostContextChildRunIDKey:         "child_run_no_grant",
+			subagentToolHostContextChildRunIDKey:         childRunID,
 			floretToolHostContextPermissionSnapshotIDKey: child.currentPermissionSnapshot().SnapshotID,
 			floretToolHostContextPermissionEpochKey:      permissionSurfaceEpoch(child.currentPermissionSnapshot()),
 			floretToolHostContextAuthorityThreadIDKey:    parent.threadID,
@@ -1988,7 +1937,7 @@ func TestRootNoUserInteractionRefreshesPermissionBeforeToolHandler(t *testing.T)
 	result := surface.FloretTools.Dispatch(ctx, fltools.ToolCall{
 		ID: "call_root_no_interaction_refresh", Name: "file.write",
 		Args: `{"file_path":"handler_called","content":"must not write"}`,
-	}, fltools.DispatchOptions{RunID: r.id, ThreadID: r.threadID, TurnID: r.turnID, HostContext: surface.HostContext, EffectDispatcher: floretToolRegistryTestEffectDispatcher(r)})
+	}, fltools.DispatchOptions{RunID: identity.RunID(r.id), ThreadID: identity.ThreadID(r.threadID), TurnID: identity.TurnID(r.turnID), HostContext: surface.HostContext, EffectDispatcher: floretToolRegistryTestEffectDispatcher(r)})
 	if !result.IsError || !strings.Contains(floretToolResultErrorText(result), "invalid thread permission type") {
 		t.Fatalf("tool result=%#v, want strict permission refresh failure", result)
 	}
@@ -2031,7 +1980,7 @@ func TestRootPermissionDowngradeRejectsStaleAllowBeforeToolHandler(t *testing.T)
 	result := surface.FloretTools.Dispatch(ctx, fltools.ToolCall{
 		ID: "call_root_allow_to_ask", Name: "file.write",
 		Args: `{"file_path":"handler_called","content":"must not write"}`,
-	}, fltools.DispatchOptions{RunID: r.id, ThreadID: r.threadID, TurnID: r.turnID, HostContext: surface.HostContext, EffectDispatcher: floretToolRegistryTestEffectDispatcher(r)})
+	}, fltools.DispatchOptions{RunID: identity.RunID(r.id), ThreadID: identity.ThreadID(r.threadID), TurnID: identity.TurnID(r.turnID), HostContext: surface.HostContext, EffectDispatcher: floretToolRegistryTestEffectDispatcher(r)})
 	if !result.IsError || !strings.Contains(strings.ToLower(floretToolResultErrorText(result)), "authorization snapshot is stale") {
 		t.Fatalf("tool result=%#v, want stale authorization rejection", result)
 	}
@@ -2053,7 +2002,7 @@ func TestFloretToolApprovalRejectsMissingPermissionSnapshot(t *testing.T) {
 	r.permissionType = FlowerPermissionFullAccess
 	_, err := r.dispatchFloretEffect(context.Background(), flruntime.EffectAuthorizationRequest{
 		EffectAttemptID: "effect_missing_snapshot", RequestFingerprint: "fingerprint_missing_snapshot",
-		ThreadID: flruntime.ThreadID(r.threadID), TurnID: flruntime.TurnID(r.turnID), RunID: flruntime.RunID(r.id), ToolCallID: "call_missing_snapshot",
+		ThreadID: identity.ThreadID(r.threadID), TurnID: identity.TurnID(r.turnID), RunID: identity.RunID(r.id), ToolCallID: "call_missing_snapshot",
 		ToolName: "terminal.exec", ArgumentHash: floretEffectArgumentHash(`{"command":"pwd"}`),
 		Permission: fltools.PermissionSpec{Mode: fltools.PermissionAllow}, LeaseOwnerID: "lease_missing_snapshot", LeaseGeneration: 1,
 		HostContext: map[string]string{floretToolHostContextAuthorityThreadIDKey: r.threadID},
@@ -2161,6 +2110,14 @@ func assertContractSafeActivityPayload(t *testing.T, value any, depth int) {
 			assertContractSafeActivityPayload(t, item, depth+1)
 		}
 	default:
-		t.Fatalf("payload value type %T is not contract-safe: %#v", value, value)
+		raw, err := json.Marshal(value)
+		if err != nil {
+			t.Fatalf("marshal payload type %T: %v", value, err)
+		}
+		var decoded any
+		if err := json.Unmarshal(raw, &decoded); err != nil {
+			t.Fatalf("decode payload type %T: %v", value, err)
+		}
+		assertContractSafeActivityPayload(t, decoded, depth)
 	}
 }

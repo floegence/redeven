@@ -9,9 +9,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/floegence/floret/v2/observation"
-	flruntime "github.com/floegence/floret/v2/runtime"
-	fltools "github.com/floegence/floret/v2/tools"
+	"github.com/floegence/floret/v3/identity"
+	"github.com/floegence/floret/v3/observation"
+	flruntime "github.com/floegence/floret/v3/runtime"
+	fltools "github.com/floegence/floret/v3/tools"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 )
 
@@ -25,6 +26,7 @@ const (
 	subagentToolHostContextChildRunIDKey    = "child_run_id"
 	subagentToolHostContextChildThreadIDKey = "child_thread_id"
 	subagentToolHostContextForkModeKey      = "subagent_fork_mode"
+	subagentToolHostContextPublicationIDKey = "subagent_publication_id"
 
 	floretToolHostContextPermissionSnapshotIDKey = "permission_snapshot_id"
 	floretToolHostContextPermissionEpochKey      = "permission_surface_epoch"
@@ -108,7 +110,7 @@ func buildFloretTools(r *run, activeTools []ToolDef, state *floretToolRuntimeSta
 				handler := &builtInToolHandler{
 					r:        execRun,
 					toolName: call.Name,
-					activityUpdater: func(activity *observation.ActivityPresentation, metadata map[string]any) {
+					activityUpdater: func(activity *fltools.ActivityPresentation, metadata map[string]any) {
 						inv.UpdateActivity(fltools.ActivityUpdate{
 							Activity: activity,
 							Metadata: metadata,
@@ -166,7 +168,7 @@ func floretInvocationRunContext(ctx context.Context, base *run, inv fltools.Invo
 	if base == nil {
 		return nil, errors.New("missing floret invocation run context")
 	}
-	return floretRunContextForIDs(ctx, base, inv.RunID, inv.ThreadID, inv.TurnID, inv.HostContext, authorizationSnapshot)
+	return floretRunContextForIDs(ctx, base, string(inv.RunID), string(inv.ThreadID), string(inv.TurnID), inv.HostContext, authorizationSnapshot)
 }
 
 func floretEffectAuthorizationRunContext(ctx context.Context, base *run, req flruntime.EffectAuthorizationRequest, authorizationSnapshot PermissionSnapshot) (*run, error) {
@@ -194,7 +196,8 @@ func floretRunContextForIDs(ctx context.Context, base *run, rawRunID string, raw
 	childThreadID := strings.TrimSpace(hostContext[subagentToolHostContextChildThreadIDKey])
 	childRunID := strings.TrimSpace(hostContext[subagentToolHostContextChildRunIDKey])
 	if childThreadID == "" && childRunID == "" {
-		if err := requireFloretRunIdentity("parent tool invocation", runID, threadID, turnID, strings.TrimSpace(base.id), strings.TrimSpace(base.threadID), strings.TrimSpace(base.turnID)); err != nil {
+		wantRunID, wantThreadID, wantTurnID := base.floretCanonicalIdentity()
+		if err := requireFloretRunIdentity("parent tool invocation", runID, threadID, turnID, wantRunID, wantThreadID, wantTurnID); err != nil {
 			return nil, err
 		}
 		return base, nil
@@ -531,7 +534,7 @@ func floretToolDefinitionForSnapshot(def ToolDef, authorizationSnapshot Permissi
 			args, _ := req.Args.(map[string]any)
 			return floretPermissionForInvocation(permissionType, def, cloneAnyMap(args)), nil
 		},
-		Activity: func(inv fltools.Invocation[any]) (*observation.ActivityPresentation, error) {
+		Activity: func(inv fltools.Invocation[any]) (*fltools.ActivityPresentation, error) {
 			args, _ := inv.Args.(map[string]any)
 			if toolName == "terminal.exec" {
 				args = normalizeTerminalExecArgs(args)
@@ -864,7 +867,7 @@ func floretToolResultProgressToken(result ToolResult, structured map[string]any)
 	return fmt.Sprintf("%s:%d:%s:%d", processID, lastSeq, status, endedAt)
 }
 
-func pendingToolActivityFromFlower(result ToolResult, structured map[string]any) *observation.ActivityPresentation {
+func pendingToolActivityFromFlower(result ToolResult, structured map[string]any) *fltools.ActivityPresentation {
 	toolName := strings.TrimSpace(result.ToolName)
 	label := activityPresentationLabel(anyToString(structured["command"]))
 	if label == "" {
@@ -875,17 +878,17 @@ func pendingToolActivityFromFlower(result ToolResult, structured map[string]any)
 	}
 	payload := cloneAnyMap(structured)
 	payload["status"] = terminalProcessStatusRunning
-	return contractSafeActivityPresentationForTool(toolName, &observation.ActivityPresentation{
+	return contractSafeActivityPresentationForTool(toolName, &fltools.ActivityPresentation{
 		Label:    label,
-		Renderer: observation.ActivityRendererTerminal,
-		Chips: []observation.ActivityChip{
+		Renderer: fltools.ActivityRendererTerminal,
+		Chips: []fltools.ActivityChip{
 			{Kind: "tool", Label: "shell", Tone: "neutral"},
 		},
-		Payload: payload,
+		Payload: activityPayloadForRenderer(fltools.ActivityRendererTerminal, payload),
 	})
 }
 
-func floretActivityForToolCall(toolName string, args map[string]any) *observation.ActivityPresentation {
+func floretActivityForToolCall(toolName string, args map[string]any) *fltools.ActivityPresentation {
 	toolName = strings.TrimSpace(toolName)
 	if toolName == "" {
 		return nil
@@ -897,37 +900,38 @@ func floretActivityForToolCall(toolName string, args map[string]any) *observatio
 	payload = activityPayloadWithHostDisplayFields(payload, args, spec, hasSpec)
 	payload = publicActivityPayloadForTool(toolName, payload)
 	payload, _ = contractSafePayloadMap(payload, 0)
-	activity := &observation.ActivityPresentation{
+	activity := &fltools.ActivityPresentation{
 		Label:    activityCallLabel(toolName, spec, hasSpec, renderer, args, payload),
 		Renderer: renderer,
-		Payload:  payload,
+		Payload:  activityPayloadForRenderer(renderer, payload),
 	}
-	if renderer == observation.ActivityRendererTerminal {
+	if renderer == fltools.ActivityRendererTerminal {
 		description := activityPresentationDescription(anyToString(args["description"]))
 		if description != activity.Label {
 			activity.Description = description
 		}
-		activity.Chips = []observation.ActivityChip{{Kind: "tool", Label: "shell", Tone: "neutral"}}
+		activity.Chips = []fltools.ActivityChip{{Kind: "tool", Label: "shell", Tone: "neutral"}}
 	}
 	return contractSafeActivityPresentation(activity)
 }
 
-func activityRendererFromSpec(spec aitools.ToolPresentationSpec, ok bool) observation.ActivityRenderer {
+func activityRendererFromSpec(spec aitools.ToolPresentationSpec, ok bool) fltools.ActivityRenderer {
 	if !ok {
-		return observation.ActivityRendererStructured
+		return fltools.ActivityRendererStructured
 	}
-	switch renderer := observation.ActivityRenderer(strings.TrimSpace(spec.Renderer)); renderer {
-	case observation.ActivityRendererStructured,
-		observation.ActivityRendererTerminal,
-		observation.ActivityRendererFile,
-		observation.ActivityRendererPatch,
-		observation.ActivityRendererWebSearch,
-		observation.ActivityRendererTodos,
-		observation.ActivityRendererQuestion,
-		observation.ActivityRendererCompletion:
+	switch renderer := fltools.ActivityRenderer(strings.TrimSpace(spec.Renderer)); renderer {
+	case fltools.ActivityRendererStructured,
+		fltools.ActivityRendererTerminal,
+		fltools.ActivityRendererFile,
+		fltools.ActivityRendererPatch,
+		fltools.ActivityRendererWebSearch,
+		fltools.ActivityRendererTodos,
+		fltools.ActivityRendererQuestion,
+		fltools.ActivityRendererCompletion,
+		fltools.ActivityRendererSubAgent:
 		return renderer
 	default:
-		return observation.ActivityRendererStructured
+		return fltools.ActivityRendererStructured
 	}
 }
 
@@ -1188,7 +1192,7 @@ func activityTodoCountValue(source map[string]any, field string) (any, bool) {
 	return nil, false
 }
 
-func activityCallLabel(toolName string, spec aitools.ToolPresentationSpec, hasSpec bool, _ observation.ActivityRenderer, args map[string]any, payload map[string]any) string {
+func activityCallLabel(toolName string, spec aitools.ToolPresentationSpec, hasSpec bool, _ fltools.ActivityRenderer, args map[string]any, payload map[string]any) string {
 	if label := activityLabelFromFields(spec.ActivityLabelFields, args, payload); label != "" {
 		return label
 	}
@@ -1196,7 +1200,7 @@ func activityCallLabel(toolName string, spec aitools.ToolPresentationSpec, hasSp
 	return activityFallbackLabel(fallback, toolName)
 }
 
-func activityResultLabel(toolName string, spec aitools.ToolPresentationSpec, hasSpec bool, _ observation.ActivityRenderer, payload map[string]any) string {
+func activityResultLabel(toolName string, spec aitools.ToolPresentationSpec, hasSpec bool, _ fltools.ActivityRenderer, payload map[string]any) string {
 	if label := activityLabelFromFields(spec.ActivityLabelFields, payload); label != "" {
 		return label
 	}
@@ -1207,7 +1211,7 @@ func activityResultLabel(toolName string, spec aitools.ToolPresentationSpec, has
 	return activityFallbackLabel(fallback, toolName)
 }
 
-func floretActivityForToolResult(r *run, result ToolResult) (*observation.ActivityPresentation, error) {
+func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPresentation, error) {
 	toolName := strings.TrimSpace(result.ToolName)
 	status, err := validateToolResultStatus(result.Status)
 	if err != nil {
@@ -1245,11 +1249,12 @@ func floretActivityForToolResult(r *run, result ToolResult) (*observation.Activi
 	if payloadTruncated && !isOKFToolName(toolName) {
 		payload["truncated"] = true
 	}
-	activity := &observation.ActivityPresentation{
-		Label:    activityResultLabel(toolName, spec, hasSpec, renderer, payload),
-		Renderer: renderer,
-		Chips:    activityChipsFromSpec(spec, payload),
-		Payload:  payload,
+	activity := &fltools.ActivityPresentation{
+		Label:      activityResultLabel(toolName, spec, hasSpec, renderer, payload),
+		Renderer:   renderer,
+		Chips:      activityChipsFromSpec(spec, payload),
+		TargetRefs: activityFileActionTargetRefs(payload),
+		Payload:    activityPayloadForRenderer(renderer, payload),
 	}
 	return contractSafeActivityPresentationForTool(toolName, activity), nil
 }
@@ -1443,24 +1448,181 @@ func contractSafePayloadValueWithMaxDepth(value any, depth int, maxDepth int) (a
 	}
 }
 
-func contractSafeActivityPresentation(activity *observation.ActivityPresentation) *observation.ActivityPresentation {
+func contractSafeActivityPresentation(activity *fltools.ActivityPresentation) *fltools.ActivityPresentation {
 	return contractSafeActivityPresentationForTool("", activity)
 }
 
-func contractSafeActivityPresentationForTool(toolName string, activity *observation.ActivityPresentation) *observation.ActivityPresentation {
+func contractSafeActivityPresentationForTool(toolName string, activity *fltools.ActivityPresentation) *fltools.ActivityPresentation {
 	if activity == nil {
 		return nil
 	}
 	activity.Label = activityPresentationLabel(activity.Label)
 	activity.Description = activityPresentationDescription(activity.Description)
-	if len(activity.Payload) > 0 {
-		payload, truncated := contractSafePayloadMapForTool(toolName, activity.Payload, 0)
-		if truncated && !isOKFToolName(toolName) {
-			payload["truncated"] = true
-		}
-		activity.Payload = payload
-	}
 	return activity
+}
+
+func activityFileActionTargetRefs(payload map[string]any) []fltools.ActivityTargetRef {
+	seen := map[string]struct{}{}
+	refs := make([]fltools.ActivityTargetRef, 0)
+	add := func(value any, label string) {
+		actionID := strings.TrimSpace(anyToString(value))
+		if actionID == "" {
+			return
+		}
+		if _, ok := seen[actionID]; ok {
+			return
+		}
+		seen[actionID] = struct{}{}
+		label = firstNonEmptyString(label, "file")
+		refs = append(refs, fltools.ActivityTargetRef{Kind: "file_action:" + actionID, Label: label})
+	}
+	add(payload["file_action_id"], firstNonEmptyString(anyToString(payload["display_name"]), anyToString(payload["path"])))
+	for _, mutation := range toAnySlice(payload["mutations"]) {
+		record, _ := mutation.(map[string]any)
+		add(record["file_action_id"], firstNonEmptyString(anyToString(record["display_name"]), anyToString(record["path"])))
+	}
+	return refs
+}
+
+func activityPayloadForRenderer(renderer fltools.ActivityRenderer, payload map[string]any) fltools.ActivityPayload {
+	status := strings.TrimSpace(anyToString(payload["status"]))
+	summary := firstNonEmptyString(anyToString(payload["summary"]), anyToString(payload["result"]))
+	operation := strings.TrimSpace(anyToString(payload["operation"]))
+	activityError := func() *fltools.ActivityError {
+		record, ok := activityToolErrorRecordFromValue(payload["error"])
+		if !ok {
+			return nil
+		}
+		message := strings.TrimSpace(anyToString(record["message"]))
+		if message == "" {
+			return nil
+		}
+		return &fltools.ActivityError{Message: message}
+	}
+	switch renderer {
+	case fltools.ActivityRendererTerminal:
+		value := fltools.TerminalActivityPayload{
+			Command: firstNonEmptyString(anyToString(payload["command"]), anyToString(payload["description"])),
+			Status:  status, ProcessID: strings.TrimSpace(anyToString(payload["process_id"])),
+			LatestOutput: anyToString(payload["latest_output"]), Output: anyToString(payload["output"]),
+			Stdout: anyToString(payload["stdout"]), Stderr: anyToString(payload["stderr"]),
+			DurationMS: readInt64Field(payload, "duration_ms"), Truncated: readBoolField(payload, "truncated"),
+			PendingResult: strings.TrimSpace(anyToString(payload["pending_result"])),
+			Terminated:    readBoolField(payload, "terminated"), Error: activityError(),
+		}
+		if exitCode, ok := activityIntValue(payload["exit_code"]); ok {
+			value.ExitCode = &exitCode
+		}
+		return value
+	case fltools.ActivityRendererFile:
+		return fltools.FileActivityPayload{
+			Path:      firstNonEmptyString(anyToString(payload["path"]), anyToString(payload["file_path"]), anyToString(payload["display_name"])),
+			Operation: operation, Status: status, Summary: summary,
+			SizeBytes: readInt64Field(payload, "size_bytes"), Error: activityError(),
+		}
+	case fltools.ActivityRendererPatch:
+		path := firstNonEmptyString(anyToString(payload["path"]), anyToString(payload["display_name"]), anyToString(payload["file_path"]), anyToString(payload["new_path"]), anyToString(payload["old_path"]))
+		diff := firstNonEmptyString(anyToString(payload["diff"]), anyToString(payload["unified_diff"]))
+		if mutations := toAnySlice(payload["mutations"]); len(mutations) > 0 {
+			if mutation, ok := mutations[0].(map[string]any); ok {
+				path = firstNonEmptyString(path, anyToString(mutation["display_name"]), anyToString(mutation["file_path"]), anyToString(mutation["new_path"]), anyToString(mutation["old_path"]))
+				diff = firstNonEmptyString(diff, anyToString(mutation["unified_diff"]), anyToString(mutation["diff"]))
+			}
+		}
+		return fltools.PatchActivityPayload{Path: path, Diff: diff, Status: status, Summary: summary, Error: activityError()}
+	case fltools.ActivityRendererWebSearch:
+		results := make([]fltools.WebSearchActivityResult, 0)
+		for _, item := range toAnySlice(payload["results"]) {
+			record, _ := item.(map[string]any)
+			title, url := strings.TrimSpace(anyToString(record["title"])), strings.TrimSpace(anyToString(record["url"]))
+			if title != "" || url != "" {
+				results = append(results, fltools.WebSearchActivityResult{Title: title, URL: url})
+			}
+		}
+		return fltools.WebSearchActivityPayload{Query: strings.TrimSpace(anyToString(payload["query"])), Status: status, Results: results, Error: activityError()}
+	case fltools.ActivityRendererTodos:
+		items := make([]fltools.TodoActivityItem, 0)
+		for _, item := range toAnySlice(payload["todos"]) {
+			record, _ := item.(map[string]any)
+			text := firstNonEmptyString(anyToString(record["text"]), anyToString(record["content"]))
+			if text != "" {
+				items = append(items, fltools.TodoActivityItem{Text: text, Status: strings.TrimSpace(anyToString(record["status"]))})
+			}
+		}
+		return fltools.TodosActivityPayload{Operation: operation, Items: items}
+	case fltools.ActivityRendererQuestion:
+		questions := make([]fltools.QuestionActivityItem, 0)
+		for _, item := range toAnySlice(payload["questions"]) {
+			record, _ := item.(map[string]any)
+			question := strings.TrimSpace(anyToString(record["question"]))
+			if question == "" {
+				continue
+			}
+			options := make([]fltools.QuestionActivityOption, 0)
+			for _, rawOption := range toAnySlice(record["options"]) {
+				option, _ := rawOption.(map[string]any)
+				label := strings.TrimSpace(anyToString(option["label"]))
+				if label != "" {
+					options = append(options, fltools.QuestionActivityOption{Label: label, Description: strings.TrimSpace(anyToString(option["description"]))})
+				}
+			}
+			questions = append(questions, fltools.QuestionActivityItem{ID: strings.TrimSpace(anyToString(record["id"])), Question: question, Options: options})
+		}
+		if len(questions) == 0 {
+			if question := strings.TrimSpace(anyToString(payload["question"])); question != "" {
+				questions = append(questions, fltools.QuestionActivityItem{ID: "question", Question: question})
+			}
+		}
+		return fltools.QuestionActivityPayload{PromptID: strings.TrimSpace(anyToString(payload["prompt_id"])), Questions: questions}
+	case fltools.ActivityRendererCompletion:
+		return fltools.CompletionActivityPayload{Status: status, Summary: summary}
+	case fltools.ActivityRendererSubAgent:
+		record := payload
+		if items := toAnySlice(payload["items"]); len(items) > 0 {
+			if item, ok := items[0].(map[string]any); ok {
+				record = item
+			}
+		}
+		return fltools.SubAgentActivityPayload{
+			ThreadID: identity.ThreadID(strings.TrimSpace(anyToString(record["thread_id"]))), Path: strings.TrimSpace(anyToString(record["path"])),
+			TaskName: strings.TrimSpace(anyToString(record["task_name"])), TaskDescription: strings.TrimSpace(anyToString(record["task_description"])),
+			Title: strings.TrimSpace(anyToString(record["title"])), HostProfileRef: strings.TrimSpace(anyToString(record["host_profile_ref"])),
+			ForkMode: strings.TrimSpace(anyToString(record["fork_mode"])), Status: strings.TrimSpace(anyToString(record["status"])),
+			LastMessage: strings.TrimSpace(anyToString(record["last_message"])), WaitingPrompt: strings.TrimSpace(anyToString(record["waiting_prompt"])),
+			QueuedInputs: readIntField(record, "queued_inputs"), ParentThreadID: identity.ThreadID(strings.TrimSpace(anyToString(record["parent_thread_id"]))),
+			ParentTurnID: identity.TurnID(strings.TrimSpace(anyToString(record["parent_turn_id"]))), LatestTurnID: identity.TurnID(strings.TrimSpace(anyToString(record["latest_turn_id"]))),
+			CreatedAtUnixMS: firstNonZeroInt64(readInt64Field(record, "created_at_unix_ms"), readInt64Field(record, "created_at_ms"), readInt64Field(record, "started_at_ms")),
+			UpdatedAtUnixMS: firstNonZeroInt64(readInt64Field(record, "updated_at_unix_ms"), readInt64Field(record, "updated_at_ms")),
+			Closed:          readBoolField(record, "closed"), CanSendInput: readBoolField(record, "can_send_input"), CanInterrupt: readBoolField(record, "can_interrupt"), CanClose: readBoolField(record, "can_close"),
+		}
+	default:
+		return fltools.StructuredActivityPayload{
+			Status: status, Operation: operation, DisplayName: strings.TrimSpace(anyToString(payload["display_name"])),
+			Summary: summary, DurationMS: readInt64Field(payload, "duration_ms"), Error: activityError(),
+		}
+	}
+}
+
+func firstNonZeroInt64(values ...int64) int64 {
+	for _, value := range values {
+		if value != 0 {
+			return value
+		}
+	}
+	return 0
+}
+
+func activityIntValue(value any) (int, bool) {
+	switch typed := value.(type) {
+	case int:
+		return typed, true
+	case int64:
+		return int(typed), true
+	case float64:
+		return int(typed), true
+	default:
+		return 0, false
+	}
 }
 
 func isOKFToolName(toolName string) bool {
@@ -1574,8 +1736,8 @@ func mapWithOperation(in map[string]any, operation string) map[string]any {
 	return out
 }
 
-func activityChipsFromSpec(spec aitools.ToolPresentationSpec, payload map[string]any) []observation.ActivityChip {
-	chips := []observation.ActivityChip{}
+func activityChipsFromSpec(spec aitools.ToolPresentationSpec, payload map[string]any) []fltools.ActivityChip {
+	chips := []fltools.ActivityChip{}
 	for _, field := range spec.ChipFields {
 		field = strings.TrimSpace(field)
 		if field == "" {
@@ -1588,24 +1750,24 @@ func activityChipsFromSpec(spec aitools.ToolPresentationSpec, payload map[string
 	return chips
 }
 
-func activityChipForField(field string, payload map[string]any) (observation.ActivityChip, bool) {
+func activityChipForField(field string, payload map[string]any) (fltools.ActivityChip, bool) {
 	if field == "truncated" {
 		if !readBoolField(payload, "truncated") {
-			return observation.ActivityChip{}, false
+			return fltools.ActivityChip{}, false
 		}
-		return observation.ActivityChip{Kind: "truncated", Label: "truncated", Tone: "warning"}, true
+		return fltools.ActivityChip{Kind: "truncated", Label: "truncated", Tone: "warning"}, true
 	}
 	if field == "has_more" {
 		if !readBoolField(payload, "has_more") {
-			return observation.ActivityChip{}, false
+			return fltools.ActivityChip{}, false
 		}
-		return observation.ActivityChip{Kind: "has_more", Label: "more", Tone: "neutral"}, true
+		return fltools.ActivityChip{Kind: "has_more", Label: "more", Tone: "neutral"}, true
 	}
 	value := strings.TrimSpace(activityScalarString(payload[field]))
 	if value == "" {
-		return observation.ActivityChip{}, false
+		return fltools.ActivityChip{}, false
 	}
-	chip := observation.ActivityChip{
+	chip := fltools.ActivityChip{
 		Kind:  activityChipKind(field),
 		Label: activityChipLabel(field),
 		Value: value,

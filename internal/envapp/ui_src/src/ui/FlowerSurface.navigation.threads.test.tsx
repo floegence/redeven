@@ -956,7 +956,7 @@ describe('FlowerSurface navigation threads', () => {
       messages: [],
       queued_turn_count: 1,
       queued_turns: [{
-        turn_id: 'turn-queued-attachments',
+        queue_id: 'queue-queued-attachments',
         prompt: 'Inspect these queued files.',
         created_at_ms: 1_000,
         attachments: [
@@ -974,9 +974,9 @@ describe('FlowerSurface navigation threads', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-queued-attachments"] button')));
     (runtime.querySelector('[data-thread-id="thread-queued-attachments"] button') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('[data-flower-queued-turn-id="turn-queued-attachments"]')));
+		await waitFor(() => Boolean(runtime.querySelector('[data-flower-queued-turn-id="queue-queued-attachments"]')));
 
-    const queued = runtime.querySelector('[data-flower-queued-turn-id="turn-queued-attachments"]') as HTMLElement;
+		const queued = runtime.querySelector('[data-flower-queued-turn-id="queue-queued-attachments"]') as HTMLElement;
     expect(queued.querySelector('.flower-message-image img')?.getAttribute('src')).toBe('/_redeven_proxy/api/ai/uploads/image-queued');
     expect(queued.querySelector('.flower-message-file')?.getAttribute('href')).toBe('/_redeven_proxy/api/ai/uploads/file-queued');
     expect(queued.textContent).toContain('notes.txt');
@@ -1273,7 +1273,7 @@ describe('FlowerSurface navigation threads', () => {
       messages: [],
       queued_turn_count: 1,
       queued_turns: [{
-        turn_id: 'turn-with-unsupported-context',
+        queue_id: 'queue-with-unsupported-context',
         prompt: 'Inspect this environment',
         created_at_ms: 1_000,
         context_action: contextAction,

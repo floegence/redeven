@@ -83,7 +83,7 @@ func TestServer_AI_ThreadTodosEndpoint(t *testing.T) {
 
 	var threadID string
 	{
-		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/ai/threads", bytes.NewBufferString(`{"title":"todo thread"}`))
+		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/ai/threads", bytes.NewBufferString(`{"client_request_id":"create_todo_thread","title":"todo thread"}`))
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
 		srv.serveHTTP(rr, req)

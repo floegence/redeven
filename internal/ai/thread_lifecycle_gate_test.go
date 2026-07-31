@@ -2,13 +2,13 @@ package ai
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"strings"
 	"testing"
 	"time"
 
-	flruntime "github.com/floegence/floret/v2/runtime"
+	"github.com/floegence/floret/v3/identity"
+	flruntime "github.com/floegence/floret/v3/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
@@ -228,7 +228,7 @@ func TestPendingForkEstablishedBeforeAdmissionRejectsRunPreparation(t *testing.T
 	go func() {
 		prepared, prepareErr := svc.prepareRun(meta, "run_operation_wins", RunStartRequest{
 			ThreadID: thread.ThreadID,
-			Input:    RunInput{TurnID: "turn_operation_wins", Text: "must not admit"},
+			Input:    RunInput{Text: "must not admit"},
 		}, nil)
 		if prepared != nil {
 			svc.releasePreparedRun(prepared)
@@ -236,8 +236,8 @@ func TestPendingForkEstablishedBeforeAdmissionRejectsRunPreparation(t *testing.T
 		result <- prepareErr
 	}()
 	if _, err := svc.threadsDB.PrepareForkOperation(ctx, threadstore.ForkThreadRequest{
-		OperationID: "fork_operation_wins", EndpointID: meta.EndpointID, SourceThreadID: thread.ThreadID,
-		DestinationThreadID: "thread_operation_wins_destination", CreatedAtUnixMs: time.Now().UnixMilli(),
+		OperationID: "fork_operation_wins", ClientRequestID: "fork_operation_wins", EndpointID: meta.EndpointID, SourceThreadID: thread.ThreadID,
+		CreatedByUserPublicID: meta.UserPublicID, CreatedAtUnixMs: time.Now().UnixMilli(),
 	}); err != nil {
 		unlock()
 		t.Fatal(err)
@@ -261,7 +261,7 @@ func TestAdmissionRegisteredBeforeForkRejectsOperation(t *testing.T) {
 	}
 	prepared, err := svc.prepareRun(meta, "run_admission_wins", RunStartRequest{
 		ThreadID: thread.ThreadID,
-		Input:    RunInput{TurnID: "turn_admission_wins", Text: "registered"},
+		Input:    RunInput{Text: "registered"},
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -306,7 +306,7 @@ func TestIdleCompactionRegisteredBeforeForkRejectsOperation(t *testing.T) {
 	}
 }
 
-func TestCanonicalAdmissionSettlementFailureBlocksForkAndDeleteIntents(t *testing.T) {
+func TestInFlightCanonicalAdmissionBlocksForkAndDeleteIntents(t *testing.T) {
 	for _, operationName := range []string{"fork", "delete"} {
 		t.Run(operationName, func(t *testing.T) {
 			svc := newSendTurnTestService(t)
@@ -316,17 +316,16 @@ func TestCanonicalAdmissionSettlementFailureBlocksForkAndDeleteIntents(t *testin
 			if err != nil {
 				t.Fatal(err)
 			}
-			command := createPendingCommandForTest(t, svc, meta, thread.ThreadID, "queue_settlement_"+operationName, "turn_settlement_"+operationName, "run_settlement_"+operationName)
+			command := createPendingCommandForTest(t, svc, meta, thread.ThreadID, "queue-settlement-"+operationName, "", "")
 			host := newTestFloretHostFromService(t, svc, thread.ThreadID, "done")
-			if _, err := host.Run(ctx, flruntime.TurnRequest{
-				TurnID: flruntime.TurnID(command.TurnID),
-				RunID:  flruntime.RunID(command.RunID), Input: flruntime.TurnInput{Text: command.TextContent},
+			if _, err := host.Run(ctx, flruntime.StartTurnCommand{
+				LogicalRequestID: identity.LogicalRequestID(command.QueueID), UserMessage: flruntime.TurnInput{Text: command.TextContent},
 			}); err != nil {
 				t.Fatal(err)
 			}
 			if _, err := svc.threadsDB.PrepareForkOperation(ctx, threadstore.ForkThreadRequest{
-				OperationID: "fork_blocks_settlement_" + operationName, EndpointID: meta.EndpointID,
-				SourceThreadID: thread.ThreadID, DestinationThreadID: "destination_blocks_settlement_" + operationName,
+				OperationID: "fork_blocks_settlement_" + operationName, ClientRequestID: "fork_blocks_settlement_" + operationName, EndpointID: meta.EndpointID,
+				SourceThreadID: thread.ThreadID, CreatedByUserPublicID: meta.UserPublicID,
 				CreatedAtUnixMs: time.Now().UnixMilli(),
 			}); err != nil {
 				t.Fatal(err)
@@ -334,8 +333,8 @@ func TestCanonicalAdmissionSettlementFailureBlocksForkAndDeleteIntents(t *testin
 
 			switch operationName {
 			case "fork":
-				if _, err := svc.ForkThread(ctx, meta, thread.ThreadID, "must not fork"); err == nil || !strings.Contains(err.Error(), "settle admitted pending turn") {
-					t.Fatalf("ForkThread error=%v, want settlement failure", err)
+				if _, err := svc.ForkThread(ctx, meta, thread.ThreadID, "must not fork"); err == nil || !strings.Contains(err.Error(), "admission is still in flight") {
+					t.Fatalf("ForkThread error=%v, want in-flight admission rejection", err)
 				}
 				operations, err := svc.threadsDB.ListPendingForkOperations(ctx, 10)
 				if err != nil {
@@ -345,8 +344,8 @@ func TestCanonicalAdmissionSettlementFailureBlocksForkAndDeleteIntents(t *testin
 					t.Fatalf("fork operations=%#v, want only pre-existing operation", operations)
 				}
 			case "delete":
-				if _, err := svc.DeleteThread(ctx, meta, thread.ThreadID, true); err == nil || !strings.Contains(err.Error(), "settle admitted pending turn") {
-					t.Fatalf("DeleteThread error=%v, want settlement failure", err)
+				if _, err := svc.DeleteThread(ctx, meta, thread.ThreadID, true); err == nil || !strings.Contains(err.Error(), "admission is still in flight") {
+					t.Fatalf("DeleteThread error=%v, want in-flight admission rejection", err)
 				}
 				deleteOperation, err := svc.threadsDB.GetThreadDeleteOperation(ctx, meta.EndpointID, thread.ThreadID)
 				if err != nil || deleteOperation != nil {
@@ -365,17 +364,16 @@ func TestQueuedRecoveryDoesNotCompeteWithActiveAdmissionSettlementOwner(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	command := createPendingCommandForTest(t, svc, meta, thread.ThreadID, "queue_single_owner", "turn_single_owner", "run_single_owner")
+	command := createPendingCommandForTest(t, svc, meta, thread.ThreadID, "queue-single-owner", "", "")
 	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "admitted")
-	if _, err := host.Run(ctx, flruntime.TurnRequest{
-		TurnID: flruntime.TurnID(command.TurnID),
-		RunID:  flruntime.RunID(command.RunID), Input: flruntime.TurnInput{Text: command.TextContent},
+	if _, err := host.Run(ctx, flruntime.StartTurnCommand{
+		LogicalRequestID: identity.LogicalRequestID(command.QueueID), UserMessage: flruntime.TurnInput{Text: command.TextContent},
 	}); err != nil {
 		t.Fatal(err)
 	}
 	threadKey := runThreadKey(meta.EndpointID, thread.ThreadID)
 	svc.mu.Lock()
-	svc.activeRunByTh[threadKey] = command.RunID
+	svc.activeRunByTh[threadKey] = command.QueueID
 	svc.mu.Unlock()
 	targets, err := svc.recoverQueuedTurnCommandsForStartup(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "active runtime settlement owner") {
@@ -398,8 +396,13 @@ func TestQueuedRecoveryDoesNotCompeteWithActiveAdmissionSettlementOwner(t *testi
 		t.Fatal(err)
 	}
 	svc.wakeQueuedTurnRecoveryTargets(targets)
-	if queued, err := svc.threadsDB.GetQueuedTurn(ctx, meta.EndpointID, thread.ThreadID, command.QueueID); !errors.Is(err, sql.ErrNoRows) || queued != nil {
-		t.Fatalf("idle recovery queued command=%#v err=%v, want settled", queued, err)
+	queued, err := svc.threadsDB.GetQueuedTurn(ctx, meta.EndpointID, thread.ThreadID, command.QueueID)
+	if err != nil || queued == nil || queued.AdmissionState != threadstore.PendingTurnAdmissionInFlight || queued.TurnID != "" || queued.RunID != "" {
+		t.Fatalf("idle recovery queued command=%#v err=%v, want stable exact-replay admission", queued, err)
+	}
+	receipt, err := svc.threadsDB.GetPendingTurnAdmissionReceipt(ctx, command.QueueID)
+	if err != nil || receipt.Stage != threadstore.PendingTurnAdmissionStageInFlight || receipt.LogicalRequestID != command.QueueID {
+		t.Fatalf("idle recovery receipt=%#v err=%v, want stable exact-replay identity", receipt, err)
 	}
 }
 
@@ -412,8 +415,8 @@ func TestForceDeletePrepareFailureLeavesActiveRunAttached(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := svc.threadsDB.PrepareForkOperation(ctx, threadstore.ForkThreadRequest{
-		OperationID: "fork_blocks_force_delete", EndpointID: meta.EndpointID, SourceThreadID: thread.ThreadID,
-		DestinationThreadID: "destination_blocks_force_delete", CreatedAtUnixMs: time.Now().UnixMilli(),
+		OperationID: "fork_blocks_force_delete", ClientRequestID: "fork_blocks_force_delete", EndpointID: meta.EndpointID, SourceThreadID: thread.ThreadID,
+		CreatedByUserPublicID: meta.UserPublicID, CreatedAtUnixMs: time.Now().UnixMilli(),
 	}); err != nil {
 		t.Fatal(err)
 	}

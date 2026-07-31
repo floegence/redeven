@@ -1273,7 +1273,7 @@ describe('Flower live projection', () => {
   it('applies queued turn count patches down to zero', () => {
     const initial = thread({
       queued_turn_count: 1,
-      queued_turns: [{ turn_id: 'turn-queued', prompt: 'queued prompt', created_at_ms: 2000 }],
+      queued_turns: [{ queue_id: 'queue-queued', prompt: 'queued prompt', created_at_ms: 2000 }],
     });
     const mapped = mapFlowerLiveEvents({
       schema_version: 1,
@@ -1390,7 +1390,7 @@ describe('Flower live projection', () => {
         ...raw.thread,
         queued_turn_count: 1,
         queued_turns: [{
-          turn_id: 'turn-invalid-attachment',
+          queue_id: 'queue-invalid-attachment',
           text: 'Inspect this file',
           created_at_unix_ms: 1_710_000_000_000,
           attachments: { name: 'notes.txt' },
@@ -1404,7 +1404,7 @@ describe('Flower live projection', () => {
         ...raw.thread,
         queued_turn_count: 1,
         queued_turns: [{
-          turn_id: 'turn-invalid-attachment',
+          queue_id: 'queue-invalid-attachment',
           text: 'Inspect this file',
           created_at_unix_ms: 1_710_000_000_000,
           attachments: [{ attachment_id: '', name: 'notes.txt', mime_type: 'text/plain', size_bytes: 128 }],
@@ -1441,7 +1441,7 @@ describe('Flower live projection', () => {
         run_status: 'running',
         queued_turn_count: 1,
         queued_turns: [{
-          turn_id: 'turn-linked-file',
+          queue_id: 'queue-linked-file',
           text: 'Inspect this file',
           created_at_unix_ms: 1_710_000_000_000,
           attachments: [{ attachment_id: 'upl_notes', name: 'notes.txt', mime_type: 'text/plain', size_bytes: 128, locator: '/api/uploads/notes' }],
@@ -1461,7 +1461,7 @@ describe('Flower live projection', () => {
     }, mapperOptions());
 
     expect(mapped.thread.queued_turns).toEqual([{
-      turn_id: 'turn-linked-file',
+      queue_id: 'queue-linked-file',
       prompt: 'Inspect this file',
       created_at_ms: 1_710_000_000_000,
       attachments: [{ attachment_id: 'upl_notes', name: 'notes.txt', mime_type: 'text/plain', size_bytes: 128, locator: '/api/uploads/notes' }],
@@ -1473,7 +1473,7 @@ describe('Flower live projection', () => {
     const initial = thread({
       queued_turn_count: 1,
       queued_turns: [{
-        turn_id: 'turn-linked-file',
+        queue_id: 'queue-linked-file',
         prompt: 'Inspect this file',
         created_at_ms: 1200,
       }],

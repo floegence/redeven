@@ -466,7 +466,7 @@ export type FlowerThreadReadStatus = Readonly<{
 }>;
 
 export type FlowerQueuedTurn = Readonly<{
-  turn_id: string;
+  queue_id: string;
   prompt: string;
   created_at_ms: number;
   attachments?: readonly FlowerQueuedTurnAttachment[];
@@ -1028,8 +1028,8 @@ export type FlowerResolveHandlerInput = Readonly<{
 }>;
 
 export type FlowerTurnLaunchInput = Readonly<{
+  client_request_id: string;
   thread_id?: string;
-  turn_id?: string;
   staging_scope?: FlowerAttachmentStagingScope;
   prompt: string;
   decision?: FlowerRouterDecision | null;
@@ -1042,10 +1042,16 @@ export type FlowerTurnLaunchInput = Readonly<{
 }>;
 
 export type FlowerTurnLaunchReceipt = Readonly<{
+  client_request_id: string;
   thread_id: string;
   turn_id: string;
   run_id: string;
-  kind: 'start' | 'queued';
+  kind: 'start';
+}> | Readonly<{
+  client_request_id: string;
+  thread_id: string;
+  queue_id: string;
+  kind: 'queued';
 }>;
 
 export type FlowerCompactThreadContextInput = Readonly<{
@@ -1056,8 +1062,10 @@ export type FlowerCompactThreadContextInput = Readonly<{
 export type FlowerTurnLaunchFailure = Error & Readonly<{
   fresh_decision?: FlowerRouterDecision;
   uncertain_admission?: Readonly<{
-    thread_id: string;
-    turn_id: string;
+    client_request_id: string;
+    thread_id?: string;
+    queue_id?: string;
+    turn_id?: string;
   }>;
 }>;
 
@@ -1097,7 +1105,7 @@ export type FlowerStagedAttachment = Readonly<{
 
 export type FlowerAttachmentStagingScope = Readonly<{
   staging_scope_id: string;
-  thread_id: string;
+  target_id: string;
   capability: string;
   expires_at_unix_ms: number;
 }>;
@@ -1303,11 +1311,11 @@ export type FlowerSurfaceAdapter = Readonly<{
   persistDefaultModel: (modelID: string) => Promise<FlowerSettingsSnapshot>;
   setThreadModel?: (threadID: string, modelID: string) => Promise<FlowerLiveBootstrap>;
   setThreadReasoningSelection?: (threadID: string, selection: FlowerReasoningSelection | undefined) => Promise<FlowerLiveBootstrap>;
-  forkThread?: (threadID: string) => Promise<FlowerLiveBootstrap>;
+  forkThread?: (threadID: string, clientRequestID: string) => Promise<FlowerLiveBootstrap>;
   deleteThread?: (threadID: string) => Promise<FlowerThreadDeleteOutcome>;
   resolveHandler: (input?: FlowerResolveHandlerInput) => Promise<FlowerRouterDecision>;
   loadAttachmentCapability?: (modelID: string) => Promise<FlowerAttachmentCapability>;
-  createAttachmentStagingScope?: (threadID?: string) => Promise<FlowerAttachmentStagingScope>;
+  createAttachmentStagingScope?: (targetID?: string) => Promise<FlowerAttachmentStagingScope>;
   releaseAttachmentStagingScope?: (scope: FlowerAttachmentStagingScope) => Promise<void>;
   uploadAttachment?: (input: FlowerAttachmentUploadInput) => Promise<FlowerStagedAttachment>;
   deleteStagedAttachment?: (attachmentID: string, scope: FlowerAttachmentStagingScope) => Promise<void>;

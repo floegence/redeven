@@ -11,14 +11,14 @@ import (
 	"testing"
 	"time"
 
-	flruntime "github.com/floegence/floret/v2/runtime"
-	flstorage "github.com/floegence/floret/v2/storage"
+	"github.com/floegence/floret/v3/identity"
+	flruntime "github.com/floegence/floret/v3/runtime"
+	flstorage "github.com/floegence/floret/v3/storage"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
 func TestClassifyFloretForkOperationError(t *testing.T) {
 	t.Parallel()
-
 	tests := []struct {
 		name     string
 		err      error
@@ -48,15 +48,15 @@ func TestThreadForkReplayRejectsDamagedSnapshotBeforeFloretFork(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	if err := db.CreateThreadSettings(ctx, threadstore.ThreadSettings{
-		ThreadID: "thread_corrupt_fork_source", EndpointID: "env_corrupt_fork", PermissionType: "approval_required",
-	}); err != nil {
+	adapter := testFloretBootstrap(t, openTestFloretRuntimeHost(t, flstorage.Memory()))
+	created, err := adapter.threadCreate.CreateThread(ctx, identity.LogicalRequestID("create_corrupt_fork_source"))
+	if err != nil {
 		t.Fatal(err)
 	}
-	operation, err := db.PrepareForkOperation(ctx, threadstore.ForkThreadRequest{
-		OperationID: "fork_corrupt_replay", EndpointID: "env_corrupt_fork", SourceThreadID: "thread_corrupt_fork_source",
-		DestinationThreadID: "thread_corrupt_fork_destination", CreatedAtUnixMs: 100,
-	})
+	if err := db.CreateThreadSettings(ctx, threadstore.ThreadSettings{ThreadID: string(created.ThreadID), EndpointID: "env_corrupt_fork", PermissionType: "approval_required"}); err != nil {
+		t.Fatal(err)
+	}
+	operation, err := db.PrepareForkOperation(ctx, threadstore.ForkThreadRequest{ClientRequestID: "fork_corrupt_replay", EndpointID: "env_corrupt_fork", SourceThreadID: string(created.ThreadID), CreatedByUserPublicID: "user", CreatedAtUnixMs: 100})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,24 +68,10 @@ func TestThreadForkReplayRejectsDamagedSnapshotBeforeFloretFork(t *testing.T) {
 	if _, err := rawDB.ExecContext(ctx, `UPDATE ai_thread_fork_operations SET request_fingerprint = 'damaged' WHERE operation_id = ?`, operation.OperationID); err != nil {
 		t.Fatal(err)
 	}
-	floretStore := openTestFloretRuntimeHost(t, flstorage.Memory())
-	t.Cleanup(func() { _ = floretStore.Close() })
-	adapter := testFloretBootstrap(t, floretStore)
-	createIntentID := flruntime.CreateIntentID("test-create-fork-source")
-	host, err := adapter.newThreadCreate(flruntime.ThreadID(operation.SourceThreadID), createIntentID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := host.Create(ctx); err != nil {
-		t.Fatal(err)
-	}
 	service := &Service{threadsDB: db}
 	installTestFloretCapabilities(service, adapter)
 	if completed, err := service.replayPendingThreadForkOperations(ctx); completed != 0 || err == nil || !strings.Contains(err.Error(), "fingerprint mismatch") {
-		t.Fatalf("replay completed=%d error=%v, want strict snapshot failure", completed, err)
-	}
-	if _, err := adapter.newThreadRead(ctx, flruntime.ThreadID(operation.DestinationThreadID)); !errors.Is(err, flruntime.ErrThreadNotFound) {
-		t.Fatalf("fork destination error=%v, want %v", err, flruntime.ErrThreadNotFound)
+		t.Fatalf("replay completed=%d error=%v", completed, err)
 	}
 }
 
@@ -93,13 +79,7 @@ func TestThreadForkOperationRecoversAfterFloretCommitAndProcessRestart(t *testin
 	stateDir := t.TempDir()
 	agentHomeDir := t.TempDir()
 	newService := func() *Service {
-		svc, err := NewService(Options{
-			Logger:           slog.New(slog.NewTextHandler(io.Discard, nil)),
-			StateDir:         stateDir,
-			AgentHomeDir:     agentHomeDir,
-			Shell:            "/bin/bash",
-			PersistOpTimeout: 2 * time.Second,
-		})
+		svc, err := NewService(Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: stateDir, AgentHomeDir: agentHomeDir, Shell: "/bin/bash", PersistOpTimeout: 2 * time.Second})
 		if err != nil {
 			t.Fatalf("NewService: %v", err)
 		}
@@ -115,29 +95,19 @@ func TestThreadForkOperationRecoversAfterFloretCommitAndProcessRestart(t *testin
 		_ = svc.Close()
 		t.Fatalf("CreateThread: %v", err)
 	}
-
-	operationID := "fork_restart_recovery"
-	destinationID := "thread_restart_destination"
-	operation, err := svc.threadsDB.PrepareForkOperation(ctx, threadstore.ForkThreadRequest{
-		OperationID:           operationID,
-		EndpointID:            meta.EndpointID,
-		SourceThreadID:        source.ThreadID,
-		DestinationThreadID:   destinationID,
-		Title:                 "Recovered fork",
-		CreatedByUserPublicID: meta.UserPublicID,
-		CreatedByUserEmail:    meta.UserEmail,
-		CreatedAtUnixMs:       1000,
-	})
+	operation, err := svc.threadsDB.PrepareForkOperation(ctx, threadstore.ForkThreadRequest{ClientRequestID: "fork_restart_recovery", EndpointID: meta.EndpointID, SourceThreadID: source.ThreadID, Title: "Recovered fork", CreatedByUserPublicID: meta.UserPublicID, CreatedByUserEmail: meta.UserEmail, CreatedAtUnixMs: 1000})
 	if err != nil {
 		_ = svc.Close()
-		t.Fatalf("PrepareForkOperation: %v", err)
+		t.Fatal(err)
 	}
-	if _, err := svc.forkFloretThread(ctx, operation.OperationID, operation.SourceThreadID, operation.DestinationThreadID); err != nil {
+	floretResult, err := svc.forkFloretThread(ctx, operation.LogicalRequestID, operation.SourceThreadID)
+	if err != nil {
 		_ = svc.Close()
-		t.Fatalf("forkFloretThread: %v", err)
+		t.Fatal(err)
 	}
+	destinationID := string(floretResult.ThreadID)
 	if err := svc.Close(); err != nil {
-		t.Fatalf("Close first service: %v", err)
+		t.Fatal(err)
 	}
 
 	recovered := newService()
@@ -146,33 +116,19 @@ func TestThreadForkOperationRecoversAfterFloretCommitAndProcessRestart(t *testin
 	for time.Now().Before(deadline) {
 		forked, getErr := recovered.threadsDB.GetThreadSettings(ctx, meta.EndpointID, destinationID)
 		if getErr != nil {
-			t.Fatalf("GetThread destination: %v", getErr)
+			t.Fatal(getErr)
 		}
 		if forked != nil {
-			gotOperation, getOperationErr := recovered.threadsDB.GetForkOperation(ctx, operationID)
-			if getOperationErr != nil {
-				t.Fatalf("GetForkOperation: %v", getOperationErr)
+			got, getOperationErr := recovered.threadsDB.GetForkOperation(ctx, operation.OperationID)
+			if getOperationErr != nil || got.Stage != threadstore.ForkStageCompleted || got.DestinationThreadID != destinationID || got.SnapshotJSON == "" {
+				t.Fatalf("operation=%+v err=%v", got, getOperationErr)
 			}
-			if gotOperation.Status != threadstore.ForkOperationCommitted || gotOperation.SnapshotJSON != "" {
-				t.Fatalf("recovered operation=%+v", gotOperation)
-			}
-			if gotOperation.SourceBroadcastedAtUnixMs == 0 || gotOperation.DestinationBroadcastedAtUnixMs == 0 {
-				t.Fatalf("fork broadcasts were not acknowledged: %+v", gotOperation)
-			}
-			stale := *gotOperation
-			stale.SourceBroadcastedAtUnixMs = 0
-			stale.DestinationBroadcastedAtUnixMs = 0
-			recovered.publishCommittedThreadForkOperation(recovered.threadsDB, &stale)
-			afterReplay, replayErr := recovered.threadsDB.GetForkOperation(ctx, operationID)
-			if replayErr != nil {
-				t.Fatalf("GetForkOperation after stale publish replay: %v", replayErr)
-			}
-			if afterReplay.SourceBroadcastedAtUnixMs != gotOperation.SourceBroadcastedAtUnixMs || afterReplay.DestinationBroadcastedAtUnixMs != gotOperation.DestinationBroadcastedAtUnixMs {
-				t.Fatalf("stale publish replay changed acknowledgements: before=%+v after=%+v", gotOperation, afterReplay)
+			if got.SourceBroadcastedAtUnixMs == 0 || got.DestinationBroadcastedAtUnixMs == 0 {
+				t.Fatalf("broadcasts were not acknowledged: %+v", got)
 			}
 			return
 		}
 		time.Sleep(25 * time.Millisecond)
 	}
-	t.Fatalf("pending fork operation was not recovered after restart")
+	t.Fatal("pending fork operation was not recovered after restart")
 }

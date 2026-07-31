@@ -9,7 +9,8 @@ import (
 	"testing"
 	"time"
 
-	flruntime "github.com/floegence/floret/v2/runtime"
+	"github.com/floegence/floret/v3/identity"
+	flruntime "github.com/floegence/floret/v3/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/filesystemscope"
@@ -17,21 +18,21 @@ import (
 
 type mutableRootInventory struct {
 	mu      sync.Mutex
-	threads map[flruntime.ThreadID]flruntime.ThreadSummary
+	threads map[identity.ThreadID]flruntime.ThreadSnapshot
 }
 
-func (i *mutableRootInventory) ListRootThreads(context.Context, flruntime.ListRootThreadsRequest) (flruntime.RootThreadsPage, error) {
+func (i *mutableRootInventory) ListRootThreads(context.Context, floretListRootThreadsRequest) (floretRootThreadsPage, error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
-	items := make([]flruntime.ThreadSummary, 0, len(i.threads))
+	items := make([]flruntime.ThreadSnapshot, 0, len(i.threads))
 	for _, item := range i.threads {
 		items = append(items, item)
 	}
 	sort.Slice(items, func(left, right int) bool { return items[left].ID < items[right].ID })
-	return flruntime.RootThreadsPage{Threads: items, GeneratedAt: time.Now().UTC()}, nil
+	return floretRootThreadsPage{Threads: items}, nil
 }
 
-func (i *mutableRootInventory) DeleteThread(_ context.Context, id flruntime.ThreadID) error {
+func (i *mutableRootInventory) DeleteThread(_ context.Context, id identity.ThreadID, _ flruntime.DeleteThreadCommand) error {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	if _, ok := i.threads[id]; !ok {
@@ -53,7 +54,7 @@ func TestOrphanCanonicalRootAdoptIsExplicitIdempotentAndCrossEndpointClosed(t *t
 	}
 	defer store.Close()
 	now := time.Now().UTC()
-	inventory := &mutableRootInventory{threads: map[flruntime.ThreadID]flruntime.ThreadSummary{
+	inventory := &mutableRootInventory{threads: map[identity.ThreadID]flruntime.ThreadSnapshot{
 		"thread_orphan": {ID: "thread_orphan", CreatedAt: now, UpdatedAt: now, Phase: flruntime.ThreadPhaseIdle, Status: flruntime.ThreadStatusIdle, CanAppendMessage: true},
 	}}
 	service := &Service{
@@ -101,7 +102,7 @@ func TestOrphanCanonicalRootDeleteUsesPublicAuthorityAndIsIdempotent(t *testing.
 	}
 	defer store.Close()
 	now := time.Now().UTC()
-	inventory := &mutableRootInventory{threads: map[flruntime.ThreadID]flruntime.ThreadSummary{
+	inventory := &mutableRootInventory{threads: map[identity.ThreadID]flruntime.ThreadSnapshot{
 		"thread_orphan": {ID: "thread_orphan", CreatedAt: now, UpdatedAt: now, Phase: flruntime.ThreadPhaseIdle, Status: flruntime.ThreadStatusIdle, CanAppendMessage: true},
 	}}
 	service := &Service{threadsDB: store, orphanRoots: &floretOrphanRootMaintenanceCoordinator{inventory: inventory, delete: inventory}}
@@ -132,14 +133,18 @@ func TestOrphanCanonicalRootMaintenanceHonorsPendingForkOwnership(t *testing.T) 
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.PrepareForkOperation(ctx, threadstore.ForkThreadRequest{
-		OperationID: "fork_pending_ownership", EndpointID: "env_a", SourceThreadID: "thread_source",
-		DestinationThreadID: "thread_pending_fork", Title: "Pending fork", CreatedAtUnixMs: time.Now().UnixMilli(),
-	}); err != nil {
+	operation, err := store.PrepareForkOperation(ctx, threadstore.ForkThreadRequest{
+		OperationID: "fork_pending_ownership", ClientRequestID: "fork_pending_ownership", EndpointID: "env_a", SourceThreadID: "thread_source",
+		Title: "Pending fork", CreatedByUserPublicID: "user_pending_fork", CreatedAtUnixMs: time.Now().UnixMilli(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.BindForkCanonicalDestination(ctx, operation.OperationID, "thread_pending_fork"); err != nil {
 		t.Fatal(err)
 	}
 	now := time.Now().UTC()
-	inventory := &mutableRootInventory{threads: map[flruntime.ThreadID]flruntime.ThreadSummary{
+	inventory := &mutableRootInventory{threads: map[identity.ThreadID]flruntime.ThreadSnapshot{
 		"thread_source":       {ID: "thread_source", CreatedAt: now, UpdatedAt: now, Phase: flruntime.ThreadPhaseIdle, Status: flruntime.ThreadStatusIdle, CanAppendMessage: true},
 		"thread_pending_fork": {ID: "thread_pending_fork", CreatedAt: now, UpdatedAt: now, Phase: flruntime.ThreadPhaseIdle, Status: flruntime.ThreadStatusIdle, CanAppendMessage: true},
 	}}

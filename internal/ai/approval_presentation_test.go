@@ -4,7 +4,8 @@ import (
 	"testing"
 	"time"
 
-	flruntime "github.com/floegence/floret/v2/runtime"
+	"github.com/floegence/floret/v3/identity"
+	flruntime "github.com/floegence/floret/v3/runtime"
 )
 
 func TestFlowerApprovalActionFromFloretQueueUsesCommandPresentationLabel(t *testing.T) {
@@ -19,9 +20,9 @@ func TestFlowerApprovalActionFromFloretQueueUsesCommandPresentationLabel(t *test
 		ToolCallID:         "tool_pending_label",
 		ToolName:           "terminal.exec",
 		ToolKind:           "local",
-		RunID:              flruntime.RunID("run_pending_label"),
-		ThreadID:           flruntime.ThreadID("thread_pending_label"),
-		TurnID:             flruntime.TurnID("msg_pending_label"),
+		RunID:              identity.RunID("run_pending_label"),
+		ThreadID:           identity.ThreadID("thread_pending_label"),
+		TurnID:             identity.TurnID("msg_pending_label"),
 		Step:               1,
 		BatchIndex:         0,
 		BatchSize:          1,

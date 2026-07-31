@@ -4,7 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/floegence/floret/v2/observation"
+	"github.com/floegence/floret/v3/identity"
+	"github.com/floegence/floret/v3/observation"
 )
 
 func TestTrimMarkdownDeltaOverlap_RemovesLargePrefixOverlap(t *testing.T) {
@@ -43,10 +44,10 @@ func TestTrimMarkdownDeltaOverlap_LeavesDifferentDeltaUntouched(t *testing.T) {
 func activityTimelinePlaceholder(runID string) ActivityTimelineBlock {
 	return newActivityTimelineBlock(observation.ActivityTimeline{
 		SchemaVersion: observation.ActivityTimelineSchemaVersion,
-		RunID:         runID,
-		ThreadID:      "thread_" + runID,
-		TurnID:        "msg_" + runID,
-		TraceID:       runID,
+		RunID:         identity.RunID(runID),
+		ThreadID:      identity.ThreadID("thread_" + runID),
+		TurnID:        identity.TurnID("msg_" + runID),
+		TraceID:       identity.TraceID(runID),
 		Summary: observation.ActivitySummary{
 			Status:     observation.ActivityStatusSuccess,
 			Severity:   observation.ActivitySeverityQuiet,

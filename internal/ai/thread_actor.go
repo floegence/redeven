@@ -606,16 +606,16 @@ func (a *threadActor) lookupActiveRun(endpointID string, threadID string) (strin
 		return "", nil
 	}
 	a.mgr.svc.mu.Lock()
-	activeRunID := strings.TrimSpace(a.mgr.svc.activeRunByTh[thKey])
+	executionKey := strings.TrimSpace(a.mgr.svc.activeRunByTh[thKey])
 	r := (*run)(nil)
-	if activeRunID != "" {
-		r = a.mgr.svc.runs[activeRunID]
+	if executionKey != "" {
+		r = a.mgr.svc.runs[executionKey]
 	}
 	a.mgr.svc.mu.Unlock()
-	if activeRunID == "" || r == nil || r.isDetached() {
+	if executionKey == "" || r == nil || r.isDetached() {
 		return "", nil
 	}
-	return activeRunID, r
+	return executionKey, r
 }
 
 func (a *threadActor) handleMaybeStartQueuedTurn(ctx context.Context) error {
@@ -633,7 +633,7 @@ func (a *threadActor) handleMaybeStartQueuedTurn(ctx context.Context) error {
 	if a.mgr.svc.isQueuedDrainSuppressed(endpointID, threadID) {
 		return nil
 	}
-	if activeRunID, _ := a.lookupActiveRun(endpointID, threadID); activeRunID != "" {
+	if _, activeRun := a.lookupActiveRun(endpointID, threadID); activeRun != nil {
 		return nil
 	}
 	if a.mgr.svc.stopFinalizingRunID(endpointID, threadID) != "" {
@@ -685,9 +685,9 @@ func (a *threadActor) handleMaybeStartQueuedTurn(ctx context.Context) error {
 		return nil
 	}
 	rec := queued[0]
-	runID := strings.TrimSpace(rec.RunID)
-	if runID == "" {
-		return errors.New("pending turn command is missing run identity")
+	executionKey := strings.TrimSpace(rec.QueueID)
+	if executionKey == "" || strings.TrimSpace(rec.TurnID) != "" || strings.TrimSpace(rec.RunID) != "" {
+		return errors.New("pending turn command has invalid pre-admission identity")
 	}
 	meta, err := queuedTurnRecordToSessionMeta(rec, th.NamespacePublicID)
 	if err != nil {
@@ -700,7 +700,7 @@ func (a *threadActor) handleMaybeStartQueuedTurn(ctx context.Context) error {
 			threadID:           threadID,
 			queueID:            rec.QueueID,
 			turnID:             rec.TurnID,
-			runID:              runID,
+			runID:              executionKey,
 			requireSourceQueue: true,
 			err:                err,
 		}
@@ -711,19 +711,19 @@ func (a *threadActor) handleMaybeStartQueuedTurn(ctx context.Context) error {
 			threadID:           threadID,
 			queueID:            rec.QueueID,
 			turnID:             rec.TurnID,
-			runID:              runID,
+			runID:              executionKey,
 			requireSourceQueue: true,
 			err:                err,
 		}
 	}
 	go func() {
-		if _, _, err := a.mgr.svc.startUserTurnDetached(ctx, meta, runID, startReq, rec.QueueID); err != nil && a.mgr.svc.log != nil {
+		if _, _, err := a.mgr.svc.startUserTurnDetached(ctx, meta, executionKey, startReq, rec.QueueID); err != nil && a.mgr.svc.log != nil {
 			a.mgr.svc.log.Warn("failed to start queued turn", queuedTurnStartLogAttrs(&queuedTurnStartError{
 				endpointID:         endpointID,
 				threadID:           threadID,
 				queueID:            rec.QueueID,
 				turnID:             rec.TurnID,
-				runID:              runID,
+				runID:              executionKey,
 				requireSourceQueue: true,
 				err:                err,
 			}, endpointID, threadID)...)
@@ -755,14 +755,27 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 		return SendUserTurnResponse{}, errors.New("invalid request")
 	}
 	expected := strings.TrimSpace(req.ExpectedRunID)
-	activeRunID, _ := a.lookupActiveRun(endpointID, threadID)
-	if activeRunID != "" && expected != "" && expected != activeRunID {
+	activeExecutionKey, activeRun := a.lookupActiveRun(endpointID, threadID)
+	activeCanonicalRunID := ""
+	if activeRun != nil {
+		activeCanonicalRunID, _ = activeRun.canonicalRunTurnIdentity()
+	}
+	if activeRun != nil && expected != "" && expected != activeCanonicalRunID {
 		return SendUserTurnResponse{}, ErrRunChanged
 	}
-	finalizingRunID := ""
-	if activeRunID == "" {
-		finalizingRunID = a.mgr.svc.stopFinalizingRunID(endpointID, threadID)
-		if finalizingRunID != "" && expected != "" && expected != finalizingRunID {
+	finalizingExecutionKey := ""
+	if activeRun == nil {
+		finalizingExecutionKey = a.mgr.svc.stopFinalizingRunID(endpointID, threadID)
+		finalizingCanonicalRunID := ""
+		if finalizingExecutionKey != "" {
+			a.mgr.svc.mu.Lock()
+			finalizingRun := a.mgr.svc.runs[finalizingExecutionKey]
+			a.mgr.svc.mu.Unlock()
+			if finalizingRun != nil {
+				finalizingCanonicalRunID, _ = finalizingRun.canonicalRunTurnIdentity()
+			}
+		}
+		if finalizingExecutionKey != "" && expected != "" && expected != finalizingCanonicalRunID {
 			return SendUserTurnResponse{}, ErrRunChanged
 		}
 	}
@@ -855,7 +868,7 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 	if openPrompt != nil {
 		return SendUserTurnResponse{}, ErrWaitingUserQueueConflict
 	}
-	if activeRunID != "" || finalizingRunID != "" {
+	if activeExecutionKey != "" || finalizingExecutionKey != "" {
 		queued, position, err := a.mgr.svc.enqueueQueuedTurn(ctx, meta, req)
 		if err != nil {
 			return SendUserTurnResponse{}, err
@@ -904,7 +917,7 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 		}, nil
 	}
 
-	runID, err := NewRunID()
+	executionKey, err := NewQueuedTurnID()
 	if err != nil {
 		return SendUserTurnResponse{}, err
 	}
@@ -917,7 +930,7 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 		StagingScopeID:    req.StagingScopeID,
 		StagingCapability: req.StagingCapability,
 	}
-	admitted, _, err := a.mgr.svc.startUserTurnDetached(ctx, meta, runID, startReq, req.SourceFollowupID)
+	admitted, _, err := a.mgr.svc.startUserTurnDetached(ctx, meta, executionKey, startReq, req.SourceFollowupID)
 	if err != nil {
 		return SendUserTurnResponse{}, err
 	}
@@ -952,8 +965,12 @@ func (a *threadActor) handleSubmitRequestUserInputResponse(ctx context.Context, 
 		return SubmitRequestUserInputResponseResponse{}, errors.New("invalid request")
 	}
 	expected := strings.TrimSpace(req.ExpectedRunID)
-	activeRunID, _ := a.lookupActiveRun(endpointID, threadID)
-	if activeRunID != "" && expected != "" && expected != activeRunID {
+	_, activeRun := a.lookupActiveRun(endpointID, threadID)
+	activeRunID := ""
+	if activeRun != nil {
+		activeRunID, _ = activeRun.canonicalRunTurnIdentity()
+	}
+	if activeRun != nil && expected != "" && expected != activeRunID {
 		return SubmitRequestUserInputResponseResponse{}, ErrRunChanged
 	}
 
@@ -1031,10 +1048,10 @@ func (a *threadActor) handleSubmitRequestUserInputResponse(ctx context.Context, 
 		req.Options.ReasoningSelection = resolved.Effective
 	}
 
-	if activeRunID != "" {
+	if activeRun != nil {
 		return SubmitRequestUserInputResponseResponse{}, ErrRunChanged
 	}
-	runID, err := NewRunID()
+	executionKey, err := NewQueuedTurnID()
 	if err != nil {
 		return SubmitRequestUserInputResponseResponse{}, err
 	}
@@ -1044,7 +1061,7 @@ func (a *threadActor) handleSubmitRequestUserInputResponse(ctx context.Context, 
 		Input:    req.Input,
 		Options:  req.Options,
 	}
-	admitted, _, err := a.mgr.svc.startUserTurnDetached(ctx, meta, runID, startReq, req.SourceFollowupID)
+	admitted, _, err := a.mgr.svc.startUserTurnDetached(ctx, meta, executionKey, startReq, req.SourceFollowupID)
 	if err != nil {
 		return SubmitRequestUserInputResponseResponse{}, err
 	}

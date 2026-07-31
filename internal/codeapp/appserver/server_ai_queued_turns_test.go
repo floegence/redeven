@@ -122,7 +122,7 @@ func TestServer_AI_FollowupsEndpoints(t *testing.T) {
 	}
 	threadIDForCleanup = thread.ThreadID
 
-	err = aiSvc.StartRunDetached(&meta, "run_appserver_active", ai.RunStartRequest{
+	started, err := aiSvc.SendUserTurn(ctx, &meta, ai.SendUserTurnRequest{
 		ThreadID: thread.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Input: ai.RunInput{
@@ -131,7 +131,10 @@ func TestServer_AI_FollowupsEndpoints(t *testing.T) {
 		Options: ai.RunOptions{},
 	})
 	if err != nil {
-		t.Fatalf("StartRunDetached: %v", err)
+		t.Fatalf("SendUserTurn active: %v", err)
+	}
+	if started.Kind != "start" || strings.TrimSpace(started.RunID) == "" || strings.TrimSpace(started.TurnID) == "" {
+		t.Fatalf("active admission receipt=%#v", started)
 	}
 
 	deadline := time.Now().Add(2 * time.Second)
@@ -145,9 +148,10 @@ func TestServer_AI_FollowupsEndpoints(t *testing.T) {
 		t.Fatalf("active run did not start in time")
 	}
 	deadline = time.Now().Add(2 * time.Second)
+	activeRunID := strings.TrimSpace(started.RunID)
 	for time.Now().Before(deadline) {
 		view, viewErr := aiSvc.GetThread(ctx, &meta, thread.ThreadID)
-		if viewErr == nil && view != nil && strings.TrimSpace(view.ActiveRunID) == "run_appserver_active" {
+		if viewErr == nil && view != nil && strings.TrimSpace(view.ActiveRunID) == activeRunID {
 			break
 		}
 		time.Sleep(20 * time.Millisecond)
@@ -156,7 +160,7 @@ func TestServer_AI_FollowupsEndpoints(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetThread before queued turns: %v", err)
 	}
-	if view == nil || strings.TrimSpace(view.ActiveRunID) != "run_appserver_active" {
+	if view == nil || activeRunID == "" || strings.TrimSpace(view.ActiveRunID) != activeRunID {
 		t.Fatalf("canonical Floret turn did not start in time: %#v", view)
 	}
 	select {
@@ -169,8 +173,7 @@ func TestServer_AI_FollowupsEndpoints(t *testing.T) {
 		ThreadID: thread.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Input: ai.RunInput{
-			TurnID: "m_appserver_queue_1",
-			Text:   "first queued via app server test",
+			Text: "first queued via app server test",
 		},
 		Options: ai.RunOptions{},
 	})
@@ -181,16 +184,15 @@ func TestServer_AI_FollowupsEndpoints(t *testing.T) {
 		ThreadID: thread.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Input: ai.RunInput{
-			TurnID: "m_appserver_queue_2",
-			Text:   "second queued via app server test",
+			Text: "second queued via app server test",
 		},
 		Options: ai.RunOptions{},
 	})
 	if err != nil {
 		t.Fatalf("SendUserTurn second: %v", err)
 	}
-	if queuedResp1.Kind != "queued" || queuedResp1.TurnID != "m_appserver_queue_1" || strings.TrimSpace(queuedResp1.RunID) == "" ||
-		queuedResp2.Kind != "queued" || queuedResp2.TurnID != "m_appserver_queue_2" || strings.TrimSpace(queuedResp2.RunID) == "" {
+	if queuedResp1.Kind != "queued" || queuedResp1.TurnID != "" || queuedResp1.RunID != "" ||
+		queuedResp2.Kind != "queued" || queuedResp2.TurnID != "" || queuedResp2.RunID != "" {
 		t.Fatalf("unexpected queued kinds: first=%q second=%q", queuedResp1.Kind, queuedResp2.Kind)
 	}
 	followupID1 := strings.TrimSpace(queuedResp1.QueueID)

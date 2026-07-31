@@ -14,8 +14,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/floegence/floret/v2/observation"
-	flruntime "github.com/floegence/floret/v2/runtime"
+	"github.com/floegence/floret/v3/identity"
+	"github.com/floegence/floret/v3/observation"
+	flruntime "github.com/floegence/floret/v3/runtime"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -121,10 +122,9 @@ func TestFlowerLiveBootstrapReadsCanonicalFloretContextAfterServiceRestart(t *te
 		t.Fatalf("CreateThread: %v", err)
 	}
 	host := newTestFloretHostFromService(t, first, thread.ThreadID, "canonical context answer")
-	if _, err := host.Run(ctx, flruntime.TurnRequest{
-		TurnID: "turn_context_restart",
-		RunID:  "run_context_restart",
-		Input:  flruntime.TurnInput{Text: "record canonical context"},
+	if _, err := host.Run(ctx, flruntime.StartTurnCommand{
+		LogicalRequestID: identity.LogicalRequestID("turn_context_restart"),
+		UserMessage:      flruntime.TurnInput{Text: "record canonical context"},
 	}); err != nil {
 		_ = first.Close()
 		t.Fatalf("RunTurn: %v", err)
@@ -494,10 +494,10 @@ func TestFlowerLiveActivityTimelineProjectsThroughMessageBlockSet(t *testing.T) 
 	messageID := "msg_live_activity_block"
 	activity := newActivityTimelineBlock(observation.ActivityTimeline{
 		SchemaVersion: observation.ActivityTimelineSchemaVersion,
-		RunID:         runID,
-		ThreadID:      th.ThreadID,
-		TurnID:        messageID,
-		TraceID:       runID,
+		RunID:         identity.RunID(runID),
+		ThreadID:      identity.ThreadID(th.ThreadID),
+		TurnID:        identity.TurnID(messageID),
+		TraceID:       identity.TraceID(runID),
 		Summary: observation.ActivitySummary{
 			Status:     observation.ActivityStatusSuccess,
 			Severity:   observation.ActivitySeverityNormal,
@@ -985,7 +985,8 @@ func TestRunContextCompactionAnchorRemainsStableAcrossOperationEvents(t *testing
 		t.Fatalf("CreateThread: %v", err)
 	}
 	host := newTestFloretHostFromService(t, svc, th.ThreadID, "visible output before compact")
-	if _, err := host.Run(ctx, flruntime.TurnRequest{TurnID: "message-before-compact", RunID: "run-before-compact", Input: flruntime.TurnInput{Text: "prepare"}}); err != nil {
+	seedTurn, err := host.Run(ctx, flruntime.StartTurnCommand{LogicalRequestID: identity.LogicalRequestID("message-before-compact"), UserMessage: flruntime.TurnInput{Text: "prepare"}})
+	if err != nil {
 		t.Fatalf("seed canonical timeline: %v", err)
 	}
 
@@ -1049,8 +1050,8 @@ func TestRunContextCompactionAnchorRemainsStableAcrossOperationEvents(t *testing
 	if got := strings.TrimSpace(anchor.TargetKind); got != "block" {
 		t.Fatalf("anchor target_kind=%q, want block", got)
 	}
-	if got := strings.TrimSpace(anchor.MessageID); got != "message-before-compact" {
-		t.Fatalf("anchor message_id=%q, want message-before-compact", got)
+	if got := strings.TrimSpace(anchor.MessageID); got != strings.TrimSpace(string(seedTurn.TurnID)) {
+		t.Fatalf("anchor message_id=%q, want canonical turn %q", got, seedTurn.TurnID)
 	}
 	if anchor.BlockIndex == nil || *anchor.BlockIndex != 0 {
 		t.Fatalf("anchor block_index=%v, want 0", anchor.BlockIndex)
@@ -1187,17 +1188,20 @@ func TestFlowerLiveCanonicalApprovalQueueSupportsIdentityCheckedResolution(t *te
 			svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, turnID, runID, ev)
 		},
 	}, svc.threadsDB)
+	if err := r.observeFloretCanonicalIdentity(runID, th.ThreadID, turnID); err != nil {
+		t.Fatalf("bind canonical approval identity: %v", err)
+	}
 	requestedAt := time.Now()
 	record := flruntime.ApprovalRecord{
 		ApprovalID:         "approval_live_approval_seq",
-		RootThreadID:       flruntime.ThreadID(th.ThreadID),
+		RootThreadID:       identity.ThreadID(th.ThreadID),
 		EffectAttemptID:    "effect_live_approval_seq",
 		ToolCallID:         "tool_live_approval_seq",
 		ToolName:           "terminal.exec",
 		ToolKind:           "local",
-		RunID:              flruntime.RunID(r.id),
-		ThreadID:           flruntime.ThreadID(th.ThreadID),
-		TurnID:             flruntime.TurnID(r.turnID),
+		RunID:              identity.RunID(r.id),
+		ThreadID:           identity.ThreadID(th.ThreadID),
+		TurnID:             identity.TurnID(r.turnID),
 		Step:               2,
 		BatchIndex:         0,
 		BatchSize:          1,
@@ -1216,11 +1220,11 @@ func TestFlowerLiveCanonicalApprovalQueueSupportsIdentityCheckedResolution(t *te
 		OpenWorld: true,
 	}
 	queue := flruntime.ApprovalQueue{
-		RootThreadID: flruntime.ThreadID(th.ThreadID), Generation: 7, Revision: 11,
+		RootThreadID: identity.ThreadID(th.ThreadID), Generation: 7, Revision: 11,
 		CurrentApprovalID: record.ApprovalID, Items: []flruntime.ApprovalRecord{record}, GeneratedAt: requestedAt,
 	}
 	host := &recordingFloretHost{approvalQueue: queue}
-	host.resolveApproval = func(req flruntime.ApprovalResolutionRequest) (flruntime.ResolveApprovalResult, error) {
+	host.resolveApproval = func(req flruntime.ResolveApprovalCommand) (flruntime.ResolveApprovalResult, error) {
 		resolvedAt := time.Now()
 		resolvedRecord := record
 		resolvedRecord.State = "rejected"
@@ -1309,10 +1313,10 @@ func TestFlowerLiveCanonicalApprovalQueueSupportsIdentityCheckedResolution(t *te
 		BlockIndex: 0,
 		Block: newActivityTimelineBlock(observation.ActivityTimeline{
 			SchemaVersion: observation.ActivityTimelineSchemaVersion,
-			RunID:         runID,
-			ThreadID:      th.ThreadID,
-			TurnID:        r.turnID,
-			TraceID:       runID,
+			RunID:         identity.RunID(runID),
+			ThreadID:      identity.ThreadID(th.ThreadID),
+			TurnID:        identity.TurnID(r.turnID),
+			TraceID:       identity.TraceID(runID),
 			Summary: observation.ActivitySummary{
 				Status:         observation.ActivityStatusWaiting,
 				Severity:       observation.ActivitySeverityBlocking,
@@ -1460,9 +1464,9 @@ func TestFlowerLiveApprovalSnapshotCarriesFloretApprovalContext(t *testing.T) {
 		ToolCallID:         "tool_floret_approval_context",
 		ToolName:           "apply_patch",
 		ToolKind:           "local",
-		RunID:              flruntime.RunID("run_floret_approval_context"),
-		ThreadID:           flruntime.ThreadID("thread_floret_approval_context"),
-		TurnID:             flruntime.TurnID("msg_floret_approval_context"),
+		RunID:              identity.RunID("run_floret_approval_context"),
+		ThreadID:           identity.ThreadID("thread_floret_approval_context"),
+		TurnID:             identity.TurnID("msg_floret_approval_context"),
 		Step:               4,
 		BatchIndex:         0,
 		BatchSize:          1,
@@ -1709,6 +1713,9 @@ func TestSubmitFlowerControlConfirmationUsesLiveEventAuthority(t *testing.T) {
 			svc.broadcastStreamEvent(meta.EndpointID, threadID, turnID, runID, event)
 		},
 	}, svc.threadsDB)
+	if err := r.observeFloretCanonicalIdentity(runID, threadID, turnID); err != nil {
+		t.Fatalf("bind canonical control identity: %v", err)
+	}
 	r.mu.Lock()
 	r.toolApprovals[toolID] = &toolApprovalRequest{
 		decision: decision, toolName: "terminal.exec", command: "sleep 30", requestedAtMs: time.Now().UnixMilli(),

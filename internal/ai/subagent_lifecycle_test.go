@@ -14,10 +14,12 @@ import (
 	"testing"
 	"time"
 
-	flconfig "github.com/floegence/floret/v2/config"
-	"github.com/floegence/floret/v2/observation"
-	flprovider "github.com/floegence/floret/v2/provider"
-	flruntime "github.com/floegence/floret/v2/runtime"
+	flconfig "github.com/floegence/floret/v3/config"
+	"github.com/floegence/floret/v3/identity"
+	"github.com/floegence/floret/v3/observation"
+	flprovider "github.com/floegence/floret/v3/provider"
+	flruntime "github.com/floegence/floret/v3/runtime"
+	fltools "github.com/floegence/floret/v3/tools"
 	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
@@ -121,8 +123,8 @@ func TestFloretSubagentTerminalCleanupSettlesCompletedChildPendingProcess(t *tes
 
 	host := &recordingFloretHost{
 		snapshots: []flruntime.SubAgentSnapshot{
-			{ParentThreadID: flruntime.ThreadID(parentThreadID), ThreadID: flruntime.ThreadID(completedChildThreadID), Status: flruntime.SubAgentStatusCompleted, LatestTurnID: flruntime.TurnID(completedFloretTurnID)},
-			{ParentThreadID: flruntime.ThreadID(parentThreadID), ThreadID: flruntime.ThreadID(runningChildThreadID), Status: flruntime.SubAgentStatusRunning, LatestTurnID: flruntime.TurnID(runningChildTurnID)},
+			{ParentThreadID: identity.ThreadID(parentThreadID), ThreadID: identity.ThreadID(completedChildThreadID), Status: flruntime.SubAgentStatusCompleted, LatestTurnID: identity.TurnID(completedFloretTurnID)},
+			{ParentThreadID: identity.ThreadID(parentThreadID), ThreadID: identity.ThreadID(runningChildThreadID), Status: flruntime.SubAgentStatusRunning, LatestTurnID: identity.TurnID(runningChildTurnID)},
 		},
 		settleResult: terminalProcessTestSettlementResult(terminalProcessTestProjection(completedFloretRunID, completedChildThreadID, completedFloretTurnID, "tool_completed")),
 	}
@@ -145,14 +147,14 @@ func TestFloretSubagentTerminalCleanupSettlesCompletedChildPendingProcess(t *tes
 	}
 
 	host.mu.Lock()
-	settleRequests := append([]flruntime.PendingToolSettlementRequest(nil), host.settleRequests...)
+	settleRequests := append([]floretPendingToolSettlementRequest(nil), host.settleRequests...)
 	host.mu.Unlock()
 	if len(settleRequests) != 1 {
 		t.Fatalf("settle requests=%d, want 1", len(settleRequests))
 	}
-	if settleRequests[0].Target.ThreadID != flruntime.ThreadID(completedChildThreadID) ||
-		settleRequests[0].Target.RunID != flruntime.RunID(completedFloretRunID) ||
-		settleRequests[0].Target.TurnID != flruntime.TurnID(completedFloretTurnID) ||
+	if settleRequests[0].Target.ThreadID != identity.ThreadID(completedChildThreadID) ||
+		settleRequests[0].Target.RunID != identity.RunID(completedFloretRunID) ||
+		settleRequests[0].Target.TurnID != identity.TurnID(completedFloretTurnID) ||
 		settleRequests[0].Target.ToolCallID != "tool_completed" ||
 		settleRequests[0].Status != flruntime.PendingToolSettlementCanceled {
 		t.Fatalf("settle request=%#v, want completed child terminal cancellation", settleRequests[0])
@@ -172,44 +174,52 @@ func TestFloretSubagentTerminalCleanupSettlesCompletedChildPendingProcess(t *tes
 
 type recordingFloretHost struct {
 	mu                 sync.Mutex
-	threadID           flruntime.ThreadID
-	parentThreadID     flruntime.ThreadID
+	threadID           identity.ThreadID
+	parentThreadID     identity.ThreadID
 	closeSubagentCount atomic.Int32
 	deleteThreadCount  atomic.Int32
 	listSubagentCount  atomic.Int32
 	spawnErr           error
 	snapshots          []flruntime.SubAgentSnapshot
-	threads            map[flruntime.ThreadID]flruntime.ThreadSnapshot
+	threads            map[identity.ThreadID]flruntime.ThreadSnapshot
 	detail             flruntime.SubAgentDetail
 	detailErr          error
-	detailRequests     []flruntime.SubAgentDetailRequest
+	detailThreadIDs    []identity.ThreadID
+	detailRequests     []flruntime.ThreadDetailRequest
 	turnPage           flruntime.ThreadTurnsPage
 	turnPages          []flruntime.ThreadTurnsPage
 	turnErr            error
 	turnRequests       []flruntime.ThreadTurnsRequest
-	exactTurnRequests  []flruntime.TurnID
-	spawnRequests      []flruntime.SpawnSubAgent
-	sendInputRequests  []flruntime.SendSubAgentInput
+	exactTurnRequests  []identity.TurnID
+	spawnRequests      []flruntime.SpawnSubAgentCommand
+	afterSpawn         func(flruntime.SpawnSubAgentCommand, flruntime.SubAgentSnapshot) error
+	sendInputRequests  []flruntime.SendSubAgentMessageCommand
 	sendInputResult    *flruntime.SubAgentSnapshot
-	settleRequests     []flruntime.PendingToolSettlementRequest
+	settleRequests     []floretPendingToolSettlementRequest
 	settleResult       flruntime.PendingToolSettlementResult
 	settleErr          error
 	readProjection     flruntime.ThreadTurnProjection
 	readProjectionErr  error
-	readProjectionReqs []flruntime.ReadTurnProjectionRequest
-	deleteThreadIDs    []flruntime.ThreadID
-	closeSubagentReqs  []flruntime.CloseSubAgent
+	readProjectionReqs []testReadTurnProjectionRequest
+	deleteThreadIDs    []identity.ThreadID
+	closeSubagentReqs  []flruntime.CloseSubAgentCommand
 	closeResult        *flruntime.SubAgentSnapshot
 	approvalQueue      flruntime.ApprovalQueue
-	resolveApproval    func(flruntime.ApprovalResolutionRequest) (flruntime.ResolveApprovalResult, error)
-	resolveApprovalReq []flruntime.ApprovalResolutionRequest
+	resolveApproval    func(flruntime.ResolveApprovalCommand) (flruntime.ResolveApprovalResult, error)
+	resolveApprovalReq []flruntime.ResolveApprovalCommand
+}
+
+type testReadTurnProjectionRequest struct {
+	ThreadID identity.ThreadID
+	TurnID   identity.TurnID
+	RunID    identity.RunID
 }
 
 func bindFloretSubagentRead(svc *Service, parentThreadID string, host floretSubagentReadHost) {
 	if svc.floretReads == nil {
 		svc.floretReads = &floretReadCapabilities{}
 	}
-	svc.floretReads.subagent = func(_ context.Context, got flruntime.ThreadID) (floretSubagentReadHost, error) {
+	svc.floretReads.subagent = func(_ context.Context, got identity.ThreadID) (floretSubagentReadHost, error) {
 		if strings.TrimSpace(string(got)) != strings.TrimSpace(parentThreadID) {
 			return nil, errors.New("unexpected SubAgent read parent")
 		}
@@ -223,7 +233,7 @@ type recordingFloretSubagentReadHost struct {
 
 func bindRecordingSubagentReadHost(svc *Service, parentThreadID string, host *recordingFloretHost) {
 	host.mu.Lock()
-	host.parentThreadID = flruntime.ThreadID(parentThreadID)
+	host.parentThreadID = identity.ThreadID(parentThreadID)
 	host.mu.Unlock()
 	bindFloretSubagentRead(svc, parentThreadID, recordingFloretSubagentReadHost{host: host})
 }
@@ -232,16 +242,16 @@ func (h recordingFloretSubagentReadHost) ListSubAgents(ctx context.Context) ([]f
 	return h.host.ListSubAgents(ctx)
 }
 
-func (h recordingFloretSubagentReadHost) ReadThreadTurn(ctx context.Context, _ flruntime.ThreadID, turnID flruntime.TurnID) (flruntime.ThreadTurnSnapshot, error) {
+func (h recordingFloretSubagentReadHost) ReadThreadTurn(ctx context.Context, _ identity.ThreadID, turnID identity.TurnID) (flruntime.ThreadTurnSnapshot, error) {
 	return h.host.ReadThreadTurn(ctx, turnID)
 }
 
-func (h recordingFloretSubagentReadHost) ListThreadTurns(ctx context.Context, childThreadID flruntime.ThreadID, request flruntime.ThreadTurnsRequest) (flruntime.ThreadTurnsPage, error) {
+func (h recordingFloretSubagentReadHost) ListThreadTurns(ctx context.Context, childThreadID identity.ThreadID, request flruntime.ThreadTurnsRequest) (flruntime.ThreadTurnsPage, error) {
 	return h.host.listThreadTurns(ctx, request, childThreadID)
 }
 
-func (h recordingFloretSubagentReadHost) ReadSubAgentDetail(ctx context.Context, request flruntime.SubAgentDetailRequest) (flruntime.SubAgentDetail, error) {
-	return h.host.readSubAgentDetail(ctx, request)
+func (h recordingFloretSubagentReadHost) ReadSubAgentDetail(ctx context.Context, childThreadID identity.ThreadID, request flruntime.ThreadDetailRequest) (flruntime.SubAgentDetail, error) {
+	return h.host.readSubAgentDetail(ctx, childThreadID, request)
 }
 
 func bindRecordingThreadRead(svc *Service, threadID string, host floretThreadReadHost) {
@@ -250,10 +260,10 @@ func bindRecordingThreadRead(svc *Service, threadID string, host floretThreadRea
 	}
 	if recorder, ok := host.(*recordingFloretHost); ok {
 		recorder.mu.Lock()
-		recorder.threadID = flruntime.ThreadID(threadID)
+		recorder.threadID = identity.ThreadID(threadID)
 		recorder.mu.Unlock()
 	}
-	svc.floretReads.thread = func(_ context.Context, got flruntime.ThreadID) (floretThreadReadHost, error) {
+	svc.floretReads.thread = func(_ context.Context, got identity.ThreadID) (floretThreadReadHost, error) {
 		if strings.TrimSpace(string(got)) != strings.TrimSpace(threadID) {
 			return nil, errors.New("unexpected thread read authority")
 		}
@@ -261,13 +271,15 @@ func bindRecordingThreadRead(svc *Service, threadID string, host floretThreadRea
 	}
 }
 
-func bindRecordingThreadDelete(svc *Service, threadID string, host ThreadDeleteHost) {
+func bindRecordingThreadDelete(svc *Service, threadID string, host interface {
+	Delete(context.Context) error
+}) {
 	if recorder, ok := host.(*recordingFloretHost); ok {
 		recorder.mu.Lock()
-		recorder.threadID = flruntime.ThreadID(threadID)
+		recorder.threadID = identity.ThreadID(threadID)
 		recorder.mu.Unlock()
 	}
-	svc.threadDeleteFloret = &threadDeleteFloretCoordinator{authority: testFloretThreadDeleteAuthorityFunc(func(ctx context.Context, got flruntime.ThreadID) error {
+	svc.threadDeleteFloret = &threadDeleteFloretCoordinator{authority: testFloretThreadDeleteAuthorityFunc(func(ctx context.Context, got identity.ThreadID) error {
 		if strings.TrimSpace(string(got)) != strings.TrimSpace(threadID) {
 			return errors.New("unexpected thread delete authority")
 		}
@@ -279,12 +291,8 @@ func (h *recordingFloretHost) ReadThreadAgentTodos(context.Context) (flruntime.T
 	return flruntime.ThreadAgentTodoState{ThreadID: h.threadID}, nil
 }
 
-func (h *recordingFloretHost) UpdateThreadAgentTodos(_ context.Context, req flruntime.AgentTodoUpdateRequest) (flruntime.ThreadAgentTodoState, error) {
+func (h *recordingFloretHost) UpdateThreadAgentTodos(_ context.Context, req flruntime.UpdateTodosCommand) (flruntime.ThreadAgentTodoState, error) {
 	return flruntime.ThreadAgentTodoState{ThreadID: h.threadID, Version: req.ExpectedVersion + 1, Items: req.Items}, nil
-}
-
-func (h *recordingFloretHost) ForkThread(context.Context, flruntime.ForkThreadRequest) (flruntime.ForkThreadResult, error) {
-	return flruntime.ForkThreadResult{}, nil
 }
 
 func (h *recordingFloretHost) ReadThread(context.Context) (flruntime.ThreadSnapshot, error) {
@@ -314,7 +322,7 @@ func (h *recordingFloretHost) ListThreadTurns(_ context.Context, req flruntime.T
 	return h.listThreadTurns(context.Background(), req, h.threadID)
 }
 
-func (h *recordingFloretHost) listThreadTurns(_ context.Context, req flruntime.ThreadTurnsRequest, defaultThreadID flruntime.ThreadID) (flruntime.ThreadTurnsPage, error) {
+func (h *recordingFloretHost) listThreadTurns(_ context.Context, req flruntime.ThreadTurnsRequest, defaultThreadID identity.ThreadID) (flruntime.ThreadTurnsPage, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.turnRequests = append(h.turnRequests, req)
@@ -332,7 +340,7 @@ func (h *recordingFloretHost) listThreadTurns(_ context.Context, req flruntime.T
 	return page, nil
 }
 
-func (h *recordingFloretHost) ReadThreadTurn(_ context.Context, turnID flruntime.TurnID) (flruntime.ThreadTurnSnapshot, error) {
+func (h *recordingFloretHost) ReadThreadTurn(_ context.Context, turnID identity.TurnID) (flruntime.ThreadTurnSnapshot, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.exactTurnRequests = append(h.exactTurnRequests, turnID)
@@ -350,14 +358,6 @@ func (h *recordingFloretHost) ReadThreadTurn(_ context.Context, turnID flruntime
 	return flruntime.ThreadTurnSnapshot{}, flruntime.ErrTurnNotFound
 }
 
-func (h *recordingFloretHost) RunTurn(context.Context, flruntime.TurnRequest) (flruntime.TurnResult, error) {
-	return flruntime.TurnResult{}, nil
-}
-
-func (h *recordingFloretHost) ListThreadDetailEvents(context.Context, flruntime.ListThreadDetailEventsRequest) (flruntime.ThreadDetailEvents, error) {
-	return flruntime.ThreadDetailEvents{}, nil
-}
-
 func (h *recordingFloretHost) ReadApprovalQueue(context.Context) (flruntime.ApprovalQueue, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -369,7 +369,7 @@ func (h *recordingFloretHost) ReadApprovalQueue(context.Context) (flruntime.Appr
 	return queue, nil
 }
 
-func (h *recordingFloretHost) ResolveApproval(_ context.Context, req flruntime.ApprovalResolutionRequest) (flruntime.ResolveApprovalResult, error) {
+func (h *recordingFloretHost) ResolveApproval(_ context.Context, req flruntime.ResolveApprovalCommand) (flruntime.ResolveApprovalResult, error) {
 	h.mu.Lock()
 	h.resolveApprovalReq = append(h.resolveApprovalReq, req)
 	resolve := h.resolveApproval
@@ -380,10 +380,10 @@ func (h *recordingFloretHost) ResolveApproval(_ context.Context, req flruntime.A
 	return resolve(req)
 }
 
-func (h *recordingFloretHost) ReadTurnProjection(_ context.Context, turnID flruntime.TurnID, runID flruntime.RunID) (flruntime.ThreadTurnProjection, error) {
+func (h *recordingFloretHost) ReadTurnProjection(_ context.Context, turnID identity.TurnID, runID identity.RunID) (flruntime.ThreadTurnProjection, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.readProjectionReqs = append(h.readProjectionReqs, flruntime.ReadTurnProjectionRequest{ThreadID: h.threadID, TurnID: turnID, RunID: runID})
+	h.readProjectionReqs = append(h.readProjectionReqs, testReadTurnProjectionRequest{ThreadID: h.threadID, TurnID: turnID, RunID: runID})
 	if h.readProjectionErr != nil {
 		return flruntime.ThreadTurnProjection{}, h.readProjectionErr
 	}
@@ -393,19 +393,7 @@ func (h *recordingFloretHost) ReadTurnProjection(_ context.Context, turnID flrun
 	return flruntime.ThreadTurnProjection{}, flruntime.ErrTurnNotFound
 }
 
-func (h *recordingFloretHost) CompactThread(context.Context, flruntime.CompactThreadRequest) (flruntime.CompactThreadResult, error) {
-	return flruntime.CompactThreadResult{}, nil
-}
-
-func (h *recordingFloretHost) RetryTurn(context.Context, flruntime.RetryTurnRequest) (flruntime.TurnResult, error) {
-	return flruntime.TurnResult{}, nil
-}
-
-func (h *recordingFloretHost) CompletePendingTool(context.Context, flruntime.PendingToolCompletionRequest) (flruntime.TurnResult, error) {
-	return flruntime.TurnResult{}, nil
-}
-
-func (h *recordingFloretHost) SettlePendingTool(_ context.Context, req flruntime.PendingToolSettlementRequest) (flruntime.PendingToolSettlementResult, error) {
+func (h *recordingFloretHost) SettlePendingTool(_ context.Context, req floretPendingToolSettlementRequest) (flruntime.PendingToolSettlementResult, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.settleRequests = append(h.settleRequests, req)
@@ -422,16 +410,21 @@ func (h *recordingFloretHost) SettlePendingTool(_ context.Context, req flruntime
 	return result, nil
 }
 
-func (h *recordingFloretHost) SpawnSubAgent(_ context.Context, req flruntime.SpawnSubAgent) (flruntime.SubAgentSnapshot, error) {
+func (h *recordingFloretHost) SpawnSubAgent(_ context.Context, req flruntime.SpawnSubAgentCommand) (flruntime.SubAgentSnapshot, error) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	h.spawnRequests = append(h.spawnRequests, req)
 	if h.spawnErr != nil {
-		return flruntime.SubAgentSnapshot{}, h.spawnErr
+		err := h.spawnErr
+		h.mu.Unlock()
+		return flruntime.SubAgentSnapshot{}, err
 	}
 	now := time.Now()
+	childThreadID := identity.ThreadID("fixture_child_" + strings.TrimSpace(req.TaskName))
+	if len(h.snapshots) > 0 && h.snapshots[len(h.snapshots)-1].ThreadID != "" {
+		childThreadID = h.snapshots[len(h.snapshots)-1].ThreadID
+	}
 	snapshot := flruntime.SubAgentSnapshot{
-		ThreadID:        req.ThreadID,
+		ThreadID:        childThreadID,
 		ParentThreadID:  h.parentThreadID,
 		TaskName:        req.TaskName,
 		TaskDescription: req.TaskDescription,
@@ -445,10 +438,17 @@ func (h *recordingFloretHost) SpawnSubAgent(_ context.Context, req flruntime.Spa
 		CanClose:        true,
 	}
 	h.snapshots = append(h.snapshots, snapshot)
+	afterSpawn := h.afterSpawn
+	h.mu.Unlock()
+	if afterSpawn != nil {
+		if err := afterSpawn(req, snapshot); err != nil {
+			return flruntime.SubAgentSnapshot{}, err
+		}
+	}
 	return snapshot, nil
 }
 
-func (h *recordingFloretHost) SendSubAgentInput(_ context.Context, req flruntime.SendSubAgentInput) (flruntime.SubAgentSnapshot, error) {
+func (h *recordingFloretHost) SendSubAgentInput(_ context.Context, req flruntime.SendSubAgentMessageCommand) (flruntime.SubAgentSnapshot, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.sendInputRequests = append(h.sendInputRequests, req)
@@ -464,10 +464,24 @@ func (h *recordingFloretHost) SendSubAgentInput(_ context.Context, req flruntime
 	return flruntime.SubAgentSnapshot{}, nil
 }
 
-func (h *recordingFloretHost) WaitSubAgents(_ context.Context, req flruntime.WaitSubAgents) (flruntime.WaitSubAgentsResult, error) {
+func (h *recordingFloretHost) InterruptSubAgent(_ context.Context, req flruntime.InterruptSubAgentCommand) (flruntime.SubAgentSnapshot, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	targets := map[flruntime.ThreadID]struct{}{}
+	for index, snapshot := range h.snapshots {
+		if snapshot.ThreadID != req.ChildThreadID {
+			continue
+		}
+		snapshot.UpdatedAt = time.Now()
+		h.snapshots[index] = snapshot
+		return snapshot, nil
+	}
+	return flruntime.SubAgentSnapshot{}, nil
+}
+
+func (h *recordingFloretHost) WaitSubAgents(_ context.Context, req flruntime.WaitSubAgentsCommand) (flruntime.WaitSubAgentsResult, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	targets := map[identity.ThreadID]struct{}{}
 	for _, id := range req.ChildThreadIDs {
 		targets[id] = struct{}{}
 	}
@@ -491,56 +505,7 @@ func (h *recordingFloretHost) ListSubAgents(context.Context) ([]flruntime.SubAge
 	return append([]flruntime.SubAgentSnapshot(nil), h.snapshots...), nil
 }
 
-func (h *recordingFloretHost) ListSubAgentActivityTimeline(_ context.Context, req flruntime.ListSubAgentActivityTimelineRequest) (flruntime.SubAgentActivityTimelineResult, error) {
-	h.mu.Lock()
-	snapshots := append([]flruntime.SubAgentSnapshot(nil), h.snapshots...)
-	h.mu.Unlock()
-	timeline := observation.ActivityTimeline{
-		SchemaVersion: observation.ActivityTimelineSchemaVersion,
-		RunID:         req.Meta.RunID,
-		ThreadID:      req.Meta.ThreadID,
-		TurnID:        req.Meta.TurnID,
-		TraceID:       req.Meta.TraceID,
-		Summary: observation.ActivitySummary{
-			Status:     observation.ActivityStatusSuccess,
-			Severity:   observation.ActivitySeverityNormal,
-			TotalItems: len(snapshots),
-		},
-		Items: make([]observation.ActivityItem, 0, len(snapshots)),
-	}
-	for _, snapshot := range snapshots {
-		threadID := strings.TrimSpace(string(snapshot.ThreadID))
-		if threadID == "" {
-			continue
-		}
-		timeline.Items = append(timeline.Items, observation.ActivityItem{
-			ItemID:           "subagents:" + threadID,
-			ToolID:           "subagents",
-			ToolName:         "subagents",
-			Kind:             observation.ActivityKindControl,
-			Status:           observation.ActivityStatusRunning,
-			Severity:         observation.ActivitySeverityNormal,
-			RequiresApproval: false,
-			Label:            firstNonEmptyString(strings.TrimSpace(snapshot.TaskName), threadID),
-			Payload: map[string]any{
-				"thread_id":        threadID,
-				"host_profile_ref": strings.TrimSpace(snapshot.HostProfileRef),
-				"task_name":        strings.TrimSpace(snapshot.TaskName),
-				"task_description": strings.TrimSpace(snapshot.TaskDescription),
-				"status":           strings.TrimSpace(string(snapshot.Status)),
-				"last_message":     strings.TrimSpace(snapshot.LastMessage),
-				"parent_thread_id": strings.TrimSpace(string(snapshot.ParentThreadID)),
-				"parent_turn_id":   strings.TrimSpace(string(snapshot.ParentTurnID)),
-				"latest_turn_id":   strings.TrimSpace(string(snapshot.LatestTurnID)),
-			},
-		})
-	}
-	timeline.Summary.TotalItems = len(timeline.Items)
-	generatedAt := time.Now()
-	return flruntime.SubAgentActivityTimelineResult{Timeline: timeline, GeneratedAt: generatedAt}, nil
-}
-
-func (h *recordingFloretHost) CloseSubAgent(_ context.Context, req flruntime.CloseSubAgent) (flruntime.SubAgentSnapshot, error) {
+func (h *recordingFloretHost) CloseSubAgent(_ context.Context, req flruntime.CloseSubAgentCommand) (flruntime.SubAgentSnapshot, error) {
 	h.closeSubagentCount.Add(1)
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -564,9 +529,10 @@ func (h *recordingFloretHost) CloseSubAgent(_ context.Context, req flruntime.Clo
 	return flruntime.SubAgentSnapshot{}, nil
 }
 
-func (h *recordingFloretHost) readSubAgentDetail(_ context.Context, req flruntime.SubAgentDetailRequest) (flruntime.SubAgentDetail, error) {
+func (h *recordingFloretHost) readSubAgentDetail(_ context.Context, childThreadID identity.ThreadID, req flruntime.ThreadDetailRequest) (flruntime.SubAgentDetail, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	h.detailThreadIDs = append(h.detailThreadIDs, childThreadID)
 	h.detailRequests = append(h.detailRequests, req)
 	if h.detailErr != nil {
 		return flruntime.SubAgentDetail{}, h.detailErr
@@ -599,14 +565,14 @@ func openTestFloretHost(t *testing.T, storePath string, parentThreadID string, f
 	}
 	adapter := testFloretBootstrap(t, store)
 	_ = fakeResponse
-	subagentRead, err := adapter.newSubagentRead(context.Background(), flruntime.ThreadID(parentThreadID))
+	subagentRead, err := adapter.newSubagentRead(context.Background(), identity.ThreadID(parentThreadID))
 	if err != nil {
-		_ = store.Close()
+		_ = store.Shutdown(context.Background())
 		t.Fatalf("open SubAgent read host: %v", err)
 	}
-	threadRead, err := adapter.newThreadRead(context.Background(), flruntime.ThreadID(parentThreadID))
+	threadRead, err := adapter.newThreadRead(context.Background(), identity.ThreadID(parentThreadID))
 	if err != nil {
-		_ = store.Close()
+		_ = store.Shutdown(context.Background())
 		t.Fatalf("open thread read host: %v", err)
 	}
 	return testFloretReadHost{floretThreadReadHost: threadRead, floretSubagentReadHost: subagentRead}, store
@@ -615,6 +581,18 @@ func openTestFloretHost(t *testing.T, storePath string, parentThreadID string, f
 type testFloretHost struct {
 	floretTurnHost
 	floretSubagentHost
+}
+
+func (h *testFloretHost) Run(ctx context.Context, command flruntime.StartTurnCommand) (flruntime.TurnResult, error) {
+	started, err := h.StartTurn(ctx, command)
+	if err != nil {
+		return flruntime.TurnResult{}, err
+	}
+	snapshot, err := h.ReadTurn(ctx, started.TurnID)
+	if err != nil {
+		return flruntime.TurnResult{}, err
+	}
+	return floretTurnResultFromSnapshot(started.ThreadID, snapshot), nil
 }
 
 type blockingFloretModelGateway struct {
@@ -666,7 +644,7 @@ func newTestFloretHostFromService(t *testing.T, svc *Service, parentThreadID str
 	return &testFloretHost{floretTurnHost: turnHost, floretSubagentHost: subagentHost}
 }
 
-func seedTestFloretSubagentTree(t *testing.T, ctx context.Context, svc *Service, parentThreadID string, childThreadID string, mission ...string) string {
+func seedTestFloretSubagentTree(t *testing.T, ctx context.Context, svc *Service, parentThreadID string, requestSeed string, mission ...string) (string, string) {
 	t.Helper()
 	delegatedMission := "work"
 	if len(mission) > 0 {
@@ -680,8 +658,7 @@ func seedTestFloretSubagentTree(t *testing.T, ctx context.Context, svc *Service,
 	if err != nil {
 		t.Fatalf("bind thread runtime: %v", err)
 	}
-	gateway := &blockingFloretModelGateway{started: make(chan struct{}), release: make(chan struct{})}
-	turnHost, err := runtimeCaps.Turn(ctx, newTestFloretAgent(t, gateway))
+	turnHost, err := runtimeCaps.Turn(ctx, newStaticTestFloretAgent(t, "parent done"))
 	if err != nil {
 		t.Fatalf("open parent turn host: %v", err)
 	}
@@ -690,44 +667,31 @@ func seedTestFloretSubagentTree(t *testing.T, ctx context.Context, svc *Service,
 		t.Fatalf("open parent SubAgent host: %v", err)
 	}
 	host := &testFloretHost{floretTurnHost: turnHost, floretSubagentHost: subagentHost}
-	parentTurnID := flruntime.TurnID("fixture_parent_turn_" + childThreadID)
-	parentRunID := flruntime.RunID("fixture_parent_run_" + childThreadID)
-	parentDone := make(chan error, 1)
-	go func() {
-		_, runErr := host.Run(ctx, flruntime.TurnRequest{
-			TurnID: parentTurnID, RunID: parentRunID,
-			Input: flruntime.TurnInput{Text: "spawn fixture child"},
-		})
-		parentDone <- runErr
-	}()
-	select {
-	case <-gateway.started:
-	case <-time.After(2 * time.Second):
-		t.Fatal("parent turn did not acquire active authority")
-	}
-	if _, err := host.SpawnSubAgent(ctx, flruntime.SpawnSubAgent{
-		PublicationID: "test-publication-" + parentThreadID + "-" + childThreadID,
-		ParentTurnID:  parentTurnID,
-		ThreadID:      flruntime.ThreadID(childThreadID),
-		TaskName:      "child",
-		Message:       delegatedMission,
-		ForkMode:      flruntime.SubAgentForkNone,
-	}); err != nil {
-		close(gateway.release)
-		<-parentDone
-		t.Fatalf("SpawnSubAgent: %v", err)
-	}
-	close(gateway.release)
-	if err := <-parentDone; err != nil {
+	parentResult, err := host.Run(ctx, flruntime.StartTurnCommand{
+		LogicalRequestID: identity.LogicalRequestID("fixture_parent_request_" + requestSeed),
+		UserMessage:      flruntime.TurnInput{Text: "spawn fixture child"},
+	})
+	if err != nil {
 		t.Fatalf("complete parent fixture turn: %v", err)
 	}
-	if waited, err := host.WaitSubAgents(ctx, flruntime.WaitSubAgents{
-		ChildThreadIDs: []flruntime.ThreadID{flruntime.ThreadID(childThreadID)},
+	spawned, err := host.SpawnSubAgent(ctx, flruntime.SpawnSubAgentCommand{
+		LogicalRequestID: identity.LogicalRequestID("test-publication-" + parentThreadID + "-" + requestSeed),
+		ParentTurnID:     parentResult.TurnID,
+		TaskName:         "child",
+		Input:            flruntime.TurnInput{Text: delegatedMission},
+		ForkMode:         flruntime.SubAgentForkNone,
+	})
+	if err != nil {
+		t.Fatalf("SpawnSubAgent: %v", err)
+	}
+	childThreadID := string(spawned.ThreadID)
+	if waited, err := host.WaitSubAgents(ctx, flruntime.WaitSubAgentsCommand{
+		ChildThreadIDs: []identity.ThreadID{identity.ThreadID(childThreadID)},
 		Timeout:        2 * time.Second,
 	}); err != nil || waited.TimedOut {
 		t.Fatalf("WaitSubAgents=%#v err=%v", waited, err)
 	}
-	return storePath
+	return storePath, childThreadID
 }
 
 func TestServiceGetFlowerSubagentDetailUsesPublishedTypedOriginForMissionVisibility(t *testing.T) {
@@ -740,9 +704,8 @@ func TestServiceGetFlowerSubagentDetailUsesPublishedTypedOriginForMissionVisibil
 	if err != nil {
 		t.Fatalf("CreateThread parent: %v", err)
 	}
-	const childThreadID = "floret_child_typed_origin_visibility"
 	const delegatedMission = "internal delegated mission sentinel 7f1a6c"
-	seedTestFloretSubagentTree(t, ctx, svc, parent.ThreadID, childThreadID, delegatedMission)
+	_, childThreadID := seedTestFloretSubagentTree(t, ctx, svc, parent.ThreadID, "typed_origin_visibility", delegatedMission)
 
 	readHost, err := svc.openFloretSubagentReadHost(ctx, parent.ThreadID)
 	if err != nil {
@@ -750,7 +713,7 @@ func TestServiceGetFlowerSubagentDetailUsesPublishedTypedOriginForMissionVisibil
 	}
 	turns, err := listAllFloretThreadTurns(ctx, childThreadTurnsReader{
 		host:          readHost,
-		childThreadID: flruntime.ThreadID(childThreadID),
+		childThreadID: identity.ThreadID(childThreadID),
 	}, childThreadID)
 	if err != nil {
 		t.Fatalf("ListThreadTurns: %v", err)
@@ -777,26 +740,23 @@ func TestServiceGetFlowerSubagentDetailUsesPublishedTypedOriginForMissionVisibil
 	}
 }
 
-func TestSubagentOperationIdentitiesAreStableAndScoped(t *testing.T) {
-	publicationA, childA, runA, err := subagentSpawnIdentities("parent", "turn", "tool")
+func TestSubagentProductRequestIdentitiesAreStableAndScoped(t *testing.T) {
+	publicationA, err := subagentPublicationID("parent", "turn", "tool")
 	if err != nil {
 		t.Fatal(err)
 	}
-	publicationB, childB, runB, err := subagentSpawnIdentities("parent", "turn", "tool")
+	publicationB, err := subagentPublicationID("parent", "turn", "tool")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if publicationA != publicationB || childA != childB || runA != runB {
-		t.Fatalf("spawn identities are not deterministic: %q/%q/%q vs %q/%q/%q", publicationA, childA, runA, publicationB, childB, runB)
+	if publicationA == "" || publicationA != publicationB {
+		t.Fatalf("publication identity is not deterministic: %q vs %q", publicationA, publicationB)
 	}
-	if publicationA == "" || childA == "" || runA == "" || childA == runA {
-		t.Fatalf("spawn identities are invalid: %q/%q/%q", publicationA, childA, runA)
-	}
-	inputA, err := subagentInputRequestID("parent", childA, "input-tool")
+	inputA, err := subagentInputRequestID("parent", "floret-allocated-child", "input-tool")
 	if err != nil {
 		t.Fatal(err)
 	}
-	inputB, err := subagentInputRequestID("parent", childA, "input-tool")
+	inputB, err := subagentInputRequestID("parent", "floret-allocated-child", "input-tool")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -990,8 +950,16 @@ func TestFloretSubagentsSpawnPersistsAndLabelsDistinctChildRunID(t *testing.T) {
 		t.Fatalf("CreateThread: %v", err)
 	}
 
-	host := &recordingFloretHost{parentThreadID: flruntime.ThreadID(parent.threadID)}
-	runtime := &floretSubagentRuntime{parent: parent, host: host}
+	host := &recordingFloretHost{parentThreadID: identity.ThreadID(parent.threadID)}
+	runtime := newFloretSubagentRuntimeWithExecutionOwner(parent, svc.bindSubagentExecutionForParent)
+	runtime.host = host
+	surfaceProvider := runtime.dynamicSubagentToolSurfaceProvider(newFloretToolRuntimeState(newTodoRuntimeState()))
+	host.afterSpawn = func(req flruntime.SpawnSubAgentCommand, snapshot flruntime.SubAgentSnapshot) error {
+		_, err := surfaceProvider(context.Background(), flruntime.ToolSurfaceRequest{
+			RunID: identity.RunID("run_child_spawn_identity"), ThreadID: snapshot.ThreadID, TurnID: "turn_child_spawn_identity", Labels: req.Labels,
+		})
+		return err
+	}
 	spawnToolCallID := "tool_subagents_spawn_identity"
 	parent.setPermissionType(FlowerPermissionFullAccess)
 	freezePermissionPolicyTestSnapshot(t, parent)
@@ -1026,16 +994,23 @@ func TestFloretSubagentsSpawnPersistsAndLabelsDistinctChildRunID(t *testing.T) {
 		t.Fatalf("spawn labels retained deprecated parent permission copy %q", got)
 	}
 
-	childThreadID := strings.TrimSpace(string(spawnReq.ThreadID))
-	childRunID := strings.TrimSpace(spawnReq.Labels.Host[subagentToolHostContextChildRunIDKey])
+	childThreadID := strings.TrimSpace(anyToString(spawnResult["thread_id"]))
+	finalized, ok, err := store.GetChildPermissionSnapshotBySpawnToolCall(context.Background(), parent.endpointID, spawnToolCallID)
+	if err != nil {
+		t.Fatalf("GetChildPermissionSnapshotBySpawnToolCall: %v", err)
+	}
+	if !ok {
+		t.Fatalf("missing finalized child permission snapshot for %s", spawnToolCallID)
+	}
+	childRunID := strings.TrimSpace(finalized.ChildRunID)
 	if childThreadID == "" || childRunID == "" {
 		t.Fatalf("spawn labels missing child identity: thread=%q labels=%#v", childThreadID, spawnReq.Labels)
 	}
 	if childRunID == childThreadID || childRunID == parent.id {
 		t.Fatalf("spawn child_run_id=%q must be distinct from child thread %q and parent run %q", childRunID, childThreadID, parent.id)
 	}
-	if spawnReq.Labels.Host[subagentToolHostContextChildThreadIDKey] != childThreadID {
-		t.Fatalf("spawn labels=%#v, want child thread and subagent id", spawnReq.Labels.Host)
+	if spawnReq.Labels.Host[subagentToolHostContextChildThreadIDKey] != "" || spawnReq.Labels.Host[subagentToolHostContextChildRunIDKey] != "" {
+		t.Fatalf("spawn request preallocated canonical child identity: %#v", spawnReq.Labels.Host)
 	}
 
 	rec, ok, err := store.GetFinalizedChildPermissionSnapshot(context.Background(), parent.endpointID, childThreadID, childRunID)
@@ -1068,7 +1043,7 @@ func TestFloretSubagentsSpawnPersistsAndLabelsDistinctChildRunID(t *testing.T) {
 		t.Fatalf("send_input child_run_id=%q, want persisted %q", got, childRunID)
 	}
 	host.mu.Lock()
-	host.sendInputResult = &flruntime.SubAgentSnapshot{ThreadID: flruntime.ThreadID(childThreadID), ParentThreadID: "other_parent"}
+	host.sendInputResult = &flruntime.SubAgentSnapshot{ThreadID: identity.ThreadID(childThreadID), ParentThreadID: "other_parent"}
 	host.mu.Unlock()
 	if _, err := runtime.sendInput(context.Background(), "call_test_send_input_mismatch", map[string]any{
 		"target": childThreadID, "message": "reject mismatched authority",
@@ -1077,14 +1052,14 @@ func TestFloretSubagentsSpawnPersistsAndLabelsDistinctChildRunID(t *testing.T) {
 	}
 	host.mu.Lock()
 	host.sendInputResult = nil
-	host.closeResult = &flruntime.SubAgentSnapshot{ThreadID: "other_child", ParentThreadID: flruntime.ThreadID(parent.threadID)}
+	host.closeResult = &flruntime.SubAgentSnapshot{ThreadID: "other_child", ParentThreadID: identity.ThreadID(parent.threadID)}
 	host.mu.Unlock()
 	if _, err := runtime.close(context.Background(), "call_test_close_mismatch", map[string]any{"target": childThreadID}); err == nil || !strings.Contains(err.Error(), "result identity mismatch") {
 		t.Fatalf("close identity error=%v, want strict mismatch", err)
 	}
 }
 
-func TestSubagentSpawnFailureIsNotEligibleForRecoveryReplay(t *testing.T) {
+func TestSubagentSpawnFailurePreservesUnboundRecoveryIntent(t *testing.T) {
 	t.Parallel()
 
 	store, err := threadstore.Open(t.TempDir() + "/threads.sqlite")
@@ -1131,50 +1106,29 @@ func TestSubagentSpawnFailureIsNotEligibleForRecoveryReplay(t *testing.T) {
 	if len(host.spawnRequests) != 1 {
 		t.Fatalf("spawn request count=%d, want 1", len(host.spawnRequests))
 	}
-	childThreadID := strings.TrimSpace(string(host.spawnRequests[0].ThreadID))
+	request := host.spawnRequests[0]
 	host.mu.Unlock()
-	if childThreadID == "" {
-		t.Fatalf("spawn request did not allocate child thread id")
+	if request.Labels.Host[subagentToolHostContextChildThreadIDKey] != "" || request.Labels.Host[subagentToolHostContextChildRunIDKey] != "" {
+		t.Fatalf("failed spawn request preallocated canonical child identity: %#v", request.Labels.Host)
 	}
-	if rec, ok, err := store.GetFinalizedChildPermissionSnapshotByThread(context.Background(), parent.endpointID, childThreadID); err != nil {
-		t.Fatalf("GetFinalizedChildPermissionSnapshotByThread: %v", err)
-	} else if ok {
-		t.Fatalf("unexpected finalized child permission snapshot after host failure: %#v", rec)
-	}
-	aborted, ok, err := store.GetChildPermissionSnapshotBySpawnToolCall(context.Background(), parent.endpointID, spawnToolCallID)
+	_, ok, err := store.GetChildPermissionSnapshotBySpawnToolCall(context.Background(), parent.endpointID, spawnToolCallID)
 	if err != nil {
 		t.Fatalf("GetChildPermissionSnapshotBySpawnToolCall: %v", err)
 	}
-	if !ok {
-		t.Fatalf("missing aborted child permission snapshot for %s", spawnToolCallID)
+	if ok {
+		t.Fatalf("failed spawn preallocated child permission identity for %s", spawnToolCallID)
 	}
-	if aborted.State != "aborted" || aborted.FinalizedAtUnixMs != 0 {
-		t.Fatalf("child snapshot=%#v, want aborted and never finalized", aborted)
-	}
-	host.mu.Lock()
-	request := host.spawnRequests[0]
-	host.spawnErr = nil
-	host.mu.Unlock()
-	publication, ok, err := store.GetSubAgentPublication(context.Background(), strings.TrimSpace(string(request.PublicationID)))
+	publication, ok, err := store.GetSubAgentPublication(context.Background(), strings.TrimSpace(string(request.LogicalRequestID)))
 	if err != nil {
 		t.Fatalf("GetSubAgentPublication: %v", err)
 	}
-	if !ok || publication.State != threadstore.SubAgentPublicationFailed || publication.FailedAtUnixMs <= 0 ||
-		publication.RequestJSON != "" || publication.SessionMetaJSON != "" || publication.ModelID != "" || publication.ReasoningSelectionJSON != "" {
-		t.Fatalf("failed publication=%#v ok=%v", publication, ok)
+	if !ok || publication.State != threadstore.SubAgentPublicationPending || publication.ChildThreadID != "" || publication.ChildRunID != "" || publication.ChildSnapshotID != "" ||
+		publication.RequestJSON == "" || publication.SessionMetaJSON == "" || publication.ModelID == "" {
+		t.Fatalf("recoverable publication=%#v ok=%v", publication, ok)
 	}
-	replayed, err := svc.replayPendingSubAgentPublications(context.Background())
-	if err != nil {
-		t.Fatalf("replayPendingSubAgentPublications: %v", err)
-	}
-	if replayed != 0 {
-		t.Fatalf("replayed=%d, want 0", replayed)
-	}
-	host.mu.Lock()
-	requests := append([]flruntime.SpawnSubAgent(nil), host.spawnRequests...)
-	host.mu.Unlock()
-	if len(requests) != 1 {
-		t.Fatalf("spawn request count=%d, want no recovery replay", len(requests))
+	pending, err := store.ListPendingSubAgentPublications(context.Background(), 10)
+	if err != nil || len(pending) != 1 || pending[0].PublicationID != publication.PublicationID {
+		t.Fatalf("pending publications=%#v err=%v", pending, err)
 	}
 }
 
@@ -1210,9 +1164,9 @@ func TestReleasedSubagentRuntimeDropsQueuedTimelineRefresh(t *testing.T) {
 
 	host := &recordingFloretHost{
 		snapshots: []flruntime.SubAgentSnapshot{{
-			ThreadID:       flruntime.ThreadID("child"),
+			ThreadID:       identity.ThreadID("child"),
 			TaskName:       "child",
-			ParentThreadID: flruntime.ThreadID("parent"),
+			ParentThreadID: identity.ThreadID("parent"),
 			Status:         flruntime.SubAgentStatusCompleted,
 			UpdatedAt:      time.Now(),
 			CreatedAt:      time.Now().Add(-time.Second),
@@ -1260,9 +1214,9 @@ func TestDeleteThreadClosesRuntimeWithoutChildThreadstoreProjection(t *testing.T
 	childID := "child"
 	host := &recordingFloretHost{
 		snapshots: []flruntime.SubAgentSnapshot{{
-			ThreadID:       flruntime.ThreadID(childID),
+			ThreadID:       identity.ThreadID(childID),
 			TaskName:       "child",
-			ParentThreadID: flruntime.ThreadID(parent.ThreadID),
+			ParentThreadID: identity.ThreadID(parent.ThreadID),
 			HostProfileRef: subagentAgentTypeWorker,
 			Status:         flruntime.SubAgentStatusRunning,
 			CreatedAt:      time.Now(),
@@ -1301,9 +1255,9 @@ func TestDeleteThreadClosesRuntimeWithoutChildThreadstoreProjection(t *testing.T
 		t.Fatalf("maintenance DeleteThread count=%d, want 1", got)
 	}
 	maintenanceHost.mu.Lock()
-	deleteThreadIDs := append([]flruntime.ThreadID(nil), maintenanceHost.deleteThreadIDs...)
+	deleteThreadIDs := append([]identity.ThreadID(nil), maintenanceHost.deleteThreadIDs...)
 	maintenanceHost.mu.Unlock()
-	if len(deleteThreadIDs) != 1 || deleteThreadIDs[0] != flruntime.ThreadID(parent.ThreadID) {
+	if len(deleteThreadIDs) != 1 || deleteThreadIDs[0] != identity.ThreadID(parent.ThreadID) {
 		t.Fatalf("DeleteThread ids=%v, want [%s]", deleteThreadIDs, parent.ThreadID)
 	}
 	childAfterDelete, err := svc.threadsDB.GetThreadSettings(ctx, meta.EndpointID, childID)
@@ -1381,7 +1335,7 @@ func TestRunTerminalFailureClosesSubagentsThroughFloretRuntime(t *testing.T) {
 	host := &recordingFloretHost{
 		snapshots: []flruntime.SubAgentSnapshot{{
 			ThreadID:        "child_running",
-			ParentThreadID:  flruntime.ThreadID(parentView.ThreadID),
+			ParentThreadID:  identity.ThreadID(parentView.ThreadID),
 			ParentTurnID:    "msg_parent_failed",
 			TaskName:        "running child",
 			TaskDescription: "finish delegated work",
@@ -1425,10 +1379,10 @@ func TestRunTerminalFailureClosesSubagentsThroughFloretRuntime(t *testing.T) {
 		t.Fatalf("CloseSubAgent count=%d, want 1", got)
 	}
 	host.mu.Lock()
-	requests := append([]flruntime.CloseSubAgent(nil), host.closeSubagentReqs...)
+	requests := append([]flruntime.CloseSubAgentCommand(nil), host.closeSubagentReqs...)
 	snapshots := append([]flruntime.SubAgentSnapshot(nil), host.snapshots...)
 	host.mu.Unlock()
-	if len(requests) != 1 || host.parentThreadID != flruntime.ThreadID(parentView.ThreadID) || requests[0].Reason != "parent_failed" {
+	if len(requests) != 1 || host.parentThreadID != identity.ThreadID(parentView.ThreadID) || requests[0].Reason != "parent_failed" {
 		t.Fatalf("CloseSubAgent requests=%#v, want parent_failed for parent thread", requests)
 	}
 	if len(snapshots) != 1 || snapshots[0].Status != flruntime.SubAgentStatusClosed || !snapshots[0].Closed || snapshots[0].CanClose {
@@ -1463,8 +1417,7 @@ func TestDeleteThreadDeletesFloretTreeWithoutCachedRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateThread parent: %v", err)
 	}
-	childID := "floret_child_without_cached_runtime"
-	storePath := seedTestFloretSubagentTree(t, ctx, svc, parent.ThreadID, childID)
+	storePath, childID := seedTestFloretSubagentTree(t, ctx, svc, parent.ThreadID, "without_cached_runtime")
 
 	if _, err := svc.DeleteThread(ctx, meta, parent.ThreadID, false); err != nil {
 		t.Fatalf("DeleteThread(parent): %v", err)
@@ -1479,13 +1432,21 @@ func TestDeleteThreadDeletesFloretTreeWithoutCachedRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer reopenedStore.Close()
+	defer reopenedStore.Shutdown(context.Background())
 	bootstrap := testFloretBootstrap(t, reopenedStore)
-	if _, err := bootstrap.newThreadRead(ctx, flruntime.ThreadID(parent.ThreadID)); !errors.Is(err, flruntime.ErrThreadDeleted) {
-		t.Fatalf("bind deleted parent read err=%v, want %v", err, flruntime.ErrThreadDeleted)
+	parentRead, err := bootstrap.newThreadRead(ctx, identity.ThreadID(parent.ThreadID))
+	if err == nil {
+		_, err = parentRead.ReadThread(ctx)
 	}
-	if _, err := bootstrap.newThreadRead(ctx, flruntime.ThreadID(childID)); !errors.Is(err, flruntime.ErrThreadDeleted) {
-		t.Fatalf("bind deleted child read err=%v, want %v", err, flruntime.ErrThreadDeleted)
+	if !errors.Is(err, flruntime.ErrThreadDeleted) {
+		t.Fatalf("read deleted parent err=%v, want %v", err, flruntime.ErrThreadDeleted)
+	}
+	childRead, err := bootstrap.newThreadRead(ctx, identity.ThreadID(childID))
+	if err == nil {
+		_, err = childRead.ReadThread(ctx)
+	}
+	if !errors.Is(err, flruntime.ErrThreadDeleted) {
+		t.Fatalf("read deleted child err=%v, want %v", err, flruntime.ErrThreadDeleted)
 	}
 }
 
@@ -1500,8 +1461,7 @@ func TestCancelThreadRejectsUnownedSubagentLifecycleWithoutCachedRuntime(t *test
 	if err != nil {
 		t.Fatalf("CreateThread parent: %v", err)
 	}
-	childID := "floret_child_cancel_without_cached_runtime"
-	storePath := seedTestFloretSubagentTree(t, ctx, svc, parent.ThreadID, childID)
+	storePath, childID := seedTestFloretSubagentTree(t, ctx, svc, parent.ThreadID, "cancel_without_cached_runtime")
 
 	if err := svc.CancelThread(meta, parent.ThreadID); err == nil || !strings.Contains(err.Error(), "active SubAgent lifecycle owner is unavailable") {
 		t.Fatalf("CancelThread(parent) error=%v, want explicit missing lifecycle owner", err)
@@ -1509,10 +1469,8 @@ func TestCancelThreadRejectsUnownedSubagentLifecycleWithoutCachedRuntime(t *test
 	assertLegacyFloretSubagentStoreNotCreated(t, svc)
 
 	reopenedHost, reopenedStore := openTestFloretHost(t, storePath, parent.ThreadID, "unused")
-	defer reopenedStore.Close()
-	snapshot, err := reopenedHost.ReadSubAgentDetail(ctx, flruntime.SubAgentDetailRequest{
-		ChildThreadID: flruntime.ThreadID(childID),
-	})
+	defer reopenedStore.Shutdown(context.Background())
+	snapshot, err := reopenedHost.ReadSubAgentDetail(ctx, identity.ThreadID(childID), flruntime.ThreadDetailRequest{})
 	if err != nil {
 		t.Fatalf("ReadSubAgentDetail child: %v", err)
 	}
@@ -1522,7 +1480,7 @@ func TestCancelThreadRejectsUnownedSubagentLifecycleWithoutCachedRuntime(t *test
 	if _, err := reopenedHost.ReadThread(ctx); err != nil {
 		t.Fatalf("ReadThread parent after cancel: %v", err)
 	}
-	if _, err := reopenedStore.ThreadReader(ctx, flruntime.ThreadID(childID)); err == nil || !errors.Is(err, flruntime.ErrSubAgentParentRequired) {
+	if _, err := reopenedStore.Thread(ctx, identity.ThreadID(childID)); err == nil || !errors.Is(err, flruntime.ErrSubAgentParentRequired) {
 		t.Fatalf("root ReadThread child error=%v, want exact root authority rejection", err)
 	}
 }
@@ -1542,11 +1500,11 @@ func TestServiceGetFlowerSubagentDetailUsesCanonicalMessagesAndSanitizedDiagnost
 	finalContent := "complete report " + strings.Repeat("evidence section ", 80) + "http://arxiv.org/abs/2607.02514v1"
 	host := &recordingFloretHost{
 		turnPage: flruntime.ThreadTurnsPage{
-			ThreadID:       flruntime.ThreadID("child-detail"),
+			ThreadID:       identity.ThreadID("child-detail"),
 			ThroughOrdinal: 7,
 			Turns: []flruntime.ThreadTurnSnapshot{{
-				TurnID:            flruntime.TurnID("child-turn"),
-				RunID:             flruntime.RunID("child-run"),
+				TurnID:            identity.TurnID("child-turn"),
+				RunID:             identity.RunID("child-run"),
 				Ordinal:           1,
 				StartedAt:         now.Add(-50 * time.Second),
 				UpdatedAt:         now.Add(-5 * time.Second),
@@ -1556,9 +1514,9 @@ func TestServiceGetFlowerSubagentDetailUsesCanonicalMessagesAndSanitizedDiagnost
 				Status:            flruntime.TurnStatusCompleted,
 				ThroughOrdinal:    7,
 				Projection: flruntime.ThreadTurnProjection{
-					ThreadID:       flruntime.ThreadID("child-detail"),
-					TurnID:         flruntime.TurnID("child-turn"),
-					RunID:          flruntime.RunID("child-run"),
+					ThreadID:       identity.ThreadID("child-detail"),
+					TurnID:         identity.TurnID("child-turn"),
+					RunID:          identity.RunID("child-run"),
 					Status:         flruntime.TurnStatusCompleted,
 					ThroughOrdinal: 7,
 					Segments: []flruntime.ThreadTurnProjectionSegment{{
@@ -1570,10 +1528,10 @@ func TestServiceGetFlowerSubagentDetailUsesCanonicalMessagesAndSanitizedDiagnost
 		},
 		detail: flruntime.SubAgentDetail{
 			Snapshot: flruntime.SubAgentSnapshot{
-				ThreadID:       flruntime.ThreadID("child-detail"),
+				ThreadID:       identity.ThreadID("child-detail"),
 				TaskName:       "Inspect tool flow",
-				ParentThreadID: flruntime.ThreadID(parent.ThreadID),
-				ParentTurnID:   flruntime.TurnID("parent-turn"),
+				ParentThreadID: identity.ThreadID(parent.ThreadID),
+				ParentTurnID:   identity.TurnID("parent-turn"),
 				HostProfileRef: subagentAgentTypeReviewer,
 				Status:         flruntime.SubAgentStatusRunning,
 				LastMessage:    "Reading tool evidence",
@@ -1587,8 +1545,8 @@ func TestServiceGetFlowerSubagentDetailUsesCanonicalMessagesAndSanitizedDiagnost
 				{
 					ID:        "child-user-entry",
 					Ordinal:   1,
-					ThreadID:  flruntime.ThreadID("child-detail"),
-					TurnID:    flruntime.TurnID("child-turn"),
+					ThreadID:  identity.ThreadID("child-detail"),
+					TurnID:    identity.TurnID("child-turn"),
 					Kind:      flruntime.ThreadDetailEventUserMessage,
 					CreatedAt: now.Add(-50 * time.Second),
 					Message:   &flruntime.ThreadDetailMessage{Role: "user", Preview: "delegate mission"},
@@ -1597,8 +1555,8 @@ func TestServiceGetFlowerSubagentDetailUsesCanonicalMessagesAndSanitizedDiagnost
 				{
 					ID:        "event-tool-call",
 					Ordinal:   2,
-					ThreadID:  flruntime.ThreadID("child-detail"),
-					TurnID:    flruntime.TurnID("child-turn"),
+					ThreadID:  identity.ThreadID("child-detail"),
+					TurnID:    identity.TurnID("child-turn"),
 					Kind:      flruntime.ThreadDetailEventToolCall,
 					CreatedAt: now.Add(-40 * time.Second),
 					ToolCall:  &flruntime.ThreadDetailToolCall{ID: "call-1", Name: "terminal.exec", ArgsPreview: "ls", ArgsHash: "hash-args"},
@@ -1606,8 +1564,8 @@ func TestServiceGetFlowerSubagentDetailUsesCanonicalMessagesAndSanitizedDiagnost
 				{
 					ID:        "event-tool-result",
 					Ordinal:   3,
-					ThreadID:  flruntime.ThreadID("child-detail"),
-					TurnID:    flruntime.TurnID("child-turn"),
+					ThreadID:  identity.ThreadID("child-detail"),
+					TurnID:    identity.TurnID("child-turn"),
 					Kind:      flruntime.ThreadDetailEventToolResult,
 					CreatedAt: now.Add(-30 * time.Second),
 					ToolResult: &flruntime.ThreadDetailToolResult{
@@ -1650,12 +1608,11 @@ func TestServiceGetFlowerSubagentDetailUsesCanonicalMessagesAndSanitizedDiagnost
 							Status:           observation.ActivityStatusSuccess,
 							Severity:         observation.ActivitySeverityNormal,
 							RequiresApproval: false,
-							Label:            "Run command",
-							Description:      "Command completed",
-							Renderer:         observation.ActivityRendererTerminal,
-							Payload: map[string]any{
-								"output":      "total 4",
-								"content_ref": "hash-content",
+							Presentation: &fltools.ActivityPresentation{
+								Label:       "Run command",
+								Description: "Command completed",
+								Renderer:    fltools.ActivityRendererTerminal,
+								Payload:     fltools.TerminalActivityPayload{Output: "total 4"},
 							},
 						}},
 					},
@@ -1663,8 +1620,8 @@ func TestServiceGetFlowerSubagentDetailUsesCanonicalMessagesAndSanitizedDiagnost
 				{
 					ID:        "event-tool-activity",
 					Ordinal:   4,
-					ThreadID:  flruntime.ThreadID("child-detail"),
-					TurnID:    flruntime.TurnID("child-turn"),
+					ThreadID:  identity.ThreadID("child-detail"),
+					TurnID:    identity.TurnID("child-turn"),
 					Kind:      flruntime.ThreadDetailEventToolActivity,
 					Type:      string(observation.EventTypeToolActivityUpdated),
 					CreatedAt: now.Add(-35 * time.Second),
@@ -1682,21 +1639,20 @@ func TestServiceGetFlowerSubagentDetailUsesCanonicalMessagesAndSanitizedDiagnost
 							Counts:     observation.ActivityCounts{Running: 1},
 						},
 						Items: []observation.ActivityItem{{
-							ItemID:   "tool:call-1",
-							ToolID:   "call-1",
-							ToolName: "terminal.exec",
-							Kind:     observation.ActivityKindTool,
-							Status:   observation.ActivityStatusRunning,
-							Severity: observation.ActivitySeverityNormal,
-							Label:    "Run command",
-							Renderer: observation.ActivityRendererTerminal,
+							ItemID:       "tool:call-1",
+							ToolID:       "call-1",
+							ToolName:     "terminal.exec",
+							Kind:         observation.ActivityKindTool,
+							Status:       observation.ActivityStatusRunning,
+							Severity:     observation.ActivitySeverityNormal,
+							Presentation: &fltools.ActivityPresentation{Label: "Run command", Renderer: fltools.ActivityRendererTerminal},
 						}},
 					},
 				},
 				{
 					ID:        "event-approval",
 					Ordinal:   5,
-					ThreadID:  flruntime.ThreadID("child-detail"),
+					ThreadID:  identity.ThreadID("child-detail"),
 					Kind:      flruntime.ThreadDetailEventApproval,
 					CreatedAt: now.Add(-20 * time.Second),
 					Approval:  &flruntime.ThreadDetailApproval{State: "denied", ToolName: "terminal.exec", ArgsHash: "hash-args", Reason: "readonly policy"},
@@ -1723,15 +1679,14 @@ func TestServiceGetFlowerSubagentDetailUsesCanonicalMessagesAndSanitizedDiagnost
 							NeedsAttention:   true,
 							RequiresApproval: true,
 							ApprovalState:    "rejected",
-							Label:            "terminal.exec",
-							Description:      "readonly policy",
+							Presentation:     &fltools.ActivityPresentation{Label: "terminal.exec", Description: "readonly policy", Renderer: fltools.ActivityRendererTerminal},
 						}},
 					},
 				},
 				{
 					ID:        "event-error",
 					Ordinal:   6,
-					ThreadID:  flruntime.ThreadID("child-detail"),
+					ThreadID:  identity.ThreadID("child-detail"),
 					Kind:      flruntime.ThreadDetailEventError,
 					CreatedAt: now.Add(-10 * time.Second),
 					Error:     "tool blocked",
@@ -1739,8 +1694,8 @@ func TestServiceGetFlowerSubagentDetailUsesCanonicalMessagesAndSanitizedDiagnost
 				{
 					ID:        "event-final-assistant",
 					Ordinal:   7,
-					ThreadID:  flruntime.ThreadID("child-detail"),
-					TurnID:    flruntime.TurnID("child-turn"),
+					ThreadID:  identity.ThreadID("child-detail"),
+					TurnID:    identity.TurnID("child-turn"),
 					Kind:      flruntime.ThreadDetailEventAssistantMessage,
 					CreatedAt: now.Add(-5 * time.Second),
 					Message: &flruntime.ThreadDetailMessage{
@@ -1771,16 +1726,15 @@ func TestServiceGetFlowerSubagentDetailUsesCanonicalMessagesAndSanitizedDiagnost
 					Status:           observation.ActivityStatusSuccess,
 					Severity:         observation.ActivitySeverityNormal,
 					RequiresApproval: false,
-					Label:            "Run command",
-					Description:      "Command completed",
-					Renderer:         observation.ActivityRendererTerminal,
-					Payload: map[string]any{
-						"output":      "total 4",
-						"content_ref": "hash-content",
+					Presentation: &fltools.ActivityPresentation{
+						Label:       "Run command",
+						Description: "Command completed",
+						Renderer:    fltools.ActivityRendererTerminal,
+						Payload:     fltools.TerminalActivityPayload{Output: "total 4"},
 					},
 				}},
 			},
-			Context:      flruntime.ThreadContextSnapshot{ThreadID: flruntime.ThreadID("child-detail")},
+			Context:      flruntime.ThreadContextSnapshot{ThreadID: identity.ThreadID("child-detail")},
 			NextOrdinal:  7,
 			HasMore:      true,
 			RetainedFrom: 1,
@@ -1820,13 +1774,14 @@ func TestServiceGetFlowerSubagentDetailUsesCanonicalMessagesAndSanitizedDiagnost
 		t.Fatalf("detail lookup created child thread metadata: %#v", childMeta)
 	}
 	host.mu.Lock()
-	requests := append([]flruntime.SubAgentDetailRequest(nil), host.detailRequests...)
+	threadIDs := append([]identity.ThreadID(nil), host.detailThreadIDs...)
+	requests := append([]flruntime.ThreadDetailRequest(nil), host.detailRequests...)
 	host.mu.Unlock()
 	if len(requests) != 1 {
 		t.Fatalf("detail request count=%d, want 1", len(requests))
 	}
 	req := requests[0]
-	if host.parentThreadID != flruntime.ThreadID(parent.ThreadID) || req.ChildThreadID != flruntime.ThreadID("child-detail") {
+	if host.parentThreadID != identity.ThreadID(parent.ThreadID) || len(threadIDs) != 1 || threadIDs[0] != identity.ThreadID("child-detail") {
 		t.Fatalf("unexpected detail request identity: %#v", req)
 	}
 	if req.AfterOrdinal != 7 || req.Limit != 333 {
@@ -1863,7 +1818,8 @@ func TestServiceGetFlowerSubagentDetailUsesCanonicalMessagesAndSanitizedDiagnost
 		t.Fatalf("canonical subagent activity not projected: %#v", detail)
 	}
 	resultActivity := detail.Activity.Items[0]
-	if resultActivity.Renderer != observation.ActivityRendererTerminal || resultActivity.Payload["output"] != "total 4" || resultActivity.Payload["content_ref"] != "hash-content" {
+	resultPayload := activityPayloadMap(resultActivity.Presentation.Payload)
+	if resultActivity.Presentation == nil || resultActivity.Presentation.Renderer != fltools.ActivityRendererTerminal || resultPayload["output"] != "total 4" {
 		t.Fatalf("tool result activity does not use canonical terminal presentation: %#v", resultActivity)
 	}
 	if resultActivity.Status != observation.ActivityStatusSuccess {
@@ -2006,7 +1962,7 @@ func TestServiceGetFlowerSubagentDetailFailsClosedWhenDetailAdvancesPastTypedTur
 			}},
 		},
 		detail: flruntime.SubAgentDetail{
-			Snapshot: flruntime.SubAgentSnapshot{ThreadID: "child-toctou", ParentThreadID: flruntime.ThreadID(parent.ThreadID)},
+			Snapshot: flruntime.SubAgentSnapshot{ThreadID: "child-toctou", ParentThreadID: identity.ThreadID(parent.ThreadID)},
 			Context:  flruntime.ThreadContextSnapshot{ThreadID: "child-toctou"},
 			Events: []flruntime.ThreadDetailEvent{{
 				ID: "entry-admitted-after-turn-read", ThreadID: "child-toctou", TurnID: "turn-new",
@@ -2052,7 +2008,7 @@ func TestServiceGetFlowerSubagentDetailRereadsTypedTurnsAfterConcurrentAdmission
 	host := &recordingFloretHost{
 		turnPages: []flruntime.ThreadTurnsPage{{ThreadID: "child-reread", ThroughOrdinal: 1, Turns: []flruntime.ThreadTurnSnapshot{baseTurn}}, {ThreadID: "child-reread", ThroughOrdinal: 2, Turns: []flruntime.ThreadTurnSnapshot{baseTurn, newTurn}}},
 		detail: flruntime.SubAgentDetail{
-			Snapshot:    flruntime.SubAgentSnapshot{ThreadID: "child-reread", ParentThreadID: flruntime.ThreadID(parent.ThreadID), CreatedAt: now, UpdatedAt: now.Add(time.Second)},
+			Snapshot:    flruntime.SubAgentSnapshot{ThreadID: "child-reread", ParentThreadID: identity.ThreadID(parent.ThreadID), CreatedAt: now, UpdatedAt: now.Add(time.Second)},
 			Context:     flruntime.ThreadContextSnapshot{ThreadID: "child-reread"},
 			Events:      []flruntime.ThreadDetailEvent{{ID: "entry-new", ThreadID: "child-reread", TurnID: "turn-new", Kind: flruntime.ThreadDetailEventUserMessage, CreatedAt: now.Add(time.Second)}},
 			GeneratedAt: now.Add(time.Second),
@@ -2086,11 +2042,11 @@ func TestServiceGetFlowerSubagentDetailProjectsCanonicalContextFacts(t *testing.
 	now := time.UnixMilli(20_000)
 	host := &recordingFloretHost{
 		turnPage: flruntime.ThreadTurnsPage{
-			ThreadID:       flruntime.ThreadID("child-context"),
+			ThreadID:       identity.ThreadID("child-context"),
 			ThroughOrdinal: 2,
 			Turns: []flruntime.ThreadTurnSnapshot{{
-				TurnID:            flruntime.TurnID("child-turn"),
-				RunID:             flruntime.RunID("child-run"),
+				TurnID:            identity.TurnID("child-turn"),
+				RunID:             identity.RunID("child-run"),
 				Ordinal:           1,
 				StartedAt:         now.Add(-50 * time.Second),
 				UpdatedAt:         now,
@@ -2100,9 +2056,9 @@ func TestServiceGetFlowerSubagentDetailProjectsCanonicalContextFacts(t *testing.
 				Status:            flruntime.TurnStatusCompleted,
 				ThroughOrdinal:    2,
 				Projection: flruntime.ThreadTurnProjection{
-					ThreadID:       flruntime.ThreadID("child-context"),
-					TurnID:         flruntime.TurnID("child-turn"),
-					RunID:          flruntime.RunID("child-run"),
+					ThreadID:       identity.ThreadID("child-context"),
+					TurnID:         identity.TurnID("child-turn"),
+					RunID:          identity.RunID("child-run"),
 					Status:         flruntime.TurnStatusCompleted,
 					ThroughOrdinal: 2,
 					Segments: []flruntime.ThreadTurnProjectionSegment{{
@@ -2114,10 +2070,10 @@ func TestServiceGetFlowerSubagentDetailProjectsCanonicalContextFacts(t *testing.
 		},
 		detail: flruntime.SubAgentDetail{
 			Snapshot: flruntime.SubAgentSnapshot{
-				ThreadID:       flruntime.ThreadID("child-context"),
+				ThreadID:       identity.ThreadID("child-context"),
 				TaskName:       "Inspect context",
-				ParentThreadID: flruntime.ThreadID(parent.ThreadID),
-				ParentTurnID:   flruntime.TurnID("parent-turn"),
+				ParentThreadID: identity.ThreadID(parent.ThreadID),
+				ParentTurnID:   identity.TurnID("parent-turn"),
 				HostProfileRef: subagentAgentTypeReviewer,
 				Status:         flruntime.SubAgentStatusCompleted,
 				CreatedAt:      now.Add(-time.Minute),
@@ -2127,8 +2083,8 @@ func TestServiceGetFlowerSubagentDetailProjectsCanonicalContextFacts(t *testing.
 				{
 					ID:        "message-1",
 					Ordinal:   1,
-					ThreadID:  flruntime.ThreadID("child-context"),
-					TurnID:    flruntime.TurnID("child-turn"),
+					ThreadID:  identity.ThreadID("child-context"),
+					TurnID:    identity.TurnID("child-turn"),
 					Kind:      flruntime.ThreadDetailEventAssistantMessage,
 					CreatedAt: now.Add(-40 * time.Second),
 					Message:   &flruntime.ThreadDetailMessage{Role: "assistant", Preview: "I am about to compact context."},
@@ -2136,8 +2092,8 @@ func TestServiceGetFlowerSubagentDetailProjectsCanonicalContextFacts(t *testing.
 				{
 					ID:        "compaction-1",
 					Ordinal:   2,
-					ThreadID:  flruntime.ThreadID("child-context"),
-					TurnID:    flruntime.TurnID("child-turn"),
+					ThreadID:  identity.ThreadID("child-context"),
+					TurnID:    identity.TurnID("child-turn"),
 					Kind:      flruntime.ThreadDetailEventCompaction,
 					CreatedAt: now.Add(-30 * time.Second),
 					Compaction: &flruntime.ThreadDetailCompaction{
@@ -2153,7 +2109,7 @@ func TestServiceGetFlowerSubagentDetailProjectsCanonicalContextFacts(t *testing.
 				},
 			},
 			Context: flruntime.ThreadContextSnapshot{
-				ThreadID: flruntime.ThreadID("child-context"),
+				ThreadID: identity.ThreadID("child-context"),
 				Provider: "openai",
 				Model:    "gpt-5-mini",
 				Policy:   flconfig.ContextPolicy{ContextWindowTokens: 1000},
@@ -2270,8 +2226,7 @@ func TestServiceGetFlowerSubagentDetailUsesParentScopedReadHostWithoutCachedRunt
 	if err != nil {
 		t.Fatalf("CreateThread parent: %v", err)
 	}
-	childID := "floret_child_detail_without_cached_runtime"
-	seedTestFloretSubagentTree(t, ctx, svc, parent.ThreadID, childID)
+	_, childID := seedTestFloretSubagentTree(t, ctx, svc, parent.ThreadID, "detail_without_cached_runtime")
 
 	svc.mu.Lock()
 	if len(svc.subagentRuntimes) != 0 {
@@ -2396,7 +2351,7 @@ func TestServiceGetFlowerSubagentDetailRejectsFloretIdentityMismatch(t *testing.
 	host := &recordingFloretHost{detail: flruntime.SubAgentDetail{
 		Snapshot: flruntime.SubAgentSnapshot{
 			ThreadID:       "wrong-child",
-			ParentThreadID: flruntime.ThreadID(parent.ThreadID),
+			ParentThreadID: identity.ThreadID(parent.ThreadID),
 		},
 		Context: flruntime.ThreadContextSnapshot{ThreadID: "wrong-child"},
 	}}
@@ -2467,12 +2422,12 @@ func TestSubagentChildEventPublishesParentSubagentsPatch(t *testing.T) {
 	childID := "child_completed"
 	host := &recordingFloretHost{
 		snapshots: []flruntime.SubAgentSnapshot{{
-			ThreadID:        flruntime.ThreadID(childID),
+			ThreadID:        identity.ThreadID(childID),
 			TaskName:        "review ui",
 			TaskDescription: "Review the Flower tool detail UI and report concise fixes.",
-			ParentThreadID:  flruntime.ThreadID(parentView.ThreadID),
-			ParentTurnID:    flruntime.TurnID("parent-turn"),
-			LatestTurnID:    flruntime.TurnID("child-turn"),
+			ParentThreadID:  identity.ThreadID(parentView.ThreadID),
+			ParentTurnID:    identity.TurnID("parent-turn"),
+			LatestTurnID:    identity.TurnID("child-turn"),
 			HostProfileRef:  subagentAgentTypeReviewer,
 			Status:          flruntime.SubAgentStatusCompleted,
 			LastMessage:     "review complete",
@@ -2502,8 +2457,8 @@ func TestSubagentChildEventPublishesParentSubagentsPatch(t *testing.T) {
 
 	floretSubagentEventSink{runtime: runtime}.EmitEvent(flruntime.Event{
 		Type:     "run_end",
-		ThreadID: flruntime.ThreadID(childID),
-		TurnID:   flruntime.TurnID("child-turn"),
+		ThreadID: identity.ThreadID(childID),
+		TurnID:   identity.TurnID("child-turn"),
 	})
 
 	deadline := time.Now().Add(2 * time.Second)

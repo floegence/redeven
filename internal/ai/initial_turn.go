@@ -2,12 +2,14 @@ package ai
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
 
-	flruntime "github.com/floegence/floret/v2/runtime"
+	flruntime "github.com/floegence/floret/v3/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -20,19 +22,30 @@ const (
 	initialTurnPhaseVerifyCanonicalReceipt = "verify_canonical_receipt"
 )
 
+func stableInitialQueueID(endpointID, userPublicID, clientRequestID string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(endpointID) + "\x00" + strings.TrimSpace(userPublicID) + "\x00" + strings.TrimSpace(clientRequestID)))
+	return "qt_" + hex.EncodeToString(sum[:18])
+}
+
 func (s *Service) sendInitialUserTurn(ctx context.Context, meta *session.Meta, req SendUserTurnRequest) (SendUserTurnResponse, error) {
+	clientRequestID := ""
+	if req.Create != nil {
+		clientRequestID = strings.TrimSpace(req.Create.ClientRequestID)
+	}
 	fail := func(phase string, err error) (SendUserTurnResponse, error) {
-		s.logInitialTurnFailure(phase, req.ThreadID, req.Input.TurnID, err)
+		s.logInitialTurnFailure(phase, clientRequestID, "", err)
 		return SendUserTurnResponse{}, err
 	}
 	if req.Create == nil {
 		return fail(initialTurnPhaseLookupFrozenState, errors.New("thread create snapshot is missing"))
 	}
-	if strings.TrimSpace(req.Input.TurnID) == "" {
-		return fail(initialTurnPhaseLookupFrozenState, errors.New("initial turn_id is required"))
+	if !validUploadStagingTargetID(clientRequestID) {
+		return fail(initialTurnPhaseLookupFrozenState, errors.New("invalid client_request_id"))
+	}
+	if strings.TrimSpace(req.Input.TurnID) != "" {
+		return fail(initialTurnPhaseLookupFrozenState, errors.New("turn_id must be omitted before canonical admission"))
 	}
 	create := *req.Create
-	create.ThreadID = strings.TrimSpace(req.ThreadID)
 	settings, err := s.buildThreadCreateSettings(ctxOrBackground(ctx), meta, create)
 	if err != nil {
 		return fail(initialTurnPhaseLookupFrozenState, err)
@@ -70,43 +83,36 @@ func (s *Service) sendInitialUserTurn(ctx context.Context, meta *session.Meta, r
 		persistTO = defaultPersistOpTimeout
 	}
 	createRequest := threadstore.PrepareThreadCreateRequest{
-		Settings: settings, ExplicitTitle: strings.TrimSpace(create.Title),
+		ClientRequestID: clientRequestID, Settings: settings, ExplicitTitle: strings.TrimSpace(create.Title),
 	}
 
-	// Initial creation and admission share one owner so concurrent retries can
-	// only observe a complete frozen state or the exact first frozen identity.
 	s.orphanMaintenanceMu.Lock()
-	defer s.orphanMaintenanceMu.Unlock()
+	locked := true
+	defer func() {
+		if locked {
+			s.orphanMaintenanceMu.Unlock()
+		}
+	}()
 
 	pctx, cancel := context.WithTimeout(ctxOrBackground(ctx), persistTO)
-	frozen, commandErr := db.GetFollowupByLaneAndTurnID(pctx, settings.EndpointID, settings.ThreadID, threadstore.FollowupLaneQueued, req.Input.TurnID)
-	operation, operationErr := db.GetMatchingInitialThreadCreateOperation(pctx, createRequest)
+	operation, operationErr := db.GetThreadCreateOperationByClientRequest(pctx, settings.EndpointID, clientRequestID)
 	cancel()
-	if commandErr != nil && !errors.Is(commandErr, sql.ErrNoRows) {
-		return fail(initialTurnPhaseLookupFrozenState, commandErr)
-	}
 	if operationErr != nil && !errors.Is(operationErr, sql.ErrNoRows) {
-		if errors.Is(operationErr, threadstore.ErrThreadCreateConflict) {
-			operationErr = fmt.Errorf("%w: %v", ErrInitialTurnStateConflict, operationErr)
-		}
 		return fail(initialTurnPhaseLookupFrozenState, operationErr)
 	}
-	hasCommand := commandErr == nil
-	hasOperation := operationErr == nil
-
-	if !hasOperation && !hasCommand {
-		var prepared preparedUserTurn
-		prepared, req.Input, err = s.prepareUserTurn(ctxOrBackground(ctx), meta, settings.EndpointID, settings.ThreadID, req.Model, req.Input, req.StagingScopeID, req.StagingCapability)
-		if err != nil {
-			return fail(initialTurnPhasePrepareAtomic, err)
+	if errors.Is(operationErr, sql.ErrNoRows) {
+		prepared, normalizedInput, prepareErr := s.prepareUserTurnForTarget(ctxOrBackground(ctx), meta, settings.EndpointID, clientRequestID, req.Model, req.Input, req.StagingScopeID, req.StagingCapability, false)
+		if prepareErr != nil {
+			return fail(initialTurnPhasePrepareAtomic, prepareErr)
 		}
-		frozen, err = buildInitialQueuedTurn(meta, req, settings, prepared)
-		if err != nil {
-			return fail(initialTurnPhasePrepareAtomic, err)
+		req.Input = normalizedInput
+		frozen, buildErr := buildInitialQueuedTurn(meta, req, settings, prepared, stableInitialQueueID(settings.EndpointID, meta.UserPublicID, clientRequestID))
+		if buildErr != nil {
+			return fail(initialTurnPhasePrepareAtomic, buildErr)
 		}
 		createRequest.CreatedAtMS = prepared.CreatedAtUnixMs
 		pctx, cancel = context.WithTimeout(ctxOrBackground(ctx), persistTO)
-		operation, frozen, err = db.PrepareThreadCreateWithInitialTurn(pctx, createRequest, frozen, prepared.UploadIDs, prepared.CreatedAtUnixMs, prepared.AttachmentAdmission, prepared.StagingScope)
+		operation, _, err = db.PrepareThreadCreateWithInitialTurn(pctx, createRequest, frozen, prepared.UploadIDs, prepared.CreatedAtUnixMs, prepared.AttachmentAdmission, prepared.StagingScope)
 		cancel()
 		if err != nil {
 			if errors.Is(err, threadstore.ErrThreadCreateConflict) {
@@ -114,61 +120,98 @@ func (s *Service) sendInitialUserTurn(ctx context.Context, meta *session.Meta, r
 			}
 			return fail(initialTurnPhasePrepareAtomic, err)
 		}
-		hasOperation = true
-		hasCommand = true
 	}
-
-	if !hasOperation || (!hasCommand && operation.Status != threadstore.ThreadCreateOperationCommitted) {
-		return fail(initialTurnPhaseLookupFrozenState, fmt.Errorf("%w: incomplete product create operation and command", ErrInitialTurnStateConflict))
+	if operation.InitialTurn == nil {
+		return fail(initialTurnPhaseLookupFrozenState, fmt.Errorf("%w: create operation has no frozen initial command", ErrInitialTurnStateConflict))
 	}
-	if !hasCommand {
-		receipt, verifyErr := s.canonicalFrozenTurnReceipt(ctxOrBackground(ctx), meta, db, req)
-		if verifyErr != nil {
-			return fail(initialTurnPhaseVerifyCanonicalReceipt, verifyErr)
-		}
-		if receipt == nil {
-			return fail(initialTurnPhaseVerifyCanonicalReceipt, fmt.Errorf("%w: committed create has no matching canonical turn", ErrInitialTurnStateConflict))
-		}
-		return *receipt, nil
-	}
-	if err := matchFrozenTurnRequest(meta, req, frozen); err != nil {
+	if err := matchInitialFrozenCreateRequest(create, settings, operation); err != nil {
 		return fail(initialTurnPhaseLookupFrozenState, err)
 	}
-	if operation.Status != threadstore.ThreadCreateOperationPending && operation.Status != threadstore.ThreadCreateOperationCommitted {
-		return fail(initialTurnPhaseResumeCanonicalCreate, fmt.Errorf("%w: unsupported create operation status %q", ErrInitialTurnStateConflict, operation.Status))
-	}
-	if frozen.AdmissionState == threadstore.PendingTurnAdmissionInFlight {
-		if operation.Status != threadstore.ThreadCreateOperationCommitted {
-			return fail(initialTurnPhaseLookupFrozenState, fmt.Errorf("%w: admission started before create committed", ErrInitialTurnStateConflict))
-		}
-		return initialTurnReceipt(frozen, settings.PermissionType), nil
-	}
-	if frozen.AdmissionState != threadstore.PendingTurnAdmissionReady {
-		return fail(initialTurnPhaseLookupFrozenState, fmt.Errorf("%w: unsupported command admission state %q", ErrInitialTurnStateConflict, frozen.AdmissionState))
+	if err := matchInitialFrozenTurnRequest(meta, req, *operation.InitialTurn); err != nil {
+		return fail(initialTurnPhaseLookupFrozenState, err)
 	}
 
 	committedSettings, err := s.resumeThreadCreateOperation(ctxOrBackground(ctx), operation)
 	if err != nil {
 		return fail(initialTurnPhaseResumeCanonicalCreate, err)
 	}
-	startRequest, err := queuedTurnRecordToRunStartRequest(frozen, committedSettings.PermissionType)
+	pctx, cancel = context.WithTimeout(ctxOrBackground(ctx), persistTO)
+	frozen, commandErr := db.GetQueuedTurn(pctx, settings.EndpointID, committedSettings.ThreadID, operation.InitialTurn.QueueID)
+	cancel()
+	if commandErr != nil && !errors.Is(commandErr, sql.ErrNoRows) {
+		return fail(initialTurnPhaseLookupFrozenState, commandErr)
+	}
+	if errors.Is(commandErr, sql.ErrNoRows) {
+		receipt, receiptErr := db.GetPendingTurnAdmissionReceipt(ctxOrBackground(ctx), operation.InitialTurn.QueueID)
+		if receiptErr != nil {
+			return fail(initialTurnPhaseVerifyCanonicalReceipt, receiptErr)
+		}
+		if receipt.Stage != threadstore.PendingTurnAdmissionStageSettled || receipt.ThreadID != committedSettings.ThreadID || receipt.TurnID == "" || receipt.RunID == "" {
+			return fail(initialTurnPhaseVerifyCanonicalReceipt, fmt.Errorf("%w: initial admission receipt is incomplete", ErrInitialTurnStateConflict))
+		}
+		canonicalReq := req
+		canonicalReq.ThreadID = committedSettings.ThreadID
+		canonicalReq.Input.TurnID = receipt.TurnID
+		verified, verifyErr := s.canonicalFrozenTurnReceipt(ctxOrBackground(ctx), meta, db, canonicalReq)
+		if verifyErr != nil || verified == nil || verified.RunID != receipt.RunID {
+			if verifyErr == nil {
+				verifyErr = fmt.Errorf("%w: canonical initial turn does not match its durable receipt", ErrInitialTurnStateConflict)
+			}
+			return fail(initialTurnPhaseVerifyCanonicalReceipt, verifyErr)
+		}
+		verified.ClientRequestID = clientRequestID
+		verified.ThreadID = committedSettings.ThreadID
+		return *verified, nil
+	}
+	if frozen == nil || frozen.TurnID != "" || frozen.RunID != "" {
+		return fail(initialTurnPhaseLookupFrozenState, fmt.Errorf("%w: initial command contains preallocated canonical identity", ErrInitialTurnStateConflict))
+	}
+	if err := matchInitialFrozenTurnRequest(meta, req, *frozen); err != nil {
+		return fail(initialTurnPhaseLookupFrozenState, err)
+	}
+	if frozen.AdmissionState != threadstore.PendingTurnAdmissionReady && frozen.AdmissionState != threadstore.PendingTurnAdmissionInFlight {
+		return fail(initialTurnPhaseLookupFrozenState, fmt.Errorf("%w: unsupported command admission state %q", ErrInitialTurnStateConflict, frozen.AdmissionState))
+	}
+
+	s.orphanMaintenanceMu.Unlock()
+	locked = false
+	if frozen.AdmissionState == threadstore.PendingTurnAdmissionInFlight {
+		admitted, waitErr := s.waitForMatchingInitialTurnAdmission(ctxOrBackground(ctx), *frozen)
+		if waitErr != nil {
+			return fail(initialTurnPhaseStartAdmission, waitErr)
+		}
+		return SendUserTurnResponse{ClientRequestID: clientRequestID, ThreadID: committedSettings.ThreadID, RunID: admitted.RunID, TurnID: admitted.TurnID, Kind: "start", AppliedPermissionType: committedSettings.PermissionType}, nil
+	}
+	startRequest, err := queuedTurnRecordToRunStartRequest(*frozen, committedSettings.PermissionType)
 	if err != nil {
 		return fail(initialTurnPhaseStartAdmission, err)
 	}
-	frozenMeta, err := queuedTurnRecordToSessionMeta(frozen, committedSettings.NamespacePublicID)
+	frozenMeta, err := queuedTurnRecordToSessionMeta(*frozen, committedSettings.NamespacePublicID)
 	if err != nil {
 		return fail(initialTurnPhaseStartAdmission, err)
 	}
-	admitted, _, err := s.startUserTurnDetached(ctxOrBackground(ctx), frozenMeta, frozen.RunID, startRequest, frozen.QueueID)
+	admitted, _, err := s.startUserTurnDetached(ctxOrBackground(ctx), frozenMeta, frozen.QueueID, startRequest, frozen.QueueID)
 	if errors.Is(err, ErrThreadBusy) {
-		admitted, err = s.waitForMatchingInitialTurnAdmission(ctxOrBackground(ctx), frozen)
+		admitted, err = s.waitForMatchingInitialTurnAdmission(ctxOrBackground(ctx), *frozen)
 	}
 	if err != nil {
 		return fail(initialTurnPhaseStartAdmission, err)
 	}
-	return SendUserTurnResponse{
-		RunID: admitted.RunID, TurnID: admitted.TurnID, Kind: "start", AppliedPermissionType: committedSettings.PermissionType,
-	}, nil
+	return SendUserTurnResponse{ClientRequestID: clientRequestID, ThreadID: committedSettings.ThreadID, RunID: admitted.RunID, TurnID: admitted.TurnID, Kind: "start", AppliedPermissionType: committedSettings.PermissionType}, nil
+}
+
+func matchInitialFrozenCreateRequest(create CreateThreadRequest, settings threadstore.ThreadSettings, operation threadstore.ThreadCreateOperation) error {
+	if strings.TrimSpace(create.ClientRequestID) != strings.TrimSpace(operation.ClientRequestID) ||
+		strings.TrimSpace(create.Title) != strings.TrimSpace(operation.ExplicitTitle) ||
+		strings.TrimSpace(settings.EndpointID) != strings.TrimSpace(operation.Settings.EndpointID) ||
+		strings.TrimSpace(settings.NamespacePublicID) != strings.TrimSpace(operation.Settings.NamespacePublicID) ||
+		strings.TrimSpace(settings.ModelID) != strings.TrimSpace(operation.Settings.ModelID) ||
+		strings.TrimSpace(settings.PermissionType) != strings.TrimSpace(operation.Settings.PermissionType) ||
+		strings.TrimSpace(settings.WorkingDir) != strings.TrimSpace(operation.Settings.WorkingDir) ||
+		strings.TrimSpace(settings.ReasoningSelectionJSON) != strings.TrimSpace(operation.Settings.ReasoningSelectionJSON) {
+		return ErrInitialTurnStateConflict
+	}
+	return nil
 }
 
 func (s *Service) waitForMatchingInitialTurnAdmission(ctx context.Context, frozen threadstore.QueuedTurn) (admittedUserTurn, error) {
@@ -176,26 +219,21 @@ func (s *Service) waitForMatchingInitialTurnAdmission(ctx context.Context, froze
 		return admittedUserTurn{}, ErrThreadBusy
 	}
 	threadKey := runThreadKey(frozen.EndpointID, frozen.ThreadID)
-	runID := strings.TrimSpace(frozen.RunID)
-	turnID := strings.TrimSpace(frozen.TurnID)
+	executionKey := strings.TrimSpace(frozen.QueueID)
 	s.mu.Lock()
-	activeRunID := strings.TrimSpace(s.activeRunByTh[threadKey])
-	active := s.runs[activeRunID]
+	activeExecutionKey := strings.TrimSpace(s.activeRunByTh[threadKey])
+	active := s.runs[activeExecutionKey]
 	s.mu.Unlock()
-	if activeRunID != runID || active == nil || strings.TrimSpace(active.threadID) != strings.TrimSpace(frozen.ThreadID) || strings.TrimSpace(active.turnID) != turnID {
+	if activeExecutionKey != executionKey || active == nil || strings.TrimSpace(active.threadID) != strings.TrimSpace(frozen.ThreadID) {
 		return admittedUserTurn{}, ErrThreadBusy
 	}
 	return active.waitForUserTurnAdmission(ctxOrBackground(ctx))
 }
 
-func buildInitialQueuedTurn(meta *session.Meta, req SendUserTurnRequest, settings threadstore.ThreadSettings, prepared preparedUserTurn) (threadstore.QueuedTurn, error) {
-	runID, err := NewRunID()
-	if err != nil {
-		return threadstore.QueuedTurn{}, err
-	}
-	queueID, err := NewQueuedTurnID()
-	if err != nil {
-		return threadstore.QueuedTurn{}, err
+func buildInitialQueuedTurn(meta *session.Meta, req SendUserTurnRequest, settings threadstore.ThreadSettings, prepared preparedUserTurn, queueID string) (threadstore.QueuedTurn, error) {
+	queueID = strings.TrimSpace(queueID)
+	if queueID == "" {
+		return threadstore.QueuedTurn{}, errors.New("initial queue identity is missing")
 	}
 	contextActionJSON, err := marshalQueuedTurnContextAction(req.Input.ContextAction)
 	if err != nil {
@@ -214,32 +252,49 @@ func buildInitialQueuedTurn(meta *session.Meta, req SendUserTurnRequest, setting
 		return threadstore.QueuedTurn{}, err
 	}
 	return threadstore.QueuedTurn{
-		QueueID: queueID, EndpointID: settings.EndpointID, ThreadID: settings.ThreadID, ChannelID: strings.TrimSpace(meta.ChannelID),
-		Lane: threadstore.FollowupLaneQueued, TurnID: prepared.TurnID, RunID: runID, ModelID: req.Model,
-		TextContent: req.Input.Text, AttachmentsJSON: attachmentsJSON, ContextActionJSON: contextActionJSON,
-		OptionsJSON: optionsJSON, SessionMetaJSON: sessionMetaJSON,
+		QueueID: queueID, EndpointID: settings.EndpointID, ChannelID: strings.TrimSpace(meta.ChannelID),
+		Lane: threadstore.FollowupLaneQueued, ModelID: req.Model, TextContent: req.Input.Text,
+		AttachmentsJSON: attachmentsJSON, ContextActionJSON: contextActionJSON, OptionsJSON: optionsJSON, SessionMetaJSON: sessionMetaJSON,
 		CreatedByUserPublicID: strings.TrimSpace(meta.UserPublicID), CreatedByUserEmail: strings.TrimSpace(meta.UserEmail),
 		CreatedAtUnixMs: prepared.CreatedAtUnixMs,
 	}, nil
 }
 
-func initialTurnReceipt(rec threadstore.QueuedTurn, permissionType string) SendUserTurnResponse {
-	return SendUserTurnResponse{
-		RunID: strings.TrimSpace(rec.RunID), TurnID: strings.TrimSpace(rec.TurnID), Kind: "start",
-		AppliedPermissionType: strings.TrimSpace(permissionType),
+func matchInitialFrozenTurnRequest(meta *session.Meta, req SendUserTurnRequest, rec threadstore.QueuedTurn) error {
+	if meta == nil || strings.TrimSpace(rec.EndpointID) != strings.TrimSpace(meta.EndpointID) || strings.TrimSpace(rec.ChannelID) != strings.TrimSpace(meta.ChannelID) {
+		return ErrTurnIdempotencyConflict
 	}
+	contextAction, err := normalizeAskFlowerContextActionEnvelope(req.Input.ContextAction)
+	if err != nil {
+		return err
+	}
+	contextJSON, err := marshalQueuedTurnContextAction(contextAction)
+	if err != nil {
+		return err
+	}
+	attachmentsJSON, err := marshalQueuedTurnAttachments(req.Input.Attachments)
+	if err != nil {
+		return err
+	}
+	optionsJSON, err := marshalQueuedTurnOptions(req.Options)
+	if err != nil {
+		return err
+	}
+	sessionJSON, err := marshalQueuedTurnSessionMeta(meta)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(rec.ModelID) != strings.TrimSpace(req.Model) || rec.TextContent != req.Input.Text || rec.AttachmentsJSON != attachmentsJSON || rec.ContextActionJSON != contextJSON || rec.OptionsJSON != optionsJSON || rec.SessionMetaJSON != sessionJSON {
+		return ErrTurnIdempotencyConflict
+	}
+	return nil
 }
 
-func (s *Service) logInitialTurnFailure(phase, threadID, turnID string, err error) {
+func (s *Service) logInitialTurnFailure(phase, clientRequestID, turnID string, err error) {
 	if s == nil || s.log == nil || err == nil {
 		return
 	}
-	s.log.Warn("flower initial turn failed",
-		"phase", strings.TrimSpace(phase),
-		"thread_id", strings.TrimSpace(threadID),
-		"turn_id", strings.TrimSpace(turnID),
-		"error_class", classifyInitialTurnError(err),
-	)
+	s.log.Warn("flower initial turn failed", "phase", strings.TrimSpace(phase), "client_request_id", strings.TrimSpace(clientRequestID), "turn_id", strings.TrimSpace(turnID), "error_class", classifyInitialTurnError(err))
 }
 
 func classifyInitialTurnError(err error) string {

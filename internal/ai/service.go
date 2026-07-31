@@ -16,7 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	flruntime "github.com/floegence/floret/v2/runtime"
+	flruntime "github.com/floegence/floret/v3/runtime"
 	"github.com/floegence/flowersec/flowersec-go/rpc"
 	contextadapter "github.com/floegence/redeven/internal/ai/context/adapter"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
@@ -279,50 +279,7 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 		return nil, err
 	}
 	threadsPath := filepath.Join(strings.TrimSpace(opts.StateDir), "ai", "threads.sqlite")
-	ts, err := threadstore.Open(threadsPath, threadstore.WithLegacyThreadTitleMigrator(func(_ context.Context, legacy threadstore.LegacyThreadTitle) error {
-		ctx, cancel := context.WithTimeout(context.Background(), persistTO)
-		defer cancel()
-		threadID := flruntime.ThreadID(strings.TrimSpace(legacy.ThreadID))
-		readHost, err := floretBootstrap.newThreadRead(ctx, threadID)
-		if err != nil {
-			return fmt.Errorf("bind canonical Floret title read: %w", err)
-		}
-		overview, err := readHost.ReadThreadOverview(ctx)
-		if err != nil {
-			return fmt.Errorf("read canonical Floret title: %w", err)
-		}
-		canonicalTitle := strings.TrimSpace(overview.Thread.Title)
-		switch {
-		case canonicalTitle == "":
-			titleHost, bindErr := floretBootstrap.newThreadTitle(ctx, threadID)
-			if bindErr != nil {
-				return fmt.Errorf("bind canonical Floret title write: %w", bindErr)
-			}
-			_, err = titleHost.Set(ctx, legacy.Title)
-			return err
-		case canonicalTitle == strings.TrimSpace(legacy.Title):
-			return nil
-		default:
-			return fmt.Errorf("canonical Floret title %q conflicts with Redeven title %q", canonicalTitle, strings.TrimSpace(legacy.Title))
-		}
-	}), threadstore.WithLegacyComposerAdmissionPreflight(uploadsDir, func(_ context.Context, legacy threadstore.LegacyComposerAdmission) (threadstore.LegacyComposerAdmissionDecision, error) {
-		preflightCtx, cancel := context.WithTimeout(context.Background(), persistTO)
-		defer cancel()
-		threadID := flruntime.ThreadID(strings.TrimSpace(legacy.ThreadID))
-		turnID := flruntime.TurnID(strings.TrimSpace(legacy.TurnID))
-		readHost, err := floretBootstrap.newThreadRead(preflightCtx, threadID)
-		if err != nil {
-			return threadstore.LegacyComposerAdmissionDecision{}, fmt.Errorf("bind canonical Floret turn read: %w", err)
-		}
-		turn, err := readHost.ReadThreadTurn(preflightCtx, turnID)
-		if errors.Is(err, flruntime.ErrTurnNotFound) {
-			return threadstore.LegacyComposerAdmissionDecision{State: threadstore.LegacyComposerAdmissionMissing}, nil
-		}
-		if err != nil {
-			return threadstore.LegacyComposerAdmissionDecision{}, fmt.Errorf("read canonical Floret turn: %w", err)
-		}
-		return legacyComposerAdmissionDecisionFromCanonicalTurn(legacy, turn)
-	}))
+	ts, err := threadstore.Open(threadsPath)
 	if err != nil {
 		_ = floretBootstrap.close()
 		return nil, err
@@ -474,38 +431,6 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 	return svc, nil
 }
 
-func legacyComposerAdmissionDecisionFromCanonicalTurn(
-	legacy threadstore.LegacyComposerAdmission,
-	turn flruntime.ThreadTurnSnapshot,
-) (threadstore.LegacyComposerAdmissionDecision, error) {
-	if turn.TurnID != flruntime.TurnID(strings.TrimSpace(legacy.TurnID)) {
-		return threadstore.LegacyComposerAdmissionDecision{}, errors.New("canonical Floret turn identity mismatch")
-	}
-	if len(turn.UserAttachments) != len(legacy.Attachments) {
-		return threadstore.LegacyComposerAdmissionDecision{}, errors.New("canonical Floret attachment membership mismatch")
-	}
-	canonicalAttachments := make([]threadstore.LegacyComposerCanonicalAttachment, 0, len(turn.UserAttachments))
-	for index, canonical := range turn.UserAttachments {
-		uploadID, digest, legacyResourceRef, parseErr := floretUploadIdentityFromResourceRef(canonical.ResourceRef)
-		if parseErr != nil || legacyResourceRef || strings.TrimSpace(digest) == "" {
-			return threadstore.LegacyComposerAdmissionDecision{}, fmt.Errorf("canonical Floret attachment %d has invalid immutable identity", index)
-		}
-		local := legacy.Attachments[index]
-		if uploadID != local.UploadID || canonical.Name != local.Name || canonical.MIMEType != local.DetectedMediaType ||
-			canonical.SizeBytes != local.SizeBytes || !strings.EqualFold(digest, local.ContentSHA256) {
-			return threadstore.LegacyComposerAdmissionDecision{}, fmt.Errorf("canonical Floret attachment %d conflicts with product attachment", index)
-		}
-		canonicalAttachments = append(canonicalAttachments, threadstore.LegacyComposerCanonicalAttachment{
-			UploadID: uploadID, ResourceRef: canonical.ResourceRef, Name: canonical.Name, MIMEType: canonical.MIMEType,
-			SizeBytes: canonical.SizeBytes, ContentSHA256: digest,
-		})
-	}
-	return threadstore.LegacyComposerAdmissionDecision{
-		State:       threadstore.LegacyComposerAdmissionAdmitted,
-		Attachments: canonicalAttachments,
-	}, nil
-}
-
 func closeServiceBeforeMaintenance(s *Service) {
 	if s == nil {
 		return
@@ -581,7 +506,7 @@ func (s *Service) recoverQueuedTurnCommandsForStartup(ctx context.Context) ([]qu
 			if activeRunID != "" || finalizingRunID != "" || (idleCompaction != nil && idleCompaction.busy()) {
 				return false, errors.New("queued turn startup recovery encountered an active runtime settlement owner")
 			}
-			if err := s.reconcileStartupPendingTurnCommands(recoveryCtx, endpointID, threadID, db); err != nil {
+			if err := validatePendingTurnRecoveryState(recoveryCtx, endpointID, threadID, db, true); err != nil {
 				return false, err
 			}
 			host, hostErr := s.openFloretThreadReadHost(recoveryCtx, threadID)
@@ -1644,7 +1569,7 @@ func newManualCompactionRequestID() (string, error) {
 type preparedRun struct {
 	meta                         *session.Meta
 	req                          RunStartRequest
-	runID                        string
+	executionKey                 string
 	startedAtUnixMs              int64
 	channelID                    string
 	endpointID                   string
@@ -1656,38 +1581,36 @@ type preparedRun struct {
 	uploadsDir                   string
 	persistTO                    time.Duration
 	db                           *threadstore.Store
-	turnID                       string
-	messageID                    string
 	r                            *run
 }
 
-func (s *Service) StartRun(ctx context.Context, meta *session.Meta, runID string, req RunStartRequest, w http.ResponseWriter) error {
+func (s *Service) StartRun(ctx context.Context, meta *session.Meta, executionKey string, req RunStartRequest, w http.ResponseWriter) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	prepared, err := s.prepareRun(meta, runID, req, w)
+	prepared, err := s.prepareRun(meta, executionKey, req, w)
 	if err != nil {
 		return err
 	}
 	return s.executePreparedRun(ctx, prepared)
 }
 
-func (s *Service) StartRunDetached(meta *session.Meta, runID string, req RunStartRequest) error {
-	prepared, err := s.prepareRun(meta, runID, req, nil)
+func (s *Service) StartRunDetached(meta *session.Meta, executionKey string, req RunStartRequest) error {
+	prepared, err := s.prepareRun(meta, executionKey, req, nil)
 	if err != nil {
 		return err
 	}
 	go func() {
 		if err := s.executePreparedRun(context.Background(), prepared); err != nil {
 			if s.log != nil {
-				s.log.Warn("ai detached run failed", "run_id", runID, "thread_id", strings.TrimSpace(req.ThreadID), "error", err)
+				s.log.Warn("ai detached run failed", "execution_key", executionKey, "thread_id", strings.TrimSpace(req.ThreadID), "error", err)
 			}
 		}
 	}()
 	return nil
 }
 
-func (s *Service) startUserTurnDetached(ctx context.Context, meta *session.Meta, runID string, req RunStartRequest, sourceFollowupID string) (admittedUserTurn, RunInput, error) {
+func (s *Service) startUserTurnDetached(ctx context.Context, meta *session.Meta, executionKey string, req RunStartRequest, sourceFollowupID string) (admittedUserTurn, RunInput, error) {
 	if s == nil {
 		return admittedUserTurn{}, req.Input, errors.New("nil service")
 	}
@@ -1708,10 +1631,11 @@ func (s *Service) startUserTurnDetached(ctx context.Context, meta *session.Meta,
 		return admittedUserTurn{}, req.Input, err
 	}
 	req.Input = normalizedInput
-	prepared, err := s.prepareRun(meta, runID, req, nil)
+	prepared, err := s.prepareRun(meta, executionKey, req, nil)
 	if err != nil {
 		return admittedUserTurn{}, normalizedInput, err
 	}
+	prepared.r.awaitFloretAdmission.Store(true)
 	sourceID := strings.TrimSpace(sourceFollowupID)
 	commandID := ""
 	if sourceID != "" {
@@ -1722,8 +1646,18 @@ func (s *Service) startUserTurnDetached(ctx context.Context, meta *session.Meta,
 			s.releasePreparedRun(prepared)
 			return admittedUserTurn{}, normalizedInput, sourceErr
 		}
-		if source != nil && strings.TrimSpace(source.TurnID) == prepared.turnID && strings.TrimSpace(source.RunID) == runID {
-			if source.AdmissionState != threadstore.PendingTurnAdmissionReady {
+		if source != nil && strings.TrimSpace(source.TurnID) == "" && strings.TrimSpace(source.RunID) == "" {
+			switch source.AdmissionState {
+			case threadstore.PendingTurnAdmissionReady:
+			case threadstore.PendingTurnAdmissionInFlight:
+				receiptCtx, receiptCancel := context.WithTimeout(ctx, prepared.persistTO)
+				receiptErr := validatePendingTurnRecoveryState(receiptCtx, endpointID, threadID, prepared.db, true)
+				receiptCancel()
+				if receiptErr != nil {
+					s.releasePreparedRun(prepared)
+					return admittedUserTurn{}, normalizedInput, receiptErr
+				}
+			default:
 				s.releasePreparedRun(prepared)
 				return admittedUserTurn{}, normalizedInput, threadstore.ErrPendingTurnAdmissionInProgress
 			}
@@ -1759,7 +1693,7 @@ func (s *Service) startUserTurnDetached(ctx context.Context, meta *session.Meta,
 		record := threadstore.QueuedTurn{
 			QueueID: commandID, EndpointID: endpointID, ThreadID: threadID,
 			ChannelID: strings.TrimSpace(meta.ChannelID), Lane: threadstore.FollowupLaneQueued,
-			TurnID: prepared.turnID, RunID: runID, ModelID: strings.TrimSpace(req.Model),
+			ModelID:     strings.TrimSpace(req.Model),
 			TextContent: normalizedInput.Text, AttachmentsJSON: attachmentsJSON,
 			ContextActionJSON: contextActionJSON, OptionsJSON: optionsJSON, SessionMetaJSON: sessionMetaJSON,
 			CreatedByUserPublicID: strings.TrimSpace(meta.UserPublicID), CreatedByUserEmail: strings.TrimSpace(meta.UserEmail),
@@ -1797,21 +1731,32 @@ func (s *Service) startUserTurnDetached(ctx context.Context, meta *session.Meta,
 	}
 
 	pctx, cancel := context.WithTimeout(ctx, prepared.persistTO)
-	err = prepared.db.BeginPendingTurnAdmission(pctx, endpointID, threadID, commandID, prepared.turnID, runID)
+	_, err = prepared.db.BeginPendingTurnAdmission(pctx, endpointID, threadID, commandID, commandID)
 	cancel()
 	if err != nil {
 		s.releasePreparedRun(prepared)
 		return admittedUserTurn{}, normalizedInput, err
 	}
 	prepared.r.setPendingTurnCommand(commandID)
-	s.broadcastThreadState(endpointID, threadID, runID, string(RunStateRunning), "", "")
 	s.broadcastThreadSummary(endpointID, threadID)
 	go func() {
 		runErr := s.executePreparedRun(context.Background(), prepared)
+		if runErr != nil && !prepared.r.floretAdmitted.Load() {
+			releaseCtx, releaseCancel := context.WithTimeout(context.Background(), prepared.persistTO)
+			releaseErr := prepared.db.ReleasePendingTurnAdmission(
+				releaseCtx, endpointID, threadID, commandID, commandID, threadstore.FollowupLaneDraft,
+			)
+			releaseCancel()
+			if releaseErr != nil {
+				runErr = errors.Join(runErr, fmt.Errorf("release failed pre-admission turn: %w", releaseErr))
+			} else {
+				s.broadcastThreadSummary(endpointID, threadID)
+			}
+		}
 		prepared.r.completeUserTurnAdmissionAfterExecution(runErr)
 		if runErr != nil {
 			if s.log != nil {
-				s.log.Warn("ai detached run failed", "run_id", runID, "thread_id", threadID, "error", runErr)
+				s.log.Warn("ai detached run failed", "execution_key", executionKey, "thread_id", threadID, "error", runErr)
 			}
 		}
 	}()
@@ -1826,13 +1771,13 @@ func (s *Service) releasePreparedRun(prepared *preparedRun) {
 	if s == nil || prepared == nil {
 		return
 	}
-	runID := strings.TrimSpace(prepared.runID)
+	executionKey := strings.TrimSpace(prepared.executionKey)
 	thKey := strings.TrimSpace(prepared.thKey)
 	s.mu.Lock()
-	if runID != "" {
-		delete(s.runs, runID)
+	if executionKey != "" {
+		delete(s.runs, executionKey)
 	}
-	if thKey != "" && strings.TrimSpace(s.activeRunByTh[thKey]) == runID {
+	if thKey != "" && strings.TrimSpace(s.activeRunByTh[thKey]) == executionKey {
 		delete(s.activeRunByTh, thKey)
 	}
 	s.mu.Unlock()
@@ -1845,16 +1790,19 @@ func (s *Service) releasePreparedRun(prepared *preparedRun) {
 	}
 }
 
-func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartRequest, w http.ResponseWriter) (*preparedRun, error) {
+func (s *Service) prepareRun(meta *session.Meta, executionKey string, req RunStartRequest, w http.ResponseWriter) (*preparedRun, error) {
 	if s == nil {
 		return nil, errors.New("nil service")
 	}
 	if err := requireRWX(meta); err != nil {
 		return nil, err
 	}
-	runID = strings.TrimSpace(runID)
-	if runID == "" {
-		return nil, errors.New("missing run_id")
+	executionKey = strings.TrimSpace(executionKey)
+	if executionKey == "" {
+		return nil, errors.New("missing execution key")
+	}
+	if strings.TrimSpace(req.Input.TurnID) != "" {
+		return nil, errors.New("turn_id must be omitted before canonical admission")
 	}
 	threadID := strings.TrimSpace(req.ThreadID)
 	if threadID == "" {
@@ -2001,24 +1949,19 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 	req.Options.PermissionType = permissionTypeString(threadPermission)
 	uploadsDir := s.uploadsDir
 	db = s.threadsDB
-	turnID, err := normalizeOrCreateTurnID(req.Input.TurnID)
-	if err != nil {
-		s.mu.Unlock()
-		return nil, err
-	}
-	req.Input.TurnID = turnID
 	finalizingThreadStatePublished := false
 	runHost, err := s.bindRunHostCapabilities(endpointID, threadID)
 	if err != nil {
 		s.mu.Unlock()
 		return nil, err
 	}
-	productCapabilities, err := bindRootRunProductCapabilities(db, endpointID, threadID, runID)
+	productCapabilities, err := bindRootRunProductCapabilities(db, endpointID, threadID)
 	if err != nil {
 		s.mu.Unlock()
 		return nil, err
 	}
-	r := newRun(runOptions{
+	var r *run
+	r = newRun(runOptions{
 		Log:                         s.log,
 		StateDir:                    s.stateDir,
 		AgentHomeDir:                s.agentHomeDir,
@@ -2031,17 +1974,15 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 		ResolveProviderKey:          s.resolveProviderKey,
 		ResolveWebSearchKey:         s.resolveWebSearchKey,
 		DesktopModelSource:          desktopModelSource,
-		RunID:                       runID,
+		ExecutionKey:                executionKey,
 		ChannelID:                   channelID,
 		EndpointID:                  endpointID,
 		ThreadID:                    threadID,
-		TurnID:                      turnID,
 		MaxWallTime:                 s.runMaxWallTime,
 		IdleTimeout:                 s.runIdleTimeout,
 		ToolApprovalTimeout:         s.approvalTimeout,
 		StreamWriteTimeout:          s.streamWriteTO,
 		UserPublicID:                strings.TrimSpace(metaRef.UserPublicID),
-		MessageID:                   turnID,
 		UploadsDir:                  uploadsDir,
 		ProductCapabilities:         productCapabilities,
 		FloretTurnOpener:            floretRuntime.Turn,
@@ -2055,29 +1996,31 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 		CanonicalReferenceAuthority: canonicalReferenceAuthority,
 		TargetToolExecutor:          s.targetToolExecutor,
 		OnStreamEvent: func(ev any) {
+			canonicalRunID, canonicalTurnID := r.canonicalRunTurnIdentity()
+			if canonicalRunID == "" || canonicalTurnID == "" {
+				return
+			}
 			if !finalizingThreadStatePublished && isFinalizingLifecycleStreamEvent(ev) {
 				finalizingThreadStatePublished = true
-				s.broadcastThreadState(endpointID, threadID, runID, string(RunStateFinalizing), "", "")
+				s.broadcastThreadState(endpointID, threadID, canonicalRunID, string(RunStateFinalizing), "", "")
 				s.broadcastThreadSummary(endpointID, threadID)
 			}
-			s.broadcastStreamEvent(endpointID, threadID, turnID, runID, ev)
+			s.broadcastStreamEvent(endpointID, threadID, canonicalTurnID, canonicalRunID, ev)
 		},
 		Writer: w,
 	})
-	r.awaitFloretAdmission.Store(true)
 	r.subagentRuntime = s.ensureThreadSubagentRuntimeLocked(thKey, r)
-	s.activeRunByTh[thKey] = runID
-	s.runs[runID] = r
+	s.activeRunByTh[thKey] = executionKey
+	s.runs[executionKey] = r
 	s.mu.Unlock()
 
-	s.broadcastThreadState(endpointID, threadID, runID, "running", "", "")
 	s.broadcastThreadSummary(endpointID, threadID)
 	r.updateModelIOStatus(FlowerModelIOPhasePreparing, 0)
 
 	return &preparedRun{
 		meta:                         metaRef,
 		req:                          req,
-		runID:                        runID,
+		executionKey:                 executionKey,
 		startedAtUnixMs:              time.Now().UnixMilli(),
 		channelID:                    channelID,
 		endpointID:                   endpointID,
@@ -2089,8 +2032,6 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 		uploadsDir:                   uploadsDir,
 		persistTO:                    persistTO,
 		db:                           db,
-		turnID:                       turnID,
-		messageID:                    turnID,
 		r:                            r,
 	}, nil
 }
@@ -2107,14 +2048,13 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	}
 
 	r := prepared.r
-	runID := strings.TrimSpace(prepared.runID)
+	executionKey := strings.TrimSpace(prepared.executionKey)
 	endpointID := strings.TrimSpace(prepared.endpointID)
 	threadID := strings.TrimSpace(prepared.threadID)
 	thKey := strings.TrimSpace(prepared.thKey)
 	db := prepared.db
 	persistTO := prepared.persistTO
 	cfg := prepared.cfg
-	messageID := strings.TrimSpace(prepared.messageID)
 	req := prepared.req
 
 	// Always close the run stream to avoid goroutine leaks on early returns.
@@ -2134,7 +2074,7 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		if msg == "" {
 			msg = "AI failed."
 		}
-		r.sendStreamEvent(streamEventError{Type: "error", MessageID: messageID, Error: msg})
+		r.sendStreamEvent(streamEventError{Type: "error", MessageID: strings.TrimSpace(r.messageID), Error: msg})
 		r.setEndReason("error")
 		return err
 	}
@@ -2142,13 +2082,12 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	engineRunStarted := false
 
 	defer func() {
-		r.reconcilePendingTurnCommand()
 		s.mu.Lock()
-		stopping := strings.TrimSpace(s.stopFinalizingByTh[thKey]) == runID
+		stopping := strings.TrimSpace(s.stopFinalizingByTh[thKey]) == executionKey
 		if !stopping {
-			delete(s.runs, runID)
+			delete(s.runs, executionKey)
 		}
-		if !stopping && strings.TrimSpace(s.activeRunByTh[thKey]) == runID {
+		if !stopping && strings.TrimSpace(s.activeRunByTh[thKey]) == executionKey {
 			delete(s.activeRunByTh, thKey)
 		}
 		s.mu.Unlock()
@@ -2170,7 +2109,8 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 				"error":      runStatusErr,
 			})
 		}
-		s.broadcastThreadState(endpointID, threadID, runID, runStatus, runStatusErrCode, runStatusErr)
+		canonicalRunID, _ := r.canonicalRunTurnIdentity()
+		s.broadcastThreadState(endpointID, threadID, canonicalRunID, runStatus, runStatusErrCode, runStatusErr)
 		s.broadcastThreadSummary(endpointID, threadID)
 		if s.threadMgr != nil {
 			s.threadMgr.Wake(endpointID, threadID)
@@ -2210,11 +2150,11 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		switch strings.TrimSpace(r.getCancelReason()) {
 		case "canceled":
 			r.setEndReason("canceled")
-			r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: messageID})
+			r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: strings.TrimSpace(r.messageID)})
 			return nil
 		case "timed_out":
 			r.setEndReason("timed_out")
-			r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: messageID})
+			r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: strings.TrimSpace(r.messageID)})
 			return nil
 		default:
 			return ctx.Err()
@@ -2247,11 +2187,11 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 			switch reason {
 			case "canceled":
 				r.setEndReason("canceled")
-				r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: messageID})
+				r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: strings.TrimSpace(r.messageID)})
 				handledCancel = true
 			case "timed_out":
 				r.setEndReason("timed_out")
-				r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: messageID})
+				r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: strings.TrimSpace(r.messageID)})
 				handledCancel = true
 			}
 		}
@@ -2574,7 +2514,7 @@ func (s *Service) CancelRun(meta *session.Meta, runID string) error {
 	if threadID == "" {
 		return nil
 	}
-	_, err := s.stopThreadWithExpectedRunID(context.Background(), meta, threadID, runID)
+	_, err := s.stopThreadWithExpectedExecutionKey(context.Background(), meta, threadID, runID)
 	if errors.Is(err, errStopRunNotActive) || errors.Is(err, ErrThreadStopPending) {
 		return nil
 	}

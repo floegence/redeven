@@ -1,73 +1,61 @@
 ---
 type: Storage Contract
 title: Flower storage ownership and migrations
-description: Floret owns Agent state; Redeven schema v8 stores host settings, upload staging, immutable unadmitted commands, routing, and audit.
+description: Floret owns canonical Agent state; Redeven product v1 stores only host resources, unadmitted work, authorization evidence, and coordination receipts.
 tags: [ai, storage, sqlite, migrations, floret]
-timestamp: 2026-07-27T00:00:00Z
+timestamp: 2026-07-31T00:00:00Z
 ---
 # Summary
 
-- Authority: Floret owns admitted Agent state. Redeven owns host settings, upload bytes, unadmitted commands, routing/read state, audit, and cross-store intent.
-- Outcome: schema v8 replaces durable drafts with capability-bound upload staging; editable composer state is connection-local.
-- Invariants: staging contains no message or reference projection; Send atomically freezes one command before admission; initial send reads product create intent before opening Floret authority.
-- Failure boundary: unsupported schema, drift, malformed legacy drafts, uncertain canonical reads, membership mismatch, or failed migration effects stop startup without repair or substitute database creation.
+- Authority: Floret owns admitted Agent state and every canonical `ThreadID`, `TurnID`, and `RunID`; Redeven owns product settings, uploads, unadmitted queue state, routing, authorization evidence, and durable cross-store operations.
+- Outcome: `ai_threadstore_product_v1` version 1 is the sole first-release baseline and opens only after a read-only complete-schema preflight.
+- Invariants: admission identities begin empty, bind once from validated Floret facts, and settle product state atomically; unsupported databases are rejected without mutation.
+- Failure boundary: schema drift, an unsupported identity, incomplete canonical evidence, or a conflicting replay stops startup or admission without repair, reset, or substitute state.
 
 # Contract
 
-## Schema v8 ownership
+## First-release schema
 
-`ai_thread_settings` stores endpoint, namespace, model, reasoning, permission type, working directory, pin state, queue revision, host audit identity, and settings timestamps. Canonical title, conversation, turn lifecycle, preview, latest turn, approvals, todos, and Agent relationships exist only in Floret.
+The Redeven AI product database has kind `ai_threadstore_product_v1`, current version 1, minimum version 1, one current initializer, and no historical migrations. The initializer directly creates the reviewed current tables, indexes, triggers, constraints, and metadata. It does not build a discarded shape and alter it forward.
 
-The shared Flower coordinator stores editable text, ordered references, attachment presentation, and composer overrides in process memory. One shell connection supplies one coordinator to Activity, Workbench, and floating surfaces, so navigation and remounts preserve the same scope without leases or conflict resolution. Another connection receives a different coordinator and never reads that state. Redeven has no composer-draft API, table, revision, lease, holder, takeover, recovery setting, or persistence adapter.
+This is a one-time, user-approved pre-launch baseline reset. The project had not been released or distributed with the discarded product schemas, so their migration code, compatibility readers, legacy composer/title paths, upload fallbacks, and migration fixtures are removed. An existing `ai_threadstore_product_v2` database, version 0, a future or unknown version, another kind, malformed metadata, or any shape drift is unsupported.
 
-`ai_upload_staging_scopes` stores an opaque scope identity, endpoint, authenticated owner hash, target thread identity, capability hash, creation time, expiry, and release state. The plaintext capability is returned only at creation and is accepted only through the exact staging headers. The scope may retain uploaded bytes while a connection is active, but it stores no prompt text, references, model choice, or UI draft snapshot and cannot hydrate a later connection. Release or expiry removes its claims; last-reference cleanup owns physical deletion.
+Before writable SQLite open, WAL configuration, or sidecar creation, threadstore classifies the path with an existing-only read-only connection. Missing and zero-byte files may proceed to initialization. A current file must match the checked-in reviewed snapshot across schema kind/version, `sqlite_master`, columns, indexes, foreign keys, triggers, and covered metadata planes. Every unsupported file is rejected before writable open; its bytes, size, timestamps, metadata, and existing or absent `-wal` and `-shm` sidecars remain unchanged.
 
-Clicking Send is the persistence boundary. Redeven validates the current request and atomically converts the selected staging claims into one immutable `ai_queued_turns` command. For a new conversation, the same transaction freezes the settings intent and thread-create operation, proposed TurnID/RunID, complete command payload, and attachment claim transfer. Product settings do not become visible until the create coordinator has established the canonical Floret root and completed the recorded title step. Retry with the same exact identity and frozen payload returns the first QueueID/RunID; a conflicting payload fails without overwriting it. Post-commit recovery and settlement operate on that command, not on an editable draft.
+## Product ownership
 
-Initial-send recovery reads product state before canonical state. It first matches the stable create operation fingerprint and exact queued command by ThreadID/TurnID. An absent operation plus absent command may enter the atomic prepare transaction. A matching ready command resumes canonical creation and starts only that frozen command; if startup queued recovery already owns the same frozen RunID and TurnID, a concurrent exact retry waits for that owner's canonical admission result instead of reporting the thread as busy or starting another run. A matching in-flight command returns its frozen identity while startup reconciliation retains recovery ownership. Only a committed operation with no remaining command may verify the exact TurnID through public Floret `ReadThreadTurn` and return the canonical receipt. Any other operation, command, settings, or canonical combination is a typed conflict or corruption error; Redeven never creates a substitute root, derives history from product metadata, or treats a canonical storage or authority error as not-found.
+`ai_thread_settings` stores endpoint, namespace, model, reasoning, permission, working directory, pin state, queue revision, audit identity, and product timestamps. Upload tables store immutable bytes, digests, text metadata when applicable, owner-scoped claims, thread references, and short-lived staging scopes. Product operation tables store immutable inputs, fingerprints, stable `client_request_id` and Floret `LogicalRequestID` values, nullable canonical bindings, materialization stages, and minimal recovery evidence.
 
-After Floret admits the canonical turn, settlement moves attachment ownership to the thread and removes the command. Restart reconciliation asks public Floret `ReadThreadTurn` for the exact TurnID; only `ErrTurnNotFound` proves absence. Redeven stores no admitted message, reference projection, lifecycle copy, or TurnID-to-entry mapping.
+No Redeven table stores admitted message bodies, assistant projection, canonical title, Agent lifecycle, approvals, todos, tool state, SubAgent membership, provider continuation, or a second queryable turn history. Permission snapshots and admission receipts are product authorization and settlement evidence, not an alternate Agent lifecycle.
 
-The current-process todo prompt projection contains only typed counts and the Floret todo snapshot version/update round. Removed dialogue pairs, structured-user-input records, loop snapshots, pending tool queues, error queues, progress signatures, objective digests, and estimate-source fields are not Redeven contracts and cannot be reintroduced as declarations or durable JSON keys.
+New-conversation staging binds a neutral product `target_id` derived from the stable client request scope. Create and fork operations begin without a canonical destination. Once Floret returns its canonical identity, Redeven compare-and-set binds it and atomically materializes settings, upload claims, initial queued work, routing, and staging ownership. A replay with the same fingerprint must converge on the same identity; a conflicting result fails closed.
 
-Permission snapshots are append-only audit and pending-approval evidence, not current authority. Current permission comes from `ai_thread_settings.permission_type`; unsupported snapshot versions and malformed data fail closed or are removed only by their declared migration.
+Queued work begins with only `queue_id`; `turn_id` and `run_id` are null. Admission freezes a command fingerprint and stable `LogicalRequestID`. The validated Floret committed-user event is the primary bind boundary. Redeven writes canonical identity, committed entry evidence, permission-snapshot proof, upload settlement, queue consumption, and followup revision in one transaction. The durable admission receipt remains after the short-lived queue row is deleted.
 
-Create, fork, delete, and SubAgent publication operations persist only immutable host intent, fingerprints, and step confirmations for cross-store effects. They never store canonical lifecycle, messages, membership, events, or journal-rebuilding results. Pending replay payloads are cleared on commit or terminal failure. Strict JSON, row identity, and fingerprints bind replay; damaged intent is rejected.
+When a retry receives a committed, replayed Floret mutation receipt without another event, recovery must exact-read the canonical turn and user entry. It validates request, thread, turn, run, entry, normalized command fingerprint, and permission proof before invoking the same binder used by the event path. Missing or conflicting evidence cannot release the command, invent identity, or rebuild canonical history.
 
-## Contiguous migration
+## Future automatic migrations
 
-Startup verifies database kind, schema shape, closed reference kinds, security rows, and pending operation payloads before any effect. Versions 2 through 8 are supported. Version 2 title migration runs through public Floret APIs before the Redeven SQL migration transaction. Versions 3 through 6 retain their documented product-only migrations. Schema v7 remains a migration input only; production v8 does not expose its draft shape.
+After this v1 baseline is merged and released or distributed, every product schema change must retain kind `ai_threadstore_product_v1`, increment the version by one, and add every contiguous `n -> n+1` migration. Each edge must verify an exact reviewed source snapshot before mutation and the exact reviewed target snapshot afterward. Schema changes, transformed data, `PRAGMA user_version`, product metadata, and final verification commit atomically; failure rolls back to the last supported database.
 
-The v7-to-v8 preflight reads each legacy admission-in-flight record and classifies its exact proposed TurnID through public Floret authority and the immutable command store before SQLite mutation. A matching queued command preserves its exact command claim. A canonical admitted turn preserves only attachment membership proven by the exact public turn. An exact queue miss plus `ErrTurnNotFound` releases unadmitted staging resources. Uncertain reads, malformed values, ownership or membership mismatch, missing bytes, or digest drift stop migration.
-
-After preflight succeeds, one SQLite transaction applies the fixed decision set, converts or releases every legacy draft claim, drops `ai_composer_drafts`, creates `ai_upload_staging_scopes`, updates schema metadata, and verifies the exact v8 shape. Ordinary and otherwise unadmitted legacy editable drafts are deleted because cross-connection draft recovery is no longer a product behavior. Any failure rolls back to the complete verified v7 database.
-
-Fresh stores initialize directly at schema v8. Another kind, version 0, versions below 2, future versions, malformed metadata, or schema drift are rejected non-destructively. Removed product v1 and canonical v15-v40 paths remain unsupported.
+A future change may not reset the kind, raise the minimum version, remove a required migration, or invoke pre-launch status to avoid upgrading distributed data. Migration tests must cover every supported edge, user-data preservation, rollback, drift rejection, and future-version rejection.
 
 # Boundaries
 
-The repository-wide automatic migration and database ownership contract is defined by [Database schema migration ownership](../architecture/database-schema-migrations.md). Redeven migration code may call only public Floret maintenance APIs and must not inspect or alter Floret storage.
+Floret v3.0.2 owns its database and opens it through published runtime APIs. Redeven neither inspects nor migrates Floret tables and has no `PreflightV2Migration`, `ApplyV2Migration`, `ErrMigrationRequired`, or `storage.MigrateV2` compatibility path.
 
-An upload staging scope is a byte-retention capability, not a draft record or authorization for canonical history. Product-local reference chips remain connection memory until Send. After admission, the ordered canonical references and attachment membership come only from Floret public snapshots; paths and opaque resource identities are never filesystem authorization.
-
-The checked-in v2-through-v8 schema manifest is independent of the DDL builders. It freezes every `sqlite_master.sql` row, `table_xinfo`, `index_list`, and `index_xinfo` row, including automatic unique indexes, triggers, CHECK clauses, and UNIQUE clauses. Runtime preflight and final verification compare real historical and fresh databases against that manifest, so a builder cannot redefine its own expected shape. Migration tests additionally require every supported historical schema to reach the exact reviewed current schema.
-
-The repository durable-sink registry is a closed set over production Go, SQL, TypeScript, TSX, Desktop, JSON/file, Web Storage, IndexedDB, and Cache Storage writes. Each discovered sink file is bound to its complete source digest, sink kinds, owner, authority, data classes, and applicable table, key, codec, and DTO inventory. A new sink, changed reviewed file, stale entry, unsupported authority, canonical Agent data class, or shadow table fails the Floret dependency boundary gate. Legal entries remain limited to product configuration and resources, unadmitted command and cross-store coordination, permission/security audit, diagnostics, user effects, upstream adapters, and UI preferences or caches.
+The checked-in reviewed schema manifest contains exactly the current product v1 snapshot and is independent of the initializer. The durable-sink registry remains a closed, digest-bound inventory of production persistence surfaces. Both artifacts are regenerated by repository tools and verified in the dependency boundary gate.
 
 # Evidence
 
-- `redeven:internal/ai/threadstore/schema.go` - Threadstore declares schema v8, the contiguous migration chain, and fresh staging-scope storage without composer drafts.
-- `redeven:internal/ai/threadstore/legacy_composer_migration.go` - Legacy v7 draft decoding is isolated to migration.
-- `redeven:internal/ai/threadstore/product_migrations.go` - The v7-to-v8 transaction applies preflight decisions and removes legacy draft ownership.
-- `redeven:internal/ai/threadstore/upload_staging.go` - Capability-hash authorization and the atomic create-operation, initial-command, and staging-claim freeze are transactional and idempotent.
-- `redeven:internal/ai/threadstore/thread_create_operation.go` - Stable create fingerprints remain verifiable after settings commit and snapshot clearing.
-- `redeven:internal/ai/initial_turn.go` - The service resolves product create/command state before canonical creation, admission, or exact receipt verification.
-- `redeven:internal/flower_ui/src/composer/createFlowerComposerDraftCoordinator.ts` - Editable composer scopes are connection-local memory shared by shell surfaces.
-- `redeven:internal/ai/threadstore/schema_v6_test.go` - Fresh v8 tests enforce staging-scope presence and composer-draft absence.
-- `redeven:internal/ai/threadstore/schema_migration_test.go` - Migration tests enforce contiguous upgrades, rollback, drift rejection, and unsupported-version rejection.
-- `redeven:internal/ai/threadstore/reviewed_schema_manifest.json` - Static v2-through-v8 SQLite object, column, index, trigger, CHECK, and UNIQUE contracts.
-- `redeven:internal/ai/threadstore/reviewed_schema_test.go` - Fresh, historical, migration-equivalence, constraint-drift, and index-drift checks.
-- `redeven:internal/ai/agent_shadow_boundary_test.go` - AST and reflection checks reject removed Agent contracts and durable shadow state.
-- `redeven:scripts/contracts/durable_sink_registry.json` - Reviewed closed inventory of production durable sink files and their ownership metadata.
-- `redeven:internal/boundarycontract/durable_sinks.go` - Cross-language discovery, exact digest enforcement, and forbidden authority validation.
-- `redeven:scripts/check_floret_dependency_boundary.sh` - The boundary gate rejects Floret storage access, local dependency wiring, and durable sinks outside the reviewed closed set.
+- `redeven:internal/ai/threadstore/schema.go` - Declares the version 1 current initializer and product-only constraints.
+- `redeven:internal/ai/threadstore/store.go` - Classifies existing files read-only before writable open.
+- `redeven:internal/ai/threadstore/store_meta_test.go` - Verifies unsupported databases are rejected without mutation.
+- `redeven:internal/ai/threadstore/reviewed_schema_manifest.json` - Freezes the sole current v1 schema snapshot.
+- `redeven:internal/ai/threadstore/reviewed_schema_test.go` - Enforces complete current-shape and metadata-plane drift detection.
+- `redeven:internal/ai/threadstore/thread_create_operation.go` - Persists stable create identity, nullable canonical binding, and product materialization stages.
+- `redeven:internal/ai/threadstore/fork_operation.go` - Persists the durable fork saga and canonical destination binding.
+- `redeven:internal/ai/threadstore/followups.go` - Owns queue admission state and durable admission receipts.
+- `redeven:internal/ai/queued_turns.go` - Replays admission through committed events or strict exact-read recovery.
+- `redeven:scripts/contracts/durable_sink_registry.json` - Records the reviewed product persistence closed set.
+- `redeven:scripts/check_floret_dependency_boundary.sh` - Rejects shadow state, Floret schema access, and unreviewed persistence.

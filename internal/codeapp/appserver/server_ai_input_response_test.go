@@ -14,8 +14,9 @@ import (
 	"testing/fstest"
 	"time"
 
-	flprovider "github.com/floegence/floret/v2/provider"
-	flruntime "github.com/floegence/floret/v2/runtime"
+	"github.com/floegence/floret/v3/identity"
+	flprovider "github.com/floegence/floret/v3/provider"
+	flruntime "github.com/floegence/floret/v3/runtime"
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
@@ -158,7 +159,7 @@ func TestServer_AIThreadInputResponseUsesURLThreadID(t *testing.T) {
 
 	body := bytes.NewBufferString(`{
 		"response":{"prompt_id":"` + promptID + `","answers":{"question_1":{"text":"ship it"}}},
-		"input":{"turn_id":"turn_appserver_input_response","text":"ship it","attachments":[]},
+		"input":{"text":"ship it","attachments":[]},
 		"options":{}
 	}`)
 	req := httptest.NewRequest(http.MethodPost, inputResponsePath, body)
@@ -180,7 +181,7 @@ func TestServer_AIThreadInputResponseUsesURLThreadID(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("json.Unmarshal response: %v", err)
 	}
-	if !resp.OK || resp.Data.Kind != "start" || resp.Data.RunID == "" || resp.Data.TurnID != "turn_appserver_input_response" || resp.Data.ConsumedWaitingPromptID != promptID {
+	if !resp.OK || resp.Data.Kind != "start" || resp.Data.RunID == "" || resp.Data.TurnID == "" || resp.Data.ConsumedWaitingPromptID != promptID {
 		t.Fatalf("unexpected input response payload: %+v", resp)
 	}
 }
@@ -219,10 +220,10 @@ func seedAppserverWaitingPrompt(t *testing.T, stateDir string, threadID string, 
 	if err != nil {
 		t.Fatal(err)
 	}
-	result := runAppserverTestFloretTurn(t, filepath.Join(stateDir, "ai", "floret_threads.sqlite"), flruntime.ThreadID(threadID), appserverAskUserGateway{toolID: toolID, args: string(args)}, flruntime.TurnRequest{
-		TurnID: flruntime.TurnID(turnID), RunID: flruntime.RunID(runID),
+	result := runAppserverTestFloretTurn(t, filepath.Join(stateDir, "ai", "floret_threads.sqlite"), identity.ThreadID(threadID), appserverAskUserGateway{toolID: toolID, args: string(args)}, appserverTestFloretTurnRequest{
+		TurnID: identity.TurnID(turnID), RunID: identity.RunID(runID),
 		Input:   flruntime.TurnInput{Text: "wait for user input"},
-		Signals: flruntime.TurnSignalSpec{Definitions: flruntime.CoreControlDefinitions(false), Project: flruntime.ProjectCoreControlSignal},
+		Signals: flruntime.TurnSignalSpec{Definitions: flruntime.CoreControlDefinitions(false), Identity: "core-control-v1", Project: flruntime.ProjectCoreControlSignal},
 	})
 	if result.Status != flruntime.TurnStatusWaiting {
 		t.Fatalf("waiting turn status=%q, want waiting", result.Status)

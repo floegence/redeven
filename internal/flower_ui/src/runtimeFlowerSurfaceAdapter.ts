@@ -47,6 +47,7 @@ type ListThreadsResponse = Readonly<{
 }>;
 
 type LoadThreadResponse = Readonly<{
+  client_request_id?: string;
   thread?: ThreadView;
 }>;
 
@@ -115,7 +116,7 @@ export type FlowerRuntimeTransport = Readonly<{
   readTerminalProcess?(runID: string, processID: string, input: { after_seq: number }): Promise<FlowerTerminalProcessSnapshot>;
   markThreadRead(threadID: string, input: MarkThreadReadInput): Promise<MarkThreadReadResponse>;
   patchThread(threadID: string, input: ThreadPatchInput): Promise<LoadThreadResponse>;
-  forkThread(threadID: string): Promise<LoadThreadResponse>;
+  forkThread(threadID: string, input: Readonly<{ client_request_id: string }>): Promise<LoadThreadResponse>;
   deleteThread?(threadID: string): Promise<FlowerThreadDeleteTransportOutcome>;
   submitApproval(input: RuntimeApprovalSubmitInput): Promise<FlowerApprovalDecisionReceipt>;
 }>;
@@ -286,10 +287,15 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
       const threadResp = await options.transport.patchThread(tid, { reasoning_selection: selection ?? null });
       return loadThread(trim(threadResp.thread?.thread_id) || tid);
     },
-    forkThread: async (threadID) => {
+    forkThread: async (threadID, clientRequestID) => {
       const tid = trim(threadID);
+      const requestID = trim(clientRequestID);
       if (!tid) throw new Error(missingThreadIDMessage(options));
-      const threadResp = await options.transport.forkThread(tid);
+      if (!requestID) throw new Error('Missing client request id.');
+      const threadResp = await options.transport.forkThread(tid, { client_request_id: requestID });
+      if (trim(threadResp.client_request_id) !== requestID) {
+        throw new Error('Flower fork returned a different client request identity.');
+      }
       const nextID = trim(threadResp.thread?.thread_id);
       if (!nextID) throw new Error(trim(options.failedToCreateThread) || 'Failed to create Flower chat.');
       return loadThread(nextID);

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	flruntime "github.com/floegence/floret/v2/runtime"
+	"github.com/floegence/floret/v3/identity"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 )
@@ -68,10 +68,13 @@ func (s *Service) replayPendingSubAgentPublication(ctx context.Context, operatio
 	if err != nil {
 		return err
 	}
-	if err := validateSubAgentPublicationSnapshot(request, snapshot); err != nil {
+	if err := validateSubAgentPublicationSnapshot(operation.ParentThreadID, snapshot); err != nil {
 		return err
 	}
-	return finalizeSubAgentPublication(parent, operation.PublicationID, operation.ChildThreadID, operation.ChildRunID, operation.ChildSnapshotID)
+	if _, err := waitForCommittedSubAgentPublication(ctx, parent, operation.PublicationID, strings.TrimSpace(string(snapshot.ThreadID))); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s *Service) newSubAgentPublicationRecoveryRun(ctx context.Context, operation threadstore.SubAgentPublicationOperation) (*run, error) {
@@ -99,16 +102,7 @@ func (s *Service) newSubAgentPublicationRecoveryRun(ctx context.Context, operati
 	if err != nil {
 		return nil, err
 	}
-	childAudit, ok, err := s.threadsDB.GetChildPermissionSnapshotBySpawnToolCall(ctxOrBackground(ctx), operation.EndpointID, operation.SpawnToolCallID)
-	if err != nil {
-		return nil, err
-	}
-	if !ok || childAudit.State != "provisional" || childAudit.ChildSnapshotID != operation.ChildSnapshotID ||
-		childAudit.ParentThreadID != operation.ParentThreadID || childAudit.ParentRunID != operation.ParentRunID ||
-		childAudit.ChildThreadID != operation.ChildThreadID || childAudit.ChildRunID != operation.ChildRunID {
-		return nil, errors.New("SubAgent publication recovery permission audit mismatch")
-	}
-	parentRecord, ok, err := s.threadsDB.GetPermissionSnapshot(ctxOrBackground(ctx), operation.EndpointID, childAudit.ParentSnapshotID)
+	parentRecord, ok, err := s.threadsDB.GetPermissionSnapshot(ctxOrBackground(ctx), operation.EndpointID, operation.ParentSnapshotID)
 	if err != nil {
 		return nil, err
 	}
@@ -125,7 +119,7 @@ func (s *Service) newSubAgentPublicationRecoveryRun(ctx context.Context, operati
 			return nil, err
 		}
 	}
-	runtimeCapabilities, err := s.bindFloretSubAgentRecoveryRuntime(flruntime.ThreadID(operation.ParentThreadID))
+	runtimeCapabilities, err := s.bindFloretSubAgentRecoveryRuntime(identity.ThreadID(operation.ParentThreadID))
 	if err != nil {
 		return nil, err
 	}
@@ -170,10 +164,11 @@ func (s *Service) newSubAgentPublicationRecoveryRun(ctx context.Context, operati
 	parent.currentReasoning = config.NormalizeAIReasoningSelection(reasoning)
 	parent.setPermissionState(parentSnapshot.PermissionType, parentSnapshot)
 	parent.toolAllowlist = stringSet(parentSnapshot.VisibleToolNames...)
+	parent.expectFloretRuntimeEventIdentity(operation.ParentRunID, operation.ParentThreadID, operation.ParentTurnID, true)
 	return parent, nil
 }
 
-func (s *Service) bindFloretSubAgentRecoveryRuntime(threadID flruntime.ThreadID) (floretThreadRuntimeCapabilities, error) {
+func (s *Service) bindFloretSubAgentRecoveryRuntime(threadID identity.ThreadID) (floretThreadRuntimeCapabilities, error) {
 	if s == nil || s.floretRuntime == nil {
 		return floretThreadRuntimeCapabilities{}, errors.New("Floret runtime binder is unavailable")
 	}

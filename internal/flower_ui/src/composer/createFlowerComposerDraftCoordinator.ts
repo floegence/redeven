@@ -42,11 +42,10 @@ export type FlowerComposerDraftValue = Readonly<{
   permission_type?: FlowerPermissionType;
   reasoning_selection?: FlowerReasoningSelection;
   working_dir?: string;
-  proposed_turn_id?: string;
+  client_request_id?: string;
   admission_started?: boolean;
   prepared_long_text_local_id?: string;
   prepared_long_text_attachment_id?: string;
-  target_thread_id?: string;
   capability_revision?: string;
 }>;
 

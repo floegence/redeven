@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	flruntime "github.com/floegence/floret/v2/runtime"
+	flruntime "github.com/floegence/floret/v3/runtime"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -19,8 +19,9 @@ var (
 )
 
 type StopThreadRequest struct {
-	ThreadID      string `json:"thread_id"`
-	ExpectedRunID string `json:"-"`
+	ThreadID             string `json:"thread_id"`
+	ExpectedRunID        string `json:"-"`
+	ExpectedExecutionKey string `json:"-"`
 }
 
 type cmdStopThread struct {
@@ -78,10 +79,14 @@ func (s *Service) isQueuedDrainSuppressed(endpointID string, threadID string) bo
 }
 
 func (s *Service) StopThread(ctx context.Context, meta *session.Meta, threadID string) (StopThreadResponse, error) {
-	return s.stopThreadWithExpectedRunID(ctx, meta, threadID, "")
+	return s.stopThread(ctx, meta, StopThreadRequest{ThreadID: threadID})
 }
 
-func (s *Service) stopThreadWithExpectedRunID(ctx context.Context, meta *session.Meta, threadID string, expectedRunID string) (StopThreadResponse, error) {
+func (s *Service) stopThreadWithExpectedExecutionKey(ctx context.Context, meta *session.Meta, threadID string, expectedExecutionKey string) (StopThreadResponse, error) {
+	return s.stopThread(ctx, meta, StopThreadRequest{ThreadID: threadID, ExpectedExecutionKey: expectedExecutionKey})
+}
+
+func (s *Service) stopThread(ctx context.Context, meta *session.Meta, req StopThreadRequest) (StopThreadResponse, error) {
 	if s == nil {
 		return StopThreadResponse{}, errors.New("nil service")
 	}
@@ -95,7 +100,7 @@ func (s *Service) stopThreadWithExpectedRunID(ctx context.Context, meta *session
 		return StopThreadResponse{}, err
 	}
 	endpointID := strings.TrimSpace(meta.EndpointID)
-	threadID = strings.TrimSpace(threadID)
+	threadID := strings.TrimSpace(req.ThreadID)
 	if endpointID == "" || threadID == "" {
 		return StopThreadResponse{}, errors.New("invalid request")
 	}
@@ -108,7 +113,10 @@ func (s *Service) stopThreadWithExpectedRunID(ctx context.Context, meta *session
 	}
 	// Stop is an exact lifecycle barrier. Execute it directly so a queued actor
 	// command cannot delay cancellation behind a long-running admission task.
-	return actor.handleStopThread(ctx, meta, StopThreadRequest{ThreadID: threadID, ExpectedRunID: strings.TrimSpace(expectedRunID)})
+	req.ThreadID = threadID
+	req.ExpectedRunID = strings.TrimSpace(req.ExpectedRunID)
+	req.ExpectedExecutionKey = strings.TrimSpace(req.ExpectedExecutionKey)
+	return actor.handleStopThread(ctx, meta, req)
 }
 
 func (a *threadActor) StopThread(ctx context.Context, meta *session.Meta, req StopThreadRequest) (StopThreadResponse, error) {
@@ -155,8 +163,17 @@ func waitForStoppedRun(ctx context.Context, r *run) error {
 func validateStoppedRunCanonicalSnapshot(snapshot flruntime.ThreadSnapshot, latest *flruntime.ThreadTurnSnapshot, threadID string, runID string, runTurnStarted bool) error {
 	threadID = strings.TrimSpace(threadID)
 	runID = strings.TrimSpace(runID)
-	if threadID == "" || runID == "" || strings.TrimSpace(string(snapshot.ID)) != threadID {
+	if threadID == "" || strings.TrimSpace(string(snapshot.ID)) != threadID {
 		return fmt.Errorf("%w: canonical thread identity does not match stopped run", ErrThreadStopUnavailable)
+	}
+	if runID == "" {
+		if runTurnStarted {
+			return fmt.Errorf("%w: canonical run identity is missing after turn admission", ErrThreadStopUnavailable)
+		}
+		if canonicalThreadBusy(snapshot) {
+			return fmt.Errorf("%w: canonical thread is busy after pre-admission stop", ErrThreadStopUnavailable)
+		}
+		return nil
 	}
 	latestRunID := strings.TrimSpace(string(snapshot.LatestRunID))
 	if latestRunID != runID {
@@ -221,20 +238,19 @@ func finishStopFinalizationAttempt(attempt *stopFinalizationAttempt, err error) 
 	})
 }
 
-func (s *Service) stopActiveRunExecution(ctx context.Context, meta *session.Meta, endpointID string, threadID string, runID string, active *run) error {
+func (s *Service) stopActiveRunExecution(ctx context.Context, meta *session.Meta, endpointID string, threadID string, executionKey string, active *run) error {
 	if s == nil || active == nil {
 		return fmt.Errorf("%w: active run owner is unavailable", ErrThreadStopUnavailable)
 	}
 	endpointID = strings.TrimSpace(endpointID)
 	threadID = strings.TrimSpace(threadID)
-	runID = strings.TrimSpace(runID)
-	if endpointID == "" || threadID == "" || runID == "" ||
+	executionKey = strings.TrimSpace(executionKey)
+	if endpointID == "" || threadID == "" || executionKey == "" ||
 		strings.TrimSpace(active.endpointID) != endpointID ||
-		strings.TrimSpace(active.threadID) != threadID ||
-		strings.TrimSpace(active.id) != runID {
+		strings.TrimSpace(active.threadID) != threadID {
 		return fmt.Errorf("%w: active run identity mismatch", ErrThreadStopUnavailable)
 	}
-	exact, _, err := s.beginExactRunStop(endpointID, threadID, runID, active)
+	exact, _, err := s.beginExactRunStop(endpointID, threadID, executionKey, active)
 	if err != nil {
 		return err
 	}
@@ -245,7 +261,7 @@ func (s *Service) stopActiveRunExecution(ctx context.Context, meta *session.Meta
 	termination, _ := exact.requestRunTerminalProcessTermination()
 	attempt, start := beginStopFinalizationAttempt(exact)
 	if start {
-		go s.finishExactRunStop(endpointID, threadID, runID, exact, termination, attempt)
+		go s.finishExactRunStop(endpointID, threadID, executionKey, exact, termination, attempt)
 	}
 	return waitForExactStopFinalization(ctx, attempt)
 }
@@ -274,7 +290,7 @@ func (s *Service) reconcileStaleActiveRun(ctx context.Context, endpointID string
 	return true, nil
 }
 
-func (s *Service) beginExactRunStop(endpointID string, threadID string, runID string, expected *run) (*run, bool, error) {
+func (s *Service) beginExactRunStop(endpointID string, threadID string, executionKey string, expected *run) (*run, bool, error) {
 	if s == nil || expected == nil {
 		return nil, false, fmt.Errorf("%w: exact run owner is unavailable", ErrThreadStopUnavailable)
 	}
@@ -285,19 +301,19 @@ func (s *Service) beginExactRunStop(endpointID string, threadID string, runID st
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if finalizingID := strings.TrimSpace(s.stopFinalizingByTh[key]); finalizingID != "" {
-		if finalizingID != runID {
+		if finalizingID != executionKey {
 			return nil, false, fmt.Errorf("%w: another exact run is finalizing", ErrThreadStopPending)
 		}
-		r := s.runs[runID]
+		r := s.runs[executionKey]
 		if r == nil || r != expected {
 			return nil, false, fmt.Errorf("%w: stopped run owner is unavailable", ErrThreadStopUnavailable)
 		}
 		return r, true, nil
 	}
-	if strings.TrimSpace(s.activeRunByTh[key]) != runID || s.runs[runID] != expected {
+	if strings.TrimSpace(s.activeRunByTh[key]) != executionKey || s.runs[executionKey] != expected {
 		return nil, false, errStopRunNotActive
 	}
-	if strings.TrimSpace(expected.endpointID) != strings.TrimSpace(endpointID) || strings.TrimSpace(expected.threadID) != strings.TrimSpace(threadID) || strings.TrimSpace(expected.id) != strings.TrimSpace(runID) {
+	if strings.TrimSpace(expected.endpointID) != strings.TrimSpace(endpointID) || strings.TrimSpace(expected.threadID) != strings.TrimSpace(threadID) {
 		return nil, false, fmt.Errorf("%w: exact run identity mismatch", ErrThreadStopUnavailable)
 	}
 	expected.closeExecution()
@@ -306,11 +322,11 @@ func (s *Service) beginExactRunStop(endpointID string, threadID string, runID st
 	if s.stopFinalizingByTh == nil {
 		s.stopFinalizingByTh = make(map[string]string)
 	}
-	s.stopFinalizingByTh[key] = runID
+	s.stopFinalizingByTh[key] = executionKey
 	return expected, false, nil
 }
 
-func (s *Service) finishExactRunStop(endpointID string, threadID string, runID string, r *run, termination runTerminalTermination, attempt *stopFinalizationAttempt) {
+func (s *Service) finishExactRunStop(endpointID string, threadID string, executionKey string, r *run, termination runTerminalTermination, attempt *stopFinalizationAttempt) {
 	if s == nil || r == nil {
 		return
 	}
@@ -335,6 +351,7 @@ func (s *Service) finishExactRunStop(endpointID string, threadID string, runID s
 		}
 	}
 	if finalErr == nil {
+		canonicalRunID, _ := r.canonicalRunTurnIdentity()
 		persistTO := s.persistOpTO
 		if persistTO <= 0 {
 			persistTO = defaultPersistOpTimeout
@@ -345,7 +362,7 @@ func (s *Service) finishExactRunStop(endpointID string, threadID string, runID s
 		if err != nil {
 			finalErr = stopExecutionError("reading canonical Floret terminal snapshot", err)
 		} else {
-			finalErr = validateStoppedRunCanonicalSnapshot(snapshot, latest, threadID, runID, r.floretRunTurnStarted.Load())
+			finalErr = validateStoppedRunCanonicalSnapshot(snapshot, latest, threadID, canonicalRunID, r.floretRunTurnStarted.Load())
 		}
 	}
 	if finalErr != nil {
@@ -354,12 +371,12 @@ func (s *Service) finishExactRunStop(endpointID string, threadID string, runID s
 	}
 	key := runThreadKey(endpointID, threadID)
 	s.mu.Lock()
-	if strings.TrimSpace(s.stopFinalizingByTh[key]) == runID && s.runs[runID] == r {
+	if strings.TrimSpace(s.stopFinalizingByTh[key]) == executionKey && s.runs[executionKey] == r {
 		delete(s.stopFinalizingByTh, key)
-		delete(s.runs, runID)
+		delete(s.runs, executionKey)
 	} else {
-		if s.runs[runID] == r {
-			delete(s.runs, runID)
+		if s.runs[executionKey] == r {
+			delete(s.runs, executionKey)
 		}
 		finalErr = fmt.Errorf("%w: exact stop ownership changed during finalization", ErrThreadStopUnavailable)
 	}
@@ -416,32 +433,48 @@ func (a *threadActor) handleStopThread(ctx context.Context, meta *session.Meta, 
 	if persistTO <= 0 {
 		persistTO = defaultPersistOpTimeout
 	}
-	activeRunID, activeRun := a.lookupActiveRun(endpointID, threadID)
-	if activeRunID == "" {
+	activeExecutionKey, activeRun := a.lookupActiveRun(endpointID, threadID)
+	if activeExecutionKey == "" {
 		key := runThreadKey(endpointID, threadID)
 		a.mgr.svc.mu.Lock()
 		rawID := strings.TrimSpace(a.mgr.svc.activeRunByTh[key])
 		rawRun := a.mgr.svc.runs[rawID]
 		a.mgr.svc.mu.Unlock()
 		if rawID != "" {
-			activeRunID, activeRun = rawID, rawRun
+			activeExecutionKey, activeRun = rawID, rawRun
 		}
 	}
 	expectedRunID := strings.TrimSpace(req.ExpectedRunID)
-	if activeRunID != "" && activeRun == nil {
-		if _, err := a.mgr.svc.reconcileStaleActiveRun(ctx, endpointID, threadID, activeRunID); err != nil {
+	expectedExecutionKey := strings.TrimSpace(req.ExpectedExecutionKey)
+	if activeExecutionKey != "" && activeRun == nil {
+		if _, err := a.mgr.svc.reconcileStaleActiveRun(ctx, endpointID, threadID, activeExecutionKey); err != nil {
 			return StopThreadResponse{}, err
 		}
-		activeRunID, activeRun = a.lookupActiveRun(endpointID, threadID)
+		activeExecutionKey, activeRun = a.lookupActiveRun(endpointID, threadID)
 	}
-	if expectedRunID != "" && activeRunID != expectedRunID {
-		if finalizingID := a.mgr.svc.stopFinalizingRunID(endpointID, threadID); finalizingID != expectedRunID {
+	activeCanonicalRunID := ""
+	if activeRun != nil {
+		activeCanonicalRunID, _ = activeRun.canonicalRunTurnIdentity()
+	}
+	finalizingExecutionKey := a.mgr.svc.stopFinalizingRunID(endpointID, threadID)
+	if expectedExecutionKey != "" && activeExecutionKey != expectedExecutionKey && finalizingExecutionKey != expectedExecutionKey {
+		return StopThreadResponse{}, errStopRunNotActive
+	}
+	if expectedRunID != "" && activeCanonicalRunID != expectedRunID {
+		a.mgr.svc.mu.Lock()
+		finalizingRun := a.mgr.svc.runs[finalizingExecutionKey]
+		a.mgr.svc.mu.Unlock()
+		finalizingCanonicalRunID := ""
+		if finalizingRun != nil {
+			finalizingCanonicalRunID, _ = finalizingRun.canonicalRunTurnIdentity()
+		}
+		if finalizingCanonicalRunID != expectedRunID {
 			return StopThreadResponse{}, errStopRunNotActive
 		}
 	}
 	switch {
-	case activeRunID != "":
-		if err := a.mgr.svc.stopActiveRunExecution(ctx, meta, endpointID, threadID, activeRunID, activeRun); err != nil {
+	case activeExecutionKey != "":
+		if err := a.mgr.svc.stopActiveRunExecution(ctx, meta, endpointID, threadID, activeExecutionKey, activeRun); err != nil {
 			if !errors.Is(err, errStopRunNotActive) {
 				return StopThreadResponse{}, err
 			}
@@ -469,7 +502,7 @@ func (a *threadActor) handleStopThread(ctx context.Context, meta *session.Meta, 
 			a.mgr.svc.cancelIdleThreadCompactionWithBroadcast(endpointID, threadID)
 		}
 	}
-	if activeRunID != "" {
+	if activeExecutionKey != "" {
 		// The exact run may have completed naturally between the actor lookup and
 		// the atomic stop admission. Canonical terminal state is the authority in
 		// that case; do not report a synthetic ownership failure.

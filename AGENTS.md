@@ -325,6 +325,22 @@ Rules:
 
 ## Database Schema Migration Contract
 
+- The `ai_threadstore_product_v1` schema introduced with the Floret v3 adoption
+  is a one-time, user-approved pre-launch baseline reset. Redeven had not been
+  released or distributed with the discarded product schema shapes, so this
+  baseline intentionally removes their migration code, compatibility readers,
+  and fallback paths instead of treating them as supported upgrade inputs.
+  Existing files with `ai_threadstore_product_v2`, any discarded version, an
+  unknown kind, or schema drift must be rejected read-only and left byte-for-byte
+  unchanged.
+- Once `ai_threadstore_product_v1` is merged and released or distributed, it is
+  the permanent migration lineage. Every v2 and later change must retain the same
+  database kind, append every contiguous `n -> n+1` automatic migration, verify
+  the exact reviewed source and target shape at each edge, and commit schema,
+  data, version metadata, and final verification atomically. A later change must
+  not reset the kind, raise the minimum version, delete a required migration, or
+  claim pre-launch status to avoid upgrading an already distributed database.
+
 - Redeven-owned persistent database schemas must migrate automatically during
   application startup, before the service that uses them accepts requests. An
   upgrade must not require users to delete state, run a manual SQL command, or
@@ -854,7 +870,7 @@ Use this checklist when reviewing any Redeven plugin integration change:
 
 ## Flower / Floret Boundary
 
-Redeven consumes Floret only through published `github.com/floegence/floret/v2`
+Redeven consumes Floret only through published `github.com/floegence/floret/v3`
 module versions. Do not use `replace`, `go.work`, `go.work.sum`, local sibling
 paths, package-manager links, or build aliases to point Redeven at a local
 Floret checkout. Run Floret dependency checks with `GOWORK=off`.

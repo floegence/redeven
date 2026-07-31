@@ -4575,7 +4575,53 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: err.Error()})
 			return
 		}
+		view.ClientRequestID = strings.TrimSpace(body.ClientRequestID)
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: view})
+		return
+
+	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/turns":
+		meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+		if !ok {
+			return
+		}
+		if !g.requireAIService(w, aiSvc) {
+			return
+		}
+		if !aiSvc.Enabled() {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
+			return
+		}
+		body, err := decodeAIUserTurnRequest(r.Body)
+		if err != nil || body.Create == nil || strings.TrimSpace(body.ThreadID) != "" {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		stagingScopeID, stagingCapability, headerErr := optionalUploadStagingHeaders(r)
+		if headerErr != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "upload staging authorization is required"})
+			return
+		}
+		if strings.TrimSpace(body.StagingScopeID) != stagingScopeID {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "upload staging scope mismatch"})
+			return
+		}
+		body.StagingCapability = stagingCapability
+		resp, err := aiSvc.SendUserTurn(r.Context(), meta, body)
+		if err != nil {
+			errorCode := ""
+			if errors.Is(err, ai.ErrLongTextAttachmentRequired) {
+				errorCode = ai.LongTextAttachmentRequiredErrorCode
+			}
+			writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error(), ErrorCode: errorCode})
+			return
+		}
+		g.appendAudit(meta, "ai_thread_turn", "accepted", map[string]any{
+			"thread_id": strings.TrimSpace(resp.ThreadID),
+			"run_id":    strings.TrimSpace(resp.RunID),
+			"kind":      strings.TrimSpace(resp.Kind),
+			"model":     strings.TrimSpace(body.Model),
+		}, nil)
+		writeJSON(w, http.StatusAccepted, apiResp{OK: true, Data: resp})
 		return
 
 	case strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/ai/threads/"):
@@ -4837,10 +4883,8 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			}
 			dec := json.NewDecoder(r.Body)
 			dec.DisallowUnknownFields()
-			var body struct {
-				Title string `json:"title,omitempty"`
-			}
-			if err := dec.Decode(&body); err != nil && !errors.Is(err, io.EOF) {
+			var body ai.ForkThreadRequest
+			if err := dec.Decode(&body); err != nil {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
 				return
 			}
@@ -4848,7 +4892,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
 				return
 			}
-			th, err := aiSvc.ForkThread(r.Context(), meta, threadID, body.Title)
+			th, err := aiSvc.ForkThreadWithOptions(r.Context(), meta, threadID, body)
 			if err != nil {
 				status := http.StatusBadRequest
 				if errors.Is(err, sql.ErrNoRows) {
@@ -4864,6 +4908,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: err.Error()})
 				return
 			}
+			view.ClientRequestID = strings.TrimSpace(body.ClientRequestID)
 			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: view})
 			return
 
@@ -4910,6 +4955,10 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			body, err := decodeAIUserTurnRequest(r.Body)
 			if err != nil {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			if body.Create != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "create must use the initial turn endpoint"})
 				return
 			}
 			bodyThreadID := strings.TrimSpace(body.ThreadID)
@@ -5504,7 +5553,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10))
 		dec.DisallowUnknownFields()
 		var body struct {
-			ThreadID string `json:"thread_id"`
+			TargetID string `json:"target_id"`
 		}
 		if err := dec.Decode(&body); err != nil || dec.Decode(&struct{}{}) != io.EOF {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
@@ -5515,7 +5564,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeUploadError(w, err)
 			return
 		}
-		created, err := aiSvc.CreateUploadStagingScope(r.Context(), owner, body.ThreadID)
+		created, err := aiSvc.CreateUploadStagingScope(r.Context(), owner, body.TargetID)
 		if err != nil {
 			writeUploadError(w, err)
 			return

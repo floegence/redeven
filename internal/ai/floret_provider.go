@@ -9,9 +9,10 @@ import (
 	"strings"
 	"sync"
 
-	flconfig "github.com/floegence/floret/v2/config"
-	flprovider "github.com/floegence/floret/v2/provider"
-	flruntime "github.com/floegence/floret/v2/runtime"
+	flconfig "github.com/floegence/floret/v3/config"
+	flprovider "github.com/floegence/floret/v3/provider"
+	flruntime "github.com/floegence/floret/v3/runtime"
+	fltools "github.com/floegence/floret/v3/tools"
 	"github.com/floegence/redeven/internal/config"
 )
 
@@ -32,19 +33,20 @@ type floretProviderAdapter struct {
 	supportsImageInput         bool
 	supportsFileInput          bool
 	supportsAttachmentToolRead bool
-	admitRequest               func(context.Context) (context.Context, func(), error)
+	admitRequest               func(context.Context, flprovider.Request) (context.Context, func(), error)
 }
 
 type floretProviderAdapterOption func(*floretProviderAdapter)
 
 type preparedFloretModelRequest struct {
-	mu          sync.Mutex
-	adapter     *floretProviderAdapter
-	request     ModelGatewayRequest
-	estimate    flprovider.TokenEstimate
-	fingerprint string
-	streamed    bool
-	closed      bool
+	mu              sync.Mutex
+	adapter         *floretProviderAdapter
+	providerRequest flprovider.Request
+	request         ModelGatewayRequest
+	estimate        flprovider.TokenEstimate
+	fingerprint     string
+	streamed        bool
+	closed          bool
 }
 
 func newFloretProviderAdapter(base ModelGateway, providerType string, modelName string, controls ProviderControls, budgets TurnBudgets, webSearch string, options ...floretProviderAdapterOption) *floretProviderAdapter {
@@ -132,6 +134,16 @@ func withFloretRequestAttachmentResolver(resolver func(context.Context, flprovid
 
 func withFloretRequestAdmission(admit func(context.Context) (context.Context, func(), error)) floretProviderAdapterOption {
 	return func(adapter *floretProviderAdapter) {
+		if adapter != nil && admit != nil {
+			adapter.admitRequest = func(ctx context.Context, _ flprovider.Request) (context.Context, func(), error) {
+				return admit(ctx)
+			}
+		}
+	}
+}
+
+func withFloretProviderRequestAdmission(admit func(context.Context, flprovider.Request) (context.Context, func(), error)) floretProviderAdapterOption {
+	return func(adapter *floretProviderAdapter) {
 		if adapter != nil {
 			adapter.admitRequest = admit
 		}
@@ -149,7 +161,7 @@ func (p *floretProviderAdapter) Stream(ctx context.Context, req flprovider.Reque
 		close(out)
 		return out, nil
 	}
-	return p.streamPreparedTurn(ctx, turnReq), nil
+	return p.streamPreparedTurn(ctx, req, turnReq), nil
 }
 
 func (p *floretProviderAdapter) Prepare(ctx context.Context, req flprovider.Request) (flprovider.PreparedRequest, error) {
@@ -174,7 +186,7 @@ func (p *floretProviderAdapter) Prepare(ctx context.Context, req flprovider.Requ
 	}
 	digest := sha256.Sum256(payload)
 	return &preparedFloretModelRequest{
-		adapter: p, request: frozen, estimate: estimate, fingerprint: fmt.Sprintf("sha256:%x", digest[:]),
+		adapter: p, providerRequest: req, request: frozen, estimate: estimate, fingerprint: fmt.Sprintf("sha256:%x", digest[:]),
 	}, nil
 }
 
@@ -207,7 +219,7 @@ func conservativeRenderedGatewayRequestEstimate(payload []byte, req ModelGateway
 	}, nil
 }
 
-func (p *floretProviderAdapter) streamPreparedTurn(ctx context.Context, turnReq ModelGatewayRequest) <-chan flprovider.Event {
+func (p *floretProviderAdapter) streamPreparedTurn(ctx context.Context, providerReq flprovider.Request, turnReq ModelGatewayRequest) <-chan flprovider.Event {
 	out := make(chan flprovider.Event, 32)
 	go func() {
 		defer close(out)
@@ -215,7 +227,7 @@ func (p *floretProviderAdapter) streamPreparedTurn(ctx context.Context, turnReq 
 		requestContext := ctx
 		releaseRequest := func() {}
 		if p.admitRequest != nil {
-			requestContext, releaseRequest, err = p.admitRequest(ctx)
+			requestContext, releaseRequest, err = p.admitRequest(ctx, providerReq)
 			if err != nil {
 				sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventError, Err: err, Reason: err.Error()})
 				return
@@ -320,7 +332,7 @@ func (p *preparedFloretModelRequest) Stream(ctx context.Context) (<-chan flprovi
 		return nil, errors.New("prepared model request adapter is unavailable")
 	}
 	p.streamed = true
-	return p.adapter.streamPreparedTurn(ctx, p.request), nil
+	return p.adapter.streamPreparedTurn(ctx, p.providerRequest, p.request), nil
 }
 
 func (p *preparedFloretModelRequest) TokenEstimate() flprovider.TokenEstimate {
@@ -348,6 +360,7 @@ func (p *preparedFloretModelRequest) Close() error {
 	}
 	p.closed = true
 	p.adapter = nil
+	p.providerRequest = flprovider.Request{}
 	p.request = ModelGatewayRequest{}
 	return nil
 }
@@ -614,7 +627,7 @@ func floretToolCallsFromFlower(calls []ToolCall) ([]flprovider.ToolCall, error) 
 	return out, nil
 }
 
-func flowerToolsFromFloret(defs []flprovider.ToolDefinition) ([]ToolDef, error) {
+func flowerToolsFromFloret(defs []fltools.ToolDefinition) ([]ToolDef, error) {
 	out := make([]ToolDef, 0, len(defs))
 	for _, def := range defs {
 		name := strings.TrimSpace(def.Name)

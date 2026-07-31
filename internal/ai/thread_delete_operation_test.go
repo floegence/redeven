@@ -12,7 +12,8 @@ import (
 	"testing"
 	"time"
 
-	flruntime "github.com/floegence/floret/v2/runtime"
+	"github.com/floegence/floret/v3/identity"
+	flruntime "github.com/floegence/floret/v3/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/session"
 	_ "modernc.org/sqlite"
@@ -31,7 +32,7 @@ type blockingThreadDeleteHost struct {
 	release chan struct{}
 }
 
-func (h *blockingThreadDeleteHost) DeleteThread(ctx context.Context, _ flruntime.ThreadID) error {
+func (h *blockingThreadDeleteHost) DeleteThread(ctx context.Context, _ identity.ThreadID) error {
 	h.mu.Lock()
 	h.count++
 	h.mu.Unlock()
@@ -50,7 +51,7 @@ func (h *blockingThreadDeleteHost) deleteCount() int {
 	return h.count
 }
 
-func (h *recordingThreadDeleteHost) DeleteThread(_ context.Context, threadID flruntime.ThreadID) error {
+func (h *recordingThreadDeleteHost) DeleteThread(_ context.Context, threadID identity.ThreadID) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.deleted = append(h.deleted, string(threadID))
@@ -103,7 +104,7 @@ func newThreadDeleteTestService(t *testing.T, stateDir string, host *recordingTh
 		t.Fatalf("NewService: %v", err)
 	}
 	if host != nil {
-		service.threadDeleteFloret = &threadDeleteFloretCoordinator{authority: testFloretThreadDeleteAuthorityFunc(func(ctx context.Context, threadID flruntime.ThreadID) error {
+		service.threadDeleteFloret = &threadDeleteFloretCoordinator{authority: testFloretThreadDeleteAuthorityFunc(func(ctx context.Context, threadID identity.ThreadID) error {
 			return host.DeleteThread(ctx, threadID)
 		})}
 	}
@@ -141,7 +142,7 @@ func TestServiceDeleteThreadPersistsPendingOperationAndReplaysTransientFailure(t
 		t.Fatalf("operation=%+v err=%v", operation, err)
 	}
 	canonicalReadCount := 0
-	service.floretReads.thread = func(context.Context, flruntime.ThreadID) (floretThreadReadHost, error) {
+	service.floretReads.thread = func(context.Context, identity.ThreadID) (floretThreadReadHost, error) {
 		canonicalReadCount++
 		return nil, errors.New("canonical read must not run for a retired thread")
 	}
@@ -183,7 +184,7 @@ func TestServiceDeleteThreadAcceptsIntentWhenStepConfirmationIsInterrupted(t *te
 	}
 
 	deleteCtx, cancelDelete := context.WithCancel(context.Background())
-	service.threadDeleteFloret = &threadDeleteFloretCoordinator{authority: testFloretThreadDeleteAuthorityFunc(func(ctx context.Context, threadID flruntime.ThreadID) error {
+	service.threadDeleteFloret = &threadDeleteFloretCoordinator{authority: testFloretThreadDeleteAuthorityFunc(func(ctx context.Context, threadID identity.ThreadID) error {
 		err := host.DeleteThread(ctx, threadID)
 		cancelDelete()
 		return err
@@ -263,7 +264,7 @@ func TestServiceDeleteThreadMarksMissingCanonicalThreadTerminal(t *testing.T) {
 		t.Fatalf("settings=%+v read-state deletes=%d err=%v", settings, cleaner.deleteCount(), err)
 	}
 	canonicalReadCount := 0
-	service.floretReads.thread = func(context.Context, flruntime.ThreadID) (floretThreadReadHost, error) {
+	service.floretReads.thread = func(context.Context, identity.ThreadID) (floretThreadReadHost, error) {
 		canonicalReadCount++
 		return nil, errors.New("canonical read must not run for a failed delete intent")
 	}
@@ -292,7 +293,7 @@ func TestThreadDeleteAdvancementAcceptsExactFloretTombstoneReplay(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	deleteCanonicalFloretThreadForTest(t, service, thread.ThreadID)
+	deleteCanonicalFloretThreadForTest(t, service, operation.OperationID, thread.ThreadID)
 	advanced, err := service.advanceThreadDeleteOperation(context.Background(), operation.OperationID, operation.EndpointID, operation.ThreadID)
 	if err != nil || advanced.Status != threadstore.ThreadDeleteOperationCommitted || advanced.FloretDeletedAtUnixMs <= 0 {
 		t.Fatalf("advanced=%+v err=%v", advanced, err)
@@ -352,7 +353,7 @@ func TestStartupDeleteRecoveryProcessesEveryBatchBeforeTurnRecovery(t *testing.T
 	host := &recordingThreadDeleteHost{}
 	service := &Service{
 		threadsDB: store,
-		threadDeleteFloret: &threadDeleteFloretCoordinator{authority: testFloretThreadDeleteAuthorityFunc(func(ctx context.Context, threadID flruntime.ThreadID) error {
+		threadDeleteFloret: &threadDeleteFloretCoordinator{authority: testFloretThreadDeleteAuthorityFunc(func(ctx context.Context, threadID identity.ThreadID) error {
 			return host.DeleteThread(ctx, threadID)
 		})},
 	}
@@ -391,7 +392,7 @@ func TestStartupDeleteRecoveryFailsClosedBeforeProductDataRemoval(t *testing.T) 
 	host := &recordingThreadDeleteHost{deleteErr: errors.New("temporary canonical delete failure")}
 	service := &Service{
 		threadsDB: store,
-		threadDeleteFloret: &threadDeleteFloretCoordinator{authority: testFloretThreadDeleteAuthorityFunc(func(ctx context.Context, threadID flruntime.ThreadID) error {
+		threadDeleteFloret: &threadDeleteFloretCoordinator{authority: testFloretThreadDeleteAuthorityFunc(func(ctx context.Context, threadID identity.ThreadID) error {
 			return host.DeleteThread(ctx, threadID)
 		})},
 	}
@@ -473,7 +474,7 @@ func TestNewServiceReplaysPendingThreadDeleteOperationsFromEveryCrashBoundary(t 
 				t.Fatalf("PrepareThreadDeleteOperation: %v", err)
 			}
 			if testCase.confirmFloret {
-				deleteCanonicalFloretThreadForTest(t, first, thread.ThreadID)
+				deleteCanonicalFloretThreadForTest(t, first, operation.OperationID, thread.ThreadID)
 				operation, err = first.threadsDB.ConfirmThreadDeleteFloretDeleted(context.Background(), operation.OperationID)
 				if err != nil {
 					t.Fatalf("ConfirmThreadDeleteFloretDeleted: %v", err)
@@ -518,8 +519,12 @@ func TestNewServiceReplaysPendingThreadDeleteOperationsFromEveryCrashBoundary(t 
 			if liveRetired != testCase.wantLiveRetired || liveStreamExists {
 				t.Fatalf("live retirement after restart retired/stream=%v/%v, want %v/false", liveRetired, liveStreamExists, testCase.wantLiveRetired)
 			}
-			if _, err := restarted.openFloretThreadReadHost(context.Background(), thread.ThreadID); !errors.Is(err, flruntime.ErrThreadDeleted) {
-				t.Fatalf("canonical thread after replay error=%v, want %v", err, flruntime.ErrThreadDeleted)
+			host, err := restarted.openFloretThreadReadHost(context.Background(), thread.ThreadID)
+			if err != nil {
+				t.Fatalf("open canonical thread after replay: %v", err)
+			}
+			if _, err := host.ReadThread(context.Background()); !errors.Is(err, flruntime.ErrThreadDeleted) {
+				t.Fatalf("canonical thread snapshot after replay error=%v, want %v", err, flruntime.ErrThreadDeleted)
 			}
 		})
 	}

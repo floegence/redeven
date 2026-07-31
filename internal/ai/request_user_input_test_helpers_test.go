@@ -6,8 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	flprovider "github.com/floegence/floret/v2/provider"
-	flruntime "github.com/floegence/floret/v2/runtime"
+	"github.com/floegence/floret/v3/identity"
+	flprovider "github.com/floegence/floret/v3/provider"
+	flruntime "github.com/floegence/floret/v3/runtime"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -92,15 +93,18 @@ func seedWaitingUserPrompt(t *testing.T, svc *Service, ctx context.Context, _ *s
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := host.Run(ctx, flruntime.TurnRequest{
-		TurnID: flruntime.TurnID(prompt.MessageID),
-		RunID:  flruntime.RunID(r.id), Input: flruntime.TurnInput{Text: "wait for user input"}, Signals: signalSpec,
+	result, err := host.StartTurn(ctx, flruntime.StartTurnCommand{
+		LogicalRequestID: identity.LogicalRequestID(identity.TurnID(prompt.MessageID)), UserMessage: flruntime.TurnInput{Text: "wait for user input"}, Signals: signalSpec,
 	})
 	if err != nil {
 		t.Fatalf("seed Floret waiting turn: %v", err)
 	}
-	if result.Status != flruntime.TurnStatusWaiting {
-		t.Fatalf("seeded turn status = %q, want waiting", result.Status)
+	snapshot, err := host.ReadTurn(ctx, result.TurnID)
+	if err != nil {
+		t.Fatalf("read seeded waiting turn: %v", err)
+	}
+	if snapshot.Status != flruntime.TurnStatusWaiting {
+		t.Fatalf("seeded turn status = %q, want waiting", snapshot.Status)
 	}
 	readHost, err := svc.openFloretThreadReadHost(ctx, threadID)
 	if err != nil {

@@ -10,8 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/floegence/floret/v2/observation"
-	flruntime "github.com/floegence/floret/v2/runtime"
+	"github.com/floegence/floret/v3/observation"
+	flruntime "github.com/floegence/floret/v3/runtime"
+	fltools "github.com/floegence/floret/v3/tools"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -188,17 +189,18 @@ func TestToolStartActivityPresentationShowsRunningTerminalCommand(t *testing.T) 
 	if presentation == nil {
 		t.Fatal("presentation is nil")
 	}
-	if presentation.Label != "pwd; sleep 5; ls -1" || presentation.Description != "" || presentation.Renderer != observation.ActivityRendererTerminal {
+	if presentation.Label != "pwd; sleep 5; ls -1" || presentation.Description != "" || presentation.Renderer != fltools.ActivityRendererTerminal {
 		t.Fatalf("presentation=%+v", presentation)
 	}
-	if presentation.Payload["command"] != "pwd; sleep 5; ls -1" {
-		t.Fatalf("command payload=%v", presentation.Payload["command"])
+	payload := activityPayloadMap(presentation.Payload)
+	if payload["command"] != "pwd; sleep 5; ls -1" {
+		t.Fatalf("command payload=%v", payload["command"])
 	}
-	if presentation.Payload["status"] != toolCallStatusRunning {
-		t.Fatalf("status payload=%v", presentation.Payload["status"])
+	if status, ok := payload["status"]; ok && status != toolCallStatusRunning {
+		t.Fatalf("status payload=%v", payload["status"])
 	}
-	if presentation.Payload["yield_ms"] != int64(2000) {
-		t.Fatalf("yield_ms payload=%v", presentation.Payload["yield_ms"])
+	if _, ok := payload["yield_ms"]; ok {
+		t.Fatalf("yield_ms payload=%v, want omitted from v3 terminal activity contract", payload["yield_ms"])
 	}
 }
 
@@ -209,14 +211,15 @@ func TestToolStartActivityPresentationUsesToolNameWithoutCommand(t *testing.T) {
 	if presentation == nil {
 		t.Fatal("presentation is nil")
 	}
-	if presentation.Label != "terminal.exec" || presentation.Description != "" || presentation.Renderer != observation.ActivityRendererTerminal {
+	if presentation.Label != "terminal.exec" || presentation.Description != "" || presentation.Renderer != fltools.ActivityRendererTerminal {
 		t.Fatalf("presentation=%+v", presentation)
 	}
-	if _, ok := presentation.Payload["command"]; ok {
-		t.Fatalf("command payload=%v, want omitted for missing command", presentation.Payload["command"])
+	payload := activityPayloadMap(presentation.Payload)
+	if _, ok := payload["command"]; ok {
+		t.Fatalf("command payload=%v, want omitted for missing command", payload["command"])
 	}
-	if presentation.Payload["status"] != toolCallStatusRunning {
-		t.Fatalf("status payload=%v", presentation.Payload["status"])
+	if payload["status"] != toolCallStatusRunning {
+		t.Fatalf("status payload=%v", payload["status"])
 	}
 }
 
@@ -228,7 +231,7 @@ func TestToolStartActivityPresentationUsesFriendlyNonTerminalLabels(t *testing.T
 		toolName  string
 		args      map[string]any
 		label     string
-		renderer  observation.ActivityRenderer
+		renderer  fltools.ActivityRenderer
 		operation string
 		rawLabel  bool
 	}{
@@ -237,7 +240,7 @@ func TestToolStartActivityPresentationUsesFriendlyNonTerminalLabels(t *testing.T
 			toolName:  "file.read",
 			args:      map[string]any{"file_path": "/workspace/app.ts"},
 			label:     "app.ts",
-			renderer:  observation.ActivityRendererFile,
+			renderer:  fltools.ActivityRendererFile,
 			operation: "read",
 		},
 		{
@@ -245,42 +248,42 @@ func TestToolStartActivityPresentationUsesFriendlyNonTerminalLabels(t *testing.T
 			toolName: "web.search",
 			args:     map[string]any{"query": "latest release"},
 			label:    "latest release",
-			renderer: observation.ActivityRendererWebSearch,
+			renderer: fltools.ActivityRendererWebSearch,
 		},
 		{
 			name:     "okf search query",
 			toolName: "okf.search",
 			args:     map[string]any{"query": "Workbench wheel ownership"},
 			label:    "Workbench wheel ownership",
-			renderer: observation.ActivityRendererStructured,
+			renderer: fltools.ActivityRendererStructured,
 		},
 		{
 			name:     "okf search fallback",
 			toolName: "okf.search",
 			args:     map[string]any{},
 			label:    aitools.MustPresentationSpec("okf.search").CallLabelFallback,
-			renderer: observation.ActivityRendererStructured,
+			renderer: fltools.ActivityRendererStructured,
 		},
 		{
 			name:     "todos",
 			toolName: "write_todos",
 			args:     map[string]any{},
 			label:    "Update todos",
-			renderer: observation.ActivityRendererTodos,
+			renderer: fltools.ActivityRendererTodos,
 		},
 		{
 			name:     "skill",
 			toolName: "use_skill",
 			args:     map[string]any{"name": "frontend-design"},
 			label:    "frontend-design",
-			renderer: observation.ActivityRendererStructured,
+			renderer: fltools.ActivityRendererStructured,
 		},
 		{
 			name:     "unknown",
 			toolName: "custom.tool",
 			args:     map[string]any{},
 			label:    "custom.tool",
-			renderer: observation.ActivityRendererStructured,
+			renderer: fltools.ActivityRendererStructured,
 			rawLabel: true,
 		},
 	}
@@ -297,11 +300,22 @@ func TestToolStartActivityPresentationUsesFriendlyNonTerminalLabels(t *testing.T
 			if presentation.Label != tc.label || presentation.Description != "" || presentation.Renderer != tc.renderer {
 				t.Fatalf("presentation=%+v", presentation)
 			}
-			if presentation.Payload["status"] != toolCallStatusRunning {
-				t.Fatalf("status payload=%v", presentation.Payload["status"])
+			if status, ok := fltools.ActivityStatus(presentation); ok && status != toolCallStatusRunning {
+				t.Fatalf("status=%q, want %q", status, toolCallStatusRunning)
 			}
-			if tc.operation != "" && presentation.Payload["operation"] != tc.operation {
-				t.Fatalf("operation payload=%v, want %q", presentation.Payload["operation"], tc.operation)
+			if tc.operation != "" {
+				operation := ""
+				switch payload := presentation.Payload.(type) {
+				case fltools.StructuredActivityPayload:
+					operation = payload.Operation
+				case fltools.FileActivityPayload:
+					operation = payload.Operation
+				case fltools.TodosActivityPayload:
+					operation = payload.Operation
+				}
+				if operation != tc.operation {
+					t.Fatalf("operation=%q, want %q", operation, tc.operation)
+				}
 			}
 			if !tc.rawLabel && presentation.Label == tc.toolName {
 				t.Fatalf("label=%q, want friendly label", presentation.Label)
@@ -497,9 +511,11 @@ func TestRecordFloretActivityEventDoesNotPublishAggregateTimelineBlocks(t *testi
 			Status:          observation.ActivityStatusRunning,
 			Severity:        observation.ActivitySeverityNormal,
 			StartedAtUnixMS: 1_700_000_000_000,
-			Label:           "sleep 10s",
-			Renderer:        observation.ActivityRendererTerminal,
-			Payload:         map[string]any{"command": "sleep 10s"},
+			Presentation: &fltools.ActivityPresentation{
+				Label:    "sleep 10s",
+				Renderer: fltools.ActivityRendererTerminal,
+				Payload:  fltools.TerminalActivityPayload{Command: "sleep 10s"},
+			},
 		}},
 	}
 	r.recordFloretActivityEvent(flruntime.Event{
@@ -520,9 +536,11 @@ func TestRecordFloretActivityEventDoesNotPublishAggregateTimelineBlocks(t *testi
 		Severity:        observation.ActivitySeverityNormal,
 		StartedAtUnixMS: 1_700_000_000_000,
 		EndedAtUnixMS:   1_700_000_010_000,
-		Label:           "sleep 10s",
-		Renderer:        observation.ActivityRendererTerminal,
-		Payload:         map[string]any{"command": "sleep 10s", "exit_code": 0, "duration_ms": int64(10_000)},
+		Presentation: &fltools.ActivityPresentation{
+			Label:    "sleep 10s",
+			Renderer: fltools.ActivityRendererTerminal,
+			Payload:  activityPayloadForRenderer(fltools.ActivityRendererTerminal, map[string]any{"command": "sleep 10s", "exit_code": 0, "duration_ms": int64(10_000)}),
+		},
 	}}
 	r.recordFloretActivityEvent(flruntime.Event{
 		Type:             observation.EventTypeToolResult,
@@ -621,15 +639,17 @@ func TestActivityTimelineFromAnyDecodesSnakeCaseBlock(t *testing.T) {
 				"status":          "success",
 				"severity":        "normal",
 				"needs_attention": false,
-				"label":           "package.json",
-				"renderer":        "file",
-				"chips": []any{
-					map[string]any{"kind": "lines", "label": "lines", "value": "42", "tone": "neutral"},
+				"presentation": map[string]any{
+					"label":    "package.json",
+					"renderer": "file",
+					"chips": []any{
+						map[string]any{"kind": "lines", "label": "lines", "value": "42", "tone": "neutral"},
+					},
+					"target_refs": []any{
+						map[string]any{"kind": "file", "label": "package.json"},
+					},
+					"payload": map[string]any{"path": "package.json", "operation": "read"},
 				},
-				"target_refs": []any{
-					map[string]any{"kind": "file", "label": "package.json"},
-				},
-				"payload": map[string]any{"operation": "read", "display_name": "package.json"},
 			},
 		},
 	}
@@ -641,7 +661,7 @@ func TestActivityTimelineFromAnyDecodesSnakeCaseBlock(t *testing.T) {
 	if err := observation.ValidateActivityTimeline(timeline); err != nil {
 		t.Fatalf("ValidateActivityTimeline: %v", err)
 	}
-	if timeline.RunID != "run_1" || timeline.Items[0].ToolName != "file.read" || timeline.Items[0].Renderer != observation.ActivityRendererFile {
+	if timeline.RunID != "run_1" || timeline.Items[0].ToolName != "file.read" || timeline.Items[0].Presentation == nil || timeline.Items[0].Presentation.Renderer != fltools.ActivityRendererFile {
 		t.Fatalf("timeline=%+v", timeline)
 	}
 }
@@ -669,10 +689,12 @@ func TestActivityTimelineBlockJSONUsesSnakeCase(t *testing.T) {
 			Status:         observation.ActivityStatusSuccess,
 			Severity:       observation.ActivitySeverityNormal,
 			NeedsAttention: false,
-			Label:          "npm test",
-			Renderer:       observation.ActivityRendererTerminal,
-			Chips:          []observation.ActivityChip{{Kind: "exit_code", Label: "exit", Value: "0", Tone: "neutral"}},
-			Payload:        map[string]any{"command": "npm test", "exit_code": 0},
+			Presentation: &fltools.ActivityPresentation{
+				Label:    "npm test",
+				Renderer: fltools.ActivityRendererTerminal,
+				Chips:    []fltools.ActivityChip{{Kind: "exit_code", Label: "exit", Value: "0", Tone: "neutral"}},
+				Payload:  activityPayloadForRenderer(fltools.ActivityRendererTerminal, map[string]any{"command": "npm test", "exit_code": 0}),
+			},
 		}},
 	}, map[string]FlowerActivityFileAction{
 		"file_action_json": {
@@ -714,8 +736,9 @@ func TestActivityTimelineBlockJSONUsesSnakeCase(t *testing.T) {
 		}
 	}
 	item := decoded["items"].([]any)[0].(map[string]any)
+	presentation := item["presentation"].(map[string]any)
 	for _, key := range []string{"label", "renderer", "chips", "payload"} {
-		if _, ok := item[key]; !ok {
+		if _, ok := presentation[key]; !ok {
 			t.Fatalf("missing item key %q in %s", key, raw)
 		}
 	}

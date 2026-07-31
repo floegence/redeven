@@ -7,7 +7,8 @@ import (
 	"sort"
 	"strings"
 
-	flruntime "github.com/floegence/floret/v2/runtime"
+	"github.com/floegence/floret/v3/identity"
+	flruntime "github.com/floegence/floret/v3/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/filesystemscope"
@@ -52,7 +53,7 @@ type DeleteOrphanCanonicalRootRequest struct {
 	OperatorPublicID string
 }
 
-func (s *Service) setOrphanCanonicalRootIDs(ids []flruntime.ThreadID) {
+func (s *Service) setOrphanCanonicalRootIDs(ids []identity.ThreadID) {
 	if s == nil {
 		return
 	}
@@ -212,7 +213,8 @@ func (s *Service) DeleteOrphanCanonicalRoot(ctx context.Context, req DeleteOrpha
 		}
 		return 0, ErrCanonicalRootNotOrphaned
 	}
-	if err := s.orphanRoots.delete.DeleteThread(ctxOrBackground(ctx), flruntime.ThreadID(req.ThreadID)); err != nil && !errors.Is(err, flruntime.ErrThreadNotFound) && !errors.Is(err, flruntime.ErrThreadDeleted) {
+	requestID := identity.LogicalRequestID("orphan-root-delete-" + req.ThreadID)
+	if err := s.orphanRoots.delete.DeleteThread(ctxOrBackground(ctx), identity.ThreadID(req.ThreadID), flruntime.DeleteThreadCommand{LogicalRequestID: requestID}); err != nil && !errors.Is(err, flruntime.ErrThreadNotFound) && !errors.Is(err, flruntime.ErrThreadDeleted) {
 		return 0, err
 	}
 	after, err := reconcileFloretRootThreadInventory(ctxOrBackground(ctx), s.threadsDB, s.orphanRoots.inventory)
@@ -223,26 +225,29 @@ func (s *Service) DeleteOrphanCanonicalRoot(ctx context.Context, req DeleteOrpha
 	return len(after.OrphanedRootThreadIDs), nil
 }
 
-func inspectFloretRootThreadInventory(ctx context.Context, db floretStartupRecoverySettingsStore, inventory floretRootThreadInventory) (floretRootThreadInventoryReconciliation, map[flruntime.ThreadID]flruntime.ThreadSummary, error) {
+func inspectFloretRootThreadInventory(ctx context.Context, db floretStartupRecoverySettingsStore, inventory floretRootThreadInventory) (floretRootThreadInventoryReconciliation, map[identity.ThreadID]flruntime.ThreadSummary, error) {
 	reconciliation, err := reconcileFloretRootThreadInventory(ctx, db, inventory)
 	if err != nil {
 		return floretRootThreadInventoryReconciliation{}, nil, err
 	}
-	summaries := make(map[flruntime.ThreadID]flruntime.ThreadSummary, len(reconciliation.RootThreadIDs))
-	var cursor flruntime.ThreadInventoryCursor
+	summaries := make(map[identity.ThreadID]flruntime.ThreadSummary, len(reconciliation.RootThreadIDs))
+	var cursor string
 	for {
-		page, err := inventory.ListRootThreads(ctx, flruntime.ListRootThreadsRequest{Cursor: cursor, Limit: 200})
+		page, err := inventory.ListRootThreads(ctx, floretListRootThreadsRequest{Cursor: cursor, Limit: 200})
 		if err != nil {
 			return floretRootThreadInventoryReconciliation{}, nil, err
 		}
-		if err := page.Validate(); err != nil {
-			return floretRootThreadInventoryReconciliation{}, nil, err
-		}
-		for _, summary := range page.Threads {
-			if _, duplicate := summaries[summary.ID]; duplicate {
+		for _, snapshot := range page.Threads {
+			if _, duplicate := summaries[snapshot.ID]; duplicate {
 				return floretRootThreadInventoryReconciliation{}, nil, errors.New("canonical root review contains duplicate identity")
 			}
-			summaries[summary.ID] = summary
+			summaries[snapshot.ID] = flruntime.ThreadSummary{
+				ID: snapshot.ID, Title: snapshot.Title, TitleStatus: snapshot.TitleStatus, TitleSource: snapshot.TitleSource,
+				TitleUpdatedAt: snapshot.TitleUpdatedAt, TitleError: snapshot.TitleError, TitleGeneration: snapshot.TitleGeneration,
+				CreatedAt: snapshot.CreatedAt, UpdatedAt: snapshot.UpdatedAt, Phase: snapshot.Phase, Status: snapshot.Status,
+				LatestTurnID: snapshot.LatestTurnID, WaitingPrompt: snapshot.WaitingPrompt, Recoverable: snapshot.Recoverable,
+				CanAppendMessage: snapshot.CanAppendMessage, CanRetry: snapshot.CanRetry,
+			}
 		}
 		if !page.HasMore {
 			break
@@ -255,7 +260,7 @@ func inspectFloretRootThreadInventory(ctx context.Context, db floretStartupRecov
 	return reconciliation, summaries, nil
 }
 
-func containsFloretThreadID(ids []flruntime.ThreadID, threadID string) bool {
+func containsFloretThreadID(ids []identity.ThreadID, threadID string) bool {
 	for _, id := range ids {
 		if string(id) == threadID {
 			return true

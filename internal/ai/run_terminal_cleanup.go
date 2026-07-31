@@ -35,7 +35,11 @@ func (r *run) requestRunTerminalProcessTermination() (runTerminalTermination, bo
 	if r == nil || r.host.terminal == nil {
 		return runTerminalTermination{}, false
 	}
-	processes := r.host.terminal.ProcessesForRun(r.id)
+	runID, _ := r.canonicalRunTurnIdentity()
+	if runID == "" {
+		return runTerminalTermination{}, false
+	}
+	processes := r.host.terminal.ProcessesForRun(runID)
 	if len(processes) == 0 {
 		return runTerminalTermination{}, false
 	}

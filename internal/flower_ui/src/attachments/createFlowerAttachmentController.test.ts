@@ -29,7 +29,7 @@ function capability(overrides: Partial<FlowerAttachmentCapability> = {}): Flower
 
 const stagingScope: FlowerAttachmentStagingScope = {
   staging_scope_id: 'staging-scope-1',
-  thread_id: 'thread-1',
+  target_id: 'thread-1',
   capability: 'scope-capability',
   expires_at_unix_ms: 60_000,
 };

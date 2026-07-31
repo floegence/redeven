@@ -8,7 +8,7 @@ import (
 	"sync"
 	"testing"
 
-	flruntime "github.com/floegence/floret/v2/runtime"
+	"github.com/floegence/floret/v3/identity"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -218,7 +218,7 @@ func TestThreadDeleteRetiresFlowerLiveBeforeFloretDelete(t *testing.T) {
 		Payload:    mustFlowerPayload(map[string]string{"retained": "event"}),
 	})
 	threadKey := runThreadKey(meta.EndpointID, thread.ThreadID)
-	service.threadDeleteFloret = &threadDeleteFloretCoordinator{authority: testFloretThreadDeleteAuthorityFunc(func(context.Context, flruntime.ThreadID) error {
+	service.threadDeleteFloret = &threadDeleteFloretCoordinator{authority: testFloretThreadDeleteAuthorityFunc(func(context.Context, identity.ThreadID) error {
 		service.mu.Lock()
 		defer service.mu.Unlock()
 		if _, retired := service.flowerLiveRetired[threadKey]; !retired {

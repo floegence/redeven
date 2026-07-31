@@ -14,8 +14,9 @@ import (
 	"testing"
 	"time"
 
-	flprovider "github.com/floegence/floret/v2/provider"
-	flruntime "github.com/floegence/floret/v2/runtime"
+	"github.com/floegence/floret/v3/identity"
+	flprovider "github.com/floegence/floret/v3/provider"
+	flruntime "github.com/floegence/floret/v3/runtime"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
@@ -56,6 +57,16 @@ func newFloretAttachmentTestRun(t *testing.T) (*run, *threadstore.Store, string)
 
 func insertFloretAttachmentUpload(t *testing.T, store *threadstore.Store, uploadsDir string, record threadstore.UploadRecord, body []byte, threadID string) {
 	t.Helper()
+	if record.OwnerScopeKind == "" {
+		record.OwnerScopeKind = threadstore.UploadOwnerScopeUser
+	}
+	if record.OwnerUserHash == "" {
+		owner, err := NewUploadOwner(record.EndpointID, "user_attachment", "channel_attachment")
+		if err != nil {
+			t.Fatal(err)
+		}
+		record.OwnerUserHash = owner.OwnerUserHash
+	}
 	if record.StorageRelPath == "" {
 		record.StorageRelPath = record.UploadID + ".data"
 	}
@@ -95,7 +106,7 @@ func TestFloretTurnInputAllowsAttachmentOnlyAndRejectsInvalidResources(t *testin
 	const commandID = "queue_attachment_only"
 	if _, _, _, err := store.CreateFollowupWithUploadRefs(context.Background(), threadstore.QueuedTurn{
 		QueueID: commandID, EndpointID: r.endpointID, ThreadID: r.threadID, ChannelID: "channel_attachment_only",
-		Lane: threadstore.FollowupLaneQueued, TurnID: r.turnID, RunID: r.id, TextContent: "",
+		Lane: threadstore.FollowupLaneQueued, TextContent: "",
 	}, []string{"upl_aaaaaaaaaaaaaaaaaaaaaaaa"}, time.Now().UnixMilli()); err != nil {
 		t.Fatal(err)
 	}
@@ -202,8 +213,11 @@ func TestRunFloretHostedTurnFreezesAttachmentBytesBeforeCanonicalAdmission(t *te
 	const commandID = "queue_frozen_attachment"
 	if _, _, _, err := store.CreateFollowupWithUploadRefs(context.Background(), threadstore.QueuedTurn{
 		QueueID: commandID, EndpointID: r.endpointID, ThreadID: r.threadID, ChannelID: "channel_frozen_attachment",
-		Lane: threadstore.FollowupLaneQueued, TurnID: r.turnID, RunID: r.id, TextContent: "inspect the file",
+		Lane: threadstore.FollowupLaneQueued, TextContent: "inspect the file",
 	}, []string{record.UploadID}, time.Now().UnixMilli()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.BeginPendingTurnAdmission(context.Background(), r.endpointID, r.threadID, commandID, commandID); err != nil {
 		t.Fatal(err)
 	}
 	r.setPendingTurnCommand(commandID)
@@ -257,7 +271,7 @@ func TestFullHistorySubagentResolvesOnlyParentOwnedCanonicalAttachments(t *testi
 	insertFloretAttachmentUpload(t, store, uploadsDir, record, body, parent.threadID)
 	const childThreadID = "child_full_history_attachment"
 	host := &recordingFloretHost{snapshots: []flruntime.SubAgentSnapshot{{
-		ParentThreadID: flruntime.ThreadID(parent.threadID), ThreadID: childThreadID, ForkMode: flruntime.SubAgentForkFullPath,
+		ParentThreadID: identity.ThreadID(parent.threadID), ThreadID: childThreadID, ForkMode: flruntime.SubAgentForkFullPath,
 	}}}
 	runtime := &floretSubagentRuntime{parent: parent, host: host}
 	attachment := flprovider.Attachment{
@@ -469,9 +483,14 @@ func TestRunFloretHostedTurnRejectsInvalidAttachmentBeforeAdmission(t *testing.T
 			const commandID = "queue_preflight_attachment"
 			if _, _, _, err := store.CreateFollowupWithUploadRefs(context.Background(), threadstore.QueuedTurn{
 				QueueID: commandID, EndpointID: r.endpointID, ThreadID: r.threadID, ChannelID: "channel_preflight_attachment",
-				Lane: threadstore.FollowupLaneQueued, TurnID: r.turnID, RunID: r.id, TextContent: "inspect attachment",
+				Lane: threadstore.FollowupLaneQueued, TextContent: "inspect attachment",
 			}, []string{record.UploadID}, time.Now().UnixMilli()); err != nil {
 				t.Fatal(err)
+			}
+			if testCase.postAdmission {
+				if _, err := store.BeginPendingTurnAdmission(context.Background(), r.endpointID, r.threadID, commandID, commandID); err != nil {
+					t.Fatal(err)
+				}
 			}
 			r.setPendingTurnCommand(commandID)
 			if testCase.postAdmission {

@@ -16,15 +16,15 @@ func (s *Store) ListPendingCanonicalRootOwnershipClaims(ctx context.Context) ([]
 		return nil, errors.New("store not initialized")
 	}
 	rows, err := s.db.QueryContext(operationContext(ctx), `
-SELECT thread_id
+SELECT canonical_thread_id
 FROM ai_thread_create_operations
-WHERE status = ?
+WHERE canonical_thread_id <> '' AND stage NOT IN (?, ?)
 UNION
 SELECT destination_thread_id
 FROM ai_thread_fork_operations
-WHERE status = ?
+WHERE destination_thread_id <> '' AND stage NOT IN (?, ?)
 ORDER BY 1
-`, ThreadCreateOperationPending, string(ForkOperationPending))
+`, ThreadCreateStageCompleted, ThreadCreateStageFailed, string(ForkStageCompleted), string(ForkStageFailed))
 	if err != nil {
 		return nil, err
 	}

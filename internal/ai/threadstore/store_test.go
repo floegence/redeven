@@ -23,6 +23,7 @@ func TestStoreSchemaContainsOnlyProductThreadState(t *testing.T) {
 		"ai_thread_delete_operations",
 		"ai_thread_fork_operations",
 		"ai_thread_settings",
+		"ai_turn_admission_receipts",
 		"ai_upload_attempts",
 		"ai_upload_refs",
 		"ai_upload_staging_scopes",
@@ -168,13 +169,13 @@ func TestStoreThreadMetadataAndPendingCommandRoundTrip(t *testing.T) {
 	}
 	record, position, revision, err := store.CreateFollowup(ctx, QueuedTurn{
 		QueueID: "cmd_1", EndpointID: "env_1", ThreadID: "th_1", ChannelID: "ch_1",
-		Lane: FollowupLaneQueued, TurnID: "turn_1", RunID: "run_1", ModelID: "openai/gpt-5",
+		Lane: FollowupLaneQueued, ModelID: "openai/gpt-5",
 		TextContent: "not admitted yet", AttachmentsJSON: "[]", OptionsJSON: "{}", SessionMetaJSON: "{}",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if position != 1 || revision != 1 || record.TurnID != "turn_1" || record.RunID != "run_1" {
+	if position != 1 || revision != 1 || record.TurnID != "" || record.RunID != "" {
 		t.Fatalf("unexpected pending command: %#v position=%d revision=%d", record, position, revision)
 	}
 	loaded, err := store.GetThreadSettings(ctx, "env_1", "th_1")
@@ -188,7 +189,7 @@ func TestStoreThreadMetadataAndPendingCommandRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(commands) != 1 || commands[0].TextContent != "not admitted yet" || commands[0].TurnID != "turn_1" || commands[0].RunID != "run_1" {
+	if len(commands) != 1 || commands[0].TextContent != "not admitted yet" || commands[0].TurnID != "" || commands[0].RunID != "" {
 		t.Fatalf("unexpected pending commands: %#v", commands)
 	}
 }
@@ -205,7 +206,6 @@ func TestListFollowupsByLaneAfterPagesZeroSortIndexesByQueueID(t *testing.T) {
 		if _, _, _, err := store.CreateFollowup(ctx, QueuedTurn{
 			QueueID: fmt.Sprintf("queue_%04d", index), EndpointID: endpointID, ThreadID: threadID,
 			ChannelID: "channel_keyset", Lane: FollowupLaneQueued,
-			TurnID: fmt.Sprintf("turn_%04d", index), RunID: fmt.Sprintf("run_%04d", index),
 			AttachmentsJSON: "[]", OptionsJSON: "{}", SessionMetaJSON: "{}",
 		}); err != nil {
 			t.Fatal(err)

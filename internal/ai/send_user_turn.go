@@ -45,6 +45,8 @@ type SendUserTurnRequest struct {
 }
 
 type SendUserTurnResponse struct {
+	ClientRequestID         string `json:"client_request_id,omitempty"`
+	ThreadID                string `json:"thread_id,omitempty"`
 	RunID                   string `json:"run_id"`
 	TurnID                  string `json:"turn_id"`
 	Kind                    string `json:"kind"` // "start" | "queued"
@@ -110,11 +112,17 @@ func (s *Service) SendUserTurn(ctx context.Context, meta *session.Meta, req Send
 	}
 	endpointID := strings.TrimSpace(meta.EndpointID)
 	threadID := strings.TrimSpace(req.ThreadID)
-	if endpointID == "" || threadID == "" {
+	if endpointID == "" {
 		return SendUserTurnResponse{}, errors.New("invalid request")
 	}
 	if req.Create != nil {
+		if threadID != "" {
+			return SendUserTurnResponse{}, errors.New("thread_id must be omitted for thread creation")
+		}
 		return s.sendInitialUserTurn(ctx, meta, req)
+	}
+	if threadID == "" {
+		return SendUserTurnResponse{}, errors.New("invalid request")
 	}
 	if s.threadMgr == nil {
 		return SendUserTurnResponse{}, errors.New("thread manager not ready")
@@ -176,44 +184,11 @@ func (s *Service) SubmitRequestUserInputResponse(ctx context.Context, meta *sess
 	return actor.SubmitRequestUserInputResponse(ctx, meta, req)
 }
 
-func isSafeClientTurnID(raw string) bool {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return false
-	}
-	if len(raw) > 128 {
-		return false
-	}
-	for i := 0; i < len(raw); i++ {
-		ch := raw[i]
-		switch {
-		case ch >= 'a' && ch <= 'z':
-			continue
-		case ch >= 'A' && ch <= 'Z':
-			continue
-		case ch >= '0' && ch <= '9':
-			continue
-		case ch == '_' || ch == '-':
-			continue
-		default:
-			return false
-		}
-	}
-	return true
-}
-
-func normalizeOrCreateTurnID(raw string) (string, error) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return newTurnID()
-	}
-	if !isSafeClientTurnID(raw) {
-		return "", errors.New("invalid turn_id")
-	}
-	return raw, nil
-}
-
 func (s *Service) prepareUserTurn(ctx context.Context, meta *session.Meta, endpointID string, threadID string, modelID string, input RunInput, stagingScopeID string, stagingCapability string) (preparedUserTurn, RunInput, error) {
+	return s.prepareUserTurnForTarget(ctx, meta, endpointID, threadID, modelID, input, stagingScopeID, stagingCapability, false)
+}
+
+func (s *Service) prepareUserTurnForTarget(ctx context.Context, meta *session.Meta, endpointID string, targetID string, modelID string, input RunInput, stagingScopeID string, stagingCapability string, allocateClientTurnID bool) (preparedUserTurn, RunInput, error) {
 	if s == nil {
 		return preparedUserTurn{}, input, errors.New("nil service")
 	}
@@ -221,19 +196,21 @@ func (s *Service) prepareUserTurn(ctx context.Context, meta *session.Meta, endpo
 		ctx = context.Background()
 	}
 	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
-	if meta == nil || endpointID == "" || threadID == "" {
+	targetID = strings.TrimSpace(targetID)
+	if meta == nil || endpointID == "" || targetID == "" {
 		return preparedUserTurn{}, input, errors.New("invalid request")
 	}
 	if err := validateInlineTurnText(input.Text); err != nil {
 		return preparedUserTurn{}, input, err
 	}
 
-	turnID, err := normalizeOrCreateTurnID(input.TurnID)
-	if err != nil {
-		return preparedUserTurn{}, input, err
+	turnID := ""
+	var err error
+	if allocateClientTurnID {
+		return preparedUserTurn{}, input, errors.New("client turn identity allocation is unsupported")
+	} else if strings.TrimSpace(input.TurnID) != "" {
+		return preparedUserTurn{}, input, errors.New("turn_id must be omitted before canonical admission")
 	}
-	input.TurnID = turnID
 	owner, err := NewUploadOwner(endpointID, meta.UserPublicID, meta.ChannelID)
 	if err != nil {
 		return preparedUserTurn{}, input, err
@@ -245,7 +222,7 @@ func (s *Service) prepareUserTurn(ctx context.Context, meta *session.Meta, endpo
 		if authorizeErr != nil {
 			return preparedUserTurn{}, input, authorizeErr
 		}
-		if strings.TrimSpace(scope.ThreadID) != threadID {
+		if strings.TrimSpace(scope.TargetID) != targetID {
 			return preparedUserTurn{}, input, errors.New("upload staging target changed")
 		}
 		stagingScope = &scope

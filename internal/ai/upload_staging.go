@@ -20,7 +20,7 @@ const uploadStagingScopeTTL = 24 * time.Hour
 
 type UploadStagingScopeResponse struct {
 	StagingScopeID  string `json:"staging_scope_id"`
-	ThreadID        string `json:"thread_id"`
+	TargetID        string `json:"target_id"`
 	ExpiresAtUnixMs int64  `json:"expires_at_unix_ms"`
 	Capability      string `json:"-"`
 }
@@ -38,14 +38,14 @@ func uploadStagingCapabilityHash(secret string) string {
 	return hex.EncodeToString(digest[:])
 }
 
-func validUploadStagingThreadID(threadID string) bool {
-	threadID = strings.TrimSpace(threadID)
-	return len(threadID) == 27 && strings.HasPrefix(threadID, "th_") && !strings.ContainsAny(threadID, "\r\n\x00")
+func validUploadStagingTargetID(targetID string) bool {
+	targetID = strings.TrimSpace(targetID)
+	return targetID != "" && len(targetID) <= 200 && !strings.ContainsAny(targetID, "\r\n\x00")
 }
 
-func (s *Service) CreateUploadStagingScope(ctx context.Context, owner UploadOwner, threadID string) (UploadStagingScopeResponse, error) {
-	threadID = strings.TrimSpace(threadID)
-	if s == nil || owner.EndpointID == "" || len(owner.OwnerUserHash) != 64 || !validUploadStagingThreadID(threadID) {
+func (s *Service) CreateUploadStagingScope(ctx context.Context, owner UploadOwner, targetID string) (UploadStagingScopeResponse, error) {
+	targetID = strings.TrimSpace(targetID)
+	if s == nil || owner.EndpointID == "" || len(owner.OwnerUserHash) != 64 || !validUploadStagingTargetID(targetID) {
 		return UploadStagingScopeResponse{}, NewUploadError(UploadErrorInvalidRequest, false, errors.New("invalid upload staging scope request"))
 	}
 	scopeID, err := newOpaqueUploadStagingValue("ustg_", 18)
@@ -59,7 +59,7 @@ func (s *Service) CreateUploadStagingScope(ctx context.Context, owner UploadOwne
 	now := time.Now().UnixMilli()
 	record := threadstore.UploadStagingScope{
 		StagingScopeID: scopeID, EndpointID: owner.EndpointID, OwnerUserHash: owner.OwnerUserHash,
-		ThreadID: threadID, CapabilityHash: uploadStagingCapabilityHash(capability),
+		TargetID: targetID, CapabilityHash: uploadStagingCapabilityHash(capability),
 		CreatedAtUnixMs: now, ExpiresAtUnixMs: now + uploadStagingScopeTTL.Milliseconds(),
 	}
 	s.mu.Lock()
@@ -71,7 +71,7 @@ func (s *Service) CreateUploadStagingScope(ctx context.Context, owner UploadOwne
 	if err := db.CreateUploadStagingScope(ctxOrBackground(ctx), record); err != nil {
 		return UploadStagingScopeResponse{}, NewUploadError(UploadErrorStoreUnavailable, true, errors.New("failed to create upload staging scope"))
 	}
-	return UploadStagingScopeResponse{StagingScopeID: scopeID, ThreadID: threadID, ExpiresAtUnixMs: record.ExpiresAtUnixMs, Capability: capability}, nil
+	return UploadStagingScopeResponse{StagingScopeID: scopeID, TargetID: targetID, ExpiresAtUnixMs: record.ExpiresAtUnixMs, Capability: capability}, nil
 }
 
 func (s *Service) authorizeUploadStagingScope(ctx context.Context, owner UploadOwner, stagingScopeID, capability string) (threadstore.UploadStagingScope, error) {

@@ -8,8 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/floegence/floret/v2/observation"
-	flruntime "github.com/floegence/floret/v2/runtime"
+	"github.com/floegence/floret/v3/identity"
+	"github.com/floegence/floret/v3/observation"
+	flruntime "github.com/floegence/floret/v3/runtime"
 )
 
 func TestValidateFloretRuntimeEventRequiresConfiguredProductAssociation(t *testing.T) {
@@ -204,9 +205,9 @@ func TestFloretEventSinkPublishesCanonicalEmptyApprovalQueueAfterDetach(t *testi
 
 	floretEventSink{run: r}.EmitEvent(flruntime.Event{
 		Type:     observation.EventTypeToolApprovalCanceled,
-		RunID:    flruntime.RunID(r.id),
-		ThreadID: flruntime.ThreadID(r.threadID),
-		TurnID:   flruntime.TurnID(r.turnID),
+		RunID:    identity.RunID(r.id),
+		ThreadID: identity.ThreadID(r.threadID),
+		TurnID:   identity.TurnID(r.turnID),
 		ToolID:   "tool-canceled",
 		ToolName: "terminal.exec",
 	})
@@ -270,6 +271,7 @@ func TestApprovalThreadStateAggregatesCanonicalQueueAndControlConfirmation(t *te
 			broadcastThreadSummary: func() error { return nil },
 		},
 	})
+	r.expectFloretRuntimeEventIdentity(r.id, r.threadID, "turn-approval-state", true)
 	r.mu.Lock()
 	r.toolApprovals["control-1"] = &toolApprovalRequest{decision: make(chan bool, 1)}
 	r.mu.Unlock()
@@ -306,6 +308,7 @@ func TestApprovalThreadStateAggregatesCanonicalQueueAndControlConfirmation(t *te
 			broadcastThreadSummary: func() error { return nil },
 		},
 	})
+	raced.expectFloretRuntimeEventIdentity(raced.id, raced.threadID, "turn-approval-race", true)
 	raced.publishThreadApprovalStateForCanonicalQueue(nil)
 	if wantRace := []string{string(RunStateRunning), string(RunStateWaitingApproval)}; !reflect.DeepEqual(racedStatuses, wantRace) {
 		t.Fatalf("raced approval state broadcasts=%#v, want %#v", racedStatuses, wantRace)
@@ -334,9 +337,9 @@ func TestFloretEventSinkReturnsAdmittedIdentityWithoutPublishingAssistantWhenCan
 	r.expectFloretRuntimeEventIdentity(r.id, r.threadID, r.turnID, true)
 
 	floretEventSink{run: r}.EmitEvent(flruntime.Event{
-		Type: observation.EventTypeThreadEntryCommitted, RunID: flruntime.RunID(r.id), ThreadID: flruntime.ThreadID(r.threadID), TurnID: flruntime.TurnID(r.turnID),
+		Type: observation.EventTypeThreadEntryCommitted, RunID: identity.RunID(r.id), ThreadID: identity.ThreadID(r.threadID), TurnID: identity.TurnID(r.turnID),
 		Committed: &flruntime.ThreadDetailEvent{
-			ID: "entry-presentation-failure", ThreadID: flruntime.ThreadID(r.threadID), TurnID: flruntime.TurnID(r.turnID), RunID: flruntime.RunID(r.id),
+			ID: "entry-presentation-failure", ThreadID: identity.ThreadID(r.threadID), TurnID: identity.TurnID(r.turnID), RunID: identity.RunID(r.id),
 			Kind: flruntime.ThreadDetailEventUserMessage, CreatedAt: time.Now(),
 			Message: &flruntime.ThreadDetailMessage{Role: "user", Content: "canonical input"},
 		},

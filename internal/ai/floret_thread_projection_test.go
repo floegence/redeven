@@ -8,11 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/floegence/floret/v2/observation"
-	flprovider "github.com/floegence/floret/v2/provider"
-	flruntime "github.com/floegence/floret/v2/runtime"
-	flstorage "github.com/floegence/floret/v2/storage"
-	fltools "github.com/floegence/floret/v2/tools"
+	"github.com/floegence/floret/v3/identity"
+	"github.com/floegence/floret/v3/observation"
+	flprovider "github.com/floegence/floret/v3/provider"
+	flruntime "github.com/floegence/floret/v3/runtime"
+	flstorage "github.com/floegence/floret/v3/storage"
+	fltools "github.com/floegence/floret/v3/tools"
 	"github.com/floegence/redeven/internal/config"
 )
 
@@ -63,6 +64,9 @@ func TestFloretThreadProjectionPersistsFullAssistantContentAfterActivity(t *test
 	r.threadID = "thread_full_projection"
 	r.turnID = "msg_full_projection"
 	r.messageID = "msg_full_projection"
+	if err := r.observeFloretCanonicalIdentity(r.id, r.threadID, r.turnID); err != nil {
+		t.Fatal(err)
+	}
 	r.onStreamEvent = func(ev any) { events = append(events, ev) }
 
 	if !r.applyFloretThreadProjection(flruntime.ThreadTurnProjection{
@@ -131,16 +135,12 @@ func TestFloretTurnResultProjectionDoesNotDowngradeFullAssistantMarkdown(t *test
 
 	ctx := context.Background()
 	floretStore := openTestFloretRuntimeHost(t, flstorage.Memory())
-	defer floretStore.Close()
 	adapter := testFloretBootstrap(t, floretStore)
-	create, err := adapter.newThreadCreate("thread_full_result_projection", "create-thread-full-result-projection")
+	created, err := adapter.threadCreate.CreateThread(ctx, identity.LogicalRequestID("create-thread-full-result-projection"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := create.Create(ctx); err != nil {
-		t.Fatal(err)
-	}
-	threadRuntime, err := adapter.bindThreadRuntime("thread_full_result_projection")
+	threadRuntime, err := adapter.bindThreadRuntime(created.ThreadID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,33 +148,28 @@ func TestFloretTurnResultProjectionDoesNotDowngradeFullAssistantMarkdown(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := host.Run(ctx, flruntime.TurnRequest{
-		RunID:  "run_full_result_projection",
-		TurnID: "msg_full_result_projection",
-		Input:  flruntime.TurnInput{Text: "find options"},
+	result, err := host.StartTurn(ctx, flruntime.StartTurnCommand{
+		LogicalRequestID: identity.LogicalRequestID("msg_full_result_projection"),
+		UserMessage:      flruntime.TurnInput{Text: "find options"},
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := host.ReadTurn(ctx, result.TurnID)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	r := newRun(runOptions{})
-	r.id = "run_full_result_projection"
-	r.threadID = "thread_full_result_projection"
-	r.turnID = "msg_full_result_projection"
-	r.messageID = "msg_full_result_projection"
-	r.applyFloretThreadProjection(flruntime.ThreadTurnProjection{
-		ThreadID:       "thread_full_result_projection",
-		TurnID:         "msg_full_result_projection",
-		RunID:          "run_full_result_projection",
-		TraceID:        "run_full_result_projection",
-		Status:         flruntime.TurnStatusCompleted,
-		ThroughOrdinal: 1,
-		Segments: []flruntime.ThreadTurnProjectionSegment{
-			{Kind: flruntime.ThreadTurnProjectionSegmentAssistantText, Text: fullAnswer},
-		},
-	})
-	if result.Projection == nil || !r.applyFloretThreadProjection(*result.Projection) {
-		t.Fatalf("completed turn projection was not applied: %#v", result.Projection)
+	r.id = string(result.RunID)
+	r.threadID = string(result.ThreadID)
+	r.turnID = string(result.TurnID)
+	r.messageID = string(result.TurnID)
+	if err := r.observeFloretCanonicalIdentity(r.id, r.threadID, r.turnID); err != nil {
+		t.Fatal(err)
+	}
+	if !r.applyFloretThreadProjection(snapshot.Projection) {
+		t.Fatalf("completed turn projection was not applied: %#v", snapshot.Projection)
 	}
 	rawJSON, assistantText, _, err := r.snapshotAssistantMessageJSON()
 	if err != nil {
@@ -293,11 +288,11 @@ func TestFloretHostPublishesRunningToolProjectionToFlowerLiveEvents(t *testing.T
 				"additionalProperties": false,
 			},
 			ReadOnly: true,
-			Activity: func(flinv fltools.Invocation[any]) (*observation.ActivityPresentation, error) {
-				return &observation.ActivityPresentation{
+			Activity: func(flinv fltools.Invocation[any]) (*fltools.ActivityPresentation, error) {
+				return &fltools.ActivityPresentation{
 					Label:    "Waiting for release",
-					Renderer: observation.ActivityRendererTerminal,
-					Payload:  map[string]any{"command": "blocking_projection_tool"},
+					Renderer: fltools.ActivityRendererTerminal,
+					Payload:  fltools.TerminalActivityPayload{Command: "blocking_projection_tool"},
 				}, nil
 			},
 		},
@@ -309,10 +304,10 @@ func TestFloretHostPublishesRunningToolProjectionToFlowerLiveEvents(t *testing.T
 			case <-release:
 				return fltools.Result{
 					Text: "released " + inv.Args.Value,
-					Activity: &observation.ActivityPresentation{
+					Activity: &fltools.ActivityPresentation{
 						Label:    "Release completed",
-						Renderer: observation.ActivityRendererTerminal,
-						Payload:  map[string]any{"command": "blocking_projection_tool", "output": "released"},
+						Renderer: fltools.ActivityRendererTerminal,
+						Payload:  fltools.TerminalActivityPayload{Command: "blocking_projection_tool", Output: "released"},
 					},
 				}, nil
 			case <-toolCtx.Done():
@@ -334,17 +329,7 @@ func TestFloretHostPublishesRunningToolProjectionToFlowerLiveEvents(t *testing.T
 		return events, nil
 	})
 	capture := &capturingFloretEventSink{downstream: floretEventSink{run: r}}
-	floretStore := openTestFloretRuntimeHost(t, flstorage.Memory())
-	defer floretStore.Close()
-	adapter := testFloretBootstrap(t, floretStore)
-	create, err := adapter.newThreadCreate(flruntime.ThreadID(thread.ThreadID), flruntime.CreateIntentID("create-"+thread.ThreadID))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := create.Create(ctx); err != nil {
-		t.Fatalf("CreateThread: %v", err)
-	}
-	threadRuntime, err := adapter.bindThreadRuntime(flruntime.ThreadID(thread.ThreadID))
+	threadRuntime, err := svc.bindFloretThreadRuntime(thread.ThreadID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -359,16 +344,15 @@ func TestFloretHostPublishesRunningToolProjectionToFlowerLiveEvents(t *testing.T
 	}
 
 	type turnOutcome struct {
-		result flruntime.TurnResult
+		result flruntime.StartTurnResult
 		err    error
 	}
 	outcomeCh := make(chan turnOutcome, 1)
 	go func() {
-		result, runErr := host.Run(ctx, flruntime.TurnRequest{
-			RunID:  flruntime.RunID(runID),
-			TurnID: flruntime.TurnID(turnID),
-			Input:  flruntime.TurnInput{Text: "run the blocking tool"},
-			Limits: flruntime.TurnLimits{MaxToolCalls: 4},
+		result, runErr := host.StartTurn(ctx, flruntime.StartTurnCommand{
+			LogicalRequestID: identity.LogicalRequestID(identity.TurnID(turnID)),
+			UserMessage:      flruntime.TurnInput{Text: "run the blocking tool"},
+			Limits:           flruntime.TurnLimits{MaxToolCalls: 4},
 		})
 		outcomeCh <- turnOutcome{result: result, err: runErr}
 	}()
@@ -402,11 +386,12 @@ func TestFloretHostPublishesRunningToolProjectionToFlowerLiveEvents(t *testing.T
 	if outcome.err != nil {
 		t.Fatalf("RunTurn: %v", outcome.err)
 	}
-	if err := outcome.result.Validate(); err != nil {
-		t.Fatalf("Validate: %v", err)
+	canonical, err := host.ReadTurn(ctx, outcome.result.TurnID)
+	if err != nil {
+		t.Fatalf("ReadTurn: %v", err)
 	}
-	if outcome.result.Projection == nil || outcome.result.Projection.Status != flruntime.TurnStatusCompleted {
-		t.Fatalf("terminal projection=%#v", outcome.result.Projection)
+	if canonical.Projection.Status != flruntime.TurnStatusCompleted {
+		t.Fatalf("terminal projection=%#v", canonical.Projection)
 	}
 
 	toolRows := 0
@@ -572,7 +557,8 @@ func TestFlowerBlocksFromFloretThreadProjectionKeepsRequestedApprovalWaiting(t *
 		item.Status != observation.ActivityStatusWaiting ||
 		item.ApprovalState != "requested" ||
 		item.EndedAtUnixMS != 0 ||
-		item.Label != "curl -s https://example.test" {
+		item.Presentation == nil ||
+		item.Presentation.Label != "curl -s https://example.test" {
 		t.Fatalf("approval activity should remain waiting: summary=%#v item=%#v", block.Summary, item)
 	}
 }
@@ -596,10 +582,10 @@ func TestFlowerBlocksFromFloretThreadProjectionKeepsQueuedSiblingPending(t *test
 				TurnID:    "msg_batch_approval",
 				Kind:      flruntime.ThreadDetailEventToolCall,
 				CreatedAt: now,
-				Message: &flruntime.ThreadDetailMessage{Role: "assistant", Activity: &observation.ActivityPresentation{
+				Message: &flruntime.ThreadDetailMessage{Role: "assistant", Activity: &fltools.ActivityPresentation{
 					Label:    newsCommand,
-					Renderer: observation.ActivityRendererTerminal,
-					Payload:  map[string]any{"command": newsCommand},
+					Renderer: fltools.ActivityRendererTerminal,
+					Payload:  fltools.TerminalActivityPayload{Command: newsCommand},
 				}},
 				ToolCall: &flruntime.ThreadDetailToolCall{ID: "call-newsapi", Name: "terminal.exec"},
 			},
@@ -610,10 +596,10 @@ func TestFlowerBlocksFromFloretThreadProjectionKeepsQueuedSiblingPending(t *test
 				TurnID:    "msg_batch_approval",
 				Kind:      flruntime.ThreadDetailEventToolCall,
 				CreatedAt: now.Add(5 * time.Millisecond),
-				Message: &flruntime.ThreadDetailMessage{Role: "assistant", Activity: &observation.ActivityPresentation{
+				Message: &flruntime.ThreadDetailMessage{Role: "assistant", Activity: &fltools.ActivityPresentation{
 					Label:    searchCommand,
-					Renderer: observation.ActivityRendererTerminal,
-					Payload:  map[string]any{"command": searchCommand},
+					Renderer: fltools.ActivityRendererTerminal,
+					Payload:  fltools.TerminalActivityPayload{Command: searchCommand},
 				}},
 				ToolCall: &flruntime.ThreadDetailToolCall{ID: "call-search", Name: "terminal.exec"},
 			},
@@ -649,13 +635,15 @@ func TestFlowerBlocksFromFloretThreadProjectionKeepsQueuedSiblingPending(t *test
 	if waiting.Status != observation.ActivityStatusWaiting ||
 		waiting.ApprovalState != "requested" ||
 		!waiting.RequiresApproval ||
-		waiting.Label != newsCommand {
+		waiting.Presentation == nil ||
+		waiting.Presentation.Label != newsCommand {
 		t.Fatalf("waiting tool mismatch: %#v", waiting)
 	}
 	queued := activityBlockItemByToolID(t, block, "call-search")
 	if queued.Status != observation.ActivityStatusPending ||
 		queued.RequiresApproval ||
-		queued.Label != searchCommand {
+		queued.Presentation == nil ||
+		queued.Presentation.Label != searchCommand {
 		t.Fatalf("queued sibling mismatch: %#v", queued)
 	}
 }
@@ -678,15 +666,17 @@ func TestFlowerBlocksFromFloretThreadProjectionKeepsPendingApprovalAsSingleToolR
 		},
 		Items: []observation.ActivityItem{
 			{
-				ItemID:          "tool:fetch-weather-once",
-				ToolID:          "fetch-weather-once",
-				ToolName:        "terminal.exec",
-				Kind:            observation.ActivityKindTool,
-				Status:          observation.ActivityStatusSuccess,
-				Severity:        observation.ActivitySeverityNormal,
-				Label:           `curl -s "wttr.in/Changsha?format=j1" 2>/dev/null | head -200`,
-				Renderer:        observation.ActivityRendererTerminal,
-				Payload:         map[string]any{"command": `curl -s "wttr.in/Changsha?format=j1" 2>/dev/null | head -200`},
+				ItemID:   "tool:fetch-weather-once",
+				ToolID:   "fetch-weather-once",
+				ToolName: "terminal.exec",
+				Kind:     observation.ActivityKindTool,
+				Status:   observation.ActivityStatusSuccess,
+				Severity: observation.ActivitySeverityNormal,
+				Presentation: &fltools.ActivityPresentation{
+					Label:    `curl -s "wttr.in/Changsha?format=j1" 2>/dev/null | head -200`,
+					Renderer: fltools.ActivityRendererTerminal,
+					Payload:  fltools.TerminalActivityPayload{Command: `curl -s "wttr.in/Changsha?format=j1" 2>/dev/null | head -200`},
+				},
 				StartedAtUnixMS: 10,
 				EndedAtUnixMS:   20,
 			},
@@ -701,10 +691,12 @@ func TestFlowerBlocksFromFloretThreadProjectionKeepsPendingApprovalAsSingleToolR
 				AttentionReasons: []observation.ActivityAttentionReason{observation.ActivityAttentionWaiting, observation.ActivityAttentionApproval},
 				RequiresApproval: true,
 				ApprovalState:    "requested",
-				Label:            `curl -s "wttr.in/Changsha?format=j1" 2>/dev/null | python3 -c "import json, sys"`,
-				Renderer:         observation.ActivityRendererTerminal,
-				Payload:          map[string]any{"command": `curl -s "wttr.in/Changsha?format=j1" 2>/dev/null | python3 -c "import json, sys"`},
-				StartedAtUnixMS:  30,
+				Presentation: &fltools.ActivityPresentation{
+					Label:    `curl -s "wttr.in/Changsha?format=j1" 2>/dev/null | python3 -c "import json, sys"`,
+					Renderer: fltools.ActivityRendererTerminal,
+					Payload:  fltools.TerminalActivityPayload{Command: `curl -s "wttr.in/Changsha?format=j1" 2>/dev/null | python3 -c "import json, sys"`},
+				},
+				StartedAtUnixMS: 30,
 			},
 		},
 	}
@@ -824,6 +816,9 @@ func TestApplyFloretThreadProjectionAdvancesOrdinalOnlyAfterSuccessfulMapping(t 
 	r.threadID = "thread_projection_cursor"
 	r.turnID = "turn_projection_cursor"
 	r.messageID = "turn_projection_cursor"
+	if err := r.observeFloretCanonicalIdentity(r.id, r.threadID, r.turnID); err != nil {
+		t.Fatalf("observe canonical identity: %v", err)
+	}
 	invalid := flruntime.ThreadTurnProjection{
 		RunID:          "run_projection_cursor",
 		ThreadID:       "thread_projection_cursor",
@@ -866,6 +861,9 @@ func TestApplyFloretThreadProjectionAcceptsUpstreamControlSignalWithoutBodyBlock
 	r.threadID = "thread_unknown_projection_signal"
 	r.turnID = "turn_unknown_projection_signal"
 	r.messageID = "turn_unknown_projection_signal"
+	if err := r.observeFloretCanonicalIdentity(r.id, r.threadID, r.turnID); err != nil {
+		t.Fatalf("observe canonical identity: %v", err)
+	}
 	if !r.applyFloretThreadProjection(flruntime.ThreadTurnProjection{
 		RunID:          "run_unknown_projection_signal",
 		ThreadID:       "thread_unknown_projection_signal",
@@ -896,7 +894,7 @@ func TestPendingToolSettlementUnavailableDoesNotReadOrSynthesizeProjection(t *te
 		t.Fatalf("CreateThread: %v", err)
 	}
 	target := flruntime.PendingToolSettlementTarget{
-		ThreadID:   flruntime.ThreadID(thread.ThreadID),
+		ThreadID:   identity.ThreadID(thread.ThreadID),
 		TurnID:     "turn_unavailable",
 		RunID:      "run_unavailable",
 		ToolCallID: "tool_unavailable",
@@ -927,6 +925,9 @@ func TestApplyFloretThreadProjectionReplacesStreamedBlocks(t *testing.T) {
 	r.threadID = "thread_projection"
 	r.turnID = "msg_projection"
 	r.messageID = "msg_projection"
+	if err := r.observeFloretCanonicalIdentity(r.id, r.threadID, r.turnID); err != nil {
+		t.Fatalf("observe canonical identity: %v", err)
+	}
 	r.onStreamEvent = func(ev any) { events = append(events, ev) }
 	r.assistantBlocks = []any{
 		&persistedMarkdownBlock{Type: "markdown", Content: "streamed partial"},
@@ -978,6 +979,9 @@ func TestApplyFloretThreadProjectionClearsStreamedBlocksWhenEmpty(t *testing.T) 
 	r.threadID = "thread_empty_projection"
 	r.turnID = "msg_empty_projection"
 	r.messageID = "msg_empty_projection"
+	if err := r.observeFloretCanonicalIdentity(r.id, r.threadID, r.turnID); err != nil {
+		t.Fatalf("observe canonical identity: %v", err)
+	}
 	r.onStreamEvent = func(ev any) { events = append(events, ev) }
 	r.assistantBlocks = []any{
 		&persistedMarkdownBlock{Type: "markdown", Content: "streamed text"},
@@ -1058,11 +1062,16 @@ func TestApplyFloretThreadProjectionIgnoresOlderOrdinalAfterSettlement(t *testin
 	r.threadID = "thread_terminal_ordinal"
 	r.turnID = "msg_terminal_ordinal"
 	r.messageID = "msg_terminal_ordinal"
+	if err := r.observeFloretCanonicalIdentity(r.id, r.threadID, r.turnID); err != nil {
+		t.Fatalf("observe canonical identity: %v", err)
+	}
 
 	settledTimeline := floretProjectionTimeline("run_terminal_ordinal", "thread_terminal_ordinal", "msg_terminal_ordinal", "exec-1", "terminal.exec")
-	settledTimeline.Items[0].Label = "printf done"
-	settledTimeline.Items[0].Renderer = observation.ActivityRendererTerminal
-	settledTimeline.Items[0].Payload = map[string]any{"command": "printf done", "output": "done"}
+	settledTimeline.Items[0].Presentation = &fltools.ActivityPresentation{
+		Label:    "printf done",
+		Renderer: fltools.ActivityRendererTerminal,
+		Payload:  fltools.TerminalActivityPayload{Command: "printf done", Output: "done"},
+	}
 	if !r.applyFloretThreadProjection(flruntime.ThreadTurnProjection{
 		ThreadID:       "thread_terminal_ordinal",
 		TurnID:         "msg_terminal_ordinal",
@@ -1099,7 +1108,8 @@ func TestApplyFloretThreadProjectionIgnoresOlderOrdinalAfterSettlement(t *testin
 		t.Fatalf("assistant block=%T, want activity timeline", r.assistantBlocks[0])
 	}
 	item := activityBlockItemByToolID(t, block, "exec-1")
-	if item.Status != observation.ActivityStatusSuccess || anyToString(item.Payload["output"]) != "done" {
+	payload, ok := item.Presentation.Payload.(fltools.TerminalActivityPayload)
+	if item.Status != observation.ActivityStatusSuccess || !ok || payload.Output != "done" {
 		t.Fatalf("terminal item=%#v, want settled result preserved by ordinal", item)
 	}
 }
@@ -1115,9 +1125,12 @@ func TestApplyFloretThreadProjectionAcceptsSettlementIdentityForChildRun(t *test
 	r.settlementThreadID = "thread_child"
 	r.settlementRunID = "run_floret_execution"
 	r.settlementTurnID = "turn_floret_execution"
+	if err := r.observeFloretCanonicalIdentity(r.settlementRunID, r.settlementThreadID, r.settlementTurnID); err != nil {
+		t.Fatalf("observe canonical identity: %v", err)
+	}
 
 	timeline := floretProjectionTimeline("run_floret_execution", "thread_child", "turn_floret_execution", "exec-1", "terminal.exec")
-	timeline.Items[0].Label = "printf child"
+	timeline.Items[0].Presentation.Label = "printf child"
 	if !r.applyFloretThreadProjection(flruntime.ThreadTurnProjection{
 		ThreadID:       "thread_child",
 		TurnID:         "turn_floret_execution",
@@ -1140,17 +1153,17 @@ func TestApplyFloretThreadProjectionAcceptsSettlementIdentityForChildRun(t *test
 		t.Fatalf("assistant block=%T, want activity timeline", r.assistantBlocks[0])
 	}
 	item := activityBlockItemByToolID(t, block, "exec-1")
-	if item.Status != observation.ActivityStatusSuccess || item.Label != "printf child" {
+	if item.Status != observation.ActivityStatusSuccess || item.Presentation == nil || item.Presentation.Label != "printf child" {
 		t.Fatalf("terminal item=%#v, want Floret settlement projection", item)
 	}
-	if block.RunID != "run_child_audit" || block.TurnID != "turn_child_audit" || block.TraceID != "run_child_audit" {
-		t.Fatalf("public activity identity run=%q turn=%q trace=%q, want Redeven audit identity", block.RunID, block.TurnID, block.TraceID)
+	if block.RunID != "run_floret_execution" || block.TurnID != "turn_floret_execution" || block.TraceID != "run_floret_execution" {
+		t.Fatalf("public activity identity run=%q turn=%q trace=%q, want canonical Floret identity", block.RunID, block.TurnID, block.TraceID)
 	}
 	rawBlock, err := json.Marshal(block)
 	if err != nil {
 		t.Fatalf("json.Marshal activity block: %v", err)
 	}
-	for _, forbidden := range []string{"run_floret_execution", "turn_floret_execution"} {
+	for _, forbidden := range []string{"run_child_audit", "turn_child_audit"} {
 		if strings.Contains(string(rawBlock), forbidden) {
 			t.Fatalf("public activity block leaked Floret execution identity %q: %s", forbidden, rawBlock)
 		}
@@ -1207,6 +1220,9 @@ func TestFloretTerminalThreadProjectionUpdatesDetachedSnapshotWithoutStream(t *t
 	r.threadID = "thread_terminal_projection"
 	r.turnID = "msg_terminal_projection"
 	r.messageID = "msg_terminal_projection"
+	if err := r.observeFloretCanonicalIdentity(r.id, r.threadID, r.turnID); err != nil {
+		t.Fatalf("observe canonical identity: %v", err)
+	}
 	r.onStreamEvent = func(ev any) { events = append(events, ev) }
 	r.markDetached()
 
@@ -1282,20 +1298,21 @@ func TestApplyFloretPendingToolSettlementProjectionPublishesTimelineReplacement(
 		t.Fatalf("CreateThread: %v", err)
 	}
 
-	runID := "run_terminal_settlement_live"
-	turnID := "turn_terminal_settlement_live"
 	messageID := "msg_terminal_settlement_live"
 	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "canonical terminal output")
-	if _, err := host.Run(ctx, flruntime.TurnRequest{
-		TurnID: flruntime.TurnID(turnID),
-		RunID:  flruntime.RunID(runID),
-		Input:  flruntime.TurnInput{Text: "run terminal command"},
-	}); err != nil {
+	seeded, err := host.Run(ctx, flruntime.StartTurnCommand{
+		LogicalRequestID: identity.LogicalRequestID("terminal-settlement-live"),
+		UserMessage:      flruntime.TurnInput{Text: "run terminal command"},
+	})
+	if err != nil {
 		t.Fatalf("seed canonical turn: %v", err)
 	}
+	runID := string(seeded.RunID)
+	turnID := string(seeded.TurnID)
+	productRunID := "run_product_terminal_settlement"
 	activeRun := newRun(runOptions{
 		HostCapabilities: bindTestRunHostCapabilities(t, svc, meta.EndpointID, thread.ThreadID),
-		RunID:            runID,
+		RunID:            productRunID,
 		EndpointID:       meta.EndpointID,
 		ThreadID:         thread.ThreadID,
 		TurnID:           turnID,
@@ -1304,6 +1321,9 @@ func TestApplyFloretPendingToolSettlementProjectionPublishesTimelineReplacement(
 			svc.broadcastStreamEvent(meta.EndpointID, thread.ThreadID, turnID, runID, ev)
 		},
 	})
+	if err := activeRun.observeFloretCanonicalIdentity(runID, thread.ThreadID, turnID); err != nil {
+		t.Fatalf("observe canonical identity: %v", err)
+	}
 	svc.mu.Lock()
 	if svc.runs == nil {
 		svc.runs = map[string]*run{}
@@ -1311,8 +1331,8 @@ func TestApplyFloretPendingToolSettlementProjectionPublishesTimelineReplacement(
 	if svc.activeRunByTh == nil {
 		svc.activeRunByTh = map[string]string{}
 	}
-	svc.runs[runID] = activeRun
-	svc.activeRunByTh[runThreadKey(meta.EndpointID, thread.ThreadID)] = runID
+	svc.runs[productRunID] = activeRun
+	svc.activeRunByTh[runThreadKey(meta.EndpointID, thread.ThreadID)] = productRunID
 	svc.mu.Unlock()
 	svc.appendFlowerLiveEvent(FlowerLiveEvent{
 		EndpointID: meta.EndpointID,
@@ -1323,10 +1343,10 @@ func TestApplyFloretPendingToolSettlementProjectionPublishesTimelineReplacement(
 		Payload:    mustFlowerPayload(FlowerLiveRunStartedPayload{RunID: runID, TurnID: turnID, MessageID: messageID, Status: string(RunStateRunning)}),
 	})
 	activeRun.applyFloretThreadProjection(flruntime.ThreadTurnProjection{
-		ThreadID:       flruntime.ThreadID(thread.ThreadID),
-		TurnID:         flruntime.TurnID(turnID),
-		RunID:          flruntime.RunID(runID),
-		TraceID:        flruntime.TraceID(runID),
+		ThreadID:       identity.ThreadID(thread.ThreadID),
+		TurnID:         identity.TurnID(turnID),
+		RunID:          identity.RunID(runID),
+		TraceID:        identity.TraceID(runID),
 		Status:         flruntime.TurnStatusRunning,
 		ThroughOrdinal: 1,
 		Segments: []flruntime.ThreadTurnProjectionSegment{{
@@ -1336,10 +1356,10 @@ func TestApplyFloretPendingToolSettlementProjectionPublishesTimelineReplacement(
 	})
 
 	settledProjection := flruntime.ThreadTurnProjection{
-		ThreadID:       flruntime.ThreadID(thread.ThreadID),
-		TurnID:         flruntime.TurnID(turnID),
-		RunID:          flruntime.RunID(runID),
-		TraceID:        flruntime.TraceID(runID),
+		ThreadID:       identity.ThreadID(thread.ThreadID),
+		TurnID:         identity.TurnID(turnID),
+		RunID:          identity.RunID(runID),
+		TraceID:        identity.TraceID(runID),
 		Status:         flruntime.TurnStatusCompleted,
 		ThroughOrdinal: 2,
 		Segments: []flruntime.ThreadTurnProjectionSegment{{
@@ -1348,9 +1368,9 @@ func TestApplyFloretPendingToolSettlementProjectionPublishesTimelineReplacement(
 		}},
 	}
 	settlementTarget := flruntime.PendingToolSettlementTarget{
-		ThreadID:   flruntime.ThreadID(thread.ThreadID),
-		TurnID:     flruntime.TurnID(turnID),
-		RunID:      flruntime.RunID(runID),
+		ThreadID:   identity.ThreadID(thread.ThreadID),
+		TurnID:     identity.TurnID(turnID),
+		RunID:      identity.RunID(runID),
 		ToolCallID: "exec-1",
 		ToolName:   "terminal.exec",
 		Handle:     "process-1",
@@ -1449,10 +1469,14 @@ func TestRunFloretHostedTurnTerminalProjectionPublishesCanonicalReplacement(t *t
 		t.Fatalf("timeline replacements = %d, want 1; events=%#v", len(replacements), response.Events)
 	}
 	replacement := replacements[0]
-	if len(replacement.Messages) != 2 || replacement.Messages[0].Role != "user" || replacement.Messages[0].TurnID != turnID || replacement.Messages[1].TurnID != turnID || replacement.Messages[1].MessageID != turnID || replacement.Messages[1].Content != "canonical final answer" {
+	canonicalRunID, canonicalTurnID := r.canonicalRunTurnIdentity()
+	if canonicalRunID == "" || canonicalTurnID == "" {
+		t.Fatal("canonical Floret identity was not bound")
+	}
+	if len(replacement.Messages) != 2 || replacement.Messages[0].Role != "user" || replacement.Messages[0].TurnID != canonicalTurnID || replacement.Messages[1].TurnID != canonicalTurnID || replacement.Messages[1].MessageID != canonicalTurnID || replacement.Messages[1].Content != "canonical final answer" {
 		t.Fatalf("replacement messages = %#v", replacement.Messages)
 	}
-	if _, exists := replacement.LiveState.Messages[turnID]; exists {
+	if _, exists := replacement.LiveState.Messages[canonicalTurnID]; exists {
 		t.Fatalf("terminal replacement retained live draft: %#v", replacement.LiveState.Messages[turnID])
 	}
 }
@@ -1460,10 +1484,10 @@ func TestRunFloretHostedTurnTerminalProjectionPublishesCanonicalReplacement(t *t
 func floretProjectionTimeline(runID string, threadID string, turnID string, toolID string, toolName string) *observation.ActivityTimeline {
 	timeline := observation.ActivityTimeline{
 		SchemaVersion: observation.ActivityTimelineSchemaVersion,
-		RunID:         runID,
-		ThreadID:      threadID,
-		TurnID:        turnID,
-		TraceID:       runID,
+		RunID:         identity.RunID(runID),
+		ThreadID:      identity.ThreadID(threadID),
+		TurnID:        identity.TurnID(turnID),
+		TraceID:       identity.TraceID(runID),
 		Summary:       observation.ActivitySummary{Status: observation.ActivityStatusSuccess, Severity: observation.ActivitySeverityNormal, TotalItems: 1},
 		Items: []observation.ActivityItem{{
 			ItemID:   "tool:" + toolID,
@@ -1472,6 +1496,10 @@ func floretProjectionTimeline(runID string, threadID string, turnID string, tool
 			Kind:     observation.ActivityKindTool,
 			Status:   observation.ActivityStatusSuccess,
 			Severity: observation.ActivitySeverityNormal,
+			Presentation: &fltools.ActivityPresentation{
+				Label: toolName, Renderer: fltools.ActivityRendererTerminal,
+				Payload: fltools.TerminalActivityPayload{Command: "printf done"},
+			},
 		}},
 	}
 	return &timeline
@@ -1486,17 +1514,17 @@ func floretRunningProjectionTimeline(runID string, threadID string, turnID strin
 		Counts:     observation.ActivityCounts{Running: 1},
 	}
 	timeline.Items[0].Status = observation.ActivityStatusRunning
-	timeline.Items[0].Payload = map[string]any{"command": "sleep 5"}
+	timeline.Items[0].Presentation.Payload = fltools.TerminalActivityPayload{Command: "sleep 5"}
 	return timeline
 }
 
 func floretProjectionApprovalTimeline(runID string, threadID string, turnID string, toolID string, label string) *observation.ActivityTimeline {
 	timeline := observation.ActivityTimeline{
 		SchemaVersion: observation.ActivityTimelineSchemaVersion,
-		RunID:         runID,
-		ThreadID:      threadID,
-		TurnID:        turnID,
-		TraceID:       runID,
+		RunID:         identity.RunID(runID),
+		ThreadID:      identity.ThreadID(threadID),
+		TurnID:        identity.TurnID(turnID),
+		TraceID:       identity.TraceID(runID),
 		Summary: observation.ActivitySummary{
 			Status:         observation.ActivityStatusWaiting,
 			Severity:       observation.ActivitySeverityBlocking,
@@ -1514,9 +1542,11 @@ func floretProjectionApprovalTimeline(runID string, threadID string, turnID stri
 			NeedsAttention:   true,
 			RequiresApproval: true,
 			ApprovalState:    "requested",
-			Label:            label,
-			Renderer:         observation.ActivityRendererTerminal,
-			Payload:          map[string]any{"command": label},
+			Presentation: &fltools.ActivityPresentation{
+				Label:    label,
+				Renderer: fltools.ActivityRendererTerminal,
+				Payload:  fltools.TerminalActivityPayload{Command: label},
+			},
 		}},
 	}
 	return &timeline

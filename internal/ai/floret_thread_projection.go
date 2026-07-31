@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/floegence/floret/v2/observation"
-	flruntime "github.com/floegence/floret/v2/runtime"
+	"github.com/floegence/floret/v3/observation"
+	flruntime "github.com/floegence/floret/v3/runtime"
 )
 
 func (r *run) applyFloretThreadProjection(projection flruntime.ThreadTurnProjection) bool {
@@ -105,10 +105,8 @@ func (r *run) floretThreadProjectionMatchesRun(projection flruntime.ThreadTurnPr
 	if runID == "" || threadID == "" || turnID == "" {
 		return false
 	}
-	if projectionIdentityMatchesRun(runID, threadID, turnID, strings.TrimSpace(r.id), strings.TrimSpace(r.threadID), strings.TrimSpace(r.turnID)) {
-		return true
-	}
-	return projectionIdentityMatchesRun(runID, threadID, turnID, strings.TrimSpace(r.settlementRunID), strings.TrimSpace(r.settlementThreadID), strings.TrimSpace(r.settlementTurnID))
+	canonicalRunID, canonicalThreadID, canonicalTurnID := r.floretCanonicalIdentity()
+	return projectionIdentityMatchesRun(runID, threadID, turnID, canonicalRunID, canonicalThreadID, canonicalTurnID)
 }
 
 func projectionIdentityMatchesRun(projectionRunID string, projectionThreadID string, projectionTurnID string, runID string, threadID string, turnID string) bool {
@@ -160,14 +158,16 @@ func (s *Service) activeRunForFloretProjection(endpointID string, threadID strin
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	r := s.runs[runID]
-	if r == nil {
-		return nil
+	for _, r := range s.runs {
+		if r == nil || strings.TrimSpace(r.endpointID) != endpointID || strings.TrimSpace(r.threadID) != threadID {
+			continue
+		}
+		canonicalRunID, canonicalThreadID, _ := r.floretCanonicalIdentity()
+		if canonicalRunID == runID && canonicalThreadID == threadID {
+			return r
+		}
 	}
-	if strings.TrimSpace(r.endpointID) != endpointID || strings.TrimSpace(r.threadID) != threadID {
-		return nil
-	}
-	return r
+	return nil
 }
 
 func (s *Service) applyFloretPendingToolSettlementProjection(ctx context.Context, endpointID string, threadID string, runID string, turnID string, settled flruntime.PendingToolSettlementResult) error {

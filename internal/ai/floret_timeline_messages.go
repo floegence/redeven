@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"strings"
 
-	flruntime "github.com/floegence/floret/v2/runtime"
+	flruntime "github.com/floegence/floret/v3/runtime"
 )
 
 type threadTimelineMessage struct {
@@ -393,6 +393,7 @@ func (s *Service) floretProjectionMessage(endpointID string, threadID string, tu
 		threadID: strings.TrimSpace(threadID), turnID: strings.TrimSpace(string(turn.TurnID)), messageID: strings.TrimSpace(string(turn.TurnID)),
 		assistantCreatedAtUnixMs: createdAt,
 	}
+	projectionRun.expectFloretRuntimeEventIdentity(string(turn.RunID), threadID, string(turn.TurnID), true)
 	if err := projectionRun.validateFloretThreadProjection(projection); err != nil {
 		return nil, "", canonicalTimelineResyncErrorf("turn %q projection does not match its canonical identity: %v", turn.TurnID, err)
 	}

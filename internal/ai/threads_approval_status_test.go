@@ -4,7 +4,8 @@ import (
 	"context"
 	"testing"
 
-	flruntime "github.com/floegence/floret/v2/runtime"
+	"github.com/floegence/floret/v3/identity"
+	flruntime "github.com/floegence/floret/v3/runtime"
 )
 
 func TestGetThreadAndListThreadsUseCanonicalFloretStatus(t *testing.T) {
@@ -16,7 +17,7 @@ func TestGetThreadAndListThreadsUseCanonicalFloretStatus(t *testing.T) {
 		t.Fatal(err)
 	}
 	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "complete")
-	if _, err := host.Run(ctx, flruntime.TurnRequest{TurnID: "turn_status", RunID: "run_status", Input: flruntime.TurnInput{Text: "work"}}); err != nil {
+	if _, err := host.Run(ctx, flruntime.StartTurnCommand{LogicalRequestID: identity.LogicalRequestID("turn_status"), UserMessage: flruntime.TurnInput{Text: "work"}}); err != nil {
 		t.Fatal(err)
 	}
 	view, err := svc.GetThread(ctx, meta, thread.ThreadID)
