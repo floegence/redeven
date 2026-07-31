@@ -556,7 +556,8 @@
     "unavailableChecksTitle": "再次嘗試前",
     "unavailableServiceCheck": "確認服務已經啟動。",
     "unavailablePortCheck": "確認服務正在監聽此連接埠。",
-    "retry": "再次嘗試"
+    "retry": "再次嘗試",
+    "retrying": "正在再次嘗試..."
   },
   "language": {
     "systemDefault": "跟隨系統",

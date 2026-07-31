@@ -556,7 +556,8 @@
     "unavailableChecksTitle": "Antes de tentar novamente",
     "unavailableServiceCheck": "Verifique se o serviço está em execução.",
     "unavailablePortCheck": "Confirme se o serviço está escutando nesta porta.",
-    "retry": "Tentar novamente"
+    "retry": "Tentar novamente",
+    "retrying": "Tentando novamente..."
   },
   "language": {
     "systemDefault": "Padrão do sistema",

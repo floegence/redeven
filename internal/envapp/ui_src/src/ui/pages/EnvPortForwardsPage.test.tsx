@@ -592,6 +592,7 @@ describe('EnvPortForwardsPage', () => {
         body: JSON.stringify({ target: '3000/docs?tab=api' }),
       });
       expect(assign).toHaveBeenCalledWith('http://localhost:3000/docs?tab=api');
+      expect(addressInput?.value).toBe('http://localhost:3000/docs?tab=api');
       expect(host.textContent).toContain('Temporary');
       expect(host.textContent).toContain('Save service');
     });

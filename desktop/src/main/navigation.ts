@@ -259,9 +259,66 @@ export function isAllowedWebServiceWindowNavigation(input: string, allowedBaseUR
   return isAllowedAppNavigation(input, allowedBaseURL) && isPortForwardURLForForward(input, forwardID);
 }
 
+function webServiceRouteRoot(routeURL: URL, forwardID: string): URL | null {
+  const expectedID = compactCodeSpaceID(forwardID);
+  if (!expectedID || !isPortForwardURLForForward(routeURL.toString(), expectedID)) return null;
+  const labels = splitHostname(routeURL.hostname);
+  if (labels[0] === `pf-${expectedID.toLowerCase()}`) return new URL('/', routeURL);
+  return new URL(`/pf/${encodeURIComponent(expectedID)}/`, routeURL);
+}
+
+function webServiceRouteAppPath(routeURL: URL, forwardID: string): string | null {
+  const routeRoot = webServiceRouteRoot(routeURL, forwardID);
+  if (!routeRoot) return null;
+  if (routeRoot.pathname === '/') {
+    if (routeURL.pathname === '/_redeven_boot/' || routeURL.pathname === '/_redeven_boot') return '/';
+    return routeURL.pathname || '/';
+  }
+  const rootWithoutTrailingSlash = routeRoot.pathname.replace(/\/$/u, '');
+  if (routeURL.pathname === rootWithoutTrailingSlash) return '/';
+  if (!routeURL.pathname.startsWith(routeRoot.pathname)) return null;
+  return `/${routeURL.pathname.slice(routeRoot.pathname.length)}`;
+}
+
+export function webServiceBrowserDisplayURL(
+  routeInput: string,
+  targetInput: string,
+  forwardID: string,
+): string | null {
+  try {
+    const routeURL = new URL(routeInput);
+    const targetURL = new URL(targetInput);
+    const appPath = webServiceRouteAppPath(routeURL, forwardID);
+    if (!appPath) return null;
+    const displayURL = new URL(appPath, targetURL.origin);
+    const isRemoteBoot = appPath === '/'
+      && (routeURL.pathname === '/_redeven_boot/' || routeURL.pathname === '/_redeven_boot');
+    if (!isRemoteBoot) {
+      displayURL.search = routeURL.search;
+      displayURL.hash = routeURL.hash;
+    }
+    return displayURL.toString();
+  } catch {
+    return null;
+  }
+}
+
+function looksLikeWebServiceAuthority(address: string): boolean {
+  const authority = address.split(/[/?#]/u, 1)[0]?.trim() ?? '';
+  if (!authority) return false;
+  const hostname = authority.startsWith('[')
+    ? authority.slice(0, authority.indexOf(']') + 1)
+    : authority.replace(/:\d+$/u, '');
+  return hostname.toLowerCase() === 'localhost'
+    || hostname.startsWith('[')
+    || /^\d{1,3}(?:\.\d{1,3}){3}$/u.test(hostname)
+    || hostname.includes('.');
+}
+
 export function resolveWebServiceBrowserAddress(
   input: string,
-  currentURL: string,
+  currentRouteURL: string,
+  targetInput: string,
   allowedBaseURL: string,
   forwardID: string,
 ): string | null {
@@ -269,22 +326,34 @@ export function resolveWebServiceBrowserAddress(
   if (!address) return null;
 
   try {
-    const current = new URL(currentURL);
-    let candidate: URL;
-    if (/^[a-z][a-z0-9+.-]*:/iu.test(address)) {
-      candidate = new URL(address);
+    const currentRoute = new URL(currentRouteURL);
+    const targetURL = new URL(targetInput);
+    const routeRoot = webServiceRouteRoot(currentRoute, forwardID);
+    const currentDisplay = webServiceBrowserDisplayURL(currentRoute.toString(), targetURL.toString(), forwardID);
+    if (!routeRoot || !currentDisplay) return null;
+
+    let displayCandidate: URL;
+    if (/^https?:\/\//iu.test(address)) {
+      displayCandidate = new URL(address);
+    } else if (looksLikeWebServiceAuthority(address)) {
+      displayCandidate = new URL(`${targetURL.protocol}//${address}`);
+    } else if (/^[a-z][a-z0-9+.-]*:/iu.test(address)) {
+      return null;
     } else if (address.startsWith('?') || address.startsWith('#')) {
-      candidate = new URL(address, current);
+      displayCandidate = new URL(address, currentDisplay);
     } else {
-      const labels = splitHostname(current.hostname);
-      const remoteForwardHost = labels[0] === `pf-${compactCodeSpaceID(forwardID).toLowerCase()}`;
-      const serviceRoot = remoteForwardHost
-        ? new URL('/', current)
-        : new URL(`/pf/${encodeURIComponent(compactCodeSpaceID(forwardID))}/`, current);
-      candidate = new URL(address.replace(/^\/+/, ''), serviceRoot);
+      displayCandidate = new URL(address.replace(/^\/+/, ''), targetURL.origin + '/');
     }
-    return isAllowedWebServiceWindowNavigation(candidate.toString(), allowedBaseURL, forwardID)
-      ? candidate.toString()
+    if (displayCandidate.origin !== targetURL.origin || displayCandidate.username || displayCandidate.password) {
+      return null;
+    }
+
+    const routeCandidate = new URL(routeRoot);
+    routeCandidate.pathname += displayCandidate.pathname.replace(/^\/+/, '');
+    routeCandidate.search = displayCandidate.search;
+    routeCandidate.hash = displayCandidate.hash;
+    return isAllowedWebServiceWindowNavigation(routeCandidate.toString(), allowedBaseURL, forwardID)
+      ? routeCandidate.toString()
       : null;
   } catch {
     return null;

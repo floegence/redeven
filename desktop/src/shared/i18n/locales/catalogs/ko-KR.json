@@ -556,7 +556,8 @@
     "unavailableChecksTitle": "다시 시도하기 전에",
     "unavailableServiceCheck": "서비스가 실행 중인지 확인하세요.",
     "unavailablePortCheck": "서비스가 이 포트에서 수신 중인지 확인하세요.",
-    "retry": "다시 시도"
+    "retry": "다시 시도",
+    "retrying": "다시 시도하는 중..."
   },
   "language": {
     "systemDefault": "시스템 기본값",

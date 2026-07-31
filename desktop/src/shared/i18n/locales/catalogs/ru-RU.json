@@ -556,7 +556,8 @@
     "unavailableChecksTitle": "Перед повторной попыткой",
     "unavailableServiceCheck": "Убедитесь, что сервис запущен.",
     "unavailablePortCheck": "Убедитесь, что сервис прослушивает этот порт.",
-    "retry": "Повторить"
+    "retry": "Повторить",
+    "retrying": "Повторная попытка..."
   },
   "language": {
     "systemDefault": "Системный язык",

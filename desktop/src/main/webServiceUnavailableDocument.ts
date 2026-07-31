@@ -9,6 +9,7 @@ export type WebServiceUnavailableCopy = Readonly<{
   serviceCheck: string;
   portCheck: string;
   retryLabel: string;
+  retryingLabel: string;
 }>;
 
 function htmlEscape(value: unknown): string {
@@ -54,6 +55,13 @@ export function buildWebServiceUnavailableDocumentURL(
     .retry:hover { background: light-dark(#286ab9, #4a84cc); }
     .retry:focus-visible { outline: 2px solid light-dark(#1e5b9f, #74a5e2); outline-offset: 3px; }
     .retry svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+    .retrying-label { display: none; }
+    .retry:target { pointer-events: none; opacity: .88; }
+    .retry:target svg { animation: spin .75s linear infinite; }
+    .retry:target .retry-label { display: none; }
+    .retry:target .retrying-label { display: inline; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .retry:target svg { animation: none; } }
     @media (max-width: 520px) {
       main { padding: 36px 24px 44px; }
       h1 { font-size: 22px; }
@@ -80,9 +88,10 @@ export function buildWebServiceUnavailableDocumentURL(
       <p>${htmlEscape(copy.portCheck)}</p>
     </section>
     <div class="actions">
-      <a class="retry" href="#retry">
+      <a id="retry" class="retry" href="#retry" aria-live="polite">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5"/><path d="M19 11a7 7 0 1 0 1 5"/></svg>
-        ${htmlEscape(copy.retryLabel)}
+        <span class="retry-label">${htmlEscape(copy.retryLabel)}</span>
+        <span class="retrying-label">${htmlEscape(copy.retryingLabel)}</span>
       </a>
     </div>
   </main>

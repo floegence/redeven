@@ -207,7 +207,7 @@ import {
   shouldFailDesktopSessionMainDocument,
   type DesktopSessionTransport,
 } from './desktopSessionTransport';
-import { isAllowedAppNavigation, isAllowedCodespaceWindowNavigation, isAllowedWebServiceWindowNavigation, resolveWebServiceBrowserAddress } from './navigation';
+import { isAllowedAppNavigation, isAllowedCodespaceWindowNavigation, isAllowedWebServiceWindowNavigation, resolveWebServiceBrowserAddress, webServiceBrowserDisplayURL } from './navigation';
 import { resolveBundledRuntimePath, resolveSessionPreloadPath, resolveUtilityPreloadPath, resolveWebServiceBrowserPreloadPath, resolveWelcomeRendererPath } from './paths';
 import { buildWebServiceBrowserDocumentURL } from './webServiceBrowserDocument';
 import { isMarkedWebServiceUpstreamUnavailable } from './webServiceBrowserProxyFailure';
@@ -7931,6 +7931,7 @@ function clearWebServiceWindowPartition(partition: string): void {
 }
 
 const WEB_SERVICE_BROWSER_TOOLBAR_HEIGHT = 54;
+const WEB_SERVICE_BROWSER_RETRY_FEEDBACK_MS = 600;
 
 function webServiceBrowserDocumentURL(): string {
   const locale = desktopLanguageState().getSnapshot().resolved_locale;
@@ -7965,6 +7966,7 @@ function webServiceUnavailableDocumentURL(targetAddress: string): string {
     serviceCheck: i18n.t('webServiceBrowser.unavailableServiceCheck'),
     portCheck: i18n.t('webServiceBrowser.unavailablePortCheck'),
     retryLabel: i18n.t('webServiceBrowser.retry'),
+    retryingLabel: i18n.t('webServiceBrowser.retrying'),
   }, targetAddress);
 }
 
@@ -8028,9 +8030,9 @@ function createWebServiceBrowserController(
 
   const snapshot = (): DesktopWebServiceBrowserState => {
     const contents = contentView.webContents;
-    const address = contents.isDestroyed()
-      ? requestedURL
-      : unavailableRequestURL || contents.getURL() || requestedURL;
+    const routeAddress = unavailableRequestURL || requestedURL;
+    const address = webServiceBrowserDisplayURL(routeAddress, request.target_url, request.forward_id)
+      ?? targetAddress + '/';
     const title = contents.isDestroyed() ? '' : contents.getTitle();
     return {
       address,
@@ -8061,6 +8063,7 @@ function createWebServiceBrowserController(
     const targetURL = resolveWebServiceBrowserAddress(
       address,
       currentURL,
+      request.target_url,
       sessionRecord.allowed_base_url,
       request.forward_id,
     );
@@ -8188,7 +8191,14 @@ function createWebServiceBrowserController(
   contentView.webContents.on('did-navigate-in-page', (_event, targetURL, isMainFrame) => {
     if (!isMainFrame) return;
     if (unavailablePageURL && targetURL === `${unavailablePageURL}#retry`) {
-      loadRequestedURL(unavailableRequestURL || requestedURL);
+      const retryPageURL = unavailablePageURL;
+      const retryRequestURL = unavailableRequestURL || requestedURL;
+      setTimeout(() => {
+        if (win.isDestroyed() || contentView.webContents.isDestroyed()) return;
+        if (unavailablePageURL !== retryPageURL) return;
+        if (contentView.webContents.getURL() !== `${retryPageURL}#retry`) return;
+        loadRequestedURL(retryRequestURL);
+      }, WEB_SERVICE_BROWSER_RETRY_FEEDBACK_MS);
       return;
     }
     requestedURL = targetURL;

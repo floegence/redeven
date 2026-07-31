@@ -556,7 +556,8 @@
     "unavailableChecksTitle": "Avant de réessayer",
     "unavailableServiceCheck": "Vérifiez que le service est en cours d’exécution.",
     "unavailablePortCheck": "Vérifiez que le service écoute sur ce port.",
-    "retry": "Réessayer"
+    "retry": "Réessayer",
+    "retrying": "Nouvelle tentative..."
   },
   "language": {
     "systemDefault": "Valeur système",
