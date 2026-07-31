@@ -142,10 +142,16 @@ describe('Flower Desktop model source E2E', () => {
       if (url === '/_redeven_proxy/api/ai/threads?limit=200' && init?.method === 'GET') {
         return jsonResponse({ threads: [] });
       }
-      if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/turns$/u.test(url) && init?.method === 'POST') {
-        const body = JSON.parse(String(init.body ?? '{}')) as { thread_id?: string; input?: { turn_id?: string } };
+      if (url === '/_redeven_proxy/api/ai/turns' && init?.method === 'POST') {
+        const body = JSON.parse(String(init.body ?? '{}')) as { create?: { client_request_id?: string } };
         turnBodies.push(body);
-        return jsonResponse({ turn_id: body.input?.turn_id, run_id: 'run-desktop-e2e', kind: 'start' });
+        return jsonResponse({
+          client_request_id: body.create?.client_request_id,
+          thread_id: `th_${'3'.repeat(24)}`,
+          turn_id: `turn_${'4'.repeat(24)}`,
+          run_id: `run_${'5'.repeat(24)}`,
+          kind: 'start',
+        });
       }
       const bootstrapMatch = /^\/_redeven_proxy\/api\/ai\/threads\/([^/]+)\/live\/bootstrap$/u.exec(url);
       if (bootstrapMatch && init?.method === 'GET') {
@@ -221,12 +227,12 @@ describe('Flower Desktop model source E2E', () => {
       }),
     }));
     expect(turnBodies[0]).toEqual(expect.objectContaining({
-      thread_id: expect.stringMatching(/^th_[A-Za-z0-9_-]{24}$/u),
       model: deepSeekModelID,
       options: expect.objectContaining({
         reasoning_selection: { level: 'high' },
       }),
     }));
-    expect(subscribeThread).toHaveBeenCalledWith({ threadId: (turnBodies[0] as { thread_id: string }).thread_id });
+    expect(turnBodies[0]).not.toHaveProperty('thread_id');
+    expect(subscribeThread).toHaveBeenCalledWith({ threadId: `th_${'3'.repeat(24)}` });
   });
 });
