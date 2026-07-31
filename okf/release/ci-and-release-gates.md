@@ -24,6 +24,14 @@ checks only the staged diff, README localization contract, and staged
 open-source hygiene. It does not run full asset, Desktop, Docker, or repository
 suites.
 
+Ordinary push and pull-request Actions run one bounded source-only job. CodeQL
+is a separate asynchronous discovery lane: it runs on a daily schedule or
+manual dispatch, never from push or pull request. Before a scheduled analysis,
+the plan job compares the current `main` SHA with the most recent successful
+scheduled CodeQL run. An unchanged SHA skips the language matrix; an API lookup
+failure fails safe by scanning. This preserves daily detection for changed code
+without making hosted analysis part of the normal development gate.
+
 The main pre-push hook owns final integration. It requires the checked-out local
 main tip to be the pushed tip, verifies fast-forward ancestry against the
 remote handshake, rejects merge commits in the unpublished range, and invokes
@@ -239,6 +247,7 @@ not become a fallback, shim, or local artifact path.
 - `redeven:scripts/collect_release_artifacts.mjs:1` - Enforces the exact downstream release artifact inventory.
 - `redeven:scripts/install.sh:1` - Verifies exact release identity and atomically activates the complete versioned runtime suite.
 - `redeven:.github/workflows/release.yml:1` - Makes least-privilege four-target runtime and installer proof mandatory.
+- `redeven:.github/workflows/codeql.yml:1` - Runs daily changed-main security analysis outside ordinary push and pull-request CI.
 - `redeven:internal/envapp/ui_src/scripts/checkPackagedRenderer.mjs:1` - Verifies the production Plugin entry and built renderer.
 - `redeven:scripts/check_readme_localizations.mjs:1` - Enforces public README localization structure, terminology, literals, and synchronization hashes.
 - `redeven:scripts/okf/check_source_integrity.sh:1` - Validates the maintained OKF corpus.

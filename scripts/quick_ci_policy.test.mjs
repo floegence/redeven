@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const workflow = readFileSync(new URL("../.github/workflows/ci-check.yml", import.meta.url), "utf8");
+const codeqlWorkflow = readFileSync(new URL("../.github/workflows/codeql.yml", import.meta.url), "utf8");
 const releaseWorkflow = readFileSync(new URL("../.github/workflows/release.yml", import.meta.url), "utf8");
 const quickGate = readFileSync(new URL("./check_quick_ci.sh", import.meta.url), "utf8");
 const finalGate = readFileSync(new URL("./check_final_integration.sh", import.meta.url), "utf8");
@@ -76,6 +77,23 @@ test("ordinary GitHub CI is one bounded source-only job", () => {
   ]) {
     assert.doesNotMatch(workflow, new RegExp(forbidden, "i"));
   }
+});
+
+test("CodeQL scans changed main daily without joining push or pull request CI", () => {
+  assert.match(codeqlWorkflow, /^name: CodeQL$/m);
+  assert.match(codeqlWorkflow, /^  workflow_dispatch: \{\}$/m);
+  assert.match(codeqlWorkflow, /^  schedule:$/m);
+  assert.match(codeqlWorkflow, /^    - cron: "17 3 \* \* \*"$/m);
+  assert.doesNotMatch(codeqlWorkflow, /^  (?:push|pull_request):/m);
+  assert.match(codeqlWorkflow, /event=schedule&status=success&per_page=1/);
+  assert.match(codeqlWorkflow, /previous_sha.*HEAD_SHA/s);
+  assert.match(codeqlWorkflow, /should_scan=false/);
+  assert.match(codeqlWorkflow, /Could not inspect previous CodeQL runs; scanning fail-safe/);
+  assert.match(codeqlWorkflow, /if: needs\.plan\.outputs\.should_scan == 'true'/);
+  assert.deepEqual(
+    [...codeqlWorkflow.matchAll(/^          - language: (.+)$/gm)].map((match) => match[1]),
+    ["actions", "go", "javascript-typescript", "python"],
+  );
 });
 
 test("quick gate checks the committed tree instead of trusting a clean checkout", () => {
