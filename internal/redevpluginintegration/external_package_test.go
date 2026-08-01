@@ -1,12 +1,10 @@
 package redevpluginintegration
 
 import (
-	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
@@ -18,10 +16,8 @@ import (
 
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/sessionhop"
-	redevpluginartifacts "github.com/floegence/redeven/spec/redevplugin"
 	"github.com/floegence/redevplugin/pkg/externalsource"
 	"github.com/floegence/redevplugin/pkg/host"
-	"github.com/floegence/redevplugin/pkg/pluginpkg"
 	"github.com/floegence/redevplugin/pkg/registry"
 )
 
@@ -167,10 +163,7 @@ func TestExternalPackageUploadInspectCommitAndQueryThroughHTTP(t *testing.T) {
 func TestContainersCatalogPackageInstallsThroughExternalUploadAtCurrentTime(t *testing.T) {
 	integration, _, _, access := newExternalPackageTestIntegrationWithClock(t, time.Now)
 	t.Cleanup(func() { _ = integration.Close() })
-	packageBytes, err := redevpluginartifacts.CatalogContainersPluginPackage()
-	if err != nil {
-		t.Fatal(err)
-	}
+	packageBytes := unsignedExternalPackageFixture(t)
 
 	uploadRequest := trustedExternalPackageRequest(t, http.MethodPost,
 		"/_redevplugin/api/plugins/external-packages/upload/inspect", bytes.NewReader(packageBytes))
@@ -239,10 +232,7 @@ func TestContainersCatalogPackageInstallsThroughExternalUploadAtCurrentTime(t *t
 
 func TestContainersCatalogPackageInstallsThroughExternalURLAtCurrentTime(t *testing.T) {
 	packageURL := catalogContainersPackageURL(t)
-	packageBytes, err := redevpluginartifacts.CatalogContainersPluginPackage()
-	if err != nil {
-		t.Fatal(err)
-	}
+	packageBytes := unsignedExternalPackageFixture(t)
 	integration, _, _, access := newExternalPackageTestIntegrationWithClockAndOptions(t, time.Now, func(options *Options) {
 		options.newExternalFetcher = func(stage *externalsource.StageStore) (host.ExternalPackageFetcher, error) {
 			return staticExternalPackageFetcher{stage: stage, packageURL: packageURL, packageData: packageBytes}, nil
@@ -279,7 +269,7 @@ func TestContainersCatalogPackageInstallsThroughExternalURLAtCurrentTime(t *test
 	}
 	inspection := inspectionEnvelope.Data
 	if !inspectionEnvelope.OK || inspection.SourceProvenance.Kind != string(registry.PackageSourcePackageURL) ||
-		inspection.SourceProvenance.SourceOrigin != "https://raw.githubusercontent.com" ||
+		inspection.SourceProvenance.SourceOrigin != "https://github.com" ||
 		inspection.SignatureAssessment.State != string(registry.SignatureAbsent) ||
 		inspection.ExecutionApproval.State != string(registry.ExecutionApprovalPending) ||
 		inspection.UpdateEligibility.State != string(registry.UpdateManualOnly) {
@@ -539,8 +529,8 @@ func (a *externalPackageTestAccess) set(permissions sessionPermissions) {
 }
 
 func newExternalPackageTestIntegration(t *testing.T) (*Integration, string, []byte, *externalPackageTestAccess) {
-	integration, stateDir, signedPackage, access := newExternalPackageTestIntegrationWithClock(t, officialReleaseFixtureTime)
-	return integration, stateDir, packageWithoutSignature(t, signedPackage), access
+	integration, stateDir, _, access := newExternalPackageTestIntegrationWithClock(t, officialReleaseFixtureTime)
+	return integration, stateDir, unsignedExternalPackageFixture(t), access
 }
 
 func newExternalPackageTestIntegrationWithClock(t *testing.T, now func() time.Time) (*Integration, string, []byte, *externalPackageTestAccess) {
@@ -580,34 +570,26 @@ func newExternalPackageTestIntegrationWithClockAndOptions(
 	if err != nil {
 		t.Fatal(err)
 	}
-	release, err := redevpluginartifacts.OfficialContainersPluginRelease()
+	signedPackage, err := os.ReadFile(filepath.Join("testdata", "containers-4.0.1.signed.redevplugin"))
 	if err != nil {
 		_ = integration.Close()
 		t.Fatal(err)
 	}
-	return integration, stateDir, release.PackageBytes, access
+	return integration, stateDir, signedPackage, access
 }
 
 func catalogContainersPackageURL(t *testing.T) string {
 	t.Helper()
-	path := filepath.Join("..", "envapp", "ui_src", "src", "ui", "plugins", "officialContainersDistribution.json")
-	raw, err := os.ReadFile(path)
+	return "https://github.com/floegence/redeven-official-plugins/releases/download/v4.0.1/containers-4.0.1.redevplugin"
+}
+
+func unsignedExternalPackageFixture(t *testing.T) []byte {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join("testdata", "containers-4.0.1.unsigned.redevplugin"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	var distribution struct {
-		Repository   string   `json:"repository"`
-		Commit       string   `json:"commit"`
-		ArtifactPath []string `json:"artifact_path"`
-	}
-	if err := json.Unmarshal(raw, &distribution); err != nil {
-		t.Fatal(err)
-	}
-	if distribution.Repository == "" || distribution.Commit == "" || len(distribution.ArtifactPath) == 0 {
-		t.Fatalf("invalid Containers distribution manifest: %#v", distribution)
-	}
-	return "https://raw.githubusercontent.com/" + distribution.Repository + "/" +
-		distribution.Commit + "/" + strings.Join(distribution.ArtifactPath, "/")
+	return raw
 }
 
 func postExternalPackageJSON(t *testing.T, integration *Integration, path string, body any) *httptest.ResponseRecorder {
@@ -640,42 +622,6 @@ func countExternalPackageStageArtifacts(t *testing.T, stateDir string) int {
 		t.Fatal(err)
 	}
 	return count
-}
-
-func packageWithoutSignature(t *testing.T, raw []byte) []byte {
-	t.Helper()
-	reader, err := zip.NewReader(bytes.NewReader(raw), int64(len(raw)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var buffer bytes.Buffer
-	writer := zip.NewWriter(&buffer)
-	for _, entry := range reader.File {
-		if entry.Name == pluginpkg.PackageSignaturePath {
-			continue
-		}
-		source, err := entry.Open()
-		if err != nil {
-			t.Fatal(err)
-		}
-		header := entry.FileHeader
-		destination, err := writer.CreateHeader(&header)
-		if err != nil {
-			_ = source.Close()
-			t.Fatal(err)
-		}
-		if _, err := io.Copy(destination, source); err != nil {
-			_ = source.Close()
-			t.Fatal(err)
-		}
-		if err := source.Close(); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := writer.Close(); err != nil {
-		t.Fatal(err)
-	}
-	return buffer.Bytes()
 }
 
 func trustedExternalPackageRequest(t *testing.T, method, path string, body *bytes.Reader) *http.Request {

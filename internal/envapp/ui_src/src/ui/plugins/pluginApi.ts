@@ -6,7 +6,7 @@ import {
 } from '@floegence/redevplugin-ui';
 import type { PluginLocalImportClient } from '@floegence/redevplugin-ui/local-import';
 
-import { officialPluginCatalog } from './officialPluginCatalog';
+import { applyOfficialDevelopmentDelivery, officialPluginCatalog } from './officialPluginCatalog';
 import { fetchLocalApiJSON, prepareLocalApiRequestInit } from '../services/localApi';
 import { projectPluginInventory } from './pluginInventoryProjection';
 import type {
@@ -18,6 +18,7 @@ import type {
   PluginManagementCommand,
   ReDevPluginRecord,
   PluginDevelopmentDelivery,
+  PluginMarketSnapshot,
 } from './pluginTypes';
 
 const EXTERNAL_COMMIT_RECONCILIATION_TIMEOUT_MS = 60_000;
@@ -29,10 +30,11 @@ export class ExternalPackageInspectionTerminalError extends Error {}
 export function createPluginLifecycleAPI(
   client: PluginPlatformClient,
   localImport?: PluginLocalImportClient,
-  catalogSeed: readonly OfficialPluginCatalogItem[] = officialPluginCatalog(),
+  catalogSeed?: readonly OfficialPluginCatalogItem[],
   loadDevelopment: (signal?: AbortSignal) => Promise<PluginDevelopmentDelivery | undefined> = loadDevelopmentDelivery,
+  loadMarket: (signal?: AbortSignal) => Promise<PluginMarketSnapshot> = loadPluginMarketSnapshot,
 ) {
-  let catalog: readonly OfficialPluginCatalogItem[] = catalogSeed;
+  let catalog: readonly OfficialPluginCatalogItem[] = catalogSeed ?? [];
   let developmentDelivery: PluginDevelopmentDelivery | undefined;
   let developmentUpdateTargets = new Map<string, number>();
   const officialByPluginID = () => new Map(catalog.map((item) => [item.pluginID, item]));
@@ -45,8 +47,20 @@ export function createPluginLifecycleAPI(
 
   const loadInventoryProjection = async (options: PluginRequestOptions = {}): Promise<PluginInventoryProjection> => {
     const installedPluginsPromise = listInstalledPlugins(options);
-    developmentDelivery = await loadDevelopment(options.signal);
-    catalog = developmentDelivery ? officialPluginCatalog(developmentDelivery) : catalogSeed;
+    const developmentPromise = loadDevelopment(options.signal);
+    let marketUnavailable = false;
+    if (catalogSeed === undefined) {
+      try {
+        catalog = officialPluginCatalog(await loadMarket(options.signal));
+      } catch {
+        catalog = [];
+        marketUnavailable = true;
+      }
+    } else {
+      catalog = catalogSeed;
+    }
+    developmentDelivery = await developmentPromise;
+    if (developmentDelivery) catalog = applyOfficialDevelopmentDelivery(catalog, developmentDelivery);
     const installedPlugins = await installedPluginsPromise;
     const [permissions, securityPolicies, permissionRequirementResults] = await Promise.all([
       client.listPermissions({ active_only: true }, options),
@@ -75,7 +89,7 @@ export function createPluginLifecycleAPI(
         ? [[item.pluginInstanceID, item.managementRevision] as const]
         : []
     )));
-    return projection;
+    return { ...projection, marketUnavailable };
   };
 
   const inspectExternalPackage = async (
@@ -258,6 +272,13 @@ async function loadDevelopmentDelivery(signal?: AbortSignal): Promise<PluginDeve
     if (error instanceof Error && 'status' in error && (error as { status?: number }).status === 404) return undefined;
     throw error;
   }
+}
+
+async function loadPluginMarketSnapshot(signal?: AbortSignal): Promise<PluginMarketSnapshot> {
+  return fetchLocalApiJSON<PluginMarketSnapshot>(
+    '/_redeven_proxy/api/plugins/market/catalog',
+    { method: 'GET', signal },
+  );
 }
 
 async function sha256Hex(blob: Blob): Promise<string> {

@@ -1,14 +1,14 @@
 ---
 type: Architecture Contract
 title: Plugin platform integration
-description: Redeven mounts ReDevPlugin v0.6.20 and adds authenticated host modules, copied-root recovery, external-source policy, product placement, and business adapters.
+description: Redeven mounts ReDevPlugin v0.6.23 and adds authenticated host modules, copied-root recovery, market-backed official releases, external-source policy, product placement, and business adapters.
 tags: [architecture, plugins, local-ui, redevplugin]
 timestamp: 2026-07-25T00:00:00Z
 quality_exception: Cross-domain host integration contract spanning identity, security, runtime, storage, routes, surfaces, and business adapters.
 ---
 # Summary
 
-Redeven integrates ReDevPlugin `v0.6.20` through one Go Host, one canonical HTTP
+Redeven integrates ReDevPlugin `v0.6.23` through one Go Host, one canonical HTTP
 namespace, one Env App `PluginPlatformClient`, one shared surface scope, and the
 released ProcessManager over a verified Redeven-built Linux runtime. Redeven
 adds authenticated session mapping, public-source admission policy, product
@@ -114,21 +114,18 @@ SHA-256 check.
 
 This development path does not add a release source or alter production trust.
 Normal Runtime and production Desktop do not accept the dev-only CLI flag,
-developer mode remains disabled without a verified descriptor, the official
-catalog stays pinned to signed Containers `2.0.0`, and no temporary private key
-or generated delivery directory is committed.
+developer mode remains disabled without a verified descriptor, and no temporary
+private key or generated delivery directory is committed.
 
-The signed official Containers release module remains available through generated
-`installReleaseRef` and `updateReleaseRef` requests, but the current product UI
-does not use that path. Its publisher, plugin, instance, version, hashes, signing
-evidence, source policy, host requirement, revocation evidence, and capability
-pin must all match; expired evidence fails closed without an install record. The
-normal catalog action instead opens external-package review with an HTTPS URL
-pinned to the immutable commit containing an unsigned catalog package. That
-package is deterministically derived from the same release content by removing
-only the release-context signature, and its package, manifest, and entries hashes
-must still equal the catalog release. No new official signing or authorization
-flow is implied.
+Production obtains the official Containers `4.0.1` release from the frozen
+latest-only market snapshot. The snapshot identifies the immutable GitHub
+Release and complete signed transport; it does not carry package bytes or grant
+trust. Redeven invokes generated `installReleaseRef` and `updateReleaseRef`
+requests with the released remote transport. Publisher, plugin, version, hashes,
+root delegation, signing ledger, source policy, revocation evidence, host
+requirement, and capability pin must all match before ReDevPlugin changes the
+registry. Expired or incomplete evidence fails closed without falling back to
+external-package admission.
 
 Administrators may also inspect packages from:
 
@@ -160,7 +157,7 @@ user pin.
 ## Runtime and Containers
 
 The runtime module binds the canonical sibling executable, target, ReDevPlugin
-`0.6.20`, released Rust IPC and WASM ABI, exact product-build descriptor, lease
+`0.6.23`, released Rust IPC and WASM ABI, exact product-build descriptor, lease
 replay storage, and released limits. Linux runtime bytes are built with Rust
 1.88.0 from the attested package set and travel with SBOM, provenance, notices,
 and signature evidence. Missing, non-canonical, wrong-target, unsigned, or
@@ -199,9 +196,7 @@ separate records. Navigation, tile selection, and detail state use exact
 installed current-version instance whose publisher, plugin, version, package,
 manifest, and entries hashes exactly match the catalog receives catalog metadata,
 including the Containers permission presentation, while its trust badge remains
-the actual signature assessment. This lets the generated instance created by the
-unsigned catalog transaction replace the Discover card without being mislabeled
-as signed. A historical
+the actual signature assessment. A historical
 version without external provenance must carry an explicitly catalog-trusted
 official signing key and exact registry-to-Host-verified hash agreement.
 External source provenance prevents an identity collision from borrowing
@@ -236,7 +231,7 @@ disposal alone is not revocation evidence.
 # Boundaries
 
 Canonical ownership is defined by [ReDevPlugin host integration boundary](redevplugin-boundary.md).
-This concept owns only Redeven's concrete `v0.6.20` assembly.
+This concept owns only Redeven's concrete `v0.6.23` assembly.
 
 Manifest surfaces remain `view|command|background` with semantic roles. Activity,
 Workbench, window, widget, inventory key, navigation, settings, and product layout
@@ -249,7 +244,7 @@ never become manifest fields.
 - `redeven:cmd/redeven/plugin_state_recovery.go:1` - Requires the Local Environment lock and explicit retained-archive confirmation.
 - `redeven:desktop/src/main/pluginStateRecovery.ts:1` - Validates the bundled recovery command result and preserves stale-plan outcomes.
 - `redeven:internal/redevpluginintegration/external_package_test.go:24` - Exercises upload inspect, confirmed commit, query, disabled state, and staged-artifact cleanup.
-- `redeven:spec/redevplugin/artifacts.go:1` - Binds the unsigned catalog package to the exact verified Containers release content.
+- `redeven:spec/redevplugin/artifacts.go:1` - Pins only official public release anchors and the signed v4 capability bundle.
 - `redeven:internal/redevpluginintegration/session_adapter.go:340` - Maps read and admin external-package actions to explicit product permissions.
 - `redeven:internal/redevpluginintegration/runtime_module.go:1` - Configures the released runtime manager and fixed version.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts:1` - Uses generated lifecycle, external-package, and permission-requirement APIs.

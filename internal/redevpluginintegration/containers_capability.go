@@ -20,9 +20,10 @@ import (
 
 const (
 	containersCapabilityID        = "redeven.capability.container_resources"
-	containersCapabilityVersion   = "1.0.0"
+	containersCapabilityV2Version = "1.0.0"
 	containersCapabilityV3Version = "2.0.0"
 	containersCapabilityV4Version = "3.0.0"
+	containersCapabilityVersion   = containersCapabilityV4Version
 	containerTaskCanceledReason   = "container operation canceled"
 	containerTerminalFailure      = "container capability terminal state failed"
 	containerTerminalTimeout      = 2 * time.Second
@@ -82,10 +83,8 @@ func newContainersCapabilityRegistry(adapter *containers.Adapter, diagnostics ob
 		return nil, nil, fmt.Errorf("register containers capability: %w", err)
 	}
 	if len(development) == 1 && development[0] != nil {
-		if err := registry.Register(capability.Registration{
-			Contract: development[0].contract, TargetProjector: bridge, Adapter: bridge,
-		}); err != nil {
-			return nil, nil, fmt.Errorf("register development containers capability: %w", err)
+		if development[0].contract.Pin != bundle.Pin {
+			return nil, nil, errors.New("development containers capability does not match the signed production contract")
 		}
 	}
 	return registry, bridge, nil
@@ -115,7 +114,7 @@ func (a *containersCapabilityAdapter) Close() error {
 
 func (a *containersCapabilityAdapter) ProjectTarget(_ context.Context, req capability.TargetResolutionRequest) (capability.TargetDescriptor, error) {
 	if a == nil || a.containers == nil || req.CapabilityID != containersCapabilityID ||
-		(req.CapabilityVersion != containersCapabilityVersion && req.CapabilityVersion != containersCapabilityV3Version && req.CapabilityVersion != containersCapabilityV4Version) {
+		(req.CapabilityVersion != containersCapabilityV2Version && req.CapabilityVersion != containersCapabilityV3Version && req.CapabilityVersion != containersCapabilityV4Version) {
 		return capability.TargetDescriptor{}, errors.New("containers capability target is invalid")
 	}
 	kind, err := containerTargetKind(req.TargetMethod)

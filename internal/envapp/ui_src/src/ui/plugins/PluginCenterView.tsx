@@ -122,7 +122,11 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     lifecycle: lifecycleFilter(),
   }, i18n, i18n.locale()));
   const loading = createMemo(() => props.loading);
-  const errorMessage = createMemo(() => messageFromUnknown(props.error ?? commandError()));
+  const errorMessage = createMemo(() => {
+    const error = props.error ?? commandError();
+    if (error) return messageFromUnknown(error);
+    return projection().marketUnavailable ? i18n.t('uiCopy.plugin.marketUnavailable') : undefined;
+  });
   const canManage = createMemo(() => props.canManagePlugins);
   const canOpenSurfaces = createMemo(() => props.canOpenPluginSurfaces);
   const tabSelection = createUIFirstSelection<PluginCenterTab>({
@@ -235,6 +239,13 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     setUpdateSuccess(false);
     setUpdateReviewItem(item);
     setUpdateReviewOpen(true);
+  };
+  const installItem = (item: PluginInventoryItem) => {
+    if (item.officialCatalog) {
+      void runCommand({ type: 'install', pluginID: item.pluginID, source: 'official_catalog' });
+      return;
+    }
+    openExternalDialog();
   };
   const currentUpdateReviewItem = createMemo(() => {
     const reviewed = updateReviewItem();
@@ -405,7 +416,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
                   pending={loading() || commandPending()}
                   entranceDelayMs={Math.min(index() * 18, 126)}
                   onOpenDetails={(target) => openDetails(item.inventoryKey, target)}
-                  onInstall={() => openExternalDialog(undefined, item.officialCatalog?.distribution.installSource)}
+                  onInstall={() => installItem(item)}
                   onUpdate={() => requestUpdate(item)}
                   onOpenActivity={() => openItemSurface(item, 'activity')}
                   onOpenWorkbench={() => openItemSurface(item, 'workbench')}
@@ -446,7 +457,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
               uninstallChoiceFor={uninstallChoiceFor()}
               onCommand={(command) => void runCommand(command)}
               onAskUninstall={setUninstallChoiceFor}
-              onExternalInstall={(selected) => openExternalDialog(undefined, selected.officialCatalog?.distribution.installSource)}
+              onExternalInstall={installItem}
               onExternalUpdate={requestUpdate}
             />
           )}

@@ -130,15 +130,13 @@ and locally signed append-only trusted time are durable. Unsigned input,
 browser-supplied trust state, arbitrary package bytes, rollback, unknown
 publisher, expired evidence, and invented fetch provenance are denied.
 
-The current Plugin Center catalog action does not fall back around that boundary.
-It opens the external-package transaction with a package URL pinned to the
-immutable source commit. The referenced catalog artifact contains no package
-signature and is admitted as `signature_absent`; generation and startup tests
-require its package, manifest, and entries hashes to equal the verified official
-release content. Explicit user confirmation produces `user_approved`,
-`manual_only`, Disabled, and zero grants. The signed release artifact is not
-rewritten, and a release-context signature is never reinterpreted as a generic
-external-package signature.
+Plugin Center installs an official market result only through this release-ref
+boundary. The frozen market snapshot identifies immutable GitHub assets and
+their complete transport, but cannot assert trust or replace Redeven's pinned
+official root and signing-ledger keys. ReDevPlugin downloads and verifies the
+exact signed transport before changing registry state. Invalid, incomplete,
+expired, rewritten, or anchor-mismatched evidence fails closed without falling
+back to the external-package transaction.
 
 The external-package path is separate from official release admission. A
 validated public HTTPS package URL or GitHub Release is retrieved through the

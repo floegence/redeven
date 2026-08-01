@@ -82,19 +82,19 @@ Go tests that import their embed packages.
 
 ## ReDevPlugin dependency gate
 
-Redeven consumes only the coordinated ReDevPlugin `v0.6.20` package set. The
+Redeven consumes only the coordinated ReDevPlugin `v0.6.23` package set. The
 boundary guard rejects local sibling paths, Go workspaces/replacements, npm
 links, copied contracts or runtimes, Rust path overrides, and a second
 platform-core package tree. Local-wiring scans cover maintained source, scripts,
 and build configuration while excluding generated `dist` and `node_modules`
 trees; a scanner error fails closed instead of being treated as no match.
 
-The Containers catalog distribution manifest separately records repository,
-immutable commit, artifact path segments, and physical SHA-256. Production UI,
-built-renderer smoke, and the URL gate consume that one manifest. The gate
-requires the commit to be an ancestor of the product tip when locally available,
-or downloads the immutable URL in a shallow CI checkout, then compares exact
-bytes with the committed artifact.
+The product does not commit a Containers package or catalog distribution
+manifest. Production freezes a validated latest-only market snapshot, then
+ReDevPlugin retrieves and verifies the exact immutable GitHub Release transport.
+Focused gates cover snapshot schema/generation, last-known-good fallback,
+official anchor pins, release identity, complete locator mapping, and content
+digests without turning market metadata into trust.
 
 The upstream GitHub Release contains exactly one
 `platform-package-publication-v1.json` asset. The verifier binds it to the tag,
@@ -167,9 +167,9 @@ The focused plugin gate covers:
   commit admission, strict source provenance, signature assessment, disabled
   zero-grant commit state, bounded query-only reconciliation, and no mutation
   replay after an unknown or in-progress outcome;
-- the exact manifest-derived Containers package URL through the Redeven HTTP
-  integration, including staged package bytes, unsigned review, digest-bound
-  commit, disabled `manual_only` result, user approval, and zero active grants;
+- the market-selected Containers release through Redeven HTTP integration,
+  including frozen snapshot identity, complete remote assets, signed release-ref
+  install, and zero implicit grants;
 - runtime path/target/hash, ProcessManager health, persistent lease replay, and
   Host storage/network/stream services;
 - the signed Containers capability, operation/cancellation/stream behavior, and
@@ -185,15 +185,13 @@ The focused plugin gate covers:
 - static absence of legacy proxy/bootstrap/base64 package and copied platform
   paths.
 
-The built renderer smoke requires the Plugins Activity entry, opens the panel
-and Plugin Center, clicks the Containers install action, reviews the
-manifest-derived immutable URL, requires explicit digest confirmation, commits
-the unsigned package, and observes completion without calling the release-ref
-mutation. The refreshed installed view must show the package as unsigned and
-disabled with zero active grants. The smoke validates the exact inspect and
-commit request bodies and request sequence, accepts only canonical ReDevPlugin
-envelopes, and also verifies content-hashed JS/CSS/WASM, non-blank root output,
-and zero console, page, request, or HTTP failures.
+The built renderer smoke requires the Plugins Activity entry, opens Plugin
+Center, consumes the frozen market projection, and submits the exact signed
+release-ref install command without opening an external package URL flow. It
+still verifies zero implicit grants, canonical ReDevPlugin envelopes,
+content-hashed JS/CSS/WASM, non-blank root output, and zero console, page,
+request, or HTTP failures. Offline projection keeps installed plugins visible
+and reports one retryable catalog-unavailable state.
 
 Browser-facing reads use the released POST query contract and retain exact
 Origin, CSRF, action, and query-effect authorization. Session disconnect uses
@@ -201,7 +199,7 @@ the released durable four-hash fence and drain; Redeven awaits exact teardown
 acknowledgement before deleting identity and reconciles retained fences on
 restart.
 
-Workbench plugin interaction is releasable only through the `v0.6.20`
+Workbench plugin interaction is releasable only through the `v0.6.23`
 source/port-bound interaction ownership and exact-surface close contracts. The
 gate rejects overlays, pointer-event switching, copied interaction DTOs, a
 second bridge, session-wide close fallback, placement persistence before close,
@@ -235,7 +233,7 @@ not become a fallback, shim, or local artifact path.
 - `redeven:desktop/src/build/desktopPreloadRuntime.test.ts:1` - Runs real Electron preload bridges in isolated working and user-data directories.
 - `redeven:scripts/check_plugin_integration.sh:1` - Defines focused ReDevPlugin integration coverage.
 - `redeven:scripts/check_redevplugin_dependency_boundary.sh:1` - Rejects maintained local source wiring and fails closed on scan errors.
-- `redeven:scripts/check_catalog_plugin_package_url.mjs:1` - Binds the catalog distribution manifest to immutable package bytes.
+- `redeven:internal/pluginmarket/service_test.go:1` - Proves strict market validation, complete remote transport, and last-known-good fallback.
 - `redeven:scripts/check_redevplugin_release_artifacts.sh:1` - Verifies the exact-one upstream publication and registry readbacks.
 - `redeven:scripts/check_redevplugin_consumption_gate.sh:1` - Verifies the product runtime marker, evidence, target, and signature.
 - `redeven:scripts/stage_redevplugin_release_artifacts.sh:1` - Builds and signs the Linux runtime from the exact published crate graph.

@@ -169,6 +169,19 @@ type Snapshot struct {
 	Plugins       []CatalogPlugin `json:"plugins"`
 }
 
+func (snapshot Snapshot) Clone() Snapshot {
+	return cloneSnapshot(snapshot)
+}
+
+func (snapshot Snapshot) LatestRelease(pluginID, channel string) (LatestRelease, error) {
+	for _, plugin := range snapshot.Plugins {
+		if plugin.PluginID == pluginID && plugin.Latest.Channel == channel && plugin.Release != nil {
+			return *cloneLatestRelease(plugin.Release), nil
+		}
+	}
+	return LatestRelease{}, ErrReleaseMissing
+}
+
 func (release LatestRelease) RemoteProjection() (host.PluginReleaseRef, []remoterelease.Asset, error) {
 	if err := validateLatestRelease(release); err != nil {
 		return host.PluginReleaseRef{}, nil, err

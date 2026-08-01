@@ -3,7 +3,7 @@ import type { PluginLocalImportClient } from '@floegence/redevplugin-ui/local-im
 import { describe, expect, it, vi } from 'vitest';
 
 import { createPluginLifecycleAPI } from './pluginApi';
-import { OFFICIAL_PLUGIN_CATALOG_SEED } from './officialPluginCatalog';
+import { OFFICIAL_PLUGIN_CATALOG_SEED, OFFICIAL_PLUGIN_MARKET_SNAPSHOT } from './officialPluginCatalog.test-fixture';
 import { OFFICIAL_CONTAINERS_RELEASE_REF } from './officialContainersRelease.generated';
 import type { ReDevPluginRecord } from './pluginTypes';
 
@@ -58,7 +58,7 @@ const developmentDelivery = {
   release_notes_id: 'containers-4.0.0',
   release_notes_summary_sha256: '0bdb5e7ab960173b2855cf31fef9f3d635f90325b90215fa10e6bb639459504e',
   source_repository: 'https://github.com/floegence/redeven-official-plugins.git',
-  source_commit: '37d4dfff0cfa88c7a00ee0b89f55bfbcdde4b251',
+  source_commit: 'b9eb04f6cc08eab35e0d0a8a5ac671ec5077aaed',
   development_only: true as const,
 };
 const generatedContainersInstanceID = 'plugin_dea00daa09166c33302f92c9b090f62a';
@@ -103,6 +103,48 @@ const generatedContainersRecord: ReDevPluginRecord = {
 };
 
 describe('v0.6.7 plugin lifecycle client integration', () => {
+  it('loads the official catalog from the frozen same-origin market snapshot', async () => {
+    const { mocks } = createClientHarness();
+    const loadMarket = vi.fn(async () => OFFICIAL_PLUGIN_MARKET_SNAPSHOT);
+    const lifecycle = createPluginLifecycleAPI(
+      mocks as unknown as PluginPlatformClient,
+      undefined,
+      undefined,
+      async () => undefined,
+      loadMarket,
+    );
+
+    await expect(lifecycle.loadInventoryProjection()).resolves.toMatchObject({
+      marketUnavailable: false,
+      items: [expect.objectContaining({
+        pluginID: 'com.redeven.official.containers',
+        lifecycleState: 'not_installed',
+        officialCatalog: expect.objectContaining({ latestVersion: '4.0.1' }),
+      })],
+    });
+    expect(loadMarket).toHaveBeenCalledOnce();
+  });
+
+  it('keeps installed plugins visible when the market snapshot is unavailable', async () => {
+    const { mocks } = createClientHarness();
+    mocks.catalog.mockResolvedValue({ plugins: [generatedContainersRecord] });
+    const lifecycle = createPluginLifecycleAPI(
+      mocks as unknown as PluginPlatformClient,
+      undefined,
+      undefined,
+      async () => undefined,
+      async () => { throw new Error('market unavailable'); },
+    );
+
+    await expect(lifecycle.loadInventoryProjection()).resolves.toMatchObject({
+      marketUnavailable: true,
+      items: [expect.objectContaining({
+        pluginInstanceID: generatedContainersInstanceID,
+        pluginID: 'com.redeven.official.containers',
+      })],
+    });
+  });
+
   it('loads inventory exclusively through the platform catalog client', async () => {
     const { lifecycle, mocks } = createClientHarness();
 

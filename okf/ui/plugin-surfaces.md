@@ -87,9 +87,9 @@ commands carry that exact key. Plugin id is not unique, and instance id alone is
 not used to select catalog presentation. This keeps an official catalog entry
 and multiple external instances with identical manifest ids independent.
 
-Official Containers catalog presentation requires exact publisher, plugin,
-version, package, manifest, and entries identity. Current unsigned content keeps
-its unsigned/manual-update state. Historical content additionally requires the
+Official Containers catalog presentation comes from the frozen latest-only
+market snapshot and requires exact publisher, plugin, version, package,
+manifest, and entries identity. Historical content additionally requires the
 fixed catalog instance and Host-verified official signature. Official-looking
 ids never inherit catalog trust or update controls.
 
@@ -130,7 +130,7 @@ Product release notes and Host security evidence have separate authority.
 Official notes render only when their target version and package, manifest, and
 entries hashes match the release reference. A development-delivery v2 descriptor
 binds its notes ID and summary hash to the Host-projected delivery identity.
-ReDevPlugin 0.6.20 has no read-only local-package inspection, so a development
+ReDevPlugin 0.6.23 has no read-only local-package inspection, so a development
 review states only that Redeven verified the exact delivery and capability
 contract identity. It explicitly states that package signature and declaration-
 difference inspection are unavailable and never claims unchanged access. External
@@ -156,11 +156,12 @@ package URL, public GitHub repository Release with optional tag, or local
 inspection API; it never downloads remote bytes in the browser, parses the
 package, chooses trust state, or invents provenance.
 
-The Containers Discover action opens this same dialog with the unsigned catalog
-package URL prefilled. The URL is pinned to the immutable commit that contains the
-artifact; the dialog still shows the full inspection and requires explicit
-confirmation. It never calls the retained `installReleaseRef` path or silently
-retries through it when official trust evidence is expired.
+The Containers Discover action uses the exact signed release reference from the
+frozen market snapshot. Redeven passes the matching immutable GitHub Release
+transport to ReDevPlugin and never downloads package bytes in the browser. If
+the market is unavailable, installed plugins remain visible and usable while
+discovery and release installation show one retryable unavailable state. An
+invalid or expired official release never falls back to external-package review.
 
 Update source entry preserves only reusable public identity. GitHub may prefill
 its public repository, while package URLs and uploads require fresh input. Every

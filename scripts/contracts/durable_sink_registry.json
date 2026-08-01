@@ -1288,7 +1288,7 @@
     },
     {
       "path": "internal/codeapp/appserver/server.go",
-      "sha256": "1697b4be4921333e99314a45e2cefefb1af3add5397ce3bfd73c33860d13edbb",
+      "sha256": "7e3e0c7533415db59ea979acd6f87f9b60d01b6ba7dff1ec8b99d0e54ab67793",
       "sink_kinds": [
         "file",
         "json_file"
@@ -1934,6 +1934,27 @@
       "review_note": "Inspects product database schema metadata only; canonical Agent lifecycle data is excluded."
     },
     {
+      "path": "internal/pluginmarket/service.go",
+      "sha256": "2067e071175fe79a278f9515b32fa5ec688fa2ef2f7d6ad4f4ec35c924571389",
+      "sink_kinds": [
+        "file",
+        "json_file"
+      ],
+      "review_status": "reviewed",
+      "owner": "redeven plugin market cache",
+      "authority": "product_configuration",
+      "data_classes": [
+        "validated latest-only catalog snapshot"
+      ],
+      "codecs": [
+        "encoding/json.Marshal"
+      ],
+      "dtos": [
+        "snapshot"
+      ],
+      "review_note": "Caches only snapshots that passed the current schema and remote release transport validation; it contains no plugin package bytes, secrets, or canonical ReDevPlugin state."
+    },
+    {
       "path": "internal/portforward/registry/registry.go",
       "sha256": "9859f4012cc11f31d074dccc1fd4c27f1c091b41605312c3a731139795c1ea10",
       "sink_kinds": [
@@ -1971,7 +1992,7 @@
     },
     {
       "path": "internal/redevpluginintegration/integration.go",
-      "sha256": "232498d7d1787b815cc54d75fc7993ad1a1dfa362acca47cb27c3631375732ce",
+      "sha256": "d1f5e19de13691749b8bbbb0bbea58dd593585e47ac0957ef3a676ad982ef622",
       "sink_kinds": [
         "file"
       ],
@@ -1985,7 +2006,7 @@
     },
     {
       "path": "internal/redevpluginintegration/release_module.go",
-      "sha256": "f9589e841ea105850652625a9d5a9c56b09a40e5867f72c7b3fd67f3fc12bfdf",
+      "sha256": "e73decc2d0e87817bee629c0cdaa76d03e39c58f48f62a45c2e16673946a1e66",
       "sink_kinds": [
         "file"
       ],
@@ -2240,20 +2261,6 @@
     {
       "path": "scripts/redevplugin_candidate_client/main.go",
       "sha256": "75b5964b14908100a436451d0ee93fe6816eb0a879c242ff0af83404b79d7d66",
-      "sink_kinds": [
-        "file"
-      ],
-      "review_status": "reviewed",
-      "owner": "redeven",
-      "authority": "product_configuration",
-      "data_classes": [
-        "product-owned state"
-      ],
-      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
-    },
-    {
-      "path": "scripts/redevplugin_unsigned_package/main.go",
-      "sha256": "50b20a81e169a4e2e02463434f2374c9f8cfbcb9896422bf6637c94e09f5fa77",
       "sink_kinds": [
         "file"
       ],

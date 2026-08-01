@@ -181,6 +181,7 @@ export const enUS = defineDictionary({
   uiCopy: {
     plugin: {
       loadingOfficial: 'Loading plugins...',
+      marketUnavailable: 'The plugin catalog is unavailable. Installed plugins remain available; retry to check for new releases.',
       official: 'Official',
       verified: 'Verified',
       unsigned: 'Unsigned',

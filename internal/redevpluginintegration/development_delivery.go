@@ -24,7 +24,7 @@ const developmentDeliverySchemaVersion = "redeven.plugin_development_delivery.v2
 const officialContainersPluginInstanceID = "plugini_redeven_official_containers"
 const officialContainersReleaseNotesID = "containers-4.0.0"
 const officialContainersSourceRepository = "https://github.com/floegence/redeven-official-plugins.git"
-const officialContainersSourceCommit = "37d4dfff0cfa88c7a00ee0b89f55bfbcdde4b251"
+const officialContainersSourceCommit = "b9eb04f6cc08eab35e0d0a8a5ac671ec5077aaed"
 
 type developmentDeliveryDescriptor struct {
 	SchemaVersion           string `json:"schema_version"`

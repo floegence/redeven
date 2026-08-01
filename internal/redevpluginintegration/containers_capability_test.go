@@ -18,6 +18,8 @@ import (
 	"github.com/floegence/redevplugin/pkg/version"
 )
 
+const capabilityTestEndpointID containers.EndpointID = "endpoint_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
 func TestContainersCapabilityRegistryUsesVerifiedSignedArtifacts(t *testing.T) {
 	registry, bridge, err := newContainersCapabilityRegistry(mustContainersAdapter(t, &capabilityEngineClient{}), nil)
 	if err != nil {
@@ -65,8 +67,10 @@ func TestContainersCapabilitySyncResponsesMatchSignedContract(t *testing.T) {
 	}
 	adapter := newTestContainersCapabilityAdapter(client)
 	result, err := adapter.Invoke(context.Background(), capability.Invocation{
-		Execution: capability.ExecutionContext{ExecutionBinding: capability.ExecutionBinding{TargetMethod: string(containers.MethodList)}},
-		Arguments: map[string]any{"engine": "docker", "all": true},
+		Execution: capability.ExecutionContext{ExecutionBinding: capability.ExecutionBinding{
+			CapabilityVersion: containersCapabilityV4Version, TargetMethod: string(containers.MethodList),
+		}},
+		Arguments: map[string]any{"engine": "docker", "endpoint_id": capabilityTestEndpointID, "all": true},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -78,8 +82,10 @@ func TestContainersCapabilitySyncResponsesMatchSignedContract(t *testing.T) {
 	}
 
 	preflight, err := adapter.Invoke(context.Background(), capability.Invocation{
-		Execution: capability.ExecutionContext{ExecutionBinding: capability.ExecutionBinding{TargetMethod: string(containers.MethodStartPreflight)}},
-		Arguments: map[string]any{"engine": "docker", "container_id": "container_1"},
+		Execution: capability.ExecutionContext{ExecutionBinding: capability.ExecutionBinding{
+			CapabilityVersion: containersCapabilityV4Version, TargetMethod: string(containers.MethodStartPreflight),
+		}},
+		Arguments: map[string]any{"engine": "docker", "endpoint_id": capabilityTestEndpointID, "container_id": "container_1"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -205,10 +211,10 @@ func TestContainersCapabilityOperationUsesHostOwnedSink(t *testing.T) {
 	sink := newTestOperationSink("operation_1")
 	result, err := adapter.Invoke(context.Background(), capability.Invocation{
 		Execution: capability.ExecutionContext{
-			ExecutionBinding: capability.ExecutionBinding{TargetMethod: string(containers.MethodStart)},
+			ExecutionBinding: capability.ExecutionBinding{CapabilityVersion: containersCapabilityV4Version, TargetMethod: string(containers.MethodStart)},
 			Operation:        sink,
 		},
-		Arguments: map[string]any{"engine": "docker", "container_id": "container_1"},
+		Arguments: map[string]any{"engine": "docker", "endpoint_id": capabilityTestEndpointID, "container_id": "container_1"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -322,11 +328,11 @@ func TestContainersCapabilitySubscriptionAppendsDirectlyToHostStream(t *testing.
 	stream := newTestStreamSink("stream_logs")
 	result, err := adapter.Invoke(context.Background(), capability.Invocation{
 		Execution: capability.ExecutionContext{
-			ExecutionBinding: capability.ExecutionBinding{TargetMethod: string(containers.MethodLogsTail)},
+			ExecutionBinding: capability.ExecutionBinding{CapabilityVersion: containersCapabilityV4Version, TargetMethod: string(containers.MethodLogsTail)},
 			Operation:        operation,
 			Stream:           stream,
 		},
-		Arguments: map[string]any{"engine": "docker", "container_id": "container_1", "tail_lines": 50},
+		Arguments: map[string]any{"engine": "docker", "endpoint_id": capabilityTestEndpointID, "container_id": "container_1", "tail_lines": 50},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -560,6 +566,19 @@ type capabilityEngineClient struct {
 	action     func(context.Context, containers.EngineActionRequest) (containers.EngineActionResult, error)
 	inspectErr error
 	logsErr    error
+}
+
+func (c *capabilityEngineClient) BindEndpoint(
+	ctx context.Context,
+	engine containers.Engine,
+	endpointID containers.EndpointID,
+) (context.Context, containers.EngineEndpoint, error) {
+	if endpointID != "" && endpointID != capabilityTestEndpointID {
+		return nil, containers.EngineEndpoint{}, containers.ErrEndpointNotFound
+	}
+	return ctx, containers.EngineEndpoint{
+		EndpointID: endpointID, Engine: engine, DisplayName: string(engine), Default: true, Available: true,
+	}, nil
 }
 
 type extendedCapabilityEngineClient struct {

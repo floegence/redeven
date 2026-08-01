@@ -20,7 +20,7 @@ import (
 const (
 	defaultMarketOrigin  = "https://plugins.redeven.com"
 	maxMarketResponse    = 8 << 20
-	marketRequestTimeout = 20 * time.Second
+	marketRequestTimeout = 5 * time.Second
 )
 
 type ServiceOptions struct {
@@ -101,12 +101,7 @@ func (service *Service) LatestRelease(ctx context.Context, pluginID, channel str
 	if err != nil {
 		return LatestRelease{}, err
 	}
-	for _, plugin := range snapshot.Plugins {
-		if plugin.PluginID == pluginID && plugin.Latest.Channel == channel && plugin.Release != nil {
-			return *cloneLatestRelease(plugin.Release), nil
-		}
-	}
-	return LatestRelease{}, ErrReleaseMissing
+	return snapshot.LatestRelease(pluginID, channel)
 }
 
 func (service *Service) refresh(ctx context.Context) (Snapshot, error) {

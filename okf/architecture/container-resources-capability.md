@@ -9,12 +9,13 @@ timestamp: 2026-07-29T00:00:00Z
 
 Redeven owns Docker and Podman semantics, CLI execution, redacted DTOs, and risk
 projection; ReDevPlugin owns plugin identity, grants, confirmations, operation
-and stream handles, quotas, revocation, and audit. Production remains pinned to
-the signed Containers `2.0.0` and `redeven.container_resources.v2@2.0.0` release
-until the matching Containers `4.0.1` package release is complete. The
-`redeven.container_resources.v4@4.0.0` capability bundle is now signed through
-the released ReDevPlugin `0.6.23` external publisher and is an immutable input
-to that package release; committing the capability alone does not activate it.
+and stream handles, quotas, revocation, and audit. Production consumes signed
+Containers `4.0.1`, `redeven.container_resources.v4@4.0.0`, and
+`redeven.capability.container_resources@3.0.0` through the latest-only market
+and immutable GitHub Release transport. The capability bundle is signed through
+the released ReDevPlugin `0.6.23` publisher and remains one verified part of the
+complete release; market discovery or a capability signature alone cannot
+activate it.
 Unknown endpoints, stale plans, partial inventory, and unavailable terminal
 reconciliation fail closed.
 
@@ -22,13 +23,14 @@ reconciliation fail closed.
 
 ## Release authority
 
-The production artifact set under `spec/redevplugin/` contains a signed
-capability pin, verified schema and generated client, compatibility metadata,
-official plugin package, release metadata, package signature bundle, revocation
-metadata, source policy, and public signing key. Startup verifies that exact v2
-set with released ReDevPlugin APIs before registering the capability. Redeven
-does not unpack the official plugin or implement an alternate package, token,
-confirmation, operation, or stream protocol.
+The production artifact set under `spec/redevplugin/` contains only the signed
+v4 capability bundle and public verification anchors needed by the product.
+Plugin package, release metadata, root delegation, signing-ledger evidence,
+revocation, and source policy remain immutable GitHub Release assets. Startup
+freezes a validated market snapshot; ReDevPlugin verifies and downloads its
+complete release transport before registration. Redeven does not embed the
+plugin package or implement an alternate package, token, confirmation,
+operation, or stream protocol.
 
 The v4 source contract and development plugin remain under candidate paths.
 Candidate verification proves deterministic generation, manifest v7, exact
@@ -128,9 +130,9 @@ registered tasks, waits for completion, and records stable terminal results.
 The in-process task map is not a durable operation store, replay protocol,
 lifecycle authority, audit store, or token issuer.
 
-The v4 bridge and generated client are exercised against the unsigned source
-contract. Production startup does not construct or register a v4 capability.
-Dev Desktop is the narrow exception: it registers the exact verified ephemeral
+The v4 bridge and generated client are exercised against the source contract.
+Production registers the signed v4 capability only through the verified
+Containers `4.0.1` release. Dev Desktop is the narrow exception: it registers the exact verified ephemeral
 v4 contract for the current process and exposes the matching package to the
 authenticated Env App for ReDevPlugin local import. Missing or altered delivery
 evidence fails startup rather than falling back to an unverified contract.
@@ -182,6 +184,6 @@ actions are disabled when inventory is stale, partial, or unavailable.
 - `redeven:scripts/check_containers_plugin_v4_candidate.sh` - Fetches the pinned official-plugin commit and validates the fail-closed v4 contract and plugin package.
 - `redeven:scripts/build_containers_v4_development_delivery.mjs` - Builds the ephemeral development package, capability, and descriptor without retaining the private key.
 - `redeven:internal/redevpluginintegration/development_delivery.go` - Verifies the development delivery before v4 registration and local-import enablement.
-- `redeven:spec/redevplugin/official-containers-capability/host-capability.pin.json` - Pins the currently active signed v2 capability.
-- `redeven:internal/redevpluginintegration/release_module.go` - Closes the current official package source, signature, revocation, and capability pin.
-- `redeven:internal/envapp/ui_src/src/ui/plugins/officialContainersDistribution.json` - Pins the external official-plugin source, stable package, and icon identities.
+- `redeven:internal/pluginmarket/service.go` - Freezes the validated latest-only market snapshot with a last-known-good fallback.
+- `redeven:internal/redevpluginintegration/release_module.go` - Projects the market release into the exact signed remote transport and capability pin.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/officialPluginCatalog.ts` - Projects current Containers discovery without embedding package bytes or a fixed release version.

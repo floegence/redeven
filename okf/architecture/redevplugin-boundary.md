@@ -8,7 +8,7 @@ timestamp: 2026-07-25T00:00:00Z
 # Summary
 
 ReDevPlugin is an independently released plugin platform. Redeven consumes its
-coordinated `v0.6.20` Go, npm, Rust source-crate, and machine-contract artifacts;
+coordinated `v0.6.23` Go, npm, Rust source-crate, and machine-contract artifacts;
 it does not fork platform mechanics. Redeven owns authenticated session mapping,
 product source policy and review UX, UI placement, product runtime builds, and
 concrete business adapters. Missing or unverifiable upstream identity, lifecycle,
@@ -42,12 +42,12 @@ external-package receipt store.
 
 ## Published dependency set
 
-The current integration consumes the coordinated ReDevPlugin `v0.6.20` set:
+The current integration consumes the coordinated ReDevPlugin `v0.6.23` set:
 
-- `github.com/floegence/redevplugin v0.6.20`;
-- `@floegence/redevplugin-contracts@0.6.20` and
-  `@floegence/redevplugin-ui@0.6.20`;
-- the exact six `0.6.20` Rust source crates ending in `redevplugin-runtime`;
+- `github.com/floegence/redevplugin v0.6.23`;
+- `@floegence/redevplugin-contracts@0.6.23` and
+  `@floegence/redevplugin-ui@0.6.23`;
+- the exact six `0.6.23` Rust source crates ending in `redevplugin-runtime`;
 - the released contract registry, package-set contract, contract hashes, and
   attested `platform-package-publication-v1.json` registry readback.
 
@@ -124,10 +124,12 @@ signature evidence. The released ProcessManager owns launch, health, heartbeat,
 shutdown, leases, hostcalls, and restart. Darwin packages omit the runtime and
 worker execution. No target searches `PATH` or alternate runtime names.
 
-Official Containers remains a signed release-ref package over the
-`redeven.capability.container_resources` adapter. Its release and capability
-artifacts remain verified as one closed source. The official signing flow is
-retained, not generalized into a requirement for externally supplied packages.
+Official Containers `4.0.1` remains a signed release-ref package over the
+`redeven.capability.container_resources@3.0.0` adapter. The latest-only market
+selects its immutable GitHub Release and complete transport, while ReDevPlugin
+verifies release and capability artifacts as one closed source. The market is
+not a trust source and the official signing flow is not generalized into a
+requirement for externally supplied packages.
 
 # Boundaries
 
@@ -147,7 +149,7 @@ committed. Unknown, corrupt, ambiguous, tampered, or future state blocks startup
 without mutation. Floret-owned state is outside this lifecycle.
 
 For an exact supported root copied across filesystem identities, Redeven may use
-the released read-only inspection and exact-plan recovery APIs from `v0.6.20`.
+the released read-only inspection and exact-plan recovery APIs from `v0.6.23`.
 The product presents the projected digests, counts, sizes, and retained-state
 facts, binds confirmation to one plan digest, and takes the normal Local
 Environment runtime lock. The released transaction retains the entire source as

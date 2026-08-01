@@ -477,8 +477,6 @@ func TestNewCreatesDurableReDevPluginState(t *testing.T) {
 		"db/operations.sqlite",
 		"db/observability.sqlite",
 		"db/session_scopes.sqlite",
-		"trust/release-trust.sqlite",
-		"trust/trusted-time/ed25519-private.key",
 		"external-package-stage",
 		"assets",
 		"storage",

@@ -15,7 +15,7 @@ import (
 const (
 	officialPublisherID        = "com.redeven.official"
 	officialContainersPluginID = "com.redeven.official.containers"
-	officialSigningKeyID       = "redeven-official-signing-2026"
+	officialSigningKeyID       = "redeven_official_signing_2026"
 )
 
 // strictPackageTrustVerifier delegates the complete local-import and release

@@ -24,6 +24,7 @@ import (
 	envui "github.com/floegence/redeven/internal/envapp/ui"
 	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/notes"
+	"github.com/floegence/redeven/internal/pluginmarket"
 	"github.com/floegence/redeven/internal/portforward"
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 	"github.com/floegence/redeven/internal/redevpluginintegration"
@@ -296,17 +297,8 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		return nil, err
 	}
 	terminalLayoutCleanup := registerWorkbenchTerminalSessionCleanup(logger, workbenchLayoutSvc, opts.Terminal)
-
-	pluginIntegration, err := redevpluginintegration.New(ctx, redevpluginintegration.Options{
-		StateDir:                stateAbs,
-		PermissionPolicy:        opts.PermissionPolicy,
-		RuntimePath:             strings.TrimSpace(opts.ReDevPluginRuntimePath),
-		ResolveSessionMeta:      resolvePluginPlatformSessionMeta(opts),
-		Audit:                   opts.Audit,
-		Diagnostics:             opts.Diagnostics,
-		Containers:              containerAdapter,
-		RuntimeAuthority:        opts.PluginRuntimeAuthority,
-		DevelopmentDeliveryPath: strings.TrimSpace(opts.PluginDevelopmentDelivery),
+	pluginMarket, err := pluginmarket.NewService(pluginmarket.ServiceOptions{
+		CachePath: filepath.Join(stateAbs, "apps", "plugins", "market-lkg.json"),
 	})
 	if err != nil {
 		terminalLayoutCleanup()
@@ -318,6 +310,33 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		_ = codexSvc.Close()
 		_ = threadReadStateStore.Close()
 		return nil, err
+	}
+
+	pluginIntegration, err := redevpluginintegration.New(ctx, redevpluginintegration.Options{
+		StateDir:                stateAbs,
+		PermissionPolicy:        opts.PermissionPolicy,
+		RuntimePath:             strings.TrimSpace(opts.ReDevPluginRuntimePath),
+		ResolveSessionMeta:      resolvePluginPlatformSessionMeta(opts),
+		Audit:                   opts.Audit,
+		Diagnostics:             opts.Diagnostics,
+		Containers:              containerAdapter,
+		RuntimeAuthority:        opts.PluginRuntimeAuthority,
+		DevelopmentDeliveryPath: strings.TrimSpace(opts.PluginDevelopmentDelivery),
+		PluginMarket:            pluginMarket,
+	})
+	if err != nil {
+		terminalLayoutCleanup()
+		_ = reg.Close()
+		_ = pfSvc.Close()
+		_ = notesSvc.Close()
+		_ = workbenchLayoutSvc.Close()
+		_ = aiReady.Close()
+		_ = codexSvc.Close()
+		_ = threadReadStateStore.Close()
+		return nil, err
+	}
+	if marketErr := pluginIntegration.MarketError(); marketErr != nil {
+		logger.Warn("plugin market unavailable; catalog installs remain disabled until restart", "error", marketErr)
 	}
 
 	appSrv, err := appserver.New(appserver.Options{
@@ -341,6 +360,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		ThreadReadStateStore:      threadReadStateStore,
 		PluginPlatform:            pluginIntegration.Handler(),
 		PluginDevelopmentDelivery: pluginIntegration.DevelopmentDelivery(),
+		PluginMarketSnapshot:      pluginIntegration.MarketSnapshot,
 		AgentHomeDir:              agentHomeDir,
 		FilesystemScope:           scope,
 		ListenAddr:                "127.0.0.1:0",

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { OFFICIAL_PLUGIN_CATALOG_SEED, officialPluginCatalog } from './officialPluginCatalog';
+import { OFFICIAL_PLUGIN_CATALOG_SEED, officialPluginCatalogFixture as officialPluginCatalog } from './officialPluginCatalog.test-fixture';
 import {
   buildPluginCenterModel,
   buildPluginPanelModel,
@@ -33,7 +33,7 @@ const developmentDelivery = {
   release_notes_id: 'containers-4.0.0',
   release_notes_summary_sha256: '0bdb5e7ab960173b2855cf31fef9f3d635f90325b90215fa10e6bb639459504e',
   source_repository: 'https://github.com/floegence/redeven-official-plugins.git',
-  source_commit: '37d4dfff0cfa88c7a00ee0b89f55bfbcdde4b251',
+  source_commit: 'b9eb04f6cc08eab35e0d0a8a5ac671ec5077aaed',
   development_only: true as const,
 };
 
@@ -57,7 +57,7 @@ function installedRecord(overrides: Partial<ReDevPluginRecord> = {}): ReDevPlugi
       },
       verified_signature: {
         algorithm: 'ed25519',
-        key_id: 'redeven-official-signing-2026',
+        key_id: 'redeven_official_signing_2026',
       },
     },
     enable_state: 'enabled',
@@ -152,7 +152,7 @@ describe('v0.6.7 plugin inventory projection', () => {
           },
           verified_signature: {
             algorithm: 'ed25519',
-            key_id: 'redeven-official-signing-2026',
+            key_id: 'redeven_official_signing_2026',
           },
         },
       },
