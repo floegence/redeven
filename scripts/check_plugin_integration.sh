@@ -66,6 +66,7 @@ node ./scripts/check_catalog_plugin_package_url.mjs
 
 log "checking immutable remote Containers v4 plugin source"
 ./scripts/check_containers_plugin_v4_candidate.sh
+./scripts/check_containers_v4_release_capability.sh
 
 log "checking controlled release archive extraction"
 python3 -c 'from pathlib import Path; [compile(Path(name).read_text(encoding="utf-8"), name, "exec") for name in ("scripts/safe_extract_tar.py", "scripts/extract_desktop_runtime.py")]'
