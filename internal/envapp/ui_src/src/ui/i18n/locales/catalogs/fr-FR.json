@@ -4274,6 +4274,7 @@
   "uiCopy": {
     "plugin": {
       "loadingOfficial": "Chargement des plugins...",
+      "marketUnavailable": "Le catalogue de plugins est indisponible. Les plugins installés restent disponibles ; réessayez pour rechercher de nouvelles versions.",
       "official": "Officiel",
       "verified": "Vérifié",
       "unsigned": "Non signé",
