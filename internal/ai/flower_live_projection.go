@@ -134,7 +134,7 @@ func (s *Service) GetFlowerThreadLiveBootstrap(ctx context.Context, meta *sessio
 	if err != nil {
 		return nil, err
 	}
-	timeline, err := s.buildFlowerTimelineProjectionFromMessages(ctx, endpointID, threadID, state, timelineItems)
+	timeline, err := s.buildFlowerTimelineProjectionFromMessages(endpointID, threadID, state, timelineItems)
 	if err != nil {
 		return nil, err
 	}
@@ -355,15 +355,12 @@ func (s *Service) buildFlowerTimelineProjection(ctx context.Context, endpointID 
 	if err != nil {
 		return flowerTimelineProjection{}, err
 	}
-	return s.buildFlowerTimelineProjectionFromMessages(ctx, endpointID, threadID, state, msgs)
+	return s.buildFlowerTimelineProjectionFromMessages(endpointID, threadID, state, msgs)
 }
 
-func (s *Service) buildFlowerTimelineProjectionFromMessages(ctx context.Context, endpointID string, threadID string, state FlowerLiveMaterializedState, msgs []threadTimelineMessage) (flowerTimelineProjection, error) {
+func (s *Service) buildFlowerTimelineProjectionFromMessages(endpointID string, threadID string, state FlowerLiveMaterializedState, msgs []threadTimelineMessage) (flowerTimelineProjection, error) {
 	if s == nil {
 		return flowerTimelineProjection{}, errors.New("nil service")
-	}
-	if ctx == nil {
-		ctx = context.Background()
 	}
 	endpointID = strings.TrimSpace(endpointID)
 	threadID = strings.TrimSpace(threadID)
