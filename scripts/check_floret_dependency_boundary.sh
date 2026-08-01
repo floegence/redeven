@@ -29,8 +29,8 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 ROOT_DIR=$(cd -- "$SCRIPT_DIR/.." &> /dev/null && pwd)
 PARENT_DIR=$(cd -- "$ROOT_DIR/.." &> /dev/null && pwd)
 FLORET_MODULE="github.com/floegence/floret/v3"
-FLORET_VERSION="v3.1.1"
-FLORET_SUM="h1:73NtYG0iOsRKHdb1UQBpAsPHDSNTj3Y8Me92HOKmv4Y="
+FLORET_VERSION="v3.2.0"
+FLORET_SUM="h1:e1TWXxbYgsav5jhiHpGH9kopHsZtDvZkMUQD/tgGjFw="
 FLORET_GO_MOD_SUM="h1:2M+JA7dpEf62qjtWuLEAzkAo4NYGYOTnAcRWdzCoiLU="
 
 cd "$ROOT_DIR"
@@ -285,11 +285,11 @@ check_exact_turn_read_boundaries() {
 	echo "[INFO] exact canonical turn read boundaries checked"
 }
 
-check_floret_v31_capability_adoption() {
+check_floret_v32_capability_adoption() {
 	local matches
 
-	if ! rg -q '^\s*github\.com/floegence/floret/v3 v3\.1\.1$' go.mod; then
-		fail "Redeven must consume the published Floret v3.1.1 capability SDK."
+	if ! rg -q '^\s*github\.com/floegence/floret/v3 v3\.2\.0$' go.mod; then
+		fail "Redeven must consume the published Floret v3.2.0 capability SDK."
 	fi
 
 	for contract in \
@@ -310,10 +310,10 @@ check_floret_v31_capability_adoption() {
 	done
 
 	if matches=$(rg -n --pcre2 \
-		'\.Turns\(|\.SubAgents\(|ExecuteAdmittedTurn\(|\.ReadProjection\(|\.Compact\([^\n]*,[^\n]*,|floretTurnHostAdapter\) StartTurn\(' \
+		'\.Turns\(|\.SubAgents\(|ExecuteAdmittedTurn\(|\.ReadProjection\(|(?:authority|parent)\.Child\(|\.Compact\([^\n]*,[^\n]*,|floretTurnHostAdapter\) StartTurn\(' \
 		internal/ai/floret_bootstrap.go internal/ai/floret_runtime.go 2>/dev/null); then
 		printf '%s\n' "$matches"
-		fail "Redeven production integration must not call deprecated broad Floret v3 entry points."
+		fail "Redeven production integration must not call removed broad Floret v3 entry points."
 	fi
 
 	if ! rg -q 'Bootstrap\(.*ThreadBootstrapRequest' internal/ai/floret_bootstrap.go \
@@ -340,7 +340,7 @@ check_floret_v31_capability_adoption() {
 		fail "Redeven todo mapping and tool schema must derive canonical statuses from Floret."
 	fi
 
-	echo "[INFO] Floret v3.1 narrow capability adoption checked"
+	echo "[INFO] Floret v3.2 capability-only adoption checked"
 }
 
 check_floret_capability_bootstrap_boundary() {
@@ -716,7 +716,7 @@ check_durable_sink_closed_set
 check_threadstore_boundary_manifest
 check_canonical_subagent_and_root_inventory_boundaries
 check_exact_turn_read_boundaries
-check_floret_v31_capability_adoption
+check_floret_v32_capability_adoption
 check_floret_capability_bootstrap_boundary
 check_floret_thread_creation_boundary
 check_removed_product_schema_paths

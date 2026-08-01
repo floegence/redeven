@@ -126,22 +126,26 @@ func runAppserverTestFloretTurn(t *testing.T, path string, threadID identity.Thr
 	if err != nil {
 		t.Fatalf("Host.Thread: %v", err)
 	}
-	turns, err := thread.Turns(newAppserverTestFloretAgent(t, gateway))
+	executor, err := thread.TurnExecutor(newAppserverTestFloretAgent(t, gateway))
 	if err != nil {
-		t.Fatalf("Thread.Turns: %v", err)
+		t.Fatalf("Thread.TurnExecutor: %v", err)
 	}
-	started, err := turns.StartTurn(context.Background(), flruntime.StartTurnCommand{
+	started, err := executor.StartTurn(context.Background(), flruntime.StartTurnCommand{
 		LogicalRequestID:    identity.LogicalRequestID("fixture_" + string(request.TurnID)),
 		UserMessage:         request.Input,
 		SupplementalContext: request.SupplementalContext,
 		Signals:             request.Signals,
 	})
 	if err != nil {
-		t.Fatalf("Turns.StartTurn: %v", err)
+		t.Fatalf("TurnExecutor.StartTurn: %v", err)
 	}
-	result, err := thread.ReadTurn(context.Background(), started.TurnID)
+	reader, err := thread.Reader()
 	if err != nil {
-		t.Fatalf("Thread.ReadTurn: %v", err)
+		t.Fatalf("Thread.Reader: %v", err)
+	}
+	result, err := reader.ReadTurn(context.Background(), started.TurnID)
+	if err != nil {
+		t.Fatalf("ThreadReader.ReadTurn: %v", err)
 	}
 	return result
 }

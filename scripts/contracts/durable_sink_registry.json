@@ -2006,7 +2006,7 @@
     },
     {
       "path": "internal/redevpluginintegration/release_module.go",
-      "sha256": "e73decc2d0e87817bee629c0cdaa76d03e39c58f48f62a45c2e16673946a1e66",
+      "sha256": "06d339874b7f56bbe34d2bf3e57ea74edc85c5bb018e1e7ed335e5b1927fae94",
       "sink_kinds": [
         "file"
       ],
@@ -2016,7 +2016,7 @@
       "data_classes": [
         "product adapter audit, trust, or lifecycle records"
       ],
-      "review_note": "Stores or invokes upstream product adapter records only; Floret remains authoritative for admitted Agent state."
+      "review_note": "Reviewed after removing an unused constructor; the remaining file sink and upstream adapter authority are unchanged, and Floret remains authoritative for admitted Agent state."
     },
     {
       "path": "internal/redevpluginintegration/release_trust_store.go",

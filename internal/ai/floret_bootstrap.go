@@ -300,7 +300,11 @@ func (s *boundFloretPendingToolRecoverySettler) SettlePendingTool(ctx context.Co
 		}
 	} else {
 		var child *flruntime.Child
-		child, err = authority.Child(ctxOrBackground(ctx), s.executionThreadID)
+		var reader flruntime.ThreadReader
+		reader, err = authority.Reader()
+		if err == nil {
+			child, err = reader.Child(ctxOrBackground(ctx), s.executionThreadID)
+		}
 		if err == nil {
 			recovery, err = child.PendingToolRecovery(ctxOrBackground(ctx), request.Target)
 		}
@@ -443,7 +447,11 @@ func configureFloretRuntime(host *flruntime.Host) (*floretBootstrapResult, flore
 			if err != nil {
 				return nil, err
 			}
-			child, err := parent.Child(ctxOrBackground(ctx), childThreadID)
+			reader, err := parent.Reader()
+			if err != nil {
+				return nil, err
+			}
+			child, err := reader.Child(ctxOrBackground(ctx), childThreadID)
 			if err != nil {
 				return nil, err
 			}
