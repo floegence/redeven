@@ -4274,6 +4274,7 @@
   "uiCopy": {
     "plugin": {
       "loadingOfficial": "플러그인 불러오는 중...",
+      "marketUnavailable": "플러그인 카탈로그를 사용할 수 없습니다. 설치된 플러그인은 계속 사용할 수 있습니다. 새 릴리스를 확인하려면 다시 시도하세요.",
       "official": "공식",
       "verified": "검증됨",
       "unsigned": "미서명",
