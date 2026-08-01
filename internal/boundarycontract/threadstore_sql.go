@@ -716,11 +716,11 @@ type reviewedThreadstoreQueryUse struct {
 }
 
 var reviewedAdmissionReceiptQueryUses = map[string]reviewedThreadstoreQueryUse{
-	"threadstore.12db61507ea15af3": {action: "schema", consumerKind: "schema_maintenance"},
+	"threadstore.0ea12aa5ec35d13c": {action: "read", consumerKind: "startup_recovery"},
+	"threadstore.1da1430999a994c7": {action: "schema", consumerKind: "schema_maintenance"},
 	"threadstore.8359c775e6198c95": {action: "update", consumerKind: "admission_coordination"},
 	"threadstore.8cae1aa6be4ba0b6": {action: "delete", consumerKind: "admission_coordination"},
-	"threadstore.ae4794b097a41ade": {action: "read", consumerKind: "startup_recovery"},
-	"threadstore.d856265f4aa6ac8d": {action: "read", consumerKind: "admission_coordination"},
+	"threadstore.c67e71a1cac5ea18": {action: "read", consumerKind: "admission_coordination"},
 	"threadstore.dc493aa9f3b1022c": {action: "insert", consumerKind: "admission_coordination"},
 }
 

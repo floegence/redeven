@@ -444,7 +444,7 @@ func TestThreadstoreBoundaryManifestRejectsReceiptConsumerOutsideClosedSet(t *te
 		LifecycleProhibition: "must not provide Agent lifecycle inventory, timeline, status, or search",
 	}
 	query := ThreadstoreQueryContract{
-		ID: "threadstore.ae4794b097a41ade", Path: "internal/ai/threadstore/admission_receipt.go", Function: "Store.GetPendingTurnAdmissionReceipt", Method: "QueryRowContext",
+		ID: "threadstore.0ea12aa5ec35d13c", Path: "internal/ai/threadstore/admission_receipt.go", Function: "Store.GetPendingTurnAdmissionReceipt", Method: "QueryRowContext",
 		SQLSHA256: strings.Repeat("a", 64), Tables: []string{"ai_turn_admission_receipts"}, LookupKeys: []string{"queue_id"}, ReadColumns: []string{"queue_id"},
 		Action: "read", Consumer: "Store.GetPendingTurnAdmissionReceipt", ConsumerKind: "product_operation",
 	}

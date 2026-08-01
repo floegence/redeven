@@ -35,7 +35,7 @@ The v3.0.2 turn path still discovers the canonical admission through an observat
 - Stable query IDs bind path, receiver/function, SQL method, normalized SQL or rendered expression, action, structured consumer kind, tables, lookup keys, read/write columns, and the full reviewed builder closure for dynamic statements. The catalog currently covers 238 production calls across threadstore and its shared SQLite engine. A source change produces an unreviewed ID or fingerprint and fails CI; non-PRAGMA DML without an owned table, or INSERT/UPDATE without reviewed write columns, is rejected.
 - Dynamic SQL is fail closed. The only exceptions are the explicitly enumerated placeholder batches, constant projections, quoted schema introspection, bounded PRAGMA, and closed enum/branch statements recorded in the catalog.
 - `ai_turn_admission_receipts` access is an exact query-ID/action/consumer-kind closed set limited to admission coordination, its schema maintenance, and startup recovery. Reads are restricted to exact `queue_id` coordination. `logical_request_id` is allowed for exact coordination as Phase 1C adopts the released Floret API. Canonical-ID indexes are integrity-only and do not authorize reads.
-- `terminal_committed` and `terminal_replayed` have no production consumer. Phase 1C must remove them in the required product schema migration; canonical receipt indexes must be retained only if their integrity value is proven.
+- The admission receipt schema stores no terminal outcome fields. Canonical receipt indexes remain integrity-only and do not authorize lookup or presentation.
 - `scripts/check_floret_dependency_boundary.sh --ci` runs both the durable-sink closed set and the threadstore schema/query contract.
 
 # Boundaries

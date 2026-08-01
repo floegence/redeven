@@ -29,8 +29,6 @@ type PendingTurnAdmissionReceipt struct {
 	PermissionSnapshotID   string
 	PermissionSnapshotHash string
 	Stage                  string
-	TerminalCommitted      bool
-	TerminalReplayed       bool
 	CreatedAtUnixMs        int64
 	UpdatedAtUnixMs        int64
 }
@@ -80,12 +78,9 @@ func queuedTurnCommandFingerprint(rec QueuedTurn) (string, error) {
 
 func scanPendingTurnAdmissionReceipt(scanner interface{ Scan(...any) error }) (PendingTurnAdmissionReceipt, error) {
 	var rec PendingTurnAdmissionReceipt
-	var committed, replayed int
 	err := scanner.Scan(&rec.QueueID, &rec.EndpointID, &rec.ThreadID, &rec.LogicalRequestID, &rec.CommandFingerprint,
 		&rec.TurnID, &rec.RunID, &rec.EntryID, &rec.PermissionSnapshotID, &rec.PermissionSnapshotHash, &rec.Stage,
-		&committed, &replayed, &rec.CreatedAtUnixMs, &rec.UpdatedAtUnixMs)
-	rec.TerminalCommitted = committed == 1
-	rec.TerminalReplayed = replayed == 1
+		&rec.CreatedAtUnixMs, &rec.UpdatedAtUnixMs)
 	return rec, err
 }
 
@@ -93,7 +88,7 @@ func loadPendingTurnAdmissionReceiptTx(ctx context.Context, tx *sql.Tx, queueID 
 	return scanPendingTurnAdmissionReceipt(tx.QueryRowContext(ctx, `
 SELECT queue_id, endpoint_id, thread_id, logical_request_id, command_fingerprint,
        turn_id, run_id, entry_id, permission_snapshot_id, permission_snapshot_hash, stage,
-       terminal_committed, terminal_replayed, created_at_unix_ms, updated_at_unix_ms
+       created_at_unix_ms, updated_at_unix_ms
 FROM ai_turn_admission_receipts WHERE queue_id = ?
 `, strings.TrimSpace(queueID)))
 }
@@ -114,7 +109,7 @@ func (s *Store) GetPendingTurnAdmissionReceipt(ctx context.Context, queueID stri
 	return scanPendingTurnAdmissionReceipt(s.db.QueryRowContext(ctxOrBackground(ctx), `
 SELECT queue_id, endpoint_id, thread_id, logical_request_id, command_fingerprint,
        turn_id, run_id, entry_id, permission_snapshot_id, permission_snapshot_hash, stage,
-       terminal_committed, terminal_replayed, created_at_unix_ms, updated_at_unix_ms
+       created_at_unix_ms, updated_at_unix_ms
 FROM ai_turn_admission_receipts WHERE queue_id = ?
 `, strings.TrimSpace(queueID)))
 }
