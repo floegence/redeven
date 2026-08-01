@@ -904,8 +904,8 @@ capabilities. Read adapters retain `runtime.ThreadReader`, lifecycle
 coordinators retain `runtime.ThreadLifecycle`, runs retain
 `runtime.TurnExecutor`, compaction retains `runtime.ThreadCompactor`, and
 SubAgent execution retains `runtime.SubAgentManager`. Production integration
-must not call the deprecated broad `Thread`/`Turns` entry points when a native
-narrow capability exists.
+must not recreate or wrap the removed broad `Thread` methods. Every operation
+must start from the matching native narrow capability.
 
 Redeven code must not bypass those Floret lifecycles:
 - tool approval must flow through Floret `PermissionSpec`, resource extraction,
