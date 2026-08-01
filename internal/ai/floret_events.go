@@ -36,6 +36,15 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 	if r == nil {
 		return
 	}
+	if ev.Projection != nil {
+		if err := ev.Projection.Validate(); err != nil && floretEventProjectionIsUnformed(err) {
+			r.recordRunDiagnostic("floret.projection.skipped", RealtimeStreamKindLifecycle, map[string]any{
+				"source": "event",
+				"error":  sanitizeLogText(err.Error(), 240),
+			})
+			ev.Projection = nil
+		}
+	}
 	isTitleEvent := ev.Type == floretEventThreadTitlePending || ev.Type == floretEventThreadTitleUpdated || ev.Type == floretEventThreadTitleFailed
 	if err := ev.Validate(); err != nil {
 		r.rejectFloretContract("event", err)
@@ -45,7 +54,9 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 	if canonicalUserEntry {
 		var err error
 		if r.awaitFloretAdmission.Load() {
-			err = r.bindFloretCanonicalAdmission(string(ev.RunID), string(ev.ThreadID), string(ev.TurnID), ev.Committed.ID)
+			if strings.TrimSpace(string(ev.ThreadID)) != strings.TrimSpace(r.threadID) {
+				err = errors.New("pre-receipt Floret admission event is bound to another thread")
+			}
 		} else {
 			err = r.observeFloretCanonicalIdentity(string(ev.RunID), string(ev.ThreadID), string(ev.TurnID))
 		}
@@ -72,21 +83,18 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 			return
 		}
 	}
+	if r.awaitFloretAdmission.Load() && !r.acceptsPresentationUpdates() {
+		return
+	}
 	if err := r.validateFloretRuntimeEvent(ev); err != nil {
 		r.rejectFloretContract("event", err)
 		return
 	}
 	if canonicalUserEntry {
-		r.floretAdmitted.Store(true)
 		if r.awaitFloretAdmission.Load() {
-			if err := r.publishCanonicalUserAdmission(); err != nil {
-				r.completeUserTurnAdmission(nil)
-				r.rejectFloretContract("turn_admission", err)
-				return
-			}
-			r.floretPresentationReady.Store(true)
-			r.completeUserTurnAdmission(nil)
+			return
 		}
+		r.floretAdmitted.Store(true)
 	}
 	if (ev.Type == floretEventThreadTitlePending || ev.Type == floretEventThreadTitleUpdated || ev.Type == floretEventThreadTitleFailed) && r.host.broadcastThreadSummary != nil {
 		_ = r.host.broadcastThreadSummary()
@@ -100,9 +108,8 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 			return
 		}
 	}
-	// The validated canonical user entry is the admission boundary for live
-	// assistant state. A draft created after it can be rendered against the
-	// canonical timeline without guessing its place.
+	// Receipt admission publishes the canonical timeline before live assistant
+	// state. Observation events may only render after that durable boundary.
 	if !r.acceptsPresentationUpdates() {
 		return
 	}
@@ -153,6 +160,16 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 			"metadata":  ev.Metadata,
 		})
 	}
+}
+
+func floretEventProjectionIsUnformed(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "turn projection identity is incomplete") ||
+		strings.Contains(msg, "turn projection ordinal must be positive") ||
+		strings.Contains(msg, `unsupported turn projection status ""`)
 }
 
 func (r *run) publishCanonicalUserAdmission() error {
