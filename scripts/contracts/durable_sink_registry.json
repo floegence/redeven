@@ -661,7 +661,7 @@
     },
     {
       "path": "internal/ai/threadstore/admission_receipt.go",
-      "sha256": "f8931642749a985c8053c577c5f67d0c4b10235d16c0427d183956da5e565759",
+      "sha256": "e0797773cfa7690934a2c452be362d384f34d56f61e514d6738dbdce45a7909d",
       "sink_kinds": [
         "sqlite"
       ],
@@ -691,7 +691,7 @@
       "dtos": [
         "command{\n\tQueueID:\tstrings.TrimSpace(rec.QueueID), EndpointID: strings.TrimSpace(rec.EndpointID), ThreadID: strings.TrimSpace(rec.ThreadID),\n\tChannelID:\tstrings.TrimSpace(rec.ChannelID), ModelID: strings.TrimSpace(rec.ModelID), TextContent: rec.TextContent,\n\tAttachmentsJSON:\tstrings.TrimSpace(rec.AttachmentsJSON), ContextActionJSON: strings.TrimSpace(rec.ContextActionJSON),\n\tOptionsJSON:\tstrings.TrimSpace(rec.OptionsJSON), SessionMetaJSON: strings.TrimSpace(rec.SessionMetaJSON),\n\tCreatedByUserPublicID:\tstrings.TrimSpace(rec.CreatedByUserPublicID), CreatedByUserEmail: strings.TrimSpace(rec.CreatedByUserEmail),\n}"
       ],
-      "review_note": "Stores minimal Redeven-owned admission and recovery evidence; canonical Agent lifecycle and message history remain exclusively in Floret."
+      "review_note": "Stores minimal Redeven-owned admission and recovery evidence without terminal outcome fields; canonical Agent lifecycle and message history remain exclusively in Floret."
     },
     {
       "path": "internal/ai/threadstore/context_planes.go",
@@ -896,7 +896,7 @@
     },
     {
       "path": "internal/ai/threadstore/schema.go",
-      "sha256": "8727cec1c79219c1d52ce38ff75f0ddbdbcd5c84694258b869f574259e2a4361",
+      "sha256": "f744c024f24a4ade86aeb92bf943f1ec71ae242ccf7377f0ca02ad6710d23897",
       "sink_kinds": [
         "sqlite"
       ],

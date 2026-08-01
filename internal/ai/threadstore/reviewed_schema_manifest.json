@@ -392,7 +392,7 @@
           "type": "table",
           "name": "ai_turn_admission_receipts",
           "table_name": "ai_turn_admission_receipts",
-          "sql": "CREATE TABLE ai_turn_admission_receipts ( queue_id TEXT PRIMARY KEY, endpoint_id TEXT NOT NULL, thread_id TEXT NOT NULL, logical_request_id TEXT NOT NULL, command_fingerprint TEXT NOT NULL CHECK(length(command_fingerprint) = 64), turn_id TEXT NOT NULL DEFAULT '', run_id TEXT NOT NULL DEFAULT '', entry_id TEXT NOT NULL DEFAULT '', permission_snapshot_id TEXT NOT NULL DEFAULT '', permission_snapshot_hash TEXT NOT NULL DEFAULT '', stage TEXT NOT NULL CHECK(stage IN ('in_flight', 'settled')), terminal_committed INTEGER NOT NULL DEFAULT 0 CHECK(terminal_committed IN (0, 1)), terminal_replayed INTEGER NOT NULL DEFAULT 0 CHECK(terminal_replayed IN (0, 1)), created_at_unix_ms INTEGER NOT NULL, updated_at_unix_ms INTEGER NOT NULL, UNIQUE(endpoint_id, logical_request_id), CHECK((stage = 'in_flight' AND turn_id = '' AND run_id = '' AND entry_id = '' AND permission_snapshot_id = '' AND permission_snapshot_hash = '') OR (stage = 'settled' AND turn_id \u003c\u003e '' AND run_id \u003c\u003e '' AND entry_id \u003c\u003e '' AND permission_snapshot_id \u003c\u003e '' AND permission_snapshot_hash \u003c\u003e '')) )"
+          "sql": "CREATE TABLE ai_turn_admission_receipts ( queue_id TEXT PRIMARY KEY, endpoint_id TEXT NOT NULL, thread_id TEXT NOT NULL, logical_request_id TEXT NOT NULL, command_fingerprint TEXT NOT NULL CHECK(length(command_fingerprint) = 64), turn_id TEXT NOT NULL DEFAULT '', run_id TEXT NOT NULL DEFAULT '', entry_id TEXT NOT NULL DEFAULT '', permission_snapshot_id TEXT NOT NULL DEFAULT '', permission_snapshot_hash TEXT NOT NULL DEFAULT '', stage TEXT NOT NULL CHECK(stage IN ('in_flight', 'settled')), created_at_unix_ms INTEGER NOT NULL, updated_at_unix_ms INTEGER NOT NULL, UNIQUE(endpoint_id, logical_request_id), CHECK((stage = 'in_flight' AND turn_id = '' AND run_id = '' AND entry_id = '' AND permission_snapshot_id = '' AND permission_snapshot_hash = '') OR (stage = 'settled' AND turn_id \u003c\u003e '' AND run_id \u003c\u003e '' AND entry_id \u003c\u003e '' AND permission_snapshot_id \u003c\u003e '' AND permission_snapshot_hash \u003c\u003e '')) )"
         },
         {
           "type": "table",
@@ -2170,24 +2170,6 @@
             },
             {
               "cid": 11,
-              "name": "terminal_committed",
-              "type": "INTEGER",
-              "not_null": 1,
-              "default_value": "0",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 12,
-              "name": "terminal_replayed",
-              "type": "INTEGER",
-              "not_null": 1,
-              "default_value": "0",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 13,
               "name": "created_at_unix_ms",
               "type": "INTEGER",
               "not_null": 1,
@@ -2196,7 +2178,7 @@
               "hidden": 0
             },
             {
-              "cid": 14,
+              "cid": 12,
               "name": "updated_at_unix_ms",
               "type": "INTEGER",
               "not_null": 1,
@@ -3667,7 +3649,7 @@
             },
             {
               "sequence": 3,
-              "cid": 14,
+              "cid": 12,
               "name": "updated_at_unix_ms",
               "desc": 0,
               "collation": "BINARY",

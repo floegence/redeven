@@ -3,6 +3,7 @@
 ## 2026-07-31
 * **Boundary**: Added an exact owner/consumer manifest for every threadstore schema object and all 238 production SQL calls, with explicit dynamic-query exceptions and receipt lookup restrictions.
 * **Architecture**: Inventoried every Floret/Redeven cross-store mutation and formally classified v3.0.2 observation-based turn admission as requiring a product-neutral two-stage Floret acknowledgement.
+* **Storage**: Removed unused terminal outcome fields from turn admission receipts so product coordination evidence cannot grow into lifecycle shadow state.
 * **Dependency**: Upgraded Redeven to published Floret v3.0.2 and adopted its command/result, canonical identity, exact-read recovery, pending settlement, Todo, approval, reference, attachment, and SubAgent contracts.
 * **Storage**: Established `ai_threadstore_product_v1` version 1 as the one-time pre-launch baseline, removed all discarded product migrations and legacy readers, and required read-only complete-schema rejection before any writable open.
 * **Boundary**: Made Floret the sole allocator of ThreadID, TurnID, and RunID; Redeven now carries only stable client request and queue identities before canonical create, fork, or turn admission.

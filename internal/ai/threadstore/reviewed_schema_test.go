@@ -165,6 +165,32 @@ func TestAdmissionReceiptQueriesStayExactCoordinationOnly(t *testing.T) {
 	}
 }
 
+func TestAdmissionReceiptSchemaStoresOnlyCoordinationEvidence(t *testing.T) {
+	reviewed, err := reviewedProductSchemaContract(threadstoreCurrentSchemaVersion)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var columns []reviewedSchemaColumn
+	for _, table := range reviewed.Tables {
+		if table.Name == "ai_turn_admission_receipts" {
+			columns = table.Columns
+			break
+		}
+	}
+	if len(columns) == 0 {
+		t.Fatal("ai_turn_admission_receipts is missing from the reviewed schema")
+	}
+	forbidden := map[string]struct{}{
+		"terminal_committed": {},
+		"terminal_replayed":  {},
+	}
+	for _, column := range columns {
+		if _, found := forbidden[column.Name]; found {
+			t.Fatalf("admission receipt column %q stores terminal outcome shadow state; receipts must stay coordination-only", column.Name)
+		}
+	}
+}
+
 func containsString(values []string, target string) bool {
 	for _, value := range values {
 		if value == target {

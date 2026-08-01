@@ -111,8 +111,6 @@ CREATE TABLE ai_turn_admission_receipts (
   permission_snapshot_id TEXT NOT NULL DEFAULT '',
   permission_snapshot_hash TEXT NOT NULL DEFAULT '',
   stage TEXT NOT NULL CHECK(stage IN ('in_flight', 'settled')),
-  terminal_committed INTEGER NOT NULL DEFAULT 0 CHECK(terminal_committed IN (0, 1)),
-  terminal_replayed INTEGER NOT NULL DEFAULT 0 CHECK(terminal_replayed IN (0, 1)),
   created_at_unix_ms INTEGER NOT NULL,
   updated_at_unix_ms INTEGER NOT NULL,
   UNIQUE(endpoint_id, logical_request_id),

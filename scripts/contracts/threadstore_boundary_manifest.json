@@ -286,8 +286,8 @@
             "threadstore.0c4e9c2b1ac935a4",
             "threadstore.11b607afdf8af69c",
             "threadstore.12cb2c1056697727",
-            "threadstore.12db61507ea15af3",
             "threadstore.1bf2eda4a21cd252",
+            "threadstore.1da1430999a994c7",
             "threadstore.1e4ad6384960d935",
             "threadstore.35c27729bcb9af38",
             "threadstore.39396e6166775ea8",
@@ -330,8 +330,8 @@
             "threadstore.0c4e9c2b1ac935a4",
             "threadstore.11b607afdf8af69c",
             "threadstore.12cb2c1056697727",
-            "threadstore.12db61507ea15af3",
             "threadstore.1bf2eda4a21cd252",
+            "threadstore.1da1430999a994c7",
             "threadstore.1e4ad6384960d935",
             "threadstore.35c27729bcb9af38",
             "threadstore.39396e6166775ea8",
@@ -374,8 +374,8 @@
             "threadstore.0c4e9c2b1ac935a4",
             "threadstore.11b607afdf8af69c",
             "threadstore.12cb2c1056697727",
-            "threadstore.12db61507ea15af3",
             "threadstore.1bf2eda4a21cd252",
+            "threadstore.1da1430999a994c7",
             "threadstore.1e4ad6384960d935",
             "threadstore.35c27729bcb9af38",
             "threadstore.39396e6166775ea8",
@@ -418,8 +418,8 @@
             "threadstore.0c4e9c2b1ac935a4",
             "threadstore.11b607afdf8af69c",
             "threadstore.12cb2c1056697727",
-            "threadstore.12db61507ea15af3",
             "threadstore.1bf2eda4a21cd252",
+            "threadstore.1da1430999a994c7",
             "threadstore.1e4ad6384960d935",
             "threadstore.35c27729bcb9af38",
             "threadstore.39396e6166775ea8",
@@ -1165,8 +1165,6 @@
         "queue_id",
         "run_id",
         "stage",
-        "terminal_committed",
-        "terminal_replayed",
         "thread_id",
         "turn_id",
         "updated_at_unix_ms"
@@ -1198,11 +1196,11 @@
           "purpose": "accelerate reviewed product coordination, resource, routing, or settings queries",
           "integrity_only": false,
           "allowed_query_ids": [
-            "threadstore.12db61507ea15af3",
+            "threadstore.0ea12aa5ec35d13c",
+            "threadstore.1da1430999a994c7",
             "threadstore.8359c775e6198c95",
             "threadstore.8cae1aa6be4ba0b6",
-            "threadstore.ae4794b097a41ade",
-            "threadstore.d856265f4aa6ac8d",
+            "threadstore.c67e71a1cac5ea18",
             "threadstore.dc493aa9f3b1022c"
           ]
         },
@@ -1242,7 +1240,7 @@
       "canonical_identity": "ThreadID/TurnID/RunID/EntryID are integrity evidence only; their indexes do not authorize lookup",
       "api_ui_visibility": "not exposed as product API, UI timeline, or lifecycle state",
       "lifecycle_prohibition": "must not provide Agent lifecycle inventory, timeline, status, or search",
-      "phase_1c_decision": "remove unused terminal_committed and terminal_replayed fields; review canonical unique indexes as integrity-only during v1 to v2 migration"
+      "phase_1c_decision": "unused terminal outcome fields were removed; canonical unique indexes remain integrity-only and do not authorize receipt lookup"
     },
     {
       "table": "ai_upload_attempts",
@@ -1755,7 +1753,7 @@
       "path": "internal/ai/threadstore/followups.go",
       "function": "Store.ListFollowupsByLaneAfter",
       "method": "QueryContext",
-      "builder_sha256": "d43e52b143073b648773fdf9f3d87537b24dba7209476667d01f879a4283dbe4",
+      "builder_sha256": "ba9a81332d983330e5d2ca41fb083fe099a62713b26ebfd1c437c5a48456495b",
       "tables": [
         "ai_queued_turns"
       ],
@@ -1972,7 +1970,7 @@
       "path": "internal/persistence/sqliteutil/engine.go",
       "function": "ensureSchema",
       "method": "Exec",
-      "builder_sha256": "d43e52b143073b648773fdf9f3d87537b24dba7209476667d01f879a4283dbe4",
+      "builder_sha256": "ba9a81332d983330e5d2ca41fb083fe099a62713b26ebfd1c437c5a48456495b",
       "action": "execute",
       "consumer": "ensureSchema",
       "consumer_kind": "schema_maintenance",
@@ -2000,7 +1998,7 @@
       "path": "internal/ai/threadstore/uploads.go",
       "function": "Store.RescheduleUploadDeletion",
       "method": "ExecContext",
-      "builder_sha256": "d43e52b143073b648773fdf9f3d87537b24dba7209476667d01f879a4283dbe4",
+      "builder_sha256": "ba9a81332d983330e5d2ca41fb083fe099a62713b26ebfd1c437c5a48456495b",
       "tables": [
         "ai_uploads"
       ],
@@ -2025,7 +2023,7 @@
       "path": "internal/ai/threadstore/store.go",
       "function": "Store.ListThreadSettings",
       "method": "QueryContext",
-      "builder_sha256": "d43e52b143073b648773fdf9f3d87537b24dba7209476667d01f879a4283dbe4",
+      "builder_sha256": "ba9a81332d983330e5d2ca41fb083fe099a62713b26ebfd1c437c5a48456495b",
       "tables": [
         "ai_thread_settings"
       ],
@@ -2205,7 +2203,7 @@
       "path": "internal/ai/threadstore/followups.go",
       "function": "Store.CountFollowupsByThreadAndLane",
       "method": "QueryContext",
-      "builder_sha256": "d43e52b143073b648773fdf9f3d87537b24dba7209476667d01f879a4283dbe4",
+      "builder_sha256": "ba9a81332d983330e5d2ca41fb083fe099a62713b26ebfd1c437c5a48456495b",
       "tables": [
         "ai_queued_turns"
       ],
@@ -2259,6 +2257,37 @@
       "action": "schema",
       "consumer": "createPermissionSnapshotTablesTx",
       "consumer_kind": "schema_maintenance"
+    },
+    {
+      "id": "threadstore.0ea12aa5ec35d13c",
+      "path": "internal/ai/threadstore/admission_receipt.go",
+      "function": "Store.GetPendingTurnAdmissionReceipt",
+      "method": "QueryRowContext",
+      "sql_sha256": "ffb7a8e0c4979cecd3b79efd62ae541b8283a74a76f48105a0b0e14be6601b77",
+      "tables": [
+        "ai_turn_admission_receipts"
+      ],
+      "lookup_keys": [
+        "queue_id"
+      ],
+      "read_columns": [
+        "command_fingerprint",
+        "created_at_unix_ms",
+        "endpoint_id",
+        "entry_id",
+        "logical_request_id",
+        "permission_snapshot_hash",
+        "permission_snapshot_id",
+        "queue_id",
+        "run_id",
+        "stage",
+        "thread_id",
+        "turn_id",
+        "updated_at_unix_ms"
+      ],
+      "action": "read",
+      "consumer": "Store.GetPendingTurnAdmissionReceipt",
+      "consumer_kind": "startup_recovery"
     },
     {
       "id": "threadstore.0f3caff50c7d88ba",
@@ -2373,30 +2402,6 @@
       "consumer_kind": "product_operation"
     },
     {
-      "id": "threadstore.12db61507ea15af3",
-      "path": "internal/ai/threadstore/schema.go",
-      "function": "createPendingTurnCommandsTableTx",
-      "method": "Exec",
-      "sql_sha256": "ab4b884637e0c859519efa35b5a5e8e11e430c5407fde0e2427068a5ed058a21",
-      "tables": [
-        "ai_queued_turns",
-        "ai_turn_admission_receipts"
-      ],
-      "lookup_keys": [
-        "entry_id",
-        "permission_snapshot_hash",
-        "permission_snapshot_id",
-        "run_id",
-        "stage",
-        "terminal_committed",
-        "terminal_replayed",
-        "turn_id"
-      ],
-      "action": "schema",
-      "consumer": "createPendingTurnCommandsTableTx",
-      "consumer_kind": "schema_maintenance"
-    },
-    {
       "id": "threadstore.13c0ebe6fa875d76",
       "path": "internal/ai/threadstore/uploads.go",
       "function": "Store.PrepareUserStagedUploadDeletion",
@@ -2502,7 +2507,7 @@
       "path": "internal/ai/threadstore/orphan_adoption.go",
       "function": "Store.GetThreadSettingsByCanonicalThreadID",
       "method": "QueryRowContext",
-      "builder_sha256": "d43e52b143073b648773fdf9f3d87537b24dba7209476667d01f879a4283dbe4",
+      "builder_sha256": "ba9a81332d983330e5d2ca41fb083fe099a62713b26ebfd1c437c5a48456495b",
       "tables": [
         "ai_thread_settings"
       ],
@@ -2524,7 +2529,7 @@
       "path": "internal/ai/threadstore/uploads.go",
       "function": "Store.PrepareExpiredUploadsForDeletion",
       "method": "ExecContext",
-      "builder_sha256": "d43e52b143073b648773fdf9f3d87537b24dba7209476667d01f879a4283dbe4",
+      "builder_sha256": "ba9a81332d983330e5d2ca41fb083fe099a62713b26ebfd1c437c5a48456495b",
       "tables": [
         "ai_uploads"
       ],
@@ -2572,6 +2577,28 @@
       "action": "delete",
       "consumer": "Store.BindPendingTurnAdmission",
       "consumer_kind": "product_operation"
+    },
+    {
+      "id": "threadstore.1da1430999a994c7",
+      "path": "internal/ai/threadstore/schema.go",
+      "function": "createPendingTurnCommandsTableTx",
+      "method": "Exec",
+      "sql_sha256": "c8f05ca5ee3f7c2e60a8f8934a4b2903a73716511d5e7ef2eb4e152c4498b1d4",
+      "tables": [
+        "ai_queued_turns",
+        "ai_turn_admission_receipts"
+      ],
+      "lookup_keys": [
+        "entry_id",
+        "permission_snapshot_hash",
+        "permission_snapshot_id",
+        "run_id",
+        "stage",
+        "turn_id"
+      ],
+      "action": "schema",
+      "consumer": "createPendingTurnCommandsTableTx",
+      "consumer_kind": "schema_maintenance"
     },
     {
       "id": "threadstore.1e4ad6384960d935",
@@ -2823,7 +2850,7 @@
       "path": "internal/ai/threadstore/store.go",
       "function": "Store.ListThreadSettingsForRecoveryPage",
       "method": "QueryContext",
-      "builder_sha256": "d43e52b143073b648773fdf9f3d87537b24dba7209476667d01f879a4283dbe4",
+      "builder_sha256": "ba9a81332d983330e5d2ca41fb083fe099a62713b26ebfd1c437c5a48456495b",
       "tables": [
         "ai_thread_settings"
       ],
@@ -3029,7 +3056,7 @@
       "path": "internal/persistence/sqliteutil/inspect.go",
       "function": "TableColumnNamesTx",
       "method": "Query",
-      "builder_sha256": "d43e52b143073b648773fdf9f3d87537b24dba7209476667d01f879a4283dbe4",
+      "builder_sha256": "ba9a81332d983330e5d2ca41fb083fe099a62713b26ebfd1c437c5a48456495b",
       "action": "read",
       "consumer": "TableColumnNamesTx",
       "consumer_kind": "schema_maintenance",
@@ -3190,7 +3217,7 @@
       "path": "internal/ai/threadstore/orphan_adoption.go",
       "function": "Store.AdoptCanonicalRootSettings",
       "method": "QueryRowContext",
-      "builder_sha256": "d43e52b143073b648773fdf9f3d87537b24dba7209476667d01f879a4283dbe4",
+      "builder_sha256": "ba9a81332d983330e5d2ca41fb083fe099a62713b26ebfd1c437c5a48456495b",
       "tables": [
         "ai_thread_settings"
       ],
@@ -3344,7 +3371,7 @@
       "path": "internal/ai/threadstore/fork_operation.go",
       "function": "captureForkSnapshot",
       "method": "QueryRowContext",
-      "builder_sha256": "d43e52b143073b648773fdf9f3d87537b24dba7209476667d01f879a4283dbe4",
+      "builder_sha256": "ba9a81332d983330e5d2ca41fb083fe099a62713b26ebfd1c437c5a48456495b",
       "tables": [
         "ai_thread_settings"
       ],
@@ -3440,7 +3467,7 @@
       "path": "internal/ai/threadstore/reviewed_schema.go",
       "function": "inspectReviewedTableTx",
       "method": "Query",
-      "builder_sha256": "d43e52b143073b648773fdf9f3d87537b24dba7209476667d01f879a4283dbe4",
+      "builder_sha256": "ba9a81332d983330e5d2ca41fb083fe099a62713b26ebfd1c437c5a48456495b",
       "action": "read",
       "consumer": "inspectReviewedTableTx",
       "consumer_kind": "product_operation",
@@ -3830,7 +3857,7 @@
       "path": "internal/ai/threadstore/uploads.go",
       "function": "Store.FinalizeDeletedUploads",
       "method": "ExecContext",
-      "builder_sha256": "d43e52b143073b648773fdf9f3d87537b24dba7209476667d01f879a4283dbe4",
+      "builder_sha256": "ba9a81332d983330e5d2ca41fb083fe099a62713b26ebfd1c437c5a48456495b",
       "tables": [
         "ai_uploads"
       ],
@@ -3949,7 +3976,7 @@
       "path": "internal/ai/threadstore/uploads.go",
       "function": "Store.MaybeCompact",
       "method": "ExecContext",
-      "builder_sha256": "d43e52b143073b648773fdf9f3d87537b24dba7209476667d01f879a4283dbe4",
+      "builder_sha256": "ba9a81332d983330e5d2ca41fb083fe099a62713b26ebfd1c437c5a48456495b",
       "action": "execute",
       "consumer": "Store.MaybeCompact",
       "consumer_kind": "product_operation",
@@ -3961,7 +3988,7 @@
       "path": "internal/ai/threadstore/store.go",
       "function": "Store.CountQueuedTurnsByThread",
       "method": "QueryContext",
-      "builder_sha256": "d43e52b143073b648773fdf9f3d87537b24dba7209476667d01f879a4283dbe4",
+      "builder_sha256": "ba9a81332d983330e5d2ca41fb083fe099a62713b26ebfd1c437c5a48456495b",
       "tables": [
         "ai_queued_turns"
       ],
@@ -4370,7 +4397,7 @@
       "path": "internal/ai/threadstore/thread_delete_operation.go",
       "function": "Store.confirmThreadDeleteStep",
       "method": "ExecContext",
-      "builder_sha256": "d43e52b143073b648773fdf9f3d87537b24dba7209476667d01f879a4283dbe4",
+      "builder_sha256": "ba9a81332d983330e5d2ca41fb083fe099a62713b26ebfd1c437c5a48456495b",
       "tables": [
         "ai_thread_delete_operations"
       ],
@@ -4675,7 +4702,7 @@
       "path": "internal/ai/threadstore/uploads.go",
       "function": "Store.FinalizeDeletedUploads",
       "method": "ExecContext",
-      "builder_sha256": "d43e52b143073b648773fdf9f3d87537b24dba7209476667d01f879a4283dbe4",
+      "builder_sha256": "ba9a81332d983330e5d2ca41fb083fe099a62713b26ebfd1c437c5a48456495b",
       "tables": [
         "ai_upload_refs"
       ],
@@ -5068,7 +5095,7 @@
       "path": "internal/ai/threadstore/fork_operation.go",
       "function": "loadForkDestinationThreadTx",
       "method": "QueryRowContext",
-      "builder_sha256": "d43e52b143073b648773fdf9f3d87537b24dba7209476667d01f879a4283dbe4",
+      "builder_sha256": "ba9a81332d983330e5d2ca41fb083fe099a62713b26ebfd1c437c5a48456495b",
       "tables": [
         "ai_thread_settings"
       ],
@@ -5204,7 +5231,7 @@
       "path": "internal/ai/threadstore/store.go",
       "function": "Store.GetThreadSettings",
       "method": "QueryRowContext",
-      "builder_sha256": "d43e52b143073b648773fdf9f3d87537b24dba7209476667d01f879a4283dbe4",
+      "builder_sha256": "ba9a81332d983330e5d2ca41fb083fe099a62713b26ebfd1c437c5a48456495b",
       "tables": [
         "ai_thread_settings"
       ],
@@ -5430,7 +5457,7 @@
       "path": "internal/persistence/sqliteutil/engine.go",
       "function": "setUserVersionTx",
       "method": "Exec",
-      "builder_sha256": "d43e52b143073b648773fdf9f3d87537b24dba7209476667d01f879a4283dbe4",
+      "builder_sha256": "ba9a81332d983330e5d2ca41fb083fe099a62713b26ebfd1c437c5a48456495b",
       "action": "execute",
       "consumer": "setUserVersionTx",
       "consumer_kind": "schema_maintenance",
@@ -5703,39 +5730,6 @@
       "consumer_kind": "product_operation"
     },
     {
-      "id": "threadstore.ae4794b097a41ade",
-      "path": "internal/ai/threadstore/admission_receipt.go",
-      "function": "Store.GetPendingTurnAdmissionReceipt",
-      "method": "QueryRowContext",
-      "sql_sha256": "d91b3bfce58e46481193c9f02ddc4a7a7eef6365dc85b01da1310347197a1dbb",
-      "tables": [
-        "ai_turn_admission_receipts"
-      ],
-      "lookup_keys": [
-        "queue_id"
-      ],
-      "read_columns": [
-        "command_fingerprint",
-        "created_at_unix_ms",
-        "endpoint_id",
-        "entry_id",
-        "logical_request_id",
-        "permission_snapshot_hash",
-        "permission_snapshot_id",
-        "queue_id",
-        "run_id",
-        "stage",
-        "terminal_committed",
-        "terminal_replayed",
-        "thread_id",
-        "turn_id",
-        "updated_at_unix_ms"
-      ],
-      "action": "read",
-      "consumer": "Store.GetPendingTurnAdmissionReceipt",
-      "consumer_kind": "startup_recovery"
-    },
-    {
       "id": "threadstore.aecca972106c8188",
       "path": "internal/ai/threadstore/admission_receipt.go",
       "function": "getQueuedTurnTx",
@@ -5805,7 +5799,7 @@
       "path": "internal/ai/threadstore/reviewed_schema.go",
       "function": "inspectReviewedIndexTx",
       "method": "Query",
-      "builder_sha256": "d43e52b143073b648773fdf9f3d87537b24dba7209476667d01f879a4283dbe4",
+      "builder_sha256": "ba9a81332d983330e5d2ca41fb083fe099a62713b26ebfd1c437c5a48456495b",
       "action": "read",
       "consumer": "inspectReviewedIndexTx",
       "consumer_kind": "product_operation",
@@ -5876,7 +5870,7 @@
       "path": "internal/ai/threadstore/reviewed_schema.go",
       "function": "inspectReviewedTableTx",
       "method": "Query",
-      "builder_sha256": "d43e52b143073b648773fdf9f3d87537b24dba7209476667d01f879a4283dbe4",
+      "builder_sha256": "ba9a81332d983330e5d2ca41fb083fe099a62713b26ebfd1c437c5a48456495b",
       "action": "read",
       "consumer": "inspectReviewedTableTx",
       "consumer_kind": "product_operation",
@@ -5960,7 +5954,7 @@
       "path": "internal/ai/threadstore/subagent_publication.go",
       "function": "Store.listPendingSubAgentPublications",
       "method": "QueryContext",
-      "builder_sha256": "d43e52b143073b648773fdf9f3d87537b24dba7209476667d01f879a4283dbe4",
+      "builder_sha256": "ba9a81332d983330e5d2ca41fb083fe099a62713b26ebfd1c437c5a48456495b",
       "tables": [
         "ai_subagent_publication_operations"
       ],
@@ -6046,7 +6040,7 @@
       "path": "internal/ai/threadstore/fork_operation.go",
       "function": "Store.listForkOperations",
       "method": "QueryContext",
-      "builder_sha256": "d43e52b143073b648773fdf9f3d87537b24dba7209476667d01f879a4283dbe4",
+      "builder_sha256": "ba9a81332d983330e5d2ca41fb083fe099a62713b26ebfd1c437c5a48456495b",
       "tables": [
         "ai_thread_fork_operations"
       ],
@@ -6263,6 +6257,37 @@
       "action": "read",
       "consumer": "bindUploadsToRefTx",
       "consumer_kind": "product_operation"
+    },
+    {
+      "id": "threadstore.c67e71a1cac5ea18",
+      "path": "internal/ai/threadstore/admission_receipt.go",
+      "function": "loadPendingTurnAdmissionReceiptTx",
+      "method": "QueryRowContext",
+      "sql_sha256": "ffb7a8e0c4979cecd3b79efd62ae541b8283a74a76f48105a0b0e14be6601b77",
+      "tables": [
+        "ai_turn_admission_receipts"
+      ],
+      "lookup_keys": [
+        "queue_id"
+      ],
+      "read_columns": [
+        "command_fingerprint",
+        "created_at_unix_ms",
+        "endpoint_id",
+        "entry_id",
+        "logical_request_id",
+        "permission_snapshot_hash",
+        "permission_snapshot_id",
+        "queue_id",
+        "run_id",
+        "stage",
+        "thread_id",
+        "turn_id",
+        "updated_at_unix_ms"
+      ],
+      "action": "read",
+      "consumer": "loadPendingTurnAdmissionReceiptTx",
+      "consumer_kind": "admission_coordination"
     },
     {
       "id": "threadstore.c6cd949f4f5cfe74",
@@ -6522,7 +6547,7 @@
       "path": "internal/ai/threadstore/uploads.go",
       "function": "collectUnreferencedUploadsTx",
       "method": "ExecContext",
-      "builder_sha256": "d43e52b143073b648773fdf9f3d87537b24dba7209476667d01f879a4283dbe4",
+      "builder_sha256": "ba9a81332d983330e5d2ca41fb083fe099a62713b26ebfd1c437c5a48456495b",
       "tables": [
         "ai_uploads"
       ],
@@ -6733,44 +6758,11 @@
       "consumer_kind": "product_operation"
     },
     {
-      "id": "threadstore.d856265f4aa6ac8d",
-      "path": "internal/ai/threadstore/admission_receipt.go",
-      "function": "loadPendingTurnAdmissionReceiptTx",
-      "method": "QueryRowContext",
-      "sql_sha256": "d91b3bfce58e46481193c9f02ddc4a7a7eef6365dc85b01da1310347197a1dbb",
-      "tables": [
-        "ai_turn_admission_receipts"
-      ],
-      "lookup_keys": [
-        "queue_id"
-      ],
-      "read_columns": [
-        "command_fingerprint",
-        "created_at_unix_ms",
-        "endpoint_id",
-        "entry_id",
-        "logical_request_id",
-        "permission_snapshot_hash",
-        "permission_snapshot_id",
-        "queue_id",
-        "run_id",
-        "stage",
-        "terminal_committed",
-        "terminal_replayed",
-        "thread_id",
-        "turn_id",
-        "updated_at_unix_ms"
-      ],
-      "action": "read",
-      "consumer": "loadPendingTurnAdmissionReceiptTx",
-      "consumer_kind": "admission_coordination"
-    },
-    {
       "id": "threadstore.d8b5ab2c0ba41c63",
       "path": "internal/ai/threadstore/uploads.go",
       "function": "collectUnreferencedUploadsTx",
       "method": "QueryContext",
-      "builder_sha256": "d43e52b143073b648773fdf9f3d87537b24dba7209476667d01f879a4283dbe4",
+      "builder_sha256": "ba9a81332d983330e5d2ca41fb083fe099a62713b26ebfd1c437c5a48456495b",
       "tables": [
         "ai_upload_refs",
         "ai_uploads"
@@ -6794,7 +6786,7 @@
       "path": "internal/ai/threadstore/fork_operation.go",
       "function": "Store.MarkForkOperationBroadcasted",
       "method": "ExecContext",
-      "builder_sha256": "d43e52b143073b648773fdf9f3d87537b24dba7209476667d01f879a4283dbe4",
+      "builder_sha256": "ba9a81332d983330e5d2ca41fb083fe099a62713b26ebfd1c437c5a48456495b",
       "tables": [
         "ai_thread_fork_operations"
       ],
@@ -6946,7 +6938,7 @@
       "path": "internal/ai/threadstore/store.go",
       "function": "Store.getThreadTx",
       "method": "QueryRowContext",
-      "builder_sha256": "d43e52b143073b648773fdf9f3d87537b24dba7209476667d01f879a4283dbe4",
+      "builder_sha256": "ba9a81332d983330e5d2ca41fb083fe099a62713b26ebfd1c437c5a48456495b",
       "tables": [
         "ai_thread_settings"
       ],
@@ -7119,7 +7111,7 @@
       "path": "internal/ai/threadstore/followups.go",
       "function": "Store.listFollowupsByLane",
       "method": "QueryContext",
-      "builder_sha256": "d43e52b143073b648773fdf9f3d87537b24dba7209476667d01f879a4283dbe4",
+      "builder_sha256": "ba9a81332d983330e5d2ca41fb083fe099a62713b26ebfd1c437c5a48456495b",
       "tables": [
         "ai_queued_turns"
       ],
@@ -7726,7 +7718,7 @@
       "path": "internal/ai/threadstore/followups.go",
       "function": "Store.listThreadsWithQueuedTurns",
       "method": "QueryContext",
-      "builder_sha256": "d43e52b143073b648773fdf9f3d87537b24dba7209476667d01f879a4283dbe4",
+      "builder_sha256": "ba9a81332d983330e5d2ca41fb083fe099a62713b26ebfd1c437c5a48456495b",
       "tables": [
         "ai_queued_turns"
       ],
@@ -7785,7 +7777,7 @@
       "path": "internal/ai/threadstore/thread_lifecycle.go",
       "function": "deleteThreadScopedRowsTx",
       "method": "ExecContext",
-      "builder_sha256": "d43e52b143073b648773fdf9f3d87537b24dba7209476667d01f879a4283dbe4",
+      "builder_sha256": "ba9a81332d983330e5d2ca41fb083fe099a62713b26ebfd1c437c5a48456495b",
       "tables": [
         "ai_child_permission_snapshots",
         "ai_flower_thread_routing",
