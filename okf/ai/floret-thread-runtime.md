@@ -3,11 +3,11 @@ type: AI Runtime Contract
 title: Floret thread runtime integration
 description: Canonical Floret v3 identity, admission, recovery, projection, and runtime ownership.
 tags: [ai, floret, threads, runtime]
-timestamp: 2026-07-31T00:00:00Z
+timestamp: 2026-08-01T00:00:00Z
 ---
 # Summary
 
-- Authority: published Floret v3.0.3 owns canonical `ThreadID`, `TurnID`, `RunID`, journal state, titles, lifecycle, projections, approvals, todos, tools, SubAgents, artifacts, and provider continuation.
+- Authority: published Floret v3.1.1 owns canonical `ThreadID`, `TurnID`, `RunID`, journal state, titles, lifecycle, projections, approvals, todos, tools, SubAgents, artifacts, and provider continuation.
 - Outcome: Redeven uses narrow identity-bound public capabilities and maps validated Floret state into Flower while retaining only product settings, resources, authorization, unadmitted work, and durable saga receipts.
 - Invariants: callers never preallocate canonical identity, admission binds only from committed Floret facts, and no product table or UI projection reconstructs Agent state.
 - Failure boundary: missing authority, invalid public data, conflicting identity, incomplete exact-read recovery, or failed permission proof stops the operation without fallback or guessed state.
@@ -26,7 +26,7 @@ Thread overviews, titles, turn pages, exact turn reads, activity, approvals, tod
 
 Before admission, a queued command owns a Redeven `queue_id`, frozen input, stable `LogicalRequestID`, product resource claims, and launch settings. Its canonical `turn_id` and `run_id` are empty. Queue admission does not generate either value.
 
-Floret v3.0.3 exposes turn admission as a two-step public contract. Redeven calls `AdmitTurn` with the frozen command, validates the returned `TurnAdmissionReceipt`, and in one threadstore transaction binds the previously empty canonical IDs, records the committed entry and permission-snapshot evidence, transfers upload ownership, consumes queued work, and advances the followup revision. Only after that product transaction commits does it configure in-memory run identity, publish canonical timeline replacement, mark presentation ready, and call `ExecuteAdmittedTurn` with the same receipt and command.
+Floret v3.1.1 exposes turn admission as a two-step public contract. Redeven calls `AdmitTurn` once with the frozen canonical command, validates the returned `TurnAdmissionReceipt`, and in one threadstore transaction binds the previously empty canonical IDs, records the committed entry and permission-snapshot evidence, transfers upload ownership, consumes queued work, and advances the followup revision. Only after that product transaction commits does it configure in-memory run identity, publish canonical timeline replacement, mark presentation ready, and call `ExecuteAdmission` with the same receipt plus process-local `ExecutionContext`. Supplemental context and signal projection are supplied only at execution; Redeven neither persists nor resubmits the canonical command as an execution plan.
 
 The eventual execution result rechecks terminal identity and releases execution authority; it is not the first admission boundary. A definite failure before receipt admission releases the in-flight command to an editable retry state and releases applicable staging ownership. A failure after canonical admission must not requeue the admitted user turn. An unknown transport outcome preserves the draft and stable client request identity so the caller can retry the exact operation.
 
@@ -34,7 +34,11 @@ Restart recovery reuses the same `LogicalRequestID`. A replayed committed mutati
 
 ## Runtime ownership and presentation
 
-One composition-root `runtime.Host` opens the published Floret v3.0.3 storage source directly. It issues responsibility-specific create, title, fork, delete, read, turn, approval, todo, SubAgent, inventory, interrupted-turn recovery, and pending-tool recovery capabilities. `Service`, runs, and tool handlers retain only narrow local interfaces. Removed v2 storage cutover APIs and compatibility migration paths are absent.
+One composition-root `runtime.Host` opens the published Floret v3.1.1 storage source directly. Transient thread handles issue native `ThreadReader`, `ThreadLifecycle`, `TurnExecutor`, `ThreadCompactor`, and `SubAgentManager` capabilities; product adapters retain only the exact native capability they need. Create, inventory, interrupted-turn recovery, and pending-tool recovery remain confined to their existing composition-owned coordinators. `Service`, runs, and tool handlers retain only narrow local interfaces. Deprecated broad `Thread` and `Turns` entry points, removed v2 storage cutover APIs, and compatibility migration paths are absent from production integration.
+
+Initial thread state is read through `ThreadReader.Bootstrap`, which returns the thread, overview, first turn page, approvals, todos, context, pending work, and SubAgents from one revision. Any direct Floret subscription must continue from that revision; later history pagination remains an explicit `ListTurns` read. Canonical Activity reads use `ReadAuthoritativeProjection` and retain its Floret revision/provenance distinction before Redeven maps the enclosed projection into Flower.
+
+Floret owns canonical todo validity: maximum count, stable non-empty unique IDs, non-empty content, the status set, and one in-progress item. Redeven derives status values in its tool schema, maps typed snapshots to UI DTOs, and keeps only product guidance that control-signal prose is not actionable work. It does not normalize or repair canonical todo state.
 
 Floret assembles canonical journal context and opaque continuation. Redeven supplies current user input, ephemeral supplemental context, typed attachments and references, provider gateway, tools, effect authorization, permission snapshots, and product labels through immutable `runtime.Agent` values. Provider adapters reject invalid typed messages rather than repairing, regrouping, dropping, or synthesizing them.
 
@@ -57,7 +61,7 @@ Redeven product receipts contain only the minimum idempotency, authorization, an
 - `redeven:internal/ai/thread_create_operation.go` - Drives create replay and canonical binding from stable client identity.
 - `redeven:internal/ai/thread_fork_operation.go` - Drives fork replay and destination materialization.
 - `redeven:internal/ai/send_user_turn.go` - Starts a turn without caller-supplied canonical turn or run identity.
-- `redeven:internal/ai/floret_runtime.go` - Binds `TurnAdmissionReceipt` before `ExecuteAdmittedTurn`.
+- `redeven:internal/ai/floret_runtime.go` - Binds `TurnAdmissionReceipt` before receipt-only `ExecuteAdmission`.
 - `redeven:internal/ai/floret_events.go` - Treats committed-user events as observation, not admission binding.
 - `redeven:internal/ai/queued_turns.go` - Implements exact replay and recovery settlement.
 - `redeven:internal/ai/queued_turns_exact_read_test.go` - Covers strict mutation-receipt and exact-read recovery evidence.

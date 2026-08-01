@@ -27,6 +27,9 @@ type attachmentAuthorityReadHost struct {
 func (h attachmentAuthorityReadHost) ReadThread(context.Context) (flruntime.ThreadSnapshot, error) {
 	return flruntime.ThreadSnapshot{}, errors.New("not used")
 }
+func (h attachmentAuthorityReadHost) Bootstrap(context.Context, flruntime.ThreadBootstrapRequest) (flruntime.ThreadBootstrap, error) {
+	return flruntime.ThreadBootstrap{}, errors.New("not used")
+}
 func (h attachmentAuthorityReadHost) ReadThreadOverview(context.Context) (flruntime.ThreadOverview, error) {
 	return flruntime.ThreadOverview{}, errors.New("not used")
 }

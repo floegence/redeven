@@ -148,6 +148,16 @@ func (s *Service) loadThreadTimelineMessages(ctx context.Context, endpointID str
 	return s.threadTimelineMessagesFromTurns(endpointID, threadID, turns)
 }
 
+func (s *Service) loadThreadTimelineMessagesFromBootstrap(ctx context.Context, endpointID string, threadID string, host interface {
+	ListThreadTurns(context.Context, flruntime.ThreadTurnsRequest) (flruntime.ThreadTurnsPage, error)
+}, bootstrap flruntime.ThreadBootstrap) ([]threadTimelineMessage, error) {
+	turns, err := listAllFloretThreadTurnsFromPage(ctx, host, threadID, bootstrap.Turns)
+	if err != nil {
+		return nil, err
+	}
+	return s.threadTimelineMessagesFromTurns(endpointID, threadID, turns)
+}
+
 func (s *Service) threadTimelineMessagesFromTurns(endpointID string, threadID string, turns []flruntime.ThreadTurnSnapshot) ([]threadTimelineMessage, error) {
 	endpointID = strings.TrimSpace(endpointID)
 	threadID = strings.TrimSpace(threadID)
@@ -228,22 +238,21 @@ func (s *Service) threadTimelineMessagesFromTurns(endpointID string, threadID st
 func listAllFloretThreadTurns(ctx context.Context, host interface {
 	ListThreadTurns(context.Context, flruntime.ThreadTurnsRequest) (flruntime.ThreadTurnsPage, error)
 }, threadID string) ([]flruntime.ThreadTurnSnapshot, error) {
+	page, err := host.ListThreadTurns(ctx, flruntime.ThreadTurnsRequest{Tail: 200})
+	if err != nil {
+		return nil, err
+	}
+	return listAllFloretThreadTurnsFromPage(ctx, host, threadID, page)
+}
+
+func listAllFloretThreadTurnsFromPage(ctx context.Context, host interface {
+	ListThreadTurns(context.Context, flruntime.ThreadTurnsRequest) (flruntime.ThreadTurnsPage, error)
+}, threadID string, page flruntime.ThreadTurnsPage) ([]flruntime.ThreadTurnSnapshot, error) {
 	newerThroughOrdinal := int64(-1)
 	newerOldestTurnOrdinal := int64(-1)
 	out := make([]flruntime.ThreadTurnSnapshot, 0)
 	var before *flruntime.ThreadTurnCursor
 	for {
-		request := flruntime.ThreadTurnsRequest{}
-		if before == nil {
-			request.Tail = 200
-		} else {
-			request.BeforeCursor = before
-			request.Limit = 200
-		}
-		page, err := host.ListThreadTurns(ctx, request)
-		if err != nil {
-			return nil, err
-		}
 		if strings.TrimSpace(string(page.ThreadID)) != strings.TrimSpace(threadID) {
 			return nil, canonicalTimelineResyncErrorf("turn page thread identity differs from the requested thread")
 		}
@@ -282,6 +291,11 @@ func listAllFloretThreadTurns(ctx context.Context, host interface {
 		newerThroughOrdinal = page.ThroughOrdinal
 		newerOldestTurnOrdinal = page.Turns[0].Ordinal
 		before = page.BeforeCursor
+		var err error
+		page, err = host.ListThreadTurns(ctx, flruntime.ThreadTurnsRequest{BeforeCursor: before, Limit: 200})
+		if err != nil {
+			return nil, err
+		}
 	}
 	for index, turn := range out {
 		if index > 0 && turn.Ordinal <= out[index-1].Ordinal {

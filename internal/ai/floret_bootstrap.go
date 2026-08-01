@@ -40,6 +40,19 @@ type floretHostAuthorityAdapter struct {
 	host *flruntime.Host
 }
 
+type floretThreadLifecycleAdapter struct {
+	lifecycle flruntime.ThreadLifecycle
+}
+
+func (a floretHostAuthorityAdapter) openLifecycle(ctx context.Context, threadID identity.ThreadID) (floretThreadLifecycleAdapter, error) {
+	thread, err := a.host.Thread(ctxOrBackground(ctx), threadID)
+	if err != nil {
+		return floretThreadLifecycleAdapter{}, err
+	}
+	lifecycle, err := thread.Lifecycle()
+	return floretThreadLifecycleAdapter{lifecycle: lifecycle}, err
+}
+
 func (a floretHostAuthorityAdapter) CreateThread(ctx context.Context, requestID identity.LogicalRequestID) (flruntime.CreateThreadResult, error) {
 	return a.host.Threads().CreateThread(ctxOrBackground(ctx), flruntime.CreateThreadCommand{LogicalRequestID: requestID})
 }
@@ -49,19 +62,19 @@ func (a floretHostAuthorityAdapter) SetCreatedThreadTitle(ctx context.Context, t
 }
 
 func (a floretHostAuthorityAdapter) SetThreadTitle(ctx context.Context, threadID identity.ThreadID, command flruntime.SetThreadTitleCommand) (flruntime.SetThreadTitleResult, error) {
-	thread, err := a.host.Thread(ctxOrBackground(ctx), threadID)
+	lifecycle, err := a.openLifecycle(ctx, threadID)
 	if err != nil {
 		return flruntime.SetThreadTitleResult{}, err
 	}
-	return thread.SetTitle(ctxOrBackground(ctx), command)
+	return lifecycle.lifecycle.SetTitle(ctxOrBackground(ctx), command)
 }
 
 func (a floretHostAuthorityAdapter) ForkThread(ctx context.Context, sourceThreadID identity.ThreadID, command flruntime.ForkThreadCommand) (flruntime.ForkThreadResultV3, error) {
-	thread, err := a.host.Thread(ctxOrBackground(ctx), sourceThreadID)
+	lifecycle, err := a.openLifecycle(ctx, sourceThreadID)
 	if err != nil {
 		return flruntime.ForkThreadResultV3{}, err
 	}
-	return thread.ForkThread(ctxOrBackground(ctx), command)
+	return lifecycle.lifecycle.Fork(ctxOrBackground(ctx), command)
 }
 
 func (a floretHostAuthorityAdapter) SetForkedThreadTitle(ctx context.Context, threadID identity.ThreadID, command flruntime.SetThreadTitleCommand) (flruntime.SetThreadTitleResult, error) {
@@ -69,57 +82,62 @@ func (a floretHostAuthorityAdapter) SetForkedThreadTitle(ctx context.Context, th
 }
 
 func (a floretHostAuthorityAdapter) DeleteThread(ctx context.Context, threadID identity.ThreadID, command flruntime.DeleteThreadCommand) error {
-	thread, err := a.host.Thread(ctxOrBackground(ctx), threadID)
+	lifecycle, err := a.openLifecycle(ctx, threadID)
 	if err != nil {
 		return err
 	}
-	_, err = thread.DeleteThread(ctxOrBackground(ctx), command)
+	_, err = lifecycle.lifecycle.Delete(ctxOrBackground(ctx), command)
 	return err
 }
 
 type floretThreadReadHostAdapter struct {
-	thread *flruntime.Thread
+	reader flruntime.ThreadReader
 }
 
 func (h floretThreadReadHostAdapter) ReadThread(ctx context.Context) (flruntime.ThreadSnapshot, error) {
-	view, err := h.thread.Snapshot(ctxOrBackground(ctx))
+	view, err := h.reader.Snapshot(ctxOrBackground(ctx))
 	return view.Thread, err
 }
 
+func (h floretThreadReadHostAdapter) Bootstrap(ctx context.Context, request flruntime.ThreadBootstrapRequest) (flruntime.ThreadBootstrap, error) {
+	return h.reader.Bootstrap(ctxOrBackground(ctx), request)
+}
+
 func (h floretThreadReadHostAdapter) ReadThreadOverview(ctx context.Context) (flruntime.ThreadOverview, error) {
-	return h.thread.ReadOverview(ctxOrBackground(ctx))
+	return h.reader.ReadOverview(ctxOrBackground(ctx))
 }
 
 func (h floretThreadReadHostAdapter) ReadThreadTurn(ctx context.Context, turnID identity.TurnID) (flruntime.ThreadTurnSnapshot, error) {
-	return h.thread.ReadTurn(ctxOrBackground(ctx), turnID)
+	return h.reader.ReadTurn(ctxOrBackground(ctx), turnID)
 }
 
 func (h floretThreadReadHostAdapter) ListThreadTurns(ctx context.Context, request flruntime.ThreadTurnsRequest) (flruntime.ThreadTurnsPage, error) {
-	return h.thread.ListTurns(ctxOrBackground(ctx), request)
+	return h.reader.ListTurns(ctxOrBackground(ctx), request)
 }
 
 func (h floretThreadReadHostAdapter) ReadThreadAgentTodos(ctx context.Context) (flruntime.ThreadAgentTodoState, error) {
-	return h.thread.ReadAgentTodos(ctxOrBackground(ctx))
+	return h.reader.ReadAgentTodos(ctxOrBackground(ctx))
 }
 
 func (h floretThreadReadHostAdapter) ReadThreadContext(ctx context.Context) (flruntime.ThreadContextSnapshot, error) {
-	return h.thread.ReadContext(ctxOrBackground(ctx))
+	return h.reader.ReadContext(ctxOrBackground(ctx))
 }
 
 func (h floretThreadReadHostAdapter) ReadTurnProjection(ctx context.Context, turnID identity.TurnID, runID identity.RunID) (flruntime.ThreadTurnProjection, error) {
-	return h.thread.ReadProjection(ctxOrBackground(ctx), turnID, runID)
+	projection, err := h.reader.ReadAuthoritativeProjection(ctxOrBackground(ctx), turnID, runID)
+	return projection.Projection, err
 }
 
 type floretSubagentReadHostAdapter struct {
-	parent *flruntime.Thread
+	reader flruntime.ThreadReader
 }
 
 func (h floretSubagentReadHostAdapter) ListSubAgents(ctx context.Context) ([]flruntime.SubAgentSnapshot, error) {
-	return h.parent.ListSubAgents(ctxOrBackground(ctx))
+	return h.reader.ListSubAgents(ctxOrBackground(ctx))
 }
 
 func (h floretSubagentReadHostAdapter) child(ctx context.Context, childThreadID identity.ThreadID) (*flruntime.Child, error) {
-	return h.parent.Child(ctxOrBackground(ctx), childThreadID)
+	return h.reader.Child(ctxOrBackground(ctx), childThreadID)
 }
 
 func (h floretSubagentReadHostAdapter) ReadThreadTurn(ctx context.Context, childThreadID identity.ThreadID, turnID identity.TurnID) (flruntime.ThreadTurnSnapshot, error) {
@@ -147,40 +165,36 @@ func (h floretSubagentReadHostAdapter) ReadSubAgentDetail(ctx context.Context, c
 }
 
 type floretTurnHostAdapter struct {
-	thread *flruntime.Thread
-	turns  *flruntime.Turns
-}
-
-func (h floretTurnHostAdapter) StartTurn(ctx context.Context, command flruntime.StartTurnCommand) (flruntime.StartTurnResult, error) {
-	return h.turns.StartTurn(ctxOrBackground(ctx), command)
+	reader   flruntime.ThreadReader
+	executor flruntime.TurnExecutor
 }
 
 func (h floretTurnHostAdapter) AdmitTurn(ctx context.Context, command flruntime.StartTurnCommand) (flruntime.AdmitTurnResult, error) {
-	return h.turns.AdmitTurn(ctxOrBackground(ctx), command)
+	return h.executor.AdmitTurn(ctxOrBackground(ctx), command)
 }
 
-func (h floretTurnHostAdapter) ExecuteAdmittedTurn(ctx context.Context, receipt flruntime.TurnAdmissionReceipt, command flruntime.StartTurnCommand) (flruntime.StartTurnResult, error) {
-	return h.turns.ExecuteAdmittedTurn(ctxOrBackground(ctx), receipt, command)
+func (h floretTurnHostAdapter) ExecuteAdmission(ctx context.Context, receipt flruntime.TurnAdmissionReceipt, executionContext flruntime.ExecutionContext) (flruntime.StartTurnResult, error) {
+	return h.executor.ExecuteAdmission(ctxOrBackground(ctx), receipt, executionContext)
 }
 
 func (h floretTurnHostAdapter) ReadTurn(ctx context.Context, turnID identity.TurnID) (flruntime.ThreadTurnSnapshot, error) {
-	return h.thread.ReadTurn(ctxOrBackground(ctx), turnID)
+	return h.reader.ReadTurn(ctxOrBackground(ctx), turnID)
 }
 
 func (h floretTurnHostAdapter) ReadApprovalQueue(ctx context.Context) (flruntime.ApprovalQueue, error) {
-	return h.thread.ReadApprovalQueue(ctxOrBackground(ctx))
+	return h.reader.ReadApprovalQueue(ctxOrBackground(ctx))
 }
 
 func (h floretTurnHostAdapter) ResolveApproval(ctx context.Context, command flruntime.ResolveApprovalCommand) (flruntime.ResolveApprovalResult, error) {
-	result, err := h.turns.ResolveApproval(ctxOrBackground(ctx), command)
+	result, err := h.executor.ResolveApproval(ctxOrBackground(ctx), command)
 	return result.Resolution, err
 }
 
 func (h floretTurnHostAdapter) SettlePendingTool(ctx context.Context, request floretPendingToolSettlementRequest) (flruntime.PendingToolSettlementResult, error) {
-	if request.Target.ThreadID != h.thread.ID() {
+	if request.Target.ThreadID != h.reader.ID() {
 		return flruntime.PendingToolSettlementResult{}, errors.New("Floret pending tool settlement target identity mismatch")
 	}
-	result, err := h.turns.RecordPendingToolOutcome(ctxOrBackground(ctx), flruntime.RecordPendingToolOutcomeCommand{
+	result, err := h.executor.RecordPendingToolOutcome(ctxOrBackground(ctx), flruntime.RecordPendingToolOutcomeCommand{
 		LogicalRequestID: request.LogicalRequestID,
 		Target: flruntime.ActivePendingToolTarget{
 			TurnID: request.Target.TurnID, RunID: request.Target.RunID, ToolCallID: request.Target.ToolCallID,
@@ -192,26 +206,25 @@ func (h floretTurnHostAdapter) SettlePendingTool(ctx context.Context, request fl
 }
 
 func (h floretTurnHostAdapter) ReadThreadAgentTodos(ctx context.Context) (flruntime.ThreadAgentTodoState, error) {
-	return h.thread.ReadAgentTodos(ctxOrBackground(ctx))
+	return h.reader.ReadAgentTodos(ctxOrBackground(ctx))
 }
 
 func (h floretTurnHostAdapter) UpdateThreadAgentTodos(ctx context.Context, command flruntime.UpdateTodosCommand) (flruntime.ThreadAgentTodoState, error) {
-	result, err := h.turns.UpdateTodos(ctxOrBackground(ctx), command)
+	result, err := h.executor.UpdateTodos(ctxOrBackground(ctx), command)
 	return result.State, err
 }
 
 type floretCompactionHostAdapter struct {
-	thread *flruntime.Thread
-	agent  *flruntime.Agent
+	compactor flruntime.ThreadCompactor
 }
 
 func (h floretCompactionHostAdapter) Compact(ctx context.Context, command flruntime.CompactThreadCommand) (flruntime.CompactThreadResult, error) {
-	return h.thread.Compact(ctxOrBackground(ctx), h.agent, command)
+	return h.compactor.Compact(ctxOrBackground(ctx), command)
 }
 
 type floretSubagentHostAdapter struct {
-	active    floretTurnHostAdapter
-	subagents *flruntime.SubAgents
+	active  floretTurnHostAdapter
+	manager flruntime.SubAgentManager
 }
 
 func (h floretSubagentHostAdapter) SettlePendingTool(ctx context.Context, request floretPendingToolSettlementRequest) (flruntime.PendingToolSettlementResult, error) {
@@ -219,30 +232,30 @@ func (h floretSubagentHostAdapter) SettlePendingTool(ctx context.Context, reques
 }
 
 func (h floretSubagentHostAdapter) SpawnSubAgent(ctx context.Context, command flruntime.SpawnSubAgentCommand) (flruntime.SubAgentSnapshot, error) {
-	result, err := h.subagents.SpawnSubAgent(ctxOrBackground(ctx), command)
+	result, err := h.manager.SpawnSubAgent(ctxOrBackground(ctx), command)
 	return result.Child, err
 }
 
 func (h floretSubagentHostAdapter) SendSubAgentInput(ctx context.Context, command flruntime.SendSubAgentMessageCommand) (flruntime.SubAgentSnapshot, error) {
-	result, err := h.subagents.SendSubAgentMessage(ctxOrBackground(ctx), command)
+	result, err := h.manager.SendSubAgentMessage(ctxOrBackground(ctx), command)
 	return result.Child, err
 }
 
 func (h floretSubagentHostAdapter) InterruptSubAgent(ctx context.Context, command flruntime.InterruptSubAgentCommand) (flruntime.SubAgentSnapshot, error) {
-	result, err := h.subagents.InterruptSubAgent(ctxOrBackground(ctx), command)
+	result, err := h.manager.InterruptSubAgent(ctxOrBackground(ctx), command)
 	return result.Child, err
 }
 
 func (h floretSubagentHostAdapter) WaitSubAgents(ctx context.Context, command flruntime.WaitSubAgentsCommand) (flruntime.WaitSubAgentsResult, error) {
-	return h.subagents.WaitSubAgents(ctxOrBackground(ctx), command)
+	return h.manager.WaitSubAgents(ctxOrBackground(ctx), command)
 }
 
 func (h floretSubagentHostAdapter) ListSubAgents(ctx context.Context) ([]flruntime.SubAgentSnapshot, error) {
-	return h.subagents.List(ctxOrBackground(ctx))
+	return h.manager.List(ctxOrBackground(ctx))
 }
 
 func (h floretSubagentHostAdapter) CloseSubAgent(ctx context.Context, command flruntime.CloseSubAgentCommand) (flruntime.SubAgentSnapshot, error) {
-	result, err := h.subagents.CloseSubAgent(ctxOrBackground(ctx), command)
+	result, err := h.manager.CloseSubAgent(ctxOrBackground(ctx), command)
 	return result.Child, err
 }
 
@@ -280,7 +293,11 @@ func (s *boundFloretPendingToolRecoverySettler) SettlePendingTool(ctx context.Co
 	}
 	var recovery *flruntime.PendingToolRecovery
 	if s.executionThreadID == s.authorityThreadID {
-		recovery, err = authority.PendingToolRecovery(ctxOrBackground(ctx), request.Target)
+		var lifecycle flruntime.ThreadLifecycle
+		lifecycle, err = authority.Lifecycle()
+		if err == nil {
+			recovery, err = lifecycle.PendingToolRecovery(ctxOrBackground(ctx), request.Target)
+		}
 	} else {
 		var child *flruntime.Child
 		child, err = authority.Child(ctxOrBackground(ctx), s.executionThreadID)
@@ -329,19 +346,26 @@ func configureFloretRuntime(host *flruntime.Host) (*floretBootstrapResult, flore
 	newThread := func(ctx context.Context, threadID identity.ThreadID) (*flruntime.Thread, error) {
 		return host.Thread(ctxOrBackground(ctx), threadID)
 	}
-	newThreadRead := func(ctx context.Context, threadID identity.ThreadID) (floretThreadReadHost, error) {
+	newReader := func(ctx context.Context, threadID identity.ThreadID) (flruntime.ThreadReader, error) {
 		thread, err := newThread(ctx, threadID)
 		if err != nil {
 			return nil, err
 		}
-		return floretThreadReadHostAdapter{thread: thread}, nil
+		return thread.Reader()
 	}
-	newSubagentRead := func(ctx context.Context, parentThreadID identity.ThreadID) (floretSubagentReadHost, error) {
-		thread, err := newThread(ctx, parentThreadID)
+	newThreadRead := func(ctx context.Context, threadID identity.ThreadID) (floretThreadReadHost, error) {
+		reader, err := newReader(ctx, threadID)
 		if err != nil {
 			return nil, err
 		}
-		return floretSubagentReadHostAdapter{parent: thread}, nil
+		return floretThreadReadHostAdapter{reader: reader}, nil
+	}
+	newSubagentRead := func(ctx context.Context, parentThreadID identity.ThreadID) (floretSubagentReadHost, error) {
+		reader, err := newReader(ctx, parentThreadID)
+		if err != nil {
+			return nil, err
+		}
+		return floretSubagentReadHostAdapter{reader: reader}, nil
 	}
 	rootInventory := floretRootThreadInventoryAdapter{threads: host.Threads()}
 	result := &floretBootstrapResult{
@@ -357,33 +381,45 @@ func configureFloretRuntime(host *flruntime.Host) (*floretBootstrapResult, flore
 				if err != nil {
 					return nil, err
 				}
-				turns, err := thread.Turns(agent)
+				reader, err := thread.Reader()
 				if err != nil {
 					return nil, err
 				}
-				return floretTurnHostAdapter{thread: thread, turns: turns}, nil
+				executor, err := thread.TurnExecutor(agent)
+				if err != nil {
+					return nil, err
+				}
+				return floretTurnHostAdapter{reader: reader, executor: executor}, nil
 			},
 			Compaction: func(ctx context.Context, agent *flruntime.Agent) (floretCompactionHost, error) {
 				thread, err := newThread(ctx, threadID)
 				if err != nil {
 					return nil, err
 				}
-				return floretCompactionHostAdapter{thread: thread, agent: agent}, nil
+				compactor, err := thread.Compactor(agent)
+				if err != nil {
+					return nil, err
+				}
+				return floretCompactionHostAdapter{compactor: compactor}, nil
 			},
 			SubAgent: func(ctx context.Context, agent *flruntime.Agent) (floretSubagentHost, error) {
 				thread, err := newThread(ctx, threadID)
 				if err != nil {
 					return nil, err
 				}
-				turns, err := thread.Turns(agent)
+				reader, err := thread.Reader()
 				if err != nil {
 					return nil, err
 				}
-				subagents, err := thread.SubAgents(ctxOrBackground(ctx), agent)
+				executor, err := thread.TurnExecutor(agent)
 				if err != nil {
 					return nil, err
 				}
-				return floretSubagentHostAdapter{active: floretTurnHostAdapter{thread: thread, turns: turns}, subagents: subagents}, nil
+				manager, err := thread.SubAgentManager(ctxOrBackground(ctx), agent)
+				if err != nil {
+					return nil, err
+				}
+				return floretSubagentHostAdapter{active: floretTurnHostAdapter{reader: reader, executor: executor}, manager: manager}, nil
 			},
 		}, nil
 	}
@@ -395,7 +431,11 @@ func configureFloretRuntime(host *flruntime.Host) (*floretBootstrapResult, flore
 			if err != nil {
 				return nil, err
 			}
-			handle, err := thread.InterruptedTurnRecovery(ctxOrBackground(ctx))
+			lifecycle, err := thread.Lifecycle()
+			if err != nil {
+				return nil, err
+			}
+			handle, err := lifecycle.InterruptedTurnRecovery(ctxOrBackground(ctx))
 			return floretInterruptedTurnRecoveryHostFactoryAdapter{recovery: handle}, err
 		},
 		subagent: func(ctx context.Context, parentThreadID identity.ThreadID, childThreadID identity.ThreadID) (floretInterruptedTurnRecoveryHostFactory, error) {

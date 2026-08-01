@@ -305,6 +305,22 @@ func (h *recordingFloretHost) ReadThread(context.Context) (flruntime.ThreadSnaps
 	return flruntime.ThreadSnapshot{}, nil
 }
 
+func (h *recordingFloretHost) Bootstrap(ctx context.Context, request flruntime.ThreadBootstrapRequest) (flruntime.ThreadBootstrap, error) {
+	snapshot, err := h.ReadThread(ctx)
+	if err != nil {
+		return flruntime.ThreadBootstrap{}, err
+	}
+	overview, err := h.ReadThreadOverview(ctx)
+	if err != nil {
+		return flruntime.ThreadBootstrap{}, err
+	}
+	page, err := h.ListThreadTurns(ctx, flruntime.ThreadTurnsRequest{Tail: request.TurnLimit})
+	if err != nil {
+		return flruntime.ThreadBootstrap{}, err
+	}
+	return flruntime.ThreadBootstrap{Revision: 1, Thread: snapshot, Overview: overview, Turns: page}, nil
+}
+
 func (h *recordingFloretHost) ReadThreadOverview(ctx context.Context) (flruntime.ThreadOverview, error) {
 	snapshot, err := h.ReadThread(ctx)
 	if err != nil {
@@ -583,7 +599,7 @@ type testFloretHost struct {
 }
 
 func (h *testFloretHost) Run(ctx context.Context, command flruntime.StartTurnCommand) (flruntime.TurnResult, error) {
-	started, err := h.StartTurn(ctx, command)
+	started, err := executeAdmittedFloretTurnForTest(ctx, h.floretTurnHost, command)
 	if err != nil {
 		return flruntime.TurnResult{}, err
 	}

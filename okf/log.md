@@ -1,8 +1,9 @@
 # Redeven OKF Update Log
 
 ## 2026-08-01
-* **Dependency**: Upgraded Redeven to published Floret v3.0.3 with exact checksums and adopted the two-step turn admission contract.
+* **Dependency**: Upgraded Redeven to published Floret v3.1.1 with exact checksums and adopted native narrow capability views, atomic thread bootstrap, authoritative projection reads, receipt-only execution, Floret-owned todo invariants, and valid partial live tool projections.
 * **Boundary**: Made `TurnAdmissionReceipt` the only live turn admission bind boundary before execution; committed-user events remain observation and presentation input only.
+* **Boundary**: Removed deprecated broad Floret production calls and Redeven's duplicate canonical todo validator while retaining product authorization, coordination, and interaction guidance.
 
 ## 2026-07-31
 * **Boundary**: Added an exact owner/consumer manifest for every threadstore schema object and all 238 production SQL calls, with explicit dynamic-query exceptions and receipt lookup restrictions.

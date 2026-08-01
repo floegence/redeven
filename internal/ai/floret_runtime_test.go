@@ -79,8 +79,8 @@ func (*panicFloretTurnHost) AdmitTurn(context.Context, flruntime.StartTurnComman
 	panic("deterministic AdmitTurn panic")
 }
 
-func (*panicFloretTurnHost) ExecuteAdmittedTurn(context.Context, flruntime.TurnAdmissionReceipt, flruntime.StartTurnCommand) (flruntime.StartTurnResult, error) {
-	panic("deterministic ExecuteAdmittedTurn panic")
+func (*panicFloretTurnHost) ExecuteAdmission(context.Context, flruntime.TurnAdmissionReceipt, flruntime.ExecutionContext) (flruntime.StartTurnResult, error) {
+	panic("deterministic ExecuteAdmission panic")
 }
 
 func (*panicFloretTurnHost) ReadTurn(context.Context, identity.TurnID) (flruntime.ThreadTurnSnapshot, error) {
@@ -191,7 +191,7 @@ func TestFloretTurnSettlementDoesNotFallbackAfterActiveAuthorityEnds(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	started, err := host.StartTurn(ctx, flruntime.StartTurnCommand{
+	started, err := executeAdmittedFloretTurnForTest(ctx, host, flruntime.StartTurnCommand{
 		LogicalRequestID: identity.LogicalRequestID("turn-settlement-owner"),
 		UserMessage:      flruntime.TurnInput{Text: "finish"},
 	})

@@ -12,6 +12,17 @@ import (
 	"github.com/floegence/redeven/internal/session"
 )
 
+func executeAdmittedFloretTurnForTest(ctx context.Context, host floretTurnHost, command flruntime.StartTurnCommand) (flruntime.StartTurnResult, error) {
+	admission, err := host.AdmitTurn(ctx, command)
+	if err != nil {
+		return flruntime.StartTurnResult{}, err
+	}
+	return host.ExecuteAdmission(ctx, admission.Receipt, flruntime.ExecutionContext{
+		SupplementalContext: command.SupplementalContext,
+		SignalProjector:     command.Signals.Project,
+	})
+}
+
 func testBoolPtr(value bool) *bool {
 	return &value
 }
@@ -93,7 +104,7 @@ func seedWaitingUserPrompt(t *testing.T, svc *Service, ctx context.Context, _ *s
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := host.StartTurn(ctx, flruntime.StartTurnCommand{
+	result, err := executeAdmittedFloretTurnForTest(ctx, host, flruntime.StartTurnCommand{
 		LogicalRequestID: identity.LogicalRequestID(identity.TurnID(prompt.MessageID)), UserMessage: flruntime.TurnInput{Text: "wait for user input"}, Signals: signalSpec,
 	})
 	if err != nil {

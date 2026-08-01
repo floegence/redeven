@@ -13,6 +13,7 @@ import (
 
 	"github.com/floegence/floret/v3/identity"
 	flruntime "github.com/floegence/floret/v3/runtime"
+	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -63,38 +64,77 @@ func (s *Service) GetFlowerThreadLiveBootstrap(ctx context.Context, meta *sessio
 		return nil, errors.New("missing thread_id")
 	}
 
-	thread, err := s.GetThread(ctx, meta, threadID)
-	if err != nil {
-		return nil, err
-	}
-	if thread == nil {
-		return nil, sql.ErrNoRows
-	}
-	subagents, err := s.listFlowerSubagentsForEndpoint(ctx, strings.TrimSpace(meta.EndpointID), threadID)
-	if err != nil {
-		return nil, err
-	}
-	thread.Subagents = subagents
-
 	s.mu.Lock()
 	db := s.threadsDB
 	s.mu.Unlock()
 	if db == nil {
 		return nil, errors.New("threads store not ready")
 	}
-
 	endpointID := strings.TrimSpace(meta.EndpointID)
+	deleteOperation, err := db.GetThreadDeleteOperation(ctx, endpointID, threadID)
+	if err != nil {
+		return nil, err
+	}
+	if deleteOperation != nil {
+		return nil, sql.ErrNoRows
+	}
+	settings, err := db.GetThreadSettings(ctx, endpointID, threadID)
+	if err != nil {
+		return nil, err
+	}
+	if settings == nil {
+		return nil, sql.ErrNoRows
+	}
+	queuedTurnCount, err := db.CountFollowupsByLane(ctx, endpointID, threadID, threadstore.FollowupLaneQueued)
+	if err != nil {
+		return nil, err
+	}
+	readHost, err := s.openFloretThreadReadHost(ctx, threadID)
+	if err != nil {
+		return nil, err
+	}
+	canonical, err := readHost.Bootstrap(ctx, flruntime.ThreadBootstrapRequest{TurnLimit: 200})
+	if err != nil {
+		return nil, err
+	}
+	thread, err := s.threadViewFromRecord(ctx, settings, queuedTurnCount, canonical.Thread, canonical.Overview.LatestTurn)
+	if err != nil {
+		return nil, err
+	}
+	thread.QueuedTurns = make([]QueuedTurnView, 0, queuedTurnCount)
+	if queuedTurnCount > 0 {
+		queued, listErr := db.ListFollowupsByLane(ctx, endpointID, threadID, threadstore.FollowupLaneQueued, queuedTurnCount)
+		if listErr != nil {
+			return nil, listErr
+		}
+		for _, record := range queued {
+			queuedView, viewErr := s.queuedTurnThreadView(ctx, record)
+			if viewErr != nil {
+				return nil, fmt.Errorf("decode queued turn %q: %w", record.QueueID, viewErr)
+			}
+			thread.QueuedTurns = append(thread.QueuedTurns, queuedView)
+		}
+	}
+	thread.Subagents, err = flowerSubagentSummariesFromFloret(threadID, canonical.SubAgents)
+	if err != nil {
+		return nil, err
+	}
+
 	s.mu.Lock()
 	state := s.flowerLiveMaterializedStateLocked(endpointID, threadID)
 	streamGeneration := s.flowerLiveStreamGenerationValue()
 	s.mu.Unlock()
 
-	canonicalContextState, err := s.flowerLiveCanonicalContextState(ctx, endpointID, threadID)
+	canonicalContextState, err := flowerLiveCanonicalContextStateFromSnapshot(canonical.Context)
 	if err != nil {
 		return nil, err
 	}
 	state = mergeFlowerLiveCanonicalContextState(state, canonicalContextState)
-	timeline, err := s.buildFlowerTimelineProjection(ctx, endpointID, threadID, state)
+	timelineItems, err := s.loadThreadTimelineMessagesFromBootstrap(ctx, endpointID, threadID, readHost, canonical)
+	if err != nil {
+		return nil, err
+	}
+	timeline, err := s.buildFlowerTimelineProjectionFromMessages(ctx, endpointID, threadID, state, timelineItems)
 	if err != nil {
 		return nil, err
 	}
@@ -115,7 +155,7 @@ func (s *Service) GetFlowerThreadLiveBootstrap(ctx context.Context, meta *sessio
 		StreamGeneration: streamGeneration,
 		Cursor:           cursor,
 		RetainedFromSeq:  retainedFromSeq,
-		Thread:           *thread,
+		Thread:           thread,
 		TimelineMessages: timeline.Messages,
 		LiveState:        state,
 		GeneratedAtMs:    time.Now().UnixMilli(),
@@ -229,6 +269,10 @@ func (s *Service) flowerLiveCanonicalContextState(ctx context.Context, endpointI
 	if err != nil {
 		return emptyFlowerLiveMaterializedState(), err
 	}
+	return flowerLiveCanonicalContextStateFromSnapshot(snapshot)
+}
+
+func flowerLiveCanonicalContextStateFromSnapshot(snapshot flruntime.ThreadContextSnapshot) (FlowerLiveMaterializedState, error) {
 	if err := snapshot.Validate(); err != nil {
 		return emptyFlowerLiveMaterializedState(), err
 	}
@@ -307,6 +351,14 @@ type flowerTimelineProjection struct {
 }
 
 func (s *Service) buildFlowerTimelineProjection(ctx context.Context, endpointID string, threadID string, state FlowerLiveMaterializedState) (flowerTimelineProjection, error) {
+	msgs, err := s.loadThreadTimelineMessages(ctx, endpointID, threadID)
+	if err != nil {
+		return flowerTimelineProjection{}, err
+	}
+	return s.buildFlowerTimelineProjectionFromMessages(ctx, endpointID, threadID, state, msgs)
+}
+
+func (s *Service) buildFlowerTimelineProjectionFromMessages(ctx context.Context, endpointID string, threadID string, state FlowerLiveMaterializedState, msgs []threadTimelineMessage) (flowerTimelineProjection, error) {
 	if s == nil {
 		return flowerTimelineProjection{}, errors.New("nil service")
 	}
@@ -319,10 +371,6 @@ func (s *Service) buildFlowerTimelineProjection(ctx context.Context, endpointID 
 		return flowerTimelineProjection{}, errors.New("invalid request")
 	}
 
-	msgs, err := s.loadThreadTimelineMessages(ctx, endpointID, threadID)
-	if err != nil {
-		return flowerTimelineProjection{}, err
-	}
 	type canonicalTurnRef struct {
 		runID  string
 		status flruntime.TurnStatus

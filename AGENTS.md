@@ -898,6 +898,15 @@ pending settlement, and opaque provider state. Redeven must not persist a
 second queryable copy, reconstruct one from audit or transport events, or query
 Floret-managed storage.
 
+The AI composition root may hold the broad Floret `runtime.Host` and transient
+`*runtime.Thread` handles only long enough to issue native responsibility-bound
+capabilities. Read adapters retain `runtime.ThreadReader`, lifecycle
+coordinators retain `runtime.ThreadLifecycle`, runs retain
+`runtime.TurnExecutor`, compaction retains `runtime.ThreadCompactor`, and
+SubAgent execution retains `runtime.SubAgentManager`. Production integration
+must not call the deprecated broad `Thread`/`Turns` entry points when a native
+narrow capability exists.
+
 Redeven code must not bypass those Floret lifecycles:
 - tool approval must flow through Floret `PermissionSpec`, resource extraction,
   and `EffectAuthorizationGate`; Redeven owns the current product permission
@@ -926,6 +935,12 @@ Redeven code must not bypass those Floret lifecycles:
 - `ask_user`, `task_complete`, and custom control signals receive no synthetic
   tool result or Redeven completion gate. Redeven may apply product confirmation
   policy, but waiting and terminal lifecycle remain Floret facts;
+- a normal admitted turn submits canonical input and execution policy exactly
+  once through `AdmitTurn`. After the product receipt transaction commits,
+  provider execution receives only the same `TurnAdmissionReceipt` plus
+  `ExecutionContext`. `SupplementalContext` and the signal projector are
+  process-local execution inputs; Redeven must not persist the admitted command
+  as a recovery execution plan or pass it again to `ExecuteAdmission`;
 - a user command may retain prompt text and queued upload ownership only before
   Floret admission. A committed public Floret turn causes Redeven to atomically
   remove that command and move its uploads to thread ownership; restart
@@ -940,12 +955,18 @@ Redeven code must not bypass those Floret lifecycles:
   consumes that frozen result, while later projection rereads the host resource
   and verifies the same digest. Redeven must not persist admitted `TurnID`/`RunID`
   attachment mappings or degrade resolution failures into filename text;
+- initial thread presentation must use `ThreadReader.Bootstrap` so thread,
+  overview, first turn page, approvals, todos, context, pending work, and
+  SubAgents share one Floret revision. Any direct Floret subscription must
+  continue with `AfterRevision` equal to that bootstrap revision. Historical
+  pagination remains on `ListThreadTurns` and must not be treated as an atomic
+  bootstrap;
 - Known-`TurnID` reconciliation, attachment membership, and canonical reference
   membership must use `ReadThreadTurn`; only `ErrTurnNotFound` means absent, and
   authority, storage, or corruption errors must fail closed without a
   `ListThreadTurns` fallback. Flower history and pagination continue to read
-  `ListThreadTurns`; thread summaries, waiting presentation, approvals, and todos
-  read `ReadThreadOverview`, pending approvals, and the typed todo API. The
+  `ListThreadTurns`; subsequent exact reads use the corresponding narrow reader
+  methods. The
   unknown-`TurnID` attachment lookup may scan canonical `ListThreadTurns` pages
   until its versioned locator carries a source TurnID. Realtime events may carry only in-memory run
   presentation and canonical replacement signals; they must not carry transcript
@@ -963,6 +984,15 @@ Redeven code must not bypass those Floret lifecycles:
 - context usage and compaction are read from Floret `ReadThreadContext` for
   bootstrap and mapped into current-process Flower presentation only. Redeven
   must not persist context lifecycle events or mapped context snapshots;
+- canonical turn projection reads must use
+  `ThreadReader.ReadAuthoritativeProjection`; Redeven may map its enclosed
+  projection into product presentation but must not consume a derived event
+  reducer result as lifecycle authority;
+- Floret owns canonical Agent todo validation, including the 40-item limit,
+  stable non-empty unique IDs, non-empty content, the status set, and at most
+  one `in_progress` item. Redeven may derive tool schema values from Floret and
+  apply product guidance such as excluding control-signal prose, but it must
+  not normalize, repair, or implement a second todo state machine;
 - Redeven product tables may reference opaque Floret `ThreadID`/`TurnID`/`RunID`
   values, but must not store their content, status, ordinal, projection,
   lifecycle, control, approval, todo, context, provider, or tool-state copies;

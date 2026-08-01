@@ -29,8 +29,8 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 ROOT_DIR=$(cd -- "$SCRIPT_DIR/.." &> /dev/null && pwd)
 PARENT_DIR=$(cd -- "$ROOT_DIR/.." &> /dev/null && pwd)
 FLORET_MODULE="github.com/floegence/floret/v3"
-FLORET_VERSION="v3.0.3"
-FLORET_SUM="h1:XpfzQQt+G3zA5nKS7xsRF/vFBCkymBBkxlroHdllbgQ="
+FLORET_VERSION="v3.1.1"
+FLORET_SUM="h1:73NtYG0iOsRKHdb1UQBpAsPHDSNTj3Y8Me92HOKmv4Y="
 FLORET_GO_MOD_SUM="h1:2M+JA7dpEf62qjtWuLEAzkAo4NYGYOTnAcRWdzCoiLU="
 
 cd "$ROOT_DIR"
@@ -283,6 +283,64 @@ check_exact_turn_read_boundaries() {
 	fi
 
 	echo "[INFO] exact canonical turn read boundaries checked"
+}
+
+check_floret_v31_capability_adoption() {
+	local matches
+
+	if ! rg -q '^\s*github\.com/floegence/floret/v3 v3\.1\.1$' go.mod; then
+		fail "Redeven must consume the published Floret v3.1.1 capability SDK."
+	fi
+
+	for contract in \
+		'reader[[:space:]]+flruntime\.ThreadReader' \
+		'lifecycle[[:space:]]+flruntime\.ThreadLifecycle' \
+		'executor[[:space:]]+flruntime\.TurnExecutor' \
+		'compactor[[:space:]]+flruntime\.ThreadCompactor' \
+		'manager[[:space:]]+flruntime\.SubAgentManager'; do
+		if ! rg -q --pcre2 "$contract" internal/ai/floret_bootstrap.go; then
+			fail "Floret composition adapters must retain the native narrow capability matching: $contract"
+		fi
+	done
+
+	for issuance in '.Reader()' '.Lifecycle()' '.TurnExecutor(' '.Compactor(' '.SubAgentManager('; do
+		if ! rg -Fq "$issuance" internal/ai/floret_bootstrap.go; then
+			fail "Floret composition must issue the native narrow capability through $issuance"
+		fi
+	done
+
+	if matches=$(rg -n --pcre2 \
+		'\.Turns\(|\.SubAgents\(|ExecuteAdmittedTurn\(|\.ReadProjection\(|\.Compact\([^\n]*,[^\n]*,|floretTurnHostAdapter\) StartTurn\(' \
+		internal/ai/floret_bootstrap.go internal/ai/floret_runtime.go 2>/dev/null); then
+		printf '%s\n' "$matches"
+		fail "Redeven production integration must not call deprecated broad Floret v3 entry points."
+	fi
+
+	if ! rg -q 'Bootstrap\(.*ThreadBootstrapRequest' internal/ai/floret_bootstrap.go \
+		|| ! rg -q 'ReadAuthoritativeProjection' internal/ai/floret_bootstrap.go \
+		|| ! rg -q 'ExecuteAdmission' internal/ai/floret_bootstrap.go \
+		|| ! rg -q 'ExecutionContext' internal/ai/floret_runtime.go; then
+		fail "Redeven must use atomic bootstrap, authoritative projections, and receipt-only execution."
+	fi
+	if ! rg -q 'readHost\.Bootstrap\(ctx, flruntime\.ThreadBootstrapRequest' internal/ai/flower_live_projection.go \
+		|| ! rg -q 'flowerLiveCanonicalContextStateFromSnapshot\(canonical\.Context\)' internal/ai/flower_live_projection.go \
+		|| ! rg -q 'loadThreadTimelineMessagesFromBootstrap' internal/ai/flower_live_projection.go \
+		|| ! rg -q 'flowerSubagentSummariesFromFloret\(threadID, canonical\.SubAgents\)' internal/ai/flower_live_projection.go; then
+		fail "Flower initial presentation must map one atomic Floret bootstrap instead of composing independent canonical reads."
+	fi
+
+	if matches=$(rg -n --pcre2 \
+		'normalizeTodo(Status|Items)|maxTodosPerWrite|only one todo can be in_progress|duplicate todo id' \
+		internal/ai --glob '*.go' --glob '!**/*_test.go' 2>/dev/null); then
+		printf '%s\n' "$matches"
+		fail "Canonical Agent todo validation belongs only to Floret."
+	fi
+	if ! rg -q 'flruntime\.AgentTodo(Pending|InProgress|Completed)' internal/ai/todos.go \
+		|| ! rg -q 'flruntime\.AgentTodo(Pending|InProgress|Completed)' internal/ai/builtin_tool_handlers.go; then
+		fail "Redeven todo mapping and tool schema must derive canonical statuses from Floret."
+	fi
+
+	echo "[INFO] Floret v3.1 narrow capability adoption checked"
 }
 
 check_floret_capability_bootstrap_boundary() {
@@ -658,6 +716,7 @@ check_durable_sink_closed_set
 check_threadstore_boundary_manifest
 check_canonical_subagent_and_root_inventory_boundaries
 check_exact_turn_read_boundaries
+check_floret_v31_capability_adoption
 check_floret_capability_bootstrap_boundary
 check_floret_thread_creation_boundary
 check_removed_product_schema_paths

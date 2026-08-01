@@ -212,12 +212,11 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 		return r.failRun("Failed to prepare Floret turn request", logicalRequestErr)
 	}
 	startCommand := flruntime.StartTurnCommand{
-		LogicalRequestID:    logicalRequestID,
-		UserMessage:         turnInput,
-		SupplementalContext: contextProjection.Items,
-		Labels:              labels,
-		Completion:          completionPolicy,
-		Signals:             controlSpec,
+		LogicalRequestID: logicalRequestID,
+		UserMessage:      turnInput,
+		Labels:           labels,
+		Completion:       completionPolicy,
+		Signals:          controlSpec,
 		Limits: flruntime.TurnLimits{
 			MaxToolCalls:           modelGatewayHardMaxToolCalls,
 			MaxInputTokens:         int64(req.Options.MaxInputTokens),
@@ -244,7 +243,10 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 		r.floretPresentationReady.Store(true)
 		r.completeUserTurnAdmission(nil)
 	}
-	startResult, err := turnHost.ExecuteAdmittedTurn(ctx, admission.Receipt, startCommand)
+	startResult, err := turnHost.ExecuteAdmission(ctx, admission.Receipt, flruntime.ExecutionContext{
+		SupplementalContext: contextProjection.Items,
+		SignalProjector:     controlSpec.Project,
+	})
 	var snapshot flruntime.ThreadTurnSnapshot
 	var snapshotErr error
 	if startResult.TurnID != "" {

@@ -55,9 +55,8 @@ type floretRootTurnRecoveryBinder func(context.Context, identity.ThreadID) (flor
 type floretSubagentTurnRecoveryBinder func(context.Context, identity.ThreadID, identity.ThreadID) (floretInterruptedTurnRecoveryHostFactory, error)
 
 type floretTurnRunner interface {
-	StartTurn(context.Context, flruntime.StartTurnCommand) (flruntime.StartTurnResult, error)
 	AdmitTurn(context.Context, flruntime.StartTurnCommand) (flruntime.AdmitTurnResult, error)
-	ExecuteAdmittedTurn(context.Context, flruntime.TurnAdmissionReceipt, flruntime.StartTurnCommand) (flruntime.StartTurnResult, error)
+	ExecuteAdmission(context.Context, flruntime.TurnAdmissionReceipt, flruntime.ExecutionContext) (flruntime.StartTurnResult, error)
 	ReadTurn(context.Context, identity.TurnID) (flruntime.ThreadTurnSnapshot, error)
 }
 
@@ -97,6 +96,7 @@ type floretCompactionHost interface {
 
 type floretThreadReadHost interface {
 	ReadThread(context.Context) (flruntime.ThreadSnapshot, error)
+	Bootstrap(context.Context, flruntime.ThreadBootstrapRequest) (flruntime.ThreadBootstrap, error)
 	ReadThreadOverview(context.Context) (flruntime.ThreadOverview, error)
 	ReadThreadTurn(context.Context, identity.TurnID) (flruntime.ThreadTurnSnapshot, error)
 	ListThreadTurns(context.Context, flruntime.ThreadTurnsRequest) (flruntime.ThreadTurnsPage, error)
