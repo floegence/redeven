@@ -13,8 +13,8 @@ observation record. The resource stays locked until terminal observation and
 fresh authoritative inventory prove the result; unrelated resources remain
 usable. Lost submissions, partial mutations, stale plans, unavailable engines,
 and failed reconciliation are never replayed or shown as success. Production
-uses the signed, endpoint-aware Containers `4.0.1` release through the exact v4
-capability and market-selected GitHub Release transport. Dev Desktop may build
+uses signed Containers `4.0.1` through the v4 capability and verified GitHub
+Release transport. Dev Desktop may build
 the same `4.0.0` plugin source through an ephemeral, exact local delivery whose
 package and capability are verified at startup; that development delivery
 remains outside official release trust.

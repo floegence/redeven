@@ -222,7 +222,7 @@
               "operations",
               "plugins"
             ],
-            "summary": "Every Containers mutation binds one exact engine, opaque endpoint, resource\nkind, and canonical identity to one ReDevPlugin operation handle and one local\nobservation record. The resource stays locked until terminal observation and\nfresh authoritative inventory prove the result; unrelated resources remain\nusable. Lost submissions, partial mutations, stale plans, unavailable engines,\nand failed reconciliation are never replayed or shown as success. Production\nuses the signed, endpoint-aware Containers `4.0.1` release through the exact v4\ncapability and market-selected GitHub Release transport. Dev Desktop may build\nthe same `4.0.0` plugin source through an ephemeral, exact local delivery whose\npackage and capability are verified at startup; that development delivery\nremains outside official release trust.",
+            "summary": "Every Containers mutation binds one exact engine, opaque endpoint, resource\nkind, and canonical identity to one ReDevPlugin operation handle and one local\nobservation record. The resource stays locked until terminal observation and\nfresh authoritative inventory prove the result; unrelated resources remain\nusable. Lost submissions, partial mutations, stale plans, unavailable engines,\nand failed reconciliation are never replayed or shown as success. Production\nuses signed Containers `4.0.1` through the v4 capability and verified GitHub\nRelease transport. Dev Desktop may build\nthe same `4.0.0` plugin source through an ephemeral, exact local delivery whose\npackage and capability are verified at startup; that development delivery\nremains outside official release trust.",
             "section_count": 2
           },
           {
@@ -3777,8 +3777,8 @@
         "title": "Containers operation observation",
         "type": "Architecture Contract"
       },
-      "body_length": 9632,
-      "summary": "Every Containers mutation binds one exact engine, opaque endpoint, resource\nkind, and canonical identity to one ReDevPlugin operation handle and one local\nobservation record. The resource stays locked until terminal observation and\nfresh authoritative inventory prove the result; unrelated resources remain\nusable. Lost submissions, partial mutations, stale plans, unavailable engines,\nand failed reconciliation are never replayed or shown as success. Production\nuses the signed, endpoint-aware Containers `4.0.1` release through the exact v4\ncapability and market-selected GitHub Release transport. Dev Desktop may build\nthe same `4.0.0` plugin source through an ephemeral, exact local delivery whose\npackage and capability are verified at startup; that development delivery\nremains outside official release trust.",
+      "body_length": 9591,
+      "summary": "Every Containers mutation binds one exact engine, opaque endpoint, resource\nkind, and canonical identity to one ReDevPlugin operation handle and one local\nobservation record. The resource stays locked until terminal observation and\nfresh authoritative inventory prove the result; unrelated resources remain\nusable. Lost submissions, partial mutations, stale plans, unavailable engines,\nand failed reconciliation are never replayed or shown as success. Production\nuses signed Containers `4.0.1` through the v4 capability and verified GitHub\nRelease transport. Dev Desktop may build\nthe same `4.0.0` plugin source through an ephemeral, exact local delivery whose\npackage and capability are verified at startup; that development delivery\nremains outside official release trust.",
       "sections": [
         {
           "id": "contract",
@@ -9993,5 +9993,5 @@
       ]
     }
   ],
-  "source_sha256": "4dd771595ada20b5c2dd29a2fc65b47ab9038f8b75c5920ea91baa1ec9cdcc20"
+  "source_sha256": "d8cc6917ef57195cf2c09ecd4bee951b2bcbd0d5bd9c453e0a2559eae956f667"
 }

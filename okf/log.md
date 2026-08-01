@@ -3,6 +3,7 @@
 ## 2026-08-02
 * **Dependency**: Upgraded Redeven to published Floret v3.2.0 with exact checksums and removed every remaining use of the deleted broad runtime methods from production and test integration.
 * **Boundary**: Bound direct-child recovery through the parent `ThreadReader.Child` capability so child authority cannot be opened from the transient broad thread handle.
+* **Quality**: Tightened the Containers operation observation summary to satisfy the strict OKF retrieval-size contract without weakening operation or release-trust boundaries.
 
 ## 2026-08-01
 * **Dependency**: Upgraded Redeven to published Floret v3.1.1 with exact checksums and adopted native narrow capability views, atomic thread bootstrap, authoritative projection reads, receipt-only execution, Floret-owned todo invariants, and valid partial live tool projections.
