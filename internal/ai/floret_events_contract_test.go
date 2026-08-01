@@ -96,7 +96,7 @@ func TestValidateFloretRuntimeEventAcceptsCanonicalTitleLifecycleIdentity(t *tes
 	}
 }
 
-func TestFloretEventSinkStartsLiveDraftAfterCanonicalIdentityValidation(t *testing.T) {
+func TestFloretEventSinkStartsLiveDraftOnlyAfterReceiptAdmissionPresentation(t *testing.T) {
 	t.Parallel()
 
 	var events []any
@@ -134,15 +134,56 @@ func TestFloretEventSinkStartsLiveDraftAfterCanonicalIdentityValidation(t *testi
 			Message: &flruntime.ThreadDetailMessage{Role: "user", Content: "canonical input"},
 		},
 	})
-	admitted, err := r.waitForUserTurnAdmission(context.Background())
+
+	waitCtx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	admitted, err := r.waitForUserTurnAdmission(waitCtx)
+	cancel()
+	if !errors.Is(err, context.DeadlineExceeded) || admitted != (admittedUserTurn{}) {
+		t.Fatalf("event-only admission outcome=%#v err=%v, want deadline waiting for receipt", admitted, err)
+	}
+	if len(admissionSteps) != 0 || len(events) != 0 || r.floretAdmitted.Load() || r.floretPresentationReady.Load() {
+		t.Fatalf("event-only admission steps=%#v events=%#v admitted=%t ready=%t", admissionSteps, events, r.floretAdmitted.Load(), r.floretPresentationReady.Load())
+	}
+
+	if err := r.bindFloretCanonicalAdmissionReceipt("logical-live-admission", flruntime.AdmitTurnResult{
+		ThreadID:    "thread-live-admission",
+		TurnID:      "turn-live-admission",
+		RunID:       "run-live-admission",
+		UserEntryID: "entry-live-admission",
+		Receipt: flruntime.TurnAdmissionReceipt{
+			LogicalRequestID: "logical-live-admission",
+			ThreadID:         "thread-live-admission",
+			TurnID:           "turn-live-admission",
+			RunID:            "run-live-admission",
+			UserEntryID:      "entry-live-admission",
+			Revision:         1,
+		},
+	}, flruntime.TurnInput{Text: "canonical input"}); err != nil {
+		t.Fatalf("bind receipt admission: %v", err)
+	}
+	r.floretAdmitted.Store(true)
+	if err := r.publishCanonicalUserAdmission(); err != nil {
+		t.Fatalf("publish receipt admission: %v", err)
+	}
+	r.floretPresentationReady.Store(true)
+	r.completeUserTurnAdmission(nil)
+
+	admitted, err = r.waitForUserTurnAdmission(context.Background())
 	if err != nil || admitted.TurnID != "turn-live-admission" || admitted.RunID != "run-live-admission" {
-		t.Fatalf("admission outcome=%#v err=%v", admitted, err)
+		t.Fatalf("receipt admission outcome=%#v err=%v", admitted, err)
 	}
 	if len(admissionSteps) != 2 || admissionSteps[0] != "thread_snapshot" || admissionSteps[1] != "canonical_timeline" {
 		t.Fatalf("admission steps=%#v", admissionSteps)
 	}
+	floretEventSink{run: r}.EmitEvent(flruntime.Event{
+		Type:     observation.EventTypeProviderDelta,
+		RunID:    "run-live-admission",
+		ThreadID: "thread-live-admission",
+		TurnID:   "turn-live-admission",
+		Stream:   &flruntime.StreamObservation{Type: flruntime.StreamObservationAssistantDelta, Text: "answer"},
+	})
 	if len(events) != 2 {
-		t.Fatalf("validated event emitted %d live-start events, want 2", len(events))
+		t.Fatalf("post-admission delta emitted %d live-start events, want 2", len(events))
 	}
 
 	var rejectedEvents []any
@@ -315,7 +356,7 @@ func TestApprovalThreadStateAggregatesCanonicalQueueAndControlConfirmation(t *te
 	}
 }
 
-func TestFloretEventSinkReturnsAdmittedIdentityWithoutPublishingAssistantWhenCanonicalPresentationFails(t *testing.T) {
+func TestReceiptAdmissionPresentationFailureDoesNotPublishAssistant(t *testing.T) {
 	t.Parallel()
 
 	var events []any
@@ -336,18 +377,27 @@ func TestFloretEventSinkReturnsAdmittedIdentityWithoutPublishingAssistantWhenCan
 	r.awaitFloretAdmission.Store(true)
 	r.expectFloretRuntimeEventIdentity(r.id, r.threadID, r.turnID, true)
 
-	floretEventSink{run: r}.EmitEvent(flruntime.Event{
-		Type: observation.EventTypeThreadEntryCommitted, RunID: identity.RunID(r.id), ThreadID: identity.ThreadID(r.threadID), TurnID: identity.TurnID(r.turnID),
-		Committed: &flruntime.ThreadDetailEvent{
-			ID: "entry-presentation-failure", ThreadID: identity.ThreadID(r.threadID), TurnID: identity.TurnID(r.turnID), RunID: identity.RunID(r.id),
-			Kind: flruntime.ThreadDetailEventUserMessage, CreatedAt: time.Now(),
-			Message: &flruntime.ThreadDetailMessage{Role: "user", Content: "canonical input"},
+	if err := r.bindFloretCanonicalAdmissionReceipt("logical-presentation-failure", flruntime.AdmitTurnResult{
+		ThreadID:    identity.ThreadID(r.threadID),
+		TurnID:      identity.TurnID(r.turnID),
+		RunID:       identity.RunID(r.id),
+		UserEntryID: "entry-presentation-failure",
+		Receipt: flruntime.TurnAdmissionReceipt{
+			LogicalRequestID: "logical-presentation-failure",
+			ThreadID:         identity.ThreadID(r.threadID),
+			TurnID:           identity.TurnID(r.turnID),
+			RunID:            identity.RunID(r.id),
+			UserEntryID:      "entry-presentation-failure",
+			Revision:         1,
 		},
-	})
-
-	admitted, err := r.waitForUserTurnAdmission(context.Background())
-	if err != nil || admitted.TurnID != r.turnID || admitted.RunID != r.id {
-		t.Fatalf("admission outcome=%#v err=%v", admitted, err)
+	}, flruntime.TurnInput{Text: "canonical input"}); err != nil {
+		t.Fatalf("bind receipt admission: %v", err)
+	}
+	r.floretAdmitted.Store(true)
+	if err := r.publishCanonicalUserAdmission(); !errors.Is(err, presentationErr) {
+		t.Fatalf("presentation error=%v, want %v", err, presentationErr)
+	} else {
+		r.completeUserTurnAdmission(err)
 	}
 	if len(events) != 0 {
 		t.Fatalf("presentation failure published assistant events: %#v", events)
@@ -355,8 +405,9 @@ func TestFloretEventSinkReturnsAdmittedIdentityWithoutPublishingAssistantWhenCan
 	if !r.floretAdmitted.Load() || r.floretPresentationReady.Load() {
 		t.Fatalf("admitted=%t presentation_ready=%t", r.floretAdmitted.Load(), r.floretPresentationReady.Load())
 	}
-	if contractErr := r.floretContractError(); contractErr == nil || !errors.Is(contractErr, presentationErr) {
-		t.Fatalf("contract error=%v, want %v", contractErr, presentationErr)
+	admitted, err := r.waitForUserTurnAdmission(context.Background())
+	if !errors.Is(err, presentationErr) || admitted != (admittedUserTurn{}) {
+		t.Fatalf("admission outcome=%#v err=%v, want presentation error", admitted, err)
 	}
 }
 

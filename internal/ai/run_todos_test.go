@@ -21,6 +21,14 @@ func (h *todoTestHost) StartTurn(context.Context, flruntime.StartTurnCommand) (f
 	return flruntime.StartTurnResult{}, nil
 }
 
+func (h *todoTestHost) AdmitTurn(context.Context, flruntime.StartTurnCommand) (flruntime.AdmitTurnResult, error) {
+	return flruntime.AdmitTurnResult{}, nil
+}
+
+func (h *todoTestHost) ExecuteAdmittedTurn(context.Context, flruntime.TurnAdmissionReceipt, flruntime.StartTurnCommand) (flruntime.StartTurnResult, error) {
+	return flruntime.StartTurnResult{}, nil
+}
+
 func (h *todoTestHost) ReadTurn(context.Context, identity.TurnID) (flruntime.ThreadTurnSnapshot, error) {
 	return flruntime.ThreadTurnSnapshot{}, flruntime.ErrTurnNotFound
 }

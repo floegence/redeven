@@ -211,7 +211,7 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 	if logicalRequestErr != nil {
 		return r.failRun("Failed to prepare Floret turn request", logicalRequestErr)
 	}
-	startResult, err := turnHost.StartTurn(ctx, flruntime.StartTurnCommand{
+	startCommand := flruntime.StartTurnCommand{
 		LogicalRequestID:    logicalRequestID,
 		UserMessage:         turnInput,
 		SupplementalContext: contextProjection.Items,
@@ -225,7 +225,26 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 			MaxLengthContinuations: 2,
 		},
 		Reasoning: req.Options.ReasoningSelection,
-	})
+	}
+	admission, err := turnHost.AdmitTurn(ctx, startCommand)
+	if err != nil {
+		return r.failRun("Floret turn admission failed", err)
+	}
+	if r.awaitFloretAdmission.Load() {
+		if bindErr := r.bindFloretCanonicalAdmissionReceipt(logicalRequestID, admission, turnInput); bindErr != nil {
+			r.rejectFloretContract("turn_admission", bindErr)
+			return r.failRun("Floret turn admission binding failed", bindErr)
+		}
+		r.floretAdmitted.Store(true)
+		if err := r.publishCanonicalUserAdmission(); err != nil {
+			r.completeUserTurnAdmission(nil)
+			r.rejectFloretContract("turn_admission", err)
+			return r.failRun("Floret turn admission presentation failed", err)
+		}
+		r.floretPresentationReady.Store(true)
+		r.completeUserTurnAdmission(nil)
+	}
+	startResult, err := turnHost.ExecuteAdmittedTurn(ctx, admission.Receipt, startCommand)
 	var snapshot flruntime.ThreadTurnSnapshot
 	var snapshotErr error
 	if startResult.TurnID != "" {
@@ -399,6 +418,36 @@ func (r *run) bindFloretCanonicalAdmissionReplay(
 		string(result.ThreadID),
 		string(result.TurnID),
 		snapshot.UserEntryID,
+	)
+}
+
+func (r *run) bindFloretCanonicalAdmissionReceipt(
+	logicalRequestID identity.LogicalRequestID,
+	result flruntime.AdmitTurnResult,
+	expected flruntime.TurnInput,
+) error {
+	if r == nil {
+		return errors.New("Floret admission receipt owner is unavailable")
+	}
+	receipt := result.Receipt
+	if strings.TrimSpace(receipt.LogicalRequestID.String()) == "" || receipt.LogicalRequestID != logicalRequestID ||
+		receipt.ThreadID == "" || receipt.TurnID == "" || receipt.RunID == "" ||
+		receipt.UserEntryID == "" || receipt.Revision <= 0 ||
+		receipt.ThreadID != result.ThreadID || receipt.TurnID != result.TurnID ||
+		receipt.RunID != result.RunID || receipt.UserEntryID != result.UserEntryID {
+		return errors.New("Floret admission receipt identity is invalid")
+	}
+	if receipt.ThreadID != identity.ThreadID(strings.TrimSpace(r.threadID)) {
+		return errors.New("Floret admission receipt is bound to another thread")
+	}
+	if strings.TrimSpace(expected.Text) == "" && len(expected.Attachments) == 0 && len(expected.References) == 0 {
+		return errors.New("Floret admission receipt command evidence is empty")
+	}
+	return r.bindFloretCanonicalAdmission(
+		string(receipt.RunID),
+		string(receipt.ThreadID),
+		string(receipt.TurnID),
+		receipt.UserEntryID,
 	)
 }
 

@@ -29,8 +29,8 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 ROOT_DIR=$(cd -- "$SCRIPT_DIR/.." &> /dev/null && pwd)
 PARENT_DIR=$(cd -- "$ROOT_DIR/.." &> /dev/null && pwd)
 FLORET_MODULE="github.com/floegence/floret/v3"
-FLORET_VERSION="v3.0.2"
-FLORET_SUM="h1:fTPUiWMzk9kafKik7vguusr58myc/QQ6VpOJsH6yedg="
+FLORET_VERSION="v3.0.3"
+FLORET_SUM="h1:XpfzQQt+G3zA5nKS7xsRF/vFBCkymBBkxlroHdllbgQ="
 FLORET_GO_MOD_SUM="h1:2M+JA7dpEf62qjtWuLEAzkAo4NYGYOTnAcRWdzCoiLU="
 
 cd "$ROOT_DIR"

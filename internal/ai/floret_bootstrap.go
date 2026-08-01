@@ -155,6 +155,14 @@ func (h floretTurnHostAdapter) StartTurn(ctx context.Context, command flruntime.
 	return h.turns.StartTurn(ctxOrBackground(ctx), command)
 }
 
+func (h floretTurnHostAdapter) AdmitTurn(ctx context.Context, command flruntime.StartTurnCommand) (flruntime.AdmitTurnResult, error) {
+	return h.turns.AdmitTurn(ctxOrBackground(ctx), command)
+}
+
+func (h floretTurnHostAdapter) ExecuteAdmittedTurn(ctx context.Context, receipt flruntime.TurnAdmissionReceipt, command flruntime.StartTurnCommand) (flruntime.StartTurnResult, error) {
+	return h.turns.ExecuteAdmittedTurn(ctxOrBackground(ctx), receipt, command)
+}
+
 func (h floretTurnHostAdapter) ReadTurn(ctx context.Context, turnID identity.TurnID) (flruntime.ThreadTurnSnapshot, error) {
 	return h.thread.ReadTurn(ctxOrBackground(ctx), turnID)
 }

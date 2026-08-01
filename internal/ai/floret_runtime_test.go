@@ -75,6 +75,14 @@ func (*panicFloretTurnHost) StartTurn(context.Context, flruntime.StartTurnComman
 	panic("deterministic RunTurn panic")
 }
 
+func (*panicFloretTurnHost) AdmitTurn(context.Context, flruntime.StartTurnCommand) (flruntime.AdmitTurnResult, error) {
+	panic("deterministic AdmitTurn panic")
+}
+
+func (*panicFloretTurnHost) ExecuteAdmittedTurn(context.Context, flruntime.TurnAdmissionReceipt, flruntime.StartTurnCommand) (flruntime.StartTurnResult, error) {
+	panic("deterministic ExecuteAdmittedTurn panic")
+}
+
 func (*panicFloretTurnHost) ReadTurn(context.Context, identity.TurnID) (flruntime.ThreadTurnSnapshot, error) {
 	return flruntime.ThreadTurnSnapshot{}, errors.New("unexpected exact turn read after panic")
 }
@@ -382,88 +390,58 @@ func bindTestRunHostCapabilities(t *testing.T, svc *Service, endpointID string, 
 	return host
 }
 
-func TestCommittedStartTurnReplayUsesExactReadAdmissionBinder(t *testing.T) {
-	for _, testCase := range []struct {
-		name         string
-		expectedText string
-		wantBound    bool
-	}{
-		{name: "matching frozen command", expectedText: "pending prompt", wantBound: true},
-		{name: "different frozen command", expectedText: "different prompt"},
-	} {
-		t.Run(testCase.name, func(t *testing.T) {
-			svc := newSendTurnTestService(t)
-			meta := testSendTurnMeta()
-			thread, err := svc.CreateThread(t.Context(), meta, "committed replay", "", "", "")
-			if err != nil {
-				t.Fatal(err)
-			}
-			command := createPendingCommandForTest(t, svc, meta, thread.ThreadID, "queue-committed-replay-"+strings.ReplaceAll(testCase.name, " ", "-"), "", "")
-			runtimeCapabilities, err := svc.bindFloretThreadRuntime(thread.ThreadID)
-			if err != nil {
-				t.Fatal(err)
-			}
-			turnHost, err := runtimeCapabilities.Turn(t.Context(), newStaticTestFloretAgent(t, "accepted"))
-			if err != nil {
-				t.Fatal(err)
-			}
-			logicalRequestID := identity.LogicalRequestID(command.QueueID)
-			input := flruntime.TurnInput{Text: command.TextContent}
-			first, err := turnHost.StartTurn(t.Context(), flruntime.StartTurnCommand{LogicalRequestID: logicalRequestID, UserMessage: input})
-			if err != nil {
-				t.Fatal(err)
-			}
-			replayed, err := turnHost.StartTurn(t.Context(), flruntime.StartTurnCommand{LogicalRequestID: logicalRequestID, UserMessage: input})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if replayed.ThreadID != first.ThreadID || replayed.TurnID != first.TurnID || replayed.RunID != first.RunID ||
-				!replayed.Receipt.Replayed || !replayed.Receipt.Committed {
-				t.Fatalf("committed replay=%#v first=%#v", replayed, first)
-			}
-			exact, err := turnHost.ReadTurn(t.Context(), replayed.TurnID)
-			if err != nil {
-				t.Fatal(err)
-			}
-			r := newRunWithProductStoreForTest(t, runOptions{
-				ExecutionKey: command.QueueID, EndpointID: meta.EndpointID, ThreadID: thread.ThreadID,
-			}, svc.threadsDB)
-			r.awaitFloretAdmission.Store(true)
-			r.setPendingTurnCommand(command.QueueID)
-			snapshot := permissionSnapshotWithOwnerIdentity(
-				buildPermissionSnapshot(FlowerPermissionApprovalRequired, nil, nil),
-				meta.EndpointID, thread.ThreadID, string(replayed.RunID),
-			)
-			r.setPermissionState(snapshot.PermissionType, snapshot)
+func TestAdmitTurnReceiptBindsPendingAdmissionBeforeExecution(t *testing.T) {
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	thread, err := svc.CreateThread(t.Context(), meta, "receipt admission", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	command := createPendingCommandForTest(t, svc, meta, thread.ThreadID, "queue-receipt-admission", "", "")
+	runtimeCapabilities, err := svc.bindFloretThreadRuntime(thread.ThreadID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	turnHost, err := runtimeCapabilities.Turn(t.Context(), newStaticTestFloretAgent(t, "accepted"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	logicalRequestID := identity.LogicalRequestID(command.QueueID)
+	input := flruntime.TurnInput{Text: command.TextContent}
+	admission, err := turnHost.AdmitTurn(t.Context(), flruntime.StartTurnCommand{LogicalRequestID: logicalRequestID, UserMessage: input})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if admission.Receipt.ThreadID != identity.ThreadID(thread.ThreadID) || admission.Receipt.TurnID == "" ||
+		admission.Receipt.RunID == "" || admission.Receipt.UserEntryID == "" || admission.Receipt.Revision <= 0 ||
+		admission.Receipt.Replayed {
+		t.Fatalf("admission receipt=%#v", admission.Receipt)
+	}
+	if _, err := turnHost.AdmitTurn(t.Context(), flruntime.StartTurnCommand{LogicalRequestID: logicalRequestID, UserMessage: flruntime.TurnInput{Text: "different prompt"}}); err == nil {
+		t.Fatal("changed admission command replay unexpectedly succeeded")
+	}
+	r := newRunWithProductStoreForTest(t, runOptions{
+		ExecutionKey: command.QueueID, EndpointID: meta.EndpointID, ThreadID: thread.ThreadID,
+	}, svc.threadsDB)
+	r.awaitFloretAdmission.Store(true)
+	r.setPendingTurnCommand(command.QueueID)
+	snapshot := permissionSnapshotWithOwnerIdentity(
+		buildPermissionSnapshot(FlowerPermissionApprovalRequired, nil, nil),
+		meta.EndpointID, thread.ThreadID, string(admission.RunID),
+	)
+	r.setPermissionState(snapshot.PermissionType, snapshot)
 
-			err = r.bindFloretCanonicalAdmissionReplay(
-				logicalRequestID, replayed, exact, nil, flruntime.TurnInput{Text: testCase.expectedText},
-			)
-			if testCase.wantBound {
-				if err != nil {
-					t.Fatal(err)
-				}
-				receipt, err := svc.threadsDB.GetPendingTurnAdmissionReceipt(t.Context(), command.QueueID)
-				if err != nil || receipt.Stage != threadstore.PendingTurnAdmissionStageSettled ||
-					receipt.ThreadID != thread.ThreadID || receipt.TurnID != string(replayed.TurnID) ||
-					receipt.RunID != string(replayed.RunID) || receipt.EntryID != exact.UserEntryID {
-					t.Fatalf("settled receipt=%#v err=%v", receipt, err)
-				}
-				if _, err := svc.threadsDB.GetQueuedTurn(t.Context(), meta.EndpointID, thread.ThreadID, command.QueueID); !errors.Is(err, sql.ErrNoRows) {
-					t.Fatalf("settled queued command error=%v, want sql.ErrNoRows", err)
-				}
-				return
-			}
-			if err == nil || !strings.Contains(err.Error(), "frozen command") {
-				t.Fatalf("mismatch error=%v, want frozen command rejection", err)
-			}
-			queued, queuedErr := svc.threadsDB.GetQueuedTurn(t.Context(), meta.EndpointID, thread.ThreadID, command.QueueID)
-			receipt, receiptErr := svc.threadsDB.GetPendingTurnAdmissionReceipt(t.Context(), command.QueueID)
-			if queuedErr != nil || queued.AdmissionState != threadstore.PendingTurnAdmissionInFlight ||
-				receiptErr != nil || receipt.Stage != threadstore.PendingTurnAdmissionStageInFlight || receipt.TurnID != "" || receipt.RunID != "" {
-				t.Fatalf("mismatch mutated queued=%#v queuedErr=%v receipt=%#v receiptErr=%v", queued, queuedErr, receipt, receiptErr)
-			}
-		})
+	if err := r.bindFloretCanonicalAdmissionReceipt(logicalRequestID, admission, input); err != nil {
+		t.Fatal(err)
+	}
+	receipt, err := svc.threadsDB.GetPendingTurnAdmissionReceipt(t.Context(), command.QueueID)
+	if err != nil || receipt.Stage != threadstore.PendingTurnAdmissionStageSettled ||
+		receipt.ThreadID != thread.ThreadID || receipt.TurnID != string(admission.TurnID) ||
+		receipt.RunID != string(admission.RunID) || receipt.EntryID != admission.UserEntryID {
+		t.Fatalf("settled receipt=%#v err=%v", receipt, err)
+	}
+	if _, err := svc.threadsDB.GetQueuedTurn(t.Context(), meta.EndpointID, thread.ThreadID, command.QueueID); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("settled queued command error=%v, want sql.ErrNoRows", err)
 	}
 }
 
