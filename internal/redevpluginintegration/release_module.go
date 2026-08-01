@@ -34,15 +34,6 @@ type officialReleaseProvider struct {
 	artifactFiles map[string][]byte
 }
 
-func newOfficialReleaseModule(
-	ctx context.Context,
-	stateDir string,
-	release pluginmarket.LatestRelease,
-	fetcher remoterelease.AssetFetcher,
-) (*host.ReleaseModule, host.PluginReleaseRef, func() error, error) {
-	return newOfficialReleaseModuleWithClock(ctx, stateDir, release, fetcher, time.Now)
-}
-
 func newOfficialReleaseModuleWithClock(
 	ctx context.Context,
 	stateDir string,
