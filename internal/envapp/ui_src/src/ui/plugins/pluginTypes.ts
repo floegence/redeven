@@ -41,6 +41,46 @@ export type OfficialPluginDistribution = {
   developmentDelivery?: PluginDevelopmentDelivery;
 };
 
+export type PluginMarketLatestRelease = {
+  plugin_id: string;
+  channel: string;
+  version: string;
+  asset: {
+    url: string;
+  };
+  publisher_release_ref: {
+    release_ref: PluginReleaseRef;
+  };
+  signer_key_id: string;
+  compatibility: {
+    min_redeven_version: string;
+    min_redevplugin_version: string;
+  };
+};
+
+export type PluginMarketSnapshot = {
+  schema_version: 'redeven.plugin_market_snapshot.v1';
+  generation: number;
+  etag?: string;
+  cached_at: string;
+  stale: boolean;
+  source: 'remote' | 'cache';
+  plugins: Array<{
+    plugin_id: string;
+    publisher_id: string;
+    name: string;
+    summary: string;
+    categories: string[];
+    channels: string[];
+    latest: {
+      channel: string;
+      version: string;
+      availability_status: 'visible' | 'disabled' | 'revoked';
+    };
+    release?: PluginMarketLatestRelease;
+  }>;
+};
+
 export type PluginReleaseNotes = Readonly<{
   releaseID: string;
   targetVersion: string;
@@ -199,6 +239,7 @@ export type PluginUpdateCandidate = Readonly<{
 
 export type PluginInventoryProjection = {
   items: PluginInventoryItem[];
+  marketUnavailable?: boolean;
 };
 
 export type PluginPanelTile =

@@ -1,328 +1,168 @@
 package redevpluginintegration
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
-	"net/http"
-	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/floegence/redeven/internal/session"
-	"github.com/floegence/redeven/internal/sessionhop"
+	"github.com/floegence/redeven/internal/pluginmarket"
 	redevpluginartifacts "github.com/floegence/redeven/spec/redevplugin"
+	"github.com/floegence/redevplugin/pkg/externalsource"
 	"github.com/floegence/redevplugin/pkg/host"
-	"github.com/floegence/redevplugin/pkg/pluginpkg"
-	"github.com/floegence/redevplugin/pkg/registry"
-	"github.com/floegence/redevplugin/pkg/releasecontract"
-	"github.com/floegence/redevplugin/pkg/releasetrust"
 )
 
 func officialReleaseFixtureTime() time.Time {
-	return time.Date(2026, time.July, 23, 10, 0, 0, 0, time.UTC)
+	return time.Date(2026, time.August, 1, 8, 0, 0, 0, time.UTC)
 }
 
-func TestOfficialReleaseModuleIsCompleteAndClosed(t *testing.T) {
-	module, ref, closeTrust, err := newOfficialReleaseModuleWithClock(filepath.Join(t.TempDir(), "trust"), officialReleaseFixtureTime)
+type rejectingReleaseAssetFetcher struct{}
+
+func (rejectingReleaseAssetFetcher) FetchArtifact(context.Context, externalsource.ArtifactFetchRequest) (externalsource.ArtifactFetchResult, error) {
+	return externalsource.ArtifactFetchResult{}, errors.New("unexpected remote fetch")
+}
+
+func TestOfficialReleaseModuleUsesValidatedMarketProjection(t *testing.T) {
+	release := officialMarketReleaseFixture(t)
+	module, ref, closeTrust, err := newOfficialReleaseModuleWithClock(
+		context.Background(), filepath.Join(t.TempDir(), "trust"), release,
+		rejectingReleaseAssetFetcher{}, officialReleaseFixtureTime,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = closeTrust() })
-	if module.Trust == nil || module.ReleaseArtifactResolver == nil || module.HostRequirements == nil || module.CapabilityContractArtifacts == nil {
-		t.Fatalf("release module is incomplete: %#v", module)
+	if ref != release.PublisherReleaseRef.ReleaseRef || module.Trust == nil || module.ReleaseArtifactResolver == nil ||
+		module.HostRequirements == nil || module.CapabilityContractArtifacts == nil {
+		t.Fatalf("release module is incomplete: ref=%#v module=%#v", ref, module)
 	}
 
-	provider := module.ReleaseArtifactResolver.(*officialReleaseProvider)
-	policy := provider.sourcePolicy
-	artifact, err := provider.ResolveReleaseArtifact(context.Background(), host.ReleaseArtifactResolveRequest{
-		Action: host.PackageTrustActionInstall, ReleaseRef: ref, SourcePolicy: policy,
-	})
-	if err != nil {
-		t.Fatal(err)
+	provider, ok := module.ReleaseArtifactResolver.(*officialReleaseProvider)
+	if !ok || provider.transport == nil {
+		t.Fatalf("release resolver = %#v", module.ReleaseArtifactResolver)
 	}
-	if artifact.Size <= 0 || artifact.ArtifactSHA256 == ref.ExpectedHashes.PackageSHA256 {
-		t.Fatalf("resolved artifact = size:%d sha:%s", artifact.Size, artifact.ArtifactSHA256)
-	}
-
 	tampered := ref
-	tampered.ReleaseMetadataSHA256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	tampered.ReleaseMetadataSHA256 = strings.Repeat("b", 64)
 	if _, err := provider.ResolveReleaseArtifact(context.Background(), host.ReleaseArtifactResolveRequest{
-		Action: host.PackageTrustActionInstall, ReleaseRef: tampered, SourcePolicy: policy,
+		Action: host.PackageTrustActionInstall, ReleaseRef: tampered,
 	}); !errors.Is(err, host.ErrReleaseRefVerificationFailed) {
 		t.Fatalf("tampered release error = %v", err)
 	}
+}
 
+func TestOfficialReleaseProviderRejectsTrustAnchorDrift(t *testing.T) {
+	for name, mutate := range map[string]func(*pluginmarket.LatestRelease){
+		"root": func(release *pluginmarket.LatestRelease) {
+			release.PublisherReleaseRef.Root.PublicKey = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+		},
+		"ledger": func(release *pluginmarket.LatestRelease) {
+			release.PublisherReleaseRef.SigningLedger.KeyID = "redeven_official_ledger_other"
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			release := officialMarketReleaseFixture(t)
+			mutate(&release)
+			_, err := newOfficialReleaseProvider(release, rejectingReleaseAssetFetcher{})
+			if err == nil || !strings.Contains(err.Error(), "trust anchors") {
+				t.Fatalf("newOfficialReleaseProvider() error = %v", err)
+			}
+		})
+	}
+}
+
+func TestOfficialReleaseProviderPinsV4HostCapability(t *testing.T) {
+	provider, err := newOfficialReleaseProvider(officialMarketReleaseFixture(t), rejectingReleaseAssetFetcher{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	bundle, _, err := redevpluginartifacts.ContainersCapabilityBundle()
 	if err != nil {
 		t.Fatal(err)
+	}
+	selection, err := provider.SelectHostRequirement(context.Background(), host.HostRequirementSelectionRequest{
+		SourceID: officialReleaseSourceID, PublisherID: officialPublisherID,
+		PluginID: officialContainersPluginID, PluginVersion: officialContainersVersion,
+		Requirements: []host.HostRequirement{{
+			HostID: officialHostID, MinHostVersion: officialMinHostVersion,
+			RequiredCapabilityContracts: []host.HostCapabilityRequirement{{
+				CapabilityID: containersCapabilityID, CapabilityVersion: containersCapabilityVersion, Contract: bundle.Pin,
+			}},
+		}},
+	})
+	if err != nil || selection.HostID != officialHostID {
+		t.Fatalf("host requirement selection = %#v, error = %v", selection, err)
 	}
 	resolved, err := provider.ResolveCapabilityContract(context.Background(), host.CapabilityContractResolveRequest{
-		SourceID: officialReleaseSourceID, PluginPublisherID: officialPublisherID, Pin: bundle.Pin, SourcePolicy: policy,
+		SourceID: officialReleaseSourceID, PluginPublisherID: officialPublisherID, Pin: bundle.Pin,
 	})
 	if err != nil || resolved.Artifacts == nil {
-		t.Fatalf("embedded capability artifact resolution error = %v", err)
+		t.Fatalf("capability resolution error = %v", err)
 	}
-	file, err := resolved.Artifacts.OpenCapabilityContractArtifact(context.Background(), bundle.Pin.ArtifactRef)
+	artifact, err := resolved.Artifacts.OpenCapabilityContractArtifact(context.Background(), bundle.Pin.ArtifactRef)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if file.Size <= 0 || len(file.FetchChain) != 0 {
-		t.Fatalf("embedded capability artifact evidence = %#v", file)
+	t.Cleanup(func() { _ = artifact.Reader.Close() })
+	if artifact.Size <= 0 || artifact.MediaType != "application/schema+json" || len(artifact.FetchChain) != 0 {
+		t.Fatalf("capability artifact = %#v", artifact)
 	}
 }
 
-func TestOfficialReleaseProviderReturnsOwnedArtifactBytes(t *testing.T) {
-	provider, err := newOfficialReleaseProvider()
+func officialMarketReleaseFixture(t *testing.T) pluginmarket.LatestRelease {
+	t.Helper()
+	anchors, err := redevpluginartifacts.OfficialReleaseTrustAnchorSet()
 	if err != nil {
 		t.Fatal(err)
 	}
-	policy := provider.sourcePolicy
-	resolve := func() host.ResolvedPackageArtifact {
-		artifact, err := provider.ResolveReleaseArtifact(context.Background(), host.ReleaseArtifactResolveRequest{
-			Action: host.PackageTrustActionInstall, ReleaseRef: provider.release.Ref, SourcePolicy: policy,
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		return artifact
-	}
-	first := resolve()
-	first.ReleaseMetadataBytes[0] ^= 0xff
-	first.ReleaseMetadataSignature[0] ^= 0xff
-	second := resolve()
-	if bytes.Equal(first.ReleaseMetadataBytes, second.ReleaseMetadataBytes) || bytes.Equal(first.ReleaseMetadataSignature, second.ReleaseMetadataSignature) {
-		t.Fatal("release artifact resolves share mutable byte slices")
-	}
-}
-
-func TestOfficialReleaseTrustChainVerifies(t *testing.T) {
-	module, ref, closeTrust, err := newOfficialReleaseModuleWithClock(filepath.Join(t.TempDir(), "trust"), officialReleaseFixtureTime)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = closeTrust() })
-	prepared, err := module.Trust.PrepareRelease(context.Background(), releasetrust.ReleaseIdentity{
-		SourceID:              ref.SourceID,
-		Channel:               ref.Channel,
-		ReleaseMetadataRef:    ref.ReleaseMetadataRef,
-		ReleaseMetadataSHA256: ref.ReleaseMetadataSHA256,
-		PublisherID:           ref.PublisherID,
-		PluginID:              ref.PluginID,
-		Version:               ref.Version,
-	})
-	if err != nil {
-		t.Fatalf("prepare official release trust: %v", err)
-	}
-	provider := module.ReleaseArtifactResolver.(*officialReleaseProvider)
-	artifact, err := provider.ResolveReleaseArtifact(context.Background(), host.ReleaseArtifactResolveRequest{
-		Action: host.PackageTrustActionInstall, ReleaseRef: ref, SourcePolicy: prepared.SourcePolicy(),
-	})
-	if err != nil {
-		t.Fatalf("resolve official release artifact: %v", err)
-	}
-	verifiedMetadata, err := module.Trust.VerifyReleaseMetadata(
-		context.Background(), prepared, artifact.ReleaseMetadataBytes, artifact.ReleaseMetadataSignature,
+	const (
+		digest    = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+		locator   = "plugins/com.redeven.official/com.redeven.official.containers/4.0.1/release.json"
+		assetName = "containers-4.0.1.release.json"
+		assetURL  = "https://github.com/floegence/redeven-official-plugins/releases/download/v4.0.1/containers-4.0.1.release.json"
 	)
-	if err != nil {
-		t.Fatalf("verify official release metadata: %v", err)
-	}
-	pkg, err := pluginpkg.Read(context.Background(), artifact.Reader, artifact.Size, pluginpkg.DefaultReadLimits())
-	if err != nil {
-		t.Fatalf("read official package: %v", err)
-	}
-	if pkg.PackageSignature == nil {
-		t.Fatal("official package signature is missing")
-	}
-	if _, err := module.Trust.VerifyPackage(context.Background(), verifiedMetadata, releasecontract.PackageSignatureV1(*pkg.PackageSignature)); err != nil {
-		t.Fatalf("verify official package: %v", err)
-	}
-	bundle, _, err := redevpluginartifacts.ContainersCapabilityBundle()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := module.Trust.VerifyCapabilityContract(verifiedMetadata, bundle, bundle.Pin); err != nil {
-		t.Fatalf("verify official capability contract: %v", err)
-	}
-}
-
-func TestOfficialContainersReleaseInstallsThroughHTTP(t *testing.T) {
-	stateDir := t.TempDir()
-	integration, err := New(context.Background(), Options{
-		StateDir:         stateDir,
-		PermissionPolicy: testPermissionPolicy(t, "execute_read_write"),
-		RuntimePath:      testRuntimePath(t, stateDir),
-		Containers:       mustContainersAdapter(t, &capabilityEngineClient{}),
-		releaseTrustNow:  officialReleaseFixtureTime,
-		ResolveSessionMeta: func(channelID string) (*session.Meta, bool) {
-			if channelID != "ch_release" {
-				return nil, false
-			}
-			return &session.Meta{
-				ChannelID: channelID, EndpointID: "env_release", UserPublicID: "user_release",
-				CanRead: true, CanWrite: true, CanExecute: true, CanAdmin: true,
-			}, true
+	asset := pluginmarket.ReleaseAsset{AssetID: 497879350, Name: assetName, URL: assetURL, Size: 1, SHA256: digest}
+	release := pluginmarket.LatestRelease{
+		PluginID: officialContainersPluginID, Channel: officialReleaseChannel, Version: officialContainersVersion,
+		Source: pluginmarket.ReleaseSource{
+			Provider: "github", RepositoryID: 1289352675, RepositoryOwner: "floegence",
+			RepositoryName: "redeven-official-plugins", ReleaseID: 363517742, Tag: "v4.0.1",
+			TargetCommit: "16429991dc3daa446385a933676b26c8031d3d7b",
 		},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = integration.Close() })
-
-	release, err := redevpluginartifacts.OfficialContainersPluginRelease()
-	if err != nil {
-		t.Fatal(err)
-	}
-	body, err := json.Marshal(map[string]any{
-		"plugin_instance_id": "plugini_official_containers",
-		"release_ref":        release.Ref,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	req := httptest.NewRequest(http.MethodPost, "/_redevplugin/api/plugins/install-release-ref", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set(sessionhop.HeaderChannelID, "ch_release")
-	req.Header.Set("Origin", "https://env.example.test")
-	req.Header.Set(csrfHeader, csrfProof)
-	req.Host = "env.example.test"
-	req = WithRouteRole(req, RouteRoleEnvTrusted)
-	req, err = WithTrustedOrigin(req, "https://env.example.test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	response := httptest.NewRecorder()
-	integration.Handler().ServeHTTP(response, req)
-	if response.Code < 200 || response.Code >= 300 {
-		t.Fatalf("install release status = %d body=%s", response.Code, response.Body.String())
-	}
-	var envelope struct {
-		OK   bool `json:"ok"`
-		Data struct {
-			PluginID   string              `json:"plugin_id"`
-			Version    string              `json:"version"`
-			TrustState registry.TrustState `json:"trust_state"`
-			Metadata   map[string]string   `json:"metadata"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(response.Body.Bytes(), &envelope); err != nil {
-		t.Fatalf("decode install response: %v body=%s", err, response.Body.String())
-	}
-	installed := envelope.Data
-	if installed.PluginID != officialContainersPluginID || installed.Version != officialContainersVersion || installed.TrustState != registry.TrustVerified {
-		t.Fatalf("installed plugin = %#v", installed)
-	}
-	if installed.Metadata["source.type"] != "host_artifact" ||
-		installed.Metadata["release.metadata_signature_key_id"] != officialSigningKeyID ||
-		installed.Metadata["release.package_signature_key_id"] != officialSigningKeyID {
-		t.Fatalf("installed release metadata = %#v", installed.Metadata)
-	}
-}
-
-func TestExpiredOfficialContainersReleaseIsRejectedThroughHTTP(t *testing.T) {
-	release, err := redevpluginartifacts.OfficialContainersPluginRelease()
-	if err != nil {
-		t.Fatal(err)
-	}
-	root, err := releasecontract.DecodeRootDelegation(release.ReleaseTrustDocuments["sources/redeven-official/root/current.json"])
-	if err != nil {
-		t.Fatal(err)
-	}
-	expiresAt, err := time.Parse(time.RFC3339, root.ExpiresAt)
-	if err != nil {
-		t.Fatal(err)
-	}
-	expiredAt := expiresAt.Add(time.Second)
-	stateDir := t.TempDir()
-	integration, err := New(context.Background(), Options{
-		StateDir:         stateDir,
-		PermissionPolicy: testPermissionPolicy(t, "execute_read_write"),
-		RuntimePath:      testRuntimePath(t, stateDir),
-		Containers:       mustContainersAdapter(t, &capabilityEngineClient{}),
-		releaseTrustNow:  func() time.Time { return expiredAt },
-		ResolveSessionMeta: func(channelID string) (*session.Meta, bool) {
-			if channelID != "ch_release" {
-				return nil, false
-			}
-			return &session.Meta{
-				ChannelID: channelID, EndpointID: "env_release", UserPublicID: "user_release",
-				CanRead: true, CanWrite: true, CanExecute: true, CanAdmin: true,
-			}, true
+		Asset: asset,
+		ReleaseRefAsset: pluginmarket.ReleaseAsset{
+			AssetID: 497879353, Name: "containers-4.0.1.release-ref.json",
+			URL:  "https://github.com/floegence/redeven-official-plugins/releases/download/v4.0.1/containers-4.0.1.release-ref.json",
+			Size: 1, SHA256: digest,
 		},
-	})
-	if err != nil {
-		t.Fatal(err)
+		TransportAssets: []pluginmarket.TransportAsset{{Locator: locator, ReleaseAsset: asset}},
+		SignerKeyID:     officialSigningKeyID,
+		Compatibility: pluginmarket.Compatibility{
+			MinRedevenVersion: officialMinHostVersion, MinReDevPluginVersion: "0.6.23",
+		},
+		ReleaseIdentityDigest: digest,
 	}
-	t.Cleanup(func() { _ = integration.Close() })
-
-	body, err := json.Marshal(map[string]any{
-		"plugin_instance_id": "plugini_official_containers",
-		"release_ref":        release.Ref,
-	})
-	if err != nil {
-		t.Fatal(err)
+	release.TrustRoot.URL = "https://github.com/floegence/redeven-official-plugins/releases/download/v4.0.1/root.public.json"
+	release.TrustRoot.SHA256 = digest
+	release.PublisherReleaseRef.SchemaVersion = "redevplugin.publisher_release_ref.v1"
+	release.PublisherReleaseRef.ReleaseRef = host.PluginReleaseRef{
+		SourceID: officialReleaseSourceID, Channel: officialReleaseChannel,
+		ReleaseMetadataRef: locator, ReleaseMetadataSHA256: digest,
+		PublisherID: officialPublisherID, PluginID: officialContainersPluginID, Version: officialContainersVersion,
+		ExpectedHashes: host.PackageHashSet{
+			PackageSHA256: "sha256:" + digest, ManifestSHA256: "sha256:" + digest, EntriesSHA256: "sha256:" + digest,
+		},
 	}
-	req := httptest.NewRequest(http.MethodPost, "/_redevplugin/api/plugins/install-release-ref", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set(sessionhop.HeaderChannelID, "ch_release")
-	req.Header.Set("Origin", "https://env.example.test")
-	req.Header.Set(csrfHeader, csrfProof)
-	req.Host = "env.example.test"
-	req = WithRouteRole(req, RouteRoleEnvTrusted)
-	req, err = WithTrustedOrigin(req, "https://env.example.test")
-	if err != nil {
-		t.Fatal(err)
+	release.PublisherReleaseRef.Root = pluginmarket.PublicKey{
+		Algorithm: "ed25519", KeyID: anchors.Root.KeyID, PublicKey: encodePublicKey(anchors.Root.PublicKey),
 	}
-	response := httptest.NewRecorder()
-	integration.Handler().ServeHTTP(response, req)
-	if response.Code != http.StatusForbidden {
-		t.Fatalf("expired release install status = %d body=%s", response.Code, response.Body.String())
+	release.PublisherReleaseRef.SigningLedger = pluginmarket.SigningLedger{
+		LogID: anchors.SigningLedgerLog, Algorithm: "ed25519", KeyID: anchors.SigningLedger.KeyID,
+		PublicKey: encodePublicKey(anchors.SigningLedger.PublicKey),
 	}
-	var envelope struct {
-		OK    bool `json:"ok"`
-		Error struct {
-			Code            string `json:"code"`
-			Message         string `json:"message"`
-			MutationOutcome string `json:"mutation_outcome"`
-		} `json:"error"`
-	}
-	if err := json.Unmarshal(response.Body.Bytes(), &envelope); err != nil {
-		t.Fatalf("decode expired release response: %v body=%s", err, response.Body.String())
-	}
-	if envelope.OK || envelope.Error.Code != "PLUGIN_PERMISSION_DENIED" ||
-		envelope.Error.Message != "plugin permission was denied" ||
-		envelope.Error.MutationOutcome != "not_committed" {
-		t.Fatalf("expired release response = %#v", envelope)
-	}
-
-	catalogRequest := httptest.NewRequest(http.MethodPost, "/_redevplugin/api/plugins/catalog/query", bytes.NewReader([]byte("{}")))
-	catalogRequest.Header.Set("Content-Type", "application/json")
-	catalogRequest.Header.Set(sessionhop.HeaderChannelID, "ch_release")
-	catalogRequest.Header.Set("Origin", "https://env.example.test")
-	catalogRequest.Header.Set(csrfHeader, csrfProof)
-	catalogRequest.Host = "env.example.test"
-	catalogRequest = WithRouteRole(catalogRequest, RouteRoleEnvTrusted)
-	catalogRequest, err = WithTrustedOrigin(catalogRequest, "https://env.example.test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	catalogResponse := httptest.NewRecorder()
-	integration.Handler().ServeHTTP(catalogResponse, catalogRequest)
-	if catalogResponse.Code != http.StatusOK {
-		t.Fatalf("catalog after expired release status = %d body=%s", catalogResponse.Code, catalogResponse.Body.String())
-	}
-	var catalogEnvelope struct {
-		OK   bool `json:"ok"`
-		Data struct {
-			Plugins []json.RawMessage `json:"plugins"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(catalogResponse.Body.Bytes(), &catalogEnvelope); err != nil {
-		t.Fatalf("decode catalog after expired release: %v body=%s", err, catalogResponse.Body.String())
-	}
-	if !catalogEnvelope.OK || len(catalogEnvelope.Data.Plugins) != 0 {
-		t.Fatalf("catalog after expired release = %#v", catalogEnvelope)
-	}
+	release.PublisherReleaseRef.Files = []pluginmarket.PublishedFile{{
+		Locator: locator, AssetName: assetName, SHA256: digest, Size: 1,
+	}}
+	return release
 }

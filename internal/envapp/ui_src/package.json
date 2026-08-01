@@ -27,7 +27,7 @@
     "@floegence/floe-webapp-protocol": "0.40.3",
     "@floegence/floeterm-terminal-web": "0.12.0",
     "@floegence/flowersec-core": "^0.27.0",
-    "@floegence/redevplugin-ui": "0.6.20",
+    "@floegence/redevplugin-ui": "0.6.23",
     "@fontsource/iosevka": "^5.2.5",
     "@solidjs/router": "^0.15.3",
     "diff": "^8.0.3",

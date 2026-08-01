@@ -37,6 +37,7 @@ import (
 	runtimefs "github.com/floegence/redeven/internal/fs"
 	"github.com/floegence/redeven/internal/notes"
 	"github.com/floegence/redeven/internal/pathutil"
+	"github.com/floegence/redeven/internal/pluginmarket"
 	"github.com/floegence/redeven/internal/portforward"
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 	"github.com/floegence/redeven/internal/redevpluginintegration"
@@ -76,6 +77,7 @@ type Options struct {
 	// PluginPlatform is the released ReDevPlugin HTTP handler mounted behind Redeven routes.
 	PluginPlatform            http.Handler
 	PluginDevelopmentDelivery *redevpluginintegration.DevelopmentDelivery
+	PluginMarketSnapshot      func() (pluginmarket.Snapshot, bool)
 	// AgentHomeDir is the canonical absolute path to the default home directory.
 	AgentHomeDir    string
 	FilesystemScope *filesystemscope.Registry
@@ -250,6 +252,7 @@ type Server struct {
 	threadReadState           *threadreadstate.Store
 	pluginPlatform            http.Handler
 	pluginDevelopmentDelivery *redevpluginintegration.DevelopmentDelivery
+	pluginMarketSnapshot      func() (pluginmarket.Snapshot, bool)
 	pluginConnMu              sync.Mutex
 	pluginConns               map[*pluginAdmissionConn]struct{}
 
@@ -397,6 +400,7 @@ func New(opts Options) (*Server, error) {
 		threadReadState:           opts.ThreadReadStateStore,
 		pluginPlatform:            opts.PluginPlatform,
 		pluginDevelopmentDelivery: opts.PluginDevelopmentDelivery,
+		pluginMarketSnapshot:      opts.PluginMarketSnapshot,
 		pluginConns:               make(map[*pluginAdmissionConn]struct{}),
 		distFS:                    opts.DistFS,
 		addr:                      addr,
@@ -2657,6 +2661,22 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 	}))
 	defer func() { releaseAI() }()
 	switch {
+	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/plugins/market/catalog":
+		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
+			return
+		}
+		if g.pluginMarketSnapshot == nil {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "plugin market is unavailable"})
+			return
+		}
+		snapshot, ok := g.pluginMarketSnapshot()
+		if !ok {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "plugin market is unavailable"})
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: snapshot})
+		return
+
 	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/plugins/development-delivery/containers":
 		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
 			return

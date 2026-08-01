@@ -109,9 +109,11 @@ func BuildStartPreflightPlan(input StartPreflightInput) (StartPreflightPlan, err
 		return riskSeverityRank(risks[i].Severity) > riskSeverityRank(risks[j].Severity)
 	})
 
+	request := NewStartRequest(engine, containerID)
+	request.EndpointID = input.EndpointID
 	return StartPreflightPlan{
 		Method:        MethodStart,
-		Request:       NewStartRequest(engine, containerID),
+		Request:       request,
 		Target:        target,
 		Image:         image,
 		Runtime:       runtime,

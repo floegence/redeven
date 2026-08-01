@@ -8,12 +8,12 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const output = join(root, 'desktop', '.containers-v4-development');
 const staging = `${output}.staging`;
 const officialPluginsRepository = 'https://github.com/floegence/redeven-official-plugins.git';
-const officialPluginsCommit = '37d4dfff0cfa88c7a00ee0b89f55bfbcdde4b251';
+const officialPluginsCommit = 'b9eb04f6cc08eab35e0d0a8a5ac671ec5077aaed';
 const sourceRoot = join(staging, 'official-plugins-source');
 const pluginRoot = join(sourceRoot, 'plugins', 'containers');
 const contractPath = join(root, 'spec', 'capabilities', 'container-resources-v4.contract.json');
 const releaseNotesPath = join(root, 'internal', 'envapp', 'ui_src', 'src', 'ui', 'plugins', 'officialPluginReleaseNotes.json');
-const cli = ['run', 'github.com/floegence/redevplugin/cmd/redevplugin@v0.6.20'];
+const cli = ['run', 'github.com/floegence/redevplugin/cmd/redevplugin@v0.6.23'];
 
 rmSync(staging, { recursive: true, force: true });
 mkdirSync(staging, { recursive: true, mode: 0o700 });
@@ -29,7 +29,7 @@ const capabilityConfig = {
   artifact_base_ref: 'capabilities/redeven.container_resources.v4/v4.0.0',
   generated_at: new Date().toISOString().replace(/\.\d{3}Z$/u, 'Z'),
   source_commit: commit,
-  min_redevplugin_version: '0.6.20',
+  min_redevplugin_version: '0.6.23',
   signature_policy_epoch: '1',
   signature_revocation_epoch: '1',
 };

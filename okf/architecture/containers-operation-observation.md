@@ -13,10 +13,11 @@ observation record. The resource stays locked until terminal observation and
 fresh authoritative inventory prove the result; unrelated resources remain
 usable. Lost submissions, partial mutations, stale plans, unavailable engines,
 and failed reconciliation are never replayed or shown as success. Production
-still uses the signed Containers `2.0.0` release. Dev Desktop may activate the
-endpoint-aware `4.0.0` candidate only through an ephemeral, exact local delivery
-whose package and capability are verified at startup; it remains outside
-official release trust.
+uses the signed, endpoint-aware Containers `4.0.1` release through the exact v4
+capability and market-selected GitHub Release transport. Dev Desktop may build
+the same `4.0.0` plugin source through an ephemeral, exact local delivery whose
+package and capability are verified at startup; that development delivery
+remains outside official release trust.
 
 # Contract
 
@@ -128,23 +129,23 @@ Containers source, tests, manifest, icon, and stable distribution are owned by
 verifies the package and icon hashes before use. The v4 gate fetches that exact
 commit, runs the plugin's own tests and build, packages through the released
 ReDevPlugin CLI, validates manifest v7, version `4.0.0`, minimum runtime
-`0.6.20`, `plugin-ui-v7`, endpoint identity, and destructive method policy,
-and rejects package signatures or activatable unsigned routes. Redeven does not
+`0.6.21`, `plugin-ui-v7`, endpoint identity, and destructive method policy,
+and rejects package signatures or capability route drift. Redeven does not
 keep a plugin source tree, icon, or unsigned plugin-package candidate.
 
-Stable and latest catalog metadata remain pinned to signed Containers `2.0.0`.
-An official `4.0.0` release requires authorized capability and package signing
-plus matching root, pin, policy, revocation, ledger, and release metadata.
-Development bytes cannot substitute for those materials and must not be merged
-as an active release. For local product verification, `dev_desktop.sh` first
+Production discovery selects signed Containers `4.0.1` from the frozen
+latest-only market snapshot. The package and every trust document remain in the
+immutable GitHub Release; ReDevPlugin requires authorized capability and package
+signing plus matching root, pin, policy, revocation, ledger, and release
+metadata. Development bytes cannot substitute for those materials. For local
+product verification, `dev_desktop.sh` first
 fetches the pinned official-plugin commit, then creates a temporary capability
 signing identity, packages all 52 exact routes, deletes the private key, and
 supplies a descriptor that records the immutable remote source only to the
 Desktop-managed development Runtime. The Runtime verifies every artifact and enables ReDevPlugin local
 import only for that process. Env App then updates the fixed Containers instance
 through the released local-import client after checking the package SHA-256 and
-current management revision. Production policy and the signed catalog are
-unchanged.
+current management revision. Production policy and release trust are unchanged.
 
 # Boundaries
 
@@ -157,8 +158,8 @@ package and integration ownership remains in [Plugin platform integration](plugi
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/plugins/officialContainersDistribution.json` - Pins the official plugin repository commit plus stable package and icon hashes.
-- `redeven:scripts/check_catalog_plugin_package_url.mjs` - Fetches the pinned official repository commit and verifies package and icon bytes.
+- `redeven:internal/pluginmarket/service.go` - Freezes the latest-only production release selection and validated transport.
+- `redeven:internal/redevpluginintegration/release_module.go` - Installs the complete signed GitHub Release transport through ReDevPlugin.
 - `redeven:scripts/check_containers_plugin_v4_candidate.sh` - Fetches, tests, builds, and validates the immutable remote v4 source without granting release trust.
 - `redeven:scripts/check_plugin_integration.sh` - Routes final ReDevPlugin integration validation through the current v4 candidate gate.
 - `redeven:scripts/build_containers_v4_development_delivery.mjs` - Produces the ephemeral Dev Desktop package and verified v4 capability delivery.

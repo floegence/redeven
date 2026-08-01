@@ -2,7 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { OFFICIAL_PLUGIN_CATALOG_SEED, officialPluginCatalog } from './officialPluginCatalog';
+import { applyOfficialDevelopmentDelivery, officialPluginCatalog } from './officialPluginCatalog';
+import { OFFICIAL_PLUGIN_CATALOG_SEED, OFFICIAL_PLUGIN_MARKET_SNAPSHOT } from './officialPluginCatalog.test-fixture';
 import type { PluginDevelopmentDelivery } from './pluginTypes';
 
 type CapabilityContract = {
@@ -15,7 +16,7 @@ type CapabilityContract = {
 const containersCapabilityContract = JSON.parse(fs.readFileSync(
   path.resolve(
     process.cwd(),
-    '../../../spec/redevplugin/official-containers-capability/capabilities/redeven.container_resources.v2/v2.0.0/redeven.container_resources.v2.schema.json',
+    '../../../spec/redevplugin/official-containers-capability-v4/bundle/capabilities/redeven.container_resources.v4/v4.0.0/redeven.container_resources.v4.schema.json',
   ),
   'utf8',
 )) as CapabilityContract;
@@ -39,7 +40,7 @@ function methodsByPermissionFromContract(): Record<string, string[]> {
 describe('official plugin catalog contracts', () => {
   it('loads the Containers icon from the immutable official plugin source', () => {
     expect(OFFICIAL_PLUGIN_CATALOG_SEED[0]?.iconURL).toBe(
-      'https://raw.githubusercontent.com/floegence/redeven-official-plugins/37d4dfff0cfa88c7a00ee0b89f55bfbcdde4b251/plugins/containers/assets/containers-plugin.png',
+      'https://raw.githubusercontent.com/floegence/redeven-official-plugins/16429991dc3daa446385a933676b26c8031d3d7b/plugins/containers/assets/containers-plugin.png',
     );
   });
 
@@ -58,6 +59,22 @@ describe('official plugin catalog contracts', () => {
     expect(catalogMethodsByPermission).toEqual(methodsByPermissionFromContract());
   });
 
+  it('projects the latest version from the current frozen market snapshot', () => {
+    const next = structuredClone(OFFICIAL_PLUGIN_MARKET_SNAPSHOT);
+    next.generation = 2;
+    next.plugins[0]!.latest.version = '4.1.0';
+    next.plugins[0]!.release!.version = '4.1.0';
+    next.plugins[0]!.release!.publisher_release_ref.release_ref.version = '4.1.0';
+
+    expect(officialPluginCatalog(next)[0]).toMatchObject({
+      latestVersion: '4.1.0',
+      stableVersion: '4.1.0',
+      distribution: {
+        releaseRef: { version: '4.1.0' },
+      },
+    });
+  });
+
   it('rejects development delivery metadata from any unpinned source identity', () => {
     const delivery: PluginDevelopmentDelivery = {
       plugin_instance_id: 'plugini_redeven_official_containers',
@@ -73,11 +90,11 @@ describe('official plugin catalog contracts', () => {
       release_notes_id: 'containers-4.0.0',
       release_notes_summary_sha256: 'b'.repeat(64),
       source_repository: 'https://github.com/example/untrusted-plugins.git',
-      source_commit: '37d4dfff0cfa88c7a00ee0b89f55bfbcdde4b251',
+      source_commit: 'b9eb04f6cc08eab35e0d0a8a5ac671ec5077aaed',
       development_only: true,
     };
 
-    expect(() => officialPluginCatalog(delivery)).toThrow(
+    expect(() => applyOfficialDevelopmentDelivery(officialPluginCatalog(OFFICIAL_PLUGIN_MARKET_SNAPSHOT), delivery)).toThrow(
       'Containers development delivery metadata is invalid',
     );
   });

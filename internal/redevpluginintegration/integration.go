@@ -13,6 +13,7 @@ import (
 	"github.com/floegence/redeven/internal/capabilities/containers"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/diagnostics"
+	"github.com/floegence/redeven/internal/pluginmarket"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redevplugin/pkg/bridge"
 	"github.com/floegence/redevplugin/pkg/connectivity"
@@ -41,6 +42,7 @@ type Options struct {
 	Containers              *containers.Adapter
 	RuntimeAuthority        *RuntimeProcessAuthority
 	DevelopmentDeliveryPath string
+	PluginMarket            *pluginmarket.Service
 	releaseTrustNow         func() time.Time
 	newReleaseModule        func(string) (*host.ReleaseModule, host.PluginReleaseRef, func() error, error)
 	newExternalFetcher      func(*externalsource.StageStore) (host.ExternalPackageFetcher, error)
@@ -53,6 +55,8 @@ type Integration struct {
 	capabilities        *containersCapabilityAdapter
 	sessionLifecycle    *sessionLifecycleAdapter
 	developmentDelivery *DevelopmentDelivery
+	marketSnapshot      *pluginmarket.Snapshot
+	marketErr           error
 	closers             []func() error
 }
 
@@ -140,21 +144,40 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 		closeOnError()
 		return nil, err
 	}
-	newReleaseModule := opts.newReleaseModule
-	if newReleaseModule == nil && opts.releaseTrustNow != nil {
-		newReleaseModule = func(stateDir string) (*host.ReleaseModule, host.PluginReleaseRef, func() error, error) {
-			return newOfficialReleaseModuleWithClock(stateDir, opts.releaseTrustNow)
+	var releaseModule *host.ReleaseModule
+	var closeReleaseTrust func() error
+	var marketSnapshot *pluginmarket.Snapshot
+	var marketErr error
+	if opts.newReleaseModule != nil {
+		releaseModule, _, closeReleaseTrust, err = opts.newReleaseModule(filepath.Join(root, "trust"))
+	} else if opts.PluginMarket != nil {
+		var snapshot pluginmarket.Snapshot
+		snapshot, marketErr = opts.PluginMarket.Snapshot(ctx)
+		if marketErr == nil {
+			var release pluginmarket.LatestRelease
+			release, marketErr = snapshot.LatestRelease(officialContainersPluginID, officialReleaseChannel)
+			if marketErr == nil {
+				now := time.Now
+				if opts.releaseTrustNow != nil {
+					now = opts.releaseTrustNow
+				}
+				releaseModule, _, closeReleaseTrust, marketErr = newOfficialReleaseModuleWithClock(
+					ctx, filepath.Join(root, "trust"), release, externalFetcher, now,
+				)
+			}
+			if marketErr == nil {
+				frozen := snapshot.Clone()
+				marketSnapshot = &frozen
+			}
 		}
 	}
-	if newReleaseModule == nil {
-		newReleaseModule = newOfficialReleaseModule
-	}
-	releaseModule, _, closeReleaseTrust, err := newReleaseModule(filepath.Join(root, "trust"))
 	if err != nil {
 		closeOnError()
 		return nil, err
 	}
-	closers = append(closers, closeReleaseTrust)
+	if closeReleaseTrust != nil {
+		closers = append(closers, closeReleaseTrust)
+	}
 
 	registryStore, err := registry.NewSQLiteStore(ctx, filepath.Join(dbRoot, "registry.sqlite"))
 	if err != nil {
@@ -324,6 +347,8 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 		capabilities:        capabilityAdapter,
 		sessionLifecycle:    sessionLifecycle,
 		developmentDelivery: developmentDelivery,
+		marketSnapshot:      marketSnapshot,
+		marketErr:           marketErr,
 		closers:             closers,
 	}
 	return integration, nil
@@ -334,6 +359,20 @@ func (i *Integration) DevelopmentDelivery() *DevelopmentDelivery {
 		return nil
 	}
 	return i.developmentDelivery
+}
+
+func (i *Integration) MarketSnapshot() (pluginmarket.Snapshot, bool) {
+	if i == nil || i.marketSnapshot == nil {
+		return pluginmarket.Snapshot{}, false
+	}
+	return i.marketSnapshot.Clone(), true
+}
+
+func (i *Integration) MarketError() error {
+	if i == nil {
+		return pluginmarket.ErrUnavailable
+	}
+	return i.marketErr
 }
 
 func (i *Integration) Handler() http.Handler {

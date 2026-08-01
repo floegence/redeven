@@ -10,7 +10,7 @@ trap 'rm -rf "$TEMP_DIR"' EXIT
 SOURCE_DIR="$TEMP_DIR/redeven-official-plugins"
 PLUGIN_DIR="$SOURCE_DIR/plugins/containers"
 SOURCE_REPOSITORY="https://github.com/floegence/redeven-official-plugins.git"
-SOURCE_COMMIT="37d4dfff0cfa88c7a00ee0b89f55bfbcdde4b251"
+SOURCE_COMMIT="b9eb04f6cc08eab35e0d0a8a5ac671ec5077aaed"
 
 git -C "$TEMP_DIR" init --quiet redeven-official-plugins
 git -C "$SOURCE_DIR" remote add origin "$SOURCE_REPOSITORY"
@@ -25,9 +25,9 @@ npm run build
 
 cd "$ROOT_DIR"
 node scripts/build_containers_v4_contract.mjs --verify
-GOWORK=off go run github.com/floegence/redevplugin/cmd/redevplugin@v0.6.20 \
+GOWORK=off go run github.com/floegence/redevplugin/cmd/redevplugin@v0.6.23 \
   package "$PLUGIN_DIR/dist" "$TEMP_DIR/plugin.redevplugin" >/dev/null
-GOWORK=off go run github.com/floegence/redevplugin/cmd/redevplugin@v0.6.20 \
+GOWORK=off go run github.com/floegence/redevplugin/cmd/redevplugin@v0.6.23 \
   validate "$TEMP_DIR/plugin.redevplugin" >/dev/null
 
 if unzip -Z1 "$TEMP_DIR/plugin.redevplugin" | grep -Fxq 'signatures/package.sig'; then
@@ -43,12 +43,22 @@ unzip -p "$TEMP_DIR/plugin.redevplugin" manifest.json | node -e '
     const manifest = JSON.parse(source);
     if (manifest.schema_version !== "redevplugin.manifest.v7"
       || manifest.plugin?.version !== "4.0.0"
-      || manifest.plugin?.min_runtime_version !== "0.6.20"
+      || manifest.plugin?.min_runtime_version !== "0.6.21"
       || manifest.plugin?.ui_protocol_version !== "plugin-ui-v7") {
       throw new Error("Containers v4 candidate version matrix is invalid");
     }
-    if (Object.hasOwn(manifest, "capability_bindings") || Object.hasOwn(manifest, "methods")) {
-      throw new Error("Unsigned Containers v4 candidate must fail closed without capability routes");
+    const bindings = manifest.capability_bindings;
+    const methods = manifest.methods;
+    if (!Array.isArray(bindings) || bindings.length !== 1
+      || bindings[0]?.binding_id !== "containers-v4"
+      || bindings[0]?.contract?.contract_id !== "redeven.container_resources.v4"
+      || bindings[0]?.contract?.contract_version !== "4.0.0"
+      || !Array.isArray(methods) || methods.length !== 52
+      || new Set(methods.map((method) => method.method)).size !== 52
+      || methods.some((method) => method.route?.kind !== "capability"
+        || method.route?.binding_id !== "containers-v4"
+        || method.route?.target_method !== method.method)) {
+      throw new Error("Containers v4 candidate capability routes are invalid");
     }
   });
 '
@@ -134,4 +144,4 @@ for (const symbol of ['RedevenContainerResourcesV4Client', 'listEndpoints', 'end
 }
 NODE
 
-echo "Containers plugin 4.0.0 immutable remote source and fail-closed package verified"
+echo "Containers plugin 4.0.0 immutable remote source and exact capability routes verified"

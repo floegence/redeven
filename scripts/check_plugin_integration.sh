@@ -61,9 +61,6 @@ require_embedded_assets() {
 log "checking ReDevPlugin published dependency boundary"
 ./scripts/check_redevplugin_dependency_boundary.sh --ci
 
-log "checking immutable catalog plugin package URL"
-node ./scripts/check_catalog_plugin_package_url.mjs
-
 log "checking immutable remote Containers v4 plugin source"
 ./scripts/check_containers_plugin_v4_candidate.sh
 ./scripts/check_containers_v4_release_capability.sh

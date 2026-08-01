@@ -13,19 +13,24 @@ const terminalAgentIconManifestPath = path.join(repoRoot, 'assets/terminal_agent
 const entryPath = '/_redeven_proxy/env/';
 const assetPrefix = `${entryPath}assets/`;
 const optionalDevelopmentDeliveryPath = '/_redeven_proxy/api/plugins/development-delivery/containers';
+const pluginMarketCatalogPath = '/_redeven_proxy/api/plugins/market/catalog';
 const hashedAssetPattern = /-[A-Za-z0-9_-]{8,}\.(?:css|js|wasm)$/;
-const officialContainersDistribution = JSON.parse(await readFile(path.join(
-  repoRoot,
-  'internal/envapp/ui_src/src/ui/plugins/officialContainersDistribution.json',
-), 'utf8'));
-const officialContainersPackageURL = `https://raw.githubusercontent.com/${officialContainersDistribution.repository}/${officialContainersDistribution.commit}/${officialContainersDistribution.artifact_path.join('/')}`;
-const builtContainersInspectionID = 'inspection_built_containers_12345678';
-const builtContainersConfirmationDigest = 'sha256:684a09cfd858448baa7d52c3d30932d7684a09cfd858448baa7d52c3d30932d7';
 const builtContainersPackageHashes = Object.freeze({
-  package_sha256: 'sha256:2609ee8ecf0d993f3e4b0456fb5d28160849566a49ede1c78ca15e6cb5384926',
-  manifest_sha256: 'sha256:431cc3c9a005a38d86c6947e2bf2501be02870361ac285bedf4157cecc6a6ef2',
-  entries_sha256: 'sha256:fa6efbcef0e2065f52a609acd1c4ca4b3e15e308975738260088c1066a6c4b34',
+  package_sha256: 'sha256:d05f1add42c7773bafcad768c766f725e438404ba237b04ad80dafbe96f8aa22',
+  manifest_sha256: 'sha256:e7453a139267309dcd1504f48416a1f622fb0ed4cc0fafdbce2f453485959ee7',
+  entries_sha256: 'sha256:e6cd5004c8d22161c25c5c65a562cda608dbfe528cfa37a1ba14909c3e8e7a73',
 });
+const builtContainersReleaseRef = Object.freeze({
+  source_id: 'redeven_official',
+  channel: 'stable',
+  release_metadata_ref: 'plugins/com.redeven.official/com.redeven.official.containers/4.0.1/release.json',
+  release_metadata_sha256: 'fe9c360f726533ede7f1c8c5f9a9ca879d9ed4215e4f8640a09908bab61d6d64',
+  publisher_id: 'com.redeven.official',
+  plugin_id: 'com.redeven.official.containers',
+  version: '4.0.1',
+  expected_hashes: builtContainersPackageHashes,
+});
+const builtContainersPackageURL = 'https://github.com/floegence/redeven-official-plugins/releases/download/v4.0.1/containers-4.0.1.redevplugin';
 
 function parseReportPath(args) {
   const index = args.indexOf('--report');
@@ -78,111 +83,67 @@ async function readJSONRequest(request) {
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
 
-function builtContainersInspection() {
-  const assessedAt = '2026-07-24T10:00:00Z';
+function builtPluginMarketSnapshot() {
   return {
-    inspection_id: builtContainersInspectionID,
-    expires_at: '2099-07-24T12:00:00Z',
-    intent: { action: 'install', plugin_instance_id: 'plugini_built_containers_12345678' },
-    publisher_id: 'com.redeven.official',
-    plugin_id: 'com.redeven.official.containers',
-    version: '2.0.0',
-    inspected_hashes: builtContainersPackageHashes,
-    signature_assessment: {
-      state: 'absent',
-      reason_codes: ['signature_not_present'],
-      assessed_hashes: builtContainersPackageHashes,
-      assessed_at: assessedAt,
-    },
-    source_provenance: {
-      kind: 'package_url',
-      source_origin: 'https://raw.githubusercontent.com',
-      source_path: new URL(officialContainersPackageURL).pathname,
-      redirect_chain: [],
-      package_sha256: builtContainersPackageHashes.package_sha256,
-      resolved_at: assessedAt,
-    },
-    execution_approval: { state: 'pending', reason_codes: [], assessed_at: assessedAt },
-    update_eligibility: { state: 'manual_only', reason_codes: ['signature_absent'], assessed_at: assessedAt },
-    security_summary: {
-      summary_sha256: 'sha256:9b30eca232030072294fcabdc98df492609672c92d2d04a545d5790119d1822b',
-      permissions: [{ permission_id: 'containers.read', methods: ['containers.status', 'containers.list'] }],
-      methods: [],
-      capability_contracts: [],
-      workers: [],
-      network: [],
-      storage: [],
-      secret_refs: [],
-      core_actions: [],
-      intents: [],
-      surfaces: [],
-    },
-    confirmation_digest: builtContainersConfirmationDigest,
+    schema_version: 'redeven.plugin_market_snapshot.v1',
+    generation: 1,
+    etag: '"catalog-g1"',
+    cached_at: '2026-08-01T10:00:00Z',
+    stale: false,
+    source: 'remote',
+    plugins: [{
+      plugin_id: builtContainersReleaseRef.plugin_id,
+      publisher_id: builtContainersReleaseRef.publisher_id,
+      name: 'Containers',
+      summary: 'Manage Docker and Podman resources through Redeven.',
+      categories: ['containers', 'development'],
+      channels: ['stable'],
+      latest: { channel: 'stable', version: builtContainersReleaseRef.version, availability_status: 'visible' },
+      release: {
+        plugin_id: builtContainersReleaseRef.plugin_id,
+        channel: 'stable',
+        version: builtContainersReleaseRef.version,
+        asset: { url: builtContainersPackageURL },
+        publisher_release_ref: { release_ref: builtContainersReleaseRef },
+        signer_key_id: 'redeven_official_signing_2026',
+        compatibility: { min_redeven_version: '1.0.0', min_redevplugin_version: '0.6.23' },
+      },
+    }],
   };
 }
 
-function builtContainersCommitResult() {
-  const inspection = builtContainersInspection();
-  const executionApproval = {
-    state: 'user_approved',
-    reason_codes: [],
-    assessed_at: '2026-07-24T10:00:00Z',
-    approved_at: '2026-07-24T10:01:00Z',
-  };
-  const plugin = {
-    plugin_instance_id: inspection.intent.plugin_instance_id,
-    publisher_id: inspection.publisher_id,
-    plugin_id: inspection.plugin_id,
-    version: inspection.version,
+function builtContainersInstalledPlugin() {
+  return {
+    plugin_instance_id: 'plugini_redeven_official_containers',
+    publisher_id: builtContainersReleaseRef.publisher_id,
+    plugin_id: builtContainersReleaseRef.plugin_id,
+    version: builtContainersReleaseRef.version,
     active_fingerprint: builtContainersPackageHashes.package_sha256,
     package_hash: builtContainersPackageHashes.package_sha256,
     manifest_hash: builtContainersPackageHashes.manifest_sha256,
     entries_hash: builtContainersPackageHashes.entries_sha256,
-    trust_state: 'unsigned_local',
-    trust_assessment: { trust_state: 'unsigned_local', verified_hashes: builtContainersPackageHashes },
-    signature_assessment: inspection.signature_assessment,
-    source_provenance: inspection.source_provenance,
-    execution_approval: executionApproval,
-    update_eligibility: inspection.update_eligibility,
-    security_summary: inspection.security_summary,
+    trust_state: 'verified',
+    trust_assessment: { trust_state: 'verified', verified_hashes: builtContainersPackageHashes },
     enable_state: 'disabled',
     policy_revision: 1,
     management_revision: 1,
     revoke_epoch: 0,
     manifest: {
-      schema_version: 'redevplugin.manifest.v5',
-      publisher: { publisher_id: inspection.publisher_id, display_name: 'Redeven' },
+      schema_version: 'redevplugin.manifest.v7',
+      publisher: { publisher_id: builtContainersReleaseRef.publisher_id, display_name: 'Redeven' },
       plugin: {
-        plugin_id: inspection.plugin_id,
+        plugin_id: builtContainersReleaseRef.plugin_id,
         display_name: 'Containers',
-        version: inspection.version,
+        version: builtContainersReleaseRef.version,
         api_version: 'plugin-v1',
-        min_runtime_version: '0.6.5',
-        ui_protocol_version: 'plugin-ui-v5',
+        min_runtime_version: '0.6.23',
+        ui_protocol_version: 'plugin-ui-v7',
       },
       surfaces: [],
     },
     package_entries: [],
     installed_at: '2026-07-24T10:01:00Z',
     updated_at: '2026-07-24T10:01:00Z',
-  };
-  return {
-    status: 'committed',
-    inspection_id: inspection.inspection_id,
-    intent: inspection.intent,
-    receipt: {
-      commit_id: 'commit_built_containers_12345678',
-      inspection_id: inspection.inspection_id,
-      package_sha256: builtContainersPackageHashes.package_sha256,
-      management_revision: 1,
-      committed_at: '2026-07-24T10:01:00Z',
-    },
-    plugin,
-    signature_assessment: inspection.signature_assessment,
-    source_provenance: inspection.source_provenance,
-    execution_approval: executionApproval,
-    update_eligibility: inspection.update_eligibility,
-    security_summary: inspection.security_summary,
   };
 }
 
@@ -255,6 +216,10 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
         response.end(JSON.stringify({ ok: false, error: 'not found' }));
         return;
       }
+      if (requestURL.pathname === pluginMarketCatalogPath) {
+        jsonResponse(response, { ok: true, data: builtPluginMarketSnapshot() });
+        return;
+      }
       if (accessReady && (
         requestURL.pathname.startsWith('/api/')
         || requestURL.pathname.startsWith('/_redeven_proxy/api/')
@@ -281,7 +246,7 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
       }
       if (requestURL.pathname === '/_redevplugin/api/plugins/permissions/requirements/query') {
         const body = await readJSONRequest(request);
-        const expected = { plugin_instance_id: 'plugini_built_containers_12345678' };
+        const expected = { plugin_instance_id: 'plugini_redeven_official_containers' };
         if (JSON.stringify(body) !== JSON.stringify(expected)) {
           throw new Error(`unexpected permission requirements request: ${JSON.stringify({ expected, actual: body })}`);
         }
@@ -289,7 +254,7 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
           ok: true,
           data: {
             plugin_instance_id: expected.plugin_instance_id,
-            plugin_version: '2.0.0',
+            plugin_version: builtContainersReleaseRef.version,
             active_fingerprint: builtContainersPackageHashes.package_sha256,
             management_revision: 1,
             required_permissions: ['containers.read'],
@@ -298,30 +263,17 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
         });
         return;
       }
-      if (pluginInstallFlow && requestURL.pathname === '/_redevplugin/api/plugins/external-packages/inspect') {
+      if (pluginInstallFlow && requestURL.pathname === '/_redevplugin/api/plugins/install-release-ref') {
         const body = await readJSONRequest(request);
         const expected = {
-          intent: { action: 'install' },
-          source: { kind: 'package_url', url: officialContainersPackageURL },
+          plugin_instance_id: 'plugini_redeven_official_containers',
+          release_ref: builtContainersReleaseRef,
         };
         if (JSON.stringify(body) !== JSON.stringify(expected)) {
-          throw new Error(`unexpected Containers inspection request: ${JSON.stringify({ expected, actual: body })}`);
+          throw new Error(`unexpected Containers release install request: ${JSON.stringify({ expected, actual: body })}`);
         }
-        jsonResponse(response, { ok: true, data: builtContainersInspection() });
-        return;
-      }
-      if (pluginInstallFlow && requestURL.pathname === '/_redevplugin/api/plugins/external-packages/commit') {
-        const body = await readJSONRequest(request);
-        const expected = {
-          inspection_id: builtContainersInspectionID,
-          confirmation_digest: builtContainersConfirmationDigest,
-        };
-        if (JSON.stringify(body) !== JSON.stringify(expected)) {
-          throw new Error(`unexpected Containers commit request: ${JSON.stringify({ expected, actual: body })}`);
-        }
-        const result = builtContainersCommitResult();
-        installedPlugin = result.plugin;
-        jsonResponse(response, { ok: true, data: result });
+        installedPlugin = builtContainersInstalledPlugin();
+        jsonResponse(response, { ok: true, data: installedPlugin });
         return;
       }
 
@@ -562,44 +514,23 @@ async function verifyBuiltPluginInstallRouting(browser) {
     await containersInstall.evaluate((button) => { button.disabled = false; });
     await containersInstall.click();
 
-    const externalPluginDialogContent = page.locator('[data-external-plugin-dialog]');
-    await externalPluginDialogContent.waitFor({ state: 'visible', timeout: 10_000 });
-    const externalPluginDialog = page.getByRole('dialog').filter({ has: externalPluginDialogContent });
-    const externalPluginDialogCount = await externalPluginDialog.count();
-    if (externalPluginDialogCount !== 1) {
-      throw new Error(`built external package dialog count = ${externalPluginDialogCount}, expected 1`);
-    }
-    const packageURL = await externalPluginDialog.locator('input[type="url"]').inputValue();
-    if (packageURL !== officialContainersPackageURL) {
-      throw new Error(`built Containers package URL mismatch: ${JSON.stringify({
-        expected: officialContainersPackageURL,
-        actual: packageURL,
-      })}`);
-    }
-    const reviewPackageActionCount = await page.getByRole('button', { name: 'Review package', exact: true }).count();
-    if (reviewPackageActionCount !== 1) {
-      throw new Error(`built external package review action count = ${reviewPackageActionCount}, expected 1`);
-    }
-    await page.getByRole('button', { name: 'Review package', exact: true }).click();
-    const confirmInstall = page.getByRole('button', { name: 'Install plugin', exact: true });
-    await confirmInstall.waitFor({ state: 'visible', timeout: 10_000 });
-    if (await confirmInstall.isEnabled()) {
-      throw new Error('built unsigned Containers install did not require digest confirmation');
-    }
-    const digestConfirmation = externalPluginDialog.locator('input[type="checkbox"]');
-    await digestConfirmation.check();
-    if (!(await confirmInstall.isEnabled())) {
-      throw new Error('built unsigned Containers install remained disabled after digest confirmation');
-    }
-    await confirmInstall.click();
-    await externalPluginDialog.getByRole('status').filter({ hasText: 'Containers' })
-      .waitFor({ state: 'visible', timeout: 10_000 });
-    await page.getByRole('dialog').getByText('Close', { exact: true }).click();
+    await pluginCenter.locator('#plugin-center-tab-installed').click();
+    const installedContainersItem = pluginCenter.locator('[data-plugin-center-item]').filter({ hasText: 'Containers' });
+    await installedContainersItem.waitFor({ state: 'visible', timeout: 10_000 });
+    await installedContainersItem.click();
     const installedDetails = pluginCenter.locator('[data-plugin-center-details]');
-    await installedDetails.getByText('Disabled', { exact: true }).waitFor({ state: 'visible', timeout: 10_000 });
-    await installedDetails.getByText('Unsigned', { exact: true }).first().waitFor({ state: 'visible', timeout: 10_000 });
-    if (pluginRequests.some((request) => request.path.endsWith('/install-release-ref'))) {
-      throw new Error(`built Containers Install called install-release-ref: ${JSON.stringify(pluginRequests)}`);
+    try {
+      await installedDetails.getByText('Disabled', { exact: true }).waitFor({ state: 'visible', timeout: 10_000 });
+    } catch (error) {
+      throw new Error(`built signed Containers install did not reach Disabled: ${JSON.stringify({
+        pluginRequests,
+        pluginCenterText: (await pluginCenter.innerText()).slice(0, 2_000),
+        pageErrors,
+      })}`, { cause: error });
+    }
+    await installedDetails.getByText('Official', { exact: true }).first().waitFor({ state: 'visible', timeout: 10_000 });
+    if (pluginRequests.some((request) => request.path.includes('/external-packages/'))) {
+      throw new Error(`built Containers Install used external-package admission: ${JSON.stringify(pluginRequests)}`);
     }
     const pluginInventoryRequests = [
       { method: 'POST', path: '/_redevplugin/api/plugins/catalog/query' },
@@ -609,8 +540,7 @@ async function verifyBuiltPluginInstallRouting(browser) {
     const expectedPluginRequests = [
       ...pluginInventoryRequests,
       ...pluginInventoryRequests,
-      { method: 'POST', path: '/_redevplugin/api/plugins/external-packages/inspect' },
-      { method: 'POST', path: '/_redevplugin/api/plugins/external-packages/commit' },
+      { method: 'POST', path: '/_redevplugin/api/plugins/install-release-ref' },
       ...pluginInventoryRequests,
       { method: 'POST', path: '/_redevplugin/api/plugins/permissions/requirements/query' },
     ];
@@ -623,11 +553,10 @@ async function verifyBuiltPluginInstallRouting(browser) {
     if (pageErrors.length > 0) throw new Error(`built plugin install page errors: ${JSON.stringify(pageErrors)}`);
 
     return {
-      external_review_opened: true,
-      external_review_committed: true,
-      installed_state: 'disabled_unsigned_zero_grants',
-      package_url: packageURL,
-      install_release_ref_called: false,
+      market_snapshot_loaded: true,
+      installed_state: 'disabled_verified_zero_grants',
+      package_url: builtContainersPackageURL,
+      install_release_ref_called: true,
       request_count: pluginRequests.length,
     };
   } finally {

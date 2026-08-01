@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { PluginCenterView } from './PluginCenterView';
 import { OFFICIAL_CONTAINERS_RELEASE_REF } from './officialContainersRelease.generated';
-import { OFFICIAL_CONTAINERS_PACKAGE_URL, officialPluginCatalog } from './officialPluginCatalog';
+import { OFFICIAL_PLUGIN_CATALOG_SEED, officialPluginCatalogFixture as officialPluginCatalog } from './officialPluginCatalog.test-fixture';
 import type { ExternalPluginCommitResult, ExternalPluginInspection, PluginDevelopmentDelivery, PluginInventoryItem, PluginInventoryProjection } from './pluginTypes';
 
 let dispose: (() => void) | undefined;
@@ -45,12 +45,12 @@ const containersPlugin = {
     iconFallback: 'containers',
     category: 'infrastructure',
     searchKeywords: ['docker', 'podman'],
-    trustedSigningKeyIDs: ['redeven-official-signing-2026'],
+    trustedSigningKeyIDs: ['redeven_official_signing_2026'],
     distribution: {
       releaseRef: OFFICIAL_CONTAINERS_RELEASE_REF,
       installSource: {
         sourceKind: 'package_url',
-        url: OFFICIAL_CONTAINERS_PACKAGE_URL,
+        url: OFFICIAL_PLUGIN_CATALOG_SEED[0]!.distribution.installSource.url,
       },
     },
   },
@@ -86,7 +86,7 @@ const developmentDelivery: PluginDevelopmentDelivery = {
   release_notes_id: 'containers-4.0.0',
   release_notes_summary_sha256: '0bdb5e7ab960173b2855cf31fef9f3d635f90325b90215fa10e6bb639459504e',
   source_repository: 'https://github.com/floegence/redeven-official-plugins.git',
-  source_commit: '37d4dfff0cfa88c7a00ee0b89f55bfbcdde4b251',
+  source_commit: 'b9eb04f6cc08eab35e0d0a8a5ac671ec5077aaed',
   development_only: true,
 };
 
@@ -269,13 +269,14 @@ function externalCommitForCenter(source: ExternalPluginInspection): ExternalPlug
 
 describe('PluginCenterView', () => {
   it('presents Discover plugins with a compact identity and independent install and detail actions', async () => {
+    const onCommand = vi.fn();
     const mount = document.createElement('div');
     document.body.append(mount);
     dispose = render(() => (
       <PluginCenterView
         projection={{ items: [containersPlugin] }}
         loading={false}
-        onCommand={vi.fn()}
+        onCommand={onCommand}
         onRefresh={vi.fn()}
         canManagePlugins
         canOpenPluginSurfaces={false}
@@ -289,7 +290,10 @@ describe('PluginCenterView', () => {
     expect(install.closest('article')?.querySelector('.h-12.w-12')).not.toBeNull();
     install.click();
     await Promise.resolve();
-    expect(document.querySelector('[data-external-plugin-dialog]')).not.toBeNull();
+    expect(onCommand).toHaveBeenCalledWith({
+      type: 'install', pluginID: 'com.redeven.official.containers', source: 'official_catalog',
+    }, expect.any(AbortSignal));
+    expect(document.querySelector('[data-external-plugin-dialog]')).toBeNull();
   });
 
   it('opens a real card action menu instead of treating the ellipsis as a detail button', async () => {
@@ -536,6 +540,30 @@ describe('PluginCenterView', () => {
     expect(searchField.classList).toContain('order-last');
     expect(searchField.classList).toContain('w-full');
     expect(searchField.classList).toContain('min-w-0');
+  });
+
+  it('keeps installed plugins usable while the market is unavailable', () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    const onRefresh = vi.fn();
+
+    dispose = render(() => (
+      <PluginCenterView
+        projection={{ ...projection, marketUnavailable: true }}
+        loading={false}
+        error={null}
+        onCommand={vi.fn()}
+        onRefresh={onRefresh}
+        canManagePlugins
+        canOpenPluginSurfaces={false}
+      />
+    ), mount);
+
+    const alert = mount.querySelector('[data-plugin-center-error]');
+    expect(alert?.textContent).toContain('The plugin catalog is unavailable');
+    expect(mount.querySelector('[data-plugin-center-item="catalog:containers"]')).not.toBeNull();
+    (alert?.querySelector('button') as HTMLButtonElement).click();
+    expect(onRefresh).toHaveBeenCalledOnce();
   });
 
   it('keeps external installation in the administrative overflow menu', async () => {
@@ -946,11 +974,9 @@ describe('PluginCenterView', () => {
     expect(document.activeElement).toBe(summary);
   });
 
-  it('opens official catalog installation through the reviewed package URL flow', async () => {
+  it('installs an official catalog item through its signed release reference flow', async () => {
     const onCommand = vi.fn();
-    const onInspectExternal = vi.fn(async () => {
-      throw new Error('stop after request capture');
-    });
+    const onInspectExternal = vi.fn();
     const mount = document.createElement('div');
     document.body.append(mount);
 
@@ -974,17 +1000,13 @@ describe('PluginCenterView', () => {
     expect(containersPlugin.officialCatalog.distribution.releaseRef).toBe(OFFICIAL_CONTAINERS_RELEASE_REF);
     install.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(onCommand).not.toHaveBeenCalled();
-    expect(document.querySelector('[data-external-plugin-dialog]')).not.toBeNull();
-    expect((document.querySelector('[data-external-plugin-dialog] input[type="url"]') as HTMLInputElement).value)
-      .toBe(OFFICIAL_CONTAINERS_PACKAGE_URL);
-    findDocumentButton('Review package').click();
-    await Promise.resolve();
-    expect(onInspectExternal).toHaveBeenCalledWith({
-      sourceKind: 'package_url',
-      url: OFFICIAL_CONTAINERS_PACKAGE_URL,
-      intent: { action: 'install' },
+    expect(onCommand).toHaveBeenCalledWith({
+      type: 'install',
+      pluginID: 'com.redeven.official.containers',
+      source: 'official_catalog',
     }, expect.any(AbortSignal));
+    expect(onInspectExternal).not.toHaveBeenCalled();
+    expect(document.querySelector('[data-external-plugin-dialog]')).toBeNull();
   });
 
   it('lets read-only users open surfaces while keeping management actions disabled', async () => {
@@ -1379,7 +1401,7 @@ describe('PluginCenterView', () => {
     expect(document.querySelector('[data-external-plugin-dialog]')).toBeNull();
     expect(onInspectExternal).toHaveBeenCalledWith({
       sourceKind: 'package_url',
-      url: OFFICIAL_CONTAINERS_PACKAGE_URL,
+      url: OFFICIAL_PLUGIN_CATALOG_SEED[0]!.distribution.installSource.url,
       intent: {
         action: 'update',
         plugin_instance_id: 'plugininst_containers',
