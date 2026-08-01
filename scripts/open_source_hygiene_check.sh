@@ -93,6 +93,7 @@ check_public_domain_literals() {
     cleaned_line="${cleaned_line//https:\/\/version.agent.redeven.com\/v1\/manifest.json/}"
     cleaned_line="${cleaned_line//https:\/\/version.agent.redeven.com\/v1\/browser-editor\/code-server\/latest.json/}"
     cleaned_line="${cleaned_line//https:\/\/agent.package.redeven.com/}"
+    cleaned_line="${cleaned_line//https:\/\/plugins.redeven.com/}"
     if printf '%s\n' "$cleaned_line" | rg -q --pcre2 "(?i)\\b(redeven\\.com|version\\.agent\\.redeven\\.com|agent\\.package\\.redeven\\.com)\\b"; then
       printf '%s:%s:%s\n' "$file_path" "$line_number" "$line_text"
       domain_failed=1
@@ -100,7 +101,7 @@ check_public_domain_literals() {
   done <"$domain_matches"
 
   if [ "$domain_failed" -ne 0 ]; then
-    echo "[ERROR] Only the public endpoint literals https://redeven.com/install.sh, https://version.agent.redeven.com/v1/manifest.json, https://version.agent.redeven.com/v1/browser-editor/code-server/latest.json, and the HTTPS package origin https://agent.package.redeven.com may appear in this public repository." >&2
+    echo "[ERROR] Only the public endpoint literals https://redeven.com/install.sh, https://version.agent.redeven.com/v1/manifest.json, https://version.agent.redeven.com/v1/browser-editor/code-server/latest.json, and the HTTPS origins https://agent.package.redeven.com and https://plugins.redeven.com may appear in this public repository." >&2
     failed=1
   fi
 }

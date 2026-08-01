@@ -40,6 +40,7 @@ EOF
 The public manifest endpoint is https://version.agent.redeven.com/v1/manifest.json.
 The public Browser Editor catalog endpoint is https://version.agent.redeven.com/v1/browser-editor/code-server/latest.json.
 The public Browser Editor package origin is https://agent.package.redeven.com.
+The public plugin market origin is https://plugins.redeven.com.
 Solid <Portal>, body-level portal, overlay portal, and npm portal: are technical terms.
 EOF
 
@@ -97,7 +98,7 @@ if run_check "$bad_path_repo" "$bad_path_out" "$bad_path_err"; then
   echo "expected invalid redeven.com path to fail hygiene check" >&2
   exit 1
 fi
-assert_contains "$bad_path_err" "Only the public endpoint literals https://redeven.com/install.sh, https://version.agent.redeven.com/v1/manifest.json, https://version.agent.redeven.com/v1/browser-editor/code-server/latest.json, and the HTTPS package origin https://agent.package.redeven.com may appear"
+assert_contains "$bad_path_err" "Only the public endpoint literals https://redeven.com/install.sh, https://version.agent.redeven.com/v1/manifest.json, https://version.agent.redeven.com/v1/browser-editor/code-server/latest.json, and the HTTPS origins https://agent.package.redeven.com and https://plugins.redeven.com may appear"
 
 create_fixture_repo "$bad_domain_repo"
 write_allowed_contract_files "$bad_domain_repo"
@@ -111,7 +112,7 @@ if run_check "$bad_domain_repo" "$bad_domain_out" "$bad_domain_err"; then
   echo "expected private delivery domain to fail hygiene check" >&2
   exit 1
 fi
-assert_contains "$bad_domain_err" "Only the public endpoint literals https://redeven.com/install.sh, https://version.agent.redeven.com/v1/manifest.json, https://version.agent.redeven.com/v1/browser-editor/code-server/latest.json, and the HTTPS package origin https://agent.package.redeven.com may appear"
+assert_contains "$bad_domain_err" "Only the public endpoint literals https://redeven.com/install.sh, https://version.agent.redeven.com/v1/manifest.json, https://version.agent.redeven.com/v1/browser-editor/code-server/latest.json, and the HTTPS origins https://agent.package.redeven.com and https://plugins.redeven.com may appear"
 
 create_fixture_repo "$bad_product_repo"
 write_allowed_contract_files "$bad_product_repo"
