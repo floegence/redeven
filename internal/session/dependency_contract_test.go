@@ -497,8 +497,8 @@ func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 
 	const (
 		floretModule   = "github.com/floegence/floret/v3"
-		floretVersion  = "v3.0.3"
-		floretSum      = "h1:XpfzQQt+G3zA5nKS7xsRF/vFBCkymBBkxlroHdllbgQ="
+		floretVersion  = "v3.1.1"
+		floretSum      = "h1:73NtYG0iOsRKHdb1UQBpAsPHDSNTj3Y8Me92HOKmv4Y="
 		floretGoModSum = "h1:2M+JA7dpEf62qjtWuLEAzkAo4NYGYOTnAcRWdzCoiLU="
 	)
 	root := repoRootForTest(t)
@@ -582,7 +582,7 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"TurnInput.References",
 			"MessageReference",
 			"raw `ResourceRef` never reaches the browser",
-			"v3.0.3",
+			"v3.1.1",
 		},
 		filepath.Join("okf", "ui", "flower-turn-launcher.md"): {
 			"file_path",
@@ -608,8 +608,8 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"complete immutable snapshot",
 		},
 		filepath.Join("internal", "runtimeservice", "compatibility_contract.json"): {
-			"Floret v3.0.3",
-			"floret-v3-0-3-admission-receipt-baseline",
+			"Floret v3.1.1",
+			"floret-v3-1-1-narrow-capability-boundary",
 			"ai_threadstore_product_v1",
 			"Fresh stores initialize directly at version 1",
 			"single persistent source of truth",
@@ -737,9 +737,10 @@ func TestFloretCapabilitiesAreMintedOnlyDuringBootstrap(t *testing.T) {
 	}
 	for _, marker := range []string{
 		"host.Threads().CreateThread", "host.Thread(ctxOrBackground(ctx), threadID)",
-		"thread.SetTitle", "thread.ForkThread", "thread.DeleteThread",
-		"thread.Turns", "thread.SubAgents", "thread.InterruptedTurnRecovery",
-		"child.InterruptedTurnRecovery", "PendingToolRecovery",
+		"thread.Reader()", "thread.Lifecycle()", "thread.TurnExecutor(agent)",
+		"thread.Compactor(agent)", "thread.SubAgentManager(ctxOrBackground(ctx), agent)",
+		"lifecycle.lifecycle.SetTitle", "lifecycle.lifecycle.Fork", "lifecycle.lifecycle.Delete",
+		"lifecycle.InterruptedTurnRecovery", "child.InterruptedTurnRecovery", "PendingToolRecovery",
 	} {
 		if !strings.Contains(bootstrap, marker) {
 			t.Fatalf("floret_bootstrap.go is missing capability constructor %q", marker)
@@ -770,7 +771,7 @@ func TestFloretActiveSettlementHasNoRecoveryFallback(t *testing.T) {
 	if strings.Contains(recoverySource, "PendingToolRecoveryHostBinder") || strings.Contains(recoverySource, "github.com/floegence/floret/v3/runtime") {
 		t.Fatal("Floret recovery interface must not retain concrete runtime capability types")
 	}
-	if !strings.Contains(bootstrap, "authority.PendingToolRecovery") || !strings.Contains(bootstrap, "child.PendingToolRecovery") || !strings.Contains(bootstrap, "boundFloretPendingToolRecoveryCoordinator") {
+	if !strings.Contains(bootstrap, "lifecycle.PendingToolRecovery") || !strings.Contains(bootstrap, "child.PendingToolRecovery") || !strings.Contains(bootstrap, "boundFloretPendingToolRecoveryCoordinator") {
 		t.Fatal("Floret recovery handle must be issued and encapsulated inside the composition root")
 	}
 	runHost := readRepoFile(t, root, filepath.Join("internal", "ai", "run_host_capabilities.go"))
