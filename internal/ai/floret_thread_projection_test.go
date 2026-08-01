@@ -148,7 +148,7 @@ func TestFloretTurnResultProjectionDoesNotDowngradeFullAssistantMarkdown(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := host.StartTurn(ctx, flruntime.StartTurnCommand{
+	result, err := executeAdmittedFloretTurnForTest(ctx, host, flruntime.StartTurnCommand{
 		LogicalRequestID: identity.LogicalRequestID("msg_full_result_projection"),
 		UserMessage:      flruntime.TurnInput{Text: "find options"},
 	})
@@ -254,23 +254,24 @@ func TestFloretHostPublishesRunningToolProjectionToFlowerLiveEvents(t *testing.T
 	}
 
 	const (
-		runID  = "run_floret_host_live_projection"
-		turnID = "turn_floret_host_live_projection"
-		toolID = "call_blocking_projection"
+		placeholderRunID  = "run_floret_host_live_projection"
+		placeholderTurnID = "turn_floret_host_live_projection"
+		toolID            = "call_blocking_projection"
 	)
 	r := newRunWithProductStoreForTest(t, runOptions{
 		Log:              svc.log,
 		HostCapabilities: bindTestRunHostCapabilities(t, svc, meta.EndpointID, thread.ThreadID),
-		RunID:            runID,
+		RunID:            placeholderRunID,
 		EndpointID:       meta.EndpointID,
 		ThreadID:         thread.ThreadID,
-		TurnID:           turnID,
-		MessageID:        turnID,
+		TurnID:           placeholderTurnID,
+		MessageID:        placeholderTurnID,
 		PersistOpTimeout: time.Second,
-		OnStreamEvent: func(ev any) {
-			svc.broadcastStreamEvent(meta.EndpointID, thread.ThreadID, turnID, runID, ev)
-		},
 	}, svc.threadsDB)
+	r.onStreamEvent = func(ev any) {
+		canonicalRunID, canonicalTurnID := r.canonicalRunTurnIdentity()
+		svc.broadcastStreamEvent(meta.EndpointID, thread.ThreadID, canonicalTurnID, canonicalRunID, ev)
+	}
 
 	started := make(chan struct{})
 	release := make(chan struct{})
@@ -342,6 +343,20 @@ func TestFloretHostPublishesRunningToolProjectionToFlowerLiveEvents(t *testing.T
 	if err != nil {
 		t.Fatalf("NewHost: %v", err)
 	}
+	command := flruntime.StartTurnCommand{
+		LogicalRequestID: identity.LogicalRequestID(placeholderTurnID),
+		UserMessage:      flruntime.TurnInput{Text: "run the blocking tool"},
+		Limits:           flruntime.TurnLimits{MaxToolCalls: 4},
+	}
+	admission, err := host.AdmitTurn(ctx, command)
+	if err != nil {
+		t.Fatalf("AdmitTurn: %v", err)
+	}
+	canonicalRunID, canonicalThreadID, canonicalTurnID := r.floretCanonicalIdentity()
+	if canonicalRunID != string(admission.RunID) || canonicalThreadID != string(admission.ThreadID) || canonicalTurnID != string(admission.TurnID) {
+		t.Fatalf("canonical identity=(%q, %q, %q), want receipt identity=(%q, %q, %q)",
+			canonicalRunID, canonicalThreadID, canonicalTurnID, admission.RunID, admission.ThreadID, admission.TurnID)
+	}
 
 	type turnOutcome struct {
 		result flruntime.StartTurnResult
@@ -349,11 +364,7 @@ func TestFloretHostPublishesRunningToolProjectionToFlowerLiveEvents(t *testing.T
 	}
 	outcomeCh := make(chan turnOutcome, 1)
 	go func() {
-		result, runErr := host.StartTurn(ctx, flruntime.StartTurnCommand{
-			LogicalRequestID: identity.LogicalRequestID(identity.TurnID(turnID)),
-			UserMessage:      flruntime.TurnInput{Text: "run the blocking tool"},
-			Limits:           flruntime.TurnLimits{MaxToolCalls: 4},
-		})
+		result, runErr := host.ExecuteAdmission(ctx, admission.Receipt, flruntime.ExecutionContext{})
 		outcomeCh <- turnOutcome{result: result, err: runErr}
 	}()
 

@@ -34,19 +34,15 @@ func (r *run) toolWriteTodos(ctx context.Context, toolID string, todos []TodoIte
 			"remaining_missing_count": max(0, missingCount-hydratedCount),
 		})
 	}
-	normalized, err := normalizeTodoItems(hydratedTodos)
-	if err != nil {
-		return nil, err
-	}
-	if err := validateActionableTodoItems(normalized); err != nil {
+	if err := validateActionableTodoItems(hydratedTodos); err != nil {
 		return nil, err
 	}
 	expected := current.Version
 	if expectedVersion != nil {
 		expected = *expectedVersion
 	}
-	items := make([]flruntime.AgentTodo, 0, len(normalized))
-	for _, item := range normalized {
+	items := make([]flruntime.AgentTodo, 0, len(hydratedTodos))
+	for _, item := range hydratedTodos {
 		items = append(items, flruntime.AgentTodo{ID: item.ID, Content: item.Content, Status: flruntime.AgentTodoStatus(item.Status)})
 	}
 	snapshot, err := host.UpdateThreadAgentTodos(ctx, flruntime.UpdateTodosCommand{
@@ -60,13 +56,13 @@ func (r *run) toolWriteTodos(ctx context.Context, toolID string, todos []TodoIte
 		}
 		return nil, err
 	}
-	summary := summarizeTodos(normalized)
+	summary := summarizeTodos(hydratedTodos)
 	updatedAt := snapshot.UpdatedAt.UnixMilli()
 	r.recordRunDiagnostic("todos.updated", RealtimeStreamKindTool, map[string]any{
 		"version": snapshot.Version, "summary": summary, "updated_at_unix_ms": updatedAt,
 		"updated_by_tool": toolID, "updated_by_run": runID, "explanation_hint": strings.TrimSpace(explanation),
 	})
-	result := map[string]any{"version": snapshot.Version, "updated_at_unix_ms": updatedAt, "summary": summary, "todos": normalized}
+	result := map[string]any{"version": snapshot.Version, "updated_at_unix_ms": updatedAt, "summary": summary, "todos": hydratedTodos}
 	if text := strings.TrimSpace(explanation); text != "" {
 		result["explanation"] = text
 	}

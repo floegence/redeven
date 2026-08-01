@@ -1,17 +1,16 @@
 package ai
 
 import (
-	"errors"
 	"fmt"
 	"strings"
+
+	flruntime "github.com/floegence/floret/v3/runtime"
 )
 
 const (
-	TodoStatusPending    = "pending"
-	TodoStatusInProgress = "in_progress"
-	TodoStatusCompleted  = "completed"
-
-	maxTodosPerWrite = 40
+	TodoStatusPending    = string(flruntime.AgentTodoPending)
+	TodoStatusInProgress = string(flruntime.AgentTodoInProgress)
+	TodoStatusCompleted  = string(flruntime.AgentTodoCompleted)
 )
 
 var controlSignalTodoNames = []string{"task_complete", "ask_user"}
@@ -33,55 +32,6 @@ type ThreadTodosView struct {
 	Version         int64      `json:"version"`
 	UpdatedAtUnixMs int64      `json:"updated_at_unix_ms"`
 	Todos           []TodoItem `json:"todos"`
-}
-
-func normalizeTodoStatus(raw string) (string, bool) {
-	status := strings.ToLower(strings.TrimSpace(raw))
-	switch status {
-	case TodoStatusPending, TodoStatusInProgress, TodoStatusCompleted:
-		return status, true
-	default:
-		return "", false
-	}
-}
-
-func normalizeTodoItems(items []TodoItem) ([]TodoItem, error) {
-	if len(items) > maxTodosPerWrite {
-		return nil, fmt.Errorf("too many todos (max %d)", maxTodosPerWrite)
-	}
-	out := make([]TodoItem, 0, len(items))
-	seenID := make(map[string]struct{}, len(items))
-	inProgressCount := 0
-	for i, item := range items {
-		content := strings.TrimSpace(item.Content)
-		if content == "" {
-			return nil, fmt.Errorf("todo[%d]: missing content", i)
-		}
-		status, ok := normalizeTodoStatus(item.Status)
-		if !ok {
-			return nil, fmt.Errorf("todo[%d]: invalid status %q", i, strings.TrimSpace(item.Status))
-		}
-		id := strings.TrimSpace(item.ID)
-		if id == "" {
-			id = fmt.Sprintf("todo_%d", i+1)
-		}
-		if _, exists := seenID[id]; exists {
-			return nil, fmt.Errorf("duplicate todo id %q", id)
-		}
-		seenID[id] = struct{}{}
-		if status == TodoStatusInProgress {
-			inProgressCount++
-			if inProgressCount > 1 {
-				return nil, errors.New("only one todo can be in_progress")
-			}
-		}
-		out = append(out, TodoItem{
-			ID:      id,
-			Content: content,
-			Status:  status,
-		})
-	}
-	return out, nil
 }
 
 func summarizeTodos(items []TodoItem) TodoSummary {

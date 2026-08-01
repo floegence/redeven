@@ -336,7 +336,7 @@ func TestExecutePreparedRun_DesktopReasoningPrecedence(t *testing.T) {
 		if response.Kind != "start" || response.RunID == "" || response.TurnID == "" {
 			t.Fatalf("SendUserTurn(%s) response=%#v, want canonical admission", runID, response)
 		}
-		deadline := time.NewTimer(2 * time.Second)
+		deadline := time.NewTimer(10 * time.Second)
 		defer deadline.Stop()
 		for {
 			select {

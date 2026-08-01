@@ -2579,6 +2579,14 @@ func (s *Service) listFlowerSubagentsForEndpoint(ctx context.Context, endpointID
 	if err != nil {
 		return nil, err
 	}
+	return flowerSubagentSummariesFromFloret(parentThreadID, snapshots)
+}
+
+func flowerSubagentSummariesFromFloret(parentThreadID string, snapshots []flruntime.SubAgentSnapshot) ([]FlowerSubagentSummary, error) {
+	parentThreadID = strings.TrimSpace(parentThreadID)
+	if parentThreadID == "" {
+		return nil, errors.New("invalid Floret SubAgent parent identity")
+	}
 	out := make([]FlowerSubagentSummary, 0, len(snapshots))
 	for _, snapshot := range snapshots {
 		summary := flowerSubagentSummary(snapshot)

@@ -166,6 +166,73 @@ func TestFlowerLiveBootstrapReadsCanonicalFloretContextAfterServiceRestart(t *te
 	}
 }
 
+type flowerBootstrapCountingThreadReadHost struct {
+	floretThreadReadHost
+	bootstrapCalls int
+	contextCalls   int
+	turnPageCalls  int
+}
+
+func (h *flowerBootstrapCountingThreadReadHost) Bootstrap(ctx context.Context, request flruntime.ThreadBootstrapRequest) (flruntime.ThreadBootstrap, error) {
+	h.bootstrapCalls++
+	return h.floretThreadReadHost.Bootstrap(ctx, request)
+}
+
+func (h *flowerBootstrapCountingThreadReadHost) ReadThreadContext(ctx context.Context) (flruntime.ThreadContextSnapshot, error) {
+	h.contextCalls++
+	return h.floretThreadReadHost.ReadThreadContext(ctx)
+}
+
+func (h *flowerBootstrapCountingThreadReadHost) ListThreadTurns(ctx context.Context, request flruntime.ThreadTurnsRequest) (flruntime.ThreadTurnsPage, error) {
+	h.turnPageCalls++
+	return h.floretThreadReadHost.ListThreadTurns(ctx, request)
+}
+
+type flowerBootstrapCountingSubagentReadHost struct {
+	floretSubagentReadHost
+	listCalls int
+}
+
+func (h *flowerBootstrapCountingSubagentReadHost) ListSubAgents(ctx context.Context) ([]flruntime.SubAgentSnapshot, error) {
+	h.listCalls++
+	return h.floretSubagentReadHost.ListSubAgents(ctx)
+}
+
+func TestFlowerLiveBootstrapUsesOneAtomicFloretReadModel(t *testing.T) {
+	ctx := context.Background()
+	svc := newTestService(t, nil)
+	meta := testSendTurnMeta()
+	thread, err := svc.CreateThread(ctx, meta, "atomic Floret bootstrap", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	threadRead, err := svc.openFloretThreadReadHost(ctx, thread.ThreadID)
+	if err != nil {
+		t.Fatalf("openFloretThreadReadHost: %v", err)
+	}
+	subagentRead, err := svc.openFloretSubagentReadHost(ctx, thread.ThreadID)
+	if err != nil {
+		t.Fatalf("openFloretSubagentReadHost: %v", err)
+	}
+	countedThread := &flowerBootstrapCountingThreadReadHost{floretThreadReadHost: threadRead}
+	countedSubagents := &flowerBootstrapCountingSubagentReadHost{floretSubagentReadHost: subagentRead}
+	svc.floretReads.thread = func(context.Context, identity.ThreadID) (floretThreadReadHost, error) {
+		return countedThread, nil
+	}
+	svc.floretReads.subagent = func(context.Context, identity.ThreadID) (floretSubagentReadHost, error) {
+		return countedSubagents, nil
+	}
+
+	if _, err := svc.GetFlowerThreadLiveBootstrap(ctx, meta, thread.ThreadID); err != nil {
+		t.Fatalf("GetFlowerThreadLiveBootstrap: %v", err)
+	}
+	if countedThread.bootstrapCalls != 1 || countedThread.contextCalls != 0 || countedThread.turnPageCalls != 0 || countedSubagents.listCalls != 0 {
+		t.Fatalf("Floret reads bootstrap=%d context=%d turn_pages=%d subagents=%d, want one bootstrap and no independent initial reads",
+			countedThread.bootstrapCalls, countedThread.contextCalls, countedThread.turnPageCalls, countedSubagents.listCalls)
+	}
+}
+
 func newRealtimeTestService(t *testing.T, delay time.Duration) *Service {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(slowOpenAIMock{delay: delay}.handle))

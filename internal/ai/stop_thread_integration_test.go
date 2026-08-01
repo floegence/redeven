@@ -38,6 +38,20 @@ func (h stopThreadReadHost) ReadThreadOverview(ctx context.Context) (flruntime.T
 	return h.readOverview(ctx)
 }
 
+func (h stopThreadReadHost) Bootstrap(ctx context.Context, request flruntime.ThreadBootstrapRequest) (flruntime.ThreadBootstrap, error) {
+	bootstrap, err := h.floretThreadReadHost.Bootstrap(ctx, request)
+	if err != nil {
+		return flruntime.ThreadBootstrap{}, err
+	}
+	overview, err := h.readOverview(ctx)
+	if err != nil {
+		return flruntime.ThreadBootstrap{}, err
+	}
+	bootstrap.Thread = overview.Thread
+	bootstrap.Overview = overview
+	return bootstrap, nil
+}
+
 func newStopThreadStateMachineTestService(t *testing.T) (*Service, *session.Meta, string) {
 	t.Helper()
 	stateDir := t.TempDir()

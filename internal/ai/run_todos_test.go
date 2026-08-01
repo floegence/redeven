@@ -25,7 +25,7 @@ func (h *todoTestHost) AdmitTurn(context.Context, flruntime.StartTurnCommand) (f
 	return flruntime.AdmitTurnResult{}, nil
 }
 
-func (h *todoTestHost) ExecuteAdmittedTurn(context.Context, flruntime.TurnAdmissionReceipt, flruntime.StartTurnCommand) (flruntime.StartTurnResult, error) {
+func (h *todoTestHost) ExecuteAdmission(context.Context, flruntime.TurnAdmissionReceipt, flruntime.ExecutionContext) (flruntime.StartTurnResult, error) {
 	return flruntime.StartTurnResult{}, nil
 }
 
@@ -57,6 +57,9 @@ func (h *todoTestHost) ReadThreadAgentTodos(context.Context) (flruntime.ThreadAg
 func (h *todoTestHost) UpdateThreadAgentTodos(_ context.Context, req flruntime.UpdateTodosCommand) (flruntime.ThreadAgentTodoState, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if err := flruntime.ValidateAgentTodos(req.Items); err != nil {
+		return flruntime.ThreadAgentTodoState{}, err
+	}
 	if req.ExpectedVersion != h.state.Version {
 		return flruntime.ThreadAgentTodoState{}, flruntime.ErrAgentTodoVersionConflict
 	}
@@ -70,6 +73,21 @@ func (h *todoTestHost) UpdateThreadAgentTodos(_ context.Context, req flruntime.U
 		UpdatedByToolCall: req.ToolCallID,
 	}
 	return h.state, nil
+}
+
+func TestRunToolWriteTodosLeavesCanonicalValidationToFloret(t *testing.T) {
+	r, host := newTodoTestRun(t)
+	_, err := r.toolWriteTodos(context.Background(), "tool_1", []TodoItem{{Content: "Inspect workspace", Status: TodoStatusInProgress}}, nil, "")
+	if err == nil || !strings.Contains(err.Error(), "agent todo item 0 is invalid") {
+		t.Fatalf("canonical validation error = %v", err)
+	}
+	snapshot, readErr := host.ReadThreadAgentTodos(context.Background())
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if snapshot.Version != 0 || len(snapshot.Items) != 0 {
+		t.Fatalf("invalid canonical todo changed state: %#v", snapshot)
+	}
 }
 
 func TestRunToolWriteTodosUsesCanonicalFloretState(t *testing.T) {

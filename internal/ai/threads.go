@@ -128,11 +128,11 @@ func (s *Service) readCanonicalThreadState(ctx context.Context, threadID string)
 	if err != nil {
 		return flruntime.ThreadSnapshot{}, nil, err
 	}
-	overview, err := host.ReadThreadOverview(ctx)
+	bootstrap, err := host.Bootstrap(ctx, flruntime.ThreadBootstrapRequest{TurnLimit: 1})
 	if err != nil {
 		return flruntime.ThreadSnapshot{}, nil, err
 	}
-	return overview.Thread, overview.LatestTurn, nil
+	return bootstrap.Thread, bootstrap.Overview.LatestTurn, nil
 }
 
 func (s *Service) lockCanonicalThreadSettingsMutation(ctx context.Context, endpointID string, threadID string) (*threadstore.Store, *threadstore.ThreadSettings, func(), error) {
