@@ -138,7 +138,6 @@ const officialContainersCatalog = {
   minReDevPluginVersion: '0.6.5',
   rolloutState: 'stable',
   defaultSurfaceID: 'containers.dashboard',
-  defaultSurfaceDisplayNameKey: 'uiCopy.plugin.containersDashboardSurface',
   iconFallback: 'containers',
   category: 'infrastructure',
   searchKeywords: ['docker', 'podman'],
