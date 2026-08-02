@@ -7,17 +7,15 @@ timestamp: 2026-07-29T00:00:00Z
 ---
 # Summary
 
-Every Containers mutation binds one exact engine, opaque endpoint, resource
-kind, and canonical identity to one ReDevPlugin operation handle and one local
-observation record. The resource stays locked until terminal observation and
-fresh authoritative inventory prove the result; unrelated resources remain
-usable. Lost submissions, partial mutations, stale plans, unavailable engines,
-and failed reconciliation are never replayed or shown as success. Production
-uses signed Containers `4.0.1` through the v4 capability and verified GitHub
-Release transport. Dev Desktop may build the pinned `4.0.0` plugin source as an
-ephemeral local package, but the package must bind the same signed v4 capability
-pin embedded in the Runtime. The local package remains outside official package
-release trust and cannot introduce a separate capability signing identity.
+Every Containers mutation binds one engine, opaque endpoint, resource identity,
+ReDevPlugin operation handle, and local observation record. The resource stays
+locked until terminal observation and fresh authoritative inventory prove the
+result. Lost submissions, stale plans, unavailable engines, and failed
+reconciliation are never replayed or shown as success. Production uses the
+signed Containers `4.0.1` release. Dev Desktop may build the pinned `4.0.0`
+source as a local package only when it binds the same signed v4 capability pin;
+the package remains outside official package trust and cannot add a development
+capability signing identity.
 
 # Contract
 
