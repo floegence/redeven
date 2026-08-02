@@ -116,7 +116,7 @@ func (service *Service) Detail(ctx context.Context, pluginID string) (PluginDeta
 	if response.Meta.Generation < 0 || response.Meta.Stale || response.Data.PluginID != pluginID || !idPattern.MatchString(response.Data.PublisherID) || response.Data.Status == "" || len(response.Data.Presentation.Locales) == 0 {
 		return PluginDetail{}, invalid("plugin detail is invalid")
 	}
-	if !validateCompactPresentation(PresentationCompact{DefaultLocale: response.Data.Presentation.DefaultLocale, Locales: compactPresentationLocales(response.Data.Presentation.Locales)}) {
+	if !validateFullPresentation(response.Data.Presentation) {
 		return PluginDetail{}, invalid("plugin detail presentation is invalid")
 	}
 	return response.Data, nil
