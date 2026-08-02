@@ -119,6 +119,40 @@ describe('v0.7.0 plugin inventory projection', () => {
     });
   });
 
+  it('does not project market author copy into an installed record without presentation', () => {
+    const projection = projectPluginInventory({
+      officialCatalog: [officialContainers],
+      installedPlugins: [installedRecord({
+        manifest: {
+          ...installedRecord().manifest,
+          publisher: {
+            publisher_id: officialContainers.publisherID,
+            display_name: 'Installed Publisher',
+          },
+          plugin: {
+            ...installedRecord().manifest.plugin,
+            display_name: '',
+          },
+        },
+        presentation: undefined,
+      })],
+      permissionGrants: [readGrant],
+    });
+
+    expect(projection.items).toHaveLength(1);
+    expect(projection.items[0]).toMatchObject({
+      pluginInstanceID: officialContainers.pluginInstanceID,
+      displayName: officialContainers.pluginID,
+      description: officialContainers.pluginID,
+      publisher: 'Installed Publisher',
+      searchKeywords: [],
+      defaultLaunchTarget: {
+        displayName: officialContainers.pluginID,
+      },
+    });
+    expect(projection.items[0]?.description).not.toBe(officialContainers.description);
+  });
+
   const catalogPresentationMismatchCases: Array<{
     label: string;
     overrides: Partial<ReDevPluginRecord>;

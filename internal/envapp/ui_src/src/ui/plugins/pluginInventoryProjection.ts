@@ -127,17 +127,21 @@ function projectCatalogItem(
   const lifecycleState = installedLifecycleState(installed, catalogItem, authorization);
   const attentionReason = installedAttentionReason(installed, catalogItem, lifecycleState, authorization);
   const externalPackage = externalPackageProjection(installed);
+  const installedLocale = installed.presentation?.locales.find((locale) => (
+    locale.locale === installed.presentation?.default_locale
+  ));
+  const installedPublisher = String(installed.manifest.publisher.display_name ?? installed.publisher_id).trim();
   return {
     inventoryKey: installedInventoryKey(installed.plugin_instance_id),
     pluginID: catalogItem.pluginID,
     pluginInstanceID: installed.plugin_instance_id,
-    displayName: manifestDisplayName(installed) || catalogItem.displayName,
-    description: catalogItem.description,
+    displayName: manifestDisplayName(installed) || installed.plugin_id,
+    description: installedLocale?.summary ?? installed.plugin_id,
     iconURL: catalogItem.iconURL,
     iconFallback: catalogItem.iconFallback,
     category: catalogItem.category,
-    searchKeywords: catalogItem.searchKeywords,
-    publisher: catalogItem.publisher,
+    searchKeywords: installedLocale?.keywords ?? [],
+    publisher: installedPublisher || installed.publisher_id,
     version: installed.version,
     managementRevision: installed.management_revision,
     installedPackage: {
@@ -157,7 +161,7 @@ function projectCatalogItem(
           surfaceID: installed.manifest.surfaces.find((surface) => (
             surface.kind === 'view' && (surface.intent ?? 'primary') === 'primary'
           ))?.surface_id ?? catalogItem.defaultSurfaceID,
-          displayName: manifestDisplayName(installed) || catalogItem.displayName,
+          displayName: manifestDisplayName(installed) || installed.plugin_id,
           expectedManagementRevision: installed.management_revision,
           preferredPlacement: 'activity',
         }
