@@ -246,6 +246,70 @@ func TestServiceRejectsNonCanonicalOrDuplicatePresentation(t *testing.T) {
 	}
 }
 
+func TestPresentationValidationRejectsUnsafeAndIncompleteFields(t *testing.T) {
+	t.Parallel()
+
+	compact := PresentationCompact{
+		DefaultLocale: "en-US",
+		Locales: []PresentationCompactLocale{
+			{Locale: "en-US", Name: "Example", PublisherName: "Publisher", Summary: "Summary", Keywords: []string{"example"}},
+			{Locale: "zh-CN", Name: "示例", PublisherName: "发布者", Summary: "摘要", Keywords: []string{"示例"}},
+		},
+	}
+	compactCases := []struct {
+		name   string
+		mutate func(*PresentationCompact)
+	}{
+		{name: "C1 control character", mutate: func(value *PresentationCompact) { value.Locales[0].Summary = "bad\u0085text" }},
+		{name: "missing localized publisher", mutate: func(value *PresentationCompact) { value.Locales[1].PublisherName = "" }},
+		{name: "summary too long", mutate: func(value *PresentationCompact) { value.Locales[0].Summary = strings.Repeat("s", 241) }},
+		{name: "keyword too long", mutate: func(value *PresentationCompact) { value.Locales[0].Keywords[0] = strings.Repeat("k", 65) }},
+	}
+	for _, testCase := range compactCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			candidate := compact
+			candidate.Locales = append([]PresentationCompactLocale(nil), compact.Locales...)
+			candidate.Locales[0].Keywords = append([]string(nil), compact.Locales[0].Keywords...)
+			candidate.Locales[1].Keywords = append([]string(nil), compact.Locales[1].Keywords...)
+			testCase.mutate(&candidate)
+			if validateCompactPresentation(candidate) {
+				t.Fatal("validateCompactPresentation accepted invalid presentation")
+			}
+		})
+	}
+
+	full := validFullPresentationForTest()
+	full.Locales[1].PublisherName = ""
+	if validateFullPresentation(full) {
+		t.Fatal("validateFullPresentation accepted incomplete publisher localization")
+	}
+	full = validFullPresentationForTest()
+	full.Locales[0].Description[0] = strings.Repeat("d", 1001)
+	if validateFullPresentation(full) {
+		t.Fatal("validateFullPresentation accepted an overlong paragraph")
+	}
+}
+
+func validFullPresentationForTest() PresentationFull {
+	return PresentationFull{
+		DefaultLocale: "en-US",
+		Locales: []PresentationFullLocale{
+			{
+				Locale: "en-US", Name: "Example", PublisherName: "Publisher", Summary: "Summary",
+				Description: []string{"Description"}, Highlights: []string{"Highlight"}, Keywords: []string{"example"},
+				Surfaces: []PresentationSurface{{SurfaceID: "example.main", Label: "Example"}},
+				Settings: []PresentationSetting{{Key: "mode", Label: "Mode", Options: []PresentationSettingOption{{Value: "safe", Label: "Safe"}}}},
+			},
+			{
+				Locale: "zh-CN", Name: "示例", PublisherName: "发布者", Summary: "摘要",
+				Description: []string{"介绍"}, Highlights: []string{"亮点"}, Keywords: []string{"示例"},
+				Surfaces: []PresentationSurface{{SurfaceID: "example.main", Label: "示例"}},
+				Settings: []PresentationSetting{{Key: "mode", Label: "模式", Options: []PresentationSettingOption{{Value: "safe", Label: "安全"}}}},
+			},
+		},
+	}
+}
+
 func TestLatestReleaseBuildsCompleteRemoteProjection(t *testing.T) {
 	t.Parallel()
 	service, err := NewService(ServiceOptions{
