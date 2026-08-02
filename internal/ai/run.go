@@ -3932,11 +3932,7 @@ func readonlyContextWindow(lines []string, matchIdx int, contextLines int) []rea
 	if end > len(lines) {
 		end = len(lines)
 	}
-	capacity := end - start
-	if capacity > 0 {
-		capacity--
-	}
-	out := make([]readonlyGrepContext, 0, capacity)
+	out := make([]readonlyGrepContext, 0)
 	for idx := start; idx < end; idx++ {
 		if idx == matchIdx {
 			continue

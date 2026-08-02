@@ -869,6 +869,8 @@ func probeRuntimeBinaryVersionWithTimeout(ctx context.Context, binaryPath string
 		return "", err
 	}
 	args := append(prefixArgs, "--version")
+	// codeql[go/command-injection]: execPath is a resolved executable path and
+	// exec.CommandContext does not invoke a shell; arguments are passed directly.
 	cmd := exec.CommandContext(probeCtx, execPath, args...)
 	cmd.Env = processenv.Current()
 	var out bytes.Buffer

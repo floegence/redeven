@@ -1233,6 +1233,8 @@ func runGit(dir string, token string, args ...string) error {
 		cmdArgs = append(cmdArgs, "-c", header)
 	}
 	cmdArgs = append(cmdArgs, args...)
+	// codeql[go/command-injection]: git arguments are passed directly without a
+	// shell; repository refs and paths are validated before reaching this helper.
 	cmd := exec.Command("git", cmdArgs...)
 	cmd.Dir = dir
 	cmd.Env = append(processenv.Current(), "GIT_TERMINAL_PROMPT=0")

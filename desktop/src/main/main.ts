@@ -3342,6 +3342,8 @@ function sessionWebServiceWindowStateKey(sessionKey: DesktopSessionKey, forwardI
 }
 
 function sessionWebServicePartition(sessionKey: DesktopSessionKey, forwardID: string): string {
+  // codeql[js/insufficient-password-hash]: this is a keyed partition namespace
+  // pseudonym, never a password verifier; HMAC prevents exposing session ids.
   const digest = crypto.createHmac('sha256', 'redeven-web-service-partition-v1')
     .update(`${sessionKey}\u0000${forwardID}`)
     .digest('hex')

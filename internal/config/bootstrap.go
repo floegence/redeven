@@ -353,6 +353,9 @@ func exchangeBootstrapTicket(ctx context.Context, baseClient *http.Client, baseU
 	req.Header.Set("Accept", "application/json")
 
 	client := secureBootstrapHTTPClient(baseClient, u)
+	// codeql[go/request-forgery]: the provider origin is an explicit product
+	// configuration value and is restricted to an HTTPS origin above; redirects
+	// are pinned to the same HTTPS origin by secureBootstrapHTTPClient.
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err

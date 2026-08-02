@@ -258,6 +258,8 @@ func extractWorkspaceEngineArchive(ctx context.Context, archivePath string, dest
 		if err != nil {
 			return err
 		}
+		// codeql[go/zipslip]: cleanArchivePath rejects absolute and parent-relative
+		// entries before any archive path is joined with the destination.
 		cleanName, err := cleanArchivePath(hdr.Name)
 		if err != nil {
 			return err

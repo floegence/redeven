@@ -433,16 +433,16 @@
     },
     {
       "path": "desktop/src/main/main.ts",
-      "sha256": "149de8254e07ad19a6f1b2c19cdc1201079338366be359628a2296da4d921418",
+      "sha256": "d5418c8078b26788595280bdd3b5828bad6bf994317a017644a3b73cc76dba70",
       "sink_kinds": [
         "file"
       ],
+      "review_status": "reviewed",
       "owner": "redeven Desktop",
       "authority": "product_configuration",
       "data_classes": [
         "Desktop preferences, runtime handoff, download, or product cache"
       ],
-      "review_status": "reviewed",
       "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
     },
     {
@@ -539,7 +539,7 @@
     },
     {
       "path": "internal/ai/run.go",
-      "sha256": "21c1295d41e5e5a6ab39f294f9403923f9e8593944271afdc6bb04e3507d1222",
+      "sha256": "6376780fbfde2605ec04c2412fe657fc384572688d5a789d03d3c5665fce774b",
       "sink_kinds": [
         "file",
         "json_file"
@@ -595,7 +595,7 @@
     },
     {
       "path": "internal/ai/skill_manager_remote.go",
-      "sha256": "136a50621933db95878e58fcb9b18f95fce1e9a3c24097f80fea0ea7184a804b",
+      "sha256": "2df1d6feab1286eeb1d48645ba07c8e0ecea0491466b01bb97235b550445059b",
       "sink_kinds": [
         "file",
         "json_file"
@@ -1077,7 +1077,7 @@
         "expression:threadDeleteOperationSelectSQL + `\nWHERE status = ?\nORDER BY updated_at_unix_ms ASC, operation_id ASC\nLIMIT 1`",
         "expression:threadDeleteOperationSelectSQL + ` WHERE endpoint_id = ? AND thread_id = ?`",
         "expression:threadDeleteOperationSelectSQL + ` WHERE operation_id = ?`",
-        "expression:threadDeleteOperationSelectSQL + ` WHERE status = ? AND operation_id \u003e ? ORDER BY operation_id ASC LIMIT ?`",
+        "expression:threadDeleteOperationSelectSQL + ` WHERE status = ? AND operation_id > ? ORDER BY operation_id ASC LIMIT ?`",
         "expression:threadDeleteOperationSelectSQL + ` WHERE status = ? ORDER BY updated_at_unix_ms ASC, operation_id ASC LIMIT ?`",
         "expression:updateSQL"
       ],
@@ -1275,7 +1275,7 @@
         "encoding/json.NewEncoder"
       ],
       "dtos": [
-        "\u0026e"
+        "&e"
       ],
       "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
     },
@@ -1334,7 +1334,7 @@
     },
     {
       "path": "internal/codeapp/codeserver/artifact.go",
-      "sha256": "410754617a85055bd300ffc883853b878e4058417a286686bef9ec523a12be44",
+      "sha256": "3f42e7c2ecac6771a1699c97579ff9c4007c87a3669e27c978b69982237bfd85",
       "sink_kinds": [
         "file"
       ],
@@ -1387,7 +1387,7 @@
     },
     {
       "path": "internal/codeapp/codeserver/runtime.go",
-      "sha256": "f9659a5b9e552b00a7ca9c98af07c46a9e0f26b9b3b4c347032043cd4fd34ee5",
+      "sha256": "faf977b73a48f9afab7255c3c35133b6ad39ff585fd23f1237de72f6eb6dd7d6",
       "sink_kinds": [
         "file",
         "json_file"
@@ -1661,7 +1661,7 @@
         "encoding/json.NewEncoder"
       ],
       "dtos": [
-        "\u0026e"
+        "&e"
       ],
       "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
     },
