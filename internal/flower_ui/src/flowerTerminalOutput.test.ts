@@ -11,6 +11,42 @@ import {
 } from './flowerTerminalOutput';
 
 describe('terminal visible output', () => {
+  it('renders canonical completed output that predates sequence metadata', () => {
+    expect(replaceTerminalOutputSnapshot(undefined, {
+      output: '1785682356',
+      first_seq: 0,
+      last_seq: 0,
+    })).toEqual({
+      output: '1785682356',
+      first_seq: 0,
+      last_seq: 0,
+      truncated: false,
+    });
+    expect(() => appendTerminalOutputDelta(undefined, {
+      output: '1785682356',
+      first_seq: 0,
+      last_seq: 0,
+    })).toThrow('sequence range is invalid');
+  });
+
+  it('replaces an unsequenced running snapshot with the first sequenced read', () => {
+    const unsequenced = replaceTerminalOutputSnapshot(undefined, {
+      output: 'tick 1\n',
+      first_seq: 0,
+      last_seq: 0,
+    });
+    expect(appendTerminalOutputDelta(unsequenced, {
+      output: 'tick 1\ntick 2\n',
+      first_seq: 1,
+      last_seq: 2,
+    })).toEqual({
+      output: 'tick 1\ntick 2\n',
+      first_seq: 1,
+      last_seq: 2,
+      truncated: false,
+    });
+  });
+
   it('keeps previous output when a running poll returns no content', () => {
     const previous = { output: 'tick 1\n', first_seq: 1, last_seq: 1, truncated: false };
     expect(appendTerminalOutputDelta(previous, { output: '', first_seq: 0, last_seq: 1 })).toBe(previous);

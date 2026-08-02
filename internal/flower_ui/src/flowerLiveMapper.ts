@@ -585,8 +585,8 @@ function mapActivityPayload(raw: unknown): Readonly<Record<string, unknown>> | u
   for (const [key, value] of Object.entries(payload)) {
     const safeKey = trim(key);
     if (!safeKey) continue;
-    assertPublicActivityPayloadKey('activity_item.payload', safeKey);
-    out[safeKey] = sanitizeActivityPublicValue(value, `activity_item.payload.${safeKey}`);
+    assertPublicActivityPayloadKey('activity_item.presentation.payload', safeKey);
+    out[safeKey] = sanitizeActivityPublicValue(value, `activity_item.presentation.payload.${safeKey}`);
   }
   return Object.keys(out).length > 0 ? out : undefined;
 }
@@ -631,15 +631,44 @@ function mapActivityTargetRefs(raw: unknown): readonly FlowerActivityTargetRef[]
   return refs.length > 0 ? refs : undefined;
 }
 
+const activityPresentationKeys = new Set(['label', 'description', 'renderer', 'chips', 'target_refs', 'payload']);
+
+function mapActivityPresentation(raw: unknown): Partial<Pick<FlowerActivityItem, 'label' | 'description' | 'renderer' | 'chips' | 'target_refs' | 'payload'>> {
+  if (raw === undefined) return {};
+  const record = plainRecordValue(raw);
+  if (!record) {
+    throw new Error('Flower contract error: activity_item.presentation must be an object.');
+  }
+  for (const key of Object.keys(record)) {
+    if (!activityPresentationKeys.has(key)) {
+      throw new Error(`Flower contract error: activity_item.presentation.${key} is not part of the activity presentation contract.`);
+    }
+  }
+  const chips = Array.isArray(record.chips) ? record.chips.map(mapActivityChip).filter(isPresent) : [];
+  const renderer = activityRenderer(record.renderer);
+  const targetRefs = mapActivityTargetRefs(record.target_refs);
+  const payload = mapActivityPayload(record.payload);
+  return {
+    ...(trim(record.label) ? { label: trim(record.label) } : {}),
+    ...(trim(record.description) ? { description: trim(record.description) } : {}),
+    ...(renderer ? { renderer } : {}),
+    ...(chips.length > 0 ? { chips } : {}),
+    ...(targetRefs ? { target_refs: targetRefs } : {}),
+    ...(payload ? { payload } : {}),
+  };
+}
+
 function mapActivityItem(raw: unknown): FlowerActivityItem | null {
   const record = plainRecordValue(raw);
   if (!record) return null;
   const itemID = trim(record.item_id);
   if (!itemID) return null;
-  const chips = Array.isArray(record.chips) ? record.chips.map(mapActivityChip).filter(isPresent) : [];
-  const renderer = activityRenderer(record.renderer);
-  const targetRefs = mapActivityTargetRefs(record.target_refs);
-  const payload = mapActivityPayload(record.payload);
+  for (const key of activityPresentationKeys) {
+    if (record[key] !== undefined && record[key] !== null) {
+      throw new Error('Flower contract error: activity presentation fields must be nested under presentation.');
+    }
+  }
+  const presentation = mapActivityPresentation(record.presentation);
   const metadata = stringRecord(record.metadata);
   const approval = activityApprovalState(record.approval_state);
   const attention = activityAttentionReasonArray(record.attention_reasons);
@@ -656,12 +685,7 @@ function mapActivityItem(raw: unknown): FlowerActivityItem | null {
     ...(approval ? { approval_state: approval } : {}),
     ...(positiveInteger(record.started_at_unix_ms) ? { started_at_unix_ms: positiveInteger(record.started_at_unix_ms) } : {}),
     ...(positiveInteger(record.ended_at_unix_ms) ? { ended_at_unix_ms: positiveInteger(record.ended_at_unix_ms) } : {}),
-    ...(trim(record.label) ? { label: trim(record.label) } : {}),
-    ...(trim(record.description) ? { description: trim(record.description) } : {}),
-    ...(renderer ? { renderer } : {}),
-    ...(chips.length > 0 ? { chips } : {}),
-    ...(targetRefs ? { target_refs: targetRefs } : {}),
-    ...(payload ? { payload } : {}),
+    ...presentation,
     ...(metadata ? { metadata } : {}),
   };
 }

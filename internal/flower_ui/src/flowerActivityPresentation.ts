@@ -678,12 +678,6 @@ function genericDetailLinesForItem(item: FlowerActivityItem, renderer: 'structur
   const lines = Array.from(orderedKeys)
     .map((key) => detailLineFromPayload(payload, key))
     .filter((line): line is FlowerActivityDetailLine => line !== null);
-  if (item.requires_approval) {
-    lines.unshift({
-      label: 'approval',
-      value: trimString(item.approval_state) || 'requested',
-    });
-  }
   return uniqueDetailLines(lines);
 }
 
@@ -919,31 +913,23 @@ function presentationForSubagents(item: FlowerActivityItem, copy?: FlowerActivit
   const detail = subagentsDetailFromPayload(item, payload, copy);
   const titleText = subagentActionTitle(detail.action, detail.items, item);
   const title: FlowerActivityTitle = { kind: 'plain', text: titleText };
-  const approvalLines: FlowerActivityDetailLine[] = [];
-  if (item.requires_approval) {
-    approvalLines.push({ label: subagentsCopy(copy).activity.labels.approval, value: trimString(item.approval_state) || 'requested' });
-  }
   const detailBlocks: FlowerActivityDetailBlock[] = [];
   const errorBlock = errorDetailBlockForItem(item, payload);
   if (errorBlock) detailBlocks.push(errorBlock);
   if (detail.items.length > 0 || detail.task_preview || detail.status) {
     detailBlocks.push({ kind: 'subagents', subagents: detail });
   }
-  if (approvalLines.length > 0) detailBlocks.push({ kind: 'structured', lines: approvalLines });
   return {
     label: title.text,
     title,
     meta: subagentMetaText(detail.items),
-    detailLines: approvalLines,
+    detailLines: [],
     detailBlocks,
   };
 }
 
-function fileStatusLines(item: FlowerActivityItem, payload: Readonly<Record<string, unknown>> | undefined): readonly FlowerActivityDetailLine[] {
+function fileStatusLines(payload: Readonly<Record<string, unknown>> | undefined): readonly FlowerActivityDetailLine[] {
   const lines: FlowerActivityDetailLine[] = [];
-  if (item.requires_approval) {
-    lines.push({ label: 'approval', value: trimString(item.approval_state) || 'requested' });
-  }
   if (payload && boolValue(payload.truncated)) {
     const line = detailLineFromPayload(payload, 'truncated');
     if (line) lines.push(line);
@@ -951,11 +937,8 @@ function fileStatusLines(item: FlowerActivityItem, payload: Readonly<Record<stri
   return uniqueDetailLines(lines);
 }
 
-function resultStatusLines(item: FlowerActivityItem, payload: Readonly<Record<string, unknown>> | undefined): readonly FlowerActivityDetailLine[] {
+function resultStatusLines(payload: Readonly<Record<string, unknown>> | undefined): readonly FlowerActivityDetailLine[] {
   const lines: FlowerActivityDetailLine[] = [];
-  if (item.requires_approval) {
-    lines.push({ label: 'approval', value: trimString(item.approval_state) || 'requested' });
-  }
   if (payload && boolValue(payload.truncated)) {
     const line = detailLineFromPayload(payload, 'truncated');
     if (line) lines.push(line);
@@ -1035,7 +1018,7 @@ function presentationForFile(item: FlowerActivityItem, fileActions?: FlowerActiv
       detailBlocks.push({ kind: 'file_diff', files });
     }
   }
-  const statusLines = fileStatusLines(item, payload);
+  const statusLines = fileStatusLines(payload);
   if (statusLines.length > 0) {
     detailBlocks.push({ kind: 'structured', lines: statusLines });
   }
@@ -1059,7 +1042,7 @@ function presentationForPatch(item: FlowerActivityItem, fileActions?: FlowerActi
   if (files.length > 0) {
     detailBlocks.push({ kind: 'file_diff', files });
   }
-  const statusLines = fileStatusLines(item, payload);
+  const statusLines = fileStatusLines(payload);
   if (statusLines.length > 0) {
     detailBlocks.push({ kind: 'structured', lines: statusLines });
   }
@@ -1077,7 +1060,7 @@ function presentationForTodos(item: FlowerActivityItem): FlowerActivityPresentat
   const title: FlowerActivityTitle = { kind: 'plain', text: trimString(item.label) || 'Update todos' };
   const items = todoItemsFromPayload(item.payload);
   const errorBlock = errorDetailBlockForItem(item, item.payload);
-  const statusLines = errorBlock ? [] : resultStatusLines(item, item.payload);
+  const statusLines = errorBlock ? [] : resultStatusLines(item.payload);
   const detailBlocks: FlowerActivityDetailBlock[] = [];
   if (errorBlock) {
     detailBlocks.push(errorBlock);
@@ -1122,17 +1105,10 @@ function terminalOutputFromPayload(payload: Readonly<Record<string, unknown>>): 
   return rawPayloadText(payload, 'output');
 }
 
-function terminalStatusLines(item: FlowerActivityItem): readonly FlowerActivityDetailLine[] {
-  if (item.requires_approval) {
-    return [{ label: 'approval', value: trimString(item.approval_state) || 'requested' }];
-  }
-  return [];
-}
-
 function presentationForTerminal(item: FlowerActivityItem): FlowerActivityPresentation {
   const payload = item.payload ?? {};
   const title = terminalTitleForItem(item);
-  const detailLines = terminalStatusLines(item);
+  const detailLines: readonly FlowerActivityDetailLine[] = [];
   const terminal: FlowerActivityTerminalDetail = {
     command: payloadValue(payload, 'command'),
     output: terminalOutputFromPayload(payload),
@@ -1201,7 +1177,7 @@ function presentationForWebSearch(item: FlowerActivityItem): FlowerActivityPrese
   const payload = item.payload ?? {};
   const title = titleForGenericItem(item, 'web_search');
   const errorBlock = errorDetailBlockForItem(item, payload);
-  const detailLines = errorBlock ? resultStatusLines(item, payload).filter((line) => line.label !== 'summary' && line.label !== 'details') : resultStatusLines(item, payload);
+  const detailLines = errorBlock ? resultStatusLines(payload).filter((line) => line.label !== 'summary' && line.label !== 'details') : resultStatusLines(payload);
   const search: FlowerActivityWebSearchDetail = {
     query: payloadValue(payload, 'query') || trimString(item.label),
     provider: payloadValue(payload, 'provider', 'okf_version'),
@@ -1262,7 +1238,7 @@ function presentationForQuestion(item: FlowerActivityItem): FlowerActivityPresen
   const payload = item.payload ?? {};
   const title = titleForGenericItem(item, 'question');
   const errorBlock = errorDetailBlockForItem(item, payload);
-  const detailLines = errorBlock ? resultStatusLines(item, payload).filter((line) => line.label !== 'summary' && line.label !== 'details') : resultStatusLines(item, payload);
+  const detailLines = errorBlock ? resultStatusLines(payload).filter((line) => line.label !== 'summary' && line.label !== 'details') : resultStatusLines(payload);
   const question: FlowerActivityQuestionDetail = {
     reason: payloadValue(payload, 'reason_code', 'reason'),
     required: compactTextArray(payload.required_from_user),
@@ -1286,7 +1262,7 @@ function presentationForCompletion(item: FlowerActivityItem): FlowerActivityPres
   const payload = item.payload ?? {};
   const title = titleForGenericItem(item, 'completion');
   const errorBlock = errorDetailBlockForItem(item, payload);
-  const detailLines = errorBlock ? resultStatusLines(item, payload).filter((line) => line.label !== 'summary' && line.label !== 'details') : resultStatusLines(item, payload);
+  const detailLines = errorBlock ? resultStatusLines(payload).filter((line) => line.label !== 'summary' && line.label !== 'details') : resultStatusLines(payload);
   const completion: FlowerActivityCompletionDetail = {
     result: payloadValue(payload, 'result'),
     summary: payloadValue(payload, 'summary'),

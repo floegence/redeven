@@ -39,6 +39,51 @@ const fileActions = {
 } as const;
 
 describe('presentFlowerActivityItem', () => {
+  it.each([
+    { name: 'structured', renderer: 'structured' },
+    { name: 'terminal', renderer: 'terminal' },
+    { name: 'file', renderer: 'file' },
+    { name: 'patch', renderer: 'patch' },
+    { name: 'todos', renderer: 'todos' },
+    { name: 'web_search', renderer: 'web_search' },
+    { name: 'question', renderer: 'question' },
+    { name: 'completion', renderer: 'completion' },
+    { name: 'subagents', renderer: undefined, toolName: 'subagents' },
+  ] as const)('does not expose approved lifecycle state in $name presentation', ({ renderer, toolName }) => {
+    const presentation = presentFlowerActivityItem(item({
+      renderer,
+      ...(toolName ? { tool_name: toolName } : {}),
+      label: 'Visible activity',
+      requires_approval: true,
+      approval_state: 'approved',
+      payload: {},
+    }));
+
+    expect(JSON.stringify(presentation).toLowerCase()).not.toContain('approval');
+    expect(JSON.stringify(presentation).toLowerCase()).not.toContain('approved');
+  });
+
+  it('never exposes approval state as activity presentation detail', () => {
+    for (const approvalState of ['requested', 'approved', 'rejected', 'timed_out', 'canceled'] as const) {
+      const presentation = presentFlowerActivityItem(item({
+        renderer: 'terminal',
+        label: 'date +%s',
+        requires_approval: true,
+        approval_state: approvalState,
+        payload: {
+          command: 'date +%s',
+          output: '1785682449',
+          exit_code: 0,
+        },
+      }));
+
+      expect(presentation.label).toBe('date +%s');
+      expect(presentation.detailLines).toHaveLength(0);
+      expect(JSON.stringify(presentation.detailBlocks).toLowerCase()).not.toContain('approval');
+      expect(JSON.stringify(presentation.detailBlocks)).not.toContain(`"approval_state":"${approvalState}"`);
+    }
+  });
+
   it('uses the terminal command as the compact row label', () => {
     const presentation = presentFlowerActivityItem(item({
       renderer: 'terminal',
