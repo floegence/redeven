@@ -1,14 +1,14 @@
 ---
 type: Architecture Boundary
 title: ReDevPlugin host integration boundary
-description: Redeven consumes ReDevPlugin as a published platform and keeps only host policy, placement, source admission, and business adapters.
+description: Redeven consumes ReDevPlugin as a published platform and keeps only host policy, placement, source admission, localized presentation projection, and business adapters.
 tags: [architecture, dependencies, plugins, release]
 timestamp: 2026-07-25T00:00:00Z
 ---
 # Summary
 
 ReDevPlugin is an independently released plugin platform. Redeven consumes its
-coordinated `v0.6.24` Go, npm, Rust source-crate, and machine-contract artifacts;
+coordinated `v0.7.0` Go, npm, Rust source-crate, and machine-contract artifacts;
 it does not fork platform mechanics. Redeven owns authenticated session mapping,
 product source policy and review UX, UI placement, product runtime builds, and
 concrete business adapters. Missing or unverifiable upstream identity, lifecycle,
@@ -42,12 +42,12 @@ external-package receipt store.
 
 ## Published dependency set
 
-The current integration consumes the coordinated ReDevPlugin `v0.6.24` set:
+The current integration consumes the coordinated ReDevPlugin `v0.7.0` set:
 
-- `github.com/floegence/redevplugin v0.6.24`;
-- `@floegence/redevplugin-contracts@0.6.24` and
-  `@floegence/redevplugin-ui@0.6.24`;
-- the exact six `0.6.24` Rust source crates ending in `redevplugin-runtime`;
+- `github.com/floegence/redevplugin v0.7.0`;
+- `@floegence/redevplugin-contracts@0.7.0` and
+  `@floegence/redevplugin-ui@0.7.0`;
+- the exact six `0.7.0` Rust source crates ending in `redevplugin-runtime`;
 - the released contract registry, package-set contract, contract hashes, and
   attested `platform-package-publication-v1.json` registry readback.
 
@@ -57,6 +57,14 @@ integrity and provenance, crates.io checksums and Cargo VCS identity, and closed
 package coordinates. Forbidden wiring includes `go.work`, `go.work.sum`, Go
 `replace`, package-manager links, sibling paths, Rust path overrides, copied
 contracts, and copied runtime binaries. Dependency checks use `GOWORK=off`.
+
+For the pre-release current-only baseline, Host admission accepts only
+`redevplugin.manifest.v8` and `redevplugin.release_metadata.v8`, with
+`plugin-ui-v7` and `bridge-v7`. Manifest presentation is signed author content:
+the Host validates and returns the normalized catalog, and resolves a requested
+BCP 47 locale through the released resolver with RFC 4647 lookup and the
+declared default locale. Older manifest or release metadata state is rejected
+read-only without a compatibility parser, synthetic copy, or English fallback.
 
 ## Host modules and external packages
 
