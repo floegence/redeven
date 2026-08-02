@@ -580,7 +580,7 @@ func (r *run) isBusy() bool {
 	return r.busyCount.Load() > 0
 }
 
-func (r *run) isWaitingApproval() bool {
+func (r *run) isWaitingProductApproval() bool {
 	if r == nil {
 		return false
 	}
@@ -592,6 +592,39 @@ func (r *run) isWaitingApproval() bool {
 		}
 	}
 	return false
+}
+
+const floretApprovalWatchdogReadTimeout = 2 * time.Second
+
+func (r *run) isWaitingFloretApproval(ctx context.Context) (bool, error) {
+	if r == nil {
+		return false, nil
+	}
+	host := r.activeFloretHost()
+	if host == nil {
+		return false, nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	readTimeout := floretApprovalWatchdogReadTimeout
+	if r.idleTimeout > 0 && r.idleTimeout < readTimeout {
+		readTimeout = r.idleTimeout
+	}
+	readCtx, cancel := context.WithTimeout(ctx, readTimeout)
+	defer cancel()
+	queue, err := host.ReadApprovalQueue(readCtx)
+	if err != nil {
+		return false, fmt.Errorf("read canonical Floret approval queue: %w", err)
+	}
+	if err := queue.Validate(); err != nil {
+		return false, fmt.Errorf("validate canonical Floret approval queue: %w", err)
+	}
+	rootThreadID := strings.TrimSpace(r.host.authorityThreadID)
+	if rootThreadID != "" && strings.TrimSpace(string(queue.RootThreadID)) != rootThreadID {
+		return false, errors.New("canonical Floret approval queue root identity mismatch")
+	}
+	return len(queue.Items) > 0, nil
 }
 
 func (r *run) runIdleWatchdog(ctx context.Context) {
@@ -615,9 +648,21 @@ func (r *run) runIdleWatchdog(ctx context.Context) {
 			}
 			idleTimer.Reset(r.idleTimeout)
 		case <-idleTimer.C:
-			// Waiting for the user is not an "idle" run. That lifecycle is bounded by the
-			// per-approval timeout (toolApprovalTO), plus the run's max wall time.
-			if r.isWaitingApproval() || r.isBusy() {
+			// Waiting for the user is not an "idle" run. Product confirmations retain
+			// their own timeout, and the run's max wall time bounds every approval wait.
+			if r.isWaitingProductApproval() || r.isBusy() {
+				idleTimer.Reset(r.idleTimeout)
+				continue
+			}
+			waitingFloretApproval, err := r.isWaitingFloretApproval(ctx)
+			if err != nil {
+				if r.log != nil {
+					r.log.Warn("canonical Floret approval queue unavailable during idle check", "run_id", r.id, "error", err)
+				}
+				idleTimer.Reset(r.idleTimeout)
+				continue
+			}
+			if waitingFloretApproval {
 				idleTimer.Reset(r.idleTimeout)
 				continue
 			}

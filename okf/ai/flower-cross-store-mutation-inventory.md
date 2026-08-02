@@ -7,13 +7,13 @@ timestamp: 2026-07-31T00:00:00Z
 ---
 # Summary
 
-Floret is authoritative for every admitted Agent fact. Redeven records only product resources, authorization, unadmitted work, and the minimum coordination evidence needed to settle a mutation across two independent stores. Redeven evidence never proves canonical lifecycle state or supports lifecycle inventory, timeline, status, or search. Turn admission now binds from the published Floret v3.2.0 `TurnAdmissionReceipt` before execution; recovery accepts only the same logical-request receipt or a public exact read, and conflicting or incomplete proof fails closed.
+Floret is authoritative for every admitted Agent fact. Redeven records only product resources, authorization, unadmitted work, and the minimum coordination evidence needed to settle a mutation across two independent stores. Redeven evidence never proves canonical lifecycle state or supports lifecycle inventory, timeline, status, or search. Turn admission now binds from the published Floret v3.2.1 `TurnAdmissionReceipt` before execution; recovery accepts only the same logical-request receipt or a public exact read, and conflicting or incomplete proof fails closed.
 
 # Contract
 
 ## Admission acknowledgement
 
-The published Floret v3.2.0 turn path separates admission from execution. Redeven first calls `AdmitTurn`, validates the returned `TurnAdmissionReceipt`, settles its product coordination transaction, publishes the canonical user timeline, and only then calls `ExecuteAdmission` with the same receipt plus ephemeral `ExecutionContext`. The canonical command is fixed by Floret admission and is not persisted or resubmitted as a Redeven execution plan. `EventSink.EmitEvent` remains fail-closed observation: committed-user events may validate identity and later presentation, but they cannot bind admission, complete admission waiting, or substitute for the receipt.
+The published Floret v3.2.1 turn path separates admission from execution. Redeven first calls `AdmitTurn`, validates the returned `TurnAdmissionReceipt`, settles its product coordination transaction, publishes the canonical user timeline, and only then calls `ExecuteAdmission` with the same receipt plus ephemeral `ExecutionContext`. The canonical command is fixed by Floret admission and is not persisted or resubmitted as a Redeven execution plan. `EventSink.EmitEvent` remains fail-closed observation: committed-user events may validate identity and later presentation, but they cannot bind admission, complete admission waiting, or substitute for the receipt.
 
 ## Mutation inventory
 
