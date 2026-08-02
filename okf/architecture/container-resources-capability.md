@@ -174,7 +174,7 @@ actions are disabled when inventory is stale, partial, or unavailable.
 
 - `redeven:spec/capabilities/container-resources-v4.contract.json` - Defines the unsigned endpoint-aware v4 capability source.
 - `redeven:spec/redevplugin/candidate-containers-capability/capabilities/redeven.container_resources.v4/v4.0.0` - Contains deterministic generated candidate schema, client, compatibility metadata, and notices without an activatable signature pin.
-- `redeven:spec/redevplugin/official-containers-capability-v4` - Contains the public external-signing exchange and verified immutable v4 capability bundle produced by ReDevPlugin `0.6.23`.
+- `redeven:spec/redevplugin/official-containers-capability-v4` - Contains the public external-signing exchange and verified immutable v4 capability bundle consumed through the released ReDevPlugin `0.7.0` verifier.
 - `redeven:scripts/check_containers_v4_release_capability.sh` - Verifies the official v4 bundle, public signing exchange, source commit, generated client, and complete artifact inventory.
 - `redeven:internal/capabilities/containers/resources_v4.go` - Defines endpoint-aware business DTOs and adapter behavior.
 - `redeven:internal/capabilities/containers/resources_v4_cli.go` - Resolves opaque endpoints and constructs explicit Docker context and Podman connection commands.
