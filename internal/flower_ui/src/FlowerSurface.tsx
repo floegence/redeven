@@ -66,7 +66,6 @@ import type {
   FlowerTimelineDecoration,
   FlowerActivityStatus,
   FlowerLiveBootstrap,
-  FlowerActivityApprovalState,
   FlowerAttachmentCapability,
   FlowerAttachmentStagingScope,
   FlowerModelIOPhase,
@@ -632,10 +631,6 @@ function retryableApprovalAction(
   const primary = action.surface_role === 'primary_action'
     || (!action.surface_role && !thread.approval_queue && pending.length === 1);
   return primary ? action : null;
-}
-
-function approvalStateLabel(state: FlowerActivityApprovalState | undefined, surfaceCopy: FlowerSurfaceCopy): string {
-  return surfaceCopy.chat.toolApprovalStates[state ?? 'requested'] ?? surfaceCopy.chat.toolApprovalStates.requested;
 }
 
 function clampThreadRailWidth(width: number): number {
@@ -7128,7 +7123,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     [
       presentFlowerActivityItem(item, timeline.file_actions, { subagents: subagentsCopy() }).label,
       copy().chat.toolStatuses[item.status],
-      item.requires_approval ? copy().chat.toolApprovalState(approvalStateLabel(item.approval_state, copy())) : '',
     ].filter(Boolean).join('. ')
   );
 

@@ -235,6 +235,61 @@ function rawBootstrapWithTimelineDecoration(decoration: unknown) {
   };
 }
 
+function rawBootstrapWithActivityItem(activityItem: Record<string, unknown>) {
+  return {
+    schema_version: 1,
+    endpoint_id: 'runtime',
+    thread_id: 'th-live',
+    stream_generation: 1,
+    cursor: 8,
+    retained_from_seq: 1,
+    thread: {
+      thread_id: 'th-live',
+      title: 'Terminal activity',
+      title_status: 'ready',
+      model_id: 'openai/gpt-5.2',
+      working_dir: '/workspace',
+      created_at_unix_ms: 1000,
+      updated_at_unix_ms: 2000,
+      run_status: 'success',
+      read_status: readStatus(),
+    },
+    timeline_messages: [{
+      id: 'assistant-terminal',
+      thread_id: 'th-live',
+      turn_id: 'turn-1',
+      run_id: 'run-1',
+      role: 'assistant',
+      content: '',
+      status: 'complete',
+      created_at_ms: 2000,
+      blocks: [{
+        type: 'activity-timeline',
+        schema_version: 1,
+        run_id: 'run-1',
+        thread_id: 'th-live',
+        turn_id: 'turn-1',
+        summary: {
+          status: 'success',
+          severity: 'normal',
+          needs_attention: false,
+          total_items: 1,
+          counts: { success: 1, approval: 1 },
+        },
+        items: [activityItem],
+      }],
+    }],
+    live_state: {
+      thread_patch: {},
+      runs: {},
+      approval_actions: {},
+      input_requests: {},
+    },
+    read_status: readStatus(),
+    generated_at_unix_ms: 3000,
+  };
+}
+
 function bootstrapWithLiveAssistant(overrides: Partial<FlowerChatMessage> = {}): FlowerLiveBootstrap {
   const baseThread = thread();
   const assistant: FlowerChatMessage = {
@@ -289,6 +344,160 @@ function applyEvents(initial: FlowerThreadSnapshot, cursor: number, events: read
 }
 
 describe('Flower live projection', () => {
+  it('maps Floret v3 nested activity presentation from bootstrap', () => {
+    const mapped = mapFlowerLiveBootstrap(rawBootstrapWithActivityItem({
+      item_id: 'tool:exec-1',
+      tool_id: 'exec-1',
+      tool_name: 'terminal.exec',
+      kind: 'tool',
+      status: 'success',
+      severity: 'normal',
+      needs_attention: false,
+      requires_approval: true,
+      approval_state: 'approved',
+      target_refs: null,
+      metadata: { tool_result_status: 'success' },
+      presentation: {
+        label: 'date +%s',
+        description: 'Read the current timestamp',
+        renderer: 'terminal',
+        chips: [{ kind: 'exit_code', label: 'exit', value: '0', tone: 'neutral' }],
+        target_refs: [{ kind: 'process', label: 'terminal process', uri: 'process://tp_123' }],
+        payload: {
+          command: 'date +%s',
+          output: '1785682449',
+          process_id: 'tp_123',
+          exit_code: 0,
+          duration_ms: 32,
+        },
+      },
+    }), mapperOptions());
+
+    const block = mapped.timeline_messages[0]?.blocks?.[0];
+    expect(block?.type).toBe('activity-timeline');
+    if (!block || block.type !== 'activity-timeline') throw new Error('missing mapped activity timeline');
+    expect(block.items[0]).toMatchObject({
+      label: 'date +%s',
+      description: 'Read the current timestamp',
+      renderer: 'terminal',
+      chips: [{ kind: 'exit_code', label: 'exit', value: '0', tone: 'neutral' }],
+      target_refs: [{ kind: 'process', label: 'terminal process', uri: 'process://tp_123' }],
+      payload: {
+        command: 'date +%s',
+        output: '1785682449',
+        process_id: 'tp_123',
+        exit_code: 0,
+        duration_ms: 32,
+      },
+    });
+  });
+
+  it('maps Floret v3 nested activity presentation from live block replacement', () => {
+    const mapped = mapFlowerLiveEvents({
+      schema_version: 1,
+      stream_generation: 1,
+      next_cursor: 9,
+      retained_from_seq: 1,
+      events: [{
+        schema_version: 1,
+        seq: 9,
+        endpoint_id: 'runtime',
+        thread_id: 'th-live',
+        turn_id: 'turn-1',
+        run_id: 'run-1',
+        at_unix_ms: 3000,
+        kind: 'message.block_set',
+        payload: {
+          message_id: 'assistant-terminal',
+          block_index: 0,
+          block: {
+            type: 'activity-timeline',
+            schema_version: 1,
+            run_id: 'run-1',
+            thread_id: 'th-live',
+            turn_id: 'turn-1',
+            summary: { status: 'success', severity: 'normal', needs_attention: false, total_items: 1, counts: { success: 1 } },
+            items: [{
+              item_id: 'tool:exec-live',
+              tool_id: 'exec-live',
+              tool_name: 'terminal.exec',
+              kind: 'tool',
+              status: 'success',
+              severity: 'normal',
+              needs_attention: false,
+              requires_approval: false,
+              target_refs: null,
+              presentation: {
+                label: 'printf live',
+                renderer: 'terminal',
+                payload: { command: 'printf live', output: 'live' },
+              },
+            }],
+          },
+        },
+      }],
+    });
+
+    const event = mapped.events[0];
+    expect(event?.kind).toBe('message.block_set');
+    if (!event || event.kind !== 'message.block_set' || event.payload.block.type !== 'activity-timeline') {
+      throw new Error('missing mapped live activity timeline');
+    }
+    const activityBlock = event.payload.block.block as FlowerActivityTimelineBlock;
+    expect(activityBlock.items[0]).toMatchObject({
+      label: 'printf live',
+      renderer: 'terminal',
+      payload: { command: 'printf live', output: 'live' },
+    });
+  });
+
+  it('does not accept legacy top-level activity presentation fields', () => {
+    expect(() => mapFlowerLiveBootstrap(rawBootstrapWithActivityItem({
+      item_id: 'tool:legacy',
+      tool_name: 'terminal.exec',
+      kind: 'tool',
+      status: 'success',
+      severity: 'normal',
+      needs_attention: false,
+      requires_approval: false,
+      label: 'legacy command',
+      renderer: 'terminal',
+      payload: { command: 'legacy command' },
+    }), mapperOptions())).toThrow(/activity presentation fields must be nested under presentation/);
+  });
+
+  it('ignores null top-level activity presentation placeholders emitted by the service', () => {
+    const mapped = mapFlowerLiveBootstrap(rawBootstrapWithActivityItem({
+      item_id: 'tool:null-placeholders',
+      tool_name: 'terminal.exec',
+      kind: 'tool',
+      status: 'success',
+      severity: 'normal',
+      needs_attention: false,
+      requires_approval: false,
+      label: null,
+      description: null,
+      renderer: null,
+      chips: null,
+      target_refs: null,
+      payload: null,
+      presentation: {
+        label: 'date +%s',
+        renderer: 'terminal',
+        payload: { command: 'date +%s' },
+      },
+    }), mapperOptions());
+
+    const block = mapped.timeline_messages[0]?.blocks?.[0];
+    expect(block?.type).toBe('activity-timeline');
+    if (!block || block.type !== 'activity-timeline') throw new Error('missing mapped activity timeline');
+    expect(block.items[0]).toMatchObject({
+      label: 'date +%s',
+      renderer: 'terminal',
+      payload: { command: 'date +%s' },
+    });
+  });
+
   it('keeps canonical message and turn identities distinct and rejects a missing turn identity', () => {
     expect(mapFlowerMessage({
       id: 'entry-user-1',
@@ -375,6 +584,17 @@ describe('Flower live projection', () => {
       role: 'assistant',
       blocks: [{
         ...activityTimelineBlock('tool-1', 'Inspect'),
+        items: [{
+          item_id: 'tool-1',
+          tool_id: 'tool-1',
+          tool_name: 'terminal.exec',
+          kind: 'tool',
+          status: 'success',
+          severity: 'quiet',
+          needs_attention: false,
+          requires_approval: false,
+          presentation: { label: 'Inspect' },
+        }],
         turn_id: 'turn-other',
         run_id: 'run-attachments',
       }],
@@ -2836,6 +3056,39 @@ describe('Flower live projection', () => {
               { reference_id: 'ref-terminal', kind: 'terminal', label: 'Terminal output', text: 'PASS' },
               { reference_id: 'ref-process', kind: 'process', label: 'node (4242)' },
             ],
+          }, {
+            id: 'msg-terminal-replacement',
+            thread_id: 'th-live',
+            turn_id: 'turn-terminal',
+            run_id: 'run-terminal',
+            role: 'assistant',
+            timestamp: 1001,
+            status: 'complete',
+            blocks: [{
+              type: 'activity-timeline',
+              schema_version: 1,
+              thread_id: 'th-live',
+              turn_id: 'turn-terminal',
+              run_id: 'run-terminal',
+              summary: { status: 'success', severity: 'normal', needs_attention: false, total_items: 1, counts: { success: 1 } },
+              items: [{
+                item_id: 'tool:timeline-terminal',
+                tool_id: 'timeline-terminal',
+                tool_name: 'terminal.exec',
+                kind: 'tool',
+                status: 'success',
+                severity: 'normal',
+                needs_attention: false,
+                requires_approval: true,
+                approval_state: 'approved',
+                target_refs: null,
+                presentation: {
+                  label: 'date +%s',
+                  renderer: 'terminal',
+                  payload: { command: 'date +%s', output: '1785682356' },
+                },
+              }],
+            }],
           }],
           stream_generation: 1,
           snapshot_through_seq: 2,
@@ -2851,6 +3104,14 @@ describe('Flower live projection', () => {
       'ref-terminal',
       'ref-process',
     ]);
+    const activityBlock = mapped.events[0].payload.messages[1]?.blocks?.[0];
+    expect(activityBlock?.type).toBe('activity-timeline');
+    if (!activityBlock || activityBlock.type !== 'activity-timeline') throw new Error('expected replacement activity timeline');
+    expect(activityBlock.items[0]).toMatchObject({
+      label: 'date +%s',
+      renderer: 'terminal',
+      payload: { command: 'date +%s', output: '1785682356' },
+    });
   });
 
   it('ignores legacy Redeven thread ownership shadow fields', () => {
@@ -3858,11 +4119,13 @@ describe('Flower live projection', () => {
               severity: 'normal',
               needs_attention: true,
               requires_approval: false,
-              renderer: 'terminal',
-              payload: {
-                command: 'sleep 10',
-                process_id: 'tp_123',
-                pending_handle: 'tp_123',
+              presentation: {
+                renderer: 'terminal',
+                payload: {
+                  command: 'sleep 10',
+                  process_id: 'tp_123',
+                  pending_handle: 'tp_123',
+                },
               },
             }],
           },
@@ -3870,7 +4133,7 @@ describe('Flower live projection', () => {
       }],
       next_cursor: 1,
       retained_from_seq: 1,
-    })).toThrow(/activity_item\.payload\.pending_handle/);
+    })).toThrow(/activity_item\.presentation\.payload\.pending_handle/);
   });
 
   it('rejects missing activity summary status instead of falling back', () => {

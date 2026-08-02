@@ -1473,10 +1473,6 @@ describe('FlowerSurface navigation activity', () => {
                       payload: {
                         command: `npm run check:${index}`,
                         output: `check ${index} ok\n`,
-						first_seq: 1,
-						last_seq: 1,
-						latest_seq: 1,
-						has_more: false,
                         exit_code: 0,
                         duration_ms: 1234,
                         process_id: `tp_check_${index}`,
@@ -3165,7 +3161,10 @@ describe('FlowerSurface navigation activity', () => {
     button.click();
     await waitFor(() => row.textContent?.includes('weather response') ?? false);
     expect(button.getAttribute('aria-expanded')).toBe('true');
-    expect(row.textContent).toContain('approved');
+    expect(row.textContent?.toLowerCase()).not.toContain('approval');
+    expect(row.textContent?.toLowerCase()).not.toContain('approved');
+    expect(row.getAttribute('aria-label')?.toLowerCase()).not.toContain('approval');
+    expect(row.getAttribute('aria-label')?.toLowerCase()).not.toContain('approved');
     expect(row.textContent).toContain('weather response');
   });
 

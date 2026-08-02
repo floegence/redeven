@@ -165,13 +165,16 @@ function normalizeSequence(value: unknown, field: string): number {
   return sequence;
 }
 
-function normalizeFrame(frame: TerminalOutputFrame): TerminalVisibleOutputState {
+function normalizeFrame(frame: TerminalOutputFrame, allowUnsequencedOutput = false): TerminalVisibleOutputState {
   const output = normalizeOutput(frame.output);
   const firstSeq = normalizeSequence(frame.first_seq, 'first_seq');
   const lastSeq = normalizeSequence(frame.last_seq, 'last_seq');
   if (output.length === 0) {
     if (firstSeq !== 0) throw new Error('Empty terminal output must have first_seq 0.');
-  } else if (firstSeq === 0 || lastSeq < firstSeq) {
+  } else if (
+    (firstSeq === 0 || lastSeq < firstSeq)
+    && !(allowUnsequencedOutput && firstSeq === 0 && lastSeq === 0)
+  ) {
     throw new Error('Terminal output sequence range is invalid.');
   }
   return { output, first_seq: firstSeq, last_seq: lastSeq, truncated: Boolean(frame.truncated) };
@@ -181,7 +184,17 @@ export function replaceTerminalOutputSnapshot(
   previous: TerminalVisibleOutputState | undefined,
   snapshot: TerminalOutputFrame,
 ): TerminalVisibleOutputState {
-  const next = normalizeFrame(snapshot);
+  const next = normalizeFrame(snapshot, true);
+  const nextUnsequenced = next.output.length > 0 && next.first_seq === 0 && next.last_seq === 0;
+  const previousUnsequenced = previous !== undefined
+    && previous.output.length > 0
+    && previous.first_seq === 0
+    && previous.last_seq === 0;
+  if (nextUnsequenced) return next;
+  if (previousUnsequenced) {
+    if (next.output.length === 0 && next.last_seq === 0) return previous;
+    return next;
+  }
   if (previous && next.last_seq <= previous.last_seq) return previous;
   return next;
 }
@@ -191,9 +204,19 @@ export function appendTerminalOutputDelta(
   delta: TerminalOutputFrame,
 ): TerminalVisibleOutputState {
   const next = normalizeFrame(delta);
+  const previousUnsequenced = previous !== undefined
+    && previous.output.length > 0
+    && previous.first_seq === 0
+    && previous.last_seq === 0;
   if (previous && next.last_seq <= previous.last_seq) return previous;
   if (next.output.length === 0) {
     if (previous) return previous;
+    return next;
+  }
+  if (previousUnsequenced) {
+    if (next.first_seq !== 1 && !next.truncated) {
+      throw new Error('Terminal output delta does not start at the first sequence.');
+    }
     return next;
   }
   if (!previous) {
