@@ -1,7 +1,9 @@
 import type {
+  FlowerApprovalAction,
   FlowerActivityFileAction as FlowerActivityFileActionRecord,
   FlowerActivityItem,
   FlowerActivityRenderer,
+  FlowerSubagentSummary,
 } from './contracts/flowerSurfaceContracts';
 import type { FlowerSubagentsCopy } from './copy';
 import { DEFAULT_FLOWER_SURFACE_COPY } from './copy';
@@ -45,6 +47,23 @@ export type FlowerActivityFileAction = Readonly<{
 }>;
 
 export type FlowerActivityFileActions = Readonly<Record<string, FlowerActivityFileActionRecord>>;
+
+/**
+ * Approval queue items are authoritative for the command while a tool waits.
+ * The activity projection can legitimately arrive first with only its tool id.
+ */
+export function pendingApprovalCommandForActivityItem(
+  item: FlowerActivityItem,
+  actions: readonly FlowerApprovalAction[],
+): string {
+  if (item.status !== 'waiting' || item.requires_approval !== true || item.approval_state !== 'requested') return '';
+  const action = actions.find((candidate) => (
+    candidate.status === 'pending'
+    && candidate.state === 'requested'
+    && candidate.tool_id === item.tool_id
+  ));
+  return trimString(action?.summary.command);
+}
 
 export type FlowerActivityDiffFile = Readonly<{
   display_name: string;
@@ -208,6 +227,7 @@ export type FlowerActivityPresentation = Readonly<{
 
 type FlowerActivityPresentationCopy = Readonly<{
   subagents?: FlowerSubagentsCopy;
+  subagentSummaries?: readonly FlowerSubagentSummary[];
 }>;
 
 const DETAIL_LABELS: Readonly<Record<string, string>> = {
@@ -820,6 +840,42 @@ function subagentDetailItemFromRecord(
   };
 }
 
+function subagentSummaryRecord(summary: FlowerSubagentSummary): Readonly<Record<string, unknown>> {
+  return {
+    thread_id: summary.thread_id,
+    task_name: summary.task_name,
+    task_description: summary.task_description,
+    agent_type: summary.agent_type,
+    status: summary.status,
+    created_at_ms: summary.created_at_ms,
+    updated_at_ms: summary.updated_at_ms,
+  };
+}
+
+function subagentSummaryMatchesItem(summary: FlowerSubagentSummary, item: FlowerActivityItem): boolean {
+  const payload = item.payload ?? {};
+  const threadID = payloadValue(payload, 'thread_id');
+  if (threadID && threadID === summary.thread_id) return true;
+  const taskName = payloadValue(payload, 'task_name');
+  if (taskName && taskName === summary.task_name) return true;
+  const label = trimString(item.label);
+  if (label && label !== trimString(item.tool_name) && label !== trimString(item.kind)) {
+    return label === summary.task_name;
+  }
+  return false;
+}
+
+function subagentSummaryFallbacks(item: FlowerActivityItem, summaries: readonly FlowerSubagentSummary[]): readonly FlowerSubagentSummary[] {
+  const matched = summaries.filter((summary) => subagentSummaryMatchesItem(summary, item));
+  if (matched.length > 0) return matched;
+  const label = trimString(item.label);
+  const genericLabel = !label
+    || label === trimString(item.tool_name)
+    || label === trimString(item.kind)
+    || label.toLowerCase() === 'subagents';
+  return genericLabel ? summaries : [];
+}
+
 function uniqueSubagentDetailItems(items: readonly FlowerActivitySubagentDetailItem[]): readonly FlowerActivitySubagentDetailItem[] {
   const seen = new Set<string>();
   const out: FlowerActivitySubagentDetailItem[] = [];
@@ -837,9 +893,15 @@ function subagentsDetailItemsFromPayload(
   payload: Readonly<Record<string, unknown>>,
   copy?: FlowerActivityPresentationCopy,
 ): readonly FlowerActivitySubagentDetailItem[] {
-  return uniqueSubagentDetailItems(
+  const payloadItems = uniqueSubagentDetailItems(
     subagentActionItems(payload)
       .map((record) => subagentDetailItemFromRecord(record, item, payload, copy))
+      .filter((entry): entry is FlowerActivitySubagentDetailItem => entry !== null),
+  );
+  if (payloadItems.length > 0) return payloadItems;
+  return uniqueSubagentDetailItems(
+    subagentSummaryFallbacks(item, copy?.subagentSummaries ?? [])
+      .map((summary) => subagentDetailItemFromRecord(subagentSummaryRecord(summary), item, payload, copy))
       .filter((entry): entry is FlowerActivitySubagentDetailItem => entry !== null),
   );
 }
