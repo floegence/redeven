@@ -7,7 +7,7 @@ import { useI18n } from '../i18n';
 import type { PluginCenterTab, PluginInventoryItem } from './pluginTypes';
 import { PLUGIN_ENTER_MOTION_CLASS, PLUGIN_PRESS_MOTION_CLASS } from './pluginPresentation';
 import { PluginIcon, PluginStatusBadge, PluginTrustBadge } from './PluginPresentationPrimitives';
-import { resolvePluginPresentation } from './officialPluginCatalog';
+import { resolveAuthorPresentation, resolvePluginPresentation } from './officialPluginCatalog';
 
 export function PluginCenterItem(props: {
   item: PluginInventoryItem;
@@ -28,9 +28,11 @@ export function PluginCenterItem(props: {
 
 function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX.Element {
   const i18n = useI18n();
-  const presentation = () => props.item.officialCatalog
-    ? resolvePluginPresentation(props.item.officialCatalog, i18n.locale())
-    : undefined;
+  const presentation = () => props.item.presentation
+    ? resolveAuthorPresentation(props.item.presentation, i18n.locale())
+    : props.item.officialCatalog
+      ? resolvePluginPresentation(props.item.officialCatalog, i18n.locale())
+      : undefined;
   const displayName = () => presentation()?.plugin_name ?? props.item.displayName;
   const summary = () => presentation()?.summary ?? props.item.description;
   const publisher = () => presentation()?.publisher_name ?? props.item.publisher;
