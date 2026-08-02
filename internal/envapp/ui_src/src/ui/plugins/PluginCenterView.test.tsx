@@ -293,6 +293,36 @@ describe('PluginCenterView', () => {
     expect(mount.querySelector('[data-plugin-center-details]')?.textContent).toContain('Containers');
   });
 
+  it('does not use market presentation when an installed record has no host presentation', async () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginCenterView
+        projection={{ items: [{
+          ...containersPlugin,
+          displayName: 'Installed Name',
+          description: 'Installed summary',
+          publisher: 'Installed Publisher',
+          pluginInstanceID: 'plugininst_containers',
+          version: '2.0.0',
+          lifecycleState: 'disabled',
+        }] }}
+        loading={false}
+        onCommand={vi.fn()}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces={false}
+      />
+    ), mount);
+
+    (mount.querySelector('[data-plugin-center-item="catalog:containers"]') as HTMLButtonElement).click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const details = mount.querySelector('[data-plugin-center-details]')!;
+    expect(details.querySelector('[data-plugin-center-detail-heading]')?.textContent).toContain('Installed Name');
+    expect(details.textContent).toContain('Installed summary');
+    expect(details.textContent).not.toContain('Manage Docker and Podman resources.');
+  });
+
   it('keeps refresh status outside the card grid', () => {
     const [loading, setLoading] = createSignal(false);
     const mount = document.createElement('div');

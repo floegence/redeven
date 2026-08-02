@@ -892,7 +892,7 @@ function PluginAuthorContent(props: {
   const i18n = useI18n();
   const presentation = () => {
     if (props.item.presentation) return resolveAuthorPresentation(props.item.presentation, i18n.locale());
-    if (props.marketDetail) return resolveAuthorPresentation(props.marketDetail.presentation, i18n.locale());
+    if (!props.item.pluginInstanceID && props.marketDetail) return resolveAuthorPresentation(props.marketDetail.presentation, i18n.locale());
     return undefined;
   };
   return (
@@ -1670,7 +1670,7 @@ function filterItems(
     if (!query) return true;
     const presentation = item.presentation
       ? resolveAuthorPresentation(item.presentation, locale)
-      : item.officialCatalog
+      : !item.pluginInstanceID && item.officialCatalog
         ? resolvePluginPresentation(item.officialCatalog, locale)
         : undefined;
     const fields = [

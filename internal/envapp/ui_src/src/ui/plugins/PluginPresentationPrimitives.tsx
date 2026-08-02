@@ -110,7 +110,7 @@ export function PluginIdentityHeader(props: {
   const i18n = useI18n();
   const presentation = () => props.item.presentation
     ? resolveAuthorPresentation(props.item.presentation, i18n.locale())
-    : props.item.officialCatalog
+    : !props.item.pluginInstanceID && props.item.officialCatalog
       ? resolvePluginPresentation(props.item.officialCatalog, i18n.locale())
       : undefined;
   const displayName = () => presentation()?.plugin_name ?? props.item.displayName;
