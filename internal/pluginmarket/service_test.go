@@ -227,6 +227,25 @@ func TestServiceRejectsUnknownFieldsWithoutReplacingCache(t *testing.T) {
 	}
 }
 
+func TestServiceRejectsNonCanonicalOrDuplicatePresentation(t *testing.T) {
+	t.Parallel()
+	invalid := strings.ReplaceAll(validCatalogResponse, `"en-US"`, `"en-us"`)
+	invalid = strings.Replace(invalid, `"keywords": ["containers", "Docker"]`, `"keywords": ["containers", "CONTAINERS"]`, 1)
+	service, err := NewService(ServiceOptions{
+		Origin:    "https://plugins.redeven.com",
+		CachePath: filepath.Join(t.TempDir(), "plugin-market-lkg.json"),
+		HTTPClient: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			return response(http.StatusOK, invalid, nil), nil
+		})},
+	})
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	if _, err := service.Snapshot(context.Background()); !errors.Is(err, ErrInvalidResponse) {
+		t.Fatalf("Snapshot() error = %v, want ErrInvalidResponse", err)
+	}
+}
+
 func TestLatestReleaseBuildsCompleteRemoteProjection(t *testing.T) {
 	t.Parallel()
 	service, err := NewService(ServiceOptions{

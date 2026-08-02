@@ -8,10 +8,13 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/floegence/redevplugin/pkg/host"
 	pluginmanifest "github.com/floegence/redevplugin/pkg/manifest"
 	"github.com/floegence/redevplugin/pkg/remoterelease"
+	"golang.org/x/text/language"
+	"golang.org/x/text/unicode/norm"
 )
 
 var (
@@ -363,7 +366,7 @@ func validateCompactPresentation(presentation PresentationCompact) bool {
 	}
 	seen := make(map[string]struct{}, len(presentation.Locales))
 	for _, locale := range presentation.Locales {
-		if locale.Locale == "" || strings.TrimSpace(locale.Name) == "" || strings.TrimSpace(locale.Summary) == "" || len(locale.Keywords) == 0 {
+		if !validPresentationLocale(locale.Locale) || !validPresentationText(locale.Name) || !validPresentationText(locale.Summary) || len(locale.Keywords) == 0 || hasDuplicateKeywords(locale.Keywords) {
 			return false
 		}
 		if _, exists := seen[locale.Locale]; exists {
@@ -372,7 +375,124 @@ func validateCompactPresentation(presentation PresentationCompact) bool {
 		seen[locale.Locale] = struct{}{}
 	}
 	_, exists := seen[presentation.DefaultLocale]
-	return exists
+	return exists && validPresentationLocale(presentation.DefaultLocale)
+}
+
+func validateFullPresentation(presentation PresentationFull) bool {
+	if len(presentation.Locales) == 0 || len(presentation.Locales) > 16 || !validPresentationLocale(presentation.DefaultLocale) {
+		return false
+	}
+	seen := make(map[string]struct{}, len(presentation.Locales))
+	var defaultLocale *PresentationFullLocale
+	for index := range presentation.Locales {
+		locale := &presentation.Locales[index]
+		if !validPresentationLocale(locale.Locale) || !validPresentationText(locale.Name) || !validPresentationText(locale.Summary) || len(locale.Description) == 0 || len(locale.Description) > 12 || len(locale.Keywords) == 0 || hasDuplicateKeywords(locale.Keywords) {
+			return false
+		}
+		if _, exists := seen[locale.Locale]; exists {
+			return false
+		}
+		seen[locale.Locale] = struct{}{}
+		if locale.Locale == presentation.DefaultLocale {
+			defaultLocale = locale
+		}
+		if hasDuplicateIDs(locale.Surfaces, func(surface PresentationSurface) string { return surface.SurfaceID }) || hasDuplicateIDs(locale.Settings, func(setting PresentationSetting) string { return setting.Key }) {
+			return false
+		}
+		for _, surface := range locale.Surfaces {
+			if !idPattern.MatchString(surface.SurfaceID) || !validPresentationText(surface.Label) {
+				return false
+			}
+		}
+		for _, setting := range locale.Settings {
+			if strings.TrimSpace(setting.Key) == "" || !validPresentationText(setting.Label) || hasDuplicateIDs(setting.Options, func(option PresentationSettingOption) string { return option.Value }) {
+				return false
+			}
+			for _, option := range setting.Options {
+				if strings.TrimSpace(option.Value) == "" || !validPresentationText(option.Label) {
+					return false
+				}
+			}
+		}
+		for _, text := range append(append(slices.Clone(locale.Description), locale.Highlights...), locale.Keywords...) {
+			if !validPresentationText(text) {
+				return false
+			}
+		}
+	}
+	if defaultLocale == nil {
+		return false
+	}
+	defaultSurfaces := make(map[string]struct{}, len(defaultLocale.Surfaces))
+	defaultSettings := make(map[string]PresentationSetting, len(defaultLocale.Settings))
+	for _, surface := range defaultLocale.Surfaces {
+		defaultSurfaces[surface.SurfaceID] = struct{}{}
+	}
+	for _, setting := range defaultLocale.Settings {
+		defaultSettings[setting.Key] = setting
+	}
+	for _, locale := range presentation.Locales {
+		if len(locale.Surfaces) != len(defaultSurfaces) || len(locale.Settings) != len(defaultSettings) {
+			return false
+		}
+		for _, surface := range locale.Surfaces {
+			if _, ok := defaultSurfaces[surface.SurfaceID]; !ok {
+				return false
+			}
+		}
+		for _, setting := range locale.Settings {
+			expected, ok := defaultSettings[setting.Key]
+			if !ok || len(setting.Options) != len(expected.Options) {
+				return false
+			}
+			values := make(map[string]struct{}, len(expected.Options))
+			for _, option := range expected.Options {
+				values[option.Value] = struct{}{}
+			}
+			for _, option := range setting.Options {
+				if _, ok := values[option.Value]; !ok {
+					return false
+				}
+			}
+		}
+	}
+	return true
+}
+
+func validPresentationLocale(value string) bool {
+	if strings.TrimSpace(value) != value || value == "" {
+		return false
+	}
+	tag, err := language.Parse(value)
+	return err == nil && tag.String() == value
+}
+
+func validPresentationText(value string) bool {
+	return value != "" && utf8.ValidString(value) && strings.TrimSpace(value) == value && norm.NFC.String(value) == value && !strings.ContainsAny(value, "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e\x1f\x7f")
+}
+
+func hasDuplicateKeywords(values []string) bool {
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		key := strings.ToLower(value)
+		if _, exists := seen[key]; exists {
+			return true
+		}
+		seen[key] = struct{}{}
+	}
+	return false
+}
+
+func hasDuplicateIDs[T any](values []T, key func(T) string) bool {
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		id := key(value)
+		if _, exists := seen[id]; exists {
+			return true
+		}
+		seen[id] = struct{}{}
+	}
+	return false
 }
 
 func validateLatestRelease(release LatestRelease) error {
