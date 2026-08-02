@@ -26,7 +26,7 @@ import { PluginConfirmationDialog, createPluginConfirmationQueue } from './Plugi
 import { PluginCenterView } from './PluginCenterView';
 import { PluginPanel } from './PluginPanel';
 import { PluginUpdateReviewDialog } from './PluginUpdateReviewDialog';
-import { officialPluginCatalogFixture as officialPluginCatalog } from './officialPluginCatalog.test-fixture';
+import { OFFICIAL_PLUGIN_CATALOG_SEED } from './officialPluginCatalog.test-fixture';
 import { PLUGIN_MOBILE_TOUCH_TARGET_CLASS } from './pluginPresentation';
 import type { PluginSurfacePlacementCoordinator } from './pluginPlatform';
 import type {
@@ -35,7 +35,6 @@ import type {
   PluginInventoryItem,
   PluginInventoryProjection,
   PluginPanelModel,
-  PluginDevelopmentDelivery,
 } from './pluginTypes';
 
 const mediaCommands = commands as unknown as Readonly<{
@@ -61,31 +60,13 @@ const updateDialogViewportCases = [
   { width: 1440, height: 900 },
 ] as const;
 
-const browserDevelopmentDelivery: PluginDevelopmentDelivery = {
-  plugin_instance_id: 'plugini_redeven_official_containers',
-  publisher_id: 'com.redeven.official',
-  plugin_id: 'com.redeven.official.containers',
-  version: '4.0.0',
-  package_url: '/development/containers.redevplugin',
-  package_sha256: 'a'.repeat(64),
-  package_hash: 'sha256:target-package',
-  manifest_hash: 'sha256:target-manifest',
-  entries_hash: 'sha256:target-entries',
-  capability_version: '3.0.0',
-  release_notes_id: 'containers-4.0.0',
-  release_notes_summary_sha256: '0bdb5e7ab960173b2855cf31fef9f3d635f90325b90215fa10e6bb639459504e',
-  source_repository: 'https://github.com/floegence/redeven-official-plugins.git',
-  source_commit: 'b9eb04f6cc08eab35e0d0a8a5ac671ec5077aaed',
-  development_only: true,
-};
-
 const containersItem: PluginInventoryItem = {
   inventoryKey: 'instance:containers',
   pluginID: 'com.redeven.official.containers',
   pluginInstanceID: 'plugini_redeven_official_containers',
   displayName: 'Containers',
   description: 'Manage Docker and Podman resources without leaving the current environment.',
-  iconFallback: 'containers',
+  iconFallback: 'generic',
   category: 'infrastructure',
   searchKeywords: ['docker', 'podman'],
   publisher: 'Redeven',
@@ -163,7 +144,7 @@ const updateDialogItem: PluginInventoryItem = {
     manifestHash: 'sha256:previous-manifest',
     entriesHash: 'sha256:previous-entries',
   },
-  officialCatalog: officialPluginCatalog(browserDevelopmentDelivery)[0],
+  officialCatalog: OFFICIAL_PLUGIN_CATALOG_SEED[0],
   defaultLaunchTarget: {
     ...containersItem.defaultLaunchTarget!,
     expectedManagementRevision: 18,
@@ -387,7 +368,6 @@ function mountUpdateReviewDialog(): HTMLElement {
       onOpenChange={() => undefined}
       onInspect={async () => unavailableInspection()}
       onCommitExternal={async () => unavailableCommit()}
-      onCommitDevelopment={async () => undefined}
       onRefresh={() => undefined}
       onCommitted={() => undefined}
       onOpenActivity={() => undefined}
@@ -756,6 +736,8 @@ describe('plugin management browser geometry and interaction', () => {
     await settle();
 
     const card = host.querySelector<HTMLElement>('[data-plugin-directory-card="instance:containers"]')!;
+    expect(card.querySelector('[data-plugin-center-item] [lang="zh-CN"]')).not.toBeNull();
+    expect(card.querySelector('[data-plugin-center-item] [dir="auto"]')).not.toBeNull();
     const primary = card.querySelector<HTMLButtonElement>('[data-plugin-center-card-primary="instance:containers"]')!;
     const label = primary.querySelector<HTMLElement>('[data-plugin-center-card-primary-label]')!;
     const actions = card.querySelector<HTMLElement>('[data-plugin-center-card-actions]')!;

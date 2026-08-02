@@ -98,25 +98,6 @@ silently accepted or retried with broader authority.
 
 ## Package sources and lifecycle
 
-Dev Desktop has one explicit development-delivery exception for the Containers
-`4.0.0` candidate. `dev_desktop.sh` builds the candidate from the current
-checkout, creates a temporary Ed25519 capability identity, signs the v4
-capability artifacts, packages the exact 52 capability routes, deletes the
-private key, and passes an absolute descriptor only to the Desktop-managed dev
-Runtime. Startup verifies the descriptor schema, fixed plugin identity, package
-SHA-256, capability pin, public-key identity, signature, contract hash, version,
-binding, and every method route before it enables local generated plugins or
-registers the v4 adapter. Any missing, changed, or incomplete material blocks
-startup. The authenticated Env App may read the resulting metadata and package,
-then updates only the fixed Containers instance through ReDevPlugin's released
-local-import client with its current management revision and a second package
-SHA-256 check.
-
-This development path does not add a release source or alter production trust.
-Normal Runtime and production Desktop do not accept the dev-only CLI flag,
-developer mode remains disabled without a verified descriptor, and no temporary
-private key or generated delivery directory is committed.
-
 Production obtains the official Containers `4.1.0` release from the frozen
 latest-only market snapshot. The snapshot identifies the immutable GitHub
 Release and complete signed transport; it does not carry package bytes or grant

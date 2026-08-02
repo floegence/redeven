@@ -32,10 +32,7 @@ complete release transport before registration. Redeven does not embed the
 plugin package or implement an alternate package, token, confirmation,
 operation, or stream protocol.
 
-The v4 source contract and development plugin remain under candidate paths.
-Candidate verification proves deterministic generation, manifest v8, exact
-method policy, and absence of an activatable production package. The official
-capability bundle is separately stored under
+The official capability bundle is stored under
 `spec/redevplugin/official-containers-capability-v4/`; its public signing
 exchange and complete output are verified with the released ReDevPlugin
 `0.7.0` CLI. The matching plugin still requires its own authorized package
@@ -183,10 +180,7 @@ actions are disabled when inventory is stale, partial, or unavailable.
 - `redeven:internal/capabilities/containers/resources_v4_cli.go` - Resolves opaque endpoints and constructs explicit Docker context and Podman connection commands.
 - `redeven:internal/capabilities/containers/resources_v4_test.go` - Proves opaque endpoint binding, Compose volume retention, Pod confirmation, and rootless projection.
 - `redeven:internal/redevpluginintegration/containers_capability_v4.go` - Dispatches v4 requests through ReDevPlugin-owned invocation, operation, and stream contexts.
-- `redeven:scripts/check_containers_plugin_v4_candidate.sh` - Fetches the pinned official-plugin commit and validates the fail-closed v4 contract and plugin package.
-- `redeven:scripts/build_containers_v4_development_delivery.mjs` - Builds the ephemeral development package and binds its manifest to the committed production capability pin.
-- `redeven:scripts/containers_development_contract.mjs` - Loads and validates the exact signed production capability used by the development package builder.
-- `redeven:internal/redevpluginintegration/development_delivery.go` - Verifies the development descriptor and package against the Runtime's signed production contract before local-import enablement.
+- `redeven:scripts/check_plugin_integration.sh` - Verifies the published ReDevPlugin package set and official capability release boundary.
 - `redeven:internal/pluginmarket/service.go` - Freezes the validated latest-only market snapshot with a last-known-good fallback.
 - `redeven:internal/redevpluginintegration/release_module.go` - Projects the market release into the exact signed remote transport and capability pin.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/officialPluginCatalog.ts` - Projects current Containers discovery without embedding package bytes or a fixed release version.

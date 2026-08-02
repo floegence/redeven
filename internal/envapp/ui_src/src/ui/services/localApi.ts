@@ -122,6 +122,7 @@ export async function fetchLocalApiJSON<T>(url: string, init: RequestInit): Prom
 
 export type LocalApiJSONResponse<T> = Readonly<{
   data: T;
+  meta?: unknown;
   headers: Headers;
   status: number;
 }>;
@@ -166,6 +167,7 @@ export async function fetchLocalApiJSONResponse<T>(url: string, init: RequestIni
   }
   return {
     data: (data?.data ?? data) as T,
+    meta: data?.meta,
     headers: resp.headers,
     status: resp.status,
   };

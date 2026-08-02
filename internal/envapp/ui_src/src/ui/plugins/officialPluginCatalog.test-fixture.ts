@@ -1,6 +1,6 @@
 import { OFFICIAL_CONTAINERS_RELEASE_REF } from './officialContainersRelease.generated';
-import { applyOfficialDevelopmentDelivery, officialPluginCatalog } from './officialPluginCatalog';
-import type { PluginDevelopmentDelivery, PluginMarketSnapshot } from './pluginTypes';
+import { officialPluginCatalog } from './officialPluginCatalog';
+import type { OfficialPluginPermission, PluginMarketSnapshot } from './pluginTypes';
 
 export const OFFICIAL_PLUGIN_MARKET_SNAPSHOT: PluginMarketSnapshot = {
   schema_version: 'redeven.plugin_market_snapshot.v2',
@@ -48,10 +48,26 @@ export const OFFICIAL_PLUGIN_MARKET_SNAPSHOT: PluginMarketSnapshot = {
   }],
 };
 
-export const OFFICIAL_PLUGIN_CATALOG_SEED = officialPluginCatalog(OFFICIAL_PLUGIN_MARKET_SNAPSHOT);
+const containersPermissionFixture: readonly OfficialPluginPermission[] = [
+  {
+    permissionID: 'containers.read',
+    group: 'read',
+    requiredToOpen: true,
+    requiredToOpenMethods: ['containers.status', 'containers.list'],
+    methods: ['containers.status', 'containers.list', 'containers.inspect'],
+  },
+  {
+    permissionID: 'containers.execute',
+    group: 'execute',
+    requiredToOpen: false,
+    methods: ['containers.start'],
+  },
+];
 
-export function officialPluginCatalogFixture(developmentDelivery?: PluginDevelopmentDelivery) {
-  return developmentDelivery
-    ? applyOfficialDevelopmentDelivery(OFFICIAL_PLUGIN_CATALOG_SEED, developmentDelivery)
-    : OFFICIAL_PLUGIN_CATALOG_SEED;
-}
+// Permission declarations are supplied by Host inventory in production. This
+// fixture keeps projection tests focused on authorization state without making
+// the catalog adapter own a plugin-specific permission table.
+export const OFFICIAL_PLUGIN_CATALOG_SEED = officialPluginCatalog(OFFICIAL_PLUGIN_MARKET_SNAPSHOT).map((item) => ({
+  ...item,
+  permissions: containersPermissionFixture,
+}));

@@ -240,7 +240,6 @@ func (c *cli) runCmd(args []string) int {
 	passwordFile := fs.String("password-file", "", "File path holding the access password")
 	startupSecretsStdin := fs.Bool("startup-secrets-stdin", false, "Read the Desktop startup secrets envelope from stdin")
 	desktopManaged := fs.Bool("desktop-managed", false, "Disable CLI self-upgrade semantics for desktop-managed Local UI runs")
-	pluginDevelopmentDelivery := fs.String("plugin-development-delivery", "", "Load one verified local plugin development delivery (development builds only)")
 	startupReportFile := fs.String("startup-report-file", "", "Write Local UI readiness JSON to the given file (advanced)")
 	presentationRaw := fs.String("presentation", string(runtimepresentation.ModeAuto), "Startup presentation: auto|rich|plain|machine")
 	var desktopLaunchFailure func(string, string, config.StateLayout, int) int
@@ -304,10 +303,6 @@ func (c *cli) runCmd(args []string) int {
 			[]string{"Hint: use `redeven run --mode desktop --desktop-managed --presentation machine` for the packaged desktop shell."},
 			runHelpText(),
 		)
-		return 2
-	}
-	if strings.TrimSpace(*pluginDevelopmentDelivery) != "" && (!*desktopManaged || mode != runModeDesktop || !strings.Contains(Version, "dev")) {
-		writeErrorWithHelp(c.stderr, "`--plugin-development-delivery` requires a development Desktop-managed runtime", nil, runHelpText())
 		return 2
 	}
 	if strings.TrimSpace(*startupReportFile) != "" && mode == runModeRemote {
@@ -702,22 +697,21 @@ func (c *cli) runCmd(args []string) int {
 	localUILogger := slog.New(slog.NewTextHandler(logOutput, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 	a, err := agent.New(agent.Options{
-		Config:                    cfg,
-		ConfigPath:                stateLayout.ConfigPath,
-		StateRoot:                 stateLayout.StateRoot,
-		InstanceID:                runtimeInstanceID,
-		LocalUIBind:               localUIBind.ListenLabel(),
-		LocalUIEnabled:            localUIEnabled,
-		ControlChannelEnabled:     controlChannelEnabled,
-		DesktopManaged:            *desktopManaged,
-		PluginDevelopmentDelivery: strings.TrimSpace(*pluginDevelopmentDelivery),
-		EffectiveRunMode:          string(effectiveRunMode),
-		RemoteEnabled:             processRemoteEnabled,
-		Version:                   Version,
-		Commit:                    Commit,
-		BuildTime:                 BuildTime,
-		LogOutput:                 logOutput,
-		OnControlConnected:        announce,
+		Config:                cfg,
+		ConfigPath:            stateLayout.ConfigPath,
+		StateRoot:             stateLayout.StateRoot,
+		InstanceID:            runtimeInstanceID,
+		LocalUIBind:           localUIBind.ListenLabel(),
+		LocalUIEnabled:        localUIEnabled,
+		ControlChannelEnabled: controlChannelEnabled,
+		DesktopManaged:        *desktopManaged,
+		EffectiveRunMode:      string(effectiveRunMode),
+		RemoteEnabled:         processRemoteEnabled,
+		Version:               Version,
+		Commit:                Commit,
+		BuildTime:             BuildTime,
+		LogOutput:             logOutput,
+		OnControlConnected:    announce,
 		OnControlConnecting: func() {
 			_ = startupReporter.Emit(runtimepresentation.Event{
 				Kind:   runtimepresentation.EventPhaseStarted,

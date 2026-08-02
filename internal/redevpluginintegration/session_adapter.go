@@ -33,7 +33,7 @@ type sessionAdapter struct {
 	webSecurity   webSecurityGuard
 }
 
-func newSessionAdapter(resolve func(channelID string) (*session.Meta, bool), permissionPolicy *config.PermissionPolicy, developmentMode ...bool) (*sessionAdapter, error) {
+func newSessionAdapter(resolve func(channelID string) (*session.Meta, bool), permissionPolicy *config.PermissionPolicy) (*sessionAdapter, error) {
 	if resolve == nil {
 		return nil, errors.New("session resolver is required")
 	}
@@ -52,7 +52,7 @@ func newSessionAdapter(resolve func(channelID string) (*session.Meta, bool), per
 	}
 	return &sessionAdapter{
 		resolver:      resolver,
-		policy:        policyAdapter{sessions: cache, developmentMode: len(developmentMode) == 1 && developmentMode[0]},
+		policy:        policyAdapter{sessions: cache},
 		authorization: authorizationAdapter{sessions: cache},
 		webSecurity: webSecurityGuard{
 			resolver: resolver,
@@ -273,8 +273,7 @@ func canonicalPluginSessionContextFromMeta(expectedChannelID string, meta *sessi
 }
 
 type policyAdapter struct {
-	sessions        *sessionPermissionCache
-	developmentMode bool
+	sessions *sessionPermissionCache
 }
 
 func (p *policyAdapter) EvaluateLocalPolicy(_ context.Context, session sessionctx.Context, _ host.PluginRef, method manifest.MethodSpec) (host.PolicyDecision, error) {
@@ -286,11 +285,11 @@ func (p *policyAdapter) EvaluateLocalPolicy(_ context.Context, session sessionct
 }
 
 func (p *policyAdapter) DeveloperModeEnabled(context.Context, sessionctx.Context) (bool, error) {
-	return p != nil && p.developmentMode, nil
+	return false, nil
 }
 
 func (p *policyAdapter) LocalGeneratedPluginsEnabled(context.Context, sessionctx.Context) (bool, error) {
-	return p != nil && p.developmentMode, nil
+	return false, nil
 }
 
 func permissionAllowsEffect(perms sessionPermissions, effect manifest.MethodEffect) bool {

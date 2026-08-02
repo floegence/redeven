@@ -19,7 +19,6 @@ import type {
   PluginLifecycleState,
   PluginPresentationCategory,
   PluginTrustBadge,
-  PluginUpdateCandidate,
 } from './pluginTypes';
 import { createUIPresentationEventRecorder } from '../services/uiPresentationTransactions';
 import { ExternalPluginInstallDialog } from './ExternalPluginInstallDialog';
@@ -237,7 +236,9 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
       return;
     }
     const pluginID = item.pluginID;
-    const cached = marketDetailCache.get(pluginID);
+    const marketGeneration = item.officialCatalog.marketGeneration ?? 0;
+    const cacheKey = `${marketGeneration}:${pluginID}`;
+    const cached = marketDetailCache.get(cacheKey);
     const current = marketDetailState();
     if (current?.pluginID === pluginID && (current.loading || current.detail === cached)) return;
     if (cached) {
@@ -250,7 +251,11 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     setMarketDetailState({ pluginID, loading: true });
     void props.onLoadMarketDetail(pluginID, controller.signal).then((detail) => {
       if (marketDetailController !== controller) return;
-      marketDetailCache.set(pluginID, detail);
+      if (detail.generation !== undefined && detail.generation !== marketGeneration) {
+        setMarketDetailState({ pluginID, error: new Error('Plugin market generation changed'), loading: false });
+        return;
+      }
+      marketDetailCache.set(cacheKey, detail);
       setMarketDetailState({ pluginID, detail, loading: false });
     }).catch((error: unknown) => {
       if (marketDetailController !== controller || controller.signal.aborted) return;
@@ -261,7 +266,8 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   const retryMarketDetail = () => {
     const item = selectedItem();
     if (!item?.officialCatalog || item.pluginInstanceID || !props.onLoadMarketDetail) return;
-    marketDetailCache.delete(item.pluginID);
+    const marketGeneration = item.officialCatalog.marketGeneration ?? 0;
+    marketDetailCache.delete(`${marketGeneration}:${item.pluginID}`);
     setMarketDetailState(undefined);
   };
   const filtersActive = createMemo(() => query() !== ''
@@ -567,15 +573,6 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
         onCommitExternal={props.onCommitExternal ?? (async () => {
           throw new Error(i18n.t('uiCopy.plugin.external.commitFailed'));
         })}
-        onCommitDevelopment={async (candidate: PluginUpdateCandidate, signal) => {
-          await props.onCommand({
-            type: 'update',
-            pluginID: candidate.intent.pluginID,
-            pluginInstanceID: candidate.intent.pluginInstanceID,
-            expectedManagementRevision: candidate.intent.expectedManagementRevision,
-            targetVersion: candidate.targetVersion,
-          }, signal);
-        }}
         onRefresh={async () => {
           await props.onRefresh();
         }}

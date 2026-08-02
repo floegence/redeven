@@ -154,7 +154,9 @@ function projectCatalogItem(
       ? {
           pluginID: installed.plugin_id,
           pluginInstanceID: installed.plugin_instance_id,
-          surfaceID: catalogItem.defaultSurfaceID,
+          surfaceID: installed.manifest.surfaces.find((surface) => (
+            surface.kind === 'view' && (surface.intent ?? 'primary') === 'primary'
+          ))?.surface_id ?? catalogItem.defaultSurfaceID,
           displayName: manifestDisplayName(installed) || catalogItem.displayName,
           expectedManagementRevision: installed.management_revision,
           preferredPlacement: 'activity',
@@ -282,11 +284,6 @@ function catalogPluginKey(publisherID: string, pluginID: string): string {
 
 function isCatalogPackageRecord(record: ReDevPluginRecord, item: OfficialPluginCatalogItem): boolean {
   const release = item.distribution.releaseRef;
-  const development = item.distribution.developmentDelivery;
-  if (development && record.version === development.version
-    && record.trust_state === 'unsigned_local') {
-    return record.publisher_id === item.publisherID && record.plugin_id === item.pluginID;
-  }
   const currentReleaseMatches = record.version === release.version
     && record.package_hash === release.expected_hashes.package_sha256
     && record.manifest_hash === release.expected_hashes.manifest_sha256
@@ -316,7 +313,6 @@ function installedLifecycleState(
   authorization?: PluginAuthorizationInventory,
 ): PluginInventoryItem['lifecycleState'] {
   if (catalogItem.rolloutState === 'revoked' || catalogItem.rolloutState === 'disabled') return 'needs_attention';
-  if (isStaleDevelopmentPackage(installed, catalogItem)) return 'update_available';
   if (!isRunnableInstalledTrust(installed)) return 'needs_attention';
   if (installed.enable_state !== 'enabled') return 'disabled';
   if (compareVersion(installed.version, catalogItem.stableVersion) < 0) return 'update_available';
@@ -336,19 +332,6 @@ function canLaunchInstalledCatalogPlugin(
   return !authorization?.permissions.some((permission) => (
     permission.requiredToOpen && (!permission.granted || permission.deniedByGrant || permission.blockedToOpen)
   ));
-}
-
-function isStaleDevelopmentPackage(
-  installed: ReDevPluginRecord,
-  catalogItem: OfficialPluginCatalogItem,
-): boolean {
-  const development = catalogItem.distribution.developmentDelivery;
-  return Boolean(development
-    && installed.version === development.version
-    && installed.trust_state === 'unsigned_local'
-    && (installed.package_hash !== development.package_hash
-      || installed.manifest_hash !== development.manifest_hash
-      || installed.entries_hash !== development.entries_hash));
 }
 
 function installedTrustBadge(installed: ReDevPluginRecord, catalogItem: OfficialPluginCatalogItem): PluginInventoryItem['trustBadge'] {

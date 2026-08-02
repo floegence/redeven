@@ -23,7 +23,7 @@ function pluginItem(overrides: Partial<PluginInventoryItem> = {}): PluginInvento
     pluginInstanceID: 'plugininst_containers',
     displayName: 'Containers',
     description: 'Manage Docker and Podman resources.',
-    iconFallback: 'containers',
+    iconFallback: 'generic',
     category: 'infrastructure',
     searchKeywords: ['docker', 'podman'],
     publisher: 'Redeven',

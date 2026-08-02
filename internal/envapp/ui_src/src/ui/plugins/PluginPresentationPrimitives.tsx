@@ -1,5 +1,5 @@
 import { cn } from '@floegence/floe-webapp-core';
-import { Grid3x3, Settings } from '@floegence/floe-webapp-core/icons';
+import { Settings } from '@floegence/floe-webapp-core/icons';
 import { Show, createSignal, type JSX } from 'solid-js';
 
 import { useI18n } from '../i18n';
@@ -32,11 +32,7 @@ export function PluginIcon(props: {
         props.class,
       )}
     >
-      <Show when={props.item.iconURL && !imageFailed()} fallback={(
-        props.item.iconFallback === 'containers'
-          ? <Grid3x3 class={iconClass()} />
-          : <Settings class={iconClass()} />
-      )}>
+      <Show when={props.item.iconURL && !imageFailed()} fallback={<Settings class={iconClass()} />}>
         <img
           src={props.item.iconURL ?? ''}
           alt=""
@@ -129,6 +125,8 @@ export function PluginIdentityHeader(props: {
             ref={props.headingRef}
             tabIndex={props.headingRef ? -1 : undefined}
             data-plugin-center-detail-heading={props.headingRef ? '' : undefined}
+            lang={presentation()?.resolved_locale}
+            dir="auto"
             class="min-w-0 truncate text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {displayName()}
@@ -137,7 +135,7 @@ export function PluginIdentityHeader(props: {
           <PluginStatusBadge item={props.item} />
         </div>
         <div class="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-          <span class="truncate">{publisher()}</span>
+          <span class="truncate" lang={presentation()?.resolved_locale} dir="auto">{publisher()}</span>
           <Show when={props.item.version}><span>v{props.item.version}</span></Show>
         </div>
         <Show when={props.description}>

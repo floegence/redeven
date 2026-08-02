@@ -12,10 +12,8 @@ ReDevPlugin operation handle, and local observation record. The resource stays
 locked until terminal observation and fresh authoritative inventory prove the
 result. Lost submissions, stale plans, unavailable engines, and failed
 reconciliation are never replayed or shown as success. Production uses the
-signed Containers `4.0.1` release. Dev Desktop may build the pinned `4.0.0`
-source as a local package only when it binds the same signed v4 capability pin;
-the package remains outside official package trust and cannot add a development
-capability signing identity.
+signed Containers `4.1.0` release after complete ReDevPlugin package and
+publication evidence has been verified.
 
 # Contract
 
@@ -123,27 +121,12 @@ guessed.
 ## Release trust
 
 Containers source, tests, manifest, icon, and stable distribution are owned by
-`floegence/redeven-official-plugins`. Redeven pins one full remote commit and
-verifies the package and icon hashes before use. The v4 gate fetches that exact
-commit, runs the plugin's own tests and build, packages through the released
-ReDevPlugin CLI, validates manifest v7, version `4.0.0`, minimum runtime
-`0.6.21`, `plugin-ui-v7`, endpoint identity, and destructive method policy,
-and rejects package signatures or capability route drift. Redeven does not
-keep a plugin source tree, icon, or unsigned plugin-package candidate.
-
-Production discovery selects signed Containers `4.0.1` from the frozen
-latest-only market snapshot. The package and every trust document remain in the
-immutable GitHub Release; ReDevPlugin requires authorized capability and package
-signing plus matching root, pin, policy, revocation, ledger, and release
-metadata. Development bytes cannot substitute for those materials. For local
-product verification, `dev_desktop.sh` fetches the pinned official-plugin
-commit, binds all 52 exact routes to the committed production capability pin,
-and supplies a descriptor that records the immutable remote source only to the
-Desktop-managed development Runtime. The Runtime verifies its embedded signed
-capability, rejects any package whose binding differs from that production pin,
-and enables ReDevPlugin local import only for that process. Env App then updates the fixed Containers instance
-through the released local-import client after checking the package SHA-256 and
-current management revision. Production policy and release trust are unchanged.
+`floegence/redeven-official-plugins`. Redeven consumes only the complete signed
+`4.1.0` release selected by the frozen latest-only market snapshot. ReDevPlugin
+verifies package signing, capability signing, root delegation, source policy,
+revocation, ledger, release metadata, and package-set evidence before any
+registry mutation. Unsigned, partial, or locally built bytes cannot substitute
+for those materials.
 
 # Boundaries
 
@@ -158,8 +141,4 @@ package and integration ownership remains in [Plugin platform integration](plugi
 
 - `redeven:internal/pluginmarket/service.go` - Freezes the latest-only production release selection and validated transport.
 - `redeven:internal/redevpluginintegration/release_module.go` - Installs the complete signed GitHub Release transport through ReDevPlugin.
-- `redeven:scripts/check_containers_plugin_v4_candidate.sh` - Fetches, tests, builds, and validates the immutable remote v4 source without granting release trust.
-- `redeven:scripts/check_plugin_integration.sh` - Routes final ReDevPlugin integration validation through the current v4 candidate gate.
-- `redeven:scripts/build_containers_v4_development_delivery.mjs` - Produces the ephemeral Dev Desktop package bound to the signed production v4 capability.
-- `redeven:scripts/containers_development_contract.mjs` - Validates and projects the committed production capability into the development manifest.
-- `redeven:internal/redevpluginintegration/development_delivery.go` - Fails closed on descriptor, package, production pin, contract, or method-route mismatch.
+- `redeven:scripts/check_plugin_integration.sh` - Routes final ReDevPlugin integration validation through the published package-set and capability gates.

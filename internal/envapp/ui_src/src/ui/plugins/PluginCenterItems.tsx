@@ -73,7 +73,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
         <span class="flex min-w-0 items-start gap-3">
           <PluginIcon item={props.item} size="card" class="redeven-plugin-directory-card-icon" />
           <span class="min-w-0 flex-1 pt-0.5">
-            <span class="line-clamp-2 text-sm font-semibold leading-5">{displayName()}</span>
+            <span class="line-clamp-2 text-sm font-semibold leading-5" lang={presentation()?.resolved_locale} dir="auto">{displayName()}</span>
             <span class="mt-1 flex flex-wrap gap-1">
               <PluginTrustBadge item={props.item} />
             </span>
@@ -85,7 +85,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
             {(version) => <span>v{version()}</span>}
           </Show>
           <span aria-hidden="true">·</span>
-          <span>{publisher()}</span>
+          <span lang={presentation()?.resolved_locale} dir="auto">{publisher()}</span>
           <PluginStatusBadge item={props.item} />
         </span>
       </button>

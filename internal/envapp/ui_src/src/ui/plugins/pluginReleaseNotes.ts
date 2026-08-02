@@ -1,20 +1,8 @@
 import catalog from './officialPluginReleaseNotes.json';
-import type { PluginDevelopmentDelivery, PluginPackageIdentity, PluginReleaseNotes } from './pluginTypes';
+import type { PluginPackageIdentity, PluginReleaseNotes } from './pluginTypes';
 import type { PluginReleaseRef } from '@floegence/redevplugin-ui';
 
 type ReleaseNotesRecord = (typeof catalog.releases)[number];
-
-export function developmentReleaseNotes(delivery: PluginDevelopmentDelivery): PluginReleaseNotes | undefined {
-  const record = catalog.releases.find((entry) => entry.release_id === delivery.release_notes_id
-    && entry.plugin_id === delivery.plugin_id
-    && entry.target_version === delivery.version);
-  if (!record || record.summary_sha256 !== delivery.release_notes_summary_sha256) return undefined;
-  return projectNotes(record, {
-    packageHash: delivery.package_hash,
-    manifestHash: delivery.manifest_hash,
-    entriesHash: delivery.entries_hash,
-  });
-}
 
 export function officialReleaseNotes(pluginID: string, releaseRef: PluginReleaseRef): PluginReleaseNotes | undefined {
   const record = catalog.releases.find((entry) => entry.plugin_id === pluginID

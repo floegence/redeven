@@ -51,7 +51,7 @@ type containerCapabilityTask struct {
 	cancel context.CancelCauseFunc
 }
 
-func newContainersCapabilityRegistry(adapter *containers.Adapter, diagnostics observability.DiagnosticsSink, development ...*DevelopmentDelivery) (*capability.Registry, *containersCapabilityAdapter, error) {
+func newContainersCapabilityRegistry(adapter *containers.Adapter, diagnostics observability.DiagnosticsSink) (*capability.Registry, *containersCapabilityAdapter, error) {
 	if err := adapter.Validate(); err != nil {
 		return nil, nil, err
 	}
@@ -81,11 +81,6 @@ func newContainersCapabilityRegistry(adapter *containers.Adapter, diagnostics ob
 		Adapter:         bridge,
 	}); err != nil {
 		return nil, nil, fmt.Errorf("register containers capability: %w", err)
-	}
-	if len(development) == 1 && development[0] != nil {
-		if development[0].contract.Pin != bundle.Pin {
-			return nil, nil, errors.New("development containers capability does not match the signed production contract")
-		}
 	}
 	return registry, bridge, nil
 }
