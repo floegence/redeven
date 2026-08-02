@@ -142,6 +142,10 @@ type mutationDiffHunk struct {
 func buildMutationDiffHunks(before string, after string) []mutationDiffHunk {
 	beforeLines := splitMutationDiffLines(before)
 	afterLines := splitMutationDiffLines(after)
+	const maxDiffLines = 100_000
+	if len(beforeLines) > maxDiffLines || len(afterLines) > maxDiffLines {
+		return nil
+	}
 	prefix := 0
 	for prefix < len(beforeLines) && prefix < len(afterLines) && beforeLines[prefix] == afterLines[prefix] {
 		prefix++

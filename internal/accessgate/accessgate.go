@@ -2,8 +2,6 @@ package accessgate
 
 import (
 	"crypto/rand"
-	"crypto/sha256"
-	"crypto/subtle"
 	"encoding/base64"
 	"errors"
 	"log/slog"
@@ -12,6 +10,7 @@ import (
 	"time"
 
 	"github.com/floegence/redeven/internal/session"
+	"golang.org/x/crypto/bcrypt"
 )
 
 const (
@@ -89,7 +88,7 @@ type failedAttemptState struct {
 type Gate struct {
 	log             *slog.Logger
 	enabled         bool
-	passwordDigest  [32]byte
+	passwordHash    []byte
 	resumeTTL       time.Duration
 	localSessionTTL time.Duration
 	attemptPolicy   AttemptPolicy
@@ -118,13 +117,19 @@ func New(opts Options) *Gate {
 
 	password := opts.Password
 	enabled := password != ""
-	digest := sha256.Sum256([]byte(password))
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		// bcrypt only fails for an invalid cost or an oversized password. Keep the
+		// gate disabled rather than retaining a weak password representation.
+		passwordHash = nil
+		enabled = false
+	}
 	attemptPolicy := normalizeAttemptPolicy(opts.AttemptPolicy)
 
 	return &Gate{
 		log:             logger,
 		enabled:         enabled,
-		passwordDigest:  digest,
+		passwordHash:    passwordHash,
 		resumeTTL:       resumeTTL,
 		localSessionTTL: localSessionTTL,
 		attemptPolicy:   attemptPolicy,
@@ -143,8 +148,10 @@ func (g *Gate) VerifyPassword(password string) bool {
 	if g == nil || !g.enabled {
 		return true
 	}
-	candidate := sha256.Sum256([]byte(password))
-	return subtle.ConstantTimeCompare(candidate[:], g.passwordDigest[:]) == 1
+	if len(g.passwordHash) == 0 {
+		return false
+	}
+	return bcrypt.CompareHashAndPassword(g.passwordHash, []byte(password)) == nil
 }
 
 func (g *Gate) RegisterChannel(meta session.Meta) {
@@ -664,7 +671,7 @@ func (g *Gate) verifyPasswordForSubject(password string, subject string) error {
 		delete(g.failedAttempts, subjectKey)
 		return nil
 	}
-	return g.recordFailedAttemptLocked(now, subjectKey)
+	return g.recordFailedAttemptLocked(time.Now(), subjectKey)
 }
 
 func (g *Gate) retryAfterLocked(now time.Time, subject string) time.Duration {

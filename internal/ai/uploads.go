@@ -178,6 +178,10 @@ func newUploadInspector() *uploadInspector {
 }
 
 func (i *uploadInspector) Write(p []byte) (int, error) {
+	const maxInspectorChunkBytes = 16 << 20
+	if len(p) > maxInspectorChunkBytes {
+		return 0, fmt.Errorf("upload chunk exceeds %d bytes", maxInspectorChunkBytes)
+	}
 	if len(i.head) < 512 {
 		remaining := 512 - len(i.head)
 		if remaining > len(p) {
@@ -428,6 +432,9 @@ func (s *Service) SaveUpload(ctx context.Context, req SaveUploadRequest) (*Uploa
 	}
 	if req.MaxBytes <= 0 {
 		req.MaxBytes = 10 << 20
+	}
+	if req.MaxBytes > 10<<20 {
+		return nil, NewUploadError(UploadErrorTooLarge, false, fmt.Errorf("attachment exceeds %d byte limit", 10<<20))
 	}
 	if req.ExpectedSizeBytes < 0 || req.ExpectedSizeBytes > req.MaxBytes {
 		return nil, NewUploadError(UploadErrorTooLarge, false, fmt.Errorf("attachment exceeds %d byte limit", req.MaxBytes))

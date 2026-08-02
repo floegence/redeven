@@ -7175,7 +7175,7 @@
         "title": "Permission policy and filesystem scope",
         "type": "Security Contract"
       },
-      "body_length": 8321,
+      "body_length": 9681,
       "summary": "Redeven treats endpoint runtime policy as authoritative. Control-plane grants can authorize a session, but the runtime clamps those grants with a local permission policy and file-facing features use explicit filesystem root policy.\n\nRuntime permissions are clamped by local policy and file features are scoped by directory root policy.",
       "sections": [
         {
@@ -7189,8 +7189,8 @@
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Browser state, display-only Home hints, provider metadata, and UI affordances cannot widen runtime permissions. A UI that still exposes a terminal under execute-only access is a product bug, but the Terminal RPC independently enforces the same write-and-execute process boundary. Local API filesystem list endpoints are not a write surface and do not grant access outside configured roots. Operating-system readability alone does not authorize a path: access exists only where the current session, configured filesystem root, canonical path boundary, and actual host read all permit it. Future file, Git, Flower, Code App, and terminal changes should update OKF only after the runtime code or typed policy changes.\n\nPermission effects, resource kinds, tool names, arguments, file paths, shell text, approval requirements, and UI queue position must not be used to infer tool-call dependencies or force execution order. Models express dependency by waiting for the prerequisite result and emitting the dependent call in a later response. Provider wire configuration may enable multi-call generation, but it cannot grant permission, bypass approval, or alter runtime scheduling.",
-          "char_count": 1176
+          "body": "Browser state, display-only Home hints, provider metadata, and UI affordances cannot widen runtime permissions. A UI that still exposes a terminal under execute-only access is a product bug, but the Terminal RPC independently enforces the same write-and-execute process boundary. Local API filesystem list endpoints are not a write surface and do not grant access outside configured roots. Operating-system readability alone does not authorize a path: access exists only where the current session, configured filesystem root, canonical path boundary, and actual host read all permit it. Future file, Git, Flower, Code App, and terminal changes should update OKF only after the runtime code or typed policy changes.\n\nArchive extraction, skill import, and release-cache writes apply the same boundary discipline. Archive entries and symlink targets must resolve beneath a private staging root before creation; skill copies reject symbolic links and resolve the nearest existing ancestor before any read or write; downloaded release evidence is written through exclusive `0600` descriptors and atomically renamed. Password gates use a computationally expensive password hash, and failed-attempt cooldown timestamps are recorded after verification so hashing latency cannot silently bypass throttling. Structured logs replace control characters and bound untrusted values to prevent log injection.\n\nPermission effects, resource kinds, tool names, arguments, file paths, shell text, approval requirements, and UI queue position must not be used to infer tool-call dependencies or force execution order. Models express dependency by waiting for the prerequisite result and emitting the dependent call in a later response. Provider wire configuration may enable multi-call generation, but it cannot grant permission, bypass approval, or alter runtime scheduling.",
+          "char_count": 1855
         }
       ],
       "evidence": [
@@ -7283,6 +7283,36 @@
           "source": "redeven:internal/ai/approval_conflict.go",
           "line": 9,
           "description": "Approval state races have a dedicated sentinel and stable error code."
+        },
+        {
+          "id": "redeven:internal/codeapp/codeserver/artifact.go:342:managed runtime archive symlinks are resolved inside the staging root before creation.",
+          "source": "redeven:internal/codeapp/codeserver/artifact.go",
+          "line": 342,
+          "description": "Managed runtime archive symlinks are resolved inside the staging root before creation."
+        },
+        {
+          "id": "redeven:internal/ai/skill_manager_remote.go:1339:skill copies reject symbolic links and resolve existing ancestors before filesystem operations.",
+          "source": "redeven:internal/ai/skill_manager_remote.go",
+          "line": 1339,
+          "description": "Skill copies reject symbolic links and resolve existing ancestors before filesystem operations."
+        },
+        {
+          "id": "redeven:desktop/src/main/sshReleaseAssets.ts:271:verified release downloads use exclusive private temporary files and atomic publication.",
+          "source": "redeven:desktop/src/main/sshReleaseAssets.ts",
+          "line": 271,
+          "description": "Verified release downloads use exclusive private temporary files and atomic publication."
+        },
+        {
+          "id": "redeven:internal/accessgate/accessgate.go:117:local access passwords use bcrypt and throttling records the post-verification failure time.",
+          "source": "redeven:internal/accessgate/accessgate.go",
+          "line": 117,
+          "description": "Local access passwords use bcrypt and throttling records the post-verification failure time."
+        },
+        {
+          "id": "redeven:internal/logsafe/logsafe.go:10:structured log values are single-line and bounded.",
+          "source": "redeven:internal/logsafe/logsafe.go",
+          "line": 10,
+          "description": "Structured log values are single-line and bounded."
         }
       ],
       "snippet": "Redeven treats endpoint runtime policy as authoritative. Control-plane grants can authorize a session, but the runtime clamps those grants with a local permission policy and file-facing features use explicit filesystem root policy.",
@@ -10037,5 +10067,5 @@
       ]
     }
   ],
-  "source_sha256": "7f92ab74cfe3c5bf99a752e2c65b69bd32cf6d8876df508d653c718845bc0211"
+  "source_sha256": "117f3e3204f147daa2a60a5878e86a9b69e8cb2eb573b86271c1b601bc8aab89"
 }

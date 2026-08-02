@@ -15,6 +15,7 @@ import (
 	"github.com/floegence/redeven/internal/agent"
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/codeapp/appserver"
+	"github.com/floegence/redeven/internal/logsafe"
 	"github.com/floegence/redeven/internal/runtimemanagement"
 	"github.com/gorilla/websocket"
 )
@@ -463,7 +464,7 @@ func (s *runtimeControlServer) handleDesktopModelSourceRPC(w http.ResponseWriter
 	}
 	err = s.agent.ServeDesktopModelSourceRPC(r.Context(), session, conn, s.notifyRuntimeServiceChanged)
 	if err != nil && s.log != nil {
-		s.log.Warn("desktop model source rpc closed", "error", err)
+		s.log.Warn("desktop model source rpc closed", "error", logsafe.Error(err))
 	}
 }
 

@@ -169,7 +169,25 @@ function collectInstalledJavaScriptLicenseEvidence() {
 }
 
 function sha256File(filePath) {
-  return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+  const descriptor = fs.openSync(filePath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
+  try {
+    const stat = fs.fstatSync(descriptor);
+    if (!stat.isFile()) throw new Error(`artifact must be a regular file: ${filePath}`);
+    return crypto.createHash('sha256').update(fs.readFileSync(descriptor)).digest('hex');
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
+function readRegularFile(filePath, encoding = 'utf8') {
+  const descriptor = fs.openSync(filePath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
+  try {
+    const stat = fs.fstatSync(descriptor);
+    if (!stat.isFile()) throw new Error(`artifact must be a regular file: ${filePath}`);
+    return fs.readFileSync(descriptor, encoding);
+  } finally {
+    fs.closeSync(descriptor);
+  }
 }
 
 function collectFloetermThemeNotices() {
@@ -309,7 +327,7 @@ function collectTerminalAgentIconAssets() {
 
   return {
     rows,
-    licenseText: fs.readFileSync(licensePath, 'utf8').trim(),
+    licenseText: readRegularFile(licensePath, 'utf8').trim(),
   };
 }
 

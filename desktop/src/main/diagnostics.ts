@@ -242,19 +242,25 @@ function rotatedFilePrefix(): string {
 
 async function rotateIfNeeded(stateDir: string): Promise<void> {
   const activePath = activeFilePath(stateDir);
-  let stat;
+  let fileHandle;
   try {
-    stat = await fs.stat(activePath);
+    fileHandle = await fs.open(activePath, 'r');
+    const stat = await fileHandle.stat();
+    if (stat.size <= DEFAULT_MAX_BYTES) return;
   } catch {
     return;
-  }
-  if (stat.size <= DEFAULT_MAX_BYTES) {
-    return;
+  } finally {
+    await fileHandle?.close().catch(() => undefined);
   }
   const dir = diagnosticsDir(stateDir);
   const rotatedPath = path.join(dir, `desktop-events-${Date.now()}-${crypto.randomBytes(4).toString('hex')}.jsonl`);
-  await fs.rename(activePath, rotatedPath);
-  await fs.writeFile(activePath, '', { mode: 0o600 });
+  try {
+    await fs.rename(activePath, rotatedPath);
+    await fs.writeFile(activePath, '', { flag: 'wx', mode: 0o600 });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    return;
+  }
   const names = (await fs.readdir(dir)).filter((name) => name.startsWith(rotatedFilePrefix()) && name.endsWith('.jsonl')).sort();
   const stale = names.slice(0, Math.max(0, names.length - DEFAULT_MAX_BACKUPS));
   await Promise.all(stale.map((name) => fs.rm(path.join(dir, name), { force: true })));

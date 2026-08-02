@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { createServer } from 'node:http';
-import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { mkdir, open, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
@@ -293,9 +293,15 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
         return;
       }
       const filePath = path.join(distDir, normalizedRelativePath);
-      const fileStat = await stat(filePath);
-      if (!fileStat.isFile()) throw new Error(`not a file: ${normalizedRelativePath}`);
-      const data = await readFile(filePath);
+      const fileHandle = await open(filePath, 'r');
+      let data;
+      try {
+        const fileStat = await fileHandle.stat();
+        if (!fileStat.isFile()) throw new Error(`not a file: ${normalizedRelativePath}`);
+        data = await fileHandle.readFile();
+      } finally {
+        await fileHandle.close();
+      }
       response.writeHead(200, {
         'cache-control': normalizedRelativePath === 'index.html'
           ? 'no-store'

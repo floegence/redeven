@@ -817,6 +817,7 @@ func (s *Server) setLocalAccessCookie(w http.ResponseWriter, token string, expir
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   true,
 		SameSite: http.SameSiteLaxMode,
 		Expires:  expiresAt,
 	})
@@ -831,6 +832,7 @@ func (s *Server) clearLocalAccessCookie(w http.ResponseWriter) {
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   true,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   -1,
 		Expires:  time.Unix(0, 0),

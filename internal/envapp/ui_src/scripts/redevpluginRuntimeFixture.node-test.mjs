@@ -41,8 +41,8 @@ test('installs the fixture only for Linux and preserves executable-only permissi
       arch: 'x64',
     });
     assert.equal(runtimePath, path.join(linuxRoot, 'redevplugin-runtime'));
-    assert.equal((await stat(runtimePath)).mode & 0o777, 0o500);
     assert.equal((await readFile(runtimePath)).length, 64);
+    assert.equal((await stat(runtimePath)).mode & 0o777, 0o500);
     verifyELF(runtimePath, 'linux/amd64');
 
     assert.equal(await installReDevPluginRuntimeFixture(darwinRoot, {

@@ -29,6 +29,8 @@ Approval authorization is independent from tool execution concurrency. Multiple 
 
 Browser state, display-only Home hints, provider metadata, and UI affordances cannot widen runtime permissions. A UI that still exposes a terminal under execute-only access is a product bug, but the Terminal RPC independently enforces the same write-and-execute process boundary. Local API filesystem list endpoints are not a write surface and do not grant access outside configured roots. Operating-system readability alone does not authorize a path: access exists only where the current session, configured filesystem root, canonical path boundary, and actual host read all permit it. Future file, Git, Flower, Code App, and terminal changes should update OKF only after the runtime code or typed policy changes.
 
+Archive extraction, skill import, and release-cache writes apply the same boundary discipline. Archive entries and symlink targets must resolve beneath a private staging root before creation; skill copies reject symbolic links and resolve the nearest existing ancestor before any read or write; downloaded release evidence is written through exclusive `0600` descriptors and atomically renamed. Password gates use a computationally expensive password hash, and failed-attempt cooldown timestamps are recorded after verification so hashing latency cannot silently bypass throttling. Structured logs replace control characters and bound untrusted values to prevent log injection.
+
 Permission effects, resource kinds, tool names, arguments, file paths, shell text, approval requirements, and UI queue position must not be used to infer tool-call dependencies or force execution order. Models express dependency by waiting for the prerequisite result and emitting the dependent call in a later response. Provider wire configuration may enable multi-call generation, but it cannot grant permission, bypass approval, or alter runtime scheduling.
 
 # Evidence
@@ -48,3 +50,8 @@ Permission effects, resource kinds, tool names, arguments, file paths, shell tex
 - `redeven:internal/ai/run.go:2957` - Final handler authorization refreshes current settings and rejects snapshot or decision drift.
 - `redeven:internal/ai/flower_live_projection.go:726` - Approval submission validates queue and action CAS state before dispatching a decision.
 - `redeven:internal/ai/approval_conflict.go:9` - Approval state races have a dedicated sentinel and stable error code.
+- `redeven:internal/codeapp/codeserver/artifact.go:342` - Managed runtime archive symlinks are resolved inside the staging root before creation.
+- `redeven:internal/ai/skill_manager_remote.go:1339` - Skill copies reject symbolic links and resolve existing ancestors before filesystem operations.
+- `redeven:desktop/src/main/sshReleaseAssets.ts:271` - Verified release downloads use exclusive private temporary files and atomic publication.
+- `redeven:internal/accessgate/accessgate.go:117` - Local access passwords use bcrypt and throttling records the post-verification failure time.
+- `redeven:internal/logsafe/logsafe.go:10` - Structured log values are single-line and bounded.

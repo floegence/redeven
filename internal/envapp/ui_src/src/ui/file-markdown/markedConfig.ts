@@ -38,7 +38,6 @@ function slugHeadingText(text: string): string {
   const slug = String(text ?? '')
     .trim()
     .toLowerCase()
-    .replace(/<[^>]*>/g, '')
     .replace(/[^\p{L}\p{N}\s_-]+/gu, '')
     .replace(/\s+/g, '-')
     .replace(/-+/g, '-')

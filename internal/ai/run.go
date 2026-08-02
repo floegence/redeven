@@ -3918,6 +3918,12 @@ func newReadonlyGlobMatcher(globs []string) (func(string) bool, error) {
 }
 
 func readonlyContextWindow(lines []string, matchIdx int, contextLines int) []readonlyGrepContext {
+	if contextLines < 0 {
+		contextLines = 0
+	}
+	if contextLines > 1_000_000 {
+		contextLines = 1_000_000
+	}
 	start := matchIdx - contextLines
 	if start < 0 {
 		start = 0

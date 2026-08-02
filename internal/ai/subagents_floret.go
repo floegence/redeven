@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
@@ -20,6 +21,7 @@ import (
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/logsafe"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/websearch"
 )
@@ -652,8 +654,9 @@ func stableSecretDigest(value string) string {
 	if value == "" {
 		return ""
 	}
-	sum := sha256.Sum256([]byte(value))
-	return hex.EncodeToString(sum[:])
+	mac := hmac.New(sha256.New, []byte("redeven-secret-digest-v1"))
+	_, _ = mac.Write([]byte(value))
+	return hex.EncodeToString(mac.Sum(nil))
 }
 
 func subagentModelCapabilityFingerprint(capability contextmodel.ModelCapability) string {
@@ -2619,7 +2622,7 @@ func (s *Service) publishFlowerSubagentsPatch(ctx context.Context, endpointID st
 	subagents, err := s.listFlowerSubagentsForEndpoint(ctxOrBackground(ctx), endpointID, parentThreadID)
 	if err != nil {
 		if s.log != nil {
-			s.log.Warn("ai: failed to publish flower subagents patch", "endpoint_id", endpointID, "thread_id", parentThreadID, "error", err)
+			s.log.Warn("ai: failed to publish flower subagents patch", "endpoint_id", logsafe.Text(endpointID, 256), "thread_id", logsafe.Text(parentThreadID, 256), "error", logsafe.Error(err))
 		}
 		return
 	}
@@ -2706,7 +2709,7 @@ func (s *Service) GetFlowerSubagentDetail(ctx context.Context, meta *session.Met
 		}
 		if err != nil {
 			if s.log != nil {
-				s.log.Warn("ai: rejected Floret subagent detail contract", "thread_id", parentThreadID, "child_thread_id", childThreadID, "error", err)
+				s.log.Warn("ai: rejected Floret subagent detail contract", "thread_id", logsafe.Text(parentThreadID, 256), "child_thread_id", logsafe.Text(childThreadID, 256), "error", logsafe.Error(err))
 			}
 			return nil, fmt.Errorf("invalid Floret subagent detail contract: %w", err)
 		}

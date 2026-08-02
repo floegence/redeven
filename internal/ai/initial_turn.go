@@ -11,6 +11,7 @@ import (
 
 	flruntime "github.com/floegence/floret/v3/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
+	"github.com/floegence/redeven/internal/logsafe"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -294,7 +295,7 @@ func (s *Service) logInitialTurnFailure(phase, clientRequestID, turnID string, e
 	if s == nil || s.log == nil || err == nil {
 		return
 	}
-	s.log.Warn("flower initial turn failed", "phase", strings.TrimSpace(phase), "client_request_id", strings.TrimSpace(clientRequestID), "turn_id", strings.TrimSpace(turnID), "error_class", classifyInitialTurnError(err))
+	s.log.Warn("flower initial turn failed", "phase", logsafe.Text(phase, 128), "client_request_id", logsafe.Text(clientRequestID, 256), "turn_id", logsafe.Text(turnID, 256), "error_class", classifyInitialTurnError(err))
 }
 
 func classifyInitialTurnError(err error) string {

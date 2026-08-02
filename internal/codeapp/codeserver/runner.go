@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/floegence/redeven/internal/logsafe"
 	"github.com/floegence/redeven/internal/processenv"
 )
 
@@ -204,6 +205,10 @@ func (r *Runner) StopAll() error {
 }
 
 func (r *Runner) start(codeSpaceID string, workspacePath string, port int) (*Instance, error) {
+	codeSpaceID = strings.TrimSpace(codeSpaceID)
+	if !safeCodeSpaceID(codeSpaceID) {
+		return nil, errors.New("invalid code space id")
+	}
 	if port <= 0 || port > 65535 {
 		return nil, errors.New("invalid port")
 	}
@@ -256,15 +261,15 @@ func (r *Runner) start(codeSpaceID string, workspacePath string, port int) (*Ins
 	_ = os.Remove(sessionSocketPath) // best-effort cleanup of a stale socket
 
 	if killed, err := r.killStaleCodeServerProcessesBySessionSocket(sessionSocketPath); err != nil {
-		r.log.Warn("failed to cleanup stale code-server processes", "code_space_id", codeSpaceID, "session_socket", sessionSocketPath, "error", err)
+		r.log.Warn("failed to cleanup stale code-server processes", "code_space_id", logsafe.Text(codeSpaceID, 128), "session_socket", logsafe.Text(sessionSocketPath, 512), "error", logsafe.Error(err))
 	} else if killed > 0 {
-		r.log.Warn("killed stale code-server process(es)", "code_space_id", codeSpaceID, "session_socket", sessionSocketPath, "count", killed)
+		r.log.Warn("killed stale code-server process(es)", "code_space_id", logsafe.Text(codeSpaceID, 128), "session_socket", logsafe.Text(sessionSocketPath, 512), "count", killed)
 	}
 	workspaceStoragePath := filepath.Join(userDataDir, "User", "workspaceStorage")
 	if removed, err := cleanupWorkspaceStorageLocks(workspaceStoragePath); err != nil {
-		r.log.Warn("failed to cleanup workspace storage locks", "code_space_id", codeSpaceID, "path", workspaceStoragePath, "error", err)
+		r.log.Warn("failed to cleanup workspace storage locks", "code_space_id", logsafe.Text(codeSpaceID, 128), "path", logsafe.Text(workspaceStoragePath, 512), "error", logsafe.Error(err))
 	} else if removed > 0 {
-		r.log.Info("cleaned workspace storage lock(s)", "code_space_id", codeSpaceID, "path", workspaceStoragePath, "count", removed)
+		r.log.Info("cleaned workspace storage lock(s)", "code_space_id", logsafe.Text(codeSpaceID, 128), "path", logsafe.Text(workspaceStoragePath, 512), "count", removed)
 	}
 
 	stdoutPath := filepath.Join(spaceDir, "stdout.log")
@@ -666,8 +671,23 @@ func (r *Runner) sessionSocketPathForCodeSpace(codeSpaceID string) string {
 	id := strings.TrimSpace(codeSpaceID)
 	id = strings.ReplaceAll(id, "/", "_")
 	id = strings.ReplaceAll(id, "\\", "_")
+	if !safeCodeSpaceID(id) {
+		return filepath.Join(r.stateDir, "apps", "code", "invalid", "codeserver", "code-server-ipc.sock")
+	}
 	sessionSocketDir := filepath.Join(strings.TrimSpace(r.stateDir), "socks")
 	return filepath.Join(sessionSocketDir, fmt.Sprintf("cs-%s.sock", id))
+}
+
+func safeCodeSpaceID(id string) bool {
+	if id == "" || len(id) > 128 || filepath.Base(id) != id {
+		return false
+	}
+	for _, r := range id {
+		if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') && r != '-' && r != '_' {
+			return false
+		}
+	}
+	return true
 }
 
 func (r *Runner) killStaleCodeServerProcessesBySessionSocket(sessionSocketPath string) (int, error) {

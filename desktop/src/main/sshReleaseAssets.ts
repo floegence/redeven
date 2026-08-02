@@ -259,20 +259,28 @@ async function downloadURLToPath(
   targetPath: string,
   fetchPolicy?: DesktopSSHReleaseFetchPolicy,
 ): Promise<void> {
-  const targetDir = path.dirname(targetPath);
-  const tempPath = path.join(
-    targetDir,
-    `.${path.basename(targetPath)}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`,
-  );
   const data = await withFetchedReleaseAsset(sourceURL, fetchPolicy, async (response, signal) => {
     const buffer = Buffer.from(await response.arrayBuffer());
     throwIfReleaseFetchCanceled(signal);
     return buffer;
   });
+  await writePrivateFileAtomically(targetPath, data);
+}
+
+async function writePrivateFileAtomically(targetPath: string, data: Buffer | string): Promise<void> {
+  const targetDir = path.dirname(targetPath);
+  await fs.mkdir(targetDir, { recursive: true, mode: 0o700 });
+  const tempPath = path.join(targetDir, `.${path.basename(targetPath)}.${process.pid}.${randomBytes(16).toString('hex')}.tmp`);
+  let handle: Awaited<ReturnType<typeof fs.open>> | undefined;
   try {
-    await fs.writeFile(tempPath, data);
+    handle = await fs.open(tempPath, 'wx', 0o600);
+    await handle.writeFile(data);
+    await handle.sync();
+    await handle.close();
+    handle = undefined;
     await fs.rename(tempPath, targetPath);
   } finally {
+    await handle?.close().catch(() => undefined);
     await fs.rm(tempPath, { force: true }).catch(() => undefined);
   }
 }
@@ -336,7 +344,7 @@ export async function ensureDesktopSSHVerifiedReleaseManifest(
   const signaturePath = path.join(cacheDir, 'SHA256SUMS.sig');
   const certificatePath = path.join(cacheDir, 'SHA256SUMS.pem');
 
-  await fs.mkdir(cacheDir, { recursive: true });
+  await fs.mkdir(cacheDir, { recursive: true, mode: 0o700 });
 
   const cachedSums = await readOptionalBuffer(sumsPath);
   const cachedSignature = await readOptionalBuffer(signaturePath);
@@ -368,9 +376,9 @@ export async function ensureDesktopSSHVerifiedReleaseManifest(
     certificate,
   });
   await Promise.all([
-    fs.writeFile(sumsPath, sumsText, 'utf8'),
-    fs.writeFile(signaturePath, signature),
-    fs.writeFile(certificatePath, certificate),
+    writePrivateFileAtomically(sumsPath, sumsText),
+    writePrivateFileAtomically(signaturePath, signature),
+    writePrivateFileAtomically(certificatePath, certificate),
   ]);
   return manifest;
 }

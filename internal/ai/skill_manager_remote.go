@@ -1277,16 +1277,22 @@ func (m *skillManager) installOneSkillLocked(srcDir string, targetDir string, ov
 	if err := os.MkdirAll(filepath.Dir(targetDir), 0o755); err != nil {
 		return newSkillError(ErrCodeAISkillsInternal, http.StatusInternalServerError, "failed to prepare destination root", err)
 	}
-	staging := targetDir + ".incoming." + strconv.FormatInt(time.Now().UnixNano(), 10)
+	staging, err := os.MkdirTemp(filepath.Dir(targetDir), ".skill-incoming-")
+	if err != nil {
+		return newSkillError(ErrCodeAISkillsInternal, http.StatusInternalServerError, "failed to prepare skill staging directory", err)
+	}
 	if err := copyDirectory(srcDir, staging); err != nil {
 		return newSkillError(ErrCodeAISkillsInternal, http.StatusInternalServerError, "failed to stage skill files", err)
 	}
 	defer os.RemoveAll(staging)
 
-	_, statErr := os.Stat(targetDir)
+	targetInfo, statErr := os.Lstat(targetDir)
 	targetExists := statErr == nil
 	if statErr != nil && !os.IsNotExist(statErr) {
 		return newSkillError(ErrCodeAISkillsInternal, http.StatusInternalServerError, "failed to inspect target skill directory", statErr)
+	}
+	if targetExists && targetInfo.Mode()&os.ModeSymlink != 0 {
+		return newSkillError(ErrCodeAISkillsPathEscape, http.StatusUnprocessableEntity, "target skill directory cannot be a symbolic link", nil)
 	}
 	if targetExists && !overwrite {
 		return newSkillError(ErrCodeAISkillsSkillExists, http.StatusConflict, fmt.Sprintf("skill already exists: %s", filepath.Base(targetDir)), nil)
@@ -1330,6 +1336,9 @@ func copyDirectory(src string, dst string) error {
 		if rel == "." {
 			return os.MkdirAll(dst, 0o755)
 		}
+		if d.Type()&os.ModeSymlink != 0 {
+			return fmt.Errorf("skill archive contains unsupported symbolic link: %s", rel)
+		}
 		target := filepath.Join(dst, rel)
 		if err := ensurePathWithinRoot(dst, target); err != nil {
 			return err
@@ -1353,6 +1362,43 @@ func ensurePathWithinRoot(root string, target string) error {
 	target = filepath.Clean(strings.TrimSpace(target))
 	if root == "" || target == "" {
 		return fmt.Errorf("empty path")
+	}
+	root, err := filepath.Abs(root)
+	if err != nil {
+		return err
+	}
+	root, err = filepath.EvalSymlinks(root)
+	if err != nil {
+		return err
+	}
+	target, err = filepath.Abs(target)
+	if err != nil {
+		return err
+	}
+	// Resolve the nearest existing ancestor so a symlink cannot redirect a
+	// not-yet-created child outside the skill root.
+	current := target
+	var tail []string
+	for {
+		if _, statErr := os.Lstat(current); statErr == nil {
+			current, err = filepath.EvalSymlinks(current)
+			if err != nil {
+				return err
+			}
+			for i := len(tail) - 1; i >= 0; i-- {
+				current = filepath.Join(current, tail[i])
+			}
+			target = filepath.Clean(current)
+			break
+		} else if !os.IsNotExist(statErr) {
+			return statErr
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			return fmt.Errorf("failed to resolve path ancestor")
+		}
+		tail = append(tail, filepath.Base(current))
+		current = parent
 	}
 	rel, err := filepath.Rel(root, target)
 	if err != nil {

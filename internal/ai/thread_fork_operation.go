@@ -10,6 +10,7 @@ import (
 	"github.com/floegence/floret/v3/identity"
 	flruntime "github.com/floegence/floret/v3/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
+	"github.com/floegence/redeven/internal/logsafe"
 )
 
 const threadForkReplayBatchSize = 20
@@ -156,7 +157,7 @@ func (s *Service) publishCommittedThreadForkOperation(db *threadstore.Store, ope
 	loadCancel()
 	if err != nil || current == nil || current.Stage != threadstore.ForkStageCompleted {
 		if err != nil && s.log != nil {
-			s.log.Warn("ai: load thread fork broadcast state failed", "operation_id", operation.OperationID, "error", err)
+			s.log.Warn("ai: load thread fork broadcast state failed", "operation_id", logsafe.Text(operation.OperationID, 256), "error", logsafe.Error(err))
 		}
 		return
 	}
@@ -166,14 +167,14 @@ func (s *Service) publishCommittedThreadForkOperation(db *threadstore.Store, ope
 		}
 		if err := s.broadcastThreadSummaryChecked(endpointID, threadID); err != nil {
 			if s.log != nil {
-				s.log.Warn("ai: thread fork broadcast failed", "operation_id", current.OperationID, "thread_id", threadID, "error", err)
+				s.log.Warn("ai: thread fork broadcast failed", "operation_id", logsafe.Text(current.OperationID, 256), "thread_id", logsafe.Text(threadID, 256), "error", logsafe.Error(err))
 			}
 			return
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), s.persistTimeout())
 		defer cancel()
 		if err := db.MarkForkOperationBroadcasted(ctx, current.OperationID, source, time.Now().UnixMilli()); err != nil && s.log != nil {
-			s.log.Warn("ai: mark thread fork broadcast failed", "operation_id", current.OperationID, "thread_id", threadID, "error", err)
+			s.log.Warn("ai: mark thread fork broadcast failed", "operation_id", logsafe.Text(current.OperationID, 256), "thread_id", logsafe.Text(threadID, 256), "error", logsafe.Error(err))
 		}
 	}
 	publish(true, current.EndpointID, current.SourceThreadID, current.SourceBroadcastedAtUnixMs)

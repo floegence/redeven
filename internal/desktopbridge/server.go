@@ -272,6 +272,12 @@ func (c *gatewayProtocolHeaderConn) Write(p []byte) (int, error) {
 	if c.injected || strings.TrimSpace(c.token) == "" {
 		return c.Conn.Write(p)
 	}
+	const maxHandshakeBytes = 64 * 1024
+	if len(p) > maxHandshakeBytes-len(c.buffer) {
+		c.buffer = nil
+		c.injected = true
+		return 0, fmt.Errorf("gateway handshake exceeds %d bytes", maxHandshakeBytes)
+	}
 	c.buffer = append(c.buffer, p...)
 	headerEnd := bytes.Index(c.buffer, []byte("\r\n\r\n"))
 	if headerEnd < 0 && len(c.buffer) < 64*1024 {
@@ -280,11 +286,11 @@ func (c *gatewayProtocolHeaderConn) Write(p []byte) (int, error) {
 	out := c.buffer
 	if headerEnd >= 0 {
 		header := []byte("X-Redeven-Gateway-Managed-Bridge-Token: " + c.token)
-		next := make([]byte, 0, len(c.buffer)+len(header)+2)
-		next = append(next, c.buffer[:headerEnd]...)
-		next = append(next, "\r\n"...)
-		next = append(next, header...)
-		next = append(next, c.buffer[headerEnd:]...)
+		next := make([]byte, len(c.buffer)+len(header)+2)
+		n := copy(next, c.buffer[:headerEnd])
+		n += copy(next[n:], "\r\n")
+		n += copy(next[n:], header)
+		copy(next[n:], c.buffer[headerEnd:])
 		out = next
 	}
 	c.injected = true

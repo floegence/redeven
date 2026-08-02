@@ -4,7 +4,7 @@ const REDEVEN_RELEASE_CERTIFICATE_IDENTITY_PREFIX =
   'https://github.com/floegence/redeven/.github/workflows/release.yml@refs/tags/';
 const REDEVEN_RELEASE_CERTIFICATE_OIDC_ISSUER = 'https://token.actions.githubusercontent.com';
 const CANONICAL_RELEASE_TAG_REGEXP =
-  /^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*)?$/u;
+  /^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u;
 const X509_SEQUENCE_TAG = 0x30;
 const X509_OBJECT_IDENTIFIER_TAG = 0x06;
 const X509_OCTET_STRING_TAG = 0x04;
@@ -65,10 +65,22 @@ function compact(value: unknown): string {
 }
 
 export function canonicalDesktopSSHReleaseTag(releaseTag: string): string {
-  if (!CANONICAL_RELEASE_TAG_REGEXP.test(releaseTag)) {
+  const normalized = compact(releaseTag);
+  if (!CANONICAL_RELEASE_TAG_REGEXP.test(normalized)) {
     throw new Error('Desktop SSH release tag must be canonical SemVer with a leading v.');
   }
-  return releaseTag;
+  const prerelease = normalized.split('-', 2)[1];
+  if (prerelease) {
+    for (const identifier of prerelease.split('.')) {
+      if (/^[0-9]+$/u.test(identifier) && identifier.length > 1 && identifier.startsWith('0')) {
+        throw new Error('Desktop SSH release tag must be canonical SemVer with a leading v.');
+      }
+      if (!/[A-Za-z-]/u.test(identifier) && !/^[0-9]+$/u.test(identifier)) {
+        throw new Error('Desktop SSH release tag must be canonical SemVer with a leading v.');
+      }
+    }
+  }
+  return normalized;
 }
 
 function maybeDecodeBase64Text(rawText: string): Buffer | null {

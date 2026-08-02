@@ -2,10 +2,13 @@
 
 import { spawnSync } from 'node:child_process';
 import {
+  closeSync,
+  constants as fsConstants,
   existsSync,
-  lstatSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
+  fstatSync,
   readFileSync,
   readlinkSync,
   rmSync,
@@ -83,12 +86,22 @@ function readUntrackedSourceEntries() {
     .filter(Boolean)
     .map((relativePath) => {
       const absolutePath = path.resolve(repoRoot, relativePath);
-      const stat = lstatSync(absolutePath);
+      let descriptor;
+      try {
+        descriptor = openSync(absolutePath, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0));
+      } catch {
+        return { path: relativePath, content: `symlink:${readlinkSync(absolutePath)}` };
+      }
       return {
         path: relativePath,
-        content: stat.isSymbolicLink()
-          ? `symlink:${readlinkSync(absolutePath)}`
-          : readFileSync(absolutePath),
+        content: (() => {
+          try {
+            if (!fstatSync(descriptor).isFile()) return '';
+            return readFileSync(descriptor);
+          } finally {
+            closeSync(descriptor);
+          }
+        })(),
       };
     });
 }
@@ -135,7 +148,13 @@ function readRunnerIdentity(carrierReport = null) {
 
 function writeReport(report) {
   mkdirSync(path.dirname(reportPath), { recursive: true });
-  writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
+  const flags = fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_TRUNC | (fsConstants.O_NOFOLLOW ?? 0);
+  const fd = openSync(reportPath, flags, 0o600);
+  try {
+    writeFileSync(fd, `${JSON.stringify(report, null, 2)}\n`);
+  } finally {
+    closeSync(fd);
+  }
 }
 
 let stage = 'source_revision';

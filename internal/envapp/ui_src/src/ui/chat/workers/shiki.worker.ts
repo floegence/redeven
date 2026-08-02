@@ -82,6 +82,7 @@ async function ensureLanguageLoaded(highlighter: CodeHighlighter, language: stri
 postMessage({ type: 'ready' });
 
 addEventListener('message', async (event: MessageEvent<ShikiWorkerRequest>) => {
+  if (event.origin && event.origin !== self.location.origin) return;
   const { id, code, language, theme } = event.data;
 
   try {

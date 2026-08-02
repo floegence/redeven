@@ -165,7 +165,7 @@ func (s *Store) List(limit int) ([]Entry, error) {
 	files := s.listFilesLocked()
 	s.mu.Unlock()
 
-	out := make([]Entry, 0, limit)
+	out := make([]Entry, 0, 1000)
 	for _, path := range files {
 		if len(out) >= limit {
 			break

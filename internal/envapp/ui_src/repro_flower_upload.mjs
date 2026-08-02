@@ -1,8 +1,16 @@
 import { chromium } from 'playwright';
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
-const filePath = '/tmp/redeven-upload-demo.txt';
-fs.writeFileSync(filePath, 'demo from playwright');
+const uploadDir = fs.mkdtempSync(path.join(os.tmpdir(), 'redeven-upload-'));
+const filePath = path.join(uploadDir, 'demo.txt');
+const fileHandle = fs.openSync(filePath, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL, 0o600);
+try {
+  fs.writeFileSync(fileHandle, 'demo from playwright');
+} finally {
+  fs.closeSync(fileHandle);
+}
 
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage();
@@ -55,3 +63,4 @@ console.log('body snippet', bodyText.slice(0, 4000));
 
 await page.screenshot({ path: '/tmp/repro_flower_upload.png', fullPage: true });
 await browser.close();
+fs.rmSync(uploadDir, { recursive: true, force: true });
