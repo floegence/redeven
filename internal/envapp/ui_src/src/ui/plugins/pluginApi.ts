@@ -19,6 +19,7 @@ import type {
   ReDevPluginRecord,
   PluginDevelopmentDelivery,
   PluginMarketSnapshot,
+  PluginMarketDetail,
 } from './pluginTypes';
 
 const EXTERNAL_COMMIT_RECONCILIATION_TIMEOUT_MS = 60_000;
@@ -243,6 +244,7 @@ export function createPluginLifecycleAPI(
   return Object.freeze({
     listInstalledPlugins,
     loadInventoryProjection,
+    loadMarketDetail: loadPluginMarketDetail,
     inspectExternalPackage,
     commitExternalPackage,
     execute,
@@ -278,6 +280,14 @@ async function loadPluginMarketSnapshot(signal?: AbortSignal): Promise<PluginMar
   return fetchLocalApiJSON<PluginMarketSnapshot>(
     '/_redeven_proxy/api/plugins/market/catalog',
     { method: 'GET', signal },
+  );
+}
+
+export async function loadPluginMarketDetail(pluginID: string, signal?: AbortSignal): Promise<PluginMarketDetail> {
+  if (!/^[a-z][a-z0-9._-]{0,127}$/.test(pluginID)) throw new Error('Invalid plugin id');
+  return fetchLocalApiJSON<PluginMarketDetail>(
+    `/_redeven_proxy/api/plugins/market/plugins/${encodeURIComponent(pluginID)}`,
+    await prepareLocalApiRequestInit({ signal }),
   );
 }
 

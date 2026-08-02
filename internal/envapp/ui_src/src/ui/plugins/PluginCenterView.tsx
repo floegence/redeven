@@ -14,6 +14,7 @@ import type {
   PluginCenterTab,
   PluginInventoryItem,
   PluginInventoryProjection,
+  PluginMarketDetail,
   PluginLifecycleCommand,
   PluginLifecycleState,
   PluginPresentationCategory,
@@ -25,6 +26,7 @@ import { ExternalPluginInstallDialog } from './ExternalPluginInstallDialog';
 import { PLUGIN_ENTER_MOTION_CLASS, PLUGIN_MOBILE_TOUCH_TARGET_CLASS, PLUGIN_PRESS_MOTION_CLASS, pluginLifecycleLabel, pluginTrustLabel, presentPlugin, type PluginPrimaryAction } from './pluginPresentation';
 import { PluginCenterItem } from './PluginCenterItems';
 import { PluginIdentityHeader } from './PluginPresentationPrimitives';
+import { resolveAuthorPresentation, resolvePluginPresentation } from './officialPluginCatalog';
 import { PluginUpdateReviewDialog } from './PluginUpdateReviewDialog';
 
 export type PluginCenterViewProps = {
@@ -40,6 +42,7 @@ export type PluginCenterViewProps = {
   onCommand: (command: PluginLifecycleCommand, signal: AbortSignal) => Promise<unknown> | unknown;
   onInspectExternal?: (request: ExternalPluginInspectionRequest, signal: AbortSignal) => Promise<ExternalPluginInspection>;
   onCommitExternal?: (inspection: ExternalPluginInspection, signal: AbortSignal) => Promise<ExternalPluginCommitResult>;
+  onLoadMarketDetail?: (pluginID: string, signal?: AbortSignal) => Promise<PluginMarketDetail>;
 };
 
 type PluginSourceFilter = 'all' | 'official' | 'external';
@@ -82,6 +85,14 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   let handledPermissionsFocusRequest = 0;
   let deferredPermissionsFocusFrame: number | undefined;
   let deferredPermissionsFocusTimer: number | undefined;
+  const [marketDetailState, setMarketDetailState] = createSignal<{
+    pluginID: string;
+    detail?: PluginMarketDetail;
+    error?: unknown;
+    loading: boolean;
+  }>();
+  let marketDetailController: AbortController | undefined;
+  const marketDetailCache = new Map<string, PluginMarketDetail>();
 
   const cancelDeferredPermissionsFocus = () => {
     if (deferredPermissionsFocusFrame !== undefined) {
@@ -96,6 +107,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
 
   onCleanup(() => {
     commandController?.abort('Plugin Center disposed');
+    marketDetailController?.abort('Plugin Center disposed');
     cancelDeferredPermissionsFocus();
   });
 
@@ -216,6 +228,42 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   });
 
   const selectedItem = createMemo(() => allItems().find((item) => item.inventoryKey === selectedInventoryKey()));
+  createEffect(() => {
+    const item = selectedItem();
+    if (!item?.officialCatalog || item.pluginInstanceID || !props.onLoadMarketDetail) {
+      marketDetailController?.abort('Selection changed');
+      marketDetailController = undefined;
+      setMarketDetailState(undefined);
+      return;
+    }
+    const pluginID = item.pluginID;
+    const cached = marketDetailCache.get(pluginID);
+    const current = marketDetailState();
+    if (current?.pluginID === pluginID && (current.loading || current.detail === cached)) return;
+    if (cached) {
+      setMarketDetailState({ pluginID, detail: cached, loading: false });
+      return;
+    }
+    marketDetailController?.abort('Selection changed');
+    const controller = new AbortController();
+    marketDetailController = controller;
+    setMarketDetailState({ pluginID, loading: true });
+    void props.onLoadMarketDetail(pluginID, controller.signal).then((detail) => {
+      if (marketDetailController !== controller) return;
+      marketDetailCache.set(pluginID, detail);
+      setMarketDetailState({ pluginID, detail, loading: false });
+    }).catch((error: unknown) => {
+      if (marketDetailController !== controller || controller.signal.aborted) return;
+      setMarketDetailState({ pluginID, error, loading: false });
+    });
+  });
+
+  const retryMarketDetail = () => {
+    const item = selectedItem();
+    if (!item?.officialCatalog || item.pluginInstanceID || !props.onLoadMarketDetail) return;
+    marketDetailCache.delete(item.pluginID);
+    setMarketDetailState(undefined);
+  };
   const filtersActive = createMemo(() => query() !== ''
     || category() !== 'all'
     || sourceFilter() !== 'all'
@@ -314,6 +362,8 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     setCommandError(null);
     try {
       await props.onRefresh();
+      marketDetailCache.clear();
+      setMarketDetailState(undefined);
     } catch (error) {
       setCommandError(messageFromUnknown(error));
     }
@@ -459,6 +509,10 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
               onAskUninstall={setUninstallChoiceFor}
               onExternalInstall={installItem}
               onExternalUpdate={requestUpdate}
+              marketDetail={marketDetailState()?.pluginID === item.pluginID ? marketDetailState()?.detail : undefined}
+              marketDetailLoading={marketDetailState()?.pluginID === item.pluginID && marketDetailState()?.loading === true}
+              marketDetailError={marketDetailState()?.pluginID === item.pluginID ? marketDetailState()?.error : undefined}
+              onRetryMarketDetail={retryMarketDetail}
             />
           )}
         </Show>
@@ -733,6 +787,10 @@ export function PluginCenterShell(props: {
 
 export function PluginCenterDetails(props: {
   item?: PluginInventoryItem;
+  marketDetail?: PluginMarketDetail;
+  marketDetailLoading?: boolean;
+  marketDetailError?: unknown;
+  onRetryMarketDetail?: () => void;
   mobileOpen?: boolean;
   mobileBackRef?: (element: HTMLButtonElement) => void;
   detailHeadingRef?: (element: HTMLHeadingElement) => void;
@@ -783,6 +841,14 @@ export function PluginCenterDetails(props: {
               onExternalUpdate={props.onExternalUpdate}
             />
 
+            <PluginAuthorContent
+              item={item()}
+              marketDetail={props.marketDetail}
+              loading={props.marketDetailLoading}
+              error={props.marketDetailError}
+              onRetry={props.onRetryMarketDetail}
+            />
+
             <PluginPermissionInventory
               item={item()}
               canManage={props.canManage}
@@ -816,6 +882,56 @@ export function PluginCenterDetails(props: {
         )}
       </Show>
     </aside>
+  );
+}
+
+function PluginAuthorContent(props: {
+  item: PluginInventoryItem;
+  marketDetail?: PluginMarketDetail;
+  loading?: boolean;
+  error?: unknown;
+  onRetry?: () => void;
+}): JSX.Element {
+  const i18n = useI18n();
+  const presentation = () => {
+    if (props.item.presentation) return resolveAuthorPresentation(props.item.presentation, i18n.locale());
+    if (props.marketDetail) return resolveAuthorPresentation(props.marketDetail.presentation, i18n.locale());
+    return undefined;
+  };
+  return (
+    <section class="min-w-0 space-y-4" data-plugin-author-content>
+      <Show when={props.loading}>
+        <div class="rounded-md border bg-muted/20 px-3 py-3 text-xs text-muted-foreground" role="status">
+          {i18n.t('uiCopy.plugin.loadingOfficial')}
+        </div>
+      </Show>
+      <Show when={props.error}>
+        <div class="flex min-w-0 items-center gap-2 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-3 text-xs text-destructive" role="alert">
+          <span class="min-w-0 flex-1">{i18n.t('uiCopy.plugin.marketUnavailable')}</span>
+          <Button size="sm" variant="outline" icon={RefreshIcon} onClick={props.onRetry}>
+            {i18n.t('common.actions.retry')}
+          </Button>
+        </div>
+      </Show>
+      <Show when={presentation()}>
+        {(resolved) => (
+          <div class="min-w-0 space-y-4" lang={resolved().resolved_locale} dir="auto">
+            <div class="space-y-2" data-plugin-author-description>
+              <For each={resolved().description}>
+                {(paragraph) => <p class="text-sm leading-6 text-foreground">{paragraph}</p>}
+              </For>
+            </div>
+            <Show when={resolved().highlights.length > 0}>
+              <ul class="space-y-2 text-sm leading-6 text-foreground" data-plugin-author-highlights>
+                <For each={resolved().highlights}>
+                  {(highlight) => <li class="flex items-start gap-2"><span aria-hidden="true" class="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" /><span>{highlight}</span></li>}
+                </For>
+              </ul>
+            </Show>
+          </div>
+        )}
+      </Show>
+    </section>
   );
 }
 
@@ -1555,17 +1671,21 @@ function filterItems(
     if (filters.trust !== 'all' && item.trustBadge !== filters.trust) return false;
     if (filters.lifecycle !== 'all' && item.lifecycleState !== filters.lifecycle) return false;
     if (!query) return true;
+    const presentation = item.presentation
+      ? resolveAuthorPresentation(item.presentation, locale)
+      : item.officialCatalog
+        ? resolvePluginPresentation(item.officialCatalog, locale)
+        : undefined;
     const fields = [
-      item.displayName,
-      item.description,
-      item.publisher,
+      presentation?.plugin_name ?? item.displayName,
+      presentation?.summary ?? item.description,
+      presentation?.publisher_name ?? item.publisher,
       item.pluginID,
       pluginLifecycleLabel(item, i18n),
       item.officialCatalog?.stableVersion,
       item.version,
       centerCategoryLabel(item.category, i18n),
-      item.searchAliasesKey ? i18n.t(item.searchAliasesKey) : undefined,
-      ...item.searchKeywords,
+      ...(presentation?.keywords ?? item.searchKeywords),
     ];
     return fields.some((field) => String(field ?? '').normalize('NFKC').toLocaleLowerCase(locale).includes(query));
   });

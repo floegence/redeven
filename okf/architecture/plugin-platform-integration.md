@@ -1,14 +1,14 @@
 ---
 type: Architecture Contract
 title: Plugin platform integration
-description: Redeven mounts ReDevPlugin v0.6.24 and adds authenticated host modules, copied-root recovery, market-backed official releases, external-source policy, product placement, and business adapters.
+description: Redeven mounts ReDevPlugin v0.7.0 and adds authenticated host modules, copied-root recovery, market-backed official releases, external-source policy, localized plugin presentation, product placement, and business adapters.
 tags: [architecture, plugins, local-ui, redevplugin]
 timestamp: 2026-07-25T00:00:00Z
 quality_exception: Cross-domain host integration contract spanning identity, security, runtime, storage, routes, surfaces, and business adapters.
 ---
 # Summary
 
-Redeven integrates ReDevPlugin `v0.6.24` through one Go Host, one canonical HTTP
+Redeven integrates ReDevPlugin `v0.7.0` through one Go Host, one canonical HTTP
 namespace, one Env App `PluginPlatformClient`, one shared surface scope, and the
 released ProcessManager over a verified Redeven-built Linux runtime. Redeven
 adds authenticated session mapping, public-source admission policy, product
@@ -117,7 +117,7 @@ Normal Runtime and production Desktop do not accept the dev-only CLI flag,
 developer mode remains disabled without a verified descriptor, and no temporary
 private key or generated delivery directory is committed.
 
-Production obtains the official Containers `4.0.1` release from the frozen
+Production obtains the official Containers `4.1.0` release from the frozen
 latest-only market snapshot. The snapshot identifies the immutable GitHub
 Release and complete signed transport; it does not carry package bytes or grant
 trust. Redeven invokes generated `installReleaseRef` and `updateReleaseRef`
@@ -157,7 +157,7 @@ user pin.
 ## Runtime and Containers
 
 The runtime module binds the canonical sibling executable, target, ReDevPlugin
-`0.6.24`, released Rust IPC and WASM ABI, exact product-build descriptor, lease
+`0.7.0`, released Rust IPC and WASM ABI, exact product-build descriptor, lease
 replay storage, and released limits. Linux runtime bytes are built with Rust
 1.88.0 from the attested package set and travel with SBOM, provenance, notices,
 and signature evidence. Missing, non-canonical, wrong-target, unsigned, or
@@ -190,12 +190,12 @@ slot host `updateContext` for the same iframe, and never remounts a surface to
 apply appearance. Context revision starts at one for each fresh slot; duplicate
 appearance or locale projections do not increment it.
 
-The inventory projects official catalog entries and every installed instance as
+The inventory projects verified market catalog entries and every installed instance as
 separate records. Navigation, tile selection, and detail state use exact
 `inventoryKey`; plugin id and instance id are not product selection keys. Every
 installed current-version instance whose publisher, plugin, version, package,
 manifest, and entries hashes exactly match the catalog receives catalog metadata,
-including the Containers permission presentation, while its trust badge remains
+including the manifest-derived localized presentation, while its trust badge remains
 the actual signature assessment. A historical
 version without external provenance must carry an explicitly catalog-trusted
 official signing key and exact registry-to-Host-verified hash agreement.

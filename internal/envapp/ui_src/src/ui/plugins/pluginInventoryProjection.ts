@@ -113,13 +113,13 @@ function projectCatalogItem(
       iconFallback: catalogItem.iconFallback,
       category: catalogItem.category,
       searchKeywords: catalogItem.searchKeywords,
-      searchAliasesKey: catalogItem.searchAliasesKey,
       publisher: catalogItem.publisher,
       lifecycleState: catalogState(catalogItem),
       trustBadge: catalogTrustBadge(catalogItem),
       pinned: false,
       attentionReason: catalogAttentionReason(catalogItem),
       officialCatalog: catalogItem,
+      presentation: undefined,
     };
   }
 
@@ -137,7 +137,6 @@ function projectCatalogItem(
     iconFallback: catalogItem.iconFallback,
     category: catalogItem.category,
     searchKeywords: catalogItem.searchKeywords,
-    searchAliasesKey: catalogItem.searchAliasesKey,
     publisher: catalogItem.publisher,
     version: installed.version,
     managementRevision: installed.management_revision,
@@ -157,7 +156,6 @@ function projectCatalogItem(
           pluginInstanceID: installed.plugin_instance_id,
           surfaceID: catalogItem.defaultSurfaceID,
           displayName: manifestDisplayName(installed) || catalogItem.displayName,
-          surfaceDisplayNameKey: catalogItem.defaultSurfaceDisplayNameKey,
           expectedManagementRevision: installed.management_revision,
           preferredPlacement: 'activity',
         }
@@ -165,6 +163,7 @@ function projectCatalogItem(
     attentionReason,
     authorization,
     officialCatalog: catalogItem,
+    presentation: installed.presentation,
     externalPackage,
   };
 }
@@ -222,6 +221,7 @@ function projectInstalledItem(
       : undefined,
     attentionReason: !runnable ? 'trust_unavailable' : lifecycleState === 'disabled' ? 'disabled' : undefined,
     authorization,
+    presentation: installed.presentation,
     externalPackage,
   };
 }

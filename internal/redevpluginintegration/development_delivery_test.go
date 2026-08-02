@@ -62,8 +62,15 @@ func writeDevelopmentDeliveryFixture(t *testing.T, mutateManifest func(map[strin
 	if err := json.Unmarshal(pkg.Files["manifest.json"], &manifest); err != nil {
 		t.Fatal(err)
 	}
+	manifest["schema_version"] = "redevplugin.manifest.v8"
+	manifest["presentation"] = map[string]any{
+		"default_locale": "en-US", "summary": "Containers development package.",
+		"description": []string{"Containers development package."}, "highlights": []string{"Development package"},
+		"keywords": []string{"containers"}, "localizations": []any{},
+	}
 	plugin := manifest["plugin"].(map[string]any)
 	plugin["version"] = "4.0.0"
+	plugin["ui_protocol_version"] = "plugin-ui-v7"
 	if mutateManifest != nil {
 		mutateManifest(manifest)
 	}
@@ -72,6 +79,9 @@ func writeDevelopmentDeliveryFixture(t *testing.T, mutateManifest func(map[strin
 		t.Fatal(err)
 	}
 	pkg.Files["manifest.json"] = manifestRaw
+	if err := json.Unmarshal(manifestRaw, &pkg.Manifest); err != nil {
+		t.Fatal(err)
+	}
 	pkg.PackageHash = ""
 	pkg.ManifestHash = ""
 	pkg.EntriesHash = ""

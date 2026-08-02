@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { applyOfficialDevelopmentDelivery, officialPluginCatalog } from './officialPluginCatalog';
+import { applyOfficialDevelopmentDelivery, officialPluginCatalog, resolvePluginPresentation } from './officialPluginCatalog';
 import { OFFICIAL_PLUGIN_CATALOG_SEED, OFFICIAL_PLUGIN_MARKET_SNAPSHOT } from './officialPluginCatalog.test-fixture';
 import type { PluginDevelopmentDelivery } from './pluginTypes';
 
@@ -73,6 +73,16 @@ describe('official plugin catalog contracts', () => {
         releaseRef: { version: '4.1.0' },
       },
     });
+  });
+
+  it('resolves the author presentation with RFC 4647 fallback', () => {
+    const item = OFFICIAL_PLUGIN_CATALOG_SEED[0]!;
+    expect(resolvePluginPresentation(item, 'zh-CN')).toMatchObject({
+      resolved_locale: 'zh-CN',
+      plugin_name: '容器',
+      summary: '在 Redeven 中管理 Docker 和 Podman 资源。',
+    });
+    expect(resolvePluginPresentation(item, 'zh-TW-Hant')).toMatchObject({ resolved_locale: 'en-US' });
   });
 
   it('rejects development delivery metadata from any unpinned source identity', () => {

@@ -3222,6 +3222,7 @@ export function EnvAppShell() {
           onCommand={handlePluginCenterCommand}
           onInspectExternal={(request, signal) => pluginLifecycle.inspectExternalPackage(request, { signal })}
           onCommitExternal={commitExternalPluginPackage}
+          onLoadMarketDetail={pluginLifecycle.loadMarketDetail}
           onClose={closePluginCenter}
         />
       ),

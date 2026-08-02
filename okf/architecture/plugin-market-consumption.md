@@ -12,7 +12,7 @@ one validated snapshot during startup, and serves that snapshot only to the
 trusted Env App origin. The market identifies a candidate GitHub Release; it
 does not host plugin packages, preserve version history, grant trust, or install
 anything. Redeven downloads the exact GitHub assets declared by the snapshot and
-passes the complete signed release transport to released ReDevPlugin `0.6.24`.
+passes the complete signed release transport to released ReDevPlugin `0.7.0`.
 An invalid current response fails closed. A valid last-known-good snapshot may
 keep discovery available as stale data, but it cannot authorize an automatic
 update.
@@ -43,17 +43,26 @@ permission and an Env App route. Codespace, port-forward, plugin, missing, and
 untrusted origins receive no market data. The endpoint does not perform a new
 network request or let the browser choose an origin, generation, or release.
 
+Catalog and detail responses use the in-place `/v1` presentation contract.
+Catalog carries every compact locale record; selecting a plugin may load the
+full `/v1/plugins/{plugin_id}` presentation. Redeven resolves requested BCP 47
+languages through the released ReDevPlugin resolver, using RFC 4647 lookup and
+the author default locale without an English-specific fallback. Author text is
+plain text with the resolved `lang` and `dir="auto"`; it is never copied into
+host code or declaration metadata.
+
 ## Latest-only discovery
 
 The snapshot contains at most one current release for each plugin and channel.
-It carries the plugin presentation fields, availability state, compatibility,
+It carries compact manifest-derived presentation locales, availability state, compatibility,
 immutable GitHub repository/release/tag/commit/asset identity, SHA-256 values,
 signer identity, signed publisher release reference, root and signing-ledger
 pins, and the complete locator-to-asset transport projection. Redeven does not
 persist or expose a market version-history model.
 
-Plugin Center projects the current Containers entry from the frozen snapshot;
-the version is not compiled into the production catalog. An unavailable market
+Plugin Center projects current entries from the frozen snapshot; names,
+summaries, keywords, and long descriptions are not compiled into the production
+catalog. An unavailable market
 does not hide installed instances. Availability `disabled` or `revoked` is a
 discovery and action constraint, while ReDevPlugin revocation evidence remains
 the installation and runtime authority.

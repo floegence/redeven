@@ -85,12 +85,15 @@ const generatedContainersRecord: ReDevPluginRecord = {
   management_revision: 23,
   revoke_epoch: 0,
   manifest: {
-    schema_version: 'redevplugin.manifest.v5',
+    schema_version: 'redevplugin.manifest.v8',
     publisher: { publisher_id: officialContainers.publisherID, display_name: officialContainers.publisher },
     plugin: {
       plugin_id: officialContainers.pluginID, display_name: officialContainers.displayName,
       version: OFFICIAL_CONTAINERS_RELEASE_REF.version, api_version: 'plugin-v1',
-      min_runtime_version: '0.6.5', ui_protocol_version: 'plugin-ui-v5',
+      min_runtime_version: '0.6.5', ui_protocol_version: 'plugin-ui-v7',
+    },
+    presentation: {
+      default_locale: 'en-US', summary: 'Containers plugin', description: ['Containers plugin.'], highlights: [], keywords: ['containers'], localizations: [],
     },
     surfaces: [{
       surface_id: officialContainers.defaultSurfaceID, kind: 'view', intent: 'primary',
@@ -102,7 +105,7 @@ const generatedContainersRecord: ReDevPluginRecord = {
   updated_at: '2026-07-04T10:01:00Z',
 };
 
-describe('v0.6.7 plugin lifecycle client integration', () => {
+describe('v0.7.0 plugin lifecycle client integration', () => {
   it('loads the official catalog from the frozen same-origin market snapshot', async () => {
     const { mocks } = createClientHarness();
     const loadMarket = vi.fn(async () => OFFICIAL_PLUGIN_MARKET_SNAPSHOT);

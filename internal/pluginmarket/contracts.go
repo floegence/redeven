@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/floegence/redevplugin/pkg/host"
+	pluginmanifest "github.com/floegence/redevplugin/pkg/manifest"
 	"github.com/floegence/redevplugin/pkg/remoterelease"
 )
 
@@ -43,13 +44,93 @@ type LatestPointer struct {
 }
 
 type PluginSummary struct {
-	PluginID    string        `json:"plugin_id"`
-	PublisherID string        `json:"publisher_id"`
-	Name        string        `json:"name"`
-	Summary     string        `json:"summary"`
-	Categories  []string      `json:"categories"`
-	Channels    []string      `json:"channels"`
-	Latest      LatestPointer `json:"latest"`
+	PluginID     string              `json:"plugin_id"`
+	PublisherID  string              `json:"publisher_id"`
+	Presentation PresentationCompact `json:"presentation"`
+	Categories   []string            `json:"categories"`
+	Channels     []string            `json:"channels"`
+	Latest       LatestPointer       `json:"latest"`
+}
+
+type PresentationCompact struct {
+	DefaultLocale string                      `json:"default_locale"`
+	Locales       []PresentationCompactLocale `json:"locales"`
+}
+
+type PresentationCompactLocale struct {
+	Locale        string   `json:"locale"`
+	Name          string   `json:"name"`
+	PublisherName string   `json:"publisher_name,omitempty"`
+	Summary       string   `json:"summary"`
+	Keywords      []string `json:"keywords"`
+}
+
+type PresentationFull struct {
+	DefaultLocale string                   `json:"default_locale"`
+	Locales       []PresentationFullLocale `json:"locales"`
+}
+
+type PresentationFullLocale struct {
+	Locale        string                `json:"locale"`
+	Name          string                `json:"name"`
+	PublisherName string                `json:"publisher_name,omitempty"`
+	Summary       string                `json:"summary"`
+	Description   []string              `json:"description"`
+	Highlights    []string              `json:"highlights"`
+	Keywords      []string              `json:"keywords"`
+	Surfaces      []PresentationSurface `json:"surfaces"`
+	Settings      []PresentationSetting `json:"settings"`
+}
+
+// PresentationCatalog is the normalized author presentation exchanged by the
+// market and host. Catalog responses may omit detail-only arrays; detail
+// responses populate every field.
+type PresentationCatalog = PresentationFull
+type PresentationLocale = PresentationFullLocale
+
+type ResolvedSurfacePresentation = pluginmanifest.ResolvedSurfacePresentation
+type ResolvedSettingPresentation = pluginmanifest.ResolvedSettingPresentation
+type ResolvedPresentation = pluginmanifest.ResolvedPresentation
+
+func ResolvePresentation(presentation PresentationCatalog, requestedLocale string) ResolvedPresentation {
+	catalog := pluginmanifest.PresentationCatalog{DefaultLocale: presentation.DefaultLocale}
+	for _, locale := range presentation.Locales {
+		resolved := pluginmanifest.PresentationLocale{
+			Locale: locale.Locale, PluginName: locale.Name, PublisherName: locale.PublisherName,
+			Summary: locale.Summary, Description: slices.Clone(locale.Description),
+			Highlights: slices.Clone(locale.Highlights), Keywords: slices.Clone(locale.Keywords),
+			Surfaces: make([]pluginmanifest.ResolvedSurfacePresentation, len(locale.Surfaces)),
+			Settings: make([]pluginmanifest.ResolvedSettingPresentation, len(locale.Settings)),
+		}
+		for index, surface := range locale.Surfaces {
+			resolved.Surfaces[index] = pluginmanifest.ResolvedSurfacePresentation{SurfaceID: surface.SurfaceID, Label: surface.Label}
+		}
+		for index, setting := range locale.Settings {
+			options := make([]pluginmanifest.SettingOptionSpec, len(setting.Options))
+			for optionIndex, option := range setting.Options {
+				options[optionIndex] = pluginmanifest.SettingOptionSpec{Value: option.Value, Label: option.Label}
+			}
+			resolved.Settings[index] = pluginmanifest.ResolvedSettingPresentation{Key: setting.Key, Label: setting.Label, Options: options}
+		}
+		catalog.Locales = append(catalog.Locales, resolved)
+	}
+	return pluginmanifest.ResolvePresentation(catalog, requestedLocale)
+}
+
+type PresentationSurface struct {
+	SurfaceID string `json:"surface_id"`
+	Label     string `json:"label"`
+}
+
+type PresentationSetting struct {
+	Key     string                      `json:"key"`
+	Label   string                      `json:"label"`
+	Options []PresentationSettingOption `json:"options"`
+}
+
+type PresentationSettingOption struct {
+	Value string `json:"value"`
+	Label string `json:"label"`
 }
 
 type CatalogResponse struct {
@@ -142,19 +223,43 @@ type LatestReleaseResponse struct {
 	Meta Meta          `json:"meta"`
 }
 
+type PluginRepository struct {
+	Provider     string `json:"provider"`
+	RepositoryID int64  `json:"repository_id"`
+	Owner        string `json:"owner"`
+	Name         string `json:"name"`
+	URL          string `json:"url"`
+}
+
+type PluginDetail struct {
+	PluginID      string           `json:"plugin_id"`
+	PublisherID   string           `json:"publisher_id"`
+	Presentation  PresentationFull `json:"presentation"`
+	Categories    []string         `json:"categories"`
+	Channels      []string         `json:"channels"`
+	Repository    PluginRepository `json:"repository"`
+	Compatibility Compatibility    `json:"compatibility"`
+	Status        string           `json:"status"`
+	Latest        []LatestPointer  `json:"latest"`
+}
+
+type PluginDetailResponse struct {
+	Data PluginDetail `json:"data"`
+	Meta Meta         `json:"meta"`
+}
+
 type CatalogPlugin struct {
-	PluginID    string         `json:"plugin_id"`
-	PublisherID string         `json:"publisher_id"`
-	Name        string         `json:"name"`
-	Summary     string         `json:"summary"`
-	Categories  []string       `json:"categories"`
-	Channels    []string       `json:"channels"`
-	Latest      LatestPointer  `json:"latest"`
-	Release     *LatestRelease `json:"release,omitempty"`
+	PluginID     string              `json:"plugin_id"`
+	PublisherID  string              `json:"publisher_id"`
+	Presentation PresentationCompact `json:"presentation"`
+	Categories   []string            `json:"categories"`
+	Channels     []string            `json:"channels"`
+	Latest       LatestPointer       `json:"latest"`
+	Release      *LatestRelease      `json:"release,omitempty"`
 }
 
 const (
-	SnapshotSchemaVersion = "redeven.plugin_market_snapshot.v1"
+	SnapshotSchemaVersion = "redeven.plugin_market_snapshot.v2"
 	SnapshotSourceRemote  = "remote"
 	SnapshotSourceCache   = "cache"
 )
@@ -210,7 +315,7 @@ func validateSnapshot(snapshot Snapshot) error {
 	seen := make(map[string]struct{}, len(snapshot.Plugins))
 	for _, plugin := range snapshot.Plugins {
 		if err := validatePluginSummary(PluginSummary{
-			PluginID: plugin.PluginID, PublisherID: plugin.PublisherID, Name: plugin.Name, Summary: plugin.Summary,
+			PluginID: plugin.PluginID, PublisherID: plugin.PublisherID, Presentation: plugin.Presentation,
 			Categories: plugin.Categories, Channels: plugin.Channels, Latest: plugin.Latest,
 		}); err != nil {
 			return err
@@ -232,7 +337,7 @@ func validateSnapshot(snapshot Snapshot) error {
 }
 
 func validatePluginSummary(plugin PluginSummary) error {
-	if !idPattern.MatchString(plugin.PluginID) || !idPattern.MatchString(plugin.PublisherID) || strings.TrimSpace(plugin.Name) == "" || strings.TrimSpace(plugin.Summary) == "" ||
+	if !idPattern.MatchString(plugin.PluginID) || !idPattern.MatchString(plugin.PublisherID) || !validateCompactPresentation(plugin.Presentation) ||
 		len(plugin.Categories) == 0 || len(plugin.Channels) == 0 || !idPattern.MatchString(plugin.Latest.Channel) || !semverPattern.MatchString(plugin.Latest.Version) {
 		return invalid("catalog plugin is invalid")
 	}
@@ -250,6 +355,24 @@ func validatePluginSummary(plugin PluginSummary) error {
 		return invalid("catalog latest channel is not declared")
 	}
 	return nil
+}
+
+func validateCompactPresentation(presentation PresentationCompact) bool {
+	if presentation.DefaultLocale == "" || len(presentation.Locales) == 0 || len(presentation.Locales) > 16 {
+		return false
+	}
+	seen := make(map[string]struct{}, len(presentation.Locales))
+	for _, locale := range presentation.Locales {
+		if locale.Locale == "" || strings.TrimSpace(locale.Name) == "" || strings.TrimSpace(locale.Summary) == "" || len(locale.Keywords) == 0 {
+			return false
+		}
+		if _, exists := seen[locale.Locale]; exists {
+			return false
+		}
+		seen[locale.Locale] = struct{}{}
+	}
+	_, exists := seen[presentation.DefaultLocale]
+	return exists
 }
 
 func validateLatestRelease(release LatestRelease) error {

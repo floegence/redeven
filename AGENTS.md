@@ -466,6 +466,16 @@ The intended dependency shape is library consumption, not source sharing:
 - Redeven contributes product policy and concrete adapters around those
   imports; it does not become a source tree for ReDevPlugin implementation.
 
+For the pre-release `v0.7.0` baseline, Redeven accepts only ReDevPlugin
+manifest v8, release metadata v8, `plugin-ui-v7`, and `bridge-v7`. Older
+manifest or release metadata state is not migrated, rewritten, or given a
+synthetic presentation; reads fail closed while the original bytes remain
+unchanged. Plugin names, publisher names, summaries, descriptions, highlights,
+keywords, surface labels, and setting labels come from the signed manifest
+presentation catalog. Redeven resolves BCP 47 locales through the released
+ReDevPlugin resolver and must not add an English fallback, duplicate parser,
+Containers-specific author copy, or plugin-id presentation branch.
+
 The current released platform contract also fixes the host-integration shape:
 
 - Redeven derives ReDevPlugin resource ownership only from an authenticated

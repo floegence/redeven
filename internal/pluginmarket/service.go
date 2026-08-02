@@ -104,6 +104,32 @@ func (service *Service) LatestRelease(ctx context.Context, pluginID, channel str
 	return snapshot.LatestRelease(pluginID, channel)
 }
 
+func (service *Service) Detail(ctx context.Context, pluginID string) (PluginDetail, error) {
+	if service == nil || !idPattern.MatchString(pluginID) {
+		return PluginDetail{}, ErrInvalidResponse
+	}
+	endpoint := service.endpoint("/v1/plugins/" + url.PathEscape(pluginID))
+	var response PluginDetailResponse
+	if _, err := service.getJSON(ctx, endpoint, &response); err != nil {
+		return PluginDetail{}, err
+	}
+	if response.Meta.Generation < 0 || response.Meta.Stale || response.Data.PluginID != pluginID || !idPattern.MatchString(response.Data.PublisherID) || response.Data.Status == "" || len(response.Data.Presentation.Locales) == 0 {
+		return PluginDetail{}, invalid("plugin detail is invalid")
+	}
+	if !validateCompactPresentation(PresentationCompact{DefaultLocale: response.Data.Presentation.DefaultLocale, Locales: compactPresentationLocales(response.Data.Presentation.Locales)}) {
+		return PluginDetail{}, invalid("plugin detail presentation is invalid")
+	}
+	return response.Data, nil
+}
+
+func compactPresentationLocales(locales []PresentationFullLocale) []PresentationCompactLocale {
+	result := make([]PresentationCompactLocale, len(locales))
+	for index, locale := range locales {
+		result[index] = PresentationCompactLocale{Locale: locale.Locale, Name: locale.Name, PublisherName: locale.PublisherName, Summary: locale.Summary, Keywords: slices.Clone(locale.Keywords)}
+	}
+	return result
+}
+
 func (service *Service) refresh(ctx context.Context) (Snapshot, error) {
 	plugins := make([]CatalogPlugin, 0)
 	cursor := ""
@@ -142,7 +168,7 @@ func (service *Service) refresh(ctx context.Context) (Snapshot, error) {
 			}
 			seen[summary.PluginID] = struct{}{}
 			plugin := CatalogPlugin{
-				PluginID: summary.PluginID, PublisherID: summary.PublisherID, Name: summary.Name, Summary: summary.Summary,
+				PluginID: summary.PluginID, PublisherID: summary.PublisherID, Presentation: cloneCompactPresentation(summary.Presentation),
 				Categories: slices.Clone(summary.Categories), Channels: slices.Clone(summary.Channels), Latest: summary.Latest,
 			}
 			if summary.Latest.AvailabilityStatus == "visible" {
@@ -311,7 +337,18 @@ func cloneSnapshot(snapshot Snapshot) Snapshot {
 		result.Plugins[index] = plugin
 		result.Plugins[index].Categories = slices.Clone(plugin.Categories)
 		result.Plugins[index].Channels = slices.Clone(plugin.Channels)
+		result.Plugins[index].Presentation = cloneCompactPresentation(plugin.Presentation)
 		result.Plugins[index].Release = cloneLatestRelease(plugin.Release)
+	}
+	return result
+}
+
+func cloneCompactPresentation(presentation PresentationCompact) PresentationCompact {
+	result := presentation
+	result.Locales = make([]PresentationCompactLocale, len(presentation.Locales))
+	for index, locale := range presentation.Locales {
+		result.Locales[index] = locale
+		result.Locales[index].Keywords = slices.Clone(locale.Keywords)
 	}
 	return result
 }

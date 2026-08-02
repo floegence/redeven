@@ -78,6 +78,7 @@ type Options struct {
 	PluginPlatform            http.Handler
 	PluginDevelopmentDelivery *redevpluginintegration.DevelopmentDelivery
 	PluginMarketSnapshot      func() (pluginmarket.Snapshot, bool)
+	PluginMarketDetail        func(context.Context, string) (pluginmarket.PluginDetail, error)
 	// AgentHomeDir is the canonical absolute path to the default home directory.
 	AgentHomeDir    string
 	FilesystemScope *filesystemscope.Registry
@@ -253,6 +254,7 @@ type Server struct {
 	pluginPlatform            http.Handler
 	pluginDevelopmentDelivery *redevpluginintegration.DevelopmentDelivery
 	pluginMarketSnapshot      func() (pluginmarket.Snapshot, bool)
+	pluginMarketDetail        func(context.Context, string) (pluginmarket.PluginDetail, error)
 	pluginConnMu              sync.Mutex
 	pluginConns               map[*pluginAdmissionConn]struct{}
 
@@ -271,6 +273,7 @@ var (
 	envAppShellRootPattern          = regexp.MustCompile(`(?i)<div\b[^>]*\bid\s*=\s*["']root["'][^>]*>`)
 	envAppShellAssetRefPattern      = regexp.MustCompile(`(?i)\b(?:src|href)\s*=\s*["']/_redeven_proxy/env/assets/([^"']+)["']`)
 	envAppImmutableAssetPathPattern = regexp.MustCompile(`^env/assets/[^/]+-[A-Za-z0-9_-]{8,}\.(?:js|mjs|css|wasm|woff2?|ttf|otf)$`)
+	pluginmarketPluginIDPattern     = regexp.MustCompile(`^[a-z][a-z0-9._-]{0,127}$`)
 )
 
 const envAppImmutableAssetCacheControl = "private, max-age=31536000, immutable"
@@ -401,6 +404,7 @@ func New(opts Options) (*Server, error) {
 		pluginPlatform:            opts.PluginPlatform,
 		pluginDevelopmentDelivery: opts.PluginDevelopmentDelivery,
 		pluginMarketSnapshot:      opts.PluginMarketSnapshot,
+		pluginMarketDetail:        opts.PluginMarketDetail,
 		pluginConns:               make(map[*pluginAdmissionConn]struct{}),
 		distFS:                    opts.DistFS,
 		addr:                      addr,
@@ -2661,6 +2665,27 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 	}))
 	defer func() { releaseAI() }()
 	switch {
+	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/plugins/market/plugins/"):
+		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
+			return
+		}
+		if g.pluginMarketDetail == nil {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "plugin market is unavailable"})
+			return
+		}
+		pluginID := strings.TrimPrefix(r.URL.Path, "/_redeven_proxy/api/plugins/market/plugins/")
+		if !pluginmarketPluginIDPattern.MatchString(pluginID) {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid plugin id"})
+			return
+		}
+		detail, err := g.pluginMarketDetail(r.Context(), pluginID)
+		if err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "plugin market detail is unavailable"})
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: detail})
+		return
+
 	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/plugins/market/catalog":
 		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
 			return
