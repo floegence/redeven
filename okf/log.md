@@ -1,6 +1,7 @@
 # Redeven OKF Update Log
 
 ## 2026-08-02
+* **Approval authority**: Adopted published Floret v3.2.3 so approval-gated effects, provider continuation, and terminal turn writes retain one renewable lease lineage across heartbeats while identity and acquisition drift remain fail closed.
 * **Store compatibility**: Adopted published Floret v3.2.2 so supported historical interrupted approvals project to coherent terminal state automatically without a Store schema change, journal rewrite, or Redeven-owned migration.
 * **Reliability**: Adopted published Floret v3.2.1 so approval resolution can proceed while a turn is active, and made the run idle watchdog honor the canonical approval queue without inventing a second approval lifecycle.
 * **Dependency**: Upgraded Redeven to published Floret v3.2.0 with exact checksums and removed every remaining use of the deleted broad runtime methods from production and test integration.
