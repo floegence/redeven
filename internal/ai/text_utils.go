@@ -40,7 +40,16 @@ func anyToBool(v any) bool {
 }
 
 func readIntField(obj map[string]any, keys ...string) int {
-	return int(readInt64Field(obj, keys...))
+	value := readInt64Field(obj, keys...)
+	maxInt := int64(^uint(0) >> 1)
+	minInt := -maxInt - 1
+	if value > maxInt {
+		return int(maxInt)
+	}
+	if value < minInt {
+		return int(minInt)
+	}
+	return int(value)
 }
 
 func readInt64Field(obj map[string]any, keys ...string) int64 {

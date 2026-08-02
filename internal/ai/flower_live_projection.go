@@ -1681,7 +1681,7 @@ func applyFlowerLiveEventToMaterializedState(state *FlowerLiveMaterializedState,
 				payload.ApprovalQueue.Generation == current.Generation && payload.ApprovalQueue.Revision < current.Revision) {
 			return
 		}
-		actions := make(map[string]FlowerApprovalAction, len(payload.Actions)+len(state.ApprovalActions))
+		actions := make(map[string]FlowerApprovalAction)
 		for actionID, action := range state.ApprovalActions {
 			if action.Origin == FlowerApprovalOriginControlConfirm {
 				actions[actionID] = action

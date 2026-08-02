@@ -121,8 +121,11 @@ describe('runtimeHostAccess', () => {
     await createLocalRuntimeHostExecutor().run([
       process.execPath,
       '-e',
-      `const fs=require('node:fs');const chunks=[];process.stdin.on('data',c=>chunks.push(c));process.stdin.on('end',()=>fs.writeFileSync(${JSON.stringify(localOut)}, Buffer.concat(chunks)));`,
+      "const fs=require('node:fs');const chunks=[];process.stdin.on('data',c=>chunks.push(c));process.stdin.on('end',()=>fs.writeFileSync(process.env.REDEVEN_TEST_OUTPUT_PATH, Buffer.concat(chunks)));",
     ], {
+      env: {
+        REDEVEN_TEST_OUTPUT_PATH: localOut,
+      },
       stdinData: Buffer.from('local-archive'),
     });
     expect(await fs.readFile(localOut, 'utf8')).toBe('local-archive');

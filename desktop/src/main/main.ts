@@ -3342,7 +3342,10 @@ function sessionWebServiceWindowStateKey(sessionKey: DesktopSessionKey, forwardI
 }
 
 function sessionWebServicePartition(sessionKey: DesktopSessionKey, forwardID: string): string {
-  const digest = crypto.createHash('sha256').update(`${sessionKey}\u0000${forwardID}`).digest('hex').slice(0, 32);
+  const digest = crypto.createHmac('sha256', 'redeven-web-service-partition-v1')
+    .update(`${sessionKey}\u0000${forwardID}`)
+    .digest('hex')
+    .slice(0, 32);
   return `redeven-web-service-${digest}`;
 }
 

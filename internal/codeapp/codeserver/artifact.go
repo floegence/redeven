@@ -269,6 +269,13 @@ func extractWorkspaceEngineArchive(ctx context.Context, archivePath string, dest
 		if rel == "" {
 			continue
 		}
+		// Keep the archive entry rooted even when the sanitizer is bypassed by a
+		// future caller or a platform-specific path implementation.
+		candidate := filepath.Clean(filepath.Join(dest, filepath.FromSlash(rel)))
+		candidateRel, relErr := filepath.Rel(filepath.Clean(dest), candidate)
+		if relErr != nil || candidateRel == ".." || strings.HasPrefix(candidateRel, ".."+string(os.PathSeparator)) {
+			return fmt.Errorf("workspace engine archive entry escapes target directory: %s", hdr.Name)
+		}
 		target, err := workspaceEngineArchiveTarget(dest, rel)
 		if err != nil {
 			return fmt.Errorf("workspace engine archive entry escapes target directory: %s", hdr.Name)

@@ -77,7 +77,7 @@ jobs:
         run: corepack enable
 
       - name: Install cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@874852de93c66509b01dc7cd80f7a5385182d017
 
       - name: Validate runtime compatibility contract
         run: ./scripts/check_runtime_compatibility_contract.sh "${GITHUB_REF_NAME}"
@@ -418,7 +418,7 @@ jobs:
           cp scripts/safe_extract_tar.py dist/safe_extract_tar.py
 
       - name: Install cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@874852de93c66509b01dc7cd80f7a5385182d017
 
       - name: Validate ReDevPlugin consumption gate
         run: ./scripts/check_redevplugin_consumption_gate.sh --scan-root dist --require-release
