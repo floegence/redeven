@@ -15,8 +15,13 @@ const validCatalogResponse = `{
   "data": [{
     "plugin_id": "com.redeven.official.containers",
     "publisher_id": "com.redeven.official",
-    "name": "Containers",
-    "summary": "Manage Docker and Podman resources.",
+    "presentation": {
+      "default_locale": "en-US",
+      "locales": [
+        {"locale": "en-US", "name": "Containers", "publisher_name": "Redeven Official", "summary": "Manage Docker and Podman resources.", "keywords": ["containers", "Docker"]},
+        {"locale": "zh-CN", "name": "容器", "publisher_name": "Redeven 官方", "summary": "管理 Docker 和 Podman 资源。", "keywords": ["容器", "Docker"]}
+      ]
+    },
     "categories": ["infrastructure"],
     "channels": ["stable"],
     "latest": {"channel": "stable", "version": "4.0.0", "availability_status": "visible"}

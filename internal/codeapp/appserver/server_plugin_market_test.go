@@ -1,6 +1,7 @@
 package appserver
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,7 @@ import (
 )
 
 const pluginMarketCatalogPath = "/_redeven_proxy/api/plugins/market/catalog"
+const pluginMarketDetailPath = "/_redeven_proxy/api/plugins/market/plugins/com.example.plugin"
 
 func performPluginMarketRequest(server *Server, route func(*http.Request) *http.Request) *httptest.ResponseRecorder {
 	request := httptest.NewRequest(http.MethodGet, pluginMarketCatalogPath, nil)
@@ -111,4 +113,43 @@ func TestServerPluginMarketCatalogFailsClosed(t *testing.T) {
 			t.Fatalf("status = %d, callback called = %t", response.Code, called)
 		}
 	})
+}
+
+func TestServerPluginMarketDetailReturnsManifestPresentation(t *testing.T) {
+	t.Parallel()
+	cap := config.PermissionSet{Read: true}
+	server := &Server{
+		localPermissionCap: &cap,
+		pluginMarketDetail: func(_ context.Context, pluginID string) (pluginmarket.PluginDetail, error) {
+			if pluginID != "com.example.plugin" {
+				t.Fatalf("plugin id = %q", pluginID)
+			}
+			return pluginmarket.PluginDetail{
+				PluginID:    pluginID,
+				PublisherID: "com.example.publisher",
+				Presentation: pluginmarket.PresentationFull{
+					DefaultLocale: "en-US",
+					Locales:       []pluginmarket.PresentationFullLocale{{Locale: "en-US", Name: "Example", Summary: "Example summary.", Description: []string{"Example description."}, Keywords: []string{"example"}}},
+				},
+				Status: "active",
+			}, nil
+		},
+	}
+	response := performPluginMarketRequest(server, func(request *http.Request) *http.Request {
+		request.URL.Path = pluginMarketDetailPath
+		return WithLocalUIEnvRoute(request)
+	})
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d; body=%s", response.Code, response.Body.String())
+	}
+	var envelope struct {
+		OK   bool                      `json:"ok"`
+		Data pluginmarket.PluginDetail `json:"data"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if !envelope.OK || envelope.Data.Presentation.DefaultLocale != "en-US" || envelope.Data.Presentation.Locales[0].Description[0] != "Example description." {
+		t.Fatalf("detail = %#v", envelope.Data)
+	}
 }

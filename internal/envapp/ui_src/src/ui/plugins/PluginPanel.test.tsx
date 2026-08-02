@@ -26,7 +26,6 @@ function pluginItem(overrides: Partial<PluginInventoryItem> = {}): PluginInvento
     iconFallback: 'containers',
     category: 'infrastructure',
     searchKeywords: ['docker', 'podman'],
-    searchAliasesKey: 'uiCopy.plugin.containersSearchAliases',
     publisher: 'Redeven',
     version: '2.0.0',
     managementRevision: 23,

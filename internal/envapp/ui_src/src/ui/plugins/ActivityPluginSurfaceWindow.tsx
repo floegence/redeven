@@ -64,9 +64,7 @@ export function ActivityPluginSurfaceWindow(props: ActivityPluginSurfaceWindowPr
 
   const title = () => i18n.t('uiCopy.plugin.activityWindowTitle', {
     plugin: props.target.displayName ?? props.target.pluginID,
-    surface: props.target.surfaceDisplayNameKey
-      ? i18n.t(props.target.surfaceDisplayNameKey)
-      : props.target.surfaceID,
+    surface: props.target.surfaceID,
   });
   const windowVisible = () => props.visible && (!layout.isMobile() || props.active);
 

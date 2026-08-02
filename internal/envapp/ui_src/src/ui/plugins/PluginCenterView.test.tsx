@@ -243,7 +243,7 @@ function externalCommitForCenter(source: ExternalPluginInspection): ExternalPlug
       management_revision: 1,
       revoke_epoch: 0,
       manifest: {
-        schema_version: 'redevplugin.manifest.v5',
+        schema_version: 'redevplugin.manifest.v8',
         publisher: { publisher_id: source.publisher_id, display_name: 'Example Publisher' },
         plugin: {
           plugin_id: source.plugin_id,
@@ -251,7 +251,10 @@ function externalCommitForCenter(source: ExternalPluginInspection): ExternalPlug
           version: source.version,
           api_version: 'plugin-v1',
           min_runtime_version: '0.6.9',
-          ui_protocol_version: 'plugin-ui-v5',
+          ui_protocol_version: 'plugin-ui-v7',
+        },
+        presentation: {
+          default_locale: 'en-US', summary: 'Example plugin', description: ['Example plugin.'], highlights: [], keywords: ['example'], localizations: [],
         },
         surfaces: [],
       },

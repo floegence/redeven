@@ -7,6 +7,7 @@ import { useI18n } from '../i18n';
 import type { PluginCenterTab, PluginInventoryItem } from './pluginTypes';
 import { PLUGIN_ENTER_MOTION_CLASS, PLUGIN_PRESS_MOTION_CLASS } from './pluginPresentation';
 import { PluginIcon, PluginStatusBadge, PluginTrustBadge } from './PluginPresentationPrimitives';
+import { resolvePluginPresentation } from './officialPluginCatalog';
 
 export function PluginCenterItem(props: {
   item: PluginInventoryItem;
@@ -27,6 +28,12 @@ export function PluginCenterItem(props: {
 
 function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX.Element {
   const i18n = useI18n();
+  const presentation = () => props.item.officialCatalog
+    ? resolvePluginPresentation(props.item.officialCatalog, i18n.locale())
+    : undefined;
+  const displayName = () => presentation()?.plugin_name ?? props.item.displayName;
+  const summary = () => presentation()?.summary ?? props.item.description;
+  const publisher = () => presentation()?.publisher_name ?? props.item.publisher;
   let menuTrigger: HTMLButtonElement | undefined;
   const installed = () => props.item.lifecycleState !== 'not_installed';
   const update = () => props.tab === 'updates' || props.item.lifecycleState === 'update_available';
@@ -60,25 +67,25 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
         data-plugin-center-item={props.item.inventoryKey}
         aria-current={props.selected ? 'true' : undefined}
         class="flex min-w-0 flex-1 cursor-pointer flex-col rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        aria-label={`${props.item.displayName}: ${i18n.t('uiCopy.plugin.viewDetails')}`}
+        aria-label={`${displayName()}: ${i18n.t('uiCopy.plugin.viewDetails')}`}
         onClick={(event) => props.onOpenDetails(event.currentTarget)}
       >
         <span class="flex min-w-0 items-start gap-3">
           <PluginIcon item={props.item} size="card" class="redeven-plugin-directory-card-icon" />
           <span class="min-w-0 flex-1 pt-0.5">
-            <span class="line-clamp-2 text-sm font-semibold leading-5">{props.item.displayName}</span>
+            <span class="line-clamp-2 text-sm font-semibold leading-5">{displayName()}</span>
             <span class="mt-1 flex flex-wrap gap-1">
               <PluginTrustBadge item={props.item} />
             </span>
           </span>
         </span>
-        <span class="mt-3 line-clamp-2 flex-1 text-xs leading-5 text-muted-foreground">{props.item.description}</span>
+        <span class="mt-3 line-clamp-2 flex-1 text-xs leading-5 text-muted-foreground" lang={presentation()?.resolved_locale} dir="auto">{summary()}</span>
         <span class="mt-3 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
           <Show when={props.item.officialCatalog?.stableVersion ?? props.item.version}>
             {(version) => <span>v{version()}</span>}
           </Show>
           <span aria-hidden="true">·</span>
-          <span>{props.item.publisher}</span>
+          <span>{publisher()}</span>
           <PluginStatusBadge item={props.item} />
         </span>
       </button>
@@ -115,7 +122,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
           onSelect={(id) => {
             if (menuTrigger) selectMenuItem(id, menuTrigger);
           }}
-          triggerAriaLabel={`${props.item.displayName}: ${i18n.t('uiCopy.plugin.moreActions')}`}
+          triggerAriaLabel={`${displayName()}: ${i18n.t('uiCopy.plugin.moreActions')}`}
           triggerClass="shrink-0 rounded-md"
           trigger={(
             <button

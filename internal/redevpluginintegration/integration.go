@@ -56,6 +56,7 @@ type Integration struct {
 	sessionLifecycle    *sessionLifecycleAdapter
 	developmentDelivery *DevelopmentDelivery
 	marketSnapshot      *pluginmarket.Snapshot
+	marketService       *pluginmarket.Service
 	marketErr           error
 	closers             []func() error
 }
@@ -348,6 +349,7 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 		sessionLifecycle:    sessionLifecycle,
 		developmentDelivery: developmentDelivery,
 		marketSnapshot:      marketSnapshot,
+		marketService:       opts.PluginMarket,
 		marketErr:           marketErr,
 		closers:             closers,
 	}
@@ -366,6 +368,13 @@ func (i *Integration) MarketSnapshot() (pluginmarket.Snapshot, bool) {
 		return pluginmarket.Snapshot{}, false
 	}
 	return i.marketSnapshot.Clone(), true
+}
+
+func (i *Integration) MarketDetail(ctx context.Context, pluginID string) (pluginmarket.PluginDetail, error) {
+	if i == nil || i.marketService == nil {
+		return pluginmarket.PluginDetail{}, pluginmarket.ErrUnavailable
+	}
+	return i.marketService.Detail(ctx, pluginID)
 }
 
 func (i *Integration) MarketError() error {

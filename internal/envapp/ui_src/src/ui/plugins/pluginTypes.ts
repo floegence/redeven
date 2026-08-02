@@ -59,7 +59,7 @@ export type PluginMarketLatestRelease = {
 };
 
 export type PluginMarketSnapshot = {
-  schema_version: 'redeven.plugin_market_snapshot.v1';
+  schema_version: 'redeven.plugin_market_snapshot.v2';
   generation: number;
   etag?: string;
   cached_at: string;
@@ -68,8 +68,7 @@ export type PluginMarketSnapshot = {
   plugins: Array<{
     plugin_id: string;
     publisher_id: string;
-    name: string;
-    summary: string;
+    presentation: PluginMarketPresentation;
     categories: string[];
     channels: string[];
     latest: {
@@ -80,6 +79,40 @@ export type PluginMarketSnapshot = {
     release?: PluginMarketLatestRelease;
   }>;
 };
+
+export type PluginMarketPresentationLocale = Readonly<{
+  locale: string;
+  name: string;
+  publisher_name?: string;
+  summary: string;
+  keywords: readonly string[];
+}>;
+
+export type PluginMarketPresentation = Readonly<{
+  default_locale: string;
+  locales: readonly PluginMarketPresentationLocale[];
+}>;
+
+export type PluginMarketPresentationFullLocale = PluginMarketPresentationLocale & Readonly<{
+  description: readonly string[];
+  highlights: readonly string[];
+  surfaces: readonly { surface_id: string; label: string }[];
+  settings: readonly { key: string; label: string; options: readonly { value: string; label: string }[] }[];
+}>;
+
+export type PluginMarketDetail = Readonly<{
+  plugin_id: string;
+  publisher_id: string;
+  presentation: Readonly<{ default_locale: string; locales: readonly PluginMarketPresentationFullLocale[] }>;
+  categories: readonly string[];
+  channels: readonly string[];
+  repository: Readonly<{ provider: string; repository_id: number; owner: string; name: string; url: string }>;
+  compatibility: Readonly<{ min_redeven_version: string; min_redevplugin_version: string }>;
+  status: string;
+  latest: readonly { channel: string; version: string; availability_status: 'visible' | 'disabled' | 'revoked' }[];
+}>;
+
+export type PluginAuthorPresentation = PluginRecord['presentation'];
 
 export type PluginReleaseNotes = Readonly<{
   releaseID: string;
@@ -129,6 +162,7 @@ export type OfficialPluginCatalogItem = {
   pluginInstanceID: string;
   displayName: string;
   description: string;
+  presentation?: PluginMarketPresentation;
   publisher: 'Redeven';
   latestVersion: string;
   stableVersion: string;
@@ -136,12 +170,10 @@ export type OfficialPluginCatalogItem = {
   minReDevPluginVersion: string;
   rolloutState: 'stable' | 'staged' | 'disabled' | 'revoked';
   defaultSurfaceID: string;
-  defaultSurfaceDisplayNameKey?: 'uiCopy.plugin.containersDashboardSurface';
   iconURL?: string;
   iconFallback: 'containers' | 'database' | 'github' | 'generic';
   category: PluginPresentationCategory;
   searchKeywords: readonly string[];
-  searchAliasesKey?: 'uiCopy.plugin.containersSearchAliases';
   trustedSigningKeyIDs: readonly string[];
   permissions?: readonly OfficialPluginPermission[];
   releaseNotes?: PluginReleaseNotes;
@@ -178,7 +210,6 @@ export type PluginSurfaceLaunchTarget = {
   pluginInstanceID: string;
   surfaceID: string;
   displayName?: string;
-  surfaceDisplayNameKey?: 'uiCopy.plugin.containersDashboardSurface';
   expectedManagementRevision: number;
   preferredPlacement: 'activity' | 'workbench';
 };
@@ -193,7 +224,6 @@ export type PluginInventoryItem = {
   iconFallback: 'containers' | 'database' | 'github' | 'generic';
   category: PluginPresentationCategory;
   searchKeywords: readonly string[];
-  searchAliasesKey?: 'uiCopy.plugin.containersSearchAliases';
   publisher: string;
   version?: string;
   managementRevision?: number;
@@ -207,6 +237,7 @@ export type PluginInventoryItem = {
   attentionReason?: PluginAttentionReason;
   authorization?: PluginAuthorizationInventory;
   officialCatalog?: OfficialPluginCatalogItem;
+  presentation?: PluginAuthorPresentation;
   externalPackage?: {
     signatureAssessment: PluginExternalPackageSignatureAssessment;
     sourceProvenance: PluginExternalPackageSourceProvenance;
@@ -328,12 +359,20 @@ export type PluginOpenSurfaceCommand = {
 
 export type PluginLifecycleCommand = PluginManagementCommand | PluginOpenSurfaceCommand;
 
-export type ReDevPluginRecord = PluginRecord;
+export type ReDevPluginRecord = Omit<PluginRecord, 'presentation' | 'presentation_sha256'> & {
+  presentation?: PluginRecord['presentation'];
+  presentation_sha256?: string;
+};
 
 export type ReDevPluginCatalogResult = PluginCatalogResult;
 
-export type ExternalPluginInspection = PluginExternalPackageInspection;
-export type ExternalPluginCommitResult = Extract<PluginExternalPackageCommitResult, { status: 'committed' }>;
+export type ExternalPluginInspection = Omit<PluginExternalPackageInspection, 'presentation' | 'presentation_sha256'> & {
+  presentation?: PluginExternalPackageInspection['presentation'];
+  presentation_sha256?: string;
+};
+export type ExternalPluginCommitResult = Omit<Extract<PluginExternalPackageCommitResult, { status: 'committed' }>, 'plugin'> & {
+  plugin: ReDevPluginRecord;
+};
 export type PluginExternalPackageSignatureAssessment = ExternalPluginInspection['signature_assessment'];
 export type PluginExternalPackageSourceProvenance = ExternalPluginInspection['source_provenance'];
 export type PluginExternalPackageExecutionApproval = ExternalPluginInspection['execution_approval'];

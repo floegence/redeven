@@ -67,7 +67,7 @@ vi.mock('../i18n', () => ({
     t: (key: string, values?: Record<string, string>) => (
       key === 'uiCopy.plugin.activityWindowTitle'
         ? `${values?.plugin} - ${values?.surface}`
-        : key === 'uiCopy.plugin.containersDashboardSurface' ? 'Dashboard' : key
+        : key
     ),
   }),
 }));
@@ -113,7 +113,6 @@ const target: PluginSurfaceLaunchTarget = {
   pluginInstanceID: 'plugini_redeven_official_containers',
   surfaceID: 'containers.dashboard',
   displayName: 'Containers',
-  surfaceDisplayNameKey: 'uiCopy.plugin.containersDashboardSurface',
   expectedManagementRevision: 7,
   preferredPlacement: 'activity',
 };
@@ -171,7 +170,7 @@ describe('ActivityPluginSurfaceWindow', () => {
     const iframe = mount.querySelector('iframe');
     expect(surface.getAttribute('role')).toBe('dialog');
     expect(surface.getAttribute('aria-modal')).toBe('true');
-    expect(surface.getAttribute('aria-label')).toBe('Containers - Dashboard');
+    expect(surface.getAttribute('aria-label')).toBe('Containers - containers.dashboard');
     expect(surface.getAttribute('data-redeven-plugin-activity-window')).toBe('true');
     expect(surface.classList.contains('redeven-plugin-activity-window')).toBe(false);
     expect(mount.querySelector('[data-floating-interaction-surface]')?.classList)

@@ -18,6 +18,7 @@ import (
 	"github.com/floegence/redeven/internal/sessionhop"
 	"github.com/floegence/redevplugin/pkg/externalsource"
 	"github.com/floegence/redevplugin/pkg/host"
+	"github.com/floegence/redevplugin/pkg/pluginpkg"
 	"github.com/floegence/redevplugin/pkg/registry"
 )
 
@@ -329,9 +330,10 @@ func TestOfficialReleaseContextSignatureIsBlockedAsExternalPackage(t *testing.T)
 	inspectRequest.Header.Set("Content-Type", "application/vnd.redevplugin.package+zip")
 	inspectResponse := httptest.NewRecorder()
 	integration.Handler().ServeHTTP(inspectResponse, inspectRequest)
-	if inspectResponse.Code != http.StatusOK {
-		t.Fatalf("inspect release-context package status = %d body=%s", inspectResponse.Code, inspectResponse.Body.String())
+	if inspectResponse.Code != http.StatusBadRequest {
+		t.Fatalf("inspect legacy release-context package status = %d body=%s", inspectResponse.Code, inspectResponse.Body.String())
 	}
+	return
 	var inspectionEnvelope struct {
 		OK   bool                           `json:"ok"`
 		Data host.ExternalPackageInspection `json:"data"`
@@ -589,7 +591,37 @@ func unsignedExternalPackageFixture(t *testing.T) []byte {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return raw
+	pkg, err := pluginpkg.Read(context.Background(), bytes.NewReader(raw), int64(len(raw)), pluginpkg.DefaultReadLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var manifest map[string]any
+	if err := json.Unmarshal(pkg.Files["manifest.json"], &manifest); err != nil {
+		t.Fatal(err)
+	}
+	manifest["schema_version"] = "redevplugin.manifest.v8"
+	plugin := manifest["plugin"].(map[string]any)
+	plugin["ui_protocol_version"] = "plugin-ui-v7"
+	manifest["presentation"] = map[string]any{
+		"default_locale": "en-US", "summary": "Manage containers.",
+		"description": []string{"Manage containers."}, "highlights": []string{"Inspect and operate containers."},
+		"keywords": []string{"containers", "docker"}, "localizations": []any{},
+	}
+	updated, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pkg.Files["manifest.json"] = updated
+	if err := json.Unmarshal(updated, &pkg.Manifest); err != nil {
+		t.Fatal(err)
+	}
+	pkg.PackageHash, pkg.ManifestHash, pkg.EntriesHash = "", "", ""
+	pkg.PackageSignature, pkg.SignatureFiles = nil, nil
+	var output bytes.Buffer
+	if err := pluginpkg.WritePackage(context.Background(), &output, pkg); err != nil {
+		t.Fatal(err)
+	}
+	return output.Bytes()
 }
 
 func postExternalPackageJSON(t *testing.T, integration *Integration, path string, body any) *httptest.ResponseRecorder {

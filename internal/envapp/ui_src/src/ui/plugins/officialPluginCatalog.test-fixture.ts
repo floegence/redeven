@@ -3,7 +3,7 @@ import { applyOfficialDevelopmentDelivery, officialPluginCatalog } from './offic
 import type { PluginDevelopmentDelivery, PluginMarketSnapshot } from './pluginTypes';
 
 export const OFFICIAL_PLUGIN_MARKET_SNAPSHOT: PluginMarketSnapshot = {
-  schema_version: 'redeven.plugin_market_snapshot.v1',
+  schema_version: 'redeven.plugin_market_snapshot.v2',
   generation: 1,
   etag: '"catalog-g1"',
   cached_at: '2026-08-01T10:00:00Z',
@@ -12,8 +12,25 @@ export const OFFICIAL_PLUGIN_MARKET_SNAPSHOT: PluginMarketSnapshot = {
   plugins: [{
     plugin_id: 'com.redeven.official.containers',
     publisher_id: 'com.redeven.official',
-    name: 'Containers',
-    summary: 'Manage Docker and Podman resources through Redeven.',
+    presentation: {
+      default_locale: 'en-US',
+      locales: [
+        {
+          locale: 'en-US',
+          name: 'Containers',
+          publisher_name: 'Redeven Official',
+          summary: 'Manage Docker and Podman resources through Redeven.',
+          keywords: ['containers', 'Docker', 'Podman'],
+        },
+        {
+          locale: 'zh-CN',
+          name: '容器',
+          publisher_name: 'Redeven 官方',
+          summary: '在 Redeven 中管理 Docker 和 Podman 资源。',
+          keywords: ['容器', 'Docker', 'Podman'],
+        },
+      ],
+    },
     categories: ['containers', 'development'],
     channels: ['stable'],
     latest: { channel: 'stable', version: '4.0.1', availability_status: 'visible' },

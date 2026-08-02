@@ -5,6 +5,7 @@ import { Show, createSignal, type JSX } from 'solid-js';
 import { useI18n } from '../i18n';
 import type { PluginInventoryItem } from './pluginTypes';
 import { pluginLifecycleLabel, pluginTrustLabel } from './pluginPresentation';
+import { resolveAuthorPresentation, resolvePluginPresentation } from './officialPluginCatalog';
 
 export type PluginIconSize = 'row' | 'card' | 'detail' | 'launcher';
 
@@ -110,6 +111,15 @@ export function PluginIdentityHeader(props: {
   class?: string;
   headingRef?: (element: HTMLHeadingElement) => void;
 }): JSX.Element {
+  const i18n = useI18n();
+  const presentation = () => props.item.presentation
+    ? resolveAuthorPresentation(props.item.presentation, i18n.locale())
+    : props.item.officialCatalog
+      ? resolvePluginPresentation(props.item.officialCatalog, i18n.locale())
+      : undefined;
+  const displayName = () => presentation()?.plugin_name ?? props.item.displayName;
+  const publisher = () => presentation()?.publisher_name ?? props.item.publisher;
+  const summary = () => presentation()?.summary ?? props.item.description;
   return (
     <div class={cn('flex min-w-0 items-start gap-3', props.class)} data-plugin-identity>
       <PluginIcon item={props.item} size="detail" />
@@ -121,17 +131,17 @@ export function PluginIdentityHeader(props: {
             data-plugin-center-detail-heading={props.headingRef ? '' : undefined}
             class="min-w-0 truncate text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            {props.item.displayName}
+            {displayName()}
           </h2>
           <PluginTrustBadge item={props.item} />
           <PluginStatusBadge item={props.item} />
         </div>
         <div class="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-          <span class="truncate">{props.item.publisher}</span>
+          <span class="truncate">{publisher()}</span>
           <Show when={props.item.version}><span>v{props.item.version}</span></Show>
         </div>
         <Show when={props.description}>
-          <p class="mt-1.5 text-xs leading-5 text-muted-foreground">{props.item.description}</p>
+          <p class="mt-1.5 text-xs leading-5 text-muted-foreground" lang={presentation()?.resolved_locale} dir="auto">{summary()}</p>
         </Show>
       </div>
     </div>

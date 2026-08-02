@@ -65,7 +65,7 @@ function installedRecord(overrides: Partial<ReDevPluginRecord> = {}): ReDevPlugi
     management_revision: 7,
     revoke_epoch: 0,
     manifest: {
-      schema_version: 'redevplugin.manifest.v5',
+      schema_version: 'redevplugin.manifest.v8',
       publisher: {
         publisher_id: officialContainers.publisherID,
         display_name: officialContainers.publisher,
@@ -76,7 +76,10 @@ function installedRecord(overrides: Partial<ReDevPluginRecord> = {}): ReDevPlugi
         version: officialContainers.stableVersion,
         api_version: 'plugin-v1',
         min_runtime_version: '0.6.5',
-        ui_protocol_version: 'plugin-ui-v5',
+        ui_protocol_version: 'plugin-ui-v7',
+      },
+      presentation: {
+        default_locale: 'en-US', summary: 'Containers plugin', description: ['Containers plugin.'], highlights: [], keywords: ['containers'], localizations: [],
       },
       surfaces: [
         {
@@ -96,7 +99,7 @@ function installedRecord(overrides: Partial<ReDevPluginRecord> = {}): ReDevPlugi
   };
 }
 
-describe('v0.6.7 plugin inventory projection', () => {
+describe('v0.7.0 plugin inventory projection', () => {
   it('keeps Plugin Center as the first panel tile', () => {
     const projection = projectPluginInventory({
       officialCatalog: [officialContainers],

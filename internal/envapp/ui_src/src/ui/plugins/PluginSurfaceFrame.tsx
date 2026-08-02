@@ -152,9 +152,7 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
     if (!openedHost) return;
     openedHost.element.title = i18n.t('uiCopy.plugin.surfaceIframeTitle', {
       plugin: props.target.displayName ?? props.target.pluginID,
-      surface: props.target.surfaceDisplayNameKey
-        ? i18n.t(props.target.surfaceDisplayNameKey)
-        : props.target.surfaceID,
+      surface: props.target.surfaceID,
     });
   });
 

@@ -15,6 +15,7 @@ import type {
 import { useI18n, type I18nHelpers } from '../i18n';
 import { isolateDocumentBranch } from './modalIsolation';
 import { PluginIcon, PluginUpdateBadge } from './PluginPresentationPrimitives';
+import { resolveAuthorPresentation, resolvePluginPresentation } from './officialPluginCatalog';
 import { PLUGIN_ENTER_MOTION_CLASS, PLUGIN_PRESS_MOTION_CLASS, pluginLifecycleLabel } from './pluginPresentation';
 
 const FOCUSABLE_SELECTOR = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -289,7 +290,9 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
                           <PluginUpdateBadge item={tile.item} />
                         </div>
                         <span class="block min-w-0 max-w-full truncate text-xs font-medium leading-4">
-                          {tile.item.displayName}
+                          {tile.item.officialCatalog
+                            ? resolvePluginPresentation(tile.item.officialCatalog, i18n.locale())?.plugin_name ?? tile.item.displayName
+                            : tile.item.displayName}
                         </span>
                       </button>
                       <span id={`plugin-launcher-tile-status-${index()}`} class="sr-only">
@@ -302,7 +305,9 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
                           triggerClass="rounded-md"
                           items={tileMenuItems(tile)}
                           onSelect={(action) => activateTileMenu(tile, action)}
-                          triggerAriaLabel={`${tile.item.displayName}: ${i18n.t('uiCopy.plugin.moreActions')}`}
+                          triggerAriaLabel={`${tile.item.officialCatalog
+                            ? resolvePluginPresentation(tile.item.officialCatalog, i18n.locale())?.plugin_name ?? tile.item.displayName
+                            : tile.item.displayName}: ${i18n.t('uiCopy.plugin.moreActions')}`}
                           trigger={(
                             <button
                               ref={(element) => tileMenuButtons.set(tile.item.inventoryKey, element)}
@@ -396,14 +401,18 @@ function normalizeSearchText(value: string, locale: string): string {
 }
 
 function pluginSearchText(item: PluginInventoryItem, i18n: I18nHelpers, locale: string): string {
+  const presentation = item.presentation
+    ? resolveAuthorPresentation(item.presentation, locale)
+    : item.officialCatalog
+      ? resolvePluginPresentation(item.officialCatalog, locale)
+      : undefined;
   return normalizeSearchText([
-    item.displayName,
-    item.description,
-    item.publisher,
+    presentation?.plugin_name ?? item.displayName,
+    presentation?.summary ?? item.description,
+    presentation?.publisher_name ?? item.publisher,
     item.pluginID,
     categoryLabel(item.category, i18n),
-    item.searchAliasesKey ? i18n.t(item.searchAliasesKey) : '',
-    ...item.searchKeywords,
+    ...(presentation?.keywords ?? item.searchKeywords),
   ].join(' '), locale);
 }
 

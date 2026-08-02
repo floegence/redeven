@@ -182,7 +182,6 @@ function officialContainersProjection(
           pluginInstanceID: officialContainersCatalog.pluginInstanceID,
           surfaceID: officialContainersCatalog.defaultSurfaceID,
           displayName: officialContainersCatalog.displayName,
-          surfaceDisplayNameKey: officialContainersCatalog.defaultSurfaceDisplayNameKey,
           expectedManagementRevision: 11,
           preferredPlacement: 'activity' as const,
         },
@@ -1828,7 +1827,6 @@ describe('EnvAppShell environment entry affordances', () => {
         pluginInstanceID: officialContainersCatalog.pluginInstanceID,
         surfaceID: officialContainersCatalog.defaultSurfaceID,
         displayName: officialContainersCatalog.displayName,
-        surfaceDisplayNameKey: officialContainersCatalog.defaultSurfaceDisplayNameKey,
         expectedManagementRevision: 11,
         preferredPlacement: 'workbench',
       });
@@ -2055,7 +2053,6 @@ describe('EnvAppShell environment entry affordances', () => {
         pluginInstanceID: officialContainersCatalog.pluginInstanceID,
         surfaceID: officialContainersCatalog.defaultSurfaceID,
         displayName: officialContainersCatalog.displayName,
-        surfaceDisplayNameKey: officialContainersCatalog.defaultSurfaceDisplayNameKey,
         expectedManagementRevision: 11,
         preferredPlacement: 'activity',
       });
@@ -2552,7 +2549,6 @@ describe('EnvAppShell environment entry affordances', () => {
         pluginInstanceID: target.pluginInstanceID,
         surfaceID: target.surfaceID,
         displayName: officialContainersCatalog.displayName,
-        surfaceDisplayNameKey: officialContainersCatalog.defaultSurfaceDisplayNameKey,
         expectedManagementRevision: 11,
         preferredPlacement: 'workbench',
       });
@@ -2564,7 +2560,6 @@ describe('EnvAppShell environment entry affordances', () => {
         pluginInstanceID: target.pluginInstanceID,
         surfaceID: target.surfaceID,
         displayName: officialContainersCatalog.displayName,
-        surfaceDisplayNameKey: officialContainersCatalog.defaultSurfaceDisplayNameKey,
         expectedManagementRevision: 11,
         preferredPlacement: 'activity',
       });
