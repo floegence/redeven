@@ -613,9 +613,11 @@ export function registerEnvAIPageSendTests() {
                     requires_approval: false,
                     started_at_unix_ms: 10,
                     ended_at_unix_ms: 1260,
-                    label: 'pwd',
-                    renderer: 'terminal',
-                    payload: { command: 'pwd', exit_code: 0 },
+                    presentation: {
+                      label: 'pwd',
+                      renderer: 'terminal',
+                      payload: { command: 'pwd', exit_code: 0 },
+                    },
                   }],
                 },
                 { type: 'markdown', content: 'Env workspace inspection is complete.' },
@@ -650,9 +652,11 @@ export function registerEnvAIPageSendTests() {
                   severity: 'quiet',
                   needs_attention: false,
                   requires_approval: false,
-                  label: 'Flower inline transcript',
-                  renderer: 'web_search',
-                  payload: { query: 'Flower inline transcript', sources: [] },
+                  presentation: {
+                    label: 'Flower inline transcript',
+                    renderer: 'web_search',
+                    payload: { query: 'Flower inline transcript', sources: [] },
+                  },
                 }],
               }],
             } as any,
@@ -704,15 +708,17 @@ export function registerEnvAIPageSendTests() {
                 severity: 'normal',
                 needs_attention: false,
                 requires_approval: false,
-                label: 'Update todos',
-                renderer: 'todos',
-                payload: {
-                  status: 'success',
-                  summary: 'todos.updated',
-                  details: 'tool execution completed',
-                  version: 2,
-                  updated_at_unix_ms: 1781519615687,
-                  todos: [{ id: '1', content: 'Review AI Agent progress', status: 'completed' }],
+                presentation: {
+                  label: 'Update todos',
+                  renderer: 'todos',
+                  payload: {
+                    status: 'success',
+                    summary: 'todos.updated',
+                    details: 'tool execution completed',
+                    version: 2,
+                    updated_at_unix_ms: 1781519615687,
+                    todos: [{ id: '1', content: 'Review AI Agent progress', status: 'completed' }],
+                  },
                 },
               }],
             }, {
@@ -766,10 +772,12 @@ export function registerEnvAIPageSendTests() {
                   severity: 'quiet',
                   needs_attention: false,
                   requires_approval: false,
-                  label: 'pwd',
-                  renderer: 'terminal',
-                  target_refs: [{ kind: 'file', label: 'app.ts', line: '12' }],
-                  payload: { command: 'pwd' },
+                  presentation: {
+                    label: 'pwd',
+                    renderer: 'terminal',
+                    target_refs: [{ kind: 'file', label: 'app.ts', line: '12' }],
+                    payload: { command: 'pwd' },
+                  },
                 }],
               }],
             } as any,
@@ -781,7 +789,7 @@ export function registerEnvAIPageSendTests() {
         (host.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
         await flush();
         await flush();
-        expect(host.textContent).toContain('Flower contract error: activity_item.target_refs[0].line must be a non-negative integer.');
+        expect(host.textContent).toContain('Flower contract error: activity_item.presentation.target_refs[0].line must be a non-negative integer.');
       } finally {
         dispose();
       }
@@ -822,10 +830,12 @@ export function registerEnvAIPageSendTests() {
                   severity: 'quiet',
                   needs_attention: false,
                   requires_approval: false,
-                  label: 'pwd',
-                  renderer: 'terminal',
-                  target_refs: [{ kind: 'file', label: 'app.ts', ...extra }],
-                  payload: { command: 'pwd' },
+                  presentation: {
+                    label: 'pwd',
+                    renderer: 'terminal',
+                    target_refs: [{ kind: 'file', label: 'app.ts', ...extra }],
+                    payload: { command: 'pwd' },
+                  },
                 }],
               }],
             } as any,
@@ -837,7 +847,7 @@ export function registerEnvAIPageSendTests() {
         (host.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
         await flush();
         await flush();
-        expect(host.textContent).toContain(`Flower contract error: activity_item.target_refs[0].${field} is not part of the activity target ref contract.`);
+        expect(host.textContent).toContain(`Flower contract error: activity_item.presentation.target_refs[0].${field} is not part of the activity target ref contract.`);
       } finally {
         dispose();
       }
@@ -877,9 +887,11 @@ export function registerEnvAIPageSendTests() {
                   severity: 'quiet',
                   needs_attention: false,
                   requires_approval: false,
-                  label: 'Done',
-                  renderer: 'completion',
-                  payload: { result },
+                  presentation: {
+                    label: 'Done',
+                    renderer: 'completion',
+                    payload: { result },
+                  },
                 }],
               }],
             } as any,
@@ -891,7 +903,7 @@ export function registerEnvAIPageSendTests() {
         (host.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
         await flush();
         await flush();
-        expect(host.textContent).toContain(`Flower contract error: activity_item.payload.result.${field} is not part of the nested activity payload contract.`);
+        expect(host.textContent).toContain(`Flower contract error: activity_item.presentation.payload.result.${field} is not part of the nested activity payload contract.`);
       } finally {
         dispose();
       }
@@ -940,9 +952,11 @@ export function registerEnvAIPageSendTests() {
                   severity: 'quiet',
                   needs_attention: false,
                   requires_approval: false,
-                  label: 'app.ts',
-                  renderer: 'file',
-                  payload: { operation: 'read', display_name: 'app.ts', file_action_id: 'read_app' },
+                  presentation: {
+                    label: 'app.ts',
+                    renderer: 'file',
+                    payload: { operation: 'read', display_name: 'app.ts', file_action_id: 'read_app' },
+                  },
                 }],
               }],
             } as any,
@@ -997,17 +1011,19 @@ export function registerEnvAIPageSendTests() {
                 severity: 'quiet',
                 needs_attention: false,
                 requires_approval: false,
-                label: 'app.ts#dcbdf9b8c27f#e1703606242a',
-                renderer: 'file',
-                target_refs: [{ kind: 'file', label: 'app.ts#dcbdf9b8c27f' }],
-                payload: {
-                  operation: 'read',
-                  display_name: 'app.ts',
-                  file_action_id: 'read_app',
-                  content: 'export const app = true;\n',
-                  line_offset: 1,
-                  line_count: 1,
-                  total_lines: 1,
+                presentation: {
+                  label: 'app.ts#dcbdf9b8c27f#e1703606242a',
+                  renderer: 'file',
+                  target_refs: [{ kind: 'file', label: 'app.ts#dcbdf9b8c27f' }],
+                  payload: {
+                    operation: 'read',
+                    display_name: 'app.ts',
+                    file_action_id: 'read_app',
+                    content: 'export const app = true;\n',
+                    line_offset: 1,
+                    line_count: 1,
+                    total_lines: 1,
+                  },
                 },
               }],
             }],
@@ -1077,14 +1093,16 @@ export function registerEnvAIPageSendTests() {
                 severity: 'quiet',
                 needs_attention: false,
                 requires_approval: false,
-                label: 'frontend-design',
-                renderer: 'structured',
-                payload: {
-                  operation: 'use_skill',
-                  name: 'frontend-design',
-                  content: 'Loaded frontend design guidance.',
-                  content_ref: 'content_123',
-                  activation_id: 'act_123',
+                presentation: {
+                  label: 'frontend-design',
+                  renderer: 'structured',
+                  payload: {
+                    operation: 'use_skill',
+                    name: 'frontend-design',
+                    content: 'Loaded frontend design guidance.',
+                    content_ref: 'content_123',
+                    activation_id: 'act_123',
+                  },
                 },
               }],
             }],
@@ -1143,25 +1161,27 @@ export function registerEnvAIPageSendTests() {
                 severity: 'quiet',
                 needs_attention: false,
                 requires_approval: false,
-                label: 'apply_patch',
-                renderer: 'patch',
-                payload: {
-                  operation: 'apply_patch',
-                  mutations: [{
-                    display_name: 'src/app.ts',
-                    file_action_id: 'patch_app',
-                    change_type: 'update',
-                    additions: 1,
-                    deletions: 1,
-                    unified_diff: [
-                      '--- a/src/app.ts',
-                      '+++ b/src/app.ts',
-                      '@@ -1,2 +1,2 @@',
-                      '-export const oldValue = 1;',
-                      '+export const newValue = 2;',
-                      ' shared();',
-                    ].join('\n'),
-                  }],
+                presentation: {
+                  label: 'apply_patch',
+                  renderer: 'patch',
+                  payload: {
+                    operation: 'apply_patch',
+                    mutations: [{
+                      display_name: 'src/app.ts',
+                      file_action_id: 'patch_app',
+                      change_type: 'update',
+                      additions: 1,
+                      deletions: 1,
+                      unified_diff: [
+                        '--- a/src/app.ts',
+                        '+++ b/src/app.ts',
+                        '@@ -1,2 +1,2 @@',
+                        '-export const oldValue = 1;',
+                        '+export const newValue = 2;',
+                        ' shared();',
+                      ].join('\n'),
+                    }],
+                  },
                 },
               }],
             }],
