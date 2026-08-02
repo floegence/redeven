@@ -433,16 +433,16 @@
     },
     {
       "path": "desktop/src/main/main.ts",
-      "sha256": "64120694e06123ab8ee10f56f095bf728f51764e9f95796c3e26fe3057d67afc",
+      "sha256": "149de8254e07ad19a6f1b2c19cdc1201079338366be359628a2296da4d921418",
       "sink_kinds": [
         "file"
       ],
-      "review_status": "reviewed",
       "owner": "redeven Desktop",
       "authority": "product_configuration",
       "data_classes": [
         "Desktop preferences, runtime handoff, download, or product cache"
       ],
+      "review_status": "reviewed",
       "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
     },
     {
@@ -539,7 +539,7 @@
     },
     {
       "path": "internal/ai/run.go",
-      "sha256": "dc04dc743f453c75e72380384421df80ca4d474162f5fdbf59ea632261bf9c9c",
+      "sha256": "21c1295d41e5e5a6ab39f294f9403923f9e8593944271afdc6bb04e3507d1222",
       "sink_kinds": [
         "file",
         "json_file"
@@ -1334,7 +1334,7 @@
     },
     {
       "path": "internal/codeapp/codeserver/artifact.go",
-      "sha256": "66c2333592b95ee94b0442f4b956fd251979f0c02f402a3a0fa190abffee3a2a",
+      "sha256": "410754617a85055bd300ffc883853b878e4058417a286686bef9ec523a12be44",
       "sink_kinds": [
         "file"
       ],
@@ -1763,7 +1763,7 @@
     },
     {
       "path": "internal/flower_ui/src/FlowerSurface.tsx",
-      "sha256": "b601eb0ddee3067ed50e9126feb3a1bbe43474795e45ab4660e5089478eb1740",
+      "sha256": "ac206e6ab9545b2e9a191371985de7def1b977e7fcc7e52f5a1e86237c7896e3",
       "sink_kinds": [
         "web_storage"
       ],
