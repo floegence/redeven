@@ -114,22 +114,6 @@ export type PluginMarketDetail = Readonly<{
 
 export type PluginAuthorPresentation = PluginRecord['presentation'];
 
-export type PluginReleaseNotes = Readonly<{
-  releaseID: string;
-  targetVersion: string;
-  summaryKey: string;
-  featureKeys: readonly string[];
-  improvementKeys: readonly string[];
-  fixKeys: readonly string[];
-  noticeKeys: readonly string[];
-  binding?: Readonly<{
-    packageHash: string;
-    manifestHash: string;
-    entriesHash: string;
-    summaryHash: string;
-  }>;
-}>;
-
 export type OfficialPluginPermission = {
   permissionID: string;
   group: 'read' | 'execute' | 'delete' | 'images_write' | 'other';
@@ -159,7 +143,6 @@ export type OfficialPluginCatalogItem = {
   searchKeywords: readonly string[];
   trustedSigningKeyIDs: readonly string[];
   permissions?: readonly OfficialPluginPermission[];
-  releaseNotes?: PluginReleaseNotes;
   distribution: OfficialPluginDistribution;
 };
 
@@ -245,7 +228,6 @@ export type PluginUpdateCandidate = Readonly<{
   targetVersion: string;
   kind: 'version_update' | 'replace' | 'noop' | 'blocked';
   target: PluginPackageIdentity;
-  releaseNotes?: PluginReleaseNotes;
   reviewEvidence: Readonly<{ kind: 'external_inspection'; inspection: ExternalPluginInspection }>;
 }>;
 

@@ -1,9 +1,9 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from 'solid-js';
+import { Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { AlertTriangle, CheckCircle, ChevronDown, Loader2, Shield } from '@floegence/floe-webapp-core/icons';
 import { pluginMutationOutcome } from '@floegence/redevplugin-ui';
 
-import { useI18n, type EnvAppTranslationKey } from '../i18n';
+import { useI18n } from '../i18n';
 import { Dialog } from '../primitives/EnvAppModal';
 import { PLUGIN_MOBILE_TOUCH_TARGET_CLASS, PLUGIN_PRESS_MOTION_CLASS } from './pluginPresentation';
 import { PluginIdentityHeader } from './PluginPresentationPrimitives';
@@ -11,8 +11,8 @@ import {
   candidateMatchesInventory,
   candidateTargetIsCurrent,
   createExternalUpdateCandidate,
+  samePackageIdentity,
 } from './pluginUpdateProjection';
-import { samePackageIdentity } from './pluginReleaseNotes';
 import { securityDeclarations } from './externalPluginSecurityProjection';
 import type {
   ExternalPluginCommitResult,
@@ -317,7 +317,6 @@ export function PluginUpdateReviewDialog(props: PluginUpdateReviewDialogProps): 
 
 function UpdateReview(props: { candidate: PluginUpdateCandidate; item: PluginInventoryItem }): JSX.Element {
   const i18n = useI18n();
-  const notes = () => props.candidate.releaseNotes;
   const securityChanges = () => props.candidate.reviewEvidence.kind === 'external_inspection'
     ? securityDeclarations(
       props.candidate.reviewEvidence.inspection.security_summary,
@@ -327,14 +326,13 @@ function UpdateReview(props: { candidate: PluginUpdateCandidate; item: PluginInv
   return <div class="space-y-5">
     <PluginIdentityHeader item={props.item} />
     <section class="border-y py-4"><p class="text-xs font-semibold uppercase text-muted-foreground">{i18n.t('uiCopy.plugin.updateReview.versionChange')}</p><div class="mt-2 flex flex-wrap items-center gap-2 text-sm"><span class="rounded-md border px-2.5 py-1">v{props.candidate.installedVersion}</span><span aria-hidden="true">→</span><span class="rounded-md border border-primary/40 bg-primary/5 px-2.5 py-1 font-semibold">v{props.candidate.targetVersion}</span><Show when={props.candidate.kind === 'replace'}><span class="text-xs text-[var(--redeven-status-warning-foreground)]">{i18n.t('uiCopy.plugin.updateReview.replacementBuild')}</span></Show></div></section>
-    <section><h3 class="text-sm font-semibold">{i18n.t('uiCopy.plugin.updateReview.whatIsNew')}</h3><Show when={notes()} fallback={<p class="mt-2 text-sm leading-6 text-muted-foreground">{i18n.t('uiCopy.plugin.updateReview.noReleaseNotes')}</p>}>{(current) => <div class="mt-2 space-y-3"><p class="text-sm leading-6">{i18n.t(current().summaryKey as EnvAppTranslationKey)}</p><NoteList title={i18n.t('uiCopy.plugin.updateReview.features')} keys={current().featureKeys} /><NoteList title={i18n.t('uiCopy.plugin.updateReview.improvements')} keys={current().improvementKeys} /><NoteList title={i18n.t('uiCopy.plugin.updateReview.fixes')} keys={current().fixKeys} /><NoteList title={i18n.t('uiCopy.plugin.updateReview.notices')} keys={current().noticeKeys} /></div>}</Show></section>
+    <section><h3 class="text-sm font-semibold">{i18n.t('uiCopy.plugin.updateReview.whatIsNew')}</h3><p class="mt-2 text-sm leading-6 text-muted-foreground">{i18n.t('uiCopy.plugin.updateReview.noReleaseNotes')}</p></section>
     <section class="border-y py-4"><div class="flex items-start gap-3"><Shield class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" /><div><h3 class="text-sm font-semibold">{i18n.t('uiCopy.plugin.updateReview.impactTitle')}</h3><Show when={securityChanges().length === 0}><p class="mt-1 text-xs leading-5 text-muted-foreground">{i18n.t('uiCopy.plugin.updateReview.noAccessChange')}</p></Show><Show when={securityChanges().length > 0}><p class="mt-1 text-xs leading-5 text-[var(--redeven-status-warning-foreground)]">{i18n.t('uiCopy.plugin.updateReview.securityChanges', { count: securityChanges().length })}</p></Show><p class="mt-1 text-xs leading-5 text-muted-foreground">{i18n.t('uiCopy.plugin.updateReview.grantsRetained')}</p><p class="mt-1 text-xs leading-5 text-muted-foreground">{i18n.t('uiCopy.plugin.updateReview.externalEvidence')}</p></div></div></section>
     <Show when={props.candidate.kind === 'noop'}><p class="rounded-md border px-3 py-2 text-sm">{i18n.t('uiCopy.plugin.updateReview.noUpdate')}</p></Show><Show when={props.candidate.kind === 'blocked'}><p class="rounded-md border border-destructive px-3 py-2 text-sm text-destructive">{i18n.t('uiCopy.plugin.updateReview.downgradeBlocked')}</p></Show>
-    <details class="group rounded-md border"><summary class="flex min-h-11 cursor-pointer list-none items-center justify-between px-3 text-xs font-semibold"><span>{i18n.t('uiCopy.plugin.updateReview.technicalEvidence')}</span><ChevronDown class="h-4 w-4 transition-transform duration-150 group-open:rotate-180 motion-reduce:transition-none" /></summary><dl class="grid gap-3 border-t px-3 py-3 text-xs sm:grid-cols-2"><HashFact label={i18n.t('uiCopy.plugin.updateReview.packageHash')} value={props.candidate.target.packageHash} /><HashFact label={i18n.t('uiCopy.plugin.updateReview.manifestHash')} value={props.candidate.target.manifestHash} /><HashFact label={i18n.t('uiCopy.plugin.updateReview.entriesHash')} value={props.candidate.target.entriesHash} /><Show when={notes()}>{(current) => <HashFact label={i18n.t('uiCopy.plugin.updateReview.releaseNotesID')} value={current().releaseID} />}</Show></dl></details>
+    <details class="group rounded-md border"><summary class="flex min-h-11 cursor-pointer list-none items-center justify-between px-3 text-xs font-semibold"><span>{i18n.t('uiCopy.plugin.updateReview.technicalEvidence')}</span><ChevronDown class="h-4 w-4 transition-transform duration-150 group-open:rotate-180 motion-reduce:transition-none" /></summary><dl class="grid gap-3 border-t px-3 py-3 text-xs sm:grid-cols-2"><HashFact label={i18n.t('uiCopy.plugin.updateReview.packageHash')} value={props.candidate.target.packageHash} /><HashFact label={i18n.t('uiCopy.plugin.updateReview.manifestHash')} value={props.candidate.target.manifestHash} /><HashFact label={i18n.t('uiCopy.plugin.updateReview.entriesHash')} value={props.candidate.target.entriesHash} /></dl></details>
   </div>;
 }
 
-function NoteList(props: { title: string; keys: readonly string[] }): JSX.Element { const i18n = useI18n(); return <Show when={props.keys.length}><div><h4 class="text-xs font-semibold text-muted-foreground">{props.title}</h4><ul class="mt-1 space-y-1 text-sm leading-5"><For each={props.keys}>{(key) => <li class="flex gap-2"><span aria-hidden="true">•</span><span>{i18n.t(key as EnvAppTranslationKey)}</span></li>}</For></ul></div></Show>; }
 function HashFact(props: { label: string; value: string }): JSX.Element { return <div class="min-w-0"><dt class="text-muted-foreground">{props.label}</dt><dd class="mt-1 truncate font-mono" title={props.value}>{props.value}</dd></div>; }
 
 function UpdateSourceForm(props: { kind: ExternalPluginSourceKind; url: string; tag: string; onKind: (kind: ExternalPluginSourceKind) => void; onURL: (value: string) => void; onTag: (value: string) => void; onFile: (file: File | undefined) => void }): JSX.Element {

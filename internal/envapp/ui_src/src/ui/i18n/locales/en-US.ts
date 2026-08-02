@@ -259,23 +259,6 @@ export const enUS = defineDictionary({
         sourceDescription: 'This plugin needs its source again before Redeven can inspect the exact update.',
         reviewPackage: 'Review package',
         readOnly: 'You can review this update, but an environment administrator must install it.',
-        notes: {
-          containers200: {
-            summary: 'An official Containers release for managing Docker and Podman resources through Redeven.',
-            featureManagement: 'Introduces the official Containers workspace and host-backed resource management.',
-            improvementSafety: 'Uses verified capability contracts, scoped permissions, and explicit operation confirmation.',
-            fixLifecycle: 'Keeps plugin lifecycle, permission, and surface state aligned with the installed package.',
-          },
-          containers400: {
-            summary: 'A rebuilt container workspace for managing Docker and Podman resources with clearer navigation and safer operations.',
-            featureWorkspace: 'Dedicated workspaces for Containers, Images, Volumes, Docker Projects, and Podman Pods.',
-            featureEngines: 'Docker and Podman views adapt to the active engine without exposing routine connection details.',
-            improvementResponsive: 'More compact tables, inspectors, dialogs, and responsive layouts across desktop and mobile sizes.',
-            improvementOperations: 'Clearer resource actions, operation state, confirmation, and recovery feedback.',
-            fixContext: 'Removes the confusing context-first presentation and keeps engine identity available only when it matters.',
-            noticeDevelopment: 'This is a development delivery. Redeven validates its exact delivery and capability identity, but package-level signature and declaration-difference inspection are unavailable.',
-          },
-        },
       },
       viewPolicyRestriction: 'View policy restriction',
       viewRuntimeRequirement: 'View runtime requirement',

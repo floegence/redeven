@@ -1,4 +1,3 @@
-import { releaseNotesForIdentity, samePackageIdentity } from './pluginReleaseNotes';
 import type {
   ExternalPluginInspection,
   PluginInventoryItem,
@@ -36,9 +35,14 @@ export function createExternalUpdateCandidate(
     targetVersion: inspection.version,
     kind: classifyUpdate(item.version, inspection.version, item.installedPackage, target),
     target,
-    releaseNotes: releaseNotesForIdentity(item.officialCatalog?.releaseNotes, target),
     reviewEvidence: Object.freeze({ kind: 'external_inspection' as const, inspection }),
   });
+}
+
+export function samePackageIdentity(a: PluginPackageIdentity, b: PluginPackageIdentity): boolean {
+  return a.packageHash === b.packageHash
+    && a.manifestHash === b.manifestHash
+    && a.entriesHash === b.entriesHash;
 }
 
 export function candidateMatchesInventory(candidate: PluginUpdateCandidate, item: PluginInventoryItem | undefined): boolean {
