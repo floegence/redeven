@@ -312,11 +312,14 @@ export async function runMermaid(root: HTMLElement, options: MermaidRunOptions =
           if (/^javascript:/iu.test(href.trim())) node.removeAttribute('href');
           node.removeAttribute('xlink:href');
         });
-        const importedSvg = document.importNode(svgRoot, true) as SVGElement;
+        const importedSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
         // Preserve Mermaid's safe presentation attributes across document
         // boundaries (some DOM implementations drop custom data attributes).
         for (const attribute of Array.from(svgRoot.attributes)) {
           importedSvg.setAttribute(attribute.name, attribute.value);
+        }
+        for (const child of Array.from(svgRoot.childNodes)) {
+          importedSvg.appendChild(document.importNode(child, true));
         }
         el.replaceChildren(importedSvg);
         const svgEl = el.querySelector('svg');
