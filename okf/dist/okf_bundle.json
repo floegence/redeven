@@ -3669,7 +3669,7 @@
         "title": "Container resources capability",
         "type": "Architecture Contract"
       },
-      "body_length": 11243,
+      "body_length": 11269,
       "summary": "Redeven owns Docker and Podman semantics, CLI execution, redacted DTOs, and risk\nprojection; ReDevPlugin owns plugin identity, grants, confirmations, operation\nand stream handles, quotas, revocation, and audit. Production consumes signed\nContainers `4.1.0`, `redeven.container_resources.v4@4.0.0`, and\n`redeven.capability.container_resources@3.0.0` through the latest-only market\nand immutable GitHub Release transport. The capability bundle is signed through\nthe released ReDevPlugin `0.7.0` publisher and remains one verified part of the\ncomplete release; market discovery or a capability signature alone cannot\nactivate it.\nUnknown endpoints, stale plans, partial inventory, and unavailable terminal\nreconciliation fail closed.",
       "sections": [
         {
@@ -3699,9 +3699,9 @@
           "description": "Contains deterministic generated candidate schema, client, compatibility metadata, and notices without an activatable signature pin."
         },
         {
-          "id": "redeven:spec/redevplugin/official-containers-capability-v4:0:contains the public external-signing exchange and verified immutable v4 capability bundle produced by redevplugin `0.6.23`.",
+          "id": "redeven:spec/redevplugin/official-containers-capability-v4:0:contains the public external-signing exchange and verified immutable v4 capability bundle consumed through the released redevplugin `0.7.0` verifier.",
           "source": "redeven:spec/redevplugin/official-containers-capability-v4",
-          "description": "Contains the public external-signing exchange and verified immutable v4 capability bundle produced by ReDevPlugin `0.6.23`."
+          "description": "Contains the public external-signing exchange and verified immutable v4 capability bundle consumed through the released ReDevPlugin `0.7.0` verifier."
         },
         {
           "id": "redeven:scripts/check_containers_v4_release_capability.sh:0:verifies the official v4 bundle, public signing exchange, source commit, generated client, and complete artifact inventory.",
@@ -4706,7 +4706,7 @@
         "title": "ReDevPlugin host integration boundary",
         "type": "Architecture Boundary"
       },
-      "body_length": 11064,
+      "body_length": 11063,
       "summary": "ReDevPlugin is an independently released plugin platform. Redeven consumes its\ncoordinated `v0.7.0` Go, npm, Rust source-crate, and machine-contract artifacts;\nit does not fork platform mechanics. Redeven owns authenticated session mapping,\nproduct source policy and review UX, UI placement, product runtime builds, and\nconcrete business adapters. Missing or unverifiable upstream identity, lifecycle,\ninteraction, package, or runtime contracts fail closed; there is no Redeven\ncompatibility path or sibling-source fallback.",
       "sections": [
         {
@@ -4720,8 +4720,8 @@
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Plugin UI loads only through the released sandbox bootstrap and bridge. Plugin\nbackend code executes only through the released Rust runtime. Product routes,\nnavigation, Activity/Workbench layout, inventory keys, session semantics, and\nconcrete business access do not become manifest or platform schema fields.\n\nFlower may orchestrate released scaffold, validate, package, inspect, commit,\nenable, and open APIs. It must not write opaque state, mint tokens, manufacture\ntrust, or grant storage/network/runtime authority.\n\nBefore opening ReDevPlugin state, Redeven uses only the committed owner-scope\ngeneration returned by the released migration. Recognized legacy state with\nunprovable ownership is retained in quarantine while a fresh generation is\ncommitted. Unknown, corrupt, ambiguous, tampered, or future state blocks startup\nwithout mutation. Floret-owned state is outside this lifecycle.\n\nFor an exact supported root copied across filesystem identities, Redeven may use\nthe released read-only inspection and exact-plan recovery APIs from `v0.6.24`.\nThe product presents the projected digests, counts, sizes, and retained-state\nfacts, binds confirmation to one plan digest, and takes the normal Local\nEnvironment runtime lock. The released transaction retains the entire source as\nan inactive archive and commits a fresh empty generation atomically. Redeven\ndoes not edit the journal, reveal archive paths, delete retained state, reactivate\narchived authority or data, or recover unknown and unsupported state.",
-          "char_count": 1516
+          "body": "Plugin UI loads only through the released sandbox bootstrap and bridge. Plugin\nbackend code executes only through the released Rust runtime. Product routes,\nnavigation, Activity/Workbench layout, inventory keys, session semantics, and\nconcrete business access do not become manifest or platform schema fields.\n\nFlower may orchestrate released scaffold, validate, package, inspect, commit,\nenable, and open APIs. It must not write opaque state, mint tokens, manufacture\ntrust, or grant storage/network/runtime authority.\n\nBefore opening ReDevPlugin state, Redeven uses only the committed owner-scope\ngeneration returned by the released migration. Recognized legacy state with\nunprovable ownership is retained in quarantine while a fresh generation is\ncommitted. Unknown, corrupt, ambiguous, tampered, or future state blocks startup\nwithout mutation. Floret-owned state is outside this lifecycle.\n\nFor an exact supported root copied across filesystem identities, Redeven may use\nthe released read-only inspection and exact-plan recovery APIs from `v0.7.0`.\nThe product presents the projected digests, counts, sizes, and retained-state\nfacts, binds confirmation to one plan digest, and takes the normal Local\nEnvironment runtime lock. The released transaction retains the entire source as\nan inactive archive and commits a fresh empty generation atomically. Redeven\ndoes not edit the journal, reveal archive paths, delete retained state, reactivate\narchived authority or data, or recover unknown and unsupported state.",
+          "char_count": 1515
         }
       ],
       "evidence": [
@@ -10051,5 +10051,5 @@
       ]
     }
   ],
-  "source_sha256": "9c1fcaa80c473ac6649184d02c133fe609a2829fed6cc9376357f344fd7da120"
+  "source_sha256": "790500951c8330b98907561cb0a8c7f1f4ab3f623dc10d7c34970bf13f445ac4"
 }

@@ -15,7 +15,7 @@ import (
 	"github.com/floegence/redevplugin/pkg/version"
 )
 
-const officialRuntimeVersion = "0.6.24"
+const officialRuntimeVersion = "0.7.0"
 
 type runtimeModuleDependencies struct {
 	Path          string
@@ -23,7 +23,7 @@ type runtimeModuleDependencies struct {
 }
 
 // newOfficialRuntimeModule admits Redeven's product-built ReDevPlugin runtime
-// through the released Host capability. ReDevPlugin v0.6 intentionally exposes
+// through the released Host capability. ReDevPlugin exposes
 // runtime admission only on Linux; other platforms keep the plugin management
 // surface available without claiming worker execution support.
 func newOfficialRuntimeModule(ctx context.Context, deps runtimeModuleDependencies) (*host.RuntimeModule, error) {
