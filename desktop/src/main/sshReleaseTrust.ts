@@ -65,7 +65,7 @@ function compact(value: unknown): string {
 }
 
 export function canonicalDesktopSSHReleaseTag(releaseTag: string): string {
-  const normalized = compact(releaseTag);
+  const normalized = String(releaseTag ?? '');
   if (!CANONICAL_RELEASE_TAG_REGEXP.test(normalized)) {
     throw new Error('Desktop SSH release tag must be canonical SemVer with a leading v.');
   }
