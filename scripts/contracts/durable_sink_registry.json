@@ -405,7 +405,7 @@
     },
     {
       "path": "desktop/src/main/diagnostics.ts",
-      "sha256": "34ac1ee559e144eddaff1b32c77b449a791f031de99c03590a2a03e78a5131bb",
+      "sha256": "bc95ea925296cd4b9e4a3e2538f28478364891dc3097e9376e16cb1c494c1936",
       "sink_kinds": [
         "file"
       ],
@@ -446,8 +446,22 @@
       "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
     },
     {
+      "path": "desktop/src/main/sshConfigHosts.ts",
+      "sha256": "5ffd5c3daa4a0ef3863fef9c66db9bf0ff4a49c606acfc6860697d3f467d43a4",
+      "sink_kinds": [
+        "file"
+      ],
+      "review_status": "reviewed",
+      "owner": "redeven Desktop",
+      "authority": "product_configuration",
+      "data_classes": [
+        "Desktop preferences, runtime handoff, download, or product cache"
+      ],
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+    },
+    {
       "path": "desktop/src/main/sshReleaseAssets.ts",
-      "sha256": "4f891ee3b87c6e4748393f9d4d242df65139291741e41df297f7c5323b7a759c",
+      "sha256": "3799482c2eaadeff9e2f8528074ea6157f5da3bd195c96001010625da62eb48e",
       "sink_kinds": [
         "file"
       ],
@@ -525,7 +539,7 @@
     },
     {
       "path": "internal/ai/run.go",
-      "sha256": "bb1a753e11fe3b85b426109c85f05aaed1932a0ab701a3504397e7ad7f201255",
+      "sha256": "dc04dc743f453c75e72380384421df80ca4d474162f5fdbf59ea632261bf9c9c",
       "sink_kinds": [
         "file",
         "json_file"
@@ -581,7 +595,7 @@
     },
     {
       "path": "internal/ai/skill_manager_remote.go",
-      "sha256": "42895f0a84559f142a0bef3c4324be876ca18c824f5cbc012812c06205a51ef8",
+      "sha256": "136a50621933db95878e58fcb9b18f95fce1e9a3c24097f80fea0ea7184a804b",
       "sink_kinds": [
         "file",
         "json_file"
@@ -627,7 +641,7 @@
     },
     {
       "path": "internal/ai/structured_tools.go",
-      "sha256": "d5bfe5c9e0bfa8aac2d3b2eedf59ad3582edef1c62eaea31207032d79ca2c549",
+      "sha256": "845d3ecc9ebf5ba95e225b39f536be202e8e71eac4c179c7226ca59dae6a668a",
       "sink_kinds": [
         "file"
       ],
@@ -1219,7 +1233,7 @@
     },
     {
       "path": "internal/ai/uploads.go",
-      "sha256": "3e37cbbbcc5c6922203118e6ba2cabb1c081900a28a35f7a879d08402aea1933",
+      "sha256": "929ee4b0ef618e474918b00fc8ca24ca37ace555c157bb8dc2697f876777574e",
       "sink_kinds": [
         "file",
         "json_file"
@@ -1246,7 +1260,7 @@
     },
     {
       "path": "internal/auditlog/store.go",
-      "sha256": "e2b376a168815e3b9628c3681c0405c5cfe5b421a4d5f79c195a8044919b9a46",
+      "sha256": "53d661972827b2d746b1dfb5b6e06a8da7f73b8914e6221000d2cb2b1eca3a50",
       "sink_kinds": [
         "file",
         "json_file"
@@ -1288,7 +1302,7 @@
     },
     {
       "path": "internal/codeapp/appserver/server.go",
-      "sha256": "7e3e0c7533415db59ea979acd6f87f9b60d01b6ba7dff1ec8b99d0e54ab67793",
+      "sha256": "efbae585f706eea8f7cb46106e55d8e3b37b4f776fb9b35b36c620909b1e42e1",
       "sink_kinds": [
         "file",
         "json_file"
@@ -1320,7 +1334,7 @@
     },
     {
       "path": "internal/codeapp/codeserver/artifact.go",
-      "sha256": "f0dbdc9885d1638b9ab2edbbf1225830ad9178fa307cd3669b6b80c42aa1d6cf",
+      "sha256": "66c2333592b95ee94b0442f4b956fd251979f0c02f402a3a0fa190abffee3a2a",
       "sink_kinds": [
         "file"
       ],
@@ -1329,6 +1343,9 @@
       "authority": "product_configuration",
       "data_classes": [
         "product-owned state"
+      ],
+      "tables": [
+        "turning"
       ],
       "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
     },
@@ -1356,7 +1373,7 @@
     },
     {
       "path": "internal/codeapp/codeserver/runner.go",
-      "sha256": "73642697b9ec0d98ae779a0fc60a9149b0d3ba1d2d1acf9414e42eaf106d0c62",
+      "sha256": "c0eb9dc6bab29d484096aa952ef8cd8cfaef3249f64f9007874da659b30e42bb",
       "sink_kinds": [
         "file"
       ],
@@ -1607,7 +1624,7 @@
     },
     {
       "path": "internal/desktopbridge/server.go",
-      "sha256": "04a0b40cfaf49a57121cb443da5459f4b40a2fa4fb224467023bb28bb6287d8f",
+      "sha256": "a5d0e960bc1dd1bfd605e9eabca0fdf38ccb6ba31e4cd252a4ed3fa190c6b3a4",
       "sink_kinds": [
         "file",
         "json_file"
