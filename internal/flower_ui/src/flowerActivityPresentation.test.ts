@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import type { FlowerActivityItem } from './contracts/flowerSurfaceContracts';
-import { presentFlowerActivityItem } from './flowerActivityPresentation';
+import type { FlowerActivityItem, FlowerApprovalAction, FlowerSubagentSummary } from './contracts/flowerSurfaceContracts';
+import { pendingApprovalCommandForActivityItem, presentFlowerActivityItem } from './flowerActivityPresentation';
 
 function item(overrides: Partial<FlowerActivityItem>): FlowerActivityItem {
   return {
@@ -38,7 +38,112 @@ const fileActions = {
   },
 } as const;
 
+function approvalAction(overrides: Partial<FlowerApprovalAction> = {}): FlowerApprovalAction {
+  return {
+    action_id: 'approval-1',
+    origin: 'main_tool',
+    run_id: 'run-1',
+    tool_id: 'tool-1',
+    tool_name: 'terminal.exec',
+    state: 'requested',
+    status: 'pending',
+    revision: 1,
+    version: 1,
+    requested_at_ms: 1,
+    can_approve: true,
+    queue_generation: 1,
+    queue_order: 1,
+    batch_index: 0,
+    batch_size: 1,
+    summary: { label: 'Tool approval' },
+    ...overrides,
+  };
+}
+
+function subagentSummary(overrides: Partial<FlowerSubagentSummary> = {}): FlowerSubagentSummary {
+  return {
+    parent_thread_id: 'parent-thread-1',
+    thread_id: 'child-thread-1',
+    task_name: 'Review API boundary',
+    task_description: 'Review the API boundary and identify contract risks.',
+    agent_type: 'reviewer',
+    status: 'running',
+    can_send_input: true,
+    can_interrupt: true,
+    can_close: true,
+    ...overrides,
+  };
+}
+
 describe('presentFlowerActivityItem', () => {
+  it('uses the thread subagent summary when the activity payload has no detail', () => {
+    const presentation = presentFlowerActivityItem(item({
+      item_id: 'subagent:review-api',
+      tool_name: 'subagents',
+      renderer: 'structured',
+      label: 'Review API boundary',
+      payload: {},
+    }), undefined, {
+      subagentSummaries: [subagentSummary()],
+    });
+
+    expect(presentation.detailBlocks).toEqual([
+      expect.objectContaining({
+        kind: 'subagents',
+        subagents: expect.objectContaining({
+          items: [expect.objectContaining({
+            name: 'Review API boundary',
+            description: 'Review the API boundary and identify contract risks.',
+            raw_status: 'running',
+            open_messages: { thread_id: 'child-thread-1' },
+          })],
+        }),
+      }),
+    ]);
+  });
+
+  it('does not use unrelated thread subagent summaries for an activity item', () => {
+    const presentation = presentFlowerActivityItem(item({
+      tool_name: 'subagents',
+      renderer: 'structured',
+      label: 'Unrelated task',
+      payload: {},
+    }), undefined, {
+      subagentSummaries: [subagentSummary()],
+    });
+
+    expect(presentation.detailBlocks).toEqual([]);
+  });
+
+  it('projects the matching approval command for a waiting activity item', () => {
+    const command = pendingApprovalCommandForActivityItem(item({
+      status: 'waiting',
+      requires_approval: true,
+      approval_state: 'requested',
+      label: 'Tool approval',
+      payload: {},
+    }), [approvalAction({
+      tool_id: 'tool-1',
+      summary: { label: 'pwd', command: 'pwd' },
+    })]);
+
+    expect(command).toBe('pwd');
+  });
+
+  it('does not borrow a command for settled or unrelated activity items', () => {
+    const action = approvalAction({ tool_id: 'other-tool', summary: { label: 'ls', command: 'ls' } });
+    expect(pendingApprovalCommandForActivityItem(item({
+      status: 'success',
+      requires_approval: true,
+      approval_state: 'approved',
+    }), [action])).toBe('');
+    expect(pendingApprovalCommandForActivityItem(item({
+      status: 'waiting',
+      requires_approval: true,
+      approval_state: 'requested',
+    }), [action])).toBe('');
+  });
+
   it.each([
     { name: 'structured', renderer: 'structured' },
     { name: 'terminal', renderer: 'terminal' },

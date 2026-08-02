@@ -98,6 +98,7 @@ import { projectSubagentDetailThread } from './flowerSubagentDetailThread';
 import { formatFlowerCurrentModelLabel } from './flowerModelLabel';
 import { FLOWER_COMPACT_CONTEXT_COMMAND, parseFlowerSlashCommand } from './flowerSlashCommands';
 import {
+  pendingApprovalCommandForActivityItem,
   presentFlowerActivityItem,
   type FlowerActivityDetailBlock,
   type FlowerActivityDiffFile,
@@ -6928,7 +6929,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     })();
     const riskNote = () => {
       const notes: string[] = [];
-      if (visibleFlags.includes('May reach outside the workspace')) notes.push('This command accesses the network.');
+      if (visibleFlags.includes('May reach outside the workspace')) notes.push('This command may access resources outside the workspace.');
       if (visibleEffects.includes('Writes files')) notes.push('This will modify files.');
       return notes.length > 0 ? notes.join(' ') : '';
     };
@@ -7121,7 +7122,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const activityItemAriaLabel = (item: FlowerActivityItem, timeline: FlowerActivityTimelineBlock): string => (
     [
-      presentFlowerActivityItem(item, timeline.file_actions, { subagents: subagentsCopy() }).label,
+      presentFlowerActivityItem(item, timeline.file_actions, {
+        subagents: subagentsCopy(),
+        subagentSummaries: selectedThread()?.subagents ?? [],
+      }).label,
       copy().chat.toolStatuses[item.status],
     ].filter(Boolean).join('. ')
   );
@@ -7820,7 +7824,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     item: Accessor<FlowerActivityItem>,
   ) => {
     const disclosureKey = createMemo(() => activityItemKey(messageID(), timeline(), item()));
-    const presentation = createMemo(() => presentFlowerActivityItem(item(), timeline().file_actions, { subagents: subagentsCopy() }));
+    const presentation = createMemo(() => presentFlowerActivityItem(item(), timeline().file_actions, {
+      subagents: subagentsCopy(),
+      subagentSummaries: selectedThread()?.subagents ?? [],
+    }));
+    const pendingApprovalCommand = createMemo(() => pendingApprovalCommandForActivityItem(item(), selectedApprovalActions()));
+    const displayTitle = createMemo<FlowerActivityTitle>(() => {
+      const command = pendingApprovalCommand();
+      return command ? { kind: 'command', command } : presentation().title;
+    });
     const terminalDisclosure = createMemo(() => presentation().detailBlocks.some((block) => block.kind === 'terminal_output'));
     const detailKeys = createMemo(() => presentation().detailBlocks.map((block) => `${disclosureKey()}:${block.kind}`));
     const detailsByKey = createMemo(() => {
@@ -7889,7 +7901,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           >
             <span class="flower-activity-inline-icon">{statusIcon(displayStatus())}</span>
             <span class="flower-activity-inline-copy">
-              <span class="flower-activity-inline-title">{activityTitle(presentation().title)}</span>
+              <span class="flower-activity-inline-title">{activityTitle(displayTitle())}</span>
               <Show when={presentation().meta}>
                 {(meta) => <span class="flower-activity-inline-detail">{meta()}</span>}
               </Show>

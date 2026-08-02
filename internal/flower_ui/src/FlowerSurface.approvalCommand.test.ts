@@ -45,6 +45,16 @@ describe('Flower approval command presentation', () => {
     expect(copyRule).toContain('cursor: pointer');
     expect(surface).toContain('aria-label={`${copy().chat.toolApprovalCopyCommand}${subtaskLabel}`}');
     expect(surface).toContain('<FlowerShellCommandHighlight command={command()} />');
+    expect(surface).toContain('pendingApprovalCommandForActivityItem(item(), selectedApprovalActions())');
+    expect(surface).toContain('activityTitle(displayTitle())');
+    expect(surface).toContain('subagentSummaries: selectedThread()?.subagents ?? []');
     expect(surface).not.toContain('innerHTML');
+  });
+
+  it('describes open-world shell access without claiming every command uses the network', () => {
+    const surface = readFile(surfacePath);
+
+    expect(surface).toContain('This command may access resources outside the workspace.');
+    expect(surface).not.toContain('This command accesses the network.');
   });
 });
