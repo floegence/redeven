@@ -25,9 +25,9 @@ npm run build
 
 cd "$ROOT_DIR"
 node scripts/build_containers_v4_contract.mjs --verify
-GOWORK=off go run github.com/floegence/redevplugin/cmd/redevplugin@v0.6.23 \
+GOWORK=off go run github.com/floegence/redevplugin/cmd/redevplugin@v0.6.24 \
   package "$PLUGIN_DIR/dist" "$TEMP_DIR/plugin.redevplugin" >/dev/null
-GOWORK=off go run github.com/floegence/redevplugin/cmd/redevplugin@v0.6.23 \
+GOWORK=off go run github.com/floegence/redevplugin/cmd/redevplugin@v0.6.24 \
   validate "$TEMP_DIR/plugin.redevplugin" >/dev/null
 
 if unzip -Z1 "$TEMP_DIR/plugin.redevplugin" | grep -Fxq 'signatures/package.sig'; then

@@ -9,7 +9,7 @@ SOURCE_CONTRACT="$ROOT_DIR/spec/capabilities/container-resources-v4.contract.jso
 PUBLIC_KEY="$RELEASE_ROOT/host-capability.public.json"
 PIN="$BUNDLE_ROOT/host-capability.pin.json"
 
-GOWORK=off go run github.com/floegence/redevplugin/cmd/redevplugin@v0.6.23 \
+GOWORK=off go run github.com/floegence/redevplugin/cmd/redevplugin@v0.6.24 \
   host-capability verify "$BUNDLE_ROOT" "$PIN" "$PUBLIC_KEY" >/dev/null
 
 cmp "$ROOT_DIR/spec/redevplugin/candidate-containers-capability/capabilities/redeven.container_resources.v4/v4.0.0/redeven.container_resources.v4.client.ts" \

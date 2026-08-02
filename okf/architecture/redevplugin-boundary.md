@@ -8,7 +8,7 @@ timestamp: 2026-07-25T00:00:00Z
 # Summary
 
 ReDevPlugin is an independently released plugin platform. Redeven consumes its
-coordinated `v0.6.23` Go, npm, Rust source-crate, and machine-contract artifacts;
+coordinated `v0.6.24` Go, npm, Rust source-crate, and machine-contract artifacts;
 it does not fork platform mechanics. Redeven owns authenticated session mapping,
 product source policy and review UX, UI placement, product runtime builds, and
 concrete business adapters. Missing or unverifiable upstream identity, lifecycle,
@@ -42,12 +42,12 @@ external-package receipt store.
 
 ## Published dependency set
 
-The current integration consumes the coordinated ReDevPlugin `v0.6.23` set:
+The current integration consumes the coordinated ReDevPlugin `v0.6.24` set:
 
-- `github.com/floegence/redevplugin v0.6.23`;
-- `@floegence/redevplugin-contracts@0.6.23` and
-  `@floegence/redevplugin-ui@0.6.23`;
-- the exact six `0.6.23` Rust source crates ending in `redevplugin-runtime`;
+- `github.com/floegence/redevplugin v0.6.24`;
+- `@floegence/redevplugin-contracts@0.6.24` and
+  `@floegence/redevplugin-ui@0.6.24`;
+- the exact six `0.6.24` Rust source crates ending in `redevplugin-runtime`;
 - the released contract registry, package-set contract, contract hashes, and
   attested `platform-package-publication-v1.json` registry readback.
 
@@ -149,7 +149,7 @@ committed. Unknown, corrupt, ambiguous, tampered, or future state blocks startup
 without mutation. Floret-owned state is outside this lifecycle.
 
 For an exact supported root copied across filesystem identities, Redeven may use
-the released read-only inspection and exact-plan recovery APIs from `v0.6.23`.
+the released read-only inspection and exact-plan recovery APIs from `v0.6.24`.
 The product presents the projected digests, counts, sizes, and retained-state
 facts, binds confirmation to one plan digest, and takes the normal Local
 Environment runtime lock. The released transaction retains the entire source as

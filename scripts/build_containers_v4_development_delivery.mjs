@@ -17,7 +17,7 @@ const officialPluginsCommit = 'b9eb04f6cc08eab35e0d0a8a5ac671ec5077aaed';
 const sourceRoot = join(staging, 'official-plugins-source');
 const pluginRoot = join(sourceRoot, 'plugins', 'containers');
 const releaseNotesPath = join(root, 'internal', 'envapp', 'ui_src', 'src', 'ui', 'plugins', 'officialPluginReleaseNotes.json');
-const cli = ['run', 'github.com/floegence/redevplugin/cmd/redevplugin@v0.6.23'];
+const cli = ['run', 'github.com/floegence/redevplugin/cmd/redevplugin@v0.6.24'];
 const productionCapability = loadContainersProductionCapability(root);
 
 rmSync(staging, { recursive: true, force: true });
