@@ -49,7 +49,11 @@ func readIntField(obj map[string]any, keys ...string) int {
 	if value < minInt {
 		return int(minInt)
 	}
-	return int(value)
+	converted, err := strconv.Atoi(strconv.FormatInt(value, 10))
+	if err != nil {
+		return 0
+	}
+	return converted
 }
 
 func readInt64Field(obj map[string]any, keys ...string) int64 {
