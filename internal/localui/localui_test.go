@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"io"
@@ -57,6 +58,28 @@ func TestServer_ConnectArtifactStoresOnlyPluginCredentialHash(t *testing.T) {
 	wantHash := sha256.Sum256([]byte(envelope.PluginSessionCredential))
 	if pending.pluginCredentialHash != wantHash {
 		t.Fatal("pending direct generation did not retain the exact credential hash")
+	}
+}
+
+func TestServer_localAccessCookieSecureMatchesTransport(t *testing.T) {
+	s := &Server{}
+	expiresAt := time.Now().Add(time.Hour).UnixMilli()
+
+	httpRequest := httptest.NewRequest(http.MethodGet, "http://localhost:23998/", nil)
+	httpResponse := httptest.NewRecorder()
+	s.setLocalAccessCookie(httpResponse, httpRequest, "http-token", expiresAt)
+	httpCookie := httpResponse.Result().Cookies()[0]
+	if httpCookie.Secure {
+		t.Fatal("plaintext access cookie must not be marked Secure")
+	}
+
+	httpsRequest := httptest.NewRequest(http.MethodGet, "https://localhost:23998/", nil)
+	httpsRequest.TLS = &tls.ConnectionState{}
+	httpsResponse := httptest.NewRecorder()
+	s.setLocalAccessCookie(httpsResponse, httpsRequest, "https-token", expiresAt)
+	httpsCookie := httpsResponse.Result().Cookies()[0]
+	if !httpsCookie.Secure {
+		t.Fatal("TLS access cookie must be marked Secure")
 	}
 }
 

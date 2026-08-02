@@ -781,7 +781,7 @@ func (s *Server) ensureLocalAccessHTTPResponse(w http.ResponseWriter, r *http.Re
 		return false
 	}
 
-	s.setLocalAccessCookie(w, result.SessionToken, result.SessionExpiresAtUnix)
+	s.setLocalAccessCookie(w, r, result.SessionToken, result.SessionExpiresAtUnix)
 	*r = *r.WithContext(context.WithValue(r.Context(), localAccessSessionContextKey{}, localAccessSessionContext{
 		accessSessionID: strings.TrimSpace(result.AccessSessionID),
 		expiresAt:       time.UnixMilli(result.SessionExpiresAtUnix),
@@ -807,7 +807,7 @@ func (s *Server) activeLocalAccessSession(r *http.Request) (string, time.Time, b
 	return accessSessionID, expiresAt, true
 }
 
-func (s *Server) setLocalAccessCookie(w http.ResponseWriter, token string, expiresAtUnixMs int64) {
+func (s *Server) setLocalAccessCookie(w http.ResponseWriter, r *http.Request, token string, expiresAtUnixMs int64) {
 	if w == nil || token == "" {
 		return
 	}
@@ -817,13 +817,13 @@ func (s *Server) setLocalAccessCookie(w http.ResponseWriter, token string, expir
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   r != nil && r.TLS != nil,
 		SameSite: http.SameSiteLaxMode,
 		Expires:  expiresAt,
 	})
 }
 
-func (s *Server) clearLocalAccessCookie(w http.ResponseWriter) {
+func (s *Server) clearLocalAccessCookie(w http.ResponseWriter, r *http.Request) {
 	if w == nil {
 		return
 	}
@@ -832,7 +832,7 @@ func (s *Server) clearLocalAccessCookie(w http.ResponseWriter) {
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   r != nil && r.TLS != nil,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   -1,
 		Expires:  time.Unix(0, 0),
@@ -1074,7 +1074,7 @@ func (s *Server) handleAccessUnlock(w http.ResponseWriter, r *http.Request) {
 		writeUnlockError(w, err)
 		return
 	}
-	s.setLocalAccessCookie(w, result.SessionToken, result.SessionExpiresAtUnix)
+	s.setLocalAccessCookie(w, r, result.SessionToken, result.SessionExpiresAtUnix)
 	writeJSON(w, http.StatusOK, apiResp{OK: true, Data: result})
 }
 
@@ -1098,7 +1098,7 @@ func (s *Server) handleAccessLogout(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	s.clearLocalAccessCookie(w)
+	s.clearLocalAccessCookie(w, r)
 	writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"ok": true}})
 }
 
