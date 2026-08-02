@@ -27,6 +27,7 @@ import (
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/filesystemscope"
+	"github.com/floegence/redeven/internal/logsafe"
 	"github.com/floegence/redeven/internal/okf"
 	"github.com/floegence/redeven/internal/processenv"
 	"github.com/floegence/redeven/internal/session"
@@ -1165,19 +1166,40 @@ func (r *run) debug(event string, attrs ...any) {
 	if r == nil || r.log == nil {
 		return
 	}
-	event = strings.TrimSpace(event)
+	event = logsafe.Text(event, 128)
 	if event == "" {
 		event = "ai.run"
 	}
 	base := []any{
 		"event", event,
-		"run_id", strings.TrimSpace(r.id),
-		"thread_id", strings.TrimSpace(r.threadID),
-		"endpoint_id", strings.TrimSpace(r.endpointID),
-		"channel_id", strings.TrimSpace(r.channelID),
+		"run_id", logsafe.Text(r.id, 256),
+		"thread_id", logsafe.Text(r.threadID, 256),
+		"endpoint_id", logsafe.Text(r.endpointID, 256),
+		"channel_id", logsafe.Text(r.channelID, 256),
 	}
-	base = append(base, attrs...)
+	base = append(base, safeRunLogAttrs(attrs)...)
 	r.log.Debug("ai run", base...)
+}
+
+func safeRunLogAttrs(attrs []any) []any {
+	out := make([]any, 0, len(attrs))
+	for i := 0; i < len(attrs); i += 2 {
+		key := logsafe.Text(fmt.Sprint(attrs[i]), 128)
+		if key == "" {
+			key = "attr"
+		}
+		out = append(out, key)
+		if i+1 >= len(attrs) {
+			out = append(out, "[missing]")
+			continue
+		}
+		if err, ok := attrs[i+1].(error); ok {
+			out = append(out, logsafe.Error(err))
+			continue
+		}
+		out = append(out, redactAnyForLog(key, attrs[i+1], 0))
+	}
+	return out
 }
 
 func normalizeLifecyclePhase(raw string) string {

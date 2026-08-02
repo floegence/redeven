@@ -722,6 +722,45 @@ func TestRuntimeManagerRemoveLocalEnvironmentVersionEnforcesSafetyChecks(t *test
 	}
 }
 
+func TestRuntimeManagerRejectsTraversalVersionBeforeRemoval(t *testing.T) {
+	mgr := NewRuntimeManager(RuntimeManagerOptions{StateDir: t.TempDir(), StateRoot: t.TempDir()})
+	if _, err := mgr.RemoveLocalEnvironmentVersion(context.Background(), "../../outside"); err == nil {
+		t.Fatal("RemoveLocalEnvironmentVersion() succeeded for traversal version")
+	}
+}
+
+func TestLocalEnvironmentRuntimeStateRejectsPathTraversal(t *testing.T) {
+	stateRoot := t.TempDir()
+	if err := ensureSharedRuntimeDirs(stateRoot); err != nil {
+		t.Fatalf("ensureSharedRuntimeDirs() error = %v", err)
+	}
+	statePath := filepath.Join(sharedRuntimeRoot(stateRoot), "local-environment.json")
+	for _, raw := range []string{
+		`{"schema_version":1,"versions":{"../../outside":{"binary_rel_path":"bin/code-server"}}}`,
+		`{"schema_version":1,"versions":{"4.109.1":{"binary_rel_path":"../../outside"}}}`,
+	} {
+		if err := os.WriteFile(statePath, []byte(raw), 0o600); err != nil {
+			t.Fatalf("write tampered state: %v", err)
+		}
+		if _, err := loadLocalEnvironmentRuntimeState(stateRoot); err == nil {
+			t.Fatalf("loadLocalEnvironmentRuntimeState() accepted %s", raw)
+		}
+	}
+
+	invalidStateRoot := filepath.Join(t.TempDir(), "not-created")
+	err := saveLocalEnvironmentRuntimeState(invalidStateRoot, localEnvironmentRuntimeState{
+		Versions: map[string]localEnvironmentRuntimeVersion{
+			"../../outside": {BinaryRelPath: filepath.Join("bin", codeServerBinaryName())},
+		},
+	})
+	if err == nil {
+		t.Fatal("saveLocalEnvironmentRuntimeState() accepted traversal version")
+	}
+	if _, statErr := os.Stat(invalidStateRoot); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("invalid state created filesystem entries: %v", statErr)
+	}
+}
+
 func TestResolveBinaryReturnsSelectedManagedRuntime(t *testing.T) {
 	stateDir := t.TempDir()
 	stateRoot := t.TempDir()

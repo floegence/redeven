@@ -227,9 +227,9 @@ func (r *Runner) start(codeSpaceID string, workspacePath string, port int) (*Ins
 	startupTimeout := 20 * time.Second
 	if v := strings.TrimSpace(os.Getenv("REDEVEN_CODE_SERVER_STARTUP_TIMEOUT")); v != "" {
 		if d, err := time.ParseDuration(v); err != nil {
-			r.log.Warn("invalid REDEVEN_CODE_SERVER_STARTUP_TIMEOUT; using default", "value", v, "err", err)
+			r.log.Warn("invalid REDEVEN_CODE_SERVER_STARTUP_TIMEOUT; using default", "value", logsafe.Text(v, 128), "err", logsafe.Error(err))
 		} else if d <= 0 {
-			r.log.Warn("invalid REDEVEN_CODE_SERVER_STARTUP_TIMEOUT; using default", "value", v)
+			r.log.Warn("invalid REDEVEN_CODE_SERVER_STARTUP_TIMEOUT; using default", "value", logsafe.Text(v, 128))
 		} else {
 			startupTimeout = d
 		}
@@ -311,12 +311,7 @@ func (r *Runner) start(codeSpaceID string, workspacePath string, port int) (*Ins
 	}
 	cmd.Env = env
 
-	attrs := []any{
-		"code_space_id", codeSpaceID,
-		"port", port,
-		"workspace", filepath.Base(workspacePath),
-		"session_socket", sessionSocketPath,
-	}
+	attrs := codeServerStartLogAttrs(codeSpaceID, port, workspacePath, sessionSocketPath)
 	if reconnectionGrace > 0 {
 		attrs = append(attrs, "reconnection_grace", formatReconnectionGraceMilliseconds(reconnectionGrace))
 	}
@@ -348,6 +343,15 @@ func (r *Runner) start(codeSpaceID string, workspacePath string, port int) (*Ins
 		StartedAt:     time.Now(),
 		cmd:           cmd,
 	}, nil
+}
+
+func codeServerStartLogAttrs(codeSpaceID string, port int, workspacePath string, sessionSocketPath string) []any {
+	return []any{
+		"code_space_id", logsafe.Text(codeSpaceID, 128),
+		"port", port,
+		"workspace", logsafe.Text(filepath.Base(workspacePath), 256),
+		"session_socket", logsafe.Text(sessionSocketPath, 512),
+	}
 }
 
 func normalizePositiveDuration(v time.Duration) time.Duration {

@@ -13,6 +13,7 @@ import {
   PluginStateRecoveryCLIError,
   type PluginStateRecoveryCLIReport,
 } from './pluginStateRecovery';
+import { safeLogText } from './logSafety';
 import {
   attachManagedRuntimeFromStatus,
   inspectLocalManagedRuntimeProcesses,
@@ -4860,7 +4861,7 @@ async function syncVisibleGatewaysIfNeeded(options: Readonly<{ force?: boolean }
     }
     await syncGatewayIfNeeded(record, options).catch((error) => {
       const message = error instanceof Error ? error.message : String(error);
-      console.warn(`[redeven:gateway-sync] Gateway sync failed for ${record.gateway_id}: ${message}`);
+      console.warn(`[redeven:gateway-sync] Gateway sync failed for ${safeLogText(record.gateway_id, 128)}: ${safeLogText(message, 512)}`);
     });
   }));
 }

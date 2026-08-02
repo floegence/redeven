@@ -433,7 +433,7 @@
     },
     {
       "path": "desktop/src/main/main.ts",
-      "sha256": "d5418c8078b26788595280bdd3b5828bad6bf994317a017644a3b73cc76dba70",
+      "sha256": "aeb670426e107324efc7635cc95bfe0b27e8a0f9010905be48d983f49862cc34",
       "sink_kinds": [
         "file"
       ],
@@ -539,7 +539,7 @@
     },
     {
       "path": "internal/ai/run.go",
-      "sha256": "6376780fbfde2605ec04c2412fe657fc384572688d5a789d03d3c5665fce774b",
+      "sha256": "7eef41da08a4121c976207da47e71f1bea9e68d0d344b97943cb01928e8e828d",
       "sink_kinds": [
         "file",
         "json_file"
@@ -595,7 +595,7 @@
     },
     {
       "path": "internal/ai/skill_manager_remote.go",
-      "sha256": "2df1d6feab1286eeb1d48645ba07c8e0ecea0491466b01bb97235b550445059b",
+      "sha256": "eb037184429907b70bef70da80fe45803063e94be79b939e56f49d5dc2ca9e2b",
       "sink_kinds": [
         "file",
         "json_file"
@@ -1373,7 +1373,7 @@
     },
     {
       "path": "internal/codeapp/codeserver/runner.go",
-      "sha256": "c0eb9dc6bab29d484096aa952ef8cd8cfaef3249f64f9007874da659b30e42bb",
+      "sha256": "abfa2991fd073ec72549b192e50e372efc6bb709775866239df113afe9e80b95",
       "sink_kinds": [
         "file"
       ],
@@ -1387,7 +1387,7 @@
     },
     {
       "path": "internal/codeapp/codeserver/runtime.go",
-      "sha256": "faf977b73a48f9afab7255c3c35133b6ad39ff585fd23f1237de72f6eb6dd7d6",
+      "sha256": "43e9b82d4770c305d066985bd64c465b04c58a875cc6b184f8c30f2f4f3c0d0a",
       "sink_kinds": [
         "file",
         "json_file"
@@ -1408,7 +1408,7 @@
     },
     {
       "path": "internal/codeapp/codeserver/setup_operation.go",
-      "sha256": "064a2f5ad1e065e7008a7bf0440457210209472b2e977e49d7162b1a03ce9a97",
+      "sha256": "eff7fce64f528235a7164b3aded486cd640f2c0ae865904a45d7e98fdb012f34",
       "sink_kinds": [
         "file",
         "json_file"
@@ -1435,7 +1435,7 @@
     },
     {
       "path": "internal/codeapp/codeserver/shared_state.go",
-      "sha256": "2b6e7e5f12dca4e8e8493aebd5fad2ec4a101a84ab379ec7e1af1eaf577a6af3",
+      "sha256": "fcfff57751eb139a69db24361315df3b321da64324edfe2ad555f7f2fafd2c2e",
       "sink_kinds": [
         "file",
         "json_file"

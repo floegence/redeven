@@ -124,14 +124,21 @@ func loadLocalEnvironmentRuntimeState(stateRoot string) (localEnvironmentRuntime
 	if err := json.Unmarshal(body, &state); err != nil {
 		return localEnvironmentRuntimeState{}, err
 	}
-	return normalizeLocalEnvironmentRuntimeState(state), nil
+	state = normalizeLocalEnvironmentRuntimeState(state)
+	if err := validateLocalEnvironmentRuntimeStatePaths(state); err != nil {
+		return localEnvironmentRuntimeState{}, err
+	}
+	return state, nil
 }
 
 func saveLocalEnvironmentRuntimeState(stateRoot string, state localEnvironmentRuntimeState) error {
+	state = normalizeLocalEnvironmentRuntimeState(state)
+	if err := validateLocalEnvironmentRuntimeStatePaths(state); err != nil {
+		return err
+	}
 	if err := ensureSharedRuntimeDirs(stateRoot); err != nil {
 		return err
 	}
-	state = normalizeLocalEnvironmentRuntimeState(state)
 	body, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
 		return err
@@ -146,6 +153,47 @@ func saveLocalEnvironmentRuntimeState(stateRoot string, state localEnvironmentRu
 		return err
 	}
 	return nil
+}
+
+func validateLocalEnvironmentRuntimeStatePaths(state localEnvironmentRuntimeState) error {
+	if state.SelectedVersion != "" {
+		if _, err := validateManagedRuntimeVersion(state.SelectedVersion); err != nil {
+			return fmt.Errorf("invalid selected runtime version: %w", err)
+		}
+	}
+	for version, record := range state.Versions {
+		if _, err := validateManagedRuntimeVersion(version); err != nil {
+			return fmt.Errorf("invalid installed runtime version: %w", err)
+		}
+		if _, err := validateManagedRuntimeBinaryRelPath(record.BinaryRelPath); err != nil {
+			return fmt.Errorf("invalid runtime binary path for %s: %w", version, err)
+		}
+	}
+	return nil
+}
+
+func validateManagedRuntimeVersion(raw string) (string, error) {
+	version := strings.TrimSpace(raw)
+	if version == "" || len(version) > 128 || version == "." || version == ".." || filepath.Base(version) != version {
+		return "", errors.New("runtime version must be one safe path segment")
+	}
+	for _, character := range version {
+		if (character < 'a' || character > 'z') &&
+			(character < 'A' || character > 'Z') &&
+			(character < '0' || character > '9') &&
+			character != '.' && character != '-' && character != '_' && character != '+' {
+			return "", errors.New("runtime version contains unsupported characters")
+		}
+	}
+	return version, nil
+}
+
+func validateManagedRuntimeBinaryRelPath(raw string) (string, error) {
+	rel := filepath.Clean(strings.TrimSpace(raw))
+	if rel == "" || rel == "." || filepath.IsAbs(rel) || filepath.VolumeName(rel) != "" || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return "", errors.New("runtime binary path must stay inside its version directory")
+	}
+	return rel, nil
 }
 
 func withLocalEnvironmentRuntimeStateLock(stateRoot string, fn func(state *localEnvironmentRuntimeState) error) error {
@@ -172,6 +220,14 @@ func withLocalEnvironmentRuntimeStateLock(stateRoot string, fn func(state *local
 }
 
 func repairManagedRuntimeLink(stateDir string, stateRoot string, version string) error {
+	version = strings.TrimSpace(version)
+	if version != "" {
+		validatedVersion, err := validateManagedRuntimeVersion(version)
+		if err != nil {
+			return err
+		}
+		version = validatedVersion
+	}
 	linkPath := managedRuntimePrefix(stateDir)
 	if err := os.MkdirAll(runtimeRoot(stateDir), 0o700); err != nil {
 		return err
@@ -179,7 +235,6 @@ func repairManagedRuntimeLink(stateDir string, stateRoot string, version string)
 	if err := removeIfExists(linkPath); err != nil {
 		return err
 	}
-	version = strings.TrimSpace(version)
 	if version == "" {
 		return nil
 	}
