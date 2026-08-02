@@ -198,7 +198,10 @@ function initializeMermaid(context: MermaidThemeContext): void {
     securityLevel: 'strict',
     fontFamily: 'Inter, system-ui, sans-serif',
     themeVariables: context.variables,
-    flowchart: { curve: 'basis', htmlLabels: true },
+    // Plain SVG text keeps the output in one namespace so it can be sanitized
+    // without dropping Mermaid's accessible labels from foreignObject nodes.
+    htmlLabels: false,
+    flowchart: { curve: 'basis', htmlLabels: false },
     sequence: { showSequenceNumbers: false, actorMargin: 50 },
   });
   mermaidThemeKey = context.key;
@@ -269,6 +272,18 @@ const renderMermaidSvgImpl = async (
 
 export const renderMermaidSvg = renderMermaidSvgImpl as RenderMermaidSvg;
 
+function mergeMermaidLabelSpans(root: SVGElement): void {
+  root.querySelectorAll('text > tspan > tspan').forEach((outer) => {
+    const spans = Array.from(outer.parentElement?.children ?? [])
+      .filter((node): node is SVGTSpanElement => node instanceof SVGTSpanElement);
+    if (spans.length < 2 || spans.some((span) => span.getAttribute('class') !== spans[0]?.getAttribute('class'))) {
+      return;
+    }
+    spans[0].textContent = spans.map((span) => span.textContent ?? '').join('');
+    spans.slice(1).forEach((span) => span.remove());
+  });
+}
+
 export async function runMermaid(root: HTMLElement, options: MermaidRunOptions = {}): Promise<void> {
   const shouldContinue = options.shouldContinue ?? (() => true);
   if (!shouldContinue() || !root.isConnected) return;
@@ -304,6 +319,9 @@ export async function runMermaid(root: HTMLElement, options: MermaidRunOptions =
 
         const sanitizedSvg = DOMPurify.sanitize(svg, {
           USE_PROFILES: { svg: true, svgFilters: true },
+          // Mermaid uses foreignObject for accessible node labels. DOMPurify
+          // still strips scripts, event handlers, and unsafe URL attributes.
+          ADD_TAGS: ['foreignObject', 'div', 'span', 'p'],
           FORBID_TAGS: ['script'],
           FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onbegin', 'onend'],
         });
@@ -324,6 +342,7 @@ export async function runMermaid(root: HTMLElement, options: MermaidRunOptions =
             }
           }
         });
+        mergeMermaidLabelSpans(svgRoot);
         const importedSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
         // Preserve Mermaid's safe presentation attributes across document
         // boundaries (some DOM implementations drop custom data attributes).
