@@ -2,16 +2,146 @@ package ai
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/floegence/floret/v3/identity"
+	flruntime "github.com/floegence/floret/v3/runtime"
 	"github.com/floegence/redeven/internal/session"
 )
+
+type idleWatchdogFloretHost struct {
+	*todoTestHost
+	readApprovalQueue func(context.Context) (flruntime.ApprovalQueue, error)
+	readCount         atomic.Int64
+}
+
+func (h *idleWatchdogFloretHost) ReadApprovalQueue(ctx context.Context) (flruntime.ApprovalQueue, error) {
+	h.readCount.Add(1)
+	return h.readApprovalQueue(ctx)
+}
+
+func TestRunIdleWatchdog_DoesNotCancelWhileCanonicalApprovalIsPending(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now()
+	record := flruntime.ApprovalRecord{
+		ApprovalID: "approval_idle", RootThreadID: "th_idle_approval", EffectAttemptID: "effect_idle",
+		ToolCallID: "tool_idle", ToolName: "terminal.exec", ToolKind: "local",
+		RunID: "run_idle_approval", ThreadID: "th_idle_approval", TurnID: "turn_idle_approval",
+		Step: 1, BatchIndex: 0, BatchSize: 1, State: "requested", Revision: 1, QueueSequence: 1,
+		RequestedAt: now, UpdatedAt: now, ArgsHash: "args_idle", RequestFingerprint: "fingerprint_idle",
+	}
+	host := &idleWatchdogFloretHost{
+		todoTestHost: &todoTestHost{},
+		readApprovalQueue: func(context.Context) (flruntime.ApprovalQueue, error) {
+			return flruntime.ApprovalQueue{
+				RootThreadID: identity.ThreadID("th_idle_approval"), Generation: 1, Revision: 1,
+				CurrentApprovalID: record.ApprovalID, Items: []flruntime.ApprovalRecord{record}, GeneratedAt: now,
+			}, nil
+		},
+	}
+	r, cancel, done := startIdleWatchdogTestRun(t, host, "th_idle_approval")
+	defer cancel()
+
+	waitForIdleWatchdogReads(t, host, 2)
+	if reason := strings.TrimSpace(r.getCancelReason()); reason != "" {
+		t.Fatalf("canonical approval wait cancel reason=%q, want empty", reason)
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("idle watchdog did not stop after context cancellation")
+	}
+}
+
+func TestRunIdleWatchdog_CancelsWhenCanonicalApprovalQueueIsEmpty(t *testing.T) {
+	t.Parallel()
+
+	host := &idleWatchdogFloretHost{
+		todoTestHost: &todoTestHost{},
+		readApprovalQueue: func(context.Context) (flruntime.ApprovalQueue, error) {
+			return flruntime.ApprovalQueue{RootThreadID: "th_idle_empty", GeneratedAt: time.Now()}, nil
+		},
+	}
+	r, cancel, done := startIdleWatchdogTestRun(t, host, "th_idle_empty")
+	defer cancel()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("idle watchdog did not cancel an idle run with an empty canonical approval queue")
+	}
+	if reason := strings.TrimSpace(r.getCancelReason()); reason != "timed_out" {
+		t.Fatalf("empty canonical queue cancel reason=%q, want timed_out", reason)
+	}
+}
+
+func TestRunIdleWatchdog_DoesNotCancelWhenCanonicalApprovalReadFails(t *testing.T) {
+	t.Parallel()
+
+	host := &idleWatchdogFloretHost{
+		todoTestHost: &todoTestHost{},
+		readApprovalQueue: func(ctx context.Context) (flruntime.ApprovalQueue, error) {
+			<-ctx.Done()
+			return flruntime.ApprovalQueue{}, errors.Join(errors.New("approval store unavailable"), ctx.Err())
+		},
+	}
+	r, cancel, done := startIdleWatchdogTestRun(t, host, "th_idle_read_error")
+	defer cancel()
+
+	waitForIdleWatchdogReads(t, host, 2)
+	if reason := strings.TrimSpace(r.getCancelReason()); reason != "" {
+		t.Fatalf("failed canonical approval read cancel reason=%q, want empty", reason)
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("idle watchdog did not stop after context cancellation")
+	}
+}
+
+func startIdleWatchdogTestRun(t *testing.T, host floretActiveRunHost, threadID string) (*run, context.CancelFunc, <-chan struct{}) {
+	t.Helper()
+	r := newRun(runOptions{
+		Log:         slog.New(slog.NewTextHandler(io.Discard, nil)),
+		RunID:       "run_idle_watchdog",
+		ThreadID:    threadID,
+		TurnID:      "turn_idle_watchdog",
+		MessageID:   "turn_idle_watchdog",
+		IdleTimeout: 25 * time.Millisecond,
+	})
+	r.host.authorityThreadID = threadID
+	r.setActiveFloretHost(host)
+	ctx, cancel := context.WithCancel(context.Background())
+	r.cancelFn = cancel
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		r.runIdleWatchdog(ctx)
+	}()
+	return r, cancel, done
+}
+
+func waitForIdleWatchdogReads(t *testing.T, host *idleWatchdogFloretHost, count int64) {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for host.readCount.Load() < count {
+		if time.Now().After(deadline) {
+			t.Fatalf("approval queue reads=%d, want at least %d", host.readCount.Load(), count)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
 
 func TestRunIdleWatchdog_DoesNotCancelWhileToolBusy(t *testing.T) {
 	t.Parallel()
