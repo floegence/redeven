@@ -15,6 +15,7 @@ import (
 	flruntime "github.com/floegence/floret/v3/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/logsafe"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -1149,7 +1150,7 @@ func (s *Service) appendFlowerLiveEvent(event FlowerLiveEvent) (FlowerLiveEvent,
 	applyFlowerLiveEventToMaterializedState(&stream.State, stream.ApprovalIndex, event)
 	if event.Kind == FlowerLiveApprovalQueueReplaced && s.log != nil && stream.State.ApprovalQueue != nil {
 		queue := stream.State.ApprovalQueue
-		s.log.Debug("flower approval queue", "endpoint_id", event.EndpointID, "thread_id", event.ThreadID, "generation", queue.Generation, "revision", queue.Revision, "current_action_id", queue.CurrentActionID, "position", queue.CurrentPosition, "total", queue.Total, "unresolved", queue.UnresolvedCount)
+		s.log.Debug("flower approval queue", "endpoint_id", logsafe.Text(event.EndpointID, 256), "thread_id", logsafe.Text(event.ThreadID, 256), "generation", queue.Generation, "revision", queue.Revision, "current_action_id", logsafe.Text(queue.CurrentActionID, 256), "position", queue.CurrentPosition, "total", queue.Total, "unresolved", queue.UnresolvedCount)
 	}
 	s.mu.Unlock()
 	return event, true
@@ -1292,6 +1293,9 @@ func validFlowerControlApprovalAction(action FlowerApprovalAction, kind FlowerLi
 
 func validFlowerCanonicalApprovalReplacement(payload FlowerLiveApprovalQueuePayload) bool {
 	queue := payload.ApprovalQueue
+	if len(payload.Actions) > 256 {
+		return false
+	}
 	if queue.Generation < 0 || queue.Revision < 0 || queue.CurrentPosition < 0 ||
 		queue.Total < 0 || queue.UnresolvedCount < 0 ||
 		queue.Total != len(payload.Actions) || queue.UnresolvedCount != len(payload.Actions) {

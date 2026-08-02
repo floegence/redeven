@@ -2,8 +2,11 @@
 
 import { createHash } from 'node:crypto';
 import {
-  lstatSync,
-  readFileSync,
+	 closeSync,
+	 constants as fsConstants,
+	 fstatSync,
+	 openSync,
+	 readFileSync,
   readdirSync,
   statSync,
   writeFileSync,
@@ -515,13 +518,18 @@ export function verifyELF(pathname, target) {
 }
 
 export function descriptor(pathname, name = path.basename(pathname)) {
-  const info = lstatSync(pathname);
-  if (!info.isFile() || info.isSymbolicLink() || info.size < 1) fail(`artifact must be a non-empty regular file: ${pathname}`);
-  return {
-    path: name,
-    sha256: createHash('sha256').update(readFileSync(pathname)).digest('hex'),
-    size: info.size,
-  };
+  const descriptorFD = openSync(pathname, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+  try {
+    const info = fstatSync(descriptorFD);
+    if (!info.isFile() || info.size < 1) fail(`artifact must be a non-empty regular file: ${pathname}`);
+    return {
+      path: name,
+      sha256: createHash('sha256').update(readFileSync(descriptorFD)).digest('hex'),
+      size: info.size,
+    };
+  } finally {
+    closeSync(descriptorFD);
+  }
 }
 
 function publicationVerificationPackageSet(value) {

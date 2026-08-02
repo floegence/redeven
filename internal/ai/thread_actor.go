@@ -9,6 +9,7 @@ import (
 
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/logsafe"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -576,8 +577,8 @@ func (e *queuedTurnStartError) Unwrap() error {
 
 func queuedTurnStartLogAttrs(err error, endpointID string, threadID string) []any {
 	attrs := []any{
-		"endpoint_id", strings.TrimSpace(endpointID),
-		"thread_id", strings.TrimSpace(threadID),
+		"endpoint_id", logsafe.Text(endpointID, 256),
+		"thread_id", logsafe.Text(threadID, 256),
 	}
 	var queuedErr *queuedTurnStartError
 	if errors.As(err, &queuedErr) && queuedErr != nil {
@@ -588,13 +589,13 @@ func queuedTurnStartLogAttrs(err error, endpointID string, threadID string) []an
 			attrs[3] = v
 		}
 		attrs = append(attrs,
-			"queue_id", strings.TrimSpace(queuedErr.queueID),
-			"turn_id", strings.TrimSpace(queuedErr.turnID),
-			"run_id", strings.TrimSpace(queuedErr.runID),
+			"queue_id", logsafe.Text(queuedErr.queueID, 256),
+			"turn_id", logsafe.Text(queuedErr.turnID, 256),
+			"run_id", logsafe.Text(queuedErr.runID, 256),
 			"require_source_queue", queuedErr.requireSourceQueue,
 		)
 	}
-	return append(attrs, "error", err)
+	return append(attrs, "error", logsafe.Error(err))
 }
 
 func (a *threadActor) lookupActiveRun(endpointID string, threadID string) (string, *run) {

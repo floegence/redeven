@@ -24,6 +24,7 @@ import (
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/filesystemscope"
+	"github.com/floegence/redeven/internal/logsafe"
 	"github.com/floegence/redeven/internal/pathutil"
 	"github.com/floegence/redeven/internal/runtimeservice"
 	"github.com/floegence/redeven/internal/session"
@@ -635,7 +636,7 @@ func (s *Service) Close() error {
 		waitOK := s.waitIdleThreadCompaction(waitCtx, compaction)
 		waitCancel()
 		if !waitOK && s.log != nil {
-			s.log.Warn("idle context compaction did not finish before service close", "thread_id", compaction.threadID, "request_id", compaction.requestID)
+			s.log.Warn("idle context compaction did not finish before service close", "thread_id", logsafe.Text(compaction.threadID, 256), "request_id", logsafe.Text(compaction.requestID, 256))
 		}
 	}
 	s.mu.Lock()
@@ -1595,7 +1596,7 @@ func (s *Service) StartRunDetached(meta *session.Meta, executionKey string, req 
 	go func() {
 		if err := s.executePreparedRun(context.Background(), prepared); err != nil {
 			if s.log != nil {
-				s.log.Warn("ai detached run failed", "execution_key", executionKey, "thread_id", strings.TrimSpace(req.ThreadID), "error", err)
+				s.log.Warn("ai detached run failed", "execution_key", logsafe.Text(executionKey, 256), "thread_id", logsafe.Text(req.ThreadID, 256), "error", logsafe.Error(err))
 			}
 		}
 	}()
@@ -1706,7 +1707,7 @@ func (s *Service) startUserTurnDetached(ctx context.Context, meta *session.Meta,
 				return admittedUserTurn{}, normalizedInput, replaceErr
 			}
 			if _, cleanupErr := s.processUploadCleanupCandidates(ctx, replacement.UploadsToDelete); cleanupErr != nil && s.log != nil {
-				s.log.Warn("pending turn replacement physical cleanup deferred", "thread_id", threadID, "source_followup_id", sourceID, "error", cleanupErr)
+				s.log.Warn("pending turn replacement physical cleanup deferred", "thread_id", logsafe.Text(threadID, 256), "source_followup_id", logsafe.Text(sourceID, 256), "error", logsafe.Error(cleanupErr))
 			}
 		} else {
 			if preparedUser.StagingScope != nil {
@@ -1748,7 +1749,7 @@ func (s *Service) startUserTurnDetached(ctx context.Context, meta *session.Meta,
 		prepared.r.completeUserTurnAdmissionAfterExecution(runErr)
 		if runErr != nil {
 			if s.log != nil {
-				s.log.Warn("ai detached run failed", "execution_key", executionKey, "thread_id", threadID, "error", runErr)
+				s.log.Warn("ai detached run failed", "execution_key", logsafe.Text(executionKey, 256), "thread_id", logsafe.Text(threadID, 256), "error", logsafe.Error(runErr))
 			}
 		}
 	}()
@@ -2280,7 +2281,7 @@ func (s *Service) resolveRunModel(ctx context.Context, cfg *config.AIConfig, req
 		if capability, capErr := s.capabilityResolver.Resolve(ctx, providerCfg, model); capErr == nil {
 			modelCapability = capability
 		} else if r != nil && r.log != nil {
-			r.log.Warn("resolve model capability failed", "model", model, "error", capErr)
+			r.log.Warn("resolve model capability failed", "model", logsafe.Text(model, 256), "error", logsafe.Error(capErr))
 		}
 	}
 

@@ -204,9 +204,7 @@ function stageSource(source, stagingDirectory, sequence, testHooks) {
     fchmodSync(stagedFD, 0o644);
     fsyncSync(stagedFD);
     const after = fstatSync(sourceFD, { bigint: true });
-    const pathAfter = lstatSync(source, { bigint: true });
-    if (!sameFileSnapshot(before, after) || !sameFileSnapshot(before, pathAfter) ||
-        pathAfter.isSymbolicLink() || !pathAfter.isFile() || BigInt(size) !== before.size) {
+    if (!sameFileSnapshot(before, after) || BigInt(size) !== before.size) {
       fail(`release source changed while being staged: ${source}`);
     }
     closeSync(stagedFD);
@@ -353,12 +351,16 @@ function isManagedReleaseOutput(name) {
 }
 
 function readJSON(file, label = file) {
+  let descriptor = -1;
   try {
-    const size = lstatSync(file).size;
+    descriptor = openSync(file, fsConstants.O_RDONLY | noFollow);
+    const size = fstatSync(descriptor).size;
     if (size > receiptByteLimit) fail(`${label}: JSON exceeds ${receiptByteLimit} bytes`);
-    return JSON.parse(readFileSync(file, 'utf8'));
+    return JSON.parse(readFileSync(descriptor, 'utf8'));
   } catch (error) {
     fail(`${label}: invalid JSON: ${error instanceof Error ? error.message : String(error)}`);
+  } finally {
+    if (descriptor >= 0) closeSync(descriptor);
   }
 }
 

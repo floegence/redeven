@@ -6,6 +6,7 @@ import { computeCodeDiffModel, EMPTY_CODE_DIFF_RENDER_MODEL } from '../diff/diff
 postMessage({ type: 'ready' });
 
 addEventListener('message', (event: MessageEvent<DiffWorkerRequest>) => {
+  if (event.origin && event.origin !== self.location.origin) return;
   const { id, oldCode, newCode } = event.data;
 
   try {

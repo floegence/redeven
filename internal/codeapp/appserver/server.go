@@ -6819,7 +6819,8 @@ func rewriteLocationToProxy(location string, target *url.URL, proxyBasePath stri
 		return location
 	}
 	if strings.TrimSpace(u.Host) == "" {
-		if strings.TrimSpace(proxyBasePath) != "" && strings.HasPrefix(loc, "/") {
+		if strings.TrimSpace(proxyBasePath) != "" && strings.HasPrefix(loc, "/") && !strings.HasPrefix(loc, "//") &&
+			strings.HasPrefix(u.EscapedPath(), "/") {
 			path := u.EscapedPath()
 			if strings.TrimSpace(path) == "" {
 				path = "/"
@@ -6950,6 +6951,9 @@ func joinProxyBasePath(basePath string, targetPath string) string {
 	if !strings.HasPrefix(p, "/") {
 		p = "/" + p
 	}
+	// Never return a scheme-relative location (//host/path), which browsers
+	// interpret as an external redirect.
+	p = "/" + strings.TrimLeft(p, "/")
 	if base == "" {
 		return p
 	}

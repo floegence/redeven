@@ -26,6 +26,7 @@ function getMarked(variant: MarkdownRendererVariant): Marked {
 }
 
 ctx.addEventListener('message', (ev: MessageEvent<MarkdownWorkerRequest>) => {
+  if (ev.origin && ev.origin !== self.location.origin) return;
   const data = ev.data as any;
   const id = String(data?.id ?? '').trim();
   if (!id) return;

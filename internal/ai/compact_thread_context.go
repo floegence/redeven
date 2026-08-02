@@ -15,6 +15,7 @@ import (
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/logsafe"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -106,7 +107,7 @@ func (s *Service) recordIdleThreadCompactionGateEvent(endpointID string, threadI
 		}
 	}
 	if s.log != nil {
-		s.log.Debug("idle thread compaction gate", "event", idleCompactionGateRunEventType, "endpoint_id", endpointID, "thread_id", threadID, "run_id", runID, "payload", payload)
+		s.log.Debug("idle thread compaction gate", "event", idleCompactionGateRunEventType, "endpoint_id", logsafe.Text(endpointID, 256), "thread_id", logsafe.Text(threadID, 256), "run_id", logsafe.Text(runID, 256), "payload", redactAnyForLog("payload", payload, 0))
 	}
 }
 

@@ -12,6 +12,7 @@ require (
 	github.com/openai/openai-go v1.12.0
 	github.com/shirou/gopsutil/v4 v4.25.12
 	golang.org/x/mod v0.37.0
+	golang.org/x/crypto v0.53.0
 	golang.org/x/sys v0.46.0
 	golang.org/x/term v0.44.0
 	golang.org/x/text v0.40.0

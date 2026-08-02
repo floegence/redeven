@@ -318,6 +318,9 @@ func extractWorkspaceEngineArchive(ctx context.Context, archivePath string, dest
 			if err != nil {
 				return err
 			}
+			if err := validateWorkspaceEngineArchiveSymlinkTarget(dest, target, linkTarget); err != nil {
+				return err
+			}
 			if err := ensureWorkspaceEngineArchiveDirectory(filepath.Dir(target)); err != nil {
 				return err
 			}
@@ -332,6 +335,33 @@ func extractWorkspaceEngineArchive(ctx context.Context, archivePath string, dest
 		default:
 			continue
 		}
+	}
+	return nil
+}
+
+// validateWorkspaceEngineArchiveSymlinkTarget resolves the link through the
+// already extracted filesystem before creating it. Requiring the target to
+// exist also prevents a later archive entry from turning an earlier safe-looking
+// link into a symlink chain that escapes the staging root.
+func validateWorkspaceEngineArchiveSymlinkTarget(dest string, linkPath string, linkTarget string) error {
+	resolved, err := filepath.EvalSymlinks(filepath.Join(filepath.Dir(linkPath), linkTarget))
+	if err != nil {
+		return fmt.Errorf("workspace engine archive symlink target is not an existing safe entry: %w", err)
+	}
+	resolved, err = filepath.Abs(resolved)
+	if err != nil {
+		return err
+	}
+	cleanDest, err := filepath.Abs(filepath.Clean(dest))
+	if err != nil {
+		return err
+	}
+	if canonicalDest, canonicalErr := filepath.EvalSymlinks(cleanDest); canonicalErr == nil {
+		cleanDest = filepath.Clean(canonicalDest)
+	}
+	inside := resolved == cleanDest || strings.HasPrefix(resolved+string(os.PathSeparator), cleanDest+string(os.PathSeparator))
+	if !inside {
+		return fmt.Errorf("workspace engine archive symlink target escapes target directory: %s", linkTarget)
 	}
 	return nil
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/filesystemscope"
+	"github.com/floegence/redeven/internal/logsafe"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -130,10 +131,33 @@ type WorkStateInfo struct {
 
 type slogTerminalLogger struct{ log *slog.Logger }
 
-func (l slogTerminalLogger) Debug(msg string, kv ...any) { l.log.Debug(msg, kv...) }
-func (l slogTerminalLogger) Info(msg string, kv ...any)  { l.log.Info(msg, kv...) }
-func (l slogTerminalLogger) Warn(msg string, kv ...any)  { l.log.Warn(msg, kv...) }
-func (l slogTerminalLogger) Error(msg string, kv ...any) { l.log.Error(msg, kv...) }
+func (l slogTerminalLogger) Debug(msg string, kv ...any) {
+	l.log.Debug(logsafe.Text(msg, 256), safeLogArgs(kv...)...)
+}
+func (l slogTerminalLogger) Info(msg string, kv ...any) {
+	l.log.Info(logsafe.Text(msg, 256), safeLogArgs(kv...)...)
+}
+func (l slogTerminalLogger) Warn(msg string, kv ...any) {
+	l.log.Warn(logsafe.Text(msg, 256), safeLogArgs(kv...)...)
+}
+func (l slogTerminalLogger) Error(msg string, kv ...any) {
+	l.log.Error(logsafe.Text(msg, 256), safeLogArgs(kv...)...)
+}
+
+func safeLogArgs(kv ...any) []any {
+	out := make([]any, len(kv))
+	for i, value := range kv {
+		switch typed := value.(type) {
+		case string:
+			out[i] = logsafe.Text(typed, 512)
+		case error:
+			out[i] = logsafe.Error(typed)
+		default:
+			out[i] = value
+		}
+	}
+	return out
+}
 
 type fixedShellResolver struct {
 	shell string

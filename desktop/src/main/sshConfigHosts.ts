@@ -251,23 +251,19 @@ async function parseSSHConfigFile(
   if (context.visitedFiles.has(resolvedPath)) {
     return [];
   }
-  let stat;
-  try {
-    stat = await fs.stat(resolvedPath);
-  } catch {
-    return [];
-  }
-  if (!stat.isFile() || stat.size > context.maxFileBytes) {
-    return [];
-  }
-  context.visitedFiles.add(resolvedPath);
-
-  let raw = '';
-  try {
-    raw = await fs.readFile(resolvedPath, 'utf8');
-  } catch {
-    return [];
-  }
+	let fileHandle;
+	let raw = '';
+	try {
+		fileHandle = await fs.open(resolvedPath, 'r');
+		const stat = await fileHandle.stat();
+		if (!stat.isFile() || stat.size > context.maxFileBytes) return [];
+		raw = await fileHandle.readFile('utf8');
+	} catch {
+		return [];
+	} finally {
+		await fileHandle?.close().catch(() => undefined);
+	}
+	context.visitedFiles.add(resolvedPath);
 
   const hosts: DesktopSSHConfigHost[] = [];
   const baseDir = path.dirname(resolvedPath);

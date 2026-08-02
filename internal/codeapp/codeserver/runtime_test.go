@@ -298,6 +298,15 @@ func TestRuntimeManagerInstallRejectsUnsafeArchiveLinks(t *testing.T) {
 				Mode:     0o755,
 			},
 		},
+		{
+			name: "missing symlink target",
+			link: fakeWorkspaceEngineArchiveEntry{
+				RelPath:  "node_modules/.bin/missing",
+				Typeflag: tar.TypeSymlink,
+				Linkname: "../typescript/bin/missing",
+				Mode:     0o777,
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

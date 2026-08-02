@@ -197,7 +197,7 @@ function initializeMermaid(context: MermaidThemeContext): void {
     securityLevel: 'strict',
     fontFamily: 'Inter, system-ui, sans-serif',
     themeVariables: context.variables,
-    flowchart: { curve: 'basis', htmlLabels: true },
+    flowchart: { curve: 'basis', htmlLabels: false },
     sequence: { showSequenceNumbers: false, actorMargin: 50 },
   });
   mermaidThemeKey = context.key;
@@ -287,7 +287,7 @@ export async function runMermaid(root: HTMLElement, options: MermaidRunOptions =
 
       try {
         const code = decodeURIComponent(src);
-        const id = `mermaid-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const id = `mermaid-${crypto.randomUUID()}`;
         const container = document.createElement('div');
         container.id = id;
         sandbox.appendChild(container);
@@ -301,7 +301,18 @@ export async function runMermaid(root: HTMLElement, options: MermaidRunOptions =
         });
         if (svg === null || !shouldContinue() || !root.contains(el) || !el.isConnected) return;
 
-        el.innerHTML = svg;
+        const svgDocument = new DOMParser().parseFromString(svg, 'image/svg+xml');
+        const svgRoot = svgDocument.documentElement;
+        if (!svgRoot || svgRoot.tagName.toLowerCase() !== 'svg' || svgDocument.querySelector('parsererror')) {
+          throw new Error('Mermaid returned invalid SVG.');
+        }
+        svgRoot.querySelectorAll('script, foreignObject, [onload], [onclick], [onerror]').forEach((node) => node.remove());
+        svgRoot.querySelectorAll('[href], [xlink\\:href]').forEach((node) => {
+          const href = node.getAttribute('href') ?? node.getAttribute('xlink:href') ?? '';
+          if (/^javascript:/iu.test(href.trim())) node.removeAttribute('href');
+          node.removeAttribute('xlink:href');
+        });
+        el.replaceChildren(document.importNode(svgRoot, true));
         const svgEl = el.querySelector('svg');
         if (svgEl) {
           svgEl.style.maxWidth = '100%';
