@@ -142,6 +142,38 @@ describe('PluginPanel', () => {
     expect(onOpenCenter).toHaveBeenCalledTimes(1);
   });
 
+  it('uses the installed manifest presentation instead of a newer market projection', () => {
+    mountPanel({
+      model: panelModel(pluginItem({
+        displayName: 'Market Name',
+        description: 'Market summary',
+        officialCatalog: {
+          ...pluginItem().officialCatalog,
+          displayName: 'Market Name',
+          description: 'Market summary',
+        } as PluginInventoryItem['officialCatalog'],
+        presentation: {
+          default_locale: 'en-US',
+          locales: [{
+            locale: 'en-US',
+            plugin_name: 'Installed Name',
+            publisher_name: 'Installed Publisher',
+            summary: 'Installed summary',
+            description: ['Installed description'],
+            highlights: [],
+            keywords: ['installed'],
+            surfaces: [],
+            settings: [],
+          }],
+        },
+      })),
+    });
+
+    const plugin = document.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]')!;
+    expect(plugin.textContent).toContain('Installed Name');
+    expect(plugin.textContent).not.toContain('Market Name');
+  });
+
   it('keeps catalog-only plugins in Plugin Center and shows the installed-plugin empty state', () => {
     const catalogItem = pluginItem({
       inventoryKey: 'catalog:containers',

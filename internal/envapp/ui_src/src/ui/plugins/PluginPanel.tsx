@@ -290,9 +290,7 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
                           <PluginUpdateBadge item={tile.item} />
                         </div>
                         <span class="block min-w-0 max-w-full truncate text-xs font-medium leading-4">
-                          {tile.item.officialCatalog
-                            ? resolvePluginPresentation(tile.item.officialCatalog, i18n.locale())?.plugin_name ?? tile.item.displayName
-                            : tile.item.displayName}
+                          {resolvedPluginPresentation(tile.item, i18n.locale())?.plugin_name ?? tile.item.displayName}
                         </span>
                       </button>
                       <span id={`plugin-launcher-tile-status-${index()}`} class="sr-only">
@@ -305,9 +303,7 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
                           triggerClass="rounded-md"
                           items={tileMenuItems(tile)}
                           onSelect={(action) => activateTileMenu(tile, action)}
-                          triggerAriaLabel={`${tile.item.officialCatalog
-                            ? resolvePluginPresentation(tile.item.officialCatalog, i18n.locale())?.plugin_name ?? tile.item.displayName
-                            : tile.item.displayName}: ${i18n.t('uiCopy.plugin.moreActions')}`}
+                          triggerAriaLabel={`${resolvedPluginPresentation(tile.item, i18n.locale())?.plugin_name ?? tile.item.displayName}: ${i18n.t('uiCopy.plugin.moreActions')}`}
                           trigger={(
                             <button
                               ref={(element) => tileMenuButtons.set(tile.item.inventoryKey, element)}
@@ -401,11 +397,7 @@ function normalizeSearchText(value: string, locale: string): string {
 }
 
 function pluginSearchText(item: PluginInventoryItem, i18n: I18nHelpers, locale: string): string {
-  const presentation = item.presentation
-    ? resolveAuthorPresentation(item.presentation, locale)
-    : item.officialCatalog
-      ? resolvePluginPresentation(item.officialCatalog, locale)
-      : undefined;
+  const presentation = resolvedPluginPresentation(item, locale);
   return normalizeSearchText([
     presentation?.plugin_name ?? item.displayName,
     presentation?.summary ?? item.description,
@@ -414,6 +406,14 @@ function pluginSearchText(item: PluginInventoryItem, i18n: I18nHelpers, locale: 
     categoryLabel(item.category, i18n),
     ...(presentation?.keywords ?? item.searchKeywords),
   ].join(' '), locale);
+}
+
+function resolvedPluginPresentation(item: PluginInventoryItem, locale: string) {
+  return item.presentation
+    ? resolveAuthorPresentation(item.presentation, locale)
+    : item.officialCatalog
+      ? resolvePluginPresentation(item.officialCatalog, locale)
+      : undefined;
 }
 
 function categoryLabel(category: PluginPresentationCategory, i18n: I18nHelpers): string {
