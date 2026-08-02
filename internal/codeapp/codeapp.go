@@ -45,11 +45,10 @@ type Options struct {
 	StateDir  string
 	StateRoot string
 	// ConfigPath is the absolute path to the runtime config file (used to persist settings updates from the Env App UI).
-	ConfigPath                string
-	PermissionPolicy          *config.PermissionPolicy
-	ControlplaneBaseURL       string
-	ReDevPluginRuntimePath    string
-	PluginDevelopmentDelivery string
+	ConfigPath             string
+	PermissionPolicy       *config.PermissionPolicy
+	ControlplaneBaseURL    string
+	ReDevPluginRuntimePath string
 
 	// CodeServerPortMin/Max configures the dynamic port range used for code-server processes.
 	// If unset/invalid, a safe default range is used.
@@ -313,16 +312,15 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	}
 
 	pluginIntegration, err := redevpluginintegration.New(ctx, redevpluginintegration.Options{
-		StateDir:                stateAbs,
-		PermissionPolicy:        opts.PermissionPolicy,
-		RuntimePath:             strings.TrimSpace(opts.ReDevPluginRuntimePath),
-		ResolveSessionMeta:      resolvePluginPlatformSessionMeta(opts),
-		Audit:                   opts.Audit,
-		Diagnostics:             opts.Diagnostics,
-		Containers:              containerAdapter,
-		RuntimeAuthority:        opts.PluginRuntimeAuthority,
-		DevelopmentDeliveryPath: strings.TrimSpace(opts.PluginDevelopmentDelivery),
-		PluginMarket:            pluginMarket,
+		StateDir:           stateAbs,
+		PermissionPolicy:   opts.PermissionPolicy,
+		RuntimePath:        strings.TrimSpace(opts.ReDevPluginRuntimePath),
+		ResolveSessionMeta: resolvePluginPlatformSessionMeta(opts),
+		Audit:              opts.Audit,
+		Diagnostics:        opts.Diagnostics,
+		Containers:         containerAdapter,
+		RuntimeAuthority:   opts.PluginRuntimeAuthority,
+		PluginMarket:       pluginMarket,
 	})
 	if err != nil {
 		terminalLayoutCleanup()
@@ -340,31 +338,30 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	}
 
 	appSrv, err := appserver.New(appserver.Options{
-		Logger:                    logger,
-		DistFS:                    mergedFS{primary: ui.DistFS(), secondary: envui.DistFS()},
-		Backend:                   svc,
-		PortForward:               pfSvc,
-		AIServiceProvider:         aiReady,
-		Notes:                     notesSvc,
-		WorkbenchLayout:           workbenchLayoutSvc,
-		Terminal:                  opts.Terminal,
-		Codex:                     codexSvc,
-		Audit:                     opts.Audit,
-		Diagnostics:               opts.Diagnostics,
-		ResolveSessionMeta:        opts.ResolveSessionMeta,
-		ResolveSessionTunnelURL:   opts.ResolveSessionTunnelURL,
-		AcquirePluginSession:      opts.AcquirePluginSession,
-		EndPluginSession:          opts.EndPluginSession,
-		ConfigPath:                strings.TrimSpace(opts.ConfigPath),
-		SecretsStore:              secrets,
-		ThreadReadStateStore:      threadReadStateStore,
-		PluginPlatform:            pluginIntegration.Handler(),
-		PluginDevelopmentDelivery: pluginIntegration.DevelopmentDelivery(),
-		PluginMarketSnapshot:      pluginIntegration.MarketSnapshot,
-		PluginMarketDetail:        pluginIntegration.MarketDetail,
-		AgentHomeDir:              agentHomeDir,
-		FilesystemScope:           scope,
-		ListenAddr:                "127.0.0.1:0",
+		Logger:                  logger,
+		DistFS:                  mergedFS{primary: ui.DistFS(), secondary: envui.DistFS()},
+		Backend:                 svc,
+		PortForward:             pfSvc,
+		AIServiceProvider:       aiReady,
+		Notes:                   notesSvc,
+		WorkbenchLayout:         workbenchLayoutSvc,
+		Terminal:                opts.Terminal,
+		Codex:                   codexSvc,
+		Audit:                   opts.Audit,
+		Diagnostics:             opts.Diagnostics,
+		ResolveSessionMeta:      opts.ResolveSessionMeta,
+		ResolveSessionTunnelURL: opts.ResolveSessionTunnelURL,
+		AcquirePluginSession:    opts.AcquirePluginSession,
+		EndPluginSession:        opts.EndPluginSession,
+		ConfigPath:              strings.TrimSpace(opts.ConfigPath),
+		SecretsStore:            secrets,
+		ThreadReadStateStore:    threadReadStateStore,
+		PluginPlatform:          pluginIntegration.Handler(),
+		PluginMarketSnapshot:    pluginIntegration.MarketSnapshot,
+		PluginMarketDetail:      pluginIntegration.MarketDetail,
+		AgentHomeDir:            agentHomeDir,
+		FilesystemScope:         scope,
+		ListenAddr:              "127.0.0.1:0",
 	})
 	if err != nil {
 		_ = pluginIntegration.Close()

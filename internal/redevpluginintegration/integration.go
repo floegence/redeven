@@ -33,32 +33,30 @@ import (
 )
 
 type Options struct {
-	StateDir                string
-	PermissionPolicy        *config.PermissionPolicy
-	RuntimePath             string
-	ResolveSessionMeta      func(channelID string) (*session.Meta, bool)
-	Audit                   *auditlog.Store
-	Diagnostics             *diagnostics.Store
-	Containers              *containers.Adapter
-	RuntimeAuthority        *RuntimeProcessAuthority
-	DevelopmentDeliveryPath string
-	PluginMarket            *pluginmarket.Service
-	releaseTrustNow         func() time.Time
-	newReleaseModule        func(string) (*host.ReleaseModule, host.PluginReleaseRef, func() error, error)
-	newExternalFetcher      func(*externalsource.StageStore) (host.ExternalPackageFetcher, error)
-	closeExternalStage      func(*externalsource.StageStore) error
+	StateDir           string
+	PermissionPolicy   *config.PermissionPolicy
+	RuntimePath        string
+	ResolveSessionMeta func(channelID string) (*session.Meta, bool)
+	Audit              *auditlog.Store
+	Diagnostics        *diagnostics.Store
+	Containers         *containers.Adapter
+	RuntimeAuthority   *RuntimeProcessAuthority
+	PluginMarket       *pluginmarket.Service
+	releaseTrustNow    func() time.Time
+	newReleaseModule   func(string) (*host.ReleaseModule, host.PluginReleaseRef, func() error, error)
+	newExternalFetcher func(*externalsource.StageStore) (host.ExternalPackageFetcher, error)
+	closeExternalStage func(*externalsource.StageStore) error
 }
 
 type Integration struct {
-	handler             http.Handler
-	host                *host.Host
-	capabilities        *containersCapabilityAdapter
-	sessionLifecycle    *sessionLifecycleAdapter
-	developmentDelivery *DevelopmentDelivery
-	marketSnapshot      *pluginmarket.Snapshot
-	marketService       *pluginmarket.Service
-	marketErr           error
-	closers             []func() error
+	handler          http.Handler
+	host             *host.Host
+	capabilities     *containersCapabilityAdapter
+	sessionLifecycle *sessionLifecycleAdapter
+	marketSnapshot   *pluginmarket.Snapshot
+	marketService    *pluginmarket.Service
+	marketErr        error
+	closers          []func() error
 }
 
 func New(ctx context.Context, opts Options) (*Integration, error) {
@@ -83,10 +81,6 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 		return nil, err
 	}
 	if err := opts.Containers.Validate(); err != nil {
-		return nil, err
-	}
-	developmentDelivery, err := loadDevelopmentDelivery(opts.DevelopmentDeliveryPath)
-	if err != nil {
 		return nil, err
 	}
 	packageTrustVerifier, err := newPackageTrustVerifier()
@@ -261,14 +255,14 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 		return nil, err
 	}
 
-	sessions, err := newSessionAdapter(opts.ResolveSessionMeta, opts.PermissionPolicy, developmentDelivery != nil)
+	sessions, err := newSessionAdapter(opts.ResolveSessionMeta, opts.PermissionPolicy)
 	if err != nil {
 		_ = pluginData.Close()
 		_ = assetStore.Close()
 		closeOnError()
 		return nil, err
 	}
-	capabilities, capabilityAdapter, err := newContainersCapabilityRegistry(opts.Containers, observability, developmentDelivery)
+	capabilities, capabilityAdapter, err := newContainersCapabilityRegistry(opts.Containers, observability)
 	if err != nil {
 		_ = pluginData.Close()
 		_ = assetStore.Close()
@@ -343,24 +337,16 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 		return nil, err
 	}
 	integration := &Integration{
-		handler:             handler,
-		host:                h,
-		capabilities:        capabilityAdapter,
-		sessionLifecycle:    sessionLifecycle,
-		developmentDelivery: developmentDelivery,
-		marketSnapshot:      marketSnapshot,
-		marketService:       opts.PluginMarket,
-		marketErr:           marketErr,
-		closers:             closers,
+		handler:          handler,
+		host:             h,
+		capabilities:     capabilityAdapter,
+		sessionLifecycle: sessionLifecycle,
+		marketSnapshot:   marketSnapshot,
+		marketService:    opts.PluginMarket,
+		marketErr:        marketErr,
+		closers:          closers,
 	}
 	return integration, nil
-}
-
-func (i *Integration) DevelopmentDelivery() *DevelopmentDelivery {
-	if i == nil {
-		return nil
-	}
-	return i.developmentDelivery
 }
 
 func (i *Integration) MarketSnapshot() (pluginmarket.Snapshot, bool) {

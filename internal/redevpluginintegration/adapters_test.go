@@ -169,42 +169,6 @@ func TestSharedRuntimeManagementRequiresAdmin(t *testing.T) {
 	}
 }
 
-func TestSessionAdapterEnablesLocalGeneratedPluginsOnlyForDevelopmentDelivery(t *testing.T) {
-	resolve := func(channelID string) (*session.Meta, bool) {
-		return &session.Meta{
-			ChannelID: channelID, EndpointID: "env_development", UserPublicID: "user_development", CanAdmin: true,
-		}, true
-	}
-	production, err := newSessionAdapter(resolve, testPermissionPolicy(t, "execute_read_write"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	development, err := newSessionAdapter(resolve, testPermissionPolicy(t, "execute_read_write"), true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, check := range []struct {
-		name string
-		call func(*policyAdapter) (bool, error)
-	}{
-		{name: "developer mode", call: func(policy *policyAdapter) (bool, error) {
-			return policy.DeveloperModeEnabled(context.Background(), sessionctx.Context{})
-		}},
-		{name: "local generated plugins", call: func(policy *policyAdapter) (bool, error) {
-			return policy.LocalGeneratedPluginsEnabled(context.Background(), sessionctx.Context{})
-		}},
-	} {
-		t.Run(check.name, func(t *testing.T) {
-			if enabled, err := check.call(&production.policy); err != nil || enabled {
-				t.Fatalf("production policy enabled = %v, err = %v", enabled, err)
-			}
-			if enabled, err := check.call(&development.policy); err != nil || !enabled {
-				t.Fatalf("development policy enabled = %v, err = %v", enabled, err)
-			}
-		})
-	}
-}
-
 func TestExternalPackageAdmissionUsesExplicitPermissionTiers(t *testing.T) {
 	for _, action := range []host.ManagementAction{
 		host.ManagementActionInspectExternalPackage,

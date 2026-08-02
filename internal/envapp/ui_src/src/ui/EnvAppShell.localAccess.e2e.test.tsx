@@ -138,7 +138,7 @@ const officialContainersCatalog = {
   minReDevPluginVersion: '0.6.5',
   rolloutState: 'stable',
   defaultSurfaceID: 'containers.dashboard',
-  iconFallback: 'containers',
+  iconFallback: 'generic',
   category: 'infrastructure',
   searchKeywords: ['docker', 'podman'],
   trustedSigningKeyIDs: ['redeven-official-signing-2026'],

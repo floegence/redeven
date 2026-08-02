@@ -120,23 +120,18 @@ single-line target action such as `Update to vX`, `Install new build`, or
 The immutable update candidate binds the exact plugin instance, management
 revision, current and target versions, package, manifest, and entries hashes,
 and release-notes identity. Before commit, Redeven rechecks the current inventory
-revision, inspection expiry or development-delivery hashes, and release-notes
+revision, inspection expiry, and release-notes
 summary. A changed target is stale and requires a fresh review; it is never
-silently substituted. Version upgrades, same-version development builds,
-same-version external replacements, exact-package no-ops, and downgrades are
+silently substituted. Version upgrades, same-version external replacements,
+exact-package no-ops, and downgrades are
 projected centrally rather than inferred separately by cards and dialogs.
 
 Product release notes and Host security evidence have separate authority.
 Official notes render only when their target version and package, manifest, and
-entries hashes match the release reference. A development-delivery v2 descriptor
-binds its notes ID and summary hash to the Host-projected delivery identity.
-ReDevPlugin 0.6.23 has no read-only local-package inspection, so a development
-review states only that Redeven verified the exact delivery and capability
-contract identity. It explicitly states that package signature and declaration-
-difference inspection are unavailable and never claims unchanged access. External
-updates use the released inspection result; only that evidence may claim no
-security-declaration changes. Missing publisher notes remain visibly absent and
-are never synthesized from manifests or source history.
+entries hashes match the release reference. External updates use the released
+inspection result; only that evidence may claim no security-declaration changes.
+Missing publisher notes remain visibly absent and are never synthesized from
+manifests or source history.
 
 Commit starts only from the review footer. Development builds and external
 replacements require a concise adjacent risk acknowledgement; ordinary verified
@@ -337,7 +332,7 @@ or call business adapters directly.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterView.tsx:1` - Selects exact inventory items and owns install and update-review entry state.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginUpdateReviewDialog.tsx:1` - Presents the target-bound review, fixed confirmation footer, reconciliation, and retained completion state.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginUpdateProjection.ts:1` - Classifies update targets and fences revision, inspection, hash, and release-note identity.
-- `redeven:internal/envapp/ui_src/src/ui/plugins/officialPluginReleaseNotes.json:1` - Stores machine-readable product release-note bindings used by catalog and development delivery.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/officialPluginReleaseNotes.json:1` - Stores machine-readable product release-note bindings used by catalog and update review.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterItems.tsx:1` - Presents the compact Discover, Installed, and Updates card directory without owning selection or mutations.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginPresentation.ts:1` - Combines trust, policy, authorization, lifecycle, and launch readiness into one primary action.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/plugin-motion.css:1` - Defines the scoped subtle entrance and disclosure motion with a reduced-motion override.

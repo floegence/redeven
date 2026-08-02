@@ -4,10 +4,9 @@ import {
   type PluginPlatformClient,
   type PluginRequestOptions,
 } from '@floegence/redevplugin-ui';
-import type { PluginLocalImportClient } from '@floegence/redevplugin-ui/local-import';
 
-import { applyOfficialDevelopmentDelivery, officialPluginCatalog } from './officialPluginCatalog';
-import { fetchLocalApiJSON, prepareLocalApiRequestInit } from '../services/localApi';
+import { officialPluginCatalog } from './officialPluginCatalog';
+import { fetchLocalApiJSON, fetchLocalApiJSONResponse, prepareLocalApiRequestInit } from '../services/localApi';
 import { projectPluginInventory } from './pluginInventoryProjection';
 import type {
   OfficialPluginCatalogItem,
@@ -17,7 +16,6 @@ import type {
   PluginInventoryProjection,
   PluginManagementCommand,
   ReDevPluginRecord,
-  PluginDevelopmentDelivery,
   PluginMarketSnapshot,
   PluginMarketDetail,
 } from './pluginTypes';
@@ -30,14 +28,10 @@ export class ExternalPackageInspectionTerminalError extends Error {}
 
 export function createPluginLifecycleAPI(
   client: PluginPlatformClient,
-  localImport?: PluginLocalImportClient,
   catalogSeed?: readonly OfficialPluginCatalogItem[],
-  loadDevelopment: (signal?: AbortSignal) => Promise<PluginDevelopmentDelivery | undefined> = loadDevelopmentDelivery,
   loadMarket: (signal?: AbortSignal) => Promise<PluginMarketSnapshot> = loadPluginMarketSnapshot,
 ) {
   let catalog: readonly OfficialPluginCatalogItem[] = catalogSeed ?? [];
-  let developmentDelivery: PluginDevelopmentDelivery | undefined;
-  let developmentUpdateTargets = new Map<string, number>();
   const officialByPluginID = () => new Map(catalog.map((item) => [item.pluginID, item]));
   const externalCommitQueryOnlyInspections = new Set<string>();
 
@@ -48,7 +42,6 @@ export function createPluginLifecycleAPI(
 
   const loadInventoryProjection = async (options: PluginRequestOptions = {}): Promise<PluginInventoryProjection> => {
     const installedPluginsPromise = listInstalledPlugins(options);
-    const developmentPromise = loadDevelopment(options.signal);
     let marketUnavailable = false;
     if (catalogSeed === undefined) {
       try {
@@ -60,8 +53,6 @@ export function createPluginLifecycleAPI(
     } else {
       catalog = catalogSeed;
     }
-    developmentDelivery = await developmentPromise;
-    if (developmentDelivery) catalog = applyOfficialDevelopmentDelivery(catalog, developmentDelivery);
     const installedPlugins = await installedPluginsPromise;
     const [permissions, securityPolicies, permissionRequirementResults] = await Promise.all([
       client.listPermissions({ active_only: true }, options),
@@ -73,7 +64,6 @@ export function createPluginLifecycleAPI(
     const permissionRequirements = permissionRequirementResults.flatMap((result, index) => {
       if (result.status === 'fulfilled') return [result.value];
       const plugin = installedPlugins[index];
-      if (plugin && isRecoverableContainersDevelopmentInstance(plugin, developmentDelivery)) return [];
       throw result.reason;
     });
     const projection = projectPluginInventory({
@@ -83,13 +73,6 @@ export function createPluginLifecycleAPI(
       permissionRequirements,
       securityPolicies: securityPolicies.security_policies,
     });
-    developmentUpdateTargets = new Map(projection.items.flatMap((item) => (
-      item.pluginInstanceID
-        && item.managementRevision !== undefined
-        && item.officialCatalog?.distribution.developmentDelivery
-        ? [[item.pluginInstanceID, item.managementRevision] as const]
-        : []
-    )));
     return { ...projection, marketUnavailable };
   };
 
@@ -192,24 +175,6 @@ export function createPluginLifecycleAPI(
         }, options);
       case 'update': {
         const official = requireOfficialPlugin(officialByPluginID(), command.pluginID);
-        const development = official.distribution.developmentDelivery;
-        if (development && command.targetVersion === development.version) {
-          if (!localImport
-            || developmentUpdateTargets.get(command.pluginInstanceID) !== command.expectedManagementRevision) {
-            throw new Error('Containers development update target is invalid');
-          }
-          const response = await fetch(development.package_url, await prepareLocalApiRequestInit({ signal: options.signal }));
-          if (!response.ok) throw new Error(`Containers development package could not be loaded (HTTP ${response.status})`);
-          const blob = await response.blob();
-          if (await sha256Hex(blob) !== development.package_sha256) {
-            throw new Error('Containers development package hash does not match the reviewed delivery');
-          }
-          const result = await localImport.updateLocalPackage(
-            command.pluginInstanceID, command.expectedManagementRevision, blob, { signal: options.signal },
-          );
-          developmentUpdateTargets.delete(command.pluginInstanceID);
-          return result;
-        }
         if (command.targetVersion !== official.distribution.releaseRef.version) {
           throw new Error('Official plugin update target does not match its signed release reference');
         }
@@ -251,31 +216,6 @@ export function createPluginLifecycleAPI(
   });
 }
 
-function isRecoverableContainersDevelopmentInstance(
-  plugin: ReDevPluginRecord,
-  delivery?: PluginDevelopmentDelivery,
-): boolean {
-  return Boolean(delivery
-    && delivery.development_only === true
-    && plugin.publisher_id === delivery.publisher_id
-    && plugin.plugin_id === delivery.plugin_id
-    && plugin.version === delivery.version
-    && plugin.trust_state === 'unsigned_local');
-}
-
-async function loadDevelopmentDelivery(signal?: AbortSignal): Promise<PluginDevelopmentDelivery | undefined> {
-  if (typeof window === 'undefined') return undefined;
-  try {
-    return await fetchLocalApiJSON<PluginDevelopmentDelivery>(
-      '/_redeven_proxy/api/plugins/development-delivery/containers',
-      { method: 'GET', signal },
-    );
-  } catch (error) {
-    if (error instanceof Error && 'status' in error && (error as { status?: number }).status === 404) return undefined;
-    throw error;
-  }
-}
-
 async function loadPluginMarketSnapshot(signal?: AbortSignal): Promise<PluginMarketSnapshot> {
   return fetchLocalApiJSON<PluginMarketSnapshot>(
     '/_redeven_proxy/api/plugins/market/catalog',
@@ -285,15 +225,17 @@ async function loadPluginMarketSnapshot(signal?: AbortSignal): Promise<PluginMar
 
 export async function loadPluginMarketDetail(pluginID: string, signal?: AbortSignal): Promise<PluginMarketDetail> {
   if (!/^[a-z][a-z0-9._-]{0,127}$/.test(pluginID)) throw new Error('Invalid plugin id');
-  return fetchLocalApiJSON<PluginMarketDetail>(
+  const response = await fetchLocalApiJSONResponse<PluginMarketDetail>(
     `/_redeven_proxy/api/plugins/market/plugins/${encodeURIComponent(pluginID)}`,
     await prepareLocalApiRequestInit({ signal }),
   );
-}
-
-async function sha256Hex(blob: Blob): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', await blob.arrayBuffer());
-  return [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, '0')).join('');
+  const meta = response.meta as { generation?: unknown } | undefined;
+  return {
+    ...response.data,
+    ...(Number.isSafeInteger(meta?.generation) && (meta?.generation as number) >= 0
+      ? { generation: meta?.generation as number }
+      : {}),
+  };
 }
 
 function waitForExternalCommitRetry(delayMs: number, signal?: AbortSignal, remainingMs = 5_000): Promise<void> {

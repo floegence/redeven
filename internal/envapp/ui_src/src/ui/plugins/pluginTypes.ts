@@ -38,7 +38,6 @@ export type PluginPresentationCategory =
 export type OfficialPluginDistribution = {
   releaseRef: PluginReleaseRef;
   installSource: ExternalPluginSourcePreset;
-  developmentDelivery?: PluginDevelopmentDelivery;
 };
 
 export type PluginMarketLatestRelease = {
@@ -101,6 +100,7 @@ export type PluginMarketPresentationFullLocale = PluginMarketPresentationLocale 
 }>;
 
 export type PluginMarketDetail = Readonly<{
+  generation?: number;
   plugin_id: string;
   publisher_id: string;
   presentation: Readonly<{ default_locale: string; locales: readonly PluginMarketPresentationFullLocale[] }>;
@@ -130,24 +130,6 @@ export type PluginReleaseNotes = Readonly<{
   }>;
 }>;
 
-export type PluginDevelopmentDelivery = {
-  plugin_instance_id: string;
-  publisher_id: string;
-  plugin_id: string;
-  version: string;
-  package_url: string;
-  package_sha256: string;
-  package_hash: string;
-  manifest_hash: string;
-  entries_hash: string;
-  capability_version: string;
-  release_notes_id: string;
-  release_notes_summary_sha256: string;
-  source_repository: string;
-  source_commit: string;
-  development_only: true;
-};
-
 export type OfficialPluginPermission = {
   permissionID: string;
   group: 'read' | 'execute' | 'delete' | 'images_write' | 'other';
@@ -163,7 +145,8 @@ export type OfficialPluginCatalogItem = {
   displayName: string;
   description: string;
   presentation?: PluginMarketPresentation;
-  publisher: 'Redeven';
+  publisher: string;
+  marketGeneration?: number;
   latestVersion: string;
   stableVersion: string;
   minRedevenVersion: string;
@@ -171,7 +154,7 @@ export type OfficialPluginCatalogItem = {
   rolloutState: 'stable' | 'staged' | 'disabled' | 'revoked';
   defaultSurfaceID: string;
   iconURL?: string;
-  iconFallback: 'containers' | 'database' | 'github' | 'generic';
+  iconFallback: 'database' | 'github' | 'generic';
   category: PluginPresentationCategory;
   searchKeywords: readonly string[];
   trustedSigningKeyIDs: readonly string[];
@@ -221,7 +204,7 @@ export type PluginInventoryItem = {
   displayName: string;
   description: string;
   iconURL?: string;
-  iconFallback: 'containers' | 'database' | 'github' | 'generic';
+  iconFallback: 'database' | 'github' | 'generic';
   category: PluginPresentationCategory;
   searchKeywords: readonly string[];
   publisher: string;
@@ -260,12 +243,10 @@ export type PluginUpdateCandidate = Readonly<{
   publisher: string;
   installedVersion: string;
   targetVersion: string;
-  kind: 'version_update' | 'development_build' | 'replace' | 'noop' | 'blocked';
+  kind: 'version_update' | 'replace' | 'noop' | 'blocked';
   target: PluginPackageIdentity;
   releaseNotes?: PluginReleaseNotes;
-  reviewEvidence:
-    | Readonly<{ kind: 'development_delivery'; packageInspection: 'unavailable'; capabilityVersion: string }>
-    | Readonly<{ kind: 'external_inspection'; inspection: ExternalPluginInspection }>;
+  reviewEvidence: Readonly<{ kind: 'external_inspection'; inspection: ExternalPluginInspection }>;
 }>;
 
 export type PluginInventoryProjection = {

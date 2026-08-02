@@ -10,7 +10,6 @@ import { PluginIdentityHeader } from './PluginPresentationPrimitives';
 import {
   candidateMatchesInventory,
   candidateTargetIsCurrent,
-  createDevelopmentUpdateCandidate,
   createExternalUpdateCandidate,
 } from './pluginUpdateProjection';
 import { samePackageIdentity } from './pluginReleaseNotes';
@@ -34,7 +33,6 @@ export type PluginUpdateReviewDialogProps = {
   onOpenChange: (open: boolean) => void;
   onInspect: (request: ExternalPluginInspectionRequest, signal: AbortSignal) => Promise<ExternalPluginInspection>;
   onCommitExternal: (inspection: ExternalPluginInspection, signal: AbortSignal) => Promise<ExternalPluginCommitResult>;
-  onCommitDevelopment: (candidate: PluginUpdateCandidate, signal: AbortSignal) => Promise<unknown>;
   onRefresh: () => Promise<unknown> | unknown;
   onCommitted: () => void;
   onOpenActivity: () => void;
@@ -61,7 +59,7 @@ export function PluginUpdateReviewDialog(props: PluginUpdateReviewDialogProps): 
   const needsRiskConfirmation = createMemo(() => {
     const current = candidate();
     if (!current) return false;
-    if (current.kind === 'replace' || current.reviewEvidence.kind === 'development_delivery') return true;
+    if (current.kind === 'replace') return true;
     const inspection = current.reviewEvidence.inspection;
     const changes = securityDeclarations(inspection.security_summary, props.item?.externalPackage?.securitySummary);
     return inspection.signature_assessment.state !== 'verified'
@@ -95,20 +93,6 @@ export function PluginUpdateReviewDialog(props: PluginUpdateReviewDialogProps): 
     setError(undefined);
     setRefreshFailed(false);
     setConfirmedRisk(false);
-    const delivery = item.officialCatalog?.distribution.developmentDelivery;
-    if (delivery) {
-      setStage('loading_review');
-      queueMicrotask(() => {
-        try {
-          setCandidate(createDevelopmentUpdateCandidate(item));
-          setStage('review');
-        } catch (caught) {
-          setError(messageFromUnknown(caught));
-          setStage('review');
-        }
-      });
-      return;
-    }
     const preset = item.officialCatalog?.distribution.installSource;
     if (preset) {
       setSourceKind(preset.sourceKind);
@@ -188,11 +172,7 @@ export function PluginUpdateReviewDialog(props: PluginUpdateReviewDialogProps): 
     setStage('committing');
     setError(undefined);
     try {
-      if (current.reviewEvidence.kind === 'external_inspection') {
-        await props.onCommitExternal(current.reviewEvidence.inspection, controller.signal);
-      } else {
-        await props.onCommitDevelopment(current, controller.signal);
-      }
+      await props.onCommitExternal(current.reviewEvidence.inspection, controller.signal);
       setStage('reconciling');
       await refreshAfterCommit(current);
       completeUpdate();
@@ -346,9 +326,9 @@ function UpdateReview(props: { candidate: PluginUpdateCandidate; item: PluginInv
     : [];
   return <div class="space-y-5">
     <PluginIdentityHeader item={props.item} />
-    <section class="border-y py-4"><p class="text-xs font-semibold uppercase text-muted-foreground">{i18n.t('uiCopy.plugin.updateReview.versionChange')}</p><div class="mt-2 flex flex-wrap items-center gap-2 text-sm"><span class="rounded-md border px-2.5 py-1">v{props.candidate.installedVersion}</span><span aria-hidden="true">→</span><span class="rounded-md border border-primary/40 bg-primary/5 px-2.5 py-1 font-semibold">v{props.candidate.targetVersion}</span><Show when={props.candidate.kind === 'development_build'}><span class="text-xs text-muted-foreground">{i18n.t('uiCopy.plugin.updateReview.newBuild')}</span></Show><Show when={props.candidate.kind === 'replace'}><span class="text-xs text-[var(--redeven-status-warning-foreground)]">{i18n.t('uiCopy.plugin.updateReview.replacementBuild')}</span></Show></div></section>
+    <section class="border-y py-4"><p class="text-xs font-semibold uppercase text-muted-foreground">{i18n.t('uiCopy.plugin.updateReview.versionChange')}</p><div class="mt-2 flex flex-wrap items-center gap-2 text-sm"><span class="rounded-md border px-2.5 py-1">v{props.candidate.installedVersion}</span><span aria-hidden="true">→</span><span class="rounded-md border border-primary/40 bg-primary/5 px-2.5 py-1 font-semibold">v{props.candidate.targetVersion}</span><Show when={props.candidate.kind === 'replace'}><span class="text-xs text-[var(--redeven-status-warning-foreground)]">{i18n.t('uiCopy.plugin.updateReview.replacementBuild')}</span></Show></div></section>
     <section><h3 class="text-sm font-semibold">{i18n.t('uiCopy.plugin.updateReview.whatIsNew')}</h3><Show when={notes()} fallback={<p class="mt-2 text-sm leading-6 text-muted-foreground">{i18n.t('uiCopy.plugin.updateReview.noReleaseNotes')}</p>}>{(current) => <div class="mt-2 space-y-3"><p class="text-sm leading-6">{i18n.t(current().summaryKey as EnvAppTranslationKey)}</p><NoteList title={i18n.t('uiCopy.plugin.updateReview.features')} keys={current().featureKeys} /><NoteList title={i18n.t('uiCopy.plugin.updateReview.improvements')} keys={current().improvementKeys} /><NoteList title={i18n.t('uiCopy.plugin.updateReview.fixes')} keys={current().fixKeys} /><NoteList title={i18n.t('uiCopy.plugin.updateReview.notices')} keys={current().noticeKeys} /></div>}</Show></section>
-    <section class="border-y py-4"><div class="flex items-start gap-3"><Shield class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" /><div><h3 class="text-sm font-semibold">{i18n.t('uiCopy.plugin.updateReview.impactTitle')}</h3><Show when={props.candidate.reviewEvidence.kind === 'external_inspection' && securityChanges().length === 0}><p class="mt-1 text-xs leading-5 text-muted-foreground">{i18n.t('uiCopy.plugin.updateReview.noAccessChange')}</p></Show><Show when={securityChanges().length > 0}><p class="mt-1 text-xs leading-5 text-[var(--redeven-status-warning-foreground)]">{i18n.t('uiCopy.plugin.updateReview.securityChanges', { count: securityChanges().length })}</p></Show><p class="mt-1 text-xs leading-5 text-muted-foreground">{i18n.t('uiCopy.plugin.updateReview.grantsRetained')}</p><p class="mt-1 text-xs leading-5 text-muted-foreground">{props.candidate.reviewEvidence.kind === 'development_delivery' ? i18n.t('uiCopy.plugin.updateReview.developmentEvidence') : i18n.t('uiCopy.plugin.updateReview.externalEvidence')}</p><Show when={props.candidate.reviewEvidence.kind === 'development_delivery'}><p class="mt-1 text-xs leading-5 text-[var(--redeven-status-warning-foreground)]">{i18n.t('uiCopy.plugin.updateReview.developmentInspectionUnavailable')}</p></Show></div></div></section>
+    <section class="border-y py-4"><div class="flex items-start gap-3"><Shield class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" /><div><h3 class="text-sm font-semibold">{i18n.t('uiCopy.plugin.updateReview.impactTitle')}</h3><Show when={securityChanges().length === 0}><p class="mt-1 text-xs leading-5 text-muted-foreground">{i18n.t('uiCopy.plugin.updateReview.noAccessChange')}</p></Show><Show when={securityChanges().length > 0}><p class="mt-1 text-xs leading-5 text-[var(--redeven-status-warning-foreground)]">{i18n.t('uiCopy.plugin.updateReview.securityChanges', { count: securityChanges().length })}</p></Show><p class="mt-1 text-xs leading-5 text-muted-foreground">{i18n.t('uiCopy.plugin.updateReview.grantsRetained')}</p><p class="mt-1 text-xs leading-5 text-muted-foreground">{i18n.t('uiCopy.plugin.updateReview.externalEvidence')}</p></div></div></section>
     <Show when={props.candidate.kind === 'noop'}><p class="rounded-md border px-3 py-2 text-sm">{i18n.t('uiCopy.plugin.updateReview.noUpdate')}</p></Show><Show when={props.candidate.kind === 'blocked'}><p class="rounded-md border border-destructive px-3 py-2 text-sm text-destructive">{i18n.t('uiCopy.plugin.updateReview.downgradeBlocked')}</p></Show>
     <details class="group rounded-md border"><summary class="flex min-h-11 cursor-pointer list-none items-center justify-between px-3 text-xs font-semibold"><span>{i18n.t('uiCopy.plugin.updateReview.technicalEvidence')}</span><ChevronDown class="h-4 w-4 transition-transform duration-150 group-open:rotate-180 motion-reduce:transition-none" /></summary><dl class="grid gap-3 border-t px-3 py-3 text-xs sm:grid-cols-2"><HashFact label={i18n.t('uiCopy.plugin.updateReview.packageHash')} value={props.candidate.target.packageHash} /><HashFact label={i18n.t('uiCopy.plugin.updateReview.manifestHash')} value={props.candidate.target.manifestHash} /><HashFact label={i18n.t('uiCopy.plugin.updateReview.entriesHash')} value={props.candidate.target.entriesHash} /><Show when={notes()}>{(current) => <HashFact label={i18n.t('uiCopy.plugin.updateReview.releaseNotesID')} value={current().releaseID} />}</Show></dl></details>
   </div>;
@@ -366,7 +346,6 @@ const primaryButtonClass = cn('inline-flex min-h-[44px] flex-none cursor-pointer
 const secondaryButtonClass = cn('inline-flex min-h-[44px] flex-none cursor-pointer items-center justify-center whitespace-nowrap rounded-md border bg-background px-4 text-sm font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', PLUGIN_PRESS_MOTION_CLASS, PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'sm:min-h-9');
 
 function submitLabel(candidate: PluginUpdateCandidate, t: ReturnType<typeof useI18n>['t']): string {
-  if (candidate.kind === 'development_build') return t('uiCopy.plugin.updateReview.installNewBuild');
   if (candidate.kind === 'replace') return t('uiCopy.plugin.updateReview.replaceBuild');
   return t('uiCopy.plugin.updateReview.updateToVersion', { version: candidate.targetVersion });
 }
