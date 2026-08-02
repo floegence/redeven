@@ -122,14 +122,6 @@ func (service *Service) Detail(ctx context.Context, pluginID string) (PluginDeta
 	return response.Data, nil
 }
 
-func compactPresentationLocales(locales []PresentationFullLocale) []PresentationCompactLocale {
-	result := make([]PresentationCompactLocale, len(locales))
-	for index, locale := range locales {
-		result[index] = PresentationCompactLocale{Locale: locale.Locale, Name: locale.Name, PublisherName: locale.PublisherName, Summary: locale.Summary, Keywords: slices.Clone(locale.Keywords)}
-	}
-	return result
-}
-
 func (service *Service) refresh(ctx context.Context) (Snapshot, error) {
 	plugins := make([]CatalogPlugin, 0)
 	cursor := ""
