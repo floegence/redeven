@@ -8,11 +8,13 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/floegence/redevplugin/pkg/host"
 	pluginmanifest "github.com/floegence/redevplugin/pkg/manifest"
 	"github.com/floegence/redevplugin/pkg/remoterelease"
+	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 	"golang.org/x/text/unicode/norm"
 )
@@ -365,9 +367,24 @@ func validateCompactPresentation(presentation PresentationCompact) bool {
 		return false
 	}
 	seen := make(map[string]struct{}, len(presentation.Locales))
+	defaultPublisherPresent := false
 	for _, locale := range presentation.Locales {
-		if !validPresentationLocale(locale.Locale) || !validPresentationText(locale.Name) || !validPresentationText(locale.Summary) || len(locale.Keywords) == 0 || hasDuplicateKeywords(locale.Keywords) {
+		if locale.Locale == presentation.DefaultLocale {
+			defaultPublisherPresent = locale.PublisherName != ""
+			break
+		}
+	}
+	for _, locale := range presentation.Locales {
+		if !validPresentationLocale(locale.Locale) || !validPresentationText(locale.Name, 128) ||
+			(locale.PublisherName != "" && !validPresentationText(locale.PublisherName, 128)) ||
+			(defaultPublisherPresent != (locale.PublisherName != "")) || !validPresentationText(locale.Summary, 240) ||
+			len(locale.Keywords) == 0 || len(locale.Keywords) > 12 || hasDuplicateKeywords(locale.Keywords) {
 			return false
+		}
+		for _, keyword := range locale.Keywords {
+			if !validPresentationText(keyword, 64) {
+				return false
+			}
 		}
 		if _, exists := seen[locale.Locale]; exists {
 			return false
@@ -386,7 +403,10 @@ func validateFullPresentation(presentation PresentationFull) bool {
 	var defaultLocale *PresentationFullLocale
 	for index := range presentation.Locales {
 		locale := &presentation.Locales[index]
-		if !validPresentationLocale(locale.Locale) || !validPresentationText(locale.Name) || !validPresentationText(locale.Summary) || len(locale.Description) == 0 || len(locale.Description) > 12 || len(locale.Keywords) == 0 || hasDuplicateKeywords(locale.Keywords) {
+		if !validPresentationLocale(locale.Locale) || !validPresentationText(locale.Name, 128) || !validPresentationText(locale.Summary, 240) || len(locale.Description) == 0 || len(locale.Description) > 12 || len(locale.Keywords) == 0 || len(locale.Keywords) > 12 || len(locale.Highlights) > 8 || hasDuplicateKeywords(locale.Keywords) {
+			return false
+		}
+		if locale.PublisherName != "" && !validPresentationText(locale.PublisherName, 128) {
 			return false
 		}
 		if _, exists := seen[locale.Locale]; exists {
@@ -400,22 +420,35 @@ func validateFullPresentation(presentation PresentationFull) bool {
 			return false
 		}
 		for _, surface := range locale.Surfaces {
-			if !idPattern.MatchString(surface.SurfaceID) || !validPresentationText(surface.Label) {
+			if !idPattern.MatchString(surface.SurfaceID) || !validPresentationText(surface.Label, 128) {
 				return false
 			}
 		}
 		for _, setting := range locale.Settings {
-			if strings.TrimSpace(setting.Key) == "" || !validPresentationText(setting.Label) || hasDuplicateIDs(setting.Options, func(option PresentationSettingOption) string { return option.Value }) {
+			if strings.TrimSpace(setting.Key) == "" || len(setting.Key) > 128 || !validPresentationText(setting.Label, 128) || hasDuplicateIDs(setting.Options, func(option PresentationSettingOption) string { return option.Value }) {
 				return false
 			}
 			for _, option := range setting.Options {
-				if strings.TrimSpace(option.Value) == "" || !validPresentationText(option.Label) {
+				if strings.TrimSpace(option.Value) == "" || len(option.Value) > 128 || !validPresentationText(option.Label, 128) {
 					return false
 				}
 			}
 		}
-		for _, text := range append(append(slices.Clone(locale.Description), locale.Highlights...), locale.Keywords...) {
-			if !validPresentationText(text) {
+		if len(locale.Description) == 0 || len(locale.Description) > 12 || runeCount(locale.Description) > 8000 {
+			return false
+		}
+		for _, text := range locale.Description {
+			if !validPresentationText(text, 1000) {
+				return false
+			}
+		}
+		for _, text := range locale.Highlights {
+			if !validPresentationText(text, 240) {
+				return false
+			}
+		}
+		for _, text := range locale.Keywords {
+			if !validPresentationText(text, 64) {
 				return false
 			}
 		}
@@ -423,6 +456,7 @@ func validateFullPresentation(presentation PresentationFull) bool {
 	if defaultLocale == nil {
 		return false
 	}
+	defaultPublisherPresent := defaultLocale.PublisherName != ""
 	defaultSurfaces := make(map[string]struct{}, len(defaultLocale.Surfaces))
 	defaultSettings := make(map[string]PresentationSetting, len(defaultLocale.Settings))
 	for _, surface := range defaultLocale.Surfaces {
@@ -432,6 +466,9 @@ func validateFullPresentation(presentation PresentationFull) bool {
 		defaultSettings[setting.Key] = setting
 	}
 	for _, locale := range presentation.Locales {
+		if (locale.PublisherName != "") != defaultPublisherPresent {
+			return false
+		}
 		if len(locale.Surfaces) != len(defaultSurfaces) || len(locale.Settings) != len(defaultSettings) {
 			return false
 		}
@@ -467,20 +504,37 @@ func validPresentationLocale(value string) bool {
 	return err == nil && tag.String() == value
 }
 
-func validPresentationText(value string) bool {
-	return value != "" && utf8.ValidString(value) && strings.TrimSpace(value) == value && norm.NFC.String(value) == value && !strings.ContainsAny(value, "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e\x1f\x7f")
+func validPresentationText(value string, maxRunes int) bool {
+	if value == "" || !utf8.ValidString(value) || strings.TrimSpace(value) != value || norm.NFC.String(value) != value || utf8.RuneCountInString(value) > maxRunes {
+		return false
+	}
+	for _, valueRune := range value {
+		if unicode.IsControl(valueRune) {
+			return false
+		}
+	}
+	return true
 }
 
 func hasDuplicateKeywords(values []string) bool {
 	seen := make(map[string]struct{}, len(values))
+	fold := cases.Fold()
 	for _, value := range values {
-		key := strings.ToLower(value)
+		key := fold.String(value)
 		if _, exists := seen[key]; exists {
 			return true
 		}
 		seen[key] = struct{}{}
 	}
 	return false
+}
+
+func runeCount(values []string) int {
+	total := 0
+	for _, value := range values {
+		total += utf8.RuneCountInString(value)
+	}
+	return total
 }
 
 func hasDuplicateIDs[T any](values []T, key func(T) string) bool {
