@@ -645,8 +645,9 @@ func (r *run) subagentHostConfigKey(ctx context.Context, resolved resolvedSubage
 	if err != nil {
 		return "", err
 	}
-	sum := sha256.Sum256(body)
-	return hex.EncodeToString(sum[:]), nil
+	mac := hmac.New(sha256.New, []byte("redeven-capability-fingerprint-v1"))
+	_, _ = mac.Write(body)
+	return hex.EncodeToString(mac.Sum(nil)), nil
 }
 
 func stableSecretDigest(value string) string {

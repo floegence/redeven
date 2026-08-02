@@ -332,6 +332,9 @@ func exchangeBootstrapTicket(ctx context.Context, baseClient *http.Client, baseU
 	if err != nil {
 		return nil, fmt.Errorf("invalid controlplane url: %w", err)
 	}
+	if !strings.EqualFold(u.Scheme, "https") || strings.TrimSpace(u.Hostname()) == "" {
+		return nil, errors.New("controlplane bootstrap requires an HTTPS origin")
+	}
 	u.Path = strings.TrimRight(u.Path, "/") + "/api/rcpp/v2/runtime/bootstrap/exchange"
 	u.RawQuery = ""
 

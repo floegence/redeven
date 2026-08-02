@@ -505,7 +505,7 @@ function compareEntries(a, b) {
 }
 
 function escapeCell(value) {
-  return String(value ?? '').replace(/\|/gu, '\\|').replace(/\n/gu, ' ');
+  return String(value ?? '').replace(/\\/gu, '\\\\').replace(/\|/gu, '\\|').replace(/\n/gu, ' ');
 }
 
 function renderTable(entries) {

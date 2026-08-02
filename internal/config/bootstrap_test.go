@@ -280,3 +280,10 @@ func TestBootstrapConfigRejectsMissingBootstrapTicket(t *testing.T) {
 		t.Fatalf("BootstrapConfig() error = %v", err)
 	}
 }
+
+func TestExchangeBootstrapTicketRejectsPlaintextControlplane(t *testing.T) {
+	_, err := exchangeBootstrapTicket(context.Background(), nil, "http://127.0.0.1:8080", "env", "ticket", bootstrapTicketExchangeRequest{})
+	if err == nil || !strings.Contains(err.Error(), "requires an HTTPS origin") {
+		t.Fatalf("exchangeBootstrapTicket() error = %v, want HTTPS rejection", err)
+	}
+}

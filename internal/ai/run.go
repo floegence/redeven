@@ -1404,7 +1404,7 @@ func redactAnyForLog(key string, in any, depth int) any {
 		if limit > 8 {
 			limit = 8
 		}
-		out := make([]any, 0, limit+1)
+		out := make([]any, 0, 9)
 		for i := 0; i < limit; i++ {
 			out = append(out, redactAnyForLog("", v[i], depth+1))
 		}
@@ -3932,7 +3932,11 @@ func readonlyContextWindow(lines []string, matchIdx int, contextLines int) []rea
 	if end > len(lines) {
 		end = len(lines)
 	}
-	out := make([]readonlyGrepContext, 0, end-start-1)
+	capacity := end - start
+	if capacity > 0 {
+		capacity--
+	}
+	out := make([]readonlyGrepContext, 0, capacity)
 	for idx := start; idx < end; idx++ {
 		if idx == matchIdx {
 			continue

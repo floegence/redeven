@@ -1,4 +1,5 @@
 import mermaid from 'mermaid';
+import DOMPurify from 'dompurify';
 
 const MAX_MERMAID_CACHE_SIZE = 64;
 const MERMAID_COLOR_TOKENS = {
@@ -301,7 +302,12 @@ export async function runMermaid(root: HTMLElement, options: MermaidRunOptions =
         });
         if (svg === null || !shouldContinue() || !root.contains(el) || !el.isConnected) return;
 
-        const svgDocument = new DOMParser().parseFromString(svg, 'image/svg+xml');
+        const sanitizedSvg = DOMPurify.sanitize(svg, {
+          USE_PROFILES: { svg: true, svgFilters: true },
+          FORBID_TAGS: ['script'],
+          FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onbegin', 'onend'],
+        });
+        const svgDocument = new DOMParser().parseFromString(sanitizedSvg, 'image/svg+xml');
         const svgRoot = svgDocument.documentElement;
         if (!svgRoot || svgRoot.tagName.toLowerCase() !== 'svg' || svgDocument.querySelector('parsererror')) {
           throw new Error('Mermaid returned invalid SVG.');

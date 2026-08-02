@@ -6291,10 +6291,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       setComposerSelection({ start: cursor, end: cursor });
     });
   };
+  let composerReferenceSequence = 0;
   const createComposerReferenceLocalID = (): string => {
     const uuid = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
       ? crypto.randomUUID()
-      : `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+      : `${Date.now()}_${composerReferenceSequence += 1}`;
     return `flower_ref_${uuid}`;
   };
   const beginComposerReferenceMutation = (): boolean => {
