@@ -5397,6 +5397,7 @@
       "timestamp": "2026-07-16T00:00:00Z",
       "frontmatter": {
         "description": "Code App serves Browser Editor codespaces through the local app server and managed code workspace engine APIs.",
+        "quality_exception": "Cross-surface Browser Editor contract spanning Code App runtime state, Desktop transfer, Env App orchestration, remote download validation, and codespace navigation security.",
         "tags": [
           "browser-editor",
           "code-app",
@@ -10085,5 +10086,5 @@
       ]
     }
   ],
-  "source_sha256": "f1d0041743b9f2a157013e23d94d5787a25dc8a8605ea7ce13d3775948a9e59b"
+  "source_sha256": "900e9f4a7d7e7895076f40ae3d5c0cafe3e86fcb8252e9444ae9ce4c3f9d33fd"
 }
