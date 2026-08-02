@@ -14,10 +14,10 @@ fresh authoritative inventory prove the result; unrelated resources remain
 usable. Lost submissions, partial mutations, stale plans, unavailable engines,
 and failed reconciliation are never replayed or shown as success. Production
 uses signed Containers `4.0.1` through the v4 capability and verified GitHub
-Release transport. Dev Desktop may build
-the same `4.0.0` plugin source through an ephemeral, exact local delivery whose
-package and capability are verified at startup; that development delivery
-remains outside official release trust.
+Release transport. Dev Desktop may build the pinned `4.0.0` plugin source as an
+ephemeral local package, but the package must bind the same signed v4 capability
+pin embedded in the Runtime. The local package remains outside official package
+release trust and cannot introduce a separate capability signing identity.
 
 # Contract
 
@@ -138,12 +138,12 @@ latest-only market snapshot. The package and every trust document remain in the
 immutable GitHub Release; ReDevPlugin requires authorized capability and package
 signing plus matching root, pin, policy, revocation, ledger, and release
 metadata. Development bytes cannot substitute for those materials. For local
-product verification, `dev_desktop.sh` first
-fetches the pinned official-plugin commit, then creates a temporary capability
-signing identity, packages all 52 exact routes, deletes the private key, and
-supplies a descriptor that records the immutable remote source only to the
-Desktop-managed development Runtime. The Runtime verifies every artifact and enables ReDevPlugin local
-import only for that process. Env App then updates the fixed Containers instance
+product verification, `dev_desktop.sh` fetches the pinned official-plugin
+commit, binds all 52 exact routes to the committed production capability pin,
+and supplies a descriptor that records the immutable remote source only to the
+Desktop-managed development Runtime. The Runtime verifies its embedded signed
+capability, rejects any package whose binding differs from that production pin,
+and enables ReDevPlugin local import only for that process. Env App then updates the fixed Containers instance
 through the released local-import client after checking the package SHA-256 and
 current management revision. Production policy and release trust are unchanged.
 
@@ -162,5 +162,6 @@ package and integration ownership remains in [Plugin platform integration](plugi
 - `redeven:internal/redevpluginintegration/release_module.go` - Installs the complete signed GitHub Release transport through ReDevPlugin.
 - `redeven:scripts/check_containers_plugin_v4_candidate.sh` - Fetches, tests, builds, and validates the immutable remote v4 source without granting release trust.
 - `redeven:scripts/check_plugin_integration.sh` - Routes final ReDevPlugin integration validation through the current v4 candidate gate.
-- `redeven:scripts/build_containers_v4_development_delivery.mjs` - Produces the ephemeral Dev Desktop package and verified v4 capability delivery.
-- `redeven:internal/redevpluginintegration/development_delivery.go` - Fails closed on descriptor, package, key, pin, contract, or method-route mismatch.
+- `redeven:scripts/build_containers_v4_development_delivery.mjs` - Produces the ephemeral Dev Desktop package bound to the signed production v4 capability.
+- `redeven:scripts/containers_development_contract.mjs` - Validates and projects the committed production capability into the development manifest.
+- `redeven:internal/redevpluginintegration/development_delivery.go` - Fails closed on descriptor, package, production pin, contract, or method-route mismatch.

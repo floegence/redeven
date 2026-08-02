@@ -62,6 +62,7 @@ log "checking ReDevPlugin published dependency boundary"
 ./scripts/check_redevplugin_dependency_boundary.sh --ci
 
 log "checking immutable remote Containers v4 plugin source"
+node --test scripts/containers_development_contract.test.mjs
 ./scripts/check_containers_plugin_v4_candidate.sh
 ./scripts/check_containers_v4_release_capability.sh
 

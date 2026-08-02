@@ -132,10 +132,12 @@ lifecycle authority, audit store, or token issuer.
 
 The v4 bridge and generated client are exercised against the source contract.
 Production registers the signed v4 capability only through the verified
-Containers `4.0.1` release. Dev Desktop is the narrow exception: it registers the exact verified ephemeral
-v4 contract for the current process and exposes the matching package to the
-authenticated Env App for ReDevPlugin local import. Missing or altered delivery
-evidence fails startup rather than falling back to an unverified contract.
+Containers `4.0.1` release. Dev Desktop may expose an ephemeral package built
+from the pinned official-plugin source to the authenticated Env App for
+ReDevPlugin local import, but that package must bind the exact production pin
+already verified and registered by the Runtime. Development startup never
+creates or trusts a second capability signing identity. Missing or altered
+delivery evidence fails startup rather than falling back to another contract.
 
 ## Product surface
 
@@ -182,8 +184,9 @@ actions are disabled when inventory is stale, partial, or unavailable.
 - `redeven:internal/capabilities/containers/resources_v4_test.go` - Proves opaque endpoint binding, Compose volume retention, Pod confirmation, and rootless projection.
 - `redeven:internal/redevpluginintegration/containers_capability_v4.go` - Dispatches v4 requests through ReDevPlugin-owned invocation, operation, and stream contexts.
 - `redeven:scripts/check_containers_plugin_v4_candidate.sh` - Fetches the pinned official-plugin commit and validates the fail-closed v4 contract and plugin package.
-- `redeven:scripts/build_containers_v4_development_delivery.mjs` - Builds the ephemeral development package, capability, and descriptor without retaining the private key.
-- `redeven:internal/redevpluginintegration/development_delivery.go` - Verifies the development delivery before v4 registration and local-import enablement.
+- `redeven:scripts/build_containers_v4_development_delivery.mjs` - Builds the ephemeral development package and binds its manifest to the committed production capability pin.
+- `redeven:scripts/containers_development_contract.mjs` - Loads and validates the exact signed production capability used by the development package builder.
+- `redeven:internal/redevpluginintegration/development_delivery.go` - Verifies the development descriptor and package against the Runtime's signed production contract before local-import enablement.
 - `redeven:internal/pluginmarket/service.go` - Freezes the validated latest-only market snapshot with a last-known-good fallback.
 - `redeven:internal/redevpluginintegration/release_module.go` - Projects the market release into the exact signed remote transport and capability pin.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/officialPluginCatalog.ts` - Projects current Containers discovery without embedding package bytes or a fixed release version.
