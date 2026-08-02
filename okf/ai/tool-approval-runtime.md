@@ -13,7 +13,7 @@ Floret is the only real-time authority for ordinary and delegated tool approvals
 
 ## Canonical queue
 
-Floret v3.2.2 validates queue and record identity, lifecycle state, batch position, timestamps, resources, effects, and argument hashes. It also projects a supported historical requested approval to the failed or aborted turn's coherent terminal state when recovery journaled a terminal tool result before an approval-resolution detail event. Redeven calls the root-bound approval reader; it never queries Floret's backend directly and never copies or repairs approval records in the Redeven database. Invalid or mismatched non-terminal Floret data remains a contract error, not input for synthesis or repair.
+Floret v3.2.3 validates queue and record identity, lifecycle state, batch position, timestamps, resources, effects, and argument hashes. Approval-gated effect callbacks retain the active turn's renewable lease binding, and approval settlement accepts only monotonic heartbeat successors within the same thread, turn, owner, generation, and acquisition. It also projects a supported historical requested approval to the failed or aborted turn's coherent terminal state when recovery journaled a terminal tool result before an approval-resolution detail event. Redeven calls the root-bound approval reader; it never queries Floret's backend directly and never copies or repairs approval records in the Redeven database. Invalid or mismatched non-terminal Floret data remains a contract error, not input for synthesis or repair.
 
 Redeven maps each visible Floret record to a `FlowerApprovalAction`. Main and delegated actions both use the record's canonical run and tool-call identity. Delegated presentation derives its child label from the Floret `scope=thread:<child-thread-id>` value; there is no Redeven delegated-reference, delivery-state, or child-execution-state shadow. Product labels and safe summaries may be derived for display, but the underlying identity, order, current item, generation, revision, and actionability remain Floret-owned.
 
@@ -45,6 +45,7 @@ Floret owns ordinary and delegated approval state, ordering, timeout, cancellati
 
 # Evidence
 
+- `redeven:internal/ai/floret_approval_lease_renewal_test.go` - Runs three approval-gated effects in one turn and holds the third decision across the published lease heartbeat before requiring a completed turn and empty queue.
 - `redeven:internal/ai/floret_approval.go:146` - Reads and maps the canonical root queue and emits complete replacements.
 - `redeven:internal/ai/run.go:597` - Keeps canonical approval waits out of idle cancellation through a bounded exact queue read.
 - `redeven:internal/ai/flower_live_projection.go:800` - Submits identity-checked Floret decisions and materializes atomic replacements.
