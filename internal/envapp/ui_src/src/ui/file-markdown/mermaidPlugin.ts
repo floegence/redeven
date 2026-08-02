@@ -272,7 +272,7 @@ const renderMermaidSvgImpl = async (
 
 export const renderMermaidSvg = renderMermaidSvgImpl as RenderMermaidSvg;
 
-function mergeMermaidLabelSpans(root: SVGElement): void {
+function mergeMermaidLabelSpans(root: Element): void {
   root.querySelectorAll('text > tspan > tspan').forEach((outer) => {
     const spans = Array.from(outer.parentElement?.children ?? [])
       .filter((node): node is SVGTSpanElement => node instanceof SVGTSpanElement);
