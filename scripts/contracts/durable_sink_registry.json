@@ -1746,7 +1746,7 @@
     },
     {
       "path": "internal/flower_ui/src/FlowerSurface.tsx",
-      "sha256": "d43a5e76a2e78f6df076d6db47899132a020526e0a8190096a6dffbae9f4f096",
+      "sha256": "5e1ea9a43f02ef4a095f17099b1871c0e95ffae97d8ae79c5228313f1697c8e3",
       "sink_kinds": [
         "web_storage"
       ],
