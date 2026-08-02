@@ -14,12 +14,12 @@ const entryPath = '/_redeven_proxy/env/';
 const assetPrefix = `${entryPath}assets/`;
 const pluginMarketCatalogPath = '/_redeven_proxy/api/plugins/market/catalog';
 const hashedAssetPattern = /-[A-Za-z0-9_-]{8,}\.(?:css|js|wasm)$/;
-const builtContainersPackageHashes = Object.freeze({
+const builtPluginPackageHashes = Object.freeze({
   package_sha256: 'sha256:d05f1add42c7773bafcad768c766f725e438404ba237b04ad80dafbe96f8aa22',
   manifest_sha256: 'sha256:e7453a139267309dcd1504f48416a1f622fb0ed4cc0fafdbce2f453485959ee7',
   entries_sha256: 'sha256:e6cd5004c8d22161c25c5c65a562cda608dbfe528cfa37a1ba14909c3e8e7a73',
 });
-const builtContainersReleaseRef = Object.freeze({
+const builtPluginReleaseRef = Object.freeze({
   source_id: 'redeven_official',
   channel: 'stable',
   release_metadata_ref: 'plugins/com.redeven.official/com.redeven.official.containers/4.0.1/release.json',
@@ -27,9 +27,9 @@ const builtContainersReleaseRef = Object.freeze({
   publisher_id: 'com.redeven.official',
   plugin_id: 'com.redeven.official.containers',
   version: '4.0.1',
-  expected_hashes: builtContainersPackageHashes,
+  expected_hashes: builtPluginPackageHashes,
 });
-const builtContainersPackageURL = 'https://github.com/floegence/redeven-official-plugins/releases/download/v4.0.1/containers-4.0.1.redevplugin';
+const builtPluginPackageURL = 'https://github.com/floegence/redeven-official-plugins/releases/download/v4.0.1/containers-4.0.1.redevplugin';
 
 function parseReportPath(args) {
   const index = args.indexOf('--report');
@@ -84,59 +84,75 @@ async function readJSONRequest(request) {
 
 function builtPluginMarketSnapshot() {
   return {
-    schema_version: 'redeven.plugin_market_snapshot.v1',
+    schema_version: 'redeven.plugin_market_snapshot.v2',
     generation: 1,
     etag: '"catalog-g1"',
     cached_at: '2026-08-01T10:00:00Z',
     stale: false,
     source: 'remote',
     plugins: [{
-      plugin_id: builtContainersReleaseRef.plugin_id,
-      publisher_id: builtContainersReleaseRef.publisher_id,
-      name: 'Containers',
-      summary: 'Manage Docker and Podman resources through Redeven.',
+      plugin_id: builtPluginReleaseRef.plugin_id,
+      publisher_id: builtPluginReleaseRef.publisher_id,
+      presentation: {
+        default_locale: 'en-US',
+        locales: [{
+          locale: 'en-US',
+          name: 'Fixture Plugin',
+          publisher_name: 'Fixture Publisher',
+          summary: 'A signed plugin fixture for renderer verification.',
+          keywords: ['fixture'],
+        }],
+      },
       categories: ['containers', 'development'],
       channels: ['stable'],
-      latest: { channel: 'stable', version: builtContainersReleaseRef.version, availability_status: 'visible' },
+      latest: { channel: 'stable', version: builtPluginReleaseRef.version, availability_status: 'visible' },
       release: {
-        plugin_id: builtContainersReleaseRef.plugin_id,
+        plugin_id: builtPluginReleaseRef.plugin_id,
         channel: 'stable',
-        version: builtContainersReleaseRef.version,
-        asset: { url: builtContainersPackageURL },
-        publisher_release_ref: { release_ref: builtContainersReleaseRef },
+        version: builtPluginReleaseRef.version,
+        asset: { url: builtPluginPackageURL },
+        publisher_release_ref: { release_ref: builtPluginReleaseRef },
         signer_key_id: 'redeven_official_signing_2026',
-        compatibility: { min_redeven_version: '1.0.0', min_redevplugin_version: '0.6.23' },
+        compatibility: { min_redeven_version: '1.0.0', min_redevplugin_version: '0.7.0' },
       },
     }],
   };
 }
 
-function builtContainersInstalledPlugin() {
+function builtPluginInstalledPlugin() {
   return {
     plugin_instance_id: 'plugini_redeven_official_containers',
-    publisher_id: builtContainersReleaseRef.publisher_id,
-    plugin_id: builtContainersReleaseRef.plugin_id,
-    version: builtContainersReleaseRef.version,
-    active_fingerprint: builtContainersPackageHashes.package_sha256,
-    package_hash: builtContainersPackageHashes.package_sha256,
-    manifest_hash: builtContainersPackageHashes.manifest_sha256,
-    entries_hash: builtContainersPackageHashes.entries_sha256,
+    publisher_id: builtPluginReleaseRef.publisher_id,
+    plugin_id: builtPluginReleaseRef.plugin_id,
+    version: builtPluginReleaseRef.version,
+    active_fingerprint: builtPluginPackageHashes.package_sha256,
+    package_hash: builtPluginPackageHashes.package_sha256,
+    manifest_hash: builtPluginPackageHashes.manifest_sha256,
+    entries_hash: builtPluginPackageHashes.entries_sha256,
     trust_state: 'verified',
-    trust_assessment: { trust_state: 'verified', verified_hashes: builtContainersPackageHashes },
+    trust_assessment: { trust_state: 'verified', verified_hashes: builtPluginPackageHashes },
     enable_state: 'disabled',
     policy_revision: 1,
     management_revision: 1,
     revoke_epoch: 0,
     manifest: {
-      schema_version: 'redevplugin.manifest.v7',
-      publisher: { publisher_id: builtContainersReleaseRef.publisher_id, display_name: 'Redeven' },
+      schema_version: 'redevplugin.manifest.v8',
+      publisher: { publisher_id: builtPluginReleaseRef.publisher_id, display_name: 'Fixture Publisher' },
       plugin: {
-        plugin_id: builtContainersReleaseRef.plugin_id,
-        display_name: 'Containers',
-        version: builtContainersReleaseRef.version,
+        plugin_id: builtPluginReleaseRef.plugin_id,
+        display_name: 'Fixture Plugin',
+        version: builtPluginReleaseRef.version,
         api_version: 'plugin-v1',
-        min_runtime_version: '0.6.23',
+        min_runtime_version: '0.7.0',
         ui_protocol_version: 'plugin-ui-v7',
+      },
+      presentation: {
+        default_locale: 'en-US',
+        summary: 'A signed plugin fixture for renderer verification.',
+        description: ['This fixture exercises the signed plugin presentation path.'],
+        highlights: ['Provides deterministic renderer verification data.'],
+        keywords: ['fixture'],
+        localizations: [],
       },
       surfaces: [],
     },
@@ -248,8 +264,8 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
           ok: true,
           data: {
             plugin_instance_id: expected.plugin_instance_id,
-            plugin_version: builtContainersReleaseRef.version,
-            active_fingerprint: builtContainersPackageHashes.package_sha256,
+            plugin_version: builtPluginReleaseRef.version,
+            active_fingerprint: builtPluginPackageHashes.package_sha256,
             management_revision: 1,
             required_permissions: ['containers.read'],
             contracts: [],
@@ -261,12 +277,12 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
         const body = await readJSONRequest(request);
         const expected = {
           plugin_instance_id: 'plugini_redeven_official_containers',
-          release_ref: builtContainersReleaseRef,
+          release_ref: builtPluginReleaseRef,
         };
         if (JSON.stringify(body) !== JSON.stringify(expected)) {
-          throw new Error(`unexpected Containers release install request: ${JSON.stringify({ expected, actual: body })}`);
+          throw new Error(`unexpected plugin release install request: ${JSON.stringify({ expected, actual: body })}`);
         }
-        installedPlugin = builtContainersInstalledPlugin();
+        installedPlugin = builtPluginInstalledPlugin();
         jsonResponse(response, { ok: true, data: installedPlugin });
         return;
       }
@@ -498,31 +514,31 @@ async function verifyBuiltPluginInstallRouting(browser) {
 
     const pluginCenter = page.locator('[data-plugin-center-view]');
     await pluginCenter.waitFor({ state: 'visible', timeout: 10_000 });
-    const containersItem = pluginCenter.locator('[data-plugin-center-item]').filter({ hasText: 'Containers' });
-    if (await containersItem.count() !== 1) {
-      throw new Error(`built Containers catalog item count = ${await containersItem.count()}, expected 1`);
+    const pluginItem = pluginCenter.locator('[data-plugin-center-item]').first();
+    if (await pluginItem.count() !== 1) {
+      throw new Error(`built plugin catalog item count = ${await pluginItem.count()}, expected 1`);
     }
-    await containersItem.click();
+    await pluginItem.click();
     await pluginCenter.locator('[data-plugin-center-details]').waitFor({ state: 'visible', timeout: 10_000 });
-    const containersInstall = pluginCenter.locator('[data-plugin-action="install"]');
-    if (await containersInstall.count() !== 1) {
-      throw new Error(`built Containers Install action count = ${await containersInstall.count()}, expected 1`);
+    const pluginInstall = pluginCenter.locator('[data-plugin-action="install"]');
+    if (await pluginInstall.count() !== 1) {
+      throw new Error(`built plugin Install action count = ${await pluginInstall.count()}, expected 1`);
     }
     // This static HTTP harness cannot complete the encrypted direct WebSocket
     // handshake, so management controls remain disabled even with admin access.
     // Enable only the located control to exercise the production click route.
-    await containersInstall.evaluate((button) => { button.disabled = false; });
-    await containersInstall.click();
+    await pluginInstall.evaluate((button) => { button.disabled = false; });
+    await pluginInstall.click();
 
     await pluginCenter.locator('#plugin-center-tab-installed').click();
-    const installedContainersItem = pluginCenter.locator('[data-plugin-center-item]').filter({ hasText: 'Containers' });
-    await installedContainersItem.waitFor({ state: 'visible', timeout: 10_000 });
-    await installedContainersItem.click();
+    const installedPluginItem = pluginCenter.locator('[data-plugin-center-item]').first();
+    await installedPluginItem.waitFor({ state: 'visible', timeout: 10_000 });
+    await installedPluginItem.click();
     const installedDetails = pluginCenter.locator('[data-plugin-center-details]');
     try {
       await installedDetails.getByText('Disabled', { exact: true }).waitFor({ state: 'visible', timeout: 10_000 });
     } catch (error) {
-      throw new Error(`built signed Containers install did not reach Disabled: ${JSON.stringify({
+      throw new Error(`built signed plugin install did not reach Disabled: ${JSON.stringify({
         pluginRequests,
         pluginCenterText: (await pluginCenter.innerText()).slice(0, 2_000),
         pageErrors,
@@ -530,7 +546,7 @@ async function verifyBuiltPluginInstallRouting(browser) {
     }
     await installedDetails.getByText('Official', { exact: true }).first().waitFor({ state: 'visible', timeout: 10_000 });
     if (pluginRequests.some((request) => request.path.includes('/external-packages/'))) {
-      throw new Error(`built Containers Install used external-package admission: ${JSON.stringify(pluginRequests)}`);
+      throw new Error(`built plugin Install used external-package admission: ${JSON.stringify(pluginRequests)}`);
     }
     const pluginInventoryRequests = [
       { method: 'POST', path: '/_redevplugin/api/plugins/catalog/query' },
@@ -545,7 +561,7 @@ async function verifyBuiltPluginInstallRouting(browser) {
       { method: 'POST', path: '/_redevplugin/api/plugins/permissions/requirements/query' },
     ];
     if (JSON.stringify(pluginRequests) !== JSON.stringify(expectedPluginRequests)) {
-      throw new Error(`built Containers Install emitted an unexpected plugin request: ${JSON.stringify({
+      throw new Error(`built plugin Install emitted an unexpected plugin request: ${JSON.stringify({
         expected: expectedPluginRequests,
         actual: pluginRequests,
       })}`);
@@ -555,7 +571,7 @@ async function verifyBuiltPluginInstallRouting(browser) {
     return {
       market_snapshot_loaded: true,
       installed_state: 'disabled_verified_zero_grants',
-      package_url: builtContainersPackageURL,
+      package_url: builtPluginPackageURL,
       install_release_ref_called: true,
       request_count: pluginRequests.length,
     };
