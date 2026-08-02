@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { createServer } from 'node:http';
-import { mkdir, open, readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { mkdir, open, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
