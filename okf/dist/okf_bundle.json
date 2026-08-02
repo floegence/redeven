@@ -222,7 +222,7 @@
               "operations",
               "plugins"
             ],
-            "summary": "Every Containers mutation binds one exact engine, opaque endpoint, resource\nkind, and canonical identity to one ReDevPlugin operation handle and one local\nobservation record. The resource stays locked until terminal observation and\nfresh authoritative inventory prove the result; unrelated resources remain\nusable. Lost submissions, partial mutations, stale plans, unavailable engines,\nand failed reconciliation are never replayed or shown as success. Production\nuses signed Containers `4.0.1` through the v4 capability and verified GitHub\nRelease transport. Dev Desktop may build the pinned `4.0.0` plugin source as an\nephemeral local package, but the package must bind the same signed v4 capability\npin embedded in the Runtime. The local package remains outside official package\nrelease trust and cannot introduce a separate capability signing identity.",
+            "summary": "Every Containers mutation binds one engine, opaque endpoint, resource identity,\nReDevPlugin operation handle, and local observation record. The resource stays\nlocked until terminal observation and fresh authoritative inventory prove the\nresult. Lost submissions, stale plans, unavailable engines, and failed\nreconciliation are never replayed or shown as success. Production uses the\nsigned Containers `4.0.1` release. Dev Desktop may build the pinned `4.0.0`\nsource as a local package only when it binds the same signed v4 capability pin;\nthe package remains outside official package trust and cannot add a development\ncapability signing identity.",
             "section_count": 2
           },
           {
@@ -3782,8 +3782,8 @@
         "title": "Containers operation observation",
         "type": "Architecture Contract"
       },
-      "body_length": 9875,
-      "summary": "Every Containers mutation binds one exact engine, opaque endpoint, resource\nkind, and canonical identity to one ReDevPlugin operation handle and one local\nobservation record. The resource stays locked until terminal observation and\nfresh authoritative inventory prove the result; unrelated resources remain\nusable. Lost submissions, partial mutations, stale plans, unavailable engines,\nand failed reconciliation are never replayed or shown as success. Production\nuses signed Containers `4.0.1` through the v4 capability and verified GitHub\nRelease transport. Dev Desktop may build the pinned `4.0.0` plugin source as an\nephemeral local package, but the package must bind the same signed v4 capability\npin embedded in the Runtime. The local package remains outside official package\nrelease trust and cannot introduce a separate capability signing identity.",
+      "body_length": 9667,
+      "summary": "Every Containers mutation binds one engine, opaque endpoint, resource identity,\nReDevPlugin operation handle, and local observation record. The resource stays\nlocked until terminal observation and fresh authoritative inventory prove the\nresult. Lost submissions, stale plans, unavailable engines, and failed\nreconciliation are never replayed or shown as success. Production uses the\nsigned Containers `4.0.1` release. Dev Desktop may build the pinned `4.0.0`\nsource as a local package only when it binds the same signed v4 capability pin;\nthe package remains outside official package trust and cannot add a development\ncapability signing identity.",
       "sections": [
         {
           "id": "contract",
@@ -3837,7 +3837,7 @@
           "description": "Fails closed on descriptor, package, production pin, contract, or method-route mismatch."
         }
       ],
-      "snippet": "Every Containers mutation binds one exact engine, opaque endpoint, resource kind, and canonical identity to one ReDevPlugin operation handle and one local observation record. The resource stays locked until terminal observation and",
+      "snippet": "Every Containers mutation binds one engine, opaque endpoint, resource identity, ReDevPlugin operation handle, and local observation record. The resource stays locked until terminal observation and fresh authoritative inventory prove the",
       "links": [
         {
           "label": "Plugin platform integration",
@@ -10003,5 +10003,5 @@
       ]
     }
   ],
-  "source_sha256": "3dee94c79235ce4c58b0197f6250a60a710de2869f03c45b88fd523cf58672ef"
+  "source_sha256": "380e5ab14b5fe1d9005d62f10cafce8cfeb20a8cb5a05a81e2a1db01c81ac6e3"
 }
