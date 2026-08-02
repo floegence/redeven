@@ -286,6 +286,7 @@ async function mountLocalizedPluginCenter(locale: RedevenLocale): Promise<HTMLEl
   const localizedProjection: PluginInventoryProjection = {
     items: [{
       ...containersItem,
+      officialCatalog: OFFICIAL_PLUGIN_CATALOG_SEED[0],
       lifecycleState: 'needs_attention',
       attentionReason: 'runtime_missing',
       displayName: 'Container Runtime Integration With A Deliberately Long Localized Layout Name',
@@ -366,7 +367,7 @@ function mountUpdateReviewDialog(): HTMLElement {
       item={updateDialogItem}
       canManage
       onOpenChange={() => undefined}
-      onInspect={async () => unavailableInspection()}
+      onInspect={async () => browserUpdateInspection()}
       onCommitExternal={async () => unavailableCommit()}
       onRefresh={() => undefined}
       onCommitted={() => undefined}
@@ -375,6 +376,19 @@ function mountUpdateReviewDialog(): HTMLElement {
     />
   ), host));
   return host;
+}
+
+function browserUpdateInspection(): ExternalPluginInspection {
+  return {
+    ...browserInspection(),
+    intent: {
+      action: 'update',
+      plugin_instance_id: updateDialogItem.pluginInstanceID!,
+      expected_management_revision: updateDialogItem.managementRevision!,
+    },
+    plugin_id: updateDialogItem.pluginID,
+    version: '4.0.1',
+  };
 }
 
 async function mountLocalizedExternalDialog(

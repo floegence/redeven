@@ -61,9 +61,8 @@ export function createPluginLifecycleAPI(
         plugin_instance_id: plugin.plugin_instance_id,
       }, options))),
     ]);
-    const permissionRequirements = permissionRequirementResults.flatMap((result, index) => {
+    const permissionRequirements = permissionRequirementResults.flatMap((result) => {
       if (result.status === 'fulfilled') return [result.value];
-      const plugin = installedPlugins[index];
       throw result.reason;
     });
     const projection = projectPluginInventory({
