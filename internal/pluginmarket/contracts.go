@@ -425,11 +425,11 @@ func validateFullPresentation(presentation PresentationFull) bool {
 			}
 		}
 		for _, setting := range locale.Settings {
-			if strings.TrimSpace(setting.Key) == "" || len(setting.Key) > 128 || !validPresentationText(setting.Label, 128) || hasDuplicateIDs(setting.Options, func(option PresentationSettingOption) string { return option.Value }) {
+			if strings.TrimSpace(setting.Key) == "" || utf8.RuneCountInString(setting.Key) > 128 || !validPresentationText(setting.Label, 128) || hasDuplicateIDs(setting.Options, func(option PresentationSettingOption) string { return option.Value }) {
 				return false
 			}
 			for _, option := range setting.Options {
-				if strings.TrimSpace(option.Value) == "" || len(option.Value) > 128 || !validPresentationText(option.Label, 128) {
+				if strings.TrimSpace(option.Value) == "" || utf8.RuneCountInString(option.Value) > 128 || !validPresentationText(option.Label, 128) {
 					return false
 				}
 			}
