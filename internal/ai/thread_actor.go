@@ -583,10 +583,10 @@ func queuedTurnStartLogAttrs(err error, endpointID string, threadID string) []an
 	var queuedErr *queuedTurnStartError
 	if errors.As(err, &queuedErr) && queuedErr != nil {
 		if v := strings.TrimSpace(queuedErr.endpointID); v != "" {
-			attrs[1] = v
+			attrs[1] = logsafe.Text(v, 256)
 		}
 		if v := strings.TrimSpace(queuedErr.threadID); v != "" {
-			attrs[3] = v
+			attrs[3] = logsafe.Text(v, 256)
 		}
 		attrs = append(attrs,
 			"queue_id", logsafe.Text(queuedErr.queueID, 256),

@@ -360,6 +360,11 @@ func (m *RuntimeManager) installWorkspaceEnginePackage(
 		}
 		return m.Status(requestContext), err
 	}
+	validatedVersion, err := validateManagedRuntimeVersion(version)
+	if err != nil {
+		return fail("artifact_validation_failed", err)
+	}
+	version = validatedVersion
 	if err := opCtx.Err(); err != nil {
 		return fail("", err)
 	}
@@ -383,7 +388,7 @@ func (m *RuntimeManager) installWorkspaceEnginePackage(
 	versionRoot := sharedVersionRoot(m.stateRoot, version)
 	var commitPromote func() error
 	var revertPromote func() error
-	err := withLocalEnvironmentRuntimeStateLock(m.stateRoot, func(state *localEnvironmentRuntimeState) error {
+	err = withLocalEnvironmentRuntimeStateLock(m.stateRoot, func(state *localEnvironmentRuntimeState) error {
 		if err := opCtx.Err(); err != nil {
 			return err
 		}

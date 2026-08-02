@@ -303,3 +303,36 @@ func TestSkillManager_BrowsePathEscape(t *testing.T) {
 		t.Fatalf("expected path escape code, got=%q", se.Code())
 	}
 }
+
+func TestNormalizeGitHubRefRejectsGitOptionAndRefSyntax(t *testing.T) {
+	t.Parallel()
+
+	for _, raw := range []string{
+		"--upload-pack=malicious",
+		"refs/heads/main..evil",
+		"refs/heads/main@{1}",
+		"refs/heads/main.lock",
+		"refs/heads/main\nforged",
+	} {
+		raw := raw
+		t.Run(raw, func(t *testing.T) {
+			t.Parallel()
+			if _, err := normalizeGitHubRef(raw); err == nil {
+				t.Fatalf("normalizeGitHubRef(%q) succeeded, want rejection", raw)
+			}
+		})
+	}
+	if got, err := normalizeGitHubRef("release/v1.2.3"); err != nil || got != "release/v1.2.3" {
+		t.Fatalf("normalizeGitHubRef(valid) = %q, %v", got, err)
+	}
+}
+
+func TestNormalizeRepoPathRejectsGitOptionSegment(t *testing.T) {
+	t.Parallel()
+
+	for _, raw := range []string{"--skip-checks", "-option/value"} {
+		if _, err := normalizeRepoPath(raw); err == nil {
+			t.Fatalf("normalizeRepoPath(%q) succeeded, want rejection", raw)
+		}
+	}
+}

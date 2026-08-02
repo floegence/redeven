@@ -308,11 +308,16 @@ func (m *RuntimeManager) SelectVersion(ctx context.Context, version string) (Run
 	if version == "" {
 		return RuntimeStatus{}, errors.New("missing version")
 	}
+	var err error
+	version, err = validateManagedRuntimeVersion(version)
+	if err != nil {
+		return RuntimeStatus{}, err
+	}
 	if err := ensureSharedRuntimeDirs(m.stateRoot); err != nil {
 		return RuntimeStatus{}, err
 	}
 	var selectedPath string
-	err := withLocalEnvironmentRuntimeStateLock(m.stateRoot, func(state *localEnvironmentRuntimeState) error {
+	err = withLocalEnvironmentRuntimeStateLock(m.stateRoot, func(state *localEnvironmentRuntimeState) error {
 		record, ok := state.Versions[version]
 		if !ok {
 			return fmt.Errorf("managed version %s is not installed in the Local Environment inventory", version)
@@ -341,6 +346,11 @@ func (m *RuntimeManager) RemoveLocalEnvironmentVersion(ctx context.Context, vers
 	version = strings.TrimSpace(version)
 	if version == "" {
 		return RuntimeStatus{}, errors.New("missing version")
+	}
+	var err error
+	version, err = validateManagedRuntimeVersion(version)
+	if err != nil {
+		return RuntimeStatus{}, err
 	}
 	opCtx, started := m.startOperation(RuntimeOperationActionRemoveLocalEnvironmentVersion, version, "", "")
 	if !started {

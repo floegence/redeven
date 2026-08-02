@@ -827,9 +827,9 @@ func (m *skillManager) ListGitHubCatalog(req SkillGitHubCatalogRequest) (SkillGi
 	if err != nil {
 		return SkillGitHubCatalog{}, err
 	}
-	ref := strings.TrimSpace(req.Ref)
-	if ref == "" {
-		ref = "main"
+	ref, err := normalizeGitHubRef(firstNonEmpty(req.Ref, "main"))
+	if err != nil {
+		return SkillGitHubCatalog{}, err
 	}
 	basePath := strings.TrimSpace(req.BasePath)
 	if basePath == "" {
@@ -938,13 +938,11 @@ func (m *skillManager) resolveGitHubImportInputLocked(req SkillGitHubImportReque
 		repo = normRepo
 		paths = append(paths, req.Paths...)
 	}
-	if ref == "" {
-		ref = "main"
+	normalizedRef, err := normalizeGitHubRef(firstNonEmpty(ref, "main"))
+	if err != nil {
+		return resolvedGitHubImportInput{}, err
 	}
-	ref = strings.TrimSpace(ref)
-	if ref == "" {
-		return resolvedGitHubImportInput{}, newSkillError(ErrCodeAISkillsInvalidSource, http.StatusBadRequest, "missing github ref", nil)
-	}
+	ref = normalizedRef
 
 	dedup := map[string]struct{}{}
 	normPaths := make([]string, 0, len(paths))
@@ -1181,17 +1179,17 @@ func (m *skillManager) fetchGitHubSkillTreesByGitLocked(input resolvedGitHubImpo
 	if err := runGit(repoDir, "", "sparse-checkout", "init", "--cone"); err != nil {
 		return nil, "", newSkillError(ErrCodeAISkillsGitFallbackFailed, http.StatusServiceUnavailable, "git sparse-checkout init failed", err)
 	}
-	setArgs := []string{"sparse-checkout", "set"}
+	setArgs := []string{"sparse-checkout", "set", "--"}
 	setArgs = append(setArgs, input.repoPaths...)
 	if err := runGit(repoDir, "", setArgs...); err != nil {
 		return nil, "", newSkillError(ErrCodeAISkillsGitFallbackFailed, http.StatusServiceUnavailable, "git sparse-checkout set failed", err)
 	}
-	fetchErr := runGit(repoDir, input.auth.GitHubToken, "fetch", "--depth", "1", "origin", input.ref)
+	fetchErr := runGit(repoDir, input.auth.GitHubToken, "fetch", "--depth", "1", "--", "origin", input.ref)
 	if fetchErr != nil {
 		if input.auth.UseLocalGitCredentials {
 			sshURL := "git@github.com:" + input.repo + ".git"
 			_ = runGit(repoDir, "", "remote", "set-url", "origin", sshURL)
-			fetchErr = runGit(repoDir, "", "fetch", "--depth", "1", "origin", input.ref)
+			fetchErr = runGit(repoDir, "", "fetch", "--depth", "1", "--", "origin", input.ref)
 		}
 		if fetchErr != nil {
 			return nil, "", newSkillError(ErrCodeAISkillsGitFallbackFailed, http.StatusServiceUnavailable, "git sparse checkout failed", fetchErr)
@@ -1536,6 +1534,28 @@ func normalizeGitHubRepo(raw string) (string, error) {
 	return owner + "/" + repo, nil
 }
 
+func normalizeGitHubRef(raw string) (string, error) {
+	ref := strings.TrimSpace(raw)
+	invalid := ref == "" || len(ref) > 255 ||
+		strings.HasPrefix(ref, "-") || strings.HasPrefix(ref, ".") || strings.HasPrefix(ref, "/") ||
+		strings.HasSuffix(ref, ".") || strings.HasSuffix(ref, "/") ||
+		strings.Contains(ref, "..") || strings.Contains(ref, "@{") || strings.Contains(ref, "//")
+	if invalid {
+		return "", newSkillError(ErrCodeAISkillsInvalidSource, http.StatusBadRequest, "invalid github ref", nil)
+	}
+	for _, character := range ref {
+		if character < 0x20 || character == 0x7f || strings.ContainsRune(" ~^:?*[\\", character) {
+			return "", newSkillError(ErrCodeAISkillsInvalidSource, http.StatusBadRequest, "invalid github ref", nil)
+		}
+	}
+	for _, segment := range strings.Split(ref, "/") {
+		if segment == "" || strings.HasPrefix(segment, ".") || strings.HasSuffix(strings.ToLower(segment), ".lock") {
+			return "", newSkillError(ErrCodeAISkillsInvalidSource, http.StatusBadRequest, "invalid github ref", nil)
+		}
+	}
+	return ref, nil
+}
+
 func normalizeRepoPath(raw string) (string, error) {
 	v := strings.TrimSpace(strings.ReplaceAll(raw, "\\", "/"))
 	if v == "" {
@@ -1550,6 +1570,9 @@ func normalizeRepoPath(raw string) (string, error) {
 	}
 	if cleaned == ".." || strings.HasPrefix(cleaned, "../") {
 		return "", newSkillError(ErrCodeAISkillsPathEscape, http.StatusUnprocessableEntity, "github path escapes repository root", nil)
+	}
+	if strings.HasPrefix(cleaned, "-") {
+		return "", newSkillError(ErrCodeAISkillsInvalidPath, http.StatusBadRequest, "github path must not start with '-'", nil)
 	}
 	return cleaned, nil
 }
