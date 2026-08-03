@@ -755,6 +755,7 @@ vi.mock('./services/desktopShellBridge', () => ({
 }));
 vi.mock('./services/localApi', () => ({
   fetchLocalApiJSON: vi.fn(),
+  fetchLocalApiJSONResponse: vi.fn(),
   getEnvAppAccessStatus: getEnvAppAccessStatusMock,
   LocalApiError: class LocalApiError extends Error {
     readonly data: unknown;
