@@ -22,6 +22,7 @@ import type {
   FlowerProviderModel,
   FlowerPermissionType,
   FlowerRouterDecision,
+  FlowerSubmitInputReceipt,
   FlowerTurnLaunchInput,
   FlowerTurnLaunchReceipt,
   FlowerSettingsDraft,
@@ -112,6 +113,13 @@ type SendTurnResponse = Readonly<{
   turn_id?: string;
   queue_id?: string;
   kind?: string;
+}>;
+
+type SubmitInputResponse = Readonly<{
+  run_id?: string;
+  turn_id?: string;
+  kind?: string;
+  consumed_waiting_prompt_id?: string;
 }>;
 
 type LoadThreadResponse = Readonly<{
@@ -882,7 +890,7 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
       const promptID = trim(input.prompt_id);
       if (!tid) throw new Error('Missing thread id.');
       if (!promptID) throw new Error('Missing input prompt id.');
-      const response = await runtimeJSON<SendTurnResponse>(bridge, 'POST', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}/input_response`, {
+      const response = await runtimeJSON<SubmitInputResponse>(bridge, 'POST', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}/input_response`, {
         thread_id: tid,
         response: {
           prompt_id: promptID,
@@ -902,10 +910,20 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
           ...(serializeFlowerReasoningSelection(input.reasoning_selection) ? { reasoning_selection: serializeFlowerReasoningSelection(input.reasoning_selection) } : {}),
         },
       });
-      if (!trim(response.turn_id) || !trim(response.run_id) || trim(response.kind) !== 'start') {
+      if (
+        !trim(response.turn_id)
+        || !trim(response.run_id)
+        || trim(response.kind) !== 'start'
+        || trim(response.consumed_waiting_prompt_id) !== promptID
+      ) {
         throw new Error('Flower input response admission returned an invalid receipt.');
       }
-      return loadRuntimeFlowerThread(bridge, tid);
+      return {
+        thread_id: tid,
+        turn_id: trim(response.turn_id),
+        run_id: trim(response.run_id),
+        consumed_prompt_id: promptID,
+      } satisfies FlowerSubmitInputReceipt;
     },
     missingThreadID: 'Missing thread id.',
     failedToCreateThread: 'Failed to create Flower chat.',
