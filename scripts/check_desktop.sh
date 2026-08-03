@@ -50,6 +50,8 @@ main() {
   ui_pkg_log "MODE: $mode"
   ui_pkg_log "ROOT_DIR: $ROOT_DIR"
 
+  "$SCRIPT_DIR/dev_desktop_process_inventory_test.sh"
+
   (
     cd "$dir"
     if ui_pkg_need_install "$dir"; then

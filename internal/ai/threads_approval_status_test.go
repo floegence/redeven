@@ -2,6 +2,9 @@ package ai
 
 import (
 	"context"
+	"errors"
+	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/floegence/floret/v3/identity"
@@ -27,9 +30,17 @@ func TestGetThreadAndListThreadsUseCanonicalFloretStatus(t *testing.T) {
 	if view.RunStatus != string(RunStateSuccess) || view.ActiveRunID != "" || view.LastMessagePreview == "" {
 		t.Fatalf("unexpected canonical thread view: %#v", view)
 	}
+	var singleThreadReads atomic.Int32
+	svc.floretReads.thread = func(context.Context, identity.ThreadID) (floretThreadReadHost, error) {
+		singleThreadReads.Add(1)
+		return nil, errors.New("single-thread read must not serve the thread list")
+	}
 	list, err := svc.ListThreads(ctx, meta, 20, "")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if got := singleThreadReads.Load(); got != 0 {
+		t.Fatalf("single-thread reads = %d, want 0", got)
 	}
 	if len(list.Threads) != 1 || list.Threads[0].RunStatus != string(RunStateSuccess) || list.Threads[0].LastMessagePreview != view.LastMessagePreview {
 		t.Fatalf("list did not use canonical state: %#v", list.Threads)
@@ -53,5 +64,50 @@ func TestGetThreadReturnsConsistencyErrorWhenFloretThreadIsMissing(t *testing.T)
 	}
 	if _, err := svc.GetThread(ctx, meta, thread.ThreadID); err == nil {
 		t.Fatal("missing canonical Floret thread was treated as idle")
+	}
+}
+
+func TestCanonicalThreadListInventoryPaginatesUntilAllProductRootsFound(t *testing.T) {
+	inventory := &scriptedFloretRootInventory{pages: []floretRootThreadsPage{
+		{
+			Threads:    []flruntime.ThreadSnapshot{{ID: identity.ThreadID("unrelated")}},
+			NextCursor: "page-2",
+			HasMore:    true,
+		},
+		{
+			Threads: []flruntime.ThreadSnapshot{
+				{ID: identity.ThreadID("thread-b")},
+				{ID: identity.ThreadID("thread-a")},
+			},
+			NextCursor: "must-not-be-read",
+			HasMore:    true,
+		},
+	}}
+	svc := &Service{floretReads: &floretReadCapabilities{inventory: inventory}}
+
+	canonical, latest, err := svc.readCanonicalThreadListStates(context.Background(), []string{"thread-a", "thread-b"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(canonical) != 2 || canonical["thread-a"].ID != identity.ThreadID("thread-a") || canonical["thread-b"].ID != identity.ThreadID("thread-b") {
+		t.Fatalf("canonical inventory = %#v", canonical)
+	}
+	if len(latest) != 0 {
+		t.Fatalf("latest turns = %#v, want empty", latest)
+	}
+	if len(inventory.requests) != 2 || inventory.requests[0].Cursor != "" || inventory.requests[1].Cursor != "page-2" || inventory.requests[0].Limit != 200 || inventory.requests[1].Limit != 200 {
+		t.Fatalf("inventory requests = %#v", inventory.requests)
+	}
+}
+
+func TestCanonicalThreadListInventoryRejectsMissingProductRoot(t *testing.T) {
+	inventory := &scriptedFloretRootInventory{pages: []floretRootThreadsPage{{
+		Threads: []flruntime.ThreadSnapshot{{ID: identity.ThreadID("thread-a")}},
+	}}}
+	svc := &Service{floretReads: &floretReadCapabilities{inventory: inventory}}
+
+	_, _, err := svc.readCanonicalThreadListStates(context.Background(), []string{"thread-a", "thread-missing"})
+	if err == nil || !strings.Contains(err.Error(), `missing canonical Floret root "thread-missing"`) {
+		t.Fatalf("error = %v, want missing canonical root", err)
 	}
 }

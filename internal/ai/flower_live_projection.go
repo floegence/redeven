@@ -22,10 +22,11 @@ import (
 const flowerLiveEventBufferLimit = 5000
 
 type flowerLiveThreadStream struct {
-	NextSeq       int64
-	Events        []FlowerLiveEvent
-	State         FlowerLiveMaterializedState
-	ApprovalIndex map[string]FlowerApprovalState
+	NextSeq              int64
+	Events               []FlowerLiveEvent
+	State                FlowerLiveMaterializedState
+	ApprovalIndex        map[string]FlowerApprovalState
+	CanonicalSettledTool map[string]struct{}
 }
 
 func newFlowerLiveThreadStream() *flowerLiveThreadStream {
@@ -38,7 +39,8 @@ func newFlowerLiveThreadStream() *flowerLiveThreadStream {
 			ApprovalActionsSeen: true,
 			InputRequests:       map[string]RequestUserInputPrompt{},
 		},
-		ApprovalIndex: map[string]FlowerApprovalState{},
+		ApprovalIndex:        map[string]FlowerApprovalState{},
+		CanonicalSettledTool: map[string]struct{}{},
 	}
 }
 
@@ -148,6 +150,19 @@ func (s *Service) GetFlowerThreadLiveBootstrap(ctx context.Context, meta *sessio
 	state.Messages = s.flowerLiveMaterializedStateLocked(endpointID, threadID).Messages
 	s.mu.Unlock()
 	state.TimelineDecorations = timeline.TimelineDecorations
+	settledTools, err := reconcileFlowerLiveApprovalsWithCanonicalTimeline(&state, timeline.Messages)
+	if err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	if stream := s.flowerLiveByThread[runThreadKey(endpointID, threadID)]; stream != nil {
+		stream.CanonicalSettledTool = settledTools
+		filterFlowerLiveApprovalStateBySettledTools(&stream.State, stream.ApprovalIndex, settledTools)
+		state.ApprovalActions = cloneFlowerLiveMaterializedState(stream.State).ApprovalActions
+		state.ApprovalActionsSeen = stream.State.ApprovalActionsSeen
+		state.ApprovalQueue = cloneFlowerApprovalQueue(stream.State.ApprovalQueue)
+	}
+	s.mu.Unlock()
 
 	return &FlowerLiveBootstrapResponse{
 		SchemaVersion:    FlowerLiveSchemaVersion,
@@ -1229,6 +1244,7 @@ func flowerLiveEventWithAssignedSeqPayload(stream *flowerLiveThreadStream, event
 			}
 			payload.Actions[index] = action
 		}
+		payload = filterFlowerCanonicalApprovalPayloadBySettledTools(payload, stream.CanonicalSettledTool)
 		if !validFlowerCanonicalApprovalReplacement(payload) {
 			return event
 		}
@@ -1259,6 +1275,140 @@ func flowerLiveEventWithAssignedSeqPayload(stream *flowerLiveThreadStream, event
 	}
 	event.Payload = mustFlowerPayload(payload)
 	return event
+}
+
+func flowerApprovalRunToolKey(runID string, toolID string) string {
+	runID = strings.TrimSpace(runID)
+	toolID = strings.TrimSpace(toolID)
+	if runID == "" || toolID == "" {
+		return ""
+	}
+	return runID + "\x00" + toolID
+}
+
+func reconcileFlowerLiveApprovalsWithCanonicalTimeline(state *FlowerLiveMaterializedState, messages []FlowerTimelineMessage) (map[string]struct{}, error) {
+	settledTools := make(map[string]struct{})
+	for _, message := range messages {
+		if message.Live {
+			continue
+		}
+		messageThreadID := strings.TrimSpace(message.ThreadID)
+		messageTurnID := strings.TrimSpace(message.TurnID)
+		messageRunID := strings.TrimSpace(message.RunID)
+		if messageThreadID == "" || messageTurnID == "" || messageRunID == "" {
+			return nil, errors.New("canonical timeline message identity is incomplete")
+		}
+		for _, block := range message.Blocks {
+			timeline, ok := activityTimelineFromAny(block)
+			if !ok {
+				continue
+			}
+			if strings.TrimSpace(timeline.ThreadID.String()) != messageThreadID ||
+				strings.TrimSpace(timeline.TurnID.String()) != messageTurnID ||
+				strings.TrimSpace(timeline.RunID.String()) != messageRunID {
+				return nil, errors.New("canonical activity timeline identity does not match its message")
+			}
+			for _, item := range timeline.Items {
+				if !flowerCanonicalActivitySettlesApproval(string(item.Status), item.ApprovalState) {
+					continue
+				}
+				key := flowerApprovalRunToolKey(messageRunID, item.ToolID)
+				if key != "" {
+					settledTools[key] = struct{}{}
+				}
+			}
+		}
+	}
+	filterFlowerLiveApprovalStateBySettledTools(state, nil, settledTools)
+	return settledTools, nil
+}
+
+func flowerCanonicalActivitySettlesApproval(status string, approvalState string) bool {
+	switch strings.TrimSpace(approvalState) {
+	case string(FlowerApprovalStateApproved), string(FlowerApprovalStateRejected),
+		string(FlowerApprovalStateTimedOut), string(FlowerApprovalStateCanceled),
+		string(FlowerApprovalStateUnavailable):
+		return true
+	}
+	switch strings.TrimSpace(status) {
+	case "success", "error", "canceled":
+		return true
+	default:
+		return false
+	}
+}
+
+func filterFlowerCanonicalApprovalPayloadBySettledTools(payload FlowerLiveApprovalQueuePayload, settledTools map[string]struct{}) FlowerLiveApprovalQueuePayload {
+	if len(settledTools) == 0 || len(payload.Actions) == 0 {
+		return payload
+	}
+	currentRemoved := false
+	actions := make([]FlowerApprovalAction, 0, len(payload.Actions))
+	for _, action := range payload.Actions {
+		if _, settled := settledTools[flowerApprovalRunToolKey(action.RunID, action.ToolID)]; settled {
+			currentRemoved = currentRemoved || strings.TrimSpace(action.ActionID) == strings.TrimSpace(payload.ApprovalQueue.CurrentActionID)
+			continue
+		}
+		actions = append(actions, action)
+	}
+	if currentRemoved {
+		actions = actions[:0]
+	}
+	payload.Actions = actions
+	payload.ApprovalQueue.Total = len(actions)
+	payload.ApprovalQueue.UnresolvedCount = len(actions)
+	if len(actions) == 0 {
+		payload.ApprovalQueue.CurrentActionID = ""
+		payload.ApprovalQueue.CurrentPosition = 0
+	}
+	return payload
+}
+
+func filterFlowerLiveApprovalStateBySettledTools(state *FlowerLiveMaterializedState, approvalIndex map[string]FlowerApprovalState, settledTools map[string]struct{}) {
+	if state == nil || len(settledTools) == 0 || len(state.ApprovalActions) == 0 {
+		return
+	}
+	currentActionID := ""
+	if state.ApprovalQueue != nil {
+		currentActionID = strings.TrimSpace(state.ApprovalQueue.CurrentActionID)
+	}
+	currentRemoved := false
+	for actionID, action := range state.ApprovalActions {
+		if _, settled := settledTools[flowerApprovalRunToolKey(action.RunID, action.ToolID)]; !settled {
+			continue
+		}
+		delete(state.ApprovalActions, actionID)
+		delete(approvalIndex, actionID)
+		currentRemoved = currentRemoved || strings.TrimSpace(actionID) == currentActionID
+	}
+	if state.ApprovalQueue == nil {
+		return
+	}
+	if currentRemoved {
+		for actionID, action := range state.ApprovalActions {
+			if action.Origin == FlowerApprovalOriginMainTool || action.Origin == FlowerApprovalOriginDelegatedSubagent {
+				delete(state.ApprovalActions, actionID)
+				delete(approvalIndex, actionID)
+			}
+		}
+		state.ApprovalQueue.CurrentActionID = ""
+		state.ApprovalQueue.CurrentPosition = 0
+		state.ApprovalQueue.Total = 0
+		state.ApprovalQueue.UnresolvedCount = 0
+		return
+	}
+	remaining := 0
+	for _, action := range state.ApprovalActions {
+		if action.Origin == FlowerApprovalOriginMainTool || action.Origin == FlowerApprovalOriginDelegatedSubagent {
+			remaining++
+		}
+	}
+	state.ApprovalQueue.Total = remaining
+	state.ApprovalQueue.UnresolvedCount = remaining
+	if remaining == 0 {
+		state.ApprovalQueue.CurrentActionID = ""
+		state.ApprovalQueue.CurrentPosition = 0
+	}
 }
 
 func validFlowerControlApprovalAction(action FlowerApprovalAction, kind FlowerLiveKind) bool {

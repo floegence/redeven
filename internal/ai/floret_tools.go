@@ -541,6 +541,13 @@ func floretToolDefinitionForSnapshot(def ToolDef, authorizationSnapshot Permissi
 			}
 			return floretActivityForToolCall(toolName, args), nil
 		},
+		InvalidActivity: func(inv fltools.Invocation[map[string]any]) (*fltools.ActivityPresentation, error) {
+			args := cloneAnyMap(inv.Args)
+			if toolName == "terminal.exec" {
+				args = normalizeTerminalExecArgs(args)
+			}
+			return floretActivityForToolCall(toolName, args), nil
+		},
 		Annotations: annotations,
 	}, nil
 }

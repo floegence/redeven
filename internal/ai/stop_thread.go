@@ -194,6 +194,80 @@ func validateStoppedRunCanonicalSnapshot(snapshot flruntime.ThreadSnapshot, late
 	return nil
 }
 
+func stoppedRunCanonicalProof(snapshot flruntime.ThreadSnapshot, latest *flruntime.ThreadTurnSnapshot, threadID string, runID string, runTurnStarted bool) (bool, error) {
+	if err := validateStoppedRunCanonicalSnapshot(snapshot, latest, threadID, runID, runTurnStarted); err == nil {
+		return true, nil
+	} else {
+		threadID = strings.TrimSpace(threadID)
+		runID = strings.TrimSpace(runID)
+		if threadID == "" || strings.TrimSpace(string(snapshot.ID)) != threadID {
+			return false, err
+		}
+		if runID == "" {
+			if !runTurnStarted && canonicalThreadBusy(snapshot) {
+				return false, nil
+			}
+			return false, err
+		}
+		if strings.TrimSpace(string(snapshot.LatestRunID)) != runID || latest == nil || strings.TrimSpace(string(latest.RunID)) != runID {
+			return false, err
+		}
+		if !latest.Status.IsTerminal() && canonicalThreadBusy(snapshot) {
+			return false, nil
+		}
+		return false, err
+	}
+}
+
+func (s *Service) waitForExactStoppedRunAuthority(ctx context.Context, threadID string, r *run) error {
+	if s == nil || r == nil {
+		return fmt.Errorf("%w: exact run authority is unavailable", ErrThreadStopUnavailable)
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	canonicalRunID, _ := r.canonicalRunTurnIdentity()
+	persistTO := s.persistOpTO
+	if persistTO <= 0 {
+		persistTO = defaultPersistOpTimeout
+	}
+	doneCh := r.doneCh
+	var authorityCh <-chan struct{}
+	if r.floretAuthorityBarrier != nil {
+		authorityCh = r.floretAuthorityBarrier.done
+	}
+	ticker := time.NewTicker(25 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		readCtx, cancel := context.WithTimeout(ctx, persistTO)
+		snapshot, latest, err := s.readCanonicalThreadState(readCtx, threadID)
+		cancel()
+		if err != nil {
+			return stopExecutionError("reading canonical Floret terminal snapshot", err)
+		}
+		proven, err := stoppedRunCanonicalProof(snapshot, latest, threadID, canonicalRunID, r.floretRunTurnStarted.Load())
+		if err != nil {
+			return err
+		}
+		if proven {
+			return nil
+		}
+
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("%w: waiting for exact canonical run terminal proof: %v", ErrThreadStopPending, ctx.Err())
+		case <-doneCh:
+			doneCh = nil
+		case <-authorityCh:
+			if err := r.floretAuthorityBarrier.waitContext(context.Background()); err != nil {
+				return fmt.Errorf("%w: waiting for Floret authority release: %v", ErrThreadStopUnavailable, err)
+			}
+			authorityCh = nil
+		case <-ticker.C:
+		}
+	}
+}
+
 func stopExecutionError(stage string, err error) error {
 	if err == nil {
 		return nil
@@ -341,29 +415,7 @@ func (s *Service) finishExactRunStop(endpointID string, threadID string, executi
 		finalErr = stopExecutionError("terminating run terminal processes", err)
 	}
 	if finalErr == nil {
-		if err := r.floretAuthorityBarrier.waitContext(finalizationCtx); err != nil {
-			finalErr = fmt.Errorf("%w: waiting for Floret authority release: %v", ErrThreadStopUnavailable, err)
-		}
-	}
-	if finalErr == nil {
-		if err := waitForStoppedRun(finalizationCtx, r); err != nil {
-			finalErr = err
-		}
-	}
-	if finalErr == nil {
-		canonicalRunID, _ := r.canonicalRunTurnIdentity()
-		persistTO := s.persistOpTO
-		if persistTO <= 0 {
-			persistTO = defaultPersistOpTimeout
-		}
-		readCtx, cancel := context.WithTimeout(finalizationCtx, persistTO)
-		snapshot, latest, err := s.readCanonicalThreadState(readCtx, threadID)
-		cancel()
-		if err != nil {
-			finalErr = stopExecutionError("reading canonical Floret terminal snapshot", err)
-		} else {
-			finalErr = validateStoppedRunCanonicalSnapshot(snapshot, latest, threadID, canonicalRunID, r.floretRunTurnStarted.Load())
-		}
+		finalErr = s.waitForExactStoppedRunAuthority(finalizationCtx, threadID, r)
 	}
 	if finalErr != nil {
 		finishStopFinalizationAttempt(attempt, finalErr)

@@ -386,6 +386,48 @@ func TestStopActiveRunExecutionReturnsPendingWhenSettlementExceedsDeadline(t *te
 	}
 }
 
+func TestStopActiveRunExecutionAcceptsExactCanonicalTerminalBeforeLocalRunExit(t *testing.T) {
+	svc, meta, threadID := newStopThreadStateMachineTestService(t)
+	const executionKey = "execution_stop_canonical_terminal"
+	const runID = "run_stop_canonical_terminal"
+	const turnID = "turn_stop_canonical_terminal"
+	r := newRun(runOptions{
+		RunID: executionKey, EndpointID: meta.EndpointID, ThreadID: threadID, TurnID: turnID,
+	})
+	if err := r.observeFloretCanonicalIdentity(runID, threadID, turnID); err != nil {
+		t.Fatal(err)
+	}
+	r.floretRunTurnStarted.Store(true)
+	_, cancelRun := context.WithCancel(context.Background())
+	r.muCancel.Lock()
+	r.cancelFn = cancelRun
+	r.muCancel.Unlock()
+	key := runThreadKey(meta.EndpointID, threadID)
+	svc.mu.Lock()
+	svc.runs[executionKey] = r
+	svc.activeRunByTh[key] = executionKey
+	svc.mu.Unlock()
+	t.Cleanup(func() {
+		cancelRun()
+		r.floretAuthorityBarrier.release(nil)
+		r.markDone()
+	})
+	overrideStopThreadOverviewReader(t, svc, func(context.Context, identity.ThreadID, floretThreadReadHost) (flruntime.ThreadOverview, error) {
+		return exactStoppedThreadOverview(threadID, runID, turnID), nil
+	})
+
+	stopCtx, cancelStop := context.WithTimeout(context.Background(), 250*time.Millisecond)
+	defer cancelStop()
+	if err := svc.stopActiveRunExecution(stopCtx, meta, meta.EndpointID, threadID, executionKey, r); err != nil {
+		t.Fatalf("stopActiveRunExecution: %v", err)
+	}
+	svc.mu.Lock()
+	defer svc.mu.Unlock()
+	if svc.stopFinalizingByTh[key] != "" || svc.runs[executionKey] != nil {
+		t.Fatal("exact canonical terminal proof did not clear local finalization ownership")
+	}
+}
+
 func TestStopThreadUsesOneTotalBudgetAcrossCanonicalReads(t *testing.T) {
 	svc, meta, threadID := newStopThreadStateMachineTestService(t)
 	var reads atomic.Int32

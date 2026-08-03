@@ -357,8 +357,9 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 		threadsDB:                    ts,
 		closeFloret:                  floretBootstrap.close,
 		floretReads: &floretReadCapabilities{
-			thread:   floretBootstrap.newThreadRead,
-			subagent: floretBootstrap.newSubagentRead,
+			thread:    floretBootstrap.newThreadRead,
+			inventory: floretBootstrap.rootInventory,
+			subagent:  floretBootstrap.newSubagentRead,
 		},
 		floretRuntime:          &floretRuntimeCapabilityIssuer{bind: floretBootstrap.bindThreadRuntime},
 		pendingToolRecovery:    floretBootstrap.pendingToolRecovery,

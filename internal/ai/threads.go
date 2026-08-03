@@ -392,15 +392,9 @@ func (s *Service) ListThreads(ctx context.Context, meta *session.Meta, limit int
 	if err != nil {
 		return nil, err
 	}
-	canonicalByThread := make(map[string]flruntime.ThreadSnapshot, len(threadIDs))
-	latestByThread := make(map[string]*flruntime.ThreadTurnSnapshot, len(threadIDs))
-	for _, threadID := range threadIDs {
-		snapshot, latest, err := s.readCanonicalThreadState(ctx, threadID)
-		if err != nil {
-			return nil, fmt.Errorf("read canonical Floret thread %s: %w", threadID, err)
-		}
-		canonicalByThread[threadID] = snapshot
-		latestByThread[threadID] = latest
+	canonicalByThread, latestByThread, err := s.readCanonicalThreadListStates(ctx, threadIDs)
+	if err != nil {
+		return nil, err
 	}
 	out := &ListThreadsResponse{Threads: make([]ThreadView, 0, len(list)), NextCursor: strings.TrimSpace(next)}
 	for _, t := range list {
@@ -412,6 +406,83 @@ func (s *Service) ListThreads(ctx context.Context, meta *session.Meta, limit int
 		out.Threads = append(out.Threads, view)
 	}
 	return out, nil
+}
+
+func (s *Service) readCanonicalThreadListStates(ctx context.Context, threadIDs []string) (map[string]flruntime.ThreadSnapshot, map[string]*flruntime.ThreadTurnSnapshot, error) {
+	canonicalByThread := make(map[string]flruntime.ThreadSnapshot, len(threadIDs))
+	latestByThread := make(map[string]*flruntime.ThreadTurnSnapshot, len(threadIDs))
+	if len(threadIDs) == 0 {
+		return canonicalByThread, latestByThread, nil
+	}
+	if s == nil || s.floretReads == nil {
+		return nil, nil, errors.New("Floret read capabilities are unavailable")
+	}
+	wanted := make(map[identity.ThreadID]struct{}, len(threadIDs))
+	for _, rawThreadID := range threadIDs {
+		threadID := identity.ThreadID(strings.TrimSpace(rawThreadID))
+		if threadID == "" || string(threadID) != rawThreadID {
+			return nil, nil, errors.New("product thread list contains an invalid Floret identity")
+		}
+		if _, duplicate := wanted[threadID]; duplicate {
+			return nil, nil, fmt.Errorf("product thread list contains duplicate Floret thread %q", threadID)
+		}
+		wanted[threadID] = struct{}{}
+	}
+
+	seenCanonical := make(map[identity.ThreadID]struct{})
+	var inventoryCursor string
+	for {
+		page, err := s.floretReads.listRootThreads(ctx, floretListRootThreadsRequest{Cursor: inventoryCursor, Limit: 200})
+		if err != nil {
+			return nil, nil, fmt.Errorf("list canonical Floret root threads: %w", err)
+		}
+		pageThreads := make(map[identity.ThreadID]struct{}, len(page.Threads))
+		for _, snapshot := range page.Threads {
+			threadID := snapshot.ID
+			if threadID == "" || strings.TrimSpace(string(threadID)) != string(threadID) {
+				return nil, nil, errors.New("canonical Floret root inventory contains an invalid identity")
+			}
+			if _, duplicate := seenCanonical[threadID]; duplicate {
+				return nil, nil, fmt.Errorf("canonical Floret root inventory contains duplicate thread %q", threadID)
+			}
+			seenCanonical[threadID] = struct{}{}
+			pageThreads[threadID] = struct{}{}
+			if _, required := wanted[threadID]; !required {
+				continue
+			}
+			canonicalByThread[string(threadID)] = snapshot
+			if latest := page.LatestTurnByThread[threadID]; latest != nil {
+				if err := latest.Validate(); err != nil {
+					return nil, nil, fmt.Errorf("validate canonical Floret latest turn for %q: %w", threadID, err)
+				}
+				if latest.Projection.ThreadID != threadID {
+					return nil, nil, fmt.Errorf("canonical Floret latest turn belongs to thread %q, want %q", latest.Projection.ThreadID, threadID)
+				}
+				latestByThread[string(threadID)] = latest
+			}
+		}
+		for threadID, latest := range page.LatestTurnByThread {
+			if _, belongsToPage := pageThreads[threadID]; !belongsToPage || latest == nil {
+				return nil, nil, errors.New("canonical Floret root inventory latest-turn index is inconsistent")
+			}
+		}
+		if len(canonicalByThread) == len(wanted) {
+			return canonicalByThread, latestByThread, nil
+		}
+		if !page.HasMore {
+			break
+		}
+		if page.NextCursor == "" || page.NextCursor == inventoryCursor {
+			return nil, nil, errors.New("canonical Floret root inventory pagination did not advance")
+		}
+		inventoryCursor = page.NextCursor
+	}
+	for _, threadID := range threadIDs {
+		if _, found := canonicalByThread[threadID]; !found {
+			return nil, nil, fmt.Errorf("product thread settings reference missing canonical Floret root %q", threadID)
+		}
+	}
+	return canonicalByThread, latestByThread, nil
 }
 
 func (s *Service) CreateThread(ctx context.Context, meta *session.Meta, title string, modelID string, permissionType string, workingDir string) (*ThreadView, error) {
