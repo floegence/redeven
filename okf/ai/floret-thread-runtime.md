@@ -7,8 +7,8 @@ timestamp: 2026-08-01T00:00:00Z
 ---
 # Summary
 
-- Authority: published Floret v3.2.12 owns canonical `ThreadID`, `TurnID`, `RunID`, journal state, titles, lifecycle, projections, approvals, todos, tools, SubAgents, artifacts, provider continuation, and its domain schema migrations.
-- Outcome: Redeven uses narrow identity-bound public capabilities and maps validated Floret state into Flower while retaining only product settings, resources, authorization, unadmitted work, and durable saga receipts.
+- Authority: Floret v3.2.12 owns canonical `ThreadID`, `TurnID`, `RunID`, journal state, titles, lifecycle, projections, approvals, todos, tools, SubAgents, artifacts, provider continuation, and domain schema migrations.
+- Outcome: Redeven consumes identity-bound public capabilities and maps validated state into Flower while retaining only product settings, authorization, unadmitted work, and saga receipts.
 - Invariants: callers never preallocate canonical identity, admission binds only from committed Floret facts, and no product table or UI projection reconstructs Agent state.
 - Failure boundary: missing authority, invalid public data, conflicting identity, incomplete exact-read recovery, or failed permission proof stops the operation without fallback or guessed state.
 
@@ -47,51 +47,36 @@ One composition-root `runtime.Host` opens the published Floret v3.2.12 storage s
 
 On canonical read, Floret v3.2.12 automatically settles a supported historical requested approval when durable failed or aborted terminal authority and a recovery tool result prove the turn is no longer decisionable. This same-schema compatibility does not rewrite the journal. Redeven consumes the validated projection and never scans, patches, or migrates Floret-owned storage; non-terminal, successful, unknown, drifted, and future state continues to fail closed upstream.
 
-Initial thread state is read through `ThreadReader.Bootstrap`, which returns the thread, overview, first turn page, approvals, todos, context, pending work, and SubAgents from one revision. Any direct Floret subscription must continue from that revision; later history pagination remains an explicit `ListTurns` read. Canonical Activity reads use `ReadAuthoritativeProjection` and retain its Floret revision/provenance distinction before Redeven maps the enclosed projection into Flower.
+`ThreadReader.Bootstrap` returns the thread, overview, first turn page, approvals, todos, context, pending work, and SubAgents from one canonical backend snapshot and exact revision. Redeven consumes it directly and subscribes after that revision; later history uses `ListTurns`. It does not cache or reconstruct bootstrap. A retained tombstone returns `ErrThreadDeleted`; only absence from live and deleted state returns `ErrThreadNotFound`. Canonical Activity reads retain the revision and provenance from `ReadAuthoritativeProjection`.
 
-The published Bootstrap implementation projects all of these read models from
-one canonical backend snapshot and exact revision. Redeven consumes that result
-directly and subscribes after its revision; it does not add a product cache or
-reconstruct the bootstrap from multiple reads. A retained tombstone returns
-`ErrThreadDeleted`; only an identity absent from both live and deleted Floret
-state returns `ErrThreadNotFound`.
-
-Root thread inventory uses the published v3.2.12 indexed projection. Each item carries its canonical snapshot and optional latest turn from the same bounded inventory view. Redeven pages this narrow capability until every product-listed root is found or the authoritative inventory ends, preserves product database order, performs zero per-thread bootstrap reads, and fails closed when a product root is absent. Redeven does not cache, duplicate, or reconstruct the upstream domain. Runtime list operations perform zero complete session-tree domain reads, so background refresh cannot repeatedly decode artifacts, provider state, and revision history or starve approval writes behind the backend transaction fence.
+Root inventory uses the v3.2.12 indexed projection, whose items pair a canonical snapshot with an optional latest turn from one bounded view. Redeven pages until every product root is found or authority ends, preserves product order, performs no per-thread bootstrap or complete session-tree reads, and fails closed when a product root is absent. Background listing therefore cannot repeatedly decode full domains or starve approval writes behind the backend fence.
 
 Floret owns canonical todo validity: maximum count, stable non-empty unique IDs, non-empty content, the status set, and one in-progress item. Redeven derives status values in its tool schema, maps typed snapshots to UI DTOs, and keeps only product guidance that control-signal prose is not actionable work. It does not normalize or repair canonical todo state.
 
 Floret assembles canonical journal context and opaque continuation. Redeven supplies current user input, ephemeral supplemental context, typed attachments and references, provider gateway, tools, effect authorization, permission snapshots, and product labels through immutable `runtime.Agent` values. Provider adapters reject invalid typed messages rather than repairing, regrouping, dropping, or synthesizing them.
 
-Redeven's structured `ask_user` projector requires an explicit reason, concrete
-required input, a valid question contract, and an `evidence_refs` array. The
-array may be empty when no tool evidence exists; requiring a fabricated
-reference would turn presentation metadata into false authority. When relevant
-tool evidence exists, the prompt instructs the model to cite its tool IDs. Other
-invalid control payloads fail closed before a waiting turn is published.
+Redeven's structured `ask_user` projector requires a reason, concrete required
+input, valid questions, and an `evidence_refs` array. The array is empty when no
+tool evidence exists and otherwise cites relevant tool IDs; invalid control
+payloads fail closed before a waiting turn is published.
 
-Submitting structured input returns the canonical continuation admission
-receipt over the same-origin product HTTP admission path, not the realtime RPC
-notification stream and not a post-admission thread bootstrap. Flower validates
-the exact thread, consumed prompt, turn, and run identities, clears only that
-prompt, and projects the admitted run as active. The selected detail retains
-its existing realtime subscription; admission must not issue a redundant RPC
-subscription after the receipt. A canonical detail refresh may proceed in the
-background, but neither it nor notification backpressure can hold the composer
-in its submitting state while the resumed run executes.
+Structured input returns a canonical continuation receipt over same-origin HTTP,
+not the realtime RPC notification stream or a subsequent bootstrap. Flower
+validates the exact thread, consumed prompt, turn, and run, clears only that
+prompt, and marks the run active while retaining the existing subscription.
+Background detail refresh and notification backpressure cannot hold the composer
+in its submitting state.
 
-An `active_run_id` change is the atomic live-state handoff boundary. The new
-active run replaces prior run, prompt, model-I/O, context-usage, and approval
-transients before events for the new run are reduced. This prevents a missed
-message-start event or a resumed control-only run from causing valid model-I/O,
-status, or input events to be rejected behind stale state. Timeline history and
-canonical context compactions remain intact. Live events then advance the
-selected detail to another prompt or a terminal state.
+An `active_run_id` change atomically replaces prior run, prompt, model-I/O,
+context-usage, and approval transients before reducing events for the new run.
+Timeline history and canonical compactions remain intact, so a resumed
+control-only run accepts valid status, model-I/O, and input events.
 
 Flower history and replacements preserve Floret turn order, entry identities, and validated projections. A valid terminal turn with no renderable assistant body may produce one typed `turn_projection_unavailable` decoration. Storage, pagination, identity, or validation failures remain errors and do not become invented assistant content. Queued rows use `queue_id` and are non-message product projections; only a canonical Floret user row carries `turn_id` and can replace them after admission.
 
 Effect dispatch rereads current product permission, validates any approval, and binds a one-shot proof to the exact Floret invocation. Pending terminal work retains the exact settlement target and authority barrier. SubAgent execution uses parent-bound v3 capabilities and canonical child `ThreadID`; no `subagent_id`, metadata parser, or product-owned child lifecycle exists.
 
-Startup recovery preserves the ordered owners: pending delete, pending create, canonical root inventory, interrupted root/direct-child turns, pending fork, SubAgent publication, queued admission, then queued wake. Each canonical root reader lists its direct children once; Redeven never reopens a child through root authority. Closed children remain canonical history but cannot contain a recoverable active turn, so recovery validates their identity and hierarchy and then omits them before requesting child recovery authority. Open and closing children still bind through their exact parent. Runtime authority stays closed until every required stage validates.
+Startup recovery preserves the ordered owners: pending delete, pending create, root inventory, interrupted root/direct-child turns, pending fork, SubAgent publication, queued admission, then queued wake. Each root reader lists direct children once. Recovery validates closed-child identity and hierarchy but requests child recovery authority only for open or closing children through their exact parent. Runtime authority stays closed until every stage validates.
 
 # Boundaries
 
