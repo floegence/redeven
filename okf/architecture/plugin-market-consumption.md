@@ -49,7 +49,11 @@ full `/v1/plugins/{plugin_id}` presentation. Redeven resolves requested BCP 47
 languages through the released ReDevPlugin resolver, using RFC 4647 lookup and
 the author default locale without an English-specific fallback. Author text is
 plain text with the resolved `lang` and `dir="auto"`; it is never copied into
-host code or declaration metadata.
+host code or declaration metadata. The local detail proxy preserves the
+market's validated `meta.generation` separately from author detail data; the
+Plugin Center accepts and caches a detail only when that generation matches the
+catalog snapshot generation. Missing, stale, or negative detail generations
+fail closed rather than allowing cross-generation presentation mixing.
 
 ## Latest-only discovery
 
@@ -104,6 +108,7 @@ does not grant permissions or enable runtime access.
 - `redeven:internal/pluginmarket/contracts.go` - Validates generation, GitHub release identity, hashes, anchors, and complete release transport.
 - `redeven:internal/codeapp/codeapp.go` - Refreshes once at startup and keeps market failure non-fatal.
 - `redeven:internal/codeapp/appserver/server.go` - Serves only the frozen snapshot through the read-gated Env App route.
+- `redeven:internal/codeapp/appserver/server.go` - Preserves validated detail generation in the read-gated local proxy envelope.
 - `redeven:internal/redevpluginintegration/release_module.go` - Converts validated market data into released remote release transport.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/officialPluginCatalog.ts` - Projects current official discovery from the frozen snapshot.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts` - Preserves installed inventory and reports market unavailability.

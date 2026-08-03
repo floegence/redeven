@@ -120,7 +120,7 @@ func TestServerPluginMarketDetailReturnsManifestPresentation(t *testing.T) {
 	cap := config.PermissionSet{Read: true}
 	server := &Server{
 		localPermissionCap: &cap,
-		pluginMarketDetail: func(_ context.Context, pluginID string) (pluginmarket.PluginDetail, error) {
+		pluginMarketDetail: func(_ context.Context, pluginID string) (pluginmarket.PluginDetail, int64, error) {
 			if pluginID != "com.example.plugin" {
 				t.Fatalf("plugin id = %q", pluginID)
 			}
@@ -132,7 +132,7 @@ func TestServerPluginMarketDetailReturnsManifestPresentation(t *testing.T) {
 					Locales:       []pluginmarket.PresentationFullLocale{{Locale: "en-US", Name: "Example", Summary: "Example summary.", Description: []string{"Example description."}, Keywords: []string{"example"}}},
 				},
 				Status: "active",
-			}, nil
+			}, 41, nil
 		},
 	}
 	response := performPluginMarketRequest(server, func(request *http.Request) *http.Request {
@@ -143,13 +143,16 @@ func TestServerPluginMarketDetailReturnsManifestPresentation(t *testing.T) {
 		t.Fatalf("status = %d; body=%s", response.Code, response.Body.String())
 	}
 	var envelope struct {
-		OK   bool                      `json:"ok"`
+		OK   bool `json:"ok"`
+		Meta struct {
+			Generation int64 `json:"generation"`
+		} `json:"meta"`
 		Data pluginmarket.PluginDetail `json:"data"`
 	}
 	if err := json.Unmarshal(response.Body.Bytes(), &envelope); err != nil {
 		t.Fatal(err)
 	}
-	if !envelope.OK || envelope.Data.Presentation.DefaultLocale != "en-US" || envelope.Data.Presentation.Locales[0].Description[0] != "Example description." {
+	if !envelope.OK || envelope.Meta.Generation != 41 || envelope.Data.Presentation.DefaultLocale != "en-US" || envelope.Data.Presentation.Locales[0].Description[0] != "Example description." {
 		t.Fatalf("detail = %#v", envelope.Data)
 	}
 }

@@ -77,7 +77,7 @@ type Options struct {
 	// PluginPlatform is the released ReDevPlugin HTTP handler mounted behind Redeven routes.
 	PluginPlatform       http.Handler
 	PluginMarketSnapshot func() (pluginmarket.Snapshot, bool)
-	PluginMarketDetail   func(context.Context, string) (pluginmarket.PluginDetail, error)
+	PluginMarketDetail   func(context.Context, string) (pluginmarket.PluginDetail, int64, error)
 	// AgentHomeDir is the canonical absolute path to the default home directory.
 	AgentHomeDir    string
 	FilesystemScope *filesystemscope.Registry
@@ -252,7 +252,7 @@ type Server struct {
 	threadReadState       *threadreadstate.Store
 	pluginPlatform        http.Handler
 	pluginMarketSnapshot  func() (pluginmarket.Snapshot, bool)
-	pluginMarketDetail    func(context.Context, string) (pluginmarket.PluginDetail, error)
+	pluginMarketDetail    func(context.Context, string) (pluginmarket.PluginDetail, int64, error)
 	pluginConnMu          sync.Mutex
 	pluginConns           map[*pluginAdmissionConn]struct{}
 
@@ -1188,6 +1188,7 @@ type apiResp struct {
 	Error        string      `json:"error,omitempty"`
 	ErrorCode    string      `json:"error_code,omitempty"`
 	ErrorDetails string      `json:"error_details,omitempty"`
+	Meta         interface{} `json:"meta,omitempty"`
 	Data         interface{} `json:"data,omitempty"`
 }
 
@@ -2675,12 +2676,18 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid plugin id"})
 			return
 		}
-		detail, err := g.pluginMarketDetail(r.Context(), pluginID)
+		detail, generation, err := g.pluginMarketDetail(r.Context(), pluginID)
 		if err != nil {
 			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "plugin market detail is unavailable"})
 			return
 		}
-		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: detail})
+		if generation < 0 {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "plugin market detail generation is unavailable"})
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Meta: struct {
+			Generation int64 `json:"generation"`
+		}{Generation: generation}, Data: detail})
 		return
 
 	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/plugins/market/catalog":

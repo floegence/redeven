@@ -104,22 +104,22 @@ func (service *Service) LatestRelease(ctx context.Context, pluginID, channel str
 	return snapshot.LatestRelease(pluginID, channel)
 }
 
-func (service *Service) Detail(ctx context.Context, pluginID string) (PluginDetail, error) {
+func (service *Service) Detail(ctx context.Context, pluginID string) (PluginDetail, int64, error) {
 	if service == nil || !idPattern.MatchString(pluginID) {
-		return PluginDetail{}, ErrInvalidResponse
+		return PluginDetail{}, -1, ErrInvalidResponse
 	}
 	endpoint := service.endpoint("/v1/plugins/" + url.PathEscape(pluginID))
 	var response PluginDetailResponse
 	if _, err := service.getJSON(ctx, endpoint, &response); err != nil {
-		return PluginDetail{}, err
+		return PluginDetail{}, -1, err
 	}
 	if response.Meta.Generation < 0 || response.Meta.Stale || response.Data.PluginID != pluginID || !idPattern.MatchString(response.Data.PublisherID) || response.Data.Status == "" || len(response.Data.Presentation.Locales) == 0 {
-		return PluginDetail{}, invalid("plugin detail is invalid")
+		return PluginDetail{}, -1, invalid("plugin detail is invalid")
 	}
 	if !validateFullPresentation(response.Data.Presentation) {
-		return PluginDetail{}, invalid("plugin detail presentation is invalid")
+		return PluginDetail{}, -1, invalid("plugin detail presentation is invalid")
 	}
-	return response.Data, nil
+	return response.Data, response.Meta.Generation, nil
 }
 
 func (service *Service) refresh(ctx context.Context) (Snapshot, error) {

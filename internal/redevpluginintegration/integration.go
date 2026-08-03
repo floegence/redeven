@@ -356,9 +356,9 @@ func (i *Integration) MarketSnapshot() (pluginmarket.Snapshot, bool) {
 	return i.marketSnapshot.Clone(), true
 }
 
-func (i *Integration) MarketDetail(ctx context.Context, pluginID string) (pluginmarket.PluginDetail, error) {
+func (i *Integration) MarketDetail(ctx context.Context, pluginID string) (pluginmarket.PluginDetail, int64, error) {
 	if i == nil || i.marketService == nil {
-		return pluginmarket.PluginDetail{}, pluginmarket.ErrUnavailable
+		return pluginmarket.PluginDetail{}, -1, pluginmarket.ErrUnavailable
 	}
 	return i.marketService.Detail(ctx, pluginID)
 }
