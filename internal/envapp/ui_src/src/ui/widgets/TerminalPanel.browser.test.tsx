@@ -1194,10 +1194,15 @@ describe('TerminalPanel browser activity integration', () => {
       const openScreenshot = await mediaCommands.inspectTerminalSharedGeometryScreenshot();
 
       const region = surfaceHost.querySelector<HTMLElement>('[role="region"]')!;
+      const disclosure = surfaceHost.querySelector<HTMLElement>('.terminal-shared-geometry-disclosure')!;
+      const panelRoot = surfaceHost.querySelector<HTMLElement>('[data-terminal-panel-variant]')!;
       expect(region.textContent).toContain('60×20');
       expect(trigger.getAttribute('aria-expanded')).toBe('true');
       expect(trigger.getAttribute('aria-controls')).toBe(region.id);
       expect(document.activeElement).toBe(trigger);
+      expect(disclosure.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+        panelRoot.getBoundingClientRect().bottom - 7,
+      );
       expect(region.tabIndex).toBe(0);
       expect(region.scrollHeight).toBeGreaterThan(region.clientHeight);
       expect(region.getAttribute('data-floe-canvas-wheel-interactive')).toBe('true');

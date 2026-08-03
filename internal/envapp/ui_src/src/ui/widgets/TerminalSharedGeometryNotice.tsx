@@ -33,6 +33,11 @@ type TerminalSharedGeometryNoticeProps = Readonly<{
 
 type AnchorPosition = Readonly<{ x: number; y: number }>;
 
+const DISCLOSURE_GAP_PX = 4;
+const DISCLOSURE_BOUNDARY_MARGIN_PX = 8;
+const DISCLOSURE_MAX_WIDTH_PX = 320;
+const DISCLOSURE_MAX_HEIGHT_PX = 220;
+
 function sameRect(left: DOMRectReadOnly, right: DOMRectReadOnly): boolean {
   return left.x === right.x
     && left.y === right.y
@@ -105,11 +110,27 @@ export function TerminalSharedGeometryNotice(props: TerminalSharedGeometryNotice
     if (!props.interactive || !trigger) return;
     const rect = trigger.getBoundingClientRect();
     const boundary = props.surfaceBoundary()?.getBoundingClientRect();
+    const maximumWidth = Math.max(
+      0,
+      Math.min(DISCLOSURE_MAX_WIDTH_PX, (boundary?.width ?? window.innerWidth) - 16),
+    );
+    const maximumHeight = Math.max(
+      0,
+      Math.min(DISCLOSURE_MAX_HEIGHT_PX, (boundary?.height ?? window.innerHeight) - 16),
+    );
+    const boundaryTop = boundary?.top ?? 0;
+    const boundaryBottom = boundary?.bottom ?? window.innerHeight;
+    const preferredY = rect.bottom + DISCLOSURE_GAP_PX;
+    const latestY = boundaryBottom - maximumHeight - DISCLOSURE_BOUNDARY_MARGIN_PX;
+    const positionY = Math.max(
+      boundaryTop + DISCLOSURE_BOUNDARY_MARGIN_PX,
+      Math.min(preferredY, latestY),
+    );
     anchorRect = rect;
-    setPosition({ x: rect.left, y: rect.bottom + 4 });
+    setPosition({ x: rect.left, y: positionY });
     setMaximumSize({
-      width: Math.max(0, Math.min(320, (boundary?.width ?? window.innerWidth) - 16)),
-      height: Math.max(0, Math.min(220, (boundary?.height ?? window.innerHeight) - 16)),
+      width: maximumWidth,
+      height: maximumHeight,
     });
     setOpen(true);
   };
