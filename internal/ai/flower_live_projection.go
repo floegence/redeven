@@ -1685,13 +1685,13 @@ func applyFlowerLiveEventToMaterializedState(state *FlowerLiveMaterializedState,
 	case FlowerLiveThreadPatched:
 		var payload FlowerLiveThreadPatchedPayload
 		if decodeFlowerPayload(event.Payload, &payload) {
-			handoffFlowerLiveActiveRun(state, approvals, payload.Patch.ActiveRunID, payload.Patch.RunStatus, payload.Patch.WaitingPrompt)
+			replaceFlowerLiveRunScopedState(state, approvals, payload.Patch.ActiveRunID, payload.Patch.RunStatus, payload.Patch.WaitingPrompt)
 			state.ThreadPatch = mergeFlowerLiveThreadPatch(state.ThreadPatch, payload.Patch)
 		}
 	case FlowerLiveRunStarted:
 		var payload FlowerLiveRunStartedPayload
 		if decodeFlowerPayload(event.Payload, &payload) && strings.TrimSpace(payload.RunID) != "" {
-			handoffFlowerLiveActiveRun(state, approvals, payload.RunID, payload.Status, nil)
+			replaceFlowerLiveRunScopedState(state, approvals, payload.RunID, payload.Status, nil)
 			state.Runs[payload.RunID] = FlowerLiveRunState{
 				RunID:     strings.TrimSpace(payload.RunID),
 				Status:    strings.TrimSpace(payload.Status),
@@ -1907,7 +1907,7 @@ func applyFlowerLiveEventToMaterializedState(state *FlowerLiveMaterializedState,
 	}
 }
 
-func handoffFlowerLiveActiveRun(
+func replaceFlowerLiveRunScopedState(
 	state *FlowerLiveMaterializedState,
 	approvals map[string]FlowerApprovalState,
 	activeRunID string,
