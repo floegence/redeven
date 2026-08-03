@@ -29,6 +29,9 @@ const builtPluginReleaseRef = Object.freeze({
   version: '4.1.0',
   expected_hashes: builtPluginPackageHashes,
 });
+const builtPluginInstanceID = `catalog_${builtPluginReleaseRef.publisher_id}_${builtPluginReleaseRef.plugin_id}`;
+const builtPluginPresentationSHA256 = `sha256:${'1'.repeat(64)}`;
+const pluginMarketDetailPath = `/_redeven_proxy/api/plugins/market/plugins/${builtPluginReleaseRef.plugin_id}`;
 const builtPluginPackageURL = 'https://github.com/floegence/redeven-official-plugins/releases/download/v4.1.0/containers-4.1.0.redevplugin';
 
 function parseReportPath(args) {
@@ -119,9 +122,50 @@ function builtPluginMarketSnapshot() {
   };
 }
 
+function builtPluginPresentationCatalog() {
+  return {
+    default_locale: 'en-US',
+    locales: [{
+      locale: 'en-US',
+      plugin_name: 'Fixture Plugin',
+      publisher_name: 'Fixture Publisher',
+      summary: 'A signed plugin fixture for renderer verification.',
+      description: ['This fixture exercises the signed plugin presentation path.'],
+      highlights: ['Provides deterministic renderer verification data.'],
+      keywords: ['fixture'],
+      surfaces: [{ surface_id: 'plugin.primary', label: 'Fixture Surface' }],
+      settings: [],
+    }],
+  };
+}
+
+function builtPluginMarketDetail() {
+  const presentation = builtPluginPresentationCatalog();
+  return {
+    plugin_id: builtPluginReleaseRef.plugin_id,
+    publisher_id: builtPluginReleaseRef.publisher_id,
+    presentation: {
+      default_locale: presentation.default_locale,
+      locales: presentation.locales.map(({ plugin_name: name, ...locale }) => ({ ...locale, name })),
+    },
+    categories: ['development'],
+    channels: ['stable'],
+    repository: {
+      provider: 'github',
+      repository_id: 1,
+      owner: 'fixture',
+      name: 'plugin',
+      url: 'https://github.com/fixture/plugin',
+    },
+    compatibility: { min_redeven_version: '1.0.0', min_redevplugin_version: '0.7.1' },
+    status: 'visible',
+    latest: [{ channel: 'stable', version: builtPluginReleaseRef.version, availability_status: 'visible' }],
+  };
+}
+
 function builtPluginInstalledPlugin() {
   return {
-    plugin_instance_id: 'plugini_redeven_official_containers',
+    plugin_instance_id: builtPluginInstanceID,
     publisher_id: builtPluginReleaseRef.publisher_id,
     plugin_id: builtPluginReleaseRef.plugin_id,
     version: builtPluginReleaseRef.version,
@@ -154,8 +198,16 @@ function builtPluginInstalledPlugin() {
         keywords: ['fixture'],
         localizations: [],
       },
-      surfaces: [],
+      surfaces: [{
+        surface_id: 'plugin.primary',
+        kind: 'view',
+        intent: 'primary',
+        label: 'Fixture Surface',
+        entry: 'ui/index.html',
+      }],
     },
+    presentation: builtPluginPresentationCatalog(),
+    presentation_sha256: builtPluginPresentationSHA256,
     package_entries: [],
     installed_at: '2026-07-24T10:01:00Z',
     updated_at: '2026-07-24T10:01:00Z',
@@ -230,6 +282,10 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
         jsonResponse(response, { ok: true, data: builtPluginMarketSnapshot() });
         return;
       }
+      if (requestURL.pathname === pluginMarketDetailPath) {
+        jsonResponse(response, { ok: true, meta: { generation: 1 }, data: builtPluginMarketDetail() });
+        return;
+      }
       if (accessReady && (
         requestURL.pathname.startsWith('/api/')
         || requestURL.pathname.startsWith('/_redeven_proxy/api/')
@@ -256,7 +312,7 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
       }
       if (requestURL.pathname === '/_redevplugin/api/plugins/permissions/requirements/query') {
         const body = await readJSONRequest(request);
-        const expected = { plugin_instance_id: 'plugini_redeven_official_containers' };
+        const expected = { plugin_instance_id: builtPluginInstanceID };
         if (JSON.stringify(body) !== JSON.stringify(expected)) {
           throw new Error(`unexpected permission requirements request: ${JSON.stringify({ expected, actual: body })}`);
         }
@@ -276,7 +332,7 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
       if (pluginInstallFlow && requestURL.pathname === '/_redevplugin/api/plugins/install-release-ref') {
         const body = await readJSONRequest(request);
         const expected = {
-          plugin_instance_id: 'plugini_redeven_official_containers',
+          plugin_instance_id: builtPluginInstanceID,
           release_ref: builtPluginReleaseRef,
         };
         if (JSON.stringify(body) !== JSON.stringify(expected)) {
@@ -514,12 +570,21 @@ async function verifyBuiltPluginInstallRouting(browser) {
 
     const pluginCenter = page.locator('[data-plugin-center-view]');
     await pluginCenter.waitFor({ state: 'visible', timeout: 10_000 });
-    const pluginItem = pluginCenter.locator('[data-plugin-center-item]').first();
-    if (await pluginItem.count() !== 1) {
-      throw new Error(`built plugin catalog item count = ${await pluginItem.count()}, expected 1`);
+    await pluginCenter.locator('[data-plugin-center-list][aria-busy="false"]').waitFor({
+      state: 'visible',
+      timeout: 10_000,
+    });
+    const pluginItems = pluginCenter.locator('[data-plugin-center-item]');
+    const pluginItemCount = await pluginItems.count();
+    if (pluginItemCount !== 1) {
+      throw new Error(`built plugin catalog item count = ${pluginItemCount}, expected 1`);
     }
-    await pluginItem.click();
-    await pluginCenter.locator('[data-plugin-center-details]').waitFor({ state: 'visible', timeout: 10_000 });
+    const pluginItem = pluginItems.first();
+    await pluginItem.press('Enter');
+    const pluginDetails = pluginCenter.locator('[data-plugin-center-details]');
+    await pluginDetails.waitFor({ state: 'visible', timeout: 10_000 });
+    await pluginDetails.getByText('This fixture exercises the signed plugin presentation path.', { exact: true })
+      .waitFor({ state: 'visible', timeout: 10_000 });
     const pluginInstall = pluginCenter.locator('[data-plugin-action="install"]');
     if (await pluginInstall.count() !== 1) {
       throw new Error(`built plugin Install action count = ${await pluginInstall.count()}, expected 1`);
@@ -531,9 +596,13 @@ async function verifyBuiltPluginInstallRouting(browser) {
     await pluginInstall.click();
 
     await pluginCenter.locator('#plugin-center-tab-installed').click();
+    await pluginCenter.locator('[data-plugin-center-list][aria-busy="false"]').waitFor({
+      state: 'visible',
+      timeout: 10_000,
+    });
     const installedPluginItem = pluginCenter.locator('[data-plugin-center-item]').first();
     await installedPluginItem.waitFor({ state: 'visible', timeout: 10_000 });
-    await installedPluginItem.click();
+    await installedPluginItem.press('Enter');
     const installedDetails = pluginCenter.locator('[data-plugin-center-details]');
     try {
       await installedDetails.getByText('Disabled', { exact: true }).waitFor({ state: 'visible', timeout: 10_000 });
@@ -806,7 +875,7 @@ async function main() {
         entry_count: pluginEntryCount,
         panel_center_tile_count: pluginPanelTileCount,
         request_count: pluginRequests.length,
-        containers_install: pluginInstall,
+        plugin_install: pluginInstall,
       },
       assets: {
         css: loadedKinds.css.map((value) => path.basename(value)),
