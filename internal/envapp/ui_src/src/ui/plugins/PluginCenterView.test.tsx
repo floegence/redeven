@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PluginCenterView } from './PluginCenterView';
 import { OFFICIAL_CONTAINERS_RELEASE_REF } from './officialContainersRelease.generated';
 import { OFFICIAL_PLUGIN_CATALOG_SEED } from './officialPluginCatalog.test-fixture';
-import type { ExternalPluginCommitResult, ExternalPluginInspection, PluginInventoryProjection } from './pluginTypes';
+import type { ExternalPluginCommitResult, ExternalPluginInspection, PluginInventoryProjection, PluginMarketDetail } from './pluginTypes';
 
 let dispose: (() => void) | undefined;
 
@@ -321,6 +321,38 @@ describe('PluginCenterView', () => {
     expect(details.querySelector('[data-plugin-center-detail-heading]')?.textContent).toContain('Installed Name');
     expect(details.textContent).toContain('Installed summary');
     expect(details.textContent).not.toContain('Manage Docker and Podman resources.');
+  });
+
+  it('fails closed when market detail has no generation evidence', async () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    const onLoadMarketDetail = vi.fn(async (): Promise<PluginMarketDetail> => ({
+      plugin_id: 'com.redeven.official.containers',
+      publisher_id: 'com.redeven.official',
+      presentation: { default_locale: 'en-US', locales: [] },
+      categories: ['infrastructure'],
+      channels: ['stable'],
+      repository: { provider: 'github', repository_id: 1, owner: 'example', name: 'plugin', url: 'https://github.com/example/plugin' },
+      compatibility: { min_redeven_version: '1.0.0', min_redevplugin_version: '0.7.0' },
+      status: 'active',
+      latest: [],
+    }));
+    dispose = render(() => (
+      <PluginCenterView
+        projection={{ items: [containersPlugin] }}
+        loading={false}
+        onCommand={vi.fn()}
+        onRefresh={vi.fn()}
+        onLoadMarketDetail={onLoadMarketDetail}
+        canManagePlugins
+        canOpenPluginSurfaces={false}
+      />
+    ), mount);
+
+    openInventoryDetails(mount);
+    await vi.waitFor(() => expect(onLoadMarketDetail).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(mount.textContent).toContain('The plugin catalog is unavailable'));
+    expect(mount.querySelector('[data-plugin-author-description]')).toBeNull();
   });
 
   it('keeps refresh status outside the card grid', () => {
