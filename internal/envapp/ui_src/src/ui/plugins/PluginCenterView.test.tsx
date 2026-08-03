@@ -526,6 +526,38 @@ describe('PluginCenterView', () => {
     expect(row?.className).not.toContain('flex-col');
   });
 
+  it('keeps identity and primary actions outside the independently scrolling detail body', () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginCenterView
+        projection={{ items: [containersPlugin] }}
+        loading={false}
+        selectedInventoryKey="catalog:containers"
+        onCommand={vi.fn()}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces={false}
+      />
+    ), mount);
+
+    const details = mount.querySelector<HTMLElement>('[data-plugin-center-details]')!;
+    const controls = details.querySelector<HTMLElement>('[data-plugin-detail-controls]')!;
+    const body = details.querySelector<HTMLElement>('[data-plugin-detail-scroll-body]')!;
+    const actions = details.querySelector<HTMLElement>('[data-plugin-action-row]')!;
+    const author = details.querySelector<HTMLElement>('[data-plugin-author-content]')!;
+
+    expect(details.className).toContain('overflow-hidden');
+    expect(details.className).not.toContain('overflow-y-auto');
+    expect(controls.className).toContain('shrink-0');
+    expect(body.className).toContain('min-h-0');
+    expect(body.className).toContain('flex-1');
+    expect(body.className).toContain('overflow-y-auto');
+    expect(controls.contains(actions)).toBe(true);
+    expect(body.contains(actions)).toBe(false);
+    expect(body.contains(author)).toBe(true);
+  });
+
   it('groups required and optional permissions without changing switch semantics', () => {
     const permissionProjection = containersPermissionProjection();
     permissionProjection.items[0].authorization!.permissions = [
