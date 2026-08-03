@@ -710,19 +710,23 @@ describe('Local Environment Flower surface adapter', () => {
     ]);
   });
 
-  it('submits input responses through the runtime thread endpoint', async () => {
+  it('returns the input admission receipt without reloading live bootstrap', async () => {
     const calls: RuntimeFlowerRequest[] = [];
     const bridge = bridgeFor((request) => {
       calls.push(request);
       if (request.path === '/_redeven_proxy/api/ai/threads/thread-1/input_response') {
-        return { turn_id: 'turn-continue', run_id: 'run-1', kind: 'start' };
+        return {
+          turn_id: 'turn-continue',
+          run_id: 'run-1',
+          kind: 'start',
+          consumed_waiting_prompt_id: 'prompt-1',
+        };
       }
-      if (request.path === '/_redeven_proxy/api/ai/threads/thread-1/live/bootstrap') return liveBootstrap();
       throw new Error(`unexpected path: ${request.path}`);
     });
     const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
 
-    await adapter.submitInput({
+    const receipt = await adapter.submitInput({
       thread_id: 'thread-1',
       prompt_id: 'prompt-1',
       answers: {
@@ -730,6 +734,12 @@ describe('Local Environment Flower surface adapter', () => {
       },
     });
 
+    expect(receipt).toEqual({
+      thread_id: 'thread-1',
+      turn_id: 'turn-continue',
+      run_id: 'run-1',
+      consumed_prompt_id: 'prompt-1',
+    });
     expect(calls[0]).toMatchObject({
       method: 'POST',
       path: '/_redeven_proxy/api/ai/threads/thread-1/input_response',
@@ -743,16 +753,23 @@ describe('Local Environment Flower surface adapter', () => {
         },
       },
     });
+    expect(calls.map((call) => call.path)).toEqual([
+      '/_redeven_proxy/api/ai/threads/thread-1/input_response',
+    ]);
   });
 
-  it('rejects an invalid input response admission receipt before reloading bootstrap', async () => {
+  it('rejects an input admission receipt for a different waiting prompt', async () => {
     const calls: RuntimeFlowerRequest[] = [];
     const bridge = bridgeFor((request) => {
       calls.push(request);
       if (request.path === '/_redeven_proxy/api/ai/threads/thread-1/input_response') {
-        return { run_id: 'run-1', kind: 'start' };
+        return {
+          turn_id: 'turn-continue',
+          run_id: 'run-1',
+          kind: 'start',
+          consumed_waiting_prompt_id: 'prompt-other',
+        };
       }
-      if (request.path === '/_redeven_proxy/api/ai/threads/thread-1/live/bootstrap') return liveBootstrap();
       throw new Error(`unexpected path: ${request.path}`);
     });
     const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
