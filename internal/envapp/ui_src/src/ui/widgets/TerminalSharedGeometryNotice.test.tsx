@@ -9,12 +9,14 @@ import type { TerminalSharedGeometryPresentation } from './terminalSharedGeometr
 
 const floatingLayerState = vi.hoisted(() => ({
   owner: null as HTMLElement | null,
+  position: null as { x: number; y: number } | null,
 }));
 
 vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => ({
   ...await importOriginal<typeof import('@floegence/floe-webapp-core/ui')>(),
   SurfaceFloatingLayer: (props: any) => {
     floatingLayerState.owner = props.owner;
+    floatingLayerState.position = props.position;
     return (
       <div ref={props.layerRef} data-testid="surface-floating-layer" class={props.class}>
         {props.children}
@@ -96,6 +98,7 @@ function dispatchKey(target: Element, key: string, shiftKey = false): KeyboardEv
 describe('TerminalSharedGeometryNotice', () => {
   beforeEach(() => {
     floatingLayerState.owner = null;
+    floatingLayerState.position = null;
   });
 
   afterEach(() => {
@@ -127,6 +130,38 @@ describe('TerminalSharedGeometryNotice', () => {
     expect(region.textContent).toContain('80×24');
     expect(floatingLayerState.owner).toBe(trigger);
     expect(document.activeElement).toBe(trigger);
+  });
+
+  it('moves the disclosure above a bottom-anchored trigger inside the surface boundary', async () => {
+    const { host } = renderNotice();
+    const trigger = host.querySelector<HTMLButtonElement>('button[aria-expanded]')!;
+    vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue({
+      x: 40,
+      y: 550,
+      left: 40,
+      top: 550,
+      right: 224,
+      bottom: 578,
+      width: 184,
+      height: 28,
+      toJSON: () => undefined,
+    });
+    vi.spyOn(host, 'getBoundingClientRect').mockReturnValue({
+      x: 20,
+      y: 100,
+      left: 20,
+      top: 100,
+      right: 820,
+      bottom: 600,
+      width: 800,
+      height: 500,
+      toJSON: () => undefined,
+    });
+
+    trigger.click();
+    await Promise.resolve();
+
+    expect(floatingLayerState.position).toEqual({ x: 40, y: 372 });
   });
 
   it('closes on Escape and consumes the key exactly once', async () => {
