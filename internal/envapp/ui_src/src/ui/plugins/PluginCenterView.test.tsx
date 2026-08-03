@@ -333,7 +333,7 @@ describe('PluginCenterView', () => {
       categories: ['infrastructure'],
       channels: ['stable'],
       repository: { provider: 'github', repository_id: 1, owner: 'example', name: 'plugin', url: 'https://github.com/example/plugin' },
-      compatibility: { min_redeven_version: '1.0.0', min_redevplugin_version: '0.7.0' },
+      compatibility: { min_redeven_version: '1.0.0', min_redevplugin_version: '0.7.1' },
       status: 'active',
       latest: [],
     }));

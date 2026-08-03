@@ -89,7 +89,7 @@ const generatedContainersRecord: ReDevPluginRecord = {
   updated_at: '2026-07-04T10:01:00Z',
 };
 
-describe('v0.7.0 plugin lifecycle client integration', () => {
+describe('v0.7.1 plugin lifecycle client integration', () => {
   it('preserves the market detail generation from the local proxy envelope', async () => {
     vi.mocked(fetchLocalApiJSONResponse).mockResolvedValueOnce({
       data: { plugin_id: 'com.example.plugin', presentation: { default_locale: 'en-US', locales: [] } },

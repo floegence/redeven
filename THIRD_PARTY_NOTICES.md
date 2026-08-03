@@ -42,7 +42,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | github.com/floegence/floeterm/terminal-go | v0.8.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.8.0 | Floegence first-party dependency. |
 | github.com/floegence/floret/v3 | v3.2.3 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v3@v3.2.3 | Detected from LICENSE. |
 | github.com/floegence/flowersec/flowersec-go | v0.27.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go@v0.27.0 | Floegence first-party dependency. |
-| github.com/floegence/redevplugin | v0.6.24 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redevplugin@v0.6.24 | Floegence first-party dependency. |
+| github.com/floegence/redevplugin | v0.7.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redevplugin@v0.7.1 | Floegence first-party dependency. |
 | github.com/go-logr/logr | v1.4.2 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/go-logr/logr@v1.4.2 | Detected from LICENSE. |
 | github.com/go-logr/stdr | v1.2.2 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/go-logr/stdr@v1.2.2 | Detected from LICENSE. |
 | github.com/go-ole/go-ole | v1.2.6 | MIT | Runtime | https://pkg.go.dev/github.com/go-ole/go-ole@v1.2.6 | Detected from LICENSE. |
@@ -77,7 +77,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | github.com/santhosh-tekuri/jsonschema/v5 | v5.3.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/santhosh-tekuri/jsonschema/v5@v5.3.1 | Detected from LICENSE. |
 | github.com/shirou/gopsutil/v4 | v4.25.12 | BSD-style | Runtime | https://pkg.go.dev/github.com/shirou/gopsutil/v4@v4.25.12 | Detected from LICENSE. |
 | github.com/stretchr/testify | v1.11.1 | MIT | Runtime | https://pkg.go.dev/github.com/stretchr/testify@v1.11.1 | Detected from LICENSE. |
-| github.com/tdewolff/parse/v2 | v2.8.13 | MIT | Runtime | https://pkg.go.dev/github.com/tdewolff/parse/v2@v2.8.13 | Detected from LICENSE.md. |
+| github.com/tdewolff/parse/v2 | v2.8.14 | MIT | Runtime | https://pkg.go.dev/github.com/tdewolff/parse/v2@v2.8.14 | Detected from LICENSE.md. |
 | github.com/tdewolff/test | v1.0.12 | MIT | Runtime | https://pkg.go.dev/github.com/tdewolff/test@v1.0.12 | Detected from LICENSE.md. |
 | github.com/tetratelabs/wazero | v1.12.0 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/tetratelabs/wazero@v1.12.0 | Detected from LICENSE. |
 | github.com/tidwall/gjson | v1.18.0 | MIT | Runtime | https://pkg.go.dev/github.com/tidwall/gjson@v1.18.0 | Detected from LICENSE. |
@@ -93,14 +93,14 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | go.opentelemetry.io/otel | v1.24.0 | Apache-2.0 | Runtime | https://pkg.go.dev/go.opentelemetry.io/otel@v1.24.0 | Detected from LICENSE. |
 | go.opentelemetry.io/otel/metric | v1.24.0 | Apache-2.0 | Runtime | https://pkg.go.dev/go.opentelemetry.io/otel/metric@v1.24.0 | Detected from LICENSE. |
 | go.opentelemetry.io/otel/trace | v1.24.0 | Apache-2.0 | Runtime | https://pkg.go.dev/go.opentelemetry.io/otel/trace@v1.24.0 | Detected from LICENSE. |
-| golang.org/x/crypto | v0.53.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/crypto@v0.53.0 | Detected from LICENSE. |
+| golang.org/x/crypto | v0.54.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/crypto@v0.54.0 | Detected from LICENSE. |
 | golang.org/x/image | v0.44.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/image@v0.44.0 | Detected from LICENSE. |
-| golang.org/x/mod | v0.37.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/mod@v0.37.0 | Detected from LICENSE. |
-| golang.org/x/net | v0.56.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/net@v0.56.0 | Detected from LICENSE. |
+| golang.org/x/mod | v0.38.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/mod@v0.38.0 | Detected from LICENSE. |
+| golang.org/x/net | v0.57.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/net@v0.57.0 | Detected from LICENSE. |
 | golang.org/x/oauth2 | v0.30.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/oauth2@v0.30.0 | Detected from LICENSE. |
 | golang.org/x/sync | v0.22.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/sync@v0.22.0 | Detected from LICENSE. |
-| golang.org/x/sys | v0.46.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/sys@v0.46.0 | Detected from LICENSE. |
-| golang.org/x/term | v0.44.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/term@v0.44.0 | Detected from LICENSE. |
+| golang.org/x/sys | v0.47.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/sys@v0.47.0 | Detected from LICENSE. |
+| golang.org/x/term | v0.45.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/term@v0.45.0 | Detected from LICENSE. |
 | golang.org/x/text | v0.40.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/text@v0.40.0 | Detected from LICENSE. |
 | golang.org/x/time | v0.5.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/time@v0.5.0 | Detected from LICENSE. |
 | golang.org/x/tools | v0.47.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/tools@v0.47.0 | Detected from LICENSE. |
@@ -111,18 +111,18 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | google.golang.org/protobuf | v1.34.2 | BSD-style | Runtime | https://pkg.go.dev/google.golang.org/protobuf@v1.34.2 | Detected from LICENSE. |
 | gopkg.in/check.v1 | v0.0.0-20161208181325-20d25e280405 | BSD-style | Runtime | https://pkg.go.dev/gopkg.in/check.v1@v0.0.0-20161208181325-20d25e280405 | Detected from LICENSE. |
 | gopkg.in/yaml.v3 | v3.0.1 | MIT | Runtime | https://pkg.go.dev/gopkg.in/yaml.v3@v3.0.1 | Detected from LICENSE. |
-| modernc.org/cc/v4 | v4.28.4 | BSD-style | Runtime | https://pkg.go.dev/modernc.org/cc/v4@v4.28.4 | Detected from LICENSE. |
-| modernc.org/ccgo/v4 | v4.34.4 | BSD-style | Runtime | https://pkg.go.dev/modernc.org/ccgo/v4@v4.34.4 | Detected from LICENSE. |
+| modernc.org/cc/v4 | v4.29.0 | BSD-style | Runtime | https://pkg.go.dev/modernc.org/cc/v4@v4.29.0 | Detected from LICENSE. |
+| modernc.org/ccgo/v4 | v4.34.6 | BSD-style | Runtime | https://pkg.go.dev/modernc.org/ccgo/v4@v4.34.6 | Detected from LICENSE. |
 | modernc.org/fileutil | v1.4.0 | BSD-style | Runtime | https://pkg.go.dev/modernc.org/fileutil@v1.4.0 | Detected from LICENSE. |
 | modernc.org/gc/v2 | v2.6.5 | BSD-style | Runtime | https://pkg.go.dev/modernc.org/gc/v2@v2.6.5 | Detected from LICENSE. |
-| modernc.org/gc/v3 | v3.1.3 | BSD-style | Runtime | https://pkg.go.dev/modernc.org/gc/v3@v3.1.3 | Detected from LICENSE. |
+| modernc.org/gc/v3 | v3.1.4 | BSD-style | Runtime | https://pkg.go.dev/modernc.org/gc/v3@v3.1.4 | Detected from LICENSE. |
 | modernc.org/goabi0 | v0.2.0 | BSD-style | Runtime | https://pkg.go.dev/modernc.org/goabi0@v0.2.0 | Detected from LICENSE. |
-| modernc.org/libc | v1.73.4 | BSD-style | Runtime | https://pkg.go.dev/modernc.org/libc@v1.73.4 | Detected from LICENSE, LICENSE-3RD-PARTY.md. |
+| modernc.org/libc | v1.74.1 | BSD-style | Runtime | https://pkg.go.dev/modernc.org/libc@v1.74.1 | Detected from LICENSE, LICENSE-3RD-PARTY.md. |
 | modernc.org/mathutil | v1.7.1 | BSD-style | Runtime | https://pkg.go.dev/modernc.org/mathutil@v1.7.1 | Detected from LICENSE. |
 | modernc.org/memory | v1.11.0 | BSD-style | Runtime | https://pkg.go.dev/modernc.org/memory@v1.11.0 | Detected from LICENSE, LICENSE-GO, LICENSE-LOGO, LICENSE-MMAP-GO. |
 | modernc.org/opt | v0.2.0 | BSD-style | Runtime | https://pkg.go.dev/modernc.org/opt@v0.2.0 | Detected from LICENSE. |
 | modernc.org/sortutil | v1.2.1 | BSD-style | Runtime | https://pkg.go.dev/modernc.org/sortutil@v1.2.1 | Detected from LICENSE. |
-| modernc.org/sqlite | v1.53.0 | BSD-style | Runtime | https://pkg.go.dev/modernc.org/sqlite@v1.53.0 | Detected from LICENSE. |
+| modernc.org/sqlite | v1.55.0 | BSD-style | Runtime | https://pkg.go.dev/modernc.org/sqlite@v1.55.0 | Detected from LICENSE. |
 | modernc.org/strutil | v1.2.1 | BSD-style | Runtime | https://pkg.go.dev/modernc.org/strutil@v1.2.1 | Detected from LICENSE. |
 | modernc.org/token | v1.1.0 | BSD-style | Runtime | https://pkg.go.dev/modernc.org/token@v1.1.0 | Detected from LICENSE. |
 
@@ -239,8 +239,8 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @floegence/floe-webapp-protocol | 0.40.3 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.40.3 | License inherited from floegence/floe-webapp root LICENSE. |
 | @floegence/floeterm-terminal-web | 0.12.0 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.12.0 | Built-in theme attribution and license texts are reproduced below from the verified 0.12.0 package. |
 | @floegence/flowersec-core | 0.27.0 | MIT | Code App UI, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/0.27.0 |  |
-| @floegence/redevplugin-contracts | 0.6.24 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-contracts/v/0.6.24 |  |
-| @floegence/redevplugin-ui | 0.6.24 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-ui/v/0.6.24 | License inherited from floegence/redevplugin root LICENSE. |
+| @floegence/redevplugin-contracts | 0.7.1 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-contracts/v/0.7.1 |  |
+| @floegence/redevplugin-ui | 0.7.1 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-ui/v/0.7.1 | License inherited from floegence/redevplugin root LICENSE. |
 | @fontsource-variable/inter | 5.2.8 | OFL-1.1 | Desktop shell | https://www.npmjs.com/package/%40fontsource-variable%2Finter/v/5.2.8 |  |
 | @fontsource/iosevka | 5.2.5 | OFL-1.1 | Desktop shell, Env App UI | https://www.npmjs.com/package/%40fontsource%2Fiosevka/v/5.2.5 |  |
 | @humanfs/core | 0.19.1 | Apache-2.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40humanfs%2Fcore/v/0.19.1 |  |
