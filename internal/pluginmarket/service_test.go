@@ -142,6 +142,24 @@ const validLatestResponse = `{
   "meta": {"request_id": "req_latest", "generation": 7, "stale": false}
 }`
 
+const validDetailResponse = `{
+  "data": {
+    "plugin_id": "com.redeven.official.containers",
+    "publisher_id": "com.redeven.official",
+    "presentation": {
+      "default_locale": "en-US",
+      "locales": [{"locale": "en-US", "name": "Containers", "publisher_name": "Redeven Official", "summary": "Manage Docker and Podman resources.", "description": ["Manage containers."], "highlights": ["Inspect logs."], "keywords": ["containers"]}]
+    },
+    "categories": ["infrastructure"],
+    "channels": ["stable"],
+    "repository": {"provider": "github", "repository_id": 1289352675, "owner": "floegence", "name": "redeven-official-plugins", "url": "https://github.com/floegence/redeven-official-plugins"},
+    "compatibility": {"min_redeven_version": "1.0.0", "min_redevplugin_version": "0.7.0"},
+    "status": "active",
+    "latest": [{"channel": "stable", "version": "4.1.0", "availability_status": "visible"}]
+  },
+  "meta": {"request_id": "req_detail", "generation": 41, "stale": false}
+}`
+
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (fn roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) { return fn(request) }
@@ -206,6 +224,48 @@ func TestServiceRefreshesAndFallsBackToValidatedCache(t *testing.T) {
 	}
 	if !cached.Stale || cached.Source != SnapshotSourceCache || cached.CachedAt != now {
 		t.Fatalf("unexpected cached snapshot: %#v", cached)
+	}
+}
+
+func TestServiceDetailReturnsMarketGeneration(t *testing.T) {
+	t.Parallel()
+	service, err := NewService(ServiceOptions{
+		Origin:    "https://plugins.redeven.com",
+		CachePath: filepath.Join(t.TempDir(), "plugin-market-lkg.json"),
+		HTTPClient: &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			if request.URL.Path != "/v1/plugins/com.redeven.official.containers" {
+				return response(http.StatusNotFound, `{}`, nil), nil
+			}
+			return response(http.StatusOK, validDetailResponse, nil), nil
+		})},
+	})
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	detail, generation, err := service.Detail(context.Background(), "com.redeven.official.containers")
+	if err != nil {
+		t.Fatalf("Detail() error = %v", err)
+	}
+	if generation != 41 || detail.PluginID != "com.redeven.official.containers" {
+		t.Fatalf("detail = %#v, generation = %d", detail, generation)
+	}
+}
+
+func TestServiceDetailRejectsStaleGeneration(t *testing.T) {
+	t.Parallel()
+	stale := strings.Replace(validDetailResponse, `"stale": false`, `"stale": true`, 1)
+	service, err := NewService(ServiceOptions{
+		Origin:    "https://plugins.redeven.com",
+		CachePath: filepath.Join(t.TempDir(), "plugin-market-lkg.json"),
+		HTTPClient: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			return response(http.StatusOK, stale, nil), nil
+		})},
+	})
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	if _, generation, err := service.Detail(context.Background(), "com.redeven.official.containers"); !errors.Is(err, ErrInvalidResponse) || generation != -1 {
+		t.Fatalf("Detail() error = %v, generation = %d", err, generation)
 	}
 }
 

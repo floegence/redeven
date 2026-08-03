@@ -1,10 +1,17 @@
 import { PluginTransportError, type PluginPlatformClient } from '@floegence/redevplugin-ui';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createPluginLifecycleAPI } from './pluginApi';
+import { fetchLocalApiJSONResponse } from '../services/localApi';
+import { createPluginLifecycleAPI, loadPluginMarketDetail } from './pluginApi';
 import { OFFICIAL_PLUGIN_CATALOG_SEED, OFFICIAL_PLUGIN_MARKET_SNAPSHOT } from './officialPluginCatalog.test-fixture';
 import { OFFICIAL_CONTAINERS_RELEASE_REF } from './officialContainersRelease.generated';
 import type { ReDevPluginRecord } from './pluginTypes';
+
+vi.mock('../services/localApi', () => ({
+  fetchLocalApiJSON: vi.fn(),
+  fetchLocalApiJSONResponse: vi.fn(),
+  prepareLocalApiRequestInit: vi.fn(async (init: RequestInit) => init),
+}));
 
 const officialContainers = OFFICIAL_PLUGIN_CATALOG_SEED[0];
 
@@ -83,6 +90,24 @@ const generatedContainersRecord: ReDevPluginRecord = {
 };
 
 describe('v0.7.0 plugin lifecycle client integration', () => {
+  it('preserves the market detail generation from the local proxy envelope', async () => {
+    vi.mocked(fetchLocalApiJSONResponse).mockResolvedValueOnce({
+      data: { plugin_id: 'com.example.plugin', presentation: { default_locale: 'en-US', locales: [] } },
+      meta: { generation: 41 },
+      headers: new Headers(),
+      status: 200,
+    });
+
+    await expect(loadPluginMarketDetail('com.example.plugin')).resolves.toMatchObject({
+      plugin_id: 'com.example.plugin',
+      generation: 41,
+    });
+    expect(fetchLocalApiJSONResponse).toHaveBeenCalledWith(
+      '/_redeven_proxy/api/plugins/market/plugins/com.example.plugin',
+      expect.anything(),
+    );
+  });
+
   it('loads the official catalog from the frozen same-origin market snapshot', async () => {
     const { mocks } = createClientHarness();
     const loadMarket = vi.fn(async () => OFFICIAL_PLUGIN_MARKET_SNAPSHOT);
