@@ -62,6 +62,10 @@ type startupRecoverySubagentReadHost struct {
 	snapshots []flruntime.SubAgentSnapshot
 }
 
+type delayedStartupRecoverySubagentReadHost struct {
+	delay time.Duration
+}
+
 type scriptedFloretRootInventory struct {
 	mu       sync.Mutex
 	pages    []floretRootThreadsPage
@@ -102,6 +106,27 @@ func (h *lifecycleBoundStartupRecoveryHost) Recover(ctx context.Context) (flrunt
 
 func (h startupRecoverySubagentReadHost) ListSubAgents(context.Context) ([]flruntime.SubAgentSnapshot, error) {
 	return append([]flruntime.SubAgentSnapshot(nil), h.snapshots...), nil
+}
+
+func (h delayedStartupRecoverySubagentReadHost) ListSubAgents(ctx context.Context) ([]flruntime.SubAgentSnapshot, error) {
+	select {
+	case <-time.After(h.delay):
+		return nil, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+func (delayedStartupRecoverySubagentReadHost) ListThreadTurns(context.Context, identity.ThreadID, flruntime.ThreadTurnsRequest) (flruntime.ThreadTurnsPage, error) {
+	return flruntime.ThreadTurnsPage{}, errors.New("unexpected SubAgent turn read")
+}
+
+func (delayedStartupRecoverySubagentReadHost) ReadThreadTurn(context.Context, identity.ThreadID, identity.TurnID) (flruntime.ThreadTurnSnapshot, error) {
+	return flruntime.ThreadTurnSnapshot{}, errors.New("unexpected SubAgent exact turn read")
+}
+
+func (delayedStartupRecoverySubagentReadHost) ReadSubAgentDetail(context.Context, identity.ThreadID, flruntime.ThreadDetailRequest) (flruntime.SubAgentDetail, error) {
+	return flruntime.SubAgentDetail{}, errors.New("unexpected SubAgent detail read")
 }
 
 func (startupRecoverySubagentReadHost) ListThreadTurns(context.Context, identity.ThreadID, flruntime.ThreadTurnsRequest) (flruntime.ThreadTurnsPage, error) {
@@ -252,6 +277,83 @@ func TestFloretStartupRecoveryRetriesBusyExactLeaseWithoutRuntimeFallback(t *tes
 	}
 }
 
+func TestFloretStartupRecoveryUsesPerOperationTimeoutAcrossLargeInventory(t *testing.T) {
+	t.Parallel()
+
+	const operationDelay = 8 * time.Millisecond
+	const operationTimeout = 25 * time.Millisecond
+	wait := func(ctx context.Context) error {
+		select {
+		case <-time.After(operationDelay):
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	capabilities := floretStartupRecoveryCapabilities{
+		root: func(ctx context.Context, _ identity.ThreadID) (floretInterruptedTurnRecoveryHostFactory, error) {
+			if err := wait(ctx); err != nil {
+				return nil, err
+			}
+			return nil, flruntime.ErrInterruptedTurnNotFound
+		},
+		listSubagents: func(ctx context.Context, _ identity.ThreadID) (floretSubagentReadHost, error) {
+			if err := wait(ctx); err != nil {
+				return nil, err
+			}
+			return delayedStartupRecoverySubagentReadHost{delay: operationDelay}, nil
+		},
+		subagent: func(context.Context, identity.ThreadID, identity.ThreadID) (floretInterruptedTurnRecoveryHostFactory, error) {
+			t.Fatal("empty SubAgent inventory must not bind child recovery")
+			return nil, nil
+		},
+	}
+
+	started := time.Now()
+	targets, err := buildFloretStartupRecoveryTargetsWithOperationTimeout(
+		context.Background(),
+		[]identity.ThreadID{"root_a", "root_b"},
+		capabilities,
+		operationTimeout,
+	)
+	if err != nil {
+		t.Fatalf("build recovery targets: %v", err)
+	}
+	if len(targets) != 0 {
+		t.Fatalf("recovery targets=%d, want 0", len(targets))
+	}
+	if elapsed := time.Since(started); elapsed <= operationTimeout {
+		t.Fatalf("elapsed=%s, want inventory scan to exceed one operation timeout", elapsed)
+	}
+}
+
+func TestFloretStartupRecoveryRejectsOperationExceedingTimeout(t *testing.T) {
+	t.Parallel()
+
+	_, err := buildFloretStartupRecoveryTargetsWithOperationTimeout(
+		context.Background(),
+		[]identity.ThreadID{"slow_root"},
+		floretStartupRecoveryCapabilities{
+			root: func(ctx context.Context, _ identity.ThreadID) (floretInterruptedTurnRecoveryHostFactory, error) {
+				<-ctx.Done()
+				return nil, ctx.Err()
+			},
+			listSubagents: func(context.Context, identity.ThreadID) (floretSubagentReadHost, error) {
+				t.Fatal("timed-out root must stop recovery target discovery")
+				return nil, nil
+			},
+			subagent: func(context.Context, identity.ThreadID, identity.ThreadID) (floretInterruptedTurnRecoveryHostFactory, error) {
+				t.Fatal("timed-out root must not bind child recovery")
+				return nil, nil
+			},
+		},
+		10*time.Millisecond,
+	)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("error=%v, want context deadline exceeded", err)
+	}
+}
+
 func TestFloretStartupRecoveryCloseCancelsLifecycleBoundBackgroundAttempt(t *testing.T) {
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	host := &lifecycleBoundStartupRecoveryHost{
@@ -332,7 +434,7 @@ func TestFloretStartupRecoveryBindsChildToExactCanonicalParent(t *testing.T) {
 	}
 }
 
-func TestFloretStartupRecoveryAcceptsCanonicalRootWithDirectChild(t *testing.T) {
+func TestFloretStartupRecoverySkipsClosedDirectChild(t *testing.T) {
 	ctx := context.Background()
 	host := openTestFloretRuntimeHost(t, flstorage.Memory())
 	created, err := host.Threads().CreateThread(ctx, flruntime.CreateThreadCommand{LogicalRequestID: "create_recovery_parent"})
@@ -379,6 +481,17 @@ func TestFloretStartupRecoveryAcceptsCanonicalRootWithDirectChild(t *testing.T) 
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+	closed, err := manager.CloseSubAgent(ctx, flruntime.CloseSubAgentCommand{
+		LogicalRequestID: "close_recovery_child",
+		ChildThreadID:    spawned.Child.ThreadID,
+		Reason:           "parent_terminal",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !closed.Child.Closed || closed.Child.Status != flruntime.SubAgentStatusClosed {
+		t.Fatalf("closed child=%#v", closed.Child)
+	}
 
 	_, recovery, err := configureFloretRuntime(host)
 	if err != nil {
@@ -386,10 +499,10 @@ func TestFloretStartupRecoveryAcceptsCanonicalRootWithDirectChild(t *testing.T) 
 	}
 	targets, err := buildFloretStartupRecoveryTargets(ctx, []identity.ThreadID{created.ThreadID}, recovery)
 	if err != nil {
-		t.Fatalf("build recovery targets for root with direct child: %v", err)
+		t.Fatalf("build recovery targets for root with closed direct child: %v", err)
 	}
 	if len(targets) != 0 {
-		t.Fatalf("completed root tree recovery targets=%d, want 0", len(targets))
+		t.Fatalf("closed root tree recovery targets=%d, want 0", len(targets))
 	}
 }
 

@@ -1436,46 +1436,65 @@ describe('Env local Flower surface adapter', () => {
     expect((turnBodies[0] as { input: Record<string, unknown> }).input).not.toHaveProperty('attachment_ids');
   });
 
-	it('passes reasoning selection through input response continuations', async () => {
-    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
-      if (url === '/_redeven_proxy/api/ai/threads/thread_waiting/live/bootstrap' && init?.method === 'GET') {
-        return jsonResponse(liveBootstrap('thread_waiting', 'running'));
-      }
-      throw new Error(`unexpected fetch: ${url}`);
-    });
-    const submitRequestUserInputResponse = vi.fn(async () => ({
-      runId: 'run_continue',
-      turnId: 'turn_continue',
-      kind: 'start',
-    }));
+	it('submits input responses through the HTTP admission path without waiting for RPC notifications', async () => {
+		const inputBodies: unknown[] = [];
+		fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+			if (url === '/_redeven_proxy/api/ai/threads/thread_waiting/input_response' && init?.method === 'POST') {
+				inputBodies.push(JSON.parse(String(init.body ?? '{}')));
+				return jsonResponse({
+					run_id: 'run_continue',
+					turn_id: 'turn_continue',
+					kind: 'start',
+					consumed_waiting_prompt_id: 'prompt_1',
+				});
+			}
+			throw new Error(`input admission must not perform another request: ${url}`);
+		});
+		const submitRequestUserInputResponse = vi.fn(async () => {
+			throw new Error('structured input admission must not share the realtime RPC stream');
+		});
+		const subscribeThread = vi.fn(async () => ({}));
     const adapter = createEnvLocalFlowerSurfaceAdapter({
       envPublicID: 'env_a',
       envLabel: 'Demo Env',
       rpc: {
         ai: {
           submitRequestUserInputResponse,
+			subscribeThread,
         },
       } as any,
     });
 
-    const live = await adapter.submitInput({
+    const receipt = await adapter.submitInput({
       thread_id: 'thread_waiting',
       prompt_id: 'prompt_1',
       answers: { next: { choice_id: 'continue' } },
       reasoning_selection: { level: 'high' },
     });
 
-    expect(live.thread.thread_id).toBe('thread_waiting');
-    expect(submitRequestUserInputResponse).toHaveBeenCalledWith(expect.objectContaining({
-      threadId: 'thread_waiting',
-      options: expect.objectContaining({
-        reasoningSelection: { level: 'high' },
-      }),
-		}));
+    expect(receipt).toEqual({
+      thread_id: 'thread_waiting',
+      turn_id: 'turn_continue',
+      run_id: 'run_continue',
+      consumed_prompt_id: 'prompt_1',
+    });
+		expect(submitRequestUserInputResponse).not.toHaveBeenCalled();
+		expect(subscribeThread).not.toHaveBeenCalled();
+		expect(inputBodies).toEqual([{
+			response: {
+				prompt_id: 'prompt_1',
+				answers: { next: { choice_id: 'continue' } },
+			},
+			input: { text: '', attachments: [] },
+			options: { reasoning_selection: { level: 'high' } },
+		}]);
 	});
 
-	it('rejects an invalid input response admission receipt before reloading bootstrap', async () => {
-		const submitRequestUserInputResponse = vi.fn(async () => ({ runId: 'run_continue', kind: 'start' }));
+	it('rejects an invalid HTTP input response admission receipt before reloading bootstrap', async () => {
+		fetchMock.mockResolvedValue(jsonResponse({ run_id: 'run_continue', kind: 'start' }));
+		const submitRequestUserInputResponse = vi.fn(async () => {
+			throw new Error('structured input admission must not use RPC');
+		});
 		const adapter = createEnvLocalFlowerSurfaceAdapter({
 			envPublicID: 'env_a',
 			envLabel: 'Demo Env',
@@ -1488,7 +1507,8 @@ describe('Env local Flower surface adapter', () => {
 			answers: { next: { choice_id: 'continue' } },
 		})).rejects.toThrow('Flower input response admission returned an invalid receipt.');
 
-		expect(fetchMock).not.toHaveBeenCalled();
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+		expect(submitRequestUserInputResponse).not.toHaveBeenCalled();
 	});
 
 	it('sends null when resetting thread reasoning selection', async () => {

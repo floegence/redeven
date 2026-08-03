@@ -49,6 +49,7 @@ import type {
   FlowerSettingsDraft,
   FlowerSettingsSnapshot,
   FlowerSubmitApprovalRequest,
+  FlowerSubmitInputReceipt,
   FlowerSurfaceAdapter,
   FlowerTerminalProcessSnapshot,
   FlowerTurnLaunchFailure,
@@ -201,6 +202,10 @@ type FlowerComposerSessionDraft = Readonly<{
   permissionTypeOverride?: FlowerPermissionType;
   reasoningOverride?: FlowerReasoningSelection;
   workingDirDraft?: string;
+}>;
+
+type FlowerConsumedInputAdmission = Readonly<{
+  promptID: string;
 }>;
 type FlowerComposerContextUsageModel = Readonly<{
   usage: FlowerContextUsage;
@@ -908,7 +913,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [selectedThreadDetailID, setSelectedThreadDetailID] = createSignal('');
   const [sidebarActiveThreadID, setSidebarActiveThreadID] = createSignal('');
   const [composerSessionDrafts, setComposerSessionDrafts] = createSignal<Record<string, FlowerComposerSessionDraft>>({});
-  const [inputSubmitting, setInputSubmitting] = createSignal(false);
+  const [inputSubmittingPromptID, setInputSubmittingPromptID] = createSignal('');
+  const [consumedInputAdmissions, setConsumedInputAdmissions] = createSignal<Record<string, FlowerConsumedInputAdmission>>({});
   const [chatRunning, setChatRunning] = createSignal(false);
   const [threadStopping, setThreadStopping] = createSignal(false);
   const [compactSubmitting, setCompactSubmitting] = createSignal(false);
@@ -1348,7 +1354,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (!detailID) return null;
     return threads().find((thread) => thread.thread_id === detailID) ?? null;
   });
-  const selectedThreadLiveStatus = createMemo(() => selectedThread()?.status ?? 'idle');
+  const selectedThreadLiveStatus = createMemo(() => {
+    const thread = selectedThread();
+    if (!thread) return 'idle';
+    const admission = consumedInputAdmissions()[trimString(thread.thread_id)];
+    if (admission && trimString(visibleInputRequest(thread)?.prompt_id) === admission.promptID) {
+      return 'running';
+    }
+    return thread.status;
+  });
   const selectedThreadHasRunningContextCompaction = createMemo(() => {
     const thread = selectedThread();
     if (!thread) return false;
@@ -1373,7 +1387,31 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     || (thread.approval_actions?.length ?? 0) > 0
     || thread.error != null
   );
-  const selectedInputRequest = createMemo(() => visibleInputRequest(selectedThread()));
+  const selectedInputRequest = createMemo(() => {
+    const thread = selectedThread();
+    const request = visibleInputRequest(thread);
+    if (!thread || !request) return null;
+    const admission = consumedInputAdmissions()[trimString(thread.thread_id)];
+    return admission?.promptID === trimString(request.prompt_id) ? null : request;
+  });
+  const inputSubmitting = createMemo(() => {
+    const promptID = trimString(inputSubmittingPromptID());
+    return Boolean(promptID && trimString(selectedInputRequest()?.prompt_id) === promptID);
+  });
+  createEffect(() => {
+    const thread = selectedThread();
+    if (!thread) return;
+    const threadID = trimString(thread.thread_id);
+    const admission = consumedInputAdmissions()[threadID];
+    if (!admission) return;
+    if (trimString(visibleInputRequest(thread)?.prompt_id) === admission.promptID) return;
+    setConsumedInputAdmissions((current) => {
+      if (current[threadID] !== admission) return current;
+      const next = { ...current };
+      delete next[threadID];
+      return next;
+    });
+  });
   const selectedThreadCanStop = createMemo(() => (
     !selectedThreadReadOnly() && !selectedInputRequest() && COMPOSER_STOP_THREAD_STATUSES.has(selectedThreadLiveStatus())
   ));
@@ -6564,22 +6602,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return;
     }
     const focusOwner = typeof document === 'undefined' ? null : document.activeElement;
-    setInputSubmitting(true);
-    try {
-      const reasoningSelection = serializeFlowerReasoningSelection(
-        composerReasoningEnabled() ? composerReasoningOverride() ?? selectedWaitingReasoningSelection() : undefined,
-      );
-      const next = await props.adapter.submitInput({
-        thread_id: thread.thread_id,
-        prompt_id: request.prompt_id,
-        answers,
-        ...(reasoningSelection ? { reasoning_selection: reasoningSelection } : {}),
-      });
-      const nextThread = applyLiveBootstrap(next);
-      const selectionCurrent = selectedThreadDetailMatches(threadID);
-      if (selectionCurrent) {
-        setSelectedThreadWithDetail(nextThread.thread_id);
-      }
+    const promptID = trimString(request.prompt_id);
+    const submittedDraft = currentComposerSessionDraft();
+    batch(() => {
+      setInputSubmittingPromptID(promptID);
+      setConsumedInputAdmissions((current) => ({
+        ...current,
+        [threadID]: { promptID },
+      }));
       updateComposerSessionDraft(threadID, (draft) => ({
         ...draft,
         inputPromptSignature: '',
@@ -6587,16 +6617,51 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         activeInputQuestionID: '',
         reasoningOverride: undefined,
       }));
+    });
+    try {
+      const reasoningSelection = serializeFlowerReasoningSelection(
+        composerReasoningEnabled() ? composerReasoningOverride() ?? selectedWaitingReasoningSelection() : undefined,
+      );
+      const receipt: FlowerSubmitInputReceipt = await props.adapter.submitInput({
+        thread_id: thread.thread_id,
+        prompt_id: request.prompt_id,
+        answers,
+        ...(reasoningSelection ? { reasoning_selection: reasoningSelection } : {}),
+      });
+      if (
+        trimString(receipt.thread_id) !== threadID
+        || trimString(receipt.consumed_prompt_id) !== trimString(request.prompt_id)
+        || !trimString(receipt.turn_id)
+        || !trimString(receipt.run_id)
+      ) {
+        throw new Error('Flower input response admission returned an invalid receipt.');
+      }
+      const selectionCurrent = selectedThreadDetailMatches(threadID);
       if (selectionCurrent) {
         requestComposerFocus(focusOwner);
-        await refreshSelectedThread(nextThread.thread_id);
       }
     } catch (error) {
+      batch(() => {
+        setConsumedInputAdmissions((current) => {
+          if (current[threadID]?.promptID !== promptID) return current;
+          const next = { ...current };
+          delete next[threadID];
+          return next;
+        });
+        updateComposerSessionDraft(threadID, (draft) => ({
+          ...draft,
+          inputPromptSignature: submittedDraft.inputPromptSignature,
+          inputDrafts: submittedDraft.inputDrafts,
+          activeInputQuestionID: submittedDraft.activeInputQuestionID,
+          reasoningOverride: submittedDraft.reasoningOverride,
+        }));
+        setInputSubmittingPromptID('');
+      });
       if (selectedThreadDetailMatches(threadID)) {
         notifyComposerError(getErrorMessage(error));
       }
     } finally {
-      setInputSubmitting(false);
+      setInputSubmittingPromptID('');
     }
   };
 
@@ -6745,18 +6810,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       {(inputRequest) => (
         <section class="flower-input-request-panel" data-flower-input-request-prompt aria-label={chatCopyValue('inputRequestTitle', 'Waiting for your reply')}>
           <div class="flower-input-request-heading">
-            <div class="flower-input-request-icon"><Clock class="h-4 w-4" /></div>
-            <div class="flower-input-request-copy">
-              <div class="flower-input-request-title">{chatCopyValue('inputRequestTitle', 'Waiting for your reply')}</div>
-              <div class="flower-input-request-description">
-                {inputRequest().public_summary || chatCopyValue('inputRequestDescription', 'Reply in the composer to continue this conversation.')}
-              </div>
-            </div>
+            <Clock class="flower-input-request-icon h-4 w-4" aria-hidden="true" />
+            <div class="flower-input-request-title">{chatCopyValue('inputRequestTitle', 'Waiting for your reply')}</div>
           </div>
           <div class="flower-input-request-questions">
             <For each={inputRequest().questions}>
               {(question) => {
                 const selectedChoiceID = () => trimString(questionDraft(question.id).choice_id);
+                const summary = trimString(inputRequest().public_summary);
+                const questionText = trimString(question.question);
+                const showSummary = summary.length > 0 && summary !== questionText && question.id === inputRequest().questions[0]?.id;
                 return (
                   <div
                     class={cn(
@@ -6766,6 +6829,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   >
                     <div class="flower-input-request-question-copy">
                       <div class="flower-input-request-question-header">{question.header}</div>
+                      <Show when={showSummary}>
+                        <div class="flower-input-request-description">{summary}</div>
+                      </Show>
                       <div class="flower-input-request-question-text">{question.question}</div>
                     </div>
                     <Show when={(question.choices?.length ?? 0) > 0}>
@@ -7117,6 +7183,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return item.status !== 'success';
   };
   const activityItemVisible = (item: FlowerActivityItem): boolean => {
+    if (item.kind === 'control' && trimString(item.tool_name) === 'ask_user') return false;
     if (activityItemAwaitingApproval(item) && !activityItemHasVisiblePayload(item)) return false;
     return true;
   };
@@ -8524,7 +8591,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const inputRequestEntry = (entry: Accessor<FlowerTimelineEntry>) => {
     const request = createMemo(() => {
       const value = entry();
-      return value.type === 'input_request' ? value.request : null;
+      if (value.type !== 'input_request') return null;
+      return trimString(visibleInputRequest(selectedThread())?.prompt_id) === trimString(value.request.prompt_id)
+        ? null
+        : value.request;
     });
     return (
       <Show when={request()}>

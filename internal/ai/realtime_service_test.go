@@ -1714,6 +1714,82 @@ func TestFlowerLiveTerminalRunStatusSettlesMaterializedState(t *testing.T) {
 	}
 }
 
+func TestFlowerLiveThreadPatchHandsOffActiveRunState(t *testing.T) {
+	t.Parallel()
+
+	oldPrompt := RequestUserInputPrompt{PromptID: "prompt-old", MessageID: "turn-old", ToolID: "tool-old"}
+	state := FlowerLiveMaterializedState{
+		ThreadPatch: FlowerLiveThreadPatch{
+			ActiveRunID:   "run-old",
+			RunStatus:     string(RunStateWaitingUser),
+			WaitingPrompt: &oldPrompt,
+		},
+		Runs: map[string]FlowerLiveRunState{
+			"run-old": {
+				RunID:         "run-old",
+				Status:        string(RunStateWaitingUser),
+				WaitingPrompt: &oldPrompt,
+			},
+		},
+		ModelIO: &FlowerModelIOStatus{RunID: "run-old", Phase: FlowerModelIOPhaseStreaming},
+		ApprovalActions: map[string]FlowerApprovalAction{
+			"approval-old": {ActionID: "approval-old", RunID: "run-old", ToolID: "tool-old"},
+		},
+		ApprovalActionsSeen: true,
+		ApprovalQueue:       &FlowerApprovalQueue{CurrentActionID: "approval-old", Total: 1, UnresolvedCount: 1},
+		InputRequests: map[string]RequestUserInputPrompt{
+			oldPrompt.PromptID: oldPrompt,
+		},
+	}
+	approvalIndex := map[string]FlowerApprovalState{"approval-old": FlowerApprovalStateRequested}
+
+	applyFlowerLiveEventToMaterializedState(&state, approvalIndex, FlowerLiveEvent{
+		Kind: FlowerLiveThreadPatched,
+		Payload: mustFlowerPayload(FlowerLiveThreadPatchedPayload{Patch: FlowerLiveThreadPatch{
+			ActiveRunID: "run-new",
+			RunStatus:   string(RunStateRecovering),
+		}}),
+	})
+
+	if len(state.Runs) != 1 || state.Runs["run-new"].RunID != "run-new" || state.Runs["run-new"].Status != string(RunStateRecovering) {
+		t.Fatalf("active run handoff left inconsistent runs: %#v", state.Runs)
+	}
+	if state.ModelIO != nil || len(state.InputRequests) != 0 {
+		t.Fatalf("active run handoff retained old transient state: model_io=%#v inputs=%#v", state.ModelIO, state.InputRequests)
+	}
+	if len(state.ApprovalActions) != 0 || state.ApprovalQueue != nil || len(approvalIndex) != 0 {
+		t.Fatalf("active run handoff retained old approval state: actions=%#v queue=%#v index=%#v", state.ApprovalActions, state.ApprovalQueue, approvalIndex)
+	}
+
+	applyFlowerLiveEventToMaterializedState(&state, approvalIndex, FlowerLiveEvent{
+		RunID: "run-new",
+		Kind:  FlowerLiveModelIOUpdated,
+		Payload: mustFlowerPayload(FlowerLiveModelIOUpdatedPayload{Status: &FlowerModelIOStatus{
+			RunID: "run-new", Phase: FlowerModelIOPhaseStreaming,
+		}}),
+	})
+	if state.ModelIO == nil || state.ModelIO.RunID != "run-new" {
+		t.Fatalf("new active run model IO was rejected: %#v", state.ModelIO)
+	}
+
+	newPrompt := RequestUserInputPrompt{PromptID: "prompt-new", MessageID: "turn-new", ToolID: "tool-new"}
+	applyFlowerLiveEventToMaterializedState(&state, approvalIndex, FlowerLiveEvent{
+		RunID: "run-new",
+		Kind:  FlowerLiveRunStatusChanged,
+		Payload: mustFlowerPayload(FlowerLiveRunStatusChangedPayload{
+			RunID: "run-new", Status: string(RunStateWaitingUser), WaitingPrompt: &newPrompt,
+		}),
+	})
+	applyFlowerLiveEventToMaterializedState(&state, approvalIndex, FlowerLiveEvent{
+		RunID:   "run-new",
+		Kind:    FlowerLiveInputRequested,
+		Payload: mustFlowerPayload(FlowerLiveInputRequestedPayload{Request: newPrompt}),
+	})
+	if len(state.InputRequests) != 1 || state.InputRequests[newPrompt.PromptID].PromptID != newPrompt.PromptID {
+		t.Fatalf("new active run prompt did not replace old prompt: %#v", state.InputRequests)
+	}
+}
+
 func TestApproveToolRejectsDuplicateDecision(t *testing.T) {
 	t.Parallel()
 

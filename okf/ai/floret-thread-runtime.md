@@ -62,11 +62,36 @@ Floret owns canonical todo validity: maximum count, stable non-empty unique IDs,
 
 Floret assembles canonical journal context and opaque continuation. Redeven supplies current user input, ephemeral supplemental context, typed attachments and references, provider gateway, tools, effect authorization, permission snapshots, and product labels through immutable `runtime.Agent` values. Provider adapters reject invalid typed messages rather than repairing, regrouping, dropping, or synthesizing them.
 
+Redeven's structured `ask_user` projector requires an explicit reason, concrete
+required input, a valid question contract, and an `evidence_refs` array. The
+array may be empty when no tool evidence exists; requiring a fabricated
+reference would turn presentation metadata into false authority. When relevant
+tool evidence exists, the prompt instructs the model to cite its tool IDs. Other
+invalid control payloads fail closed before a waiting turn is published.
+
+Submitting structured input returns the canonical continuation admission
+receipt over the same-origin product HTTP admission path, not the realtime RPC
+notification stream and not a post-admission thread bootstrap. Flower validates
+the exact thread, consumed prompt, turn, and run identities, clears only that
+prompt, and projects the admitted run as active. The selected detail retains
+its existing realtime subscription; admission must not issue a redundant RPC
+subscription after the receipt. A canonical detail refresh may proceed in the
+background, but neither it nor notification backpressure can hold the composer
+in its submitting state while the resumed run executes.
+
+An `active_run_id` change is the atomic live-state handoff boundary. The new
+active run replaces prior run, prompt, model-I/O, context-usage, and approval
+transients before events for the new run are reduced. This prevents a missed
+message-start event or a resumed control-only run from causing valid model-I/O,
+status, or input events to be rejected behind stale state. Timeline history and
+canonical context compactions remain intact. Live events then advance the
+selected detail to another prompt or a terminal state.
+
 Flower history and replacements preserve Floret turn order, entry identities, and validated projections. A valid terminal turn with no renderable assistant body may produce one typed `turn_projection_unavailable` decoration. Storage, pagination, identity, or validation failures remain errors and do not become invented assistant content. Queued rows use `queue_id` and are non-message product projections; only a canonical Floret user row carries `turn_id` and can replace them after admission.
 
 Effect dispatch rereads current product permission, validates any approval, and binds a one-shot proof to the exact Floret invocation. Pending terminal work retains the exact settlement target and authority barrier. SubAgent execution uses parent-bound v3 capabilities and canonical child `ThreadID`; no `subagent_id`, metadata parser, or product-owned child lifecycle exists.
 
-Startup recovery preserves the ordered owners: pending delete, pending create, canonical root inventory, interrupted root/direct-child turns, pending fork, SubAgent publication, queued admission, then queued wake. Each canonical root reader lists its direct children once; Redeven never reopens a child through root authority. Runtime authority stays closed until every required stage validates.
+Startup recovery preserves the ordered owners: pending delete, pending create, canonical root inventory, interrupted root/direct-child turns, pending fork, SubAgent publication, queued admission, then queued wake. Each canonical root reader lists its direct children once; Redeven never reopens a child through root authority. Closed children remain canonical history but cannot contain a recoverable active turn, so recovery validates their identity and hierarchy and then omits them before requesting child recovery authority. Open and closing children still bind through their exact parent. Runtime authority stays closed until every required stage validates.
 
 # Boundaries
 
@@ -83,6 +108,12 @@ Redeven product receipts contain only the minimum idempotency, authorization, an
 - `redeven:internal/ai/thread_fork_operation.go` - Drives fork replay and destination materialization.
 - `redeven:internal/ai/send_user_turn.go` - Starts a turn without caller-supplied canonical turn or run identity.
 - `redeven:internal/ai/floret_runtime.go` - Binds `TurnAdmissionReceipt` before receipt-only `ExecuteAdmission`.
+- `redeven:internal/ai/floret_control_test.go` - Verifies structured waiting signals, including the no-tool-evidence case, and rejects invalid question contracts.
+- `redeven:internal/ai/flower_live_projection.go` - Replaces transient live state when canonical active-run identity changes.
+- `redeven:internal/ai/realtime_service_test.go` - Verifies that active-run handoff removes prior prompt and approval state and admits new run events.
+- `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Applies exact structured-input admission receipts before non-blocking detail reconciliation.
+- `redeven:internal/envapp/ui_src/src/ui/flower/envLocalFlowerSurfaceAdapter.test.ts` - Keeps structured-input admission on the HTTP receipt path without issuing request or subscription RPCs.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.inputAdmission.browser.test.tsx` - Keeps the selected composer live while a post-admission detail read remains blocked.
 - `redeven:internal/ai/floret_events.go` - Treats committed-user events as observation, not admission binding.
 - `redeven:internal/ai/queued_turns.go` - Implements exact replay and recovery settlement.
 - `redeven:internal/ai/queued_turns_exact_read_test.go` - Covers strict mutation-receipt and exact-read recovery evidence.

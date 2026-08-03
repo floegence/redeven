@@ -11,9 +11,11 @@ import {
   activityItem,
   activityTimeline,
   adapter,
+  deferred,
   flush,
   flowerSurfaceNotifications,
   inputRequest,
+  inputAdmissionReceipt,
   launchReceipt,
   liveBootstrap,
   renderSurfaceWithAdapter,
@@ -90,7 +92,8 @@ describe('FlowerSurface navigation structured input', () => {
     expect(runtime.querySelector('[data-flower-input-request-prompt]')?.textContent).toContain('Where should Flower deploy this change?');
     expect(runtime.querySelector('[data-flower-input-request-prompt]')?.textContent).toContain('Staging');
     expect(runtime.querySelector('[data-flower-input-request-prompt]')?.textContent).toContain('Production');
-    expect(runtime.querySelector('.flower-activity-inline')?.textContent).toContain('Requested input');
+    expect(runtime.querySelectorAll('[data-flower-input-request-prompt]')).toHaveLength(1);
+    expect(runtime.querySelector('.flower-activity-inline')).toBeNull();
     expect(runtime.querySelector('.flower-model-status-indicator')).toBeNull();
     expect(runtime.querySelectorAll('textarea')).toHaveLength(1);
     expect((runtime.querySelector('textarea') as HTMLTextAreaElement).disabled).toBe(true);
@@ -130,7 +133,7 @@ describe('FlowerSurface navigation structured input', () => {
       status: 'running',
       input_request: null,
     });
-    const submitInput = vi.fn(async () => liveBootstrap(continuedThread));
+    const submitInput = vi.fn(async () => inputAdmissionReceipt(continuedThread.thread_id, secretInputRequest.prompt_id));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [waitingThread]),
@@ -200,7 +203,7 @@ describe('FlowerSurface navigation structured input', () => {
         },
       ],
     });
-    const submitInput = vi.fn(async () => liveBootstrap(continuedThread));
+    const submitInput = vi.fn(async () => inputAdmissionReceipt(continuedThread.thread_id, waitingThread.input_request!.prompt_id));
     const loadThread = vi.fn(async () => liveBootstrap(loadThread.mock.calls.length === 1 ? waitingThread : continuedThread));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
@@ -218,7 +221,6 @@ describe('FlowerSurface navigation structured input', () => {
     await flush();
     (runtime.querySelector('.flower-composer-continue') as HTMLButtonElement).click();
     await waitFor(() => submitInput.mock.calls.length > 0);
-    await waitFor(() => runtime.textContent?.includes('Continuing with staging.') ?? false);
 
     expect(submitInput).toHaveBeenCalledWith({
       thread_id: 'thread-submit-input',
@@ -230,7 +232,8 @@ describe('FlowerSurface navigation structured input', () => {
       },
     });
     expect(runtime.querySelector('[data-flower-input-request-prompt]')).toBeNull();
-    expect(runtime.textContent).toContain('Continuing with staging.');
+    expect(loadThread).toHaveBeenCalledTimes(1);
+    expect(runtime.querySelector('[data-thread-id="thread-submit-input"]')).not.toBeNull();
   });
 
   it('shows structured input submission failures in the composer without losing the answer', async () => {
@@ -269,6 +272,46 @@ describe('FlowerSurface navigation structured input', () => {
     }));
     expect(runtime.querySelector('.flower-composer-error')).toBeNull();
     expect(runtime.querySelector('.flower-composer-continue')?.textContent).toContain('Continue');
+    expect(runtime.querySelector('.flower-input-request-choice-selected')?.textContent).toContain('Production');
+  });
+
+  it('restores a failed structured answer after navigating away and back', async () => {
+    const waitingThread = thread({
+      thread_id: 'thread-input-error-navigation',
+      title: 'Input error navigation',
+      status: 'waiting_user',
+      input_request: inputRequest(),
+    });
+    const otherThread = thread({
+      thread_id: 'thread-input-error-other',
+      title: 'Other thread',
+      status: 'idle',
+    });
+    const delayedReceipt = deferred<ReturnType<typeof inputAdmissionReceipt>>();
+    const submitInput = vi.fn(() => delayedReceipt.promise);
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [waitingThread, otherThread]),
+      loadThread: vi.fn(async (threadID) => liveBootstrap(threadID === waitingThread.thread_id ? waitingThread : otherThread)),
+      submitInput,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-input-error-navigation"] button')));
+    (runtime.querySelector('[data-thread-id="thread-input-error-navigation"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-input-request-prompt]')));
+    (Array.from(runtime.querySelectorAll('.flower-input-request-choice')) as HTMLButtonElement[])
+      .find((button) => button.textContent?.includes('Production'))?.click();
+    await flush();
+    (runtime.querySelector('.flower-composer-continue') as HTMLButtonElement).click();
+    await waitFor(() => submitInput.mock.calls.length === 1);
+    (runtime.querySelector('[data-thread-id="thread-input-error-other"] button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.textContent?.includes('Other thread') ?? false);
+
+    delayedReceipt.reject(new Error('Flower is no longer waiting for that input.'));
+    await flush();
+    (runtime.querySelector('[data-thread-id="thread-input-error-navigation"] button') as HTMLButtonElement).click();
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-input-request-prompt]')));
     expect(runtime.querySelector('.flower-input-request-choice-selected')?.textContent).toContain('Production');
   });
 
@@ -334,7 +377,7 @@ describe('FlowerSurface navigation structured input', () => {
       ],
     });
     const launchTurn = vi.fn(async (input: FlowerTurnLaunchInput) => launchReceipt(staleThread.thread_id, 'turn-stale-input', 'start', input.client_request_id));
-    const submitInput = vi.fn(async () => liveBootstrap(staleThread));
+    const submitInput = vi.fn(async () => inputAdmissionReceipt(staleThread.thread_id, 'unused-prompt'));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [staleThread]),

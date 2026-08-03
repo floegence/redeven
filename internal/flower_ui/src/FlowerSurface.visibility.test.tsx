@@ -269,7 +269,12 @@ function createAdapterHarness(overrides: Partial<FlowerSurfaceAdapter> = {}): Ad
     launchTurn: async (input) => ({ client_request_id: input.client_request_id, thread_id: 'new-thread', turn_id: 'turn', run_id: 'run', kind: 'start' }),
     compactThreadContext: async () => bootstrap(),
     stopThread: async () => bootstrap(),
-    submitInput: async () => bootstrap(),
+    submitInput: async (input) => ({
+      thread_id: input.thread_id,
+      turn_id: 'turn-input-response',
+      run_id: 'run-input-response',
+      consumed_prompt_id: input.prompt_id,
+    }),
     submitApproval: async () => ({ ok: true, current_cursor: 0 }),
     ...overrides,
   };

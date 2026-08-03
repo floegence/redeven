@@ -24,6 +24,7 @@ import type {
   FlowerModelSourceModel,
   FlowerModelSourceRecovery,
   FlowerSurfaceAdapter,
+  FlowerSubmitInputReceipt,
   FlowerStagedAttachment,
   FlowerStagedLongTextReadResult,
   FlowerTerminalProcessSnapshot,
@@ -116,6 +117,13 @@ type SendTurnResponse = Readonly<{
   turn_id?: string;
   queue_id?: string;
   kind?: string;
+}>;
+
+type SubmitInputResponse = Readonly<{
+  run_id?: string;
+  turn_id?: string;
+  kind?: string;
+  consumed_waiting_prompt_id?: string;
 }>;
 
 type MarkThreadReadResponse = Readonly<{
@@ -908,30 +916,46 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       const promptID = trim(input.prompt_id);
       if (!tid) throw new Error(adapterCopy(options).missingThreadID);
       if (!promptID) throw new Error('Missing input prompt id.');
-      const response = await options.rpc.ai.submitRequestUserInputResponse({
-        threadId: tid,
-        response: {
-          promptId: promptID,
-          answers: Object.fromEntries(Object.entries(input.answers).map(([questionID, answer]) => [
-            questionID,
-            {
-              choiceId: trim(answer.choice_id) || undefined,
-              text: trim(answer.text) || undefined,
+      const reasoningSelection = serializeFlowerReasoningSelection(input.reasoning_selection);
+      const response = await fetchLocalApiJSON<SubmitInputResponse>(
+        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}/input_response`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            response: {
+              prompt_id: promptID,
+              answers: Object.fromEntries(Object.entries(input.answers).map(([questionID, answer]) => [
+                questionID,
+                {
+                  choice_id: trim(answer.choice_id) || undefined,
+                  text: trim(answer.text) || undefined,
+                },
+              ])),
             },
-          ])),
+            input: {
+              text: '',
+              attachments: [],
+            },
+            options: {
+              ...(reasoningSelection ? { reasoning_selection: reasoningSelection } : {}),
+            },
+          }),
         },
-        input: {
-          text: '',
-          attachments: [],
-        },
-        options: {
-          ...(serializeFlowerReasoningSelection(input.reasoning_selection) ? { reasoningSelection: serializeFlowerReasoningSelection(input.reasoning_selection) } : {}),
-        },
-      });
-      if (!trim(response.turnId) || !trim(response.runId) || trim(response.kind) !== 'start') {
+      );
+      if (
+        !trim(response.turn_id)
+        || !trim(response.run_id)
+        || trim(response.kind) !== 'start'
+        || trim(response.consumed_waiting_prompt_id) !== promptID
+      ) {
         throw new Error('Flower input response admission returned an invalid receipt.');
       }
-      return loadThread(tid);
+      return {
+        thread_id: tid,
+        turn_id: trim(response.turn_id),
+        run_id: trim(response.run_id),
+        consumed_prompt_id: promptID,
+      } satisfies FlowerSubmitInputReceipt;
     },
     missingThreadID: copy.missingThreadID,
     failedToCreateThread: copy.failedToCreateChat,

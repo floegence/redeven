@@ -188,8 +188,6 @@ func askUserValidationError(reason string, contractError string) string {
 		return prefix + "a choice-based question omitted choices_exhaustive"
 	case askUserGateReasonInconsistentChoiceContract:
 		return prefix + "response_mode and choices_exhaustive disagree"
-	case "missing_evidence_refs":
-		return prefix + "evidence_refs is empty"
 	default:
 		if contractError != "" {
 			return prefix + contractError

@@ -1685,11 +1685,13 @@ func applyFlowerLiveEventToMaterializedState(state *FlowerLiveMaterializedState,
 	case FlowerLiveThreadPatched:
 		var payload FlowerLiveThreadPatchedPayload
 		if decodeFlowerPayload(event.Payload, &payload) {
+			handoffFlowerLiveActiveRun(state, approvals, payload.Patch.ActiveRunID, payload.Patch.RunStatus, payload.Patch.WaitingPrompt)
 			state.ThreadPatch = mergeFlowerLiveThreadPatch(state.ThreadPatch, payload.Patch)
 		}
 	case FlowerLiveRunStarted:
 		var payload FlowerLiveRunStartedPayload
 		if decodeFlowerPayload(event.Payload, &payload) && strings.TrimSpace(payload.RunID) != "" {
+			handoffFlowerLiveActiveRun(state, approvals, payload.RunID, payload.Status, nil)
 			state.Runs[payload.RunID] = FlowerLiveRunState{
 				RunID:     strings.TrimSpace(payload.RunID),
 				Status:    strings.TrimSpace(payload.Status),
@@ -1903,6 +1905,51 @@ func applyFlowerLiveEventToMaterializedState(state *FlowerLiveMaterializedState,
 			}
 		}
 	}
+}
+
+func handoffFlowerLiveActiveRun(
+	state *FlowerLiveMaterializedState,
+	approvals map[string]FlowerApprovalState,
+	activeRunID string,
+	status string,
+	waitingPrompt *RequestUserInputPrompt,
+) {
+	if state == nil {
+		return
+	}
+	activeRunID = strings.TrimSpace(activeRunID)
+	if activeRunID == "" || activeRunID == strings.TrimSpace(state.ThreadPatch.ActiveRunID) {
+		return
+	}
+	ensureFlowerLiveStateMaps(state)
+	status = strings.TrimSpace(status)
+	if status == "" {
+		status = string(RunStateRunning)
+	}
+	state.Runs = map[string]FlowerLiveRunState{
+		activeRunID: {
+			RunID:         activeRunID,
+			Status:        status,
+			WaitingPrompt: waitingPrompt,
+		},
+	}
+	state.ModelIO = nil
+	state.ContextUsage = nil
+	state.InputRequests = map[string]RequestUserInputPrompt{}
+	if waitingPrompt != nil && strings.TrimSpace(waitingPrompt.PromptID) != "" {
+		state.InputRequests[strings.TrimSpace(waitingPrompt.PromptID)] = *waitingPrompt
+	}
+	state.ApprovalActions = map[string]FlowerApprovalAction{}
+	state.ApprovalActionsSeen = true
+	state.ApprovalQueue = nil
+	for actionID := range approvals {
+		delete(approvals, actionID)
+	}
+	state.ThreadPatch.ActiveRunID = activeRunID
+	state.ThreadPatch.RunStatus = status
+	state.ThreadPatch.RunErrorCode = ""
+	state.ThreadPatch.RunError = ""
+	state.ThreadPatch.WaitingPrompt = waitingPrompt
 }
 
 func markFlowerLiveRunWaitingApproval(state *FlowerLiveMaterializedState, runID string) {
