@@ -2804,9 +2804,6 @@ func validateAskUserSignal(signal askUserSignal) string {
 	if reason := validateRequestUserInputQuestionsContract(rawQuestions); reason != "" {
 		return reason
 	}
-	if len(signal.EvidenceRefs) == 0 {
-		return "missing_evidence_refs"
-	}
 	return ""
 }
 

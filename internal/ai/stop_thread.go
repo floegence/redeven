@@ -212,7 +212,7 @@ func stoppedRunCanonicalProof(snapshot flruntime.ThreadSnapshot, latest *flrunti
 		if strings.TrimSpace(string(snapshot.LatestRunID)) != runID || latest == nil || strings.TrimSpace(string(latest.RunID)) != runID {
 			return false, err
 		}
-		if !latest.Status.IsTerminal() && canonicalThreadBusy(snapshot) {
+		if !latest.Status.IsTerminal() || canonicalThreadBusy(snapshot) {
 			return false, nil
 		}
 		return false, err

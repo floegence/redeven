@@ -27,6 +27,7 @@ import type {
   FlowerThreadReadStatus,
   FlowerLiveBootstrap,
   FlowerThreadSnapshot,
+  FlowerSubmitInputReceipt,
   FlowerTurnLaunchReceipt,
   FlowerActivityStatus,
   FlowerModelIOStatus,
@@ -410,6 +411,20 @@ export function launchReceipt(
       run_id: `run-${canonicalID}`,
       kind,
     };
+}
+
+export function inputAdmissionReceipt(
+  threadID: string,
+  promptID: string,
+  turnID = 'turn-input-response',
+  runID = 'run-input-response',
+): FlowerSubmitInputReceipt {
+  return {
+    thread_id: threadID,
+    turn_id: turnID,
+    run_id: runID,
+    consumed_prompt_id: promptID,
+  };
 }
 
 export function activityItem(overrides: Partial<FlowerActivityItem> = {}): FlowerActivityItem {
@@ -820,7 +835,7 @@ export function adapter(configured = true): FlowerSurfaceAdapter {
       status: 'running',
     }))),
     stopThread: vi.fn(async (threadID: string) => liveBootstrap(thread({ thread_id: threadID, status: 'canceled' }))),
-    submitInput: vi.fn(async () => liveBootstrap(thread({ status: 'running' }))),
+    submitInput: vi.fn(async (input) => inputAdmissionReceipt(input.thread_id, input.prompt_id)),
     submitApproval: vi.fn(async () => ({ ok: true, current_cursor: 1 })),
     modelSourceRecovery: {
       describe: (status) => `Desktop source is ${status.state}.`,

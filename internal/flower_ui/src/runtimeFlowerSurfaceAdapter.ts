@@ -20,6 +20,7 @@ import type {
   FlowerSubmitApprovalRequest,
   FlowerSubmitInputRequest,
   FlowerSurfaceAdapter,
+  FlowerSubmitInputReceipt,
   FlowerSurfaceRuntimeDescriptor,
   FlowerTerminalProcessSnapshot,
   FlowerThreadActivitySnapshot,
@@ -140,7 +141,7 @@ export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
   launchTurn: (input: FlowerTurnLaunchInput) => Promise<FlowerTurnLaunchReceipt>;
   compactThreadContext: (input: FlowerCompactThreadContextInput) => Promise<FlowerLiveBootstrap>;
   stopThread: (threadID: string) => Promise<FlowerLiveBootstrap>;
-  submitInput: (input: FlowerSubmitInputRequest) => Promise<FlowerLiveBootstrap>;
+  submitInput: (input: FlowerSubmitInputRequest) => Promise<FlowerSubmitInputReceipt>;
   getWorkingDirectoryPathContext?: () => Promise<FlowerWorkingDirectoryPathContext>;
   listWorkingDirectoryEntries?: (input: FlowerWorkingDirectoryListInput) => Promise<readonly FlowerWorkingDirectoryEntry[]>;
   openFileBrowser?: (request: FlowerFileOpenRequest) => Promise<void>;

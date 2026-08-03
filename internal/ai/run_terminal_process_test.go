@@ -842,6 +842,13 @@ func TestWaitForStoppedRunRequiresDoneAndExactCanonicalTerminal(t *testing.T) {
 	if err := validateStoppedRunCanonicalSnapshot(exact, nil, "thread_stop", "run_stop", true); !errors.Is(err, ErrThreadStopUnavailable) {
 		t.Fatalf("missing latest error=%v, want %v", err, ErrThreadStopUnavailable)
 	}
+	transient := exact
+	transient.Status = flruntime.ThreadStatusIdle
+	transientLatest := *latest
+	transientLatest.Status = flruntime.TurnStatusRunning
+	if proven, err := stoppedRunCanonicalProof(transient, &transientLatest, "thread_stop", "run_stop", true); err != nil || proven {
+		t.Fatalf("transient canonical proof=(%t, %v), want (false, nil)", proven, err)
+	}
 }
 
 func TestTerminalProcessSettlementFailureIsNotRetried(t *testing.T) {

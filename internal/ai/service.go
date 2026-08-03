@@ -408,8 +408,7 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 		closeServiceBeforeMaintenance(svc)
 		return nil, createReplayErr
 	}
-	recoveryTargetsCtx, recoveryTargetsCancel := context.WithTimeout(ctx, persistTO)
-	reconciliation, recoveryTargetsErr := reconcileFloretRootThreadInventory(recoveryTargetsCtx, ts, floretRecovery.inventory)
+	reconciliation, recoveryTargetsErr := reconcileFloretRootThreadInventoryWithOperationTimeout(ctx, ts, floretRecovery.inventory, persistTO)
 	if recoveryTargetsErr == nil {
 		svc.setOrphanCanonicalRootIDs(reconciliation.OrphanedRootThreadIDs)
 		for _, threadID := range reconciliation.OrphanedRootThreadIDs {
@@ -418,9 +417,8 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 	}
 	var recoveryTargets []floretStartupRecoveryTarget
 	if recoveryTargetsErr == nil {
-		recoveryTargets, recoveryTargetsErr = buildFloretStartupRecoveryTargets(recoveryTargetsCtx, reconciliation.RootThreadIDs, floretRecovery)
+		recoveryTargets, recoveryTargetsErr = buildFloretStartupRecoveryTargetsWithOperationTimeout(ctx, reconciliation.RootThreadIDs, floretRecovery, persistTO)
 	}
-	recoveryTargetsCancel()
 	if recoveryTargetsErr != nil {
 		closeServiceBeforeMaintenance(svc)
 		return nil, fmt.Errorf("bind exact Floret startup recovery targets: %w", recoveryTargetsErr)

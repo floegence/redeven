@@ -21,6 +21,7 @@ import {
   deferred,
   flowerSurfaceNotifications,
   inputRequest,
+  inputAdmissionReceipt,
   liveBootstrap,
   modelIOStatus,
   renderSurfaceWithAdapter,
@@ -1011,7 +1012,7 @@ describe('FlowerSurface navigation activity', () => {
   });
 
   it('prioritizes read-only child state over waiting input submission', async () => {
-    const submitInput = vi.fn(async () => liveBootstrap(thread({ status: 'running' })));
+    const submitInput = vi.fn(async () => inputAdmissionReceipt('thread-activity-input', 'prompt-activity-input'));
     const waitingChild = thread({
       thread_id: 'thread-child-waiting',
       title: 'Waiting child',
@@ -3395,13 +3396,24 @@ describe('FlowerSurface navigation activity', () => {
     expect(runtime.querySelector('.flower-activity-inline-details')).toBeNull();
   });
 
-  it('keeps waiting activity visible even if a timeline summary is marked digest', async () => {
+  it('presents waiting ask_user activity only through the dedicated composer prompt', async () => {
     const waitingThread = thread({
       thread_id: 'thread-waiting-activity',
       title: 'Waiting activity',
       created_at_ms: 6_700,
       updated_at_ms: 6_900,
       status: 'waiting_user',
+      input_request: inputRequest({
+        prompt_id: 'prompt-waiting-activity',
+        public_summary: 'Choose a target before continuing.',
+        questions: [{
+          id: 'target',
+          header: 'Target',
+          question: 'Choose a target before continuing.',
+          is_secret: false,
+          response_mode: 'write',
+        }],
+      }),
       messages: [
         {
           id: 'm-waiting',
@@ -3454,10 +3466,12 @@ describe('FlowerSurface navigation activity', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-waiting-activity"] button')));
     (runtime.querySelector('[data-thread-id="thread-waiting-activity"] button') as HTMLButtonElement).click();
-    await waitFor(() => runtime.textContent?.includes('Requested input') ?? false);
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-input-request-prompt]')));
 
-    expect(runtime.querySelectorAll('.flower-activity-inline-row')).toHaveLength(1);
-    expect(runtime.querySelector('.flower-activity-inline-button')?.getAttribute('aria-expanded')).toBe('true');
+    expect(runtime.textContent).not.toContain('Requested input');
+    expect(runtime.querySelectorAll('.flower-activity-inline-row')).toHaveLength(0);
+    expect(runtime.querySelectorAll('[data-flower-input-request-prompt]')).toHaveLength(1);
+    expect(runtime.querySelector('[data-flower-input-request-prompt]')?.textContent).toContain('Choose a target before continuing.');
   });
 
   it.each([

@@ -23,6 +23,7 @@ import {
   flush,
   flowerSurfaceNotifications,
   inputRequest,
+  inputAdmissionReceipt,
   launchReceipt,
   activityItem,
   activityTimeline,
@@ -4015,7 +4016,7 @@ describe('FlowerSurface navigation launch/send', () => {
     });
     const stopThread = vi.fn(async () => liveBootstrap(waitingThread));
     const launchTurn = vi.fn(async (input: FlowerTurnLaunchInput) => launchReceiptFor(input, waitingThread.thread_id, 'turn-waiting'));
-    const submitInput = vi.fn(async () => liveBootstrap({ ...waitingThread, status: 'running', input_request: null }));
+    const submitInput = vi.fn(async () => inputAdmissionReceipt(waitingThread.thread_id, waitingThread.input_request!.prompt_id));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [waitingThread]),

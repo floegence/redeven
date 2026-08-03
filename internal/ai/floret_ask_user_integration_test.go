@@ -3,8 +3,10 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -128,6 +131,164 @@ func TestRedevenHostedRunAskUserWaitsAndResumesWithoutAuthorityCorruption(t *tes
 	}
 	if mainCalls.Load() != 2 {
 		t.Fatalf("main provider calls=%d, want waiting and resumed calls", mainCalls.Load())
+	}
+}
+
+func TestSubmitRequestUserInputResponseRPCReturnsAdmissionReceiptBeforeProviderCompletes(t *testing.T) {
+	t.Parallel()
+
+	var mainCalls atomic.Int32
+	providerStarted := make(chan struct{})
+	releaseProvider := make(chan struct{})
+	providerServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusOK)
+
+		tools, _ := request["tools"].([]any)
+		if len(tools) == 0 {
+			writeAskUserIntegrationTextResponse(w, flusher, "resp_title_receipt", "Receipt boundary")
+			return
+		}
+		if mainCalls.Add(1) == 1 {
+			args := `{"reason_code":"missing_external_input","required_from_user":["Provide a receipt value."],"evidence_refs":[],"questions":[{"id":"receipt","header":"Receipt","question":"What value should continue the run?","response_mode":"write","is_secret":false,"write_label":"Value","write_placeholder":"Type a value"}]}`
+			writeOpenAISSEJSON(w, flusher, map[string]any{
+				"type": "response.output_item.added", "output_index": 0,
+				"item": map[string]any{"type": "function_call", "id": "fc_receipt", "call_id": "call_receipt", "name": "ask_user", "arguments": args},
+			})
+			writeOpenAISSEJSON(w, flusher, map[string]any{
+				"type": "response.output_item.done", "output_index": 0,
+				"item": map[string]any{"type": "function_call", "id": "fc_receipt", "call_id": "call_receipt", "name": "ask_user", "arguments": args},
+			})
+			writeAskUserIntegrationCompletedResponse(w, flusher, "resp_waiting_receipt")
+			return
+		}
+		close(providerStarted)
+		select {
+		case <-releaseProvider:
+			writeAskUserIntegrationTextResponse(w, flusher, "resp_resumed_receipt", "Receipt accepted.")
+		case <-r.Context().Done():
+		}
+	}))
+	t.Cleanup(func() {
+		close(releaseProvider)
+		providerServer.Close()
+	})
+
+	stateDir := t.TempDir()
+	meta := &session.Meta{
+		EndpointID: "env_receipt_boundary", ChannelID: "channel_receipt_boundary",
+		NamespacePublicID: "namespace_receipt", UserPublicID: "user_receipt", UserEmail: "receipt@example.com",
+		CanRead: true, CanWrite: true, CanExecute: true, CanAdmin: true,
+	}
+	svc, err := NewService(Options{
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: stateDir, AgentHomeDir: stateDir, Shell: "/bin/sh",
+		Config: &config.AIConfig{
+			CurrentModelID: "openai/gpt-5-mini",
+			Providers: []config.AIProvider{{
+				ID: "openai", Name: "OpenAI", Type: "openai", BaseURL: providerServer.URL + "/v1",
+				Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
+			}},
+		},
+		RunMaxWallTime: 30 * time.Second, RunIdleTimeout: 30 * time.Second, PersistOpTimeout: 2 * time.Second,
+		ResolveProviderAPIKey: func(string) (string, bool, error) { return "sk-test", true, nil },
+	})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+	t.Cleanup(func() { _ = svc.Close() })
+	thread, err := svc.CreateThread(context.Background(), meta, "", "openai/gpt-5-mini", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	if _, err := svc.SendUserTurn(context.Background(), meta, SendUserTurnRequest{
+		ThreadID: thread.ThreadID, Model: "openai/gpt-5-mini",
+		Input: RunInput{Text: "Ask for a receipt value."}, Options: RunOptions{PermissionType: config.AIPermissionFullAccess},
+	}); err != nil {
+		t.Fatalf("SendUserTurn: %v", err)
+	}
+	waiting := waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(view *ThreadView) bool {
+		return strings.TrimSpace(view.RunStatus) == "waiting_user" && view.WaitingPrompt != nil &&
+			!svc.HasActiveThreadForEndpoint(meta.EndpointID, thread.ThreadID)
+	})
+	prompt := waiting.WaitingPrompt
+
+	serverConn, clientConn := net.Pipe()
+	t.Cleanup(func() { _ = serverConn.Close() })
+	t.Cleanup(func() { _ = clientConn.Close() })
+	router := rpc.NewRouter()
+	rpcServer := rpc.NewServer(serverConn, router)
+	svc.RegisterRPC(router, meta, rpcServer)
+	serveCtx, cancelServe := context.WithCancel(context.Background())
+	t.Cleanup(cancelServe)
+	go func() { _ = rpcServer.Serve(serveCtx) }()
+	rpcClient := rpc.NewClient(clientConn)
+
+	type submitResult struct {
+		response aiSubmitRequestUserInputResponseResp
+		err      error
+	}
+	submitted := make(chan submitResult, 1)
+	go func() {
+		payload, marshalErr := json.Marshal(aiSubmitRequestUserInputResponseReq{
+			ThreadID: thread.ThreadID, Model: "openai/gpt-5-mini",
+			Response: RequestUserInputResponse{
+				PromptID: prompt.PromptID,
+				Answers:  map[string]RequestUserInputAnswer{"receipt": {Text: "accepted"}},
+			},
+			Input: RunInput{Text: "accepted"}, Options: RunOptions{PermissionType: config.AIPermissionFullAccess},
+		})
+		if marshalErr != nil {
+			submitted <- submitResult{err: marshalErr}
+			return
+		}
+		callCtx, cancelCall := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancelCall()
+		raw, rpcErr, callErr := rpcClient.Call(callCtx, TypeID_AI_SUBMIT_REQUEST_USER_INPUT_RESPONSE, payload)
+		if callErr != nil {
+			submitted <- submitResult{err: callErr}
+			return
+		}
+		if rpcErr != nil {
+			message := "rpc error"
+			if rpcErr.Message != nil && strings.TrimSpace(*rpcErr.Message) != "" {
+				message = strings.TrimSpace(*rpcErr.Message)
+			}
+			submitted <- submitResult{err: errors.New(message)}
+			return
+		}
+		var response aiSubmitRequestUserInputResponseResp
+		if unmarshalErr := json.Unmarshal(raw, &response); unmarshalErr != nil {
+			submitted <- submitResult{err: unmarshalErr}
+			return
+		}
+		submitted <- submitResult{response: response}
+	}()
+
+	select {
+	case <-providerStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("resumed provider request did not start")
+	}
+	select {
+	case result := <-submitted:
+		if result.err != nil || result.response.Kind != "start" ||
+			result.response.ConsumedWaitingPromptID != prompt.PromptID ||
+			strings.TrimSpace(result.response.RunID) == "" || strings.TrimSpace(result.response.TurnID) == "" {
+			t.Fatalf("admission receipt=%#v err=%v", result.response, result.err)
+		}
+	case <-time.After(250 * time.Millisecond):
+		t.Fatal("structured response waited for provider execution after canonical admission")
 	}
 }
 

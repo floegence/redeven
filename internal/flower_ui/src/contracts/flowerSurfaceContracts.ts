@@ -445,6 +445,14 @@ export type FlowerSubmitInputRequest = Readonly<{
   reasoning_selection?: FlowerReasoningSelection;
 }>;
 
+/** Canonical admission proof returned after a waiting prompt is consumed. */
+export type FlowerSubmitInputReceipt = Readonly<{
+  thread_id: string;
+  turn_id: string;
+  run_id: string;
+  consumed_prompt_id: string;
+}>;
+
 export type FlowerThreadActivitySnapshot = Readonly<{
   activity_revision: number;
   last_message_at_unix_ms: number;
@@ -1324,7 +1332,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   launchTurn: (input: FlowerTurnLaunchInput) => Promise<FlowerTurnLaunchReceipt>;
   compactThreadContext: (input: FlowerCompactThreadContextInput) => Promise<FlowerLiveBootstrap>;
   stopThread: (threadID: string) => Promise<FlowerLiveBootstrap>;
-  submitInput: (input: FlowerSubmitInputRequest) => Promise<FlowerLiveBootstrap>;
+  submitInput: (input: FlowerSubmitInputRequest) => Promise<FlowerSubmitInputReceipt>;
   submitApproval: (input: FlowerSubmitApprovalRequest) => Promise<FlowerApprovalDecisionReceipt>;
   readTerminalProcess?: (input: FlowerTerminalProcessReadRequest) => Promise<FlowerTerminalProcessSnapshot>;
   getWorkingDirectoryPathContext?: () => Promise<FlowerWorkingDirectoryPathContext>;

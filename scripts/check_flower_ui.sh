@@ -124,6 +124,7 @@ main() {
         src/ui/FlowerSurface.composerReferences.browser.test.tsx \
         src/ui/FlowerSurface.approvalRefresh.browser.test.tsx \
         src/ui/FlowerSurface.activityDisclosure.browser.test.tsx \
+        src/ui/FlowerSurface.inputAdmission.browser.test.tsx \
         src/ui/FlowerSurface.setupGuide.browser.test.tsx \
         src/ui/widgets/FlowerTurnLauncherWindow.browser.test.tsx \
         src/ui/widgets/TerminalCoreDependencyContract.browser.test.tsx \

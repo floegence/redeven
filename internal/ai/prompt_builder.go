@@ -585,7 +585,7 @@ func buildPromptAskUserPolicySection(snapshot promptRuntimeSnapshot) promptSecti
 		"- ask_user must include reason_code, required_from_user, and evidence_refs.",
 		"- reason_code must be one of: user_decision_required | permission_blocked | missing_external_input | conflicting_constraints | safety_confirmation.",
 		"- required_from_user must list concrete user inputs or decisions needed to proceed.",
-		"- evidence_refs must reference relevant tool IDs when evidence is required.",
+		"- evidence_refs must reference relevant tool IDs when evidence exists; use an empty array when no tool evidence exists.",
 		"- ask_user arguments are structured as `questions[]`; every question must include id, header, question, is_secret, and response_mode.",
 		"- Any question with fixed choices MUST also declare `choices_exhaustive`.",
 		"- For guided questionnaires, interviews, quizzes, guessing games, or decision trees, prefer ask_user over freeform markdown option lists.",

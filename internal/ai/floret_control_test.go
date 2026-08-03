@@ -65,6 +65,40 @@ func TestFloretControlProjector_ModelAskUserWaits(t *testing.T) {
 	}
 }
 
+func TestFloretControlProjector_ModelAskUserWaitsWithoutEvidence(t *testing.T) {
+	t.Parallel()
+
+	projector := floretControlProjector{}
+	signal, handled, err := projector.Project(fltools.ToolCall{
+		ID:   "call_ask_user_without_evidence",
+		Name: "ask_user",
+		Args: `{
+			"questions":[{
+				"id":"direction",
+				"header":"Direction",
+				"question":"Which direction should I take?",
+				"is_secret":false,
+				"response_mode":"write"
+			}],
+			"reason_code":"user_decision_required",
+			"required_from_user":["Choose the next direction."],
+			"evidence_refs":[]
+		}`,
+	})
+	if err != nil {
+		t.Fatalf("Project: %v", err)
+	}
+	if !handled {
+		t.Fatal("ask_user should be handled")
+	}
+	if signal.Disposition != flruntime.SignalWaiting {
+		t.Fatalf("disposition=%q, want waiting", signal.Disposition)
+	}
+	if refs, ok := signal.Payload["evidence_refs"].([]string); !ok || len(refs) != 0 {
+		t.Fatalf("evidence_refs=%#v, want an empty list", signal.Payload["evidence_refs"])
+	}
+}
+
 func TestFloretControlProjector_TaskCompleteActivityUsesPresentationSpec(t *testing.T) {
 	t.Parallel()
 
