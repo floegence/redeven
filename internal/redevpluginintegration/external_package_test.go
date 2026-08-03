@@ -321,7 +321,7 @@ func TestContainersCatalogPackageInstallsThroughExternalURLAtCurrentTime(t *test
 	}
 }
 
-func TestOfficialReleaseContextSignatureIsBlockedAsExternalPackage(t *testing.T) {
+func TestOfficialReleaseSignatureIsBlockedAsExternalPackage(t *testing.T) {
 	integration, _, signedPackage, access := newExternalPackageTestIntegrationWithClock(t, time.Now)
 	t.Cleanup(func() { _ = integration.Close() })
 
@@ -330,21 +330,20 @@ func TestOfficialReleaseContextSignatureIsBlockedAsExternalPackage(t *testing.T)
 	inspectRequest.Header.Set("Content-Type", "application/vnd.redevplugin.package+zip")
 	inspectResponse := httptest.NewRecorder()
 	integration.Handler().ServeHTTP(inspectResponse, inspectRequest)
-	if inspectResponse.Code != http.StatusBadRequest {
-		t.Fatalf("inspect legacy release-context package status = %d body=%s", inspectResponse.Code, inspectResponse.Body.String())
+	if inspectResponse.Code != http.StatusOK {
+		t.Fatalf("inspect official release package status = %d body=%s", inspectResponse.Code, inspectResponse.Body.String())
 	}
-	return
 	var inspectionEnvelope struct {
 		OK   bool                           `json:"ok"`
 		Data host.ExternalPackageInspection `json:"data"`
 	}
 	if err := json.Unmarshal(inspectResponse.Body.Bytes(), &inspectionEnvelope); err != nil {
-		t.Fatalf("decode release-context inspection: %v body=%s", err, inspectResponse.Body.String())
+		t.Fatalf("decode official release inspection: %v body=%s", err, inspectResponse.Body.String())
 	}
 	inspection := inspectionEnvelope.Data
 	if !inspectionEnvelope.OK || inspection.SignatureAssessment.State != string(registry.SignatureInvalid) ||
 		inspection.ExecutionApproval.State != string(registry.ExecutionApprovalPolicyBlocked) {
-		t.Fatalf("release-context inspection = %#v", inspection)
+		t.Fatalf("official release inspection = %#v", inspection)
 	}
 
 	commitResponse := postExternalPackageJSON(t, integration,
@@ -353,7 +352,7 @@ func TestOfficialReleaseContextSignatureIsBlockedAsExternalPackage(t *testing.T)
 			"confirmation_digest": inspection.ConfirmationDigest,
 		})
 	if commitResponse.Code != http.StatusForbidden {
-		t.Fatalf("commit release-context package status = %d body=%s", commitResponse.Code, commitResponse.Body.String())
+		t.Fatalf("commit official release package status = %d body=%s", commitResponse.Code, commitResponse.Body.String())
 	}
 	var commitEnvelope struct {
 		OK    bool `json:"ok"`
@@ -363,11 +362,11 @@ func TestOfficialReleaseContextSignatureIsBlockedAsExternalPackage(t *testing.T)
 		} `json:"error"`
 	}
 	if err := json.Unmarshal(commitResponse.Body.Bytes(), &commitEnvelope); err != nil {
-		t.Fatalf("decode blocked release-context commit: %v body=%s", err, commitResponse.Body.String())
+		t.Fatalf("decode blocked official release commit: %v body=%s", err, commitResponse.Body.String())
 	}
 	if commitEnvelope.OK || commitEnvelope.Error.Code != "PLUGIN_SIGNATURE_INVALID" ||
 		commitEnvelope.Error.MutationOutcome != "not_committed" {
-		t.Fatalf("blocked release-context commit = %#v", commitEnvelope)
+		t.Fatalf("blocked official release commit = %#v", commitEnvelope)
 	}
 
 	access.set(sessionPermissions{read: true, admin: true})
@@ -380,10 +379,10 @@ func TestOfficialReleaseContextSignatureIsBlockedAsExternalPackage(t *testing.T)
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(catalogResponse.Body.Bytes(), &catalogEnvelope); err != nil {
-		t.Fatalf("decode catalog after blocked release-context commit: %v body=%s", err, catalogResponse.Body.String())
+		t.Fatalf("decode catalog after blocked official release commit: %v body=%s", err, catalogResponse.Body.String())
 	}
 	if catalogResponse.Code != http.StatusOK || !catalogEnvelope.OK || len(catalogEnvelope.Data.Plugins) != 0 {
-		t.Fatalf("catalog after blocked release-context commit status=%d response=%#v", catalogResponse.Code, catalogEnvelope)
+		t.Fatalf("catalog after blocked official release commit status=%d response=%#v", catalogResponse.Code, catalogEnvelope)
 	}
 }
 
@@ -572,7 +571,7 @@ func newExternalPackageTestIntegrationWithClockAndOptions(
 	if err != nil {
 		t.Fatal(err)
 	}
-	signedPackage, err := os.ReadFile(filepath.Join("testdata", "containers-4.0.1.signed.redevplugin"))
+	signedPackage, err := os.ReadFile(filepath.Join("testdata", "containers-4.1.0.signed.redevplugin"))
 	if err != nil {
 		_ = integration.Close()
 		t.Fatal(err)
@@ -582,12 +581,12 @@ func newExternalPackageTestIntegrationWithClockAndOptions(
 
 func catalogContainersPackageURL(t *testing.T) string {
 	t.Helper()
-	return "https://github.com/floegence/redeven-official-plugins/releases/download/v4.0.1/containers-4.0.1.redevplugin"
+	return "https://github.com/floegence/redeven-official-plugins/releases/download/v4.1.0/containers-4.1.0.redevplugin"
 }
 
 func unsignedExternalPackageFixture(t *testing.T) []byte {
 	t.Helper()
-	raw, err := os.ReadFile(filepath.Join("testdata", "containers-4.0.1.unsigned.redevplugin"))
+	raw, err := os.ReadFile(filepath.Join("testdata", "containers-4.1.0.signed.redevplugin"))
 	if err != nil {
 		t.Fatal(err)
 	}

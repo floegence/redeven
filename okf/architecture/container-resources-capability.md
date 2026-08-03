@@ -129,11 +129,9 @@ lifecycle authority, audit store, or token issuer.
 
 The v4 bridge and generated client are exercised against the source contract.
 Production registers the signed v4 capability only through the verified
-Containers `4.0.1` release. Dev Desktop may expose an ephemeral package built
-from the pinned official-plugin source to the authenticated Env App for
-ReDevPlugin local import, but that package must bind the exact production pin
-already verified and registered by the Runtime. Development startup never
-creates or trusts a second capability signing identity. Missing or altered
+Containers `4.1.0` release selected by the production market snapshot.
+Development follows the same published market and release path; Redeven does
+not build, embed, or trust an ephemeral Containers package. Missing or altered
 delivery evidence fails startup rather than falling back to another contract.
 
 ## Product surface

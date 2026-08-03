@@ -26,7 +26,10 @@ import { PluginConfirmationDialog, createPluginConfirmationQueue } from './Plugi
 import { PluginCenterView } from './PluginCenterView';
 import { PluginPanel } from './PluginPanel';
 import { PluginUpdateReviewDialog } from './PluginUpdateReviewDialog';
-import { OFFICIAL_PLUGIN_CATALOG_SEED } from './officialPluginCatalog.test-fixture';
+import {
+  OFFICIAL_PLUGIN_CATALOG_SEED,
+  OFFICIAL_PLUGIN_MARKET_SNAPSHOT,
+} from './officialPluginCatalog.test-fixture';
 import { PLUGIN_MOBILE_TOUCH_TARGET_CLASS } from './pluginPresentation';
 import type { PluginSurfacePlacementCoordinator } from './pluginPlatform';
 import type {
@@ -50,6 +53,21 @@ const viewportCases = [
   { width: 768, height: 820 },
   { width: 1440, height: 900 },
 ] as const;
+
+const containersHostPresentation = {
+  default_locale: OFFICIAL_PLUGIN_MARKET_SNAPSHOT.plugins[0]!.presentation.default_locale,
+  locales: OFFICIAL_PLUGIN_MARKET_SNAPSHOT.plugins[0]!.presentation.locales.map((locale) => ({
+    locale: locale.locale,
+    plugin_name: locale.name,
+    ...(locale.publisher_name ? { publisher_name: locale.publisher_name } : {}),
+    summary: locale.summary,
+    description: [locale.summary],
+    highlights: [locale.keywords.join(', ')],
+    keywords: [...locale.keywords],
+    surfaces: [{ surface_id: 'containers.dashboard', label: locale.name }],
+    settings: [],
+  })),
+};
 
 const updateDialogViewportCases = [
   { width: 320, height: 568 },
@@ -76,6 +94,7 @@ const containersItem: PluginInventoryItem = {
   lifecycleState: 'enabled',
   trustBadge: 'official',
   pinned: true,
+  presentation: containersHostPresentation,
   defaultLaunchTarget: {
     pluginID: 'com.redeven.official.containers',
     pluginInstanceID: 'plugini_redeven_official_containers',
@@ -387,7 +406,7 @@ function browserUpdateInspection(): ExternalPluginInspection {
       expected_management_revision: updateDialogItem.managementRevision!,
     },
     plugin_id: updateDialogItem.pluginID,
-    version: '4.0.1',
+    version: '4.1.0',
   };
 }
 
@@ -920,12 +939,20 @@ describe('plugin management browser geometry and interaction', () => {
       expectInsideViewport(view, { width: 320, height: 720 });
       expectNoHorizontalOverflow(view);
       expectNoHorizontalOverflow(host.querySelector<HTMLElement>('[data-plugin-center-shell]')!);
+      const item = host.querySelector<HTMLButtonElement>('[data-plugin-center-item="instance:containers"]')!;
+      expect(item.querySelector(`[lang="${locale}"]`)).not.toBeNull();
       expectTouchTargets([
         host.querySelector<HTMLElement>('[data-plugin-center-install-external]')!,
         host.querySelector<HTMLElement>('[data-plugin-center-search]')!,
         host.querySelector<HTMLElement>('[data-plugin-center-refresh]')!,
         ...Array.from(host.querySelectorAll<HTMLElement>('[role="tab"]')),
       ]);
+
+      item.click();
+      await settle();
+      const detail = host.querySelector<HTMLElement>('[data-plugin-center-details]')!;
+      expect(detail.querySelector(`[data-plugin-author-content] [lang="${locale}"]`)).not.toBeNull();
+      expectNoHorizontalOverflow(detail);
     },
   );
 

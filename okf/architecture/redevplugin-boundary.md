@@ -132,7 +132,7 @@ signature evidence. The released ProcessManager owns launch, health, heartbeat,
 shutdown, leases, hostcalls, and restart. Darwin packages omit the runtime and
 worker execution. No target searches `PATH` or alternate runtime names.
 
-Official Containers `4.0.1` remains a signed release-ref package over the
+Official Containers `4.1.0` is a signed manifest-v8 release-ref package over the
 `redeven.capability.container_resources@3.0.0` adapter. The latest-only market
 selects its immutable GitHub Release and complete transport, while ReDevPlugin
 verifies release and capability artifacts as one closed source. The market is
