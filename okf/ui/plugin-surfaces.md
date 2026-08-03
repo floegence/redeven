@@ -87,11 +87,12 @@ commands carry that exact key. Plugin id is not unique, and instance id alone is
 not used to select catalog presentation. This keeps an official catalog entry
 and multiple external instances with identical manifest ids independent.
 
-Official Containers catalog presentation comes from the frozen latest-only
-market snapshot and requires exact publisher, plugin, version, package,
-manifest, and entries identity. Historical content additionally requires the
-fixed catalog instance and Host-verified official signature. Official-looking
-ids never inherit catalog trust or update controls.
+Official catalog presentation comes from the frozen latest-only market snapshot
+and ultimately from the signed manifest. It requires exact publisher, plugin,
+version, package, manifest, and entries identity. Historical content additionally
+requires the fixed catalog instance and Host-verified official signature.
+Official-looking ids never inherit catalog trust or update controls, and Redeven
+does not carry plugin-specific author presentation.
 
 Lifecycle commands carry the current management revision. Permission mutations
 also carry policy revision and revoke epoch. Unknown mutation outcomes invalidate
@@ -118,20 +119,18 @@ single-line target action such as `Update to vX`, `Install new build`, or
 `Replace current build`; low-height and narrow layouts scroll only the body.
 
 The immutable update candidate binds the exact plugin instance, management
-revision, current and target versions, package, manifest, and entries hashes,
-and release-notes identity. Before commit, Redeven rechecks the current inventory
-revision, inspection expiry, and release-notes
-summary. A changed target is stale and requires a fresh review; it is never
+revision, current and target versions, package, manifest, and entries hashes.
+Before commit, Redeven rechecks the current inventory revision and inspection
+expiry. A changed target is stale and requires a fresh review; it is never
 silently substituted. Version upgrades, same-version external replacements,
-exact-package no-ops, and downgrades are
-projected centrally rather than inferred separately by cards and dialogs.
+exact-package no-ops, and downgrades are projected centrally rather than inferred
+separately by cards and dialogs.
 
-Product release notes and Host security evidence have separate authority.
-Official notes render only when their target version and package, manifest, and
-entries hashes match the release reference. External updates use the released
-inspection result; only that evidence may claim no security-declaration changes.
-Missing publisher notes remain visibly absent and are never synthesized from
-manifests or source history.
+Host security evidence comes only from the released inspection result; only that
+evidence may claim no security-declaration changes. Redeven does not maintain
+official-plugin release notes or synthesize publisher notes from manifests,
+source history, plugin identity, or host locale catalogs. Missing publisher notes
+remain visibly absent.
 
 Commit starts only from the review footer. Development builds and external
 replacements require a concise adjacent risk acknowledgement; ordinary verified
@@ -151,7 +150,7 @@ package URL, public GitHub repository Release with optional tag, or local
 inspection API; it never downloads remote bytes in the browser, parses the
 package, chooses trust state, or invents provenance.
 
-The Containers Discover action uses the exact signed release reference from the
+An official Discover action uses the exact signed release reference from the
 frozen market snapshot. Redeven passes the matching immutable GitHub Release
 transport to ReDevPlugin and never downloads package bytes in the browser. If
 the market is unavailable, installed plugins remain visible and usable while
@@ -331,8 +330,8 @@ or call business adapters directly.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginPanel.tsx:1` - Carries exact inventory keys from tiles into management navigation.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterView.tsx:1` - Selects exact inventory items and owns install and update-review entry state.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginUpdateReviewDialog.tsx:1` - Presents the target-bound review, fixed confirmation footer, reconciliation, and retained completion state.
-- `redeven:internal/envapp/ui_src/src/ui/plugins/pluginUpdateProjection.ts:1` - Classifies update targets and fences revision, inspection, hash, and release-note identity.
-- `redeven:internal/envapp/ui_src/src/ui/plugins/officialPluginReleaseNotes.json:1` - Stores machine-readable product release-note bindings used by catalog and update review.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/pluginUpdateProjection.ts:1` - Classifies update targets and fences revision, inspection expiry, and package identity.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/officialPluginCatalog.ts:1` - Projects verified market releases and manifest-owned presentation without plugin-specific author copy.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterItems.tsx:1` - Presents the compact Discover, Installed, and Updates card directory without owning selection or mutations.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginPresentation.ts:1` - Combines trust, policy, authorization, lifecycle, and launch readiness into one primary action.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/plugin-motion.css:1` - Defines the scoped subtle entrance and disclosure motion with a reduced-motion override.
