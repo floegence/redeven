@@ -6,7 +6,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { PluginCenterView } from './PluginCenterView';
 import { OFFICIAL_CONTAINERS_RELEASE_REF } from './officialContainersRelease.generated';
-import { OFFICIAL_PLUGIN_CATALOG_SEED } from './officialPluginCatalog.test-fixture';
+import {
+  OFFICIAL_PLUGIN_CATALOG_SEED,
+  OFFICIAL_PLUGIN_MARKET_DETAIL,
+} from './officialPluginCatalog.test-fixture';
 import type { ExternalPluginCommitResult, ExternalPluginInspection, PluginInventoryProjection, PluginMarketDetail } from './pluginTypes';
 
 let dispose: (() => void) | undefined;
@@ -323,6 +326,86 @@ describe('PluginCenterView', () => {
     expect(details.textContent).not.toContain('Manage Docker and Podman resources.');
   });
 
+  it('loads complete market author content only after an uninstalled plugin is selected', async () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    const onLoadMarketDetail = vi.fn(async () => OFFICIAL_PLUGIN_MARKET_DETAIL);
+    const marketItem = {
+      ...containersPlugin,
+      officialCatalog: OFFICIAL_PLUGIN_CATALOG_SEED[0],
+    } satisfies PluginInventoryProjection['items'][number];
+    dispose = render(() => (
+      <PluginCenterView
+        projection={{ items: [marketItem] }}
+        loading={false}
+        onCommand={vi.fn()}
+        onRefresh={vi.fn()}
+        onLoadMarketDetail={onLoadMarketDetail}
+        canManagePlugins
+        canOpenPluginSurfaces={false}
+      />
+    ), mount);
+
+    expect(onLoadMarketDetail).not.toHaveBeenCalled();
+    expect(mount.querySelector('[data-plugin-author-description]')).toBeNull();
+    openInventoryDetails(mount);
+
+    await vi.waitFor(() => expect(onLoadMarketDetail).toHaveBeenCalledWith(
+      'com.redeven.official.containers',
+      expect.any(AbortSignal),
+    ));
+    await vi.waitFor(() => expect(mount.querySelector('[data-plugin-author-description]')).not.toBeNull());
+    const author = mount.querySelector<HTMLElement>('[data-plugin-author-content]')!;
+    expect(author.querySelector('[lang="en-US"]')).not.toBeNull();
+    expect(author.textContent).toContain('Manage Docker and Podman containers, images, volumes, logs, and statistics');
+    expect(mount.querySelector('[data-plugin-author-highlights]')).not.toBeNull();
+  });
+
+  it('reloads selected market detail when the catalog generation changes', async () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    const [currentProjection, setCurrentProjection] = createSignal<PluginInventoryProjection>({
+      items: [{
+        ...containersPlugin,
+        officialCatalog: OFFICIAL_PLUGIN_CATALOG_SEED[0],
+      }],
+    });
+    let generation = 2;
+    const onLoadMarketDetail = vi.fn(async () => ({
+      ...OFFICIAL_PLUGIN_MARKET_DETAIL,
+      generation,
+    }));
+    dispose = render(() => (
+      <PluginCenterView
+        projection={currentProjection()}
+        loading={false}
+        onCommand={vi.fn()}
+        onRefresh={vi.fn()}
+        onLoadMarketDetail={onLoadMarketDetail}
+        canManagePlugins
+        canOpenPluginSurfaces={false}
+      />
+    ), mount);
+
+    openInventoryDetails(mount);
+    await vi.waitFor(() => expect(onLoadMarketDetail).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(mount.querySelector('[data-plugin-author-description]')).not.toBeNull());
+
+    generation = 3;
+    setCurrentProjection({
+      items: [{
+        ...containersPlugin,
+        officialCatalog: {
+          ...OFFICIAL_PLUGIN_CATALOG_SEED[0]!,
+          marketGeneration: 3,
+        },
+      }],
+    });
+
+    await vi.waitFor(() => expect(onLoadMarketDetail).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(mount.querySelector('[data-plugin-author-description]')).not.toBeNull());
+  });
+
   it('fails closed when market detail has no generation evidence', async () => {
     const mount = document.createElement('div');
     document.body.append(mount);
@@ -353,6 +436,9 @@ describe('PluginCenterView', () => {
     await vi.waitFor(() => expect(onLoadMarketDetail).toHaveBeenCalledOnce());
     await vi.waitFor(() => expect(mount.textContent).toContain('The plugin catalog is unavailable'));
     expect(mount.querySelector('[data-plugin-author-description]')).toBeNull();
+    expect(mount.textContent).toContain('Manage Docker and Podman resources.');
+    expect(mount.querySelector('[data-plugin-center-install="catalog:containers"]')).not.toBeNull();
+    expect(findDocumentButton('Retry')).not.toBeNull();
   });
 
   it('keeps refresh status outside the card grid', () => {

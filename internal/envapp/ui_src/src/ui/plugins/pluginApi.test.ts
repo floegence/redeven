@@ -122,7 +122,7 @@ describe('v0.7.1 plugin lifecycle client integration', () => {
       items: [expect.objectContaining({
         pluginID: 'com.redeven.official.containers',
         lifecycleState: 'not_installed',
-        officialCatalog: expect.objectContaining({ latestVersion: '4.0.1' }),
+        officialCatalog: expect.objectContaining({ latestVersion: '4.1.0' }),
       })],
     });
     expect(loadMarket).toHaveBeenCalledOnce();
