@@ -251,7 +251,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     setMarketDetailState({ pluginID, loading: true });
     void props.onLoadMarketDetail(pluginID, controller.signal).then((detail) => {
       if (marketDetailController !== controller) return;
-      if (detail.generation !== undefined && detail.generation !== marketGeneration) {
+      if (detail.generation === undefined || detail.generation !== marketGeneration) {
         setMarketDetailState({ pluginID, error: new Error('Plugin market generation changed'), loading: false });
         return;
       }
