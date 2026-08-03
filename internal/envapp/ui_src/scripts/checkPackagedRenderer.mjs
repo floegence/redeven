@@ -113,7 +113,7 @@ function builtPluginMarketSnapshot() {
         asset: { url: builtPluginPackageURL },
         publisher_release_ref: { release_ref: builtPluginReleaseRef },
         signer_key_id: 'redeven_official_signing_2026',
-        compatibility: { min_redeven_version: '1.0.0', min_redevplugin_version: '0.7.0' },
+        compatibility: { min_redeven_version: '1.0.0', min_redevplugin_version: '0.7.1' },
       },
     }],
   };
@@ -143,7 +143,7 @@ function builtPluginInstalledPlugin() {
         display_name: 'Fixture Plugin',
         version: builtPluginReleaseRef.version,
         api_version: 'plugin-v1',
-        min_runtime_version: '0.7.0',
+        min_runtime_version: '0.7.1',
         ui_protocol_version: 'plugin-ui-v7',
       },
       presentation: {
