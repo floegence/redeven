@@ -9,8 +9,16 @@ import (
 )
 
 type floretReadCapabilities struct {
-	thread   floretThreadReadHostFactory
-	subagent floretSubagentReadHostFactory
+	thread    floretThreadReadHostFactory
+	inventory floretRootThreadInventory
+	subagent  floretSubagentReadHostFactory
+}
+
+func (c *floretReadCapabilities) listRootThreads(ctx context.Context, request floretListRootThreadsRequest) (floretRootThreadsPage, error) {
+	if c == nil || c.inventory == nil {
+		return floretRootThreadsPage{}, errors.New("Floret root thread inventory capability is unavailable")
+	}
+	return c.inventory.ListRootThreads(ctxOrBackground(ctx), request)
 }
 
 func (c *floretReadCapabilities) openThread(ctx context.Context, threadID string) (floretThreadReadHost, error) {

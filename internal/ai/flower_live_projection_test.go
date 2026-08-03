@@ -2,8 +2,12 @@ package ai
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/floegence/floret/v3/identity"
+	"github.com/floegence/floret/v3/observation"
 )
 
 func assertFlowerApprovalReceiptCursor(t *testing.T, svc *Service, endpointID string, threadID string, actionID string, resp *SubmitFlowerApprovalResponse) {
@@ -494,6 +498,158 @@ func TestFlowerLiveProjectionReplacesCanonicalApprovalQueueAtomically(t *testing
 	}
 	if len(state.ApprovalActions) != 1 || state.ApprovalActions[control.ActionID].ActionID == "" {
 		t.Fatalf("empty canonical queue actions=%#v, want only control confirmation", state.ApprovalActions)
+	}
+}
+
+func TestFlowerLiveCanonicalTimelineSuppressesSettledApprovalOverlay(t *testing.T) {
+	t.Parallel()
+
+	current := FlowerApprovalAction{
+		ActionID: "approval_current", Origin: FlowerApprovalOriginMainTool,
+		RunID: "run_current", TurnID: "turn_current", ToolID: "tool_current", ToolName: "file.read",
+		State: FlowerApprovalStateRequested, Status: FlowerApprovalStatusPending,
+		Revision: 2, Version: 2, SurfaceEpoch: 7, SurfaceRole: FlowerApprovalSurfacePrimaryAction,
+		Scope: "thread:thread_canonical", RequestedAtMs: 1000, CanApprove: true,
+		QueueGeneration: 7, QueueOrder: 1, BatchSize: 1, Summary: FlowerApprovalSummary{Label: "Read file"},
+	}
+	settled := FlowerApprovalAction{
+		ActionID: "approval_settled", Origin: FlowerApprovalOriginMainTool,
+		RunID: "run_settled", TurnID: "turn_settled", ToolID: "tool_settled", ToolName: "terminal.exec",
+		State: FlowerApprovalStateRequested, Status: FlowerApprovalStatusPending,
+		Revision: 3, Version: 3, SurfaceEpoch: 7, SurfaceRole: FlowerApprovalSurfaceLocator,
+		Scope: "thread:thread_canonical", RequestedAtMs: 1100, CanApprove: false,
+		ReadOnlyReason: "Queued for approval", QueueGeneration: 7, QueueOrder: 2, BatchSize: 1,
+		Summary: FlowerApprovalSummary{Label: "Run command"},
+	}
+	queue := FlowerApprovalQueue{
+		Generation: 7, Revision: 8, CurrentActionID: current.ActionID,
+		CurrentPosition: 1, Total: 2, UnresolvedCount: 2,
+	}
+	state := FlowerLiveMaterializedState{
+		Messages: map[string]FlowerLiveMessageDraft{}, Runs: map[string]FlowerLiveRunState{},
+		ApprovalActions:     map[string]FlowerApprovalAction{current.ActionID: current, settled.ActionID: settled},
+		ApprovalActionsSeen: true, ApprovalQueue: &queue, InputRequests: map[string]RequestUserInputPrompt{},
+	}
+	timeline := []FlowerTimelineMessage{{
+		MessageID: "turn_settled", ThreadID: "thread_canonical", TurnID: "turn_settled", RunID: "run_settled",
+		Role: "assistant", Status: "error", Live: false,
+		Blocks: []any{ActivityTimelineBlock{Type: activityTimelineBlockType, ActivityTimeline: observation.ActivityTimeline{
+			SchemaVersion: observation.ActivityTimelineSchemaVersion,
+			RunID:         identity.RunID("run_settled"), ThreadID: identity.ThreadID("thread_canonical"), TurnID: identity.TurnID("turn_settled"),
+			Summary: observation.ActivitySummary{Status: observation.ActivityStatusError},
+			Items: []observation.ActivityItem{{
+				ItemID: "tool:tool_settled", ToolID: "tool_settled", ToolName: "terminal.exec",
+				Kind: observation.ActivityKindTool, Status: observation.ActivityStatusError,
+				Severity: observation.ActivitySeverityError, RequiresApproval: true, ApprovalState: "timed_out",
+			}},
+		}}},
+	}}
+
+	settledTools, err := reconcileFlowerLiveApprovalsWithCanonicalTimeline(&state, timeline)
+	if err != nil {
+		t.Fatalf("reconcile canonical approvals: %v", err)
+	}
+	if _, ok := settledTools[flowerApprovalRunToolKey(settled.RunID, settled.ToolID)]; !ok {
+		t.Fatalf("settled tool index=%#v, want canonical run/tool", settledTools)
+	}
+	if _, ok := state.ApprovalActions[settled.ActionID]; ok {
+		t.Fatalf("canonical terminal tool retained stale approval: %#v", state.ApprovalActions)
+	}
+	if got := state.ApprovalActions[current.ActionID]; got.ActionID != current.ActionID || !got.CanApprove {
+		t.Fatalf("unrelated current approval changed: %#v", got)
+	}
+	if state.ApprovalQueue == nil || state.ApprovalQueue.CurrentActionID != current.ActionID ||
+		state.ApprovalQueue.Total != 1 || state.ApprovalQueue.UnresolvedCount != 1 {
+		t.Fatalf("approval queue=%#v, want one unrelated current action", state.ApprovalQueue)
+	}
+}
+
+func TestFlowerLiveCanonicalApprovalReconciliationFailsClosedOnCrossRunActivity(t *testing.T) {
+	t.Parallel()
+
+	action := FlowerApprovalAction{
+		ActionID: "approval_cross_run", Origin: FlowerApprovalOriginMainTool,
+		RunID: "run_expected", TurnID: "turn_expected", ToolID: "tool_cross_run", ToolName: "terminal.exec",
+		State: FlowerApprovalStateRequested, Status: FlowerApprovalStatusPending, CanApprove: true,
+	}
+	state := FlowerLiveMaterializedState{
+		ApprovalActions: map[string]FlowerApprovalAction{action.ActionID: action},
+		ApprovalQueue:   &FlowerApprovalQueue{CurrentActionID: action.ActionID, Total: 1, UnresolvedCount: 1, CurrentPosition: 1},
+	}
+	wantAction := action
+	wantQueue := *state.ApprovalQueue
+	timeline := []FlowerTimelineMessage{{
+		MessageID: "turn_expected", ThreadID: "thread_expected", TurnID: "turn_expected", RunID: "run_expected",
+		Role: "assistant", Status: "error", Live: false,
+		Blocks: []any{ActivityTimelineBlock{Type: activityTimelineBlockType, ActivityTimeline: observation.ActivityTimeline{
+			SchemaVersion: observation.ActivityTimelineSchemaVersion,
+			RunID:         identity.RunID("run_other"), ThreadID: identity.ThreadID("thread_expected"), TurnID: identity.TurnID("turn_expected"),
+			Summary: observation.ActivitySummary{Status: observation.ActivityStatusError},
+			Items: []observation.ActivityItem{{
+				ItemID: "tool:tool_cross_run", ToolID: "tool_cross_run", ToolName: "terminal.exec",
+				Kind: observation.ActivityKindTool, Status: observation.ActivityStatusError, Severity: observation.ActivitySeverityError,
+			}},
+		}}},
+	}}
+
+	if _, err := reconcileFlowerLiveApprovalsWithCanonicalTimeline(&state, timeline); err == nil {
+		t.Fatal("cross-run canonical activity unexpectedly reconciled")
+	}
+	if got := state.ApprovalActions[action.ActionID]; !reflect.DeepEqual(got, wantAction) {
+		t.Fatalf("failed reconciliation mutated action\n got: %#v\nwant: %#v", got, wantAction)
+	}
+	if state.ApprovalQueue == nil || *state.ApprovalQueue != wantQueue {
+		t.Fatalf("failed reconciliation mutated queue\n got: %#v\nwant: %#v", state.ApprovalQueue, wantQueue)
+	}
+}
+
+func TestFlowerLiveCanonicalSettlementFiltersLaterStaleQueueReplacement(t *testing.T) {
+	t.Parallel()
+
+	endpointID := "env_settled_queue"
+	threadID := "thread_settled_queue"
+	action := FlowerApprovalAction{
+		ActionID: "approval_settled_queue", Origin: FlowerApprovalOriginMainTool,
+		RunID: "run_settled_queue", TurnID: "turn_settled_queue", ToolID: "tool_settled_queue", ToolName: "terminal.exec",
+		State: FlowerApprovalStateRequested, Status: FlowerApprovalStatusPending,
+		Revision: 4, Version: 4, SurfaceEpoch: 9, SurfaceRole: FlowerApprovalSurfacePrimaryAction,
+		Scope: "thread:" + threadID, RequestedAtMs: 1000, CanApprove: true,
+		QueueGeneration: 9, QueueOrder: 1, BatchSize: 1, Summary: FlowerApprovalSummary{Label: "Run command"},
+	}
+	queue := FlowerApprovalQueue{
+		Generation: 9, Revision: 10, CurrentActionID: action.ActionID,
+		CurrentPosition: 1, Total: 1, UnresolvedCount: 1,
+	}
+	svc := &Service{flowerLiveByThread: map[string]*flowerLiveThreadStream{}}
+	svc.mu.Lock()
+	stream := newFlowerLiveThreadStream()
+	stream.CanonicalSettledTool[flowerApprovalRunToolKey(action.RunID, action.ToolID)] = struct{}{}
+	svc.flowerLiveByThread[runThreadKey(endpointID, threadID)] = stream
+	svc.mu.Unlock()
+
+	event, accepted := svc.appendFlowerLiveEvent(FlowerLiveEvent{
+		EndpointID: endpointID, ThreadID: threadID, RunID: action.RunID, TurnID: action.TurnID,
+		Kind: FlowerLiveApprovalQueueReplaced,
+		Payload: mustFlowerPayload(FlowerLiveApprovalQueuePayload{
+			Actions: []FlowerApprovalAction{action}, ApprovalQueue: queue,
+		}),
+	})
+	if !accepted {
+		t.Fatal("stale queue replacement was not recorded as a settled empty snapshot")
+	}
+	var payload FlowerLiveApprovalQueuePayload
+	if !decodeFlowerPayload(event.Payload, &payload) {
+		t.Fatalf("decode filtered queue payload: %s", event.Payload)
+	}
+	if len(payload.Actions) != 0 || payload.ApprovalQueue.CurrentActionID != "" ||
+		payload.ApprovalQueue.CurrentPosition != 0 || payload.ApprovalQueue.Total != 0 || payload.ApprovalQueue.UnresolvedCount != 0 {
+		t.Fatalf("filtered stale queue=%#v actions=%#v, want explicit empty queue", payload.ApprovalQueue, payload.Actions)
+	}
+	svc.mu.Lock()
+	state := cloneFlowerLiveMaterializedState(stream.State)
+	svc.mu.Unlock()
+	if len(state.ApprovalActions) != 0 || state.ApprovalQueue == nil || state.ApprovalQueue.Total != 0 {
+		t.Fatalf("stale queue reactivated live approval state: %#v", state)
 	}
 }
 

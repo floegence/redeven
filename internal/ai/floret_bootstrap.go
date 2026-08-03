@@ -16,6 +16,7 @@ type floretBootstrapResult struct {
 	pendingToolRecovery floretPendingToolRecoveryCoordinator
 
 	newThreadRead floretThreadReadHostFactory
+	rootInventory floretRootThreadInventory
 
 	bindThreadRuntime floretThreadRuntimeBinder
 	newSubagentRead   floretSubagentReadHostFactory
@@ -335,9 +336,18 @@ func (a floretRootThreadInventoryAdapter) ListRootThreads(ctx context.Context, r
 	if err != nil {
 		return floretRootThreadsPage{}, err
 	}
-	out := floretRootThreadsPage{NextCursor: string(page.NextCursor), HasMore: page.HasMore, Threads: make([]flruntime.ThreadSnapshot, 0, len(page.Threads))}
+	out := floretRootThreadsPage{
+		NextCursor:         string(page.NextCursor),
+		HasMore:            page.HasMore,
+		Threads:            make([]flruntime.ThreadSnapshot, 0, len(page.Threads)),
+		LatestTurnByThread: make(map[identity.ThreadID]*flruntime.ThreadTurnSnapshot, len(page.Threads)),
+	}
 	for _, item := range page.Threads {
 		out.Threads = append(out.Threads, item.Thread)
+		if item.LatestTurn != nil {
+			latest := *item.LatestTurn
+			out.LatestTurnByThread[item.Thread.ID] = &latest
+		}
 	}
 	return out, nil
 }
@@ -375,7 +385,7 @@ func configureFloretRuntime(host *flruntime.Host) (*floretBootstrapResult, flore
 	result := &floretBootstrapResult{
 		close:               func() error { return host.Shutdown(context.Background()) },
 		pendingToolRecovery: &boundFloretPendingToolRecoveryCoordinator{host: host},
-		newThreadRead:       newThreadRead, newSubagentRead: newSubagentRead,
+		newThreadRead:       newThreadRead, rootInventory: rootInventory, newSubagentRead: newSubagentRead,
 		threadCreate: authority, threadTitle: authority, threadFork: authority, threadDelete: authority,
 	}
 	result.bindThreadRuntime = func(threadID identity.ThreadID) (floretThreadRuntimeCapabilities, error) {

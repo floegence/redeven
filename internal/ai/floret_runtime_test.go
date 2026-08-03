@@ -54,7 +54,7 @@ func installTestFloretCapabilities(svc *Service, bootstrap *floretBootstrapResul
 		return
 	}
 	svc.closeFloret = bootstrap.close
-	svc.floretReads = &floretReadCapabilities{thread: bootstrap.newThreadRead, subagent: bootstrap.newSubagentRead}
+	svc.floretReads = &floretReadCapabilities{thread: bootstrap.newThreadRead, inventory: bootstrap.rootInventory, subagent: bootstrap.newSubagentRead}
 	svc.floretRuntime = &floretRuntimeCapabilityIssuer{bind: bootstrap.bindThreadRuntime}
 	svc.pendingToolRecovery = bootstrap.pendingToolRecovery
 	svc.threadCreateFloret = &threadCreateFloretCoordinator{authority: bootstrap.threadCreate}

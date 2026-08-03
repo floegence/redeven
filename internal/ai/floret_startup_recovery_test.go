@@ -10,7 +10,10 @@ import (
 	"testing"
 	"time"
 
+	flconfig "github.com/floegence/floret/v3/config"
+	"github.com/floegence/floret/v3/florettest"
 	"github.com/floegence/floret/v3/identity"
+	flprovider "github.com/floegence/floret/v3/provider"
 	flruntime "github.com/floegence/floret/v3/runtime"
 	flstorage "github.com/floegence/floret/v3/storage"
 	"github.com/floegence/redeven/internal/ai/threadstore"
@@ -329,7 +332,68 @@ func TestFloretStartupRecoveryBindsChildToExactCanonicalParent(t *testing.T) {
 	}
 }
 
-func TestFloretStartupRecoveryWalksNestedSubagents(t *testing.T) {
+func TestFloretStartupRecoveryAcceptsCanonicalRootWithDirectChild(t *testing.T) {
+	ctx := context.Background()
+	host := openTestFloretRuntimeHost(t, flstorage.Memory())
+	created, err := host.Threads().CreateThread(ctx, flruntime.CreateThreadCommand{LogicalRequestID: "create_recovery_parent"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	parent, err := host.Thread(ctx, created.ThreadID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gateway := florettest.NewScriptedGateway(
+		flprovider.Identity{Provider: "test", Model: "model", StateCompatibilityKey: "test:model:v1"},
+		flprovider.Capabilities{Reasoning: flprovider.ReasoningUnsupported, AttachmentPayload: flprovider.AttachmentDescriptors},
+		florettest.Step{Events: []flprovider.Event{{Type: flprovider.EventDelta, Text: "done"}, {Type: flprovider.EventDone}}},
+	)
+	agent, err := flruntime.NewAgent(flconfig.AgentConfig{
+		Profile: flconfig.AgentProfile{ID: "assistant", Name: "Assistant"}, SystemPrompt: "Complete the delegated task.",
+		Context: flconfig.ContextPolicy{ContextWindowTokens: flconfig.DefaultContextWindowTokens},
+	}, gateway)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager, err := parent.SubAgentManager(ctx, agent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	spawned, err := manager.SpawnSubAgent(ctx, flruntime.SpawnSubAgentCommand{
+		LogicalRequestID: "spawn_recovery_child", TaskName: "recovery_child",
+		Input: flruntime.TurnInput{Text: "finish"}, ForkMode: flruntime.SubAgentForkNone,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		children, listErr := manager.List(ctx)
+		if listErr != nil {
+			t.Fatal(listErr)
+		}
+		if slices.ContainsFunc(children, func(child flruntime.SubAgentSnapshot) bool {
+			return child.ThreadID == spawned.Child.ThreadID && child.Status == flruntime.SubAgentStatusCompleted
+		}) {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	_, recovery, err := configureFloretRuntime(host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	targets, err := buildFloretStartupRecoveryTargets(ctx, []identity.ThreadID{created.ThreadID}, recovery)
+	if err != nil {
+		t.Fatalf("build recovery targets for root with direct child: %v", err)
+	}
+	if len(targets) != 0 {
+		t.Fatalf("completed root tree recovery targets=%d, want 0", len(targets))
+	}
+}
+
+func TestFloretStartupRecoveryDoesNotRebindDirectChildrenAsRoots(t *testing.T) {
 	t.Parallel()
 
 	var listed []identity.ThreadID
@@ -340,12 +404,8 @@ func TestFloretStartupRecoveryWalksNestedSubagents(t *testing.T) {
 			switch parentThreadID {
 			case "root_nested":
 				return startupRecoverySubagentReadHost{snapshots: []flruntime.SubAgentSnapshot{{ThreadID: "child_nested", ParentThreadID: parentThreadID}}}, nil
-			case "child_nested":
-				return startupRecoverySubagentReadHost{snapshots: []flruntime.SubAgentSnapshot{{ThreadID: "grandchild_nested", ParentThreadID: parentThreadID}}}, nil
-			case "grandchild_nested":
-				return startupRecoverySubagentReadHost{}, nil
 			default:
-				return nil, errors.New("unexpected nested SubAgent parent")
+				return nil, errors.New("direct child was rebound through root authority")
 			}
 		},
 		root: func(context.Context, identity.ThreadID) (floretInterruptedTurnRecoveryHostFactory, error) {
@@ -359,11 +419,11 @@ func TestFloretStartupRecoveryWalksNestedSubagents(t *testing.T) {
 	if _, err := buildFloretStartupRecoveryTargets(context.Background(), []identity.ThreadID{"root_nested"}, capabilities); err != nil {
 		t.Fatalf("build nested startup recovery targets: %v", err)
 	}
-	if want := []identity.ThreadID{"root_nested", "child_nested", "grandchild_nested"}; !slices.Equal(listed, want) {
+	if want := []identity.ThreadID{"root_nested"}; !slices.Equal(listed, want) {
 		t.Fatalf("listed parents=%v, want %v", listed, want)
 	}
-	if want := [][2]identity.ThreadID{{"root_nested", "child_nested"}, {"child_nested", "grandchild_nested"}}; !slices.Equal(bound, want) {
-		t.Fatalf("bound nested children=%v, want %v", bound, want)
+	if want := [][2]identity.ThreadID{{"root_nested", "child_nested"}}; !slices.Equal(bound, want) {
+		t.Fatalf("bound direct children=%v, want %v", bound, want)
 	}
 }
 

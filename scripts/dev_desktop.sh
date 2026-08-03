@@ -217,14 +217,23 @@ process_cwd() {
 
 cwd_looks_like_redeven_desktop() {
   local cwd="$1"
+  local checkout_root
+
+  if [ "$cwd" = "$DESKTOP_DIR" ]; then
+    return 0
+  fi
   case "$cwd" in
-    "$DESKTOP_DIR"|*/redeven/desktop|*/redeven-feat-*/desktop)
-      return 0
+    */desktop)
       ;;
     *)
       return 1
       ;;
   esac
+
+  checkout_root="${cwd%/desktop}"
+  [ -e "$checkout_root/.git" ] || return 1
+  [ -f "$cwd/package.json" ] || return 1
+  grep -Eq '"name"[[:space:]]*:[[:space:]]*"@floegence/redeven-desktop"' "$cwd/package.json"
 }
 
 collect_pids_by_pattern_and_desktop_cwd() {

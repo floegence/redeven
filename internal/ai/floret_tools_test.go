@@ -514,6 +514,45 @@ func TestFloretActivityForTerminalCallUsesCommandAsLabel(t *testing.T) {
 	}
 }
 
+func TestFloretToolDefinitionPreservesInvalidTerminalCallCommandPresentation(t *testing.T) {
+	t.Parallel()
+
+	definition, err := floretToolDefinitionForSnapshot(ToolDef{
+		Name: "terminal.exec",
+		InputSchema: json.RawMessage(`{
+			"type":"object",
+			"required":["command"],
+			"properties":{
+				"command":{"type":"string"},
+				"yield_ms":{"type":"integer","maximum":30000}
+			}
+		}`),
+	}, permissionSnapshotWithOwnerIdentity(buildPermissionSnapshot(FlowerPermissionApprovalRequired, nil, nil), "test", "test", "test"))
+	if err != nil {
+		t.Fatalf("floretToolDefinitionForSnapshot: %v", err)
+	}
+	if definition.InvalidActivity == nil {
+		t.Fatal("schema-invalid terminal calls have no presentation callback")
+	}
+	activity, err := definition.InvalidActivity(fltools.Invocation[map[string]any]{
+		Name: "terminal.exec",
+		Args: map[string]any{
+			"command":  "sleep 30; printf \\\"interrupt-should-not-print\\\\n\\\"",
+			"yield_ms": float64(60000),
+		},
+	})
+	if err != nil {
+		t.Fatalf("invalid terminal activity: %v", err)
+	}
+	if activity == nil || activity.Label != "sleep 30; printf \\\"interrupt-should-not-print\\\\n\\\"" {
+		t.Fatalf("activity=%#v, want attempted command label", activity)
+	}
+	payload, ok := activity.Payload.(fltools.TerminalActivityPayload)
+	if !ok || payload.Command != activity.Label {
+		t.Fatalf("payload=%#v, want attempted terminal command", activity.Payload)
+	}
+}
+
 func TestFloretActivityForTerminalCallTrimsLabelToContract(t *testing.T) {
 	t.Parallel()
 

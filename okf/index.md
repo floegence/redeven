@@ -74,7 +74,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 
 - [AI tool runtime](ai/ai-tool-runtime.md) - Builtin tool registry, permission checks, and activity projection.
 - [Flower storage ownership and migrations](ai/flower-storage-ownership-and-migrations.md) - Use the product v1 first-release baseline, capability-bound upload staging, canonical identity binding, and future contiguous migrations.
-- [Flower cross-store mutation inventory](ai/flower-cross-store-mutation-inventory.md) - Review every cross-store saga, legal Redeven coordination record, recovery entry, and the v3.2.3 receipt-only execution boundary.
+- [Flower cross-store mutation inventory](ai/flower-cross-store-mutation-inventory.md) - Review every cross-store saga, legal Redeven coordination record, recovery entry, and the v3.2.12 receipt-only execution boundary.
 - [Flower attachment resources](ai/flower-attachment-resources.md) - Enforce owner-scoped uploads, canonical reads, quotas, and last-reference cleanup.
 - [AI tool permissions and dispatch](ai/tool-permission-runtime.md) - Apply tool registration, scheduling, permission, approval, readonly, and target-routing contracts.
 - [AI tool approval runtime](ai/tool-approval-runtime.md) - Reconcile pending approval queues, conflicts, decisions, and authoritative live state.
