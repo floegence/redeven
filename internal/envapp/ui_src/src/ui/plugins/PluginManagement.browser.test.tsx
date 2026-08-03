@@ -728,16 +728,26 @@ describe('plugin management browser geometry and interaction', () => {
     item.click();
     await settle();
     const details = host.querySelector<HTMLElement>('[data-plugin-center-details]')!;
+    const detailControls = details.querySelector<HTMLElement>('[data-plugin-detail-controls]')!;
+    const detailBody = details.querySelector<HTMLElement>('[data-plugin-detail-scroll-body]')!;
+    const detailActions = details.querySelector<HTMLElement>('[data-plugin-action-row]')!;
     const selectedRow = item.closest<HTMLElement>('article')!;
     expect(selectedRow.getAttribute('aria-current')).toBe('true');
     expect(getComputedStyle(selectedRow).boxShadow).not.toBe('none');
     expect(host.querySelector<HTMLElement>('[data-plugin-center-list]')!.className).toContain('grid-cols-[repeat(auto-fill');
+    expect(getComputedStyle(details).overflowY).toBe('hidden');
+    expect(getComputedStyle(detailBody).overflowY).toBe('auto');
+    expect(detailControls.contains(detailActions)).toBe(true);
+    expect(detailBody.contains(detailActions)).toBe(false);
+    const detailsRect = details.getBoundingClientRect();
+    const controlsRect = detailControls.getBoundingClientRect();
+    expect(controlsRect.top).toBeGreaterThanOrEqual(detailsRect.top - 1);
+    expect(controlsRect.bottom).toBeLessThanOrEqual(detailsRect.bottom + 1);
 
     if (viewport.width >= 640) {
       expect(getComputedStyle(master).display).not.toBe('none');
       expect(getComputedStyle(details).display).not.toBe('none');
       const masterRect = master.getBoundingClientRect();
-      const detailsRect = details.getBoundingClientRect();
       expect(Math.abs(masterRect.top - detailsRect.top)).toBeLessThanOrEqual(1);
       expect(masterRect.right).toBeLessThanOrEqual(detailsRect.left + 1);
       if (viewport.width >= 1280) {

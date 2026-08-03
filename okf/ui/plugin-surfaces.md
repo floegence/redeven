@@ -58,8 +58,11 @@ one responsive compact card directory with 48px identity icons and independent
 primary, surface, overflow, and detail commands. Updates carry an explicit
 information treatment and update command. Refresh status remains outside the
 card grid, so a pending refresh cannot appear as a duplicate card. The inspector
-orders identity, primary actions, required and optional
-permissions, issue evidence, and collapsed technical information. Policy caps,
+orders identity and summary, primary actions, manifest-owned author description
+and highlights, required and optional permissions, issue evidence, and collapsed
+technical information. Its identity and primary-action region remains stable
+while the author, permission, issue, and technical body scrolls independently;
+long localized copy cannot push the current action out of view. Policy caps,
 effective grants, revocation, and required-to-open semantics remain distinct.
 The directory opens with no inspector selected. Only an explicit item selection
 or Shell exact-key request opens detail; closing detail preserves the directory

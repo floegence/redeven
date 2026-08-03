@@ -806,75 +806,81 @@ export function PluginCenterDetails(props: {
   return (
     <aside
       data-plugin-center-details
-      class={cn('min-h-0 w-full overflow-y-auto bg-background sm:w-[360px] sm:max-w-[42vw] sm:flex-none sm:border-l', props.mobileOpen === false ? 'hidden sm:block' : 'redeven-plugin-motion block animate-in fade-in duration-200 ease-out motion-reduce:animate-none')}
+      class={cn('min-h-0 w-full overflow-hidden bg-background sm:w-[360px] sm:max-w-[42vw] sm:flex-none sm:border-l', props.mobileOpen === false ? 'hidden sm:block' : 'redeven-plugin-motion block animate-in fade-in duration-200 ease-out motion-reduce:animate-none')}
     >
       <Show
         when={props.item}
         fallback={<div class="px-4 py-8 text-xs text-muted-foreground">{i18n.t('uiCopy.plugin.selectOfficial')}</div>}
       >
         {(item) => (
-          <div class="space-y-4 px-4 py-4">
-            <Button
-              ref={props.mobileBackRef}
-              data-plugin-center-mobile-back
-              size="sm"
-              variant="ghost"
-              icon={ArrowLeft}
-              class="min-h-[44px] sm:hidden"
-              onClick={props.onMobileBack}
-            >
-              {i18n.t('uiCopy.plugin.backToList')}
-            </Button>
-            <PluginIdentityHeader item={item()} description headingRef={props.detailHeadingRef} />
+          <div class="flex h-full min-h-0 flex-col">
+            <div class="shrink-0 space-y-4 border-b px-4 py-4" data-plugin-detail-controls>
+              <Button
+                ref={props.mobileBackRef}
+                data-plugin-center-mobile-back
+                size="sm"
+                variant="ghost"
+                icon={ArrowLeft}
+                class="min-h-[44px] sm:hidden"
+                onClick={props.onMobileBack}
+              >
+                {i18n.t('uiCopy.plugin.backToList')}
+              </Button>
+              <PluginIdentityHeader item={item()} description headingRef={props.detailHeadingRef} />
 
-            <PluginActions
-              item={item()}
-              canManage={props.canManage}
-              canOpenSurfaces={props.canOpenSurfaces}
-              commandPending={props.commandPending}
-              onCommand={props.onCommand}
-              onAskUninstall={props.onAskUninstall}
-              onExternalInstall={props.onExternalInstall}
-              onExternalUpdate={props.onExternalUpdate}
-            />
+              <PluginActions
+                item={item()}
+                canManage={props.canManage}
+                canOpenSurfaces={props.canOpenSurfaces}
+                commandPending={props.commandPending}
+                onCommand={props.onCommand}
+                onAskUninstall={props.onAskUninstall}
+                onExternalInstall={props.onExternalInstall}
+                onExternalUpdate={props.onExternalUpdate}
+              />
+            </div>
 
-            <PluginAuthorContent
-              item={item()}
-              marketDetail={props.marketDetail}
-              loading={props.marketDetailLoading}
-              error={props.marketDetailError}
-              onRetry={props.onRetryMarketDetail}
-            />
+            <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4" data-plugin-detail-scroll-body>
+              <div class="space-y-4">
+                <PluginAuthorContent
+                  item={item()}
+                  marketDetail={props.marketDetail}
+                  loading={props.marketDetailLoading}
+                  error={props.marketDetailError}
+                  onRetry={props.onRetryMarketDetail}
+                />
 
-            <PluginPermissionInventory
-              item={item()}
-              canManage={props.canManage}
-              commandPending={props.commandPending}
-              onCommand={props.onCommand}
-              focusTargetRef={props.permissionsRef}
-            />
+                <PluginPermissionInventory
+                  item={item()}
+                  canManage={props.canManage}
+                  commandPending={props.commandPending}
+                  onCommand={props.onCommand}
+                  focusTargetRef={props.permissionsRef}
+                />
 
-            <PluginIssueDetails item={item()} />
+                <PluginIssueDetails item={item()} />
 
-            <details class="group rounded-md border px-3 py-2.5 transition-[border-color,background-color] duration-150 open:bg-muted/10 motion-reduce:transition-none" data-plugin-technical-details>
-              <summary tabIndex={0} class="min-h-7 cursor-pointer text-xs font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{i18n.t('uiCopy.plugin.technicalDetails')}</summary>
-              <div class="redeven-plugin-disclosure-content mt-3 grid gap-2.5">
-                <DetailStat label={i18n.t('uiCopy.plugin.publisher')} value={item().publisher} />
-                <DetailStat label={i18n.t('uiCopy.plugin.installedVersion')} value={item().version ?? i18n.t('uiCopy.plugin.notInstalled')} />
-                <DetailStat label={i18n.t('uiCopy.plugin.stableVersion')} value={item().officialCatalog?.stableVersion ?? '-'} />
-                <DetailStat label={i18n.t('uiCopy.plugin.minimumRedeven')} value={item().officialCatalog?.minRedevenVersion ?? '-'} />
-                <DetailStat label={i18n.t('uiCopy.plugin.minimumReDevPlugin')} value={item().officialCatalog?.minReDevPluginVersion ?? '-'} />
-                <DetailStat label={i18n.t('uiCopy.plugin.trust')} value={pluginTrustLabel(item(), i18n)} />
+                <details class="group rounded-md border px-3 py-2.5 transition-[border-color,background-color] duration-150 open:bg-muted/10 motion-reduce:transition-none" data-plugin-technical-details>
+                  <summary tabIndex={0} class="min-h-7 cursor-pointer text-xs font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{i18n.t('uiCopy.plugin.technicalDetails')}</summary>
+                  <div class="redeven-plugin-disclosure-content mt-3 grid gap-2.5">
+                    <DetailStat label={i18n.t('uiCopy.plugin.publisher')} value={item().publisher} />
+                    <DetailStat label={i18n.t('uiCopy.plugin.installedVersion')} value={item().version ?? i18n.t('uiCopy.plugin.notInstalled')} />
+                    <DetailStat label={i18n.t('uiCopy.plugin.stableVersion')} value={item().officialCatalog?.stableVersion ?? '-'} />
+                    <DetailStat label={i18n.t('uiCopy.plugin.minimumRedeven')} value={item().officialCatalog?.minRedevenVersion ?? '-'} />
+                    <DetailStat label={i18n.t('uiCopy.plugin.minimumReDevPlugin')} value={item().officialCatalog?.minReDevPluginVersion ?? '-'} />
+                    <DetailStat label={i18n.t('uiCopy.plugin.trust')} value={pluginTrustLabel(item(), i18n)} />
+                  </div>
+                  <code class="mt-3 block break-all text-[11px] text-muted-foreground">{item().pluginID}</code>
+                </details>
+                <PluginUninstallDialog
+                  item={item()}
+                  open={props.uninstallChoiceFor === item().pluginInstanceID}
+                  pending={props.commandPending}
+                  onClose={() => props.onAskUninstall('')}
+                  onCommand={props.onCommand}
+                />
               </div>
-              <code class="mt-3 block break-all text-[11px] text-muted-foreground">{item().pluginID}</code>
-            </details>
-            <PluginUninstallDialog
-              item={item()}
-              open={props.uninstallChoiceFor === item().pluginInstanceID}
-              pending={props.commandPending}
-              onClose={() => props.onAskUninstall('')}
-              onCommand={props.onCommand}
-            />
+            </div>
           </div>
         )}
       </Show>
