@@ -58,14 +58,6 @@ func (h *scriptedInterruptedTurnRecoveryHost) Recover(context.Context) (flruntim
 	return flruntime.RecoverInterruptedTurnResult{}, nil
 }
 
-type startupRecoverySubagentReadHost struct {
-	snapshots []flruntime.SubAgentSnapshot
-}
-
-type delayedStartupRecoverySubagentReadHost struct {
-	delay time.Duration
-}
-
 type scriptedFloretRootInventory struct {
 	mu       sync.Mutex
 	pages    []floretRootThreadsPage
@@ -102,43 +94,6 @@ func (h *lifecycleBoundStartupRecoveryHost) Recover(ctx context.Context) (flrunt
 	<-ctx.Done()
 	close(h.backgroundCanceled)
 	return flruntime.RecoverInterruptedTurnResult{}, ctx.Err()
-}
-
-func (h startupRecoverySubagentReadHost) ListSubAgents(context.Context) ([]flruntime.SubAgentSnapshot, error) {
-	return append([]flruntime.SubAgentSnapshot(nil), h.snapshots...), nil
-}
-
-func (h delayedStartupRecoverySubagentReadHost) ListSubAgents(ctx context.Context) ([]flruntime.SubAgentSnapshot, error) {
-	select {
-	case <-time.After(h.delay):
-		return nil, nil
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	}
-}
-
-func (delayedStartupRecoverySubagentReadHost) ListThreadTurns(context.Context, identity.ThreadID, flruntime.ThreadTurnsRequest) (flruntime.ThreadTurnsPage, error) {
-	return flruntime.ThreadTurnsPage{}, errors.New("unexpected SubAgent turn read")
-}
-
-func (delayedStartupRecoverySubagentReadHost) ReadThreadTurn(context.Context, identity.ThreadID, identity.TurnID) (flruntime.ThreadTurnSnapshot, error) {
-	return flruntime.ThreadTurnSnapshot{}, errors.New("unexpected SubAgent exact turn read")
-}
-
-func (delayedStartupRecoverySubagentReadHost) ReadSubAgentDetail(context.Context, identity.ThreadID, flruntime.ThreadDetailRequest) (flruntime.SubAgentDetail, error) {
-	return flruntime.SubAgentDetail{}, errors.New("unexpected SubAgent detail read")
-}
-
-func (startupRecoverySubagentReadHost) ListThreadTurns(context.Context, identity.ThreadID, flruntime.ThreadTurnsRequest) (flruntime.ThreadTurnsPage, error) {
-	return flruntime.ThreadTurnsPage{}, errors.New("unexpected SubAgent turn read")
-}
-
-func (startupRecoverySubagentReadHost) ReadThreadTurn(context.Context, identity.ThreadID, identity.TurnID) (flruntime.ThreadTurnSnapshot, error) {
-	return flruntime.ThreadTurnSnapshot{}, errors.New("unexpected SubAgent exact turn read")
-}
-
-func (startupRecoverySubagentReadHost) ReadSubAgentDetail(context.Context, identity.ThreadID, flruntime.ThreadDetailRequest) (flruntime.SubAgentDetail, error) {
-	return flruntime.SubAgentDetail{}, errors.New("unexpected SubAgent detail read")
 }
 
 func newStartupRecoveryTestStore(t *testing.T, settings ...threadstore.ThreadSettings) *threadstore.Store {
