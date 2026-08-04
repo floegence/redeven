@@ -497,8 +497,8 @@ func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 
 	const (
 		floretModule   = "github.com/floegence/floret/v3"
-		floretVersion  = "v3.2.12"
-		floretSum      = "h1:lvdChuL9CfaBmkwX+1lYVNS6PIc/O6j80UgWkZIDw9k="
+		floretVersion  = "v3.2.13"
+		floretSum      = "h1:3zBmE3sbfV3f5PQqPkG1XigVbqY+SXMZMD3fZeWVGUo="
 		floretGoModSum = "h1:l9Z36ZEf/OHlHu+1hZeDp+WOT9TqWNgNQYOQi+eAWW0="
 	)
 	root := repoRootForTest(t)
@@ -582,7 +582,7 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"TurnInput.References",
 			"MessageReference",
 			"raw `ResourceRef` never reaches the browser",
-			"v3.2.12",
+			"v3.2.13",
 		},
 		filepath.Join("okf", "ui", "flower-turn-launcher.md"): {
 			"file_path",
@@ -608,7 +608,7 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"complete immutable snapshot",
 		},
 		filepath.Join("internal", "runtimeservice", "compatibility_contract.json"): {
-			"Floret v3.2.12",
+			"Floret v3.2.13",
 			"floret-v3-2-12-desktop-reliability",
 			"ai_threadstore_product_v1",
 			"Fresh stores initialize directly at version 1",
@@ -721,7 +721,7 @@ func TestFloretCapabilitiesAreMintedOnlyDuringBootstrap(t *testing.T) {
 		}
 	}
 	maintenance := readRepoFile(t, root, filepath.Join("internal", "ai", "floret_store_maintenance.go"))
-	for _, marker := range []string{"flstorage.SQLite", "flruntime.Open"} {
+	for _, marker := range []string{"flstorage.SQLite", "type floretRuntimeOpener"} {
 		if !strings.Contains(maintenance, marker) {
 			t.Fatalf("floret_store_maintenance.go must open the current published storage contract with %q", marker)
 		}

@@ -29,10 +29,10 @@ type floretBootstrapResult struct {
 }
 
 type floretStartupRecoveryCapabilities struct {
-	inventory     floretRootThreadInventory
-	root          floretRootTurnRecoveryBinder
-	subagent      floretSubagentTurnRecoveryBinder
-	listSubagents floretSubagentReadHostFactory
+	inventory  floretRootThreadInventory
+	candidates func(context.Context) ([]flruntime.InterruptedTurnRecoveryCandidate, error)
+	root       floretRootTurnRecoveryBinder
+	subagent   floretSubagentTurnRecoveryBinder
 }
 
 type floretThreadRuntimeBinder func(identity.ThreadID) (floretThreadRuntimeCapabilities, error)
@@ -439,7 +439,10 @@ func configureFloretRuntime(host *flruntime.Host) (*floretBootstrapResult, flore
 	}
 	result.orphanRoots = &floretOrphanRootMaintenanceCoordinator{inventory: rootInventory, delete: result.threadDelete}
 	recovery := floretStartupRecoveryCapabilities{
-		inventory: rootInventory, listSubagents: newSubagentRead,
+		inventory: rootInventory,
+		candidates: func(ctx context.Context) ([]flruntime.InterruptedTurnRecoveryCandidate, error) {
+			return host.Threads().ListInterruptedTurnRecoveryCandidates(ctxOrBackground(ctx))
+		},
 		root: func(ctx context.Context, threadID identity.ThreadID) (floretInterruptedTurnRecoveryHostFactory, error) {
 			thread, err := newThread(ctx, threadID)
 			if err != nil {
@@ -478,11 +481,11 @@ func newFloretBootstrapResult(host *flruntime.Host) (*floretBootstrapResult, err
 }
 
 func openFloretRuntime(ctx context.Context, storePath string, progress func(FloretStoreStartupPhase)) (*floretBootstrapResult, floretStartupRecoveryCapabilities, error) {
-	source, err := prepareFloretStorage(ctx, storePath, progress)
-	if err != nil {
-		return nil, floretStartupRecoveryCapabilities{}, err
-	}
-	host, err := flruntime.Open(ctx, flruntime.Options{Storage: source})
+	return openFloretRuntimeWith(ctx, storePath, progress, flruntime.Open)
+}
+
+func openFloretRuntimeWith(ctx context.Context, storePath string, progress func(FloretStoreStartupPhase), open floretRuntimeOpener) (*floretBootstrapResult, floretStartupRecoveryCapabilities, error) {
+	host, err := openFloretHost(ctx, storePath, progress, open)
 	if err != nil {
 		return nil, floretStartupRecoveryCapabilities{}, err
 	}

@@ -57,28 +57,26 @@ func (e *FloretStoreStartupError) Unwrap() error {
 
 // IMPORTANT: Redeven treats Floret storage as opaque and opens only the
 // current published Floret storage contract. Unsupported stores fail closed.
-func prepareFloretStorage(ctx context.Context, path string, progress func(FloretStoreStartupPhase)) (flstorage.Source, error) {
-	var zero flstorage.Source
-	if ctx == nil || strings.TrimSpace(path) == "" || path != strings.TrimSpace(path) {
-		return zero, floretStoreStartupError(FloretStoreStartupContractError, false, false, errors.New("Floret storage startup requires a context and canonical path"))
+type floretRuntimeOpener func(context.Context, flruntime.Options) (*flruntime.Host, error)
+
+func openFloretHost(ctx context.Context, path string, progress func(FloretStoreStartupPhase), open floretRuntimeOpener) (*flruntime.Host, error) {
+	if ctx == nil || strings.TrimSpace(path) == "" || path != strings.TrimSpace(path) || open == nil {
+		return nil, floretStoreStartupError(FloretStoreStartupContractError, false, false, errors.New("Floret storage startup requires a context, canonical path, and runtime opener"))
 	}
 	if err := ctx.Err(); err != nil {
-		return zero, floretStoreStartupError(FloretStoreStartupCancelled, true, true, err)
+		return nil, floretStoreStartupError(FloretStoreStartupCancelled, true, true, err)
 	}
 	source := flstorage.SQLite(path)
 	reportFloretStorePhase(progress, FloretStoreStartupInspecting)
-	host, err := flruntime.Open(ctx, flruntime.Options{Storage: source})
+	host, err := open(ctx, flruntime.Options{Storage: source})
 	if err != nil {
-		return zero, classifyFloretStorageOpenError(err)
+		return nil, classifyFloretStorageOpenError(err)
 	}
 	if host == nil {
-		return zero, floretStoreStartupError(FloretStoreStartupContractError, false, false, errors.New("Floret storage source returned no runtime host"))
-	}
-	if err := host.Shutdown(context.WithoutCancel(ctx)); err != nil {
-		return zero, floretStoreStartupError(FloretStoreStartupIOError, true, true, err)
+		return nil, floretStoreStartupError(FloretStoreStartupContractError, false, false, errors.New("Floret storage source returned no runtime host"))
 	}
 	reportFloretStorePhase(progress, FloretStoreStartupVerifying)
-	return source, nil
+	return host, nil
 }
 
 func reportFloretStorePhase(progress func(FloretStoreStartupPhase), phase FloretStoreStartupPhase) {

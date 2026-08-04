@@ -18,9 +18,13 @@ timestamp: 2026-07-25T00:00:00Z
 
 The Code App composition layer owns the only AI readiness controller. Its
 closed state set is `unavailable`, `inspecting`, `migrating`, `verifying`,
-`ready`, and `blocked`. Maintenance phases are reported only by the actual
-public Floret Inspect, Migrate, and Verify calls. Failures are mapped from the
-typed Redeven startup projection into sanitized product reason codes plus
+`ready`, and `blocked`. Store inspection, automatic domain migration, and
+verification occur only inside the single published Floret `runtime.Open` call
+that creates the actual Host retained by the new service generation. Redeven
+reports `inspecting` before that call and `verifying` after it returns while
+product composition and startup recovery finish; it must not open and close a
+disposable probe Host before opening the retained Host. Failures are mapped from
+the typed Redeven startup projection into sanitized product reason codes plus
 `retryable`, `safe_to_retry`, `committed`, and `rolled_back` facts. Generic
 service construction failures use `ai_service_startup_error`; raw errors,
 paths, schema identities, fingerprints, SQL, and backend content are not exposed.
@@ -152,6 +156,7 @@ closed for unknown outcomes. Readiness history is not recovery authority.
 - `redeven:internal/ai/rpc.go:123` - Registers AI RPC handlers against scoped call and realtime-subscription leases.
 - `redeven:internal/agent/desktop_model_source.go:10` - Holds one generation lease for each Desktop model-source operation.
 - `redeven:internal/codeapp/ai_readiness_test.go:16` - Covers drain ordering, close failure, parent cancellation, current startup options, replacement, duplicate release, late startup, phases, and sanitized failures.
+- `redeven:internal/ai/floret_store_maintenance_test.go:1` - Proves that one service startup opens exactly one retained Floret Host and preserves typed failure classification.
 - `redeven:internal/codeapp/appserver/ai_readiness_test.go:78` - Covers unified unavailable responses, optional Settings projection, exact permission ordering, invalid leases, and secrets-only routes.
 - `redeven:internal/ai/rpc_readiness_test.go:15` - Covers dynamic recovery, generation lease counts, invalid leases, and concurrent connection cleanup.
 - `redeven:internal/envapp/ui_src/src/ui/flower/aiReadiness.ts:1` - Strictly normalizes the sanitized wire facts and owns bounded, permission-aware polling and retry state.
