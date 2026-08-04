@@ -1,6 +1,11 @@
 # Redeven OKF Update Log
 
 ## 2026-08-04
+* **Canceled approval startup compatibility**: Adopted published Floret v3.2.14
+  so an interrupted batch with a canceled tool result closes its requested
+  approval before any run-end marker exists. Canonical startup inventory and
+  latest-turn projection remain readable without rewriting the Floret Store or
+  changing its schema v4 lineage.
 * **Startup**: Reused the single published Floret `runtime.Open` Host for the
   complete AI service generation instead of opening and closing a disposable
   probe Host before the real startup, preserving upstream migration and
