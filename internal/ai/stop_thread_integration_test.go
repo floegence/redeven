@@ -682,6 +682,28 @@ func TestReconcileStaleActiveRunRequiresCanonicalIdle(t *testing.T) {
 	}
 }
 
+func TestStopThreadIsIdempotentForInterruptedTerminalWithoutLocalOwner(t *testing.T) {
+	svc, meta, threadID := newStopThreadStateMachineTestService(t)
+	overrideStopThreadOverviewReader(t, svc, func(context.Context, identity.ThreadID, floretThreadReadHost) (flruntime.ThreadOverview, error) {
+		return flruntime.ThreadOverview{
+			Thread: flruntime.ThreadSnapshot{
+				ID:          identity.ThreadID(threadID),
+				Status:      flruntime.ThreadStatusInterrupted,
+				Recoverable: false,
+			},
+			LatestTurn: &flruntime.ThreadTurnSnapshot{
+				TurnID: identity.TurnID("turn-interrupted-terminal"),
+				Status: flruntime.TurnStatusInterrupted,
+			},
+		}, nil
+	})
+
+	response, err := svc.StopThread(context.Background(), meta, threadID)
+	if err != nil || !response.OK {
+		t.Fatalf("StopThread response=%#v err=%v, want idempotent success", response, err)
+	}
+}
+
 func TestRunExecutionClosureIsScopedToExactRun(t *testing.T) {
 	stopped := &run{}
 	stopped.closeExecution()

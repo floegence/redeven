@@ -1110,6 +1110,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let approvalHandoffStyleSettleFrame = 0;
   const [composerFocusRevision, setComposerFocusRevision] = createSignal(0);
   const selectedThreadLiveRequests = new Map<string, SelectedThreadLiveRequest>();
+  const threadBootstrapRequests = new Map<string, Promise<FlowerLiveBootstrap>>();
   const loadedThreadIDs = new Set<string>();
   let selectedThreadLiveUpdateToken = 0;
   const locallyReadSnapshots = new Map<string, string>();
@@ -3296,6 +3297,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     return thread;
   };
+  const loadThreadBootstrap = (threadID: string, force = false): Promise<FlowerLiveBootstrap> => {
+    const tid = trimString(threadID);
+    const existing = force ? undefined : threadBootstrapRequests.get(tid);
+    if (existing) return existing;
+    const request = props.adapter.loadThread(tid);
+    threadBootstrapRequests.set(tid, request);
+    const clear = () => {
+      if (threadBootstrapRequests.get(tid) === request) threadBootstrapRequests.delete(tid);
+    };
+    void request.then(clear, clear);
+    return request;
+  };
   const reloadSelectedThread = async (
     threadID: string,
     sequence = threadLoadSequence,
@@ -3303,7 +3316,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   ): Promise<FlowerThreadSnapshot | null> => {
     const tid = trimString(threadID);
     if (!tid || retiredThreadIDs.has(tid)) return null;
-    const live = await props.adapter.loadThread(tid);
+    const live = await loadThreadBootstrap(tid, reason === 'user_action');
     if (retiredThreadIDs.has(tid) || sequence !== threadLoadSequence || selectedThreadID() !== tid) {
       const projected = projectFlowerLiveBootstrap(live);
       return threads().find((item) => item.thread_id === tid) ?? projected;
@@ -3569,7 +3582,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     setLoadingThreadID(tid);
     try {
-      const live = await props.adapter.loadThread(tid);
+      const live = await loadThreadBootstrap(tid);
       if (sequence !== threadLoadSequence || selectedThreadID() !== tid) {
         if (loadingThreadID() === tid) setLoadingThreadID('');
         return;
@@ -4048,7 +4061,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         publishProjection();
       }
       const applyBootstrap = async () => {
-        const live = await props.adapter.loadThread(threadID);
+        const live = await loadThreadBootstrap(threadID);
         if (!stillCurrent()) return false;
         projectedThread = projectFlowerLiveBootstrap(live);
         trackedRunID = trimString(projectedThread.active_run_id) || trackedRunID;
@@ -4749,7 +4762,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (selectionCurrent) {
         setLoadError('');
         returnToChat();
-        await refreshSelectedThread(receipt.thread_id);
+        void reloadSelectedThread(receipt.thread_id, threadLoadSequence, 'background_refresh').catch((error) => {
+          if (selectedThreadDetailMatches(receipt.thread_id)) {
+            setThreadLoadError(getErrorMessage(error));
+          }
+        });
       }
     } finally {
       if (cancelActiveLongTextSubmission === cancelLongTextSubmission) cancelActiveLongTextSubmission = null;
@@ -5070,6 +5087,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
     loadedThreadIDs.delete(tid);
     selectedThreadLiveRequests.delete(tid);
+    threadBootstrapRequests.delete(tid);
     locallyReadSnapshots.delete(tid);
     persistingReadThreadIDs.delete(tid);
     pendingReadPersistenceSnapshots.delete(tid);

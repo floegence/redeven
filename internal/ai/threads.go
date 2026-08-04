@@ -69,7 +69,8 @@ func (s *Service) threadViewFromRecord(ctx context.Context, th *threadstore.Thre
 		return ThreadView{}, err
 	}
 	activeRunID := ""
-	if snapshot.Status == flruntime.ThreadStatusRunning || snapshot.Status == flruntime.ThreadStatusWaiting || snapshot.Status == flruntime.ThreadStatusInterrupted {
+	if snapshot.Status == flruntime.ThreadStatusRunning || snapshot.Status == flruntime.ThreadStatusWaiting ||
+		(snapshot.Status == flruntime.ThreadStatusInterrupted && snapshot.Recoverable) {
 		activeRunID = strings.TrimSpace(string(snapshot.LatestRunID))
 	}
 	lastMessageAt, lastMessagePreview := canonicalThreadPreview(latest)
@@ -201,7 +202,14 @@ func threadViewRunState(snapshot flruntime.ThreadSnapshot, latest *flruntime.Thr
 	case flruntime.ThreadStatusCancelled:
 		return string(RunStateCanceled), "", "", nil
 	case flruntime.ThreadStatusInterrupted:
-		return string(RunStateRecovering), "", "", nil
+		if snapshot.Recoverable {
+			return string(RunStateRecovering), "", "", nil
+		}
+		failure := ""
+		if latest != nil && latest.Failure != nil {
+			failure = strings.TrimSpace(latest.Failure.Message)
+		}
+		return string(RunStateFailed), "floret_turn_interrupted", failure, nil
 	case flruntime.ThreadStatusIdle:
 		return string(RunStateIdle), "", "", nil
 	default:
@@ -831,8 +839,10 @@ func threadForkBlockedByRunState(snapshot flruntime.ThreadSnapshot) bool {
 
 func canonicalThreadBusy(snapshot flruntime.ThreadSnapshot) bool {
 	switch snapshot.Status {
-	case flruntime.ThreadStatusRunning, flruntime.ThreadStatusWaiting, flruntime.ThreadStatusInterrupted:
+	case flruntime.ThreadStatusRunning, flruntime.ThreadStatusWaiting:
 		return true
+	case flruntime.ThreadStatusInterrupted:
+		return snapshot.Recoverable
 	default:
 		return false
 	}
