@@ -679,6 +679,53 @@ describe('FlowerSurface companion visibility lifecycle', () => {
     expect(harness.markThreadRead).not.toHaveBeenCalled();
   });
 
+  it('backs off full summary refreshes while the companion is idle', async () => {
+    const idleThread = thread({
+      status: 'idle',
+      active_run_id: undefined,
+      read_status: readStatus(false),
+    });
+    let refreshRevision = 0;
+    const listThreads = vi.fn<FlowerSurfaceAdapter['listThreads']>(async () => [{
+      ...idleThread,
+      updated_at_ms: idleThread.updated_at_ms + ++refreshRevision,
+    }]);
+    const harness = createAdapterHarness({
+      listThreads,
+      loadThread: vi.fn(async () => bootstrap(idleThread)),
+    });
+    renderSurface(harness.adapter, false, false);
+
+    await waitUntil(() => listThreads.mock.calls.length >= 1, 'initial companion summary did not settle');
+    const settledCalls = listThreads.mock.calls.length;
+    await new Promise((resolve) => window.setTimeout(resolve, 2_100));
+
+    expect(listThreads).toHaveBeenCalledTimes(settledCalls);
+  });
+
+  it('backs off full summary refreshes while a thread waits for user input', async () => {
+    const waitingThread = thread({
+      status: 'waiting_user',
+      read_status: readStatus(false),
+    });
+    let refreshRevision = 0;
+    const listThreads = vi.fn<FlowerSurfaceAdapter['listThreads']>(async () => [{
+      ...waitingThread,
+      updated_at_ms: waitingThread.updated_at_ms + ++refreshRevision,
+    }]);
+    const harness = createAdapterHarness({
+      listThreads,
+      loadThread: vi.fn(async () => bootstrap(waitingThread)),
+    });
+    renderSurface(harness.adapter, false, false);
+
+    await waitUntil(() => listThreads.mock.calls.length >= 1, 'initial companion summary did not settle');
+    const settledCalls = listThreads.mock.calls.length;
+    await new Promise((resolve) => window.setTimeout(resolve, 2_100));
+
+    expect(listThreads).toHaveBeenCalledTimes(settledCalls);
+  });
+
   it('streams waiting, tool, and output progress for the canonical collapsed priority thread', async () => {
     const selectedSummary = thread({
       title: 'Pending selected title',

@@ -47,15 +47,15 @@ func TestGetThreadAndListThreadsUseCanonicalFloretStatus(t *testing.T) {
 	}
 }
 
-func TestInterruptedCanonicalThreadWithoutRecoveryLeaseIsTerminal(t *testing.T) {
+func TestInterruptedCanonicalThreadIsTerminalEvenWhenRetryable(t *testing.T) {
 	threadID := "thread-interrupted-terminal"
 	snapshot := flruntime.ThreadSnapshot{
 		ID:          identity.ThreadID(threadID),
 		Status:      flruntime.ThreadStatusInterrupted,
-		Recoverable: false,
+		Recoverable: true,
 	}
 	if canonicalThreadBusy(snapshot) {
-		t.Fatal("an interrupted thread without a recovery lease was treated as busy")
+		t.Fatal("a retryable interrupted thread was treated as an active execution")
 	}
 	status, code, message, err := threadViewRunState(snapshot, &flruntime.ThreadTurnSnapshot{
 		TurnID: identity.TurnID("turn-interrupted-terminal"),
@@ -70,15 +70,6 @@ func TestInterruptedCanonicalThreadWithoutRecoveryLeaseIsTerminal(t *testing.T) 
 	}
 	if status != string(RunStateFailed) || code != "floret_turn_interrupted" || message == "" {
 		t.Fatalf("interrupted terminal view=(%q,%q,%q), want failed with an actionable interruption error", status, code, message)
-	}
-}
-
-func TestInterruptedCanonicalThreadWithRecoveryLeaseRemainsBusy(t *testing.T) {
-	if !canonicalThreadBusy(flruntime.ThreadSnapshot{
-		Status:      flruntime.ThreadStatusInterrupted,
-		Recoverable: true,
-	}) {
-		t.Fatal("an interrupted thread with a recovery lease was not treated as busy")
 	}
 }
 

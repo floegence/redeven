@@ -87,7 +87,10 @@ func classifyRunFailureCode(err error, fallback string) string {
 		return strings.TrimSpace(fallback)
 	case strings.Contains(text, "missing api key") || strings.Contains(text, "missing provider key") || strings.Contains(text, "api key resolver"):
 		return runErrorCodeProviderMissingKey
-	case strings.Contains(text, "unauthorized") || strings.Contains(text, "forbidden") || strings.Contains(text, "invalid api key") || strings.Contains(text, "incorrect api key"):
+	case strings.Contains(text, "invalid api key") || strings.Contains(text, "incorrect api key") ||
+		(strings.Contains(text, "provider") && (strings.Contains(text, "unauthorized") || strings.Contains(text, "forbidden"))) ||
+		(strings.Contains(text, "provider") && strings.Contains(text, "credential")) ||
+		(strings.Contains(text, "provider") && strings.Contains(text, "authentication")):
 		return runErrorCodeProviderAuthFailed
 	case strings.Contains(text, "rate limit") || strings.Contains(text, "too many requests") || strings.Contains(text, "quota"):
 		return runErrorCodeProviderRateLimited

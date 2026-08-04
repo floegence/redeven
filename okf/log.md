@@ -1,7 +1,55 @@
 # Redeven OKF Update Log
 
 ## 2026-08-04
-* **Canceled approval startup compatibility**: Adopted published Floret v3.2.14
+* **Approval rejection continuation**: Adopted published Floret v3.2.27 so a
+  user rejection settles as `rejected/user_rejected`, skips the authorization
+  gate and handler, and returns an error tool result to the provider for normal
+  same-turn continuation. Redeven no longer misclassifies host authorization or
+  rejected-tool text as invalid Provider credentials.
+* **Renewed approval cancellation**: Adopted published Floret v3.2.27 so
+  stopping a turn while its effect waits for approval uses the current renewed
+  lease authority, atomically cancels the approval batch, and leaves the
+  canonical turn canceled and its admission replayable. Flower no longer has
+  to recover this normal stop path as an interrupted failure after restart.
+* **Durable delegated approval presentation**: Adopted published Floret v3.2.25
+  so new canonical approval entries retain detached tool-authored presentation
+  and earlier v3 journals recover it from the matching durable tool call after
+  restart. Presentation remains outside approval identity, Redeven still uses
+  the root queue as the only decision authority, and Floret schema v4 is
+  unchanged.
+* **Approval presentation continuity**: Adopted published Floret v3.2.24 so
+  execution events and committed approval details share one Host-owned live
+  projection recorder. Approval lifecycle details advance the existing tool
+  item without replacing its command label, terminal renderer, description, or
+  payload; exact thread, turn, run, and tool identity prevents cross-turn reuse.
+  Flower omits separate approval-status transcript content; only approval-only
+  history uses the neutral upstream fallback.
+* **Idle companion summary backoff**: The visible companion still refreshes
+  active work every 1.8 seconds, but idle full-inventory reads back off through
+  5, 15, and 30 seconds. Hidden and disposed surfaces clear their timer, polls
+  never overlap, and visibility restoration probes immediately.
+* **Bootstrap execution continuity**: Adopted published Floret v3.2.24 so the
+  atomic `ThreadReader.Bootstrap` path shares the process-local execution
+  registry with ordinary reads. An admitted or executing turn stays `running`
+  during live bootstrap, while restart without that proof remains a
+  recoverable interruption.
+* **Admission projection continuity**: Adopted published Floret v3.2.24 so a
+  newly admitted turn remains `running` between its durable lease commit and
+  exact process-local execution registration. Redeven's live reducer also
+  rejects an older same-run thread summary after a newer run lifecycle event,
+  while still applying unrelated summary fields.
+* **Running lease projection continuity**: Adopted published Floret v3.2.24 so
+  canonical thread reads preserve `running` across the durable-renewal and
+  process-registry update interval. A new active run clears an older
+  interrupted product error, while restart, expiry, replacement, and recovery
+  claims retain fail-closed interruption semantics.
+* **Validated Floret domain reads**: Adopted published Floret v3.2.24. Every
+  complete-domain view still reads the exact durable envelope inside its
+  backend transaction, while byte-identical validated state reuses the decoded
+  projection. External changes, corruption, drift, and future versions retain
+  strict decoding and fail-closed behavior without a Redeven-owned cache or
+  schema change.
+* **Canceled approval startup compatibility**: Adopted published Floret v3.2.24
   so an interrupted batch with a canceled tool result closes its requested
   approval before any run-end marker exists. Canonical startup inventory and
   latest-turn projection remain readable without rewriting the Floret Store or

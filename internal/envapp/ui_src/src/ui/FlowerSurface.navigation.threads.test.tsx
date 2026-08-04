@@ -2274,6 +2274,64 @@ describe('FlowerSurface navigation threads', () => {
     expect(forkThread).not.toHaveBeenCalled();
   });
 
+  it('stops active conversations from the thread menu without selecting them', async () => {
+    const runningThread = thread({
+      thread_id: 'thread-menu-stop-running',
+      title: 'Running elsewhere',
+      status: 'running',
+      active_run_id: 'run-menu-stop',
+      messages: [],
+    });
+    const idleThread = thread({
+      thread_id: 'thread-menu-stop-idle',
+      title: 'Idle conversation',
+      status: 'success',
+      messages: [],
+    });
+    const waitingUserThread = thread({
+      thread_id: 'thread-menu-stop-waiting-user',
+      title: 'Waiting for input elsewhere',
+      status: 'waiting_user',
+      messages: [],
+    });
+    const stopThread = vi.fn(async (threadID: string) => liveBootstrap({
+      ...runningThread,
+      thread_id: threadID,
+      status: 'canceled',
+    }));
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [runningThread, waitingUserThread, idleThread]),
+      stopThread,
+    });
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-menu-stop-running"]')));
+
+    (runtime.querySelector('[data-thread-id="thread-menu-stop-running"]') as HTMLElement)
+      .dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 20, clientY: 20 }));
+    await flush();
+    const stop = Array.from(runtime.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'))
+      .find((item) => item.textContent?.includes('Stop'));
+    expect(stop).toBeTruthy();
+    stop?.click();
+    await waitFor(() => stopThread.mock.calls.length === 1);
+    expect(stopThread).toHaveBeenCalledWith('thread-menu-stop-running');
+    expect(runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-id')).toBe('');
+
+    (runtime.querySelector('[data-thread-id="thread-menu-stop-waiting-user"]') as HTMLElement)
+      .dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 20, clientY: 20 }));
+    await flush();
+    expect(Array.from(runtime.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'))
+      .some((item) => item.textContent?.includes('Stop'))).toBe(true);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    await flush();
+
+    (runtime.querySelector('[data-thread-id="thread-menu-stop-idle"]') as HTMLElement)
+      .dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 20, clientY: 20 }));
+    await flush();
+    expect(Array.from(runtime.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'))
+      .some((item) => item.textContent?.includes('Stop'))).toBe(false);
+  });
+
   it('copies thread metadata with fallback clipboard feedback', async () => {
     Object.defineProperty(document, 'execCommand', {
       configurable: true,
@@ -2459,7 +2517,7 @@ describe('FlowerSurface navigation threads', () => {
     expect(runtime.textContent).toContain('Loaded detail stays visible.');
     expect(runtime.textContent).toContain('file.read');
     expect(runtime.querySelector('.flower-activity-inline')).toBeTruthy();
-    expect(runtime.querySelector('.flower-error-card')?.textContent).toContain('Provider returned a structured failure.');
+    expect(runtime.querySelector('.flower-error-card')).toBeNull();
   });
 
   it('ignores stale same-thread load responses that resolve after a newer load', async () => {

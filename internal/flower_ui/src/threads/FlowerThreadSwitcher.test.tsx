@@ -86,6 +86,7 @@ const threadListCopy: FlowerThreadListCopy = {
   untitled: 'Untitled',
   working: 'Working',
   unread: 'Unread',
+  stop: 'Stop conversation',
   deleteMenuAction: 'Delete conversation',
   deleteDialogTitle: 'Delete conversation?',
   deleteDialogDescription: (title) => `Delete ${title} permanently`,

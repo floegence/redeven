@@ -29,8 +29,8 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 ROOT_DIR=$(cd -- "$SCRIPT_DIR/.." &> /dev/null && pwd)
 PARENT_DIR=$(cd -- "$ROOT_DIR/.." &> /dev/null && pwd)
 FLORET_MODULE="github.com/floegence/floret/v3"
-FLORET_VERSION="v3.2.14"
-FLORET_SUM="h1:lvFahCv6Fvp76Z790X2ScJHTexO+9ntCJ6Bl/H/i2qk="
+FLORET_VERSION="v3.2.27"
+FLORET_SUM="h1:UhTfI8eHdaAWQt3lnEpXYZtvFj1v+l+iG2HD5cSEbdQ="
 FLORET_GO_MOD_SUM="h1:l9Z36ZEf/OHlHu+1hZeDp+WOT9TqWNgNQYOQi+eAWW0="
 
 cd "$ROOT_DIR"
@@ -288,8 +288,8 @@ check_exact_turn_read_boundaries() {
 check_floret_v32_capability_adoption() {
 	local matches
 
-	if ! rg -q '^\s*github\.com/floegence/floret/v3 v3\.2\.14$' go.mod; then
-		fail "Redeven must consume the published Floret v3.2.14 capability SDK."
+	if ! rg -q '^\s*github\.com/floegence/floret/v3 v3\.2\.27$' go.mod; then
+		fail "Redeven must consume the published Floret v3.2.27 capability SDK."
 	fi
 
 	for contract in \

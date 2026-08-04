@@ -2259,6 +2259,10 @@ func flowerLiveThreadPatchFromSummary(ev RealtimeEvent) FlowerLiveThreadPatch {
 }
 
 func mergeFlowerLiveThreadPatch(current FlowerLiveThreadPatch, patch FlowerLiveThreadPatch) FlowerLiveThreadPatch {
+	preserveNewerRunState := strings.TrimSpace(current.ActiveRunID) != "" &&
+		strings.TrimSpace(current.ActiveRunID) == strings.TrimSpace(patch.ActiveRunID) &&
+		current.RunUpdatedAtUnixMs > 0 && patch.UpdatedAtUnixMs > 0 &&
+		patch.UpdatedAtUnixMs < current.RunUpdatedAtUnixMs
 	if strings.TrimSpace(patch.ThreadID) != "" {
 		current.ThreadID = strings.TrimSpace(patch.ThreadID)
 	}
@@ -2289,15 +2293,17 @@ func mergeFlowerLiveThreadPatch(current FlowerLiveThreadPatch, patch FlowerLiveT
 		current.QueuedTurnsSet = true
 		current.QueuedTurns = cloneQueuedTurnViews(patch.QueuedTurns)
 	}
-	if strings.TrimSpace(patch.RunStatus) != "" {
-		current.RunStatus = strings.TrimSpace(patch.RunStatus)
+	if !preserveNewerRunState {
+		if strings.TrimSpace(patch.RunStatus) != "" {
+			current.RunStatus = strings.TrimSpace(patch.RunStatus)
+		}
+		if patch.RunUpdatedAtUnixMs > 0 {
+			current.RunUpdatedAtUnixMs = patch.RunUpdatedAtUnixMs
+		}
+		current.RunErrorCode = strings.TrimSpace(patch.RunErrorCode)
+		current.RunError = strings.TrimSpace(patch.RunError)
+		current.WaitingPrompt = patch.WaitingPrompt
 	}
-	if patch.RunUpdatedAtUnixMs > 0 {
-		current.RunUpdatedAtUnixMs = patch.RunUpdatedAtUnixMs
-	}
-	current.RunErrorCode = strings.TrimSpace(patch.RunErrorCode)
-	current.RunError = strings.TrimSpace(patch.RunError)
-	current.WaitingPrompt = patch.WaitingPrompt
 	if strings.TrimSpace(patch.ActiveRunID) != "" {
 		current.ActiveRunID = strings.TrimSpace(patch.ActiveRunID)
 	}

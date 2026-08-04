@@ -52,6 +52,18 @@ describe('main routing', () => {
     expect(mainSrc).not.toContain("'window:settings'");
   });
 
+  it('forces the launcher runtime health to converge after automatic startup', () => {
+    const mainSrc = readMainSource();
+    const start = mainSrc.indexOf('async function autoStartLocalRuntimeOnDesktopLaunch()');
+    const end = mainSrc.indexOf('function controlPlaneIssueForError(', start);
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    const startupSrc = mainSrc.slice(start, end);
+    expect(startupSrc.match(/await refreshWelcomeRuntimeHealthForEnvironment\(environment\.id, \{ force: true \}\);/gu)).toHaveLength(2);
+    expect(startupSrc).toContain('resetLauncherIssueState();');
+    expect(startupSrc).toContain('broadcastDesktopWelcomeSnapshots();');
+  });
+
   it('tracks environment windows by session key and scopes child windows per session', () => {
     const mainSrc = readMainSource();
 
@@ -1232,6 +1244,7 @@ describe('main routing', () => {
     expect(routeSrc).toContain("{ path: '/_redeven_proxy/api/ai/default_permission', methods: ['PUT'] }");
     expect(routeSrc).toContain("{ path: '/_redeven_proxy/api/ai/current_model', methods: ['PUT'] }");
     expect(routeSrc).toContain("'/_redeven_proxy/api/ai/models'");
+    expect(routeSrc).toContain("{ path: '/_redeven_proxy/api/ai/turns', methods: ['POST'] }");
     expect(routeSrc).toContain("{ path: '/_redeven_proxy/api/ai/upload-staging-scopes', methods: ['POST'] }");
     expect(routeSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/upload-staging-scopes\\/[^/]+$/u");
     expect(routeSrc).not.toContain('composer-drafts');

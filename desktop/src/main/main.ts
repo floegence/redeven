@@ -96,6 +96,7 @@ import {
 } from './desktopTarget';
 import { desktopSessionContextSnapshotFromTarget } from './desktopSessionContext';
 import {
+  desktopAutoStartRuntimeEnabled,
   buildDesktopRuntimeLaunchPlan,
 } from './desktopLaunch';
 import {
@@ -9018,6 +9019,34 @@ async function openDesktopWelcomeWindow(options: OpenDesktopWelcomeOptions = {})
   await openUtilityWindow('launcher', options);
 }
 
+async function autoStartLocalRuntimeOnDesktopLaunch(): Promise<void> {
+  if (!desktopAutoStartRuntimeEnabled()) {
+    return;
+  }
+  try {
+    const preferences = await loadDesktopPreferencesCached();
+    const environment = preferences.local_environment;
+    const attached = await attachLocalEnvironmentRuntime(environment);
+    if (attached && runtimeServiceIsOpenable(attached.startup.runtime_service)) {
+      await refreshWelcomeRuntimeHealthForEnvironment(environment.id, { force: true });
+      resetLauncherIssueState();
+      broadcastDesktopWelcomeSnapshots();
+      return;
+    }
+    await startLocalHostRuntimeWithLifecycleProgress({
+      environment,
+      action: attached ? 'restart_environment_runtime' : 'start_environment_runtime',
+    });
+    await refreshWelcomeRuntimeHealthForEnvironment(environment.id, { force: true });
+    resetLauncherIssueState();
+    broadcastDesktopWelcomeSnapshots();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[redeven:desktop-startup] Local runtime auto-start failed: ${message}`);
+    broadcastDesktopWelcomeSnapshots();
+  }
+}
+
 function controlPlaneIssueForError(
   error: unknown,
   fallbackMessage: string,
@@ -9229,6 +9258,7 @@ const RUNTIME_FLOWER_ROUTES: readonly RuntimeFlowerRoute[] = [
   { path: '/_redeven_proxy/api/ai/provider_bundle', methods: ['PUT'] },
   { path: '/_redeven_proxy/api/ai/current_model', methods: ['PUT'] },
   { path: '/_redeven_proxy/api/ai/models', methods: ['GET'] },
+  { path: '/_redeven_proxy/api/ai/turns', methods: ['POST'] },
   { path: '/_redeven_proxy/api/ai/attachments/capabilities', methods: ['GET'], allowsQuery: runtimeFlowerAttachmentCapabilityQuery },
   { path: '/_redeven_proxy/api/ai/upload-staging-scopes', methods: ['POST'] },
   { path: /^\/_redeven_proxy\/api\/ai\/upload-staging-scopes\/[^/]+$/u, methods: ['DELETE'] },
@@ -18633,9 +18663,11 @@ if (!app.requestSingleInstanceLock()) {
         if (openSessionSummaries().length <= 0 && !liveUtilityWindow('launcher')) {
           await openDesktopWelcomeWindow({ entryReason: 'app_launch' });
         }
+        void autoStartLocalRuntimeOnDesktopLaunch();
         return;
       }
       await openDesktopWelcomeWindow({ entryReason: 'app_launch' });
+      void autoStartLocalRuntimeOnDesktopLaunch();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       dialog.showErrorBox('Redeven Desktop failed to start', message || 'Unknown startup error.');

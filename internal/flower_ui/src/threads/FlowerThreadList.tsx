@@ -1,17 +1,17 @@
 import type { Component, JSX } from 'solid-js';
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { Copy, Folder, GitBranch, MoreHorizontal, Pencil, Pin, Refresh, Search, Trash } from '@floegence/floe-webapp-core/icons';
+import { Copy, Folder, GitBranch, MoreHorizontal, Pencil, Pin, Refresh, Search, Trash, XCircle } from '@floegence/floe-webapp-core/icons';
 import { Input, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
 
 import type { FlowerThreadListCopy, FlowerThreadTimeGroup } from '../copy';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../copy';
 import type { FlowerThreadListItem } from '../contracts/flowerSurfaceContracts';
 import { filterFlowerThreadItems, flowerThreadIndicator, groupFlowerThreadItems, type FlowerThreadGroup } from './threadListModel';
-import { canForkThreadItem, canPinThreadItem, canRenameThreadItem } from './threadListActions';
+import { canForkThreadItem, canPinThreadItem, canRenameThreadItem, canStopThreadItem } from './threadListActions';
 
 type TimeGroup = FlowerThreadTimeGroup;
-export type FlowerThreadMenuAction = 'copy_thread_id' | 'fork' | 'copy_workdir' | 'pin' | 'rename' | 'delete';
+export type FlowerThreadMenuAction = 'copy_thread_id' | 'fork' | 'copy_workdir' | 'stop' | 'pin' | 'rename' | 'delete';
 export type { FlowerThreadGroup };
 
 const THREAD_CONTEXT_MENU_WIDTH = 212;
@@ -104,12 +104,14 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
         }}
       >
         <div class="flower-thread-indicator relative mt-1.5 flex h-2 shrink-0 items-center justify-center" aria-hidden="true" title={indicator().title}>
-          <div class="flower-thread-wave h-2 items-center gap-0.5">
-            <div class="flower-thread-wave-bar" style="animation-delay: 0ms" />
-            <div class="flower-thread-wave-bar" style="animation-delay: 180ms" />
-            <div class="flower-thread-wave-bar" style="animation-delay: 360ms" />
-            <div class="flower-thread-wave-bar" style="animation-delay: 540ms" />
-          </div>
+          <Show when={indicator().visual === 'wave'}>
+            <div class="flower-thread-wave h-2 items-center gap-0.5">
+              <div class="flower-thread-wave-bar" style="animation-delay: 0ms" />
+              <div class="flower-thread-wave-bar" style="animation-delay: 180ms" />
+              <div class="flower-thread-wave-bar" style="animation-delay: 360ms" />
+              <div class="flower-thread-wave-bar" style="animation-delay: 540ms" />
+            </div>
+          </Show>
           <div class="flower-thread-status-dot h-1.5 w-1.5 rounded-full" />
         </div>
         <div class="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -162,6 +164,7 @@ type FlowerThreadContextMenuProps = Readonly<{
   canFork: boolean;
   canRename: boolean;
   canPin: boolean;
+  showStopAction: boolean;
   showDeleteAction: boolean;
   actionsBusy: boolean;
   busyAction: FlowerThreadMenuAction | null;
@@ -270,7 +273,10 @@ const FlowerThreadContextMenu: Component<FlowerThreadContextMenuProps> = (props)
   return (
     <SurfaceFloatingLayer
       position={{ x: props.x, y: props.y }}
-      estimatedSize={{ width: THREAD_CONTEXT_MENU_WIDTH, height: props.showDeleteAction ? 276 : 232 }}
+      estimatedSize={{
+        width: THREAD_CONTEXT_MENU_WIDTH,
+        height: 232 + (props.showStopAction && canStopThreadItem(props.item) ? 44 : 0) + (props.showDeleteAction ? 44 : 0),
+      }}
       class="flower-thread-context-menu-layer"
       data-flower-floating-layer="true"
     >
@@ -285,6 +291,9 @@ const FlowerThreadContextMenu: Component<FlowerThreadContextMenuProps> = (props)
         {itemButton('fork', props.copy.fork, <GitBranch class="h-3.5 w-3.5" />, !props.canFork || !canForkThreadItem(props.item))}
         {itemButton('copy_workdir', props.copy.copyWorkingDirectory, <Folder class="h-3.5 w-3.5" />, workdir() === '')}
         <div class="flower-thread-menu-separator" />
+        <Show when={props.showStopAction && canStopThreadItem(props.item)}>
+          {itemButton('stop', props.copy.stop, <XCircle class="h-3.5 w-3.5" />)}
+        </Show>
         {itemButton('pin', props.item.pinned ? props.copy.unpin : props.copy.pin, <Pin class={cn('h-3.5 w-3.5', props.item.pinned && 'text-primary')} />, !props.canPin || !canPinThreadItem(props.item))}
         {itemButton('rename', props.copy.rename, <Pencil class="h-3.5 w-3.5" />, !props.canRename || !canRenameThreadItem(props.item))}
         <Show when={props.showDeleteAction}>
@@ -310,6 +319,7 @@ export type FlowerThreadListProps = Readonly<{
   canFork?: boolean;
   canRename?: boolean;
   canPin?: boolean;
+  showStopAction?: boolean;
   showDeleteAction?: boolean;
   busyThreadID?: string;
   busyAction?: FlowerThreadMenuAction | null;
@@ -493,6 +503,7 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
             canFork={!!props.canFork}
             canRename={!!props.canRename}
             canPin={!!props.canPin}
+            showStopAction={props.showStopAction === true}
             showDeleteAction={props.showDeleteAction === true}
             actionsBusy={!!props.actionsBusy}
             busyAction={props.busyThreadID === state().threadID ? props.busyAction ?? null : null}

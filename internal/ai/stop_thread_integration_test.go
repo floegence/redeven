@@ -689,7 +689,7 @@ func TestStopThreadIsIdempotentForInterruptedTerminalWithoutLocalOwner(t *testin
 			Thread: flruntime.ThreadSnapshot{
 				ID:          identity.ThreadID(threadID),
 				Status:      flruntime.ThreadStatusInterrupted,
-				Recoverable: false,
+				Recoverable: true,
 			},
 			LatestTurn: &flruntime.ThreadTurnSnapshot{
 				TurnID: identity.TurnID("turn-interrupted-terminal"),

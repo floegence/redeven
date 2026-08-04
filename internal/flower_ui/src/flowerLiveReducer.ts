@@ -178,6 +178,53 @@ function withoutModelIO(thread: FlowerThreadSnapshot): FlowerThreadSnapshot {
     : { ...thread, model_io_status: null };
 }
 
+function clearStaleRunError(thread: FlowerThreadSnapshot): FlowerThreadSnapshot {
+  if (!thread.error) return thread;
+  const { error: _error, ...rest } = thread;
+  return rest;
+}
+
+function reconcileActiveRunPresentation(thread: FlowerThreadSnapshot): FlowerThreadSnapshot {
+  let next = thread;
+  const approvals = pendingApprovalActions(next.approval_actions);
+  if (next.input_request && next.status !== 'waiting_user') {
+    next = { ...next, status: 'waiting_user' };
+  } else if (approvals.length > 0) {
+    const approvalRunID = trim(approvals[0]?.run_id);
+    if (next.status !== 'waiting_approval' || approvalRunID && approvalRunID !== trim(next.active_run_id)) {
+      next = {
+        ...next,
+        status: 'waiting_approval',
+        ...(approvalRunID ? { active_run_id: approvalRunID } : {}),
+      };
+    }
+  }
+  if (next.status === 'running' || next.status === 'waiting_approval' || next.status === 'waiting_user') {
+    next = clearStaleRunError(next);
+  }
+  return next;
+}
+
+function applyCanonicalTerminalPresentation(
+  thread: FlowerThreadSnapshot,
+  messages: readonly FlowerChatMessage[],
+  runID: string,
+): FlowerThreadSnapshot {
+  const canonicalRunID = trim(runID);
+  if (!canonicalRunID) return thread;
+  const latestAssistant = [...messages]
+    .reverse()
+    .find((message) => message.role === 'assistant' && trim(message.run_id) === canonicalRunID);
+  if (!latestAssistant || latestAssistant.status !== 'complete') return thread;
+  const { active_run_id: _activeRunID, error: _error, ...rest } = thread;
+  return {
+    ...rest,
+    status: 'success',
+    model_io_status: null,
+    input_request: null,
+  };
+}
+
 function withModelIOStatus(thread: FlowerThreadSnapshot, status: FlowerModelIOStatus | null | undefined, runID?: string): FlowerThreadSnapshot {
   if (!status) return clearModelIOForRun(thread, runID);
   if (threadStatusHidesModelIO(thread.status)) return thread;
@@ -258,6 +305,8 @@ function applyLiveMaterializedState(thread: FlowerThreadSnapshot, liveState: Flo
       next = { ...next, status: 'idle' };
     }
   }
+  // A live active run supersedes a stale terminal error from a previous process.
+  next = reconcileActiveRunPresentation(next);
   if (next.status === 'waiting_user' || next.status === 'waiting_approval') {
     if (activeRunID) {
       next = { ...next, active_run_id: activeRunID };
@@ -604,7 +653,8 @@ export function applyFlowerLiveEvent(
     case 'context.compaction.updated':
       next = upsertContextCompaction(next, event.payload.compaction, event.payload.timeline_decoration);
       break;
-    case 'timeline.replaced':
+    case 'timeline.replaced': {
+      const canonicalRunID = trim(event.payload.thread_patch?.active_run_id) || trim(next.active_run_id);
       next = {
         ...next,
         messages: [...event.payload.messages],
@@ -627,6 +677,7 @@ export function applyFlowerLiveEvent(
       if (event.payload.live_state) {
         next = applyLiveMaterializedState(next, event.payload.live_state);
       }
+      next = applyCanonicalTerminalPresentation(next, event.payload.messages, canonicalRunID);
       if (Number(next.queued_turn_count ?? 0) === 0) {
         next = { ...next, queued_turns: [] };
       }
@@ -634,7 +685,10 @@ export function applyFlowerLiveEvent(
         next = withoutModelIO(next);
       }
       break;
+    }
   }
+
+  next = reconcileActiveRunPresentation(next);
 
   const nextCursor = event.kind === 'timeline.replaced'
     ? Math.max(event.seq, Math.floor(Number(event.payload.snapshot_through_seq ?? 0)))
