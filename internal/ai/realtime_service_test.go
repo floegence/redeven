@@ -1790,7 +1790,7 @@ func TestFlowerLiveThreadPatchHandsOffActiveRunState(t *testing.T) {
 	}
 }
 
-func TestFlowerLiveActiveRunClearsPriorInterruptedError(t *testing.T) {
+func TestNewActiveRunClearsPriorInterruptedError(t *testing.T) {
 	t.Parallel()
 
 	state := FlowerLiveMaterializedState{
