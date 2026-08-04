@@ -568,7 +568,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | bl | 4.1.0 | MIT | Env App UI | https://www.npmjs.com/package/bl/v/4.1.0 |  |
 | bluebird | 3.7.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/bluebird/v/3.7.2 |  |
 | boolean | 3.2.0 | MIT | Desktop shell | https://www.npmjs.com/package/boolean/v/3.2.0 |  |
-| brace-expansion | 5.0.8 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/brace-expansion/v/5.0.8 |  |
+| brace-expansion | 5.0.9 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/brace-expansion/v/5.0.9 |  |
 | browserslist | 4.28.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/browserslist/v/4.28.2 |  |
 | buffer-crc32 | 0.2.13 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/buffer-crc32/v/0.2.13 |  |
 | buffer-from | 1.1.2 | MIT | Desktop shell | https://www.npmjs.com/package/buffer-from/v/1.1.2 |  |
@@ -731,7 +731,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | fast-deep-equal | 3.1.3 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/fast-deep-equal/v/3.1.3 |  |
 | fast-json-stable-stringify | 2.1.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/fast-json-stable-stringify/v/2.1.0 |  |
 | fast-levenshtein | 2.0.6 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/fast-levenshtein/v/2.0.6 |  |
-| fast-uri | 3.1.4 | BSD-3-Clause | Desktop shell | https://www.npmjs.com/package/fast-uri/v/3.1.4 |  |
+| fast-uri | 3.1.5 | BSD-3-Clause | Desktop shell | https://www.npmjs.com/package/fast-uri/v/3.1.5 |  |
 | fd-slicer | 1.1.0 | MIT | Desktop shell | https://www.npmjs.com/package/fd-slicer/v/1.1.0 |  |
 | fdir | 6.5.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/fdir/v/6.5.0 |  |
 | file-entry-cache | 8.0.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/file-entry-cache/v/8.0.0 |  |
@@ -1113,7 +1113,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | ufo | 1.6.3 | MIT | Env App UI | https://www.npmjs.com/package/ufo/v/1.6.3 |  |
 | undici-types | 6.21.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/undici-types/v/6.21.0 |  |
 | undici-types | 7.16.0 | MIT | Desktop shell | https://www.npmjs.com/package/undici-types/v/7.16.0 |  |
-| undici | 7.28.0 | MIT | Desktop shell | https://www.npmjs.com/package/undici/v/7.28.0 |  |
+| undici | 7.29.0 | MIT | Desktop shell | https://www.npmjs.com/package/undici/v/7.29.0 |  |
 | unist-util-is | 6.0.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/unist-util-is/v/6.0.1 |  |
 | unist-util-position | 5.0.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/unist-util-position/v/5.0.0 |  |
 | unist-util-stringify-position | 4.0.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/unist-util-stringify-position/v/4.0.0 |  |
