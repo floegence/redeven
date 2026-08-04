@@ -574,6 +574,64 @@ func TestFlowerBlocksFromFloretThreadProjectionKeepsRequestedApprovalWaiting(t *
 	}
 }
 
+func TestFlowerBlocksFromPublishedFloretSettleCanceledInterruptedApproval(t *testing.T) {
+	t.Parallel()
+
+	now := time.Unix(260, 0)
+	projection := flruntime.ProjectThreadTurn(flruntime.ProjectThreadTurnRequest{
+		RunID:    "run_interrupted_batch",
+		ThreadID: "thread_interrupted_batch",
+		TurnID:   "turn_interrupted_batch",
+		TraceID:  "run_interrupted_batch",
+		Events: []flruntime.ThreadDetailEvent{
+			{
+				ID: "turn-started", Ordinal: 1, ThreadID: "thread_interrupted_batch", TurnID: "turn_interrupted_batch",
+				Kind: flruntime.ThreadDetailEventTurnMarker, CreatedAt: now,
+				TurnMarker: &flruntime.ThreadDetailTurnMarker{Status: "started"},
+			},
+			{
+				ID: "approval-requested", Ordinal: 2, ThreadID: "thread_interrupted_batch", TurnID: "turn_interrupted_batch",
+				Kind: flruntime.ThreadDetailEventApproval, Type: string(observation.EventTypeToolApprovalRequested), CreatedAt: now.Add(time.Second),
+				Approval: &flruntime.ThreadDetailApproval{State: "requested", ToolID: "call-shell", ToolName: "terminal.exec"},
+			},
+			{
+				ID: "shell-call", Ordinal: 3, ThreadID: "thread_interrupted_batch", TurnID: "turn_interrupted_batch",
+				Kind: flruntime.ThreadDetailEventToolCall, CreatedAt: now.Add(2 * time.Second),
+				ToolCall: &flruntime.ThreadDetailToolCall{ID: "call-shell", Name: "terminal.exec"},
+			},
+			{
+				ID: "shell-result", Ordinal: 4, ThreadID: "thread_interrupted_batch", TurnID: "turn_interrupted_batch",
+				Kind: flruntime.ThreadDetailEventToolResult, CreatedAt: now.Add(3 * time.Second),
+				ToolResult: &flruntime.ThreadDetailToolResult{CallID: "call-shell", ToolName: "terminal.exec", Status: string(observation.ActivityStatusCanceled)},
+			},
+			{
+				ID: "interrupted-save-point", Ordinal: 5, ThreadID: "thread_interrupted_batch", TurnID: "turn_interrupted_batch",
+				Kind: flruntime.ThreadDetailEventTurnMarker, CreatedAt: now.Add(4 * time.Second),
+				TurnMarker: &flruntime.ThreadDetailTurnMarker{Status: "save_point", Metadata: map[string]string{"reason": "interrupted_tool_result_batch"}},
+			},
+		},
+	})
+
+	if err := projection.Validate(); err != nil {
+		t.Fatalf("published Floret projection must remain startup-readable: %v", err)
+	}
+	blocks, err := newRun(runOptions{}).flowerBlocksFromFloretThreadProjection(projection)
+	if err != nil {
+		t.Fatalf("map interrupted projection: %v", err)
+	}
+	if len(blocks) != 1 {
+		t.Fatalf("blocks = %#v, want one activity block", blocks)
+	}
+	block, ok := blocks[0].(ActivityTimelineBlock)
+	if !ok || len(block.Items) != 1 {
+		t.Fatalf("blocks[0] = %T %#v, want one activity item", blocks[0], blocks[0])
+	}
+	item := block.Items[0]
+	if item.Status != observation.ActivityStatusCanceled || item.ApprovalState != "canceled" || item.NeedsAttention {
+		t.Fatalf("canceled interrupted approval = %#v", item)
+	}
+}
+
 func TestFlowerBlocksFromFloretThreadProjectionKeepsQueuedSiblingPending(t *testing.T) {
 	t.Parallel()
 
