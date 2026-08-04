@@ -1,22 +1,32 @@
 # Redeven OKF Update Log
 
+## 2026-08-04
+* **Startup**: Reused the single published Floret `runtime.Open` Host for the
+  complete AI service generation instead of opening and closing a disposable
+  probe Host before the real startup, preserving upstream migration and
+  fail-closed verification while removing duplicate cold-start work.
+
 ## 2026-08-03
-* **Engine failure classification**: Adopted published Floret v3.2.12 so every
+* **Engine failure classification**: Adopted published Floret v3.2.13 so every
   failed result carries an explicit origin and AgentHarness preserves the
   original control-signal or validation failure instead of replacing it with a
   secondary failure-classification contract error.
-* **Bootstrap deletion compatibility**: Adopted published Floret v3.2.12 so the
+* **Bootstrap deletion compatibility**: Adopted published Floret v3.2.13 so the
   single-snapshot path preserves `ErrThreadDeleted` for tombstoned identities
   without weakening absent-identity failure handling.
-* **Single-snapshot Flower bootstrap**: Adopted published Floret v3.2.12 so one
+* **Single-snapshot Flower bootstrap**: Adopted published Floret v3.2.13 so one
   task open projects all canonical bootstrap surfaces from one backend snapshot
   and exact revision, preserving subscription handoff without a Redeven cache.
-* **Invalid tool presentation**: Adopted published Floret v3.2.12 so parseable schema-invalid calls retain sanitized host presentation while remaining rejected before resource, permission, approval, effect, and handler execution.
+* **Invalid tool presentation**: Adopted published Floret v3.2.13 so parseable schema-invalid calls retain sanitized host presentation while remaining rejected before resource, permission, approval, effect, and handler execution.
 * **Approval reconciliation**: Made canonical terminal run/tool Activity suppress stale in-memory approval controls during bootstrap and filter later stale queue replacements without resolving or mutating Floret authority.
-* **Batch thread navigation**: Adopted published Floret v3.2.12 so thread-list refresh reads canonical root snapshots and latest turns from bounded inventory pages, preserves product ordering, rejects missing roots, and performs zero per-thread bootstrap or complete-domain reads.
-* **Migration and inventory**: Adopted published Floret v3.2.12 so startup automatically migrates released domain schema v2 through v3 to current v4, atomically commits the strict derived root inventory, verifies current agreement before Host availability, and serves each root list without decoding the complete session-tree domain while Redeven remains outside upstream storage internals.
+* **Batch thread navigation**: Adopted published Floret v3.2.13 so thread-list refresh reads canonical root snapshots and latest turns from bounded inventory pages, preserves product ordering, rejects missing roots, and performs zero per-thread bootstrap or complete-domain reads.
+* **Migration and inventory**: Adopted published Floret v3.2.13 so startup automatically migrates released domain schema v2 through v3 to current v4, atomically commits the strict derived root inventory, verifies current agreement before Host availability, and serves each root list without decoding the complete session-tree domain while Redeven remains outside upstream storage internals.
 * **Recovery**: Adopted Floret's failed-approval timeline closure so supported historical requested approvals no longer make canonical Flower threads unloadable.
-* **SubAgent recovery**: Enumerated canonical direct children once under each root reader so startup never rebinds a child through forbidden root authority.
+* **Batch recovery discovery**: Adopted Floret's read-only
+  `Threads.ListInterruptedTurnRecoveryCandidates` scan so startup discovers
+  root and direct-parent interrupted leases in one canonical read, then binds
+  only the returned exact recovery proofs without per-root SubAgent inventory
+  reads or forbidden root authority.
 
 ## 2026-08-02
 * **Approval authority**: Adopted published Floret v3.2.3 so approval-gated effects, provider continuation, and terminal turn writes retain one renewable lease lineage across heartbeats while identity and acquisition drift remain fail closed.

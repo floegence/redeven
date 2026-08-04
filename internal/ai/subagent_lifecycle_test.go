@@ -570,13 +570,9 @@ type testFloretReadHost struct {
 
 func openTestFloretHost(t *testing.T, storePath string, parentThreadID string, fakeResponse string) (testFloretReadHost, *flruntime.Host) {
 	t.Helper()
-	source, err := prepareFloretStorage(context.Background(), storePath, nil)
+	store, err := openFloretHost(context.Background(), storePath, nil, flruntime.Open)
 	if err != nil {
-		t.Fatalf("prepare Floret storage: %v", err)
-	}
-	store, err := flruntime.Open(context.Background(), flruntime.Options{Storage: source})
-	if err != nil {
-		t.Fatalf("runtime.Open: %v", err)
+		t.Fatalf("open Floret host: %v", err)
 	}
 	adapter := testFloretBootstrap(t, store)
 	_ = fakeResponse
@@ -1410,11 +1406,7 @@ func TestDeleteThreadDeletesFloretTreeWithoutCachedRuntime(t *testing.T) {
 	}
 	assertLegacyFloretSubagentStoreNotCreated(t, svc)
 
-	source, err := prepareFloretStorage(ctx, storePath, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	reopenedStore, err := flruntime.Open(ctx, flruntime.Options{Storage: source})
+	reopenedStore, err := openFloretHost(ctx, storePath, nil, flruntime.Open)
 	if err != nil {
 		t.Fatal(err)
 	}

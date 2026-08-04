@@ -176,7 +176,7 @@ func buildFloretStartupRecoveryTargetsWithOperationTimeout(
 	capabilities floretStartupRecoveryCapabilities,
 	operationTimeout time.Duration,
 ) ([]floretStartupRecoveryTarget, error) {
-	if capabilities.root == nil || capabilities.subagent == nil || capabilities.listSubagents == nil {
+	if capabilities.candidates == nil || capabilities.root == nil || capabilities.subagent == nil {
 		return nil, errors.New("Floret startup recovery capability is unavailable")
 	}
 	targets := make([]floretStartupRecoveryTarget, 0, len(rootThreadIDs))
@@ -191,66 +191,64 @@ func buildFloretStartupRecoveryTargetsWithOperationTimeout(
 		}
 		seenRoots[rootThreadID] = struct{}{}
 	}
-	seenThreads := make(map[identity.ThreadID]struct{}, len(rootThreadIDs))
-	for rootThreadID := range seenRoots {
-		seenThreads[rootThreadID] = struct{}{}
+	candidates, err := runFloretStartupOperation(ctx, operationTimeout, capabilities.candidates)
+	if err != nil {
+		return nil, fmt.Errorf("list Floret interrupted-turn recovery candidates: %w", err)
 	}
-	for _, rootThreadID := range rootThreadIDs {
-		threadID := strings.TrimSpace(string(rootThreadID))
-		rootFactory, err := runFloretStartupOperation(ctx, operationTimeout, func(operationCtx context.Context) (floretInterruptedTurnRecoveryHostFactory, error) {
-			return capabilities.root(operationCtx, rootThreadID)
-		})
+	seenCandidates := make(map[identity.ThreadID]struct{}, len(candidates))
+	for index, candidate := range candidates {
+		threadID := identity.ThreadID(strings.TrimSpace(string(candidate.ThreadID)))
+		parentThreadID := identity.ThreadID(strings.TrimSpace(string(candidate.ParentThreadID)))
+		if threadID == "" || string(threadID) != string(candidate.ThreadID) {
+			return nil, fmt.Errorf("Floret recovery candidate %d has an invalid thread identity", index)
+		}
+		if parentThreadID != "" && string(parentThreadID) != string(candidate.ParentThreadID) {
+			return nil, fmt.Errorf("Floret recovery candidate %d has an invalid parent identity", index)
+		}
+		if _, duplicate := seenCandidates[threadID]; duplicate {
+			return nil, fmt.Errorf("Floret recovery candidate hierarchy contains duplicate thread %q", threadID)
+		}
+		if parentThreadID != "" {
+			if _, duplicate := seenRoots[threadID]; duplicate {
+				return nil, fmt.Errorf("Floret recovery candidate hierarchy reuses root %q as a child", threadID)
+			}
+		}
+		if parentThreadID != "" {
+			if _, ok := seenRoots[parentThreadID]; !ok {
+				return nil, fmt.Errorf("Floret recovery candidate %q has an unknown canonical parent %q", threadID, parentThreadID)
+			}
+		}
+		seenCandidates[threadID] = struct{}{}
+		var factory floretInterruptedTurnRecoveryHostFactory
+		if parentThreadID == "" {
+			if _, ok := seenRoots[threadID]; !ok {
+				return nil, fmt.Errorf("Floret recovery candidate root %q is absent from canonical root inventory", threadID)
+			}
+			factory, err = runFloretStartupOperation(ctx, operationTimeout, func(operationCtx context.Context) (floretInterruptedTurnRecoveryHostFactory, error) {
+				return capabilities.root(operationCtx, threadID)
+			})
+		} else {
+			factory, err = runFloretStartupOperation(ctx, operationTimeout, func(operationCtx context.Context) (floretInterruptedTurnRecoveryHostFactory, error) {
+				return capabilities.subagent(operationCtx, parentThreadID, threadID)
+			})
+		}
 		switch {
 		case errors.Is(err, flruntime.ErrInterruptedTurnNotFound):
 		case err != nil:
-			return nil, fmt.Errorf("bind root recovery target %q: %w", threadID, err)
-		case rootFactory == nil:
-			return nil, fmt.Errorf("bind root recovery target %q: empty factory", threadID)
+			if parentThreadID == "" {
+				return nil, fmt.Errorf("bind root recovery target %q: %w", threadID, err)
+			}
+			return nil, fmt.Errorf("bind SubAgent recovery target %q under %q: %w", threadID, parentThreadID, err)
+		case factory == nil:
+			if parentThreadID == "" {
+				return nil, fmt.Errorf("bind root recovery target %q: empty factory", threadID)
+			}
+			return nil, fmt.Errorf("bind SubAgent recovery target %q under %q: empty factory", threadID, parentThreadID)
 		default:
-			targets = append(targets, floretStartupRecoveryTarget{
-				description: fmt.Sprintf("root thread %q", threadID),
-				factory:     rootFactory,
-			})
-		}
-
-		parentThreadID := strings.TrimSpace(string(rootThreadID))
-		readHost, err := runFloretStartupOperation(ctx, operationTimeout, func(operationCtx context.Context) (floretSubagentReadHost, error) {
-			return capabilities.listSubagents(operationCtx, rootThreadID)
-		})
-		if err != nil {
-			return nil, fmt.Errorf("bind SubAgent recovery read for %q: %w", parentThreadID, err)
-		}
-		children, err := runFloretStartupOperation(ctx, operationTimeout, readHost.ListSubAgents)
-		if err != nil {
-			return nil, fmt.Errorf("list SubAgents for recovery parent %q: %w", parentThreadID, err)
-		}
-		for _, child := range children {
-			childThreadID := strings.TrimSpace(string(child.ThreadID))
-			if childThreadID == "" || strings.TrimSpace(string(child.ParentThreadID)) != parentThreadID {
-				return nil, errors.New("Floret SubAgent recovery identity is invalid")
-			}
-			childID := identity.ThreadID(childThreadID)
-			if _, duplicate := seenThreads[childID]; duplicate {
-				return nil, fmt.Errorf("Floret SubAgent recovery hierarchy contains duplicate thread %q", childThreadID)
-			}
-			seenThreads[childID] = struct{}{}
-			if child.Closed {
-				continue
-			}
-			childFactory, err := runFloretStartupOperation(ctx, operationTimeout, func(operationCtx context.Context) (floretInterruptedTurnRecoveryHostFactory, error) {
-				return capabilities.subagent(operationCtx, rootThreadID, childID)
-			})
-			switch {
-			case errors.Is(err, flruntime.ErrInterruptedTurnNotFound):
-			case err != nil:
-				return nil, fmt.Errorf("bind SubAgent recovery target %q under %q: %w", childThreadID, parentThreadID, err)
-			case childFactory == nil:
-				return nil, fmt.Errorf("bind SubAgent recovery target %q under %q: empty factory", childThreadID, parentThreadID)
-			default:
-				targets = append(targets, floretStartupRecoveryTarget{
-					description: fmt.Sprintf("SubAgent %q under %q", childThreadID, parentThreadID),
-					factory:     childFactory,
-				})
+			if parentThreadID == "" {
+				targets = append(targets, floretStartupRecoveryTarget{description: fmt.Sprintf("root thread %q", threadID), factory: factory})
+			} else {
+				targets = append(targets, floretStartupRecoveryTarget{description: fmt.Sprintf("SubAgent %q under %q", threadID, parentThreadID), factory: factory})
 			}
 		}
 	}
