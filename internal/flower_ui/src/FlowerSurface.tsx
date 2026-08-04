@@ -3582,7 +3582,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     setLoadingThreadID(tid);
     try {
-      const live = await loadThreadBootstrap(tid);
+      const live = await loadThreadBootstrap(tid, true);
       if (sequence !== threadLoadSequence || selectedThreadID() !== tid) {
         if (loadingThreadID() === tid) setLoadingThreadID('');
         return;
