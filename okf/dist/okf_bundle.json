@@ -1635,6 +1635,7 @@
       "timestamp": "2026-08-01T00:00:00Z",
       "frontmatter": {
         "description": "Canonical Floret v3 identity, admission, recovery, projection, and runtime ownership.",
+        "quality_exception": "Cross-domain canonical thread authority contract spanning identity, admission, recovery, projection, and runtime ownership.",
         "tags": [
           "ai",
           "floret",
@@ -10124,5 +10125,5 @@
       ]
     }
   ],
-  "source_sha256": "37c270862e4f3ea13c6423cf527329eca34163f370359b62ee84d3d63982ad81"
+  "source_sha256": "60e2e49d180cf9e57e7335e246462752038b855fb4dc4f42d81e2326652f6c18"
 }

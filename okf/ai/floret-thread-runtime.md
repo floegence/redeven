@@ -4,6 +4,7 @@ title: Floret thread runtime integration
 description: Canonical Floret v3 identity, admission, recovery, projection, and runtime ownership.
 tags: [ai, floret, threads, runtime]
 timestamp: 2026-08-01T00:00:00Z
+quality_exception: Cross-domain canonical thread authority contract spanning identity, admission, recovery, projection, and runtime ownership.
 ---
 # Summary
 
