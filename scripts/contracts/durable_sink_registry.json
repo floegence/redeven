@@ -433,7 +433,7 @@
     },
     {
       "path": "desktop/src/main/main.ts",
-      "sha256": "aeb670426e107324efc7635cc95bfe0b27e8a0f9010905be48d983f49862cc34",
+      "sha256": "70871cd94e01f992650f03a3a43522157d16b1542e48a0389fc8d012376360ab",
       "sink_kinds": [
         "file"
       ],
@@ -1077,7 +1077,7 @@
         "expression:threadDeleteOperationSelectSQL + `\nWHERE status = ?\nORDER BY updated_at_unix_ms ASC, operation_id ASC\nLIMIT 1`",
         "expression:threadDeleteOperationSelectSQL + ` WHERE endpoint_id = ? AND thread_id = ?`",
         "expression:threadDeleteOperationSelectSQL + ` WHERE operation_id = ?`",
-        "expression:threadDeleteOperationSelectSQL + ` WHERE status = ? AND operation_id > ? ORDER BY operation_id ASC LIMIT ?`",
+        "expression:threadDeleteOperationSelectSQL + ` WHERE status = ? AND operation_id \u003e ? ORDER BY operation_id ASC LIMIT ?`",
         "expression:threadDeleteOperationSelectSQL + ` WHERE status = ? ORDER BY updated_at_unix_ms ASC, operation_id ASC LIMIT ?`",
         "expression:updateSQL"
       ],
@@ -1275,7 +1275,7 @@
         "encoding/json.NewEncoder"
       ],
       "dtos": [
-        "&e"
+        "\u0026e"
       ],
       "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
     },
@@ -1661,7 +1661,7 @@
         "encoding/json.NewEncoder"
       ],
       "dtos": [
-        "&e"
+        "\u0026e"
       ],
       "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
     },
@@ -1763,7 +1763,7 @@
     },
     {
       "path": "internal/flower_ui/src/FlowerSurface.tsx",
-      "sha256": "07a0fdd61d5bc213d07a787e1a60f6e5b1c4061acf05c8487253a95b72f2e459",
+      "sha256": "4de858503ae095c5b4d74a1a0dde7647e12037e704f38512cd1f7a10dd556326",
       "sink_kinds": [
         "web_storage"
       ],

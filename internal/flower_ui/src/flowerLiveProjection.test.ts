@@ -2486,6 +2486,37 @@ describe('Flower live projection', () => {
     expect(cleared.thread.status).toBe('waiting_approval');
   });
 
+  it('keeps a pending approval authoritative over a stale interrupted thread patch', () => {
+    const approval = approvalAction({ run_id: 'run-active' });
+    const initial = thread({
+      status: 'waiting_approval',
+      active_run_id: 'run-active',
+      approval_actions: [approval],
+      approval_queue: {
+        generation: 1,
+        revision: 1,
+        current_action_id: approval.action_id,
+        current_position: 1,
+        total: 1,
+        unresolved_count: 1,
+      },
+    });
+
+    const patched = applyFlowerLiveEvent(initial, 0, event(1, 'thread.patched', {
+      patch: {
+        active_run_id: 'run-active',
+        run_status: 'failed',
+        run_error_code: 'floret_turn_interrupted',
+        run_error: 'turn interrupted during previous process',
+      },
+    }));
+
+    expect(patched.thread.status).toBe('waiting_approval');
+    expect(patched.thread.active_run_id).toBe('run-active');
+    expect(patched.thread.error).toBeUndefined();
+    expect(patched.thread.approval_actions).toEqual([approval]);
+  });
+
   it('rejects malformed canonical approval replacements as a unit', () => {
     const action = {
       action_id: 'delegated-1',
@@ -3209,6 +3240,34 @@ describe('Flower live projection', () => {
     expect(projected.approval_actions?.map((action) => action.action_id)).toEqual(['appr-1']);
   });
 
+  it('clears a stale interrupted error when live approval proves the run is active', () => {
+    const projected = projectFlowerLiveBootstrap(bootstrap({
+      thread: thread({
+        status: 'failed',
+        active_run_id: undefined,
+        error: { code: 'floret_turn_interrupted', message: 'turn interrupted during previous process' },
+      }),
+      live_state: {
+        thread_patch: {
+          run_status: 'failed',
+          run_error_code: 'floret_turn_interrupted',
+          run_error: 'turn interrupted during previous process',
+        },
+        runs: {
+          'run-1': { run_id: 'run-1', status: 'waiting_approval', message_id: 'assistant-live' },
+        },
+        approval_actions: {
+          'appr-1': approvalAction({ run_id: 'run-1' }),
+        },
+        input_requests: {},
+      },
+    }));
+
+    expect(projected.status).toBe('waiting_approval');
+    expect(projected.active_run_id).toBe('run-1');
+    expect(projected.error).toBeUndefined();
+  });
+
   it('keeps existing approval actions when bootstrap live state has not sampled approvals', () => {
     const approval = approvalAction();
     const approvalQueue = { generation: 1, revision: 1, current_action_id: 'appr-1', current_position: 1, total: 1, unresolved_count: 1 };
@@ -3774,6 +3833,46 @@ describe('Flower live projection', () => {
     expect(result.thread.model_io_status).toBeNull();
     expect(activityBlock?.items[0]?.status).toBe('success');
     expect(activityBlock?.summary.counts?.running).toBeUndefined();
+  });
+
+  it('prefers a canonical complete message over a stale interrupted timeline patch', () => {
+    const initial = thread({ status: 'running', active_run_id: 'run-1' });
+    const result = applyFlowerLiveEvent(initial, 10, event(11, 'timeline.replaced', {
+      stream_generation: 1,
+      snapshot_through_seq: 11,
+      messages: [message(), {
+        id: 'turn-1',
+        thread_id: 'thread-1',
+        turn_id: 'turn-1',
+        run_id: 'run-1',
+        role: 'assistant',
+        content: 'completed response',
+        status: 'complete',
+        created_at_ms: 2000,
+        blocks: [{ type: 'markdown', content: 'completed response' }],
+      }],
+      thread_patch: {
+        active_run_id: 'run-1',
+        run_status: 'failed',
+        run_error_code: 'floret_turn_interrupted',
+        run_error: 'turn interrupted during previous process',
+      },
+      live_state: {
+        thread_patch: {
+          active_run_id: 'run-1',
+          run_status: 'failed',
+          run_error_code: 'floret_turn_interrupted',
+          run_error: 'turn interrupted during previous process',
+        },
+        runs: { 'run-1': { run_id: 'run-1', status: 'failed', error_code: 'floret_turn_interrupted', error: 'turn interrupted during previous process' } },
+        approval_actions: {},
+        input_requests: {},
+      },
+    }));
+
+    expect(result.thread.status).toBe('success');
+    expect(result.thread.active_run_id).toBeUndefined();
+    expect(result.thread.error).toBeUndefined();
   });
 
   it('replaces stale live state when canonical timeline includes materialized state', () => {

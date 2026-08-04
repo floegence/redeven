@@ -357,6 +357,18 @@ func TestFloretHostPublishesRunningToolProjectionToFlowerLiveEvents(t *testing.T
 		t.Fatalf("canonical identity=(%q, %q, %q), want receipt identity=(%q, %q, %q)",
 			canonicalRunID, canonicalThreadID, canonicalTurnID, admission.RunID, admission.ThreadID, admission.TurnID)
 	}
+	bootstrapSnapshot, bootstrapTurn, err := svc.readCanonicalThreadState(ctx, thread.ThreadID)
+	if err != nil {
+		t.Fatalf("readCanonicalThreadState after admission: %v", err)
+	}
+	if bootstrapSnapshot.Status != flruntime.ThreadStatusRunning || bootstrapSnapshot.LatestTurnID != admission.TurnID ||
+		bootstrapSnapshot.LatestRunID != admission.RunID || bootstrapSnapshot.Recoverable {
+		t.Fatalf("canonical bootstrap after admission=%#v, want running turn %q run %q", bootstrapSnapshot, admission.TurnID, admission.RunID)
+	}
+	if bootstrapTurn == nil || bootstrapTurn.TurnID != admission.TurnID || bootstrapTurn.RunID != admission.RunID ||
+		bootstrapTurn.Status != flruntime.TurnStatusRunning {
+		t.Fatalf("canonical bootstrap turn after admission=%#v, want running turn %q run %q", bootstrapTurn, admission.TurnID, admission.RunID)
+	}
 
 	type turnOutcome struct {
 		result flruntime.StartTurnResult
@@ -571,6 +583,122 @@ func TestFlowerBlocksFromFloretThreadProjectionKeepsRequestedApprovalWaiting(t *
 		item.Presentation == nil ||
 		item.Presentation.Label != "curl -s https://example.test" {
 		t.Fatalf("approval activity should remain waiting: summary=%#v item=%#v", block.Summary, item)
+	}
+}
+
+func TestFlowerBlocksFromPublishedFloretApprovalPreservesTerminalPresentationBeforeDispatch(t *testing.T) {
+	t.Parallel()
+
+	now := time.UnixMilli(1_700_032_000_000)
+	command := "pwd && whoami"
+	approvalTimeline := func(state string, status observation.ActivityStatus, at time.Time) *observation.ActivityTimeline {
+		return &observation.ActivityTimeline{
+			SchemaVersion: observation.ActivityTimelineSchemaVersion,
+			RunID:         "run_approval_presentation",
+			ThreadID:      "thread_approval_presentation",
+			TurnID:        "turn_approval_presentation",
+			TraceID:       "run_approval_presentation",
+			Summary: observation.ActivitySummary{
+				Status:     status,
+				Severity:   observation.ActivitySeverityNormal,
+				TotalItems: 1,
+			},
+			Items: []observation.ActivityItem{{
+				ItemID:           "tool:call-1",
+				ToolID:           "call-1",
+				ToolName:         "terminal.exec",
+				Kind:             observation.ActivityKindTool,
+				Status:           status,
+				Severity:         observation.ActivitySeverityNormal,
+				RequiresApproval: true,
+				ApprovalState:    state,
+				StartedAtUnixMS:  at.UnixMilli(),
+				Presentation: &fltools.ActivityPresentation{
+					Label:       "Tool approval",
+					Description: state,
+					Renderer:    fltools.ActivityRendererStructured,
+				},
+			}},
+		}
+	}
+	projection := flruntime.ProjectThreadTurn(flruntime.ProjectThreadTurnRequest{
+		RunID:    "run_approval_presentation",
+		ThreadID: "thread_approval_presentation",
+		TurnID:   "turn_approval_presentation",
+		TraceID:  "run_approval_presentation",
+		Events: []flruntime.ThreadDetailEvent{
+			{
+				ID:         "turn-started",
+				Ordinal:    1,
+				ThreadID:   "thread_approval_presentation",
+				TurnID:     "turn_approval_presentation",
+				Kind:       flruntime.ThreadDetailEventTurnMarker,
+				CreatedAt:  now.Add(-time.Second),
+				TurnMarker: &flruntime.ThreadDetailTurnMarker{Status: "started"},
+			},
+			{
+				ID:        "tool-call",
+				Ordinal:   2,
+				ThreadID:  "thread_approval_presentation",
+				TurnID:    "turn_approval_presentation",
+				Kind:      flruntime.ThreadDetailEventToolCall,
+				CreatedAt: now,
+				Message: &flruntime.ThreadDetailMessage{Role: "assistant", Activity: &fltools.ActivityPresentation{
+					Label:       command,
+					Description: "Run in the main thread",
+					Renderer:    fltools.ActivityRendererTerminal,
+					Payload:     fltools.TerminalActivityPayload{Command: command},
+				}},
+				ToolCall: &flruntime.ThreadDetailToolCall{ID: "call-1", Name: "terminal.exec"},
+			},
+			{
+				ID:               "approval-requested",
+				Ordinal:          3,
+				ThreadID:         "thread_approval_presentation",
+				TurnID:           "turn_approval_presentation",
+				Kind:             flruntime.ThreadDetailEventApproval,
+				Type:             string(observation.EventTypeToolApprovalRequested),
+				CreatedAt:        now.Add(time.Second),
+				Approval:         &flruntime.ThreadDetailApproval{State: "requested", ToolID: "call-1", ToolName: "terminal.exec"},
+				ActivityTimeline: approvalTimeline("requested", observation.ActivityStatusWaiting, now.Add(time.Second)),
+			},
+			{
+				ID:               "approval-approved",
+				Ordinal:          4,
+				ThreadID:         "thread_approval_presentation",
+				TurnID:           "turn_approval_presentation",
+				Kind:             flruntime.ThreadDetailEventApproval,
+				Type:             string(observation.EventTypeToolApprovalApproved),
+				CreatedAt:        now.Add(2 * time.Second),
+				Approval:         &flruntime.ThreadDetailApproval{State: "approved", ToolID: "call-1", ToolName: "terminal.exec"},
+				ActivityTimeline: approvalTimeline("approved", observation.ActivityStatusPending, now.Add(2*time.Second)),
+			},
+		},
+	})
+	if err := projection.Validate(); err != nil {
+		t.Fatalf("published Floret projection must validate: %v", err)
+	}
+
+	blocks, err := newRun(runOptions{}).flowerBlocksFromFloretThreadProjection(projection)
+	if err != nil {
+		t.Fatalf("map approved projection: %v", err)
+	}
+	if len(blocks) != 1 {
+		t.Fatalf("blocks = %#v, want one activity block", blocks)
+	}
+	block, ok := blocks[0].(ActivityTimelineBlock)
+	if !ok || len(block.Items) != 1 {
+		t.Fatalf("blocks[0] = %T %#v, want one activity item", blocks[0], blocks[0])
+	}
+	item := block.Items[0]
+	if item.Presentation == nil {
+		t.Fatalf("approval lifecycle removed terminal presentation: %#v", item)
+	}
+	payload, ok := item.Presentation.Payload.(fltools.TerminalActivityPayload)
+	if !ok || item.Status != observation.ActivityStatusPending || item.ApprovalState != "approved" ||
+		item.Presentation.Label != command || item.Presentation.Description != "Run in the main thread" ||
+		item.Presentation.Renderer != fltools.ActivityRendererTerminal || payload.Command != command {
+		t.Fatalf("approval lifecycle replaced terminal presentation: %#v", item)
 	}
 }
 

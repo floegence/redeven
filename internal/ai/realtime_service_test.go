@@ -1790,6 +1790,84 @@ func TestFlowerLiveThreadPatchHandsOffActiveRunState(t *testing.T) {
 	}
 }
 
+func TestFlowerLiveActiveRunClearsPriorInterruptedError(t *testing.T) {
+	t.Parallel()
+
+	state := FlowerLiveMaterializedState{
+		ThreadPatch: FlowerLiveThreadPatch{
+			ActiveRunID:  "run-old",
+			RunStatus:    string(RunStateFailed),
+			RunErrorCode: "floret_turn_interrupted",
+			RunError:     "turn interrupted during previous process",
+		},
+		Runs: map[string]FlowerLiveRunState{
+			"run-old": {
+				RunID:     "run-old",
+				Status:    string(RunStateFailed),
+				ErrorCode: "floret_turn_interrupted",
+				Error:     "turn interrupted during previous process",
+			},
+		},
+	}
+
+	applyFlowerLiveEventToMaterializedState(&state, nil, FlowerLiveEvent{
+		RunID: "run-new",
+		Kind:  FlowerLiveThreadPatched,
+		Payload: mustFlowerPayload(FlowerLiveThreadPatchedPayload{Patch: FlowerLiveThreadPatch{
+			ActiveRunID: "run-new",
+			RunStatus:   string(RunStateRunning),
+		}}),
+	})
+
+	if state.ThreadPatch.ActiveRunID != "run-new" || state.ThreadPatch.RunStatus != string(RunStateRunning) {
+		t.Fatalf("active run handoff did not publish running state: %#v", state.ThreadPatch)
+	}
+	if state.ThreadPatch.RunErrorCode != "" || state.ThreadPatch.RunError != "" {
+		t.Fatalf("active run handoff retained prior interruption: %#v", state.ThreadPatch)
+	}
+	if _, ok := state.Runs["run-old"]; ok {
+		t.Fatalf("active run handoff retained old failed run: %#v", state.Runs)
+	}
+}
+
+func TestFlowerLiveOlderSummaryCannotInterruptNewerActiveRunState(t *testing.T) {
+	t.Parallel()
+
+	state := FlowerLiveMaterializedState{
+		ThreadPatch: FlowerLiveThreadPatch{
+			ActiveRunID:        "run-active",
+			RunStatus:          string(RunStateWaitingApproval),
+			RunUpdatedAtUnixMs: 200,
+		},
+		Runs: map[string]FlowerLiveRunState{
+			"run-active": {RunID: "run-active", Status: string(RunStateWaitingApproval)},
+		},
+	}
+	applyFlowerLiveEventToMaterializedState(&state, nil, FlowerLiveEvent{
+		RunID: "run-active",
+		Kind:  FlowerLiveThreadPatched,
+		Payload: mustFlowerPayload(FlowerLiveThreadPatchedPayload{Patch: FlowerLiveThreadPatch{
+			ActiveRunID:     "run-active",
+			RunStatus:       string(RunStateFailed),
+			RunErrorCode:    "floret_turn_interrupted",
+			RunError:        "turn interrupted during previous process",
+			Title:           "Updated title",
+			TitleSet:        true,
+			UpdatedAtUnixMs: 100,
+		}}),
+	})
+
+	if state.ThreadPatch.RunStatus != string(RunStateWaitingApproval) || state.ThreadPatch.RunUpdatedAtUnixMs != 200 {
+		t.Fatalf("older summary replaced newer run state: %#v", state.ThreadPatch)
+	}
+	if state.ThreadPatch.RunErrorCode != "" || state.ThreadPatch.RunError != "" {
+		t.Fatalf("older summary restored an interrupted error: %#v", state.ThreadPatch)
+	}
+	if state.ThreadPatch.Title != "Updated title" {
+		t.Fatalf("non-run summary fields were not applied: %#v", state.ThreadPatch)
+	}
+}
+
 func TestApproveToolRejectsDuplicateDecision(t *testing.T) {
 	t.Parallel()
 

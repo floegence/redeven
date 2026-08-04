@@ -1911,6 +1911,29 @@ describe('DesktopWelcomeShell', () => {
     );
   });
 
+  it('keeps steady environment health indicators compositor-idle', () => {
+    const styles = readWelcomeStyles();
+    const environmentSuccessRule = cssRuleBlock(
+      styles,
+      ".redeven-status-indicator[data-tone='success'] .redeven-status-indicator__dot",
+    );
+    const bottomBarSuccessRule = cssRuleBlock(
+      styles,
+      ".redeven-bottom-bar-metric[data-tone='success'] .redeven-bottom-bar-metric__dot",
+    );
+    const bottomBarWarningRule = cssRuleBlock(
+      styles,
+      ".redeven-bottom-bar-metric[data-tone='warning'] .redeven-bottom-bar-metric__dot",
+    );
+
+    expect(environmentSuccessRule).not.toContain('animation:');
+    expect(bottomBarSuccessRule).not.toContain('animation:');
+    expect(bottomBarWarningRule).not.toContain('animation:');
+    expect(styles).not.toContain('@keyframes redeven-status-dot-glow');
+    expect(styles).not.toContain('@keyframes redeven-bottom-bar-dot-breathe');
+    expect(styles).not.toContain('@keyframes redeven-bottom-bar-dot-breathe-warning');
+  });
+
   it('includes Control Plane management copy inside the launcher source', () => {
     const appSrc = readWelcomeSource();
     const styles = readWelcomeStyles();

@@ -17,6 +17,10 @@ export function canRenameThreadItem(item: FlowerThreadListItem): boolean {
   return true;
 }
 
+export function canStopThreadItem(item: FlowerThreadListItem): boolean {
+  return item.status === 'running' || item.status === 'waiting_approval' || item.status === 'waiting_user';
+}
+
 export function canPinThreadItem(item: FlowerThreadListItem): boolean {
   void item;
   return true;

@@ -343,6 +343,8 @@ const SUBAGENT_DROPDOWN_ESTIMATED_SIZE = { width: 400, height: 480 } as const;
 const SUBAGENT_DETAIL_TAIL_RUNNING_INTERVAL_MS = 1500;
 const SUBAGENT_DETAIL_TAIL_QUEUED_INTERVAL_MS = 2500;
 const SUBAGENT_DETAIL_TAIL_ERROR_INTERVAL_MS = 4000;
+const COMPANION_SUMMARY_ACTIVE_REFRESH_MS = 1800;
+const COMPANION_SUMMARY_IDLE_REFRESH_DELAYS_MS = [5_000, 15_000, 30_000] as const;
 const FLOWER_SURFACE_LAYER = {
   subagentWindow: 160,
   contextPreview: 162,
@@ -3520,6 +3522,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           if (!props.adapter.deleteThread) return;
           openDeleteDialog(item, restore);
           return;
+        case 'stop':
+          setThreadActionBusy({ threadID: item.thread_id, action });
+          applyLiveBootstrap(await props.adapter.stopThread(item.thread_id), 'user_action');
+          return;
         case 'pin':
           if (!props.adapter.setThreadPinned) return;
           setThreadActionBusy({ threadID: item.thread_id, action });
@@ -4150,7 +4156,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   });
 
-  createEffect(() => {
+  const companionSummaryRefreshEnabled = createMemo(() => {
     const ownsCompanionPresence = companionPresenceOwner();
     const hasBackgroundActiveThread = ownsCompanionPresence
       ? false
@@ -4167,22 +4173,52 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             )
           ));
         })();
-    // Companion presence owns a canonical summary refresh even while its local
-    // cache is quiet. Otherwise work started from another surface cannot be
-    // discovered until the companion is opened manually.
-    if (!ownsCompanionPresence && !hasBackgroundActiveThread) return;
-    const tick = () => {
-      if (backgroundThreadsRefreshInFlight) return;
-      backgroundThreadsRefreshInFlight = true;
-      void refreshThreads().finally(() => {
-        backgroundThreadsRefreshInFlight = false;
-      });
+    return ownsCompanionPresence || hasBackgroundActiveThread;
+  });
+
+  createEffect(() => {
+    const refreshEnabled = companionSummaryRefreshEnabled();
+    if (!documentVisible() || !refreshEnabled) return;
+    let disposed = false;
+    let timer: number | undefined;
+    let requestInFlight = false;
+    let idleDelayIndex = 0;
+    const hasCompanionProgress = (values: readonly FlowerThreadSnapshot[]) => values.some((thread) => (
+      thread.status === 'running'
+      || Number(thread.queued_turn_count ?? thread.queued_turns?.length ?? 0) > 0
+    ));
+    const schedule = (delayMs: number) => {
+      if (disposed) return;
+      timer = window.setTimeout(() => {
+        timer = undefined;
+        void poll();
+      }, delayMs);
     };
-    const timer = window.setInterval(tick, 1800);
-    tick();
+    const poll = async () => {
+      if (disposed || !documentVisible() || requestInFlight) return;
+      requestInFlight = true;
+      backgroundThreadsRefreshInFlight = true;
+      let nextDelayMs = COMPANION_SUMMARY_ACTIVE_REFRESH_MS;
+      try {
+        await refreshThreads();
+        const current = untrack(threads);
+        if (!hasCompanionProgress(current)) {
+          nextDelayMs = COMPANION_SUMMARY_IDLE_REFRESH_DELAYS_MS[idleDelayIndex]
+            ?? COMPANION_SUMMARY_IDLE_REFRESH_DELAYS_MS.at(-1)!;
+          idleDelayIndex = Math.min(idleDelayIndex + 1, COMPANION_SUMMARY_IDLE_REFRESH_DELAYS_MS.length - 1);
+        } else {
+          idleDelayIndex = 0;
+        }
+      } finally {
+        requestInFlight = false;
+        backgroundThreadsRefreshInFlight = false;
+        schedule(nextDelayMs);
+      }
+    };
+    void poll();
     onCleanup(() => {
-      window.clearInterval(timer);
-      backgroundThreadsRefreshInFlight = false;
+      disposed = true;
+      if (timer !== undefined) window.clearTimeout(timer);
     });
   });
 
@@ -4802,6 +4838,24 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return thread;
   };
 
+  const stopSelectedThreadFromComposer = async (): Promise<void> => {
+    if (threadStopping() || chatRunning()) return;
+    const stoppingThreadID = trimString(selectedThread()?.thread_id);
+    setThreadStopping(true);
+    try {
+      await stopSelectedThread();
+      if (selectedThreadDetailMatches(stoppingThreadID)) {
+        returnToChat();
+      }
+    } catch (error) {
+      if (selectedThreadDetailMatches(stoppingThreadID)) {
+        notifyComposerError(getErrorMessage(error));
+      }
+    } finally {
+      setThreadStopping(false);
+    }
+  };
+
   const contextCompactionOperationIDs = (thread: FlowerThreadSnapshot): readonly string[] => {
     const operationIDs = new Set<string>();
     for (const compaction of thread.context_compactions ?? []) {
@@ -5025,22 +5079,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return;
     }
     if (selectedThreadCanStop() && !promptOverLimit && !prompt && !composerHasAttachments() && !composerHasReferences()) {
-      if (threadStopping() || chatRunning()) return;
-      const stoppingThreadID = trimString(selectedThread()?.thread_id);
-      setThreadStopping(true);
-      try {
-        await stopSelectedThread();
-        if (selectedThreadDetailMatches(stoppingThreadID)) {
-          returnToChat();
-        }
-      } catch (error) {
-        if (selectedThreadDetailMatches(stoppingThreadID)) {
-          notifyComposerError(getErrorMessage(error));
-        }
-        return;
-      } finally {
-        setThreadStopping(false);
-      }
+      await stopSelectedThreadFromComposer();
       return;
     }
     if (chatRunning() || composerSharedOperationActive()) {
@@ -6976,46 +7015,44 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return out;
   };
 
-  const approvalActionCard = (action: FlowerApprovalAction, options: Readonly<{ surface?: 'history' | 'composer' }> = {}) => {
-    const busy = () => approvalSubmitting()[action.action_id];
-    const canDecide = approvalActionCanDecide(action);
-    const disabled = () => busy() !== undefined || !canDecide;
+  const approvalActionCard = (
+    actionID: string,
+    action: Accessor<FlowerApprovalAction>,
+    options: Readonly<{ surface?: 'history' | 'composer' }> = {},
+  ) => {
+    const busy = () => approvalSubmitting()[actionID];
+    const canDecide = () => approvalActionCanDecide(action());
+    const disabled = () => busy() !== undefined || !canDecide();
     const composerSurface = options.surface === 'composer';
-    const queue = selectedThread()?.approval_queue;
-    const queueProgress = composerSurface && queue && queue.total > 0
-      ? `${queue.current_position} / ${queue.total}`
-      : '';
-    const descriptionID = `flower-approval-description-${action.action_id}`;
-    const statusID = `flower-approval-status-${action.action_id}`;
-    const actionLabel = action.summary.label || action.tool_name || copy().chat.toolApprovalRequired;
-    const scopedThreadID = action.origin === 'delegated_subagent' && action.scope?.startsWith('thread:')
-      ? action.scope.slice('thread:'.length)
-      : '';
-    const subtaskLabel = scopedThreadID ? copy().chat.toolApprovalSubtaskSuffix(scopedThreadID) : '';
-    const commandText = trimString(action.summary.command);
-    const descriptionText = action.summary.description || action.read_only_reason || '';
-    const hasDescription = Boolean(descriptionText);
-    const visibleEffects = approvalVisibleEffects(action);
-    const visibleFlags = approvalVisibleFlags(action);
-    const commandCopyKey = `approval:${action.action_id}:command`;
+    const queueProgress = createMemo(() => {
+      const queue = selectedThread()?.approval_queue;
+      return composerSurface && queue && queue.total > 0
+        ? `${queue.current_position} / ${queue.total}`
+        : '';
+    });
+    const descriptionID = `flower-approval-description-${actionID}`;
+    const statusID = `flower-approval-status-${actionID}`;
+    const actionLabel = createMemo(() => action().summary.label || action().tool_name || copy().chat.toolApprovalRequired);
+    const scopedThreadID = createMemo(() => (
+      action().origin === 'delegated_subagent' && action().scope?.startsWith('thread:')
+        ? action().scope!.slice('thread:'.length)
+        : ''
+    ));
+    const subtaskLabel = createMemo(() => scopedThreadID() ? copy().chat.toolApprovalSubtaskSuffix(scopedThreadID()) : '');
+    const commandText = createMemo(() => trimString(action().summary.command));
+    const descriptionText = createMemo(() => action().summary.description || action().read_only_reason || '');
+    const visibleEffects = createMemo(() => approvalVisibleEffects(action()));
+    const visibleFlags = createMemo(() => approvalVisibleFlags(action()));
+    const commandCopyKey = `approval:${actionID}:command`;
     const commandCopied = () => copiedApprovalAction() === commandCopyKey;
-    const statusCopy = !canDecide ? action.read_only_reason || copy().chat.toolApprovalUnavailable : '';
-    const describedBy = [hasDescription ? descriptionID : '', statusCopy ? statusID : ''].filter(Boolean).join(' ');
-    const unavailableCopy = (() => {
-      return action.read_only_reason || copy().chat.toolApprovalUnavailable;
-    })();
-    const approvalIntroText = (() => {
-      const toolName = action.tool_name;
-      if (toolName === 'terminal.exec') return 'Flower wants to execute a shell command';
-      if (toolName === 'file.edit') return 'Flower wants to edit a file';
-      if (toolName === 'file.write') return 'Flower wants to write a file';
-      if (toolName === 'apply_patch') return 'Flower wants to apply a patch';
-      return 'Flower needs your approval';
-    })();
+    const statusCopy = createMemo(() => !canDecide() ? action().read_only_reason || copy().chat.toolApprovalUnavailable : '');
+    const describedBy = createMemo(() => [descriptionText() ? descriptionID : '', statusCopy() ? statusID : ''].filter(Boolean).join(' '));
+    const unavailableCopy = createMemo(() => action().read_only_reason || copy().chat.toolApprovalUnavailable);
+    const approvalIntroText = () => copy().chat.toolApprovalComposerTitle;
     const riskNote = () => {
       const notes: string[] = [];
-      if (visibleFlags.includes('May reach outside the workspace')) notes.push('This command may access resources outside the workspace.');
-      if (visibleEffects.includes('Writes files')) notes.push('This will modify files.');
+      if (visibleFlags().includes('May reach outside the workspace')) notes.push(copy().chat.toolApprovalOutsideWorkspaceRisk);
+      if (visibleEffects().includes('Writes files')) notes.push(copy().chat.toolApprovalWritesFilesRisk);
       return notes.length > 0 ? notes.join(' ') : '';
     };
     return (
@@ -7023,64 +7060,64 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         ref={composerSurface ? (element) => { composerApprovalCardRef = element; } : undefined}
         tabIndex={composerSurface ? -1 : undefined}
         class={cn('flower-approval-card', composerSurface && 'flower-approval-card-composer')}
-        data-flower-approval-action-id={action.action_id}
-        data-flower-approval-origin={action.origin}
-        data-flower-approval-surface-role={action.surface_role || 'primary_action'}
+        data-flower-approval-action-id={actionID}
+        data-flower-approval-origin={action().origin}
+        data-flower-approval-surface-role={action().surface_role || 'primary_action'}
         data-flower-composer-approval={composerSurface ? 'true' : undefined}
       >
         <div class="flower-approval-body">
           <div class="flower-approval-header">
-            <p class="flower-approval-intro">{approvalIntroText}</p>
-            <Show when={queueProgress}>
-              {(progress) => <span class="flower-approval-queue-progress" aria-label={`Approval ${progress()}`}>{progress()}</span>}
+            <p class="flower-approval-intro">{approvalIntroText()}</p>
+            <Show when={queueProgress()}>
+              {(progress) => <span class="flower-approval-queue-progress" aria-label={`${copy().chat.toolApprovalRequired} ${progress()}`}>{progress()}</span>}
             </Show>
-            <Show when={commandText}>
+            <Show when={commandText()}>
               <button
                 type="button"
                 class="flower-approval-copy-btn"
                 data-copied={commandCopied() ? 'true' : 'false'}
-                aria-label={`${copy().chat.toolApprovalCopyCommand}${subtaskLabel}`}
+                aria-label={`${copy().chat.toolApprovalCopyCommand}${subtaskLabel()}`}
                 title={commandCopied() ? copy().chat.toolApprovalCopied : copy().chat.toolApprovalCopyCommand}
-                onClick={() => void copyApprovalCommand(action)}
+                onClick={() => void copyApprovalCommand(action())}
               >
                 <Copy class="h-3.5 w-3.5" aria-hidden="true" />
               </button>
             </Show>
           </div>
-          <Show when={commandText}>
+          <Show when={commandText()}>
             {(command) => (
               <pre class="flower-approval-command-text"><FlowerShellCommandHighlight command={command()} /></pre>
             )}
           </Show>
-          <Show when={!commandText && (action.summary.targets?.length ?? 0) > 0}>
+          <Show when={!commandText() && (action().summary.targets?.length ?? 0) > 0}>
             <div class="flower-approval-targets">
-              <For each={action.summary.targets ?? []}>
+              <For each={action().summary.targets ?? []}>
                 {(target) => <span class="flower-approval-target">{target.label}</span>}
               </For>
             </div>
           </Show>
-          <Show when={!commandText && !((action.summary.targets?.length ?? 0) > 0) && action.summary.label}>
-            <p class="flower-approval-fallback-label">{action.summary.label}</p>
+          <Show when={!commandText() && !((action().summary.targets?.length ?? 0) > 0) && action().summary.label}>
+            <p class="flower-approval-fallback-label">{action().summary.label}</p>
           </Show>
           <Show when={riskNote()}>
             {(note) => <p class="flower-approval-risk">{note()}</p>}
           </Show>
-          <Show when={statusCopy}>
+          <Show when={statusCopy()}>
             {(message) => <p class="flower-approval-status">{message()}</p>}
           </Show>
         </div>
         <Show when={!composerSurface}>
           <div class="flower-approval-actions">
-            <Show when={canDecide} fallback={<div class="flower-approval-unavailable">{unavailableCopy}</div>}>
+            <Show when={canDecide()} fallback={<div class="flower-approval-unavailable">{unavailableCopy()}</div>}>
               <Button
                 variant="outline"
                 size="sm"
                 disabled={disabled()}
                 loading={busy() === 'reject'}
                 aria-busy={busy() === 'reject' ? 'true' : undefined}
-                aria-label={copy().chat.toolApprovalRejectAction(actionLabel, subtaskLabel)}
-                aria-describedby={describedBy || undefined}
-                onClick={() => void submitApprovalAction(action, false)}
+                aria-label={copy().chat.toolApprovalRejectAction(actionLabel(), subtaskLabel())}
+                aria-describedby={describedBy() || undefined}
+                onClick={() => void submitApprovalAction(action(), false)}
               >
                 {copy().chat.toolApprovalReject}
               </Button>
@@ -7090,9 +7127,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 disabled={disabled()}
                 loading={busy() === 'approve'}
                 aria-busy={busy() === 'approve' ? 'true' : undefined}
-                aria-label={copy().chat.toolApprovalApproveAction(actionLabel, subtaskLabel)}
-                aria-describedby={describedBy || undefined}
-                onClick={() => void submitApprovalAction(action, true)}
+                aria-label={copy().chat.toolApprovalApproveAction(actionLabel(), subtaskLabel())}
+                aria-describedby={describedBy() || undefined}
+                onClick={() => void submitApprovalAction(action(), true)}
               >
                 {copy().chat.toolApprovalApprove}
               </Button>
@@ -7110,7 +7147,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           <div class="flower-thread-approval-title">{copy().chat.threadApprovalPanelTitle(selectedThreadLevelApprovalActions().length)}</div>
         </div>
         <For each={selectedThreadLevelApprovalActions()}>
-          {(action) => approvalActionCard(action)}
+          {(action) => approvalActionCard(action.action_id, () => action)}
         </For>
       </section>
     </Show>
@@ -9991,15 +10028,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     </>
                   )}
                 >
-                  {(_actionID) => {
-                    const approvalAction = selectedComposerApprovalDisplayAction();
-                    return approvalAction ? (
-                      <div class="flower-composer-approval-body">
-                        <span class="flower-visually-hidden" role="status" aria-live="polite" aria-atomic="true">{approvalQueueAnnouncement()}</span>
-                        {approvalActionCard(approvalAction, { surface: 'composer' })}
-                      </div>
-                    ) : null;
-                  }}
+                  {(actionID) => (
+                    <div class="flower-composer-approval-body">
+                      <span class="flower-visually-hidden" role="status" aria-live="polite" aria-atomic="true">{approvalQueueAnnouncement()}</span>
+                      {approvalActionCard(actionID, () => selectedComposerApprovalDisplayAction()!, { surface: 'composer' })}
+                    </div>
+                  )}
                 </Show>
                 <div class="flower-composer-footer">
                   <Show
@@ -10139,6 +10173,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                             <div class="flower-composer-approval-actions">
                               <Button
                                 variant="outline"
+                                icon={FlowerStopIcon}
+                                size="icon"
+                                class="flower-composer-stop-thread"
+                                aria-label={copy().chat.stop}
+                                title={copy().chat.stop}
+                                disabled={!selectedThreadCanStop() || threadStopping() || chatRunning()}
+                                loading={threadStopping()}
+                                onClick={() => void stopSelectedThreadFromComposer()}
+                              />
+                              <Button
+                                variant="outline"
                                 class="flower-composer-approval-decision"
                                 disabled={disabled()}
                                 loading={busy() === 'reject'}
@@ -10224,6 +10269,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           canFork={!!props.adapter.forkThread}
           canRename={!!props.adapter.renameThread}
           canPin={!!props.adapter.setThreadPinned}
+          showStopAction
           showDeleteAction={typeof props.adapter.deleteThread === 'function'}
           busyThreadID={threadActionBusy()?.threadID}
           busyAction={threadActionBusy()?.action}

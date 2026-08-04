@@ -30,6 +30,7 @@ export type FlowerThreadListCopy = Readonly<{
   untitled: string;
   working: string;
   unread: string;
+  stop: string;
   deleteMenuAction: string;
   deleteDialogTitle: string;
   deleteDialogDescription: (title: string) => string;
@@ -399,6 +400,8 @@ export type FlowerSurfaceCopy = Readonly<{
     toolApprovalComposerTitle: string;
     toolApprovalComposerDescription: string;
     toolApprovalQueueCount: (count: number) => string;
+    toolApprovalOutsideWorkspaceRisk: string;
+    toolApprovalWritesFilesRisk: string;
     toolApprovalWorkingDirectory: string;
     toolApprovalCommand: string;
     toolApprovalCommandText: string;
@@ -626,6 +629,8 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     toolApprovalComposerTitle: 'Review before this runs',
     toolApprovalComposerDescription: 'The conversation is paused until you approve or reject this action.',
     toolApprovalQueueCount: (count) => `${count} more approval${count === 1 ? '' : 's'} waiting`,
+    toolApprovalOutsideWorkspaceRisk: 'This command may access resources outside the workspace.',
+    toolApprovalWritesFilesRisk: 'This action will modify files.',
     toolApprovalWorkingDirectory: 'Working directory',
     toolApprovalCommand: 'Command',
     toolApprovalCommandText: 'Command text',
@@ -676,6 +681,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     untitled: 'Untitled chat',
     working: 'Working',
     unread: 'Unread',
+    stop: 'Stop conversation',
     deleteMenuAction: 'Delete conversation',
     deleteDialogTitle: 'Delete conversation?',
     deleteDialogDescription: (title) => `Permanently delete "${title}" and its conversation history? This cannot be undone.`,

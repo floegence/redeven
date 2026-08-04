@@ -6437,9 +6437,15 @@ html.dark .flower-component-shell {
 
 .flower-composer-approval-actions {
   display: inline-grid;
-  grid-template-columns: repeat(2, minmax(5.5rem, 1fr));
+  grid-template-columns: 2.25rem repeat(2, minmax(5.5rem, 1fr));
   min-width: 0;
   gap: 0.5rem;
+}
+
+.flower-composer-stop-thread {
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
 }
 
 .flower-approval-queue-progress {

@@ -42,6 +42,7 @@ Options:
 
 Environment:
   REDEVEN_DESKTOP_OPEN_DEVTOOLS=0|1
+  REDEVEN_DESKTOP_AUTO_START_RUNTIME=0|1 (default: 1 for this development launch)
   REDEVEN_DESKTOP_REMOTE_DEBUGGING_PORT=<port|0>
   REDEVEN_DESKTOP_INSPECT_PORT=<port|0>
   REDEVEN_DESKTOP_STOP_TIMEOUT_SECONDS=<seconds>
@@ -428,6 +429,7 @@ start_desktop() {
       npm ci
     fi
     export REDEVEN_DESKTOP_OPEN_DEVTOOLS="$OPEN_DEVTOOLS"
+    export REDEVEN_DESKTOP_AUTO_START_RUNTIME="${REDEVEN_DESKTOP_AUTO_START_RUNTIME:-1}"
     if [ -n "$ssh_runtime_release_tag" ]; then
       export REDEVEN_DESKTOP_SSH_RUNTIME_RELEASE_TAG="$ssh_runtime_release_tag"
       export REDEVEN_DESKTOP_BUNDLE_VERSION="${REDEVEN_DESKTOP_BUNDLE_VERSION:-$ssh_runtime_release_tag}"

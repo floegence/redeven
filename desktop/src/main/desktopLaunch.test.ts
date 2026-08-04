@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  DESKTOP_AUTO_START_RUNTIME_ENV_NAME,
   DESKTOP_OWNER_ID_ENV_NAME,
   RUNTIME_SECRET_ENV_NAMES,
   buildDesktopRuntimeArgs,
   buildDesktopRuntimeEnvironment,
   buildDesktopRuntimeLaunchPlan,
   buildDesktopRuntimeSpawnPlan,
+  desktopAutoStartRuntimeEnabled,
 } from './desktopLaunch';
 import {
   testLocalAccess,
@@ -15,6 +17,14 @@ import {
 } from '../testSupport/desktopTestHelpers';
 
 describe('desktopLaunch', () => {
+  it('requires an explicit opt-in before Desktop auto-starts the local runtime', () => {
+    expect(desktopAutoStartRuntimeEnabled()).toBe(false);
+    expect(desktopAutoStartRuntimeEnabled('1')).toBe(true);
+    expect(desktopAutoStartRuntimeEnabled('TRUE')).toBe(true);
+    expect(desktopAutoStartRuntimeEnabled('off')).toBe(false);
+    expect(DESKTOP_AUTO_START_RUNTIME_ENV_NAME).toBe('REDEVEN_DESKTOP_AUTO_START_RUNTIME');
+  });
+
   it('builds desktop-managed args from persistent local settings', () => {
     const environment = testLocalEnvironment({
       access: testLocalAccess({
