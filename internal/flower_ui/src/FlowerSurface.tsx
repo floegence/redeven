@@ -1104,7 +1104,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   }> | null = null;
   let threadSelectionContentFrame = 0;
   let threadSelectionContentTimer: number | undefined;
-  let backgroundThreadsRefreshInFlight = false;
   let composerFocusToken = 0;
   let composerFocusOwner: Element | null = null;
   let approvalDecisionResyncTimer: number | undefined;
@@ -4197,7 +4196,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const poll = async () => {
       if (disposed || !documentVisible() || requestInFlight) return;
       requestInFlight = true;
-      backgroundThreadsRefreshInFlight = true;
       let nextDelayMs = COMPANION_SUMMARY_ACTIVE_REFRESH_MS;
       try {
         await refreshThreads();
@@ -4211,7 +4209,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         }
       } finally {
         requestInFlight = false;
-        backgroundThreadsRefreshInFlight = false;
         schedule(nextDelayMs);
       }
     };
