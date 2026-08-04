@@ -4186,6 +4186,48 @@ describe('FlowerSurface navigation launch/send', () => {
     expect(runtime.querySelector('.flower-model-status-indicator')).toBeTruthy();
   });
 
+  it('ends the send busy state at admission without waiting for canonical bootstrap', async () => {
+    const bootstrapDeferred = deferred<FlowerLiveBootstrap>();
+    const launchTurn = vi.fn(async (input: FlowerTurnLaunchInput) => {
+      return launchReceiptFor(input, 'thread-fast-admission', 'turn-fast-admission');
+    });
+    const loadThread = vi.fn(() => bootstrapDeferred.promise);
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => []),
+      loadThread,
+      launchTurn,
+    });
+    await waitFor(() => Boolean(runtime.querySelector('textarea')));
+
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    textarea.value = 'admit without bootstrap latency';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    await waitFor(() => !(runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).disabled);
+    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
+
+    await waitFor(() => launchTurn.mock.calls.length === 1 && loadThread.mock.calls.length === 1);
+    await waitFor(() => runtime.querySelector('.flower-composer')?.getAttribute('aria-busy') !== 'true');
+    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('');
+    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).disabled).toBe(false);
+    expect(runtime.querySelector('[data-flower-message-id]')).toBeNull();
+
+    bootstrapDeferred.resolve(liveBootstrap(thread({
+      thread_id: 'thread-fast-admission',
+      title: 'Fast admission',
+      status: 'running',
+      messages: [{
+        id: 'entry-fast-admission',
+        turn_id: 'turn-fast-admission',
+        role: 'user',
+        content: 'admit without bootstrap latency',
+        status: 'complete',
+        created_at_ms: 10,
+      }],
+    })));
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="entry-fast-admission"]')));
+  });
+
   it('removes a queued product row when the server timeline replacement clears the queue', async () => {
     const initialThread = thread({
       thread_id: 'thread-live-canonical-send',
@@ -4410,7 +4452,7 @@ describe('FlowerSurface navigation launch/send', () => {
     expect(runtime.querySelector('.flower-model-status-indicator')).toBeNull();
     expect(runtime.querySelector('[data-flower-message-id]')).toBeNull();
     expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('');
-    expect(runtime.querySelector('.flower-composer')?.getAttribute('aria-busy')).toBe('true');
+    expect(runtime.querySelector('.flower-composer')?.getAttribute('aria-busy')).not.toBe('true');
     reloadDeferred.resolve(liveBootstrap({
       ...acceptedThread,
       messages: acceptedThread.messages.map((message) => ({ ...message, turn_id: acceptedTurnID })),
