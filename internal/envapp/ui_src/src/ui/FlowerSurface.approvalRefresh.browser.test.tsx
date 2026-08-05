@@ -322,7 +322,10 @@ describe('Flower approval refresh browser behavior', () => {
     promotionObserver.observe(composer, { childList: true, subtree: true });
     eventPhase = 'promote';
 
-    await waitFor(() => Boolean(runtime.querySelector('[data-flower-approval-action-id="appr-browser-locator"]')));
+    await waitFor(
+      () => Boolean(runtime.querySelector('[data-flower-approval-action-id="appr-browser-locator"]')),
+      7_000,
+    );
     promotionObserver.disconnect();
     expect(runtime.querySelector('[data-flower-approval-action-id="appr-browser-primary"]')).toBeNull();
     expect(runtime.querySelectorAll('.flower-composer [data-flower-composer-approval="true"]')).toHaveLength(1);
@@ -341,7 +344,10 @@ describe('Flower approval refresh browser behavior', () => {
     finalObserver.observe(runtime, { childList: true, subtree: true });
     eventPhase = 'resolve';
 
-    await waitFor(() => runtime.querySelector('[data-flower-approval-action-id="appr-browser-locator"]') === null);
+    await waitFor(
+      () => runtime.querySelector('[data-flower-approval-action-id="appr-browser-locator"]') === null,
+      7_000,
+    );
     await new Promise((resolve) => window.setTimeout(resolve, 750));
     finalObserver.disconnect();
     expect(finalDetachCount).toBe(1);

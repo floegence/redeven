@@ -36,6 +36,7 @@ import { requireAskFlowerContextActionEnvelope } from '../contextActions/protoco
 import { mapFlowerLiveBootstrap } from '../../../../../flower_ui/src/flowerLiveMapper';
 import {
   createRuntimeFlowerSurfaceAdapter,
+  FLOWER_LIVE_EVENT_WAIT_MS,
   FLOWER_THREAD_DELETE_OPERATION_FAILED_CODE,
 } from '../../../../../flower_ui/src/runtimeFlowerSurfaceAdapter';
 import {
@@ -666,7 +667,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       listThreads: () => fetchLocalApiJSON('/_redeven_proxy/api/ai/threads?limit=200', { method: 'GET' }),
       loadThread: (threadID) => fetchLocalApiJSON(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/live/bootstrap`, { method: 'GET' }),
       listThreadLiveEvents: (threadID, afterSeq, limit) => fetchLocalApiJSON(
-        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/live/events?after_seq=${afterSeq}&limit=${limit}`,
+        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/live/events?after_seq=${afterSeq}&limit=${limit}&wait_ms=${FLOWER_LIVE_EVENT_WAIT_MS}`,
         { method: 'GET' },
       ),
       loadSubagentDetail: (parentThreadID, childThreadID, afterOrdinal, limit) => fetchLocalApiJSON(

@@ -189,7 +189,7 @@ describe('presentFlowerActivityItem', () => {
     }
   });
 
-  it('uses the terminal command as the compact row label', () => {
+  it('uses a Shell title with the real command as compact row context', () => {
     const presentation = presentFlowerActivityItem(item({
       renderer: 'terminal',
       status: 'running',
@@ -212,7 +212,8 @@ describe('presentFlowerActivityItem', () => {
     }));
 
     expect(presentation.label).toBe('npm run build -- --mode production');
-    expect(presentation.title).toEqual({ kind: 'command', command: 'npm run build -- --mode production' });
+    expect(presentation.title).toEqual({ kind: 'plain', text: 'Shell' });
+    expect(presentation.meta).toContain('npm run build -- --mode production');
     expect(presentation.meta).not.toContain('exit 0');
     expect(presentation.detailBlocks[0]).toMatchObject({
       kind: 'terminal_output',
@@ -246,7 +247,7 @@ describe('presentFlowerActivityItem', () => {
     expect(presentation.label).toBe('pnpm run test:browser -- src/ui/FlowerSurface.activityDisclosure.browser.test.tsx');
   });
 
-  it('uses terminal read intent as the compact title and keeps the real command in details', () => {
+  it('keeps terminal read intent out of the semantic title and preserves the real command', () => {
     const presentation = presentFlowerActivityItem(item({
       tool_name: 'terminal.read',
       renderer: 'terminal',
@@ -263,8 +264,9 @@ describe('presentFlowerActivityItem', () => {
       },
     }));
 
-    expect(presentation.label).toBe('Check the latest Docker build output again');
-    expect(presentation.title).toEqual({ kind: 'plain', text: 'Check the latest Docker build output again' });
+    expect(presentation.label).toBe('docker compose up --build -d');
+    expect(presentation.title).toEqual({ kind: 'plain', text: 'Shell' });
+    expect(presentation.meta).toContain('docker compose up --build -d');
     expect(presentation.detailBlocks[0]).toMatchObject({
       kind: 'terminal_output',
       terminal: {
@@ -641,6 +643,7 @@ describe('presentFlowerActivityItem', () => {
         reason: 'needs_user_choice',
         required: ['target'],
         contains_secret: false,
+        answers: [],
         questions: [{
           id: 'target',
           question: 'Which target should I inspect?',
@@ -651,6 +654,36 @@ describe('presentFlowerActivityItem', () => {
     });
     expect(presentation.detailLines.map((line) => line.label)).not.toContain('questions');
     expect(presentation.detailLines.map((line) => line.label)).not.toContain('reason');
+  });
+
+  it('renders safe answered question summaries and redacts secret answers', () => {
+    const presentation = presentFlowerActivityItem(item({
+      tool_name: 'ask_user',
+      renderer: 'question',
+      status: 'success',
+      label: 'Choose target',
+      payload: {
+        questions: [
+          { id: 'target', question: 'Which target?' },
+          { id: 'token', question: 'Access token?' },
+        ],
+        answers: [
+          { question_id: 'target', values: ['Local'] },
+          { question_id: 'token', redacted: true },
+        ],
+      },
+    }));
+
+    expect(presentation.detailBlocks[0]).toMatchObject({
+      kind: 'question',
+      question: {
+        answers: [
+          { question_id: 'target', values: ['Local'], redacted: false },
+          { question_id: 'token', values: [], redacted: true },
+        ],
+      },
+    });
+    expect(JSON.stringify(presentation)).not.toContain('secret-value');
   });
 
   it('renders completion payloads as outcome sections', () => {
@@ -699,9 +732,9 @@ describe('presentFlowerActivityItem', () => {
       ],
     }));
 
-    expect(presentation.label).toBe('Update todos');
-    expect(presentation.title).toEqual({ kind: 'plain', text: 'Update todos' });
-    expect(presentation.meta).toContain('completed 1');
+    expect(presentation.label).toBe('Todos');
+    expect(presentation.title).toEqual({ kind: 'plain', text: 'Todos' });
+    expect(presentation.meta).toContain('1/2 completed');
     expect(presentation.detailLines).toHaveLength(0);
     expect(presentation.detailBlocks).toContainEqual({
       kind: 'todos',
@@ -1035,10 +1068,87 @@ describe('presentFlowerActivityItem', () => {
       label: undefined,
     }));
 
-    expect(presentation.label).toBe('terminal.exec');
+    expect(presentation.label).toBe('Shell');
+    expect(presentation.title).toEqual({ kind: 'plain', text: 'Shell' });
     expect(presentation.meta).toBe('');
     expect(presentation.detailLines).toHaveLength(0);
     expect(presentation.detailBlocks).toHaveLength(0);
+  });
+
+  it('uses a neutral semantic fallback without exposing unknown protocol JSON', () => {
+    const presentation = presentFlowerActivityItem(item({
+      tool_name: 'vendor.internal_call',
+      renderer: 'structured',
+      label: undefined,
+      payload: {
+        query: 'release notes',
+        data: { token: 'must-not-render', nested: ['raw', 'protocol'] },
+        result: { internal_id: 'opaque' },
+      },
+    }));
+
+    expect(presentation.title).toEqual({ kind: 'plain', text: 'Called vendor internal call' });
+    expect(presentation.detailLines).toEqual([{ label: 'query', value: 'release notes' }]);
+    expect(JSON.stringify(presentation)).not.toContain('must-not-render');
+    expect(JSON.stringify(presentation)).not.toContain('internal_id');
+  });
+
+  it.each([
+    {
+      tool_name: 'rgrep',
+      label: 'activity contract',
+      payload: {
+        query: 'activity contract',
+        paths: ['internal/flower_ui', 'internal/ai'],
+        glob: ['*.ts', '*.go'],
+        match_count: 4,
+        matches: [{ path: 'internal/ai/floret_tools.go', line: 12, text: 'private protocol row' }],
+        data: { internal_cursor: 'must-not-render' },
+      },
+      visible: ['activity contract', 'internal/flower_ui, internal/ai', '*.ts, *.go', '4'],
+    },
+    {
+      tool_name: 'find',
+      label: 'FlowerSurface.tsx',
+      payload: {
+        root: 'internal',
+        name: 'FlowerSurface.tsx',
+        type: 'file',
+        result_count: 1,
+        results: [{ path: 'internal/flower_ui/src/FlowerSurface.tsx', private_id: 'must-not-render' }],
+        result: { transport_shape: 'must-not-render' },
+      },
+      visible: ['internal', 'FlowerSurface.tsx', 'file', '1'],
+    },
+  ])('renders only semantic scalar fields for $tool_name', ({ tool_name, label, payload, visible }) => {
+    const presentation = presentFlowerActivityItem(item({
+      tool_name,
+      renderer: 'structured',
+      label,
+      payload,
+    }));
+
+    const detail = presentation.detailLines.map((line) => line.value);
+    for (const value of visible) expect(detail).toContain(value);
+    expect(JSON.stringify(presentation)).not.toContain('must-not-render');
+    expect(JSON.stringify(presentation)).not.toContain('private protocol row');
+  });
+
+  it('does not let an unknown tool label expose complex protocol fields', () => {
+    const presentation = presentFlowerActivityItem(item({
+      tool_name: 'vendor.internal_call',
+      renderer: 'structured',
+      label: 'Inspect release metadata',
+      payload: {
+        query: 'release metadata',
+        data: { token: 'must-not-render' },
+        result: { internal_id: 'must-not-render' },
+      },
+    }));
+
+    expect(presentation.title).toEqual({ kind: 'plain', text: 'Inspect release metadata' });
+    expect(presentation.detailLines).toEqual([{ label: 'query', value: 'release metadata' }]);
+    expect(JSON.stringify(presentation)).not.toContain('must-not-render');
   });
 
   it('renders structured use_skill payloads with their real result fields', () => {

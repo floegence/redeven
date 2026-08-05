@@ -196,6 +196,7 @@
       "inputRequestSubmit": "Продолжить",
       "inputRequestRetry": "Повторить",
       "inputRequestAnswerRequired": "Ответьте на ожидающий запрос, прежде чем продолжить.",
+      "inputRequestAnswerHidden": "Ответ скрыт",
       "inputRequestSubmitting": "Отправка…",
       "inputRequestComposerPlaceholder": "Ответьте, чтобы продолжить эту беседу.",
       "inputRequestChoicePlaceholder": "Выберите вариант для продолжения.",

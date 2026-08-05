@@ -197,6 +197,7 @@ export const flowerSurfaceEnUS = {
     inputRequestSubmit: 'Continue',
     inputRequestRetry: 'Retry',
     inputRequestAnswerRequired: 'Answer the waiting prompt before continuing.',
+    inputRequestAnswerHidden: 'Answer hidden',
     inputRequestSubmitting: 'Submitting...',
     inputRequestComposerPlaceholder: 'Reply to continue this conversation.',
     inputRequestChoicePlaceholder: 'Choose an option to continue.',

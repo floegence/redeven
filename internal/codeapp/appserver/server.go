@@ -4746,7 +4746,23 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 					limit = v
 				}
 			}
-			resp, err := aiSvc.ListFlowerThreadLiveEvents(r.Context(), meta, threadID, afterSeq, limit)
+			waitMs := 0
+			if raw := strings.TrimSpace(r.URL.Query().Get("wait_ms")); raw != "" {
+				v, err := strconv.Atoi(raw)
+				if err != nil || v < 0 || v > 30000 {
+					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid wait_ms"})
+					return
+				}
+				waitMs = v
+			}
+			resp, err := aiSvc.WaitFlowerThreadLiveEvents(
+				r.Context(),
+				meta,
+				threadID,
+				afterSeq,
+				limit,
+				time.Duration(waitMs)*time.Millisecond,
+			)
 			if err != nil {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 				return

@@ -128,7 +128,14 @@ export type FlowerActivityQuestionDetail = Readonly<{
   reason: string;
   required: readonly string[];
   questions: readonly FlowerActivityQuestionItem[];
+  answers: readonly FlowerActivityQuestionAnswer[];
   contains_secret: boolean;
+}>;
+
+export type FlowerActivityQuestionAnswer = Readonly<{
+  question_id: string;
+  values: readonly string[];
+  redacted: boolean;
 }>;
 
 export type FlowerActivityCompletionDetail = Readonly<{
@@ -332,11 +339,32 @@ const DETAIL_LABELS: Readonly<Record<string, string>> = {
   error_message: 'error message',
   error_retryable: 'retryable',
   content_ref: 'content ref',
+  path: 'path',
+  paths: 'paths',
+  pattern: 'pattern',
+  glob: 'pattern',
+  root: 'root',
+  type: 'type',
+  result_count: 'results',
+  url: 'URL',
 };
 
 const RENDERER_DETAIL_KEYS: Readonly<Record<'structured', readonly string[]>> = {
-  structured: ['operation', 'name', 'action', 'content', 'content_ref', 'activation_id', 'already_active', 'permission_hints', 'dependencies', 'dependency_degraded', 'reason', 'id', 'message', 'timed_out', 'targets', 'stats', 'output', 'structured', 'key_files', 'rows', 'cards', 'items', 'query', 'count', 'provider', 'okf_version', 'total_sections', 'sections', 'filters', 'total_concepts', 'total_matches', 'match_count', 'max_results', 'has_more', 'omitted_count', 'matches', 'concept_title', 'concept', 'body_offset', 'body_length', 'returned_body_length', 'link_count', 'backlink_count', 'links', 'backlinks', 'data', 'result', 'limit', 'evidence_refs', 'remaining_risks', 'next_actions', 'truncated'],
+  structured: ['operation', 'name', 'action', 'content', 'content_ref', 'activation_id', 'already_active', 'permission_hints', 'dependencies', 'dependency_degraded', 'reason', 'id', 'message', 'timed_out', 'targets', 'stats', 'output', 'structured', 'key_files', 'rows', 'cards', 'items', 'query', 'path', 'pattern', 'url', 'count', 'provider', 'okf_version', 'total_sections', 'sections', 'filters', 'total_concepts', 'total_matches', 'match_count', 'max_results', 'has_more', 'omitted_count', 'matches', 'concept_title', 'concept', 'body_offset', 'body_length', 'returned_body_length', 'link_count', 'backlink_count', 'links', 'backlinks', 'data', 'result', 'limit', 'evidence_refs', 'remaining_risks', 'next_actions', 'truncated'],
 };
+
+const RICH_STRUCTURED_TOOL_NAMES = new Set([
+  'okf.index',
+  'okf.search',
+  'okf.open',
+  'use_skill',
+]);
+
+const SAFE_STRUCTURED_DETAIL_KEYS = [
+  'operation', 'name', 'action', 'query', 'path', 'paths', 'pattern', 'glob', 'root', 'type', 'url',
+  'final_url', 'content_type', 'count', 'match_count', 'result_count', 'max_results', 'max_matches',
+  'context_lines', 'truncated', 'message',
+] as const;
 
 function scalarText(value: unknown): string {
   if (typeof value === 'string') return trimString(value);
@@ -467,10 +495,16 @@ function rendererForItem(item: FlowerActivityItem): FlowerActivityRenderer {
   return item.renderer ?? 'structured';
 }
 
+function isApprovalLifecycleText(value: string): boolean {
+  const normalized = trimString(value).toLowerCase().replace(/[_:-]+/g, ' ').replace(/\s+/g, ' ');
+  return /^(?:tool )?approval(?: (?:requested|approved|rejected|timed out|canceled))?$/.test(normalized)
+    || /^(?:requested|approved|rejected|timed out|canceled)$/.test(normalized);
+}
+
 function defaultLabelForItem(item: FlowerActivityItem): string {
   const label = trimString(item.label);
   const toolName = trimString(item.tool_name);
-  if (label && label !== toolName && label !== 'Tool approval') return label;
+  if (label && label !== toolName && !isApprovalLifecycleText(label)) return label;
   return toolName || 'tool';
 }
 
@@ -533,16 +567,33 @@ function chipText(item: FlowerActivityItem): readonly string[] {
 
 function metaForItem(item: FlowerActivityItem): string {
   const desc = trimString(item.description);
-  const isApprovalState = /^(requested|approved|rejected|timed_out|canceled)$/.test(desc);
   const parts = [
-    ...(isApprovalState ? [] : [desc]),
+    ...(isApprovalLifecycleText(desc) ? [] : [desc]),
     ...chipText(item),
   ].filter(Boolean);
   return Array.from(new Set(parts)).join(' · ');
 }
 
+function metaWithError(item: FlowerActivityItem, base: string): string {
+  const error = item.status === 'error' ? errorMessageFromPayload(item.payload) : '';
+  return Array.from(new Set([base, error].filter(Boolean))).join(' · ');
+}
+
+function diffStatsMeta(files: readonly FlowerActivityDiffFile[]): string {
+  const additions = files.reduce((total, file) => total + file.additions, 0);
+  const deletions = files.reduce((total, file) => total + file.deletions, 0);
+  if (additions === 0 && deletions === 0) return '';
+  return `+${additions} / -${deletions}`;
+}
+
 function metaForTerminalItem(item: FlowerActivityItem): string {
-  return trimString(item.description);
+  const command = payloadValue(item.payload, 'command');
+  const description = trimString(item.description);
+  const error = errorMessageFromPayload(item.payload);
+  return [command, description, item.status === 'error' ? error : '']
+    .filter(Boolean)
+    .filter((value, index, values) => values.indexOf(value) === index)
+    .join(' · ');
 }
 
 function isSubagentsActivityItem(item: FlowerActivityItem): boolean {
@@ -647,6 +698,7 @@ function errorDetailBlockForItem(item: FlowerActivityItem, payload: Readonly<Rec
 
 function isNonInformativeSuccessText(value: string): boolean {
   const normalized = trimString(value).toLowerCase().replace(/\s+/g, ' ');
+  if (isApprovalLifecycleText(normalized)) return true;
   if (normalized === 'tool execution completed'
     || normalized === 'tool completed'
     || normalized === 'execution completed'
@@ -680,6 +732,20 @@ function detailLineFromPayload(payload: Readonly<Record<string, unknown>>, key: 
   };
 }
 
+function safeDetailLineFromPayload(payload: Readonly<Record<string, unknown>>, key: string): FlowerActivityDetailLine | null {
+  if (!(key in payload)) return null;
+  const raw = payload[key];
+  const value = Array.isArray(raw)
+    ? raw.map((entry) => scalarText(entry)).filter(Boolean).join(', ')
+    : scalarText(raw);
+  if (!value || shouldHideDetailLine(key, value)) return null;
+  return {
+    label: detailLabel(key),
+    value,
+    ...(detailLineTone(key) ? { tone: detailLineTone(key) } : {}),
+  };
+}
+
 function uniqueDetailLines(lines: readonly FlowerActivityDetailLine[]): readonly FlowerActivityDetailLine[] {
   const seen = new Set<string>();
   const out: FlowerActivityDetailLine[] = [];
@@ -694,9 +760,15 @@ function uniqueDetailLines(lines: readonly FlowerActivityDetailLine[]): readonly
 
 function genericDetailLinesForItem(item: FlowerActivityItem, renderer: 'structured'): readonly FlowerActivityDetailLine[] {
   const payload = item.payload ?? {};
-  const orderedKeys = new Set<string>(RENDERER_DETAIL_KEYS[renderer] ?? RENDERER_DETAIL_KEYS.structured);
+  const toolName = trimString(item.tool_name);
+  const richStructured = RICH_STRUCTURED_TOOL_NAMES.has(toolName);
+  const orderedKeys = new Set<string>(richStructured
+    ? (RENDERER_DETAIL_KEYS[renderer] ?? RENDERER_DETAIL_KEYS.structured)
+    : SAFE_STRUCTURED_DETAIL_KEYS);
   const lines = Array.from(orderedKeys)
-    .map((key) => detailLineFromPayload(payload, key))
+    .map((key) => richStructured
+      ? detailLineFromPayload(payload, key)
+      : safeDetailLineFromPayload(payload, key))
     .filter((line): line is FlowerActivityDetailLine => line !== null);
   return uniqueDetailLines(lines);
 }
@@ -1087,7 +1159,7 @@ function presentationForFile(item: FlowerActivityItem, fileActions?: FlowerActiv
   return {
     label: titleText(title),
     title,
-    meta: metaForItem(item),
+    meta: metaWithError(item, metaForItem(item)),
     primaryAction: action,
     detailLines: statusLines,
     detailBlocks,
@@ -1111,7 +1183,7 @@ function presentationForPatch(item: FlowerActivityItem, fileActions?: FlowerActi
   return {
     label: titleText(title),
     title,
-    meta: metaForItem(item),
+    meta: metaWithError(item, [diffStatsMeta(files), metaForItem(item)].filter(Boolean).join(' · ')),
     ...(files.length === 1 ? { primaryAction: files[0].action } : {}),
     detailLines: statusLines,
     detailBlocks,
@@ -1119,7 +1191,7 @@ function presentationForPatch(item: FlowerActivityItem, fileActions?: FlowerActi
 }
 
 function presentationForTodos(item: FlowerActivityItem): FlowerActivityPresentation {
-  const title: FlowerActivityTitle = { kind: 'plain', text: trimString(item.label) || 'Update todos' };
+  const title: FlowerActivityTitle = { kind: 'plain', text: 'Todos' };
   const items = todoItemsFromPayload(item.payload);
   const errorBlock = errorDetailBlockForItem(item, item.payload);
   const statusLines = errorBlock ? [] : resultStatusLines(item.payload);
@@ -1138,7 +1210,7 @@ function presentationForTodos(item: FlowerActivityItem): FlowerActivityPresentat
     return acc;
   }, { pending: 0, in_progress: 0, completed: 0, cancelled: 0 });
   const meta = ([
-    counts.completed > 0 ? `completed ${counts.completed}` : '',
+    items.length > 0 ? `${counts.completed}/${items.length} completed` : '',
     counts.in_progress > 0 ? `in progress ${counts.in_progress}` : '',
     counts.pending > 0 ? `pending ${counts.pending}` : '',
     counts.cancelled > 0 ? `cancelled ${counts.cancelled}` : '',
@@ -1146,21 +1218,14 @@ function presentationForTodos(item: FlowerActivityItem): FlowerActivityPresentat
   return {
     label: title.text,
     title,
-    meta,
+    meta: metaWithError(item, meta),
     detailLines: statusLines,
     detailBlocks,
   };
 }
 
-function terminalTitleForItem(item: FlowerActivityItem): FlowerActivityTitle {
-  const payload = item.payload ?? {};
-  const toolName = trimString(item.tool_name);
-  const label = trimString(item.label);
-  const meaningfulLabel = label && label !== toolName && label !== 'Tool approval' ? label : '';
-  const command = payloadValue(payload, 'command');
-  if (meaningfulLabel && meaningfulLabel !== command) return { kind: 'plain', text: meaningfulLabel };
-  if (command) return { kind: 'command', command };
-  return { kind: 'plain', text: meaningfulLabel || defaultLabelForItem(item) };
+function terminalTitleForItem(_item: FlowerActivityItem): FlowerActivityTitle {
+  return { kind: 'plain', text: 'Shell' };
 }
 
 function terminalOutputFromPayload(payload: Readonly<Record<string, unknown>>): string {
@@ -1193,7 +1258,7 @@ function presentationForTerminal(item: FlowerActivityItem): FlowerActivityPresen
   detailBlocks.push({ kind: 'terminal_output', terminal });
   if (detailLines.length > 0) detailBlocks.push({ kind: 'structured', lines: detailLines });
   return {
-    label: titleText(title),
+    label: payloadValue(payload, 'command') || titleText(title),
     title,
     meta: metaForTerminalItem(item),
     detailLines,
@@ -1256,7 +1321,7 @@ function presentationForWebSearch(item: FlowerActivityItem): FlowerActivityPrese
   return {
     label: titleText(title),
     title,
-    meta: metaForItem(item),
+    meta: metaWithError(item, metaForItem(item)),
     detailLines,
     detailBlocks,
   };
@@ -1296,6 +1361,18 @@ function questionItems(payload: Readonly<Record<string, unknown>>): readonly Flo
   }] : [];
 }
 
+function questionAnswers(payload: Readonly<Record<string, unknown>>): readonly FlowerActivityQuestionAnswer[] {
+  return asArray(payload.answers).map((entry) => {
+    const record = asRecord(entry);
+    const questionID = payloadValue(record, 'question_id', 'id');
+    if (!questionID) return null;
+    const redacted = boolValue(record.redacted);
+    const values = redacted ? [] : compactTextArray(record.values ?? record.value);
+    if (!redacted && values.length === 0) return null;
+    return { question_id: questionID, values, redacted };
+  }).filter((answer): answer is FlowerActivityQuestionAnswer => answer !== null);
+}
+
 function presentationForQuestion(item: FlowerActivityItem): FlowerActivityPresentation {
   const payload = item.payload ?? {};
   const title = titleForGenericItem(item, 'question');
@@ -1305,6 +1382,7 @@ function presentationForQuestion(item: FlowerActivityItem): FlowerActivityPresen
     reason: payloadValue(payload, 'reason_code', 'reason'),
     required: compactTextArray(payload.required_from_user),
     questions: questionItems(payload),
+    answers: questionAnswers(payload),
     contains_secret: boolValue(payload.contains_secret),
   };
   const detailBlocks: FlowerActivityDetailBlock[] = [];
@@ -1314,7 +1392,7 @@ function presentationForQuestion(item: FlowerActivityItem): FlowerActivityPresen
   return {
     label: titleText(title),
     title,
-    meta: metaForItem(item),
+    meta: metaWithError(item, metaForItem(item)),
     detailLines,
     detailBlocks,
   };
@@ -1340,14 +1418,14 @@ function presentationForCompletion(item: FlowerActivityItem): FlowerActivityPres
   return {
     label: titleText(title),
     title,
-    meta: metaForItem(item),
+    meta: metaWithError(item, metaForItem(item)),
     detailLines,
     detailBlocks,
   };
 }
 
 function titleWithToolContext(toolName: string, explicit: string, fallback: string): string {
-  const meaningful = explicit && explicit !== toolName && explicit !== 'Tool approval' ? explicit : '';
+  const meaningful = explicit && explicit !== toolName && !isApprovalLifecycleText(explicit) ? explicit : '';
   const label = meaningful || fallback;
   switch (toolName) {
     case 'okf.search': return meaningful ? `OKF search "${meaningful}"` : 'OKF search';
@@ -1358,7 +1436,12 @@ function titleWithToolContext(toolName: string, explicit: string, fallback: stri
     case 'web.search': return meaningful ? `Web search "${meaningful}"` : 'Web search';
     case 'web_fetch': return meaningful ? `Web fetch ${meaningful}` : 'Web fetch';
     case 'use_skill': return meaningful ? `Skill ${meaningful}` : 'Skill';
-    default: return label;
+    default: {
+      if (meaningful) return label;
+      if (toolName === 'terminal.exec') return 'Shell';
+      const semantic = toolName.replace(/[._:-]+/g, ' ').trim();
+      return semantic ? `Called ${semantic}` : 'Called tool';
+    }
   }
 }
 
@@ -1378,17 +1461,18 @@ function titleForGenericItem(item: FlowerActivityItem, renderer: FlowerActivityR
   }
 }
 
-export function presentFlowerActivityItem(item: FlowerActivityItem, fileActions?: FlowerActivityFileActions, copy?: FlowerActivityPresentationCopy): FlowerActivityPresentation {
-  const renderer = rendererForItem(item);
-  if (isSubagentsActivityItem(item)) return presentationForSubagents(item, copy);
-  if (renderer === 'file') return presentationForFile(item, fileActions);
-  if (renderer === 'patch') return presentationForPatch(item, fileActions);
-  if (renderer === 'todos') return presentationForTodos(item);
-  if (renderer === 'terminal') return presentationForTerminal(item);
-  if (renderer === 'web_search') return presentationForWebSearch(item);
-  if (renderer === 'question') return presentationForQuestion(item);
-  if (renderer === 'completion') return presentationForCompletion(item);
-  const title = titleForGenericItem(item, renderer);
+type FlowerActivityRendererContext = Readonly<{
+  fileActions?: FlowerActivityFileActions;
+  copy?: FlowerActivityPresentationCopy;
+}>;
+
+type FlowerActivityRendererHandler = (
+  item: FlowerActivityItem,
+  context: FlowerActivityRendererContext,
+) => FlowerActivityPresentation;
+
+function presentationForStructured(item: FlowerActivityItem): FlowerActivityPresentation {
+  const title = titleForGenericItem(item, 'structured');
   const errorBlock = errorDetailBlockForItem(item, item.payload);
   const detailLines = genericDetailLinesForItem(item, 'structured');
   const detailBlocks: FlowerActivityDetailBlock[] = [];
@@ -1397,8 +1481,25 @@ export function presentFlowerActivityItem(item: FlowerActivityItem, fileActions?
   return {
     label: titleText(title),
     title,
-    meta: metaForItem(item),
+    meta: metaWithError(item, metaForItem(item)),
     detailLines,
     detailBlocks,
   };
+}
+
+const FLOWER_ACTIVITY_RENDERERS: Readonly<Record<FlowerActivityRenderer, FlowerActivityRendererHandler>> = {
+  structured: (item) => presentationForStructured(item),
+  terminal: (item) => presentationForTerminal(item),
+  file: (item, context) => presentationForFile(item, context.fileActions),
+  patch: (item, context) => presentationForPatch(item, context.fileActions),
+  web_search: (item) => presentationForWebSearch(item),
+  todos: (item) => presentationForTodos(item),
+  question: (item) => presentationForQuestion(item),
+  completion: (item) => presentationForCompletion(item),
+};
+
+export function presentFlowerActivityItem(item: FlowerActivityItem, fileActions?: FlowerActivityFileActions, copy?: FlowerActivityPresentationCopy): FlowerActivityPresentation {
+  const renderer = rendererForItem(item);
+  if (isSubagentsActivityItem(item)) return presentationForSubagents(item, copy);
+  return FLOWER_ACTIVITY_RENDERERS[renderer](item, { fileActions, copy });
 }

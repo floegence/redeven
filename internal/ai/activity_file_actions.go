@@ -666,7 +666,7 @@ func activityPayloadAllowedKeys(renderer fltools.ActivityRenderer) map[string]st
 	case fltools.ActivityRendererWebSearch:
 		return stringSet("query", "provider", "count", "sources", "results", "truncated", "summary", "details", "status", "error", "content_ref")
 	case fltools.ActivityRendererQuestion:
-		return stringSet("reason_code", "required_from_user", "questions", "contains_secret", "summary", "details", "status", "error", "content_ref")
+		return stringSet("prompt_id", "reason_code", "required_from_user", "questions", "answers", "contains_secret", "summary", "details", "status", "error", "content_ref")
 	case fltools.ActivityRendererCompletion:
 		return stringSet("result", "evidence_refs", "remaining_risks", "next_actions", "truncated", "summary", "details", "status", "error", "content_ref")
 	case fltools.ActivityRendererStructured:

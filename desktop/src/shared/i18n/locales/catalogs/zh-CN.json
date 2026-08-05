@@ -196,6 +196,7 @@
       "inputRequestSubmit": "继续",
       "inputRequestRetry": "重试",
       "inputRequestAnswerRequired": "请先回答等待提示再继续。",
+      "inputRequestAnswerHidden": "回答已隐藏",
       "inputRequestSubmitting": "正在提交…",
       "inputRequestComposerPlaceholder": "回复以继续这段对话。",
       "inputRequestChoicePlaceholder": "选择一个选项以继续。",

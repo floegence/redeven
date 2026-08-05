@@ -551,12 +551,6 @@ func (s *Service) Close() error {
 	ts := s.threadsDB
 	closeFloret := s.closeFloret
 	s.closeFloret = nil
-	s.floretReads = nil
-	s.floretRuntime = nil
-	s.threadCreateFloret = nil
-	s.threadTitleFloret = nil
-	s.threadForkFloret = nil
-	s.threadDeleteFloret = nil
 	writers := make([]*aiSinkWriter, 0, len(s.realtimeWriters))
 	for srv, w := range s.realtimeWriters {
 		if w == nil {
@@ -569,6 +563,9 @@ func (s *Service) Close() error {
 	s.realtimeSummaryEndpointBySRV = make(map[*rpc.Server]string)
 	s.realtimeByThread = make(map[string]map[*rpc.Server]struct{})
 	s.realtimeThreadBySRV = make(map[*rpc.Server]string)
+	for _, stream := range s.flowerLiveByThread {
+		closeFlowerLiveWaitersLocked(stream)
+	}
 	s.flowerLiveByThread = make(map[string]*flowerLiveThreadStream)
 	s.flowerLiveRetired = make(map[string]struct{})
 	maintenanceStopCh := s.maintenanceStopCh
@@ -627,6 +624,22 @@ func (s *Service) Close() error {
 	for _, r := range runs {
 		r.requestCancel("canceled")
 	}
+	runWaitCtx, runWaitCancel := context.WithTimeout(context.Background(), waitTO)
+	defer runWaitCancel()
+	var runCloseErr error
+	for _, r := range runs {
+		if r == nil || r.doneCh == nil {
+			continue
+		}
+		select {
+		case <-r.doneCh:
+		case <-runWaitCtx.Done():
+			runCloseErr = fmt.Errorf("active AI runs did not finish before service close: %w", runWaitCtx.Err())
+		}
+		if runCloseErr != nil {
+			break
+		}
+	}
 	for _, compaction := range idleCompactions {
 		s.cancelIdleThreadCompactionWithBroadcast(compaction.endpointID, compaction.threadID)
 	}
@@ -652,14 +665,14 @@ func (s *Service) Close() error {
 		runtime.release()
 	}
 	var floretCloseErr error
-	if closeFloret != nil {
+	if runCloseErr == nil && closeFloret != nil {
 		floretCloseErr = closeFloret()
 	}
 	var threadCloseErr error
-	if ts != nil {
+	if runCloseErr == nil && ts != nil {
 		threadCloseErr = ts.Close()
 	}
-	return errors.Join(terminalCloseErr, floretCloseErr, threadCloseErr)
+	return errors.Join(terminalCloseErr, runCloseErr, floretCloseErr, threadCloseErr)
 }
 
 func (s *Service) ensureThreadSubagentRuntimeLocked(thKey string, r *run) subagentRuntime {

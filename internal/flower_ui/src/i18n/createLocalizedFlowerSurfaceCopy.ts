@@ -189,6 +189,7 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       inputRequestSubmit: t(i18n, k('chat.inputRequestSubmit')),
       inputRequestRetry: t(i18n, k('chat.inputRequestRetry')),
       inputRequestAnswerRequired: t(i18n, k('chat.inputRequestAnswerRequired')),
+      inputRequestAnswerHidden: t(i18n, k('chat.inputRequestAnswerHidden')),
       inputRequestSubmitting: t(i18n, k('chat.inputRequestSubmitting')),
       inputRequestComposerPlaceholder: t(i18n, k('chat.inputRequestComposerPlaceholder')),
       inputRequestChoicePlaceholder: t(i18n, k('chat.inputRequestChoicePlaceholder')),

@@ -907,6 +907,7 @@ func floretActivityForToolCall(toolName string, args map[string]any) *fltools.Ac
 	payload = activityPayloadWithHostDisplayFields(payload, args, spec, hasSpec)
 	payload = publicActivityPayloadForTool(toolName, payload)
 	payload, _ = contractSafePayloadMap(payload, 0)
+	renderer = activityRendererForPayload(renderer, payload)
 	activity := &fltools.ActivityPresentation{
 		Label:    activityCallLabel(toolName, spec, hasSpec, renderer, args, payload),
 		Renderer: renderer,
@@ -1256,6 +1257,7 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 	if payloadTruncated && !isOKFToolName(toolName) {
 		payload["truncated"] = true
 	}
+	renderer = activityRendererForPayload(renderer, payload)
 	activity := &fltools.ActivityPresentation{
 		Label:      activityResultLabel(toolName, spec, hasSpec, renderer, payload),
 		Renderer:   renderer,
@@ -1264,6 +1266,24 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 		Payload:    activityPayloadForRenderer(renderer, payload),
 	}
 	return contractSafeActivityPresentationForTool(toolName, activity), nil
+}
+
+func activityRendererForPayload(renderer fltools.ActivityRenderer, payload map[string]any) fltools.ActivityRenderer {
+	if renderer != fltools.ActivityRendererSubAgent {
+		return renderer
+	}
+	record := payload
+	if items := toAnySlice(payload["items"]); len(items) > 0 {
+		if item, ok := items[0].(map[string]any); ok {
+			record = item
+		}
+	}
+	if strings.TrimSpace(anyToString(record["thread_id"])) == "" ||
+		strings.TrimSpace(anyToString(record["parent_thread_id"])) == "" ||
+		strings.TrimSpace(anyToString(record["status"])) == "" {
+		return fltools.ActivityRendererStructured
+	}
+	return renderer
 }
 
 func isNonInformativeToolActivityText(value string) bool {
@@ -1580,7 +1600,31 @@ func activityPayloadForRenderer(renderer fltools.ActivityRenderer, payload map[s
 				questions = append(questions, fltools.QuestionActivityItem{ID: "question", Question: question})
 			}
 		}
-		return fltools.QuestionActivityPayload{PromptID: strings.TrimSpace(anyToString(payload["prompt_id"])), Questions: questions}
+		answers := make([]fltools.QuestionActivityAnswer, 0)
+		for _, item := range toAnySlice(payload["answers"]) {
+			record, _ := item.(map[string]any)
+			questionID := strings.TrimSpace(anyToString(record["question_id"]))
+			if questionID == "" {
+				continue
+			}
+			redacted := readBoolField(record, "redacted")
+			values := make([]string, 0)
+			if !redacted {
+				for _, rawValue := range toAnySlice(record["values"]) {
+					if value := strings.TrimSpace(anyToString(rawValue)); value != "" {
+						values = append(values, value)
+					}
+				}
+			}
+			if redacted || len(values) > 0 {
+				answers = append(answers, fltools.QuestionActivityAnswer{QuestionID: questionID, Values: values, Redacted: redacted})
+			}
+		}
+		return fltools.QuestionActivityPayload{
+			PromptID:  strings.TrimSpace(anyToString(payload["prompt_id"])),
+			Questions: questions,
+			Answers:   answers,
+		}
 	case fltools.ActivityRendererCompletion:
 		return fltools.CompletionActivityPayload{Status: status, Summary: summary}
 	case fltools.ActivityRendererSubAgent:

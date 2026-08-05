@@ -68,184 +68,31 @@ describe('flowerActivityDisclosureIntent', () => {
 });
 
 describe('createFlowerActivityDisclosureController', () => {
-  it('does not reveal activity that settles before the automatic open delay', async () => {
+  it.each(['active', 'attention'] as const)('keeps %s details closed until the user opens them', async (intent) => {
     vi.useFakeTimers();
-    const harness = createControllerHarness('active');
-
-    await vi.advanceTimersByTimeAsync(FLOWER_ACTIVITY_AUTO_OPEN_DELAY_MS - 1);
-    expect(harness.control.open()).toBe(false);
-
-    harness.setIntent('settled');
-    await vi.runAllTimersAsync();
-    expect(harness.control.open()).toBe(false);
-    harness.dispose();
-  });
-
-  it('reveals sustained work and holds its completed state before closing', async () => {
-    vi.useFakeTimers();
-    const harness = createControllerHarness('active');
-
-    await vi.advanceTimersByTimeAsync(FLOWER_ACTIVITY_AUTO_OPEN_DELAY_MS);
-    expect(harness.control.open()).toBe(true);
-
-    harness.setIntent('settled');
-    await vi.advanceTimersByTimeAsync(FLOWER_ACTIVITY_SETTLE_HOLD_MS - 1);
-    expect(harness.control.open()).toBe(true);
-
-    await vi.advanceTimersByTimeAsync(1);
-    expect(harness.control.open()).toBe(false);
-    harness.dispose();
-  });
-
-  it('cancels a scheduled close when the same item becomes active again', async () => {
-    vi.useFakeTimers();
-    const harness = createControllerHarness('active');
-
-    await vi.advanceTimersByTimeAsync(FLOWER_ACTIVITY_AUTO_OPEN_DELAY_MS);
-    harness.setIntent('settled');
-    await vi.advanceTimersByTimeAsync(500);
-    harness.setIntent('active');
-    await vi.advanceTimersByTimeAsync(1000);
-
-    expect(harness.control.open()).toBe(true);
-    harness.dispose();
-  });
-
-  it('starts presentation-anchored hold only after settled content is presented', async () => {
-    vi.useFakeTimers();
-    const harness = createControllerHarness('active', false, 'presentation');
-
-    await vi.advanceTimersByTimeAsync(FLOWER_ACTIVITY_AUTO_OPEN_DELAY_MS);
-    harness.setIntent('settled');
-    await vi.advanceTimersByTimeAsync(FLOWER_ACTIVITY_SETTLE_HOLD_MS * 2);
-    expect(harness.control.open()).toBe(true);
-
-    harness.control.markSettledPresentation();
-    await vi.advanceTimersByTimeAsync(FLOWER_ACTIVITY_SETTLE_HOLD_MS - 1);
-    expect(harness.control.open()).toBe(true);
-    await vi.advanceTimersByTimeAsync(1);
-    expect(harness.control.open()).toBe(false);
-    harness.dispose();
-  });
-
-  it('restarts presentation-anchored hold for the latest settled output frame', async () => {
-    vi.useFakeTimers();
-    const harness = createControllerHarness('active', false, 'presentation');
-
-    await vi.advanceTimersByTimeAsync(FLOWER_ACTIVITY_AUTO_OPEN_DELAY_MS);
-    harness.setIntent('settled');
-    harness.control.markSettledPresentation();
-    await vi.advanceTimersByTimeAsync(900);
-    harness.control.markSettledPresentation();
-    await vi.advanceTimersByTimeAsync(900);
-    expect(harness.control.open()).toBe(true);
-    await vi.advanceTimersByTimeAsync(300);
-    expect(harness.control.open()).toBe(false);
-    harness.dispose();
-  });
-
-  it('waits for settled presentation when the anchor becomes presentation-driven later', async () => {
-    vi.useFakeTimers();
-    const harness = createControllerHarness('active');
-
-    await vi.advanceTimersByTimeAsync(FLOWER_ACTIVITY_AUTO_OPEN_DELAY_MS);
-    expect(harness.control.open()).toBe(true);
-
-    harness.setIntent('settled');
-    harness.setSettleAnchor('presentation');
-    await vi.advanceTimersByTimeAsync(FLOWER_ACTIVITY_SETTLE_HOLD_MS * 2);
-    expect(harness.control.open()).toBe(true);
-
-    harness.control.markSettledPresentation();
-    await vi.advanceTimersByTimeAsync(FLOWER_ACTIVITY_SETTLE_HOLD_MS);
-    expect(harness.control.open()).toBe(false);
-    harness.dispose();
-  });
-
-  it('opens attention states immediately and keeps them latched', async () => {
-    vi.useFakeTimers();
-    const harness = createControllerHarness('attention');
-
-    expect(harness.control.open()).toBe(true);
-    harness.setIntent('settled');
-    await vi.advanceTimersByTimeAsync(5000);
-
-    expect(harness.control.open()).toBe(true);
-    harness.dispose();
-  });
-
-  it('lets explicit user choices override every later lifecycle transition', async () => {
-    vi.useFakeTimers();
-    const manuallyOpened = createControllerHarness('active');
-
-    manuallyOpened.control.toggle();
-    expect(manuallyOpened.control.open()).toBe(true);
-    manuallyOpened.setIntent('settled');
-    await vi.advanceTimersByTimeAsync(5000);
-    expect(manuallyOpened.control.open()).toBe(true);
-    manuallyOpened.dispose();
-
-    const manuallyClosed = createControllerHarness('active');
-    await vi.advanceTimersByTimeAsync(FLOWER_ACTIVITY_AUTO_OPEN_DELAY_MS);
-    manuallyClosed.control.toggle();
-    expect(manuallyClosed.control.open()).toBe(false);
-    manuallyClosed.setIntent('attention');
-    await vi.advanceTimersByTimeAsync(5000);
-    expect(manuallyClosed.control.open()).toBe(false);
-    manuallyClosed.dispose();
-  });
-
-  it('pins automatic disclosure when the user interacts with its details', async () => {
-    vi.useFakeTimers();
-    const harness = createControllerHarness('active');
-
-    await vi.advanceTimersByTimeAsync(FLOWER_ACTIVITY_AUTO_OPEN_DELAY_MS);
-    harness.setIntent('settled');
-    await vi.advanceTimersByTimeAsync(500);
-    harness.control.retainOpen();
-    await vi.advanceTimersByTimeAsync(1000);
-
-    expect(harness.control.open()).toBe(true);
-    harness.dispose();
-  });
-
-  it('suppresses routine automatic expansion when reduced motion is preferred', async () => {
-    vi.useFakeTimers();
-    const harness = createControllerHarness('active', true);
-
+    const harness = createControllerHarness(intent);
     await vi.advanceTimersByTimeAsync(5000);
     expect(harness.control.open()).toBe(false);
+    harness.control.toggle();
+    expect(harness.control.open()).toBe(true);
+    harness.control.toggle();
+    expect(harness.control.open()).toBe(false);
+    harness.dispose();
+  });
 
-    harness.setIntent('attention');
+  it('preserves a manual choice across later lifecycle transitions', async () => {
+    const harness = createControllerHarness('active');
+    harness.control.toggle();
+    harness.setIntent('settled');
     expect(harness.control.open()).toBe(true);
     harness.dispose();
   });
 
-  it('clears pending timers when its owning item unmounts', () => {
+  it('does not schedule background timers for a closed activity row', () => {
     vi.useFakeTimers();
     const harness = createControllerHarness('active');
-
-    expect(vi.getTimerCount()).toBe(1);
-    harness.dispose();
-
     expect(vi.getTimerCount()).toBe(0);
-  });
-
-  it('keeps controllers isolated by their owning activity item', async () => {
-    vi.useFakeTimers();
-    const first = createControllerHarness('active');
-    const second = createControllerHarness('active');
-
-    first.control.toggle();
-    await vi.advanceTimersByTimeAsync(FLOWER_ACTIVITY_AUTO_OPEN_DELAY_MS);
-
-    expect(first.control.open()).toBe(true);
-    expect(second.control.open()).toBe(true);
-    second.control.toggle();
-    expect(first.control.open()).toBe(true);
-    expect(second.control.open()).toBe(false);
-    first.dispose();
-    second.dispose();
+    harness.dispose();
   });
 });
 

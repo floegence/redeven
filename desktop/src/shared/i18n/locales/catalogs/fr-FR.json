@@ -196,6 +196,7 @@
       "inputRequestSubmit": "Continuer",
       "inputRequestRetry": "Réessayer",
       "inputRequestAnswerRequired": "Répondez à l'invite en attente avant de continuer.",
+      "inputRequestAnswerHidden": "Réponse masquée",
       "inputRequestSubmitting": "Envoi…",
       "inputRequestComposerPlaceholder": "Répondez pour continuer cette conversation.",
       "inputRequestChoicePlaceholder": "Choisissez une option pour continuer.",

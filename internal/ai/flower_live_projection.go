@@ -20,6 +20,7 @@ import (
 )
 
 const flowerLiveEventBufferLimit = 5000
+const flowerLiveEventWaitLimit = 30 * time.Second
 
 type flowerLiveThreadStream struct {
 	NextSeq              int64
@@ -27,6 +28,7 @@ type flowerLiveThreadStream struct {
 	State                FlowerLiveMaterializedState
 	ApprovalIndex        map[string]FlowerApprovalState
 	CanonicalSettledTool map[string]struct{}
+	Notify               chan struct{}
 }
 
 func newFlowerLiveThreadStream() *flowerLiveThreadStream {
@@ -41,6 +43,7 @@ func newFlowerLiveThreadStream() *flowerLiveThreadStream {
 		},
 		ApprovalIndex:        map[string]FlowerApprovalState{},
 		CanonicalSettledTool: map[string]struct{}{},
+		Notify:               make(chan struct{}),
 	}
 }
 
@@ -124,6 +127,15 @@ func (s *Service) GetFlowerThreadLiveBootstrap(ctx context.Context, meta *sessio
 	}
 
 	s.mu.Lock()
+	threadKey := runThreadKey(endpointID, threadID)
+	if _, retired := s.flowerLiveRetired[threadKey]; !retired {
+		if s.flowerLiveByThread == nil {
+			s.flowerLiveByThread = make(map[string]*flowerLiveThreadStream)
+		}
+		if s.flowerLiveByThread[threadKey] == nil {
+			s.flowerLiveByThread[threadKey] = newFlowerLiveThreadStream()
+		}
+	}
 	state := s.flowerLiveMaterializedStateLocked(endpointID, threadID)
 	streamGeneration := s.flowerLiveStreamGenerationValue()
 	s.mu.Unlock()
@@ -179,16 +191,48 @@ func (s *Service) GetFlowerThreadLiveBootstrap(ctx context.Context, meta *sessio
 }
 
 func (s *Service) ListFlowerThreadLiveEvents(ctx context.Context, meta *session.Meta, threadID string, afterSeq int64, limit int) (*FlowerLiveEventsResponse, error) {
-	_ = ctx
+	response, _, err := s.listFlowerThreadLiveEvents(meta, threadID, afterSeq, limit, false)
+	return response, err
+}
+
+func (s *Service) WaitFlowerThreadLiveEvents(ctx context.Context, meta *session.Meta, threadID string, afterSeq int64, limit int, wait time.Duration) (*FlowerLiveEventsResponse, error) {
+	if wait <= 0 {
+		return s.ListFlowerThreadLiveEvents(ctx, meta, threadID, afterSeq, limit)
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if wait > flowerLiveEventWaitLimit {
+		wait = flowerLiveEventWaitLimit
+	}
+	timer := time.NewTimer(wait)
+	defer timer.Stop()
+
+	for {
+		response, notify, err := s.listFlowerThreadLiveEvents(meta, threadID, afterSeq, limit, true)
+		if err != nil || response == nil || len(response.Events) > 0 || response.HasMore || notify == nil {
+			return response, err
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-timer.C:
+			return s.ListFlowerThreadLiveEvents(ctx, meta, threadID, afterSeq, limit)
+		case <-notify:
+		}
+	}
+}
+
+func (s *Service) listFlowerThreadLiveEvents(meta *session.Meta, threadID string, afterSeq int64, limit int, wait bool) (*FlowerLiveEventsResponse, <-chan struct{}, error) {
 	if s == nil {
-		return nil, errors.New("nil service")
+		return nil, nil, errors.New("nil service")
 	}
 	if err := requireRWX(meta); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	threadID = strings.TrimSpace(threadID)
 	if threadID == "" {
-		return nil, errors.New("missing thread_id")
+		return nil, nil, errors.New("missing thread_id")
 	}
 	if limit <= 0 {
 		limit = 100
@@ -203,22 +247,26 @@ func (s *Service) ListFlowerThreadLiveEvents(ctx context.Context, meta *session.
 	endpointID := strings.TrimSpace(meta.EndpointID)
 	threadKey := runThreadKey(endpointID, threadID)
 	if threadKey == "" {
-		return nil, errors.New("invalid request")
+		return nil, nil, errors.New("invalid request")
 	}
 
 	s.mu.Lock()
 	stream := s.flowerLiveByThread[threadKey]
 	streamGeneration := s.flowerLiveStreamGenerationValue()
-	if _, retired := s.flowerLiveRetired[threadKey]; retired {
+	_, retired := s.flowerLiveRetired[threadKey]
+	if retired {
 		stream = nil
 	}
 	if stream == nil {
 		s.mu.Unlock()
 		if afterSeq > 0 {
 			event := flowerLiveResyncEvent(endpointID, threadID, afterSeq, "cursor_expired")
-			return &FlowerLiveEventsResponse{StreamGeneration: streamGeneration, Events: []FlowerLiveEvent{event}, NextCursor: afterSeq, RetainedFromSeq: 0}, nil
+			return &FlowerLiveEventsResponse{StreamGeneration: streamGeneration, Events: []FlowerLiveEvent{event}, NextCursor: afterSeq, RetainedFromSeq: 0}, nil, nil
 		}
-		return &FlowerLiveEventsResponse{StreamGeneration: streamGeneration, Events: []FlowerLiveEvent{}, NextCursor: 0, RetainedFromSeq: 0}, nil
+		return &FlowerLiveEventsResponse{StreamGeneration: streamGeneration, Events: []FlowerLiveEvent{}, NextCursor: 0, RetainedFromSeq: 0}, nil, nil
+	}
+	if stream.Notify == nil {
+		stream.Notify = make(chan struct{})
 	}
 
 	nextCursor := stream.NextSeq - 1
@@ -229,7 +277,7 @@ func (s *Service) ListFlowerThreadLiveEvents(ctx context.Context, meta *session.
 	if afterSeq > 0 && retainedFromSeq > 0 && afterSeq < retainedFromSeq {
 		event := flowerLiveResyncEvent(endpointID, threadID, afterSeq, "cursor_expired")
 		s.mu.Unlock()
-		return &FlowerLiveEventsResponse{StreamGeneration: streamGeneration, Events: []FlowerLiveEvent{event}, NextCursor: afterSeq, RetainedFromSeq: retainedFromSeq}, nil
+		return &FlowerLiveEventsResponse{StreamGeneration: streamGeneration, Events: []FlowerLiveEvent{event}, NextCursor: afterSeq, RetainedFromSeq: retainedFromSeq}, nil, nil
 	}
 
 	events := []FlowerLiveEvent{}
@@ -260,9 +308,10 @@ func (s *Service) ListFlowerThreadLiveEvents(ctx context.Context, meta *session.
 		}
 		nextCursor = lastSeq
 	}
+	notify := stream.Notify
 	s.mu.Unlock()
 
-	return &FlowerLiveEventsResponse{StreamGeneration: streamGeneration, Events: events, NextCursor: nextCursor, HasMore: hasMore, RetainedFromSeq: retainedFromSeq}, nil
+	return &FlowerLiveEventsResponse{StreamGeneration: streamGeneration, Events: events, NextCursor: nextCursor, HasMore: hasMore, RetainedFromSeq: retainedFromSeq}, notify, nil
 }
 
 func (s *Service) flowerLiveCanonicalContextState(ctx context.Context, endpointID string, threadID string) (FlowerLiveMaterializedState, error) {
@@ -1163,6 +1212,7 @@ func (s *Service) appendFlowerLiveEvent(event FlowerLiveEvent) (FlowerLiveEvent,
 	}
 	event = appendFlowerLiveEventLocked(stream, event)
 	applyFlowerLiveEventToMaterializedState(&stream.State, stream.ApprovalIndex, event)
+	notifyFlowerLiveWaitersLocked(stream)
 	if event.Kind == FlowerLiveApprovalQueueReplaced && s.log != nil && stream.State.ApprovalQueue != nil {
 		queue := stream.State.ApprovalQueue
 		s.log.Debug("flower approval queue", "endpoint_id", logsafe.Text(event.EndpointID, 256), "thread_id", logsafe.Text(event.ThreadID, 256), "generation", queue.Generation, "revision", queue.Revision, "current_action_id", logsafe.Text(queue.CurrentActionID, 256), "position", queue.CurrentPosition, "total", queue.Total, "unresolved", queue.UnresolvedCount)
@@ -1197,7 +1247,24 @@ func (s *Service) retireFlowerLiveThreadLocked(threadKey string) {
 		s.flowerLiveRetired = make(map[string]struct{})
 	}
 	s.flowerLiveRetired[threadKey] = struct{}{}
+	closeFlowerLiveWaitersLocked(s.flowerLiveByThread[threadKey])
 	delete(s.flowerLiveByThread, threadKey)
+}
+
+func notifyFlowerLiveWaitersLocked(stream *flowerLiveThreadStream) {
+	if stream == nil {
+		return
+	}
+	closeFlowerLiveWaitersLocked(stream)
+	stream.Notify = make(chan struct{})
+}
+
+func closeFlowerLiveWaitersLocked(stream *flowerLiveThreadStream) {
+	if stream == nil || stream.Notify == nil {
+		return
+	}
+	close(stream.Notify)
+	stream.Notify = nil
 }
 
 func appendFlowerLiveEventLocked(stream *flowerLiveThreadStream, event FlowerLiveEvent) FlowerLiveEvent {

@@ -9228,10 +9228,19 @@ type RuntimeFlowerRoute = Readonly<{
 
 const runtimeFlowerNoQuery = (parsed: URL): boolean => parsed.search === '';
 const runtimeFlowerLimitQuery = (parsed: URL): boolean => parsed.search === '' || /^\?limit=\d{1,4}$/u.test(parsed.search);
-const runtimeFlowerLiveEventsQuery = (parsed: URL): boolean => parsed.search === ''
-  || /^\?after_seq=\d+$/u.test(parsed.search)
-  || /^\?after_seq=\d+&limit=\d{1,3}$/u.test(parsed.search)
-  || /^\?limit=\d{1,3}&after_seq=\d+$/u.test(parsed.search);
+const runtimeFlowerLiveEventsQuery = (parsed: URL): boolean => {
+  const allowed = new Set(['after_seq', 'limit', 'wait_ms']);
+  if (![...parsed.searchParams.keys()].every((key) => allowed.has(key))) return false;
+  const afterSeq = parsed.searchParams.getAll('after_seq');
+  const limit = parsed.searchParams.getAll('limit');
+  const waitMs = parsed.searchParams.getAll('wait_ms');
+  return afterSeq.length <= 1
+    && limit.length <= 1
+    && waitMs.length <= 1
+    && (afterSeq.length === 0 || /^\d{1,18}$/u.test(afterSeq[0] ?? ''))
+    && (limit.length === 0 || /^\d{1,3}$/u.test(limit[0] ?? ''))
+    && (waitMs.length === 0 || /^\d{1,5}$/u.test(waitMs[0] ?? ''));
+};
 const runtimeFlowerSubagentDetailQuery = (parsed: URL): boolean => parsed.search === ''
   || /^\?after_ordinal=\d+$/u.test(parsed.search)
   || /^\?limit=\d{1,4}$/u.test(parsed.search)

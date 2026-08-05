@@ -58,7 +58,7 @@ func authorizeFlowerContextActionTarget(action *ContextActionEnvelope, authority
 		if source := strings.TrimSpace(hint.SourceEnvPublicID); source != "" && source != authority.SourceEnvPublicID {
 			return ErrInvalidContextAction
 		}
-		if current := strings.TrimSpace(hint.CurrentTargetID); current != "" && current != "current" && current != authority.TargetID {
+		if current := strings.TrimSpace(hint.CurrentTargetID); current != "" && current != "current" && current != "local:local" && current != authority.TargetID {
 			return ErrInvalidContextAction
 		}
 	}

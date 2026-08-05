@@ -1172,6 +1172,36 @@ func TestFloretToolResultActivityPayloadsAreJSONSafe(t *testing.T) {
 	}
 }
 
+func TestQuestionActivityPayloadProjectsOnlySafeAnswerSummaries(t *testing.T) {
+	t.Parallel()
+
+	raw := activityPayloadForRenderer(fltools.ActivityRendererQuestion, map[string]any{
+		"prompt_id": "prompt_1",
+		"questions": []any{
+			map[string]any{"id": "target", "question": "Which target?"},
+			map[string]any{"id": "token", "question": "Access token?"},
+		},
+		"answers": []any{
+			map[string]any{"question_id": "target", "values": []any{"production"}},
+			map[string]any{"question_id": "token", "values": []any{"must-not-project"}, "redacted": true},
+			map[string]any{"question_id": "empty", "values": []any{}},
+		},
+	})
+	payload, ok := raw.(fltools.QuestionActivityPayload)
+	if !ok {
+		t.Fatal("question activity payload type assertion failed")
+	}
+	if payload.PromptID != "prompt_1" || len(payload.Answers) != 2 {
+		t.Fatalf("payload=%#v, want prompt and two safe answers", payload)
+	}
+	if got := payload.Answers[0]; got.QuestionID != "target" || len(got.Values) != 1 || got.Values[0] != "production" || got.Redacted {
+		t.Fatalf("public answer=%#v", got)
+	}
+	if got := payload.Answers[1]; got.QuestionID != "token" || len(got.Values) != 0 || !got.Redacted {
+		t.Fatalf("redacted answer=%#v", got)
+	}
+}
+
 func TestFloretToolResultActivityPayloadsMeetFullContract(t *testing.T) {
 	t.Parallel()
 
@@ -1276,6 +1306,29 @@ func TestFloretToolResultActivityProjectsPublicSubagentDisplayPayload(t *testing
 	}
 	if payload.LastMessage != "" || payload.WaitingPrompt != "" || payload.QueuedInputs != 0 || payload.CanSendInput || payload.CanInterrupt || payload.CanClose {
 		t.Fatalf("activity retained non-display subagent details: %#v", payload)
+	}
+}
+
+func TestFloretToolResultActivityUsesStructuredRendererForAggregateSubagentResult(t *testing.T) {
+	t.Parallel()
+
+	activity := mustFloretToolResultActivity(t, newRun(runOptions{}), ToolResult{
+		ToolID:   "call_list_subagents",
+		ToolName: "subagents",
+		Status:   toolResultStatusSuccess,
+		Data: map[string]any{
+			"action":      "list",
+			"status":      "ok",
+			"agent_count": 0,
+			"items":       []any{},
+			"counts":      map[string]any{"total": 0},
+		},
+	})
+	if activity.Renderer != fltools.ActivityRendererStructured {
+		t.Fatalf("renderer=%q, want structured for aggregate result without child identity", activity.Renderer)
+	}
+	if _, err := json.Marshal(activity); err != nil {
+		t.Fatalf("json.Marshal aggregate subagent activity: %v", err)
 	}
 }
 

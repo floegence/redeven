@@ -56,25 +56,22 @@ describe('Flower activity running sheen', () => {
     expect(css).toContain('.flower-activity-completion-panel');
   });
 
-  it('keeps the subdued running row sheen and square loader on the running row button only', () => {
+  it('uses a compact transform-only loader without a layout-triggering row sheen', () => {
     const css = flowerStyles();
     const activityInlineRule = cssRule(css, '.flower-activity-inline');
     const buttonRule = cssRule(css, '.flower-activity-inline-button');
     const buttonHoverRule = cssRule(css, '.flower-activity-inline-button:not(:disabled):hover,\n.flower-activity-inline-button:not(:disabled):focus-visible');
-    const sheenRule = cssRule(css, '.flower-activity-inline-row-running .flower-activity-inline-button::before');
     const loaderRule = cssRule(css, '.flower-activity-inline-loader');
     const loaderSquareRule = cssRule(css, '.flower-activity-inline-loader-square');
     const titleRule = cssRule(css, '.flower-activity-inline-title');
     const titleVerbRule = cssRule(css, '.flower-activity-inline-title-verb');
     const detailRule = cssRule(css, '.flower-activity-inline-detail');
-    const statusRule = cssRule(css, '.flower-activity-inline-duration,\n.flower-activity-inline-status');
+    const durationRule = cssRule(css, '.flower-activity-inline-duration');
     const runningTitleRule = cssRule(css, '.flower-activity-inline-row-running .flower-activity-inline-title');
     const runningButtonRule = cssRule(css, '.flower-activity-inline-row-running .flower-activity-inline-button');
     const successButtonRule = cssRule(css, '.flower-activity-inline-row-success .flower-activity-inline-button');
     const failedIconRule = cssRule(css, '.flower-activity-inline-row-error .flower-activity-inline-icon');
     const canceledIconRule = cssRule(css, '.flower-activity-inline-row-canceled .flower-activity-inline-icon');
-    const failedStatusRule = cssRule(css, '.flower-activity-inline-status-error');
-    const canceledStatusRule = cssRule(css, '.flower-activity-inline-status-canceled');
 
     expect(activityInlineRule).toContain('--flower-activity-tool-row-foreground: var(--redeven-chat-muted)');
     expect(activityInlineRule).toContain('--flower-activity-tool-row-foreground-strong: color-mix(in srgb, var(--redeven-chat-text) 72%, var(--redeven-chat-muted) 28%)');
@@ -88,12 +85,9 @@ describe('Flower activity running sheen', () => {
     expect(buttonRule).toContain('color: var(--flower-activity-tool-row-foreground)');
     expect(buttonHoverRule).toContain('background: var(--flower-activity-tool-row-soft)');
     expect(buttonHoverRule).not.toContain('color: var(--flower-activity-tool-row-foreground-strong)');
-    expect(sheenRule).toContain('linear-gradient(\n      100deg');
-    expect(sheenRule).toContain('width: 18%');
-    expect(sheenRule).toContain('color-mix(in srgb, var(--redeven-chat-muted) 12%, transparent) 38%');
-    expect(sheenRule).toContain('color-mix(in srgb, var(--redeven-chat-text) 72%, transparent) 50%');
-    expect(sheenRule).toContain('opacity: 0.64');
-    expect(sheenRule).toContain('animation: flower-activity-running-sheen 5.4s cubic-bezier(0.42, 0, 0.2, 1) infinite');
+    expect(css).not.toContain('flower-activity-running-sheen');
+    expect(css).not.toContain('.flower-activity-inline-row-running .flower-activity-inline-button::before');
+    expect(css).not.toContain('.flower-activity-inline-row-waiting .flower-activity-inline-button::before');
     expect(titleRule).toContain('color: currentColor');
     expect(titleRule).toContain('font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace');
     expect(titleRule).toContain('font-weight: 560');
@@ -101,27 +95,20 @@ describe('Flower activity running sheen', () => {
     expect(titleVerbRule).toContain('font-weight: inherit');
     expect(detailRule).toContain('color: currentColor');
     expect(detailRule).toContain('font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace');
-    expect(statusRule).toContain('color: currentColor');
-    expect(statusRule).toContain('font-size: 0.6875rem');
-    expect(statusRule).toContain('font-weight: 620');
+    expect(durationRule).toContain('color: currentColor');
+    expect(durationRule).toContain('font-size: 0.6875rem');
+    expect(durationRule).toContain('font-weight: 620');
     expect(runningTitleRule).toContain('font-weight: 600');
     expect(runningTitleRule).toContain('text-shadow: 0 0 0.65rem color-mix(in srgb, var(--redeven-chat-muted) 12%, transparent)');
     expect(runningButtonRule).toContain('color: var(--flower-activity-tool-row-foreground-strong)');
     expect(successButtonRule).toContain('color: var(--flower-activity-tool-row-foreground-complete)');
     expect(activityInlineRule).toContain('--flower-activity-tool-row-error: var(--redeven-status-error-foreground)');
     expect(failedIconRule).toContain('color: var(--flower-activity-tool-row-error)');
-    expect(failedStatusRule).toContain('color: var(--flower-activity-tool-row-error)');
     expect(canceledIconRule).toContain('color: var(--destructive)');
-    expect(canceledStatusRule).toContain('color: var(--destructive)');
     expect(css).toContain('@keyframes flower-activity-loader-square');
-    expect(css).toContain('left: 100%');
     expect(loaderRule).toContain('grid-template-columns: repeat(2, 0.3rem)');
     expect(loaderSquareRule).toContain('animation: flower-activity-loader-square 1.35s ease-in-out infinite');
-    expect(css).toContain('.flower-activity-inline-row-running .flower-activity-inline-button::before,');
     expect(css).toContain('.flower-activity-inline-loader-square {');
-    expect(css).toContain('content: none !important;');
-    expect(css).toContain('opacity: 0 !important;');
-    expect(css).toContain('background: none !important;');
     expect(css).not.toContain('.flower-activity-inline-details::before');
     expect(css).not.toContain('.flower-activity-inline-row-running::before');
   });
@@ -143,6 +130,8 @@ describe('Flower activity running sheen', () => {
     expect(contentRule).toContain('box-sizing: border-box');
     expect(contentRule).toContain('max-height: min(42rem, 72vh)');
     expect(contentRule).toContain('overflow: auto');
+    expect(contentRule).toContain('content-visibility: auto');
+    expect(contentRule).toContain('contain-intrinsic-size: auto 12rem');
     expect(contentRule).toContain('padding: 0.125rem 0 0.25rem 0.625rem');
   });
 
@@ -225,7 +214,7 @@ describe('Flower activity running sheen', () => {
     expect(css).toContain('.flower-subagent-status-loader');
     expect(css).toContain('.flower-subagent-status-loader .flower-activity-inline-loader-square');
     expect(css).toContain('.flower-subagent-detail-tail-pulse');
-    expect(css).toContain('.flower-subagent-ledger-entry-body .flower-activity-inline-row-running .flower-activity-inline-button::before');
+    expect(css).not.toContain('.flower-subagent-ledger-entry-body .flower-activity-inline-row-running .flower-activity-inline-button::before');
     expect(css).not.toContain('z-index: 50');
     expect(detailScrollRule).not.toContain('z-index: ');
     expect(dropdownRule).not.toContain('right: 0');

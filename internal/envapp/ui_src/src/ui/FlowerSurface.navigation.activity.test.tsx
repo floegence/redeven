@@ -1517,8 +1517,8 @@ describe('FlowerSurface navigation activity', () => {
     expect(runtime.textContent).not.toContain('Draft final answer');
     expect(runtime.querySelectorAll('.flower-activity-inline-row')).toHaveLength(tool_names.length);
     expect(runtime.textContent).not.toContain('terminal.execterminal.exec');
-    expect(runtime.textContent).toContain('Update todos');
-    expect(runtime.textContent).toContain('completed 1');
+    expect(runtime.textContent).toContain('Todos');
+    expect(runtime.textContent).toContain('1/1 completed');
     expect(runtime.textContent).toContain('task_complete');
     const todosRow = runtime.querySelector('[data-flower-activity-item-id="item-5"]') as HTMLElement | null;
     expect(todosRow).toBeTruthy();
@@ -2097,7 +2097,7 @@ describe('FlowerSurface navigation activity', () => {
     const queuedRow = runtime.querySelector('[data-flower-activity-item-id="tool-queued-sibling"]') as HTMLElement;
     expect(queuedRow?.textContent).toContain('curl -sL https://search.example.test');
     expect(queuedRow?.getAttribute('data-flower-activity-status')).toBe('pending');
-    expect(queuedRow?.textContent).toContain('Pending');
+    expect(queuedRow?.textContent).not.toContain('Pending');
     expect(queuedRow?.textContent).not.toContain('Running');
     expect(runtime.querySelector('.flower-transcript-stack > .flower-approval-stack')).toBeNull();
 
@@ -3264,11 +3264,11 @@ describe('FlowerSurface navigation activity', () => {
     const row = runtime.querySelector('[data-flower-activity-item-id="terminal-readonly"]') as HTMLElement;
     const button = row.querySelector('.flower-activity-inline-button') as HTMLButtonElement;
     expect(row.textContent).toContain('curl -s https://example.com/pending');
-    expect(button.getAttribute('aria-expanded')).toBeNull();
-    expect(row.querySelector('.flower-activity-inline-chevron')).toBeNull();
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+    expect(row.querySelector('.flower-activity-inline-chevron')).toBeTruthy();
 
     button.click();
-    expect(row.textContent).not.toContain('should not open from the activity row');
+    expect(button.getAttribute('aria-expanded')).toBe('true');
     expect(runtime.querySelector('.flower-composer [data-flower-approval-action-id="appr-terminal-readonly"]')).toBeTruthy();
   });
 
@@ -3381,7 +3381,7 @@ describe('FlowerSurface navigation activity', () => {
     const activityButton = runtime.querySelector('.flower-activity-inline-button') as HTMLButtonElement;
     expect(activityButton.getAttribute('aria-expanded')).toBe('false');
 
-    await wait(440);
+    activityButton.click();
     expect(activityButton.getAttribute('aria-expanded')).toBe('true');
     await waitFor(() => Boolean(runtime.querySelector('.flower-activity-inline-details')));
     const activityRow = runtime.querySelector('[data-flower-activity-item-id="tool-refresh"]');
@@ -3396,17 +3396,15 @@ describe('FlowerSurface navigation activity', () => {
     expect(runtime.querySelector('.flower-activity-inline-details')).toBe(activityDetails);
     expect(runtime.querySelector('.flower-activity-terminal-output')).toBe(terminalOutput);
     expect(activityButton.getAttribute('aria-expanded')).toBe('true');
-    expect(runtime.textContent).toContain('Done');
+    expect(runtime.textContent).not.toContain('Done');
     expect(runtime.textContent).toContain('1s');
     expect(runtime.textContent).toContain('Tests passed.');
     expect(runtime.textContent).toContain('all tests passed');
     expect(loadThread.mock.calls.length).toBeGreaterThanOrEqual(2);
 
     await wait(1250);
-    expect(activityButton.getAttribute('aria-expanded')).toBe('false');
-    expect(runtime.querySelector('.flower-activity-inline-details')?.getAttribute('data-state')).toBe('closing');
-    await wait(390);
-    expect(runtime.querySelector('.flower-activity-inline-details')).toBeNull();
+    expect(activityButton.getAttribute('aria-expanded')).toBe('true');
+    expect(runtime.querySelector('.flower-activity-inline-details')?.getAttribute('data-state')).toBe('open');
   });
 
   it('presents waiting ask_user activity only through the dedicated composer prompt', async () => {
@@ -3571,7 +3569,7 @@ describe('FlowerSurface navigation activity', () => {
 
     expect(runtime.querySelectorAll('.flower-activity-inline-row')).toHaveLength(1);
     if (scenario.requires_approval) {
-      expect(runtime.querySelector('.flower-activity-inline-button')?.getAttribute('aria-expanded')).toBeNull();
+      expect(runtime.querySelector('.flower-activity-inline-button')?.getAttribute('aria-expanded')).toBe('false');
     }
   });
 });

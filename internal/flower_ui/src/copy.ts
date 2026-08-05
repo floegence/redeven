@@ -431,6 +431,7 @@ export type FlowerSurfaceCopy = Readonly<{
     inputRequestSubmit?: string;
     inputRequestRetry?: string;
     inputRequestAnswerRequired?: string;
+    inputRequestAnswerHidden?: string;
     inputRequestSubmitting?: string;
     inputRequestComposerPlaceholder?: string;
     inputRequestChoicePlaceholder?: string;
@@ -660,6 +661,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     inputRequestSubmit: 'Continue',
     inputRequestRetry: 'Retry',
     inputRequestAnswerRequired: 'Answer the waiting prompt before continuing.',
+    inputRequestAnswerHidden: 'Answer hidden',
     inputRequestSubmitting: 'Submitting...',
     inputRequestComposerPlaceholder: 'Reply to continue this conversation.',
     inputRequestChoicePlaceholder: 'Choose an option to continue.',
