@@ -257,13 +257,17 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
       if (accessReady && requestURL.pathname === '/api/local/direct/connect_artifact') {
         jsonResponse(response, {
           plugin_session_credential: 'built-dist-plugin-session',
-          transport: 'direct',
-          direct_info: {
-            ws_url: baseURL.replace(/^http/, 'ws') + '_redeven_direct/ws',
-            channel_id: 'built-dist-shell',
-            e2ee_psk_b64u: builtDistDirectPSK,
-            channel_init_expire_at_unix_s: 4_102_444_800,
-            default_suite: 1,
+          connect_artifact: {
+            v: 1,
+            transport: 'direct',
+            correlation: { v: 1, session_id: 'built-dist-shell' },
+            direct_info: {
+              ws_url: baseURL.replace(/^http/, 'ws') + '_redeven_direct/ws',
+              channel_id: 'built-dist-shell',
+              e2ee_psk_b64u: builtDistDirectPSK,
+              channel_init_expire_at_unix_s: 4_102_444_800,
+              default_suite: 1,
+            },
           },
         });
         return;
@@ -696,8 +700,14 @@ async function verifyBuiltPluginInstallRouting(browser) {
       { method: 'POST', path: '/_redevplugin/api/plugins/security-policies/query' },
     ];
     const expectedPluginRequests = [
-      ...pluginInventoryRequests,
-      ...pluginInventoryRequests,
+      { method: 'POST', path: '/_redevplugin/api/plugins/catalog/query' },
+      { method: 'GET', path: '/_redevplugin/api/plugins/release-install-operations' },
+      { method: 'POST', path: '/_redevplugin/api/plugins/permissions/query' },
+      { method: 'POST', path: '/_redevplugin/api/plugins/security-policies/query' },
+      { method: 'POST', path: '/_redevplugin/api/plugins/catalog/query' },
+      { method: 'GET', path: '/_redevplugin/api/plugins/release-install-operations' },
+      { method: 'POST', path: '/_redevplugin/api/plugins/permissions/query' },
+      { method: 'POST', path: '/_redevplugin/api/plugins/security-policies/query' },
       { method: 'POST', path: '/_redevplugin/api/plugins/release-install-operations' },
       { method: 'GET', path: '/_redevplugin/api/plugins/release-install-operations/release_install_built_renderer' },
       ...pluginInventoryRequests,
@@ -841,11 +851,8 @@ async function main() {
       })}`, { cause: error });
     }
     const pluginPanelTileCount = await pluginCenterTile.count();
-    const expectedPluginRequests = [
-      { method: 'POST', path: '/_redevplugin/api/plugins/catalog/query' },
-      { method: 'POST', path: '/_redevplugin/api/plugins/permissions/query' },
-      { method: 'POST', path: '/_redevplugin/api/plugins/security-policies/query' },
-    ];
+    // Locked local sessions must not issue privileged plugin inventory requests.
+    const expectedPluginRequests = [];
     if (JSON.stringify(pluginRequests) !== JSON.stringify(expectedPluginRequests)) {
       throw new Error(`built Plugin request contract mismatch: ${JSON.stringify({
         expected: expectedPluginRequests,
