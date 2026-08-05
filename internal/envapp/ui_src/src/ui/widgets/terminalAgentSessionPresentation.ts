@@ -38,6 +38,7 @@ export const TERMINAL_AGENT_CLI_PRESENTATIONS: Readonly<Record<TerminalAgentCliI
     opticalSizePx: 20,
   },
   cline: { label: 'Cline', iconPath: terminalAgentIconPath('cline.svg'), render: 'mask', opticalSizePx: 20 },
+  pi: { label: 'Pi Agent', iconPath: terminalAgentIconPath('pi.svg'), render: 'mask', opticalSizePx: 20 },
   roo: { label: 'Roo Code', iconPath: terminalAgentIconPath('roo.svg'), render: 'mask', opticalSizePx: 20 },
   vibe: { label: 'Mistral Vibe', iconPath: terminalAgentIconPath('vibe.svg'), render: 'image', opticalSizePx: 20 },
   cursor: {

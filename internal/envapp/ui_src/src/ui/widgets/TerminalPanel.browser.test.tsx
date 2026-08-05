@@ -1977,6 +1977,30 @@ describe('TerminalPanel browser activity integration', () => {
     const agentCoverageRatio = codexScreenshot.paintedPixels / claudeScreenshot.paintedPixels;
     expect(agentCoverageRatio).toBeGreaterThanOrEqual(0.8);
     expect(agentCoverageRatio).toBeLessThanOrEqual(1.4);
+
+    publishTerminalForegroundCommand('session-2', {
+      phase: 'running', displayName: 'pi', revision: 3, updatedAtMs: 40,
+    });
+    publishTerminalExecutionContext('session-2', {
+      location: { kind: 'local', phase: 'ready', label: '', authority: '', workingDirectory: '/workspace/repo', source: 'shell_integration' },
+      application: { kind: 'agent_cli', identity: 'pi', displayName: 'Pi' },
+      revision: 3,
+      updatedAtMs: 40,
+    });
+    publishTerminalWorkState('session-2', {
+      phase: 'idle', source: 'semantic', contextRevision: 3, foregroundCommandRevision: 3, revision: 3, updatedAtMs: 40,
+    });
+    await new Promise<void>((resolve) => setTimeout(resolve, 170));
+    await settleTerminalPanel();
+
+    const piIdentity = host.querySelector<HTMLElement>('[data-terminal-agent-identity="pi"]')!;
+    const piMark = piIdentity.querySelector<HTMLElement>('.bg-current')!;
+    expect([piIdentity.getBoundingClientRect().width, piIdentity.getBoundingClientRect().height]).toEqual([36, 36]);
+    expect([piMark.getBoundingClientRect().width, piMark.getBoundingClientRect().height]).toEqual([20, 20]);
+    expect(getComputedStyle(piMark).webkitMaskImage).toContain('/_redeven_proxy/env/agent-cli-icons/pi.svg');
+    const piScreenshot = await mediaCommands.inspectTerminalAvatarScreenshot('session-2');
+    expect(piScreenshot.paintedPixels).toBeGreaterThan(0);
+    expect(piScreenshot.screenshotHash).not.toBe(claudeScreenshot.screenshotHash);
   });
 
   it('aligns identity, two-line content, and the fixed action rail on one session-row grid', async () => {

@@ -62,7 +62,7 @@ function contentType(filePath) {
 
 async function readExpectedTerminalAgentIconFiles() {
   const manifest = JSON.parse(await readFile(terminalAgentIconManifestPath, 'utf8'));
-  if (manifest.schema_version !== 1 || !Array.isArray(manifest.assets)) {
+  if (manifest.schema_version !== 2 || !Array.isArray(manifest.assets)) {
     throw new Error('terminal Agent CLI icon manifest is invalid');
   }
   const files = manifest.assets.flatMap((asset) => [asset.file, asset.light_file, asset.dark_file]

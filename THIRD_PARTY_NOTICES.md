@@ -237,7 +237,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @floegence/floe-webapp-boot | 0.40.4 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.40.4 | License inherited from floegence/floe-webapp root LICENSE. |
 | @floegence/floe-webapp-core | 0.40.4 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.40.4 | License inherited from floegence/floe-webapp root LICENSE. |
 | @floegence/floe-webapp-protocol | 0.40.4 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.40.4 | License inherited from floegence/floe-webapp root LICENSE. |
-| @floegence/floeterm-terminal-web | 0.12.1 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.12.1 | Built-in theme attribution and license texts are reproduced below from the verified 0.12.1 package. |
+| @floegence/floeterm-terminal-web | 0.12.2 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.12.2 | Built-in theme attribution and license texts are reproduced below from the verified 0.12.2 package. |
 | @floegence/flowersec-core | 0.27.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/0.27.0 |  |
 | @floegence/redevplugin-contracts | 0.7.2 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-contracts/v/0.7.2 |  |
 | @floegence/redevplugin-ui | 0.7.2 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-ui/v/0.7.2 | License inherited from floegence/redevplugin root LICENSE. |
@@ -1173,7 +1173,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 
 ## Bundled Agent CLI Brand Assets
 
-The following icons are redistributed from a pinned revision of [GLINCKER/thesvg](https://github.com/GLINCKER/thesvg). Product names and marks remain the property of their respective owners. These assets are used only to identify the corresponding Agent CLI process in the terminal session list.
+The following icons are redistributed from pinned upstream revisions. Product names and marks remain the property of their respective owners. These assets are used only to identify the corresponding Agent CLI process in the terminal session list.
 
 | Brand asset | License | Pinned source | Bundled file | Modification |
 | --- | --- | --- | --- | --- |
@@ -1185,6 +1185,7 @@ The following icons are redistributed from a pinned revision of [GLINCKER/thesvg
 | Qwen Code | MIT | [mono-lobe](https://github.com/GLINCKER/thesvg/blob/8731f4b62fea303b022e4aa0125783aeb42c3ea5/public/icons/qwen/mono-lobe.svg) | `internal/envapp/ui_src/public/agent-cli-icons/qwen.svg` | Trailing newline only |
 | GitHub Copilot CLI | MIT | [default](https://github.com/GLINCKER/thesvg/blob/8731f4b62fea303b022e4aa0125783aeb42c3ea5/public/icons/github-copilot/default.svg)<br>[light](https://github.com/GLINCKER/thesvg/blob/8731f4b62fea303b022e4aa0125783aeb42c3ea5/public/icons/github-copilot/light.svg)<br>[dark](https://github.com/GLINCKER/thesvg/blob/8731f4b62fea303b022e4aa0125783aeb42c3ea5/public/icons/github-copilot/dark.svg) | `internal/envapp/ui_src/public/agent-cli-icons/copilot.svg`<br>`internal/envapp/ui_src/public/agent-cli-icons/copilot-light.svg`<br>`internal/envapp/ui_src/public/agent-cli-icons/copilot-dark.svg` | Trailing newline only |
 | Cline | MIT | [mono](https://github.com/GLINCKER/thesvg/blob/8731f4b62fea303b022e4aa0125783aeb42c3ea5/public/icons/cline/mono.svg) | `internal/envapp/ui_src/public/agent-cli-icons/cline.svg` | Trailing newline only |
+| Pi Agent | MIT | [logo](https://github.com/earendil-works/pi-website/blob/2f5e410b97474d0a34ec2500aa1aa58d6c3f992c/src/logo.svg) | `internal/envapp/ui_src/public/agent-cli-icons/pi.svg` | No |
 | Roo Code | MIT | [mono](https://github.com/GLINCKER/thesvg/blob/8731f4b62fea303b022e4aa0125783aeb42c3ea5/public/icons/roocode/mono.svg) | `internal/envapp/ui_src/public/agent-cli-icons/roo.svg` | Trailing newline only |
 | Mistral Vibe | MIT | [color](https://github.com/GLINCKER/thesvg/blob/8731f4b62fea303b022e4aa0125783aeb42c3ea5/public/icons/mistral/color.svg) | `internal/envapp/ui_src/public/agent-cli-icons/vibe.svg` | Trailing newline only |
 | Cursor Agent | MIT | [default](https://github.com/GLINCKER/thesvg/blob/8731f4b62fea303b022e4aa0125783aeb42c3ea5/public/icons/cursor/default.svg)<br>[light](https://github.com/GLINCKER/thesvg/blob/8731f4b62fea303b022e4aa0125783aeb42c3ea5/public/icons/cursor/light.svg)<br>[dark](https://github.com/GLINCKER/thesvg/blob/8731f4b62fea303b022e4aa0125783aeb42c3ea5/public/icons/cursor/dark.svg) | `internal/envapp/ui_src/public/agent-cli-icons/cursor.svg`<br>`internal/envapp/ui_src/public/agent-cli-icons/cursor-light.svg`<br>`internal/envapp/ui_src/public/agent-cli-icons/cursor-dark.svg` | Trailing newline only |
@@ -1220,9 +1221,35 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
+### Pi website MIT License
+
+```text
+MIT License
+
+Copyright (c) 2026 Earendil Inc. and contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
 ## Floeterm Built-in Theme Notices
 
-Redeven embeds the built-in terminal theme catalog from `@floegence/floeterm-terminal-web@0.12.1`. The following attribution and license texts are reproduced in Redeven's distributed root notice from the installed registry package. Notice generation verifies the upstream provenance, quality evidence, notice, and license artifacts against these fixed SHA-256 values before emitting this section:
+Redeven embeds the built-in terminal theme catalog from `@floegence/floeterm-terminal-web@0.12.2`. The following attribution and license texts are reproduced in Redeven's distributed root notice from the installed registry package. Notice generation verifies the upstream provenance, quality evidence, notice, and license artifacts against these fixed SHA-256 values before emitting this section:
 
 - `2b6b2d07297ace181564890b79e2c488e67f4747512b8adad08b4bd3ea8dfc06`
 - `e9fdd068550001f555f1bb52ca475b68bc56a12c00da25f9ec28fe03dbdb9005`

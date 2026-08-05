@@ -3,6 +3,7 @@ import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
   TerminalCore,
+  TerminalDataEvent,
   TerminalSessionInfo,
 } from '@floegence/floeterm-terminal-web';
 
@@ -51,19 +52,9 @@ const SESSION = {
   isActive: true,
 } as TerminalSessionInfo;
 
-const EVENT_SOURCE: RedevenTerminalEventSource = {
-  onTerminalData: () => () => undefined,
-  onTerminalLiveAttachmentLifecycle: (_sessionId, handler) => {
-    queueMicrotask(() => handler({
-      sessionId: SESSION.id,
-      runtimeAttachGeneration: 1,
-      state: 'attached',
-    }));
-    return () => undefined;
-  },
-};
-
-const createTransport = (): RedevenTerminalTransport => ({
+const createTransport = (
+  sendInput: RedevenTerminalTransport['sendInput'] = async () => undefined,
+): RedevenTerminalTransport => ({
   attach: async () => undefined,
   attachWithHistoryBoundary: async (_sessionId, cols, rows) => ({
     historyBoundarySequence: 1,
@@ -85,7 +76,7 @@ const createTransport = (): RedevenTerminalTransport => ({
       rows,
     },
   }),
-  sendInput: async () => undefined,
+  sendInput,
   history: async () => [],
   historyPage: async () => ({
     chunks: [{ sequence: 1, timestampMs: 1, data: HISTORY_BYTES }],
@@ -124,6 +115,8 @@ type RuntimeHarness = Readonly<{
   core: () => TerminalCore | null;
   cores: readonly TerminalCore[];
   workingSet: () => TerminalWorkingSetRuntime | null;
+  emitLiveOutput: (text: string) => void;
+  sendInput: ReturnType<typeof vi.fn>;
   dispose: () => void;
 }>;
 
@@ -134,7 +127,26 @@ const mountRuntime = async (
   let currentCore: TerminalCore | null = null;
   let currentSurface: HTMLDivElement | null = null;
   let currentWorkingSet: TerminalWorkingSetRuntime | null = null;
+  let terminalDataHandler: ((event: TerminalDataEvent) => void) | null = null;
+  let liveSequence = 1;
   const cores: TerminalCore[] = [];
+  const sendInput = vi.fn(async () => undefined);
+  const eventSource: RedevenTerminalEventSource = {
+    onTerminalData: (_sessionId, handler) => {
+      terminalDataHandler = handler;
+      return () => {
+        if (terminalDataHandler === handler) terminalDataHandler = null;
+      };
+    },
+    onTerminalLiveAttachmentLifecycle: (_sessionId, handler) => {
+      queueMicrotask(() => handler({
+        sessionId: SESSION.id,
+        runtimeAttachGeneration: 1,
+        state: 'attached',
+      }));
+      return () => undefined;
+    },
+  };
   i18nTestState.readScrollbarLabel = label;
 
   const host = document.createElement('div');
@@ -162,8 +174,8 @@ const mountRuntime = async (
       canOpenFilePreview={() => false}
       bottomInsetPx={() => 0}
       connId="browser-contract-connection"
-      transport={createTransport()}
-      eventSource={EVENT_SOURCE}
+      transport={createTransport(sendInput)}
+      eventSource={eventSource}
       registerCore={(_sessionId, core) => {
         currentCore = core;
         if (core && !cores.includes(core)) cores.push(core);
@@ -205,6 +217,18 @@ const mountRuntime = async (
     core: () => currentCore,
     cores,
     workingSet: () => currentWorkingSet,
+    emitLiveOutput: (text) => {
+      liveSequence += 1;
+      if (!terminalDataHandler) throw new Error('terminal live output is not subscribed');
+      terminalDataHandler({
+        sessionId: SESSION.id,
+        type: 'data',
+        data: new TextEncoder().encode(text),
+        sequence: liveSequence,
+        timestampMs: liveSequence,
+      });
+    },
+    sendInput,
     dispose,
   };
 };
@@ -241,6 +265,52 @@ describe('TerminalSessionRuntime real scrollbar integration', () => {
       expect(scrollbarRect.left).toBeGreaterThanOrEqual(surfaceRect.left - 0.5);
       expect(scrollbar.getAttribute('aria-valuenow')).toBe(scrollbar.getAttribute('aria-valuemax'));
       expect(core.getResourceEstimate().wasmMemoryBytes).toBeGreaterThan(0);
+    }, 30_000);
+
+    it(`preserves a user's reading anchor during live output in the ${variant} product surface`, async () => {
+      const harness = await mountRuntime(variant, () => 'Terminal history');
+      harnesses.push(harness);
+      const surface = harness.surface()!;
+      const scrollbar = surface.querySelector<HTMLElement>('[data-floeterm-scrollbar]')!;
+      const canvas = surface.querySelector<HTMLCanvasElement>('canvas')!;
+
+      expect(canvas).toBeInstanceOf(HTMLCanvasElement);
+      canvas.dispatchEvent(new WheelEvent('wheel', {
+        bubbles: true,
+        cancelable: true,
+        deltaY: -480,
+      }));
+      await vi.waitFor(() => {
+        expect(scrollbar.getAttribute('aria-valuenow')).not.toBe(scrollbar.getAttribute('aria-valuemax'));
+      });
+
+      const anchoredValue = Number(scrollbar.getAttribute('aria-valuenow'));
+      const initialMaximum = Number(scrollbar.getAttribute('aria-valuemax'));
+      for (let batch = 0; batch < 3; batch += 1) {
+        harness.emitLiveOutput(Array.from(
+          { length: 6 },
+          (_, index) => `PI-AGENT-LIVE-${batch}-${index}\r\n`,
+        ).join(''));
+      }
+
+      await vi.waitFor(() => {
+        expect(bufferContains(harness.core()!, 'PI-AGENT-LIVE-2-5')).toBe(true);
+        expect(Number(scrollbar.getAttribute('aria-valuemax'))).toBeGreaterThan(initialMaximum);
+      });
+      expect(Number(scrollbar.getAttribute('aria-valuenow'))).toBe(anchoredValue);
+      expect(scrollbar.getAttribute('aria-valuenow')).not.toBe(scrollbar.getAttribute('aria-valuemax'));
+
+      const input = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Terminal input"]')!;
+      input.dispatchEvent(new InputEvent('beforeinput', {
+        bubbles: true,
+        cancelable: true,
+        data: 'x',
+        inputType: 'insertText',
+      }));
+      await vi.waitFor(() => {
+        expect(scrollbar.getAttribute('aria-valuenow')).toBe(scrollbar.getAttribute('aria-valuemax'));
+        expect(harness.sendInput).toHaveBeenCalledWith(SESSION.id, 'x', 'browser-contract-connection');
+      });
     }, 30_000);
   }
 

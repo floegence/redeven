@@ -1,10 +1,21 @@
 {
-  "schema_version": 1,
-  "source": {
-    "repository": "https://github.com/GLINCKER/thesvg",
-    "revision": "8731f4b62fea303b022e4aa0125783aeb42c3ea5",
-    "license": "MIT",
-    "license_file": "assets/licenses/thesvg-MIT.txt"
+  "schema_version": 2,
+  "default_source": "thesvg",
+  "sources": {
+    "thesvg": {
+      "label": "thesvg",
+      "repository": "https://github.com/GLINCKER/thesvg",
+      "revision": "8731f4b62fea303b022e4aa0125783aeb42c3ea5",
+      "license": "MIT",
+      "license_file": "assets/licenses/thesvg-MIT.txt"
+    },
+    "pi": {
+      "label": "Pi website",
+      "repository": "https://github.com/earendil-works/pi-website",
+      "revision": "2f5e410b97474d0a34ec2500aa1aa58d6c3f992c",
+      "license": "MIT",
+      "license_file": "assets/licenses/pi-website-MIT.txt"
+    }
   },
   "assets": [
     { "identity": "codex", "label": "Codex", "file": "codex.svg", "source_path": "public/icons/codex-openai/default.svg", "sha256": "525c1d016c9283654dc1104cd4d7e0745a46bcc2d4e9b92782202ecab9cf230d", "upstream_sha256": "5f424b10216e17cd79c5f852138969453e031066e68a8d9c661e74534276ed9c", "render": "mask", "modified": "trailing_newline_only" },
@@ -15,6 +26,7 @@
     { "identity": "qwen", "label": "Qwen Code", "file": "qwen.svg", "source_path": "public/icons/qwen/mono-lobe.svg", "sha256": "31cf02ca228fb6895eb4b803fa8a809038d2c92d7fd0d5ac1f03487286648bfc", "upstream_sha256": "fd2ed34b50f871b0a044d46ab9c2a6b308580cab29a388b1a41360d99acfee14", "render": "mask", "modified": "trailing_newline_only" },
     { "identity": "copilot", "label": "GitHub Copilot CLI", "file": "copilot.svg", "source_path": "public/icons/github-copilot/default.svg", "sha256": "9b26c654f6281476a8371cdcd6c10b74fc7e9b6ae149407455a989137187c7b3", "upstream_sha256": "38b9324574b647fcda85d87642a0bf3c7804dcf4b7ad9f534f924de38a1dfbe4", "light_file": "copilot-light.svg", "light_source_path": "public/icons/github-copilot/light.svg", "light_sha256": "f9a0867d6e367502b33b093b638b066092b0f1b8814cd1450c745360aa92f1ba", "light_upstream_sha256": "f9a0867d6e367502b33b093b638b066092b0f1b8814cd1450c745360aa92f1ba", "light_modified": false, "dark_file": "copilot-dark.svg", "dark_source_path": "public/icons/github-copilot/dark.svg", "dark_sha256": "38b9324574b647fcda85d87642a0bf3c7804dcf4b7ad9f534f924de38a1dfbe4", "dark_upstream_sha256": "38b9324574b647fcda85d87642a0bf3c7804dcf4b7ad9f534f924de38a1dfbe4", "dark_modified": false, "render": "image", "modified": "trailing_newline_only" },
     { "identity": "cline", "label": "Cline", "file": "cline.svg", "source_path": "public/icons/cline/mono.svg", "sha256": "4df6c05b881d3197241ddbe3cee4894561dd22b6ce223e7b000e306b88c71b5f", "upstream_sha256": "af83bfdd6ca92ff6ff473b06233f0d7f5c375771f539c3b401fdf992960e6b05", "render": "mask", "modified": "trailing_newline_only" },
+    { "identity": "pi", "label": "Pi Agent", "source": "pi", "file": "pi.svg", "source_path": "src/logo.svg", "sha256": "2d43cb4f6a239ac70416214ac05842be34175339f761001fab3e8d01459bec69", "upstream_sha256": "2d43cb4f6a239ac70416214ac05842be34175339f761001fab3e8d01459bec69", "render": "mask", "modified": false },
     { "identity": "roo", "label": "Roo Code", "file": "roo.svg", "source_path": "public/icons/roocode/mono.svg", "sha256": "28c879ebf0726f09857b2bb1ea4402696dda6e890a857f606f5845dad620ae94", "upstream_sha256": "6f3f1767bbe13ec049aa179689d66354fc2ec8c8ffb083eeab56b6730d3f92e4", "render": "mask", "modified": "trailing_newline_only" },
     { "identity": "vibe", "label": "Mistral Vibe", "file": "vibe.svg", "source_path": "public/icons/mistral/color.svg", "sha256": "003009498cd6baf8a85de4b52944523c17fe2ead525e9edbaeaa42fcef6a2142", "upstream_sha256": "a21838f4a3714b9f537bd849de4848dca712778517bfc4177621cc58b3050006", "render": "image", "modified": "trailing_newline_only" },
     { "identity": "cursor", "label": "Cursor Agent", "file": "cursor.svg", "source_path": "public/icons/cursor/default.svg", "sha256": "0c1940179c8fe0a877c331a1e19a2cb9437a8f9633594e1d81f9ffba106615ff", "upstream_sha256": "cd0e3e5d8991a4cdd4577f8896cd063105207665165c73e25a1ff918dd367eb7", "light_file": "cursor-light.svg", "light_source_path": "public/icons/cursor/light.svg", "light_sha256": "c483c02f78eb2619778fdd959e72a9adfac4844854472cd2653d4cbfd60e4d71", "light_upstream_sha256": "c483c02f78eb2619778fdd959e72a9adfac4844854472cd2653d4cbfd60e4d71", "light_modified": false, "dark_file": "cursor-dark.svg", "dark_source_path": "public/icons/cursor/dark.svg", "dark_sha256": "cd0e3e5d8991a4cdd4577f8896cd063105207665165c73e25a1ff918dd367eb7", "dark_upstream_sha256": "cd0e3e5d8991a4cdd4577f8896cd063105207665165c73e25a1ff918dd367eb7", "dark_modified": false, "render": "image", "modified": "trailing_newline_only" },
