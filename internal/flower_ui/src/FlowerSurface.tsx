@@ -978,6 +978,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [activityClockNow, setActivityClockNow] = createSignal(Date.now());
   const [approvalSubmitting, setApprovalSubmitting] = createSignal<Record<string, FlowerApprovalSubmittingState>>({});
   const [approvalDecisionHandoff, setApprovalDecisionHandoff] = createSignal<ApprovalDecisionHandoff | null>(null);
+  const [approvalDisplayFallbackAction, setApprovalDisplayFallbackAction] = createSignal<FlowerApprovalAction | null>(null);
   const [approvalHandoffStyleThreadID, setApprovalHandoffStyleThreadID] = createSignal('');
   const [approvalQueueAnnouncement, setApprovalQueueAnnouncement] = createSignal('');
   const [copiedMessageAction, setCopiedMessageAction] = createSignal('');
@@ -1402,9 +1403,35 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const handoff = approvalDecisionHandoff();
     return handoff && handoff.threadID === selectedThreadID() ? handoff : null;
   });
+  let approvalDisplayFallbackClearFrame = 0;
   const selectedComposerApprovalDisplayAction = createMemo(() => (
-    selectedComposerApprovalAction() ?? selectedApprovalDecisionHandoff()?.frozenAction ?? null
+    selectedComposerApprovalAction()
+      ?? selectedApprovalDecisionHandoff()?.frozenAction
+      ?? approvalDisplayFallbackAction()
   ));
+  createEffect(() => {
+    const current = selectedComposerApprovalAction();
+    const handoff = selectedApprovalDecisionHandoff();
+    if (current) {
+      if (approvalDisplayFallbackAction()?.action_id !== current.action_id) {
+        setApprovalDisplayFallbackAction(current);
+      }
+      if (approvalDisplayFallbackClearFrame) {
+        cancelTranscriptAnimationFrame(approvalDisplayFallbackClearFrame);
+        approvalDisplayFallbackClearFrame = 0;
+      }
+      return;
+    }
+    if (handoff || !approvalDisplayFallbackAction() || approvalDisplayFallbackClearFrame) return;
+    approvalDisplayFallbackClearFrame = requestTranscriptAnimationFrame(() => {
+      approvalDisplayFallbackClearFrame = requestTranscriptAnimationFrame(() => {
+        approvalDisplayFallbackClearFrame = 0;
+        if (!selectedComposerApprovalAction() && !selectedApprovalDecisionHandoff()) {
+          setApprovalDisplayFallbackAction(null);
+        }
+      });
+    });
+  });
   const selectedComposerApprovalHandoffActive = createMemo(() => (
     Boolean(selectedApprovalDecisionHandoff()) || approvalHandoffStyleThreadID() === selectedThreadID()
   ));
@@ -1552,6 +1579,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   onCleanup(() => {
     clearApprovalDecisionResyncTimer();
     clearApprovalHandoffStyleSchedule();
+    if (approvalDisplayFallbackClearFrame) {
+      cancelTranscriptAnimationFrame(approvalDisplayFallbackClearFrame);
+      approvalDisplayFallbackClearFrame = 0;
+    }
   });
   const pendingContextCompactionVisible = (thread: FlowerThreadSnapshot | null, pending: PendingContextCompactionDecoration | null): boolean => {
     if (!pending) return false;

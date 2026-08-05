@@ -146,7 +146,7 @@ describe('Flower approval refresh browser behavior', () => {
     expect(blankComposerMutations).toBe(0);
   });
 
-  it('keeps one actionable approval card mounted while stale summaries continue polling', async () => {
+  it('keeps one actionable approval card mounted while stale summaries remain unchanged', async () => {
     const primaryAction = {
       action_id: 'appr-browser-primary',
       origin: 'main_tool' as const,
@@ -311,13 +311,16 @@ describe('Flower approval refresh browser behavior', () => {
     expect(runtime.querySelector('.flower-composer textarea')).toBeNull();
     expect(initialCard.textContent).toContain('1 / 2');
     expect(detachCount).toBe(0);
-    expect(listThreads.mock.calls.length).toBeGreaterThanOrEqual(3);
+    expect(listThreads).toHaveBeenCalledTimes(1);
+    expect(listThreadLiveEvents.mock.calls.length).toBeGreaterThanOrEqual(1);
     expect(loadThread).toHaveBeenCalledTimes(1);
 
     const composer = runtime.querySelector('.flower-composer') as HTMLElement;
     let blankPromotionFrames = 0;
     const promotionObserver = new MutationObserver(() => {
-      if (composer.querySelectorAll('[data-flower-composer-approval="true"]').length === 0) blankPromotionFrames += 1;
+      if (composer.querySelectorAll('[data-flower-composer-approval="true"]').length === 0) {
+        blankPromotionFrames += 1;
+      }
     });
     promotionObserver.observe(composer, { childList: true, subtree: true });
     eventPhase = 'promote';
