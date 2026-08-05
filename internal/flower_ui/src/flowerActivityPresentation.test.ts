@@ -732,8 +732,8 @@ describe('presentFlowerActivityItem', () => {
       ],
     }));
 
-    expect(presentation.label).toBe('Todos');
-    expect(presentation.title).toEqual({ kind: 'plain', text: 'Todos' });
+    expect(presentation.label).toBe('Update todos');
+    expect(presentation.title).toEqual({ kind: 'plain', text: 'Update todos' });
     expect(presentation.meta).toContain('1/2 completed');
     expect(presentation.detailLines).toHaveLength(0);
     expect(presentation.detailBlocks).toContainEqual({

@@ -1517,7 +1517,7 @@ describe('FlowerSurface navigation activity', () => {
     expect(runtime.textContent).not.toContain('Draft final answer');
     expect(runtime.querySelectorAll('.flower-activity-inline-row')).toHaveLength(tool_names.length);
     expect(runtime.textContent).not.toContain('terminal.execterminal.exec');
-    expect(runtime.textContent).toContain('Todos');
+    expect(runtime.textContent).toContain('Update todos');
     expect(runtime.textContent).toContain('1/1 completed');
     expect(runtime.textContent).toContain('task_complete');
     const todosRow = runtime.querySelector('[data-flower-activity-item-id="item-5"]') as HTMLElement | null;
