@@ -3951,6 +3951,7 @@
       "inputRequestSubmit": "Continuar",
       "inputRequestRetry": "Tentar novamente",
       "inputRequestAnswerRequired": "Responda à solicitação pendente antes de continuar.",
+      "inputRequestAnswerHidden": "Resposta oculta",
       "inputRequestSubmitting": "Enviando…",
       "inputRequestComposerPlaceholder": "Responda para continuar esta conversa.",
       "inputRequestChoicePlaceholder": "Escolha uma opção para continuar.",

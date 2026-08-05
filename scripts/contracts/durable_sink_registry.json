@@ -433,7 +433,7 @@
     },
     {
       "path": "desktop/src/main/main.ts",
-      "sha256": "70871cd94e01f992650f03a3a43522157d16b1542e48a0389fc8d012376360ab",
+      "sha256": "6f2f529693017a35eff91d7a6ecdd310d9caf6bd1d8a99de3fd08924e1a2beeb",
       "sink_kinds": [
         "file"
       ],
@@ -1302,7 +1302,7 @@
     },
     {
       "path": "internal/codeapp/appserver/server.go",
-      "sha256": "b77073853de377e108ac5df817a5b0e61c0c38388b072857c24b67319b5948de",
+      "sha256": "1138c030770f8267923f94421b4c41fcc067c93ee979ecd1901ea65f426d7433",
       "sink_kinds": [
         "file",
         "json_file"
@@ -1763,7 +1763,7 @@
     },
     {
       "path": "internal/flower_ui/src/FlowerSurface.tsx",
-      "sha256": "45badd75b55417624f4241dc8322df26c24620d1a9c2262e23af73e110722b8e",
+      "sha256": "92e9b1e0b7e308b750f469fc7a9a27c6dac597ce622d40a3e95d36b2db8b4edb",
       "sink_kinds": [
         "web_storage"
       ],

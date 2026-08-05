@@ -67,96 +67,7 @@ function prefersReducedMotion(): boolean {
 export function createFlowerActivityDisclosureController(
   options: FlowerActivityDisclosureControllerOptions,
 ): FlowerActivityDisclosureController {
-  const openDelayMs = Math.max(0, options.openDelayMs ?? FLOWER_ACTIVITY_AUTO_OPEN_DELAY_MS);
-  const settlePolicy = options.settle ?? { anchor: () => 'intent' as const };
-  const settleHoldMs = Math.max(0, settlePolicy.holdMs ?? FLOWER_ACTIVITY_SETTLE_HOLD_MS);
-  const reducedMotion = options.reducedMotion ?? prefersReducedMotion;
-  const initialIntent = options.intent();
-  const [automaticOpen, setAutomaticOpen] = createSignal(initialIntent === 'attention');
-  const [settledPresentationRevision, setSettledPresentationRevision] = createSignal(0);
-  let presentationBaseline = 0;
-  let attentionLatched = initialIntent === 'attention';
-  let openTimer: number | undefined;
-  let settleTimer: number | undefined;
-
-  const clearOpenTimer = () => {
-    if (openTimer === undefined) return;
-    window.clearTimeout(openTimer);
-    openTimer = undefined;
-  };
-  const clearSettleTimer = () => {
-    if (settleTimer === undefined) return;
-    window.clearTimeout(settleTimer);
-    settleTimer = undefined;
-  };
-  const scheduleSettle = () => {
-    clearSettleTimer();
-    settleTimer = window.setTimeout(() => {
-      settleTimer = undefined;
-      if (options.intent() === 'settled' && typeof options.manualOpen() !== 'boolean') {
-        setAutomaticOpen(false);
-      }
-    }, settleHoldMs);
-  };
-
-  createEffect(() => {
-    const intent = options.intent();
-    const manualOpen = options.manualOpen();
-    const motionReduced = reducedMotion();
-    const presentationRevision = settledPresentationRevision();
-    const settleAnchor = settlePolicy.anchor();
-    clearOpenTimer();
-
-    if (typeof manualOpen === 'boolean') {
-      clearSettleTimer();
-      return;
-    }
-    if (intent === 'attention') {
-      clearSettleTimer();
-      attentionLatched = true;
-      setAutomaticOpen(true);
-      return;
-    }
-    if (intent === 'active') {
-      clearSettleTimer();
-      presentationBaseline = presentationRevision;
-      if (attentionLatched || automaticOpen()) return;
-      if (motionReduced) {
-        setAutomaticOpen(false);
-        return;
-      }
-      openTimer = window.setTimeout(() => {
-        openTimer = undefined;
-        if (
-          options.intent() === 'active'
-          && typeof options.manualOpen() !== 'boolean'
-          && !reducedMotion()
-        ) {
-          setAutomaticOpen(true);
-        }
-      }, openDelayMs);
-      return;
-    }
-    if (attentionLatched || !automaticOpen()) {
-      clearSettleTimer();
-      return;
-    }
-    if (settleAnchor === 'presentation' && presentationRevision <= presentationBaseline) {
-      clearSettleTimer();
-      return;
-    }
-    scheduleSettle();
-  });
-
-  onCleanup(() => {
-    clearOpenTimer();
-    clearSettleTimer();
-  });
-
-  const open = createMemo(() => {
-    const manualOpen = options.manualOpen();
-    return typeof manualOpen === 'boolean' ? manualOpen : automaticOpen();
-  });
+  const open = createMemo(() => options.manualOpen() === true);
   const retainOpen = () => {
     if (open()) options.onManualOpenChange(true);
   };
@@ -165,11 +76,7 @@ export function createFlowerActivityDisclosureController(
     open,
     toggle: () => options.onManualOpenChange(!open()),
     retainOpen,
-    markSettledPresentation: () => {
-      if (settlePolicy.anchor() === 'presentation') {
-        setSettledPresentationRevision((revision) => revision + 1);
-      }
-    },
+    markSettledPresentation: () => undefined,
   };
 }
 

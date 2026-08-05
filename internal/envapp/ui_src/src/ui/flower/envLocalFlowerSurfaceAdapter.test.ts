@@ -103,6 +103,27 @@ function liveBootstrap(threadID: string, status = 'canceled') {
 }
 
 describe('Env local Flower surface adapter', () => {
+	it('uses bounded server-side waiting for live events', async () => {
+		fetchMock.mockResolvedValue(jsonResponse({
+			stream_generation: 1,
+			events: [],
+			next_cursor: 7,
+			retained_from_seq: 1,
+		}));
+		const adapter = createEnvLocalFlowerSurfaceAdapter({
+			envPublicID: 'env_a',
+			envLabel: 'Demo Env',
+			rpc: { ai: {} } as any,
+		});
+
+		await adapter.listThreadLiveEvents('thread_live', 7, 25);
+
+		expect(fetchMock).toHaveBeenCalledWith(
+			'/_redeven_proxy/api/ai/threads/thread_live/live/events?after_seq=7&limit=25&wait_ms=10000',
+			expect.objectContaining({ method: 'GET' }),
+		);
+	});
+
 	it('creates and releases attachment staging scopes without exposing the capability', async () => {
 		fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
 			if (url === '/_redeven_proxy/api/ai/upload-staging-scopes' && init?.method === 'POST') {

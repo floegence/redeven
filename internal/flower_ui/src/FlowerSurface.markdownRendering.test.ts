@@ -45,8 +45,8 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(src).toContain("`flower-activity-inline-row-${displayStatus()}`");
     expect(src).toContain('data-flower-activity-status={displayStatus()}');
     expect(src).toContain('statusIcon(displayStatus())');
-    expect(src).toContain("`flower-activity-inline-status-${displayStatus()}`");
-    expect(src).toContain('copy().chat.toolStatuses[displayStatus()]');
+    expect(src).not.toContain('flower-activity-inline-status-${displayStatus()}');
+    expect(src).toContain('copy().chat.toolStatuses[item.status]');
     expect(src).not.toContain('payload.status');
     expect(src).not.toContain("payload['status']");
   });
@@ -58,6 +58,13 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(src).toContain('flower-activity-inline-loader-square');
     expect(src).toContain("case 'running':");
     expect(src).not.toContain("case 'running':\n        return <Terminal");
+  });
+
+  it('uses the adaptive live poll loop instead of fixed 350ms intervals', () => {
+    const src = surfaceSource();
+    expect(src).toContain('createFlowerLivePollLoop');
+    expect(src).not.toContain('setInterval(tick, 350)');
+    expect(src).not.toContain('setInterval(() => void poll(), 350)');
   });
 
   it('renders context usage in standard actions and compact companion More outside timeline entries', () => {

@@ -97,6 +97,25 @@ func TestAuthorizeFlowerContextActionTargetRejectsTargetAndHintForgedTogether(t 
 	}
 }
 
+func TestAuthorizeFlowerContextActionTargetAcceptsMatchingLocalRuntimeAlias(t *testing.T) {
+	t.Parallel()
+
+	authority := flowerCanonicalReferenceTargetAuthority{
+		TargetID:          "env_authoritative",
+		TargetLocality:    contextActionLocalityCurrent,
+		SourceEnvPublicID: "env_authoritative",
+	}
+	action := &ContextActionEnvelope{
+		Target: ContextActionTarget{TargetID: "local:local", Locality: contextActionLocalityAuto},
+		ExecutionContext: &ContextActionExecutionHint{
+			CurrentTargetID: "local:local",
+		},
+	}
+	if err := authorizeFlowerContextActionTarget(action, authority); err != nil {
+		t.Fatalf("authorizeFlowerContextActionTarget: %v", err)
+	}
+}
+
 func TestFloretSupplementalContextFormatsProcessSnapshot(t *testing.T) {
 	t.Parallel()
 

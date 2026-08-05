@@ -150,6 +150,32 @@ function attachmentBridgeStubs() {
 }
 
 describe('Local Environment Flower surface adapter', () => {
+  it('uses bounded server-side waiting for live events', async () => {
+    const requestRuntimeFlower = vi.fn(async () => ({
+      ok: true as const,
+      data: {
+        stream_generation: 1,
+        events: [],
+        next_cursor: 7,
+        retained_from_seq: 1,
+      },
+    }));
+    const bridge: DesktopSettingsBridge = {
+      ...attachmentBridgeStubs(),
+      save: vi.fn(async () => ({ ok: true as const, snapshot: {} as never })),
+      requestRuntimeFlower,
+      cancel: vi.fn(),
+    };
+    const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
+
+    await adapter.listThreadLiveEvents('thread_live', 7, 25);
+
+    expect(requestRuntimeFlower).toHaveBeenCalledWith({
+      method: 'GET',
+      path: '/_redeven_proxy/api/ai/threads/thread_live/live/events?after_seq=7&limit=25&wait_ms=10000',
+    });
+  });
+
   it('creates and releases attachment staging scopes without putting capabilities in URL or body', async () => {
     const calls: RuntimeFlowerRequest[] = [];
     const requestRuntimeFlower = vi.fn(async (request: RuntimeFlowerRequest) => {

@@ -84,6 +84,7 @@ type ThreadDeleteReceipt = Readonly<{
 }>;
 
 export const FLOWER_THREAD_DELETE_OPERATION_FAILED_CODE = 'AI_THREAD_DELETE_OPERATION_FAILED';
+export const FLOWER_LIVE_EVENT_WAIT_MS = 10_000;
 
 export type FlowerThreadDeleteTransportOutcome = Readonly<
   | { kind: 'success'; receipt: unknown }

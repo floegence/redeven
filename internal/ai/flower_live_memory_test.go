@@ -7,12 +7,105 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/floegence/floret/v3/identity"
 	"github.com/floegence/redeven/internal/session"
 )
 
 var flowerLiveEventsListSink *FlowerLiveEventsResponse
+
+func TestWaitFlowerThreadLiveEventsReturnsWhenAnEventArrives(t *testing.T) {
+	t.Parallel()
+
+	svc := newFlowerLiveMemoryTestService()
+	meta := flowerLiveMemoryTestMeta("env_live_wait")
+	threadID := "thread_live_wait"
+	svc.flowerLiveByThread[runThreadKey(meta.EndpointID, threadID)] = newFlowerLiveThreadStream()
+	type result struct {
+		response *FlowerLiveEventsResponse
+		err      error
+	}
+	resultCh := make(chan result, 1)
+	go func() {
+		response, err := svc.WaitFlowerThreadLiveEvents(context.Background(), &meta, threadID, 0, 10, time.Second)
+		resultCh <- result{response: response, err: err}
+	}()
+
+	select {
+	case early := <-resultCh:
+		t.Fatalf("wait returned before an event arrived: %#v, %v", early.response, early.err)
+	case <-time.After(20 * time.Millisecond):
+	}
+
+	appended, ok := svc.appendFlowerLiveEvent(FlowerLiveEvent{
+		EndpointID: meta.EndpointID,
+		ThreadID:   threadID,
+		Kind:       FlowerLiveMessageBlockDelta,
+		Payload:    mustFlowerPayload(map[string]string{"text": "ready"}),
+	})
+	if !ok {
+		t.Fatal("event append was rejected")
+	}
+
+	select {
+	case got := <-resultCh:
+		if got.err != nil {
+			t.Fatal(got.err)
+		}
+		if got.response == nil || len(got.response.Events) != 1 || got.response.Events[0].Seq != appended.Seq {
+			t.Fatalf("wait response=%#v, want appended event seq %d", got.response, appended.Seq)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("wait did not return after the event arrived")
+	}
+}
+
+func TestWaitFlowerThreadLiveEventsHonorsTimeoutAndCancellation(t *testing.T) {
+	t.Parallel()
+
+	svc := newFlowerLiveMemoryTestService()
+	meta := flowerLiveMemoryTestMeta("env_live_wait_stop")
+	timeoutThreadID := "thread_timeout"
+	svc.flowerLiveByThread[runThreadKey(meta.EndpointID, timeoutThreadID)] = newFlowerLiveThreadStream()
+	startedAt := time.Now()
+	response, err := svc.WaitFlowerThreadLiveEvents(context.Background(), &meta, timeoutThreadID, 0, 10, 25*time.Millisecond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response == nil || len(response.Events) != 0 {
+		t.Fatalf("timeout response=%#v, want empty response", response)
+	}
+	if elapsed := time.Since(startedAt); elapsed < 20*time.Millisecond {
+		t.Fatalf("wait returned too early after %s", elapsed)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	canceledThreadID := "thread_canceled"
+	svc.flowerLiveByThread[runThreadKey(meta.EndpointID, canceledThreadID)] = newFlowerLiveThreadStream()
+	cancel()
+	_, err = svc.WaitFlowerThreadLiveEvents(ctx, &meta, canceledThreadID, 0, 10, time.Second)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled wait error=%v, want context.Canceled", err)
+	}
+}
+
+func TestWaitFlowerThreadLiveEventsDoesNotAllocateUnknownThread(t *testing.T) {
+	t.Parallel()
+
+	svc := newFlowerLiveMemoryTestService()
+	meta := flowerLiveMemoryTestMeta("env_live_wait_unknown")
+	response, err := svc.WaitFlowerThreadLiveEvents(context.Background(), &meta, "unknown_thread", 0, 10, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response == nil || len(response.Events) != 0 {
+		t.Fatalf("unknown thread response=%#v, want empty response", response)
+	}
+	if len(svc.flowerLiveByThread) != 0 {
+		t.Fatalf("unknown thread allocated %d live streams", len(svc.flowerLiveByThread))
+	}
+}
 
 func TestListFlowerThreadLiveEventsAllocatesOnlyForMatchingEvents(t *testing.T) {
 	t.Parallel()

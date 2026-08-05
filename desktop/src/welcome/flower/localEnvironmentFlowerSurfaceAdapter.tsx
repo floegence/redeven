@@ -58,6 +58,7 @@ import {
 } from '../../../../internal/flower_ui/src/flowerLiveMapper';
 import {
   createRuntimeFlowerSurfaceAdapter,
+  FLOWER_LIVE_EVENT_WAIT_MS,
   FLOWER_THREAD_DELETE_OPERATION_FAILED_CODE,
 } from '../../../../internal/flower_ui/src/runtimeFlowerSurfaceAdapter';
 import {
@@ -729,7 +730,7 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
       listThreadLiveEvents: (threadID, afterSeq, limit) => runtimeJSON(
         bridge,
         'GET',
-        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/live/events?after_seq=${afterSeq}&limit=${limit}`,
+        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/live/events?after_seq=${afterSeq}&limit=${limit}&wait_ms=${FLOWER_LIVE_EVENT_WAIT_MS}`,
       ),
       loadSubagentDetail: (parentThreadID, childThreadID, afterOrdinal, limit) => runtimeJSON(
         bridge,

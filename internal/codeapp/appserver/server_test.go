@@ -3005,6 +3005,16 @@ func TestServer_AIThreadLiveEventsIncludeReadStatus(t *testing.T) {
 	if emptyLiveResponse.Data.Events == nil || len(emptyLiveResponse.Data.Events) != 0 {
 		t.Fatalf("empty live events=%#v, want non-nil empty array", emptyLiveResponse.Data.Events)
 	}
+	invalidWait := performServerRequest(
+		srv,
+		http.MethodGet,
+		"/_redeven_proxy/api/ai/threads/missing_live_events_thread/live/events?after_seq=0&limit=10&wait_ms=30001",
+		origin,
+		"",
+	)
+	if invalidWait.Code != http.StatusBadRequest || !strings.Contains(invalidWait.Body.String(), "invalid wait_ms") {
+		t.Fatalf("invalid live wait status=%d body=%s", invalidWait.Code, invalidWait.Body.String())
+	}
 	initialDetail := performServerRequest(srv, http.MethodGet, "/_redeven_proxy/api/ai/threads/"+url.PathEscape(thread.ThreadID), origin, "")
 	if initialDetail.Code != http.StatusOK {
 		t.Fatalf("initial detail status=%d body=%s", initialDetail.Code, initialDetail.Body.String())

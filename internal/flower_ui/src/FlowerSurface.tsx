@@ -130,6 +130,7 @@ import { FlowerThreadList, type FlowerThreadMenuAction } from './threads/FlowerT
 import { FlowerThreadSwitcher, type FlowerThreadSwitcherCopy } from './threads/FlowerThreadSwitcher';
 import { SubagentDetailWindow } from './SubagentDetailWindow';
 import { applyFlowerLiveEvent, projectFlowerLiveBootstrap } from './flowerLiveReducer';
+import { createFlowerLivePollLoop } from './flowerLivePolling';
 import { flowerThreadReadSnapshotKey, mergeFlowerThreadListRefresh, sameThreadSnapshot } from './flowerThreadListRefresh';
 import { FlowerProviderBrandIcon, flowerModelSupportsImage, formatFlowerTokenCount } from './settings/providerCatalog';
 import { FlowerReasoningControl } from './ReasoningControl';
@@ -3840,16 +3841,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     scheduleComposerFocus();
   });
 
-  const applySelectedThreadLiveEvents = async (threadID: string, sequence: number) => {
+  const applySelectedThreadLiveEvents = async (threadID: string, sequence: number): Promise<boolean> => {
     const tid = trimString(threadID);
-    if (!tid || retiredThreadIDs.has(tid)) return;
+    if (!tid || retiredThreadIDs.has(tid)) return false;
     const existingRequest = selectedThreadLiveRequests.get(tid);
-    if (existingRequest && existingRequest.sequence === sequence) return;
+    if (existingRequest && existingRequest.sequence === sequence) return false;
     const token = selectedThreadLiveUpdateToken + 1;
     selectedThreadLiveUpdateToken = token;
     selectedThreadLiveRequests.set(tid, { token, sequence });
     let cursor = liveCursorValue(liveCursors.get(tid));
     let streamGeneration = liveStreamGenerationValue(liveStreamGenerations.get(tid));
+    let hadEvents = false;
     try {
       let keepGoing = true;
       while (
@@ -3865,13 +3867,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           props.adapter.listThreadLiveEvents(tid, cursor, 100),
           SELECTED_THREAD_LIVE_EVENTS_TIMEOUT_MS,
         );
+        hadEvents ||= response.events.length > 0;
         if (
           sequence !== threadLoadSequence
           || selectedThreadID() !== tid
           || !effectiveEngagement()
           || retiredThreadIDs.has(tid)
         ) {
-          return;
+          return false;
         }
         const responseGeneration = liveStreamGenerationValue(response.stream_generation);
         const currentGeneration = liveStreamGenerationValue(liveStreamGenerations.get(tid));
@@ -3887,7 +3890,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           currentGeneration > responseGeneration
           || (currentGeneration === responseGeneration && liveCursorValue(liveCursors.get(tid)) > requestedCursor)
         ) {
-          return;
+          return false;
         }
         streamGeneration = responseGeneration;
         let resyncRequired = false;
@@ -3944,7 +3947,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 || !effectiveEngagement()
                 || retiredThreadIDs.has(tid)
               ) {
-                return;
+                return false;
               }
             }
           }
@@ -3958,7 +3961,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         cursor = Math.max(cursor, Math.floor(Number(response.next_cursor ?? 0)));
         if (resyncRequired || (response.retained_from_seq > 0 && cursor > 0 && cursor < response.retained_from_seq)) {
           await reloadSelectedThread(tid, sequence, 'resync_reload');
-          return;
+          return hadEvents;
         }
         setLivePosition(tid, streamGeneration, cursor);
         keepGoing = response.has_more === true;
@@ -3972,7 +3975,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           stream_generation: streamGeneration,
           sequence,
         });
-        return;
+        return hadEvents;
       }
       if (sequence === threadLoadSequence && selectedThreadID() === tid) {
         setThreadLoadError(getErrorMessage(error));
@@ -3982,6 +3985,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         selectedThreadLiveRequests.delete(tid);
       }
     }
+    return hadEvents;
   };
 
   createEffect(() => {
@@ -4000,22 +4004,27 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return;
     }
     const sequence = threadLoadSequence;
-    const tick = () => {
-      void applySelectedThreadLiveEvents(threadID, sequence);
-    };
-    const timer = window.setInterval(tick, 350);
-    tick();
-    onCleanup(() => {
-      window.clearInterval(timer);
+    const loop = createFlowerLivePollLoop({
+      poll: async () => ({
+        hadEvents: await applySelectedThreadLiveEvents(threadID, sequence),
+        hasMore: false,
+      }),
+      active: () => (
+        sequence === threadLoadSequence
+        && selectedThreadID() === threadID
+        && effectiveEngagement()
+        && !retiredThreadIDs.has(threadID)
+      ),
     });
+    onCleanup(loop.dispose);
   });
 
   createEffect(on(
-    companionLiveThreadID,
-    (threadID) => {
+    [companionLiveThreadID, documentVisible],
+    ([threadID, visible]) => {
       const sequence = ++companionLiveSequence;
       setCompanionLiveThread(null);
-      if (!threadID) return;
+      if (!threadID || !visible) return;
       setCompanionLiveRunGeneration(sequence);
 
       let disposed = false;
@@ -4030,6 +4039,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         !disposed
         && sequence === companionLiveSequence
         && companionLiveThreadID() === threadID
+        && documentVisible()
         && !retiredThreadIDs.has(threadID)
       );
       const publishProjection = () => {
@@ -4075,7 +4085,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         publishProjection();
         return true;
       };
-      const poll = async () => {
+      const pollOnce = async () => {
         if (requestInFlight || !stillCurrent() || (projectedThread != null && projectedThread.status !== 'running')) return;
         requestInFlight = true;
         try {
@@ -4133,11 +4143,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         }
       };
 
-      const timer = window.setInterval(() => void poll(), 350);
-      void poll();
+      const loop = createFlowerLivePollLoop({
+        poll: async () => {
+          const beforeCursor = cursor;
+          await pollOnce();
+          return { hadEvents: cursor > beforeCursor, hasMore: false };
+        },
+        active: stillCurrent,
+      });
       onCleanup(() => {
         disposed = true;
-        window.clearInterval(timer);
+        loop.dispose();
         if (sequence === companionLiveSequence) {
           companionLiveSequence += 1;
           setCompanionLiveThread(null);
@@ -5729,6 +5745,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       | 'inputRequestSubmit'
       | 'inputRequestRetry'
       | 'inputRequestAnswerRequired'
+      | 'inputRequestAnswerHidden'
       | 'inputRequestSubmitting'
       | 'inputRequestComposerPlaceholder'
       | 'inputRequestChoicePlaceholder',
@@ -7235,7 +7252,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return item.status !== 'success';
   };
   const activityItemVisible = (item: FlowerActivityItem): boolean => {
-    if (item.kind === 'control' && trimString(item.tool_name) === 'ask_user') return false;
+    if (
+      item.kind === 'control'
+      && trimString(item.tool_name) === 'ask_user'
+      && (item.status === 'pending' || item.status === 'running' || item.status === 'waiting')
+    ) return false;
     if (activityItemAwaitingApproval(item) && !activityItemHasVisiblePayload(item)) return false;
     return true;
   };
@@ -7668,28 +7689,44 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         </div>
       </Show>
       <For each={block.question.questions}>
-        {(question) => (
+        {(question) => {
+          const answer = () => block.question.answers.find((candidate) => candidate.question_id === question.id);
+          return (
           <div class="flower-activity-question-item">
             <div class="flower-activity-question-text">{question.question}</div>
-            <Show when={question.choices.length > 0 || question.write_label}>
+            <Show
+              when={answer()}
+              fallback={<Show when={question.choices.length > 0 || question.write_label}>
+                <div class="flower-activity-question-choices">
+                  <For each={question.choices}>
+                    {(choice) => (
+                      <span class="flower-activity-question-choice">
+                        <span>{choice.label}</span>
+                        <Show when={choice.description}>
+                          {(description) => <small>{description()}</small>}
+                        </Show>
+                      </span>
+                    )}
+                  </For>
+                  <Show when={question.write_label}>
+                    {(label) => <span class="flower-activity-question-choice">{label()}</span>}
+                  </Show>
+                </div>
+              </Show>}
+            >
+              {(resolved) => (
               <div class="flower-activity-question-choices">
-                <For each={question.choices}>
-                  {(choice) => (
-                    <span class="flower-activity-question-choice">
-                      <span>{choice.label}</span>
-                      <Show when={choice.description}>
-                        {(description) => <small>{description()}</small>}
-                      </Show>
-                    </span>
-                  )}
-                </For>
-                <Show when={question.write_label}>
-                  {(label) => <span class="flower-activity-question-choice">{label()}</span>}
-                </Show>
+                <span class="flower-activity-question-choice flower-activity-question-answer">
+                  {resolved().redacted
+                    ? chatCopyValue('inputRequestAnswerHidden', 'Answer hidden')
+                    : resolved().values.join(', ')}
+                </span>
               </div>
+              )}
             </Show>
           </div>
-        )}
+          );
+        }}
       </For>
       <Show when={block.question.questions.length === 0}>
         <div class="flower-activity-question-empty">Waiting for user input.</div>
@@ -7972,7 +8009,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const open = disclosureControl.open;
     const subagentsDetail = createMemo(() => subagentsDetailForPresentation(presentation()));
     const hasDetails = createMemo(() => presentation().detailBlocks.length > 0);
-    const expandable = createMemo(() => hasDetails() && !activityItemAwaitingApproval(item()));
+    const expandable = createMemo(() => hasDetails());
     let toggleButtonRef: HTMLButtonElement | undefined;
     let detailPanelRef: HTMLDivElement | undefined;
     const disclosure = createFlowerActivityDisclosureMotion(
@@ -8001,7 +8038,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         ? value.ended_at_unix_ms - value.started_at_unix_ms
         : undefined) ?? timeline().summary.duration_ms);
     });
-    const showStatus = createMemo(() => !subagentsDetail());
     return (
       <div
         class={cn('flower-activity-inline-row', `flower-activity-inline-row-${displayStatus()}`, subagentsDetail() && 'flower-activity-inline-row-subagents')}
@@ -8028,11 +8064,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             </span>
             <Show when={duration()}>
               {(value) => <span class="flower-activity-inline-duration">{value()}</span>}
-            </Show>
-            <Show when={showStatus()}>
-              <span class={cn('flower-activity-inline-status', `flower-activity-inline-status-${displayStatus()}`)}>
-                {copy().chat.toolStatuses[displayStatus()]}
-              </span>
             </Show>
             <Show when={expandable()}>
               <ChevronDown class={cn('flower-activity-inline-chevron h-3.5 w-3.5', open() && 'flower-activity-inline-chevron-open')} />

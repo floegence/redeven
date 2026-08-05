@@ -1270,8 +1270,12 @@ describe('main routing', () => {
     expect(routeSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/runs\\/[^/]+\\/terminal\\/[^/]+\\/read$/u");
 	expect(routeSrc).toContain('runtimeFlowerTerminalReadQuery');
 	expect(routeSrc).toContain("'after_seq'");
-	expect(routeSrc).not.toContain("'wait_ms'");
+	expect(routeSrc).toContain("'wait_ms'");
 	expect(routeSrc).not.toContain("'max_bytes'");
+	const terminalReadQueryStart = routeSrc.indexOf('const runtimeFlowerTerminalReadQuery');
+	const terminalReadQueryEnd = routeSrc.indexOf('const runtimeFlowerAttachmentCapabilityQuery', terminalReadQueryStart);
+	const terminalReadQuerySrc = routeSrc.slice(terminalReadQueryStart, terminalReadQueryEnd);
+	expect(terminalReadQuerySrc).not.toContain("'wait_ms'");
     expect(routeSrc).not.toContain('terminal\\/[^/]+\\/write');
     expect(routeSrc).not.toContain('terminal\\/[^/]+\\/terminate');
     expect(routeSrc).not.toContain("startsWith('/_redeven_proxy/api/ai/threads')");

@@ -3951,6 +3951,7 @@
       "inputRequestSubmit": "Fortfahren",
       "inputRequestRetry": "Wiederholen",
       "inputRequestAnswerRequired": "Beantworte den wartenden Hinweis, bevor du fortfährst.",
+      "inputRequestAnswerHidden": "Antwort ausgeblendet",
       "inputRequestSubmitting": "Wird gesendet…",
       "inputRequestComposerPlaceholder": "Antworte, um diese Unterhaltung fortzusetzen.",
       "inputRequestChoicePlaceholder": "Wähle eine Option zum Fortfahren.",

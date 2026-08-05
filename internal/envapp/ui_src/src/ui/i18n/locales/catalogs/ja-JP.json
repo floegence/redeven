@@ -3951,6 +3951,7 @@
       "inputRequestSubmit": "続行",
       "inputRequestRetry": "再試行",
       "inputRequestAnswerRequired": "続行する前に待機中のプロンプトへ回答してください。",
+      "inputRequestAnswerHidden": "回答は非表示です",
       "inputRequestSubmitting": "送信中…",
       "inputRequestComposerPlaceholder": "返信してこの会話を続行します。",
       "inputRequestChoicePlaceholder": "続行するオプションを選択してください。",

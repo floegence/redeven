@@ -297,11 +297,14 @@ describe('Flower activity disclosure browser behavior', () => {
     expect(detailMounts).toBe(0);
   });
 
-  it('opens sustained activity at real height and holds completion before closing', async () => {
+  it('opens sustained activity on demand and preserves the manual choice through completion', async () => {
     await page.viewport(1440, 900);
     const { runtime, complete } = renderDisclosureThread();
     const button = await selectDisclosureThread(runtime);
 
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+    expect(runtime.querySelector('.flower-activity-inline-details')).toBeNull();
+    button.click();
     await waitFor(() => button.getAttribute('aria-expanded') === 'true');
     await waitFor(
       () => runtime.querySelector('.flower-activity-inline-details')?.getAttribute('data-state') === 'open',
@@ -319,8 +322,9 @@ describe('Flower activity disclosure browser behavior', () => {
 
     await complete();
     expect(button.getAttribute('aria-expanded')).toBe('true');
-    await wait(1050);
+    await wait(1350);
     expect(button.getAttribute('aria-expanded')).toBe('true');
+    button.click();
     await waitFor(() => button.getAttribute('aria-expanded') === 'false');
     expect(runtime.querySelector('.flower-activity-inline-details')?.getAttribute('data-state')).toBe('closing');
     await waitFor(() => runtime.querySelector('.flower-activity-inline-details') === null);
@@ -377,6 +381,8 @@ describe('Flower activity disclosure browser behavior', () => {
       })),
     });
     const button = await selectDisclosureThread(runtime);
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+    button.click();
     await waitFor(() => button.getAttribute('aria-expanded') === 'true');
     await waitFor(
       () => runtime.querySelector('.flower-activity-inline-details')?.getAttribute('data-state') === 'open',
@@ -425,8 +431,9 @@ describe('Flower activity disclosure browser behavior', () => {
     expect(runtime.querySelector('.flower-activity-terminal-output')).toBe(output);
     expect(output.scrollHeight - output.scrollTop - output.clientHeight).toBeLessThanOrEqual(2);
 
-    await wait(1050);
+    await wait(1350);
     expect(button.getAttribute('aria-expanded')).toBe('true');
+    button.click();
     await waitFor(() => button.getAttribute('aria-expanded') === 'false');
     expect(runtime.querySelector('.flower-activity-inline-details')?.getAttribute('data-state')).toBe('closing');
     await waitFor(() => runtime.querySelector('.flower-activity-inline-details') === null);
@@ -580,11 +587,13 @@ describe('Flower activity disclosure browser behavior', () => {
     await waitFor(() => button.getAttribute('aria-expanded') === 'true');
   });
 
-  it.each(disclosureInterventions)('keeps automatically opened detail pinned after %s intervention', async (intervention) => {
+  it.each(disclosureInterventions)('keeps manually opened detail pinned after %s intervention', async (intervention) => {
     await page.viewport(1440, 900);
     const { runtime, complete } = renderDisclosureThread();
     const button = await selectDisclosureThread(runtime);
 
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+    button.click();
     await waitFor(
       () => runtime.querySelector('.flower-activity-inline-details')?.getAttribute('data-state') === 'open',
       5_000,
@@ -628,6 +637,8 @@ describe('Flower activity disclosure browser behavior', () => {
       readTerminalProcess,
     });
     const button = await selectDisclosureThread(runtime);
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+    button.click();
     await waitFor(() => button.getAttribute('aria-expanded') === 'true');
     await waitFor(() => runtime.textContent?.includes('stream line 2') === true);
     await waitFor(() => readTerminalProcess.mock.calls.length >= 2);
