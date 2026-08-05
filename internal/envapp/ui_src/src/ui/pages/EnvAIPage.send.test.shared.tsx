@@ -342,7 +342,16 @@ vi.mock('../protocol/redeven_v1', () => ({
 vi.mock('./EnvContext', () => ({
   useEnvContext: () => ({
     env_id: () => 'env-1',
-    env: () => ({ name: 'Demo Env' }),
+    env: () => ({
+      name: 'Demo Env',
+      permissions: {
+        can_read: true,
+        can_write: true,
+        can_execute: true,
+        can_admin: true,
+        is_owner: true,
+      },
+    }),
     aiReadinessController: {
       snapshot: () => ({ state: 'ready', reason_code: '', retryable: false, safe_to_retry: false, committed: false, rolled_back: false }),
       loading: () => false,
@@ -469,8 +478,15 @@ async function renderPage() {
       draftCoordinator={createFlowerComposerDraftCoordinator()}
     />
   ), host);
-  await flush();
-  await flush();
+  // Settings, handler resolution, and thread bootstrap now settle through
+  // separate async boundaries. Wait for the observable model control instead
+  // of assuming a fixed number of microtasks.
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    await flush();
+    const modelLabel = host.querySelector('.flower-model-reasoning-model-label')?.textContent?.trim();
+    const submitButton = host.querySelector<HTMLButtonElement>('button.flower-composer-submit');
+    if (modelLabel && submitButton && !submitButton.disabled) break;
+  }
   return { host, dispose };
 }
 
