@@ -2935,7 +2935,7 @@ func TestServer_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 	}
 }
 
-func TestServer_AIThreadLiveEventsIncludeReadStatus(t *testing.T) {
+func TestServer_AILegacyThreadLiveEventsRouteIsRemoved(t *testing.T) {
 	t.Parallel()
 
 	dist := fstest.MapFS{
@@ -2991,87 +2991,9 @@ func TestServer_AIThreadLiveEventsIncludeReadStatus(t *testing.T) {
 		origin,
 		"",
 	)
-	if emptyLive.Code != http.StatusOK {
-		t.Fatalf("empty live events status=%d body=%s", emptyLive.Code, emptyLive.Body.String())
+	if emptyLive.Code != http.StatusNotFound {
+		t.Fatalf("legacy live events status=%d body=%s", emptyLive.Code, emptyLive.Body.String())
 	}
-	var emptyLiveResponse struct {
-		Data struct {
-			Events []json.RawMessage `json:"events"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(emptyLive.Body.Bytes(), &emptyLiveResponse); err != nil {
-		t.Fatalf("unmarshal empty live events response: %v", err)
-	}
-	if emptyLiveResponse.Data.Events == nil || len(emptyLiveResponse.Data.Events) != 0 {
-		t.Fatalf("empty live events=%#v, want non-nil empty array", emptyLiveResponse.Data.Events)
-	}
-	invalidWait := performServerRequest(
-		srv,
-		http.MethodGet,
-		"/_redeven_proxy/api/ai/threads/missing_live_events_thread/live/events?after_seq=0&limit=10&wait_ms=30001",
-		origin,
-		"",
-	)
-	if invalidWait.Code != http.StatusBadRequest || !strings.Contains(invalidWait.Body.String(), "invalid wait_ms") {
-		t.Fatalf("invalid live wait status=%d body=%s", invalidWait.Code, invalidWait.Body.String())
-	}
-	initialDetail := performServerRequest(srv, http.MethodGet, "/_redeven_proxy/api/ai/threads/"+url.PathEscape(thread.ThreadID), origin, "")
-	if initialDetail.Code != http.StatusOK {
-		t.Fatalf("initial detail status=%d body=%s", initialDetail.Code, initialDetail.Body.String())
-	}
-	seedFloretThreadTurn(t, stateDir, thread.ThreadID, "turn_live_read_2", "run_live_read_2", "Final", "Final response")
-	if err := aiSvc.RenameThread(context.Background(), &meta, thread.ThreadID, "Live events read state updated"); err != nil {
-		t.Fatalf("RenameThread: %v", err)
-	}
-
-	rr := performServerRequest(
-		srv,
-		http.MethodGet,
-		"/_redeven_proxy/api/ai/threads/"+url.PathEscape(thread.ThreadID)+"/live/events?after_seq=0&limit=10",
-		origin,
-		"",
-	)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("live events status=%d body=%s", rr.Code, rr.Body.String())
-	}
-	var resp struct {
-		Data struct {
-			Events []struct {
-				Kind    string          `json:"kind"`
-				Payload json.RawMessage `json:"payload"`
-			} `json:"events"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("unmarshal live events response: %v", err)
-	}
-	for _, event := range resp.Data.Events {
-		if event.Kind != "thread.patched" {
-			continue
-		}
-		var payload struct {
-			Patch struct {
-				ReadStatus struct {
-					IsUnread bool `json:"is_unread"`
-					Snapshot struct {
-						ActivityRevision  int64  `json:"activity_revision"`
-						ActivitySignature string `json:"activity_signature"`
-					} `json:"snapshot"`
-				} `json:"read_status"`
-			} `json:"patch"`
-		}
-		if err := json.Unmarshal(event.Payload, &payload); err != nil {
-			t.Fatalf("unmarshal thread patch payload: %v", err)
-		}
-		if !payload.Patch.ReadStatus.IsUnread {
-			t.Fatalf("thread.patched read_status.is_unread=false, want true")
-		}
-		if payload.Patch.ReadStatus.Snapshot.ActivityRevision <= 0 || strings.TrimSpace(payload.Patch.ReadStatus.Snapshot.ActivitySignature) == "" {
-			t.Fatalf("thread.patched read_status snapshot not populated: %#v", payload.Patch.ReadStatus.Snapshot)
-		}
-		return
-	}
-	t.Fatalf("events=%#v, want thread.patched with read_status", resp.Data.Events)
 }
 
 func TestServer_AIThreadForkDecodesBodyStrictly(t *testing.T) {

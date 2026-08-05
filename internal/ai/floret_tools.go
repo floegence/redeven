@@ -254,6 +254,7 @@ func floretRunContextForIDs(ctx context.Context, base *run, rawRunID string, raw
 		ResolveProviderKey:    base.resolveProviderKey,
 		ResolveWebSearchKey:   base.resolveWebSearchKey,
 		DesktopModelSource:    base.desktopModelSource,
+		LiveMetrics:           base.liveMetrics,
 		RunID:                 runID,
 		ChannelID:             base.channelID,
 		EndpointID:            base.endpointID,

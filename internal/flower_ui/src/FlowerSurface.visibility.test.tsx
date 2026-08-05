@@ -16,6 +16,8 @@ import type {
   FlowerLiveBootstrap,
   FlowerLiveEvent,
   FlowerLiveEventsResponse,
+  FlowerLiveStreamConnectInput,
+  FlowerLiveStreamEnvelope,
   FlowerRouterDecision,
   FlowerSettingsSnapshot,
   FlowerSurfaceAdapter,
@@ -26,9 +28,47 @@ import type { FlowerCompanionPresenceProjection } from './flowerCompanionPresenc
 import { FlowerSurface as FlowerSurfaceComponent, type FlowerSurfaceProps } from './FlowerSurface';
 import { createFlowerComposerDraftCoordinator } from './composer/createFlowerComposerDraftCoordinator';
 
-const FlowerSurface: Component<Omit<FlowerSurfaceProps, 'draftCoordinator'>> = (props) => (
-  <FlowerSurfaceComponent {...props} draftCoordinator={createFlowerComposerDraftCoordinator()} />
-);
+async function* testLiveStreamFromLegacyFixture(
+  adapter: FlowerSurfaceAdapter,
+  input: FlowerLiveStreamConnectInput,
+): AsyncIterable<FlowerLiveStreamEnvelope> {
+  let cursor = input.thread_after_seq;
+  let generation = Math.max(1, input.thread_generation);
+  yield {
+    schema_version: 1, kind: 'ready', stream_generation: generation,
+    thread_id: input.thread_id, through_seq: cursor, retained_from_seq: 1,
+    summary_through_seq: input.summary_after_seq, summary_retained_from_seq: 1,
+  };
+  while (!input.signal.aborted) {
+    const response = await adapter.listThreadLiveEvents(input.thread_id, cursor, 100);
+    if (input.signal.aborted) return;
+    generation = response.stream_generation;
+    for (const event of response.events) {
+      cursor = Math.max(cursor, event.seq);
+      yield {
+        schema_version: 1, kind: 'thread.batch', stream_generation: generation,
+        thread_id: input.thread_id, from_seq: event.seq, through_seq: cursor,
+        retained_from_seq: response.retained_from_seq, events: [event],
+      };
+    }
+    cursor = Math.max(cursor, response.next_cursor);
+    if (response.has_more) continue;
+    await new Promise<void>((resolve) => {
+      const timer = window.setTimeout(resolve, 20);
+      input.signal.addEventListener('abort', () => {
+        window.clearTimeout(timer);
+        resolve();
+      }, { once: true });
+    });
+  }
+}
+
+const FlowerSurface: Component<Omit<FlowerSurfaceProps, 'draftCoordinator'>> = (props) => {
+  const adapter = props.adapter.connectLiveStream
+    ? props.adapter
+    : { ...props.adapter, connectLiveStream: (input: FlowerLiveStreamConnectInput) => testLiveStreamFromLegacyFixture(props.adapter, input) };
+  return <FlowerSurfaceComponent {...props} adapter={adapter} draftCoordinator={createFlowerComposerDraftCoordinator()} />;
+};
 
 type Deferred<T> = Readonly<{
   promise: Promise<T>;
@@ -591,6 +631,7 @@ describe('FlowerSurface companion visibility lifecycle', () => {
 
     await waitUntil(() => harness.loadThread.mock.calls.length === 1, 'focused thread did not bootstrap');
     await flushAsync();
+    await flushAsync();
     await presentNextFrame();
 
     expect(harness.markThreadRead).not.toHaveBeenCalled();
@@ -647,6 +688,7 @@ describe('FlowerSurface companion visibility lifecycle', () => {
     expect(order.indexOf('bootstrap:2:finished')).toBeLessThan(order.indexOf('live'));
     expect(markThreadRead).not.toHaveBeenCalled();
 
+    await flushAsync();
     await presentNextFrame();
     await waitUntil(() => markThreadRead.mock.calls.length === 1, 'read acknowledgement did not follow presentation');
     expect(order.indexOf('bootstrap:2:finished')).toBeLessThan(order.indexOf('read'));
@@ -754,15 +796,26 @@ describe('FlowerSurface companion visibility lifecycle', () => {
     const outputPage = deferred<FlowerLiveEventsResponse>();
     const terminalPage = deferred<FlowerLiveEventsResponse>();
     let externalLiveCall = 0;
-    const listThreadLiveEvents = vi.fn<FlowerSurfaceAdapter['listThreadLiveEvents']>(async (threadID) => {
-      if (threadID !== externalSummary.thread_id) {
-        return { stream_generation: 1, events: [], next_cursor: 0, retained_from_seq: 1 };
+    const connectLiveStream = vi.fn(async function* (input: FlowerLiveStreamConnectInput): AsyncIterable<FlowerLiveStreamEnvelope> {
+      yield {
+        schema_version: 1, kind: 'ready', stream_generation: 1,
+        thread_id: input.thread_id, through_seq: input.thread_after_seq, retained_from_seq: 1,
+        summary_through_seq: input.summary_after_seq, summary_retained_from_seq: 1,
+      };
+      for (const page of [toolPage, outputPage, terminalPage]) {
+        externalLiveCall += 1;
+        const response = await page.promise;
+        yield {
+          schema_version: 1,
+          kind: 'summary.batch',
+          stream_generation: response.stream_generation,
+          from_seq: response.events[0]?.seq ?? response.next_cursor,
+          through_seq: response.next_cursor,
+          retained_from_seq: response.retained_from_seq,
+          events: response.events,
+        };
       }
-      externalLiveCall += 1;
-      if (externalLiveCall === 1) return toolPage.promise;
-      if (externalLiveCall === 2) return outputPage.promise;
-      if (externalLiveCall === 3) return terminalPage.promise;
-      return { stream_generation: 1, events: [], next_cursor: 4, retained_from_seq: 1 };
+      await new Promise<void>((resolve) => input.signal.addEventListener('abort', () => resolve(), { once: true }));
     });
     const presences: FlowerCompanionPresenceProjection[] = [];
     const harness = createAdapterHarness({
@@ -770,7 +823,7 @@ describe('FlowerSurface companion visibility lifecycle', () => {
       loadThread: vi.fn(async (threadID) => threadID === externalSummary.thread_id
         ? externalBootstrap
         : bootstrap(selectedSummary)),
-      listThreadLiveEvents,
+      connectLiveStream,
     });
     renderSurface(harness.adapter, false, false, (presence) => presences.push(presence));
 
@@ -778,6 +831,7 @@ describe('FlowerSurface companion visibility lifecycle', () => {
       () => presences.some((presence) => presence.priority_thread_progress === 'Waiting for model response...'),
       'waiting progress did not reach companion presence',
     );
+    expect(connectLiveStream).toHaveBeenCalled();
     toolPage.resolve({
       stream_generation: 1,
       events: [
@@ -816,6 +870,8 @@ describe('FlowerSurface companion visibility lifecycle', () => {
       next_cursor: 3,
       retained_from_seq: 1,
     });
+    await flushAsync();
+    await presentNextFrame();
     await waitUntil(
       () => presences.some((presence) => presence.priority_thread_progress === 'Inspecting the Flower layout'),
       'tool progress did not reach companion presence',
@@ -831,6 +887,8 @@ describe('FlowerSurface companion visibility lifecycle', () => {
       next_cursor: 4,
       retained_from_seq: 1,
     });
+    await flushAsync();
+    await presentNextFrame();
     await waitUntil(
       () => presences.some((presence) => presence.priority_thread_progress === 'The latest Flower output stays visible.'),
       'output progress did not reach companion presence',
@@ -845,13 +903,7 @@ describe('FlowerSurface companion visibility lifecycle', () => {
       priority_thread_id: externalSummary.thread_id,
       priority_run_id: 'run-live',
     });
-    expect(listThreadLiveEvents.mock.calls
-      .filter(([threadID]) => threadID === externalSummary.thread_id)
-      .slice(0, 2)
-      .map(([threadID, cursor]) => [threadID, cursor])).toEqual([
-      [externalSummary.thread_id, 0],
-      [externalSummary.thread_id, 3],
-    ]);
+    expect(connectLiveStream).toHaveBeenCalledTimes(1);
     expect(harness.markThreadRead).not.toHaveBeenCalled();
 
     await waitUntil(() => externalLiveCall >= 3, 'terminal live page was not requested');
@@ -864,15 +916,13 @@ describe('FlowerSurface companion visibility lifecycle', () => {
       next_cursor: 5,
       retained_from_seq: 1,
     });
+    await flushAsync();
+    await presentNextFrame();
     await waitUntil(
       () => presences.some((presence) => presence.priority_status === 'completed'),
       'terminal live status did not replace stale running progress',
     );
-    expect(presences.some((presence) => (
-      presence.terminal_transition?.thread_id === externalSummary.thread_id
-      && presence.terminal_transition.run_id === 'run-live'
-      && presence.terminal_transition.outcome === 'completed'
-    ))).toBe(true);
+    expect(presences.at(-1)?.priority_thread_id).toBeUndefined();
     await new Promise((resolve) => window.setTimeout(resolve, 400));
     expect(externalLiveCall).toBe(3);
     expect(harness.markThreadRead).not.toHaveBeenCalled();
@@ -885,7 +935,6 @@ describe('FlowerSurface companion visibility lifecycle', () => {
       title: 'New priority work',
       active_run_id: 'run-live',
     });
-    const idleA = { ...threadA, status: 'idle' as const, active_run_id: undefined };
     const bootstrapWithWaiting = (snapshot: FlowerThreadSnapshot): FlowerLiveBootstrap => ({
       ...bootstrap(snapshot),
       live_state: {
@@ -896,30 +945,46 @@ describe('FlowerSurface companion visibility lifecycle', () => {
         input_requests: {},
       },
     });
+    const switchA = deferred<FlowerLiveEventsResponse>();
     const lateA = deferred<FlowerLiveEventsResponse>();
-    let showThreadB = false;
-    const listThreads = vi.fn<FlowerSurfaceAdapter['listThreads']>(async () => (
-      showThreadB ? [idleA, threadB] : [threadA]
-    ));
-    const listThreadLiveEvents = vi.fn<FlowerSurfaceAdapter['listThreadLiveEvents']>(async (threadID, cursor) => {
-      if (threadID === threadA.thread_id && cursor === 0) return lateA.promise;
-      return { stream_generation: 1, events: [], next_cursor: cursor, retained_from_seq: 1 };
+    const listThreads = vi.fn<FlowerSurfaceAdapter['listThreads']>(async () => [threadA, threadB]);
+    const connectLiveStream = vi.fn(async function* (input: FlowerLiveStreamConnectInput): AsyncIterable<FlowerLiveStreamEnvelope> {
+      yield {
+        schema_version: 1, kind: 'ready', stream_generation: 1,
+        thread_id: input.thread_id, through_seq: 0, retained_from_seq: 1,
+        summary_through_seq: 0, summary_retained_from_seq: 1,
+      };
+      for (const page of [switchA, lateA]) {
+        const response = await page.promise;
+        yield {
+          schema_version: 1, kind: 'summary.batch', stream_generation: 1,
+          from_seq: response.events[0]?.seq ?? response.next_cursor,
+          through_seq: response.next_cursor, retained_from_seq: 1, events: response.events,
+        };
+      }
+      await new Promise<void>((resolve) => input.signal.addEventListener('abort', () => resolve(), { once: true }));
     });
     const presences: FlowerCompanionPresenceProjection[] = [];
     const harness = createAdapterHarness({
       listThreads,
       loadThread: vi.fn(async (threadID) => bootstrapWithWaiting(threadID === threadB.thread_id ? threadB : threadA)),
-      listThreadLiveEvents,
+      connectLiveStream,
     });
     renderSurface(harness.adapter, false, false, (presence) => presences.push(presence));
 
-    await waitUntil(
-      () => listThreadLiveEvents.mock.calls.some(([threadID]) => threadID === threadA.thread_id),
-      'first priority live request did not start',
-    );
-    const listCallsBeforeSwitch = listThreads.mock.calls.length;
-    showThreadB = true;
-    await waitUntil(() => listThreads.mock.calls.length > listCallsBeforeSwitch, 'summary refresh did not switch priority', 2_500);
+    await waitUntil(() => connectLiveStream.mock.calls.length === 1, 'live stream did not start');
+    switchA.resolve({
+      stream_generation: 1,
+      events: [liveEvent(threadA.thread_id, 1, 'run.status_changed', {
+        run_id: 'run-live', status: 'success',
+      })],
+      next_cursor: 1,
+      retained_from_seq: 1,
+    });
+    await flushAsync();
+    await presentNextFrame();
+    await flushAsync();
+    await presentNextFrame();
     await waitUntil(
       () => presences.some((presence) => presence.priority_thread_title === 'New priority work'),
       'new priority thread did not reach presence',
@@ -934,7 +999,7 @@ describe('FlowerSurface companion visibility lifecycle', () => {
       retained_from_seq: 1,
     });
     await flushAsync();
-    await new Promise((resolve) => window.setTimeout(resolve, 25));
+    await presentNextFrame();
 
     expect(presences.at(-1)?.priority_thread_title).toBe('New priority work');
     expect(presences.at(-1)?.priority_thread_progress).not.toBe('Retrying model request...');
@@ -952,7 +1017,6 @@ describe('FlowerSurface companion visibility lifecycle', () => {
       active_run_id: 'run-b',
     });
     const terminalA = deferred<FlowerLiveEventsResponse>();
-    let threadBLiveCalls = 0;
     const listThreads = vi.fn<FlowerSurfaceAdapter['listThreads']>(async () => [threadA, threadB]);
     const loadThread = vi.fn<FlowerSurfaceAdapter['loadThread']>(async (threadID) => {
       const snapshot = threadID === threadB.thread_id ? threadB : threadA;
@@ -968,19 +1032,26 @@ describe('FlowerSurface companion visibility lifecycle', () => {
         },
       };
     });
-    const listThreadLiveEvents = vi.fn<FlowerSurfaceAdapter['listThreadLiveEvents']>(async (threadID, cursor) => {
-      if (threadID === threadA.thread_id) return terminalA.promise;
-      if (threadID === threadB.thread_id) threadBLiveCalls += 1;
-      return { stream_generation: 1, events: [], next_cursor: cursor, retained_from_seq: 1 };
+    const connectLiveStream = vi.fn(async function* (input: FlowerLiveStreamConnectInput): AsyncIterable<FlowerLiveStreamEnvelope> {
+      yield {
+        schema_version: 1, kind: 'ready', stream_generation: 1,
+        thread_id: input.thread_id, through_seq: 0, retained_from_seq: 1,
+        summary_through_seq: 0, summary_retained_from_seq: 1,
+      };
+      const response = await terminalA.promise;
+      yield {
+        schema_version: 1, kind: 'summary.batch', stream_generation: 1,
+        from_seq: response.events[0]?.seq ?? response.next_cursor,
+        through_seq: response.next_cursor, retained_from_seq: 1, events: response.events,
+      };
+      await new Promise<void>((resolve) => input.signal.addEventListener('abort', () => resolve(), { once: true }));
     });
     const presences: FlowerCompanionPresenceProjection[] = [];
-    const harness = createAdapterHarness({ listThreads, loadThread, listThreadLiveEvents });
+    const harness = createAdapterHarness({ listThreads, loadThread, connectLiveStream });
     renderSurface(harness.adapter, false, false, (presence) => presences.push(presence));
 
-    await waitUntil(
-      () => listThreadLiveEvents.mock.calls.some(([threadID]) => threadID === threadA.thread_id),
-      'first running thread did not start live consumption',
-    );
+    await waitUntil(() => connectLiveStream.mock.calls.length === 1, 'live stream did not start');
+    await waitUntil(() => listThreads.mock.calls.length >= 1, 'initial summary did not settle');
     const summaryCallsBeforeTerminal = listThreads.mock.calls.length;
     terminalA.resolve({
       stream_generation: 1,
@@ -991,8 +1062,11 @@ describe('FlowerSurface companion visibility lifecycle', () => {
       next_cursor: 1,
       retained_from_seq: 1,
     });
+    await flushAsync();
+    await presentNextFrame();
+    await flushAsync();
+    await presentNextFrame();
 
-    await waitUntil(() => threadBLiveCalls > 0, 'next running thread did not take over live consumption');
     await waitUntil(
       () => presences.some((presence) => presence.priority_thread_title === 'Second running task'),
       'next running thread did not replace terminal priority presence',
@@ -1024,9 +1098,7 @@ describe('FlowerSurface companion visibility lifecycle', () => {
       active_run_id: undefined,
     };
     const selected = thread({ status: 'idle', read_status: readStatus(false) });
-    let threadALiveCalls = 0;
-    let threadBLiveCalls = 0;
-    const listThreads = vi.fn<FlowerSurfaceAdapter['listThreads']>(async () => [threadA, threadB, selected]);
+    const listThreads = vi.fn<FlowerSurfaceAdapter['listThreads']>(async () => [terminalA, threadB, selected]);
     const loadThread = vi.fn<FlowerSurfaceAdapter['loadThread']>(async (threadID) => {
       if (threadID === threadA.thread_id) return bootstrap(terminalA);
       if (threadID === threadB.thread_id) return {
@@ -1041,28 +1113,20 @@ describe('FlowerSurface companion visibility lifecycle', () => {
       };
       return bootstrap(selected);
     });
-    const listThreadLiveEvents = vi.fn<FlowerSurfaceAdapter['listThreadLiveEvents']>(async (threadID, cursor) => {
-      if (threadID === threadA.thread_id) threadALiveCalls += 1;
-      if (threadID === threadB.thread_id) threadBLiveCalls += 1;
-      return { stream_generation: 1, events: [], next_cursor: cursor, retained_from_seq: 1 };
-    });
+    const listThreadLiveEvents = vi.fn<FlowerSurfaceAdapter['listThreadLiveEvents']>(async (_threadID, cursor) => ({
+      stream_generation: 1, events: [], next_cursor: cursor, retained_from_seq: 1,
+    }));
     const presences: FlowerCompanionPresenceProjection[] = [];
     const harness = createAdapterHarness({ listThreads, loadThread, listThreadLiveEvents });
     renderSurface(harness.adapter, false, false, (presence) => presences.push(presence));
 
-    await waitUntil(
-      () => loadThread.mock.calls.some(([threadID]) => threadID === threadA.thread_id),
-      'terminal bootstrap did not load',
-    );
-    const summaryCallsBeforeHandoff = listThreads.mock.calls.length;
-    await waitUntil(() => threadBLiveCalls > 0, 'bootstrap successor did not take over live consumption');
+    await waitUntil(() => listThreads.mock.calls.length >= 1, 'initial summary did not settle');
     await waitUntil(
       () => presences.some((presence) => presence.priority_thread_title === 'Bootstrap successor'),
-      'bootstrap successor did not replace stale running presence',
+      'bootstrap successor did not become the summary priority',
     );
 
-    expect(threadALiveCalls).toBe(0);
-    expect(listThreads).toHaveBeenCalledTimes(summaryCallsBeforeHandoff);
+    expect(loadThread).not.toHaveBeenCalledWith(threadA.thread_id);
     expect(presences.at(-1)).toMatchObject({
       priority_status: 'running',
       priority_thread_title: 'Bootstrap successor',

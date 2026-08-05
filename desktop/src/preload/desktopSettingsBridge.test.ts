@@ -37,6 +37,9 @@ describe('bootstrapDesktopSettingsBridge', () => {
     const [, bridge] = exposeInMainWorld.mock.calls[0] ?? [];
     expect(typeof bridge.save).toBe('function');
     expect(typeof bridge.requestRuntimeFlower).toBe('function');
+    expect(typeof bridge.startRuntimeFlowerStream).toBe('function');
+    expect(typeof bridge.cancelRuntimeFlowerStream).toBe('function');
+    expect(typeof bridge.subscribeRuntimeFlowerStream).toBe('function');
     expect(typeof bridge.prepareRuntimeFlowerAttachment).toBe('function');
     expect(typeof bridge.writeRuntimeFlowerAttachmentChunk).toBe('function');
     expect(typeof bridge.commitRuntimeFlowerAttachment).toBe('function');
@@ -55,6 +58,11 @@ describe('bootstrapDesktopSettingsBridge', () => {
       method: 'GET',
       path: '/_redeven_proxy/api/settings',
     });
+    await bridge.startRuntimeFlowerStream({
+      stream_id: 'stream-1',
+      path: '/_redeven_proxy/api/ai/flower/stream?thread_id=thread-1',
+    });
+    bridge.cancelRuntimeFlowerStream('stream-1');
     const digest = 'a'.repeat(64);
     await bridge.prepareRuntimeFlowerAttachment({
       operation_id: 'operation-1', upload_request_id: 'upload-1', staging_scope_id: 'staging-1', staging_capability: 'secret-1', source: 'uploaded_file',
@@ -81,27 +89,35 @@ describe('bootstrapDesktopSettingsBridge', () => {
       method: 'GET',
       path: '/_redeven_proxy/api/settings',
     });
-    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(3, 'redeven-desktop:runtime-flower-attachment-prepare', expect.objectContaining({
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(3, 'redeven-desktop:runtime-flower-stream-start', {
+      stream_id: 'stream-1',
+      path: '/_redeven_proxy/api/ai/flower/stream?thread_id=thread-1',
+    });
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(4, 'redeven-desktop:runtime-flower-attachment-prepare', expect.objectContaining({
       operation_id: 'operation-1',
     }));
-    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(4, 'redeven-desktop:runtime-flower-attachment-chunk', expect.objectContaining({
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(5, 'redeven-desktop:runtime-flower-attachment-chunk', expect.objectContaining({
       operation_id: 'operation-1', offset_bytes: 0,
     }));
-    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(5, 'redeven-desktop:runtime-flower-attachment-commit', { operation_id: 'operation-1' });
-    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(6, 'redeven-desktop:runtime-flower-attachment-cancel', { operation_id: 'operation-1' });
-    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(7, 'redeven-desktop:runtime-flower-attachment-preview', {
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(6, 'redeven-desktop:runtime-flower-attachment-commit', { operation_id: 'operation-1' });
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(7, 'redeven-desktop:runtime-flower-attachment-cancel', { operation_id: 'operation-1' });
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(8, 'redeven-desktop:runtime-flower-attachment-preview', {
       attachment_id: 'upl-preview-1', staging_scope_id: 'staging-1', staging_capability: 'secret-1', display_name: 'notes.txt',
     });
+    expect(ipcRendererSend).toHaveBeenCalledWith('redeven-desktop:runtime-flower-stream-cancel', 'stream-1');
     expect(ipcRendererSend).toHaveBeenCalledWith('redeven-desktop:cancel-settings');
     expect(Object.keys(bridge).sort()).toEqual([
       'cancel',
       'cancelRuntimeFlowerAttachment',
+      'cancelRuntimeFlowerStream',
       'commitRuntimeFlowerAttachment',
       'prepareRuntimeFlowerAttachment',
       'previewRuntimeFlowerAttachment',
       'requestRuntimeFlower',
       'save',
+      'startRuntimeFlowerStream',
       'subscribeRuntimeFlowerAttachmentProgress',
+      'subscribeRuntimeFlowerStream',
       'writeRuntimeFlowerAttachmentChunk',
     ]);
   });

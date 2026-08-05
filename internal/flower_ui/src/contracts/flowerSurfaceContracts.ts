@@ -926,6 +926,30 @@ export type FlowerLiveEventsResponse = Readonly<{
   retained_from_seq: number;
 }>;
 
+export type FlowerLiveStreamConnectInput = Readonly<{
+  thread_id: string;
+  thread_generation: number;
+  thread_after_seq: number;
+  summary_generation: number;
+  summary_after_seq: number;
+  signal: AbortSignal;
+}>;
+
+export type FlowerLiveStreamEnvelope = Readonly<{
+  schema_version: number;
+  kind: 'ready' | 'summary.batch' | 'thread.batch' | 'viewer.read_state' | 'resync_required';
+  stream_generation: number;
+  thread_id?: string;
+  from_seq?: number;
+  through_seq?: number;
+  retained_from_seq?: number;
+  summary_through_seq?: number;
+  summary_retained_from_seq?: number;
+  events?: readonly FlowerLiveEvent[];
+  read_status?: FlowerThreadReadStatus;
+  reason?: string;
+}>;
+
 type FlowerSubmitApprovalRequestBase = Readonly<{
   thread_id: string;
   action_id: string;
@@ -1305,12 +1329,15 @@ export type FlowerThreadDeleteOutcome = Readonly<{
 
 export type FlowerSurfaceAdapter = Readonly<{
   runtime: FlowerSurfaceRuntimeDescriptor;
+  canMutate?: boolean;
   loadSettings: () => Promise<FlowerSettingsSnapshot>;
   saveDefaultPermission: (permissionType: FlowerPermissionType) => Promise<FlowerSettingsSnapshot>;
   saveModelProfile: (draft: FlowerSettingsDraft) => Promise<FlowerSettingsSnapshot>;
   listThreads: () => Promise<readonly FlowerThreadSnapshot[]>;
   loadThread: (threadID: string) => Promise<FlowerLiveBootstrap>;
+  /** @deprecated Live product surfaces use connectLiveStream. */
   listThreadLiveEvents: (threadID: string, afterSeq: number, limit?: number) => Promise<FlowerLiveEventsResponse>;
+  connectLiveStream?: (input: FlowerLiveStreamConnectInput) => AsyncIterable<FlowerLiveStreamEnvelope>;
   loadSubagentDetail: (parentThreadID: string, childThreadID: string, afterOrdinal?: number, limit?: number) => Promise<FlowerSubagentDetail>;
   markThreadRead: (threadID: string, snapshot: FlowerThreadActivitySnapshot) => Promise<FlowerThreadReadStatus>;
   renameThread?: (threadID: string, title: string) => Promise<FlowerLiveBootstrap>;

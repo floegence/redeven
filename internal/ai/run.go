@@ -89,6 +89,7 @@ type runOptions struct {
 
 	WebFetchHTTPClient *http.Client
 	WebFetchResolver   webFetchResolver
+	LiveMetrics        *flowerLiveMetrics
 }
 
 type run struct {
@@ -108,6 +109,7 @@ type run struct {
 	resolveProviderKey  func(providerID string) (string, bool, error)
 	resolveWebSearchKey func(providerID string) (string, bool, error)
 	desktopModelSource  *desktopModelSourceClient
+	liveMetrics         *flowerLiveMetrics
 
 	id                 string // Floret canonical RunID; empty before durable admission.
 	executionKey       string
@@ -196,12 +198,14 @@ type run struct {
 	activityFileActionSeq    int64
 	waitingPrompt            *RequestUserInputPrompt
 
-	muFloretProjection      sync.Mutex
-	floretProjectionOrdinal map[string]int64
-	muFloretIdentity        sync.Mutex
-	floretEventIdentity     floretRuntimeEventIdentity
-	muFloretContract        sync.Mutex
-	floretContractErr       error
+	muFloretProjection         sync.Mutex
+	floretProjectionOrdinal    map[string]int64
+	floretProjectionByKey      map[string]flruntime.ThreadTurnProjection
+	floretProjectionDeltaByKey map[string]flruntime.ThreadTurnProjection
+	muFloretIdentity           sync.Mutex
+	floretEventIdentity        floretRuntimeEventIdentity
+	muFloretContract           sync.Mutex
+	floretContractErr          error
 
 	muPendingCommand         sync.Mutex
 	pendingCommandID         string
@@ -448,6 +452,7 @@ func newRun(opts runOptions) *run {
 		resolveProviderKey:          opts.ResolveProviderKey,
 		resolveWebSearchKey:         opts.ResolveWebSearchKey,
 		desktopModelSource:          opts.DesktopModelSource,
+		liveMetrics:                 opts.LiveMetrics,
 		id:                          runID,
 		executionKey:                executionKey,
 		channelID:                   strings.TrimSpace(opts.ChannelID),

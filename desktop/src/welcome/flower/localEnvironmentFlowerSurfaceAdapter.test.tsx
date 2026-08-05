@@ -11,6 +11,7 @@ import {
   type DesktopSettingsBridge,
 } from './localEnvironmentFlowerSurfaceAdapter';
 import type { RuntimeFlowerRequest } from '../../shared/runtimeFlowerIPC';
+import type { RuntimeFlowerStreamEvent, RuntimeFlowerStreamRequest } from '../../shared/runtimeFlowerIPC';
 import {
   parseRuntimeFlowerJSON,
   requestRuntimeFlowerHTTP,
@@ -140,6 +141,9 @@ function bridgeFor(handler: (request: RuntimeFlowerRequest) => unknown | Promise
 
 function attachmentBridgeStubs() {
   return {
+    startRuntimeFlowerStream: vi.fn(async () => ({ ok: true as const, status: 200, content_type: 'text/event-stream' })),
+    cancelRuntimeFlowerStream: vi.fn(),
+    subscribeRuntimeFlowerStream: vi.fn(() => () => undefined),
     prepareRuntimeFlowerAttachment: vi.fn(async () => ({ ok: false, message: 'not configured' })),
     writeRuntimeFlowerAttachmentChunk: vi.fn(async () => ({ ok: false, message: 'not configured' })),
     commitRuntimeFlowerAttachment: vi.fn(async () => ({ ok: false, failureKind: 'local' as const })),
@@ -150,30 +154,57 @@ function attachmentBridgeStubs() {
 }
 
 describe('Local Environment Flower surface adapter', () => {
-  it('uses bounded server-side waiting for live events', async () => {
-    const requestRuntimeFlower = vi.fn(async () => ({
-      ok: true as const,
-      data: {
-        stream_generation: 1,
-        events: [],
-        next_cursor: 7,
-        retained_from_seq: 1,
-      },
-    }));
+  it('streams live events through Desktop IPC without the removed long-poll route', async () => {
+    let streamListener: ((event: RuntimeFlowerStreamEvent) => void) | undefined;
+    const startRuntimeFlowerStream = vi.fn(async (request: RuntimeFlowerStreamRequest) => {
+      queueMicrotask(() => {
+        const data = JSON.stringify({
+          schema_version: 1,
+          kind: 'ready',
+          stream_generation: 2,
+          thread_id: 'thread_live',
+          through_seq: 7,
+          retained_from_seq: 1,
+          summary_through_seq: 8,
+          summary_retained_from_seq: 1,
+        });
+        streamListener?.({ stream_id: request.stream_id, kind: 'chunk', chunk: new TextEncoder().encode(`data: ${data}\n\n`) });
+        streamListener?.({ stream_id: request.stream_id, kind: 'end' });
+      });
+      return { ok: true as const, status: 200, content_type: 'text/event-stream' };
+    });
     const bridge: DesktopSettingsBridge = {
       ...attachmentBridgeStubs(),
       save: vi.fn(async () => ({ ok: true as const, snapshot: {} as never })),
-      requestRuntimeFlower,
+      requestRuntimeFlower: vi.fn(),
+      startRuntimeFlowerStream,
+      subscribeRuntimeFlowerStream: vi.fn((listener) => {
+        streamListener = listener;
+        return () => { streamListener = undefined; };
+      }),
       cancel: vi.fn(),
     };
     const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
+    const controller = new AbortController();
+    const frames = [];
+    for await (const frame of adapter.connectLiveStream!({
+      thread_id: 'thread_live', thread_generation: 2, thread_after_seq: 7,
+      summary_generation: 4, summary_after_seq: 8, signal: controller.signal,
+    })) frames.push(frame);
 
-    await adapter.listThreadLiveEvents('thread_live', 7, 25);
-
-    expect(requestRuntimeFlower).toHaveBeenCalledWith({
-      method: 'GET',
-      path: '/_redeven_proxy/api/ai/threads/thread_live/live/events?after_seq=7&limit=25&wait_ms=10000',
-    });
+    expect(frames).toEqual([{
+      schema_version: 1,
+      kind: 'ready',
+      stream_generation: 2,
+      thread_id: 'thread_live',
+      through_seq: 7,
+      retained_from_seq: 1,
+      summary_through_seq: 8,
+      summary_retained_from_seq: 1,
+    }]);
+    expect(startRuntimeFlowerStream).toHaveBeenCalledWith(expect.objectContaining({
+      path: '/_redeven_proxy/api/ai/flower/stream?thread_id=thread_live&thread_generation=2&thread_after_seq=7&summary_generation=4&summary_after_seq=8',
+    }));
   });
 
   it('creates and releases attachment staging scopes without putting capabilities in URL or body', async () => {

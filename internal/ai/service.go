@@ -140,11 +140,17 @@ type Service struct {
 	realtimeSummaryByEndpoint    map[string]map[*rpc.Server]struct{}
 	realtimeSummaryEndpointBySRV map[*rpc.Server]string
 
-	realtimeByThread     map[string]map[*rpc.Server]struct{} // <endpoint_id>:<thread_id> -> set(stream)
-	realtimeThreadBySRV  map[*rpc.Server]string
-	flowerLiveByThread   map[string]*flowerLiveThreadStream
-	flowerLiveRetired    map[string]struct{}
-	flowerLiveGeneration int64
+	realtimeByThread                map[string]map[*rpc.Server]struct{} // <endpoint_id>:<thread_id> -> set(stream)
+	realtimeThreadBySRV             map[*rpc.Server]string
+	flowerLiveByThread              map[string]*flowerLiveThreadStream
+	flowerLiveRetired               map[string]struct{}
+	flowerLiveGeneration            int64
+	flowerLiveSubscriberSeq         uint64
+	flowerLiveSubscribersByEndpoint map[string]int
+	flowerLiveSubscribers           map[uint64]*flowerLiveSubscriber
+	flowerLiveSummaryByEndpoint     map[string]*flowerLiveSummaryStream
+	flowerLiveQueuedBytes           int
+	flowerLiveMetrics               flowerLiveMetrics
 
 	uploadsDir string
 	threadsDB  *threadstore.Store
@@ -322,40 +328,43 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	svc := &Service{
-		log:                          logger,
-		stateDir:                     strings.TrimSpace(opts.StateDir),
-		agentHomeDir:                 agentHomeDir,
-		scope:                        scope,
-		shell:                        strings.TrimSpace(opts.Shell),
-		cfg:                          opts.Config,
-		desktopModelSource:           newDesktopModelSourceClient(logger),
-		persistOpTO:                  persistTO,
-		runMaxWallTime:               maxWall,
-		runIdleTimeout:               idleTO,
-		approvalTimeout:              approvalTO,
-		streamWriteTO:                streamWTO,
-		resolveProviderKey:           resolveProviderKey,
-		resolveWebSearchKey:          resolveWebSearchKey,
-		toolTargetPolicy:             toolTargetPolicy,
-		targetToolExecutor:           opts.TargetToolExecutor,
-		toolTargetPolicyForRun:       opts.ToolTargetPolicyForRun,
-		activeRunByTh:                make(map[string]string),
-		stopFinalizingByTh:           make(map[string]string),
-		idleCompactionByTh:           make(map[string]*idleThreadCompaction),
-		runs:                         make(map[string]*run),
-		subagentRuntimes:             make(map[string]*floretSubagentRuntime),
-		realtimeWriters:              make(map[*rpc.Server]*aiSinkWriter),
-		realtimeSummaryByEndpoint:    make(map[string]map[*rpc.Server]struct{}),
-		realtimeSummaryEndpointBySRV: make(map[*rpc.Server]string),
-		realtimeByThread:             make(map[string]map[*rpc.Server]struct{}),
-		realtimeThreadBySRV:          make(map[*rpc.Server]string),
-		flowerLiveByThread:           make(map[string]*flowerLiveThreadStream),
-		flowerLiveRetired:            make(map[string]struct{}),
-		flowerLiveGeneration:         newFlowerLiveGeneration(),
-		suppressQueuedDrainByTh:      make(map[string]bool),
-		uploadsDir:                   uploadsDir,
-		threadsDB:                    ts,
-		closeFloret:                  floretBootstrap.close,
+		log:                             logger,
+		stateDir:                        strings.TrimSpace(opts.StateDir),
+		agentHomeDir:                    agentHomeDir,
+		scope:                           scope,
+		shell:                           strings.TrimSpace(opts.Shell),
+		cfg:                             opts.Config,
+		desktopModelSource:              newDesktopModelSourceClient(logger),
+		persistOpTO:                     persistTO,
+		runMaxWallTime:                  maxWall,
+		runIdleTimeout:                  idleTO,
+		approvalTimeout:                 approvalTO,
+		streamWriteTO:                   streamWTO,
+		resolveProviderKey:              resolveProviderKey,
+		resolveWebSearchKey:             resolveWebSearchKey,
+		toolTargetPolicy:                toolTargetPolicy,
+		targetToolExecutor:              opts.TargetToolExecutor,
+		toolTargetPolicyForRun:          opts.ToolTargetPolicyForRun,
+		activeRunByTh:                   make(map[string]string),
+		stopFinalizingByTh:              make(map[string]string),
+		idleCompactionByTh:              make(map[string]*idleThreadCompaction),
+		runs:                            make(map[string]*run),
+		subagentRuntimes:                make(map[string]*floretSubagentRuntime),
+		realtimeWriters:                 make(map[*rpc.Server]*aiSinkWriter),
+		realtimeSummaryByEndpoint:       make(map[string]map[*rpc.Server]struct{}),
+		realtimeSummaryEndpointBySRV:    make(map[*rpc.Server]string),
+		realtimeByThread:                make(map[string]map[*rpc.Server]struct{}),
+		realtimeThreadBySRV:             make(map[*rpc.Server]string),
+		flowerLiveByThread:              make(map[string]*flowerLiveThreadStream),
+		flowerLiveRetired:               make(map[string]struct{}),
+		flowerLiveGeneration:            newFlowerLiveGeneration(),
+		flowerLiveSubscribersByEndpoint: make(map[string]int),
+		flowerLiveSubscribers:           make(map[uint64]*flowerLiveSubscriber),
+		flowerLiveSummaryByEndpoint:     make(map[string]*flowerLiveSummaryStream),
+		suppressQueuedDrainByTh:         make(map[string]bool),
+		uploadsDir:                      uploadsDir,
+		threadsDB:                       ts,
+		closeFloret:                     floretBootstrap.close,
 		floretReads: &floretReadCapabilities{
 			thread:    floretBootstrap.newThreadRead,
 			inventory: floretBootstrap.rootInventory,
@@ -564,10 +573,18 @@ func (s *Service) Close() error {
 	s.realtimeByThread = make(map[string]map[*rpc.Server]struct{})
 	s.realtimeThreadBySRV = make(map[*rpc.Server]string)
 	for _, stream := range s.flowerLiveByThread {
+		if stream.FlushTimer != nil {
+			stream.FlushTimer.Stop()
+			stream.FlushTimer = nil
+		}
 		closeFlowerLiveWaitersLocked(stream)
+		closeFlowerLiveThreadSubscribersLocked(s, stream, "service_stopped")
 	}
 	s.flowerLiveByThread = make(map[string]*flowerLiveThreadStream)
 	s.flowerLiveRetired = make(map[string]struct{})
+	s.flowerLiveSubscribersByEndpoint = make(map[string]int)
+	s.flowerLiveSubscribers = make(map[uint64]*flowerLiveSubscriber)
+	s.flowerLiveSummaryByEndpoint = make(map[string]*flowerLiveSummaryStream)
 	maintenanceStopCh := s.maintenanceStopCh
 	maintenanceDoneCh := s.maintenanceDoneCh
 	recoveryStopCh := s.recoveryStopCh
@@ -1979,6 +1996,7 @@ func (s *Service) prepareRun(meta *session.Meta, executionKey string, req RunSta
 		ResolveProviderKey:          s.resolveProviderKey,
 		ResolveWebSearchKey:         s.resolveWebSearchKey,
 		DesktopModelSource:          desktopModelSource,
+		LiveMetrics:                 &s.flowerLiveMetrics,
 		ExecutionKey:                executionKey,
 		ChannelID:                   channelID,
 		EndpointID:                  endpointID,

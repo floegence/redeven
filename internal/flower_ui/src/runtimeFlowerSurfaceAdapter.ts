@@ -29,6 +29,8 @@ import type {
   FlowerThreadSnapshot,
   FlowerLiveBootstrap,
   FlowerLiveEventsResponse,
+  FlowerLiveStreamConnectInput,
+  FlowerLiveStreamEnvelope,
 } from './contracts/flowerSurfaceContracts';
 import {
   mapFlowerReadStatus,
@@ -113,7 +115,9 @@ type RuntimeApprovalSubmitInput = RuntimeApprovalSubmitBase & Readonly<{
 export type FlowerRuntimeTransport = Readonly<{
   listThreads(): Promise<ListThreadsResponse>;
   loadThread(threadID: string): Promise<unknown>;
+  /** @deprecated Live product surfaces use connectLiveStream. */
   listThreadLiveEvents(threadID: string, afterSeq: number, limit: number): Promise<unknown>;
+  connectLiveStream?: (input: FlowerLiveStreamConnectInput) => AsyncIterable<unknown>;
   loadSubagentDetail(parentThreadID: string, childThreadID: string, afterOrdinal: number, limit: number): Promise<LoadSubagentDetailResponse>;
   readTerminalProcess?(runID: string, processID: string, input: { after_seq: number }): Promise<FlowerTerminalProcessSnapshot>;
   markThreadRead(threadID: string, input: MarkThreadReadInput): Promise<MarkThreadReadResponse>;
@@ -125,6 +129,7 @@ export type FlowerRuntimeTransport = Readonly<{
 
 export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
   runtime: FlowerSurfaceRuntimeDescriptor;
+  canMutate?: boolean;
   transport: FlowerRuntimeTransport;
   mapperOptions: FlowerLiveThreadMapperOptions;
   loadSettings: () => Promise<FlowerSettingsSnapshot>;
@@ -175,6 +180,40 @@ function mapRuntimeEvents(raw: unknown): FlowerLiveEventsResponse {
   return mapFlowerLiveEvents(raw);
 }
 
+function mapRuntimeLiveStreamEnvelope(raw: unknown): FlowerLiveStreamEnvelope {
+  const value = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
+  const kind = trim(value.kind);
+  if (kind !== 'ready' && kind !== 'summary.batch' && kind !== 'thread.batch' && kind !== 'viewer.read_state' && kind !== 'resync_required') {
+    throw new Error('Flower live stream returned an unsupported envelope.');
+  }
+  const streamGeneration = Math.floor(Number(value.stream_generation));
+  if (!Number.isSafeInteger(streamGeneration) || streamGeneration <= 0) {
+    throw new Error('Flower live stream returned an invalid generation.');
+  }
+  const mappedEvents = kind === 'summary.batch' || kind === 'thread.batch'
+    ? mapRuntimeEvents({
+        stream_generation: streamGeneration,
+        events: value.events,
+        next_cursor: value.through_seq,
+        retained_from_seq: value.retained_from_seq,
+      }).events
+    : undefined;
+  return {
+    schema_version: Math.floor(Number(value.schema_version)),
+    kind,
+    stream_generation: streamGeneration,
+    ...(trim(value.thread_id) ? { thread_id: trim(value.thread_id) } : {}),
+    ...(Number.isSafeInteger(Number(value.from_seq)) ? { from_seq: Math.floor(Number(value.from_seq)) } : {}),
+    ...(Number.isSafeInteger(Number(value.through_seq)) ? { through_seq: Math.floor(Number(value.through_seq)) } : {}),
+    ...(Number.isSafeInteger(Number(value.retained_from_seq)) ? { retained_from_seq: Math.floor(Number(value.retained_from_seq)) } : {}),
+    ...(Number.isSafeInteger(Number(value.summary_through_seq)) ? { summary_through_seq: Math.floor(Number(value.summary_through_seq)) } : {}),
+    ...(Number.isSafeInteger(Number(value.summary_retained_from_seq)) ? { summary_retained_from_seq: Math.floor(Number(value.summary_retained_from_seq)) } : {}),
+    ...(mappedEvents ? { events: mappedEvents } : {}),
+    ...(kind === 'viewer.read_state' ? { read_status: mapFlowerReadStatus(value.read_status) } : {}),
+    ...(trim(value.reason) ? { reason: trim(value.reason) } : {}),
+  } as FlowerLiveStreamEnvelope;
+}
+
 function mapSubagentDetail(raw: LoadSubagentDetailResponse): FlowerSubagentDetail {
   if (!raw.detail) throw new Error('Missing subagent detail.');
   return raw.detail;
@@ -223,6 +262,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
 
   return {
     runtime: options.runtime,
+    canMutate: options.canMutate !== false,
     loadSettings: options.loadSettings,
     saveDefaultPermission: options.saveDefaultPermission,
     saveModelProfile: options.saveModelProfile,
@@ -236,10 +276,15 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
       if (!tid) throw new Error(missingThreadIDMessage(options));
       const cursor = Math.max(0, Math.floor(Number(afterSeq) || 0));
       const pageLimit = Math.max(1, Math.min(200, Math.floor(Number(limit) || 100)));
-      return mapRuntimeEvents(
-        await options.transport.listThreadLiveEvents(tid, cursor, pageLimit),
-      );
+      return mapRuntimeEvents(await options.transport.listThreadLiveEvents(tid, cursor, pageLimit));
     },
+    ...(options.transport.connectLiveStream ? {
+      connectLiveStream: async function* (input: FlowerLiveStreamConnectInput): AsyncIterable<FlowerLiveStreamEnvelope> {
+        for await (const envelope of options.transport.connectLiveStream!(input)) {
+          yield mapRuntimeLiveStreamEnvelope(envelope);
+        }
+      },
+    } : {}),
     loadSubagentDetail: async (parentThreadID, childThreadID, afterOrdinal = 0, limit = 200) => {
       const parentID = trim(parentThreadID);
       const childID = trim(childThreadID);
@@ -252,57 +297,61 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
       ));
     },
     markThreadRead,
-    renameThread: async (threadID, title) => {
-      const tid = trim(threadID);
-      if (!tid) throw new Error(missingThreadIDMessage(options));
-      const threadResp = await options.transport.patchThread(tid, { title });
-      return loadThread(trim(threadResp.thread?.thread_id) || tid);
-    },
-    setThreadPinned: async (threadID, pinned) => {
-      const tid = trim(threadID);
-      if (!tid) throw new Error(missingThreadIDMessage(options));
-      const threadResp = await options.transport.patchThread(tid, { pinned });
-      return loadThread(trim(threadResp.thread?.thread_id) || tid);
-    },
-    setThreadPermissionType: async (threadID, permissionType) => {
-      const tid = trim(threadID);
-      if (!tid) throw new Error(missingThreadIDMessage(options));
-      const threadResp = await options.transport.patchThread(tid, { permission_type: permissionType });
-      return loadThread(trim(threadResp.thread?.thread_id) || tid);
-    },
+    ...(options.canMutate === false ? {} : {
+      renameThread: async (threadID: string, title: string) => {
+        const tid = trim(threadID);
+        if (!tid) throw new Error(missingThreadIDMessage(options));
+        const threadResp = await options.transport.patchThread(tid, { title });
+        return loadThread(trim(threadResp.thread?.thread_id) || tid);
+      },
+      setThreadPinned: async (threadID: string, pinned: boolean) => {
+        const tid = trim(threadID);
+        if (!tid) throw new Error(missingThreadIDMessage(options));
+        const threadResp = await options.transport.patchThread(tid, { pinned });
+        return loadThread(trim(threadResp.thread?.thread_id) || tid);
+      },
+      setThreadPermissionType: async (threadID: string, permissionType: FlowerPermissionType) => {
+        const tid = trim(threadID);
+        if (!tid) throw new Error(missingThreadIDMessage(options));
+        const threadResp = await options.transport.patchThread(tid, { permission_type: permissionType });
+        return loadThread(trim(threadResp.thread?.thread_id) || tid);
+      },
+    }),
     persistDefaultModel: async (modelID) => {
       const mid = trim(modelID);
       if (!mid) throw new Error('Missing model id.');
       return options.persistDefaultModel(mid);
     },
-    setThreadModel: async (threadID, modelID) => {
-      const tid = trim(threadID);
-      const mid = trim(modelID);
-      if (!tid) throw new Error(missingThreadIDMessage(options));
-      if (!mid) throw new Error('Missing model id.');
-      const threadResp = await options.transport.patchThread(tid, { model_id: mid });
-      return loadThread(trim(threadResp.thread?.thread_id) || tid);
-    },
-    setThreadReasoningSelection: async (threadID, selection) => {
-      const tid = trim(threadID);
-      if (!tid) throw new Error(missingThreadIDMessage(options));
-      const threadResp = await options.transport.patchThread(tid, { reasoning_selection: selection ?? null });
-      return loadThread(trim(threadResp.thread?.thread_id) || tid);
-    },
-    forkThread: async (threadID, clientRequestID) => {
-      const tid = trim(threadID);
-      const requestID = trim(clientRequestID);
-      if (!tid) throw new Error(missingThreadIDMessage(options));
-      if (!requestID) throw new Error('Missing client request id.');
-      const threadResp = await options.transport.forkThread(tid, { client_request_id: requestID });
-      if (trim(threadResp.client_request_id) !== requestID) {
-        throw new Error('Flower fork returned a different client request identity.');
-      }
-      const nextID = trim(threadResp.thread?.thread_id);
-      if (!nextID) throw new Error(trim(options.failedToCreateThread) || 'Failed to create Flower chat.');
-      return loadThread(nextID);
-    },
-    ...(options.transport.deleteThread ? {
+    ...(options.canMutate === false ? {} : {
+      setThreadModel: async (threadID: string, modelID: string) => {
+        const tid = trim(threadID);
+        const mid = trim(modelID);
+        if (!tid) throw new Error(missingThreadIDMessage(options));
+        if (!mid) throw new Error('Missing model id.');
+        const threadResp = await options.transport.patchThread(tid, { model_id: mid });
+        return loadThread(trim(threadResp.thread?.thread_id) || tid);
+      },
+      setThreadReasoningSelection: async (threadID: string, selection: FlowerReasoningSelection | undefined) => {
+        const tid = trim(threadID);
+        if (!tid) throw new Error(missingThreadIDMessage(options));
+        const threadResp = await options.transport.patchThread(tid, { reasoning_selection: selection ?? null });
+        return loadThread(trim(threadResp.thread?.thread_id) || tid);
+      },
+      forkThread: async (threadID: string, clientRequestID: string) => {
+        const tid = trim(threadID);
+        const requestID = trim(clientRequestID);
+        if (!tid) throw new Error(missingThreadIDMessage(options));
+        if (!requestID) throw new Error('Missing client request id.');
+        const threadResp = await options.transport.forkThread(tid, { client_request_id: requestID });
+        if (trim(threadResp.client_request_id) !== requestID) {
+          throw new Error('Flower fork returned a different client request identity.');
+        }
+        const nextID = trim(threadResp.thread?.thread_id);
+        if (!nextID) throw new Error(trim(options.failedToCreateThread) || 'Failed to create Flower chat.');
+        return loadThread(nextID);
+      },
+    }),
+    ...(options.canMutate !== false && options.transport.deleteThread ? {
       deleteThread: async (threadID) => {
         const tid = trim(threadID);
         if (!tid) throw new Error(missingThreadIDMessage(options));
@@ -310,13 +359,13 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
       },
     } : {}),
     resolveHandler: options.resolveHandler,
-    ...(options.loadAttachmentCapability ? { loadAttachmentCapability: options.loadAttachmentCapability } : {}),
-    ...(options.createAttachmentStagingScope ? { createAttachmentStagingScope: options.createAttachmentStagingScope } : {}),
-    ...(options.releaseAttachmentStagingScope ? { releaseAttachmentStagingScope: options.releaseAttachmentStagingScope } : {}),
-    ...(options.uploadAttachment ? { uploadAttachment: options.uploadAttachment } : {}),
-    ...(options.deleteStagedAttachment ? { deleteStagedAttachment: options.deleteStagedAttachment } : {}),
-    ...(options.readStagedLongText ? { readStagedLongText: options.readStagedLongText } : {}),
-    ...(options.previewStagedAttachment ? { previewStagedAttachment: options.previewStagedAttachment } : {}),
+    ...(options.canMutate !== false && options.loadAttachmentCapability ? { loadAttachmentCapability: options.loadAttachmentCapability } : {}),
+    ...(options.canMutate !== false && options.createAttachmentStagingScope ? { createAttachmentStagingScope: options.createAttachmentStagingScope } : {}),
+    ...(options.canMutate !== false && options.releaseAttachmentStagingScope ? { releaseAttachmentStagingScope: options.releaseAttachmentStagingScope } : {}),
+    ...(options.canMutate !== false && options.uploadAttachment ? { uploadAttachment: options.uploadAttachment } : {}),
+    ...(options.canMutate !== false && options.deleteStagedAttachment ? { deleteStagedAttachment: options.deleteStagedAttachment } : {}),
+    ...(options.canMutate !== false && options.readStagedLongText ? { readStagedLongText: options.readStagedLongText } : {}),
+    ...(options.canMutate !== false && options.previewStagedAttachment ? { previewStagedAttachment: options.previewStagedAttachment } : {}),
     launchTurn: options.launchTurn,
     compactThreadContext: async (input) => {
       const tid = trim(input.thread_id);

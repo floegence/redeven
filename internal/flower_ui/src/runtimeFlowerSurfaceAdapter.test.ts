@@ -140,6 +140,77 @@ function adapterOptions(
 }
 
 describe('runtime Flower surface adapter read state', () => {
+	it('keeps read APIs while removing mutation affordances for read-only viewers', () => {
+		const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({}, { canMutate: false }));
+
+		expect(adapter.canMutate).toBe(false);
+		expect(adapter.listThreads).toBeTypeOf('function');
+		expect(adapter.loadThread).toBeTypeOf('function');
+		expect(adapter.markThreadRead).toBeTypeOf('function');
+		expect(adapter.renameThread).toBeUndefined();
+		expect(adapter.setThreadPinned).toBeUndefined();
+		expect(adapter.setThreadPermissionType).toBeUndefined();
+		expect(adapter.setThreadModel).toBeUndefined();
+		expect(adapter.setThreadReasoningSelection).toBeUndefined();
+		expect(adapter.forkThread).toBeUndefined();
+		expect(adapter.deleteThread).toBeUndefined();
+		expect(adapter.uploadAttachment).toBeUndefined();
+	});
+
+	it('maps the published SSE transport into typed Flower envelopes', async () => {
+		const connectLiveStream = vi.fn(async function* () {
+				yield {
+				schema_version: 1,
+				kind: 'thread.batch',
+				stream_generation: 7,
+				thread_id: 'thread_stream',
+				from_seq: 3,
+				through_seq: 3,
+				retained_from_seq: 1,
+				events: [{
+					schema_version: 1,
+					seq: 3,
+					endpoint_id: 'env_1',
+					thread_id: 'thread_stream',
+					at_unix_ms: 10,
+					kind: 'thread.patched',
+					payload: { patch: { title: 'Streaming' } },
+				}],
+				};
+				yield {
+					schema_version: 1,
+					kind: 'viewer.read_state',
+					stream_generation: 7,
+					thread_id: 'thread_stream',
+					read_status: readStatus(),
+				};
+		});
+		const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ connectLiveStream }));
+		const controller = new AbortController();
+		const frames = [];
+		for await (const frame of adapter.connectLiveStream!({
+			thread_id: 'thread_stream',
+			thread_generation: 7,
+			thread_after_seq: 2,
+			summary_generation: 7,
+			summary_after_seq: 0,
+			signal: controller.signal,
+		})) frames.push(frame);
+
+			expect(frames).toHaveLength(2);
+		expect(frames[0]).toMatchObject({
+			kind: 'thread.batch',
+			stream_generation: 7,
+			through_seq: 3,
+			events: [{ kind: 'thread.patched', seq: 3 }],
+			});
+			expect(frames[1]).toMatchObject({
+				kind: 'viewer.read_state',
+				stream_generation: 7,
+				thread_id: 'thread_stream',
+				read_status: { is_unread: false },
+			});
+	});
   it('keeps thread-list summaries transcript-free even when preview fields are present', async () => {
     const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({
       listThreads: vi.fn(async () => ({

@@ -12,9 +12,12 @@ import {
   type FlowerThreadFocusRequest,
 } from '../../../../flower_ui/src';
 
-const FlowerSurface: Component<Omit<FlowerSurfaceProps, 'draftCoordinator'>> = (props) => (
-  <FlowerSurfaceComponent {...props} draftCoordinator={createFlowerComposerDraftCoordinator()} />
-);
+const FlowerSurface: Component<Omit<FlowerSurfaceProps, 'draftCoordinator'>> = (props) => {
+  const adapter = props.adapter.connectLiveStream
+    ? props.adapter
+    : { ...props.adapter, connectLiveStream: (input: FlowerLiveStreamConnectInput) => testLiveStreamFromLegacyFixture(props.adapter, input) };
+  return <FlowerSurfaceComponent {...props} adapter={adapter} draftCoordinator={createFlowerComposerDraftCoordinator()} />;
+};
 import type {
 	FlowerActivityItem,
 	FlowerActivityTimelineBlock,
@@ -35,7 +38,64 @@ import type {
   FlowerTimelineDecoration,
   FlowerSubagentDetail,
   FlowerSubagentSummary,
+  FlowerLiveStreamConnectInput,
+  FlowerLiveStreamEnvelope,
 } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+
+async function* testLiveStreamFromLegacyFixture(
+  adapter: FlowerSurfaceAdapter,
+  input: FlowerLiveStreamConnectInput,
+): AsyncIterable<FlowerLiveStreamEnvelope> {
+  let cursor = input.thread_after_seq;
+  let generation = Math.max(1, input.thread_generation);
+  yield {
+    schema_version: 1,
+    kind: 'ready',
+    stream_generation: generation,
+    thread_id: input.thread_id,
+    through_seq: cursor,
+    retained_from_seq: 1,
+    summary_through_seq: input.summary_after_seq,
+    summary_retained_from_seq: 1,
+  };
+  while (!input.signal.aborted) {
+    const response = await adapter.listThreadLiveEvents(input.thread_id, cursor, 100);
+    if (input.signal.aborted) return;
+    if (response.stream_generation !== generation && cursor > 0) {
+      yield {
+        schema_version: 1,
+        kind: 'resync_required',
+        stream_generation: response.stream_generation,
+        thread_id: input.thread_id,
+        reason: 'test_generation_changed',
+      };
+      return;
+    }
+    generation = response.stream_generation;
+    for (const event of response.events) {
+      cursor = Math.max(cursor, event.seq);
+      yield {
+        schema_version: 1,
+        kind: 'thread.batch',
+        stream_generation: generation,
+        thread_id: input.thread_id,
+        from_seq: event.seq,
+        through_seq: cursor,
+        retained_from_seq: response.retained_from_seq,
+        events: [event],
+      };
+    }
+    cursor = Math.max(cursor, response.next_cursor);
+    if (response.has_more) continue;
+    await new Promise<void>((resolve) => {
+      const timer = window.setTimeout(resolve, 20);
+      input.signal.addEventListener('abort', () => {
+        window.clearTimeout(timer);
+        resolve();
+      }, { once: true });
+    });
+  }
+}
 
 vi.mock('@floegence/floe-webapp-core', () => ({
   cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' '),

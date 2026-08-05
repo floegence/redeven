@@ -1255,7 +1255,8 @@ describe('main routing', () => {
     expect(routeSrc).not.toContain("methods: ['GET', 'PATCH', 'DELETE']");
     expect(routeSrc).not.toContain("'/_redeven_proxy/api/ai/runs'");
     expect(routeSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/live\\/bootstrap$/u");
-    expect(routeSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/live\\/events$/u");
+    expect(routeSrc).toContain("{ path: '/_redeven_proxy/api/ai/flower/stream', methods: ['GET'], allowsQuery: runtimeFlowerStreamQuery }");
+    expect(routeSrc).not.toContain('live\\/events');
     expect(routeSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/subagents\\/[^/]+\\/detail$/u");
     expect(routeSrc).toContain('runtimeFlowerSubagentDetailQuery');
     expect(routeSrc).toContain('after_ordinal');
@@ -1270,7 +1271,7 @@ describe('main routing', () => {
     expect(routeSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/runs\\/[^/]+\\/terminal\\/[^/]+\\/read$/u");
 	expect(routeSrc).toContain('runtimeFlowerTerminalReadQuery');
 	expect(routeSrc).toContain("'after_seq'");
-	expect(routeSrc).toContain("'wait_ms'");
+	expect(routeSrc).not.toContain("'wait_ms'");
 	expect(routeSrc).not.toContain("'max_bytes'");
 	const terminalReadQueryStart = routeSrc.indexOf('const runtimeFlowerTerminalReadQuery');
 	const terminalReadQueryEnd = routeSrc.indexOf('const runtimeFlowerAttachmentCapabilityQuery', terminalReadQueryStart);

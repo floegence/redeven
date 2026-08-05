@@ -2568,7 +2568,7 @@ describe('FlowerSurface navigation activity', () => {
     const promotedEvents = deferred<FlowerLiveEventsResponse>();
     let deliveredPromotion = false;
     const listThreadLiveEvents = vi.fn(async (_threadID: string, afterSeq: number) => {
-      if (!deliveredPromotion && afterSeq === 22) {
+      if (!deliveredPromotion && afterSeq <= 22) {
         deliveredPromotion = true;
         return promotedEvents.promise;
       }
@@ -2643,7 +2643,7 @@ describe('FlowerSurface navigation activity', () => {
     expect((document.activeElement as HTMLElement | null)?.tagName).toBe('SECTION');
   });
 
-  it('does not recursively refresh unchanged background thread summaries', async () => {
+  it('does not periodically refresh unchanged thread summaries while the live stream is connected', async () => {
     const backgroundThread = thread({
       thread_id: 'thread-background-refresh-stability',
       title: 'Background refresh stability',
@@ -2662,10 +2662,10 @@ describe('FlowerSurface navigation activity', () => {
       listThreads,
     });
 
-    await waitFor(() => listThreads.mock.calls.length >= 2);
-    await flushMicrotasks();
+    await waitFor(() => listThreads.mock.calls.length === 1);
+    await new Promise((resolve) => window.setTimeout(resolve, 80));
 
-    expect(listThreads).toHaveBeenCalledTimes(2);
+    expect(listThreads).toHaveBeenCalledTimes(1);
   });
 
   it('keeps the selected approval card mounted across stale list refreshes', async () => {
@@ -2769,7 +2769,7 @@ describe('FlowerSurface navigation activity', () => {
     observer.disconnect();
 
     expect(detachCount).toBe(0);
-    expect(listThreads.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(listThreads).toHaveBeenCalledTimes(1);
     expect(listThreadLiveEvents.mock.calls.length).toBeGreaterThanOrEqual(5);
     expect(loadThread).toHaveBeenCalledTimes(1);
   });

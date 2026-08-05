@@ -1,4 +1,5 @@
 import type { RedevenV1Rpc } from '../protocol/redeven_v1';
+import { fetchServerSentEvents } from '@floegence/floe-webapp-boot';
 import {
   fetchLocalApiJSON,
   fetchLocalApiJSONResponse,
@@ -30,13 +31,13 @@ import type {
   FlowerTerminalProcessSnapshot,
   FlowerThreadReadStatus,
   FlowerLiveBootstrap,
+  FlowerLiveStreamConnectInput,
 } from '../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import type { FlowerCanonicalReferenceNavigationTarget } from './linkedContextNavigation';
 import { requireAskFlowerContextActionEnvelope } from '../contextActions/protocol';
 import { mapFlowerLiveBootstrap } from '../../../../../flower_ui/src/flowerLiveMapper';
 import {
   createRuntimeFlowerSurfaceAdapter,
-  FLOWER_LIVE_EVENT_WAIT_MS,
   FLOWER_THREAD_DELETE_OPERATION_FAILED_CODE,
 } from '../../../../../flower_ui/src/runtimeFlowerSurfaceAdapter';
 import {
@@ -59,6 +60,7 @@ type EnvLocalFlowerSurfaceAdapterOptions = Readonly<{
   envLabel: string;
   desktopSessionTargetRoute?: 'local_host' | 'remote_desktop';
   rpc: RedevenV1Rpc;
+  canMutate?: boolean;
   copy?: EnvLocalFlowerSurfaceAdapterCopy;
   onSettingsChanged?: () => void | Promise<unknown>;
   uploadAttachment?: FlowerSurfaceAdapter['uploadAttachment'];
@@ -663,13 +665,45 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       display_name: trim(options.envLabel) || copy.currentEnvironment,
       subtitle: copy.environmentLocalSubtitle,
     },
+    canMutate: options.canMutate !== false,
     transport: {
       listThreads: () => fetchLocalApiJSON('/_redeven_proxy/api/ai/threads?limit=200', { method: 'GET' }),
       loadThread: (threadID) => fetchLocalApiJSON(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/live/bootstrap`, { method: 'GET' }),
-      listThreadLiveEvents: (threadID, afterSeq, limit) => fetchLocalApiJSON(
-        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/live/events?after_seq=${afterSeq}&limit=${limit}&wait_ms=${FLOWER_LIVE_EVENT_WAIT_MS}`,
-        { method: 'GET' },
-      ),
+		  listThreadLiveEvents: async () => {
+			throw new Error('Flower live polling is unavailable.');
+		  },
+      connectLiveStream: async function* (input: FlowerLiveStreamConnectInput): AsyncIterable<unknown> {
+        const params = new URLSearchParams({
+          thread_id: input.thread_id,
+          thread_generation: String(input.thread_generation),
+          thread_after_seq: String(input.thread_after_seq),
+          summary_generation: String(input.summary_generation),
+          summary_after_seq: String(input.summary_after_seq),
+        });
+        const streamController = new AbortController();
+        const abort = () => streamController.abort(input.signal.reason);
+        input.signal.addEventListener('abort', abort, { once: true });
+        let activityTimer: ReturnType<typeof setTimeout> | undefined;
+        const resetActivityTimer = () => {
+          if (activityTimer !== undefined) clearTimeout(activityTimer);
+          activityTimer = setTimeout(() => streamController.abort('Flower live stream timed out.'), 45_000);
+        };
+        try {
+          resetActivityTimer();
+          const init = await prepareLocalApiRequestInit({ method: 'GET', signal: streamController.signal });
+          for await (const frame of fetchServerSentEvents(`/_redeven_proxy/api/ai/flower/stream?${params.toString()}`, {
+            ...init,
+            signal: streamController.signal,
+            onActivity: resetActivityTimer,
+          })) {
+            yield JSON.parse(frame.data) as unknown;
+          }
+        } finally {
+          input.signal.removeEventListener('abort', abort);
+          if (activityTimer !== undefined) clearTimeout(activityTimer);
+          streamController.abort();
+        }
+      },
       loadSubagentDetail: (parentThreadID, childThreadID, afterOrdinal, limit) => fetchLocalApiJSON(
         `/_redeven_proxy/api/ai/threads/${encodeURIComponent(parentThreadID)}/subagents/${encodeURIComponent(childThreadID)}/detail?after_ordinal=${afterOrdinal}&limit=${limit}`,
         { method: 'GET' },

@@ -9,9 +9,17 @@ import {
   type SaveDesktopSettingsResult,
 } from '../shared/settingsIPC';
 import {
+  CANCEL_RUNTIME_FLOWER_STREAM_CHANNEL,
   REQUEST_RUNTIME_FLOWER_CHANNEL,
+  RUNTIME_FLOWER_STREAM_EVENT_CHANNEL,
+  START_RUNTIME_FLOWER_STREAM_CHANNEL,
+  normalizeRuntimeFlowerStreamEvent,
+  normalizeRuntimeFlowerStreamID,
+  normalizeRuntimeFlowerStreamRequest,
   type RuntimeFlowerRequest,
   type RuntimeFlowerRequestResult,
+  type RuntimeFlowerStreamEvent,
+  type RuntimeFlowerStreamStartResult,
 } from '../shared/runtimeFlowerIPC';
 import {
   CANCEL_RUNTIME_FLOWER_ATTACHMENT_CHANNEL,
@@ -39,6 +47,24 @@ export function bootstrapDesktopSettingsBridge(): void {
       ipcRenderer.invoke(SAVE_DESKTOP_SETTINGS_CHANNEL, draft),
     requestRuntimeFlower: (request: RuntimeFlowerRequest): Promise<RuntimeFlowerRequestResult> =>
       ipcRenderer.invoke(REQUEST_RUNTIME_FLOWER_CHANNEL, request),
+    startRuntimeFlowerStream: async (request: unknown): Promise<RuntimeFlowerStreamStartResult> => {
+      const normalized = normalizeRuntimeFlowerStreamRequest(request);
+      if (!normalized) return { ok: false, error: { code: 'runtime_flower_invalid_stream', message: 'Invalid Flower stream request.' } };
+      return ipcRenderer.invoke(START_RUNTIME_FLOWER_STREAM_CHANNEL, normalized);
+    },
+    cancelRuntimeFlowerStream: (streamID: unknown): void => {
+      const normalized = normalizeRuntimeFlowerStreamID(streamID);
+      if (normalized) ipcRenderer.send(CANCEL_RUNTIME_FLOWER_STREAM_CHANNEL, normalized);
+    },
+    subscribeRuntimeFlowerStream: (listener: (event: RuntimeFlowerStreamEvent) => void): (() => void) => {
+      if (typeof listener !== 'function') return () => undefined;
+      const wrapped = (_event: IpcRendererEvent, value: unknown) => {
+        const normalized = normalizeRuntimeFlowerStreamEvent(value);
+        if (normalized) listener(normalized);
+      };
+      ipcRenderer.on(RUNTIME_FLOWER_STREAM_EVENT_CHANNEL, wrapped);
+      return () => ipcRenderer.removeListener(RUNTIME_FLOWER_STREAM_EVENT_CHANNEL, wrapped);
+    },
     prepareRuntimeFlowerAttachment: async (request: unknown): Promise<RuntimeFlowerAttachmentPrepareResponse> => {
       const normalized = normalizeRuntimeFlowerAttachmentPrepareRequest(request);
       if (!normalized) return { ok: false, message: 'Invalid Flower attachment upload request.' };

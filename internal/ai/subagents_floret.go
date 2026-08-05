@@ -2646,7 +2646,7 @@ func (s *Service) GetFlowerSubagentDetail(ctx context.Context, meta *session.Met
 	if s == nil {
 		return nil, errors.New("nil service")
 	}
-	if err := requireRWX(meta); err != nil {
+	if err := requireRead(meta); err != nil {
 		return nil, err
 	}
 	parentThreadID = strings.TrimSpace(parentThreadID)

@@ -235,12 +235,107 @@ func TestFloretEventProjectionReplacesDuplicateLiveActivityTail(t *testing.T) {
 	if block, ok := r.assistantBlocks[1].(*persistedMarkdownBlock); !ok || block.Content != "live text" {
 		t.Fatalf("assistantBlocks[1]=%T %#v, want canonical markdown", r.assistantBlocks[1], r.assistantBlocks[1])
 	}
-	if len(events) != 4 {
-		t.Fatalf("stream events=%d, want two canonical block sets, stale tail clear, and step status: %#v", len(events), events)
+	if len(events) != 3 {
+		t.Fatalf("stream events=%d, want changed canonical block, stale tail clear, and step status: %#v", len(events), events)
 	}
-	cleared, ok := events[2].(streamEventBlockSet)
+	cleared, ok := events[1].(streamEventBlockSet)
 	if !ok || cleared.BlockIndex != 2 {
-		t.Fatalf("events[2]=%T %#v, want stale duplicate clear at index 2", events[2], events[2])
+		t.Fatalf("events[1]=%T %#v, want stale duplicate clear at index 2", events[1], events[1])
+	}
+}
+
+func TestFloretEventPrefersProjectionDeltaAndDoesNotReemitUnchangedBlocks(t *testing.T) {
+	t.Parallel()
+
+	const (
+		runID    = "run_projection_delta_preferred"
+		threadID = "thread_projection_delta_preferred"
+		turnID   = "turn_projection_delta_preferred"
+	)
+	metrics := &flowerLiveMetrics{}
+	events := make([]any, 0, 4)
+	r := newRun(runOptions{
+		RunID: runID, ThreadID: threadID, TurnID: turnID, MessageID: turnID,
+		LiveMetrics:   metrics,
+		OnStreamEvent: func(event any) { events = append(events, event) },
+	})
+	if err := r.observeFloretCanonicalIdentity(runID, threadID, turnID); err != nil {
+		t.Fatal(err)
+	}
+	initial := flruntime.ThreadTurnProjection{
+		ThreadID: threadID, TurnID: turnID, RunID: runID, TraceID: runID,
+		Status: flruntime.TurnStatusRunning, ThroughOrdinal: 1,
+		Segments: []flruntime.ThreadTurnProjectionSegment{{Kind: flruntime.ThreadTurnProjectionSegmentAssistantText, Text: "delta wins"}},
+	}
+	delta, err := flruntime.DiffThreadTurnProjections(nil, initial)
+	if err != nil {
+		t.Fatal(err)
+	}
+	full := initial
+	floretEventSink{run: r}.EmitEvent(flruntime.Event{
+		Type: observation.EventTypeStepStart, RunID: runID, ThreadID: threadID, TurnID: turnID, Step: 1,
+		Projection: &full, ProjectionDelta: &delta,
+	})
+	if len(r.assistantBlocks) != 1 {
+		t.Fatalf("assistant blocks=%#v, want one delta block", r.assistantBlocks)
+	}
+	if block, ok := r.assistantBlocks[0].(*persistedMarkdownBlock); !ok || block.Content != "delta wins" {
+		t.Fatalf("assistant block=%T %#v, want preferred delta text", r.assistantBlocks[0], r.assistantBlocks[0])
+	}
+	if snapshot := metrics.snapshot(); snapshot.ProjectionDeltas != 1 {
+		t.Fatalf("projection delta metrics=%#v, want event delta path to win over full projection", snapshot)
+	}
+
+	events = nil
+	statusOnly := initial
+	statusOnly.Status = flruntime.TurnStatusCompleted
+	statusOnly.ThroughOrdinal = 2
+	statusDelta, err := flruntime.DiffThreadTurnProjections(&initial, statusOnly)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !r.applyFloretThreadProjectionDelta(statusDelta) {
+		t.Fatal("status-only delta was not applied")
+	}
+	if len(events) != 0 {
+		t.Fatalf("status-only delta re-emitted unchanged blocks: %#v", events)
+	}
+	if snapshot := metrics.snapshot(); snapshot.ProjectionDeltas != 2 || snapshot.ProjectionNanoseconds == 0 {
+		t.Fatalf("projection delta metrics=%#v, want two measured deltas", snapshot)
+	}
+}
+
+func TestFloretProjectionDeltaBaseZeroStartsNewLineage(t *testing.T) {
+	t.Parallel()
+
+	const (
+		runID    = "run_projection_delta_reset"
+		threadID = "thread_projection_delta_reset"
+		turnID   = "turn_projection_delta_reset"
+	)
+	r := newRun(runOptions{RunID: runID, ThreadID: threadID, TurnID: turnID, MessageID: turnID})
+	if err := r.observeFloretCanonicalIdentity(runID, threadID, turnID); err != nil {
+		t.Fatal(err)
+	}
+	projection := func(text string) flruntime.ThreadTurnProjection {
+		return flruntime.ThreadTurnProjection{
+			ThreadID: threadID, TurnID: turnID, RunID: runID, TraceID: runID,
+			Status: flruntime.TurnStatusRunning, ThroughOrdinal: 1,
+			Segments: []flruntime.ThreadTurnProjectionSegment{{Kind: flruntime.ThreadTurnProjectionSegmentAssistantText, Text: text}},
+		}
+	}
+	for _, text := range []string{"first lineage", "replacement lineage"} {
+		current := projection(text)
+		delta, err := flruntime.DiffThreadTurnProjections(nil, current)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !r.applyFloretThreadProjectionDelta(delta) {
+			t.Fatalf("base-zero delta for %q was not applied", text)
+		}
+	}
+	if block, ok := r.assistantBlocks[0].(*persistedMarkdownBlock); !ok || block.Content != "replacement lineage" {
+		t.Fatalf("assistant block=%T %#v, want replacement lineage", r.assistantBlocks[0], r.assistantBlocks[0])
 	}
 }
 
