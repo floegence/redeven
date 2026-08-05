@@ -28,8 +28,17 @@ type terminal_link_provider_args = {
 };
 
 const TOKEN_RE = /[^\s]+/g;
-const LEADING_WRAP_RE = /^[([{"'`]+/;
-const TRAILING_WRAP_RE = /[)\]}>"'`,;.!?]+$/;
+const OUTER_WRAPPER_PAIRS = new Map([
+  ['"', '"'],
+  ["'", "'"],
+  ['(', ')'],
+  ['[', ']'],
+  ['{', '}'],
+]);
+const FORBIDDEN_PATH_CHARACTERS = new Set([
+  '<', '>', "'", '"', '`', '|', ';', ',',
+  '(', ')', '{', '}', '[', ']', '*', '?', '!', '=',
+]);
 const NO_EXTENSION_FILENAMES = new Set([
   '.env',
   '.gitignore',
@@ -45,19 +54,17 @@ const NO_EXTENSION_FILENAMES = new Set([
 ]);
 const SEMVER_RE = /^v?\d+(?:\.\d+)+$/i;
 
-function stripWrappedToken(token: string, startIndex: number): { text: string; startIndex: number; endIndexExclusive: number } | null {
+function unwrapTerminalToken(token: string, startIndex: number): { text: string; startIndex: number; endIndexExclusive: number } | null {
   let nextText = String(token ?? '');
   let nextStart = startIndex;
 
-  const leading = nextText.match(LEADING_WRAP_RE)?.[0] ?? '';
-  if (leading) {
-    nextText = nextText.slice(leading.length);
-    nextStart += leading.length;
-  }
-
-  const trailing = nextText.match(TRAILING_WRAP_RE)?.[0] ?? '';
-  if (trailing) {
-    nextText = nextText.slice(0, nextText.length - trailing.length);
+  while (nextText.length >= 2) {
+    const closing = OUTER_WRAPPER_PAIRS.get(nextText[0] ?? '');
+    if (!closing || nextText[nextText.length - 1] !== closing) {
+      break;
+    }
+    nextText = nextText.slice(1, -1);
+    nextStart += 1;
   }
 
   if (!nextText) {
@@ -79,18 +86,27 @@ function parseLineAndColumn(token: string): { pathText: string; line?: number; c
 
   const fullMatch = raw.match(/^(.*?):(\d+):(\d+)$/);
   if (fullMatch) {
+    const line = Number(fullMatch[2] ?? 0);
+    const column = Number(fullMatch[3] ?? 0);
+    if (line <= 0 || column <= 0) {
+      return null;
+    }
     return {
       pathText: fullMatch[1] ?? '',
-      line: Number(fullMatch[2] ?? 0),
-      column: Number(fullMatch[3] ?? 0),
+      line,
+      column,
     };
   }
 
   const lineMatch = raw.match(/^(.*?):(\d+)$/);
   if (lineMatch) {
+    const line = Number(lineMatch[2] ?? 0);
+    if (line <= 0) {
+      return null;
+    }
     return {
       pathText: lineMatch[1] ?? '',
-      line: Number(lineMatch[2] ?? 0),
+      line,
     };
   }
 
@@ -105,34 +121,42 @@ function basenameFromPath(path: string): string {
   return slashIndex >= 0 ? normalized.slice(slashIndex + 1) : normalized;
 }
 
-function looksLikeFilePath(pathText: string, line?: number): boolean {
+function classifyFilePathCandidate(pathText: string): 'explicit' | 'relative' | null {
   const normalized = String(pathText ?? '').trim().replace(/\\+/g, '/');
   if (!normalized) {
-    return false;
+    return null;
   }
-  if (normalized.startsWith('-') || normalized.includes('://') || SEMVER_RE.test(normalized)) {
-    return false;
+  if (
+    normalized.startsWith('-')
+    || normalized.includes('://')
+    || SEMVER_RE.test(normalized)
+    || [...normalized].some((character) => FORBIDDEN_PATH_CHARACTERS.has(character))
+    || normalized.includes(':')
+  ) {
+    return null;
   }
   if (normalized === '/' || normalized.endsWith('/')) {
-    return false;
+    return null;
   }
 
-  const hasPrefix = normalized.startsWith('/') || normalized.startsWith('./') || normalized.startsWith('../') || normalized.startsWith('~/');
-  const hasSlash = normalized.includes('/');
+  const hasExplicitPrefix = normalized.startsWith('/')
+    || normalized.startsWith('./')
+    || normalized.startsWith('../')
+    || normalized.startsWith('~/');
+  if (hasExplicitPrefix) {
+    return basenameFromPath(normalized) ? 'explicit' : null;
+  }
+
+  if (!normalized.includes('/')) {
+    return null;
+  }
+
   const basename = basenameFromPath(normalized);
   const hasExtension = /\.[A-Za-z0-9][A-Za-z0-9._-]*$/.test(basename);
   const isKnownNoExtensionFile = NO_EXTENSION_FILENAMES.has(basename);
   const isHiddenDotfile = basename.startsWith('.') && basename.length > 1;
 
-  if (hasPrefix || hasSlash) {
-    return hasExtension || isKnownNoExtensionFile || isHiddenDotfile || basename.length > 0;
-  }
-
-  if (!line || line <= 0) {
-    return false;
-  }
-
-  return hasExtension || isKnownNoExtensionFile || isHiddenDotfile;
+  return hasExtension || isKnownNoExtensionFile || isHiddenDotfile ? 'relative' : null;
 }
 
 function joinAbsolutePath(basePath: string, relativePath: string): string {
@@ -189,7 +213,7 @@ function toLinkMatch(candidateText: string, startIndex: number, context: Termina
   const line = Number.isFinite(parsed.line) && (parsed.line ?? 0) > 0 ? parsed.line : undefined;
   const column = Number.isFinite(parsed.column) && (parsed.column ?? 0) > 0 ? parsed.column : undefined;
   const pathText = String(parsed.pathText ?? '').trim();
-  if (!looksLikeFilePath(pathText, line)) {
+  if (!classifyFilePathCandidate(pathText)) {
     return null;
   }
 
@@ -225,7 +249,7 @@ function collectTerminalLinkMatches(lineText: string, context: TerminalLinkConte
       continue;
     }
 
-    const stripped = stripWrappedToken(rawToken, rawIndex);
+    const stripped = unwrapTerminalToken(rawToken, rawIndex);
     if (!stripped) {
       continue;
     }
