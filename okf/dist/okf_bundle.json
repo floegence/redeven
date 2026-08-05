@@ -7845,7 +7845,7 @@
         "title": "Flower approval and context state",
         "type": "UI Contract"
       },
-      "body_length": 9640,
+      "body_length": 9634,
       "summary": "Flower projects current approvals from complete Floret approval-queue snapshots and exposes only Floret's current actionable record in the composer. Context usage, compaction, and read acknowledgement are separate typed projections with explicit ownership and compare-and-swap identity. Activity history cannot recreate current approvals, model context, or read state, and conflicts reload authoritative state instead of preserving stale user actions.",
       "sections": [
         {
@@ -7913,10 +7913,10 @@
           "description": "Live-event read-state decoration loads canonical state only for responses containing thread patches."
         },
         {
-          "id": "redeven:internal/codeapp/appserver/thread_read_state_live_test.go:16:focused allocation and loader-count tests enforce the non-patch fast path and copy-on-write patch behavior.",
-          "source": "redeven:internal/codeapp/appserver/thread_read_state_live_test.go",
-          "line": 16,
-          "description": "Focused allocation and loader-count tests enforce the non-patch fast path and copy-on-write patch behavior."
+          "id": "redeven:internal/codeapp/appserver/server_test.go:2638:appserver tests cover per-user flower list/detail/read snapshots and stale or mismatched acknowledgement rejection.",
+          "source": "redeven:internal/codeapp/appserver/server_test.go",
+          "line": 2638,
+          "description": "AppServer tests cover per-user Flower list/detail/read snapshots and stale or mismatched acknowledgement rejection."
         }
       ],
       "snippet": "Flower projects current approvals from complete Floret approval-queue snapshots and exposes only Floret's current actionable record in the composer. Context usage, compaction, and read acknowledgement are separate typed projections with exp",
@@ -10161,5 +10161,5 @@
       ]
     }
   ],
-  "source_sha256": "ce4ed9cab2a8baec91f3d2abcd9e99da5540440fd7fbfc2546c55c286da5b1a9"
+  "source_sha256": "ac2c542a8d4239281412476145355ce0ec22081e218417a67b4625103ad61c27"
 }
