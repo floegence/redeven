@@ -1,3 +1,4 @@
+import { fetchServerSentEvents } from '@floegence/floe-webapp-boot';
 import type {
   DesktopSettingsDraft,
   SaveDesktopSettingsResult,
@@ -7,6 +8,9 @@ import type {
   RuntimeFlowerFailureKind,
   RuntimeFlowerRequest,
   RuntimeFlowerRequestResult,
+  RuntimeFlowerStreamEvent,
+  RuntimeFlowerStreamRequest,
+  RuntimeFlowerStreamStartResult,
 } from '../../shared/runtimeFlowerIPC';
 import type {
   RuntimeFlowerAttachmentCancelResponse,
@@ -34,6 +38,7 @@ import type {
   FlowerStagedAttachment,
   FlowerStagedLongTextReadResult,
   FlowerLiveBootstrap,
+  FlowerLiveStreamConnectInput,
   FlowerTerminalProcessSnapshot,
   FlowerThreadReadStatus,
   FlowerThreadSnapshot,
@@ -58,7 +63,6 @@ import {
 } from '../../../../internal/flower_ui/src/flowerLiveMapper';
 import {
   createRuntimeFlowerSurfaceAdapter,
-  FLOWER_LIVE_EVENT_WAIT_MS,
   FLOWER_THREAD_DELETE_OPERATION_FAILED_CODE,
 } from '../../../../internal/flower_ui/src/runtimeFlowerSurfaceAdapter';
 import {
@@ -73,6 +77,9 @@ import {
 export type DesktopSettingsBridge = Readonly<{
   save: (draft: DesktopSettingsDraft) => Promise<SaveDesktopSettingsResult>;
   requestRuntimeFlower: (request: RuntimeFlowerRequest) => Promise<RuntimeFlowerRequestResult>;
+  startRuntimeFlowerStream: (request: RuntimeFlowerStreamRequest) => Promise<RuntimeFlowerStreamStartResult>;
+  cancelRuntimeFlowerStream: (streamID: string) => void;
+  subscribeRuntimeFlowerStream: (listener: (event: RuntimeFlowerStreamEvent) => void) => () => void;
   prepareRuntimeFlowerAttachment: (request: unknown) => Promise<RuntimeFlowerAttachmentPrepareResponse>;
   writeRuntimeFlowerAttachmentChunk: (request: unknown) => Promise<RuntimeFlowerAttachmentChunkResponse>;
   commitRuntimeFlowerAttachment: (request: unknown) => Promise<RuntimeFlowerAttachmentCommitResponse>;
@@ -258,6 +265,68 @@ async function runtimeJSON<T>(
     throw runtimeFlowerError(result.error, result.failureKind);
   }
   return result.data as T;
+}
+
+function runtimeFlowerStreamFetch(
+  bridge: DesktopSettingsBridge,
+  streamID: string,
+): typeof globalThis.fetch {
+  return async (input, init) => {
+    const path = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+    let settled = false;
+    let bodyController: ReadableStreamDefaultController<Uint8Array> | undefined;
+    const cleanup = (cancel: boolean) => {
+      if (settled) return;
+      settled = true;
+      unsubscribe();
+      init?.signal?.removeEventListener('abort', abort);
+      if (cancel) bridge.cancelRuntimeFlowerStream(streamID);
+    };
+    const abort = () => {
+      const reason = init?.signal?.reason instanceof Error
+        ? init.signal.reason
+        : new DOMException('Flower stream was cancelled.', 'AbortError');
+      bodyController?.error(reason);
+      cleanup(true);
+    };
+    const unsubscribe = bridge.subscribeRuntimeFlowerStream((event) => {
+      if (event.stream_id !== streamID || settled) return;
+      if (event.kind === 'chunk') {
+        bodyController?.enqueue(event.chunk);
+      } else if (event.kind === 'end') {
+        bodyController?.close();
+        cleanup(false);
+      } else {
+        bodyController?.error(new Error(event.message));
+        cleanup(false);
+      }
+    });
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        bodyController = controller;
+      },
+      cancel() {
+        cleanup(true);
+      },
+    });
+    if (init?.signal?.aborted) {
+      abort();
+      throw init.signal.reason;
+    }
+    init?.signal?.addEventListener('abort', abort, { once: true });
+    const started = await bridge.startRuntimeFlowerStream({ stream_id: streamID, path });
+    if (!started.ok) {
+      cleanup(false);
+      throw runtimeFlowerError(started.error, 'transport_unknown');
+    }
+    return new Response(body, {
+      status: started.status,
+      headers: {
+        ...(started.content_type ? { 'Content-Type': started.content_type } : {}),
+        ...(started.retry_after ? { 'Retry-After': started.retry_after } : {}),
+      },
+    });
+  };
 }
 
 async function createDesktopAttachmentStagingScope(
@@ -727,11 +796,44 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
     transport: {
       listThreads: () => runtimeJSON(bridge, 'GET', '/_redeven_proxy/api/ai/threads?limit=200'),
       loadThread: (threadID) => runtimeJSON(bridge, 'GET', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/live/bootstrap`),
-      listThreadLiveEvents: (threadID, afterSeq, limit) => runtimeJSON(
-        bridge,
-        'GET',
-        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/live/events?after_seq=${afterSeq}&limit=${limit}&wait_ms=${FLOWER_LIVE_EVENT_WAIT_MS}`,
-      ),
+      listThreadLiveEvents: async () => {
+        throw new Error('Flower live polling is unavailable.');
+      },
+      connectLiveStream: async function* (input: FlowerLiveStreamConnectInput): AsyncIterable<unknown> {
+        const params = new URLSearchParams({
+          thread_id: input.thread_id,
+          thread_generation: String(input.thread_generation),
+          thread_after_seq: String(input.thread_after_seq),
+          summary_generation: String(input.summary_generation),
+          summary_after_seq: String(input.summary_after_seq),
+        });
+        const path = `/_redeven_proxy/api/ai/flower/stream?${params.toString()}`;
+        const streamID = `flower-${globalThis.crypto.randomUUID()}`;
+        const streamController = new AbortController();
+        const abort = () => streamController.abort(input.signal.reason);
+        input.signal.addEventListener('abort', abort, { once: true });
+        let activityTimer: ReturnType<typeof setTimeout> | undefined;
+        const resetActivityTimer = () => {
+          if (activityTimer !== undefined) clearTimeout(activityTimer);
+          activityTimer = setTimeout(() => streamController.abort('Flower live stream timed out.'), 45_000);
+        };
+        try {
+          resetActivityTimer();
+          for await (const frame of fetchServerSentEvents(path, {
+            method: 'GET',
+            signal: streamController.signal,
+            fetch: runtimeFlowerStreamFetch(bridge, streamID),
+            onActivity: resetActivityTimer,
+          })) {
+            yield JSON.parse(frame.data) as unknown;
+          }
+        } finally {
+          input.signal.removeEventListener('abort', abort);
+          if (activityTimer !== undefined) clearTimeout(activityTimer);
+          streamController.abort();
+          bridge.cancelRuntimeFlowerStream(streamID);
+        }
+      },
       loadSubagentDetail: (parentThreadID, childThreadID, afterOrdinal, limit) => runtimeJSON(
         bridge,
         'GET',

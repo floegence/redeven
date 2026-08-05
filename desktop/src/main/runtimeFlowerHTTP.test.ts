@@ -1,9 +1,11 @@
 import http from 'node:http';
+import { once } from 'node:events';
 
 import { describe, expect, it } from 'vitest';
 
 import {
 	invalidateRuntimeFlowerAccessOnStatus,
+	openRuntimeFlowerHTTPStream,
 	parseRuntimeFlowerJSON,
 	readRuntimeFlowerHTTPResponse,
 	runtimeFlowerDeleteQuery,
@@ -90,6 +92,32 @@ describe('readRuntimeFlowerHTTPResponse', () => {
         message: 'Flower returned an invalid JSON response.',
         status: 200,
       });
+    } finally {
+      await close(server);
+    }
+  });
+});
+
+describe('openRuntimeFlowerHTTPStream', () => {
+  it('delivers the first SSE chunk before the response ends and releases on cancellation', async () => {
+    let responseEnded = false;
+    const server = http.createServer((_request, response) => {
+      response.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      response.flushHeaders();
+      response.write('data: {"kind":"ready"}\n\n');
+      response.once('close', () => { responseEnded = true; });
+    });
+    const port = await listen(server);
+    try {
+      const stream = openRuntimeFlowerHTTPStream(new URL(`http://127.0.0.1:${port}/stream`));
+      const incoming = await stream.response;
+      const [chunk] = await once(incoming, 'data') as [Buffer];
+      expect(chunk.toString('utf8')).toContain('"kind":"ready"');
+      expect(responseEnded).toBe(false);
+      const closed = once(incoming, 'close');
+      stream.request.destroy();
+      incoming.destroy();
+      await closed;
     } finally {
       await close(server);
     }

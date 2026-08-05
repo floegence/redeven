@@ -19,7 +19,7 @@ import (
 	"github.com/floegence/redeven/internal/session"
 )
 
-const flowerLiveEventBufferLimit = 5000
+const flowerLiveEventBufferLimit = 4096
 const flowerLiveEventWaitLimit = 30 * time.Second
 
 type flowerLiveThreadStream struct {
@@ -29,6 +29,14 @@ type flowerLiveThreadStream struct {
 	ApprovalIndex        map[string]FlowerApprovalState
 	CanonicalSettledTool map[string]struct{}
 	Notify               chan struct{}
+	EncodedBatches       []*flowerLiveEncodedBatch
+	EncodedBytes         int
+	EncodedEventCount    int
+	Subscribers          map[uint64]*flowerLiveSubscriber
+	BlockSetFingerprint  map[string][sha256.Size]byte
+	PendingEvents        []FlowerLiveEvent
+	PendingBytes         int
+	FlushTimer           *time.Timer
 }
 
 func newFlowerLiveThreadStream() *flowerLiveThreadStream {
@@ -44,6 +52,8 @@ func newFlowerLiveThreadStream() *flowerLiveThreadStream {
 		ApprovalIndex:        map[string]FlowerApprovalState{},
 		CanonicalSettledTool: map[string]struct{}{},
 		Notify:               make(chan struct{}),
+		Subscribers:          make(map[uint64]*flowerLiveSubscriber),
+		BlockSetFingerprint:  make(map[string][sha256.Size]byte),
 	}
 }
 
@@ -59,7 +69,7 @@ func (s *Service) GetFlowerThreadLiveBootstrap(ctx context.Context, meta *sessio
 	if s == nil {
 		return nil, errors.New("nil service")
 	}
-	if err := requireRWX(meta); err != nil {
+	if err := requireRead(meta); err != nil {
 		return nil, err
 	}
 	if ctx == nil {
@@ -227,7 +237,7 @@ func (s *Service) listFlowerThreadLiveEvents(meta *session.Meta, threadID string
 	if s == nil {
 		return nil, nil, errors.New("nil service")
 	}
-	if err := requireRWX(meta); err != nil {
+	if err := requireRead(meta); err != nil {
 		return nil, nil, err
 	}
 	threadID = strings.TrimSpace(threadID)
@@ -1180,6 +1190,9 @@ func emptyFlowerLiveMaterializedState() FlowerLiveMaterializedState {
 }
 
 func (s *Service) appendFlowerLiveEvent(event FlowerLiveEvent) (FlowerLiveEvent, bool) {
+	if s != nil {
+		s.flowerLiveMetrics.canonicalInputs.Add(1)
+	}
 	if s == nil {
 		return event, false
 	}
@@ -1210,8 +1223,17 @@ func (s *Service) appendFlowerLiveEvent(event FlowerLiveEvent) (FlowerLiveEvent,
 		stream = newFlowerLiveThreadStream()
 		s.flowerLiveByThread[threadKey] = stream
 	}
+	flowerLiveInvalidateBlockSetFingerprint(stream, event)
+	if flowerLiveBlockSetIsDuplicate(stream, event) {
+		s.flowerLiveMetrics.deduplicatedBlockSets.Add(1)
+		s.mu.Unlock()
+		return event, false
+	}
 	event = appendFlowerLiveEventLocked(stream, event)
+	projectionStartedAt := time.Now()
 	applyFlowerLiveEventToMaterializedState(&stream.State, stream.ApprovalIndex, event)
+	s.flowerLiveMetrics.projectionNanoseconds.Add(uint64(time.Since(projectionStartedAt)))
+	s.publishFlowerLiveEventLocked(stream, event)
 	notifyFlowerLiveWaitersLocked(stream)
 	if event.Kind == FlowerLiveApprovalQueueReplaced && s.log != nil && stream.State.ApprovalQueue != nil {
 		queue := stream.State.ApprovalQueue
@@ -1219,6 +1241,29 @@ func (s *Service) appendFlowerLiveEvent(event FlowerLiveEvent) (FlowerLiveEvent,
 	}
 	s.mu.Unlock()
 	return event, true
+}
+
+func flowerLiveInvalidateBlockSetFingerprint(stream *flowerLiveThreadStream, event FlowerLiveEvent) {
+	if stream == nil || stream.BlockSetFingerprint == nil {
+		return
+	}
+	messageID := ""
+	blockIndex := -1
+	switch event.Kind {
+	case FlowerLiveMessageBlockStart:
+		var payload FlowerLiveMessageBlockStartedPayload
+		if decodeFlowerPayload(event.Payload, &payload) {
+			messageID, blockIndex = strings.TrimSpace(payload.MessageID), payload.BlockIndex
+		}
+	case FlowerLiveMessageBlockDelta:
+		var payload FlowerLiveMessageBlockDeltaPayload
+		if decodeFlowerPayload(event.Payload, &payload) {
+			messageID, blockIndex = strings.TrimSpace(payload.MessageID), payload.BlockIndex
+		}
+	}
+	if messageID != "" && blockIndex >= 0 {
+		delete(stream.BlockSetFingerprint, fmt.Sprintf("%s:%d", messageID, blockIndex))
+	}
 }
 
 func (s *Service) appendFlowerLiveEventCursor(event FlowerLiveEvent) (int64, error) {
@@ -1247,7 +1292,13 @@ func (s *Service) retireFlowerLiveThreadLocked(threadKey string) {
 		s.flowerLiveRetired = make(map[string]struct{})
 	}
 	s.flowerLiveRetired[threadKey] = struct{}{}
-	closeFlowerLiveWaitersLocked(s.flowerLiveByThread[threadKey])
+	stream := s.flowerLiveByThread[threadKey]
+	if stream != nil && stream.FlushTimer != nil {
+		stream.FlushTimer.Stop()
+		stream.FlushTimer = nil
+	}
+	closeFlowerLiveWaitersLocked(stream)
+	closeFlowerLiveThreadSubscribersLocked(s, stream, "thread_retired")
 	delete(s.flowerLiveByThread, threadKey)
 }
 
@@ -1278,6 +1329,30 @@ func appendFlowerLiveEventLocked(stream *flowerLiveThreadStream, event FlowerLiv
 		stream.Events = stream.Events[:flowerLiveEventBufferLimit]
 	}
 	return event
+}
+
+func flowerLiveBlockSetIsDuplicate(stream *flowerLiveThreadStream, event FlowerLiveEvent) bool {
+	if stream == nil || event.Kind != FlowerLiveMessageBlockSet {
+		return false
+	}
+	var payload FlowerLiveMessageBlockSetPayload
+	if !decodeFlowerPayload(event.Payload, &payload) {
+		return false
+	}
+	messageID := strings.TrimSpace(payload.MessageID)
+	if messageID == "" || payload.BlockIndex < 0 {
+		return false
+	}
+	if stream.BlockSetFingerprint == nil {
+		stream.BlockSetFingerprint = make(map[string][sha256.Size]byte)
+	}
+	key := fmt.Sprintf("%s:%d", messageID, payload.BlockIndex)
+	fingerprint := sha256.Sum256(event.Payload)
+	if previous, ok := stream.BlockSetFingerprint[key]; ok && previous == fingerprint {
+		return true
+	}
+	stream.BlockSetFingerprint[key] = fingerprint
+	return false
 }
 
 func flowerLiveEventWithAssignedSeqPayload(stream *flowerLiveThreadStream, event FlowerLiveEvent) FlowerLiveEvent {

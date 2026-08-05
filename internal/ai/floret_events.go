@@ -120,7 +120,9 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 	r.applyFloretSourceObservation(ev.Sources)
 	r.applyFloretContextStatus(ev.ContextStatus)
 	r.applyFloretCompaction(ev.Compaction)
-	if ev.Projection != nil {
+	if ev.ProjectionDelta != nil {
+		r.applyFloretThreadProjectionDelta(*ev.ProjectionDelta)
+	} else if ev.Projection != nil {
 		r.applyFloretThreadProjection(*ev.Projection)
 	}
 	r.recordFloretActivityEvent(ev)
@@ -224,6 +226,19 @@ func (r *run) validateFloretRuntimeEvent(ev flruntime.Event) error {
 	}
 	if ev.Projection != nil && !r.floretThreadProjectionMatchesRun(*ev.Projection) {
 		return errors.New("Floret event projection identity mismatch")
+	}
+	if ev.ProjectionDelta != nil {
+		canonicalRunID, canonicalThreadID, canonicalTurnID := r.floretCanonicalIdentity()
+		if !projectionIdentityMatchesRun(
+			strings.TrimSpace(string(ev.ProjectionDelta.RunID)),
+			strings.TrimSpace(string(ev.ProjectionDelta.ThreadID)),
+			strings.TrimSpace(string(ev.ProjectionDelta.TurnID)),
+			canonicalRunID,
+			canonicalThreadID,
+			canonicalTurnID,
+		) {
+			return errors.New("Floret event projection delta identity mismatch")
+		}
 	}
 	return nil
 }

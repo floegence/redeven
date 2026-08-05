@@ -2668,7 +2668,7 @@ describe('FlowerSurface navigation launch/send', () => {
     await waitFor(() => compactThreadContext.mock.calls.length === 1);
   });
 
-  it('stops polling once a real compaction decoration replaces the local pending divider', async () => {
+  it('keeps the live stream connected after a real compaction decoration replaces the local pending divider', async () => {
     const idleThread = thread({
       thread_id: 'thread-compact-pending-clears',
       title: 'Compact pending clears',
@@ -2752,10 +2752,10 @@ describe('FlowerSurface navigation launch/send', () => {
     expect(runtime.querySelectorAll('.flower-compaction-divider')).toHaveLength(1);
     const callsAfterRealDecoration = listThreadLiveEvents.mock.calls.length;
     await new Promise((resolve) => window.setTimeout(resolve, 450));
-    expect(listThreadLiveEvents).toHaveBeenCalledTimes(callsAfterRealDecoration);
+    expect(listThreadLiveEvents.mock.calls.length).toBeGreaterThan(callsAfterRealDecoration);
   });
 
-  it('emits a debug event when selected thread live polling times out', async () => {
+  it('does not emit the removed live polling timeout diagnostic', async () => {
     vi.useFakeTimers();
     const runningThread = thread({
       thread_id: 'thread-live-timeout-debug',
@@ -2794,15 +2794,7 @@ describe('FlowerSurface navigation launch/send', () => {
         expect(runtime.querySelector('.flower-model-status-indicator')).toBeTruthy();
       });
       await vi.advanceTimersByTimeAsync(15_000);
-      await vi.waitFor(() => {
-        expect(timeouts).toHaveLength(1);
-      });
-
-      expect(timeouts[0]).toMatchObject({
-        thread_id: 'thread-live-timeout-debug',
-        cursor: 0,
-        stream_generation: 1,
-      });
+      expect(timeouts).toHaveLength(0);
     } finally {
       window.removeEventListener('redeven:flower-live-events-timeout', onTimeout);
     }

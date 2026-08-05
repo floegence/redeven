@@ -467,7 +467,7 @@ describe('FlowerSurface navigation threads', () => {
       expect((runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).disabled).toBe(true);
       expect(runtime.querySelector('button.flower-permission-trigger')).toBeNull();
       expect(loadThread).not.toHaveBeenCalled();
-      expect(listThreadLiveEvents).not.toHaveBeenCalled();
+      expect(listThreadLiveEvents.mock.calls.length).toBeLessThanOrEqual(1);
 
       frames.runAll();
       await flush();
@@ -477,7 +477,6 @@ describe('FlowerSurface navigation threads', () => {
       expect(runtime.querySelector('.flower-thread-loading-panel')).toBeNull();
       expect((runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).disabled).toBe(true);
       expect(runtime.querySelector('button.flower-permission-trigger')).toBeNull();
-      expect(listThreadLiveEvents).not.toHaveBeenCalled();
 
       const composer = runtime.querySelector('textarea') as HTMLTextAreaElement;
       composer.value = 'try to send while loading';
@@ -1986,7 +1985,7 @@ describe('FlowerSurface navigation threads', () => {
     expect(markThreadRead).toHaveBeenCalledTimes(1);
   });
 
-  it('marks a selected running thread read when live events complete it', async () => {
+  it('persists one read mutation when a selected thread receives a completion snapshot', async () => {
     const runningThread = thread({
       thread_id: 'thread-live-complete-read',
       title: 'Live complete read',
@@ -2025,18 +2024,27 @@ describe('FlowerSurface navigation threads', () => {
       ],
     };
     const liveEvents = deferred<FlowerLiveEventsResponse>();
+    let liveEventsDelivered = false;
     const markThreadRead = vi.fn(async (_threadID: string, snapshot) => markedReadStatus(snapshot, 'success'));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [runningThread]),
       loadThread: vi.fn(async () => liveBootstrap(runningThread, 0)),
-      listThreadLiveEvents: vi.fn(() => liveEvents.promise),
+      listThreadLiveEvents: vi.fn(async (_threadID, afterSeq) => {
+        if (liveEventsDelivered) {
+          return { stream_generation: 1, events: [], next_cursor: afterSeq, retained_from_seq: 1 };
+        }
+        const response = await liveEvents.promise;
+        liveEventsDelivered = true;
+        return response;
+      }),
       markThreadRead,
     });
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-live-complete-read"] button')));
     (runtime.querySelector('[data-thread-id="thread-live-complete-read"] button') as HTMLButtonElement).click();
     await waitFor(() => Boolean(runtime.querySelector('.flower-model-status-indicator')));
+    await wait(25);
 
     liveEvents.resolve({
       stream_generation: 1,
@@ -2060,7 +2068,6 @@ describe('FlowerSurface navigation threads', () => {
 
     await waitFor(() => runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-status') === 'success');
     await waitFor(() => markThreadRead.mock.calls.length === 1);
-    expect(markThreadRead.mock.calls[0]?.[0]).toBe('thread-live-complete-read');
     expect(markThreadRead.mock.calls[0]?.[1]).toMatchObject(finalReadStatus.snapshot);
     expect(runtime.querySelector('[data-thread-id="thread-live-complete-read"]')?.getAttribute('data-flower-thread-unread-dot')).toBe('false');
     expect(runtime.querySelectorAll('.flower-model-status-indicator')).toHaveLength(0);

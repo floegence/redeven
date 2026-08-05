@@ -14,7 +14,7 @@ import (
 	"github.com/floegence/redeven/internal/session"
 )
 
-func TestServer_AI_Permissions_RequireRWX(t *testing.T) {
+func TestServer_AI_Permissions_AllowReadsAndProtectMutations(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -92,18 +92,29 @@ func TestServer_AI_Permissions_RequireRWX(t *testing.T) {
 			t.Fatalf("%s %s unexpected body=%s", method, path, rr.Body.String())
 		}
 	}
+	assertReadAllowed := func(path string) {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set("Origin", envOrigin)
+		rr := httptest.NewRecorder()
+		srv.serveHTTP(rr, req)
+		if rr.Code == http.StatusForbidden {
+			t.Fatalf("GET %s unexpectedly denied: %s", path, rr.Body.String())
+		}
+	}
 
-	// AI endpoints require RWX for the entire feature surface.
+	// Flower observation is read-only. Business mutations retain the full
+	// read/write/execute boundary.
 	assertForbidden(http.MethodGet, "/_redeven_proxy/api/ai/models")
-	assertForbidden(http.MethodGet, "/_redeven_proxy/api/ai/threads")
+	assertReadAllowed("/_redeven_proxy/api/ai/threads")
+	assertReadAllowed("/_redeven_proxy/api/ai/threads/th_test")
+	assertReadAllowed("/_redeven_proxy/api/ai/threads/th_test/todos")
+	assertReadAllowed("/_redeven_proxy/api/ai/threads/th_test/messages")
+	assertReadAllowed("/_redeven_proxy/api/ai/threads/th_test/live/bootstrap")
+	assertReadAllowed("/_redeven_proxy/api/ai/flower/stream")
 	assertForbidden(http.MethodPost, "/_redeven_proxy/api/ai/threads")
-	assertForbidden(http.MethodGet, "/_redeven_proxy/api/ai/threads/th_test")
 	assertForbidden(http.MethodPatch, "/_redeven_proxy/api/ai/threads/th_test")
 	assertForbidden(http.MethodDelete, "/_redeven_proxy/api/ai/threads/th_test")
-	assertForbidden(http.MethodGet, "/_redeven_proxy/api/ai/threads/th_test/todos")
-	assertForbidden(http.MethodGet, "/_redeven_proxy/api/ai/threads/th_test/messages")
-	assertForbidden(http.MethodGet, "/_redeven_proxy/api/ai/threads/th_test/live/bootstrap")
-	assertForbidden(http.MethodGet, "/_redeven_proxy/api/ai/threads/th_test/live/events?after_seq=1&limit=10")
 	assertForbidden(http.MethodPost, "/_redeven_proxy/api/ai/threads/th_test/turns")
 	assertForbidden(http.MethodPost, "/_redeven_proxy/api/ai/threads/th_test/approvals")
 	assertForbidden(http.MethodPost, "/_redeven_proxy/api/ai/threads/th_test/cancel")

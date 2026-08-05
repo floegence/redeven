@@ -4457,6 +4457,17 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: models})
 		return
 
+	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/flower/stream":
+		meta, ok := g.requirePermission(w, r, requiredPermissionRead)
+		if !ok {
+			return
+		}
+		if !g.requireAIService(w, aiSvc) {
+			return
+		}
+		serveAIFlowerLiveStream(w, r, aiSvc, meta)
+		return
+
 	case r.Method == http.MethodPut && r.URL.Path == "/_redeven_proxy/api/ai/current_model":
 		meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 		if !ok {
@@ -4545,7 +4556,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		return
 
 	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/threads":
-		meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+		meta, ok := g.requirePermission(w, r, requiredPermissionRead)
 		if !ok {
 			return
 		}
@@ -4674,7 +4685,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 
 		switch {
 		case action == "" && r.Method == http.MethodGet:
-			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+			meta, ok := g.requirePermission(w, r, requiredPermissionRead)
 			if !ok {
 				return
 			}
@@ -4699,7 +4710,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 
 		case action == "live" && r.Method == http.MethodGet && len(parts) == 3 && strings.TrimSpace(parts[2]) == "bootstrap":
-			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+			meta, ok := g.requirePermission(w, r, requiredPermissionRead)
 			if !ok {
 				return
 			}
@@ -4723,60 +4734,8 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: view})
 			return
 
-		case action == "live" && r.Method == http.MethodGet && len(parts) == 3 && strings.TrimSpace(parts[2]) == "events":
-			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
-			if !ok {
-				return
-			}
-			if !g.requireAIService(w, aiSvc) {
-				return
-			}
-			afterSeq := int64(0)
-			if raw := strings.TrimSpace(r.URL.Query().Get("after_seq")); raw != "" {
-				v, err := strconv.ParseInt(raw, 10, 64)
-				if err != nil || v < 0 {
-					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid after_seq"})
-					return
-				}
-				afterSeq = v
-			}
-			limit := 100
-			if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
-				if v, err := strconv.Atoi(raw); err == nil && v > 0 {
-					limit = v
-				}
-			}
-			waitMs := 0
-			if raw := strings.TrimSpace(r.URL.Query().Get("wait_ms")); raw != "" {
-				v, err := strconv.Atoi(raw)
-				if err != nil || v < 0 || v > 30000 {
-					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid wait_ms"})
-					return
-				}
-				waitMs = v
-			}
-			resp, err := aiSvc.WaitFlowerThreadLiveEvents(
-				r.Context(),
-				meta,
-				threadID,
-				afterSeq,
-				limit,
-				time.Duration(waitMs)*time.Millisecond,
-			)
-			if err != nil {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
-				return
-			}
-			view, err := g.buildAIFlowerLiveEventsView(r.Context(), meta, threadID, resp)
-			if err != nil {
-				writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: err.Error()})
-				return
-			}
-			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: view})
-			return
-
 		case action == "subagents" && r.Method == http.MethodGet && len(parts) == 4 && strings.TrimSpace(parts[3]) == "detail":
-			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+			meta, ok := g.requirePermission(w, r, requiredPermissionRead)
 			if !ok {
 				return
 			}
@@ -4962,7 +4921,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 
 		case action == "read" && r.Method == http.MethodPost:
-			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+			meta, ok := g.requirePermission(w, r, requiredPermissionRead)
 			if !ok {
 				return
 			}
@@ -4981,6 +4940,12 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 				return
+			}
+			if aiSvc != nil {
+				if err := aiSvc.PublishFlowerViewerReadState(meta, threadID, flowerAIReadStatusView(resp.ReadStatus)); err != nil {
+					writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: "failed to publish Flower read state"})
+					return
+				}
 			}
 			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: resp})
 			return
@@ -5309,7 +5274,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 
 		case action == "todos" && r.Method == http.MethodGet:
-			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+			meta, ok := g.requirePermission(w, r, requiredPermissionRead)
 			if !ok {
 				return
 			}
@@ -5442,7 +5407,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 
 		case action == "messages" && r.Method == http.MethodGet:
-			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+			meta, ok := g.requirePermission(w, r, requiredPermissionRead)
 			if !ok {
 				return
 			}

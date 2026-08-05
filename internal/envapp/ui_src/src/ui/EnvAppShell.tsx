@@ -1831,7 +1831,7 @@ export function EnvAppShell() {
   };
 
   const openFlowerTurnLauncher = (intent: FlowerTurnLauncherIntent, anchor?: FlowerTurnLauncherAnchor) => {
-    if (!canUseFlower()) {
+    if (!hasRWXPermissions(env())) {
       notify.error(i18n.t('shell.notifications.permissionDeniedTitle'), i18n.t('shell.notifications.rwxPermissionRequired'));
       return;
     }
@@ -2115,6 +2115,7 @@ export function EnvAppShell() {
         envLabel: trimString(env()?.name) || trimString(envId()) || 'This environment',
         desktopSessionTargetRoute: readDesktopSessionContextSnapshot()?.target_route,
         rpc,
+        canMutate: true,
         copy: {
           currentEnvironment: i18n.t('flowerChat.router.currentEnvSource'),
           usingCurrentEnvironment: i18n.t('flowerChat.router.currentEnvHandler'),

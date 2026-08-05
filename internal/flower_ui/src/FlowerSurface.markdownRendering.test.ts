@@ -60,9 +60,12 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(src).not.toContain("case 'running':\n        return <Terminal");
   });
 
-  it('uses the adaptive live poll loop instead of fixed 350ms intervals', () => {
+  it('uses one cancellable live stream without polling fallbacks', () => {
     const src = surfaceSource();
-    expect(src).toContain('createFlowerLivePollLoop');
+    expect(src).toContain('props.adapter.connectLiveStream');
+    expect(src).not.toContain('createFlowerLivePollLoop');
+    expect(src).not.toContain('listThreadLiveEvents(');
+    expect(src).not.toContain('COMPANION_SUMMARY_ACTIVE_REFRESH_MS');
     expect(src).not.toContain('setInterval(tick, 350)');
     expect(src).not.toContain('setInterval(() => void poll(), 350)');
   });

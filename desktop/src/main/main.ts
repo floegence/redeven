@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import fs from 'node:fs/promises';
-import http, { type ClientRequest, type IncomingHttpHeaders } from 'node:http';
+import http, { type ClientRequest, type IncomingHttpHeaders, type IncomingMessage } from 'node:http';
 import https from 'node:https';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -195,6 +195,7 @@ import {
 	parseRuntimeFlowerJSON,
 	readRuntimeFlowerHTTPResponse,
 	requestRuntimeFlowerHTTP as runtimeFlowerRequestHTTP,
+  openRuntimeFlowerHTTPStream,
   runtimeFlowerDeleteQuery,
 	runtimeFlowerInvalidJSONError,
   type RuntimeFlowerHTTPResponse,
@@ -356,10 +357,17 @@ import {
   type SaveDesktopSettingsResult,
 } from '../shared/settingsIPC';
 import {
+  CANCEL_RUNTIME_FLOWER_STREAM_CHANNEL,
   REQUEST_RUNTIME_FLOWER_CHANNEL,
+  RUNTIME_FLOWER_STREAM_EVENT_CHANNEL,
+  START_RUNTIME_FLOWER_STREAM_CHANNEL,
+  normalizeRuntimeFlowerStreamID,
+  normalizeRuntimeFlowerStreamRequest,
   type RuntimeFlowerError,
   type RuntimeFlowerRequest,
   type RuntimeFlowerRequestResult,
+  type RuntimeFlowerStreamEvent,
+  type RuntimeFlowerStreamStartResult,
 } from '../shared/runtimeFlowerIPC';
 import {
   CANCEL_RUNTIME_FLOWER_ATTACHMENT_CHANNEL,
@@ -1026,6 +1034,19 @@ class RuntimeFlowerTransportError extends Error {
 const LOCAL_UI_ACCESS_COOKIE_NAME = 'redeven_local_access';
 const runtimeFlowerAccessCookies = new Map<string, string>();
 const RUNTIME_FLOWER_ATTACHMENT_MAX_BYTES = 64 * 1024 * 1024;
+const RUNTIME_FLOWER_STREAMS_PER_SENDER = 8;
+const RUNTIME_FLOWER_STREAMS_GLOBAL = 64;
+
+type RuntimeFlowerStreamOperation = {
+  key: string;
+  streamID: string;
+  sender: WebContents;
+  request?: ClientRequest;
+  settled: boolean;
+  senderDestroyedListener: () => void;
+};
+
+const runtimeFlowerStreamOperations = new Map<string, RuntimeFlowerStreamOperation>();
 
 type RuntimeFlowerAttachmentOperation = {
   key: string;
@@ -9228,18 +9249,15 @@ type RuntimeFlowerRoute = Readonly<{
 
 const runtimeFlowerNoQuery = (parsed: URL): boolean => parsed.search === '';
 const runtimeFlowerLimitQuery = (parsed: URL): boolean => parsed.search === '' || /^\?limit=\d{1,4}$/u.test(parsed.search);
-const runtimeFlowerLiveEventsQuery = (parsed: URL): boolean => {
-  const allowed = new Set(['after_seq', 'limit', 'wait_ms']);
+const runtimeFlowerStreamQuery = (parsed: URL): boolean => {
+  const allowed = new Set(['summary_generation', 'summary_after_seq', 'thread_id', 'thread_generation', 'thread_after_seq']);
   if (![...parsed.searchParams.keys()].every((key) => allowed.has(key))) return false;
-  const afterSeq = parsed.searchParams.getAll('after_seq');
-  const limit = parsed.searchParams.getAll('limit');
-  const waitMs = parsed.searchParams.getAll('wait_ms');
-  return afterSeq.length <= 1
-    && limit.length <= 1
-    && waitMs.length <= 1
-    && (afterSeq.length === 0 || /^\d{1,18}$/u.test(afterSeq[0] ?? ''))
-    && (limit.length === 0 || /^\d{1,3}$/u.test(limit[0] ?? ''))
-    && (waitMs.length === 0 || /^\d{1,5}$/u.test(waitMs[0] ?? ''));
+  const threadIDs = parsed.searchParams.getAll('thread_id');
+  if (threadIDs.length !== 1 || !threadIDs[0]?.trim() || threadIDs[0].length > 200) return false;
+  return ['summary_generation', 'summary_after_seq', 'thread_generation', 'thread_after_seq'].every((name) => {
+    const values = parsed.searchParams.getAll(name);
+    return values.length === 1 && /^\d{1,18}$/u.test(values[0] ?? '');
+  });
 };
 const runtimeFlowerSubagentDetailQuery = (parsed: URL): boolean => parsed.search === ''
   || /^\?after_ordinal=\d+$/u.test(parsed.search)
@@ -9276,7 +9294,7 @@ const RUNTIME_FLOWER_ROUTES: readonly RuntimeFlowerRoute[] = [
   { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+$/u, methods: ['GET', 'PATCH'] },
   { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+$/u, methods: ['DELETE'], allowsQuery: runtimeFlowerDeleteQuery },
   { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/live\/bootstrap$/u, methods: ['GET'] },
-  { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/live\/events$/u, methods: ['GET'], allowsQuery: runtimeFlowerLiveEventsQuery },
+  { path: '/_redeven_proxy/api/ai/flower/stream', methods: ['GET'], allowsQuery: runtimeFlowerStreamQuery },
   { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/subagents\/[^/]+\/detail$/u, methods: ['GET'], allowsQuery: runtimeFlowerSubagentDetailQuery },
   { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/read$/u, methods: ['POST'] },
   { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/turns$/u, methods: ['POST'] },
@@ -9568,6 +9586,142 @@ async function requestRuntimeFlower(request: RuntimeFlowerRequest): Promise<Runt
     data: dataRecord && Object.prototype.hasOwnProperty.call(dataRecord, 'data') ? dataRecord.data : parsed,
     ...(responseCapability ? { stagingCapability: responseCapability } : {}),
   };
+}
+
+function runtimeFlowerStreamOperationKey(senderID: number, streamID: string): string {
+  return `${senderID}:${streamID}`;
+}
+
+function emitRuntimeFlowerStreamEvent(operation: RuntimeFlowerStreamOperation, event: RuntimeFlowerStreamEvent): void {
+  if (operation.settled || operation.sender.isDestroyed()) return;
+  operation.sender.send(RUNTIME_FLOWER_STREAM_EVENT_CHANNEL, event);
+}
+
+function finishRuntimeFlowerStream(operation: RuntimeFlowerStreamOperation, destroyRequest = false): void {
+  if (operation.settled) return;
+  operation.settled = true;
+  runtimeFlowerStreamOperations.delete(operation.key);
+  operation.sender.removeListener('destroyed', operation.senderDestroyedListener);
+  if (destroyRequest && operation.request && !operation.request.destroyed) operation.request.destroy();
+}
+
+function cancelRuntimeFlowerStream(sender: WebContents, rawStreamID: unknown): void {
+  const streamID = normalizeRuntimeFlowerStreamID(rawStreamID);
+  if (!streamID) return;
+  const operation = runtimeFlowerStreamOperations.get(runtimeFlowerStreamOperationKey(sender.id, streamID));
+  if (operation) finishRuntimeFlowerStream(operation, true);
+}
+
+function runtimeFlowerStreamCountForSender(senderID: number): number {
+  let count = 0;
+  for (const operation of runtimeFlowerStreamOperations.values()) {
+    if (operation.sender.id === senderID) count += 1;
+  }
+  return count;
+}
+
+async function openRuntimeFlowerStreamResponse(
+  operation: RuntimeFlowerStreamOperation,
+  url: URL,
+  headers: Readonly<Record<string, string>>,
+): Promise<IncomingMessage> {
+  const stream = openRuntimeFlowerHTTPStream(url, { headers });
+  operation.request = stream.request;
+  return stream.response;
+}
+
+async function startRuntimeFlowerStream(
+  sender: WebContents,
+  rawRequest: unknown,
+): Promise<RuntimeFlowerStreamStartResult> {
+  const request = normalizeRuntimeFlowerStreamRequest(rawRequest);
+  if (!request) {
+    return { ok: false, error: runtimeFlowerError('runtime_flower_invalid_stream', 'Desktop received an invalid Flower stream request.') };
+  }
+  let path: string;
+  try {
+    path = runtimeFlowerPath(request.path);
+  } catch (error) {
+    return { ok: false, error: runtimeFlowerErrorFromUnknown(error) };
+  }
+  if (!runtimeFlowerMethodAllowed(path, 'GET') || new URL(path, 'http://runtime-flower.local').pathname !== '/_redeven_proxy/api/ai/flower/stream') {
+    return { ok: false, error: runtimeFlowerError('runtime_flower_invalid_stream', 'Flower stream path is not allowed.') };
+  }
+  const key = runtimeFlowerStreamOperationKey(sender.id, request.stream_id);
+  if (runtimeFlowerStreamOperations.has(key)) {
+    return { ok: false, error: runtimeFlowerError('runtime_flower_stream_conflict', 'A Flower stream with this id is already active.') };
+  }
+  if (runtimeFlowerStreamOperations.size >= RUNTIME_FLOWER_STREAMS_GLOBAL
+    || runtimeFlowerStreamCountForSender(sender.id) >= RUNTIME_FLOWER_STREAMS_PER_SENDER) {
+    return { ok: false, error: runtimeFlowerError('runtime_flower_stream_limit', 'Too many Flower streams are active.', 429, 10_000) };
+  }
+
+  const preferences = await loadDesktopPreferencesCached();
+  const record = await ensureRuntimeFlowerRecord();
+  const url = new URL(path, runtimeFlowerBaseURL(record));
+  const environment = preferences.local_environment;
+  const operation: RuntimeFlowerStreamOperation = {
+    key,
+    streamID: request.stream_id,
+    sender,
+    settled: false,
+    senderDestroyedListener: () => undefined,
+  };
+  operation.senderDestroyedListener = () => finishRuntimeFlowerStream(operation, true);
+  runtimeFlowerStreamOperations.set(key, operation);
+  sender.once('destroyed', operation.senderDestroyedListener);
+
+  try {
+    let accessHeaders = await runtimeFlowerAccessHeaders(record, environment);
+    let response = await openRuntimeFlowerStreamResponse(operation, url, accessHeaders);
+    if (response.statusCode === 423) {
+      response.resume();
+      runtimeFlowerAccessCookies.delete(runtimeFlowerBaseURL(record));
+      const cookie = await unlockRuntimeFlowerAccess(record, environment);
+      accessHeaders = { Cookie: runtimeFlowerAccessCookieHeader(cookie) };
+      response = await openRuntimeFlowerStreamResponse(operation, url, accessHeaders);
+    }
+    if (operation.settled) {
+      response.destroy();
+      return { ok: false, error: runtimeFlowerError('runtime_flower_stream_cancelled', 'Flower stream was cancelled.') };
+    }
+    response.on('data', (chunk: Buffer) => {
+      try {
+        emitRuntimeFlowerStreamEvent(operation, {
+          stream_id: operation.streamID,
+          kind: 'chunk',
+          chunk: new Uint8Array(chunk),
+        });
+      } catch {
+        finishRuntimeFlowerStream(operation, true);
+      }
+    });
+    response.once('end', () => {
+      emitRuntimeFlowerStreamEvent(operation, { stream_id: operation.streamID, kind: 'end' });
+      finishRuntimeFlowerStream(operation);
+    });
+    const fail = (error: unknown) => {
+      emitRuntimeFlowerStreamEvent(operation, {
+        stream_id: operation.streamID,
+        kind: 'error',
+        message: error instanceof Error ? error.message : compact(error) || 'Flower stream failed.',
+      });
+      finishRuntimeFlowerStream(operation, true);
+    };
+    response.once('aborted', () => fail(new Error('Flower stream response was interrupted.')));
+    response.once('error', fail);
+    const contentType = response.headers['content-type'];
+    const retryAfter = response.headers['retry-after'];
+    return {
+      ok: true,
+      status: response.statusCode ?? 0,
+      ...(contentType ? { content_type: Array.isArray(contentType) ? contentType[0] : contentType } : {}),
+      ...(retryAfter ? { retry_after: Array.isArray(retryAfter) ? retryAfter[0] : retryAfter } : {}),
+    };
+  } catch (error) {
+    finishRuntimeFlowerStream(operation, true);
+    return { ok: false, error: runtimeFlowerErrorFromUnknown(error) };
+  }
 }
 
 async function fetchRuntimeFlowerAttachmentPreview(request: RuntimeFlowerAttachmentPreviewRequest): Promise<RuntimeFlowerHTTPResponse> {
@@ -18361,6 +18515,12 @@ if (!app.requestSingleInstanceLock()) {
         failureKind: error instanceof RuntimeFlowerTransportError ? 'transport_unknown' : 'local',
       };
     }
+  });
+  ipcMain.handle(START_RUNTIME_FLOWER_STREAM_CHANNEL, async (event, request): Promise<RuntimeFlowerStreamStartResult> => (
+    startRuntimeFlowerStream(event.sender, request)
+  ));
+  ipcMain.on(CANCEL_RUNTIME_FLOWER_STREAM_CHANNEL, (event, streamID) => {
+    cancelRuntimeFlowerStream(event.sender, streamID);
   });
   ipcMain.handle(PREPARE_RUNTIME_FLOWER_ATTACHMENT_CHANNEL, async (event, request): Promise<RuntimeFlowerAttachmentPrepareResponse> => {
     const normalized = normalizeRuntimeFlowerAttachmentPrepareRequest(request);

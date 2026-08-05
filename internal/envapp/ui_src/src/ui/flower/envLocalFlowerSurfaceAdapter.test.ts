@@ -103,25 +103,93 @@ function liveBootstrap(threadID: string, status = 'canceled') {
 }
 
 describe('Env local Flower surface adapter', () => {
-	it('uses bounded server-side waiting for live events', async () => {
-		fetchMock.mockResolvedValue(jsonResponse({
-			stream_generation: 1,
-			events: [],
-			next_cursor: 7,
-			retained_from_seq: 1,
-		}));
+	it('does not retain the legacy live polling transport', async () => {
 		const adapter = createEnvLocalFlowerSurfaceAdapter({
 			envPublicID: 'env_a',
 			envLabel: 'Demo Env',
 			rpc: { ai: {} } as any,
 		});
 
-		await adapter.listThreadLiveEvents('thread_live', 7, 25);
+		await expect(adapter.listThreadLiveEvents('thread_live', 7, 25)).rejects.toThrow('polling is unavailable');
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
 
-		expect(fetchMock).toHaveBeenCalledWith(
-			'/_redeven_proxy/api/ai/threads/thread_live/live/events?after_seq=7&limit=25&wait_ms=10000',
-			expect.objectContaining({ method: 'GET' }),
-		);
+	it('aborts an inactive SSE stream and releases the reader after 45 seconds', async () => {
+		vi.useFakeTimers();
+		let cancelled = false;
+		fetchMock.mockImplementation((_input: RequestInfo | URL, init?: RequestInit) => new Promise((_resolve, reject) => {
+			init?.signal?.addEventListener('abort', () => {
+				cancelled = true;
+				reject(new DOMException('aborted', 'AbortError'));
+			}, { once: true });
+		}));
+		const adapter = createEnvLocalFlowerSurfaceAdapter({
+			envPublicID: 'env_a', envLabel: 'Demo Env', rpc: { ai: {} } as any,
+		});
+		const controller = new AbortController();
+		const iterator = adapter.connectLiveStream!({
+			thread_id: 'thread_idle', thread_generation: 1, thread_after_seq: 0,
+			summary_generation: 1, summary_after_seq: 0, signal: controller.signal,
+		})[Symbol.asyncIterator]();
+		let failure: unknown;
+		const pending = iterator.next().catch((error) => { failure = error; });
+		await vi.advanceTimersByTimeAsync(45_000);
+		await pending;
+		expect(failure).toBeTruthy();
+		expect(cancelled).toBe(true);
+		vi.useRealTimers();
+	});
+
+	it('cancels the fetch-SSE reader immediately when the caller aborts', async () => {
+		let cancelled = false;
+		fetchMock.mockImplementation((_input: RequestInfo | URL, init?: RequestInit) => new Promise((_resolve, reject) => {
+			init?.signal?.addEventListener('abort', () => {
+				cancelled = true;
+				reject(new DOMException('aborted', 'AbortError'));
+			}, { once: true });
+		}));
+		const controller = new AbortController();
+		const adapter = createEnvLocalFlowerSurfaceAdapter({
+			envPublicID: 'env_a', envLabel: 'Demo Env', rpc: { ai: {} } as any,
+		});
+		const iterator = adapter.connectLiveStream!({
+			thread_id: 'thread_abort', thread_generation: 1, thread_after_seq: 0,
+			summary_generation: 1, summary_after_seq: 0, signal: controller.signal,
+		})[Symbol.asyncIterator]();
+		const pending = iterator.next();
+		await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+		controller.abort();
+		await expect(pending).rejects.toThrow();
+		expect(cancelled).toBe(true);
+	});
+
+	it('consumes one cancellable fetch-SSE stream with explicit cursors', async () => {
+		fetchMock.mockResolvedValue(new Response(
+			'data: {"schema_version":1,"kind":"ready","stream_generation":9,"thread_id":"thread_live","through_seq":7,"summary_through_seq":4}\n\n',
+			{ status: 200, headers: { 'Content-Type': 'text/event-stream; charset=utf-8' } },
+		));
+		const adapter = createEnvLocalFlowerSurfaceAdapter({
+			envPublicID: 'env_a',
+			envLabel: 'Demo Env',
+			rpc: { ai: {} } as any,
+		});
+		const controller = new AbortController();
+		const frames = [];
+		for await (const frame of adapter.connectLiveStream!({
+			thread_id: 'thread_live',
+			thread_generation: 9,
+			thread_after_seq: 7,
+			summary_generation: 9,
+			summary_after_seq: 4,
+			signal: controller.signal,
+		})) frames.push(frame);
+
+		expect(frames).toEqual([expect.objectContaining({ kind: 'ready', stream_generation: 9, through_seq: 7 })]);
+		const url = String(fetchMock.mock.calls[0]?.[0]);
+		expect(url).toContain('/_redeven_proxy/api/ai/flower/stream?');
+		expect(url).toContain('thread_after_seq=7');
+		expect(url).toContain('summary_after_seq=4');
+		expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
 
 	it('creates and releases attachment staging scopes without exposing the capability', async () => {

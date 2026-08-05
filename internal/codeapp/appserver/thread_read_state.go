@@ -2,7 +2,6 @@ package appserver
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"sort"
 	"strings"
@@ -152,74 +151,6 @@ func (g *Server) buildAIFlowerLiveBootstrapView(
 	return &out, nil
 }
 
-func (g *Server) buildAIFlowerLiveEventsView(
-	ctx context.Context,
-	meta *session.Meta,
-	threadID string,
-	resp *ai.FlowerLiveEventsResponse,
-) (*ai.FlowerLiveEventsResponse, error) {
-	if resp == nil {
-		return nil, nil
-	}
-	aiSvc := aiServiceFromContext(ctx)
-	if g == nil || aiSvc == nil {
-		return resp, nil
-	}
-	return decorateAIFlowerLiveEventsReadStatus(resp, func() (ai.FlowerThreadReadView, error) {
-		thread, err := aiSvc.GetThread(ctx, meta, threadID)
-		if err != nil {
-			return ai.FlowerThreadReadView{}, err
-		}
-		if thread == nil {
-			return ai.FlowerThreadReadView{}, errors.New("thread not found")
-		}
-		records, err := g.ensureFlowerReadRecords(ctx, meta, []ai.ThreadView{*thread})
-		if err != nil {
-			return ai.FlowerThreadReadView{}, err
-		}
-		readStatus := flowerReadStatusView(flowerSnapshotFromThread(*thread), records[strings.TrimSpace(thread.ThreadID)])
-		return flowerAIReadStatusView(readStatus), nil
-	})
-}
-
-func decorateAIFlowerLiveEventsReadStatus(
-	resp *ai.FlowerLiveEventsResponse,
-	loadReadStatus func() (ai.FlowerThreadReadView, error),
-) (*ai.FlowerLiveEventsResponse, error) {
-	if resp == nil {
-		return nil, nil
-	}
-	needsReadStatus := false
-	for _, event := range resp.Events {
-		if event.Kind == ai.FlowerLiveThreadPatched {
-			needsReadStatus = true
-			break
-		}
-	}
-	if !needsReadStatus {
-		return resp, nil
-	}
-	readStatus, err := loadReadStatus()
-	if err != nil {
-		return nil, err
-	}
-	out := *resp
-	out.Events = make([]ai.FlowerLiveEvent, len(resp.Events))
-	for i, event := range resp.Events {
-		out.Events[i] = event
-		if event.Kind != ai.FlowerLiveThreadPatched {
-			continue
-		}
-		var payload ai.FlowerLiveThreadPatchedPayload
-		if !decodeAIFlowerPayload(event.Payload, &payload) {
-			continue
-		}
-		payload.Patch.ReadStatus = &readStatus
-		out.Events[i].Payload = mustAIFlowerPayload(payload)
-	}
-	return &out, nil
-}
-
 func flowerAIReadStatusView(view flowerThreadReadStatusView) ai.FlowerThreadReadView {
 	return ai.FlowerThreadReadView{
 		IsUnread: view.IsUnread,
@@ -236,21 +167,6 @@ func flowerAIReadStatusView(view flowerThreadReadStatusView) ai.FlowerThreadRead
 			LastSeenWaitingPromptID:   view.ReadState.LastSeenWaitingPromptID,
 		},
 	}
-}
-
-func decodeAIFlowerPayload(raw json.RawMessage, out any) bool {
-	if len(raw) == 0 {
-		return false
-	}
-	return json.Unmarshal(raw, out) == nil
-}
-
-func mustAIFlowerPayload(value any) json.RawMessage {
-	raw, err := json.Marshal(value)
-	if err != nil || len(raw) == 0 {
-		return json.RawMessage(`{}`)
-	}
-	return raw
 }
 
 func (g *Server) buildCodexThreadListView(

@@ -487,7 +487,7 @@ func newFlowerLiveMemoryTestService() *Service {
 }
 
 func flowerLiveMemoryTestMeta(endpointID string) session.Meta {
-	return session.Meta{EndpointID: endpointID, CanRead: true, CanWrite: true, CanExecute: true}
+	return session.Meta{EndpointID: endpointID, UserPublicID: "user_" + endpointID, CanRead: true, CanWrite: true, CanExecute: true}
 }
 
 func jsonPayloadForMemoryTest(value string) []byte {

@@ -513,6 +513,7 @@ func (s *Service) runIdleThreadCompaction(ctx context.Context, meta *session.Met
 		ResolveProviderKey:    s.resolveProviderKey,
 		ResolveWebSearchKey:   s.resolveWebSearchKey,
 		DesktopModelSource:    desktopModelSource,
+		LiveMetrics:           &s.flowerLiveMetrics,
 		RunID:                 runID,
 		ChannelID:             strings.TrimSpace(meta.ChannelID),
 		EndpointID:            endpointID,

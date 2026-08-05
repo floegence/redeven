@@ -27,10 +27,14 @@ The focused timeline contract preserves Floret `ThroughOrdinal` and `ListThreadT
 
 Flower must not reconstruct canonical execution, approval, context, read, or child state from transcript text, audit rows, previews, timestamps, or local heuristics. Full timeline replacement is reserved for explicit resynchronization, snapshot recovery, and terminal settlement finalization.
 
+Realtime observation uses the Redeven Flower live hub and a single fetch-SSE connection per authorized surface. The hub performs canonical projection, privacy sanitization, deduplication, coalescing, and JSON encoding once, then fans out immutable batches to independent observer queues. Summary and selected-thread cursors carry explicit stream generations; a retention gap, generation reset, service restart, or slow-observer overflow emits one `resync_required` envelope and closes that observer. Canonical batches exclude private read state; `viewer.read_state` is delivered only to connections for the same user. Hidden pages cancel their reader, and healthy heartbeats do not create application polling requests.
+
 # Evidence
 
 - `redeven:internal/ai/flower_live_projection.go:79` - Live bootstrap builds `timeline_messages` before returning the thread snapshot.
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx:128` - Flower recognizes `model_io.updated` as a model-status presentation boundary.
 - `redeven:internal/envapp/ui_src/src/ui/chat/blocks/ShellBlock.tsx:377` - The terminal shell block builds process read, write, and terminate URLs from run and process ids.
 - `redeven:internal/flower_ui/src/flowerLiveReducer.ts:407` - `context.usage.updated` is applied as thread presentation state.
+- `redeven:internal/ai/flower_live_stream.go:1` - The live hub shares immutable encoded batches, bounds retention and observer queues, and emits explicit resynchronization envelopes.
+- `redeven:internal/flower_ui/src/FlowerSurface.tsx:3890` - Flower consumes one cancellable SSE stream and applies at most one render commit per animation frame.
 - `redeven:internal/ai/subagents_floret.go:2096` - Redeven lists parent subagents through Floret host or maintenance host APIs.

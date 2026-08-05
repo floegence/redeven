@@ -433,7 +433,7 @@
     },
     {
       "path": "desktop/src/main/main.ts",
-      "sha256": "6f2f529693017a35eff91d7a6ecdd310d9caf6bd1d8a99de3fd08924e1a2beeb",
+      "sha256": "cf814f554389b13be9f9abc9f4652e9c3068ef7700ab6a7c6562f05663bdae7b",
       "sink_kinds": [
         "file"
       ],
@@ -539,7 +539,7 @@
     },
     {
       "path": "internal/ai/run.go",
-      "sha256": "7eef41da08a4121c976207da47e71f1bea9e68d0d344b97943cb01928e8e828d",
+      "sha256": "9c9da3fda4779de429b092058d80015c43089b0b27f6c1bad0ba4b9198af5fa3",
       "sink_kinds": [
         "file",
         "json_file"
@@ -1302,7 +1302,7 @@
     },
     {
       "path": "internal/codeapp/appserver/server.go",
-      "sha256": "1138c030770f8267923f94421b4c41fcc067c93ee979ecd1901ea65f426d7433",
+      "sha256": "b1385ea963bcc4cbc67e56267dbad7447fd334120078456c8b92a924a409e3f2",
       "sink_kinds": [
         "file",
         "json_file"
@@ -1327,8 +1327,7 @@
       "dtos": [
         "ev",
         "event",
-        "v",
-        "value"
+        "v"
       ],
       "review_note": "Writes response transport bytes and delegates explicit Web Service save commands to the portforward owner; it does not own or duplicate durable state and is not durable conversation storage."
     },
@@ -1667,7 +1666,7 @@
     },
     {
       "path": "internal/envapp/ui_src/src/ui/EnvAppShell.tsx",
-      "sha256": "e27d4481e951c49e054118c2904a94fe7c625f0ee8247afc286ec0137ff61710",
+      "sha256": "d0fe46d85eb8b253a003046df102cf4002e268252cd5d9d6f7942168d2fa108d",
       "sink_kinds": [
         "web_storage"
       ],
@@ -1763,7 +1762,7 @@
     },
     {
       "path": "internal/flower_ui/src/FlowerSurface.tsx",
-      "sha256": "92e9b1e0b7e308b750f469fc7a9a27c6dac597ce622d40a3e95d36b2db8b4edb",
+      "sha256": "6798eff254ad3daa80542d12b141a7a3085edf15548d2939815f5622f603d3ff",
       "sink_kinds": [
         "web_storage"
       ],

@@ -1,4 +1,4 @@
-import http, { type IncomingHttpHeaders, type IncomingMessage } from 'node:http';
+import http, { type ClientRequest, type IncomingHttpHeaders, type IncomingMessage } from 'node:http';
 import https from 'node:https';
 import type { RuntimeFlowerError, RuntimeFlowerRequest } from '../shared/runtimeFlowerIPC';
 
@@ -7,6 +7,11 @@ export type RuntimeFlowerHTTPResponse = Readonly<{
   body: string;
   bytes: Buffer;
   headers: IncomingHttpHeaders;
+}>;
+
+export type RuntimeFlowerHTTPStream = Readonly<{
+	request: ClientRequest;
+	response: Promise<IncomingMessage>;
 }>;
 
 export function runtimeFlowerDeleteQuery(parsed: URL): boolean {
@@ -84,6 +89,31 @@ export function requestRuntimeFlowerHTTP(
     if (body) req.write(body);
     req.end();
   });
+}
+
+export function openRuntimeFlowerHTTPStream(
+	url: URL,
+	options: Readonly<{ headers?: Readonly<Record<string, string>> }> = {},
+): RuntimeFlowerHTTPStream {
+	let resolveResponse!: (response: IncomingMessage) => void;
+	let rejectResponse!: (error: Error) => void;
+	const response = new Promise<IncomingMessage>((resolve, reject) => {
+		resolveResponse = resolve;
+		rejectResponse = reject;
+	});
+	const client = url.protocol === 'https:' ? https : http;
+	const request = client.request(url, {
+		method: 'GET',
+		timeout: 120_000,
+		headers: {
+			Accept: 'text/event-stream',
+			...(options.headers ?? {}),
+		},
+	}, resolveResponse);
+	request.once('timeout', () => request.destroy(new Error('Flower runtime stream timed out.')));
+	request.once('error', rejectResponse);
+	request.end();
+	return { request, response };
 }
 
 export function parseRuntimeFlowerJSON(body: string): unknown {

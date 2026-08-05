@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 
@@ -15,7 +16,47 @@ func (r *run) applyFloretThreadProjection(projection flruntime.ThreadTurnProject
 	return r.applyFloretThreadProjectionInternal(projection, true, false)
 }
 
+func (r *run) applyFloretThreadProjectionDelta(delta flruntime.ThreadTurnProjectionDelta) bool {
+	if r == nil || !r.acceptsPresentationUpdates() {
+		return false
+	}
+	projectionStartedAt := time.Now()
+	if r.liveMetrics != nil {
+		r.liveMetrics.projectionDeltas.Add(1)
+		defer func() {
+			r.liveMetrics.projectionNanoseconds.Add(uint64(time.Since(projectionStartedAt)))
+		}()
+	}
+	key := strings.Join([]string{
+		strings.TrimSpace(string(delta.ThreadID)),
+		strings.TrimSpace(string(delta.TurnID)),
+		strings.TrimSpace(string(delta.RunID)),
+	}, "\x00")
+	r.muFloretProjection.Lock()
+	previous, hasPrevious := r.floretProjectionDeltaByKey[key]
+	var previousPointer *flruntime.ThreadTurnProjection
+	if hasPrevious && delta.BaseThroughOrdinal > 0 {
+		previousPointer = &previous
+	}
+	projection, err := flruntime.ApplyThreadTurnProjectionDelta(previousPointer, delta)
+	if err != nil {
+		r.muFloretProjection.Unlock()
+		r.rejectFloretContract("turn_projection_delta", err)
+		return false
+	}
+	if r.floretProjectionDeltaByKey == nil {
+		r.floretProjectionDeltaByKey = map[string]flruntime.ThreadTurnProjection{}
+	}
+	r.floretProjectionDeltaByKey[key] = projection
+	r.muFloretProjection.Unlock()
+	return r.applyFloretThreadProjectionContent(projection, true, false, true)
+}
+
 func (r *run) applyFloretThreadProjectionInternal(projection flruntime.ThreadTurnProjection, emit bool, allowDetached bool) bool {
+	return r.applyFloretThreadProjectionContent(projection, emit, allowDetached, false)
+}
+
+func (r *run) applyFloretThreadProjectionContent(projection flruntime.ThreadTurnProjection, emit bool, allowDetached bool, allowDeltaLineage bool) bool {
 	if r == nil {
 		return false
 	}
@@ -28,7 +69,7 @@ func (r *run) applyFloretThreadProjectionInternal(projection flruntime.ThreadTur
 	}
 	projectionKey := floretProjectionIdentityKey(projection)
 	r.muFloretProjection.Lock()
-	if projection.ThroughOrdinal <= r.floretProjectionOrdinal[projectionKey] {
+	if !allowDeltaLineage && projection.ThroughOrdinal <= r.floretProjectionOrdinal[projectionKey] {
 		r.muFloretProjection.Unlock()
 		return false
 	}
@@ -49,18 +90,28 @@ func (r *run) applyFloretThreadProjectionInternal(projection flruntime.ThreadTur
 	if r.assistantCreatedAtUnixMs == 0 {
 		r.assistantCreatedAtUnixMs = time.Now().UnixMilli()
 	}
-	oldLen := len(r.assistantBlocks)
+	oldBlocks := append([]any(nil), r.assistantBlocks...)
+	oldLen := len(oldBlocks)
 	r.assistantBlocks = blocks
 	r.muAssistant.Unlock()
 	if r.floretProjectionOrdinal == nil {
 		r.floretProjectionOrdinal = map[string]int64{}
 	}
-	r.floretProjectionOrdinal[projectionKey] = projection.ThroughOrdinal
+	if r.floretProjectionByKey == nil {
+		r.floretProjectionByKey = map[string]flruntime.ThreadTurnProjection{}
+	}
+	if projection.ThroughOrdinal > r.floretProjectionOrdinal[projectionKey] {
+		r.floretProjectionOrdinal[projectionKey] = projection.ThroughOrdinal
+	}
+	r.floretProjectionByKey[projectionKey] = projection
 	r.muFloretProjection.Unlock()
 	if !emit {
 		return true
 	}
 	for idx, block := range blocks {
+		if idx < oldLen && reflect.DeepEqual(oldBlocks[idx], block) {
+			continue
+		}
 		r.sendStreamEvent(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: idx, Block: block})
 	}
 	for idx := len(blocks); idx < oldLen; idx++ {

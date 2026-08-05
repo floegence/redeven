@@ -67,6 +67,7 @@ import type {
   FlowerTimelineDecoration,
   FlowerActivityStatus,
   FlowerLiveBootstrap,
+  FlowerLiveStreamEnvelope,
   FlowerAttachmentCapability,
   FlowerAttachmentStagingScope,
   FlowerModelIOPhase,
@@ -130,7 +131,6 @@ import { FlowerThreadList, type FlowerThreadMenuAction } from './threads/FlowerT
 import { FlowerThreadSwitcher, type FlowerThreadSwitcherCopy } from './threads/FlowerThreadSwitcher';
 import { SubagentDetailWindow } from './SubagentDetailWindow';
 import { applyFlowerLiveEvent, projectFlowerLiveBootstrap } from './flowerLiveReducer';
-import { createFlowerLivePollLoop } from './flowerLivePolling';
 import { flowerThreadReadSnapshotKey, mergeFlowerThreadListRefresh, sameThreadSnapshot } from './flowerThreadListRefresh';
 import { FlowerProviderBrandIcon, flowerModelSupportsImage, formatFlowerTokenCount } from './settings/providerCatalog';
 import { FlowerReasoningControl } from './ReasoningControl';
@@ -169,7 +169,6 @@ import {
 import { FlowerWorkingDirPickerDialog } from './filePicker/FlowerWorkingDirPickerDialog';
 import {
   projectFlowerCompanionPresence,
-  selectFlowerCompanionPriorityThread,
   type FlowerCompanionPriorityStatus,
   type FlowerCompanionTerminalTransition,
   type FlowerCompanionPresenceProjection,
@@ -234,43 +233,7 @@ type PendingContextCompactionDecoration = Readonly<{
   known_operation_ids: readonly string[];
   decoration: Extract<FlowerTimelineDecoration, { kind: 'context_compaction' }>;
 }>;
-type SelectedThreadLiveRequest = Readonly<{
-  token: number;
-  sequence: number;
-}>;
-type FlowerLiveTimeoutDetail = Readonly<{
-  thread_id: string;
-  cursor: number;
-  stream_generation: number;
-  sequence: number;
-}>;
-const SELECTED_THREAD_LIVE_EVENTS_TIMEOUT_MS = 15000;
 const APPROVAL_DECISION_RESYNC_MS = 1500;
-const FLOWER_LIVE_EVENTS_TIMEOUT_EVENT = 'redeven:flower-live-events-timeout';
-class LiveEventRequestTimeoutError extends Error {
-  constructor() {
-    super('live event request timed out');
-    this.name = 'LiveEventRequestTimeoutError';
-  }
-}
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
-  if (timeoutMs <= 0 || typeof window === 'undefined') return promise;
-  let timeoutID: number | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timeoutID = window.setTimeout(() => {
-      reject(new LiveEventRequestTimeoutError());
-    }, timeoutMs);
-  });
-  return Promise.race([promise, timeout]).finally(() => {
-    if (timeoutID !== undefined) {
-      window.clearTimeout(timeoutID);
-    }
-  });
-}
-function dispatchFlowerLiveEventsTimeout(detail: FlowerLiveTimeoutDetail) {
-  if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function' || typeof CustomEvent === 'undefined') return;
-  window.dispatchEvent(new CustomEvent(FLOWER_LIVE_EVENTS_TIMEOUT_EVENT, { detail }));
-}
 type FlowerHandlerResolutionState =
   | Readonly<{ status: 'starting' }>
   | Readonly<{ status: 'resolving'; decision: FlowerRouterDecision | null }>
@@ -326,7 +289,6 @@ const FLOWER_PERMISSION_TYPES: readonly FlowerPermissionType[] = ['readonly', 'a
 const FLOWER_COMPOSER_CONTROL_ORDER: readonly FlowerComposerControlID[] = ['working_dir', 'permission', 'model_reasoning', 'read_only'];
 const FLOWER_COMPOSER_CONTROL_OVERFLOW_ORDER: readonly FlowerComposerControlID[] = ['working_dir', 'model_reasoning', 'read_only', 'permission'];
 const FLOWER_COMPOSER_CONTROL_GAP_PX = 6;
-const LIVE_EVENT_RENDER_YIELD_SIZE = 8;
 const MESSAGE_COPY_RESET_MS = 1600;
 const FLOWER_COMPOSER_COMMAND_MENU_ID = 'flower-composer-command-menu';
 const FLOWER_COMPOSER_COMPACT_COMMAND_OPTION_ID = 'flower-composer-command-compact-context';
@@ -344,8 +306,6 @@ const SUBAGENT_DROPDOWN_ESTIMATED_SIZE = { width: 400, height: 480 } as const;
 const SUBAGENT_DETAIL_TAIL_RUNNING_INTERVAL_MS = 1500;
 const SUBAGENT_DETAIL_TAIL_QUEUED_INTERVAL_MS = 2500;
 const SUBAGENT_DETAIL_TAIL_ERROR_INTERVAL_MS = 4000;
-const COMPANION_SUMMARY_ACTIVE_REFRESH_MS = 1800;
-const COMPANION_SUMMARY_IDLE_REFRESH_DELAYS_MS = [5_000, 15_000, 30_000] as const;
 const FLOWER_SURFACE_LAYER = {
   subagentWindow: 160,
   contextPreview: 162,
@@ -365,10 +325,6 @@ function flowerComposerDraftAttachments(
     ...(item.staged ? { staged: item.staged } : {}),
   }));
 }
-function isModelIOPresentationBoundary(kind: string): boolean {
-  return kind === 'model_io.updated';
-}
-
 function emptyFlowerComposerSessionDraft(): FlowerComposerSessionDraft {
   return {
     chatDraft: '',
@@ -860,7 +816,6 @@ const FlowerCompanionLiveTailText: Component<Readonly<{
 export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const presentation = () => props.presentation ?? 'full';
   const companionCollapsed = () => presentation() === 'companion' && !(props.companionOpen ?? true);
-  const companionPresenceOwner = () => props.companionPresenceOwner ?? presentation() === 'companion';
   const surfaceEngaged = () => props.engaged ?? true;
   const transcriptVisible = () => props.transcriptVisible ?? true;
   const foregroundEngagementRequested = () => surfaceEngaged() && transcriptVisible() && documentVisible();
@@ -1111,15 +1066,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let approvalHandoffStyleFrame = 0;
   let approvalHandoffStyleSettleFrame = 0;
   const [composerFocusRevision, setComposerFocusRevision] = createSignal(0);
-  const selectedThreadLiveRequests = new Map<string, SelectedThreadLiveRequest>();
   const threadBootstrapRequests = new Map<string, Promise<FlowerLiveBootstrap>>();
   const loadedThreadIDs = new Set<string>();
-  let selectedThreadLiveUpdateToken = 0;
   const locallyReadSnapshots = new Map<string, string>();
   const persistingReadThreadIDs = new Set<string>();
   const pendingReadPersistenceSnapshots = new Map<string, FlowerThreadActivitySnapshot>();
   const liveCursors = new Map<string, number>();
   const liveStreamGenerations = new Map<string, number>();
+  let liveSummaryCursor = 0;
+  let liveSummaryGeneration = 1;
   const retiredThreadIDs = new Set<string>();
   let copiedMessageResetTimer: number | undefined;
   let copiedApprovalResetTimer: number | undefined;
@@ -1375,8 +1330,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         && decoration.compaction.status === 'compacting'
       ));
   });
+  const surfaceReadOnly = createMemo(() => props.adapter.canMutate === false);
   const selectedThreadReadOnlyReason = createMemo(() => trimString(selectedThread()?.read_only_reason));
-  const selectedThreadReadOnly = createMemo(() => selectedThreadLiveStatus() === 'read_only' || Boolean(selectedThreadReadOnlyReason()));
+  const selectedThreadReadOnly = createMemo(() => surfaceReadOnly() || selectedThreadLiveStatus() === 'read_only' || Boolean(selectedThreadReadOnlyReason()));
   const selectedThreadReadOnlyDisplay = createMemo(() => (
     selectedThreadReadOnlyReason() || subagentsCopy().readOnlyComposerLabel
   ));
@@ -1456,9 +1412,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   createEffect(() => {
     const actionID = trimString(selectedComposerApprovalDisplayAction()?.action_id);
     const queue = selectedThread()?.approval_queue;
-    if (previousComposerApprovalActionID && actionID && actionID !== previousComposerApprovalActionID) {
+    if (actionID && actionID !== previousComposerApprovalActionID) {
       setApprovalQueueAnnouncement(queue && queue.total > 0 ? `Approval ${queue.current_position} of ${queue.total}` : 'Next approval');
-      requestAnimationFrame(() => composerApprovalCardRef?.focus({ preventScroll: true }));
+      requestTranscriptAnimationFrame(() => composerApprovalCardRef?.focus({ preventScroll: true }));
     }
     previousComposerApprovalActionID = actionID;
   });
@@ -1626,7 +1582,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const pendingContextCompactionVisibleForSelectedThread = createMemo(() => (
     pendingContextCompactionVisible(selectedThread(), pendingContextCompactionForSelectedThread())
   ));
-  const selectedThreadHasQueuedTurns = createMemo(() => Number(selectedThread()?.queued_turn_count ?? 0) > 0);
   const selectedThreadDetailPending = createMemo(() => {
     const threadID = trimString(selectedThreadID());
     return Boolean(threadID && selectedThreadDetailID() !== threadID);
@@ -2541,9 +2496,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     lastSidebarListSignature = signature;
     setSidebarListItems(items);
   });
-  let companionLiveSequence = 0;
   const [companionLiveThread, setCompanionLiveThread] = createSignal<FlowerThreadSnapshot | null>(null);
-  const [companionLiveRunGeneration, setCompanionLiveRunGeneration] = createSignal(0);
+  const [companionLiveRunGeneration] = createSignal(0);
   const [companionTerminalTransition, setCompanionTerminalTransition] = createSignal<FlowerCompanionTerminalTransition>();
   const [companionTerminalOverrides, setCompanionTerminalOverrides] = createSignal<ReadonlyMap<string, Readonly<{
     thread: FlowerThreadSnapshot;
@@ -2600,11 +2554,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const override = overrides.get(item.thread_id);
       return override ? overlayCompanionThreadItem(item, override.thread, override.runGeneration) : item;
     });
-  });
-  const companionLiveThreadID = createMemo(() => {
-    if (!companionPresenceOwner() || !companionCollapsed() || !documentVisible()) return '';
-    const priorityThread = selectFlowerCompanionPriorityThread(companionPriorityThreadItems());
-    return priorityThread?.status === 'running' ? priorityThread.thread_id : '';
   });
   const companionThreadItems = createMemo<readonly FlowerCompanionThreadListItem[]>(() => {
     const liveThread = companionLiveThread();
@@ -3384,8 +3333,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const persistThreadRead = (threadID: string, snapshot: FlowerThreadActivitySnapshot, sequence: number) => {
     const tid = trimString(threadID);
     if (!tid || !readAcknowledgementEligible(tid, sequence)) return;
-    markThreadReadLocally(tid, snapshot);
     const submittedSnapshotKey = flowerThreadReadSnapshotKey(snapshot);
+    if (!submittedSnapshotKey || locallyReadSnapshots.get(tid) === submittedSnapshotKey) return;
+    markThreadReadLocally(tid, snapshot);
     if (persistingReadThreadIDs.has(tid)) {
       pendingReadPersistenceSnapshots.set(tid, snapshot);
       return;
@@ -3751,15 +3701,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const loadSurface = async () => {
-    const startedMutationRevision = threadLocalMutationRevision;
     try {
       const next = await props.adapter.loadSettings();
       setSnapshot(next);
       setLoadError('');
       await resolveHandlerDecision().catch(() => undefined);
-      if (startedMutationRevision === threadLocalMutationRevision) {
-        await refreshThreads();
-      }
+      await refreshThreads();
     } catch (error) {
       setLoadError(getErrorMessage(error));
     }
@@ -3841,327 +3788,158 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     scheduleComposerFocus();
   });
 
-  const applySelectedThreadLiveEvents = async (threadID: string, sequence: number): Promise<boolean> => {
-    const tid = trimString(threadID);
-    if (!tid || retiredThreadIDs.has(tid)) return false;
-    const existingRequest = selectedThreadLiveRequests.get(tid);
-    if (existingRequest && existingRequest.sequence === sequence) return false;
-    const token = selectedThreadLiveUpdateToken + 1;
-    selectedThreadLiveUpdateToken = token;
-    selectedThreadLiveRequests.set(tid, { token, sequence });
-    let cursor = liveCursorValue(liveCursors.get(tid));
-    let streamGeneration = liveStreamGenerationValue(liveStreamGenerations.get(tid));
-    let hadEvents = false;
-    try {
-      let keepGoing = true;
-      while (
-        keepGoing
-        && sequence === threadLoadSequence
-        && selectedThreadID() === tid
-        && effectiveEngagement()
-        && !retiredThreadIDs.has(tid)
-      ) {
-        keepGoing = false;
-        const requestedCursor = cursor;
-        const response = await withTimeout(
-          props.adapter.listThreadLiveEvents(tid, cursor, 100),
-          SELECTED_THREAD_LIVE_EVENTS_TIMEOUT_MS,
-        );
-        hadEvents ||= response.events.length > 0;
-        if (
-          sequence !== threadLoadSequence
-          || selectedThreadID() !== tid
-          || !effectiveEngagement()
-          || retiredThreadIDs.has(tid)
-        ) {
-          return false;
-        }
-        const responseGeneration = liveStreamGenerationValue(response.stream_generation);
-        const currentGeneration = liveStreamGenerationValue(liveStreamGenerations.get(tid));
-        if (responseGeneration > currentGeneration && requestedCursor > 0) {
-          streamGeneration = responseGeneration;
-          cursor = 0;
-          liveStreamGenerations.set(tid, responseGeneration);
-          liveCursors.set(tid, 0);
-          keepGoing = true;
-          continue;
-        }
-        if (
-          currentGeneration > responseGeneration
-          || (currentGeneration === responseGeneration && liveCursorValue(liveCursors.get(tid)) > requestedCursor)
-        ) {
-          return false;
-        }
-        streamGeneration = responseGeneration;
-        let resyncRequired = false;
-        let threadState = threads().find((thread) => thread.thread_id === tid) ?? null;
-        if (!threadState) {
-          resyncRequired = true;
-        } else {
-          let shouldPersistRead = false;
-          let nextReadSnapshot: FlowerThreadActivitySnapshot | null = null;
-          let shouldScrollTail = false;
-          let appliedSincePaint = 0;
-          const commitLiveThreadState = (nextThread: FlowerThreadSnapshot) => {
-            upsertThread(nextThread);
-            reconcileApprovalDecisionHandoff(nextThread, streamGeneration, cursor);
-            if (shouldScrollTail) {
-              scheduleTranscriptTailScroll();
-              shouldScrollTail = false;
-            }
-          };
-          for (const event of response.events) {
-            if (event.thread_id !== tid) continue;
-            const result = applyFlowerLiveEvent(threadState, cursor, event);
-            cursor = result.cursor;
-            if (result.resyncRequired) {
-              resyncRequired = true;
-              continue;
-            }
-            threadState = result.thread;
-            if (event.kind === 'timeline.replaced') {
-              resyncRequired = false;
-              cursor = Math.max(cursor, event.payload.snapshot_through_seq);
-              shouldScrollTail = true;
-            }
-            if (result.tailKey && result.tailLength > 0) {
-              shouldScrollTail = true;
-            }
-            if (result.thread.read_status.is_unread) {
-              shouldPersistRead = true;
-              nextReadSnapshot = result.thread.read_status.snapshot;
-            }
-            appliedSincePaint += 1;
-            const modelIOBoundary = isModelIOPresentationBoundary(event.kind);
-            if (modelIOBoundary || appliedSincePaint >= LIVE_EVENT_RENDER_YIELD_SIZE) {
-              commitLiveThreadState(threadState);
-              appliedSincePaint = 0;
-              if (modelIOBoundary) {
-                await yieldModelIOPresentationFrame();
-              } else {
-                await yieldLiveEventRenderFrame();
-              }
-              if (
-                sequence !== threadLoadSequence
-                || selectedThreadID() !== tid
-                || !effectiveEngagement()
-                || retiredThreadIDs.has(tid)
-              ) {
-                return false;
-              }
-            }
-          }
-          if (!resyncRequired) {
-            commitLiveThreadState(threadState);
-          }
-          if (shouldPersistRead && nextReadSnapshot) {
-            persistThreadRead(tid, nextReadSnapshot, sequence);
-          }
-        }
-        cursor = Math.max(cursor, Math.floor(Number(response.next_cursor ?? 0)));
-        if (resyncRequired || (response.retained_from_seq > 0 && cursor > 0 && cursor < response.retained_from_seq)) {
-          await reloadSelectedThread(tid, sequence, 'resync_reload');
-          return hadEvents;
-        }
-        setLivePosition(tid, streamGeneration, cursor);
-        keepGoing = response.has_more === true;
+  const applyFlowerLiveStreamEnvelope = async (
+    envelope: FlowerLiveStreamEnvelope,
+    selectedID: string,
+    sequence: number,
+  ): Promise<'continue' | 'resync'> => {
+    if (envelope.kind === 'ready') {
+      const generation = liveStreamGenerationValue(envelope.stream_generation);
+      liveSummaryGeneration = generation;
+      liveSummaryCursor = Math.max(liveSummaryCursor, liveCursorValue(envelope.summary_through_seq));
+      setLivePosition(selectedID, generation, Math.max(
+        liveCursorValue(liveCursors.get(selectedID)),
+        liveCursorValue(envelope.through_seq),
+      ));
+      return 'continue';
+    }
+    if (envelope.kind === 'resync_required') {
+      liveSummaryCursor = 0;
+      liveSummaryGeneration = liveStreamGenerationValue(envelope.stream_generation);
+      await refreshThreads();
+      if (selectedThreadID() === selectedID && sequence === threadLoadSequence) {
+        await reloadSelectedThread(selectedID, sequence, 'resync_reload');
       }
-      setThreadLoadError('');
-    } catch (error) {
-      if (error instanceof LiveEventRequestTimeoutError) {
-        dispatchFlowerLiveEventsTimeout({
-          thread_id: tid,
-          cursor,
-          stream_generation: streamGeneration,
-          sequence,
-        });
-        return hadEvents;
+      return 'resync';
+    }
+    if (envelope.kind === 'viewer.read_state') {
+      const threadID = trimString(envelope.thread_id);
+      if (threadID && envelope.read_status && !retiredThreadIDs.has(threadID)) {
+        clearLocalReadVisibility(threadID);
+        applyThreadReadStatus(threadID, envelope.read_status);
       }
-      if (sequence === threadLoadSequence && selectedThreadID() === tid) {
-        setThreadLoadError(getErrorMessage(error));
+      return 'continue';
+    }
+    const events = envelope.events ?? [];
+    if (events.length === 0) {
+      if (envelope.kind === 'summary.batch') {
+        liveSummaryCursor = Math.max(liveSummaryCursor, liveCursorValue(envelope.through_seq));
       }
-    } finally {
-      if (selectedThreadLiveRequests.get(tid)?.token === token) {
-        selectedThreadLiveRequests.delete(tid);
+      return 'continue';
+    }
+    await yieldLiveEventRenderFrame();
+    if (sequence !== threadLoadSequence || selectedThreadID() !== selectedID || !documentVisible()) {
+      return 'continue';
+    }
+    const projected = new Map<string, FlowerThreadSnapshot>();
+    let shouldRefreshSummaries = false;
+    let shouldScrollTail = false;
+    let nextReadSnapshot: FlowerThreadActivitySnapshot | null = null;
+    for (const event of events) {
+      const threadID = trimString(event.thread_id);
+      if (!threadID || retiredThreadIDs.has(threadID)) continue;
+      const current = projected.get(threadID) ?? threads().find((thread) => thread.thread_id === threadID) ?? null;
+      if (!current) {
+        shouldRefreshSummaries = true;
+        continue;
+      }
+      const currentCursor = liveCursorValue(liveCursors.get(threadID));
+      const result = applyFlowerLiveEvent(current, currentCursor, event);
+      if (result.resyncRequired) {
+        shouldRefreshSummaries = true;
+        continue;
+      }
+      projected.set(threadID, result.thread);
+      setLivePosition(threadID, envelope.stream_generation, result.cursor);
+      if (threadID === selectedID) {
+        shouldScrollTail ||= Boolean(result.tailKey && result.tailLength > 0) || event.kind === 'timeline.replaced';
+        if (result.thread.read_status.is_unread) {
+          nextReadSnapshot = result.thread.read_status.snapshot;
+        }
       }
     }
-    return hadEvents;
+    batch(() => {
+      for (const thread of projected.values()) upsertThread(thread);
+    });
+    for (const thread of projected.values()) {
+      reconcileApprovalDecisionHandoff(
+        thread,
+        liveStreamGenerations.get(thread.thread_id),
+        liveCursors.get(thread.thread_id),
+      );
+    }
+    if (shouldScrollTail) scheduleTranscriptTailScroll();
+    if (nextReadSnapshot) persistThreadRead(selectedID, nextReadSnapshot, sequence);
+    if (envelope.kind === 'summary.batch') {
+      liveSummaryGeneration = liveStreamGenerationValue(envelope.stream_generation);
+      liveSummaryCursor = Math.max(liveSummaryCursor, liveCursorValue(envelope.through_seq));
+    }
+    if (shouldRefreshSummaries) {
+      await refreshThreads();
+    }
+    return 'continue';
   };
 
   createEffect(() => {
+    const connect = props.adapter.connectLiveStream;
     const threadID = selectedThreadID();
-    if (!effectiveEngagement()) return;
-    if (selectedThreadDetailPending()) return;
-    const status = selectedThreadLiveStatus();
-    const hasPendingContextCompaction = pendingContextCompactionVisibleForSelectedThread();
-    const shouldPollLive = status === 'running'
-      || status === 'waiting_approval'
-      || status === 'waiting_user'
-      || selectedThreadHasRunningContextCompaction()
-      || hasPendingContextCompaction
-      || selectedThreadHasQueuedTurns();
-    if (!threadID || !shouldPollLive) {
-      return;
-    }
-    const sequence = threadLoadSequence;
-    const loop = createFlowerLivePollLoop({
-      poll: async () => ({
-        hadEvents: await applySelectedThreadLiveEvents(threadID, sequence),
-        hasMore: false,
-      }),
-      active: () => (
-        sequence === threadLoadSequence
-        && selectedThreadID() === threadID
-        && effectiveEngagement()
-        && !retiredThreadIDs.has(threadID)
-      ),
+    const visible = documentVisible();
+    if (!connect || !threadID || !visible) return;
+    const controller = new AbortController();
+    let disposed = false;
+    let reconnectAttempt = 0;
+    const waitForReconnect = async (delayMs: number) => new Promise<void>((resolve) => {
+      const timer = window.setTimeout(resolve, delayMs);
+      controller.signal.addEventListener('abort', () => {
+        window.clearTimeout(timer);
+        resolve();
+      }, { once: true });
     });
-    onCleanup(loop.dispose);
-  });
-
-  createEffect(on(
-    [companionLiveThreadID, documentVisible],
-    ([threadID, visible]) => {
-      const sequence = ++companionLiveSequence;
-      setCompanionLiveThread(null);
-      if (!threadID || !visible) return;
-      setCompanionLiveRunGeneration(sequence);
-
-      let disposed = false;
-      let requestInFlight = false;
-      let cursor = 0;
-      let streamGeneration = 1;
-      const cachedThread = threads().find((thread) => thread.thread_id === threadID) ?? null;
-      let projectedThread = loadedThreadIDs.has(threadID) ? cachedThread : null;
-      let trackedRunID = trimString(cachedThread?.active_run_id);
-
-      const stillCurrent = () => (
-        !disposed
-        && sequence === companionLiveSequence
-        && companionLiveThreadID() === threadID
-        && documentVisible()
-        && !retiredThreadIDs.has(threadID)
-      );
-      const publishProjection = () => {
-        if (!projectedThread) return;
-        if (projectedThread.status !== 'running' && trackedRunID) {
-          const outcome = projectedThread.status === 'success'
-            ? 'completed'
-            : projectedThread.status === 'canceled'
-              ? 'canceled'
-              : 'failed';
-          setCompanionTerminalTransition({
-            thread_id: threadID,
-            run_id: trackedRunID,
-            run_generation: sequence,
-            outcome,
-          });
-          setCompanionTerminalOverrides((current) => {
-            const next = new Map(current);
-            next.set(threadID, {
-              thread: projectedThread!,
-              runID: trackedRunID,
-              runGeneration: sequence,
-            });
-            return next;
-          });
-        } else if (projectedThread.status === 'running') {
-          setCompanionTerminalTransition(undefined);
-        }
-        setCompanionLiveThread(projectedThread);
-      };
-      if (projectedThread) {
-        cursor = liveCursorValue(liveCursors.get(threadID));
-        streamGeneration = liveStreamGenerationValue(liveStreamGenerations.get(threadID));
-        publishProjection();
-      }
-      const applyBootstrap = async () => {
-        const live = await loadThreadBootstrap(threadID);
-        if (!stillCurrent()) return false;
-        projectedThread = projectFlowerLiveBootstrap(live);
-        trackedRunID = trimString(projectedThread.active_run_id) || trackedRunID;
-        cursor = liveCursorValue(live.cursor);
-        streamGeneration = liveStreamGenerationValue(live.stream_generation);
-        publishProjection();
-        return true;
-      };
-      const pollOnce = async () => {
-        if (requestInFlight || !stillCurrent() || (projectedThread != null && projectedThread.status !== 'running')) return;
-        requestInFlight = true;
+    const run = async () => {
+      while (!disposed && !controller.signal.aborted && documentVisible() && selectedThreadID() === threadID) {
+        const readyStartedAt = Date.now();
         try {
-          if (!projectedThread && !await applyBootstrap()) return;
-          if (projectedThread?.status !== 'running') return;
-          let hasMore = true;
-          while (hasMore && projectedThread && stillCurrent()) {
-            const requestedCursor = cursor;
-            const response = await withTimeout(
-              props.adapter.listThreadLiveEvents(threadID, cursor, 100),
-              SELECTED_THREAD_LIVE_EVENTS_TIMEOUT_MS,
-            );
-            if (!stillCurrent()) return;
-            const responseGeneration = liveStreamGenerationValue(response.stream_generation);
-            const retainedGap = response.retained_from_seq > 0
-              && requestedCursor > 0
-              && requestedCursor < response.retained_from_seq;
-            if (retainedGap) {
-              projectedThread = null;
-              if (!await applyBootstrap()) return;
-              hasMore = false;
-              continue;
-            }
-            if (responseGeneration > streamGeneration && requestedCursor > 0) {
-              projectedThread = null;
-              if (!await applyBootstrap()) return;
-              hasMore = false;
-              continue;
-            }
-            if (responseGeneration < streamGeneration) return;
-            streamGeneration = responseGeneration;
-            let resyncRequired = false;
-            for (const event of response.events) {
-              if (event.thread_id !== threadID) continue;
-              const result = applyFlowerLiveEvent(projectedThread, cursor, event);
-              cursor = result.cursor;
-              projectedThread = result.thread;
-              trackedRunID = trimString(projectedThread.active_run_id) || trackedRunID;
-              resyncRequired ||= result.resyncRequired;
-            }
-            cursor = Math.max(cursor, liveCursorValue(response.next_cursor));
-            if (resyncRequired) {
-              projectedThread = null;
-              if (!await applyBootstrap()) return;
-              hasMore = false;
-              continue;
-            }
-            publishProjection();
-            hasMore = response.has_more === true && projectedThread.status === 'running';
+          for await (const envelope of connect({
+            thread_id: threadID,
+            thread_generation: liveStreamGenerationValue(liveStreamGenerations.get(threadID)),
+            thread_after_seq: liveCursorValue(liveCursors.get(threadID)),
+            summary_generation: liveSummaryGeneration,
+            summary_after_seq: liveSummaryCursor,
+            signal: controller.signal,
+          })) {
+            if (disposed || controller.signal.aborted) return;
+            const outcome = await applyFlowerLiveStreamEnvelope(envelope, threadID, threadLoadSequence);
+            if (outcome === 'resync') break;
           }
-        } catch {
-          // The canonical summary poll remains the recovery path for a transient companion-only failure.
-        } finally {
-          requestInFlight = false;
+          if (Date.now() - readyStartedAt >= 30_000) reconnectAttempt = 0;
+        } catch (error) {
+          if (disposed || controller.signal.aborted) return;
+          const status = Number((error as { status?: unknown })?.status ?? 0);
+          if (status === 401 || status === 403) {
+            setThreadLoadError(getErrorMessage(error));
+            return;
+          }
+          if (status === 429) {
+            const retryAfterSeconds = Number((error as { retryAfter?: unknown })?.retryAfter ?? 0);
+            if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
+              await waitForReconnect(Math.min(30_000, retryAfterSeconds * 1000));
+              continue;
+            }
+          }
         }
-      };
-
-      const loop = createFlowerLivePollLoop({
-        poll: async () => {
-          const beforeCursor = cursor;
-          await pollOnce();
-          return { hadEvents: cursor > beforeCursor, hasMore: false };
-        },
-        active: stillCurrent,
-      });
-      onCleanup(() => {
-        disposed = true;
-        loop.dispose();
-        if (sequence === companionLiveSequence) {
-          companionLiveSequence += 1;
-          setCompanionLiveThread(null);
-        }
-      });
-    },
-    { defer: true },
-  ));
+        const baseDelays = [250, 500, 1_000, 2_000, 4_000, 10_000] as const;
+        const base = baseDelays[Math.min(reconnectAttempt, baseDelays.length - 1)];
+        reconnectAttempt += 1;
+        const jittered = Math.round(base * (0.8 + Math.random() * 0.4));
+        await waitForReconnect(jittered);
+      }
+    };
+    void run();
+    onCleanup(() => {
+      disposed = true;
+      controller.abort();
+    });
+  });
 
   createEffect(() => {
     const pending = pendingContextCompactionForSelectedThread();
@@ -4169,70 +3947,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (!pendingContextCompactionVisibleForSelectedThread()) {
       setPendingContextCompaction(null);
     }
-  });
-
-  const companionSummaryRefreshEnabled = createMemo(() => {
-    const ownsCompanionPresence = companionPresenceOwner();
-    const hasBackgroundActiveThread = ownsCompanionPresence
-      ? false
-      : (() => {
-          const selectedID = selectedThreadID();
-          const selectedLiveEngaged = effectiveEngagement();
-          return threads().some((thread) => (
-            (!selectedLiveEngaged || thread.thread_id !== selectedID)
-            && (
-              thread.status === 'running'
-              || thread.status === 'waiting_approval'
-              || thread.status === 'waiting_user'
-              || Number(thread.queued_turn_count ?? thread.queued_turns?.length ?? 0) > 0
-            )
-          ));
-        })();
-    return ownsCompanionPresence || hasBackgroundActiveThread;
-  });
-
-  createEffect(() => {
-    const refreshEnabled = companionSummaryRefreshEnabled();
-    if (!documentVisible() || !refreshEnabled) return;
-    let disposed = false;
-    let timer: number | undefined;
-    let requestInFlight = false;
-    let idleDelayIndex = 0;
-    const hasCompanionProgress = (values: readonly FlowerThreadSnapshot[]) => values.some((thread) => (
-      thread.status === 'running'
-      || Number(thread.queued_turn_count ?? thread.queued_turns?.length ?? 0) > 0
-    ));
-    const schedule = (delayMs: number) => {
-      if (disposed) return;
-      timer = window.setTimeout(() => {
-        timer = undefined;
-        void poll();
-      }, delayMs);
-    };
-    const poll = async () => {
-      if (disposed || !documentVisible() || requestInFlight) return;
-      requestInFlight = true;
-      let nextDelayMs = COMPANION_SUMMARY_ACTIVE_REFRESH_MS;
-      try {
-        await refreshThreads();
-        const current = untrack(threads);
-        if (!hasCompanionProgress(current)) {
-          nextDelayMs = COMPANION_SUMMARY_IDLE_REFRESH_DELAYS_MS[idleDelayIndex]
-            ?? COMPANION_SUMMARY_IDLE_REFRESH_DELAYS_MS.at(-1)!;
-          idleDelayIndex = Math.min(idleDelayIndex + 1, COMPANION_SUMMARY_IDLE_REFRESH_DELAYS_MS.length - 1);
-        } else {
-          idleDelayIndex = 0;
-        }
-      } finally {
-        requestInFlight = false;
-        schedule(nextDelayMs);
-      }
-    };
-    void poll();
-    onCleanup(() => {
-      disposed = true;
-      if (timer !== undefined) window.clearTimeout(timer);
-    });
   });
 
   createEffect(() => {
@@ -5129,16 +4843,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const retiringSelected = selectedThreadID() === tid
       || selectedThreadDetailID() === tid
       || sidebarActiveThreadID() === tid;
-    const retiringCompanion = companionLiveThreadID() === tid
-      || companionLiveThread()?.thread_id === tid;
     retiredThreadIDs.add(tid);
     threadsRefreshSequence += 1;
     threadLocalMutationRevision += 1;
     if (retiringSelected) engagementBootstrapSequence += 1;
-    if (retiringCompanion) companionLiveSequence += 1;
 
     loadedThreadIDs.delete(tid);
-    selectedThreadLiveRequests.delete(tid);
     threadBootstrapRequests.delete(tid);
     locallyReadSnapshots.delete(tid);
     persistingReadThreadIDs.delete(tid);
@@ -5317,11 +5027,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const yieldLiveEventRenderFrame = async () => {
     await yieldAnimationFrame();
   };
-  const yieldModelIOPresentationFrame = async () => {
-    await yieldAnimationFrame();
-    await yieldAnimationFrame();
-  };
-
   const selectedTimelineEntries = createMemo(() => buildFlowerTimelineEntries(selectedThread()));
   createEffect(() => {
     const preview = contextSnapshotPreview();
