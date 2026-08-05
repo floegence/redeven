@@ -1412,6 +1412,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   createEffect(() => {
     const current = selectedComposerApprovalAction();
     const handoff = selectedApprovalDecisionHandoff();
+    const queue = selectedThread()?.approval_queue;
     if (current) {
       if (approvalDisplayFallbackAction()?.action_id !== current.action_id) {
         setApprovalDisplayFallbackAction(current);
@@ -1422,7 +1423,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }
       return;
     }
-    if (handoff || !approvalDisplayFallbackAction() || approvalDisplayFallbackClearFrame) return;
+    if (handoff || !approvalDisplayFallbackAction()) return;
+    if (!queue || queue.unresolved_count <= 0 || !trimString(queue.current_action_id)) {
+      if (approvalDisplayFallbackClearFrame) {
+        cancelTranscriptAnimationFrame(approvalDisplayFallbackClearFrame);
+        approvalDisplayFallbackClearFrame = 0;
+      }
+      setApprovalDisplayFallbackAction(null);
+      return;
+    }
+    if (approvalDisplayFallbackClearFrame) return;
     approvalDisplayFallbackClearFrame = requestTranscriptAnimationFrame(() => {
       approvalDisplayFallbackClearFrame = requestTranscriptAnimationFrame(() => {
         approvalDisplayFallbackClearFrame = 0;
