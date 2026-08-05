@@ -130,6 +130,14 @@ and locally signed append-only trusted time are durable. Unsigned input,
 browser-supplied trust state, arbitrary package bytes, rollback, unknown
 publisher, expired evidence, and invented fetch provenance are denied.
 
+The released trusted-time request carries the authoritative previously committed
+checkpoint tree size. Redeven's append-only adapter derives consistency proofs
+from that size rather than from its local leaf count, so a leaf appended before
+a lost response remains auditable without being mistaken for committed state.
+If the committed checkpoint is ahead of the local log, observation fails before
+another leaf or trust state is written; the adapter never repairs, truncates, or
+silently resets the log.
+
 Plugin Center installs an official market result only through this release-ref
 boundary. The frozen market snapshot identifies immutable GitHub assets and
 their complete transport, but cannot assert trust or replace Redeven's pinned
