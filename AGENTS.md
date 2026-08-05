@@ -466,7 +466,7 @@ The intended dependency shape is library consumption, not source sharing:
 - Redeven contributes product policy and concrete adapters around those
   imports; it does not become a source tree for ReDevPlugin implementation.
 
-For the pre-release `v0.7.1` baseline, Redeven accepts only ReDevPlugin
+For the pre-release `v0.7.2` baseline, Redeven accepts only ReDevPlugin
 manifest v8, release metadata v8, `plugin-ui-v7`, and `bridge-v7`. Older
 manifest or release metadata state is not migrated, rewritten, or given a
 synthetic presentation; reads fail closed while the original bytes remain
@@ -475,6 +475,18 @@ keywords, surface labels, and setting labels come from the signed manifest
 presentation catalog. Redeven resolves BCP 47 locales through the released
 ReDevPlugin resolver and must not add an English fallback, duplicate parser,
 Containers-specific author copy, or plugin-id presentation branch.
+
+Official signed-release installation uses ReDevPlugin's durable owner-scoped
+release-install operation. ReDevPlugin owns request idempotency, operation
+journaling, remote-asset retries, byte and indeterminate progress, stable
+failure codes, response-loss recovery, and restart reconciliation. Redeven uses
+only the released start, list, get-by-request, and watch client helpers. It owns
+the target-scoped product presentation, ten-locale copy, reconnect attachment,
+and the inventory refresh after a committed installation. Closing Plugin Center
+or losing its observer must not cancel the Host operation, create a new request
+id, replay installation, or turn transport/internal failures into permission
+denials. Redeven must not add a polling algorithm, operation store, lifecycle
+state machine, or Containers-specific installation path.
 
 The current released platform contract also fixes the host-integration shape:
 
@@ -726,7 +738,7 @@ Use this responsibility matrix as the default decision rule:
 | Area | ReDevPlugin owns | Redeven owns |
 | --- | --- | --- |
 | Package and trust | Package layout, canonical hashes, signing rules, manifest validation, trust state contracts, compatibility manifests | Which registries or local sources Redeven allows, local policy caps, review UX, and product audit presentation |
-| Lifecycle | Install, enable, open, disable, uninstall, update, downgrade, export/import, diagnostics, and data-retention APIs | Env App placement, Desktop commands, Activity Bar/Workbench/Settings entry points, and who may invoke the actions |
+| Lifecycle | Install, enable, open, disable, uninstall, update, downgrade, export/import, diagnostics, and data-retention APIs; durable owner-scoped release-install operations with idempotent request recovery, restart reconciliation, progress, and stable failure codes | Env App placement, localized target-scoped operation presentation, committed-install inventory refresh, Desktop commands, Activity Bar/Workbench/Settings entry points, and who may invoke the actions |
 | UI runtime | Sandboxed iframe bootstrap, asset ticket/session protocol, bridge SDK, opaque-origin-safe source/port-bound MessageChannel messaging, settings and intent contracts | Native shell chrome, Workbench layout, Settings placement, startup diagnostics, route mounting, and Redeven product copy |
 | Backend runtime | Rust `redevplugin-runtime` source crates, runtime manager/supervisor, WASM actor/job model, IPC, leases, quotas, revocation, hostcall contracts, stream envelopes | Fixed package coordinates and toolchain, verified Linux source build, product binary/SBOM/provenance/signature, lifecycle wiring, and diagnostics presentation |
 | Storage, network, and secrets | Host-neutral broker contracts, request contexts, target classifiers, quotas, secret reference contracts, and stable errors | State-root selection, vault integration, environment/network policy, proxy settings, and user-facing grant UX |

@@ -110,6 +110,27 @@ selection enters a detail view, focuses its explicit back action, and restores
 focus to the originating inventory row on return. Tablet and desktop layouts
 keep the inventory master and selected detail side by side.
 
+## Official installation progress
+
+Official installation uses the released durable install operation instead of a
+page-bound pending flag. Only the target plugin card and inspector show its
+queued, trust verification, release inspection, download, package verification,
+commit, reconciliation, success, or failure state. A byte progress bar is shown
+only for Host-reported byte progress; all other active phases remain visibly
+indeterminate. Search, filters, scrolling, detail reading, panel close, and
+unrelated surface launch stay available while installation continues.
+
+The Shell retains the original request identity and reattaches to the same Host
+operation after Plugin Center reopens, transport reconnects, or a start response
+is lost. Closing the panel never cancels installation. Terminal failures use
+stable error code, phase, and retryability to select complete locale-owned copy;
+raw backend messages are not primary UI. A retry creates a new request only when
+the Host has confirmed a retryable terminal failure. After success, inventory is
+refreshed before the temporary status is removed. Refresh failure remains a
+separate inline recovery state and must not be reported as installation failure.
+Cards and inspector share the same accessible `aria-busy`, live-status, alert,
+and progress projection.
+
 ## Update review and confirmation
 
 Plugin Center's Updates card and inspector expose one primary `Review update`

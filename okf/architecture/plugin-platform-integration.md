@@ -1,14 +1,14 @@
 ---
 type: Architecture Contract
 title: Plugin platform integration
-description: Redeven mounts ReDevPlugin v0.7.1 and adds authenticated host modules, copied-root recovery, market-backed official releases, external-source policy, localized plugin presentation, product placement, and business adapters.
+description: Redeven mounts ReDevPlugin v0.7.2 and adds authenticated host modules, copied-root recovery, market-backed official releases, external-source policy, localized plugin presentation, product placement, and business adapters.
 tags: [architecture, plugins, local-ui, redevplugin]
 timestamp: 2026-07-25T00:00:00Z
 quality_exception: Cross-domain host integration contract spanning identity, security, runtime, storage, routes, surfaces, and business adapters.
 ---
 # Summary
 
-Redeven integrates ReDevPlugin `v0.7.1` through one Go Host, one canonical HTTP
+Redeven integrates ReDevPlugin `v0.7.2` through one Go Host, one canonical HTTP
 namespace, one Env App `PluginPlatformClient`, one shared surface scope, and the
 released ProcessManager over a verified Redeven-built Linux runtime. Redeven
 adds authenticated session mapping, public-source admission policy, product
@@ -101,8 +101,9 @@ silently accepted or retried with broader authority.
 Production obtains the official Containers `4.1.0` release from the frozen
 latest-only market snapshot. The snapshot identifies the immutable GitHub
 Release and complete signed transport; it does not carry package bytes or grant
-trust. Redeven invokes generated `installReleaseRef` and `updateReleaseRef`
-requests with the released remote transport. Publisher, plugin, version, hashes,
+trust. Redeven submits the released `release-install-operation.v1` request with
+the remote transport and observes the durable operation through its generated
+start/list/get/watch client. Publisher, plugin, version, hashes,
 root delegation, signing ledger, source policy, revocation evidence, host
 requirement, and capability pin must all match before ReDevPlugin changes the
 registry. Expired or incomplete evidence fails closed without falling back to
@@ -138,7 +139,7 @@ user pin.
 ## Runtime and Containers
 
 The runtime module binds the canonical sibling executable, target, ReDevPlugin
-`0.7.1`, released Rust IPC and WASM ABI, exact product-build descriptor, lease
+`0.7.2`, released Rust IPC and WASM ABI, exact product-build descriptor, lease
 replay storage, and released limits. Linux runtime bytes are built with Rust
 1.88.0 from the attested package set and travel with SBOM, provenance, notices,
 and signature evidence. Missing, non-canonical, wrong-target, unsigned, or
@@ -163,6 +164,16 @@ mutation carries its current management and applicable policy/revoke revisions;
 committed and unknown management outcomes rely on Host revocation followed by
 the SDK's scope teardown, then refresh state without a second slot-close path or
 blind mutation retry.
+
+Official installation is product-observable but platform-owned. The Shell keeps
+one coordinator keyed by `plugin_instance_id`; it preserves the original
+`request_id`, reattaches to the same operation after panel close or transport
+loss, and renders queued/running/reconciling progress from the operation. Byte
+progress is shown only when the Host reports bytes; trust, parsing, verification,
+and commit remain indeterminate. A succeeded operation refreshes inventory; a
+refresh failure is shown as a separate recoverable state and never relabeled as
+an install failure. Only a confirmed terminal, retryable failure may create a
+new request.
 
 Every opened surface receives the released `redevplugin.surface_context.v1`
 with a monotonic revision, semantic light/dark palette, language tag, and text
