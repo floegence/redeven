@@ -23,14 +23,14 @@ const envAppRequire = createRequire(path.join(repoRoot, 'internal/envapp/ui_src/
 const { load: parseYAML } = envAppRequire('js-yaml');
 const expectedTerminalAgentIconIdentities = [
   'codex', 'claude', 'opencode', 'kimi', 'gemini', 'qwen', 'copilot', 'cline',
-  'roo', 'vibe', 'cursor', 'junie', 'kiro', 'openhands', 'trae', 'kilo',
+  'pi', 'roo', 'vibe', 'cursor', 'junie', 'kiro', 'openhands', 'trae', 'kilo',
 ];
 const floetermThemePackageRoot = path.join(
   repoRoot,
   'internal/envapp/ui_src/node_modules/@floegence/floeterm-terminal-web',
 );
 const floetermThemeArtifactContract = {
-  packageVersion: '0.12.1',
+  packageVersion: '0.12.2',
   files: {
     'THEME_PROVENANCE.json': '2b6b2d07297ace181564890b79e2c488e67f4747512b8adad08b4bd3ea8dfc06',
     'THEME_QUALITY_EVIDENCE.json': 'e9fdd068550001f555f1bb52ca475b68bc56a12c00da25f9ec28fe03dbdb9005',
@@ -44,7 +44,7 @@ const npmLicenseOverrides = new Map([
   ['@floegence/floe-webapp-boot', { license: 'MIT', note: 'License inherited from floegence/floe-webapp root LICENSE.' }],
   ['@floegence/floe-webapp-core', { license: 'MIT', note: 'License inherited from floegence/floe-webapp root LICENSE.' }],
   ['@floegence/floe-webapp-protocol', { license: 'MIT', note: 'License inherited from floegence/floe-webapp root LICENSE.' }],
-  ['@floegence/floeterm-terminal-web', { license: 'MIT', note: 'Built-in theme attribution and license texts are reproduced below from the verified 0.12.1 package.' }],
+  ['@floegence/floeterm-terminal-web', { license: 'MIT', note: 'Built-in theme attribution and license texts are reproduced below from the verified 0.12.2 package.' }],
   ['@floegence/redevplugin-ui', { license: 'MIT', note: 'License inherited from floegence/redevplugin root LICENSE.' }],
   ['khroma', { license: 'MIT', note: 'The published README declares MIT copyright for the package authors.' }],
 ]);
@@ -218,19 +218,43 @@ function collectFloetermThemeNotices() {
 
 function collectTerminalAgentIconAssets() {
   const manifest = readJSON(terminalAgentIconManifestPath);
-  if (manifest.schema_version !== 1) throw new Error('terminal agent icon manifest schema_version must be 1');
-  const source = manifest.source;
-  if (!source || source.repository !== 'https://github.com/GLINCKER/thesvg') {
-    throw new Error('terminal agent icons must use the approved GLINCKER/thesvg source');
+  if (manifest.schema_version !== 2) throw new Error('terminal agent icon manifest schema_version must be 2');
+  const approvedSources = new Map([
+    ['thesvg', {
+      repository: 'https://github.com/GLINCKER/thesvg',
+      licenseFile: 'assets/licenses/thesvg-MIT.txt',
+    }],
+    ['pi', {
+      repository: 'https://github.com/earendil-works/pi-website',
+      licenseFile: 'assets/licenses/pi-website-MIT.txt',
+    }],
+  ]);
+  const sourceEntries = Object.entries(manifest.sources ?? {});
+  if (JSON.stringify(sourceEntries.map(([key]) => key)) !== JSON.stringify([...approvedSources.keys()])) {
+    throw new Error('terminal agent icon sources must exactly match the approved source registry');
   }
-  if (!/^[0-9a-f]{40}$/u.test(String(source.revision ?? ''))) {
-    throw new Error('terminal agent icon source revision must be a pinned Git commit');
-  }
-  if (source.license !== 'MIT') throw new Error('terminal agent icon source license must be MIT');
-  const licensePath = path.resolve(repoRoot, String(source.license_file ?? ''));
-  if (!licensePath.startsWith(`${repoRoot}${path.sep}`) || !fs.statSync(licensePath).isFile()) {
-    throw new Error('terminal agent icon license file is missing or outside the repository');
-  }
+  const sources = new Map(sourceEntries.map(([key, source]) => {
+    const approved = approvedSources.get(key);
+    if (!approved || source?.repository !== approved.repository) {
+      throw new Error(`terminal agent icon source is not approved: ${key}`);
+    }
+    if (!/^[0-9a-f]{40}$/u.test(String(source.revision ?? ''))) {
+      throw new Error(`terminal agent icon source revision must be a pinned Git commit: ${key}`);
+    }
+    if (source.license !== 'MIT') throw new Error(`terminal agent icon source license must be MIT: ${key}`);
+    if (source.license_file !== approved.licenseFile) {
+      throw new Error(`terminal agent icon source license path is not approved: ${key}`);
+    }
+    const licensePath = path.resolve(repoRoot, source.license_file);
+    if (!licensePath.startsWith(`${repoRoot}${path.sep}`) || !fs.statSync(licensePath).isFile()) {
+      throw new Error(`terminal agent icon license file is missing or outside the repository: ${key}`);
+    }
+    const label = String(source.label ?? '').trim();
+    if (!label) throw new Error(`terminal agent icon source label is missing: ${key}`);
+    return [key, { ...source, label, licensePath }];
+  }));
+  const defaultSourceKey = String(manifest.default_source ?? '');
+  if (!sources.has(defaultSourceKey)) throw new Error('terminal agent icon default source is invalid');
 
   const assets = Array.isArray(manifest.assets) ? manifest.assets : [];
   const identities = assets.map((asset) => String(asset?.identity ?? ''));
@@ -240,12 +264,16 @@ function collectTerminalAgentIconAssets() {
 
   const seenFiles = new Set();
   const rows = assets.map((asset) => {
+    const sourceKey = String(asset.source ?? defaultSourceKey);
+    const source = sources.get(sourceKey);
+    if (!source) throw new Error(`terminal agent icon references an unknown source: ${sourceKey}`);
     const file = String(asset.file ?? '');
     const sourcePath = String(asset.source_path ?? '');
     if (!/^[a-z-]+\.svg$/u.test(file)) {
       throw new Error(`terminal agent icon filename is invalid or duplicated: ${file}`);
     }
-    if (!/^public\/icons\/[a-z0-9-]+\/[a-z0-9-]+\.svg$/u.test(sourcePath)) {
+    if (!/^[a-z0-9._-]+(?:\/[a-z0-9._-]+)*\.svg$/u.test(sourcePath)
+      || sourcePath.split('/').some(segment => segment === '.' || segment === '..')) {
       throw new Error(`terminal agent icon source path is invalid: ${sourcePath}`);
     }
     if (asset.render !== 'image' && asset.render !== 'mask') {
@@ -293,7 +321,8 @@ function collectTerminalAgentIconAssets() {
       if (!/^[a-z-]+\.svg$/u.test(variant.file) || seenFiles.has(variant.file)) {
         throw new Error(`terminal agent icon variant filename is invalid or duplicated: ${variant.file}`);
       }
-      if (!/^public\/icons\/[a-z0-9-]+\/[a-z0-9-]+\.svg$/u.test(variant.sourcePath)) {
+      if (!/^[a-z0-9._-]+(?:\/[a-z0-9._-]+)*\.svg$/u.test(variant.sourcePath)
+        || variant.sourcePath.split('/').some(segment => segment === '.' || segment === '..')) {
         throw new Error(`terminal agent icon variant source path is invalid: ${variant.sourcePath}`);
       }
       const bundledPath = path.join(terminalAgentIconRoot, variant.file);
@@ -327,7 +356,11 @@ function collectTerminalAgentIconAssets() {
 
   return {
     rows,
-    licenseText: readRegularFile(licensePath, 'utf8').trim(),
+    licenseNotices: [...sources.values()].map(source => ({
+      label: source.label,
+      license: source.license,
+      text: readRegularFile(source.licensePath, 'utf8').trim(),
+    })),
   };
 }
 
@@ -552,6 +585,14 @@ function renderTerminalAgentIconTable(rows) {
   return lines.join('\n');
 }
 
+function renderTerminalAgentIconLicenses(notices) {
+  return notices.map(notice => `### ${notice.label} ${notice.license} License
+
+\`\`\`text
+${notice.text}
+\`\`\``).join('\n\n');
+}
+
 function renderNotices(goEntries, npmEntries, terminalAgentIcons, floetermThemeNotices) {
   return `# Third-Party Notices
 
@@ -571,15 +612,11 @@ ${renderTable(npmEntries)}
 
 ## Bundled Agent CLI Brand Assets
 
-The following icons are redistributed from a pinned revision of [GLINCKER/thesvg](https://github.com/GLINCKER/thesvg). Product names and marks remain the property of their respective owners. These assets are used only to identify the corresponding Agent CLI process in the terminal session list.
+The following icons are redistributed from pinned upstream revisions. Product names and marks remain the property of their respective owners. These assets are used only to identify the corresponding Agent CLI process in the terminal session list.
 
 ${renderTerminalAgentIconTable(terminalAgentIcons.rows)}
 
-### thesvg MIT License
-
-\`\`\`text
-${terminalAgentIcons.licenseText}
-\`\`\`
+${renderTerminalAgentIconLicenses(terminalAgentIcons.licenseNotices)}
 
 ## Floeterm Built-in Theme Notices
 

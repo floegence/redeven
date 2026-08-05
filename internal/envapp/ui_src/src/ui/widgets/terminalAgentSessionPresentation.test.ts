@@ -16,6 +16,7 @@ describe('terminal agent session presentation', () => {
       'qwen',
       'copilot',
       'cline',
+      'pi',
       'roo',
       'vibe',
       'cursor',
@@ -44,6 +45,14 @@ describe('terminal agent session presentation', () => {
     });
     expect(deriveTerminalAgentSessionPresentation('claude', 'settled')).toMatchObject({
       identity: 'claude',
+      outputState: 'none',
+    });
+    expect(deriveTerminalAgentSessionPresentation('PI.EXE', 'streaming')).toMatchObject({
+      identity: 'pi',
+      outputState: 'streaming',
+    });
+    expect(deriveTerminalAgentSessionPresentation('pi-agent', 'streaming')).toEqual({
+      identity: null,
       outputState: 'none',
     });
     expect(deriveTerminalAgentSessionPresentation('top', 'streaming')).toEqual({
