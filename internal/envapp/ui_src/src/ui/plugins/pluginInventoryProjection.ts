@@ -56,6 +56,7 @@ export function projectPluginInventory(input: {
         record,
         grantsByPlugin.get(record.plugin_instance_id) ?? [],
         policyByPlugin.get(record.plugin_instance_id),
+        requirementsByPlugin.get(record.plugin_instance_id),
       ));
       projectedInstances.add(record.plugin_instance_id);
     }
@@ -102,6 +103,7 @@ function projectCatalogItem(
   installed?: ReDevPluginRecord,
   grants: readonly PluginPermissionGrant[] = [],
   policy?: PluginSecurityPolicy,
+  requirements?: PluginPermissionRequirements,
 ): PluginInventoryItem {
   if (!installed) {
     return {
@@ -123,7 +125,7 @@ function projectCatalogItem(
     };
   }
 
-  const authorization = projectAuthorization(catalogItem, installed, grants, policy);
+  const authorization = projectAuthorization(catalogItem, installed, grants, policy, requirements);
   const lifecycleState = installedLifecycleState(installed, catalogItem, authorization);
   const attentionReason = installedAttentionReason(installed, catalogItem, lifecycleState, authorization);
   const externalPackage = externalPackageProjection(installed);
@@ -388,8 +390,13 @@ function projectAuthorization(
   installed: ReDevPluginRecord,
   grants: readonly PluginPermissionGrant[],
   policy?: PluginSecurityPolicy,
+  requirements?: PluginPermissionRequirements,
 ): PluginAuthorizationInventory | undefined {
-  return projectAuthorizationFromPermissions(catalogItem.permissions ?? [], installed, grants, policy);
+  const metadata = catalogItem.permissions ?? [];
+  if (metadata.length > 0) {
+    return projectAuthorizationFromPermissions(metadata, installed, grants, policy);
+  }
+  return projectGenericAuthorization(installed, grants, requirements, policy);
 }
 
 function projectAuthorizationFromPermissions(
