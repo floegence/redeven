@@ -1,4 +1,8 @@
-import { PluginTransportError, type PluginPlatformClient } from '@floegence/redevplugin-ui';
+import {
+  PluginTransportError,
+  type PluginPlatformClient,
+  type PluginReleaseInstallOperation,
+} from '@floegence/redevplugin-ui';
 import { describe, expect, it, vi } from 'vitest';
 
 import { fetchLocalApiJSONResponse } from '../services/localApi';
@@ -21,6 +25,17 @@ function createClientHarness() {
     listPermissions: vi.fn(async () => ({ permissions: [] })),
     listSecurityPolicies: vi.fn(async () => ({ security_policies: [] })),
     installReleaseRef: vi.fn(async () => ({})),
+    startReleaseInstallOperation: vi.fn(async () => releaseInstallOperation()),
+    listReleaseInstallOperations: vi.fn(async (): Promise<{
+      operations: PluginReleaseInstallOperation[];
+    }> => ({ operations: [] })),
+    getReleaseInstallOperationByRequest: vi.fn(async () => releaseInstallOperation()),
+    watchReleaseInstallOperation: vi.fn(async () => releaseInstallOperation({
+      status: 'succeeded',
+      phase: 'complete',
+      progress: { kind: 'items', completed: 1, total: 1 },
+      mutation_outcome: 'committed',
+    })),
     updateReleaseRef: vi.fn(async () => ({})),
     enablePlugin: vi.fn(async () => ({})),
     disablePlugin: vi.fn(async () => ({})),
@@ -46,6 +61,27 @@ function createClientHarness() {
 }
 
 const generatedContainersInstanceID = 'plugin_dea00daa09166c33302f92c9b090f62a';
+const releaseInstallRequestID = '996224cb-c992-4fc3-b74a-9a100f306da4';
+
+function releaseInstallOperation(
+  overrides: Partial<PluginReleaseInstallOperation> = {},
+): PluginReleaseInstallOperation {
+  return {
+    request_id: releaseInstallRequestID,
+    operation_id: 'release_install_4c9d48a3',
+    plugin_instance_id: officialContainers.pluginInstanceID,
+    request_sha256: 'a'.repeat(64),
+    status: 'running',
+    phase: 'download_package',
+    progress: { kind: 'bytes', completed: 262_144, total: 524_288 },
+    attempt: 1,
+    retry_after_ms: 250,
+    mutation_outcome: 'not_committed',
+    created_at: '2026-08-05T08:00:00Z',
+    updated_at: '2026-08-05T08:00:01Z',
+    ...overrides,
+  } as PluginReleaseInstallOperation;
+}
 const generatedContainersRecord: ReDevPluginRecord = {
   plugin_instance_id: generatedContainersInstanceID,
   publisher_id: officialContainers.publisherID,
@@ -89,7 +125,7 @@ const generatedContainersRecord: ReDevPluginRecord = {
   updated_at: '2026-07-04T10:01:00Z',
 };
 
-describe('v0.7.1 plugin lifecycle client integration', () => {
+describe('v0.7.2 plugin lifecycle client integration', () => {
   it('preserves the market detail generation from the local proxy envelope', async () => {
     vi.mocked(fetchLocalApiJSONResponse).mockResolvedValueOnce({
       data: { plugin_id: 'com.example.plugin', presentation: { default_locale: 'en-US', locales: [] } },
@@ -182,24 +218,71 @@ describe('v0.7.1 plugin lifecycle client integration', () => {
     await expect(lifecycle.loadInventoryProjection()).rejects.toThrow('permission requirements unavailable');
   });
 
-  it('installs the generated signed release under the fixed official identity', async () => {
+  it('starts and watches the generated signed release installation with one stable request id', async () => {
     const { lifecycle, mocks } = createClientHarness();
+    const updates: PluginReleaseInstallOperation[] = [];
 
-    await lifecycle.execute({
+    await expect(lifecycle.installOfficialRelease({
       type: 'install',
       pluginID: officialContainers.pluginID,
       source: 'official_catalog',
+    }, releaseInstallRequestID, {}, (operation) => updates.push(operation))).resolves.toMatchObject({
+      status: 'succeeded',
+      mutation_outcome: 'committed',
     });
 
-    expect(mocks.installReleaseRef).toHaveBeenCalledWith({
+    expect(mocks.startReleaseInstallOperation).toHaveBeenCalledWith({
+      request_id: releaseInstallRequestID,
       plugin_instance_id: officialContainers.pluginInstanceID,
       release_ref: OFFICIAL_CONTAINERS_RELEASE_REF,
     }, {});
+    expect(mocks.watchReleaseInstallOperation).toHaveBeenCalledWith(
+      'release_install_4c9d48a3',
+      { onUpdate: expect.any(Function) },
+    );
+    expect(mocks.installReleaseRef).not.toHaveBeenCalled();
+    expect(updates).toEqual([expect.objectContaining({ status: 'running' })]);
     expect(OFFICIAL_CONTAINERS_RELEASE_REF).toMatchObject({
       publisher_id: officialContainers.publisherID,
       plugin_id: officialContainers.pluginID,
       version: officialContainers.stableVersion,
     });
+  });
+
+  it('returns an already terminal release installation without starting a second watcher', async () => {
+    const { lifecycle, mocks } = createClientHarness();
+    mocks.startReleaseInstallOperation.mockResolvedValueOnce(releaseInstallOperation({
+      status: 'failed',
+      phase: 'failed',
+      failure: { code: 'PLUGIN_RELEASE_NETWORK', retryable: true },
+    }));
+
+    await expect(lifecycle.installOfficialRelease({
+      type: 'install',
+      pluginID: officialContainers.pluginID,
+      source: 'official_catalog',
+    }, releaseInstallRequestID)).resolves.toMatchObject({
+      status: 'failed',
+      failure: { code: 'PLUGIN_RELEASE_NETWORK', retryable: true },
+    });
+    expect(mocks.watchReleaseInstallOperation).not.toHaveBeenCalled();
+  });
+
+  it('lists and reattaches release installations through the published client helpers', async () => {
+    const { lifecycle, mocks } = createClientHarness();
+    const operation = releaseInstallOperation();
+    mocks.listReleaseInstallOperations.mockResolvedValueOnce({ operations: [operation] });
+    mocks.getReleaseInstallOperationByRequest.mockResolvedValueOnce(operation);
+
+    await expect(lifecycle.listReleaseInstallOperations()).resolves.toEqual([operation]);
+    await expect(lifecycle.getReleaseInstallOperationByRequest(releaseInstallRequestID)).resolves.toEqual(operation);
+    await expect(lifecycle.watchReleaseInstallOperation(operation.operation_id)).resolves.toMatchObject({
+      status: 'succeeded',
+    });
+
+    expect(mocks.listReleaseInstallOperations).toHaveBeenCalledWith({});
+    expect(mocks.getReleaseInstallOperationByRequest).toHaveBeenCalledWith(releaseInstallRequestID, {});
+    expect(mocks.watchReleaseInstallOperation).toHaveBeenCalledWith(operation.operation_id, {});
   });
 
   it('updates the exact installed instance with its management revision and generated release ref', async () => {

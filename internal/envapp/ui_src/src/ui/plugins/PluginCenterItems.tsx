@@ -4,10 +4,11 @@ import { CheckCircle, Download, MoreHorizontal, RefreshIcon } from '@floegence/f
 import { Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 
 import { useI18n } from '../i18n';
-import type { PluginCenterTab, PluginInventoryItem } from './pluginTypes';
+import type { PluginCenterTab, PluginInstallOperationProjection, PluginInventoryItem } from './pluginTypes';
 import { PLUGIN_ENTER_MOTION_CLASS, PLUGIN_PRESS_MOTION_CLASS } from './pluginPresentation';
 import { PluginIcon, PluginStatusBadge, PluginTrustBadge } from './PluginPresentationPrimitives';
 import { resolveAuthorPresentation, resolvePluginPresentation } from './officialPluginCatalog';
+import { PluginInstallStatus } from './PluginInstallStatus';
 
 export function PluginCenterItem(props: {
   item: PluginInventoryItem;
@@ -15,13 +16,15 @@ export function PluginCenterItem(props: {
   selected: boolean;
   canManage: boolean;
   canOpenSurfaces: boolean;
-  pending: boolean;
+  managementDisabled: boolean;
+  installOperation?: PluginInstallOperationProjection;
   entranceDelayMs?: number;
   onOpenDetails: (target: HTMLButtonElement) => void;
   onInstall: () => void;
   onUpdate: () => void;
   onOpenActivity: () => void;
   onOpenWorkbench: () => void;
+  onRetryInstall?: () => void;
 }): JSX.Element {
   return <PluginDirectoryCard {...props} />;
 }
@@ -41,8 +44,8 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
   const update = () => props.tab === 'updates' || props.item.lifecycleState === 'update_available';
   const menuItems = (): DropdownItem[] => [
     ...(installed() && props.item.defaultLaunchTarget ? [
-      { id: 'activity', label: i18n.t('uiCopy.plugin.openInActivity'), disabled: props.pending || !props.canOpenSurfaces },
-      { id: 'workbench', label: i18n.t('uiCopy.plugin.openInWorkbench'), disabled: props.pending || !props.canOpenSurfaces },
+      { id: 'activity', label: i18n.t('uiCopy.plugin.openInActivity'), disabled: !props.canOpenSurfaces },
+      { id: 'workbench', label: i18n.t('uiCopy.plugin.openInWorkbench'), disabled: !props.canOpenSurfaces },
       { id: 'surface-separator', label: '', separator: true },
     ] : []),
     { id: 'details', label: i18n.t('uiCopy.plugin.viewDetails') },
@@ -91,6 +94,17 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
           <PluginStatusBadge item={props.item} />
         </span>
       </button>
+      <Show when={props.installOperation}>
+        {(operation) => (
+          <div class="mt-3">
+            <PluginInstallStatus
+              projection={operation()}
+              compact
+              onRetry={props.onRetryInstall}
+            />
+          </div>
+        )}
+      </Show>
       <div class="mt-3 flex min-w-0 items-center gap-1.5" data-plugin-center-card-actions>
         <Show when={!installed()} fallback={(
           <button
@@ -98,7 +112,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
             data-plugin-center-card-primary={props.item.inventoryKey}
             data-plugin-center-update={update() ? props.item.inventoryKey : undefined}
             class={cn('inline-flex min-h-[44px] min-w-0 flex-1 cursor-pointer items-center justify-center gap-1 overflow-hidden whitespace-nowrap rounded-md bg-primary px-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-8', PLUGIN_PRESS_MOTION_CLASS)}
-            disabled={props.pending || (!update() && !props.canOpenSurfaces)}
+            disabled={(update() && props.managementDisabled) || (!update() && !props.canOpenSurfaces)}
             onClick={update() ? props.onUpdate : props.onOpenActivity}
           >
             {update() ? <RefreshIcon class="h-4 w-4 shrink-0" /> : <CheckCircle class="h-4 w-4 shrink-0" />}
@@ -111,7 +125,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
             type="button"
             data-plugin-center-install={props.item.inventoryKey}
             class={cn('inline-flex min-h-[44px] min-w-0 flex-1 cursor-pointer items-center justify-center gap-1 rounded-md bg-primary px-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-8', PLUGIN_PRESS_MOTION_CLASS)}
-            disabled={!props.canManage || props.pending}
+            disabled={!props.canManage || props.managementDisabled}
             onClick={props.onInstall}
           >
             <Download class="h-4 w-4 shrink-0" />
