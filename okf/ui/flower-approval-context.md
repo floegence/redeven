@@ -47,4 +47,4 @@ Flower does not parse provider request metadata, database rows, or transcript te
 - `redeven:internal/ai/flower_live_types.go:406` - Approval actions carry typed ordering, batch, generation, revision, and current-position fields.
 - `redeven:internal/ai/flower_live_types.go:434` - Approval queue snapshots carry typed generation, revision, and current-position fields.
 - `redeven:internal/codeapp/appserver/thread_read_state.go:154` - Live-event read-state decoration loads canonical state only for responses containing thread patches.
-- `redeven:internal/codeapp/appserver/thread_read_state_live_test.go:16` - Focused allocation and loader-count tests enforce the non-patch fast path and copy-on-write patch behavior.
+- `redeven:internal/codeapp/appserver/server_test.go:2638` - AppServer tests cover per-user Flower list/detail/read snapshots and stale or mismatched acknowledgement rejection.
