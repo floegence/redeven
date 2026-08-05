@@ -242,15 +242,24 @@ function activityPluginProjection(count: number): PluginInventoryProjection {
   };
 }
 
-const connectMock = vi.fn(async (_config: Record<string, unknown>) => {
+const emitLocalHandshake = (config: Record<string, unknown>) => {
+  (config.observer as { onDiagnosticEvent?: (event: Record<string, unknown>) => void } | undefined)
+    ?.onDiagnosticEvent?.({
+      path: 'direct', stage: 'handshake', code: 'handshake_ok', result: 'ok', session_id: 'ch_local',
+    });
+};
+
+const connectMock = vi.fn(async (config: Record<string, unknown>) => {
   protocolStatus = 'connected';
   protocolClient = { id: 'client-1' };
   protocolError = null;
+  emitLocalHandshake(config);
 });
-const reconnectMock = vi.fn(async (_config?: Record<string, unknown>) => {
+const reconnectMock = vi.fn(async (config?: Record<string, unknown>) => {
   protocolStatus = 'connected';
   protocolClient = { id: 'client-2' };
   protocolError = null;
+  if (config) emitLocalHandshake(config);
 });
 const disconnectMock = vi.fn(() => {
   protocolStatus = 'disconnected';
@@ -1184,9 +1193,11 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.resetModules();
   vi.clearAllMocks();
+  const pluginCredential = await import('./services/pluginSessionCredential');
+  pluginCredential.stagePluginSessionCredential('ch_local', 'test-plugin-session');
   window.localStorage.clear();
   window.sessionStorage.clear();
   commandState.commands = [];
@@ -1285,15 +1296,19 @@ beforeEach(() => {
     lifecycle_status: 'running',
     permissions: { can_read: true, can_write: true, can_execute: true, can_admin: true, is_owner: true },
   });
-  mintLocalDirectConnectArtifactMock.mockResolvedValue({
-    transport: 'direct',
-    direct_info: {
-      ws_url: 'ws://localhost/_redeven_direct/ws',
-      channel_id: 'ch_local',
-      e2ee_psk_b64u: 'secret',
-      channel_init_expire_at_unix_s: 1,
-      default_suite: 1,
-    },
+  mintLocalDirectConnectArtifactMock.mockImplementation(async () => {
+    const pluginCredential = await import('./services/pluginSessionCredential');
+    pluginCredential.stagePluginSessionCredential('ch_local', 'test-plugin-session');
+    return {
+      transport: 'direct',
+      direct_info: {
+        ws_url: 'ws://localhost/_redeven_direct/ws',
+        channel_id: 'ch_local',
+        e2ee_psk_b64u: 'secret',
+        channel_init_expire_at_unix_s: 1,
+        default_suite: 1,
+      },
+    };
   });
   connectArtifactEntryMock.mockReturnValue({
     transport: 'tunnel',
@@ -3222,6 +3237,25 @@ describe('EnvAppShell local access gate', () => {
         },
       });
       expect(localConnectConfig).not.toHaveProperty('directInfo');
+      const pluginCredential = await import('./services/pluginSessionCredential');
+      pluginCredential.clearPluginSessionCredential();
+      pluginCredential.stagePluginSessionCredential('ch_local', 'credential-local');
+      const localObserver = localConnectConfig?.observer as {
+        onDiagnosticEvent?: (event: Record<string, unknown>) => void;
+      } | undefined;
+      localObserver?.onDiagnosticEvent?.({
+        v: 1,
+        namespace: 'connect',
+        path: 'direct',
+        stage: 'handshake',
+        code_domain: 'event',
+        code: 'handshake_ok',
+        result: 'ok',
+        elapsed_ms: 1,
+        attempt_seq: 1,
+        session_id: 'ch_local',
+      });
+      expect(pluginCredential.readPluginSessionCredential()).toBe('credential-local');
       expect(mintLocalDirectConnectArtifactMock).not.toHaveBeenCalled();
       expect(accessResumeMock).not.toHaveBeenCalled();
       expect(resumeCalls).toEqual([]);

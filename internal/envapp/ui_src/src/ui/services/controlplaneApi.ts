@@ -5,7 +5,7 @@ import { SESSION_KIND_ENVAPP_RPC, sessionKindForLauncherApp, type LauncherFloeAp
 import { appendLocalAccessResumeQuery, applyLocalAccessResumeHeader } from './localAccessAuth';
 import { controlPlaneOriginFromSandboxLocation } from './sandboxOrigins';
 import { AccessUnlockError, isKnownAccessUnlockErrorCode, normalizeRetryAfterMs } from './accessUnlockError';
-import { writePluginSessionCredential } from './pluginSessionCredential';
+import { stagePluginSessionCredential } from './pluginSessionCredential';
 
 export interface Environment {
   public_id: string;
@@ -493,7 +493,7 @@ export async function mintLocalDirectConnectArtifact(context: ArtifactAcquireCon
   if (!pluginSessionCredential) {
     throw new Error('Invalid local plugin session credential');
   }
-  writePluginSessionCredential(pluginSessionCredential);
+  stagePluginSessionCredential(channelID, pluginSessionCredential);
   return {
     ...artifact,
     direct_info: {

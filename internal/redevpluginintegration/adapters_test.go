@@ -195,6 +195,26 @@ func TestExternalPackageAdmissionUsesExplicitPermissionTiers(t *testing.T) {
 	}
 }
 
+func TestReleaseInstallOperationsUseExplicitPermissionTiers(t *testing.T) {
+	if permissionsAllowAction(sessionPermissions{read: true}, host.ManagementActionStartReleaseInstall) {
+		t.Fatal("release install start accepted read-only session")
+	}
+	if !permissionsAllowAction(sessionPermissions{admin: true}, host.ManagementActionStartReleaseInstall) {
+		t.Fatal("release install start denied admin session")
+	}
+	for _, action := range []host.ManagementAction{
+		host.ManagementActionGetReleaseInstall,
+		host.ManagementActionListReleaseInstalls,
+	} {
+		if permissionsAllowAction(sessionPermissions{}, action) {
+			t.Fatalf("%s accepted without read permission", action)
+		}
+		if !permissionsAllowAction(sessionPermissions{read: true}, action) {
+			t.Fatalf("%s denied read-only session", action)
+		}
+	}
+}
+
 func TestSessionAdapterKeepsUserScopesDistinctWithinEnvironment(t *testing.T) {
 	adapter, err := newSessionAdapter(func(channelID string) (*session.Meta, bool) {
 		userID := "user_a"

@@ -56,6 +56,15 @@ server shutdown stop mint and request admission, remove pending artifacts, close
 the exact WebSocket set, and retire only generations owned by that access session.
 No-password mode scopes the access session to one direct connection.
 
+For direct local transport, the Env App stages each credential against the exact
+channel id returned by the connect artifact. It does not publish that credential
+to ReDevPlugin request headers until the Flowersec direct handshake reports
+success for the same channel. Inventory loading and release-install operation
+resume are gated on this activation, so a reconnect or concurrent artifact
+cannot cause an unauthenticated request to be projected as an internal plugin
+failure. A handshake for an unknown channel leaves the credential unpublished
+and the original staged state untouched.
+
 The released lifecycle adapter persists the active process/session generation,
 phase, exact four-hash identity, close continuation, terminal claim, revision,
 and checksum in an atomically replaced generation. Startup accepts only the

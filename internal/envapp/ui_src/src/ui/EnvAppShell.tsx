@@ -170,6 +170,7 @@ import {
 } from './services/accessUnlockError';
 import { clearLocalAccessResumeToken, writeLocalAccessResumeToken } from './services/localAccessAuth';
 import {
+  activatePluginSessionCredential,
   clearPluginSessionCredential,
   readPluginSessionCredential,
 } from './services/pluginSessionCredential';
@@ -563,6 +564,9 @@ export function EnvAppShell() {
   onCleanup(() => flowerDraftCoordinator.dispose());
   const pluginConfirmationQueue = createPluginConfirmationQueue();
   const [pluginSessionRetired, setPluginSessionRetired] = createSignal(false);
+  // Direct plugin APIs are usable only after the exact channel handshake
+  // activates the credential staged for that channel.
+  const [pluginSessionReady, setPluginSessionReady] = createSignal(false);
   const retiredPluginManagementRevisionByInstanceID = new Map<string, number>();
   const retirePluginManagementRevision = (pluginInstanceID: string, revision: number) => {
     const previous = retiredPluginManagementRevisionByInstanceID.get(pluginInstanceID) ?? 0;
@@ -630,6 +634,7 @@ export function EnvAppShell() {
       }
     }
     setPluginSessionRetired(true);
+    setPluginSessionReady(false);
     clearPluginSessionCredential();
     setActivityPluginWindows([]);
     return true;
@@ -661,6 +666,7 @@ export function EnvAppShell() {
     if (coordinatorError !== undefined) throw coordinatorError;
   };
   onCleanup(() => {
+    setPluginSessionReady(false);
     clearPluginSessionCredential();
     pluginInventoryAbort?.abort('Env App shell disposed');
     pluginInstallCoordinator?.dispose();
@@ -1159,7 +1165,8 @@ export function EnvAppShell() {
   };
 
   const pluginInventorySource = () => (
-    pluginsPanelOpen() || layout.sidebarActiveTab() === PLUGIN_CENTER_ACTIVITY_ID
+    (pluginsPanelOpen() || layout.sidebarActiveTab() === PLUGIN_CENTER_ACTIVITY_ID)
+    && (!isLocalMode() || pluginSessionReady())
   );
   const [pluginInventoryProjection, { refetch: refetchPluginInventory }] = createResource(
     pluginInventorySource,
@@ -1191,7 +1198,8 @@ export function EnvAppShell() {
   createEffect(() => {
     const eligible = pluginInventorySource()
       && protocol.status() === 'connected'
-      && canAdmin();
+      && canAdmin()
+      && (!isLocalMode() || pluginSessionReady());
     if (!eligible) {
       pluginInstallResumeEligible = false;
       return;
@@ -2200,6 +2208,15 @@ export function EnvAppShell() {
       }
     },
     onDiagnosticEvent: (event) => {
+      if (
+        event.path === 'direct'
+        && event.stage === 'handshake'
+        && event.code === 'handshake_ok'
+        && event.result === 'ok'
+        && event.session_id
+      ) {
+        setPluginSessionReady(activatePluginSessionCredential(event.session_id));
+      }
       reconnectController.noteProtocolDiagnostic(event, classifyReconnectFailure(protocol.error()));
     },
   };
@@ -2302,6 +2319,7 @@ export function EnvAppShell() {
   };
 
   const acquireLocalDirectArtifact = async (context: Readonly<{ traceId?: string; signal?: AbortSignal }> = {}) => {
+    setPluginSessionReady(false);
     if (readPluginSessionCredential()) {
       pluginConfirmationQueue.cancelAll();
       await Promise.allSettled([
