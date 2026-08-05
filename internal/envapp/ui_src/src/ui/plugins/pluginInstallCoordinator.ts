@@ -68,8 +68,12 @@ export function createPluginInstallCoordinator(options: Readonly<{
 
   const finish = async (projection: PluginInstallOperationProjection): Promise<void> => {
     const operation = projection.operation;
-    if (!operation || operation.status === 'failed') {
-      put({ ...projection, observation: 'watching' });
+    if (!operation) {
+      put(projection);
+      return;
+    }
+    if (operation.status === 'failed') {
+      put({ ...projection, observation: 'failed' });
       return;
     }
     if (operation.status !== 'succeeded') {
@@ -165,7 +169,7 @@ export function createPluginInstallCoordinator(options: Readonly<{
         if (error instanceof PluginPlatformRequestError) {
           put({
             ...current,
-            observation: 'watching',
+            observation: 'failed',
             startFailure: {
               code: error.errorCode,
               retryable: startFailureRetryable(error.errorCode),
@@ -206,7 +210,7 @@ export function createPluginInstallCoordinator(options: Readonly<{
         pluginID: options.resolvePluginID(operation.plugin_instance_id) ?? '',
         pluginInstanceID: operation.plugin_instance_id,
         requestID: operation.request_id,
-        observation: 'watching',
+        observation: operation.status === 'failed' ? 'failed' : 'watching',
         operation,
       });
     }

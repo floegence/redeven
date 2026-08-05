@@ -105,7 +105,8 @@ func TestOfficialReleaseProviderPinsV4HostCapability(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = artifact.Reader.Close() })
-	if artifact.Size <= 0 || artifact.MediaType != "application/schema+json" || len(artifact.FetchChain) != 0 {
+	if artifact.Size <= 0 || artifact.MediaType != "application/schema+json" ||
+		artifact.Origin != host.CapabilityArtifactOriginHost || len(artifact.FetchChain) != 0 {
 		t.Fatalf("capability artifact = %#v", artifact)
 	}
 }

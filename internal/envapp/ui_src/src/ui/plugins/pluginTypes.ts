@@ -240,6 +240,7 @@ export type PluginInstallObservation =
   | 'starting'
   | 'watching'
   | 'reconnecting'
+  | 'failed'
   | 'refreshing'
   | 'refresh_failed';
 

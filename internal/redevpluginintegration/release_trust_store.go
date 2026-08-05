@@ -367,9 +367,9 @@ func (adapter *localTrustedTimeAdapter) Observe(ctx context.Context, request rel
 		Domain: "redevplugin.trusted-time.set.v1", LeafSHA256: leafSHA256,
 		IntegratedTime: integrated.Format(time.RFC3339Nano), LogID: request.LogID(),
 	})
-	consistency := []string{}
-	if len(leaves) != 0 {
-		consistency = trustEncodeProof(trustMerkleConsistencyProof(leafHashes, len(leaves)))
+	consistency, err := trustedTimeConsistencyProof(leafHashes, request.PreviousCheckpointTreeSize())
+	if err != nil {
+		return releasetrust.TrustedTimeObservation{}, err
 	}
 	evidence := releasetrust.TrustedTimeEvidenceV1{
 		SchemaVersion: releasetrust.TrustedTimeEvidenceSchemaVersion, Kind: releasetrust.TrustedTimeEvidenceTransparency,
@@ -387,6 +387,16 @@ func (adapter *localTrustedTimeAdapter) Observe(ctx context.Context, request rel
 		return releasetrust.TrustedTimeObservation{}, err
 	}
 	return releasetrust.NewTransparencyTimeObservation(request, evidenceBytes)
+}
+
+func trustedTimeConsistencyProof(leafHashes [][]byte, previousTreeSize uint64) ([]string, error) {
+	if len(leafHashes) == 0 || previousTreeSize >= uint64(len(leafHashes)) {
+		return nil, releasetrust.ErrInvalidTrustedTimeRequest
+	}
+	if previousTreeSize == 0 {
+		return []string{}, nil
+	}
+	return trustEncodeProof(trustMerkleConsistencyProof(leafHashes, int(previousTreeSize))), nil
 }
 
 func trustDigest(value []byte) string {
