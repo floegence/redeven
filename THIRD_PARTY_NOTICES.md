@@ -234,11 +234,11 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @fast-csv/format | 4.3.5 | MIT | Env App UI | https://www.npmjs.com/package/%40fast-csv%2Fformat/v/4.3.5 |  |
 | @fast-csv/parse | 4.3.6 | MIT | Env App UI | https://www.npmjs.com/package/%40fast-csv%2Fparse/v/4.3.6 |  |
 | @floegence/beamterm-renderer | 1.0.1 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fbeamterm-renderer/v/1.0.1 |  |
-| @floegence/floe-webapp-boot | 0.40.4 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.40.4 | License inherited from floegence/floe-webapp root LICENSE. |
+| @floegence/floe-webapp-boot | 0.40.4 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.40.4 | License inherited from floegence/floe-webapp root LICENSE. |
 | @floegence/floe-webapp-core | 0.40.4 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.40.4 | License inherited from floegence/floe-webapp root LICENSE. |
 | @floegence/floe-webapp-protocol | 0.40.4 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.40.4 | License inherited from floegence/floe-webapp root LICENSE. |
 | @floegence/floeterm-terminal-web | 0.12.1 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.12.1 | Built-in theme attribution and license texts are reproduced below from the verified 0.12.1 package. |
-| @floegence/flowersec-core | 0.27.0 | MIT | Code App UI, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/0.27.0 |  |
+| @floegence/flowersec-core | 0.27.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/0.27.0 |  |
 | @floegence/redevplugin-contracts | 0.7.2 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-contracts/v/0.7.2 |  |
 | @floegence/redevplugin-ui | 0.7.2 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-ui/v/0.7.2 | License inherited from floegence/redevplugin root LICENSE. |
 | @fontsource-variable/inter | 5.2.8 | OFL-1.1 | Desktop shell | https://www.npmjs.com/package/%40fontsource-variable%2Finter/v/5.2.8 |  |
@@ -296,10 +296,10 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @napi-rs/canvas | 0.1.99 | MIT | Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fcanvas/v/0.1.99 |  |
 | @napi-rs/wasm-runtime | 1.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40napi-rs%2Fwasm-runtime/v/1.1.1 |  |
 | @napi-rs/wasm-runtime | 1.1.5 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40napi-rs%2Fwasm-runtime/v/1.1.5 |  |
-| @noble/ciphers | 0.6.0 | MIT | Code App UI, Env App UI | https://www.npmjs.com/package/%40noble%2Fciphers/v/0.6.0 |  |
-| @noble/curves | 1.9.7 | MIT | Code App UI, Env App UI | https://www.npmjs.com/package/%40noble%2Fcurves/v/1.9.7 |  |
+| @noble/ciphers | 0.6.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40noble%2Fciphers/v/0.6.0 |  |
+| @noble/curves | 1.9.7 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40noble%2Fcurves/v/1.9.7 |  |
 | @noble/hashes | 1.4.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40noble%2Fhashes/v/1.4.0 |  |
-| @noble/hashes | 1.8.0 | MIT | Code App UI, Env App UI | https://www.npmjs.com/package/%40noble%2Fhashes/v/1.8.0 |  |
+| @noble/hashes | 1.8.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40noble%2Fhashes/v/1.8.0 |  |
 | @noble/hashes | 2.2.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40noble%2Fhashes/v/2.2.0 |  |
 | @oxc-project/types | 0.133.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40oxc-project%2Ftypes/v/0.133.0 |  |
 | @peculiar/asn1-schema | 2.8.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40peculiar%2Fasn1-schema/v/2.8.0 |  |
@@ -1156,6 +1156,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | wrap-ansi | 7.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/wrap-ansi/v/7.0.0 |  |
 | wrappy | 1.0.2 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/wrappy/v/1.0.2 |  |
 | ws | 8.21.0 | MIT | Code App UI, Env App UI | https://www.npmjs.com/package/ws/v/8.21.0 |  |
+| ws | 8.21.2 | MIT | Desktop shell | https://www.npmjs.com/package/ws/v/8.21.2 |  |
 | xml-name-validator | 5.0.0 | Apache-2.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/xml-name-validator/v/5.0.0 |  |
 | xmlbuilder | 15.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/xmlbuilder/v/15.1.1 |  |
 | xmlchars | 2.2.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/xmlchars/v/2.2.0 |  |
