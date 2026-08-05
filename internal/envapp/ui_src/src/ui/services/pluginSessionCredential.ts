@@ -1,9 +1,22 @@
 const PLUGIN_SESSION_HEADER = 'X-Redeven-Plugin-Session';
 
 let pluginSessionCredential = '';
+const pendingPluginSessionCredentials = new Map<string, string>();
 
-export function writePluginSessionCredential(credential: string): void {
-  pluginSessionCredential = String(credential ?? '').trim();
+export function stagePluginSessionCredential(channelID: string, credential: string): void {
+  const normalizedChannelID = String(channelID ?? '').trim();
+  const normalizedCredential = String(credential ?? '').trim();
+  if (!normalizedChannelID || !normalizedCredential) return;
+  pendingPluginSessionCredentials.set(normalizedChannelID, normalizedCredential);
+}
+
+export function activatePluginSessionCredential(channelID: string): boolean {
+  const normalizedChannelID = String(channelID ?? '').trim();
+  const credential = pendingPluginSessionCredentials.get(normalizedChannelID);
+  if (!credential) return false;
+  pluginSessionCredential = credential;
+  pendingPluginSessionCredentials.clear();
+  return true;
 }
 
 export function readPluginSessionCredential(): string {
@@ -12,6 +25,7 @@ export function readPluginSessionCredential(): string {
 
 export function clearPluginSessionCredential(): void {
   pluginSessionCredential = '';
+  pendingPluginSessionCredentials.clear();
 }
 
 export function applyPluginSessionCredential(headers: Headers): void {

@@ -21,7 +21,8 @@ import {
 } from './pluginPlatform';
 import {
   clearPluginSessionCredential,
-  writePluginSessionCredential,
+  stagePluginSessionCredential,
+  activatePluginSessionCredential,
 } from '../services/pluginSessionCredential';
 
 vi.mock('../services/localApi', () => ({
@@ -382,7 +383,8 @@ describe('createPluginSurfacePlacementCoordinator', () => {
 
 describe('createAuthenticatedReDevPluginFetch', () => {
   it('admits only the canonical same-origin API and attaches the CSRF proof', async () => {
-    writePluginSessionCredential('generation-secret');
+    stagePluginSessionCredential('channel-1', 'generation-secret');
+    expect(activatePluginSessionCredential('channel-1')).toBe(true);
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response('{}', { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
     const platformFetch = createAuthenticatedReDevPluginFetch();

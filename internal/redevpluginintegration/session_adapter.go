@@ -356,6 +356,8 @@ func permissionsAllowAction(perms sessionPermissions, action host.ManagementActi
 		host.ManagementActionAcknowledgeSurfaceStream,
 		host.ManagementActionListIntents,
 		host.ManagementActionListPlugins,
+		host.ManagementActionGetReleaseInstall,
+		host.ManagementActionListReleaseInstalls,
 		host.ManagementActionQueryExternalPackageCommit,
 		host.ManagementActionListFeatures,
 		host.ManagementActionGetCompatibility,
@@ -392,6 +394,7 @@ func permissionsAllowAction(perms sessionPermissions, action host.ManagementActi
 		return perms.write
 	case host.ManagementActionImportLocalPackage,
 		host.ManagementActionInstallReleaseRef,
+		host.ManagementActionStartReleaseInstall,
 		host.ManagementActionInspectExternalPackage,
 		host.ManagementActionCommitExternalPackage,
 		host.ManagementActionUpdateLocalPackage,
