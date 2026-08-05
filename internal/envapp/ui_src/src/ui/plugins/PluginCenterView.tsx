@@ -12,6 +12,7 @@ import type {
   ExternalPluginInspectionRequest,
   ExternalPluginSourcePreset,
   PluginCenterTab,
+  PluginInstallOperationProjection,
   PluginInventoryItem,
   PluginInventoryProjection,
   PluginMarketDetail,
@@ -27,6 +28,7 @@ import { PluginCenterItem } from './PluginCenterItems';
 import { PluginIdentityHeader } from './PluginPresentationPrimitives';
 import { resolveAuthorPresentation, resolvePluginPresentation } from './officialPluginCatalog';
 import { PluginUpdateReviewDialog } from './PluginUpdateReviewDialog';
+import { PluginInstallStatus } from './PluginInstallStatus';
 
 export type PluginCenterViewProps = {
   projection: PluginInventoryProjection;
@@ -39,6 +41,8 @@ export type PluginCenterViewProps = {
   onClose?: () => void;
   onRefresh: () => Promise<unknown> | unknown;
   onCommand: (command: PluginLifecycleCommand, signal: AbortSignal) => Promise<unknown> | unknown;
+  installOperations?: readonly PluginInstallOperationProjection[];
+  onRetryInstall?: (pluginInstanceID: string) => Promise<unknown> | unknown;
   onInspectExternal?: (request: ExternalPluginInspectionRequest, signal: AbortSignal) => Promise<ExternalPluginInspection>;
   onCommitExternal?: (inspection: ExternalPluginInspection, signal: AbortSignal) => Promise<ExternalPluginCommitResult>;
   onLoadMarketDetail?: (pluginID: string, signal?: AbortSignal) => Promise<PluginMarketDetail>;
@@ -61,6 +65,10 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   const [protectedSelectionInventoryKey, setProtectedSelectionInventoryKey] = createSignal<string | undefined>();
   const [commandError, setCommandError] = createSignal<string | null>(null);
   const [commandPending, setCommandPending] = createSignal(false);
+  const [submittedInstallTarget, setSubmittedInstallTarget] = createSignal<Readonly<{
+    pluginID: string;
+    pluginInstanceID: string;
+  }>>();
   const [uninstallChoiceFor, setUninstallChoiceFor] = createSignal<string | null>(null);
   const [mobileDetailOpen, setMobileDetailOpen] = createSignal(Boolean(props.selectedInventoryKey));
   const [externalDialogOpen, setExternalDialogOpen] = createSignal(false);
@@ -113,6 +121,44 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   const projection = createMemo(() => props.projection);
   const model = createMemo(() => buildPluginCenterModel(projection(), activeTab()));
   const allItems = createMemo(() => projection().items);
+  const installOperationByInstanceID = createMemo(() => new Map(
+    (props.installOperations ?? []).map((operation) => [operation.pluginInstanceID, operation]),
+  ));
+  const installOperationForItem = (item: PluginInventoryItem): PluginInstallOperationProjection | undefined => {
+    const pluginInstanceID = item.pluginInstanceID ?? item.officialCatalog?.pluginInstanceID;
+    if (!pluginInstanceID) return undefined;
+    const authoritative = installOperationByInstanceID().get(pluginInstanceID);
+    if (authoritative) return authoritative;
+    const submitted = submittedInstallTarget();
+    if (submitted?.pluginInstanceID !== pluginInstanceID) return undefined;
+    return {
+      pluginID: submitted.pluginID,
+      pluginInstanceID,
+      requestID: '',
+      observation: 'starting',
+    };
+  };
+  const installOperationActive = (projection: PluginInstallOperationProjection): boolean => (
+    projection.observation === 'starting'
+    || projection.observation === 'reconnecting'
+    || projection.observation === 'refreshing'
+    || (
+      projection.observation === 'watching'
+      && projection.operation?.status !== 'succeeded'
+      && projection.operation?.status !== 'failed'
+    )
+  );
+  const installPending = createMemo(() => (
+    Boolean(submittedInstallTarget())
+    || (props.installOperations ?? []).some(installOperationActive)
+  ));
+  const managementPending = createMemo(() => commandPending() || installPending());
+  createEffect(() => {
+    const submitted = submittedInstallTarget();
+    if (submitted && installOperationByInstanceID().has(submitted.pluginInstanceID)) {
+      setSubmittedInstallTarget(undefined);
+    }
+  });
   const tabItems = createMemo(() => {
     switch (activeTab()) {
       case 'discover':
@@ -308,7 +354,24 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   });
 
   const runCommand = async (command: PluginLifecycleCommand) => {
-    if (commandPending()) return;
+    if (command.type === 'install') {
+      if (managementPending()) return;
+      const item = allItems().find((candidate) => candidate.pluginID === command.pluginID && candidate.officialCatalog);
+      if (!item?.officialCatalog) return;
+      setSubmittedInstallTarget({
+        pluginID: command.pluginID,
+        pluginInstanceID: item.officialCatalog.pluginInstanceID,
+      });
+      setCommandError(null);
+      try {
+        await props.onCommand(command, new AbortController().signal);
+      } catch (error) {
+        setSubmittedInstallTarget(undefined);
+        setCommandError(messageFromUnknown(error));
+      }
+      return;
+    }
+    if (command.type === 'open_surface' ? commandPending() : managementPending()) return;
     const controller = new AbortController();
     commandController = controller;
     setCommandPending(true);
@@ -391,7 +454,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   return (
     <PluginCenterShell
       query={query()}
-      loading={loading() || commandPending()}
+      loading={loading()}
       activeTab={tabSelection.visual()}
       installedCount={model().installed.length}
       discoverCount={model().discover.length}
@@ -469,13 +532,18 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
                   selected={selectedItem()?.inventoryKey === item.inventoryKey}
                   canManage={canManage()}
                   canOpenSurfaces={canOpenSurfaces()}
-                  pending={loading() || commandPending()}
+                  managementDisabled={loading() || managementPending()}
+                  installOperation={installOperationForItem(item)}
                   entranceDelayMs={Math.min(index() * 18, 126)}
                   onOpenDetails={(target) => openDetails(item.inventoryKey, target)}
                   onInstall={() => installItem(item)}
                   onUpdate={() => requestUpdate(item)}
                   onOpenActivity={() => openItemSurface(item, 'activity')}
                   onOpenWorkbench={() => openItemSurface(item, 'workbench')}
+                  onRetryInstall={() => {
+                    const pluginInstanceID = item.pluginInstanceID ?? item.officialCatalog?.pluginInstanceID;
+                    if (pluginInstanceID) void props.onRetryInstall?.(pluginInstanceID);
+                  }}
                 />
               )}
             </For>
@@ -509,12 +577,18 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
               onMobileBack={closeDetails}
               canManage={canManage()}
               canOpenSurfaces={canOpenSurfaces()}
+              managementPending={managementPending()}
               commandPending={commandPending()}
+              installOperation={installOperationForItem(item)}
               uninstallChoiceFor={uninstallChoiceFor()}
               onCommand={(command) => void runCommand(command)}
               onAskUninstall={setUninstallChoiceFor}
               onExternalInstall={installItem}
               onExternalUpdate={requestUpdate}
+              onRetryInstall={() => {
+                const pluginInstanceID = item.pluginInstanceID ?? item.officialCatalog?.pluginInstanceID;
+                if (pluginInstanceID) void props.onRetryInstall?.(pluginInstanceID);
+              }}
               marketDetail={marketDetailState()?.pluginID === item.pluginID ? marketDetailState()?.detail : undefined}
               marketDetailLoading={marketDetailState()?.pluginID === item.pluginID && marketDetailState()?.loading === true}
               marketDetailError={marketDetailState()?.pluginID === item.pluginID ? marketDetailState()?.error : undefined}
@@ -795,17 +869,20 @@ export function PluginCenterDetails(props: {
   onMobileBack?: () => void;
   canManage: boolean;
   canOpenSurfaces: boolean;
+  managementPending: boolean;
   commandPending: boolean;
+  installOperation?: PluginInstallOperationProjection;
   uninstallChoiceFor: string | null;
   onCommand: (command: PluginLifecycleCommand) => void;
   onAskUninstall: (pluginInstanceID: string) => void;
   onExternalInstall: (item: PluginInventoryItem) => void;
   onExternalUpdate: (item: PluginInventoryItem) => void;
+  onRetryInstall?: () => void;
 }): JSX.Element {
   const i18n = useI18n();
   return (
     <aside
-      data-plugin-center-details
+      data-plugin-center-details={props.item?.inventoryKey ?? ''}
       class={cn('min-h-0 w-full overflow-hidden bg-background sm:w-[360px] sm:max-w-[42vw] sm:flex-none sm:border-l', props.mobileOpen === false ? 'hidden sm:block' : 'redeven-plugin-motion block animate-in fade-in duration-200 ease-out motion-reduce:animate-none')}
     >
       <Show
@@ -832,11 +909,14 @@ export function PluginCenterDetails(props: {
                 item={item()}
                 canManage={props.canManage}
                 canOpenSurfaces={props.canOpenSurfaces}
+                managementPending={props.managementPending}
                 commandPending={props.commandPending}
+                installOperation={props.installOperation}
                 onCommand={props.onCommand}
                 onAskUninstall={props.onAskUninstall}
                 onExternalInstall={props.onExternalInstall}
                 onExternalUpdate={props.onExternalUpdate}
+                onRetryInstall={props.onRetryInstall}
               />
             </div>
 
@@ -853,7 +933,7 @@ export function PluginCenterDetails(props: {
                 <PluginPermissionInventory
                   item={item()}
                   canManage={props.canManage}
-                  commandPending={props.commandPending}
+                  commandPending={props.managementPending}
                   onCommand={props.onCommand}
                   focusTargetRef={props.permissionsRef}
                 />
@@ -875,7 +955,7 @@ export function PluginCenterDetails(props: {
                 <PluginUninstallDialog
                   item={item()}
                   open={props.uninstallChoiceFor === item().pluginInstanceID}
-                  pending={props.commandPending}
+                  pending={props.managementPending}
                   onClose={() => props.onAskUninstall('')}
                   onCommand={props.onCommand}
                 />
@@ -1372,15 +1452,18 @@ function PluginActions(props: {
   item: PluginInventoryItem;
   canManage: boolean;
   canOpenSurfaces: boolean;
+  managementPending: boolean;
   commandPending: boolean;
+  installOperation?: PluginInstallOperationProjection;
   onCommand: (command: PluginLifecycleCommand) => void;
   onAskUninstall: (pluginInstanceID: string) => void;
   onExternalInstall: (item: PluginInventoryItem) => void;
   onExternalUpdate: (item: PluginInventoryItem) => void;
+  onRetryInstall?: () => void;
 }) {
   const i18n = useI18n();
   const presentation = () => presentPlugin(props.item);
-  const disabledManagement = () => !props.canManage || props.commandPending;
+  const disabledManagement = () => !props.canManage || props.managementPending;
   const disabledOpen = () => props.commandPending || !props.canOpenSurfaces;
   const item = () => props.item;
   const reveal = (selector: string) => {
@@ -1471,6 +1554,13 @@ function PluginActions(props: {
   };
   return (
     <section class="border-y bg-muted/20 px-3 py-3" data-plugin-primary-actions>
+      <Show when={props.installOperation}>
+        {(operation) => (
+          <div class="mb-3">
+            <PluginInstallStatus projection={operation()} onRetry={props.onRetryInstall} />
+          </div>
+        )}
+      </Show>
       <div class="flex min-w-0 items-center gap-2" data-plugin-action-row>
         <Button
           data-plugin-action={primaryActionDataID(presentation().primaryAction)}

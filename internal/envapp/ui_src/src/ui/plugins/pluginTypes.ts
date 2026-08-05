@@ -236,6 +236,25 @@ export type PluginInventoryProjection = {
   marketUnavailable?: boolean;
 };
 
+export type PluginInstallObservation =
+  | 'starting'
+  | 'watching'
+  | 'reconnecting'
+  | 'refreshing'
+  | 'refresh_failed';
+
+export type PluginInstallOperationProjection = Readonly<{
+  pluginID: string;
+  pluginInstanceID: string;
+  requestID: string;
+  observation: PluginInstallObservation;
+  operation?: PluginReleaseInstallOperation;
+  startFailure?: Readonly<{
+    code: PluginPlatformErrorCode;
+    retryable: boolean;
+  }>;
+}>;
+
 export type PluginPanelTile =
   | {
       kind: 'open_center';
@@ -346,7 +365,9 @@ import type {
   PluginExternalPackageCommitResult,
   PluginExternalPackageInspection,
   PluginPermissionGrant,
+  PluginPlatformErrorCode,
   PluginRecord,
+  PluginReleaseInstallOperation,
   PluginReleaseRef,
   PluginSecurityPolicy,
   PluginUploadedExternalPackageIntent,

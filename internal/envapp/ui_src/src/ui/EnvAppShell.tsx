@@ -84,6 +84,10 @@ import { createAIReadinessController } from './flower/aiReadiness';
 import { buildPluginPanelModel } from './plugins/pluginInventoryProjection';
 import { createPluginLifecycleAPI } from './plugins/pluginApi';
 import {
+  createPluginInstallCoordinator,
+  type PluginInstallCoordinator,
+} from './plugins/pluginInstallCoordinator';
+import {
   PluginConfirmationDialog,
   createPluginConfirmationQueue,
 } from './plugins/PluginConfirmationQueue';
@@ -607,6 +611,7 @@ export function EnvAppShell() {
   });
   const pluginSurfaceCoordinator = createPluginSurfacePlacementCoordinator(pluginPlatform.client);
   const pluginLifecycle = createPluginLifecycleAPI(pluginPlatform.client);
+  let pluginInstallCoordinator: PluginInstallCoordinator | undefined;
   const performEndPluginSession = async (): Promise<boolean> => {
     pluginConfirmationQueue.cancelAll();
     const localCleanup = await Promise.allSettled([
@@ -658,6 +663,7 @@ export function EnvAppShell() {
   onCleanup(() => {
     clearPluginSessionCredential();
     pluginInventoryAbort?.abort('Env App shell disposed');
+    pluginInstallCoordinator?.dispose();
     pluginConfirmationQueue.cancelAll();
     void disposePluginPlatform().catch(reportPluginSurfaceRetirementError);
   });
@@ -1168,6 +1174,32 @@ export function EnvAppShell() {
       }
     },
   );
+  pluginInstallCoordinator = createPluginInstallCoordinator({
+    lifecycle: pluginLifecycle,
+    refreshInventory: async () => {
+      await refetchPluginInventory();
+    },
+    createRequestID: () => createClientId('plugin-install'),
+    resolvePluginID: (pluginInstanceID) => (
+      pluginInventoryProjection()?.items.find((item) => (
+        item.pluginInstanceID === pluginInstanceID
+        || item.officialCatalog?.pluginInstanceID === pluginInstanceID
+      ))?.pluginID
+    ),
+  });
+  let pluginInstallResumeEligible = false;
+  createEffect(() => {
+    const eligible = pluginInventorySource()
+      && protocol.status() === 'connected'
+      && canAdmin();
+    if (!eligible) {
+      pluginInstallResumeEligible = false;
+      return;
+    }
+    if (pluginInstallResumeEligible) return;
+    pluginInstallResumeEligible = true;
+    void pluginInstallCoordinator?.resume();
+  });
   createEffect(() => {
     if (!pluginInventorySource()) {
       pluginInventoryAbort?.abort('Plugin inventory surface closed');
@@ -1324,17 +1356,15 @@ export function EnvAppShell() {
   );
 
   const performPluginCenterManagementCommand = async (
-    command: Exclude<PluginLifecycleCommand, { type: 'open_surface' }>,
+    command: Exclude<PluginLifecycleCommand, { type: 'open_surface' } | { type: 'install' }>,
     signal: AbortSignal,
   ) => {
     const invalidatesManagementRevision = (
-      command.type !== 'install'
-      && command.type !== 'grant_permission'
+      command.type !== 'grant_permission'
       && command.type !== 'revoke_permission'
     );
     const invalidatesPluginSurfaces = (
-      command.type !== 'install'
-      && (
+      (
         activityPluginWindows().some((window) => window.target().pluginInstanceID === command.pluginInstanceID)
         || (workbenchPluginSurfaceController?.listPluginTargets(command.pluginInstanceID).length ?? 0) > 0
       )
@@ -1449,6 +1479,18 @@ export function EnvAppShell() {
         expectedManagementRevision: command.expectedManagementRevision,
         preferredPlacement: command.placement,
       });
+    }
+    if (command.type === 'install') {
+      const item = pluginInventoryProjection()?.items.find((candidate) => (
+        candidate.pluginID === command.pluginID && candidate.officialCatalog
+      ));
+      if (!item?.officialCatalog) {
+        return Promise.reject(new Error(i18n.t('uiCopy.plugin.installOperation.failure.internal')));
+      }
+      return pluginInstallCoordinator!.start(
+        command.pluginID,
+        item.officialCatalog.pluginInstanceID,
+      );
     }
     return serializePluginPlacementOperation(() => performPluginCenterManagementCommand(command, signal));
   };
@@ -3218,7 +3260,12 @@ export function EnvAppShell() {
           focusRequest={pluginCenterFocusRequest()}
           canManagePlugins={protocol.status() === 'connected' && canAdmin()}
           canOpenPluginSurfaces={canOpenPluginSurfaces()}
-          onRefresh={() => refetchPluginInventory()}
+          installOperations={pluginInstallCoordinator?.projections() ?? []}
+          onRetryInstall={(pluginInstanceID) => pluginInstallCoordinator?.retry(pluginInstanceID)}
+          onRefresh={async () => {
+            await refetchPluginInventory();
+            await pluginInstallCoordinator?.resume();
+          }}
           onCommand={handlePluginCenterCommand}
           onInspectExternal={(request, signal) => pluginLifecycle.inspectExternalPackage(request, { signal })}
           onCommitExternal={commitExternalPluginPackage}

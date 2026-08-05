@@ -2,6 +2,7 @@ import {
   pluginMutationOutcome,
   type PluginExternalPackageCommitResult,
   type PluginPlatformClient,
+  type PluginReleaseInstallOperation,
   type PluginRequestOptions,
 } from '@floegence/redevplugin-ui';
 
@@ -143,18 +144,55 @@ export function createPluginLifecycleAPI(
     return result;
   };
 
+  const installOfficialRelease = async (
+    command: Extract<PluginManagementCommand, { type: 'install' }>,
+    requestID: string,
+    options: PluginRequestOptions = {},
+    onUpdate?: (operation: PluginReleaseInstallOperation) => void,
+  ): Promise<PluginReleaseInstallOperation> => {
+    const official = requireOfficialPlugin(officialByPluginID(), command.pluginID);
+    const operation = await client.startReleaseInstallOperation({
+      request_id: requestID,
+      plugin_instance_id: official.pluginInstanceID,
+      release_ref: official.distribution.releaseRef,
+    }, options);
+    onUpdate?.(operation);
+    if (isReleaseInstallTerminal(operation)) return operation;
+    return client.watchReleaseInstallOperation(operation.operation_id, {
+      ...options,
+      onUpdate,
+    });
+  };
+
+  const listReleaseInstallOperations = async (
+    options: PluginRequestOptions = {},
+  ): Promise<PluginReleaseInstallOperation[]> => (
+    (await client.listReleaseInstallOperations(options)).operations
+  );
+
+  const getReleaseInstallOperationByRequest = (
+    requestID: string,
+    options: PluginRequestOptions = {},
+  ): Promise<PluginReleaseInstallOperation> => (
+    client.getReleaseInstallOperationByRequest(requestID, options)
+  );
+
+  const watchReleaseInstallOperation = (
+    operationID: string,
+    options: PluginRequestOptions = {},
+    onUpdate?: (operation: PluginReleaseInstallOperation) => void,
+  ): Promise<PluginReleaseInstallOperation> => (
+    client.watchReleaseInstallOperation(operationID, {
+      ...options,
+      ...(onUpdate ? { onUpdate } : {}),
+    })
+  );
+
   const execute = async (
-    command: PluginManagementCommand,
+    command: Exclude<PluginManagementCommand, { type: 'install' }>,
     options: PluginRequestOptions = {},
   ) => {
     switch (command.type) {
-      case 'install': {
-        const official = requireOfficialPlugin(officialByPluginID(), command.pluginID);
-        return client.installReleaseRef({
-          plugin_instance_id: official.pluginInstanceID,
-          release_ref: official.distribution.releaseRef,
-        }, options);
-      }
       case 'enable':
         return client.enablePlugin({
           plugin_instance_id: command.pluginInstanceID,
@@ -211,8 +249,16 @@ export function createPluginLifecycleAPI(
     loadMarketDetail: loadPluginMarketDetail,
     inspectExternalPackage,
     commitExternalPackage,
+    installOfficialRelease,
+    listReleaseInstallOperations,
+    getReleaseInstallOperationByRequest,
+    watchReleaseInstallOperation,
     execute,
   });
+}
+
+function isReleaseInstallTerminal(operation: PluginReleaseInstallOperation): boolean {
+  return operation.status === 'succeeded' || operation.status === 'failed';
 }
 
 async function loadPluginMarketSnapshot(signal?: AbortSignal): Promise<PluginMarketSnapshot> {

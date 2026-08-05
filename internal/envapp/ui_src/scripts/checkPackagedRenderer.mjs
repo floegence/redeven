@@ -217,6 +217,7 @@ function builtPluginInstalledPlugin() {
 async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = false } = {}) {
   let baseURL = '';
   let installedPlugin = null;
+  let releaseInstallOperation = null;
   const server = createServer(async (request, response) => {
     try {
       const requestURL = new URL(request.url ?? '/', baseURL || 'http://127.0.0.1');
@@ -329,17 +330,48 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
         });
         return;
       }
-      if (pluginInstallFlow && requestURL.pathname === '/_redevplugin/api/plugins/install-release-ref') {
+      if (pluginInstallFlow && requestURL.pathname === '/_redevplugin/api/plugins/release-install-operations') {
         const body = await readJSONRequest(request);
         const expected = {
+          request_id: body.request_id,
           plugin_instance_id: builtPluginInstanceID,
           release_ref: builtPluginReleaseRef,
         };
-        if (JSON.stringify(body) !== JSON.stringify(expected)) {
+        if (!/^[0-9a-f-]{36}$/u.test(body.request_id)
+          || JSON.stringify(body) !== JSON.stringify(expected)) {
           throw new Error(`unexpected plugin release install request: ${JSON.stringify({ expected, actual: body })}`);
         }
+        releaseInstallOperation = {
+          request_id: body.request_id,
+          operation_id: 'release_install_built_renderer',
+          plugin_instance_id: builtPluginInstanceID,
+          request_sha256: 'a'.repeat(64),
+          status: 'running',
+          phase: 'download_package',
+          progress: { kind: 'bytes', completed: 262144, total: 524288 },
+          attempt: 1,
+          retry_after_ms: 250,
+          mutation_outcome: 'not_committed',
+          created_at: '2026-08-05T08:00:00Z',
+          updated_at: '2026-08-05T08:00:01Z',
+        };
+        jsonResponse(response, { ok: true, data: releaseInstallOperation });
+        return;
+      }
+      if (pluginInstallFlow
+        && requestURL.pathname === '/_redevplugin/api/plugins/release-install-operations/release_install_built_renderer') {
         installedPlugin = builtPluginInstalledPlugin();
-        jsonResponse(response, { ok: true, data: installedPlugin });
+        releaseInstallOperation = {
+          ...releaseInstallOperation,
+          status: 'succeeded',
+          phase: 'complete',
+          progress: { kind: 'items', completed: 1, total: 1 },
+          mutation_outcome: 'committed',
+          plugin_record: installedPlugin,
+          updated_at: '2026-08-05T08:00:02Z',
+          terminal_at: '2026-08-05T08:00:02Z',
+        };
+        jsonResponse(response, { ok: true, data: releaseInstallOperation });
         return;
       }
 
@@ -625,7 +657,8 @@ async function verifyBuiltPluginInstallRouting(browser) {
     const expectedPluginRequests = [
       ...pluginInventoryRequests,
       ...pluginInventoryRequests,
-      { method: 'POST', path: '/_redevplugin/api/plugins/install-release-ref' },
+      { method: 'POST', path: '/_redevplugin/api/plugins/release-install-operations' },
+      { method: 'GET', path: '/_redevplugin/api/plugins/release-install-operations/release_install_built_renderer' },
       ...pluginInventoryRequests,
       { method: 'POST', path: '/_redevplugin/api/plugins/permissions/requirements/query' },
     ];
@@ -641,7 +674,7 @@ async function verifyBuiltPluginInstallRouting(browser) {
       market_snapshot_loaded: true,
       installed_state: 'disabled_verified_zero_grants',
       package_url: builtPluginPackageURL,
-      install_release_ref_called: true,
+      release_install_operation_called: true,
       request_count: pluginRequests.length,
     };
   } finally {

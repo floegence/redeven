@@ -1148,6 +1148,143 @@ describe('PluginCenterView', () => {
     expect(document.querySelector('[data-external-plugin-dialog]')).toBeNull();
   });
 
+  it('shows authoritative byte progress only on the target plugin while browsing remains available', () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginCenterView
+        projection={projection}
+        loading={false}
+        installOperations={[{
+          pluginID: containersPlugin.pluginID,
+          pluginInstanceID: containersPlugin.officialCatalog.pluginInstanceID,
+          requestID: 'request_install_containers',
+          observation: 'watching',
+          operation: {
+            request_id: 'request_install_containers',
+            operation_id: 'release_install_containers',
+            plugin_instance_id: containersPlugin.officialCatalog.pluginInstanceID,
+            request_sha256: 'a'.repeat(64),
+            status: 'running',
+            phase: 'download_package',
+            progress: { kind: 'bytes', completed: 262_144, total: 524_288 },
+            attempt: 1,
+            retry_after_ms: 250,
+            mutation_outcome: 'not_committed',
+            created_at: '2026-08-05T08:00:00Z',
+            updated_at: '2026-08-05T08:00:01Z',
+          },
+        }]}
+        onCommand={vi.fn()}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces
+      />
+    ), mount);
+
+    const target = mount.querySelector('[data-plugin-directory-card="catalog:containers"]')!;
+    const other = mount.querySelector('[data-plugin-directory-card="catalog:database"]')!;
+    const progress = target.querySelector<HTMLProgressElement>('[data-plugin-install-progress]')!;
+    expect(target.querySelector('[data-plugin-install-operation]')?.textContent).toContain('Downloading plugin package');
+    expect(progress.value).toBe(262_144);
+    expect(progress.max).toBe(524_288);
+    expect(other.querySelector('[data-plugin-install-operation]')).toBeNull();
+
+    (mount.querySelector('[data-plugin-center-item="catalog:database"]') as HTMLButtonElement).click();
+    expect(mount.querySelector('[data-plugin-center-details="catalog:database"]')).not.toBeNull();
+    const search = mount.querySelector<HTMLInputElement>('[data-plugin-center-search]')!;
+    expect(search.disabled).toBe(false);
+  });
+
+  it('localizes a retryable release failure and retries only the failed target', () => {
+    const onRetryInstall = vi.fn();
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginCenterView
+        projection={projection}
+        loading={false}
+        installOperations={[{
+          pluginID: containersPlugin.pluginID,
+          pluginInstanceID: containersPlugin.officialCatalog.pluginInstanceID,
+          requestID: 'request_install_containers',
+          observation: 'watching',
+          operation: {
+            request_id: 'request_install_containers',
+            operation_id: 'release_install_containers',
+            plugin_instance_id: containersPlugin.officialCatalog.pluginInstanceID,
+            request_sha256: 'a'.repeat(64),
+            status: 'failed',
+            phase: 'failed',
+            progress: { kind: 'indeterminate' },
+            attempt: 3,
+            retry_after_ms: 0,
+            mutation_outcome: 'not_committed',
+            failure: { code: 'PLUGIN_RELEASE_NETWORK', retryable: true },
+            created_at: '2026-08-05T08:00:00Z',
+            updated_at: '2026-08-05T08:00:03Z',
+            terminal_at: '2026-08-05T08:00:03Z',
+          },
+        }]}
+        onRetryInstall={onRetryInstall}
+        onCommand={vi.fn()}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces
+      />
+    ), mount);
+
+    const status = mount.querySelector('[data-plugin-install-operation]')!;
+    expect(status.textContent).toContain('The plugin release could not be reached');
+    expect(status.textContent).not.toContain('PLUGIN_RELEASE_NETWORK');
+    (status.querySelector('[data-plugin-install-retry]') as HTMLButtonElement).click();
+    expect(onRetryInstall).toHaveBeenCalledWith(containersPlugin.officialCatalog.pluginInstanceID);
+  });
+
+  it('keeps a committed installation distinct when inventory refresh needs retrying', () => {
+    const onRetryInstall = vi.fn();
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginCenterView
+        projection={{ items: [containersPlugin] }}
+        loading={false}
+        installOperations={[{
+          pluginID: containersPlugin.pluginID,
+          pluginInstanceID: containersPlugin.officialCatalog.pluginInstanceID,
+          requestID: 'request_install_containers',
+          observation: 'refresh_failed',
+          operation: {
+            request_id: 'request_install_containers',
+            operation_id: 'release_install_containers',
+            plugin_instance_id: containersPlugin.officialCatalog.pluginInstanceID,
+            request_sha256: 'a'.repeat(64),
+            status: 'succeeded',
+            phase: 'complete',
+            progress: { kind: 'items', completed: 1, total: 1 },
+            attempt: 1,
+            retry_after_ms: 0,
+            mutation_outcome: 'committed',
+            created_at: '2026-08-05T08:00:00Z',
+            updated_at: '2026-08-05T08:00:03Z',
+            terminal_at: '2026-08-05T08:00:03Z',
+          },
+        }]}
+        onRetryInstall={onRetryInstall}
+        onCommand={vi.fn()}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces
+      />
+    ), mount);
+
+    const status = mount.querySelector('[data-plugin-install-operation]')!;
+    expect(status.textContent).toContain('installed, but Plugin Center could not refresh');
+    expect(status.textContent).not.toContain('installation failed');
+    (status.querySelector('[data-plugin-install-retry]') as HTMLButtonElement).click();
+    expect(onRetryInstall).toHaveBeenCalledWith(containersPlugin.officialCatalog.pluginInstanceID);
+  });
+
   it('lets read-only users open surfaces while keeping management actions disabled', async () => {
     const onCommand = vi.fn();
     const installedProjection: PluginInventoryProjection = {

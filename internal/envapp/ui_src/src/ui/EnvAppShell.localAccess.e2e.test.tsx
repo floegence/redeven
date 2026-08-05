@@ -58,18 +58,35 @@ const pluginLifecycleMocks = vi.hoisted(() => {
   const listInstalledPlugins = vi.fn(async () => []);
   const loadInventoryProjection = vi.fn();
   const execute = vi.fn(async (_command: any) => ({}));
+  const installOfficialRelease = vi.fn(async (
+    _command: any,
+    _requestID: string,
+    _options: { signal?: AbortSignal },
+    _onUpdate: (operation: any) => void,
+  ) => ({}));
+  const listReleaseInstallOperations = vi.fn(async () => []);
+  const getReleaseInstallOperationByRequest = vi.fn(async () => ({}));
+  const watchReleaseInstallOperation = vi.fn(async () => ({}));
   const inspectExternalPackage = vi.fn(async (_request: any) => ({}));
   const commitExternalPackage = vi.fn(async (_inspection: any, _options: any, _onProgress?: (result: any) => void) => ({}));
   return {
     listInstalledPlugins,
     loadInventoryProjection,
     execute,
+    installOfficialRelease,
+    listReleaseInstallOperations,
+    getReleaseInstallOperationByRequest,
+    watchReleaseInstallOperation,
     inspectExternalPackage,
     commitExternalPackage,
     createPluginLifecycleAPI: vi.fn(() => ({
       listInstalledPlugins,
       loadInventoryProjection,
       execute,
+      installOfficialRelease,
+      listReleaseInstallOperations,
+      getReleaseInstallOperationByRequest,
+      watchReleaseInstallOperation,
       inspectExternalPackage,
       commitExternalPackage,
     })),
@@ -1212,6 +1229,12 @@ beforeEach(() => {
   pluginLifecycleMocks.loadInventoryProjection.mockReset();
   pluginLifecycleMocks.execute.mockReset();
   pluginLifecycleMocks.execute.mockImplementation(async (_command: any) => ({}));
+  pluginLifecycleMocks.installOfficialRelease.mockReset();
+  pluginLifecycleMocks.installOfficialRelease.mockImplementation(async () => ({}));
+  pluginLifecycleMocks.listReleaseInstallOperations.mockReset();
+  pluginLifecycleMocks.listReleaseInstallOperations.mockResolvedValue([]);
+  pluginLifecycleMocks.getReleaseInstallOperationByRequest.mockReset();
+  pluginLifecycleMocks.watchReleaseInstallOperation.mockReset();
   pluginLifecycleMocks.inspectExternalPackage.mockReset();
   pluginLifecycleMocks.commitExternalPackage.mockReset();
   pluginSurfaceFrameState.lastProps = null;
@@ -1706,9 +1729,9 @@ describe('EnvAppShell environment entry affordances', () => {
 
       let settled = false;
       const command = Promise.resolve(pluginCenterViewState.lastProps.onCommand({
-        type: 'install',
-        pluginID: officialContainersCatalog.pluginID,
-        source: 'official_catalog',
+        type: 'disable',
+        pluginInstanceID: officialContainersCatalog.pluginInstanceID,
+        expectedManagementRevision: 11,
       }, new AbortController().signal));
       void command.then(() => { settled = true; }, () => { settled = true; });
       await flushAsync();
@@ -1730,6 +1753,87 @@ describe('EnvAppShell environment entry affordances', () => {
       await expect(command).rejects.toBe(unknownOutcome);
       await expect(queuedOpen).rejects.toThrow();
       expect(workbenchPluginSurfaceState.open).not.toHaveBeenCalled();
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
+  it('keeps official installation observation alive when Plugin Center closes', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(officialContainersProjection());
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+    let finishInstall!: (operation: any) => void;
+    let observationSignal: AbortSignal | undefined;
+    pluginLifecycleMocks.installOfficialRelease.mockImplementationOnce(async (
+      _command: any,
+      requestID: string,
+      options: { signal?: AbortSignal },
+      onUpdate: (operation: any) => void,
+    ) => {
+      observationSignal = options.signal;
+      const running = {
+        request_id: requestID,
+        operation_id: 'release_install_shell_test',
+        plugin_instance_id: officialContainersCatalog.pluginInstanceID,
+        request_sha256: 'a'.repeat(64),
+        status: 'running',
+        phase: 'download_package',
+        progress: { kind: 'bytes', completed: 262144, total: 524288 },
+        attempt: 1,
+        retry_after_ms: 250,
+        mutation_outcome: 'not_committed',
+        created_at: '2026-08-05T08:00:00Z',
+        updated_at: '2026-08-05T08:00:01Z',
+      };
+      onUpdate(running);
+      return new Promise((resolve) => { finishInstall = resolve; });
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+      await flushUntil(() => Boolean(host.querySelector('[data-activity-id="plugins"]')));
+      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement).click();
+      await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="plugin-center"]')), 40);
+      (host.querySelector('[data-plugin-panel-tile="plugin-center"]') as HTMLButtonElement).click();
+      await flushUntil(() => Boolean(pluginCenterViewState.lastProps?.onCommand), 40);
+
+      const viewController = new AbortController();
+      const install = pluginCenterViewState.lastProps.onCommand({
+        type: 'install',
+        pluginID: officialContainersCatalog.pluginID,
+        source: 'official_catalog',
+      }, viewController.signal);
+      await flushUntil(() => pluginLifecycleMocks.installOfficialRelease.mock.calls.length === 1);
+
+      expect(pluginCenterViewState.lastProps.installOperations[0]).toMatchObject({
+        pluginInstanceID: officialContainersCatalog.pluginInstanceID,
+        observation: 'watching',
+        operation: {
+          phase: 'download_package',
+          progress: { kind: 'bytes', completed: 262144, total: 524288 },
+        },
+      });
+      pluginCenterViewState.lastProps.onClose();
+      viewController.abort('Plugin Center disposed');
+      expect(observationSignal?.aborted).toBe(false);
+
+      finishInstall({
+        ...pluginCenterViewState.lastProps.installOperations[0].operation,
+        status: 'succeeded',
+        phase: 'complete',
+        progress: { kind: 'items', completed: 1, total: 1 },
+        mutation_outcome: 'committed',
+        terminal_at: '2026-08-05T08:00:02Z',
+      });
+      await expect(install).resolves.toBeUndefined();
+      await flushAsync();
+      expect(pluginCenterViewState.lastProps.installOperations).toEqual([]);
     } finally {
       dispose();
     }
