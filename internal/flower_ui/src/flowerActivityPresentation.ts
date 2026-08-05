@@ -1191,7 +1191,7 @@ function presentationForPatch(item: FlowerActivityItem, fileActions?: FlowerActi
 }
 
 function presentationForTodos(item: FlowerActivityItem): FlowerActivityPresentation {
-  const title: FlowerActivityTitle = { kind: 'plain', text: 'Todos' };
+  const title: FlowerActivityTitle = { kind: 'plain', text: trimString(item.label) || 'Todos' };
   const items = todoItemsFromPayload(item.payload);
   const errorBlock = errorDetailBlockForItem(item, item.payload);
   const statusLines = errorBlock ? [] : resultStatusLines(item.payload);
