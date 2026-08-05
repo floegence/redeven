@@ -1667,7 +1667,7 @@
     },
     {
       "path": "internal/envapp/ui_src/src/ui/EnvAppShell.tsx",
-      "sha256": "2699935d5f8378c10dc070d456da973be96f10fbc8a88595ae4c962da76a9e1b",
+      "sha256": "e27d4481e951c49e054118c2904a94fe7c625f0ee8247afc286ec0137ff61710",
       "sink_kinds": [
         "web_storage"
       ],
@@ -1684,7 +1684,7 @@
     },
     {
       "path": "internal/envapp/ui_src/src/ui/services/controlplaneApi.ts",
-      "sha256": "3d998784512ad6a23bf56f5eb51bf9c1ef51a4a8af28ec4738703ac78a96cebe",
+      "sha256": "43c9604c649c5cc37b1f2cbca8e70ec087ed188d979e356355a71288774813d7",
       "sink_kinds": [
         "web_storage"
       ],
