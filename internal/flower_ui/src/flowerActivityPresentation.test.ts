@@ -745,6 +745,30 @@ describe('presentFlowerActivityItem', () => {
     });
   });
 
+  it('renders the published Floret v3 todo items payload', () => {
+    const presentation = presentFlowerActivityItem(item({
+      tool_name: 'write_todos',
+      renderer: 'todos',
+      label: 'Update todos',
+      payload: {
+        operation: 'write',
+        items: [
+          { text: 'Inspect the live timeline', status: 'completed' },
+          { text: 'Verify the expanded details', status: 'in_progress' },
+        ],
+      },
+    }));
+
+    expect(presentation.meta).toContain('1/2 completed');
+    expect(presentation.detailBlocks).toContainEqual({
+      kind: 'todos',
+      items: [
+        { content: 'Inspect the live timeline', status: 'completed' },
+        { content: 'Verify the expanded details', status: 'in_progress' },
+      ],
+    });
+  });
+
   it('renders todo failure reason without raw tool fields while keeping the todo block', () => {
     const presentation = presentFlowerActivityItem(item({
       tool_name: 'write_todos',
