@@ -1484,7 +1484,7 @@ describe('FlowerSurface navigation activity', () => {
                     ? {
                         label: 'Update todos',
                         renderer: 'todos',
-                        payload: { todos: [{ content: 'Verify inline activity', status: 'completed' }] },
+                        payload: { operation: 'write', items: [{ text: 'Verify inline activity', status: 'completed' }] },
                       }
                     : {
                         label: 'task_complete',

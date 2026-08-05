@@ -471,14 +471,17 @@ function todoItemsFromPayload(payload: Readonly<Record<string, unknown>> | undef
   if (!payload) return [];
   const result = asRecord(payload.result);
   const args = asRecord(payload.args);
-  const source = asArray(payload.todos).length > 0
-    ? asArray(payload.todos)
-    : asArray(result.todos).length > 0
-      ? asArray(result.todos)
-      : asArray(args.todos);
+  const source = [
+    payload.items,
+    payload.todos,
+    result.items,
+    result.todos,
+    args.items,
+    args.todos,
+  ].map(asArray).find((items) => items.length > 0) ?? [];
   return source.map((entry) => {
     const record = asRecord(entry);
-    const content = payloadValue(record, 'content', 'title', 'task', 'text', 'description');
+    const content = payloadValue(record, 'text', 'content', 'title', 'task', 'description');
     if (!content) return null;
     const id = payloadValue(record, 'id');
     const note = payloadValue(record, 'note');
