@@ -7,6 +7,7 @@ import {
   projectPluginInventory,
 } from './pluginInventoryProjection';
 import type { ReDevPluginRecord } from './pluginTypes';
+import type { PluginPermissionRequirements } from '@floegence/redevplugin-ui';
 
 const officialContainers = OFFICIAL_PLUGIN_CATALOG_SEED[0];
 const packageHash = officialContainers.distribution.releaseRef.expected_hashes.package_sha256;
@@ -500,6 +501,41 @@ describe('v0.7.1 plugin inventory projection', () => {
       authorization: {
         permissions: expect.arrayContaining([
           expect.objectContaining({ permissionID: 'containers.read', granted: false }),
+        ]),
+      },
+    });
+  });
+
+  it('projects Host-verified requirements when the market catalog has no permission metadata', () => {
+    const requirements: PluginPermissionRequirements = {
+      plugin_instance_id: officialContainers.pluginInstanceID,
+      plugin_version: officialContainers.stableVersion,
+      active_fingerprint: packageHash,
+      management_revision: 7,
+      required_permissions: ['containers.read', 'containers.execute'],
+      contracts: [{
+        contract_id: 'redeven.container_resources.v4',
+        contract_version: '4.0.0',
+        contract_sha256: 'a'.repeat(64),
+        capability_id: 'redeven.capability.container_resources',
+        capability_version: '3.0.0',
+        methods: [
+          { method: 'containers.list', required_permissions: ['containers.read'] },
+          { method: 'containers.start', required_permissions: ['containers.execute'] },
+        ],
+      }],
+    };
+    const projection = projectPluginInventory({
+      officialCatalog: [{ ...officialContainers, permissions: [] }],
+      installedPlugins: [installedRecord()],
+      permissionRequirements: [requirements],
+    });
+
+    expect(projection.items[0]).toMatchObject({
+      authorization: {
+        permissions: expect.arrayContaining([
+          expect.objectContaining({ permissionID: 'containers.read', methods: ['containers.list'] }),
+          expect.objectContaining({ permissionID: 'containers.execute', methods: ['containers.start'] }),
         ]),
       },
     });
