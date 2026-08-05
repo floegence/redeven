@@ -5,6 +5,8 @@ import { mkdir, open, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
+import { WebSocketServer } from 'ws';
+import { acceptDirectNode, AllowPlaintextForLoopback } from '@floegence/flowersec-core/node';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, '../../../..');
@@ -33,6 +35,7 @@ const builtPluginInstanceID = `catalog_${builtPluginReleaseRef.publisher_id}_${b
 const builtPluginPresentationSHA256 = `sha256:${'1'.repeat(64)}`;
 const pluginMarketDetailPath = `/_redeven_proxy/api/plugins/market/plugins/${builtPluginReleaseRef.plugin_id}`;
 const builtPluginPackageURL = 'https://github.com/floegence/redeven-official-plugins/releases/download/v4.1.0/containers-4.1.0.redevplugin';
+const builtDistDirectPSK = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
 
 function parseReportPath(args) {
   const index = args.indexOf('--report');
@@ -253,11 +256,12 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
       }
       if (accessReady && requestURL.pathname === '/api/local/direct/connect_artifact') {
         jsonResponse(response, {
+          plugin_session_credential: 'built-dist-plugin-session',
           transport: 'direct',
           direct_info: {
             ws_url: baseURL.replace(/^http/, 'ws') + '_redeven_direct/ws',
             channel_id: 'built-dist-shell',
-            e2ee_psk_b64u: 'built-dist-shell',
+            e2ee_psk_b64u: builtDistDirectPSK,
             channel_init_expire_at_unix_s: 4_102_444_800,
             default_suite: 1,
           },
@@ -413,6 +417,34 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
       response.end(error instanceof Error ? error.message : 'not found');
     }
   });
+  const webSocketServer = new WebSocketServer({ noServer: true });
+  const webSocketSessions = new Set();
+  server.on('upgrade', (request, socket, head) => {
+    const requestURL = new URL(request.url ?? '/', baseURL || 'http://127.0.0.1');
+    if (requestURL.pathname !== '/_redeven_direct/ws') {
+      socket.destroy();
+      return;
+    }
+    webSocketServer.handleUpgrade(request, socket, head, (websocket) => {
+      webSocketServer.emit('connection', websocket, request);
+    });
+  });
+  webSocketServer.on('connection', (websocket) => {
+    webSocketSessions.add(websocket);
+    void acceptDirectNode(websocket, {
+      channelId: 'built-dist-shell',
+      suite: 1,
+      psk: builtDistDirectPSK,
+      initExpireAtUnixS: 4_102_444_800,
+    }, {
+      secureTransport: false,
+      transportSecurityPolicy: AllowPlaintextForLoopback,
+    }).catch(() => {
+      websocket.close();
+    }).finally(() => {
+      webSocketSessions.delete(websocket);
+    });
+  });
 
   await new Promise((resolve, reject) => {
     server.once('error', reject);
@@ -423,7 +455,16 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
   baseURL = `http://127.0.0.1:${address.port}/`;
   return {
     baseURL,
-    close: () => new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve()))),
+    close: () => new Promise((resolve, reject) => {
+      for (const websocket of webSocketSessions) websocket.close();
+      webSocketServer.close((webSocketError) => {
+        if (webSocketError) {
+          reject(webSocketError);
+          return;
+        }
+        server.close((error) => (error ? reject(error) : resolve()));
+      });
+    }),
   };
 }
 
