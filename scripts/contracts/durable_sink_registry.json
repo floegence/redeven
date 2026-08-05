@@ -2022,7 +2022,7 @@
     },
     {
       "path": "internal/redevpluginintegration/release_module.go",
-      "sha256": "820c2cab28f71b78ec42f65957056aa042c2ef088bcc6d8f68ceb081de38a476",
+      "sha256": "91e402f342030a3e66da83e3ab474a427af2bac666cda12822e49f8fc3ef3254",
       "sink_kinds": [
         "file"
       ],
@@ -2032,11 +2032,11 @@
       "data_classes": [
         "product adapter audit, trust, or lifecycle records"
       ],
-      "review_note": "Reviewed after removing an unused constructor; the remaining file sink and upstream adapter authority are unchanged, and Floret remains authoritative for admitted Agent state."
+      "review_note": "Reviewed after declaring embedded capability artifacts as host-origin; the file sink inventory and upstream adapter authority are unchanged, and Floret remains authoritative for admitted Agent state."
     },
     {
       "path": "internal/redevpluginintegration/release_trust_store.go",
-      "sha256": "8e12f60225baf54084d10af42afcc00144715205f94dc6db12e4fffd906aeb73",
+      "sha256": "bf02429d71a929823b4cd78f6a0fa2f3a131e110fe30e70a08ea70d6fe23bf56",
       "sink_kinds": [
         "file",
         "json_file",
@@ -2061,7 +2061,7 @@
         "struct {\n\tDomain\t\tstring\t`json:\"domain\"`\n\tLeafSHA256\tstring\t`json:\"leaf_sha256\"`\n\tIntegratedTime\tstring\t`json:\"integrated_time\"`\n\tLogID\t\tstring\t`json:\"log_id\"`\n}{\n\tDomain:\t\"redevplugin.trusted-time.set.v1\", LeafSHA256: leafSHA256,\n\tIntegratedTime:\tintegrated.Format(time.RFC3339Nano), LogID: request.LogID(),\n}",
         "struct {\n\tDomain\t\tstring\t`json:\"domain\"`\n\tSchemaVersion\tstring\t`json:\"schema_version\"`\n\tLogID\t\tstring\t`json:\"log_id\"`\n\tTreeSize\tuint64\t`json:\"tree_size\"`\n\tRootHash\tstring\t`json:\"root_hash\"`\n\tCheckpointTime\tstring\t`json:\"checkpoint_time\"`\n\tKeyID\t\tstring\t`json:\"key_id\"`\n}{\n\tDomain:\t\"redevplugin.trusted-time.checkpoint.v1\", SchemaVersion: checkpoint.SchemaVersion,\n\tLogID:\tcheckpoint.LogID, TreeSize: checkpoint.TreeSize, RootHash: checkpoint.RootHash,\n\tCheckpointTime:\tcheckpoint.CheckpointTime, KeyID: checkpoint.KeyID,\n}"
       ],
-      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+      "review_note": "Reviewed after deriving consistency proofs from the committed checkpoint size and failing before writes on invalid checkpoints; the file, JSON, and SQLite sink inventory and upstream adapter authority are unchanged."
     },
     {
       "path": "internal/redevpluginintegration/session_lifecycle_adapter.go",
