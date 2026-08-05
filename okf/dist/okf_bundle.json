@@ -715,7 +715,7 @@
               "presentation",
               "terminal"
             ],
-            "summary": "Terminal activity is a renderer-first view over canonical Floret Activity items, not a second process lifecycle. Redeven maps display data only from the Floret v3 `ActivityItem.presentation` object, so the compact row uses the semantic title `Shell` with the authored command as its immediate context instead of exposing a tool protocol name. Approval lifecycle state remains available to the actionable composer and internal lifecycle logic but is never ordinary activity presentation. Stable activity identity preserves user-controlled disclosure and viewport state across live replacements; terminal output may poll Redeven process handles, but canonical status and completion remain projection-owned. Measured disclosure animation, local scrolling, and transcript following preserve user reading intent and reduced-motion behavior.",
+            "summary": "Terminal activity is a renderer-first view over canonical Floret Activity items, not a second process lifecycle. Redeven maps display data only from Floret v3 `ActivityItem.presentation`, so the compact row shows `Shell` and the authored command instead of a protocol name. Approval state remains available to the actionable composer and lifecycle logic but never becomes ordinary activity presentation. Stable activity identity preserves user disclosure and viewport state across live replacements. Terminal output may poll Redeven process handles, but canonical status and completion remain projection-owned. Measured disclosure, local scrolling, transcript following, and reduced-motion handling preserve reading intent.",
             "section_count": 2
           },
           {
@@ -8525,8 +8525,8 @@
         "title": "Flower terminal activity presentation",
         "type": "UI Contract"
       },
-      "body_length": 14385,
-      "summary": "Terminal activity is a renderer-first view over canonical Floret Activity items, not a second process lifecycle. Redeven maps display data only from the Floret v3 `ActivityItem.presentation` object, so the compact row uses the semantic title `Shell` with the authored command as its immediate context instead of exposing a tool protocol name. Approval lifecycle state remains available to the actionable composer and internal lifecycle logic but is never ordinary activity presentation. Stable activity identity preserves user-controlled disclosure and viewport state across live replacements; terminal output may poll Redeven process handles, but canonical status and completion remain projection-owned. Measured disclosure animation, local scrolling, and transcript following preserve user reading intent and reduced-motion behavior.",
+      "body_length": 14273,
+      "summary": "Terminal activity is a renderer-first view over canonical Floret Activity items, not a second process lifecycle. Redeven maps display data only from Floret v3 `ActivityItem.presentation`, so the compact row shows `Shell` and the authored command instead of a protocol name. Approval state remains available to the actionable composer and lifecycle logic but never becomes ordinary activity presentation. Stable activity identity preserves user disclosure and viewport state across live replacements. Terminal output may poll Redeven process handles, but canonical status and completion remain projection-owned. Measured disclosure, local scrolling, transcript following, and reduced-motion handling preserve reading intent.",
       "sections": [
         {
           "id": "contract",
@@ -8653,7 +8653,7 @@
           "description": "Env App terminal output uses the same five-line border-box height cap in the shipped base stylesheet."
         }
       ],
-      "snippet": "Terminal activity is a renderer-first view over canonical Floret Activity items, not a second process lifecycle. Redeven maps display data only from the Floret v3 `ActivityItem.presentation` object, so the compact row uses the semantic titl",
+      "snippet": "Terminal activity is a renderer-first view over canonical Floret Activity items, not a second process lifecycle. Redeven maps display data only from Floret v3 `ActivityItem.presentation`, so the compact row shows `Shell` and the authored co",
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -10149,5 +10149,5 @@
       ]
     }
   ],
-  "source_sha256": "911659d44fbd5590ada2a769d4d677e3235f5390f3af1dd52ba8446dee6f8839"
+  "source_sha256": "b17da9c1b67aa192347438b64bc63c543359d716c87a22373f025863a8671a94"
 }

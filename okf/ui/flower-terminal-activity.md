@@ -7,7 +7,7 @@ timestamp: 2026-07-18T00:00:00Z
 ---
 # Summary
 
-Terminal activity is a renderer-first view over canonical Floret Activity items, not a second process lifecycle. Redeven maps display data only from the Floret v3 `ActivityItem.presentation` object, so the compact row uses the semantic title `Shell` with the authored command as its immediate context instead of exposing a tool protocol name. Approval lifecycle state remains available to the actionable composer and internal lifecycle logic but is never ordinary activity presentation. Stable activity identity preserves user-controlled disclosure and viewport state across live replacements; terminal output may poll Redeven process handles, but canonical status and completion remain projection-owned. Measured disclosure animation, local scrolling, and transcript following preserve user reading intent and reduced-motion behavior.
+Terminal activity is a renderer-first view over canonical Floret Activity items, not a second process lifecycle. Redeven maps display data only from Floret v3 `ActivityItem.presentation`, so the compact row shows `Shell` and the authored command instead of a protocol name. Approval state remains available to the actionable composer and lifecycle logic but never becomes ordinary activity presentation. Stable activity identity preserves user disclosure and viewport state across live replacements. Terminal output may poll Redeven process handles, but canonical status and completion remain projection-owned. Measured disclosure, local scrolling, transcript following, and reduced-motion handling preserve reading intent.
 
 # Contract
 
