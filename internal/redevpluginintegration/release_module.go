@@ -242,6 +242,7 @@ func (set *embeddedCapabilityArtifactSet) OpenCapabilityContractArtifact(ctx con
 	}
 	return host.ResolvedCapabilityContractFile{
 		Reader: io.NopCloser(bytes.NewReader(value)), Size: int64(len(value)), MediaType: mediaType,
+		Origin:     host.CapabilityArtifactOriginHost,
 		FetchChain: []host.CapabilityArtifactFetchHop{},
 	}, nil
 }

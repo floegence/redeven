@@ -1,4 +1,7 @@
-import type { PluginReleaseInstallOperation } from '@floegence/redevplugin-ui';
+import {
+  PluginPlatformRequestError,
+  type PluginReleaseInstallOperation,
+} from '@floegence/redevplugin-ui';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createPluginInstallCoordinator } from './pluginInstallCoordinator';
@@ -84,6 +87,18 @@ describe('plugin install coordinator', () => {
     }));
     await expect(first).resolves.toBeUndefined();
     await expect(duplicate).resolves.toBeUndefined();
+    expect(coordinator.projections()).toEqual([
+      expect.objectContaining({
+        pluginInstanceID,
+        requestID: 'request-install-1',
+        observation: 'failed',
+        operation: expect.objectContaining({
+          status: 'failed',
+          phase: 'failed',
+          failure: { code: 'PLUGIN_RELEASE_NETWORK', retryable: true },
+        }),
+      }),
+    ]);
   });
 
   it('reattaches an active operation listed after the Plugin Center reopens', async () => {
@@ -111,6 +126,26 @@ describe('plugin install coordinator', () => {
     expect(coordinator.projections()).toEqual([]);
   });
 
+  it('projects a typed submission failure as a retryable terminal state', async () => {
+    const { coordinator, lifecycle } = harness();
+    lifecycle.installOfficialRelease.mockRejectedValueOnce(new PluginPlatformRequestError(
+      'PLUGIN_RELEASE_NETWORK',
+      'Release transport is temporarily unavailable',
+    ));
+
+    await coordinator.start(pluginID, pluginInstanceID);
+
+    expect(coordinator.projections()).toEqual([
+      expect.objectContaining({
+        pluginID,
+        pluginInstanceID,
+        requestID: 'request-install-1',
+        observation: 'failed',
+        startFailure: { code: 'PLUGIN_RELEASE_NETWORK', retryable: true },
+      }),
+    ]);
+  });
+
   it('restores a recent terminal failure after the Env App reopens', async () => {
     const { coordinator, lifecycle } = harness();
     const terminalAt = new Date(Date.now() - 60_000).toISOString();
@@ -130,7 +165,7 @@ describe('plugin install coordinator', () => {
       expect.objectContaining({
         pluginID,
         pluginInstanceID,
-        observation: 'watching',
+        observation: 'failed',
         operation: expect.objectContaining({
           status: 'failed',
           failure: { code: 'PLUGIN_RELEASE_REF_VERIFICATION_FAILED', retryable: false },
