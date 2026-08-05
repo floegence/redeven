@@ -12,7 +12,7 @@ one validated snapshot during startup, and serves that snapshot only to the
 trusted Env App origin. The market identifies a candidate GitHub Release; it
 does not host plugin packages, preserve version history, grant trust, or install
 anything. Redeven downloads the exact GitHub assets declared by the snapshot and
-passes the complete signed release transport to released ReDevPlugin `0.7.1`.
+passes the complete signed release transport to released ReDevPlugin `0.7.2`.
 An invalid current response fails closed. A valid last-known-good snapshot may
 keep discovery available as stale data, but it cannot authorize an automatic
 update.
@@ -82,6 +82,13 @@ signing-ledger proof, signed release metadata, package signature, package hashes
 publisher, plugin, version, channel, and host capability requirement, and only
 then changes registry state.
 
+Official installation is a durable ReDevPlugin operation. Redeven submits the
+snapshot-derived release reference once with an idempotent request identity and
+observes the released operation; it does not treat the market response, browser
+connection, or an Env App pending flag as installation authority. A failed or
+disconnected observer may reattach to the same operation without selecting new
+assets or replaying the mutation.
+
 Market `latest`, signer labels, compatibility text, and listing status are not
 installation authorization. Redeven pins the official root and signing-ledger
 public keys in the product, rejects a snapshot whose advertised anchors differ,
@@ -96,9 +103,9 @@ does not grant permissions or enable runtime access.
 - GitHub Releases owns immutable package and signed trust-document transport.
 - Redeven owns startup refresh, last-known-good caching, trusted-origin
   projection, product presentation, and product-pinned official anchors.
-- ReDevPlugin owns remote download, cryptographic verification, installation,
-  update, rollback, revocation, registry state, permissions, and runtime
-  lifecycle.
+- ReDevPlugin owns remote download, cryptographic verification, durable install
+  operations and progress, update, rollback, revocation, registry state,
+  permissions, and runtime lifecycle.
 - Market or cache failure must not remove installed plugins or prevent Redeven
   startup, and must not become permission to install unverified content.
 

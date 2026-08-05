@@ -8,7 +8,7 @@ timestamp: 2026-07-25T00:00:00Z
 # Summary
 
 ReDevPlugin is an independently released plugin platform. Redeven consumes its
-coordinated `v0.7.1` Go, npm, Rust source-crate, and machine-contract artifacts;
+coordinated `v0.7.2` Go, npm, Rust source-crate, and machine-contract artifacts;
 it does not fork platform mechanics. Redeven owns authenticated session mapping,
 product source policy and review UX, UI placement, product runtime builds, and
 concrete business adapters. Missing or unverifiable upstream identity, lifecycle,
@@ -42,12 +42,12 @@ external-package receipt store.
 
 ## Published dependency set
 
-The current integration consumes the coordinated ReDevPlugin `v0.7.1` set:
+The current integration consumes the coordinated ReDevPlugin `v0.7.2` set:
 
-- `github.com/floegence/redevplugin v0.7.1`;
-- `@floegence/redevplugin-contracts@0.7.1` and
-  `@floegence/redevplugin-ui@0.7.1`;
-- the exact six `0.7.1` Rust source crates ending in `redevplugin-runtime`;
+- `github.com/floegence/redevplugin v0.7.2`;
+- `@floegence/redevplugin-contracts@0.7.2` and
+  `@floegence/redevplugin-ui@0.7.2`;
+- the exact six `0.7.2` Rust source crates ending in `redevplugin-runtime`;
 - the released contract registry, package-set contract, contract hashes, and
   attested `platform-package-publication-v1.json` registry readback.
 
@@ -57,6 +57,15 @@ integrity and provenance, crates.io checksums and Cargo VCS identity, and closed
 package coordinates. Forbidden wiring includes `go.work`, `go.work.sum`, Go
 `replace`, package-manager links, sibling paths, Rust path overrides, copied
 contracts, and copied runtime binaries. Dependency checks use `GOWORK=off`.
+
+ReDevPlugin owns the durable `redevplugin.release_install_operation.v1`
+journal. Official release installation is submitted with an owner-scoped,
+idempotent request and observed through the released start/list/get/watch
+endpoints. The operation survives browser, Shell, transport, and Host
+observation loss; its phase, retryable failure code, mutation outcome, and
+authoritative progress remain platform state. Redeven may reconnect and refresh
+inventory, but must not create a local operation store, copy the state machine,
+invent progress, or cancel work when a panel closes.
 
 For the pre-release current-only baseline, Host admission accepts only
 `redevplugin.manifest.v8` and `redevplugin.release_metadata.v8`, with
@@ -157,7 +166,7 @@ committed. Unknown, corrupt, ambiguous, tampered, or future state blocks startup
 without mutation. Floret-owned state is outside this lifecycle.
 
 For an exact supported root copied across filesystem identities, Redeven may use
-the released read-only inspection and exact-plan recovery APIs from `v0.7.1`.
+the released read-only inspection and exact-plan recovery APIs from `v0.7.2`.
 The product presents the projected digests, counts, sizes, and retained-state
 facts, binds confirmation to one plan digest, and takes the normal Local
 Environment runtime lock. The released transaction retains the entire source as
