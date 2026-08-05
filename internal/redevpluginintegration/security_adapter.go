@@ -62,6 +62,12 @@ func (g webSecurityGuard) ValidateOrigin(r *http.Request, session sessionctx.Con
 		return websecurity.ErrOriginDenied
 	}
 	origins := r.Header.Values("Origin")
+	if len(origins) == 0 {
+		if trustedSameOriginRead(r) {
+			return nil
+		}
+		return websecurity.ErrOriginDenied
+	}
 	if len(origins) != 1 {
 		return websecurity.ErrOriginDenied
 	}
@@ -74,6 +80,23 @@ func (g webSecurityGuard) ValidateOrigin(r *http.Request, session sessionctx.Con
 		return websecurity.ErrOriginDenied
 	}
 	return nil
+}
+
+func trustedSameOriginRead(r *http.Request) bool {
+	if r == nil || (r.Method != http.MethodGet && r.Method != http.MethodHead) {
+		return false
+	}
+	if _, ok := trustedOriginFromRequest(r); !ok {
+		return false
+	}
+	return exactHeaderValue(r.Header, "Sec-Fetch-Site", "same-origin") &&
+		exactHeaderValue(r.Header, "Sec-Fetch-Mode", "cors") &&
+		exactHeaderValue(r.Header, "Sec-Fetch-Dest", "empty")
+}
+
+func exactHeaderValue(header http.Header, name, expected string) bool {
+	values := header.Values(name)
+	return len(values) == 1 && values[0] == expected
 }
 
 func (g webSecurityGuard) ValidateCSRF(r *http.Request, session sessionctx.Context, policy websecurity.CSRFPolicy) error {

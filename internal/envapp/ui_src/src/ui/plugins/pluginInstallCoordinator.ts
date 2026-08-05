@@ -16,6 +16,8 @@ type InstallLifecycle = Pick<
   | 'watchReleaseInstallOperation'
 >;
 
+const RECENT_TERMINAL_FAILURE_MS = 24 * 60 * 60 * 1_000;
+
 export type PluginInstallCoordinator = Readonly<{
   projections: Accessor<readonly PluginInstallOperationProjection[]>;
   start: (pluginID: string, pluginInstanceID: string) => Promise<void>;
@@ -188,11 +190,18 @@ export function createPluginInstallCoordinator(options: Readonly<{
     } catch {
       return;
     }
-    const listedActive = listed.filter((operation) => (
-      operation.status !== 'succeeded' && operation.status !== 'failed'
-    ));
+    const latestByPlugin = new Map<string, PluginReleaseInstallOperation>();
+    for (const operation of listed) {
+      const previous = latestByPlugin.get(operation.plugin_instance_id);
+      if (!previous || releaseInstallOperationIsNewer(operation, previous)) {
+        latestByPlugin.set(operation.plugin_instance_id, operation);
+      }
+    }
+    const now = Date.now();
     const candidates = new Map<string, PluginInstallOperationProjection>();
-    for (const operation of listedActive) {
+    for (const operation of latestByPlugin.values()) {
+      if (operation.status === 'succeeded') continue;
+      if (operation.status === 'failed' && !terminalFailureIsRecent(operation, now)) continue;
       candidates.set(operation.plugin_instance_id, {
         pluginID: options.resolvePluginID(operation.plugin_instance_id) ?? '',
         pluginInstanceID: operation.plugin_instance_id,
@@ -209,9 +218,7 @@ export function createPluginInstallCoordinator(options: Readonly<{
     await Promise.all([...candidates.values()].map((projection) => (
       runExclusive(projection.pluginInstanceID, () => observe(
         projection,
-        projection.operation?.status !== 'succeeded' && projection.operation?.status !== 'failed'
-          ? projection.operation
-          : undefined,
+        projection.observation === 'reconnecting' ? undefined : projection.operation,
       ))
     )));
   };
@@ -250,6 +257,32 @@ export function createPluginInstallCoordinator(options: Readonly<{
   };
 
   return Object.freeze({ projections, start, resume, retry, dispose });
+}
+
+function releaseInstallOperationIsNewer(
+  candidate: PluginReleaseInstallOperation,
+  current: PluginReleaseInstallOperation,
+): boolean {
+  const candidateCreatedAt = Date.parse(candidate.created_at);
+  const currentCreatedAt = Date.parse(current.created_at);
+  const candidateHasValidTime = Number.isFinite(candidateCreatedAt);
+  const currentHasValidTime = Number.isFinite(currentCreatedAt);
+  if (candidateHasValidTime !== currentHasValidTime) return candidateHasValidTime;
+  if (candidateHasValidTime && candidateCreatedAt !== currentCreatedAt) {
+    return candidateCreatedAt > currentCreatedAt;
+  }
+  return candidate.operation_id > current.operation_id;
+}
+
+function terminalFailureIsRecent(
+  operation: PluginReleaseInstallOperation,
+  now: number,
+): boolean {
+  if (operation.status !== 'failed' || !operation.terminal_at) return false;
+  const terminalAt = Date.parse(operation.terminal_at);
+  return Number.isFinite(terminalAt)
+    && terminalAt <= now
+    && terminalAt >= now - RECENT_TERMINAL_FAILURE_MS;
 }
 
 function projectionIsActive(projection: PluginInstallOperationProjection): boolean {
