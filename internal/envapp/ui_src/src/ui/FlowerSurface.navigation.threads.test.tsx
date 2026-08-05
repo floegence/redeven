@@ -1736,6 +1736,7 @@ describe('FlowerSurface navigation threads', () => {
     (runtime.querySelector('[data-thread-id="thread-idle-compacting-live"] button') as HTMLButtonElement).click();
 
     await waitFor(() => listThreadLiveEvents.mock.calls.some((call) => call[0] === 'thread-idle-compacting-live'));
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-compaction-status="compacting"]')));
     const divider = runtime.querySelector('[data-flower-compaction-status="compacting"]');
     expect(divider).toBeTruthy();
     expect(divider?.textContent).toContain(DEFAULT_FLOWER_SURFACE_COPY.chat.compactionDivider.compacting);
