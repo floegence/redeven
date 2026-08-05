@@ -111,6 +111,110 @@ describe('plugin install coordinator', () => {
     expect(coordinator.projections()).toEqual([]);
   });
 
+  it('restores a recent terminal failure after the Env App reopens', async () => {
+    const { coordinator, lifecycle } = harness();
+    const terminalAt = new Date(Date.now() - 60_000).toISOString();
+    lifecycle.listReleaseInstallOperations.mockResolvedValueOnce([operation({
+      status: 'failed',
+      phase: 'failed',
+      progress: { kind: 'indeterminate' },
+      failure: { code: 'PLUGIN_RELEASE_REF_VERIFICATION_FAILED', retryable: false },
+      updated_at: terminalAt,
+      terminal_at: terminalAt,
+    })]);
+
+    await coordinator.resume();
+
+    expect(lifecycle.watchReleaseInstallOperation).not.toHaveBeenCalled();
+    expect(coordinator.projections()).toEqual([
+      expect.objectContaining({
+        pluginID,
+        pluginInstanceID,
+        observation: 'watching',
+        operation: expect.objectContaining({
+          status: 'failed',
+          failure: { code: 'PLUGIN_RELEASE_REF_VERIFICATION_FAILED', retryable: false },
+        }),
+      }),
+    ]);
+  });
+
+  it('does not restore stale or superseded terminal failures', async () => {
+    const { coordinator, lifecycle } = harness();
+    const staleTerminalAt = new Date(Date.now() - (25 * 60 * 60 * 1_000)).toISOString();
+    const recentTerminalAt = new Date(Date.now() - 60_000).toISOString();
+    lifecycle.listReleaseInstallOperations.mockResolvedValueOnce([
+      operation({
+        operation_id: 'release_install_stale',
+        status: 'failed',
+        phase: 'failed',
+        progress: { kind: 'indeterminate' },
+        failure: { code: 'PLUGIN_RELEASE_NETWORK', retryable: true },
+        updated_at: staleTerminalAt,
+        terminal_at: staleTerminalAt,
+      }),
+      operation({
+        operation_id: 'release_install_recent_failure',
+        created_at: '2026-08-05T08:01:00Z',
+        status: 'failed',
+        phase: 'failed',
+        progress: { kind: 'indeterminate' },
+        failure: { code: 'PLUGIN_RELEASE_TIMEOUT', retryable: true },
+        updated_at: recentTerminalAt,
+        terminal_at: recentTerminalAt,
+      }),
+      operation({
+        operation_id: 'release_install_later_success',
+        created_at: '2026-08-05T08:02:00Z',
+        status: 'succeeded',
+        phase: 'complete',
+        progress: { kind: 'items', completed: 1, total: 1 },
+        mutation_outcome: 'committed',
+        updated_at: recentTerminalAt,
+        terminal_at: recentTerminalAt,
+      }),
+    ]);
+
+    await coordinator.resume();
+
+    expect(lifecycle.getReleaseInstallOperationByRequest).not.toHaveBeenCalled();
+    expect(lifecycle.watchReleaseInstallOperation).not.toHaveBeenCalled();
+    expect(coordinator.projections()).toEqual([]);
+  });
+
+  it('orders RFC3339Nano operation timestamps by time rather than text', async () => {
+    const { coordinator, lifecycle } = harness();
+    const terminalAt = new Date(Date.now() - 60_000).toISOString();
+    lifecycle.listReleaseInstallOperations.mockResolvedValueOnce([
+      operation({
+        operation_id: 'release_install_exact_second',
+        created_at: '2026-08-05T08:01:00Z',
+        status: 'succeeded',
+        phase: 'complete',
+        progress: { kind: 'items', completed: 1, total: 1 },
+        mutation_outcome: 'committed',
+        updated_at: '2026-08-05T08:01:00Z',
+        terminal_at: '2026-08-05T08:01:00Z',
+      }),
+      operation({
+        operation_id: 'release_install_fractional_second',
+        created_at: '2026-08-05T08:01:00.500Z',
+        status: 'failed',
+        phase: 'failed',
+        progress: { kind: 'indeterminate' },
+        failure: { code: 'PLUGIN_RELEASE_NETWORK', retryable: true },
+        updated_at: terminalAt,
+        terminal_at: terminalAt,
+      }),
+    ]);
+
+    await coordinator.resume();
+
+    expect(coordinator.projections()[0]?.operation?.operation_id).toBe(
+      'release_install_fractional_second',
+    );
+  });
+
   it('reattaches the same request after a transport interruption without creating a new install', async () => {
     const { coordinator, lifecycle } = harness();
     lifecycle.installOfficialRelease.mockRejectedValueOnce(new TypeError('connection lost'));

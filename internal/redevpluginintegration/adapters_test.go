@@ -387,6 +387,83 @@ func TestWebSecurityGuardRequiresExactTrustedOriginAndCSRF(t *testing.T) {
 	}
 }
 
+func TestWebSecurityGuardAcceptsSameOriginReleaseInstallOperationReadsWithoutOrigin(t *testing.T) {
+	adapter, err := newSessionAdapter(func(channelID string) (*session.Meta, bool) {
+		if channelID != "ch_123" {
+			return nil, false
+		}
+		return &session.Meta{
+			ChannelID:    channelID,
+			EndpointID:   "env_123",
+			UserPublicID: "user_123",
+			CanRead:      true,
+		}, true
+	}, testPermissionPolicy(t, "read_only"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	paths := []string{
+		"/_redevplugin/api/plugins/release-install-operations",
+		"/_redevplugin/api/plugins/release-install-operations/release_install_123",
+		"/_redevplugin/api/plugins/release-install-operations/by-request/request_123",
+	}
+	for _, requestPath := range paths {
+		t.Run(requestPath, func(t *testing.T) {
+			req := authenticatedRequest(http.MethodGet, requestPath, "ch_123")
+			req.Host = "env.example.test"
+			req.Header.Set("Sec-Fetch-Site", "same-origin")
+			req.Header.Set("Sec-Fetch-Mode", "cors")
+			req.Header.Set("Sec-Fetch-Dest", "empty")
+			req, err = WithTrustedOrigin(req, "https://env.example.test")
+			if err != nil {
+				t.Fatal(err)
+			}
+			sessionContext, err := adapter.Authenticate(req)
+			if err != nil {
+				t.Fatalf("Authenticate() error = %v", err)
+			}
+			if err := adapter.ValidateOrigin(req, sessionContext, websecurity.OriginPolicyTrustedHost); err != nil {
+				t.Fatalf("ValidateOrigin() error = %v", err)
+			}
+		})
+	}
+
+	base := authenticatedRequest(http.MethodGet, paths[0], "ch_123")
+	base.Host = "env.example.test"
+	base.Header.Set("Sec-Fetch-Site", "same-origin")
+	base.Header.Set("Sec-Fetch-Mode", "cors")
+	base.Header.Set("Sec-Fetch-Dest", "empty")
+	base, err = WithTrustedOrigin(base, "https://env.example.test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sessionContext, err := adapter.Authenticate(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, testCase := range []struct {
+		name      string
+		configure func(*http.Request)
+	}{
+		{name: "cross_site", configure: func(r *http.Request) { r.Header.Set("Sec-Fetch-Site", "cross-site") }},
+		{name: "navigate", configure: func(r *http.Request) { r.Header.Set("Sec-Fetch-Mode", "navigate") }},
+		{name: "document", configure: func(r *http.Request) { r.Header.Set("Sec-Fetch-Dest", "document") }},
+		{name: "missing_metadata", configure: func(r *http.Request) { r.Header.Del("Sec-Fetch-Site") }},
+		{name: "duplicate_metadata", configure: func(r *http.Request) { r.Header.Add("Sec-Fetch-Site", "same-origin") }},
+		{name: "unsafe_method", configure: func(r *http.Request) { r.Method = http.MethodPost }},
+	} {
+		t.Run("reject_"+testCase.name, func(t *testing.T) {
+			req := base.Clone(base.Context())
+			req.Header = base.Header.Clone()
+			testCase.configure(req)
+			if err := adapter.ValidateOrigin(req, sessionContext, websecurity.OriginPolicyTrustedHost); !errors.Is(err, websecurity.ErrOriginDenied) {
+				t.Fatalf("ValidateOrigin() error = %v, want ErrOriginDenied", err)
+			}
+		})
+	}
+}
+
 func TestWebSecurityGuardRejectsUntrustedRouteRole(t *testing.T) {
 	adapter, err := newSessionAdapter(func(string) (*session.Meta, bool) { return nil, false }, testPermissionPolicy(t, "read_only"))
 	if err != nil {
