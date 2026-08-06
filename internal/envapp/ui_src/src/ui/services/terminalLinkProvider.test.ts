@@ -185,6 +185,52 @@ describe('terminalLinkProvider', () => {
     );
   });
 
+  it('reads the exact zero-based buffer row requested by ghostty', async () => {
+    const readBufferLine = vi.fn((row: number) => [
+      'previous output',
+      '/Users/tester/.codex/config.toml',
+    ][row] ?? '');
+    const provider = createTerminalFileLinkProvider({
+      core: { readBufferLine } as any,
+      getContext: () => ({ workingDirAbs: '/Users/tester' }),
+      onActivate: () => undefined,
+    });
+
+    const links = await new Promise<any[]>((resolve) => {
+      provider.provideLinks(1, (value) => resolve(value ?? []));
+    });
+
+    expect(readBufferLine).toHaveBeenCalledOnce();
+    expect(readBufferLine).toHaveBeenCalledWith(1);
+    expect(links).toHaveLength(1);
+    expect(links[0]).toMatchObject({
+      text: '/Users/tester/.codex/config.toml',
+      range: {
+        start: { y: 1 },
+        end: { y: 1 },
+      },
+    });
+  });
+
+  it('does not decorate the current row with a path from the preceding row', async () => {
+    const provider = createTerminalFileLinkProvider({
+      core: {
+        readBufferLine: (row: number) => [
+          '/Users/tester/.codex/config.toml',
+          'plain current output',
+        ][row] ?? '',
+      } as any,
+      getContext: () => ({ workingDirAbs: '/Users/tester' }),
+      onActivate: () => undefined,
+    });
+
+    const links = await new Promise<any[]>((resolve) => {
+      provider.provideLinks(1, (value) => resolve(value ?? []));
+    });
+
+    expect(links).toEqual([]);
+  });
+
   it('returns no links when hover scanning races with terminal disposal', async () => {
     const provider = createTerminalFileLinkProvider({
       core: {

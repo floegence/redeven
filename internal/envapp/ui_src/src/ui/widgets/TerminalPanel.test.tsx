@@ -6198,7 +6198,7 @@ describe('TerminalPanel', () => {
   });
 
   it('opens the floating file preview from a modifier-click terminal file link', async () => {
-    terminalBufferLinesState.lines.set(0, 'src/app/server.ts:18:4 failed to compile');
+    terminalBufferLinesState.lines.set(1, 'src/app/server.ts:18:4 failed to compile');
 
     const host = document.createElement('div');
     document.body.appendChild(host);
