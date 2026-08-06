@@ -266,19 +266,16 @@ function collectTerminalLinkMatches(lineText: string, context: TerminalLinkConte
 }
 
 function readTerminalBufferLine(core: TerminalCore, y: number): string {
-  try {
-    const candidateRows = [y - 1, y];
-    for (const row of candidateRows) {
-      if (!Number.isFinite(row) || row < 0) {
-        continue;
-      }
-      const text = core.readBufferLine(row);
-      if (text) return text;
-    }
-  } catch {
+  const row = Math.floor(Number(y));
+  if (!Number.isFinite(row) || row < 0) {
+    return '';
   }
 
-  return '';
+  try {
+    return core.readBufferLine(row);
+  } catch {
+    return '';
+  }
 }
 
 function isModifierClick(event: MouseEvent): boolean {
