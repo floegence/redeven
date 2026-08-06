@@ -2033,7 +2033,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         tabActivityTracker.handleCommandFinish(sessionId, shouldMarkSessionUnread(sessionId));
         return;
       }
-      tabActivityTracker.handlePromptReady(sessionId);
+      tabActivityTracker.handlePromptReady(sessionId, source === 'live' && shouldMarkSessionUnread(sessionId));
       return;
     }
 

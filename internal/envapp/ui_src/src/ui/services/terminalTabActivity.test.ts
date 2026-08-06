@@ -73,6 +73,45 @@ describe('createTerminalTabActivityTracker', () => {
     tracker.dispose();
   });
 
+  it('marks a live prompt-ready completion unread when the session is not being read', () => {
+    const published: string[] = [];
+    const tracker = createTerminalTabActivityTracker({
+      publishVisualState: (_sessionId, state) => published.push(state),
+    });
+
+    tracker.handleCommandStart('session-1');
+    tracker.handlePromptReady('session-1', true);
+
+    expect(published).toEqual(['running', 'unread']);
+    tracker.dispose();
+  });
+
+  it('keeps an initial prompt-ready marker quiet', () => {
+    const published: string[] = [];
+    const tracker = createTerminalTabActivityTracker({
+      publishVisualState: (_sessionId, state) => published.push(state),
+    });
+
+    tracker.handlePromptReady('session-1', true);
+
+    expect(published).toEqual([]);
+    tracker.dispose();
+  });
+
+  it('promotes provisional unread output before a prompt-ready completion clears it', () => {
+    const published: string[] = [];
+    const tracker = createTerminalTabActivityTracker({
+      publishVisualState: (_sessionId, state) => published.push(state),
+      outputActivityQuietMs: 25,
+    });
+
+    tracker.handlePendingLiveOutput('session-1', { sequence: 4, shouldMarkUnread: true });
+    tracker.handlePromptReady('session-1', false);
+
+    expect(published).toEqual(['running', 'unread']);
+    tracker.dispose();
+  });
+
   it('publishes brief active work for live output even when shell lifecycle markers are unavailable', () => {
     const published: string[] = [];
     const workStates: string[] = [];

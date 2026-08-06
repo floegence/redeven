@@ -655,20 +655,22 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                               >
                                 {item().title}
                               </span>
-                              <span class="flex h-7 w-2 shrink-0 items-center justify-center" data-terminal-attention-slot={sessionId} aria-hidden="true">
-                                <Show when={item().attentionState === 'unread' && item().outputState === 'none'}>
-                                  <span
-                                    class="h-1.5 w-1.5 rounded-full bg-primary forced-colors:border forced-colors:border-current"
-                                    data-terminal-attention-state={item().attentionState}
-                                    data-terminal-tab-status={item().attentionState}
-                                  />
-                                </Show>
-                              </span>
-                              <span class="pointer-events-auto flex h-7 w-7 shrink-0 items-center justify-center" data-terminal-output-slot={sessionId}>
+                              <span class="pointer-events-auto flex h-7 w-7 shrink-0 items-center justify-center" data-terminal-output-slot={sessionId} data-terminal-attention-slot={sessionId}>
                                 <Show
                                   when={item().outputState !== 'none'}
                                   fallback={(
-                                    <Show when={item().attentionState === 'waiting'}>
+                                    <Show
+                                      when={item().attentionState === 'waiting'}
+                                      fallback={(
+                                        <Show when={item().attentionState === 'unread'}>
+                                          <span
+                                            class="h-1.5 w-1.5 rounded-full bg-primary forced-colors:border forced-colors:border-current"
+                                            data-terminal-attention-state={item().attentionState}
+                                            data-terminal-tab-status={item().attentionState}
+                                          />
+                                        </Show>
+                                      )}
+                                    >
                                       <Tooltip
                                         content={i18n.t('codex.pendingRequests.titleByType.userInput')}
                                         placement="top"

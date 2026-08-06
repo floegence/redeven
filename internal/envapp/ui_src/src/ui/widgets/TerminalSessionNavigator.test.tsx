@@ -324,14 +324,18 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     expect(document.body.querySelector('[role="tooltip"]')?.getAttribute('aria-hidden') ?? 'true').toBe('true');
   });
 
-  it('keeps ordinary session unread attention in the title slot', () => {
+  it('aligns ordinary session unread attention with the output slot', () => {
     const { host } = renderNavigator(navigationItem({
       title: 'top',
       avatar: { kind: 'initial' },
       outputState: 'none',
     }));
 
-    expect(host.querySelector('[data-terminal-attention-state="unread"]')).not.toBeNull();
+    const outputSlot = host.querySelector('[data-terminal-output-slot="agent-session"]');
+    const unreadDot = host.querySelector('[data-terminal-attention-state="unread"]');
+    expect(outputSlot).not.toBeNull();
+    expect(unreadDot?.parentElement).toBe(outputSlot);
+    expect(host.querySelector('[data-terminal-attention-slot="agent-session"]')).toBe(outputSlot);
     expect(host.querySelector('[data-terminal-output-attention="unread"]')).toBeNull();
   });
 

@@ -36,7 +36,7 @@ export interface TerminalTabActivityTracker {
   handleBell: (sessionId: string, shouldMarkUnread: boolean) => void;
   handleCommandStart: (sessionId: string) => void;
   handleCommandFinish: (sessionId: string, shouldMarkUnread: boolean) => void;
-  handlePromptReady: (sessionId: string) => void;
+  handlePromptReady: (sessionId: string, shouldMarkUnread: boolean) => void;
   handleProgramActivity: (sessionId: string, phase: Exclude<TerminalProgramActivityPhase, 'unknown'>) => void;
   handlePendingLiveOutput: (
     sessionId: string,
@@ -333,7 +333,7 @@ export function createTerminalTabActivityTracker(
       publishIfNeeded(normalizedSessionId, runtime);
     },
 
-    handlePromptReady(sessionId: string) {
+    handlePromptReady(sessionId: string, shouldMarkUnread: boolean) {
       const normalizedSessionId = normalizeSessionId(sessionId);
       if (!normalizedSessionId) {
         return;
@@ -344,10 +344,17 @@ export function createTerminalTabActivityTracker(
       }
       clearRecentActivityTimer(runtime);
       clearPendingOutputTimer(runtime);
+      const completedWork = runtime.commandPhase === 'running'
+        || runtime.pendingLiveOutput
+        || runtime.recentActivityPhase !== 'inactive'
+        || runtime.programActivityPhase === 'busy';
       runtime.commandPhase = 'idle';
       runtime.programActivityPhase = 'idle';
+      // A prompt-ready marker can be the only completion signal for an Agent round.
+      promotePendingUnread(runtime);
       clearPendingOutput(runtime);
       runtime.recentActivityPhase = 'inactive';
+      markUnread(runtime, shouldMarkUnread && completedWork);
       publishIfNeeded(normalizedSessionId, runtime);
     },
 
