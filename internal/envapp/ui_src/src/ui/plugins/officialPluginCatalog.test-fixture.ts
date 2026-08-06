@@ -4,8 +4,8 @@ import type { OfficialPluginPermission, PluginMarketDetail, PluginMarketSnapshot
 
 export const OFFICIAL_PLUGIN_MARKET_SNAPSHOT: PluginMarketSnapshot = {
   schema_version: 'redeven.plugin_market_snapshot.v2',
-  generation: 2,
-  etag: '"catalog-g2"',
+  generation: 3,
+  etag: '"catalog-g3"',
   cached_at: '2026-08-03T09:15:30Z',
   stale: false,
   source: 'remote',
@@ -14,6 +14,13 @@ export const OFFICIAL_PLUGIN_MARKET_SNAPSHOT: PluginMarketSnapshot = {
     publisher_id: 'com.redeven.official',
     presentation: {
       default_locale: 'en-US',
+      icon: {
+        url: '/v1/plugins/com.redeven.official.containers/icon?sha256=949adb221cd3e990ebe350947cc17d1b415d6175f99df98aeb5c47d70fb3cce1',
+        media_type: 'image/png',
+        width: 512,
+        height: 512,
+        sha256: '949adb221cd3e990ebe350947cc17d1b415d6175f99df98aeb5c47d70fb3cce1',
+      },
       locales: [
         {
           locale: 'de-DE',
@@ -89,17 +96,17 @@ export const OFFICIAL_PLUGIN_MARKET_SNAPSHOT: PluginMarketSnapshot = {
     },
     categories: ['containers', 'development'],
     channels: ['stable'],
-    latest: { channel: 'stable', version: '4.1.0', availability_status: 'visible' },
+    latest: { channel: 'stable', version: '4.2.0', availability_status: 'visible' },
     release: {
       plugin_id: 'com.redeven.official.containers',
       channel: 'stable',
-      version: '4.1.0',
+      version: '4.2.0',
       asset: {
-        url: 'https://github.com/floegence/redeven-official-plugins/releases/download/v4.1.0/containers-4.1.0.redevplugin',
+        url: 'https://github.com/floegence/redeven-official-plugins/releases/download/v4.2.0/containers-4.2.0.redevplugin',
       },
       publisher_release_ref: { release_ref: OFFICIAL_CONTAINERS_RELEASE_REF },
       signer_key_id: 'redeven_official_signing_2026',
-      compatibility: { min_redeven_version: '1.0.0', min_redevplugin_version: '0.7.1' },
+      compatibility: { min_redeven_version: '1.0.0', min_redevplugin_version: '0.7.12' },
     },
   }],
 };

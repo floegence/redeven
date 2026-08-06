@@ -363,6 +363,19 @@ func (i *Integration) MarketDetail(ctx context.Context, pluginID string) (plugin
 	return i.marketService.Detail(ctx, pluginID)
 }
 
+func (i *Integration) MarketIcon(ctx context.Context, pluginID, digest string) (pluginmarket.IconAsset, error) {
+	if i == nil || i.marketService == nil || i.marketSnapshot == nil {
+		return pluginmarket.IconAsset{}, pluginmarket.ErrUnavailable
+	}
+	for _, plugin := range i.marketSnapshot.Plugins {
+		icon := plugin.Presentation.Icon
+		if plugin.PluginID == pluginID && icon != nil && icon.SHA256 == digest {
+			return i.marketService.Icon(ctx, pluginID, *icon)
+		}
+	}
+	return pluginmarket.IconAsset{}, pluginmarket.ErrReleaseMissing
+}
+
 func (i *Integration) MarketError() error {
 	if i == nil {
 		return pluginmarket.ErrUnavailable

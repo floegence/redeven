@@ -359,6 +359,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		PluginPlatform:          pluginIntegration.Handler(),
 		PluginMarketSnapshot:    pluginIntegration.MarketSnapshot,
 		PluginMarketDetail:      pluginIntegration.MarketDetail,
+		PluginMarketIcon:        pluginIntegration.MarketIcon,
 		AgentHomeDir:            agentHomeDir,
 		FilesystemScope:         scope,
 		ListenAddr:              "127.0.0.1:0",

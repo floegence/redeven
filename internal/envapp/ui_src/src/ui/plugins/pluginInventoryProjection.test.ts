@@ -120,6 +120,21 @@ describe('v0.7.1 plugin inventory projection', () => {
     });
   });
 
+  it('uses a market icon for an installed plugin only when the signed release identity is exact', () => {
+    const projection = projectPluginInventory({
+      officialCatalog: [officialContainers],
+      installedPlugins: [installedRecord({
+        version: officialContainers.stableVersion,
+        manifest_hash: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      })],
+      permissionGrants: [readGrant],
+    });
+
+    const installed = projection.items.find((item) => item.pluginInstanceID === officialContainers.pluginInstanceID);
+    expect(installed?.iconURL).toBeUndefined();
+    expect(installed?.iconFallback).toBe('generic');
+  });
+
   it('does not project market author copy into an installed record without presentation', () => {
     const projection = projectPluginInventory({
       officialCatalog: [officialContainers],

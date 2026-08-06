@@ -3,6 +3,7 @@ package pluginmarket
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,8 +21,15 @@ import (
 const (
 	defaultMarketOrigin  = "https://plugins.redeven.com"
 	maxMarketResponse    = 8 << 20
+	maxMarketIcon        = 512 << 10
 	marketRequestTimeout = 5 * time.Second
 )
+
+type IconAsset struct {
+	Data      []byte
+	MediaType string
+	SHA256    string
+}
 
 type ServiceOptions struct {
 	Origin     string
@@ -116,10 +124,52 @@ func (service *Service) Detail(ctx context.Context, pluginID string) (PluginDeta
 	if response.Meta.Generation < 0 || response.Meta.Stale || response.Data.PluginID != pluginID || !idPattern.MatchString(response.Data.PublisherID) || response.Data.Status == "" || len(response.Data.Presentation.Locales) == 0 {
 		return PluginDetail{}, -1, invalid("plugin detail is invalid")
 	}
-	if !validateFullPresentation(response.Data.Presentation) {
+	if !validateFullPresentation(response.Data.Presentation, pluginID) {
 		return PluginDetail{}, -1, invalid("plugin detail presentation is invalid")
 	}
 	return response.Data, response.Meta.Generation, nil
+}
+
+func (service *Service) Icon(ctx context.Context, pluginID string, expected PresentationIcon) (IconAsset, error) {
+	if service == nil || !validatePresentationIcon(&expected, pluginID) {
+		return IconAsset{}, ErrInvalidResponse
+	}
+	endpoint := service.endpoint("/v1/plugins/" + url.PathEscape(pluginID) + "/icon")
+	query := endpoint.Query()
+	query.Set("sha256", expected.SHA256)
+	endpoint.RawQuery = query.Encode()
+	requestCtx, cancel := context.WithTimeout(ctx, marketRequestTimeout)
+	defer cancel()
+	request, err := http.NewRequestWithContext(requestCtx, http.MethodGet, endpoint.String(), nil)
+	if err != nil {
+		return IconAsset{}, err
+	}
+	request.Header.Set("Accept", expected.MediaType)
+	request.Header.Set("User-Agent", "Redeven")
+	response, err := service.httpClient.Do(request)
+	if err != nil {
+		return IconAsset{}, err
+	}
+	defer response.Body.Close()
+	if response.Request != nil && response.Request.URL.String() != endpoint.String() {
+		return IconAsset{}, invalid("plugin icon redirected outside its evidence-bound URL")
+	}
+	if response.StatusCode != http.StatusOK {
+		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 64<<10))
+		return IconAsset{}, fmt.Errorf("plugin market returned HTTP %d", response.StatusCode)
+	}
+	mediaType := strings.TrimSpace(strings.Split(response.Header.Get("Content-Type"), ";")[0])
+	if mediaType != expected.MediaType {
+		return IconAsset{}, invalid("plugin icon media type does not match catalog evidence")
+	}
+	data, err := io.ReadAll(io.LimitReader(response.Body, maxMarketIcon+1))
+	if err != nil {
+		return IconAsset{}, err
+	}
+	if len(data) == 0 || len(data) > maxMarketIcon || fmt.Sprintf("%x", sha256.Sum256(data)) != expected.SHA256 {
+		return IconAsset{}, invalid("plugin icon bytes do not match catalog evidence")
+	}
+	return IconAsset{Data: data, MediaType: mediaType, SHA256: expected.SHA256}, nil
 }
 
 func (service *Service) refresh(ctx context.Context) (Snapshot, error) {
@@ -337,6 +387,10 @@ func cloneSnapshot(snapshot Snapshot) Snapshot {
 
 func cloneCompactPresentation(presentation PresentationCompact) PresentationCompact {
 	result := presentation
+	if presentation.Icon != nil {
+		icon := *presentation.Icon
+		result.Icon = &icon
+	}
 	result.Locales = make([]PresentationCompactLocale, len(presentation.Locales))
 	for index, locale := range presentation.Locales {
 		result.Locales[index] = locale

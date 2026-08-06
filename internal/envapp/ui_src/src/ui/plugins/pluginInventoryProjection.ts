@@ -19,6 +19,7 @@ import type {
   PluginPermissionRequirements,
   PluginSecurityPolicy,
 } from '@floegence/redevplugin-ui';
+import { presentPlugin } from './pluginPresentation';
 
 export function projectPluginInventory(input: {
   officialCatalog?: readonly OfficialPluginCatalogItem[];
@@ -85,7 +86,7 @@ export function buildPluginPanelModel(
     ...projection.items.filter((item) => Boolean(item.pluginInstanceID) && item.lifecycleState !== 'disabled').map((item): PluginPanelTile => ({
       kind: 'plugin',
       item,
-      action: options.canOpenSurfaces && item.defaultLaunchTarget ? 'open_surface' : 'open_details',
+      action: options.canOpenSurfaces && presentPlugin(item).canOpenActivity ? 'open_surface' : 'open_details',
     })),
   ];
   return { loading: Boolean(options.loading), errorMessage, tiles };
@@ -129,6 +130,13 @@ function projectCatalogItem(
   const lifecycleState = installedLifecycleState(installed, catalogItem, authorization);
   const attentionReason = installedAttentionReason(installed, catalogItem, lifecycleState, authorization);
   const externalPackage = externalPackageProjection(installed);
+  const expectedReleaseHashes = catalogItem.distribution.releaseRef.expected_hashes;
+  const installedIconURL = installed.version === catalogItem.stableVersion
+    && installed.package_hash === expectedReleaseHashes.package_sha256
+    && installed.manifest_hash === expectedReleaseHashes.manifest_sha256
+    && installed.entries_hash === expectedReleaseHashes.entries_sha256
+    ? catalogItem.iconURL
+    : undefined;
   const installedLocale = installed.presentation?.locales.find((locale) => (
     locale.locale === installed.presentation?.default_locale
   ));
@@ -139,7 +147,7 @@ function projectCatalogItem(
     pluginInstanceID: installed.plugin_instance_id,
     displayName: manifestDisplayName(installed) || installed.plugin_id,
     description: installedLocale?.summary ?? installed.plugin_id,
-    iconURL: catalogItem.iconURL,
+    iconURL: installedIconURL,
     iconFallback: catalogItem.iconFallback,
     category: catalogItem.category,
     searchKeywords: installedLocale?.keywords ?? [],

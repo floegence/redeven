@@ -12,7 +12,7 @@ one validated snapshot during startup, and serves that snapshot only to the
 trusted Env App origin. The market identifies a candidate GitHub Release; it
 does not host plugin packages, preserve version history, grant trust, or install
 anything. Redeven downloads the exact GitHub assets declared by the snapshot and
-passes the complete signed release transport to released ReDevPlugin `0.7.9`.
+passes the complete signed release transport to released ReDevPlugin `0.7.13`.
 An invalid current response fails closed. A valid last-known-good snapshot may
 keep discovery available as stale data, but it cannot authorize an automatic
 update.
@@ -54,6 +54,16 @@ market's validated `meta.generation` separately from author detail data; the
 Plugin Center accepts and caches a detail only when that generation matches the
 catalog snapshot generation. Missing, stale, or negative detail generations
 fail closed rather than allowing cross-generation presentation mixing.
+
+The market may expose one compact icon descriptor for the current verified
+release. Its URL, media type, dimensions, and digest are evidence-bound to the
+same manifest and presentation generation as the catalog entry; the market
+does not proxy package bytes. Installed inventory remains authoritative for an
+installed version. Redeven may reuse the bounded URL only when the installed
+version, package hash, manifest hash, and entries hash exactly match the current
+signed release; otherwise it uses the generic placeholder, so a later market
+generation cannot replace an older installed package's name, description, or
+icon.
 
 ## Latest-only discovery
 

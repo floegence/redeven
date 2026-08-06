@@ -20,6 +20,7 @@ export type PluginPrimaryAction =
 export type PluginPresentation = Readonly<{
   primaryAction: PluginPrimaryAction;
   tone: 'neutral' | 'success' | 'warning' | 'error' | 'info';
+  canOpenActivity: boolean;
   canOpenWorkbench: boolean;
   canDisable: boolean;
   canCheckForUpdate: boolean;
@@ -42,6 +43,23 @@ export function presentPlugin(item: PluginInventoryItem): PluginPresentation {
   const requiredAccessMissing = requiredPermissions.some((permission) => (
     !permission.granted || permission.deniedByGrant
   ));
+  const lifecycleAllowsOpening = item.lifecycleState === 'enabled'
+    || item.lifecycleState === 'update_available';
+  const attentionBlocksOpening = item.attentionReason === 'catalog_revoked'
+    || item.attentionReason === 'catalog_disabled'
+    || item.attentionReason === 'policy_restricted'
+    || item.attentionReason === 'permission_required'
+    || item.attentionReason === 'runtime_missing'
+    || item.attentionReason === 'diagnostic_error'
+    || item.attentionReason === 'install_unavailable'
+    || item.attentionReason === 'trust_unavailable';
+  const canOpen = installed
+    && lifecycleAllowsOpening
+    && Boolean(item.defaultLaunchTarget)
+    && !trustBlocked
+    && !policyBlocksOpening
+    && !requiredAccessMissing
+    && !attentionBlocksOpening;
 
   let primaryAction: PluginPrimaryAction;
   let tone: PluginPresentation['tone'];
@@ -80,7 +98,8 @@ export function presentPlugin(item: PluginInventoryItem): PluginPresentation {
   return Object.freeze({
     primaryAction,
     tone,
-    canOpenWorkbench: primaryAction === 'open_activity' && Boolean(item.defaultLaunchTarget),
+    canOpenActivity: canOpen,
+    canOpenWorkbench: canOpen,
     canDisable: installed && Boolean(item.canDisable),
     canCheckForUpdate: installed && !trustBlocked && Boolean(item.externalPackage || item.officialCatalog),
     canUninstall: installed,

@@ -78,6 +78,7 @@ type Options struct {
 	PluginPlatform       http.Handler
 	PluginMarketSnapshot func() (pluginmarket.Snapshot, bool)
 	PluginMarketDetail   func(context.Context, string) (pluginmarket.PluginDetail, int64, error)
+	PluginMarketIcon     func(context.Context, string, string) (pluginmarket.IconAsset, error)
 	// AgentHomeDir is the canonical absolute path to the default home directory.
 	AgentHomeDir    string
 	FilesystemScope *filesystemscope.Registry
@@ -253,6 +254,7 @@ type Server struct {
 	pluginPlatform        http.Handler
 	pluginMarketSnapshot  func() (pluginmarket.Snapshot, bool)
 	pluginMarketDetail    func(context.Context, string) (pluginmarket.PluginDetail, int64, error)
+	pluginMarketIcon      func(context.Context, string, string) (pluginmarket.IconAsset, error)
 	pluginConnMu          sync.Mutex
 	pluginConns           map[*pluginAdmissionConn]struct{}
 
@@ -272,6 +274,7 @@ var (
 	envAppShellAssetRefPattern      = regexp.MustCompile(`(?i)\b(?:src|href)\s*=\s*["']/_redeven_proxy/env/assets/([^"']+)["']`)
 	envAppImmutableAssetPathPattern = regexp.MustCompile(`^env/assets/[^/]+-[A-Za-z0-9_-]{8,}\.(?:js|mjs|css|wasm|woff2?|ttf|otf)$`)
 	pluginmarketPluginIDPattern     = regexp.MustCompile(`^[a-z][a-z0-9._-]{0,127}$`)
+	pluginmarketIconDigestPattern   = regexp.MustCompile(`^[0-9a-f]{64}$`)
 )
 
 const envAppImmutableAssetCacheControl = "private, max-age=31536000, immutable"
@@ -402,6 +405,7 @@ func New(opts Options) (*Server, error) {
 		pluginPlatform:          opts.PluginPlatform,
 		pluginMarketSnapshot:    opts.PluginMarketSnapshot,
 		pluginMarketDetail:      opts.PluginMarketDetail,
+		pluginMarketIcon:        opts.PluginMarketIcon,
 		pluginConns:             make(map[*pluginAdmissionConn]struct{}),
 		distFS:                  opts.DistFS,
 		addr:                    addr,
@@ -2663,6 +2667,35 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 	}))
 	defer func() { releaseAI() }()
 	switch {
+	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/plugins/market/plugins/") && strings.HasSuffix(r.URL.Path, "/icon"):
+		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
+			return
+		}
+		prefix := "/_redeven_proxy/api/plugins/market/plugins/"
+		pluginID := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, prefix), "/icon")
+		query, queryErr := url.ParseQuery(r.URL.RawQuery)
+		digests := query["sha256"]
+		if queryErr != nil || !pluginmarketPluginIDPattern.MatchString(pluginID) || len(query) != 1 || len(digests) != 1 || !pluginmarketIconDigestPattern.MatchString(digests[0]) {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid plugin icon request"})
+			return
+		}
+		if g.pluginMarketIcon == nil {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "plugin market icon is unavailable"})
+			return
+		}
+		asset, err := g.pluginMarketIcon(r.Context(), pluginID, digests[0])
+		if err != nil || len(asset.Data) == 0 || asset.SHA256 != digests[0] || (asset.MediaType != "image/png" && asset.MediaType != "image/webp") {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "plugin market icon is unavailable"})
+			return
+		}
+		w.Header().Set("Content-Type", asset.MediaType)
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("ETag", `"sha256:`+asset.SHA256+`"`)
+		w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(asset.Data)
+		return
+
 	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/plugins/market/plugins/"):
 		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
 			return
