@@ -1661,6 +1661,31 @@ func TestWireSessionInfoIncludesExecutionContextAndWorkSnapshots(t *testing.T) {
 	}
 }
 
+func TestWireSessionInfoPreservesPiAgentExecutionContext(t *testing.T) {
+	wire := toWireSessionInfo(termgo.TerminalSessionInfo{
+		ID: "pi-session",
+		ExecutionContext: termgo.TerminalExecutionContextInfo{
+			Location: termgo.TerminalLocationInfo{
+				Kind:             termgo.TerminalLocationLocal,
+				Phase:            termgo.TerminalLocationPhaseReady,
+				WorkingDirectory: "/workspace/pi",
+				Source:           termgo.TerminalContextSourceShellIntegration,
+			},
+			Application: termgo.TerminalApplicationInfo{
+				Kind:        termgo.TerminalApplicationAgentCLI,
+				Identity:    "pi",
+				DisplayName: "Pi",
+			},
+			Revision:  5,
+			UpdatedAt: 60,
+		},
+	}, "")
+
+	if wire.ExecutionContext.Application.Kind != "agent_cli" || wire.ExecutionContext.Application.Identity != "pi" || wire.ExecutionContext.Application.DisplayName != "Pi" || wire.ExecutionContext.Location.WorkingDirectory != "/workspace/pi" {
+		t.Fatalf("Pi execution context snapshot = %#v", wire.ExecutionContext)
+	}
+}
+
 func TestWireSessionInfoIncludesForegroundCommandSnapshot(t *testing.T) {
 	wire := toWireSessionInfo(termgo.TerminalSessionInfo{
 		ID:         "session-1",
