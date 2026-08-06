@@ -46,6 +46,20 @@ function compactPresentationCatalog(presentation: OfficialPluginCatalogItem['pre
   };
 }
 
+function validatedMarketIcon(icon: PluginMarketSnapshot['plugins'][number]['presentation']['icon']): string | undefined {
+  if (!icon || !Number.isSafeInteger(icon.width) || !Number.isSafeInteger(icon.height)
+    || icon.width < 1 || icon.width > 512 || icon.height < 1 || icon.height > 512
+    || !/^sha256:[0-9a-f]{64}$/i.test(icon.sha256)) return undefined;
+  try {
+    const base = typeof window === 'undefined' ? 'http://localhost' : window.location.origin;
+    const url = new URL(icon.url, base);
+    if ((url.protocol !== 'https:' && url.protocol !== 'http:') || url.username || url.password) return undefined;
+    return url.toString();
+  } catch {
+    return undefined;
+  }
+}
+
 function fullPresentationCatalog(presentation: PluginAuthorPresentation | PluginMarketDetail['presentation']) {
   return {
     default_locale: presentation.default_locale,
@@ -103,6 +117,7 @@ function projectMarketSnapshot(snapshot: PluginMarketSnapshot): OfficialPluginCa
       minReDevPluginVersion: plugin.release.compatibility.min_redevplugin_version,
       rolloutState: marketRolloutState(plugin.latest.availability_status),
       defaultSurfaceID: 'plugin.primary',
+      iconURL: validatedMarketIcon(presentation.icon),
       iconFallback: 'generic' as const,
       category: marketCategory(plugin.categories),
       searchKeywords: [...new Set(presentation.locales.flatMap((locale) => locale.keywords))],

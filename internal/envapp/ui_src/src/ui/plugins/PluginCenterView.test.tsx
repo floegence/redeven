@@ -296,6 +296,83 @@ describe('PluginCenterView', () => {
     expect(mount.querySelector('[data-plugin-center-details]')?.textContent).toContain('Containers');
   });
 
+  it('keeps disabled card actions aligned with the lifecycle state', async () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    const disabled = {
+      ...containersPlugin,
+      pluginInstanceID: 'plugininst_containers',
+      version: '2.0.0',
+      managementRevision: 23,
+      lifecycleState: 'disabled' as const,
+      defaultLaunchTarget: {
+        pluginID: containersPlugin.pluginID,
+        pluginInstanceID: 'plugininst_containers',
+        surfaceID: 'containers.dashboard',
+        expectedManagementRevision: 23,
+        preferredPlacement: 'activity' as const,
+      },
+    };
+    const onCommand = vi.fn();
+    dispose = render(() => (
+      <PluginCenterView
+        projection={{ items: [disabled] }}
+        loading={false}
+        onCommand={onCommand}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces
+      />
+    ), mount);
+
+    const card = mount.querySelector('[data-plugin-center-card-menu="catalog:containers"]') as HTMLButtonElement;
+    card.click();
+    await Promise.resolve();
+    expect([...document.querySelectorAll('[role="menu"]')].some((menu) => menu.textContent?.includes('Open in Activity'))).toBe(false);
+    expect([...document.querySelectorAll('[role="menu"]')].some((menu) => menu.textContent?.includes('Open in Workbench'))).toBe(false);
+    expect(findDocumentButton('Enable')).not.toBeNull();
+    expect(findDocumentButton('View plugin details')).not.toBeNull();
+  });
+
+  it('routes blocked primary actions to details instead of opening a surface', async () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    const blocked = {
+      ...containersPlugin,
+      pluginInstanceID: 'plugininst_containers',
+      version: '2.0.0',
+      managementRevision: 23,
+      lifecycleState: 'needs_attention' as const,
+      trustBadge: 'blocked' as const,
+      attentionReason: 'trust_unavailable' as const,
+      defaultLaunchTarget: {
+        pluginID: containersPlugin.pluginID,
+        pluginInstanceID: 'plugininst_containers',
+        surfaceID: 'containers.dashboard',
+        expectedManagementRevision: 23,
+        preferredPlacement: 'activity' as const,
+      },
+    };
+    const onCommand = vi.fn();
+    dispose = render(() => (
+      <PluginCenterView
+        projection={{ items: [blocked] }}
+        loading={false}
+        onCommand={onCommand}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces
+      />
+    ), mount);
+
+    const primary = mount.querySelector<HTMLButtonElement>('[data-plugin-center-card-primary="catalog:containers"]');
+    expect(primary?.textContent).toContain('View trust details');
+    primary?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(onCommand).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'open_surface' }), expect.anything());
+    expect(mount.querySelector('[data-plugin-center-details]')?.textContent).toContain('Containers');
+  });
+
   it('does not use market presentation when an installed record has no host presentation', async () => {
     const mount = document.createElement('div');
     document.body.append(mount);

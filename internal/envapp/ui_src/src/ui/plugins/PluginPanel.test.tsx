@@ -281,18 +281,12 @@ describe('PluginPanel', () => {
     }));
   });
 
-  it('shows lifecycle state and routes disabled plugins to details', () => {
-    const onOpenPluginDetails = vi.fn();
+  it('hides disabled plugins from the application launcher', () => {
     mountPanel({
-      model: panelModel(pluginItem({ lifecycleState: 'disabled', attentionReason: 'disabled' })),
-      onOpenPluginDetails,
+      model: buildPluginPanelModel({ items: [pluginItem({ lifecycleState: 'disabled', attentionReason: 'disabled' })] }),
     });
 
-    const row = document.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]') as HTMLButtonElement;
-    expect(row.parentElement?.textContent).toContain('Disabled');
-    expect(row.getAttribute('aria-describedby')).toBeTruthy();
-    row.click();
-    expect(onOpenPluginDetails).toHaveBeenCalledWith('instance:plugininst_containers');
+    expect(document.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]')).toBeNull();
   });
 
   it('renders the desktop launcher as an isolated centered modal', async () => {

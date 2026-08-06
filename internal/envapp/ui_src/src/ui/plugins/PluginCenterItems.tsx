@@ -5,7 +5,7 @@ import { Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 
 import { useI18n } from '../i18n';
 import type { PluginCenterTab, PluginInstallOperationProjection, PluginInventoryItem } from './pluginTypes';
-import { PLUGIN_ENTER_MOTION_CLASS, PLUGIN_PRESS_MOTION_CLASS } from './pluginPresentation';
+import { PLUGIN_ENTER_MOTION_CLASS, PLUGIN_PRESS_MOTION_CLASS, presentPlugin } from './pluginPresentation';
 import { PluginIcon, PluginStatusBadge, PluginTrustBadge } from './PluginPresentationPrimitives';
 import { resolveAuthorPresentation, resolvePluginPresentation } from './officialPluginCatalog';
 import { PluginInstallStatus } from './PluginInstallStatus';
@@ -22,6 +22,9 @@ export function PluginCenterItem(props: {
   onOpenDetails: (target: HTMLButtonElement) => void;
   onInstall: () => void;
   onUpdate: () => void;
+  onEnable: () => void;
+  onDisable: () => void;
+  onUninstall: () => void;
   onOpenActivity: () => void;
   onOpenWorkbench: () => void;
   onRetryInstall?: () => void;
@@ -39,20 +42,54 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
   const displayName = () => presentation()?.plugin_name ?? props.item.displayName;
   const summary = () => presentation()?.summary ?? props.item.description;
   const publisher = () => presentation()?.publisher_name ?? props.item.publisher;
+  const actions = () => presentPlugin(props.item);
   let menuTrigger: HTMLButtonElement | undefined;
-  const installed = () => props.item.lifecycleState !== 'not_installed';
   const update = () => props.tab === 'updates' || props.item.lifecycleState === 'update_available';
+  const primaryAction = () => actions().primaryAction;
+  const primaryLabel = () => {
+    switch (primaryAction()) {
+      case 'install': return i18n.t('uiCopy.plugin.install');
+      case 'enable': return i18n.t('uiCopy.plugin.enable');
+      case 'review_update': return i18n.t('uiCopy.plugin.reviewUpdate');
+      case 'open_activity': return i18n.t('uiCopy.plugin.openInActivity');
+      case 'review_permissions': return i18n.t('uiCopy.plugin.reviewPermissions');
+      case 'view_policy': return i18n.t('uiCopy.plugin.viewPolicyRestriction');
+      case 'view_runtime': return i18n.t('uiCopy.plugin.viewRuntimeRequirement');
+      case 'view_trust': return i18n.t('uiCopy.plugin.viewTrustDetails');
+      case 'view_diagnostics': return i18n.t('uiCopy.plugin.viewIssue');
+      default: return i18n.t('uiCopy.plugin.viewDetails');
+    }
+  };
+  const activatePrimary = (target: HTMLButtonElement) => {
+    switch (primaryAction()) {
+      case 'install': return props.onInstall();
+      case 'enable': return props.onEnable();
+      case 'review_update': return props.onUpdate();
+      case 'open_activity': return props.onOpenActivity();
+      default: return props.onOpenDetails(target);
+    }
+  };
+  const launchable = () => Boolean(props.item.defaultLaunchTarget)
+    && (actions().primaryAction === 'open_activity' || actions().primaryAction === 'review_update');
   const menuItems = (): DropdownItem[] => [
-    ...(installed() && props.item.defaultLaunchTarget ? [
+    ...(launchable() ? [
       { id: 'activity', label: i18n.t('uiCopy.plugin.openInActivity'), disabled: !props.canOpenSurfaces },
       { id: 'workbench', label: i18n.t('uiCopy.plugin.openInWorkbench'), disabled: !props.canOpenSurfaces },
       { id: 'surface-separator', label: '', separator: true },
     ] : []),
+    ...(actions().primaryAction === 'enable' ? [{ id: 'enable', label: i18n.t('uiCopy.plugin.enable'), disabled: !props.canManage || props.managementDisabled }] : []),
+    ...(actions().canDisable ? [{ id: 'disable', label: i18n.t('uiCopy.plugin.disable'), disabled: !props.canManage || props.managementDisabled }] : []),
+    ...(actions().canCheckForUpdate ? [{ id: 'update', label: i18n.t('uiCopy.plugin.checkForUpdate'), disabled: !props.canManage || props.managementDisabled }] : []),
+    ...(actions().canUninstall ? [{ id: 'uninstall', label: i18n.t('uiCopy.plugin.uninstall'), disabled: !props.canManage || props.managementDisabled }] : []),
     { id: 'details', label: i18n.t('uiCopy.plugin.viewDetails') },
   ];
   const selectMenuItem = (id: string, target: HTMLButtonElement) => {
     if (id === 'activity') props.onOpenActivity();
     else if (id === 'workbench') props.onOpenWorkbench();
+    else if (id === 'enable') props.onEnable();
+    else if (id === 'disable') props.onDisable();
+    else if (id === 'update') props.onUpdate();
+    else if (id === 'uninstall') props.onUninstall();
     else if (id === 'details') props.onOpenDetails(target);
   };
   return (
@@ -106,18 +143,22 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
         )}
       </Show>
       <div class="mt-3 flex min-w-0 items-center gap-1.5" data-plugin-center-card-actions>
-        <Show when={!installed()} fallback={(
+        <Show when={primaryAction() === 'install'} fallback={(
           <button
             type="button"
             data-plugin-center-card-primary={props.item.inventoryKey}
             data-plugin-center-update={update() ? props.item.inventoryKey : undefined}
             class={cn('inline-flex min-h-[44px] min-w-0 flex-1 cursor-pointer items-center justify-center gap-1 overflow-hidden whitespace-nowrap rounded-md bg-primary px-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-8', PLUGIN_PRESS_MOTION_CLASS)}
-            disabled={(update() && props.managementDisabled) || (!update() && !props.canOpenSurfaces)}
-            onClick={update() ? props.onUpdate : props.onOpenActivity}
+            disabled={(primaryAction() === 'review_update' && props.managementDisabled)
+              || (primaryAction() === 'open_activity' && (!props.canOpenSurfaces || !props.item.defaultLaunchTarget))
+              || (primaryAction() === 'enable' && (!props.canManage || props.managementDisabled))}
+            onClick={(event) => activatePrimary(event.currentTarget)}
           >
-            {update() ? <RefreshIcon class="h-4 w-4 shrink-0" /> : <CheckCircle class="h-4 w-4 shrink-0" />}
+            {primaryAction() === 'review_update'
+              ? <RefreshIcon class="h-4 w-4 shrink-0" />
+              : primaryAction() === 'open_activity' ? <CheckCircle class="h-4 w-4 shrink-0" /> : <MoreHorizontal class="h-4 w-4 shrink-0" />}
             <span data-plugin-center-card-primary-label class="shrink-0 whitespace-nowrap">
-              {update() ? i18n.t('uiCopy.plugin.reviewUpdate') : i18n.t('uiCopy.plugin.openInActivity')}
+              {primaryLabel()}
             </span>
           </button>
         )}>

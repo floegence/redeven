@@ -26,6 +26,31 @@ describe('official plugin catalog contracts', () => {
     });
   });
 
+  it('accepts only bounded, digest-bound market icon metadata', () => {
+    const icon = {
+      url: '/v1/plugins/com.redeven.official.containers/icon?sha256=abc',
+      media_type: 'image/png' as const,
+      width: 128,
+      height: 128,
+      sha256: `sha256:${'a'.repeat(64)}`,
+    };
+    const next = {
+      ...structuredClone(OFFICIAL_PLUGIN_MARKET_SNAPSHOT),
+      plugins: OFFICIAL_PLUGIN_MARKET_SNAPSHOT.plugins.map((plugin, index) => index === 0
+        ? { ...plugin, presentation: { ...plugin.presentation, icon } }
+        : plugin),
+    };
+    expect(officialPluginCatalog(next)[0]?.iconURL).toContain('/v1/plugins/com.redeven.official.containers/icon');
+
+    const unsafe = {
+      ...next,
+      plugins: next.plugins.map((plugin, index) => index === 0
+        ? { ...plugin, presentation: { ...plugin.presentation, icon: { ...icon, url: 'javascript:alert(1)' } } }
+        : plugin),
+    };
+    expect(officialPluginCatalog(unsafe)[0]?.iconURL).toBeUndefined();
+  });
+
   it('resolves the author presentation with RFC 4647 fallback', () => {
     const item = OFFICIAL_PLUGIN_CATALOG_SEED[0]!;
     expect(resolvePluginPresentation(item, 'zh-CN')).toMatchObject({
