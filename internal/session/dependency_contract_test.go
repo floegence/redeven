@@ -269,7 +269,7 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 			"@floegence/flowersec-core | 0.27.0",
 		},
 		"okf/architecture/runtime-transport-dependencies.md": {
-			"terminal-go v0.8.2",
+			"terminal-go v0.8.3",
 			"Flowersec Go v0.27.0",
 			"Flowersec Core v0.27.0",
 		},
