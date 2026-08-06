@@ -669,6 +669,16 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
         onCommitExternal={props.onCommitExternal ?? (async () => {
           throw new Error(i18n.t('uiCopy.plugin.external.commitFailed'));
         })}
+        onOfficialUpdate={async (item, targetVersion) => {
+          if (!item.pluginInstanceID || item.managementRevision === undefined) return;
+          await runCommand({
+            type: 'update',
+            pluginID: item.pluginID,
+            pluginInstanceID: item.pluginInstanceID,
+            targetVersion,
+            expectedManagementRevision: item.managementRevision,
+          });
+        }}
         onRefresh={async () => {
           await props.onRefresh();
         }}

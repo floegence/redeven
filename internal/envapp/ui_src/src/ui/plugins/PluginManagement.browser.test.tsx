@@ -388,6 +388,7 @@ function mountUpdateReviewDialog(): HTMLElement {
       onOpenChange={() => undefined}
       onInspect={async () => browserUpdateInspection()}
       onCommitExternal={async () => unavailableCommit()}
+      onOfficialUpdate={async () => undefined}
       onRefresh={() => undefined}
       onCommitted={() => undefined}
       onOpenActivity={() => undefined}

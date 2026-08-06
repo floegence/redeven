@@ -33,6 +33,7 @@ export type PluginUpdateReviewDialogProps = {
   onOpenChange: (open: boolean) => void;
   onInspect: (request: ExternalPluginInspectionRequest, signal: AbortSignal) => Promise<ExternalPluginInspection>;
   onCommitExternal: (inspection: ExternalPluginInspection, signal: AbortSignal) => Promise<ExternalPluginCommitResult>;
+  onOfficialUpdate: (item: PluginInventoryItem, targetVersion: string) => Promise<unknown>;
   onRefresh: () => Promise<unknown> | unknown;
   onCommitted: () => void;
   onOpenActivity: () => void;
@@ -172,7 +173,11 @@ export function PluginUpdateReviewDialog(props: PluginUpdateReviewDialogProps): 
     setStage('committing');
     setError(undefined);
     try {
-      await props.onCommitExternal(current.reviewEvidence.inspection, controller.signal);
+      if (props.item?.officialCatalog) {
+        await props.onOfficialUpdate(props.item, current.targetVersion);
+      } else {
+        await props.onCommitExternal(current.reviewEvidence.inspection, controller.signal);
+      }
       setStage('reconciling');
       await refreshAfterCommit(current);
       completeUpdate();
