@@ -90,6 +90,15 @@ export type PluginMarketPresentationLocale = Readonly<{
 export type PluginMarketPresentation = Readonly<{
   default_locale: string;
   locales: readonly PluginMarketPresentationLocale[];
+  icon?: PluginMarketIcon;
+}>;
+
+export type PluginMarketIcon = Readonly<{
+  url: string;
+  media_type: 'image/png' | 'image/webp';
+  width: number;
+  height: number;
+  sha256: string;
 }>;
 
 export type PluginMarketPresentationFullLocale = PluginMarketPresentationLocale & Readonly<{
@@ -103,7 +112,7 @@ export type PluginMarketDetail = Readonly<{
   generation?: number;
   plugin_id: string;
   publisher_id: string;
-  presentation: Readonly<{ default_locale: string; locales: readonly PluginMarketPresentationFullLocale[] }>;
+  presentation: Readonly<{ default_locale: string; locales: readonly PluginMarketPresentationFullLocale[]; icon?: PluginMarketIcon }>;
   categories: readonly string[];
   channels: readonly string[];
   repository: Readonly<{ provider: string; repository_id: number; owner: string; name: string; url: string }>;

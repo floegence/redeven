@@ -538,6 +538,28 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
                   onOpenDetails={(target) => openDetails(item.inventoryKey, target)}
                   onInstall={() => installItem(item)}
                   onUpdate={() => requestUpdate(item)}
+                  onEnable={() => {
+                    if (!item.pluginInstanceID || item.managementRevision === undefined) return;
+                    void runCommand({
+                      type: 'enable',
+                      pluginInstanceID: item.pluginInstanceID,
+                      expectedManagementRevision: item.managementRevision,
+                    });
+                  }}
+                  onDisable={() => {
+                    if (!item.pluginInstanceID || item.managementRevision === undefined) return;
+                    void runCommand({
+                      type: 'disable',
+                      pluginInstanceID: item.pluginInstanceID,
+                      expectedManagementRevision: item.managementRevision,
+                    });
+                  }}
+                  onUninstall={() => {
+                    if (!item.pluginInstanceID) return;
+                    setSelectedInventoryKey(item.inventoryKey);
+                    setMobileDetailOpen(true);
+                    setUninstallChoiceFor(item.pluginInstanceID);
+                  }}
                   onOpenActivity={() => openItemSurface(item, 'activity')}
                   onOpenWorkbench={() => openItemSurface(item, 'workbench')}
                   onRetryInstall={() => {

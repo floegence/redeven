@@ -462,10 +462,7 @@ describe('v0.7.1 plugin inventory projection', () => {
         },
       },
     });
-    expect(buildPluginPanelModel(disabledProjection, undefined, { canOpenSurfaces: true }).tiles[1]).toMatchObject({
-      kind: 'plugin',
-      action: 'open_details',
-    });
+    expect(buildPluginPanelModel(disabledProjection, undefined, { canOpenSurfaces: true }).tiles).toHaveLength(1);
   });
 
   it('keeps an enabled plugin launchable from the panel when an update is available', () => {
