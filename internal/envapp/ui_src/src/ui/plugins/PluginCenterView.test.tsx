@@ -1241,6 +1241,51 @@ describe('PluginCenterView', () => {
     expect(onRetryInstall).toHaveBeenCalledWith(containersPlugin.officialCatalog.pluginInstanceID);
   });
 
+  it('keeps a release trust timeout retryable and distinct from permission denial', () => {
+    const onRetryInstall = vi.fn();
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginCenterView
+        projection={projection}
+        loading={false}
+        installOperations={[{
+          pluginID: containersPlugin.pluginID,
+          pluginInstanceID: containersPlugin.officialCatalog.pluginInstanceID,
+          requestID: 'request_install_containers',
+          observation: 'watching',
+          operation: {
+            request_id: 'request_install_containers',
+            operation_id: 'release_install_containers',
+            plugin_instance_id: containersPlugin.officialCatalog.pluginInstanceID,
+            request_sha256: 'a'.repeat(64),
+            status: 'failed',
+            phase: 'failed',
+            progress: { kind: 'indeterminate' },
+            attempt: 3,
+            retry_after_ms: 0,
+            mutation_outcome: 'not_committed',
+            failure: { code: 'PLUGIN_RELEASE_TIMEOUT', retryable: true },
+            created_at: '2026-08-05T08:00:00Z',
+            updated_at: '2026-08-05T08:00:30Z',
+            terminal_at: '2026-08-05T08:00:30Z',
+          },
+        }]}
+        onRetryInstall={onRetryInstall}
+        onCommand={vi.fn()}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces
+      />
+    ), mount);
+
+    const status = mount.querySelector('[data-plugin-install-operation]')!;
+    expect(status.textContent).toContain('did not respond in time');
+    expect(status.textContent?.toLowerCase()).not.toContain('permission');
+    (status.querySelector('[data-plugin-install-retry]') as HTMLButtonElement).click();
+    expect(onRetryInstall).toHaveBeenCalledWith(containersPlugin.officialCatalog.pluginInstanceID);
+  });
+
   it('keeps a committed installation distinct when inventory refresh needs retrying', () => {
     const onRetryInstall = vi.fn();
     const mount = document.createElement('div');
