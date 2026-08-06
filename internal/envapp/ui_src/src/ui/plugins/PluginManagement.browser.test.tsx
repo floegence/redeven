@@ -785,7 +785,7 @@ describe('plugin management browser geometry and interaction', () => {
     const label = primary.querySelector<HTMLElement>('[data-plugin-center-card-primary-label]')!;
     const actions = card.querySelector<HTMLElement>('[data-plugin-center-card-actions]')!;
     const initialHeight = primary.getBoundingClientRect().height;
-    expect(label.textContent?.trim()).toBe('在 Activity 中打开');
+    expect(label.textContent?.trim()).toBe('查看运行时要求');
     expect(getComputedStyle(label).whiteSpace).toBe('nowrap');
     expect(primary.scrollWidth).toBeLessThanOrEqual(primary.clientWidth + 1);
     expectNoHorizontalOverflow(actions);
