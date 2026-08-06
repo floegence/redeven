@@ -2103,7 +2103,7 @@ describe('TerminalPanel browser activity integration', () => {
     await new Promise<void>((resolve) => setTimeout(resolve, 170));
     await settleTerminalPanel();
 
-    const slot = host.querySelector<HTMLElement>('[data-terminal-attention-slot="session-2"]')!;
+    const slot = host.querySelector<HTMLElement>('[data-terminal-output-slot="session-2"]')!;
     const slotBefore = slot.getBoundingClientRect();
     terminalCoreState.instances[1]?.emitBell();
     publishTerminalOutputActivity('session-2', {
@@ -2119,6 +2119,8 @@ describe('TerminalPanel browser activity integration', () => {
     const dotStyle = getComputedStyle(dot);
     const slotUnread = slot.getBoundingClientRect();
     expect([dotRect.width, dotRect.height]).toEqual([6, 6]);
+    expect(dotRect.left + dotRect.width / 2).toBeCloseTo(slotUnread.left + slotUnread.width / 2, 4);
+    expect(dotRect.top + dotRect.height / 2).toBeCloseTo(slotUnread.top + slotUnread.height / 2, 4);
     expect(parseFloat(dotStyle.borderRadius)).toBeGreaterThanOrEqual(3);
     expect(dotStyle.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
     expect([slotUnread.width, slotUnread.height]).toEqual([slotBefore.width, slotBefore.height]);
