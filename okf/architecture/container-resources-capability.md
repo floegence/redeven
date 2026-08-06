@@ -13,7 +13,7 @@ and stream handles, quotas, revocation, and audit. Production consumes signed
 Containers `4.1.0`, `redeven.container_resources.v4@4.0.0`, and
 `redeven.capability.container_resources@3.0.0` through the latest-only market
 and immutable GitHub Release transport. The capability bundle is signed through
-the released ReDevPlugin `0.7.6` publisher and remains one verified part of the
+the released ReDevPlugin publisher and remains one verified part of the
 complete release; market discovery or a capability signature alone cannot
 activate it.
 Unknown endpoints, stale plans, partial inventory, and unavailable terminal
@@ -35,7 +35,7 @@ operation, or stream protocol.
 The official capability bundle is stored under
 `spec/redevplugin/official-containers-capability-v4/`; its public signing
 exchange and complete output are verified with the released ReDevPlugin
-`0.7.6` CLI. The matching plugin still requires its own authorized package
+`0.7.7` CLI. The matching plugin still requires its own authorized package
 signatures, pin, root, source policy, revocation, ledger, and release metadata
 before Redeven may activate v4. Redeven must not create a substitute key or
 activate an unsigned or partially published contract.
@@ -172,7 +172,7 @@ actions are disabled when inventory is stale, partial, or unavailable.
 
 - `redeven:spec/capabilities/container-resources-v4.contract.json` - Defines the unsigned endpoint-aware v4 capability source.
 - `redeven:spec/redevplugin/candidate-containers-capability/capabilities/redeven.container_resources.v4/v4.0.0` - Contains deterministic generated candidate schema, client, compatibility metadata, and notices without an activatable signature pin.
-- `redeven:spec/redevplugin/official-containers-capability-v4` - Contains the public external-signing exchange and verified immutable v4 capability bundle consumed through the released ReDevPlugin `0.7.6` verifier.
+- `redeven:spec/redevplugin/official-containers-capability-v4` - Contains the public external-signing exchange and verified immutable v4 capability bundle consumed through the released ReDevPlugin `0.7.7` verifier.
 - `redeven:scripts/check_containers_v4_release_capability.sh` - Verifies the official v4 bundle, public signing exchange, source commit, generated client, and complete artifact inventory.
 - `redeven:internal/capabilities/containers/resources_v4.go` - Defines endpoint-aware business DTOs and adapter behavior.
 - `redeven:internal/capabilities/containers/resources_v4_cli.go` - Resolves opaque endpoints and constructs explicit Docker context and Podman connection commands.

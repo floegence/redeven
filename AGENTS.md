@@ -466,7 +466,7 @@ The intended dependency shape is library consumption, not source sharing:
 - Redeven contributes product policy and concrete adapters around those
   imports; it does not become a source tree for ReDevPlugin implementation.
 
-For the pre-release `v0.7.6` baseline, Redeven accepts only ReDevPlugin
+For the pre-release `v0.7.7` baseline, Redeven accepts only ReDevPlugin
 manifest v8, release metadata v8, `plugin-ui-v7`, and `bridge-v7`. Older
 manifest or release metadata state is not migrated, rewritten, or given a
 synthetic presentation; reads fail closed while the original bytes remain
