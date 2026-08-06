@@ -1867,6 +1867,65 @@ describe('PluginCenterView', () => {
     expect(onCommand).not.toHaveBeenCalled();
   });
 
+  it('submits official catalog updates through the platform release command', async () => {
+    const onCommand = vi.fn(async () => undefined);
+    const onCommitExternal = vi.fn(async () => externalCommitForCenter(externalInspectionForCenter()));
+    const inspection = externalInspectionForCenter();
+    const onInspectExternal = vi.fn(async () => ({
+      ...inspection,
+      expires_at: '2026-08-08T12:00:00Z',
+      intent: {
+        action: 'update' as const,
+        plugin_instance_id: 'plugininst_containers',
+        expected_management_revision: 13,
+      },
+      plugin_id: containersPlugin.pluginID,
+      publisher_id: containersPlugin.officialCatalog.publisherID,
+      version: '2.0.0',
+      signature_assessment: { ...inspection.signature_assessment, state: 'verified' as const },
+    }));
+    const updatesProjection: PluginInventoryProjection = {
+      items: [{
+        ...containersPlugin,
+        pluginInstanceID: 'plugininst_containers',
+        version: '1.9.0',
+        managementRevision: 13,
+        lifecycleState: 'update_available',
+      }],
+    };
+    const mount = document.createElement('div');
+    document.body.append(mount);
+
+    dispose = render(() => (
+      <PluginCenterView
+        projection={updatesProjection}
+        loading={false}
+        error={null}
+        onCommand={onCommand}
+        onInspectExternal={onInspectExternal}
+        onCommitExternal={onCommitExternal}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces={false}
+      />
+    ), mount);
+
+    openInventoryDetails(mount);
+    (mount.querySelector('[data-plugin-action="update-external"]') as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(document.querySelector('[data-plugin-update-submit]')).not.toBeNull());
+    findDocumentButton('Update to v2.0.0').click();
+    await vi.waitFor(() => expect(onCommand).toHaveBeenCalledOnce());
+
+    expect(onCommand).toHaveBeenCalledWith({
+      type: 'update',
+      pluginID: containersPlugin.pluginID,
+      pluginInstanceID: 'plugininst_containers',
+      targetVersion: '2.0.0',
+      expectedManagementRevision: 13,
+    }, expect.any(AbortSignal));
+    expect(onCommitExternal).not.toHaveBeenCalled();
+  });
+
   it('does not offer enable for plugins that need trust attention or updates', () => {
     const needsAttentionProjection: PluginInventoryProjection = {
       items: [
