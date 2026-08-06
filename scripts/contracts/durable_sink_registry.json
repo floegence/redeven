@@ -1302,7 +1302,7 @@
     },
     {
       "path": "internal/codeapp/appserver/server.go",
-      "sha256": "b1385ea963bcc4cbc67e56267dbad7447fd334120078456c8b92a924a409e3f2",
+      "sha256": "76553c4876ff88e4a1a0cf534a7328922edbcea3a9ff8662122e78675b5ecf54",
       "sink_kinds": [
         "file",
         "json_file"
@@ -1731,7 +1731,7 @@
     },
     {
       "path": "internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx",
-      "sha256": "0de5b3e5ded377629a444a3dab6cc88ac9da1fa4f166fa60401ea46b55eef3ef",
+      "sha256": "9854a5a0434283d4739c088baacb5c673c3567dfa112cee63c25f788c2ff6cee",
       "sink_kinds": [
         "web_storage"
       ],
@@ -1951,7 +1951,7 @@
     },
     {
       "path": "internal/pluginmarket/service.go",
-      "sha256": "e25824d887054608e8ba81c0ef3b74a32e991d21ee381e3da169cc004d2f61bc",
+      "sha256": "44d57bc9bab4efcd84b4854d5c634db648ec531aa4379386a209432974f819ce",
       "sink_kinds": [
         "file",
         "json_file"
@@ -2008,7 +2008,7 @@
     },
     {
       "path": "internal/redevpluginintegration/integration.go",
-      "sha256": "641b926285703132a8f388c58469359dd35a29641c98236a271553a72a8a2bad",
+      "sha256": "549ff7117de04af9a978165fd2af8f5c6c8a1c81b50683a7849d63a5924cb25d",
       "sink_kinds": [
         "file"
       ],
@@ -2022,7 +2022,7 @@
     },
     {
       "path": "internal/redevpluginintegration/release_module.go",
-      "sha256": "91e402f342030a3e66da83e3ab474a427af2bac666cda12822e49f8fc3ef3254",
+      "sha256": "488124679de6672dd6f66384feb1627cb7f8962caedfd4b2b12310d160d3a826",
       "sink_kinds": [
         "file"
       ],
