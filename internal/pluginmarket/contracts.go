@@ -59,7 +59,16 @@ type PluginSummary struct {
 
 type PresentationCompact struct {
 	DefaultLocale string                      `json:"default_locale"`
+	Icon          *PresentationIcon           `json:"icon,omitempty"`
 	Locales       []PresentationCompactLocale `json:"locales"`
+}
+
+type PresentationIcon struct {
+	URL       string `json:"url"`
+	MediaType string `json:"media_type"`
+	Width     int    `json:"width"`
+	Height    int    `json:"height"`
+	SHA256    string `json:"sha256"`
 }
 
 type PresentationCompactLocale struct {
@@ -72,6 +81,7 @@ type PresentationCompactLocale struct {
 
 type PresentationFull struct {
 	DefaultLocale string                   `json:"default_locale"`
+	Icon          *PresentationIcon        `json:"icon,omitempty"`
 	Locales       []PresentationFullLocale `json:"locales"`
 }
 
@@ -342,7 +352,7 @@ func validateSnapshot(snapshot Snapshot) error {
 }
 
 func validatePluginSummary(plugin PluginSummary) error {
-	if !idPattern.MatchString(plugin.PluginID) || !idPattern.MatchString(plugin.PublisherID) || !validateCompactPresentation(plugin.Presentation) ||
+	if !idPattern.MatchString(plugin.PluginID) || !idPattern.MatchString(plugin.PublisherID) || !validateCompactPresentation(plugin.Presentation, plugin.PluginID) ||
 		len(plugin.Categories) == 0 || len(plugin.Channels) == 0 || !idPattern.MatchString(plugin.Latest.Channel) || !semverPattern.MatchString(plugin.Latest.Version) {
 		return invalid("catalog plugin is invalid")
 	}
@@ -362,8 +372,8 @@ func validatePluginSummary(plugin PluginSummary) error {
 	return nil
 }
 
-func validateCompactPresentation(presentation PresentationCompact) bool {
-	if presentation.DefaultLocale == "" || len(presentation.Locales) == 0 || len(presentation.Locales) > 16 {
+func validateCompactPresentation(presentation PresentationCompact, pluginID string) bool {
+	if presentation.DefaultLocale == "" || len(presentation.Locales) == 0 || len(presentation.Locales) > 16 || !validatePresentationIcon(presentation.Icon, pluginID) {
 		return false
 	}
 	seen := make(map[string]struct{}, len(presentation.Locales))
@@ -395,8 +405,8 @@ func validateCompactPresentation(presentation PresentationCompact) bool {
 	return exists && validPresentationLocale(presentation.DefaultLocale)
 }
 
-func validateFullPresentation(presentation PresentationFull) bool {
-	if len(presentation.Locales) == 0 || len(presentation.Locales) > 16 || !validPresentationLocale(presentation.DefaultLocale) {
+func validateFullPresentation(presentation PresentationFull, pluginID string) bool {
+	if len(presentation.Locales) == 0 || len(presentation.Locales) > 16 || !validPresentationLocale(presentation.DefaultLocale) || !validatePresentationIcon(presentation.Icon, pluginID) {
 		return false
 	}
 	seen := make(map[string]struct{}, len(presentation.Locales))
@@ -494,6 +504,24 @@ func validateFullPresentation(presentation PresentationFull) bool {
 		}
 	}
 	return true
+}
+
+func validatePresentationIcon(icon *PresentationIcon, pluginID string) bool {
+	if icon == nil {
+		return true
+	}
+	if !idPattern.MatchString(pluginID) || !shaPattern.MatchString(icon.SHA256) ||
+		(icon.MediaType != "image/png" && icon.MediaType != "image/webp") ||
+		icon.Width < 1 || icon.Width > 512 || icon.Height < 1 || icon.Height > 512 {
+		return false
+	}
+	parsed, err := url.ParseRequestURI(icon.URL)
+	if err != nil || parsed.IsAbs() || parsed.Host != "" || parsed.Fragment != "" ||
+		parsed.Path != "/v1/plugins/"+url.PathEscape(pluginID)+"/icon" {
+		return false
+	}
+	query := parsed.Query()
+	return len(query) == 1 && len(query["sha256"]) == 1 && query.Get("sha256") == icon.SHA256
 }
 
 func validPresentationLocale(value string) bool {

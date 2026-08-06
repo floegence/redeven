@@ -4,35 +4,36 @@ import { officialPluginCatalog, resolvePluginPresentation } from './officialPlug
 import { OFFICIAL_PLUGIN_CATALOG_SEED, OFFICIAL_PLUGIN_MARKET_SNAPSHOT } from './officialPluginCatalog.test-fixture';
 
 describe('official plugin catalog contracts', () => {
-  it('does not embed plugin-specific icon or permission metadata in the market adapter', () => {
+  it('uses verified market icon metadata without embedding plugin-specific permissions', () => {
     expect(OFFICIAL_PLUGIN_CATALOG_SEED[0]).toMatchObject({ iconFallback: 'generic' });
-    expect(OFFICIAL_PLUGIN_CATALOG_SEED[0]?.iconURL).toBeUndefined();
+    expect(OFFICIAL_PLUGIN_CATALOG_SEED[0]?.iconURL).toContain('/_redeven_proxy/api/plugins/market/plugins/com.redeven.official.containers/icon');
     expect(officialPluginCatalog(OFFICIAL_PLUGIN_MARKET_SNAPSHOT)[0]?.permissions).toEqual([]);
   });
 
   it('projects the latest version from the current frozen market snapshot', () => {
     const next = structuredClone(OFFICIAL_PLUGIN_MARKET_SNAPSHOT);
-    next.generation = 2;
-    next.plugins[0]!.latest.version = '4.1.0';
-    next.plugins[0]!.release!.version = '4.1.0';
-    next.plugins[0]!.release!.publisher_release_ref.release_ref.version = '4.1.0';
+    next.generation = 3;
+    next.plugins[0]!.latest.version = '4.2.0';
+    next.plugins[0]!.release!.version = '4.2.0';
+    next.plugins[0]!.release!.publisher_release_ref.release_ref.version = '4.2.0';
 
     expect(officialPluginCatalog(next)[0]).toMatchObject({
-      latestVersion: '4.1.0',
-      stableVersion: '4.1.0',
+      latestVersion: '4.2.0',
+      stableVersion: '4.2.0',
       distribution: {
-        releaseRef: { version: '4.1.0' },
+        releaseRef: { version: '4.2.0' },
       },
     });
   });
 
   it('accepts only bounded, digest-bound market icon metadata', () => {
+    const sha256 = 'a'.repeat(64);
     const icon = {
-      url: '/v1/plugins/com.redeven.official.containers/icon?sha256=abc',
+      url: `/v1/plugins/com.redeven.official.containers/icon?sha256=${sha256}`,
       media_type: 'image/png' as const,
       width: 128,
       height: 128,
-      sha256: `sha256:${'a'.repeat(64)}`,
+      sha256,
     };
     const next = {
       ...structuredClone(OFFICIAL_PLUGIN_MARKET_SNAPSHOT),
@@ -40,7 +41,7 @@ describe('official plugin catalog contracts', () => {
         ? { ...plugin, presentation: { ...plugin.presentation, icon } }
         : plugin),
     };
-    expect(officialPluginCatalog(next)[0]?.iconURL).toContain('/v1/plugins/com.redeven.official.containers/icon');
+    expect(officialPluginCatalog(next)[0]?.iconURL).toContain('/_redeven_proxy/api/plugins/market/plugins/com.redeven.official.containers/icon');
 
     const unsafe = {
       ...next,
@@ -49,6 +50,14 @@ describe('official plugin catalog contracts', () => {
         : plugin),
     };
     expect(officialPluginCatalog(unsafe)[0]?.iconURL).toBeUndefined();
+
+    const digestMismatch = {
+      ...next,
+      plugins: next.plugins.map((plugin, index) => index === 0
+        ? { ...plugin, presentation: { ...plugin.presentation, icon: { ...icon, sha256: 'b'.repeat(64) } } }
+        : plugin),
+    };
+    expect(officialPluginCatalog(digestMismatch)[0]?.iconURL).toBeUndefined();
   });
 
   it('resolves the author presentation with RFC 4647 fallback', () => {

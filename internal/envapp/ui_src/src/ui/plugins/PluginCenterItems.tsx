@@ -69,12 +69,14 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
       default: return props.onOpenDetails(target);
     }
   };
-  const launchable = () => Boolean(props.item.defaultLaunchTarget)
-    && (actions().primaryAction === 'open_activity' || actions().primaryAction === 'review_update');
   const menuItems = (): DropdownItem[] => [
-    ...(launchable() ? [
+    ...(actions().canOpenActivity ? [
       { id: 'activity', label: i18n.t('uiCopy.plugin.openInActivity'), disabled: !props.canOpenSurfaces },
+    ] : []),
+    ...(actions().canOpenWorkbench ? [
       { id: 'workbench', label: i18n.t('uiCopy.plugin.openInWorkbench'), disabled: !props.canOpenSurfaces },
+    ] : []),
+    ...((actions().canOpenActivity || actions().canOpenWorkbench) ? [
       { id: 'surface-separator', label: '', separator: true },
     ] : []),
     ...(actions().primaryAction === 'enable' ? [{ id: 'enable', label: i18n.t('uiCopy.plugin.enable'), disabled: !props.canManage || props.managementDisabled }] : []),

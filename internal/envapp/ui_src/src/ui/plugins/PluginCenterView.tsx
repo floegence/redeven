@@ -1551,6 +1551,7 @@ function PluginActions(props: {
     return false;
   };
   const overflowItems = (): DropdownItem[] => [
+    ...(presentation().canOpenActivity ? [{ id: 'activity', label: i18n.t('uiCopy.plugin.openInActivity'), disabled: disabledOpen() }] : []),
     ...(presentation().canOpenWorkbench ? [{ id: 'workbench', label: i18n.t('uiCopy.plugin.openInWorkbench'), disabled: disabledOpen() }] : []),
     ...(presentation().canDisable ? [{ id: 'disable', label: i18n.t('uiCopy.plugin.disable'), disabled: disabledManagement() }] : []),
     ...(presentation().canCheckForUpdate ? [{ id: 'update', label: i18n.t('uiCopy.plugin.checkForUpdate'), disabled: disabledManagement() }] : []),
@@ -1560,7 +1561,9 @@ function PluginActions(props: {
     ] : []),
   ];
   const selectOverflowAction = (action: string) => {
-    if (action === 'workbench') {
+    if (action === 'activity') {
+      openSurface('activity');
+    } else if (action === 'workbench') {
       openSurface('workbench');
     } else if (action === 'disable') {
       props.onCommand({

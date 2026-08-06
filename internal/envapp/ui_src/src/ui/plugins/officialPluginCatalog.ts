@@ -46,15 +46,24 @@ function compactPresentationCatalog(presentation: OfficialPluginCatalogItem['pre
   };
 }
 
-function validatedMarketIcon(icon: PluginMarketSnapshot['plugins'][number]['presentation']['icon']): string | undefined {
+function validatedMarketIcon(
+  icon: PluginMarketSnapshot['plugins'][number]['presentation']['icon'],
+  pluginID: string,
+): string | undefined {
   if (!icon || !Number.isSafeInteger(icon.width) || !Number.isSafeInteger(icon.height)
     || icon.width < 1 || icon.width > 512 || icon.height < 1 || icon.height > 512
-    || !/^sha256:[0-9a-f]{64}$/i.test(icon.sha256)) return undefined;
+    || (icon.media_type !== 'image/png' && icon.media_type !== 'image/webp')
+    || !/^[0-9a-f]{64}$/.test(icon.sha256)
+    || !/^[a-z][a-z0-9._-]{0,127}$/.test(pluginID)
+    || !icon.url.startsWith('/') || icon.url.startsWith('//')) return undefined;
   try {
-    const base = typeof window === 'undefined' ? 'http://localhost' : window.location.origin;
-    const url = new URL(icon.url, base);
-    if ((url.protocol !== 'https:' && url.protocol !== 'http:') || url.username || url.password) return undefined;
-    return url.toString();
+    const marketOrigin = 'https://plugin-market.invalid';
+    const url = new URL(icon.url, marketOrigin);
+    const digests = url.searchParams.getAll('sha256');
+    if (url.origin !== marketOrigin || url.pathname !== `/v1/plugins/${pluginID}/icon`
+      || url.hash || [...url.searchParams.keys()].length !== 1 || digests.length !== 1
+      || digests[0] !== icon.sha256) return undefined;
+    return `/_redeven_proxy/api/plugins/market/plugins/${pluginID}/icon?sha256=${icon.sha256}`;
   } catch {
     return undefined;
   }
@@ -117,7 +126,7 @@ function projectMarketSnapshot(snapshot: PluginMarketSnapshot): OfficialPluginCa
       minReDevPluginVersion: plugin.release.compatibility.min_redevplugin_version,
       rolloutState: marketRolloutState(plugin.latest.availability_status),
       defaultSurfaceID: 'plugin.primary',
-      iconURL: validatedMarketIcon(presentation.icon),
+      iconURL: validatedMarketIcon(presentation.icon, plugin.plugin_id),
       iconFallback: 'generic' as const,
       category: marketCategory(plugin.categories),
       searchKeywords: [...new Set(presentation.locales.flatMap((locale) => locale.keywords))],

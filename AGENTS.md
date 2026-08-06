@@ -45,7 +45,11 @@ Goals:
 - `redeven` consumes published upstream releases only. Do not wire local sibling repositories into builds, tests, or release validation.
 - If local `main` is pushed, push the full current local `main` tip together with all of its latest commits.
 - Do not partial-push `main`, and do not update `origin/main` through another branch while newer local `main` commits remain unpublished.
-- One feature equals one dedicated worktree plus one local private branch.
+- One task may own at most one feature worktree and one feature branch at a
+  time.
+- Before creating another task-owned worktree or branch, finish or stop the
+  current task and remove the worktree and branch that this task created.
+- Never remove or modify worktrees, branches, or stashes owned by another task.
 - Keep feature branches private until they are merged into `main`.
 - Do not push feature branches or create pull requests unless the user explicitly asks for that collaboration path.
 - Do not create a pull request merely to trigger CI; by default, fast-forward the ready feature into `main`, push `main`, and verify the `main` Actions run.
@@ -82,6 +86,22 @@ BR=feat-<topic>
 WT=../redeven-feat-<topic>
 git worktree add -b "$BR" "$WT" origin/main
 ```
+
+## Change Workflow
+
+- Define one task scope, acceptance criterion, owner, and non-goals before
+  editing. Split independent problems into separate tasks.
+- Reproduce the problem with read-only evidence before changing production
+  behavior. A fix requires a deterministic failing test or a documented
+  external blocker.
+- Use focused tests during development. Run the complete repository gate only
+  before integrating into main or publishing.
+- Check downstream contract requirements before releasing an upstream change.
+  Fix missing platform contracts upstream; never use local sibling wiring or a
+  host-side duplicate implementation.
+- Before reporting a task as complete, verify its acceptance evidence. After
+  integration, verify main == origin/main, then remove the worktree and branch
+  created by the task.
 
 ## Feature Sync
 
@@ -466,7 +486,7 @@ The intended dependency shape is library consumption, not source sharing:
 - Redeven contributes product policy and concrete adapters around those
   imports; it does not become a source tree for ReDevPlugin implementation.
 
-For the pre-release `v0.7.9` baseline, Redeven accepts only ReDevPlugin
+For the pre-release `v0.7.13` baseline, Redeven accepts only ReDevPlugin
 manifest v8, release metadata v8, `plugin-ui-v7`, and `bridge-v7`. Older
 manifest or release metadata state is not migrated, rewritten, or given a
 synthetic presentation; reads fail closed while the original bytes remain
@@ -487,6 +507,18 @@ or losing its observer must not cancel the Host operation, create a new request
 id, replay installation, or turn transport/internal failures into permission
 denials. Redeven must not add a polling algorithm, operation store, lifecycle
 state machine, or Containers-specific installation path.
+
+Plugin Center cards, detail actions, and the application launcher must consume
+one product action projection. Disabled or blocked records must not expose a
+surface launch action from stale targets, while a runnable update may keep
+Activity and Workbench available during review. Installed presentation and
+icon evidence belong to the installed Host-verified package. When the installed
+version, package hash, manifest hash, and entries hash exactly match the
+current signed market release, Redeven may reuse that release's bounded icon
+URL; any mismatch falls back to the generic placeholder, so a later market
+generation cannot replace an older installed package's icon. ReDevPlugin
+`v0.7.13` does not expose a generic installed-icon read URL, so Redeven must
+not parse package bytes or invent a second icon transport.
 
 The current released platform contract also fixes the host-integration shape:
 
@@ -1162,6 +1194,13 @@ tests, and published Floret release notes.
   - do not tag until the rationale and reviewed surfaces explain why no compatibility window change is needed.
 - If the Runtime Service protocol contract changes, bump `compatibility_epoch` or the relevant minimum version fields instead of relying on ad hoc UI checks.
 - Do not use release notes, installer metadata, or Desktop-only conditionals as the compatibility source of truth; they may describe the policy, but they must not replace the contract file.
+- Do not create a release tag to discover deterministic source, generated
+  artifact, packaging, or contract failures. Fix and validate those failures
+  on the exact clean main tip first.
+- Do not create a new version only to retry CI, packaging, registry
+  propagation, or GitHub Release publication. Recover transient publication
+  failures against the same immutable tag. A new version requires changed
+  source or published artifact content.
 
 ### Public Installer Contract
 

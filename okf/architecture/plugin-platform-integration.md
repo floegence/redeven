@@ -1,14 +1,14 @@
 ---
 type: Architecture Contract
 title: Plugin platform integration
-description: Redeven mounts ReDevPlugin v0.7.9 and adds authenticated host modules, copied-root recovery, market-backed official releases, external-source policy, localized plugin presentation, product placement, and business adapters.
+description: Redeven mounts ReDevPlugin v0.7.13 and adds authenticated host modules, copied-root recovery, market-backed official releases, external-source policy, localized plugin presentation, product placement, and business adapters.
 tags: [architecture, plugins, local-ui, redevplugin]
 timestamp: 2026-07-25T00:00:00Z
 quality_exception: Cross-domain host integration contract spanning identity, security, runtime, storage, routes, surfaces, and business adapters.
 ---
 # Summary
 
-Redeven integrates ReDevPlugin `v0.7.9` through one Go Host, one canonical HTTP
+Redeven integrates ReDevPlugin `v0.7.13` through one Go Host, one canonical HTTP
 namespace, one Env App `PluginPlatformClient`, one shared surface scope, and the
 released ProcessManager over a verified Redeven-built Linux runtime. Redeven
 adds authenticated session mapping, public-source admission policy, product
@@ -107,7 +107,7 @@ silently accepted or retried with broader authority.
 
 ## Package sources and lifecycle
 
-Production obtains the official Containers `4.1.0` release from the frozen
+Production obtains the official Containers `4.2.0` release from the frozen
 latest-only market snapshot. The snapshot identifies the immutable GitHub
 Release and complete signed transport; it does not carry package bytes or grant
 trust. Redeven submits the released `release-install-operation.v1` request with
@@ -156,7 +156,7 @@ user pin.
 ## Runtime and Containers
 
 The runtime module binds the canonical sibling executable, target, ReDevPlugin
-`0.7.9`, released Rust IPC and WASM ABI, exact product-build descriptor, lease
+`0.7.13`, released Rust IPC and WASM ABI, exact product-build descriptor, lease
 replay storage, and released limits. Linux runtime bytes are built with Rust
 1.88.0 from the attested package set and travel with SBOM, provenance, notices,
 and signature evidence. Missing, non-canonical, wrong-target, unsigned, or
@@ -214,6 +214,18 @@ version without external provenance must carry an explicitly catalog-trusted
 official signing key and exact registry-to-Host-verified hash agreement.
 External source provenance prevents an identity collision from borrowing
 historical official identity or update controls.
+
+Plugin Center cards, detail actions, and the application launcher consume one
+`presentPlugin` action projection. A disabled or blocked record never exposes a
+surface launch action, even if an old launch target is still present; a runnable
+update may keep Activity and Workbench available while its primary action is
+review. The launcher omits disabled records, while cards keep enable and review
+actions visible. Installed presentation remains authoritative for the installed
+package. A market icon descriptor may be reused only when all four installed
+release hashes and the version exactly match the current signed market release;
+otherwise the installed projection uses the generic placeholder. `PluginIcon`
+validates and renders the bounded URL with that fallback and has no plugin-id-
+specific behavior.
 
 Active grants and explicit security policy join the exact installed record.
 Generic requirements come only from the released Host projection of the active

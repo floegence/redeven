@@ -57,9 +57,23 @@ describe('presentPlugin', () => {
     expect(presentPlugin(item).primaryAction).toBe(action);
   });
 
-  it('exposes Workbench only for an enabled ready launch target', () => {
+  it('exposes Workbench for a runnable enabled target', () => {
     const target = { pluginID: 'com.example.plugin', pluginInstanceID: 'plugin-1', surfaceID: 'main', expectedManagementRevision: 4, preferredPlacement: 'activity' as const };
     expect(presentPlugin(plugin({ lifecycleState: 'enabled', defaultLaunchTarget: target })).canOpenWorkbench).toBe(true);
-    expect(presentPlugin(plugin({ lifecycleState: 'update_available', defaultLaunchTarget: target })).canOpenWorkbench).toBe(false);
+  });
+
+  it('exposes explicit Activity and Workbench capabilities for runnable update states', () => {
+    const target = { pluginID: 'com.example.plugin', pluginInstanceID: 'plugin-1', surfaceID: 'main', expectedManagementRevision: 4, preferredPlacement: 'activity' as const };
+    const presentation = presentPlugin(plugin({ lifecycleState: 'update_available', defaultLaunchTarget: target }));
+    expect(presentation.canOpenActivity).toBe(true);
+    expect(presentation.canOpenWorkbench).toBe(true);
+    expect(presentation.primaryAction).toBe('review_update');
+  });
+
+  it('does not expose stale launch capabilities while disabled', () => {
+    const target = { pluginID: 'com.example.plugin', pluginInstanceID: 'plugin-1', surfaceID: 'main', expectedManagementRevision: 4, preferredPlacement: 'activity' as const };
+    const presentation = presentPlugin(plugin({ lifecycleState: 'disabled', defaultLaunchTarget: target }));
+    expect(presentation.canOpenActivity).toBe(false);
+    expect(presentation.canOpenWorkbench).toBe(false);
   });
 });

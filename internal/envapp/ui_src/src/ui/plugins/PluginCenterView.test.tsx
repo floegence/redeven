@@ -447,7 +447,7 @@ describe('PluginCenterView', () => {
         officialCatalog: OFFICIAL_PLUGIN_CATALOG_SEED[0],
       }],
     });
-    let generation = 2;
+    let generation = 3;
     const onLoadMarketDetail = vi.fn(async () => ({
       ...OFFICIAL_PLUGIN_MARKET_DETAIL,
       generation,
@@ -468,13 +468,13 @@ describe('PluginCenterView', () => {
     await vi.waitFor(() => expect(onLoadMarketDetail).toHaveBeenCalledTimes(1));
     await vi.waitFor(() => expect(mount.querySelector('[data-plugin-author-description]')).not.toBeNull());
 
-    generation = 3;
+    generation = 4;
     setCurrentProjection({
       items: [{
         ...containersPlugin,
         officialCatalog: {
           ...OFFICIAL_PLUGIN_CATALOG_SEED[0]!,
-          marketGeneration: 3,
+          marketGeneration: 4,
         },
       }],
     });
@@ -601,6 +601,37 @@ describe('PluginCenterView', () => {
     expect(overflow?.closest('[data-plugin-action-row]')).toBe(row);
     expect(row?.className).toContain('items-center');
     expect(row?.className).not.toContain('flex-col');
+  });
+
+  it('offers both open destinations from the detail overflow for a runnable update', () => {
+    const target = { pluginID: 'com.redeven.official.containers', pluginInstanceID: 'plugininst_containers', surfaceID: 'containers.dashboard', expectedManagementRevision: 13, preferredPlacement: 'activity' as const };
+    const updateItem = {
+      ...containersPlugin,
+      pluginInstanceID: 'plugininst_containers',
+      version: '1.9.0',
+      managementRevision: 13,
+      lifecycleState: 'update_available' as const,
+      canDisable: true,
+      defaultLaunchTarget: target,
+    };
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginCenterView
+        projection={{ items: [updateItem] }}
+        loading={false}
+        selectedInventoryKey="catalog:containers"
+        onCommand={vi.fn()}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces
+      />
+    ), mount);
+
+    (mount.querySelector('[data-plugin-action="more"]') as HTMLButtonElement).click();
+    const menu = document.querySelector<HTMLElement>('[role="menu"]')!;
+    expect(menu.textContent).toContain('Open in Activity');
+    expect(menu.textContent).toContain('Open in Workbench');
   });
 
   it('keeps identity and primary actions outside the independently scrolling detail body', () => {

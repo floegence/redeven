@@ -2,9 +2,12 @@ package pluginmarket
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -17,6 +20,13 @@ const validCatalogResponse = `{
     "publisher_id": "com.redeven.official",
     "presentation": {
       "default_locale": "en-US",
+      "icon": {
+        "url": "/v1/plugins/com.redeven.official.containers/icon?sha256=949adb221cd3e990ebe350947cc17d1b415d6175f99df98aeb5c47d70fb3cce1",
+        "media_type": "image/png",
+        "width": 512,
+        "height": 512,
+        "sha256": "949adb221cd3e990ebe350947cc17d1b415d6175f99df98aeb5c47d70fb3cce1"
+      },
       "locales": [
         {"locale": "en-US", "name": "Containers", "publisher_name": "Redeven Official", "summary": "Manage Docker and Podman resources.", "keywords": ["containers", "Docker"]},
         {"locale": "zh-CN", "name": "容器", "publisher_name": "Redeven 官方", "summary": "管理 Docker 和 Podman 资源。", "keywords": ["容器", "Docker"]}
@@ -148,6 +158,13 @@ const validDetailResponse = `{
     "publisher_id": "com.redeven.official",
     "presentation": {
       "default_locale": "en-US",
+      "icon": {
+        "url": "/v1/plugins/com.redeven.official.containers/icon?sha256=949adb221cd3e990ebe350947cc17d1b415d6175f99df98aeb5c47d70fb3cce1",
+        "media_type": "image/png",
+        "width": 512,
+        "height": 512,
+        "sha256": "949adb221cd3e990ebe350947cc17d1b415d6175f99df98aeb5c47d70fb3cce1"
+      },
       "locales": [{"locale": "en-US", "name": "Containers", "publisher_name": "Redeven Official", "summary": "Manage Docker and Podman resources.", "description": ["Manage containers."], "highlights": ["Inspect logs."], "keywords": ["containers"]}]
     },
     "categories": ["infrastructure"],
@@ -206,6 +223,9 @@ func TestServiceRefreshesAndFallsBackToValidatedCache(t *testing.T) {
 	if snapshot.Plugins[0].Release == nil || snapshot.Plugins[0].Release.Version != "4.0.0" {
 		t.Fatalf("missing exact latest release: %#v", snapshot.Plugins[0])
 	}
+	if snapshot.Plugins[0].Presentation.Icon == nil || snapshot.Plugins[0].Presentation.Icon.SHA256 != "949adb221cd3e990ebe350947cc17d1b415d6175f99df98aeb5c47d70fb3cce1" {
+		t.Fatalf("missing verified market icon: %#v", snapshot.Plugins[0].Presentation.Icon)
+	}
 
 	offline, err := NewService(ServiceOptions{
 		Origin:    "https://plugins.redeven.com",
@@ -249,6 +269,9 @@ func TestServiceDetailReturnsMarketGeneration(t *testing.T) {
 	if generation != 41 || detail.PluginID != "com.redeven.official.containers" {
 		t.Fatalf("detail = %#v, generation = %d", detail, generation)
 	}
+	if detail.Presentation.Icon == nil || detail.Presentation.Icon.SHA256 != "949adb221cd3e990ebe350947cc17d1b415d6175f99df98aeb5c47d70fb3cce1" {
+		t.Fatalf("detail icon = %#v", detail.Presentation.Icon)
+	}
 }
 
 func TestServiceDetailRejectsStaleGeneration(t *testing.T) {
@@ -266,6 +289,108 @@ func TestServiceDetailRejectsStaleGeneration(t *testing.T) {
 	}
 	if _, generation, err := service.Detail(context.Background(), "com.redeven.official.containers"); !errors.Is(err, ErrInvalidResponse) || generation != -1 {
 		t.Fatalf("Detail() error = %v, generation = %d", err, generation)
+	}
+}
+
+func TestServiceIconReturnsEvidenceBoundBytes(t *testing.T) {
+	t.Parallel()
+	data := []byte("verified market icon")
+	digest := fmt.Sprintf("%x", sha256.Sum256(data))
+	icon := PresentationIcon{
+		URL:       "/v1/plugins/com.redeven.official.containers/icon?sha256=" + digest,
+		MediaType: "image/png",
+		Width:     128,
+		Height:    128,
+		SHA256:    digest,
+	}
+	service, err := NewService(ServiceOptions{
+		Origin:    "https://plugins.redeven.com",
+		CachePath: filepath.Join(t.TempDir(), "plugin-market-lkg.json"),
+		HTTPClient: &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			if request.URL.Path != "/v1/plugins/com.redeven.official.containers/icon" || request.URL.Query().Get("sha256") != digest {
+				t.Fatalf("request URL = %s", request.URL)
+			}
+			return response(http.StatusOK, string(data), http.Header{"Content-Type": {"image/png"}}), nil
+		})},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	asset, err := service.Icon(context.Background(), "com.redeven.official.containers", icon)
+	if err != nil {
+		t.Fatalf("Icon() error = %v", err)
+	}
+	if string(asset.Data) != string(data) || asset.MediaType != icon.MediaType || asset.SHA256 != digest {
+		t.Fatalf("asset = %#v", asset)
+	}
+}
+
+func TestServiceIconRejectsUnverifiedResponses(t *testing.T) {
+	t.Parallel()
+	data := []byte("verified market icon")
+	digest := fmt.Sprintf("%x", sha256.Sum256(data))
+	icon := PresentationIcon{
+		URL:       "/v1/plugins/com.redeven.official.containers/icon?sha256=" + digest,
+		MediaType: "image/png",
+		Width:     128,
+		Height:    128,
+		SHA256:    digest,
+	}
+	tests := []struct {
+		name     string
+		response func(*http.Request) *http.Response
+	}{
+		{name: "digest mismatch", response: func(*http.Request) *http.Response {
+			return response(http.StatusOK, "different bytes", http.Header{"Content-Type": {"image/png"}})
+		}},
+		{name: "oversized body", response: func(*http.Request) *http.Response {
+			return response(http.StatusOK, strings.Repeat("x", maxMarketIcon+1), http.Header{"Content-Type": {"image/png"}})
+		}},
+		{name: "wrong content type", response: func(*http.Request) *http.Response {
+			return response(http.StatusOK, string(data), http.Header{"Content-Type": {"image/webp"}})
+		}},
+		{name: "redirected response", response: func(*http.Request) *http.Response {
+			result := response(http.StatusOK, string(data), http.Header{"Content-Type": {"image/png"}})
+			result.Request = &http.Request{URL: &url.URL{Scheme: "https", Host: "other.invalid", Path: "/icon"}}
+			return result
+		}},
+	}
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			service, err := NewService(ServiceOptions{
+				Origin:    "https://plugins.redeven.com",
+				CachePath: filepath.Join(t.TempDir(), "plugin-market-lkg.json"),
+				HTTPClient: &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+					return testCase.response(request), nil
+				})},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := service.Icon(context.Background(), "com.redeven.official.containers", icon); !errors.Is(err, ErrInvalidResponse) {
+				t.Fatalf("Icon() error = %v, want ErrInvalidResponse", err)
+			}
+		})
+	}
+}
+
+func TestServiceIconRejectsInvalidEvidenceBeforeRequest(t *testing.T) {
+	t.Parallel()
+	called := false
+	service, err := NewService(ServiceOptions{
+		Origin:    "https://plugins.redeven.com",
+		CachePath: filepath.Join(t.TempDir(), "plugin-market-lkg.json"),
+		HTTPClient: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			called = true
+			return response(http.StatusOK, "icon", http.Header{"Content-Type": {"image/png"}}), nil
+		})},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	invalid := PresentationIcon{URL: "/v1/plugins/com.example.plugin/icon?sha256=abc", MediaType: "image/png", Width: 128, Height: 128, SHA256: "abc"}
+	if _, err := service.Icon(context.Background(), "BadPlugin", invalid); !errors.Is(err, ErrInvalidResponse) || called {
+		t.Fatalf("Icon() error = %v, request called = %t", err, called)
 	}
 }
 
@@ -332,7 +457,7 @@ func TestPresentationValidationRejectsUnsafeAndIncompleteFields(t *testing.T) {
 			candidate.Locales[0].Keywords = append([]string(nil), compact.Locales[0].Keywords...)
 			candidate.Locales[1].Keywords = append([]string(nil), compact.Locales[1].Keywords...)
 			testCase.mutate(&candidate)
-			if validateCompactPresentation(candidate) {
+			if validateCompactPresentation(candidate, "com.example.plugin") {
 				t.Fatal("validateCompactPresentation accepted invalid presentation")
 			}
 		})
@@ -340,12 +465,12 @@ func TestPresentationValidationRejectsUnsafeAndIncompleteFields(t *testing.T) {
 
 	full := validFullPresentationForTest()
 	full.Locales[1].PublisherName = ""
-	if validateFullPresentation(full) {
+	if validateFullPresentation(full, "com.example.plugin") {
 		t.Fatal("validateFullPresentation accepted incomplete publisher localization")
 	}
 	full = validFullPresentationForTest()
 	full.Locales[0].Description[0] = strings.Repeat("d", 1001)
-	if validateFullPresentation(full) {
+	if validateFullPresentation(full, "com.example.plugin") {
 		t.Fatal("validateFullPresentation accepted an overlong paragraph")
 	}
 }
