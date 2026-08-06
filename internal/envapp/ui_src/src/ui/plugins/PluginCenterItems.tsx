@@ -125,7 +125,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
         </span>
         <span class="mt-3 line-clamp-2 flex-1 text-xs leading-5 text-muted-foreground" lang={presentation()?.resolved_locale} dir="auto">{summary()}</span>
         <span class="mt-3 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-          <Show when={props.item.officialCatalog?.stableVersion ?? props.item.version}>
+          <Show when={props.item.pluginInstanceID ? props.item.version : (props.item.officialCatalog?.stableVersion ?? props.item.version)}>
             {(version) => <span>v{version()}</span>}
           </Show>
           <span aria-hidden="true">·</span>

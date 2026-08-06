@@ -258,6 +258,32 @@ describe('PluginCenterView', () => {
     expect(document.querySelector('[data-external-plugin-dialog]')).toBeNull();
   });
 
+  it('shows the installed Host version instead of the newer market version', () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    const installed = {
+      ...containersPlugin,
+      pluginInstanceID: 'plugininst_containers',
+      version: '1.9.0',
+      managementRevision: 23,
+      lifecycleState: 'disabled' as const,
+    };
+    dispose = render(() => (
+      <PluginCenterView
+        projection={{ items: [installed] }}
+        loading={false}
+        onCommand={vi.fn()}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces
+      />
+    ), mount);
+
+    const card = mount.querySelector('[data-plugin-directory-card="catalog:containers"]');
+    expect(card?.textContent).toContain('v1.9.0');
+    expect(card?.textContent).not.toContain('v2.0.0');
+  });
+
   it('opens a real card action menu instead of treating the ellipsis as a detail button', async () => {
     const mount = document.createElement('div');
     document.body.append(mount);
