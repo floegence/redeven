@@ -2058,7 +2058,7 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   }, 10000);
 
-  it('routes disabled plugin panel tiles to the dedicated Plugin Center details', async () => {
+  it('hides disabled plugin panel tiles while keeping Plugin Center management available', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(officialContainersProjection('disabled'));
@@ -2075,13 +2075,14 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushAsync();
 
       (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement | null)?.click();
-      await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="instance:plugini_redeven_official_containers"]')));
-      (host.querySelector('[data-plugin-panel-tile="instance:plugini_redeven_official_containers"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="plugin-center"]')));
+      expect(host.querySelector('[data-plugin-panel-tile="instance:plugini_redeven_official_containers"]')).toBeNull();
+      (host.querySelector('[data-plugin-panel-tile="plugin-center"]') as HTMLButtonElement | null)?.click();
       await flushUntil(() => Boolean(host.querySelector('[data-plugin-center-view]')));
-      await flushUntil(() => Boolean(host.querySelector('[data-plugin-center-item="instance:plugini_redeven_official_containers"]')));
-
-      expect(host.querySelector('[data-plugin-center-item="instance:plugini_redeven_official_containers"]')).toBeTruthy();
-      expect(host.querySelector('[data-plugin-center-details]')?.textContent).toContain('Disabled');
+      await flushUntil(() => pluginCenterViewState.lastProps?.projection?.items?.some((item: any) => (
+        item.inventoryKey === 'instance:plugini_redeven_official_containers'
+          && item.lifecycleState === 'disabled'
+      )));
       expectPluginCenterMountedInActivityMain(host);
       expect(host.querySelector('[data-testid="settings-page"]')).toBeNull();
       expect(settingsPageState.focusSection).not.toBe('plugins');
