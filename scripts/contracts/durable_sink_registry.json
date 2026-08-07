@@ -2022,7 +2022,7 @@
     },
     {
       "path": "internal/redevpluginintegration/release_module.go",
-      "sha256": "488124679de6672dd6f66384feb1627cb7f8962caedfd4b2b12310d160d3a826",
+      "sha256": "7ff75e65b72467f9df8284bbfb875a824983df50fc2c965fd63243d6845476e4",
       "sink_kinds": [
         "file"
       ],
@@ -2032,7 +2032,7 @@
       "data_classes": [
         "product adapter audit, trust, or lifecycle records"
       ],
-      "review_note": "Reviewed after declaring embedded capability artifacts as host-origin; the file sink inventory and upstream adapter authority are unchanged, and Floret remains authoritative for admitted Agent state."
+      "review_note": "Reviewed after updating the immutable official Containers release coordinate; the file sink inventory and upstream adapter authority are unchanged, and Floret remains authoritative for admitted Agent state."
     },
     {
       "path": "internal/redevpluginintegration/release_trust_store.go",
