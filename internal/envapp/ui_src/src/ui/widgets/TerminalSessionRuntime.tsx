@@ -880,6 +880,75 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     }
   };
 
+  const terminalPresentationIsCurrent = (
+    core: TerminalCore,
+    initSequence: number,
+    reloadSequence: number,
+    trace: TerminalRecoveryTrace,
+  ): boolean => !disposed
+    && initSequence === initSeq
+    && reloadSequence === reloadSeq
+    && recoveryTrace === trace
+    && term === core;
+
+  const waitForAppliedGeometry = async (
+    effective: TerminalEffectiveGeometry,
+    core: TerminalCore,
+    initSequence: number,
+    reloadSequence: number,
+    trace: TerminalRecoveryTrace,
+  ): Promise<void> => {
+    const deadline = Date.now() + 5000;
+    while (Date.now() < deadline) {
+      if (!terminalPresentationIsCurrent(core, initSequence, reloadSequence, trace)) {
+        throw new Error('Terminal geometry presentation was superseded');
+      }
+      applyPendingGeometry();
+      const applied = geometryPresentation.getState().appliedEffective;
+      if (applied
+        && applied.lifecycleEpoch === effective.lifecycleEpoch
+        && applied.rendererEpoch === activeGeometryRendererEpoch
+        && applied.generation === effective.generation
+        && applied.outputSequenceBoundary === effective.outputSequenceBoundary
+        && applied.cols === effective.cols
+        && applied.rows === effective.rows) {
+        return;
+      }
+      await new Promise<void>((resolve) => setTimeout(resolve, 16));
+    }
+    throw new Error('Terminal geometry presentation did not reach the acknowledged boundary');
+  };
+
+  const settleTerminalPresentation = async (
+    id: string,
+    core: TerminalCore,
+    initSequence: number,
+    reloadSequence: number,
+    trace: TerminalRecoveryTrace,
+  ): Promise<boolean> => {
+    await core.forceResizeAndWaitForPresentation();
+    if (!terminalPresentationIsCurrent(core, initSequence, reloadSequence, trace)) return false;
+
+    if (props.viewActive() && props.active()) {
+      const hostDimensions = core.measureHostDimensions?.();
+      const effective = geometryPresentation.getState().knownEffective;
+      if (hostDimensions && effective
+        && (hostDimensions.cols !== effective.cols || hostDimensions.rows !== effective.rows)) {
+        const acknowledged = await requestTerminalResize(id, hostDimensions);
+        if (!acknowledged) {
+          if (!terminalPresentationIsCurrent(core, initSequence, reloadSequence, trace)
+            || loading() === 'reconnecting'
+            || !liveAttachmentReady) return false;
+          throw new Error('Terminal host capacity resize was not acknowledged');
+        }
+        await waitForAppliedGeometry(acknowledged, core, initSequence, reloadSequence, trace);
+      }
+    }
+
+    await core.forceResizeAndWaitForPresentation();
+    return terminalPresentationIsCurrent(core, initSequence, reloadSequence, trace);
+  };
+
   const createCore = (
     id: string,
     target: HTMLDivElement,
@@ -1172,6 +1241,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     if (!target) throw new Error('Terminal not mounted');
 
     const seq = ++initSeq;
+    const reloadSequence = reloadSeq;
     const trace = startRecoveryTrace();
     const focusOwnerAtStart = typeof document === 'undefined' ? null : document.activeElement;
     const focusWasAvailableAtStart = focusOwnerAtStart == null
@@ -1403,6 +1473,12 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
         setHistoryReplayProgress(null);
       }
       if (seq !== initSeq) return;
+
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      if (seq !== initSeq || recoveryTrace !== trace || term !== core) return;
+      armBaselineRender(core, trace, seq);
+      if (!await settleTerminalPresentation(id, core, seq, reloadSequence, trace)) return;
+      if (seq !== initSeq || recoveryTrace !== trace || term !== core) return;
       setLoading('idle');
       setReadyOnce(true);
       setGeometryRendererReady(true);
@@ -1412,22 +1488,16 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
         history_generation: lastHistoryGeneration,
         covered_through_sequence: outputCoordinatorSnapshot?.coveredThroughSequence,
       });
-
-      requestAnimationFrame(() => {
-        if (seq !== initSeq || recoveryTrace !== trace || term !== core) return;
-        armBaselineRender(core, trace, seq);
-        core.forceResize();
-        const activeElement = typeof document === 'undefined' ? null : document.activeElement;
-        const focusStillOwned = focusWasAvailableAtStart && (activeElement == null
-          || activeElement === document.body
-          || target.contains(activeElement));
-        if (focusStillOwned && props.viewActive() && props.active() && props.autoFocus() && !core.hasSelection()) core.focus();
-        const el = container;
-        if (el && el.style.opacity !== '1') {
-          el.style.opacity = '1';
-        }
-        props.onInteractive?.(id);
-      });
+      const activeElement = typeof document === 'undefined' ? null : document.activeElement;
+      const focusStillOwned = focusWasAvailableAtStart && (activeElement == null
+        || activeElement === document.body
+        || target.contains(activeElement));
+      if (focusStillOwned && props.viewActive() && props.active() && props.autoFocus() && !core.hasSelection()) core.focus();
+      const el = container;
+      if (el && el.style.opacity !== '1') {
+        el.style.opacity = '1';
+      }
+      props.onInteractive?.(id);
     } catch (errorValue) {
       if (seq !== initSeq) return;
       if (pendingBaselineRender?.trace === trace) pendingBaselineRender = null;
@@ -1503,6 +1573,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     }
 
     const seq = ++initSeq;
+    const reloadSequence = reloadSeq;
     const trace = startRecoveryTrace();
     const focusOwnerAtStart = typeof document === 'undefined' ? null : document.activeElement;
     const focusWasAvailableAtStart = focusOwnerAtStart == null
@@ -1606,6 +1677,12 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       const latestEffective = geometryPresentation.getState().knownEffective;
       if (latestEffective) queueTerminalGeometry({ sessionId: id, ...latestEffective });
 
+      coordinator.setActive(liveRenderActive());
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      if (term !== core || seq !== initSeq || recoveryTrace !== trace) return;
+      armBaselineRender(core, trace, seq);
+      if (!await settleTerminalPresentation(id, core, seq, reloadSequence, trace)) return;
+      if (term !== core || seq !== initSeq || recoveryTrace !== trace) return;
       setLoading('idle');
       setReadyOnce(true);
       setShowLoading(false);
@@ -1615,18 +1692,13 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
         coordinator_attach_generation: coordinator.getSnapshot().attachGeneration,
         covered_through_sequence: coordinator.getSnapshot().coveredThroughSequence,
       });
-      coordinator.setActive(liveRenderActive());
-      requestAnimationFrame(() => {
-        if (term !== core || seq !== initSeq || recoveryTrace !== trace) return;
-        armBaselineRender(core, trace, seq);
-        core.forceResize();
-        const activeElement = typeof document === 'undefined' ? null : document.activeElement;
-        const focusStillOwned = focusWasAvailableAtStart && (activeElement == null
-          || activeElement === document.body
-          || target.contains(activeElement));
-        if (focusStillOwned && props.viewActive() && props.active() && props.autoFocus() && !core.hasSelection()) core.focus();
-        props.onInteractive?.(id);
-      });
+      const activeElement = typeof document === 'undefined' ? null : document.activeElement;
+      const focusStillOwned = focusWasAvailableAtStart && (activeElement == null
+        || activeElement === document.body
+        || target.contains(activeElement));
+      const interactiveCore = core as TerminalCore;
+      if (focusStillOwned && props.viewActive() && props.active() && props.autoFocus() && !interactiveCore.hasSelection()) interactiveCore.focus();
+      props.onInteractive?.(id);
     } catch (errorValue) {
       if (seq !== initSeq) return;
       if (pendingBaselineRender?.trace === trace) pendingBaselineRender = null;
