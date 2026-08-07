@@ -248,6 +248,15 @@ export function fromWireTerminalHistoryResponse(resp: wire_terminal_history_resp
         sequence: Number(c?.sequence ?? 0),
         timestampMs: Number(c?.timestamp_ms ?? 0),
         data: bytesFromBase64(String(c?.data_b64 ?? '')),
+        ...(hasOwnField(c, 'geometry_generation')
+          ? { geometryGeneration: optionalHistorySequence(c, 'geometry_generation') }
+          : {}),
+        ...(hasOwnField(c, 'cols')
+          ? { cols: optionalHistorySequence(c, 'cols') }
+          : {}),
+        ...(hasOwnField(c, 'rows')
+          ? { rows: optionalHistorySequence(c, 'rows') }
+          : {}),
       }))
       .filter((c) => c.data.length > 0),
     nextStartSeq: Number(resp?.next_start_seq ?? 0),

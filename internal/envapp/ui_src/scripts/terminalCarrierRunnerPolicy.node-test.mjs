@@ -105,3 +105,11 @@ test('waits for the trace-scoped baseline render before visual sampling', () => 
   assert.match(carrierSource, /baseline\.startTime <= rendered\.startTime/u);
   assert.match(carrierSource, /baseline_rendered_ms: rendered\.startTime - start\.startTime/u);
 });
+
+test('rebuilds the real renderer on refresh and verifies focus does not corrupt replay', () => {
+  assert.match(carrierSource, /\[data-testid="terminal-sidebar-refresh"\]:visible/u);
+  assert.match(carrierSource, /refresh_attach_start_delta/u);
+  assert.match(carrierSource, /refresh_history_visual_match/u);
+  assert.match(carrierSource, /focus_history_visual_match/u);
+  assert.match(carrierSource, /await terminalInput\(page, refreshedRuntime\)/u);
+});

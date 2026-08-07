@@ -1060,6 +1060,11 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
         } as PagedTerminalHistoryPage;
       },
       transformChunk: outputProjection.transformChunk,
+      applyHistoryGeometry: ({ cols, rows }) => {
+        const core = term;
+        if (!core) throw new Error('Terminal history geometry has no active core');
+        core.setFixedDimensions({ cols, rows });
+      },
       write: (_payload, chunks) => writeTerminalChunks(chunks, false),
       writeHistory: (_payload, chunks) => writeTerminalChunks(chunks, true),
       clear: () => {

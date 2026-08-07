@@ -25,6 +25,9 @@ export type TerminalHistoryChunk = {
   sequence: number;
   timestampMs: number;
   data: Uint8Array;
+  geometryGeneration?: number;
+  cols?: number;
+  rows?: number;
 };
 
 export type TerminalHistoryRequest = {

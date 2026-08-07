@@ -20,6 +20,15 @@ const layoutState = vi.hoisted(() => ({
   mobile: false,
 }));
 
+const debugConsoleCaptureMocks = vi.hoisted(() => ({
+  publishStructuredEvent: vi.fn(),
+}));
+
+vi.mock('../services/debugConsoleCapture', async () => ({
+  ...await vi.importActual<typeof import('../services/debugConsoleCapture')>('../services/debugConsoleCapture'),
+  publishDebugConsoleStructuredEvent: debugConsoleCaptureMocks.publishStructuredEvent,
+}));
+
 const browserWidgetState = vi.hoisted(() => ({
   currentWidgetId: null as string | null,
 }));
@@ -190,6 +199,7 @@ const terminalEventSourceState = vi.hoisted(() => ({
 const terminalCoreState = vi.hoisted(() => ({
   instances: [] as Array<{
     write: ReturnType<typeof vi.fn>;
+    dispose: ReturnType<typeof vi.fn>;
     setFixedDimensions: ReturnType<typeof vi.fn>;
     getDimensions: () => { cols: number; rows: number };
     focus: ReturnType<typeof vi.fn>;
@@ -748,6 +758,14 @@ function withHistoryContract<T extends Record<string, unknown>>(pageValue: T): T
   historyTruncated: boolean;
 } {
   const lastSequence = Number(pageValue.lastSequence ?? 0);
+  const chunks = Array.isArray(pageValue.chunks)
+    ? pageValue.chunks.map((chunk) => ({
+        geometryGeneration: 1,
+        cols: 80,
+        rows: 24,
+        ...(chunk as Record<string, unknown>),
+      }))
+    : pageValue.chunks;
   return {
     coveredThroughSequence: lastSequence,
     snapshotEndSequence: lastSequence,
@@ -756,6 +774,14 @@ function withHistoryContract<T extends Record<string, unknown>>(pageValue: T): T
     historyReset: false,
     historyTruncated: false,
     ...pageValue,
+    chunks,
+  } as T & {
+    coveredThroughSequence: number;
+    snapshotEndSequence: number;
+    firstRetainedSequence: number;
+    historyGeneration: number;
+    historyReset: boolean;
+    historyTruncated: boolean;
   };
 }
 
@@ -784,6 +810,7 @@ function localPresentationExecutionContext(workingDirectory: string) {
 }
 
 beforeEach(() => {
+  debugConsoleCaptureMocks.publishStructuredEvent.mockClear();
   sessionStorage.clear();
   layoutState.mobile = false;
   browserWidgetState.currentWidgetId = null;
@@ -1146,6 +1173,282 @@ describe('TerminalPanel browser activity integration', () => {
       'history-a history-b',
       'live-c',
     ]);
+  });
+
+  it.each([
+    {
+      label: 'missing geometry',
+      expectedCode: 'history_contract_missing',
+      chunks: [{
+        sequence: 1,
+        timestampMs: 10,
+        data: textEncoder.encode('missing'),
+        geometryGeneration: undefined,
+        cols: undefined,
+        rows: undefined,
+      }],
+    },
+    {
+      label: 'invalid geometry',
+      expectedCode: 'history_contract_invalid',
+      chunks: [{
+        sequence: 1,
+        timestampMs: 10,
+        data: textEncoder.encode('invalid'),
+        geometryGeneration: 0,
+        cols: 80,
+        rows: 24,
+      }],
+    },
+    {
+      label: 'regressing generation',
+      expectedCode: 'history_contract_invalid',
+      chunks: [{
+        sequence: 1,
+        timestampMs: 10,
+        data: textEncoder.encode('newer'),
+        geometryGeneration: 8,
+        cols: 120,
+        rows: 55,
+      }, {
+        sequence: 2,
+        timestampMs: 20,
+        data: textEncoder.encode('older'),
+        geometryGeneration: 7,
+        cols: 100,
+        rows: 40,
+      }],
+    },
+  ])('fails closed on history with $label', async ({ chunks, expectedCode }) => {
+    terminalSessionsState.sessions = [terminalSessionsState.sessions[0]!];
+    transportAttachState.historyBoundarySequence = chunks.length;
+    transportMocks.historyPage.mockResolvedValue(withHistoryContract({
+      chunks,
+      nextStartSeq: 0,
+      hasMore: false,
+      firstSequence: 1,
+      lastSequence: chunks.length,
+      coveredBytes: chunks.reduce((total, chunk) => total + chunk.data.byteLength, 0),
+      totalBytes: chunks.reduce((total, chunk) => total + chunk.data.byteLength, 0),
+    }));
+    const eventStart = debugConsoleCaptureMocks.publishStructuredEvent.mock.calls.length;
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="panel" />, host);
+
+    await vi.waitFor(() => {
+      expect(host.querySelector('button[aria-label="Update Runtime"]')).not.toBeNull();
+    });
+    expect(host.querySelector('button[aria-label="Retry"]')).toBeNull();
+    const events = debugConsoleCaptureMocks.publishStructuredEvent.mock.calls
+      .slice(eventStart)
+      .map(([event]) => event);
+    expect(events).toContainEqual(expect.objectContaining({
+      scope: 'terminal_recovery',
+      kind: 'blocking',
+      detail: expect.objectContaining({
+        error_code: expectedCode,
+        recovery_action: 'update_runtime',
+      }),
+    }));
+  });
+
+  it('fails closed when one geometry generation changes dimensions across history pages', async () => {
+    terminalSessionsState.sessions = [terminalSessionsState.sessions[0]!];
+    transportAttachState.historyBoundarySequence = 2;
+    transportMocks.historyPage
+      .mockResolvedValueOnce(withHistoryContract({
+        chunks: [{
+          sequence: 1,
+          timestampMs: 10,
+          data: textEncoder.encode('page-a'),
+          geometryGeneration: 7,
+          cols: 120,
+          rows: 55,
+        }],
+        nextStartSeq: 2,
+        hasMore: true,
+        firstSequence: 1,
+        lastSequence: 1,
+        coveredThroughSequence: 1,
+        snapshotEndSequence: 2,
+        firstRetainedSequence: 1,
+        coveredBytes: 6,
+        totalBytes: 12,
+      }))
+      .mockResolvedValueOnce(withHistoryContract({
+        chunks: [{
+          sequence: 2,
+          timestampMs: 20,
+          data: textEncoder.encode('page-b'),
+          geometryGeneration: 7,
+          cols: 131,
+          rows: 58,
+        }],
+        nextStartSeq: 0,
+        hasMore: false,
+        firstSequence: 2,
+        lastSequence: 2,
+        coveredThroughSequence: 2,
+        snapshotEndSequence: 2,
+        firstRetainedSequence: 1,
+        coveredBytes: 6,
+        totalBytes: 12,
+      }));
+    const eventStart = debugConsoleCaptureMocks.publishStructuredEvent.mock.calls.length;
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="panel" />, host);
+
+    await vi.waitFor(() => {
+      expect(host.querySelector('button[aria-label="Update Runtime"]')).not.toBeNull();
+    });
+    expect(transportMocks.historyPage).toHaveBeenCalledTimes(2);
+    const events = debugConsoleCaptureMocks.publishStructuredEvent.mock.calls
+      .slice(eventStart)
+      .map(([event]) => event);
+    expect(events).toContainEqual(expect.objectContaining({
+      scope: 'terminal_recovery',
+      kind: 'blocking',
+      detail: expect.objectContaining({
+        error_code: 'history_contract_invalid',
+        recovery_action: 'update_runtime',
+      }),
+    }));
+  });
+
+  it('accepts truncated history that starts at an arbitrary positive geometry generation', async () => {
+    terminalSessionsState.sessions = [terminalSessionsState.sessions[0]!];
+    transportMocks.attach.mockResolvedValueOnce({
+      historyBoundarySequence: 5,
+      historyGeneration: 3,
+      historyStartSequence: 5,
+      geometryGeneration: 9,
+      runtimeAttachGeneration: 1,
+      cols: 140,
+      rows: 60,
+    });
+    transportMocks.historyPage.mockResolvedValue(withHistoryContract({
+      chunks: [{
+        sequence: 5,
+        timestampMs: 50,
+        data: textEncoder.encode('retained'),
+        geometryGeneration: 7,
+        cols: 120,
+        rows: 55,
+      }],
+      nextStartSeq: 0,
+      hasMore: false,
+      firstSequence: 5,
+      lastSequence: 5,
+      coveredThroughSequence: 5,
+      snapshotEndSequence: 5,
+      firstRetainedSequence: 5,
+      historyGeneration: 3,
+      historyTruncated: true,
+      coveredBytes: 8,
+      totalBytes: 8,
+    }));
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="panel" />, host);
+
+    await vi.waitFor(() => {
+      expect(terminalCoreState.instances[0]?.write.mock.calls.map((call) => decodeTerminalWrite(call[0])))
+        .toEqual(['retained']);
+    });
+    const core = terminalCoreState.instances[0]!;
+    const retainedGeometry = core.setFixedDimensions.mock.calls.findIndex(
+      ([value]) => value.cols === 120 && value.rows === 55,
+    );
+    const currentGeometry = core.setFixedDimensions.mock.calls.findIndex(
+      ([value]) => value.cols === 140 && value.rows === 60,
+    );
+    expect(retainedGeometry).toBeGreaterThanOrEqual(0);
+    expect(currentGeometry).toBeGreaterThan(retainedGeometry);
+    expect(host.querySelector('button[aria-label="Update Runtime"]')).toBeNull();
+  });
+
+  it('rebuilds on refresh and replays each recorded grid before restoring the attach grid', async () => {
+    terminalSessionsState.sessions = [terminalSessionsState.sessions[0]!];
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="panel" />, host);
+    await vi.waitFor(() => expect(terminalCoreState.instances).toHaveLength(1));
+    await settleTerminalPanel();
+
+    transportMocks.attach.mockResolvedValueOnce({
+      historyBoundarySequence: 2,
+      historyGeneration: 1,
+      historyStartSequence: 1,
+      geometryGeneration: 9,
+      runtimeAttachGeneration: 2,
+      cols: 140,
+      rows: 60,
+    });
+    transportMocks.historyPage.mockResolvedValue(withHistoryContract({
+      chunks: [{
+        sequence: 1,
+        timestampMs: 10,
+        data: textEncoder.encode('old-grid'),
+        geometryGeneration: 7,
+        cols: 120,
+        rows: 55,
+      }, {
+        sequence: 2,
+        timestampMs: 20,
+        data: textEncoder.encode('new-grid'),
+        geometryGeneration: 8,
+        cols: 131,
+        rows: 58,
+      }],
+      nextStartSeq: 0,
+      hasMore: false,
+      firstSequence: 1,
+      lastSequence: 2,
+      coveredThroughSequence: 2,
+      snapshotEndSequence: 2,
+      firstRetainedSequence: 1,
+      coveredBytes: 16,
+      totalBytes: 16,
+    }));
+
+    host.querySelector<HTMLButtonElement>('[data-testid="terminal-sidebar-refresh"]')?.click();
+    await vi.waitFor(() => expect(terminalCoreState.instances).toHaveLength(2));
+    const oldCore = terminalCoreState.instances[0]!;
+    const core = terminalCoreState.instances[1]!;
+    await vi.waitFor(() => {
+      expect(core.write.mock.calls.map((call) => decodeTerminalWrite(call[0]))).toEqual(['old-grid', 'new-grid']);
+    });
+
+    expect(oldCore.dispose).toHaveBeenCalledTimes(1);
+    const historyA = core.setFixedDimensions.mock.calls.findIndex(([value]) => value.cols === 120 && value.rows === 55);
+    const historyB = core.setFixedDimensions.mock.calls.findIndex(([value]) => value.cols === 131 && value.rows === 58);
+    const currentC = core.setFixedDimensions.mock.calls.findIndex(([value]) => value.cols === 140 && value.rows === 60);
+    expect(historyA).toBeGreaterThanOrEqual(0);
+    expect(historyB).toBeGreaterThan(historyA);
+    expect(currentC).toBeGreaterThan(historyB);
+    expect(core.setFixedDimensions.mock.invocationCallOrder[historyA]).toBeLessThan(
+      core.write.mock.invocationCallOrder[0]!,
+    );
+    expect(core.write.mock.invocationCallOrder[0]).toBeLessThan(
+      core.setFixedDimensions.mock.invocationCallOrder[historyB]!,
+    );
+    expect(core.setFixedDimensions.mock.invocationCallOrder[historyB]).toBeLessThan(
+      core.write.mock.invocationCallOrder[1]!,
+    );
+    expect(core.write.mock.invocationCallOrder[1]).toBeLessThan(
+      core.setFixedDimensions.mock.invocationCallOrder[currentC]!,
+    );
+
+    const dimensionsBeforeFocus = core.setFixedDimensions.mock.calls.length;
+    host.querySelector<HTMLTextAreaElement>('textarea[aria-label="Terminal input"]')?.focus();
+    await settleTerminalPanel();
+    expect(core.setFixedDimensions.mock.calls).toHaveLength(dimensionsBeforeFocus);
+    expect(core.write.mock.calls.map((call) => decodeTerminalWrite(call[0]))).toEqual(['old-grid', 'new-grid']);
   });
 
   it('does not fetch unbounded history for a zero boundary and first live sequence', async () => {

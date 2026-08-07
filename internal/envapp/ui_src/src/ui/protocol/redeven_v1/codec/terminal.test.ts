@@ -14,6 +14,62 @@ import {
 } from './terminal';
 
 describe('terminal codec', () => {
+  it('preserves recorded geometry on every history chunk', () => {
+    const response = fromWireTerminalHistoryResponse({
+      chunks: [{
+        sequence: 4,
+        timestamp_ms: 1000,
+        data_b64: 'aGVsbG8=',
+        geometry_generation: 7,
+        cols: 120,
+        rows: 55,
+      }, {
+        sequence: 5,
+        timestamp_ms: 1100,
+        data_b64: 'd29ybGQ=',
+        geometry_generation: 8,
+        cols: 131,
+        rows: 58,
+      }],
+    } as any);
+
+    expect(response.chunks.map(chunk => ({
+      sequence: chunk.sequence,
+      geometryGeneration: chunk.geometryGeneration,
+      cols: chunk.cols,
+      rows: chunk.rows,
+    }))).toEqual([
+      { sequence: 4, geometryGeneration: 7, cols: 120, rows: 55 },
+      { sequence: 5, geometryGeneration: 8, cols: 131, rows: 58 },
+    ]);
+  });
+
+  it('preserves missing and malformed history geometry for fail-closed validation', () => {
+    const response = fromWireTerminalHistoryResponse({
+      chunks: [{
+        sequence: 1,
+        timestamp_ms: 10,
+        data_b64: 'YQ==',
+      }, {
+        sequence: 2,
+        timestamp_ms: 20,
+        data_b64: 'Yg==',
+        geometry_generation: 0,
+        cols: -1,
+        rows: Number.NaN,
+      }],
+    } as any);
+
+    expect(response.chunks[0]).not.toHaveProperty('geometryGeneration');
+    expect(response.chunks[0]).not.toHaveProperty('cols');
+    expect(response.chunks[0]).not.toHaveProperty('rows');
+    expect(response.chunks[1]).toMatchObject({
+      geometryGeneration: 0,
+      cols: Number.NaN,
+      rows: Number.NaN,
+    });
+  });
+
   it('decodes foreground command snapshots and defaults missing snapshots to unknown', () => {
     expect(fromWireTerminalSessionListResponse({
       sessions: [{

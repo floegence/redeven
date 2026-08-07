@@ -114,6 +114,9 @@ export type wire_terminal_history_chunk = {
   sequence: number;
   timestamp_ms: number;
   data_b64: string;
+  geometry_generation?: number;
+  cols?: number;
+  rows?: number;
 };
 
 export type wire_terminal_history_resp = {

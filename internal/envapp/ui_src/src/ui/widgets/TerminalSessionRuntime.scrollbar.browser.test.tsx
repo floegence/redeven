@@ -79,7 +79,14 @@ const createTransport = (
   sendInput,
   history: async () => [],
   historyPage: async () => ({
-    chunks: [{ sequence: 1, timestampMs: 1, data: HISTORY_BYTES }],
+    chunks: [{
+      sequence: 1,
+      timestampMs: 1,
+      data: HISTORY_BYTES,
+      geometryGeneration: 1,
+      cols: 80,
+      rows: 24,
+    }],
     nextStartSeq: 0,
     hasMore: false,
     firstSequence: 1,
@@ -203,8 +210,16 @@ const mountRuntime = async (
     await vi.waitFor(() => {
       expect(currentCore).not.toBeNull();
       expect(currentWorkingSet).not.toBeNull();
-      expect(currentSurface?.querySelector('[data-floeterm-scrollbar]')).not.toBeNull();
+      const scrollbar = currentSurface?.querySelector<HTMLElement>('[data-floeterm-scrollbar]') ?? null;
+      expect(scrollbar).not.toBeNull();
       expect(bufferContains(currentCore!, HISTORY_MARKERS.at(-1)!)).toBe(true);
+      const dimensions = currentCore!.getDimensions();
+      const terminalInfo = currentCore!.getTerminalInfo();
+      expect(dimensions.rows).toBeGreaterThan(24);
+      expect(Number(scrollbar!.getAttribute('aria-valuemax'))).toBe(
+        Math.max(0, (terminalInfo?.bufferLength ?? 0) - dimensions.rows),
+      );
+      expect(scrollbar!.getAttribute('aria-valuenow')).toBe(scrollbar!.getAttribute('aria-valuemax'));
     }, { timeout: 15_000 });
   } catch (error) {
     dispose();
