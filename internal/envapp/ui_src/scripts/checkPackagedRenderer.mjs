@@ -344,6 +344,7 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
           request_id: body.request_id,
           plugin_instance_id: builtPluginInstanceID,
           release_ref: builtPluginReleaseRef,
+          activate_after_install: true,
         };
         if (!/^[0-9a-f-]{36}$/u.test(body.request_id)
           || JSON.stringify(body) !== JSON.stringify(expected)) {
@@ -360,6 +361,8 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
           attempt: 1,
           retry_after_ms: 250,
           mutation_outcome: 'not_committed',
+          activation: { status: 'pending' },
+          phase_diagnostics: [],
           created_at: '2026-08-05T08:00:00Z',
           updated_at: '2026-08-05T08:00:01Z',
         };
@@ -376,6 +379,11 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
           progress: { kind: 'items', completed: 1, total: 1 },
           mutation_outcome: 'committed',
           plugin_record: installedPlugin,
+          activation: {
+            status: 'needs_attention',
+            missing_permission_ids: ['containers.read'],
+            next_action: 'approve_permissions',
+          },
           updated_at: '2026-08-05T08:00:02Z',
           terminal_at: '2026-08-05T08:00:02Z',
         };
@@ -678,13 +686,21 @@ async function verifyBuiltPluginInstallRouting(browser) {
       timeout: 10_000,
     });
     const installedPluginItem = pluginCenter.locator('[data-plugin-center-item]').first();
-    await installedPluginItem.waitFor({ state: 'visible', timeout: 10_000 });
+    try {
+      await installedPluginItem.waitFor({ state: 'visible', timeout: 10_000 });
+    } catch (error) {
+      throw new Error(`built signed plugin install did not refresh inventory: ${JSON.stringify({
+        pluginRequests,
+        pluginCenterText: (await pluginCenter.innerText()).slice(0, 2_000),
+        pageErrors,
+      })}`, { cause: error });
+    }
     await installedPluginItem.press('Enter');
     const installedDetails = pluginCenter.locator('[data-plugin-center-details]');
     try {
-      await installedDetails.getByText('Disabled', { exact: true }).waitFor({ state: 'visible', timeout: 10_000 });
+      await installedDetails.getByText('Needs attention', { exact: true }).waitFor({ state: 'visible', timeout: 10_000 });
     } catch (error) {
-      throw new Error(`built signed plugin install did not reach Disabled: ${JSON.stringify({
+      throw new Error(`built signed plugin install did not reach Needs attention: ${JSON.stringify({
         pluginRequests,
         pluginCenterText: (await pluginCenter.innerText()).slice(0, 2_000),
         pageErrors,
@@ -723,7 +739,7 @@ async function verifyBuiltPluginInstallRouting(browser) {
 
     return {
       market_snapshot_loaded: true,
-      installed_state: 'disabled_verified_zero_grants',
+      installed_state: 'needs_attention_verified_zero_grants',
       package_url: builtPluginPackageURL,
       release_install_operation_called: true,
       request_count: pluginRequests.length,
