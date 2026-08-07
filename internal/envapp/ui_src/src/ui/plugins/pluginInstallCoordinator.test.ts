@@ -23,6 +23,8 @@ function operation(
     attempt: 1,
     retry_after_ms: 250,
     mutation_outcome: 'not_committed',
+    activation: { status: 'pending' },
+    phase_diagnostics: [],
     created_at: '2026-08-05T08:00:00Z',
     updated_at: '2026-08-05T08:00:01Z',
     ...overrides,
@@ -275,6 +277,47 @@ describe('plugin install coordinator', () => {
         failure: { code: 'PLUGIN_INSTALL_INTERRUPTED', retryable: true },
       },
     });
+  });
+
+  it('keeps reattaching the same request until a transport-interrupted install reaches its terminal state', async () => {
+    vi.useFakeTimers();
+    try {
+      const { coordinator, lifecycle, refreshInventory } = harness();
+      lifecycle.installOfficialRelease.mockImplementationOnce(async (
+        _command,
+        requestID,
+        _options,
+        onUpdate,
+      ) => {
+        onUpdate(operation({ request_id: requestID }));
+        throw new TypeError('watch connection lost');
+      });
+      lifecycle.getReleaseInstallOperationByRequest
+        .mockResolvedValueOnce(operation())
+        .mockResolvedValueOnce(operation({
+          status: 'succeeded',
+          phase: 'complete',
+          progress: { kind: 'items', completed: 1, total: 1 },
+          mutation_outcome: 'committed',
+          activation: {
+            status: 'needs_attention',
+            missing_permission_ids: ['containers.read'],
+            next_action: 'approve_permissions',
+          },
+        }));
+      lifecycle.watchReleaseInstallOperation.mockRejectedValueOnce(new TypeError('poll connection lost'));
+
+      const install = coordinator.start(pluginID, pluginInstanceID);
+      await vi.runAllTimersAsync();
+      await install;
+
+      expect(lifecycle.installOfficialRelease).toHaveBeenCalledTimes(1);
+      expect(lifecycle.getReleaseInstallOperationByRequest).toHaveBeenCalledTimes(2);
+      expect(refreshInventory).toHaveBeenCalledOnce();
+      expect(coordinator.projections()).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('reports inventory refresh failure separately from a committed installation', async () => {

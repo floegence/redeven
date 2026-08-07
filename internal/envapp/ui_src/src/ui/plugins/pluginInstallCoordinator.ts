@@ -17,6 +17,8 @@ type InstallLifecycle = Pick<
 >;
 
 const RECENT_TERMINAL_FAILURE_MS = 24 * 60 * 60 * 1_000;
+const REATTACH_BASE_DELAY_MS = 250;
+const REATTACH_MAX_DELAY_MS = 5_000;
 
 export type PluginInstallCoordinator = Readonly<{
   projections: Accessor<readonly PluginInstallOperationProjection[]>;
@@ -96,37 +98,49 @@ export function createPluginInstallCoordinator(options: Readonly<{
     const controller = new AbortController();
     controllers.get(projection.pluginInstanceID)?.abort('Plugin installation observation superseded');
     controllers.set(projection.pluginInstanceID, controller);
+    let operation = initialOperation;
+    let reconnectAttempt = 0;
     try {
-      let operation = initialOperation;
-      if (!operation) {
-        operation = await options.lifecycle.getReleaseInstallOperationByRequest(
-          projection.requestID,
-          { signal: controller.signal },
-        );
-      }
-      let current: PluginInstallOperationProjection = {
-        ...projection,
-        requestID: operation.request_id,
-        observation: 'watching',
-        operation,
-        startFailure: undefined,
-      };
-      put(current);
-      if (operation.status !== 'succeeded' && operation.status !== 'failed') {
-        operation = await options.lifecycle.watchReleaseInstallOperation(
-          operation.operation_id,
-          { signal: controller.signal },
-          (update) => {
-            current = { ...current, observation: 'watching', operation: update };
-            put(current);
-          },
-        );
-        current = { ...current, observation: 'watching', operation };
-      }
-      await finish(current);
-    } catch {
-      if (!disposed && !controller.signal.aborted) {
-        put({ ...projectionFor(projection.pluginInstanceID) ?? projection, observation: 'reconnecting' });
+      while (!disposed && !controller.signal.aborted) {
+        try {
+          if (!operation) {
+            operation = await options.lifecycle.getReleaseInstallOperationByRequest(
+              projection.requestID,
+              { signal: controller.signal },
+            );
+          }
+          let current: PluginInstallOperationProjection = {
+            ...projection,
+            requestID: operation.request_id,
+            observation: 'watching',
+            operation,
+            startFailure: undefined,
+          };
+          put(current);
+          if (operation.status !== 'succeeded' && operation.status !== 'failed') {
+            operation = await options.lifecycle.watchReleaseInstallOperation(
+              operation.operation_id,
+              { signal: controller.signal },
+              (update) => {
+                current = { ...current, observation: 'watching', operation: update };
+                put(current);
+              },
+            );
+            current = { ...current, observation: 'watching', operation };
+          }
+          await finish(current);
+          return;
+        } catch {
+          if (disposed || controller.signal.aborted) return;
+          put({ ...projectionFor(projection.pluginInstanceID) ?? projection, observation: 'reconnecting' });
+          operation = undefined;
+          const delay = Math.min(
+            REATTACH_BASE_DELAY_MS * (2 ** reconnectAttempt),
+            REATTACH_MAX_DELAY_MS,
+          );
+          reconnectAttempt += 1;
+          await waitForReattach(delay, controller.signal);
+        }
       }
     } finally {
       if (controllers.get(projection.pluginInstanceID) === controller) {
@@ -261,6 +275,21 @@ export function createPluginInstallCoordinator(options: Readonly<{
   };
 
   return Object.freeze({ projections, start, resume, retry, dispose });
+}
+
+function waitForReattach(delayMs: number, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.reject(signal.reason);
+  return new Promise((resolve, reject) => {
+    const timer = globalThis.setTimeout(() => {
+      signal.removeEventListener('abort', abort);
+      resolve();
+    }, delayMs);
+    const abort = () => {
+      globalThis.clearTimeout(timer);
+      reject(signal.reason);
+    };
+    signal.addEventListener('abort', abort, { once: true });
+  });
 }
 
 function releaseInstallOperationIsNewer(

@@ -77,6 +77,8 @@ function releaseInstallOperation(
     attempt: 1,
     retry_after_ms: 250,
     mutation_outcome: 'not_committed',
+    activation: { status: 'pending' },
+    phase_diagnostics: [],
     created_at: '2026-08-05T08:00:00Z',
     updated_at: '2026-08-05T08:00:01Z',
     ...overrides,
@@ -125,7 +127,7 @@ const generatedContainersRecord: ReDevPluginRecord = {
   updated_at: '2026-07-04T10:01:00Z',
 };
 
-describe('v0.7.16 plugin lifecycle client integration', () => {
+describe('v0.7.17 plugin lifecycle client integration', () => {
   it('preserves the market detail generation from the local proxy envelope', async () => {
     vi.mocked(fetchLocalApiJSONResponse).mockResolvedValueOnce({
       data: { plugin_id: 'com.example.plugin', presentation: { default_locale: 'en-US', locales: [] } },
@@ -235,6 +237,7 @@ describe('v0.7.16 plugin lifecycle client integration', () => {
       request_id: releaseInstallRequestID,
       plugin_instance_id: officialContainers.pluginInstanceID,
       release_ref: OFFICIAL_CONTAINERS_RELEASE_REF,
+      activate_after_install: true,
     }, {});
     expect(mocks.watchReleaseInstallOperation).toHaveBeenCalledWith(
       'release_install_4c9d48a3',
