@@ -1491,6 +1491,9 @@ describe('TerminalPanel browser activity integration', () => {
     const runtime = host.querySelector<HTMLElement>('[data-terminal-runtime-session="session-1"]');
     expect(oldCore.dispose).toHaveBeenCalledTimes(1);
     expect(refreshedCore.forceResizeAndWaitForPresentation).toHaveBeenCalled();
+    transportMocks.resizeWithEffectiveGeometry.mockClear();
+    refreshedCore.handlers?.onResize?.({ cols: 100, rows: 30 });
+    expect(transportMocks.resizeWithEffectiveGeometry).not.toHaveBeenCalled();
     expect(runtime?.getAttribute('aria-busy')).toBe('true');
     expect(host.querySelector<HTMLElement>('.redeven-terminal-surface')?.style.opacity).toBe('0');
 

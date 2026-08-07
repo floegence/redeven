@@ -329,6 +329,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     coveredThroughSequence: number;
   }>>();
   let liveAttachmentReady = false;
+  let terminalPresentationSettling = false;
   let latestHostDimensions: Readonly<{ cols: number; rows: number }> | null = null;
   const currentHostDimensions = () => latestHostDimensions;
   let lastDegradedEventKey = '';
@@ -926,27 +927,35 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     reloadSequence: number,
     trace: TerminalRecoveryTrace,
   ): Promise<boolean> => {
-    await core.forceResizeAndWaitForPresentation();
-    if (!terminalPresentationIsCurrent(core, initSequence, reloadSequence, trace)) return false;
+    terminalPresentationSettling = true;
+    try {
+      await core.forceResizeAndWaitForPresentation();
+      if (!terminalPresentationIsCurrent(core, initSequence, reloadSequence, trace)) return false;
 
-    if (props.viewActive() && props.active()) {
-      const hostDimensions = core.measureHostDimensions?.();
-      const effective = geometryPresentation.getState().knownEffective;
-      if (hostDimensions && effective
-        && (hostDimensions.cols !== effective.cols || hostDimensions.rows !== effective.rows)) {
-        const acknowledged = await requestTerminalResize(id, hostDimensions);
-        if (!acknowledged) {
-          if (!terminalPresentationIsCurrent(core, initSequence, reloadSequence, trace)
-            || loading() === 'reconnecting'
-            || !liveAttachmentReady) return false;
-          throw new Error('Terminal host capacity resize was not acknowledged');
+      if (props.viewActive() && props.active()) {
+        const hostDimensions = core.measureHostDimensions?.();
+        const effective = geometryPresentation.getState().knownEffective;
+        if (hostDimensions && effective
+          && (hostDimensions.cols !== effective.cols || hostDimensions.rows !== effective.rows)) {
+          const acknowledged = await requestTerminalResize(id, hostDimensions);
+          if (!acknowledged) {
+            if (!terminalPresentationIsCurrent(core, initSequence, reloadSequence, trace)
+              || loading() === 'reconnecting'
+              || !liveAttachmentReady) return false;
+            throw new Error('Terminal host capacity resize was not acknowledged');
+          }
+          await waitForAppliedGeometry(acknowledged, core, initSequence, reloadSequence, trace);
         }
-        await waitForAppliedGeometry(acknowledged, core, initSequence, reloadSequence, trace);
       }
-    }
 
-    await core.forceResizeAndWaitForPresentation();
-    return terminalPresentationIsCurrent(core, initSequence, reloadSequence, trace);
+      // Let geometry-triggered renderer work commit before the final fence; otherwise
+      // the renderer scheduler can coalesce the second demand behind the resize frame.
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      await core.forceResizeAndWaitForPresentation();
+      return terminalPresentationIsCurrent(core, initSequence, reloadSequence, trace);
+    } finally {
+      terminalPresentationSettling = false;
+    }
   };
 
   const createCore = (
@@ -997,7 +1006,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
           if (!props.viewActive() || !props.active()) return;
           latestHostDimensions = { cols: size.cols, rows: size.rows };
           geometryPresentation.observeLocal(size);
-          if (!liveAttachmentReady) return;
+          if (!liveAttachmentReady || terminalPresentationSettling) return;
           void requestTerminalResize(id, size);
         },
         onError: () => {
