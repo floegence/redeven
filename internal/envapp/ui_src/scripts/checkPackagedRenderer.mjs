@@ -17,24 +17,24 @@ const assetPrefix = `${entryPath}assets/`;
 const pluginMarketCatalogPath = '/_redeven_proxy/api/plugins/market/catalog';
 const hashedAssetPattern = /-[A-Za-z0-9_-]{8,}\.(?:css|js|wasm)$/;
 const builtPluginPackageHashes = Object.freeze({
-  package_sha256: 'sha256:749aac3b48c3c3e2ced98ad1738c187cebf1001b5e6f5ed22c4e73d7c56c764c',
-  manifest_sha256: 'sha256:001ad248eb6aea058bb3386e12a03cfb89f4599222aef9b83960738cbe7e24ab',
-  entries_sha256: 'sha256:4cb3f856929e85c5f71e128a25b6f2108b295868dc522c716b67ba75b0d575ba',
+  package_sha256: 'sha256:2b70270fe548dbd6742bbe56d40b706cdd1bdb95cc75e2fb32d9ce676b7dc6d2',
+  manifest_sha256: 'sha256:7f6f3f70235d7ec2f876738bbb8038914b353dc559621e9cbaffad2a7ad98c23',
+  entries_sha256: 'sha256:33d5e20fd5d18ed514b3e70dabfd7d9603382e8c42d6ef06e8280069c9180630',
 });
 const builtPluginReleaseRef = Object.freeze({
   source_id: 'redeven_official',
   channel: 'stable',
-  release_metadata_ref: 'plugins/com.redeven.official/com.redeven.official.containers/4.1.0/release.json',
-  release_metadata_sha256: '04cdedd57d93428028fdb2ae284c150e7973de4cbffd4ef96bf6ef8f89e0e6a6',
+  release_metadata_ref: 'plugins/com.redeven.official/com.redeven.official.containers/4.4.0/release.json',
+  release_metadata_sha256: '439316f415741c2972e87a8972b932f76404b87368173f09af9ba9bf1cf54c7c',
   publisher_id: 'com.redeven.official',
   plugin_id: 'com.redeven.official.containers',
-  version: '4.1.0',
+  version: '4.4.0',
   expected_hashes: builtPluginPackageHashes,
 });
 const builtPluginInstanceID = `catalog_${builtPluginReleaseRef.publisher_id}_${builtPluginReleaseRef.plugin_id}`;
 const builtPluginPresentationSHA256 = `sha256:${'1'.repeat(64)}`;
 const pluginMarketDetailPath = `/_redeven_proxy/api/plugins/market/plugins/${builtPluginReleaseRef.plugin_id}`;
-const builtPluginPackageURL = 'https://github.com/floegence/redeven-official-plugins/releases/download/v4.1.0/containers-4.1.0.redevplugin';
+const builtPluginPackageURL = 'https://github.com/floegence/redeven-official-plugins/releases/download/v4.4.0/containers-4.4.0.redevplugin';
 const builtDistDirectPSK = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
 
 function parseReportPath(args) {
@@ -119,7 +119,7 @@ function builtPluginMarketSnapshot() {
         asset: { url: builtPluginPackageURL },
         publisher_release_ref: { release_ref: builtPluginReleaseRef },
         signer_key_id: 'redeven_official_signing_2026',
-        compatibility: { min_redeven_version: '1.0.0', min_redevplugin_version: '0.7.1' },
+        compatibility: { min_redeven_version: '1.0.0', min_redevplugin_version: '0.7.16' },
       },
     }],
   };

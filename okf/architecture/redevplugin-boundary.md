@@ -8,7 +8,7 @@ timestamp: 2026-07-25T00:00:00Z
 # Summary
 
 ReDevPlugin is an independently released plugin platform. Redeven consumes its
-coordinated `v0.7.13` Go, npm, Rust source-crate, and machine-contract artifacts;
+coordinated `v0.7.16` Go, npm, Rust source-crate, and machine-contract artifacts;
 it does not fork platform mechanics. Redeven owns authenticated session mapping,
 product source policy and review UX, UI placement, product runtime builds, and
 concrete business adapters. Missing or unverifiable upstream identity, lifecycle,
@@ -42,12 +42,12 @@ external-package receipt store.
 
 ## Published dependency set
 
-The current integration consumes the coordinated ReDevPlugin `v0.7.13` set:
+The current integration consumes the coordinated ReDevPlugin `v0.7.16` set:
 
-- `github.com/floegence/redevplugin v0.7.13`;
-- `@floegence/redevplugin-contracts@0.7.13` and
-  `@floegence/redevplugin-ui@0.7.13`;
-- the exact six `0.7.13` Rust source crates ending in `redevplugin-runtime`;
+- `github.com/floegence/redevplugin v0.7.16`;
+- `@floegence/redevplugin-contracts@0.7.16` and
+  `@floegence/redevplugin-ui@0.7.16`;
+- the exact six `0.7.16` Rust source crates ending in `redevplugin-runtime`;
 - the released contract registry, package-set contract, contract hashes, and
   attested `platform-package-publication-v1.json` registry readback.
 
@@ -68,7 +68,7 @@ inventory, but must not create a local operation store, copy the state machine,
 invent progress, or cancel work when a panel closes.
 
 Release trust refreshes, including activation-lease reconstruction after Host
-restart, remain ReDevPlugin work. The `v0.7.13` Host gives the complete activation
+restart, remain ReDevPlugin work. The `v0.7.16` Host gives the complete activation
 trust reconstruction the same five-minute operation window as installation while
 retaining the separate 20-second asset and two-minute package deadlines. It
 preserves timeout and network identities through the trust boundary and stops
@@ -151,7 +151,7 @@ signature evidence. The released ProcessManager owns launch, health, heartbeat,
 shutdown, leases, hostcalls, and restart. Darwin packages omit the runtime and
 worker execution. No target searches `PATH` or alternate runtime names.
 
-Official Containers `4.1.0` is a signed manifest-v8 release-ref package over the
+Official Containers `4.4.0` is a signed manifest-v8 release-ref package over the
 `redeven.capability.container_resources@3.0.0` adapter. The latest-only market
 selects its immutable GitHub Release and complete transport, while ReDevPlugin
 verifies release and capability artifacts as one closed source. The market is
@@ -176,7 +176,7 @@ committed. Unknown, corrupt, ambiguous, tampered, or future state blocks startup
 without mutation. Floret-owned state is outside this lifecycle.
 
 For an exact supported root copied across filesystem identities, Redeven may use
-the released read-only inspection and exact-plan recovery APIs from `v0.7.13`.
+the released read-only inspection and exact-plan recovery APIs from `v0.7.16`.
 The product presents the projected digests, counts, sizes, and retained-state
 facts, binds confirmation to one plan digest, and takes the normal Local
 Environment runtime lock. The released transaction retains the entire source as

@@ -1,9 +1,27 @@
 import { describe, expect, it } from 'vitest';
 
+import { OFFICIAL_CONTAINERS_RELEASE_REF } from './officialContainersRelease.generated';
 import { officialPluginCatalog, resolvePluginPresentation } from './officialPluginCatalog';
 import { OFFICIAL_PLUGIN_CATALOG_SEED, OFFICIAL_PLUGIN_MARKET_SNAPSHOT } from './officialPluginCatalog.test-fixture';
 
 describe('official plugin catalog contracts', () => {
+  it('pins the published Containers 4.4.0 release identity', () => {
+    expect(OFFICIAL_CONTAINERS_RELEASE_REF).toEqual({
+      source_id: 'redeven_official',
+      channel: 'stable',
+      release_metadata_ref: 'plugins/com.redeven.official/com.redeven.official.containers/4.4.0/release.json',
+      release_metadata_sha256: '439316f415741c2972e87a8972b932f76404b87368173f09af9ba9bf1cf54c7c',
+      publisher_id: 'com.redeven.official',
+      plugin_id: 'com.redeven.official.containers',
+      version: '4.4.0',
+      expected_hashes: {
+        package_sha256: 'sha256:2b70270fe548dbd6742bbe56d40b706cdd1bdb95cc75e2fb32d9ce676b7dc6d2',
+        manifest_sha256: 'sha256:7f6f3f70235d7ec2f876738bbb8038914b353dc559621e9cbaffad2a7ad98c23',
+        entries_sha256: 'sha256:33d5e20fd5d18ed514b3e70dabfd7d9603382e8c42d6ef06e8280069c9180630',
+      },
+    });
+  });
+
   it('uses verified market icon metadata without embedding plugin-specific permissions', () => {
     expect(OFFICIAL_PLUGIN_CATALOG_SEED[0]).toMatchObject({ iconFallback: 'generic' });
     expect(OFFICIAL_PLUGIN_CATALOG_SEED[0]?.iconURL).toContain('/_redeven_proxy/api/plugins/market/plugins/com.redeven.official.containers/icon');
