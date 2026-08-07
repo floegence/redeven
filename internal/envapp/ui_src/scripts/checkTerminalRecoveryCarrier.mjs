@@ -850,6 +850,82 @@ async function countTerminalAttachStarts(page, surface, sessionRef) {
   ), { expectedSurface: surface, expectedSessionRef: sessionRef });
 }
 
+async function verifyTerminalRefreshReplay({
+  page,
+  targetPanel,
+  sessionID,
+  surface,
+  fixtureBytes,
+  expectedHistoryBytes,
+  baselineVisual,
+  baselineLayout,
+}) {
+  const sessionRef = pseudonymousTerminalSessionRef(sessionID);
+  const attachStartsBefore = await countTerminalAttachStarts(page, surface, sessionRef);
+  const refreshStarted = await page.evaluate(() => performance.now());
+  const refreshButton = targetPanel.locator('[data-testid="terminal-sidebar-refresh"]:visible').last();
+  await refreshButton.waitFor({ state: 'visible', timeout: 15_000 });
+  await refreshButton.click();
+  const refreshMarks = await waitForRecoveryMarks(
+    page,
+    surface,
+    refreshStarted,
+    fixtureBytes,
+    sessionRef,
+  );
+  const attachStartsAfterRefresh = await countTerminalAttachStarts(page, surface, sessionRef);
+  const refreshAttachStartDelta = attachStartsAfterRefresh - attachStartsBefore;
+  if (refreshAttachStartDelta !== 1 || refreshMarks.attach_start_count !== 1) {
+    throw new Error(
+      'terminal refresh must rebuild through exactly one new attach '
+        + `(total_delta=${refreshAttachStartDelta} trace_count=${refreshMarks.attach_start_count})`,
+    );
+  }
+  if (refreshMarks.covered_through_sequence !== refreshMarks.snapshot_end_sequence) {
+    throw new Error('terminal refresh did not replay through its attach history boundary');
+  }
+  await waitForHistoryBytes(targetPanel, expectedHistoryBytes);
+
+  const refreshedRuntime = targetPanel.locator(`[data-terminal-runtime-session="${sessionID}"]`).first();
+  const refreshedCanvas = refreshedRuntime.locator(
+    '.redeven-terminal-surface .floeterm-beamterm-canvas:visible',
+  ).last();
+  await refreshedCanvas.waitFor({ state: 'visible', timeout: 15_000 });
+  const refreshedVisual = await captureCanvasVisualEvidence(refreshedCanvas);
+  const refreshVisualMatch = assertTerminalCarrierHistoryVisualEvidence({
+    baselineVisual,
+    recoveredVisual: refreshedVisual,
+    baselineLayout,
+    recoveredLayout: { cols: refreshMarks.cols, rows: refreshMarks.rows },
+  });
+
+  const attachStartsBeforeFocus = await countTerminalAttachStarts(page, surface, sessionRef);
+  await terminalInput(page, refreshedRuntime);
+  await delay(250);
+  const focusedVisual = await captureCanvasVisualEvidence(refreshedCanvas);
+  const focusVisualMatch = assertTerminalCarrierHistoryVisualEvidence({
+    baselineVisual: refreshedVisual,
+    recoveredVisual: focusedVisual,
+    baselineLayout: { cols: refreshMarks.cols, rows: refreshMarks.rows },
+    recoveredLayout: { cols: refreshMarks.cols, rows: refreshMarks.rows },
+  });
+  const attachStartsAfterFocus = await countTerminalAttachStarts(page, surface, sessionRef);
+  if (attachStartsAfterFocus !== attachStartsBeforeFocus) {
+    throw new Error('terminal focus unexpectedly started another attachment after refresh');
+  }
+  if (await targetPanel.locator('button[aria-label="Update Runtime"]:visible').count()) {
+    throw new Error('terminal refresh rendered a non-retryable history contract failure');
+  }
+
+  return {
+    refresh_attach_start_delta: refreshAttachStartDelta,
+    refresh_history_visual_match: refreshVisualMatch.layouts_match ? true : null,
+    refresh_history_visual_comparison: refreshVisualMatch.mode,
+    focus_history_visual_match: focusVisualMatch.layouts_match ? true : null,
+    focus_history_visual_comparison: focusVisualMatch.mode,
+  };
+}
+
 async function waitForTerminalPerformanceMark(page, stage, notBefore, sessionRef, timeoutMs = 30_000) {
   await page.waitForFunction(({ expectedName, minimumStart, expectedSessionRef }) => (
     performance.getEntriesByName(expectedName, 'mark').some((entry) => (
@@ -1251,15 +1327,29 @@ async function runRecoverySample({ context, entryURL, fixtureBytes, seeded, surf
     }
 
     const historyBytes = await waitForHistoryBytes(targetPanel, seeded.historyBytes);
+    let recoveredVisual = null;
     let historyVisualMatch = null;
     if (seeded.historyVisual) {
+      recoveredVisual = await captureCanvasVisualEvidence(targetCanvas);
       historyVisualMatch = assertTerminalCarrierHistoryVisualEvidence({
         baselineVisual: seeded.historyVisual,
-        recoveredVisual: await captureCanvasVisualEvidence(targetCanvas),
+        recoveredVisual,
         baselineLayout: seeded.historyLayout,
         recoveredLayout: { cols: marks.cols, rows: marks.rows },
       });
     }
+    const refreshReplay = recoveredVisual
+      ? await verifyTerminalRefreshReplay({
+        page,
+        targetPanel,
+        sessionID: seeded.sessionID,
+        surface,
+        fixtureBytes,
+        expectedHistoryBytes: seeded.historyBytes,
+        baselineVisual: recoveredVisual,
+        baselineLayout: { cols: marks.cols, rows: marks.rows },
+      })
+      : null;
     const markerPath = path.join(tempDir, `input-${temperature}-${surface}-${sampleIndex}`);
     const probeStarted = performance.now();
     await sendTerminalCommand(
@@ -1297,6 +1387,12 @@ async function runRecoverySample({ context, entryURL, fixtureBytes, seeded, surf
       history_visual_baseline_active_grid_ratio: historyVisualMatch?.baselineActiveGridRatio ?? null,
       history_visual_recovered_active_grid_ratio: historyVisualMatch?.recoveredActiveGridRatio ?? null,
       history_visual_ink_ratio_scale: historyVisualMatch?.inkRatioScale ?? null,
+      refresh_replay_evidence_passed: refreshReplay !== null,
+      refresh_attach_start_delta: refreshReplay?.refresh_attach_start_delta ?? null,
+      refresh_history_visual_match: refreshReplay?.refresh_history_visual_match ?? null,
+      refresh_history_visual_comparison: refreshReplay?.refresh_history_visual_comparison ?? null,
+      focus_history_visual_match: refreshReplay?.focus_history_visual_match ?? null,
+      focus_history_visual_comparison: refreshReplay?.focus_history_visual_comparison ?? null,
       status: 'passed',
     };
   } finally {

@@ -16,7 +16,13 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
 function chunk(sequence: number, data: string, source: 'history' | 'live' = 'history') {
-  return tagTerminalOutputChunk({ sequence, data: encoder.encode(data) }, source);
+  return tagTerminalOutputChunk({
+    sequence,
+    data: encoder.encode(data),
+    geometryGeneration: 1,
+    cols: 120,
+    rows: 55,
+  }, source);
 }
 
 function page(overrides: Partial<PagedTerminalHistoryPage> = {}): PagedTerminalHistoryPage {

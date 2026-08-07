@@ -76,7 +76,14 @@ const createRpcMock = () => {
   }) => void) | undefined;
   const terminal = {
     history: vi.fn().mockResolvedValue({
-      chunks: [],
+      chunks: [{
+        sequence: 4,
+        timestampMs: 10,
+        data: new TextEncoder().encode('history'),
+        geometryGeneration: 7,
+        cols: 120,
+        rows: 55,
+      }],
       nextStartSeq: 0,
       hasMore: false,
       firstSequence: 0,
@@ -213,6 +220,12 @@ describe('terminal live transport', () => {
       historyGeneration: 2,
     }));
     expect(page).toMatchObject({ coveredThroughSequence: 4, historyGeneration: 2 });
+    expect(page.chunks).toEqual([expect.objectContaining({
+      sequence: 4,
+      geometryGeneration: 7,
+      cols: 120,
+      rows: 55,
+    })]);
 
     emitName({ sessionId: 'other', newName: 'ignored', workingDir: '/', localPathCapability: null });
     emitName({

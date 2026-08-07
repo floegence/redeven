@@ -122,6 +122,49 @@ describe('terminal history warmup', () => {
     expect(fetchCount).toBe(1);
   });
 
+  it('preserves recorded geometry while preparing cached history', async () => {
+    preparePagedTerminalHistory.mockImplementation(async ({ fetchPage }: any) => {
+      const preparedPage = await fetchPage({
+        startSequence: 1,
+        signal: new AbortController().signal,
+      });
+      expect(preparedPage.chunks).toEqual([expect.objectContaining({
+        sequence: 1,
+        geometryGeneration: 7,
+        cols: 120,
+        rows: 55,
+      })]);
+      return {
+        ...seed(4),
+        chunks: preparedPage.chunks,
+      };
+    });
+    const warmup = createTerminalHistoryWarmup({
+      budgetBytes: 100,
+      fetchPage: async () => ({
+        ...page(),
+        chunks: [{
+          sequence: 1,
+          timestampMs: 10,
+          data: new TextEncoder().encode('seed'),
+          geometryGeneration: 7,
+          cols: 120,
+          rows: 55,
+        }],
+      }),
+    });
+    warmup.syncSessions([{ id: 'session', isActive: true, lastActiveAtMs: 1 }]);
+    warmup.start();
+
+    await expect(warmup.request('session', 'interactive')).resolves.toMatchObject({
+      chunks: [expect.objectContaining({
+        geometryGeneration: 7,
+        cols: 120,
+        rows: 55,
+      })],
+    });
+  });
+
   it('keeps a newer seed and limits an older session to the remaining budget', async () => {
     preparePagedTerminalHistory.mockImplementation(async ({ fetchPage, maxBytes }: any) => {
       await fetchPage({ startSequence: 0, signal: new AbortController().signal });

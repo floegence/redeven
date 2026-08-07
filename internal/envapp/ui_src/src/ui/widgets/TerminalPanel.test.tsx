@@ -1288,28 +1288,49 @@ vi.mock('@floegence/floeterm-terminal-web', async () => {
         return data === null ? [] : [{ ...item, data }];
       });
       if (accepted.length > 0) {
-        const total = accepted.reduce((sum, item) => sum + item.data.byteLength, 0);
-        const payload = new Uint8Array(total);
-        let offset = 0;
+        const groups: any[][] = [];
         for (const item of accepted) {
-          payload.set(item.data, offset);
-          offset += item.data.byteLength;
+          const previous = groups.at(-1);
+          const first = previous?.[0];
+          const sameGeometry = first?.source !== 'history'
+            || (first.geometryGeneration === item.geometryGeneration
+              && first.cols === item.cols
+              && first.rows === item.rows);
+          if (!previous || first?.source !== item.source || !sameGeometry) groups.push([item]);
+          else previous.push(item);
         }
-        const source = accepted[0]?.source;
-        const writer = source === 'history' ? (options.writeHistory ?? options.write) : options.write;
-        activeWriters += 1;
-        try {
-          await writer(payload, accepted);
-        } finally {
-          activeWriters -= 1;
-          if (activeWriters === 0) {
-            const waiters = writerQuiescenceWaiters;
-            writerQuiescenceWaiters = [];
-            for (const resolve of waiters) resolve();
+        for (const group of groups) {
+          const total = group.reduce((sum, item) => sum + item.data.byteLength, 0);
+          const payload = new Uint8Array(total);
+          let offset = 0;
+          for (const item of group) {
+            payload.set(item.data, offset);
+            offset += item.data.byteLength;
           }
-        }
-        for (const item of accepted) {
-          coveredThroughSequence = Math.max(coveredThroughSequence, item.sequence ?? 0);
+          const source = group[0]?.source;
+          if (source === 'history') {
+            const first = group[0];
+            await options.applyHistoryGeometry?.({
+              generation: first.geometryGeneration,
+              cols: first.cols,
+              rows: first.rows,
+            });
+          }
+          const writer = source === 'history' ? (options.writeHistory ?? options.write) : options.write;
+          activeWriters += 1;
+          try {
+            await writer(payload, group);
+          } finally {
+            activeWriters -= 1;
+            if (activeWriters === 0) {
+              const waiters = writerQuiescenceWaiters;
+              writerQuiescenceWaiters = [];
+              for (const resolve of waiters) resolve();
+            }
+          }
+          for (const item of group) {
+            coveredThroughSequence = Math.max(coveredThroughSequence, item.sequence ?? 0);
+          }
         }
       }
     };
@@ -1725,7 +1746,14 @@ const render: typeof solidRender = (...args) => {
 };
 
 type TestTerminalHistoryPage = {
-  chunks: Array<{ sequence: number; timestampMs: number; data: Uint8Array }>;
+  chunks: Array<{
+    sequence: number;
+    timestampMs: number;
+    data: Uint8Array;
+    geometryGeneration?: number;
+    cols?: number;
+    rows?: number;
+  }>;
   nextStartSeq: number;
   hasMore: boolean;
   firstSequence: number;
@@ -1742,8 +1770,13 @@ type TestTerminalHistoryPage = {
 
 function makeTerminalHistoryPage(overrides: Partial<TestTerminalHistoryPage> = {}): TestTerminalHistoryPage {
   const lastSequence = overrides.lastSequence ?? 0;
+  const chunks = (overrides.chunks ?? []).map(chunk => ({
+    geometryGeneration: 1,
+    cols: 80,
+    rows: 24,
+    ...chunk,
+  }));
   return {
-    chunks: [],
     nextStartSeq: 0,
     hasMore: false,
     firstSequence: 0,
@@ -1757,6 +1790,7 @@ function makeTerminalHistoryPage(overrides: Partial<TestTerminalHistoryPage> = {
     coveredBytes: 0,
     totalBytes: 0,
     ...overrides,
+    chunks,
   };
 }
 
@@ -3066,6 +3100,65 @@ describe('TerminalPanel', () => {
     expect(decodeTerminalWrite(core?.writeFrame.mock.calls[0]?.[0])).toBe('x');
     expect(core?.writeFrame.mock.calls[0]).toHaveLength(1);
     expect(core?.writeHistory).toHaveBeenCalledTimes(1);
+  });
+
+  it('applies recorded history geometry before each batch and restores the attach grid afterward', async () => {
+    transportMocks.attach.mockResolvedValueOnce({
+      historyBoundarySequence: 2,
+      historyGeneration: 1,
+      historyStartSequence: 1,
+      geometryGeneration: 9,
+      runtimeAttachGeneration: 1,
+      cols: 140,
+      rows: 60,
+    });
+    transportMocks.historyPage.mockResolvedValue(makeTerminalHistoryPage({
+      chunks: [{
+        sequence: 1,
+        timestampMs: 10,
+        data: textEncoder.encode('old-grid'),
+        geometryGeneration: 7,
+        cols: 120,
+        rows: 55,
+      }, {
+        sequence: 2,
+        timestampMs: 20,
+        data: textEncoder.encode('new-grid'),
+        geometryGeneration: 8,
+        cols: 131,
+        rows: 58,
+      }],
+      firstSequence: 1,
+      lastSequence: 2,
+      coveredThroughSequence: 2,
+      snapshotEndSequence: 2,
+    }));
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="panel" />, host);
+    await waitForTerminalPanelCondition(() => {
+      expect(terminalCoreInstances[0]?.writeHistory).toHaveBeenCalledTimes(2);
+    });
+
+    const core = terminalCoreInstances[0]!;
+    expect(core.setFixedDimensions.mock.calls.slice(0, 3).map((call: [{ cols: number; rows: number }]) => call[0])).toEqual([
+      { cols: 120, rows: 55 },
+      { cols: 131, rows: 58 },
+      { cols: 140, rows: 60 },
+    ]);
+    expect(core.setFixedDimensions.mock.invocationCallOrder[0]).toBeLessThan(
+      core.writeHistory.mock.invocationCallOrder[0]!,
+    );
+    expect(core.writeHistory.mock.invocationCallOrder[0]).toBeLessThan(
+      core.setFixedDimensions.mock.invocationCallOrder[1]!,
+    );
+    expect(core.setFixedDimensions.mock.invocationCallOrder[1]).toBeLessThan(
+      core.writeHistory.mock.invocationCallOrder[1]!,
+    );
+    expect(core.writeHistory.mock.invocationCallOrder[1]).toBeLessThan(
+      core.setFixedDimensions.mock.invocationCallOrder[2]!,
+    );
   });
 
   it('blocks initial input until the terminal parser commits the history baseline', async () => {
@@ -8363,14 +8456,18 @@ describe('TerminalPanel', () => {
     expect(transportMocks.resizeWithEffectiveGeometry).toHaveBeenCalledWith('session-1', 80, 24);
     expect(resumedCore).toBeTruthy();
     expect(transportMocks.historyPage).toHaveBeenCalled();
-    expect(resumedCore?.setFixedDimensions).toHaveBeenCalledTimes(2);
+    expect(resumedCore?.setFixedDimensions).toHaveBeenCalledTimes(3);
     expect(resumedCore?.setFixedDimensions).toHaveBeenNthCalledWith(1, { cols: 70, rows: 22 });
-    expect(resumedCore?.setFixedDimensions).toHaveBeenNthCalledWith(2, { cols: 70, rows: 22 });
+    expect(resumedCore?.setFixedDimensions).toHaveBeenNthCalledWith(2, { cols: 80, rows: 24 });
+    expect(resumedCore?.setFixedDimensions).toHaveBeenNthCalledWith(3, { cols: 70, rows: 22 });
     expect(resumedCore!.setFixedDimensions.mock.invocationCallOrder[0]).toBeLessThan(
+      resumedCore!.setFixedDimensions.mock.invocationCallOrder[1]!,
+    );
+    expect(resumedCore!.setFixedDimensions.mock.invocationCallOrder[1]).toBeLessThan(
       resumedCore!.write.mock.invocationCallOrder[0]!,
     );
     expect(resumedCore!.write.mock.invocationCallOrder[0]).toBeLessThan(
-      resumedCore!.setFixedDimensions.mock.invocationCallOrder[1]!,
+      resumedCore!.setFixedDimensions.mock.invocationCallOrder[2]!,
     );
   });
 
@@ -9168,7 +9265,14 @@ describe('TerminalPanel', () => {
       isActive: false,
     }));
     const preparedHistory = {
-      chunks: [{ sequence: 1, timestampMs: 1, data: textEncoder.encode('seed') }],
+      chunks: [{
+        sequence: 1,
+        timestampMs: 1,
+        data: textEncoder.encode('seed'),
+        geometryGeneration: 7,
+        cols: 120,
+        rows: 55,
+      }],
       requestedStartSequence: 0,
       firstRetainedSequence: 1,
       coveredThroughSequence: 1,
