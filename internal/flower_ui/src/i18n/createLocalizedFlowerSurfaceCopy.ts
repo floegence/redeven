@@ -101,6 +101,7 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       composerReferenceExists: (path) => t(i18n, k('chat.composerReferenceExists'), { path }),
       commandCompactContext: t(i18n, k('chat.commandCompactContext')),
       pendingSending: t(i18n, k('chat.pendingSending')),
+      pendingSubmission: t(i18n, k('chat.pendingSubmission')),
       pendingQueued: t(i18n, k('chat.pendingQueued')),
       scrollToLatest: t(i18n, k('chat.scrollToLatest')),
       runErrorTitle: t(i18n, k('chat.runErrorTitle')),

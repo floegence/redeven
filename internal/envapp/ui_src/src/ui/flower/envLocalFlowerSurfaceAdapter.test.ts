@@ -558,6 +558,80 @@ describe('Env local Flower surface adapter', () => {
     expect(fetchMock).not.toHaveBeenCalledWith('/_redeven_proxy/api/ai/models', expect.anything());
   });
 
+  it('deduplicates settings and model catalog reads across concurrent initial launches', async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/settings' && init?.method === 'GET') {
+        return jsonResponse({
+          ai: {
+            current_model_id: 'default/gpt-5.4',
+            permission_type: 'approval_required',
+            providers: [{ id: 'default', type: 'openai', models: [{ model_name: 'gpt-5.4' }] }],
+          },
+          ai_secrets: {
+            provider_api_key_set: { default: true },
+            web_search_provider_api_key_set: {},
+          },
+        });
+      }
+      if (url === '/_redeven_proxy/api/ai/models' && init?.method === 'GET') {
+        return jsonResponse({ current_model: 'default/gpt-5.4' });
+      }
+      if (url === '/_redeven_proxy/api/ai/turns' && init?.method === 'POST') {
+        const body = JSON.parse(String(init.body)) as { create: { client_request_id: string } };
+        const suffix = body.create.client_request_id;
+        return jsonResponse({
+          client_request_id: suffix,
+          thread_id: `thread_${suffix}`,
+          run_id: `run_${suffix}`,
+          turn_id: `turn_${suffix}`,
+          kind: 'start',
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    const adapter = createEnvLocalFlowerSurfaceAdapter({
+      envPublicID: 'env_a',
+      envLabel: 'Demo Env',
+      rpc: { ai: { subscribeThread: vi.fn(async () => ({ runId: '' })) } } as any,
+    });
+
+    await Promise.all([
+      adapter.loadSettings(),
+      adapter.launchTurn({ client_request_id: 'client_cache_a', prompt: 'first' }),
+      adapter.launchTurn({ client_request_id: 'client_cache_b', prompt: 'second' }),
+    ]);
+
+    expect(fetchMock.mock.calls.filter(([url]) => url === '/_redeven_proxy/api/settings')).toHaveLength(1);
+    expect(fetchMock.mock.calls.filter(([url]) => url === '/_redeven_proxy/api/ai/models')).toHaveLength(1);
+    expect(fetchMock.mock.calls.filter(([url]) => url === '/_redeven_proxy/api/ai/turns')).toHaveLength(2);
+  });
+
+  it('invalidates the settings cache after saving the default permission', async () => {
+    let permissionType: FlowerPermissionType = 'approval_required';
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/settings' && init?.method === 'GET') {
+        return jsonResponse({ ai: { permission_type: permissionType } });
+      }
+      if (url === '/_redeven_proxy/api/ai/default_permission' && init?.method === 'PUT') {
+        permissionType = 'full_access';
+        return jsonResponse({});
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    const adapter = createEnvLocalFlowerSurfaceAdapter({
+      envPublicID: 'env_a',
+      envLabel: 'Demo Env',
+      rpc: { ai: {} } as any,
+    });
+
+    await adapter.loadSettings();
+    await adapter.loadSettings();
+    const updated = await adapter.saveDefaultPermission!('full_access');
+
+    expect(updated.defaults.permission_type).toBe('full_access');
+    expect(fetchMock.mock.calls.filter(([url]) => url === '/_redeven_proxy/api/settings')).toHaveLength(2);
+  });
+
   it('keeps a disconnected Desktop model source in the settings contract', async () => {
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/settings' && init?.method === 'GET') {

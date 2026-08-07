@@ -3842,6 +3842,7 @@
       "composerReferenceExists": "{path}은(는) 이미 참조되어 있습니다.",
       "commandCompactContext": "현재 컨텍스트 압축",
       "pendingSending": "보내는 중",
+      "pendingSubmission": "메시지 보내는 중...",
       "pendingQueued": "대기열에 추가됨",
       "scrollToLatest": "최신으로 스크롤",
       "runErrorTitle": "Flower가 이 답변을 완료하지 못했습니다.",

@@ -59,7 +59,7 @@ function launchReceiptFor(
   return launchReceipt(threadID, canonicalID, kind, input.client_request_id);
 }
 
-it('launches once after asynchronous handler resolution with an in-memory draft', async () => {
+it('shows the pending submission before asynchronous handler resolution completes', async () => {
   const coordinator = createFlowerComposerDraftCoordinator();
   const handler = deferred<FlowerRouterDecision>();
   const surfaceAdapter = adapter();
@@ -74,6 +74,14 @@ it('launches once after asynchronous handler resolution with an in-memory draft'
   const send = runtime.querySelector('button.flower-composer-submit') as HTMLButtonElement;
   send.click();
   await waitFor(() => runtime.querySelector('.flower-composer')?.getAttribute('aria-busy') === 'true');
+
+  const pending = runtime.querySelector('[data-flower-pending-submission-id]');
+  expect(pending?.textContent).toContain('in-memory send');
+  expect(pending?.textContent).toContain('Sending message...');
+  expect(pending?.getAttribute('data-flower-pending-submission-phase')).toBe('preparing');
+  expect(pending?.querySelector('[data-flower-message-id]')).toBeNull();
+  expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('');
+  expect(launchTurn).not.toHaveBeenCalled();
 
   handler.resolve(decision());
   await waitFor(() => launchTurn.mock.calls.length === 1);
@@ -3820,6 +3828,7 @@ describe('FlowerSurface navigation launch/send', () => {
     }));
     expect(runtime.querySelector('.flower-composer-error')).toBeNull();
     expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('do not lose this draft');
+    expect(runtime.querySelector('[data-flower-pending-submission-id]')).toBeNull();
     expect(stopThread).not.toHaveBeenCalled();
     expect(launchTurn).toHaveBeenCalledTimes(1);
   });
@@ -3866,6 +3875,7 @@ describe('FlowerSurface navigation launch/send', () => {
     }));
     expect(runtime.querySelector('.flower-composer-error')).toBeNull();
     expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('keep this draft after send fails');
+    expect(runtime.querySelector('[data-flower-pending-submission-id]')).toBeNull();
   });
 
   it('presents provider stream interruptions without blaming Flower orchestration', async () => {
@@ -4111,7 +4121,7 @@ describe('FlowerSurface navigation launch/send', () => {
     expect(runtime.textContent).toContain('Flower verification is complete.');
   });
 
-  it('retains the composer draft without synthesizing a row while admission is pending', async () => {
+  it('shows a non-canonical pending preview while admission is pending', async () => {
     const sendDeferred = deferred<FlowerTurnLaunchReceipt>();
     let launchTurnID = 'turn-user-canonical';
     let launchedInput: FlowerTurnLaunchInput | null = null;
@@ -4163,16 +4173,22 @@ describe('FlowerSurface navigation launch/send', () => {
     (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
     await waitFor(() => launchTurn.mock.calls.length > 0);
 
+    const pending = runtime.querySelector('[data-flower-pending-submission-id]');
+    expect(pending?.textContent).toContain('inspect the running turn');
+    expect(pending?.textContent).toContain('Sending message...');
+    expect(pending?.getAttribute('data-flower-pending-submission-phase')).toBe('admitting');
+    expect(pending?.querySelector('[data-flower-message-id]')).toBeNull();
     expect(runtime.querySelector('[data-flower-message-id]')).toBeNull();
     expect(runtime.querySelector('[data-flower-message-id="entry-user-canonical"]')).toBeNull();
     expect(runtime.querySelector('.flower-model-status-indicator')).toBeNull();
-    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('inspect the running turn');
+    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('');
     expect((runtime.querySelector('textarea') as HTMLTextAreaElement).disabled).toBe(true);
     expect(runtime.querySelector('.flower-composer')?.getAttribute('aria-busy')).toBe('true');
 
     if (!launchedInput) throw new Error('missing launch input');
     sendDeferred.resolve(launchReceiptFor(launchedInput, 'thread-canonical-send', launchTurnID));
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="entry-user-canonical"]')));
+    expect(runtime.querySelector('[data-flower-pending-submission-id]')).toBeNull();
     expect(runtime.textContent).toContain('inspect the running turn');
     expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('');
     expect(runtime.querySelector('.flower-model-status-indicator')).toBeTruthy();
@@ -4203,6 +4219,8 @@ describe('FlowerSurface navigation launch/send', () => {
     expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('');
     expect((runtime.querySelector('textarea') as HTMLTextAreaElement).disabled).toBe(false);
     expect(runtime.querySelector('[data-flower-message-id]')).toBeNull();
+    expect(runtime.querySelector('[data-flower-pending-submission-id]')?.textContent).toContain('admit without bootstrap latency');
+    expect(runtime.querySelector('[data-flower-pending-submission-id]')?.getAttribute('data-flower-pending-submission-phase')).toBe('awaiting_projection');
 
     bootstrapDeferred.resolve(liveBootstrap(thread({
       thread_id: 'thread-fast-admission',
@@ -4218,6 +4236,8 @@ describe('FlowerSurface navigation launch/send', () => {
       }],
     })));
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="entry-fast-admission"]')));
+    expect(runtime.querySelector('[data-flower-pending-submission-id]')).toBeNull();
+    expect(runtime.querySelectorAll('[data-flower-message-role="user"]')).toHaveLength(1);
   });
 
   it('removes a queued product row when the server timeline replacement clears the queue', async () => {
@@ -4260,6 +4280,7 @@ describe('FlowerSurface navigation launch/send', () => {
     textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
     (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
     await waitFor(() => acceptedQueueID !== '' && Boolean(runtime.querySelector(`[data-flower-queued-turn-id="${acceptedQueueID}"]`)));
+    expect(runtime.querySelector('[data-flower-pending-submission-id]')).toBeNull();
 
     replacement.resolve({
       events: [{
@@ -4329,6 +4350,8 @@ describe('FlowerSurface navigation launch/send', () => {
     expect(loadThread).toHaveBeenCalledWith('thread-refresh-failed-after-send');
     expect(runtime.querySelector('[data-flower-message-id]')).toBeNull();
     expect(runtime.querySelector('[data-flower-queued-turn-id]')).toBeNull();
+    expect(runtime.querySelector('[data-flower-pending-submission-id]')?.textContent).toContain('send exactly once');
+    expect(runtime.querySelector('[data-flower-pending-submission-id]')?.getAttribute('data-flower-pending-submission-phase')).toBe('awaiting_projection');
     expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('');
     expect(flowerSurfaceNotifications()).not.toContainEqual(expect.objectContaining({
       title: 'Flower could not send.',
@@ -4364,6 +4387,8 @@ describe('FlowerSurface navigation launch/send', () => {
     expect(clientRequestID).toMatch(/^client_/);
     expect(runtime.querySelector('[data-flower-message-id]')).toBeNull();
     expect(runtime.querySelector('[data-flower-queued-turn-id]')).toBeNull();
+    expect(runtime.querySelector('[data-flower-pending-submission-id]')?.textContent).toContain('reconcile this exact turn');
+    expect(runtime.querySelector('[data-flower-pending-submission-id]')?.getAttribute('data-flower-pending-submission-phase')).toBe('awaiting_projection');
     expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('reconcile this exact turn');
     expect((runtime.querySelector('textarea') as HTMLTextAreaElement).disabled).toBe(true);
     expect(flowerSurfaceNotifications()).not.toContainEqual(expect.objectContaining({
@@ -4508,7 +4533,9 @@ describe('FlowerSurface navigation launch/send', () => {
 
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(runtime.querySelector('[data-flower-message-id]')).toBeNull();
-    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('show before route settles');
+    expect(runtime.querySelector('[data-flower-pending-submission-id]')?.textContent).toContain('show before route settles');
+    expect(runtime.querySelector('[data-flower-pending-submission-id]')?.getAttribute('data-flower-pending-submission-phase')).toBe('preparing');
+    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('');
     expect((runtime.querySelector('textarea') as HTMLTextAreaElement).disabled).toBe(true);
     expect(runtime.querySelector('.flower-composer')?.getAttribute('aria-busy')).toBe('true');
     expect(runtime.querySelector('.flower-model-status-indicator')).toBeNull();

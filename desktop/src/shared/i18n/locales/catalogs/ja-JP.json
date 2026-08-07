@@ -87,6 +87,7 @@
       "composerReferenceExists": "{path} はすでに参照されています。",
       "commandCompactContext": "現在のコンテキストを圧縮",
       "pendingSending": "送信中",
+      "pendingSubmission": "メッセージを送信中...",
       "pendingQueued": "キュー済み",
       "scrollToLatest": "最新へスクロール",
       "runErrorTitle": "Flower はこの返信を完了できませんでした。",

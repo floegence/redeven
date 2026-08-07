@@ -317,6 +317,7 @@ export type FlowerSurfaceCopy = Readonly<{
     composerReferenceExists: (path: string) => string;
     commandCompactContext: string;
     pendingSending: string;
+    pendingSubmission: string;
     pendingQueued: string;
     scrollToLatest: string;
     runErrorTitle: string;
@@ -534,6 +535,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     composerReferenceExists: (path) => `${path} is already referenced.`,
     commandCompactContext: 'Compact current context',
     pendingSending: 'Sending',
+    pendingSubmission: 'Sending message...',
     pendingQueued: 'Queued',
     scrollToLatest: 'Scroll to latest',
     runErrorTitle: 'Flower could not finish this reply.',

@@ -2529,6 +2529,40 @@ html.dark .flower-component-shell {
   background: color-mix(in srgb, var(--primary) 9%, var(--flower-chat-surface-elevated));
 }
 
+.flower-pending-submission-bubble {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--primary) 40%, var(--flower-chat-surface-border));
+  background: color-mix(in srgb, var(--primary) 8%, var(--flower-chat-surface-elevated));
+  opacity: 0.88;
+}
+
+.flower-pending-submission-context {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.45rem;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+}
+
+.flower-pending-submission-context span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flower-pending-submission-meta {
+  opacity: 0.88;
+}
+
+.flower-pending-submission-state {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
 .flower-queued-turn-meta {
   opacity: 0.88;
 }

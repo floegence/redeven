@@ -3842,6 +3842,7 @@
       "composerReferenceExists": "{path} já está referenciado.",
       "commandCompactContext": "Comprimir contexto atual",
       "pendingSending": "Enviando",
+      "pendingSubmission": "Enviando mensagem...",
       "pendingQueued": "Na fila",
       "scrollToLatest": "Rolar para o mais recente",
       "runErrorTitle": "O Flower não conseguiu concluir esta resposta.",

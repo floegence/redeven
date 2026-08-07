@@ -122,6 +122,7 @@ main() {
       ui_pkg_run_pnpm run test:browser -- \
         src/ui/EnvAppShell.flowerCompanion.browser.test.tsx \
         src/ui/flowerCompanionTailMotion.browser.test.tsx \
+        src/ui/FlowerSurface.pendingSubmission.browser.test.tsx \
         src/ui/FlowerSurface.canonicalReferences.browser.test.tsx \
         src/ui/FlowerSurface.composerReferences.browser.test.tsx \
         src/ui/FlowerSurface.approvalRefresh.browser.test.tsx \

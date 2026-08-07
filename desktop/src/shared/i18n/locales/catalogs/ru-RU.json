@@ -87,6 +87,7 @@
       "composerReferenceExists": "Ссылка на {path} уже добавлена.",
       "commandCompactContext": "Сжать текущий контекст",
       "pendingSending": "Отправка",
+      "pendingSubmission": "Отправка сообщения...",
       "pendingQueued": "В очереди",
       "scrollToLatest": "Прокрутить к последнему",
       "runErrorTitle": "Flower не смог завершить этот ответ.",
