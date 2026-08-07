@@ -399,11 +399,24 @@ async function openEnvPage(context, entryURL) {
   return { page, problems };
 }
 
-async function terminalInput(page, scope = page) {
+async function terminalInput(page, scope = page, waitForInteractive = false) {
   const focusHost = scope.locator(
     '.redeven-terminal-surface [contenteditable="true"][aria-label="Terminal input"]:visible',
   ).last();
   await focusHost.waitFor({ state: 'visible', timeout: 15_000 });
+  if (waitForInteractive) {
+    const runtime = focusHost.locator('xpath=ancestor::*[@data-terminal-runtime-session][1]');
+    const deadline = Date.now() + 15_000;
+    let lastBusy = null;
+    while (Date.now() < deadline) {
+      lastBusy = await runtime.getAttribute('aria-busy').catch(() => null);
+      if (lastBusy === 'false') break;
+      await delay(50);
+    }
+    if (lastBusy !== 'false') {
+      throw new Error(`terminal runtime did not become interactive (aria_busy=${lastBusy})`);
+    }
+  }
   await focusHost.evaluate((element) => element.focus({ preventScroll: true }));
   const input = page.locator('body > textarea[aria-label="Terminal input"]:focus');
   await input.waitFor({ state: 'attached', timeout: 15_000 });
@@ -411,7 +424,7 @@ async function terminalInput(page, scope = page) {
 }
 
 async function sendTerminalCommand(page, command, scope = page) {
-  const input = await terminalInput(page, scope);
+  const input = await terminalInput(page, scope, true);
   await input.focus();
   await page.keyboard.insertText(command);
   await page.keyboard.press('Enter');
