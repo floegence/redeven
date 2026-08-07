@@ -10,6 +10,8 @@ quality_exception: Cross-surface terminal interaction contract spanning live tra
 
 Activity and Workbench terminals use Floeterm's single binary `terminal/live_v1` data path over a Flowersec named Yamux stream. Each mounted view owns an independent connection identity and reports its own host capacity, while Floeterm owns the shared PTY geometry, geometry-stamped retained history, atomic history boundary, ordered output, input, resize acknowledgement, and explicit close/error states. Redeven keeps catalog and history RPCs as a control plane and never falls back to the removed RPC live transport. A renderer rebuild replays every retained chunk at its recorded grid before restoring the current attachment grid.
 
+Redeven consumes terminal-web v0.13.1. `forceResizeAndWaitForPresentation()` is the mandatory presentation fence for initial recovery, refresh, and working-set resume, while read-only host measurement is used only by an active visible runtime.
+
 # Contract
 
 ## Live attachment and multi-view geometry
@@ -25,6 +27,8 @@ The Terminal refresh command remains a forced renderer rebuild. It pauses and in
 When the current visible view has acknowledged a larger local grid but the current renderer has applied a smaller effective grid, Redeven presents a lightweight informational status inside existing Terminal chrome. The status appears only for the active display session in idle recovery state, waits briefly to avoid flicker, and never changes terminal canvas geometry. Its disclosure states that connected views with different available sizes share one grid, shows local and effective dimensions, and explains that the grid adjusts as views resize or disconnect. It does not infer view count, device, window, user, or per-view dimensions. Unselected Workbench widgets render an inert pointer-through visual; selected Workbench and Activity surfaces use a real disclosure button and an explicitly owner-bound surface floating layer. Lifecycle, session, selection, recovery, anchor movement, and confirmed equality close the disclosure without stealing focus, while each live attachment is announced at most once through a polite live region.
 
 Input and resize use the same binary stream. Input bytes are forwarded exactly once and repeated characters remain repeated. Resize promises resolve only after the matching `RESIZE_APPLIED`; a stream end, protocol error, permission denial, missing session, slow consumer, or session close remains an explicit state. `SESSION_CLOSED` removes the session without presenting an ordinary reconnect error. Server error codes are structured Floeterm values rather than parsed message text or legacy RPC status codes.
+
+After replay restores the current attach or live geometry, Redeven waits for the renderer presentation fence, measures the active host, requests any required shared-grid change through the live transport, waits for the acknowledged geometry boundary to be applied, and waits for a second presentation fence before publishing `interactive`, revealing the surface, or restoring focus. Missing or conflicting history geometry remains fail closed. Focus may still report capacity later, but it cannot be required to make a completed refresh usable or reinterpret already-replayed bytes. Stale history requests, resize acknowledgements, or writers from the destroyed Core cannot commit into the replacement Core.
 
 ## Product lifecycle and performance
 
