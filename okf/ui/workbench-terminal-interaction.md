@@ -8,9 +8,9 @@ quality_exception: Cross-surface terminal interaction contract spanning live tra
 ---
 # Summary
 
-Activity and Workbench terminals use Floeterm's single binary `terminal/live_v1` data path over a Flowersec named Yamux stream. Each mounted view owns an independent connection identity and reports its own host capacity, while Floeterm owns the shared PTY geometry, geometry-stamped retained history, atomic history boundary, ordered output, input, resize acknowledgement, and explicit close/error states. Redeven keeps catalog and history RPCs as a control plane and never falls back to the removed RPC live transport. A renderer rebuild replays every retained chunk at its recorded grid before restoring the current attachment grid.
+Activity and Workbench use Floeterm's binary `terminal/live_v1` stream over Flowersec. Floeterm owns PTY geometry, geometry-stamped retained history, atomic boundaries, ordered output, input, resize acknowledgement, and close/error states; Redeven keeps catalog/history RPCs on the control plane with no live-RPC fallback. Renderer rebuilds replay each retained chunk at its recorded grid before restoring the current attachment grid.
 
-Redeven consumes terminal-web v0.13.1. `forceResizeAndWaitForPresentation()` is the mandatory presentation fence for initial recovery, refresh, and working-set resume, while read-only host measurement is used only by an active visible runtime.
+Redeven consumes terminal-web v0.13.1. `forceResizeAndWaitForPresentation()` fences initial recovery, refresh, and working-set resume; read-only host measurement is used only by an active visible runtime.
 
 # Contract
 
