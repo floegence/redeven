@@ -544,6 +544,9 @@ describe('v0.7.1 plugin inventory projection', () => {
     });
 
     expect(projection.items[0]).toMatchObject({
+      lifecycleState: 'needs_attention',
+      attentionReason: 'permission_required',
+      defaultLaunchTarget: undefined,
       authorization: {
         permissions: expect.arrayContaining([
           expect.objectContaining({ permissionID: 'containers.read', methods: ['containers.list'] }),

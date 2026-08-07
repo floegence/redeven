@@ -155,6 +155,7 @@ export function createPluginLifecycleAPI(
       request_id: requestID,
       plugin_instance_id: official.pluginInstanceID,
       release_ref: official.distribution.releaseRef,
+      activate_after_install: true,
     }, options);
     onUpdate?.(operation);
     if (isReleaseInstallTerminal(operation)) return operation;

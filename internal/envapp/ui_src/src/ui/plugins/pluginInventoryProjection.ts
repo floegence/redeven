@@ -192,11 +192,14 @@ function projectInstalledItem(
 ): PluginInventoryItem {
   const authorization = projectGenericAuthorization(installed, grants, requirements, policy);
   const runnable = isRunnableInstalledTrust(installed);
+  const permissionAttention = authorizationNeedsPermissionAttention(authorization);
   const lifecycleState: PluginInventoryItem['lifecycleState'] = !runnable
     ? 'needs_attention'
-    : installed.enable_state === 'enabled'
-      ? 'enabled'
-      : 'disabled';
+    : permissionAttention
+      ? 'needs_attention'
+      : installed.enable_state === 'enabled'
+        ? 'enabled'
+        : 'disabled';
   const launchSurface = installed.manifest.surfaces.find((surface) => (
     surface.kind === 'view' && (surface.intent ?? 'primary') === 'primary'
   ));
@@ -225,7 +228,7 @@ function projectInstalledItem(
     trustBadge: installedTrustBadgeForRecord(installed),
     pinned: installed.metadata?.pinned === 'true',
     lastOpenedAt: installed.metadata?.last_opened_at,
-    defaultLaunchTarget: lifecycleState === 'enabled' && launchSurface
+    defaultLaunchTarget: lifecycleState === 'enabled' && !permissionAttention && launchSurface
       ? {
           pluginID: installed.plugin_id,
           pluginInstanceID: installed.plugin_instance_id,
@@ -235,7 +238,11 @@ function projectInstalledItem(
           preferredPlacement: 'activity',
         }
       : undefined,
-    attentionReason: !runnable ? 'trust_unavailable' : lifecycleState === 'disabled' ? 'disabled' : undefined,
+    attentionReason: !runnable
+      ? 'trust_unavailable'
+      : permissionAttention
+        ? 'permission_required'
+        : lifecycleState === 'disabled' ? 'disabled' : undefined,
     authorization,
     presentation: installed.presentation,
     externalPackage,
@@ -328,6 +335,8 @@ function installedLifecycleState(
 ): PluginInventoryItem['lifecycleState'] {
   if (catalogItem.rolloutState === 'revoked' || catalogItem.rolloutState === 'disabled') return 'needs_attention';
   if (!isRunnableInstalledTrust(installed)) return 'needs_attention';
+  if ((catalogItem.permissions?.length ?? 0) === 0
+    && authorizationNeedsPermissionAttention(authorization)) return 'needs_attention';
   if (installed.enable_state !== 'enabled') return 'disabled';
   if (compareVersion(installed.version, catalogItem.stableVersion) < 0) return 'update_available';
   if (authorization?.permissions.some((permission) => (
@@ -343,6 +352,8 @@ function canLaunchInstalledCatalogPlugin(
 ): boolean {
   if (catalogItem.rolloutState === 'revoked' || catalogItem.rolloutState === 'disabled') return false;
   if (!isRunnableInstalledTrust(installed) || installed.enable_state !== 'enabled') return false;
+  if ((catalogItem.permissions?.length ?? 0) === 0
+    && authorizationNeedsPermissionAttention(authorization)) return false;
   return !authorization?.permissions.some((permission) => (
     permission.requiredToOpen && (!permission.granted || permission.deniedByGrant || permission.blockedToOpen)
   ));
@@ -388,9 +399,22 @@ function installedAttentionReason(
   if (authorization?.permissions.some((permission) => (
     permission.requiredToOpen && (!permission.granted || permission.deniedByGrant)
   ))) return 'permission_required';
+  if ((catalogItem.permissions?.length ?? 0) === 0
+    && authorizationNeedsPermissionAttention(authorization)) return 'permission_required';
   if (lifecycleState === 'disabled') return 'disabled';
   if (lifecycleState === 'update_available') return 'update_required';
   return undefined;
+}
+
+function authorizationNeedsPermissionAttention(
+  authorization?: PluginAuthorizationInventory,
+): boolean {
+  const permissions = authorization?.permissions ?? [];
+  return permissions.length > 0 && !permissions.some((permission) => (
+    permission.granted
+    && !permission.deniedByGrant
+    && !permission.grantBlockedByPolicy
+  ));
 }
 
 function projectAuthorization(

@@ -20,6 +20,12 @@ export function PluginInstallStatus(props: {
     && props.projection.observation !== 'refresh_failed'
     && props.projection.operation?.status !== 'succeeded';
   const progress = () => props.projection.operation?.progress;
+  const currentDiagnostic = () => {
+    const operation = props.projection.operation;
+    if (!operation) return undefined;
+    return [...operation.phase_diagnostics].reverse()
+      .find((diagnostic) => diagnostic.phase === operation.phase);
+  };
   const determinate = () => {
     const value = progress();
     return value && value.kind === 'bytes' && value.total > 0 ? value : undefined;
@@ -64,6 +70,18 @@ export function PluginInstallStatus(props: {
         )} />
         <div class="min-w-0 flex-1">
           <p class={cn('text-xs font-semibold leading-5', props.compact && 'line-clamp-2')}>{label()}</p>
+          <Show when={currentDiagnostic()?.cache_hit}>
+            <p class="mt-0.5 text-[11px] leading-4 text-muted-foreground">
+              {i18n.t('uiCopy.plugin.installOperation.cacheHit')}
+            </p>
+          </Show>
+          <Show when={(props.projection.operation?.attempt ?? 1) > 1}>
+            <p class="mt-0.5 text-[11px] leading-4 text-muted-foreground">
+              {i18n.t('uiCopy.plugin.installOperation.retryAttempt', {
+                attempt: props.projection.operation!.attempt,
+              })}
+            </p>
+          </Show>
           <Show when={determinate()}>
             {(value) => (
               <>
@@ -130,22 +148,26 @@ function installStatusLabel(
   if (operation.status === 'reconciling') {
     return i18n.t('uiCopy.plugin.installOperation.reconciling');
   }
-  if (operation.phase === 'commit') {
-    return i18n.t('uiCopy.plugin.installOperation.installing');
+  switch (operation.phase) {
+    case 'fetch_trust_evidence':
+      return i18n.t('uiCopy.plugin.installOperation.fetchingTrustEvidence');
+    case 'fetch_release_evidence':
+      return i18n.t('uiCopy.plugin.installOperation.fetchingReleaseEvidence');
+    case 'download_package':
+      return i18n.t('uiCopy.plugin.installOperation.downloadingPackage');
+    case 'verify_hashes':
+      return i18n.t('uiCopy.plugin.installOperation.verifyingHashes');
+    case 'verify_signatures_ledger':
+      return i18n.t('uiCopy.plugin.installOperation.verifyingSignaturesLedger');
+    case 'fetch_capability_evidence':
+      return i18n.t('uiCopy.plugin.installOperation.fetchingCapabilityEvidence');
+    case 'commit':
+      return i18n.t('uiCopy.plugin.installOperation.installing');
+    case 'enable':
+      return i18n.t('uiCopy.plugin.installOperation.enabling');
+    default:
+      return i18n.t('uiCopy.plugin.installOperation.queued');
   }
-  if (operation.phase === 'verify_release') {
-    return i18n.t('uiCopy.plugin.installOperation.verifyingRelease');
-  }
-  if (operation.phase.startsWith('retry_wait_')) {
-    return i18n.t('uiCopy.plugin.installOperation.retrying', { attempt: operation.attempt });
-  }
-  if (operation.phase === 'download_package') {
-    return i18n.t('uiCopy.plugin.installOperation.downloadingPackage');
-  }
-  if (operation.phase.startsWith('download_')) {
-    return i18n.t('uiCopy.plugin.installOperation.verifyingPublisher');
-  }
-  return i18n.t('uiCopy.plugin.installOperation.queued');
 }
 
 function installFailureLabel(code: string, i18n: I18nHelpers): string {
