@@ -929,6 +929,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   ): Promise<boolean> => {
     terminalPresentationSettling = true;
     try {
+      let geometryChanged = false;
       await core.forceResizeAndWaitForPresentation();
       if (!terminalPresentationIsCurrent(core, initSequence, reloadSequence, trace)) return false;
 
@@ -945,12 +946,15 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
             throw new Error('Terminal host capacity resize was not acknowledged');
           }
           await waitForAppliedGeometry(acknowledged, core, initSequence, reloadSequence, trace);
+          geometryChanged = true;
         }
       }
 
-      // Let geometry-triggered renderer work commit before the final fence; otherwise
-      // the renderer scheduler can coalesce the second demand behind the resize frame.
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      if (geometryChanged) {
+        // Let geometry-triggered renderer work commit before the final fence; otherwise
+        // the renderer scheduler can coalesce the second demand behind the resize frame.
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      }
       await core.forceResizeAndWaitForPresentation();
       return terminalPresentationIsCurrent(core, initSequence, reloadSequence, trace);
     } finally {
