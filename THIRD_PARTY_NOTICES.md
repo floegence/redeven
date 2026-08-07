@@ -133,9 +133,9 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @antfu/install-pkg | 1.1.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40antfu%2Finstall-pkg/v/1.1.0 |  |
 | @asamuzakjp/css-color | 3.2.0 | MIT | Env App UI | https://www.npmjs.com/package/%40asamuzakjp%2Fcss-color/v/3.2.0 |  |
 | @asamuzakjp/css-color | 5.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40asamuzakjp%2Fcss-color/v/5.1.1 |  |
-| @asamuzakjp/css-color | 5.1.11 | MIT | Desktop shell | https://www.npmjs.com/package/%40asamuzakjp%2Fcss-color/v/5.1.11 |  |
+| @asamuzakjp/css-color | 5.1.11 | MIT | Desktop shell | https://www.npmjs.com/package/%40asamuzakjp%2Fcss-color/v/5.1.11 | License verified from the exact registry package manifest. |
 | @asamuzakjp/dom-selector | 7.0.4 | MIT | Desktop shell | https://www.npmjs.com/package/%40asamuzakjp%2Fdom-selector/v/7.0.4 |  |
-| @asamuzakjp/dom-selector | 7.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40asamuzakjp%2Fdom-selector/v/7.1.1 |  |
+| @asamuzakjp/dom-selector | 7.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40asamuzakjp%2Fdom-selector/v/7.1.1 | License verified from the exact registry package manifest. |
 | @asamuzakjp/generational-cache | 1.0.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40asamuzakjp%2Fgenerational-cache/v/1.0.1 | License verified from the pnpm-installed package manifest. |
 | @asamuzakjp/nwsapi | 2.3.9 | MIT | Desktop shell | https://www.npmjs.com/package/%40asamuzakjp%2Fnwsapi/v/2.3.9 |  |
 | @babel/code-frame | 7.29.7 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40babel%2Fcode-frame/v/7.29.7 |  |
@@ -168,14 +168,14 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @csstools/color-helpers | 6.0.2 | MIT-0 | Desktop shell | https://www.npmjs.com/package/%40csstools%2Fcolor-helpers/v/6.0.2 |  |
 | @csstools/css-calc | 2.1.4 | MIT | Env App UI | https://www.npmjs.com/package/%40csstools%2Fcss-calc/v/2.1.4 |  |
 | @csstools/css-calc | 3.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40csstools%2Fcss-calc/v/3.1.1 |  |
-| @csstools/css-calc | 3.2.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40csstools%2Fcss-calc/v/3.2.1 |  |
+| @csstools/css-calc | 3.2.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40csstools%2Fcss-calc/v/3.2.1 | License verified from the exact registry package manifest. |
 | @csstools/css-color-parser | 3.1.0 | MIT | Env App UI | https://www.npmjs.com/package/%40csstools%2Fcss-color-parser/v/3.1.0 |  |
 | @csstools/css-color-parser | 4.0.2 | MIT | Desktop shell | https://www.npmjs.com/package/%40csstools%2Fcss-color-parser/v/4.0.2 |  |
-| @csstools/css-color-parser | 4.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40csstools%2Fcss-color-parser/v/4.1.1 |  |
+| @csstools/css-color-parser | 4.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40csstools%2Fcss-color-parser/v/4.1.1 | License verified from the exact registry package manifest. |
 | @csstools/css-parser-algorithms | 3.0.5 | MIT | Env App UI | https://www.npmjs.com/package/%40csstools%2Fcss-parser-algorithms/v/3.0.5 |  |
 | @csstools/css-parser-algorithms | 4.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40csstools%2Fcss-parser-algorithms/v/4.0.0 |  |
 | @csstools/css-syntax-patches-for-csstree | 1.1.2 | MIT-0 | Desktop shell | https://www.npmjs.com/package/%40csstools%2Fcss-syntax-patches-for-csstree/v/1.1.2 |  |
-| @csstools/css-syntax-patches-for-csstree | 1.1.4 | MIT-0 | Desktop shell | https://www.npmjs.com/package/%40csstools%2Fcss-syntax-patches-for-csstree/v/1.1.4 |  |
+| @csstools/css-syntax-patches-for-csstree | 1.1.4 | MIT-0 | Desktop shell | https://www.npmjs.com/package/%40csstools%2Fcss-syntax-patches-for-csstree/v/1.1.4 | License verified from the exact registry package manifest. |
 | @csstools/css-tokenizer | 3.0.4 | MIT | Env App UI | https://www.npmjs.com/package/%40csstools%2Fcss-tokenizer/v/3.0.4 |  |
 | @csstools/css-tokenizer | 4.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40csstools%2Fcss-tokenizer/v/4.0.0 |  |
 | @electron/asar | 4.2.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40electron%2Fasar/v/4.2.1 |  |
@@ -184,7 +184,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @electron/get | 3.1.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40electron%2Fget/v/3.1.0 |  |
 | @electron/notarize | 2.5.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40electron%2Fnotarize/v/2.5.0 |  |
 | @electron/osx-sign | 1.3.3 | BSD-2-Clause | Desktop shell | https://www.npmjs.com/package/%40electron%2Fosx-sign/v/1.3.3 |  |
-| @electron/rebuild | 4.0.4 | MIT | Desktop shell | https://www.npmjs.com/package/%40electron%2Frebuild/v/4.0.4 |  |
+| @electron/rebuild | 4.0.4 | MIT | Desktop shell | https://www.npmjs.com/package/%40electron%2Frebuild/v/4.0.4 | License verified from the exact registry package manifest. |
 | @electron/rebuild | 4.2.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40electron%2Frebuild/v/4.2.0 |  |
 | @electron/universal | 3.0.6 | MIT | Desktop shell | https://www.npmjs.com/package/%40electron%2Funiversal/v/3.0.6 |  |
 | @electron/windows-sign | 1.2.2 | BSD-2-Clause | Desktop shell | https://www.npmjs.com/package/%40electron%2Fwindows-sign/v/1.2.2 |  |
@@ -230,14 +230,14 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @eslint/object-schema | 2.1.7 | Apache-2.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40eslint%2Fobject-schema/v/2.1.7 |  |
 | @eslint/plugin-kit | 0.4.1 | Apache-2.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40eslint%2Fplugin-kit/v/0.4.1 |  |
 | @exodus/bytes | 1.15.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40exodus%2Fbytes/v/1.15.0 |  |
-| @exodus/bytes | 1.15.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40exodus%2Fbytes/v/1.15.1 |  |
+| @exodus/bytes | 1.15.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40exodus%2Fbytes/v/1.15.1 | License verified from the exact registry package manifest. |
 | @fast-csv/format | 4.3.5 | MIT | Env App UI | https://www.npmjs.com/package/%40fast-csv%2Fformat/v/4.3.5 |  |
 | @fast-csv/parse | 4.3.6 | MIT | Env App UI | https://www.npmjs.com/package/%40fast-csv%2Fparse/v/4.3.6 |  |
 | @floegence/beamterm-renderer | 1.0.2 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fbeamterm-renderer/v/1.0.2 |  |
 | @floegence/floe-webapp-boot | 0.40.4 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.40.4 | License inherited from floegence/floe-webapp root LICENSE. |
 | @floegence/floe-webapp-core | 0.40.4 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.40.4 | License inherited from floegence/floe-webapp root LICENSE. |
 | @floegence/floe-webapp-protocol | 0.40.4 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.40.4 | License inherited from floegence/floe-webapp root LICENSE. |
-| @floegence/floeterm-terminal-web | 0.13.0 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.13.0 | Built-in theme attribution and license texts are reproduced below from the verified 0.13.0 package. |
+| @floegence/floeterm-terminal-web | 0.13.1 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.13.1 | Built-in theme attribution and license texts are reproduced below from the verified 0.13.1 package. |
 | @floegence/flowersec-core | 0.27.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/0.27.0 |  |
 | @floegence/redevplugin-contracts | 0.7.17 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-contracts/v/0.7.17 |  |
 | @floegence/redevplugin-ui | 0.7.17 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-ui/v/0.7.17 | License inherited from floegence/redevplugin root LICENSE. |
@@ -373,7 +373,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @standard-schema/spec | 1.1.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40standard-schema%2Fspec/v/1.1.0 |  |
 | @szmarczak/http-timer | 4.0.6 | MIT | Desktop shell | https://www.npmjs.com/package/%40szmarczak%2Fhttp-timer/v/4.0.6 |  |
 | @tailwindcss/node | 4.2.2 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Fnode/v/4.2.2 |  |
-| @tailwindcss/node | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Fnode/v/4.3.0 |  |
+| @tailwindcss/node | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Fnode/v/4.3.0 | License verified from the exact registry package manifest. |
 | @tailwindcss/node | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Fnode/v/4.3.1 |  |
 | @tailwindcss/oxide-android-arm64 | 4.2.2 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-android-arm64/v/4.2.2 |  |
 | @tailwindcss/oxide-android-arm64 | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-android-arm64/v/4.3.0 | License audited from the exact registry package manifest. |
@@ -412,10 +412,10 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @tailwindcss/oxide-win32-x64-msvc | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide-win32-x64-msvc/v/4.3.0 | License audited from the exact registry package manifest. |
 | @tailwindcss/oxide-win32-x64-msvc | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Foxide-win32-x64-msvc/v/4.3.1 |  |
 | @tailwindcss/oxide | 4.2.2 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide/v/4.2.2 |  |
-| @tailwindcss/oxide | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide/v/4.3.0 |  |
+| @tailwindcss/oxide | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Foxide/v/4.3.0 | License verified from the exact registry package manifest. |
 | @tailwindcss/oxide | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Foxide/v/4.3.1 |  |
 | @tailwindcss/vite | 4.2.2 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Fvite/v/4.2.2 |  |
-| @tailwindcss/vite | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Fvite/v/4.3.0 |  |
+| @tailwindcss/vite | 4.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40tailwindcss%2Fvite/v/4.3.0 | License verified from the exact registry package manifest. |
 | @tailwindcss/vite | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/%40tailwindcss%2Fvite/v/4.3.1 |  |
 | @tybys/wasm-util | 0.10.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40tybys%2Fwasm-util/v/0.10.1 |  |
 | @tybys/wasm-util | 0.10.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40tybys%2Fwasm-util/v/0.10.2 |  |
@@ -476,7 +476,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @types/node | 20.19.37 | MIT | Desktop shell | https://www.npmjs.com/package/%40types%2Fnode/v/20.19.37 |  |
 | @types/node | 20.19.41 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fnode/v/20.19.41 |  |
 | @types/node | 24.12.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40types%2Fnode/v/24.12.0 |  |
-| @types/node | 24.12.4 | MIT | Desktop shell | https://www.npmjs.com/package/%40types%2Fnode/v/24.12.4 |  |
+| @types/node | 24.12.4 | MIT | Desktop shell | https://www.npmjs.com/package/%40types%2Fnode/v/24.12.4 | License verified from the exact registry package manifest. |
 | @types/responselike | 1.0.3 | MIT | Desktop shell | https://www.npmjs.com/package/%40types%2Fresponselike/v/1.0.3 |  |
 | @types/semver | 7.7.1 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fsemver/v/7.7.1 |  |
 | @types/trusted-types | 2.0.7 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Ftrusted-types/v/2.0.7 |  |
@@ -532,7 +532,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @vitest/utils | 4.1.10 | MIT | Env App UI | https://www.npmjs.com/package/%40vitest%2Futils/v/4.1.10 |  |
 | @vitest/utils | 4.1.8 | MIT | Code App UI, Desktop shell | https://www.npmjs.com/package/%40vitest%2Futils/v/4.1.8 |  |
 | @xmldom/xmldom | 0.8.13 | MIT | Desktop shell | https://www.npmjs.com/package/%40xmldom%2Fxmldom/v/0.8.13 |  |
-| @xmldom/xmldom | 0.9.10 | MIT | Desktop shell | https://www.npmjs.com/package/%40xmldom%2Fxmldom/v/0.9.10 |  |
+| @xmldom/xmldom | 0.9.10 | MIT | Desktop shell | https://www.npmjs.com/package/%40xmldom%2Fxmldom/v/0.9.10 | License verified from the exact registry package manifest. |
 | abbrev | 4.0.0 | ISC | Desktop shell | https://www.npmjs.com/package/abbrev/v/4.0.0 |  |
 | acorn-jsx | 5.3.2 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/acorn-jsx/v/5.3.2 |  |
 | acorn | 8.16.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/acorn/v/8.16.0 |  |
@@ -605,7 +605,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | compress-commons | 4.1.2 | MIT | Env App UI | https://www.npmjs.com/package/compress-commons/v/4.1.2 |  |
 | confbox | 0.1.8 | MIT | Env App UI | https://www.npmjs.com/package/confbox/v/0.1.8 |  |
 | convert-source-map | 2.0.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/convert-source-map/v/2.0.0 |  |
-| core-util-is | 1.0.2 | MIT | Desktop shell | https://www.npmjs.com/package/core-util-is/v/1.0.2 |  |
+| core-util-is | 1.0.2 | MIT | Desktop shell | https://www.npmjs.com/package/core-util-is/v/1.0.2 | License verified from the exact registry package manifest. |
 | core-util-is | 1.0.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/core-util-is/v/1.0.3 |  |
 | cose-base | 1.0.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/cose-base/v/1.0.3 |  |
 | cose-base | 2.2.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/cose-base/v/2.2.0 |  |
@@ -694,9 +694,9 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | end-of-stream | 1.4.5 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/end-of-stream/v/1.4.5 |  |
 | enhanced-resolve | 5.20.1 | MIT | Desktop shell | https://www.npmjs.com/package/enhanced-resolve/v/5.20.1 |  |
 | enhanced-resolve | 5.21.6 | MIT | Env App UI | https://www.npmjs.com/package/enhanced-resolve/v/5.21.6 |  |
-| enhanced-resolve | 5.22.0 | MIT | Desktop shell | https://www.npmjs.com/package/enhanced-resolve/v/5.22.0 |  |
+| enhanced-resolve | 5.22.0 | MIT | Desktop shell | https://www.npmjs.com/package/enhanced-resolve/v/5.22.0 | License verified from the exact registry package manifest. |
 | entities | 6.0.1 | BSD-2-Clause | Desktop shell, Env App UI | https://www.npmjs.com/package/entities/v/6.0.1 |  |
-| entities | 8.0.0 | BSD-2-Clause | Desktop shell | https://www.npmjs.com/package/entities/v/8.0.0 |  |
+| entities | 8.0.0 | BSD-2-Clause | Desktop shell | https://www.npmjs.com/package/entities/v/8.0.0 | License verified from the exact registry package manifest. |
 | env-paths | 2.2.1 | MIT | Desktop shell | https://www.npmjs.com/package/env-paths/v/2.2.1 |  |
 | err-code | 2.0.3 | MIT | Desktop shell | https://www.npmjs.com/package/err-code/v/2.0.3 |  |
 | es-define-property | 1.0.1 | MIT | Desktop shell | https://www.npmjs.com/package/es-define-property/v/1.0.1 |  |
@@ -822,7 +822,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | js-yaml | 4.3.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/js-yaml/v/4.3.0 |  |
 | jsdom | 26.1.0 | MIT | Env App UI | https://www.npmjs.com/package/jsdom/v/26.1.0 |  |
 | jsdom | 29.0.1 | MIT | Desktop shell | https://www.npmjs.com/package/jsdom/v/29.0.1 |  |
-| jsdom | 29.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/jsdom/v/29.1.1 |  |
+| jsdom | 29.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/jsdom/v/29.1.1 | License verified from the exact registry package manifest. |
 | jsesc | 3.1.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/jsesc/v/3.1.0 |  |
 | json-buffer | 3.0.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/json-buffer/v/3.0.1 |  |
 | json-schema-traverse | 0.4.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/json-schema-traverse/v/0.4.1 |  |
@@ -918,10 +918,10 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | ms | 2.1.3 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/ms/v/2.1.3 |  |
 | nanoid | 3.3.16 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/nanoid/v/3.3.16 |  |
 | natural-compare | 1.4.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/natural-compare/v/1.4.0 |  |
-| node-abi | 4.31.0 | MIT | Desktop shell | https://www.npmjs.com/package/node-abi/v/4.31.0 |  |
+| node-abi | 4.31.0 | MIT | Desktop shell | https://www.npmjs.com/package/node-abi/v/4.31.0 | License verified from the exact registry package manifest. |
 | node-abi | 4.33.0 | MIT | Desktop shell | https://www.npmjs.com/package/node-abi/v/4.33.0 |  |
 | node-api-version | 0.2.1 | MIT | Desktop shell | https://www.npmjs.com/package/node-api-version/v/0.2.1 |  |
-| node-gyp | 12.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/node-gyp/v/12.3.0 |  |
+| node-gyp | 12.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/node-gyp/v/12.3.0 | License verified from the exact registry package manifest. |
 | node-gyp | 12.4.0 | MIT | Desktop shell | https://www.npmjs.com/package/node-gyp/v/12.4.0 |  |
 | node-int64 | 0.4.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/node-int64/v/0.4.0 |  |
 | node-readable-to-web-readable-stream | 0.4.2 | MIT | Env App UI | https://www.npmjs.com/package/node-readable-to-web-readable-stream/v/0.4.2 |  |
@@ -949,7 +949,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | parent-module | 1.0.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/parent-module/v/1.0.1 |  |
 | parse5 | 7.3.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/parse5/v/7.3.0 |  |
 | parse5 | 8.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/parse5/v/8.0.0 |  |
-| parse5 | 8.0.1 | MIT | Desktop shell | https://www.npmjs.com/package/parse5/v/8.0.1 |  |
+| parse5 | 8.0.1 | MIT | Desktop shell | https://www.npmjs.com/package/parse5/v/8.0.1 | License verified from the exact registry package manifest. |
 | path-data-parser | 0.1.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/path-data-parser/v/0.1.0 |  |
 | path-exists | 4.0.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/path-exists/v/4.0.0 |  |
 | path-is-absolute | 1.0.1 | MIT | Desktop shell | https://www.npmjs.com/package/path-is-absolute/v/1.0.1 |  |
@@ -969,7 +969,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | playwright | 1.58.2 | Apache-2.0 | Env App UI | https://www.npmjs.com/package/playwright/v/1.58.2 |  |
 | playwright | 1.60.0 | Apache-2.0 | Env App UI | https://www.npmjs.com/package/playwright/v/1.60.0 |  |
 | plist | 3.1.0 | MIT | Desktop shell | https://www.npmjs.com/package/plist/v/3.1.0 |  |
-| plist | 3.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/plist/v/3.1.1 |  |
+| plist | 3.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/plist/v/3.1.1 | License verified from the exact registry package manifest. |
 | pngjs | 7.0.0 | MIT | Env App UI | https://www.npmjs.com/package/pngjs/v/7.0.0 |  |
 | points-on-curve | 0.2.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/points-on-curve/v/0.2.0 |  |
 | points-on-path | 0.2.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/points-on-path/v/0.2.1 |  |
@@ -1016,7 +1016,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | safe-buffer | 5.2.1 | MIT | Env App UI | https://www.npmjs.com/package/safe-buffer/v/5.2.1 |  |
 | safer-buffer | 2.1.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/safer-buffer/v/2.1.2 |  |
 | sanitize-filename | 1.6.4 | WTFPL OR ISC | Desktop shell | https://www.npmjs.com/package/sanitize-filename/v/1.6.4 |  |
-| sax | 1.6.0 | BlueOak-1.0.0 | Desktop shell | https://www.npmjs.com/package/sax/v/1.6.0 |  |
+| sax | 1.6.0 | BlueOak-1.0.0 | Desktop shell | https://www.npmjs.com/package/sax/v/1.6.0 | License verified from the exact registry package manifest. |
 | sax | 1.6.1 | BlueOak-1.0.0 | Desktop shell | https://www.npmjs.com/package/sax/v/1.6.1 |  |
 | saxes | 5.0.1 | ISC | Env App UI | https://www.npmjs.com/package/saxes/v/5.0.1 |  |
 | saxes | 6.0.0 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/saxes/v/6.0.0 |  |
@@ -1025,7 +1025,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | semver | 5.7.2 | ISC | Desktop shell | https://www.npmjs.com/package/semver/v/5.7.2 |  |
 | semver | 6.3.1 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/semver/v/6.3.1 |  |
 | semver | 7.7.4 | ISC | Code App UI, Desktop shell | https://www.npmjs.com/package/semver/v/7.7.4 |  |
-| semver | 7.8.1 | ISC | Desktop shell | https://www.npmjs.com/package/semver/v/7.8.1 |  |
+| semver | 7.8.1 | ISC | Desktop shell | https://www.npmjs.com/package/semver/v/7.8.1 | License verified from the exact registry package manifest. |
 | semver | 7.8.5 | ISC | Env App UI | https://www.npmjs.com/package/semver/v/7.8.5 |  |
 | serialize-error | 7.0.1 | MIT | Desktop shell | https://www.npmjs.com/package/serialize-error/v/7.0.1 |  |
 | seroval-plugins | 1.5.4 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/seroval-plugins/v/1.5.4 |  |
@@ -1089,10 +1089,10 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | tinyrainbow | 3.1.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/tinyrainbow/v/3.1.0 |  |
 | tldts-core | 6.1.86 | MIT | Env App UI | https://www.npmjs.com/package/tldts-core/v/6.1.86 |  |
 | tldts-core | 7.0.27 | MIT | Desktop shell | https://www.npmjs.com/package/tldts-core/v/7.0.27 |  |
-| tldts-core | 7.4.0 | MIT | Desktop shell | https://www.npmjs.com/package/tldts-core/v/7.4.0 |  |
+| tldts-core | 7.4.0 | MIT | Desktop shell | https://www.npmjs.com/package/tldts-core/v/7.4.0 | License verified from the exact registry package manifest. |
 | tldts | 6.1.86 | MIT | Env App UI | https://www.npmjs.com/package/tldts/v/6.1.86 |  |
 | tldts | 7.0.27 | MIT | Desktop shell | https://www.npmjs.com/package/tldts/v/7.0.27 |  |
-| tldts | 7.4.0 | MIT | Desktop shell | https://www.npmjs.com/package/tldts/v/7.4.0 |  |
+| tldts | 7.4.0 | MIT | Desktop shell | https://www.npmjs.com/package/tldts/v/7.4.0 | License verified from the exact registry package manifest. |
 | tmp-promise | 3.0.3 | MIT | Desktop shell | https://www.npmjs.com/package/tmp-promise/v/3.0.3 |  |
 | tmp | 0.2.7 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/tmp/v/0.2.7 |  |
 | totalist | 3.0.1 | MIT | Env App UI | https://www.npmjs.com/package/totalist/v/3.0.1 |  |
@@ -1249,7 +1249,7 @@ SOFTWARE.
 
 ## Floeterm Built-in Theme Notices
 
-Redeven embeds the built-in terminal theme catalog from `@floegence/floeterm-terminal-web@0.13.0`. The following attribution and license texts are reproduced in Redeven's distributed root notice from the installed registry package. Notice generation verifies the upstream provenance, quality evidence, notice, and license artifacts against these fixed SHA-256 values before emitting this section:
+Redeven embeds the built-in terminal theme catalog from `@floegence/floeterm-terminal-web@0.13.1`. The following attribution and license texts are reproduced in Redeven's distributed root notice from the installed registry package. Notice generation verifies the upstream provenance, quality evidence, notice, and license artifacts against these fixed SHA-256 values before emitting this section:
 
 - `2b6b2d07297ace181564890b79e2c488e67f4747512b8adad08b4bd3ea8dfc06`
 - `e9fdd068550001f555f1bb52ca475b68bc56a12c00da25f9ec28fe03dbdb9005`
