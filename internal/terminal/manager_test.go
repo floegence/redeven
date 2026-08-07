@@ -563,8 +563,8 @@ func TestNormalizeTerminalHistoryPageOptionsDefaultsAndClamps(t *testing.T) {
 func TestTerminalHistoryRespFromPageIncludesCursorMetadata(t *testing.T) {
 	resp := terminalHistoryRespFromPage(termgo.HistoryPage{
 		Chunks: []termgo.TerminalDataChunk{
-			{Sequence: 4, Timestamp: 1000, Data: []byte("hello")},
-			{Sequence: 5, Timestamp: 1100, Data: []byte("world")},
+			{Sequence: 4, Timestamp: 1000, Data: []byte("hello"), GeometryGeneration: 7, Cols: 120, Rows: 55},
+			{Sequence: 5, Timestamp: 1100, Data: []byte("world"), GeometryGeneration: 8, Cols: 131, Rows: 58},
 		},
 		FirstSequence:          4,
 		LastSequence:           5,
@@ -585,6 +585,12 @@ func TestTerminalHistoryRespFromPageIncludesCursorMetadata(t *testing.T) {
 	}
 	if resp.Chunks[0].DataB64 != base64.StdEncoding.EncodeToString([]byte("hello")) {
 		t.Fatalf("first chunk data_b64=%q", resp.Chunks[0].DataB64)
+	}
+	if resp.Chunks[0].GeometryGeneration != 7 || resp.Chunks[0].Cols != 120 || resp.Chunks[0].Rows != 55 {
+		t.Fatalf("first chunk geometry=%+v", resp.Chunks[0])
+	}
+	if resp.Chunks[1].GeometryGeneration != 8 || resp.Chunks[1].Cols != 131 || resp.Chunks[1].Rows != 58 {
+		t.Fatalf("second chunk geometry=%+v", resp.Chunks[1])
 	}
 	if !resp.HasMore || resp.NextStartSeq != 6 || resp.FirstSequence != 4 || resp.LastSequence != 5 {
 		t.Fatalf("unexpected cursor metadata: %+v", resp)
