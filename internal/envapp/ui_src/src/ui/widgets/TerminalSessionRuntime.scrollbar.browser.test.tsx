@@ -42,6 +42,7 @@ const HISTORY_MARKERS = Array.from({ length: 1_200 }, (_, index) => (
 ));
 const HISTORY_TEXT = `${HISTORY_MARKERS.join('\r\n')}\r\n`;
 const HISTORY_BYTES = new TextEncoder().encode(HISTORY_TEXT);
+let nextResizeGeneration = 1;
 
 const SESSION = {
   id: 'scrollbar-product-contract',
@@ -70,7 +71,7 @@ const createTransport = (
     runtimeAttachGeneration: 1,
     requested: { cols, rows },
     effective: {
-      generation: 1,
+      generation: ++nextResizeGeneration,
       outputSequenceBoundary: 1,
       cols,
       rows,
