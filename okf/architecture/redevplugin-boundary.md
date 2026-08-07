@@ -8,7 +8,7 @@ timestamp: 2026-07-25T00:00:00Z
 # Summary
 
 ReDevPlugin is an independently released plugin platform. Redeven consumes its
-coordinated `v0.7.16` Go, npm, Rust source-crate, and machine-contract artifacts;
+coordinated `v0.7.17` Go, npm, Rust source-crate, and machine-contract artifacts;
 it does not fork platform mechanics. Redeven owns authenticated session mapping,
 product source policy and review UX, UI placement, product runtime builds, and
 concrete business adapters. Missing or unverifiable upstream identity, lifecycle,
@@ -42,12 +42,12 @@ external-package receipt store.
 
 ## Published dependency set
 
-The current integration consumes the coordinated ReDevPlugin `v0.7.16` set:
+The current integration consumes the coordinated ReDevPlugin `v0.7.17` set:
 
-- `github.com/floegence/redevplugin v0.7.16`;
-- `@floegence/redevplugin-contracts@0.7.16` and
-  `@floegence/redevplugin-ui@0.7.16`;
-- the exact six `0.7.16` Rust source crates ending in `redevplugin-runtime`;
+- `github.com/floegence/redevplugin v0.7.17`;
+- `@floegence/redevplugin-contracts@0.7.17` and
+  `@floegence/redevplugin-ui@0.7.17`;
+- the exact six `0.7.17` Rust source crates ending in `redevplugin-runtime`;
 - the released contract registry, package-set contract, contract hashes, and
   attested `platform-package-publication-v1.json` registry readback.
 
@@ -59,16 +59,19 @@ package coordinates. Forbidden wiring includes `go.work`, `go.work.sum`, Go
 contracts, and copied runtime binaries. Dependency checks use `GOWORK=off`.
 
 ReDevPlugin owns the durable `redevplugin.release_install_operation.v1`
-journal. Official release installation is submitted with an owner-scoped,
-idempotent request and observed through the released start/list/get/watch
-endpoints. The operation survives browser, Shell, transport, and Host
-observation loss; its phase, retryable failure code, mutation outcome, and
-authoritative progress remain platform state. Redeven may reconnect and refresh
-inventory, but must not create a local operation store, copy the state machine,
-invent progress, or cancel work when a panel closes.
+journal. Official release installation requests activation after commit and is
+observed through the released start/list/get/watch endpoints. The platform
+activates a verified official release when its permissions are already
+approved, or returns an installed `needs_attention` record without silently
+granting missing permissions. The operation survives browser, Shell, transport,
+and Host observation loss; its fetch, download, hash, signature/ledger, commit,
+enable, retry, cache, failure, mutation, and byte-progress evidence remains
+platform state. Redeven may reconnect and refresh inventory, but must not create
+a local operation store, copy the state machine, invent progress, or cancel work
+when a panel closes.
 
 Release trust refreshes, including activation-lease reconstruction after Host
-restart, remain ReDevPlugin work. The `v0.7.16` Host gives the complete activation
+restart, remain ReDevPlugin work. The `v0.7.17` Host gives the complete activation
 trust reconstruction the same five-minute operation window as installation while
 retaining the separate 20-second asset and two-minute package deadlines. It
 preserves timeout and network identities through the trust boundary and stops
@@ -176,7 +179,7 @@ committed. Unknown, corrupt, ambiguous, tampered, or future state blocks startup
 without mutation. Floret-owned state is outside this lifecycle.
 
 For an exact supported root copied across filesystem identities, Redeven may use
-the released read-only inspection and exact-plan recovery APIs from `v0.7.16`.
+the released read-only inspection and exact-plan recovery APIs from `v0.7.17`.
 The product presents the projected digests, counts, sizes, and retained-state
 facts, binds confirmation to one plan digest, and takes the normal Local
 Environment runtime lock. The released transaction retains the entire source as
