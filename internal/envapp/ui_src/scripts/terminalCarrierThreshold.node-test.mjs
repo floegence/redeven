@@ -15,7 +15,7 @@ import {
   terminalCarrierPercentile,
 } from './terminalCarrierThreshold.mjs';
 
-test('requires byte-exact terminal carrier fixtures within the retained history cap', () => {
+test('retains byte-exact terminal carrier fixtures up to the ring-buffer cap', () => {
   const historyMaxBytes = 8 * 1024 * 1024;
   assert.equal(terminalCarrierExpectedRetainedBytes({ fixtureBytes: 0, historyMaxBytes }), 0);
   assert.equal(terminalCarrierExpectedRetainedBytes({
@@ -26,10 +26,10 @@ test('requires byte-exact terminal carrier fixtures within the retained history 
     fixtureBytes: historyMaxBytes,
     historyMaxBytes,
   }), historyMaxBytes);
-  assert.throws(
-    () => terminalCarrierExpectedRetainedBytes({ fixtureBytes: historyMaxBytes + 1, historyMaxBytes }),
-    /must not exceed the retained history cap/,
-  );
+  assert.equal(terminalCarrierExpectedRetainedBytes({
+    fixtureBytes: historyMaxBytes + 1,
+    historyMaxBytes,
+  }), historyMaxBytes);
 });
 
 test('allows disabled and in-budget terminal carrier samples', () => {

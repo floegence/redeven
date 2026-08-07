@@ -10,13 +10,10 @@ export function terminalCarrierExpectedRetainedBytes({ fixtureBytes, historyMaxB
   if (!Number.isSafeInteger(maximum) || maximum <= 0) {
     throw new Error('terminal carrier retained history cap must be a positive safe integer');
   }
-  if (requested > maximum) {
-    throw new Error(
-      'terminal carrier fixture bytes must not exceed the retained history cap '
-        + `(fixture_bytes=${requested}, history_max_bytes=${maximum})`,
-    );
-  }
-  return requested;
+  // Deliberately allow an overflow fixture: the carrier must prove that a
+  // refresh can recover the retained tail after the ring buffer evicts the
+  // oldest bytes.
+  return Math.min(requested, maximum);
 }
 
 export function assertTerminalCarrierInteractiveLimit({ stage, interactiveMs, maxInteractiveMs }) {

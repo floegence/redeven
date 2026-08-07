@@ -36,6 +36,7 @@ function fixtureID(fixtureBytes) {
   if (fixtureBytes === 448 * 1024) return '448KiB';
   if (fixtureBytes === 7 * 1024 * 1024) return '7MiB';
   if (fixtureBytes === 8 * 1024 * 1024) return '8MiB-boundary';
+  if (fixtureBytes === 9 * 1024 * 1024) return '9MiB-ring-overflow';
   return `${fixtureBytes}B`;
 }
 
@@ -499,6 +500,29 @@ async function captureCanvasEvidence(canvas) {
   return { hash: sha256(image), visual: analyzeCanvasImage(image) };
 }
 
+async function captureTerminalRendererGeometry(runtime) {
+  return runtime.evaluate((element) => {
+    const surface = element.querySelector('.redeven-terminal-surface');
+    const canvas = element.querySelector('.floeterm-beamterm-canvas');
+    if (!(surface instanceof globalThis.HTMLElement)
+      || !(canvas instanceof globalThis.HTMLCanvasElement)) {
+      throw new Error('terminal surface or renderer canvas is unavailable');
+    }
+    const surfaceRect = surface.getBoundingClientRect();
+    const canvasRect = canvas.getBoundingClientRect();
+    const computed = globalThis.getComputedStyle(canvas);
+    return {
+      runtime: [element.getBoundingClientRect().width, element.getBoundingClientRect().height],
+      surface: [surfaceRect.width, surfaceRect.height],
+      canvas_css: [canvasRect.width, canvasRect.height],
+      canvas_client: [canvas.clientWidth, canvas.clientHeight],
+      canvas_backing: [canvas.width, canvas.height],
+      canvas_display: computed.display,
+      canvas_visibility: computed.visibility,
+    };
+  });
+}
+
 async function captureCanvasVisualEvidence(canvas) {
   const samples = [];
   for (let index = 0; index < 3; index += 1) {
@@ -532,6 +556,24 @@ async function waitForHistoryBytes(scope, expectedBytes, timeoutMs = 30_000) {
   throw new Error(
     'terminal history stats did not reach the exact retained-byte fixture '
       + `(expected_bytes=${expectedBytes}, minimum_observed_bytes=${minimumObservedBytes}, `
+      + `last_observed_bytes=${lastObservedBytes})`,
+  );
+}
+
+async function waitForHistoryBytesRange(scope, minimumBytes, maximumBytes, timeoutMs = 30_000) {
+  const deadline = Date.now() + timeoutMs;
+  let lastObservedBytes = null;
+  while (Date.now() < deadline) {
+    const historyBytes = await readHistoryBytes(scope).catch(() => null);
+    if (historyBytes !== null) {
+      lastObservedBytes = historyBytes;
+      if (historyBytes >= minimumBytes && historyBytes <= maximumBytes) return historyBytes;
+    }
+    await delay(50);
+  }
+  throw new Error(
+    'terminal history stats did not reach the retained-byte range '
+      + `(minimum_bytes=${minimumBytes}, maximum_bytes=${maximumBytes}, `
       + `last_observed_bytes=${lastObservedBytes})`,
   );
 }
@@ -664,7 +706,13 @@ async function seedRetainedSession(page, tempDir, fixtureBytes) {
     fixtureBytes,
     historyMaxBytes: terminalHistoryMaxBytes,
   });
-  const historyBytes = await waitForHistoryBytes(targetPanel, expectedHistoryBytes);
+  const historyBytes = fixtureBytes > terminalHistoryMaxBytes
+    ? await waitForHistoryBytesRange(
+        targetPanel,
+        terminalHistoryMaxBytes - terminalHistoryChunkMaxBytes + 1,
+        terminalHistoryMaxBytes,
+      )
+    : await waitForHistoryBytes(targetPanel, expectedHistoryBytes);
   try {
     await waitForCanvasChange(canvas, beforeFixture, 15_000);
   } catch (error) {
@@ -702,6 +750,7 @@ async function seedRetainedSession(page, tempDir, fixtureBytes) {
     });
   }
   const historyVisual = await captureCanvasVisualEvidence(canvas);
+  const rendererGeometry = await captureTerminalRendererGeometry(targetRuntime);
   const historyLayout = await page.evaluate(({ panelVariant, sessionRef }) => {
     const attachStart = performance.getEntriesByType('mark').filter((entry) => (
       entry.name.startsWith('redeven:terminal:attach-start:')
@@ -726,6 +775,7 @@ async function seedRetainedSession(page, tempDir, fixtureBytes) {
     historyLabel: String(historyLabel ?? '').trim(),
     historyLayout,
     historyVisual,
+    rendererGeometry,
     foregroundPresentation,
   };
 }
@@ -859,6 +909,7 @@ async function verifyTerminalRefreshReplay({
   expectedHistoryBytes,
   baselineVisual,
   baselineLayout,
+  baselineRendererGeometry,
 }) {
   const sessionRef = pseudonymousTerminalSessionRef(sessionID);
   const attachStartsBefore = await countTerminalAttachStarts(page, surface, sessionRef);
@@ -892,17 +943,36 @@ async function verifyTerminalRefreshReplay({
   ).last();
   await refreshedCanvas.waitFor({ state: 'visible', timeout: 15_000 });
   const refreshedVisual = await captureCanvasVisualEvidence(refreshedCanvas);
+  const refreshedGeometry = await captureTerminalRendererGeometry(refreshedRuntime);
+  for (const [name, values] of Object.entries(refreshedGeometry)) {
+    if (name === 'canvas_display' || name === 'canvas_visibility') continue;
+    if (!Array.isArray(values) || values.some((value) => !Number.isFinite(value) || value <= 0)) {
+      throw new Error(`terminal refresh produced invalid renderer geometry (${name}=${JSON.stringify(values)})`);
+    }
+  }
   const refreshVisualMatch = assertTerminalCarrierHistoryVisualEvidence({
     baselineVisual,
     recoveredVisual: refreshedVisual,
     baselineLayout,
     recoveredLayout: { cols: refreshMarks.cols, rows: refreshMarks.rows },
   });
+  const sameGridAfterRefresh = baselineLayout.cols === refreshMarks.cols
+    && baselineLayout.rows === refreshMarks.rows;
+  if (sameGridAfterRefresh
+    && baselineRendererGeometry
+    && JSON.stringify(baselineRendererGeometry) !== JSON.stringify(refreshedGeometry)) {
+    throw new Error(
+      'terminal refresh changed renderer geometry without a shared-grid change '
+        + `(baseline=${JSON.stringify(baselineRendererGeometry)} `
+        + `refresh=${JSON.stringify(refreshedGeometry)})`,
+    );
+  }
 
   const attachStartsBeforeFocus = await countTerminalAttachStarts(page, surface, sessionRef);
   await terminalInput(page, refreshedRuntime);
   await delay(250);
   const focusedVisual = await captureCanvasVisualEvidence(refreshedCanvas);
+  const focusedGeometry = await captureTerminalRendererGeometry(refreshedRuntime);
   const focusVisualMatch = assertTerminalCarrierHistoryVisualEvidence({
     baselineVisual: refreshedVisual,
     recoveredVisual: focusedVisual,
@@ -912,6 +982,12 @@ async function verifyTerminalRefreshReplay({
   const attachStartsAfterFocus = await countTerminalAttachStarts(page, surface, sessionRef);
   if (attachStartsAfterFocus !== attachStartsBeforeFocus) {
     throw new Error('terminal focus unexpectedly started another attachment after refresh');
+  }
+  if (JSON.stringify(refreshedGeometry) !== JSON.stringify(focusedGeometry)) {
+    throw new Error(
+      'terminal focus changed renderer geometry after refresh '
+        + `(refresh=${JSON.stringify(refreshedGeometry)} focus=${JSON.stringify(focusedGeometry)})`,
+    );
   }
   if (await targetPanel.locator('button[aria-label="Update Runtime"]:visible').count()) {
     throw new Error('terminal refresh rendered a non-retryable history contract failure');
@@ -923,6 +999,9 @@ async function verifyTerminalRefreshReplay({
     refresh_history_visual_comparison: refreshVisualMatch.mode,
     focus_history_visual_match: focusVisualMatch.layouts_match ? true : null,
     focus_history_visual_comparison: focusVisualMatch.mode,
+    baseline_renderer_geometry: baselineRendererGeometry ?? null,
+    refresh_renderer_geometry: refreshedGeometry,
+    focus_renderer_geometry: focusedGeometry,
   };
 }
 
@@ -1305,6 +1384,7 @@ async function runRecoverySample({ context, entryURL, fixtureBytes, seeded, surf
     if (marks.covered_through_sequence !== marks.snapshot_end_sequence) {
       throw new Error('terminal recovery coverage did not reach the fixed snapshot end');
     }
+    const baselineRendererGeometry = await captureTerminalRendererGeometry(targetRuntime);
     if (fixtureBytes > 0 && !preparedHistoryHit && marks.history_bytes_fetched < seeded.historyBytes) {
       throw new Error(
         'terminal recovery fetched fewer history bytes than the fixture requires '
@@ -1348,6 +1428,7 @@ async function runRecoverySample({ context, entryURL, fixtureBytes, seeded, surf
         expectedHistoryBytes: seeded.historyBytes,
         baselineVisual: recoveredVisual,
         baselineLayout: { cols: marks.cols, rows: marks.rows },
+        baselineRendererGeometry,
       })
       : null;
     const markerPath = path.join(tempDir, `input-${temperature}-${surface}-${sampleIndex}`);
@@ -1393,6 +1474,9 @@ async function runRecoverySample({ context, entryURL, fixtureBytes, seeded, surf
       refresh_history_visual_comparison: refreshReplay?.refresh_history_visual_comparison ?? null,
       focus_history_visual_match: refreshReplay?.focus_history_visual_match ?? null,
       focus_history_visual_comparison: refreshReplay?.focus_history_visual_comparison ?? null,
+      baseline_renderer_geometry: refreshReplay?.baseline_renderer_geometry ?? null,
+      refresh_renderer_geometry: refreshReplay?.refresh_renderer_geometry ?? null,
+      focus_renderer_geometry: refreshReplay?.focus_renderer_geometry ?? null,
       status: 'passed',
     };
   } finally {
