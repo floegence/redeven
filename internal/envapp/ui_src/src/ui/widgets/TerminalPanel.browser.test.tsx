@@ -218,7 +218,10 @@ const terminalCoreState = vi.hoisted(() => ({
     measureHostDimensions: ReturnType<typeof vi.fn>;
     getDimensions: () => { cols: number; rows: number };
     focus: ReturnType<typeof vi.fn>;
-    handlers: { onError?: (error: Error) => void };
+    handlers: {
+      onError?: (error: Error) => void;
+      onResize?: (size: { cols: number; rows: number }) => void;
+    };
     config: any;
     emitBell: () => void;
   }>,
