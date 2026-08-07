@@ -139,6 +139,10 @@ const hostCapacityState = vi.hoisted(() => ({
   dimensions: null as { cols: number; rows: number } | null,
 }));
 
+const snapshotRestoreState = vi.hoisted(() => ({
+  nextResult: true,
+}));
+
 const transportMocks = vi.hoisted(() => {
   const attach = vi.fn().mockImplementation(async (_sessionId: string, cols: number, rows: number) => ({
     historyBoundarySequence: transportAttachState.historyBoundarySequence,
@@ -216,6 +220,9 @@ const terminalCoreState = vi.hoisted(() => ({
     setFixedDimensions: ReturnType<typeof vi.fn>;
     forceResizeAndWaitForPresentation: ReturnType<typeof vi.fn>;
     measureHostDimensions: ReturnType<typeof vi.fn>;
+    captureRestorableSnapshot: ReturnType<typeof vi.fn>;
+    restoreSnapshot: ReturnType<typeof vi.fn>;
+    clear: ReturnType<typeof vi.fn>;
     getDimensions: () => { cols: number; rows: number };
     focus: ReturnType<typeof vi.fn>;
     handlers: {
@@ -534,7 +541,7 @@ vi.mock('@floegence/floeterm-terminal-web', async () => {
       rows: 24,
       createdAtMs: Date.now(),
     }));
-    restoreSnapshot = vi.fn().mockResolvedValue(true);
+    restoreSnapshot = vi.fn().mockImplementation(async () => snapshotRestoreState.nextResult);
     getResourceEstimate = vi.fn(() => ({
       bufferBytes: 256 * 1024,
       cellCount: 2_000,
@@ -856,6 +863,7 @@ beforeEach(() => {
   presentationFenceState.blocked = false;
   presentationFenceState.resolvers = [];
   hostCapacityState.dimensions = null;
+  snapshotRestoreState.nextResult = true;
   terminalSessionsState.sessions = [
     {
       id: 'session-1',
@@ -1476,6 +1484,109 @@ describe('TerminalPanel browser activity integration', () => {
     await settleTerminalPanel();
     expect(core.setFixedDimensions.mock.calls).toHaveLength(dimensionsBeforeFocus);
     expect(core.write.mock.calls.map((call) => decodeTerminalWrite(call[0]))).toEqual(['old-grid', 'new-grid']);
+  });
+
+  it('restores a refresh checkpoint and replays only output after the checkpoint', async () => {
+    terminalSessionsState.sessions = [terminalSessionsState.sessions[0]!];
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="panel" />, host);
+    await vi.waitFor(() => expect(terminalCoreState.instances).toHaveLength(1));
+    await settleTerminalPanel();
+
+    for (const sequence of [1, 2, 3, 4, 5]) {
+      emitTerminalData('session-1', sequence === 5 ? 'screen-before-refresh' : `prefix-${sequence}`, sequence);
+    }
+    await settleTerminalPanel();
+
+    transportAttachState.historyBoundarySequence = 6;
+    transportMocks.historyPage.mockResolvedValue(withHistoryContract({
+      chunks: [{
+        sequence: 6,
+        timestampMs: 60,
+        data: textEncoder.encode('screen-after-refresh'),
+        geometryGeneration: 1,
+        cols: 80,
+        rows: 24,
+      }],
+      nextStartSeq: 0,
+      hasMore: false,
+      firstSequence: 6,
+      lastSequence: 6,
+      coveredThroughSequence: 6,
+      snapshotEndSequence: 6,
+      firstRetainedSequence: 1,
+      historyGeneration: 1,
+      coveredBytes: 20,
+      totalBytes: 20,
+    }));
+    transportMocks.historyPage.mockClear();
+
+    host.querySelector<HTMLButtonElement>('[data-testid="terminal-sidebar-refresh"]')?.click();
+    await vi.waitFor(() => expect(terminalCoreState.instances).toHaveLength(2));
+    const oldCore = terminalCoreState.instances[0]!;
+    const refreshedCore = terminalCoreState.instances[1]!;
+    await vi.waitFor(() => expect(refreshedCore.restoreSnapshot).toHaveBeenCalled());
+
+    expect(oldCore.captureRestorableSnapshot).toHaveBeenCalledWith({ coveredThroughSequence: 5 });
+    expect(oldCore.dispose).toHaveBeenCalledTimes(1);
+    expect(refreshedCore.restoreSnapshot).toHaveBeenCalledWith(expect.objectContaining({
+      coveredThroughSequence: 5,
+      data: 'browser snapshot',
+    }));
+    expect(transportMocks.historyPage.mock.calls[0]?.[1]).toBe(6);
+    expect(refreshedCore.write.mock.calls.map((call) => decodeTerminalWrite(call[0]))).toEqual([
+      'screen-after-refresh',
+    ]);
+  });
+
+  it('falls back to complete history when a refresh checkpoint cannot be restored', async () => {
+    terminalSessionsState.sessions = [terminalSessionsState.sessions[0]!];
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="panel" />, host);
+    await vi.waitFor(() => expect(terminalCoreState.instances).toHaveLength(1));
+    await settleTerminalPanel();
+
+    for (const sequence of [1, 2, 3, 4, 5]) {
+      emitTerminalData('session-1', `screen-${sequence}`, sequence);
+    }
+    await settleTerminalPanel();
+    transportAttachState.historyBoundarySequence = 6;
+    transportMocks.historyPage.mockResolvedValue(withHistoryContract({
+      chunks: [{
+        sequence: 1,
+        timestampMs: 10,
+        data: textEncoder.encode('full-history'),
+        geometryGeneration: 1,
+        cols: 80,
+        rows: 24,
+      }],
+      nextStartSeq: 0,
+      hasMore: false,
+      firstSequence: 1,
+      lastSequence: 1,
+      coveredThroughSequence: 6,
+      snapshotEndSequence: 6,
+      firstRetainedSequence: 1,
+      historyGeneration: 1,
+      coveredBytes: 12,
+      totalBytes: 12,
+    }));
+    transportMocks.historyPage.mockClear();
+    snapshotRestoreState.nextResult = false;
+
+    host.querySelector<HTMLButtonElement>('[data-testid="terminal-sidebar-refresh"]')?.click();
+    await vi.waitFor(() => expect(terminalCoreState.instances).toHaveLength(2));
+    const refreshedCore = terminalCoreState.instances[1]!;
+    await vi.waitFor(() => expect(refreshedCore.write.mock.calls.length).toBeGreaterThan(0));
+
+    expect(refreshedCore.restoreSnapshot).toHaveBeenCalledTimes(1);
+    expect(refreshedCore.clear).toHaveBeenCalledTimes(1);
+    expect(transportMocks.historyPage.mock.calls[0]?.[1]).toBe(0);
+    expect(refreshedCore.write.mock.calls.map((call) => decodeTerminalWrite(call[0]))).toEqual([
+      'full-history',
+    ]);
   });
 
   it('keeps the surface non-interactive until the refreshed renderer presentation fence completes', async () => {
