@@ -579,7 +579,10 @@ function decision(options: EnvLocalFlowerSurfaceAdapterOptions): FlowerRouterDec
   };
 }
 
-async function loadSettingsSnapshot(options: EnvLocalFlowerSurfaceAdapterOptions): Promise<FlowerSettingsSnapshot> {
+async function loadSettingsSnapshot(
+  options: EnvLocalFlowerSurfaceAdapterOptions,
+  loadCatalog: () => Promise<ModelsResponse> = loadModels,
+): Promise<FlowerSettingsSnapshot> {
   const settings = await fetchLocalApiJSON<AgentSettingsResponse>('/_redeven_proxy/api/settings', { method: 'GET' });
   const exposeDesktopModelSource = options.desktopSessionTargetRoute === 'remote_desktop';
   const desktopModelSource = settings.ai_runtime?.desktop_model_source;
@@ -591,7 +594,7 @@ async function loadSettingsSnapshot(options: EnvLocalFlowerSurfaceAdapterOptions
     && (desktopModelSource.missing_key_provider_ids ?? []).length === 0
   ) {
     try {
-      catalog = { state: 'loaded', response: await loadDesktopModelCatalog() };
+      catalog = { state: 'loaded', response: await loadDesktopModelCatalog(loadCatalog) };
     } catch (error) {
       catalog = { state: 'failed', message: error instanceof Error ? error.message : String(error) };
     }
@@ -603,8 +606,8 @@ async function loadModels(): Promise<ModelsResponse> {
   return fetchLocalApiJSON<ModelsResponse>('/_redeven_proxy/api/ai/models', { method: 'GET' });
 }
 
-async function loadDesktopModelCatalog(): Promise<ModelsResponse> {
-  const raw = await fetchLocalApiJSON<unknown>('/_redeven_proxy/api/ai/models', { method: 'GET' });
+async function loadDesktopModelCatalog(loadCatalog: () => Promise<unknown> = loadModels): Promise<ModelsResponse> {
+  const raw = await loadCatalog();
   if (!raw || typeof raw !== 'object') {
     throw new Error('Desktop model catalog response is invalid.');
   }
@@ -656,6 +659,50 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         await openCanonicalReferenceTarget(target);
       }
     : undefined;
+
+  const cacheTTLMS = 5_000;
+  let settingsRevision = 0;
+  let modelsRevision = 0;
+  let settingsCache: Readonly<{ value: FlowerSettingsSnapshot; expiresAtMS: number }> | null = null;
+  let modelsCache: Readonly<{ value: ModelsResponse; expiresAtMS: number }> | null = null;
+  let settingsRequest: Promise<FlowerSettingsSnapshot> | null = null;
+  let modelsRequest: Promise<ModelsResponse> | null = null;
+  const loadCachedModels = (): Promise<ModelsResponse> => {
+    const now = Date.now();
+    if (modelsCache && modelsCache.expiresAtMS > now) return Promise.resolve(modelsCache.value);
+    if (modelsRequest) return modelsRequest;
+    const revision = modelsRevision;
+    const request = loadModels().then((value) => {
+      if (revision === modelsRevision) modelsCache = { value, expiresAtMS: Date.now() + cacheTTLMS };
+      return value;
+    }).finally(() => {
+      if (modelsRequest === request) modelsRequest = null;
+    });
+    modelsRequest = request;
+    return request;
+  };
+  const loadCachedSettings = (): Promise<FlowerSettingsSnapshot> => {
+    const now = Date.now();
+    if (settingsCache && settingsCache.expiresAtMS > now) return Promise.resolve(settingsCache.value);
+    if (settingsRequest) return settingsRequest;
+    const revision = settingsRevision;
+    const request = loadSettingsSnapshot(options, loadCachedModels).then((value) => {
+      if (revision === settingsRevision) settingsCache = { value, expiresAtMS: Date.now() + cacheTTLMS };
+      return value;
+    }).finally(() => {
+      if (settingsRequest === request) settingsRequest = null;
+    });
+    settingsRequest = request;
+    return request;
+  };
+  const invalidateSettingsCache = () => {
+    settingsRevision += 1;
+    modelsRevision += 1;
+    settingsCache = null;
+    modelsCache = null;
+    settingsRequest = null;
+    modelsRequest = null;
+  };
 
   return createRuntimeFlowerSurfaceAdapter({
     runtime: {
@@ -749,13 +796,14 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       }),
     },
     mapperOptions: envLiveMapperOptions(options),
-    loadSettings: () => loadSettingsSnapshot(options),
+    loadSettings: loadCachedSettings,
     saveDefaultPermission: async (permissionType) => {
       await fetchLocalApiJSON<unknown>('/_redeven_proxy/api/ai/default_permission', {
         method: 'PUT',
         body: JSON.stringify({ permission_type: normalizePermissionType(permissionType) }),
       });
-      return loadSettingsSnapshot(options);
+      invalidateSettingsCache();
+      return loadCachedSettings();
     },
     saveModelProfile: async (draft) => {
       const providerAPIKeyPatches: FlowerSecretPatch[] = draft.model_profile.providers.flatMap((provider): FlowerSecretPatch[] => {
@@ -782,18 +830,20 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
           web_search_provider_key_patches: webSearchKeyPatches,
         }),
       });
-      return loadSettingsSnapshot(options);
+      invalidateSettingsCache();
+      return loadCachedSettings();
     },
     persistDefaultModel: async (modelID) => {
       const mid = trim(modelID);
       if (!mid) throw new Error('Missing model id.');
-      const current = await loadSettingsSnapshot(options);
+      const current = await loadCachedSettings();
       if (!profileContainsModel(current, mid)) throw new Error('Model is not part of the environment profile.');
       await fetchLocalApiJSON<ModelsResponse>('/_redeven_proxy/api/ai/current_model', {
         method: 'PUT',
         body: JSON.stringify({ model_id: mid }),
       });
-      const snapshot = await loadSettingsSnapshot(options);
+      invalidateSettingsCache();
+      const snapshot = await loadCachedSettings();
       if (options.onSettingsChanged) void Promise.resolve(options.onSettingsChanged()).catch(() => undefined);
       return snapshot;
     },
@@ -837,9 +887,12 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       const attachmentIDs = (input.attachment_ids ?? []).map(trim).filter(Boolean);
       const contextAction = requireAskFlowerContextActionEnvelope(input.context_action);
       if (!prompt.trim() && attachmentIDs.length === 0 && !contextAction) throw new Error(copy.enterMessageBeforeSending);
-      const snapshot = await loadSettingsSnapshot(options);
-      const permissionType = normalizePermissionType(input.permission_type ?? snapshot.defaults.permission_type);
       const existingThreadID = trim(input.thread_id);
+      const [snapshot, models] = await Promise.all([
+        loadCachedSettings(),
+        existingThreadID ? Promise.resolve<ModelsResponse | null>(null) : loadCachedModels(),
+      ]);
+      const permissionType = normalizePermissionType(input.permission_type ?? snapshot.defaults.permission_type);
       const clientRequestID = trim(input.client_request_id);
       if (!clientRequestID) throw new Error('Missing client request id.');
       const stagingScope = input.staging_scope;
@@ -853,7 +906,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       let turnModelID = trim(input.model_id);
       let createBody: Record<string, unknown> | undefined;
       if (!existingThreadID) {
-        const models = await loadModels();
+        if (!models) throw new Error('Flower model catalog is unavailable.');
         turnModelID = turnModelID || currentModelID(snapshot, models);
         if (!turnModelID) throw new Error(copy.selectModelBeforeChat);
         createBody = {

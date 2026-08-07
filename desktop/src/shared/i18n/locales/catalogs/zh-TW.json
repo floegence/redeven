@@ -87,6 +87,7 @@
       "composerReferenceExists": "{path} 已在引用清單中。",
       "commandCompactContext": "壓縮目前上下文",
       "pendingSending": "傳送中",
+      "pendingSubmission": "訊息傳送中...",
       "pendingQueued": "已排入佇列",
       "scrollToLatest": "捲動到最新",
       "runErrorTitle": "Flower 未能完成這次回覆。",

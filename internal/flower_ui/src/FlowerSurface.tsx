@@ -233,6 +233,74 @@ type PendingContextCompactionDecoration = Readonly<{
   known_operation_ids: readonly string[];
   decoration: Extract<FlowerTimelineDecoration, { kind: 'context_compaction' }>;
 }>;
+type FlowerPendingSubmission = Readonly<{
+  clientRequestID: string;
+  sessionKey: string;
+  threadID?: string;
+  prompt: string;
+  attachmentNames: readonly string[];
+  referenceLabels: readonly string[];
+  phase: 'preparing' | 'admitting' | 'awaiting_projection';
+  canonicalKind?: 'start' | 'queued';
+  canonicalID?: string;
+  startedAtMS: number;
+}>;
+type FlowerPendingSubmissionEvent =
+  | Readonly<{ kind: 'begin'; submission: FlowerPendingSubmission }>
+  | Readonly<{ kind: 'admission_started'; clientRequestID: string }>
+  | Readonly<{ kind: 'admission_uncertain'; clientRequestID: string; threadID?: string }>
+  | Readonly<{
+    kind: 'admission_accepted';
+    clientRequestID: string;
+    threadID: string;
+    canonicalKind: 'start' | 'queued';
+    canonicalID: string;
+  }>
+  | Readonly<{ kind: 'projection_observed'; clientRequestID: string }>
+  | Readonly<{ kind: 'admission_failed'; clientRequestID: string }>
+  | Readonly<{ kind: 'submission_finished_without_receipt'; clientRequestID: string }>
+  | Readonly<{ kind: 'new_conversation' }>
+  | Readonly<{ kind: 'thread_selected'; threadID: string }>;
+
+function transitionFlowerPendingSubmission(
+  current: FlowerPendingSubmission | null,
+  event: FlowerPendingSubmissionEvent,
+): FlowerPendingSubmission | null {
+  switch (event.kind) {
+    case 'begin':
+      return event.submission;
+    case 'admission_started':
+      return current?.clientRequestID === event.clientRequestID
+        ? { ...current, phase: 'admitting' }
+        : current;
+    case 'admission_uncertain':
+      return current?.clientRequestID === event.clientRequestID
+        ? {
+          ...current,
+          ...(event.threadID ? { threadID: event.threadID } : {}),
+          phase: 'awaiting_projection',
+        }
+        : current;
+    case 'admission_accepted':
+      return current?.clientRequestID === event.clientRequestID
+        ? {
+          ...current,
+          threadID: event.threadID,
+          phase: 'awaiting_projection',
+          canonicalKind: event.canonicalKind,
+          canonicalID: event.canonicalID,
+        }
+        : current;
+    case 'projection_observed':
+    case 'admission_failed':
+    case 'submission_finished_without_receipt':
+      return current?.clientRequestID === event.clientRequestID ? null : current;
+    case 'new_conversation':
+      return null;
+    case 'thread_selected':
+      return current?.threadID === event.threadID ? current : null;
+  }
+}
 const APPROVAL_DECISION_RESYNC_MS = 1500;
 type FlowerHandlerResolutionState =
   | Readonly<{ status: 'starting' }>
@@ -874,6 +942,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [inputSubmittingPromptID, setInputSubmittingPromptID] = createSignal('');
   const [consumedInputAdmissions, setConsumedInputAdmissions] = createSignal<Record<string, FlowerConsumedInputAdmission>>({});
   const [chatRunning, setChatRunning] = createSignal(false);
+  const [pendingSubmission, setPendingSubmission] = createSignal<FlowerPendingSubmission | null>(null);
+  const transitionPendingSubmission = (event: FlowerPendingSubmissionEvent) => {
+    setPendingSubmission((current) => transitionFlowerPendingSubmission(current, event));
+  };
   const [threadStopping, setThreadStopping] = createSignal(false);
   const [compactSubmitting, setCompactSubmitting] = createSignal(false);
   const [pendingContextCompaction, setPendingContextCompaction] = createSignal<PendingContextCompactionDecoration | null>(null);
@@ -1313,6 +1385,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (!detailID) return null;
     return threads().find((thread) => thread.thread_id === detailID) ?? null;
   });
+  createEffect(() => {
+    const pending = pendingSubmission();
+    if (!pending?.threadID || pending.phase !== 'awaiting_projection' || !pending.canonicalID) return;
+    const thread = threads().find((candidate) => candidate.thread_id === pending.threadID);
+    if (!thread) return;
+    const projected = pending.canonicalKind === 'queued'
+      ? (thread.queued_turns ?? []).some((turn) => turn.queue_id === pending.canonicalID)
+      : thread.messages.some((message) => trimString(message.turn_id) === pending.canonicalID);
+    if (projected) transitionPendingSubmission({ kind: 'projection_observed', clientRequestID: pending.clientRequestID });
+  });
   const selectedThreadLiveStatus = createMemo(() => {
     const thread = selectedThread();
     if (!thread) return 'idle';
@@ -1632,6 +1714,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     || (trimString(loadingThreadID()) !== '' && loadingThreadID() === selectedThreadID())
   ));
   const currentComposerSessionKey = createMemo(() => trimString(selectedThreadID()) || PENDING_NEW_THREAD_ID);
+  const visiblePendingSubmission = createMemo(() => {
+    const pending = pendingSubmission();
+    if (!pending) return null;
+    const threadID = trimString(selectedThreadID());
+    if (pending.threadID) return pending.threadID === threadID ? pending : null;
+    return !threadID && pending.sessionKey === PENDING_NEW_THREAD_ID ? pending : null;
+  });
   const currentComposerSessionDraft = createMemo(() => composerSessionDrafts()[currentComposerSessionKey()] ?? emptyFlowerComposerSessionDraft());
   const defaultComposerPermissionType = createMemo<FlowerPermissionType>(() => snapshot()?.defaults.permission_type ?? 'approval_required');
   const selectedThreadPermissionType = createMemo<FlowerPermissionType>(() => selectedThread()?.permission_type ?? defaultComposerPermissionType());
@@ -3231,23 +3320,39 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     };
   };
 
-  const resolveHandlerDecision = async (requestedHandlerID?: string, previousDecision?: FlowerRouterDecision | null) => {
+  let handlerDecisionRequest: Readonly<{ key: string; token: object; promise: Promise<FlowerRouterDecision> }> | null = null;
+  const resolveHandlerDecision = (requestedHandlerID?: string, previousDecision?: FlowerRouterDecision | null): Promise<FlowerRouterDecision> => {
     const baseDecision = previousDecision ?? currentHandlerDecision();
+    const key = [
+      trimString(requestedHandlerID),
+      trimString(baseDecision?.decision_scope.client_surface),
+      trimString(baseDecision?.decision_scope.context_envelope_id),
+    ].join('\x00');
+    if (handlerDecisionRequest?.key === key) return handlerDecisionRequest.promise;
     setHandlerState({ status: 'resolving', decision: baseDecision });
-    try {
-      const next = await props.adapter.resolveHandler({
-        thread_kind: 'chat',
-        client_surface: baseDecision?.decision_scope.client_surface || 'flower_surface',
-        ...(baseDecision?.decision_scope.context_envelope_id ? { context_envelope_id: baseDecision.decision_scope.context_envelope_id } : {}),
-        ...(trimString(requestedHandlerID) ? { requested_handler_id: trimString(requestedHandlerID) } : {}),
-      });
-      setHandlerState(handlerStateFromDecision(next));
-      return next;
-    } catch (error) {
-      const message = getErrorMessage(error);
-      setHandlerState({ status: 'failed', decision: baseDecision, message });
-      throw new Error(message);
-    }
+    const token = {};
+    const requestPromise = (async () => {
+      try {
+        const next = await props.adapter.resolveHandler({
+          thread_kind: 'chat',
+          client_surface: baseDecision?.decision_scope.client_surface || 'flower_surface',
+          ...(baseDecision?.decision_scope.context_envelope_id ? { context_envelope_id: baseDecision.decision_scope.context_envelope_id } : {}),
+          ...(trimString(requestedHandlerID) ? { requested_handler_id: trimString(requestedHandlerID) } : {}),
+        });
+        if (handlerDecisionRequest?.token === token) setHandlerState(handlerStateFromDecision(next));
+        return next;
+      } catch (error) {
+        const message = getErrorMessage(error);
+        if (handlerDecisionRequest?.token === token) {
+          setHandlerState({ status: 'failed', decision: baseDecision, message });
+        }
+        throw new Error(message);
+      } finally {
+        if (handlerDecisionRequest?.token === token) handlerDecisionRequest = null;
+      }
+    })();
+    handlerDecisionRequest = { key, token, promise: requestPromise };
+    return requestPromise;
   };
 
   const upsertThread = (thread: FlowerThreadSnapshot) => {
@@ -4306,6 +4411,20 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }
     };
     let preserveClientRequestID = false;
+    let retainPendingSubmission = false;
+    transitionPendingSubmission({
+      kind: 'begin',
+      submission: {
+        clientRequestID,
+        sessionKey: launchSessionKey,
+        ...(selectedID ? { threadID: selectedID } : {}),
+        prompt: promptInput,
+        attachmentNames: frozenDraft.attachments.map((attachment) => attachment.name),
+        referenceLabels: frozenDraft.references.map((reference) => reference.label || reference.path),
+        phase: 'preparing',
+        startedAtMS: Date.now(),
+      },
+    });
     setChatRunning(true);
     try {
       let attachmentSnapshot = launchController.snapshot();
@@ -4443,6 +4562,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           || admission.snapshot.value.admission_started !== true
           || !submissionCurrent()
         ) return;
+        transitionPendingSubmission({ kind: 'admission_started', clientRequestID });
         const contextAction: ContextActionEnvelope | undefined = frozenReferences.length > 0
           ? {
             schema_version: CONTEXT_ACTION_SCHEMA_VERSION,
@@ -4492,10 +4612,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         const uncertain = flowerTurnAdmissionUncertainIdentity(failure);
         if (uncertain) {
           preserveClientRequestID = true;
+          retainPendingSubmission = true;
           if (uncertain.client_request_id !== clientRequestID) {
             throw new Error('Flower turn admission returned a different client request identity.');
           }
           const uncertainSessionKey = trimString(uncertain.thread_id);
+          transitionPendingSubmission({
+            kind: 'admission_uncertain',
+            clientRequestID,
+            ...(uncertainSessionKey ? { threadID: uncertainSessionKey } : {}),
+          });
           if (uncertainSessionKey && uncertainSessionKey !== launchSessionKey) {
             const sourceSnapshot = operation.session.snapshot();
             if (launchSessionKey === PENDING_NEW_THREAD_ID) {
@@ -4534,6 +4660,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           }
           return;
         }
+        transitionPendingSubmission({ kind: 'admission_failed', clientRequestID });
         if (composerSessionStillCurrent(launchSessionKey)) {
           notifyComposerError(getErrorMessage(error));
         }
@@ -4554,6 +4681,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         }
         return;
       }
+      retainPendingSubmission = true;
+      transitionPendingSubmission({
+        kind: 'admission_accepted',
+        clientRequestID,
+        threadID: receipt.thread_id,
+        canonicalKind: receipt.kind,
+        canonicalID: receipt.kind === 'queued' ? receipt.queue_id : receipt.turn_id,
+      });
       clearAcceptedComposerDraft(receipt.thread_id);
       releaseAttachmentStagingScope(launchSessionKey);
       const selectionCurrent = setSelectedThreadWithDetailIfSessionCurrent(launchSessionKey, receipt.thread_id);
@@ -4570,6 +4705,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (cancelActiveLongTextSubmission === cancelLongTextSubmission) cancelActiveLongTextSubmission = null;
       setLongTextPreparing(false);
       setChatRunning(false);
+      if (!retainPendingSubmission) {
+        transitionPendingSubmission({ kind: 'submission_finished_without_receipt', clientRequestID });
+      }
       if (composerDraftOperationActive(operation)) {
         const shared = operation.session.snapshot();
         if (!preserveClientRequestID && shared.value.client_request_id === clientRequestID && shared.value.admission_started !== true) {
@@ -4862,6 +5000,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     transcriptScroll.startFollowing();
     cancelSelectedThreadTailReveal();
     closeSubagentOverlays();
+    transitionPendingSubmission({ kind: 'new_conversation' });
     setSelectedThreadID('');
     setSelectedThreadDetailID('');
     setSidebarActiveThreadID('');
@@ -5010,6 +5149,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     transcriptScroll.startFollowing();
     closeSubagentOverlays();
+    transitionPendingSubmission({ kind: 'thread_selected', threadID: tid });
     setSelectedThreadID(tid);
     setSidebarActiveThreadID(tid);
     scheduleThreadSelectionAfterPaint(tid);
@@ -6007,7 +6147,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   ));
 
   const composerTextValue = createMemo(() => {
-    if (!selectedInputRequest()) return currentComposerSessionDraft().chatDraft;
+    if (!selectedInputRequest()) {
+      const pending = visiblePendingSubmission();
+      return pending && (pending.phase !== 'awaiting_projection' || Boolean(pending.canonicalID))
+        ? ''
+        : currentComposerSessionDraft().chatDraft;
+    }
     const question = activeInputQuestion();
     return question ? questionDraft(question.id).text ?? '' : '';
   });
@@ -8401,6 +8546,41 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     );
   };
 
+  const pendingSubmissionEntry = (submission: Accessor<FlowerPendingSubmission>) => {
+    const contextLabels = createMemo(() => [
+      ...submission().attachmentNames,
+      ...submission().referenceLabels,
+    ]);
+    return (
+      <div
+        class="flower-message-row flower-message-row-user flower-pending-submission-row"
+        data-flower-pending-submission-id={submission().clientRequestID}
+        data-flower-pending-submission-phase={submission().phase}
+      >
+        <div class="flower-message-block-stack flower-message-block-stack-user">
+          <div class="flower-message-bubble flower-message-bubble-framed flower-message-bubble-user flower-pending-submission-bubble">
+            <Show when={submission().prompt}>
+              <span class="flower-message-plain-text">{submission().prompt}</span>
+            </Show>
+            <Show when={contextLabels().length > 0}>
+              <div class="flower-pending-submission-context">
+                <For each={contextLabels()}>{(label) => <span>{label}</span>}</For>
+              </div>
+            </Show>
+          </div>
+          <div
+            class="flower-message-action-row flower-message-action-row-user flower-pending-submission-meta"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            <span class="flower-pending-submission-state">{copy().chat.pendingSubmission}</span>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const compactionDividerEntry = (entry: Accessor<Extract<FlowerTimelineEntry, { type: 'context_compaction' }>>) => {
     const decoration = createMemo(() => entry().decoration);
     return <FlowerContextCompactionDivider decoration={decoration()} copy={copy()} />;
@@ -9375,7 +9555,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               {(message) => errorNotice(copy().chat.threadLoadErrorTitle, message())}
             </Show>
             <Show
-              when={selectedThreadHasContent() || selectedThreadHasModelStatus()}
+              when={selectedThreadHasContent() || selectedThreadHasModelStatus() || visiblePendingSubmission()}
                 fallback={selectedThreadLoading()
                   ? threadLoadingState()
                   : warmupCanReplaceTranscript()
@@ -9399,6 +9579,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   );
                 }}
               </For>
+              <Show when={visiblePendingSubmission()}>
+                {(submission) => pendingSubmissionEntry(submission)}
+              </Show>
               {threadLevelApprovalPanel()}
             </Show>
           </div>

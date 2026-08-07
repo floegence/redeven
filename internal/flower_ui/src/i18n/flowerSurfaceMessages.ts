@@ -88,6 +88,7 @@ export const flowerSurfaceEnUS = {
     composerReferenceExists: '{path} is already referenced.',
     commandCompactContext: 'Compact current context',
     pendingSending: 'Sending',
+    pendingSubmission: 'Sending message...',
     pendingQueued: 'Queued',
     scrollToLatest: 'Scroll to latest',
     runErrorTitle: 'Flower could not finish this reply.',

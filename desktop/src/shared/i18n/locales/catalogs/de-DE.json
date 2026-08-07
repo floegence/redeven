@@ -87,6 +87,7 @@
       "composerReferenceExists": "{path} ist bereits referenziert.",
       "commandCompactContext": "Aktuellen Kontext komprimieren",
       "pendingSending": "Wird gesendet",
+      "pendingSubmission": "Nachricht wird gesendet...",
       "pendingQueued": "In Warteschlange",
       "scrollToLatest": "Zum neuesten scrollen",
       "runErrorTitle": "Flower konnte diese Antwort nicht abschließen.",
