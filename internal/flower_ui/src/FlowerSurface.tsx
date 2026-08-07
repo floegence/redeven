@@ -3835,13 +3835,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     sequence: number,
   ): Promise<'continue' | 'resync'> => {
     if (envelope.kind === 'ready') {
-      const generation = liveStreamGenerationValue(envelope.stream_generation);
-      liveSummaryGeneration = generation;
-      liveSummaryCursor = Math.max(liveSummaryCursor, liveCursorValue(envelope.summary_through_seq));
-      setLivePosition(selectedID, generation, Math.max(
-        liveCursorValue(liveCursors.get(selectedID)),
-        liveCursorValue(envelope.through_seq),
-      ));
+      // Ready advertises server high-water marks; only applied replay batches advance local cursors.
       return 'continue';
     }
     if (envelope.kind === 'resync_required') {

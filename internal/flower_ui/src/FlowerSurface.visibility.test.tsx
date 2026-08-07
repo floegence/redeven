@@ -928,6 +928,155 @@ describe('FlowerSurface companion visibility lifecycle', () => {
     expect(harness.markThreadRead).not.toHaveBeenCalled();
   });
 
+  it('applies selected-thread replay batches after a ready high-water mark', async () => {
+    const userMessage = {
+      id: 'message-user-replay',
+      thread_id: 'thread-running',
+      turn_id: 'turn-live',
+      run_id: 'run-live',
+      role: 'user' as const,
+      content: 'hi',
+      status: 'complete' as const,
+      created_at_ms: 1_000,
+      blocks: [{ type: 'markdown' as const, content: 'hi' }],
+    };
+    const assistantMessage = {
+      id: 'message-assistant-replay',
+      thread_id: 'thread-running',
+      turn_id: 'turn-live',
+      run_id: 'run-live',
+      role: 'assistant' as const,
+      content: 'Recovered Flower reply',
+      status: 'complete' as const,
+      created_at_ms: 2_000,
+      blocks: [{ type: 'markdown' as const, content: 'Recovered Flower reply' }],
+    };
+    const snapshot = thread({ messages: [userMessage] });
+    const loadThread = vi.fn<FlowerSurfaceAdapter['loadThread']>(async () => ({
+      ...bootstrap(snapshot),
+      cursor: 1,
+      timeline_messages: [userMessage],
+    }));
+    const connectLiveStream = vi.fn(async function* (input: FlowerLiveStreamConnectInput): AsyncIterable<FlowerLiveStreamEnvelope> {
+      yield {
+        schema_version: 1,
+        kind: 'ready',
+        stream_generation: 1,
+        thread_id: input.thread_id,
+        through_seq: 3,
+        retained_from_seq: 1,
+        summary_through_seq: input.summary_after_seq,
+        summary_retained_from_seq: 1,
+      };
+      yield {
+        schema_version: 1,
+        kind: 'thread.batch',
+        stream_generation: 1,
+        thread_id: input.thread_id,
+        from_seq: 2,
+        through_seq: 3,
+        retained_from_seq: 1,
+        events: [
+          liveEvent(input.thread_id, 2, 'timeline.replaced', {
+            messages: [userMessage, assistantMessage],
+            stream_generation: 1,
+            snapshot_through_seq: 2,
+          }),
+          liveEvent(input.thread_id, 3, 'run.status_changed', {
+            run_id: 'run-live',
+            status: 'success',
+          }),
+        ],
+      };
+      await new Promise<void>((resolve) => input.signal.addEventListener('abort', () => resolve(), { once: true }));
+    });
+    const harness = createAdapterHarness({
+      listThreads: vi.fn(async () => [snapshot]),
+      loadThread,
+      connectLiveStream,
+    });
+    renderSurface(harness.adapter, true, true, undefined, 'full');
+
+    await waitUntil(() => connectLiveStream.mock.calls.length === 1, 'selected thread live stream did not start');
+    await waitUntil(() => animationFrames.length > 0, 'selected thread replay did not request a render frame');
+    await presentNextFrame();
+    await flushAsync();
+    if (animationFrames.length > 0) await presentNextFrame();
+    await waitUntil(
+      () => host.textContent?.includes('Recovered Flower reply') === true,
+      'selected thread replay did not restore the assistant reply',
+    );
+
+    expect(connectLiveStream.mock.calls[0]?.[0].thread_after_seq).toBe(0);
+    expect(loadThread).toHaveBeenCalled();
+  });
+
+  it('reconnects summary replay from the last applied cursor instead of the ready high-water mark', async () => {
+    const firstDisconnected = deferred<void>();
+    const selectedSummary = thread({ status: 'idle', read_status: readStatus(false) });
+    const externalSummary = thread({
+      thread_id: 'thread-summary-replay',
+      title: 'Stale external summary',
+      active_run_id: 'run-live',
+      messages: [],
+    });
+    let connectionCount = 0;
+    const connectLiveStream = vi.fn(async function* (input: FlowerLiveStreamConnectInput): AsyncIterable<FlowerLiveStreamEnvelope> {
+      connectionCount += 1;
+      yield {
+        schema_version: 1,
+        kind: 'ready',
+        stream_generation: 1,
+        thread_id: input.thread_id,
+        through_seq: input.thread_after_seq,
+        retained_from_seq: 1,
+        summary_through_seq: 4,
+        summary_retained_from_seq: 1,
+      };
+      if (connectionCount === 1) {
+        firstDisconnected.resolve();
+        throw new Error('simulated stream interruption before summary replay');
+      }
+      if (input.summary_after_seq === 0) {
+        yield {
+          schema_version: 1,
+          kind: 'summary.batch',
+          stream_generation: 1,
+          from_seq: 1,
+          through_seq: 4,
+          retained_from_seq: 1,
+          events: [liveEvent(externalSummary.thread_id, 1, 'thread.patched', {
+            patch: {
+              thread_id: externalSummary.thread_id,
+              title: 'Recovered external summary',
+              run_status: 'running',
+            },
+          })],
+        };
+      }
+      await new Promise<void>((resolve) => input.signal.addEventListener('abort', () => resolve(), { once: true }));
+    });
+    const presences: FlowerCompanionPresenceProjection[] = [];
+    const harness = createAdapterHarness({
+      listThreads: vi.fn(async () => [selectedSummary, externalSummary]),
+      loadThread: vi.fn(async () => bootstrap(selectedSummary)),
+      connectLiveStream,
+    });
+    renderSurface(harness.adapter, true, false, (presence) => presences.push(presence));
+
+    await firstDisconnected.promise;
+    await waitUntil(() => connectLiveStream.mock.calls.length >= 2, 'summary stream did not reconnect');
+
+    expect(connectLiveStream.mock.calls[0]?.[0].summary_after_seq).toBe(0);
+    expect(connectLiveStream.mock.calls[1]?.[0].summary_after_seq).toBe(0);
+    await waitUntil(() => animationFrames.length > 0, 'summary replay did not request a render frame');
+    await presentNextFrame();
+    await waitUntil(
+      () => presences.some((presence) => presence.priority_thread_title === 'Recovered external summary'),
+      'summary replay did not update the external thread presence',
+    );
+  });
+
   it('ignores a late live response after the canonical priority thread changes', async () => {
     const threadA = thread({ active_run_id: 'run-live' });
     const threadB = thread({

@@ -13,9 +13,23 @@ import (
 	"github.com/floegence/redeven/internal/session"
 )
 
-const flowerLiveHeartbeatInterval = 15 * time.Second
+const (
+	flowerLiveHeartbeatInterval = 15 * time.Second
+	flowerLiveWriteTimeout      = 5 * time.Second
+)
 
 func serveAIFlowerLiveStream(w http.ResponseWriter, r *http.Request, aiSvc *ai.Service, meta *session.Meta) {
+	serveAIFlowerLiveStreamWithTiming(w, r, aiSvc, meta, flowerLiveHeartbeatInterval, flowerLiveWriteTimeout)
+}
+
+func serveAIFlowerLiveStreamWithTiming(
+	w http.ResponseWriter,
+	r *http.Request,
+	aiSvc *ai.Service,
+	meta *session.Meta,
+	heartbeatInterval time.Duration,
+	writeTimeout time.Duration,
+) {
 	query := r.URL.Query()
 	threadID := strings.TrimSpace(query.Get("thread_id"))
 	if threadID == "" {
@@ -64,15 +78,22 @@ func serveAIFlowerLiveStream(w http.ResponseWriter, r *http.Request, aiSvc *ai.S
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
 	controller := http.NewResponseController(w)
-	write := func(payload []byte) error {
-		if err := controller.SetWriteDeadline(time.Now().Add(5 * time.Second)); err != nil && !errors.Is(err, http.ErrNotSupported) {
+	write := func(prefix string, payload []byte) (writeErr error) {
+		if err := controller.SetWriteDeadline(time.Now().Add(writeTimeout)); err != nil && !errors.Is(err, http.ErrNotSupported) {
 			return err
 		}
-		if _, err := io.WriteString(w, "data: "); err != nil {
+		defer func() {
+			if err := controller.SetWriteDeadline(time.Time{}); writeErr == nil && err != nil && !errors.Is(err, http.ErrNotSupported) {
+				writeErr = err
+			}
+		}()
+		if _, err := io.WriteString(w, prefix); err != nil {
 			return err
 		}
-		if _, err := w.Write(payload); err != nil {
-			return err
+		if len(payload) > 0 {
+			if _, err := w.Write(payload); err != nil {
+				return err
+			}
 		}
 		if _, err := io.WriteString(w, "\n\n"); err != nil {
 			return err
@@ -81,20 +102,19 @@ func serveAIFlowerLiveStream(w http.ResponseWriter, r *http.Request, aiSvc *ai.S
 		return nil
 	}
 	for {
-		frameCtx, cancel := context.WithTimeout(r.Context(), flowerLiveHeartbeatInterval)
+		frameCtx, cancel := context.WithTimeout(r.Context(), heartbeatInterval)
 		frame, err := subscription.Next(frameCtx)
 		cancel()
 		if errors.Is(err, context.DeadlineExceeded) && r.Context().Err() == nil {
-			if _, err := io.WriteString(w, ": heartbeat\n\n"); err != nil {
+			if write(": heartbeat", nil) != nil {
 				return
 			}
-			flusher.Flush()
 			continue
 		}
 		if err != nil {
 			return
 		}
-		if frame == nil || write(frame.Data) != nil {
+		if frame == nil || write("data: ", frame.Data) != nil {
 			return
 		}
 		if frame.Kind == ai.FlowerLiveStreamResyncRequired {
