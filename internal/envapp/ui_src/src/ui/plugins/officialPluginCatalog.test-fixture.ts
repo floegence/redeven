@@ -4,9 +4,9 @@ import type { OfficialPluginPermission, PluginMarketDetail, PluginMarketSnapshot
 
 export const OFFICIAL_PLUGIN_MARKET_SNAPSHOT: PluginMarketSnapshot = {
   schema_version: 'redeven.plugin_market_snapshot.v2',
-  generation: 3,
-  etag: '"catalog-g3"',
-  cached_at: '2026-08-03T09:15:30Z',
+  generation: 5,
+  etag: '"catalog-g5"',
+  cached_at: '2026-08-07T10:00:00Z',
   stale: false,
   source: 'remote',
   plugins: [{
@@ -96,17 +96,17 @@ export const OFFICIAL_PLUGIN_MARKET_SNAPSHOT: PluginMarketSnapshot = {
     },
     categories: ['containers', 'development'],
     channels: ['stable'],
-    latest: { channel: 'stable', version: '4.2.0', availability_status: 'visible' },
+    latest: { channel: 'stable', version: '4.4.0', availability_status: 'visible' },
     release: {
       plugin_id: 'com.redeven.official.containers',
       channel: 'stable',
-      version: '4.2.0',
+      version: '4.4.0',
       asset: {
-        url: 'https://github.com/floegence/redeven-official-plugins/releases/download/v4.2.0/containers-4.2.0.redevplugin',
+        url: 'https://github.com/floegence/redeven-official-plugins/releases/download/v4.4.0/containers-4.4.0.redevplugin',
       },
       publisher_release_ref: { release_ref: OFFICIAL_CONTAINERS_RELEASE_REF },
       signer_key_id: 'redeven_official_signing_2026',
-      compatibility: { min_redeven_version: '1.0.0', min_redevplugin_version: '0.7.12' },
+      compatibility: { min_redeven_version: '1.0.0', min_redevplugin_version: '0.7.16' },
     },
   }],
 };
