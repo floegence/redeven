@@ -126,6 +126,19 @@ const transportAttachState = vi.hoisted(() => ({
   effectiveRows: null as number | null,
 }));
 
+const presentationFenceState = vi.hoisted(() => ({
+  blocked: false,
+  resolvers: [] as Array<() => void>,
+  release() {
+    for (const resolve of this.resolvers.splice(0)) resolve();
+    this.blocked = false;
+  },
+}));
+
+const hostCapacityState = vi.hoisted(() => ({
+  dimensions: null as { cols: number; rows: number } | null,
+}));
+
 const transportMocks = vi.hoisted(() => {
   const attach = vi.fn().mockImplementation(async (_sessionId: string, cols: number, rows: number) => ({
     historyBoundarySequence: transportAttachState.historyBoundarySequence,
@@ -201,6 +214,8 @@ const terminalCoreState = vi.hoisted(() => ({
     write: ReturnType<typeof vi.fn>;
     dispose: ReturnType<typeof vi.fn>;
     setFixedDimensions: ReturnType<typeof vi.fn>;
+    forceResizeAndWaitForPresentation: ReturnType<typeof vi.fn>;
+    measureHostDimensions: ReturnType<typeof vi.fn>;
     getDimensions: () => { cols: number; rows: number };
     focus: ReturnType<typeof vi.fn>;
     handlers: { onError?: (error: Error) => void };
@@ -478,6 +493,12 @@ vi.mock('@floegence/floeterm-terminal-web', async () => {
     setTheme = vi.fn();
     setAppearance = vi.fn();
     forceResize = vi.fn();
+    forceResizeAndWaitForPresentation = vi.fn(() => (
+      presentationFenceState.blocked
+        ? new Promise<void>((resolve) => presentationFenceState.resolvers.push(resolve))
+        : Promise.resolve()
+    ));
+    measureHostDimensions = vi.fn(() => hostCapacityState.dimensions);
     getDimensions = vi.fn(() => ({ cols: 80, rows: 24 }));
     startHistoryReplay = vi.fn();
     endHistoryReplay = vi.fn();
@@ -829,6 +850,9 @@ beforeEach(() => {
   transportAttachState.effectiveCols = null;
   transportAttachState.effectiveRows = null;
   terminalCoreState.instances = [];
+  presentationFenceState.blocked = false;
+  presentationFenceState.resolvers = [];
+  hostCapacityState.dimensions = null;
   terminalSessionsState.sessions = [
     {
       id: 'session-1',
@@ -1449,6 +1473,100 @@ describe('TerminalPanel browser activity integration', () => {
     await settleTerminalPanel();
     expect(core.setFixedDimensions.mock.calls).toHaveLength(dimensionsBeforeFocus);
     expect(core.write.mock.calls.map((call) => decodeTerminalWrite(call[0]))).toEqual(['old-grid', 'new-grid']);
+  });
+
+  it('keeps the surface non-interactive until the refreshed renderer presentation fence completes', async () => {
+    terminalSessionsState.sessions = [terminalSessionsState.sessions[0]!];
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="panel" />, host);
+    await vi.waitFor(() => expect(terminalCoreState.instances).toHaveLength(1));
+    await settleTerminalPanel();
+
+    presentationFenceState.blocked = true;
+    host.querySelector<HTMLButtonElement>('[data-testid="terminal-sidebar-refresh"]')?.click();
+    await vi.waitFor(() => expect(terminalCoreState.instances).toHaveLength(2));
+    const oldCore = terminalCoreState.instances[0]!;
+    const refreshedCore = terminalCoreState.instances[1]!;
+    const runtime = host.querySelector<HTMLElement>('[data-terminal-runtime-session="session-1"]');
+    expect(oldCore.dispose).toHaveBeenCalledTimes(1);
+    expect(refreshedCore.forceResizeAndWaitForPresentation).toHaveBeenCalled();
+    expect(runtime?.getAttribute('aria-busy')).toBe('true');
+    expect(host.querySelector<HTMLElement>('.redeven-terminal-surface')?.style.opacity).toBe('0');
+
+    presentationFenceState.release();
+    await settleTerminalPanel();
+    expect(runtime?.getAttribute('aria-busy')).toBe('false');
+    expect(host.querySelector<HTMLElement>('.redeven-terminal-surface')?.style.opacity).toBe('1');
+  });
+
+  it('negotiates a larger active host capacity through the acknowledged resize boundary', async () => {
+    terminalSessionsState.sessions = [terminalSessionsState.sessions[0]!];
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="panel" />, host);
+    await vi.waitFor(() => expect(terminalCoreState.instances).toHaveLength(1));
+    await settleTerminalPanel();
+
+    hostCapacityState.dimensions = { cols: 100, rows: 30 };
+    transportMocks.resizeWithEffectiveGeometry.mockResolvedValueOnce({
+      runtimeAttachGeneration: 1,
+      requested: { cols: 100, rows: 30 },
+      effective: {
+        generation: 2,
+        outputSequenceBoundary: 0,
+        cols: 100,
+        rows: 30,
+      },
+    });
+    host.querySelector<HTMLButtonElement>('[data-testid="terminal-sidebar-refresh"]')?.click();
+    await vi.waitFor(() => expect(terminalCoreState.instances).toHaveLength(2));
+    const core = terminalCoreState.instances[1]!;
+    await settleTerminalPanel();
+
+    expect(transportMocks.resizeWithEffectiveGeometry).toHaveBeenCalledWith('session-1', 100, 30);
+    expect(core.setFixedDimensions).toHaveBeenCalledWith({ cols: 100, rows: 30 });
+    expect(core.forceResizeAndWaitForPresentation).toHaveBeenCalled();
+  });
+
+  it('does not apply an obsolete host-capacity acknowledgement to a replacement Core', async () => {
+    terminalSessionsState.sessions = [terminalSessionsState.sessions[0]!];
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => <TerminalPanel variant="panel" />, host);
+    await vi.waitFor(() => expect(terminalCoreState.instances).toHaveLength(1));
+    await settleTerminalPanel();
+
+    let resolveResize: ((value: unknown) => void) | undefined;
+    transportMocks.resizeWithEffectiveGeometry.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveResize = resolve;
+    }));
+    hostCapacityState.dimensions = { cols: 100, rows: 30 };
+    const refresh = host.querySelector<HTMLButtonElement>('[data-testid="terminal-sidebar-refresh"]');
+    refresh?.click();
+    await vi.waitFor(() => expect(terminalCoreState.instances).toHaveLength(2));
+    await vi.waitFor(() => expect(transportMocks.resizeWithEffectiveGeometry).toHaveBeenCalledTimes(1));
+
+    hostCapacityState.dimensions = null;
+    dispose();
+    render(() => <TerminalPanel variant="panel" />, host);
+    await vi.waitFor(() => expect(terminalCoreState.instances).toHaveLength(3));
+    resolveResize?.({
+      runtimeAttachGeneration: 1,
+      requested: { cols: 100, rows: 30 },
+      effective: {
+        generation: 2,
+        outputSequenceBoundary: 0,
+        cols: 100,
+        rows: 30,
+      },
+    });
+    await settleTerminalPanel();
+
+    const obsoleteCore = terminalCoreState.instances[1]!;
+    expect(obsoleteCore.dispose).toHaveBeenCalledTimes(1);
+    expect(obsoleteCore.setFixedDimensions).not.toHaveBeenCalledWith({ cols: 100, rows: 30 });
+    expect(host.querySelector('[data-terminal-runtime-session="session-1"]')?.getAttribute('aria-busy')).toBe('false');
   });
 
   it('does not fetch unbounded history for a zero boundary and first live sequence', async () => {

@@ -156,6 +156,7 @@ const terminalPrefsState = vi.hoisted(() => ({
 
 const focusSpy = vi.hoisted(() => vi.fn());
 const forceResizeSpy = vi.hoisted(() => vi.fn());
+const forceResizeAndWaitSpy = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const scrollLinesSpy = vi.hoisted(() => vi.fn());
 const terminalInputSpy = vi.hoisted(() => vi.fn());
 const terminalScrollState = vi.hoisted(() => ({
@@ -925,6 +926,8 @@ vi.mock('@floegence/floeterm-terminal-web', async () => {
     setConnected = vi.fn();
     setTheme = vi.fn();
     forceResize = forceResizeSpy;
+    forceResizeAndWaitForPresentation = forceResizeAndWaitSpy;
+    measureHostDimensions = vi.fn(() => undefined);
     getDimensions = vi.fn(() => ({ cols: 80, rows: 24 }));
     getTerminalInfo = vi.fn(() => ({
       cols: 80,
@@ -1799,9 +1802,9 @@ function decodeTerminalWrite(value: unknown): string {
 }
 
 async function settleTerminalPanelMicrotasks() {
-  await Promise.resolve();
-  await Promise.resolve();
-  await Promise.resolve();
+  for (let i = 0; i < 8; i += 1) {
+    await Promise.resolve();
+  }
 }
 
 async function settleTerminalPanel() {
@@ -2076,6 +2079,7 @@ describe('TerminalPanel', () => {
     sessionStorage.clear();
     focusSpy.mockClear();
     forceResizeSpy.mockClear();
+    forceResizeAndWaitSpy.mockClear();
     scrollLinesSpy.mockClear();
     terminalInputSpy.mockClear();
     terminalScrollState.alternateScreen = false;
@@ -3222,20 +3226,27 @@ describe('TerminalPanel', () => {
     expect(mark.mock.calls.some(([name]) => String(name).includes(':baseline-rendered:'))).toBe(false);
 
     forceResizeSpy.mockClear();
+    forceResizeAndWaitSpy.mockClear();
     terminalWriteCompletionState.historyCallbacks.shift()?.();
     await settleTerminalPanelMicrotasks();
-    expect(host.querySelector('[data-terminal-runtime-session="session-1"]')?.getAttribute('aria-busy')).toBe('false');
+    // The baseline is parser-committed, but the presentation fence still runs
+    // on the next animation frame before the surface becomes interactive.
+    expect(host.querySelector('[data-terminal-runtime-session="session-1"]')?.getAttribute('aria-busy')).toBe('true');
 
     transportMocks.sendInput.mockClear();
-    core?.handlers?.onData?.('after-baseline\r');
-    expect(transportMocks.sendInput).toHaveBeenCalledWith('session-1', 'after-baseline\r', 'conn-1');
+    core?.handlers?.onData?.('before-presentation\r');
+    expect(transportMocks.sendInput).not.toHaveBeenCalled();
     expect(forceResizeSpy).not.toHaveBeenCalled();
 
     core?.handlers?.onRender?.(2);
     expect(mark.mock.calls.some(([name]) => String(name).includes(':baseline-rendered:'))).toBe(false);
 
     await vi.advanceTimersByTimeAsync(1);
-    expect(forceResizeSpy).toHaveBeenCalledTimes(1);
+    expect(forceResizeAndWaitSpy).toHaveBeenCalledTimes(2);
+    await settleTerminalPanelMicrotasks();
+    expect(host.querySelector('[data-terminal-runtime-session="session-1"]')?.getAttribute('aria-busy')).toBe('false');
+    core?.handlers?.onData?.('after-baseline\r');
+    expect(transportMocks.sendInput).toHaveBeenCalledWith('session-1', 'after-baseline\r', 'conn-1');
     core?.handlers?.onRender?.(3);
     core?.handlers?.onRender?.(4);
 
@@ -8347,7 +8358,9 @@ describe('TerminalPanel', () => {
 
     transportMocks.historyPage.mockClear();
     createOutputCoordinatorSpy.mockClear();
-    await runtime.resume(snapshot);
+    const resume = runtime.resume(snapshot);
+    await vi.advanceTimersByTimeAsync(1);
+    await resume;
     await settleTerminalPanelAfterPaint();
 
     const resumedCore = terminalCoreInstances.at(-1);
