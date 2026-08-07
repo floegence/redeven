@@ -559,7 +559,7 @@
               "ui",
               "workbench"
             ],
-            "summary": "Activity and Workbench terminals use Floeterm's single binary `terminal/live_v1` data path over a Flowersec named Yamux stream. Each mounted view owns an independent connection identity and reports its own host capacity, while Floeterm owns the shared PTY geometry, geometry-stamped retained history, atomic history boundary, ordered output, input, resize acknowledgement, and explicit close/error states. Redeven keeps catalog and history RPCs as a control plane and never falls back to the removed RPC live transport. A renderer rebuild replays every retained chunk at its recorded grid before restoring the current attachment grid.\n\nRedeven consumes terminal-web v0.13.1. `forceResizeAndWaitForPresentation()` is the mandatory presentation fence for initial recovery, refresh, and working-set resume, while read-only host measurement is used only by an active visible runtime.",
+            "summary": "Activity and Workbench use Floeterm's binary `terminal/live_v1` stream over Flowersec. Floeterm owns PTY geometry, geometry-stamped retained history, atomic boundaries, ordered output, input, resize acknowledgement, and close/error states; Redeven keeps catalog/history RPCs on the control plane with no live-RPC fallback. Renderer rebuilds replay each retained chunk at its recorded grid before restoring the current attachment grid.\n\nRedeven consumes terminal-web v0.13.1. `forceResizeAndWaitForPresentation()` fences initial recovery, refresh, and working-set resume; read-only host measurement is used only by an active visible runtime.",
             "section_count": 2
           },
           {
@@ -10054,8 +10054,8 @@
         "title": "Workbench terminal interaction",
         "type": "UI Contract"
       },
-      "body_length": 21568,
-      "summary": "Activity and Workbench terminals use Floeterm's single binary `terminal/live_v1` data path over a Flowersec named Yamux stream. Each mounted view owns an independent connection identity and reports its own host capacity, while Floeterm owns the shared PTY geometry, geometry-stamped retained history, atomic history boundary, ordered output, input, resize acknowledgement, and explicit close/error states. Redeven keeps catalog and history RPCs as a control plane and never falls back to the removed RPC live transport. A renderer rebuild replays every retained chunk at its recorded grid before restoring the current attachment grid.\n\nRedeven consumes terminal-web v0.13.1. `forceResizeAndWaitForPresentation()` is the mandatory presentation fence for initial recovery, refresh, and working-set resume, while read-only host measurement is used only by an active visible runtime.",
+      "body_length": 21329,
+      "summary": "Activity and Workbench use Floeterm's binary `terminal/live_v1` stream over Flowersec. Floeterm owns PTY geometry, geometry-stamped retained history, atomic boundaries, ordered output, input, resize acknowledgement, and close/error states; Redeven keeps catalog/history RPCs on the control plane with no live-RPC fallback. Renderer rebuilds replay each retained chunk at its recorded grid before restoring the current attachment grid.\n\nRedeven consumes terminal-web v0.13.1. `forceResizeAndWaitForPresentation()` fences initial recovery, refresh, and working-set resume; read-only host measurement is used only by an active visible runtime.",
       "sections": [
         {
           "id": "contract",
@@ -10154,7 +10154,7 @@
           "description": "The process carrier validates real Runtime, PTY, parser, canvas, input, and retained-history behavior."
         }
       ],
-      "snippet": "Activity and Workbench terminals use Floeterm's single binary `terminal/live_v1` data path over a Flowersec named Yamux stream. Each mounted view owns an independent connection identity and reports its own host capacity, while Floeterm owns",
+      "snippet": "Activity and Workbench use Floeterm's binary `terminal/live_v1` stream over Flowersec. Floeterm owns PTY geometry, geometry-stamped retained history, atomic boundaries, ordered output, input, resize acknowledgement, and close/error states; ",
       "links": [
         {
           "label": "Flower turn launcher",
@@ -10178,5 +10178,5 @@
       ]
     }
   ],
-  "source_sha256": "e7d6a425c6a53511e6c042cd19c116e0841b0140e16003d8f1897fba1edd2662"
+  "source_sha256": "7d27225e5304c3bb28fd2d80e15cc7b7e14af2c7c83203dcbf65ca101e025dcd"
 }
