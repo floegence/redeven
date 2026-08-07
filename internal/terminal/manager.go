@@ -1170,9 +1170,12 @@ type terminalHistoryReq struct {
 }
 
 type terminalHistoryChunk struct {
-	Sequence    int64  `json:"sequence"`
-	TimestampMs int64  `json:"timestamp_ms"`
-	DataB64     string `json:"data_b64"`
+	Sequence           int64  `json:"sequence"`
+	TimestampMs        int64  `json:"timestamp_ms"`
+	DataB64            string `json:"data_b64"`
+	GeometryGeneration uint64 `json:"geometry_generation"`
+	Cols               int    `json:"cols"`
+	Rows               int    `json:"rows"`
 }
 
 type terminalHistoryResp struct {
@@ -1228,9 +1231,12 @@ func terminalHistoryRespFromPage(page termgo.HistoryPage) *terminalHistoryResp {
 	out := make([]terminalHistoryChunk, 0, len(page.Chunks))
 	for _, c := range page.Chunks {
 		out = append(out, terminalHistoryChunk{
-			Sequence:    c.Sequence,
-			TimestampMs: c.Timestamp,
-			DataB64:     base64.StdEncoding.EncodeToString(c.Data),
+			Sequence:           c.Sequence,
+			TimestampMs:        c.Timestamp,
+			DataB64:            base64.StdEncoding.EncodeToString(c.Data),
+			GeometryGeneration: c.GeometryGeneration,
+			Cols:               c.Cols,
+			Rows:               c.Rows,
 		})
 	}
 
