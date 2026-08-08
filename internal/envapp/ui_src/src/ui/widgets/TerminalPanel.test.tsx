@@ -4241,22 +4241,56 @@ describe('TerminalPanel', () => {
     render(() => <TerminalPanel variant="panel" />, host);
     await settleTerminalPanelAfterPaint();
 
-    const core = terminalCoreInstances[0];
-    expect(core).toBeDefined();
+    expect(terminalCoreInstances[0]).toBeDefined();
 
     setViewActivationActive(false);
     emitTerminalData('session-1', 'background output', 1);
     await settleTerminalPanel();
 
     setViewActivationActive(true);
+    await waitForTerminalPanelCondition(() => {
+      expect(transportMocks.attach).toHaveBeenCalledTimes(2);
+      expect(terminalCoreInstances).toHaveLength(2);
+    });
     transportMocks.sendInput.mockClear();
-    core?.handlers?.onData?.('echo __rdv_after_return__\r');
+    terminalCoreInstances[1]?.handlers?.onData?.('echo __rdv_after_return__\r');
 
     expect(transportMocks.sendInput).toHaveBeenCalledWith(
       'session-1',
       'echo __rdv_after_return__\r',
       'conn-1',
     );
+  });
+
+  it('limits live attachment ownership to the active KeepAlive view', async () => {
+    setViewActivationActive(false);
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanelAfterPaint();
+
+    expect(transportMocks.attach).not.toHaveBeenCalled();
+    expect(terminalCoreInstances).toHaveLength(0);
+
+    setViewActivationActive(true);
+    await waitForTerminalPanelCondition(() => {
+      expect(transportMocks.attach).toHaveBeenCalledTimes(1);
+      expect(terminalCoreInstances).toHaveLength(1);
+    });
+    const firstCore = terminalCoreInstances[0]!;
+
+    setViewActivationActive(false);
+    await waitForTerminalPanelCondition(() => {
+      expect(transportMocks.forgetSession).toHaveBeenCalledWith('session-1');
+      expect(firstCore.dispose).toHaveBeenCalledTimes(1);
+    });
+
+    setViewActivationActive(true);
+    await waitForTerminalPanelCondition(() => {
+      expect(transportMocks.attach).toHaveBeenCalledTimes(2);
+      expect(terminalCoreInstances).toHaveLength(2);
+    });
   });
 
   it('does not publish synthetic recovery gaps for consecutive live output', async () => {

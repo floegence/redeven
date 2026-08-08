@@ -340,6 +340,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   let maxObservedLiveSequence = 0;
   let activitySettledAttachGeneration = 0;
   let activitySettledThroughSequence = 0;
+  let viewAttachmentActive = props.viewActive();
 
   const transitionRecoveryPhase = (next: TerminalRecoveryPhase) => {
     const trace = recoveryTrace;
@@ -711,6 +712,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     coordinator.pushLive(liveChunk);
   };
 
+  let initSeq = 0;
   let reloadSeq = 0;
   const disposeCore = () => {
     cancelPendingAppearanceApply();
@@ -764,7 +766,21 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     }
   };
 
-  let initSeq = 0;
+  const releaseInactiveViewAttachment = () => {
+    const id = sessionId();
+    if (!id) return;
+
+    // Inactive KeepAlive views must not remain in Floeterm's shared PTY
+    // geometry calculation. Invalidate every pending recovery before closing
+    // the live entry so an old attach cannot publish into a later activation.
+    initSeq += 1;
+    reloadSeq += 1;
+    disposeTerminal();
+    props.transport.forgetSession(id);
+    setLoading('idle');
+    setShowLoading(false);
+  };
+
   let disposed = false;
   let waitingForProtocolClient: unknown = null;
   const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -1751,10 +1767,18 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     const client = props.protocolClient();
     if (!client) return;
     if (!container) return;
+    if (!props.viewActive()) return;
     if (untrack(loading) === 'reconnecting' && client === waitingForProtocolClient) return;
 
     // Untrack to avoid capturing theme/font reactivity as init dependencies.
     untrack(() => void reload());
+  });
+
+  createEffect(() => {
+    const active = props.viewActive();
+    if (active === viewAttachmentActive) return;
+    viewAttachmentActive = active;
+    if (!active) releaseInactiveViewAttachment();
   });
 
   createEffect(() => {
