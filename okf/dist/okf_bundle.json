@@ -889,7 +889,7 @@
               "runtime",
               "threads"
             ],
-            "summary": "- Authority: Floret v3.2.33 owns canonical `ThreadID`, `TurnID`, `RunID`, per-thread runtime actors, recovery journal state, titles, lifecycle, projections, approvals, todos, tools, SubAgents, artifacts, provider continuation, and domain schema migrations.\n- Outcome: Redeven consumes identity-bound public capabilities and maps validated state into Flower while retaining only product settings, authorization, unadmitted work, and saga receipts.\n- Invariants: callers never preallocate canonical identity, admission binds only from committed Floret facts, and no product table or UI projection reconstructs Agent state.\n- Failure boundary: missing authority, invalid public data, conflicting identity, incomplete exact-read recovery, or failed permission proof stops the operation without fallback or guessed state.",
+            "summary": "- Authority: Floret v3.2.33 owns canonical `ThreadID`, `TurnID`, `RunID`, thread actors, recovery journal state, titles, lifecycle, projections, approvals, todos, tools, SubAgents, artifacts, provider continuation, and schema migrations.\n- Outcome: Redeven consumes identity-bound public capabilities and maps validated state into Flower while retaining product settings, authorization, unadmitted work, and saga receipts.\n- Invariants: callers never preallocate canonical identity, admission binds only from committed Floret facts, and no product table or UI projection reconstructs Agent state.\n- Failure boundary: missing authority, invalid data, conflicting identity, incomplete exact-read recovery, or failed permission proof stops the operation without fallback or guessed state.",
             "section_count": 2
           },
           {
@@ -1646,8 +1646,8 @@
         "title": "Floret thread runtime integration",
         "type": "AI Runtime Contract"
       },
-      "body_length": 19452,
-      "summary": "- Authority: Floret v3.2.33 owns canonical `ThreadID`, `TurnID`, `RunID`, per-thread runtime actors, recovery journal state, titles, lifecycle, projections, approvals, todos, tools, SubAgents, artifacts, provider continuation, and domain schema migrations.\n- Outcome: Redeven consumes identity-bound public capabilities and maps validated state into Flower while retaining only product settings, authorization, unadmitted work, and saga receipts.\n- Invariants: callers never preallocate canonical identity, admission binds only from committed Floret facts, and no product table or UI projection reconstructs Agent state.\n- Failure boundary: missing authority, invalid public data, conflicting identity, incomplete exact-read recovery, or failed permission proof stops the operation without fallback or guessed state.",
+      "body_length": 19421,
+      "summary": "- Authority: Floret v3.2.33 owns canonical `ThreadID`, `TurnID`, `RunID`, thread actors, recovery journal state, titles, lifecycle, projections, approvals, todos, tools, SubAgents, artifacts, provider continuation, and schema migrations.\n- Outcome: Redeven consumes identity-bound public capabilities and maps validated state into Flower while retaining product settings, authorization, unadmitted work, and saga receipts.\n- Invariants: callers never preallocate canonical identity, admission binds only from committed Floret facts, and no product table or UI projection reconstructs Agent state.\n- Failure boundary: missing authority, invalid data, conflicting identity, incomplete exact-read recovery, or failed permission proof stops the operation without fallback or guessed state.",
       "sections": [
         {
           "id": "contract",
@@ -1776,7 +1776,7 @@
           "description": "Pins the published Floret v3 module."
         }
       ],
-      "snippet": "- Authority: Floret v3.2.33 owns canonical `ThreadID`, `TurnID`, `RunID`, per-thread runtime actors, recovery journal state, titles, lifecycle, projections, approvals, todos, tools, SubAgents, artifacts, provider continuation, and domain sc",
+      "snippet": "- Authority: Floret v3.2.33 owns canonical `ThreadID`, `TurnID`, `RunID`, thread actors, recovery journal state, titles, lifecycle, projections, approvals, todos, tools, SubAgents, artifacts, provider continuation, and schema migrations.",
       "backlinks": [
         {
           "label": "AI tool runtime",
@@ -10178,5 +10178,5 @@
       ]
     }
   ],
-  "source_sha256": "72ea2199a2c9a9059add3bf73eacedb2c3f525b528baeff8076d8814431fc46c"
+  "source_sha256": "74936e067237a8b548cb3a530031faaf0e3b8a99b46a012a58a1fb9d71ed285c"
 }
