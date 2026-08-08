@@ -320,6 +320,7 @@ export type FlowerSurfaceCopy = Readonly<{
     pendingSubmission: string;
     pendingQueued: string;
     scrollToLatest: string;
+    runtimeRestartedDivider: string;
     runErrorTitle: string;
     runErrorActions: Readonly<{
       updateAPIKey: string;
@@ -391,6 +392,8 @@ export type FlowerSurfaceCopy = Readonly<{
       description: string;
     }>;
     toolStatuses: Readonly<Record<'pending' | 'running' | 'waiting' | 'success' | 'error' | 'canceled', string>>;
+    toolCallCanceled: string;
+    toolApprovalRejectedDetail: string;
     toolApprovalRequired: string;
     toolApprovalStates: Readonly<Record<FlowerActivityApprovalState, string>>;
     toolApprovalState: (state: string) => string;
@@ -538,6 +541,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     pendingSubmission: 'Sending message...',
     pendingQueued: 'Queued',
     scrollToLatest: 'Scroll to latest',
+    runtimeRestartedDivider: 'Redeven runtime restarted',
     runErrorTitle: 'Flower could not finish this reply.',
     runErrorActions: {
       updateAPIKey: 'Update API key',
@@ -616,6 +620,8 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       error: 'Failed',
       canceled: 'Canceled',
     },
+    toolCallCanceled: 'Tool call was canceled',
+    toolApprovalRejectedDetail: 'User declined tool execution',
     toolApprovalRequired: 'Approval required',
     toolApprovalStates: {
       requested: 'Requested',

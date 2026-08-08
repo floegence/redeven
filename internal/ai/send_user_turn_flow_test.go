@@ -24,6 +24,31 @@ func newSendTurnTestService(t *testing.T) *Service {
 	return newSendTurnTestServiceAt(t, t.TempDir(), t.TempDir())
 }
 
+func awaitCanonicalTurnAdmissionForTest(t *testing.T, svc *Service, response SendUserTurnResponse) SendUserTurnResponse {
+	t.Helper()
+	if response.Kind == "start" && response.TurnID != "" && response.RunID != "" {
+		return response
+	}
+	if svc == nil || response.AdmissionID == "" {
+		t.Fatalf("response has no canonical or pending admission identity: %#v", response)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	var last threadstore.PendingTurnAdmissionReceipt
+	var lastErr error
+	for time.Now().Before(deadline) {
+		last, lastErr = svc.threadsDB.GetPendingTurnAdmissionReceipt(t.Context(), response.AdmissionID)
+		if lastErr == nil && last.Stage == threadstore.PendingTurnAdmissionStageSettled && last.TurnID != "" && last.RunID != "" {
+			response.TurnID = last.TurnID
+			response.RunID = last.RunID
+			response.Kind = "start"
+			return response
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("canonical admission did not settle: response=%#v receipt=%#v err=%v", response, last, lastErr)
+	return SendUserTurnResponse{}
+}
+
 func readCanonicalThreadTurnIDsForTest(t *testing.T, svc *Service, ctx context.Context, threadID string) map[string]struct{} {
 	t.Helper()
 	host, err := svc.openFloretThreadReadHost(ctx, threadID)
@@ -248,6 +273,7 @@ func TestSendUserTurnReturnsAcceptedTurnAndRunIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	response = awaitCanonicalTurnAdmissionForTest(t, svc, response)
 	if response.Kind != "start" || strings.TrimSpace(response.TurnID) == "" || strings.TrimSpace(response.RunID) == "" {
 		t.Fatalf("response=%#v, want exact start receipt", response)
 	}
@@ -265,22 +291,28 @@ func TestSendUserTurnReturnsAcceptedTurnAndRunIdentity(t *testing.T) {
 	if canonicalUserIndex < 0 {
 		t.Fatalf("start receipt returned before canonical user timeline: %#v", bootstrap.TimelineMessages)
 	}
-	events, err := svc.ListFlowerThreadLiveEvents(ctx, meta, thread.ThreadID, 0, 100)
-	if err != nil {
-		t.Fatal(err)
-	}
+	var events *FlowerLiveEventsResponse
 	replacementIndex := -1
 	assistantIndex := -1
-	for index, event := range events.Events {
-		if event.Kind == FlowerLiveTimelineReplaced && replacementIndex < 0 {
-			replacementIndex = index
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline) && replacementIndex < 0; {
+		events, err = svc.ListFlowerThreadLiveEvents(ctx, meta, thread.ThreadID, 0, 100)
+		if err != nil {
+			t.Fatal(err)
 		}
-		if event.Kind == FlowerLiveMessageStarted && assistantIndex < 0 {
-			assistantIndex = index
+		for index, event := range events.Events {
+			if event.Kind == FlowerLiveTimelineReplaced && replacementIndex < 0 {
+				replacementIndex = index
+			}
+			if event.Kind == FlowerLiveMessageStarted && assistantIndex < 0 {
+				assistantIndex = index
+			}
+		}
+		if replacementIndex < 0 {
+			time.Sleep(10 * time.Millisecond)
 		}
 	}
 	if replacementIndex < 0 || (assistantIndex >= 0 && replacementIndex >= assistantIndex) {
-		t.Fatalf("live event order replacement=%d assistant=%d events=%#v", replacementIndex, assistantIndex, events.Events)
+		t.Fatalf("live event order replacement=%d assistant=%d events=%#v", replacementIndex, assistantIndex, events)
 	}
 	queued, err := svc.threadsDB.CountFollowupsByLane(ctx, meta.EndpointID, thread.ThreadID, threadstore.FollowupLaneQueued)
 	if err != nil || queued != 0 {
@@ -301,7 +333,11 @@ func TestQueuedSecondTurnTransitionsFromServerSnapshotToCanonicalFloretRow(t *te
 		Model:    "openai/gpt-5-mini",
 		Input:    RunInput{Text: "run long enough to queue the next turn"},
 	})
-	if err != nil || first.Kind != "start" {
+	if err != nil {
+		t.Fatalf("first turn response=%#v err=%v", first, err)
+	}
+	first = awaitCanonicalTurnAdmissionForTest(t, svc, first)
+	if first.Kind != "start" {
 		t.Fatalf("first turn response=%#v err=%v", first, err)
 	}
 	second, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{
@@ -459,13 +495,13 @@ WHERE queue_id = ?
 		PersistOpTimeout: 2 * time.Second, RunMaxWallTime: 2 * time.Second, RunIdleTimeout: time.Second,
 		ResolveProviderAPIKey: func(string) (string, bool, error) { return "", false, nil },
 	})
-	if restarted != nil {
-		_ = restarted.Close()
-		t.Fatal("startup returned a service after incomplete queued admission recovery")
+	if err != nil || restarted == nil {
+		if restarted != nil {
+			_ = restarted.Close()
+		}
+		t.Fatalf("startup should remain available while preserving malformed queued recovery: service=%v err=%v", restarted != nil, err)
 	}
-	if err == nil || !strings.Contains(err.Error(), "invalid durable admission receipt") {
-		t.Fatalf("startup error=%v, want explicit receipt failure", err)
-	}
+	defer restarted.Close()
 	verificationDB, openErr := sql.Open("sqlite", filepath.Join(stateDir, "ai", "threads.sqlite"))
 	if openErr != nil {
 		t.Fatal(openErr)

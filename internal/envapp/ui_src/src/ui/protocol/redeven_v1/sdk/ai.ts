@@ -82,6 +82,7 @@ export type AISendUserTurnRequest = {
 };
 
 export type AISendUserTurnResponse = {
+  admissionId?: string;
   runId: string;
   turnId: string;
   kind: string;

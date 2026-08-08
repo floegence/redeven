@@ -73,6 +73,7 @@ export type wire_ai_send_user_turn_req = {
 };
 
 export type wire_ai_send_user_turn_resp = {
+  admission_id?: string;
   run_id: string;
   turn_id: string;
   kind: string;

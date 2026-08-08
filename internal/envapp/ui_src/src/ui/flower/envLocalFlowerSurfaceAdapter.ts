@@ -119,6 +119,7 @@ type SendTurnResponse = Readonly<{
   run_id?: string;
   turn_id?: string;
   queue_id?: string;
+  admission_id?: string;
   kind?: string;
 }>;
 
@@ -251,14 +252,16 @@ async function releaseEnvAttachmentStagingScope(scope: FlowerAttachmentStagingSc
   );
 }
 
-async function previewEnvStagedAttachment(
+async function loadEnvStagedAttachmentPreview(
   attachment: FlowerStagedAttachment,
   scope: FlowerAttachmentStagingScope,
-): Promise<void> {
+  signal?: AbortSignal,
+): Promise<Blob> {
   const response = await fetch(
     `/_redeven_proxy/api/ai/uploads/${encodeURIComponent(trim(attachment.attachment_id))}`,
     await prepareLocalApiRequestInit({
       method: 'GET',
+      signal,
       headers: { ...flowerAttachmentStagingHeaders(scope), Accept: '*/*' },
     }),
   );
@@ -278,7 +281,14 @@ async function previewEnvStagedAttachment(
     || contentType === 'text/plain'
     || contentType === 'text/plain; charset=utf-8';
   if (!safeType) throw new Error('Flower returned an unsupported attachment preview content type.');
-  const objectURL = URL.createObjectURL(await response.blob());
+  return response.blob();
+}
+
+async function previewEnvStagedAttachment(
+  attachment: FlowerStagedAttachment,
+  scope: FlowerAttachmentStagingScope,
+): Promise<void> {
+  const objectURL = URL.createObjectURL(await loadEnvStagedAttachmentPreview(attachment, scope));
   window.open(objectURL, '_blank', 'noopener,noreferrer');
   window.setTimeout(() => URL.revokeObjectURL(objectURL), 60_000);
 }
@@ -771,6 +781,13 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         method: 'PATCH',
         body: JSON.stringify(body),
       }),
+      reorderQueuedTurns: (threadID, orderedQueueIDs) => fetchLocalApiJSON(
+        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/followups/order`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ lane: 'queued', ordered_followup_ids: orderedQueueIDs }),
+        },
+      ),
       forkThread: (threadID, body) => fetchLocalApiJSON<LoadThreadResponse>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/fork`, {
         method: 'POST',
         body: JSON.stringify(body),
@@ -880,6 +897,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       ),
       attachment,
     ),
+    loadStagedAttachmentPreview: (attachment, scope, signal) => loadEnvStagedAttachmentPreview(attachment, scope, signal),
     previewStagedAttachment: previewEnvStagedAttachment,
     launchTurn: async (input: FlowerTurnLaunchInput) => {
       const copy = adapterCopy(options);
@@ -889,10 +907,12 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       if (!prompt.trim() && attachmentIDs.length === 0 && !contextAction) throw new Error(copy.enterMessageBeforeSending);
       const existingThreadID = trim(input.thread_id);
       const [snapshot, models] = await Promise.all([
-        loadCachedSettings(),
+        existingThreadID ? Promise.resolve<FlowerSettingsSnapshot | null>(null) : loadCachedSettings(),
         existingThreadID ? Promise.resolve<ModelsResponse | null>(null) : loadCachedModels(),
       ]);
-      const permissionType = normalizePermissionType(input.permission_type ?? snapshot.defaults.permission_type);
+      const permissionType = snapshot || trim(input.permission_type)
+        ? normalizePermissionType(input.permission_type ?? snapshot?.defaults.permission_type)
+        : undefined;
       const clientRequestID = trim(input.client_request_id);
       if (!clientRequestID) throw new Error('Missing client request id.');
       const stagingScope = input.staging_scope;
@@ -907,7 +927,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       let createBody: Record<string, unknown> | undefined;
       if (!existingThreadID) {
         if (!models) throw new Error('Flower model catalog is unavailable.');
-        turnModelID = turnModelID || currentModelID(snapshot, models);
+        turnModelID = turnModelID || currentModelID(snapshot!, models);
         if (!turnModelID) throw new Error(copy.selectModelBeforeChat);
         createBody = {
           client_request_id: clientRequestID,
@@ -935,6 +955,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
             ...(stagingHeaders ? { headers: stagingHeaders } : {}),
             body: JSON.stringify({
               ...(existingThreadID ? { thread_id: existingThreadID } : {}),
+              ...(trim(input.source_followup_id) ? { source_followup_id: trim(input.source_followup_id) } : {}),
               ...(stagingScope ? { staging_scope_id: stagingScope.staging_scope_id } : {}),
               ...(turnModelID ? { model: turnModelID } : {}),
               input: {
@@ -943,7 +964,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
                 ...(contextAction ? { context_action: contextAction } : {}),
               },
               options: {
-                permission_type: permissionType,
+                ...(permissionType ? { permission_type: permissionType } : {}),
                 ...(serializeFlowerReasoningSelection(input.reasoning_selection) ? { reasoning_selection: serializeFlowerReasoningSelection(input.reasoning_selection) } : {}),
               },
               ...(createBody ? { create: createBody } : {}),
@@ -955,12 +976,14 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         const turnID = trim(response.turn_id);
         const runID = trim(response.run_id);
         const queueID = trim(response.queue_id);
+        const admissionID = trim(response.admission_id);
         const kind = trim(response.kind);
         const clientIdentityValid = existingThreadID
           ? !responseClientRequestID || responseClientRequestID === clientRequestID
           : responseClientRequestID === clientRequestID;
         const receiptValid = Boolean(responseThreadID && clientIdentityValid) && (
           (kind === 'start' && Boolean(turnID && runID) && !queueID)
+          || (kind === 'admitting' && Boolean(admissionID) && !turnID && !runID && !queueID)
           || (kind === 'queued' && Boolean(queueID) && !turnID && !runID)
         );
         if (!receiptValid) {
@@ -971,6 +994,9 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
           );
         }
         void options.rpc.ai.subscribeThread({ threadId: responseThreadID }).catch(() => undefined);
+        if (kind === 'admitting') {
+          return { client_request_id: clientRequestID, thread_id: responseThreadID, admission_id: admissionID, kind };
+        }
         return kind === 'start'
           ? { client_request_id: clientRequestID, thread_id: responseThreadID, turn_id: turnID, run_id: runID, kind }
           : { client_request_id: clientRequestID, thread_id: responseThreadID, queue_id: queueID, kind: 'queued' };

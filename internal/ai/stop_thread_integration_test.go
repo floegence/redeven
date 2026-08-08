@@ -351,11 +351,11 @@ func TestStopActiveRunExecutionReturnsPendingWhenSettlementExceedsDeadline(t *te
 	defer cancelStop()
 	startedAt := time.Now()
 	err = svc.stopActiveRunExecution(stopCtx, meta, endpointID, threadID, runID, r)
-	if !errors.Is(err, ErrThreadStopPending) {
-		t.Fatalf("stopActiveRunExecution error=%v, want %v", err, ErrThreadStopPending)
+	if err != nil {
+		t.Fatalf("stopActiveRunExecution error=%v, want immediate cancellation acceptance", err)
 	}
 	if elapsed := time.Since(startedAt); elapsed > time.Second {
-		t.Fatalf("pending stop elapsed=%s, want prompt bounded response", elapsed)
+		t.Fatalf("stop elapsed=%s, want prompt bounded response", elapsed)
 	}
 	if !errors.Is(r.requireExecutionOpen(), ErrRunExecutionClosed) {
 		t.Fatal("run execution remained open after pending stop")
@@ -374,6 +374,14 @@ func TestStopActiveRunExecutionReturnsPendingWhenSettlementExceedsDeadline(t *te
 	}
 
 	release()
+	r.markDone()
+	if attempt := currentStopFinalizationAttempt(r); attempt != nil {
+		select {
+		case <-attempt.done:
+		case <-time.After(3 * time.Second):
+			t.Fatal("stop finalization did not finish after release")
+		}
+	}
 	select {
 	case <-proc.finalizationDone:
 	case <-time.After(3 * time.Second):
@@ -398,6 +406,7 @@ func TestStopActiveRunExecutionAcceptsExactCanonicalTerminalBeforeLocalRunExit(t
 		t.Fatal(err)
 	}
 	r.floretRunTurnStarted.Store(true)
+	r.floretAdmitted.Store(true)
 	_, cancelRun := context.WithCancel(context.Background())
 	r.muCancel.Lock()
 	r.cancelFn = cancelRun
@@ -420,6 +429,13 @@ func TestStopActiveRunExecutionAcceptsExactCanonicalTerminalBeforeLocalRunExit(t
 	defer cancelStop()
 	if err := svc.stopActiveRunExecution(stopCtx, meta, meta.EndpointID, threadID, executionKey, r); err != nil {
 		t.Fatalf("stopActiveRunExecution: %v", err)
+	}
+	if attempt := currentStopFinalizationAttempt(r); attempt != nil {
+		select {
+		case <-attempt.done:
+		case <-time.After(3 * time.Second):
+			t.Fatal("exact canonical stop finalization did not finish")
+		}
 	}
 	svc.mu.Lock()
 	defer svc.mu.Unlock()
@@ -490,8 +506,15 @@ func TestStopThreadRetriesCanonicalFinalizationAfterTransientReadFailure(t *test
 		return exactStoppedThreadOverview(threadID, runID, turnID), nil
 	})
 
-	if _, err := svc.StopThread(context.Background(), meta, threadID); !errors.Is(err, ErrThreadStopUnavailable) {
-		t.Fatalf("first StopThread error=%v, want %v", err, ErrThreadStopUnavailable)
+	if response, err := svc.StopThread(context.Background(), meta, threadID); err != nil || !response.OK {
+		t.Fatalf("first StopThread response=%#v err=%v, want accepted cancellation", response, err)
+	}
+	if attempt := currentStopFinalizationAttempt(r); attempt != nil {
+		select {
+		case <-attempt.done:
+		case <-time.After(3 * time.Second):
+			t.Fatal("first stop finalization did not finish")
+		}
 	}
 	key := runThreadKey(meta.EndpointID, threadID)
 	svc.mu.Lock()
@@ -504,6 +527,13 @@ func TestStopThreadRetriesCanonicalFinalizationAfterTransientReadFailure(t *test
 	response, err := svc.StopThread(context.Background(), meta, threadID)
 	if err != nil || !response.OK {
 		t.Fatalf("second StopThread response=%#v err=%v, want success", response, err)
+	}
+	if attempt := currentStopFinalizationAttempt(r); attempt != nil {
+		select {
+		case <-attempt.done:
+		case <-time.After(3 * time.Second):
+			t.Fatal("retry stop finalization did not finish")
+		}
 	}
 	svc.mu.Lock()
 	defer svc.mu.Unlock()
@@ -622,6 +652,7 @@ func TestStopFinalizerDoesNotDeleteReplacementRunMapping(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("old finalizer did not reach canonical read")
 	}
+	oldAttempt := currentStopFinalizationAttempt(oldRun)
 	const newRunID = "run_stop_new"
 	newRun := newRun(runOptions{RunID: newRunID, EndpointID: meta.EndpointID, ThreadID: threadID, TurnID: "turn_stop_new"})
 	key := runThreadKey(meta.EndpointID, threadID)
@@ -631,8 +662,15 @@ func TestStopFinalizerDoesNotDeleteReplacementRunMapping(t *testing.T) {
 	svc.runs[newRunID] = newRun
 	svc.mu.Unlock()
 	close(releaseRead)
-	if err := <-result; !errors.Is(err, ErrThreadStopUnavailable) {
-		t.Fatalf("old StopThread error=%v, want ownership change failure", err)
+	if err := <-result; err != nil {
+		t.Fatalf("old StopThread error=%v, want accepted cancellation", err)
+	}
+	if oldAttempt != nil {
+		select {
+		case <-oldAttempt.done:
+		case <-time.After(3 * time.Second):
+			t.Fatal("old stop finalization did not finish")
+		}
 	}
 	svc.mu.Lock()
 	defer svc.mu.Unlock()

@@ -1,6 +1,6 @@
 import type { Component } from 'solid-js';
 import { createEffect, createSignal, Index, Show } from 'solid-js';
-import { Copy, ExternalLink, FileText, FolderOpen, Refresh, XCircle } from '@floegence/floe-webapp-core/icons';
+import { FileText, FolderOpen, Refresh, XCircle } from '@floegence/floe-webapp-core/icons';
 
 import type { FlowerAttachmentItem } from './createFlowerAttachmentController';
 
@@ -44,7 +44,6 @@ export type FlowerAttachmentLaneProps = Readonly<{
   onRemove: (localID: string) => void;
   onRestore: (localID: string) => void;
   onPreview?: (item: FlowerAttachmentItem) => void;
-  onCopyReference?: (item: FlowerAttachmentItem) => void;
   onFocusFallback?: () => void;
 }>;
 
@@ -144,20 +143,9 @@ export const FlowerAttachmentLane: Component<FlowerAttachmentLaneProps> = (props
           const status = () => itemStatus(item(), props.copy);
           const error = () => itemError(item(), props.copy);
           const errorDescriptionID = () => `flower-attachment-error-${item().local_id}`;
-          return (
-            <div
-              class="flower-attachment-item"
-              role="listitem"
-              data-attachment-status={item().status}
-              aria-label={[
-                item().name,
-                formatIECBytes(item().size_bytes, props.locale),
-                item().text_stats ? props.copy.lines(item().text_stats!.lines) : '',
-                item().mime_type,
-                status(),
-              ].filter(Boolean).join(', ')}
-              aria-describedby={item().error_code ? errorDescriptionID() : undefined}
-            >
+          const previewable = () => Boolean(item().staged && props.onPreview);
+          const attachmentSummary = () => (
+            <>
               <span class="flower-attachment-file-icon" aria-hidden="true"><FileText /></span>
               <span class="flower-attachment-body">
                 <span class="flower-attachment-name" title={item().name}>{item().name}</span>
@@ -184,6 +172,37 @@ export const FlowerAttachmentLane: Component<FlowerAttachmentLaneProps> = (props
                   <span id={errorDescriptionID()} class="flower-attachment-error">{error()}</span>
                 </Show>
               </span>
+            </>
+          );
+          return (
+            <div
+              class="flower-attachment-item"
+              role="listitem"
+              data-attachment-status={item().status}
+              aria-label={[
+                item().name,
+                formatIECBytes(item().size_bytes, props.locale),
+                item().text_stats ? props.copy.lines(item().text_stats!.lines) : '',
+                item().mime_type,
+                status(),
+              ].filter(Boolean).join(', ')}
+              aria-describedby={item().error_code ? errorDescriptionID() : undefined}
+            >
+              <Show
+                when={previewable()}
+                fallback={<div class="flower-attachment-preview-trigger" data-disabled="true">{attachmentSummary()}</div>}
+              >
+                <button
+                  type="button"
+                  class="flower-attachment-preview-trigger"
+                  aria-label={`${props.copy.preview}: ${item().name}`}
+                  title={`${props.copy.preview}: ${item().name}`}
+                  disabled={props.disabled}
+                  onClick={() => props.onPreview?.(item())}
+                >
+                  {attachmentSummary()}
+                </button>
+              </Show>
               <span class="flower-attachment-actions">
                 <Show when={item().source === 'long_text'}>
                   <button
@@ -231,26 +250,6 @@ export const FlowerAttachmentLane: Component<FlowerAttachmentLaneProps> = (props
                   >
                     <FolderOpen aria-hidden="true" />
                   </button>
-                </Show>
-                <Show when={item().status === 'staged_ready' && props.onPreview}>
-                  <button
-                    type="button"
-                    class="flower-attachment-icon-button"
-                    aria-label={props.copy.preview}
-                    title={props.copy.preview}
-                    disabled={props.disabled}
-                    onClick={() => props.onPreview?.(item())}
-                  ><ExternalLink /></button>
-                </Show>
-                <Show when={item().status === 'staged_ready' && props.onCopyReference}>
-                  <button
-                    type="button"
-                    class="flower-attachment-icon-button"
-                    aria-label={props.copy.copyReference}
-                    title={props.copy.copyReference}
-                    disabled={props.disabled}
-                    onClick={() => props.onCopyReference?.(item())}
-                  ><Copy /></button>
                 </Show>
                 <button
                   ref={(node) => itemButtons.set(item().local_id, node)}

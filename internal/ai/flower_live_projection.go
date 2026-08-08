@@ -1175,6 +1175,24 @@ func (s *Service) flowerLiveMaterializedStateLocked(endpointID string, threadID 
 	return cloneFlowerLiveMaterializedState(stream.State)
 }
 
+func flowerLiveStateHasPendingApproval(state FlowerLiveMaterializedState, runID string) bool {
+	runID = strings.TrimSpace(runID)
+	for _, action := range state.ApprovalActions {
+		if action.Status != FlowerApprovalStatusPending || action.State != FlowerApprovalStateRequested {
+			continue
+		}
+		if action.Origin != FlowerApprovalOriginMainTool && action.Origin != FlowerApprovalOriginControlConfirm {
+			continue
+		}
+		actionRunID := strings.TrimSpace(action.RunID)
+		if runID != "" && actionRunID != "" && actionRunID != runID {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
 func emptyFlowerLiveMaterializedState() FlowerLiveMaterializedState {
 	return FlowerLiveMaterializedState{
 		Messages:            map[string]FlowerLiveMessageDraft{},

@@ -229,6 +229,7 @@ export function toWireAISendUserTurnRequest(req: AISendUserTurnRequest): wire_ai
 
 export function fromWireAISendUserTurnResponse(resp: wire_ai_send_user_turn_resp): AISendUserTurnResponse {
   return {
+    admissionId: String(resp?.admission_id ?? '').trim() || undefined,
     runId: String(resp?.run_id ?? '').trim(),
     turnId: String(resp?.turn_id ?? '').trim(),
     kind: String(resp?.kind ?? '').trim(),

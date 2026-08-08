@@ -578,7 +578,7 @@ function metaForItem(item: FlowerActivityItem): string {
 }
 
 function metaWithError(item: FlowerActivityItem, base: string): string {
-  const error = item.status === 'error' ? errorMessageFromPayload(item.payload) : '';
+  const error = item.status === 'error' && item.approval_state !== 'rejected' ? errorMessageFromPayload(item.payload) : '';
   return Array.from(new Set([base, error].filter(Boolean))).join(' · ');
 }
 
@@ -593,7 +593,7 @@ function metaForTerminalItem(item: FlowerActivityItem): string {
   const command = payloadValue(item.payload, 'command');
   const description = trimString(item.description);
   const error = errorMessageFromPayload(item.payload);
-  return [command, description, item.status === 'error' ? error : '']
+  return [command, description, item.status === 'error' && item.approval_state !== 'rejected' ? error : '']
     .filter(Boolean)
     .filter((value, index, values) => values.indexOf(value) === index)
     .join(' · ');
@@ -691,6 +691,7 @@ function errorMessageFromPayload(payload: Readonly<Record<string, unknown>> | un
 }
 
 function errorDetailBlockForItem(item: FlowerActivityItem, payload: Readonly<Record<string, unknown>> | undefined): Extract<FlowerActivityDetailBlock, { kind: 'error' }> | null {
+  if (item.approval_state === 'rejected') return null;
   const message = errorMessageFromPayload(payload);
   if (!message) return null;
   return {
@@ -1162,7 +1163,7 @@ function presentationForFile(item: FlowerActivityItem, fileActions?: FlowerActiv
   return {
     label: titleText(title),
     title,
-    meta: metaWithError(item, metaForItem(item)),
+    meta: metaWithError(item, verb === 'Read' ? '' : metaForItem(item)),
     primaryAction: action,
     detailLines: statusLines,
     detailBlocks,
@@ -1228,7 +1229,10 @@ function presentationForTodos(item: FlowerActivityItem): FlowerActivityPresentat
 }
 
 function terminalTitleForItem(_item: FlowerActivityItem): FlowerActivityTitle {
-  return { kind: 'plain', text: 'Shell' };
+  const command = payloadValue(_item.payload, 'command');
+  return command
+    ? { kind: 'command', command }
+    : { kind: 'plain', text: trimString(_item.tool_name) || 'terminal.exec' };
 }
 
 function terminalOutputFromPayload(payload: Readonly<Record<string, unknown>>): string {
@@ -1256,7 +1260,7 @@ function presentationForTerminal(item: FlowerActivityItem): FlowerActivityPresen
     timed_out: boolValue(payload.timed_out),
   };
   const detailBlocks: FlowerActivityDetailBlock[] = [];
-  const errorBlock = errorDetailBlockForItem(item, payload);
+  const errorBlock = item.status === 'canceled' || item.approval_state === 'rejected' ? null : errorDetailBlockForItem(item, payload);
   if (errorBlock) detailBlocks.push(errorBlock);
   detailBlocks.push({ kind: 'terminal_output', terminal });
   if (detailLines.length > 0) detailBlocks.push({ kind: 'structured', lines: detailLines });
@@ -1441,7 +1445,7 @@ function titleWithToolContext(toolName: string, explicit: string, fallback: stri
     case 'use_skill': return meaningful ? `Skill ${meaningful}` : 'Skill';
     default: {
       if (meaningful) return label;
-      if (toolName === 'terminal.exec') return 'Shell';
+      if (toolName === 'terminal.exec') return fallback;
       const semantic = toolName.replace(/[._:-]+/g, ' ').trim();
       return semantic ? `Called ${semantic}` : 'Called tool';
     }

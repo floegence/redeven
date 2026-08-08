@@ -990,6 +990,8 @@ export type FlowerThreadListItem = Readonly<{
   target_labels: readonly string[];
   read_only_reason?: string;
   read_status: FlowerThreadReadStatus;
+  /** Local-only projection while canonical turn admission is in flight. */
+  admission_pending?: boolean;
 }>;
 
 export type FlowerHandlerRef = Readonly<{
@@ -1067,6 +1069,7 @@ export type FlowerTurnLaunchInput = Readonly<{
   decision?: FlowerRouterDecision | null;
   context_action?: unknown;
   attachment_ids?: readonly string[];
+  source_followup_id?: string;
   working_dir?: string;
   model_id?: string;
   permission_type?: FlowerPermissionType;
@@ -1079,6 +1082,11 @@ export type FlowerTurnLaunchReceipt = Readonly<{
   turn_id: string;
   run_id: string;
   kind: 'start';
+}> | Readonly<{
+  client_request_id: string;
+  thread_id: string;
+  admission_id: string;
+  kind: 'admitting';
 }> | Readonly<{
   client_request_id: string;
   thread_id: string;
@@ -1341,11 +1349,12 @@ export type FlowerSurfaceAdapter = Readonly<{
   loadSubagentDetail: (parentThreadID: string, childThreadID: string, afterOrdinal?: number, limit?: number) => Promise<FlowerSubagentDetail>;
   markThreadRead: (threadID: string, snapshot: FlowerThreadActivitySnapshot) => Promise<FlowerThreadReadStatus>;
   renameThread?: (threadID: string, title: string) => Promise<FlowerLiveBootstrap>;
-  setThreadPinned?: (threadID: string, pinned: boolean) => Promise<FlowerLiveBootstrap>;
+  setThreadPinned?: (threadID: string, pinned: boolean) => Promise<FlowerLiveBootstrap | undefined>;
   setThreadPermissionType?: (threadID: string, permissionType: FlowerPermissionType) => Promise<FlowerLiveBootstrap>;
   persistDefaultModel: (modelID: string) => Promise<FlowerSettingsSnapshot>;
   setThreadModel?: (threadID: string, modelID: string) => Promise<FlowerLiveBootstrap>;
   setThreadReasoningSelection?: (threadID: string, selection: FlowerReasoningSelection | undefined) => Promise<FlowerLiveBootstrap>;
+  reorderQueuedTurns?: (threadID: string, orderedQueueIDs: readonly string[]) => Promise<FlowerLiveBootstrap>;
   forkThread?: (threadID: string, clientRequestID: string) => Promise<FlowerLiveBootstrap>;
   deleteThread?: (threadID: string) => Promise<FlowerThreadDeleteOutcome>;
   resolveHandler: (input?: FlowerResolveHandlerInput) => Promise<FlowerRouterDecision>;
@@ -1355,6 +1364,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   uploadAttachment?: (input: FlowerAttachmentUploadInput) => Promise<FlowerStagedAttachment>;
   deleteStagedAttachment?: (attachmentID: string, scope: FlowerAttachmentStagingScope) => Promise<void>;
   readStagedLongText?: (attachment: FlowerStagedAttachment, scope: FlowerAttachmentStagingScope) => Promise<FlowerStagedLongTextReadResult>;
+  loadStagedAttachmentPreview?: (attachment: FlowerStagedAttachment, scope: FlowerAttachmentStagingScope, signal: AbortSignal) => Promise<Blob>;
   previewStagedAttachment?: (attachment: FlowerStagedAttachment, scope: FlowerAttachmentStagingScope) => void | Promise<void>;
   launchTurn: (input: FlowerTurnLaunchInput) => Promise<FlowerTurnLaunchReceipt>;
   compactThreadContext: (input: FlowerCompactThreadContextInput) => Promise<FlowerLiveBootstrap>;

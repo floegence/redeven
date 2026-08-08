@@ -37,6 +37,7 @@ type aiSendUserTurnReq struct {
 }
 
 type aiSendUserTurnResp struct {
+	AdmissionID             string `json:"admission_id,omitempty"`
 	RunID                   string `json:"run_id"`
 	TurnID                  string `json:"turn_id"`
 	Kind                    string `json:"kind"`
@@ -170,6 +171,7 @@ func RegisterRPCServiceProviderWithAccessGate(r *rpc.Router, meta *session.Meta,
 			return nil, toAIRPCError(err)
 		}
 		return &aiSendUserTurnResp{
+			AdmissionID:             strings.TrimSpace(resp.AdmissionID),
 			RunID:                   strings.TrimSpace(resp.RunID),
 			TurnID:                  strings.TrimSpace(resp.TurnID),
 			Kind:                    strings.TrimSpace(resp.Kind),

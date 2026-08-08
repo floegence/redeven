@@ -133,7 +133,7 @@ func TestServer_AI_FollowupsEndpoints(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SendUserTurn active: %v", err)
 	}
-	if started.Kind != "start" || strings.TrimSpace(started.RunID) == "" || strings.TrimSpace(started.TurnID) == "" {
+	if started.Kind != "admitting" || strings.TrimSpace(started.AdmissionID) == "" || strings.TrimSpace(started.RunID) != "" || strings.TrimSpace(started.TurnID) != "" {
 		t.Fatalf("active admission receipt=%#v", started)
 	}
 
@@ -148,10 +148,11 @@ func TestServer_AI_FollowupsEndpoints(t *testing.T) {
 		t.Fatalf("active run did not start in time")
 	}
 	deadline = time.Now().Add(2 * time.Second)
-	activeRunID := strings.TrimSpace(started.RunID)
+	activeRunID := ""
 	for time.Now().Before(deadline) {
 		view, viewErr := aiSvc.GetThread(ctx, &meta, thread.ThreadID)
-		if viewErr == nil && view != nil && strings.TrimSpace(view.ActiveRunID) == activeRunID {
+		if viewErr == nil && view != nil && strings.TrimSpace(view.ActiveRunID) != "" {
+			activeRunID = strings.TrimSpace(view.ActiveRunID)
 			break
 		}
 		time.Sleep(20 * time.Millisecond)
@@ -396,11 +397,8 @@ func TestServer_AI_FollowupsEndpoints(t *testing.T) {
 		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
 			t.Fatalf("unmarshal cancel thread: %v", err)
 		}
-		if !resp.OK || !resp.Data.OK || len(resp.Data.RecoveredFollowups) != 1 {
+		if !resp.OK || !resp.Data.OK {
 			t.Fatalf("unexpected cancel thread response: %s", rr.Body.String())
-		}
-		if got := resp.Data.RecoveredFollowups[0]; got.FollowupID != followupID2 || got.Lane != "draft" || got.Text != "edited queued text" {
-			t.Fatalf("unexpected recovered followup: %+v", got)
 		}
 		if elapsed := time.Since(cancelStartedAt); elapsed > 2*time.Second {
 			t.Fatalf("cancel request elapsed=%s, want no more than 2s", elapsed)
@@ -417,6 +415,14 @@ func TestServer_AI_FollowupsEndpoints(t *testing.T) {
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
 		srv.serveHTTP(rr, req)
+		for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); {
+			if rr.Code == http.StatusOK && strings.Contains(rr.Body.String(), `"queued":[]`) && strings.Contains(rr.Body.String(), `"drafts":[{"followup_id":"`+followupID2) {
+				break
+			}
+			time.Sleep(20 * time.Millisecond)
+			rr = httptest.NewRecorder()
+			srv.serveHTTP(rr, req)
+		}
 		if rr.Code != http.StatusOK {
 			t.Fatalf("list followups after cancel status=%d body=%s", rr.Code, rr.Body.String())
 		}

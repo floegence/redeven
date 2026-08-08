@@ -98,6 +98,12 @@ func TestThreadTimelineRetryWithoutUserEntryUsesSourceCanonicalAnchor(t *testing
 			if err != nil {
 				t.Fatalf("threadTimelineMessagesFromTurns: %v", err)
 			}
+			if status == flruntime.TurnStatusCancelled {
+				if len(items) != 2 {
+					t.Fatalf("items=%#v, want source user and source assistant only for normal cancellation", items)
+				}
+				return
+			}
 			if len(items) != 3 || items[2].Decoration == nil {
 				t.Fatalf("items=%#v, want source user, source assistant, retry decoration", items)
 			}

@@ -114,7 +114,7 @@ html.dark .flower-activity-companion {
   [data-companion-phase='expanded'],
   [data-companion-phase='collapsing']
 ) .flower-chat-bottom-dock {
-  border-top: 1px solid color-mix(in srgb, var(--flower-companion-border) 52%, transparent);
+  border-top: 0;
   background: var(--flower-companion-surface);
 }
 
@@ -147,10 +147,8 @@ html.dark .flower-activity-companion {
   [data-companion-phase='expanded'],
   [data-companion-phase='collapsing']
 ) .flower-composer[data-flower-approval-handoff='true'] {
-  border-color: color-mix(in srgb, var(--ring) 60%, var(--flower-companion-border) 40%);
-  box-shadow:
-    0 0 0 2px color-mix(in srgb, var(--ring) 72%, var(--flower-companion-surface-elevated) 28%),
-    0 2px 8px -4px color-mix(in srgb, var(--redeven-surface-shadow-source) 36%, transparent);
+  border-color: color-mix(in srgb, var(--flower-companion-border) 82%, transparent);
+  box-shadow: 0 2px 8px -4px color-mix(in srgb, var(--redeven-surface-shadow-source) 36%, transparent);
 }
 
 html.dark .flower-activity-companion:is(

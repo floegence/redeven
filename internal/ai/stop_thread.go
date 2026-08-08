@@ -9,6 +9,7 @@ import (
 	"time"
 
 	flruntime "github.com/floegence/floret/v3/runtime"
+	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -226,6 +227,31 @@ func (s *Service) waitForExactStoppedRunAuthority(ctx context.Context, threadID 
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	// Before durable Floret admission there is no canonical run identity to
+	// stop or prove terminal. Wait for the local execution to settle first: it
+	// will either finish binding canonical identity or release the durable
+	// pending command. This keeps a normal immediate Stop out of the authority
+	// barrier path that requires a complete StartTurn identity.
+	if !r.floretAdmitted.Load() {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("%w: waiting for pre-admission execution: %v", ErrThreadStopPending, ctx.Err())
+		case <-r.doneCh:
+		}
+		if !r.floretAdmitted.Load() {
+			persistTO := s.persistOpTO
+			if persistTO <= 0 {
+				persistTO = defaultPersistOpTimeout
+			}
+			readCtx, cancel := context.WithTimeout(ctx, persistTO)
+			snapshot, latest, err := s.readCanonicalThreadState(readCtx, threadID)
+			cancel()
+			if err != nil {
+				return stopExecutionError("reading canonical Floret state after pre-admission stop", err)
+			}
+			return validateStoppedRunCanonicalSnapshot(snapshot, latest, threadID, "", false)
+		}
+	}
 	canonicalRunID, _ := r.canonicalRunTurnIdentity()
 	persistTO := s.persistOpTO
 	if persistTO <= 0 {
@@ -337,7 +363,57 @@ func (s *Service) stopActiveRunExecution(ctx context.Context, meta *session.Meta
 	if start {
 		go s.finishExactRunStop(endpointID, threadID, executionKey, exact, termination, attempt)
 	}
-	return waitForExactStopFinalization(ctx, attempt)
+	// Cancellation admission is the synchronous API boundary. Canonical
+	// terminal proof and product cleanup continue in the background.
+	return nil
+}
+
+func currentStopFinalizationAttempt(r *run) *stopFinalizationAttempt {
+	if r == nil {
+		return nil
+	}
+	r.muStopFinalization.Lock()
+	defer r.muStopFinalization.Unlock()
+	return r.stopFinalizationAttempt
+}
+
+func (s *Service) finishAcceptedThreadStop(endpointID string, threadID string, r *run, db interface {
+	RecoverQueuedTurnsToDrafts(context.Context, string, string) ([]threadstore.QueuedTurn, int64, error)
+}) {
+	if s == nil || r == nil || db == nil {
+		return
+	}
+	defer s.clearQueuedDrainSuppression(endpointID, threadID)
+	attempt := currentStopFinalizationAttempt(r)
+	if attempt == nil {
+		return
+	}
+	<-attempt.done
+	if attempt.err != nil {
+		if s.log != nil {
+			s.log.Warn("ai: accepted thread stop failed to reconcile", "endpoint_id", endpointID, "thread_id", threadID, "error", attempt.err)
+		}
+		return
+	}
+	if r.admissionDone != nil {
+		<-r.admissionDone
+	}
+	persistTO := s.persistOpTO
+	if persistTO <= 0 {
+		persistTO = defaultPersistOpTimeout
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), persistTO)
+	defer cancel()
+	if err := s.closeThreadSubagents(ctx, endpointID, threadID, persistTO); err != nil && s.log != nil {
+		s.log.Warn("ai: accepted thread stop failed to close SubAgents", "endpoint_id", endpointID, "thread_id", threadID, "error", err)
+	}
+	if _, _, err := db.RecoverQueuedTurnsToDrafts(ctx, endpointID, threadID); err != nil {
+		if s.log != nil {
+			s.log.Warn("ai: accepted thread stop failed to recover queued turns", "endpoint_id", endpointID, "thread_id", threadID, "error", err)
+		}
+		return
+	}
+	s.broadcastThreadSummary(endpointID, threadID)
 }
 
 // reconcileStaleActiveRun removes a local run mapping only after Floret proves
@@ -473,7 +549,12 @@ func (a *threadActor) handleStopThread(ctx context.Context, meta *session.Meta, 
 		return StopThreadResponse{}, errors.New("invalid request")
 	}
 	a.mgr.svc.suppressQueuedDrain(endpointID, threadID)
-	defer a.mgr.svc.clearQueuedDrainSuppression(endpointID, threadID)
+	asyncStop := false
+	defer func() {
+		if !asyncStop {
+			a.mgr.svc.clearQueuedDrainSuppression(endpointID, threadID)
+		}
+	}()
 
 	a.mgr.svc.mu.Lock()
 	db := a.mgr.svc.threadsDB
@@ -531,6 +612,9 @@ func (a *threadActor) handleStopThread(ctx context.Context, meta *session.Meta, 
 				return StopThreadResponse{}, err
 			}
 		}
+		asyncStop = true
+		go a.mgr.svc.finishAcceptedThreadStop(endpointID, threadID, activeRun, db)
+		return StopThreadResponse{OK: true}, nil
 	case a.mgr.svc.stopFinalizingRunID(endpointID, threadID) != "":
 		finalizingID := a.mgr.svc.stopFinalizingRunID(endpointID, threadID)
 		a.mgr.svc.mu.Lock()
@@ -542,6 +626,9 @@ func (a *threadActor) handleStopThread(ctx context.Context, meta *session.Meta, 
 		if err := a.mgr.svc.stopActiveRunExecution(ctx, meta, endpointID, threadID, finalizingID, finalizingRun); err != nil {
 			return StopThreadResponse{}, err
 		}
+		asyncStop = true
+		go a.mgr.svc.finishAcceptedThreadStop(endpointID, threadID, finalizingRun, db)
+		return StopThreadResponse{OK: true}, nil
 	default:
 		canonical, _, err := a.mgr.svc.readCanonicalThreadState(ctx, threadID)
 		if err != nil {

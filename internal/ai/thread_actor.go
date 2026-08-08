@@ -903,7 +903,7 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 	if err != nil {
 		return SendUserTurnResponse{}, err
 	}
-	if queuedTurnCount > 0 {
+	if queuedTurnCount > 0 && strings.TrimSpace(req.SourceFollowupID) == "" {
 		queued, position, err := a.mgr.svc.enqueueQueuedTurn(ctx, meta, req)
 		if err != nil {
 			return SendUserTurnResponse{}, err
@@ -931,14 +931,14 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 		StagingScopeID:    req.StagingScopeID,
 		StagingCapability: req.StagingCapability,
 	}
-	admitted, _, err := a.mgr.svc.startUserTurnDetached(ctx, meta, executionKey, startReq, req.SourceFollowupID)
+	_, _, err = a.mgr.svc.startUserTurnDetached(ctx, meta, executionKey, startReq, req.SourceFollowupID)
 	if err != nil {
 		return SendUserTurnResponse{}, err
 	}
 	return SendUserTurnResponse{
-		RunID:                 strings.TrimSpace(admitted.RunID),
-		TurnID:                strings.TrimSpace(admitted.TurnID),
-		Kind:                  "start",
+		ThreadID:              threadID,
+		AdmissionID:           executionKey,
+		Kind:                  "admitting",
 		AppliedPermissionType: appliedPermissionType,
 	}, nil
 }
@@ -1062,7 +1062,11 @@ func (a *threadActor) handleSubmitRequestUserInputResponse(ctx context.Context, 
 		Input:    req.Input,
 		Options:  req.Options,
 	}
-	admitted, _, err := a.mgr.svc.startUserTurnDetached(ctx, meta, executionKey, startReq, req.SourceFollowupID)
+	_, _, err = a.mgr.svc.startUserTurnDetached(ctx, meta, executionKey, startReq, req.SourceFollowupID)
+	if err != nil {
+		return SubmitRequestUserInputResponseResponse{}, err
+	}
+	admitted, err := a.waitForExecutionUserTurnAdmission(ctx, executionKey)
 	if err != nil {
 		return SubmitRequestUserInputResponseResponse{}, err
 	}
@@ -1073,4 +1077,17 @@ func (a *threadActor) handleSubmitRequestUserInputResponse(ctx context.Context, 
 		ConsumedWaitingPromptID: strings.TrimSpace(openPrompt.PromptID),
 		AppliedPermissionType:   permissionTypeString(resolvedPermissionType),
 	}, nil
+}
+
+func (a *threadActor) waitForExecutionUserTurnAdmission(ctx context.Context, executionKey string) (admittedUserTurn, error) {
+	if a == nil || a.mgr == nil || a.mgr.svc == nil {
+		return admittedUserTurn{}, errors.New("service not ready")
+	}
+	a.mgr.svc.mu.Lock()
+	r := a.mgr.svc.runs[strings.TrimSpace(executionKey)]
+	a.mgr.svc.mu.Unlock()
+	if r == nil {
+		return admittedUserTurn{}, ErrUserTurnNotAdmitted
+	}
+	return r.waitForUserTurnAdmission(ctxOrBackground(ctx))
 }

@@ -47,9 +47,10 @@ type SendUserTurnRequest struct {
 type SendUserTurnResponse struct {
 	ClientRequestID         string `json:"client_request_id,omitempty"`
 	ThreadID                string `json:"thread_id,omitempty"`
+	AdmissionID             string `json:"admission_id,omitempty"`
 	RunID                   string `json:"run_id"`
 	TurnID                  string `json:"turn_id"`
-	Kind                    string `json:"kind"` // "start" | "queued"
+	Kind                    string `json:"kind"` // "start" | "queued" | "admitting"
 	QueueID                 string `json:"queue_id,omitempty"`
 	QueuePosition           int    `json:"queue_position,omitempty"`
 	ConsumedWaitingPromptID string `json:"consumed_waiting_prompt_id,omitempty"`

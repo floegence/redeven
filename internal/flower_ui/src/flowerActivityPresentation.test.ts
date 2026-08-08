@@ -189,7 +189,7 @@ describe('presentFlowerActivityItem', () => {
     }
   });
 
-  it('uses a Shell title with the real command as compact row context', () => {
+  it('uses the real command as the compact terminal row title', () => {
     const presentation = presentFlowerActivityItem(item({
       renderer: 'terminal',
       status: 'running',
@@ -212,7 +212,7 @@ describe('presentFlowerActivityItem', () => {
     }));
 
     expect(presentation.label).toBe('npm run build -- --mode production');
-    expect(presentation.title).toEqual({ kind: 'plain', text: 'Shell' });
+    expect(presentation.title).toEqual({ kind: 'command', command: 'npm run build -- --mode production' });
     expect(presentation.meta).toContain('npm run build -- --mode production');
     expect(presentation.meta).not.toContain('exit 0');
     expect(presentation.detailBlocks[0]).toMatchObject({
@@ -265,7 +265,7 @@ describe('presentFlowerActivityItem', () => {
     }));
 
     expect(presentation.label).toBe('docker compose up --build -d');
-    expect(presentation.title).toEqual({ kind: 'plain', text: 'Shell' });
+    expect(presentation.title).toEqual({ kind: 'command', command: 'docker compose up --build -d' });
     expect(presentation.meta).toContain('docker compose up --build -d');
     expect(presentation.detailBlocks[0]).toMatchObject({
       kind: 'terminal_output',
@@ -1092,8 +1092,8 @@ describe('presentFlowerActivityItem', () => {
       label: undefined,
     }));
 
-    expect(presentation.label).toBe('Shell');
-    expect(presentation.title).toEqual({ kind: 'plain', text: 'Shell' });
+    expect(presentation.label).toBe('terminal.exec');
+    expect(presentation.title).toEqual({ kind: 'plain', text: 'terminal.exec' });
     expect(presentation.meta).toBe('');
     expect(presentation.detailLines).toHaveLength(0);
     expect(presentation.detailBlocks).toHaveLength(0);

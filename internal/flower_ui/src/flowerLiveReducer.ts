@@ -50,11 +50,28 @@ function runStatus(raw: unknown): FlowerThreadStatus {
 
 function mergeMessages(messages: readonly FlowerChatMessage[], message: FlowerChatMessage | null | undefined): readonly FlowerChatMessage[] {
   if (!message) return messages;
-  const index = messages.findIndex((item) => item.id === message.id);
+  const messageID = trim(message.id);
+  const threadID = trim(message.thread_id);
+  const turnID = trim(message.turn_id);
+  const index = messages.findIndex((item) => {
+    if (trim(item.id) === messageID) return true;
+    // Optimistic/live rows can have different presentation ids. Once the
+    // canonical turn identity is known, the turn+role is the replacement key.
+    if (!threadID || !turnID || item.role !== message.role) return false;
+    if (trim(item.thread_id) && trim(item.thread_id) !== threadID) return false;
+    if (trim(item.turn_id) !== turnID) return false;
+    const itemRunID = trim(item.run_id);
+    const runID = trim(message.run_id);
+    return !itemRunID || !runID || itemRunID === runID;
+  });
   if (index < 0) return [...messages, message];
   const next = messages.slice();
   next[index] = message;
   return next;
+}
+
+function deduplicateMessages(messages: readonly FlowerChatMessage[]): readonly FlowerChatMessage[] {
+  return messages.reduce<readonly FlowerChatMessage[]>((current, message) => mergeMessages(current, message), []);
 }
 
 function visibleApprovalAction(action: FlowerApprovalAction): boolean {
@@ -225,6 +242,24 @@ function applyCanonicalTerminalPresentation(
   };
 }
 
+function preserveCanonicalTerminalState(
+  projected: FlowerThreadSnapshot,
+  canonical: FlowerThreadSnapshot,
+): FlowerThreadSnapshot {
+  if (!threadStatusIsTerminal(canonical.status)) return projected;
+  return {
+    ...projected,
+    status: canonical.status,
+    updated_at_ms: canonical.updated_at_ms,
+    active_run_id: undefined,
+    model_io_status: null,
+    input_request: null,
+    approval_actions: [],
+    approval_queue: null,
+    ...(canonical.error ? { error: canonical.error } : { error: undefined }),
+  };
+}
+
 function withModelIOStatus(thread: FlowerThreadSnapshot, status: FlowerModelIOStatus | null | undefined, runID?: string): FlowerThreadSnapshot {
   if (!status) return clearModelIOForRun(thread, runID);
   if (threadStatusHidesModelIO(thread.status)) return thread;
@@ -332,14 +367,15 @@ export function projectFlowerLiveBootstrap(bootstrap: FlowerLiveBootstrap): Flow
   const thread: FlowerThreadSnapshot = {
     ...bootstrap.thread,
     read_status: bootstrap.read_status,
-    messages: [...bootstrap.timeline_messages],
+    messages: deduplicateMessages(bootstrap.timeline_messages),
   };
-  return applyLiveMaterializedState(thread, {
+  const projected = applyLiveMaterializedState(thread, {
     ...bootstrap.live_state,
     context_usage: bootstrap.live_state.context_usage ?? bootstrap.thread.context_usage ?? null,
     context_compactions: bootstrap.live_state.context_compactions ?? bootstrap.thread.context_compactions ?? [],
     timeline_decorations: bootstrap.live_state.timeline_decorations ?? bootstrap.thread.timeline_decorations ?? [],
   });
+  return preserveCanonicalTerminalState(projected, thread);
 }
 
 export type FlowerLiveEventResult = Readonly<{
@@ -655,9 +691,10 @@ export function applyFlowerLiveEvent(
       break;
     case 'timeline.replaced': {
       const canonicalRunID = trim(event.payload.thread_patch?.active_run_id) || trim(next.active_run_id);
+      let canonicalThread: FlowerThreadSnapshot | null = null;
       next = {
         ...next,
-        messages: [...event.payload.messages],
+        messages: deduplicateMessages(event.payload.messages),
       };
       if (event.payload.read_status) {
         next = { ...next, read_status: event.payload.read_status };
@@ -673,11 +710,17 @@ export function applyFlowerLiveEvent(
       }
       if (event.payload.thread_patch) {
         next = applyThreadPatch(next, event.payload.thread_patch);
+        canonicalThread = next;
       }
       if (event.payload.live_state) {
         next = applyLiveMaterializedState(next, event.payload.live_state);
       }
-      next = applyCanonicalTerminalPresentation(next, event.payload.messages, canonicalRunID);
+      next = canonicalThread
+        ? preserveCanonicalTerminalState(next, canonicalThread)
+        : next;
+      if (!canonicalThread || !threadStatusIsTerminal(canonicalThread.status)) {
+        next = applyCanonicalTerminalPresentation(next, event.payload.messages, canonicalRunID);
+      }
       if (Number(next.queued_turn_count ?? 0) === 0) {
         next = { ...next, queued_turns: [] };
       }
