@@ -1260,8 +1260,6 @@ describe('Local Environment Flower surface adapter', () => {
     })).resolves.toMatchObject({ thread_id: 'thread-upload', run_id: 'run-upload' });
 
     expect(calls.map((call) => call.path)).toEqual([
-      '/_redeven_proxy/api/settings',
-      '/_redeven_proxy/api/ai/models',
       '/_redeven_proxy/api/ai/threads/thread-upload/turns',
     ]);
   });
