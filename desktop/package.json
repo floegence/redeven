@@ -74,7 +74,7 @@
     "@types/node": "^20.19.24",
     "@typescript-eslint/eslint-plugin": "^8.57.0",
     "@typescript-eslint/parser": "^8.57.0",
-    "electron": "41.3.0",
+    "electron": "41.10.3",
     "electron-builder": "26.15.3",
     "electron-builder-squirrel-windows": "26.15.3",
     "esbuild": "^0.28.1",
