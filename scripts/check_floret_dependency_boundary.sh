@@ -29,8 +29,8 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 ROOT_DIR=$(cd -- "$SCRIPT_DIR/.." &> /dev/null && pwd)
 PARENT_DIR=$(cd -- "$ROOT_DIR/.." &> /dev/null && pwd)
 FLORET_MODULE="github.com/floegence/floret/v3"
-FLORET_VERSION="v3.2.32"
-FLORET_SUM="h1:tQ3GDXXl75sblAKdlcJqUIiVY5Ifp1AqB0XDFbmetDI="
+FLORET_VERSION="v3.2.33"
+FLORET_SUM="h1:DidRvvXdUMKSe3KLl66inQHI8jF1Se33JbLdnhNDTVA="
 FLORET_GO_MOD_SUM="h1:l9Z36ZEf/OHlHu+1hZeDp+WOT9TqWNgNQYOQi+eAWW0="
 
 cd "$ROOT_DIR"
@@ -285,11 +285,11 @@ check_exact_turn_read_boundaries() {
 	echo "[INFO] exact canonical turn read boundaries checked"
 }
 
-check_floret_v32_capability_adoption() {
+check_floret_v3_capability_adoption() {
 	local matches
 
-	if ! rg -q '^\s*github\.com/floegence/floret/v3 v3\.2\.32$' go.mod; then
-		fail "Redeven must consume the published Floret v3.2.32 capability SDK."
+	if ! rg -q '^\s*github\.com/floegence/floret/v3 v3\.2\.33$' go.mod; then
+		fail "Redeven must consume the published Floret v3.2.33 capability SDK."
 	fi
 
 	for contract in \
@@ -716,7 +716,7 @@ check_durable_sink_closed_set
 check_threadstore_boundary_manifest
 check_canonical_subagent_and_root_inventory_boundaries
 check_exact_turn_read_boundaries
-check_floret_v32_capability_adoption
+check_floret_v3_capability_adoption
 check_floret_capability_bootstrap_boundary
 check_floret_thread_creation_boundary
 check_removed_product_schema_paths

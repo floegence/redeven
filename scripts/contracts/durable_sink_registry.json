@@ -1666,7 +1666,7 @@
     },
     {
       "path": "internal/envapp/ui_src/src/ui/EnvAppShell.tsx",
-      "sha256": "d0fe46d85eb8b253a003046df102cf4002e268252cd5d9d6f7942168d2fa108d",
+      "sha256": "a8b609a476714ecbf32ca42540f09735b61b6fda024250e96c88caa4716f54d2",
       "sink_kinds": [
         "web_storage"
       ],
@@ -1762,7 +1762,7 @@
     },
     {
       "path": "internal/flower_ui/src/FlowerSurface.tsx",
-      "sha256": "db9b533de69329c4b11c99cba25600951fcb430e225d9c94fff0c127772d6f5e",
+      "sha256": "413d4a4fb598ec5fcec7e7f48d7747bb6d6905ab2f8dd9ad4452d69422e7b6d6",
       "sink_kinds": [
         "web_storage"
       ],
@@ -1775,7 +1775,7 @@
       "keys": [
         "expression:THREAD_RAIL_WIDTH_STORAGE_KEY"
       ],
-      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded. The bounded thread-detail LRU remains process memory and does not add a durable lifecycle or transcript sink."
     },
     {
       "path": "internal/fs/entries.go",
@@ -1951,7 +1951,7 @@
     },
     {
       "path": "internal/pluginmarket/service.go",
-      "sha256": "44d57bc9bab4efcd84b4854d5c634db648ec531aa4379386a209432974f819ce",
+      "sha256": "2665896a5150658ac8ebfaee48f9ee9d746871b7101076eabed9fcdee58bb262",
       "sink_kinds": [
         "file",
         "json_file"
