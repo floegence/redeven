@@ -3879,8 +3879,14 @@ describe('TerminalPanel', () => {
     });
     await drainTerminalPanelAsyncWork();
 
-    expect(core?.setFixedDimensions).toHaveBeenCalledWith({ cols: 120, rows: 55 });
-    expect(core?.setFixedDimensions).toHaveBeenLastCalledWith({ cols: 80, rows: 24 });
+    expect(core?.setFixedDimensions).toHaveBeenCalledWith(
+      { cols: 120, rows: 55 },
+      { notifyResize: false },
+    );
+    expect(core?.setFixedDimensions).toHaveBeenLastCalledWith(
+      { cols: 80, rows: 24 },
+      { notifyResize: false },
+    );
     expect(core?.write).toHaveBeenCalled();
     expect(core?.setFixedDimensions.mock.invocationCallOrder[0]).toBeLessThan(
       core?.write.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
@@ -3888,6 +3894,39 @@ describe('TerminalPanel', () => {
     expect(core?.write.mock.invocationCallOrder[0]).toBeLessThan(
       core?.setFixedDimensions.mock.invocationCallOrder.at(-1) ?? Number.POSITIVE_INFINITY,
     );
+  });
+
+  it('keeps automatic host resize active after replaying a late live batch', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="panel" />, host);
+    await settleTerminalPanelAfterPaint();
+
+    const core = terminalCoreInstances[0];
+    emitTerminalData('session-1', 'late-old-grid', 1, {
+      geometryGeneration: 7,
+      cols: 120,
+      rows: 55,
+    });
+    await drainTerminalPanelAsyncWork();
+
+    transportMocks.resizeWithEffectiveGeometry.mockClear();
+    transportMocks.resizeWithEffectiveGeometry.mockResolvedValueOnce({
+      runtimeAttachGeneration: 1,
+      requested: { cols: 100, rows: 30 },
+      effective: {
+        generation: 2,
+        outputSequenceBoundary: 1,
+        cols: 100,
+        rows: 30,
+      },
+    });
+    core?.handlers?.onResize?.({ cols: 100, rows: 30 });
+
+    await waitForTerminalPanelCondition(() => {
+      expect(transportMocks.resizeWithEffectiveGeometry).toHaveBeenCalledWith('session-1', 100, 30);
+      expect(core?.setFixedDimensions).toHaveBeenCalledWith({ cols: 100, rows: 30 });
+    });
   });
 
   it('finishes attach and confirms the latest local size when the host resizes in flight', async () => {
@@ -8541,7 +8580,11 @@ describe('TerminalPanel', () => {
     expect(transportMocks.historyPage).toHaveBeenCalled();
     expect(resumedCore?.setFixedDimensions).toHaveBeenCalledTimes(3);
     expect(resumedCore?.setFixedDimensions).toHaveBeenNthCalledWith(1, { cols: 70, rows: 22 });
-    expect(resumedCore?.setFixedDimensions).toHaveBeenNthCalledWith(2, { cols: 80, rows: 24 });
+    expect(resumedCore?.setFixedDimensions).toHaveBeenNthCalledWith(
+      2,
+      { cols: 80, rows: 24 },
+      { notifyResize: false },
+    );
     expect(resumedCore?.setFixedDimensions).toHaveBeenNthCalledWith(3, { cols: 70, rows: 22 });
     expect(resumedCore!.setFixedDimensions.mock.invocationCallOrder[0]).toBeLessThan(
       resumedCore!.setFixedDimensions.mock.invocationCallOrder[1]!,
