@@ -41,7 +41,8 @@ Goals:
 - `git stash` is allowed only as a short-term safety rope before rebasing or
   switching context. Every stash must be applied back and continued, or dropped
   once it is confirmed obsolete. Do not leave stale stashes as hidden work.
-- Never introduce or rely on `go.work` or `go.work.sum` in this repository, sibling repositories, or their shared parent directory as a cross-repo development shortcut.
+- Outside the documented Local Fast Debugging mode, never introduce or rely on
+  `go.work` or `go.work.sum` as a cross-repository dependency mechanism.
 - `redeven` consumes published upstream releases only. Do not wire local sibling repositories into builds, tests, or release validation.
 - If local `main` is pushed, push the full current local `main` tip together with all of its latest commits.
 - Do not partial-push `main`, and do not update `origin/main` through another branch while newer local `main` commits remain unpublished.
@@ -115,17 +116,23 @@ running the final integration gate.
   Build only affected components, run focused tests, and verify the real local
   UI and runtime flow. Do not present this as final integration evidence.
 - When an upstream package must change, implement and test it in that upstream
-  repository first. For local debugging only, build the package and temporarily
-  overlay its artifacts in Redeven's installed dependency directory.
+  repository first. For local debugging only, either use a temporary `go.work`
+  for Go modules or overlay built package artifacts in Redeven's installed
+  dependency directory.
+- A debugging `go.work` may reference only worktrees owned by the current task.
+  Keep `go.work` and `go.work.sum` untracked, record every referenced upstream
+  commit, and remove both files before committing Redeven or running formal
+  dependency, integration, or release validation.
 - An overlay must not change manifests, lockfiles, generated contracts, or
-  tracked files. Do not use `go.work`, Go `replace`, `file:`, `link:`,
-  `workspace:`, npm link, build aliases, or sibling source imports.
+  tracked files. Do not use Go `replace`, `file:`, `link:`, `workspace:`, npm
+  link, build aliases, or sibling source imports.
 - Record the upstream commit used by each overlay and rebuild the overlay after
   every upstream change. An overlay proves local behavior only; it does not
   prove release compatibility, provenance, or package-set integrity.
-- Before committing or integrating Redeven, release the upstream change,
-  upgrade Redeven to the published version, remove all overlays, and repeat the
-  affected checks against the published artifacts.
+- Before committing or integrating Redeven, remove temporary workspaces and
+  overlays, release the upstream change, upgrade Redeven to the published
+  version, and repeat the affected checks with `GOWORK=off` against the
+  published artifacts.
 
 ## Feature Sync
 
@@ -436,7 +443,9 @@ Rules:
   `flowersec`, and `redevplugin`. Do not turn a general-purpose dependency gap
   into Redeven-local helper code, copied contracts, hidden compatibility shims,
   local package wiring, or one-off product-specific platform logic.
-- Never reference local sibling checkouts through package manifests, lockfiles, build aliases, source imports, or Go workspace wiring.
+- Never reference local sibling checkouts through package manifests, lockfiles,
+  build aliases, or source imports. The only local Go workspace exception is
+  the temporary, untracked Local Fast Debugging flow defined above.
 - Forbidden local wiring includes `file:`, `link:`, `workspace:`, `portal:`, relative paths, absolute paths, and equivalent local indirection.
 - For ReDevPlugin specifically, a usable dependency update means the matching
   Go module, npm packages, Rust source crates, package publication evidence,
@@ -703,12 +712,13 @@ state machine, bridge token issuer, asset session manager, WASM executor,
 storage/network broker, operation/stream protocol, or runtime supervisor has
 crossed the boundary and must be moved upstream into ReDevPlugin first.
 
-Do not use `replace`, `go.work`, `go.work.sum`, local sibling paths,
-package-manager links, local npm workspace wiring, Rust path overrides, copied
-source trees, or build aliases to point Redeven at a local `redevplugin`
-checkout. Do not copy generated `redevplugin` source, schemas, SDK files, or
-runtime binaries into Redeven as a substitute for a released dependency. Run
-ReDevPlugin dependency and contract checks with `GOWORK=off`.
+Outside Local Fast Debugging, do not use `replace`, `go.work`, `go.work.sum`,
+local sibling paths, package-manager links, local npm workspace wiring, Rust
+path overrides, copied source trees, or build aliases to point Redeven at a
+local `redevplugin` checkout. Do not copy generated `redevplugin` source,
+schemas, SDK files, or runtime binaries into Redeven as a substitute for a
+released dependency. Run ReDevPlugin dependency and contract checks with
+`GOWORK=off`.
 
 `redevplugin` owns platform-general concerns:
 
@@ -956,9 +966,10 @@ Use this checklist when reviewing any Redeven plugin integration change:
 ## Flower / Floret Boundary
 
 Redeven consumes Floret only through published `github.com/floegence/floret/v3`
-module versions. Do not use `replace`, `go.work`, `go.work.sum`, local sibling
-paths, package-manager links, or build aliases to point Redeven at a local
-Floret checkout. Run Floret dependency checks with `GOWORK=off`.
+module versions. Outside Local Fast Debugging, do not use `replace`, `go.work`,
+`go.work.sum`, local sibling paths, package-manager links, or build aliases to
+point Redeven at a local Floret checkout. Run Floret dependency checks with
+`GOWORK=off`.
 
 Flower and Redeven own product policy, concrete tool implementations, host
 thread settings, unadmitted commands, Desktop and Env App adapters, provider
