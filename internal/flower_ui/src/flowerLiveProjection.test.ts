@@ -3623,6 +3623,41 @@ describe('Flower live projection', () => {
     });
   });
 
+  it('clears the previous transient draft when a newer provider attempt starts', () => {
+    const initial = projectFlowerLiveBootstrap(bootstrap());
+    const started = applyFlowerLiveEvent(initial, 0, event(1, 'message.started', {
+      message_id: 'assistant-attempt',
+      role: 'assistant',
+      status: 'streaming',
+      created_at_ms: 100,
+      attempt_epoch: 1,
+    }));
+    const oldDelta = applyFlowerLiveEvent(started.thread, started.cursor, event(2, 'message.block_delta', {
+      message_id: 'assistant-attempt',
+      block_index: 0,
+      delta: 'old attempt',
+    }));
+    const restarted = applyFlowerLiveEvent(oldDelta.thread, oldDelta.cursor, event(3, 'message.started', {
+      message_id: 'assistant-attempt',
+      role: 'assistant',
+      status: 'streaming',
+      created_at_ms: 200,
+      attempt_epoch: 2,
+    }));
+    const freshBlock = applyFlowerLiveEvent(restarted.thread, restarted.cursor, event(4, 'message.block_started', {
+      message_id: 'assistant-attempt',
+      block_index: 0,
+      block_type: 'markdown',
+    }));
+    const freshDelta = applyFlowerLiveEvent(freshBlock.thread, freshBlock.cursor, event(5, 'message.block_delta', {
+      message_id: 'assistant-attempt',
+      block_index: 0,
+      delta: 'new attempt',
+    }));
+
+    expect(freshDelta.thread.messages.find((message) => message.id === 'assistant-attempt')?.content).toBe('new attempt');
+  });
+
   it('requires message.started to carry the owning TurnID before creating a row', () => {
     const initial = projectFlowerLiveBootstrap(bootstrap());
     const messageStarted = event(1, 'message.started', {

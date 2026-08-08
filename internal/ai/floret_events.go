@@ -90,6 +90,16 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 		r.rejectFloretContract("event", err)
 		return
 	}
+	if ev.Type == floretEventProviderRequest {
+		accepted, err := r.activateFloretProviderAttempt(ev.Metadata)
+		if err != nil {
+			r.rejectFloretContract("provider_attempt", err)
+			return
+		}
+		if !accepted {
+			return
+		}
+	}
 	if canonicalUserEntry {
 		if r.awaitFloretAdmission.Load() {
 			return
@@ -116,7 +126,9 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 	if canonicalUserEntry {
 		r.ensureAssistantMessageStarted()
 	}
-	r.applyFloretStreamObservation(ev.Stream)
+	if r.acceptsFloretStreamAttempt(ev.Stream) {
+		r.applyFloretStreamObservation(ev.Stream)
+	}
 	r.applyFloretSourceObservation(ev.Sources)
 	r.applyFloretContextStatus(ev.ContextStatus)
 	r.applyFloretCompaction(ev.Compaction)
@@ -161,6 +173,98 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 			"tool_name": strings.TrimSpace(ev.ToolName),
 			"metadata":  ev.Metadata,
 		})
+	}
+}
+
+func (r *run) acceptsFloretStreamAttempt(stream *flruntime.StreamObservation) bool {
+	if r == nil || stream == nil {
+		return true
+	}
+	logical := strings.TrimSpace(string(stream.LogicalRequestID))
+	attemptID := strings.TrimSpace(stream.AttemptID)
+	if logical == "" && attemptID == "" && stream.AttemptEpoch == 0 {
+		return true
+	}
+	if logical == "" || attemptID == "" || stream.AttemptEpoch <= 0 {
+		return false
+	}
+	r.muProviderAttempt.Lock()
+	active := r.providerAttempt
+	r.muProviderAttempt.Unlock()
+	if active.logicalRequestID == "" {
+		return false
+	}
+	if logical != active.logicalRequestID || stream.AttemptEpoch != active.attemptEpoch || attemptID != active.attemptID {
+		r.recordRunDiagnostic("floret.provider.stream_dropped", RealtimeStreamKindLifecycle, map[string]any{
+			"logical_request_id": logical,
+			"attempt_id":         attemptID,
+			"attempt_epoch":      stream.AttemptEpoch,
+			"active_attempt_id":  active.attemptID,
+			"active_epoch":       active.attemptEpoch,
+		})
+		return false
+	}
+	return true
+}
+
+func (r *run) activateFloretProviderAttempt(metadata map[string]any) (bool, error) {
+	if r == nil {
+		return false, errors.New("provider attempt owner is unavailable")
+	}
+	logical, _ := metadata["logical_request_id"].(string)
+	attemptID, _ := metadata["attempt_id"].(string)
+	epoch := intFromAny(metadata["attempt_epoch"])
+	identity := providerAttemptIdentity{
+		logicalRequestID: strings.TrimSpace(logical),
+		attemptID:        strings.TrimSpace(attemptID),
+		attemptEpoch:     epoch,
+	}
+	if identity.logicalRequestID == "" || identity.attemptID == "" || identity.attemptEpoch <= 0 {
+		return false, errors.New("provider request attempt identity is incomplete")
+	}
+	r.muProviderAttempt.Lock()
+	previous := r.providerAttempt
+	if previous.logicalRequestID != "" && previous.logicalRequestID != identity.logicalRequestID {
+		r.muProviderAttempt.Unlock()
+		return false, errors.New("provider request logical identity changed")
+	}
+	if identity.attemptEpoch < previous.attemptEpoch || identity.attemptEpoch == previous.attemptEpoch && previous.attemptID != "" && previous.attemptID != identity.attemptID {
+		r.muProviderAttempt.Unlock()
+		return false, nil
+	}
+	if identity.attemptEpoch == previous.attemptEpoch && previous.attemptID == identity.attemptID {
+		r.muProviderAttempt.Unlock()
+		return true, nil
+	}
+	r.providerAttempt = identity
+	r.muProviderAttempt.Unlock()
+
+	r.muAssistant.Lock()
+	r.assistantBlocks = nil
+	r.assistantAnswer = assistantAnswerState{}
+	r.activityFileActions = make(map[string]FlowerActivityFileAction)
+	r.activityFileActionSeq = 0
+	r.muAssistant.Unlock()
+	r.nextBlockIndex = 0
+	r.currentTextBlockIndex = -1
+	r.needNewTextBlock = false
+	r.currentThinkingBlockIndex = -1
+	r.needNewThinkingBlock = false
+	r.sendStreamEvent(streamEventMessageStart{Type: "message-start", MessageID: r.messageID, AttemptEpoch: identity.attemptEpoch})
+	r.sendStreamEvent(streamEventBlockStart{Type: "block-start", MessageID: r.messageID, BlockIndex: 0, BlockType: "markdown"})
+	return true, nil
+}
+
+func intFromAny(value any) int {
+	switch number := value.(type) {
+	case int:
+		return number
+	case int64:
+		return int(number)
+	case float64:
+		return int(number)
+	default:
+		return 0
 	}
 }
 
