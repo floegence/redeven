@@ -1176,7 +1176,7 @@ html.dark .flower-component-shell {
 }
 
 .flower-composer-reference-option[data-kind='directory'] .flower-composer-reference-option-icon {
-  color: color-mix(in srgb, #f2bd62 82%, var(--foreground) 18%);
+  color: color-mix(in srgb, var(--redeven-status-warning) 82%, var(--foreground) 18%);
 }
 
 .flower-composer-reference-option-copy {
@@ -6101,10 +6101,10 @@ html.dark .flower-component-shell {
   overflow: hidden;
   background: linear-gradient(
     90deg,
-    rgb(96 165 250 / 0) 0%,
-    rgb(96 165 250 / 0.05) 24%,
-    rgb(59 130 246 / 0.12) 58%,
-    rgb(37 99 235 / 0.2) 100%
+    color-mix(in srgb, var(--primary) 0%, transparent) 0%,
+    color-mix(in srgb, var(--primary) 5%, transparent) 24%,
+    color-mix(in srgb, var(--primary) 12%, transparent) 58%,
+    color-mix(in srgb, var(--primary) 20%, transparent) 100%
   );
   pointer-events: none;
 }
@@ -6130,7 +6130,7 @@ html.dark .flower-component-shell {
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: rgb(96 165 250 / 0.96);
+  color: color-mix(in srgb, var(--primary) 96%, transparent);
   font-size: 0.625rem;
   font-weight: 600;
   line-height: 1;
