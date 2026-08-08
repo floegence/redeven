@@ -620,6 +620,13 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     return result;
   };
 
+  const applyTransientFixedDimensions = (
+    core: TerminalCore,
+    dimensions: Readonly<{ cols: number; rows: number }>,
+  ): void => {
+    core.setFixedDimensions(dimensions, { notifyResize: false });
+  };
+
   const writeTerminalChunks = async (
     chunks: readonly TerminalOutputPipelineChunk[],
     history: boolean,
@@ -671,7 +678,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       if (liveGeometry && (!sharedGeometry
         || sharedGeometry.cols !== liveGeometry.cols
         || sharedGeometry.rows !== liveGeometry.rows)) {
-        core.setFixedDimensions(liveGeometry);
+        applyTransientFixedDimensions(core, liveGeometry);
       }
       try {
         if (payload.byteLength > 0) {
@@ -684,7 +691,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       } finally {
         if (liveGeometry && sharedGeometry
           && (sharedGeometry.cols !== liveGeometry.cols || sharedGeometry.rows !== liveGeometry.rows)) {
-          core.setFixedDimensions(sharedGeometry);
+          applyTransientFixedDimensions(core, sharedGeometry);
         }
       }
       for (const chunk of current) {
@@ -1214,7 +1221,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       applyHistoryGeometry: ({ cols, rows }) => {
         const core = term;
         if (!core) throw new Error('Terminal history geometry has no active core');
-        core.setFixedDimensions({ cols, rows });
+        applyTransientFixedDimensions(core, { cols, rows });
       },
       write: (_payload, chunks) => writeTerminalChunks(chunks, false),
       writeHistory: (_payload, chunks) => writeTerminalChunks(chunks, true),
