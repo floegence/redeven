@@ -1680,7 +1680,7 @@ describe('TerminalPanel browser activity integration', () => {
       { cols: 100, rows: 30 },
       { notifyResize: false },
     );
-    expect(core.forceResizeAndWaitForPresentation).toHaveBeenCalled();
+    expect(core.forceResizeAndWaitForCommittedFrame).toHaveBeenCalledTimes(2);
   });
 
   it('does not reassert an unchanged host capacity when another view constrains the shared grid', async () => {

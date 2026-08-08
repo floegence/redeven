@@ -192,6 +192,9 @@ const terminalSelectionState = vi.hoisted(() => ({
 const terminalConfigState = vi.hoisted(() => ({
   values: [] as any[],
 }));
+const terminalHostDimensionsState = vi.hoisted(() => ({
+  value: undefined as { cols: number; rows: number } | undefined,
+}));
 
 const getThemeColorsSpy = vi.hoisted(() => vi.fn((themeName: string) => (
   themeName === 'light'
@@ -932,7 +935,7 @@ vi.mock('@floegence/floeterm-terminal-web', async () => {
     forceResize = forceResizeSpy;
     forceResizeAndWaitForCommittedFrame = forceResizeAndWaitForCommittedFrameSpy;
     forceResizeAndWaitForPresentation = forceResizeAndWaitSpy;
-    measureHostDimensions = vi.fn(() => undefined);
+    measureHostDimensions = vi.fn(() => terminalHostDimensionsState.value);
     getDimensions = vi.fn(() => ({ cols: 80, rows: 24 }));
     getTerminalInfo = vi.fn(() => ({
       cols: 80,
@@ -2117,6 +2120,7 @@ describe('TerminalPanel', () => {
     terminalEnvPermissionsState.canExecute = true;
     terminalSelectionState.text = '';
     terminalConfigState.values = [];
+    terminalHostDimensionsState.value = undefined;
     getThemeColorsSpy.mockClear();
     terminalBufferLinesState.lines = new Map();
     terminalCoreInstances.splice(0, terminalCoreInstances.length);
@@ -3261,6 +3265,36 @@ describe('TerminalPanel', () => {
       coordinator_attach_generation: expect.any(Number),
       covered_through_sequence: 1,
     }));
+  });
+
+  it('uses committed frame fences before and after an acknowledged geometry correction', async () => {
+    terminalHostDimensionsState.value = { cols: 115, rows: 44 };
+    envContextState.viewMode = 'workbench';
+    transportMocks.resize.mockResolvedValueOnce({
+      runtimeAttachGeneration: 1,
+      requested: { cols: 115, rows: 44 },
+      effective: {
+        generation: 2,
+        outputSequenceBoundary: 0,
+        cols: 115,
+        rows: 44,
+      },
+    });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+
+    await vi.waitFor(() => {
+      expect(terminalCoreInstances[0]?.measureHostDimensions).toHaveBeenCalled();
+    });
+    await settleTerminalPanelAfterPaint();
+    await vi.waitFor(() => {
+      expect(forceResizeAndWaitForCommittedFrameSpy).toHaveBeenCalledTimes(2);
+    });
+
+    expect(transportMocks.resize).toHaveBeenCalledWith('session-1', 115, 44);
+    expect(forceResizeAndWaitSpy).not.toHaveBeenCalled();
   });
 
   it('cancels the pending baseline render fence after a blocking core failure', async () => {

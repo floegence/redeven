@@ -1032,7 +1032,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
         }
       }
 
-      if (geometryChanged) await core.forceResizeAndWaitForPresentation();
+      if (geometryChanged) await core.forceResizeAndWaitForCommittedFrame();
       return terminalPresentationIsCurrent(core, initSequence, reloadSequence, trace);
     } finally {
       terminalPresentationSettling = false;
