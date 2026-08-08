@@ -57,6 +57,7 @@ const activitySurfaceLifecycleState = vi.hoisted(() => ({
 const pluginLifecycleMocks = vi.hoisted(() => {
   const listInstalledPlugins = vi.fn(async () => []);
   const loadInventoryProjection = vi.fn();
+  const refreshEnabledRuntimeState = vi.fn(async () => ({ results: [] }));
   const execute = vi.fn(async (_command: any) => ({}));
   const installOfficialRelease = vi.fn(async (
     _command: any,
@@ -72,6 +73,7 @@ const pluginLifecycleMocks = vi.hoisted(() => {
   return {
     listInstalledPlugins,
     loadInventoryProjection,
+    refreshEnabledRuntimeState,
     execute,
     installOfficialRelease,
     listReleaseInstallOperations,
@@ -82,6 +84,7 @@ const pluginLifecycleMocks = vi.hoisted(() => {
     createPluginLifecycleAPI: vi.fn(() => ({
       listInstalledPlugins,
       loadInventoryProjection,
+      refreshEnabledRuntimeState,
       execute,
       installOfficialRelease,
       listReleaseInstallOperations,
@@ -242,24 +245,15 @@ function activityPluginProjection(count: number): PluginInventoryProjection {
   };
 }
 
-const emitLocalHandshake = (config: Record<string, unknown>) => {
-  (config.observer as { onDiagnosticEvent?: (event: Record<string, unknown>) => void } | undefined)
-    ?.onDiagnosticEvent?.({
-      path: 'direct', stage: 'handshake', code: 'handshake_ok', result: 'ok', session_id: 'ch_local',
-    });
-};
-
-const connectMock = vi.fn(async (config: Record<string, unknown>) => {
+const connectMock = vi.fn(async (_config: Record<string, unknown>) => {
   protocolStatus = 'connected';
   protocolClient = { id: 'client-1' };
   protocolError = null;
-  emitLocalHandshake(config);
 });
-const reconnectMock = vi.fn(async (config?: Record<string, unknown>) => {
+const reconnectMock = vi.fn(async (_config?: Record<string, unknown>) => {
   protocolStatus = 'connected';
   protocolClient = { id: 'client-2' };
   protocolError = null;
-  if (config) emitLocalHandshake(config);
 });
 const disconnectMock = vi.fn(() => {
   protocolStatus = 'disconnected';
@@ -273,6 +267,8 @@ const accessResumeMock = vi.fn(async ({ token }: { token: string }) => {
 let protocolStatus: 'connected' | 'disconnected' | 'connecting' | 'error' = 'disconnected';
 let protocolClient: unknown = null;
 let protocolError: unknown = null;
+const [protocolStateRevision, setProtocolStateRevision] = createSignal(0);
+const notifyProtocolStateChange = () => setProtocolStateRevision((revision) => revision + 1);
 let resumeCalls: string[] = [];
 let layoutIsMobile = false;
 let sidebarActiveTabValue = 'terminal';
@@ -831,12 +827,21 @@ vi.mock('@floegence/floe-webapp-core/icons', async () => {
 
 vi.mock('@floegence/floe-webapp-protocol', () => ({
   useProtocol: () => ({
-    status: () => protocolStatus,
-    session: () => protocolClient,
+    status: () => {
+      protocolStateRevision();
+      return protocolStatus;
+    },
+    session: () => {
+      protocolStateRevision();
+      return protocolClient;
+    },
     connect: connectMock,
     reconnect: reconnectMock,
     disconnect: disconnectMock,
-    error: () => protocolError,
+    error: () => {
+      protocolStateRevision();
+      return protocolError;
+    },
   }),
 }));
 
@@ -1238,6 +1243,8 @@ beforeEach(async () => {
   pluginLifecycleMocks.createPluginLifecycleAPI.mockClear();
   pluginLifecycleMocks.listInstalledPlugins.mockClear();
   pluginLifecycleMocks.loadInventoryProjection.mockReset();
+  pluginLifecycleMocks.refreshEnabledRuntimeState.mockReset();
+  pluginLifecycleMocks.refreshEnabledRuntimeState.mockResolvedValue({ results: [] });
   pluginLifecycleMocks.execute.mockReset();
   pluginLifecycleMocks.execute.mockImplementation(async (_command: any) => ({}));
   pluginLifecycleMocks.installOfficialRelease.mockReset();
@@ -1844,6 +1851,7 @@ describe('EnvAppShell environment entry affordances', () => {
         phase: 'complete',
         progress: { kind: 'items', completed: 1, total: 1 },
         mutation_outcome: 'committed',
+        activation: { status: 'enabled' },
         terminal_at: '2026-08-05T08:00:02Z',
       });
       await expect(install).resolves.toBeUndefined();
@@ -2097,7 +2105,6 @@ describe('EnvAppShell environment entry affordances', () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(officialContainersProjection('update_available'));
-    protocolStatus = 'connected';
     window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
 
     const host = document.createElement('div');
@@ -2109,9 +2116,11 @@ describe('EnvAppShell environment entry affordances', () => {
     try {
       await flushAsync();
       await flushAsync();
+      await new Promise((resolve) => setTimeout(resolve, 1500));
 
       (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement | null)?.click();
-      await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="instance:plugini_redeven_official_containers"]')));
+      await flushAsync();
+      await flushUntil(() => host.querySelector('[data-plugin-panel-tile="instance:plugini_redeven_official_containers"]')?.getAttribute('data-plugin-panel-action') === 'open_surface', 40);
       const tile = host.querySelector('[data-plugin-panel-tile="instance:plugini_redeven_official_containers"]') as HTMLButtonElement;
       expect(tile.dataset.pluginPanelAction).toBe('open_surface');
       tile.click();
@@ -3216,7 +3225,7 @@ describe('EnvAppShell local access gate', () => {
       const pluginCredential = await import('./services/pluginSessionCredential');
       pluginCredential.clearPluginSessionCredential();
       pluginCredential.stagePluginSessionCredential('ch_local', 'credential-local');
-      expect(pluginCredential.readPluginSessionCredential()).toBe('credential-local');
+      expect(pluginCredential.readPluginSessionCredential()).toBe('');
       expect(mintLocalDirectConnectArtifactMock).not.toHaveBeenCalled();
       expect(accessResumeMock).not.toHaveBeenCalled();
       expect(resumeCalls).toEqual([]);
@@ -3522,11 +3531,7 @@ describe('EnvAppShell local access gate', () => {
       protocolStatus = 'error';
       protocolClient = null;
       protocolError = { code: 'AGENT_OFFLINE', status: 503, message: 'Runtime is offline' };
-      const observer = connectMock.mock.calls[0]?.[0]?.observer as {
-        onDiagnosticEvent?: (event: Record<string, unknown>) => void;
-      } | undefined;
-      observer?.onDiagnosticEvent?.({ stage: 'reconnect', code: 'reconnect_attempt', result: 'retry', attempt_seq: 1 });
-      observer?.onDiagnosticEvent?.({ stage: 'reconnect', code: 'reconnect_exhausted', result: 'fail', attempt_seq: 1 });
+      notifyProtocolStateChange();
       await flushAsync();
 
       expect(host.querySelector('[data-testid="connection-recovery-view"]')).toBeTruthy();
@@ -3590,11 +3595,7 @@ describe('EnvAppShell local access gate', () => {
       protocolStatus = 'error';
       protocolClient = null;
       protocolError = { code: 'AGENT_OFFLINE', status: 503, message: 'Runtime is offline' };
-      const observer = connectMock.mock.calls[0]?.[0]?.observer as {
-        onDiagnosticEvent?: (event: Record<string, unknown>) => void;
-      } | undefined;
-      observer?.onDiagnosticEvent?.({ stage: 'reconnect', code: 'reconnect_attempt', result: 'retry', attempt_seq: 1 });
-      observer?.onDiagnosticEvent?.({ stage: 'reconnect', code: 'reconnect_exhausted', result: 'fail', attempt_seq: 1 });
+      notifyProtocolStateChange();
       await flushAsync();
 
       expect(host.querySelector('[data-testid="connection-recovery-view"]')).toBeTruthy();
@@ -3649,11 +3650,7 @@ describe('EnvAppShell local access gate', () => {
       protocolStatus = 'error';
       protocolClient = null;
       protocolError = { code: 'AGENT_OFFLINE', status: 503, message: 'Runtime is offline' };
-      const observer = connectMock.mock.calls[0]?.[0]?.observer as {
-        onDiagnosticEvent?: (event: Record<string, unknown>) => void;
-      } | undefined;
-      observer?.onDiagnosticEvent?.({ stage: 'reconnect', code: 'reconnect_attempt', result: 'retry', attempt_seq: 1 });
-      observer?.onDiagnosticEvent?.({ stage: 'reconnect', code: 'reconnect_exhausted', result: 'fail', attempt_seq: 1 });
+      notifyProtocolStateChange();
       await flushAsync();
       expect(host.querySelector('[data-testid="connection-recovery-view"]')).toBeTruthy();
 
@@ -3748,11 +3745,7 @@ describe('EnvAppShell local access gate', () => {
       protocolStatus = 'error';
       protocolClient = null;
       protocolError = { code: 'AGENT_OFFLINE', status: 503, message: 'Runtime is offline' };
-      const observer = connectMock.mock.calls[0]?.[0]?.observer as {
-        onDiagnosticEvent?: (event: Record<string, unknown>) => void;
-      } | undefined;
-      observer?.onDiagnosticEvent?.({ stage: 'reconnect', code: 'reconnect_attempt', result: 'retry', attempt_seq: 1 });
-      observer?.onDiagnosticEvent?.({ stage: 'reconnect', code: 'reconnect_exhausted', result: 'fail', attempt_seq: 1 });
+      notifyProtocolStateChange();
       await flushAsync();
       await vi.advanceTimersByTimeAsync(12_000);
       await flushUntil(() => Boolean(host.querySelector('input[type="password"]')), 40);
@@ -4161,35 +4154,11 @@ describe('EnvAppShell remote access gate', () => {
       expect(connectMock).toHaveBeenCalledTimes(1);
       const remoteConnectConfig = connectMock.mock.calls[0]?.[0];
       expect(remoteConnectConfig).toMatchObject({
-        observer: expect.any(Object),
         source: {
-          kind: 'refreshable',
           acquire: expect.any(Function),
         },
-        connect: {
-          outboundRecordChunkBytes: 64 * 1024,
-          transportSecurityPolicy: 'require_tls',
-          webSocketLimits: {
-            maxInboundQueuedBytes: 4 * 1024 * 1024,
-            outboundLowWatermarkBytes: 256 * 1024,
-            outboundHighWatermarkBytes: 1024 * 1024,
-            outboundHardLimitBytes: 4 * 1024 * 1024,
-            outboundDrainTimeoutMs: 10_000,
-          },
-          yamuxLimits: {
-            maxActiveStreams: 64,
-            maxInboundStreams: 32,
-            maxFrameBytes: 256 * 1024,
-            preferredOutboundFrameBytes: 64 * 1024,
-            maxStreamReceiveBytes: 256 * 1024,
-            maxSessionReceiveBytes: 16 * 1024 * 1024,
-          },
-        },
-        autoReconnect: {
-          enabled: true,
-          maxAttempts: 3,
-          initialDelayMs: 500,
-          maxDelayMs: 3_000,
+        controller: {
+          maximumAttempts: 3,
         },
       });
       expect(accessResumeMock).toHaveBeenCalledWith({ token: 'resume123' });
@@ -4236,7 +4205,7 @@ describe('EnvAppShell remote access gate', () => {
       await flushAsync();
 
       const remoteConnectConfig = connectMock.mock.calls[0]?.[0] as {
-        source: { acquire: (context?: Readonly<{ traceId?: string; signal?: AbortSignal }>) => Promise<unknown> };
+        source: { acquire: (context: Readonly<{ signal: AbortSignal }>) => Promise<unknown> };
       };
       expect(remoteConnectConfig?.source.acquire).toEqual(expect.any(Function));
 
@@ -4244,7 +4213,7 @@ describe('EnvAppShell remote access gate', () => {
       mintEnvProxyEntryTicketMock.mockClear();
       connectArtifactEntryMock.mockClear();
 
-      const artifact = await remoteConnectConfig.source.acquire();
+      const artifact = await remoteConnectConfig.source.acquire({ signal: new AbortController().signal });
 
       expect(getEnvironmentMock).toHaveBeenCalledTimes(1);
       expect(getEnvironmentMock).toHaveBeenCalledWith({ source: 'controlplane', envId: 'env_demo' });
@@ -4260,6 +4229,7 @@ describe('EnvAppShell remote access gate', () => {
         floeApp: 'com.floegence.redeven.agent',
         entryTicket: 'ticket-1',
         allowLoopbackHTTP: true,
+        signal: expect.any(AbortSignal),
       });
       expect(artifact).toEqual({
         transport: 'tunnel',
@@ -4301,7 +4271,7 @@ describe('EnvAppShell remote access gate', () => {
       await flushAsync();
 
       const remoteConnectConfig = connectMock.mock.calls[0]?.[0] as {
-        source: { acquire: (context?: Readonly<{ traceId?: string; signal?: AbortSignal }>) => Promise<unknown> };
+        source: { acquire: (context: Readonly<{ signal: AbortSignal }>) => Promise<unknown> };
       };
       expect(remoteConnectConfig?.source.acquire).toEqual(expect.any(Function));
 
@@ -4309,7 +4279,7 @@ describe('EnvAppShell remote access gate', () => {
       mintEnvProxyEntryTicketMock.mockClear();
       connectArtifactEntryMock.mockClear();
 
-      await expect(remoteConnectConfig.source.acquire()).rejects.toThrow('Runtime is offline.');
+      await expect(remoteConnectConfig.source.acquire({ signal: new AbortController().signal })).rejects.toThrow('Runtime is offline.');
       expect(getEnvironmentMock).toHaveBeenCalledTimes(1);
       expect(getEnvironmentMock).toHaveBeenCalledWith({ source: 'controlplane', envId: 'env_demo' });
       expect(mintEnvProxyEntryTicketMock).not.toHaveBeenCalled();
@@ -4350,14 +4320,10 @@ describe('EnvAppShell remote access gate', () => {
       protocolStatus = 'error';
       protocolClient = null;
       protocolError = { code: 'AGENT_OFFLINE', status: 503, message: 'Runtime is offline' };
-      const observer = connectMock.mock.calls[0]?.[0]?.observer as {
-        onDiagnosticEvent?: (event: Record<string, unknown>) => void;
-      } | undefined;
-      observer?.onDiagnosticEvent?.({ stage: 'reconnect', code: 'reconnect_attempt', result: 'retry', attempt_seq: 7 });
-      observer?.onDiagnosticEvent?.({ stage: 'reconnect', code: 'reconnect_exhausted', result: 'fail', attempt_seq: 7 });
+      notifyProtocolStateChange();
       await flushAsync();
       expect(host.querySelector('[data-testid="connection-recovery-view"]')).toBeTruthy();
-      expect(host.textContent).toContain('1 attempt');
+      expect(host.textContent).toContain('Retrying in 2s');
       expect(reconnectMock).not.toHaveBeenCalled();
 
       await vi.advanceTimersByTimeAsync(2_000);

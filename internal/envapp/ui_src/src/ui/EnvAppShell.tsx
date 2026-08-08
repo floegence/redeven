@@ -986,11 +986,11 @@ export function EnvAppShell() {
     if (!accessible && aiReadinessAccessible) aiReadinessController.pause();
     aiReadinessAccessible = accessible;
   });
-  const canOpenPluginSurfaces = createMemo(() => Boolean(
+  const canOpenPluginSurfaces = () => Boolean(
     protocol.status() === 'connected'
       && env()?.permissions?.can_read
       && pluginRuntimeSurfacesReady(),
-  ));
+  );
   const controlplaneStatus = createMemo(() => String(env()?.status ?? '').trim());
   const canUseFlower = createMemo(() => !accessGateVisible());
   const canUseCodex = createMemo(() => env.state === 'ready' && hasRWXPermissions(env()));
@@ -1175,7 +1175,11 @@ export function EnvAppShell() {
   };
 
   const pluginInventorySource = () => (
-    (pluginsPanelOpen() || layout.sidebarActiveTab() === PLUGIN_CENTER_ACTIVITY_ID)
+    (
+      pluginsPanelOpen()
+      || layout.sidebarActiveTab() === PLUGIN_CENTER_ACTIVITY_ID
+      || String(activeSurface()) === PLUGIN_CENTER_ACTIVITY_ID
+    )
     && (!isLocalMode() || pluginSessionReady())
   );
   const [pluginInventoryError, setPluginInventoryError] = createSignal<unknown>(null);
@@ -1213,7 +1217,7 @@ export function EnvAppShell() {
   let pluginRuntimeRecoveryClient: unknown = null;
   let pluginRuntimeRecoveryAbort: AbortController | undefined;
   createEffect(() => {
-    const connectedClient = protocol.status() === 'connected' ? protocol.client() : null;
+    const connectedClient = protocol.status() === 'connected' ? protocol.session() : null;
     const sessionReady = !isLocalMode() || pluginSessionReady();
     if (!connectedClient || !sessionReady) {
       pluginRuntimeRecoveryClient = null;
@@ -2450,6 +2454,9 @@ export function EnvAppShell() {
         setLocalAccessChannelReady(false);
         await fn(localProtocolConnectConfig);
         if (accessRecoverySeq !== attemptKey) return;
+        if (!pluginSessionRetired() && !pluginSessionReady()) {
+          setPluginSessionReady(activatePendingPluginSessionCredential());
+        }
         accessResumeClient = protocol.session?.();
         setLocalAccessChannelReady(true);
         setCurrentAccessError(null);
@@ -2977,7 +2984,9 @@ export function EnvAppShell() {
     const failure = classifyReconnectFailure(rawFailure);
 
     if (protocolStatusValue === 'connected') {
-	  if (isLocalMode()) setPluginSessionReady(activatePendingPluginSessionCredential());
+      if (isLocalMode() && !pluginSessionReady()) {
+        setPluginSessionReady(activatePendingPluginSessionCredential());
+      }
       if (lastConnectedClient !== protocol.session?.()) {
         lastConnectedClient = protocol.session?.();
         if (!isLocalMode()) {
