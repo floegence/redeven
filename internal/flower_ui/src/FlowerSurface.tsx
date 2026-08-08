@@ -418,7 +418,6 @@ const THREAD_RAIL_WIDTH_DEFAULT = 272;
 const THREAD_RAIL_WIDTH_MIN = 220;
 const THREAD_RAIL_WIDTH_MAX = 380;
 const SIDEBAR_STABLE_LIVE_STATUSES = new Set<FlowerThreadStatus>(['running']);
-const FLOWER_TERMINAL_THREAD_STATUSES = new Set<FlowerThreadStatus>(['success', 'failed', 'canceled']);
 const COMPOSER_STOP_THREAD_STATUSES = new Set<FlowerThreadStatus>(['running', 'waiting_approval']);
 const PENDING_NEW_THREAD_ID = '__new_thread__';
 const FLOWER_PERMISSION_TYPES: readonly FlowerPermissionType[] = ['readonly', 'approval_required', 'full_access'];
@@ -4078,7 +4077,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   };
 
-  const loadAndSelectThread = async (threadID: string) => {
+  const loadAndSelectThread = async (threadID: string, revalidateWarmDetail = false) => {
     const tid = trimString(threadID);
     if (!tid || retiredThreadIDs.has(tid)) return;
     const focusOwner = typeof document === 'undefined' ? null : document.activeElement;
@@ -4107,13 +4106,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     if (detailWarm) {
       requestComposerFocus(focusOwner);
-      // Keep the warm snapshot visible while canonical bootstrap verifies that
-      // no terminal output was missed while this thread was not selected.
-      void reloadSelectedThread(tid, sequence, 'background_refresh').catch((error) => {
-        if (sequence === threadLoadSequence && selectedThreadDetailMatches(tid)) {
-          setThreadLoadError(getErrorMessage(error));
-        }
-      });
+      if (revalidateWarmDetail) {
+        void reloadSelectedThread(tid, sequence, 'background_refresh').catch((error) => {
+          if (sequence === threadLoadSequence && selectedThreadDetailMatches(tid)) {
+            setThreadLoadError(getErrorMessage(error));
+          }
+        });
+      }
       return;
     }
     setLoadingThreadID(tid);
@@ -4185,7 +4184,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     cancelThreadSelectionTransaction();
     props.onFocusThreadRequestConsumed?.(requestID);
-    await loadAndSelectThread(tid);
+    await loadAndSelectThread(tid, true);
   };
 
   const refreshSelectedThread = async (threadID: string) => {
@@ -4256,13 +4255,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         }
         return current;
       });
-      const selectedStatusChanged = previousSelected?.status !== mergedSelected?.status;
-      const selectedTerminalUpdated = Boolean(
-        previousSelected
-        && mergedSelected
-        && FLOWER_TERMINAL_THREAD_STATUSES.has(mergedSelected.status)
-        && previousSelected.updated_at_ms !== mergedSelected.updated_at_ms
-      );
       if (
         effectiveEngagement()
         && selectedID
@@ -4270,9 +4262,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         && selectedSummary
         && mergedSelected
         && selectedDetailCurrent
-        && (selectedStatusChanged || selectedTerminalUpdated)
+        && (
+          previousSelected.updated_at_ms !== mergedSelected.updated_at_ms
+          || previousSelected.status !== mergedSelected.status
+          || flowerThreadReadSnapshotKey(previousSelected.read_status.snapshot) !== flowerThreadReadSnapshotKey(mergedSelected.read_status.snapshot)
+        )
       ) {
-        void reloadSelectedThread(selectedID, threadLoadSequence, 'background_refresh').catch(() => undefined);
+        void refreshSelectedThread(selectedID);
       }
       return true;
     } catch (error) {
@@ -4445,10 +4441,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     for (const event of events) {
       const threadID = trimString(event.thread_id);
       if (!threadID || retiredThreadIDs.has(threadID)) continue;
-      // The selected thread has its own detail replay. Applying its summary
-      // patch as well duplicates live updates and can force needless reloads
-      // while the model is streaming.
-      if (envelope.kind === 'summary.batch' && threadID === selectedID) continue;
       const current = projected.get(threadID) ?? threads().find((thread) => thread.thread_id === threadID) ?? null;
       if (!current) {
         shouldRefreshSummaries = true;
@@ -6102,13 +6094,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           {(turn) => {
             const queueID = () => trimString(turn.queue_id);
             const dragging = () => queuedTurnReorder()?.draggedQueueID === queueID();
+            const timelineEntry = createMemo(() => selectedTimelineEntries().find((entry) => (
+              entry.type === 'queued_turn' && trimString(entry.turn.queue_id) === queueID()
+            )) as Extract<FlowerTimelineEntry, { type: 'queued_turn' }> | undefined);
             return (
               <div
                 class="flower-queued-turn-item"
                 role="listitem"
                 aria-label={`${copy().chat.pendingQueued}: ${queuedTurnDisplayLabel(turn)}`}
                 draggable={queuedTurnReorderEnabled()}
-                data-flower-queued-turn-id={queueID()}
+                data-flower-queued-turn-dock-id={queueID()}
                 data-flower-queued-turn-dragging={dragging() && queuedTurnReorder()?.phase === 'dragging' ? 'true' : undefined}
                 data-flower-queued-turn-saving={queuedTurnReorder()?.phase === 'saving' ? 'true' : undefined}
                 onDragStart={(event) => beginQueuedTurnDrag(event, queueID())}
@@ -6120,8 +6115,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 onDragEnd={finishQueuedTurnDrag}
               >
                 <GripVertical class="flower-queued-turn-handle" aria-hidden="true" />
-                <span class="flower-queued-turn-label">{queuedTurnDisplayLabel(turn)}</span>
-                <span class="flower-queued-turn-state">{copy().chat.pendingQueued}</span>
+                <Show when={timelineEntry()}>
+                  {(entry) => queuedTurnEntry(entry)}
+                </Show>
                 <button
                   type="button"
                   class="flower-queued-turn-send"
@@ -6866,6 +6862,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   });
 
   const composerTextareaDisabled = createMemo(() => {
+    if (composerSharedOperationActive()) return true;
     if (selectedComposerApprovalDisplayAction()) return true;
     if (selectedThreadDetailPending()) return true;
     if (selectedThreadReadOnly()) return true;
@@ -6874,11 +6871,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return inputSubmitting() || !activeInputQuestion();
   });
 
-  // A shared draft submission must not make the visible composer inert. The
-  // user should still be able to place the caret and understand that the
-  // composer is present while another Flower surface finishes admission.
   const composerTextareaReadOnly = createMemo(() => (
-    composerSharedOperationActive() || composerReferenceMutationCount() > 0
+    composerReferenceMutationCount() > 0
   ));
 
   const focusComposerFromBlankArea = (event: PointerEvent & { currentTarget: HTMLDivElement }) => {
@@ -7802,10 +7796,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     </span>
   );
 
-  const statusIcon = (status: FlowerActivityStatus, approvalState?: FlowerActivityItem['approval_state']) => {
-    if (approvalState === 'rejected') {
-      return <span class="flower-activity-user-rejected-marker" aria-hidden="true">-</span>;
-    }
+  const statusIcon = (status: FlowerActivityStatus) => {
     switch (status) {
       case 'success':
         return <Check class="h-3.5 w-3.5" />;
@@ -8249,7 +8240,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         data-flower-activity-terminal-panel
       >
         <div class="flower-activity-terminal-header">
-          <span class="flower-activity-terminal-status">{statusIcon(displayStatus(), detailProps.approvalState())}</span>
+          <span class="flower-activity-terminal-status">
+            {statusIcon(displayStatus())}
+            <Show when={detailProps.approvalState() === 'rejected'}>
+              <span class="flower-activity-user-rejected-marker" aria-hidden="true">-</span>
+            </Show>
+          </span>
           <span class="flower-activity-terminal-prompt" aria-hidden="true">$</span>
           <span class="flower-activity-terminal-command">
             <FlowerShellCommandHighlight
@@ -8759,7 +8755,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             disabled={!expandable()}
             onClick={disclosureControl.toggle}
           >
-            <span class="flower-activity-inline-icon">{statusIcon(displayStatus(), item().approval_state)}</span>
+            <span class="flower-activity-inline-icon">
+              {statusIcon(displayStatus())}
+              <Show when={item().approval_state === 'rejected'}>
+                <span class="flower-activity-user-rejected-marker" aria-hidden="true">-</span>
+              </Show>
+            </span>
             <span class="flower-activity-inline-copy">
               <span class="flower-activity-inline-title">{activityTitle(displayTitle())}</span>
               <Show when={presentation().meta}>
@@ -9015,12 +9016,20 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     <Show
       when={block().type === 'image' ? block() as Extract<FlowerRenderableMessageBlock, { type: 'image' }> : null}
       fallback={(
-        <button
-          type="button"
+        <a
           class="flower-message-file"
-          disabled={!(block() as Extract<FlowerRenderableMessageBlock, { type: 'file' }>).url}
-          onClick={() => {
+          href={(block() as Extract<FlowerRenderableMessageBlock, { type: 'file' }>).url || undefined}
+          download={(block() as Extract<FlowerRenderableMessageBlock, { type: 'file' }>).url
+            ? (block() as Extract<FlowerRenderableMessageBlock, { type: 'file' }>).name
+            : undefined}
+          aria-disabled={!(block() as Extract<FlowerRenderableMessageBlock, { type: 'file' }>).url ? 'true' : undefined}
+          onClick={(event) => {
             const file = block() as Extract<FlowerRenderableMessageBlock, { type: 'file' }>;
+            if (!file.url) {
+              event.preventDefault();
+              return;
+            }
+            event.preventDefault();
             openMessageAttachmentPreview({
               id: file.key,
               name: file.name,
@@ -9039,22 +9048,25 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               {(block() as Extract<FlowerRenderableMessageBlock, { type: 'file' }>).mimeType}
             </span>
           </span>
-        </button>
+        </a>
       )}
     >
       {(imageBlock) => (
-        <button
-          type="button"
+        <a
           class="flower-message-image"
-          onClick={() => openMessageAttachmentPreview({
-            id: imageBlock().key,
-            name: trimString(imageBlock().alt) || attachmentCopy().preview,
-            mimeType: 'image/*',
-            url: imageBlock().src,
-          })}
+          href={imageBlock().src}
+          onClick={(event) => {
+            event.preventDefault();
+            openMessageAttachmentPreview({
+              id: imageBlock().key,
+              name: trimString(imageBlock().alt) || attachmentCopy().preview,
+              mimeType: 'image/*',
+              url: imageBlock().src,
+            });
+          }}
         >
           <img src={imageBlock().src} alt={imageBlock().alt ?? ''} loading="lazy" />
-        </button>
+        </a>
       )}
     </Show>
   );
@@ -9288,7 +9300,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     );
   };
 
-  const queuedTurnEntry = (entry: Accessor<Extract<FlowerTimelineEntry, { type: 'queued_turn' }>>) => {
+  function queuedTurnEntry(entry: Accessor<Extract<FlowerTimelineEntry, { type: 'queued_turn' }>>) {
     const turn = createMemo<FlowerQueuedTurn>(() => entry().turn);
     const blocks = createMemo(() => entry().blocks);
     const blockKeys = createMemo(() => blocks().map((block) => block.key));
@@ -9418,7 +9430,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         </div>
       </div>
     );
-  };
+  }
 
   const pendingSubmissionEntry = (submission: Accessor<FlowerPendingSubmission>) => {
     const contextLabels = createMemo(() => [
@@ -10525,6 +10537,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               {queuedTurnsDock()}
               <div
                 class="flower-composer flower-chat-input-floating chat-input-container p-3"
+                inert={composerSharedOperationActive()}
                 aria-busy={chatRunning() || composerSharedOperationActive() || selectedApprovalDecisionHandoff() || composerReferenceMutationCount() > 0 ? 'true' : undefined}
                 data-flower-turn-submitting={chatRunning() || composerSharedOperationActive() ? 'true' : undefined}
                 data-flower-approval-handoff={selectedComposerApprovalHandoffActive() ? 'true' : undefined}

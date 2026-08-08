@@ -1881,7 +1881,7 @@ describe('PluginCenterView', () => {
     const inspection = externalInspectionForCenter();
     const onInspectExternal = vi.fn(async () => ({
       ...inspection,
-      expires_at: '2026-08-08T12:00:00Z',
+      expires_at: '2099-08-08T12:00:00Z',
       intent: {
         action: 'update' as const,
         plugin_instance_id: 'plugininst_containers',

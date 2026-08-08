@@ -1001,13 +1001,23 @@ html.dark .flower-component-shell {
   display: grid;
   min-width: 0;
   min-height: 2.25rem;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 0.5rem;
   border-radius: 0.5rem;
   padding: 0.375rem 0.5rem;
   color: var(--foreground);
   user-select: none;
+}
+
+.flower-queued-turn-item .flower-queued-turn-row,
+.flower-queued-turn-item .flower-message-block-stack,
+.flower-queued-turn-item .flower-message-bubble-user,
+.flower-queued-turn-item .flower-message-image,
+.flower-queued-turn-item .flower-message-file {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .flower-queued-turn-item[draggable='true'] {
