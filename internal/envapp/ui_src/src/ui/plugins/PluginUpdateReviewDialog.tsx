@@ -288,7 +288,7 @@ export function PluginUpdateReviewDialog(props: PluginUpdateReviewDialogProps): 
             </Show>
             <Show when={stage() === 'complete' && completedLaunchTarget()}>
               <button data-plugin-update-open-activity type="button" class={primaryButtonClass} onClick={props.onOpenActivity}>
-                {i18n.t('uiCopy.plugin.openInActivity')}
+                {i18n.t('common.actions.open')}
               </button>
             </Show>
             <Show when={stage() === 'complete' && completedInventoryItem() && !completedLaunchTarget()}>

@@ -1,13 +1,13 @@
 import { cn } from '@floegence/floe-webapp-core';
 import { Settings } from '@floegence/floe-webapp-core/icons';
-import { Show, createSignal, type JSX } from 'solid-js';
+import { Show, createEffect, createSignal, type JSX } from 'solid-js';
 
 import { useI18n } from '../i18n';
 import type { PluginInventoryItem } from './pluginTypes';
 import { pluginLifecycleLabel, pluginTrustLabel } from './pluginPresentation';
 import { resolveAuthorPresentation, resolvePluginPresentation } from './officialPluginCatalog';
 
-export type PluginIconSize = 'row' | 'card' | 'detail' | 'launcher';
+export type PluginIconSize = 'row' | 'card' | 'detail' | 'launcher' | 'dock';
 
 export function PluginIcon(props: {
   item: PluginInventoryItem;
@@ -15,29 +15,49 @@ export function PluginIcon(props: {
   class?: string;
 }): JSX.Element {
   const [imageFailed, setImageFailed] = createSignal(false);
+  const [imageLoaded, setImageLoaded] = createSignal(false);
   const size = () => props.size ?? 'row';
-  const iconClass = () => size() === 'launcher'
+  const iconURL = () => props.item.iconURL;
+  const iconClass = () => size() === 'launcher' || size() === 'dock'
     ? 'h-7 w-7'
     : size() === 'detail' || size() === 'card'
       ? 'h-5 w-5'
       : 'h-4 w-4';
+  createEffect(() => {
+    iconURL();
+    setImageFailed(false);
+    setImageLoaded(false);
+  });
   return (
     <span
       class={cn(
-        'flex shrink-0 items-center justify-center overflow-hidden border bg-muted text-foreground shadow-sm',
+        'relative flex shrink-0 items-center justify-center overflow-hidden border bg-muted text-foreground shadow-sm',
         size() === 'launcher' && 'h-16 w-16 rounded-2xl',
+        size() === 'dock' && 'h-[42px] w-[42px] rounded-xl',
         size() === 'detail' && 'h-12 w-12 rounded-xl',
         size() === 'card' && 'h-12 w-12 rounded-lg',
         size() === 'row' && 'h-10 w-10 rounded-lg',
         props.class,
       )}
     >
-      <Show when={props.item.iconURL && !imageFailed()} fallback={<Settings class={iconClass()} />}>
+      <Show when={!props.item.iconURL || imageFailed() || !imageLoaded()}>
+        <Settings class={iconClass()} />
+      </Show>
+      <Show when={props.item.iconURL && !imageFailed()}>
         <img
           src={props.item.iconURL ?? ''}
           alt=""
-          class="h-full w-full object-cover"
-          onError={() => setImageFailed(true)}
+          draggable={false}
+          class={cn(
+            'absolute inset-0 h-full w-full object-cover transition-opacity duration-150 motion-reduce:transition-none',
+            imageLoaded() ? 'opacity-100' : 'opacity-0',
+          )}
+          onDragStart={(event) => event.preventDefault()}
+          onLoad={() => setImageLoaded(true)}
+          onError={() => {
+            setImageLoaded(false);
+            setImageFailed(true);
+          }}
         />
       </Show>
     </span>
@@ -122,6 +142,7 @@ export function PluginIdentityHeader(props: {
       <div class="min-w-0 flex-1">
         <div class="flex min-w-0 flex-wrap items-center gap-2">
           <h2
+            id={props.headingRef ? 'plugin-center-detail-heading' : undefined}
             ref={props.headingRef}
             tabIndex={props.headingRef ? -1 : undefined}
             data-plugin-center-detail-heading={props.headingRef ? '' : undefined}

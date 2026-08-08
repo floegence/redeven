@@ -1,6 +1,6 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
 import { cn, createUIFirstSelection } from '@floegence/floe-webapp-core';
-import { AlertTriangle, ArrowLeft, CheckCircle, ChevronDown, Download, MoreHorizontal, RefreshIcon, Search, Settings, Shield, X } from '@floegence/floe-webapp-core/icons';
+import { AlertTriangle, ArrowLeft, CheckCircle, ChevronDown, Download, MoreHorizontal, Play, RefreshIcon, Search, Shield, X } from '@floegence/floe-webapp-core/icons';
 import { Button, Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 
 import { buildPluginCenterModel } from './pluginInventoryProjection';
@@ -18,12 +18,13 @@ import type {
   PluginMarketDetail,
   PluginLifecycleCommand,
   PluginLifecycleState,
+  PluginPendingCommandType,
   PluginPresentationCategory,
   PluginTrustBadge,
 } from './pluginTypes';
 import { createUIPresentationEventRecorder } from '../services/uiPresentationTransactions';
 import { ExternalPluginInstallDialog } from './ExternalPluginInstallDialog';
-import { PLUGIN_ENTER_MOTION_CLASS, PLUGIN_MOBILE_TOUCH_TARGET_CLASS, PLUGIN_PRESS_MOTION_CLASS, pluginLifecycleLabel, pluginTrustLabel, presentPlugin, type PluginPrimaryAction } from './pluginPresentation';
+import { PLUGIN_ENTER_MOTION_CLASS, PLUGIN_MOBILE_TOUCH_TARGET_CLASS, PLUGIN_PRESS_MOTION_CLASS, pluginLifecycleLabel, pluginPendingCommandLabel, pluginTrustLabel, presentPlugin, type PluginPrimaryAction } from './pluginPresentation';
 import { PluginCenterItem } from './PluginCenterItems';
 import { PluginIdentityHeader } from './PluginPresentationPrimitives';
 import { resolveAuthorPresentation, resolvePluginPresentation } from './officialPluginCatalog';
@@ -55,7 +56,10 @@ type PluginLifecycleFilter = 'all' | Exclude<PluginLifecycleState, 'installed'>;
 export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   const i18n = useI18n();
   const [activeTab, setActiveTab] = createSignal<PluginCenterTab>(initialTabForProjection(props.projection));
-  const [initialTabResolved, setInitialTabResolved] = createSignal(Boolean(props.projection));
+  // The shell supplies an empty fallback projection while the first inventory
+  // request is in flight. Treat that fallback as unresolved so the tab follows
+  // the authoritative inventory once it arrives.
+  const [initialTabResolved, setInitialTabResolved] = createSignal(props.projection.items.length > 0);
   const [query, setQuery] = createSignal('');
   const [category, setCategory] = createSignal<PluginPresentationCategory | 'all'>('all');
   const [sourceFilter, setSourceFilter] = createSignal<PluginSourceFilter>('all');
@@ -64,7 +68,10 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   const [selectedInventoryKey, setSelectedInventoryKey] = createSignal<string | undefined>();
   const [protectedSelectionInventoryKey, setProtectedSelectionInventoryKey] = createSignal<string | undefined>();
   const [commandError, setCommandError] = createSignal<string | null>(null);
-  const [commandPending, setCommandPending] = createSignal(false);
+  const [pendingCommand, setPendingCommand] = createSignal<Readonly<{
+    type: PluginPendingCommandType;
+    target?: string;
+  }>>();
   const [submittedInstallTarget, setSubmittedInstallTarget] = createSignal<Readonly<{
     pluginID: string;
     pluginInstanceID: string;
@@ -72,6 +79,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   const [uninstallChoiceFor, setUninstallChoiceFor] = createSignal<string | null>(null);
   const [mobileDetailOpen, setMobileDetailOpen] = createSignal(Boolean(props.selectedInventoryKey));
   const [externalDialogOpen, setExternalDialogOpen] = createSignal(false);
+  const [officialInstallReviewItem, setOfficialInstallReviewItem] = createSignal<PluginInventoryItem>();
   const [externalUpdateItem, setExternalUpdateItem] = createSignal<PluginInventoryItem | undefined>();
   const [externalSourcePreset, setExternalSourcePreset] = createSignal<ExternalPluginSourcePreset | undefined>();
   const [updateReviewItem, setUpdateReviewItem] = createSignal<PluginInventoryItem>();
@@ -118,6 +126,17 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     cancelDeferredPermissionsFocus();
   });
 
+  onMount(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && mobileDetailOpen() && selectedInventoryKey()) {
+        event.preventDefault();
+        closeDetails();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    onCleanup(() => document.removeEventListener('keydown', onKeyDown));
+  });
+
   const projection = createMemo(() => props.projection);
   const model = createMemo(() => buildPluginCenterModel(projection(), activeTab()));
   const allItems = createMemo(() => projection().items);
@@ -128,20 +147,31 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     const pluginInstanceID = item.pluginInstanceID ?? item.officialCatalog?.pluginInstanceID;
     if (!pluginInstanceID) return undefined;
     const authoritative = installOperationByInstanceID().get(pluginInstanceID);
-    if (authoritative) return authoritative;
     const submitted = submittedInstallTarget();
-    if (submitted?.pluginInstanceID !== pluginInstanceID) return undefined;
-    return {
-      pluginID: submitted.pluginID,
-      pluginInstanceID,
-      requestID: '',
-      observation: 'starting',
-    };
+    if (submitted?.pluginInstanceID === pluginInstanceID) {
+      return authoritative ?? {
+        pluginID: submitted.pluginID,
+        pluginInstanceID,
+        requestID: '',
+        observation: 'starting',
+      };
+    }
+    if (item.pluginInstanceID) return authoritative;
+    if (!authoritative) return undefined;
+    if (installOperationActive(authoritative)) return authoritative;
+    if (authoritative.observation === 'refresh_failed'
+      || authoritative.observation === 'activation_failed') return authoritative;
+    if (authoritative.operation?.status === 'failed'
+      && authoritative.operation.mutation_outcome === 'not_committed') {
+      return authoritative;
+    }
+    return undefined;
   };
   const installOperationActive = (projection: PluginInstallOperationProjection): boolean => (
     projection.observation === 'starting'
     || projection.observation === 'reconnecting'
     || projection.observation === 'refreshing'
+    || projection.observation === 'activating'
     || (
       projection.observation === 'watching'
       && projection.operation?.status !== 'succeeded'
@@ -152,10 +182,48 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     Boolean(submittedInstallTarget())
     || (props.installOperations ?? []).some(installOperationActive)
   ));
-  const managementPending = createMemo(() => commandPending() || installPending());
+  const managementPending = createMemo(() => Boolean(pendingCommand()) || installPending());
+  const pendingCommandTypeForItem = (item: PluginInventoryItem): PluginPendingCommandType | undefined => {
+    const command = pendingCommand();
+    const target = command?.target;
+    if (target && (
+      target === item.pluginInstanceID
+      || target === item.pluginID
+      || target === item.inventoryKey
+    )) return command?.type;
+    const submitted = submittedInstallTarget();
+    if (submitted && (
+      submitted.pluginInstanceID === item.pluginInstanceID
+      || submitted.pluginInstanceID === item.officialCatalog?.pluginInstanceID
+      || submitted.pluginID === item.pluginID
+    )) return 'install';
+    const operation = installOperationForItem(item);
+    return operation && (
+      installOperationActive(operation)
+      || operation.observation === 'activating'
+    ) ? 'install' : undefined;
+  };
+  const itemManagementPending = (item: PluginInventoryItem) => {
+    if (pendingCommandTypeForItem(item)) return true;
+    const operation = installOperationForItem(item);
+    return Boolean(operation && (
+      installOperationActive(operation)
+      || operation.observation === 'activating'
+    ));
+  };
   createEffect(() => {
     const submitted = submittedInstallTarget();
-    if (submitted && installOperationByInstanceID().has(submitted.pluginInstanceID)) {
+    if (!submitted) return;
+    const installed = allItems().find((item) => item.pluginInstanceID === submitted.pluginInstanceID);
+    if (installed) {
+      tabSelection.commitNow('installed');
+      setSubmittedInstallTarget(undefined);
+      return;
+    }
+    const operation = installOperationByInstanceID().get(submitted.pluginInstanceID);
+    if (operation?.observation === 'failed'
+      || operation?.observation === 'activation_failed'
+      || operation?.operation?.status === 'failed') {
       setSubmittedInstallTarget(undefined);
     }
   });
@@ -221,11 +289,11 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   });
 
   createEffect(() => {
-    if (initialTabResolved() || loading()) return;
-    const next = model();
-    if (next.installed.length === 0 && next.discover.length > 0) {
-      tabSelection.commitNow('discover');
-    }
+    // The shell exposes an empty fallback before the inventory resource has
+    // actually started. Do not let that transient value permanently select
+    // Discover when persisted navigation opens Plugin Center on page load.
+    if (initialTabResolved() || loading() || projection().items.length === 0) return;
+    tabSelection.commitNow(initialTabForProjection(projection()));
     setInitialTabResolved(true);
   });
 
@@ -342,10 +410,23 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   };
   const installItem = (item: PluginInventoryItem) => {
     if (item.officialCatalog) {
-      void runCommand({ type: 'install', pluginID: item.pluginID, source: 'official_catalog' });
+      setOfficialInstallReviewItem(item);
       return;
     }
     openExternalDialog();
+  };
+  const confirmOfficialInstall = () => {
+    const reviewed = officialInstallReviewItem();
+    if (!reviewed?.officialCatalog) return;
+    const approvedPermissionIDs = (reviewed.officialCatalog.permissions ?? [])
+      .map((permission) => permission.permissionID);
+    setOfficialInstallReviewItem(undefined);
+    void runCommand({
+      type: 'install',
+      pluginID: reviewed.pluginID,
+      source: 'official_catalog',
+      ...(approvedPermissionIDs.length > 0 ? { approvedPermissionIDs } : {}),
+    });
   };
   const currentUpdateReviewItem = createMemo(() => {
     const reviewed = updateReviewItem();
@@ -355,9 +436,11 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
 
   const runCommand = async (command: PluginLifecycleCommand) => {
     if (command.type === 'install') {
-      if (managementPending()) return;
       const item = allItems().find((candidate) => candidate.pluginID === command.pluginID && candidate.officialCatalog);
-      if (!item?.officialCatalog) return;
+      if (!item?.officialCatalog) {
+        setCommandError(i18n.t('uiCopy.plugin.installOperation.failure.internal'));
+        return;
+      }
       setSubmittedInstallTarget({
         pluginID: command.pluginID,
         pluginInstanceID: item.officialCatalog.pluginInstanceID,
@@ -371,19 +454,24 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
       }
       return;
     }
-    if (command.type === 'open_surface' ? commandPending() : managementPending()) return;
+    if (command.type === 'open_surface' ? pendingCommand() : managementPending()) return;
     const controller = new AbortController();
     commandController = controller;
-    setCommandPending(true);
+    const pendingTarget = command.pluginInstanceID;
+    setPendingCommand({ type: command.type, target: pendingTarget });
     setCommandError(null);
     try {
       await props.onCommand(command, controller.signal);
       setUninstallChoiceFor(null);
+      if (command.type === 'uninstall') {
+        clearDetailSelection();
+        tabSelection.commitNow('discover');
+      }
     } catch (error) {
       setCommandError(messageFromUnknown(error));
     } finally {
       if (commandController === controller) commandController = undefined;
-      setCommandPending(false);
+      setPendingCommand(undefined);
     }
   };
 
@@ -392,9 +480,10 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     setSelectedInventoryKey(inventoryKey);
     mobileDetailReturnTarget = returnTarget;
     setMobileDetailOpen(true);
-    if (window.innerWidth < 640) {
-      queueMicrotask(() => mobileDetailBackButton?.focus({ preventScroll: true }));
-    }
+    queueMicrotask(() => {
+      if (window.innerWidth < 640) mobileDetailBackButton?.focus({ preventScroll: true });
+      else detailHeadingRef?.focus({ preventScroll: true });
+    });
   };
 
   const closeDetails = () => {
@@ -448,6 +537,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
       surfaceID: target.surfaceID,
       expectedManagementRevision: target.expectedManagementRevision,
       placement,
+      keepPluginCenter: placement === 'activity',
     });
   };
 
@@ -507,12 +597,12 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
         tabIndex={-1}
         aria-labelledby={`plugin-center-tab-${activeTab()}`}
         data-plugin-center-shell
-        class="flex min-h-0 flex-1 flex-col sm:flex-row"
+        class="relative flex min-h-0 flex-1 flex-col overflow-hidden sm:flex-row"
       >
         <div
           data-plugin-center-master
           class={cn(
-            'min-h-0 min-w-0 w-full flex-1 flex-col border-b sm:border-b-0',
+            'min-h-0 min-w-0 w-full flex-1 flex-col border-b sm:w-auto sm:border-b-0',
             mobileDetailOpen() ? 'hidden sm:flex' : 'flex',
           )}
         >
@@ -532,7 +622,8 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
                   selected={selectedItem()?.inventoryKey === item.inventoryKey}
                   canManage={canManage()}
                   canOpenSurfaces={canOpenSurfaces()}
-                  managementDisabled={loading() || managementPending()}
+                  managementDisabled={loading() || itemManagementPending(item)}
+                  commandPendingType={pendingCommandTypeForItem(item)}
                   installOperation={installOperationForItem(item)}
                   entranceDelayMs={Math.min(index() * 18, 126)}
                   onOpenDetails={(target) => openDetails(item.inventoryKey, target)}
@@ -588,6 +679,15 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
             </Show>
           </div>
         </div>
+        <Show when={selectedItem() && mobileDetailOpen()}>
+          <button
+            type="button"
+            data-plugin-center-drawer-backdrop
+            aria-label={i18n.t('uiCopy.plugin.backToList')}
+            class="absolute inset-0 z-10 cursor-default bg-[var(--redeven-overlay-scrim)] backdrop-blur-[1px]"
+            onClick={closeDetails}
+          />
+        </Show>
         <Show keyed when={selectedItem()}>
           {(item) => (
             <PluginCenterDetails
@@ -600,7 +700,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
               canManage={canManage()}
               canOpenSurfaces={canOpenSurfaces()}
               managementPending={managementPending()}
-              commandPending={commandPending()}
+              commandPendingType={pendingCommandTypeForItem(item)}
               installOperation={installOperationForItem(item)}
               uninstallChoiceFor={uninstallChoiceFor()}
               onCommand={(command) => void runCommand(command)}
@@ -619,6 +719,13 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
           )}
         </Show>
       </div>
+      <OfficialPluginInstallDialog
+        item={officialInstallReviewItem()}
+        onOpenChange={(open) => {
+          if (!open) setOfficialInstallReviewItem(undefined);
+        }}
+        onConfirm={confirmOfficialInstall}
+      />
       <ExternalPluginInstallDialog
         open={externalDialogOpen()}
         updateItem={externalUpdateItem()}
@@ -642,15 +749,6 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
           setProtectedSelectionInventoryKey(inventoryKey);
           setSelectedInventoryKey(inventoryKey);
           tabSelection.commitNow('installed');
-        }}
-        onViewPermissions={(result) => {
-          const inventoryKey = `instance:${result.plugin.plugin_instance_id}`;
-          setProtectedSelectionInventoryKey(inventoryKey);
-          setSelectedInventoryKey(inventoryKey);
-          tabSelection.commitNow('installed');
-          setMobileDetailOpen(true);
-          nextPermissionsFocusRequest += 1;
-          setPermissionsFocusRequest({ id: nextPermissionsFocusRequest, inventoryKey });
         }}
       />
       <PluginUpdateReviewDialog
@@ -700,6 +798,83 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
         }}
       />
     </PluginCenterShell>
+  );
+}
+
+function OfficialPluginInstallDialog(props: {
+  item?: PluginInventoryItem;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: () => void;
+}): JSX.Element {
+  const i18n = useI18n();
+  const permissions = () => props.item?.officialCatalog?.permissions ?? [];
+  return (
+    <Dialog
+      open={Boolean(props.item)}
+      onOpenChange={props.onOpenChange}
+      title={i18n.t('uiCopy.plugin.external.confirmInstallTitle')}
+      description={i18n.t('uiCopy.plugin.external.confirmInstallGuidance')}
+      class="w-[min(34rem,calc(100%-1rem))] max-w-[34rem] bg-background text-foreground sm:w-[min(34rem,calc(100%-2rem))]"
+      footer={(
+        <div class="flex w-full flex-wrap justify-end gap-2">
+          <button
+            type="button"
+            class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'cursor-pointer rounded-md border bg-background px-3 text-sm font-medium hover:bg-muted')}
+            onClick={() => props.onOpenChange(false)}
+          >
+            {i18n.t('common.actions.cancel')}
+          </button>
+          <button
+            type="button"
+            data-plugin-install-review-confirm
+            class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'cursor-pointer rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary/90')}
+            onClick={props.onConfirm}
+          >
+            {i18n.t('uiCopy.plugin.external.confirmInstall')}
+          </button>
+        </div>
+      )}
+    >
+      <Show when={props.item}>
+        {(item) => (
+          <div data-plugin-install-review-dialog class="space-y-4">
+            <PluginIdentityHeader item={item()} description />
+            <section class="rounded-md border bg-muted/10 px-4 py-3">
+              <h3 class="text-sm font-semibold">
+                {i18n.t('uiCopy.plugin.permissionsTitle', { plugin: item().displayName })}
+              </h3>
+              <Show
+                when={permissions().length > 0}
+                fallback={<p class="mt-2 text-sm leading-6 text-muted-foreground">{i18n.t('uiCopy.plugin.permissionsResolvedDuringInstall')}</p>}
+              >
+                <div class="mt-2 divide-y">
+                  <For each={permissions()}>
+                    {(permission) => (
+                      <div class="flex items-start gap-3 py-2.5" data-plugin-install-permission={permission.permissionID}>
+                        <Shield class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                        <div class="min-w-0 flex-1">
+                          <div class="flex flex-wrap items-center gap-2">
+                            <span class="text-sm font-medium">{permissionLabel(permission.group, i18n)}</span>
+                            <span class="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                              {permission.requiredToOpen
+                                ? i18n.t('uiCopy.plugin.requiredToOpen')
+                                : i18n.t('uiCopy.plugin.optionalPermission')}
+                            </span>
+                          </div>
+                          <p class="mt-1 text-xs leading-5 text-muted-foreground">
+                            {permissionDescription(permission.group, i18n)}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </For>
+                </div>
+              </Show>
+            </section>
+          </div>
+        )}
+      </Show>
+    </Dialog>
   );
 }
 
@@ -902,7 +1077,7 @@ export function PluginCenterDetails(props: {
   canManage: boolean;
   canOpenSurfaces: boolean;
   managementPending: boolean;
-  commandPending: boolean;
+  commandPendingType?: PluginPendingCommandType;
   installOperation?: PluginInstallOperationProjection;
   uninstallChoiceFor: string | null;
   onCommand: (command: PluginLifecycleCommand) => void;
@@ -915,7 +1090,10 @@ export function PluginCenterDetails(props: {
   return (
     <aside
       data-plugin-center-details={props.item?.inventoryKey ?? ''}
-      class={cn('min-h-0 w-full overflow-hidden bg-background sm:w-[360px] sm:max-w-[42vw] sm:flex-none sm:border-l', props.mobileOpen === false ? 'hidden sm:block' : 'redeven-plugin-motion block animate-in fade-in duration-200 ease-out motion-reduce:animate-none')}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={props.item ? 'plugin-center-detail-heading' : undefined}
+      class={cn('absolute inset-y-0 right-0 z-20 min-h-0 w-full max-w-full overflow-hidden border-l bg-background shadow-2xl sm:relative sm:inset-auto sm:h-full sm:w-[420px] sm:max-w-[min(420px,calc(100vw-2rem))] sm:shrink-0', props.mobileOpen === false ? 'hidden' : 'redeven-plugin-motion block animate-in fade-in slide-in-from-right-2 duration-200 ease-out motion-reduce:animate-none')}
     >
       <Show
         when={props.item}
@@ -924,17 +1102,29 @@ export function PluginCenterDetails(props: {
         {(item) => (
           <div class="flex h-full min-h-0 flex-col">
             <div class="shrink-0 space-y-4 border-b px-4 py-4" data-plugin-detail-controls>
-              <Button
+              <div class="flex items-center justify-between gap-3">
+                <Button
                 ref={props.mobileBackRef}
                 data-plugin-center-mobile-back
                 size="sm"
                 variant="ghost"
                 icon={ArrowLeft}
-                class="min-h-[44px] sm:hidden"
+                class="min-h-[44px] min-w-[44px] sm:hidden"
                 onClick={props.onMobileBack}
               >
                 {i18n.t('uiCopy.plugin.backToList')}
-              </Button>
+                </Button>
+                <button
+                  type="button"
+                  data-plugin-center-drawer-close
+                  class="ml-auto inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-md border text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:h-10 sm:w-10"
+                  aria-label={i18n.t('uiCopy.plugin.backToList')}
+                  title={i18n.t('uiCopy.plugin.backToList')}
+                  onClick={props.onMobileBack}
+                >
+                  <X class="h-4 w-4" />
+                </button>
+              </div>
               <PluginIdentityHeader item={item()} description headingRef={props.detailHeadingRef} />
 
               <PluginActions
@@ -942,7 +1132,7 @@ export function PluginCenterDetails(props: {
                 canManage={props.canManage}
                 canOpenSurfaces={props.canOpenSurfaces}
                 managementPending={props.managementPending}
-                commandPending={props.commandPending}
+                commandPendingType={props.commandPendingType}
                 installOperation={props.installOperation}
                 onCommand={props.onCommand}
                 onAskUninstall={props.onAskUninstall}
@@ -1485,7 +1675,7 @@ function PluginActions(props: {
   canManage: boolean;
   canOpenSurfaces: boolean;
   managementPending: boolean;
-  commandPending: boolean;
+  commandPendingType?: PluginPendingCommandType;
   installOperation?: PluginInstallOperationProjection;
   onCommand: (command: PluginLifecycleCommand) => void;
   onAskUninstall: (pluginInstanceID: string) => void;
@@ -1496,7 +1686,8 @@ function PluginActions(props: {
   const i18n = useI18n();
   const presentation = () => presentPlugin(props.item);
   const disabledManagement = () => !props.canManage || props.managementPending;
-  const disabledOpen = () => props.commandPending || !props.canOpenSurfaces;
+  const commandPending = () => props.commandPendingType !== undefined;
+  const disabledOpen = () => commandPending() || !props.canOpenSurfaces;
   const item = () => props.item;
   const reveal = (selector: string) => {
     const element = document.querySelector<HTMLElement>(selector);
@@ -1518,14 +1709,14 @@ function PluginActions(props: {
       surfaceID: target.surfaceID,
       expectedManagementRevision: target.expectedManagementRevision,
       placement,
+      keepPluginCenter: placement === 'activity',
     });
   };
   const primaryActionLabel = (action: PluginPrimaryAction) => {
     switch (action) {
       case 'install': return i18n.t('uiCopy.plugin.install');
-      case 'review_permissions': return i18n.t('uiCopy.plugin.reviewPermissions');
       case 'enable': return i18n.t('uiCopy.plugin.enable');
-      case 'open_activity': return i18n.t('uiCopy.plugin.openInActivity');
+      case 'open_activity': return i18n.t('common.actions.open');
       case 'review_update': return i18n.t('uiCopy.plugin.reviewUpdate');
       case 'view_policy': return i18n.t('uiCopy.plugin.viewPolicyRestriction');
       case 'view_runtime': return i18n.t('uiCopy.plugin.viewRuntimeRequirement');
@@ -1537,7 +1728,6 @@ function PluginActions(props: {
   const runPrimaryAction = () => {
     switch (presentation().primaryAction) {
       case 'install': props.onExternalInstall(item()); break;
-      case 'review_permissions':
       case 'view_policy': reveal('[data-plugin-permissions]'); break;
       case 'enable':
         props.onCommand({
@@ -1561,7 +1751,7 @@ function PluginActions(props: {
     return false;
   };
   const overflowItems = (): DropdownItem[] => [
-    ...(presentation().canOpenActivity ? [{ id: 'activity', label: i18n.t('uiCopy.plugin.openInActivity'), disabled: disabledOpen() }] : []),
+    ...(presentation().canOpenActivity ? [{ id: 'activity', label: i18n.t('common.actions.open'), disabled: disabledOpen() }] : []),
     ...(presentation().canOpenWorkbench ? [{ id: 'workbench', label: i18n.t('uiCopy.plugin.openInWorkbench'), disabled: disabledOpen() }] : []),
     ...(presentation().canDisable ? [{ id: 'disable', label: i18n.t('uiCopy.plugin.disable'), disabled: disabledManagement() }] : []),
     ...(presentation().canCheckForUpdate ? [{ id: 'update', label: i18n.t('uiCopy.plugin.checkForUpdate'), disabled: disabledManagement() }] : []),
@@ -1592,7 +1782,11 @@ function PluginActions(props: {
       <Show when={props.installOperation}>
         {(operation) => (
           <div class="mb-3">
-            <PluginInstallStatus projection={operation()} onRetry={props.onRetryInstall} />
+            <PluginInstallStatus
+              projection={operation()}
+              pluginName={item().displayName}
+              onRetry={props.onRetryInstall}
+            />
           </div>
         )}
       </Show>
@@ -1602,12 +1796,14 @@ function PluginActions(props: {
           variant="primary"
           size="sm"
           class="min-h-[44px] min-w-0 flex-1 justify-center text-xs sm:min-h-8"
-          loading={props.commandPending}
+          loading={commandPending()}
           disabled={primaryDisabled()}
           icon={primaryActionIcon(presentation().primaryAction)}
           onClick={runPrimaryAction}
         >
-          {primaryActionLabel(presentation().primaryAction)}
+          {props.commandPendingType
+            ? pluginPendingCommandLabel(props.commandPendingType, i18n)
+            : primaryActionLabel(presentation().primaryAction)}
         </Button>
         <Show when={overflowItems().length > 0}>
           <Dropdown
@@ -1643,15 +1839,12 @@ function PluginUninstallDialog(props: {
 }): JSX.Element {
   const i18n = useI18n();
   const [retention, setRetention] = createSignal<'keep_data' | 'delete_data'>('keep_data');
-  const [confirmDeleteData, setConfirmDeleteData] = createSignal(false);
   let wasOpen = false;
   createEffect(() => {
     const open = props.open;
     if (open && !wasOpen) {
       setRetention('keep_data');
-      setConfirmDeleteData(false);
     }
-    if (!open) setConfirmDeleteData(false);
     wasOpen = open;
   });
   const submit = () => props.onCommand({
@@ -1676,47 +1869,31 @@ function PluginUninstallDialog(props: {
             size="sm"
             loading={props.pending}
             disabled={props.pending}
-            onClick={() => {
-              if (retention() === 'delete_data' && !confirmDeleteData()) {
-                setConfirmDeleteData(true);
-                return;
-              }
-              submit();
-            }}
+            onClick={submit}
           >
-            {confirmDeleteData() ? i18n.t('uiCopy.plugin.deleteData') : i18n.t('uiCopy.plugin.uninstall')}
+            {i18n.t('uiCopy.plugin.uninstall')}
           </Button>
         </div>
       )}
     >
-      <Show
-        when={confirmDeleteData()}
-        fallback={(
-          <div class="space-y-2" role="radiogroup" aria-label={i18n.t('uiCopy.plugin.uninstallDataChoice')}>
-            <DataRetentionChoice
-              checked={retention() === 'keep_data'}
-              label={i18n.t('uiCopy.plugin.keepData')}
-              description={i18n.t('uiCopy.plugin.keepDataDescription')}
-              onSelect={() => setRetention('keep_data')}
-            />
-            <DataRetentionChoice
-              checked={retention() === 'delete_data'}
-              label={i18n.t('uiCopy.plugin.deleteData')}
-              description={i18n.t('uiCopy.plugin.deleteDataDescription')}
-              destructive
-              onSelect={() => setRetention('delete_data')}
-            />
-          </div>
-        )}
-      >
-        <div class="space-y-4">
-          <PluginIdentityHeader item={props.item} />
-          <div role="alert" data-plugin-uninstall-delete-warning class="flex items-start gap-3 rounded-md border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
-            <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0" />
-            <span>{i18n.t('uiCopy.plugin.deleteDataDescription')}</span>
-          </div>
+      <div class="space-y-4">
+        <PluginIdentityHeader item={props.item} />
+        <div class="space-y-2" role="radiogroup" aria-label={i18n.t('uiCopy.plugin.uninstallDataChoice')}>
+          <DataRetentionChoice
+            checked={retention() === 'keep_data'}
+            label={i18n.t('uiCopy.plugin.keepData')}
+            description={i18n.t('uiCopy.plugin.keepDataDescription')}
+            onSelect={() => setRetention('keep_data')}
+          />
+          <DataRetentionChoice
+            checked={retention() === 'delete_data'}
+            label={i18n.t('uiCopy.plugin.deleteData')}
+            description={i18n.t('uiCopy.plugin.deleteDataDescription')}
+            destructive
+            onSelect={() => setRetention('delete_data')}
+          />
         </div>
-      </Show>
+      </div>
     </Dialog>
   );
 }
@@ -1735,12 +1912,28 @@ function DataRetentionChoice(props: {
       aria-checked={props.checked}
       class={cn(
         'flex min-h-[44px] w-full cursor-pointer items-start gap-3 rounded-md border p-3 text-left transition-[background-color,border-color] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none',
-        props.checked ? 'border-primary bg-primary/5' : 'hover:bg-muted/50',
-        props.destructive && props.checked && 'border-destructive bg-destructive/5',
+        props.checked
+          ? props.destructive
+            ? 'border-destructive bg-destructive/10 ring-1 ring-destructive/40'
+            : 'border-primary bg-primary/10 ring-1 ring-primary/35'
+          : 'border-border hover:bg-muted/50',
       )}
+      data-selected={props.checked ? 'true' : 'false'}
       onClick={props.onSelect}
     >
-      <span class={cn('mt-0.5 h-4 w-4 shrink-0 rounded-full border-[5px]', props.checked ? (props.destructive ? 'border-destructive' : 'border-primary') : 'border-muted-foreground/40')} />
+      <span
+        aria-hidden="true"
+        class={cn(
+          'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2',
+          props.checked
+            ? props.destructive ? 'border-destructive' : 'border-primary'
+            : 'border-muted-foreground/50',
+        )}
+      >
+        <Show when={props.checked}>
+          <span class={cn('h-2.5 w-2.5 rounded-full', props.destructive ? 'bg-destructive' : 'bg-primary')} />
+        </Show>
+      </span>
       <span class="min-w-0">
         <span class={cn('block text-sm font-medium', props.destructive && 'text-destructive')}>{props.label}</span>
         <span class="mt-1 block text-xs leading-5 text-muted-foreground">{props.description}</span>
@@ -1760,8 +1953,7 @@ function primaryActionIcon(action: PluginPrimaryAction) {
     case 'install': return Download;
     case 'open_activity': return CheckCircle;
     case 'review_update': return RefreshIcon;
-    case 'enable': return Settings;
-    case 'review_permissions':
+    case 'enable': return Play;
     case 'view_policy':
     case 'view_trust': return Shield;
     case 'view_runtime':

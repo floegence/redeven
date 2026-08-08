@@ -232,7 +232,7 @@ describe('PluginPanel', () => {
 
     (document.querySelector('[data-plugin-panel-tile-menu="instance:plugininst_containers"]') as HTMLButtonElement).click();
     await Promise.resolve();
-    expect(findDocumentButton('Open in Activity')).not.toBeNull();
+    expect(findDocumentButton('Open')).not.toBeNull();
     expect(findDocumentButton('Technical details')).not.toBeNull();
     findDocumentButton('Open in Workbench').click();
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -272,7 +272,7 @@ describe('PluginPanel', () => {
 
     openMenu();
     await Promise.resolve();
-    findDocumentButton('Open in Activity').click();
+    findDocumentButton('Open').click();
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(onOpenPluginSurface).toHaveBeenCalledWith(expect.objectContaining({
@@ -490,7 +490,7 @@ describe('PluginPanel', () => {
 
     (document.querySelector('[data-plugin-panel-tile-menu="instance:plugininst_containers"]') as HTMLButtonElement).click();
     await Promise.resolve();
-    findDocumentButton('Open in Activity').click();
+    findDocumentButton('Open').click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(document.activeElement).toBe(target);
   });

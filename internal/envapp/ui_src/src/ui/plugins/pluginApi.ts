@@ -22,6 +22,9 @@ import type {
 } from './pluginTypes';
 
 const EXTERNAL_COMMIT_RECONCILIATION_TIMEOUT_MS = 60_000;
+// Host enable includes worker preflight, data namespace initialization, and
+// surface publication. Keep this bounded, but allow a cold runtime to finish.
+const POST_INSTALL_MUTATION_TIMEOUT_MS = 90_000;
 
 export type PluginLifecycleAPI = ReturnType<typeof createPluginLifecycleAPI>;
 
@@ -141,7 +144,25 @@ export function createPluginLifecycleAPI(
         'The plugin host restarted before the installation completed. Inspect the package again.',
       );
     }
-    return result;
+    if (result.status === 'committed' && inspection.intent.action === 'install' && result.plugin?.plugin_instance_id) {
+      const committedResult = result as ExternalPluginCommitResult;
+      const requirements = await client.getPermissionRequirements({
+        plugin_instance_id: committedResult.plugin.plugin_instance_id,
+      }, options);
+      const enabled = await authorizeAndEnablePlugin(
+        committedResult.plugin.plugin_instance_id,
+        requirements.required_permissions,
+        options,
+      );
+      return {
+        ...committedResult,
+        plugin: {
+          ...enabled,
+          presentation: enabled.presentation ?? committedResult.plugin.presentation,
+        },
+      } as ExternalPluginCommitResult;
+    }
+    return result as ExternalPluginCommitResult;
   };
 
   const installOfficialRelease = async (
@@ -151,11 +172,13 @@ export function createPluginLifecycleAPI(
     onUpdate?: (operation: PluginReleaseInstallOperation) => void,
   ): Promise<PluginReleaseInstallOperation> => {
     const official = requireOfficialPlugin(officialByPluginID(), command.pluginID);
+    const approvedPermissionIDs = [...(command.approvedPermissionIDs ?? [])];
     const operation = await client.startReleaseInstallOperation({
       request_id: requestID,
       plugin_instance_id: official.pluginInstanceID,
       release_ref: official.distribution.releaseRef,
       activate_after_install: true,
+      ...(approvedPermissionIDs.length > 0 ? { approved_permission_ids: approvedPermissionIDs } : {}),
     }, options);
     onUpdate?.(operation);
     if (isReleaseInstallTerminal(operation)) return operation;
@@ -188,6 +211,78 @@ export function createPluginLifecycleAPI(
       ...(onUpdate ? { onUpdate } : {}),
     })
   );
+
+  const refreshEnabledRuntimeState = (options: PluginRequestOptions = {}) => (
+    client.refreshEnabledRuntimeState(options)
+  );
+
+  // The install confirmation is the user's authorization decision. The Host
+  // remains authoritative for the required permission set and every revision.
+  const authorizeAndEnablePlugin = async (
+    pluginInstanceID: string,
+    permissionIDs: readonly string[],
+    options: PluginRequestOptions = {},
+  ) => {
+    const catalogResult = await client.catalog(options);
+    const record = catalogResult.plugins.find((plugin) => plugin.plugin_instance_id === pluginInstanceID);
+    if (!record) throw new Error('Installed plugin record was not found while authorizing installation');
+    // The registry is the current lifecycle authority. A release-install
+    // operation may still carry its original needs_attention activation
+    // snapshot after a later enable mutation has committed.
+    if (record.enable_state === 'enabled') return record;
+    const [requirements, grants, policies] = await Promise.all([
+      client.getPermissionRequirements({ plugin_instance_id: pluginInstanceID }, options),
+      client.listPermissions({ active_only: true }, options),
+      client.listSecurityPolicies(options),
+    ]);
+    const requested = [...new Set(permissionIDs.map((permissionID) => permissionID.trim()).filter(Boolean))];
+    const required = new Set(requirements.required_permissions);
+    if (requested.some((permissionID) => !required.has(permissionID))) {
+      throw new Error('The installation requested a permission outside the Host-verified requirement set');
+    }
+    const policy = policies.security_policies.find((candidate) => candidate.plugin_instance_id === pluginInstanceID);
+    let revisions = {
+      policyRevision: record.policy_revision,
+      managementRevision: record.management_revision,
+      revokeEpoch: record.revoke_epoch,
+    };
+    for (const permissionID of requested) {
+      const current = grants.permissions.find((grant) => (
+        grant.plugin_instance_id === pluginInstanceID && grant.permission_id === permissionID && !grant.revoked_at
+      ));
+      if (current?.effect === 'deny') {
+        throw new Error(`Permission ${permissionID} is explicitly denied`);
+      }
+      if (policy && !policy.allowed_permissions.includes(permissionID)) {
+        throw new Error(`Permission ${permissionID} is blocked by environment policy`);
+      }
+      if (current?.effect === 'grant') continue;
+      const result = await withPostInstallMutationTimeout(
+        (signal) => client.grantPermission({
+          plugin_instance_id: pluginInstanceID,
+          permission_id: permissionID,
+          expected_policy_revision: revisions.policyRevision,
+          expected_management_revision: revisions.managementRevision,
+          expected_revoke_epoch: revisions.revokeEpoch,
+        }, { ...options, signal }),
+        options.signal,
+        `Granting ${permissionID}`,
+      );
+      revisions = {
+        policyRevision: result.revisions.policy_revision,
+        managementRevision: result.revisions.management_revision,
+        revokeEpoch: result.revisions.revoke_epoch,
+      };
+    }
+    return withPostInstallMutationTimeout(
+      (signal) => client.enablePlugin({
+        plugin_instance_id: pluginInstanceID,
+        expected_management_revision: revisions.managementRevision,
+      }, { ...options, signal }),
+      options.signal,
+      'Enabling the installed plugin',
+    );
+  };
 
   const execute = async (
     command: Exclude<PluginManagementCommand, { type: 'install' }>,
@@ -254,8 +349,35 @@ export function createPluginLifecycleAPI(
     listReleaseInstallOperations,
     getReleaseInstallOperationByRequest,
     watchReleaseInstallOperation,
+    refreshEnabledRuntimeState,
+    authorizeAndEnablePlugin,
     execute,
   });
+}
+
+async function withPostInstallMutationTimeout<T>(
+  run: (signal: AbortSignal) => Promise<T>,
+  parentSignal: AbortSignal | undefined,
+  label: string,
+): Promise<T> {
+  const controller = new AbortController();
+  const abortFromParent = () => controller.abort(parentSignal?.reason);
+  if (parentSignal?.aborted) abortFromParent();
+  else parentSignal?.addEventListener('abort', abortFromParent, { once: true });
+  let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = globalThis.setTimeout(() => {
+      const error = new Error(`${label} timed out`);
+      controller.abort(error);
+      reject(error);
+    }, POST_INSTALL_MUTATION_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([run(controller.signal), timeout]);
+  } finally {
+    if (timer !== undefined) globalThis.clearTimeout(timer);
+    parentSignal?.removeEventListener('abort', abortFromParent);
+  }
 }
 
 function isReleaseInstallTerminal(operation: PluginReleaseInstallOperation): boolean {

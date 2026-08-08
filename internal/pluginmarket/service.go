@@ -54,7 +54,7 @@ func NewService(options ServiceOptions) (*Service, error) {
 		originValue = defaultMarketOrigin
 	}
 	origin, err := url.Parse(originValue)
-	if err != nil || origin.Scheme != "https" || origin.Hostname() == "" || origin.User != nil || origin.RawQuery != "" || origin.Fragment != "" || (origin.Path != "" && origin.Path != "/") {
+	if err != nil || !validMarketOrigin(origin) {
 		return nil, errors.New("plugin market origin must be an HTTPS origin")
 	}
 	cachePath := strings.TrimSpace(options.CachePath)
@@ -70,6 +70,22 @@ func NewService(options ServiceOptions) (*Service, error) {
 		now = time.Now
 	}
 	return &Service{origin: origin, cachePath: cachePath, httpClient: client, now: now}, nil
+}
+
+func validMarketOrigin(origin *url.URL) bool {
+	if origin == nil || origin.Hostname() == "" || origin.User != nil || origin.RawQuery != "" || origin.Fragment != "" || (origin.Path != "" && origin.Path != "/") {
+		return false
+	}
+	if origin.Scheme == "https" {
+		return true
+	}
+	// Local Wrangler development is intentionally the only plaintext exception.
+	// It cannot be used for a non-loopback host or by the default production path.
+	if origin.Scheme != "http" {
+		return false
+	}
+	host := strings.ToLower(origin.Hostname())
+	return host == "localhost" || host == "127.0.0.1" || host == "::1"
 }
 
 func (service *Service) Snapshot(ctx context.Context) (Snapshot, error) {

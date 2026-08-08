@@ -454,7 +454,7 @@ describe('ExternalPluginInstallDialog', () => {
     expect(document.activeElement).toBe(trustReview);
     expect(confirmation.querySelector('input[type="checkbox"]')).not.toBeNull();
     expect(confirmation.textContent).toContain('Confirm installation of this plugin package');
-    expect(confirmation.textContent).toContain('start Disabled with no permission grants');
+    expect(confirmation.textContent).toContain('grants allowed required permissions and enables the plugin');
     expect(confirmation.textContent).not.toContain(confirmationDigest);
     expect(report.textContent).toContain(confirmationDigest);
     button('Back').click();
@@ -760,7 +760,7 @@ describe('ExternalPluginInstallDialog', () => {
     expect(report.open).toBe(false);
     expect(report.textContent).toContain('permissions the plugin may ask');
     expect(report.textContent).toContain('declared external destinations');
-    expect(document.body.textContent).toContain('A fresh installation grants no permissions');
+    expect(document.body.textContent).toContain('A fresh installation grants the required permissions allowed by Host policy');
     const permissionDisclosure = [...document.querySelectorAll<HTMLDetailsElement>('[data-external-plugin-security-declarations] > details')]
       .find((details) => details.querySelector('summary')?.textContent?.includes('Permissions'));
     expect(permissionDisclosure?.open).toBe(false);
@@ -864,7 +864,9 @@ describe('ExternalPluginInstallDialog', () => {
     await flush();
     expect(onCommitted).toHaveBeenCalledWith(result);
     expect(document.body.textContent).toContain('Example Toolbox was installed');
-    expect(button('Review required permissions')).toBeTruthy();
+    expect([...document.querySelectorAll('button')]
+      .some((candidate) => candidate.textContent?.trim() === 'Review required permissions')).toBe(false);
+    expect(button('Close')).toBeTruthy();
   });
 
   it('keeps a committed install terminal when the inventory refresh callback fails', async () => {
@@ -874,8 +876,7 @@ describe('ExternalPluginInstallDialog', () => {
     const onCommitted = vi.fn()
       .mockRejectedValueOnce(new Error('inventory refresh failed'))
       .mockResolvedValueOnce(undefined);
-    const onViewPermissions = vi.fn();
-    renderDialog({ onInspect: vi.fn(async () => inspected), onCommit, onCommitted, onViewPermissions });
+    renderDialog({ onInspect: vi.fn(async () => inspected), onCommit, onCommitted });
     typeInto(inputWithPlaceholder('https://example.com/plugin.redevplugin'), 'https://plugins.example.com/toolbox.redevplugin');
     button('Review package').click();
     await flush();
@@ -892,8 +893,9 @@ describe('ExternalPluginInstallDialog', () => {
     button('Refresh plugins').click();
     await flush();
     expect(onCommitted).toHaveBeenNthCalledWith(2, committed);
-    button('Review required permissions').click();
-    expect(onViewPermissions).toHaveBeenCalledWith(committed);
+    expect([...document.querySelectorAll('button')]
+      .some((candidate) => candidate.textContent?.trim() === 'Review required permissions')).toBe(false);
+    expect(button('Close')).toBeTruthy();
   });
 
   it('requires a fresh inspection after the current inspection reaches failed terminal state', async () => {

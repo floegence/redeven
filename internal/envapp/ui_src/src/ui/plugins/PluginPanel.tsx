@@ -34,23 +34,39 @@ export type PluginPanelProps = {
   open: boolean;
   mobile?: boolean;
   trigger?: HTMLButtonElement | null;
+  placement?: 'activity' | 'workbench';
   model: PluginPanelModel;
   onClose: () => void;
   onOpenCenter: () => void;
   onOpenPluginSurface: (target: PluginSurfaceLaunchTarget) => void;
   onOpenPluginDetails: (inventoryKey: string) => void;
+  onDropPlugin?: (target: PluginSurfaceLaunchTarget) => void;
 };
+
+type PluginTileDragState = Readonly<{
+  tile: Extract<PluginPanelTile, { kind: 'plugin' }>;
+  clientX: number;
+  clientY: number;
+}>;
 
 export function PluginPanel(props: PluginPanelProps): JSX.Element {
   const i18n = useI18n();
   const [query, setQuery] = createSignal('');
   const [category, setCategory] = createSignal<PluginPresentationCategory | 'all'>('all');
+  const [dragState, setDragState] = createSignal<PluginTileDragState | null>(null);
+  let suppressTileClick = false;
   let panelRef: HTMLDivElement | undefined;
   let searchRef: HTMLInputElement | undefined;
   let gridRef: HTMLUListElement | undefined;
   const tileMenuButtons = new Map<string, HTMLButtonElement>();
   let restoreFocusAfterClose = false;
   let focusRestoreTarget: HTMLElement | null = null;
+  let cancelActiveTileDrag: (() => void) | undefined;
+
+  onCleanup(() => {
+    cancelActiveTileDrag?.();
+    cancelActiveTileDrag = undefined;
+  });
 
   const pluginTiles = createMemo(() => props.model.tiles.filter(isPluginTile));
   const centerTile = createMemo(() => props.model.tiles.find((tile) => tile.kind === 'open_center'));
@@ -63,6 +79,29 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
   const attentionCount = createMemo(() => pluginTiles().filter((tile) => (
     tile.item.lifecycleState === 'needs_attention' || tile.item.lifecycleState === 'update_available'
   )).length);
+  const isWorkbenchPopup = () => props.placement === 'workbench';
+  const [popupPosition, setPopupPosition] = createSignal<{
+    left: number;
+    bottom: number;
+    arrowLeft: number;
+  }>({ left: 0, bottom: 88, arrowLeft: 24 });
+
+  const updatePopupPosition = () => {
+    if (!isWorkbenchPopup()) return;
+    const trigger = props.trigger?.isConnected
+      ? props.trigger
+      : document.querySelector<HTMLButtonElement>('[data-workbench-dock-action="plugins"]');
+    if (!trigger) return;
+    const rect = trigger.getBoundingClientRect();
+    const width = Math.min(320, Math.max(280, window.innerWidth - 24));
+    const left = Math.max(12, Math.min(window.innerWidth - width - 12, rect.left + rect.width / 2 - width / 2));
+    const triggerCenter = rect.left + rect.width / 2;
+    setPopupPosition({
+      left,
+      bottom: Math.max(76, window.innerHeight - rect.top + 16),
+      arrowLeft: Math.max(18, Math.min(width - 18, triggerCenter - left)),
+    });
+  };
 
   const dismiss = () => {
     restoreFocusAfterClose = true;
@@ -101,8 +140,22 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
         first.focus();
       }
     };
+    const onPointerDown = (event: PointerEvent) => {
+      if (!isWorkbenchPopup() || !panelRef) return;
+      const trigger = props.trigger?.isConnected
+        ? props.trigger
+        : document.querySelector<HTMLButtonElement>('[data-workbench-dock-action="plugins"]');
+      if (panelRef.contains(event.target as Node) || trigger?.contains(event.target as Node)) return;
+      dismiss();
+    };
     document.addEventListener('keydown', onKeyDown);
-    const restoreIsolation = panelRef ? isolateDocumentBranch(panelRef) : null;
+    if (isWorkbenchPopup()) {
+      updatePopupPosition();
+      window.addEventListener('resize', updatePopupPosition);
+      window.addEventListener('scroll', updatePopupPosition, true);
+      document.addEventListener('pointerdown', onPointerDown, true);
+    }
+    const restoreIsolation = panelRef && !isWorkbenchPopup() ? isolateDocumentBranch(panelRef) : null;
     let focusCancelled = false;
     queueMicrotask(() => {
       if (!focusCancelled) searchRef?.focus({ preventScroll: true });
@@ -110,12 +163,91 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
     onCleanup(() => {
       focusCancelled = true;
       document.removeEventListener('keydown', onKeyDown);
+      if (isWorkbenchPopup()) {
+        window.removeEventListener('resize', updatePopupPosition);
+        window.removeEventListener('scroll', updatePopupPosition, true);
+        document.removeEventListener('pointerdown', onPointerDown, true);
+      }
       restoreIsolation?.();
       if (restoreFocusAfterClose && focusRestoreTarget?.isConnected) {
         focusRestoreTarget.focus({ preventScroll: true });
       }
     });
   });
+
+  const isCanvasDropPoint = (clientX: number, clientY: number): boolean => {
+    const frame = document.querySelector<HTMLElement>('[data-floe-workbench-canvas-frame="true"]');
+    const rect = frame?.getBoundingClientRect();
+    return Boolean(rect
+      && clientX >= rect.left
+      && clientX <= rect.right
+      && clientY >= rect.top
+      && clientY <= rect.bottom);
+  };
+
+  const beginTileDrag = (
+    event: PointerEvent,
+    tile: Extract<PluginPanelTile, { kind: 'plugin' }>,
+  ) => {
+    if (!isWorkbenchPopup() || event.button !== 0) return;
+    cancelActiveTileDrag?.();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const pointerID = event.pointerId;
+    const captureTarget = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+    let moved = false;
+    try {
+      captureTarget?.setPointerCapture(pointerID);
+    } catch {
+      // The window listeners below remain the fallback for older browsers.
+    }
+    const onMove = (moveEvent: PointerEvent) => {
+      if (moveEvent.pointerId !== pointerID) return;
+      const distance = Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY);
+      if (distance > 6) moved = true;
+      if (moved) {
+        moveEvent.preventDefault();
+        setDragState({ tile, clientX: moveEvent.clientX, clientY: moveEvent.clientY });
+      }
+    };
+    const cleanup = () => {
+      window.removeEventListener('pointermove', onMove, true);
+      window.removeEventListener('pointerup', onUp, true);
+      window.removeEventListener('pointercancel', onCancel, true);
+      try {
+        if (captureTarget?.hasPointerCapture(pointerID)) {
+          captureTarget.releasePointerCapture(pointerID);
+        }
+      } catch {
+        // The pointer may already have been released by the browser.
+      }
+      if (cancelActiveTileDrag === cleanup) cancelActiveTileDrag = undefined;
+      setDragState(null);
+    };
+    const finish = (upEvent: PointerEvent, cancelled: boolean) => {
+      if (upEvent.pointerId !== pointerID) return;
+      const dropped = !cancelled
+        && moved
+        && isCanvasDropPoint(upEvent.clientX, upEvent.clientY)
+        && tile.item.defaultLaunchTarget
+        && props.onDropPlugin;
+      cleanup();
+      if (moved) suppressTileClick = true;
+      if (!dropped) return;
+      props.onDropPlugin?.({
+        ...tile.item.defaultLaunchTarget!,
+        preferredPlacement: 'workbench',
+        workbenchDropPoint: { clientX: upEvent.clientX, clientY: upEvent.clientY },
+      });
+      dismiss();
+    };
+    const onUp = (upEvent: PointerEvent) => finish(upEvent, false);
+    const onCancel = (cancelEvent: PointerEvent) => finish(cancelEvent, true);
+    window.addEventListener('pointermove', onMove, true);
+    window.addEventListener('pointerup', onUp, true);
+    window.addEventListener('pointercancel', onCancel, true);
+    cancelActiveTileDrag = cleanup;
+  };
 
   const activateTile = (tile: PluginPanelTile) => {
     restoreFocusAfterClose = false;
@@ -134,7 +266,7 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
 
   const tileMenuItems = (tile: Extract<PluginPanelTile, { kind: 'plugin' }>): DropdownItem[] => [
     ...(tile.action === 'open_surface' && tile.item.defaultLaunchTarget ? [
-      { id: 'activity', label: i18n.t('uiCopy.plugin.openInActivity') },
+      { id: 'activity', label: i18n.t('common.actions.open') },
       { id: 'workbench', label: i18n.t('uiCopy.plugin.openInWorkbench') },
     ] : []),
     { id: 'details', label: i18n.t('uiCopy.plugin.technicalDetails') },
@@ -187,10 +319,11 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
         <div
           data-plugin-launcher-backdrop
           class={cn(
-            'redeven-plugin-motion fixed inset-0 flex bg-[var(--redeven-overlay-scrim)] animate-in fade-in duration-150 motion-reduce:animate-none',
+            'redeven-plugin-motion fixed inset-0 flex animate-in fade-in duration-150 motion-reduce:animate-none',
+            isWorkbenchPopup() ? 'pointer-events-none items-end' : 'bg-[var(--redeven-overlay-scrim)]',
             props.mobile ? 'items-end' : 'items-center justify-center p-4',
           )}
-          style={{ 'z-index': ENV_APP_FLOATING_LAYER.pluginPanel }}
+            style={{ 'z-index': ENV_APP_FLOATING_LAYER.pluginPanel }}
           onPointerDown={(event) => {
             if (event.target === event.currentTarget) dismiss();
           }}
@@ -200,30 +333,41 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
             ref={panelRef}
             role="dialog"
             tabIndex={-1}
-            aria-modal="true"
-            aria-labelledby="plugin-launcher-title"
+            aria-modal={isWorkbenchPopup() ? undefined : 'true'}
+            aria-label={isWorkbenchPopup() ? i18n.t('uiCopy.plugin.launcherTitle') : undefined}
+            aria-labelledby={isWorkbenchPopup() ? undefined : 'plugin-launcher-title'}
             aria-describedby="plugin-launcher-description"
             class={cn(
-              'redeven-plugin-motion flex min-h-0 w-full origin-bottom flex-col overflow-hidden border bg-popover text-popover-foreground shadow-2xl ease-out motion-reduce:animate-none',
-              props.mobile
+              'redeven-plugin-motion pointer-events-auto flex min-h-0 origin-bottom flex-col overflow-hidden border bg-popover text-popover-foreground shadow-2xl ease-out motion-reduce:animate-none',
+              isWorkbenchPopup()
+                ? 'fixed max-h-[min(380px,calc(100vh-120px))] w-[min(320px,calc(100vw-24px))] rounded-lg animate-in fade-in zoom-in-95 duration-150'
+                : 'w-full',
+              !isWorkbenchPopup() && props.mobile
                 ? 'h-[min(680px,92dvh)] rounded-t-lg border-x-0 border-b-0 animate-in fade-in duration-200'
-                : 'h-[min(680px,78dvh)] max-w-[820px] rounded-lg animate-in fade-in zoom-in-95 duration-200',
+                : !isWorkbenchPopup() ? 'h-[min(680px,78dvh)] max-w-[820px] rounded-lg animate-in fade-in zoom-in-95 duration-200' : '',
             )}
+            style={isWorkbenchPopup() ? {
+              left: `${popupPosition().left}px`,
+              bottom: `${popupPosition().bottom}px`,
+              'transform-origin': `${popupPosition().arrowLeft}px calc(100% + 8px)`,
+            } : undefined}
           >
-            <header class="shrink-0 border-b px-4 py-3 sm:px-5">
-              <div class="flex items-center gap-3">
+            <header class={cn('shrink-0 border-b', isWorkbenchPopup() ? 'px-2.5 py-2' : 'px-4 py-3 sm:px-5')}>
+              <div class={cn('flex items-center', isWorkbenchPopup() ? 'gap-2' : 'gap-3')}>
                 <button
                   type="button"
-                  class="order-last inline-flex h-[44px] w-[44px] shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:h-8 sm:w-8 motion-reduce:transition-none"
+                  class={cn('order-last inline-flex shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none', isWorkbenchPopup() ? 'h-8 w-8' : 'h-[44px] w-[44px] sm:h-8 sm:w-8')}
                   aria-label={i18n.t('uiCopy.plugin.closePanel')}
                   title={i18n.t('uiCopy.plugin.closePanel')}
                   onClick={dismiss}
                 >
                   <X class="h-3.5 w-3.5" />
                 </button>
-                <h2 id="plugin-launcher-title" class="shrink-0 text-base font-semibold">
-                  {i18n.t('uiCopy.plugin.launcherTitle')}
-                </h2>
+                <Show when={!isWorkbenchPopup()}>
+                  <h2 id="plugin-launcher-title" class="shrink-0 text-base font-semibold">
+                    {i18n.t('uiCopy.plugin.launcherTitle')}
+                  </h2>
+                </Show>
                 <label class="relative min-w-0 flex-1">
                   <span class="sr-only">{i18n.t('uiCopy.plugin.launcherSearchLabel')}</span>
                   <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -234,7 +378,7 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
                     value={query()}
                     onInput={(event) => setQuery(event.currentTarget.value)}
                     placeholder={i18n.t('uiCopy.plugin.launcherSearchPlaceholder')}
-                    class="h-10 w-full rounded-md border bg-muted/40 pl-9 pr-3 text-sm outline-none transition-[background-color,border-color,box-shadow] duration-150 placeholder:text-muted-foreground/60 focus:border-ring focus:bg-background focus:ring-2 focus:ring-ring/20 motion-reduce:transition-none"
+                    class={cn('w-full rounded-md border bg-muted/40 outline-none transition-[background-color,border-color,box-shadow] duration-150 placeholder:text-muted-foreground/60 focus:border-ring focus:bg-background focus:ring-2 focus:ring-ring/20 motion-reduce:transition-none', isWorkbenchPopup() ? 'h-8 pl-8 pr-2 text-xs' : 'h-10 pl-9 pr-3 text-sm')}
                   />
                 </label>
               </div>
@@ -251,7 +395,7 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
               </Show>
             </header>
 
-            <div class="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-5">
+            <div class={cn('min-h-0 flex-1 overflow-y-auto', isWorkbenchPopup() ? 'px-3 py-3' : 'px-4 py-5 sm:px-5')}>
               <Show when={props.model.errorMessage}>
                 <div role="alert" class="mb-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs leading-4 text-destructive">
                   {props.model.errorMessage}
@@ -266,7 +410,7 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
               <ul
                 ref={gridRef}
                 data-plugin-launcher-grid
-                class="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5"
+                class={cn('grid', isWorkbenchPopup() ? 'grid-cols-4 gap-1.5' : 'grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5')}
               >
                 <For each={visibleTiles()}>
                   {(tile, index) => (
@@ -279,17 +423,24 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
                         type="button"
                         data-plugin-panel-tile={tile.item.inventoryKey}
                         aria-describedby={`plugin-launcher-tile-status-${index()}`}
-                        class={cn('flex w-full min-w-0 cursor-pointer flex-col items-center gap-2.5 rounded-lg border border-transparent px-2 py-3 text-center hover:-translate-y-0.5 hover:border-border hover:bg-background hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', PLUGIN_PRESS_MOTION_CLASS)}
+                        class={cn('flex w-full min-w-0 cursor-pointer touch-none select-none flex-col items-center rounded-md border border-transparent text-center hover:-translate-y-0.5 hover:border-border hover:bg-background hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', isWorkbenchPopup() ? 'gap-1 px-1 py-2' : 'gap-2.5 px-2 py-3', PLUGIN_PRESS_MOTION_CLASS)}
                         onKeyDown={(event) => {
                           if (!openTileMenu(event, tile.item.inventoryKey)) moveGridFocus(event, index());
                         }}
-                        onClick={() => activateTile(tile)}
+                        onPointerDown={(event) => beginTileDrag(event, tile)}
+                        onClick={() => {
+                          if (suppressTileClick) {
+                            suppressTileClick = false;
+                            return;
+                          }
+                          activateTile(tile);
+                        }}
                       >
                         <div class="relative">
-                          <PluginIcon item={tile.item} size="launcher" class="transition-transform duration-200 ease-out group-hover:scale-[1.04] motion-reduce:transform-none motion-reduce:transition-none" />
+                          <PluginIcon item={tile.item} size={isWorkbenchPopup() ? 'dock' : 'launcher'} class="transition-transform duration-200 ease-out group-hover:scale-[1.04] motion-reduce:transform-none motion-reduce:transition-none" />
                           <PluginUpdateBadge item={tile.item} />
                         </div>
-                        <span class="block min-w-0 max-w-full truncate text-xs font-medium leading-4">
+                        <span class={cn('block min-w-0 max-w-full truncate font-medium', isWorkbenchPopup() ? 'text-[10px] leading-3.5' : 'text-xs leading-4')}>
                           {resolvedPluginPresentation(tile.item, i18n.locale())?.plugin_name ?? tile.item.displayName}
                         </span>
                       </button>
@@ -345,14 +496,14 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
 
             <Show when={centerTile()}>
               {(tile) => (
-                <footer class="flex shrink-0 items-center justify-between gap-3 border-t bg-muted/25 px-4 py-3 sm:px-5">
-                  <div class="min-w-0 text-xs leading-5 text-muted-foreground">
+                <footer class={cn('flex shrink-0 items-center justify-between border-t bg-muted/25', isWorkbenchPopup() ? 'gap-2 px-3 py-2' : 'gap-3 px-4 py-3 sm:px-5')}>
+                  <div class={cn('min-w-0 text-muted-foreground', isWorkbenchPopup() ? 'text-[10px] leading-4' : 'text-xs leading-5')}>
                     {i18n.t('uiCopy.plugin.launcherSummary', { count: pluginTiles().length, attention: attentionCount() })}
                   </div>
                   <button
                     type="button"
                     data-plugin-panel-tile="plugin-center"
-                    class={cn('inline-flex min-h-[44px] shrink-0 cursor-pointer items-center gap-2 rounded-md border bg-background px-3 text-sm font-medium hover:bg-accent hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', PLUGIN_PRESS_MOTION_CLASS)}
+                    class={cn('inline-flex shrink-0 cursor-pointer items-center rounded-md border bg-background font-medium hover:bg-accent hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', isWorkbenchPopup() ? 'h-8 gap-1.5 px-2 text-[11px]' : 'min-h-[44px] gap-2 px-3 text-sm', PLUGIN_PRESS_MOTION_CLASS)}
                     onClick={() => activateTile(tile())}
                   >
                     <Settings class="h-4 w-4" />
@@ -364,6 +515,36 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
             </Show>
           </div>
         </div>
+        <Show when={isWorkbenchPopup()}>
+          <span
+            data-plugin-workbench-popover-arrow
+            class="pointer-events-none fixed h-3 w-3 rotate-45 border-b border-r bg-popover"
+            style={{
+              'z-index': ENV_APP_FLOATING_LAYER.pluginPanel,
+              left: `${popupPosition().left + popupPosition().arrowLeft - 6}px`,
+              bottom: `${popupPosition().bottom - 6}px`,
+            }}
+            aria-hidden="true"
+          />
+        </Show>
+        <Show when={dragState()}>
+          {(state) => (
+            <div
+              data-plugin-workbench-drag-ghost
+              class="pointer-events-none fixed left-0 top-0 flex items-center gap-2 rounded-lg border bg-popover/95 px-3 py-2 text-popover-foreground shadow-xl backdrop-blur-md"
+              style={{
+                'z-index': ENV_APP_FLOATING_LAYER.pluginPanel + 1,
+                transform: `translate3d(${state().clientX + 14}px, ${state().clientY - 34}px, 0)`,
+              }}
+              aria-hidden="true"
+            >
+              <PluginIcon item={state().tile.item} size="dock" />
+              <span class="max-w-40 truncate text-xs font-semibold">
+                {resolvedPluginPresentation(state().tile.item, i18n.locale())?.plugin_name ?? state().tile.item.displayName}
+              </span>
+            </div>
+          )}
+        </Show>
       </Portal>
     </Show>
   );

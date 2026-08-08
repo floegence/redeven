@@ -297,6 +297,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	}
 	terminalLayoutCleanup := registerWorkbenchTerminalSessionCleanup(logger, workbenchLayoutSvc, opts.Terminal)
 	pluginMarket, err := pluginmarket.NewService(pluginmarket.ServiceOptions{
+		Origin:    strings.TrimSpace(os.Getenv("REDEVEN_PLUGIN_MARKET_ORIGIN")),
 		CachePath: filepath.Join(stateAbs, "apps", "plugins", "market-lkg.json"),
 	})
 	if err != nil {

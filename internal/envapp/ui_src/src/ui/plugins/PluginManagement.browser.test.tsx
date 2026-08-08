@@ -812,7 +812,7 @@ describe('plugin management browser geometry and interaction', () => {
 
     const menu = document.querySelector<HTMLElement>('[role="menu"]')!;
     expect(menu).not.toBeNull();
-    expect(menu.textContent).toContain('Open in Activity');
+    expect(menu.textContent).toContain('Open');
     expect(menu.textContent).toContain('Open in Workbench');
     expect(menu.textContent).toContain('View plugin details');
     const detailsAction = [...menu.querySelectorAll<HTMLButtonElement>('button')]

@@ -371,7 +371,7 @@ export const redevenWorkbenchWidgets: readonly WorkbenchWidgetDefinition[] = [
   {
     type: 'redeven.plugin',
     label: 'Plugin',
-    icon: DockLayers,
+    icon: Package,
     body: PluginWidget,
     defaultTitle: 'Plugin',
     defaultSize: { width: 1120, height: 760 },

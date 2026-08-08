@@ -44,7 +44,7 @@ function authorization(options: { missing?: boolean; policyBlocked?: boolean } =
 describe('presentPlugin', () => {
   it.each<readonly [string, PluginInventoryItem, PluginPrimaryAction]>([
     ['offers review and install for an available package', plugin({ pluginInstanceID: undefined, lifecycleState: 'not_installed', trustBadge: 'official' }), 'install'],
-    ['reviews required access before enabling a disabled plugin', plugin({ authorization: authorization({ missing: true }) }), 'review_permissions'],
+    ['enables and completes required access for a disabled plugin', plugin({ authorization: authorization({ missing: true }) }), 'enable'],
     ['enables a disabled plugin after required access is granted', plugin({ authorization: authorization() }), 'enable'],
     ['opens an enabled ready plugin in Activity', plugin({ lifecycleState: 'enabled', defaultLaunchTarget: { pluginID: 'com.example.plugin', pluginInstanceID: 'plugin-1', surfaceID: 'main', expectedManagementRevision: 4, preferredPlacement: 'activity' } }), 'open_activity'],
     ['reviews an update before allowing open', plugin({ lifecycleState: 'update_available' }), 'review_update'],
@@ -52,7 +52,7 @@ describe('presentPlugin', () => {
     ['shows a missing runtime requirement', plugin({ lifecycleState: 'needs_attention', attentionReason: 'runtime_missing' }), 'view_runtime'],
     ['fails closed for revoked trust even if lifecycle says enabled', plugin({ lifecycleState: 'enabled', trustBadge: 'revoked', defaultLaunchTarget: { pluginID: 'com.example.plugin', pluginInstanceID: 'plugin-1', surfaceID: 'main', expectedManagementRevision: 4, preferredPlacement: 'activity' } }), 'view_trust'],
     ['fails closed for policy-blocked execution approval', plugin({ externalPackage: { executionApproval: { state: 'policy_blocked', reason_codes: ['blocked'], assessed_at: '2026-07-25T00:00:00Z' } } as PluginInventoryItem['externalPackage'] }), 'view_trust'],
-    ['reviews permissions even if a stale lifecycle says enabled', plugin({ lifecycleState: 'enabled', authorization: authorization({ missing: true }), defaultLaunchTarget: { pluginID: 'com.example.plugin', pluginInstanceID: 'plugin-1', surfaceID: 'main', expectedManagementRevision: 4, preferredPlacement: 'activity' } }), 'review_permissions'],
+    ['offers executable enable recovery if a stale lifecycle says enabled without its required access', plugin({ lifecycleState: 'enabled', authorization: authorization({ missing: true }), defaultLaunchTarget: { pluginID: 'com.example.plugin', pluginInstanceID: 'plugin-1', surfaceID: 'main', expectedManagementRevision: 4, preferredPlacement: 'activity' } }), 'enable'],
   ])('%s', (_name, item, action) => {
     expect(presentPlugin(item).primaryAction).toBe(action);
   });

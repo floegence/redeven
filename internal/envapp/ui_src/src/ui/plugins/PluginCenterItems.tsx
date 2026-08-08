@@ -1,11 +1,11 @@
 import { Show, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { CheckCircle, Download, MoreHorizontal, RefreshIcon } from '@floegence/floe-webapp-core/icons';
+import { CheckCircle, Download, MoreHorizontal, Play, RefreshIcon } from '@floegence/floe-webapp-core/icons';
 import { Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 
 import { useI18n } from '../i18n';
-import type { PluginCenterTab, PluginInstallOperationProjection, PluginInventoryItem } from './pluginTypes';
-import { PLUGIN_ENTER_MOTION_CLASS, PLUGIN_PRESS_MOTION_CLASS, presentPlugin } from './pluginPresentation';
+import type { PluginCenterTab, PluginInstallOperationProjection, PluginInventoryItem, PluginPendingCommandType } from './pluginTypes';
+import { PLUGIN_ENTER_MOTION_CLASS, PLUGIN_PRESS_MOTION_CLASS, pluginPendingCommandLabel, presentPlugin } from './pluginPresentation';
 import { PluginIcon, PluginStatusBadge, PluginTrustBadge } from './PluginPresentationPrimitives';
 import { resolveAuthorPresentation, resolvePluginPresentation } from './officialPluginCatalog';
 import { PluginInstallStatus } from './PluginInstallStatus';
@@ -17,6 +17,7 @@ export function PluginCenterItem(props: {
   canManage: boolean;
   canOpenSurfaces: boolean;
   managementDisabled: boolean;
+  commandPendingType?: PluginPendingCommandType;
   installOperation?: PluginInstallOperationProjection;
   entranceDelayMs?: number;
   onOpenDetails: (target: HTMLButtonElement) => void;
@@ -46,13 +47,13 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
   let menuTrigger: HTMLButtonElement | undefined;
   const update = () => props.tab === 'updates' || props.item.lifecycleState === 'update_available';
   const primaryAction = () => actions().primaryAction;
+  const commandPending = () => props.commandPendingType !== undefined;
   const primaryLabel = () => {
     switch (primaryAction()) {
       case 'install': return i18n.t('uiCopy.plugin.install');
       case 'enable': return i18n.t('uiCopy.plugin.enable');
       case 'review_update': return i18n.t('uiCopy.plugin.reviewUpdate');
-      case 'open_activity': return i18n.t('uiCopy.plugin.openInActivity');
-      case 'review_permissions': return i18n.t('uiCopy.plugin.reviewPermissions');
+      case 'open_activity': return i18n.t('common.actions.open');
       case 'view_policy': return i18n.t('uiCopy.plugin.viewPolicyRestriction');
       case 'view_runtime': return i18n.t('uiCopy.plugin.viewRuntimeRequirement');
       case 'view_trust': return i18n.t('uiCopy.plugin.viewTrustDetails');
@@ -71,8 +72,8 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
   };
   const menuItems = (): DropdownItem[] => [
     ...(actions().canOpenActivity ? [
-      { id: 'activity', label: i18n.t('uiCopy.plugin.openInActivity'), disabled: !props.canOpenSurfaces },
-    ] : []),
+      { id: 'activity', label: i18n.t('common.actions.open'), disabled: !props.canOpenSurfaces },
+      ] : []),
     ...(actions().canOpenWorkbench ? [
       { id: 'workbench', label: i18n.t('uiCopy.plugin.openInWorkbench'), disabled: !props.canOpenSurfaces },
     ] : []),
@@ -138,6 +139,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
           <div class="mt-3">
             <PluginInstallStatus
               projection={operation()}
+              pluginName={props.item.displayName}
               compact
               onRetry={props.onRetryInstall}
             />
@@ -151,16 +153,23 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
             data-plugin-center-card-primary={props.item.inventoryKey}
             data-plugin-center-update={update() ? props.item.inventoryKey : undefined}
             class={cn('inline-flex min-h-[44px] min-w-0 flex-1 cursor-pointer items-center justify-center gap-1 overflow-hidden whitespace-nowrap rounded-md bg-primary px-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-8', PLUGIN_PRESS_MOTION_CLASS)}
-            disabled={(primaryAction() === 'review_update' && props.managementDisabled)
+            aria-busy={commandPending()}
+            disabled={commandPending() || (primaryAction() === 'review_update' && props.managementDisabled)
               || (primaryAction() === 'open_activity' && (!props.canOpenSurfaces || !props.item.defaultLaunchTarget))
               || (primaryAction() === 'enable' && (!props.canManage || props.managementDisabled))}
             onClick={(event) => activatePrimary(event.currentTarget)}
           >
-            {primaryAction() === 'review_update'
+            {commandPending()
+              ? <RefreshIcon class="h-4 w-4 shrink-0 animate-spin motion-reduce:animate-none" />
+              : primaryAction() === 'review_update'
               ? <RefreshIcon class="h-4 w-4 shrink-0" />
-              : primaryAction() === 'open_activity' ? <CheckCircle class="h-4 w-4 shrink-0" /> : <MoreHorizontal class="h-4 w-4 shrink-0" />}
+              : primaryAction() === 'open_activity' ? <CheckCircle class="h-4 w-4 shrink-0" />
+                : primaryAction() === 'enable' ? <Play class="h-4 w-4 shrink-0" />
+                  : <MoreHorizontal class="h-4 w-4 shrink-0" />}
             <span data-plugin-center-card-primary-label class="shrink-0 whitespace-nowrap">
-              {primaryLabel()}
+              {props.commandPendingType
+                ? pluginPendingCommandLabel(props.commandPendingType, i18n)
+                : primaryLabel()}
             </span>
           </button>
         )}>
@@ -168,11 +177,16 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
             type="button"
             data-plugin-center-install={props.item.inventoryKey}
             class={cn('inline-flex min-h-[44px] min-w-0 flex-1 cursor-pointer items-center justify-center gap-1 rounded-md bg-primary px-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-8', PLUGIN_PRESS_MOTION_CLASS)}
-            disabled={!props.canManage || props.managementDisabled}
+            aria-busy={commandPending()}
+            disabled={!props.canManage || props.managementDisabled || commandPending()}
             onClick={props.onInstall}
           >
-            <Download class="h-4 w-4 shrink-0" />
-            <span data-plugin-center-card-primary-label class="shrink-0 whitespace-nowrap">{i18n.t('uiCopy.plugin.install')}</span>
+            <Show when={commandPending()} fallback={<Download class="h-4 w-4 shrink-0" />}>
+              <RefreshIcon class="h-4 w-4 shrink-0 animate-spin motion-reduce:animate-none" />
+            </Show>
+            <span data-plugin-center-card-primary-label class="shrink-0 whitespace-nowrap">
+              {commandPending() ? i18n.t('uiCopy.plugin.installOperation.starting') : i18n.t('uiCopy.plugin.install')}
+            </span>
           </button>
         </Show>
         <Dropdown

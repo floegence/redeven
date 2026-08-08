@@ -14,15 +14,24 @@ type InstallLifecycle = Pick<
   | 'listReleaseInstallOperations'
   | 'getReleaseInstallOperationByRequest'
   | 'watchReleaseInstallOperation'
->;
+> & Partial<Pick<PluginLifecycleAPI, 'authorizeAndEnablePlugin'>>;
 
 const RECENT_TERMINAL_FAILURE_MS = 24 * 60 * 60 * 1_000;
 const REATTACH_BASE_DELAY_MS = 250;
 const REATTACH_MAX_DELAY_MS = 5_000;
+// Enabling a freshly installed plugin may cold-start its worker runtime and
+// publish surfaces. The operation remains bounded, but 12 seconds was shorter
+// than the observed cold path and turned a successful mutation into a retry.
+const ACTIVATION_TIMEOUT_MS = 90_000;
+const INVENTORY_REFRESH_TIMEOUT_MS = 8_000;
 
 export type PluginInstallCoordinator = Readonly<{
   projections: Accessor<readonly PluginInstallOperationProjection[]>;
-  start: (pluginID: string, pluginInstanceID: string) => Promise<void>;
+  start: (
+    pluginID: string,
+    pluginInstanceID: string,
+    approvedPermissionIDs?: readonly string[],
+  ) => Promise<void>;
   resume: () => Promise<void>;
   retry: (pluginInstanceID: string) => Promise<void>;
   dispose: () => void;
@@ -68,7 +77,10 @@ export function createPluginInstallCoordinator(options: Readonly<{
     return task;
   };
 
-  const finish = async (projection: PluginInstallOperationProjection): Promise<void> => {
+  const finish = async (
+    projection: PluginInstallOperationProjection,
+    signal?: AbortSignal,
+  ): Promise<void> => {
     const operation = projection.operation;
     if (!operation) {
       put(projection);
@@ -82,9 +94,75 @@ export function createPluginInstallCoordinator(options: Readonly<{
       put(projection);
       return;
     }
+    const missingPermissionIDs = operation.activation.status === 'needs_attention'
+      ? operation.activation.missing_permission_ids ?? []
+      : [];
+    if (options.lifecycle.authorizeAndEnablePlugin
+      && (operation.activation.status === 'needs_attention'
+        || operation.activation.next_action === 'retry_activation')) {
+      const activating = {
+        ...projection,
+        observation: 'activating' as const,
+        activationFailure: undefined,
+      };
+      put(activating);
+      try {
+        await withTimeout(
+          options.lifecycle.authorizeAndEnablePlugin(
+            projection.pluginInstanceID,
+            missingPermissionIDs,
+            { signal },
+          ),
+          ACTIVATION_TIMEOUT_MS,
+          signal,
+          'Plugin setup timed out',
+        );
+      } catch (error) {
+        // A timed out mutation may have committed. Refresh the authoritative
+        // inventory once, then expose a bounded retry instead of leaving the
+        // card in an endless post-install spinner.
+        try {
+          await withTimeout(
+            options.refreshInventory(),
+            INVENTORY_REFRESH_TIMEOUT_MS,
+            signal,
+            'Plugin inventory refresh timed out',
+          );
+          const reconciled = await withTimeout(
+            options.lifecycle.getReleaseInstallOperationByRequest(
+              projection.requestID,
+              { signal },
+            ),
+            INVENTORY_REFRESH_TIMEOUT_MS,
+            signal,
+            'Plugin installation reconciliation timed out',
+          );
+          if (reconciled.activation.status === 'enabled') {
+            remove(projection.pluginInstanceID);
+            return;
+          }
+        } catch {
+          // The activation failure remains the actionable terminal state.
+        }
+        put({
+          ...projection,
+          observation: 'activation_failed',
+          activationFailure: {
+            message: error instanceof Error ? error.message : 'Plugin activation did not complete',
+            retryable: true,
+          },
+        });
+        return;
+      }
+    }
     put({ ...projection, observation: 'refreshing' });
     try {
-      await options.refreshInventory();
+      await withTimeout(
+        options.refreshInventory(),
+        INVENTORY_REFRESH_TIMEOUT_MS,
+        signal,
+        'Plugin inventory refresh timed out',
+      );
       remove(projection.pluginInstanceID);
     } catch {
       put({ ...projection, observation: 'refresh_failed' });
@@ -128,7 +206,7 @@ export function createPluginInstallCoordinator(options: Readonly<{
             );
             current = { ...current, observation: 'watching', operation };
           }
-          await finish(current);
+          await finish(current, controller.signal);
           return;
         } catch {
           if (disposed || controller.signal.aborted) return;
@@ -149,12 +227,24 @@ export function createPluginInstallCoordinator(options: Readonly<{
     }
   };
 
-  const start = (pluginID: string, pluginInstanceID: string): Promise<void> => (
-    runExclusive(pluginInstanceID, async () => {
-      const active = projections().some((projection) => (
-        projection.pluginInstanceID !== pluginInstanceID && projectionIsActive(projection)
-      ));
-      if (active) return;
+  const start = (
+    pluginID: string,
+    pluginInstanceID: string,
+    approvedPermissionIDs: readonly string[] = [],
+  ): Promise<void> => {
+    // A terminal operation can outlive its registry record (for example after
+    // an uninstall). An explicit new Install must be allowed to supersede
+    // that historical observation instead of reusing its completed promise.
+    const existing = tasks.get(pluginInstanceID);
+    const existingProjection = projectionFor(pluginInstanceID);
+    if (existing && existingProjection?.operation
+      && (existingProjection.operation.status === 'succeeded'
+        || existingProjection.operation.status === 'failed')) {
+      controllers.get(pluginInstanceID)?.abort('Superseded terminal install operation');
+      tasks.delete(pluginInstanceID);
+      remove(pluginInstanceID);
+    }
+    return runExclusive(pluginInstanceID, async () => {
       const requestID = options.createRequestID();
       const controller = new AbortController();
       controllers.get(pluginInstanceID)?.abort('Plugin installation submission superseded');
@@ -168,7 +258,12 @@ export function createPluginInstallCoordinator(options: Readonly<{
       put(current);
       try {
         const operation = await options.lifecycle.installOfficialRelease(
-          { type: 'install', pluginID, source: 'official_catalog' },
+          {
+            type: 'install',
+            pluginID,
+            source: 'official_catalog',
+            ...(approvedPermissionIDs.length > 0 ? { approvedPermissionIDs } : {}),
+          },
           requestID,
           { signal: controller.signal },
           (update) => {
@@ -177,7 +272,7 @@ export function createPluginInstallCoordinator(options: Readonly<{
           },
         );
         current = { ...current, observation: 'watching', operation };
-        await finish(current);
+        await finish(current, controller.signal);
       } catch (error) {
         if (disposed || controller.signal.aborted) return;
         if (error instanceof PluginPlatformRequestError) {
@@ -197,8 +292,8 @@ export function createPluginInstallCoordinator(options: Readonly<{
       } finally {
         if (controllers.get(pluginInstanceID) === controller) controllers.delete(pluginInstanceID);
       }
-    })
-  );
+    });
+  };
 
   const resume = async (): Promise<void> => {
     if (disposed) return;
@@ -218,7 +313,7 @@ export function createPluginInstallCoordinator(options: Readonly<{
     const now = Date.now();
     const candidates = new Map<string, PluginInstallOperationProjection>();
     for (const operation of latestByPlugin.values()) {
-      if (operation.status === 'succeeded') continue;
+      if (operation.status === 'succeeded' && operation.activation.status !== 'needs_attention') continue;
       if (operation.status === 'failed' && !terminalFailureIsRecent(operation, now)) continue;
       candidates.set(operation.plugin_instance_id, {
         pluginID: options.resolvePluginID(operation.plugin_instance_id) ?? '',
@@ -247,11 +342,24 @@ export function createPluginInstallCoordinator(options: Readonly<{
     if (projection.observation === 'refresh_failed') {
       put({ ...projection, observation: 'refreshing' });
       try {
-        await options.refreshInventory();
+        await withTimeout(
+          options.refreshInventory(),
+          INVENTORY_REFRESH_TIMEOUT_MS,
+          undefined,
+          'Plugin inventory refresh timed out',
+        );
         remove(pluginInstanceID);
       } catch {
         put({ ...projection, observation: 'refresh_failed' });
       }
+      return;
+    }
+    if (projection.observation === 'activation_failed') {
+      await runExclusive(pluginInstanceID, () => observe({
+        ...projection,
+        observation: 'watching',
+        activationFailure: undefined,
+      }, projection.operation));
       return;
     }
     if (projection.observation === 'reconnecting') {
@@ -292,6 +400,28 @@ function waitForReattach(delayMs: number, signal: AbortSignal): Promise<void> {
   });
 }
 
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  signal: AbortSignal | undefined,
+  message: string,
+): Promise<T> {
+  if (signal?.aborted) throw signal.reason;
+  let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
+  let abort: (() => void) | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = globalThis.setTimeout(() => reject(new Error(message)), timeoutMs);
+    abort = () => reject(signal?.reason ?? new Error('Plugin operation was aborted'));
+    signal?.addEventListener('abort', abort, { once: true });
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timer !== undefined) globalThis.clearTimeout(timer);
+    if (signal && abort) signal.removeEventListener('abort', abort);
+  }
+}
+
 function releaseInstallOperationIsNewer(
   candidate: PluginReleaseInstallOperation,
   current: PluginReleaseInstallOperation,
@@ -316,19 +446,6 @@ function terminalFailureIsRecent(
   return Number.isFinite(terminalAt)
     && terminalAt <= now
     && terminalAt >= now - RECENT_TERMINAL_FAILURE_MS;
-}
-
-function projectionIsActive(projection: PluginInstallOperationProjection): boolean {
-  if (
-    projection.observation === 'starting'
-    || projection.observation === 'reconnecting'
-    || projection.observation === 'refreshing'
-  ) {
-    return true;
-  }
-  return projection.observation === 'watching'
-    && projection.operation?.status !== 'succeeded'
-    && projection.operation?.status !== 'failed';
 }
 
 function startFailureRetryable(code: PluginPlatformErrorCode): boolean {

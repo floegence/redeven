@@ -286,7 +286,10 @@ function projectGenericAuthorization(
     requirements.required_permissions.map((permissionID) => ({
       permissionID,
       group: 'other',
-      requiredToOpen: false,
+      // Host requirements are the only authority when market presentation
+      // metadata is absent. Missing any required grant must fail closed instead
+      // of exposing a launch target for a plugin that cannot use its contract.
+      requiredToOpen: true,
       methods: methodsByPermission.get(permissionID) ?? [],
     })),
     installed,
@@ -410,10 +413,10 @@ function authorizationNeedsPermissionAttention(
   authorization?: PluginAuthorizationInventory,
 ): boolean {
   const permissions = authorization?.permissions ?? [];
-  return permissions.length > 0 && !permissions.some((permission) => (
-    permission.granted
-    && !permission.deniedByGrant
-    && !permission.grantBlockedByPolicy
+  return permissions.some((permission) => permission.requiredToOpen && (
+    !permission.granted
+    || permission.deniedByGrant
+    || permission.grantBlockedByPolicy
   ));
 }
 
