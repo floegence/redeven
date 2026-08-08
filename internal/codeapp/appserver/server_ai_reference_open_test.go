@@ -66,9 +66,10 @@ func TestServer_AIReferenceOpenTargetAcceptsOnlyCanonicalIdentity(t *testing.T) 
 		EndpointID: "env_reference_open", UserPublicID: "user_reference_open", UserEmail: "reference-open@example.com",
 		CanRead: true,
 	}
-	aiSvc, err := ai.NewService(ai.Options{
+	aiOptions := ai.Options{
 		Logger: logger, StateDir: stateDir, AgentHomeDir: home, FilesystemScope: scope, Shell: "/bin/sh",
-	})
+	}
+	aiSvc, err := ai.NewService(aiOptions)
 	if err != nil {
 		t.Fatalf("ai.NewService: %v", err)
 	}
@@ -81,9 +82,16 @@ func TestServer_AIReferenceOpenTargetAcceptsOnlyCanonicalIdentity(t *testing.T) 
 		t.Fatalf("CreateThread: %v", err)
 	}
 	locator := referenceOpenLocatorForTest(t, meta.EndpointID, filePath, false)
+	if err := aiSvc.Close(); err != nil {
+		t.Fatalf("close AI service before canonical fixture: %v", err)
+	}
 	seedFloretReferenceOpenTurn(t, stateDir, thread.ThreadID, "turn_reference_open", []flruntime.MessageReference{
 		{ReferenceID: "context:0", Kind: flruntime.MessageReferenceFile, Label: "main.ts", ResourceRef: locator},
 	})
+	aiSvc, err = ai.NewService(aiOptions)
+	if err != nil {
+		t.Fatalf("reopen AI service after canonical fixture: %v", err)
+	}
 
 	channelID := "ch_reference_open"
 	srv, err := New(Options{
@@ -166,7 +174,7 @@ func TestServer_AIReferenceOpenTargetRejectsCanonicalReferenceAfterTargetChanges
 		EndpointID: "env_reference_target_change", UserPublicID: "user_reference_target_change",
 		UserEmail: "reference-target-change@example.com", CanRead: true,
 	}
-	aiSvc, err := ai.NewService(ai.Options{
+	aiOptions := ai.Options{
 		Logger: logger, StateDir: stateDir, AgentHomeDir: home, FilesystemScope: scope, Shell: "/bin/sh",
 		ToolTargetPolicy: ai.ToolTargetPolicy{
 			Mode: ai.ToolTargetModeExplicitTarget, AllowedTargetIDs: []string{"target_before", "target_after"},
@@ -181,7 +189,8 @@ func TestServer_AIReferenceOpenTargetRejectsCanonicalReferenceAfterTargetChanges
 			}
 			return policy
 		},
-	})
+	}
+	aiSvc, err := ai.NewService(aiOptions)
 	if err != nil {
 		t.Fatalf("ai.NewService: %v", err)
 	}
@@ -199,9 +208,16 @@ func TestServer_AIReferenceOpenTargetRejectsCanonicalReferenceAfterTargetChanges
 		t.Fatalf("set initial target: %v", err)
 	}
 	locator := referenceOpenTargetLocatorForTest(t, meta.EndpointID, "target_before", filePath)
+	if err := aiSvc.Close(); err != nil {
+		t.Fatalf("close AI service before canonical fixture: %v", err)
+	}
 	seedFloretReferenceOpenTurn(t, stateDir, thread.ThreadID, "turn_reference_target_change", []flruntime.MessageReference{{
 		ReferenceID: "context:0", Kind: flruntime.MessageReferenceFile, Label: "target-bound.txt", ResourceRef: locator,
 	}})
+	aiSvc, err = ai.NewService(aiOptions)
+	if err != nil {
+		t.Fatalf("reopen AI service after canonical fixture: %v", err)
+	}
 	if routing, err := aiSvc.GetFlowerThreadRouting(context.Background(), meta.EndpointID, thread.ThreadID); err != nil || routing == nil || routing.PrimaryTargetID != "target_before" {
 		t.Fatalf("initial routing=%#v err=%v", routing, err)
 	}

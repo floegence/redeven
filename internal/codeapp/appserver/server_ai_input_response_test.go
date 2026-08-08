@@ -48,7 +48,7 @@ func TestServer_AIThreadInputResponseUsesURLThreadID(t *testing.T) {
 		CanExecute:        true,
 		CanAdmin:          true,
 	}
-	aiSvc, err := ai.NewService(ai.Options{
+	aiOptions := ai.Options{
 		Logger:       logger,
 		StateDir:     stateDir,
 		AgentHomeDir: stateDir,
@@ -71,7 +71,8 @@ func TestServer_AIThreadInputResponseUsesURLThreadID(t *testing.T) {
 		ResolveProviderAPIKey: func(string) (string, bool, error) {
 			return "sk-test", true, nil
 		},
-	})
+	}
+	aiSvc, err := ai.NewService(aiOptions)
 	if err != nil {
 		t.Fatalf("ai.NewService: %v", err)
 	}
@@ -84,7 +85,14 @@ func TestServer_AIThreadInputResponseUsesURLThreadID(t *testing.T) {
 	const waitingTurnID = "msg_appserver_input"
 	const waitingToolID = "tool_appserver_input"
 	const promptID = "rui_" + waitingTurnID + "_" + waitingToolID
+	if err := aiSvc.Close(); err != nil {
+		t.Fatalf("close AI service before canonical fixture: %v", err)
+	}
 	seedAppserverWaitingPrompt(t, stateDir, thread.ThreadID, waitingTurnID, "run_appserver_input", waitingToolID)
+	aiSvc, err = ai.NewService(aiOptions)
+	if err != nil {
+		t.Fatalf("reopen AI service after canonical fixture: %v", err)
+	}
 
 	srv, err := New(Options{
 		Logger:  logger,
