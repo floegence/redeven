@@ -680,6 +680,10 @@ async function verifyBuiltPluginInstallRouting(browser) {
     await pluginInstall.evaluate((button) => { button.disabled = false; });
     await pluginInstall.click();
 
+    const installReview = page.locator('[data-plugin-install-review-dialog]');
+    await installReview.waitFor({ state: 'visible', timeout: 10_000 });
+    await page.locator('[data-plugin-install-review-confirm]').click();
+    await installReview.waitFor({ state: 'detached', timeout: 10_000 });
     await pluginCenter.locator('[data-plugin-center-list][aria-busy="false"]').waitFor({
       state: 'visible',
       timeout: 10_000,
@@ -699,51 +703,54 @@ async function verifyBuiltPluginInstallRouting(browser) {
         pageErrors,
       })}`, { cause: error });
     }
+    await installedPluginItem.getByText('Needs attention', { exact: true }).waitFor({ state: 'visible', timeout: 10_000 });
     await installedPluginItem.press('Enter');
     const installedDetails = pluginCenter.locator('[data-plugin-center-details]');
-    try {
-      await installedDetails.getByText('Needs attention', { exact: true }).waitFor({ state: 'visible', timeout: 10_000 });
-    } catch (error) {
-      throw new Error(`built signed plugin install did not reach Needs attention: ${JSON.stringify({
-        pluginRequests,
-        pluginCenterText: (await pluginCenter.innerText()).slice(0, 2_000),
-        pageErrors,
-      })}`, { cause: error });
-    }
     await installedDetails.getByText('Official', { exact: true }).first().waitFor({ state: 'visible', timeout: 10_000 });
     if (pluginRequests.some((request) => request.path.includes('/external-packages/'))) {
       throw new Error(`built plugin Install used external-package admission: ${JSON.stringify(pluginRequests)}`);
     }
-    const pluginInventoryRequests = [
-      { method: 'POST', path: '/_redevplugin/api/plugins/catalog/query' },
-      { method: 'POST', path: '/_redevplugin/api/plugins/permissions/query' },
-      { method: 'POST', path: '/_redevplugin/api/plugins/security-policies/query' },
-    ];
+    const normalizedPluginRequests = pluginRequests.map((request) => ({
+      ...request,
+      path: request.path.replace(
+        /\/release-install-operations\/by-request\/[0-9a-f-]{36}$/u,
+        '/release-install-operations/by-request/:requestID',
+      ),
+    }));
     const expectedPluginRequests = [
-      { method: 'POST', path: '/_redevplugin/api/plugins/catalog/query' },
+      { method: 'POST', path: '/_redevplugin/api/plugins/runtime/refresh-enabled' },
       { method: 'GET', path: '/_redevplugin/api/plugins/release-install-operations' },
+      { method: 'POST', path: '/_redevplugin/api/plugins/catalog/query' },
       { method: 'POST', path: '/_redevplugin/api/plugins/permissions/query' },
       { method: 'POST', path: '/_redevplugin/api/plugins/security-policies/query' },
       { method: 'POST', path: '/_redevplugin/api/plugins/catalog/query' },
-      { method: 'GET', path: '/_redevplugin/api/plugins/release-install-operations' },
       { method: 'POST', path: '/_redevplugin/api/plugins/permissions/query' },
       { method: 'POST', path: '/_redevplugin/api/plugins/security-policies/query' },
       { method: 'POST', path: '/_redevplugin/api/plugins/release-install-operations' },
       { method: 'GET', path: '/_redevplugin/api/plugins/release-install-operations/release_install_built_renderer' },
-      ...pluginInventoryRequests,
+      { method: 'POST', path: '/_redevplugin/api/plugins/catalog/query' },
       { method: 'POST', path: '/_redevplugin/api/plugins/permissions/requirements/query' },
+      { method: 'POST', path: '/_redevplugin/api/plugins/permissions/query' },
+      { method: 'POST', path: '/_redevplugin/api/plugins/security-policies/query' },
+      { method: 'POST', path: '/_redevplugin/api/plugins/permissions/grant' },
+      { method: 'POST', path: '/_redevplugin/api/plugins/catalog/query' },
+      { method: 'POST', path: '/_redevplugin/api/plugins/catalog/query' },
+      { method: 'POST', path: '/_redevplugin/api/plugins/permissions/query' },
+      { method: 'POST', path: '/_redevplugin/api/plugins/security-policies/query' },
+      { method: 'POST', path: '/_redevplugin/api/plugins/permissions/requirements/query' },
+      { method: 'GET', path: '/_redevplugin/api/plugins/release-install-operations/by-request/:requestID' },
     ];
-    if (JSON.stringify(pluginRequests) !== JSON.stringify(expectedPluginRequests)) {
+    if (JSON.stringify(normalizedPluginRequests) !== JSON.stringify(expectedPluginRequests)) {
       throw new Error(`built plugin Install emitted an unexpected plugin request: ${JSON.stringify({
         expected: expectedPluginRequests,
-        actual: pluginRequests,
+        actual: normalizedPluginRequests,
       })}`);
     }
     if (pageErrors.length > 0) throw new Error(`built plugin install page errors: ${JSON.stringify(pageErrors)}`);
 
     return {
       market_snapshot_loaded: true,
-      installed_state: 'needs_attention_verified_zero_grants',
+      installed_state: 'needs_attention_verified_after_permission_review',
       package_url: builtPluginPackageURL,
       release_install_operation_called: true,
       request_count: pluginRequests.length,
