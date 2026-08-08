@@ -190,6 +190,7 @@ import {
 } from './reasoning';
 
 type FlowerSurfacePanel = 'chat' | 'settings';
+const FLOWER_WARM_THREAD_DETAIL_LIMIT = 8;
 type UnavailableFlowerModelSourceStatus = Exclude<FlowerModelSourceStatus, { state: 'ready' }>;
 type FlowerModelSourceRecoveryActionID = 'local_settings' | 'runtime_settings' | 'connection_center';
 type FlowerInputDraft = Readonly<{
@@ -3617,6 +3618,48 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return next;
     });
   };
+  const stripThreadDetail = (thread: FlowerThreadSnapshot): FlowerThreadSnapshot => {
+    const summary = { ...thread, messages: [] as readonly FlowerChatMessage[] };
+    delete summary.queued_turns;
+    delete summary.model_io_status;
+    delete summary.context_usage;
+    delete summary.context_compactions;
+    delete summary.timeline_decorations;
+    delete summary.subagents;
+    delete summary.approval_actions;
+    delete summary.approval_queue;
+    delete summary.input_request;
+    delete summary.error;
+    return summary;
+  };
+  const evictThreadDetail = (threadID: string) => {
+    const tid = trimString(threadID);
+    if (!tid || !loadedThreadIDs.delete(tid)) return;
+    liveCursors.delete(tid);
+    liveStreamGenerations.delete(tid);
+    setThreads((current) => {
+      let changed = false;
+      const next = current.map((thread) => {
+        if (thread.thread_id !== tid) return thread;
+        changed = true;
+        return stripThreadDetail(thread);
+      });
+      if (changed) threadLocalMutationRevision += 1;
+      return changed ? next : current;
+    });
+  };
+  const rememberThreadDetail = (threadID: string) => {
+    const tid = trimString(threadID);
+    if (!tid) return;
+    loadedThreadIDs.delete(tid);
+    loadedThreadIDs.add(tid);
+    while (loadedThreadIDs.size > FLOWER_WARM_THREAD_DETAIL_LIMIT) {
+      const selectedID = trimString(selectedThreadID());
+      const evictedID = [...loadedThreadIDs].find((candidate) => candidate !== tid && candidate !== selectedID);
+      if (!evictedID) return;
+      evictThreadDetail(evictedID);
+    }
+  };
   const applyOptimisticPinnedState = (threadID: string, pinned: boolean) => {
     const tid = trimString(threadID);
     if (!tid || retiredThreadIDs.has(tid)) return;
@@ -3638,10 +3681,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (!liveBootstrapIsCurrent(live, reason)) {
       return threads().find((item) => item.thread_id === thread.thread_id) ?? thread;
     }
-    loadedThreadIDs.add(thread.thread_id);
     const previous = threads().find((item) => item.thread_id === thread.thread_id);
     setLivePosition(thread.thread_id, live.stream_generation, live.cursor);
     upsertThread(thread);
+    rememberThreadDetail(thread.thread_id);
     reconcileApprovalDecisionHandoff(thread, live.stream_generation, live.cursor);
     if (
       previous
@@ -4105,6 +4148,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       persistThreadRead(tid, existing.read_status.snapshot, sequence);
     }
     if (detailWarm) {
+      rememberThreadDetail(tid);
       requestComposerFocus(focusOwner);
       if (revalidateWarmDetail) {
         void reloadSelectedThread(tid, sequence, 'background_refresh').catch((error) => {

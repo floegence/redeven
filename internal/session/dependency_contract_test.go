@@ -511,8 +511,8 @@ func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 
 	const (
 		floretModule   = "github.com/floegence/floret/v3"
-		floretVersion  = "v3.2.32"
-		floretSum      = "h1:tQ3GDXXl75sblAKdlcJqUIiVY5Ifp1AqB0XDFbmetDI="
+		floretVersion  = "v3.2.33"
+		floretSum      = "h1:DidRvvXdUMKSe3KLl66inQHI8jF1Se33JbLdnhNDTVA="
 		floretGoModSum = "h1:l9Z36ZEf/OHlHu+1hZeDp+WOT9TqWNgNQYOQi+eAWW0="
 	)
 	root := repoRootForTest(t)
@@ -596,7 +596,7 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"TurnInput.References",
 			"MessageReference",
 			"raw `ResourceRef` never reaches the browser",
-			"v3.2.32",
+			"v3.2.33",
 		},
 		filepath.Join("okf", "ui", "flower-turn-launcher.md"): {
 			"file_path",
@@ -622,8 +622,8 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"complete immutable snapshot",
 		},
 		filepath.Join("internal", "runtimeservice", "compatibility_contract.json"): {
-			"Floret v3.2.32",
-			"floret-v3-2-32-memory-first-admission",
+			"Floret v3.2.33",
+			"floret-v3-2-33-memory-first-runtime",
 			"ai_threadstore_product_v1",
 			"Fresh stores initialize directly at version 1",
 			"single persistent source of truth",

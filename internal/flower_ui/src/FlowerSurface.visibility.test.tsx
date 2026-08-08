@@ -1171,6 +1171,94 @@ describe('FlowerSurface companion visibility lifecycle', () => {
     );
   });
 
+  it('bounds warm thread detail while preserving the evicted thread composer draft', async () => {
+    const threadIDs = Array.from({ length: 9 }, (_, index) => `thread-lru-${index + 1}`);
+    const summaries = threadIDs.map((threadID, index) => thread({
+      thread_id: threadID,
+      title: `LRU thread ${index + 1}`,
+      status: 'idle',
+      messages: [],
+      read_status: readStatus(false),
+    }));
+    const firstReload = deferred<FlowerLiveBootstrap>();
+    const loadCounts = new Map<string, number>();
+    const detailFor = (threadID: string, label: string): FlowerLiveBootstrap => {
+      const summary = summaries.find((item) => item.thread_id === threadID)!;
+      const message = {
+        id: `message-${threadID}-${label}`,
+        thread_id: threadID,
+        turn_id: `turn-${threadID}`,
+        run_id: `run-${threadID}`,
+        role: 'assistant' as const,
+        content: label,
+        status: 'complete' as const,
+        created_at_ms: 2_000,
+        blocks: [{ type: 'markdown' as const, content: label }],
+      };
+      return {
+        ...bootstrap(summary),
+        cursor: 1,
+        timeline_messages: [message],
+      };
+    };
+    const loadThread = vi.fn<FlowerSurfaceAdapter['loadThread']>((threadID) => {
+      const count = (loadCounts.get(threadID) ?? 0) + 1;
+      loadCounts.set(threadID, count);
+      if (threadID === threadIDs[0] && count === 2) return firstReload.promise;
+      return Promise.resolve(detailFor(threadID, `Cached detail for ${threadID}`));
+    });
+    const connectLiveStream = vi.fn(async function* (input: FlowerLiveStreamConnectInput): AsyncIterable<FlowerLiveStreamEnvelope> {
+      yield {
+        schema_version: 1, kind: 'ready', stream_generation: 1,
+        thread_id: input.thread_id, through_seq: input.thread_after_seq, retained_from_seq: 1,
+        summary_through_seq: input.summary_after_seq, summary_retained_from_seq: 1,
+      };
+      await new Promise<void>((resolve) => input.signal.addEventListener('abort', () => resolve(), { once: true }));
+    });
+    const harness = createAdapterHarness({
+      listThreads: vi.fn(async () => summaries),
+      loadThread,
+      connectLiveStream,
+    });
+    const [focusRequest, setFocusRequest] = createSignal({ request_id: 'focus-lru-1', thread_id: threadIDs[0] });
+    dispose = render(() => (
+      <FlowerSurface
+        adapter={harness.adapter}
+        notify={() => undefined}
+        presentation="full"
+        companionOpen
+        engaged
+        transcriptVisible
+        companionPresenceOwner={false}
+        focusThreadRequest={focusRequest()}
+      />
+    ), host);
+    await waitUntil(() => host.textContent?.includes(`Cached detail for ${threadIDs[0]}`) === true, 'first detail did not load');
+    const textarea = host.querySelector('textarea') as HTMLTextAreaElement;
+    textarea.value = 'Keep this thread-specific draft';
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    await flushAsync();
+
+    for (let index = 1; index < threadIDs.length; index += 1) {
+      setFocusRequest({ request_id: `focus-lru-${index + 1}`, thread_id: threadIDs[index] });
+      await waitUntil(
+        () => host.textContent?.includes(`Cached detail for ${threadIDs[index]}`) === true,
+        `detail ${index + 1} did not load`,
+      );
+    }
+
+    setFocusRequest({ request_id: 'focus-lru-return', thread_id: threadIDs[0] });
+    await waitUntil(() => loadCounts.get(threadIDs[0]) === 2, 'evicted detail did not request canonical bootstrap');
+    expect(host.textContent).not.toContain(`Cached detail for ${threadIDs[0]}`);
+    expect((host.querySelector('textarea') as HTMLTextAreaElement).value).toBe('Keep this thread-specific draft');
+
+    firstReload.resolve(detailFor(threadIDs[0], 'Canonical detail after eviction'));
+    await waitUntil(
+      () => host.textContent?.includes('Canonical detail after eviction') === true,
+      'canonical detail did not replace the evicted snapshot',
+    );
+  });
+
   it('reconnects summary replay from the last applied cursor instead of the ready high-water mark', async () => {
     const firstDisconnected = deferred<void>();
     const selectedSummary = thread({ status: 'idle', read_status: readStatus(false) });
