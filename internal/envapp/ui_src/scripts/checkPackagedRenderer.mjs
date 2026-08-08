@@ -718,11 +718,11 @@ async function verifyBuiltPluginInstallRouting(browser) {
       ),
     }));
     const expectedPluginRequests = [
-      { method: 'POST', path: '/_redevplugin/api/plugins/runtime/refresh-enabled' },
-      { method: 'GET', path: '/_redevplugin/api/plugins/release-install-operations' },
       { method: 'POST', path: '/_redevplugin/api/plugins/catalog/query' },
       { method: 'POST', path: '/_redevplugin/api/plugins/permissions/query' },
       { method: 'POST', path: '/_redevplugin/api/plugins/security-policies/query' },
+      { method: 'POST', path: '/_redevplugin/api/plugins/runtime/refresh-enabled' },
+      { method: 'GET', path: '/_redevplugin/api/plugins/release-install-operations' },
       { method: 'POST', path: '/_redevplugin/api/plugins/catalog/query' },
       { method: 'POST', path: '/_redevplugin/api/plugins/permissions/query' },
       { method: 'POST', path: '/_redevplugin/api/plugins/security-policies/query' },
