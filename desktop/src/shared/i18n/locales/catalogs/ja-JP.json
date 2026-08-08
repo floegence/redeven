@@ -155,6 +155,7 @@
       "toolStatusSuccess": "完了",
       "toolStatusError": "失敗",
       "toolStatusCanceled": "キャンセル済み",
+      "toolCallCanceled": "コマンドはキャンセルされました",
       "toolApprovalRejectedDetail": "ツールの実行を拒否しました",
       "toolApprovalRequired": "承認が必要です",
       "toolApprovalState": "承認状態: {state}",

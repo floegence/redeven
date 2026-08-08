@@ -155,6 +155,7 @@
       "toolStatusSuccess": "已完成",
       "toolStatusError": "失敗",
       "toolStatusCanceled": "已取消",
+      "toolCallCanceled": "命令已取消",
       "toolApprovalRejectedDetail": "你已拒絕執行此工具",
       "toolApprovalRequired": "需要核准",
       "toolApprovalState": "核准狀態：{state}",

@@ -148,7 +148,9 @@ html.dark .flower-activity-companion {
   [data-companion-phase='collapsing']
 ) .flower-composer[data-flower-approval-handoff='true'] {
   border-color: color-mix(in srgb, var(--flower-companion-border) 82%, transparent);
-  box-shadow: 0 2px 8px -4px color-mix(in srgb, var(--redeven-surface-shadow-source) 36%, transparent);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--ring) 72%, transparent),
+    0 2px 8px -4px color-mix(in srgb, var(--redeven-surface-shadow-source) 36%, transparent);
 }
 
 html.dark .flower-activity-companion:is(

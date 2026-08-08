@@ -3858,7 +3858,7 @@
       "runErrorProviderModelUnavailable": "El modelo seleccionado no está disponible en este proveedor de modelos. Elige otro modelo en el perfil de IA local.",
       "runErrorFloretEngineFailed": "Flower no pudo finalizar este turno porque falló el motor de orquestación.",
       "runErrorRuntimeRestarted": "El entorno de ejecución local se reinició antes de que terminara esta respuesta. Vuelve a solicitar una respuesta cuando el entorno de ejecución esté listo.",
-      "runtimeRestartedDivider": "Runtime de Redeven reiniciado",
+      "runtimeRestartedDivider": "El entorno de ejecución de Redeven se reinició",
       "messageErrorTitle": "Mensaje fallido",
       "messageErrorFallback": "Este mensaje falló antes de que Flower produjera texto visible.",
       "copyCode": "Copiar código",

@@ -3858,7 +3858,7 @@
       "runErrorProviderModelUnavailable": "Le modèle sélectionné n’est pas disponible auprès de ce fournisseur de modèles. Choisissez un autre modèle dans le profil d’IA local.",
       "runErrorFloretEngineFailed": "Flower n'a pas pu terminer ce tour en raison d'une panne du moteur d'orchestration.",
       "runErrorRuntimeRestarted": "L’environnement d’exécution local a redémarré avant la fin de cette réponse. Lancez une nouvelle réponse lorsqu’il est prêt.",
-      "runtimeRestartedDivider": "Runtime Redeven redémarré",
+      "runtimeRestartedDivider": "L'environnement d'exécution Redeven a redémarré",
       "messageErrorTitle": "Échec du message",
       "messageErrorFallback": "Ce message a échoué avant que Flower ne produise du texte visible.",
       "copyCode": "Copier le code",
