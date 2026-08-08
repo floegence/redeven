@@ -76,16 +76,6 @@ type PendingBaselineRender = Readonly<{
   armed: boolean;
 }>;
 
-type RefreshTerminalCheckpoint = Readonly<{
-  snapshot: TerminalRestorableSnapshot;
-  effective: Readonly<{
-    generation: number;
-    outputSequenceBoundary: number;
-    cols: number;
-    rows: number;
-  }>;
-}>;
-
 export function shouldPublishTerminalOutputCoverage(
   previousAttachGeneration: number,
   previousCoveredThroughSequence: number,
@@ -346,7 +336,6 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   let lastBlockingEventKey = '';
   let liveMilestoneMarked = false;
   let outputCoordinatorEpoch = 0;
-  let pendingRefreshCheckpoint: RefreshTerminalCheckpoint | null = null;
   let observedLiveAttachGeneration = 0;
   let maxObservedLiveSequence = 0;
   let activitySettledAttachGeneration = 0;
@@ -804,42 +793,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     // Invalidate the old init before waiting so a baseline waiter cannot publish stale state.
     initSeq += 1;
     const coordinator = outputCoordinator;
-    const previousCore = term;
-    if (coordinator) {
-      const coordinatorSnapshot = await coordinator.pause();
-      if (disposed || seq !== reloadSeq) return false;
-      if (previousCore && term === previousCore) {
-        try {
-          const snapshot = previousCore.captureRestorableSnapshot({
-            coveredThroughSequence: coordinatorSnapshot.coveredThroughSequence,
-          });
-          const knownEffective = geometryPresentation.getState().knownEffective;
-          if (snapshot
-            && !snapshot.partial
-            && knownEffective
-            && Number.isSafeInteger(snapshot.coveredThroughSequence)
-            && snapshot.coveredThroughSequence >= knownEffective.outputSequenceBoundary
-            && snapshot.cols === knownEffective.cols
-            && snapshot.rows === knownEffective.rows) {
-            pendingRefreshCheckpoint = {
-              snapshot,
-              effective: {
-                generation: knownEffective.generation,
-                outputSequenceBoundary: knownEffective.outputSequenceBoundary,
-                cols: knownEffective.cols,
-                rows: knownEffective.rows,
-              },
-            };
-          } else {
-            pendingRefreshCheckpoint = null;
-          }
-        } catch {
-          pendingRefreshCheckpoint = null;
-        }
-      }
-    } else {
-      pendingRefreshCheckpoint = null;
-    }
+    if (coordinator) await coordinator.pause();
     if (disposed || seq !== reloadSeq) return false;
     disposeTerminal({ preservePendingUnread: opts?.preservePendingUnread });
 
@@ -1302,8 +1256,6 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     const seq = ++initSeq;
     const reloadSequence = reloadSeq;
     const trace = startRecoveryTrace();
-    const refreshCheckpoint = pendingRefreshCheckpoint;
-    pendingRefreshCheckpoint = null;
     const focusOwnerAtStart = typeof document === 'undefined' ? null : document.activeElement;
     const focusWasAvailableAtStart = focusOwnerAtStart == null
       || focusOwnerAtStart === document.body
@@ -1319,9 +1271,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
 
     const core = createCore(id, target);
     const coordinator = ensureOutputCoordinator(id);
-    const preparedHistoryPromise = refreshCheckpoint
-      ? null
-      : (props.requestPreparedHistory?.(id) ?? null);
+    const preparedHistoryPromise = props.requestPreparedHistory?.(id) ?? null;
 
     try {
       await core.initialize({ priority: 'interactive' });
@@ -1336,9 +1286,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       // captures the atomic history boundary for this attachment.
       activitySettledAttachGeneration = 0;
       activitySettledThroughSequence = 0;
-      let coordinatorAttachGeneration = coordinator.beginAttach(
-        refreshCheckpoint ? refreshCheckpoint.snapshot.coveredThroughSequence + 1 : 0,
-      );
+      const coordinatorAttachGeneration = coordinator.beginAttach(0);
       activitySettledAttachGeneration = coordinatorAttachGeneration;
 
       clearOutputSubscription();
@@ -1451,31 +1399,8 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
 
       setLoading('loading_history');
       transitionRecoveryPhase('replaying');
-      let restoredRefreshCheckpoint = false;
-      if (refreshCheckpoint
-        && refreshCheckpoint.snapshot.coveredThroughSequence < historyBoundarySequence
-        && refreshCheckpoint.snapshot.coveredThroughSequence >= refreshCheckpoint.effective.outputSequenceBoundary) {
-        core.setFixedDimensions({
-          cols: refreshCheckpoint.snapshot.cols,
-          rows: refreshCheckpoint.snapshot.rows,
-        });
-        outputProjection.reset();
-        try {
-          restoredRefreshCheckpoint = await core.restoreSnapshot(refreshCheckpoint.snapshot);
-        } catch {
-          restoredRefreshCheckpoint = false;
-        }
-        if (!terminalPresentationIsCurrent(core, seq, reloadSequence, trace)) return;
-        if (!restoredRefreshCheckpoint) {
-          coordinatorAttachGeneration = coordinator.beginAttach(0);
-        } else {
-          lastWrittenOutputSequence = refreshCheckpoint.snapshot.coveredThroughSequence;
-        }
-      }
-      if (!restoredRefreshCheckpoint) {
-        core.clear();
-        outputProjection.reset();
-      }
+      core.clear();
+      outputProjection.reset();
       try {
         markTerminalRecoveryMilestone(trace, 'baseline-queued');
         const preparedHistory = preparedHistoryPromise
@@ -1485,9 +1410,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
         void coordinator.completeAttach(
           coordinatorAttachGeneration,
           historyBoundarySequence,
-          restoredRefreshCheckpoint
-            ? undefined
-            : (preparedHistory ? { preparedHistory } : undefined),
+          preparedHistory ? { preparedHistory } : undefined,
         );
         const baseline = await coordinator.waitForBaseline();
         if (!baseline.baselineReady) {

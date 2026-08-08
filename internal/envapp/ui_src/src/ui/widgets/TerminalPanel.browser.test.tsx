@@ -139,10 +139,6 @@ const hostCapacityState = vi.hoisted(() => ({
   dimensions: null as { cols: number; rows: number } | null,
 }));
 
-const snapshotRestoreState = vi.hoisted(() => ({
-  nextResult: true,
-}));
-
 const transportMocks = vi.hoisted(() => {
   const attach = vi.fn().mockImplementation(async (_sessionId: string, cols: number, rows: number) => ({
     historyBoundarySequence: transportAttachState.historyBoundarySequence,
@@ -541,7 +537,7 @@ vi.mock('@floegence/floeterm-terminal-web', async () => {
       rows: 24,
       createdAtMs: Date.now(),
     }));
-    restoreSnapshot = vi.fn().mockImplementation(async () => snapshotRestoreState.nextResult);
+    restoreSnapshot = vi.fn().mockResolvedValue(true);
     getResourceEstimate = vi.fn(() => ({
       bufferBytes: 256 * 1024,
       cellCount: 2_000,
@@ -863,7 +859,6 @@ beforeEach(() => {
   presentationFenceState.blocked = false;
   presentationFenceState.resolvers = [];
   hostCapacityState.dimensions = null;
-  snapshotRestoreState.nextResult = true;
   terminalSessionsState.sessions = [
     {
       id: 'session-1',
@@ -1486,7 +1481,7 @@ describe('TerminalPanel browser activity integration', () => {
     expect(core.write.mock.calls.map((call) => decodeTerminalWrite(call[0]))).toEqual(['old-grid', 'new-grid']);
   });
 
-  it('restores a refresh checkpoint and replays only output after the checkpoint', async () => {
+  it('replays complete history on refresh so alternate-screen state is reconstructed', async () => {
     terminalSessionsState.sessions = [terminalSessionsState.sessions[0]!];
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -1502,16 +1497,23 @@ describe('TerminalPanel browser activity integration', () => {
     transportAttachState.historyBoundarySequence = 6;
     transportMocks.historyPage.mockResolvedValue(withHistoryContract({
       chunks: [{
+        sequence: 1,
+        timestampMs: 10,
+        data: textEncoder.encode('\u001b[?1049h\u001b[2Jcomplete-top-frame'),
+        geometryGeneration: 1,
+        cols: 80,
+        rows: 24,
+      }, {
         sequence: 6,
         timestampMs: 60,
-        data: textEncoder.encode('screen-after-refresh'),
+        data: textEncoder.encode('\u001b[Hpartial-top-update'),
         geometryGeneration: 1,
         cols: 80,
         rows: 24,
       }],
       nextStartSeq: 0,
       hasMore: false,
-      firstSequence: 6,
+      firstSequence: 1,
       lastSequence: 6,
       coveredThroughSequence: 6,
       snapshotEndSequence: 6,
@@ -1526,66 +1528,14 @@ describe('TerminalPanel browser activity integration', () => {
     await vi.waitFor(() => expect(terminalCoreState.instances).toHaveLength(2));
     const oldCore = terminalCoreState.instances[0]!;
     const refreshedCore = terminalCoreState.instances[1]!;
-    await vi.waitFor(() => expect(refreshedCore.restoreSnapshot).toHaveBeenCalled());
-
-    expect(oldCore.captureRestorableSnapshot).toHaveBeenCalledWith({ coveredThroughSequence: 5 });
-    expect(oldCore.dispose).toHaveBeenCalledTimes(1);
-    expect(refreshedCore.restoreSnapshot).toHaveBeenCalledWith(expect.objectContaining({
-      coveredThroughSequence: 5,
-      data: 'browser snapshot',
-    }));
-    expect(transportMocks.historyPage.mock.calls[0]?.[1]).toBe(6);
-    expect(refreshedCore.write.mock.calls.map((call) => decodeTerminalWrite(call[0]))).toEqual([
-      'screen-after-refresh',
-    ]);
-  });
-
-  it('falls back to complete history when a refresh checkpoint cannot be restored', async () => {
-    terminalSessionsState.sessions = [terminalSessionsState.sessions[0]!];
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-    render(() => <TerminalPanel variant="panel" />, host);
-    await vi.waitFor(() => expect(terminalCoreState.instances).toHaveLength(1));
-    await settleTerminalPanel();
-
-    for (const sequence of [1, 2, 3, 4, 5]) {
-      emitTerminalData('session-1', `screen-${sequence}`, sequence);
-    }
-    await settleTerminalPanel();
-    transportAttachState.historyBoundarySequence = 6;
-    transportMocks.historyPage.mockResolvedValue(withHistoryContract({
-      chunks: [{
-        sequence: 1,
-        timestampMs: 10,
-        data: textEncoder.encode('full-history'),
-        geometryGeneration: 1,
-        cols: 80,
-        rows: 24,
-      }],
-      nextStartSeq: 0,
-      hasMore: false,
-      firstSequence: 1,
-      lastSequence: 1,
-      coveredThroughSequence: 6,
-      snapshotEndSequence: 6,
-      firstRetainedSequence: 1,
-      historyGeneration: 1,
-      coveredBytes: 12,
-      totalBytes: 12,
-    }));
-    transportMocks.historyPage.mockClear();
-    snapshotRestoreState.nextResult = false;
-
-    host.querySelector<HTMLButtonElement>('[data-testid="terminal-sidebar-refresh"]')?.click();
-    await vi.waitFor(() => expect(terminalCoreState.instances).toHaveLength(2));
-    const refreshedCore = terminalCoreState.instances[1]!;
     await vi.waitFor(() => expect(refreshedCore.write.mock.calls.length).toBeGreaterThan(0));
 
-    expect(refreshedCore.restoreSnapshot).toHaveBeenCalledTimes(1);
-    expect(refreshedCore.clear).toHaveBeenCalledTimes(1);
+    expect(oldCore.captureRestorableSnapshot).not.toHaveBeenCalled();
+    expect(oldCore.dispose).toHaveBeenCalledTimes(1);
+    expect(refreshedCore.restoreSnapshot).not.toHaveBeenCalled();
     expect(transportMocks.historyPage.mock.calls[0]?.[1]).toBe(0);
     expect(refreshedCore.write.mock.calls.map((call) => decodeTerminalWrite(call[0]))).toEqual([
-      'full-history',
+      '\u001b[?1049h\u001b[2Jcomplete-top-frame\u001b[Hpartial-top-update',
     ]);
   });
 
