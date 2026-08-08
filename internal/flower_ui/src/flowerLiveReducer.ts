@@ -70,8 +70,14 @@ function mergeMessages(messages: readonly FlowerChatMessage[], message: FlowerCh
   return next;
 }
 
-function deduplicateMessages(messages: readonly FlowerChatMessage[]): readonly FlowerChatMessage[] {
-  return messages.reduce<readonly FlowerChatMessage[]>((current, message) => mergeMessages(current, message), []);
+function canonicalTimelineMessages(messages: readonly FlowerChatMessage[]): readonly FlowerChatMessage[] {
+  const seen = new Set<string>();
+  return messages.filter((message) => {
+    const id = trim(message.id);
+    if (!id || seen.has(id)) return !id;
+    seen.add(id);
+    return true;
+  });
 }
 
 function visibleApprovalAction(action: FlowerApprovalAction): boolean {
@@ -247,6 +253,11 @@ function preserveCanonicalTerminalState(
   canonical: FlowerThreadSnapshot,
 ): FlowerThreadSnapshot {
   if (!threadStatusIsTerminal(canonical.status)) return projected;
+  if (
+    runStatusKeepsActiveRunID(projected.status)
+    || pendingApprovalActions(projected.approval_actions).length > 0
+    || projected.input_request
+  ) return projected;
   return {
     ...projected,
     status: canonical.status,
@@ -367,7 +378,7 @@ export function projectFlowerLiveBootstrap(bootstrap: FlowerLiveBootstrap): Flow
   const thread: FlowerThreadSnapshot = {
     ...bootstrap.thread,
     read_status: bootstrap.read_status,
-    messages: deduplicateMessages(bootstrap.timeline_messages),
+    messages: canonicalTimelineMessages(bootstrap.timeline_messages),
   };
   const projected = applyLiveMaterializedState(thread, {
     ...bootstrap.live_state,
@@ -694,7 +705,7 @@ export function applyFlowerLiveEvent(
       let canonicalThread: FlowerThreadSnapshot | null = null;
       next = {
         ...next,
-        messages: deduplicateMessages(event.payload.messages),
+        messages: canonicalTimelineMessages(event.payload.messages),
       };
       if (event.payload.read_status) {
         next = { ...next, read_status: event.payload.read_status };
@@ -715,12 +726,15 @@ export function applyFlowerLiveEvent(
       if (event.payload.live_state) {
         next = applyLiveMaterializedState(next, event.payload.live_state);
       }
-      next = canonicalThread
+      const canonicalHasCompleteAssistant = event.payload.messages.some((message) => (
+        message.role === 'assistant'
+        && message.status === 'complete'
+        && trim(message.run_id) === canonicalRunID
+      ));
+      next = canonicalThread && !canonicalHasCompleteAssistant
         ? preserveCanonicalTerminalState(next, canonicalThread)
         : next;
-      if (!canonicalThread || !threadStatusIsTerminal(canonicalThread.status)) {
-        next = applyCanonicalTerminalPresentation(next, event.payload.messages, canonicalRunID);
-      }
+      next = applyCanonicalTerminalPresentation(next, event.payload.messages, canonicalRunID);
       if (Number(next.queued_turn_count ?? 0) === 0) {
         next = { ...next, queued_turns: [] };
       }
