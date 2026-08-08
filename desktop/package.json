@@ -92,7 +92,7 @@
   },
   "dependencies": {
     "@floegence/floe-webapp-boot": "0.40.4",
-    "@floegence/floe-webapp-core": "0.40.4",
+    "@floegence/floe-webapp-core": "0.40.6",
     "qrcode-generator": "^2.0.4"
   }
 }

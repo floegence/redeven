@@ -35,8 +35,8 @@ importers:
         specifier: 0.40.4
         version: 0.40.4
       '@floegence/floe-webapp-core':
-        specifier: 0.40.4
-        version: 0.40.4(solid-js@1.9.13)
+        specifier: 0.40.6
+        version: 0.40.6(solid-js@1.9.13)
       '@floegence/floe-webapp-protocol':
         specifier: 0.40.4
         version: 0.40.4(solid-js@1.9.13)
@@ -47,11 +47,11 @@ importers:
         specifier: ^0.27.0
         version: 0.27.0
       '@floegence/redevplugin-contracts':
-        specifier: 0.7.17
-        version: 0.7.17
+        specifier: 0.7.18
+        version: 0.7.18
       '@floegence/redevplugin-ui':
-        specifier: 0.7.17
-        version: 0.7.17
+        specifier: 0.7.18
+        version: 0.7.18
       '@fontsource/iosevka':
         specifier: ^5.2.5
         version: 5.2.5
@@ -379,8 +379,8 @@ packages:
     resolution: {integrity: sha512-3OTeh9v1/g/KoXE7tHr9dywpVNmZZZoK5kfjLoGOeOzfl7zePn/fr/VhZqLtw81hVrBhB5agOXMCLYQv5DbqOw==}
     engines: {node: '>=24.0.0'}
 
-  '@floegence/floe-webapp-core@0.40.4':
-    resolution: {integrity: sha512-WrMpxexYGntyBJX2tgNPFtX3bJiNUfCBBpSI7actWbHZFYOdg0on8imqnM+71HeaGXR3WqC+5480i8t9x32aGA==}
+  '@floegence/floe-webapp-core@0.40.6':
+    resolution: {integrity: sha512-CNV+SfaT2IiP5vTP4S1XtCIpx/vx7qYzmUVHl2IXDUNuXtJImCdVhq7Hk7jUQuXMqhxhQqcB+PJdhstopgX8Fw==}
     engines: {node: '>=24.0.0'}
     peerDependencies:
       solid-js: ^1.8.0
@@ -398,11 +398,11 @@ packages:
     resolution: {integrity: sha512-iSKC7vQUMVzYOWbgNGFo+Hz4rTOuqCn+UGRj2lLiuT5vBqXo1GwImMf7+1h8GaKrahAv9t3EtiD4TglCwwTjhQ==}
     engines: {node: '>=24.0.0'}
 
-  '@floegence/redevplugin-contracts@0.7.17':
-    resolution: {integrity: sha512-QRvU6p/+VwlzeIn+/9RSRX/NrcOukYIB78BskJ8Ojg6Ctv39PlZsx1PRyRitdH+/JSGHok27RiRIufz9HDb3HA==}
+  '@floegence/redevplugin-contracts@0.7.18':
+    resolution: {integrity: sha512-z9m+LDWHDWVFyEKQteqEYFkLsg4u03xC3JyEfmq1Nqr/kTyc4SLGpSYAJhiLKMTkhqrGzjFZu8EodNkV4k0hMA==}
 
-  '@floegence/redevplugin-ui@0.7.17':
-    resolution: {integrity: sha512-QdvN91AZjw7PRqUj1O9e7Fq9ptr+rWbgU6LWVxyWmM0MvPX3m3EqTjR8r/p3qzkk2aUmzDUiMVgccXGe3KvK+g==}
+  '@floegence/redevplugin-ui@0.7.18':
+    resolution: {integrity: sha512-4KDHgVCZgVAeaNJuVRX5H7RShg3tKAdlTyCt6ryKHkYUG61lELwpirE6gYjGRyIPzgpTERFlxOkcNv4HrMEx5A==}
 
   '@fontsource/iosevka@5.2.5':
     resolution: {integrity: sha512-Zv/UHJodDug1LcnWv2u2+GPp3oWP3U6Xp16cJOsqqZQNsCu8sA/ttT331N0NypxBZ+7c8szlSRlYDcy9liZ8pw==}
@@ -2864,7 +2864,7 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@floegence/floe-webapp-core@0.40.4(solid-js@1.9.13)':
+  '@floegence/floe-webapp-core@0.40.6(solid-js@1.9.13)':
     dependencies:
       clsx: 2.1.1
       diff: 8.0.4
@@ -2899,11 +2899,11 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@floegence/redevplugin-contracts@0.7.17': {}
+  '@floegence/redevplugin-contracts@0.7.18': {}
 
-  '@floegence/redevplugin-ui@0.7.17':
+  '@floegence/redevplugin-ui@0.7.18':
     dependencies:
-      '@floegence/redevplugin-contracts': 0.7.17
+      '@floegence/redevplugin-contracts': 0.7.18
 
   '@fontsource/iosevka@5.2.5': {}
 

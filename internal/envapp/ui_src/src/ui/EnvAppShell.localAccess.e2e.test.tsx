@@ -65,6 +65,8 @@ const pluginLifecycleMocks = vi.hoisted(() => {
     _onUpdate: (operation: any) => void,
   ) => ({}));
   const listReleaseInstallOperations = vi.fn(async () => []);
+  const refreshEnabledRuntimeState = vi.fn(async () => ({ results: [] }));
+  const authorizeAndEnablePlugin = vi.fn(async (_pluginInstanceID: string, _permissionIDs: readonly string[], _options?: any) => ({}));
   const getReleaseInstallOperationByRequest = vi.fn(async () => ({}));
   const watchReleaseInstallOperation = vi.fn(async () => ({}));
   const inspectExternalPackage = vi.fn(async (_request: any) => ({}));
@@ -75,6 +77,8 @@ const pluginLifecycleMocks = vi.hoisted(() => {
     execute,
     installOfficialRelease,
     listReleaseInstallOperations,
+    refreshEnabledRuntimeState,
+    authorizeAndEnablePlugin,
     getReleaseInstallOperationByRequest,
     watchReleaseInstallOperation,
     inspectExternalPackage,
@@ -85,6 +89,8 @@ const pluginLifecycleMocks = vi.hoisted(() => {
       execute,
       installOfficialRelease,
       listReleaseInstallOperations,
+      refreshEnabledRuntimeState,
+      authorizeAndEnablePlugin,
       getReleaseInstallOperationByRequest,
       watchReleaseInstallOperation,
       inspectExternalPackage,
@@ -1244,6 +1250,10 @@ beforeEach(async () => {
   pluginLifecycleMocks.installOfficialRelease.mockImplementation(async () => ({}));
   pluginLifecycleMocks.listReleaseInstallOperations.mockReset();
   pluginLifecycleMocks.listReleaseInstallOperations.mockResolvedValue([]);
+  pluginLifecycleMocks.refreshEnabledRuntimeState.mockReset();
+  pluginLifecycleMocks.refreshEnabledRuntimeState.mockResolvedValue({ results: [] });
+  pluginLifecycleMocks.authorizeAndEnablePlugin.mockReset();
+  pluginLifecycleMocks.authorizeAndEnablePlugin.mockResolvedValue({});
   pluginLifecycleMocks.getReleaseInstallOperationByRequest.mockReset();
   pluginLifecycleMocks.watchReleaseInstallOperation.mockReset();
   pluginLifecycleMocks.inspectExternalPackage.mockReset();
@@ -1713,6 +1723,97 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   }, 10000);
 
+  it('keeps the Plugins panel available when the initial inventory request fails', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadInventoryProjection.mockRejectedValue(new Error('Plugin inventory is unavailable.'));
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushUntil(() => Boolean(host.querySelector('[data-activity-id="plugins"]')), 40);
+      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement).click();
+      await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="plugin-center"]')), 40);
+
+      expect(pluginPanelState.lastProps.model.errorMessage).toContain('Plugin inventory is unavailable.');
+      expect(host.querySelector('[data-plugin-panel-tile="plugin-center"]')).toBeTruthy();
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
+  it('restores Workbench mode instead of resurrecting the Activity-only Plugin Center', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+    window.localStorage.setItem('redeven_envapp_active_tab', 'terminal');
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    let dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushUntil(() => Boolean(host.querySelector('[data-activity-id="plugins"]')), 40);
+      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement).click();
+      await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="plugin-center"]')), 40);
+      (host.querySelector('[data-plugin-panel-tile="plugin-center"]') as HTMLButtonElement).click();
+      await flushUntil(() => Boolean(host.querySelector('[data-plugin-center-view]')), 40);
+
+      findButtonByText(host, 'Workbench')?.click();
+      await flushUntil(() => (
+        window.localStorage.getItem('redeven_envapp_desktop_view_mode') === 'workbench'
+      ), 40);
+
+      expect(window.localStorage.getItem('redeven_envapp_desktop_view_mode')).toBe('workbench');
+      expect(window.localStorage.getItem('redeven_envapp_active_tab')).toBe('terminal');
+
+      dispose();
+      host.replaceChildren();
+      dispose = render(() => <EnvAppShell />, host);
+      await flushUntil(() => Boolean(host.querySelector('[data-testid="workbench-page"]')), 40);
+
+      expect(host.querySelector('[data-testid="workbench-page"]')).toBeTruthy();
+      expect(host.querySelector('[data-plugin-center-view]')).toBeNull();
+      expect(sidebarActiveTabValue).toBe('terminal');
+      expect(window.localStorage.getItem('redeven_envapp_desktop_view_mode')).toBe('workbench');
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
+  it('normalizes a stale Plugin Center sidebar tab when Workbench was persisted', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'workbench');
+    window.localStorage.setItem('redeven_envapp_active_tab', 'plugin-center');
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushUntil(() => Boolean(host.querySelector('[data-testid="workbench-page"]')), 40);
+      await flushUntil(() => sidebarActiveTabValue !== 'plugin-center', 40);
+
+      expect(host.querySelector('[data-testid="workbench-page"]')).toBeTruthy();
+      expect(host.querySelector('[data-plugin-center-view]')).toBeNull();
+      expect(sidebarActiveTabValue).toBe('terminal');
+      expect(window.localStorage.getItem('redeven_envapp_active_tab')).toBe('terminal');
+      expect(window.localStorage.getItem('redeven_envapp_desktop_view_mode')).toBe('workbench');
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
   it('keeps an unknown-outcome mutation lane closed until local surface invalidation completes', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
@@ -1844,6 +1945,7 @@ describe('EnvAppShell environment entry affordances', () => {
         phase: 'complete',
         progress: { kind: 'items', completed: 1, total: 1 },
         mutation_outcome: 'committed',
+        activation: { status: 'enabled' },
         terminal_at: '2026-08-05T08:00:02Z',
       });
       await expect(install).resolves.toBeUndefined();
@@ -2087,6 +2189,16 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(host.querySelector('[data-testid="settings-page"]')).toBeNull();
       expect(settingsPageState.focusSection).not.toBe('plugins');
       expect(sidebarActiveTabValue).toBe('plugin-center');
+      await pluginCenterViewState.lastProps.onCommand({
+        type: 'enable',
+        pluginInstanceID: officialContainersCatalog.pluginInstanceID,
+        expectedManagementRevision: 11,
+      }, new AbortController().signal);
+      expect(pluginLifecycleMocks.authorizeAndEnablePlugin).toHaveBeenCalledWith(
+        officialContainersCatalog.pluginInstanceID,
+        [],
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
       expect((host.querySelector('[data-plugin-center-view]') as HTMLElement).contains(document.activeElement)).toBe(true);
     } finally {
       dispose();
@@ -3203,6 +3315,10 @@ describe('EnvAppShell local access gate', () => {
       expect(unlockLocalAccessMock).toHaveBeenCalledWith('secret');
       expect(getLocalAccessStatusMock).toHaveBeenCalledTimes(1);
       expect(connectMock).toHaveBeenCalledTimes(1);
+      await flushUntil(() => pluginLifecycleMocks.refreshEnabledRuntimeState.mock.calls.length === 1);
+      expect(pluginLifecycleMocks.refreshEnabledRuntimeState).toHaveBeenCalledWith({
+        signal: expect.any(AbortSignal),
+      });
       const localConnectConfig = connectMock.mock.calls[0]?.[0];
       expect(localConnectConfig).toMatchObject({
         observer: expect.any(Object),
@@ -3256,6 +3372,8 @@ describe('EnvAppShell local access gate', () => {
         attempt_seq: 1,
         session_id: 'ch_local',
       });
+      await flushAsync();
+      expect(pluginLifecycleMocks.refreshEnabledRuntimeState).toHaveBeenCalledTimes(1);
       expect(pluginCredential.readPluginSessionCredential()).toBe('credential-local');
       expect(mintLocalDirectConnectArtifactMock).not.toHaveBeenCalled();
       expect(accessResumeMock).not.toHaveBeenCalled();

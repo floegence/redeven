@@ -187,6 +187,8 @@ export type PluginSurfaceLaunchTarget = {
   displayName?: string;
   expectedManagementRevision: number;
   preferredPlacement: 'activity' | 'workbench';
+  /** Ephemeral client point used when a Workbench launcher tile is dropped. */
+  workbenchDropPoint?: Readonly<{ clientX: number; clientY: number }>;
 };
 
 export type PluginInventoryItem = {
@@ -248,6 +250,8 @@ export type PluginInventoryProjection = {
 export type PluginInstallObservation =
   | 'starting'
   | 'watching'
+  | 'activating'
+  | 'activation_failed'
   | 'reconnecting'
   | 'failed'
   | 'refreshing'
@@ -262,6 +266,10 @@ export type PluginInstallOperationProjection = Readonly<{
   startFailure?: Readonly<{
     code: PluginPlatformErrorCode;
     retryable: boolean;
+  }>;
+  activationFailure?: Readonly<{
+    message: string;
+    retryable: true;
   }>;
 }>;
 
@@ -318,7 +326,12 @@ export type ExternalPluginInspectionRequest =
     };
 
 export type PluginManagementCommand =
-  | { type: 'install'; pluginID: string; source: 'official_catalog' }
+  | {
+      type: 'install';
+      pluginID: string;
+      source: 'official_catalog';
+      approvedPermissionIDs?: readonly string[];
+    }
   | { type: 'enable'; pluginInstanceID: string; expectedManagementRevision: number }
   | { type: 'disable'; pluginInstanceID: string; expectedManagementRevision: number }
   | { type: 'uninstall'; pluginInstanceID: string; expectedManagementRevision: number; dataRetention: 'keep_data' | 'delete_data' }
@@ -347,9 +360,12 @@ export type PluginOpenSurfaceCommand = {
   surfaceID: string;
   expectedManagementRevision: number;
   placement: 'activity' | 'workbench';
+  /** Keep the Plugin Center route as the owning surface while Activity opens. */
+  keepPluginCenter?: boolean;
 };
 
 export type PluginLifecycleCommand = PluginManagementCommand | PluginOpenSurfaceCommand;
+export type PluginPendingCommandType = PluginLifecycleCommand['type'];
 
 export type ReDevPluginRecord = Omit<PluginRecord, 'presentation' | 'presentation_sha256'> & {
   presentation?: PluginRecord['presentation'];

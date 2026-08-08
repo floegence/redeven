@@ -252,6 +252,10 @@ describe('PluginCenterView', () => {
     expect(install.closest('article')?.querySelector('.h-12.w-12')).not.toBeNull();
     install.click();
     await Promise.resolve();
+    expect(document.querySelector('[data-plugin-install-review-dialog]')).not.toBeNull();
+    expect(onCommand).not.toHaveBeenCalled();
+    (document.querySelector('[data-plugin-install-review-confirm]') as HTMLButtonElement).click();
+    await Promise.resolve();
     expect(onCommand).toHaveBeenCalledWith({
       type: 'install', pluginID: 'com.redeven.official.containers', source: 'official_catalog',
     }, expect.any(AbortSignal));
@@ -315,7 +319,7 @@ describe('PluginCenterView', () => {
     (mount.querySelector('[data-plugin-center-card-menu="catalog:containers"]') as HTMLButtonElement).click();
     await Promise.resolve();
 
-    expect(findDocumentButton('Open in Activity')).not.toBeNull();
+    expect(findDocumentButton('Open')).not.toBeNull();
     expect(findDocumentButton('Open in Workbench')).not.toBeNull();
     findDocumentButton('View plugin details').click();
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -656,7 +660,7 @@ describe('PluginCenterView', () => {
 
     (mount.querySelector('[data-plugin-action="more"]') as HTMLButtonElement).click();
     const menu = document.querySelector<HTMLElement>('[role="menu"]')!;
-    expect(menu.textContent).toContain('Open in Activity');
+    expect(menu.textContent).toContain('Open');
     expect(menu.textContent).toContain('Open in Workbench');
   });
 
@@ -1272,6 +1276,10 @@ describe('PluginCenterView', () => {
     expect(install.textContent).toContain('Install');
     expect(containersPlugin.officialCatalog.distribution.releaseRef).toBe(OFFICIAL_CONTAINERS_RELEASE_REF);
     install.click();
+    await Promise.resolve();
+    expect(document.querySelector('[data-plugin-install-review-dialog]')).not.toBeNull();
+    expect(onCommand).not.toHaveBeenCalled();
+    (document.querySelector('[data-plugin-install-review-confirm]') as HTMLButtonElement).click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(onCommand).toHaveBeenCalledWith({
       type: 'install',
@@ -1320,10 +1328,10 @@ describe('PluginCenterView', () => {
 
     const target = mount.querySelector('[data-plugin-directory-card="catalog:containers"]')!;
     const other = mount.querySelector('[data-plugin-directory-card="catalog:database"]')!;
-    const progress = target.querySelector<HTMLProgressElement>('[data-plugin-install-progress]')!;
+    const progress = target.querySelector<HTMLElement>('[data-plugin-install-progress]')!;
     expect(target.querySelector('[data-plugin-install-operation]')?.textContent).toContain('Downloading plugin package');
-    expect(progress.value).toBe(262_144);
-    expect(progress.max).toBe(524_288);
+    expect(progress.getAttribute('aria-valuenow')).toBe('262144');
+    expect(progress.getAttribute('aria-valuemax')).toBe('524288');
     expect(other.querySelector('[data-plugin-install-operation]')).toBeNull();
 
     (mount.querySelector('[data-plugin-center-item="catalog:database"]') as HTMLButtonElement).click();
@@ -1526,6 +1534,7 @@ describe('PluginCenterView', () => {
     findDocumentButton('Open in Workbench').click();
     await vi.waitFor(() => expect(onCommand).toHaveBeenCalledTimes(2));
     expect(onCommand).toHaveBeenNthCalledWith(1, expect.objectContaining({ type: 'open_surface', placement: 'activity' }), expect.any(AbortSignal));
+    expect(onCommand).toHaveBeenNthCalledWith(1, expect.objectContaining({ keepPluginCenter: true }), expect.any(AbortSignal));
     expect(onCommand).toHaveBeenNthCalledWith(2, expect.objectContaining({ type: 'open_surface', placement: 'workbench' }), expect.any(AbortSignal));
   });
 
@@ -1811,6 +1820,7 @@ describe('PluginCenterView', () => {
       surfaceID: 'containers.dashboard',
       expectedManagementRevision: 11,
       placement: 'activity',
+      keepPluginCenter: true,
     }, expect.any(AbortSignal));
   });
 
@@ -2046,12 +2056,12 @@ describe('PluginCenterView', () => {
     ), mount);
 
     openInventoryDetails(mount);
-    expect(mount.querySelector('[data-plugin-primary-actions]')?.textContent).toContain('Review required permissions');
+    expect(mount.querySelector('[data-plugin-primary-actions]')?.textContent).toContain('Enable');
     expect(mount.querySelector('[data-plugin-action="open"]')).toBeNull();
     expect(mount.querySelector('[data-plugin-action="open-workbench"]')).toBeNull();
   });
 
-  it('requires a second destructive confirmation before uninstall deletes plugin data', async () => {
+  it('submits delete-data uninstall directly after the explicit retention choice', async () => {
     const onCommand = vi.fn();
     const installedProjection: PluginInventoryProjection = {
       items: [{
@@ -2087,11 +2097,6 @@ describe('PluginCenterView', () => {
     expect(choices[1]?.getAttribute('aria-checked')).toBe('false');
     expect((document.querySelector('[data-plugin-uninstall-confirm]') as HTMLButtonElement).className).toContain('min-h-[46px]');
     choices[1]?.click();
-    (document.querySelector('[data-plugin-uninstall-confirm]') as HTMLButtonElement).click();
-
-    expect(onCommand).not.toHaveBeenCalled();
-    expect(document.querySelector('[data-plugin-uninstall-delete-warning]')?.textContent).toContain('Permanently delete');
-    expect((document.querySelector('[data-plugin-uninstall-confirm]') as HTMLButtonElement).textContent).toContain('Delete data');
     (document.querySelector('[data-plugin-uninstall-confirm]') as HTMLButtonElement).click();
 
     expect(onCommand).toHaveBeenCalledWith({
@@ -2359,15 +2364,8 @@ describe('PluginCenterView', () => {
     expect(mount.querySelector('[data-plugin-center-details]')?.textContent).toContain('Toolbox Beta');
     expect(mount.querySelector('[data-plugin-center-details]')?.textContent).not.toContain('Toolbox Alpha');
 
-    const dialogContent = document.querySelector<HTMLElement>('[data-external-plugin-dialog]')!;
-    const dialog = dialogContent.closest<HTMLElement>('[role="dialog"]')!;
-    const reviewPermissions = [...dialog.querySelectorAll<HTMLButtonElement>('button')]
-      .find((button) => button.textContent?.trim() === 'Review required permissions')!;
-    reviewPermissions.click();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    const permissions = mount.querySelector<HTMLElement>('[data-plugin-permissions]')!;
+    expect(document.body.textContent).not.toContain('Review required permissions');
     expect(mount.querySelector('[data-plugin-center-details]')?.textContent).toContain('Toolbox Beta');
-    await vi.waitFor(() => expect(document.activeElement).toBe(permissions));
   });
 
   it('preserves an exact shell detail request when retained filters exclude it', async () => {

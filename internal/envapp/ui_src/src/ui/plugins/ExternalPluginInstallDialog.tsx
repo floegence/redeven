@@ -51,7 +51,6 @@ type ExternalPluginInstallDialogProps = {
   onInspect: (request: ExternalPluginInspectionRequest, signal: AbortSignal) => Promise<ExternalPluginInspection>;
   onCommit: (inspection: ExternalPluginInspection, signal: AbortSignal) => Promise<ExternalPluginCommitResult>;
   onCommitted: (result: ExternalPluginCommitResult) => Promise<unknown> | unknown;
-  onViewPermissions?: (result: ExternalPluginCommitResult) => void;
 };
 
 type InstallStage = 'source' | 'review' | 'committing' | 'complete';
@@ -222,13 +221,6 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
     props.onOpenChange(false);
   };
 
-  const viewPermissions = () => {
-    const result = committed();
-    if (!result || refreshFailed()) return;
-    props.onOpenChange(false);
-    props.onViewPermissions?.(result);
-  };
-
   const reviewBlocked = createMemo(() => {
     const current = inspection();
     return current ? inspectionBlocked(current) : false;
@@ -284,11 +276,7 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
               {(result) => (
                 <Show
                   when={refreshFailed()}
-                  fallback={(
-                    <button type="button" class="min-h-[46px] cursor-pointer rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground sm:min-h-9" onClick={viewPermissions}>
-                      {i18n.t('uiCopy.plugin.reviewPermissions')}
-                    </button>
-                  )}
+                  fallback={null}
                 >
                   <button
                     type="button"
@@ -1285,7 +1273,7 @@ function PostInstallFacts(props: {
   const lifecycle = () => {
     if (props.committedEnableState === 'enabled') return i18n.t('uiCopy.plugin.enabled');
     if (props.committedEnableState === 'disabled') return i18n.t('uiCopy.plugin.disabled');
-    return update() ? i18n.t('uiCopy.plugin.external.currentStateRetained') : i18n.t('uiCopy.plugin.disabled');
+    return update() ? i18n.t('uiCopy.plugin.external.currentStateRetained') : i18n.t('uiCopy.plugin.enabled');
   };
   return (
     <dl class="grid grid-cols-2 gap-3 border-y bg-muted/10 px-1 py-3 sm:grid-cols-3 sm:gap-0 sm:divide-x" data-external-plugin-install-outcome>
@@ -1298,7 +1286,9 @@ function PostInstallFacts(props: {
         <dd class="mt-0.5 text-sm font-medium">
           {update()
             ? i18n.t('uiCopy.plugin.external.noNewPermissionGrants')
-            : `0 · ${i18n.t('uiCopy.plugin.permissionNotGranted')}`}
+            : props.committedEnableState === 'disabled'
+              ? i18n.t('uiCopy.plugin.permissionNotGranted')
+              : i18n.t('uiCopy.plugin.permissionGranted')}
         </dd>
       </div>
       <div class="col-span-2 min-w-0 border-t pt-3 sm:col-span-1 sm:border-t-0 sm:px-3 sm:pt-0 sm:last:pr-0">

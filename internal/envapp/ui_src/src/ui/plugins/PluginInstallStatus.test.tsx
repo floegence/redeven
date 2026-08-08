@@ -99,4 +99,59 @@ describe('PluginInstallStatus', () => {
     ), mount);
     expect(mount.textContent).toContain('uiCopy.plugin.installOperation.cacheHit');
   });
+
+  it('renders the operation phase history and an indeterminate progress bar while trust is fetched', () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginInstallStatus projection={projection(operation('fetch_trust_evidence', {
+        phase_diagnostics: [
+          {
+            phase: 'fetch_trust_evidence',
+            artifact_role: 'release_trust',
+            attempt: 2,
+            progress: { kind: 'indeterminate' },
+            cache_hit: false,
+            started_at: '2026-08-07T08:00:00Z',
+          },
+          {
+            phase: 'fetch_release_evidence',
+            artifact_role: 'release_metadata',
+            attempt: 1,
+            progress: { kind: 'indeterminate' },
+            cache_hit: true,
+            started_at: '2026-08-07T08:00:02Z',
+            completed_at: '2026-08-07T08:00:03.250Z',
+            duration_ms: 1250,
+          },
+        ],
+        updated_at: '2026-08-07T08:00:02Z',
+      }))} />
+    ), mount);
+
+    expect(mount.querySelector('[data-plugin-install-progress]')).not.toBeNull();
+    expect(mount.querySelector('[data-plugin-install-progress][role="progressbar"]')).not.toBeNull();
+    expect(mount.querySelector('[data-plugin-install-phase-duration]')).not.toBeNull();
+    expect(mount.querySelector('[data-plugin-install-phase="fetch_trust_evidence"]')).not.toBeNull();
+    expect(mount.querySelector('[data-plugin-install-phase="fetch_release_evidence"]')).not.toBeNull();
+    expect(mount.querySelector('[data-plugin-install-phase="download_package"]')).not.toBeNull();
+    expect(mount.textContent).toContain('uiCopy.plugin.installOperation.phaseCompleted');
+    expect(mount.textContent).toContain('2s');
+    expect(mount.textContent).toContain('1.25s');
+  });
+
+  it('normalizes an unset initial byte count to zero instead of rendering NaN progress', () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginInstallStatus projection={projection(operation('download_package', {
+        progress: { kind: 'bytes', completed: Number.NaN, total: 405 * 1024 },
+      }))} />
+    ), mount);
+
+    const progress = mount.querySelector<HTMLElement>('[data-plugin-install-progress]')!;
+    expect(progress.getAttribute('aria-valuenow')).toBe('0');
+    expect(progress.getAttribute('aria-valuetext')).not.toContain('NaN');
+    expect(progress.getAttribute('aria-valuetext')).toContain('0 byte');
+  });
 });

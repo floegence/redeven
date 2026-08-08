@@ -42,7 +42,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | github.com/floegence/floeterm/terminal-go | v0.8.7 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.8.7 | Floegence first-party dependency. |
 | github.com/floegence/floret/v3 | v3.2.32 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v3@v3.2.32 | Detected from LICENSE. |
 | github.com/floegence/flowersec/flowersec-go | v0.27.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go@v0.27.0 | Floegence first-party dependency. |
-| github.com/floegence/redevplugin | v0.7.17 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redevplugin@v0.7.17 | Floegence first-party dependency. |
+| github.com/floegence/redevplugin | v0.7.18 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redevplugin@v0.7.18 | Floegence first-party dependency. |
 | github.com/go-logr/logr | v1.4.2 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/go-logr/logr@v1.4.2 | Detected from LICENSE. |
 | github.com/go-logr/stdr | v1.2.2 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/go-logr/stdr@v1.2.2 | Detected from LICENSE. |
 | github.com/go-ole/go-ole | v1.2.6 | MIT | Runtime | https://pkg.go.dev/github.com/go-ole/go-ole@v1.2.6 | Detected from LICENSE. |
@@ -235,12 +235,12 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @fast-csv/parse | 4.3.6 | MIT | Env App UI | https://www.npmjs.com/package/%40fast-csv%2Fparse/v/4.3.6 |  |
 | @floegence/beamterm-renderer | 1.0.2 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fbeamterm-renderer/v/1.0.2 |  |
 | @floegence/floe-webapp-boot | 0.40.4 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.40.4 | License inherited from floegence/floe-webapp root LICENSE. |
-| @floegence/floe-webapp-core | 0.40.4 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.40.4 | License inherited from floegence/floe-webapp root LICENSE. |
+| @floegence/floe-webapp-core | 0.40.6 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.40.6 | License inherited from floegence/floe-webapp root LICENSE. |
 | @floegence/floe-webapp-protocol | 0.40.4 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.40.4 | License inherited from floegence/floe-webapp root LICENSE. |
 | @floegence/floeterm-terminal-web | 0.13.3 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.13.3 | Built-in theme attribution and license texts are reproduced below from the verified 0.13.3 package. |
 | @floegence/flowersec-core | 0.27.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/0.27.0 |  |
-| @floegence/redevplugin-contracts | 0.7.17 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-contracts/v/0.7.17 |  |
-| @floegence/redevplugin-ui | 0.7.17 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-ui/v/0.7.17 | License inherited from floegence/redevplugin root LICENSE. |
+| @floegence/redevplugin-contracts | 0.7.18 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-contracts/v/0.7.18 |  |
+| @floegence/redevplugin-ui | 0.7.18 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-ui/v/0.7.18 | License inherited from floegence/redevplugin root LICENSE. |
 | @fontsource-variable/inter | 5.2.8 | OFL-1.1 | Desktop shell | https://www.npmjs.com/package/%40fontsource-variable%2Finter/v/5.2.8 |  |
 | @fontsource/iosevka | 5.2.5 | OFL-1.1 | Desktop shell, Env App UI | https://www.npmjs.com/package/%40fontsource%2Fiosevka/v/5.2.5 |  |
 | @humanfs/core | 0.19.1 | Apache-2.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40humanfs%2Fcore/v/0.19.1 |  |
@@ -1157,6 +1157,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | wrappy | 1.0.2 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/wrappy/v/1.0.2 |  |
 | ws | 8.21.0 | MIT | Code App UI, Env App UI | https://www.npmjs.com/package/ws/v/8.21.0 |  |
 | ws | 8.21.2 | MIT | Desktop shell | https://www.npmjs.com/package/ws/v/8.21.2 |  |
+| ws | 8.21.3 | MIT | Desktop shell | https://www.npmjs.com/package/ws/v/8.21.3 |  |
 | xml-name-validator | 5.0.0 | Apache-2.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/xml-name-validator/v/5.0.0 |  |
 | xmlbuilder | 15.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/xmlbuilder/v/15.1.1 |  |
 | xmlchars | 2.2.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/xmlchars/v/2.2.0 |  |

@@ -51,6 +51,7 @@ function createClientHarness() {
     inspectUploadedExternalPackage: vi.fn(async () => ({})),
     commitExternalPackage: vi.fn(async () => ({})),
     queryExternalPackageCommit: vi.fn(async () => ({})),
+    refreshEnabledRuntimeState: vi.fn(async () => ({ results: [] })),
   };
   return {
     mocks,
@@ -127,7 +128,7 @@ const generatedContainersRecord: ReDevPluginRecord = {
   updated_at: '2026-07-04T10:01:00Z',
 };
 
-describe('v0.7.17 plugin lifecycle client integration', () => {
+describe('v0.7.18 plugin lifecycle client integration', () => {
   it('preserves the market detail generation from the local proxy envelope', async () => {
     vi.mocked(fetchLocalApiJSONResponse).mockResolvedValueOnce({
       data: { plugin_id: 'com.example.plugin', presentation: { default_locale: 'en-US', locales: [] } },
@@ -190,6 +191,14 @@ describe('v0.7.17 plugin lifecycle client integration', () => {
     await expect(lifecycle.listInstalledPlugins()).resolves.toEqual([]);
     expect(mocks.catalog).toHaveBeenCalledOnce();
     expect(mocks.catalog).toHaveBeenCalledWith({});
+  });
+
+  it('restores enabled plugin runtime state through the published platform client', async () => {
+    const { lifecycle, mocks } = createClientHarness();
+
+    await expect(lifecycle.refreshEnabledRuntimeState()).resolves.toEqual({ results: [] });
+    expect(mocks.refreshEnabledRuntimeState).toHaveBeenCalledOnce();
+    expect(mocks.refreshEnabledRuntimeState).toHaveBeenCalledWith({});
   });
 
   it('loads catalog before projecting grants, policies, and per-instance permission requirements', async () => {
@@ -355,6 +364,23 @@ describe('v0.7.17 plugin lifecycle client integration', () => {
     }, {});
   });
 
+  it('treats an already-enabled PluginRecord as the authoritative idempotent result', async () => {
+    const { lifecycle, mocks } = createClientHarness();
+    mocks.catalog.mockResolvedValueOnce({ plugins: [generatedContainersRecord] });
+
+    await expect(lifecycle.authorizeAndEnablePlugin(
+      generatedContainersInstanceID,
+      ['containers.read', 'containers.execute'],
+    )).resolves.toMatchObject({
+      plugin_instance_id: generatedContainersInstanceID,
+      enable_state: 'enabled',
+    });
+
+    expect(mocks.enablePlugin).not.toHaveBeenCalled();
+    expect(mocks.grantPermission).not.toHaveBeenCalled();
+    expect(mocks.getPermissionRequirements).not.toHaveBeenCalled();
+  });
+
   it('binds grant and revoke mutations to the exact authorization revisions', async () => {
     const { lifecycle, mocks } = createClientHarness();
     const revisions = {
@@ -447,6 +473,7 @@ describe('v0.7.17 plugin lifecycle client integration', () => {
     const inspection = {
       inspection_id: 'inspection_external_12345678',
       confirmation_digest: 'sha256:684a09cfd858448baa7d52c3d30932d7684a09cfd858448baa7d52c3d30932d7',
+      intent: { action: 'install' as const },
     };
     const committed = { status: 'committed', inspection_id: inspection.inspection_id };
     mocks.commitExternalPackage.mockResolvedValue(committed);
@@ -467,6 +494,7 @@ describe('v0.7.17 plugin lifecycle client integration', () => {
       const inspection = {
         inspection_id: 'inspection_external_12345678',
         confirmation_digest: 'sha256:684a09cfd858448baa7d52c3d30932d7684a09cfd858448baa7d52c3d30932d7',
+        intent: { action: 'install' as const },
       };
       const inProgress = {
         status: 'in_progress',
@@ -504,6 +532,7 @@ describe('v0.7.17 plugin lifecycle client integration', () => {
       const inspection = {
         inspection_id: 'inspection_external_12345678',
         confirmation_digest: 'sha256:684a09cfd858448baa7d52c3d30932d7684a09cfd858448baa7d52c3d30932d7',
+        intent: { action: 'install' as const },
       };
       const inProgress = {
         status: 'in_progress',
@@ -539,6 +568,7 @@ describe('v0.7.17 plugin lifecycle client integration', () => {
     const inspection = {
       inspection_id: 'inspection_external_12345678',
       confirmation_digest: 'sha256:684a09cfd858448baa7d52c3d30932d7684a09cfd858448baa7d52c3d30932d7',
+      intent: { action: 'install' as const },
     };
     const committed = { status: 'committed', inspection_id: inspection.inspection_id };
     mocks.commitExternalPackage.mockRejectedValue(new PluginTransportError(

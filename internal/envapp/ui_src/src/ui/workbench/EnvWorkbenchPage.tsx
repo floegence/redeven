@@ -2,6 +2,8 @@ import {
   createDefaultWorkbenchState,
   sanitizeWorkbenchState,
   type WorkbenchContextMenuItem,
+  type WorkbenchDockAction,
+  type WorkbenchDockItemActivation,
   type WorkbenchState,
   type WorkbenchWidgetDefinition,
   type WorkbenchWidgetItem,
@@ -700,6 +702,8 @@ function waitForAbortOrTimeout(signal: AbortSignal, timeoutMs: number): Promise<
 export type EnvWorkbenchPageProps = Readonly<{
   pluginSurfaceHost?: WorkbenchPluginSurfaceContextValue;
   registerPluginSurfaceController?: (controller: WorkbenchPluginSurfaceController | null) => void;
+  onDockItemClick?: (item: WorkbenchDockItemActivation) => boolean | void;
+  dockActions?: readonly WorkbenchDockAction[];
 }>;
 
 export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
@@ -2182,11 +2186,21 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
       throw new Error(i18n.t('uiCopy.plugin.surfaceFailed'));
     }
 
-    const currentState = runtimeSnapshot().widget_states.find((state) => pluginStateMatchesTarget(state, target));
+    // A drag from the launcher is an explicit placement request. Always create
+    // a new surface at the drop point instead of focusing an existing one.
+    const currentState = target.workbenchDropPoint
+      ? undefined
+      : runtimeSnapshot().widget_states.find((state) => pluginStateMatchesTarget(state, target));
     let widget = currentState ? api.findWidgetById(currentState.widget_id) : null;
     const created = !widget;
     if (!widget) {
-      widget = api.createWidget('redeven.plugin', { centerViewport: false });
+      const dropPoint = target.workbenchDropPoint
+        ? resolveWorkbenchAnchorWorldPoint(target.workbenchDropPoint)
+        : null;
+      widget = api.createWidget('redeven.plugin', {
+        centerViewport: false,
+        ...(dropPoint ?? {}),
+      });
     }
     if (!widget) {
       throw new Error(i18n.t('uiCopy.plugin.surfaceFailed'));
@@ -2931,6 +2945,8 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
             filterBarWidgetTypes={redevenWorkbenchFilterBarWidgetTypes}
             resolveContextMenuItems={resolveWorkbenchContextMenuItems}
             onApiReady={setSurfaceApi}
+            onDockItemClick={props.onDockItemClick}
+            dockActions={props.dockActions}
             onRequestDelete={requestWidgetRemoval}
             onLayoutInteractionStart={beginSurfaceLayoutInteraction}
             onLayoutInteractionEnd={endSurfaceLayoutInteraction}
