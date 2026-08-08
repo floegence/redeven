@@ -103,6 +103,30 @@ git worktree add -b "$BR" "$WT" origin/main
   integration, verify main == origin/main, then remove the worktree and branch
   created by the task.
 
+## Local Fast Debugging
+
+Use this mode to validate real product behavior quickly before committing or
+running the final integration gate.
+
+- Work in the task's dedicated worktree and use a task-owned runtime with an
+  isolated port and state directory. Record its commit, PID, port, and state
+  path; never stop or reuse another task's runtime.
+- Reproduce with read-only evidence first, then use Red -> Green -> Refactor.
+  Build only affected components, run focused tests, and verify the real local
+  UI and runtime flow. Do not present this as final integration evidence.
+- When an upstream package must change, implement and test it in that upstream
+  repository first. For local debugging only, build the package and temporarily
+  overlay its artifacts in Redeven's installed dependency directory.
+- An overlay must not change manifests, lockfiles, generated contracts, or
+  tracked files. Do not use `go.work`, Go `replace`, `file:`, `link:`,
+  `workspace:`, npm link, build aliases, or sibling source imports.
+- Record the upstream commit used by each overlay and rebuild the overlay after
+  every upstream change. An overlay proves local behavior only; it does not
+  prove release compatibility, provenance, or package-set integrity.
+- Before committing or integrating Redeven, release the upstream change,
+  upgrade Redeven to the published version, remove all overlays, and repeat the
+  affected checks against the published artifacts.
+
 ## Feature Sync
 
 Inside the feature worktree:
