@@ -1539,6 +1539,86 @@ describe('TerminalPanel browser activity integration', () => {
     ]);
   });
 
+  it('applies a post-boundary fullscreen redraw after truncated refresh history', async () => {
+    terminalSessionsState.sessions = [terminalSessionsState.sessions[0]!];
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="panel" />, host);
+    await vi.waitFor(() => expect(terminalCoreState.instances).toHaveLength(1));
+    await settleTerminalPanel();
+
+    transportAttachState.historyBoundarySequence = 6;
+    transportMocks.attachWithHistoryBoundary.mockResolvedValueOnce({
+      historyBoundarySequence: 6,
+      historyGeneration: 1,
+      historyStartSequence: 1,
+      geometryGeneration: 1,
+      runtimeAttachGeneration: 2,
+      cols: 80,
+      rows: 24,
+    });
+    let releaseHistoryPage!: (page: ReturnType<typeof withHistoryContract>) => void;
+    const historyPage = new Promise<ReturnType<typeof withHistoryContract>>((resolve) => {
+      releaseHistoryPage = resolve;
+    });
+    transportMocks.historyPage.mockReturnValue(historyPage);
+    transportMocks.historyPage.mockClear();
+
+    host.querySelector<HTMLButtonElement>('[data-testid="terminal-sidebar-refresh"]')?.click();
+    await vi.waitFor(() => expect(terminalCoreState.instances).toHaveLength(2));
+    await vi.waitFor(() => expect(transportMocks.historyPage).toHaveBeenCalledTimes(1));
+    const oldCore = terminalCoreState.instances[0]!;
+    const refreshedCore = terminalCoreState.instances[1]!;
+
+    emitTerminalData(
+      'session-1',
+      '\u001b[?1049h\u001b[2J\u001b[HFLOETERM_TOP_REDRAW',
+      7,
+    );
+    releaseHistoryPage(withHistoryContract({
+      chunks: [{
+        sequence: 4,
+        timestampMs: 40,
+        data: textEncoder.encode('\u001b[Hpartial-four'),
+        geometryGeneration: 1,
+        cols: 80,
+        rows: 24,
+      }, {
+        sequence: 5,
+        timestampMs: 50,
+        data: textEncoder.encode('\u001b[2;1Hpartial-five'),
+        geometryGeneration: 1,
+        cols: 80,
+        rows: 24,
+      }, {
+        sequence: 6,
+        timestampMs: 60,
+        data: textEncoder.encode('\u001b[3;1Hpartial-six'),
+        geometryGeneration: 1,
+        cols: 80,
+        rows: 24,
+      }],
+      nextStartSeq: 0,
+      hasMore: false,
+      firstSequence: 4,
+      lastSequence: 6,
+      coveredThroughSequence: 6,
+      snapshotEndSequence: 6,
+      firstRetainedSequence: 4,
+      historyGeneration: 1,
+      historyTruncated: true,
+      coveredBytes: 57,
+      totalBytes: 57,
+    }));
+
+    await vi.waitFor(() => expect(refreshedCore.write.mock.calls.length).toBe(2));
+    expect(oldCore.dispose).toHaveBeenCalledTimes(1);
+    expect(refreshedCore.write.mock.calls.map((call) => decodeTerminalWrite(call[0]))).toEqual([
+      '\u001b[Hpartial-four\u001b[2;1Hpartial-five\u001b[3;1Hpartial-six',
+      '\u001b[?1049h\u001b[2J\u001b[HFLOETERM_TOP_REDRAW',
+    ]);
+  });
+
   it('keeps the surface non-interactive until the refreshed renderer presentation fence completes', async () => {
     terminalSessionsState.sessions = [terminalSessionsState.sessions[0]!];
     const host = document.createElement('div');
