@@ -2223,7 +2223,9 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushAsync();
 
       (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement | null)?.click();
-      await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="instance:plugini_redeven_official_containers"]')));
+      await flushUntil(() => (
+        host.querySelector('[data-plugin-panel-tile="instance:plugini_redeven_official_containers"]')?.getAttribute('data-plugin-panel-action') === 'open_surface'
+      ), 400);
       const tile = host.querySelector('[data-plugin-panel-tile="instance:plugini_redeven_official_containers"]') as HTMLButtonElement;
       expect(tile.dataset.pluginPanelAction).toBe('open_surface');
       tile.click();
@@ -3315,7 +3317,7 @@ describe('EnvAppShell local access gate', () => {
       expect(unlockLocalAccessMock).toHaveBeenCalledWith('secret');
       expect(getLocalAccessStatusMock).toHaveBeenCalledTimes(1);
       expect(connectMock).toHaveBeenCalledTimes(1);
-      await flushUntil(() => pluginLifecycleMocks.refreshEnabledRuntimeState.mock.calls.length === 1);
+      await flushUntil(() => pluginLifecycleMocks.refreshEnabledRuntimeState.mock.calls.length === 1, 400);
       expect(pluginLifecycleMocks.refreshEnabledRuntimeState).toHaveBeenCalledWith({
         signal: expect.any(AbortSignal),
       });

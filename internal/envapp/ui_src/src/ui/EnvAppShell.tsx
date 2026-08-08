@@ -267,7 +267,12 @@ const EMPTY_FLOWER_COMPANION_PRESENCE: FlowerCompanionPresenceProjection = {
 const ACTIVE_SURFACE_STORAGE_KEY = 'redeven_envapp_active_tab';
 const DESKTOP_VIEW_MODE_STORAGE_KEY = 'redeven_envapp_desktop_view_mode';
 const ACCESS_RESUME_TIMEOUT_MS = 15_000;
-const PLUGIN_RUNTIME_RECOVERY_TIMEOUT_MS = 8_000;
+// Release-bound plugins may need the platform's bounded trust reconstruction
+// window on the first refresh after a host restart.
+const PLUGIN_RUNTIME_RECOVERY_TIMEOUT_MS = 90_000;
+// The direct-session handshake publishes its credential just before the
+// server-side session scope becomes available to plugin HTTP mutations.
+const PLUGIN_RUNTIME_RECOVERY_START_DELAY_MS = 250;
 const WORKBENCH_HANDOFF_ANCHOR_MAX_AGE_MS = 1_500;
 const NOTES_OVERLAY_KEYBIND = 'mod+.';
 
@@ -1239,7 +1244,14 @@ export function EnvAppShell() {
       recoveryTimedOut = true;
       controller.abort('Plugin runtime recovery timed out');
     }, PLUGIN_RUNTIME_RECOVERY_TIMEOUT_MS);
-    void pluginLifecycle.refreshEnabledRuntimeState({ signal: controller.signal }).then((result) => {
+    const recoveryStartDelay = new Promise<void>((resolve, reject) => {
+      const delayTimer = window.setTimeout(resolve, PLUGIN_RUNTIME_RECOVERY_START_DELAY_MS);
+      controller.signal.addEventListener('abort', () => {
+        window.clearTimeout(delayTimer);
+        reject(controller.signal.reason);
+      }, { once: true });
+    });
+    void recoveryStartDelay.then(() => pluginLifecycle.refreshEnabledRuntimeState({ signal: controller.signal })).then((result) => {
       if (controller.signal.aborted || pluginRuntimeRecoveryClient !== connectedClient) return;
       window.clearTimeout(recoveryTimer);
       const failures = result.results.filter((entry) => entry.status === 'failed');

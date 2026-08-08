@@ -110,6 +110,21 @@ selection enters a detail view, focuses its explicit back action, and restores
 focus to the originating inventory row on return. Tablet and desktop layouts
 keep the inventory master and selected detail side by side.
 
+## Session recovery
+
+After a direct-session handshake, the Shell waits through a cancellable 250ms
+stability window before asking the released Host to refresh enabled runtimes.
+The handshake credential can precede the server-side scope needed by that
+mutation. A released plugin may need the full bounded 90-second recovery budget
+after a host restart while its upstream trust state is reconstructed. Until the
+exact `refresh-enabled` operation succeeds without a failed entry, Activity and
+Workbench plugin surfaces remain unavailable; the UI must not expose an `Open`
+action that will fail because recovery is still active. A disconnect, replaced
+client, or Shell disposal aborts the pending wait and refresh. Only one recovery
+may be active for a connected client, and a timeout or reported failure leaves
+the surfaces unavailable with actionable attention state rather than retrying a
+mutation blindly.
+
 ## Official installation progress
 
 Official installation uses the released durable install operation instead of a
