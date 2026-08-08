@@ -1666,7 +1666,7 @@
     },
     {
       "path": "internal/envapp/ui_src/src/ui/EnvAppShell.tsx",
-      "sha256": "a8b609a476714ecbf32ca42540f09735b61b6fda024250e96c88caa4716f54d2",
+      "sha256": "10b2ba96e0226193897661e01340ea8eac6b9e13a1cf956e5dd046a454c433e5",
       "sink_kinds": [
         "web_storage"
       ],
