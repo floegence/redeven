@@ -39,7 +39,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | github.com/dustin/go-humanize | v1.0.1 | MIT | Runtime | https://pkg.go.dev/github.com/dustin/go-humanize@v1.0.1 | Detected from LICENSE. |
 | github.com/ebitengine/purego | v0.9.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/ebitengine/purego@v0.9.1 | Detected from LICENSE. |
 | github.com/felixge/httpsnoop | v1.0.4 | MIT | Runtime | https://pkg.go.dev/github.com/felixge/httpsnoop@v1.0.4 | Detected from LICENSE.txt. |
-| github.com/floegence/floeterm/terminal-go | v0.8.4 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.8.4 | Floegence first-party dependency. |
+| github.com/floegence/floeterm/terminal-go | v0.8.5 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.8.5 | Floegence first-party dependency. |
 | github.com/floegence/floret/v3 | v3.2.29 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v3@v3.2.29 | Detected from LICENSE. |
 | github.com/floegence/flowersec/flowersec-go | v0.27.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go@v0.27.0 | Floegence first-party dependency. |
 | github.com/floegence/redevplugin | v0.7.17 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redevplugin@v0.7.17 | Floegence first-party dependency. |
