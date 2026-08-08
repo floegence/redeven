@@ -680,6 +680,10 @@ async function verifyBuiltPluginInstallRouting(browser) {
     await pluginInstall.evaluate((button) => { button.disabled = false; });
     await pluginInstall.click();
 
+    await pluginCenter.locator('[data-plugin-center-list][aria-busy="false"]').waitFor({
+      state: 'visible',
+      timeout: 10_000,
+    });
     await pluginCenter.locator('#plugin-center-tab-installed').click();
     await pluginCenter.locator('[data-plugin-center-list][aria-busy="false"]').waitFor({
       state: 'visible',
