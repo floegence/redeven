@@ -156,6 +156,7 @@ const terminalPrefsState = vi.hoisted(() => ({
 
 const focusSpy = vi.hoisted(() => vi.fn());
 const forceResizeSpy = vi.hoisted(() => vi.fn());
+const forceResizeAndWaitForCommittedFrameSpy = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const forceResizeAndWaitSpy = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const scrollLinesSpy = vi.hoisted(() => vi.fn());
 const terminalInputSpy = vi.hoisted(() => vi.fn());
@@ -929,6 +930,7 @@ vi.mock('@floegence/floeterm-terminal-web', async () => {
     setConnected = vi.fn();
     setTheme = vi.fn();
     forceResize = forceResizeSpy;
+    forceResizeAndWaitForCommittedFrame = forceResizeAndWaitForCommittedFrameSpy;
     forceResizeAndWaitForPresentation = forceResizeAndWaitSpy;
     measureHostDimensions = vi.fn(() => undefined);
     getDimensions = vi.fn(() => ({ cols: 80, rows: 24 }));
@@ -2089,6 +2091,7 @@ describe('TerminalPanel', () => {
     sessionStorage.clear();
     focusSpy.mockClear();
     forceResizeSpy.mockClear();
+    forceResizeAndWaitForCommittedFrameSpy.mockClear();
     forceResizeAndWaitSpy.mockClear();
     scrollLinesSpy.mockClear();
     terminalInputSpy.mockClear();
@@ -3239,26 +3242,16 @@ describe('TerminalPanel', () => {
     forceResizeAndWaitSpy.mockClear();
     terminalWriteCompletionState.historyCallbacks.shift()?.();
     await settleTerminalPanelMicrotasks();
-    // The baseline is parser-committed, but the presentation fence still runs
-    // on the next animation frame before the surface becomes interactive.
-    expect(host.querySelector('[data-terminal-runtime-session="session-1"]')?.getAttribute('aria-busy')).toBe('true');
+    expect(forceResizeAndWaitForCommittedFrameSpy).toHaveBeenCalledTimes(1);
+    expect(forceResizeAndWaitSpy).not.toHaveBeenCalled();
+    expect(host.querySelector('[data-terminal-runtime-session="session-1"]')?.getAttribute('aria-busy')).toBe('false');
 
     transportMocks.sendInput.mockClear();
-    core?.handlers?.onData?.('before-presentation\r');
-    expect(transportMocks.sendInput).not.toHaveBeenCalled();
+    core?.handlers?.onData?.('after-baseline\r');
+    expect(transportMocks.sendInput).toHaveBeenCalledWith('session-1', 'after-baseline\r', 'conn-1');
     expect(forceResizeSpy).not.toHaveBeenCalled();
 
     core?.handlers?.onRender?.(2);
-    expect(mark.mock.calls.some(([name]) => String(name).includes(':baseline-rendered:'))).toBe(false);
-
-    await vi.advanceTimersByTimeAsync(1);
-    expect(forceResizeAndWaitSpy).toHaveBeenCalledTimes(2);
-    await settleTerminalPanelMicrotasks();
-    expect(host.querySelector('[data-terminal-runtime-session="session-1"]')?.getAttribute('aria-busy')).toBe('false');
-    core?.handlers?.onData?.('after-baseline\r');
-    expect(transportMocks.sendInput).toHaveBeenCalledWith('session-1', 'after-baseline\r', 'conn-1');
-    core?.handlers?.onRender?.(3);
-    core?.handlers?.onRender?.(4);
 
     const renderedMarks = mark.mock.calls.filter(([name]) => String(name).includes(':baseline-rendered:'));
     expect(renderedMarks).toHaveLength(1);
@@ -3925,8 +3918,32 @@ describe('TerminalPanel', () => {
 
     await waitForTerminalPanelCondition(() => {
       expect(transportMocks.resizeWithEffectiveGeometry).toHaveBeenCalledWith('session-1', 100, 30);
-      expect(core?.setFixedDimensions).toHaveBeenCalledWith({ cols: 100, rows: 30 });
+      expect(core?.setFixedDimensions).toHaveBeenCalledWith(
+        { cols: 100, rows: 30 },
+        { notifyResize: false },
+      );
     });
+  });
+
+  it('does not echo a confirmed shared geometry as a host resize', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="panel" />, host);
+    await settleTerminalPanelAfterPaint();
+
+    const core = terminalCoreInstances[0];
+    transportMocks.resizeWithEffectiveGeometry.mockClear();
+    for (const handler of terminalEventSourceState.geometryHandlers.get('session-1') ?? []) {
+      handler({ sessionId: 'session-1', generation: 2, outputSequenceBoundary: 1, cols: 100, rows: 30 });
+    }
+    emitTerminalData('session-1', 'shared-grid-boundary', 1);
+    await drainTerminalPanelAsyncWork();
+
+    expect(core?.setFixedDimensions).toHaveBeenCalledWith(
+      { cols: 100, rows: 30 },
+      { notifyResize: false },
+    );
+    expect(transportMocks.resizeWithEffectiveGeometry).not.toHaveBeenCalled();
   });
 
   it('finishes attach and confirms the latest local size when the host resizes in flight', async () => {
@@ -4031,7 +4048,10 @@ describe('TerminalPanel', () => {
     }
     emitTerminalData('session-1', 'boundary-one', 1);
     await drainTerminalPanelAsyncWork();
-    expect(core?.setFixedDimensions).toHaveBeenCalledWith({ cols: 70, rows: 22 });
+    expect(core?.setFixedDimensions).toHaveBeenCalledWith(
+      { cols: 70, rows: 22 },
+      { notifyResize: false },
+    );
 
     for (const handler of handlers) {
       handler({ sessionId: 'session-1', generation: 2, outputSequenceBoundary: 2, cols: 71, rows: 22 });
@@ -8467,9 +8487,7 @@ describe('TerminalPanel', () => {
 
     transportMocks.historyPage.mockClear();
     createOutputCoordinatorSpy.mockClear();
-    const resume = runtime.resume(snapshot);
-    await vi.advanceTimersByTimeAsync(1);
-    await resume;
+    await runtime.resume(snapshot);
     await settleTerminalPanelAfterPaint();
 
     const resumedCore = terminalCoreInstances.at(-1);
@@ -8585,7 +8603,11 @@ describe('TerminalPanel', () => {
       { cols: 80, rows: 24 },
       { notifyResize: false },
     );
-    expect(resumedCore?.setFixedDimensions).toHaveBeenNthCalledWith(3, { cols: 70, rows: 22 });
+    expect(resumedCore?.setFixedDimensions).toHaveBeenNthCalledWith(
+      3,
+      { cols: 70, rows: 22 },
+      { notifyResize: false },
+    );
     expect(resumedCore!.setFixedDimensions.mock.invocationCallOrder[0]).toBeLessThan(
       resumedCore!.setFixedDimensions.mock.invocationCallOrder[1]!,
     );
@@ -8629,7 +8651,10 @@ describe('TerminalPanel', () => {
     const resumedCore = terminalCoreInstances.at(-1);
     expect(resumedCore?.restoreSnapshot).toHaveBeenCalledWith(snapshot);
     expect(resumedCore?.write.mock.calls.map((call: unknown[]) => decodeTerminalWrite(call[0]))).toContain('hibernated-output');
-    expect(resumedCore?.setFixedDimensions).toHaveBeenCalledWith({ cols: 90, rows: 28 });
+    expect(resumedCore?.setFixedDimensions).toHaveBeenCalledWith(
+      { cols: 90, rows: 28 },
+      { notifyResize: false },
+    );
   });
 
   it('marks the first rendered history baseline when working-set snapshot restore falls back to replay', async () => {
@@ -9179,7 +9204,10 @@ describe('TerminalPanel', () => {
     emitTerminalData('session-1', 'after-evicted-clear', 7);
     await settleTerminalPanelAfterPaint();
 
-    expect(reloadedCore?.setFixedDimensions).toHaveBeenCalledWith({ cols: 100, rows: 30 });
+    expect(reloadedCore?.setFixedDimensions).toHaveBeenCalledWith(
+      { cols: 100, rows: 30 },
+      { notifyResize: false },
+    );
     expect(reloadedCore?.write.mock.calls.map((call: unknown[]) => decodeTerminalWrite(call[0])))
       .toEqual(['after-evicted-clear']);
   });

@@ -25,7 +25,7 @@
     "@floegence/floe-webapp-boot": "0.40.4",
     "@floegence/floe-webapp-core": "0.40.4",
     "@floegence/floe-webapp-protocol": "0.40.4",
-    "@floegence/floeterm-terminal-web": "0.13.2",
+    "@floegence/floeterm-terminal-web": "0.13.3",
     "@floegence/flowersec-core": "^0.27.0",
     "@floegence/redevplugin-contracts": "0.7.17",
     "@floegence/redevplugin-ui": "0.7.17",
