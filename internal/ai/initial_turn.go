@@ -229,22 +229,6 @@ func matchInitialFrozenCreateRequest(create CreateThreadRequest, settings thread
 	return nil
 }
 
-func (s *Service) waitForMatchingInitialTurnAdmission(ctx context.Context, frozen threadstore.QueuedTurn) (admittedUserTurn, error) {
-	if s == nil {
-		return admittedUserTurn{}, ErrThreadBusy
-	}
-	threadKey := runThreadKey(frozen.EndpointID, frozen.ThreadID)
-	executionKey := strings.TrimSpace(frozen.QueueID)
-	s.mu.Lock()
-	activeExecutionKey := strings.TrimSpace(s.activeRunByTh[threadKey])
-	active := s.runs[activeExecutionKey]
-	s.mu.Unlock()
-	if activeExecutionKey != executionKey || active == nil || strings.TrimSpace(active.threadID) != strings.TrimSpace(frozen.ThreadID) {
-		return admittedUserTurn{}, ErrThreadBusy
-	}
-	return active.waitForUserTurnAdmission(ctxOrBackground(ctx))
-}
-
 func buildInitialQueuedTurn(meta *session.Meta, req SendUserTurnRequest, settings threadstore.ThreadSettings, prepared preparedUserTurn, queueID string) (threadstore.QueuedTurn, error) {
 	queueID = strings.TrimSpace(queueID)
 	if queueID == "" {
