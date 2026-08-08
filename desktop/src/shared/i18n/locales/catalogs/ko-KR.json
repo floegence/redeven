@@ -155,6 +155,7 @@
       "toolStatusSuccess": "완료",
       "toolStatusError": "실패",
       "toolStatusCanceled": "취소됨",
+      "toolCallCanceled": "명령이 취소되었습니다",
       "toolApprovalRejectedDetail": "도구 실행을 거부했습니다",
       "toolApprovalRequired": "승인 필요",
       "toolApprovalState": "승인 상태: {state}",

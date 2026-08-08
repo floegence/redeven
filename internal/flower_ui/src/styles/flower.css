@@ -6738,7 +6738,9 @@ button.flower-attachment-preview-trigger:disabled {
 
 .flower-composer:focus-within {
   border-color: color-mix(in srgb, var(--primary) 48%, transparent);
-  box-shadow: none;
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--ring) 72%, transparent),
+    0 2px 8px -4px color-mix(in srgb, var(--redeven-surface-shadow-source) 36%, transparent);
   transition: border-color 200ms ease;
 }
 

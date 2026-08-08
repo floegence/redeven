@@ -155,6 +155,7 @@
       "toolStatusSuccess": "Готово",
       "toolStatusError": "Ошибка",
       "toolStatusCanceled": "Отменено",
+      "toolCallCanceled": "Команда отменена",
       "toolApprovalRejectedDetail": "Вы отклонили выполнение инструмента",
       "toolApprovalRequired": "Требуется подтверждение",
       "toolApprovalState": "Подтверждение: {state}",

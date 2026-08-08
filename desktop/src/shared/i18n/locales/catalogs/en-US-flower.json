@@ -155,6 +155,7 @@
     "toolStatusSuccess": "Done",
     "toolStatusError": "Failed",
     "toolStatusCanceled": "Canceled",
+    "toolCallCanceled": "Tool call was canceled",
     "toolApprovalRejectedDetail": "User declined tool execution",
     "toolApprovalRequired": "Approval required",
     "toolApprovalState": "Approval: {state}",

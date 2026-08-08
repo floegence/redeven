@@ -155,6 +155,7 @@
       "toolStatusSuccess": "Erledigt",
       "toolStatusError": "Fehlgeschlagen",
       "toolStatusCanceled": "Abgebrochen",
+      "toolCallCanceled": "Der Befehl wurde abgebrochen",
       "toolApprovalRejectedDetail": "Du hast die Tool-Ausführung abgelehnt",
       "toolApprovalRequired": "Freigabe erforderlich",
       "toolApprovalState": "Freigabe: {state}",
