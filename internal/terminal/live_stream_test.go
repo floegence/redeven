@@ -3,16 +3,15 @@ package terminal
 import (
 	"context"
 	"encoding/binary"
-	"encoding/json"
-	"io"
+	"errors"
 	"net"
 	"strings"
 	"testing"
 	"time"
 
 	livev1 "github.com/floegence/floeterm/terminal-go/livev1"
-	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/sessionrpc"
 )
 
 func TestLiveStreamRejectsMissingProcessPermission(t *testing.T) {
@@ -68,34 +67,24 @@ func TestTerminalRPCDoesNotRegisterLegacyLiveTypeIDs(t *testing.T) {
 	manager := newQuietTestManager(t, t.TempDir())
 	t.Cleanup(manager.Cleanup)
 
-	serverConn, clientConn := net.Pipe()
-	t.Cleanup(func() {
-		_ = serverConn.Close()
-		_ = clientConn.Close()
-	})
-	router := rpc.NewRouter()
-	server := rpc.NewServer(serverConn, router)
+	router := sessionrpc.NewRouter()
+	peer := newTestRPCPeer(router)
 	detach := manager.RegisterWithAccessGate(
 		router,
 		&session.Meta{CanWrite: true, CanExecute: true},
-		server,
+		peer,
 		nil,
 	)
 	defer detach()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go func() { _ = server.Serve(ctx) }()
-	client := rpc.NewClient(clientConn)
 	for _, typeID := range []uint32{2003, 2004, 2005, 2006} {
 		callCtx, callCancel := context.WithTimeout(context.Background(), time.Second)
-		_, rpcErr, err := client.Call(callCtx, typeID, json.RawMessage(`{}`))
+		var response any
+		err := peer.Call(callCtx, typeID, struct{}{}, &response)
 		callCancel()
-		if err != nil && err != io.EOF {
-			t.Fatalf("Call(typeID=%d) transport error = %v", typeID, err)
-		}
-		if rpcErr == nil || rpcErr.Code != 404 {
-			t.Fatalf("Call(typeID=%d) rpc error = %#v, want handler not found", typeID, rpcErr)
+		var rpcErr *sessionrpc.Error
+		if !errors.As(err, &rpcErr) || rpcErr.Code != 404 {
+			t.Fatalf("Call(typeID=%d) rpc error = %#v, want handler not found", typeID, err)
 		}
 	}
 }

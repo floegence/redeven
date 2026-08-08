@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/gitruntime"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/sessionrpc"
 )
 
 const (
@@ -36,7 +36,7 @@ const (
 )
 
 func registerGitTyped[TReq any, TResp any](
-	router *rpc.Router,
+	router *sessionrpc.Router,
 	typeID uint32,
 	runtime *gitruntime.Runtime,
 	gate *accessgate.Gate,
@@ -57,7 +57,7 @@ func registerGitTyped[TReq any, TResp any](
 }
 
 func registerGitPathStatusTyped(
-	router *rpc.Router,
+	router *sessionrpc.Router,
 	runtime *gitruntime.Runtime,
 	gate *accessgate.Gate,
 	meta *session.Meta,

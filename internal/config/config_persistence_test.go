@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"os"
@@ -9,268 +10,147 @@ import (
 	"testing"
 )
 
-type fakeRuntimeDirectSecretStore struct {
-	values      map[string]string
-	setErr      error
-	getErr      error
-	retainErr   error
-	verifyValue string
-}
+const directArtifactFixture = `{"v":2,"profile":"flowersec/2","session":{"channel_id":"channel-1","init_expire_at_unix_s":4102444800,"idle_timeout_seconds":60,"establish_timeout_seconds":30,"rekey_prepare_timeout_seconds":10,"rekey_completion_timeout_seconds":30,"max_inbound_streams":64,"e2ee_psk_b64u":"AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA","allowed_suites":[1,2],"default_suite":1,"selected_features":0,"contract_hash_b64u":"ioBJP5DPhg471caMR-huV5I9RlNKY2Pr9fs2GkP8CmA"},"path":{"kind":"direct","rendezvous_group_id":"group-1","listener_audience":"listener-1","routing_token":"routing-token","candidates":[{"id":"w1","carrier":"websocket","url":"wss://example.com/flowersec/v2/direct","wire_profile":"flowersec-direct/2"}]},"scoped":[],"correlation":{"v":2,"tags":[]}}`
 
-func (s *fakeRuntimeDirectSecretStore) GetRuntimeDirectPSK(channelID string) (string, bool, error) {
-	if s.getErr != nil {
-		return "", false, s.getErr
-	}
-	if s.verifyValue != "" {
-		return s.verifyValue, true, nil
-	}
-	value, ok := s.values[channelID]
-	return value, ok, nil
-}
+func TestSaveAndLoadPreserveOpaqueDirectArtifactAcrossRestart(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	wantArtifact := json.RawMessage(directArtifactFixture)
+	cfg := configWithDirectArtifact(wantArtifact, false)
 
-func (s *fakeRuntimeDirectSecretStore) SetRuntimeDirectPSK(channelID string, psk string) error {
-	if s.setErr != nil {
-		return s.setErr
+	if err := Save(path, cfg); err != nil {
+		t.Fatalf("Save() error = %v", err)
 	}
-	if s.values == nil {
-		s.values = make(map[string]string)
-	}
-	s.values[channelID] = psk
-	return nil
-}
-
-func (s *fakeRuntimeDirectSecretStore) RetainRuntimeDirectPSK(channelID string) error {
-	if s.retainErr != nil {
-		return s.retainErr
-	}
-	if channelID == "" {
-		s.values = make(map[string]string)
-		return nil
-	}
-	value := s.values[channelID]
-	s.values = map[string]string{channelID: value}
-	return nil
-}
-
-func TestLoadMigratesLegacyDirectPSKAndRestartsFromSecrets(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.json")
-	legacy := legacyConfigWithDirectPSK("channel-1", "legacy-psk")
-	if err := os.WriteFile(path, []byte(legacy), 0o600); err != nil {
-		t.Fatalf("WriteFile() error = %v", err)
-	}
-	store := &fakeRuntimeDirectSecretStore{values: make(map[string]string)}
-	persistence := testConfigPersistence(store, writeConfigAtomic)
-
-	cfg, err := loadConfig(path, persistence)
+	restarted, err := Load(path)
 	if err != nil {
-		t.Fatalf("loadConfig() error = %v", err)
+		t.Fatalf("Load() error = %v", err)
 	}
-	if cfg.Direct == nil || cfg.Direct.E2eePskB64u != "legacy-psk" {
-		t.Fatalf("migrated config direct = %#v", cfg.Direct)
+	if restarted.Direct == nil {
+		t.Fatal("Load() direct = nil")
 	}
+	if !jsonEqual(restarted.Direct.ArtifactJSON, wantArtifact) {
+		t.Fatalf("Load() artifact = %s, want %s", restarted.Direct.ArtifactJSON, wantArtifact)
+	}
+	if restarted.Direct.ExpiresAtUnixS != 4102444800 {
+		t.Fatalf("Load() expires_at_unix_s = %d, want 4102444800", restarted.Direct.ExpiresAtUnixS)
+	}
+	if restarted.Direct.Spent {
+		t.Fatal("Load() spent = true, want false")
+	}
+	assertDirectEnvelopeFields(t, path)
+}
+
+func TestSaveAndLoadPreserveDirectArtifactSpentState(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	cfg := configWithDirectArtifact(json.RawMessage(directArtifactFixture), false)
+	if err := Save(path, cfg); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	cfg.Direct.Spent = true
+	if err := Save(path, cfg); err != nil {
+		t.Fatalf("Save(spent) error = %v", err)
+	}
+	restarted, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if restarted.Direct == nil || !restarted.Direct.Spent {
+		t.Fatalf("Load() direct = %#v, want spent artifact", restarted.Direct)
+	}
+}
+
+func TestSaveArtifactWriteFailurePreservesPreviousRestartArtifact(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	oldArtifact := json.RawMessage(directArtifactFixture)
+	oldConfig := configWithDirectArtifact(oldArtifact, false)
+	if err := Save(path, oldConfig); err != nil {
+		t.Fatalf("Save(old) error = %v", err)
+	}
+	oldBody, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(old) error = %v", err)
+	}
+
+	next := *oldConfig
+	nextDirect := *oldConfig.Direct
+	nextDirect.ArtifactJSON = json.RawMessage(strings.Replace(directArtifactFixture, "channel-1", "channel-2", 1))
+	nextDirect.ExpiresAtUnixS = 4102444900
+	next.Direct = &nextDirect
+	persistence := defaultConfigPersistence()
+	persistence.writeConfig = func(string, *Config) error { return errors.New("rename denied") }
+	if err := saveConfig(path, &next, persistence); err == nil || !strings.Contains(err.Error(), "rename denied") {
+		t.Fatalf("saveConfig() error = %v, want rename failure", err)
+	}
+	afterBody, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(after) error = %v", err)
+	}
+	if !bytes.Equal(afterBody, oldBody) {
+		t.Fatalf("config changed after failed artifact write:\n%s", afterBody)
+	}
+	restarted, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() after failed save error = %v", err)
+	}
+	if restarted.Direct == nil || !jsonEqual(restarted.Direct.ArtifactJSON, oldArtifact) {
+		t.Fatalf("restart did not retain old artifact: %#v", restarted.Direct)
+	}
+}
+
+func configWithDirectArtifact(artifact json.RawMessage, spent bool) *Config {
+	return &Config{
+		ProviderOrigin:           "https://redeven.test",
+		ControlplaneBaseURL:      "https://dev.redeven.test",
+		EnvironmentID:            "env-1",
+		LocalEnvironmentPublicID: "local-1",
+		BindingGeneration:        1,
+		AgentInstanceID:          "agent-1",
+		Direct: &DirectConnectInfo{
+			ArtifactJSON:   append(json.RawMessage(nil), artifact...),
+			ExpiresAtUnixS: 4102444800,
+			Spent:          spent,
+		},
+	}
+}
+
+func assertDirectEnvelopeFields(t *testing.T, path string) {
+	t.Helper()
 	body, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("ReadFile() error = %v", err)
 	}
-	if strings.Contains(string(body), "legacy-psk") || strings.Contains(string(body), "e2ee_psk_b64u") {
-		t.Fatalf("config.json still contains direct PSK: %s", body)
+	var document map[string]json.RawMessage
+	if err := json.Unmarshal(body, &document); err != nil {
+		t.Fatalf("Unmarshal(config) error = %v", err)
 	}
-	if !strings.Contains(string(body), `"e2ee_psk_set": true`) {
-		t.Fatalf("config.json missing psk status: %s", body)
+	var direct map[string]json.RawMessage
+	if err := json.Unmarshal(document["direct"], &direct); err != nil {
+		t.Fatalf("Unmarshal(direct) error = %v", err)
 	}
+	for _, field := range []string{"ws_url", "channel_id", "e2ee_psk_b64u", "e2ee_psk_set", "channel_init_expire_at_unix_s", "default_suite"} {
+		if _, ok := direct[field]; ok {
+			t.Fatalf("legacy direct field %q persisted in envelope: %s", field, document["direct"])
+		}
+	}
+	for _, field := range []string{"artifact_json", "expires_at_unix_s", "spent"} {
+		if _, ok := direct[field]; !ok {
+			t.Fatalf("direct envelope missing %q: %s", field, document["direct"])
+		}
+	}
+}
 
-	restarted, err := loadConfig(path, persistence)
+func jsonEqual(left, right []byte) bool {
+	var leftValue any
+	var rightValue any
+	return json.Unmarshal(left, &leftValue) == nil &&
+		json.Unmarshal(right, &rightValue) == nil &&
+		bytes.Equal(mustCanonicalJSON(leftValue), mustCanonicalJSON(rightValue))
+}
+
+func mustCanonicalJSON(value any) []byte {
+	encoded, err := json.Marshal(value)
 	if err != nil {
-		t.Fatalf("restart loadConfig() error = %v", err)
+		panic(err)
 	}
-	if restarted.Direct == nil || restarted.Direct.E2eePskB64u != "legacy-psk" {
-		t.Fatalf("restarted direct = %#v", restarted.Direct)
-	}
-}
-
-func TestLoadLegacyDirectPSKMigrationFailuresPreserveConfig(t *testing.T) {
-	for _, testCase := range []struct {
-		name      string
-		configure func(*fakeRuntimeDirectSecretStore, *configPersistence)
-		wantError string
-	}{
-		{
-			name: "secret store write",
-			configure: func(store *fakeRuntimeDirectSecretStore, _ *configPersistence) {
-				store.setErr = errors.New("write denied")
-			},
-			wantError: "migrate direct psk to secrets store",
-		},
-		{
-			name: "verification mismatch",
-			configure: func(store *fakeRuntimeDirectSecretStore, _ *configPersistence) {
-				store.verifyValue = "different-psk"
-			},
-			wantError: "stored value mismatch",
-		},
-		{
-			name: "config rewrite",
-			configure: func(_ *fakeRuntimeDirectSecretStore, persistence *configPersistence) {
-				persistence.writeConfig = func(string, *Config) error { return errors.New("rename denied") }
-			},
-			wantError: "rewrite config after direct psk migration",
-		},
-	} {
-		t.Run(testCase.name, func(t *testing.T) {
-			dir := t.TempDir()
-			path := filepath.Join(dir, "config.json")
-			legacy := legacyConfigWithDirectPSK("channel-1", "legacy-psk")
-			if err := os.WriteFile(path, []byte(legacy), 0o600); err != nil {
-				t.Fatalf("WriteFile() error = %v", err)
-			}
-			store := &fakeRuntimeDirectSecretStore{values: make(map[string]string)}
-			persistence := testConfigPersistence(store, writeConfigAtomic)
-			testCase.configure(store, &persistence)
-
-			_, err := loadConfig(path, persistence)
-			if err == nil || !strings.Contains(err.Error(), testCase.wantError) {
-				t.Fatalf("loadConfig() error = %v, want %q", err, testCase.wantError)
-			}
-			body, readErr := os.ReadFile(path)
-			if readErr != nil {
-				t.Fatalf("ReadFile() error = %v", readErr)
-			}
-			if string(body) != legacy {
-				t.Fatalf("legacy config changed after failed migration:\n%s", body)
-			}
-		})
-	}
-}
-
-func TestSaveCredentialRewriteFailureKeepsPreviousRestartPath(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.json")
-	store := &fakeRuntimeDirectSecretStore{values: map[string]string{"channel-old": "psk-old"}}
-	persistence := testConfigPersistence(store, writeConfigAtomic)
-	oldConfig, err := loadConfigFromJSON(legacyConfigWithDirectStatus("channel-old"))
-	if err != nil {
-		t.Fatalf("loadConfigFromJSON() error = %v", err)
-	}
-	oldConfig.Direct.E2eePskB64u = "psk-old"
-	oldConfig.directPSKSet = true
-	if err := persistence.writeConfig(path, oldConfig); err != nil {
-		t.Fatalf("write old config error = %v", err)
-	}
-	oldBody, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("ReadFile() error = %v", err)
-	}
-
-	next := *oldConfig
-	direct := *oldConfig.Direct
-	direct.ChannelId = "channel-new"
-	direct.E2eePskB64u = "psk-new"
-	next.Direct = &direct
-	failing := persistence
-	failing.writeConfig = func(string, *Config) error { return errors.New("rename denied") }
-	if err := saveConfig(path, &next, failing); err == nil || !strings.Contains(err.Error(), "rename denied") {
-		t.Fatalf("saveConfig() error = %v", err)
-	}
-	afterBody, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("ReadFile() error = %v", err)
-	}
-	if string(afterBody) != string(oldBody) {
-		t.Fatalf("config changed after failed credential rewrite:\n%s", afterBody)
-	}
-	restarted, err := loadConfig(path, persistence)
-	if err != nil {
-		t.Fatalf("loadConfig() after failed save error = %v", err)
-	}
-	if restarted.Direct == nil || restarted.Direct.ChannelId != "channel-old" || restarted.Direct.E2eePskB64u != "psk-old" {
-		t.Fatalf("restart did not retain old credentials: %#v", restarted.Direct)
-	}
-}
-
-func TestSaveCredentialCommitPrunesSupersededAndDisconnectedPSKs(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.json")
-	store := &fakeRuntimeDirectSecretStore{values: map[string]string{"channel-old": "psk-old"}}
-	persistence := testConfigPersistence(store, writeConfigAtomic)
-	cfg, err := loadConfigFromJSON(legacyConfigWithDirectStatus("channel-new"))
-	if err != nil {
-		t.Fatalf("loadConfigFromJSON() error = %v", err)
-	}
-	cfg.Direct.E2eePskB64u = "psk-new"
-	if err := saveConfig(path, cfg, persistence); err != nil {
-		t.Fatalf("saveConfig(new credentials) error = %v", err)
-	}
-	if len(store.values) != 1 || store.values["channel-new"] != "psk-new" {
-		t.Fatalf("direct PSKs after commit = %#v", store.values)
-	}
-
-	cfg.Direct = nil
-	if err := saveConfig(path, cfg, persistence); err != nil {
-		t.Fatalf("saveConfig(disconnect) error = %v", err)
-	}
-	if len(store.values) != 0 {
-		t.Fatalf("direct PSKs after disconnect = %#v", store.values)
-	}
-}
-
-func testConfigPersistence(store runtimeDirectSecretStore, writer func(string, *Config) error) configPersistence {
-	return configPersistence{
-		readFile:    os.ReadFile,
-		writeConfig: writer,
-		newSecretStore: func(string) runtimeDirectSecretStore {
-			return store
-		},
-	}
-}
-
-func loadConfigFromJSON(raw string) (*Config, error) {
-	path := filepath.Join(os.TempDir(), "unused-config.json")
-	return decodeConfigForTest(path, raw)
-}
-
-func decodeConfigForTest(_ string, raw string) (*Config, error) {
-	var cfg Config
-	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
-		return nil, err
-	}
-	return &cfg, nil
-}
-
-func legacyConfigWithDirectPSK(channelID string, psk string) string {
-	return `{
-  "provider_origin": "https://redeven.test",
-  "controlplane_base_url": "https://dev.redeven.test",
-  "environment_id": "env-1",
-  "local_environment_public_id": "local-1",
-  "binding_generation": 1,
-  "agent_instance_id": "agent-1",
-  "direct": {
-    "ws_url": "wss://dev.redeven.test/control/ws",
-    "channel_id": "` + channelID + `",
-    "e2ee_psk_b64u": "` + psk + `",
-    "channel_init_expire_at_unix_s": 4102444800,
-    "default_suite": 1
-  }
-}
-`
-}
-
-func legacyConfigWithDirectStatus(channelID string) string {
-	return `{
-  "provider_origin": "https://redeven.test",
-  "controlplane_base_url": "https://dev.redeven.test",
-  "environment_id": "env-1",
-  "local_environment_public_id": "local-1",
-  "binding_generation": 1,
-  "agent_instance_id": "agent-1",
-  "direct": {
-    "ws_url": "wss://dev.redeven.test/control/ws",
-    "channel_id": "` + channelID + `",
-    "channel_init_expire_at_unix_s": 4102444800,
-    "default_suite": 1,
-    "e2ee_psk_set": true
-  }
-}
-`
+	return encoded
 }

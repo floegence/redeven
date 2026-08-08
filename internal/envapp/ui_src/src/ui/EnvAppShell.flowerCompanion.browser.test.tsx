@@ -341,14 +341,14 @@ vi.mock('@floegence/floe-webapp-core/icons', async (importOriginal) => {
 });
 
 vi.mock('@floegence/floe-webapp-boot', () => ({
-  createArtifactDirectReconnectConfig: (config: unknown) => config,
-  createProxyRuntimeTunnelReconnectConfig: (config: unknown) => config,
+  createArtifactDirectConnectionConfig: (config: unknown) => config,
+  createProxyRuntimeTunnelConnectionConfig: (config: unknown) => config,
 }));
 
 vi.mock('@floegence/floe-webapp-protocol', () => ({
   useProtocol: () => ({
     status: () => protocolStatus,
-    client: () => protocolClient,
+    session: () => protocolClient,
     connect: connectMock,
     reconnect: vi.fn(async () => undefined),
     disconnect: vi.fn(() => {

@@ -3,8 +3,6 @@ package session
 import (
 	"strings"
 	"testing"
-
-	controlv1 "github.com/floegence/flowersec/flowersec-go/gen/flowersec/controlplane/v1"
 )
 
 func TestValidateGrantServerNotifyRemote(t *testing.T) {
@@ -18,7 +16,7 @@ func TestValidateGrantServerNotifyRemote(t *testing.T) {
 		{
 			name: "accepts remote session without email",
 			mutate: func(n *GrantServerNotify) {
-				n.GrantServer.ChannelId = " ch_remote "
+				n.GrantServer.ChannelID = " ch_remote "
 				n.SessionMeta.UserEmail = ""
 			},
 		},
@@ -67,13 +65,13 @@ func TestValidateGrantServerNotifyRemote(t *testing.T) {
 		{
 			name: "trims matching grant channel id",
 			mutate: func(n *GrantServerNotify) {
-				n.GrantServer.ChannelId = "  ch_remote  "
+				n.GrantServer.ChannelID = "  ch_remote  "
 			},
 		},
 		{
 			name: "rejects mismatched grant channel id",
 			mutate: func(n *GrantServerNotify) {
-				n.GrantServer.ChannelId = "ch_other"
+				n.GrantServer.ChannelID = "ch_other"
 			},
 			wantError: "grant_server.channel_id mismatch",
 		},
@@ -142,9 +140,9 @@ func TestValidateGrantServerNotifyRemoteRejectsMissingNotify(t *testing.T) {
 
 func validRemoteNotifyForTest() GrantServerNotify {
 	return GrantServerNotify{
-		GrantServer: &controlv1.ChannelInitGrant{
-			ChannelId: "ch_remote",
-			TunnelUrl: "https://tunnel.example.test/ch_remote",
+		GrantServer: &ChannelInitGrant{
+			ChannelID:    "ch_remote",
+			ArtifactJSON: []byte(`{"version":2}`),
 		},
 		SessionMeta: &Meta{
 			ChannelID:         "ch_remote",

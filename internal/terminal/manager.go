@@ -14,11 +14,12 @@ import (
 
 	termgo "github.com/floegence/floeterm/terminal-go"
 	livev1 "github.com/floegence/floeterm/terminal-go/livev1"
-	"github.com/floegence/flowersec/flowersec-go/rpc"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v2"
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/logsafe"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/sessionrpc"
 )
 
 const (
@@ -59,7 +60,7 @@ type Manager struct {
 	activateSessionFunc func(ctx context.Context, sessionID string, cols int, rows int) error
 
 	mu                    sync.Mutex
-	writers               map[*rpc.Server]*controlSink
+	writers               map[flowersec.RPCPeer]*controlSink
 	sessionLifecycle      map[string]SessionLifecycleRecord
 	localPathCapabilities map[string]string
 	deleteOperations      map[string]*sessionDeleteOperation
@@ -221,7 +222,7 @@ func NewManagerWithScope(shell string, scope *filesystemscope.Registry, log *slo
 		agentHomeAbs:          scope.HomePathAbs(),
 		scope:                 scope,
 		log:                   log,
-		writers:               make(map[*rpc.Server]*controlSink),
+		writers:               make(map[flowersec.RPCPeer]*controlSink),
 		sessionLifecycle:      make(map[string]SessionLifecycleRecord),
 		localPathCapabilities: make(map[string]string),
 		deleteOperations:      make(map[string]*sessionDeleteOperation),
@@ -249,11 +250,11 @@ func (m *Manager) DeleteSession(sessionID string) error {
 	return m.requestSessionDelete(sessionID, "", true)
 }
 
-func (m *Manager) Register(r *rpc.Router, meta *session.Meta, streamServer *rpc.Server) func() {
+func (m *Manager) Register(r *sessionrpc.Router, meta *session.Meta, streamServer flowersec.RPCPeer) func() {
 	return m.RegisterWithAccessGate(r, meta, streamServer, nil)
 }
 
-func (m *Manager) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, streamServer *rpc.Server, gate *accessgate.Gate) func() {
+func (m *Manager) RegisterWithAccessGate(r *sessionrpc.Router, meta *session.Meta, streamServer flowersec.RPCPeer, gate *accessgate.Gate) func() {
 	if m == nil || r == nil {
 		return func() {}
 	}
@@ -300,29 +301,29 @@ func (m *Manager) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, stre
 			return nil, err
 		}
 		if req == nil {
-			return nil, &rpc.Error{Code: 400, Message: "invalid payload"}
+			return nil, &sessionrpc.Error{Code: 400, Message: "invalid payload"}
 		}
 		sessionID := strings.TrimSpace(req.SessionID)
 		if sessionID == "" {
-			return nil, &rpc.Error{Code: 400, Message: "session_id is required"}
+			return nil, &sessionrpc.Error{Code: 400, Message: "session_id is required"}
 		}
 		if req.HistoryGeneration < 0 {
-			return nil, &rpc.Error{Code: 400, Message: "history_generation must be non-negative"}
+			return nil, &sessionrpc.Error{Code: 400, Message: "history_generation must be non-negative"}
 		}
 
 		if !m.sessionAvailableForInteraction(sessionID) {
-			return nil, &rpc.Error{Code: 404, Message: "terminal session not found"}
+			return nil, &sessionrpc.Error{Code: 404, Message: "terminal session not found"}
 		}
 
 		sess, ok := m.term.GetSession(sessionID)
 		if !ok || sess == nil {
-			return nil, &rpc.Error{Code: 404, Message: "terminal session not found"}
+			return nil, &sessionrpc.Error{Code: 404, Message: "terminal session not found"}
 		}
 
 		page, err := sess.GetHistoryPage(normalizeTerminalHistoryPageOptions(req))
 		if err != nil {
 			m.log.Warn("terminal history failed", "session_id", sessionID, "error", err)
-			return nil, &rpc.Error{Code: 500, Message: "failed to read history"}
+			return nil, &sessionrpc.Error{Code: 500, Message: "failed to read history"}
 		}
 
 		return terminalHistoryRespFromPage(page), nil
@@ -334,25 +335,25 @@ func (m *Manager) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, stre
 			return nil, err
 		}
 		if req == nil {
-			return nil, &rpc.Error{Code: 400, Message: "invalid payload"}
+			return nil, &sessionrpc.Error{Code: 400, Message: "invalid payload"}
 		}
 		sessionID := strings.TrimSpace(req.SessionID)
 		if sessionID == "" {
-			return nil, &rpc.Error{Code: 400, Message: "session_id is required"}
+			return nil, &sessionrpc.Error{Code: 400, Message: "session_id is required"}
 		}
 		if !m.sessionAvailableForInteraction(sessionID) {
-			return nil, &rpc.Error{Code: 404, Message: "terminal session not found"}
+			return nil, &sessionrpc.Error{Code: 404, Message: "terminal session not found"}
 		}
 
 		sess, ok := m.term.GetSession(sessionID)
 		if !ok || sess == nil {
-			return nil, &rpc.Error{Code: 404, Message: "terminal session not found"}
+			return nil, &sessionrpc.Error{Code: 404, Message: "terminal session not found"}
 		}
 
 		stats, err := sess.GetHistoryStats()
 		if err != nil {
 			m.log.Warn("terminal stats failed", "session_id", sessionID, "error", err)
-			return nil, &rpc.Error{Code: 500, Message: "failed to read stats"}
+			return nil, &sessionrpc.Error{Code: 500, Message: "failed to read stats"}
 		}
 
 		return &terminalStatsResp{
@@ -368,17 +369,17 @@ func (m *Manager) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, stre
 			return nil, err
 		}
 		if req == nil {
-			return nil, &rpc.Error{Code: 400, Message: "invalid payload"}
+			return nil, &sessionrpc.Error{Code: 400, Message: "invalid payload"}
 		}
 		sessionID := strings.TrimSpace(req.SessionID)
 		if sessionID == "" {
-			return nil, &rpc.Error{Code: 400, Message: "session_id is required"}
+			return nil, &sessionrpc.Error{Code: 400, Message: "session_id is required"}
 		}
 		if !m.sessionAvailableForInteraction(sessionID) {
-			return nil, &rpc.Error{Code: 404, Message: "terminal session not found"}
+			return nil, &sessionrpc.Error{Code: 404, Message: "terminal session not found"}
 		}
 		if err := m.term.ClearSessionHistory(sessionID); err != nil {
-			return nil, &rpc.Error{Code: 404, Message: "terminal session not found"}
+			return nil, &sessionrpc.Error{Code: 404, Message: "terminal session not found"}
 		}
 		return &terminalClearResp{OK: true}, nil
 	})
@@ -389,17 +390,17 @@ func (m *Manager) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, stre
 			return nil, err
 		}
 		if req == nil {
-			return nil, &rpc.Error{Code: 400, Message: "invalid payload"}
+			return nil, &sessionrpc.Error{Code: 400, Message: "invalid payload"}
 		}
 		sessionID := strings.TrimSpace(req.SessionID)
 		if sessionID == "" {
-			return nil, &rpc.Error{Code: 400, Message: "session_id is required"}
+			return nil, &sessionrpc.Error{Code: 400, Message: "session_id is required"}
 		}
 		if err := m.DeleteSession(sessionID); err != nil {
 			if errors.Is(err, ErrSessionNotFound) {
-				return nil, &rpc.Error{Code: 404, Message: "terminal session not found"}
+				return nil, &sessionrpc.Error{Code: 404, Message: "terminal session not found"}
 			}
-			return nil, &rpc.Error{Code: 500, Message: "failed to close terminal session"}
+			return nil, &sessionrpc.Error{Code: 500, Message: "failed to close terminal session"}
 		}
 		return &terminalDeleteResp{OK: true}, nil
 	})
@@ -446,14 +447,14 @@ func (m *Manager) ServeLiveStream(
 
 func requireProcessLaunchPermission(meta *session.Meta) error {
 	if !session.AllowsProcessLaunch(meta) {
-		return &rpc.Error{Code: 403, Message: "process permission denied: terminal requires write and execute permissions"}
+		return &sessionrpc.Error{Code: 403, Message: "process permission denied: terminal requires write and execute permissions"}
 	}
 	return nil
 }
 
 // DetachSink removes the control-plane notification sink bound to an RPC stream.
 // Realtime terminal attachments are owned by independent terminal/live_v1 streams.
-func (m *Manager) DetachSink(streamServer *rpc.Server) {
+func (m *Manager) DetachSink(streamServer flowersec.RPCPeer) {
 	if m == nil || streamServer == nil {
 		return
 	}
@@ -489,7 +490,7 @@ func (m *Manager) Cleanup() {
 	m.mu.Unlock()
 }
 
-func (m *Manager) ensureWriter(streamServer *rpc.Server, meta *session.Meta, gate *accessgate.Gate) {
+func (m *Manager) ensureWriter(streamServer flowersec.RPCPeer, meta *session.Meta, gate *accessgate.Gate) {
 	if m == nil || streamServer == nil {
 		return
 	}
@@ -698,29 +699,29 @@ func (m *Manager) broadcastSessionsChanged(payload terminalSessionsChangedPayloa
 
 func (m *Manager) createSession(name string, workingDir string) (*termgo.Session, error) {
 	if m == nil {
-		return nil, &rpc.Error{Code: 500, Message: "internal error"}
+		return nil, &sessionrpc.Error{Code: 500, Message: "internal error"}
 	}
 
 	workingDirAbs, err := m.resolveWorkingDir(workingDir)
 	if err != nil {
 		switch {
 		case errors.Is(err, filesystemscope.ErrPathOutsideScope):
-			return nil, &rpc.Error{Code: 403, Message: "working_dir outside filesystem scope"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "working_dir outside filesystem scope"}
 		case errors.Is(err, filesystemscope.ErrReadDenied):
-			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "read permission denied"}
 		case os.IsNotExist(err):
-			return nil, &rpc.Error{Code: 404, Message: "working_dir not found"}
+			return nil, &sessionrpc.Error{Code: 404, Message: "working_dir not found"}
 		case strings.Contains(err.Error(), "directory"):
-			return nil, &rpc.Error{Code: 400, Message: "working_dir is not a directory"}
+			return nil, &sessionrpc.Error{Code: 400, Message: "working_dir is not a directory"}
 		default:
-			return nil, &rpc.Error{Code: 400, Message: "invalid working_dir"}
+			return nil, &sessionrpc.Error{Code: 400, Message: "invalid working_dir"}
 		}
 	}
 
 	sess, err := m.term.CreateSession(name, workingDirAbs)
 	if err != nil {
 		m.log.Warn("terminal create failed", "error", err)
-		return nil, &rpc.Error{Code: 500, Message: "failed to create terminal session"}
+		return nil, &sessionrpc.Error{Code: 500, Message: "failed to create terminal session"}
 	}
 	return sess, nil
 }
@@ -1304,7 +1305,7 @@ type sinkMsg struct {
 }
 
 type controlSink struct {
-	srv    *rpc.Server
+	srv    flowersec.RPCPeer
 	meta   session.Meta
 	gate   *accessgate.Gate
 	log    *slog.Logger
@@ -1312,7 +1313,7 @@ type controlSink struct {
 	closed bool
 }
 
-func newControlSink(srv *rpc.Server, meta *session.Meta, gate *accessgate.Gate, log *slog.Logger) *controlSink {
+func newControlSink(srv flowersec.RPCPeer, meta *session.Meta, gate *accessgate.Gate, log *slog.Logger) *controlSink {
 	var metaCopy session.Meta
 	if meta != nil {
 		metaCopy = *meta
@@ -1335,7 +1336,7 @@ func (w *controlSink) Send(msg sinkMsg) {
 	if err := requireProcessLaunchPermission(&w.meta); err != nil {
 		return
 	}
-	if err := w.srv.Notify(msg.TypeID, msg.Payload); err != nil && w.log != nil && !errors.Is(err, context.Canceled) {
+	if err := w.srv.Notify(context.Background(), msg.TypeID, msg.Payload); err != nil && w.log != nil && !errors.Is(err, context.Canceled) {
 		w.log.Debug("terminal control notify failed", "error", err)
 	}
 }

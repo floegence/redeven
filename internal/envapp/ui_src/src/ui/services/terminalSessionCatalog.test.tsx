@@ -141,7 +141,7 @@ vi.mock('@floegence/floeterm-terminal-web/history', () => ({
   preparePagedTerminalHistory: vi.fn(),
 }));
 vi.mock('@floegence/floe-webapp-protocol', () => ({
-  useProtocol: () => ({ client: protocolState.client, status: protocolState.status }),
+  useProtocol: () => ({ session: protocolState.client, status: protocolState.status }),
   ProtocolNotConnectedError: class extends Error {},
   RpcError: class extends Error {},
 }));

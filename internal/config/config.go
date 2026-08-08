@@ -4,23 +4,30 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/url"
 	"strings"
 
-	directv1 "github.com/floegence/flowersec/flowersec-go/gen/flowersec/direct/v1"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v2"
 )
+
+// DirectConnectInfo is the control-plane artifact envelope persisted by
+// Redeven. The opaque artifact bytes are interpreted only by Flowersec v2.
+type DirectConnectInfo struct {
+	ArtifactJSON   json.RawMessage `json:"artifact_json"`
+	ExpiresAtUnixS int64           `json:"expires_at_unix_s"`
+	Spent          bool            `json:"spent"`
+}
 
 // Config is the runtime configuration for Redeven. Secret material is loaded
 // from secrets.json and is never serialized back into config.json.
 type Config struct {
-	ProviderOrigin           string                      `json:"provider_origin"`
-	ControlplaneBaseURL      string                      `json:"controlplane_base_url"`
-	ControlplaneProviderID   string                      `json:"controlplane_provider_id,omitempty"`
-	EnvironmentID            string                      `json:"environment_id"`
-	LocalEnvironmentPublicID string                      `json:"local_environment_public_id"`
-	BindingGeneration        int64                       `json:"binding_generation,omitempty"`
-	AgentInstanceID          string                      `json:"agent_instance_id"`
-	Direct                   *directv1.DirectConnectInfo `json:"direct"`
+	ProviderOrigin           string             `json:"provider_origin"`
+	ControlplaneBaseURL      string             `json:"controlplane_base_url"`
+	ControlplaneProviderID   string             `json:"controlplane_provider_id,omitempty"`
+	EnvironmentID            string             `json:"environment_id"`
+	LocalEnvironmentPublicID string             `json:"local_environment_public_id"`
+	BindingGeneration        int64              `json:"binding_generation,omitempty"`
+	AgentInstanceID          string             `json:"agent_instance_id"`
+	Direct                   *DirectConnectInfo `json:"direct"`
 
 	// AI config controls optional Flower AI assistant features.
 	AI *AIConfig `json:"ai,omitempty"`
@@ -53,9 +60,7 @@ type Config struct {
 	CodeServerPortMin int `json:"code_server_port_min,omitempty"`
 	CodeServerPortMax int `json:"code_server_port_max,omitempty"`
 
-	directPSKSet bool
-	directPSKErr error
-	extra        map[string]json.RawMessage
+	extra map[string]json.RawMessage
 }
 
 // ValidateLocalMinimal validates config fields required to start the runtime in local-only mode.
@@ -118,19 +123,11 @@ func (c *Config) ValidateRemoteStrict() error {
 	if strings.TrimSpace(c.AgentInstanceID) == "" {
 		return errors.New("missing agent_instance_id")
 	}
-	if c.directPSKErr != nil {
-		return fmt.Errorf("load direct psk: %w", c.directPSKErr)
-	}
-	if c.Direct == nil ||
-		strings.TrimSpace(c.Direct.WsUrl) == "" ||
-		strings.TrimSpace(c.Direct.ChannelId) == "" ||
-		strings.TrimSpace(c.Direct.E2eePskB64u) == "" ||
-		c.Direct.ChannelInitExpireAtUnixS <= 0 {
+	if c.Direct == nil || len(c.Direct.ArtifactJSON) == 0 || c.Direct.ExpiresAtUnixS <= 0 {
 		return errors.New("missing direct connect info")
 	}
-	directURL, err := url.Parse(strings.TrimSpace(c.Direct.WsUrl))
-	if err != nil || directURL == nil || !strings.EqualFold(directURL.Scheme, "wss") || strings.TrimSpace(directURL.Host) == "" || directURL.User != nil {
-		return errors.New("invalid direct connect info: remote WebSocket URL must use wss")
+	if _, err := flowersec.ParseArtifact(c.Direct.ArtifactJSON); err != nil {
+		return fmt.Errorf("invalid direct connect artifact: %w", err)
 	}
 	return nil
 }

@@ -1,7 +1,6 @@
 import { type Accessor, createEffect, createSignal, onCleanup, untrack } from 'solid-js';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
-import type { Client } from '@floegence/flowersec-core';
-import type { JsonFrameChannel } from '@floegence/flowersec-core/streamio';
+import type { Session } from '@floegence/flowersec-core';
 import type { RedevenV1Rpc } from '../protocol/redeven_v1';
 import {
   getRedevenFilePreviewOversizedMessage,
@@ -16,7 +15,7 @@ import {
   type FilePreviewDescriptor,
 } from '../utils/filePreview';
 import { buildRedevenFileResourceUrl } from '../utils/filePreviewResource';
-import { openReadFileStreamChannel } from '../utils/fileStreamReader';
+import { openReadFileStreamChannel, type ReadFileStreamChannel } from '../utils/fileStreamReader';
 import { getFilePreviewBlockReason } from './FileBrowserShared';
 import { createWorkspaceEffectRpc } from '../services/workspaceEffects';
 
@@ -81,7 +80,7 @@ export interface FilePreviewController {
 }
 
 export function createFilePreviewController(params: {
-  client: Accessor<Client | null | undefined>;
+  client: Accessor<Session | null | undefined>;
   rpc: Accessor<RedevenV1Rpc | null | undefined>;
   canWrite: Accessor<boolean>;
   onSaved?: (path: string) => void;
@@ -109,7 +108,7 @@ export function createFilePreviewController(params: {
   const [xlsxRows, setXlsxRows] = createSignal<string[][]>([]);
   const [pendingConnectionLoad, setPendingConnectionLoad] = createSignal<PendingConnectionPreviewLoad | null>(null);
 
-  let activePreviewChannel: JsonFrameChannel | null = null;
+  let activePreviewChannel: ReadFileStreamChannel | null = null;
   let activeObjectUrl: string | null = null;
   let previewReqSeq = 0;
   let saveReqSeq = 0;
@@ -127,7 +126,7 @@ export function createFilePreviewController(params: {
   const cleanupPreviewContent = () => {
     if (activePreviewChannel) {
       try {
-        activePreviewChannel.stream.reset(new Error('canceled'));
+		void activePreviewChannel.stream.reset();
       } catch {
       }
       try {

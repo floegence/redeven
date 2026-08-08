@@ -177,7 +177,7 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
     }
   };
 
-  const isConnected = () => protocol.status() === 'connected' && !!protocol.client();
+  const isConnected = () => protocol.status() === 'connected' && !!protocol.session?.();
 
   const permissionReady = () => ctx.env.state === 'ready';
   const canExecute = () => Boolean(ctx.env()?.permissions?.can_execute);

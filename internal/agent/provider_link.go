@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/floegence/flowersec/flowersec-go/rpc"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v2"
 	"github.com/floegence/redeven/internal/codeapp"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/runtimeservice"
@@ -378,8 +378,8 @@ func providerLinkDisconnectError(err error) *ProviderLinkError {
 	if err == nil {
 		return nil
 	}
-	var callErr *rpc.CallError
-	if errors.As(err, &callErr) && callErr.Code == 409 {
+	var rpcErr *flowersec.RPCError
+	if errors.As(err, &rpcErr) && rpcErr.Code == 409 {
 		return &ProviderLinkError{
 			Code:    ProviderLinkErrorBindingNotCurrent,
 			Message: "Provider binding is no longer current. Refresh Desktop, then connect or disconnect again.",

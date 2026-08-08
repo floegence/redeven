@@ -19,6 +19,7 @@ import (
 	"testing/fstest"
 	"time"
 
+	flowersec "github.com/floegence/flowersec/flowersec-go/v2"
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/agent"
 	appserverpkg "github.com/floegence/redeven/internal/codeapp/appserver"
@@ -36,6 +37,7 @@ func TestServer_ConnectArtifactStoresOnlyPluginCredentialHash(t *testing.T) {
 
 	s := newTestServer(t, nil)
 	req := httptest.NewRequest(http.MethodPost, "http://localhost:23998/api/local/direct/connect_artifact", bytes.NewBufferString(`{}`))
+	req.TLS = &tls.ConnectionState{}
 	res := httptest.NewRecorder()
 	s.handler().ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
@@ -45,10 +47,13 @@ func TestServer_ConnectArtifactStoresOnlyPluginCredentialHash(t *testing.T) {
 	if err := json.Unmarshal(res.Body.Bytes(), &envelope); err != nil {
 		t.Fatalf("decode artifact envelope: %v", err)
 	}
-	if envelope.ConnectArtifact == nil || envelope.ConnectArtifact.DirectInfo == nil || envelope.PluginSessionCredential == "" {
+	if len(envelope.ConnectArtifact) == 0 || envelope.ChannelID == "" || envelope.PluginSessionCredential == "" {
 		t.Fatalf("artifact envelope is incomplete: %+v", envelope)
 	}
-	channelID := envelope.ConnectArtifact.DirectInfo.ChannelId
+	if _, err := flowersec.ParseArtifact(envelope.ConnectArtifact); err != nil {
+		t.Fatalf("connect artifact is not a Flowersec v2 artifact: %v", err)
+	}
+	channelID := envelope.ChannelID
 	s.pendingMu.Lock()
 	pending, ok := s.pending[channelID]
 	s.pendingMu.Unlock()
@@ -626,6 +631,7 @@ func TestServer_LocalAccessUnlockFlow(t *testing.T) {
 	}
 
 	resumeConnectReq := httptest.NewRequest(http.MethodPost, "http://localhost:23998/api/local/direct/connect_artifact", bytes.NewBufferString(`{}`))
+	resumeConnectReq.TLS = &tls.ConnectionState{}
 	resumeConnectReq.Header.Set(localAccessResumeHeader, unlockBody.Data.ResumeToken)
 	resumeConnectRes := httptest.NewRecorder()
 	s.handleConnectArtifact(resumeConnectRes, resumeConnectReq)
@@ -661,6 +667,7 @@ func TestServer_LocalAccessUnlockFlow(t *testing.T) {
 	}
 
 	connectReq := httptest.NewRequest(http.MethodPost, "http://localhost:23998/api/local/direct/connect_artifact", bytes.NewBufferString(`{}`))
+	connectReq.TLS = &tls.ConnectionState{}
 	connectReq.AddCookie(cookies[0])
 	connectRes := httptest.NewRecorder()
 	s.handleConnectArtifact(connectRes, connectReq)
@@ -992,6 +999,7 @@ func TestServer_DiagnosticsConnectInfoReusesTraceID(t *testing.T) {
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "http://localhost:23998/api/local/direct/connect_artifact", bytes.NewBufferString(`{}`))
+	req.TLS = &tls.ConnectionState{}
 	res := httptest.NewRecorder()
 	s.handler().ServeHTTP(res, req)
 

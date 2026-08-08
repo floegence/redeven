@@ -11,11 +11,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/gitruntime"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/sessionrpc"
 )
 
 const (
@@ -82,47 +82,47 @@ func filesystemWriteEffect(target string) gitruntime.FilesystemEffect {
 
 func mutationCoordinationRPCError(err error) error {
 	if errors.Is(err, gitruntime.ErrResourceLimit) {
-		return &rpc.Error{Code: gitruntime.ErrorResourceLimit, Message: "git runtime resource limit exceeded"}
+		return &sessionrpc.Error{Code: gitruntime.ErrorResourceLimit, Message: "git runtime resource limit exceeded"}
 	}
 	return err
 }
 
-func listDirectoryRPCError(err error) *rpc.Error {
+func listDirectoryRPCError(err error) *sessionrpc.Error {
 	switch {
 	case errors.Is(err, filesystemscope.ErrPathOutsideScope):
-		return &rpc.Error{Code: 403, Message: fsErrorPathOutsideScope}
+		return &sessionrpc.Error{Code: 403, Message: fsErrorPathOutsideScope}
 	case errors.Is(err, filesystemscope.ErrReadDenied):
-		return &rpc.Error{Code: 403, Message: fsErrorReadPermissionDenied}
+		return &sessionrpc.Error{Code: 403, Message: fsErrorReadPermissionDenied}
 	case errors.Is(err, os.ErrPermission):
-		return &rpc.Error{Code: 403, Message: fsErrorHostFilesystemDenied}
+		return &sessionrpc.Error{Code: 403, Message: fsErrorHostFilesystemDenied}
 	case errors.Is(err, os.ErrNotExist):
-		return &rpc.Error{Code: 404, Message: fsErrorNotFound}
+		return &sessionrpc.Error{Code: 404, Message: fsErrorNotFound}
 	case errors.Is(err, filesystemscope.ErrPathNotDirectory):
-		return &rpc.Error{Code: 400, Message: fsErrorPathNotDirectory}
+		return &sessionrpc.Error{Code: 400, Message: fsErrorPathNotDirectory}
 	default:
-		return &rpc.Error{Code: 400, Message: fsErrorInvalidPath}
+		return &sessionrpc.Error{Code: 400, Message: fsErrorInvalidPath}
 	}
 }
 
-func (s *Service) Register(r *rpc.Router, meta *session.Meta) {
+func (s *Service) Register(r *sessionrpc.Router, meta *session.Meta) {
 	s.RegisterWithAccessGate(r, meta, nil)
 }
 
-func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate *accessgate.Gate) {
+func (s *Service) RegisterWithAccessGate(r *sessionrpc.Router, meta *session.Meta, gate *accessgate.Gate) {
 	if r == nil || s == nil {
 		return
 	}
 
 	accessgate.RegisterTyped[fsGetPathContextReq, fsGetPathContextResp](r, TypeID_FS_GET_PATH_CONTEXT, gate, meta, accessgate.RPCAccessProtected, func(_ctx context.Context, _ *fsGetPathContextReq) (*fsGetPathContextResp, error) {
 		if meta == nil || !meta.CanRead {
-			return nil, &rpc.Error{Code: 403, Message: fsErrorReadPermissionDenied}
+			return nil, &sessionrpc.Error{Code: 403, Message: fsErrorReadPermissionDenied}
 		}
 		return s.getPathContext(), nil
 	})
 
 	accessgate.RegisterTyped[fsListReq, fsListResp](r, TypeID_FS_LIST, gate, meta, accessgate.RPCAccessProtected, func(_ctx context.Context, req *fsListReq) (*fsListResp, error) {
 		if meta == nil || !meta.CanRead {
-			return nil, &rpc.Error{Code: 403, Message: fsErrorReadPermissionDenied}
+			return nil, &sessionrpc.Error{Code: 403, Message: fsErrorReadPermissionDenied}
 		}
 		showHidden := req.ShowHidden != nil && *req.ShowHidden
 		out, err := s.listDirectoryEntries(req.Path, showHidden)
@@ -134,27 +134,27 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 
 	accessgate.RegisterTyped[fsReadFileReq, fsReadFileResp](r, TypeID_FS_READ_FILE, gate, meta, accessgate.RPCAccessProtected, func(_ctx context.Context, req *fsReadFileReq) (*fsReadFileResp, error) {
 		if meta == nil || !meta.CanRead {
-			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "read permission denied"}
 		}
 		p, _, err := s.resolveReadableFilePath(req.Path)
 		if err != nil {
 			if errors.Is(err, filesystemscope.ErrPathOutsideScope) {
-				return nil, &rpc.Error{Code: 403, Message: "path outside filesystem scope"}
+				return nil, &sessionrpc.Error{Code: 403, Message: "path outside filesystem scope"}
 			}
 			if errors.Is(err, filesystemscope.ErrReadDenied) {
-				return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
+				return nil, &sessionrpc.Error{Code: 403, Message: "read permission denied"}
 			}
 			if os.IsNotExist(err) {
-				return nil, &rpc.Error{Code: 404, Message: "not found"}
+				return nil, &sessionrpc.Error{Code: 404, Message: "not found"}
 			}
 			if errors.Is(err, errFSPathIsDirectory) {
-				return nil, &rpc.Error{Code: 400, Message: "path is a directory"}
+				return nil, &sessionrpc.Error{Code: 400, Message: "path is a directory"}
 			}
-			return nil, &rpc.Error{Code: 400, Message: "invalid path"}
+			return nil, &sessionrpc.Error{Code: 400, Message: "invalid path"}
 		}
 		b, err := os.ReadFile(p)
 		if err != nil {
-			return nil, &rpc.Error{Code: 404, Message: "not found"}
+			return nil, &sessionrpc.Error{Code: 404, Message: "not found"}
 		}
 
 		enc := strings.ToLower(strings.TrimSpace(req.Encoding))
@@ -164,23 +164,23 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		case "base64":
 			return &fsReadFileResp{Content: base64.StdEncoding.EncodeToString(b), Encoding: "base64"}, nil
 		default:
-			return nil, &rpc.Error{Code: 400, Message: "unsupported encoding"}
+			return nil, &sessionrpc.Error{Code: 400, Message: "unsupported encoding"}
 		}
 	})
 
 	accessgate.RegisterTyped[fsWriteFileReq, fsWriteFileResp](r, TypeID_FS_WRITE, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *fsWriteFileReq) (*fsWriteFileResp, error) {
 		if meta == nil || !meta.CanWrite {
-			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "write permission denied"}
 		}
 		p, err := s.resolveTargetPath(req.Path)
 		if err != nil {
 			if errors.Is(err, filesystemscope.ErrPathOutsideScope) {
-				return nil, &rpc.Error{Code: 403, Message: "path outside filesystem scope"}
+				return nil, &sessionrpc.Error{Code: 403, Message: "path outside filesystem scope"}
 			}
 			if errors.Is(err, filesystemscope.ErrWriteDenied) {
-				return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+				return nil, &sessionrpc.Error{Code: 403, Message: "write permission denied"}
 			}
-			return nil, &rpc.Error{Code: 400, Message: "invalid path"}
+			return nil, &sessionrpc.Error{Code: 400, Message: "invalid path"}
 		}
 
 		enc := strings.ToLower(strings.TrimSpace(req.Encoding))
@@ -191,11 +191,11 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		case "base64":
 			b, err := base64.StdEncoding.DecodeString(req.Content)
 			if err != nil {
-				return nil, &rpc.Error{Code: 400, Message: "invalid base64"}
+				return nil, &sessionrpc.Error{Code: 400, Message: "invalid base64"}
 			}
 			data = b
 		default:
-			return nil, &rpc.Error{Code: 400, Message: "unsupported encoding"}
+			return nil, &sessionrpc.Error{Code: 400, Message: "unsupported encoding"}
 		}
 
 		createDirs := req.CreateDirs != nil && *req.CreateDirs
@@ -211,25 +211,25 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 			if errors.Is(err, gitruntime.ErrResourceLimit) {
 				return nil, mutationCoordinationRPCError(err)
 			}
-			return nil, &rpc.Error{Code: 500, Message: "write failed"}
+			return nil, &sessionrpc.Error{Code: 500, Message: "write failed"}
 		}
 		return &fsWriteFileResp{Success: true}, nil
 	})
 
 	accessgate.RegisterTyped[fsMkdirReq, fsMkdirResp](r, TypeID_FS_MKDIR, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *fsMkdirReq) (*fsMkdirResp, error) {
 		if meta == nil || !meta.CanWrite {
-			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "write permission denied"}
 		}
 		createParents := req.CreateParents != nil && *req.CreateParents
 		target, resolveErr := s.resolveTargetPath(req.Path)
 		if resolveErr != nil {
 			if errors.Is(resolveErr, filesystemscope.ErrPathOutsideScope) {
-				return nil, &rpc.Error{Code: 403, Message: "path outside filesystem scope"}
+				return nil, &sessionrpc.Error{Code: 403, Message: "path outside filesystem scope"}
 			}
 			if errors.Is(resolveErr, filesystemscope.ErrWriteDenied) {
-				return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+				return nil, &sessionrpc.Error{Code: 403, Message: "write permission denied"}
 			}
-			return nil, &rpc.Error{Code: 400, Message: "invalid path"}
+			return nil, &sessionrpc.Error{Code: 400, Message: "invalid path"}
 		}
 		if err := s.coordinateMutation(ctx, gitruntime.FilesystemEffect{Paths: []string{target}, ChangesTopology: true}, func() error {
 			_, err := mkdirTargetResolved(target, createParents)
@@ -242,7 +242,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 
 	accessgate.RegisterTyped[fsDeleteReq, fsDeleteResp](r, TypeID_FS_DELETE, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *fsDeleteReq) (*fsDeleteResp, error) {
 		if meta == nil || !meta.CanWrite {
-			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "write permission denied"}
 		}
 		target, mutationErr := s.resolveExistingWritableEntryPath(req.Path)
 		if mutationErr != nil {
@@ -257,25 +257,25 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 				return nil, mutationCoordinationRPCError(err)
 			}
 			if os.IsNotExist(err) {
-				return nil, &rpc.Error{Code: 404, Message: "not found"}
+				return nil, &sessionrpc.Error{Code: 404, Message: "not found"}
 			}
 			if errors.Is(err, filesystemscope.ErrPathOutsideScope) {
-				return nil, &rpc.Error{Code: 403, Message: "path outside filesystem scope"}
+				return nil, &sessionrpc.Error{Code: 403, Message: "path outside filesystem scope"}
 			}
 			if errors.Is(err, filesystemscope.ErrWriteDenied) {
-				return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+				return nil, &sessionrpc.Error{Code: 403, Message: "write permission denied"}
 			}
 			if errors.Is(err, errFSInvalidPath) {
-				return nil, &rpc.Error{Code: 400, Message: "invalid path"}
+				return nil, &sessionrpc.Error{Code: 400, Message: "invalid path"}
 			}
-			return nil, &rpc.Error{Code: 500, Message: "delete failed"}
+			return nil, &sessionrpc.Error{Code: 500, Message: "delete failed"}
 		}
 		return &fsDeleteResp{Success: true}, nil
 	})
 
 	accessgate.RegisterTyped[fsRenameReq, fsRenameResp](r, TypeID_FS_RENAME, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *fsRenameReq) (*fsRenameResp, error) {
 		if meta == nil || !meta.CanWrite {
-			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "write permission denied"}
 		}
 		oldPath, oldResolveErr := s.resolveExistingWritableEntryPath(req.OldPath)
 		newTarget, newResolveErr := s.resolveTargetPath(req.NewPath)
@@ -299,19 +299,19 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 			}
 			switch {
 			case os.IsNotExist(err):
-				return nil, &rpc.Error{Code: 404, Message: "source not found"}
+				return nil, &sessionrpc.Error{Code: 404, Message: "source not found"}
 			case errors.Is(err, filesystemscope.ErrPathOutsideScope):
-				return nil, &rpc.Error{Code: 403, Message: "path outside filesystem scope"}
+				return nil, &sessionrpc.Error{Code: 403, Message: "path outside filesystem scope"}
 			case errors.Is(err, filesystemscope.ErrWriteDenied):
-				return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+				return nil, &sessionrpc.Error{Code: 403, Message: "write permission denied"}
 			case errors.Is(err, errFSDestinationExists):
-				return nil, &rpc.Error{Code: 409, Message: "destination already exists"}
+				return nil, &sessionrpc.Error{Code: 409, Message: "destination already exists"}
 			case errors.Is(err, errFSInvalidNewPath):
-				return nil, &rpc.Error{Code: 400, Message: "invalid new_path"}
+				return nil, &sessionrpc.Error{Code: 400, Message: "invalid new_path"}
 			case errors.Is(err, errFSInvalidOldPath):
-				return nil, &rpc.Error{Code: 400, Message: "invalid old_path"}
+				return nil, &sessionrpc.Error{Code: 400, Message: "invalid old_path"}
 			default:
-				return nil, &rpc.Error{Code: 500, Message: "rename failed"}
+				return nil, &sessionrpc.Error{Code: 500, Message: "rename failed"}
 			}
 		}
 		return &fsRenameResp{Success: true, NewPath: newPath}, nil
@@ -319,7 +319,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 
 	accessgate.RegisterTyped[fsCopyReq, fsCopyResp](r, TypeID_FS_COPY, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *fsCopyReq) (*fsCopyResp, error) {
 		if meta == nil || !meta.CanWrite {
-			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "write permission denied"}
 		}
 		overwrite := req.Overwrite != nil && *req.Overwrite
 		source, sourceResolveErr := s.resolveExistingEntryPath(req.SourcePath)
@@ -344,19 +344,19 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 			}
 			switch {
 			case os.IsNotExist(err):
-				return nil, &rpc.Error{Code: 404, Message: "source not found"}
+				return nil, &sessionrpc.Error{Code: 404, Message: "source not found"}
 			case errors.Is(err, filesystemscope.ErrPathOutsideScope):
-				return nil, &rpc.Error{Code: 403, Message: "path outside filesystem scope"}
+				return nil, &sessionrpc.Error{Code: 403, Message: "path outside filesystem scope"}
 			case errors.Is(err, filesystemscope.ErrWriteDenied):
-				return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+				return nil, &sessionrpc.Error{Code: 403, Message: "write permission denied"}
 			case errors.Is(err, errFSDestinationExists):
-				return nil, &rpc.Error{Code: 409, Message: "destination already exists"}
+				return nil, &sessionrpc.Error{Code: 409, Message: "destination already exists"}
 			case errors.Is(err, errFSInvalidSourcePath):
-				return nil, &rpc.Error{Code: 400, Message: "invalid source_path"}
+				return nil, &sessionrpc.Error{Code: 400, Message: "invalid source_path"}
 			case errors.Is(err, errFSInvalidDestPath):
-				return nil, &rpc.Error{Code: 400, Message: "invalid dest_path"}
+				return nil, &sessionrpc.Error{Code: 400, Message: "invalid dest_path"}
 			default:
-				return nil, &rpc.Error{Code: 500, Message: "copy failed: " + err.Error()}
+				return nil, &sessionrpc.Error{Code: 500, Message: "copy failed: " + err.Error()}
 			}
 		}
 		return &fsCopyResp{Success: true, NewPath: newPath}, nil
@@ -404,12 +404,12 @@ func (s *Service) mkdirTarget(path string, createParents bool) (string, error) {
 	targetPath, err := s.resolveTargetPath(path)
 	if err != nil {
 		if errors.Is(err, filesystemscope.ErrPathOutsideScope) {
-			return "", &rpc.Error{Code: 403, Message: "path outside filesystem scope"}
+			return "", &sessionrpc.Error{Code: 403, Message: "path outside filesystem scope"}
 		}
 		if errors.Is(err, filesystemscope.ErrWriteDenied) {
-			return "", &rpc.Error{Code: 403, Message: "write permission denied"}
+			return "", &sessionrpc.Error{Code: 403, Message: "write permission denied"}
 		}
-		return "", &rpc.Error{Code: 400, Message: "invalid path"}
+		return "", &sessionrpc.Error{Code: 400, Message: "invalid path"}
 	}
 
 	return mkdirTargetResolved(targetPath, createParents)
@@ -417,40 +417,40 @@ func (s *Service) mkdirTarget(path string, createParents bool) (string, error) {
 
 func mkdirTargetResolved(targetPath string, createParents bool) (string, error) {
 	if _, err := os.Stat(targetPath); err == nil {
-		return "", &rpc.Error{Code: 409, Message: "path already exists"}
+		return "", &sessionrpc.Error{Code: 409, Message: "path already exists"}
 	} else if !os.IsNotExist(err) {
-		return "", &rpc.Error{Code: 500, Message: "failed to stat target"}
+		return "", &sessionrpc.Error{Code: 500, Message: "failed to stat target"}
 	}
 
 	if !createParents {
 		parentDir := filepath.Dir(targetPath)
 		info, err := os.Stat(parentDir)
 		if os.IsNotExist(err) {
-			return "", &rpc.Error{Code: 404, Message: "parent directory not found"}
+			return "", &sessionrpc.Error{Code: 404, Message: "parent directory not found"}
 		}
 		if err != nil {
-			return "", &rpc.Error{Code: 500, Message: "failed to stat parent directory"}
+			return "", &sessionrpc.Error{Code: 500, Message: "failed to stat parent directory"}
 		}
 		if !info.IsDir() {
-			return "", &rpc.Error{Code: 400, Message: "parent is not a directory"}
+			return "", &sessionrpc.Error{Code: 400, Message: "parent is not a directory"}
 		}
 	}
 
 	if createParents {
 		if err := os.MkdirAll(targetPath, 0o755); err != nil {
 			if os.IsExist(err) {
-				return "", &rpc.Error{Code: 409, Message: "path already exists"}
+				return "", &sessionrpc.Error{Code: 409, Message: "path already exists"}
 			}
-			return "", &rpc.Error{Code: 500, Message: "mkdir failed"}
+			return "", &sessionrpc.Error{Code: 500, Message: "mkdir failed"}
 		}
 		return targetPath, nil
 	}
 
 	if err := os.Mkdir(targetPath, 0o755); err != nil {
 		if os.IsExist(err) {
-			return "", &rpc.Error{Code: 409, Message: "path already exists"}
+			return "", &sessionrpc.Error{Code: 409, Message: "path already exists"}
 		}
-		return "", &rpc.Error{Code: 500, Message: "mkdir failed"}
+		return "", &sessionrpc.Error{Code: 500, Message: "mkdir failed"}
 	}
 
 	return targetPath, nil

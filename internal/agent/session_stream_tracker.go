@@ -1,27 +1,28 @@
 package agent
 
 import (
+	"context"
 	"sync"
 
-	"github.com/floegence/flowersec/flowersec-go/endpoint"
-	fsstream "github.com/floegence/flowersec/flowersec-go/stream"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v2"
 )
 
 // drainingEndpointSession accounts a stream before Flowersec dispatches its
 // handler. This closes the ServeSession return-to-handler-start race without
 // changing the released Flowersec dependency.
 type drainingEndpointSession struct {
-	endpoint.Session
+	flowersec.Session
 	streams sync.WaitGroup
 }
 
-func (s *drainingEndpointSession) AcceptStreamHello(maxHelloBytes int) (string, fsstream.Stream, error) {
-	kind, stream, err := s.Session.AcceptStreamHello(maxHelloBytes)
+func (s *drainingEndpointSession) AcceptStream(ctx context.Context) (flowersec.IncomingStream, error) {
+	incoming, err := s.Session.AcceptStream(ctx)
 	if err != nil {
-		return kind, stream, err
+		return incoming, err
 	}
 	s.streams.Add(1)
-	return kind, &drainingEndpointStream{Stream: stream, done: s.streams.Done}, nil
+	incoming.Stream = &drainingEndpointStream{ByteStream: incoming.Stream, done: s.streams.Done}
+	return incoming, nil
 }
 
 func (s *drainingEndpointSession) Wait() {
@@ -31,7 +32,7 @@ func (s *drainingEndpointSession) Wait() {
 }
 
 type drainingEndpointStream struct {
-	fsstream.Stream
+	flowersec.ByteStream
 	done      func()
 	closeOnce sync.Once
 }
@@ -42,7 +43,7 @@ func (s *drainingEndpointStream) Close() error {
 	}
 	var err error
 	s.closeOnce.Do(func() {
-		err = s.Stream.Close()
+		err = s.ByteStream.Close()
 		if s.done != nil {
 			s.done()
 		}

@@ -157,11 +157,8 @@ func writeTestConfig(t *testing.T) string {
   "environment_id": "env_123",
   "agent_instance_id": "agent_123",
   "direct": {
-    "ws_url": "wss://example.com/ws",
-    "channel_id": "ch_123",
-    "e2ee_psk_b64u": "secret",
-    "channel_init_expire_at_unix_s": 0,
-    "default_suite": 1
+    "artifact_json": {"v": 2},
+    "expires_at_unix_s": 4102444800
   }
 }
 `
@@ -207,11 +204,8 @@ func writeTestConfigWithAI(t *testing.T) string {
   "environment_id": "env_123",
   "agent_instance_id": "agent_123",
   "direct": {
-    "ws_url": "wss://example.com/ws",
-    "channel_id": "ch_123",
-    "e2ee_psk_b64u": "secret",
-    "channel_init_expire_at_unix_s": 0,
-    "default_suite": 1
+    "artifact_json": {"v": 2},
+    "expires_at_unix_s": 4102444800
   },
   "ai": {
     "current_model_id": "openai/gpt-5-mini",
@@ -1692,8 +1686,8 @@ func TestServer_Settings_RedactsSecrets(t *testing.T) {
 		if _, ok := direct["e2ee_psk_b64u"]; ok {
 			t.Fatalf("secret leaked: e2ee_psk_b64u must not be returned")
 		}
-		if direct["e2ee_psk_set"] != true {
-			t.Fatalf("e2ee_psk_set mismatch: got=%v want=true", direct["e2ee_psk_set"])
+		if direct["artifact_provisioned"] != true {
+			t.Fatalf("artifact_provisioned mismatch: got=%v want=true", direct["artifact_provisioned"])
 		}
 	}
 

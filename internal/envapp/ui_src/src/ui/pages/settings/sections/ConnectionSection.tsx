@@ -87,7 +87,7 @@ export function ConnectionSection() {
   const controlPlaneURL = () => String(conn()?.controlplane_base_url ?? '').trim();
   const environmentID = () => String(conn()?.environment_id ?? '').trim();
   const runtimeInstanceID = () => String(conn()?.agent_instance_id ?? '').trim();
-  const e2eeReady = () => Boolean(direct()?.e2ee_psk_set);
+  const artifactReady = () => Boolean(direct()?.artifact_provisioned);
   const hasConnectionInfo = () => Boolean(controlPlaneURL() || environmentID() || runtimeInstanceID());
 
   const openConnectionManager = async () => {
@@ -115,8 +115,8 @@ export function ConnectionSection() {
             label={hasConnectionInfo() ? i18n.t('settings.connection.connectedRuntime') : i18n.t('settings.connection.incompleteConnectionInfo')}
           />
           <ConnectionStatusLine
-            active={e2eeReady()}
-            label={e2eeReady() ? i18n.t('settings.connection.keyProvisioned') : i18n.t('settings.connection.keyNotProvisioned')}
+            active={artifactReady()}
+            label={artifactReady() ? i18n.t('settings.connection.keyProvisioned') : i18n.t('settings.connection.keyNotProvisioned')}
           />
         </div>
       </div>
@@ -159,11 +159,11 @@ export function ConnectionSection() {
         <ConnectionInfoRow
           icon={ShieldCheck}
           label={i18n.t('settings.connection.securityKey')}
-          technicalLabel={i18n.t('settings.connection.e2eePsk')}
+          technicalLabel={i18n.t('settings.connection.securityKey')}
           description={i18n.t('settings.connection.securityKeyDescription')}
           value={
-            <span class={e2eeReady() ? 'text-sm font-medium text-foreground' : 'text-sm text-muted-foreground'}>
-              {e2eeReady() ? i18n.t('settings.connection.keyProvisioned') : i18n.t('settings.connection.keyNotProvisioned')}
+            <span class={artifactReady() ? 'text-sm font-medium text-foreground' : 'text-sm text-muted-foreground'}>
+              {artifactReady() ? i18n.t('settings.connection.keyProvisioned') : i18n.t('settings.connection.keyNotProvisioned')}
             </span>
           }
         />
@@ -197,12 +197,9 @@ export function ConnectionSection() {
           <div class="redeven-settings-inset mt-2 overflow-hidden rounded-lg border">
             <table class="w-full table-fixed text-xs">
               <tbody>
-                <TechnicalRow label={i18n.t('settings.connection.channelId')} value={String(direct()?.channel_id ?? '')} emptyLabel={i18n.t('settings.connection.emptyValue')} />
-                <TechnicalRow label={i18n.t('settings.connection.webSocketUrl')} value={String(direct()?.ws_url ?? '')} emptyLabel={i18n.t('settings.connection.emptyValue')} />
-                <TechnicalRow label={i18n.t('settings.connection.directSuite')} value={String(direct()?.default_suite ?? '')} emptyLabel={i18n.t('settings.connection.emptyValue')} />
                 <TechnicalRow
                   label={i18n.t('settings.connection.channelInitExpiresAt')}
-                  value={direct()?.channel_init_expire_at_unix_s ? String(direct()!.channel_init_expire_at_unix_s) : ''}
+                  value={direct()?.expires_at_unix_s ? String(direct()!.expires_at_unix_s) : ''}
                   emptyLabel={i18n.t('settings.connection.emptyValue')}
                 />
               </tbody>

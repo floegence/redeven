@@ -1,4 +1,4 @@
-import type { Client } from '@floegence/flowersec-core';
+import type { Session } from '@floegence/flowersec-core';
 
 import { openFileByteStream } from '../utils/fileStreamReader';
 import type { DownloadCommand, RuntimeDownloadSource } from './types';
@@ -7,7 +7,7 @@ function encodeUtf8(value: string): Uint8Array<ArrayBuffer> {
   return new TextEncoder().encode(value) as Uint8Array<ArrayBuffer>;
 }
 
-export function createRuntimeDownloadSource(client: () => Client | null | undefined): RuntimeDownloadSource {
+export function createRuntimeDownloadSource(client: () => Session | null | undefined): RuntimeDownloadSource {
   return {
     async open(command: DownloadCommand, signal: AbortSignal) {
       if (command.source.kind === 'draft_text') {

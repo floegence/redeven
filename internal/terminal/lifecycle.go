@@ -5,7 +5,7 @@ import (
 	"time"
 
 	termgo "github.com/floegence/floeterm/terminal-go"
-	"github.com/floegence/flowersec/flowersec-go/rpc"
+	"github.com/floegence/redeven/internal/sessionrpc"
 )
 
 type SessionLifecycle string
@@ -191,16 +191,16 @@ func (m *Manager) DeleteSessionForWidget(sessionID string, widgetID string) erro
 
 func (m *Manager) requestSessionDelete(sessionID string, widgetID string, strict bool) error {
 	if m == nil {
-		return &rpc.Error{Code: 500, Message: "internal error"}
+		return &sessionrpc.Error{Code: 500, Message: "internal error"}
 	}
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
-		return &rpc.Error{Code: 400, Message: "session_id is required"}
+		return &sessionrpc.Error{Code: 400, Message: "session_id is required"}
 	}
 
 	nowUnixMs := time.Now().UnixMilli()
 	if m.term == nil {
-		return &rpc.Error{Code: 500, Message: "internal error"}
+		return &sessionrpc.Error{Code: 500, Message: "internal error"}
 	}
 	_, sessionExists := m.term.GetSession(sessionID)
 

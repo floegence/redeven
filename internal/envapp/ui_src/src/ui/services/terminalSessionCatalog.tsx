@@ -667,7 +667,7 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
 
   const refresh = async (): Promise<void> => {
     if (providerDisposed) return;
-    const client = protocol.client();
+    const client = protocol.session?.();
     const canUseCatalog = protocol.status() === 'connected'
       && Boolean(client)
       && env.env.state === 'ready'
@@ -789,7 +789,7 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
 
   const getCoordinator = (): TerminalSessionsCoordinator | null => {
     if (providerDisposed) return null;
-    const client = protocol.client();
+    const client = protocol.session?.();
     if (!client || protocol.status() !== 'connected') return null;
     if (env.env.state !== 'ready' || !canLaunchProcess(env.env()?.permissions)) return null;
     return ensureCoordinator(client);
@@ -862,7 +862,7 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     disposeConnection(false);
     setStale(false);
     markPermissionDenied(
-      protocol.client(),
+      protocol.session?.(),
       String(env.env_id() ?? '').trim(),
       env.env()?.permissions,
     );
@@ -899,7 +899,7 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
 
   createEffect(() => {
     const envId = String(env.env_id() ?? '').trim();
-    const client = protocol.client();
+    const client = protocol.session?.();
     const connected = protocol.status() === 'connected' && Boolean(client);
     const permissionReady = env.env.state === 'ready';
     const permissions = env.env()?.permissions;

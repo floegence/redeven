@@ -2,41 +2,25 @@ package ai
 
 import (
 	"context"
-	"net"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/sessionrpc"
 )
 
 func TestRPC_Permissions_RequireRWX(t *testing.T) {
 	t.Parallel()
 
-	serverConn, clientConn := net.Pipe()
-	t.Cleanup(func() { _ = serverConn.Close() })
-	t.Cleanup(func() { _ = clientConn.Close() })
-
-	router := rpc.NewRouter()
+	router := sessionrpc.NewRouter()
 	svc := &Service{}
 	meta := &session.Meta{CanRead: true, CanWrite: false, CanExecute: false}
-	svc.RegisterRPC(router, meta, nil)
-
-	server := rpc.NewServer(serverConn, router)
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-
-	done := make(chan error, 1)
-	go func() {
-		done <- server.Serve(ctx)
-	}()
-
-	client := rpc.NewClient(clientConn)
+	peer := newTestRPCPeer(router)
+	svc.RegisterRPC(router, meta, peer)
 
 	assertRWXDenied := func(typeID uint32) {
 		t.Helper()
-		_, rpcErr, err := client.Call(context.Background(), typeID, []byte(`{}`))
+		_, rpcErr, err := callTestRPC(context.Background(), peer, typeID, []byte(`{}`))
 		if err != nil {
 			t.Fatalf("Call type_id=%d: %v", typeID, err)
 		}
@@ -46,10 +30,7 @@ func TestRPC_Permissions_RequireRWX(t *testing.T) {
 		if rpcErr.Code != 403 {
 			t.Fatalf("Call type_id=%d: code=%d, want 403", typeID, rpcErr.Code)
 		}
-		msg := ""
-		if rpcErr.Message != nil {
-			msg = strings.TrimSpace(*rpcErr.Message)
-		}
+		msg := strings.TrimSpace(rpcErr.Message)
 		if !strings.Contains(msg, "read/write/execute permission denied") {
 			t.Fatalf("Call type_id=%d: message=%q", typeID, msg)
 		}
@@ -59,12 +40,4 @@ func TestRPC_Permissions_RequireRWX(t *testing.T) {
 	assertRWXDenied(TypeID_AI_SUBSCRIBE_THREAD)
 	assertRWXDenied(TypeID_AI_MESSAGES_LIST)
 
-	cancel()
-	_ = clientConn.Close()
-
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatalf("rpc server did not stop")
-	}
 }

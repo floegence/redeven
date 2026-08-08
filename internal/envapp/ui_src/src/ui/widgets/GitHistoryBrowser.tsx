@@ -353,7 +353,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
 
   const loadCommitDetail = async (hash: string) => {
     const repo = repoRootPath();
-    if (!repo || !hash || !protocol.client()) return;
+    if (!repo || !hash || !protocol.session?.()) return;
     const seq = ++detailReqSeq;
     setDetailLoading(true);
     setDetailError("");

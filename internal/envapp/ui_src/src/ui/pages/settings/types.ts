@@ -88,11 +88,8 @@ export type AgentSettingsResponse = Readonly<{
     environment_id: string;
     agent_instance_id: string;
     direct: Readonly<{
-      ws_url: string;
-      channel_id: string;
-      channel_init_expire_at_unix_s: number;
-      default_suite: number;
-      e2ee_psk_set: boolean;
+      artifact_provisioned: boolean;
+      expires_at_unix_s: number;
     }>;
   }>;
   runtime: Readonly<{ agent_home_dir: string; shell: string; filesystem_scope?: FilesystemScope | null }>;

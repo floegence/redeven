@@ -3,20 +3,19 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/x509"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
-	"net/netip"
 	"net/url"
 	"os"
 	"strings"
 	"time"
 
-	fsclient "github.com/floegence/flowersec/flowersec-go/client"
-	"github.com/floegence/flowersec/flowersec-go/protocolio"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v2"
 	"github.com/floegence/redeven/internal/rpcutil"
 	"github.com/floegence/redeven/internal/sys"
 )
@@ -112,15 +111,7 @@ func run(baseURL string, action string, targetVersion string, password string) e
 	if err != nil {
 		return err
 	}
-	policy, err := transportSecurityPolicyForHost(parsedBase.Hostname())
-	if err != nil {
-		return err
-	}
-	session, err := fsclient.Connect(ctx, artifact,
-		fsclient.WithOrigin(origin),
-		fsclient.WithHeader(webSocketCookieHeader(httpClient, parsedBase)),
-		fsclient.WithTransportSecurityPolicy(policy),
-	)
+	session, err := connectFlowersecSession(ctx, artifact, origin)
 	if err != nil {
 		return fmt.Errorf("connect direct session: %w", err)
 	}
@@ -179,20 +170,6 @@ func newHTTPClient(baseURL string) (*http.Client, *url.URL, error) {
 	return &http.Client{Jar: jar}, parsedBase, nil
 }
 
-func transportSecurityPolicyForHost(host string) (fsclient.TransportSecurityPolicy, error) {
-	addr, err := netip.ParseAddr(strings.TrimSpace(host))
-	if err != nil {
-		return nil, fmt.Errorf("Local UI host must be an IP literal: %w", err)
-	}
-	if addr.IsLoopback() {
-		return fsclient.AllowPlaintextForLoopback, nil
-	}
-	return fsclient.NewNetworkPlaintextPolicy(fsclient.NetworkPlaintextPolicyOptions{
-		AllowedHosts:   []string{addr.String()},
-		RiskAcceptance: fsclient.PlaintextRiskAcceptPreE2ECredentialExposure,
-	})
-}
-
 func unlockLocalUI(ctx context.Context, client *http.Client, parsedBase *url.URL, password string) error {
 	endpoint := parsedBase.ResolveReference(&url.URL{Path: "/api/local/access/unlock"})
 	body, err := json.Marshal(map[string]string{"password": password})
@@ -213,22 +190,6 @@ func unlockLocalUI(ctx context.Context, client *http.Client, parsedBase *url.URL
 		return fmt.Errorf("POST access unlock returned HTTP %d", resp.StatusCode)
 	}
 	return nil
-}
-
-func webSocketCookieHeader(client *http.Client, parsedBase *url.URL) http.Header {
-	header := make(http.Header)
-	if client == nil || client.Jar == nil || parsedBase == nil {
-		return header
-	}
-	cookies := client.Jar.Cookies(parsedBase)
-	parts := make([]string, 0, len(cookies))
-	for _, cookie := range cookies {
-		parts = append(parts, cookie.Name+"="+cookie.Value)
-	}
-	if len(parts) > 0 {
-		header.Set("Cookie", strings.Join(parts, "; "))
-	}
-	return header
 }
 
 func readAccessStatus(ctx context.Context, client *http.Client, parsedBase *url.URL) (accessStatus, error) {
@@ -321,16 +282,7 @@ func verifyNetworkExposure(ctx context.Context, baseURL string, password string)
 	if err != nil {
 		return nil, err
 	}
-	policy, err := transportSecurityPolicyForHost(parsedBase.Hostname())
-	if err != nil {
-		return nil, err
-	}
-	cookieHeader := webSocketCookieHeader(client, parsedBase)
-	session, err := fsclient.Connect(ctx, artifact,
-		fsclient.WithOrigin(origin),
-		fsclient.WithHeader(cookieHeader),
-		fsclient.WithTransportSecurityPolicy(policy),
-	)
+	session, err := connectFlowersecSession(ctx, artifact, origin)
 	if err != nil {
 		return nil, fmt.Errorf("connect network direct session: %w", err)
 	}
@@ -343,11 +295,10 @@ func verifyNetworkExposure(ctx context.Context, baseURL string, password string)
 	if err != nil {
 		return nil, err
 	}
-	_, wrongOriginErr := fsclient.Connect(ctx, wrongOriginArtifact,
-		fsclient.WithOrigin("http://evil.example.invalid"),
-		fsclient.WithHeader(cookieHeader),
-		fsclient.WithTransportSecurityPolicy(policy),
-	)
+	wrongOriginSession, wrongOriginErr := connectFlowersecSession(ctx, wrongOriginArtifact, "http://evil.example.invalid")
+	if wrongOriginSession != nil {
+		_ = wrongOriginSession.Close()
+	}
 	if wrongOriginErr == nil {
 		return nil, fmt.Errorf("wrong Origin unexpectedly established a Direct session")
 	}
@@ -360,30 +311,42 @@ func verifyNetworkExposure(ctx context.Context, baseURL string, password string)
 	}, nil
 }
 
-func mintConnectArtifact(ctx context.Context, client *http.Client, parsedBase *url.URL) (*protocolio.ConnectArtifact, string, error) {
+func mintConnectArtifact(ctx context.Context, client *http.Client, parsedBase *url.URL) (flowersec.Artifact, string, error) {
 	origin := parsedBase.Scheme + "://" + parsedBase.Host
 	endpoint := parsedBase.ResolveReference(&url.URL{Path: "/api/local/direct/connect_artifact"})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint.String(), bytes.NewBufferString(`{}`))
 	if err != nil {
-		return nil, "", err
+		return flowersec.Artifact{}, "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Origin", origin)
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, "", fmt.Errorf("POST connect_artifact: %w", err)
+		return flowersec.Artifact{}, "", fmt.Errorf("POST connect_artifact: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, "", fmt.Errorf("POST connect_artifact returned HTTP %d", resp.StatusCode)
+		return flowersec.Artifact{}, "", fmt.Errorf("POST connect_artifact returned HTTP %d", resp.StatusCode)
 	}
 	var envelope connectArtifactEnvelope
 	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
-		return nil, "", fmt.Errorf("decode connect artifact envelope: %w", err)
+		return flowersec.Artifact{}, "", fmt.Errorf("decode connect artifact envelope: %w", err)
 	}
-	artifact, err := protocolio.DecodeConnectArtifactJSON(bytes.NewReader(envelope.ConnectArtifact))
+	artifact, err := flowersec.ParseArtifact(envelope.ConnectArtifact)
 	if err != nil {
-		return nil, "", fmt.Errorf("decode connect artifact: %w", err)
+		return flowersec.Artifact{}, "", fmt.Errorf("decode connect artifact: %w", err)
 	}
 	return artifact, origin, nil
+}
+
+func connectFlowersecSession(ctx context.Context, artifact flowersec.Artifact, origin string) (flowersec.Session, error) {
+	trustRoots, err := x509.SystemCertPool()
+	if err != nil || trustRoots == nil || len(trustRoots.Subjects()) == 0 {
+		return nil, fmt.Errorf("system trust roots unavailable: %w", err)
+	}
+	lease, err := flowersec.NewArtifactLease(artifact, func(context.Context) error { return nil })
+	if err != nil {
+		return nil, err
+	}
+	return flowersec.Connect(ctx, lease, flowersec.ConnectorOptions{TrustRoots: trustRoots, Origin: origin, ConnectTimeout: 15 * time.Second})
 }

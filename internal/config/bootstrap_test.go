@@ -33,12 +33,11 @@ func TestBootstrapConfigExplicitLogLevelOverridesPreviousConfig(t *testing.T) {
   "provider_origin": "https://redeven.test",
   "access_point_id": "dev",
 	  "access_point_origin": "https://` + r.Host + `",
-  "direct": {
-    "ws_url": "wss://dev.redeven.test/control/ws",
-    "channel_id": "ch_123",
-    "e2ee_psk_b64u": "cHNr",
-    "channel_init_expire_at_unix_s": 4102444800
-  },
+	  "direct": {
+	    "artifact_json": ` + directArtifactFixture + `,
+	    "expires_at_unix_s": 4102444800,
+	    "spent": false
+	  },
   "local_environment_binding": {
     "local_environment_public_id": "le_existing",
     "env_public_id": "env_123",
@@ -109,26 +108,17 @@ func TestBootstrapConfigExplicitLogLevelOverridesPreviousConfig(t *testing.T) {
 	if cfg.ControlplaneProviderID != "example_control_plane" {
 		t.Fatalf("ControlplaneProviderID = %q, want %q", cfg.ControlplaneProviderID, "example_control_plane")
 	}
-	if cfg.Direct == nil || cfg.Direct.ChannelId != "ch_123" {
+	if cfg.Direct == nil || !jsonEqual(cfg.Direct.ArtifactJSON, []byte(directArtifactFixture)) {
 		t.Fatalf("Direct = %#v", cfg.Direct)
 	}
 	configBody, err := os.ReadFile(layout.ConfigPath)
 	if err != nil {
 		t.Fatalf("ReadFile(config) error = %v", err)
 	}
-	if strings.Contains(string(configBody), "e2ee_psk_b64u") || strings.Contains(string(configBody), "cHNr") || strings.Contains(string(configBody), "ticket-123") {
-		t.Fatalf("config contains bootstrap secret material: %s", configBody)
+	if strings.Contains(string(configBody), "ticket-123") {
+		t.Fatalf("config contains bootstrap ticket: %s", configBody)
 	}
-	if !strings.Contains(string(configBody), `"e2ee_psk_set": true`) {
-		t.Fatalf("config missing e2ee_psk_set: %s", configBody)
-	}
-	secretsInfo, err := os.Stat(layout.SecretsPath)
-	if err != nil {
-		t.Fatalf("Stat(secrets) error = %v", err)
-	}
-	if secretsInfo.Mode().Perm() != 0o600 {
-		t.Fatalf("secrets mode = %o, want 600", secretsInfo.Mode().Perm())
-	}
+	assertDirectEnvelopeFields(t, layout.ConfigPath)
 }
 
 func TestSavePreservesUnknownConfigFields(t *testing.T) {
@@ -210,12 +200,11 @@ func TestBootstrapConfigSupportsBootstrapTicketExchange(t *testing.T) {
   "provider_origin": "https://redeven.test",
   "access_point_id": "dev",
 	  "access_point_origin": "https://` + r.Host + `",
-  "direct": {
-    "ws_url": "wss://dev.redeven.test/control/ws",
-    "channel_id": "ch_ticket",
-    "e2ee_psk_b64u": "cHNr",
-    "channel_init_expire_at_unix_s": 4102444800
-  },
+	  "direct": {
+	    "artifact_json": ` + directArtifactFixture + `,
+	    "expires_at_unix_s": 4102444800,
+	    "spent": false
+	  },
   "local_environment_binding": {
     "local_environment_public_id": "` + payload.LocalEnvironmentPublicID + `",
     "env_public_id": "env_123",
@@ -255,7 +244,7 @@ func TestBootstrapConfigSupportsBootstrapTicketExchange(t *testing.T) {
 	if cfg.ControlplaneProviderID != "example_control_plane" {
 		t.Fatalf("ControlplaneProviderID = %q, want %q", cfg.ControlplaneProviderID, "example_control_plane")
 	}
-	if cfg.Direct == nil || cfg.Direct.ChannelId != "ch_ticket" {
+	if cfg.Direct == nil || !jsonEqual(cfg.Direct.ArtifactJSON, []byte(directArtifactFixture)) {
 		t.Fatalf("Direct = %#v", cfg.Direct)
 	}
 	if cfg.LocalEnvironmentPublicID == "" {

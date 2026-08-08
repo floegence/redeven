@@ -5,13 +5,9 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
-	"net/http"
-	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
-	controlv1 "github.com/floegence/flowersec/flowersec-go/gen/flowersec/controlplane/v1"
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
@@ -42,15 +38,11 @@ func TestSupportedFloeAppsExcludeLegacyFlowerControlPlaneApp(t *testing.T) {
 
 func TestGrantNotifyAcceptsValidRemoteSessionAndRegistersAccessGate(t *testing.T) {
 	gate := accessgate.New(accessgate.Options{Password: "secret"})
-	blockingTunnel := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
-		time.Sleep(5 * time.Second)
-	}))
-	t.Cleanup(blockingTunnel.Close)
 
 	notify := session.GrantServerNotify{
-		GrantServer: &controlv1.ChannelInitGrant{
-			ChannelId: " ch_remote ",
-			TunnelUrl: "ws" + strings.TrimPrefix(blockingTunnel.URL, "http") + "/tunnel/ws",
+		GrantServer: &session.ChannelInitGrant{
+			ChannelID:    " ch_remote ",
+			ArtifactJSON: []byte(controlArtifactFixture),
 		},
 		SessionMeta: &session.Meta{
 			ChannelID:         "ch_remote",
@@ -125,9 +117,9 @@ func TestGrantNotifyRejectsMissingRemoteIdentityBeforeRegisteringAccessGate(t *t
 	}
 
 	notify := session.GrantServerNotify{
-		GrantServer: &controlv1.ChannelInitGrant{
-			ChannelId: "ch_missing_identity",
-			TunnelUrl: "ws://127.0.0.1:1/tunnel/ws",
+		GrantServer: &session.ChannelInitGrant{
+			ChannelID:    "ch_missing_identity",
+			ArtifactJSON: []byte(controlArtifactFixture),
 		},
 		SessionMeta: &session.Meta{
 			ChannelID:         "ch_missing_identity",
@@ -172,9 +164,9 @@ func TestGrantNotifyRejectsSessionAfterShutdownAdmissionCloses(t *testing.T) {
 	a.beginSessionShutdown()
 
 	notify := session.GrantServerNotify{
-		GrantServer: &controlv1.ChannelInitGrant{
-			ChannelId: "ch_after_shutdown",
-			TunnelUrl: "ws://127.0.0.1:1/tunnel/ws",
+		GrantServer: &session.ChannelInitGrant{
+			ChannelID:    "ch_after_shutdown",
+			ArtifactJSON: []byte(controlArtifactFixture),
 		},
 		SessionMeta: &session.Meta{
 			ChannelID:         "ch_after_shutdown",

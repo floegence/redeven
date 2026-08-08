@@ -3,8 +3,8 @@ package agent
 import (
 	"context"
 	"crypto/rand"
+	"crypto/x509"
 	"encoding/base32"
-	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,18 +20,10 @@ import (
 	"time"
 
 	livev1 "github.com/floegence/floeterm/terminal-go/livev1"
-	fsclient "github.com/floegence/flowersec/flowersec-go/client"
-	"github.com/floegence/flowersec/flowersec-go/endpoint"
-	"github.com/floegence/flowersec/flowersec-go/endpoint/serve"
-	controlv1 "github.com/floegence/flowersec/flowersec-go/gen/flowersec/controlplane/v1"
-	directv1 "github.com/floegence/flowersec/flowersec-go/gen/flowersec/direct/v1"
-	"github.com/floegence/flowersec/flowersec-go/origin"
-	fsproxy "github.com/floegence/flowersec/flowersec-go/proxy"
-	"github.com/floegence/flowersec/flowersec-go/rpc"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v2"
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/accessproxy"
 	"github.com/floegence/redeven/internal/accessrpc"
-	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/auditlog"
 	"github.com/floegence/redeven/internal/codeapp"
 	"github.com/floegence/redeven/internal/config"
@@ -47,6 +39,7 @@ import (
 	"github.com/floegence/redeven/internal/runtimeidentity"
 	"github.com/floegence/redeven/internal/runtimeproxy"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/sessionrpc"
 	syssvc "github.com/floegence/redeven/internal/sys"
 	"github.com/floegence/redeven/internal/terminal"
 )
@@ -182,6 +175,7 @@ type Agent struct {
 	onControlDisabled    func()
 	runCtx               context.Context
 	controlCancel        context.CancelFunc
+	controlController    *flowersec.ConnectionController
 	controlRPC           rpcutil.Caller
 	controlRPCSerial     uint64
 	controlRPCCallMu     sync.Mutex
@@ -522,6 +516,7 @@ func (a *Agent) startControlChannel(ctx context.Context) {
 		a.controlCancel()
 		a.controlCancel = nil
 	}
+	a.controlController = nil
 	a.controlRPCSerial++
 	a.controlRPC = nil
 	controlCtx, cancel := context.WithCancel(ctx)
@@ -537,6 +532,7 @@ func (a *Agent) stopControlChannel() {
 	a.mu.Lock()
 	cancel := a.controlCancel
 	a.controlCancel = nil
+	a.controlController = nil
 	a.controlRPCSerial++
 	a.controlRPC = nil
 	a.mu.Unlock()
@@ -558,106 +554,124 @@ func (a *Agent) runControlLoop(ctx context.Context) {
 		a.log.Warn("control channel not started: invalid remote config", "error", err)
 		return
 	}
-	a.runControlAttempts(ctx, a.runControlOnce, newBackoff(), waitControlRetry)
-}
-
-type controlAttemptResult struct {
-	registered bool
-}
-
-type controlAttemptFunc func(context.Context) (controlAttemptResult, error)
-
-type controlRetryWaitFunc func(context.Context, time.Duration) bool
-
-func (a *Agent) runControlAttempts(ctx context.Context, attempt controlAttemptFunc, backoff *backoff, wait controlRetryWaitFunc) {
-	for {
-		if ctx.Err() != nil {
-			return
+	trustRoots, err := x509.SystemCertPool()
+	if err != nil || trustRoots == nil || len(trustRoots.Subjects()) == 0 {
+		a.log.Error("control channel not started: system trust roots are unavailable")
+		return
+	}
+	handlers, err := flowersec.NewSessionHandlers(flowersec.SessionHandlerOptions{OnError: func(handlerErr error) {
+		if handlerErr != nil {
+			a.log.Warn("control channel handler failed", "error", handlerErr)
 		}
-		if a.onControlConnecting != nil {
+	}})
+	if err != nil {
+		a.log.Error("control channel not started: create handlers", "error", err)
+		return
+	}
+	if err := handlers.HandleRPC(controlRPCTypeGrantServer, func(handlerCtx context.Context, payload json.RawMessage) (any, *flowersec.RPCError) {
+		a.handleGrantNotify(handlerCtx, payload)
+		return struct{}{}, nil
+	}); err != nil {
+		a.log.Error("control channel not started: register grant handler", "error", err)
+		return
+	}
+	controller, err := flowersec.NewConnectionController(&controlArtifactSource{agent: a}, flowersec.ConnectionControllerOptions{
+		Connector: flowersec.ConnectorOptions{
+			TrustRoots:     trustRoots,
+			Origin:         strings.TrimSuffix(cfg.ControlplaneBaseURL, "/"),
+			ConnectTimeout: 15 * time.Second,
+			Handlers:       handlers,
+		},
+	})
+	if err != nil {
+		a.log.Error("control channel not started: create Flowersec controller", "error", err)
+		return
+	}
+	a.mu.Lock()
+	if a.controlCancel == nil || ctx.Err() != nil {
+		a.mu.Unlock()
+		return
+	}
+	a.controlController = controller
+	a.mu.Unlock()
+	defer func() {
+		a.mu.Lock()
+		if a.controlController == controller {
+			a.controlController = nil
+		}
+		a.mu.Unlock()
+	}()
+
+	if a.onControlConnecting != nil {
+		a.onControlConnecting()
+	}
+	controller.Start(ctx)
+	snapshot := controller.Snapshot()
+	var sessionCancel context.CancelFunc
+	for snapshot.State != flowersec.ConnectionClosed && snapshot.State != flowersec.ConnectionFailed {
+		next, waitErr := controller.WaitForSnapshotChange(ctx, snapshot)
+		if waitErr != nil {
+			break
+		}
+		if next.State == flowersec.ConnectionConnecting && a.onControlConnecting != nil {
 			a.onControlConnecting()
 		}
-		result, attemptErr := attempt(ctx)
-		if ctx.Err() != nil {
-			return
+		if next.State == flowersec.ConnectionWaiting && next.Failure != nil {
+			a.log.Warn("control channel disconnected; Flowersec is retrying", "error", next.Failure.Error)
+			if a.onControlRetry != nil {
+				delay := time.Duration(0)
+				if !next.Failure.Disposition.RetryAt.IsZero() {
+					delay = time.Until(next.Failure.Disposition.RetryAt)
+					if delay < 0 {
+						delay = 0
+					}
+				}
+				a.onControlRetry(next.Failure.Error, delay)
+			}
 		}
-		a.log.Warn("control channel disconnected; retrying", "error", attemptErr)
-
-		if result.registered {
-			backoff.Reset()
+		if next.State == flowersec.ConnectionConnected && next.CurrentSession != nil && next.CurrentSession != snapshot.CurrentSession {
+			if sessionCancel != nil {
+				sessionCancel()
+			}
+			var sessionCtx context.Context
+			sessionCtx, sessionCancel = context.WithCancel(ctx)
+			go func(current flowersec.Session) {
+				if sessionErr := a.runControlSession(sessionCtx, current); sessionErr != nil && sessionCtx.Err() == nil {
+					a.log.Warn("control channel business session ended", "error", sessionErr)
+					_ = current.Close()
+				}
+			}(next.CurrentSession)
 		}
-		d, err := backoff.Next()
-		if err != nil {
-			a.log.Error("control channel retry scheduling failed", "error", err)
-			return
-		}
-		if a.onControlRetry != nil {
-			a.onControlRetry(attemptErr, d)
-		}
-		if !wait(ctx, d) {
-			return
-		}
+		snapshot = next
 	}
+	if sessionCancel != nil {
+		sessionCancel()
+	}
+	if snapshot.State == flowersec.ConnectionFailed && snapshot.Failure != nil {
+		a.log.Error("control channel failed", "error", snapshot.Failure.Error)
+	}
+	closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = controller.Close(closeCtx)
 }
 
-func waitControlRetry(ctx context.Context, delay time.Duration) bool {
-	timer := time.NewTimer(delay)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return false
-	case <-timer.C:
-		return true
+func (a *Agent) runControlSession(ctx context.Context, current flowersec.Session) error {
+	if current == nil {
+		return errors.New("missing control session")
 	}
-}
-
-func (a *Agent) runControlOnce(ctx context.Context) (controlAttemptResult, error) {
-	result := controlAttemptResult{}
 	cfg := a.remoteConfigSnapshot()
 	if cfg == nil {
-		return result, errors.New("missing config")
+		return errors.New("missing config")
 	}
-	origin, err := origin.FromWSURL(cfg.Direct.WsUrl)
-	if err != nil {
-		return result, err
-	}
-
-	c, err := fsclient.ConnectDirect(ctx, cfg.Direct,
-		fsclient.WithOrigin(origin),
-		fsclient.WithOutboundRecordChunkBytes(64*1024),
-		fsclient.WithYamuxLimits(fsclient.YamuxLimits{
-			MaxActiveStreams:            64,
-			MaxInboundStreams:           32,
-			MaxFrameBytes:               256 * 1024,
-			PreferredOutboundFrameBytes: 64 * 1024,
-			MaxStreamReceiveBytes:       256 * 1024,
-			MaxSessionReceiveBytes:      16 * 1024 * 1024,
-		}),
-		fsclient.WithLiveness(fsclient.LivenessOptions{
-			Interval: 15 * time.Second,
-			Timeout:  10 * time.Second,
-		}),
-		fsclient.WithTransportSecurityPolicy(fsclient.RequireTLS),
-	)
-	if err != nil {
-		return result, err
-	}
-	defer c.Close()
-
-	rpcC := c.RPC()
+	rpcC := current.RPC()
 	if rpcC == nil {
-		return result, errors.New("missing rpc client")
+		return errors.New("missing rpc client")
 	}
 	controlRPCSerial := a.setCurrentControlRPC(rpcC)
 	defer a.clearCurrentControlRPC(controlRPCSerial)
 
-	unsub := rpcC.OnNotify(controlRPCTypeGrantServer, func(payload json.RawMessage) {
-		a.handleGrantNotify(ctx, payload)
-	})
-	defer unsub()
-
 	// Register (best-effort; required for server-side online state).
-	_, err = callControlJSON[registerReq, registerResp](ctx, a, rpcC, controlRPCTypeRegister, &registerReq{
+	_, err := callControlJSON[registerReq, registerResp](ctx, a, rpcC, controlRPCTypeRegister, &registerReq{
 		EnvPublicID:              cfg.EnvironmentID,
 		LocalEnvironmentPublicID: cfg.LocalEnvironmentPublicID,
 		BindingGeneration:        cfg.BindingGeneration,
@@ -671,9 +685,8 @@ func (a *Agent) runControlOnce(ctx context.Context) (controlAttemptResult, error
 		RemoteEnabled:            a.remoteEnabled,
 	})
 	if err != nil {
-		return result, err
+		return err
 	}
-	result.registered = true
 
 	a.controlConnectedOnce.Do(func() {
 		if a.onControlConnected != nil {
@@ -688,19 +701,22 @@ func (a *Agent) runControlOnce(ctx context.Context) (controlAttemptResult, error
 	for {
 		select {
 		case <-ctx.Done():
-			return result, ctx.Err()
+			return ctx.Err()
 		case <-t.C:
 			if shouldRenewDirectCredentials(cfg.Direct, time.Now()) {
 				if err := a.renewDirectCredentials(ctx, rpcC, cfg); err != nil {
-					return result, err
+					return err
 				}
-				return result, errors.New("control credentials renewed; reconnecting")
+				cfg = a.remoteConfigSnapshot()
+				if cfg == nil {
+					return errors.New("control credentials renewed but config is unavailable")
+				}
 			}
 			_, err := callControlJSON[heartbeatReq, heartbeatResp](ctx, a, rpcC, controlRPCTypeHeartbeat, &heartbeatReq{
 				NowUnixMs: time.Now().UnixMilli(),
 			})
 			if err != nil {
-				return result, err
+				return err
 			}
 		}
 	}
@@ -716,6 +732,11 @@ func (a *Agent) remoteConfigSnapshot() *config.Config {
 		return nil
 	}
 	cfg := *a.cfg
+	if a.cfg.Direct != nil {
+		direct := *a.cfg.Direct
+		direct.ArtifactJSON = append([]byte(nil), a.cfg.Direct.ArtifactJSON...)
+		cfg.Direct = &direct
+	}
 	return &cfg
 }
 
@@ -761,11 +782,11 @@ func callControlJSON[TReq any, TResp any](ctx context.Context, a *Agent, caller 
 	return rpcutil.CallJSON[TReq, TResp](ctx, caller, typeID, req)
 }
 
-func shouldRenewDirectCredentials(direct *directv1.DirectConnectInfo, now time.Time) bool {
-	if direct == nil || direct.ChannelInitExpireAtUnixS <= 0 {
+func shouldRenewDirectCredentials(direct *config.DirectConnectInfo, now time.Time) bool {
+	if direct == nil || direct.ExpiresAtUnixS <= 0 {
 		return false
 	}
-	expireAt := time.Unix(direct.ChannelInitExpireAtUnixS, 0)
+	expireAt := time.Unix(direct.ExpiresAtUnixS, 0)
 	return now.Add(5 * time.Minute).After(expireAt)
 }
 
@@ -787,13 +808,13 @@ func (a *Agent) renewDirectCredentials(ctx context.Context, rpcC rpcutil.Caller,
 	if resp == nil {
 		return errors.New("renew control credentials: empty response")
 	}
-	if resp.Direct == nil ||
-		strings.TrimSpace(resp.Direct.WsUrl) == "" ||
-		strings.TrimSpace(resp.Direct.ChannelId) == "" ||
-		strings.TrimSpace(resp.Direct.E2eePskB64u) == "" ||
-		resp.Direct.ChannelInitExpireAtUnixS <= 0 {
+	if resp.Direct == nil || len(resp.Direct.ArtifactJSON) == 0 || resp.Direct.ExpiresAtUnixS <= 0 {
 		return errors.New("renew control credentials: invalid direct")
 	}
+	if _, err := flowersec.ParseArtifact(resp.Direct.ArtifactJSON); err != nil {
+		return fmt.Errorf("renew control credentials: invalid artifact: %w", err)
+	}
+	resp.Direct.Spent = false
 	if resp.BindingGeneration <= cfg.BindingGeneration {
 		return errors.New("renew control credentials: stale binding generation")
 	}
@@ -886,7 +907,7 @@ func (a *Agent) handleGrantNotify(ctx context.Context, payload json.RawMessage) 
 	meta.FloeApp = floeApp
 	meta.UserPublicID = strings.TrimSpace(meta.UserPublicID)
 	meta.NamespacePublicID = strings.TrimSpace(meta.NamespacePublicID)
-	n.GrantServer.ChannelId = channelID
+	n.GrantServer.ChannelID = channelID
 
 	// Clamp control-plane granted permissions using the local endpoint cap.
 	declared := config.PermissionSet{
@@ -980,7 +1001,7 @@ func (a *Agent) handleGrantNotify(ctx context.Context, payload json.RawMessage) 
 	a.sessions[channelID] = &activeSession{
 		cancel:    cancel,
 		meta:      metaCopy,
-		tunnelURL: strings.TrimSpace(n.GrantServer.TunnelUrl),
+		tunnelURL: "",
 	}
 	a.sessionWG.Add(1)
 	a.mu.Unlock()
@@ -1002,7 +1023,7 @@ func (a *Agent) handleGrantNotify(ctx context.Context, payload json.RawMessage) 
 	}(&metaCopy)
 }
 
-func (a *Agent) runDataSession(ctx context.Context, grant *controlv1.ChannelInitGrant, meta *session.Meta) (err error) {
+func (a *Agent) runDataSession(ctx context.Context, grant *session.ChannelInitGrant, meta *session.Meta) (err error) {
 	if grant == nil || meta == nil {
 		return errors.New("missing grant/meta")
 	}
@@ -1016,7 +1037,7 @@ func (a *Agent) runDataSession(ctx context.Context, grant *controlv1.ChannelInit
 	codeSpaceID := strings.TrimSpace(meta.CodeSpaceID)
 	userPublicID := strings.TrimSpace(meta.UserPublicID)
 	userEmail := strings.TrimSpace(meta.UserEmail)
-	tunnelURL := strings.TrimSpace(grant.TunnelUrl)
+	tunnelURL := ""
 	defer func() {
 		reason := "eof"
 		if !opened {
@@ -1098,24 +1119,26 @@ func (a *Agent) runDataSession(ctx context.Context, grant *controlv1.ChannelInit
 		}
 	}()
 
-	origin, err := origin.ForTunnel(grant.TunnelUrl, a.cfg.ControlplaneBaseURL)
+	if len(grant.ArtifactJSON) == 0 {
+		return errors.New("missing Flowersec v2 data artifact")
+	}
+	artifact, err := flowersec.ParseArtifact(grant.ArtifactJSON)
 	if err != nil {
 		return err
 	}
-
-	sess, err := endpoint.ConnectTunnel(ctx, grant,
-		endpoint.WithOrigin(origin),
-		endpoint.WithOutboundRecordChunkBytes(64*1024),
-		endpoint.WithYamuxLimits(endpoint.YamuxLimits{
-			MaxActiveStreams:            64,
-			MaxInboundStreams:           32,
-			MaxFrameBytes:               256 * 1024,
-			PreferredOutboundFrameBytes: 64 * 1024,
-			MaxStreamReceiveBytes:       256 * 1024,
-			MaxSessionReceiveBytes:      16 * 1024 * 1024,
-		}),
-		endpoint.WithTransportSecurityPolicy(endpoint.RequireTLS),
-	)
+	lease, err := flowersec.NewArtifactLease(artifact, func(context.Context) error { return nil })
+	if err != nil {
+		return err
+	}
+	trustRoots, err := x509.SystemCertPool()
+	if err != nil || trustRoots == nil || len(trustRoots.Subjects()) == 0 {
+		return errors.New("system trust roots are unavailable")
+	}
+	sess, err := flowersec.Connect(ctx, lease, flowersec.ConnectorOptions{
+		TrustRoots:     trustRoots,
+		Origin:         strings.TrimSuffix(a.cfg.ControlplaneBaseURL, "/"),
+		ConnectTimeout: 15 * time.Second,
+	})
 	if err != nil {
 		return err
 	}
@@ -1170,16 +1193,7 @@ func (a *Agent) runDataSession(ctx context.Context, grant *controlv1.ChannelInit
 	}
 }
 
-func newProxySessionServer(onError func(error)) (*serve.Server, error) {
-	return serve.New(serve.Options{
-		RPC: serve.RPCOptions{
-			Register: func(*rpc.Router, *rpc.Server) {},
-		},
-		OnError: onError,
-	})
-}
-
-func (a *Agent) serveCodeAppSession(ctx context.Context, sess endpoint.Session, meta *session.Meta) error {
+func (a *Agent) serveCodeAppSession(ctx context.Context, sess flowersec.Session, meta *session.Meta) error {
 	if a == nil || meta == nil {
 		return errors.New("invalid args")
 	}
@@ -1216,29 +1230,28 @@ func (a *Agent) serveCodeAppSession(ctx context.Context, sess endpoint.Session, 
 	}
 	defer cleanupUpstream()
 
-	srv, err := newProxySessionServer(func(err error) {
+	handlers, err := flowersec.NewSessionHandlers(flowersec.SessionHandlerOptions{OnError: func(err error) {
 		if err == nil {
 			return
 		}
 		a.log.Warn("codeapp stream error", "channel_id", meta.ChannelID, "code_space_id", codeSpaceID, "error", err)
-	})
+	}})
 	if err != nil {
 		return err
 	}
 
-	proxyOpts := runtimeproxy.ApplyOptions(fsproxy.Options{
-		Upstream:        up,
-		UpstreamOrigin:  origin,
-		ContractOptions: fsproxy.ContractOptions{BlockedResponseHeaders: runtimeproxy.ProductBlockedResponseHeaders()},
-	})
-	if err := fsproxy.Register(srv, proxyOpts); err != nil {
+	proxyOpts := runtimeproxy.Options{
+		Upstream:               up,
+		UpstreamOrigin:         origin,
+		BlockedResponseHeaders: runtimeproxy.ProductBlockedResponseHeaders(),
+	}
+	if _, err := runtimeproxy.Register(handlers, proxyOpts); err != nil {
 		return err
 	}
-
-	return srv.ServeSession(ctx, sess)
+	return handlers.Serve(ctx, sess)
 }
 
-func (a *Agent) servePortForwardSession(ctx context.Context, sess endpoint.Session, meta *session.Meta) error {
+func (a *Agent) servePortForwardSession(ctx context.Context, sess flowersec.Session, meta *session.Meta) error {
 	if a == nil || meta == nil {
 		return errors.New("invalid args")
 	}
@@ -1273,29 +1286,28 @@ func (a *Agent) servePortForwardSession(ctx context.Context, sess endpoint.Sessi
 	}
 	defer cleanupUpstream()
 
-	srv, err := newProxySessionServer(func(err error) {
+	handlers, err := flowersec.NewSessionHandlers(flowersec.SessionHandlerOptions{OnError: func(err error) {
 		if err == nil {
 			return
 		}
 		a.log.Warn("portforward stream error", "channel_id", meta.ChannelID, "forward_id", forwardID, "error", err)
-	})
+	}})
 	if err != nil {
 		return err
 	}
 
-	proxyOpts := runtimeproxy.ApplyOptions(fsproxy.Options{
-		Upstream:        up,
-		UpstreamOrigin:  origin,
-		ContractOptions: fsproxy.ContractOptions{BlockedResponseHeaders: runtimeproxy.ProductBlockedResponseHeaders()},
-	})
-	if err := fsproxy.Register(srv, proxyOpts); err != nil {
+	proxyOpts := runtimeproxy.Options{
+		Upstream:               up,
+		UpstreamOrigin:         origin,
+		BlockedResponseHeaders: runtimeproxy.ProductBlockedResponseHeaders(),
+	}
+	if _, err := runtimeproxy.Register(handlers, proxyOpts); err != nil {
 		return err
 	}
-
-	return srv.ServeSession(ctx, sess)
+	return handlers.Serve(ctx, sess)
 }
 
-func (a *Agent) serveRedevenAgentSession(ctx context.Context, sess endpoint.Session, meta *session.Meta) error {
+func (a *Agent) serveRedevenAgentSession(ctx context.Context, sess flowersec.Session, meta *session.Meta) error {
 	if a == nil || meta == nil {
 		return errors.New("invalid args")
 	}
@@ -1307,28 +1319,38 @@ func (a *Agent) serveRedevenAgentSession(ctx context.Context, sess endpoint.Sess
 	gitRepoSvc := gitrepo.NewServiceWithScopeAndRuntime(a.filesystemScope, a.gitRuntime)
 	defer gitRepoSvc.Close()
 
-	srv, err := serve.New(serve.Options{
-		OnError: func(err error) {
-			if err == nil {
-				return
-			}
-			a.log.Warn("agent stream error", "channel_id", meta.ChannelID, "floe_app", meta.FloeApp, "code_space_id", meta.CodeSpaceID, "error", err)
-		},
-	})
+	handlers, err := flowersec.NewSessionHandlers(flowersec.SessionHandlerOptions{OnError: func(err error) {
+		if err == nil {
+			return
+		}
+		a.log.Warn("agent stream error", "channel_id", meta.ChannelID, "floe_app", meta.FloeApp, "code_space_id", meta.CodeSpaceID, "error", err)
+	}})
 	if err != nil {
 		return err
 	}
 
-	// RPC stream
-	srv.Handle("rpc", func(ctx context.Context, stream io.ReadWriteCloser) {
-		a.serveRPCStream(ctx, stream, meta, fsSvc, gitRepoSvc)
-	})
+	router := sessionrpc.NewRouter()
+	accessrpc.New(a.accessGate).Register(router, meta)
+	a.sys.RegisterWithAccessGate(router, meta, a.accessGate)
+	fsSvc.RegisterWithAccessGate(router, meta, a.accessGate)
+	gitRepoSvc.RegisterWithAccessGate(router, meta, a.accessGate)
+	a.mon.RegisterWithAccessGate(router, meta, a.accessGate)
+	a.registerSessionsRPCWithAccessGate(router, meta, a.accessGate)
+	if err := router.Bind(handlers); err != nil {
+		return err
+	}
 
 	// FS read-file stream (binary, chunked)
-	srv.Handle("fs/read_file", func(ctx context.Context, stream io.ReadWriteCloser) {
-		fsSvc.ServeReadFileStreamWithAccessGate(ctx, stream, meta, a.accessGate)
-	})
-	a.registerTerminalLiveStream(srv, meta)
+	if err := handlers.HandleStream("fs/read_file", func(ctx context.Context, incoming flowersec.IncomingStream) {
+		fsSvc.ServeReadFileStreamWithAccessGate(ctx, incoming.Stream, meta, a.accessGate)
+	}); err != nil {
+		return err
+	}
+	if a.term != nil {
+		if err := handlers.HandleStream(livev1.StreamKind, a.terminalLiveStreamHandler(meta)); err != nil {
+			return err
+		}
+	}
 
 	// Env App UI static assets are delivered over flowersec-proxy (Standard Mode only).
 	// Only enable the proxy handler for the reserved Env App code_space_id, and only when the
@@ -1357,83 +1379,74 @@ func (a *Agent) serveRedevenAgentSession(ctx context.Context, sess endpoint.Sess
 		if err != nil {
 			return err
 		}
-		proxyOpts := runtimeproxy.ApplyOptions(fsproxy.Options{
-			Upstream:        up,
-			UpstreamOrigin:  origin,
-			ContractOptions: fsproxy.ContractOptions{BlockedResponseHeaders: runtimeproxy.ProductBlockedResponseHeaders()},
-		})
-		if err := fsproxy.Register(srv, proxyOpts); err != nil {
+		proxyOpts := runtimeproxy.Options{
+			Upstream:               up,
+			UpstreamOrigin:         origin,
+			BlockedResponseHeaders: runtimeproxy.ProductBlockedResponseHeaders(),
+		}
+		if _, err := runtimeproxy.Register(handlers, proxyOpts); err != nil {
 			return err
 		}
 	}
-
-	trackedSession := &drainingEndpointSession{Session: sess}
-	streamCtx, cancelStreams := context.WithCancel(ctx)
-	serveErr := srv.ServeSession(streamCtx, trackedSession)
-	cancelStreams()
-	_ = sess.Close()
-	trackedSession.Wait()
-	return serveErr
+	return handlers.Serve(ctx, sess)
 }
 
-func (a *Agent) registerTerminalLiveStream(srv *serve.Server, meta *session.Meta) {
-	if a == nil || a.term == nil || srv == nil {
-		return
+// NewLocalSessionHandlers builds the Redeven application router used by a
+// Flowersec Acceptor. Flowersec owns admission, session establishment, RPC
+// framing, stream dispatch, and session lifetime; the returned cleanup only
+// releases Redeven service state captured by the handlers.
+func (a *Agent) NewLocalSessionHandlers(meta *session.Meta) (*flowersec.SessionHandlers, func(), error) {
+	if a == nil || meta == nil {
+		return nil, nil, errors.New("invalid args")
 	}
-	srv.Handle(livev1.StreamKind, func(ctx context.Context, stream io.ReadWriteCloser) {
-		if err := a.term.ServeLiveStream(ctx, stream, meta, a.accessGate); err != nil && ctx.Err() == nil && a.log != nil {
+	fsSvc := fs.NewServiceWithCoordinator(a.filesystemScope, a.gitRuntime)
+	gitRepoSvc := gitrepo.NewServiceWithScopeAndRuntime(a.filesystemScope, a.gitRuntime)
+	cleanup := func() { gitRepoSvc.Close() }
+
+	handlers, err := flowersec.NewSessionHandlers(flowersec.SessionHandlerOptions{OnError: func(err error) {
+		if err != nil && a.log != nil {
+			a.log.Warn("local agent stream error", "channel_id", meta.ChannelID, "error", err)
+		}
+	}})
+	if err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+	router := sessionrpc.NewRouter()
+	accessrpc.New(a.accessGate).Register(router, meta)
+	a.sys.RegisterWithAccessGate(router, meta, a.accessGate)
+	fsSvc.RegisterWithAccessGate(router, meta, a.accessGate)
+	gitRepoSvc.RegisterWithAccessGate(router, meta, a.accessGate)
+	a.mon.RegisterWithAccessGate(router, meta, a.accessGate)
+	a.registerSessionsRPCWithAccessGate(router, meta, a.accessGate)
+	if err := router.Bind(handlers); err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+	if err := handlers.HandleStream("fs/read_file", func(ctx context.Context, incoming flowersec.IncomingStream) {
+		fsSvc.ServeReadFileStreamWithAccessGate(ctx, incoming.Stream, meta, a.accessGate)
+	}); err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+	if a.term != nil {
+		if err := handlers.HandleStream(livev1.StreamKind, a.terminalLiveStreamHandler(meta)); err != nil {
+			cleanup()
+			return nil, nil, err
+		}
+	}
+	return handlers, cleanup, nil
+}
+
+func (a *Agent) terminalLiveStreamHandler(meta *session.Meta) flowersec.StreamHandler {
+	return func(ctx context.Context, incoming flowersec.IncomingStream) {
+		if a == nil || a.term == nil || incoming.Stream == nil {
+			return
+		}
+		if err := a.term.ServeLiveStream(ctx, incoming.Stream, meta, a.accessGate); err != nil && ctx.Err() == nil && a.log != nil {
 			a.log.Debug("terminal live stream closed", "error", err)
 		}
-	})
-}
-
-func (a *Agent) serveRPCStream(ctx context.Context, stream io.ReadWriteCloser, meta *session.Meta, fsSvc *fs.Service, gitRepoSvc *gitrepo.Service) {
-	streamAdmission, err := a.gitRuntime.TryAcquireRPCStream()
-	if err != nil {
-		a.log.Warn("rpc stream admission rejected", "category", "git_runtime_stream_limit")
-		_ = stream.Close()
-		return
 	}
-	defer streamAdmission.Release()
-
-	router := rpc.NewRouter()
-	srv, err := rpc.NewServerWithOptions(stream, router, rpc.ServerOptions{
-		MaxConcurrentRequests:  gitruntime.MaxConcurrentRPCRequests,
-		MaxQueuedRequests:      gitruntime.MaxQueuedRPCRequests,
-		MaxQueuedNotifications: gitruntime.MaxQueuedRPCNotifications,
-	})
-	if err != nil {
-		a.log.Warn("rpc server init failed", "error", err)
-		_ = stream.Close()
-		return
-	}
-	accessrpc.New(a.accessGate).Register(router, meta)
-
-	// Sys domain (health checks).
-	a.sys.RegisterWithAccessGate(router, meta, a.accessGate)
-
-	// FS domain
-	fsSvc.RegisterWithAccessGate(router, meta, a.accessGate)
-
-	// Git repository domain
-	gitRepoSvc.RegisterWithAccessGate(router, meta, a.accessGate)
-
-	// Terminal domain
-	detachTerminalSink := a.term.RegisterWithAccessGate(router, meta, srv, a.accessGate)
-	defer detachTerminalSink()
-
-	// Monitor domain
-	a.mon.RegisterWithAccessGate(router, meta, a.accessGate)
-
-	if a.code != nil {
-		detachAIRealtimeSinks := ai.RegisterRPCServiceProviderWithAccessGate(router, meta, srv, a.accessGate, a.code.AcquireAIService)
-		defer detachAIRealtimeSinks()
-	}
-
-	// Sessions domain (active Flowersec channel sessions).
-	a.registerSessionsRPCWithAccessGate(router, meta, a.accessGate)
-
-	_ = srv.Serve(ctx)
 }
 
 func (a *Agent) prepareAccessProxyUpstream(ctx context.Context, meta *session.Meta, upstream string) (string, func(), error) {
@@ -1736,8 +1749,8 @@ type credentialRenewReq struct {
 }
 
 type credentialRenewResp struct {
-	Direct            *directv1.DirectConnectInfo `json:"direct"`
-	BindingGeneration int64                       `json:"binding_generation"`
+	Direct            *config.DirectConnectInfo `json:"direct"`
+	BindingGeneration int64                     `json:"binding_generation"`
 }
 
 type runtimeDisconnectReq struct {
@@ -1759,24 +1772,6 @@ type runtimeDisconnectResp struct {
 	ReasonCode string `json:"reason_code,omitempty"`
 }
 
-// --- helper: backoff ---
-
-type backoff struct {
-	next       time.Duration
-	randomUnit func() (float64, error)
-}
-
-func newBackoff() *backoff {
-	return newBackoffWithRandom(secureRandomUnit)
-}
-
-func newBackoffWithRandom(randomUnit func() (float64, error)) *backoff {
-	return &backoff{
-		next:       250 * time.Millisecond,
-		randomUnit: randomUnit,
-	}
-}
-
 func normalizeEffectiveRunMode(raw string) string {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case "local":
@@ -1788,44 +1783,6 @@ func normalizeEffectiveRunMode(raw string) string {
 	default:
 		return ""
 	}
-}
-
-func (b *backoff) Reset() {
-	b.next = 250 * time.Millisecond
-}
-
-func (b *backoff) Next() (time.Duration, error) {
-	unit, err := b.randomUnit()
-	if err != nil {
-		return 0, err
-	}
-	if unit < 0 || unit >= 1 {
-		return 0, fmt.Errorf("control retry random value %v is outside [0, 1)", unit)
-	}
-
-	base := b.next
-	lower := time.Duration(float64(base) * 0.8)
-	upper := time.Duration(float64(base) * 1.2)
-	if upper > 10*time.Second {
-		upper = 10 * time.Second
-	}
-	delay := lower + time.Duration(float64(upper-lower)*unit)
-
-	next := time.Duration(float64(base) * 1.8)
-	if next > 10*time.Second {
-		next = 10 * time.Second
-	}
-	b.next = next
-	return delay, nil
-}
-
-func secureRandomUnit() (float64, error) {
-	var data [8]byte
-	if _, err := rand.Read(data[:]); err != nil {
-		return 0, fmt.Errorf("read control retry random source: %w", err)
-	}
-	const unitScale = 1 << 53
-	return float64(binary.LittleEndian.Uint64(data[:])>>11) / float64(unitScale), nil
 }
 
 func randomOpaqueID(size int) (string, error) {

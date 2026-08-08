@@ -32,16 +32,15 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | github.com/Azure/azure-sdk-for-go/sdk/azidentity | v1.7.0 | MIT | Runtime | https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/azidentity@v1.7.0 | Detected from LICENSE.txt. |
 | github.com/Azure/azure-sdk-for-go/sdk/internal | v1.10.0 | MIT | Runtime | https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/internal@v1.10.0 | Detected from LICENSE.txt. |
 | github.com/AzureAD/microsoft-authentication-library-for-go | v1.2.2 | MIT | Runtime | https://pkg.go.dev/github.com/AzureAD/microsoft-authentication-library-for-go@v1.2.2 | Detected from LICENSE. |
-| github.com/beorn7/perks | v1.0.1 | MIT | Runtime | https://pkg.go.dev/github.com/beorn7/perks@v1.0.1 | Detected from LICENSE. |
-| github.com/cespare/xxhash/v2 | v2.3.0 | MIT | Runtime | https://pkg.go.dev/github.com/cespare/xxhash/v2@v2.3.0 | Detected from LICENSE.txt. |
 | github.com/creack/pty | v1.1.24 | MIT | Runtime | https://pkg.go.dev/github.com/creack/pty@v1.1.24 | Detected from LICENSE. |
 | github.com/davecgh/go-spew | v1.1.1 | ISC | Runtime | https://pkg.go.dev/github.com/davecgh/go-spew@v1.1.1 | Detected from LICENSE. |
+| github.com/dunglas/httpsfv | v1.1.0 | BSD-style | Runtime | https://pkg.go.dev/github.com/dunglas/httpsfv@v1.1.0 | Detected from LICENSE. |
 | github.com/dustin/go-humanize | v1.0.1 | MIT | Runtime | https://pkg.go.dev/github.com/dustin/go-humanize@v1.0.1 | Detected from LICENSE. |
 | github.com/ebitengine/purego | v0.9.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/ebitengine/purego@v0.9.1 | Detected from LICENSE. |
 | github.com/felixge/httpsnoop | v1.0.4 | MIT | Runtime | https://pkg.go.dev/github.com/felixge/httpsnoop@v1.0.4 | Detected from LICENSE.txt. |
 | github.com/floegence/floeterm/terminal-go | v0.8.7 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.8.7 | Floegence first-party dependency. |
 | github.com/floegence/floret/v3 | v3.2.33 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v3@v3.2.33 | Detected from LICENSE. |
-| github.com/floegence/flowersec/flowersec-go | v0.27.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go@v0.27.0 | Floegence first-party dependency. |
+| github.com/floegence/flowersec/flowersec-go/v2 | v2.3.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go/v2@v2.3.1 | Floegence first-party dependency. |
 | github.com/floegence/redevplugin | v0.7.18 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redevplugin@v0.7.18 | Floegence first-party dependency. |
 | github.com/go-logr/logr | v1.4.2 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/go-logr/logr@v1.4.2 | Detected from LICENSE. |
 | github.com/go-logr/stdr | v1.2.2 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/go-logr/stdr@v1.2.2 | Detected from LICENSE. |
@@ -56,24 +55,25 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | github.com/googleapis/enterprise-certificate-proxy | v0.3.2 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/googleapis/enterprise-certificate-proxy@v0.3.2 | Detected from LICENSE. |
 | github.com/gorilla/websocket | v1.5.3 | BSD-style | Runtime | https://pkg.go.dev/github.com/gorilla/websocket@v1.5.3 | Detected from LICENSE. |
 | github.com/hashicorp/golang-lru/v2 | v2.0.7 | MPL-2.0 | Runtime | https://pkg.go.dev/github.com/hashicorp/golang-lru/v2@v2.0.7 | Detected from LICENSE. |
-| github.com/hashicorp/yamux | v0.1.2 | MPL-2.0 | Runtime | https://pkg.go.dev/github.com/hashicorp/yamux@v0.1.2 | Detected from LICENSE. |
-| github.com/klauspost/compress | v1.17.9 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/klauspost/compress@v1.17.9 | Detected from LICENSE. |
+| github.com/jordanlewis/gcassert | v0.0.0-20250430164644-389ef753e22e | MIT | Runtime | https://pkg.go.dev/github.com/jordanlewis/gcassert@v0.0.0-20250430164644-389ef753e22e | Detected from LICENSE.txt. |
+| github.com/kr/pretty | v0.3.1 | MIT | Runtime | https://pkg.go.dev/github.com/kr/pretty@v0.3.1 | Detected from License. |
+| github.com/kr/text | v0.2.0 | MIT | Runtime | https://pkg.go.dev/github.com/kr/text@v0.2.0 | Detected from License. |
 | github.com/kylelemons/godebug | v1.1.0 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/kylelemons/godebug@v1.1.0 | Detected from LICENSE. |
 | github.com/libp2p/go-buffer-pool | v0.0.2 | MIT | Runtime | https://pkg.go.dev/github.com/libp2p/go-buffer-pool@v0.0.2 | Detected from LICENSE, LICENSE-BSD. |
 | github.com/libp2p/go-yamux/v5 | v5.1.0 | MPL-2.0 | Runtime | https://pkg.go.dev/github.com/libp2p/go-yamux/v5@v5.1.0 | Detected from LICENSE, LICENSE-BSD. |
 | github.com/lufia/plan9stats | v0.0.0-20211012122336-39d0f177ccd0 | BSD-style | Runtime | https://pkg.go.dev/github.com/lufia/plan9stats@v0.0.0-20211012122336-39d0f177ccd0 | Detected from LICENSE. |
 | github.com/mattn/go-isatty | v0.0.20 | MIT | Runtime | https://pkg.go.dev/github.com/mattn/go-isatty@v0.0.20 | Detected from LICENSE. |
-| github.com/munnerz/goautoneg | v0.0.0-20191010083416-a7dc8b61c822 | BSD-style | Runtime | https://pkg.go.dev/github.com/munnerz/goautoneg@v0.0.0-20191010083416-a7dc8b61c822 | Detected from LICENSE. |
 | github.com/ncruces/go-strftime | v1.0.0 | MIT | Runtime | https://pkg.go.dev/github.com/ncruces/go-strftime@v1.0.0 | Detected from LICENSE. |
 | github.com/openai/openai-go | v1.12.0 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/openai/openai-go@v1.12.0 | Detected from LICENSE. |
 | github.com/pkg/browser | v0.0.0-20240102092130-5ac0b6a4141c | BSD-style | Runtime | https://pkg.go.dev/github.com/pkg/browser@v0.0.0-20240102092130-5ac0b6a4141c | Detected from LICENSE. |
 | github.com/pmezard/go-difflib | v1.0.0 | BSD-style | Runtime | https://pkg.go.dev/github.com/pmezard/go-difflib@v1.0.0 | Detected from LICENSE. |
 | github.com/power-devops/perfstat | v0.0.0-20240221224432-82ca36839d55 | MIT | Runtime | https://pkg.go.dev/github.com/power-devops/perfstat@v0.0.0-20240221224432-82ca36839d55 | Detected from LICENSE. |
-| github.com/prometheus/client_golang | v1.20.5 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/prometheus/client_golang@v1.20.5 | Detected from LICENSE. |
-| github.com/prometheus/client_model | v0.6.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/prometheus/client_model@v0.6.1 | Detected from LICENSE. |
-| github.com/prometheus/common | v0.55.0 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/prometheus/common@v0.55.0 | Detected from LICENSE. |
-| github.com/prometheus/procfs | v0.15.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/prometheus/procfs@v0.15.1 | Detected from LICENSE. |
+| github.com/quic-go/go-ossfuzz-seeds | v0.1.0 | MIT | Runtime | https://pkg.go.dev/github.com/quic-go/go-ossfuzz-seeds@v0.1.0 | Detected from LICENSE. |
+| github.com/quic-go/qpack | v0.6.0 | MIT | Runtime | https://pkg.go.dev/github.com/quic-go/qpack@v0.6.0 | Detected from LICENSE.md. |
+| github.com/quic-go/quic-go | v0.60.0 | MIT | Runtime | https://pkg.go.dev/github.com/quic-go/quic-go@v0.60.0 | Detected from LICENSE. |
+| github.com/quic-go/webtransport-go | v0.11.1 | MIT | Runtime | https://pkg.go.dev/github.com/quic-go/webtransport-go@v0.11.1 | Detected from LICENSE. |
 | github.com/remyoudompheng/bigfft | v0.0.0-20230129092748-24d4a6f8daec | BSD-style | Runtime | https://pkg.go.dev/github.com/remyoudompheng/bigfft@v0.0.0-20230129092748-24d4a6f8daec | Detected from LICENSE. |
+| github.com/rogpeppe/go-internal | v1.10.0 | BSD-style | Runtime | https://pkg.go.dev/github.com/rogpeppe/go-internal@v1.10.0 | Detected from LICENSE. |
 | github.com/santhosh-tekuri/jsonschema/v5 | v5.3.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/santhosh-tekuri/jsonschema/v5@v5.3.1 | Detected from LICENSE. |
 | github.com/shirou/gopsutil/v4 | v4.25.12 | BSD-style | Runtime | https://pkg.go.dev/github.com/shirou/gopsutil/v4@v4.25.12 | Detected from LICENSE. |
 | github.com/stretchr/testify | v1.11.1 | MIT | Runtime | https://pkg.go.dev/github.com/stretchr/testify@v1.11.1 | Detected from LICENSE. |
@@ -93,6 +93,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | go.opentelemetry.io/otel | v1.24.0 | Apache-2.0 | Runtime | https://pkg.go.dev/go.opentelemetry.io/otel@v1.24.0 | Detected from LICENSE. |
 | go.opentelemetry.io/otel/metric | v1.24.0 | Apache-2.0 | Runtime | https://pkg.go.dev/go.opentelemetry.io/otel/metric@v1.24.0 | Detected from LICENSE. |
 | go.opentelemetry.io/otel/trace | v1.24.0 | Apache-2.0 | Runtime | https://pkg.go.dev/go.opentelemetry.io/otel/trace@v1.24.0 | Detected from LICENSE. |
+| go.uber.org/mock | v0.5.2 | Apache-2.0 | Runtime | https://pkg.go.dev/go.uber.org/mock@v0.5.2 | Detected from LICENSE. |
 | golang.org/x/crypto | v0.54.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/crypto@v0.54.0 | Detected from LICENSE. |
 | golang.org/x/image | v0.44.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/image@v0.44.0 | Detected from LICENSE. |
 | golang.org/x/mod | v0.38.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/mod@v0.38.0 | Detected from LICENSE. |
@@ -109,7 +110,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | google.golang.org/genproto/googleapis/rpc | v0.0.0-20240722135656-d784300faade | Apache-2.0 | Runtime | https://pkg.go.dev/google.golang.org/genproto/googleapis/rpc@v0.0.0-20240722135656-d784300faade | Detected from LICENSE. |
 | google.golang.org/grpc | v1.64.1 | Apache-2.0 | Runtime | https://pkg.go.dev/google.golang.org/grpc@v1.64.1 | Detected from LICENSE. |
 | google.golang.org/protobuf | v1.34.2 | BSD-style | Runtime | https://pkg.go.dev/google.golang.org/protobuf@v1.34.2 | Detected from LICENSE. |
-| gopkg.in/check.v1 | v0.0.0-20161208181325-20d25e280405 | BSD-style | Runtime | https://pkg.go.dev/gopkg.in/check.v1@v0.0.0-20161208181325-20d25e280405 | Detected from LICENSE. |
+| gopkg.in/check.v1 | v1.0.0-20201130134442-10cb98267c6c | BSD-style | Runtime | https://pkg.go.dev/gopkg.in/check.v1@v1.0.0-20201130134442-10cb98267c6c | Detected from LICENSE. |
 | gopkg.in/yaml.v3 | v3.0.1 | MIT | Runtime | https://pkg.go.dev/gopkg.in/yaml.v3@v3.0.1 | Detected from LICENSE. |
 | modernc.org/cc/v4 | v4.29.0 | BSD-style | Runtime | https://pkg.go.dev/modernc.org/cc/v4@v4.29.0 | Detected from LICENSE. |
 | modernc.org/ccgo/v4 | v4.34.6 | BSD-style | Runtime | https://pkg.go.dev/modernc.org/ccgo/v4@v4.34.6 | Detected from LICENSE. |
@@ -178,6 +179,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @csstools/css-syntax-patches-for-csstree | 1.1.4 | MIT-0 | Desktop shell | https://www.npmjs.com/package/%40csstools%2Fcss-syntax-patches-for-csstree/v/1.1.4 | License verified from the exact registry package manifest. |
 | @csstools/css-tokenizer | 3.0.4 | MIT | Env App UI | https://www.npmjs.com/package/%40csstools%2Fcss-tokenizer/v/3.0.4 |  |
 | @csstools/css-tokenizer | 4.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40csstools%2Fcss-tokenizer/v/4.0.0 |  |
+| @electron/asar | 3.4.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40electron%2Fasar/v/3.4.1 |  |
 | @electron/asar | 4.2.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40electron%2Fasar/v/4.2.1 |  |
 | @electron/fuses | 1.8.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40electron%2Ffuses/v/1.8.0 |  |
 | @electron/get | 2.0.3 | MIT | Desktop shell | https://www.npmjs.com/package/%40electron%2Fget/v/2.0.3 |  |
@@ -186,6 +188,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @electron/osx-sign | 1.3.3 | BSD-2-Clause | Desktop shell | https://www.npmjs.com/package/%40electron%2Fosx-sign/v/1.3.3 |  |
 | @electron/rebuild | 4.0.4 | MIT | Desktop shell | https://www.npmjs.com/package/%40electron%2Frebuild/v/4.0.4 | License verified from the exact registry package manifest. |
 | @electron/rebuild | 4.2.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40electron%2Frebuild/v/4.2.0 |  |
+| @electron/universal | 2.0.3 | MIT | Desktop shell | https://www.npmjs.com/package/%40electron%2Funiversal/v/2.0.3 |  |
 | @electron/universal | 3.0.6 | MIT | Desktop shell | https://www.npmjs.com/package/%40electron%2Funiversal/v/3.0.6 |  |
 | @electron/windows-sign | 1.2.2 | BSD-2-Clause | Desktop shell | https://www.npmjs.com/package/%40electron%2Fwindows-sign/v/1.2.2 |  |
 | @emnapi/core | 1.10.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40emnapi%2Fcore/v/1.10.0 |  |
@@ -231,16 +234,18 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @eslint/plugin-kit | 0.4.1 | Apache-2.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40eslint%2Fplugin-kit/v/0.4.1 |  |
 | @exodus/bytes | 1.15.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40exodus%2Fbytes/v/1.15.0 |  |
 | @exodus/bytes | 1.15.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40exodus%2Fbytes/v/1.15.1 | License verified from the exact registry package manifest. |
+| @fails-components/webtransport-transport-http3-quiche | 1.6.7 | BSD-3-Clause | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40fails-components%2Fwebtransport-transport-http3-quiche/v/1.6.7 |  |
+| @fails-components/webtransport | 1.6.7 | BSD-3-Clause | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40fails-components%2Fwebtransport/v/1.6.7 |  |
 | @fast-csv/format | 4.3.5 | MIT | Env App UI | https://www.npmjs.com/package/%40fast-csv%2Fformat/v/4.3.5 |  |
 | @fast-csv/parse | 4.3.6 | MIT | Env App UI | https://www.npmjs.com/package/%40fast-csv%2Fparse/v/4.3.6 |  |
 | @floegence/beamterm-renderer | 1.0.2 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fbeamterm-renderer/v/1.0.2 |  |
-| @floegence/floe-webapp-boot | 0.40.4 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.40.4 | License inherited from floegence/floe-webapp root LICENSE. |
-| @floegence/floe-webapp-core | 0.40.6 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.40.6 | License inherited from floegence/floe-webapp root LICENSE. |
-| @floegence/floe-webapp-protocol | 0.40.4 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.40.4 | License inherited from floegence/floe-webapp root LICENSE. |
+| @floegence/floe-webapp-boot | 0.40.11 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.40.11 | License inherited from floegence/floe-webapp root LICENSE. |
+| @floegence/floe-webapp-core | 0.40.11 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.40.11 | License inherited from floegence/floe-webapp root LICENSE. |
+| @floegence/floe-webapp-protocol | 0.40.11 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.40.11 | License inherited from floegence/floe-webapp root LICENSE. |
 | @floegence/floeterm-terminal-web | 0.13.4 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.13.4 | Built-in theme attribution and license texts are reproduced below from the verified 0.13.4 package. |
-| @floegence/flowersec-core | 0.27.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/0.27.0 |  |
-| @floegence/redevplugin-contracts | 0.7.18 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-contracts/v/0.7.18 |  |
-| @floegence/redevplugin-ui | 0.7.18 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-ui/v/0.7.18 | License inherited from floegence/redevplugin root LICENSE. |
+| @floegence/flowersec-core | 2.3.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/2.3.1 |  |
+| @floegence/redevplugin-contracts | 0.7.17 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-contracts/v/0.7.17 |  |
+| @floegence/redevplugin-ui | 0.7.17 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-ui/v/0.7.17 | License inherited from floegence/redevplugin root LICENSE. |
 | @fontsource-variable/inter | 5.2.8 | OFL-1.1 | Desktop shell | https://www.npmjs.com/package/%40fontsource-variable%2Finter/v/5.2.8 |  |
 | @fontsource/iosevka | 5.2.5 | OFL-1.1 | Desktop shell, Env App UI | https://www.npmjs.com/package/%40fontsource%2Fiosevka/v/5.2.5 |  |
 | @humanfs/core | 0.19.1 | Apache-2.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40humanfs%2Fcore/v/0.19.1 |  |
@@ -254,7 +259,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @iconify/utils | 3.1.0 | MIT | Env App UI | https://www.npmjs.com/package/%40iconify%2Futils/v/3.1.0 |  |
 | @iconify/utils | 3.1.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40iconify%2Futils/v/3.1.3 |  |
 | @iconify/utils | 3.1.4 | MIT | Desktop shell | https://www.npmjs.com/package/%40iconify%2Futils/v/3.1.4 |  |
-| @isaacs/fs-minipass | 4.0.1 | ISC | Desktop shell | https://www.npmjs.com/package/%40isaacs%2Ffs-minipass/v/4.0.1 |  |
+| @isaacs/fs-minipass | 4.0.1 | ISC | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40isaacs%2Ffs-minipass/v/4.0.1 |  |
 | @jridgewell/gen-mapping | 0.3.13 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40jridgewell%2Fgen-mapping/v/0.3.13 |  |
 | @jridgewell/remapping | 2.3.5 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40jridgewell%2Fremapping/v/2.3.5 |  |
 | @jridgewell/resolve-uri | 3.1.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40jridgewell%2Fresolve-uri/v/3.1.2 |  |
@@ -457,7 +462,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @types/d3-transition | 3.0.9 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fd3-transition/v/3.0.9 |  |
 | @types/d3-zoom | 3.0.8 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fd3-zoom/v/3.0.8 |  |
 | @types/d3 | 7.4.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fd3/v/7.4.3 |  |
-| @types/debug | 4.1.13 | MIT | Desktop shell | https://www.npmjs.com/package/%40types%2Fdebug/v/4.1.13 |  |
+| @types/debug | 4.1.13 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fdebug/v/4.1.13 |  |
 | @types/deep-eql | 4.0.2 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fdeep-eql/v/4.0.2 |  |
 | @types/diff | 8.0.0 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fdiff/v/8.0.0 |  |
 | @types/estree | 1.0.8 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Festree/v/1.0.8 |  |
@@ -470,7 +475,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @types/katex | 0.16.8 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fkatex/v/0.16.8 |  |
 | @types/keyv | 3.1.4 | MIT | Desktop shell | https://www.npmjs.com/package/%40types%2Fkeyv/v/3.1.4 |  |
 | @types/mdast | 4.0.4 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fmdast/v/4.0.4 |  |
-| @types/ms | 2.1.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40types%2Fms/v/2.1.0 |  |
+| @types/ms | 2.1.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fms/v/2.1.0 |  |
 | @types/node | 14.18.63 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fnode/v/14.18.63 |  |
 | @types/node | 20.19.31 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fnode/v/20.19.31 |  |
 | @types/node | 20.19.37 | MIT | Desktop shell | https://www.npmjs.com/package/%40types%2Fnode/v/20.19.37 |  |
@@ -540,7 +545,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | agent-base | 7.1.4 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/agent-base/v/7.1.4 |  |
 | ajv | 6.15.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/ajv/v/6.15.0 |  |
 | ajv | 8.20.0 | MIT | Desktop shell | https://www.npmjs.com/package/ajv/v/8.20.0 |  |
-| ansi-regex | 5.0.1 | MIT | Desktop shell | https://www.npmjs.com/package/ansi-regex/v/5.0.1 |  |
+| ansi-regex | 5.0.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/ansi-regex/v/5.0.1 |  |
 | ansi-styles | 4.3.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/ansi-styles/v/4.3.0 |  |
 | app-builder-lib | 26.15.3 | MIT | Desktop shell | https://www.npmjs.com/package/app-builder-lib/v/26.15.3 |  |
 | archiver-utils | 2.1.0 | MIT | Env App UI | https://www.npmjs.com/package/archiver-utils/v/2.1.0 |  |
@@ -560,19 +565,23 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | babel-plugin-jsx-dom-expressions | 0.40.7 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/babel-plugin-jsx-dom-expressions/v/0.40.7 |  |
 | babel-preset-solid | 1.9.10 | MIT | Env App UI | https://www.npmjs.com/package/babel-preset-solid/v/1.9.10 |  |
 | babel-preset-solid | 1.9.12 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/babel-preset-solid/v/1.9.12 |  |
+| balanced-match | 1.0.2 | MIT | Desktop shell | https://www.npmjs.com/package/balanced-match/v/1.0.2 |  |
 | balanced-match | 4.0.4 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/balanced-match/v/4.0.4 |  |
-| base64-js | 1.5.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/base64-js/v/1.5.1 |  |
+| base64-js | 1.5.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/base64-js/v/1.5.1 |  |
 | baseline-browser-mapping | 2.10.32 | Apache-2.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/baseline-browser-mapping/v/2.10.32 |  |
 | baseline-browser-mapping | 2.10.37 | Apache-2.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/baseline-browser-mapping/v/2.10.37 |  |
 | bidi-js | 1.0.3 | MIT | Desktop shell | https://www.npmjs.com/package/bidi-js/v/1.0.3 |  |
-| bl | 4.1.0 | MIT | Env App UI | https://www.npmjs.com/package/bl/v/4.1.0 |  |
+| bindings | 1.5.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/bindings/v/1.5.0 |  |
+| bl | 4.1.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/bl/v/4.1.0 |  |
 | bluebird | 3.7.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/bluebird/v/3.7.2 |  |
 | boolean | 3.2.0 | MIT | Desktop shell | https://www.npmjs.com/package/boolean/v/3.2.0 |  |
+| brace-expansion | 1.1.18 | MIT | Desktop shell | https://www.npmjs.com/package/brace-expansion/v/1.1.18 |  |
+| brace-expansion | 2.1.4 | MIT | Desktop shell | https://www.npmjs.com/package/brace-expansion/v/2.1.4 |  |
 | brace-expansion | 5.0.9 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/brace-expansion/v/5.0.9 |  |
 | browserslist | 4.28.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/browserslist/v/4.28.2 |  |
 | buffer-crc32 | 0.2.13 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/buffer-crc32/v/0.2.13 |  |
 | buffer-from | 1.1.2 | MIT | Desktop shell | https://www.npmjs.com/package/buffer-from/v/1.1.2 |  |
-| buffer | 5.7.1 | MIT | Env App UI | https://www.npmjs.com/package/buffer/v/5.7.1 |  |
+| buffer | 5.7.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/buffer/v/5.7.1 |  |
 | builder-util-runtime | 9.7.0 | MIT | Desktop shell | https://www.npmjs.com/package/builder-util-runtime/v/9.7.0 |  |
 | builder-util | 26.15.3 | MIT | Desktop shell | https://www.npmjs.com/package/builder-util/v/26.15.3 |  |
 | bytestreamjs | 2.0.1 | BSD-3-Clause | Desktop shell | https://www.npmjs.com/package/bytestreamjs/v/2.0.1 |  |
@@ -587,22 +596,26 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | chalk | 4.1.2 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/chalk/v/4.1.2 |  |
 | character-entities-html4 | 2.1.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/character-entities-html4/v/2.1.0 |  |
 | character-entities-legacy | 3.0.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/character-entities-legacy/v/3.0.0 |  |
-| chownr | 3.0.0 | BlueOak-1.0.0 | Desktop shell | https://www.npmjs.com/package/chownr/v/3.0.0 |  |
+| chownr | 1.1.4 | ISC | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/chownr/v/1.1.4 |  |
+| chownr | 3.0.0 | BlueOak-1.0.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/chownr/v/3.0.0 |  |
 | chromium-pickle-js | 0.2.0 | MIT | Desktop shell | https://www.npmjs.com/package/chromium-pickle-js/v/0.2.0 |  |
 | ci-info | 4.3.1 | MIT | Desktop shell | https://www.npmjs.com/package/ci-info/v/4.3.1 |  |
 | ci-info | 4.4.0 | MIT | Desktop shell | https://www.npmjs.com/package/ci-info/v/4.4.0 |  |
-| cliui | 8.0.1 | ISC | Desktop shell | https://www.npmjs.com/package/cliui/v/8.0.1 |  |
+| cliui | 8.0.1 | ISC | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/cliui/v/8.0.1 |  |
 | clone-response | 1.0.3 | MIT | Desktop shell | https://www.npmjs.com/package/clone-response/v/1.0.3 |  |
 | clsx | 2.1.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/clsx/v/2.1.1 |  |
+| cmake-js | 8.0.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/cmake-js/v/8.0.0 |  |
 | color-convert | 2.0.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/color-convert/v/2.0.1 |  |
 | color-name | 1.1.4 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/color-name/v/1.1.4 |  |
 | combined-stream | 1.0.8 | MIT | Desktop shell | https://www.npmjs.com/package/combined-stream/v/1.0.8 |  |
 | comma-separated-tokens | 2.0.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/comma-separated-tokens/v/2.0.3 |  |
+| commander | 5.1.0 | MIT | Desktop shell | https://www.npmjs.com/package/commander/v/5.1.0 |  |
 | commander | 7.2.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/commander/v/7.2.0 |  |
 | commander | 8.3.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/commander/v/8.3.0 |  |
 | commander | 9.5.0 | MIT | Desktop shell | https://www.npmjs.com/package/commander/v/9.5.0 |  |
 | compare-version | 0.1.2 | MIT | Desktop shell | https://www.npmjs.com/package/compare-version/v/0.1.2 |  |
 | compress-commons | 4.1.2 | MIT | Env App UI | https://www.npmjs.com/package/compress-commons/v/4.1.2 |  |
+| concat-map | 0.0.1 | MIT | Desktop shell | https://www.npmjs.com/package/concat-map/v/0.0.1 |  |
 | confbox | 0.1.8 | MIT | Env App UI | https://www.npmjs.com/package/confbox/v/0.1.8 |  |
 | convert-source-map | 2.0.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/convert-source-map/v/2.0.0 |  |
 | core-util-is | 1.0.2 | MIT | Desktop shell | https://www.npmjs.com/package/core-util-is/v/1.0.2 | License verified from the exact registry package manifest. |
@@ -662,7 +675,8 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | dayjs | 1.11.21 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/dayjs/v/1.11.21 |  |
 | debug | 4.4.3 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/debug/v/4.4.3 |  |
 | decimal.js | 10.6.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/decimal.js/v/10.6.0 |  |
-| decompress-response | 6.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/decompress-response/v/6.0.0 |  |
+| decompress-response | 6.0.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/decompress-response/v/6.0.0 |  |
+| deep-extend | 0.6.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/deep-extend/v/0.6.0 |  |
 | deep-is | 0.1.4 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/deep-is/v/0.1.4 |  |
 | defer-to-connect | 2.0.1 | MIT | Desktop shell | https://www.npmjs.com/package/defer-to-connect/v/2.0.1 |  |
 | define-data-property | 1.1.4 | MIT | Desktop shell | https://www.npmjs.com/package/define-data-property/v/1.1.4 |  |
@@ -670,13 +684,15 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | delaunator | 5.1.0 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/delaunator/v/5.1.0 |  |
 | delayed-stream | 1.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/delayed-stream/v/1.0.0 |  |
 | dequal | 2.0.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/dequal/v/2.0.3 |  |
-| detect-libc | 2.1.2 | Apache-2.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/detect-libc/v/2.1.2 |  |
+| detect-libc | 2.1.2 | Apache-2.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/detect-libc/v/2.1.2 |  |
 | detect-node | 2.1.0 | MIT | Desktop shell | https://www.npmjs.com/package/detect-node/v/2.1.0 |  |
 | devlop | 1.1.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/devlop/v/1.1.0 |  |
 | diff | 8.0.3 | BSD-3-Clause | Env App UI | https://www.npmjs.com/package/diff/v/8.0.3 |  |
 | diff | 8.0.4 | BSD-3-Clause | Desktop shell, Env App UI | https://www.npmjs.com/package/diff/v/8.0.4 |  |
+| dir-compare | 4.2.0 | MIT | Desktop shell | https://www.npmjs.com/package/dir-compare/v/4.2.0 |  |
 | dmg-builder | 26.15.3 | MIT | Desktop shell | https://www.npmjs.com/package/dmg-builder/v/26.15.3 |  |
 | docx-preview | 0.3.7 | Apache-2.0 | Env App UI | https://www.npmjs.com/package/docx-preview/v/0.3.7 |  |
+| dompurify | 3.2.7 | (MPL-2.0 OR Apache-2.0) | Desktop shell | https://www.npmjs.com/package/dompurify/v/3.2.7 |  |
 | dompurify | 3.4.12 | (MPL-2.0 OR Apache-2.0) | Desktop shell, Env App UI | https://www.npmjs.com/package/dompurify/v/3.4.12 |  |
 | dotenv-expand | 11.0.7 | BSD-2-Clause | Desktop shell | https://www.npmjs.com/package/dotenv-expand/v/11.0.7 |  |
 | dotenv | 16.6.1 | BSD-2-Clause | Desktop shell | https://www.npmjs.com/package/dotenv/v/16.6.1 |  |
@@ -690,8 +706,8 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | electron-to-chromium | 1.5.373 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/electron-to-chromium/v/1.5.373 |  |
 | electron-winstaller | 5.4.0 | MIT | Desktop shell | https://www.npmjs.com/package/electron-winstaller/v/5.4.0 |  |
 | electron | 41.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/electron/v/41.3.0 |  |
-| emoji-regex | 8.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/emoji-regex/v/8.0.0 |  |
-| end-of-stream | 1.4.5 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/end-of-stream/v/1.4.5 |  |
+| emoji-regex | 8.0.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/emoji-regex/v/8.0.0 |  |
+| end-of-stream | 1.4.5 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/end-of-stream/v/1.4.5 |  |
 | enhanced-resolve | 5.20.1 | MIT | Desktop shell | https://www.npmjs.com/package/enhanced-resolve/v/5.20.1 |  |
 | enhanced-resolve | 5.21.6 | MIT | Env App UI | https://www.npmjs.com/package/enhanced-resolve/v/5.21.6 |  |
 | enhanced-resolve | 5.22.0 | MIT | Desktop shell | https://www.npmjs.com/package/enhanced-resolve/v/5.22.0 | License verified from the exact registry package manifest. |
@@ -709,7 +725,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | es-toolkit | 1.49.0 | MIT | Desktop shell | https://www.npmjs.com/package/es-toolkit/v/1.49.0 |  |
 | es6-error | 4.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/es6-error/v/4.1.1 |  |
 | esbuild | 0.28.1 | MIT | Code App UI, Desktop shell | https://www.npmjs.com/package/esbuild/v/0.28.1 |  |
-| escalade | 3.2.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/escalade/v/3.2.0 |  |
+| escalade | 3.2.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/escalade/v/3.2.0 |  |
 | escape-string-regexp | 4.0.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/escape-string-regexp/v/4.0.0 |  |
 | eslint-plugin-solid | 0.14.5 | MIT | Env App UI | https://www.npmjs.com/package/eslint-plugin-solid/v/0.14.5 |  |
 | eslint-scope | 8.4.0 | BSD-2-Clause | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/eslint-scope/v/8.4.0 |  |
@@ -724,6 +740,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | estree-walker | 3.0.3 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/estree-walker/v/3.0.3 |  |
 | esutils | 2.0.3 | BSD-2-Clause | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/esutils/v/2.0.3 |  |
 | exceljs | 4.4.0 | MIT | Env App UI | https://www.npmjs.com/package/exceljs/v/4.4.0 |  |
+| expand-template | 2.0.3 | (MIT OR WTFPL) | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/expand-template/v/2.0.3 |  |
 | expect-type | 1.3.0 | Apache-2.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/expect-type/v/1.3.0 |  |
 | exponential-backoff | 3.1.3 | Apache-2.0 | Desktop shell | https://www.npmjs.com/package/exponential-backoff/v/3.1.3 |  |
 | extract-zip | 2.0.1 | BSD-2-Clause | Desktop shell | https://www.npmjs.com/package/extract-zip/v/2.0.1 |  |
@@ -735,16 +752,18 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | fd-slicer | 1.1.0 | MIT | Desktop shell | https://www.npmjs.com/package/fd-slicer/v/1.1.0 |  |
 | fdir | 6.5.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/fdir/v/6.5.0 |  |
 | file-entry-cache | 8.0.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/file-entry-cache/v/8.0.0 |  |
+| file-uri-to-path | 1.0.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/file-uri-to-path/v/1.0.0 |  |
+| filelist | 1.0.6 | Apache-2.0 | Desktop shell | https://www.npmjs.com/package/filelist/v/1.0.6 |  |
 | filelist | 2.0.2 | Apache-2.0 | Desktop shell | https://www.npmjs.com/package/filelist/v/2.0.2 |  |
 | find-up | 5.0.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/find-up/v/5.0.0 |  |
 | flat-cache | 4.0.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/flat-cache/v/4.0.1 |  |
 | flatted | 3.4.2 | ISC | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/flatted/v/3.4.2 |  |
 | form-data | 4.0.6 | MIT | Desktop shell | https://www.npmjs.com/package/form-data/v/4.0.6 |  |
-| fs-constants | 1.0.0 | MIT | Env App UI | https://www.npmjs.com/package/fs-constants/v/1.0.0 |  |
+| fs-constants | 1.0.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/fs-constants/v/1.0.0 |  |
 | fs-extra | 10.1.0 | MIT | Desktop shell | https://www.npmjs.com/package/fs-extra/v/10.1.0 |  |
 | fs-extra | 11.3.1 | MIT | Desktop shell | https://www.npmjs.com/package/fs-extra/v/11.3.1 |  |
 | fs-extra | 11.3.5 | MIT | Env App UI | https://www.npmjs.com/package/fs-extra/v/11.3.5 |  |
-| fs-extra | 11.4.0 | MIT | Desktop shell | https://www.npmjs.com/package/fs-extra/v/11.4.0 |  |
+| fs-extra | 11.4.0 | MIT | Code App UI, Desktop shell | https://www.npmjs.com/package/fs-extra/v/11.4.0 |  |
 | fs-extra | 7.0.1 | MIT | Desktop shell | https://www.npmjs.com/package/fs-extra/v/7.0.1 |  |
 | fs-extra | 8.1.0 | MIT | Desktop shell | https://www.npmjs.com/package/fs-extra/v/8.1.0 |  |
 | fs-extra | 9.1.0 | MIT | Desktop shell | https://www.npmjs.com/package/fs-extra/v/9.1.0 |  |
@@ -753,11 +772,12 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | fsevents | 2.3.3 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/fsevents/v/2.3.3 |  |
 | function-bind | 1.1.2 | MIT | Desktop shell | https://www.npmjs.com/package/function-bind/v/1.1.2 |  |
 | gensync | 1.0.0-beta.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/gensync/v/1.0.0-beta.2 |  |
-| get-caller-file | 2.0.5 | ISC | Desktop shell | https://www.npmjs.com/package/get-caller-file/v/2.0.5 |  |
+| get-caller-file | 2.0.5 | ISC | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/get-caller-file/v/2.0.5 |  |
 | get-intrinsic | 1.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/get-intrinsic/v/1.3.0 |  |
 | get-proto | 1.0.1 | MIT | Desktop shell | https://www.npmjs.com/package/get-proto/v/1.0.1 |  |
 | get-stream | 5.2.0 | MIT | Desktop shell | https://www.npmjs.com/package/get-stream/v/5.2.0 |  |
 | ghostty-web | 0.4.0-next.14.g6a1a50d | MIT | Env App UI | https://www.npmjs.com/package/ghostty-web/v/0.4.0-next.14.g6a1a50d |  |
+| github-from-package | 0.0.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/github-from-package/v/0.0.0 |  |
 | github-slugger | 2.0.0 | ISC | Env App UI | https://www.npmjs.com/package/github-slugger/v/2.0.0 |  |
 | glob-parent | 6.0.2 | ISC | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/glob-parent/v/6.0.2 |  |
 | glob | 13.0.6 | BlueOak-1.0.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/glob/v/13.0.6 |  |
@@ -769,7 +789,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | globalthis | 1.0.4 | MIT | Desktop shell | https://www.npmjs.com/package/globalthis/v/1.0.4 |  |
 | gopd | 1.2.0 | MIT | Desktop shell | https://www.npmjs.com/package/gopd/v/1.2.0 |  |
 | got | 11.8.6 | MIT | Desktop shell | https://www.npmjs.com/package/got/v/11.8.6 |  |
-| graceful-fs | 4.2.11 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/graceful-fs/v/4.2.11 |  |
+| graceful-fs | 4.2.11 | ISC | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/graceful-fs/v/4.2.11 |  |
 | hachure-fill | 0.5.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/hachure-fill/v/0.5.2 |  |
 | has-flag | 4.0.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/has-flag/v/4.0.0 |  |
 | has-property-descriptors | 1.0.2 | MIT | Desktop shell | https://www.npmjs.com/package/has-property-descriptors/v/1.0.2 |  |
@@ -791,7 +811,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | http2-wrapper | 1.0.3 | MIT | Desktop shell | https://www.npmjs.com/package/http2-wrapper/v/1.0.3 |  |
 | https-proxy-agent | 7.0.6 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/https-proxy-agent/v/7.0.6 |  |
 | iconv-lite | 0.6.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/iconv-lite/v/0.6.3 |  |
-| ieee754 | 1.2.1 | BSD-3-Clause | Env App UI | https://www.npmjs.com/package/ieee754/v/1.2.1 |  |
+| ieee754 | 1.2.1 | BSD-3-Clause | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/ieee754/v/1.2.1 |  |
 | ignore | 5.3.2 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/ignore/v/5.3.2 |  |
 | ignore | 7.0.5 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/ignore/v/7.0.5 |  |
 | immediate | 3.0.6 | MIT | Env App UI | https://www.npmjs.com/package/immediate/v/3.0.6 |  |
@@ -799,12 +819,13 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | import-meta-resolve | 4.2.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/import-meta-resolve/v/4.2.0 |  |
 | imurmurhash | 0.1.4 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/imurmurhash/v/0.1.4 |  |
 | inflight | 1.0.6 | ISC | Desktop shell | https://www.npmjs.com/package/inflight/v/1.0.6 |  |
-| inherits | 2.0.4 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/inherits/v/2.0.4 |  |
+| inherits | 2.0.4 | ISC | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/inherits/v/2.0.4 |  |
+| ini | 1.3.8 | ISC | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/ini/v/1.3.8 |  |
 | inline-style-parser | 0.2.7 | MIT | Env App UI | https://www.npmjs.com/package/inline-style-parser/v/0.2.7 |  |
 | internmap | 1.0.1 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/internmap/v/1.0.1 |  |
 | internmap | 2.0.3 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/internmap/v/2.0.3 |  |
 | is-extglob | 2.1.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/is-extglob/v/2.1.1 |  |
-| is-fullwidth-code-point | 3.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/is-fullwidth-code-point/v/3.0.0 |  |
+| is-fullwidth-code-point | 3.0.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/is-fullwidth-code-point/v/3.0.0 |  |
 | is-glob | 4.0.3 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/is-glob/v/4.0.3 |  |
 | is-html | 2.0.0 | MIT | Env App UI | https://www.npmjs.com/package/is-html/v/2.0.0 |  |
 | is-potential-custom-element-name | 1.0.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/is-potential-custom-element-name/v/1.0.1 |  |
@@ -814,7 +835,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | isbinaryfile | 5.0.7 | MIT | Desktop shell | https://www.npmjs.com/package/isbinaryfile/v/5.0.7 |  |
 | isexe | 2.0.0 | ISC | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/isexe/v/2.0.0 |  |
 | isexe | 3.1.5 | BlueOak-1.0.0 | Desktop shell | https://www.npmjs.com/package/isexe/v/3.1.5 |  |
-| isexe | 4.0.0 | BlueOak-1.0.0 | Desktop shell | https://www.npmjs.com/package/isexe/v/4.0.0 |  |
+| isexe | 4.0.0 | BlueOak-1.0.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/isexe/v/4.0.0 |  |
 | jake | 10.9.4 | Apache-2.0 | Desktop shell | https://www.npmjs.com/package/jake/v/10.9.4 |  |
 | jiti | 2.6.1 | MIT | Desktop shell | https://www.npmjs.com/package/jiti/v/2.6.1 |  |
 | jiti | 2.7.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/jiti/v/2.7.0 |  |
@@ -832,7 +853,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | json5 | 2.2.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/json5/v/2.2.3 |  |
 | jsonfile | 4.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/jsonfile/v/4.0.0 |  |
 | jsonfile | 6.2.0 | MIT | Desktop shell | https://www.npmjs.com/package/jsonfile/v/6.2.0 |  |
-| jsonfile | 6.2.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/jsonfile/v/6.2.1 |  |
+| jsonfile | 6.2.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/jsonfile/v/6.2.1 |  |
 | jszip | 3.10.1 | (MIT OR GPL-3.0-or-later) | Env App UI | https://www.npmjs.com/package/jszip/v/3.10.1 | Redeven uses this dual-licensed package under the MIT option. |
 | katex | 0.16.45 | MIT | Env App UI | https://www.npmjs.com/package/katex/v/0.16.45 |  |
 | katex | 0.16.47 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/katex/v/0.16.47 |  |
@@ -880,7 +901,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | lru-cache | 10.4.3 | ISC | Env App UI | https://www.npmjs.com/package/lru-cache/v/10.4.3 |  |
 | lru-cache | 11.2.7 | BlueOak-1.0.0 | Desktop shell | https://www.npmjs.com/package/lru-cache/v/11.2.7 |  |
 | lru-cache | 11.5.0 | BlueOak-1.0.0 | Desktop shell | https://www.npmjs.com/package/lru-cache/v/11.5.0 | License verified from the pnpm-installed package manifest. |
-| lru-cache | 11.5.2 | BlueOak-1.0.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/lru-cache/v/11.5.2 |  |
+| lru-cache | 11.5.2 | BlueOak-1.0.0 | Env App UI | https://www.npmjs.com/package/lru-cache/v/11.5.2 |  |
 | lru-cache | 5.1.1 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/lru-cache/v/5.1.1 |  |
 | lru-cache | 6.0.0 | ISC | Desktop shell | https://www.npmjs.com/package/lru-cache/v/6.0.0 |  |
 | magic-string | 0.30.21 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/magic-string/v/0.30.21 |  |
@@ -906,20 +927,28 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | mime-types | 2.1.35 | MIT | Desktop shell | https://www.npmjs.com/package/mime-types/v/2.1.35 |  |
 | mime | 2.6.0 | MIT | Desktop shell | https://www.npmjs.com/package/mime/v/2.6.0 |  |
 | mimic-response | 1.0.1 | MIT | Desktop shell | https://www.npmjs.com/package/mimic-response/v/1.0.1 |  |
-| mimic-response | 3.1.0 | MIT | Desktop shell | https://www.npmjs.com/package/mimic-response/v/3.1.0 |  |
+| mimic-response | 3.1.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/mimic-response/v/3.1.0 |  |
 | minimatch | 10.2.5 | BlueOak-1.0.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/minimatch/v/10.2.5 |  |
-| minimist | 1.2.8 | MIT | Desktop shell | https://www.npmjs.com/package/minimist/v/1.2.8 |  |
-| minipass | 7.1.3 | BlueOak-1.0.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/minipass/v/7.1.3 |  |
-| minizlib | 3.1.0 | MIT | Desktop shell | https://www.npmjs.com/package/minizlib/v/3.1.0 |  |
+| minimatch | 3.1.5 | ISC | Desktop shell | https://www.npmjs.com/package/minimatch/v/3.1.5 |  |
+| minimatch | 5.1.9 | ISC | Desktop shell | https://www.npmjs.com/package/minimatch/v/5.1.9 |  |
+| minimatch | 9.0.9 | ISC | Desktop shell | https://www.npmjs.com/package/minimatch/v/9.0.9 |  |
+| minimist | 1.2.8 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/minimist/v/1.2.8 |  |
+| minipass | 7.1.3 | BlueOak-1.0.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/minipass/v/7.1.3 |  |
+| minizlib | 3.1.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/minizlib/v/3.1.0 |  |
+| mkdirp-classic | 0.5.3 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/mkdirp-classic/v/0.5.3 |  |
 | mkdirp | 0.5.6 | MIT | Desktop shell | https://www.npmjs.com/package/mkdirp/v/0.5.6 |  |
 | mlly | 1.8.0 | MIT | Env App UI | https://www.npmjs.com/package/mlly/v/1.8.0 |  |
 | monaco-editor | 0.55.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/monaco-editor/v/0.55.1 |  |
 | mrmime | 2.0.1 | MIT | Env App UI | https://www.npmjs.com/package/mrmime/v/2.0.1 |  |
 | ms | 2.1.3 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/ms/v/2.1.3 |  |
 | nanoid | 3.3.16 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/nanoid/v/3.3.16 |  |
+| napi-build-utils | 2.0.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/napi-build-utils/v/2.0.0 |  |
 | natural-compare | 1.4.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/natural-compare/v/1.4.0 |  |
+| node-abi | 3.94.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/node-abi/v/3.94.0 |  |
 | node-abi | 4.31.0 | MIT | Desktop shell | https://www.npmjs.com/package/node-abi/v/4.31.0 | License verified from the exact registry package manifest. |
 | node-abi | 4.33.0 | MIT | Desktop shell | https://www.npmjs.com/package/node-abi/v/4.33.0 |  |
+| node-addon-api | 7.1.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/node-addon-api/v/7.1.1 |  |
+| node-api-headers | 1.9.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/node-api-headers/v/1.9.0 |  |
 | node-api-version | 0.2.1 | MIT | Desktop shell | https://www.npmjs.com/package/node-api-version/v/0.2.1 |  |
 | node-gyp | 12.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/node-gyp/v/12.3.0 | License verified from the exact registry package manifest. |
 | node-gyp | 12.4.0 | MIT | Desktop shell | https://www.npmjs.com/package/node-gyp/v/12.4.0 |  |
@@ -933,7 +962,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | nwsapi | 2.2.23 | MIT | Env App UI | https://www.npmjs.com/package/nwsapi/v/2.2.23 |  |
 | object-keys | 1.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/object-keys/v/1.1.1 |  |
 | obug | 2.1.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/obug/v/2.1.1 |  |
-| once | 1.4.0 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/once/v/1.4.0 |  |
+| once | 1.4.0 | ISC | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/once/v/1.4.0 |  |
 | oniguruma-parser | 0.12.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/oniguruma-parser/v/0.12.1 |  |
 | oniguruma-parser | 0.12.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/oniguruma-parser/v/0.12.2 |  |
 | oniguruma-to-es | 4.3.4 | MIT | Env App UI | https://www.npmjs.com/package/oniguruma-to-es/v/4.3.4 |  |
@@ -975,6 +1004,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | points-on-path | 0.2.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/points-on-path/v/0.2.1 |  |
 | postcss | 8.5.23 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/postcss/v/8.5.23 |  |
 | postject | 1.0.0-alpha.6 | MIT | Desktop shell | https://www.npmjs.com/package/postject/v/1.0.0-alpha.6 |  |
+| prebuild-install | 7.1.3 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/prebuild-install/v/7.1.3 |  |
 | prelude-ls | 1.2.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/prelude-ls/v/1.2.1 |  |
 | proc-log | 6.1.0 | ISC | Desktop shell | https://www.npmjs.com/package/proc-log/v/6.1.0 |  |
 | process-nextick-args | 2.0.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/process-nextick-args/v/2.0.1 |  |
@@ -982,22 +1012,23 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | promise-retry | 2.0.1 | MIT | Desktop shell | https://www.npmjs.com/package/promise-retry/v/2.0.1 |  |
 | proper-lockfile | 4.1.2 | MIT | Desktop shell | https://www.npmjs.com/package/proper-lockfile/v/4.1.2 |  |
 | property-information | 7.1.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/property-information/v/7.1.0 |  |
-| pump | 3.0.4 | MIT | Desktop shell | https://www.npmjs.com/package/pump/v/3.0.4 |  |
+| pump | 3.0.4 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/pump/v/3.0.4 |  |
 | punycode | 2.3.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/punycode/v/2.3.1 |  |
 | pvtsutils | 1.3.6 | MIT | Desktop shell | https://www.npmjs.com/package/pvtsutils/v/1.3.6 |  |
 | pvutils | 1.1.5 | MIT | Desktop shell | https://www.npmjs.com/package/pvutils/v/1.1.5 |  |
 | qrcode-generator | 2.0.4 | MIT | Desktop shell | https://www.npmjs.com/package/qrcode-generator/v/2.0.4 |  |
 | quick-lru | 5.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/quick-lru/v/5.1.1 |  |
+| rc | 1.2.8 | (BSD-2-Clause OR MIT OR Apache-2.0) | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/rc/v/1.2.8 |  |
 | react-dom | 18.3.1 | MIT | Env App UI | https://www.npmjs.com/package/react-dom/v/18.3.1 |  |
 | react | 18.3.1 | MIT | Env App UI | https://www.npmjs.com/package/react/v/18.3.1 |  |
 | read-binary-file-arch | 1.0.6 | MIT | Desktop shell | https://www.npmjs.com/package/read-binary-file-arch/v/1.0.6 |  |
 | readable-stream | 2.3.8 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/readable-stream/v/2.3.8 |  |
-| readable-stream | 3.6.2 | MIT | Env App UI | https://www.npmjs.com/package/readable-stream/v/3.6.2 |  |
+| readable-stream | 3.6.2 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/readable-stream/v/3.6.2 |  |
 | readdir-glob | 3.0.0 | Apache-2.0 | Env App UI | https://www.npmjs.com/package/readdir-glob/v/3.0.0 |  |
 | regex-recursion | 6.0.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/regex-recursion/v/6.0.2 |  |
 | regex-utilities | 2.3.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/regex-utilities/v/2.3.0 |  |
 | regex | 6.1.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/regex/v/6.1.0 |  |
-| require-directory | 2.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/require-directory/v/2.1.1 |  |
+| require-directory | 2.1.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/require-directory/v/2.1.1 |  |
 | require-from-string | 2.0.2 | MIT | Desktop shell | https://www.npmjs.com/package/require-from-string/v/2.0.2 |  |
 | resedit | 1.7.2 | MIT | Desktop shell | https://www.npmjs.com/package/resedit/v/1.7.2 |  |
 | resolve-alpn | 1.2.1 | MIT | Desktop shell | https://www.npmjs.com/package/resolve-alpn/v/1.2.1 |  |
@@ -1013,7 +1044,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | rrweb-cssom | 0.8.0 | MIT | Env App UI | https://www.npmjs.com/package/rrweb-cssom/v/0.8.0 |  |
 | rw | 1.3.3 | BSD-3-Clause | Desktop shell, Env App UI | https://www.npmjs.com/package/rw/v/1.3.3 |  |
 | safe-buffer | 5.1.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/safe-buffer/v/5.1.2 |  |
-| safe-buffer | 5.2.1 | MIT | Env App UI | https://www.npmjs.com/package/safe-buffer/v/5.2.1 |  |
+| safe-buffer | 5.2.1 | MIT | Code App UI, Env App UI | https://www.npmjs.com/package/safe-buffer/v/5.2.1 |  |
 | safer-buffer | 2.1.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/safer-buffer/v/2.1.2 |  |
 | sanitize-filename | 1.6.4 | WTFPL OR ISC | Desktop shell | https://www.npmjs.com/package/sanitize-filename/v/1.6.4 |  |
 | sax | 1.6.0 | BlueOak-1.0.0 | Desktop shell | https://www.npmjs.com/package/sax/v/1.6.0 | License verified from the exact registry package manifest. |
@@ -1039,6 +1070,8 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | shiki | 3.23.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/shiki/v/3.23.0 |  |
 | siginfo | 2.0.0 | ISC | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/siginfo/v/2.0.0 |  |
 | signal-exit | 3.0.7 | ISC | Desktop shell | https://www.npmjs.com/package/signal-exit/v/3.0.7 |  |
+| simple-concat | 1.0.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/simple-concat/v/1.0.1 |  |
+| simple-get | 4.0.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/simple-get/v/4.0.1 |  |
 | simple-update-notifier | 2.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/simple-update-notifier/v/2.0.0 |  |
 | sirv | 3.0.2 | MIT | Env App UI | https://www.npmjs.com/package/sirv/v/3.0.2 |  |
 | solid-js | 1.9.11 | MIT | Env App UI | https://www.npmjs.com/package/solid-js/v/1.9.11 |  |
@@ -1055,10 +1088,11 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | stat-mode | 1.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/stat-mode/v/1.0.0 |  |
 | std-env | 4.1.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/std-env/v/4.1.0 |  |
 | string_decoder | 1.1.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/string_decoder/v/1.1.1 |  |
-| string_decoder | 1.3.0 | MIT | Env App UI | https://www.npmjs.com/package/string_decoder/v/1.3.0 |  |
-| string-width | 4.2.3 | MIT | Desktop shell | https://www.npmjs.com/package/string-width/v/4.2.3 |  |
+| string_decoder | 1.3.0 | MIT | Code App UI, Env App UI | https://www.npmjs.com/package/string_decoder/v/1.3.0 |  |
+| string-width | 4.2.3 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/string-width/v/4.2.3 |  |
 | stringify-entities | 4.0.4 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/stringify-entities/v/4.0.4 |  |
-| strip-ansi | 6.0.1 | MIT | Desktop shell | https://www.npmjs.com/package/strip-ansi/v/6.0.1 |  |
+| strip-ansi | 6.0.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/strip-ansi/v/6.0.1 |  |
+| strip-json-comments | 2.0.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/strip-json-comments/v/2.0.1 |  |
 | strip-json-comments | 3.1.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/strip-json-comments/v/3.1.1 |  |
 | style-to-object | 1.0.14 | MIT | Env App UI | https://www.npmjs.com/package/style-to-object/v/1.0.14 |  |
 | stylis | 4.3.6 | MIT | Env App UI | https://www.npmjs.com/package/stylis/v/4.3.6 |  |
@@ -1074,8 +1108,9 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | tailwindcss | 4.3.1 | MIT | Env App UI | https://www.npmjs.com/package/tailwindcss/v/4.3.1 |  |
 | tapable | 2.3.2 | MIT | Desktop shell | https://www.npmjs.com/package/tapable/v/2.3.2 |  |
 | tapable | 2.3.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/tapable/v/2.3.3 |  |
-| tar-stream | 2.2.0 | MIT | Env App UI | https://www.npmjs.com/package/tar-stream/v/2.2.0 |  |
-| tar | 7.5.22 | BlueOak-1.0.0 | Desktop shell | https://www.npmjs.com/package/tar/v/7.5.22 |  |
+| tar-fs | 2.1.5 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/tar-fs/v/2.1.5 |  |
+| tar-stream | 2.2.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/tar-stream/v/2.2.0 |  |
+| tar | 7.5.22 | BlueOak-1.0.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/tar/v/7.5.22 |  |
 | temp-file | 3.4.0 | MIT | Desktop shell | https://www.npmjs.com/package/temp-file/v/3.4.0 |  |
 | temp | 0.9.4 | MIT | Desktop shell | https://www.npmjs.com/package/temp/v/0.9.4 |  |
 | tiny-async-pool | 1.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/tiny-async-pool/v/1.3.0 |  |
@@ -1098,6 +1133,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | totalist | 3.0.1 | MIT | Env App UI | https://www.npmjs.com/package/totalist/v/3.0.1 |  |
 | tough-cookie | 5.1.2 | BSD-3-Clause | Env App UI | https://www.npmjs.com/package/tough-cookie/v/5.1.2 |  |
 | tough-cookie | 6.0.1 | BSD-3-Clause | Desktop shell | https://www.npmjs.com/package/tough-cookie/v/6.0.1 |  |
+| tr46 | 5.0.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/tr46/v/5.0.0 |  |
 | tr46 | 5.1.1 | MIT | Env App UI | https://www.npmjs.com/package/tr46/v/5.1.1 |  |
 | tr46 | 6.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/tr46/v/6.0.0 |  |
 | trim-lines | 3.0.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/trim-lines/v/3.0.1 |  |
@@ -1107,12 +1143,14 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | ts-dedent | 2.2.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/ts-dedent/v/2.2.0 |  |
 | ts-dedent | 2.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/ts-dedent/v/2.3.0 |  |
 | tslib | 2.8.1 | 0BSD | Desktop shell, Env App UI | https://www.npmjs.com/package/tslib/v/2.8.1 |  |
+| tunnel-agent | 0.6.0 | Apache-2.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/tunnel-agent/v/0.6.0 |  |
 | type-check | 0.4.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/type-check/v/0.4.0 |  |
 | type-fest | 0.13.1 | (MIT OR CC0-1.0) | Desktop shell | https://www.npmjs.com/package/type-fest/v/0.13.1 |  |
 | typescript | 5.9.3 | Apache-2.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/typescript/v/5.9.3 |  |
 | ufo | 1.6.3 | MIT | Env App UI | https://www.npmjs.com/package/ufo/v/1.6.3 |  |
 | undici-types | 6.21.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/undici-types/v/6.21.0 |  |
 | undici-types | 7.16.0 | MIT | Desktop shell | https://www.npmjs.com/package/undici-types/v/7.16.0 |  |
+| undici | 6.28.0 | MIT | Desktop shell | https://www.npmjs.com/package/undici/v/6.28.0 |  |
 | undici | 7.29.0 | MIT | Desktop shell | https://www.npmjs.com/package/undici/v/7.29.0 |  |
 | unist-util-is | 6.0.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/unist-util-is/v/6.0.1 |  |
 | unist-util-position | 5.0.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/unist-util-position/v/5.0.0 |  |
@@ -1120,13 +1158,14 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | unist-util-visit-parents | 6.0.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/unist-util-visit-parents/v/6.0.2 |  |
 | unist-util-visit | 5.1.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/unist-util-visit/v/5.1.0 |  |
 | universalify | 0.1.2 | MIT | Desktop shell | https://www.npmjs.com/package/universalify/v/0.1.2 |  |
-| universalify | 2.0.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/universalify/v/2.0.1 |  |
+| universalify | 2.0.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/universalify/v/2.0.1 |  |
 | unzipper | 0.12.3 | MIT | Env App UI | https://www.npmjs.com/package/unzipper/v/0.12.3 |  |
 | unzipper | 0.12.5 | MIT | Desktop shell | https://www.npmjs.com/package/unzipper/v/0.12.5 |  |
 | update-browserslist-db | 1.2.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/update-browserslist-db/v/1.2.3 |  |
 | uri-js | 4.4.1 | BSD-2-Clause | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/uri-js/v/4.4.1 |  |
+| url-join | 4.0.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/url-join/v/4.0.1 |  |
 | utf8-byte-length | 1.0.5 | (WTFPL OR MIT) | Desktop shell | https://www.npmjs.com/package/utf8-byte-length/v/1.0.5 |  |
-| util-deprecate | 1.0.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/util-deprecate/v/1.0.2 |  |
+| util-deprecate | 1.0.2 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/util-deprecate/v/1.0.2 |  |
 | uuid | 14.0.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/uuid/v/14.0.0 |  |
 | uuid | 14.0.1 | MIT | Desktop shell | https://www.npmjs.com/package/uuid/v/14.0.1 |  |
 | vfile-message | 4.0.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/vfile-message/v/4.0.3 |  |
@@ -1150,23 +1189,24 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | whatwg-url | 16.0.1 | MIT | Desktop shell | https://www.npmjs.com/package/whatwg-url/v/16.0.1 |  |
 | which | 2.0.2 | ISC | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/which/v/2.0.2 |  |
 | which | 5.0.0 | ISC | Desktop shell | https://www.npmjs.com/package/which/v/5.0.0 |  |
-| which | 6.0.1 | ISC | Desktop shell | https://www.npmjs.com/package/which/v/6.0.1 |  |
+| which | 6.0.1 | ISC | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/which/v/6.0.1 |  |
 | why-is-node-running | 2.3.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/why-is-node-running/v/2.3.0 |  |
 | word-wrap | 1.2.5 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/word-wrap/v/1.2.5 |  |
-| wrap-ansi | 7.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/wrap-ansi/v/7.0.0 |  |
-| wrappy | 1.0.2 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/wrappy/v/1.0.2 |  |
+| wrap-ansi | 7.0.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/wrap-ansi/v/7.0.0 |  |
+| wrappy | 1.0.2 | ISC | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/wrappy/v/1.0.2 |  |
 | ws | 8.21.0 | MIT | Code App UI, Env App UI | https://www.npmjs.com/package/ws/v/8.21.0 |  |
 | ws | 8.21.2 | MIT | Desktop shell | https://www.npmjs.com/package/ws/v/8.21.2 |  |
 | ws | 8.21.3 | MIT | Desktop shell | https://www.npmjs.com/package/ws/v/8.21.3 |  |
 | xml-name-validator | 5.0.0 | Apache-2.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/xml-name-validator/v/5.0.0 |  |
 | xmlbuilder | 15.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/xmlbuilder/v/15.1.1 |  |
 | xmlchars | 2.2.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/xmlchars/v/2.2.0 |  |
-| y18n | 5.0.8 | ISC | Desktop shell | https://www.npmjs.com/package/y18n/v/5.0.8 |  |
+| y18n | 5.0.8 | ISC | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/y18n/v/5.0.8 |  |
 | yallist | 3.1.1 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/yallist/v/3.1.1 |  |
 | yallist | 4.0.0 | ISC | Desktop shell | https://www.npmjs.com/package/yallist/v/4.0.0 |  |
-| yallist | 5.0.0 | BlueOak-1.0.0 | Desktop shell | https://www.npmjs.com/package/yallist/v/5.0.0 |  |
-| yargs-parser | 21.1.1 | ISC | Desktop shell | https://www.npmjs.com/package/yargs-parser/v/21.1.1 |  |
+| yallist | 5.0.0 | BlueOak-1.0.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/yallist/v/5.0.0 |  |
+| yargs-parser | 21.1.1 | ISC | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/yargs-parser/v/21.1.1 |  |
 | yargs | 17.7.2 | MIT | Desktop shell | https://www.npmjs.com/package/yargs/v/17.7.2 |  |
+| yargs | 17.7.3 | MIT | Code App UI, Env App UI | https://www.npmjs.com/package/yargs/v/17.7.3 |  |
 | yauzl | 2.10.0 | MIT | Desktop shell | https://www.npmjs.com/package/yauzl/v/2.10.0 |  |
 | yocto-queue | 0.1.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/yocto-queue/v/0.1.0 |  |
 | zip-stream | 4.1.1 | MIT | Env App UI | https://www.npmjs.com/package/zip-stream/v/4.1.1 |  |

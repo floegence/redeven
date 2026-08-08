@@ -772,13 +772,13 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
   const captureTerminalMutationFence = (): WorkbenchTerminalMutationFence => ({
     envId: String(env.env_id() ?? '').trim(),
     connectionEpoch: terminalCatalog?.connectionEpoch() ?? 0,
-    protocolClient: protocol.client(),
+    protocolClient: protocol.session?.(),
   });
 
   const terminalMutationFenceIsCurrent = (fence: WorkbenchTerminalMutationFence): boolean => (
     protocol.status() === 'connected'
-    && Boolean(protocol.client())
-    && protocol.client() === fence.protocolClient
+    && Boolean(protocol.session?.())
+    && protocol.session?.() === fence.protocolClient
     && String(env.env_id() ?? '').trim() === fence.envId
     && (terminalCatalog?.connectionEpoch() ?? 0) === fence.connectionEpoch
     && env.env.state === 'ready'

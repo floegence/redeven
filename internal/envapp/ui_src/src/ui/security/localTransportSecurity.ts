@@ -1,12 +1,5 @@
-import {
-  AllowPlaintextForLoopback,
-  createNetworkPlaintextPolicy,
-  PlaintextRiskAcceptance,
-  type TransportSecurityPolicy,
-} from '@floegence/flowersec-core';
-
 export type LocalTransportSecurityResolution = Readonly<{
-  policy: TransportSecurityPolicy | null;
+  policy: true | null;
   loopback: boolean;
   network: boolean;
   error: string;
@@ -34,24 +27,12 @@ function hostnameIsLoopback(hostname: string): boolean {
 export function resolveLocalTransportSecurityPolicy(rawHostname: string): LocalTransportSecurityResolution {
   const hostname = normalizeHostname(rawHostname);
   if (hostnameIsLoopback(hostname)) {
-    return { policy: AllowPlaintextForLoopback, loopback: true, network: false, error: '' };
+    return { policy: true, loopback: true, network: false, error: '' };
   }
-  try {
-    return {
-      policy: createNetworkPlaintextPolicy({
-        allowedHosts: [hostname],
-        riskAcceptance: PlaintextRiskAcceptance.acceptPreE2ECredentialExposure,
-      }),
-      loopback: false,
-      network: true,
-      error: '',
-    };
-  } catch (error) {
-    return {
-      policy: null,
-      loopback: false,
-      network: false,
-      error: error instanceof Error ? error.message : String(error),
-    };
-  }
+  return {
+    policy: null,
+    loopback: false,
+    network: true,
+    error: 'Flowersec plaintext direct sessions are restricted to canonical loopback hosts.',
+  };
 }

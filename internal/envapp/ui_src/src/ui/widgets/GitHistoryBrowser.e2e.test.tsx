@@ -27,7 +27,7 @@ vi.mock("@floegence/floe-webapp-protocol", async () => {
   return {
     ...actual,
     useProtocol: () => ({
-      client: () => ({ connected: true }),
+      session: () => ({ connected: true }),
     }),
   };
 });

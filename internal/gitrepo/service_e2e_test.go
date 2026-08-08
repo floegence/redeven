@@ -5,16 +5,36 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/sessionrpc"
 )
+
+type testRPCClient struct {
+	router *sessionrpc.Router
+}
+
+func (client *testRPCClient) Call(ctx context.Context, typeID uint32, request json.RawMessage) (json.RawMessage, *sessionrpc.Error, error) {
+	var response json.RawMessage
+	if err := client.router.Call(ctx, typeID, request, &response); err != nil {
+		var rpcErr *sessionrpc.Error
+		if errors.As(err, &rpcErr) {
+			return nil, rpcErr, nil
+		}
+		return nil, nil, err
+	}
+	return response, nil, nil
+}
+
+func newGitRepoRPCClient(svc *Service, meta *session.Meta) *testRPCClient {
+	router := sessionrpc.NewRouter()
+	svc.Register(router, meta)
+	return &testRPCClient{router: router}
+}
 
 func mustMarshalJSON(t *testing.T, value any) []byte {
 	t.Helper()
@@ -40,22 +60,7 @@ func TestE2E_GitRepoRPC_ResolveListDetail(t *testing.T) {
 	svc := NewService(fixture.Root)
 	meta := &session.Meta{CanRead: true}
 
-	serverConn, clientConn := net.Pipe()
-	t.Cleanup(func() { _ = serverConn.Close() })
-	t.Cleanup(func() { _ = clientConn.Close() })
-
-	router := rpc.NewRouter()
-	svc.Register(router, meta)
-	server := rpc.NewServer(serverConn, router)
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-
-	done := make(chan error, 1)
-	go func() {
-		done <- server.Serve(ctx)
-	}()
-
-	client := rpc.NewClient(clientConn)
+	client := newGitRepoRPCClient(svc, meta)
 
 	resolvePayload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_RESOLVE_REPO, mustMarshalJSON(t, resolveRepoReq{
 		Path: filepath.Join(fixture.Root, "src"),
@@ -150,13 +155,6 @@ func TestE2E_GitRepoRPC_ResolveListDetail(t *testing.T) {
 		t.Fatalf("full-context rename diff should preserve rename metadata: %+v", fullContextResp.File)
 	}
 
-	cancel()
-	_ = clientConn.Close()
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatalf("rpc server did not stop")
-	}
 }
 
 func TestE2E_GitRepoRPC_LargeFullDiffReturnsTruncatedAndKeepsSession(t *testing.T) {
@@ -271,22 +269,7 @@ func TestE2E_GitRepoRPC_ListCommitsPagination(t *testing.T) {
 	svc := NewService(fixture.Root)
 	meta := &session.Meta{CanRead: true}
 
-	serverConn, clientConn := net.Pipe()
-	t.Cleanup(func() { _ = serverConn.Close() })
-	t.Cleanup(func() { _ = clientConn.Close() })
-
-	router := rpc.NewRouter()
-	svc.Register(router, meta)
-	server := rpc.NewServer(serverConn, router)
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-
-	done := make(chan error, 1)
-	go func() {
-		done <- server.Serve(ctx)
-	}()
-
-	client := rpc.NewClient(clientConn)
+	client := newGitRepoRPCClient(svc, meta)
 
 	page1Payload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_LIST_COMMITS, mustMarshalJSON(t, listCommitsReq{
 		RepoRootPath: fixture.Root,
@@ -332,13 +315,6 @@ func TestE2E_GitRepoRPC_ListCommitsPagination(t *testing.T) {
 		t.Fatalf("unexpected page2 commits: %+v", page2.Commits)
 	}
 
-	cancel()
-	_ = clientConn.Close()
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatalf("rpc server did not stop")
-	}
 }
 
 func TestE2E_GitRepoRPC_WorkbenchEndpoints(t *testing.T) {
@@ -811,29 +787,9 @@ func TestE2E_GitRepoRPC_StashEndpoints(t *testing.T) {
 	}
 }
 
-func startGitRepoRPCSession(t *testing.T, svc *Service) (*rpc.Client, func()) {
+func startGitRepoRPCSession(t *testing.T, svc *Service) (*testRPCClient, func()) {
 	t.Helper()
-	serverConn, clientConn := net.Pipe()
-	router := rpc.NewRouter()
-	svc.Register(router, &session.Meta{CanRead: true, CanWrite: true})
-	server := rpc.NewServer(serverConn, router)
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan error, 1)
-	go func() {
-		done <- server.Serve(ctx)
-	}()
-
-	cleanup := func() {
-		cancel()
-		_ = clientConn.Close()
-		_ = serverConn.Close()
-		select {
-		case <-done:
-		case <-time.After(2 * time.Second):
-			t.Fatalf("rpc server did not stop")
-		}
-	}
-	return rpc.NewClient(clientConn), cleanup
+	return newGitRepoRPCClient(svc, &session.Meta{CanRead: true, CanWrite: true}), func() {}
 }
 
 func TestE2E_GitRepoRPC_WorkspaceCapabilitiesAndBudgetErrorKeepSessionOpen(t *testing.T) {

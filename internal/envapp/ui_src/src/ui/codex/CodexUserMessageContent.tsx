@@ -110,7 +110,7 @@ function LocalImageInput(props: {
   };
 
   createEffect(() => {
-    const client = protocol.client();
+    const client = protocol.session?.();
     const normalizedPath = path();
     const currentRequest = ++requestSeq;
 

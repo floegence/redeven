@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/floegence/flowersec/flowersec-go/rpc"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v2"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 )
@@ -61,7 +61,7 @@ func (s *Service) ListActiveThreadRuns(endpointID string) []ActiveThreadRun {
 	return out
 }
 
-func (s *Service) SubscribeSummary(endpointID string, streamServer *rpc.Server) ([]ActiveThreadRun, error) {
+func (s *Service) SubscribeSummary(endpointID string, streamServer flowersec.RPCPeer) ([]ActiveThreadRun, error) {
 	endpointID = strings.TrimSpace(endpointID)
 	if s == nil {
 		return nil, errors.New("nil service")
@@ -84,7 +84,7 @@ func (s *Service) SubscribeSummary(endpointID string, streamServer *rpc.Server) 
 	}
 	bySrv := s.realtimeSummaryByEndpoint[endpointID]
 	if bySrv == nil {
-		bySrv = make(map[*rpc.Server]struct{})
+		bySrv = make(map[flowersec.RPCPeer]struct{})
 		s.realtimeSummaryByEndpoint[endpointID] = bySrv
 	}
 	bySrv[streamServer] = struct{}{}
@@ -94,7 +94,7 @@ func (s *Service) SubscribeSummary(endpointID string, streamServer *rpc.Server) 
 	return s.ListActiveThreadRuns(endpointID), nil
 }
 
-func (s *Service) SubscribeThread(endpointID string, threadID string, streamServer *rpc.Server) (string, error) {
+func (s *Service) SubscribeThread(endpointID string, threadID string, streamServer flowersec.RPCPeer) (string, error) {
 	endpointID = strings.TrimSpace(endpointID)
 	threadID = strings.TrimSpace(threadID)
 	if s == nil {
@@ -122,7 +122,7 @@ func (s *Service) SubscribeThread(endpointID string, threadID string, streamServ
 	}
 	bySrv := s.realtimeByThread[threadKey]
 	if bySrv == nil {
-		bySrv = make(map[*rpc.Server]struct{})
+		bySrv = make(map[flowersec.RPCPeer]struct{})
 		s.realtimeByThread[threadKey] = bySrv
 	}
 	bySrv[streamServer] = struct{}{}
@@ -133,7 +133,7 @@ func (s *Service) SubscribeThread(endpointID string, threadID string, streamServ
 	return runID, nil
 }
 
-func (s *Service) DetachRealtimeSink(streamServer *rpc.Server) {
+func (s *Service) DetachRealtimeSink(streamServer flowersec.RPCPeer) {
 	if s == nil || streamServer == nil {
 		return
 	}
@@ -524,7 +524,7 @@ type aiSinkBlockDeltaEnvelope struct {
 }
 
 type aiSinkNotifier interface {
-	Notify(typeID uint32, payload json.RawMessage) error
+	Notify(context.Context, uint32, any) error
 }
 
 func newAISinkMsg(typeID uint32, ev RealtimeEvent, payload json.RawMessage) aiSinkMsg {
@@ -603,7 +603,7 @@ type aiSinkWriter struct {
 	lowOrder   []string
 }
 
-func newAISinkWriter(srv *rpc.Server) *aiSinkWriter {
+func newAISinkWriter(srv flowersec.RPCPeer) *aiSinkWriter {
 	return newAISinkWriterWithNotifier(srv)
 }
 
@@ -696,7 +696,7 @@ func (w *aiSinkWriter) notify(msg aiSinkMsg) error {
 	if w == nil || w.notifier == nil {
 		return errors.New("nil notifier")
 	}
-	return w.notifier.Notify(msg.TypeID, msg.Payload)
+	return w.notifier.Notify(context.Background(), msg.TypeID, msg.Payload)
 }
 
 func (w *aiSinkWriter) enqueueLow(msg aiSinkMsg) {

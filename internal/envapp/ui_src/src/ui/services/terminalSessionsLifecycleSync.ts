@@ -52,7 +52,7 @@ export function TerminalSessionsLifecycleSync(props: TerminalSessionsLifecycleSy
   };
 
   createEffect(() => {
-    const client = protocol.client();
+    const client = protocol.session?.();
     const status = (protocol as typeof protocol & { status?: () => string }).status?.() ?? 'connected';
     if (!client || status !== 'connected') return;
 

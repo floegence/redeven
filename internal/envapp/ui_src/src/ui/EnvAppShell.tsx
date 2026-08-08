@@ -49,13 +49,9 @@ import {
 } from '@floegence/floe-webapp-core/layout';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import {
-  createArtifactDirectReconnectConfig,
-  createProxyRuntimeTunnelReconnectConfig,
+  createArtifactDirectConnectionConfig,
+  createProxyRuntimeTunnelConnectionConfig,
 } from '@floegence/floe-webapp-boot';
-import {
-  RequireTLS,
-  type ClientObserverLike,
-} from '@floegence/flowersec-core';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { pluginMutationOutcome } from '@floegence/redevplugin-ui';
 
@@ -171,7 +167,7 @@ import {
 } from './services/accessUnlockError';
 import { clearLocalAccessResumeToken, writeLocalAccessResumeToken } from './services/localAccessAuth';
 import {
-  activatePluginSessionCredential,
+  activatePendingPluginSessionCredential,
   clearPluginSessionCredential,
   readPluginSessionCredential,
 } from './services/pluginSessionCredential';
@@ -685,11 +681,11 @@ export function EnvAppShell() {
     void disposePluginPlatform().catch(reportPluginSurfaceRetirementError);
   });
   const downloadManager = createDownloadManager({
-    source: createRuntimeDownloadSource(() => protocol.client()),
+    source: createRuntimeDownloadSource(() => protocol.session?.()),
     sink: resolveDownloadPlatformSink(),
   });
   const filePreviewController = createFilePreviewController({
-    client: () => protocol.client(),
+    client: () => protocol.session?.(),
     rpc: () => rpc,
     canWrite: () => Boolean(env()?.permissions?.can_write),
     onSaved: (path) => {
@@ -2298,37 +2294,13 @@ export function EnvAppShell() {
     lastAgentRxAtMs = Date.now();
   };
 
-  const observer: ClientObserverLike = {
-    onRpcNotify: () => {
-      markAgentRx();
-    },
-    onRpcCall: (result) => {
-      // Only count results that prove we received a response envelope from the peer.
-      if (result === 'ok' || result === 'rpc_error' || result === 'handler_not_found') {
-        markAgentRx();
-      }
-    },
-    onDiagnosticEvent: (event) => {
-      if (
-        event.path === 'direct'
-        && event.stage === 'handshake'
-        && event.code === 'handshake_ok'
-        && event.result === 'ok'
-        && event.session_id
-      ) {
-        setPluginSessionReady(activatePluginSessionCredential(event.session_id));
-      }
-      reconnectController.noteProtocolDiagnostic(event, classifyReconnectFailure(protocol.error()));
-    },
-  };
-
   let ensureInFlight: Promise<void> | null = null;
   let accessResumeClient: unknown = null;
   let accessRecoverySeq = 0;
   let accessResumeInFlight: { key: number; promise: Promise<void> } | null = null;
 
   const ensureAccessResumed = async (attemptKey: number) => {
-    const client = protocol.client();
+    const client = protocol.session?.();
     if (!client || protocol.status() !== 'connected') return;
     if (accessResumeClient === client) {
       setCurrentAccessChannelReady(true);
@@ -2382,7 +2354,7 @@ export function EnvAppShell() {
     }
   };
 
-  const acquireRemoteArtifact = async (ctx: Readonly<{ traceId?: string; signal?: AbortSignal }> = {}) => {
+  const acquireRemoteArtifact = async (ctx: Readonly<{ signal: AbortSignal }>) => {
     const id = envId();
     if (!id) throw new Error(i18n.t('shell.status.missingEnvContext'));
 
@@ -2414,12 +2386,11 @@ export function EnvAppShell() {
       ...(allowLoopbackControlplaneHTTP(window.location.protocol, localTransportSecurity)
         ? { allowLoopbackHTTP: true }
         : {}),
-      traceId: ctx.traceId,
       signal: ctx.signal,
     });
   };
 
-  const acquireLocalDirectArtifact = async (context: Readonly<{ traceId?: string; signal?: AbortSignal }> = {}) => {
+  const acquireLocalDirectArtifact = async (context: Readonly<{ signal: AbortSignal }>) => {
     setPluginSessionReady(false);
     setPluginRuntimeRecoveryComplete(false);
     setPluginRuntimeSurfacesReady(false);
@@ -2437,24 +2408,13 @@ export function EnvAppShell() {
     return artifact;
   };
 
-  const localProtocolConnectConfig: ProtocolConnectConfig | null = localTransportSecurity.policy ? createArtifactDirectReconnectConfig({
-    source: { kind: 'refreshable', acquire: acquireLocalDirectArtifact },
-    observer,
-    connect: {
-      ...FLOWERSEC_CONNECT_RESOURCES,
-      liveness: { intervalMs: 15_000, timeoutMs: 10_000 },
-      transportSecurityPolicy: localTransportSecurity.policy,
-    },
-    autoReconnect: LOCAL_FAST_RECONNECT_POLICY,
+  const localProtocolConnectConfig: ProtocolConnectConfig | null = localTransportSecurity.policy ? createArtifactDirectConnectionConfig({
+    source: { acquire: acquireLocalDirectArtifact },
+    controller: { maximumAttempts: LOCAL_FAST_RECONNECT_POLICY.maxAttempts },
   }) : null;
-  const remoteProtocolConnectConfig: ProtocolConnectConfig = createProxyRuntimeTunnelReconnectConfig({
-    source: { kind: 'refreshable', acquire: acquireRemoteArtifact },
-    observer,
-    connect: {
-      ...FLOWERSEC_CONNECT_RESOURCES,
-      transportSecurityPolicy: RequireTLS,
-    },
-    autoReconnect: REMOTE_FAST_RECONNECT_POLICY,
+  const remoteProtocolConnectConfig: ProtocolConnectConfig = createProxyRuntimeTunnelConnectionConfig({
+    source: { acquire: acquireRemoteArtifact },
+    controller: { maximumAttempts: REMOTE_FAST_RECONNECT_POLICY.maxAttempts },
   });
 
   const runConnect = async (fn: (config: ProtocolConnectConfig) => Promise<void>) => {
@@ -2490,7 +2450,7 @@ export function EnvAppShell() {
         setLocalAccessChannelReady(false);
         await fn(localProtocolConnectConfig);
         if (accessRecoverySeq !== attemptKey) return;
-        accessResumeClient = protocol.client();
+        accessResumeClient = protocol.session?.();
         setLocalAccessChannelReady(true);
         setCurrentAccessError(null);
         setManualError(null);
@@ -2550,7 +2510,7 @@ export function EnvAppShell() {
   const currentPingSource = createMemo(() => {
     if (accessGateVisible()) return null;
     if (protocol.status() !== 'connected') return null;
-    return protocol.client() ?? null;
+    return protocol.session?.() ?? null;
   });
 
   const agentVersionModel = createAgentVersionModel({
@@ -2856,7 +2816,11 @@ export function EnvAppShell() {
     if (recoverySnapshot().state === 'failed') return 'error';
     if (recoveryVisible()) return 'connecting';
     if (manualError()) return 'error';
-    return protocol.status();
+	const current = protocol.status();
+	if (current === 'connected') return 'connected';
+	if (current === 'connecting' || current === 'waiting') return 'connecting';
+	if (current === 'failed') return 'error';
+	return 'disconnected';
   });
   const statusLabel = createMemo(() => {
     switch (accessGatePhase()) {
@@ -3013,8 +2977,9 @@ export function EnvAppShell() {
     const failure = classifyReconnectFailure(rawFailure);
 
     if (protocolStatusValue === 'connected') {
-      if (lastConnectedClient !== protocol.client()) {
-        lastConnectedClient = protocol.client();
+	  if (isLocalMode()) setPluginSessionReady(activatePendingPluginSessionCredential());
+      if (lastConnectedClient !== protocol.session?.()) {
+        lastConnectedClient = protocol.session?.();
         if (!isLocalMode()) {
           void refetchEnv();
         }
@@ -3065,7 +3030,7 @@ export function EnvAppShell() {
       return;
     }
 
-    const client = protocol.client();
+    const client = protocol.session?.();
     const st = protocol.status();
     if (st !== 'connected' || !client) {
       accessResumeClient = null;
@@ -3140,7 +3105,7 @@ export function EnvAppShell() {
       }
 
       const st = protocol.status();
-      const client = protocol.client();
+      const client = protocol.session?.();
       if (st !== 'connected' || !client) {
         console.debug('[envapp] ensureHealthy: connect', { reason, status: st });
         await connect();

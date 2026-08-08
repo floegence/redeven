@@ -9,12 +9,12 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/gitruntime"
 	"github.com/floegence/redeven/internal/gitutil"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/sessionrpc"
 )
 
 const (
@@ -164,18 +164,18 @@ func repoReadEpochFromContext(ctx context.Context, identity gitruntime.Repositor
 	return lease.epoch, ok && lease.commonRepoKey == identity.CommonRepoKey
 }
 
-func (s *Service) Register(r *rpc.Router, meta *session.Meta) {
+func (s *Service) Register(r *sessionrpc.Router, meta *session.Meta) {
 	s.RegisterWithAccessGate(r, meta, nil)
 }
 
-func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate *accessgate.Gate) {
+func (s *Service) RegisterWithAccessGate(r *sessionrpc.Router, meta *session.Meta, gate *accessgate.Gate) {
 	if r == nil || s == nil {
 		return
 	}
 
 	registerGitTyped[resolveRepoReq, resolveRepoResp](r, TypeID_GIT_RESOLVE_REPO, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *resolveRepoReq) (*resolveRepoResp, error) {
 		if meta == nil || !meta.CanRead {
-			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "read permission denied"}
 		}
 		if req == nil {
 			req = &resolveRepoReq{}
@@ -203,7 +203,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 
 	registerGitTyped[listCommitsReq, listCommitsResp](r, TypeID_GIT_LIST_COMMITS, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *listCommitsReq) (*listCommitsResp, error) {
 		if meta == nil || !meta.CanRead {
-			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "read permission denied"}
 		}
 		if req == nil {
 			req = &listCommitsReq{}
@@ -245,7 +245,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 
 	registerGitTyped[getCommitDetailReq, getCommitDetailResp](r, TypeID_GIT_GET_COMMIT_DETAIL, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *getCommitDetailReq) (*getCommitDetailResp, error) {
 		if meta == nil || !meta.CanRead {
-			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "read permission denied"}
 		}
 		if req == nil {
 			req = &getCommitDetailReq{}
@@ -261,7 +261,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		defer releaseRead()
 		commit := strings.TrimSpace(req.Commit)
 		if commit == "" {
-			return nil, &rpc.Error{Code: 400, Message: "missing commit"}
+			return nil, &sessionrpc.Error{Code: 400, Message: "missing commit"}
 		}
 		detail, presentation, files, err := s.getCommitDetail(ctx, repo, commit)
 		if err != nil {
@@ -277,7 +277,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 
 	registerGitTyped[getRepoSummaryReq, getRepoSummaryResp](r, TypeID_GIT_GET_REPO_SUMMARY, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *getRepoSummaryReq) (*getRepoSummaryResp, error) {
 		if meta == nil || !meta.CanRead {
-			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "read permission denied"}
 		}
 		if req == nil {
 			req = &getRepoSummaryReq{}
@@ -300,7 +300,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 
 	registerGitTyped[listWorkspaceChangesReq, listWorkspaceChangesResp](r, TypeID_GIT_LIST_WORKSPACE, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *listWorkspaceChangesReq) (*listWorkspaceChangesResp, error) {
 		if meta == nil || !meta.CanRead {
-			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "read permission denied"}
 		}
 		if req == nil {
 			req = &listWorkspaceChangesReq{}
@@ -326,7 +326,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 
 	registerGitTyped[listWorkspacePageReq, listWorkspacePageResp](r, TypeID_GIT_LIST_WORKSPACE_PAGE, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *listWorkspacePageReq) (*listWorkspacePageResp, error) {
 		if meta == nil || !meta.CanRead {
-			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "read permission denied"}
 		}
 		if req == nil {
 			req = &listWorkspacePageReq{}
@@ -352,7 +352,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 
 	registerGitTyped[listStashesReq, listStashesResp](r, TypeID_GIT_LIST_STASHES, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *listStashesReq) (*listStashesResp, error) {
 		if meta == nil || !meta.CanRead {
-			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "read permission denied"}
 		}
 		if req == nil {
 			req = &listStashesReq{}
@@ -375,7 +375,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 
 	registerGitTyped[getStashDetailReq, getStashDetailResp](r, TypeID_GIT_GET_STASH_DETAIL, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *getStashDetailReq) (*getStashDetailResp, error) {
 		if meta == nil || !meta.CanRead {
-			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "read permission denied"}
 		}
 		if req == nil {
 			req = &getStashDetailReq{}
@@ -398,7 +398,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 
 	registerGitTyped[listBranchesReq, listBranchesResp](r, TypeID_GIT_LIST_BRANCHES, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *listBranchesReq) (*listBranchesResp, error) {
 		if meta == nil || !meta.CanRead {
-			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "read permission denied"}
 		}
 		if req == nil {
 			req = &listBranchesReq{}
@@ -421,7 +421,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 
 	registerGitTyped[getBranchCompareReq, getBranchCompareResp](r, TypeID_GIT_GET_BRANCH_DIFF, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *getBranchCompareReq) (*getBranchCompareResp, error) {
 		if meta == nil || !meta.CanRead {
-			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "read permission denied"}
 		}
 		if req == nil {
 			req = &getBranchCompareReq{}
@@ -444,7 +444,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 
 	registerGitTyped[getDiffContentReq, getDiffContentResp](r, TypeID_GIT_DIFF_CONTENT, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *getDiffContentReq) (*getDiffContentResp, error) {
 		if meta == nil || !meta.CanRead {
-			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "read permission denied"}
 		}
 		if req == nil {
 			req = &getDiffContentReq{}
@@ -459,10 +459,10 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		}
 		defer releaseRead()
 		if strings.TrimSpace(req.SourceKind) == "" {
-			return nil, &rpc.Error{Code: 400, Message: "missing source kind"}
+			return nil, &sessionrpc.Error{Code: 400, Message: "missing source kind"}
 		}
 		if req.File.Path == "" && req.File.OldPath == "" && req.File.NewPath == "" {
-			return nil, &rpc.Error{Code: 400, Message: "missing diff file"}
+			return nil, &sessionrpc.Error{Code: 400, Message: "missing diff file"}
 		}
 		resp, err := s.getDiffContent(ctx, repo, *req)
 		if err != nil {
@@ -473,7 +473,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 
 	registerGitTyped[stageWorkspaceReq, stageWorkspaceResp](r, TypeID_GIT_STAGE_WORKSPACE, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *stageWorkspaceReq) (*stageWorkspaceResp, error) {
 		if meta == nil || !meta.CanWrite {
-			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "write permission denied"}
 		}
 		if req == nil {
 			req = &stageWorkspaceReq{}
@@ -503,7 +503,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 
 	registerGitTyped[unstageWorkspaceReq, unstageWorkspaceResp](r, TypeID_GIT_UNSTAGE_WORKSPACE, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *unstageWorkspaceReq) (*unstageWorkspaceResp, error) {
 		if meta == nil || !meta.CanWrite {
-			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "write permission denied"}
 		}
 		if req == nil {
 			req = &unstageWorkspaceReq{}
@@ -533,7 +533,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 
 	registerGitTyped[discardWorkspaceReq, discardWorkspaceResp](r, TypeID_GIT_DISCARD_WORKSPACE, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *discardWorkspaceReq) (*discardWorkspaceResp, error) {
 		if meta == nil || !meta.CanWrite {
-			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "write permission denied"}
 		}
 		if req == nil {
 			req = &discardWorkspaceReq{}
@@ -563,7 +563,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 
 	registerGitTyped[commitWorkspaceReq, commitWorkspaceResp](r, TypeID_GIT_COMMIT_WORKSPACE, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *commitWorkspaceReq) (*commitWorkspaceResp, error) {
 		if meta == nil || !meta.CanWrite {
-			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "write permission denied"}
 		}
 		if req == nil {
 			req = &commitWorkspaceReq{}
@@ -586,7 +586,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 
 	registerGitTyped[saveStashReq, saveStashResp](r, TypeID_GIT_SAVE_STASH, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *saveStashReq) (*saveStashResp, error) {
 		if meta == nil || !meta.CanWrite {
-			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "write permission denied"}
 		}
 		if req == nil {
 			req = &saveStashReq{}
@@ -609,7 +609,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 
 	registerGitTyped[fetchRepoReq, fetchRepoResp](r, TypeID_GIT_FETCH_REPO, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *fetchRepoReq) (*fetchRepoResp, error) {
 		if meta == nil || !meta.CanWrite {
-			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "write permission denied"}
 		}
 		if req == nil {
 			req = &fetchRepoReq{}
@@ -632,7 +632,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 
 	registerGitTyped[pullRepoReq, pullRepoResp](r, TypeID_GIT_PULL_REPO, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *pullRepoReq) (*pullRepoResp, error) {
 		if meta == nil || !meta.CanWrite {
-			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "write permission denied"}
 		}
 		if req == nil {
 			req = &pullRepoReq{}
@@ -655,7 +655,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 
 	registerGitTyped[pushRepoReq, pushRepoResp](r, TypeID_GIT_PUSH_REPO, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *pushRepoReq) (*pushRepoResp, error) {
 		if meta == nil || !meta.CanWrite {
-			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "write permission denied"}
 		}
 		if req == nil {
 			req = &pushRepoReq{}
@@ -678,7 +678,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 
 	registerGitTyped[checkoutBranchReq, checkoutBranchResp](r, TypeID_GIT_CHECKOUT_BRANCH, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *checkoutBranchReq) (*checkoutBranchResp, error) {
 		if meta == nil || !meta.CanWrite {
-			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "write permission denied"}
 		}
 		if req == nil {
 			req = &checkoutBranchReq{}
@@ -701,7 +701,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 
 	registerGitTyped[switchDetachedReq, switchDetachedResp](r, TypeID_GIT_SWITCH_DETACHED, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *switchDetachedReq) (*switchDetachedResp, error) {
 		if meta == nil || !meta.CanWrite {
-			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "write permission denied"}
 		}
 		if req == nil {
 			req = &switchDetachedReq{}
@@ -724,7 +724,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 
 	registerGitTyped[previewApplyStashReq, previewApplyStashResp](r, TypeID_GIT_PREVIEW_APPLY, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *previewApplyStashReq) (*previewApplyStashResp, error) {
 		if meta == nil || !meta.CanWrite {
-			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "write permission denied"}
 		}
 		if req == nil {
 			req = &previewApplyStashReq{}
@@ -747,7 +747,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 
 	registerGitTyped[applyStashReq, applyStashResp](r, TypeID_GIT_APPLY_STASH, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *applyStashReq) (*applyStashResp, error) {
 		if meta == nil || !meta.CanWrite {
-			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "write permission denied"}
 		}
 		if req == nil {
 			req = &applyStashReq{}
@@ -770,7 +770,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 
 	registerGitTyped[previewDropStashReq, previewDropStashResp](r, TypeID_GIT_PREVIEW_DROP, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *previewDropStashReq) (*previewDropStashResp, error) {
 		if meta == nil || !meta.CanWrite {
-			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "write permission denied"}
 		}
 		if req == nil {
 			req = &previewDropStashReq{}
@@ -793,7 +793,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 
 	registerGitTyped[dropStashReq, dropStashResp](r, TypeID_GIT_DROP_STASH, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *dropStashReq) (*dropStashResp, error) {
 		if meta == nil || !meta.CanWrite {
-			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "write permission denied"}
 		}
 		if req == nil {
 			req = &dropStashReq{}
@@ -816,7 +816,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 
 	registerGitTyped[previewDeleteBranchReq, previewDeleteBranchResp](r, TypeID_GIT_PREVIEW_DELETE, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *previewDeleteBranchReq) (*previewDeleteBranchResp, error) {
 		if meta == nil || !meta.CanWrite {
-			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "write permission denied"}
 		}
 		if req == nil {
 			req = &previewDeleteBranchReq{}
@@ -839,7 +839,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 
 	registerGitTyped[deleteBranchReq, deleteBranchResp](r, TypeID_GIT_DELETE_BRANCH, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *deleteBranchReq) (*deleteBranchResp, error) {
 		if meta == nil || !meta.CanWrite {
-			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "write permission denied"}
 		}
 		if req == nil {
 			req = &deleteBranchReq{}
@@ -897,7 +897,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 
 	registerGitTyped[previewMergeBranchReq, previewMergeBranchResp](r, TypeID_GIT_PREVIEW_MERGE, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *previewMergeBranchReq) (*previewMergeBranchResp, error) {
 		if meta == nil || !meta.CanWrite {
-			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "write permission denied"}
 		}
 		if req == nil {
 			req = &previewMergeBranchReq{}
@@ -920,7 +920,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 
 	registerGitTyped[mergeBranchReq, mergeBranchResp](r, TypeID_GIT_MERGE_BRANCH, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *mergeBranchReq) (*mergeBranchResp, error) {
 		if meta == nil || !meta.CanWrite {
-			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "write permission denied"}
 		}
 		if req == nil {
 			req = &mergeBranchReq{}
@@ -943,7 +943,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 
 	registerGitTyped[getCapabilitiesReq, getCapabilitiesResp](r, TypeID_GIT_GET_CAPABILITIES, s.runtime, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *getCapabilitiesReq) (*getCapabilitiesResp, error) {
 		if meta == nil || !meta.CanRead {
-			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "read permission denied"}
 		}
 		return &getCapabilitiesResp{
 			WorkspaceRevisionV1:       true,
@@ -955,7 +955,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 
 	registerGitPathStatusTyped(r, s.runtime, gate, meta, func(ctx context.Context, req *listWorkspacePathStatusesReq) (*listWorkspacePathStatusesResp, error) {
 		if meta == nil || !meta.CanRead {
-			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "read permission denied"}
 		}
 		if req == nil {
 			req = &listWorkspacePathStatusesReq{}
@@ -1251,12 +1251,12 @@ func summarizeCommitBody(raw string) string {
 	return collapsed[:180] + "…"
 }
 
-func classifyRepoRPCError(err error) *rpc.Error {
+func classifyRepoRPCError(err error) *sessionrpc.Error {
 	if err == nil {
-		return &rpc.Error{Code: 500, Message: "internal error"}
+		return &sessionrpc.Error{Code: 500, Message: "internal error"}
 	}
 	if errors.Is(err, errGitUnavailable) {
-		return &rpc.Error{Code: 503, Message: gitUnavailableReason}
+		return &sessionrpc.Error{Code: 503, Message: gitUnavailableReason}
 	}
 	if errors.Is(err, gitruntime.ErrResourceLimit) || errors.Is(err, gitruntime.ErrRequestBudget) ||
 		errors.Is(err, gitruntime.ErrResponseBudget) || errors.Is(err, context.Canceled) ||
@@ -1268,97 +1268,97 @@ func classifyRepoRPCError(err error) *rpc.Error {
 		return classifyGitRPCError(err)
 	}
 	if errors.Is(err, os.ErrNotExist) {
-		return &rpc.Error{Code: 404, Message: "not found"}
+		return &sessionrpc.Error{Code: 404, Message: "not found"}
 	}
 	message := strings.TrimSpace(err.Error())
 	switch {
 	case strings.Contains(message, "must match worktree root"):
-		return &rpc.Error{Code: 400, Message: "invalid repo_root_path"}
+		return &sessionrpc.Error{Code: 400, Message: "invalid repo_root_path"}
 	case strings.Contains(message, "not a git repository"):
-		return &rpc.Error{Code: 404, Message: "repository not found"}
+		return &sessionrpc.Error{Code: 404, Message: "repository not found"}
 	default:
-		return &rpc.Error{Code: 400, Message: "invalid repo_root_path"}
+		return &sessionrpc.Error{Code: 400, Message: "invalid repo_root_path"}
 	}
 }
 
-func classifyGitRPCError(err error) *rpc.Error {
+func classifyGitRPCError(err error) *sessionrpc.Error {
 	if err == nil {
-		return &rpc.Error{Code: 500, Message: "internal error"}
+		return &sessionrpc.Error{Code: 500, Message: "internal error"}
 	}
 	if errors.Is(err, errGitUnavailable) || gitutil.IsGitUnavailable(err) {
-		return &rpc.Error{Code: 503, Message: gitUnavailableReason}
+		return &sessionrpc.Error{Code: 503, Message: gitUnavailableReason}
 	}
 	switch {
 	case errors.Is(err, context.Canceled):
-		return &rpc.Error{Code: 499, Message: "request canceled"}
+		return &sessionrpc.Error{Code: 499, Message: "request canceled"}
 	case errors.Is(err, context.DeadlineExceeded):
-		return &rpc.Error{Code: 504, Message: "git request timed out"}
+		return &sessionrpc.Error{Code: 504, Message: "git request timed out"}
 	case errors.Is(err, errWorkspaceSnapshotStale):
-		return &rpc.Error{Code: GitErrorWorkspaceSnapshotStale, Message: "workspace snapshot is stale"}
+		return &sessionrpc.Error{Code: GitErrorWorkspaceSnapshotStale, Message: "workspace snapshot is stale"}
 	case errors.Is(err, errWorkspaceInventoryLimit):
-		return &rpc.Error{Code: GitErrorWorkspaceInventoryLimit, Message: "workspace inventory exceeds resource limit"}
+		return &sessionrpc.Error{Code: GitErrorWorkspaceInventoryLimit, Message: "workspace inventory exceeds resource limit"}
 	case errors.Is(err, errWorkspacePathEncoding):
-		return &rpc.Error{Code: GitErrorWorkspacePathEncoding, Message: "workspace path is not valid UTF-8"}
+		return &sessionrpc.Error{Code: GitErrorWorkspacePathEncoding, Message: "workspace path is not valid UTF-8"}
 	case errors.Is(err, errWorkspacePaginationRequired):
-		return &rpc.Error{Code: GitErrorWorkspacePaginationRequired, Message: "workspace pagination is required"}
+		return &sessionrpc.Error{Code: GitErrorWorkspacePaginationRequired, Message: "workspace pagination is required"}
 	case errors.Is(err, errWorkspaceResponseBudget):
-		return &rpc.Error{Code: GitErrorWorkspaceResponseBudget, Message: "workspace response exceeds resource budget"}
+		return &sessionrpc.Error{Code: GitErrorWorkspaceResponseBudget, Message: "workspace response exceeds resource budget"}
 	case errors.Is(err, errDestructiveWorkspaceScanLimit):
-		return &rpc.Error{Code: GitErrorDestructiveWorkspaceScanLimit, Message: "destructive workspace scan exceeds safety limit"}
+		return &sessionrpc.Error{Code: GitErrorDestructiveWorkspaceScanLimit, Message: "destructive workspace scan exceeds safety limit"}
 	case errors.Is(err, gitruntime.ErrResourceLimit):
-		return &rpc.Error{Code: GitErrorResourceLimit, Message: "git runtime resource limit exceeded"}
+		return &sessionrpc.Error{Code: GitErrorResourceLimit, Message: "git runtime resource limit exceeded"}
 	case errors.Is(err, gitruntime.ErrRequestBudget):
-		return &rpc.Error{Code: GitErrorRequestBudget, Message: "git request exceeds resource budget"}
+		return &sessionrpc.Error{Code: GitErrorRequestBudget, Message: "git request exceeds resource budget"}
 	case errors.Is(err, gitruntime.ErrResponseBudget):
-		return &rpc.Error{Code: GitErrorResponseBudget, Message: "git response exceeds resource budget"}
+		return &sessionrpc.Error{Code: GitErrorResponseBudget, Message: "git response exceeds resource budget"}
 	case errors.Is(err, errWorktreePorcelainZUnsupported):
-		return &rpc.Error{Code: 501, Message: "git worktree porcelain-z is unsupported"}
+		return &sessionrpc.Error{Code: 501, Message: "git worktree porcelain-z is unsupported"}
 	}
 	message := strings.TrimSpace(err.Error())
 	lower := strings.ToLower(message)
 	switch {
 	case strings.Contains(lower, "unknown revision"):
-		return &rpc.Error{Code: 404, Message: "commit not found"}
+		return &sessionrpc.Error{Code: 404, Message: "commit not found"}
 	case strings.Contains(lower, "bad object"):
-		return &rpc.Error{Code: 404, Message: "commit not found"}
+		return &sessionrpc.Error{Code: 404, Message: "commit not found"}
 	case strings.Contains(lower, "ambiguous argument"):
-		return &rpc.Error{Code: 404, Message: "commit not found"}
+		return &sessionrpc.Error{Code: 404, Message: "commit not found"}
 	case strings.Contains(lower, "pathspec") && strings.Contains(lower, "did not match"):
-		return &rpc.Error{Code: 404, Message: "file not found in commit"}
+		return &sessionrpc.Error{Code: 404, Message: "file not found in commit"}
 	case strings.Contains(lower, "invalid git path"):
-		return &rpc.Error{Code: 400, Message: "invalid path"}
+		return &sessionrpc.Error{Code: 400, Message: "invalid path"}
 	case strings.Contains(lower, "invalid source kind"):
-		return &rpc.Error{Code: 400, Message: "invalid source kind"}
+		return &sessionrpc.Error{Code: 400, Message: "invalid source kind"}
 	case strings.Contains(lower, "missing source kind"):
-		return &rpc.Error{Code: 400, Message: "missing source kind"}
+		return &sessionrpc.Error{Code: 400, Message: "missing source kind"}
 	case strings.Contains(lower, "missing workspace section"):
-		return &rpc.Error{Code: 400, Message: "missing workspace section"}
+		return &sessionrpc.Error{Code: 400, Message: "missing workspace section"}
 	case strings.Contains(lower, "missing commit"):
-		return &rpc.Error{Code: 400, Message: "missing commit"}
+		return &sessionrpc.Error{Code: 400, Message: "missing commit"}
 	case strings.Contains(lower, "missing diff file"):
-		return &rpc.Error{Code: 400, Message: "missing diff file"}
+		return &sessionrpc.Error{Code: 400, Message: "missing diff file"}
 	case strings.Contains(lower, "missing ref"):
-		return &rpc.Error{Code: 400, Message: "missing ref"}
+		return &sessionrpc.Error{Code: 400, Message: "missing ref"}
 	case strings.Contains(lower, "stash id is required"):
-		return &rpc.Error{Code: 400, Message: "stash id is required"}
+		return &sessionrpc.Error{Code: 400, Message: "stash id is required"}
 	case strings.Contains(lower, "stash not found"):
-		return &rpc.Error{Code: 404, Message: "stash not found"}
+		return &sessionrpc.Error{Code: 404, Message: "stash not found"}
 	case strings.Contains(lower, "file not found in diff"):
-		return &rpc.Error{Code: 404, Message: "file not found in diff"}
+		return &sessionrpc.Error{Code: 404, Message: "file not found in diff"}
 	case strings.Contains(lower, "ambiguous stash section"):
-		return &rpc.Error{Code: 400, Message: "ambiguous stash section"}
+		return &sessionrpc.Error{Code: 400, Message: "ambiguous stash section"}
 	case strings.Contains(lower, "invalid stash section"):
-		return &rpc.Error{Code: 400, Message: "invalid stash section"}
+		return &sessionrpc.Error{Code: 400, Message: "invalid stash section"}
 	case strings.Contains(lower, "not a git repository"):
-		return &rpc.Error{Code: 404, Message: "repository not found"}
+		return &sessionrpc.Error{Code: 404, Message: "repository not found"}
 	default:
-		return &rpc.Error{Code: 500, Message: message}
+		return &sessionrpc.Error{Code: 500, Message: message}
 	}
 }
 
-func classifyGitMutationRPCError(err error) *rpc.Error {
+func classifyGitMutationRPCError(err error) *sessionrpc.Error {
 	if err == nil {
-		return &rpc.Error{Code: 500, Message: "internal error"}
+		return &sessionrpc.Error{Code: 500, Message: "internal error"}
 	}
 	if errors.Is(err, gitruntime.ErrResourceLimit) || errors.Is(err, gitruntime.ErrRequestBudget) || errors.Is(err, gitruntime.ErrResponseBudget) ||
 		errors.Is(err, errWorkspaceInventoryLimit) || errors.Is(err, errWorkspacePathEncoding) || errors.Is(err, errDestructiveWorkspaceScanLimit) {
@@ -1368,81 +1368,81 @@ func classifyGitMutationRPCError(err error) *rpc.Error {
 	lower := strings.ToLower(message)
 	switch {
 	case strings.Contains(lower, "commit message is required"):
-		return &rpc.Error{Code: 400, Message: "commit message is required"}
+		return &sessionrpc.Error{Code: 400, Message: "commit message is required"}
 	case strings.Contains(lower, "no staged changes to commit"):
-		return &rpc.Error{Code: 400, Message: "no staged changes to commit"}
+		return &sessionrpc.Error{Code: 400, Message: "no staged changes to commit"}
 	case strings.Contains(lower, "no local changes to stash"):
-		return &rpc.Error{Code: 400, Message: "no local changes to stash"}
+		return &sessionrpc.Error{Code: 400, Message: "no local changes to stash"}
 	case strings.Contains(lower, "invalid git path"):
-		return &rpc.Error{Code: 400, Message: "invalid path"}
+		return &sessionrpc.Error{Code: 400, Message: "invalid path"}
 	case strings.Contains(lower, "please tell me who you are"):
-		return &rpc.Error{Code: 400, Message: "git user.name and user.email are required before committing"}
+		return &sessionrpc.Error{Code: 400, Message: "git user.name and user.email are required before committing"}
 	case strings.Contains(lower, "unable to auto-detect email address"):
-		return &rpc.Error{Code: 400, Message: "git user.name and user.email are required before committing"}
+		return &sessionrpc.Error{Code: 400, Message: "git user.name and user.email are required before committing"}
 	case strings.Contains(lower, "nothing to commit"):
-		return &rpc.Error{Code: 400, Message: "no staged changes to commit"}
+		return &sessionrpc.Error{Code: 400, Message: "no staged changes to commit"}
 	case strings.Contains(lower, "target branch does not exist"):
-		return &rpc.Error{Code: 404, Message: "target branch does not exist"}
+		return &sessionrpc.Error{Code: 404, Message: "target branch does not exist"}
 	case strings.Contains(lower, "target commit does not exist"):
-		return &rpc.Error{Code: 404, Message: "target commit does not exist"}
+		return &sessionrpc.Error{Code: 404, Message: "target commit does not exist"}
 	case strings.Contains(lower, "remote branches cannot be deleted here"):
-		return &rpc.Error{Code: 400, Message: "remote branches cannot be deleted here"}
+		return &sessionrpc.Error{Code: 400, Message: "remote branches cannot be deleted here"}
 	case strings.Contains(lower, "cannot delete the current branch"):
-		return &rpc.Error{Code: 400, Message: "cannot delete the current branch"}
+		return &sessionrpc.Error{Code: 400, Message: "cannot delete the current branch"}
 	case strings.Contains(lower, "invalid delete mode"):
-		return &rpc.Error{Code: 400, Message: "invalid delete mode"}
+		return &sessionrpc.Error{Code: 400, Message: "invalid delete mode"}
 	case strings.Contains(lower, "delete plan fingerprint is required"):
-		return &rpc.Error{Code: 400, Message: "delete plan fingerprint is required"}
+		return &sessionrpc.Error{Code: 400, Message: "delete plan fingerprint is required"}
 	case strings.Contains(lower, "branch name confirmation does not match"):
-		return &rpc.Error{Code: 400, Message: message}
+		return &sessionrpc.Error{Code: 400, Message: message}
 	case strings.Contains(lower, "delete plan is stale"):
-		return &rpc.Error{Code: 409, Message: message}
+		return &sessionrpc.Error{Code: 409, Message: message}
 	case strings.Contains(lower, "merge plan fingerprint is required"):
-		return &rpc.Error{Code: 400, Message: "merge plan fingerprint is required"}
+		return &sessionrpc.Error{Code: 400, Message: "merge plan fingerprint is required"}
 	case strings.Contains(lower, "merge plan is stale"):
-		return &rpc.Error{Code: 409, Message: message}
+		return &sessionrpc.Error{Code: 409, Message: message}
 	case strings.Contains(lower, "stash apply plan fingerprint is required"):
-		return &rpc.Error{Code: 400, Message: "stash apply plan fingerprint is required"}
+		return &sessionrpc.Error{Code: 400, Message: "stash apply plan fingerprint is required"}
 	case strings.Contains(lower, "stash apply plan is stale"):
-		return &rpc.Error{Code: 409, Message: message}
+		return &sessionrpc.Error{Code: 409, Message: message}
 	case strings.Contains(lower, "stash drop plan fingerprint is required"):
-		return &rpc.Error{Code: 400, Message: "stash drop plan fingerprint is required"}
+		return &sessionrpc.Error{Code: 400, Message: "stash drop plan fingerprint is required"}
 	case strings.Contains(lower, "stash drop plan is stale"):
-		return &rpc.Error{Code: 409, Message: message}
+		return &sessionrpc.Error{Code: 409, Message: message}
 	case strings.Contains(lower, "linked worktree removal must be confirmed"):
-		return &rpc.Error{Code: 400, Message: message}
+		return &sessionrpc.Error{Code: 400, Message: message}
 	case strings.Contains(lower, "discard confirmation is required"):
-		return &rpc.Error{Code: 400, Message: message}
+		return &sessionrpc.Error{Code: 400, Message: message}
 	case strings.Contains(lower, "not accessible from this agent"), strings.Contains(lower, "not accessible from this runtime host"):
-		return &rpc.Error{Code: 400, Message: message}
+		return &sessionrpc.Error{Code: 400, Message: message}
 	case strings.Contains(lower, "attach head to a local branch before merging"):
-		return &rpc.Error{Code: 400, Message: message}
+		return &sessionrpc.Error{Code: 400, Message: message}
 	case strings.Contains(lower, "select a different branch to merge"):
-		return &rpc.Error{Code: 400, Message: message}
+		return &sessionrpc.Error{Code: 400, Message: message}
 	case strings.Contains(lower, "current workspace must be clean before merging"):
-		return &rpc.Error{Code: 400, Message: message}
+		return &sessionrpc.Error{Code: 400, Message: message}
 	case strings.Contains(lower, "current workspace must be clean before applying a stash"):
-		return &rpc.Error{Code: 400, Message: message}
+		return &sessionrpc.Error{Code: 400, Message: message}
 	case strings.Contains(lower, "current workspace must be clean before switching to detached head"):
-		return &rpc.Error{Code: 400, Message: message}
+		return &sessionrpc.Error{Code: 400, Message: message}
 	case strings.Contains(lower, "finish the current"):
-		return &rpc.Error{Code: 400, Message: message}
+		return &sessionrpc.Error{Code: 400, Message: message}
 	case strings.Contains(lower, "unrelated histories support"):
-		return &rpc.Error{Code: 400, Message: message}
+		return &sessionrpc.Error{Code: 400, Message: message}
 	case strings.Contains(lower, "target branch does not have a readable head commit"):
-		return &rpc.Error{Code: 400, Message: message}
+		return &sessionrpc.Error{Code: 400, Message: message}
 	case strings.Contains(lower, "current files would be overwritten by this stash"):
-		return &rpc.Error{Code: 400, Message: message}
+		return &sessionrpc.Error{Code: 400, Message: message}
 	case strings.Contains(lower, "this stash cannot be applied cleanly on the current head"):
-		return &rpc.Error{Code: 400, Message: message}
+		return &sessionrpc.Error{Code: 400, Message: message}
 	case strings.Contains(lower, "merge is blocked"):
-		return &rpc.Error{Code: 400, Message: message}
+		return &sessionrpc.Error{Code: 400, Message: message}
 	case strings.Contains(lower, "checked out in worktree"):
-		return &rpc.Error{Code: 400, Message: message}
+		return &sessionrpc.Error{Code: 400, Message: message}
 	case strings.Contains(lower, "checked out at"):
-		return &rpc.Error{Code: 400, Message: message}
+		return &sessionrpc.Error{Code: 400, Message: message}
 	case strings.Contains(lower, "not fully merged"):
-		return &rpc.Error{Code: 400, Message: message}
+		return &sessionrpc.Error{Code: 400, Message: message}
 	default:
 		return classifyGitRPCError(err)
 	}

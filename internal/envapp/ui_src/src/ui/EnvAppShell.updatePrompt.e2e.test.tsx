@@ -192,7 +192,7 @@ vi.mock('@floegence/floe-webapp-protocol', () => ({
       protocolRevision();
       return protocolStatus;
     },
-    client: () => {
+    session: () => {
       protocolRevision();
       return protocolClient;
     },

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/floegence/flowersec/flowersec-go/endpoint"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v2"
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/auditlog"
 	"github.com/floegence/redeven/internal/diagnostics"
@@ -37,6 +37,10 @@ type LocalDirectSessionOptions struct {
 	PluginCredentialHash      [sha256.Size]byte
 	HasPluginCredential       bool
 	AccessSessionID           string
+	// HandlersServedByAcceptor is set when Flowersec's Acceptor owns handler
+	// dispatch for the accepted session. Redeven still owns product lifecycle,
+	// access-gate registration, monitoring, and audit state.
+	HandlersServedByAcceptor bool
 }
 
 func (a *Agent) registerLocalDirectChannel(meta session.Meta, opts LocalDirectSessionOptions) func() {
@@ -56,7 +60,7 @@ func (a *Agent) registerLocalDirectChannel(meta session.Meta, opts LocalDirectSe
 	}
 }
 
-func (a *Agent) ServeLocalDirectSession(ctx context.Context, sess endpoint.Session, meta *session.Meta, opts LocalDirectSessionOptions) (err error) {
+func (a *Agent) ServeLocalDirectSession(ctx context.Context, sess flowersec.Session, meta *session.Meta, opts LocalDirectSessionOptions) (err error) {
 	if a == nil {
 		return errors.New("nil agent")
 	}
@@ -245,6 +249,11 @@ func (a *Agent) ServeLocalDirectSession(ctx context.Context, sess endpoint.Sessi
 	}
 
 	defer sess.Close()
+
+	if opts.HandlersServedByAcceptor {
+		_, err = sess.WaitTermination(sessCtx)
+		return err
+	}
 
 	switch strings.TrimSpace(meta.FloeApp) {
 	case FloeAppRedevenCode:

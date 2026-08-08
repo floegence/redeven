@@ -29,7 +29,7 @@ vi.mock('@floegence/floe-webapp-core', () => ({
 
 vi.mock('@floegence/floe-webapp-protocol', () => ({
   useProtocol: () => ({
-    client: () => protocolMocks.client,
+    session: () => protocolMocks.client,
   }),
 }));
 

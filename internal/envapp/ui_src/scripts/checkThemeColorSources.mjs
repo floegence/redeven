@@ -280,6 +280,25 @@ export const THEME_COLOR_EXCEPTIONS = Object.freeze([
     'Initial annotation and background colors are serialized user-canvas data.',
     ({ lineSource }) => /^\s*(?:color|fill):/u.test(lineSource),
   ),
+  exception(
+    'internal/flower_ui/src/styles/flower.css',
+    'brand',
+    'Flower directory references retain the product directory marker color.',
+    ({ value, source, offset }) => value.toLowerCase() === '#f2bd62'
+      && cssBlockSelector(source, offset).includes('.flower-composer-reference-option[data-kind=\'directory\']'),
+  ),
+  exception(
+    'internal/flower_ui/src/styles/flower.css',
+    'diagram',
+    'Approval indicators use a categorical blue overlay over the thread card.',
+    ({ source, offset }) => cssBlockSelector(source, offset).includes('.flower-thread-card-approval-indicator'),
+  ),
+  exception(
+    'internal/flower_ui/src/styles/flower.css',
+    'diagram',
+    'Approval badge text uses the same categorical blue role as its indicator.',
+    ({ source, offset }) => cssBlockSelector(source, offset).includes('.flower-thread-card-approval-badge'),
+  ),
 ]);
 
 function normalizePath(value) {

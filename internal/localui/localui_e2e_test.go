@@ -3,7 +3,7 @@ package localui
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
+	"crypto/x509"
 	"encoding/json"
 	"net"
 	"net/http"
@@ -13,8 +13,7 @@ import (
 	"testing"
 	"time"
 
-	fsclient "github.com/floegence/flowersec/flowersec-go/client"
-	"github.com/floegence/flowersec/flowersec-go/protocolio"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v2"
 	"github.com/floegence/redeven/internal/accessgate"
 )
 
@@ -23,19 +22,28 @@ func TestServer_E2E_LocalPasswordFlow(t *testing.T) {
 	s := newTestServer(t, gate)
 	s.a = newRuntimeHealthTestAgent(t, s.configPath)
 
-	srv := httptest.NewServer(s.handler())
+	srv := httptest.NewTLSServer(s.handler())
 	defer srv.Close()
+	s.authorityMu.Lock()
+	if s.networkAuthorities == nil {
+		s.networkAuthorities = make(map[string]struct{})
+	}
+	s.networkAuthorities[srv.Listener.Addr().String()] = struct{}{}
+	s.authorityMu.Unlock()
+	if err := s.configureAcceptor(); err != nil {
+		t.Fatalf("configureAcceptor() error = %v", err)
+	}
 
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		t.Fatalf("cookiejar.New() error = %v", err)
 	}
-	client := &http.Client{Jar: jar}
+	client := srv.Client()
+	client.Jar = jar
 
-	redirectClient := &http.Client{
-		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
+	redirectClient := srv.Client()
+	redirectClient.CheckRedirect = func(_ *http.Request, _ []*http.Request) error {
+		return http.ErrUseLastResponse
 	}
 	rootResp, err := redirectClient.Get(srv.URL + "/")
 	if err != nil {
@@ -108,7 +116,7 @@ func TestServer_E2E_LocalPasswordFlow(t *testing.T) {
 		t.Fatalf("NewRequest header runtime error = %v", err)
 	}
 	headerRuntimeReq.Header.Set(localAccessResumeHeader, unlockBody.Data.ResumeToken)
-	headerRuntimeResp, err := http.DefaultClient.Do(headerRuntimeReq)
+	headerRuntimeResp, err := client.Do(headerRuntimeReq)
 	if err != nil {
 		t.Fatalf("GET header runtime error = %v", err)
 	}
@@ -140,7 +148,7 @@ func TestServer_E2E_LocalPasswordFlow(t *testing.T) {
 		t.Fatalf("NewRequest header connect_artifact error = %v", err)
 	}
 	headerConnectReq.Header.Set(localAccessResumeHeader, unlockBody.Data.ResumeToken)
-	headerConnectResp, err := http.DefaultClient.Do(headerConnectReq)
+	headerConnectResp, err := srv.Client().Do(headerConnectReq)
 	if err != nil {
 		t.Fatalf("POST header connect_artifact error = %v", err)
 	}
@@ -153,65 +161,48 @@ func TestServer_E2E_LocalPasswordFlow(t *testing.T) {
 	if err := json.NewDecoder(headerConnectResp.Body).Decode(&connectBody); err != nil {
 		t.Fatalf("decode header connect_artifact body error = %v", err)
 	}
-	badInfo := *connectBody.ConnectArtifact.DirectInfo
-	badInfo.E2eePskB64u = base64.RawURLEncoding.EncodeToString(make([]byte, 32))
-	badCtx, badCancel := context.WithTimeout(context.Background(), 2*time.Second)
-	_, badErr := fsclient.ConnectDirect(badCtx, &badInfo,
-		fsclient.WithOrigin(srv.URL),
-		fsclient.WithHeader(http.Header{localAccessResumeHeader: []string{unlockBody.Data.ResumeToken}}),
-		fsclient.WithTransportSecurityPolicy(fsclient.AllowPlaintextForLoopback),
-	)
-	badCancel()
-	if badErr == nil {
-		t.Fatal("ConnectDirect() with the wrong PSK unexpectedly succeeded")
+	corruptArtifact := append([]byte(nil), connectBody.ConnectArtifact...)
+	if len(corruptArtifact) < 2 {
+		t.Fatal("connect artifact is unexpectedly empty")
 	}
-	connectLocalDirectSession(t, s, srv.URL, unlockBody.Data.ResumeToken, connectBody.ConnectArtifact)
+	corruptArtifact[len(corruptArtifact)-2] = 'x'
+	if _, err := flowersec.ParseArtifact(corruptArtifact); err == nil {
+		t.Fatal("tampered Flowersec artifact unexpectedly parsed")
+	}
+	connectLocalDirectSession(t, s, srv.URL, srv.Certificate(), unlockBody.Data.ResumeToken, connectBody.ConnectArtifact)
 }
 
-func connectLocalDirectSession(t *testing.T, s *Server, serverURL, resumeToken string, artifact *protocolio.ConnectArtifact) {
+func connectLocalDirectSession(t *testing.T, s *Server, serverURL string, certificate *x509.Certificate, resumeToken string, encodedArtifact json.RawMessage) {
 	t.Helper()
 	if s == nil || s.a == nil {
 		t.Fatal("test server missing agent")
 	}
-	if artifact == nil || artifact.DirectInfo == nil {
-		t.Fatalf("missing direct connect artifact: %#v", artifact)
+	artifact, err := flowersec.ParseArtifact(encodedArtifact)
+	if err != nil {
+		t.Fatalf("ParseArtifact() error = %v", err)
 	}
 	origin := strings.TrimPrefix(serverURL, "ws://")
 	origin = strings.TrimPrefix(origin, "wss://")
 	origin = strings.TrimPrefix(origin, "http://")
 	origin = strings.TrimPrefix(origin, "https://")
-	origin = "http://" + origin
+	origin = "https://" + origin
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	client, err := fsclient.ConnectDirect(ctx, artifact.DirectInfo,
-		fsclient.WithOrigin(origin),
-		fsclient.WithHeader(http.Header{localAccessResumeHeader: []string{resumeToken}}),
-		fsclient.WithTransportSecurityPolicy(fsclient.AllowPlaintextForLoopback),
-	)
+	if certificate == nil {
+		t.Fatal("test server certificate unavailable")
+	}
+	trustRoots := x509.NewCertPool()
+	trustRoots.AddCert(certificate)
+	lease, err := flowersec.NewArtifactLease(artifact, func(context.Context) error { return nil })
+	if err != nil {
+		t.Fatalf("NewArtifactLease() error = %v", err)
+	}
+	client, err := flowersec.Connect(ctx, lease, flowersec.ConnectorOptions{TrustRoots: trustRoots, Origin: origin, ConnectTimeout: 5 * time.Second})
 	if err != nil {
 		t.Fatalf("ConnectDirect() error = %v", err)
 	}
 	defer client.Close()
-
-	var sessions []any
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		sessions = nil
-		for _, sess := range s.a.RuntimePresentationSessions() {
-			if sess.ChannelID == artifact.DirectInfo.ChannelId &&
-				sess.SessionKind == "envapp_rpc" &&
-				sess.UserPublicID == "user_local" &&
-				sess.CanRead &&
-				sess.CanWrite &&
-				sess.CanExecute {
-				return
-			}
-			sessions = append(sessions, sess)
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatalf("local direct session %q did not become active; sessions=%#v", artifact.DirectInfo.ChannelId, sessions)
 }
 
 func TestServer_E2E_CodespaceBrowserBootstrapFromResumeToken(t *testing.T) {

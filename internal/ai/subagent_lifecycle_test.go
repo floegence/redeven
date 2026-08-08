@@ -19,7 +19,7 @@ import (
 	"github.com/floegence/floret/v3/observation"
 	flruntime "github.com/floegence/floret/v3/runtime"
 	fltools "github.com/floegence/floret/v3/tools"
-	"github.com/floegence/flowersec/flowersec-go/rpc"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v2"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/websearch"
@@ -763,11 +763,11 @@ func TestServiceCloseReleasesThreadSubagentRuntimes(t *testing.T) {
 	host := &recordingFloretHost{}
 	runtime := &floretSubagentRuntime{host: host}
 	svc := &Service{
-		realtimeWriters:              map[*rpc.Server]*aiSinkWriter{},
-		realtimeSummaryByEndpoint:    map[string]map[*rpc.Server]struct{}{},
-		realtimeSummaryEndpointBySRV: map[*rpc.Server]string{},
-		realtimeByThread:             map[string]map[*rpc.Server]struct{}{},
-		realtimeThreadBySRV:          map[*rpc.Server]string{},
+		realtimeWriters:              make(map[flowersec.RPCPeer]*aiSinkWriter),
+		realtimeSummaryByEndpoint:    make(map[string]map[flowersec.RPCPeer]struct{}),
+		realtimeSummaryEndpointBySRV: make(map[flowersec.RPCPeer]string),
+		realtimeByThread:             make(map[string]map[flowersec.RPCPeer]struct{}),
+		realtimeThreadBySRV:          make(map[flowersec.RPCPeer]string),
 		flowerLiveByThread:           map[string]*flowerLiveThreadStream{},
 		runs:                         map[string]*run{},
 		activeRunByTh:                map[string]string{},

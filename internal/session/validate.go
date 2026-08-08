@@ -47,7 +47,7 @@ func ValidateGrantServerNotifyRemote(n *GrantServerNotify, expectedEndpointID st
 		return errors.New("invalid session_meta.created_at_unix_ms")
 	}
 
-	grantChannelID := strings.TrimSpace(n.GrantServer.ChannelId)
+	grantChannelID := strings.TrimSpace(n.GrantServer.ChannelID)
 	if grantChannelID == "" {
 		return errors.New("missing grant_server.channel_id")
 	}

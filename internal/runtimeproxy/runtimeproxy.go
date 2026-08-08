@@ -1,70 +1,66 @@
 package runtimeproxy
 
 import (
-	"github.com/floegence/flowersec/flowersec-go/endpoint/serve"
-	"github.com/floegence/flowersec/flowersec-go/framing/jsonframe"
-	fsproxy "github.com/floegence/flowersec/flowersec-go/proxy"
-	fsproxypreset "github.com/floegence/flowersec/flowersec-go/proxy/preset"
+	"time"
+
+	flowersec "github.com/floegence/flowersec/flowersec-go/v2"
 )
 
 const (
 	PresetID        = "redeven-runtime"
 	MaxWSFrameBytes = 32 * 1024 * 1024
-
-	contentSecurityPolicyHeader           = "content-security-policy"
-	contentSecurityPolicyReportOnlyHeader = "content-security-policy-report-only"
-	xFrameOptionsHeader                   = "x-frame-options"
 )
 
-// Manifest returns the stable Redeven-owned proxy preset manifest used for runtime flows.
-func Manifest() *fsproxypreset.Manifest {
-	maxJSON := jsonframe.DefaultMaxJSONFrameBytes
-	maxChunk := fsproxy.DefaultMaxChunkBytes
-	maxBody := int64(fsproxy.DefaultMaxBodyBytes)
-	maxWS := MaxWSFrameBytes
-
-	return &fsproxypreset.Manifest{
-		V:        1,
-		PresetID: PresetID,
-		Limits: fsproxypreset.Limits{
-			MaxJSONFrameBytes: &maxJSON,
-			MaxChunkBytes:     &maxChunk,
-			MaxBodyBytes:      &maxBody,
-			MaxWSFrameBytes:   &maxWS,
-		},
-	}
+// Options is the Redeven-owned policy subset applied to Flowersec's public
+// carrier-neutral ProxyServer.
+type Options struct {
+	Upstream                    string
+	UpstreamOrigin              string
+	DefaultHTTPRequestTimeout   time.Duration
+	MaxHTTPRequestTimeout       time.Duration
+	MaxConcurrentStreams        int
+	MaxBodyBytes                int64
+	BlockedResponseHeaders      []string
+	ExtraRequestHeaders         []string
+	ExtraResponseHeaders        []string
+	ExtraWebSocketHeaders       []string
+	ForbiddenCookieNames        []string
+	ForbiddenCookieNamePrefixes []string
+	OnError                     func(error)
 }
 
-// ApplyOptions applies the Redeven runtime preset manifest to proxy options.
-func ApplyOptions(opts fsproxy.Options) fsproxy.Options {
-	bridge := fsproxy.BridgeOptions{
-		MaxJSONFrameBytes:           opts.MaxJSONFrameBytes,
-		MaxChunkBytes:               opts.MaxChunkBytes,
-		MaxBodyBytes:                opts.MaxBodyBytes,
-		MaxWSFrameBytes:             opts.MaxWSFrameBytes,
-		DefaultHTTPRequestTimeoutMS: opts.DefaultHTTPRequestTimeoutMS,
-		ExtraRequestHeaders:         append([]string(nil), opts.ExtraRequestHeaders...),
-		ExtraResponseHeaders:        append([]string(nil), opts.ExtraResponseHeaders...),
-		BlockedResponseHeaders: append(append([]string(nil), opts.BlockedResponseHeaders...),
-			contentSecurityPolicyHeader,
-			contentSecurityPolicyReportOnlyHeader,
-			xFrameOptionsHeader,
-		),
-		ExtraWSHeaders:              append([]string(nil), opts.ExtraWSHeaders...),
-		ForbiddenCookieNames:        append([]string(nil), opts.ForbiddenCookieNames...),
-		ForbiddenCookieNamePrefixes: append([]string(nil), opts.ForbiddenCookieNamePrefixes...),
-	}
-	bridge = fsproxypreset.ApplyBridgeOptions(bridge, Manifest())
-	opts.ContractOptions = fsproxy.ContractOptions(bridge)
-	return opts
-}
-
-// ProductBlockedResponseHeaders returns the product-owned response-header policy.
 func ProductBlockedResponseHeaders() []string {
 	return []string{"Content-Security-Policy", "Content-Security-Policy-Report-Only", "X-Frame-Options"}
 }
 
-// Register wires the runtime proxy handlers with the Redeven runtime preset applied.
-func Register(srv *serve.Server, opts fsproxy.Options) error {
-	return fsproxy.Register(srv, ApplyOptions(opts))
+func New(opts Options) (*flowersec.ProxyServer, error) {
+	blocked := append([]string{}, opts.BlockedResponseHeaders...)
+	blocked = append(blocked, ProductBlockedResponseHeaders()...)
+	return flowersec.NewProxyServer(flowersec.ProxyServerOptions{
+		Upstream:                    opts.Upstream,
+		UpstreamOrigin:              opts.UpstreamOrigin,
+		MaxConcurrentStreams:        opts.MaxConcurrentStreams,
+		MaxBodyBytes:                opts.MaxBodyBytes,
+		DefaultHTTPRequestTimeout:   opts.DefaultHTTPRequestTimeout,
+		MaxHTTPRequestTimeout:       opts.MaxHTTPRequestTimeout,
+		BlockedResponseHeaders:      blocked,
+		ExtraRequestHeaders:         opts.ExtraRequestHeaders,
+		ExtraResponseHeaders:        opts.ExtraResponseHeaders,
+		ExtraWebSocketHeaders:       opts.ExtraWebSocketHeaders,
+		ForbiddenCookieNames:        opts.ForbiddenCookieNames,
+		ForbiddenCookieNamePrefixes: opts.ForbiddenCookieNamePrefixes,
+		OnError:                     opts.OnError,
+	})
+}
+
+func Register(handlers *flowersec.SessionHandlers, opts Options) (*flowersec.ProxyServer, error) {
+	proxy, err := New(opts)
+	if err != nil {
+		return nil, err
+	}
+	if err := proxy.Register(handlers); err != nil {
+		_ = proxy.Close()
+		return nil, err
+	}
+	return proxy, nil
 }

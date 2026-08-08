@@ -11,7 +11,7 @@ import {
   type TerminalLiveEventSource,
   type TerminalLiveResizeAppliedResult,
 } from '@floegence/floeterm-terminal-web/live';
-import type { Client } from '@floegence/flowersec-core';
+import type { Session } from '@floegence/flowersec-core';
 import { ProtocolNotConnectedError, RpcError } from '@floegence/floe-webapp-protocol';
 import type { RedevenV1Rpc } from '../protocol/redeven_v1';
 import type { TerminalNameUpdateEvent } from '../protocol/redeven_v1/sdk/terminal';
@@ -78,7 +78,7 @@ export function classifyTerminalAttachLifecycleExit(error: unknown): TerminalAtt
 
 export function createRedevenTerminalLiveBundle(
   rpc: RedevenV1Rpc,
-  client: () => Client | null | undefined,
+  client: () => Session | null | undefined,
   connectionId: string,
 ): RedevenTerminalLiveBundle {
   const requestHistoryPage = createHistoryPageRequester(rpc);
@@ -100,7 +100,13 @@ export function createRedevenTerminalLiveBundle(
     openStream: async (kind, options) => {
       const current = client();
       if (!current) throw new ProtocolNotConnectedError();
-      return current.openStream(kind, options);
+	  const stream = await current.openStream(kind, options);
+	  return {
+		read: () => stream.read(),
+		write: async (data: Uint8Array) => { await stream.write(data); },
+		close: () => stream.close(),
+		reset: () => stream.reset(),
+	  };
     },
     control: {
       history: async (sessionId, startSeq, endSeq) => {

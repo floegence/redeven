@@ -92,7 +92,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
 
 vi.mock('@floegence/floe-webapp-protocol', () => ({
   useProtocol: () => ({
-    client: () => ({ id: 'protocol-client' }),
+    session: () => ({ id: 'protocol-client' }),
     status: () => 'connected',
   }),
 }));
