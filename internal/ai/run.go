@@ -184,6 +184,9 @@ type run struct {
 	lastModelIOStep   int
 	modelIOStatusLive bool
 
+	muProviderAttempt sync.Mutex
+	providerAttempt   providerAttemptIdentity
+
 	nextBlockIndex            int
 	currentTextBlockIndex     int
 	needNewTextBlock          bool
@@ -250,6 +253,12 @@ var ErrRunExecutionClosed = errors.New("run execution is closed")
 
 type assistantAnswerState struct {
 	CanonicalMarkdown string
+}
+
+type providerAttemptIdentity struct {
+	logicalRequestID string
+	attemptID        string
+	attemptEpoch     int
 }
 
 type floretRuntimeEventIdentity struct {

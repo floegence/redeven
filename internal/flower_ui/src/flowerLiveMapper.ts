@@ -1625,6 +1625,7 @@ function mapLiveEventPayload(kind: string, payload: unknown): unknown {
         role: 'assistant',
         status: 'streaming',
         created_at_ms: Math.max(0, Math.floor(Number(record.created_at_ms ?? 0))),
+        ...(Number(record.attempt_epoch ?? 0) > 0 ? { attempt_epoch: Math.max(0, Math.floor(Number(record.attempt_epoch))) } : {}),
       } as FlowerLiveMessageStartedPayload;
     case 'message.block_started':
       return {

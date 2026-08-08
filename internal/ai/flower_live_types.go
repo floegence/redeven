@@ -339,10 +339,11 @@ type FlowerLiveThreadPatchedPayload struct {
 }
 
 type FlowerLiveMessageStartedPayload struct {
-	MessageID   string `json:"message_id"`
-	Role        string `json:"role"`
-	Status      string `json:"status"`
-	CreatedAtMs int64  `json:"created_at_ms"`
+	MessageID    string `json:"message_id"`
+	Role         string `json:"role"`
+	Status       string `json:"status"`
+	CreatedAtMs  int64  `json:"created_at_ms"`
+	AttemptEpoch int    `json:"attempt_epoch,omitempty"`
 }
 
 type FlowerLiveMessageBlockStartedPayload struct {
@@ -691,14 +692,15 @@ type FlowerLiveResyncRequiredPayload struct {
 }
 
 type FlowerLiveMessageDraft struct {
-	ThreadID    string            `json:"thread_id"`
-	TurnID      string            `json:"turn_id"`
-	RunID       string            `json:"run_id"`
-	MessageID   string            `json:"message_id"`
-	Role        string            `json:"role"`
-	Status      string            `json:"status"`
-	CreatedAtMs int64             `json:"created_at_ms"`
-	Blocks      []FlowerLiveBlock `json:"blocks"`
+	ThreadID     string            `json:"thread_id"`
+	TurnID       string            `json:"turn_id"`
+	RunID        string            `json:"run_id"`
+	MessageID    string            `json:"message_id"`
+	Role         string            `json:"role"`
+	Status       string            `json:"status"`
+	CreatedAtMs  int64             `json:"created_at_ms"`
+	AttemptEpoch int               `json:"attempt_epoch,omitempty"`
+	Blocks       []FlowerLiveBlock `json:"blocks"`
 }
 
 type FlowerLiveBlock struct {

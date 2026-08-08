@@ -1752,7 +1752,7 @@ func (s *Service) flowerLiveEventsFromStreamEvent(ev RealtimeEvent, base func(Fl
 		}
 		return []FlowerLiveEvent{
 			base(FlowerLiveRunStarted, FlowerLiveRunStartedPayload{RunID: strings.TrimSpace(ev.RunID), TurnID: strings.TrimSpace(ev.TurnID), MessageID: messageID, Status: string(RunStateRunning)}),
-			base(FlowerLiveMessageStarted, FlowerLiveMessageStartedPayload{MessageID: messageID, Role: "assistant", Status: "streaming", CreatedAtMs: ev.AtUnixMs}),
+			base(FlowerLiveMessageStarted, FlowerLiveMessageStartedPayload{MessageID: messageID, Role: "assistant", Status: "streaming", CreatedAtMs: ev.AtUnixMs, AttemptEpoch: stream.AttemptEpoch}),
 		}
 	case streamEventBlockStart:
 		blockType := normalizeLiveBlockType(stream.BlockType)
@@ -1940,6 +1940,12 @@ func applyFlowerLiveEventToMaterializedState(state *FlowerLiveMaterializedState,
 			msg.MessageID = id
 			msg.Role = "assistant"
 			msg.Status = "streaming"
+			if payload.AttemptEpoch > 0 && payload.AttemptEpoch > msg.AttemptEpoch {
+				msg.Blocks = nil
+			}
+			if payload.AttemptEpoch >= msg.AttemptEpoch {
+				msg.AttemptEpoch = payload.AttemptEpoch
+			}
 			msg.CreatedAtMs = payload.CreatedAtMs
 			state.Messages[id] = msg
 		}

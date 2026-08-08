@@ -171,6 +171,7 @@ export type FlowerChatMessage = Readonly<{
   context_action?: unknown;
   live?: boolean;
   active_cursor?: boolean;
+  attempt_epoch?: number;
 }>;
 
 export type FlowerThreadStatus =
@@ -791,6 +792,7 @@ export type FlowerLiveMessageStartedPayload = Readonly<{
   role: 'assistant';
   status: 'streaming';
   created_at_ms: number;
+  attempt_epoch?: number;
 }>;
 
 export type FlowerLiveMessageBlockStartedPayload = Readonly<{

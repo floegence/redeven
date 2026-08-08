@@ -548,8 +548,9 @@ func IsActiveRunState(raw string) bool {
 // --- StreamEvent types (camelCase, aligned with @floegence/floe-webapp-core) ---
 
 type streamEventMessageStart struct {
-	Type      string `json:"type"`
-	MessageID string `json:"messageId"`
+	Type         string `json:"type"`
+	MessageID    string `json:"messageId"`
+	AttemptEpoch int    `json:"attemptEpoch,omitempty"`
 }
 
 type streamEventBlockStart struct {

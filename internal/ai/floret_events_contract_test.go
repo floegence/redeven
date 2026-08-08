@@ -434,3 +434,42 @@ func TestFloretEventSinkCancelsRunAfterContractRejection(t *testing.T) {
 		t.Fatal("malformed Floret event did not cancel the active run context")
 	}
 }
+
+func TestFloretProviderAttemptActivationFencesStaleStreamAndDraft(t *testing.T) {
+	var events []any
+	r := &run{
+		messageID: "assistant-1",
+		assistantBlocks: []any{&persistedMarkdownBlock{
+			Type:    "markdown",
+			Content: "old attempt",
+		}},
+		onStreamEvent: func(event any) { events = append(events, event) },
+	}
+
+	accepted, err := r.activateFloretProviderAttempt(map[string]any{
+		"logical_request_id": "logical-1",
+		"attempt_id":         "logical-1:attempt:2",
+		"attempt_epoch":      2,
+	})
+	if err != nil || !accepted {
+		t.Fatalf("activate current attempt accepted=%v err=%v", accepted, err)
+	}
+	r.muAssistant.Lock()
+	if len(r.assistantBlocks) != 0 {
+		r.muAssistant.Unlock()
+		t.Fatalf("new provider attempt retained old assistant blocks: %#v", r.assistantBlocks)
+	}
+	r.muAssistant.Unlock()
+
+	accepted, err = r.activateFloretProviderAttempt(map[string]any{
+		"logical_request_id": "logical-1",
+		"attempt_id":         "logical-1:attempt:1",
+		"attempt_epoch":      1,
+	})
+	if err != nil || accepted {
+		t.Fatalf("stale provider attempt accepted=%v err=%v, want dropped", accepted, err)
+	}
+	if len(events) != 2 {
+		t.Fatalf("activation events=%d, want message and block start", len(events))
+	}
+}
