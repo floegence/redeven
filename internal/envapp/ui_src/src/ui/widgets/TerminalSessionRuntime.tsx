@@ -640,11 +640,51 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       const current = remaining.slice(0, count);
       remaining = remaining.slice(count);
       const payload = concatTerminalChunks(current);
-      if (payload.byteLength > 0) {
-        if (history) {
-          await new Promise<void>((resolve) => core.writeHistory(payload, resolve));
-        } else {
-          core.writeFrame(payload);
+      const liveGeometry = !history && current.length > 0
+        ? (() => {
+          const first = current[0]!;
+          if (first.geometryGeneration === undefined || first.cols === undefined || first.rows === undefined) {
+            return null;
+          }
+          if (!Number.isSafeInteger(first.geometryGeneration) || first.geometryGeneration <= 0
+            || !Number.isSafeInteger(first.cols) || first.cols <= 0
+            || !Number.isSafeInteger(first.rows) || first.rows <= 0) {
+            throw new Error('Terminal live output geometry is invalid');
+          }
+          for (const chunk of current.slice(1)) {
+            if (chunk.geometryGeneration !== first.geometryGeneration
+              || chunk.cols !== first.cols
+              || chunk.rows !== first.rows) {
+              throw new Error('Terminal live output batch crossed a geometry boundary');
+            }
+          }
+          return { cols: first.cols, rows: first.rows };
+        })()
+        : null;
+      const sharedGeometry = liveGeometry
+        ? (() => {
+          const state = geometryPresentation.getState();
+          const effective = state.appliedEffective ?? state.knownEffective;
+          return effective ? { cols: effective.cols, rows: effective.rows } : null;
+        })()
+        : null;
+      if (liveGeometry && (!sharedGeometry
+        || sharedGeometry.cols !== liveGeometry.cols
+        || sharedGeometry.rows !== liveGeometry.rows)) {
+        core.setFixedDimensions(liveGeometry);
+      }
+      try {
+        if (payload.byteLength > 0) {
+          if (history) {
+            await new Promise<void>((resolve) => core.writeHistory(payload, resolve));
+          } else {
+            core.writeFrame(payload);
+          }
+        }
+      } finally {
+        if (liveGeometry && sharedGeometry
+          && (sharedGeometry.cols !== liveGeometry.cols || sharedGeometry.rows !== liveGeometry.rows)) {
+          core.setFixedDimensions(sharedGeometry);
         }
       }
       for (const chunk of current) {
@@ -655,7 +695,15 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     }
   };
 
-  const handleLiveTerminalData = (data: Uint8Array, sequence: number | undefined) => {
+  const handleLiveTerminalData = (
+    data: Uint8Array,
+    sequence: number | undefined,
+    geometry?: Readonly<{
+      geometryGeneration?: number;
+      cols?: number;
+      rows?: number;
+    }>,
+  ) => {
     const coordinator = outputCoordinator;
     if (!coordinator) return;
 
@@ -708,6 +756,11 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     const liveChunk = tagTerminalOutputChunk({
       sequence: normalizedSequence,
       data,
+      ...(geometry?.geometryGeneration !== undefined
+        ? { geometryGeneration: geometry.geometryGeneration }
+        : {}),
+      ...(geometry?.cols !== undefined ? { cols: geometry.cols } : {}),
+      ...(geometry?.rows !== undefined ? { rows: geometry.rows } : {}),
     }, 'live');
     coordinator.pushLive(liveChunk);
   };
@@ -1307,7 +1360,11 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
 
       clearOutputSubscription();
       unsubData = props.eventSource.onTerminalData(id, (ev) => {
-        handleLiveTerminalData(ev.data, ev.sequence);
+        handleLiveTerminalData(ev.data, ev.sequence, {
+          geometryGeneration: ev.geometryGeneration,
+          cols: ev.cols,
+          rows: ev.rows,
+        });
       });
 
       if (props.eventSource.onTerminalGeometry) {

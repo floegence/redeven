@@ -346,6 +346,9 @@ const terminalEventSourceState = vi.hoisted(() => ({
     data: Uint8Array;
     sequence?: number;
     timestampMs?: number;
+    geometryGeneration?: number;
+    cols?: number;
+    rows?: number;
   }) => void>>(),
   nameHandlers: new Map<string, Set<(event: {
     sessionId: string;
@@ -1295,7 +1298,8 @@ vi.mock('@floegence/floeterm-terminal-web', async () => {
         for (const item of accepted) {
           const previous = groups.at(-1);
           const first = previous?.[0];
-          const sameGeometry = first?.source !== 'history'
+          const sameGeometry = first?.geometryGeneration === undefined
+            || item.geometryGeneration === undefined
             || (first.geometryGeneration === item.geometryGeneration
               && first.cols === item.cols
               && first.rows === item.rows);
@@ -1844,13 +1848,19 @@ async function waitForTerminalPanelCondition(assertion: () => void, attempts = 5
   throw new Error('Timed out waiting for terminal panel condition');
 }
 
-function emitTerminalData(sessionId: string, data: string, sequence?: number) {
+function emitTerminalData(
+  sessionId: string,
+  data: string,
+  sequence?: number,
+  geometry?: { geometryGeneration?: number; cols?: number; rows?: number },
+) {
   const handlers = terminalEventSourceState.dataHandlers.get(sessionId);
   if (!handlers) return;
   const event = {
     sessionId,
     data: textEncoder.encode(data),
     sequence,
+    ...geometry,
   };
   for (const handler of handlers) {
     handler(event);
@@ -3851,6 +3861,32 @@ describe('TerminalPanel', () => {
       0,
       -1,
       { snapshotEndSequence: 1, historyGeneration: undefined },
+    );
+  });
+
+  it('writes a late live batch at the geometry recorded by that batch', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="panel" />, host);
+    await settleTerminalPanelAfterPaint();
+
+    const core = terminalCoreInstances[0];
+    core?.setFixedDimensions.mockClear();
+    emitTerminalData('session-1', 'late-old-grid', 1, {
+      geometryGeneration: 7,
+      cols: 120,
+      rows: 55,
+    });
+    await drainTerminalPanelAsyncWork();
+
+    expect(core?.setFixedDimensions).toHaveBeenCalledWith({ cols: 120, rows: 55 });
+    expect(core?.setFixedDimensions).toHaveBeenLastCalledWith({ cols: 80, rows: 24 });
+    expect(core?.write).toHaveBeenCalled();
+    expect(core?.setFixedDimensions.mock.invocationCallOrder[0]).toBeLessThan(
+      core?.write.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
+    );
+    expect(core?.write.mock.invocationCallOrder[0]).toBeLessThan(
+      core?.setFixedDimensions.mock.invocationCallOrder.at(-1) ?? Number.POSITIVE_INFINITY,
     );
   });
 
