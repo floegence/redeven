@@ -12,12 +12,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/floegence/flowersec/flowersec-go/framing/jsonframe"
-	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/gitruntime"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/sessionrpc"
 )
 
 func mustEvalPath(t *testing.T, path string) string {
@@ -101,17 +100,8 @@ func TestMutationRPCsFailClosedWithoutCoordinator(t *testing.T) {
 	source := filepath.Join(root, "source.txt")
 	writeTestFile(t, source, "source")
 	svc := NewService(root)
-	router := rpc.NewRouter()
+	router := sessionrpc.NewRouter()
 	svc.Register(router, &session.Meta{CanRead: true, CanWrite: true})
-
-	serverConn, clientConn := net.Pipe()
-	defer serverConn.Close()
-	defer clientConn.Close()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	server := rpc.NewServer(serverConn, router)
-	go func() { _ = server.Serve(ctx) }()
-	client := rpc.NewClient(clientConn)
 
 	requests := []struct {
 		name    string
@@ -130,12 +120,11 @@ func TestMutationRPCsFailClosedWithoutCoordinator(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, rpcErr, callErr := client.Call(ctx, test.typeID, payload)
-			if callErr != nil {
-				t.Fatalf("Call error = %v", callErr)
-			}
-			if rpcErr == nil || rpcErr.Code != gitruntime.ErrorResourceLimit {
-				t.Fatalf("RPC error = %#v, want resource limit", rpcErr)
+			var response json.RawMessage
+			callErr := router.Call(context.Background(), test.typeID, json.RawMessage(payload), &response)
+			var rpcErr *sessionrpc.Error
+			if !errors.As(callErr, &rpcErr) || rpcErr.Code != gitruntime.ErrorResourceLimit {
+				t.Fatalf("RPC error = %#v, want resource limit", callErr)
 			}
 		})
 	}
@@ -290,26 +279,15 @@ func TestMutationRPCsBindEffectToCoordinatedCanonicalPaths(t *testing.T) {
 
 func callMutationRPC(t *testing.T, svc *Service, typeID uint32, request any) {
 	t.Helper()
-	router := rpc.NewRouter()
+	router := sessionrpc.NewRouter()
 	svc.Register(router, &session.Meta{CanRead: true, CanWrite: true})
-	serverConn, clientConn := net.Pipe()
-	defer serverConn.Close()
-	defer clientConn.Close()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	server := rpc.NewServer(serverConn, router)
-	go func() { _ = server.Serve(ctx) }()
-	client := rpc.NewClient(clientConn)
 	payload, err := json.Marshal(request)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, rpcErr, callErr := client.Call(ctx, typeID, payload)
-	if callErr != nil {
+	var response json.RawMessage
+	if callErr := router.Call(context.Background(), typeID, json.RawMessage(payload), &response); callErr != nil {
 		t.Fatalf("Call error = %v", callErr)
-	}
-	if rpcErr != nil {
-		t.Fatalf("RPC error = %#v", rpcErr)
 	}
 }
 
@@ -368,11 +346,11 @@ func callReadFileStream(t *testing.T, svc *Service, path string) (fsReadFileStre
 
 	go svc.ServeReadFileStream(ctx, serverConn, &session.Meta{CanRead: true})
 
-	if err := jsonframe.WriteJSONFrame(clientConn, fsReadFileStreamMeta{Path: path}); err != nil {
+	if err := writeJSONFrame(clientConn, fsReadFileStreamMeta{Path: path}); err != nil {
 		t.Fatalf("WriteJSONFrame(request): %v", err)
 	}
 
-	respBytes, err := jsonframe.ReadJSONFrame(clientConn, jsonframe.DefaultMaxJSONFrameBytes)
+	respBytes, err := readJSONFrame(clientConn, 1<<20)
 	if err != nil {
 		t.Fatalf("ReadJSONFrame(response): %v", err)
 	}
@@ -453,7 +431,7 @@ func TestServiceMkdirTarget(t *testing.T) {
 
 	t.Run("rejects read-only computer root target", func(t *testing.T) {
 		_, err := s.mkdirTarget("/../../outside", false)
-		rpcErr, ok := err.(*rpc.Error)
+		rpcErr, ok := err.(*sessionrpc.Error)
 		if !ok || rpcErr.Code != 403 {
 			t.Fatalf("expected rpc 403 error, got %#v", err)
 		}
@@ -465,7 +443,7 @@ func TestServiceMkdirTarget(t *testing.T) {
 			t.Fatalf("MkdirAll(%q): %v", existing, err)
 		}
 		_, err := s.mkdirTarget(existing, false)
-		rpcErr, ok := err.(*rpc.Error)
+		rpcErr, ok := err.(*sessionrpc.Error)
 		if !ok || rpcErr.Code != 409 {
 			t.Fatalf("expected rpc 409 error, got %#v", err)
 		}
@@ -692,7 +670,7 @@ func TestServiceMutationsRequireWritableSourceRoot(t *testing.T) {
 	}
 	if _, err := svc.mkdirTarget(filepath.Join(readonlyRoot, "new-dir"), false); err == nil {
 		t.Fatalf("mkdirTarget(readonly root) error = nil, want write denied")
-	} else if rpcErr, ok := err.(*rpc.Error); !ok || rpcErr.Code != 403 || rpcErr.Message != "write permission denied" {
+	} else if rpcErr, ok := err.(*sessionrpc.Error); !ok || rpcErr.Code != 403 || rpcErr.Message != "write permission denied" {
 		t.Fatalf("mkdirTarget(readonly root) error = %#v, want rpc 403 write permission denied", err)
 	}
 	if _, err := svc.renameEntry(filepath.Join(writableRoot, "source.txt"), filepath.Join(readonlyRoot, "renamed.txt")); !errors.Is(err, filesystemscope.ErrWriteDenied) {

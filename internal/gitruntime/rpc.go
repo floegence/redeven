@@ -3,11 +3,11 @@ package gitruntime
 import (
 	"context"
 	"encoding/json"
+	"errors"
 
-	rpcwirev1 "github.com/floegence/flowersec/flowersec-go/gen/flowersec/rpc/v1"
-	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/sessionrpc"
 )
 
 const (
@@ -43,7 +43,7 @@ func DefaultRPCSpec[TReq any, TResp any]() RPCSpec[TReq, TResp] {
 // The decode reservation remains held until the handler and response guard
 // finish, so the decoded DTO cannot outlive its admission.
 func RegisterTyped[TReq any, TResp any](
-	router *rpc.Router,
+	router *sessionrpc.Router,
 	typeID uint32,
 	runtime *Runtime,
 	spec RPCSpec[TReq, TResp],
@@ -55,7 +55,7 @@ func RegisterTyped[TReq any, TResp any](
 	if router == nil {
 		return
 	}
-	router.Register(typeID, func(ctx context.Context, payload json.RawMessage) (json.RawMessage, *rpcwirev1.RpcError) {
+	router.Register(typeID, func(ctx context.Context, payload json.RawMessage) (json.RawMessage, *sessionrpc.Error) {
 		if runtime == nil || spec.Response.RetainedBytes == nil || handler == nil {
 			return responseBudgetWireError()
 		}
@@ -71,7 +71,7 @@ func RegisterTyped[TReq any, TResp any](
 		var req TReq
 		if len(payload) != 0 {
 			if err := decodeStrict(payload, &req); err != nil {
-				return nil, rpc.ToWireError(&rpc.Error{Code: 400, Message: "invalid payload"})
+				return nil, &sessionrpc.Error{Code: 400, Message: "invalid payload"}
 			}
 		}
 		if _, err := retainedBytes(&req, maxRetainedRequestBytes); err != nil {
@@ -111,28 +111,37 @@ func RegisterTyped[TReq any, TResp any](
 	})
 }
 
-func guardErrorEnvelope(typeID uint32, err error) (json.RawMessage, *rpcwirev1.RpcError) {
-	wireErr := rpc.ToWireError(err)
-	if wireErr == nil || (wireErr.Message != nil && len(*wireErr.Message) > MaxSyntheticEnvelope-256) || !syntheticEnvelopeFits(typeID, nil, wireErr) {
+func guardErrorEnvelope(typeID uint32, err error) (json.RawMessage, *sessionrpc.Error) {
+	wireErr := errorToRPC(err)
+	if wireErr == nil || len(wireErr.Message) > MaxSyntheticEnvelope-256 || !syntheticEnvelopeFits(typeID, nil, wireErr) {
 		return responseBudgetWireError()
 	}
 	return nil, wireErr
 }
 
-func syntheticEnvelopeFits(typeID uint32, payload json.RawMessage, rpcErr *rpcwirev1.RpcError) bool {
-	_, err := MarshalJSONBounded(rpcwirev1.RpcEnvelope{
-		TypeId:     typeID,
-		ResponseTo: 1<<53 - 1,
-		Payload:    payload,
-		Error:      rpcErr,
-	}, MaxSyntheticEnvelope)
-	return err == nil
+func syntheticEnvelopeFits(_ uint32, payload json.RawMessage, rpcErr *sessionrpc.Error) bool {
+	encoded, err := MarshalJSONBounded(struct {
+		Payload json.RawMessage   `json:"payload,omitempty"`
+		Error   *sessionrpc.Error `json:"error,omitempty"`
+	}{Payload: payload, Error: rpcErr}, MaxSyntheticEnvelope)
+	return err == nil && len(encoded) <= MaxSyntheticEnvelope
 }
 
-func requestBudgetWireError() (json.RawMessage, *rpcwirev1.RpcError) {
-	return nil, rpc.ToWireError(&rpc.Error{Code: ErrorRequestBudget, Message: "git request exceeds resource budget"})
+func requestBudgetWireError() (json.RawMessage, *sessionrpc.Error) {
+	return nil, &sessionrpc.Error{Code: ErrorRequestBudget, Message: "git request exceeds resource budget"}
 }
 
-func responseBudgetWireError() (json.RawMessage, *rpcwirev1.RpcError) {
-	return nil, rpc.ToWireError(&rpc.Error{Code: ErrorResponseBudget, Message: "git response exceeds resource budget"})
+func responseBudgetWireError() (json.RawMessage, *sessionrpc.Error) {
+	return nil, &sessionrpc.Error{Code: ErrorResponseBudget, Message: "git response exceeds resource budget"}
+}
+
+func errorToRPC(err error) *sessionrpc.Error {
+	if err == nil {
+		return nil
+	}
+	var rpcErr *sessionrpc.Error
+	if errors.As(err, &rpcErr) {
+		return rpcErr
+	}
+	return &sessionrpc.Error{Code: 500, Message: err.Error()}
 }

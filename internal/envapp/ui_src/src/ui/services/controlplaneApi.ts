@@ -1,11 +1,13 @@
-import { createControlplaneArtifactSource, type ArtifactAcquireContext } from '@floegence/floe-webapp-boot';
-import { assertConnectArtifact, type ConnectArtifact } from '@floegence/flowersec-core';
+import type { ArtifactSourceResult } from '@floegence/flowersec-core';
 
 import { SESSION_KIND_ENVAPP_RPC, sessionKindForLauncherApp, type LauncherFloeApp } from './floeproxyContract';
-import { appendLocalAccessResumeQuery, applyLocalAccessResumeHeader } from './localAccessAuth';
+import { applyLocalAccessResumeHeader } from './localAccessAuth';
 import { controlPlaneOriginFromSandboxLocation } from './sandboxOrigins';
 import { AccessUnlockError, isKnownAccessUnlockErrorCode, normalizeRetryAfterMs } from './accessUnlockError';
 import { stagePluginSessionCredential } from './pluginSessionCredential';
+
+const loadArtifactRuntime = () => import('@floegence/flowersec-core');
+const loadControlplaneArtifactSource = () => import('@floegence/floe-webapp-boot/artifact-source');
 
 export interface Environment {
   public_id: string;
@@ -180,7 +182,11 @@ function currentEnvAppReturnToBestEffort(): string {
 }
 
 function controlPlaneOriginFromSandboxOriginBestEffort(): string {
-  return controlPlaneOriginFromSandboxLocation(window.location);
+	try {
+		return controlPlaneOriginFromSandboxLocation(window.location);
+	} catch {
+		return window.location.origin;
+	}
 }
 
 function buildControlPlaneEnvRecoverURL(envPublicID: string): string {
@@ -472,7 +478,7 @@ export async function refreshLocalRuntime(): Promise<LocalRuntimeInfo | null> {
   return request;
 }
 
-export async function mintLocalDirectConnectArtifact(context: ArtifactAcquireContext = {}): Promise<ConnectArtifact> {
+export async function mintLocalDirectConnectArtifact(context: Readonly<{ signal: AbortSignal }>): Promise<ArtifactSourceResult> {
   const out = await fetchLocalJSON<{
     connect_artifact?: unknown;
     plugin_session_credential?: unknown;
@@ -480,13 +486,8 @@ export async function mintLocalDirectConnectArtifact(context: ArtifactAcquireCon
     method: 'POST',
     ...(context.signal === undefined ? {} : { signal: context.signal }),
   });
-  const artifact = assertConnectArtifact(out?.connect_artifact);
-  if (artifact.transport !== 'direct') {
-    throw new Error('Invalid local direct connect artifact');
-  }
-  const wsURL = asString(artifact.direct_info?.ws_url);
-  const channelID = asString(artifact.direct_info?.channel_id);
-  if (!wsURL || !channelID) {
+  const channelID = asString((out as { channel_id?: unknown })?.channel_id);
+  if (!out?.connect_artifact || !channelID) {
     throw new Error('Invalid local direct connect artifact');
   }
   const pluginSessionCredential = asString(out?.plugin_session_credential);
@@ -494,13 +495,9 @@ export async function mintLocalDirectConnectArtifact(context: ArtifactAcquireCon
     throw new Error('Invalid local plugin session credential');
   }
   stagePluginSessionCredential(channelID, pluginSessionCredential);
-  return {
-    ...artifact,
-    direct_info: {
-      ...artifact.direct_info,
-      ws_url: appendLocalAccessResumeQuery(wsURL),
-    },
-  };
+  const { createArtifactLease, parseArtifact } = await loadArtifactRuntime();
+  const artifact = parseArtifact(JSON.stringify(out.connect_artifact));
+  return { kind: 'lease', lease: createArtifactLease(artifact, async () => undefined) };
 }
 
 export type EnvironmentDetailSource = 'local' | 'controlplane';
@@ -647,26 +644,23 @@ export async function connectArtifactEntry(args: {
   allowLoopbackHTTP?: boolean;
   signal?: AbortSignal;
   traceId?: string;
-}): Promise<ConnectArtifact> {
+}): Promise<ArtifactSourceResult> {
   const endpointId = args.endpointId.trim();
   const floeApp = args.floeApp.trim();
   const entryTicket = args.entryTicket.trim();
   if (!endpointId || !floeApp || !entryTicket) throw new Error('Invalid request');
 
+  const { createControlplaneArtifactSource } = await loadControlplaneArtifactSource();
   const source = createControlplaneArtifactSource({
+	baseUrl: controlPlaneOriginFromSandboxOriginBestEffort(),
     endpointId,
     entryTicket,
-    credentials: 'omit',
     payload: {
       floe_app: floeApp,
     },
+	...(args.traceId === undefined ? {} : { correlation: { traceId: args.traceId } }),
     ...(args.allowLoopbackHTTP === true ? { allowLoopbackHTTP: true } : {}),
   });
-  if (source.kind !== 'refreshable') {
-    throw new Error('Invalid controlplane artifact source');
-  }
-  return source.acquire({
-    ...(args.signal === undefined ? {} : { signal: args.signal }),
-    ...(args.traceId === undefined ? {} : { traceId: args.traceId }),
-  });
+  const signal = args.signal ?? new AbortController().signal;
+  return source.acquire({ signal });
 }

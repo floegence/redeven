@@ -8,11 +8,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/floegence/flowersec/flowersec-go/framing/jsonframe"
-	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/sessionrpc"
 )
 
 // ServeReadFileStream implements the `fs/read_file` stream.
@@ -32,14 +31,14 @@ func (s *Service) ServeReadFileStreamWithAccessGate(ctx context.Context, stream 
 	defer func() { _ = stream.Close() }()
 
 	if err := accessgate.RequireRPC(gate, meta, accessgate.RPCAccessProtected); err != nil {
-		rpcErr, _ := err.(*rpc.Error)
+		rpcErr, _ := err.(*sessionrpc.Error)
 		code := 423
 		message := "access password required"
 		if rpcErr != nil {
 			code = int(rpcErr.Code)
 			message = rpcErr.Message
 		}
-		_ = jsonframe.WriteJSONFrame(stream, fsReadFileStreamRespMeta{
+		_ = writeJSONFrame(stream, fsReadFileStreamRespMeta{
 			Ok: false,
 			Error: &fsStreamError{
 				Code:    code,
@@ -51,7 +50,7 @@ func (s *Service) ServeReadFileStreamWithAccessGate(ctx context.Context, stream 
 
 	// Enforce permissions from session_meta.
 	if meta == nil || !meta.CanRead {
-		_ = jsonframe.WriteJSONFrame(stream, fsReadFileStreamRespMeta{
+		_ = writeJSONFrame(stream, fsReadFileStreamRespMeta{
 			Ok: false,
 			Error: &fsStreamError{
 				Code:    403,
@@ -61,7 +60,7 @@ func (s *Service) ServeReadFileStreamWithAccessGate(ctx context.Context, stream 
 		return
 	}
 
-	reqBytes, err := jsonframe.ReadJSONFrame(stream, jsonframe.DefaultMaxJSONFrameBytes)
+	reqBytes, err := readJSONFrame(stream, (1 << 20))
 	if err != nil {
 		// Peer may have closed early; nothing useful to do here.
 		return
@@ -69,7 +68,7 @@ func (s *Service) ServeReadFileStreamWithAccessGate(ctx context.Context, stream 
 
 	var req fsReadFileStreamMeta
 	if err := json.Unmarshal(reqBytes, &req); err != nil {
-		_ = jsonframe.WriteJSONFrame(stream, fsReadFileStreamRespMeta{
+		_ = writeJSONFrame(stream, fsReadFileStreamRespMeta{
 			Ok: false,
 			Error: &fsStreamError{
 				Code:    400,
@@ -81,7 +80,7 @@ func (s *Service) ServeReadFileStreamWithAccessGate(ctx context.Context, stream 
 
 	req.Path = strings.TrimSpace(req.Path)
 	if req.Path == "" {
-		_ = jsonframe.WriteJSONFrame(stream, fsReadFileStreamRespMeta{
+		_ = writeJSONFrame(stream, fsReadFileStreamRespMeta{
 			Ok: false,
 			Error: &fsStreamError{
 				Code:    400,
@@ -94,7 +93,7 @@ func (s *Service) ServeReadFileStreamWithAccessGate(ctx context.Context, stream 
 	realPath, _, err := s.resolveReadableFilePath(req.Path)
 	if err != nil {
 		if errors.Is(err, filesystemscope.ErrPathOutsideScope) {
-			_ = jsonframe.WriteJSONFrame(stream, fsReadFileStreamRespMeta{
+			_ = writeJSONFrame(stream, fsReadFileStreamRespMeta{
 				Ok: false,
 				Error: &fsStreamError{
 					Code:    403,
@@ -104,7 +103,7 @@ func (s *Service) ServeReadFileStreamWithAccessGate(ctx context.Context, stream 
 			return
 		}
 		if errors.Is(err, filesystemscope.ErrReadDenied) {
-			_ = jsonframe.WriteJSONFrame(stream, fsReadFileStreamRespMeta{
+			_ = writeJSONFrame(stream, fsReadFileStreamRespMeta{
 				Ok: false,
 				Error: &fsStreamError{
 					Code:    403,
@@ -114,7 +113,7 @@ func (s *Service) ServeReadFileStreamWithAccessGate(ctx context.Context, stream 
 			return
 		}
 		if os.IsNotExist(err) {
-			_ = jsonframe.WriteJSONFrame(stream, fsReadFileStreamRespMeta{
+			_ = writeJSONFrame(stream, fsReadFileStreamRespMeta{
 				Ok: false,
 				Error: &fsStreamError{
 					Code:    404,
@@ -124,7 +123,7 @@ func (s *Service) ServeReadFileStreamWithAccessGate(ctx context.Context, stream 
 			return
 		}
 		if errors.Is(err, errFSPathIsDirectory) {
-			_ = jsonframe.WriteJSONFrame(stream, fsReadFileStreamRespMeta{
+			_ = writeJSONFrame(stream, fsReadFileStreamRespMeta{
 				Ok: false,
 				Error: &fsStreamError{
 					Code:    400,
@@ -133,7 +132,7 @@ func (s *Service) ServeReadFileStreamWithAccessGate(ctx context.Context, stream 
 			})
 			return
 		}
-		_ = jsonframe.WriteJSONFrame(stream, fsReadFileStreamRespMeta{
+		_ = writeJSONFrame(stream, fsReadFileStreamRespMeta{
 			Ok: false,
 			Error: &fsStreamError{
 				Code:    400,
@@ -145,7 +144,7 @@ func (s *Service) ServeReadFileStreamWithAccessGate(ctx context.Context, stream 
 
 	f, err := os.Open(realPath)
 	if err != nil {
-		_ = jsonframe.WriteJSONFrame(stream, fsReadFileStreamRespMeta{
+		_ = writeJSONFrame(stream, fsReadFileStreamRespMeta{
 			Ok: false,
 			Error: &fsStreamError{
 				Code:    404,
@@ -158,7 +157,7 @@ func (s *Service) ServeReadFileStreamWithAccessGate(ctx context.Context, stream 
 
 	info, err := f.Stat()
 	if err != nil {
-		_ = jsonframe.WriteJSONFrame(stream, fsReadFileStreamRespMeta{
+		_ = writeJSONFrame(stream, fsReadFileStreamRespMeta{
 			Ok: false,
 			Error: &fsStreamError{
 				Code:    500,
@@ -174,7 +173,7 @@ func (s *Service) ServeReadFileStreamWithAccessGate(ctx context.Context, stream 
 		offset = 0
 	}
 	if offset > fileSize {
-		_ = jsonframe.WriteJSONFrame(stream, fsReadFileStreamRespMeta{
+		_ = writeJSONFrame(stream, fsReadFileStreamRespMeta{
 			Ok: false,
 			Error: &fsStreamError{
 				Code:    416,
@@ -186,7 +185,7 @@ func (s *Service) ServeReadFileStreamWithAccessGate(ctx context.Context, stream 
 
 	if offset > 0 {
 		if _, err := f.Seek(offset, io.SeekStart); err != nil {
-			_ = jsonframe.WriteJSONFrame(stream, fsReadFileStreamRespMeta{
+			_ = writeJSONFrame(stream, fsReadFileStreamRespMeta{
 				Ok: false,
 				Error: &fsStreamError{
 					Code:    500,
@@ -207,7 +206,7 @@ func (s *Service) ServeReadFileStreamWithAccessGate(ctx context.Context, stream 
 		contentLen = 0
 	}
 
-	if err := jsonframe.WriteJSONFrame(stream, fsReadFileStreamRespMeta{
+	if err := writeJSONFrame(stream, fsReadFileStreamRespMeta{
 		Ok:         true,
 		FileSize:   fileSize,
 		ContentLen: contentLen,
@@ -284,4 +283,20 @@ func copyNWithContext(ctx context.Context, dst io.Writer, src io.Reader, n int64
 		}
 	}
 	return nil
+}
+
+// The application stream uses one JSON value followed by an optional byte
+// payload. Flowersec owns stream boundaries and transport framing; this helper
+// only serializes the Redeven message envelope.
+func writeJSONFrame(w io.Writer, value any) error {
+	return json.NewEncoder(w).Encode(value)
+}
+
+func readJSONFrame(r io.Reader, maxLen int) ([]byte, error) {
+	decoder := json.NewDecoder(io.LimitReader(r, int64(maxLen)))
+	var value json.RawMessage
+	if err := decoder.Decode(&value); err != nil {
+		return nil, err
+	}
+	return value, nil
 }

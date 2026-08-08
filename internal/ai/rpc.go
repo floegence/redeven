@@ -8,9 +8,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/floegence/flowersec/flowersec-go/rpc"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v2"
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/sessionrpc"
 )
 
 const (
@@ -119,11 +120,11 @@ type aiTimelineMessageItem struct {
 	MessageJSON json.RawMessage `json:"message_json"`
 }
 
-func (s *Service) RegisterRPC(r *rpc.Router, meta *session.Meta, streamServer *rpc.Server) {
+func (s *Service) RegisterRPC(r *sessionrpc.Router, meta *session.Meta, streamServer flowersec.RPCPeer) {
 	s.RegisterRPCWithAccessGate(r, meta, streamServer, nil)
 }
 
-func (s *Service) RegisterRPCWithAccessGate(r *rpc.Router, meta *session.Meta, streamServer *rpc.Server, gate *accessgate.Gate) {
+func (s *Service) RegisterRPCWithAccessGate(r *sessionrpc.Router, meta *session.Meta, streamServer flowersec.RPCPeer, gate *accessgate.Gate) {
 	if s == nil {
 		return
 	}
@@ -134,7 +135,7 @@ func (s *Service) RegisterRPCWithAccessGate(r *rpc.Router, meta *session.Meta, s
 
 type RPCServiceAcquire func(context.Context) (*Service, context.Context, uint64, func(), error)
 
-func RegisterRPCServiceProviderWithAccessGate(r *rpc.Router, meta *session.Meta, streamServer *rpc.Server, gate *accessgate.Gate, acquire RPCServiceAcquire) func() {
+func RegisterRPCServiceProviderWithAccessGate(r *sessionrpc.Router, meta *session.Meta, streamServer flowersec.RPCPeer, gate *accessgate.Gate, acquire RPCServiceAcquire) func() {
 	if r == nil || acquire == nil {
 		return func() {}
 	}
@@ -142,13 +143,13 @@ func RegisterRPCServiceProviderWithAccessGate(r *rpc.Router, meta *session.Meta,
 
 	accessgate.RegisterTyped[aiSendUserTurnReq, aiSendUserTurnResp](r, TypeID_AI_SEND_USER_TURN, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *aiSendUserTurnReq) (*aiSendUserTurnResp, error) {
 		if meta == nil || !meta.CanRead || !meta.CanWrite || !meta.CanExecute {
-			return nil, &rpc.Error{Code: 403, Message: "read/write/execute permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "read/write/execute permission denied"}
 		}
 		if req == nil {
-			return nil, &rpc.Error{Code: 400, Message: "invalid payload"}
+			return nil, &sessionrpc.Error{Code: 400, Message: "invalid payload"}
 		}
 		if strings.TrimSpace(req.Input.TurnID) != "" {
-			return nil, &rpc.Error{Code: 400, Message: "turn_id must be omitted before canonical admission"}
+			return nil, &sessionrpc.Error{Code: 400, Message: "turn_id must be omitted before canonical admission"}
 		}
 		service, leaseCtx, release, acquireErr := acquireRPCService(ctx, acquire)
 		if acquireErr != nil {
@@ -156,7 +157,7 @@ func RegisterRPCServiceProviderWithAccessGate(r *rpc.Router, meta *session.Meta,
 		}
 		defer release()
 		if !service.Enabled() {
-			return nil, &rpc.Error{Code: 503, Message: "ai not configured"}
+			return nil, &sessionrpc.Error{Code: 503, Message: "ai not configured"}
 		}
 		resp, err := service.SendUserTurn(leaseCtx, meta, SendUserTurnRequest{
 			ThreadID:              strings.TrimSpace(req.ThreadID),
@@ -184,13 +185,13 @@ func RegisterRPCServiceProviderWithAccessGate(r *rpc.Router, meta *session.Meta,
 
 	accessgate.RegisterTyped[aiSubmitRequestUserInputResponseReq, aiSubmitRequestUserInputResponseResp](r, TypeID_AI_SUBMIT_REQUEST_USER_INPUT_RESPONSE, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *aiSubmitRequestUserInputResponseReq) (*aiSubmitRequestUserInputResponseResp, error) {
 		if meta == nil || !meta.CanRead || !meta.CanWrite || !meta.CanExecute {
-			return nil, &rpc.Error{Code: 403, Message: "read/write/execute permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "read/write/execute permission denied"}
 		}
 		if req == nil {
-			return nil, &rpc.Error{Code: 400, Message: "invalid payload"}
+			return nil, &sessionrpc.Error{Code: 400, Message: "invalid payload"}
 		}
 		if strings.TrimSpace(req.Input.TurnID) != "" {
-			return nil, &rpc.Error{Code: 400, Message: "turn_id must be omitted before canonical admission"}
+			return nil, &sessionrpc.Error{Code: 400, Message: "turn_id must be omitted before canonical admission"}
 		}
 		service, leaseCtx, release, acquireErr := acquireRPCService(ctx, acquire)
 		if acquireErr != nil {
@@ -198,7 +199,7 @@ func RegisterRPCServiceProviderWithAccessGate(r *rpc.Router, meta *session.Meta,
 		}
 		defer release()
 		if !service.Enabled() {
-			return nil, &rpc.Error{Code: 503, Message: "ai not configured"}
+			return nil, &sessionrpc.Error{Code: 503, Message: "ai not configured"}
 		}
 		resp, err := service.SubmitRequestUserInputResponse(leaseCtx, meta, SubmitRequestUserInputResponseRequest{
 			ThreadID:         strings.TrimSpace(req.ThreadID),
@@ -223,14 +224,14 @@ func RegisterRPCServiceProviderWithAccessGate(r *rpc.Router, meta *session.Meta,
 
 	accessgate.RegisterTyped[aiCompactThreadContextReq, aiCompactThreadContextResp](r, TypeID_AI_COMPACT_THREAD_CONTEXT, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *aiCompactThreadContextReq) (*aiCompactThreadContextResp, error) {
 		if meta == nil || !meta.CanRead || !meta.CanWrite || !meta.CanExecute {
-			return nil, &rpc.Error{Code: 403, Message: "read/write/execute permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "read/write/execute permission denied"}
 		}
 		if req == nil {
-			return nil, &rpc.Error{Code: 400, Message: "invalid payload"}
+			return nil, &sessionrpc.Error{Code: 400, Message: "invalid payload"}
 		}
 		threadID := strings.TrimSpace(req.ThreadID)
 		if threadID == "" {
-			return nil, &rpc.Error{Code: 400, Message: "missing thread_id"}
+			return nil, &sessionrpc.Error{Code: 400, Message: "missing thread_id"}
 		}
 		service, leaseCtx, release, acquireErr := acquireRPCService(ctx, acquire)
 		if acquireErr != nil {
@@ -238,7 +239,7 @@ func RegisterRPCServiceProviderWithAccessGate(r *rpc.Router, meta *session.Meta,
 		}
 		defer release()
 		if !service.Enabled() {
-			return nil, &rpc.Error{Code: 503, Message: "ai not configured"}
+			return nil, &sessionrpc.Error{Code: 503, Message: "ai not configured"}
 		}
 		resp, err := service.CompactThreadContext(leaseCtx, meta, CompactThreadContextRequest{
 			ThreadID:    threadID,
@@ -256,10 +257,10 @@ func RegisterRPCServiceProviderWithAccessGate(r *rpc.Router, meta *session.Meta,
 
 	accessgate.RegisterTyped[aiSubscribeSummaryReq, aiSubscribeSummaryResp](r, TypeID_AI_SUBSCRIBE_SUMMARY, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, _ *aiSubscribeSummaryReq) (*aiSubscribeSummaryResp, error) {
 		if meta == nil || !meta.CanRead || !meta.CanWrite || !meta.CanExecute {
-			return nil, &rpc.Error{Code: 403, Message: "read/write/execute permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "read/write/execute permission denied"}
 		}
 		if streamServer == nil {
-			return nil, &rpc.Error{Code: 500, Message: "stream not ready"}
+			return nil, &sessionrpc.Error{Code: 500, Message: "stream not ready"}
 		}
 		activeRuns, subscribeErr := realtimeSubscriptions.SubscribeSummary()
 		if subscribeErr != nil {
@@ -270,17 +271,17 @@ func RegisterRPCServiceProviderWithAccessGate(r *rpc.Router, meta *session.Meta,
 
 	accessgate.RegisterTyped[aiSubscribeThreadReq, aiSubscribeThreadResp](r, TypeID_AI_SUBSCRIBE_THREAD, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *aiSubscribeThreadReq) (*aiSubscribeThreadResp, error) {
 		if meta == nil || !meta.CanRead || !meta.CanWrite || !meta.CanExecute {
-			return nil, &rpc.Error{Code: 403, Message: "read/write/execute permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "read/write/execute permission denied"}
 		}
 		if streamServer == nil {
-			return nil, &rpc.Error{Code: 500, Message: "stream not ready"}
+			return nil, &sessionrpc.Error{Code: 500, Message: "stream not ready"}
 		}
 		if req == nil {
-			return nil, &rpc.Error{Code: 400, Message: "invalid payload"}
+			return nil, &sessionrpc.Error{Code: 400, Message: "invalid payload"}
 		}
 		threadID := strings.TrimSpace(req.ThreadID)
 		if threadID == "" {
-			return nil, &rpc.Error{Code: 400, Message: "missing thread_id"}
+			return nil, &sessionrpc.Error{Code: 400, Message: "missing thread_id"}
 		}
 		runID, subscribeErr := realtimeSubscriptions.SubscribeThread(threadID)
 		if subscribeErr != nil {
@@ -291,14 +292,14 @@ func RegisterRPCServiceProviderWithAccessGate(r *rpc.Router, meta *session.Meta,
 
 	accessgate.RegisterTyped[aiStopThreadReq, aiStopThreadResp](r, TypeID_AI_STOP_THREAD, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *aiStopThreadReq) (*aiStopThreadResp, error) {
 		if meta == nil || !meta.CanRead || !meta.CanWrite || !meta.CanExecute {
-			return nil, &rpc.Error{Code: 403, Message: "read/write/execute permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "read/write/execute permission denied"}
 		}
 		if req == nil {
-			return nil, &rpc.Error{Code: 400, Message: "invalid payload"}
+			return nil, &sessionrpc.Error{Code: 400, Message: "invalid payload"}
 		}
 		threadID := strings.TrimSpace(req.ThreadID)
 		if threadID == "" {
-			return nil, &rpc.Error{Code: 400, Message: "missing thread_id"}
+			return nil, &sessionrpc.Error{Code: 400, Message: "missing thread_id"}
 		}
 		service, leaseCtx, release, acquireErr := acquireRPCService(ctx, acquire)
 		if acquireErr != nil {
@@ -314,14 +315,14 @@ func RegisterRPCServiceProviderWithAccessGate(r *rpc.Router, meta *session.Meta,
 
 	accessgate.RegisterTyped[aiListMessagesReq, aiListMessagesResp](r, TypeID_AI_MESSAGES_LIST, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *aiListMessagesReq) (*aiListMessagesResp, error) {
 		if meta == nil || !meta.CanRead || !meta.CanWrite || !meta.CanExecute {
-			return nil, &rpc.Error{Code: 403, Message: "read/write/execute permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "read/write/execute permission denied"}
 		}
 		if req == nil {
-			return nil, &rpc.Error{Code: 400, Message: "invalid payload"}
+			return nil, &sessionrpc.Error{Code: 400, Message: "invalid payload"}
 		}
 		threadID := strings.TrimSpace(req.ThreadID)
 		if threadID == "" {
-			return nil, &rpc.Error{Code: 400, Message: "missing thread_id"}
+			return nil, &sessionrpc.Error{Code: 400, Message: "missing thread_id"}
 		}
 		service, leaseCtx, release, acquireErr := acquireRPCService(ctx, acquire)
 		if acquireErr != nil {
@@ -334,14 +335,14 @@ func RegisterRPCServiceProviderWithAccessGate(r *rpc.Router, meta *session.Meta,
 		db := service.threadsDB
 		service.mu.Unlock()
 		if db == nil {
-			return nil, &rpc.Error{Code: 503, Message: "threads store not ready"}
+			return nil, &sessionrpc.Error{Code: 503, Message: "threads store not ready"}
 		}
 
 		// Ensure thread exists (consistent with other endpoints).
 		if th, err := db.GetThreadSettings(ctx, strings.TrimSpace(meta.EndpointID), threadID); err != nil {
-			return nil, &rpc.Error{Code: 400, Message: err.Error()}
+			return nil, &sessionrpc.Error{Code: 400, Message: err.Error()}
 		} else if th == nil {
-			return nil, &rpc.Error{Code: 404, Message: "thread not found"}
+			return nil, &sessionrpc.Error{Code: 404, Message: "thread not found"}
 		}
 
 		limit := req.Limit
@@ -388,7 +389,7 @@ type rpcRealtimeSubscriptions struct {
 	ctx          context.Context
 	cancel       context.CancelFunc
 	acquire      RPCServiceAcquire
-	streamServer *rpc.Server
+	streamServer flowersec.RPCPeer
 	endpointID   string
 
 	closed   bool
@@ -403,7 +404,7 @@ type rpcRealtimeSubscriptions struct {
 	watchers   sync.WaitGroup
 }
 
-func newRPCRealtimeSubscriptions(meta *session.Meta, streamServer *rpc.Server, acquire RPCServiceAcquire) *rpcRealtimeSubscriptions {
+func newRPCRealtimeSubscriptions(meta *session.Meta, streamServer flowersec.RPCPeer, acquire RPCServiceAcquire) *rpcRealtimeSubscriptions {
 	ctx, cancel := context.WithCancel(context.Background())
 	endpointID := ""
 	if meta != nil {
@@ -414,9 +415,9 @@ func newRPCRealtimeSubscriptions(meta *session.Meta, streamServer *rpc.Server, a
 	}
 }
 
-func (s *rpcRealtimeSubscriptions) SubscribeSummary() ([]ActiveThreadRun, *rpc.Error) {
+func (s *rpcRealtimeSubscriptions) SubscribeSummary() ([]ActiveThreadRun, *sessionrpc.Error) {
 	if s == nil {
-		return nil, &rpc.Error{Code: 503, Message: "AI service is unavailable"}
+		return nil, &sessionrpc.Error{Code: 503, Message: "AI service is unavailable"}
 	}
 	service, leaseCtx, release, rpcErr := acquireRPCService(s.ctx, s.acquire)
 	if rpcErr != nil {
@@ -426,9 +427,9 @@ func (s *rpcRealtimeSubscriptions) SubscribeSummary() ([]ActiveThreadRun, *rpc.E
 	return activeRuns, bindErr
 }
 
-func (s *rpcRealtimeSubscriptions) SubscribeThread(threadID string) (string, *rpc.Error) {
+func (s *rpcRealtimeSubscriptions) SubscribeThread(threadID string) (string, *sessionrpc.Error) {
 	if s == nil {
-		return "", &rpc.Error{Code: 503, Message: "AI service is unavailable"}
+		return "", &sessionrpc.Error{Code: 503, Message: "AI service is unavailable"}
 	}
 	service, leaseCtx, release, rpcErr := acquireRPCService(s.ctx, s.acquire)
 	if rpcErr != nil {
@@ -444,16 +445,16 @@ func (s *rpcRealtimeSubscriptions) bindAcquired(
 	release func(),
 	addSummary bool,
 	addThreadID string,
-) ([]ActiveThreadRun, string, *rpc.Error) {
+) ([]ActiveThreadRun, string, *sessionrpc.Error) {
 	if release == nil {
-		return nil, "", &rpc.Error{Code: 503, Message: "AI service is unavailable"}
+		return nil, "", &sessionrpc.Error{Code: 503, Message: "AI service is unavailable"}
 	}
 
 	s.mu.Lock()
 	if s.closed || service == nil || leaseCtx == nil || s.streamServer == nil || s.endpointID == "" {
 		s.mu.Unlock()
 		release()
-		return nil, "", &rpc.Error{Code: 503, Message: "AI service is unavailable"}
+		return nil, "", &sessionrpc.Error{Code: 503, Message: "AI service is unavailable"}
 	}
 
 	requestedThreadID := strings.TrimSpace(addThreadID)
@@ -626,18 +627,18 @@ func (s *rpcRealtimeSubscriptions) Close() {
 	})
 }
 
-func acquireRPCService(ctx context.Context, acquire RPCServiceAcquire) (*Service, context.Context, func(), *rpc.Error) {
+func acquireRPCService(ctx context.Context, acquire RPCServiceAcquire) (*Service, context.Context, func(), *sessionrpc.Error) {
 	service, leaseCtx, _, release, err := acquire(ctx)
 	if err != nil || service == nil || leaseCtx == nil || release == nil {
 		if release != nil {
 			release()
 		}
-		return nil, nil, nil, &rpc.Error{Code: 503, Message: "AI service is unavailable"}
+		return nil, nil, nil, &sessionrpc.Error{Code: 503, Message: "AI service is unavailable"}
 	}
 	return service, leaseCtx, release, nil
 }
 
-func toAIRPCError(err error) *rpc.Error {
+func toAIRPCError(err error) *sessionrpc.Error {
 	if err == nil {
 		return nil
 	}
@@ -648,9 +649,9 @@ func toAIRPCError(err error) *rpc.Error {
 
 	switch {
 	case errors.Is(err, ErrNotConfigured):
-		return &rpc.Error{Code: 503, Message: "ai not configured"}
+		return &sessionrpc.Error{Code: 503, Message: "ai not configured"}
 	case errors.Is(err, ErrThreadStopUnavailable):
-		return &rpc.Error{Code: 503, Message: msg}
+		return &sessionrpc.Error{Code: 503, Message: msg}
 	case errors.Is(err, ErrThreadBusy),
 		errors.Is(err, ErrRunChanged),
 		errors.Is(err, ErrWaitingPromptChanged),
@@ -661,16 +662,16 @@ func toAIRPCError(err error) *rpc.Error {
 		errors.Is(err, ErrNoCompactableContext),
 		errors.Is(err, ErrCanonicalTimelineResyncRequired),
 		errors.Is(err, ErrThreadStopPending):
-		return &rpc.Error{Code: 409, Message: msg}
+		return &sessionrpc.Error{Code: 409, Message: msg}
 	}
 
 	s := strings.ToLower(msg)
 	switch {
 	case strings.Contains(s, "thread not found"), strings.Contains(s, "run not found"):
-		return &rpc.Error{Code: 404, Message: msg}
+		return &sessionrpc.Error{Code: 404, Message: msg}
 	case strings.Contains(s, "permission denied"):
-		return &rpc.Error{Code: 403, Message: msg}
+		return &sessionrpc.Error{Code: 403, Message: msg}
 	default:
-		return &rpc.Error{Code: 400, Message: msg}
+		return &sessionrpc.Error{Code: 400, Message: msg}
 	}
 }

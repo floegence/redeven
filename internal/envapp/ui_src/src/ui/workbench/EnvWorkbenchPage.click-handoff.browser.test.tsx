@@ -125,7 +125,7 @@ vi.mock('../pages/EnvContext', () => ({
 vi.mock('@floegence/floe-webapp-protocol', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@floegence/floe-webapp-protocol')>()),
   useProtocol: () => ({
-    client: () => browserProtocolState.client,
+    session: () => browserProtocolState.client,
     status: () => 'connected',
   }),
 }));

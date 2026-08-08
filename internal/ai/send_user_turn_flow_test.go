@@ -7,16 +7,15 @@ import (
 	"errors"
 	"io"
 	"log/slog"
-	"net"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/sessionrpc"
 )
 
 func newSendTurnTestService(t *testing.T) *Service {
@@ -197,20 +196,13 @@ func TestAdmissionRPCDecodersRejectLegacyAndInvalidTurnIdentityWithoutSideEffect
 		t.Fatal(err)
 	}
 
-	serverConn, clientConn := net.Pipe()
-	t.Cleanup(func() { _ = serverConn.Close() })
-	t.Cleanup(func() { _ = clientConn.Close() })
-	router := rpc.NewRouter()
+	router := sessionrpc.NewRouter()
 	svc.RegisterRPC(router, meta, nil)
-	server := rpc.NewServer(serverConn, router)
-	serveCtx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	go func() { _ = server.Serve(serveCtx) }()
-	client := rpc.NewClient(clientConn)
+	client := newTestRPCPeer(router)
 
 	callInvalid := func(typeID uint32, payload string) {
 		t.Helper()
-		_, rpcErr, err := client.Call(ctx, typeID, []byte(payload))
+		_, rpcErr, err := callTestRPC(ctx, client, typeID, []byte(payload))
 		if err != nil {
 			t.Fatalf("Call type_id=%d: %v", typeID, err)
 		}
@@ -240,11 +232,11 @@ func TestAdmissionRPCDecodersRejectLegacyAndInvalidTurnIdentityWithoutSideEffect
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, rpcErr, err := client.Call(ctx, TypeID_AI_SEND_USER_TURN, longPayload)
+	_, rpcErr, err := callTestRPC(ctx, client, TypeID_AI_SEND_USER_TURN, longPayload)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rpcErr == nil || rpcErr.Code != 400 || rpcErr.Message == nil || *rpcErr.Message != LongTextAttachmentRequiredErrorCode {
+	if rpcErr == nil || rpcErr.Code != 400 || rpcErr.Message != LongTextAttachmentRequiredErrorCode {
 		t.Fatalf("long text rpc error=%#v, want code=400 message=%q", rpcErr, LongTextAttachmentRequiredErrorCode)
 	}
 	assertState(0)

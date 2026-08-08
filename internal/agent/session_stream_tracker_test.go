@@ -1,22 +1,22 @@
 package agent
 
 import (
+	"context"
 	"io"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/floegence/flowersec/flowersec-go/endpoint"
-	fsstream "github.com/floegence/flowersec/flowersec-go/stream"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v2"
 )
 
 type trackerTestSession struct {
-	endpoint.Session
-	stream fsstream.Stream
+	flowersec.Session
+	stream flowersec.ByteStream
 }
 
-func (s *trackerTestSession) AcceptStreamHello(int) (string, fsstream.Stream, error) {
-	return "rpc", s.stream, nil
+func (s *trackerTestSession) AcceptStream(context.Context) (flowersec.IncomingStream, error) {
+	return flowersec.IncomingStream{Kind: "rpc", Stream: s.stream}, nil
 }
 
 type trackerTestStream struct {
@@ -29,15 +29,19 @@ func (s *trackerTestStream) Close() error {
 	s.closed.Add(1)
 	return nil
 }
-func (s *trackerTestStream) Reset() error { return s.Close() }
+func (*trackerTestStream) Kind() string                           { return "rpc" }
+func (*trackerTestStream) TerminalError() *flowersec.SessionError { return nil }
+func (*trackerTestStream) CloseWrite() error                      { return nil }
+func (s *trackerTestStream) Reset() error                         { return s.Close() }
 
 func TestDrainingEndpointSessionWaitsForAcceptedStreamClose(t *testing.T) {
 	underlying := &trackerTestStream{}
 	session := &drainingEndpointSession{Session: &trackerTestSession{stream: underlying}}
-	_, stream, err := session.AcceptStreamHello(1024)
+	incoming, err := session.AcceptStream(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
+	stream := incoming.Stream
 	waitDone := make(chan struct{})
 	go func() {
 		session.Wait()

@@ -12,9 +12,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven/internal/processenv"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/sessionrpc"
 	syssvc "github.com/floegence/redeven/internal/sys"
 )
 
@@ -41,21 +41,21 @@ type sysUpgrader struct {
 
 func normalizeTargetVersion(req *syssvc.UpgradeRequest) (string, error) {
 	if req == nil {
-		return "", &rpc.Error{Code: 400, Message: "missing target_version"}
+		return "", &sessionrpc.Error{Code: 400, Message: "missing target_version"}
 	}
 	v := strings.TrimSpace(req.TargetVersion)
 	if v == "" {
-		return "", &rpc.Error{Code: 400, Message: "missing target_version"}
+		return "", &sessionrpc.Error{Code: 400, Message: "missing target_version"}
 	}
 	if !releaseTagPattern.MatchString(v) {
-		return "", &rpc.Error{Code: 400, Message: "invalid target_version (expected release tag like v1.2.3)"}
+		return "", &sessionrpc.Error{Code: 400, Message: "invalid target_version (expected release tag like v1.2.3)"}
 	}
 	return v, nil
 }
 
 func (u *sysUpgrader) StartUpgrade(_ctx context.Context, meta *session.Meta, req *syssvc.UpgradeRequest) (*syssvc.UpgradeResponse, error) {
 	if u == nil || u.a == nil {
-		return nil, &rpc.Error{Code: 500, Message: "internal error"}
+		return nil, &sessionrpc.Error{Code: 500, Message: "internal error"}
 	}
 	a := u.a
 
@@ -75,7 +75,7 @@ func (u *sysUpgrader) StartUpgrade(_ctx context.Context, meta *session.Meta, req
 	plan, err := resolveSelfExecPlan(a.binaryPath, a.localUIBind)
 	if err != nil {
 		a.log.Warn("sys_upgrade: resolve self paths failed", "error", err)
-		return nil, &rpc.Error{Code: 500, Message: "failed to resolve runtime executable path"}
+		return nil, &sessionrpc.Error{Code: 500, Message: "failed to resolve runtime executable path"}
 	}
 
 	if !a.maintenanceOp.CompareAndSwap(maintenanceOpNone, maintenanceOpUpgrade) {

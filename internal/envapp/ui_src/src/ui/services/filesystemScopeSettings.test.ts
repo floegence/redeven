@@ -25,11 +25,8 @@ function buildSettings(scope: FilesystemScope | null): AgentSettingsResponse {
       environment_id: 'env-1',
       agent_instance_id: 'agent-1',
       direct: {
-        ws_url: '',
-        channel_id: '',
-        channel_init_expire_at_unix_s: 0,
-        default_suite: 1,
-        e2ee_psk_set: false,
+        artifact_provisioned: false,
+        expires_at_unix_s: 0,
       },
     },
     runtime: {

@@ -16,6 +16,10 @@ function errorResponse(message: string, status: number, extras?: Record<string, 
   });
 }
 
+function validV2Artifact(): unknown {
+  return JSON.parse('{"v":2,"profile":"flowersec/2","session":{"channel_id":"channel-1","init_expire_at_unix_s":2000000000,"idle_timeout_seconds":60,"establish_timeout_seconds":30,"rekey_prepare_timeout_seconds":10,"rekey_completion_timeout_seconds":30,"max_inbound_streams":64,"e2ee_psk_b64u":"AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA","allowed_suites":[1,2],"default_suite":1,"selected_features":0,"contract_hash_b64u":"ioBJP5DPhg471caMR-huV5I9RlNKY2Pr9fs2GkP8CmA"},"path":{"kind":"direct","rendezvous_group_id":"group-1","listener_audience":"listener-1","routing_token":"routing-token","candidates":[{"id":"w1","carrier":"websocket","url":"wss://example.com/flowersec/v2/direct","wire_profile":"flowersec-direct/2"}]},"scoped":[],"correlation":{"v":2,"tags":[]}}');
+}
+
 describe('controlplaneApi local access flow', () => {
   beforeEach(() => {
     vi.resetModules();
@@ -219,17 +223,8 @@ describe('controlplaneApi local access flow', () => {
       expect(new Headers(init?.headers).get(auth.getLocalAccessResumeHeaderName())).toBe('resume123');
       return jsonResponse({
         plugin_session_credential: 'plugin-generation-secret',
-        connect_artifact: {
-          v: 1,
-          transport: 'direct',
-          direct_info: {
-            ws_url: 'ws://localhost/_redeven_direct/ws',
-            channel_id: 'ch_local',
-            e2ee_psk_b64u: 'secret',
-            channel_init_expire_at_unix_s: 1,
-            default_suite: 1,
-          },
-        },
+		channel_id: 'ch_local',
+		connect_artifact: validV2Artifact(),
       });
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -237,12 +232,7 @@ describe('controlplaneApi local access flow', () => {
     const mod = await import('./controlplaneApi');
     const out = await mod.mintLocalDirectConnectArtifact({ signal: controller.signal });
 
-    expect(out.transport).toBe('direct');
-    if (out.transport !== 'direct') {
-      throw new Error('Expected direct connect artifact');
-    }
-    expect(out.direct_info.channel_id).toBe('ch_local');
-    expect(String(out.direct_info.ws_url)).toBe('ws://localhost/_redeven_direct/ws?redeven_access_resume=resume123');
+	expect(out.kind).toBe('lease');
     const pluginCredential = await import('./pluginSessionCredential');
     expect(pluginCredential.readPluginSessionCredential()).toBe('');
     expect(pluginCredential.activatePluginSessionCredential('ch_local')).toBe(true);
@@ -370,7 +360,7 @@ describe('controlplaneApi local access flow', () => {
 
   it('redeems entry tickets via the canonical connect artifact contract with explicit loopback HTTP permission', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      expect(String(input)).toBe('/v1/connect/artifact/entry');
+	  expect(String(input)).toMatch(/\/v1\/connect\/artifact\/entry$/u);
       expect(init?.method).toBe('POST');
       expect(init?.credentials).toBe('omit');
       expect(init?.redirect).toBe('error');
@@ -384,21 +374,7 @@ describe('controlplaneApi local access flow', () => {
       });
       return new Response(
         JSON.stringify({
-          connect_artifact: {
-            v: 1,
-            transport: 'tunnel',
-            tunnel_grant: {
-              tunnel_url: 'wss://example.com/ws',
-              channel_id: 'ch_remote',
-              token: 'token',
-              role: 1,
-              idle_timeout_seconds: 10,
-              channel_init_expire_at_unix_s: 1,
-              e2ee_psk_b64u: 'secret',
-              allowed_suites: [1],
-              default_suite: 1,
-            },
-          },
+		  connect_artifact: validV2Artifact(),
         }),
         {
           status: 200,
@@ -416,11 +392,7 @@ describe('controlplaneApi local access flow', () => {
       allowLoopbackHTTP: true,
     });
 
-    expect(out.transport).toBe('tunnel');
-    if (out.transport !== 'tunnel') {
-      throw new Error('Expected tunnel connect artifact');
-    }
-    expect(out.tunnel_grant.channel_id).toBe('ch_remote');
+	expect(out.kind).toBe('lease');
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

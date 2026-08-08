@@ -1,8 +1,6 @@
 package session
 
-import (
-	controlv1 "github.com/floegence/flowersec/flowersec-go/gen/flowersec/controlplane/v1"
-)
+import "encoding/json"
 
 // Meta is the authoritative session metadata delivered by the Redeven control plane over the direct control channel.
 //
@@ -38,6 +36,14 @@ func AllowsProcessLaunch(meta *Meta) bool {
 // - grant_server: tunnel server grant for the agent
 // - session_meta: immutable permissions and routing info
 type GrantServerNotify struct {
-	GrantServer *controlv1.ChannelInitGrant `json:"grant_server"`
-	SessionMeta *Meta                       `json:"session_meta"`
+	GrantServer *ChannelInitGrant `json:"grant_server"`
+	SessionMeta *Meta             `json:"session_meta"`
+}
+
+// ChannelInitGrant is the Redeven control-plane notification DTO. It is
+// intentionally limited to the published Flowersec v2 artifact grant fields;
+// transport/session implementation details stay inside Flowersec.
+type ChannelInitGrant struct {
+	ArtifactJSON json.RawMessage `json:"artifact_json"`
+	ChannelID    string          `json:"channel_id"`
 }

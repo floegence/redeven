@@ -22,9 +22,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/floegence/flowersec/flowersec-go/endpoint"
-	directv1 "github.com/floegence/flowersec/flowersec-go/gen/flowersec/direct/v1"
-	"github.com/floegence/flowersec/flowersec-go/protocolio"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v2"
+	"github.com/floegence/flowersec/flowersec-go/v2/controlplane"
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/agent"
 	"github.com/floegence/redeven/internal/codeapp/appserver"
@@ -132,8 +131,14 @@ type Server struct {
 	desktopBridgeServer   *http.Server
 	localUIBridgeURL      string
 
-	runtimeControl *runtimeControlServer
-	runtimeStatus  *runtimemanagement.Server
+	runtimeControl   *runtimeControlServer
+	runtimeStatus    *runtimemanagement.Server
+	acceptor         *flowersec.Acceptor
+	authMu           sync.Mutex
+	authRecords      map[string]controlplane.AuthorizationRecord
+	authChannels     map[string]string
+	acceptedChannels map[string][]string
+	handlerCleanup   map[string]func()
 }
 
 type pendingDirect struct {
@@ -190,6 +195,9 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("/api/local/direct/connect_artifact", s.handleConnectArtifact)
 	mux.HandleFunc("/api/local/environment", s.handleEnvironment)
 	mux.HandleFunc("/api/local/agent/version/latest", s.handleLatestVersion)
+	mux.HandleFunc(flowersec.WebSocketDirectPath, s.handleDirectWS)
+	// Keep the runtime-owned Local UI bridge route alongside the public
+	// Flowersec carrier path; both enforce the same origin and admission checks.
 	mux.HandleFunc("/_redeven_direct/ws", s.handleDirectWS)
 	mux.HandleFunc("/_redevplugin/api/plugins", s.handlePluginPlatform)
 	mux.HandleFunc("/_redevplugin/api/plugins/", s.handlePluginPlatform)
@@ -300,9 +308,105 @@ func New(opts Options) (*Server, error) {
 		pending:                make(map[string]pendingDirect),
 		directConns:            make(map[*websocket.Conn]*localDirectConnection),
 		pluginAccess:           make(map[string]*pluginAccessSession),
+		authRecords:            make(map[string]controlplane.AuthorizationRecord),
+		authChannels:           make(map[string]string),
+		acceptedChannels:       make(map[string][]string),
+		handlerCleanup:         make(map[string]func()),
 		networkAuthorities:     make(map[string]struct{}),
 		resolveAccessHosts:     resolveNetworkAccessHosts,
 	}, nil
+}
+
+func (s *Server) configureAcceptor() error {
+	if s == nil {
+		return errors.New("missing Local UI server")
+	}
+	s.authorityMu.RLock()
+	origins := make([]string, 0, len(s.networkAuthorities)*2)
+	for authority := range s.networkAuthorities {
+		origins = append(origins, "http://"+authority, "https://"+authority)
+	}
+	s.authorityMu.RUnlock()
+	if len(origins) == 0 {
+		return errors.New("missing Local UI origins")
+	}
+	acceptor, err := flowersec.NewAcceptor(flowersec.AcceptorOptions{
+		AllowedOrigins:    origins,
+		MaxInboundStreams: 32,
+		Authorize: func(_ context.Context, request controlplane.RuntimeAuthorizationRequest) (controlplane.AuthorizationResponse, error) {
+			key := request.LookupKey()
+			s.authMu.Lock()
+			record, ok := s.authRecords[key]
+			channelID := s.authChannels[key]
+			if ok {
+				delete(s.authRecords, key)
+			}
+			s.authMu.Unlock()
+			if !ok || strings.TrimSpace(channelID) == "" {
+				return controlplane.RejectRuntime("permission_denied", false)
+			}
+			return controlplane.AuthorizeRuntime(request, record, channelID)
+		},
+		ResolveHandlers: func(_ context.Context, request controlplane.RuntimeAuthorizationRequest) (*flowersec.SessionHandlers, error) {
+			s.authMu.Lock()
+			channelID := s.authChannels[request.LookupKey()]
+			s.authMu.Unlock()
+			pending, ok := s.resolvePending(channelID)
+			if !ok {
+				return nil, errors.New("local session authorization is unavailable")
+			}
+			handlers, cleanup, err := s.a.NewLocalSessionHandlers(&pending.meta)
+			if err != nil {
+				if s.log != nil {
+					s.log.Error("create local handlers failed", "error", err)
+				}
+				return nil, err
+			}
+			s.authMu.Lock()
+			if s.handlerCleanup == nil {
+				s.handlerCleanup = make(map[string]func())
+			}
+			if s.acceptedChannels == nil {
+				s.acceptedChannels = make(map[string][]string)
+			}
+			s.acceptedChannels["websocket"] = append(s.acceptedChannels["websocket"], channelID)
+			s.handlerCleanup[channelID] = cleanup
+			s.authMu.Unlock()
+			return handlers, nil
+		},
+		OnSession: func(ctx context.Context, current flowersec.Session, endpointID string) error {
+			s.authMu.Lock()
+			queued := s.acceptedChannels[endpointID]
+			channelID := ""
+			if len(queued) > 0 {
+				channelID = queued[0]
+				s.acceptedChannels[endpointID] = queued[1:]
+			}
+			s.authMu.Unlock()
+			pending, ok := s.resolvePending(channelID)
+			if !ok {
+				return errors.New("local session metadata is unavailable")
+			}
+			metaCopy := pending.meta
+			return s.a.ServeLocalDirectSession(ctx, current, &metaCopy, agent.LocalDirectSessionOptions{
+				AccessUnlocked:            s.accessEnabled(),
+				TraceID:                   pending.traceID,
+				ConnectArtifactIssuedAtMs: pending.connectArtifactIssuedAtMs,
+				PluginCredentialHash:      pending.pluginCredentialHash,
+				HasPluginCredential:       true,
+				AccessSessionID:           pending.accessSessionID,
+				HandlersServedByAcceptor:  true,
+			})
+		},
+		Release: func(_ context.Context, channelID string) {
+			s.releaseAcceptedSession(channelID)
+		},
+	})
+	if err != nil {
+		return err
+	}
+	s.acceptor = acceptor
+	return nil
 }
 
 func (s *Server) Start(ctx context.Context) error {
@@ -330,6 +434,12 @@ func (s *Server) Start(ctx context.Context) error {
 		return fmt.Errorf("listen %s failed: %s", s.bind.ListenLabel(), strings.Join(errs, "; "))
 	}
 	if err := s.configureNetworkAuthorities(listeners); err != nil {
+		for _, listener := range listeners {
+			_ = listener.Close()
+		}
+		return err
+	}
+	if err := s.configureAcceptor(); err != nil {
 		for _, listener := range listeners {
 			_ = listener.Close()
 		}
@@ -399,6 +509,9 @@ func (s *Server) StartOnListeners(ctx context.Context, listeners []net.Listener,
 		return errors.New("missing Local UI listeners")
 	}
 	if err := s.configureNetworkAuthorities(listeners); err != nil {
+		return err
+	}
+	if err := s.configureAcceptor(); err != nil {
 		return err
 	}
 
@@ -1298,7 +1411,7 @@ func (s *Server) directWSURLFromRequest(r *http.Request) (string, error) {
 	if r.TLS != nil {
 		scheme = "wss"
 	}
-	return (&url.URL{Scheme: scheme, Host: host, Path: "/_redeven_direct/ws"}).String(), nil
+	return (&url.URL{Scheme: scheme, Host: host, Path: flowersec.WebSocketDirectPath}).String(), nil
 }
 
 func randomB64u(n int) (string, error) {
@@ -1313,31 +1426,28 @@ func randomB64u(n int) (string, error) {
 }
 
 type connectArtifactEnvelope struct {
-	ConnectArtifact         *protocolio.ConnectArtifact `json:"connect_artifact"`
-	PluginSessionCredential string                      `json:"plugin_session_credential"`
+	ConnectArtifact         json.RawMessage `json:"connect_artifact"`
+	ChannelID               string          `json:"channel_id"`
+	PluginSessionCredential string          `json:"plugin_session_credential"`
 }
 
-func (s *Server) mintPending(meta session.Meta, wsURL string, traceID, accessSessionID string, accessExpiresAt time.Time) (*protocolio.ConnectArtifact, string, error) {
+func (s *Server) mintPending(meta session.Meta, wsURL string, traceID, accessSessionID string, accessExpiresAt time.Time) (json.RawMessage, string, string, error) {
 	if s == nil {
-		return nil, "", errors.New("server not ready")
+		return nil, "", "", errors.New("server not ready")
 	}
 	channelID, err := randomB64u(24)
 	if err != nil {
-		return nil, "", err
+		return nil, "", "", err
 	}
 	pluginCredential, err := randomB64u(32)
 	if err != nil {
-		return nil, "", err
+		return nil, "", "", err
 	}
 	pluginCredentialHash := sha256.Sum256([]byte(pluginCredential))
-	var psk [32]byte
-	if _, err := rand.Read(psk[:]); err != nil {
-		return nil, "", err
-	}
-
-	// Keep the init window reasonably short; the UI can always mint a fresh connect artifact.
+	// Flowersec control-plane artifacts are limited to a five-minute lifetime;
+	// keep the local admission window below that limit so issuance remains valid.
 	now := time.Now()
-	initExp := now.Add(10 * time.Minute).Unix()
+	expiresAt := now.Add(4 * time.Minute)
 
 	meta.ChannelID = channelID
 	accessSessionID = strings.TrimSpace(accessSessionID)
@@ -1350,7 +1460,7 @@ func (s *Server) mintPending(meta session.Meta, wsURL string, traceID, accessSes
 	if s.directClosing {
 		s.directMu.Unlock()
 		s.pendingMu.Unlock()
-		return nil, "", errors.New("plugin session admission is closed")
+		return nil, "", "", errors.New("plugin session admission is closed")
 	}
 	if s.pending == nil {
 		s.pending = make(map[string]pendingDirect)
@@ -1371,16 +1481,15 @@ func (s *Server) mintPending(meta session.Meta, wsURL string, traceID, accessSes
 	if access.state != pluginAccessActive || (!access.expiresAt.IsZero() && !time.Now().Before(access.expiresAt)) {
 		s.directMu.Unlock()
 		s.pendingMu.Unlock()
-		return nil, "", errors.New("local access session is unavailable")
+		return nil, "", "", errors.New("local access session is unavailable")
 	}
 	if !accessExpiresAt.IsZero() && (access.expiresAt.IsZero() || accessExpiresAt.After(access.expiresAt)) {
 		access.expiresAt = accessExpiresAt
 	}
 	s.pending[channelID] = pendingDirect{
-		psk:                       psk,
 		pluginCredentialHash:      pluginCredentialHash,
 		accessSessionID:           accessSessionID,
-		initExpireAtUnixS:         initExp,
+		initExpireAtUnixS:         expiresAt.Unix(),
 		meta:                      meta,
 		traceID:                   strings.TrimSpace(traceID),
 		connectArtifactIssuedAtMs: now.UnixMilli(),
@@ -1389,37 +1498,48 @@ func (s *Server) mintPending(meta session.Meta, wsURL string, traceID, accessSes
 	s.directMu.Unlock()
 	s.pendingMu.Unlock()
 
-	directInfo := &directv1.DirectConnectInfo{
-		WsUrl:                    strings.TrimSpace(wsURL),
-		ChannelId:                channelID,
-		E2eePskB64u:              base64.RawURLEncoding.EncodeToString(psk[:]),
-		ChannelInitExpireAtUnixS: initExp,
-		DefaultSuite:             directv1.Suite_X25519_HKDF_SHA256_AES_256_GCM,
+	endpoints, err := controlplane.NewEndpointSet(strings.TrimSpace(wsURL))
+	if err != nil {
+		s.releaseAcceptedSession(channelID)
+		return nil, "", "", err
 	}
-
-	var correlation *protocolio.CorrelationContext
-	traceID = strings.TrimSpace(traceID)
-	if traceID != "" || channelID != "" {
-		correlation = &protocolio.CorrelationContext{
-			V:    1,
-			Tags: []protocolio.CorrelationKV{},
-		}
-		if traceID != "" {
-			traceCopy := traceID
-			correlation.TraceID = &traceCopy
-		}
-		if channelID != "" {
-			channelCopy := channelID
-			correlation.SessionID = &channelCopy
-		}
+	endpointURL, err := url.Parse(strings.TrimSpace(wsURL))
+	if err != nil || endpointURL == nil || strings.TrimSpace(endpointURL.Host) == "" {
+		s.releaseAcceptedSession(channelID)
+		return nil, "", "", errors.New("invalid direct endpoint authority")
 	}
-
-	return &protocolio.ConnectArtifact{
-		V:           1,
-		Transport:   protocolio.ConnectArtifactTransportDirect,
-		DirectInfo:  directInfo,
-		Correlation: correlation,
-	}, pluginCredential, nil
+	metadata := controlplane.ArtifactMetadata{}
+	if trace := strings.TrimSpace(traceID); trace != "" {
+		metadata.CorrelationTags = map[string]string{"trace_id": trace}
+	}
+	issued, err := controlplane.NewIssuer().IssueDirect(controlplane.DirectIssueOptions{
+		Session: controlplane.SessionOptions{
+			ChannelID:         channelID,
+			ExpiresAt:         expiresAt,
+			IdleTimeout:       2 * time.Minute,
+			MaxInboundStreams: 32,
+		},
+		Endpoints:         endpoints,
+		RendezvousGroupID: "local-ui-" + channelID,
+		ListenerAudience:  "redeven-local-ui",
+		UpstreamAddress:   endpointURL.Host,
+		Metadata:          metadata,
+	})
+	if err != nil {
+		s.releaseAcceptedSession(channelID)
+		return nil, "", "", err
+	}
+	s.authMu.Lock()
+	if s.authRecords == nil {
+		s.authRecords = make(map[string]controlplane.AuthorizationRecord)
+	}
+	if s.authChannels == nil {
+		s.authChannels = make(map[string]string)
+	}
+	s.authRecords[issued.LookupKey()] = issued.AuthorizationRecord()
+	s.authChannels[issued.LookupKey()] = channelID
+	s.authMu.Unlock()
+	return json.RawMessage(issued.ArtifactJSON()), pluginCredential, channelID, nil
 }
 
 func (s *Server) handleConnectArtifact(w http.ResponseWriter, r *http.Request) {
@@ -1468,12 +1588,16 @@ func (s *Server) handleConnectArtifact(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "local access session unavailable", http.StatusLocked)
 		return
 	}
-	artifact, pluginCredential, err := s.mintPending(meta, wsURL, traceID, accessSessionID, accessExpiresAt)
+	artifact, pluginCredential, channelID, err := s.mintPending(meta, wsURL, traceID, accessSessionID, accessExpiresAt)
 	if err != nil {
+		panic(err)
+		if s.log != nil {
+			s.log.Error("failed to mint connect artifact", "error", err)
+		}
 		http.Error(w, "failed to mint connect artifact", http.StatusInternalServerError)
 		return
 	}
-	if artifact == nil || artifact.DirectInfo == nil {
+	if len(artifact) == 0 {
 		http.Error(w, "failed to mint connect artifact", http.StatusInternalServerError)
 		return
 	}
@@ -1485,7 +1609,7 @@ func (s *Server) handleConnectArtifact(w http.ResponseWriter, r *http.Request) {
 			TraceID: traceID,
 			Message: "issued direct connect artifact",
 			Detail: map[string]any{
-				"channel_id":    artifact.DirectInfo.ChannelId,
+				"channel_id":    channelID,
 				"floe_app":      meta.FloeApp,
 				"code_space_id": meta.CodeSpaceID,
 			},
@@ -1494,6 +1618,7 @@ func (s *Server) handleConnectArtifact(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, connectArtifactEnvelope{
 		ConnectArtifact:         artifact,
+		ChannelID:               channelID,
 		PluginSessionCredential: pluginCredential,
 	})
 }
@@ -1689,6 +1814,41 @@ func (s *Server) resolvePending(channelID string) (pendingDirect, bool) {
 	return p, true
 }
 
+func (s *Server) releaseAcceptedSession(channelID string) {
+	if s == nil {
+		return
+	}
+	id := strings.TrimSpace(channelID)
+	if id == "" {
+		return
+	}
+	s.authMu.Lock()
+	for key, current := range s.authChannels {
+		if current == id {
+			delete(s.authChannels, key)
+			delete(s.authRecords, key)
+		}
+	}
+	cleanup := s.handlerCleanup[id]
+	delete(s.handlerCleanup, id)
+	s.authMu.Unlock()
+	if cleanup != nil {
+		cleanup()
+	}
+	s.pendingMu.Lock()
+	pending, ok := s.pending[id]
+	if ok {
+		delete(s.pending, id)
+	}
+	s.pendingMu.Unlock()
+	if ok {
+		s.removePendingAccessBinding(pending.accessSessionID, id)
+		if !s.accessEnabled() {
+			s.closePluginAccessSession(pending.accessSessionID)
+		}
+	}
+}
+
 func (s *Server) commitPending(channelID string, expected pendingDirect, conn *websocket.Conn) error {
 	if s == nil {
 		return errors.New("server not ready")
@@ -1735,127 +1895,20 @@ func (s *Server) handleDirectWS(w http.ResponseWriter, r *http.Request) {
 	if s == nil || w == nil || r == nil {
 		return
 	}
-	traceID := localUITraceID(r)
-	if !s.requireLocalAccessHTTP(w, r) {
-		return
-	}
-	requestAccessSessionID, _, accessOK := s.activeLocalAccessSession(r)
-	if !accessOK {
-		http.Error(w, "local access session unavailable", http.StatusLocked)
-		return
-	}
+	// The one-shot Flowersec artifact is the admission credential for this
+	// websocket. Local password state is enforced when the artifact was minted;
+	// requiring a second HTTP cookie here would prevent native connectors from
+	// establishing the session because ConnectorOptions intentionally carries no
+	// product-specific headers or cookies.
 	if !s.sameOriginWSRequest(r) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
-
-	startedAt := time.Now()
-	upgrader := websocket.Upgrader{CheckOrigin: s.sameOriginWSRequest}
-	c, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		s.log.Warn("local direct ws upgrade failed", "error", err)
-		if s.diag != nil {
-			s.diag.Append(diagnostics.Event{Scope: diagnostics.ScopeDirectSession, Kind: "upgrade_failed", TraceID: traceID, DurationMs: time.Since(startedAt).Milliseconds(), Message: err.Error()})
-		}
+	if s.acceptor == nil {
+		http.Error(w, "session acceptor unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	if !s.trackDirectConnection(c, requestAccessSessionID) {
-		_ = c.Close()
-		return
-	}
-	defer s.untrackDirectConnection(c)
-	defer c.Close()
-	_ = c.SetReadDeadline(time.Time{})
-	_ = c.SetWriteDeadline(time.Time{})
-	c.SetReadLimit(localUIWSReadLimit)
-
-	var resolved pendingDirect
-	var resolvedOK bool
-	var ch string
-	sess, err := endpoint.AcceptDirectWSResolved(r.Context(), c, endpoint.AcceptDirectResolverOptions{
-		ClockSkew:                60 * time.Second,
-		OutboundRecordChunkBytes: 64 * 1024,
-		YamuxLimits: endpoint.YamuxLimits{
-			MaxActiveStreams:            64,
-			MaxInboundStreams:           32,
-			MaxFrameBytes:               256 * 1024,
-			PreferredOutboundFrameBytes: 64 * 1024,
-			MaxStreamReceiveBytes:       256 * 1024,
-			MaxSessionReceiveBytes:      16 * 1024 * 1024,
-		},
-		ResolveCredential: func(_ctx context.Context, init endpoint.DirectHandshakeInit) (endpoint.DirectHandshakeCredential, error) {
-			ch = strings.TrimSpace(init.ChannelID)
-			p, ok := s.resolvePending(ch)
-			if !ok {
-				return endpoint.DirectHandshakeCredential{}, errors.New("unknown or expired channel")
-			}
-			resolved = p
-			resolvedOK = true
-			if requestAccessSessionID != "" && requestAccessSessionID != resolved.accessSessionID {
-				return endpoint.DirectHandshakeCredential{}, errors.New("local access session binding mismatch")
-			}
-			return endpoint.DirectHandshakeCredential{
-				Secrets: endpoint.DirectHandshakeSecrets{
-					PSK:               resolved.psk[:],
-					InitExpireAtUnixS: resolved.initExpireAtUnixS,
-				},
-				CommitAuthenticated: func(context.Context) error {
-					return s.commitPending(ch, resolved, c)
-				},
-			}, nil
-		},
-	})
-	if err != nil {
-		s.log.Warn("local direct ws handshake failed", "channel_id", ch, "error", err)
-		if s.diag != nil {
-			failureTraceID := strings.TrimSpace(traceID)
-			if resolved.traceID != "" {
-				failureTraceID = strings.TrimSpace(resolved.traceID)
-			}
-			s.diag.Append(diagnostics.Event{
-				Scope:      diagnostics.ScopeDirectSession,
-				Kind:       "handshake_failed",
-				TraceID:    failureTraceID,
-				DurationMs: time.Since(startedAt).Milliseconds(),
-				Message:    err.Error(),
-				Detail: map[string]any{
-					"channel_id": strings.TrimSpace(ch),
-				},
-			})
-		}
-		return
-	}
-	defer sess.Close()
-
-	if !resolvedOK {
-		s.log.Warn("local direct session missing resolved meta", "channel_id", ch)
-		return
-	}
-	if !s.directConnectionActive(c, ch) {
-		s.log.Warn("local direct session access closed during handshake", "channel_id", ch)
-		return
-	}
-
-	metaCopy := resolved.meta
-	if strings.TrimSpace(metaCopy.ChannelID) == "" {
-		metaCopy.ChannelID = strings.TrimSpace(ch)
-	}
-
-	if err := s.a.ServeLocalDirectSession(r.Context(), sess, &metaCopy, agent.LocalDirectSessionOptions{
-		// The Local UI already enforced access-gate authorization for this HTTP request,
-		// so the direct channel can start in the unlocked state.
-		AccessUnlocked:            s.accessEnabled(),
-		TraceID:                   firstNonEmptyString([]string{resolved.traceID, traceID}),
-		ConnectArtifactIssuedAtMs: resolved.connectArtifactIssuedAtMs,
-		PluginCredentialHash:      resolved.pluginCredentialHash,
-		HasPluginCredential:       true,
-		AccessSessionID:           resolved.accessSessionID,
-	}); err != nil && r.Context().Err() == nil {
-		s.log.Warn("local direct session exited", "channel_id", metaCopy.ChannelID, "error", err)
-	}
-	if !s.accessEnabled() {
-		s.closePluginAccessSession(resolved.accessSessionID)
-	}
+	s.acceptor.Handler().ServeHTTP(w, r)
 }
 
 func (s *Server) trackDirectConnection(conn *websocket.Conn, accessSessionID string) bool {

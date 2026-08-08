@@ -1,7 +1,6 @@
 // Shared streaming file reader utilities used by preview and downloads.
 
-import type { Client } from '@floegence/flowersec-core';
-import { openJsonFrameChannel, readNBytes, type JsonFrameChannel } from '@floegence/flowersec-core/streamio';
+import type { ByteStream, Session } from '@floegence/flowersec-core';
 import { redevenV1StreamKinds } from '../protocol/redeven_v1/streamKinds';
 
 export type FsReadFileStreamMeta = {
@@ -21,6 +20,68 @@ export type FsReadFileStreamRespMeta = {
   };
 };
 
+export type ReadFileStreamChannel = Readonly<{
+  stream: ByteStream;
+  reader: Readonly<{ readExactly(length: number): Promise<Uint8Array> }>;
+  writeFrame(value: unknown): Promise<void>;
+  readFrame<T>(options: Readonly<{ assert(value: unknown): T }>): Promise<T>;
+  close(): Promise<void>;
+}>;
+
+class BufferedByteStreamReader {
+  private buffered = new Uint8Array(0);
+
+  constructor(private readonly stream: ByteStream) {}
+
+  private append(chunk: Uint8Array): void {
+    const next = new Uint8Array(this.buffered.byteLength + chunk.byteLength);
+    next.set(this.buffered);
+    next.set(chunk, this.buffered.byteLength);
+    this.buffered = next;
+  }
+
+  async readExactly(length: number): Promise<Uint8Array> {
+    const wanted = Math.max(0, Math.floor(length));
+    while (this.buffered.byteLength < wanted) {
+      const chunk = await this.stream.read();
+      if (chunk === null) throw new Error('Unexpected end of file stream');
+      this.append(chunk);
+    }
+    const result = this.buffered.slice(0, wanted);
+    this.buffered = this.buffered.slice(wanted);
+    return result;
+  }
+
+  async readJSONLine(maxBytes = 1 << 20): Promise<unknown> {
+    for (;;) {
+      const newline = this.buffered.indexOf(0x0a);
+      if (newline >= 0) {
+        const encoded = this.buffered.slice(0, newline);
+        this.buffered = this.buffered.slice(newline + 1);
+        return JSON.parse(new TextDecoder().decode(encoded));
+      }
+      if (this.buffered.byteLength >= maxBytes) throw new Error('File stream metadata is too large');
+      const chunk = await this.stream.read();
+      if (chunk === null) throw new Error('Unexpected end of file stream metadata');
+      this.append(chunk);
+    }
+  }
+}
+
+async function openReadFileChannel(session: Session): Promise<ReadFileStreamChannel> {
+  const stream = await session.openStream(redevenV1StreamKinds.fs.readFile);
+  const reader = new BufferedByteStreamReader(stream);
+  return {
+    stream,
+    reader,
+    writeFrame: async (value) => {
+      await stream.write(new TextEncoder().encode(`${JSON.stringify(value)}\n`));
+    },
+    readFrame: async <T>(options: Readonly<{ assert(value: unknown): T }>) => options.assert(await reader.readJSONLine()),
+    close: () => stream.close(),
+  };
+}
+
 export function normalizeRespMeta(v: unknown): FsReadFileStreamRespMeta {
   if (v == null || typeof v !== 'object') throw new Error('Invalid response');
   const o = v as Record<string, unknown>;
@@ -39,7 +100,7 @@ export function normalizeRespMeta(v: unknown): FsReadFileStreamRespMeta {
   return { ok, file_size: fileSize, content_len: contentLen, truncated, error };
 }
 
-async function closeChannelBestEffort(channel: JsonFrameChannel): Promise<void> {
+async function closeChannelBestEffort(channel: ReadFileStreamChannel): Promise<void> {
   try {
     await channel.close();
   } catch {
@@ -53,12 +114,12 @@ function cloneToOwnedBytes(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
 }
 
 export async function openReadFileStreamChannel(params: {
-  client: Client;
+  client: Session;
   path: string;
   offset?: number;
   maxBytes?: number;
-}): Promise<{ channel: JsonFrameChannel; meta: FsReadFileStreamRespMeta }> {
-  const channel = await openJsonFrameChannel(params.client, redevenV1StreamKinds.fs.readFile);
+}): Promise<{ channel: ReadFileStreamChannel; meta: FsReadFileStreamRespMeta }> {
+  const channel = await openReadFileChannel(params.client);
   try {
     const req: FsReadFileStreamMeta = {
       path: params.path,
@@ -82,7 +143,7 @@ export async function openReadFileStreamChannel(params: {
 }
 
 export async function readFileBytesOnce(params: {
-  client: Client;
+  client: Session;
   path: string;
   offset?: number;
   maxBytes?: number;
@@ -90,7 +151,7 @@ export async function readFileBytesOnce(params: {
   const { channel, meta } = await openReadFileStreamChannel(params);
   try {
     const want = Math.max(0, Math.floor(Number(meta.content_len ?? 0)));
-    const bytes = cloneToOwnedBytes(await readNBytes(channel.reader, want));
+    const bytes = cloneToOwnedBytes(await channel.reader.readExactly(want));
     return { bytes, meta };
   } finally {
     await closeChannelBestEffort(channel);
@@ -98,7 +159,7 @@ export async function readFileBytesOnce(params: {
 }
 
 type StreamFileBytesParams = {
-  client: Client;
+  client: Session;
   path: string;
   offset?: number;
   maxBytes?: number;
@@ -123,7 +184,7 @@ export async function openFileByteStream(params: StreamFileBytesParams): Promise
         }
         const remaining = want - bytesRead;
         const nextSize = Math.min(chunkSize, remaining);
-        const bytes = cloneToOwnedBytes(await readNBytes(channel.reader, nextSize));
+        const bytes = cloneToOwnedBytes(await channel.reader.readExactly(nextSize));
         bytesRead += bytes.byteLength;
         yield { bytes, meta, bytesRead };
       }
@@ -131,7 +192,7 @@ export async function openFileByteStream(params: StreamFileBytesParams): Promise
     } finally {
       if (params.signal?.aborted) {
         try {
-          channel.stream.reset(new DOMException('Download canceled.', 'AbortError'));
+		  void channel.stream.reset();
         } catch {
         }
       }

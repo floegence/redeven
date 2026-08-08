@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const acquire = vi.fn();
 const createControlplaneArtifactSource = vi.fn(() => ({ kind: 'refreshable', acquire }));
 
-vi.mock('@floegence/floe-webapp-boot', () => ({
+vi.mock('@floegence/floe-webapp-boot/artifact-source', () => ({
   createControlplaneArtifactSource,
 }));
 
@@ -22,22 +22,8 @@ describe('controlplaneApi controlplane helper usage', () => {
   });
 
   it('redeems entry tickets through the stable controlplane module', async () => {
-    const artifact = {
-      v: 1,
-      transport: 'tunnel',
-      tunnel_grant: {
-        tunnel_url: 'wss://example.com/ws',
-        channel_id: 'ch_remote',
-        token: 'token',
-        role: 1,
-        idle_timeout_seconds: 10,
-        channel_init_expire_at_unix_s: 1,
-        e2ee_psk_b64u: 'secret',
-        allowed_suites: [1],
-        default_suite: 1,
-      },
-    } as const;
-    acquire.mockResolvedValue(artifact);
+    const result = { kind: 'failure', code: 'test', disposition: { kind: 'terminal' } } as const;
+    acquire.mockResolvedValue(result);
     const controller = new AbortController();
 
     const mod = await import('./controlplaneApi');
@@ -49,23 +35,23 @@ describe('controlplaneApi controlplane helper usage', () => {
       signal: controller.signal,
     });
 
-    expect(out).toBe(artifact);
+    expect(out).toBe(result);
     expect(createControlplaneArtifactSource).toHaveBeenCalledWith({
+      baseUrl: 'http://localhost:3000',
       endpointId: 'env_demo',
       entryTicket: 'ticket-1',
-      credentials: 'omit',
       payload: {
         floe_app: 'com.floegence.redeven.agent',
       },
+      correlation: { traceId: 'trace-1' },
     });
     expect(acquire).toHaveBeenCalledWith({
-      traceId: 'trace-1',
       signal: controller.signal,
     });
   });
 
   it('forwards loopback HTTP permission only when the caller selects it', async () => {
-    acquire.mockResolvedValue({ transport: 'tunnel' });
+    acquire.mockResolvedValue({ kind: 'failure', code: 'test', disposition: { kind: 'terminal' } });
 
     const mod = await import('./controlplaneApi');
     await mod.connectArtifactEntry({
@@ -76,9 +62,9 @@ describe('controlplaneApi controlplane helper usage', () => {
     });
 
     expect(createControlplaneArtifactSource).toHaveBeenCalledWith({
+      baseUrl: 'http://localhost:3000',
       endpointId: 'env_demo',
       entryTicket: 'ticket-1',
-      credentials: 'omit',
       payload: {
         floe_app: 'com.floegence.redeven.agent',
       },

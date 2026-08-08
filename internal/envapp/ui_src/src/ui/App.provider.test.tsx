@@ -63,7 +63,7 @@ vi.mock('@floegence/floe-webapp-protocol', async () => {
 
   return {
     ProtocolProvider: (props: any) => (
-      <ProtocolContext.Provider value={{ client: () => client }}>
+      <ProtocolContext.Provider value={{ session: () => client }}>
         {props.children}
       </ProtocolContext.Provider>
     ),

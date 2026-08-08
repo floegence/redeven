@@ -17,7 +17,7 @@ import (
 	"time"
 
 	flruntime "github.com/floegence/floret/v3/runtime"
-	"github.com/floegence/flowersec/flowersec-go/rpc"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v2"
 	contextadapter "github.com/floegence/redeven/internal/ai/context/adapter"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 	contextstore "github.com/floegence/redeven/internal/ai/context/store"
@@ -135,13 +135,13 @@ type Service struct {
 
 	threadMgr *threadManager
 
-	realtimeWriters map[*rpc.Server]*aiSinkWriter
+	realtimeWriters map[flowersec.RPCPeer]*aiSinkWriter
 
-	realtimeSummaryByEndpoint    map[string]map[*rpc.Server]struct{}
-	realtimeSummaryEndpointBySRV map[*rpc.Server]string
+	realtimeSummaryByEndpoint    map[string]map[flowersec.RPCPeer]struct{}
+	realtimeSummaryEndpointBySRV map[flowersec.RPCPeer]string
 
-	realtimeByThread                map[string]map[*rpc.Server]struct{} // <endpoint_id>:<thread_id> -> set(stream)
-	realtimeThreadBySRV             map[*rpc.Server]string
+	realtimeByThread                map[string]map[flowersec.RPCPeer]struct{} // <endpoint_id>:<thread_id> -> set(stream)
+	realtimeThreadBySRV             map[flowersec.RPCPeer]string
 	flowerLiveByThread              map[string]*flowerLiveThreadStream
 	flowerLiveRetired               map[string]struct{}
 	flowerLiveGeneration            int64
@@ -350,11 +350,11 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 		idleCompactionByTh:              make(map[string]*idleThreadCompaction),
 		runs:                            make(map[string]*run),
 		subagentRuntimes:                make(map[string]*floretSubagentRuntime),
-		realtimeWriters:                 make(map[*rpc.Server]*aiSinkWriter),
-		realtimeSummaryByEndpoint:       make(map[string]map[*rpc.Server]struct{}),
-		realtimeSummaryEndpointBySRV:    make(map[*rpc.Server]string),
-		realtimeByThread:                make(map[string]map[*rpc.Server]struct{}),
-		realtimeThreadBySRV:             make(map[*rpc.Server]string),
+		realtimeWriters:                 make(map[flowersec.RPCPeer]*aiSinkWriter),
+		realtimeSummaryByEndpoint:       make(map[string]map[flowersec.RPCPeer]struct{}),
+		realtimeSummaryEndpointBySRV:    make(map[flowersec.RPCPeer]string),
+		realtimeByThread:                make(map[string]map[flowersec.RPCPeer]struct{}),
+		realtimeThreadBySRV:             make(map[flowersec.RPCPeer]string),
 		flowerLiveByThread:              make(map[string]*flowerLiveThreadStream),
 		flowerLiveRetired:               make(map[string]struct{}),
 		flowerLiveGeneration:            newFlowerLiveGeneration(),
@@ -575,10 +575,10 @@ func (s *Service) Close() error {
 		writers = append(writers, w)
 		delete(s.realtimeWriters, srv)
 	}
-	s.realtimeSummaryByEndpoint = make(map[string]map[*rpc.Server]struct{})
-	s.realtimeSummaryEndpointBySRV = make(map[*rpc.Server]string)
-	s.realtimeByThread = make(map[string]map[*rpc.Server]struct{})
-	s.realtimeThreadBySRV = make(map[*rpc.Server]string)
+	s.realtimeSummaryByEndpoint = make(map[string]map[flowersec.RPCPeer]struct{})
+	s.realtimeSummaryEndpointBySRV = make(map[flowersec.RPCPeer]string)
+	s.realtimeByThread = make(map[string]map[flowersec.RPCPeer]struct{})
+	s.realtimeThreadBySRV = make(map[flowersec.RPCPeer]string)
 	for _, stream := range s.flowerLiveByThread {
 		if stream.FlushTimer != nil {
 			stream.FlushTimer.Stop()

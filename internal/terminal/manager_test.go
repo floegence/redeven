@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,18 +17,18 @@ import (
 	"time"
 
 	termgo "github.com/floegence/floeterm/terminal-go"
-	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/sessionrpc"
 )
 
 func TestRequireProcessLaunchPermissionRejectsExecuteWithoutWrite(t *testing.T) {
 	t.Parallel()
 
 	err := requireProcessLaunchPermission(&session.Meta{CanRead: true, CanExecute: true})
-	rpcErr, ok := err.(*rpc.Error)
+	rpcErr, ok := err.(*sessionrpc.Error)
 	if !ok {
 		t.Fatalf("error = %#v, want rpc error", err)
 	}
@@ -219,7 +218,7 @@ func TestCreateSessionReportsWorkingDirErrors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := tt.manager.createSession("test", tt.path)
-			rpcErr, ok := err.(*rpc.Error)
+			rpcErr, ok := err.(*sessionrpc.Error)
 			if !ok {
 				t.Fatalf("createSession() error = %#v, want rpc error", err)
 			}
@@ -636,22 +635,10 @@ func TestTerminalHistoryRespAlwaysSerializesHistoryContractZeroValues(t *testing
 }
 
 func TestTerminalHistoryRPCRejectsNegativeGeneration(t *testing.T) {
-	serverConn, clientConn := net.Pipe()
-	t.Cleanup(func() {
-		_ = serverConn.Close()
-		_ = clientConn.Close()
-	})
-
 	m := newQuietTestManager(t, t.TempDir())
 	t.Cleanup(m.Cleanup)
-	router := rpc.NewRouter()
+	router := sessionrpc.NewRouter()
 	m.RegisterWithAccessGate(router, &session.Meta{CanWrite: true, CanExecute: true}, nil, nil)
-	server := rpc.NewServer(serverConn, router)
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	go func() {
-		_ = server.Serve(ctx)
-	}()
 
 	request, err := json.Marshal(terminalHistoryReq{
 		SessionID:         "session-does-not-need-to-exist",
@@ -660,12 +647,11 @@ func TestTerminalHistoryRPCRejectsNegativeGeneration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Marshal() error = %v", err)
 	}
-	_, rpcErr, err := rpc.NewClient(clientConn).Call(ctx, TypeID_TERMINAL_HISTORY, request)
-	if err != nil {
-		t.Fatalf("Call() transport error = %v", err)
-	}
-	if rpcErr == nil || rpcErr.Code != 400 || rpcErr.Message == nil || *rpcErr.Message != "history_generation must be non-negative" {
-		t.Fatalf("Call() rpc error = %#v, want code 400 negative generation rejection", rpcErr)
+	var response any
+	err = router.Call(context.Background(), TypeID_TERMINAL_HISTORY, json.RawMessage(request), &response)
+	var rpcErr *sessionrpc.Error
+	if !errors.As(err, &rpcErr) || rpcErr.Code != 400 || rpcErr.Message != "history_generation must be non-negative" {
+		t.Fatalf("Call() rpc error = %#v, want code 400 negative generation rejection", err)
 	}
 }
 
@@ -1049,17 +1035,13 @@ func TestNameUpdateReachesEveryAuthorizedControlClient(t *testing.T) {
 	t.Cleanup(m.Cleanup)
 
 	type clientHarness struct {
-		serverConn net.Conn
-		clientConn net.Conn
-		client     *rpc.Client
-		detach     func()
-		updates    chan terminalNameUpdatePayload
+		client  *testRPCPeer
+		detach  func()
+		updates chan terminalNameUpdatePayload
 	}
 	newHarness := func() *clientHarness {
-		serverConn, clientConn := net.Pipe()
-		router := rpc.NewRouter()
-		server := rpc.NewServer(serverConn, router)
-		client := rpc.NewClient(clientConn)
+		router := sessionrpc.NewRouter()
+		client := newTestRPCPeer(router)
 		updates := make(chan terminalNameUpdatePayload, 1)
 		client.OnNotify(TypeID_TERMINAL_NAME_UPDATE, func(payload json.RawMessage) {
 			var update terminalNameUpdatePayload
@@ -1070,15 +1052,13 @@ func TestNameUpdateReachesEveryAuthorizedControlClient(t *testing.T) {
 		detach := m.RegisterWithAccessGate(
 			router,
 			&session.Meta{CanRead: true, CanWrite: true, CanExecute: true},
-			server,
+			client,
 			nil,
 		)
 		return &clientHarness{
-			serverConn: serverConn,
-			clientConn: clientConn,
-			client:     client,
-			detach:     detach,
-			updates:    updates,
+			client:  client,
+			detach:  detach,
+			updates: updates,
 		}
 	}
 	clients := []*clientHarness{newHarness(), newHarness()}
@@ -1086,9 +1066,6 @@ func TestNameUpdateReachesEveryAuthorizedControlClient(t *testing.T) {
 		harness := harness
 		t.Cleanup(func() {
 			harness.detach()
-			_ = harness.client.Close()
-			_ = harness.serverConn.Close()
-			_ = harness.clientConn.Close()
 		})
 	}
 
@@ -1110,17 +1087,13 @@ func TestForegroundCommandUpdateReachesEveryAuthorizedControlClient(t *testing.T
 	t.Cleanup(m.Cleanup)
 
 	type clientHarness struct {
-		serverConn net.Conn
-		clientConn net.Conn
-		client     *rpc.Client
-		detach     func()
-		updates    chan terminalForegroundCommandUpdatePayload
+		client  *testRPCPeer
+		detach  func()
+		updates chan terminalForegroundCommandUpdatePayload
 	}
 	newHarness := func() *clientHarness {
-		serverConn, clientConn := net.Pipe()
-		router := rpc.NewRouter()
-		server := rpc.NewServer(serverConn, router)
-		client := rpc.NewClient(clientConn)
+		router := sessionrpc.NewRouter()
+		client := newTestRPCPeer(router)
 		updates := make(chan terminalForegroundCommandUpdatePayload, 1)
 		client.OnNotify(TypeID_TERMINAL_FOREGROUND_COMMAND_UPDATE, func(payload json.RawMessage) {
 			var update terminalForegroundCommandUpdatePayload
@@ -1131,15 +1104,13 @@ func TestForegroundCommandUpdateReachesEveryAuthorizedControlClient(t *testing.T
 		detach := m.RegisterWithAccessGate(
 			router,
 			&session.Meta{CanRead: true, CanWrite: true, CanExecute: true},
-			server,
+			client,
 			nil,
 		)
 		return &clientHarness{
-			serverConn: serverConn,
-			clientConn: clientConn,
-			client:     client,
-			detach:     detach,
-			updates:    updates,
+			client:  client,
+			detach:  detach,
+			updates: updates,
 		}
 	}
 	clients := []*clientHarness{newHarness(), newHarness()}
@@ -1147,9 +1118,6 @@ func TestForegroundCommandUpdateReachesEveryAuthorizedControlClient(t *testing.T
 		harness := harness
 		t.Cleanup(func() {
 			harness.detach()
-			_ = harness.client.Close()
-			_ = harness.serverConn.Close()
-			_ = harness.clientConn.Close()
 		})
 	}
 
@@ -1198,17 +1166,13 @@ func TestOutputActivityEventReachesEveryAuthorizedControlClient(t *testing.T) {
 	t.Cleanup(m.Cleanup)
 
 	type clientHarness struct {
-		serverConn net.Conn
-		clientConn net.Conn
-		client     *rpc.Client
-		detach     func()
-		updates    chan terminalOutputActivityUpdatePayload
+		client  *testRPCPeer
+		detach  func()
+		updates chan terminalOutputActivityUpdatePayload
 	}
 	newHarness := func() *clientHarness {
-		serverConn, clientConn := net.Pipe()
-		router := rpc.NewRouter()
-		server := rpc.NewServer(serverConn, router)
-		client := rpc.NewClient(clientConn)
+		router := sessionrpc.NewRouter()
+		client := newTestRPCPeer(router)
 		updates := make(chan terminalOutputActivityUpdatePayload, 1)
 		client.OnNotify(TypeID_TERMINAL_OUTPUT_ACTIVITY_UPDATE, func(payload json.RawMessage) {
 			var update terminalOutputActivityUpdatePayload
@@ -1219,15 +1183,13 @@ func TestOutputActivityEventReachesEveryAuthorizedControlClient(t *testing.T) {
 		detach := m.RegisterWithAccessGate(
 			router,
 			&session.Meta{CanRead: true, CanWrite: true, CanExecute: true},
-			server,
+			client,
 			nil,
 		)
 		return &clientHarness{
-			serverConn: serverConn,
-			clientConn: clientConn,
-			client:     client,
-			detach:     detach,
-			updates:    updates,
+			client:  client,
+			detach:  detach,
+			updates: updates,
 		}
 	}
 	clients := []*clientHarness{newHarness(), newHarness()}
@@ -1235,9 +1197,6 @@ func TestOutputActivityEventReachesEveryAuthorizedControlClient(t *testing.T) {
 		harness := harness
 		t.Cleanup(func() {
 			harness.detach()
-			_ = harness.client.Close()
-			_ = harness.serverConn.Close()
-			_ = harness.clientConn.Close()
 		})
 	}
 
@@ -1266,15 +1225,8 @@ func TestOutputActivityEventDoesNotReuseForegroundCommandNotify(t *testing.T) {
 	m := newQuietTestManager(t, t.TempDir())
 	t.Cleanup(m.Cleanup)
 
-	serverConn, clientConn := net.Pipe()
-	router := rpc.NewRouter()
-	server := rpc.NewServer(serverConn, router)
-	client := rpc.NewClient(clientConn)
-	t.Cleanup(func() {
-		_ = client.Close()
-		_ = serverConn.Close()
-		_ = clientConn.Close()
-	})
+	router := sessionrpc.NewRouter()
+	client := newTestRPCPeer(router)
 
 	foregroundUpdates := make(chan json.RawMessage, 1)
 	client.OnNotify(TypeID_TERMINAL_FOREGROUND_COMMAND_UPDATE, func(payload json.RawMessage) {
@@ -1283,7 +1235,7 @@ func TestOutputActivityEventDoesNotReuseForegroundCommandNotify(t *testing.T) {
 	detach := m.RegisterWithAccessGate(
 		router,
 		&session.Meta{CanRead: true, CanWrite: true, CanExecute: true},
-		server,
+		client,
 		nil,
 	)
 	t.Cleanup(detach)
@@ -1305,15 +1257,8 @@ func TestOutputActivityUpdateNormalizesMalformedUpstreamPhase(t *testing.T) {
 	m := newQuietTestManager(t, t.TempDir())
 	t.Cleanup(m.Cleanup)
 
-	serverConn, clientConn := net.Pipe()
-	router := rpc.NewRouter()
-	server := rpc.NewServer(serverConn, router)
-	client := rpc.NewClient(clientConn)
-	t.Cleanup(func() {
-		_ = client.Close()
-		_ = serverConn.Close()
-		_ = clientConn.Close()
-	})
+	router := sessionrpc.NewRouter()
+	client := newTestRPCPeer(router)
 
 	updates := make(chan terminalOutputActivityUpdatePayload, 1)
 	client.OnNotify(TypeID_TERMINAL_OUTPUT_ACTIVITY_UPDATE, func(payload json.RawMessage) {
@@ -1325,7 +1270,7 @@ func TestOutputActivityUpdateNormalizesMalformedUpstreamPhase(t *testing.T) {
 	detach := m.RegisterWithAccessGate(
 		router,
 		&session.Meta{CanRead: true, CanWrite: true, CanExecute: true},
-		server,
+		client,
 		nil,
 	)
 	t.Cleanup(detach)
@@ -1351,18 +1296,14 @@ func TestContextAndWorkEventsReachEveryAuthorizedControlClient(t *testing.T) {
 	t.Cleanup(m.Cleanup)
 
 	type clientHarness struct {
-		serverConn     net.Conn
-		clientConn     net.Conn
-		client         *rpc.Client
+		client         *testRPCPeer
 		detach         func()
 		contextUpdates chan terminalExecutionContextUpdatePayload
 		workUpdates    chan terminalWorkStateUpdatePayload
 	}
 	newHarness := func() *clientHarness {
-		serverConn, clientConn := net.Pipe()
-		router := rpc.NewRouter()
-		server := rpc.NewServer(serverConn, router)
-		client := rpc.NewClient(clientConn)
+		router := sessionrpc.NewRouter()
+		client := newTestRPCPeer(router)
 		contextUpdates := make(chan terminalExecutionContextUpdatePayload, 1)
 		workUpdates := make(chan terminalWorkStateUpdatePayload, 1)
 		client.OnNotify(TypeID_TERMINAL_EXECUTION_CONTEXT_UPDATE, func(payload json.RawMessage) {
@@ -1380,12 +1321,10 @@ func TestContextAndWorkEventsReachEveryAuthorizedControlClient(t *testing.T) {
 		detach := m.RegisterWithAccessGate(
 			router,
 			&session.Meta{CanRead: true, CanWrite: true, CanExecute: true},
-			server,
+			client,
 			nil,
 		)
 		return &clientHarness{
-			serverConn:     serverConn,
-			clientConn:     clientConn,
 			client:         client,
 			detach:         detach,
 			contextUpdates: contextUpdates,
@@ -1398,9 +1337,6 @@ func TestContextAndWorkEventsReachEveryAuthorizedControlClient(t *testing.T) {
 		harness := harness
 		t.Cleanup(func() {
 			harness.detach()
-			_ = harness.client.Close()
-			_ = harness.serverConn.Close()
-			_ = harness.clientConn.Close()
 		})
 	}
 
@@ -1458,18 +1394,14 @@ func TestContextAndWorkNotificationsFollowDynamicAccessGateState(t *testing.T) {
 
 	type clientHarness struct {
 		meta           session.Meta
-		serverConn     net.Conn
-		clientConn     net.Conn
-		client         *rpc.Client
+		client         *testRPCPeer
 		detach         func()
 		contextUpdates chan terminalExecutionContextUpdatePayload
 		workUpdates    chan terminalWorkStateUpdatePayload
 	}
 	newHarness := func(channelID string, unlocked bool) *clientHarness {
-		serverConn, clientConn := net.Pipe()
-		router := rpc.NewRouter()
-		server := rpc.NewServer(serverConn, router)
-		client := rpc.NewClient(clientConn)
+		router := sessionrpc.NewRouter()
+		client := newTestRPCPeer(router)
 		meta := session.Meta{ChannelID: channelID, CanRead: true, CanWrite: true, CanExecute: true}
 		gate.RegisterChannelWithOptions(meta, accessgate.RegisterChannelOptions{Unlocked: unlocked})
 		contextUpdates := make(chan terminalExecutionContextUpdatePayload, 4)
@@ -1486,9 +1418,9 @@ func TestContextAndWorkNotificationsFollowDynamicAccessGateState(t *testing.T) {
 				workUpdates <- update
 			}
 		})
-		detach := m.RegisterWithAccessGate(router, &meta, server, gate)
+		detach := m.RegisterWithAccessGate(router, &meta, client, gate)
 		return &clientHarness{
-			meta: meta, serverConn: serverConn, clientConn: clientConn, client: client,
+			meta: meta, client: client,
 			detach: detach, contextUpdates: contextUpdates, workUpdates: workUpdates,
 		}
 	}
@@ -1499,9 +1431,6 @@ func TestContextAndWorkNotificationsFollowDynamicAccessGateState(t *testing.T) {
 		t.Cleanup(func() {
 			harness.detach()
 			gate.UnregisterChannel(harness.meta.ChannelID)
-			_ = harness.client.Close()
-			_ = harness.serverConn.Close()
-			_ = harness.clientConn.Close()
 		})
 	}
 

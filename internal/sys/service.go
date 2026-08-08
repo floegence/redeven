@@ -5,10 +5,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/runtimeservice"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/sessionrpc"
 )
 
 const (
@@ -100,11 +100,11 @@ func NewService(opts Options) *Service {
 	}
 }
 
-func (s *Service) Register(r *rpc.Router, meta *session.Meta) {
+func (s *Service) Register(r *sessionrpc.Router, meta *session.Meta) {
 	s.RegisterWithAccessGate(r, meta, nil)
 }
 
-func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate *accessgate.Gate) {
+func (s *Service) RegisterWithAccessGate(r *sessionrpc.Router, meta *session.Meta, gate *accessgate.Gate) {
 	if s == nil || r == nil {
 		return
 	}
@@ -133,10 +133,10 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 
 	accessgate.RegisterTyped[UpgradeRequest, UpgradeResponse](r, TypeID_SYS_UPGRADE, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *UpgradeRequest) (*UpgradeResponse, error) {
 		if meta == nil || !meta.CanAdmin {
-			return nil, &rpc.Error{Code: 403, Message: "admin permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "admin permission denied"}
 		}
 		if s.upgrader == nil {
-			return nil, &rpc.Error{Code: 501, Message: "upgrade not supported"}
+			return nil, &sessionrpc.Error{Code: 501, Message: "upgrade not supported"}
 		}
 		if req == nil {
 			req = &UpgradeRequest{}
@@ -146,10 +146,10 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 
 	accessgate.RegisterTyped[RestartRequest, RestartResponse](r, TypeID_SYS_RESTART, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *RestartRequest) (*RestartResponse, error) {
 		if meta == nil || !meta.CanAdmin {
-			return nil, &rpc.Error{Code: 403, Message: "admin permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "admin permission denied"}
 		}
 		if s.restarter == nil {
-			return nil, &rpc.Error{Code: 501, Message: "restart not supported"}
+			return nil, &sessionrpc.Error{Code: 501, Message: "restart not supported"}
 		}
 		if req == nil {
 			req = &RestartRequest{}

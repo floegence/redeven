@@ -16,8 +16,6 @@ import (
 	"runtime"
 	"strings"
 	"time"
-
-	directv1 "github.com/floegence/flowersec/flowersec-go/gen/flowersec/direct/v1"
 )
 
 type BootstrapArgs struct {
@@ -67,12 +65,12 @@ type ProviderLinkBootstrapArgs struct {
 }
 
 type bootstrapResponse struct {
-	ProviderID              string                      `json:"provider_id"`
-	ProviderOrigin          string                      `json:"provider_origin"`
-	AccessPointID           string                      `json:"access_point_id"`
-	AccessPointOrigin       string                      `json:"access_point_origin"`
-	Direct                  *directv1.DirectConnectInfo `json:"direct"`
-	LocalEnvironmentBinding *LocalEnvironmentBinding    `json:"local_environment_binding"`
+	ProviderID              string                   `json:"provider_id"`
+	ProviderOrigin          string                   `json:"provider_origin"`
+	AccessPointID           string                   `json:"access_point_id"`
+	AccessPointOrigin       string                   `json:"access_point_origin"`
+	Direct                  *DirectConnectInfo       `json:"direct"`
+	LocalEnvironmentBinding *LocalEnvironmentBinding `json:"local_environment_binding"`
 }
 
 type LocalEnvironmentBinding struct {
@@ -227,8 +225,8 @@ func ResolveProviderLinkConfig(ctx context.Context, args ProviderLinkBootstrapAr
 	if binding.Generation <= 0 {
 		return nil, errors.New("invalid bootstrap exchange response: missing binding generation")
 	}
-	if direct == nil || strings.TrimSpace(direct.WsUrl) == "" {
-		return nil, errors.New("invalid bootstrap response: missing direct.ws_url")
+	if direct == nil || len(direct.ArtifactJSON) == 0 || direct.ExpiresAtUnixS <= 0 {
+		return nil, errors.New("invalid bootstrap response: missing direct artifact")
 	}
 	if strings.TrimSpace(bootstrap.ProviderOrigin) != providerOrigin {
 		return nil, errors.New("invalid bootstrap exchange response: provider_origin mismatch")
@@ -371,7 +369,7 @@ func exchangeBootstrapTicket(ctx context.Context, baseClient *http.Client, baseU
 	if err := json.Unmarshal(body, &out); err != nil {
 		return nil, fmt.Errorf("invalid bootstrap exchange json: %w", err)
 	}
-	if out.Direct == nil || strings.TrimSpace(out.Direct.WsUrl) == "" {
+	if out.Direct == nil || len(out.Direct.ArtifactJSON) == 0 || out.Direct.ExpiresAtUnixS <= 0 {
 		return nil, errors.New("invalid bootstrap exchange response: missing direct")
 	}
 	return &out, nil

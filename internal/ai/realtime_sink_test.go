@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"context"
 	"encoding/json"
 	"sync"
 	"testing"
@@ -32,7 +33,7 @@ func newSinkTestNotifier(blockFirst bool) *sinkTestNotifier {
 	}
 }
 
-func (n *sinkTestNotifier) Notify(typeID uint32, payload json.RawMessage) error {
+func (n *sinkTestNotifier) Notify(_ context.Context, typeID uint32, payload any) error {
 	if n.blockFirst {
 		n.startOnce.Do(func() {
 			close(n.startedCh)
@@ -41,10 +42,11 @@ func (n *sinkTestNotifier) Notify(typeID uint32, payload json.RawMessage) error 
 	}
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	n.notifications = append(n.notifications, sinkTestNotification{
-		typeID:  typeID,
-		payload: append(json.RawMessage(nil), payload...),
-	})
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	n.notifications = append(n.notifications, sinkTestNotification{typeID: typeID, payload: encoded})
 	return nil
 }
 

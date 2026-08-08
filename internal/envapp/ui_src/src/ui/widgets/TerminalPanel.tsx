@@ -975,7 +975,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const terminalPrefs = useTerminalPreferences();
   const terminalCatalog = useTerminalSessionCatalog();
 
-  const terminalLive = createRedevenTerminalLiveBundle(rpc, () => protocol.client(), connId);
+  const terminalLive = createRedevenTerminalLiveBundle(rpc, () => protocol.session?.(), connId);
   const transport = terminalLive.transport;
   const eventSource = terminalLive.eventSource;
   const fallbackSessionsCoordinator = terminalCatalog
@@ -994,7 +994,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     new Set<string>(),
   );
   createEffect(() => {
-    transport.syncConnectionEpoch(protocol.client() ?? null);
+    transport.syncConnectionEpoch(protocol.session?.() ?? null);
   });
   onCleanup(() => {
     disposed = true;
@@ -1007,7 +1007,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     }
   });
 
-  const connected = () => protocol.status() === 'connected' && Boolean(protocol.client());
+  const connected = () => protocol.status() === 'connected' && Boolean(protocol.session?.());
   const viewActive = () => view.active();
   const workbenchSelected = () => variant !== 'workbench' || props.workbenchSelected !== false;
   const terminalFocusOwner = () => viewActive() && workbenchSelected();
@@ -1018,7 +1018,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const captureSessionMutationFence = (): terminal_session_mutation_fence => ({
     envId: String(env.env_id() ?? '').trim(),
     connectionEpoch: terminalCatalog?.connectionEpoch() ?? 0,
-    protocolClient: protocol.client(),
+    protocolClient: protocol.session?.(),
   });
 
   const sessionMutationFenceIsCurrent = (fence: terminal_session_mutation_fence): boolean => (
@@ -1027,7 +1027,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     && permissionReady()
     && canLaunchProcess(env.env()?.permissions)
     && String(env.env_id() ?? '').trim() === fence.envId
-    && protocol.client() === fence.protocolClient
+    && protocol.session?.() === fence.protocolClient
     && (terminalCatalog?.connectionEpoch() ?? 0) === fence.connectionEpoch
   );
 
@@ -3142,7 +3142,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       }
       return;
     }
-    const client = protocol.client();
+    const client = protocol.session?.();
     if (!client) {
       batch(() => {
         setSessionsHydrated(false);
@@ -4731,7 +4731,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                               variant={variant}
                               active={() => activeDisplaySessionId() === sessionId}
                               connected={connected}
-                              protocolClient={() => protocol.client()}
+                              protocolClient={() => protocol.session?.()}
                               viewActive={viewActive}
                               autoFocus={shouldAutoFocus}
                               themeColors={terminalThemeColors}

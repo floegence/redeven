@@ -7,9 +7,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven/internal/processenv"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/sessionrpc"
 	syssvc "github.com/floegence/redeven/internal/sys"
 )
 
@@ -21,7 +21,7 @@ type sysRestarter struct {
 
 func (r *sysRestarter) StartRestart(_ctx context.Context, meta *session.Meta, _ *syssvc.RestartRequest) (*syssvc.RestartResponse, error) {
 	if r == nil || r.a == nil {
-		return nil, &rpc.Error{Code: 500, Message: "internal error"}
+		return nil, &sessionrpc.Error{Code: 500, Message: "internal error"}
 	}
 	a := r.a
 
@@ -32,7 +32,7 @@ func (r *sysRestarter) StartRestart(_ctx context.Context, meta *session.Meta, _ 
 	plan, err := resolveSelfExecPlan(a.binaryPath, a.localUIBind)
 	if err != nil {
 		a.log.Warn("sys_restart: resolve self paths failed", "error", err)
-		return nil, &rpc.Error{Code: 500, Message: "failed to resolve runtime executable path"}
+		return nil, &sessionrpc.Error{Code: 500, Message: "failed to resolve runtime executable path"}
 	}
 
 	if !a.maintenanceOp.CompareAndSwap(maintenanceOpNone, maintenanceOpRestart) {

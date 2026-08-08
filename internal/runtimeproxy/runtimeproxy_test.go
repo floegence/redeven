@@ -4,26 +4,28 @@ import (
 	"slices"
 	"testing"
 
-	fsproxy "github.com/floegence/flowersec/flowersec-go/proxy"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v2"
 )
 
 func TestApplyOptionsBlocksOnlyEmbeddingPolicies(t *testing.T) {
 	t.Parallel()
 
-	opts := ApplyOptions(fsproxy.Options{
-		ContractOptions: fsproxy.ContractOptions{
-			BlockedResponseHeaders: []string{"x-product-secret"},
-		},
-	})
+	opts := Options{BlockedResponseHeaders: []string{"x-product-secret"}}
+	proxy, err := New(opts)
+	if err == nil || proxy != nil {
+		t.Fatalf("expected invalid empty upstream")
+	}
+	_ = flowersec.ProxyServerOptions{}
 
 	wantBlocked := []string{
 		"x-product-secret",
-		"content-security-policy",
-		"content-security-policy-report-only",
-		"x-frame-options",
+		"Content-Security-Policy",
+		"Content-Security-Policy-Report-Only",
+		"X-Frame-Options",
 	}
-	if !slices.Equal(opts.BlockedResponseHeaders, wantBlocked) {
-		t.Fatalf("BlockedResponseHeaders = %#v, want %#v", opts.BlockedResponseHeaders, wantBlocked)
+	blocked := append(append([]string{}, opts.BlockedResponseHeaders...), ProductBlockedResponseHeaders()...)
+	if !slices.Equal(blocked, wantBlocked) {
+		t.Fatalf("BlockedResponseHeaders = %#v, want %#v", blocked, wantBlocked)
 	}
 	for _, preserved := range []string{
 		"x-content-type-options",

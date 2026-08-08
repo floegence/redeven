@@ -11,9 +11,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/sessionrpc"
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/load"
 	gopsutilNet "github.com/shirou/gopsutil/v4/net"
@@ -90,18 +90,18 @@ func (s *Service) Start(ctx context.Context) {
 	})
 }
 
-func (s *Service) Register(r *rpc.Router, meta *session.Meta) {
+func (s *Service) Register(r *sessionrpc.Router, meta *session.Meta) {
 	s.RegisterWithAccessGate(r, meta, nil)
 }
 
-func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate *accessgate.Gate) {
+func (s *Service) RegisterWithAccessGate(r *sessionrpc.Router, meta *session.Meta, gate *accessgate.Gate) {
 	if s == nil || r == nil {
 		return
 	}
 
 	accessgate.RegisterTyped[sysMonitorReq, sysMonitorResp](r, TypeID_SYS_MONITOR, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *sysMonitorReq) (*sysMonitorResp, error) {
 		if meta == nil || !meta.CanExecute {
-			return nil, &rpc.Error{Code: 403, Message: "execute permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "execute permission denied"}
 		}
 
 		sortBy := "cpu"
@@ -115,24 +115,24 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 
 	accessgate.RegisterTyped[killProcessReq, killProcessResp](r, TypeID_SYS_MONITOR_KILL_PROCESS, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *killProcessReq) (*killProcessResp, error) {
 		if meta == nil || !meta.CanExecute {
-			return nil, &rpc.Error{Code: 403, Message: "execute permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "execute permission denied"}
 		}
 		if req == nil {
-			return nil, &rpc.Error{Code: 400, Message: "missing request"}
+			return nil, &sessionrpc.Error{Code: 400, Message: "missing request"}
 		}
 		if s.collectors.killProcess == nil {
-			return nil, &rpc.Error{Code: 501, Message: "process kill not supported"}
+			return nil, &sessionrpc.Error{Code: 501, Message: "process kill not supported"}
 		}
 
 		if err := s.collectors.killProcess(ctx, req.PID); err != nil {
 			switch {
 			case errors.Is(err, errInvalidProcessPID):
-				return nil, &rpc.Error{Code: 400, Message: err.Error()}
+				return nil, &sessionrpc.Error{Code: 400, Message: err.Error()}
 			case errors.Is(err, errProcessNotFound):
-				return nil, &rpc.Error{Code: 404, Message: err.Error()}
+				return nil, &sessionrpc.Error{Code: 404, Message: err.Error()}
 			default:
 				s.log.Warn("sys_monitor: kill process failed", "pid", req.PID, "error", err)
-				return nil, &rpc.Error{Code: 500, Message: fmt.Sprintf("failed to kill process %d", req.PID)}
+				return nil, &sessionrpc.Error{Code: 500, Message: fmt.Sprintf("failed to kill process %d", req.PID)}
 			}
 		}
 

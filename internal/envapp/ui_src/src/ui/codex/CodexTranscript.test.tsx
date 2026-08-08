@@ -12,9 +12,9 @@ import type { CodexOptimisticUserTurn, CodexTranscriptItem } from './types';
 const openPreview = vi.fn(async () => undefined);
 const readFileBytesOnceMock = vi.fn();
 const protocolState: {
-  client: () => Record<string, never> | null;
+  session: () => Record<string, never> | null;
 } = {
-  client: () => null,
+  session: () => null,
 };
 
 vi.mock('@floegence/floe-webapp-core', () => ({
@@ -259,7 +259,7 @@ function flushAsync(): Promise<void> {
 afterEach(() => {
   openPreview.mockReset();
   readFileBytesOnceMock.mockReset();
-  protocolState.client = () => null;
+  protocolState.session = () => null;
   vi.unstubAllGlobals();
   document.body.innerHTML = '';
 });
@@ -1353,7 +1353,7 @@ describe('CodexTranscript', () => {
   });
 
   it('loads a local image thumbnail and still routes clicks into the file preview surface', async () => {
-    protocolState.client = () => ({});
+    protocolState.session = () => ({});
     readFileBytesOnceMock.mockResolvedValue({
       bytes: new Uint8Array([137, 80, 78, 71]),
       meta: {

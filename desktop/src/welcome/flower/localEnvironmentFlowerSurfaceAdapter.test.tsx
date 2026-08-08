@@ -52,11 +52,8 @@ function settingsResponse(): AgentSettingsResponse {
       environment_id: 'local-environment',
       agent_instance_id: 'agent-local',
       direct: {
-        ws_url: '',
-        channel_id: '',
-        channel_init_expire_at_unix_s: 0,
-        default_suite: 0,
-        e2ee_psk_set: false,
+        artifact_provisioned: false,
+        expires_at_unix_s: 0,
       },
     },
     runtime: { agent_home_dir: '/Users/me/.redeven/local-environment', shell: '/bin/zsh' },

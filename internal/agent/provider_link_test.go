@@ -12,8 +12,7 @@ import (
 	"testing"
 	"time"
 
-	directv1 "github.com/floegence/flowersec/flowersec-go/gen/flowersec/direct/v1"
-	rpcwirev1 "github.com/floegence/flowersec/flowersec-go/gen/flowersec/rpc/v1"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v2"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/runtimeservice"
 	"github.com/floegence/redeven/internal/session"
@@ -23,25 +22,42 @@ type providerDisconnectFakeRPC struct {
 	mu       sync.Mutex
 	typeID   uint32
 	payload  json.RawMessage
-	rpcError *rpcwirev1.RpcError
+	rpcError *flowersec.RPCError
 	err      error
 }
 
-func (f *providerDisconnectFakeRPC) Call(_ context.Context, typeID uint32, payload json.RawMessage) (json.RawMessage, *rpcwirev1.RpcError, error) {
+func (f *providerDisconnectFakeRPC) Call(_ context.Context, typeID uint32, request, response any) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.typeID = typeID
+	payload, marshalErr := json.Marshal(request)
+	if marshalErr != nil {
+		return marshalErr
+	}
 	f.payload = append(f.payload[:0], payload...)
 	if f.err != nil || f.rpcError != nil {
-		return nil, f.rpcError, f.err
+		if f.err != nil {
+			return f.err
+		}
+		return f.rpcError
 	}
-	resp, err := json.Marshal(runtimeDisconnectResp{
+	encoded, err := json.Marshal(runtimeDisconnectResp{
 		OK:         true,
 		Cleared:    true,
 		State:      "disconnected",
 		ReasonCode: "runtime_disconnected",
 	})
-	return resp, nil, err
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(encoded, response)
+}
+
+func testDirectConnectInfo() *config.DirectConnectInfo {
+	return &config.DirectConnectInfo{
+		ArtifactJSON:   []byte(controlArtifactFixture),
+		ExpiresAtUnixS: 4102444800,
+	}
 }
 
 func providerLinkRemoteConfig(t *testing.T, cfgPath string) *config.Config {
@@ -58,14 +74,9 @@ func providerLinkRemoteConfig(t *testing.T, cfgPath string) *config.Config {
 		LocalEnvironmentPublicID: "le_existing",
 		BindingGeneration:        7,
 		AgentInstanceID:          "ai_existing",
-		Direct: &directv1.DirectConnectInfo{
-			WsUrl:                    "wss://127.0.0.1:1/control/ws",
-			ChannelId:                "ch_existing",
-			E2eePskB64u:              "cHNr",
-			ChannelInitExpireAtUnixS: 4102444800,
-		},
-		AgentHomeDir:     t.TempDir(),
-		PermissionPolicy: policy,
+		Direct:                   testDirectConnectInfo(),
+		AgentHomeDir:             t.TempDir(),
+		PermissionPolicy:         policy,
 	}
 	if cfgPath != "" {
 		if err := config.Save(cfgPath, cfg); err != nil {
@@ -130,7 +141,7 @@ func providerLinkTestServer(t *testing.T, handler func(http.ResponseWriter, *htt
 	}))
 }
 
-func writeProviderLinkBootstrapResponse(t *testing.T, w http.ResponseWriter, r *http.Request, channelID string) {
+func writeProviderLinkBootstrapResponse(t *testing.T, w http.ResponseWriter, r *http.Request, _ string) {
 	t.Helper()
 	if r.Method != http.MethodPost || r.URL.Path != "/api/rcpp/v2/runtime/bootstrap/exchange" {
 		t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
@@ -154,12 +165,11 @@ func writeProviderLinkBootstrapResponse(t *testing.T, w http.ResponseWriter, r *
   "provider_id": "example_control_plane",
   "provider_origin": "` + payload.ProviderOrigin + `",
   "access_point_id": "dev",
-	  "access_point_origin": "https://` + r.Host + `",
+  "access_point_origin": "https://` + r.Host + `",
   "direct": {
-	    "ws_url": "wss://127.0.0.1:1/control/ws",
-    "channel_id": "` + channelID + `",
-    "e2ee_psk_b64u": "cHNr",
-    "channel_init_expire_at_unix_s": 4102444800
+	"artifact_json": ` + controlArtifactFixture + `,
+	"expires_at_unix_s": 4102444800,
+	"spent": false
   },
   "local_environment_binding": {
     "local_environment_public_id": "` + payload.LocalEnvironmentPublicID + `",
@@ -210,13 +220,8 @@ func TestConnectProviderRechecksActiveWorkBeforePersistingConfig(t *testing.T) {
 		LocalEnvironmentPublicID: "le_existing",
 		BindingGeneration:        1,
 		AgentInstanceID:          "ai_existing",
-		Direct: &directv1.DirectConnectInfo{
-			WsUrl:                    "wss://127.0.0.1:1/control/ws",
-			ChannelId:                "ch_old",
-			E2eePskB64u:              "cHNr",
-			ChannelInitExpireAtUnixS: 4102444800,
-		},
-		AgentHomeDir: t.TempDir(),
+		Direct:                   testDirectConnectInfo(),
+		AgentHomeDir:             t.TempDir(),
 	}
 	if err := config.Save(cfgPath, initial); err != nil {
 		t.Fatalf("config.Save() error = %v", err)
@@ -280,8 +285,7 @@ func TestConnectProviderRechecksActiveWorkBeforePersistingConfig(t *testing.T) {
 	if cfg.ControlplaneBaseURL != initial.ControlplaneBaseURL ||
 		cfg.EnvironmentID != initial.EnvironmentID ||
 		cfg.BindingGeneration != initial.BindingGeneration ||
-		cfg.Direct == nil ||
-		cfg.Direct.ChannelId != "ch_old" {
+		cfg.Direct == nil || cfg.Direct.ExpiresAtUnixS != initial.Direct.ExpiresAtUnixS || cfg.Direct.Spent {
 		t.Fatalf("config changed after blocked relink: %#v", cfg)
 	}
 	if binding := a.ProviderLinkBinding(); binding.EnvPublicID != "env_old" || binding.BindingGeneration != 1 {
@@ -303,13 +307,8 @@ func TestConnectProviderRefreshesExistingMatchingBindingWhenExplicitlyRequested(
 		LocalEnvironmentPublicID: "le_existing",
 		BindingGeneration:        3,
 		AgentInstanceID:          "ai_existing",
-		Direct: &directv1.DirectConnectInfo{
-			WsUrl:                    "wss://127.0.0.1:1/control/ws",
-			ChannelId:                "ch_existing",
-			E2eePskB64u:              "cHNr",
-			ChannelInitExpireAtUnixS: 4102444800,
-		},
-		AgentHomeDir: t.TempDir(),
+		Direct:                   testDirectConnectInfo(),
+		AgentHomeDir:             t.TempDir(),
 	}
 	cfgPath := filepath.Join(t.TempDir(), "config.json")
 	if err := config.Save(cfgPath, cfg); err != nil {
@@ -353,8 +352,8 @@ func TestConnectProviderRefreshesExistingMatchingBindingWhenExplicitlyRequested(
 	if err != nil {
 		t.Fatalf("config.Load() error = %v", err)
 	}
-	if saved.Direct == nil || saved.Direct.ChannelId != "ch_refreshed" {
-		t.Fatalf("saved Direct = %#v, want refreshed channel", saved.Direct)
+	if saved.Direct == nil || len(saved.Direct.ArtifactJSON) == 0 || saved.Direct.Spent {
+		t.Fatalf("saved Direct = %#v, want fresh v2 artifact", saved.Direct)
 	}
 	if saved.BindingGeneration != 7 {
 		t.Fatalf("BindingGeneration = %d, want refreshed generation 7", saved.BindingGeneration)
@@ -428,7 +427,7 @@ func TestDisconnectProviderConflictDoesNotClearConfig(t *testing.T) {
 	cfg := providerLinkRemoteConfig(t, cfgPath)
 	a := newProviderLinkTestAgent(t, cfgPath, cfg)
 	msg := "local environment binding mismatch"
-	fakeRPC := &providerDisconnectFakeRPC{rpcError: &rpcwirev1.RpcError{Code: 409, Message: &msg}}
+	fakeRPC := &providerDisconnectFakeRPC{rpcError: &flowersec.RPCError{Code: 409, Message: msg}}
 	linkProviderControlForTest(a, fakeRPC)
 
 	_, err := a.DisconnectProvider(context.Background())
@@ -447,8 +446,7 @@ func TestDisconnectProviderConflictDoesNotClearConfig(t *testing.T) {
 		saved.EnvironmentID != cfg.EnvironmentID ||
 		saved.LocalEnvironmentPublicID != cfg.LocalEnvironmentPublicID ||
 		saved.BindingGeneration != cfg.BindingGeneration ||
-		saved.Direct == nil ||
-		saved.Direct.ChannelId != cfg.Direct.ChannelId {
+		saved.Direct == nil || saved.Direct.ExpiresAtUnixS != cfg.Direct.ExpiresAtUnixS || saved.Direct.Spent != cfg.Direct.Spent {
 		t.Fatalf("config changed after rejected disconnect: %#v", saved)
 	}
 	if binding := a.ProviderLinkBinding(); binding.State != runtimeservice.ProviderLinkStateLinked || !binding.RemoteEnabled {

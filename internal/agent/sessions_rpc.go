@@ -5,9 +5,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/sessionrpc"
 )
 
 const (
@@ -72,7 +72,7 @@ func (a *Agent) RuntimePresentationSessions() []RuntimePresentationSession {
 	return out
 }
 
-func (a *Agent) registerSessionsRPCWithAccessGate(r *rpc.Router, meta *session.Meta, gate *accessgate.Gate) {
+func (a *Agent) registerSessionsRPCWithAccessGate(r *sessionrpc.Router, meta *session.Meta, gate *accessgate.Gate) {
 	if a == nil || r == nil {
 		return
 	}
@@ -82,7 +82,7 @@ func (a *Agent) registerSessionsRPCWithAccessGate(r *rpc.Router, meta *session.M
 		// Gate it by read permission to avoid leaking user identities / connection metadata
 		// when the session is clamped to no permissions.
 		if meta == nil || !meta.CanRead {
-			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
+			return nil, &sessionrpc.Error{Code: 403, Message: "read permission denied"}
 		}
 		return &sessionsListActiveResp{Sessions: a.listActiveSessionsSnapshot()}, nil
 	})

@@ -1025,7 +1025,7 @@ export function EnvCodespacesPage() {
 
   // Load home directory path
   createEffect(() => {
-    if (!protocol.client()) return;
+    if (!protocol.session?.()) return;
     void (async () => {
       try {
         const resp = await rpc.fs.getPathContext();
@@ -1095,7 +1095,7 @@ export function EnvCodespacesPage() {
   });
 
   const loadPickerDir = async (pickerPath: string) => {
-    if (!protocol.client()) return;
+    if (!protocol.session?.()) return;
 
     const absolutePath = toPickerTreeAbsolutePath(pickerPath, homePath());
     if (!absolutePath) return;

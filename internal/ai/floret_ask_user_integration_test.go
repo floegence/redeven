@@ -6,7 +6,6 @@ import (
 	"errors"
 	"io"
 	"log/slog"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,9 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/sessionrpc"
 )
 
 func TestRedevenHostedRunAskUserWaitsAndResumesWithoutAuthorityCorruption(t *testing.T) {
@@ -227,16 +226,9 @@ func TestSubmitRequestUserInputResponseRPCReturnsAdmissionReceiptBeforeProviderC
 	})
 	prompt := waiting.WaitingPrompt
 
-	serverConn, clientConn := net.Pipe()
-	t.Cleanup(func() { _ = serverConn.Close() })
-	t.Cleanup(func() { _ = clientConn.Close() })
-	router := rpc.NewRouter()
-	rpcServer := rpc.NewServer(serverConn, router)
-	svc.RegisterRPC(router, meta, rpcServer)
-	serveCtx, cancelServe := context.WithCancel(context.Background())
-	t.Cleanup(cancelServe)
-	go func() { _ = rpcServer.Serve(serveCtx) }()
-	rpcClient := rpc.NewClient(clientConn)
+	router := sessionrpc.NewRouter()
+	rpcClient := newTestRPCPeer(router)
+	svc.RegisterRPC(router, meta, rpcClient)
 
 	type submitResult struct {
 		response aiSubmitRequestUserInputResponseResp
@@ -258,15 +250,15 @@ func TestSubmitRequestUserInputResponseRPCReturnsAdmissionReceiptBeforeProviderC
 		}
 		callCtx, cancelCall := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancelCall()
-		raw, rpcErr, callErr := rpcClient.Call(callCtx, TypeID_AI_SUBMIT_REQUEST_USER_INPUT_RESPONSE, payload)
+		raw, rpcErr, callErr := callTestRPC(callCtx, rpcClient, TypeID_AI_SUBMIT_REQUEST_USER_INPUT_RESPONSE, payload)
 		if callErr != nil {
 			submitted <- submitResult{err: callErr}
 			return
 		}
 		if rpcErr != nil {
 			message := "rpc error"
-			if rpcErr.Message != nil && strings.TrimSpace(*rpcErr.Message) != "" {
-				message = strings.TrimSpace(*rpcErr.Message)
+			if strings.TrimSpace(rpcErr.Message) != "" {
+				message = strings.TrimSpace(rpcErr.Message)
 			}
 			submitted <- submitResult{err: errors.New(message)}
 			return

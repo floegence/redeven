@@ -1353,11 +1353,8 @@ type settingsConnectionView struct {
 }
 
 type settingsDirectView struct {
-	WsURL                    string `json:"ws_url"`
-	ChannelID                string `json:"channel_id"`
-	ChannelInitExpireAtUnixS int64  `json:"channel_init_expire_at_unix_s"`
-	DefaultSuite             uint16 `json:"default_suite"`
-	E2eePskSet               bool   `json:"e2ee_psk_set"`
+	ArtifactProvisioned bool  `json:"artifact_provisioned"`
+	ExpiresAtUnixS      int64 `json:"expires_at_unix_s"`
 }
 
 type settingsRuntimeView struct {
@@ -2060,11 +2057,8 @@ func (g *Server) toSettingsView(cfg *config.Config, aiSvc *ai.Service) settingsV
 	var direct settingsDirectView
 	if cfg != nil && cfg.Direct != nil {
 		direct = settingsDirectView{
-			WsURL:                    strings.TrimSpace(cfg.Direct.WsUrl),
-			ChannelID:                strings.TrimSpace(cfg.Direct.ChannelId),
-			ChannelInitExpireAtUnixS: cfg.Direct.ChannelInitExpireAtUnixS,
-			DefaultSuite:             uint16(cfg.Direct.DefaultSuite),
-			E2eePskSet:               strings.TrimSpace(cfg.Direct.E2eePskB64u) != "",
+			ArtifactProvisioned: len(cfg.Direct.ArtifactJSON) > 0,
+			ExpiresAtUnixS:      cfg.Direct.ExpiresAtUnixS,
 		}
 	}
 

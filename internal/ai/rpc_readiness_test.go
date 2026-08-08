@@ -2,15 +2,15 @@ package ai
 
 import (
 	"context"
-	"net"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/floegence/flowersec/flowersec-go/rpc"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v2"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/sessionrpc"
 )
 
 func TestAcquireRPCServiceReleasesInvalidLease(t *testing.T) {
@@ -30,31 +30,21 @@ func TestAcquireRPCServiceReleasesInvalidLease(t *testing.T) {
 }
 
 func TestRPCServiceProviderCleanupDetachesRealtimeSink(t *testing.T) {
-	serverConn, clientConn := net.Pipe()
-	t.Cleanup(func() { _ = serverConn.Close() })
-	t.Cleanup(func() { _ = clientConn.Close() })
-
 	service := newRPCRealtimeTestService()
 	provider := newRPCGenerationProvider(service)
-	router := rpc.NewRouter()
+	router := sessionrpc.NewRouter()
 	meta := &session.Meta{EndpointID: "env_1", CanRead: true, CanWrite: true, CanExecute: true}
-	server := rpc.NewServer(serverConn, router)
-	detach := RegisterRPCServiceProviderWithAccessGate(router, meta, server, nil, provider.Acquire)
+	peer := newTestRPCPeer(router)
+	detach := RegisterRPCServiceProviderWithAccessGate(router, meta, peer, nil, provider.Acquire)
 	t.Cleanup(detach)
-
-	serveCtx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	done := make(chan error, 1)
-	go func() { done <- server.Serve(serveCtx) }()
-	client := rpc.NewClient(clientConn)
-	if _, rpcErr, err := client.Call(context.Background(), TypeID_AI_SUBSCRIBE_SUMMARY, []byte(`{}`)); err != nil {
+	if _, rpcErr, err := callTestRPC(context.Background(), peer, TypeID_AI_SUBSCRIBE_SUMMARY, []byte(`{}`)); err != nil {
 		t.Fatalf("subscribe summary: %v", err)
 	} else if rpcErr != nil {
 		t.Fatalf("subscribe summary RPC error = %#v", rpcErr)
 	}
 
 	service.mu.Lock()
-	_, attached := service.realtimeSummaryEndpointBySRV[server]
+	_, attached := service.realtimeSummaryEndpointBySRV[peer]
 	service.mu.Unlock()
 	if !attached {
 		t.Fatal("realtime sink was not attached")
@@ -65,8 +55,8 @@ func TestRPCServiceProviderCleanupDetachesRealtimeSink(t *testing.T) {
 	detach()
 	detach()
 	service.mu.Lock()
-	_, attached = service.realtimeSummaryEndpointBySRV[server]
-	_, writerAttached := service.realtimeWriters[server]
+	_, attached = service.realtimeSummaryEndpointBySRV[peer]
+	_, writerAttached := service.realtimeWriters[peer]
 	service.mu.Unlock()
 	if attached || writerAttached {
 		t.Fatal("realtime sink remained attached after connection cleanup")
@@ -78,40 +68,24 @@ func TestRPCServiceProviderCleanupDetachesRealtimeSink(t *testing.T) {
 		t.Fatalf("subscription lease counts = (%d, %d), want (1, 1)", acquires, releases)
 	}
 
-	cancel()
-	_ = clientConn.Close()
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("RPC server did not stop")
-	}
 }
 
 func TestRPCServiceProviderRebindsRealtimeSinkAcrossGenerations(t *testing.T) {
-	serverConn, clientConn := net.Pipe()
-	t.Cleanup(func() { _ = serverConn.Close() })
-	t.Cleanup(func() { _ = clientConn.Close() })
-
 	first := newRPCRealtimeTestService()
 	second := newRPCRealtimeTestService()
 	provider := newRPCGenerationProvider(first)
 
-	router := rpc.NewRouter()
+	router := sessionrpc.NewRouter()
 	meta := &session.Meta{EndpointID: "env_1", CanRead: true, CanWrite: true, CanExecute: true}
-	server := rpc.NewServer(serverConn, router)
-	detach := RegisterRPCServiceProviderWithAccessGate(router, meta, server, nil, provider.Acquire)
+	peer := newTestRPCPeer(router)
+	detach := RegisterRPCServiceProviderWithAccessGate(router, meta, peer, nil, provider.Acquire)
 	t.Cleanup(detach)
-	serveCtx, cancelServe := context.WithCancel(context.Background())
-	t.Cleanup(cancelServe)
-	done := make(chan error, 1)
-	go func() { done <- server.Serve(serveCtx) }()
-	client := rpc.NewClient(clientConn)
-	if _, rpcErr, err := client.Call(context.Background(), TypeID_AI_SUBSCRIBE_SUMMARY, []byte(`{}`)); err != nil {
+	if _, rpcErr, err := callTestRPC(context.Background(), peer, TypeID_AI_SUBSCRIBE_SUMMARY, []byte(`{}`)); err != nil {
 		t.Fatalf("subscribe summary: %v", err)
 	} else if rpcErr != nil {
 		t.Fatalf("subscribe summary RPC error = %#v", rpcErr)
 	}
-	if _, rpcErr, err := client.Call(context.Background(), TypeID_AI_SUBSCRIBE_THREAD, []byte(`{"thread_id":"thread_1"}`)); err != nil {
+	if _, rpcErr, err := callTestRPC(context.Background(), peer, TypeID_AI_SUBSCRIBE_THREAD, []byte(`{"thread_id":"thread_1"}`)); err != nil {
 		t.Fatalf("subscribe thread: %v", err)
 	} else if rpcErr != nil {
 		t.Fatalf("subscribe thread RPC error = %#v", rpcErr)
@@ -127,8 +101,8 @@ func TestRPCServiceProviderRebindsRealtimeSinkAcrossGenerations(t *testing.T) {
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
 		second.mu.Lock()
-		_, summaryAttached := second.realtimeSummaryEndpointBySRV[server]
-		threadAttached := second.realtimeThreadBySRV[server] == runThreadKey("env_1", "thread_1")
+		_, summaryAttached := second.realtimeSummaryEndpointBySRV[peer]
+		threadAttached := second.realtimeThreadBySRV[peer] == runThreadKey("env_1", "thread_1")
 		second.mu.Unlock()
 		if summaryAttached && threadAttached && provider.ActiveLeases(second) == 1 {
 			break
@@ -136,14 +110,14 @@ func TestRPCServiceProviderRebindsRealtimeSinkAcrossGenerations(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 	second.mu.Lock()
-	_, summaryRebound := second.realtimeSummaryEndpointBySRV[server]
-	threadRebound := second.realtimeThreadBySRV[server] == runThreadKey("env_1", "thread_1")
+	_, summaryRebound := second.realtimeSummaryEndpointBySRV[peer]
+	threadRebound := second.realtimeThreadBySRV[peer] == runThreadKey("env_1", "thread_1")
 	second.mu.Unlock()
 	if !summaryRebound || !threadRebound {
 		t.Fatal("realtime sink did not rebind to the replacement generation")
 	}
 	first.mu.Lock()
-	_, oldAttached := first.realtimeSummaryEndpointBySRV[server]
+	_, oldAttached := first.realtimeSummaryEndpointBySRV[peer]
 	first.mu.Unlock()
 	if oldAttached {
 		t.Fatal("realtime sink remained attached to the old generation")
@@ -161,38 +135,22 @@ func TestRPCServiceProviderRebindsRealtimeSinkAcrossGenerations(t *testing.T) {
 		t.Fatalf("second generation active leases after cleanup = %d, want 0", active)
 	}
 	second.mu.Lock()
-	_, summaryAttached := second.realtimeSummaryEndpointBySRV[server]
-	_, writerAttached := second.realtimeWriters[server]
+	_, summaryAttached := second.realtimeSummaryEndpointBySRV[peer]
+	_, writerAttached := second.realtimeWriters[peer]
 	second.mu.Unlock()
 	if summaryAttached || writerAttached {
 		t.Fatal("replacement generation sink remained attached after cleanup")
 	}
-	cancelServe()
-	_ = clientConn.Close()
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("RPC server did not stop")
-	}
 }
 
 func TestRPCServiceProviderConcurrentGenerationCancelAndCleanupReleasesOnce(t *testing.T) {
-	serverConn, clientConn := net.Pipe()
-	t.Cleanup(func() { _ = serverConn.Close() })
-	t.Cleanup(func() { _ = clientConn.Close() })
-
 	service := newRPCRealtimeTestService()
 	provider := newRPCGenerationProvider(service)
-	router := rpc.NewRouter()
+	router := sessionrpc.NewRouter()
 	meta := &session.Meta{EndpointID: "env_1", CanRead: true, CanWrite: true, CanExecute: true}
-	server := rpc.NewServer(serverConn, router)
-	detach := RegisterRPCServiceProviderWithAccessGate(router, meta, server, nil, provider.Acquire)
-	serveCtx, cancelServe := context.WithCancel(context.Background())
-	t.Cleanup(cancelServe)
-	done := make(chan error, 1)
-	go func() { done <- server.Serve(serveCtx) }()
-	client := rpc.NewClient(clientConn)
-	if _, rpcErr, err := client.Call(context.Background(), TypeID_AI_SUBSCRIBE_SUMMARY, []byte(`{}`)); err != nil {
+	peer := newTestRPCPeer(router)
+	detach := RegisterRPCServiceProviderWithAccessGate(router, meta, peer, nil, provider.Acquire)
+	if _, rpcErr, err := callTestRPC(context.Background(), peer, TypeID_AI_SUBSCRIBE_SUMMARY, []byte(`{}`)); err != nil {
 		t.Fatalf("subscribe summary: %v", err)
 	} else if rpcErr != nil {
 		t.Fatalf("subscribe summary RPC error = %#v", rpcErr)
@@ -223,30 +181,23 @@ func TestRPCServiceProviderConcurrentGenerationCancelAndCleanupReleasesOnce(t *t
 		t.Fatalf("concurrent cleanup lease counts = (%d, %d), want (1, 1)", acquires, releases)
 	}
 	service.mu.Lock()
-	_, attached := service.realtimeSummaryEndpointBySRV[server]
-	_, writerAttached := service.realtimeWriters[server]
+	_, attached := service.realtimeSummaryEndpointBySRV[peer]
+	_, writerAttached := service.realtimeWriters[peer]
 	service.mu.Unlock()
 	if attached || writerAttached {
 		t.Fatal("realtime sink remained attached after concurrent cleanup")
 	}
 
-	cancelServe()
-	_ = clientConn.Close()
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("RPC server did not stop")
-	}
 }
 
 func newRPCRealtimeTestService() *Service {
 	return &Service{
 		activeRunByTh:                make(map[string]string),
-		realtimeWriters:              make(map[*rpc.Server]*aiSinkWriter),
-		realtimeSummaryByEndpoint:    make(map[string]map[*rpc.Server]struct{}),
-		realtimeSummaryEndpointBySRV: make(map[*rpc.Server]string),
-		realtimeByThread:             make(map[string]map[*rpc.Server]struct{}),
-		realtimeThreadBySRV:          make(map[*rpc.Server]string),
+		realtimeWriters:              make(map[flowersec.RPCPeer]*aiSinkWriter),
+		realtimeSummaryByEndpoint:    make(map[string]map[flowersec.RPCPeer]struct{}),
+		realtimeSummaryEndpointBySRV: make(map[flowersec.RPCPeer]string),
+		realtimeByThread:             make(map[string]map[flowersec.RPCPeer]struct{}),
+		realtimeThreadBySRV:          make(map[flowersec.RPCPeer]string),
 	}
 }
 
@@ -348,10 +299,6 @@ func (p *rpcGenerationProvider) Counts(service *Service) (int, int) {
 }
 
 func TestRPCServiceProviderRecoversWithoutReconnect(t *testing.T) {
-	serverConn, clientConn := net.Pipe()
-	t.Cleanup(func() { _ = serverConn.Close() })
-	t.Cleanup(func() { _ = clientConn.Close() })
-
 	var mu sync.Mutex
 	var service *Service
 	acquires := 0
@@ -373,28 +320,23 @@ func TestRPCServiceProviderRecoversWithoutReconnect(t *testing.T) {
 		}, nil
 	}
 
-	router := rpc.NewRouter()
+	router := sessionrpc.NewRouter()
 	meta := &session.Meta{CanRead: true, CanWrite: true, CanExecute: true}
-	RegisterRPCServiceProviderWithAccessGate(router, meta, nil, nil, acquire)
-	server := rpc.NewServer(serverConn, router)
-	serveCtx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	done := make(chan error, 1)
-	go func() { done <- server.Serve(serveCtx) }()
-	client := rpc.NewClient(clientConn)
+	peer := newTestRPCPeer(router)
+	RegisterRPCServiceProviderWithAccessGate(router, meta, peer, nil, acquire)
 
-	_, rpcErr, err := client.Call(context.Background(), TypeID_AI_STOP_THREAD, []byte(`{"thread_id":"thread_1"}`))
+	_, rpcErr, err := callTestRPC(context.Background(), peer, TypeID_AI_STOP_THREAD, []byte(`{"thread_id":"thread_1"}`))
 	if err != nil {
 		t.Fatalf("blocked call: %v", err)
 	}
-	if rpcErr == nil || rpcErr.Code != 503 || rpcErr.Message == nil || strings.TrimSpace(*rpcErr.Message) != "AI service is unavailable" {
+	if rpcErr == nil || rpcErr.Code != 503 || strings.TrimSpace(rpcErr.Message) != "AI service is unavailable" {
 		t.Fatalf("blocked RPC error = %#v", rpcErr)
 	}
 
 	mu.Lock()
 	service = &Service{}
 	mu.Unlock()
-	_, rpcErr, err = client.Call(context.Background(), TypeID_AI_STOP_THREAD, []byte(`{"thread_id":"thread_1"}`))
+	_, rpcErr, err = callTestRPC(context.Background(), peer, TypeID_AI_STOP_THREAD, []byte(`{"thread_id":"thread_1"}`))
 	if err != nil {
 		t.Fatalf("ready call on same connection: %v", err)
 	}
@@ -407,11 +349,4 @@ func TestRPCServiceProviderRecoversWithoutReconnect(t *testing.T) {
 	}
 	mu.Unlock()
 
-	cancel()
-	_ = clientConn.Close()
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("RPC server did not stop")
-	}
 }

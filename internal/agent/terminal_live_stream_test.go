@@ -7,10 +7,17 @@ import (
 	"time"
 
 	livev1 "github.com/floegence/floeterm/terminal-go/livev1"
-	"github.com/floegence/flowersec/flowersec-go/endpoint/serve"
+	flowersec "github.com/floegence/flowersec/flowersec-go/v2"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/terminal"
 )
+
+type terminalTestByteStream struct{ net.Conn }
+
+func (*terminalTestByteStream) Kind() string                           { return livev1.StreamKind }
+func (*terminalTestByteStream) TerminalError() *flowersec.SessionError { return nil }
+func (*terminalTestByteStream) CloseWrite() error                      { return nil }
+func (stream *terminalTestByteStream) Reset() error                    { return stream.Close() }
 
 func TestRegisterTerminalLiveStreamHandlesNamedStream(t *testing.T) {
 	manager := terminal.NewManager("/bin/sh", t.TempDir(), nil)
@@ -20,11 +27,7 @@ func TestRegisterTerminalLiveStreamHandlesNamedStream(t *testing.T) {
 		t.Fatalf("CreateSession() error = %v", err)
 	}
 	agent := &Agent{term: manager}
-	server, err := serve.New(serve.Options{})
-	if err != nil {
-		t.Fatalf("serve.New() error = %v", err)
-	}
-	agent.registerTerminalLiveStream(server, &session.Meta{CanRead: true})
+	handler := agent.terminalLiveStreamHandler(&session.Meta{CanRead: true})
 
 	serverConn, clientConn := net.Pipe()
 	t.Cleanup(func() {
@@ -33,7 +36,7 @@ func TestRegisterTerminalLiveStreamHandlesNamedStream(t *testing.T) {
 	})
 	done := make(chan struct{})
 	go func() {
-		server.HandleStream(context.Background(), livev1.StreamKind, serverConn)
+		handler(context.Background(), flowersec.IncomingStream{Kind: livev1.StreamKind, Stream: &terminalTestByteStream{Conn: serverConn}})
 		close(done)
 	}()
 	attach, err := livev1.EncodeAttach(livev1.Attach{
@@ -68,16 +71,12 @@ func TestRegisterTerminalLiveStreamServesAuthorizedAttachAndResize(t *testing.T)
 		t.Fatalf("CreateSession() error = %v", err)
 	}
 	agent := &Agent{term: manager}
-	server, err := serve.New(serve.Options{})
-	if err != nil {
-		t.Fatalf("serve.New() error = %v", err)
-	}
-	agent.registerTerminalLiveStream(server, &session.Meta{CanRead: true, CanWrite: true, CanExecute: true})
+	handler := agent.terminalLiveStreamHandler(&session.Meta{CanRead: true, CanWrite: true, CanExecute: true})
 
 	serverConn, clientConn := net.Pipe()
 	done := make(chan struct{})
 	go func() {
-		server.HandleStream(context.Background(), livev1.StreamKind, serverConn)
+		handler(context.Background(), flowersec.IncomingStream{Kind: livev1.StreamKind, Stream: &terminalTestByteStream{Conn: serverConn}})
 		close(done)
 	}()
 	t.Cleanup(func() {

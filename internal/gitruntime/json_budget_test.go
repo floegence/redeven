@@ -3,13 +3,12 @@ package gitruntime
 import (
 	"context"
 	"encoding/json"
-	"net"
+	"errors"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven/internal/accessgate"
+	"github.com/floegence/redeven/internal/sessionrpc"
 )
 
 type boundedJSONTextValue string
@@ -198,7 +197,7 @@ func TestBudgetedRPCRejectsLargeRequestAndResponseWithoutClosingConnection(t *te
 		Value string `json:"value"`
 	}
 	runtime := New()
-	router := rpc.NewRouter()
+	router := sessionrpc.NewRouter()
 	RegisterTyped(router, 1101, runtime, DefaultRPCSpec[request, response](), nil, nil, accessgate.RPCAccessPublic,
 		func(_ context.Context, req *request) (*response, error) {
 			switch req.Value {
@@ -207,42 +206,20 @@ func TestBudgetedRPCRejectsLargeRequestAndResponseWithoutClosingConnection(t *te
 			case "escaped-response":
 				return &response{Value: strings.Repeat("<", maxRetainedResponseBytes-1024)}, nil
 			case "large-error":
-				return nil, &rpc.Error{Code: 500, Message: strings.Repeat("x", MaxResponsePayload)}
+				return nil, &sessionrpc.Error{Code: 500, Message: strings.Repeat("x", MaxResponsePayload)}
 			default:
 				return &response{Value: req.Value}, nil
 			}
 		})
 
-	serverConn, clientConn := net.Pipe()
-	server, err := rpc.NewServerWithOptions(serverConn, router, rpc.ServerOptions{
-		MaxConcurrentRequests: 1, MaxQueuedRequests: 1, MaxQueuedNotifications: 1,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan error, 1)
-	go func() { done <- server.Serve(ctx) }()
-	client := rpc.NewClient(clientConn)
-	defer func() {
-		cancel()
-		_ = client.Close()
-		select {
-		case <-done:
-		case <-time.After(time.Second):
-			t.Error("RPC server did not stop")
-		}
-	}()
-
 	call := func(raw json.RawMessage) (json.RawMessage, uint32) {
 		t.Helper()
-		callCtx, callCancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer callCancel()
-		payload, rpcErr, callErr := client.Call(callCtx, 1101, raw)
-		if callErr != nil {
-			t.Fatalf("transport error: %v", callErr)
-		}
-		if rpcErr != nil {
+		var payload json.RawMessage
+		if callErr := router.Call(context.Background(), 1101, raw, &payload); callErr != nil {
+			var rpcErr *sessionrpc.Error
+			if !errors.As(callErr, &rpcErr) {
+				t.Fatalf("business RPC error: %v", callErr)
+			}
 			return payload, rpcErr.Code
 		}
 		return payload, 0

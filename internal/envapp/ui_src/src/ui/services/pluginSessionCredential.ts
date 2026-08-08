@@ -19,6 +19,12 @@ export function activatePluginSessionCredential(channelID: string): boolean {
   return true;
 }
 
+export function activatePendingPluginSessionCredential(): boolean {
+  if (pendingPluginSessionCredentials.size !== 1) return false;
+  const [channelID] = pendingPluginSessionCredentials.keys();
+  return activatePluginSessionCredential(channelID ?? '');
+}
+
 export function readPluginSessionCredential(): string {
   return pluginSessionCredential;
 }

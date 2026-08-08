@@ -4,9 +4,9 @@ import (
 	"context"
 	"strings"
 
-	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/sessionrpc"
 )
 
 const (
@@ -38,7 +38,7 @@ func New(gate *accessgate.Gate) *Service {
 	return &Service{gate: gate}
 }
 
-func (s *Service) Register(r *rpc.Router, meta *session.Meta) {
+func (s *Service) Register(r *sessionrpc.Router, meta *session.Meta) {
 	if s == nil || r == nil {
 		return
 	}
@@ -60,10 +60,10 @@ func (s *Service) Register(r *rpc.Router, meta *session.Meta) {
 			return &ResumeResponse{Unlocked: true}, nil
 		}
 		if meta == nil {
-			return nil, &rpc.Error{Code: 500, Message: "missing session metadata"}
+			return nil, &sessionrpc.Error{Code: 500, Message: "missing session metadata"}
 		}
 		if err := s.gate.ResumeChannel(strings.TrimSpace(meta.ChannelID), req.Token); err != nil {
-			return nil, &rpc.Error{Code: 401, Message: err.Error()}
+			return nil, &sessionrpc.Error{Code: 401, Message: err.Error()}
 		}
 		return &ResumeResponse{Unlocked: true}, nil
 	})

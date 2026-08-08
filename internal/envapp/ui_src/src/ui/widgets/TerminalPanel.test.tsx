@@ -865,7 +865,7 @@ vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => ({
 vi.mock('@floegence/floe-webapp-protocol', async () => ({
   ...await vi.importActual<typeof import('@floegence/floe-webapp-protocol')>('@floegence/floe-webapp-protocol'),
   useProtocol: () => ({
-    client: () => terminalProtocolState.client,
+    session: () => terminalProtocolState.client,
     status: () => terminalProtocolState.status,
   }),
 }));

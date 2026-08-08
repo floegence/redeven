@@ -3,14 +3,13 @@ package accessrpc
 import (
 	"context"
 	"errors"
-	"net"
 	"testing"
 
-	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/fs"
 	"github.com/floegence/redeven/internal/rpcutil"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/sessionrpc"
 )
 
 type pathContextProbe struct {
@@ -43,22 +42,11 @@ func TestService_ResumeUnlocksProtectedRPC(t *testing.T) {
 		t.Fatalf("resume token missing")
 	}
 
-	serverConn, clientConn := net.Pipe()
-	defer serverConn.Close()
-	defer clientConn.Close()
-
-	router := rpc.NewRouter()
+	router := sessionrpc.NewRouter()
 	New(gate).Register(router, &rpcMeta)
 	fs.NewService(t.TempDir()).RegisterWithAccessGate(router, &rpcMeta, gate)
-
-	srv := rpc.NewServer(serverConn, router)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go func() {
-		_ = srv.Serve(ctx)
-	}()
-
-	client := rpc.NewClient(clientConn)
+	ctx := context.Background()
+	client := router
 
 	status, err := rpcutil.CallJSON[struct{}, StatusResponse](ctx, client, TypeIDAccessStatus, &struct{}{})
 	if err != nil {
@@ -71,7 +59,7 @@ func TestService_ResumeUnlocksProtectedRPC(t *testing.T) {
 	if _, err := rpcutil.CallJSON[struct{}, map[string]string](ctx, client, fs.TypeID_FS_GET_PATH_CONTEXT, &struct{}{}); err == nil {
 		t.Fatalf("expected protected RPC to fail before resume")
 	} else {
-		var callErr *rpc.CallError
+		var callErr *sessionrpc.Error
 		if !errors.As(err, &callErr) {
 			t.Fatalf("expected CallError, got %T (%v)", err, err)
 		}
@@ -107,22 +95,11 @@ func TestService_InitiallyUnlockedChannelSkipsResume(t *testing.T) {
 
 	gate.RegisterChannelWithOptions(rpcMeta, accessgate.RegisterChannelOptions{Unlocked: true})
 
-	serverConn, clientConn := net.Pipe()
-	defer serverConn.Close()
-	defer clientConn.Close()
-
-	router := rpc.NewRouter()
+	router := sessionrpc.NewRouter()
 	New(gate).Register(router, &rpcMeta)
 	fs.NewService(t.TempDir()).RegisterWithAccessGate(router, &rpcMeta, gate)
-
-	srv := rpc.NewServer(serverConn, router)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go func() {
-		_ = srv.Serve(ctx)
-	}()
-
-	client := rpc.NewClient(clientConn)
+	ctx := context.Background()
+	client := router
 
 	status, err := rpcutil.CallJSON[struct{}, StatusResponse](ctx, client, TypeIDAccessStatus, &struct{}{})
 	if err != nil {

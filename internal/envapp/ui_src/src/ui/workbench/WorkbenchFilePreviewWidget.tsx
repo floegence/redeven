@@ -118,7 +118,7 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
   const downloads = useDownloadManager();
   const workbench = useEnvWorkbenchInstancesContext();
   const controller = createFilePreviewController({
-    client: () => protocol.client(),
+    client: () => protocol.session?.(),
     rpc: () => rpc,
     canWrite: () => Boolean(env.env()?.permissions?.can_write),
     onSaved: (path) => {
