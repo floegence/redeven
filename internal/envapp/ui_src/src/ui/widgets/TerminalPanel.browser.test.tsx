@@ -214,6 +214,7 @@ const terminalCoreState = vi.hoisted(() => ({
     write: ReturnType<typeof vi.fn>;
     dispose: ReturnType<typeof vi.fn>;
     setFixedDimensions: ReturnType<typeof vi.fn>;
+    forceResizeAndWaitForCommittedFrame: ReturnType<typeof vi.fn>;
     forceResizeAndWaitForPresentation: ReturnType<typeof vi.fn>;
     measureHostDimensions: ReturnType<typeof vi.fn>;
     captureRestorableSnapshot: ReturnType<typeof vi.fn>;
@@ -499,10 +500,13 @@ vi.mock('@floegence/floeterm-terminal-web', async () => {
     setTheme = vi.fn();
     setAppearance = vi.fn();
     forceResize = vi.fn();
-    forceResizeAndWaitForPresentation = vi.fn(() => (
+    forceResizeAndWaitForCommittedFrame = vi.fn(() => (
       presentationFenceState.blocked
         ? new Promise<void>((resolve) => presentationFenceState.resolvers.push(resolve))
         : Promise.resolve()
+    ));
+    forceResizeAndWaitForPresentation = vi.fn(() => (
+      Promise.resolve()
     ));
     measureHostDimensions = vi.fn(() => hostCapacityState.dimensions);
     getDimensions = vi.fn(() => ({ cols: 80, rows: 24 }));
@@ -1619,7 +1623,7 @@ describe('TerminalPanel browser activity integration', () => {
     ]);
   });
 
-  it('keeps the surface non-interactive until the refreshed renderer presentation fence completes', async () => {
+  it('keeps the surface non-interactive until the refreshed renderer committed-frame fence completes', async () => {
     terminalSessionsState.sessions = [terminalSessionsState.sessions[0]!];
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -1634,7 +1638,7 @@ describe('TerminalPanel browser activity integration', () => {
     const refreshedCore = terminalCoreState.instances[1]!;
     const runtime = host.querySelector<HTMLElement>('[data-terminal-runtime-session="session-1"]');
     expect(oldCore.dispose).toHaveBeenCalledTimes(1);
-    expect(refreshedCore.forceResizeAndWaitForPresentation).toHaveBeenCalled();
+    expect(refreshedCore.forceResizeAndWaitForCommittedFrame).toHaveBeenCalled();
     transportMocks.resizeWithEffectiveGeometry.mockClear();
     refreshedCore.handlers?.onResize?.({ cols: 100, rows: 30 });
     expect(transportMocks.resizeWithEffectiveGeometry).not.toHaveBeenCalled();
@@ -1672,8 +1676,34 @@ describe('TerminalPanel browser activity integration', () => {
     await settleTerminalPanel();
 
     expect(transportMocks.resizeWithEffectiveGeometry).toHaveBeenCalledWith('session-1', 100, 30);
-    expect(core.setFixedDimensions).toHaveBeenCalledWith({ cols: 100, rows: 30 });
+    expect(core.setFixedDimensions).toHaveBeenCalledWith(
+      { cols: 100, rows: 30 },
+      { notifyResize: false },
+    );
     expect(core.forceResizeAndWaitForPresentation).toHaveBeenCalled();
+  });
+
+  it('does not reassert an unchanged host capacity when another view constrains the shared grid', async () => {
+    terminalSessionsState.sessions = [terminalSessionsState.sessions[0]!];
+    transportAttachState.effectiveCols = 60;
+    transportAttachState.effectiveRows = 20;
+    hostCapacityState.dimensions = { cols: 80, rows: 24 };
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="panel" />, host);
+    await vi.waitFor(() => expect(terminalCoreState.instances).toHaveLength(1));
+    await settleTerminalPanel();
+
+    const core = terminalCoreState.instances[0]!;
+    expect(transportMocks.attach).toHaveBeenCalledWith('session-1', 80, 24);
+    expect(core.setFixedDimensions).toHaveBeenCalledWith(
+      { cols: 60, rows: 20 },
+      { notifyResize: false },
+    );
+    expect(transportMocks.resizeWithEffectiveGeometry).not.toHaveBeenCalled();
+    expect(core.forceResizeAndWaitForCommittedFrame).toHaveBeenCalledTimes(1);
+    expect(core.forceResizeAndWaitForPresentation).not.toHaveBeenCalled();
   });
 
   it('does not apply an obsolete host-capacity acknowledgement to a replacement Core', async () => {
@@ -1712,7 +1742,10 @@ describe('TerminalPanel browser activity integration', () => {
 
     const obsoleteCore = terminalCoreState.instances[1]!;
     expect(obsoleteCore.dispose).toHaveBeenCalledTimes(1);
-    expect(obsoleteCore.setFixedDimensions).not.toHaveBeenCalledWith({ cols: 100, rows: 30 });
+    expect(obsoleteCore.setFixedDimensions).not.toHaveBeenCalledWith(
+      { cols: 100, rows: 30 },
+      { notifyResize: false },
+    );
     expect(host.querySelector('[data-terminal-runtime-session="session-1"]')?.getAttribute('aria-busy')).toBe('false');
   });
 
@@ -1944,7 +1977,10 @@ describe('TerminalPanel browser activity integration', () => {
       'new-size',
     ]);
     expect(core.setFixedDimensions).toHaveBeenCalledTimes(1);
-    expect(core.setFixedDimensions).toHaveBeenCalledWith({ cols: 90, rows: 28 });
+    expect(core.setFixedDimensions).toHaveBeenCalledWith(
+      { cols: 90, rows: 28 },
+      { notifyResize: false },
+    );
     expect(core.write.mock.invocationCallOrder[0]).toBeLessThan(core.setFixedDimensions.mock.invocationCallOrder[0]!);
     expect(core.setFixedDimensions.mock.invocationCallOrder[0]).toBeLessThan(core.write.mock.invocationCallOrder[1]!);
   });

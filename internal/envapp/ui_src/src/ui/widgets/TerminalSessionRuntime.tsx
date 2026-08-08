@@ -547,7 +547,12 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       pendingGeometryEvents.shift();
       lastAppliedGeometryGeneration = event.generation;
       lastAppliedGeometryBoundary = event.outputSequenceBoundary;
-      core.setFixedDimensions({ cols: event.cols, rows: event.rows });
+      // A server-confirmed effective grid is presentation input, not a new
+      // local host-capacity report. Later observer/focus resizes remain active.
+      core.setFixedDimensions(
+        { cols: event.cols, rows: event.rows },
+        { notifyResize: false },
+      );
       geometryPresentation.noteAppliedEffective({
         lifecycleEpoch: event.lifecycleEpoch,
         rendererEpoch: activeGeometryRendererEpoch,
@@ -1006,14 +1011,15 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     terminalPresentationSettling = true;
     try {
       let geometryChanged = false;
-      await core.forceResizeAndWaitForPresentation();
+      await core.forceResizeAndWaitForCommittedFrame();
       if (!terminalPresentationIsCurrent(core, initSequence, reloadSequence, trace)) return false;
 
       if (props.viewActive() && props.active()) {
         const hostDimensions = core.measureHostDimensions?.();
-        const effective = geometryPresentation.getState().knownEffective;
-        if (hostDimensions && effective
-          && (hostDimensions.cols !== effective.cols || hostDimensions.rows !== effective.rows)) {
+        const acknowledgedLocal = geometryPresentation.getState().acknowledgedLocal;
+        if (hostDimensions && (!acknowledgedLocal
+          || hostDimensions.cols !== acknowledgedLocal.cols
+          || hostDimensions.rows !== acknowledgedLocal.rows)) {
           const acknowledged = await requestTerminalResize(id, hostDimensions);
           if (!acknowledged) {
             if (!terminalPresentationIsCurrent(core, initSequence, reloadSequence, trace)
@@ -1026,12 +1032,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
         }
       }
 
-      if (geometryChanged) {
-        // Let geometry-triggered renderer work commit before the final fence; otherwise
-        // the renderer scheduler can coalesce the second demand behind the resize frame.
-        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-      }
-      await core.forceResizeAndWaitForPresentation();
+      if (geometryChanged) await core.forceResizeAndWaitForPresentation();
       return terminalPresentationIsCurrent(core, initSequence, reloadSequence, trace);
     } finally {
       terminalPresentationSettling = false;
@@ -1567,8 +1568,6 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       }
       if (seq !== initSeq) return;
 
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-      if (seq !== initSeq || recoveryTrace !== trace || term !== core) return;
       armBaselineRender(core, trace, seq);
       if (!await settleTerminalPresentation(id, core, seq, reloadSequence, trace)) return;
       if (seq !== initSeq || recoveryTrace !== trace || term !== core) return;
@@ -1771,8 +1770,6 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       if (latestEffective) queueTerminalGeometry({ sessionId: id, ...latestEffective });
 
       coordinator.setActive(liveRenderActive());
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-      if (term !== core || seq !== initSeq || recoveryTrace !== trace) return;
       armBaselineRender(core, trace, seq);
       if (!await settleTerminalPresentation(id, core, seq, reloadSequence, trace)) return;
       if (term !== core || seq !== initSeq || recoveryTrace !== trace) return;
