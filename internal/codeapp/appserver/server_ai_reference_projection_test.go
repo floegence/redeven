@@ -35,12 +35,13 @@ func TestServer_AIThreadLiveBootstrapProjectsCanonicalReferencesWithoutHostSecre
 		CanWrite:     true,
 		CanExecute:   true,
 	}
-	aiSvc, err := ai.NewService(ai.Options{
+	aiOptions := ai.Options{
 		Logger:       logger,
 		StateDir:     stateDir,
 		AgentHomeDir: t.TempDir(),
 		Shell:        "/bin/sh",
-	})
+	}
+	aiSvc, err := ai.NewService(aiOptions)
 	if err != nil {
 		t.Fatalf("ai.NewService: %v", err)
 	}
@@ -49,7 +50,14 @@ func TestServer_AIThreadLiveBootstrapProjectsCanonicalReferencesWithoutHostSecre
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
+	if err := aiSvc.Close(); err != nil {
+		t.Fatalf("close AI service before canonical fixture: %v", err)
+	}
 	seedFloretReferenceThreadTurn(t, stateDir, thread.ThreadID, sentinelPath, sentinelLocator)
+	aiSvc, err = ai.NewService(aiOptions)
+	if err != nil {
+		t.Fatalf("reopen AI service after canonical fixture: %v", err)
+	}
 
 	channelID := "ch_reference_projection"
 	srv, err := New(Options{

@@ -2646,11 +2646,12 @@ func TestServer_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 	cfgPath := writeTestConfig(t)
 	store := openTestThreadReadStateStore(t)
 	stateDir := t.TempDir()
-	aiSvc, err := ai.NewService(ai.Options{
+	aiOptions := ai.Options{
 		StateDir:     stateDir,
 		AgentHomeDir: t.TempDir(),
 		Shell:        "/bin/sh",
-	})
+	}
+	aiSvc, err := ai.NewService(aiOptions)
 	if err != nil {
 		t.Fatalf("ai.NewService: %v", err)
 	}
@@ -2691,20 +2692,31 @@ func TestServer_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
-	seedFloretThreadTurn(t, stateDir, thread.ThreadID, "turn_read_state_1", "run_read_state_1", "First prompt", "First response")
-
-	srv, err := New(Options{
-		Backend:              &stubBackend{},
-		DistFS:               dist,
-		ListenAddr:           "127.0.0.1:0",
-		AIServiceProvider:    newStaticAIServiceProvider(aiSvc),
-		ConfigPath:           cfgPath,
-		ThreadReadStateStore: store,
-		ResolveSessionMeta:   resolveMeta,
-	})
-	if err != nil {
-		t.Fatalf("New: %v", err)
+	if err := aiSvc.Close(); err != nil {
+		t.Fatalf("close AI service before canonical fixture: %v", err)
 	}
+	seedFloretThreadTurn(t, stateDir, thread.ThreadID, "turn_read_state_1", "run_read_state_1", "First prompt", "First response")
+	aiSvc, err = ai.NewService(aiOptions)
+	if err != nil {
+		t.Fatalf("reopen AI service after canonical fixture: %v", err)
+	}
+	newServer := func() *Server {
+		t.Helper()
+		srv, err := New(Options{
+			Backend:              &stubBackend{},
+			DistFS:               dist,
+			ListenAddr:           "127.0.0.1:0",
+			AIServiceProvider:    newStaticAIServiceProvider(aiSvc),
+			ConfigPath:           cfgPath,
+			ThreadReadStateStore: store,
+			ResolveSessionMeta:   resolveMeta,
+		})
+		if err != nil {
+			t.Fatalf("New: %v", err)
+		}
+		return srv
+	}
+	srv := newServer()
 
 	type aiThreadReadStatusSnapshot struct {
 		ActivityRevision    int64  `json:"activity_revision"`
@@ -2840,7 +2852,15 @@ func TestServer_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 		t.Fatalf("user2 first list is_unread=true, want=false")
 	}
 
+	if err := aiSvc.Close(); err != nil {
+		t.Fatalf("close AI service before second canonical fixture: %v", err)
+	}
 	seedFloretThreadTurn(t, stateDir, thread.ThreadID, "turn_read_state_2", "run_read_state_2", "Second prompt", "Second response")
+	aiSvc, err = ai.NewService(aiOptions)
+	if err != nil {
+		t.Fatalf("reopen AI service after second canonical fixture: %v", err)
+	}
+	srv = newServer()
 
 	detail := readDetail(originUser1)
 	if !detail.Data.Thread.ReadStatus.IsUnread {
@@ -2888,7 +2908,15 @@ func TestServer_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 		t.Fatalf("mismatched last-message ai mark-read status=%d, want=%d body=%s", mismatchedLastMessageRead.Code, http.StatusBadRequest, mismatchedLastMessageRead.Body.String())
 	}
 
+	if err := aiSvc.Close(); err != nil {
+		t.Fatalf("close AI service before third canonical fixture: %v", err)
+	}
 	seedFloretThreadTurn(t, stateDir, thread.ThreadID, "turn_read_state_3", "run_read_state_3", "Concurrent prompt", "Concurrent response")
+	aiSvc, err = ai.NewService(aiOptions)
+	if err != nil {
+		t.Fatalf("reopen AI service after third canonical fixture: %v", err)
+	}
+	srv = newServer()
 	staleTampered := markRead(originUser1, aiThreadReadStatusSnapshot{
 		ActivityRevision:    staleSnapshot.ActivityRevision,
 		LastMessageAtUnixMs: staleSnapshot.LastMessageAtUnixMs,
