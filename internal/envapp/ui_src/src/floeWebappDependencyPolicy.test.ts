@@ -10,6 +10,12 @@ const FLOE_WEBAPP_DEPENDENCIES = [
   '@floegence/floe-webapp-protocol',
 ] as const;
 
+const FLOE_WEBAPP_RELEASE_SET = {
+  '@floegence/floe-webapp-boot': '0.40.4',
+  '@floegence/floe-webapp-core': '0.40.6',
+  '@floegence/floe-webapp-protocol': '0.40.4',
+} as const;
+
 const PUBLISHED_NPM_DEPENDENCIES = [...FLOE_WEBAPP_DEPENDENCIES, '@floegence/floeterm-terminal-web'] as const;
 
 const LOCAL_REFERENCE_PREFIXES = ['file:', 'link:', 'workspace:', 'portal:'] as const;
@@ -74,13 +80,15 @@ function expectedTarballUrl(packageName: string, version: string): string {
 }
 
 describe('published npm dependency policy', () => {
-  it('keeps floe-webapp boot, core, and protocol aligned to the same released version', () => {
+  it('keeps floe-webapp boot, core, and protocol on the released compatible package set', () => {
     const dependencies = readDependencySpecifiers();
-    const versions = FLOE_WEBAPP_DEPENDENCIES.map((dependencyName) =>
-      extractVersionSpecifier(getDependencySpecifier(dependencies, dependencyName)),
-    );
 
-    expect(new Set(versions).size, 'floe-webapp packages must be upgraded together').toBe(1);
+    for (const dependencyName of FLOE_WEBAPP_DEPENDENCIES) {
+      expect(
+        extractVersionSpecifier(getDependencySpecifier(dependencies, dependencyName)),
+        `${dependencyName} must use the released compatible package set`,
+      ).toBe(FLOE_WEBAPP_RELEASE_SET[dependencyName]);
+    }
   });
 
   it('keeps published UI dependencies on released semver ranges instead of local references', () => {
@@ -119,9 +127,9 @@ describe('published npm dependency policy', () => {
       '@floegence/floeterm-terminal-web',
     ));
 
-    expect(version).toBe('0.13.3');
+    expect(version).toBe('0.13.4');
     expect(expectedTarballUrl('@floegence/floeterm-terminal-web', version)).toBe(
-      'https://registry.npmjs.org/@floegence/floeterm-terminal-web/-/floeterm-terminal-web-0.13.3.tgz',
+      'https://registry.npmjs.org/@floegence/floeterm-terminal-web/-/floeterm-terminal-web-0.13.4.tgz',
     );
 
     const previousReleaseMarkers = new Map([
