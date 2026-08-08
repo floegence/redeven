@@ -529,7 +529,14 @@ func (s *Service) recoverQueuedTurnCommandsForStartup(ctx context.Context) ([]qu
 			return snapshot.CanAppendMessage, nil
 		}()
 		if err != nil {
-			return nil, fmt.Errorf("recover queued turns for thread %q: %w", threadID, err)
+			// A malformed or stale canonical turn is scoped to this thread. Do not
+			// make the entire AI service unavailable during startup because one
+			// queued turn cannot be resumed. Keep the durable queue entry intact so
+			// the user can inspect or remove it after the service becomes available.
+			if s.log != nil {
+				s.log.Warn("ai: skipped queued turn startup recovery for thread", "endpoint_id", endpointID, "thread_id", threadID, "error", err)
+			}
+			continue
 		}
 		if wake {
 			targets = append(targets, queuedTurnRecoveryTarget{endpointID: endpointID, threadID: threadID})
@@ -1659,7 +1666,15 @@ func (s *Service) startUserTurnDetached(ctx context.Context, meta *session.Meta,
 	}
 	prepared.r.awaitFloretAdmission.Store(true)
 	sourceID := strings.TrimSpace(sourceFollowupID)
-	commandID := ""
+	// The detached execution key is also the durable admission identity. Keeping
+	// one ID across the product queue, Floret logical request, live events, and
+	// the immediate client receipt makes asynchronous admission observable and
+	// stoppable without a second lookup key.
+	commandID := strings.TrimSpace(executionKey)
+	if commandID == "" {
+		s.releasePreparedRun(prepared)
+		return admittedUserTurn{}, normalizedInput, errors.New("missing detached admission identity")
+	}
 	if sourceID != "" {
 		pctx, cancel := context.WithTimeout(ctx, prepared.persistTO)
 		source, sourceErr := prepared.db.GetQueuedTurn(pctx, endpointID, threadID, sourceID)
@@ -1686,12 +1701,7 @@ func (s *Service) startUserTurnDetached(ctx context.Context, meta *session.Meta,
 			commandID = sourceID
 		}
 	}
-	if commandID == "" {
-		commandID, err = NewQueuedTurnID()
-		if err != nil {
-			s.releasePreparedRun(prepared)
-			return admittedUserTurn{}, normalizedInput, err
-		}
+	if sourceID == "" {
 		contextActionJSON, marshalErr := marshalQueuedTurnContextAction(normalizedInput.ContextAction)
 		if marshalErr != nil {
 			s.releasePreparedRun(prepared)
@@ -1763,7 +1773,8 @@ func (s *Service) startUserTurnDetached(ctx context.Context, meta *session.Meta,
 	s.broadcastThreadSummary(endpointID, threadID)
 	go func() {
 		runErr := s.executePreparedRun(context.Background(), prepared)
-		if runErr != nil && !prepared.r.floretAdmitted.Load() {
+		expectedPreAdmissionCancel := !prepared.r.floretAdmitted.Load() && strings.TrimSpace(prepared.r.getCancelReason()) == "canceled"
+		if !prepared.r.floretAdmitted.Load() {
 			releaseCtx, releaseCancel := context.WithTimeout(context.Background(), prepared.persistTO)
 			releaseErr := prepared.db.ReleasePendingTurnAdmission(
 				releaseCtx, endpointID, threadID, commandID, commandID, threadstore.FollowupLaneDraft,
@@ -1772,21 +1783,24 @@ func (s *Service) startUserTurnDetached(ctx context.Context, meta *session.Meta,
 			if releaseErr != nil {
 				runErr = errors.Join(runErr, fmt.Errorf("release failed pre-admission turn: %w", releaseErr))
 			} else {
+				if runErr == nil {
+					runErr = errors.New("execution ended before canonical user admission")
+				}
 				s.broadcastThreadSummary(endpointID, threadID)
 			}
 		}
 		prepared.r.completeUserTurnAdmissionAfterExecution(runErr)
-		if runErr != nil {
+		if runErr != nil && !expectedPreAdmissionCancel {
 			if s.log != nil {
 				s.log.Warn("ai detached run failed", "execution_key", logsafe.Text(executionKey, 256), "thread_id", logsafe.Text(threadID, 256), "error", logsafe.Error(runErr))
 			}
 		}
 	}()
-	admitted, err := prepared.r.waitForUserTurnAdmission(ctx)
-	if err != nil {
-		return admittedUserTurn{}, normalizedInput, err
-	}
-	return admitted, normalizedInput, nil
+	// Durable admission is the request boundary. Floret canonical identity is
+	// published asynchronously through the live/bootstrap projection; waiting
+	// here makes the HTTP send path needlessly pay the model/runtime startup
+	// latency and creates an unavoidable Stop race before identity exists.
+	return admittedUserTurn{}, normalizedInput, nil
 }
 
 func (s *Service) releasePreparedRun(prepared *preparedRun) {

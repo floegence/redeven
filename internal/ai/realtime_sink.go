@@ -447,6 +447,14 @@ func (s *Service) threadSummaryRealtimeEvent(endpointID string, threadID string)
 	if err != nil {
 		return RealtimeEvent{}, err
 	}
+	if runStatus == string(RunStateRunning) {
+		s.mu.Lock()
+		liveState := s.flowerLiveMaterializedStateLocked(endpointID, threadID)
+		s.mu.Unlock()
+		if flowerLiveStateHasPendingApproval(liveState, strings.TrimSpace(string(snapshot.LatestRunID))) {
+			runStatus = string(RunStateWaitingApproval)
+		}
+	}
 	permissionType, err := threadPermissionType(th)
 	if err != nil {
 		return RealtimeEvent{}, err

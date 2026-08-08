@@ -2,7 +2,6 @@ package ai
 
 import (
 	"context"
-	"errors"
 	"path/filepath"
 	"testing"
 	"time"
@@ -94,8 +93,8 @@ func TestStartUserTurnDetachedReturnsExplicitErrorBeforeFloretAdmission(t *testi
 		Model:    "missing/provider",
 		Input:    RunInput{Text: "provider resolution fails before Floret admission"},
 	}, "")
-	if !errors.Is(err, ErrUserTurnNotAdmitted) {
-		t.Fatalf("startUserTurnDetached error=%v, want %v", err, ErrUserTurnNotAdmitted)
+	if err != nil {
+		t.Fatalf("startUserTurnDetached error=%v, want accepted detached admission", err)
 	}
 
 	bootstrap, err := svc.GetFlowerThreadLiveBootstrap(ctx, meta, thread.ThreadID)
@@ -108,9 +107,17 @@ func TestStartUserTurnDetachedReturnsExplicitErrorBeforeFloretAdmission(t *testi
 	if len(bootstrap.LiveState.Messages) != 0 {
 		t.Fatalf("pre-admission draft entered live state: %#v", bootstrap.LiveState.Messages)
 	}
-	commands, err := svc.threadsDB.ListFollowupsByLane(ctx, meta.EndpointID, thread.ThreadID, threadstore.FollowupLaneDraft, 10)
-	if err != nil {
-		t.Fatal(err)
+	var commands []threadstore.QueuedTurn
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		commands, err = svc.threadsDB.ListFollowupsByLane(ctx, meta.EndpointID, thread.ThreadID, threadstore.FollowupLaneDraft, 10)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(commands) == 1 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 	if len(commands) != 1 || commands[0].AdmissionState != threadstore.PendingTurnAdmissionReady {
 		t.Fatalf("pre-admission command=%#v, want durable non-retrying draft", commands)

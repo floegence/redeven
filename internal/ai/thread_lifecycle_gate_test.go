@@ -376,8 +376,8 @@ func TestQueuedRecoveryDoesNotCompeteWithActiveAdmissionSettlementOwner(t *testi
 	svc.activeRunByTh[threadKey] = command.QueueID
 	svc.mu.Unlock()
 	targets, err := svc.recoverQueuedTurnCommandsForStartup(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "active runtime settlement owner") {
-		t.Fatalf("queued recovery targets=%#v err=%v, want active settlement owner rejection", targets, err)
+	if err != nil || len(targets) != 0 {
+		t.Fatalf("queued recovery targets=%#v err=%v, want active settlement owner to be skipped", targets, err)
 	}
 	if queued, err := svc.threadsDB.GetQueuedTurn(ctx, meta.EndpointID, thread.ThreadID, command.QueueID); err != nil || queued == nil {
 		t.Fatalf("active-owner queued command=%#v err=%v, want preserved", queued, err)

@@ -177,11 +177,10 @@ func (s *Service) sendInitialUserTurn(ctx context.Context, meta *session.Meta, r
 	s.orphanMaintenanceMu.Unlock()
 	locked = false
 	if frozen.AdmissionState == threadstore.PendingTurnAdmissionInFlight {
-		admitted, waitErr := s.waitForMatchingInitialTurnAdmission(ctxOrBackground(ctx), *frozen)
-		if waitErr != nil {
-			return fail(initialTurnPhaseStartAdmission, waitErr)
+		if !s.matchingInitialTurnAdmissionActive(*frozen) {
+			return fail(initialTurnPhaseStartAdmission, ErrThreadBusy)
 		}
-		return SendUserTurnResponse{ClientRequestID: clientRequestID, ThreadID: committedSettings.ThreadID, RunID: admitted.RunID, TurnID: admitted.TurnID, Kind: "start", AppliedPermissionType: committedSettings.PermissionType}, nil
+		return SendUserTurnResponse{ClientRequestID: clientRequestID, ThreadID: committedSettings.ThreadID, AdmissionID: frozen.QueueID, Kind: "admitting", AppliedPermissionType: committedSettings.PermissionType}, nil
 	}
 	startRequest, err := queuedTurnRecordToRunStartRequest(*frozen, committedSettings.PermissionType)
 	if err != nil {
@@ -191,14 +190,29 @@ func (s *Service) sendInitialUserTurn(ctx context.Context, meta *session.Meta, r
 	if err != nil {
 		return fail(initialTurnPhaseStartAdmission, err)
 	}
-	admitted, _, err := s.startUserTurnDetached(ctxOrBackground(ctx), frozenMeta, frozen.QueueID, startRequest, frozen.QueueID)
+	_, _, err = s.startUserTurnDetached(ctxOrBackground(ctx), frozenMeta, frozen.QueueID, startRequest, frozen.QueueID)
 	if errors.Is(err, ErrThreadBusy) {
-		admitted, err = s.waitForMatchingInitialTurnAdmission(ctxOrBackground(ctx), *frozen)
+		if s.matchingInitialTurnAdmissionActive(*frozen) {
+			err = nil
+		}
 	}
 	if err != nil {
 		return fail(initialTurnPhaseStartAdmission, err)
 	}
-	return SendUserTurnResponse{ClientRequestID: clientRequestID, ThreadID: committedSettings.ThreadID, RunID: admitted.RunID, TurnID: admitted.TurnID, Kind: "start", AppliedPermissionType: committedSettings.PermissionType}, nil
+	return SendUserTurnResponse{ClientRequestID: clientRequestID, ThreadID: committedSettings.ThreadID, AdmissionID: frozen.QueueID, Kind: "admitting", AppliedPermissionType: committedSettings.PermissionType}, nil
+}
+
+func (s *Service) matchingInitialTurnAdmissionActive(frozen threadstore.QueuedTurn) bool {
+	if s == nil {
+		return false
+	}
+	threadKey := runThreadKey(frozen.EndpointID, frozen.ThreadID)
+	executionKey := strings.TrimSpace(frozen.QueueID)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	activeExecutionKey := strings.TrimSpace(s.activeRunByTh[threadKey])
+	active := s.runs[activeExecutionKey]
+	return activeExecutionKey == executionKey && active != nil && strings.TrimSpace(active.threadID) == strings.TrimSpace(frozen.ThreadID)
 }
 
 func matchInitialFrozenCreateRequest(create CreateThreadRequest, settings threadstore.ThreadSettings, operation threadstore.ThreadCreateOperation) error {

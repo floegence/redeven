@@ -120,6 +120,7 @@ type SendTurnResponse = Readonly<{
   run_id?: string;
   turn_id?: string;
   queue_id?: string;
+  admission_id?: string;
   kind?: string;
 }>;
 
@@ -695,12 +696,14 @@ export async function launchLocalEnvironmentFlowerTurn(
   const attachmentIDs = (input.attachment_ids ?? []).map(trim).filter(Boolean);
   const contextAction = requireAskFlowerContextActionEnvelope(input.context_action);
   if (!prompt.trim() && attachmentIDs.length === 0 && !contextAction) throw new Error('Enter a message or add an attachment before sending.');
-  const snapshot = await loadSettingsSnapshot(bridge);
-  const models = await loadModels(bridge);
-  const modelID = trim(input.model_id) || currentModelID(snapshot, models);
-  if (!modelID) throw new Error('Select a Flower model before starting a chat.');
-  const permissionType = normalizePermissionType(input.permission_type ?? snapshot.defaults.permission_type);
   const existingThreadID = trim(input.thread_id);
+  const snapshot = existingThreadID ? null : await loadSettingsSnapshot(bridge);
+  const models = existingThreadID ? null : await loadModels(bridge);
+  const modelID = trim(input.model_id) || (snapshot && models ? currentModelID(snapshot, models) : '');
+  if (!existingThreadID && !modelID) throw new Error('Select a Flower model before starting a chat.');
+  const permissionType = snapshot || trim(input.permission_type)
+    ? normalizePermissionType(input.permission_type ?? snapshot?.defaults.permission_type)
+    : undefined;
   const clientRequestID = trim(input.client_request_id);
   if (!clientRequestID) throw new Error('Missing client request id.');
   const stagingScope = input.staging_scope;
@@ -717,7 +720,7 @@ export async function launchLocalEnvironmentFlowerTurn(
       client_request_id: clientRequestID,
       title: '',
       model_id: modelID,
-      permission_type: permissionType,
+      permission_type: permissionType ?? 'approval_required',
     };
     const reasoningSelection = serializeFlowerReasoningSelection(input.reasoning_selection);
     if (reasoningSelection) createBody.reasoning_selection = reasoningSelection;
@@ -731,15 +734,16 @@ export async function launchLocalEnvironmentFlowerTurn(
       : '/_redeven_proxy/api/ai/turns';
     const response = await runtimeJSON<SendTurnResponse>(bridge, 'POST', endpoint, {
       ...(existingThreadID ? { thread_id: existingThreadID } : {}),
+      ...(trim(input.source_followup_id) ? { source_followup_id: trim(input.source_followup_id) } : {}),
       ...(stagingScope ? { staging_scope_id: stagingScope.staging_scope_id } : {}),
-      model: modelID,
+      ...(modelID ? { model: modelID } : {}),
       input: {
         text: prompt,
         attachments: attachmentIDs.map((attachmentID) => ({ attachment_id: attachmentID })),
         ...(contextAction ? { context_action: contextAction } : {}),
       },
       options: {
-        permission_type: permissionType,
+        ...(permissionType ? { permission_type: permissionType } : {}),
         ...(serializeFlowerReasoningSelection(input.reasoning_selection) ? { reasoning_selection: serializeFlowerReasoningSelection(input.reasoning_selection) } : {}),
       },
       ...(createBody ? { create: createBody } : {}),
@@ -749,12 +753,14 @@ export async function launchLocalEnvironmentFlowerTurn(
     const turnID = trim(response.turn_id);
     const runID = trim(response.run_id);
     const queueID = trim(response.queue_id);
+    const admissionID = trim(response.admission_id);
     const kind = trim(response.kind);
     const clientIdentityValid = existingThreadID
       ? !responseClientRequestID || responseClientRequestID === clientRequestID
       : responseClientRequestID === clientRequestID;
     const receiptValid = Boolean(responseThreadID && clientIdentityValid) && (
       (kind === 'start' && Boolean(turnID && runID) && !queueID)
+      || (kind === 'admitting' && Boolean(admissionID) && !turnID && !runID && !queueID)
       || (kind === 'queued' && Boolean(queueID) && !turnID && !runID)
     );
     if (!receiptValid) {
@@ -763,6 +769,9 @@ export async function launchLocalEnvironmentFlowerTurn(
         clientRequestID,
         { ...(responseThreadID ? { thread_id: responseThreadID } : {}) },
       );
+    }
+    if (kind === 'admitting') {
+      return { client_request_id: clientRequestID, thread_id: responseThreadID, admission_id: admissionID, kind };
     }
     return kind === 'start'
       ? { client_request_id: clientRequestID, thread_id: responseThreadID, turn_id: turnID, run_id: runID, kind }
@@ -859,6 +868,12 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
         'PATCH',
         `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}`,
         body,
+      ),
+      reorderQueuedTurns: (threadID, orderedQueueIDs) => runtimeJSON(
+        bridge,
+        'PATCH',
+        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/followups/order`,
+        { lane: 'queued', ordered_followup_ids: orderedQueueIDs },
       ),
       forkThread: (threadID, body) => runtimeJSON<LoadThreadResponse>(
         bridge,

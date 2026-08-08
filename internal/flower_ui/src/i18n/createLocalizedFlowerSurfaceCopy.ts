@@ -104,6 +104,7 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       pendingSubmission: t(i18n, k('chat.pendingSubmission')),
       pendingQueued: t(i18n, k('chat.pendingQueued')),
       scrollToLatest: t(i18n, k('chat.scrollToLatest')),
+      runtimeRestartedDivider: t(i18n, k('chat.runtimeRestartedDivider')),
       runErrorTitle: t(i18n, k('chat.runErrorTitle')),
       runErrorActions: {
         updateAPIKey: t(i18n, k('chat.runErrorActionUpdateAPIKey')),
@@ -143,6 +144,8 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
         error: t(i18n, k('chat.toolStatusError')),
         canceled: t(i18n, k('chat.toolStatusCanceled')),
       },
+      toolCallCanceled: t(i18n, k('chat.toolCallCanceled')),
+      toolApprovalRejectedDetail: t(i18n, k('chat.toolApprovalRejectedDetail')),
       toolApprovalRequired: t(i18n, k('chat.toolApprovalRequired')),
       toolApprovalStates: {
         requested: t(i18n, k('chat.toolApprovalStateRequested')),

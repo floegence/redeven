@@ -142,11 +142,10 @@ describe('Flower composer attachment browser presentation', () => {
       <FlowerAttachmentLane
         items={[item]} copy={longCopy} locale="de-DE" onRetry={vi.fn()} onReselect={vi.fn()}
         onCancel={vi.fn()} onRemove={vi.fn()} onRestore={vi.fn()} onPreview={vi.fn()}
-        onCopyReference={vi.fn()}
       />
     ), host);
     try {
-      await waitFor(() => host.querySelectorAll('.flower-attachment-actions button').length === 4);
+      await waitFor(() => host.querySelectorAll('.flower-attachment-actions button').length === 2);
       const lane = host.querySelector('.flower-attachment-lane') as HTMLElement;
       const attachment = host.querySelector('.flower-attachment-item') as HTMLElement;
       const actions = host.querySelector('.flower-attachment-actions') as HTMLElement;
@@ -156,7 +155,7 @@ describe('Flower composer attachment browser presentation', () => {
       expect(actions.scrollWidth).toBeLessThanOrEqual(actions.clientWidth + 1);
       expectHorizontallyContained(attachment.getBoundingClientRect(), lane.getBoundingClientRect());
       expectHorizontallyContained(actions.getBoundingClientRect(), attachment.getBoundingClientRect());
-      const actionLabels = [longCopy.restore, longCopy.preview, longCopy.copyReference, longCopy.remove];
+      const actionLabels = [longCopy.restore, longCopy.remove];
       for (const label of actionLabels) {
         const button = actions.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
         expect(button).not.toBeNull();

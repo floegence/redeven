@@ -91,7 +91,11 @@ func TestRedevenHostedRunAskUserWaitsAndResumesWithoutAuthorityCorruption(t *tes
 		Input:   RunInput{Text: "Deploy the application."},
 		Options: RunOptions{PermissionType: config.AIPermissionFullAccess},
 	})
-	if err != nil || start.Kind != "start" {
+	if err != nil {
+		t.Fatalf("SendUserTurn response=%#v err=%v", start, err)
+	}
+	start = awaitCanonicalTurnAdmissionForTest(t, svc, start)
+	if start.Kind != "start" {
 		t.Fatalf("SendUserTurn response=%#v err=%v", start, err)
 	}
 

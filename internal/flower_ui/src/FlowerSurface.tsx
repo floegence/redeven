@@ -8,6 +8,10 @@ import { Button, ConfirmDialog, SurfaceFloatingLayer } from '@floegence/floe-web
 import { writeTextToClipboard } from './clipboard';
 import { FlowerAttachmentLane } from './attachments/FlowerAttachmentLane';
 import {
+  FlowerAttachmentPreviewWindow,
+  type FlowerAttachmentPreviewSource,
+} from './attachments/FlowerAttachmentPreviewWindow';
+import {
   createFlowerAttachmentController,
   type FlowerAttachmentController,
   type FlowerAttachmentControllerSnapshot,
@@ -204,6 +208,39 @@ type FlowerComposerSessionDraft = Readonly<{
   workingDirDraft?: string;
 }>;
 
+type FlowerMessageAttachmentPreviewTarget = Readonly<{
+  id: string;
+  name: string;
+  mimeType: string;
+  url: string;
+}>;
+
+function messageHasUserRejectedTool(message: FlowerChatMessage): boolean {
+  return (message.blocks ?? []).some((block) => (
+    block.type === 'activity-timeline'
+    && block.items.some((item) => item.requires_approval && item.approval_state === 'rejected')
+  ));
+}
+
+function threadHasUserRejectedTool(
+  thread: FlowerThreadSnapshot | null | undefined,
+  runID = '',
+  turnID = '',
+): boolean {
+  return (thread?.messages ?? []).some((message) => (
+    (!runID || trimString(message.run_id) === trimString(runID))
+    && (!turnID || trimString(message.turn_id) === trimString(turnID))
+    && messageHasUserRejectedTool(message)
+  ));
+}
+
+function latestThreadFailureIsUserRejectedTool(thread: FlowerThreadSnapshot | null | undefined): boolean {
+  const latestFailedMessage = [...(thread?.messages ?? [])].reverse().find((message) => (
+    message.role === 'assistant' && message.status === 'error'
+  ));
+  return latestFailedMessage ? messageHasUserRejectedTool(latestFailedMessage) : false;
+}
+
 type FlowerConsumedInputAdmission = Readonly<{
   promptID: string;
 }>;
@@ -237,11 +274,12 @@ type FlowerPendingSubmission = Readonly<{
   clientRequestID: string;
   sessionKey: string;
   threadID?: string;
+  sourceQueueID?: string;
   prompt: string;
   attachmentNames: readonly string[];
   referenceLabels: readonly string[];
   phase: 'preparing' | 'admitting' | 'awaiting_projection';
-  canonicalKind?: 'start' | 'queued';
+  canonicalKind?: 'start' | 'queued' | 'admitting';
   canonicalID?: string;
   startedAtMS: number;
 }>;
@@ -253,7 +291,7 @@ type FlowerPendingSubmissionEvent =
     kind: 'admission_accepted';
     clientRequestID: string;
     threadID: string;
-    canonicalKind: 'start' | 'queued';
+    canonicalKind: 'start' | 'queued' | 'admitting';
     canonicalID: string;
   }>
   | Readonly<{ kind: 'projection_observed'; clientRequestID: string }>
@@ -261,6 +299,13 @@ type FlowerPendingSubmissionEvent =
   | Readonly<{ kind: 'submission_finished_without_receipt'; clientRequestID: string }>
   | Readonly<{ kind: 'new_conversation' }>
   | Readonly<{ kind: 'thread_selected'; threadID: string }>;
+type FlowerQueuedTurnReorderState = Readonly<{
+  threadID: string;
+  draggedQueueID: string;
+  originalQueueIDs: readonly string[];
+  orderedQueueIDs: readonly string[];
+  phase: 'dragging' | 'saving';
+}>;
 
 function transitionFlowerPendingSubmission(
   current: FlowerPendingSubmission | null,
@@ -300,6 +345,28 @@ function transitionFlowerPendingSubmission(
     case 'thread_selected':
       return current?.threadID === event.threadID ? current : null;
   }
+}
+
+function sameQueuedTurnIDs(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((queueID) => right.includes(queueID));
+}
+
+function moveQueuedTurnID(
+  orderedQueueIDs: readonly string[],
+  draggedQueueID: string,
+  targetQueueID: string,
+  afterTarget: boolean,
+): readonly string[] {
+  if (draggedQueueID === targetQueueID) return orderedQueueIDs;
+  const remaining = orderedQueueIDs.filter((queueID) => queueID !== draggedQueueID);
+  const targetIndex = remaining.indexOf(targetQueueID);
+  if (targetIndex < 0 || remaining.length === orderedQueueIDs.length) return orderedQueueIDs;
+  const insertionIndex = targetIndex + (afterTarget ? 1 : 0);
+  return [
+    ...remaining.slice(0, insertionIndex),
+    draggedQueueID,
+    ...remaining.slice(insertionIndex),
+  ];
 }
 const APPROVAL_DECISION_RESYNC_MS = 1500;
 type FlowerHandlerResolutionState =
@@ -351,6 +418,7 @@ const THREAD_RAIL_WIDTH_DEFAULT = 272;
 const THREAD_RAIL_WIDTH_MIN = 220;
 const THREAD_RAIL_WIDTH_MAX = 380;
 const SIDEBAR_STABLE_LIVE_STATUSES = new Set<FlowerThreadStatus>(['running']);
+const FLOWER_TERMINAL_THREAD_STATUSES = new Set<FlowerThreadStatus>(['success', 'failed', 'canceled']);
 const COMPOSER_STOP_THREAD_STATUSES = new Set<FlowerThreadStatus>(['running', 'waiting_approval']);
 const PENDING_NEW_THREAD_ID = '__new_thread__';
 const FLOWER_PERMISSION_TYPES: readonly FlowerPermissionType[] = ['readonly', 'approval_required', 'full_access'];
@@ -377,6 +445,7 @@ const SUBAGENT_DETAIL_TAIL_ERROR_INTERVAL_MS = 4000;
 const FLOWER_SURFACE_LAYER = {
   subagentWindow: 160,
   contextPreview: 162,
+  attachmentPreview: 164,
 } as const;
 
 function flowerComposerDraftAttachments(
@@ -943,6 +1012,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [consumedInputAdmissions, setConsumedInputAdmissions] = createSignal<Record<string, FlowerConsumedInputAdmission>>({});
   const [chatRunning, setChatRunning] = createSignal(false);
   const [pendingSubmission, setPendingSubmission] = createSignal<FlowerPendingSubmission | null>(null);
+  const [deferredStopClientRequestID, setDeferredStopClientRequestID] = createSignal('');
+  const [queuedTurnReorder, setQueuedTurnReorder] = createSignal<FlowerQueuedTurnReorderState | null>(null);
+  const [queuedTurnPromotingID, setQueuedTurnPromotingID] = createSignal('');
+  // Reactive state updates are batched. Keep a synchronous guard as well so
+  // Enter repeat and a same-tick click cannot admit the same draft twice.
+  let launchChatTurnInFlight = false;
   const transitionPendingSubmission = (event: FlowerPendingSubmissionEvent) => {
     setPendingSubmission((current) => transitionFlowerPendingSubmission(current, event));
   };
@@ -956,6 +1031,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [sidePanel, setSidePanel] = createSignal<FlowerSurfacePanel>('chat');
   let consumedSettingsFocusRequest = 0;
   const [contextSnapshotPreview, setContextSnapshotPreview] = createSignal<FlowerChatContextSnapshotPreview | null>(null);
+  const [attachmentPreview, setAttachmentPreview] = createSignal<FlowerAttachmentPreviewSource | null>(null);
   const [workingDirectoryPathContext, setWorkingDirectoryPathContext] = createSignal<FlowerWorkingDirectoryPathContext | null>(null);
   const [, setWorkingDirectoryPathContextLoading] = createSignal(false);
   const [workingDirectoryPickerOpen, setWorkingDirectoryPickerOpen] = createSignal(false);
@@ -1023,11 +1099,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     status: 'idle',
     generation: 0,
   });
+  const [composerReferenceLoadingVisible, setComposerReferenceLoadingVisible] = createSignal(false);
   const [handlerState, setHandlerState] = createSignal<FlowerHandlerResolutionState>({ status: 'starting' });
   const [threadLoadError, setThreadLoadError] = createSignal('');
   const [localReadVisibilityRevision, setLocalReadVisibilityRevision] = createSignal(0);
   const [threadActionBusy, setThreadActionBusy] = createSignal<{ threadID: string; action: FlowerThreadMenuAction } | null>(null);
   const forkRequestIDs = new Map<string, string>();
+  const pinMutationSequences = new Map<string, number>();
   const [renameThreadID, setRenameThreadID] = createSignal('');
   const [renameDraft, setRenameDraft] = createSignal('');
   const [renameError, setRenameError] = createSignal('');
@@ -1148,6 +1226,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const liveStreamGenerations = new Map<string, number>();
   let liveSummaryCursor = 0;
   let liveSummaryGeneration = 1;
+  let liveSummaryRefreshTimer: number | undefined;
+  let threadsRefreshRequest: Promise<boolean> | null = null;
   const retiredThreadIDs = new Set<string>();
   let copiedMessageResetTimer: number | undefined;
   let copiedApprovalResetTimer: number | undefined;
@@ -1385,24 +1465,121 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (!detailID) return null;
     return threads().find((thread) => thread.thread_id === detailID) ?? null;
   });
+  const selectedCanonicalQueuedTurns = createMemo<readonly FlowerQueuedTurn[]>(() => {
+    const thread = selectedThread();
+    return thread && trimString(thread.thread_id) === trimString(selectedThreadID())
+      ? thread.queued_turns ?? []
+      : [];
+  });
+  const selectedQueuedTurns = createMemo<readonly FlowerQueuedTurn[]>(() => {
+    const canonical = selectedCanonicalQueuedTurns();
+    const promotingID = trimString(queuedTurnPromotingID());
+    const visibleCanonical = promotingID
+      ? canonical.filter((turn) => trimString(turn.queue_id) !== promotingID)
+      : canonical;
+    const reorder = queuedTurnReorder();
+    if (!reorder || reorder.threadID !== selectedThreadID()) return visibleCanonical;
+    const canonicalIDs = visibleCanonical.map((turn) => trimString(turn.queue_id));
+    if (!sameQueuedTurnIDs(canonicalIDs, reorder.orderedQueueIDs)) return visibleCanonical;
+    const byID = new Map(visibleCanonical.map((turn) => [trimString(turn.queue_id), turn] as const));
+    return reorder.orderedQueueIDs.map((queueID) => byID.get(queueID)).filter((turn): turn is FlowerQueuedTurn => Boolean(turn));
+  });
+  createEffect(() => {
+    const reorder = queuedTurnReorder();
+    if (!reorder) return;
+    const canonicalIDs = selectedCanonicalQueuedTurns().map((turn) => trimString(turn.queue_id));
+    if (reorder.threadID !== selectedThreadID() || !sameQueuedTurnIDs(canonicalIDs, reorder.originalQueueIDs)) {
+      setQueuedTurnReorder(null);
+    }
+  });
+  const pendingSubmissionHasCanonicalProjection = (
+    pending: FlowerPendingSubmission,
+    thread: FlowerThreadSnapshot | null,
+  ): boolean => {
+    if (!thread || !pending.canonicalID) return false;
+    if (pending.canonicalKind === 'queued') {
+      return (thread.queued_turns ?? []).some((turn) => trimString(turn.queue_id) === pending.canonicalID);
+    }
+    if (pending.canonicalKind === 'admitting') {
+      const earliestCanonicalTime = pending.startedAtMS - 1_000;
+      return thread.messages.some((message) => (
+        message.role === 'user'
+        && Number(message.created_at_ms ?? 0) >= earliestCanonicalTime
+        && trimString(message.content) === trimString(pending.prompt)
+      ));
+    }
+    return thread.messages.some((message) => trimString(message.turn_id) === pending.canonicalID);
+  };
+  const pendingSubmissionIsQueued = (pending: FlowerPendingSubmission, thread: FlowerThreadSnapshot | null): boolean => (
+    pending.sourceQueueID
+      ? false
+      : pending.canonicalKind
+      ? pending.canonicalKind === 'queued'
+      : Boolean(
+      pending.threadID
+      && thread
+      && trimString(pending.threadID) === trimString(thread.thread_id)
+      && COMPOSER_STOP_THREAD_STATUSES.has(thread.status)
+      )
+  );
+  const queuedPendingSubmission = createMemo<FlowerPendingSubmission | null>(() => {
+    const pending = pendingSubmission();
+    if (
+      !pending
+      || !pending.threadID
+      || trimString(pending.threadID) !== trimString(selectedThreadID())
+      || !pendingSubmissionIsQueued(pending, selectedThread())
+      || pendingSubmissionHasCanonicalProjection(pending, selectedThread())
+    ) return null;
+    return pending;
+  });
   createEffect(() => {
     const pending = pendingSubmission();
     if (!pending?.threadID || pending.phase !== 'awaiting_projection' || !pending.canonicalID) return;
     const thread = threads().find((candidate) => candidate.thread_id === pending.threadID);
     if (!thread) return;
-    const projected = pending.canonicalKind === 'queued'
-      ? (thread.queued_turns ?? []).some((turn) => turn.queue_id === pending.canonicalID)
-      : thread.messages.some((message) => trimString(message.turn_id) === pending.canonicalID);
-    if (projected) transitionPendingSubmission({ kind: 'projection_observed', clientRequestID: pending.clientRequestID });
+    if (pendingSubmissionHasCanonicalProjection(pending, thread)) {
+      transitionPendingSubmission({ kind: 'projection_observed', clientRequestID: pending.clientRequestID });
+      if (pending.sourceQueueID) setQueuedTurnPromotingID('');
+    }
+  });
+  createEffect(() => {
+    const promotingID = queuedTurnPromotingID();
+    const pending = pendingSubmission();
+    if (promotingID && (!pending?.sourceQueueID || pending.threadID !== selectedThreadID())) {
+      setQueuedTurnPromotingID('');
+    }
   });
   const selectedThreadLiveStatus = createMemo(() => {
     const thread = selectedThread();
+    const pending = pendingSubmission();
+    const localAdmissionRunning = Boolean(
+      pending
+      && pending.phase !== 'preparing'
+      && !pendingSubmissionIsQueued(pending, thread)
+      && (pending.threadID
+        ? pending.threadID === trimString(selectedThreadID())
+        : pending.sessionKey === PENDING_NEW_THREAD_ID && !trimString(selectedThreadID()))
+    );
+    if (localAdmissionRunning) return 'running';
     if (!thread) return 'idle';
     const admission = consumedInputAdmissions()[trimString(thread.thread_id)];
     if (admission && trimString(visibleInputRequest(thread)?.prompt_id) === admission.promptID) {
       return 'running';
     }
     return thread.status;
+  });
+  const pendingAdmissionCanStop = createMemo(() => {
+    if (!chatRunning()) return false;
+    const pending = pendingSubmission();
+    if (!pending || pending.sourceQueueID || pendingSubmissionIsQueued(pending, selectedThread())) return false;
+    const selectedID = trimString(selectedThreadID());
+    if (pending.threadID) return trimString(pending.threadID) === selectedID;
+    return !selectedID && pending.sessionKey === PENDING_NEW_THREAD_ID;
+  });
+  const deferredStopPending = createMemo(() => {
+    const requestID = trimString(deferredStopClientRequestID());
+    return Boolean(requestID && requestID === trimString(pendingSubmission()?.clientRequestID));
   });
   const selectedThreadHasRunningContextCompaction = createMemo(() => {
     const thread = selectedThread();
@@ -1718,7 +1895,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const pending = pendingSubmission();
     if (!pending) return null;
     const threadID = trimString(selectedThreadID());
-    if (pending.threadID) return pending.threadID === threadID ? pending : null;
+    if (pending.threadID) {
+      if (pending.threadID !== threadID) return null;
+      if (pendingSubmissionIsQueued(pending, selectedThread())) return null;
+      if (pendingSubmissionHasCanonicalProjection(pending, selectedThread())) return null;
+      return pending;
+    }
     return !threadID && pending.sessionKey === PENDING_NEW_THREAD_ID ? pending : null;
   });
   const currentComposerSessionDraft = createMemo(() => composerSessionDrafts()[currentComposerSessionKey()] ?? emptyFlowerComposerSessionDraft());
@@ -2506,7 +2688,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         return trimString(error?.message);
     }
   };
-  const selectedThreadRunErrorMessage = createMemo(() => presentRunError(selectedThread()?.error));
+  const selectedThreadRunErrorMessage = createMemo(() => {
+    const thread = selectedThread();
+    const error = thread?.error;
+    if (latestThreadFailureIsUserRejectedTool(thread)) return '';
+    return presentRunError(error);
+  });
   const threadItemCache = new Map<string, { item: ReturnType<typeof projectFlowerThreadListItem>; sig: string }>();
   const liveCursorValue = (value: unknown): number => Math.max(0, Math.floor(Number(value ?? 0)));
   const liveStreamGenerationValue = (value: unknown): number => {
@@ -2625,6 +2812,65 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (signature === lastSidebarListSignature) return;
     lastSidebarListSignature = signature;
     setSidebarListItems(items);
+  });
+  const localAdmissionThreadItems = createMemo<readonly FlowerThreadListItem[]>(() => {
+    const items = sidebarListItems();
+    const pending = pendingSubmission();
+    if (!pending || pending.phase === 'preparing' || pendingSubmissionIsQueued(pending, selectedThread())) return items;
+    const pendingThreadID = trimString(pending.threadID);
+    const buildPendingItem = (threadID: string): FlowerThreadListItem => {
+      const startedAtMS = Math.max(1, pending.startedAtMS);
+      const activitySignature = `local-admission:${pending.clientRequestID}`;
+      return {
+        thread_id: threadID,
+        title: copy().threadList.untitled,
+        title_status: 'pending',
+        model_id: selectedComposerModelID(),
+        working_dir: draftWorkingDirectory(),
+        pinned: false,
+        created_at_ms: startedAtMS,
+        updated_at_ms: startedAtMS,
+        preview: pending.prompt,
+        status: 'running',
+        source_label: '',
+        target_labels: [],
+        admission_pending: true,
+        read_status: {
+          is_unread: false,
+          snapshot: {
+            activity_revision: 0,
+            last_message_at_unix_ms: startedAtMS,
+            activity_signature: activitySignature,
+          },
+          read_state: {
+            last_seen_activity_revision: 0,
+            last_read_message_at_unix_ms: startedAtMS,
+            last_seen_activity_signature: activitySignature,
+          },
+        },
+      };
+    };
+    if (pendingThreadID) {
+      const matched = items.some((item) => item.thread_id === pendingThreadID);
+      const projected = items.map((item) => item.thread_id === pendingThreadID
+        ? { ...item, status: 'running' as const, admission_pending: true }
+        : item);
+      return matched || pending.sessionKey !== PENDING_NEW_THREAD_ID
+        ? projected
+        : [buildPendingItem(pendingThreadID), ...projected];
+    }
+    if (pending.sessionKey !== PENDING_NEW_THREAD_ID) return items;
+    return [buildPendingItem(PENDING_NEW_THREAD_ID), ...items];
+  });
+  const visibleSidebarActiveThreadID = createMemo(() => {
+    const pending = pendingSubmission();
+    return pending
+      && pending.phase !== 'preparing'
+      && pending.canonicalKind !== 'queued'
+      && !pending.threadID
+      && pending.sessionKey === PENDING_NEW_THREAD_ID
+      ? PENDING_NEW_THREAD_ID
+      : sidebarActiveThreadID();
   });
   const [companionLiveThread, setCompanionLiveThread] = createSignal<FlowerThreadSnapshot | null>(null);
   const [companionLiveRunGeneration] = createSignal(0);
@@ -3372,6 +3618,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return next;
     });
   };
+  const applyOptimisticPinnedState = (threadID: string, pinned: boolean) => {
+    const tid = trimString(threadID);
+    if (!tid || retiredThreadIDs.has(tid)) return;
+    setThreads((items) => items.map((thread) => (
+      thread.thread_id === tid
+        ? {
+            ...thread,
+            ...(pinned ? { pinned_at_ms: Date.now() } : { pinned_at_ms: undefined }),
+          }
+        : thread
+    )));
+    threadLocalMutationRevision += 1;
+  };
   const applyLiveBootstrap = (live: FlowerLiveBootstrap, reason: LiveBootstrapApplyReason = 'background_refresh'): FlowerThreadSnapshot => {
     const thread = projectFlowerLiveBootstrap(live);
     if (retiredThreadIDs.has(trimString(thread.thread_id))) {
@@ -3394,6 +3653,156 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     return thread;
   };
+  let queuedTurnReorderSequence = 0;
+  const queuedTurnReorderEnabled = () => Boolean(
+    props.adapter.reorderQueuedTurns
+    && !selectedThreadReadOnly()
+    && selectedCanonicalQueuedTurns().length > 1
+    && queuedTurnReorder()?.phase !== 'saving'
+  );
+  const beginQueuedTurnDrag = (event: DragEvent & { currentTarget: HTMLDivElement }, queueID: string) => {
+    if (!queuedTurnReorderEnabled()) {
+      event.preventDefault();
+      return;
+    }
+    const threadID = trimString(selectedThreadID());
+    const orderedQueueIDs = selectedCanonicalQueuedTurns().map((turn) => trimString(turn.queue_id));
+    const draggedQueueID = trimString(queueID);
+    if (!threadID || !draggedQueueID || !orderedQueueIDs.includes(draggedQueueID)) {
+      event.preventDefault();
+      return;
+    }
+    if (!event.dataTransfer) return;
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', draggedQueueID);
+    setQueuedTurnReorder({
+      threadID,
+      draggedQueueID,
+      originalQueueIDs: orderedQueueIDs,
+      orderedQueueIDs,
+      phase: 'dragging',
+    });
+  };
+  const previewQueuedTurnDrop = (
+    event: DragEvent & { currentTarget: HTMLDivElement },
+    targetQueueID: string,
+  ) => {
+    const reorder = queuedTurnReorder();
+    if (!reorder || reorder.phase !== 'dragging' || reorder.threadID !== selectedThreadID()) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (!event.dataTransfer) return;
+    event.dataTransfer.dropEffect = 'move';
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const next = moveQueuedTurnID(
+      reorder.orderedQueueIDs,
+      reorder.draggedQueueID,
+      targetQueueID,
+      event.clientY >= bounds.top + bounds.height / 2,
+    );
+    if (next.every((queueID, index) => queueID === reorder.orderedQueueIDs[index])) return;
+    setQueuedTurnReorder({ ...reorder, orderedQueueIDs: next });
+  };
+  const previewQueuedTurnDropAtEnd = (event: DragEvent & { currentTarget: HTMLDivElement }) => {
+    if (event.target !== event.currentTarget) return;
+    const reorder = queuedTurnReorder();
+    if (!reorder || reorder.phase !== 'dragging' || reorder.threadID !== selectedThreadID()) return;
+    event.preventDefault();
+    if (!event.dataTransfer) return;
+    event.dataTransfer.dropEffect = 'move';
+    const next = [
+      ...reorder.orderedQueueIDs.filter((queueID) => queueID !== reorder.draggedQueueID),
+      reorder.draggedQueueID,
+    ];
+    if (next.every((queueID, index) => queueID === reorder.orderedQueueIDs[index])) return;
+    setQueuedTurnReorder({ ...reorder, orderedQueueIDs: next });
+  };
+  const commitQueuedTurnReorder = (event: DragEvent) => {
+    const reorder = queuedTurnReorder();
+    if (!reorder || reorder.phase !== 'dragging' || reorder.threadID !== selectedThreadID()) return;
+    event.preventDefault();
+    const changed = reorder.orderedQueueIDs.some((queueID, index) => queueID !== reorder.originalQueueIDs[index]);
+    if (!changed || !props.adapter.reorderQueuedTurns) {
+      setQueuedTurnReorder(null);
+      return;
+    }
+    const sequence = ++queuedTurnReorderSequence;
+    setQueuedTurnReorder({ ...reorder, phase: 'saving' });
+    void props.adapter.reorderQueuedTurns(reorder.threadID, reorder.orderedQueueIDs).then((live) => {
+      if (sequence !== queuedTurnReorderSequence) return;
+      applyLiveBootstrap(live, 'user_action');
+      setQueuedTurnReorder(null);
+    }).catch((error) => {
+      if (sequence !== queuedTurnReorderSequence) return;
+      setQueuedTurnReorder(null);
+      notifyThreadActionError(getErrorMessage(error));
+    });
+  };
+  const finishQueuedTurnDrag = () => {
+    if (queuedTurnReorder()?.phase === 'dragging') setQueuedTurnReorder(null);
+  };
+  const queuedTurnPromotionBlocked = createMemo(() => {
+    if (selectedThreadReadOnly() || selectedThreadHasRunningContextCompaction()) return true;
+    const status = selectedThreadLiveStatus();
+    return status === 'running' || status === 'waiting_approval' || status === 'waiting_user';
+  });
+  const promoteQueuedTurn = async (turn: FlowerQueuedTurn): Promise<void> => {
+    const threadID = trimString(selectedThreadID());
+    const queueID = trimString(turn.queue_id);
+    if (!threadID || !queueID || queuedTurnPromotionBlocked() || queuedTurnPromotingID()) return;
+    const clientRequestID = createFlowerClientRequestID();
+    setQueuedTurnPromotingID(queueID);
+    transitionPendingSubmission({
+      kind: 'begin',
+      submission: {
+        clientRequestID,
+        sessionKey: threadID,
+        threadID,
+        sourceQueueID: queueID,
+        prompt: turn.prompt,
+        attachmentNames: (turn.attachments ?? []).map((attachment) => trimString(attachment.name)).filter(Boolean),
+        referenceLabels: [],
+        phase: 'preparing',
+        startedAtMS: Date.now(),
+      },
+    });
+    transcriptScroll.startFollowing();
+    scrollTranscriptToBottom({ smooth: false });
+    requestTranscriptAnimationFrame(() => scrollTranscriptToBottom({ smooth: false }));
+    try {
+      const receipt = await props.adapter.launchTurn({
+        client_request_id: clientRequestID,
+        thread_id: threadID,
+        prompt: turn.prompt,
+        ...(turn.attachments?.length ? { attachment_ids: turn.attachments.map((attachment) => trimString(attachment.attachment_id)).filter(Boolean) } : {}),
+        ...(turn.context_action ? { context_action: turn.context_action } : {}),
+        source_followup_id: queueID,
+      });
+      if (trimString(receipt.thread_id) !== threadID) {
+        throw new Error('Flower queued turn admission returned a different conversation.');
+      }
+      if (receipt.kind === 'start' || receipt.kind === 'admitting') {
+        transitionPendingSubmission({
+          kind: 'admission_accepted',
+          clientRequestID,
+          threadID,
+          canonicalKind: receipt.kind,
+          canonicalID: receipt.kind === 'start' ? receipt.turn_id : receipt.admission_id,
+        });
+      } else {
+        transitionPendingSubmission({ kind: 'admission_started', clientRequestID });
+      }
+      void reloadSelectedThread(threadID, threadLoadSequence, 'user_action').catch(() => undefined);
+      requestComposerFocus();
+    } catch (error) {
+      transitionPendingSubmission({ kind: 'admission_failed', clientRequestID });
+      notifyThreadActionError(getErrorMessage(error));
+    } finally {
+      if (queuedTurnPromotingID() === queueID && pendingSubmission()?.clientRequestID !== clientRequestID) {
+        setQueuedTurnPromotingID('');
+      }
+    }
+  };
   const loadThreadBootstrap = (threadID: string, force = false): Promise<FlowerLiveBootstrap> => {
     const tid = trimString(threadID);
     const existing = force ? undefined : threadBootstrapRequests.get(tid);
@@ -3413,7 +3822,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   ): Promise<FlowerThreadSnapshot | null> => {
     const tid = trimString(threadID);
     if (!tid || retiredThreadIDs.has(tid)) return null;
-    const live = await loadThreadBootstrap(tid, reason === 'user_action');
+    const live = await loadThreadBootstrap(tid, reason === 'user_action' || reason === 'resync_reload');
     if (retiredThreadIDs.has(tid) || sequence !== threadLoadSequence || selectedThreadID() !== tid) {
       const projected = projectFlowerLiveBootstrap(live);
       return threads().find((item) => item.thread_id === tid) ?? projected;
@@ -3624,8 +4033,26 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           return;
         case 'pin':
           if (!props.adapter.setThreadPinned) return;
-          setThreadActionBusy({ threadID: item.thread_id, action });
-          applyLiveBootstrap(await props.adapter.setThreadPinned(item.thread_id, !item.pinned));
+          {
+            const threadID = item.thread_id;
+            const pinned = !item.pinned;
+            const sequence = (pinMutationSequences.get(threadID) ?? 0) + 1;
+            pinMutationSequences.set(threadID, sequence);
+            applyOptimisticPinnedState(threadID, pinned);
+            setThreadActionBusy({ threadID, action });
+            try {
+              const live = await props.adapter.setThreadPinned(threadID, pinned);
+              if (live) applyLiveBootstrap(live, 'user_action');
+              if (pinMutationSequences.get(threadID) === sequence) {
+                pinMutationSequences.delete(threadID);
+              }
+            } catch (error) {
+              if (pinMutationSequences.get(threadID) === sequence) {
+                applyOptimisticPinnedState(threadID, !pinned);
+              }
+              throw error;
+            }
+          }
           return;
         case 'fork':
           if (!props.adapter.forkThread) return;
@@ -3680,6 +4107,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     if (detailWarm) {
       requestComposerFocus(focusOwner);
+      // Keep the warm snapshot visible while canonical bootstrap verifies that
+      // no terminal output was missed while this thread was not selected.
+      void reloadSelectedThread(tid, sequence, 'background_refresh').catch((error) => {
+        if (sequence === threadLoadSequence && selectedThreadDetailMatches(tid)) {
+          setThreadLoadError(getErrorMessage(error));
+        }
+      });
       return;
     }
     setLoadingThreadID(tid);
@@ -3765,7 +4199,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   };
 
-  const refreshThreads = async (): Promise<boolean> => {
+  const performThreadsRefresh = async (): Promise<boolean> => {
     const refreshSequence = ++threadsRefreshSequence;
     const startedMutationRevision = threadLocalMutationRevision;
     setThreadsRefreshing(true);
@@ -3822,6 +4256,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         }
         return current;
       });
+      const selectedStatusChanged = previousSelected?.status !== mergedSelected?.status;
+      const selectedTerminalUpdated = Boolean(
+        previousSelected
+        && mergedSelected
+        && FLOWER_TERMINAL_THREAD_STATUSES.has(mergedSelected.status)
+        && previousSelected.updated_at_ms !== mergedSelected.updated_at_ms
+      );
       if (
         effectiveEngagement()
         && selectedID
@@ -3829,13 +4270,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         && selectedSummary
         && mergedSelected
         && selectedDetailCurrent
-        && (
-          previousSelected.updated_at_ms !== mergedSelected.updated_at_ms
-          || previousSelected.status !== mergedSelected.status
-          || flowerThreadReadSnapshotKey(previousSelected.read_status.snapshot) !== flowerThreadReadSnapshotKey(mergedSelected.read_status.snapshot)
-        )
+        && (selectedStatusChanged || selectedTerminalUpdated)
       ) {
-        void refreshSelectedThread(selectedID);
+        void reloadSelectedThread(selectedID, threadLoadSequence, 'background_refresh').catch(() => undefined);
       }
       return true;
     } catch (error) {
@@ -3844,6 +4281,34 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     } finally {
       setThreadsRefreshing(false);
     }
+  };
+
+  // Summary events can arrive in bursts while a run is thinking. Coalesce the
+  // list reconciliation and never allow overlapping full-list requests.
+  const refreshThreads = (): Promise<boolean> => {
+    if (threadsRefreshRequest) return threadsRefreshRequest;
+    const request = performThreadsRefresh();
+    threadsRefreshRequest = request;
+    void request.then(
+      () => {
+        if (threadsRefreshRequest === request) threadsRefreshRequest = null;
+      },
+      () => {
+        if (threadsRefreshRequest === request) threadsRefreshRequest = null;
+      },
+    );
+    return request;
+  };
+  const scheduleLiveSummaryRefresh = () => {
+    if (liveSummaryRefreshTimer !== undefined) return;
+    if (typeof window === 'undefined') {
+      void refreshThreads();
+      return;
+    }
+    liveSummaryRefreshTimer = window.setTimeout(() => {
+      liveSummaryRefreshTimer = undefined;
+      void refreshThreads();
+    }, 500);
   };
 
   const loadSurface = async () => {
@@ -3972,12 +4437,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return 'continue';
     }
     const projected = new Map<string, FlowerThreadSnapshot>();
+    const advancesThreadCursor = envelope.kind === 'thread.batch';
     let shouldRefreshSummaries = false;
+    let shouldResyncSelectedThread = false;
     let shouldScrollTail = false;
     let nextReadSnapshot: FlowerThreadActivitySnapshot | null = null;
     for (const event of events) {
       const threadID = trimString(event.thread_id);
       if (!threadID || retiredThreadIDs.has(threadID)) continue;
+      // The selected thread has its own detail replay. Applying its summary
+      // patch as well duplicates live updates and can force needless reloads
+      // while the model is streaming.
+      if (envelope.kind === 'summary.batch' && threadID === selectedID) continue;
       const current = projected.get(threadID) ?? threads().find((thread) => thread.thread_id === threadID) ?? null;
       if (!current) {
         shouldRefreshSummaries = true;
@@ -3986,11 +4457,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const currentCursor = liveCursorValue(liveCursors.get(threadID));
       const result = applyFlowerLiveEvent(current, currentCursor, event);
       if (result.resyncRequired) {
-        shouldRefreshSummaries = true;
+        if (threadID === selectedID && envelope.kind === 'thread.batch') {
+          shouldResyncSelectedThread = true;
+        } else {
+          shouldRefreshSummaries = true;
+        }
         continue;
       }
       projected.set(threadID, result.thread);
-      setLivePosition(threadID, envelope.stream_generation, result.cursor);
+      // Summary replay has its own cursor. Its events retain their originating
+      // thread sequence for identity, but must not consume detail replay.
+      if (advancesThreadCursor) {
+        setLivePosition(threadID, envelope.stream_generation, result.cursor);
+      }
       if (threadID === selectedID) {
         shouldScrollTail ||= Boolean(result.tailKey && result.tailLength > 0) || event.kind === 'timeline.replaced';
         if (result.thread.read_status.is_unread) {
@@ -4014,8 +4493,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       liveSummaryGeneration = liveStreamGenerationValue(envelope.stream_generation);
       liveSummaryCursor = Math.max(liveSummaryCursor, liveCursorValue(envelope.through_seq));
     }
-    if (shouldRefreshSummaries) {
-      await refreshThreads();
+    if (shouldRefreshSummaries) scheduleLiveSummaryRefresh();
+    if (shouldResyncSelectedThread && selectedThreadID() === selectedID && sequence === threadLoadSequence) {
+      // A detail event can be valid on the server but not safely applicable to
+      // the current client draft (for example, an activity timeline arriving
+      // immediately after an approval decision). Replace the draft from the
+      // canonical bootstrap before continuing the live cursor.
+      await reloadSelectedThread(selectedID, sequence, 'resync_reload');
+      return 'resync';
     }
     return 'continue';
   };
@@ -4280,6 +4765,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const launchChatTurn = async (promptInput: string) => {
+    // Sending disables the textarea while admission is in flight, which makes
+    // the browser blur it. Keep the original owner so focus can be restored
+    // only when the user has not moved to another control meanwhile.
+    const focusOwner = typeof document === 'undefined' ? null : document.activeElement;
+    const focusSelectionSequence = threadLoadSequence;
     const inspection = inspectFlowerText(promptInput);
     if (!inspection) {
       notifyComposerError(attachmentCopy().invalidText);
@@ -4343,7 +4833,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const launchController = operation.controller;
     const launchSessionKey = operation.sessionKey;
     const frozenDraft = operationClaim.snapshot.value;
-    const frozenAttachmentLocalIDs = new Set(frozenDraft.attachments.map((item) => item.local_id));
+    const frozenDraftAttachmentLocalIDs = new Set(frozenDraft.attachments.map((item) => item.local_id));
+    const frozenAttachmentLocalIDs = new Set(
+      launchController.snapshot().items
+        .filter((item) => frozenDraftAttachmentLocalIDs.has(item.local_id) && item.status === 'staged_ready')
+        .map((item) => item.local_id),
+    );
     const draftReasoningSelection = !selectedID ? frozenDraft.reasoning_selection : undefined;
     const draftModelID = !selectedID ? frozenDraft.model_id ?? '' : '';
     const launchModelID = frozenDraft.model_id ?? frozenModelID;
@@ -4381,15 +4876,26 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     cancelActiveLongTextSubmission = cancelLongTextSubmission;
     const clearAcceptedComposerDraft = (...sessionKeys: string[]) => {
       launchController.consumeReady(consumedAttachmentLocalIDs);
+      const remainingAttachments = flowerComposerDraftAttachments(launchController.snapshot().items);
+      const canonicalSessionKey = trimString(sessionKeys[0]);
+      if (
+        remainingAttachments.length > 0
+        && launchSessionKey === PENDING_NEW_THREAD_ID
+        && canonicalSessionKey
+        && canonicalSessionKey !== launchSessionKey
+      ) {
+        draftCoordinator.moveScope(launchSessionKey, canonicalSessionKey);
+      }
       const acceptedSessionKeys = new Set([
         launchSessionKey,
         ...sessionKeys,
       ].map((value) => trimString(value) || PENDING_NEW_THREAD_ID));
+      const retainedSessionKey = canonicalSessionKey || launchSessionKey;
       if (composerDraftOperationActive(operation)) {
         for (const sessionKey of acceptedSessionKeys) draftSessionFor(sessionKey).mutate((value) => ({
           ...value,
           text: '',
-          attachments: [],
+          attachments: sessionKey === retainedSessionKey ? remainingAttachments : [],
           references: [],
           mode: 'ordinary',
           client_request_id: undefined,
@@ -4419,7 +4925,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         sessionKey: launchSessionKey,
         ...(selectedID ? { threadID: selectedID } : {}),
         prompt: promptInput,
-        attachmentNames: frozenDraft.attachments.map((attachment) => attachment.name),
+        attachmentNames: frozenDraft.attachments
+          .filter((attachment) => frozenAttachmentLocalIDs.has(attachment.local_id))
+          .map((attachment) => attachment.name),
         referenceLabels: frozenDraft.references.map((reference) => reference.label || reference.path),
         phase: 'preparing',
         startedAtMS: Date.now(),
@@ -4599,6 +5107,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               thread_id: returnedReceipt.thread_id,
               ...(returnedReceipt.kind === 'queued'
                 ? { queue_id: returnedReceipt.queue_id }
+                : returnedReceipt.kind === 'admitting'
+                ? { admission_id: returnedReceipt.admission_id }
                 : { turn_id: returnedReceipt.turn_id }),
             },
           );
@@ -4687,14 +5197,40 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         clientRequestID,
         threadID: receipt.thread_id,
         canonicalKind: receipt.kind,
-        canonicalID: receipt.kind === 'queued' ? receipt.queue_id : receipt.turn_id,
+        canonicalID: receipt.kind === 'queued'
+          ? receipt.queue_id
+          : receipt.kind === 'admitting'
+          ? receipt.admission_id
+          : receipt.turn_id,
       });
+      const stopAfterAdmission = deferredStopClientRequestID() === clientRequestID;
+      if (stopAfterAdmission) setDeferredStopClientRequestID('');
       clearAcceptedComposerDraft(receipt.thread_id);
-      releaseAttachmentStagingScope(launchSessionKey);
+      if (launchController.snapshot().items.length === 0) {
+        releaseAttachmentStagingScope(launchSessionKey);
+      }
       const selectionCurrent = setSelectedThreadWithDetailIfSessionCurrent(launchSessionKey, receipt.thread_id);
       if (selectionCurrent) {
         setLoadError('');
         returnToChat();
+      }
+      if (stopAfterAdmission && receipt.kind !== 'queued') {
+        setThreadStopping(true);
+        try {
+          const stopped = applyLiveBootstrap(await props.adapter.stopThread(receipt.thread_id), 'user_action');
+          if (selectedThreadDetailMatches(receipt.thread_id)) {
+            setSelectedThreadWithDetail(stopped.thread_id);
+            setLoadError('');
+            returnToChat();
+          }
+        } catch (error) {
+          if (selectedThreadID() === receipt.thread_id) {
+            notifyComposerError(getErrorMessage(error));
+          }
+        } finally {
+          setThreadStopping(false);
+        }
+      } else if (selectionCurrent) {
         void reloadSelectedThread(receipt.thread_id, threadLoadSequence, 'background_refresh').catch((error) => {
           if (selectedThreadDetailMatches(receipt.thread_id)) {
             setThreadLoadError(getErrorMessage(error));
@@ -4707,6 +5243,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       setChatRunning(false);
       if (!retainPendingSubmission) {
         transitionPendingSubmission({ kind: 'submission_finished_without_receipt', clientRequestID });
+        if (deferredStopClientRequestID() === clientRequestID) setDeferredStopClientRequestID('');
       }
       if (composerDraftOperationActive(operation)) {
         const shared = operation.session.snapshot();
@@ -4721,6 +5258,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             prepared_long_text_attachment_id: undefined,
           }));
         }
+      }
+      if (threadLoadSequence === focusSelectionSequence) {
+        requestComposerFocus(focusOwner);
       }
     }
   };
@@ -4739,7 +5279,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const stopSelectedThreadFromComposer = async (): Promise<void> => {
-    if (threadStopping() || chatRunning()) return;
+    if (threadStopping()) return;
+    if (chatRunning()) {
+      const pending = pendingSubmission();
+      if (pendingAdmissionCanStop() && pending) {
+        setDeferredStopClientRequestID(pending.clientRequestID);
+      }
+      return;
+    }
     const stoppingThreadID = trimString(selectedThread()?.thread_id);
     setThreadStopping(true);
     try {
@@ -4957,6 +5504,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       await submitInputRequest();
       return;
     }
+    if (pendingAdmissionCanStop() && !promptOverLimit && !prompt && !composerHasAttachments() && !composerHasReferences()) {
+      await stopSelectedThreadFromComposer();
+      return;
+    }
     const command = parseFlowerSlashCommand(prompt);
     if (command.kind === 'invalid') {
       notifyComposerError(command.message);
@@ -4986,7 +5537,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (longTextPreparing()) cancelActiveLongTextSubmission?.();
       return;
     }
-    await launchChatTurn(promptInput);
+    if (launchChatTurnInFlight) return;
+    launchChatTurnInFlight = true;
+    try {
+      await launchChatTurn(promptInput);
+    } finally {
+      launchChatTurnInFlight = false;
+    }
   };
 
   const startCompose = () => {
@@ -5176,6 +5733,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const measureTranscriptNearBottomAfterLayout = () => transcriptScroll.measureAfterLayout();
   const scheduleTranscriptTailScroll = () => transcriptScroll.scheduleTailScroll();
   onCleanup(() => {
+    if (liveSummaryRefreshTimer !== undefined) {
+      window.clearTimeout(liveSummaryRefreshTimer);
+      liveSummaryRefreshTimer = undefined;
+    }
     cancelDeferredThreadSelection();
     cancelThreadSelectionTransaction();
     cancelPresentedSelectionSchedule();
@@ -5393,7 +5954,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         timeline_decorations: [...(thread.timeline_decorations ?? []), pending.decoration],
       })]
       : [...selectedTimelineEntries()];
-    return entries;
+    return entries.filter((entry) => entry.type !== 'queued_turn');
   });
   const visibleTimelineEntryKeys = createMemo(() => visibleTimelineEntries().map((entry) => entry.key));
   const visibleTimelineEntriesByKey = createMemo(() => new Map(visibleTimelineEntries().map((entry) => [entry.key, entry] as const)));
@@ -5441,13 +6002,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         }
         return;
       }
-      if (!event.shiftKey && (event.key === 'Enter' || event.key === 'Tab')) {
+      if (!event.shiftKey && event.key === 'Tab' && active) {
+        event.preventDefault();
+        completeComposerReference(active);
+        return;
+      }
+      if (!event.shiftKey && event.key === 'Enter') {
         if (active) {
           event.preventDefault();
           void commitComposerReference(active);
           return;
         }
-        if (composerReferenceSearchState().status === 'loading' && event.key === 'Enter') {
+        if (composerReferenceSearchState().status === 'loading') {
           event.preventDefault();
           return;
         }
@@ -5500,6 +6066,96 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         </Show>
       </div>
     </div>
+  );
+
+  const runtimeRestartedDivider = () => (
+    <div class="flower-runtime-restart-divider" role="separator">
+      <span class="flower-runtime-restart-divider-rule" aria-hidden="true" />
+      <span class="flower-runtime-restart-divider-label">{copy().chat.runtimeRestartedDivider}</span>
+      <span class="flower-runtime-restart-divider-rule" aria-hidden="true" />
+    </div>
+  );
+
+  const queuedTurnDisplayLabel = (turn: FlowerQueuedTurn): string => {
+    const prompt = trimString(turn.prompt);
+    if (prompt) return prompt;
+    const attachments = (turn.attachments ?? []).map((attachment) => trimString(attachment.name)).filter(Boolean);
+    return attachments.join(', ') || copy().chat.pendingQueued;
+  };
+  const queuedPendingDisplayLabel = (pending: FlowerPendingSubmission): string => (
+    trimString(pending.prompt)
+      || pending.attachmentNames.map(trimString).filter(Boolean).join(', ')
+      || copy().chat.pendingQueued
+  );
+
+  const queuedTurnsDock = () => (
+    <Show when={selectedQueuedTurns().length > 0 || queuedPendingSubmission()}>
+      <div
+        class="flower-queued-turn-dock"
+        role="list"
+        aria-label={copy().chat.pendingQueued}
+        aria-busy={queuedTurnReorder()?.phase === 'saving' ? 'true' : undefined}
+        onDragOver={previewQueuedTurnDropAtEnd}
+        onDrop={commitQueuedTurnReorder}
+      >
+        <For each={selectedQueuedTurns()}>
+          {(turn) => {
+            const queueID = () => trimString(turn.queue_id);
+            const dragging = () => queuedTurnReorder()?.draggedQueueID === queueID();
+            return (
+              <div
+                class="flower-queued-turn-item"
+                role="listitem"
+                aria-label={`${copy().chat.pendingQueued}: ${queuedTurnDisplayLabel(turn)}`}
+                draggable={queuedTurnReorderEnabled()}
+                data-flower-queued-turn-id={queueID()}
+                data-flower-queued-turn-dragging={dragging() && queuedTurnReorder()?.phase === 'dragging' ? 'true' : undefined}
+                data-flower-queued-turn-saving={queuedTurnReorder()?.phase === 'saving' ? 'true' : undefined}
+                onDragStart={(event) => beginQueuedTurnDrag(event, queueID())}
+                onDragOver={(event) => previewQueuedTurnDrop(event, queueID())}
+                onDrop={(event) => {
+                  event.stopPropagation();
+                  commitQueuedTurnReorder(event);
+                }}
+                onDragEnd={finishQueuedTurnDrag}
+              >
+                <GripVertical class="flower-queued-turn-handle" aria-hidden="true" />
+                <span class="flower-queued-turn-label">{queuedTurnDisplayLabel(turn)}</span>
+                <span class="flower-queued-turn-state">{copy().chat.pendingQueued}</span>
+                <button
+                  type="button"
+                  class="flower-queued-turn-send"
+                  disabled={queuedTurnPromotionBlocked() || Boolean(queuedTurnPromotingID())}
+                  aria-busy={queuedTurnPromotingID() === queueID() ? 'true' : undefined}
+                  aria-label={copy().chat.send}
+                  title={copy().chat.send}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void promoteQueuedTurn(turn);
+                  }}
+                >
+                  <span aria-hidden="true">↵</span>
+                </button>
+              </div>
+            );
+          }}
+        </For>
+        <Show when={queuedPendingSubmission()}>
+          {(pending) => (
+            <div
+              class="flower-queued-turn-item flower-queued-turn-item-pending"
+              role="listitem"
+              aria-label={`${copy().chat.pendingSending}: ${queuedPendingDisplayLabel(pending())}`}
+              data-flower-queued-turn-pending="true"
+            >
+              <Clock class="flower-queued-turn-handle" aria-hidden="true" />
+              <span class="flower-queued-turn-label">{queuedPendingDisplayLabel(pending())}</span>
+              <span class="flower-queued-turn-state">{copy().chat.pendingSending}</span>
+            </div>
+          )}
+        </Show>
+      </div>
+    </Show>
   );
 
   const permissionSelector = () => {
@@ -5803,8 +6459,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const composerAttachmentItems = createMemo(() => currentAttachmentSnapshot().items);
   const composerHasAttachments = createMemo(() => composerAttachmentItems().length > 0);
-  const composerAttachmentsReady = createMemo(() => (
-    composerHasAttachments() && composerAttachmentItems().every((item) => item.status === 'staged_ready')
+  const composerHasReadyAttachments = createMemo(() => (
+    composerAttachmentItems().some((item) => item.status === 'staged_ready')
+  ));
+  const composerHasSubmissionBlockingAttachments = createMemo(() => (
+    composerAttachmentItems().some((item) => item.status !== 'staged_ready' && item.status !== 'incompatible')
   ));
   const composerAttachmentCapabilityEnabled = createMemo(() => (
     currentAttachmentSnapshot().capability?.enabled === true
@@ -6108,19 +6767,21 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       notifyComposerError(attachmentCopy().restoreFailed);
     }
   };
-  const copyAttachmentReference = async (item: FlowerAttachmentItem) => {
-    const locator = trimString(item.staged?.locator);
-    if (!locator) return;
-    try {
-      await writeTextToClipboard(locator);
-    } catch (error) {
-      notifyComposerError(getErrorMessage(error));
-    }
-  };
   const previewStagedAttachment = async (item: FlowerAttachmentItem) => {
-    if (!item.staged || !props.adapter.previewStagedAttachment) return;
+    if (!item.staged) return;
     const scope = currentAttachmentSnapshot().staging_scope;
     if (!scope) return;
+    if (props.adapter.loadStagedAttachmentPreview) {
+      const attachment = item.staged;
+      setAttachmentPreview({
+        id: `staged:${attachment.attachment_id}`,
+        name: attachment.name,
+        mimeType: attachment.mime_type,
+        load: (signal) => props.adapter.loadStagedAttachmentPreview!(attachment, scope, signal),
+      });
+      return;
+    }
+    if (!props.adapter.previewStagedAttachment) return;
     try {
       await props.adapter.previewStagedAttachment(item.staged, scope);
     } catch (error) {
@@ -6208,11 +6869,39 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (selectedComposerApprovalDisplayAction()) return true;
     if (selectedThreadDetailPending()) return true;
     if (selectedThreadReadOnly()) return true;
-    if (composerSharedOperationActive()) return true;
     if (chatRunning()) return true;
     if (!selectedInputRequest()) return false;
     return inputSubmitting() || !activeInputQuestion();
   });
+
+  // A shared draft submission must not make the visible composer inert. The
+  // user should still be able to place the caret and understand that the
+  // composer is present while another Flower surface finishes admission.
+  const composerTextareaReadOnly = createMemo(() => (
+    composerSharedOperationActive() || composerReferenceMutationCount() > 0
+  ));
+
+  const focusComposerFromBlankArea = (event: PointerEvent & { currentTarget: HTMLDivElement }) => {
+    if (event.button !== 0 || event.defaultPrevented) return;
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    if (target.closest('textarea, input, button, a, select, [role="button"], [role="option"], [contenteditable="true"]')) return;
+    const field = composerRef;
+    if (
+      !(field instanceof HTMLTextAreaElement || field instanceof HTMLInputElement)
+      || field.disabled
+      || !field.isConnected
+      || !event.currentTarget.contains(field)
+    ) return;
+    const alreadyFocused = document.activeElement === field;
+    event.preventDefault();
+    field.focus({ preventScroll: true });
+    if (!alreadyFocused && field instanceof HTMLTextAreaElement) {
+      const end = field.value.length;
+      field.setSelectionRange(end, end);
+      syncComposerSelection(field);
+    }
+  };
 
   const composerReferenceEditingAllowed = createMemo(() => (
     composerAttachmentEditingAllowed()
@@ -6250,11 +6939,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   });
   const composerReferenceMenuVisible = createMemo(() => {
     const signature = composerReferenceTokenSignature();
+    const state = composerReferenceSearchState();
+    const hasStableContent = state.status === 'ready'
+      || state.status === 'empty'
+      || state.status === 'error'
+      || (state.status !== 'idle' && state.candidates.length > 0)
+      || composerReferenceLoadingVisible();
     return Boolean(
       composerFocused()
       && signature
       && signature !== composerReferenceDismissedSignature()
-      && composerReferenceSearchState().status !== 'idle'
+      && state.status !== 'idle'
+      && hasStableContent
       && composerReferenceMutationCount() === 0
       && !selectedInputRequest()
       && !selectedComposerApprovalDisplayAction(),
@@ -6286,6 +6982,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     });
   };
   let composerReferenceSequence = 0;
+  let composerReferenceLoadingTimer: number | undefined;
   const createComposerReferenceLocalID = (): string => {
     const uuid = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
       ? crypto.randomUUID()
@@ -6360,6 +7057,28 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       finishComposerReferenceMutation();
     }
   };
+  const completeComposerReference = (candidate: FlowerComposerReferenceCandidate) => {
+    const target = composerRef;
+    if (!(target instanceof HTMLTextAreaElement) || composerReferenceMutationActive()) return;
+    const draft = currentComposerSessionDraft().chatDraft;
+    const token = findFlowerComposerReferenceToken({
+      text: draft,
+      selectionStart: target.selectionStart,
+      selectionEnd: target.selectionEnd,
+    });
+    if (!token) return;
+    const root = normalizeFlowerComposerReferencePath(displayedWorkingDirectory());
+    const path = normalizeFlowerComposerReferencePath(candidate.path);
+    const rootPrefix = root === '/' ? '/' : `${root}/`;
+    const relative = path.startsWith(rootPrefix) ? path.slice(rootPrefix.length) : candidate.label;
+    const completedToken = `@${relative}${candidate.kind === 'directory' ? '/' : ''}`;
+    const nextText = `${draft.slice(0, token.range.start)}${completedToken}${draft.slice(token.range.end)}`;
+    const cursor = token.range.start + completedToken.length;
+    updateComposerText(nextText);
+    setComposerReferenceDismissedSignature('');
+    setComposerReferenceActiveKey('');
+    scheduleComposerSelection(cursor, cursor, currentComposerSessionKey(), nextText);
+  };
   const removeComposerReference = async (reference: FlowerComposerDraftReference, index: number) => {
     if (!beginComposerReferenceMutation()) return;
     const focusOwner = document.activeElement;
@@ -6413,6 +7132,26 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       rootPath,
       query: token.query,
     });
+  });
+  createEffect(() => {
+    const state = composerReferenceSearchState();
+    if (composerReferenceLoadingTimer !== undefined) {
+      window.clearTimeout(composerReferenceLoadingTimer);
+      composerReferenceLoadingTimer = undefined;
+    }
+    if (state.status !== 'loading' || state.candidates.length > 0) {
+      setComposerReferenceLoadingVisible(false);
+      return;
+    }
+    composerReferenceLoadingTimer = window.setTimeout(() => {
+      composerReferenceLoadingTimer = undefined;
+      if (composerReferenceSearchState().generation === state.generation) {
+        setComposerReferenceLoadingVisible(true);
+      }
+    }, 140);
+  });
+  onCleanup(() => {
+    if (composerReferenceLoadingTimer !== undefined) window.clearTimeout(composerReferenceLoadingTimer);
   });
   createEffect(() => {
     const candidates = composerReferenceCandidates();
@@ -6487,6 +7226,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const composerPrimaryActionIsCommand = createMemo(() => composerSlashCommand().kind === 'intent');
   const composerPrimaryActionIsStop = createMemo(() => (
     longTextPreparing()
+    || pendingAdmissionCanStop()
     || (selectedThreadCanStop() && !composerTextOverLimit() && !composerChatDraftText() && !composerHasAttachments() && !composerHasReferences())
   ));
   const composerPrimaryActionIcon = createMemo(() => composerPrimaryActionIsStop() ? FlowerStopIcon : composerPrimaryActionIsCommand() ? Clock : ArrowUp);
@@ -6497,20 +7237,21 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (selectedThreadDetailPending()) return true;
     if (composerSharedOperationActive() && !chatRunning()) return true;
     if (longTextPreparing()) return false;
-    if (threadStopping() || chatRunning()) return true;
+    if (threadStopping()) return true;
+    if (chatRunning()) return !pendingAdmissionCanStop() || deferredStopPending();
     if (selectedThreadReadOnly()) return true;
     if (composerSlashCommand().kind === 'invalid') return true;
     if (composerPrimaryActionIsCommand()) {
       return composerHasAttachments() || composerHasReferences() || compactSubmitting() || !readyForChat() || !!selectedInputRequest() || !selectedThreadID() || !selectedThreadHasContent();
     }
-    if (composerHasAttachments() && !composerAttachmentsReady()) return true;
+    if (composerHasSubmissionBlockingAttachments()) return true;
     if (composerTextOverLimit() && !currentAttachmentSnapshot().capability?.supports_long_text) return true;
     if (selectedThreadCanStop() && !composerTextOverLimit() && !composerHasAttachments() && !composerHasReferences()) return false;
     const hasSendableText = composerTextOverLimit() ? composerChatDraftHasRawText() : Boolean(composerChatDraftText());
-    return !readyForChat() || !handlerAllowsSubmitIntent() || (!hasSendableText && !composerAttachmentsReady() && !composerHasReferences());
+    return !readyForChat() || !handlerAllowsSubmitIntent() || (!hasSendableText && !composerHasReadyAttachments() && !composerHasReferences());
   });
   const composerPrimaryActionLoading = createMemo(() => (
-    threadStopping() || (chatRunning() && !longTextPreparing()) || (composerPrimaryActionIsCommand() && compactSubmitting())
+    threadStopping() || deferredStopPending() || (chatRunning() && !longTextPreparing() && !pendingAdmissionCanStop()) || (composerPrimaryActionIsCommand() && compactSubmitting())
   ));
 
   const questionAnswer = (question: FlowerInputRequestQuestion): FlowerInputAnswer | null => {
@@ -7061,7 +7802,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     </span>
   );
 
-  const statusIcon = (status: FlowerActivityStatus) => {
+  const statusIcon = (status: FlowerActivityStatus, approvalState?: FlowerActivityItem['approval_state']) => {
+    if (approvalState === 'rejected') {
+      return <span class="flower-activity-user-rejected-marker" aria-hidden="true">-</span>;
+    }
     switch (status) {
       case 'success':
         return <Check class="h-3.5 w-3.5" />;
@@ -7168,6 +7912,39 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return <span class="flower-activity-inline-title-target">{title.kind === 'command' ? title.command : title.text}</span>;
   };
 
+  const attachmentPreviewTargetForActivity = (
+    item: FlowerActivityItem,
+    timeline: FlowerActivityTimelineBlock,
+    displayName: string,
+  ): FlowerMessageAttachmentPreviewTarget | null => {
+    if (trimString(item.tool_name) !== 'attachment.read') return null;
+    const turnID = trimString(timeline.turn_id);
+    const expectedName = trimString(displayName) || trimString(item.label);
+    const candidates: FlowerMessageAttachmentPreviewTarget[] = [];
+    for (const message of selectedThread()?.messages ?? []) {
+      if (message.role !== 'user' || (turnID && trimString(message.turn_id) !== turnID)) continue;
+      for (const [index, block] of (message.blocks ?? []).entries()) {
+        if (block.type === 'file' && trimString(block.url)) {
+          candidates.push({
+            id: `${message.id}:attachment:${index}`,
+            name: trimString(block.name) || expectedName || attachmentCopy().preview,
+            mimeType: trimString(block.mimeType),
+            url: block.url,
+          });
+        } else if (block.type === 'image' && trimString(block.src)) {
+          candidates.push({
+            id: `${message.id}:attachment:${index}`,
+            name: trimString(block.alt) || expectedName || attachmentCopy().preview,
+            mimeType: 'image/*',
+            url: block.src,
+          });
+        }
+      }
+    }
+    return candidates.find((candidate) => trimString(candidate.name) === expectedName)
+      ?? (candidates.length === 1 ? candidates[0] : null);
+  };
+
   const openActivityFileBrowser = (messageID: string, blockIndex: number, itemID: string, action: FlowerActivityFileAction) => {
     if (selectedThreadDetailPending()) return;
     if (!action.can_browse_directory || !trimString(action.action_id) || !props.adapter.openFileBrowser) return;
@@ -7196,43 +7973,65 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     });
   };
 
-  const fileActionButtons = (messageID: string, blockIndex: number, itemID: string, action: FlowerActivityFileAction) => (
-    <div class="flower-activity-file-actions" aria-label="File actions">
-      <button
-        type="button"
-        class="flower-activity-file-action-button"
-        title="Preview file"
-        aria-label={`Preview ${action.display_name || 'file'}`}
-        disabled={selectedThreadDetailPending() || !action.can_preview || !trimString(action.action_id) || !props.adapter.openFilePreview}
-        onClick={(event) => {
-          event.stopPropagation();
-          openActivityFilePreview(messageID, blockIndex, itemID, action);
-        }}
-      >
-        <FileText class="h-3.5 w-3.5" />
-      </button>
-      <button
-        type="button"
-        class="flower-activity-file-action-button"
-        title="Browse folder"
-        aria-label={`Browse folder for ${action.display_name || 'file'}`}
-        disabled={selectedThreadDetailPending() || !action.can_browse_directory || !trimString(action.action_id) || !props.adapter.openFileBrowser}
-        onClick={(event) => {
-          event.stopPropagation();
-          openActivityFileBrowser(messageID, blockIndex, itemID, action);
-        }}
-      >
-        <FolderOpen class="h-3.5 w-3.5" />
-      </button>
-    </div>
-  );
-
-  const disabledFileAction = (displayName: string): FlowerActivityFileAction => ({
-    action_id: '',
-    display_name: trimString(displayName) || 'file',
-    can_preview: false,
-    can_browse_directory: false,
-  });
+  const fileActionButtons = (
+    messageID: string,
+    blockIndex: number,
+    itemID: string,
+    action: FlowerActivityFileAction | null,
+    attachmentTarget: FlowerMessageAttachmentPreviewTarget | null = null,
+  ) => {
+    const canonicalActionID = trimString(action?.action_id);
+    const canPreview = Boolean(
+      attachmentTarget
+      || (action?.can_preview && canonicalActionID && props.adapter.openFilePreview),
+    );
+    const canBrowseDirectory = Boolean(
+      action?.can_browse_directory
+      && canonicalActionID
+      && props.adapter.openFileBrowser,
+    );
+    const displayName = trimString(attachmentTarget?.name) || trimString(action?.display_name) || 'file';
+    return (
+      <Show when={canPreview || canBrowseDirectory}>
+        <div class="flower-activity-file-actions" aria-label="File actions">
+          <Show when={canPreview}>
+            <button
+              type="button"
+              class="flower-activity-file-action-button"
+              title="Preview file"
+              aria-label={`Preview ${displayName}`}
+              disabled={!attachmentTarget && selectedThreadDetailPending()}
+              onClick={(event) => {
+                event.stopPropagation();
+                if (attachmentTarget) {
+                  openMessageAttachmentPreview(attachmentTarget);
+                  return;
+                }
+                if (action) openActivityFilePreview(messageID, blockIndex, itemID, action);
+              }}
+            >
+              <FileText class="h-3.5 w-3.5" />
+            </button>
+          </Show>
+          <Show when={canBrowseDirectory && action}>
+            <button
+              type="button"
+              class="flower-activity-file-action-button"
+              title="Browse folder"
+              aria-label={`Browse folder for ${displayName}`}
+              disabled={selectedThreadDetailPending()}
+              onClick={(event) => {
+                event.stopPropagation();
+                openActivityFileBrowser(messageID, blockIndex, itemID, action!);
+              }}
+            >
+              <FolderOpen class="h-3.5 w-3.5" />
+            </button>
+          </Show>
+        </div>
+      </Show>
+    );
+  };
 
   const detailLinesBlock = (block: Extract<FlowerActivityDetailBlock, { kind: 'structured' }>) => (
     <>
@@ -7276,6 +8075,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     context: Accessor<FlowerTerminalOutputContext>;
     block: Accessor<Extract<FlowerActivityDetailBlock, { kind: 'terminal_output' }>>;
     canonicalStatus: Accessor<FlowerActivityStatus>;
+    approvalState: Accessor<FlowerActivityItem['approval_state']>;
     onSettledPresentation: () => void;
   }>;
   type FlowerNonTerminalDetailBlock = Exclude<FlowerActivityDetailBlock, { kind: 'terminal_output' }>;
@@ -7334,10 +8134,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       (detailProps.canonicalStatus() === 'running' || detailProps.canonicalStatus() === 'pending')
     );
     const displayStatus = detailProps.canonicalStatus;
+    const displayCanceled = () => displayStatus() === 'canceled';
+    const displayUserRejected = () => detailProps.approvalState() === 'rejected';
     const visibleOutput = liveOutput;
     const displayOutput = () => {
       const output = visibleOutput();
       if (output.trim()) return output;
+      if (displayUserRejected()) return '';
       if (liveError()) return `Live output unavailable: ${liveError()}`;
       if (canReadLiveOutput() && terminalListeningPlaceholderVisible(output, displayStatus())) return 'Listening for output...';
       if ((displayStatus() === 'running' || displayStatus() === 'pending') && processID() === '') {
@@ -7345,7 +8148,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }
       return 'No output captured.';
     };
-    const muted = () => !visibleOutput().trim();
+    const muted = () => !visibleOutput().trim() && !displayUserRejected();
     const copyTerminalCommand = async () => {
       const value = command();
       if (!value) return;
@@ -7446,7 +8249,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         data-flower-activity-terminal-panel
       >
         <div class="flower-activity-terminal-header">
-          <span class="flower-activity-terminal-status">{statusIcon(displayStatus())}</span>
+          <span class="flower-activity-terminal-status">{statusIcon(displayStatus(), detailProps.approvalState())}</span>
           <span class="flower-activity-terminal-prompt" aria-hidden="true">$</span>
           <span class="flower-activity-terminal-command">
             <FlowerShellCommandHighlight
@@ -7508,7 +8311,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           onScroll={outputViewport.onScroll}
           onWheel={outputViewport.onWheel}
         >
-          <pre>{displayOutput()}</pre>
+          <pre>
+            {displayOutput()}
+            <Show when={displayUserRejected()}>
+              <span class="flower-activity-terminal-approval-rejected">{copy().chat.toolApprovalRejectedDetail}</span>
+            </Show>
+            <Show when={displayCanceled() && !displayUserRejected()}>
+              <span class="flower-activity-terminal-canceled">{copy().chat.toolCallCanceled}</span>
+            </Show>
+          </pre>
         </div>
       </section>
     );
@@ -7894,7 +8705,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const open = disclosureControl.open;
     const subagentsDetail = createMemo(() => subagentsDetailForPresentation(presentation()));
     const hasDetails = createMemo(() => presentation().detailBlocks.length > 0);
-    const expandable = createMemo(() => hasDetails());
+    const isReadActivity = createMemo(() => {
+      const title = presentation().title;
+      return title.kind === 'file' && title.verb === 'Read';
+    });
+    const expandable = createMemo(() => hasDetails() && !isReadActivity());
     let toggleButtonRef: HTMLButtonElement | undefined;
     let detailPanelRef: HTMLDivElement | undefined;
     const disclosure = createFlowerActivityDisclosureMotion(
@@ -7910,9 +8725,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         },
       },
     );
-    const rowFileAction = createMemo(() => {
-      const value = presentation();
-      return value.primaryAction ?? (value.title.kind === 'file' ? disabledFileAction(value.title.display_name) : null);
+    const rowFileAction = createMemo(() => presentation().primaryAction ?? null);
+    const rowAttachmentPreviewTarget = createMemo(() => {
+      const title = presentation().title;
+      return title.kind === 'file' && title.verb === 'Read'
+        ? attachmentPreviewTargetForActivity(item(), timeline(), title.display_name)
+        : null;
     });
     const displayStatus = createMemo(() => item().status);
     const duration = createMemo(() => {
@@ -7928,6 +8746,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         class={cn('flower-activity-inline-row', `flower-activity-inline-row-${displayStatus()}`, subagentsDetail() && 'flower-activity-inline-row-subagents')}
         data-flower-activity-item-id={item().item_id}
         data-flower-activity-status={displayStatus()}
+        data-flower-activity-approval-state={item().approval_state}
         data-state={disclosure.state()}
         aria-label={activityItemAriaLabel(item(), timeline())}
       >
@@ -7940,7 +8759,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             disabled={!expandable()}
             onClick={disclosureControl.toggle}
           >
-            <span class="flower-activity-inline-icon">{statusIcon(displayStatus())}</span>
+            <span class="flower-activity-inline-icon">{statusIcon(displayStatus(), item().approval_state)}</span>
             <span class="flower-activity-inline-copy">
               <span class="flower-activity-inline-title">{activityTitle(displayTitle())}</span>
               <Show when={presentation().meta}>
@@ -7954,9 +8773,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               <ChevronDown class={cn('flower-activity-inline-chevron h-3.5 w-3.5', open() && 'flower-activity-inline-chevron-open')} />
             </Show>
           </button>
-          <Show when={rowFileAction()}>
-            {(action) => fileActionButtons(messageID(), blockIndex(), item().item_id, action())}
-          </Show>
+          {fileActionButtons(
+            messageID(),
+            blockIndex(),
+            item().item_id,
+            rowFileAction(),
+            rowAttachmentPreviewTarget(),
+          )}
         </div>
         <Show when={disclosure.mounted() && expandable()}>
           <div
@@ -7975,6 +8798,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           >
             <div class="flower-activity-inline-details-clip">
               <div ref={disclosure.bindContent} class="flower-activity-inline-details-content">
+                <Show when={item().approval_state === 'rejected' && !terminalDisclosure()}>
+                  <div class="flower-activity-approval-rejected-detail">
+                    {copy().chat.toolApprovalRejectedDetail}
+                  </div>
+                </Show>
                 <For each={detailKeys()}>
                   {(detailKey) => {
                     const block = createMemo(() => detailsByKey().get(detailKey)!);
@@ -8000,6 +8828,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                               })}
                               block={value}
                               canonicalStatus={() => item().status}
+                              approvalState={() => item().approval_state}
                               onSettledPresentation={disclosureControl.markSettledPresentation}
                             />
                           )}
@@ -8151,19 +8980,54 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return `${value.toFixed(value >= 10 ? 0 : 1)} ${unit}`;
   };
 
+  const attachmentPreviewURL = (rawURL: string): string => {
+    const url = new URL(rawURL, window.location.href);
+    url.searchParams.set('preview', '1');
+    return url.toString();
+  };
+
+  const openMessageAttachmentPreview = (input: Readonly<{
+    id: string;
+    name: string;
+    mimeType: string;
+    url: string;
+  }>) => {
+    const url = trimString(input.url);
+    if (!url) return;
+    setAttachmentPreview({
+      id: input.id,
+      name: trimString(input.name) || attachmentCopy().preview,
+      mimeType: trimString(input.mimeType),
+      load: async (signal) => {
+        const response = await fetch(attachmentPreviewURL(url), {
+          method: 'GET',
+          credentials: 'same-origin',
+          headers: { Accept: 'text/plain, image/png, image/jpeg, image/gif, image/webp, application/pdf' },
+          signal,
+        });
+        if (!response.ok) throw new Error(`${attachmentCopy().errorUnavailable} (HTTP ${response.status})`);
+        return response.blob();
+      },
+    });
+  };
+
   const messageAttachmentBlock = (block: Accessor<Extract<FlowerRenderableMessageBlock, { type: 'image' | 'file' }>>) => (
     <Show
       when={block().type === 'image' ? block() as Extract<FlowerRenderableMessageBlock, { type: 'image' }> : null}
       fallback={(
-        <a
+        <button
+          type="button"
           class="flower-message-file"
-          href={(block() as Extract<FlowerRenderableMessageBlock, { type: 'file' }>).url || undefined}
-          download={(block() as Extract<FlowerRenderableMessageBlock, { type: 'file' }>).url
-            ? (block() as Extract<FlowerRenderableMessageBlock, { type: 'file' }>).name
-            : undefined}
-          target={(block() as Extract<FlowerRenderableMessageBlock, { type: 'file' }>).url ? '_blank' : undefined}
-          rel={(block() as Extract<FlowerRenderableMessageBlock, { type: 'file' }>).url ? 'noreferrer' : undefined}
-          aria-disabled={(block() as Extract<FlowerRenderableMessageBlock, { type: 'file' }>).url ? undefined : 'true'}
+          disabled={!(block() as Extract<FlowerRenderableMessageBlock, { type: 'file' }>).url}
+          onClick={() => {
+            const file = block() as Extract<FlowerRenderableMessageBlock, { type: 'file' }>;
+            openMessageAttachmentPreview({
+              id: file.key,
+              name: file.name,
+              mimeType: file.mimeType,
+              url: file.url ?? '',
+            });
+          }}
         >
           <FileText class="size-5 shrink-0" aria-hidden="true" />
           <span class="flower-message-file-copy">
@@ -8175,16 +9039,22 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               {(block() as Extract<FlowerRenderableMessageBlock, { type: 'file' }>).mimeType}
             </span>
           </span>
-          <Show when={(block() as Extract<FlowerRenderableMessageBlock, { type: 'file' }>).url}>
-            <ExternalLink class="size-4 shrink-0" aria-hidden="true" />
-          </Show>
-        </a>
+        </button>
       )}
     >
       {(imageBlock) => (
-        <a class="flower-message-image" href={imageBlock().src} target="_blank" rel="noreferrer">
+        <button
+          type="button"
+          class="flower-message-image"
+          onClick={() => openMessageAttachmentPreview({
+            id: imageBlock().key,
+            name: trimString(imageBlock().alt) || attachmentCopy().preview,
+            mimeType: 'image/*',
+            url: imageBlock().src,
+          })}
+        >
           <img src={imageBlock().src} alt={imageBlock().alt ?? ''} loading="lazy" />
-        </a>
+        </button>
       )}
     </Show>
   );
@@ -8239,7 +9109,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       && message().role === 'assistant'
       && message().active_cursor === true
     ));
-    const failed = createMemo(() => message().status === 'error');
+    const failed = createMemo(() => (
+      message().status === 'error'
+      && !messageHasUserRejectedTool(message())
+      && !threadHasUserRejectedTool(selectedThread(), message().run_id, message().turn_id)
+    ));
     const hasRenderableBlock = createMemo(() => entry().blocks.length > 0);
     const contextDisplay = createMemo(() => {
       const msg = message();
@@ -8613,7 +9487,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     });
     return (
       <Show when={error()}>
-        {(value) => runErrorNotice(value())}
+        {(value) => {
+          const code = trimString(value().code);
+          if (code === 'runtime_restarted') return runtimeRestartedDivider();
+          if (code === 'floret_turn_interrupted') return null;
+          if (latestThreadFailureIsUserRejectedTool(selectedThread())) return null;
+          return runErrorNotice(value());
+        }}
       </Show>
     );
   };
@@ -9347,7 +10227,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           aria-label={copy().chat.composerReferencesLabel}
           aria-busy={composerReferenceSearchState().status === 'loading' ? 'true' : 'false'}
         >
-          <Show when={composerReferenceSearchState().status === 'loading'}>
+          <Show when={composerReferenceLoadingVisible()}>
             <div class="flower-composer-reference-status" role="status" aria-live="polite">
               <Refresh class="h-4 w-4 animate-spin" aria-hidden="true" />
               <span>{copy().chat.composerReferenceLoading}</span>
@@ -9375,7 +10255,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               </button>
             </div>
           </Show>
-          <Show when={composerReferenceSearchState().status === 'ready'}>
+          <Show when={composerReferenceCandidates().length > 0}>
             <For each={composerReferenceCandidates()}>
               {(candidate, index) => {
                 const key = () => composerReferenceCandidateKey(candidate);
@@ -9390,6 +10270,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     disabled={composerReferenceMutationCount() > 0}
                     aria-selected={active() ? 'true' : 'false'}
                     data-active={active() ? 'true' : 'false'}
+                    data-kind={candidate.kind}
                     onPointerDown={(event) => event.preventDefault()}
                     onPointerEnter={() => setComposerReferenceActiveKey(key())}
                     onClick={() => void commitComposerReference(candidate)}
@@ -9405,6 +10286,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                         <span class="flower-composer-reference-option-path">{candidate.relativeParent}</span>
                       </Show>
                     </span>
+                    <span class="flower-composer-reference-option-hint" aria-hidden="true">Tab</span>
                   </button>
                 );
               }}
@@ -9535,6 +10417,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         zIndex={FLOWER_SURFACE_LAYER.contextPreview}
         onClose={() => setContextSnapshotPreview(null)}
       />
+      <FlowerAttachmentPreviewWindow
+        source={attachmentPreview()}
+        zIndex={FLOWER_SURFACE_LAYER.attachmentPreview}
+        loadingLabel={attachmentCopy().uploading}
+        unavailableLabel={attachmentCopy().errorUnavailable}
+        onClose={() => setAttachmentPreview(null)}
+      />
       <div class="flower-chat-main flower-chat-main">
         <div
           ref={(node) => { transcriptScroll.bind(node); }}
@@ -9633,16 +10522,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   </button>
                 </div>
               </Show>
+              {queuedTurnsDock()}
               <div
                 class="flower-composer flower-chat-input-floating chat-input-container p-3"
                 aria-busy={chatRunning() || composerSharedOperationActive() || selectedApprovalDecisionHandoff() || composerReferenceMutationCount() > 0 ? 'true' : undefined}
-                aria-disabled={composerSharedOperationActive() && !chatRunning() ? 'true' : undefined}
-                inert={composerSharedOperationActive() && !chatRunning()}
                 data-flower-turn-submitting={chatRunning() || composerSharedOperationActive() ? 'true' : undefined}
                 data-flower-approval-handoff={selectedComposerApprovalHandoffActive() ? 'true' : undefined}
                 data-flower-approval-handoff-phase={selectedComposerApprovalHandoffActive() ? selectedComposerApprovalHandoffPhase() : undefined}
                 data-flower-companion-compact={companionCompactComposer() ? 'true' : undefined}
                 data-flower-attachment-drag={attachmentDragActive() ? 'true' : undefined}
+                data-flower-text-entry={!selectedComposerApprovalDisplayAction() && !composerTextareaDisabled() ? 'true' : undefined}
+                onPointerDown={focusComposerFromBlankArea}
                 onDragEnter={(event) => {
                   if (!event.dataTransfer?.types.includes('Files')) return;
                   event.preventDefault();
@@ -9870,8 +10760,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     onCancel={(localID) => currentAttachmentController().cancel(localID)}
                     onRemove={(localID) => currentAttachmentController().remove(localID)}
                     onRestore={(localID) => void restoreLongTextAttachment(localID)}
-                    onPreview={props.adapter.previewStagedAttachment ? previewStagedAttachment : undefined}
-                    onCopyReference={(item) => void copyAttachmentReference(item)}
+                    onPreview={props.adapter.loadStagedAttachmentPreview || props.adapter.previewStagedAttachment ? previewStagedAttachment : undefined}
                     onFocusFallback={() => attachmentPickerButtonRef?.focus()}
                   />
                 </Show>
@@ -9905,7 +10794,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                             placeholder={composerPlaceholder()}
                             value={composerTextValue()}
                             disabled={composerTextareaDisabled()}
-                            readOnly={composerReferenceMutationCount() > 0}
+                            readOnly={composerTextareaReadOnly()}
                             aria-label={presentation() === 'companion' ? copy().chat.placeholder : undefined}
                             aria-autocomplete={composerReferenceEditingAllowed() ? 'list' : undefined}
                             aria-haspopup="listbox"
@@ -9963,6 +10852,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                           placeholder={composerPlaceholder()}
                           value={composerTextValue()}
                           disabled={composerTextareaDisabled()}
+                          readOnly={composerTextareaReadOnly()}
                           aria-haspopup="listbox"
                           aria-expanded={composerCommandMenuVisible() ? 'true' : undefined}
                           aria-controls={composerCommandMenuVisible() ? FLOWER_COMPOSER_COMMAND_MENU_ID : undefined}
@@ -10186,7 +11076,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       data-flower-engaged={surfaceEngaged() ? 'true' : 'false'}
       data-flower-transcript-visible={transcriptVisible() ? 'true' : 'false'}
       data-flower-selected-thread-id={selectedThreadID()}
-      data-flower-selected-thread-status={selectedThread()?.status ?? 'idle'}
+      data-flower-selected-thread-status={selectedThreadLiveStatus()}
       data-flower-selected-thread-loading={selectedThreadLoading() ? 'true' : 'false'}
       data-flower-warmup={surfaceWarmupActive() ? 'true' : 'false'}
       data-flower-side-panel={sidePanel()}
@@ -10208,15 +11098,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           </button>
         </div>
         <FlowerThreadList
-          items={sidebarListItems()}
-          activeThreadID={sidebarActiveThreadID()}
+          items={localAdmissionThreadItems()}
+          activeThreadID={visibleSidebarActiveThreadID()}
           query={historyFilter()}
           refreshing={threadsRefreshing()}
           warmup={surfaceWarmupActive()}
           copy={copy().threadList}
           onQueryChange={setHistoryFilter}
           onRefresh={() => void refreshThreads()}
-          onSelect={selectThread}
+          onSelect={(threadID) => {
+            if (threadID !== PENDING_NEW_THREAD_ID) selectThread(threadID);
+          }}
           canFork={!!props.adapter.forkThread}
           canRename={!!props.adapter.renameThread}
           canPin={!!props.adapter.setThreadPinned}

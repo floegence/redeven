@@ -352,7 +352,11 @@ export function mergeFlowerThreadListRefresh(
     if (!existing) return thread;
     const preserveLoadedDetail = threadHasLoadedDetail(existing) && thread.messages.length === 0;
     const candidate = preserveLoadedDetail ? mergeFlowerThreadListSummary(thread, existing, {
-      preserveApprovalDetail: thread.thread_id === selectedID,
+      // List summaries do not carry approval detail. Keep the last applied
+      // canonical queue for every thread until live replay or bootstrap
+      // explicitly clears it; otherwise unrelated summary refreshes make a
+      // background approval oscillate between running and waiting.
+      preserveApprovalDetail: true,
     }) : thread;
     return options.sameThreadSnapshot(existing, candidate) ? existing : candidate;
   });

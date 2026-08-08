@@ -333,6 +333,7 @@ func TestExecutePreparedRun_DesktopReasoningPrecedence(t *testing.T) {
 		if err != nil {
 			t.Fatalf("SendUserTurn(%s): %v", runID, err)
 		}
+		response = awaitCanonicalTurnAdmissionForTest(t, svc, response)
 		if response.Kind != "start" || response.RunID == "" || response.TurnID == "" {
 			t.Fatalf("SendUserTurn(%s) response=%#v, want canonical admission", runID, response)
 		}

@@ -383,6 +383,7 @@ export function createFlowerComposerReferenceIndex(args: {
   let state: FlowerComposerReferenceSearchState = { status: 'idle', generation };
 
   const cacheID = (identity: SearchIdentity) => `${identity.cacheKey}\u0000${identity.rootPath}`;
+  const immediateCacheID = (identity: SearchIdentity) => `${cacheID(identity)}\u0000immediate`;
   const publish = (next: FlowerComposerReferenceSearchState) => {
     state = next;
     args.onStateChange?.(next);
@@ -406,6 +407,76 @@ export function createFlowerComposerReferenceIndex(args: {
     if (activeIdentity && !sameIdentity(activeIdentity, identity)) abortInflight();
     activeIdentity = identity;
 
+    // A bare line-leading `@` is the primary quick-pick path. Resolve only the
+    // working directory's immediate children so the menu appears after one
+    // filesystem request instead of waiting for a recursive workspace scan.
+    if (!normalizedInput.query.trim()) {
+      abortInflight();
+      const id = immediateCacheID(identity);
+      const cached = cache.get(id);
+      if (cached && cached.expiresAt > now()) {
+        return publish({
+          status: cached.candidates.length > 0 ? 'ready' : 'empty',
+          generation: requestGeneration,
+          input: normalizedInput,
+          candidates: cached.candidates,
+        });
+      }
+      if (cached) cache.delete(id);
+      publish({
+        status: 'loading',
+        generation: requestGeneration,
+        input: normalizedInput,
+        candidates: state.status !== 'idle' ? state.candidates : [],
+      });
+      try {
+        const candidates = await scanReferenceCandidates({
+          rootPath: identity.rootPath,
+          listDirectory: args.listDirectory,
+          limits: {
+            ...limits,
+            maxDepth: 0,
+            maxDirectories: 1,
+          },
+          skipDirectoryNames,
+          control: { aborted: false },
+        });
+        if (
+          disposed
+          || requestGeneration !== generation
+          || !activeIdentity
+          || !sameIdentity(activeIdentity, identity)
+        ) return undefined;
+        const ranked = rankFlowerComposerReferenceCandidates(
+          candidates,
+          normalizedInput.query,
+          normalizedInput.rootPath,
+          limits.maxResults,
+        );
+        cache.set(id, { candidates: ranked, expiresAt: now() + ttlMs });
+        return publish({
+          status: ranked.length > 0 ? 'ready' : 'empty',
+          generation: requestGeneration,
+          input: normalizedInput,
+          candidates: ranked,
+        });
+      } catch (error) {
+        if (
+          disposed
+          || requestGeneration !== generation
+          || !activeIdentity
+          || !sameIdentity(activeIdentity, identity)
+        ) return undefined;
+        return publish({
+          status: 'error',
+          generation: requestGeneration,
+          input: normalizedInput,
+          candidates: [],
+          error,
+        });
+      }
+    }
+
     const id = cacheID(identity);
     const cached = cache.get(id);
     if (cached && cached.expiresAt > now()) {
@@ -428,7 +499,7 @@ export function createFlowerComposerReferenceIndex(args: {
       status: 'loading',
       generation: requestGeneration,
       input: normalizedInput,
-      candidates: [],
+      candidates: state.status !== 'idle' ? state.candidates : [],
     });
 
     if (!inflight || !sameIdentity(inflight.identity, identity)) {
@@ -509,12 +580,18 @@ export function createFlowerComposerReferenceIndex(args: {
     }
     publish({ status: 'idle', generation });
   };
+  const softAbort = () => {
+    generation += 1;
+    abortInflight();
+    activeIdentity = undefined;
+    publish({ status: 'idle', generation });
+  };
 
   return {
     current: () => state,
     search,
     invalidate: reset,
-    softAbort: () => reset(activeIdentity?.cacheKey),
+    softAbort,
     dispose: () => {
       disposed = true;
       reset();

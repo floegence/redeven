@@ -296,6 +296,9 @@ func (c *aiReadinessController) setTransientState(state appserver.AIReadinessSta
 }
 
 func (c *aiReadinessController) finishFailure(err error) {
+	if c != nil && c.opts.Logger != nil && err != nil {
+		c.opts.Logger.Error("ai: service startup failed", "error", err)
+	}
 	snapshot := appserver.AIReadinessSnapshot{
 		State:      appserver.AIReadinessBlocked,
 		ReasonCode: appserver.AIServiceStartupErrorReasonCode,

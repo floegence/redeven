@@ -407,6 +407,14 @@ func (s *Service) ListThreads(ctx context.Context, meta *session.Meta, limit int
 		if err != nil {
 			return nil, fmt.Errorf("build thread %s view: %w", threadID, err)
 		}
+		if view.RunStatus == string(RunStateRunning) {
+			s.mu.Lock()
+			liveState := s.flowerLiveMaterializedStateLocked(endpointID, threadID)
+			s.mu.Unlock()
+			if flowerLiveStateHasPendingApproval(liveState, view.ActiveRunID) {
+				view.RunStatus = string(RunStateWaitingApproval)
+			}
+		}
 		out.Threads = append(out.Threads, view)
 	}
 	return out, nil
@@ -726,16 +734,22 @@ func (s *Service) SetThreadPinned(ctx context.Context, meta *session.Meta, threa
 		return nil, errors.New("missing thread_id")
 	}
 	endpointID := strings.TrimSpace(meta.EndpointID)
-	db, _, unlockLifecycle, err := s.lockCanonicalThreadSettingsMutation(ctx, endpointID, threadID)
+	s.mu.Lock()
+	db := s.threadsDB
+	s.mu.Unlock()
+	if db == nil {
+		return nil, errors.New("threads store not ready")
+	}
+	pinnedAt, err := db.SetThreadPinned(ctx, endpointID, threadID, pinned, meta.UserPublicID, meta.UserEmail)
 	if err != nil {
 		return nil, err
 	}
-	defer unlockLifecycle()
-	if _, err := db.SetThreadPinned(ctx, endpointID, threadID, pinned, meta.UserPublicID, meta.UserEmail); err != nil {
-		return nil, err
-	}
-	s.broadcastThreadSummary(endpointID, threadID)
-	return s.GetThread(ctx, meta, threadID)
+	// Summary delivery observes the active run and may wait on Floret. Keep it
+	// out of the pin receipt path so metadata changes remain responsive.
+	go s.broadcastThreadSummary(endpointID, threadID)
+	// Pinning is product metadata, independent of the active run lifecycle.
+	// Return a receipt instead of waiting for a canonical transcript read.
+	return &ThreadView{ThreadID: threadID, PinnedAtUnixMs: pinnedAt}, nil
 }
 
 func (s *Service) ForkThread(ctx context.Context, meta *session.Meta, sourceThreadID string, title string) (*ThreadView, error) {

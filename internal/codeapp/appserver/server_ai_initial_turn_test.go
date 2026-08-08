@@ -94,7 +94,7 @@ func TestServerAIInitialTurnCreateIsIdempotentAndCanonicallyReadable(t *testing.
 		return recorder.Code, response.Data, recorder.Body.String()
 	}
 	firstStatus, first, firstBody := post(payload, "", "")
-	if firstStatus != http.StatusAccepted || first.Kind != "start" || first.ClientRequestID != clientRequestID || first.ThreadID == "" || first.TurnID == "" || first.RunID == "" {
+	if firstStatus != http.StatusAccepted || first.Kind != "admitting" || first.ClientRequestID != clientRequestID || first.ThreadID == "" || first.AdmissionID == "" || first.TurnID != "" || first.RunID != "" {
 		t.Fatalf("first status=%d receipt=%#v body=%s", firstStatus, first, firstBody)
 	}
 	secondStatus, second, secondBody := post(payload, "", "")
@@ -106,7 +106,17 @@ func TestServerAIInitialTurnCreateIsIdempotentAndCanonicallyReadable(t *testing.
 	readRequest.Header.Set("Origin", origin)
 	readResponse := httptest.NewRecorder()
 	server.serveHTTP(readResponse, readRequest)
-	if readResponse.Code != http.StatusOK || !strings.Contains(readResponse.Body.String(), "create through the Flower HTTP boundary") || !strings.Contains(readResponse.Body.String(), first.TurnID) {
+	if readResponse.Code != http.StatusOK || !strings.Contains(readResponse.Body.String(), "create through the Flower HTTP boundary") {
+		for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); {
+			time.Sleep(20 * time.Millisecond)
+			readResponse = httptest.NewRecorder()
+			server.serveHTTP(readResponse, readRequest)
+			if readResponse.Code == http.StatusOK && strings.Contains(readResponse.Body.String(), "create through the Flower HTTP boundary") {
+				break
+			}
+		}
+	}
+	if readResponse.Code != http.StatusOK || !strings.Contains(readResponse.Body.String(), "create through the Flower HTTP boundary") {
 		t.Fatalf("canonical read status=%d body=%s", readResponse.Code, readResponse.Body.String())
 	}
 
@@ -153,13 +163,19 @@ func TestServerAIInitialTurnCreateIsIdempotentAndCanonicallyReadable(t *testing.
 		t.Fatalf("partial staging headers status=%d body=%s", partialStatus, partialBody)
 	}
 	attachmentStatus, attachmentReceipt, attachmentBody := post(attachmentPayload, scope.StagingScopeID, scope.Capability)
-	if attachmentStatus != http.StatusAccepted || attachmentReceipt.ClientRequestID != attachmentClientRequestID || attachmentReceipt.ThreadID == "" || attachmentReceipt.TurnID == "" || attachmentReceipt.RunID == "" {
+	if attachmentStatus != http.StatusAccepted || attachmentReceipt.ClientRequestID != attachmentClientRequestID || attachmentReceipt.ThreadID == "" || attachmentReceipt.AdmissionID == "" || attachmentReceipt.TurnID != "" || attachmentReceipt.RunID != "" {
 		t.Fatalf("attachment status=%d receipt=%#v body=%s", attachmentStatus, attachmentReceipt, attachmentBody)
 	}
 	attachmentReadRequest := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/ai/threads/"+attachmentReceipt.ThreadID+"/messages", nil)
 	attachmentReadRequest.Header.Set("Origin", origin)
 	attachmentReadResponse := httptest.NewRecorder()
 	server.serveHTTP(attachmentReadResponse, attachmentReadRequest)
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline) &&
+		(attachmentReadResponse.Code != http.StatusOK || !strings.Contains(attachmentReadResponse.Body.String(), upload.AttachmentID)); {
+		time.Sleep(20 * time.Millisecond)
+		attachmentReadResponse = httptest.NewRecorder()
+		server.serveHTTP(attachmentReadResponse, attachmentReadRequest)
+	}
 	if attachmentReadResponse.Code != http.StatusOK || !strings.Contains(attachmentReadResponse.Body.String(), upload.AttachmentID) {
 		t.Fatalf("attachment read status=%d body=%s", attachmentReadResponse.Code, attachmentReadResponse.Body.String())
 	}

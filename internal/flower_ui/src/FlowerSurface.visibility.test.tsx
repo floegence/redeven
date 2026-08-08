@@ -1011,6 +1011,166 @@ describe('FlowerSurface companion visibility lifecycle', () => {
     expect(loadThread).toHaveBeenCalled();
   });
 
+  it('does not let summary replay advance the selected thread detail cursor', async () => {
+    const userMessage = {
+      id: 'message-user-summary-race',
+      thread_id: 'thread-running',
+      turn_id: 'turn-summary-race',
+      run_id: 'run-summary-race',
+      role: 'user' as const,
+      content: 'hi',
+      status: 'complete' as const,
+      created_at_ms: 1_000,
+      blocks: [{ type: 'markdown' as const, content: 'hi' }],
+    };
+    const assistantMessage = {
+      id: 'turn-summary-race',
+      thread_id: 'thread-running',
+      turn_id: 'turn-summary-race',
+      run_id: 'run-summary-race',
+      role: 'assistant' as const,
+      content: 'Recovered after summary replay',
+      status: 'complete' as const,
+      created_at_ms: 2_000,
+      blocks: [{ type: 'markdown' as const, content: 'Recovered after summary replay' }],
+    };
+    const snapshot = thread({ messages: [userMessage] });
+    const connectLiveStream = vi.fn(async function* (input: FlowerLiveStreamConnectInput): AsyncIterable<FlowerLiveStreamEnvelope> {
+      yield {
+        schema_version: 1,
+        kind: 'ready',
+        stream_generation: 1,
+        thread_id: input.thread_id,
+        through_seq: 65,
+        retained_from_seq: 1,
+        summary_through_seq: 1,
+        summary_retained_from_seq: 1,
+      };
+      yield {
+        schema_version: 1,
+        kind: 'summary.batch',
+        stream_generation: 1,
+        from_seq: 1,
+        through_seq: 1,
+        retained_from_seq: 1,
+        events: [liveEvent(input.thread_id, 65, 'thread.patched', {
+          patch: { thread_id: input.thread_id, run_status: 'success' },
+        })],
+      };
+      yield {
+        schema_version: 1,
+        kind: 'thread.batch',
+        stream_generation: 1,
+        thread_id: input.thread_id,
+        from_seq: 6,
+        through_seq: 61,
+        retained_from_seq: 1,
+        events: [liveEvent(input.thread_id, 61, 'timeline.replaced', {
+          messages: [userMessage, assistantMessage],
+          stream_generation: 1,
+          snapshot_through_seq: 60,
+        })],
+      };
+      await new Promise<void>((resolve) => input.signal.addEventListener('abort', () => resolve(), { once: true }));
+    });
+    const harness = createAdapterHarness({
+      listThreads: vi.fn(async () => [snapshot]),
+      loadThread: vi.fn(async () => ({
+        ...bootstrap(snapshot),
+        cursor: 5,
+        timeline_messages: [userMessage],
+      })),
+      connectLiveStream,
+    });
+    renderSurface(harness.adapter, true, true, undefined, 'full');
+
+    const deadline = Date.now() + 1_000;
+    while (!host.textContent?.includes('Recovered after summary replay') && Date.now() < deadline) {
+      if (animationFrames.length > 0) await presentNextFrame();
+      await flushAsync();
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+    }
+    expect(host.textContent).toContain('Recovered after summary replay');
+  });
+
+  it('revalidates a warm thread against canonical bootstrap when it is selected again', async () => {
+    const userMessage = {
+      id: 'message-user-warm-recovery',
+      thread_id: 'thread-running',
+      turn_id: 'turn-warm-recovery',
+      run_id: 'run-warm-recovery',
+      role: 'user' as const,
+      content: 'hi',
+      status: 'complete' as const,
+      created_at_ms: 1_000,
+      blocks: [{ type: 'markdown' as const, content: 'hi' }],
+    };
+    const assistantMessage = {
+      id: 'turn-warm-recovery',
+      thread_id: 'thread-running',
+      turn_id: 'turn-warm-recovery',
+      run_id: 'run-warm-recovery',
+      role: 'assistant' as const,
+      content: 'Canonical warm recovery',
+      status: 'complete' as const,
+      created_at_ms: 2_000,
+      blocks: [{ type: 'markdown' as const, content: 'Canonical warm recovery' }],
+    };
+    const threadA = thread({ messages: [userMessage] });
+    const threadB = thread({ thread_id: 'thread-warm-b', title: 'Other thread', messages: [] });
+    let threadALoads = 0;
+    const loadThread = vi.fn<FlowerSurfaceAdapter['loadThread']>(async (threadID) => {
+      if (threadID === threadB.thread_id) return bootstrap(threadB);
+      threadALoads += 1;
+      return {
+        ...bootstrap(threadA),
+        cursor: threadALoads === 1 ? 5 : 61,
+        timeline_messages: threadALoads === 1 ? [userMessage] : [userMessage, assistantMessage],
+      };
+    });
+    const connectLiveStream = vi.fn(async function* (input: FlowerLiveStreamConnectInput): AsyncIterable<FlowerLiveStreamEnvelope> {
+      yield {
+        schema_version: 1, kind: 'ready', stream_generation: 1,
+        thread_id: input.thread_id, through_seq: input.thread_after_seq, retained_from_seq: 1,
+        summary_through_seq: input.summary_after_seq, summary_retained_from_seq: 1,
+      };
+      await new Promise<void>((resolve) => input.signal.addEventListener('abort', () => resolve(), { once: true }));
+    });
+    const harness = createAdapterHarness({
+      listThreads: vi.fn(async () => [threadA, threadB]),
+      loadThread,
+      connectLiveStream,
+    });
+    const [focusRequest, setFocusRequest] = createSignal({ request_id: 'focus-warm-a-1', thread_id: threadA.thread_id });
+    dispose = render(() => (
+      <FlowerSurface
+        adapter={harness.adapter}
+        notify={() => undefined}
+        presentation="full"
+        companionOpen
+        engaged
+        transcriptVisible
+        companionPresenceOwner={false}
+        focusThreadRequest={focusRequest()}
+      />
+    ), host);
+    await waitUntil(() => threadALoads === 1, 'initial thread bootstrap did not complete');
+
+    const select = async (requestID: string, threadID: string) => {
+      setFocusRequest({ request_id: requestID, thread_id: threadID });
+      await flushAsync();
+    };
+    await select('focus-warm-b', threadB.thread_id);
+    await waitUntil(() => loadThread.mock.calls.some(([threadID]) => threadID === threadB.thread_id), 'second thread bootstrap did not complete');
+    await select('focus-warm-a-2', threadA.thread_id);
+
+    await waitUntil(() => threadALoads === 2, 'warm thread did not revalidate its canonical bootstrap');
+    await waitUntil(
+      () => host.textContent?.includes('Canonical warm recovery') === true,
+      'warm thread did not replace stale detail with canonical content',
+    );
+  });
+
   it('reconnects summary replay from the last applied cursor instead of the ready high-water mark', async () => {
     const firstDisconnected = deferred<void>();
     const selectedSummary = thread({ status: 'idle', read_status: readStatus(false) });

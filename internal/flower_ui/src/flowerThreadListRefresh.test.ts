@@ -622,7 +622,7 @@ describe('mergeFlowerThreadListRefresh', () => {
     expect(first[0]?.approval_queue).toBe(existing.approval_queue);
   });
 
-  it('lets non-selected summaries replace stale approval detail', () => {
+  it('keeps non-selected live approval detail when a list summary reports running', () => {
     const existing = thread({
       thread_id: 'thread-background-approval',
       status: 'waiting_approval',
@@ -642,9 +642,9 @@ describe('mergeFlowerThreadListRefresh', () => {
       sameThreadSnapshot,
     });
 
-    expect(merged?.status).toBe('running');
-    expect(merged?.approval_actions).toBeUndefined();
-    expect(merged?.approval_queue).toBeUndefined();
+    expect(merged?.status).toBe('waiting_approval');
+    expect(merged?.approval_actions).toBe(existing.approval_actions);
+    expect(merged?.approval_queue).toBe(existing.approval_queue);
   });
 
   it('treats a zero-unresolved queue as an authoritative approval clear', () => {
@@ -663,7 +663,7 @@ describe('mergeFlowerThreadListRefresh', () => {
     });
 
     const [merged] = mergeFlowerThreadListRefresh([existing], [summary], {
-      selectedThreadID: existing.thread_id,
+      selectedThreadID: 'thread-other',
       sameThreadSnapshot,
     });
 

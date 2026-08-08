@@ -4884,6 +4884,25 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			if body.Pinned != nil {
+				pinOnly := body.Title == nil && body.ModelID == nil && body.PermissionType == nil && body.ReasoningSelection == nil
+				if pinOnly {
+					pinnedThread, err := aiSvc.SetThreadPinned(r.Context(), meta, threadID, *body.Pinned)
+					if err != nil {
+						status := http.StatusBadRequest
+						if errors.Is(err, sql.ErrNoRows) {
+							status = http.StatusNotFound
+						}
+						writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
+						return
+					}
+					writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{
+						"thread": map[string]any{
+							"thread_id":         pinnedThread.ThreadID,
+							"pinned_at_unix_ms": pinnedThread.PinnedAtUnixMs,
+						},
+					}})
+					return
+				}
 				if _, err := aiSvc.SetThreadPinned(r.Context(), meta, threadID, *body.Pinned); err != nil {
 					status := http.StatusBadRequest
 					if errors.Is(err, sql.ErrNoRows) {

@@ -420,7 +420,9 @@ func (s *Service) floretProjectionMessage(endpointID string, threadID string, tu
 		return nil, "", canonicalTimelineResyncErrorf("turn %q projection cannot be mapped: %v", turn.TurnID, err)
 	}
 	if len(blocks) == 0 {
-		if projection.Status == flruntime.TurnStatusRunning {
+		// A user cancellation is a normal terminal outcome. There is no
+		// assistant body to render, but that is not a projection failure.
+		if projection.Status == flruntime.TurnStatusRunning || projection.Status == flruntime.TurnStatusCancelled {
 			return nil, "", nil
 		}
 		return nil, FlowerTurnProjectionUnavailableNotRenderable, nil

@@ -122,6 +122,7 @@ export type FlowerRuntimeTransport = Readonly<{
   readTerminalProcess?(runID: string, processID: string, input: { after_seq: number }): Promise<FlowerTerminalProcessSnapshot>;
   markThreadRead(threadID: string, input: MarkThreadReadInput): Promise<MarkThreadReadResponse>;
   patchThread(threadID: string, input: ThreadPatchInput): Promise<LoadThreadResponse>;
+  reorderQueuedTurns?(threadID: string, orderedQueueIDs: readonly string[]): Promise<unknown>;
   forkThread(threadID: string, input: Readonly<{ client_request_id: string }>): Promise<LoadThreadResponse>;
   deleteThread?(threadID: string): Promise<FlowerThreadDeleteTransportOutcome>;
   submitApproval(input: RuntimeApprovalSubmitInput): Promise<FlowerApprovalDecisionReceipt>;
@@ -143,6 +144,7 @@ export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
   uploadAttachment?: FlowerSurfaceAdapter['uploadAttachment'];
   deleteStagedAttachment?: FlowerSurfaceAdapter['deleteStagedAttachment'];
   readStagedLongText?: FlowerSurfaceAdapter['readStagedLongText'];
+  loadStagedAttachmentPreview?: FlowerSurfaceAdapter['loadStagedAttachmentPreview'];
   previewStagedAttachment?: FlowerSurfaceAdapter['previewStagedAttachment'];
   launchTurn: (input: FlowerTurnLaunchInput) => Promise<FlowerTurnLaunchReceipt>;
   compactThreadContext: (input: FlowerCompactThreadContextInput) => Promise<FlowerLiveBootstrap>;
@@ -307,8 +309,8 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
       setThreadPinned: async (threadID: string, pinned: boolean) => {
         const tid = trim(threadID);
         if (!tid) throw new Error(missingThreadIDMessage(options));
-        const threadResp = await options.transport.patchThread(tid, { pinned });
-        return loadThread(trim(threadResp.thread?.thread_id) || tid);
+        await options.transport.patchThread(tid, { pinned });
+        return undefined;
       },
       setThreadPermissionType: async (threadID: string, permissionType: FlowerPermissionType) => {
         const tid = trim(threadID);
@@ -337,6 +339,18 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
         const threadResp = await options.transport.patchThread(tid, { reasoning_selection: selection ?? null });
         return loadThread(trim(threadResp.thread?.thread_id) || tid);
       },
+      ...(options.transport.reorderQueuedTurns ? {
+        reorderQueuedTurns: async (threadID: string, orderedQueueIDs: readonly string[]) => {
+          const tid = trim(threadID);
+          const queueIDs = orderedQueueIDs.map(trim);
+          if (!tid) throw new Error(missingThreadIDMessage(options));
+          if (queueIDs.length < 2 || queueIDs.some((queueID) => !queueID) || new Set(queueIDs).size !== queueIDs.length) {
+            throw new Error('Invalid Flower queued turn order.');
+          }
+          await options.transport.reorderQueuedTurns!(tid, queueIDs);
+          return loadThread(tid);
+        },
+      } : {}),
       forkThread: async (threadID: string, clientRequestID: string) => {
         const tid = trim(threadID);
         const requestID = trim(clientRequestID);
@@ -365,6 +379,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     ...(options.canMutate !== false && options.uploadAttachment ? { uploadAttachment: options.uploadAttachment } : {}),
     ...(options.canMutate !== false && options.deleteStagedAttachment ? { deleteStagedAttachment: options.deleteStagedAttachment } : {}),
     ...(options.canMutate !== false && options.readStagedLongText ? { readStagedLongText: options.readStagedLongText } : {}),
+    ...(options.canMutate !== false && options.loadStagedAttachmentPreview ? { loadStagedAttachmentPreview: options.loadStagedAttachmentPreview } : {}),
     ...(options.canMutate !== false && options.previewStagedAttachment ? { previewStagedAttachment: options.previewStagedAttachment } : {}),
     launchTurn: options.launchTurn,
     compactThreadContext: async (input) => {

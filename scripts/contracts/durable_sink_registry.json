@@ -1302,7 +1302,7 @@
     },
     {
       "path": "internal/codeapp/appserver/server.go",
-      "sha256": "76553c4876ff88e4a1a0cf534a7328922edbcea3a9ff8662122e78675b5ecf54",
+      "sha256": "c7bab657c4f82f692a95befd3ace626b6668517d8489c490f5a919d779a6f619",
       "sink_kinds": [
         "file",
         "json_file"
@@ -1762,7 +1762,7 @@
     },
     {
       "path": "internal/flower_ui/src/FlowerSurface.tsx",
-      "sha256": "5f814e3ef4b78cb196370934ef9d1078b3b85febf6b7a2bd8731ebc881cabe17",
+      "sha256": "b8a6be1549ace0c2a8dd574713199b8f5963356dca7a53aad9c487adde11b0b8",
       "sink_kinds": [
         "web_storage"
       ],

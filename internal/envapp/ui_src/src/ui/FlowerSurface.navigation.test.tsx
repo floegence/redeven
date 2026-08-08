@@ -88,7 +88,7 @@ describe('FlowerSurface navigation', () => {
     expect(runtime.querySelector('.flower-chat-header-title')?.textContent).toBe('Deploy plan');
   });
 
-  it('explains when a reply was interrupted by a runtime restart', async () => {
+  it('marks a reply interrupted by a runtime restart without showing an error card', async () => {
     const interruptedThread = thread({
       status: 'canceled',
       error: {
@@ -104,12 +104,32 @@ describe('FlowerSurface navigation', () => {
     await flush();
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-1"] button')));
     (runtime.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
-    await waitFor(() => runtime.querySelectorAll('.flower-error-card').length > 0);
+    await waitFor(() => runtime.querySelector('.flower-runtime-restart-divider') !== null);
 
-    expect(runtime.querySelector('.flower-error-card')?.textContent).toContain(
-      'The local runtime restarted before this reply finished. Start a new reply when the runtime is ready.',
-    );
-    expect(runtime.querySelector('.flower-error-actions')).toBeNull();
+    expect(runtime.querySelector('.flower-runtime-restart-divider')?.textContent).toContain('Redeven runtime restarted');
+    expect(runtime.querySelector('.flower-error-card')).toBeNull();
+  });
+
+  it('hides an interrupted-process error when the restart cause is unknown', async () => {
+    const interruptedThread = thread({
+      status: 'failed',
+      error: {
+        code: 'floret_turn_interrupted',
+        message: 'turn interrupted during previous process',
+      },
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [interruptedThread]),
+      loadThread: vi.fn(async () => liveBootstrap(interruptedThread)),
+    });
+    await flush();
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-1"] button')));
+    (runtime.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
+    await flush();
+
+    expect(runtime.querySelector('.flower-error-card')).toBeNull();
+    expect(runtime.querySelector('.flower-runtime-restart-divider')).toBeNull();
   });
 
   it('shows the Local AI Profile editor without a separate Flower enable switch', async () => {

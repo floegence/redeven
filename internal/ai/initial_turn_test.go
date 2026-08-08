@@ -38,7 +38,7 @@ func TestSendInitialUserTurnCreatesCanonicalThreadBeforeAdmission(t *testing.T) 
 	if err != nil {
 		t.Fatalf("SendUserTurn(create): %v", err)
 	}
-	if receipt.Kind != "start" || receipt.ClientRequestID != clientRequestID || receipt.ThreadID == "" || receipt.TurnID == "" || receipt.RunID == "" {
+	if receipt.Kind != "admitting" || receipt.ClientRequestID != clientRequestID || receipt.ThreadID == "" || receipt.AdmissionID == "" || receipt.TurnID != "" || receipt.RunID != "" {
 		t.Fatalf("receipt=%#v", receipt)
 	}
 
@@ -46,16 +46,29 @@ func TestSendInitialUserTurnCreatesCanonicalThreadBeforeAdmission(t *testing.T) 
 	if err != nil || settings == nil {
 		t.Fatalf("thread settings=%#v err=%v", settings, err)
 	}
+	var admission *threadstore.PendingTurnAdmissionReceipt
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		candidate, readErr := svc.threadsDB.GetPendingTurnAdmissionReceipt(t.Context(), receipt.AdmissionID)
+		if readErr == nil && candidate.Stage == threadstore.PendingTurnAdmissionStageSettled && candidate.TurnID != "" && candidate.RunID != "" {
+			admission = &candidate
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if admission == nil {
+		t.Fatalf("canonical admission did not settle: %#v", receipt)
+	}
 	host, err := svc.openFloretThreadReadHost(t.Context(), receipt.ThreadID)
 	if err != nil {
 		t.Fatalf("open canonical thread: %v", err)
 	}
-	turn, err := host.ReadThreadTurn(t.Context(), identity.TurnID(receipt.TurnID))
+	turn, err := host.ReadThreadTurn(t.Context(), identity.TurnID(admission.TurnID))
 	if err != nil {
 		t.Fatalf("ReadThreadTurn: %v", err)
 	}
-	if string(turn.RunID) != receipt.RunID || turn.UserInput != "create the first canonical turn" {
-		t.Fatalf("canonical turn=%#v receipt=%#v", turn, receipt)
+	if string(turn.RunID) != admission.RunID || turn.UserInput != "create the first canonical turn" {
+		t.Fatalf("canonical turn=%#v admission=%#v receipt=%#v", turn, admission, receipt)
 	}
 }
 
@@ -76,6 +89,7 @@ func TestSendInitialUserTurnSerialRetryReturnsCanonicalReceipt(t *testing.T) {
 	if second != first {
 		t.Fatalf("retry receipt=%#v, want %#v", second, first)
 	}
+	first = awaitCanonicalTurnAdmissionForTest(t, svc, first)
 	turns, err := listAllFloretThreadTurns(t.Context(), mustOpenInitialTurnReadHost(t, svc, first.ThreadID), first.ThreadID)
 	if err != nil {
 		t.Fatal(err)
@@ -120,14 +134,15 @@ func TestSendInitialUserTurnConcurrentRetryReusesFrozenIdentity(t *testing.T) {
 			t.Fatalf("request %d: %v", index, err)
 		}
 	}
-	if responses[0] != responses[1] || responses[0].ThreadID == "" || responses[0].RunID == "" || responses[0].TurnID == "" {
+	if responses[0] != responses[1] || responses[0].ThreadID == "" || responses[0].AdmissionID == "" || responses[0].RunID != "" || responses[0].TurnID != "" {
 		t.Fatalf("responses=%#v", responses)
 	}
-	turns, err := listAllFloretThreadTurns(t.Context(), mustOpenInitialTurnReadHost(t, svc, responses[0].ThreadID), responses[0].ThreadID)
+	canonical := awaitCanonicalTurnAdmissionForTest(t, svc, responses[0])
+	turns, err := listAllFloretThreadTurns(t.Context(), mustOpenInitialTurnReadHost(t, svc, canonical.ThreadID), canonical.ThreadID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(turns) != 1 || string(turns[0].RunID) != responses[0].RunID {
+	if len(turns) != 1 || string(turns[0].RunID) != canonical.RunID {
 		t.Fatalf("canonical turns=%#v responses=%#v", turns, responses)
 	}
 }
@@ -170,6 +185,7 @@ func TestSendInitialUserTurnTransfersStagingAttachmentToCanonicalTurn(t *testing
 	if err != nil || retried != first {
 		t.Fatalf("retry=%#v err=%v, want %#v", retried, err, first)
 	}
+	first = awaitCanonicalTurnAdmissionForTest(t, svc, first)
 	turn, err := mustOpenInitialTurnReadHost(t, svc, first.ThreadID).ReadThreadTurn(t.Context(), identity.TurnID(first.TurnID))
 	if err != nil {
 		t.Fatal(err)
@@ -225,6 +241,7 @@ func TestSendInitialUserTurnResumesPreparedCreateBeforeCanonicalRoot(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
+	receipt = awaitCanonicalTurnAdmissionForTest(t, svc, receipt)
 	if receipt.ThreadID == "" || receipt.RunID == "" || receipt.TurnID == "" {
 		t.Fatalf("receipt=%#v", receipt)
 	}
@@ -248,6 +265,7 @@ func TestSendInitialUserTurnResumesCommittedCreateBeforeAdmission(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
+	receipt = awaitCanonicalTurnAdmissionForTest(t, svc, receipt)
 	if receipt.ThreadID == "" || receipt.RunID == "" || receipt.TurnID == "" {
 		t.Fatalf("receipt=%#v frozen=%#v", receipt, frozen)
 	}
@@ -291,6 +309,7 @@ func TestSendInitialUserTurnResumesAfterRestartFromAtomicPrepare(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	receipt = awaitCanonicalTurnAdmissionForTest(t, restarted, receipt)
 	if receipt.ThreadID == "" || receipt.RunID == "" || receipt.TurnID == "" {
 		t.Fatalf("receipt=%#v frozen=%#v", receipt, frozen)
 	}
