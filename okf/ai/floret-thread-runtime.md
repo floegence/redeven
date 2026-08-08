@@ -8,10 +8,10 @@ quality_exception: Cross-domain canonical thread authority contract spanning ide
 ---
 # Summary
 
-- Authority: Floret v3.2.33 owns canonical `ThreadID`, `TurnID`, `RunID`, per-thread runtime actors, recovery journal state, titles, lifecycle, projections, approvals, todos, tools, SubAgents, artifacts, provider continuation, and domain schema migrations.
-- Outcome: Redeven consumes identity-bound public capabilities and maps validated state into Flower while retaining only product settings, authorization, unadmitted work, and saga receipts.
+- Authority: Floret v3.2.33 owns canonical `ThreadID`, `TurnID`, `RunID`, thread actors, recovery journal state, titles, lifecycle, projections, approvals, todos, tools, SubAgents, artifacts, provider continuation, and schema migrations.
+- Outcome: Redeven consumes identity-bound public capabilities and maps validated state into Flower while retaining product settings, authorization, unadmitted work, and saga receipts.
 - Invariants: callers never preallocate canonical identity, admission binds only from committed Floret facts, and no product table or UI projection reconstructs Agent state.
-- Failure boundary: missing authority, invalid public data, conflicting identity, incomplete exact-read recovery, or failed permission proof stops the operation without fallback or guessed state.
+- Failure boundary: missing authority, invalid data, conflicting identity, incomplete exact-read recovery, or failed permission proof stops the operation without fallback or guessed state.
 
 # Contract
 
