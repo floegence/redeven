@@ -31,6 +31,26 @@ const settleWorkbenchTransition = async (): Promise<void> => {
   await settleFrames();
 };
 
+const waitForViewportToSettle = async (
+  readViewport: () => Readonly<{ x: number; y: number; scale: number }>,
+): Promise<void> => {
+  const deadline = performance.now() + 2_000;
+  let previous = readViewport();
+  let stableFrames = 0;
+  while (performance.now() < deadline) {
+    await settleFrames(1);
+    const current = readViewport();
+    if (current.x === previous.x && current.y === previous.y && current.scale === previous.scale) {
+      stableFrames += 1;
+      if (stableFrames >= 4) return;
+    } else {
+      stableFrames = 0;
+      previous = current;
+    }
+  }
+  throw new Error('Workbench viewport did not settle');
+};
+
 const writeTerminal = (core: TerminalCore, data: string): Promise<void> => (
   new Promise<void>((resolve) => core.write(data, resolve))
 );
@@ -168,7 +188,7 @@ describe('Workbench terminal input plane', () => {
     await settleWorkbenchTransition();
 
     activeSurfaceApi.fitWidget(state().widgets[0]!);
-    await settleWorkbenchTransition();
+    await waitForViewportToSettle(() => state().viewport);
     activeSurfaceApi.runViewportTransition(() => {
       setState((previous) => ({
         ...previous,
