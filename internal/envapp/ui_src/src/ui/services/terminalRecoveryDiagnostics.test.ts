@@ -9,6 +9,7 @@ import {
 import {
   markTerminalRecoveryMilestone,
   publishTerminalRecoveryEvent,
+  releaseTerminalRecoveryDiagnostics,
   resetTerminalRecoveryDiagnosticsForTests,
   startTerminalRecoveryTrace,
   terminalRecoveryDiagnosticsQuery,
@@ -38,7 +39,7 @@ describe('terminalRecoveryDiagnostics', () => {
     });
 
     const event = getDebugConsoleClientEventRingSnapshot().events.at(-1);
-    expect(event?.trace_id).toBe('terminal-recovery-session-40b62f4d-1');
+    expect(event?.trace_id).toBe('terminal-recovery-session-40b62f4d-1-1');
     expect(event?.detail).toMatchObject({
       schema_version: 1,
       session_ref: 'session-40b62f4d',
@@ -68,7 +69,7 @@ describe('terminalRecoveryDiagnostics', () => {
       history_generation: 7,
     });
 
-    expect(mark).toHaveBeenCalledWith('redeven:terminal:interactive:terminal-recovery-session-40b62f4d-1', {
+    expect(mark).toHaveBeenCalledWith('redeven:terminal:interactive:terminal-recovery-session-40b62f4d-1-1', {
       detail: expect.objectContaining({
         session_ref: 'session-40b62f4d',
         surface_generation: 1,
@@ -102,6 +103,16 @@ describe('terminalRecoveryDiagnostics', () => {
     );
   });
 
+  it('keeps trace ids unique when a released surface generation is reused', () => {
+    const first = startTerminalRecoveryTrace('private-session-id', 'workbench');
+    releaseTerminalRecoveryDiagnostics('private-session-id');
+    const second = startTerminalRecoveryTrace('private-session-id', 'workbench');
+
+    expect(first.surfaceGeneration).toBe(1);
+    expect(second.surfaceGeneration).toBe(1);
+    expect(second.traceID).not.toBe(first.traceID);
+  });
+
   it('records the renderer fence as a trace-scoped recovery milestone', () => {
     const mark = vi.spyOn(performance, 'mark').mockImplementation(() => ({}) as PerformanceMark);
     const trace = startTerminalRecoveryTrace('private-session-id', 'workbench');
@@ -113,7 +124,7 @@ describe('terminalRecoveryDiagnostics', () => {
     });
 
     expect(mark).toHaveBeenCalledWith(
-      'redeven:terminal:baseline-rendered:terminal-recovery-session-40b62f4d-1',
+      'redeven:terminal:baseline-rendered:terminal-recovery-session-40b62f4d-1-1',
       {
         detail: expect.objectContaining({
           variant: 'workbench',

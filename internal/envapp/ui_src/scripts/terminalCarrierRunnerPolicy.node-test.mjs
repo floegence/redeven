@@ -102,8 +102,17 @@ test('disables Readline bracketed paste before seeding byte-exact terminal fixtu
 test('waits for the trace-scoped baseline render before visual sampling', () => {
   assert.match(carrierSource, /startsWith\('redeven:terminal:baseline-rendered:'\)/u);
   assert.match(carrierSource, /find\('baseline-rendered'\)/u);
+  assert.match(carrierSource, /entry\.name\.endsWith\(`:\$\{traceID\}`\)/u);
+  assert.match(carrierSource, /entry\.detail\?\.variant === start\.detail\?\.variant/u);
   assert.match(carrierSource, /baseline\.startTime <= rendered\.startTime/u);
   assert.match(carrierSource, /baseline_rendered_ms: rendered\.startTime - start\.startTime/u);
+});
+
+test('persists the complete recovery breakdown before enforcing the sample limit', () => {
+  assert.match(carrierSource, /attach_ack_ms: workbenchRecovery\.attach_ack_ms/u);
+  assert.match(carrierSource, /baseline_parser_committed_ms: workbenchRecovery\.baseline_parser_committed_ms/u);
+  assert.match(carrierSource, /baseline_rendered_ms: workbenchRecovery\.baseline_rendered_ms/u);
+  assert.match(carrierSource, /carrierProgress\.sharedPreparedHistorySamples\.push\(completedSample\);\s+assertTerminalCarrierInteractiveLimit/u);
 });
 
 test('rebuilds the real renderer on refresh and verifies focus does not corrupt replay', () => {
