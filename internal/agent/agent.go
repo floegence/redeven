@@ -1336,6 +1336,10 @@ func (a *Agent) serveRedevenAgentSession(ctx context.Context, sess flowersec.Ses
 	gitRepoSvc.RegisterWithAccessGate(router, meta, a.accessGate)
 	a.mon.RegisterWithAccessGate(router, meta, a.accessGate)
 	a.registerSessionsRPCWithAccessGate(router, meta, a.accessGate)
+	if a.term != nil {
+		detachTerminal := a.term.RegisterWithAccessGate(router, meta, sess.RPC(), a.accessGate)
+		defer detachTerminal()
+	}
 	if err := router.Bind(handlers); err != nil {
 		return err
 	}
@@ -1419,6 +1423,9 @@ func (a *Agent) NewLocalSessionHandlers(meta *session.Meta) (*flowersec.SessionH
 	gitRepoSvc.RegisterWithAccessGate(router, meta, a.accessGate)
 	a.mon.RegisterWithAccessGate(router, meta, a.accessGate)
 	a.registerSessionsRPCWithAccessGate(router, meta, a.accessGate)
+	if a.term != nil {
+		a.term.RegisterWithAccessGate(router, meta, nil, a.accessGate)
+	}
 	if err := router.Bind(handlers); err != nil {
 		cleanup()
 		return nil, nil, err
