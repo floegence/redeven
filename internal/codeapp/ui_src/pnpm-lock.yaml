@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@floegence/flowersec-core':
-        specifier: ^2.3.3
-        version: 2.3.3
+        specifier: 2.3.4
+        version: 2.3.4
     devDependencies:
       '@eslint/js':
         specifier: ^9.39.4
@@ -241,8 +241,8 @@ packages:
     resolution: {integrity: sha512-jBXB9TC7ItzhzXdSRSR8MbzvfdnQ7vuHiL4LFn2LGDc2nSsVdA9NWE1Zrf+XekbPlwK/K2trwXnQp6jOcw0OuA==}
     engines: {node: '>=20'}
 
-  '@floegence/flowersec-core@2.3.3':
-    resolution: {integrity: sha512-Yh96G4pkDwDMkURGC380TpoiiWNCOw+mbaMor58OSgundmaIWaQw/zSpZKJh8HQYosVFQpmD1ktx1RAy5T0aEQ==}
+  '@floegence/flowersec-core@2.3.4':
+    resolution: {integrity: sha512-AoTlEbd+pc17th/ru6LhGeMvSUKo21LfrtE16jlD7acXvzOKA5cEoXd9GYo6m2EJwVI4z3tLC6bgoSCw/pUkig==}
     engines: {node: '>=20.0.0'}
     hasBin: true
 
@@ -1444,7 +1444,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@floegence/flowersec-core@2.3.3':
+  '@floegence/flowersec-core@2.3.4':
     dependencies:
       '@fails-components/webtransport': 1.6.7
       '@fails-components/webtransport-transport-http3-quiche': 1.6.7

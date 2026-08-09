@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  '@floegence/flowersec-core': 2.3.3
+  '@floegence/flowersec-core': 2.3.4
   '@babel/core': ^7.29.7
   '@electron/asar': ^4.2.1
   '@electron/universal': ^3.0.6
@@ -30,14 +30,14 @@ importers:
   .:
     dependencies:
       '@floegence/floe-webapp-boot':
-        specifier: 0.40.11
-        version: 0.40.11
+        specifier: 0.40.12
+        version: 0.40.12
       '@floegence/floe-webapp-core':
-        specifier: 0.40.11
-        version: 0.40.11(solid-js@1.9.13)
+        specifier: 0.40.12
+        version: 0.40.12(solid-js@1.9.13)
       '@floegence/flowersec-core':
-        specifier: 2.3.3
-        version: 2.3.3
+        specifier: 2.3.4
+        version: 2.3.4
       qrcode-generator:
         specifier: ^2.0.4
         version: 2.0.4
@@ -516,18 +516,18 @@ packages:
     resolution: {integrity: sha512-jBXB9TC7ItzhzXdSRSR8MbzvfdnQ7vuHiL4LFn2LGDc2nSsVdA9NWE1Zrf+XekbPlwK/K2trwXnQp6jOcw0OuA==}
     engines: {node: '>=20'}
 
-  '@floegence/floe-webapp-boot@0.40.11':
-    resolution: {integrity: sha512-B1FlOkCYWh9+7FcjoXOGMWAIvB0uxDNd+n5lq+7cX8efzAfe/koik8e7MY7aP/TzaPt3h3NWbbhofo/ggipMWQ==}
+  '@floegence/floe-webapp-boot@0.40.12':
+    resolution: {integrity: sha512-0A/U5Tn7a+i+XsOOF2fcqM/QO+Zmemse8/rtpowL2UMCj3/5gzmw0gMiUj5B2Q+HF5Xuewm4b9qxux3SJLk2FQ==}
     engines: {node: '>=24.0.0'}
 
-  '@floegence/floe-webapp-core@0.40.11':
-    resolution: {integrity: sha512-XZQRVVc0VA1xFoakJtdGn2ms+HnGmrhwogNSAM7BL4Ogtj5vEbrAXYq645c+VpL8kRC0RPZ8lTZ1nCQixd/p1Q==}
+  '@floegence/floe-webapp-core@0.40.12':
+    resolution: {integrity: sha512-UIE45qMMjRi2S6LTGpGuASX2helMXFp8MNgeW27TOxHyLFGftUGmcY/2VCWyGjl8Ts1k2SeBdGTwTz1V59qJFQ==}
     engines: {node: '>=24.0.0'}
     peerDependencies:
       solid-js: ^1.8.0
 
-  '@floegence/flowersec-core@2.3.3':
-    resolution: {integrity: sha512-Yh96G4pkDwDMkURGC380TpoiiWNCOw+mbaMor58OSgundmaIWaQw/zSpZKJh8HQYosVFQpmD1ktx1RAy5T0aEQ==}
+  '@floegence/flowersec-core@2.3.4':
+    resolution: {integrity: sha512-AoTlEbd+pc17th/ru6LhGeMvSUKo21LfrtE16jlD7acXvzOKA5cEoXd9GYo6m2EJwVI4z3tLC6bgoSCw/pUkig==}
     engines: {node: '>=20.0.0'}
     hasBin: true
 
@@ -3634,15 +3634,15 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@floegence/floe-webapp-boot@0.40.11':
+  '@floegence/floe-webapp-boot@0.40.12':
     dependencies:
-      '@floegence/flowersec-core': 2.3.3
+      '@floegence/flowersec-core': 2.3.4
     transitivePeerDependencies:
       - bufferutil
       - supports-color
       - utf-8-validate
 
-  '@floegence/floe-webapp-core@0.40.11(solid-js@1.9.13)':
+  '@floegence/floe-webapp-core@0.40.12(solid-js@1.9.13)':
     dependencies:
       clsx: 2.1.1
       diff: 8.0.4
@@ -3654,7 +3654,7 @@ snapshots:
       solid-motionone: 1.0.4(solid-js@1.9.13)
       tailwind-merge: 3.6.0
 
-  '@floegence/flowersec-core@2.3.3':
+  '@floegence/flowersec-core@2.3.4':
     dependencies:
       '@fails-components/webtransport': 1.6.7
       '@fails-components/webtransport-transport-http3-quiche': 1.6.7
