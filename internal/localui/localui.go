@@ -34,7 +34,6 @@ import (
 	"github.com/floegence/redeven/internal/runtimeservice"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/sessionhop"
-	"github.com/gorilla/websocket"
 )
 
 const (
@@ -115,9 +114,7 @@ type Server struct {
 	pending       map[string]pendingDirect
 	directMu      sync.Mutex
 	directClosing bool
-	directConns   map[*websocket.Conn]*localDirectConnection
 	pluginAccess  map[string]*pluginAccessSession
-	directWG      sync.WaitGroup
 
 	authorityMu        sync.RWMutex
 	networkAuthorities map[string]struct{}
@@ -131,14 +128,13 @@ type Server struct {
 	desktopBridgeServer   *http.Server
 	localUIBridgeURL      string
 
-	runtimeControl   *runtimeControlServer
-	runtimeStatus    *runtimemanagement.Server
-	acceptor         *flowersec.Acceptor
-	authMu           sync.Mutex
-	authRecords      map[string]controlplane.AuthorizationRecord
-	authChannels     map[string]string
-	acceptedChannels map[string][]string
-	handlerCleanup   map[string]func()
+	runtimeControl *runtimeControlServer
+	runtimeStatus  *runtimemanagement.Server
+	acceptor       *flowersec.Acceptor
+	authMu         sync.Mutex
+	authRecords    map[string]controlplane.AuthorizationRecord
+	authChannels   map[string]string
+	handlerCleanup map[string]func()
 }
 
 type pendingDirect struct {
@@ -160,15 +156,10 @@ const (
 )
 
 type pluginAccessSession struct {
-	state       pluginAccessState
-	expiresAt   time.Time
-	pending     map[string]struct{}
-	connections map[*websocket.Conn]string
-}
-
-type localDirectConnection struct {
-	accessSessionID string
-	channelID       string
+	state     pluginAccessState
+	expiresAt time.Time
+	pending   map[string]struct{}
+	sessions  map[string]flowersec.Session
 }
 
 type localAccessSessionContextKey struct{}
@@ -306,11 +297,9 @@ func New(opts Options) (*Server, error) {
 		accessGate:             opts.AccessGate,
 		exposure:               exposure,
 		pending:                make(map[string]pendingDirect),
-		directConns:            make(map[*websocket.Conn]*localDirectConnection),
 		pluginAccess:           make(map[string]*pluginAccessSession),
 		authRecords:            make(map[string]controlplane.AuthorizationRecord),
 		authChannels:           make(map[string]string),
-		acceptedChannels:       make(map[string][]string),
 		handlerCleanup:         make(map[string]func()),
 		networkAuthorities:     make(map[string]struct{}),
 		resolveAccessHosts:     resolveNetworkAccessHosts,
@@ -366,29 +355,24 @@ func (s *Server) configureAcceptor() error {
 			if s.handlerCleanup == nil {
 				s.handlerCleanup = make(map[string]func())
 			}
-			if s.acceptedChannels == nil {
-				s.acceptedChannels = make(map[string][]string)
-			}
-			s.acceptedChannels["websocket"] = append(s.acceptedChannels["websocket"], channelID)
 			s.handlerCleanup[channelID] = cleanup
 			s.authMu.Unlock()
 			return handlers, nil
 		},
 		OnSession: func(ctx context.Context, current flowersec.Session, endpointID string) error {
-			s.authMu.Lock()
-			queued := s.acceptedChannels[endpointID]
-			channelID := ""
-			if len(queued) > 0 {
-				channelID = queued[0]
-				s.acceptedChannels[endpointID] = queued[1:]
-			}
-			s.authMu.Unlock()
-			pending, ok := s.resolvePending(channelID)
+			// Direct artifacts use their channel ID as the accepted endpoint ID.
+			// Flowersec owns the carrier lifecycle; Redeven records only the
+			// public session needed to revoke product access on logout or expiry.
+			channelID := strings.TrimSpace(endpointID)
+			pending, ok := s.activateAcceptedSession(channelID, current)
 			if !ok {
+				if s.log != nil {
+					s.log.Warn("reject accepted local Flowersec session", "endpoint_id", channelID)
+				}
 				return errors.New("local session metadata is unavailable")
 			}
 			metaCopy := pending.meta
-			return s.a.ServeLocalDirectSession(ctx, current, &metaCopy, agent.LocalDirectSessionOptions{
+			err := s.a.ServeLocalDirectSession(ctx, current, &metaCopy, agent.LocalDirectSessionOptions{
 				AccessUnlocked:            s.accessEnabled(),
 				TraceID:                   pending.traceID,
 				ConnectArtifactIssuedAtMs: pending.connectArtifactIssuedAtMs,
@@ -397,6 +381,10 @@ func (s *Server) configureAcceptor() error {
 				AccessSessionID:           pending.accessSessionID,
 				HandlersServedByAcceptor:  true,
 			})
+			if err != nil && s.log != nil {
+				s.log.Warn("local Flowersec session ended with an error", "channel_id", channelID, "error", err)
+			}
+			return err
 		},
 		Release: func(_ context.Context, channelID string) {
 			s.releaseAcceptedSession(channelID)
@@ -671,8 +659,8 @@ func (s *Server) Close() error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	for _, conn := range s.beginDirectShutdown() {
-		_ = conn.Close()
+	for _, directSession := range s.beginDirectShutdown() {
+		_ = directSession.Close()
 	}
 	if s.srv != nil {
 		_ = s.srv.Shutdown(ctx)
@@ -692,7 +680,6 @@ func (s *Server) Close() error {
 	if s.desktopBridgeListener != nil {
 		_ = s.desktopBridgeListener.Close()
 	}
-	s.waitForDirectShutdown(ctx)
 	s.srv = nil
 	s.listeners = nil
 	s.desktopBridgeServer = nil
@@ -1463,10 +1450,10 @@ func (s *Server) mintPending(meta session.Meta, wsURL string, traceID, accessSes
 	access := s.pluginAccess[accessSessionID]
 	if access == nil {
 		access = &pluginAccessSession{
-			state:       pluginAccessActive,
-			expiresAt:   accessExpiresAt,
-			pending:     make(map[string]struct{}),
-			connections: make(map[*websocket.Conn]string),
+			state:     pluginAccessActive,
+			expiresAt: accessExpiresAt,
+			pending:   make(map[string]struct{}),
+			sessions:  make(map[string]flowersec.Session),
 		}
 		s.pluginAccess[accessSessionID] = access
 	}
@@ -1840,48 +1827,6 @@ func (s *Server) releaseAcceptedSession(channelID string) {
 	}
 }
 
-func (s *Server) commitPending(channelID string, expected pendingDirect, conn *websocket.Conn) error {
-	if s == nil {
-		return errors.New("server not ready")
-	}
-	id := strings.TrimSpace(channelID)
-	if id == "" {
-		return errors.New("missing channel")
-	}
-	s.pendingMu.Lock()
-	defer s.pendingMu.Unlock()
-	s.directMu.Lock()
-	defer s.directMu.Unlock()
-	current, ok := s.pending[id]
-	if !ok || current.psk != expected.psk || current.connectArtifactIssuedAtMs != expected.connectArtifactIssuedAtMs {
-		return errors.New("credential already consumed or replaced")
-	}
-	if current.initExpireAtUnixS <= 0 || time.Now().Unix() > current.initExpireAtUnixS {
-		delete(s.pending, id)
-		if access := s.pluginAccess[current.accessSessionID]; access != nil {
-			delete(access.pending, id)
-		}
-		return errors.New("credential expired")
-	}
-	access := s.pluginAccess[current.accessSessionID]
-	tracked := s.directConns[conn]
-	if access == nil || access.state != pluginAccessActive || tracked == nil {
-		return errors.New("local access session is unavailable")
-	}
-	if !access.expiresAt.IsZero() && !time.Now().Before(access.expiresAt) {
-		return errors.New("local access session expired")
-	}
-	if tracked.accessSessionID != "" && tracked.accessSessionID != current.accessSessionID {
-		return errors.New("local access session binding mismatch")
-	}
-	delete(s.pending, id)
-	delete(access.pending, id)
-	tracked.accessSessionID = current.accessSessionID
-	tracked.channelID = id
-	access.connections[conn] = id
-	return nil
-}
-
 func (s *Server) handleDirectWS(w http.ResponseWriter, r *http.Request) {
 	if s == nil || w == nil || r == nil {
 		return
@@ -1902,22 +1847,56 @@ func (s *Server) handleDirectWS(w http.ResponseWriter, r *http.Request) {
 	s.acceptor.Handler().ServeHTTP(w, r)
 }
 
-func (s *Server) beginDirectShutdown() []*websocket.Conn {
+func (s *Server) activateAcceptedSession(channelID string, current flowersec.Session) (pendingDirect, bool) {
+	if s == nil || current == nil {
+		return pendingDirect{}, false
+	}
+	id := strings.TrimSpace(channelID)
+	if id == "" {
+		return pendingDirect{}, false
+	}
+	s.pendingMu.Lock()
+	pending, ok := s.pending[id]
+	if !ok || pending.initExpireAtUnixS <= 0 || time.Now().Unix() > pending.initExpireAtUnixS {
+		s.pendingMu.Unlock()
+		return pendingDirect{}, false
+	}
+	s.directMu.Lock()
+	s.pendingMu.Unlock()
+	defer s.directMu.Unlock()
+	if s.directClosing {
+		return pendingDirect{}, false
+	}
+	access := s.pluginAccess[pending.accessSessionID]
+	if access == nil || access.state != pluginAccessActive || (!access.expiresAt.IsZero() && !time.Now().Before(access.expiresAt)) {
+		return pendingDirect{}, false
+	}
+	if access.sessions == nil {
+		access.sessions = make(map[string]flowersec.Session)
+	}
+	if _, exists := access.sessions[id]; exists {
+		return pendingDirect{}, false
+	}
+	access.sessions[id] = current
+	return pending, true
+}
+
+func (s *Server) beginDirectShutdown() []flowersec.Session {
 	if s == nil {
 		return nil
 	}
 	s.directMu.Lock()
 	s.directClosing = true
-	connections := make([]*websocket.Conn, 0, len(s.directConns))
-	for conn := range s.directConns {
-		connections = append(connections, conn)
-	}
+	sessions := make([]flowersec.Session, 0)
 	pending := make(map[string]string)
 	for accessSessionID, access := range s.pluginAccess {
 		if access == nil {
 			continue
 		}
 		access.state = pluginAccessClosing
+		for _, current := range access.sessions {
+			sessions = append(sessions, current)
+		}
 		for channelID := range access.pending {
 			pending[channelID] = accessSessionID
 		}
@@ -1930,7 +1909,7 @@ func (s *Server) beginDirectShutdown() []*websocket.Conn {
 		}
 	}
 	s.pendingMu.Unlock()
-	return connections
+	return sessions
 }
 
 func (s *Server) removePendingAccessBinding(accessSessionID, channelID string) {
@@ -1944,7 +1923,8 @@ func (s *Server) removePendingAccessBinding(accessSessionID, channelID string) {
 		return
 	}
 	delete(access.pending, strings.TrimSpace(channelID))
-	if access.state == pluginAccessClosing && len(access.pending) == 0 && len(access.connections) == 0 {
+	delete(access.sessions, strings.TrimSpace(channelID))
+	if access.state == pluginAccessClosing && len(access.pending) == 0 && len(access.sessions) == 0 {
 		access.state = pluginAccessClosed
 		delete(s.pluginAccess, strings.TrimSpace(accessSessionID))
 	}
@@ -1958,19 +1938,23 @@ func (s *Server) pluginAccessAllowsRequest(r *http.Request, channelID string) bo
 	if !ok {
 		return false
 	}
+	id := strings.TrimSpace(channelID)
+	s.pendingMu.Lock()
+	pending, exists := s.pending[id]
+	s.pendingMu.Unlock()
+	if !exists {
+		return false
+	}
 	s.directMu.Lock()
 	defer s.directMu.Unlock()
-	for _, binding := range s.directConns {
-		if binding == nil || binding.channelID != strings.TrimSpace(channelID) {
-			continue
-		}
-		access := s.pluginAccess[binding.accessSessionID]
-		if access == nil || access.state != pluginAccessActive || (!access.expiresAt.IsZero() && !time.Now().Before(access.expiresAt)) {
-			return false
-		}
-		return requestAccessSessionID == "" || requestAccessSessionID == binding.accessSessionID
+	access := s.pluginAccess[pending.accessSessionID]
+	if access == nil || access.state != pluginAccessActive || (!access.expiresAt.IsZero() && !time.Now().Before(access.expiresAt)) {
+		return false
 	}
-	return false
+	if _, active := access.sessions[id]; !active {
+		return false
+	}
+	return requestAccessSessionID == "" || requestAccessSessionID == pending.accessSessionID
 }
 
 func (s *Server) closePluginAccessSession(accessSessionID string) {
@@ -1992,9 +1976,9 @@ func (s *Server) closePluginAccessSession(accessSessionID string) {
 	for channelID := range access.pending {
 		pending = append(pending, channelID)
 	}
-	connections := make([]*websocket.Conn, 0, len(access.connections))
-	for conn := range access.connections {
-		connections = append(connections, conn)
+	sessions := make([]flowersec.Session, 0, len(access.sessions))
+	for _, current := range access.sessions {
+		sessions = append(sessions, current)
 	}
 	s.directMu.Unlock()
 	if s.a != nil {
@@ -2013,30 +1997,16 @@ func (s *Server) closePluginAccessSession(accessSessionID string) {
 	if current := s.pluginAccess[accessSessionID]; current != nil {
 		for _, channelID := range pending {
 			delete(current.pending, channelID)
+			delete(current.sessions, channelID)
 		}
-		if len(current.connections) == 0 {
+		if len(current.sessions) == 0 {
 			current.state = pluginAccessClosed
 			delete(s.pluginAccess, accessSessionID)
 		}
 	}
 	s.directMu.Unlock()
-	for _, conn := range connections {
-		_ = conn.Close()
-	}
-}
-
-func (s *Server) waitForDirectShutdown(ctx context.Context) {
-	if s == nil {
-		return
-	}
-	done := make(chan struct{})
-	go func() {
-		s.directWG.Wait()
-		close(done)
-	}()
-	select {
-	case <-done:
-	case <-ctx.Done():
+	for _, current := range sessions {
+		_ = current.Close()
 	}
 }
 

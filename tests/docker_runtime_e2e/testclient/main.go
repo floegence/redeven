@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -341,8 +342,11 @@ func mintConnectArtifact(ctx context.Context, client *http.Client, parsedBase *u
 
 func connectFlowersecSession(ctx context.Context, artifact flowersec.Artifact, origin string) (flowersec.Session, error) {
 	trustRoots, err := x509.SystemCertPool()
-	if err != nil || trustRoots == nil {
-		return nil, fmt.Errorf("system trust roots unavailable: %w", err)
+	if err != nil {
+		return nil, fmt.Errorf("load system trust roots: %w", err)
+	}
+	if trustRoots == nil {
+		return nil, errors.New("system trust roots unavailable")
 	}
 	lease, err := flowersec.NewArtifactLease(artifact, func(context.Context) error { return nil })
 	if err != nil {

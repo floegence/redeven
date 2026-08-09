@@ -10,14 +10,12 @@ import (
 	"net/netip"
 	"reflect"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
+	flowersec "github.com/floegence/flowersec/flowersec-go/v2"
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/runtimemanagement"
-	"github.com/gorilla/websocket"
 )
 
 type authorityTestListener struct {
@@ -247,48 +245,6 @@ func TestSecurityHeadersDoNotWeakenExistingPolicy(t *testing.T) {
 	}
 }
 
-func TestPendingCredentialCommitsExactlyOnce(t *testing.T) {
-	t.Parallel()
-
-	conn := &websocket.Conn{}
-	s := &Server{
-		pending:      make(map[string]pendingDirect),
-		directConns:  map[*websocket.Conn]*localDirectConnection{conn: {accessSessionID: "access"}},
-		pluginAccess: make(map[string]*pluginAccessSession),
-	}
-	s.pluginAccess["access"] = &pluginAccessSession{
-		state:       pluginAccessActive,
-		pending:     map[string]struct{}{"channel": {}},
-		connections: make(map[*websocket.Conn]string),
-	}
-	p := pendingDirect{accessSessionID: "access", initExpireAtUnixS: time.Now().Add(time.Minute).Unix(), connectArtifactIssuedAtMs: time.Now().UnixMilli()}
-	p.psk[0] = 1
-	s.pending["channel"] = p
-	resolved, ok := s.resolvePending("channel")
-	if !ok {
-		t.Fatal("resolvePending() rejected a valid credential")
-	}
-
-	var successes atomic.Int32
-	var wg sync.WaitGroup
-	for range 8 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if s.commitPending("channel", resolved, conn) == nil {
-				successes.Add(1)
-			}
-		}()
-	}
-	wg.Wait()
-	if got := successes.Load(); got != 1 {
-		t.Fatalf("successful commits = %d, want 1", got)
-	}
-	if _, ok := s.resolvePending("channel"); ok {
-		t.Fatal("committed credential remained available")
-	}
-}
-
 func TestPluginAccessSessionCloseRevokesOnlyItsPendingArtifacts(t *testing.T) {
 	t.Parallel()
 
@@ -298,8 +254,8 @@ func TestPluginAccessSessionCloseRevokesOnlyItsPendingArtifacts(t *testing.T) {
 			"two": {accessSessionID: "access-two"},
 		},
 		pluginAccess: map[string]*pluginAccessSession{
-			"access-one": {state: pluginAccessActive, pending: map[string]struct{}{"one": {}}, connections: make(map[*websocket.Conn]string)},
-			"access-two": {state: pluginAccessActive, pending: map[string]struct{}{"two": {}}, connections: make(map[*websocket.Conn]string)},
+			"access-one": {state: pluginAccessActive, pending: map[string]struct{}{"one": {}}, sessions: make(map[string]flowersec.Session)},
+			"access-two": {state: pluginAccessActive, pending: map[string]struct{}{"two": {}}, sessions: make(map[string]flowersec.Session)},
 		},
 	}
 	s.closePluginAccessSession("access-one")
@@ -320,18 +276,15 @@ func TestPluginAccessSessionCloseRevokesOnlyItsPendingArtifacts(t *testing.T) {
 func TestPluginAccessRequestRequiresExactActiveAccessSession(t *testing.T) {
 	t.Parallel()
 
-	conn := &websocket.Conn{}
 	s := &Server{
 		accessGate: accessgate.New(accessgate.Options{Password: "secret"}),
-		directConns: map[*websocket.Conn]*localDirectConnection{
-			conn: {accessSessionID: "access-one", channelID: "channel"},
-		},
+		pending:    map[string]pendingDirect{"channel": {accessSessionID: "access-one"}},
 		pluginAccess: map[string]*pluginAccessSession{
 			"access-one": {
-				state:       pluginAccessActive,
-				expiresAt:   time.Now().Add(time.Minute),
-				pending:     make(map[string]struct{}),
-				connections: map[*websocket.Conn]string{conn: "channel"},
+				state:     pluginAccessActive,
+				expiresAt: time.Now().Add(time.Minute),
+				pending:   map[string]struct{}{"channel": {}},
+				sessions:  map[string]flowersec.Session{"channel": nil},
 			},
 		},
 	}

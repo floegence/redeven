@@ -169,10 +169,10 @@ func TestServer_E2E_LocalPasswordFlow(t *testing.T) {
 	if _, err := flowersec.ParseArtifact(corruptArtifact); err == nil {
 		t.Fatal("tampered Flowersec artifact unexpectedly parsed")
 	}
-	connectLocalDirectSession(t, s, srv.URL, srv.Certificate(), unlockBody.Data.ResumeToken, connectBody.ConnectArtifact)
+	connectLocalDirectSession(t, s, srv.URL, srv.Certificate(), unlockBody.Data.ResumeToken, connectBody.ChannelID, connectBody.ConnectArtifact)
 }
 
-func connectLocalDirectSession(t *testing.T, s *Server, serverURL string, certificate *x509.Certificate, resumeToken string, encodedArtifact json.RawMessage) {
+func connectLocalDirectSession(t *testing.T, s *Server, serverURL string, certificate *x509.Certificate, resumeToken, channelID string, encodedArtifact json.RawMessage) {
 	t.Helper()
 	if s == nil || s.a == nil {
 		t.Fatal("test server missing agent")
@@ -203,6 +203,30 @@ func connectLocalDirectSession(t *testing.T, s *Server, serverURL string, certif
 		t.Fatalf("ConnectDirect() error = %v", err)
 	}
 	defer client.Close()
+	if _, err := client.ProbeLiveness(ctx); err != nil {
+		t.Fatalf("accepted Flowersec session did not remain live: %v", err)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		s.pendingMu.Lock()
+		pending, pendingOK := s.pending[channelID]
+		s.pendingMu.Unlock()
+		if pendingOK {
+			s.directMu.Lock()
+			access := s.pluginAccess[pending.accessSessionID]
+			active := false
+			if access != nil {
+				_, active = access.sessions[channelID]
+			}
+			s.directMu.Unlock()
+			if active {
+				return
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("Flowersec accepted session %q was not bound to plugin access", channelID)
 }
 
 func TestServer_E2E_CodespaceBrowserBootstrapFromResumeToken(t *testing.T) {
