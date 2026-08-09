@@ -435,41 +435,175 @@ func TestFloretEventSinkCancelsRunAfterContractRejection(t *testing.T) {
 	}
 }
 
-func TestFloretProviderAttemptActivationFencesStaleStreamAndDraft(t *testing.T) {
+func TestFloretProviderAttemptActivationPreservesCanonicalToolPrefixAndFencesStaleSuffix(t *testing.T) {
+	const (
+		runID     = "run-tool-continuity"
+		threadID  = "thread-tool-continuity"
+		turnID    = "turn-tool-continuity"
+		messageID = "assistant-tool-continuity"
+	)
 	var events []any
-	r := &run{
-		messageID: "assistant-1",
-		assistantBlocks: []any{&persistedMarkdownBlock{
-			Type:    "markdown",
-			Content: "old attempt",
-		}},
-		onStreamEvent: func(event any) { events = append(events, event) },
+	r := newRun(runOptions{
+		RunID: runID, ThreadID: threadID, TurnID: turnID, MessageID: messageID,
+		OnStreamEvent: func(event any) { events = append(events, event) },
+	})
+	if err := r.observeFloretCanonicalIdentity(runID, threadID, turnID); err != nil {
+		t.Fatal(err)
 	}
 
 	accepted, err := r.activateFloretProviderAttempt(map[string]any{
+		"logical_request_id": "logical-1",
+		"attempt_id":         "logical-1:attempt:1",
+		"attempt_epoch":      1,
+	})
+	if err != nil || !accepted {
+		t.Fatalf("activate first attempt accepted=%v err=%v", accepted, err)
+	}
+	if !r.applyFloretThreadProjection(flruntime.ThreadTurnProjection{
+		ThreadID: threadID, TurnID: turnID, RunID: runID, TraceID: runID,
+		Status: flruntime.TurnStatusRunning, ThroughOrdinal: 1,
+		Segments: []flruntime.ThreadTurnProjectionSegment{{
+			Kind:             flruntime.ThreadTurnProjectionSegmentActivityTimeline,
+			ActivityTimeline: floretProjectionTimeline(runID, threadID, turnID, "tool-1", "terminal.exec"),
+		}},
+	}) {
+		t.Fatal("canonical tool projection was not applied")
+	}
+
+	events = nil
+	accepted, err = r.activateFloretProviderAttempt(map[string]any{
 		"logical_request_id": "logical-1",
 		"attempt_id":         "logical-1:attempt:2",
 		"attempt_epoch":      2,
 	})
 	if err != nil || !accepted {
-		t.Fatalf("activate current attempt accepted=%v err=%v", accepted, err)
+		t.Fatalf("activate next provider step accepted=%v err=%v", accepted, err)
 	}
 	r.muAssistant.Lock()
-	if len(r.assistantBlocks) != 0 {
+	if len(r.assistantBlocks) != 1 {
 		r.muAssistant.Unlock()
-		t.Fatalf("new provider attempt retained old assistant blocks: %#v", r.assistantBlocks)
+		t.Fatalf("next provider step discarded canonical tool prefix: %#v", r.assistantBlocks)
+	}
+	if _, ok := r.assistantBlocks[0].(ActivityTimelineBlock); !ok {
+		r.muAssistant.Unlock()
+		t.Fatalf("assistantBlocks[0]=%T, want canonical activity", r.assistantBlocks[0])
+	}
+	r.muAssistant.Unlock()
+	if r.nextBlockIndex != 1 {
+		t.Fatalf("nextBlockIndex=%d, want append after canonical prefix", r.nextBlockIndex)
+	}
+	if len(events) != 1 {
+		t.Fatalf("activation events=%#v, want only message start when canonical prefix is unchanged", events)
+	}
+	if started, ok := events[0].(streamEventMessageStart); !ok || started.AttemptEpoch != 2 {
+		t.Fatalf("activation event=%T %#v, want epoch 2 message start", events[0], events[0])
+	}
+
+	stale := &flruntime.StreamObservation{
+		Type:             flruntime.StreamObservationAssistantDelta,
+		Text:             "stale output",
+		LogicalRequestID: "logical-1",
+		AttemptID:        "logical-1:attempt:1",
+		AttemptEpoch:     1,
+	}
+	if r.acceptsFloretStreamAttempt(stale) {
+		t.Fatal("stale attempt stream was accepted")
+	}
+	if err := r.appendThinkingDelta("continuing after tool"); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.appendTextDelta("final live answer"); err != nil {
+		t.Fatal(err)
+	}
+	r.muAssistant.Lock()
+	if len(r.assistantBlocks) != 3 {
+		r.muAssistant.Unlock()
+		t.Fatalf("assistantBlocks=%#v, want activity, thinking, and markdown", r.assistantBlocks)
+	}
+	if _, ok := r.assistantBlocks[1].(*persistedThinkingBlock); !ok {
+		r.muAssistant.Unlock()
+		t.Fatalf("assistantBlocks[1]=%T, want thinking appended after activity", r.assistantBlocks[1])
+	}
+	if block, ok := r.assistantBlocks[2].(*persistedMarkdownBlock); !ok || block.Content != "final live answer" {
+		r.muAssistant.Unlock()
+		t.Fatalf("assistantBlocks[2]=%T %#v, want live markdown", r.assistantBlocks[2], r.assistantBlocks[2])
+	}
+	r.muAssistant.Unlock()
+
+	events = nil
+	accepted, err = r.activateFloretProviderAttempt(map[string]any{
+		"logical_request_id": "logical-1",
+		"attempt_id":         "logical-1:attempt:3",
+		"attempt_epoch":      3,
+	})
+	if err != nil || !accepted {
+		t.Fatalf("activate retry accepted=%v err=%v", accepted, err)
+	}
+	r.muAssistant.Lock()
+	if len(r.assistantBlocks) != 1 {
+		r.muAssistant.Unlock()
+		t.Fatalf("retry did not discard only the transient suffix: %#v", r.assistantBlocks)
+	}
+	if _, ok := r.assistantBlocks[0].(ActivityTimelineBlock); !ok {
+		r.muAssistant.Unlock()
+		t.Fatalf("retry discarded canonical activity: %#v", r.assistantBlocks)
+	}
+	r.muAssistant.Unlock()
+	if len(events) != 3 {
+		t.Fatalf("retry activation events=%#v, want message start and two suffix clears", events)
+	}
+	for index, wantBlockIndex := range []int{1, 2} {
+		cleared, ok := events[index+1].(streamEventBlockSet)
+		if !ok || cleared.BlockIndex != wantBlockIndex {
+			t.Fatalf("retry clear event %d=%T %#v, want block %d", index, events[index+1], events[index+1], wantBlockIndex)
+		}
+	}
+	if err := r.appendTextDelta("retried answer"); err != nil {
+		t.Fatal(err)
+	}
+	r.muAssistant.Lock()
+	if len(r.assistantBlocks) != 2 {
+		r.muAssistant.Unlock()
+		t.Fatalf("retried output did not append after canonical prefix: %#v", r.assistantBlocks)
+	}
+	if block, ok := r.assistantBlocks[1].(*persistedMarkdownBlock); !ok || block.Content != "retried answer" {
+		r.muAssistant.Unlock()
+		t.Fatalf("retried assistantBlocks[1]=%T %#v", r.assistantBlocks[1], r.assistantBlocks[1])
 	}
 	r.muAssistant.Unlock()
 
 	accepted, err = r.activateFloretProviderAttempt(map[string]any{
 		"logical_request_id": "logical-1",
-		"attempt_id":         "logical-1:attempt:1",
-		"attempt_epoch":      1,
+		"attempt_id":         "logical-1:attempt:2",
+		"attempt_epoch":      2,
 	})
 	if err != nil || accepted {
 		t.Fatalf("stale provider attempt accepted=%v err=%v, want dropped", accepted, err)
 	}
-	if len(events) != 2 {
-		t.Fatalf("activation events=%d, want message and block start", len(events))
+
+	if !r.applyFloretThreadProjection(flruntime.ThreadTurnProjection{
+		ThreadID: threadID, TurnID: turnID, RunID: runID, TraceID: runID,
+		Status: flruntime.TurnStatusCompleted, ThroughOrdinal: 2,
+		Segments: []flruntime.ThreadTurnProjectionSegment{
+			{
+				Kind:             flruntime.ThreadTurnProjectionSegmentActivityTimeline,
+				ActivityTimeline: floretProjectionTimeline(runID, threadID, turnID, "tool-1", "terminal.exec"),
+			},
+			{Kind: flruntime.ThreadTurnProjectionSegmentAssistantText, Text: "canonical final answer"},
+		},
+	}) {
+		t.Fatal("terminal canonical projection was not applied")
+	}
+	r.muAssistant.Lock()
+	defer r.muAssistant.Unlock()
+	if len(r.assistantBlocks) != 2 {
+		t.Fatalf("terminal assistantBlocks=%#v, want one activity and one answer", r.assistantBlocks)
+	}
+	activity, ok := r.assistantBlocks[0].(ActivityTimelineBlock)
+	if !ok || len(activity.Items) != 1 || activity.Items[0].ToolID != "tool-1" {
+		t.Fatalf("terminal activity=%T %#v, want one canonical tool row", r.assistantBlocks[0], r.assistantBlocks[0])
+	}
+	if answer, ok := r.assistantBlocks[1].(*persistedMarkdownBlock); !ok || answer.Content != "canonical final answer" {
+		t.Fatalf("terminal answer=%T %#v", r.assistantBlocks[1], r.assistantBlocks[1])
 	}
 }

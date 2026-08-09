@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/floegence/floret/v3/observation"
@@ -239,19 +240,37 @@ func (r *run) activateFloretProviderAttempt(metadata map[string]any) (bool, erro
 	r.providerAttempt = identity
 	r.muProviderAttempt.Unlock()
 
+	canonicalBlocks, err := r.floretCanonicalProjectionBlocks()
+	if err != nil {
+		return false, fmt.Errorf("rebuild canonical provider prefix: %w", err)
+	}
 	r.muAssistant.Lock()
-	r.assistantBlocks = nil
+	oldBlocks := append([]any(nil), r.assistantBlocks...)
+	r.assistantBlocks = canonicalBlocks
 	r.assistantAnswer = assistantAnswerState{}
-	r.activityFileActions = make(map[string]FlowerActivityFileAction)
-	r.activityFileActionSeq = 0
 	r.muAssistant.Unlock()
-	r.nextBlockIndex = 0
+	r.mu.Lock()
+	r.nextBlockIndex = len(canonicalBlocks)
 	r.currentTextBlockIndex = -1
-	r.needNewTextBlock = false
+	r.needNewTextBlock = true
 	r.currentThinkingBlockIndex = -1
-	r.needNewThinkingBlock = false
+	r.needNewThinkingBlock = true
+	r.mu.Unlock()
 	r.sendStreamEvent(streamEventMessageStart{Type: "message-start", MessageID: r.messageID, AttemptEpoch: identity.attemptEpoch})
-	r.sendStreamEvent(streamEventBlockStart{Type: "block-start", MessageID: r.messageID, BlockIndex: 0, BlockType: "markdown"})
+	for idx, block := range canonicalBlocks {
+		if idx < len(oldBlocks) && reflect.DeepEqual(oldBlocks[idx], block) {
+			continue
+		}
+		r.sendStreamEvent(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: idx, Block: block})
+	}
+	for idx := len(canonicalBlocks); idx < len(oldBlocks); idx++ {
+		r.sendStreamEvent(streamEventBlockSet{
+			Type:       "block-set",
+			MessageID:  r.messageID,
+			BlockIndex: idx,
+			Block:      persistedMarkdownBlock{Type: "markdown", Content: ""},
+		})
+	}
 	return true, nil
 }
 

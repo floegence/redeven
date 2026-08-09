@@ -258,7 +258,7 @@ func TestFlowerLiveMessageEventsRequireExactStartedDraftIdentity(t *testing.T) {
 		RunID:    runID,
 		Kind:     FlowerLiveMessageStarted,
 		Payload: mustFlowerPayload(FlowerLiveMessageStartedPayload{
-			MessageID: messageID, Role: "assistant", Status: "streaming", CreatedAtMs: 100,
+			MessageID: messageID, Role: "assistant", Status: "streaming", CreatedAtMs: 100, AttemptEpoch: 1,
 		}),
 	})
 	applyFlowerLiveEventToMaterializedState(&state, nil, FlowerLiveEvent{
@@ -296,6 +296,18 @@ func TestFlowerLiveMessageEventsRequireExactStartedDraftIdentity(t *testing.T) {
 	}
 	if len(draft.Blocks) != 1 || draft.Blocks[0].Content != "before reconnect after reconnect" {
 		t.Fatalf("reconnected draft blocks=%#v", draft.Blocks)
+	}
+	applyFlowerLiveEventToMaterializedState(&reconnected, nil, FlowerLiveEvent{
+		ThreadID: threadID,
+		TurnID:   turnID,
+		RunID:    runID,
+		Kind:     FlowerLiveMessageStarted,
+		Payload: mustFlowerPayload(FlowerLiveMessageStartedPayload{
+			MessageID: messageID, Role: "assistant", Status: "streaming", CreatedAtMs: 200, AttemptEpoch: 2,
+		}),
+	})
+	if got := reconnected.Messages[messageID].Blocks[0].Content; got != "before reconnect after reconnect" {
+		t.Fatalf("new provider step discarded the materialized canonical prefix=%q", got)
 	}
 
 	applyFlowerLiveEventToMaterializedState(&reconnected, nil, FlowerLiveEvent{

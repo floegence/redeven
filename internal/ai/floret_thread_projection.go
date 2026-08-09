@@ -146,6 +146,24 @@ func floretProjectionIdentityKey(projection flruntime.ThreadTurnProjection) stri
 	}, "\x00")
 }
 
+func (r *run) floretCanonicalProjectionBlocks() ([]any, error) {
+	if r == nil {
+		return nil, errors.New("nil run")
+	}
+	runID, threadID, turnID := r.floretCanonicalIdentity()
+	if runID == "" || threadID == "" || turnID == "" {
+		return nil, nil
+	}
+	key := strings.Join([]string{threadID, turnID, runID}, "\x00")
+	r.muFloretProjection.Lock()
+	projection, ok := r.floretProjectionByKey[key]
+	r.muFloretProjection.Unlock()
+	if !ok {
+		return nil, nil
+	}
+	return r.flowerBlocksFromFloretThreadProjection(projection)
+}
+
 func (r *run) floretThreadProjectionMatchesRun(projection flruntime.ThreadTurnProjection) bool {
 	if r == nil {
 		return false
