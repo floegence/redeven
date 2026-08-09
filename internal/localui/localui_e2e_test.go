@@ -232,9 +232,10 @@ func TestServer_E2E_DesktopBridgeRestartRevokesOldState(t *testing.T) {
 	oldArtifact := mintDesktopBridgeArtifact(t, oldBridge.Client(), oldBridge.URL, "")
 	oldBridge.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if _, err := connectDesktopBridgeArtifactResult(ctx, oldArtifact.ConnectArtifact, oldBridge.URL); err == nil {
+	oldConnectCtx, oldConnectCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	_, oldConnectErr := connectDesktopBridgeArtifactResult(oldConnectCtx, oldArtifact.ConnectArtifact, oldBridge.URL)
+	oldConnectCancel()
+	if oldConnectErr == nil {
 		t.Fatal("artifact connected after its Desktop bridge closed")
 	}
 	if err := oldServer.Close(); err != nil {
@@ -246,8 +247,10 @@ func TestServer_E2E_DesktopBridgeRestartRevokesOldState(t *testing.T) {
 	newBridge := httptest.NewServer(newServer.HandlerForDesktopBridge())
 	defer newBridge.Close()
 	newArtifact := mintDesktopBridgeArtifact(t, newBridge.Client(), newBridge.URL, "")
-	newSession := connectDesktopBridgeArtifact(t, ctx, newArtifact.ConnectArtifact, newBridge.URL)
-	assertDesktopBridgeSessionReady(t, ctx, newSession)
+	newConnectCtx, newConnectCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer newConnectCancel()
+	newSession := connectDesktopBridgeArtifact(t, newConnectCtx, newArtifact.ConnectArtifact, newBridge.URL)
+	assertDesktopBridgeSessionReady(t, newConnectCtx, newSession)
 	_ = newSession.Close()
 	assertDirectStateEventuallyEmpty(t, newServer)
 }
