@@ -1302,7 +1302,7 @@
     },
     {
       "path": "internal/codeapp/appserver/server.go",
-      "sha256": "c7bab657c4f82f692a95befd3ace626b6668517d8489c490f5a919d779a6f619",
+      "sha256": "08d86a298a995aa5d69b6aa9faa2186afe1e5e155f859a2c06708a2ffb4933b1",
       "sink_kinds": [
         "file",
         "json_file"
@@ -1578,19 +1578,16 @@
     },
     {
       "path": "internal/config/config_persistence.go",
-      "sha256": "3d2fed31094f47ecb78748d56597a3e43ae4134510fda7a04b0157d174e9e74e",
+      "sha256": "60476ba2a8827177b5dbf592b844b221bdd6a337929394b70b5a5ca6b7082edf",
       "sink_kinds": [
         "file",
         "json_file"
       ],
       "review_status": "reviewed",
-      "owner": "redeven",
+      "owner": "redeven configuration",
       "authority": "product_configuration",
       "data_classes": [
-        "product-owned state"
-      ],
-      "tables": [
-        "secrets"
+        "product-owned configuration"
       ],
       "codecs": [
         "encoding/json.MarshalIndent"
@@ -1598,7 +1595,7 @@
       "dtos": [
         "cfg"
       ],
-      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+      "review_note": "Stores current Redeven product configuration; canonical Agent lifecycle data is excluded."
     },
     {
       "path": "internal/desktopbridge/protocol.go",
@@ -1666,7 +1663,7 @@
     },
     {
       "path": "internal/envapp/ui_src/src/ui/EnvAppShell.tsx",
-      "sha256": "10b2ba96e0226193897661e01340ea8eac6b9e13a1cf956e5dd046a454c433e5",
+      "sha256": "7b5c496e2d607bcf4dc5acc4aadc7e302f709b484e3a25a1fc480331ff2bafb3",
       "sink_kinds": [
         "web_storage"
       ],
@@ -1679,11 +1676,11 @@
       "keys": [
         "redeven_env_public_id"
       ],
-      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+      "review_note": "Stores the current environment identifier for the active browser session."
     },
     {
       "path": "internal/envapp/ui_src/src/ui/services/controlplaneApi.ts",
-      "sha256": "43c9604c649c5cc37b1f2cbca8e70ec087ed188d979e356355a71288774813d7",
+      "sha256": "ab1ded6ca2aa269053146059829a88935be59ce31eafb4a219eb32026b342e7c",
       "sink_kinds": [
         "web_storage"
       ],
@@ -1696,7 +1693,7 @@
       "keys": [
         "expression:key"
       ],
-      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+      "review_note": "Stores bounded control-plane browser session state."
     },
     {
       "path": "internal/envapp/ui_src/src/ui/services/uiStorage.ts",
@@ -1717,21 +1714,21 @@
     },
     {
       "path": "internal/envapp/ui_src/src/ui/widgets/RemoteFileBrowser.tsx",
-      "sha256": "1ebfdea2a16980a1b3d1617e369273cbc8c7318d9c4e59f2968574ff26a1265e",
+      "sha256": "79ea8bea9200fd7171f5a77f0ea09ae09b0a6310e6d43af1e668db807a57507b",
       "sink_kinds": [
         "file"
       ],
       "review_status": "reviewed",
-      "owner": "redeven UI",
-      "authority": "browser_ui_preference",
+      "owner": "redeven filesystem UI",
+      "authority": "user_effect",
       "data_classes": [
-        "product UI preference or cache"
+        "authorized user filesystem effect"
       ],
-      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+      "review_note": "Invokes filesystem RPCs for explicit user file operations; it does not own admitted conversation state."
     },
     {
       "path": "internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx",
-      "sha256": "9854a5a0434283d4739c088baacb5c673c3567dfa112cee63c25f788c2ff6cee",
+      "sha256": "d385aa4df67e46a07df8aff458fa9258efd38274399ecb7e4baadb696c35b7c2",
       "sink_kinds": [
         "web_storage"
       ],
@@ -1744,25 +1741,25 @@
       "keys": [
         "expression:storageKey"
       ],
-      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+      "review_note": "Stores the selected terminal identity for the active browser session."
     },
     {
       "path": "internal/envapp/ui_src/src/ui/widgets/createFilePreviewController.ts",
-      "sha256": "b028d703f3df3a7b66708f952e059e93579bd4292d157052a6c2a87a28c2bbfb",
+      "sha256": "33e4e45d132b8a66bc0045a325d5a27b3f42a1ef32c786fe0c83aaaf841061c3",
       "sink_kinds": [
         "file"
       ],
       "review_status": "reviewed",
-      "owner": "redeven UI",
-      "authority": "browser_ui_preference",
+      "owner": "redeven filesystem UI",
+      "authority": "user_effect",
       "data_classes": [
-        "product UI preference or cache"
+        "authorized user filesystem effect"
       ],
-      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+      "review_note": "Invokes filesystem RPCs for explicit user file saves; it does not own admitted conversation state."
     },
     {
       "path": "internal/flower_ui/src/FlowerSurface.tsx",
-      "sha256": "413d4a4fb598ec5fcec7e7f48d7747bb6d6905ab2f8dd9ad4452d69422e7b6d6",
+      "sha256": "c4a4681b26161eba5261798ca05e498312938890edd12bb5e59ce1522af85e70",
       "sink_kinds": [
         "web_storage"
       ],
@@ -1775,7 +1772,7 @@
       "keys": [
         "expression:THREAD_RAIL_WIDTH_STORAGE_KEY"
       ],
-      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded. The bounded thread-detail LRU remains process memory and does not add a durable lifecycle or transcript sink."
+      "review_note": "Stores the thread rail width preference. The bounded thread-detail LRU remains process memory and does not add a durable lifecycle or transcript sink."
     },
     {
       "path": "internal/fs/entries.go",
@@ -1793,24 +1790,24 @@
     },
     {
       "path": "internal/fs/service.go",
-      "sha256": "d4f7f7e1187bddb8f179cd51949e8efffeb4d80167c0334502a86d3f581d3726",
+      "sha256": "5429306e915c4e14c3f2a9124d9d9bff2eacc6d953efa18f7b9cebd46c035aeb",
       "sink_kinds": [
         "file"
       ],
       "review_status": "reviewed",
-      "owner": "redeven",
-      "authority": "product_configuration",
+      "owner": "redeven filesystem capability",
+      "authority": "user_effect",
       "data_classes": [
-        "product-owned state"
+        "authorized user filesystem effect"
       ],
       "tables": [
         "src"
       ],
-      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
+      "review_note": "Executes explicitly authorized filesystem mutations; it does not own admitted conversation state."
     },
     {
       "path": "internal/fs/stream_read_file.go",
-      "sha256": "cdfe347e515dad3bfece916ec68680ad32e4746914691a467c1a64a583502cae",
+      "sha256": "788cbffb2825a2abc91fa5d14c862205ba402ba0472d51c309dd8a5c67aa369a",
       "sink_kinds": [
         "file"
       ],
@@ -1823,7 +1820,13 @@
       "tables": [
         "session_meta"
       ],
-      "review_note": "Executes or invokes an explicitly authorized filesystem capability; it does not own admitted conversation state."
+      "codecs": [
+        "encoding/json.NewEncoder"
+      ],
+      "dtos": [
+        "value"
+      ],
+      "review_note": "Writes Redeven application stream response envelopes and authorized file bytes; Flowersec owns transport framing and session lifecycle."
     },
     {
       "path": "internal/lockfile/lockfile.go",
