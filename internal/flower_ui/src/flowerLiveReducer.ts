@@ -691,7 +691,6 @@ export function applyFlowerLiveEvent(
       next = upsertContextCompaction(next, event.payload.compaction, event.payload.timeline_decoration);
       break;
     case 'timeline.replaced': {
-      const canonicalRunID = trim(event.payload.thread_patch?.active_run_id) || trim(next.active_run_id);
       let canonicalThread: FlowerThreadSnapshot | null = null;
       next = {
         ...next,
