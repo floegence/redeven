@@ -617,11 +617,8 @@ describe('EnvSettingsPage', () => {
         environment_id: 'env_current',
         agent_instance_id: 'ai_runtime_123',
         direct: {
-          ws_url: 'wss://console.example.com/control/ws',
-          channel_id: 'ch_runtime',
-          channel_init_expire_at_unix_s: 1893456000,
-          default_suite: 1,
-          e2ee_psk_set: true,
+          artifact_provisioned: true,
+          expires_at_unix_s: 1893456000,
         },
       },
       runtime: { agent_home_dir: '/workspace', shell: '/bin/zsh' },
@@ -654,7 +651,6 @@ describe('EnvSettingsPage', () => {
     expect(connectionCard?.textContent).toContain('Runtime instance');
     expect(connectionCard?.textContent).toContain('ai_runtime_123');
     expect(connectionCard?.textContent).toContain('Security key');
-    expect(connectionCard?.textContent).toContain('E2EE PSK');
     expect(connectionCard?.textContent).toContain('Change connection');
     expect(connectionCard?.textContent).toContain('Desktop Connection Center');
     expect(connectionCard?.textContent).not.toContain('Connection details managed by the Control Plane');
@@ -662,8 +658,10 @@ describe('EnvSettingsPage', () => {
     expect(connectionCard?.textContent).not.toContain('Generated automatically');
     expect(connectionCard?.textContent).not.toContain('Where this connection comes from');
     expect(connectionCard?.textContent).not.toContain('Redeven connection service');
+    expect(connectionCard?.textContent).not.toContain('E2EE PSK');
     expect(connectionCard?.textContent).not.toContain('WebSocket URL');
     expect(connectionCard?.textContent).not.toContain('Direct Suite');
+    expect(connectionCard?.textContent).not.toContain('Channel ID');
 
     const detailsButton = Array.from(connectionCard?.querySelectorAll('button') ?? [])
       .find((node) => node.textContent?.includes('Technical information')) as HTMLButtonElement | undefined;
@@ -671,12 +669,11 @@ describe('EnvSettingsPage', () => {
     detailsButton?.click();
     await flushPage();
 
-    expect(connectionCard?.textContent).toContain('Channel ID');
-    expect(connectionCard?.textContent).toContain('WebSocket URL');
-    expect(connectionCard?.textContent).toContain('Direct Suite');
     expect(connectionCard?.textContent).toContain('Key initialization expires at');
-    expect(connectionCard?.textContent).toContain('ch_runtime');
-    expect(connectionCard?.textContent).toContain('wss://console.example.com/control/ws');
+    expect(connectionCard?.textContent).toContain('1893456000');
+    expect(connectionCard?.textContent).not.toContain('Channel ID');
+    expect(connectionCard?.textContent).not.toContain('WebSocket URL');
+    expect(connectionCard?.textContent).not.toContain('Direct Suite');
   });
 
   it('can render with an existing settings provider context instead of shadowing it', async () => {
