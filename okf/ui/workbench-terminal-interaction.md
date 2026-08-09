@@ -10,7 +10,7 @@ quality_exception: Cross-surface terminal interaction contract spanning live tra
 
 Activity and Workbench use Floeterm's binary `terminal/live_v1` stream over Flowersec. Floeterm owns PTY geometry, geometry-stamped retained history, atomic boundaries, ordered output, input, resize acknowledgement, and close/error states; Redeven keeps catalog/history RPCs on the control plane with no live-RPC fallback. Renderer rebuilds replay each retained chunk at its recorded grid before restoring the current attachment grid.
 
-Redeven consumes terminal-web v0.13.4. `forceResizeAndWaitForPresentation()` fences initial recovery, refresh, and working-set resume; read-only host measurement is used only by an active visible runtime.
+Redeven consumes terminal-web v0.13.5. `forceResizeAndWaitForCommittedFrame()` fences initial recovery, refresh, and working-set resume; a completed full WebGL frame settles the fence immediately, and read-only host measurement is used only by an active visible runtime.
 
 # Contract
 
