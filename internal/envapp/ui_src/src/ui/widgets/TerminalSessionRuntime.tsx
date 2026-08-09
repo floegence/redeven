@@ -59,6 +59,8 @@ import {
 
 type SessionLoadingState = 'idle' | 'initializing' | 'attaching' | 'loading_history' | 'reconnecting';
 
+const TERMINAL_LOADING_CURTAIN_DELAY_MS = 250;
+
 type SharedTerminalGeometryEvent = Readonly<{
   sessionId: string;
   lifecycleEpoch: number;
@@ -281,7 +283,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     if (isLoading) {
       loadingDebounceTimer = setTimeout(() => {
         setShowLoading(true);
-      }, 150);
+      }, TERMINAL_LOADING_CURTAIN_DELAY_MS);
     } else {
       setShowLoading(false);
     }

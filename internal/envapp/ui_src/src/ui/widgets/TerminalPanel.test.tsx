@@ -6464,6 +6464,31 @@ describe('TerminalPanel', () => {
     expect(host.textContent).not.toContain('This terminal could not be restored.');
   });
 
+  it('avoids flashing the loading curtain before attach recovery reaches 250ms', async () => {
+    vi.useFakeTimers();
+    installRequestAnimationFrameMock('timer');
+    transportMocks.attach.mockReturnValueOnce(new Promise(() => {}));
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await vi.advanceTimersByTimeAsync(0);
+    await settleTerminalPanel();
+    expect(transportMocks.attach).toHaveBeenCalledWith('session-1', 80, 24);
+
+    await vi.advanceTimersByTimeAsync(150);
+    await settleTerminalPanel();
+    expect(host.querySelector('.redeven-terminal-loading-curtain')).toBeNull();
+
+    await vi.advanceTimersByTimeAsync(99);
+    await settleTerminalPanel();
+    expect(host.querySelector('.redeven-terminal-loading-curtain')).toBeNull();
+
+    await vi.advanceTimersByTimeAsync(1);
+    await settleTerminalPanel();
+    expect(host.querySelector('.redeven-terminal-loading-curtain')).not.toBeNull();
+  });
+
   it('opens the floating file preview from a modifier-click terminal file link', async () => {
     terminalBufferLinesState.lines.set(1, 'src/app/server.ts:18:4 failed to compile');
 
@@ -9585,7 +9610,7 @@ describe('TerminalPanel', () => {
       expect(transportMocks.historyPage.mock.calls).toContainEqual([sessionId, 2, -1]);
     });
 
-    await vi.advanceTimersByTimeAsync(170);
+    await vi.advanceTimersByTimeAsync(270);
     await settleTerminalPanel();
     expect(host.textContent).toContain('Loading history 5 B / 10 B');
 
