@@ -602,7 +602,7 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 		},
 		filepath.Join("internal", "runtimeservice", "compatibility_contract.json"): {
 			"Floret v3.2.33",
-			"floret-v3-2-33-memory-first-runtime",
+			"flowersec-v2-3-5-session-lifecycle",
 			"ai_threadstore_product_v1",
 			"Fresh stores initialize directly at version 1",
 			"single persistent source of truth",
@@ -1615,42 +1615,32 @@ func assertOnlyCurrentFlowersecGoImports(t *testing.T, root string) {
 	t.Helper()
 
 	moduleRoot := strings.TrimSuffix(flowersecGoModule, "/v2")
-	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
+	cmd := exec.Command("git", "-C", root, "ls-files", "-z", "--", "*.go")
+	trackedFiles, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("list tracked Go files: %v", err)
+	}
+	for _, rel := range strings.Split(string(trackedFiles), "\x00") {
+		if rel == "" {
+			continue
 		}
-		if entry.IsDir() {
-			switch entry.Name() {
-			case ".git", "node_modules", "vendor":
-				return filepath.SkipDir
-			default:
-				return nil
-			}
-		}
-		if filepath.Ext(path) != ".go" {
-			return nil
-		}
+		path := filepath.Join(root, filepath.FromSlash(rel))
 		parsed, parseErr := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
 		if parseErr != nil {
-			return parseErr
+			t.Fatalf("parse imports from %s: %v", rel, parseErr)
 		}
 		for _, imported := range parsed.Imports {
 			importPath, unquoteErr := strconv.Unquote(imported.Path.Value)
 			if unquoteErr != nil {
-				return unquoteErr
+				t.Fatalf("parse import from %s: %v", rel, unquoteErr)
 			}
 			if importPath != moduleRoot && !strings.HasPrefix(importPath, moduleRoot+"/") {
 				continue
 			}
 			if importPath != flowersecGoModule && !strings.HasPrefix(importPath, flowersecGoModule+"/") {
-				rel, _ := filepath.Rel(root, path)
-				return errors.New(rel + " imports a Flowersec package outside " + flowersecGoModule)
+				t.Fatalf("%s imports a Flowersec package outside %s", rel, flowersecGoModule)
 			}
 		}
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("scan Flowersec Go imports: %v", err)
 	}
 }
 
