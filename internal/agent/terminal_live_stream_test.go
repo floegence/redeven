@@ -19,6 +19,13 @@ func (*terminalTestByteStream) TerminalError() *flowersec.SessionError { return 
 func (*terminalTestByteStream) CloseWrite() error                      { return nil }
 func (stream *terminalTestByteStream) Reset() error                    { return stream.Close() }
 
+func TestTerminalLiveStreamHandlerReturnsInvalidStreamError(t *testing.T) {
+	handler := (&Agent{}).terminalLiveStreamHandler(&session.Meta{CanRead: true})
+	if err := handler(context.Background(), flowersec.IncomingStream{Kind: livev1.StreamKind}); err == nil {
+		t.Fatal("terminal live stream handler error = nil, want unavailable stream error")
+	}
+}
+
 func TestRegisterTerminalLiveStreamHandlesNamedStream(t *testing.T) {
 	manager := terminal.NewManager("/bin/sh", t.TempDir(), nil)
 	t.Cleanup(manager.Cleanup)

@@ -1345,8 +1345,9 @@ func (a *Agent) serveRedevenAgentSession(ctx context.Context, sess flowersec.Ses
 	}
 
 	// FS read-file stream (binary, chunked)
-	if err := handlers.HandleStream("fs/read_file", func(ctx context.Context, incoming flowersec.IncomingStream) {
+	if err := handlers.HandleStream("fs/read_file", func(ctx context.Context, incoming flowersec.IncomingStream) error {
 		fsSvc.ServeReadFileStreamWithAccessGate(ctx, incoming.Stream, meta, a.accessGate)
+		return nil
 	}); err != nil {
 		return err
 	}
@@ -1430,8 +1431,9 @@ func (a *Agent) NewLocalSessionHandlers(meta *session.Meta) (*flowersec.SessionH
 		cleanup()
 		return nil, nil, err
 	}
-	if err := handlers.HandleStream("fs/read_file", func(ctx context.Context, incoming flowersec.IncomingStream) {
+	if err := handlers.HandleStream("fs/read_file", func(ctx context.Context, incoming flowersec.IncomingStream) error {
 		fsSvc.ServeReadFileStreamWithAccessGate(ctx, incoming.Stream, meta, a.accessGate)
+		return nil
 	}); err != nil {
 		cleanup()
 		return nil, nil, err
@@ -1446,13 +1448,11 @@ func (a *Agent) NewLocalSessionHandlers(meta *session.Meta) (*flowersec.SessionH
 }
 
 func (a *Agent) terminalLiveStreamHandler(meta *session.Meta) flowersec.StreamHandler {
-	return func(ctx context.Context, incoming flowersec.IncomingStream) {
+	return func(ctx context.Context, incoming flowersec.IncomingStream) error {
 		if a == nil || a.term == nil || incoming.Stream == nil {
-			return
+			return errors.New("terminal live stream unavailable")
 		}
-		if err := a.term.ServeLiveStream(ctx, incoming.Stream, meta, a.accessGate); err != nil && ctx.Err() == nil && a.log != nil {
-			a.log.Debug("terminal live stream closed", "error", err)
-		}
+		return a.term.ServeLiveStream(ctx, incoming.Stream, meta, a.accessGate)
 	}
 }
 
