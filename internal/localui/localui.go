@@ -138,7 +138,6 @@ type Server struct {
 }
 
 type pendingDirect struct {
-	psk                       [32]byte
 	pluginCredentialHash      [sha256.Size]byte
 	accessSessionID           string
 	initExpireAtUnixS         int64
