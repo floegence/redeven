@@ -1155,6 +1155,45 @@ func TestForegroundCommandUpdateReachesEveryAuthorizedControlClient(t *testing.T
 	}
 }
 
+func TestAttachSinkReplaysCurrentForegroundCommandState(t *testing.T) {
+	m := newQuietTestManager(t, t.TempDir())
+	t.Cleanup(m.Cleanup)
+
+	created, err := m.CreateSession("before-sink", "")
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	router := sessionrpc.NewRouter()
+	client := newTestRPCPeer(router)
+	updates := make(chan terminalForegroundCommandUpdatePayload, 1)
+	client.OnNotify(TypeID_TERMINAL_FOREGROUND_COMMAND_UPDATE, func(payload json.RawMessage) {
+		var update terminalForegroundCommandUpdatePayload
+		if json.Unmarshal(payload, &update) == nil {
+			updates <- update
+		}
+	})
+	detach := m.RegisterWithAccessGate(
+		router,
+		&session.Meta{CanRead: true, CanWrite: true, CanExecute: true},
+		client,
+		nil,
+	)
+	t.Cleanup(detach)
+
+	select {
+	case update := <-updates:
+		if update.SessionID != created.ID {
+			t.Fatalf("session = %q, want %q", update.SessionID, created.ID)
+		}
+		if update.ForegroundCommand != created.ForegroundCommand {
+			t.Fatalf("foreground command = %#v, want %#v", update.ForegroundCommand, created.ForegroundCommand)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("new terminal notification sink did not receive the current foreground command state")
+	}
+}
+
 func TestForegroundCommandUpdatePayloadRemainsForegroundOnly(t *testing.T) {
 	payload, err := json.Marshal(terminalForegroundCommandUpdatePayload{
 		SessionID: "session-1",

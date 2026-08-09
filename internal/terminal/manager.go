@@ -454,7 +454,10 @@ func (m *Manager) AttachSink(meta *session.Meta, streamServer flowersec.RPCPeer,
 	if m == nil || streamServer == nil || !session.AllowsProcessLaunch(meta) {
 		return func() {}
 	}
-	m.ensureWriter(streamServer, meta, gate)
+	writer, attached := m.ensureWriter(streamServer, meta, gate)
+	if attached {
+		m.replayCurrentMetadata(writer)
+	}
 	var once sync.Once
 	return func() {
 		once.Do(func() {
@@ -501,16 +504,78 @@ func (m *Manager) Cleanup() {
 	m.mu.Unlock()
 }
 
-func (m *Manager) ensureWriter(streamServer flowersec.RPCPeer, meta *session.Meta, gate *accessgate.Gate) {
+func (m *Manager) ensureWriter(streamServer flowersec.RPCPeer, meta *session.Meta, gate *accessgate.Gate) (*controlSink, bool) {
 	if m == nil || streamServer == nil {
-		return
+		return nil, false
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if _, ok := m.writers[streamServer]; ok {
+	if writer, ok := m.writers[streamServer]; ok {
+		return writer, false
+	}
+	writer := newControlSink(streamServer, meta, gate, m.log)
+	m.writers[streamServer] = writer
+	return writer, true
+}
+
+func (m *Manager) replayCurrentMetadata(writer *controlSink) {
+	if m == nil || m.term == nil || writer == nil {
 		return
 	}
-	m.writers[streamServer] = newControlSink(streamServer, meta, gate, m.log)
+	for _, terminalSession := range m.term.ListSessions() {
+		if terminalSession == nil {
+			continue
+		}
+		info := terminalSession.ToSessionInfo()
+		if strings.TrimSpace(info.ID) == "" || m.sessionHidden(info.ID) {
+			continue
+		}
+		payloads := []struct {
+			typeID  uint32
+			payload any
+		}{
+			{
+				typeID: TypeID_TERMINAL_FOREGROUND_COMMAND_UPDATE,
+				payload: terminalForegroundCommandUpdatePayload{
+					SessionID:         info.ID,
+					ForegroundCommand: toForegroundCommandInfo(info.ForegroundCommand),
+				},
+			},
+			{
+				typeID: TypeID_TERMINAL_EXECUTION_CONTEXT_UPDATE,
+				payload: terminalExecutionContextUpdatePayload{
+					SessionID:        info.ID,
+					ExecutionContext: toExecutionContextInfo(info.ExecutionContext),
+				},
+			},
+			{
+				typeID: TypeID_TERMINAL_WORK_STATE_UPDATE,
+				payload: terminalWorkStateUpdatePayload{
+					SessionID: info.ID,
+					WorkState: toWorkStateInfo(info.WorkState),
+				},
+			},
+		}
+		if outputActivity := toOptionalOutputActivityInfo(info.OutputActivity); outputActivity != nil {
+			payloads = append(payloads, struct {
+				typeID  uint32
+				payload any
+			}{
+				typeID: TypeID_TERMINAL_OUTPUT_ACTIVITY_UPDATE,
+				payload: terminalOutputActivityUpdatePayload{
+					SessionID:      info.ID,
+					OutputActivity: *outputActivity,
+				},
+			})
+		}
+		for _, current := range payloads {
+			encoded, err := json.Marshal(current.payload)
+			if err != nil {
+				continue
+			}
+			writer.Send(sinkMsg{TypeID: current.typeID, Payload: encoded})
+		}
+	}
 }
 
 // broadcastNameUpdate sends a name/working directory update notification to all
