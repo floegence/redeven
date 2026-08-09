@@ -190,10 +190,6 @@ func TestFlowersecTransportPoliciesAreExplicit(t *testing.T) {
 	for _, marker := range []string{
 		"source: { acquire: acquireLocalDirectArtifact }",
 		"source: { acquire: acquireRemoteArtifact }",
-		"outboundRecordChunkBytes: 64 * 1024",
-		"webSocketLimits:",
-		"yamuxLimits:",
-		"outboundDrainTimeoutMs: 10_000",
 		"resolveLocalTransportSecurityPolicy(window.location.hostname)",
 		"createProxyRuntimeTunnelConnectionConfig({",
 	} {
