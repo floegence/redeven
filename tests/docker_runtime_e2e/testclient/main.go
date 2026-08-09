@@ -341,7 +341,7 @@ func mintConnectArtifact(ctx context.Context, client *http.Client, parsedBase *u
 
 func connectFlowersecSession(ctx context.Context, artifact flowersec.Artifact, origin string) (flowersec.Session, error) {
 	trustRoots, err := x509.SystemCertPool()
-	if err != nil || trustRoots == nil || len(trustRoots.Subjects()) == 0 {
+	if err != nil || trustRoots == nil {
 		return nil, fmt.Errorf("system trust roots unavailable: %w", err)
 	}
 	lease, err := flowersec.NewArtifactLease(artifact, func(context.Context) error { return nil })
