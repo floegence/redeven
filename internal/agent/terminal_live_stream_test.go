@@ -41,10 +41,9 @@ func TestRegisterTerminalLiveStreamHandlesNamedStream(t *testing.T) {
 		_ = serverConn.Close()
 		_ = clientConn.Close()
 	})
-	done := make(chan struct{})
+	done := make(chan error, 1)
 	go func() {
-		handler(context.Background(), flowersec.IncomingStream{Kind: livev1.StreamKind, Stream: &terminalTestByteStream{Conn: serverConn}})
-		close(done)
+		done <- handler(context.Background(), flowersec.IncomingStream{Kind: livev1.StreamKind, Stream: &terminalTestByteStream{Conn: serverConn}})
 	}()
 	attach, err := livev1.EncodeAttach(livev1.Attach{
 		AttachGeneration: 1,
@@ -67,7 +66,9 @@ func TestRegisterTerminalLiveStreamHandlesNamedStream(t *testing.T) {
 		t.Fatalf("frame type = %v, want permission error", frame.Type)
 	}
 	_ = clientConn.Close()
-	<-done
+	if err := <-done; err == nil {
+		t.Fatal("terminal live stream handler error = nil, want permission error")
+	}
 }
 
 func TestRegisterTerminalLiveStreamServesAuthorizedAttachAndResize(t *testing.T) {
@@ -81,16 +82,18 @@ func TestRegisterTerminalLiveStreamServesAuthorizedAttachAndResize(t *testing.T)
 	handler := agent.terminalLiveStreamHandler(&session.Meta{CanRead: true, CanWrite: true, CanExecute: true})
 
 	serverConn, clientConn := net.Pipe()
-	done := make(chan struct{})
+	done := make(chan error, 1)
 	go func() {
-		handler(context.Background(), flowersec.IncomingStream{Kind: livev1.StreamKind, Stream: &terminalTestByteStream{Conn: serverConn}})
-		close(done)
+		done <- handler(context.Background(), flowersec.IncomingStream{Kind: livev1.StreamKind, Stream: &terminalTestByteStream{Conn: serverConn}})
 	}()
 	t.Cleanup(func() {
 		_ = clientConn.Close()
 		_ = serverConn.Close()
 		select {
-		case <-done:
+		case err := <-done:
+			if err != nil {
+				t.Errorf("terminal live stream handler error = %v, want nil", err)
+			}
 		case <-time.After(time.Second):
 			t.Error("terminal live stream handler did not stop")
 		}
