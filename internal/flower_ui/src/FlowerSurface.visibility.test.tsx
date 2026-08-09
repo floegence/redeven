@@ -112,6 +112,19 @@ async function waitUntil(predicate: () => boolean, message: string, timeoutMs = 
   }
 }
 
+async function waitUntilPresented(predicate: () => boolean, message: string, timeoutMs = 1_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() >= deadline) throw new Error(message);
+    if (animationFrames.length > 0) {
+      await presentNextFrame();
+    } else {
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+      await flushAsync();
+    }
+  }
+}
+
 async function presentNextFrame(): Promise<void> {
   const callbacks = animationFrames.splice(0);
   callbacks.forEach((callback) => callback(performance.now()));
@@ -1009,6 +1022,162 @@ describe('FlowerSurface companion visibility lifecycle', () => {
 
     expect(connectLiveStream.mock.calls[0]?.[0].thread_after_seq).toBe(0);
     expect(loadThread).toHaveBeenCalled();
+  });
+
+  it('keeps the same successful tool row through the next provider step and terminal reconciliation', async () => {
+    const snapshot = thread({
+      active_run_id: 'run-live',
+      messages: [],
+      read_status: readStatus(false),
+    });
+    const liveBootstrap: FlowerLiveBootstrap = {
+      ...bootstrap(snapshot),
+      live_state: {
+        thread_patch: {},
+        runs: { 'run-live': { run_id: 'run-live', status: 'running', message_id: 'assistant-continuity' } },
+        approval_actions: {},
+        input_requests: {},
+      },
+    };
+    const toolPage = deferred<FlowerLiveEventsResponse>();
+    const nextStepPage = deferred<FlowerLiveEventsResponse>();
+    const outputPage = deferred<FlowerLiveEventsResponse>();
+    const terminalPage = deferred<FlowerLiveEventsResponse>();
+    const connectLiveStream = vi.fn(async function* (input: FlowerLiveStreamConnectInput): AsyncIterable<FlowerLiveStreamEnvelope> {
+      yield {
+        schema_version: 1, kind: 'ready', stream_generation: 1,
+        thread_id: input.thread_id, through_seq: input.thread_after_seq, retained_from_seq: 1,
+        summary_through_seq: input.summary_after_seq, summary_retained_from_seq: 1,
+      };
+      for (const page of [toolPage, nextStepPage, outputPage, terminalPage]) {
+        const response = await page.promise;
+        yield {
+          schema_version: 1,
+          kind: 'thread.batch',
+          stream_generation: 1,
+          thread_id: input.thread_id,
+          from_seq: response.events[0]?.seq ?? response.next_cursor,
+          through_seq: response.next_cursor,
+          retained_from_seq: 1,
+          events: response.events,
+        };
+      }
+      await new Promise<void>((resolve) => input.signal.addEventListener('abort', () => resolve(), { once: true }));
+    });
+    const harness = createAdapterHarness({
+      listThreads: vi.fn(async () => [snapshot]),
+      loadThread: vi.fn(async () => liveBootstrap),
+      connectLiveStream,
+    });
+    renderSurface(harness.adapter, true, true, undefined, 'full');
+
+    await waitUntil(() => connectLiveStream.mock.calls.length === 1, 'tool continuity stream did not start');
+    const activity = {
+      type: 'activity-timeline' as const,
+      schema_version: 1 as const,
+      thread_id: snapshot.thread_id,
+      turn_id: 'turn-live',
+      run_id: 'run-live',
+      summary: {
+        status: 'success' as const,
+        severity: 'normal' as const,
+        needs_attention: false,
+        total_items: 1,
+        counts: { success: 1 },
+      },
+      items: [{
+        item_id: 'tool-continuity',
+        tool_id: 'tool-continuity',
+        tool_name: 'terminal.exec',
+        kind: 'tool' as const,
+        status: 'success' as const,
+        severity: 'normal' as const,
+        needs_attention: false,
+        requires_approval: false,
+        label: 'Ran continuity check',
+      }],
+    };
+    toolPage.resolve({
+      stream_generation: 1,
+      events: [
+        liveEvent(snapshot.thread_id, 1, 'message.started', {
+          message_id: 'assistant-continuity', role: 'assistant', status: 'streaming', created_at_ms: 3_001, attempt_epoch: 1,
+        }),
+        liveEvent(snapshot.thread_id, 2, 'message.block_set', {
+          message_id: 'assistant-continuity', block_index: 0, block: { type: 'activity-timeline', block: activity },
+        }),
+      ],
+      next_cursor: 2,
+      retained_from_seq: 1,
+    });
+    await waitUntilPresented(
+      () => Boolean(host.querySelector('[data-flower-activity-item-id="tool-continuity"]')),
+      'successful tool row did not render',
+    );
+    const toolRow = host.querySelector('[data-flower-activity-item-id="tool-continuity"]') as HTMLElement;
+    expect(toolRow.dataset.flowerActivityStatus).toBe('success');
+
+    nextStepPage.resolve({
+      stream_generation: 1,
+      events: [liveEvent(snapshot.thread_id, 3, 'message.started', {
+        message_id: 'assistant-continuity', role: 'assistant', status: 'streaming', created_at_ms: 3_003, attempt_epoch: 2,
+      })],
+      next_cursor: 3,
+      retained_from_seq: 1,
+    });
+    await flushAsync();
+    await presentNextFrame();
+    expect(host.querySelector('[data-flower-activity-item-id="tool-continuity"]')).toBe(toolRow);
+    expect(toolRow.dataset.flowerActivityStatus).toBe('success');
+
+    outputPage.resolve({
+      stream_generation: 1,
+      events: [
+        liveEvent(snapshot.thread_id, 4, 'message.block_started', {
+          message_id: 'assistant-continuity', block_index: 1, block_type: 'thinking',
+        }),
+        liveEvent(snapshot.thread_id, 5, 'message.block_delta', {
+          message_id: 'assistant-continuity', block_index: 1, delta: 'Using the successful tool result',
+        }),
+        liveEvent(snapshot.thread_id, 6, 'message.block_started', {
+          message_id: 'assistant-continuity', block_index: 2, block_type: 'markdown',
+        }),
+        liveEvent(snapshot.thread_id, 7, 'message.block_delta', {
+          message_id: 'assistant-continuity', block_index: 2, delta: 'Continuity answer',
+        }),
+      ],
+      next_cursor: 7,
+      retained_from_seq: 1,
+    });
+    await waitUntilPresented(() => host.textContent?.includes('Continuity answer') === true, 'next provider output did not render');
+    expect(host.querySelector('[data-flower-activity-item-id="tool-continuity"]')).toBe(toolRow);
+    expect(toolRow.dataset.flowerActivityStatus).toBe('success');
+
+    terminalPage.resolve({
+      stream_generation: 1,
+      events: [liveEvent(snapshot.thread_id, 8, 'timeline.replaced', {
+        messages: [{
+          id: 'assistant-continuity',
+          thread_id: snapshot.thread_id,
+          turn_id: 'turn-live',
+          run_id: 'run-live',
+          role: 'assistant',
+          content: 'Continuity answer',
+          status: 'complete',
+          created_at_ms: 3_001,
+          blocks: [activity, { type: 'markdown', content: 'Continuity answer' }],
+        }],
+        stream_generation: 1,
+        snapshot_through_seq: 8,
+      })],
+      next_cursor: 8,
+      retained_from_seq: 1,
+    });
+    await flushAsync();
+    await presentNextFrame();
+    expect(host.querySelectorAll('[data-flower-activity-item-id="tool-continuity"]')).toHaveLength(1);
+    expect(host.querySelector('[data-flower-activity-item-id="tool-continuity"]')).toBe(toolRow);
+    expect(toolRow.dataset.flowerActivityStatus).toBe('success');
   });
 
   it('does not let summary replay advance the selected thread detail cursor', async () => {

@@ -1934,19 +1934,21 @@ func applyFlowerLiveEventToMaterializedState(state *FlowerLiveMaterializedState,
 				strings.TrimSpace(msg.MessageID) != id) {
 				return
 			}
+			if exists && payload.AttemptEpoch > 0 && msg.AttemptEpoch > payload.AttemptEpoch {
+				return
+			}
 			msg.ThreadID = strings.TrimSpace(event.ThreadID)
 			msg.TurnID = strings.TrimSpace(event.TurnID)
 			msg.RunID = strings.TrimSpace(event.RunID)
 			msg.MessageID = id
 			msg.Role = "assistant"
 			msg.Status = "streaming"
-			if payload.AttemptEpoch > 0 && payload.AttemptEpoch > msg.AttemptEpoch {
-				msg.Blocks = nil
-			}
 			if payload.AttemptEpoch >= msg.AttemptEpoch {
 				msg.AttemptEpoch = payload.AttemptEpoch
 			}
-			msg.CreatedAtMs = payload.CreatedAtMs
+			if msg.CreatedAtMs == 0 {
+				msg.CreatedAtMs = payload.CreatedAtMs
+			}
 			state.Messages[id] = msg
 		}
 	case FlowerLiveMessageBlockStart:

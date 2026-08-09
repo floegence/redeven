@@ -3623,7 +3623,7 @@ describe('Flower live projection', () => {
     });
   });
 
-  it('clears the previous transient draft when a newer provider attempt starts', () => {
+  it('preserves the canonical activity prefix when a newer provider step starts', () => {
     const initial = projectFlowerLiveBootstrap(bootstrap());
     const started = applyFlowerLiveEvent(initial, 0, event(1, 'message.started', {
       message_id: 'assistant-attempt',
@@ -3632,30 +3632,116 @@ describe('Flower live projection', () => {
       created_at_ms: 100,
       attempt_epoch: 1,
     }));
-    const oldDelta = applyFlowerLiveEvent(started.thread, started.cursor, event(2, 'message.block_delta', {
+    const toolSuccess = applyFlowerLiveEvent(started.thread, started.cursor, event(2, 'message.block_set', {
       message_id: 'assistant-attempt',
       block_index: 0,
-      delta: 'old attempt',
+      block: { type: 'activity-timeline', block: activityTimelineBlock('tool-continuity', 'Tool completed') },
     }));
-    const restarted = applyFlowerLiveEvent(oldDelta.thread, oldDelta.cursor, event(3, 'message.started', {
+    const restarted = applyFlowerLiveEvent(toolSuccess.thread, toolSuccess.cursor, event(3, 'message.started', {
       message_id: 'assistant-attempt',
       role: 'assistant',
       status: 'streaming',
       created_at_ms: 200,
       attempt_epoch: 2,
     }));
-    const freshBlock = applyFlowerLiveEvent(restarted.thread, restarted.cursor, event(4, 'message.block_started', {
+
+    expect(restarted.thread.messages.find((message) => message.id === 'assistant-attempt')?.blocks).toEqual([
+      activityTimelineBlock('tool-continuity', 'Tool completed'),
+    ]);
+
+    const thinkingBlock = applyFlowerLiveEvent(restarted.thread, restarted.cursor, event(4, 'message.block_started', {
       message_id: 'assistant-attempt',
-      block_index: 0,
+      block_index: 1,
+      block_type: 'thinking',
+    }));
+    const thinkingDelta = applyFlowerLiveEvent(thinkingBlock.thread, thinkingBlock.cursor, event(5, 'message.block_delta', {
+      message_id: 'assistant-attempt',
+      block_index: 1,
+      delta: 'Using the tool result',
+    }));
+    const freshBlock = applyFlowerLiveEvent(thinkingDelta.thread, thinkingDelta.cursor, event(6, 'message.block_started', {
+      message_id: 'assistant-attempt',
+      block_index: 2,
       block_type: 'markdown',
     }));
-    const freshDelta = applyFlowerLiveEvent(freshBlock.thread, freshBlock.cursor, event(5, 'message.block_delta', {
+    const freshDelta = applyFlowerLiveEvent(freshBlock.thread, freshBlock.cursor, event(7, 'message.block_delta', {
       message_id: 'assistant-attempt',
-      block_index: 0,
-      delta: 'new attempt',
+      block_index: 2,
+      delta: 'new step output',
     }));
 
-    expect(freshDelta.thread.messages.find((message) => message.id === 'assistant-attempt')?.content).toBe('new attempt');
+    const canonicalAssistant = message({
+      id: 'assistant-attempt',
+      thread_id: 'th-live',
+      turn_id: 'turn-1',
+      run_id: 'run-1',
+      role: 'assistant',
+      status: 'complete',
+      content: 'new step output',
+      blocks: [
+        activityTimelineBlock('tool-continuity', 'Tool completed'),
+        { type: 'markdown', content: 'new step output' },
+      ],
+    });
+    const terminal = applyFlowerLiveEvent(freshDelta.thread, freshDelta.cursor, event(8, 'timeline.replaced', {
+      messages: [message(), canonicalAssistant],
+      stream_generation: 1,
+      snapshot_through_seq: 8,
+    }));
+
+    const live = freshDelta.thread.messages.find((item) => item.id === 'assistant-attempt');
+    expect(live?.blocks?.map((block) => block.type)).toEqual(['activity-timeline', 'thinking', 'markdown']);
+    expect(live?.content).toBe('new step output');
+    const settled = terminal.thread.messages.find((item) => item.id === 'assistant-attempt');
+    expect(settled?.blocks?.map((block) => block.type)).toEqual(['activity-timeline', 'markdown']);
+    expect(settled?.blocks?.filter((block) => block.type === 'activity-timeline')).toHaveLength(1);
+  });
+
+  it('replaces only the transient suffix when a provider attempt retries', () => {
+    const activity = activityTimelineBlock('tool-retry-prefix', 'Tool result retained');
+    const initial = thread({
+      messages: [
+        message(),
+        message({
+          id: 'assistant-retry',
+          thread_id: 'th-live',
+          turn_id: 'turn-1',
+          run_id: 'run-1',
+          role: 'assistant',
+          status: 'streaming',
+          attempt_epoch: 1,
+          content: 'old transient answer',
+          blocks: [
+            activity,
+            { type: 'thinking', content: 'old transient thinking' },
+            { type: 'markdown', content: 'old transient answer' },
+          ],
+        }),
+      ],
+    });
+    const restarted = applyFlowerLiveEvent(initial, 0, event(1, 'message.started', {
+      message_id: 'assistant-retry', role: 'assistant', status: 'streaming', created_at_ms: 300, attempt_epoch: 2,
+    }));
+    expect(restarted.thread.messages[1]?.blocks?.[0]).toEqual(activity);
+
+    const projected = applyEvents(restarted.thread, restarted.cursor, [
+      event(2, 'message.block_set', {
+        message_id: 'assistant-retry', block_index: 1, block: { type: 'markdown', content: '' },
+      }),
+      event(3, 'message.block_set', {
+        message_id: 'assistant-retry', block_index: 2, block: { type: 'markdown', content: '' },
+      }),
+      event(4, 'message.block_started', {
+        message_id: 'assistant-retry', block_index: 1, block_type: 'markdown',
+      }),
+      event(5, 'message.block_delta', {
+        message_id: 'assistant-retry', block_index: 1, delta: 'retried answer',
+      }),
+    ]);
+    const retried = projected.thread.messages.find((item) => item.id === 'assistant-retry');
+    expect(retried?.blocks?.[0]).toEqual(activity);
+    expect(retried?.content).toBe('retried answer');
+    expect(JSON.stringify(retried?.blocks)).not.toContain('old transient');
   });
 
   it('requires message.started to carry the owning TurnID before creating a row', () => {

@@ -441,7 +441,7 @@ function upsertStreamingAssistantMessage(
   const currentAttemptEpoch = Math.max(0, Math.floor(Number(current?.attempt_epoch ?? 0)));
   attemptEpoch = Math.max(0, Math.floor(Number(attemptEpoch || 0)));
   if (current && attemptEpoch > 0 && currentAttemptEpoch > attemptEpoch) return thread;
-  const resetForNewAttempt = Boolean(current && attemptEpoch > currentAttemptEpoch);
+  const newerAttempt = Boolean(current && attemptEpoch > currentAttemptEpoch);
   const nextMessage: FlowerChatMessage = current
     ? {
         ...current,
@@ -449,11 +449,11 @@ function upsertStreamingAssistantMessage(
         turn_id: turnID,
         run_id: runID,
         role: 'assistant',
-        status: current.status === 'complete' && !resetForNewAttempt ? current.status : 'streaming',
-        content: resetForNewAttempt ? '' : current.content,
-        blocks: resetForNewAttempt ? [] : current.blocks,
-        created_at_ms: resetForNewAttempt ? createdAtMs : current.created_at_ms || createdAtMs,
-        active_cursor: current.status === 'complete' && !resetForNewAttempt ? current.active_cursor : true,
+        status: current.status === 'complete' && !newerAttempt ? current.status : 'streaming',
+        content: current.content,
+        blocks: current.blocks,
+        created_at_ms: current.created_at_ms || createdAtMs,
+        active_cursor: current.status === 'complete' && !newerAttempt ? current.active_cursor : true,
         ...(attemptEpoch > 0 ? { attempt_epoch: attemptEpoch } : {}),
       }
     : {
