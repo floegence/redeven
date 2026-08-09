@@ -228,26 +228,6 @@ function reconcileActiveRunPresentation(thread: FlowerThreadSnapshot): FlowerThr
   return next;
 }
 
-function applyCanonicalTerminalPresentation(
-  thread: FlowerThreadSnapshot,
-  messages: readonly FlowerChatMessage[],
-  runID: string,
-): FlowerThreadSnapshot {
-  const canonicalRunID = trim(runID);
-  if (!canonicalRunID) return thread;
-  const latestAssistant = [...messages]
-    .reverse()
-    .find((message) => message.role === 'assistant' && trim(message.run_id) === canonicalRunID);
-  if (!latestAssistant || latestAssistant.status !== 'complete') return thread;
-  const { active_run_id: _activeRunID, error: _error, ...rest } = thread;
-  return {
-    ...rest,
-    status: 'success',
-    model_io_status: null,
-    input_request: null,
-  };
-}
-
 function preserveCanonicalTerminalState(
   projected: FlowerThreadSnapshot,
   canonical: FlowerThreadSnapshot,
@@ -736,15 +716,7 @@ export function applyFlowerLiveEvent(
       if (event.payload.live_state) {
         next = applyLiveMaterializedState(next, event.payload.live_state);
       }
-      const canonicalHasCompleteAssistant = event.payload.messages.some((message) => (
-        message.role === 'assistant'
-        && message.status === 'complete'
-        && trim(message.run_id) === canonicalRunID
-      ));
-      next = canonicalThread && !canonicalHasCompleteAssistant
-        ? preserveCanonicalTerminalState(next, canonicalThread)
-        : next;
-      next = applyCanonicalTerminalPresentation(next, event.payload.messages, canonicalRunID);
+      next = canonicalThread ? preserveCanonicalTerminalState(next, canonicalThread) : next;
       if (Number(next.queued_turn_count ?? 0) === 0) {
         next = { ...next, queued_turns: [] };
       }

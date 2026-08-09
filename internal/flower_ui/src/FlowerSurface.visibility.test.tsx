@@ -1220,10 +1220,34 @@ describe('FlowerSurface companion visibility lifecycle', () => {
       loadThread,
       connectLiveStream,
     });
+    const draftCoordinator = createFlowerComposerDraftCoordinator();
+    draftCoordinator.open(threadIDs[0]).mutate((value) => ({
+      ...value,
+      attachments: [{
+        local_id: 'local-lru-attachment',
+        source: 'file',
+        name: 'lru-notes.txt',
+        mime_type: 'text/plain',
+        size_bytes: 9,
+        upload_request_id: 'request-lru-attachment',
+        attempt_state: 'staged_ready',
+        staged: {
+          attachment_id: 'upl_lru_attachment________',
+          name: 'lru-notes.txt',
+          mime_type: 'text/plain',
+          size_bytes: 9,
+          digest_sha256: 'a'.repeat(64),
+          source: 'file',
+          capability_revision: 'lru-capability',
+          locator: 'attachment://v1/upl_lru_attachment/lru-notes.txt',
+        },
+      }],
+    }));
     const [focusRequest, setFocusRequest] = createSignal({ request_id: 'focus-lru-1', thread_id: threadIDs[0] });
     dispose = render(() => (
-      <FlowerSurface
+      <FlowerSurfaceComponent
         adapter={harness.adapter}
+        draftCoordinator={draftCoordinator}
         notify={() => undefined}
         presentation="full"
         companionOpen
@@ -1234,6 +1258,7 @@ describe('FlowerSurface companion visibility lifecycle', () => {
       />
     ), host);
     await waitUntil(() => host.textContent?.includes(`Cached detail for ${threadIDs[0]}`) === true, 'first detail did not load');
+    await waitUntil(() => host.textContent?.includes('lru-notes.txt') === true, 'thread attachment did not hydrate');
     const textarea = host.querySelector('textarea') as HTMLTextAreaElement;
     textarea.value = 'Keep this thread-specific draft';
     textarea.dispatchEvent(new Event('input', { bubbles: true }));
@@ -1251,6 +1276,9 @@ describe('FlowerSurface companion visibility lifecycle', () => {
     await waitUntil(() => loadCounts.get(threadIDs[0]) === 2, 'evicted detail did not request canonical bootstrap');
     expect(host.textContent).not.toContain(`Cached detail for ${threadIDs[0]}`);
     expect((host.querySelector('textarea') as HTMLTextAreaElement).value).toBe('Keep this thread-specific draft');
+    expect(host.textContent).toContain('lru-notes.txt');
+    expect(draftCoordinator.read(threadIDs[0]).value.attachments).toHaveLength(1);
+    expect(document.activeElement).toBe(host.querySelector('textarea'));
 
     firstReload.resolve(detailFor(threadIDs[0], 'Canonical detail after eviction'));
     await waitUntil(
