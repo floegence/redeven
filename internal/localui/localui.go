@@ -111,11 +111,14 @@ type Server struct {
 
 	latestVersionResolver latestVersionResolver
 
-	pendingMu     sync.Mutex
-	pending       map[string]pendingDirect
-	directMu      sync.Mutex
-	directClosing bool
-	pluginAccess  map[string]*pluginAccessSession
+	// Lock order is pendingMu -> directMu when both admission and active state
+	// must change atomically. authMu is never held with either lock.
+	pendingMu           sync.Mutex
+	pending             map[string]pendingDirect
+	directMu            sync.Mutex
+	directClosing       bool
+	pluginAccess        map[string]*pluginAccessSession
+	activePluginSession map[string]activePluginSessionBinding
 
 	authorityMu        sync.RWMutex
 	networkAuthorities map[string]struct{}
@@ -159,7 +162,11 @@ type pluginAccessSession struct {
 	state     pluginAccessState
 	expiresAt time.Time
 	pending   map[string]struct{}
-	sessions  map[string]flowersec.Session
+}
+
+type activePluginSessionBinding struct {
+	accessSessionID string
+	session         flowersec.Session
 }
 
 type localAccessSessionContextKey struct{}
@@ -298,6 +305,7 @@ func New(opts Options) (*Server, error) {
 		exposure:               exposure,
 		pending:                make(map[string]pendingDirect),
 		pluginAccess:           make(map[string]*pluginAccessSession),
+		activePluginSession:    make(map[string]activePluginSessionBinding),
 		authRecords:            make(map[string]controlplane.AuthorizationRecord),
 		authChannels:           make(map[string]string),
 		handlerCleanup:         make(map[string]func()),
@@ -366,6 +374,7 @@ func (s *Server) configureAcceptor() error {
 			channelID := strings.TrimSpace(endpointID)
 			pending, ok := s.activateAcceptedSession(channelID, current)
 			if !ok {
+				s.releaseAcceptedSession(channelID)
 				if s.log != nil {
 					s.log.Warn("reject accepted local Flowersec session", "endpoint_id", channelID)
 				}
@@ -998,6 +1007,9 @@ func (s *Server) handlePluginPlatform(w http.ResponseWriter, r *http.Request) {
 	next.Header.Del(sessionhop.HeaderPluginSessionCredential)
 	next.Header.Del(sessionhop.HeaderChannelID)
 	s.appServer.ServeHTTP(w, appserver.WithLocalUIPluginRoute(next, channelID))
+	if _, stillActive := s.a.ResolvePluginSessionCredential(credential); !stillActive {
+		s.removeActivePluginSessionBinding(channelID)
+	}
 }
 
 func (s *Server) handleCodeSpace(w http.ResponseWriter, r *http.Request) {
@@ -1447,13 +1459,15 @@ func (s *Server) mintPending(meta session.Meta, wsURL string, traceID, accessSes
 	if s.pluginAccess == nil {
 		s.pluginAccess = make(map[string]*pluginAccessSession)
 	}
+	if s.activePluginSession == nil {
+		s.activePluginSession = make(map[string]activePluginSessionBinding)
+	}
 	access := s.pluginAccess[accessSessionID]
 	if access == nil {
 		access = &pluginAccessSession{
 			state:     pluginAccessActive,
 			expiresAt: accessExpiresAt,
 			pending:   make(map[string]struct{}),
-			sessions:  make(map[string]flowersec.Session),
 		}
 		s.pluginAccess[accessSessionID] = access
 	}
@@ -1778,21 +1792,23 @@ func (s *Server) resolvePending(channelID string) (pendingDirect, bool) {
 	now := time.Now().Unix()
 
 	s.pendingMu.Lock()
-	defer s.pendingMu.Unlock()
-
 	p, ok := s.pending[id]
 	if !ok {
+		s.pendingMu.Unlock()
 		return pendingDirect{}, false
 	}
 	if p.initExpireAtUnixS <= 0 || now > p.initExpireAtUnixS {
 		delete(s.pending, id)
+		s.pendingMu.Unlock()
 		s.removePendingAccessBinding(p.accessSessionID, id)
+		s.releaseAcceptedSessionAuthorization(id)
 		return pendingDirect{}, false
 	}
+	s.pendingMu.Unlock()
 	return p, true
 }
 
-func (s *Server) releaseAcceptedSession(channelID string) {
+func (s *Server) releaseAcceptedSessionAuthorization(channelID string) {
 	if s == nil {
 		return
 	}
@@ -1813,18 +1829,36 @@ func (s *Server) releaseAcceptedSession(channelID string) {
 	if cleanup != nil {
 		cleanup()
 	}
-	s.pendingMu.Lock()
-	pending, ok := s.pending[id]
-	if ok {
-		delete(s.pending, id)
+}
+
+func (s *Server) releaseAcceptedSession(channelID string) {
+	if s == nil {
+		return
 	}
-	s.pendingMu.Unlock()
-	if ok {
-		s.removePendingAccessBinding(pending.accessSessionID, id)
-		if !s.accessEnabled() {
-			s.closePluginAccessSession(pending.accessSessionID)
+	id := strings.TrimSpace(channelID)
+	if id == "" {
+		return
+	}
+	s.releaseAcceptedSessionAuthorization(id)
+	var accessSessionID string
+	s.pendingMu.Lock()
+	s.directMu.Lock()
+	if pending, ok := s.pending[id]; ok {
+		delete(s.pending, id)
+		accessSessionID = pending.accessSessionID
+		if access := s.pluginAccess[pending.accessSessionID]; access != nil {
+			delete(access.pending, id)
 		}
 	}
+	if binding, ok := s.activePluginSession[id]; ok {
+		delete(s.activePluginSession, id)
+		accessSessionID = binding.accessSessionID
+	}
+	if accessSessionID != "" {
+		s.removePluginAccessIfUnusedLocked(accessSessionID)
+	}
+	s.directMu.Unlock()
+	s.pendingMu.Unlock()
 }
 
 func (s *Server) handleDirectWS(w http.ResponseWriter, r *http.Request) {
@@ -1890,29 +1924,34 @@ func (s *Server) activateAcceptedSession(channelID string, current flowersec.Ses
 	if id == "" {
 		return pendingDirect{}, false
 	}
+	now := time.Now()
 	s.pendingMu.Lock()
-	pending, ok := s.pending[id]
-	if !ok || pending.initExpireAtUnixS <= 0 || time.Now().Unix() > pending.initExpireAtUnixS {
-		s.pendingMu.Unlock()
-		return pendingDirect{}, false
-	}
 	s.directMu.Lock()
-	s.pendingMu.Unlock()
 	defer s.directMu.Unlock()
-	if s.directClosing {
+	defer s.pendingMu.Unlock()
+	pending, ok := s.pending[id]
+	if !ok {
 		return pendingDirect{}, false
 	}
 	access := s.pluginAccess[pending.accessSessionID]
-	if access == nil || access.state != pluginAccessActive || (!access.expiresAt.IsZero() && !time.Now().Before(access.expiresAt)) {
+	if pending.initExpireAtUnixS <= 0 || now.Unix() > pending.initExpireAtUnixS || s.directClosing ||
+		access == nil || access.state != pluginAccessActive || (!access.expiresAt.IsZero() && !now.Before(access.expiresAt)) {
+		delete(s.pending, id)
+		if access != nil {
+			delete(access.pending, id)
+			s.removePluginAccessIfUnusedLocked(pending.accessSessionID)
+		}
 		return pendingDirect{}, false
 	}
-	if access.sessions == nil {
-		access.sessions = make(map[string]flowersec.Session)
-	}
-	if _, exists := access.sessions[id]; exists {
+	if _, exists := s.activePluginSession[id]; exists {
 		return pendingDirect{}, false
 	}
-	access.sessions[id] = current
+	delete(s.pending, id)
+	delete(access.pending, id)
+	s.activePluginSession[id] = activePluginSessionBinding{
+		accessSessionID: pending.accessSessionID,
+		session:         current,
+	}
 	return pending, true
 }
 
@@ -1922,7 +1961,7 @@ func (s *Server) beginDirectShutdown() []flowersec.Session {
 	}
 	s.directMu.Lock()
 	s.directClosing = true
-	sessions := make([]flowersec.Session, 0)
+	sessions := make([]flowersec.Session, 0, len(s.activePluginSession))
 	accessSessionIDs := make([]string, 0, len(s.pluginAccess))
 	for accessSessionID, access := range s.pluginAccess {
 		if access == nil {
@@ -1930,11 +1969,14 @@ func (s *Server) beginDirectShutdown() []flowersec.Session {
 		}
 		accessSessionIDs = append(accessSessionIDs, accessSessionID)
 		access.state = pluginAccessClosing
-		for _, current := range access.sessions {
-			sessions = append(sessions, current)
+	}
+	for _, binding := range s.activePluginSession {
+		if binding.session != nil {
+			sessions = append(sessions, binding.session)
 		}
 	}
 	s.pluginAccess = make(map[string]*pluginAccessSession)
+	s.activePluginSession = make(map[string]activePluginSessionBinding)
 	s.directMu.Unlock()
 
 	s.pendingMu.Lock()
@@ -1975,11 +2017,44 @@ func (s *Server) removePendingAccessBinding(accessSessionID, channelID string) {
 		return
 	}
 	delete(access.pending, strings.TrimSpace(channelID))
-	delete(access.sessions, strings.TrimSpace(channelID))
-	if access.state == pluginAccessClosing && len(access.pending) == 0 && len(access.sessions) == 0 {
-		access.state = pluginAccessClosed
-		delete(s.pluginAccess, strings.TrimSpace(accessSessionID))
+	s.removePluginAccessIfUnusedLocked(accessSessionID)
+}
+
+func (s *Server) removeActivePluginSessionBinding(channelID string) {
+	if s == nil {
+		return
 	}
+	channelID = strings.TrimSpace(channelID)
+	if channelID == "" {
+		return
+	}
+	s.directMu.Lock()
+	binding, ok := s.activePluginSession[channelID]
+	if ok {
+		delete(s.activePluginSession, channelID)
+		s.removePluginAccessIfUnusedLocked(binding.accessSessionID)
+	}
+	s.directMu.Unlock()
+}
+
+func (s *Server) pluginAccessHasActiveLocked(accessSessionID string) bool {
+	accessSessionID = strings.TrimSpace(accessSessionID)
+	for _, binding := range s.activePluginSession {
+		if binding.accessSessionID == accessSessionID {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Server) removePluginAccessIfUnusedLocked(accessSessionID string) {
+	accessSessionID = strings.TrimSpace(accessSessionID)
+	access := s.pluginAccess[accessSessionID]
+	if access == nil || len(access.pending) != 0 || s.pluginAccessHasActiveLocked(accessSessionID) {
+		return
+	}
+	access.state = pluginAccessClosed
+	delete(s.pluginAccess, accessSessionID)
 }
 
 func (s *Server) pluginAccessAllowsRequest(r *http.Request, channelID string) bool {
@@ -1991,22 +2066,17 @@ func (s *Server) pluginAccessAllowsRequest(r *http.Request, channelID string) bo
 		return false
 	}
 	id := strings.TrimSpace(channelID)
-	s.pendingMu.Lock()
-	pending, exists := s.pending[id]
-	s.pendingMu.Unlock()
+	s.directMu.Lock()
+	defer s.directMu.Unlock()
+	binding, exists := s.activePluginSession[id]
 	if !exists {
 		return false
 	}
-	s.directMu.Lock()
-	defer s.directMu.Unlock()
-	access := s.pluginAccess[pending.accessSessionID]
+	access := s.pluginAccess[binding.accessSessionID]
 	if access == nil || access.state != pluginAccessActive || (!access.expiresAt.IsZero() && !time.Now().Before(access.expiresAt)) {
 		return false
 	}
-	if _, active := access.sessions[id]; !active {
-		return false
-	}
-	return requestAccessSessionID == "" || requestAccessSessionID == pending.accessSessionID
+	return requestAccessSessionID == "" || requestAccessSessionID == binding.accessSessionID
 }
 
 func (s *Server) closePluginAccessSession(accessSessionID string) {
@@ -2028,9 +2098,15 @@ func (s *Server) closePluginAccessSession(accessSessionID string) {
 	for channelID := range access.pending {
 		pending = append(pending, channelID)
 	}
-	sessions := make([]flowersec.Session, 0, len(access.sessions))
-	for _, current := range access.sessions {
-		sessions = append(sessions, current)
+	sessions := make([]flowersec.Session, 0)
+	for channelID, binding := range s.activePluginSession {
+		if binding.accessSessionID != accessSessionID {
+			continue
+		}
+		if binding.session != nil {
+			sessions = append(sessions, binding.session)
+		}
+		delete(s.activePluginSession, channelID)
 	}
 	s.directMu.Unlock()
 	if s.a != nil {
@@ -2049,12 +2125,8 @@ func (s *Server) closePluginAccessSession(accessSessionID string) {
 	if current := s.pluginAccess[accessSessionID]; current != nil {
 		for _, channelID := range pending {
 			delete(current.pending, channelID)
-			delete(current.sessions, channelID)
 		}
-		if len(current.sessions) == 0 {
-			current.state = pluginAccessClosed
-			delete(s.pluginAccess, accessSessionID)
-		}
+		s.removePluginAccessIfUnusedLocked(accessSessionID)
 	}
 	s.directMu.Unlock()
 	for _, current := range sessions {
@@ -2094,22 +2166,31 @@ func (s *Server) sweepLoop(ctx context.Context) {
 }
 
 func (s *Server) sweepExpired() {
+	s.sweepExpiredAt(time.Now())
+}
+
+func (s *Server) sweepExpiredAt(now time.Time) {
 	if s == nil {
 		return
 	}
-	now := time.Now().Unix()
+	nowUnix := now.Unix()
 
+	expiredChannels := make([]string, 0)
 	s.pendingMu.Lock()
 	for k, v := range s.pending {
-		if v.initExpireAtUnixS > 0 && now > v.initExpireAtUnixS {
+		if v.initExpireAtUnixS > 0 && nowUnix > v.initExpireAtUnixS {
 			delete(s.pending, k)
 			s.removePendingAccessBinding(v.accessSessionID, k)
+			expiredChannels = append(expiredChannels, k)
 		}
 	}
 	s.pendingMu.Unlock()
+	for _, channelID := range expiredChannels {
+		s.releaseAcceptedSessionAuthorization(channelID)
+	}
 
 	if s.accessGate != nil {
-		for _, expired := range s.accessGate.TakeExpiredLocalSessions(time.Now()) {
+		for _, expired := range s.accessGate.TakeExpiredLocalSessions(now) {
 			s.closePluginAccessSession(expired.AccessSessionID)
 		}
 	}

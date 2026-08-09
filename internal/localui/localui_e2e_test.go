@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/json"
+	"io"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
@@ -16,6 +17,7 @@ import (
 	flowersec "github.com/floegence/flowersec/flowersec-go/v2"
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/accessrpc"
+	"github.com/floegence/redeven/internal/sessionhop"
 	"github.com/floegence/redeven/internal/terminal"
 )
 
@@ -33,17 +35,112 @@ func TestServer_E2E_DesktopBridgeDynamicLoopbackOriginConnectsDirectSession(t *t
 	assertDirectStateEventuallyEmpty(t, s)
 }
 
+func TestServer_E2E_DesktopBridgePluginAccessSurvivesAdmissionExpiry(t *testing.T) {
+	s := newDesktopBridgeTestServer(t, nil)
+	s.appServer = s.a.CodeAppServer()
+
+	bridge := httptest.NewServer(s.HandlerForDesktopBridge())
+	defer bridge.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	envelope := mintDesktopBridgeArtifact(t, bridge.Client(), bridge.URL, "")
+	current := connectDesktopBridgeArtifact(t, ctx, envelope.ConnectArtifact, bridge.URL)
+	defer current.Close()
+	assertDesktopBridgeSessionReady(t, ctx, current)
+	assertPluginCatalogEventuallyStatus(t, bridge.Client(), bridge.URL, envelope.PluginSessionCredential, http.StatusOK)
+
+	s.pendingMu.Lock()
+	_, stillPending := s.pending[envelope.ChannelID]
+	s.pendingMu.Unlock()
+	s.directMu.Lock()
+	activeBinding, active := s.activePluginSession[envelope.ChannelID]
+	s.directMu.Unlock()
+	if stillPending {
+		t.Fatal("accepted Desktop bridge artifact remained in pending admission state")
+	}
+	if !active || activeBinding.session == nil {
+		t.Fatal("accepted Desktop bridge session has no independent active binding")
+	}
+	s.sweepExpiredAt(time.Now().Add(5 * time.Minute))
+
+	if _, err := current.ProbeLiveness(ctx); err != nil {
+		t.Fatalf("Desktop bridge transport closed with expired admission artifact: %v", err)
+	}
+	assertPluginCatalogStatus(t, bridge.Client(), bridge.URL, envelope.PluginSessionCredential, http.StatusOK)
+}
+
+func TestServer_E2E_DesktopBridgeExpiredUnusedArtifactIsRejected(t *testing.T) {
+	s := newDesktopBridgeTestServer(t, nil)
+	bridge := httptest.NewServer(s.HandlerForDesktopBridge())
+	defer bridge.Close()
+	envelope := mintDesktopBridgeArtifact(t, bridge.Client(), bridge.URL, "")
+
+	s.sweepExpiredAt(time.Now().Add(5 * time.Minute))
+	s.pendingMu.Lock()
+	_, pending := s.pending[envelope.ChannelID]
+	s.pendingMu.Unlock()
+	s.directMu.Lock()
+	_, active := s.activePluginSession[envelope.ChannelID]
+	_, access := s.pluginAccess["direct:"+envelope.ChannelID]
+	s.directMu.Unlock()
+	if pending || active || access {
+		t.Fatalf("expired unused admission remained tracked: pending=%t active=%t access=%t", pending, active, access)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if _, err := connectDesktopBridgeArtifactResult(ctx, envelope.ConnectArtifact, bridge.URL); err == nil {
+		t.Fatal("expired unused Desktop bridge artifact connected")
+	}
+	assertDirectStateEventuallyEmpty(t, s)
+}
+
+func TestServer_E2E_DesktopBridgePluginScopeRevokeRemovesActiveBinding(t *testing.T) {
+	s := newDesktopBridgeTestServer(t, nil)
+	s.appServer = s.a.CodeAppServer()
+	bridge := httptest.NewServer(s.HandlerForDesktopBridge())
+	defer bridge.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	envelope := mintDesktopBridgeArtifact(t, bridge.Client(), bridge.URL, "")
+	current := connectDesktopBridgeArtifact(t, ctx, envelope.ConnectArtifact, bridge.URL)
+	defer current.Close()
+	assertDesktopBridgeSessionReady(t, ctx, current)
+	assertPluginCatalogEventuallyStatus(t, bridge.Client(), bridge.URL, envelope.PluginSessionCredential, http.StatusOK)
+
+	status, body := pluginRequestStatus(t, bridge.Client(), bridge.URL, envelope.PluginSessionCredential,
+		http.MethodPost, "/_redevplugin/api/plugins/session/revoke-scope", `{}`)
+	if status != http.StatusOK {
+		t.Fatalf("plugin session revoke status = %d, want 200; body=%q", status, body)
+	}
+	assertPluginCredentialEventuallyRejected(t, s, envelope.PluginSessionCredential)
+	s.directMu.Lock()
+	_, active := s.activePluginSession[envelope.ChannelID]
+	s.directMu.Unlock()
+	if active {
+		t.Fatal("plugin session scope revoke left the Local UI active binding registered")
+	}
+	assertPluginCatalogStatus(t, bridge.Client(), bridge.URL, envelope.PluginSessionCredential, http.StatusForbidden)
+}
+
 func TestServer_E2E_DesktopBridgeConsecutiveSessionsKeepTerminalRPCHandlers(t *testing.T) {
 	s := newDesktopBridgeTestServer(t, nil)
+	s.appServer = s.a.CodeAppServer()
 	bridge := httptest.NewServer(s.HandlerForDesktopBridge())
 	defer bridge.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
+	var previousCredential string
 	for attempt := 1; attempt <= 2; attempt++ {
 		envelope := mintDesktopBridgeArtifact(t, bridge.Client(), bridge.URL, "")
+		if envelope.PluginSessionCredential == previousCredential {
+			t.Fatal("consecutive Desktop sessions reused a plugin credential")
+		}
 		current := connectDesktopBridgeArtifact(t, ctx, envelope.ConnectArtifact, bridge.URL)
 		assertDesktopBridgeSessionReady(t, ctx, current)
+		assertPluginCatalogEventuallyStatus(t, bridge.Client(), bridge.URL, envelope.PluginSessionCredential, http.StatusOK)
 		var response struct {
 			Sessions []json.RawMessage `json:"sessions"`
 		}
@@ -80,11 +177,14 @@ func TestServer_E2E_DesktopBridgeConsecutiveSessionsKeepTerminalRPCHandlers(t *t
 		}
 		_ = current.Close()
 		assertDirectStateEventuallyEmpty(t, s)
+		assertPluginCatalogStatus(t, bridge.Client(), bridge.URL, envelope.PluginSessionCredential, http.StatusForbidden)
+		previousCredential = envelope.PluginSessionCredential
 	}
 }
 
 func TestServer_E2E_DesktopBridgeWindowIsolationAndOneShotArtifacts(t *testing.T) {
 	s := newDesktopBridgeTestServer(t, nil)
+	s.appServer = s.a.CodeAppServer()
 	firstBridge := httptest.NewServer(s.HandlerForDesktopBridge())
 	defer firstBridge.Close()
 	secondBridge := httptest.NewServer(s.HandlerForDesktopBridge())
@@ -103,6 +203,14 @@ func TestServer_E2E_DesktopBridgeWindowIsolationAndOneShotArtifacts(t *testing.T
 	defer secondSession.Close()
 	assertDesktopBridgeSessionReady(t, ctx, firstSession)
 	assertDesktopBridgeSessionReady(t, ctx, secondSession)
+	assertPluginCatalogEventuallyStatus(t, firstBridge.Client(), firstBridge.URL, firstArtifact.PluginSessionCredential, http.StatusOK)
+	assertPluginCatalogEventuallyStatus(t, secondBridge.Client(), secondBridge.URL, secondArtifact.PluginSessionCredential, http.StatusOK)
+	if channelID, ok := s.a.ResolvePluginSessionCredential(firstArtifact.PluginSessionCredential); !ok || channelID != firstArtifact.ChannelID {
+		t.Fatalf("first Desktop credential resolved to %q, want %q", channelID, firstArtifact.ChannelID)
+	}
+	if channelID, ok := s.a.ResolvePluginSessionCredential(secondArtifact.PluginSessionCredential); !ok || channelID != secondArtifact.ChannelID {
+		t.Fatalf("second Desktop credential resolved to %q, want %q", channelID, secondArtifact.ChannelID)
+	}
 
 	crossArtifact := mintDesktopBridgeArtifact(t, firstBridge.Client(), firstBridge.URL, "")
 	if _, err := connectDesktopBridgeArtifactResult(ctx, crossArtifact.ConnectArtifact, secondBridge.URL); err == nil {
@@ -190,6 +298,7 @@ func TestServer_E2E_DesktopBridgePasswordLogoutAndExpiry(t *testing.T) {
 	t.Run("logout", func(t *testing.T) {
 		gate := accessgate.New(accessgate.Options{Password: "secret"})
 		s := newDesktopBridgeTestServer(t, gate)
+		s.appServer = s.a.CodeAppServer()
 		bridge := httptest.NewServer(s.HandlerForDesktopBridge())
 		defer bridge.Close()
 		client := bridgeClientWithCookies(t, bridge)
@@ -200,6 +309,7 @@ func TestServer_E2E_DesktopBridgePasswordLogoutAndExpiry(t *testing.T) {
 		envelope := mintDesktopBridgeArtifact(t, client, bridge.URL, resumeToken)
 		current := connectDesktopBridgeArtifact(t, ctx, envelope.ConnectArtifact, bridge.URL)
 		assertDesktopBridgeSessionReady(t, ctx, current)
+		assertPluginCatalogEventuallyStatus(t, client, bridge.URL, envelope.PluginSessionCredential, http.StatusOK)
 
 		logoutReq, err := http.NewRequest(http.MethodPost, bridge.URL+"/api/local/access/logout", nil)
 		if err != nil {
@@ -216,6 +326,7 @@ func TestServer_E2E_DesktopBridgePasswordLogoutAndExpiry(t *testing.T) {
 		}
 		assertSessionEventuallyClosed(t, current)
 		assertDirectStateEventuallyEmpty(t, s)
+		assertPluginCredentialEventuallyRejected(t, s, envelope.PluginSessionCredential)
 		if _, err := connectDesktopBridgeArtifactResult(ctx, envelope.ConnectArtifact, bridge.URL); err == nil {
 			t.Fatal("logged-out Desktop artifact reconnected")
 		}
@@ -231,10 +342,11 @@ func TestServer_E2E_DesktopBridgePasswordLogoutAndExpiry(t *testing.T) {
 	t.Run("expiry", func(t *testing.T) {
 		gate := accessgate.New(accessgate.Options{
 			Password:        "secret",
-			ResumeTTL:       50 * time.Millisecond,
-			LocalSessionTTL: 50 * time.Millisecond,
+			ResumeTTL:       3 * time.Second,
+			LocalSessionTTL: 3 * time.Second,
 		})
 		s := newDesktopBridgeTestServer(t, gate)
+		s.appServer = s.a.CodeAppServer()
 		bridge := httptest.NewServer(s.HandlerForDesktopBridge())
 		defer bridge.Close()
 		client := bridgeClientWithCookies(t, bridge)
@@ -245,15 +357,16 @@ func TestServer_E2E_DesktopBridgePasswordLogoutAndExpiry(t *testing.T) {
 		envelope := mintDesktopBridgeArtifact(t, client, bridge.URL, resumeToken)
 		current := connectDesktopBridgeArtifact(t, ctx, envelope.ConnectArtifact, bridge.URL)
 		assertDesktopBridgeSessionReady(t, ctx, current)
+		assertPluginCatalogEventuallyStatus(t, client, bridge.URL, envelope.PluginSessionCredential, http.StatusOK)
 
-		time.Sleep(75 * time.Millisecond)
-		expired := gate.TakeExpiredLocalSessions(time.Now())
+		expired := gate.TakeExpiredLocalSessions(time.Now().Add(4 * time.Second))
 		if len(expired) != 1 {
 			t.Fatalf("expired Local UI sessions = %d, want 1", len(expired))
 		}
 		s.closePluginAccessSession(expired[0].AccessSessionID)
 		assertSessionEventuallyClosed(t, current)
 		assertDirectStateEventuallyEmpty(t, s)
+		assertPluginCredentialEventuallyRejected(t, s, envelope.PluginSessionCredential)
 		if _, err := connectDesktopBridgeArtifactResult(ctx, envelope.ConnectArtifact, bridge.URL); err == nil {
 			t.Fatal("expired Desktop artifact reconnected")
 		}
@@ -380,6 +493,68 @@ func assertDesktopBridgeSessionReady(t *testing.T, ctx context.Context, current 
 	}
 }
 
+func assertPluginCatalogEventuallyStatus(t *testing.T, client *http.Client, bridgeURL, credential string, want int) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	var got int
+	var body string
+	for time.Now().Before(deadline) {
+		got, body = pluginCatalogStatus(t, client, bridgeURL, credential)
+		if got == want {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("plugin catalog status = %d, want %d; body=%q", got, want, body)
+}
+
+func assertPluginCatalogStatus(t *testing.T, client *http.Client, bridgeURL, credential string, want int) {
+	t.Helper()
+	got, body := pluginCatalogStatus(t, client, bridgeURL, credential)
+	if got != want {
+		t.Fatalf("plugin catalog status = %d, want %d; body=%q", got, want, body)
+	}
+}
+
+func pluginCatalogStatus(t *testing.T, client *http.Client, bridgeURL, credential string) (int, string) {
+	t.Helper()
+	return pluginRequestStatus(t, client, bridgeURL, credential, http.MethodPost, "/_redevplugin/api/plugins/catalog/query", `{}`)
+}
+
+func pluginRequestStatus(t *testing.T, client *http.Client, bridgeURL, credential, method, path, body string) (int, string) {
+	t.Helper()
+	req, err := http.NewRequest(method, bridgeURL+path, strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("NewRequest plugin API error = %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", bridgeURL)
+	req.Header.Set("X-ReDevPlugin-CSRF", "redeven-env-v1")
+	req.Header.Set(sessionhop.HeaderPluginSessionCredential, credential)
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("plugin API request error = %v", err)
+	}
+	defer resp.Body.Close()
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read plugin API response error = %v", err)
+	}
+	return resp.StatusCode, string(responseBody)
+}
+
+func assertPluginCredentialEventuallyRejected(t *testing.T, s *Server, credential string) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, ok := s.a.ResolvePluginSessionCredential(credential); !ok {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("revoked Desktop plugin credential remained active")
+}
+
 func assertDirectStateEventuallyEmpty(t *testing.T, s *Server) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
@@ -389,10 +564,10 @@ func assertDirectStateEventuallyEmpty(t *testing.T, s *Server) {
 		pendingCount = len(s.pending)
 		s.pendingMu.Unlock()
 		s.directMu.Lock()
-		accessBindingCount = 0
+		accessBindingCount = len(s.activePluginSession)
 		for _, access := range s.pluginAccess {
 			if access != nil {
-				accessBindingCount += len(access.pending) + len(access.sessions)
+				accessBindingCount += len(access.pending)
 			}
 		}
 		s.directMu.Unlock()
@@ -614,20 +789,12 @@ func connectLocalDirectSession(t *testing.T, s *Server, serverURL string, certif
 
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		s.pendingMu.Lock()
-		pending, pendingOK := s.pending[channelID]
-		s.pendingMu.Unlock()
-		if pendingOK {
-			s.directMu.Lock()
-			access := s.pluginAccess[pending.accessSessionID]
-			active := false
-			if access != nil {
-				_, active = access.sessions[channelID]
-			}
-			s.directMu.Unlock()
-			if active {
-				return
-			}
+		s.directMu.Lock()
+		binding, active := s.activePluginSession[channelID]
+		access := s.pluginAccess[binding.accessSessionID]
+		s.directMu.Unlock()
+		if active && access != nil {
+			return
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
