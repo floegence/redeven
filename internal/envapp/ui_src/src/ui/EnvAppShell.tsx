@@ -273,25 +273,6 @@ const WORKBENCH_HANDOFF_ANCHOR_MAX_AGE_MS = 1_500;
 const NOTES_OVERLAY_KEYBIND = 'mod+.';
 
 const PLUGIN_CENTER_ACTIVITY_ID = 'plugin-center';
-const FLOWERSEC_CONNECT_RESOURCES = {
-  outboundRecordChunkBytes: 64 * 1024,
-  webSocketLimits: {
-    maxInboundQueuedBytes: 4 * 1024 * 1024,
-    outboundLowWatermarkBytes: 256 * 1024,
-    outboundHighWatermarkBytes: 1024 * 1024,
-    outboundHardLimitBytes: 4 * 1024 * 1024,
-    outboundDrainTimeoutMs: 10_000,
-  },
-  yamuxLimits: {
-    maxActiveStreams: 64,
-    maxInboundStreams: 32,
-    maxFrameBytes: 256 * 1024,
-    preferredOutboundFrameBytes: 64 * 1024,
-    maxStreamReceiveBytes: 256 * 1024,
-    maxSessionReceiveBytes: 16 * 1024 * 1024,
-  },
-} as const;
-
 const EnvTerminalPage = lazy(() => import('./pages/EnvTerminalPage').then((module) => ({ default: module.EnvTerminalPage })));
 const EnvMonitorPage = lazy(() => import('./pages/EnvMonitorPage').then((module) => ({ default: module.EnvMonitorPage })));
 const EnvFileBrowserPage = lazy(() => import('./pages/EnvFileBrowserPage').then((module) => ({ default: module.EnvFileBrowserPage })));
@@ -2294,9 +2275,6 @@ export function EnvAppShell() {
   const PROBE_TIMEOUT_MS = 1_200;
 
   let lastAgentRxAtMs = 0;
-  const markAgentRx = () => {
-    lastAgentRxAtMs = Date.now();
-  };
 
   let ensureInFlight: Promise<void> | null = null;
   let accessResumeClient: unknown = null;
