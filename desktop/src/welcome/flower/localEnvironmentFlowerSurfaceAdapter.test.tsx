@@ -859,6 +859,27 @@ describe('Local Environment Flower surface adapter', () => {
     expect(calls[0].body).toEqual({});
   });
 
+  it('deletes one queued turn through Desktop IPC and reloads canonical detail', async () => {
+    const calls: RuntimeFlowerRequest[] = [];
+    const bridge = bridgeFor((request) => {
+      calls.push(request);
+      if (request.path === '/_redeven_proxy/api/ai/threads/thread%20%2F1/followups/followup%20%2F2') return { ok: true };
+      if (request.path === '/_redeven_proxy/api/ai/threads/thread%20%2F1/live/bootstrap') {
+        return liveBootstrap({ thread_id: 'thread /1', queued_turn_count: 0, queued_turns: [] });
+      }
+      throw new Error(`unexpected path: ${request.path}`);
+    });
+    const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
+
+    const bootstrap = await adapter.deleteQueuedTurn?.('thread /1', 'followup /2');
+
+    expect(bootstrap?.thread.queued_turns).toEqual([]);
+    expect(calls.map((call) => `${call.method} ${call.path}`)).toEqual([
+      'DELETE /_redeven_proxy/api/ai/threads/thread%20%2F1/followups/followup%20%2F2',
+      'GET /_redeven_proxy/api/ai/threads/thread%20%2F1/live/bootstrap',
+    ]);
+  });
+
   it('deletes threads through the force-only runtime endpoint', async () => {
     const calls: RuntimeFlowerRequest[] = [];
     const bridge = bridgeFor((request) => {

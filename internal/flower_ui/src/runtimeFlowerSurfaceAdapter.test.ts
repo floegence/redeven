@@ -154,7 +154,45 @@ describe('runtime Flower surface adapter read state', () => {
 		expect(adapter.setThreadReasoningSelection).toBeUndefined();
 		expect(adapter.forkThread).toBeUndefined();
 		expect(adapter.deleteThread).toBeUndefined();
+		expect(adapter.deleteQueuedTurn).toBeUndefined();
 		expect(adapter.uploadAttachment).toBeUndefined();
+	});
+
+	it('deletes one canonical queued turn and reconciles from the thread bootstrap', async () => {
+		const deleteQueuedTurn = vi.fn(async () => undefined);
+		const loadThread = vi.fn(async () => ({
+			schema_version: 1,
+			endpoint_id: 'runtime_1',
+			thread_id: 'thread_1',
+			stream_generation: 1,
+			cursor: 4,
+			retained_from_seq: 1,
+			thread: {
+				thread_id: 'thread_1',
+				title: 'Queue',
+				title_status: 'ready',
+				model_id: 'default/gpt-5',
+				permission_type: 'approval_required',
+				working_dir: '/workspace',
+				queued_turn_count: 0,
+				run_status: 'running',
+				created_at_unix_ms: 1,
+				updated_at_unix_ms: 2,
+				last_message_at_unix_ms: 2,
+				read_status: readStatus(),
+			},
+			timeline_messages: [],
+			live_state: { thread_patch: {}, runs: {}, approval_actions: {}, input_requests: {} },
+			read_status: readStatus(),
+			generated_at_ms: 2,
+		}));
+		const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ deleteQueuedTurn, loadThread }));
+
+		const result = await adapter.deleteQueuedTurn?.(' thread_1 ', ' followup_middle ');
+
+		expect(deleteQueuedTurn).toHaveBeenCalledWith('thread_1', 'followup_middle');
+		expect(loadThread).toHaveBeenCalledWith('thread_1');
+		expect(result?.thread_id).toBe('thread_1');
 	});
 
 	it('maps the published SSE transport into typed Flower envelopes', async () => {

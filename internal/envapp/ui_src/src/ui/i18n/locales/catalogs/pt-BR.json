@@ -3844,6 +3844,8 @@
       "pendingSending": "Enviando",
       "pendingSubmission": "Enviando mensagem...",
       "pendingQueued": "Na fila",
+      "queuedSendNow": "Enviar agora",
+      "queuedDelete": "Excluir mensagem da fila",
       "scrollToLatest": "Rolar para o mais recente",
       "runErrorTitle": "O Flower não conseguiu concluir esta resposta.",
       "runErrorActionUpdateAPIKey": "Atualizar chave API",

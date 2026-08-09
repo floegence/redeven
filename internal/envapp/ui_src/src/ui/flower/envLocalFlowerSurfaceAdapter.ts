@@ -788,6 +788,10 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
           body: JSON.stringify({ lane: 'queued', ordered_followup_ids: orderedQueueIDs }),
         },
       ),
+      deleteQueuedTurn: (threadID, queueID) => fetchLocalApiJSON(
+        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/followups/${encodeURIComponent(queueID)}`,
+        { method: 'DELETE' },
+      ),
       forkThread: (threadID, body) => fetchLocalApiJSON<LoadThreadResponse>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/fork`, {
         method: 'POST',
         body: JSON.stringify(body),

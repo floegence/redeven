@@ -2412,8 +2412,8 @@ describe('FlowerSurface navigation launch/send', () => {
       thread_id: 'thread-running-send-queue',
       prompt: 'continue while running',
     }));
-    await waitFor(() => Boolean(runtime.querySelector(`[data-flower-queued-turn-id="${acceptedQueueID}"]`)));
-    expect(runtime.querySelector(`[data-flower-queued-turn-id="${acceptedQueueID}"]`)?.textContent).toContain('continue while running');
+    await waitFor(() => Boolean(runtime.querySelector(`[data-flower-queued-turn-dock-id="${acceptedQueueID}"]`)));
+    expect(runtime.querySelector(`[data-flower-queued-turn-dock-id="${acceptedQueueID}"]`)?.textContent).toContain('continue while running');
   });
 
   it('compacts a running selected thread without stopping or launching a new turn', async () => {
@@ -3032,8 +3032,7 @@ describe('FlowerSurface navigation launch/send', () => {
       thread_id: 'thread-idle-compact-pending-send',
       prompt: 'continue after compact starts',
     }));
-    await waitFor(() => runtime.querySelector(`[data-flower-queued-turn-id="${acceptedQueueID}"]`)?.textContent?.includes('continue after compact starts') ?? false);
-    expect(runtime.querySelector(`[data-flower-queued-turn-id="${acceptedQueueID}"]`)?.getAttribute('data-flower-queued-turn-state')).toBe('queued');
+    await waitFor(() => runtime.querySelector(`[data-flower-queued-turn-dock-id="${acceptedQueueID}"]`)?.textContent?.includes('continue after compact starts') ?? false);
     expect(runtime.querySelector('[data-flower-message-id="m-idle-compact-user"]')).toBeTruthy();
     expect(runtime.querySelector('[data-flower-message-id="continue after compact starts"]')).toBeNull();
     expect(compactThreadContext).toHaveBeenCalledTimes(1);
@@ -3106,8 +3105,8 @@ describe('FlowerSurface navigation launch/send', () => {
     }
 
     await waitFor(() => launchTurn.mock.calls.length === 2);
-    await waitFor(() => runtime.querySelectorAll('[data-flower-queued-turn-id]').length === 2);
-    const queuedText = Array.from(runtime.querySelectorAll('[data-flower-queued-turn-id]')).map((node) => node.textContent ?? '').join('\n');
+    await waitFor(() => runtime.querySelectorAll('[data-flower-queued-turn-dock-id]').length === 2);
+    const queuedText = Array.from(runtime.querySelectorAll('[data-flower-queued-turn-dock-id]')).map((node) => node.textContent ?? '').join('\n');
     expect((queuedText.match(/repeat queued follow-up/g) ?? []).length).toBe(2);
     expect(pendingQueueIDs).toEqual(['queue-1', 'queue-2']);
   });
@@ -3495,11 +3494,11 @@ describe('FlowerSurface navigation launch/send', () => {
     textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
     (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
 
-    await waitFor(() => Boolean(runtime.querySelector(`[data-flower-queued-turn-id="${acceptedQueueID}"]`)));
+    await waitFor(() => Boolean(runtime.querySelector(`[data-flower-queued-turn-dock-id="${acceptedQueueID}"]`)));
 
     const ids = Array.from(runtime.querySelectorAll('[data-flower-message-id]')).map((node) => node.getAttribute('data-flower-message-id'));
     expect(ids).toEqual(['m-old-continue']);
-    expect(runtime.querySelector(`[data-flower-queued-turn-id="${acceptedQueueID}"]`)?.textContent).toContain('continue');
+    expect(runtime.querySelector(`[data-flower-queued-turn-dock-id="${acceptedQueueID}"]`)?.textContent).toContain('continue');
   });
 
   it('renders the canonical user row before assistant streaming', async () => {
@@ -4282,7 +4281,7 @@ describe('FlowerSurface navigation launch/send', () => {
     textarea.value = 'replace this queued row';
     textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
     (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
-    await waitFor(() => acceptedQueueID !== '' && Boolean(runtime.querySelector(`[data-flower-queued-turn-id="${acceptedQueueID}"]`)));
+    await waitFor(() => acceptedQueueID !== '' && Boolean(runtime.querySelector(`[data-flower-queued-turn-dock-id="${acceptedQueueID}"]`)));
     expect(runtime.querySelector('[data-flower-pending-submission-id]')).toBeNull();
 
     replacement.resolve({
@@ -4323,7 +4322,7 @@ describe('FlowerSurface navigation launch/send', () => {
     });
 
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="entry-user-live-canonical"]')));
-    expect(runtime.querySelector(`[data-flower-queued-turn-id="${acceptedQueueID}"]`)).toBeNull();
+    expect(runtime.querySelector(`[data-flower-queued-turn-dock-id="${acceptedQueueID}"]`)).toBeNull();
     expect(runtime.querySelectorAll('[data-flower-message-role="user"]')).toHaveLength(1);
   });
 
@@ -4352,7 +4351,7 @@ describe('FlowerSurface navigation launch/send', () => {
     expect(loadThread.mock.calls.length).toBeGreaterThanOrEqual(1);
     expect(loadThread).toHaveBeenCalledWith('thread-refresh-failed-after-send');
     expect(runtime.querySelector('[data-flower-message-id]')).toBeNull();
-    expect(runtime.querySelector('[data-flower-queued-turn-id]')).toBeNull();
+    expect(runtime.querySelector('[data-flower-queued-turn-dock-id]')).toBeNull();
     expect(runtime.querySelector('[data-flower-pending-submission-id]')?.textContent).toContain('send exactly once');
     expect(runtime.querySelector('[data-flower-pending-submission-id]')?.getAttribute('data-flower-pending-submission-phase')).toBe('awaiting_projection');
     expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('');
@@ -4389,7 +4388,7 @@ describe('FlowerSurface navigation launch/send', () => {
     await waitFor(() => launchTurn.mock.calls.length === 1 && loadThread.mock.calls.length >= 1);
     expect(clientRequestID).toMatch(/^client_/);
     expect(runtime.querySelector('[data-flower-message-id]')).toBeNull();
-    expect(runtime.querySelector('[data-flower-queued-turn-id]')).toBeNull();
+    expect(runtime.querySelector('[data-flower-queued-turn-dock-id]')).toBeNull();
     expect(runtime.querySelector('[data-flower-pending-submission-id]')?.textContent).toContain('reconcile this exact turn');
     expect(runtime.querySelector('[data-flower-pending-submission-id]')?.getAttribute('data-flower-pending-submission-phase')).toBe('awaiting_projection');
     expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('reconcile this exact turn');

@@ -103,6 +103,8 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       pendingSending: t(i18n, k('chat.pendingSending')),
       pendingSubmission: t(i18n, k('chat.pendingSubmission')),
       pendingQueued: t(i18n, k('chat.pendingQueued')),
+      queuedSendNow: t(i18n, k('chat.queuedSendNow')),
+      queuedDelete: t(i18n, k('chat.queuedDelete')),
       scrollToLatest: t(i18n, k('chat.scrollToLatest')),
       runtimeRestartedDivider: t(i18n, k('chat.runtimeRestartedDivider')),
       runErrorTitle: t(i18n, k('chat.runErrorTitle')),

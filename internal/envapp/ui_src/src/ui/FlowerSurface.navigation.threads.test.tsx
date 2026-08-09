@@ -973,14 +973,15 @@ describe('FlowerSurface navigation threads', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-queued-attachments"] button')));
     (runtime.querySelector('[data-thread-id="thread-queued-attachments"] button') as HTMLButtonElement).click();
-		await waitFor(() => Boolean(runtime.querySelector('[data-flower-queued-turn-id="queue-queued-attachments"]')));
+		await waitFor(() => Boolean(runtime.querySelector('[data-flower-queued-turn-dock-id="queue-queued-attachments"]')));
 
-		const queued = runtime.querySelector('[data-flower-queued-turn-id="queue-queued-attachments"]') as HTMLElement;
-    expect(queued.querySelector('.flower-message-image img')?.getAttribute('src')).toBe('/_redeven_proxy/api/ai/uploads/image-queued');
-    expect(queued.querySelector('.flower-message-file')?.getAttribute('href')).toBe('/_redeven_proxy/api/ai/uploads/file-queued');
-    expect(queued.textContent).toContain('notes.txt');
+		const queued = runtime.querySelector('[data-flower-queued-turn-dock-id="queue-queued-attachments"]') as HTMLElement;
+    expect(queued.querySelector('.flower-message-image')).toBeNull();
+    expect(queued.querySelector('.flower-message-file')).toBeNull();
+    expect(queued.querySelectorAll('.flower-queued-turn-compact-meta')).toHaveLength(2);
+    expect(queued.textContent).toContain('2');
     expect(queued.textContent).toContain('Inspect these queued files.');
-    expect(queued.querySelector('[data-flower-chat-context-chip="true"]')).toBeTruthy();
+    expect(queued.querySelector('[data-flower-chat-context-chip="true"]')).toBeNull();
     expect(runtime.querySelector('[data-flower-message-id]')).toBeNull();
   });
 

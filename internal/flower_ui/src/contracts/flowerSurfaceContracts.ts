@@ -1357,6 +1357,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   setThreadModel?: (threadID: string, modelID: string) => Promise<FlowerLiveBootstrap>;
   setThreadReasoningSelection?: (threadID: string, selection: FlowerReasoningSelection | undefined) => Promise<FlowerLiveBootstrap>;
   reorderQueuedTurns?: (threadID: string, orderedQueueIDs: readonly string[]) => Promise<FlowerLiveBootstrap>;
+  deleteQueuedTurn?: (threadID: string, queueID: string) => Promise<FlowerLiveBootstrap>;
   forkThread?: (threadID: string, clientRequestID: string) => Promise<FlowerLiveBootstrap>;
   deleteThread?: (threadID: string) => Promise<FlowerThreadDeleteOutcome>;
   resolveHandler: (input?: FlowerResolveHandlerInput) => Promise<FlowerRouterDecision>;

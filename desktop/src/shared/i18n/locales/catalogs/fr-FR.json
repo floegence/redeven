@@ -89,6 +89,8 @@
       "pendingSending": "Envoi en cours",
       "pendingSubmission": "Envoi du message...",
       "pendingQueued": "En file d’attente",
+      "queuedSendNow": "Envoyer maintenant",
+      "queuedDelete": "Supprimer le message en attente",
       "scrollToLatest": "Aller au message le plus récent",
       "runErrorTitle": "Flower n’a pas pu terminer cette réponse.",
       "runErrorActionUpdateAPIKey": "Mettre à jour la clé API",

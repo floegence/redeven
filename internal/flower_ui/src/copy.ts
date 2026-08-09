@@ -319,6 +319,8 @@ export type FlowerSurfaceCopy = Readonly<{
     pendingSending: string;
     pendingSubmission: string;
     pendingQueued: string;
+    queuedSendNow: string;
+    queuedDelete: string;
     scrollToLatest: string;
     runtimeRestartedDivider: string;
     runErrorTitle: string;
@@ -540,6 +542,8 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     pendingSending: 'Sending',
     pendingSubmission: 'Sending message...',
     pendingQueued: 'Queued',
+    queuedSendNow: 'Send now',
+    queuedDelete: 'Delete queued message',
     scrollToLatest: 'Scroll to latest',
     runtimeRestartedDivider: 'Redeven runtime restarted',
     runErrorTitle: 'Flower could not finish this reply.',

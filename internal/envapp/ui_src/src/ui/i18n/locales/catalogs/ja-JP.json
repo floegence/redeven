@@ -3844,6 +3844,8 @@
       "pendingSending": "送信中",
       "pendingSubmission": "メッセージを送信中...",
       "pendingQueued": "キュー済み",
+      "queuedSendNow": "今すぐ送信",
+      "queuedDelete": "キュー内のメッセージを削除",
       "scrollToLatest": "最新へスクロール",
       "runErrorTitle": "Flower はこの返信を完了できませんでした。",
       "runErrorActionUpdateAPIKey": "API キーを更新します",

@@ -90,6 +90,8 @@ export const flowerSurfaceEnUS = {
     pendingSending: 'Sending',
     pendingSubmission: 'Sending message...',
     pendingQueued: 'Queued',
+    queuedSendNow: 'Send now',
+    queuedDelete: 'Delete queued message',
     scrollToLatest: 'Scroll to latest',
     runtimeRestartedDivider: 'Redeven runtime restarted',
     runErrorTitle: 'Flower could not finish this reply.',

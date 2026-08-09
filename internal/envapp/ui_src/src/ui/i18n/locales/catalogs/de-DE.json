@@ -3844,6 +3844,8 @@
       "pendingSending": "Wird gesendet",
       "pendingSubmission": "Nachricht wird gesendet...",
       "pendingQueued": "In Warteschlange",
+      "queuedSendNow": "Jetzt senden",
+      "queuedDelete": "Nachricht aus Warteschlange löschen",
       "scrollToLatest": "Zum neuesten scrollen",
       "runErrorTitle": "Flower konnte diese Antwort nicht abschließen.",
       "runErrorActionUpdateAPIKey": "API-Schlüssel aktualisieren",
