@@ -123,6 +123,7 @@ export type FlowerRuntimeTransport = Readonly<{
   markThreadRead(threadID: string, input: MarkThreadReadInput): Promise<MarkThreadReadResponse>;
   patchThread(threadID: string, input: ThreadPatchInput): Promise<LoadThreadResponse>;
   reorderQueuedTurns?(threadID: string, orderedQueueIDs: readonly string[]): Promise<unknown>;
+  deleteQueuedTurn?(threadID: string, queueID: string): Promise<unknown>;
   forkThread(threadID: string, input: Readonly<{ client_request_id: string }>): Promise<LoadThreadResponse>;
   deleteThread?(threadID: string): Promise<FlowerThreadDeleteTransportOutcome>;
   submitApproval(input: RuntimeApprovalSubmitInput): Promise<FlowerApprovalDecisionReceipt>;
@@ -348,6 +349,16 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
             throw new Error('Invalid Flower queued turn order.');
           }
           await options.transport.reorderQueuedTurns!(tid, queueIDs);
+          return loadThread(tid);
+        },
+      } : {}),
+      ...(options.transport.deleteQueuedTurn ? {
+        deleteQueuedTurn: async (threadID: string, queueID: string) => {
+          const tid = trim(threadID);
+          const qid = trim(queueID);
+          if (!tid) throw new Error(missingThreadIDMessage(options));
+          if (!qid) throw new Error('Missing Flower queued turn id.');
+          await options.transport.deleteQueuedTurn!(tid, qid);
           return loadThread(tid);
         },
       } : {}),

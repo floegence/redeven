@@ -3972,6 +3972,8 @@
       "pendingSending": "Отправка",
       "pendingSubmission": "Отправка сообщения...",
       "pendingQueued": "В очереди",
+      "queuedSendNow": "Отправить сейчас",
+      "queuedDelete": "Удалить сообщение из очереди",
       "scrollToLatest": "Прокрутить к последнему",
       "runErrorTitle": "Flower не смог завершить этот ответ.",
       "runErrorActionUpdateAPIKey": "Обновить ключ API",

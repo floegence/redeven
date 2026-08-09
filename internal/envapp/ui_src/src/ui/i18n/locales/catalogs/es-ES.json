@@ -3844,6 +3844,8 @@
       "pendingSending": "Enviando",
       "pendingSubmission": "Enviando mensaje...",
       "pendingQueued": "En cola",
+      "queuedSendNow": "Enviar ahora",
+      "queuedDelete": "Eliminar mensaje en cola",
       "scrollToLatest": "Ir a lo más reciente",
       "runErrorTitle": "Flower no pudo completar esta respuesta.",
       "runErrorActionUpdateAPIKey": "Actualizar clave API",

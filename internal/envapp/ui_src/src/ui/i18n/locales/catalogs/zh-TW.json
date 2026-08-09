@@ -3844,6 +3844,8 @@
       "pendingSending": "傳送中",
       "pendingSubmission": "訊息傳送中...",
       "pendingQueued": "已排入佇列",
+      "queuedSendNow": "立即傳送",
+      "queuedDelete": "刪除佇列訊息",
       "scrollToLatest": "捲動到最新",
       "runErrorTitle": "Flower 未能完成這次回覆。",
       "runErrorActionUpdateAPIKey": "更新 API 金鑰",

@@ -89,6 +89,8 @@
     "pendingSending": "Sending",
     "pendingSubmission": "Sending message...",
     "pendingQueued": "Queued",
+    "queuedSendNow": "Send now",
+    "queuedDelete": "Delete queued message",
     "scrollToLatest": "Scroll to latest",
     "runErrorTitle": "Flower could not finish this reply.",
     "runErrorActionUpdateAPIKey": "Update API key",

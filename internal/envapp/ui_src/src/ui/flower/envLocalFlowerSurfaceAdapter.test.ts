@@ -103,6 +103,28 @@ function liveBootstrap(threadID: string, status = 'canceled') {
 }
 
 describe('Env local Flower surface adapter', () => {
+	it('deletes a canonical queued turn through the existing followup route before reloading detail', async () => {
+		fetchMock
+			.mockResolvedValueOnce(jsonResponse({ ok: true }))
+			.mockResolvedValueOnce(jsonResponse(liveBootstrap('thread/delete', 'running')));
+		const adapter = createEnvLocalFlowerSurfaceAdapter({
+			envPublicID: 'env_a',
+			envLabel: 'Demo Env',
+			rpc: { ai: {} } as any,
+		});
+
+		await adapter.deleteQueuedTurn?.('thread/delete', 'followup/middle');
+
+		expect(fetchMock).toHaveBeenNthCalledWith(1,
+			'/_redeven_proxy/api/ai/threads/thread%2Fdelete/followups/followup%2Fmiddle',
+			expect.objectContaining({ method: 'DELETE' }),
+		);
+		expect(fetchMock).toHaveBeenNthCalledWith(2,
+			'/_redeven_proxy/api/ai/threads/thread%2Fdelete/live/bootstrap',
+			expect.objectContaining({ method: 'GET' }),
+		);
+	});
+
 	it('does not retain the legacy live polling transport', async () => {
 		const adapter = createEnvLocalFlowerSurfaceAdapter({
 			envPublicID: 'env_a',

@@ -875,6 +875,11 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
         `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/followups/order`,
         { lane: 'queued', ordered_followup_ids: orderedQueueIDs },
       ),
+      deleteQueuedTurn: (threadID, queueID) => runtimeJSON(
+        bridge,
+        'DELETE',
+        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/followups/${encodeURIComponent(queueID)}`,
+      ),
       forkThread: (threadID, body) => runtimeJSON<LoadThreadResponse>(
         bridge,
         'POST',
