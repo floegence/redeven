@@ -65,6 +65,7 @@ export type TerminalRecoveryEventDetail = Readonly<{
 
 const surfaceGenerations = new Map<string, number>();
 const activeTraces = new Map<string, TerminalRecoveryTrace>();
+let traceSequence = 0;
 
 function monotonicNow(): number {
   return typeof performance !== 'undefined' && typeof performance.now === 'function'
@@ -121,7 +122,7 @@ export function startTerminalRecoveryTrace(
     sessionRef,
     variant,
     surfaceGeneration: nextGeneration,
-    traceID: `terminal-recovery-${sessionRef}-${nextGeneration}`,
+    traceID: `terminal-recovery-${sessionRef}-${nextGeneration}-${++traceSequence}`,
     startedAtMonotonicMs: monotonicNow(),
   };
   activeTraces.set(sessionID, trace);
@@ -193,4 +194,5 @@ export function releaseTerminalRecoveryDiagnostics(sessionID: string): void {
 export function resetTerminalRecoveryDiagnosticsForTests(): void {
   surfaceGenerations.clear();
   activeTraces.clear();
+  traceSequence = 0;
 }

@@ -833,8 +833,11 @@ async function waitForRecoveryMarks(page, surface, notBefore, fixtureBytes, expe
     ));
     const start = starts.at(-1);
     if (!start) return false;
+    const traceID = start.name.slice('redeven:terminal:attach-start:'.length);
     const sameTrace = (entry) => (
-      entry.detail?.session_ref === start.detail?.session_ref
+      entry.name.endsWith(`:${traceID}`)
+      && entry.detail?.variant === start.detail?.variant
+      && entry.detail?.session_ref === start.detail?.session_ref
       && entry.detail?.surface_generation === start.detail?.surface_generation
       && entry.startTime >= start.startTime
     );
@@ -869,8 +872,11 @@ async function waitForRecoveryMarks(page, surface, notBefore, fixtureBytes, expe
       && (!sessionRef || entry.detail?.session_ref === sessionRef)
     ));
     const start = starts.at(-1);
+    const traceID = start.name.slice('redeven:terminal:attach-start:'.length);
     const sameTrace = (entry) => (
-      entry.detail?.session_ref === start.detail?.session_ref
+      entry.name.endsWith(`:${traceID}`)
+      && entry.detail?.variant === start.detail?.variant
+      && entry.detail?.session_ref === start.detail?.session_ref
       && entry.detail?.surface_generation === start.detail?.surface_generation
       && entry.startTime >= start.startTime
     );
@@ -1107,7 +1113,6 @@ async function runSharedPreparedHistorySample({
   seeded,
   tempDir,
   sampleIndex,
-  maxInteractiveMs,
 }) {
   const { page, problems } = await openEnvPage(context, entryURL);
   const sessionRef = pseudonymousTerminalSessionRef(seeded.sessionID);
@@ -1282,11 +1287,6 @@ async function runSharedPreparedHistorySample({
           + `(before=${panelAttachStartsBeforeReturn} after=${panelAttachStartsAfterReturn})`,
       );
     }
-    assertTerminalCarrierInteractiveLimit({
-      stage: 'shared_prepared_history',
-      interactiveMs: workbenchRecovery.interactive_ms,
-      maxInteractiveMs,
-    });
     assertPageHealthy(problems);
     return {
       status: 'passed',
@@ -1321,6 +1321,9 @@ async function runSharedPreparedHistorySample({
       history_visual_ink_ratio_scale: historyVisualMatch?.inkRatioScale ?? null,
       input_probe_ms: inputProbeMs,
       input_probe_marker: markerName,
+      attach_ack_ms: workbenchRecovery.attach_ack_ms,
+      baseline_parser_committed_ms: workbenchRecovery.baseline_parser_committed_ms,
+      baseline_rendered_ms: workbenchRecovery.baseline_rendered_ms,
       interactive_ms: workbenchRecovery.interactive_ms,
     };
   } finally {
@@ -1545,19 +1548,26 @@ async function main(options) {
       try {
         const sample = await runStage(
           `shared_prepared_history_${sampleIndex}`,
-          () => runSharedPreparedHistorySample({
-            context: sharedContext,
-            entryURL,
-            fixtureBytes: options.fixtureBytes,
-            seeded,
-            tempDir,
-            sampleIndex,
-            maxInteractiveMs: options.maxInteractiveMs,
-          }),
+          async () => {
+            const sample = await runSharedPreparedHistorySample({
+              context: sharedContext,
+              entryURL,
+              fixtureBytes: options.fixtureBytes,
+              seeded,
+              tempDir,
+              sampleIndex,
+            });
+            const completedSample = { ...sample, sample_index: sampleIndex };
+            carrierProgress.sharedPreparedHistorySamples.push(completedSample);
+            assertTerminalCarrierInteractiveLimit({
+              stage: 'shared_prepared_history',
+              interactiveMs: completedSample.interactive_ms,
+              maxInteractiveMs: options.maxInteractiveMs,
+            });
+            return completedSample;
+          },
         );
-        const completedSample = { ...sample, sample_index: sampleIndex };
-        sharedPreparedHistorySamples.push(completedSample);
-        carrierProgress.sharedPreparedHistorySamples.push(completedSample);
+        sharedPreparedHistorySamples.push(sample);
       } finally {
         await sharedContext.close();
       }
