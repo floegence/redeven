@@ -17,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -1843,7 +1844,42 @@ func (s *Server) handleDirectWS(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "session acceptor unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	s.acceptor.Handler().ServeHTTP(w, r)
+	acceptorRequest, ok := s.requestForAcceptor(r)
+	if !ok {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	s.acceptor.Handler().ServeHTTP(w, acceptorRequest)
+}
+
+func (s *Server) requestForAcceptor(r *http.Request) (*http.Request, bool) {
+	if r == nil || s == nil {
+		return nil, false
+	}
+	if !isTrustedLocalUIBridge(r) {
+		return r, true
+	}
+	if _, err := canonicalLoopbackAuthority(r.Host); err != nil || !strictSameOriginWSRequest(r, true) {
+		return nil, false
+	}
+	s.authorityMu.RLock()
+	authorities := make([]string, 0, len(s.networkAuthorities))
+	for authority := range s.networkAuthorities {
+		authorities = append(authorities, authority)
+	}
+	s.authorityMu.RUnlock()
+	if len(authorities) == 0 {
+		return nil, false
+	}
+	sort.Strings(authorities)
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	mapped := r.Clone(r.Context())
+	mapped.Header = r.Header.Clone()
+	mapped.Header.Set("Origin", scheme+"://"+authorities[0])
+	return mapped, true
 }
 
 func (s *Server) activateAcceptedSession(channelID string, current flowersec.Session) (pendingDirect, bool) {
@@ -1887,27 +1923,44 @@ func (s *Server) beginDirectShutdown() []flowersec.Session {
 	s.directMu.Lock()
 	s.directClosing = true
 	sessions := make([]flowersec.Session, 0)
-	pending := make(map[string]string)
+	accessSessionIDs := make([]string, 0, len(s.pluginAccess))
 	for accessSessionID, access := range s.pluginAccess {
 		if access == nil {
 			continue
 		}
+		accessSessionIDs = append(accessSessionIDs, accessSessionID)
 		access.state = pluginAccessClosing
 		for _, current := range access.sessions {
 			sessions = append(sessions, current)
 		}
-		for channelID := range access.pending {
-			pending[channelID] = accessSessionID
-		}
 	}
+	s.pluginAccess = make(map[string]*pluginAccessSession)
 	s.directMu.Unlock()
+
 	s.pendingMu.Lock()
-	for channelID, accessSessionID := range pending {
-		if current, ok := s.pending[channelID]; ok && current.accessSessionID == accessSessionID {
-			delete(s.pending, channelID)
+	s.pending = make(map[string]pendingDirect)
+	s.pendingMu.Unlock()
+
+	s.authMu.Lock()
+	cleanups := make([]func(), 0, len(s.handlerCleanup))
+	for _, cleanup := range s.handlerCleanup {
+		if cleanup != nil {
+			cleanups = append(cleanups, cleanup)
 		}
 	}
-	s.pendingMu.Unlock()
+	s.authRecords = make(map[string]controlplane.AuthorizationRecord)
+	s.authChannels = make(map[string]string)
+	s.handlerCleanup = make(map[string]func())
+	s.authMu.Unlock()
+
+	if s.a != nil {
+		for _, accessSessionID := range accessSessionIDs {
+			s.a.EndPluginAccessSession(accessSessionID)
+		}
+	}
+	for _, cleanup := range cleanups {
+		cleanup()
+	}
 	return sessions
 }
 

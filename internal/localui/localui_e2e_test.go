@@ -15,7 +15,361 @@ import (
 
 	flowersec "github.com/floegence/flowersec/flowersec-go/v2"
 	"github.com/floegence/redeven/internal/accessgate"
+	"github.com/floegence/redeven/internal/accessrpc"
 )
+
+func TestServer_E2E_DesktopBridgeDynamicLoopbackOriginConnectsDirectSession(t *testing.T) {
+	s := newDesktopBridgeTestServer(t, nil)
+
+	bridge := httptest.NewServer(s.HandlerForDesktopBridge())
+	defer bridge.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	envelope := mintDesktopBridgeArtifact(t, bridge.Client(), bridge.URL, "")
+	client := connectDesktopBridgeArtifact(t, ctx, envelope.ConnectArtifact, bridge.URL)
+	assertDesktopBridgeSessionReady(t, ctx, client)
+	_ = client.Close()
+	assertDirectStateEventuallyEmpty(t, s)
+}
+
+func TestServer_E2E_DesktopBridgeWindowIsolationAndOneShotArtifacts(t *testing.T) {
+	s := newDesktopBridgeTestServer(t, nil)
+	firstBridge := httptest.NewServer(s.HandlerForDesktopBridge())
+	defer firstBridge.Close()
+	secondBridge := httptest.NewServer(s.HandlerForDesktopBridge())
+	defer secondBridge.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	firstArtifact := mintDesktopBridgeArtifact(t, firstBridge.Client(), firstBridge.URL, "")
+	secondArtifact := mintDesktopBridgeArtifact(t, secondBridge.Client(), secondBridge.URL, "")
+	if firstArtifact.ChannelID == secondArtifact.ChannelID {
+		t.Fatalf("Desktop windows shared channel ID %q", firstArtifact.ChannelID)
+	}
+	firstSession := connectDesktopBridgeArtifact(t, ctx, firstArtifact.ConnectArtifact, firstBridge.URL)
+	defer firstSession.Close()
+	secondSession := connectDesktopBridgeArtifact(t, ctx, secondArtifact.ConnectArtifact, secondBridge.URL)
+	defer secondSession.Close()
+	assertDesktopBridgeSessionReady(t, ctx, firstSession)
+	assertDesktopBridgeSessionReady(t, ctx, secondSession)
+
+	crossArtifact := mintDesktopBridgeArtifact(t, firstBridge.Client(), firstBridge.URL, "")
+	if _, err := connectDesktopBridgeArtifactResult(ctx, crossArtifact.ConnectArtifact, secondBridge.URL); err == nil {
+		t.Fatal("artifact minted for the first Desktop window connected with the second window Origin")
+	}
+	s.releaseAcceptedSession(crossArtifact.ChannelID)
+	if _, err := connectDesktopBridgeArtifactResult(ctx, firstArtifact.ConnectArtifact, firstBridge.URL); err == nil {
+		t.Fatal("consumed Desktop artifact connected a second time")
+	}
+
+	_ = firstSession.Close()
+	_ = secondSession.Close()
+	assertDirectStateEventuallyEmpty(t, s)
+}
+
+func TestServer_E2E_DesktopBridgeRestartRevokesOldState(t *testing.T) {
+	oldServer := newDesktopBridgeTestServer(t, nil)
+	oldBridge := httptest.NewServer(oldServer.HandlerForDesktopBridge())
+	oldArtifact := mintDesktopBridgeArtifact(t, oldBridge.Client(), oldBridge.URL, "")
+	oldBridge.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if _, err := connectDesktopBridgeArtifactResult(ctx, oldArtifact.ConnectArtifact, oldBridge.URL); err == nil {
+		t.Fatal("artifact connected after its Desktop bridge closed")
+	}
+	if err := oldServer.Close(); err != nil {
+		t.Fatalf("old Server.Close() error = %v", err)
+	}
+	assertDirectStateEventuallyEmpty(t, oldServer)
+
+	newServer := newDesktopBridgeTestServer(t, nil)
+	newBridge := httptest.NewServer(newServer.HandlerForDesktopBridge())
+	defer newBridge.Close()
+	newArtifact := mintDesktopBridgeArtifact(t, newBridge.Client(), newBridge.URL, "")
+	newSession := connectDesktopBridgeArtifact(t, ctx, newArtifact.ConnectArtifact, newBridge.URL)
+	assertDesktopBridgeSessionReady(t, ctx, newSession)
+	_ = newSession.Close()
+	assertDirectStateEventuallyEmpty(t, newServer)
+}
+
+func TestServer_E2E_DesktopBridgeSecurityDoesNotExpandPublicListener(t *testing.T) {
+	s := newDesktopBridgeTestServer(t, nil)
+	bridge := httptest.NewServer(s.HandlerForDesktopBridge())
+	defer bridge.Close()
+	artifact := mintDesktopBridgeArtifact(t, bridge.Client(), bridge.URL, "")
+	s.releaseAcceptedSession(artifact.ChannelID)
+
+	for name, origin := range map[string]string{
+		"missing":  "",
+		"mismatch": "http://127.0.0.1:1",
+		"external": "http://example.com:23998",
+	} {
+		t.Run(name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, bridge.URL+flowersec.WebSocketDirectPath, nil)
+			req.Host = strings.TrimPrefix(bridge.URL, "http://")
+			req.Header.Set("Connection", "Upgrade")
+			req.Header.Set("Upgrade", "websocket")
+			req.Header.Set("Sec-WebSocket-Key", "AAAAAAAAAAAAAAAAAAAAAA==")
+			req.Header.Set("Sec-WebSocket-Version", "13")
+			if origin != "" {
+				req.Header.Set("Origin", origin)
+			}
+			res := httptest.NewRecorder()
+			s.HandlerForDesktopBridge().ServeHTTP(res, req)
+			if res.Code != http.StatusForbidden {
+				t.Fatalf("bridge websocket status = %d, want %d", res.Code, http.StatusForbidden)
+			}
+		})
+	}
+
+	public := httptest.NewServer(s.handler())
+	defer public.Close()
+	resp, err := public.Client().Post(public.URL+"/api/local/direct/connect_artifact", "application/json", bytes.NewBufferString(`{}`))
+	if err != nil {
+		t.Fatalf("POST public dynamic connect_artifact error = %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusOK {
+		t.Fatal("public listener admitted an unconfigured dynamic authority")
+	}
+}
+
+func TestServer_E2E_DesktopBridgePasswordLogoutAndExpiry(t *testing.T) {
+	t.Run("logout", func(t *testing.T) {
+		gate := accessgate.New(accessgate.Options{Password: "secret"})
+		s := newDesktopBridgeTestServer(t, gate)
+		bridge := httptest.NewServer(s.HandlerForDesktopBridge())
+		defer bridge.Close()
+		client := bridgeClientWithCookies(t, bridge)
+		resumeToken := unlockDesktopBridge(t, client, bridge.URL)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		envelope := mintDesktopBridgeArtifact(t, client, bridge.URL, resumeToken)
+		current := connectDesktopBridgeArtifact(t, ctx, envelope.ConnectArtifact, bridge.URL)
+		assertDesktopBridgeSessionReady(t, ctx, current)
+
+		logoutReq, err := http.NewRequest(http.MethodPost, bridge.URL+"/api/local/access/logout", nil)
+		if err != nil {
+			t.Fatalf("NewRequest logout error = %v", err)
+		}
+		logoutReq.Header.Set(localAccessResumeHeader, resumeToken)
+		logoutResp, err := client.Do(logoutReq)
+		if err != nil {
+			t.Fatalf("POST logout error = %v", err)
+		}
+		defer logoutResp.Body.Close()
+		if logoutResp.StatusCode != http.StatusOK {
+			t.Fatalf("logout status = %d, want %d", logoutResp.StatusCode, http.StatusOK)
+		}
+		assertSessionEventuallyClosed(t, current)
+		assertDirectStateEventuallyEmpty(t, s)
+		if _, err := connectDesktopBridgeArtifactResult(ctx, envelope.ConnectArtifact, bridge.URL); err == nil {
+			t.Fatal("logged-out Desktop artifact reconnected")
+		}
+
+		newResumeToken := unlockDesktopBridge(t, client, bridge.URL)
+		newEnvelope := mintDesktopBridgeArtifact(t, client, bridge.URL, newResumeToken)
+		newSession := connectDesktopBridgeArtifact(t, ctx, newEnvelope.ConnectArtifact, bridge.URL)
+		assertDesktopBridgeSessionReady(t, ctx, newSession)
+		_ = newSession.Close()
+		assertDirectStateEventuallyEmpty(t, s)
+	})
+
+	t.Run("expiry", func(t *testing.T) {
+		gate := accessgate.New(accessgate.Options{
+			Password:        "secret",
+			ResumeTTL:       50 * time.Millisecond,
+			LocalSessionTTL: 50 * time.Millisecond,
+		})
+		s := newDesktopBridgeTestServer(t, gate)
+		bridge := httptest.NewServer(s.HandlerForDesktopBridge())
+		defer bridge.Close()
+		client := bridgeClientWithCookies(t, bridge)
+		resumeToken := unlockDesktopBridge(t, client, bridge.URL)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		envelope := mintDesktopBridgeArtifact(t, client, bridge.URL, resumeToken)
+		current := connectDesktopBridgeArtifact(t, ctx, envelope.ConnectArtifact, bridge.URL)
+		assertDesktopBridgeSessionReady(t, ctx, current)
+
+		time.Sleep(75 * time.Millisecond)
+		expired := gate.TakeExpiredLocalSessions(time.Now())
+		if len(expired) != 1 {
+			t.Fatalf("expired Local UI sessions = %d, want 1", len(expired))
+		}
+		s.closePluginAccessSession(expired[0].AccessSessionID)
+		assertSessionEventuallyClosed(t, current)
+		assertDirectStateEventuallyEmpty(t, s)
+		if _, err := connectDesktopBridgeArtifactResult(ctx, envelope.ConnectArtifact, bridge.URL); err == nil {
+			t.Fatal("expired Desktop artifact reconnected")
+		}
+	})
+}
+
+func newDesktopBridgeTestServer(t *testing.T, gate *accessgate.Gate) *Server {
+	t.Helper()
+	s := newTestServer(t, gate)
+	s.a = newRuntimeHealthTestAgent(t, s.configPath)
+	s.networkAuthorities = map[string]struct{}{"127.0.0.1:23998": {}}
+	if err := s.configureAcceptor(); err != nil {
+		t.Fatalf("configureAcceptor() error = %v", err)
+	}
+	return s
+}
+
+func bridgeClientWithCookies(t *testing.T, bridge *httptest.Server) *http.Client {
+	t.Helper()
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatalf("cookiejar.New() error = %v", err)
+	}
+	client := bridge.Client()
+	client.Jar = jar
+	return client
+}
+
+func unlockDesktopBridge(t *testing.T, client *http.Client, bridgeURL string) string {
+	t.Helper()
+	resp, err := client.Post(bridgeURL+"/api/local/access/unlock", "application/json", bytes.NewBufferString(`{"password":"secret"}`))
+	if err != nil {
+		t.Fatalf("POST bridge unlock error = %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("bridge unlock status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var body struct {
+		Data struct {
+			ResumeToken string `json:"resume_token"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode bridge unlock error = %v", err)
+	}
+	if strings.TrimSpace(body.Data.ResumeToken) == "" {
+		t.Fatal("bridge unlock did not issue a resume token")
+	}
+	return body.Data.ResumeToken
+}
+
+func mintDesktopBridgeArtifact(t *testing.T, client *http.Client, bridgeURL, resumeToken string) connectArtifactEnvelope {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, bridgeURL+"/api/local/direct/connect_artifact", bytes.NewBufferString(`{}`))
+	if err != nil {
+		t.Fatalf("NewRequest bridge connect_artifact error = %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if strings.TrimSpace(resumeToken) != "" {
+		req.Header.Set(localAccessResumeHeader, resumeToken)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("POST bridge connect_artifact error = %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("bridge connect_artifact status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var envelope connectArtifactEnvelope
+	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
+		t.Fatalf("decode bridge connect_artifact error = %v", err)
+	}
+	var artifactWire struct {
+		Path struct {
+			Candidates []struct {
+				URL string `json:"url"`
+			} `json:"candidates"`
+		} `json:"path"`
+	}
+	if err := json.Unmarshal(envelope.ConnectArtifact, &artifactWire); err != nil {
+		t.Fatalf("decode bridge artifact candidate error = %v", err)
+	}
+	wantURL := "ws" + strings.TrimPrefix(bridgeURL, "http") + flowersec.WebSocketDirectPath
+	if len(artifactWire.Path.Candidates) != 1 || artifactWire.Path.Candidates[0].URL != wantURL {
+		t.Fatalf("bridge artifact candidates = %#v, want %q", artifactWire.Path.Candidates, wantURL)
+	}
+	return envelope
+}
+
+func connectDesktopBridgeArtifact(t *testing.T, ctx context.Context, encodedArtifact json.RawMessage, origin string) flowersec.Session {
+	t.Helper()
+	current, err := connectDesktopBridgeArtifactResult(ctx, encodedArtifact, origin)
+	if err != nil {
+		t.Fatalf("Connect() through Desktop bridge error = %v", err)
+	}
+	return current
+}
+
+func connectDesktopBridgeArtifactResult(ctx context.Context, encodedArtifact json.RawMessage, origin string) (flowersec.Session, error) {
+	artifact, err := flowersec.ParseArtifact(encodedArtifact)
+	if err != nil {
+		return nil, err
+	}
+	lease, err := flowersec.NewArtifactLease(artifact, func(context.Context) error { return nil })
+	if err != nil {
+		return nil, err
+	}
+	return flowersec.Connect(ctx, lease, flowersec.ConnectorOptions{Origin: origin, ConnectTimeout: 5 * time.Second})
+}
+
+func assertDesktopBridgeSessionReady(t *testing.T, ctx context.Context, current flowersec.Session) {
+	t.Helper()
+	if _, err := current.ProbeLiveness(ctx); err != nil {
+		t.Fatalf("Desktop bridge session liveness error = %v", err)
+	}
+	var status accessrpc.StatusResponse
+	if err := current.RPC().Call(ctx, accessrpc.TypeIDAccessStatus, &struct{}{}, &status); err != nil {
+		t.Fatalf("access status RPC through Desktop bridge error = %v", err)
+	}
+	if status.PasswordRequired {
+		t.Fatal("unlocked Desktop bridge session still reports password required")
+	}
+}
+
+func assertDirectStateEventuallyEmpty(t *testing.T, s *Server) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	var pendingCount, accessBindingCount, authCount int
+	for time.Now().Before(deadline) {
+		s.pendingMu.Lock()
+		pendingCount = len(s.pending)
+		s.pendingMu.Unlock()
+		s.directMu.Lock()
+		accessBindingCount = 0
+		for _, access := range s.pluginAccess {
+			if access != nil {
+				accessBindingCount += len(access.pending) + len(access.sessions)
+			}
+		}
+		s.directMu.Unlock()
+		s.authMu.Lock()
+		authCount = len(s.authRecords) + len(s.authChannels) + len(s.handlerCleanup)
+		s.authMu.Unlock()
+		if pendingCount == 0 && accessBindingCount == 0 && authCount == 0 {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("Desktop bridge state did not clean up: pending=%d access_bindings=%d auth=%d", pendingCount, accessBindingCount, authCount)
+}
+
+func assertSessionEventuallyClosed(t *testing.T, current flowersec.Session) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		_, err := current.ProbeLiveness(ctx)
+		cancel()
+		if err != nil {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("revoked Desktop bridge session remained live")
+}
 
 func TestServer_E2E_LocalPasswordFlow(t *testing.T) {
 	gate := accessgate.New(accessgate.Options{Password: "secret"})
