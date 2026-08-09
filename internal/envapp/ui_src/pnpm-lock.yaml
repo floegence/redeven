@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  '@floegence/flowersec-core': 2.3.5
+  '@floegence/flowersec-core': 2.3.6
   '@babel/core': ^7.29.7
   brace-expansion: ^5.0.9
   dompurify: ^3.4.12
@@ -32,20 +32,20 @@ importers:
         specifier: ^0.0.5
         version: 0.0.5
       '@floegence/floe-webapp-boot':
-        specifier: 0.40.13
-        version: 0.40.13
+        specifier: 0.40.14
+        version: 0.40.14
       '@floegence/floe-webapp-core':
-        specifier: 0.40.13
-        version: 0.40.13(solid-js@1.9.13)
+        specifier: 0.40.14
+        version: 0.40.14(solid-js@1.9.13)
       '@floegence/floe-webapp-protocol':
-        specifier: 0.40.13
-        version: 0.40.13(solid-js@1.9.13)
+        specifier: 0.40.14
+        version: 0.40.14(solid-js@1.9.13)
       '@floegence/floeterm-terminal-web':
         specifier: 0.13.6
         version: 0.13.6
       '@floegence/flowersec-core':
-        specifier: 2.3.5
-        version: 2.3.5
+        specifier: 2.3.6
+        version: 2.3.6
       '@floegence/redevplugin-contracts':
         specifier: 0.7.18
         version: 0.7.18
@@ -383,18 +383,18 @@ packages:
     resolution: {integrity: sha512-F8phI5jylhMnQQN7qesEg6tGj/80Peum9PGDZkOj1LLOGta+Fq8QhGwTkCtd35iR1AYJQ2LSK4FcDf5bs1vOsw==}
     engines: {node: '>=20'}
 
-  '@floegence/floe-webapp-boot@0.40.13':
-    resolution: {integrity: sha512-8Yea3BnN56bXj8vI2C/CYLX4b4nf2tDJMtuA1dijX9iWyqW04J0uG7XYXbV30+IcPLNZpzusixDNyUEX+MdDDw==}
+  '@floegence/floe-webapp-boot@0.40.14':
+    resolution: {integrity: sha512-xXFCGfKWbK1ZFzevEr4/oQTzRi16j16FS5PJdKNfk7//KRdDjGZptJs72xE55UH/022Ba2tFyKZZi1VM4001rQ==}
     engines: {node: '>=24.0.0'}
 
-  '@floegence/floe-webapp-core@0.40.13':
-    resolution: {integrity: sha512-TvlPQoIsxUWr8mk9yEDSZQvd7AodozRg5NQvnUGQf8yWNUbu7cbZBGryV5aGQr00X1ietfeZLaevYewGjZYg1g==}
+  '@floegence/floe-webapp-core@0.40.14':
+    resolution: {integrity: sha512-2O6ZGBtd61HA4fluavKA7VAU6gOJc1uYEvQTnS1PAXPFY86UOj6vTE+dL064zhjTUfaZ5uNQs44cIFarfTParA==}
     engines: {node: '>=24.0.0'}
     peerDependencies:
       solid-js: ^1.8.0
 
-  '@floegence/floe-webapp-protocol@0.40.13':
-    resolution: {integrity: sha512-0XSVUjojYIw4R8PWOWYem7WSEsOkH8nki8y11H/c3NG4u5Rlb33nPKckcIOXErBU2rg5/9hRCbbFbvkcmHM+cA==}
+  '@floegence/floe-webapp-protocol@0.40.14':
+    resolution: {integrity: sha512-UzLmxcdx6cMBW1VJjc00VtRBXoKjVuoFd/jLQdGzbs1pQ/2Om2+Kqcuayv6dY25kQN8njcetWPbBupigpzKDig==}
     engines: {node: '>=24.0.0'}
     peerDependencies:
       solid-js: ^1.8.0
@@ -402,8 +402,8 @@ packages:
   '@floegence/floeterm-terminal-web@0.13.6':
     resolution: {integrity: sha512-a1k7rTOkihtrl7vRlQFfgjc3CUAEMHBvuRdDehYS5r/KuF1ClpvpAbK5dq0j++wZ1fKLikcbXgezWjr4FTStEA==}
 
-  '@floegence/flowersec-core@2.3.5':
-    resolution: {integrity: sha512-uYBTrNhb3Kg6bUP8sOiYUAMMl2+Zevvcb8RZhfXG6qCOFKGH8nquYfeUPabRd3yqBUP5khWvd0Pd3DjRS8+1vg==}
+  '@floegence/flowersec-core@2.3.6':
+    resolution: {integrity: sha512-AjWBNAFogQza/MqZX4lWmly9dZGSsLHBTnmlAsF05aMcjnBxdZHgVYAsbO3jKGA5BX3Wcp+TH96T2lcNqXlWYg==}
     engines: {node: '>=20.0.0'}
     hasBin: true
 
@@ -3039,15 +3039,15 @@ snapshots:
 
   '@floegence/beamterm-renderer@1.0.2': {}
 
-  '@floegence/floe-webapp-boot@0.40.13':
+  '@floegence/floe-webapp-boot@0.40.14':
     dependencies:
-      '@floegence/flowersec-core': 2.3.5
+      '@floegence/flowersec-core': 2.3.6
     transitivePeerDependencies:
       - bufferutil
       - supports-color
       - utf-8-validate
 
-  '@floegence/floe-webapp-core@0.40.13(solid-js@1.9.13)':
+  '@floegence/floe-webapp-core@0.40.14(solid-js@1.9.13)':
     dependencies:
       clsx: 2.1.1
       diff: 8.0.4
@@ -3059,9 +3059,9 @@ snapshots:
       solid-motionone: 1.0.4(solid-js@1.9.13)
       tailwind-merge: 3.6.0
 
-  '@floegence/floe-webapp-protocol@0.40.13(solid-js@1.9.13)':
+  '@floegence/floe-webapp-protocol@0.40.14(solid-js@1.9.13)':
     dependencies:
-      '@floegence/flowersec-core': 2.3.5
+      '@floegence/flowersec-core': 2.3.6
       solid-js: 1.9.13
     transitivePeerDependencies:
       - bufferutil
@@ -3073,7 +3073,7 @@ snapshots:
       '@floegence/beamterm-renderer': 1.0.2
       ghostty-web: 0.4.0-next.14.g6a1a50d
 
-  '@floegence/flowersec-core@2.3.5':
+  '@floegence/flowersec-core@2.3.6':
     dependencies:
       '@fails-components/webtransport': 1.6.7
       '@fails-components/webtransport-transport-http3-quiche': 1.6.7

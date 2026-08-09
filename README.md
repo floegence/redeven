@@ -120,7 +120,7 @@ Redeven leads with capability, but the runtime is still the trust boundary becau
 
 - The runtime lives on the endpoint and keeps plaintext there.
 - The control plane issues bootstrap payloads, grants, and immutable session metadata.
-- [Flowersec](https://github.com/floegence/flowersec) carries encrypted bytes between the client and the endpoint runtime; the browser integration uses the published 2.3.5 API and the Go consumer module is `flowersec-go/v2@v2.3.5`.
+- [Flowersec](https://github.com/floegence/flowersec) carries encrypted bytes between the client and the endpoint runtime; the browser integration uses the published 2.3.6 API and the Go consumer module is `flowersec-go/v2@v2.3.6`.
 - Effective permissions come from server-issued session grants, clamped by the local permission policy (`read`, `write`, `execute`, `admin` — no category implies any other).
 - Local config, E2EE material, audit logs, and diagnostics stay in the endpoint state directory.
 - GitHub Releases remain the public source of truth for binaries, checksums, signatures, and OKF verification assets.
