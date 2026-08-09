@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  '@floegence/flowersec-core': 2.3.1
+  '@floegence/flowersec-core': 2.3.3
   '@babel/core': ^7.29.7
   '@electron/asar': ^4.2.1
   '@electron/universal': ^3.0.6
@@ -36,8 +36,8 @@ importers:
         specifier: 0.40.11
         version: 0.40.11(solid-js@1.9.13)
       '@floegence/flowersec-core':
-        specifier: 2.3.1
-        version: 2.3.1
+        specifier: 2.3.3
+        version: 2.3.3
       qrcode-generator:
         specifier: ^2.0.4
         version: 2.0.4
@@ -526,8 +526,8 @@ packages:
     peerDependencies:
       solid-js: ^1.8.0
 
-  '@floegence/flowersec-core@2.3.1':
-    resolution: {integrity: sha512-NPWawdCn0MhqD9DMUjs12VexN9BHveXcT9ilxsglNPlG8tHaWfaD/xogx6auTGyfDT1IGo/t5k8hYfmr6wpL6g==}
+  '@floegence/flowersec-core@2.3.3':
+    resolution: {integrity: sha512-Yh96G4pkDwDMkURGC380TpoiiWNCOw+mbaMor58OSgundmaIWaQw/zSpZKJh8HQYosVFQpmD1ktx1RAy5T0aEQ==}
     engines: {node: '>=20.0.0'}
     hasBin: true
 
@@ -3636,7 +3636,7 @@ snapshots:
 
   '@floegence/floe-webapp-boot@0.40.11':
     dependencies:
-      '@floegence/flowersec-core': 2.3.1
+      '@floegence/flowersec-core': 2.3.3
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -3654,7 +3654,7 @@ snapshots:
       solid-motionone: 1.0.4(solid-js@1.9.13)
       tailwind-merge: 3.6.0
 
-  '@floegence/flowersec-core@2.3.1':
+  '@floegence/flowersec-core@2.3.3':
     dependencies:
       '@fails-components/webtransport': 1.6.7
       '@fails-components/webtransport-transport-http3-quiche': 1.6.7

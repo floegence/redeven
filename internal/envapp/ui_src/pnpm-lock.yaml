@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  '@floegence/flowersec-core': 2.3.1
+  '@floegence/flowersec-core': 2.3.3
   '@babel/core': ^7.29.7
   brace-expansion: ^5.0.9
   dompurify: ^3.4.12
@@ -44,8 +44,8 @@ importers:
         specifier: 0.13.4
         version: 0.13.4
       '@floegence/flowersec-core':
-        specifier: 2.3.1
-        version: 2.3.1
+        specifier: 2.3.3
+        version: 2.3.3
       '@floegence/redevplugin-contracts':
         specifier: 0.7.17
         version: 0.7.17
@@ -402,8 +402,8 @@ packages:
   '@floegence/floeterm-terminal-web@0.13.4':
     resolution: {integrity: sha512-EShX58/hvfvy0Fd+bYjUOwIpuqziNrOCoT5VCuSGOqo/pfeIVTs4zF6IC27rr4mVXV3Wy0K4Fd0IknJ/ltkmJg==}
 
-  '@floegence/flowersec-core@2.3.1':
-    resolution: {integrity: sha512-NPWawdCn0MhqD9DMUjs12VexN9BHveXcT9ilxsglNPlG8tHaWfaD/xogx6auTGyfDT1IGo/t5k8hYfmr6wpL6g==}
+  '@floegence/flowersec-core@2.3.3':
+    resolution: {integrity: sha512-Yh96G4pkDwDMkURGC380TpoiiWNCOw+mbaMor58OSgundmaIWaQw/zSpZKJh8HQYosVFQpmD1ktx1RAy5T0aEQ==}
     engines: {node: '>=20.0.0'}
     hasBin: true
 
@@ -3041,7 +3041,7 @@ snapshots:
 
   '@floegence/floe-webapp-boot@0.40.11':
     dependencies:
-      '@floegence/flowersec-core': 2.3.1
+      '@floegence/flowersec-core': 2.3.3
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -3061,7 +3061,7 @@ snapshots:
 
   '@floegence/floe-webapp-protocol@0.40.11(solid-js@1.9.13)':
     dependencies:
-      '@floegence/flowersec-core': 2.3.1
+      '@floegence/flowersec-core': 2.3.3
       solid-js: 1.9.13
     transitivePeerDependencies:
       - bufferutil
@@ -3073,7 +3073,7 @@ snapshots:
       '@floegence/beamterm-renderer': 1.0.2
       ghostty-web: 0.4.0-next.14.g6a1a50d
 
-  '@floegence/flowersec-core@2.3.1':
+  '@floegence/flowersec-core@2.3.3':
     dependencies:
       '@fails-components/webtransport': 1.6.7
       '@fails-components/webtransport-transport-http3-quiche': 1.6.7
