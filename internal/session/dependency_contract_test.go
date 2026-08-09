@@ -217,6 +217,10 @@ func TestFlowersecTransportPoliciesAreExplicit(t *testing.T) {
 			t.Fatalf("EnvAppShell.tsx must not retain removed Flowersec reconnect API %q", removed)
 		}
 	}
+	browserConfigSource := readRepoFile(t, root, "internal/envapp/ui_src/vitest.browser.config.ts")
+	if strings.Contains(browserConfigSource, "@floegence/flowersec-core/streamio") {
+		t.Fatal("vitest.browser.config.ts must not optimize the unavailable Flowersec streamio subpath")
+	}
 
 	dockerClientSource := readRepoFile(t, root, "tests/docker_runtime_e2e/testclient/main.go")
 	for _, marker := range []string{
