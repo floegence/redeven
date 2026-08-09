@@ -465,6 +465,7 @@ vi.mock('@floegence/floe-webapp-protocol', async () => ({
     };
     return {
       client,
+      session: client,
       status: () => client() ? 'connected' : 'disconnected',
     };
   },

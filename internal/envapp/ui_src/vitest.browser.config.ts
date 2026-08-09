@@ -70,7 +70,6 @@ export default mergeConfig(viteConfig, defineConfig({
   optimizeDeps: {
     include: [
       '@chenglou/pretext',
-      '@floegence/flowersec-core/streamio',
       'docx-preview',
       'exceljs',
     ],
