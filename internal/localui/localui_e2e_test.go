@@ -16,6 +16,7 @@ import (
 	flowersec "github.com/floegence/flowersec/flowersec-go/v2"
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/accessrpc"
+	"github.com/floegence/redeven/internal/terminal"
 )
 
 func TestServer_E2E_DesktopBridgeDynamicLoopbackOriginConnectsDirectSession(t *testing.T) {
@@ -30,6 +31,56 @@ func TestServer_E2E_DesktopBridgeDynamicLoopbackOriginConnectsDirectSession(t *t
 	assertDesktopBridgeSessionReady(t, ctx, client)
 	_ = client.Close()
 	assertDirectStateEventuallyEmpty(t, s)
+}
+
+func TestServer_E2E_DesktopBridgeConsecutiveSessionsKeepTerminalRPCHandlers(t *testing.T) {
+	s := newDesktopBridgeTestServer(t, nil)
+	bridge := httptest.NewServer(s.HandlerForDesktopBridge())
+	defer bridge.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	for attempt := 1; attempt <= 2; attempt++ {
+		envelope := mintDesktopBridgeArtifact(t, bridge.Client(), bridge.URL, "")
+		current := connectDesktopBridgeArtifact(t, ctx, envelope.ConnectArtifact, bridge.URL)
+		assertDesktopBridgeSessionReady(t, ctx, current)
+		var response struct {
+			Sessions []json.RawMessage `json:"sessions"`
+		}
+		if err := current.RPC().Call(ctx, terminal.TypeID_TERMINAL_SESSION_LIST, &struct{}{}, &response); err != nil {
+			t.Fatalf("terminal list RPC on Desktop bridge session %d error = %v", attempt, err)
+		}
+		var created struct {
+			Session struct {
+				ID string `json:"id"`
+			} `json:"session"`
+		}
+		if err := current.RPC().Call(ctx, terminal.TypeID_TERMINAL_SESSION_CREATE, map[string]any{}, &created); err != nil {
+			t.Fatalf("terminal create RPC on Desktop bridge session %d error = %v", attempt, err)
+		}
+		if strings.TrimSpace(created.Session.ID) == "" {
+			t.Fatalf("terminal create RPC on Desktop bridge session %d returned no session ID", attempt)
+		}
+		var history struct {
+			FirstRetainedSequence  int64 `json:"first_retained_sequence"`
+			CoveredThroughSequence int64 `json:"covered_through_sequence"`
+			SnapshotEndSequence    int64 `json:"snapshot_end_sequence"`
+			HistoryGeneration      int64 `json:"history_generation"`
+		}
+		if err := current.RPC().Call(ctx, terminal.TypeID_TERMINAL_HISTORY, map[string]any{
+			"session_id": created.Session.ID,
+			"start_seq":  1,
+			"end_seq":    -1,
+		}, &history); err != nil {
+			t.Fatalf("terminal history RPC on Desktop bridge session %d error = %v", attempt, err)
+		}
+		if history.HistoryGeneration <= 0 || history.FirstRetainedSequence < 0 || history.CoveredThroughSequence < 0 ||
+			history.CoveredThroughSequence > history.SnapshotEndSequence {
+			t.Fatalf("terminal history contract on Desktop bridge session %d = %+v", attempt, history)
+		}
+		_ = current.Close()
+		assertDirectStateEventuallyEmpty(t, s)
+	}
 }
 
 func TestServer_E2E_DesktopBridgeWindowIsolationAndOneShotArtifacts(t *testing.T) {

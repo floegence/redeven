@@ -251,6 +251,10 @@ func (a *Agent) ServeLocalDirectSession(ctx context.Context, sess flowersec.Sess
 	defer sess.Close()
 
 	if opts.HandlersServedByAcceptor {
+		if a.term != nil {
+			detachTerminalSink := a.term.AttachSink(meta, sess.RPC(), a.accessGate)
+			defer detachTerminalSink()
+		}
 		_, err = sess.WaitTermination(sessCtx)
 		return err
 	}

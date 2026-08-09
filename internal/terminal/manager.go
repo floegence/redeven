@@ -259,9 +259,7 @@ func (m *Manager) RegisterWithAccessGate(r *sessionrpc.Router, meta *session.Met
 		return func() {}
 	}
 
-	if session.AllowsProcessLaunch(meta) && streamServer != nil {
-		m.ensureWriter(streamServer, meta, gate)
-	}
+	detachSink := m.AttachSink(meta, streamServer, gate)
 
 	// Create session
 	accessgate.RegisterTyped[terminalCreateReq, terminalCreateResp](r, TypeID_TERMINAL_SESSION_CREATE, gate, meta, accessgate.RPCAccessProtected, func(_ context.Context, req *terminalCreateReq) (*terminalCreateResp, error) {
@@ -325,7 +323,6 @@ func (m *Manager) RegisterWithAccessGate(r *sessionrpc.Router, meta *session.Met
 			m.log.Warn("terminal history failed", "session_id", sessionID, "error", err)
 			return nil, &sessionrpc.Error{Code: 500, Message: "failed to read history"}
 		}
-
 		return terminalHistoryRespFromPage(page), nil
 	})
 
@@ -405,9 +402,7 @@ func (m *Manager) RegisterWithAccessGate(r *sessionrpc.Router, meta *session.Met
 		return &terminalDeleteResp{OK: true}, nil
 	})
 
-	return func() {
-		m.DetachSink(streamServer)
-	}
+	return detachSink
 }
 
 // ServeLiveStream serves the only realtime terminal transport. Catalog,
@@ -450,6 +445,22 @@ func requireProcessLaunchPermission(meta *session.Meta) error {
 		return &sessionrpc.Error{Code: 403, Message: "process permission denied: terminal requires write and execute permissions"}
 	}
 	return nil
+}
+
+// AttachSink binds outbound terminal lifecycle notifications to an established
+// Flowersec RPC peer. Inbound RPC and stream handlers remain owned by the
+// session handler registration path.
+func (m *Manager) AttachSink(meta *session.Meta, streamServer flowersec.RPCPeer, gate *accessgate.Gate) func() {
+	if m == nil || streamServer == nil || !session.AllowsProcessLaunch(meta) {
+		return func() {}
+	}
+	m.ensureWriter(streamServer, meta, gate)
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			m.DetachSink(streamServer)
+		})
+	}
 }
 
 // DetachSink removes the control-plane notification sink bound to an RPC stream.
@@ -1241,13 +1252,18 @@ func terminalHistoryRespFromPage(page termgo.HistoryPage) *terminalHistoryResp {
 		})
 	}
 
+	firstRetainedSequence := page.FirstRetainedSequence
+	if firstRetainedSequence == 0 && len(page.Chunks) == 0 && page.CoveredThroughSequence > 0 {
+		firstRetainedSequence = page.CoveredThroughSequence + 1
+	}
+
 	return &terminalHistoryResp{
 		Chunks:                 out,
 		NextStartSeq:           page.NextStartSeq,
 		HasMore:                page.HasMore,
 		FirstSequence:          page.FirstSequence,
 		LastSequence:           page.LastSequence,
-		FirstRetainedSequence:  page.FirstRetainedSequence,
+		FirstRetainedSequence:  firstRetainedSequence,
 		CoveredThroughSequence: page.CoveredThroughSequence,
 		SnapshotEndSequence:    page.SnapshotEndSequence,
 		HistoryGeneration:      page.HistoryGeneration,

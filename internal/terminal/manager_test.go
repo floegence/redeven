@@ -634,6 +634,18 @@ func TestTerminalHistoryRespAlwaysSerializesHistoryContractZeroValues(t *testing
 	}
 }
 
+func TestTerminalHistoryRespAdvancesFirstRetainedSequenceAfterClear(t *testing.T) {
+	resp := terminalHistoryRespFromPage(termgo.HistoryPage{
+		FirstRetainedSequence:  0,
+		CoveredThroughSequence: 79,
+		SnapshotEndSequence:    79,
+		HistoryGeneration:      2,
+	})
+	if resp.FirstRetainedSequence != 80 {
+		t.Fatalf("first retained sequence = %d, want 80 after cleared history coverage", resp.FirstRetainedSequence)
+	}
+}
+
 func TestTerminalHistoryRPCRejectsNegativeGeneration(t *testing.T) {
 	m := newQuietTestManager(t, t.TempDir())
 	t.Cleanup(m.Cleanup)
