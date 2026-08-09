@@ -960,14 +960,6 @@ func (s *Server) requireLocalAccessAPI(w http.ResponseWriter, r *http.Request) b
 	return false
 }
 
-func (s *Server) requireLocalAccessHTTP(w http.ResponseWriter, r *http.Request) bool {
-	if s.ensureLocalAccessHTTPResponse(w, r) {
-		return true
-	}
-	http.Error(w, "access password required", http.StatusLocked)
-	return false
-}
-
 func (s *Server) isPublicEnvAppRequest(r *http.Request) bool {
 	if r == nil {
 		return false
@@ -1590,7 +1582,6 @@ func (s *Server) handleConnectArtifact(w http.ResponseWriter, r *http.Request) {
 	}
 	artifact, pluginCredential, channelID, err := s.mintPending(meta, wsURL, traceID, accessSessionID, accessExpiresAt)
 	if err != nil {
-		panic(err)
 		if s.log != nil {
 			s.log.Error("failed to mint connect artifact", "error", err)
 		}
@@ -1911,52 +1902,6 @@ func (s *Server) handleDirectWS(w http.ResponseWriter, r *http.Request) {
 	s.acceptor.Handler().ServeHTTP(w, r)
 }
 
-func (s *Server) trackDirectConnection(conn *websocket.Conn, accessSessionID string) bool {
-	if s == nil || conn == nil {
-		return false
-	}
-	s.directMu.Lock()
-	defer s.directMu.Unlock()
-	if s.directClosing {
-		return false
-	}
-	if s.directConns == nil {
-		s.directConns = make(map[*websocket.Conn]*localDirectConnection)
-	}
-	accessSessionID = strings.TrimSpace(accessSessionID)
-	if accessSessionID != "" {
-		access := s.pluginAccess[accessSessionID]
-		if access == nil || access.state != pluginAccessActive || (!access.expiresAt.IsZero() && !time.Now().Before(access.expiresAt)) {
-			return false
-		}
-	}
-	s.directConns[conn] = &localDirectConnection{accessSessionID: accessSessionID}
-	s.directWG.Add(1)
-	return true
-}
-
-func (s *Server) untrackDirectConnection(conn *websocket.Conn) {
-	if s == nil || conn == nil {
-		return
-	}
-	s.directMu.Lock()
-	binding, tracked := s.directConns[conn]
-	if tracked {
-		delete(s.directConns, conn)
-		if access := s.pluginAccess[binding.accessSessionID]; access != nil {
-			delete(access.connections, conn)
-			if access.state == pluginAccessClosing && len(access.pending) == 0 && len(access.connections) == 0 {
-				access.state = pluginAccessClosed
-				delete(s.pluginAccess, binding.accessSessionID)
-			}
-		}
-	}
-	s.directMu.Unlock()
-	if tracked {
-		s.directWG.Done()
-	}
-}
-
 func (s *Server) beginDirectShutdown() []*websocket.Conn {
 	if s == nil {
 		return nil
@@ -2003,20 +1948,6 @@ func (s *Server) removePendingAccessBinding(accessSessionID, channelID string) {
 		access.state = pluginAccessClosed
 		delete(s.pluginAccess, strings.TrimSpace(accessSessionID))
 	}
-}
-
-func (s *Server) directConnectionActive(conn *websocket.Conn, channelID string) bool {
-	if s == nil || conn == nil {
-		return false
-	}
-	s.directMu.Lock()
-	defer s.directMu.Unlock()
-	binding := s.directConns[conn]
-	if binding == nil || binding.channelID != strings.TrimSpace(channelID) {
-		return false
-	}
-	access := s.pluginAccess[binding.accessSessionID]
-	return access != nil && access.state == pluginAccessActive && (access.expiresAt.IsZero() || time.Now().Before(access.expiresAt))
 }
 
 func (s *Server) pluginAccessAllowsRequest(r *http.Request, channelID string) bool {

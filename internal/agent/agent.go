@@ -555,7 +555,7 @@ func (a *Agent) runControlLoop(ctx context.Context) {
 		return
 	}
 	trustRoots, err := x509.SystemCertPool()
-	if err != nil || trustRoots == nil || len(trustRoots.Subjects()) == 0 {
+	if err != nil || trustRoots == nil {
 		a.log.Error("control channel not started: system trust roots are unavailable")
 		return
 	}
@@ -1131,7 +1131,7 @@ func (a *Agent) runDataSession(ctx context.Context, grant *session.ChannelInitGr
 		return err
 	}
 	trustRoots, err := x509.SystemCertPool()
-	if err != nil || trustRoots == nil || len(trustRoots.Subjects()) == 0 {
+	if err != nil || trustRoots == nil {
 		return errors.New("system trust roots are unavailable")
 	}
 	sess, err := flowersec.Connect(ctx, lease, flowersec.ConnectorOptions{
