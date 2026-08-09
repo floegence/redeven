@@ -13,7 +13,6 @@ import (
 	"testing"
 	"time"
 
-	flowersec "github.com/floegence/flowersec/flowersec-go/v2"
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/runtimemanagement"
 )
@@ -254,8 +253,8 @@ func TestPluginAccessSessionCloseRevokesOnlyItsPendingArtifacts(t *testing.T) {
 			"two": {accessSessionID: "access-two"},
 		},
 		pluginAccess: map[string]*pluginAccessSession{
-			"access-one": {state: pluginAccessActive, pending: map[string]struct{}{"one": {}}, sessions: make(map[string]flowersec.Session)},
-			"access-two": {state: pluginAccessActive, pending: map[string]struct{}{"two": {}}, sessions: make(map[string]flowersec.Session)},
+			"access-one": {state: pluginAccessActive, pending: map[string]struct{}{"one": {}}},
+			"access-two": {state: pluginAccessActive, pending: map[string]struct{}{"two": {}}},
 		},
 	}
 	s.closePluginAccessSession("access-one")
@@ -278,13 +277,14 @@ func TestPluginAccessRequestRequiresExactActiveAccessSession(t *testing.T) {
 
 	s := &Server{
 		accessGate: accessgate.New(accessgate.Options{Password: "secret"}),
-		pending:    map[string]pendingDirect{"channel": {accessSessionID: "access-one"}},
+		activePluginSession: map[string]activePluginSessionBinding{
+			"channel": {accessSessionID: "access-one"},
+		},
 		pluginAccess: map[string]*pluginAccessSession{
 			"access-one": {
 				state:     pluginAccessActive,
 				expiresAt: time.Now().Add(time.Minute),
-				pending:   map[string]struct{}{"channel": {}},
-				sessions:  map[string]flowersec.Session{"channel": nil},
+				pending:   make(map[string]struct{}),
 			},
 		},
 	}

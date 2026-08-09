@@ -23,6 +23,21 @@ The public listener accepts only exact canonical IP authorities created from the
 
 Trusted Desktop, SSH, and container traffic enters through an independent `127.0.0.1:0` listener that mounts the trusted bridge handler and accepts canonical loopback authorities only. Its required attach URL is machine-only and never joins public display or exposure projections. SSH and container placement bridges execute `redeven desktop-bridge` and stream through that listener; they never forward the public Local UI port, rewrite Host, retry through the public URL, or select a compatibility transport. An established SSH bridge may replace only its private stdio transport after the same remote process generation proves the original identity; this does not create a public listener, alternate URL, or Runtime restart path. Runtime-control, Desktop model-source, and runtime management sockets remain loopback, token, owner, or local-socket protected and are not widened by Local UI exposure.
 
+A Desktop bridge connect artifact is one-shot admission state. Redeven keeps its
+channel metadata and plugin credential hash in `pending` only until Flowersec
+accepts the authenticated session, then atomically consumes that admission and
+creates an independent active channel binding. The artifact's four-minute
+admission expiry and the thirty-second pending sweep never revoke an established
+transport or its active plugin binding. An unused expired artifact is removed
+with its authorization index and cannot connect. Transport termination removes
+the exact active binding and credential generation; logout and access expiry
+close every exact access-session binding; plugin session-scope revoke retires
+plugin authority and removes the active plugin binding without treating the
+still-live transport as pending admission. Shutdown closes active transports and
+clears pending, active, authorization, and handler state. The shared lock order
+is pending admission before active direct state, while authorization cleanup is
+performed without either lock.
+
 ## Security Meaning
 
 `LocalUIExposure` is the single projected posture: `scope` is `loopback` or `network`, `transport` is `plaintext`, and `password_required` records access control. It appears in CLI presentation, Desktop startup and attach status, Runtime health, Local UI access status, and Env App state.
@@ -51,3 +66,4 @@ No additional boundary is declared for this concept.
 - `redeven:cmd/redeven/desktop_bridge.go:42` - `desktop-bridge` dials only the required trusted Local UI bridge URL.
 - `redeven:internal/desktopbridge/server.go:205` - Trusted bridge URL validation admits only root-path HTTP loopback endpoints.
 - `redeven:desktop/src/main/runtimePlacementBridgeSession.ts:337` - Established placement bridges keep one loopback proxy while replacing only a verified private transport.
+- `redeven:internal/localui/localui_e2e_test.go:37` - Real Flowersec Desktop bridge coverage proves admission consumption, post-expiry plugin access, unused-artifact rejection, revocation, and window isolation.

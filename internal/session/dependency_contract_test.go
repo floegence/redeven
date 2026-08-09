@@ -15,6 +15,7 @@ import (
 	"strings"
 	"testing"
 
+	redevplugincontracts "github.com/floegence/redevplugin/pkg/contracts"
 	"golang.org/x/mod/modfile"
 	"gopkg.in/yaml.v3"
 )
@@ -123,6 +124,98 @@ func TestFlowersecDependencyUsesPublishedRelease(t *testing.T) {
 	assertOnlyCurrentFlowersecGoImports(t, root)
 	assertNoticeDependency(t, notices, flowersecGoModule, flowersecGoVersion, "https://pkg.go.dev/"+flowersecGoModule+"@"+flowersecGoVersion)
 	assertNoticeDependency(t, notices, flowersecCorePackage, flowersecCoreVersion, "https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/"+flowersecCoreVersion)
+}
+
+func TestReDevPluginDependenciesMatchPublishedPackageSet(t *testing.T) {
+	t.Parallel()
+
+	root := repoRootForTest(t)
+	packageSet := redevplugincontracts.PackageSet()
+	parsedMod, err := modfile.Parse("go.mod", []byte(readRepoFile(t, root, "go.mod")), nil)
+	if err != nil {
+		t.Fatalf("parse go.mod: %v", err)
+	}
+	var goVersions []string
+	for _, requirement := range parsedMod.Require {
+		if requirement.Mod.Path == packageSet.GoModule.Module {
+			goVersions = append(goVersions, requirement.Mod.Version)
+		}
+	}
+	if len(goVersions) != 1 || goVersions[0] != packageSet.GoModule.Version {
+		t.Fatalf("ReDevPlugin Go coordinate = %v, want %s", goVersions, packageSet.GoModule.Version)
+	}
+
+	type packageManifest struct {
+		Dependencies map[string]string `json:"dependencies"`
+	}
+	var manifest packageManifest
+	if err := json.Unmarshal([]byte(readRepoFile(t, root, "internal/envapp/ui_src/package.json")), &manifest); err != nil {
+		t.Fatalf("parse Env App package.json: %v", err)
+	}
+	var npmLock struct {
+		Packages map[string]struct {
+			Version      string            `json:"version"`
+			Dependencies map[string]string `json:"dependencies"`
+		} `json:"packages"`
+	}
+	if err := json.Unmarshal([]byte(readRepoFile(t, root, "internal/envapp/ui_src/package-lock.json")), &npmLock); err != nil {
+		t.Fatalf("parse Env App package-lock.json: %v", err)
+	}
+	var pnpmLock struct {
+		Importers map[string]struct {
+			Dependencies map[string]struct {
+				Specifier string `yaml:"specifier"`
+				Version   string `yaml:"version"`
+			} `yaml:"dependencies"`
+		} `yaml:"importers"`
+		Packages  map[string]any `yaml:"packages"`
+		Snapshots map[string]struct {
+			Dependencies map[string]string `yaml:"dependencies"`
+		} `yaml:"snapshots"`
+	}
+	if err := yaml.Unmarshal([]byte(readRepoFile(t, root, "internal/envapp/ui_src/pnpm-lock.yaml")), &pnpmLock); err != nil {
+		t.Fatalf("parse Env App pnpm-lock.yaml: %v", err)
+	}
+	rootImporter, ok := pnpmLock.Importers["."]
+	if !ok {
+		t.Fatal("Env App pnpm lock is missing the root importer")
+	}
+	notices := readRepoFile(t, root, "THIRD_PARTY_NOTICES.md")
+	npmVersions := make(map[string]string, len(packageSet.NPMPackages))
+	for _, coordinate := range packageSet.NPMPackages {
+		npmVersions[coordinate.Name] = coordinate.Version
+		if got := manifest.Dependencies[coordinate.Name]; got != coordinate.Version {
+			t.Fatalf("Env App package.json %s = %q, want %q", coordinate.Name, got, coordinate.Version)
+		}
+		if got := npmLock.Packages[""].Dependencies[coordinate.Name]; got != coordinate.Version {
+			t.Fatalf("Env App npm root %s = %q, want %q", coordinate.Name, got, coordinate.Version)
+		}
+		installed, ok := npmLock.Packages["node_modules/"+coordinate.Name]
+		if !ok || installed.Version != coordinate.Version {
+			t.Fatalf("Env App npm lock %s = %q, want %q", coordinate.Name, installed.Version, coordinate.Version)
+		}
+		pnpmCoordinate, ok := rootImporter.Dependencies[coordinate.Name]
+		if !ok || pnpmCoordinate.Specifier != coordinate.Version || pnpmCoordinate.Version != coordinate.Version {
+			t.Fatalf("Env App pnpm importer %s = %+v, want %q", coordinate.Name, pnpmCoordinate, coordinate.Version)
+		}
+		pnpmKey := coordinate.Name + "@" + coordinate.Version
+		if _, ok := pnpmLock.Packages[pnpmKey]; !ok {
+			t.Fatalf("Env App pnpm lock is missing %s", pnpmKey)
+		}
+		if marker := coordinate.Name + " | " + coordinate.Version; !strings.Contains(notices, marker) {
+			t.Fatalf("THIRD_PARTY_NOTICES.md is missing %q", marker)
+		}
+	}
+	uiName := "@floegence/redevplugin-ui"
+	contractsName := "@floegence/redevplugin-contracts"
+	uiVersion := npmVersions[uiName]
+	contractsVersion := npmVersions[contractsName]
+	if got := npmLock.Packages["node_modules/"+uiName].Dependencies[contractsName]; got != contractsVersion {
+		t.Fatalf("Env App npm UI contracts dependency = %q, want %q", got, contractsVersion)
+	}
+	if got := pnpmLock.Snapshots[uiName+"@"+uiVersion].Dependencies[contractsName]; got != contractsVersion {
+		t.Fatalf("Env App pnpm UI contracts dependency = %q, want %q", got, contractsVersion)
+	}
 }
 
 func TestFlowersecTransportPoliciesAreExplicit(t *testing.T) {

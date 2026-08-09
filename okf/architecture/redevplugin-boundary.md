@@ -57,6 +57,11 @@ integrity and provenance, crates.io checksums and Cargo VCS identity, and closed
 package coordinates. Forbidden wiring includes `go.work`, `go.work.sum`, Go
 `replace`, package-manager links, sibling paths, Rust path overrides, copied
 contracts, and copied runtime binaries. Dependency checks use `GOWORK=off`.
+Redeven's dependency contract test reads the package set embedded in the
+released Go module and requires the Go module, Env App manifest, npm and pnpm
+lockfiles, and third-party notices to carry its exact npm coordinates. A
+front-end package cannot be independently downgraded while the Host and runtime
+remain on a newer platform release.
 
 ReDevPlugin owns the durable `redevplugin.release_install_operation.v1`
 journal. Official release installation requests activation after commit and is
@@ -202,3 +207,4 @@ archived authority or data, or recover unknown and unsupported state.
 - `redeven:internal/workbenchlayout/types.go:21` - Declares the persisted `redeven.plugin` widget type.
 - `redeven:scripts/check_redevplugin_dependency_boundary.sh:1` - Rejects local wiring and platform duplication.
 - `redeven:scripts/check_redevplugin_release_artifacts.sh:1` - Verifies the coordinated public package publication.
+- `redeven:internal/session/dependency_contract_test.go:1` - Matches downstream Go and npm coordinates to the package set embedded in the released Go module.
