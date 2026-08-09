@@ -1550,25 +1550,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       setQueuedTurnPromotingID('');
     }
   });
-  const selectedThreadLiveStatus = createMemo(() => {
-    const thread = selectedThread();
-    const pending = pendingSubmission();
-    const localAdmissionRunning = Boolean(
-      pending
-      && pending.phase !== 'preparing'
-      && !pendingSubmissionIsQueued(pending, thread)
-      && (pending.threadID
-        ? pending.threadID === trimString(selectedThreadID())
-        : pending.sessionKey === PENDING_NEW_THREAD_ID && !trimString(selectedThreadID()))
-    );
-    if (localAdmissionRunning) return 'running';
-    if (!thread) return 'idle';
-    const admission = consumedInputAdmissions()[trimString(thread.thread_id)];
-    if (admission && trimString(visibleInputRequest(thread)?.prompt_id) === admission.promptID) {
-      return 'running';
-    }
-    return thread.status;
-  });
+  const selectedThreadLiveStatus = createMemo(() => selectedThread()?.status ?? 'idle');
   const pendingAdmissionCanStop = createMemo(() => {
     if (!chatRunning()) return false;
     const pending = pendingSubmission();

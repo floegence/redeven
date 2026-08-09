@@ -3870,7 +3870,43 @@ describe('Flower live projection', () => {
     expect(activityBlock?.summary.counts?.running).toBeUndefined();
   });
 
-  it('prefers a canonical complete message over a stale interrupted timeline patch', () => {
+  it('does not synthesize terminal success from a complete assistant before Floret settles the run', () => {
+    const initial = thread({ status: 'running', active_run_id: 'run-1' });
+    const result = applyFlowerLiveEvent(initial, 10, event(11, 'timeline.replaced', {
+      stream_generation: 1,
+      snapshot_through_seq: 11,
+      messages: [message(), {
+        id: 'turn-1',
+        thread_id: 'thread-1',
+        turn_id: 'turn-1',
+        run_id: 'run-1',
+        role: 'assistant',
+        content: 'committed before terminal settlement',
+        status: 'complete',
+        created_at_ms: 2000,
+        blocks: [{ type: 'markdown', content: 'committed before terminal settlement' }],
+      }],
+      thread_patch: {
+        active_run_id: 'run-1',
+        run_status: 'running',
+      },
+      live_state: {
+        thread_patch: {
+          active_run_id: 'run-1',
+          run_status: 'running',
+        },
+        runs: { 'run-1': { run_id: 'run-1', status: 'running' } },
+        approval_actions: {},
+        input_requests: {},
+      },
+    }));
+
+    expect(result.thread.status).toBe('running');
+    expect(result.thread.active_run_id).toBe('run-1');
+    expect(result.thread.messages[1]).toMatchObject({ role: 'assistant', status: 'complete' });
+  });
+
+  it('keeps Floret terminal failure authoritative when a complete assistant is present', () => {
     const initial = thread({ status: 'running', active_run_id: 'run-1' });
     const result = applyFlowerLiveEvent(initial, 10, event(11, 'timeline.replaced', {
       stream_generation: 1,
@@ -3905,9 +3941,9 @@ describe('Flower live projection', () => {
       },
     }));
 
-    expect(result.thread.status).toBe('success');
+    expect(result.thread.status).toBe('failed');
     expect(result.thread.active_run_id).toBeUndefined();
-    expect(result.thread.error).toBeUndefined();
+    expect(result.thread.error?.code).toBe('floret_turn_interrupted');
   });
 
   it('replaces stale live state when canonical timeline includes materialized state', () => {

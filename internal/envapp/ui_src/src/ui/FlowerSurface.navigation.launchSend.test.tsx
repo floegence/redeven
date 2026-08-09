@@ -4052,6 +4052,7 @@ describe('FlowerSurface navigation launch/send', () => {
         details: { text: 'answer the waiting prompt' },
       },
     }));
+    expect(runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-status')).toBe('waiting_user');
   });
 
   it('loads the canonical thread after sending so completed assistant replies appear', async () => {
@@ -4221,6 +4222,7 @@ describe('FlowerSurface navigation launch/send', () => {
     expect(runtime.querySelector('[data-flower-message-id]')).toBeNull();
     expect(runtime.querySelector('[data-flower-pending-submission-id]')?.textContent).toContain('admit without bootstrap latency');
     expect(runtime.querySelector('[data-flower-pending-submission-id]')?.getAttribute('data-flower-pending-submission-phase')).toBe('awaiting_projection');
+    expect(runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-status')).toBe('idle');
 
     bootstrapDeferred.resolve(liveBootstrap(thread({
       thread_id: 'thread-fast-admission',
@@ -4238,6 +4240,7 @@ describe('FlowerSurface navigation launch/send', () => {
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="entry-fast-admission"]')));
     expect(runtime.querySelector('[data-flower-pending-submission-id]')).toBeNull();
     expect(runtime.querySelectorAll('[data-flower-message-role="user"]')).toHaveLength(1);
+    expect(runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-status')).toBe('running');
   });
 
   it('removes a queued product row when the server timeline replacement clears the queue', async () => {
