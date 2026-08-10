@@ -117,6 +117,56 @@ describe('Flower pending submission browser presentation', () => {
     expect(Array.from(runtime.querySelectorAll('[data-flower-message-id]')).filter((row) => row.textContent?.includes(prompt))).toHaveLength(1);
   });
 
+  it('does not let an earlier identical canonical user message consume a new admission preview', async () => {
+    const prompt = 'Repeat this exact request';
+    const admission = deferred<FlowerTurnLaunchReceipt>();
+    const canonical = thread({
+      thread_id: 'thread-repeated-admission',
+      status: 'running',
+      active_run_id: 'run-existing',
+      messages: [{
+        id: 'message-earlier-user',
+        turn_id: 'turn-earlier-user',
+        role: 'user',
+        content: prompt,
+        status: 'complete',
+        created_at_ms: Date.now(),
+      }],
+    });
+    const launchTurn = vi.fn(async (input) => ({
+      ...await admission.promise,
+      client_request_id: input.client_request_id,
+    }));
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [canonical]),
+      loadThread: vi.fn(async () => liveBootstrap(canonical)),
+      launchTurn,
+    });
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-repeated-admission"] button')));
+    (runtime.querySelector('[data-thread-id="thread-repeated-admission"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('textarea')));
+
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    textarea.value = prompt;
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    await waitFor(() => !(runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).disabled);
+    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-pending-submission-id]')));
+
+    admission.resolve({
+      client_request_id: 'replaced-by-launch-adapter',
+      thread_id: canonical.thread_id,
+      admission_id: 'admission-new-identical-user',
+      kind: 'admitting',
+    });
+    await waitFor(() => !(runtime.querySelector('textarea') as HTMLTextAreaElement).disabled);
+
+    expect(runtime.querySelector('[data-flower-pending-submission-id]')?.textContent).toContain(prompt);
+    expect(runtime.querySelectorAll('[data-flower-message-id]')).toHaveLength(1);
+    expect(runtime.querySelector('.flower-queued-turn-dock')).toBeNull();
+  });
+
   it('renders a compact canonical queue and deletes only the selected middle item', async () => {
     let canonical = thread({
       thread_id: 'thread-compact-queue',
