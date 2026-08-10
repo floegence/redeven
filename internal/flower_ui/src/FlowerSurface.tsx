@@ -7757,10 +7757,27 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (!thread || pending.length < 2 || selectedThreadDetailPending() || selectedThreadReadOnly()) {
       return;
     }
+    const threadID = trimString(thread.thread_id);
+    const pendingActionIDs = pending.map((action) => action.action_id);
     setApprovalQueueAnnouncement(copy().chat.toolApprovalSubmitting);
-    for (const action of pending) {
+    for (let index = 0; index < pendingActionIDs.length; index += 1) {
+      const actionID = pendingActionIDs[index]!;
+      const canonicalThread = selectedThread();
+      const action = canonicalThread?.approval_actions?.find((candidate) => (
+        candidate.action_id === actionID
+        && candidate.state === 'requested'
+        && candidate.status === 'pending'
+      ));
+      if (!action) continue;
       if (approvalSubmitting()[action.action_id] !== undefined) continue;
       await submitApprovalAction(action, false, { allowNonPrimary: true, suppressHandoff: true });
+      if (index + 1 >= pendingActionIDs.length || !selectedThreadDetailMatches(threadID)) continue;
+      try {
+        await reloadSelectedThread(threadID, threadLoadSequence, 'user_action');
+      } catch (error) {
+        if (selectedThreadDetailMatches(threadID)) notifyComposerError(getErrorMessage(error));
+        return;
+      }
     }
   };
 
