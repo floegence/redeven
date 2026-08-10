@@ -1720,6 +1720,56 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   }, 10000);
 
+  it('keeps plugin surfaces closed and retries failed runtime recovery only once', async () => {
+    vi.useFakeTimers();
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(officialContainersProjection('enabled'));
+    pluginLifecycleMocks.refreshEnabledRuntimeState
+      .mockRejectedValueOnce(new Error('Activation evidence is unavailable.'))
+      .mockResolvedValueOnce({ results: [] });
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+      await vi.advanceTimersByTimeAsync(250);
+      await flushUntil(() => pluginLifecycleMocks.refreshEnabledRuntimeState.mock.calls.length === 1, 40);
+
+      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="plugin-center"]')), 40);
+      (host.querySelector('[data-plugin-panel-tile="plugin-center"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => Boolean(pluginCenterViewState.lastProps), 40);
+
+      expect(pluginCenterViewState.lastProps.runtimeRecovery).toEqual({
+        state: 'failed',
+        error: 'Activation evidence is unavailable.',
+      });
+      expect(pluginCenterViewState.lastProps.canOpenPluginSurfaces).toBe(false);
+
+      pluginCenterViewState.lastProps.onRetryRuntimeRecovery();
+      pluginCenterViewState.lastProps.onRetryRuntimeRecovery();
+      await flushAsync();
+
+      expect(pluginCenterViewState.lastProps.runtimeRecovery).toEqual({ state: 'recovering', error: undefined });
+      expect(pluginCenterViewState.lastProps.canOpenPluginSurfaces).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(250);
+      await flushUntil(() => pluginLifecycleMocks.refreshEnabledRuntimeState.mock.calls.length === 2, 40);
+
+      expect(pluginLifecycleMocks.refreshEnabledRuntimeState).toHaveBeenCalledTimes(2);
+      expect(pluginCenterViewState.lastProps.runtimeRecovery).toBeUndefined();
+      expect(pluginCenterViewState.lastProps.canOpenPluginSurfaces).toBe(true);
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
   it('keeps an unknown-outcome mutation lane closed until local surface invalidation completes', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
