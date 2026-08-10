@@ -39,6 +39,11 @@ export type PluginCenterViewProps = {
   focusRequest?: number;
   canManagePlugins: boolean;
   canOpenPluginSurfaces: boolean;
+  runtimeRecovery?: Readonly<{
+    state: 'recovering' | 'failed';
+    error?: string;
+  }>;
+  onRetryRuntimeRecovery?: () => Promise<unknown> | unknown;
   onClose?: () => void;
   onRefresh: () => Promise<unknown> | unknown;
   onCommand: (command: PluginLifecycleCommand, signal: AbortSignal) => Promise<unknown> | unknown;
@@ -570,6 +575,8 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
       focusRequest={props.selectedInventoryKey ? undefined : props.focusRequest}
       onInstallExternal={() => openExternalDialog()}
       onClose={props.onClose}
+      runtimeRecovery={props.runtimeRecovery}
+      onRetryRuntimeRecovery={props.onRetryRuntimeRecovery}
     >
       <Show when={errorMessage()}>
         <div role="alert" data-plugin-center-error class={cn('flex flex-wrap items-center gap-3 border-b border-destructive bg-background px-4 py-3 text-sm text-destructive', PLUGIN_ENTER_MOTION_CLASS)}>
@@ -900,12 +907,28 @@ export function PluginCenterShell(props: {
   onRefresh: () => void;
   onTabSelect: (tab: PluginCenterTab) => void;
   canManage: boolean;
+  runtimeRecovery?: Readonly<{
+    state: 'recovering' | 'failed';
+    error?: string;
+  }>;
+  onRetryRuntimeRecovery?: () => Promise<unknown> | unknown;
   focusRequest?: number;
   onInstallExternal: () => void;
   onClose?: () => void;
   children: JSX.Element;
 }): JSX.Element {
   const i18n = useI18n();
+  const [runtimeRetryPending, setRuntimeRetryPending] = createSignal(false);
+  createEffect(() => {
+    if (props.runtimeRecovery?.state !== 'failed') setRuntimeRetryPending(false);
+  });
+  const retryRuntimeRecovery = () => {
+    if (runtimeRetryPending() || !props.onRetryRuntimeRecovery) return;
+    setRuntimeRetryPending(true);
+    Promise.resolve(props.onRetryRuntimeRecovery())
+      .catch(() => undefined)
+      .finally(() => setRuntimeRetryPending(false));
+  };
   let rootRef: HTMLElement | undefined;
   let handledFocusRequest = 0;
   createEffect(() => {
@@ -1058,6 +1081,48 @@ export function PluginCenterShell(props: {
           </div>
         </div>
       </header>
+      <Show when={props.runtimeRecovery}>
+        {(recovery) => (
+          <div
+            role={recovery().state === 'recovering' ? 'status' : 'alert'}
+            data-plugin-runtime-recovery={recovery().state}
+            class={cn(
+              'flex flex-wrap items-center gap-3 border-b px-4 py-3 text-sm',
+              recovery().state === 'recovering'
+                ? 'border-primary/30 bg-primary/5 text-foreground'
+                : 'border-destructive bg-background text-destructive',
+              PLUGIN_ENTER_MOTION_CLASS,
+            )}
+          >
+            <Show when={recovery().state === 'recovering'} fallback={<AlertTriangle class="h-4 w-4 shrink-0" />}>
+              <RefreshIcon class="h-4 w-4 shrink-0 animate-spin motion-reduce:animate-none" />
+            </Show>
+            <div class="min-w-0 flex-1">
+              <div class="font-medium">
+                {recovery().state === 'recovering'
+                  ? i18n.t('shell.status.preparingSecureSession')
+                  : i18n.t('shell.status.connectionFailed')}
+              </div>
+              <Show when={recovery().error}>
+                {(message) => <div class="mt-1 text-xs text-muted-foreground">{message()}</div>}
+              </Show>
+              <div class="mt-1 text-xs text-muted-foreground">{i18n.t('uiCopy.plugin.runtimeIssueRecovery')}</div>
+            </div>
+            <Show when={props.onRetryRuntimeRecovery && recovery().state === 'failed'}>
+              <button
+                type="button"
+                data-plugin-runtime-recovery-retry
+                class={cn('min-h-[44px] cursor-pointer rounded-md border border-destructive px-3 text-xs font-semibold hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-9', PLUGIN_PRESS_MOTION_CLASS)}
+                aria-busy={runtimeRetryPending()}
+                disabled={runtimeRetryPending()}
+                onClick={retryRuntimeRecovery}
+              >
+                {i18n.t('shell.status.retryNow')}
+              </button>
+            </Show>
+          </div>
+        )}
+      </Show>
       {props.children}
     </section>
   );
