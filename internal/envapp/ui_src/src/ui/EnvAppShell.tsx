@@ -4503,6 +4503,7 @@ export function EnvAppShell() {
             id="redeven-activity-flower-product"
             class="flower-activity-product-root"
             classList={{ 'flower-activity-product-root-full-page': activityFlowerPlacement() === 'full_page' }}
+            data-floe-dialog-surface-host="true"
             data-presentation={activityFlowerPlacement()}
             aria-hidden={!activityFlowerSurfaceVisible() ? 'true' : undefined}
             inert={!activityFlowerSurfaceVisible()}

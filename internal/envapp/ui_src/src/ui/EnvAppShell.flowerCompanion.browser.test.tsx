@@ -1249,6 +1249,7 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     if (!(flowerSurface instanceof HTMLElement)) throw new Error('Activity EnvAIPage did not mount.');
     const mountID = flowerSurface.dataset.mountId;
 
+    expect(fixture.product.getAttribute('data-floe-dialog-surface-host')).toBe('true');
     expect(fixture.product.dataset.presentation).toBe('collapsed');
     expect(fixture.product.getAttribute('aria-hidden')).toBeNull();
     expect(fixture.companion.dataset.companionPhase).toBe('collapsed');
