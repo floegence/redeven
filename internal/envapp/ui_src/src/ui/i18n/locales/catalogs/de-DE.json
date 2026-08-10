@@ -4323,6 +4323,21 @@
       "runtimeIssueRecovery": "Aktualisieren Sie Redeven oder ReDevPlugin auf die erforderliche Version, starten Sie die Laufzeitumgebung neu und aktualisieren Sie anschließend das Plugin Center.",
       "runtimeRecoveryInProgress": "Der Zugriff auf die Plugin-Laufzeit wird wiederhergestellt. Plugin-Oberflächen bleiben bis zum Abschluss der Wiederherstellung nicht verfügbar.",
       "runtimeRecoveryFailed": "Plugin-Oberflächen bleiben nicht verfügbar. Prüfen Sie den oben angezeigten Fehler und versuchen Sie dann die Laufzeitwiederherstellung erneut.",
+      "runtimeRecoveryReason": {
+        "unknown": "Die Wiederherstellung der Plugin-Laufzeit ist fehlgeschlagen.",
+        "trust_state_advanced": "Die Plugin-Vertrauensinformationen haben sich geändert und konnten nicht erneut validiert werden.",
+        "trust_revoked": "Diese Plugin-Version gilt nicht mehr als vertrauenswürdig.",
+        "trust_fenced": "Das Plugin-Vertrauen wurde vorübergehend durch einen Administrator gesperrt.",
+        "trust_epoch_mismatch": "Die Plugin-Vertrauensrichtlinie wurde nach der Installation geändert.",
+        "activation_evidence_invalid": "Der Aktivierungsnachweis des Plugins ist ungültig.",
+        "activation_lease_expired": "Die Aktivierungsberechtigung des Plugins ist abgelaufen.",
+        "recovery_canceled": "Die Wiederherstellung der Plugin-Laufzeit wurde abgebrochen."
+      },
+      "runtimeRecoveryAction": {
+        "retry": "Prüfen Sie den oben angezeigten Fehler und versuchen Sie die Wiederherstellung erneut.",
+        "reinstall": "Installieren Sie das Plugin erneut aus einer vertrauenswürdigen Quelle, bevor Sie es wieder öffnen.",
+        "contact_admin": "Wenden Sie sich an einen Administrator, bevor Sie es erneut versuchen."
+      },
       "trustIssueRecovery": "Prüfen Sie unten die Codes für die Vertrauens- und Genehmigungsgründe sowie die Quelle. Wählen Sie ein anderes Paket oder bitten Sie einen Administrator, die Richtlinie zu ändern, bevor Sie es erneut versuchen.",
       "diagnosticIssueRecovery": "Beheben Sie das unten angezeigte Host- oder Paketproblem und aktualisieren Sie anschließend das Plugin Center, bevor Sie es erneut versuchen.",
       "moreActions": "Weitere Plugin-Aktionen",

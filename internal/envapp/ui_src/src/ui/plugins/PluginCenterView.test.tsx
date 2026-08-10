@@ -2078,6 +2078,48 @@ describe('PluginCenterView', () => {
     expect(open?.disabled).toBe(true);
   });
 
+  it('presents typed fenced recovery guidance without suggesting a blind retry', () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    const enabledProjection = containersPermissionProjection(true);
+    enabledProjection.items[0] = {
+      ...enabledProjection.items[0],
+      defaultLaunchTarget: {
+        pluginID: 'com.redeven.official.containers',
+        pluginInstanceID: 'plugininst_containers',
+        surfaceID: 'containers.dashboard',
+        preferredPlacement: 'activity',
+        expectedManagementRevision: 7,
+      },
+    };
+    const runtimeRecovery = {
+      state: 'failed',
+      error: 'Plugin trust source is fenced; contact an administrator',
+      reason: 'trust_fenced',
+      action: 'contact_admin',
+    } as const;
+
+    dispose = render(() => (
+      <PluginCenterView
+        projection={enabledProjection}
+        loading={false}
+        error={null}
+        canManagePlugins
+        canOpenPluginSurfaces={false}
+        runtimeRecovery={runtimeRecovery}
+        onRetryRuntimeRecovery={vi.fn()}
+        onRefresh={vi.fn()}
+        onCommand={vi.fn()}
+      />
+    ), mount);
+
+    const recovery = mount.querySelector<HTMLElement>('[data-plugin-runtime-recovery="failed"]');
+    expect(recovery?.textContent).toContain('Plugin trust is temporarily blocked by an administrator.');
+    expect(recovery?.textContent).toContain('Contact an administrator before trying again.');
+    expect(recovery?.textContent).not.toContain('then retry runtime recovery');
+    expect(mount.querySelector<HTMLButtonElement>('[data-plugin-center-card-primary="catalog:containers"]')?.disabled).toBe(true);
+  });
+
   it('explains that plugin surfaces remain unavailable while runtime recovery is active', () => {
     const mount = document.createElement('div');
     document.body.append(mount);

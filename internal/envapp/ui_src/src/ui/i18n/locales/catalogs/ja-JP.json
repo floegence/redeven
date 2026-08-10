@@ -4323,6 +4323,21 @@
       "runtimeIssueRecovery": "Redeven または ReDevPlugin を必要なバージョンに更新し、ランタイムを再起動してからプラグインセンターを再読み込みしてください。",
       "runtimeRecoveryInProgress": "プラグインランタイムへのアクセスを復元しています。復元が完了するまでプラグイン画面は利用できません。",
       "runtimeRecoveryFailed": "プラグイン画面は引き続き利用できません。上のエラーを確認してから、ランタイムの復元を再試行してください。",
+      "runtimeRecoveryReason": {
+        "unknown": "プラグインランタイムの復元に失敗しました。",
+        "trust_state_advanced": "プラグインの信頼情報が変更され、再検証できませんでした。",
+        "trust_revoked": "このプラグインリリースは信頼されなくなりました。",
+        "trust_fenced": "管理者がプラグインの信頼を一時的にブロックしています。",
+        "trust_epoch_mismatch": "インストール後にプラグインの信頼ポリシーが変更されました。",
+        "activation_evidence_invalid": "プラグインのアクティベーション証拠が無効です。",
+        "activation_lease_expired": "プラグインのアクティベーション許可が期限切れです。",
+        "recovery_canceled": "プラグインランタイムの復元がキャンセルされました。"
+      },
+      "runtimeRecoveryAction": {
+        "retry": "上のエラーを確認してから、ランタイムの復元を再試行してください。",
+        "reinstall": "再度開く前に、信頼できるソースからプラグインを再インストールしてください。",
+        "contact_admin": "再試行する前に管理者へ連絡してください。"
+      },
       "trustIssueRecovery": "以下の信頼および承認の理由コードとソースを確認してください。再試行する前に、別のパッケージを選ぶか、管理者にポリシーの変更を依頼してください。",
       "diagnosticIssueRecovery": "以下に表示されているホストまたはパッケージの問題を解決し、プラグインセンターを再読み込みしてから再試行してください。",
       "moreActions": "その他のプラグイン操作",

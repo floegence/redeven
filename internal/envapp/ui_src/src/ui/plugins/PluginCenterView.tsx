@@ -20,6 +20,7 @@ import type {
   PluginLifecycleState,
   PluginPendingCommandType,
   PluginPresentationCategory,
+  PluginRuntimeRecoveryPresentation,
   PluginTrustBadge,
 } from './pluginTypes';
 import { createUIPresentationEventRecorder } from '../services/uiPresentationTransactions';
@@ -39,10 +40,7 @@ export type PluginCenterViewProps = {
   focusRequest?: number;
   canManagePlugins: boolean;
   canOpenPluginSurfaces: boolean;
-  runtimeRecovery?: Readonly<{
-    state: 'recovering' | 'failed';
-    error?: string;
-  }>;
+  runtimeRecovery?: PluginRuntimeRecoveryPresentation;
   onRetryRuntimeRecovery?: () => Promise<unknown> | unknown;
   onClose?: () => void;
   onRefresh: () => Promise<unknown> | unknown;
@@ -907,10 +905,7 @@ export function PluginCenterShell(props: {
   onRefresh: () => void;
   onTabSelect: (tab: PluginCenterTab) => void;
   canManage: boolean;
-  runtimeRecovery?: Readonly<{
-    state: 'recovering' | 'failed';
-    error?: string;
-  }>;
+  runtimeRecovery?: PluginRuntimeRecoveryPresentation;
   onRetryRuntimeRecovery?: () => Promise<unknown> | unknown;
   focusRequest?: number;
   onInstallExternal: () => void;
@@ -928,6 +923,16 @@ export function PluginCenterShell(props: {
     Promise.resolve(props.onRetryRuntimeRecovery())
       .catch(() => undefined)
       .finally(() => setRuntimeRetryPending(false));
+  };
+  const runtimeRecoveryTitle = () => {
+    const reason = props.runtimeRecovery?.reason;
+    if (!reason) return i18n.t('shell.status.connectionFailed');
+    return i18n.t(`uiCopy.plugin.runtimeRecoveryReason.${reason}`);
+  };
+  const runtimeRecoveryGuidance = () => {
+    const action = props.runtimeRecovery?.action;
+    if (!action) return i18n.t('uiCopy.plugin.runtimeRecoveryFailed');
+    return i18n.t(`uiCopy.plugin.runtimeRecoveryAction.${action}`);
   };
   let rootRef: HTMLElement | undefined;
   let handledFocusRequest = 0;
@@ -1101,7 +1106,7 @@ export function PluginCenterShell(props: {
               <div class="font-medium">
                 {recovery().state === 'recovering'
                   ? i18n.t('shell.status.preparingSecureSession')
-                  : i18n.t('shell.status.connectionFailed')}
+                  : runtimeRecoveryTitle()}
               </div>
               <Show when={recovery().error}>
                 {(message) => <div class="mt-1 text-xs text-muted-foreground">{message()}</div>}
@@ -1109,7 +1114,7 @@ export function PluginCenterShell(props: {
               <div class="mt-1 text-xs text-muted-foreground">
                 {recovery().state === 'recovering'
                   ? i18n.t('uiCopy.plugin.runtimeRecoveryInProgress')
-                  : i18n.t('uiCopy.plugin.runtimeRecoveryFailed')}
+                  : runtimeRecoveryGuidance()}
               </div>
             </div>
             <Show when={props.onRetryRuntimeRecovery && recovery().state === 'failed'}>
