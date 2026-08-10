@@ -4004,6 +4004,7 @@
       "threadLoadErrorTitle": "Не удалось загрузить беседу.",
       "threadLoading": "Беседа загружается...",
       "composerErrorTitle": "Flower не смог отправить сообщение.",
+      "stopErrorTitle": "Flower не смог остановить этот ответ.",
       "modelStatusPreparing": "Подготовка запроса к модели...",
       "modelStatusWaitingResponse": "Ожидание ответа модели...",
       "modelStatusStreaming": "Думает...",

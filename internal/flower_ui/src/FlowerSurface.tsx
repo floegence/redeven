@@ -982,6 +982,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     title: copy().chat.composerErrorTitle,
     message,
   });
+  const notifyStopError = (message: string) => notify({
+    tone: 'error',
+    title: copy().chat.stopErrorTitle,
+    message,
+  });
   const notifyPermissionError = (message: string) => notify({
     tone: 'error',
     title: copy().chat.permissionSelectorErrorTitle,
@@ -5364,7 +5369,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }
     } catch (error) {
       if (selectedThreadDetailMatches(stoppingThreadID)) {
-        notifyComposerError(getErrorMessage(error));
+        notifyStopError(getErrorMessage(error));
       }
     } finally {
       setThreadStopping(false);
@@ -7390,6 +7395,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     || pendingAdmissionCanStop()
     || (selectedThreadCanStop() && !composerTextOverLimit() && !composerChatDraftText() && !composerHasAttachments() && !composerHasReferences())
   ));
+  type ComposerPrimaryAction = 'send' | 'stop' | 'compact' | 'cancel_long_text';
+  const composerPrimaryActionKind = createMemo<ComposerPrimaryAction>(() => (
+    longTextPreparing()
+      ? 'cancel_long_text'
+      : composerPrimaryActionIsStop()
+      ? 'stop'
+      : composerPrimaryActionIsCommand()
+        ? 'compact'
+        : 'send'
+  ));
   const composerPrimaryActionIcon = createMemo(() => composerPrimaryActionIsStop() ? FlowerStopIcon : composerPrimaryActionIsCommand() ? Clock : ArrowUp);
   const composerPrimaryActionLabel = createMemo(() => composerPrimaryActionIsStop() ? copy().chat.stop : composerPrimaryActionIsCommand() ? copy().chat.compactContext : copy().chat.send);
   const composerPrimaryActionDisabled = createMemo(() => {
@@ -7414,6 +7429,29 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const composerPrimaryActionLoading = createMemo(() => (
     threadStopping() || deferredStopPending() || (chatRunning() && !longTextPreparing() && !pendingAdmissionCanStop()) || (composerPrimaryActionIsCommand() && compactSubmitting())
   ));
+
+  let capturedComposerPrimaryAction: ComposerPrimaryAction | undefined;
+  const captureComposerPrimaryAction = () => {
+    capturedComposerPrimaryAction = composerPrimaryActionKind();
+  };
+  const executeComposerPrimaryAction = (event: MouseEvent) => {
+    const renderedAction = (event.currentTarget as HTMLElement).dataset.flowerPrimaryAction as ComposerPrimaryAction | undefined;
+    const action = capturedComposerPrimaryAction ?? renderedAction ?? composerPrimaryActionKind();
+    capturedComposerPrimaryAction = undefined;
+    switch (action) {
+      case 'cancel_long_text':
+        cancelActiveLongTextSubmission?.();
+        return;
+      case 'stop':
+        void stopSelectedThreadFromComposer();
+        return;
+      case 'compact':
+        void executeCompactContextCommand();
+        return;
+      default:
+        void submitChat();
+    }
+  };
 
   const questionAnswer = (question: FlowerInputRequestQuestion): FlowerInputAnswer | null => {
     const draft = questionDraft(question.id);
@@ -11250,7 +11288,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                         title={composerPrimaryActionLabel()}
                         disabled={composerPrimaryActionDisabled()}
                         loading={composerPrimaryActionLoading()}
-                        onClick={() => void submitChat()}
+                        data-flower-primary-action={composerPrimaryActionKind()}
+                        onPointerDown={captureComposerPrimaryAction}
+                        onClick={executeComposerPrimaryAction}
                       />
                     </div>
                   </Show>

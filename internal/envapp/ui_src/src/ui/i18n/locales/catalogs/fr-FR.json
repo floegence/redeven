@@ -3876,6 +3876,7 @@
       "threadLoadErrorTitle": "La discussion n’a pas pu se charger.",
       "threadLoading": "Chargement de la discussion...",
       "composerErrorTitle": "Flower n’a pas pu envoyer.",
+      "stopErrorTitle": "Flower n’a pas pu arrêter cette réponse.",
       "modelStatusPreparing": "Préparation de la requête au modèle…",
       "modelStatusWaitingResponse": "Attente de la réponse du modèle...",
       "modelStatusStreaming": "Réflexion...",

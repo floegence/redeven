@@ -14,6 +14,20 @@ Runtime transport uses Flowersec sessions while terminal lifecycle is delegated 
 
 # Contract
 
+## AI Flower RPC registration
+
+The local direct and remote agent production session profiles register the
+complete AI request inventory before Flowersec freezes a session. The shared
+inventory covers send, summary/thread subscription, message listing, Stop,
+input response, and context compaction; the event type is explicitly a server
+notification rather than a request handler. A declared AI method therefore
+cannot fail at the router with a missing-handler 404. If the AI service or a
+local realtime peer is not ready, the registered handler returns a structured
+503 and the session remains usable. Env Local live timeline ownership is
+HTTP/SSE, so its turn admission does not issue a second best-effort thread
+subscription RPC. Stop remains a single AI RPC lifecycle command and does not
+fall back to another transport.
+
 ## Mechanism
 
 The released runtime dependency set includes Floeterm terminal-go v0.8.7 and Flowersec Go v2.3.6.
@@ -57,6 +71,10 @@ Compatibility depends on these transport and terminal interfaces staying aligned
 - `redeven:go.mod:8` - Redeven pins floeterm terminal-go in the runtime module.
 - `redeven:internal/agent/agent.go:20` - Agent imports the published Flowersec v2 root package and uses `ConnectionController`, `Connect`, `Session`, `RPCPeer`, and `ByteStream`.
 - `redeven:internal/agent/proxy_session_server_test.go:13` - Proxy-only sessions prove the RPC bootstrap stream returns standard 404 responses and remains usable until cancellation.
+- `redeven:internal/agent/agent.go:1339` - Remote and local production session assembly share AI registration and detach cleanup.
+- `redeven:internal/ai/rpc_inventory.go:1` - Canonical AI request/notification type inventory.
+- `redeven:internal/agent/ai_rpc_registration_test.go:1` - Production local session registration and structured-unavailable coverage.
+- `redeven:internal/ai/rpc_readiness_test.go:35` - Realtime RPC without a peer returns structured 503.
 - `redeven:internal/terminal/manager.go:14` - Runtime terminal manager wraps floeterm terminal-go plus Flowersec RPC types.
 - `redeven:internal/terminal/manager_test.go` - Tests cover authorized terminal metadata notification broadcast, snapshot mapping, normalization, and payload isolation.
 - `redeven:internal/terminal/lifecycle.go:190` - Concurrent delete callers join one session-scoped in-flight cleanup operation.

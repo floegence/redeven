@@ -121,6 +121,7 @@
       "threadLoadErrorTitle": "La conversación no se pudo cargar.",
       "threadLoading": "Cargando conversación...",
       "composerErrorTitle": "Flower no pudo enviar el mensaje.",
+      "stopErrorTitle": "Flower no pudo detener esta respuesta.",
       "modelStatusPreparing": "Preparando solicitud al modelo...",
       "modelStatusWaitingResponse": "Esperando respuesta del modelo...",
       "modelStatusStreaming": "Pensando...",

@@ -997,7 +997,6 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
             { ...(responseThreadID ? { thread_id: responseThreadID } : {}) },
           );
         }
-        void options.rpc.ai.subscribeThread({ threadId: responseThreadID }).catch(() => undefined);
         if (kind === 'admitting') {
           return { client_request_id: clientRequestID, thread_id: responseThreadID, admission_id: admissionID, kind };
         }

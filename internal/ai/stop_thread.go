@@ -110,7 +110,18 @@ func (s *Service) stopThread(ctx context.Context, meta *session.Meta, req StopTh
 	}
 	actor := s.threadMgr.Get(endpointID, threadID)
 	if actor == nil {
-		return StopThreadResponse{}, errors.New("thread actor not ready")
+		// A rebuilt session can briefly lack the in-memory owner while the
+		// canonical Floret thread is already terminal. Treat that lifecycle
+		// command as idempotently complete; a canonical busy thread is only
+		// accepted as pending so the recovery path can recreate its owner.
+		snapshot, _, err := s.readCanonicalThreadState(ctx, threadID)
+		if err != nil {
+			return StopThreadResponse{}, err
+		}
+		if canonicalThreadBusy(snapshot) {
+			return StopThreadResponse{}, fmt.Errorf("%w: thread actor is unavailable during recovery", ErrThreadStopPending)
+		}
+		return StopThreadResponse{OK: true}, nil
 	}
 	// Stop is an exact lifecycle barrier. Execute it directly so a queued actor
 	// command cannot delay cancellation behind a long-running admission task.

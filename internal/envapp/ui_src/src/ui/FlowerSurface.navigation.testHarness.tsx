@@ -158,6 +158,8 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
         title={props.title}
         disabled={props.disabled}
         data-loading={props.loading ? 'true' : undefined}
+        data-flower-primary-action={props['data-flower-primary-action']}
+        onPointerDown={props.onPointerDown}
         onClick={props.onClick}
       >
         {props.icon ? <Dynamic component={props.icon} /> : null}
