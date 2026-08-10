@@ -1009,11 +1009,15 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     initSequence: number,
     reloadSequence: number,
     trace: TerminalRecoveryTrace,
+    pendingInitialResize: Promise<TerminalEffectiveGeometry | null> | null = null,
   ): Promise<boolean> => {
     terminalPresentationSettling = true;
     try {
       let geometryChanged = false;
-      await core.forceResizeAndWaitForCommittedFrame();
+      await Promise.all([
+        core.forceResizeAndWaitForCommittedFrame(),
+        pendingInitialResize ?? Promise.resolve(null),
+      ]);
       if (!terminalPresentationIsCurrent(core, initSequence, reloadSequence, trace)) return false;
 
       if (props.viewActive() && props.active()) {
@@ -1475,9 +1479,13 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       core.setConnected(true);
       liveAttachmentReady = true;
       const latestDimensions = currentHostDimensions();
+      let initialHostResize: Promise<TerminalEffectiveGeometry | null> | null = null;
       if (latestDimensions && (latestDimensions.cols !== dims.cols || latestDimensions.rows !== dims.rows)) {
-        await requestTerminalResize(id, latestDimensions);
-        if (seq !== initSeq) return;
+        // The host-capacity acknowledgement is independent of history replay. Start
+        // it before fetching the baseline so the transport round trip overlaps the
+        // parser work; the queued effective geometry is applied only at its output
+        // sequence boundary and the final committed-frame fence still presents it.
+        initialHostResize = requestTerminalResize(id, latestDimensions);
       }
 
       setLoading('loading_history');
@@ -1571,7 +1579,14 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       if (seq !== initSeq) return;
 
       armBaselineRender(core, trace, seq);
-      if (!await settleTerminalPresentation(id, core, seq, reloadSequence, trace)) return;
+      if (!await settleTerminalPresentation(
+        id,
+        core,
+        seq,
+        reloadSequence,
+        trace,
+        initialHostResize,
+      )) return;
       if (seq !== initSeq || recoveryTrace !== trace || term !== core) return;
       setLoading('idle');
       setReadyOnce(true);
