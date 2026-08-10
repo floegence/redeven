@@ -1,12 +1,15 @@
 #!/usr/bin/env node
 
+import { createHash, X509Certificate } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { createServer } from 'node:http';
-import { mkdir, open, readFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, open, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
-import { WebSocketServer } from 'ws';
-import { acceptDirectNode, AllowPlaintextForLoopback } from '@floegence/flowersec-core/node';
+import { createAcceptor, SessionHandlers } from '@floegence/flowersec-core/node';
+import { parseArtifact } from '@floegence/flowersec-core';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, '../../../..');
@@ -35,7 +38,78 @@ const builtPluginInstanceID = `catalog_${builtPluginReleaseRef.publisher_id}_${b
 const builtPluginPresentationSHA256 = `sha256:${'1'.repeat(64)}`;
 const pluginMarketDetailPath = `/_redeven_proxy/api/plugins/market/plugins/${builtPluginReleaseRef.plugin_id}`;
 const builtPluginPackageURL = 'https://github.com/floegence/redeven-official-plugins/releases/download/v4.4.0/containers-4.4.0.redevplugin';
-const builtDistDirectPSK = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+
+function builtDistArtifact(webTransportURL) {
+  return {
+    v: 2,
+    profile: 'flowersec/2',
+    session: {
+      channel_id: 'channel-1',
+      init_expire_at_unix_s: 4_102_444_800,
+      idle_timeout_seconds: 60,
+      establish_timeout_seconds: 30,
+      rekey_prepare_timeout_seconds: 10,
+      rekey_completion_timeout_seconds: 30,
+      max_inbound_streams: 64,
+      e2ee_psk_b64u: 'AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA',
+      allowed_suites: [1, 2],
+      default_suite: 1,
+      selected_features: 0,
+      contract_hash_b64u: 'ioBJP5DPhg471caMR-huV5I9RlNKY2Pr9fs2GkP8CmA',
+    },
+    path: {
+      kind: 'direct',
+      rendezvous_group_id: 'group-1',
+      listener_audience: 'listener-1',
+      routing_token: 'routing-token',
+      candidates: [{
+        id: 't1',
+        carrier: 'webtransport',
+        url: webTransportURL,
+        wire_profile: 'flowersec-direct/2',
+      }],
+    },
+    scoped: [],
+    correlation: { v: 2, tags: [] },
+  };
+}
+
+async function createBuiltDistTLS() {
+  const directory = await mkdtemp(path.join(tmpdir(), 'redeven-built-dist-flowersec-'));
+  const certificatePath = path.join(directory, 'certificate.pem');
+  const privateKeyPath = path.join(directory, 'private-key.pem');
+  execFileSync('openssl', [
+    'req', '-x509', '-newkey', 'ec', '-pkeyopt', 'ec_paramgen_curve:prime256v1',
+    '-nodes', '-days', '1', '-sha256', '-subj', '/CN=127.0.0.1',
+    '-addext', 'subjectAltName=IP:127.0.0.1',
+    '-keyout', privateKeyPath, '-out', certificatePath,
+  ], { stdio: 'ignore' });
+  const certificate = await readFile(certificatePath, 'utf8');
+  const privateKey = await readFile(privateKeyPath, 'utf8');
+  const certificateHash = createHash('sha256').update(new X509Certificate(certificate).raw).digest('base64');
+  return {
+    certificate,
+    privateKey,
+    certificateHash,
+    cleanup: () => rm(directory, { recursive: true, force: true }),
+  };
+}
+
+async function trustBuiltDistWebTransport(page, tls) {
+  await page.addInitScript(({ certificateHash }) => {
+    const NativeWebTransport = globalThis.WebTransport;
+    if (typeof NativeWebTransport !== 'function') return;
+    const certificateBytes = Uint8Array.from(atob(certificateHash), (character) => character.charCodeAt(0));
+    globalThis.WebTransport = class BuiltDistWebTransport extends NativeWebTransport {
+      constructor(url, options = {}) {
+        super(url, {
+          ...options,
+          serverCertificateHashes: [{ algorithm: 'sha-256', value: certificateBytes }],
+        });
+      }
+    };
+  }, { certificateHash: tls.certificateHash });
+}
 
 function parseReportPath(args) {
   const index = args.indexOf('--report');
@@ -217,10 +291,16 @@ function builtPluginInstalledPlugin() {
   };
 }
 
-async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = false } = {}) {
+async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = false, tls } = {}) {
   let baseURL = '';
   let installedPlugin = null;
   let releaseInstallOperation = null;
+  let directArtifact = null;
+  let acceptor = null;
+  let acceptorFailure = null;
+  let accepting = true;
+  const acceptedSessions = new Set();
+  let acceptingTask = Promise.resolve();
   const server = createServer(async (request, response) => {
     try {
       const requestURL = new URL(request.url ?? '/', baseURL || 'http://127.0.0.1');
@@ -257,18 +337,8 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
       if (accessReady && requestURL.pathname === '/api/local/direct/connect_artifact') {
         jsonResponse(response, {
           plugin_session_credential: 'built-dist-plugin-session',
-          connect_artifact: {
-            v: 1,
-            transport: 'direct',
-            correlation: { v: 1, session_id: 'built-dist-shell' },
-            direct_info: {
-              ws_url: baseURL.replace(/^http/, 'ws') + '_redeven_direct/ws',
-              channel_id: 'built-dist-shell',
-              e2ee_psk_b64u: builtDistDirectPSK,
-              channel_init_expire_at_unix_s: 4_102_444_800,
-              default_suite: 1,
-            },
-          },
+          channel_id: directArtifact.session.channel_id,
+          connect_artifact: directArtifact,
         });
         return;
       }
@@ -429,35 +499,6 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
       response.end(error instanceof Error ? error.message : 'not found');
     }
   });
-  const webSocketServer = new WebSocketServer({ noServer: true });
-  const webSocketSessions = new Set();
-  server.on('upgrade', (request, socket, head) => {
-    const requestURL = new URL(request.url ?? '/', baseURL || 'http://127.0.0.1');
-    if (requestURL.pathname !== '/_redeven_direct/ws') {
-      socket.destroy();
-      return;
-    }
-    webSocketServer.handleUpgrade(request, socket, head, (websocket) => {
-      webSocketServer.emit('connection', websocket, request);
-    });
-  });
-  webSocketServer.on('connection', (websocket) => {
-    webSocketSessions.add(websocket);
-    void acceptDirectNode(websocket, {
-      channelId: 'built-dist-shell',
-      suite: 1,
-      psk: builtDistDirectPSK,
-      initExpireAtUnixS: 4_102_444_800,
-    }, {
-      secureTransport: false,
-      transportSecurityPolicy: AllowPlaintextForLoopback,
-    }).catch(() => {
-      websocket.close();
-    }).finally(() => {
-      webSocketSessions.delete(websocket);
-    });
-  });
-
   await new Promise((resolve, reject) => {
     server.once('error', reject);
     server.listen(0, '127.0.0.1', resolve);
@@ -465,27 +506,63 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('built Env App dist server did not bind a TCP port');
   baseURL = `http://127.0.0.1:${address.port}/`;
+  if (accessReady) {
+    if (!tls) throw new Error('built Env App direct server requires Flowersec TLS credentials');
+    acceptor = await createAcceptor({
+      host: '127.0.0.1',
+      port: 0,
+      path: '/flowersec/webtransport/v2/direct',
+      certificate: tls.certificate,
+      privateKey: tls.privateKey,
+      maxInboundStreams: 64,
+      authorize: async () => ({
+        decision: 'allow',
+        artifact: parseArtifact(JSON.stringify(directArtifact)),
+      }),
+      resolveHandlers: () => {
+        const handlers = new SessionHandlers();
+        handlers.handleRPC(4001, async () => ({ payload: { server_time_ms: Date.now() } }));
+        handlers.handleRPC(4501, async () => ({ payload: { password_required: false, unlocked: true } }));
+        handlers.handleRPC(4502, async () => ({ payload: { unlocked: true } }));
+        handlers.handleRPC(5001, async () => ({ payload: { sessions: [] } }));
+        handlers.handleRPC(2002, async () => ({ payload: { sessions: [] } }));
+        return handlers;
+      },
+    });
+    const acceptorAddress = acceptor.address();
+    directArtifact = builtDistArtifact(
+      `https://127.0.0.1:${acceptorAddress.port}/flowersec/webtransport/v2/direct`,
+    );
+    acceptingTask = (async () => {
+      while (accepting) {
+        const accepted = await acceptor.accept();
+        acceptedSessions.add(accepted);
+        void accepted.serve().catch(() => undefined).finally(() => acceptedSessions.delete(accepted));
+      }
+    })().catch((error) => {
+      if (accepting) acceptorFailure = error;
+    });
+  }
   return {
     baseURL,
-    close: () => new Promise((resolve, reject) => {
-      for (const websocket of webSocketSessions) websocket.close();
-      webSocketServer.close((webSocketError) => {
-        if (webSocketError) {
-          reject(webSocketError);
-          return;
-        }
-        server.close((error) => (error ? reject(error) : resolve()));
-      });
-    }),
+    close: async () => {
+      accepting = false;
+      await Promise.all([...acceptedSessions].map((accepted) => accepted.close().catch(() => undefined)));
+      await acceptor?.close().catch(() => undefined);
+      await acceptingTask;
+      await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+      if (acceptorFailure) throw acceptorFailure;
+    },
   };
 }
 
-async function verifyBuiltFlowerLifecycle(browser) {
-  const server = await createBuiltDistServer({ accessReady: true });
+async function verifyBuiltFlowerLifecycle(browser, tls) {
+  const server = await createBuiltDistServer({ accessReady: true, tls });
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   await page.addInitScript(() => {
     globalThis.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
   });
+  await trustBuiltDistWebTransport(page, tls);
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
 
@@ -627,12 +704,13 @@ async function verifyBuiltFlowerLifecycle(browser) {
   }
 }
 
-async function verifyBuiltPluginInstallRouting(browser) {
-  const server = await createBuiltDistServer({ accessReady: true, pluginInstallFlow: true });
+async function verifyBuiltPluginInstallRouting(browser, tls) {
+  const server = await createBuiltDistServer({ accessReady: true, pluginInstallFlow: true, tls });
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   await page.addInitScript(() => {
     globalThis.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
   });
+  await trustBuiltDistWebTransport(page, tls);
   const pluginRequests = [];
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
@@ -789,6 +867,7 @@ async function main() {
     })}`);
   }
 
+  const tls = await createBuiltDistTLS();
   const server = await createBuiltDistServer();
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
@@ -970,8 +1049,8 @@ async function main() {
       throw new Error(`renderer HTTP failures: ${JSON.stringify(unexpectedBadResponses)}`);
     }
 
-    const pluginInstall = await verifyBuiltPluginInstallRouting(browser);
-    const flowerLifecycle = await verifyBuiltFlowerLifecycle(browser);
+    const pluginInstall = await verifyBuiltPluginInstallRouting(browser, tls);
+    const flowerLifecycle = await verifyBuiltFlowerLifecycle(browser, tls);
 
     report = {
       schema_version: 1,
@@ -1005,6 +1084,7 @@ async function main() {
     await page.close();
     await browser.close();
     await server.close();
+    await tls.cleanup();
   }
 
   if (reportPath) {
