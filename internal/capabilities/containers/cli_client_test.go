@@ -157,6 +157,32 @@ func TestCLIClientListParsesDockerNDJSONAndPodmanArray(t *testing.T) {
 	}
 }
 
+func TestCLIClientListPrefersPausedDockerStatusOverRunningState(t *testing.T) {
+	t.Parallel()
+
+	runner := &fakeCommandRunner{outputs: map[string]string{
+		"docker ps -a --no-trunc --format json": `{"ID":"paused123","Names":"paused-api","Image":"alpine:3.22","State":"running","Status":"Up 2 minutes (Paused)"}`,
+	}}
+	client := &CLIClient{Runner: runner}
+
+	containers, err := client.List(context.Background(), EngineDocker, true)
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(containers) != 1 || containers[0].State != ContainerStatePaused {
+		t.Fatalf("containers = %+v, want one paused container", containers)
+	}
+}
+
+func TestNormalizeContainerStatePrefersPausedFlagOverRunningFlag(t *testing.T) {
+	t.Parallel()
+
+	state := normalizeContainerState(inspectState{Running: true, Paused: true, Status: "paused"})
+	if state != ContainerStatePaused {
+		t.Fatalf("normalizeContainerState() = %q, want %q", state, ContainerStatePaused)
+	}
+}
+
 func TestCLIClientInspectParsesRuntimeInputs(t *testing.T) {
 	t.Parallel()
 

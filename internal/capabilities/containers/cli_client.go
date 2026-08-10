@@ -894,14 +894,14 @@ func findFirstString(value any, keys ...string) string {
 }
 
 func normalizeContainerState(state inspectState) ContainerState {
-	if state.Running {
-		return ContainerStateRunning
-	}
 	if state.Paused {
 		return ContainerStatePaused
 	}
 	if state.Restarting {
 		return ContainerStateRestarting
+	}
+	if state.Running {
+		return ContainerStateRunning
 	}
 	return normalizeStateString(state.Status, "")
 }
@@ -909,12 +909,12 @@ func normalizeContainerState(state inspectState) ContainerState {
 func normalizeStateString(values ...string) ContainerState {
 	joined := strings.ToLower(strings.Join(values, " "))
 	switch {
-	case strings.Contains(joined, "running") || strings.Contains(joined, "up "):
-		return ContainerStateRunning
 	case strings.Contains(joined, "paused"):
 		return ContainerStatePaused
 	case strings.Contains(joined, "restarting"):
 		return ContainerStateRestarting
+	case strings.Contains(joined, "running") || strings.Contains(joined, "up "):
+		return ContainerStateRunning
 	case strings.Contains(joined, "created"):
 		return ContainerStateCreated
 	case strings.Contains(joined, "exited") || strings.Contains(joined, "dead"):
