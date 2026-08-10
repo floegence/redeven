@@ -3982,8 +3982,16 @@ describe('TerminalPanel', () => {
 
   it('finishes attach and confirms the latest local size when the host resizes in flight', async () => {
     let resolveAttach!: (value: TerminalLiveAttachResult) => void;
+    let resolveResize!: (value: {
+      runtimeAttachGeneration: number;
+      requested: { cols: number; rows: number };
+      effective: { generation: number; outputSequenceBoundary: number; cols: number; rows: number };
+    }) => void;
     transportMocks.attach.mockReturnValueOnce(new Promise<TerminalLiveAttachResult>((resolve) => {
       resolveAttach = resolve;
+    }));
+    transportMocks.resizeWithEffectiveGeometry.mockReturnValueOnce(new Promise((resolve) => {
+      resolveResize = resolve;
     }));
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -4005,6 +4013,14 @@ describe('TerminalPanel', () => {
 
     await waitForTerminalPanelCondition(() => {
       expect(transportMocks.resizeWithEffectiveGeometry).toHaveBeenCalledWith('session-1', 100, 30);
+      expect(outputCoordinatorCompleteAttachSpy).toHaveBeenCalled();
+    });
+    resolveResize({
+      runtimeAttachGeneration: 1,
+      requested: { cols: 100, rows: 30 },
+      effective: { generation: 2, outputSequenceBoundary: 0, cols: 100, rows: 30 },
+    });
+    await waitForTerminalPanelCondition(() => {
       expect(host.querySelector('[data-terminal-runtime-session="session-1"]')?.getAttribute('aria-busy')).toBe('false');
     });
     expect(host.textContent).not.toContain('This terminal could not be restored.');
