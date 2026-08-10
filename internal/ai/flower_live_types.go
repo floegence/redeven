@@ -653,19 +653,20 @@ func (decoration *FlowerTimelineDecoration) UnmarshalJSON(data []byte) error {
 }
 
 type FlowerTimelineMessage struct {
-	MessageID    string                   `json:"id"`
-	ThreadID     string                   `json:"thread_id"`
-	TurnID       string                   `json:"turn_id"`
-	RunID        string                   `json:"run_id"`
-	TurnOrdinal  int64                    `json:"turn_ordinal,omitempty"`
-	Role         string                   `json:"role"`
-	Content      string                   `json:"content"`
-	Status       string                   `json:"status"`
-	CreatedAtMs  int64                    `json:"created_at_ms"`
-	Blocks       []any                    `json:"blocks,omitempty"`
-	References   []FlowerMessageReference `json:"references,omitempty"`
-	Live         bool                     `json:"live"`
-	ActiveCursor bool                     `json:"active_cursor"`
+	MessageID        string                   `json:"id"`
+	ThreadID         string                   `json:"thread_id"`
+	TurnID           string                   `json:"turn_id"`
+	RunID            string                   `json:"run_id"`
+	LogicalRequestID string                   `json:"logical_request_id,omitempty"`
+	TurnOrdinal      int64                    `json:"turn_ordinal,omitempty"`
+	Role             string                   `json:"role"`
+	Content          string                   `json:"content"`
+	Status           string                   `json:"status"`
+	CreatedAtMs      int64                    `json:"created_at_ms"`
+	Blocks           []any                    `json:"blocks,omitempty"`
+	References       []FlowerMessageReference `json:"references,omitempty"`
+	Live             bool                     `json:"live"`
+	ActiveCursor     bool                     `json:"active_cursor"`
 }
 
 type FlowerMessageReference struct {

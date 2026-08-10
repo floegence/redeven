@@ -54,6 +54,9 @@ func TestThreadTimelineUsesCanonicalFloretOrdinalOrder(t *testing.T) {
 		if record.TurnID != wantTurnID {
 			t.Fatalf("message %d turn_id = %q, want %q", index, record.TurnID, wantTurnID)
 		}
+		if record.LogicalRequestID != fmt.Sprintf("turn_%d", index/2+1) {
+			t.Fatalf("message %d logical_request_id = %q, want turn_%d", index, record.LogicalRequestID, index/2+1)
+		}
 	}
 	last := decodeTimelineMessageForTest(t, response.Messages[len(response.Messages)-2])
 	if last.Role != "user" || last.Content != "user 3" {
@@ -529,11 +532,12 @@ func TestTerminalCanonicalReplacementRecoversMismatchedLiveDraft(t *testing.T) {
 }
 
 type timelineMessageRecord struct {
-	ID      string `json:"id"`
-	TurnID  string `json:"turn_id"`
-	Role    string `json:"role"`
-	Content string `json:"content"`
-	Blocks  []struct {
+	ID               string `json:"id"`
+	TurnID           string `json:"turn_id"`
+	LogicalRequestID string `json:"logical_request_id"`
+	Role             string `json:"role"`
+	Content          string `json:"content"`
+	Blocks           []struct {
 		Content string `json:"content"`
 	} `json:"blocks"`
 }

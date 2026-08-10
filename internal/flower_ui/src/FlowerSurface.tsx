@@ -1512,11 +1512,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return (thread.queued_turns ?? []).some((turn) => trimString(turn.queue_id) === pending.canonicalID);
     }
     if (pending.canonicalKind === 'admitting') {
-      const earliestCanonicalTime = pending.startedAtMS - 1_000;
       return thread.messages.some((message) => (
         message.role === 'user'
-        && Number(message.created_at_ms ?? 0) >= earliestCanonicalTime
-        && trimString(message.content) === trimString(pending.prompt)
+        && trimString(message.logical_request_id) === trimString(pending.canonicalID)
       ));
     }
     return thread.messages.some((message) => trimString(message.turn_id) === pending.canonicalID);

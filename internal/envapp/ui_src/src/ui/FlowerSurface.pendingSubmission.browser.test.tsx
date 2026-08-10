@@ -99,6 +99,7 @@ describe('Flower pending submission browser presentation', () => {
       messages: [{
         id: 'message-canonical-user',
         turn_id: 'turn-canonical-user',
+        logical_request_id: 'admission-canonical-user',
         role: 'user',
         content: prompt,
         status: 'complete',
