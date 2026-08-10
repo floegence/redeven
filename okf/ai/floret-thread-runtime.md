@@ -119,6 +119,16 @@ prompt, and marks the run active while retaining the existing subscription.
 Background detail refresh and notification backpressure cannot hold the composer
 in its submitting state.
 
+Flower projects the canonical waiting state into one mutually exclusive bottom
+surface: ordinary chat, structured input, or approval. Input and approval
+surfaces replace the ordinary composer controls and footer; they do not nest a
+second composer or synthesize lifecycle state. The input surface keeps per-
+question answers in local interaction state while navigating the canonical
+question list, and the approval surface exposes only the canonical tool label,
+safe command or target summary, required risk note, and reject/allow-once
+decision. Draft text, attachments, focus, and scroll remain local UI state and
+survive projection, reconnect, and surface-mode changes.
+
 An `active_run_id` change atomically replaces prior run, prompt, model-I/O,
 context-usage, and approval transients before reducing events for the new run.
 Timeline history and canonical compactions remain intact, so a resumed

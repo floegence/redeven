@@ -87,7 +87,7 @@ describe('FlowerSurface navigation structured input', () => {
     (runtime.querySelector('[data-thread-id="thread-waiting-input"] button') as HTMLButtonElement).click();
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-input-request-prompt]')));
 
-    expect(runtime.querySelector('[data-flower-input-request-prompt]')?.textContent).toContain('Waiting for your reply');
+    expect(runtime.querySelector('[data-flower-input-request-prompt]')?.getAttribute('aria-label')).toBe('Waiting for your reply');
     expect(runtime.querySelector('[data-flower-input-request-prompt]')?.textContent).toContain('Choose the deployment target before Flower continues.');
     expect(runtime.querySelector('[data-flower-input-request-prompt]')?.textContent).toContain('Where should Flower deploy this change?');
     expect(runtime.querySelector('[data-flower-input-request-prompt]')?.textContent).toContain('Staging');

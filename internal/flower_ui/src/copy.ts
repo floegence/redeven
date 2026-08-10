@@ -439,6 +439,8 @@ export type FlowerSurfaceCopy = Readonly<{
     inputRequestAnswerRequired?: string;
     inputRequestAnswerHidden?: string;
     inputRequestSubmitting?: string;
+    inputRequestPrevious?: string;
+    inputRequestNext?: string;
     inputRequestComposerPlaceholder?: string;
     inputRequestChoicePlaceholder?: string;
     conversationsAria: string;
@@ -635,11 +637,11 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       canceled: 'Canceled',
     },
     toolApprovalState: (state) => `Approval: ${state}`,
-    toolApprovalApprove: 'Approve',
+    toolApprovalApprove: 'Allow once',
     toolApprovalReject: 'Reject',
     toolApprovalSubmitting: 'Submitting...',
     toolApprovalUnavailable: 'Approval is no longer available.',
-    toolApprovalComposerTitle: 'Review before this runs',
+    toolApprovalComposerTitle: 'Allow this tool to run?',
     toolApprovalComposerDescription: 'The conversation is paused until you approve or reject this action.',
     toolApprovalQueueCount: (count) => `${count} more approval${count === 1 ? '' : 's'} waiting`,
     toolApprovalOutsideWorkspaceRisk: 'This command may access resources outside the workspace.',
@@ -675,6 +677,8 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     inputRequestAnswerRequired: 'Answer the waiting prompt before continuing.',
     inputRequestAnswerHidden: 'Answer hidden',
     inputRequestSubmitting: 'Submitting...',
+    inputRequestPrevious: 'Previous question',
+    inputRequestNext: 'Next question',
     inputRequestComposerPlaceholder: 'Reply to continue this conversation.',
     inputRequestChoicePlaceholder: 'Choose an option to continue.',
     conversationsAria: 'Flower conversations',

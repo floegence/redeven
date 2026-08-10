@@ -2089,7 +2089,7 @@ describe('FlowerSurface navigation activity', () => {
     const composer = runtime.querySelector('.flower-composer') as HTMLElement;
     expect(composer.querySelector('textarea')).toBeNull();
     expect(composer.textContent).toContain('pwd; sleep 15; date');
-    expect(composer.textContent).toContain('Review before this runs');
+    expect(composer.textContent).toContain('Allow this tool to run?');
     const row = runtime.querySelector('[data-flower-activity-item-id="tool-needs-approval"]') as HTMLElement;
     expect(row?.textContent).toContain('pwd; sleep 15; date');
     expect(row?.textContent).not.toContain('terminal.exec');
@@ -2101,11 +2101,7 @@ describe('FlowerSurface navigation activity', () => {
     expect(queuedRow?.textContent).not.toContain('Running');
     expect(runtime.querySelector('.flower-transcript-stack > .flower-approval-stack')).toBeNull();
 
-    const stop = composer.querySelector('.flower-composer-stop-thread') as HTMLButtonElement | null;
-    expect(stop?.getAttribute('aria-label')).toBe('Stop');
-    stop?.click();
-    await waitFor(() => stopThread.mock.calls.length === 1);
-    expect(stopThread).toHaveBeenCalledWith('thread-inline-approval');
+    expect(composer.querySelector('.flower-composer-stop-thread')).toBeNull();
   });
 
   it('uses the composer as the primary surface for delegated approvals', async () => {
@@ -2203,18 +2199,13 @@ describe('FlowerSurface navigation activity', () => {
     expect(runtime.querySelector('.flower-composer textarea')).toBeNull();
     expect(runtime.querySelector('[data-flower-thread-approval-panel] [data-flower-approval-action-id="dappr-terminal"]')).toBeNull();
     expect(primaryCard.textContent).toContain('npm test -- --runInBand');
-    writeTextToClipboardMock.mockResolvedValueOnce(undefined);
     const copyButton = primaryCard.querySelector('.flower-approval-copy-btn') as HTMLButtonElement | null;
-    expect(copyButton).toBeTruthy();
-    copyButton?.click();
-    await waitFor(() => writeTextToClipboardMock.mock.calls.length === 1);
-    expect(writeTextToClipboardMock).toHaveBeenCalledWith('npm test -- --runInBand');
-    expect(copyButton?.getAttribute('data-copied')).toBe('true');
+    expect(copyButton).toBeNull();
 
     const row = runtime.querySelector('[data-flower-activity-item-id="tool-child-shell"]') as HTMLElement | null;
     expect(row?.querySelector('[data-flower-approval-action-id="dappr-terminal"]')).toBeNull();
     const approve = Array.from(runtime.querySelectorAll<HTMLButtonElement>('.flower-composer-approval-actions button'))
-      .find((button) => button.textContent?.trim() === 'Approve');
+      .find((button) => button.textContent?.trim() === 'Allow once');
     expect(approve).toBeTruthy();
     approve?.click();
 
@@ -2328,7 +2319,7 @@ describe('FlowerSurface navigation activity', () => {
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-approval-action-id="appr-immediate-feedback"]')));
     const card = runtime.querySelector('.flower-composer [data-flower-approval-action-id="appr-immediate-feedback"]') as HTMLElement;
     const buttons = Array.from(runtime.querySelectorAll<HTMLButtonElement>('.flower-composer-approval-decision'));
-    const approve = buttons.find((button) => button.textContent?.trim() === 'Approve');
+    const approve = buttons.find((button) => button.textContent?.trim() === 'Allow once');
     expect(approve).toBeTruthy();
 
     approve?.click();
@@ -2341,7 +2332,7 @@ describe('FlowerSurface navigation activity', () => {
     expect(buttons.every((button) => button.disabled)).toBe(true);
     expect(approve?.getAttribute('data-loading')).toBe('true');
     expect(approve?.getAttribute('aria-busy')).toBe('true');
-    expect(approve?.textContent?.trim()).toBe('Approve');
+    expect(approve?.textContent?.trim()).toBe('Allow once');
     expect(runtime.querySelector('.flower-composer')?.getAttribute('data-flower-approval-handoff-phase')).toBe('submitting');
     expect(runtime.querySelector('.flower-composer')?.getAttribute('aria-busy')).toBe('true');
     approve?.click();
@@ -2448,7 +2439,7 @@ describe('FlowerSurface navigation activity', () => {
     (runtime.querySelector('[data-thread-id="thread-event-before-receipt"] button') as HTMLButtonElement).click();
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-approval-action-id="appr-event-first"]')));
     const approve = Array.from(runtime.querySelectorAll<HTMLButtonElement>('.flower-composer-approval-decision'))
-      .find((button) => button.textContent?.trim() === 'Approve')!;
+      .find((button) => button.textContent?.trim() === 'Allow once')!;
     approve.click();
     deliverPromotion = true;
 
@@ -2507,7 +2498,7 @@ describe('FlowerSurface navigation activity', () => {
     (runtime.querySelector('[data-thread-id="thread-fallback-failure"] button') as HTMLButtonElement).click();
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-approval-action-id="appr-fallback-failure"]')));
     const approve = Array.from(runtime.querySelectorAll<HTMLButtonElement>('.flower-composer-approval-decision'))
-      .find((button) => button.textContent?.trim() === 'Approve')!;
+      .find((button) => button.textContent?.trim() === 'Allow once')!;
     approve.click();
 
     await waitFor(() => loadThread.mock.calls.length >= 2, 2_500);
@@ -2601,7 +2592,7 @@ describe('FlowerSurface navigation activity', () => {
     const composer = runtime.querySelector('.flower-composer') as HTMLElement;
     expect(composer.textContent).toContain('npm test');
     expect(composer.textContent).not.toContain('npm run lint');
-    expect(composer.textContent).toContain('Review before this runs');
+    expect(composer.textContent).toContain('Allow this tool to run?');
     expect(composer.textContent).toContain('1 / 2');
 
     promotedEvents.resolve({
@@ -2915,7 +2906,7 @@ describe('FlowerSurface navigation activity', () => {
     (runtime.querySelector('[data-thread-id="thread-stale-approval"] button') as HTMLButtonElement).click();
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-approval-action-id="appr-stale"]')));
     const approve = Array.from(runtime.querySelectorAll<HTMLButtonElement>('button'))
-      .find((button) => button.textContent?.trim() === 'Approve');
+      .find((button) => button.textContent?.trim() === 'Allow once');
     expect(approve).toBeTruthy();
     approve?.click();
 
@@ -3022,7 +3013,7 @@ describe('FlowerSurface navigation activity', () => {
     (runtime.querySelector('[data-thread-id="thread-retry-approval"] button') as HTMLButtonElement).click();
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-approval-action-id="appr-retry"]')));
     const approve = Array.from(runtime.querySelectorAll<HTMLButtonElement>('button'))
-      .find((button) => button.textContent?.trim() === 'Approve');
+      .find((button) => button.textContent?.trim() === 'Allow once');
     expect(approve).toBeTruthy();
     approve?.click();
 

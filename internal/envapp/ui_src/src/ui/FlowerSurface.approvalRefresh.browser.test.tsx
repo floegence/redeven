@@ -95,7 +95,7 @@ describe('Flower approval refresh browser behavior', () => {
     const composer = runtime.querySelector('.flower-composer') as HTMLElement;
     const card = composer.querySelector('[data-flower-approval-action-id="appr-browser-handoff"]') as HTMLElement;
     const buttons = Array.from(composer.querySelectorAll<HTMLButtonElement>('.flower-composer-approval-decision'));
-    const approve = buttons.find((button) => button.textContent?.trim() === 'Approve')!;
+    const approve = buttons.find((button) => button.textContent?.trim() === 'Allow once')!;
     approve.focus();
     const focusedBorder = getComputedStyle(composer).borderColor;
     const focusedShadow = getComputedStyle(composer).boxShadow;
@@ -126,7 +126,7 @@ describe('Flower approval refresh browser behavior', () => {
     expect(approve.getAttribute('aria-busy')).toBe('true');
     expect(approve.getAttribute('data-loading')).toBe('true');
     expect(approve.querySelector('[data-floe-button-spinner="true"]')).not.toBeNull();
-    expect(approve.textContent?.trim()).toBe('Approve');
+    expect(approve.textContent?.trim()).toBe('Allow once');
     expect(composer.getAttribute('data-flower-approval-handoff-phase')).toBe('submitting');
     expect(getComputedStyle(composer).borderColor).toBe(focusedBorder);
     expect(getComputedStyle(composer).boxShadow).toBe(focusedShadow);

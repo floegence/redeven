@@ -2,7 +2,7 @@ import type { Accessor, Component, JSX } from 'solid-js';
 import { For, Show, batch, createEffect, createMemo, createSignal, on, onCleanup, onMount, untrack } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import type { UIFirstSelectionEvent } from '@floegence/floe-webapp-core';
-import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronRight, Clock, Copy, ExternalLink, FileText, FolderOpen, GitBranch, GripVertical, MoreHorizontal, Paperclip, Plus, Refresh, Send, Settings, Shield, Terminal, Trash, XCircle } from '@floegence/floe-webapp-core/icons';
+import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, FileText, FolderOpen, GitBranch, GripVertical, MoreHorizontal, Paperclip, Plus, Refresh, Send, Settings, Shield, Terminal, Trash, XCircle } from '@floegence/floe-webapp-core/icons';
 import { Button, ConfirmDialog, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
 
 import { writeTextToClipboard } from './clipboard';
@@ -1656,6 +1656,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       ?? selectedApprovalDecisionHandoff()?.frozenAction
       ?? approvalDisplayFallbackAction()
   ));
+  const bottomActionMode = createMemo<'chat' | 'input_request' | 'approval'>(() => {
+    if (selectedComposerApprovalDisplayAction()) return 'approval';
+    if (selectedInputRequest()) return 'input_request';
+    return 'chat';
+  });
   createEffect(() => {
     const current = selectedComposerApprovalAction();
     const handoff = selectedApprovalDecisionHandoff();
@@ -4629,7 +4634,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   createEffect(() => {
     const request = selectedInputRequest();
     const signature = request ? `${currentComposerSessionKey()}:${request.prompt_id}` : '';
-    const textQuestion = request?.questions.find((question) => question.response_mode === 'write' || question.response_mode === 'select_or_write') ?? null;
+    const firstQuestion = request?.questions[0] ?? null;
     updateCurrentComposerSessionDraft((draft) => ({
       ...draft,
       inputPromptSignature: signature,
@@ -4638,7 +4643,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         ? (
           draft.activeInputQuestionID && request.questions.some((question) => question.id === draft.activeInputQuestionID)
             ? draft.activeInputQuestionID
-            : (textQuestion?.id ?? '')
+            : (firstQuestion?.id ?? '')
         )
         : '',
     }));
@@ -6366,6 +6371,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       | 'inputRequestAnswerRequired'
       | 'inputRequestAnswerHidden'
       | 'inputRequestSubmitting'
+      | 'inputRequestPrevious'
+      | 'inputRequestNext'
       | 'inputRequestComposerPlaceholder'
       | 'inputRequestChoicePlaceholder',
     fallback: string,
@@ -6880,10 +6887,24 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const inputTextQuestions = createMemo(() => selectedInputRequest()?.questions.filter(questionAllowsText) ?? []);
 
   const activeInputQuestion = createMemo(() => {
-    const questions = inputTextQuestions();
+    const questions = selectedInputRequest()?.questions ?? [];
     const activeID = trimString(currentComposerSessionDraft().activeInputQuestionID);
     return questions.find((question) => question.id === activeID) ?? questions[0] ?? null;
   });
+  const inputRequestQuestionIndex = createMemo(() => {
+    const questions = selectedInputRequest()?.questions ?? [];
+    const activeID = activeInputQuestion()?.id;
+    const index = activeID ? questions.findIndex((question) => question.id === activeID) : -1;
+    return index >= 0 ? index : 0;
+  });
+  const setActiveInputQuestionByOffset = (offset: number) => {
+    const questions = selectedInputRequest()?.questions ?? [];
+    if (questions.length < 2) return;
+    const nextIndex = Math.max(0, Math.min(questions.length - 1, inputRequestQuestionIndex() + offset));
+    const nextQuestion = questions[nextIndex];
+    if (!nextQuestion || nextQuestion.id === activeInputQuestion()?.id) return;
+    updateCurrentComposerSessionDraft((draft) => ({ ...draft, activeInputQuestionID: nextQuestion.id }));
+  };
   const activeInputQuestionIsSecret = createMemo(() => !!selectedInputRequest() && !!activeInputQuestion()?.is_secret);
   const companionActionVisible = createMemo(() => (
     companionCollapsed()
@@ -6940,7 +6961,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (surfaceWarmupActive() && !selectedInputRequest()) return copy().chat.warmupComposerPlaceholder;
     if (!selectedInputRequest()) return copy().chat.placeholder;
     const question = activeInputQuestion();
-    if (!question) {
+    if (!question || !questionAllowsText(question)) {
       return chatCopyValue('inputRequestChoicePlaceholder', 'Choose an option to continue.');
     }
     return trimString(question.write_placeholder)
@@ -6955,7 +6976,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (selectedThreadReadOnly()) return true;
     if (chatRunning()) return true;
     if (!selectedInputRequest()) return false;
-    return inputSubmitting() || !activeInputQuestion();
+    const question = activeInputQuestion();
+    return inputSubmitting() || !question || !questionAllowsText(question);
   });
 
   const composerTextareaReadOnly = createMemo(() => (
@@ -7583,16 +7605,32 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   };
 
-  const inputRequestPrompt = (request: FlowerInputRequest | null | undefined) => (
+  const inputRequestPrompt = (
+    request: FlowerInputRequest | null | undefined,
+    options: Readonly<{ surface?: 'history' | 'composer' }> = {},
+  ) => {
+    const composerSurface = options.surface === 'composer';
+    const visibleQuestions = (inputRequest: FlowerInputRequest) => (
+      composerSurface
+        ? inputRequest.questions.filter((question) => question.id === activeInputQuestion()?.id)
+        : inputRequest.questions
+    );
+    return (
     <Show when={request}>
       {(inputRequest) => (
-        <section class="flower-input-request-panel" data-flower-input-request-prompt aria-label={chatCopyValue('inputRequestTitle', 'Waiting for your reply')}>
-          <div class="flower-input-request-heading">
-            <Clock class="flower-input-request-icon h-4 w-4" aria-hidden="true" />
-            <div class="flower-input-request-title">{chatCopyValue('inputRequestTitle', 'Waiting for your reply')}</div>
-          </div>
+        <section
+          class={cn('flower-input-request-panel', composerSurface && 'flower-input-request-surface')}
+          data-flower-input-request-prompt
+          aria-label={chatCopyValue('inputRequestTitle', 'Waiting for your reply')}
+        >
+          <Show when={!composerSurface}>
+            <div class="flower-input-request-heading">
+              <Clock class="flower-input-request-icon h-4 w-4" aria-hidden="true" />
+              <div class="flower-input-request-title">{chatCopyValue('inputRequestTitle', 'Waiting for your reply')}</div>
+            </div>
+          </Show>
           <div class="flower-input-request-questions">
-            <For each={inputRequest().questions}>
+            <For each={visibleQuestions(inputRequest())}>
               {(question) => {
                 const selectedChoiceID = () => trimString(questionDraft(question.id).choice_id);
                 const summary = trimString(inputRequest().public_summary);
@@ -7640,7 +7678,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               }}
             </For>
           </div>
-          <Show when={inputTextQuestions().length > 1}>
+          <Show when={!composerSurface && inputTextQuestions().length > 1}>
             <div class="flower-input-request-text-targets" role="tablist" aria-label={chatCopyValue('inputRequestComposerPlaceholder', 'Reply to continue this conversation.')}>
               <For each={inputTextQuestions()}>
                 {(question) => (
@@ -7660,10 +7698,38 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               </For>
             </div>
           </Show>
+          <Show when={composerSurface && inputRequest().questions.length > 1}>
+            <nav class="flower-input-request-navigation" aria-label={chatCopyValue('inputRequestTitle', 'Waiting for your reply')}>
+              <button
+                type="button"
+                class="flower-input-request-navigation-button"
+                aria-label={chatCopyValue('inputRequestPrevious', 'Previous question')}
+                title={chatCopyValue('inputRequestPrevious', 'Previous question')}
+                disabled={inputSubmitting() || inputRequestQuestionIndex() <= 0}
+                onClick={() => setActiveInputQuestionByOffset(-1)}
+              >
+                <ChevronLeft class="h-4 w-4" aria-hidden="true" />
+              </button>
+              <span class="flower-input-request-navigation-count" aria-live="polite">
+                {inputRequestQuestionIndex() + 1} / {inputRequest().questions.length}
+              </span>
+              <button
+                type="button"
+                class="flower-input-request-navigation-button"
+                aria-label={chatCopyValue('inputRequestNext', 'Next question')}
+                title={chatCopyValue('inputRequestNext', 'Next question')}
+                disabled={inputSubmitting() || inputRequestQuestionIndex() >= inputRequest().questions.length - 1}
+                onClick={() => setActiveInputQuestionByOffset(1)}
+              >
+                <ChevronRight class="h-4 w-4" aria-hidden="true" />
+              </button>
+            </nav>
+          </Show>
         </section>
       )}
     </Show>
-  );
+    );
+  };
 
   const approvalEffectLabel = (raw: string): string => {
     const value = trimString(raw).toLowerCase().replaceAll('-', '_').replaceAll(' ', '_');
@@ -7747,7 +7813,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const composerSurface = options.surface === 'composer';
     const queueProgress = createMemo(() => {
       const queue = selectedThread()?.approval_queue;
-      return composerSurface && queue && queue.total > 0
+      return composerSurface && queue && queue.total > 1
         ? `${queue.current_position} / ${queue.total}`
         : '';
     });
@@ -7761,6 +7827,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     ));
     const subtaskLabel = createMemo(() => scopedThreadID() ? copy().chat.toolApprovalSubtaskSuffix(scopedThreadID()) : '');
     const commandText = createMemo(() => trimString(action().summary.command));
+    const toolLabel = createMemo(() => {
+      const explicit = trimString(action().summary.label);
+      const command = commandText();
+      if (explicit && explicit !== command) return explicit;
+      return trimString(action().tool_name) || explicit || copy().chat.toolApprovalRequired;
+    });
     const descriptionText = createMemo(() => action().summary.description || action().read_only_reason || '');
     const visibleEffects = createMemo(() => approvalVisibleEffects(action()));
     const visibleFlags = createMemo(() => approvalVisibleFlags(action()));
@@ -7769,7 +7841,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const statusCopy = createMemo(() => !canDecide() ? action().read_only_reason || copy().chat.toolApprovalUnavailable : '');
     const describedBy = createMemo(() => [descriptionText() ? descriptionID : '', statusCopy() ? statusID : ''].filter(Boolean).join(' '));
     const unavailableCopy = createMemo(() => action().read_only_reason || copy().chat.toolApprovalUnavailable);
-    const approvalIntroText = () => copy().chat.toolApprovalComposerTitle;
+    const approvalIntroText = () => composerSurface ? toolLabel() : copy().chat.toolApprovalComposerTitle;
     const riskNote = () => {
       const notes: string[] = [];
       if (visibleFlags().includes('May reach outside the workspace')) notes.push(copy().chat.toolApprovalOutsideWorkspaceRisk);
@@ -7780,7 +7852,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       <section
         ref={composerSurface ? (element) => { composerApprovalCardRef = element; } : undefined}
         tabIndex={composerSurface ? -1 : undefined}
-        class={cn('flower-approval-card', composerSurface && 'flower-approval-card-composer')}
+        class={composerSurface ? 'flower-approval-surface' : 'flower-approval-card'}
         data-flower-approval-action-id={actionID}
         data-flower-approval-origin={action().origin}
         data-flower-approval-surface-role={action().surface_role || 'primary_action'}
@@ -7792,7 +7864,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             <Show when={queueProgress()}>
               {(progress) => <span class="flower-approval-queue-progress" aria-label={`${copy().chat.toolApprovalRequired} ${progress()}`}>{progress()}</span>}
             </Show>
-            <Show when={commandText()}>
+            <Show when={!composerSurface && commandText()}>
               <button
                 type="button"
                 class="flower-approval-copy-btn"
@@ -7805,6 +7877,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               </button>
             </Show>
           </div>
+          <Show when={composerSurface}>
+            <p class="flower-approval-question" id={`flower-approval-question-${actionID}`}>
+              {copy().chat.toolApprovalComposerTitle}
+            </p>
+          </Show>
           <Show when={commandText()}>
             {(command) => (
               <pre class="flower-approval-command-text"><FlowerShellCommandHighlight command={command()} /></pre>
@@ -7827,12 +7904,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             {(message) => <p class="flower-approval-status">{message()}</p>}
           </Show>
         </div>
-        <Show when={!composerSurface}>
-          <div class="flower-approval-actions">
+        <div class={cn('flower-approval-actions', composerSurface && 'flower-composer-approval-actions')}>
             <Show when={canDecide()} fallback={<div class="flower-approval-unavailable">{unavailableCopy()}</div>}>
               <Button
                 variant="outline"
                 size="sm"
+                class={composerSurface ? 'flower-composer-approval-decision' : undefined}
                 disabled={disabled()}
                 loading={busy() === 'reject'}
                 aria-busy={busy() === 'reject' ? 'true' : undefined}
@@ -7845,6 +7922,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               <Button
                 variant="primary"
                 size="sm"
+                class={composerSurface ? 'flower-composer-approval-decision' : undefined}
                 disabled={disabled()}
                 loading={busy() === 'approve'}
                 aria-busy={busy() === 'approve' ? 'true' : undefined}
@@ -7855,8 +7933,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 {copy().chat.toolApprovalApprove}
               </Button>
             </Show>
-          </div>
-        </Show>
+        </div>
       </section>
     );
   };
@@ -10623,12 +10700,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               </Show>
               {queuedTurnsDock()}
               <div
-                class="flower-composer flower-chat-input-floating chat-input-container p-3"
+                class={cn(
+                  'flower-composer flower-chat-input-floating chat-input-container p-3',
+                  bottomActionMode() !== 'chat' && 'flower-decision-surface',
+                )}
                 inert={composerSharedOperationActive()}
                 aria-busy={chatRunning() || composerSharedOperationActive() || selectedApprovalDecisionHandoff() || composerReferenceMutationCount() > 0 ? 'true' : undefined}
                 data-flower-turn-submitting={chatRunning() || composerSharedOperationActive() ? 'true' : undefined}
                 data-flower-approval-handoff={selectedComposerApprovalHandoffActive() ? 'true' : undefined}
                 data-flower-approval-handoff-phase={selectedComposerApprovalHandoffActive() ? selectedComposerApprovalHandoffPhase() : undefined}
+                data-flower-bottom-mode={bottomActionMode()}
                 data-flower-companion-compact={companionCompactComposer() ? 'true' : undefined}
                 data-flower-attachment-drag={attachmentDragActive() ? 'true' : undefined}
                 data-flower-text-entry={!selectedComposerApprovalDisplayAction() && !composerTextareaDisabled() ? 'true' : undefined}
@@ -10864,11 +10945,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     onFocusFallback={() => attachmentPickerButtonRef?.focus()}
                   />
                 </Show>
-                <Show when={(selectedInputRequest() || selectedComposerApprovalDisplayAction()) && (composerChatDraftHasRawText() || composerHasAttachments() || composerHasReferences())}>
-                  <div class="flower-composer-draft-presence" role="status">
-                    {attachmentCopy().pendingDraft}
-                  </div>
-                </Show>
                 <Show when={composerTextOverLimit() && !selectedInputRequest()}>
                   <div class="flower-composer-over-limit" role="status">
                     {attachmentCopy().overLimit(FLOWER_INLINE_TEXT_CODE_POINT_LIMIT)}
@@ -10879,7 +10955,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   keyed
                   fallback={(
                     <>
-                      {inputRequestPrompt(selectedInputRequest())}
+                      {inputRequestPrompt(selectedInputRequest(), { surface: 'composer' })}
                       <Show
                         when={activeInputQuestionIsSecret()}
                         fallback={(
@@ -10976,6 +11052,28 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     </div>
                   )}
                 </Show>
+                <Show when={bottomActionMode() === 'input_request'}>
+                  <div class="flower-decision-actions flower-input-request-actions">
+                    <Show when={selectedThreadReadOnly()}>
+                      <span class="flower-decision-readonly-status flower-composer-readonly-chip" role="status">
+                        {selectedThreadReadOnlyDisplay()}
+                      </span>
+                    </Show>
+                    <Button
+                      variant="primary"
+                      icon={ArrowUp}
+                      class="flower-composer-continue"
+                      disabled={selectedThreadReadOnly() || inputSubmitting() || !inputRequestReadyToSubmit()}
+                      loading={inputSubmitting()}
+                      onClick={() => void submitChat()}
+                    >
+                      {inputSubmitting()
+                        ? chatCopyValue('inputRequestSubmitting', 'Submitting...')
+                        : chatCopyValue('inputRequestSubmit', 'Continue')}
+                    </Button>
+                  </div>
+                </Show>
+                <Show when={bottomActionMode() === 'chat'}>
                 <div class="flower-composer-footer">
                   <Show
                     when={!needsSetup()}
@@ -11060,104 +11158,27 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                           />
                         )}
                       </Show>
-                      <Show
-                        when={trimString(selectedComposerApprovalDisplayAction()?.action_id)}
-                        keyed
-                        fallback={(
-                          <Show
-                            when={selectedInputRequest()}
-                            fallback={(
-                              <Button
-                                variant="primary"
-                                icon={composerPrimaryActionIcon()}
-                                size="icon"
-                                class="flower-composer-submit rounded-full"
-                                aria-label={composerPrimaryActionLabel()}
-                                title={composerPrimaryActionLabel()}
-                                disabled={composerPrimaryActionDisabled()}
-                                loading={composerPrimaryActionLoading()}
-                                onClick={() => void submitChat()}
-                              />
-                            )}
-                          >
-                            <Button
-                              variant="primary"
-                              icon={ArrowUp}
-                              class="flower-composer-continue"
-                              disabled={selectedThreadReadOnly() || inputSubmitting() || !inputRequestReadyToSubmit()}
-                              loading={inputSubmitting()}
-                              onClick={() => void submitChat()}
-                            >
-                              {inputSubmitting()
-                                ? chatCopyValue('inputRequestSubmitting', 'Submitting...')
-                                : chatCopyValue('inputRequestSubmit', 'Continue')}
-                            </Button>
-                          </Show>
-                        )}
-                      >
-                        {(_actionID) => {
-                          const approvalAction = selectedComposerApprovalDisplayAction();
-                          if (!approvalAction) return null;
-                          const busy = () => approvalSubmitting()[approvalAction.action_id];
-                          const disabled = () => (
-                            busy() !== undefined
-                            || selectedThreadDetailPending()
-                            || selectedThreadReadOnly()
-                            || !approvalActionCanDecide(approvalAction)
-                          );
-                          const actionLabel = () => approvalAction.summary.label || approvalAction.tool_name || copy().chat.toolApprovalRequired;
-                          const subtaskLabel = () => {
-                            const scope = approvalAction.origin === 'delegated_subagent' ? trimString(approvalAction.scope) : '';
-                            return scope.startsWith('thread:') ? copy().chat.toolApprovalSubtaskSuffix(scope.slice('thread:'.length)) : '';
-                          };
-                          return (
-                            <div class="flower-composer-approval-actions">
-                              <Button
-                                variant="outline"
-                                icon={FlowerStopIcon}
-                                size="icon"
-                                class="flower-composer-stop-thread"
-                                aria-label={copy().chat.stop}
-                                title={copy().chat.stop}
-                                disabled={!selectedThreadCanStop() || threadStopping() || chatRunning()}
-                                loading={threadStopping()}
-                                onClick={() => void stopSelectedThreadFromComposer()}
-                              />
-                              <Button
-                                variant="outline"
-                                class="flower-composer-approval-decision"
-                                disabled={disabled()}
-                                loading={busy() === 'reject'}
-                                aria-busy={busy() === 'reject' ? 'true' : undefined}
-                                aria-label={copy().chat.toolApprovalRejectAction(actionLabel(), subtaskLabel())}
-                                onClick={() => void submitApprovalAction(approvalAction, false)}
-                              >
-                                {copy().chat.toolApprovalReject}
-                              </Button>
-                              <Button
-                                variant="primary"
-                                class="flower-composer-approval-decision"
-                                disabled={disabled()}
-                                loading={busy() === 'approve'}
-                                aria-busy={busy() === 'approve' ? 'true' : undefined}
-                                aria-label={copy().chat.toolApprovalApproveAction(actionLabel(), subtaskLabel())}
-                                onClick={() => void submitApprovalAction(approvalAction, true)}
-                              >
-                                {copy().chat.toolApprovalApprove}
-                              </Button>
-                            </div>
-                          );
-                        }}
-                      </Show>
+                      <Button
+                        variant="primary"
+                        icon={composerPrimaryActionIcon()}
+                        size="icon"
+                        class="flower-composer-submit rounded-full"
+                        aria-label={composerPrimaryActionLabel()}
+                        title={composerPrimaryActionLabel()}
+                        disabled={composerPrimaryActionDisabled()}
+                        loading={composerPrimaryActionLoading()}
+                        onClick={() => void submitChat()}
+                      />
                     </div>
                   </Show>
                 </div>
-                </div>
+                </Show>
               </div>
             </div>
           </div>
         </div>
       </div>
+    </div>
     </div>
   );
 
