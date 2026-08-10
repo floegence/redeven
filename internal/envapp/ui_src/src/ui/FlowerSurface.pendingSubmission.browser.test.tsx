@@ -4,7 +4,7 @@ import './flower-feature.css';
 import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { FlowerTurnLaunchReceipt } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import type { FlowerLiveEventsResponse, FlowerTurnLaunchReceipt } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import {
   adapter,
   deferred,
@@ -312,6 +312,84 @@ describe('Flower pending submission browser presentation', () => {
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-queued-turn-dock-id="queue-explicit"]')));
     expect(runtime.querySelector('[data-flower-pending-submission-id]')).toBeNull();
     expect(runtime.querySelectorAll('[data-flower-queued-turn-dock-id="queue-explicit"]')).toHaveLength(1);
+  });
+
+  it('removes a send-now preview when its exact canonical queue identity arrives before the receipt', async () => {
+    const prompt = 'Promote this exact queued request';
+    const receipt = deferred<FlowerTurnLaunchReceipt>();
+    const events = deferred<FlowerLiveEventsResponse>();
+    const canonical = thread({
+      thread_id: 'thread-send-now-reconcile',
+      status: 'canceled',
+      messages: [],
+      queued_turn_count: 1,
+      queued_turns: [{ queue_id: 'queue-send-now-exact', prompt, created_at_ms: 1 }],
+    });
+    const promoted = thread({
+      ...canonical,
+      status: 'running',
+      active_run_id: 'run-send-now-exact',
+      queued_turn_count: 0,
+      queued_turns: [],
+      messages: [{
+        id: 'message-send-now-exact',
+        turn_id: 'turn-send-now-exact',
+        run_id: 'run-send-now-exact',
+        logical_request_id: 'queue-send-now-exact',
+        role: 'user',
+        content: prompt,
+        status: 'complete',
+        created_at_ms: 2,
+      }],
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [canonical]),
+      loadThread: vi.fn(async () => liveBootstrap(canonical)),
+      listThreadLiveEvents: vi.fn(() => events.promise),
+      launchTurn: vi.fn(() => receipt.promise),
+    });
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-send-now-reconcile"] button')));
+    (runtime.querySelector('[data-thread-id="thread-send-now-reconcile"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-queued-turn-dock-id="queue-send-now-exact"]')));
+
+    (runtime.querySelector('[data-flower-queued-turn-dock-id="queue-send-now-exact"] .flower-queued-turn-send') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-pending-submission-id]')));
+    events.resolve({
+      stream_generation: 1,
+      events: [
+        {
+          schema_version: 1,
+          seq: 1,
+          endpoint_id: 'test-runtime',
+          thread_id: promoted.thread_id,
+          run_id: 'run-send-now-exact',
+          turn_id: 'turn-send-now-exact',
+          at_unix_ms: 2,
+          kind: 'thread.patched',
+          payload: { patch: { queued_turn_count: 0, queued_turns: [], run_status: 'running' } },
+        },
+        {
+          schema_version: 1,
+          seq: 2,
+          endpoint_id: 'test-runtime',
+          thread_id: promoted.thread_id,
+          run_id: 'run-send-now-exact',
+          turn_id: 'turn-send-now-exact',
+          at_unix_ms: 2,
+          kind: 'timeline.replaced',
+          payload: { messages: promoted.messages, stream_generation: 1, snapshot_through_seq: 2 },
+        },
+      ],
+      next_cursor: 2,
+      retained_from_seq: 1,
+      has_more: false,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="message-send-now-exact"]')));
+    expect(runtime.querySelector('[data-flower-pending-submission-id]')).toBeNull();
+    expect(Array.from(runtime.querySelectorAll('[data-flower-message-id]')).filter((row) => row.textContent?.includes(prompt))).toHaveLength(1);
+    expect(runtime.querySelector('[data-flower-queued-turn-dock-id="queue-send-now-exact"]')).toBeNull();
   });
 
   it('rolls an optimistic queued-turn deletion back in its original order when the command fails', async () => {
