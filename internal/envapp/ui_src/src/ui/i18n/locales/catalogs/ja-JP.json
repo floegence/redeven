@@ -3876,6 +3876,7 @@
       "threadLoadErrorTitle": "会話を読み込めませんでした。",
       "threadLoading": "会話を読み込み中...",
       "composerErrorTitle": "Flower は送信できませんでした。",
+      "stopErrorTitle": "Flower はこの応答を停止できませんでした。",
       "modelStatusPreparing": "モデルリクエストを準備中...",
       "modelStatusWaitingResponse": "モデルの応答を待っています...",
       "modelStatusStreaming": "思考中...",

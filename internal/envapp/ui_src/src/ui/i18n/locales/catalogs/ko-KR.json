@@ -3876,6 +3876,7 @@
       "threadLoadErrorTitle": "대화를 불러오지 못했습니다.",
       "threadLoading": "대화를 불러오는 중...",
       "composerErrorTitle": "Flower가 전송하지 못했습니다.",
+      "stopErrorTitle": "Flower가 이 응답을 중지하지 못했습니다.",
       "modelStatusPreparing": "모델 요청을 준비 중...",
       "modelStatusWaitingResponse": "모델 응답을 기다리는 중...",
       "modelStatusStreaming": "생각 중...",

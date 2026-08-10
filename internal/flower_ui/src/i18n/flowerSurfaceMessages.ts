@@ -122,6 +122,7 @@ export const flowerSurfaceEnUS = {
     threadLoadErrorTitle: 'Conversation could not load.',
     threadLoading: 'Loading conversation...',
     composerErrorTitle: 'Flower could not send.',
+    stopErrorTitle: 'Flower could not stop this reply.',
     modelStatusPreparing: 'Preparing model request...',
     modelStatusWaitingResponse: 'Waiting for model response...',
     modelStatusStreaming: 'Thinking...',

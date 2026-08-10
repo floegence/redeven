@@ -3878,6 +3878,7 @@
       "threadLoadErrorTitle": "对话加载失败。",
       "threadLoading": "正在加载对话...",
       "composerErrorTitle": "Flower 发送失败。",
+      "stopErrorTitle": "Flower 无法停止此回复。",
       "modelStatusPreparing": "正在准备模型请求...",
       "modelStatusWaitingResponse": "正在等待模型响应...",
       "modelStatusStreaming": "正在思考...",

@@ -121,6 +121,7 @@
       "threadLoadErrorTitle": "Unterhaltung konnte nicht geladen werden.",
       "threadLoading": "Unterhaltung wird geladen...",
       "composerErrorTitle": "Flower konnte nicht senden.",
+      "stopErrorTitle": "Flower konnte diese Antwort nicht stoppen.",
       "modelStatusPreparing": "Modellanfrage wird vorbereitet...",
       "modelStatusWaitingResponse": "Warten auf Modellantwort...",
       "modelStatusStreaming": "Denkt nach...",

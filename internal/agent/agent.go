@@ -24,6 +24,7 @@ import (
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/accessproxy"
 	"github.com/floegence/redeven/internal/accessrpc"
+	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/auditlog"
 	"github.com/floegence/redeven/internal/codeapp"
 	"github.com/floegence/redeven/internal/config"
@@ -1336,6 +1337,8 @@ func (a *Agent) serveRedevenAgentSession(ctx context.Context, sess flowersec.Ses
 	gitRepoSvc.RegisterWithAccessGate(router, meta, a.accessGate)
 	a.mon.RegisterWithAccessGate(router, meta, a.accessGate)
 	a.registerSessionsRPCWithAccessGate(router, meta, a.accessGate)
+	detachAI := a.registerAISessionRPC(router, meta, sess.RPC())
+	defer detachAI()
 	if a.term != nil {
 		detachTerminal := a.term.RegisterWithAccessGate(router, meta, sess.RPC(), a.accessGate)
 		defer detachTerminal()
@@ -1406,7 +1409,12 @@ func (a *Agent) NewLocalSessionHandlers(meta *session.Meta) (*flowersec.SessionH
 	}
 	fsSvc := fs.NewServiceWithCoordinator(a.filesystemScope, a.gitRuntime)
 	gitRepoSvc := gitrepo.NewServiceWithScopeAndRuntime(a.filesystemScope, a.gitRuntime)
-	cleanup := func() { gitRepoSvc.Close() }
+	cleanups := []func(){gitRepoSvc.Close}
+	cleanup := func() {
+		for index := len(cleanups) - 1; index >= 0; index-- {
+			cleanups[index]()
+		}
+	}
 
 	handlers, err := flowersec.NewSessionHandlers(flowersec.SessionHandlerOptions{OnError: func(err error) {
 		if err != nil && a.log != nil {
@@ -1424,8 +1432,9 @@ func (a *Agent) NewLocalSessionHandlers(meta *session.Meta) (*flowersec.SessionH
 	gitRepoSvc.RegisterWithAccessGate(router, meta, a.accessGate)
 	a.mon.RegisterWithAccessGate(router, meta, a.accessGate)
 	a.registerSessionsRPCWithAccessGate(router, meta, a.accessGate)
+	cleanups = append(cleanups, a.registerAISessionRPC(router, meta, nil))
 	if a.term != nil {
-		a.term.RegisterWithAccessGate(router, meta, nil, a.accessGate)
+		cleanups = append(cleanups, a.term.RegisterWithAccessGate(router, meta, nil, a.accessGate))
 	}
 	if err := router.Bind(handlers); err != nil {
 		cleanup()
@@ -1445,6 +1454,16 @@ func (a *Agent) NewLocalSessionHandlers(meta *session.Meta) (*flowersec.SessionH
 		}
 	}
 	return handlers, cleanup, nil
+}
+
+func (a *Agent) registerAISessionRPC(router *sessionrpc.Router, meta *session.Meta, peer flowersec.RPCPeer) func() {
+	acquire := func(ctx context.Context) (*ai.Service, context.Context, uint64, func(), error) {
+		if a == nil || a.code == nil {
+			return nil, nil, 0, nil, errors.New("AI service is unavailable")
+		}
+		return a.code.AcquireAIService(ctx)
+	}
+	return ai.RegisterRPCServiceProviderWithAccessGate(router, meta, peer, a.accessGate, acquire)
 }
 
 func (a *Agent) terminalLiveStreamHandler(meta *session.Meta) flowersec.StreamHandler {

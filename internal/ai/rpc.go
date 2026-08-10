@@ -260,7 +260,7 @@ func RegisterRPCServiceProviderWithAccessGate(r *sessionrpc.Router, meta *sessio
 			return nil, &sessionrpc.Error{Code: 403, Message: "read/write/execute permission denied"}
 		}
 		if streamServer == nil {
-			return nil, &sessionrpc.Error{Code: 500, Message: "stream not ready"}
+			return nil, &sessionrpc.Error{Code: 503, Message: "realtime stream is unavailable"}
 		}
 		activeRuns, subscribeErr := realtimeSubscriptions.SubscribeSummary()
 		if subscribeErr != nil {
@@ -274,7 +274,7 @@ func RegisterRPCServiceProviderWithAccessGate(r *sessionrpc.Router, meta *sessio
 			return nil, &sessionrpc.Error{Code: 403, Message: "read/write/execute permission denied"}
 		}
 		if streamServer == nil {
-			return nil, &sessionrpc.Error{Code: 500, Message: "stream not ready"}
+			return nil, &sessionrpc.Error{Code: 503, Message: "realtime stream is unavailable"}
 		}
 		if req == nil {
 			return nil, &sessionrpc.Error{Code: 400, Message: "invalid payload"}

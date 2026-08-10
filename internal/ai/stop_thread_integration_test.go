@@ -742,6 +742,41 @@ func TestStopThreadIsIdempotentForInterruptedTerminalWithoutLocalOwner(t *testin
 	}
 }
 
+func TestStopThreadWithoutActorUsesCanonicalLifecycle(t *testing.T) {
+	for _, test := range []struct {
+		name        string
+		status      flruntime.ThreadStatus
+		wantOK      bool
+		wantPending bool
+	}{
+		{name: "terminal", status: flruntime.ThreadStatusCompleted, wantOK: true},
+		{name: "busy", status: flruntime.ThreadStatusRunning, wantPending: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			svc, meta, threadID := newStopThreadStateMachineTestService(t)
+			overrideStopThreadOverviewReader(t, svc, func(context.Context, identity.ThreadID, floretThreadReadHost) (flruntime.ThreadOverview, error) {
+				return flruntime.ThreadOverview{
+					Thread: flruntime.ThreadSnapshot{
+						ID: identity.ThreadID(threadID), Status: test.status,
+					},
+				}, nil
+			})
+			svc.threadMgr.Close()
+
+			response, err := svc.StopThread(context.Background(), meta, threadID)
+			if test.wantOK {
+				if err != nil || !response.OK {
+					t.Fatalf("StopThread response=%#v err=%v, want idempotent success", response, err)
+				}
+				return
+			}
+			if test.wantPending && !errors.Is(err, ErrThreadStopPending) {
+				t.Fatalf("StopThread response=%#v err=%v, want recovery pending", response, err)
+			}
+		})
+	}
+}
+
 func TestRunExecutionClosureIsScopedToExactRun(t *testing.T) {
 	stopped := &run{}
 	stopped.closeExecution()

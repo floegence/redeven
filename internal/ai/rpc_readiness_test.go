@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -26,6 +27,31 @@ func TestAcquireRPCServiceReleasesInvalidLease(t *testing.T) {
 	}
 	if got := releases.Load(); got != 1 {
 		t.Fatalf("invalid lease release count = %d, want 1", got)
+	}
+}
+
+func TestAIRealtimeRPCWithoutPeerReturnsUnavailable(t *testing.T) {
+	router := sessionrpc.NewRouter()
+	meta := &session.Meta{EndpointID: "env_1", CanRead: true, CanWrite: true, CanExecute: true}
+	detach := RegisterRPCServiceProviderWithAccessGate(router, meta, nil, nil, func(context.Context) (*Service, context.Context, uint64, func(), error) {
+		return newRPCRealtimeTestService(), context.Background(), 1, func() {}, nil
+	})
+	t.Cleanup(detach)
+	for _, request := range []struct {
+		name   string
+		typeID uint32
+		body   any
+	}{
+		{name: "summary", typeID: TypeID_AI_SUBSCRIBE_SUMMARY, body: map[string]any{}},
+		{name: "thread", typeID: TypeID_AI_SUBSCRIBE_THREAD, body: map[string]any{"thread_id": "thread_1"}},
+	} {
+		t.Run(request.name, func(t *testing.T) {
+			err := router.Call(context.Background(), request.typeID, request.body, nil)
+			var rpcErr *sessionrpc.Error
+			if !errors.As(err, &rpcErr) || rpcErr.Code != 503 {
+				t.Fatalf("RPC error = %v, want structured 503 unavailable", err)
+			}
+		})
 	}
 }
 

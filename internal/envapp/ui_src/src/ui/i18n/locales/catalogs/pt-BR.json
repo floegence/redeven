@@ -3876,6 +3876,7 @@
       "threadLoadErrorTitle": "A conversa não pôde carregar.",
       "threadLoading": "Carregando conversa...",
       "composerErrorTitle": "O Flower não pôde enviar.",
+      "stopErrorTitle": "O Flower não pôde interromper esta resposta.",
       "modelStatusPreparing": "Preparando solicitação ao modelo...",
       "modelStatusWaitingResponse": "Aguardando resposta do modelo...",
       "modelStatusStreaming": "Pensando...",

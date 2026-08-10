@@ -1243,7 +1243,7 @@ describe('Env local Flower surface adapter', () => {
     });
 
     expect(uploadAttachment).not.toHaveBeenCalled();
-    expect(subscribeThread).toHaveBeenCalledWith({ threadId: 'thread_upload' });
+    expect(subscribeThread).not.toHaveBeenCalled();
     expect(turnBodies[0]).toMatchObject({
       thread_id: 'thread_upload',
       staging_scope_id: 'staging_thread_upload',
@@ -1360,7 +1360,7 @@ describe('Env local Flower surface adapter', () => {
         context_action: contextAction,
       },
     });
-    expect(subscribeThread).toHaveBeenCalledWith({ threadId: 'thread_reference' });
+    expect(subscribeThread).not.toHaveBeenCalled();
   });
 
   it('passes reasoning selection through create thread and turn launch', async () => {
@@ -1442,7 +1442,7 @@ describe('Env local Flower surface adapter', () => {
         reasoning_selection: { level: 'high' },
       }),
     });
-    expect(subscribeThread).toHaveBeenCalledWith({ threadId: 'thread_reasoning' });
+    expect(subscribeThread).not.toHaveBeenCalled();
   });
 
   it('rejects a receipt that changes the echoed client request identity', async () => {
