@@ -7827,12 +7827,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     ));
     const subtaskLabel = createMemo(() => scopedThreadID() ? copy().chat.toolApprovalSubtaskSuffix(scopedThreadID()) : '');
     const commandText = createMemo(() => trimString(action().summary.command));
-    const toolLabel = createMemo(() => {
-      const explicit = trimString(action().summary.label);
-      const command = commandText();
-      if (explicit && explicit !== command) return explicit;
-      return trimString(action().tool_name) || copy().chat.toolApprovalRequired;
-    });
     const descriptionText = createMemo(() => action().summary.description || action().read_only_reason || '');
     const visibleEffects = createMemo(() => approvalVisibleEffects(action()));
     const visibleFlags = createMemo(() => approvalVisibleFlags(action()));
@@ -7841,7 +7835,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const statusCopy = createMemo(() => !canDecide() ? action().read_only_reason || copy().chat.toolApprovalUnavailable : '');
     const describedBy = createMemo(() => [descriptionText() ? descriptionID : '', statusCopy() ? statusID : ''].filter(Boolean).join(' '));
     const unavailableCopy = createMemo(() => action().read_only_reason || copy().chat.toolApprovalUnavailable);
-    const approvalIntroText = () => composerSurface ? toolLabel() : copy().chat.toolApprovalComposerTitle;
     const riskNote = () => {
       const notes: string[] = [];
       if (visibleFlags().includes('May reach outside the workspace')) notes.push(copy().chat.toolApprovalOutsideWorkspaceRisk);
@@ -7859,24 +7852,28 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         data-flower-composer-approval={composerSurface ? 'true' : undefined}
       >
         <div class="flower-approval-body">
-          <div class="flower-approval-header">
-            <p class="flower-approval-intro">{approvalIntroText()}</p>
-            <Show when={queueProgress()}>
-              {(progress) => <span class="flower-approval-queue-progress" aria-label={`${copy().chat.toolApprovalRequired} ${progress()}`}>{progress()}</span>}
-            </Show>
-            <Show when={!composerSurface && commandText()}>
-              <button
-                type="button"
-                class="flower-approval-copy-btn"
-                data-copied={commandCopied() ? 'true' : 'false'}
-                aria-label={`${copy().chat.toolApprovalCopyCommand}${subtaskLabel()}`}
-                title={commandCopied() ? copy().chat.toolApprovalCopied : copy().chat.toolApprovalCopyCommand}
-                onClick={() => void copyApprovalCommand(action())}
-              >
-                <Copy class="h-3.5 w-3.5" aria-hidden="true" />
-              </button>
-            </Show>
-          </div>
+          <Show when={!composerSurface || queueProgress()}>
+            <div class="flower-approval-header">
+              <Show when={!composerSurface}>
+                <p class="flower-approval-intro">{copy().chat.toolApprovalComposerTitle}</p>
+              </Show>
+              <Show when={queueProgress()}>
+                {(progress) => <span class="flower-approval-queue-progress" aria-label={`${copy().chat.toolApprovalRequired} ${progress()}`}>{progress()}</span>}
+              </Show>
+              <Show when={!composerSurface && commandText()}>
+                <button
+                  type="button"
+                  class="flower-approval-copy-btn"
+                  data-copied={commandCopied() ? 'true' : 'false'}
+                  aria-label={`${copy().chat.toolApprovalCopyCommand}${subtaskLabel()}`}
+                  title={commandCopied() ? copy().chat.toolApprovalCopied : copy().chat.toolApprovalCopyCommand}
+                  onClick={() => void copyApprovalCommand(action())}
+                >
+                  <Copy class="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+              </Show>
+            </div>
+          </Show>
           <Show when={composerSurface}>
             <p class="flower-approval-question" id={`flower-approval-question-${actionID}`}>
               {copy().chat.toolApprovalComposerTitle}

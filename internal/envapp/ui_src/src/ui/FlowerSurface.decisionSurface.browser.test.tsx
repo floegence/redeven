@@ -163,7 +163,8 @@ describe('Flower bottom decision surface', () => {
     expect(surface.querySelector('[data-flower-composer-control="model_reasoning"]')).toBeNull();
     expect(surface.textContent).not.toContain('Review before this runs');
     expect(surface.textContent).not.toContain('Approval required');
-    expect(surface.textContent).toContain('terminal.exec');
+    expect(surface.querySelector('.flower-approval-intro')).toBeNull();
+    expect(surface.textContent).not.toContain('terminal.exec');
     expect(surface.textContent?.match(/printf flower-decision-surface/g)).toHaveLength(1);
     expect(surface.textContent).not.toContain('1 / 1');
 
@@ -183,8 +184,9 @@ describe('Flower bottom decision surface', () => {
     }));
   });
 
-  it('does not render a duplicate command when an approval label is only the command', async () => {
-    const command = 'printf flower-decision-surface-live';
+  it('does not render a command summary above the canonical approval command', async () => {
+    const summary = 'curl -s --max-time 20 https://api.open-meteo.com/v1/forecast';
+    const command = `${summary}\npython - <<'PY'\nprint('weather')\nPY`;
     const action = {
       action_id: 'approval-duplicate-command',
       origin: 'main_tool' as const,
@@ -197,7 +199,7 @@ describe('Flower bottom decision surface', () => {
       version: 1,
       requested_at_ms: 20_000,
       can_approve: true,
-      summary: { label: command, command },
+      summary: { label: summary, command },
     };
     const approvalThread = thread({
       thread_id: 'thread-duplicate-command',
@@ -215,8 +217,8 @@ describe('Flower bottom decision surface', () => {
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-bottom-mode="approval"]')));
 
     const surface = runtime.querySelector('[data-flower-bottom-mode="approval"]') as HTMLElement;
-    expect(surface.querySelector('.flower-approval-intro')?.textContent?.trim()).not.toBe(command);
-    expect(surface.textContent?.split(command).length ?? 0).toBe(2);
+    expect(surface.querySelector('.flower-approval-intro')).toBeNull();
+    expect(surface.querySelector('.flower-approval-command-text')?.textContent).toBe(command);
   });
 
   it('uses the same single-layer decision contract in the narrow companion surface', async () => {
