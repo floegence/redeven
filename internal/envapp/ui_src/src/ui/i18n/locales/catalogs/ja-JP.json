@@ -4319,6 +4319,8 @@
       "viewTrustDetails": "信頼情報を確認",
       "viewIssue": "問題を確認",
       "runtimeIssueRecovery": "Redeven または ReDevPlugin を必要なバージョンに更新し、ランタイムを再起動してからプラグインセンターを再読み込みしてください。",
+      "runtimeRecoveryInProgress": "プラグインランタイムへのアクセスを復元しています。復元が完了するまでプラグイン画面は利用できません。",
+      "runtimeRecoveryFailed": "プラグイン画面は引き続き利用できません。上のエラーを確認してから、ランタイムの復元を再試行してください。",
       "trustIssueRecovery": "以下の信頼および承認の理由コードとソースを確認してください。再試行する前に、別のパッケージを選ぶか、管理者にポリシーの変更を依頼してください。",
       "diagnosticIssueRecovery": "以下に表示されているホストまたはパッケージの問題を解決し、プラグインセンターを再読み込みしてから再試行してください。",
       "moreActions": "その他のプラグイン操作",

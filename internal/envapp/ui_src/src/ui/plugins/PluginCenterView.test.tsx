@@ -2064,6 +2064,8 @@ describe('PluginCenterView', () => {
 
     const recovery = mount.querySelector<HTMLElement>('[data-plugin-runtime-recovery="failed"]');
     expect(recovery?.textContent).toContain('Activation evidence is unavailable.');
+    expect(recovery?.textContent).toContain('Review the error above, then retry runtime recovery.');
+    expect(recovery?.textContent).not.toContain('restart the runtime');
     const retry = recovery?.querySelector<HTMLButtonElement>('[data-plugin-runtime-recovery-retry]');
     expect(retry?.disabled).toBe(false);
     retry?.click();
@@ -2074,6 +2076,30 @@ describe('PluginCenterView', () => {
     const open = mount.querySelector<HTMLButtonElement>('[data-plugin-center-card-primary="catalog:containers"]');
     expect(open?.textContent).toContain('Open');
     expect(open?.disabled).toBe(true);
+  });
+
+  it('explains that plugin surfaces remain unavailable while runtime recovery is active', () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+
+    dispose = render(() => (
+      <PluginCenterView
+        projection={containersPermissionProjection(true)}
+        loading={false}
+        error={null}
+        canManagePlugins
+        canOpenPluginSurfaces={false}
+        runtimeRecovery={{ state: 'recovering' }}
+        onRetryRuntimeRecovery={vi.fn()}
+        onRefresh={vi.fn()}
+        onCommand={vi.fn()}
+      />
+    ), mount);
+
+    const recovery = mount.querySelector<HTMLElement>('[data-plugin-runtime-recovery="recovering"]');
+    expect(recovery?.textContent).toContain('Plugin runtime access is being restored.');
+    expect(recovery?.textContent).toContain('Plugin surfaces will remain unavailable until recovery completes.');
+    expect(recovery?.querySelector('[data-plugin-runtime-recovery-retry]')).toBeNull();
   });
 
   it('uses the combined authorization state instead of a stale enabled lifecycle', () => {
