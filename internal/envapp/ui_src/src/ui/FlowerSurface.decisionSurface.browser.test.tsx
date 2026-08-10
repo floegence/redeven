@@ -151,6 +151,10 @@ describe('Flower bottom decision surface', () => {
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-bottom-mode="approval"]')));
 
     const surface = runtime.querySelector('[data-flower-bottom-mode="approval"]') as HTMLElement;
+    const decisions = Array.from(surface.querySelectorAll<HTMLButtonElement>('.flower-composer-approval-decision'));
+    await waitFor(() => document.activeElement === decisions[0]);
+    expect(surface.hasAttribute('tabindex')).toBe(false);
+    expect(document.activeElement).not.toBe(surface);
     expect(surface.classList.contains('flower-decision-surface')).toBe(true);
     expect(surface.querySelector('.flower-decision-surface')).toBeNull();
     expect(surface.querySelector('.flower-approval-card')).toBeNull();
@@ -168,7 +172,6 @@ describe('Flower bottom decision surface', () => {
     expect(surface.textContent?.match(/printf flower-decision-surface/g)).toHaveLength(1);
     expect(surface.textContent).not.toContain('1 / 1');
 
-    const decisions = Array.from(surface.querySelectorAll<HTMLButtonElement>('.flower-composer-approval-decision'));
     expect(decisions.map((button) => button.textContent?.trim())).toEqual(['Reject', 'Allow once']);
     decisions[1].click();
     await waitFor(() => submitApproval.mock.calls.length === 1);
