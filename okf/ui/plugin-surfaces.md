@@ -115,15 +115,19 @@ keep the inventory master and selected detail side by side.
 After a direct-session handshake, the Shell waits through a cancellable 250ms
 stability window before asking the released Host to refresh enabled runtimes.
 The handshake credential can precede the server-side scope needed by that
-mutation. A released plugin may need the full bounded 90-second recovery budget
-after a host restart while its upstream trust state is reconstructed. Until the
-exact `refresh-enabled` operation succeeds without a failed entry, Activity and
-Workbench plugin surfaces remain unavailable; the UI must not expose an `Open`
-action that will fail because recovery is still active. A disconnect, replaced
+mutation. ReDevPlugin `v0.7.19` normally reconstructs restart activation from
+sealed local registry and release-trust evidence without remote artifact
+downloads; Redeven retains a bounded 90-second outer timeout as a fail-closed
+guard rather than a normal recovery budget.
+
+Until the exact `refresh-enabled` operation succeeds without a failed entry,
+Activity and Workbench plugin surfaces remain unavailable and `Open` stays
+disabled. Plugin Center presents the active recovery state. A timeout or failed
+entry shows the stable reason and an explicit Retry action; Retry is single-flight,
+returns presentation to recovering immediately, and never reloads the page,
+opens a surface early, or grants fallback authorization. A disconnect, replaced
 client, or Shell disposal aborts the pending wait and refresh. Only one recovery
-may be active for a connected client, and a timeout or reported failure leaves
-the surfaces unavailable with actionable attention state rather than retrying a
-mutation blindly.
+may be active for a connected client.
 
 ## Official installation progress
 
