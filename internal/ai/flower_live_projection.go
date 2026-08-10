@@ -1891,6 +1891,7 @@ func applyFlowerLiveEventToMaterializedState(state *FlowerLiveMaterializedState,
 			if flowerLiveRunStatusIsTerminal(run.Status) {
 				delete(state.Runs, payload.RunID)
 				clearFlowerModelIOForRun(state, payload.RunID)
+				clearFlowerLiveApprovalsForRun(state, approvals, payload.RunID)
 				state.ThreadPatch.WaitingPrompt = nil
 				for promptID := range state.InputRequests {
 					delete(state.InputRequests, promptID)
@@ -2073,6 +2074,50 @@ func applyFlowerLiveEventToMaterializedState(state *FlowerLiveMaterializedState,
 				delete(state.InputRequests, key)
 			}
 		}
+	}
+}
+
+func clearFlowerLiveApprovalsForRun(state *FlowerLiveMaterializedState, approvalIndex map[string]FlowerApprovalState, runID string) {
+	if state == nil {
+		return
+	}
+	runID = strings.TrimSpace(runID)
+	if runID == "" {
+		return
+	}
+	removedCurrent := false
+	currentActionID := ""
+	if state.ApprovalQueue != nil {
+		currentActionID = strings.TrimSpace(state.ApprovalQueue.CurrentActionID)
+	}
+	for actionID, action := range state.ApprovalActions {
+		if strings.TrimSpace(action.RunID) != runID {
+			continue
+		}
+		delete(state.ApprovalActions, actionID)
+		delete(approvalIndex, actionID)
+		removedCurrent = removedCurrent || strings.TrimSpace(actionID) == currentActionID
+	}
+	if state.ApprovalQueue == nil {
+		return
+	}
+	remaining := 0
+	var nextAction FlowerApprovalAction
+	for _, action := range state.ApprovalActions {
+		if action.Origin == FlowerApprovalOriginMainTool || action.Origin == FlowerApprovalOriginDelegatedSubagent {
+			remaining++
+			if strings.TrimSpace(nextAction.ActionID) == "" || action.QueueOrder < nextAction.QueueOrder {
+				nextAction = action
+			}
+		}
+	}
+	state.ApprovalQueue.Total = remaining
+	state.ApprovalQueue.UnresolvedCount = remaining
+	if remaining == 0 {
+		state.ApprovalQueue = nil
+	} else if removedCurrent {
+		state.ApprovalQueue.CurrentActionID = strings.TrimSpace(nextAction.ActionID)
+		state.ApprovalQueue.CurrentPosition = 1
 	}
 }
 

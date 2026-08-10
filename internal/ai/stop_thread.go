@@ -231,9 +231,9 @@ func stoppedRunCanonicalProof(snapshot flruntime.ThreadSnapshot, latest *flrunti
 	}
 }
 
-func (s *Service) waitForExactStoppedRunAuthority(ctx context.Context, threadID string, r *run) error {
+func (s *Service) waitForExactStoppedRunAuthority(ctx context.Context, threadID string, r *run) (string, string, string, error) {
 	if s == nil || r == nil {
-		return fmt.Errorf("%w: exact run authority is unavailable", ErrThreadStopUnavailable)
+		return "", "", "", fmt.Errorf("%w: exact run authority is unavailable", ErrThreadStopUnavailable)
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -246,7 +246,7 @@ func (s *Service) waitForExactStoppedRunAuthority(ctx context.Context, threadID 
 	if !r.floretAdmitted.Load() {
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("%w: waiting for pre-admission execution: %v", ErrThreadStopPending, ctx.Err())
+			return "", "", "", fmt.Errorf("%w: waiting for pre-admission execution: %v", ErrThreadStopPending, ctx.Err())
 		case <-r.doneCh:
 		}
 		if !r.floretAdmitted.Load() {
@@ -258,9 +258,13 @@ func (s *Service) waitForExactStoppedRunAuthority(ctx context.Context, threadID 
 			snapshot, latest, err := s.readCanonicalThreadState(readCtx, threadID)
 			cancel()
 			if err != nil {
-				return stopExecutionError("reading canonical Floret state after pre-admission stop", err)
+				return "", "", "", stopExecutionError("reading canonical Floret state after pre-admission stop", err)
 			}
-			return validateStoppedRunCanonicalSnapshot(snapshot, latest, threadID, "", false)
+			if err := validateStoppedRunCanonicalSnapshot(snapshot, latest, threadID, "", false); err != nil {
+				return "", "", "", err
+			}
+			status, errorCode, runErr, err := threadViewRunState(snapshot, latest)
+			return status, errorCode, runErr, err
 		}
 	}
 	canonicalRunID, _ := r.canonicalRunTurnIdentity()
@@ -280,24 +284,25 @@ func (s *Service) waitForExactStoppedRunAuthority(ctx context.Context, threadID 
 		snapshot, latest, err := s.readCanonicalThreadState(readCtx, threadID)
 		cancel()
 		if err != nil {
-			return stopExecutionError("reading canonical Floret terminal snapshot", err)
+			return "", "", "", stopExecutionError("reading canonical Floret terminal snapshot", err)
 		}
 		proven, err := stoppedRunCanonicalProof(snapshot, latest, threadID, canonicalRunID, r.floretRunTurnStarted.Load())
 		if err != nil {
-			return err
+			return "", "", "", err
 		}
 		if proven {
-			return nil
+			status, errorCode, runErr, err := threadViewRunState(snapshot, latest)
+			return status, errorCode, runErr, err
 		}
 
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("%w: waiting for exact canonical run terminal proof: %v", ErrThreadStopPending, ctx.Err())
+			return "", "", "", fmt.Errorf("%w: waiting for exact canonical run terminal proof: %v", ErrThreadStopPending, ctx.Err())
 		case <-doneCh:
 			doneCh = nil
 		case <-authorityCh:
 			if err := r.floretAuthorityBarrier.waitContext(context.Background()); err != nil {
-				return fmt.Errorf("%w: waiting for Floret authority release: %v", ErrThreadStopUnavailable, err)
+				return "", "", "", fmt.Errorf("%w: waiting for Floret authority release: %v", ErrThreadStopUnavailable, err)
 			}
 			authorityCh = nil
 		case <-ticker.C:
@@ -498,11 +503,14 @@ func (s *Service) finishExactRunStop(endpointID string, threadID string, executi
 	}
 	s.mu.Unlock()
 	var finalErr error
+	var canonicalStatus string
+	var canonicalErrorCode string
+	var canonicalError string
 	if err := termination.wait(finalizationCtx); err != nil {
 		finalErr = stopExecutionError("terminating run terminal processes", err)
 	}
 	if finalErr == nil {
-		finalErr = s.waitForExactStoppedRunAuthority(finalizationCtx, threadID, r)
+		canonicalStatus, canonicalErrorCode, canonicalError, finalErr = s.waitForExactStoppedRunAuthority(finalizationCtx, threadID, r)
 	}
 	if finalErr != nil {
 		finishStopFinalizationAttempt(attempt, finalErr)
@@ -520,10 +528,13 @@ func (s *Service) finishExactRunStop(endpointID string, threadID string, executi
 		finalErr = fmt.Errorf("%w: exact stop ownership changed during finalization", ErrThreadStopUnavailable)
 	}
 	s.mu.Unlock()
-	finishStopFinalizationAttempt(attempt, finalErr)
 	if finalErr != nil {
+		finishStopFinalizationAttempt(attempt, finalErr)
 		return
 	}
+	canonicalRunID, _ := r.canonicalRunTurnIdentity()
+	s.broadcastThreadState(endpointID, threadID, canonicalRunID, canonicalStatus, canonicalErrorCode, canonicalError)
+	finishStopFinalizationAttempt(attempt, nil)
 	if s.threadMgr != nil {
 		s.threadMgr.Wake(endpointID, threadID)
 	}

@@ -513,6 +513,45 @@ func TestFlowerLiveProjectionReplacesCanonicalApprovalQueueAtomically(t *testing
 	}
 }
 
+func TestFlowerLiveTerminalRunClearsRunScopedApprovals(t *testing.T) {
+	t.Parallel()
+
+	const endpointID = "env_terminal_approval"
+	const threadID = "thread_terminal_approval"
+	const runID = "run_terminal_approval"
+	svc := &Service{}
+	action := FlowerApprovalAction{
+		ActionID: "approval_terminal", Origin: FlowerApprovalOriginMainTool,
+		RunID: runID, TurnID: "turn_terminal_approval", ToolID: "tool_terminal", ToolName: "terminal.exec",
+		State: FlowerApprovalStateRequested, Status: FlowerApprovalStatusPending,
+		Revision: 1, Version: 1, SurfaceEpoch: 1, SurfaceRole: FlowerApprovalSurfacePrimaryAction,
+		Scope: "thread:" + threadID, RequestedAtMs: 1_000, CanApprove: true,
+		QueueGeneration: 1, QueueOrder: 1, BatchSize: 1, Summary: FlowerApprovalSummary{Label: "sleep 60"},
+	}
+	svc.appendFlowerLiveEvent(FlowerLiveEvent{
+		EndpointID: endpointID, ThreadID: threadID, RunID: runID,
+		Kind: FlowerLiveApprovalQueueReplaced,
+		Payload: mustFlowerPayload(FlowerLiveApprovalQueuePayload{
+			Actions: []FlowerApprovalAction{action},
+			ApprovalQueue: FlowerApprovalQueue{
+				Generation: 1, Revision: 1, CurrentActionID: action.ActionID,
+				CurrentPosition: 1, Total: 1, UnresolvedCount: 1,
+			},
+		}),
+	})
+	svc.broadcastThreadState(endpointID, threadID, runID, string(RunStateCanceled), "", "")
+
+	svc.mu.Lock()
+	state := cloneFlowerLiveMaterializedState(svc.flowerLiveByThread[runThreadKey(endpointID, threadID)].State)
+	svc.mu.Unlock()
+	if len(state.ApprovalActions) != 0 || state.ApprovalQueue != nil {
+		t.Fatalf("terminal run retained approvals: actions=%#v queue=%#v", state.ApprovalActions, state.ApprovalQueue)
+	}
+	if state.ThreadPatch.RunStatus != string(RunStateCanceled) {
+		t.Fatalf("run status=%q, want canceled", state.ThreadPatch.RunStatus)
+	}
+}
+
 func TestFlowerLiveCanonicalTimelineSuppressesSettledApprovalOverlay(t *testing.T) {
 	t.Parallel()
 
