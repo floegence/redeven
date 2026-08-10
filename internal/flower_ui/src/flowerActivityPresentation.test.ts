@@ -213,7 +213,7 @@ describe('presentFlowerActivityItem', () => {
 
     expect(presentation.label).toBe('npm run build -- --mode production');
     expect(presentation.title).toEqual({ kind: 'command', command: 'npm run build -- --mode production' });
-    expect(presentation.meta).toContain('npm run build -- --mode production');
+    expect(presentation.meta).not.toContain('npm run build -- --mode production');
     expect(presentation.meta).not.toContain('exit 0');
     expect(presentation.detailBlocks[0]).toMatchObject({
       kind: 'terminal_output',
@@ -233,6 +233,21 @@ describe('presentFlowerActivityItem', () => {
     expect(presentation.detailLines.map((line) => line.label)).not.toContain('output');
     expect(JSON.stringify(presentation.detailBlocks)).not.toContain('workdir');
     expect(JSON.stringify(presentation.detailBlocks)).not.toContain('stdin');
+  });
+
+  it('does not repeat the terminal command in compact metadata when the title already shows it', () => {
+    const command = 'printf flower-decision-surface-live';
+    const presentation = presentFlowerActivityItem(item({
+      renderer: 'terminal',
+      status: 'waiting',
+      requires_approval: true,
+      approval_state: 'requested',
+      description: `运行 ${command}`,
+      payload: { command },
+    }));
+
+    expect(presentation.title).toEqual({ kind: 'command', command });
+    expect(presentation.meta).not.toContain(command);
   });
 
   it('prefers the terminal payload command over a stale generic label', () => {
@@ -266,7 +281,7 @@ describe('presentFlowerActivityItem', () => {
 
     expect(presentation.label).toBe('docker compose up --build -d');
     expect(presentation.title).toEqual({ kind: 'command', command: 'docker compose up --build -d' });
-    expect(presentation.meta).toContain('docker compose up --build -d');
+    expect(presentation.meta).not.toContain('docker compose up --build -d');
     expect(presentation.detailBlocks[0]).toMatchObject({
       kind: 'terminal_output',
       terminal: {

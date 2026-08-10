@@ -183,6 +183,42 @@ describe('Flower bottom decision surface', () => {
     }));
   });
 
+  it('does not render a duplicate command when an approval label is only the command', async () => {
+    const command = 'printf flower-decision-surface-live';
+    const action = {
+      action_id: 'approval-duplicate-command',
+      origin: 'main_tool' as const,
+      run_id: 'run-duplicate-command',
+      tool_id: 'tool-duplicate-command',
+      tool_name: '',
+      state: 'requested' as const,
+      status: 'pending' as const,
+      revision: 1,
+      version: 1,
+      requested_at_ms: 20_000,
+      can_approve: true,
+      summary: { label: command, command },
+    };
+    const approvalThread = thread({
+      thread_id: 'thread-duplicate-command',
+      status: 'waiting_approval',
+      approval_actions: [action],
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [approvalThread]),
+      loadThread: vi.fn(async () => liveBootstrap(approvalThread, 21)),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-duplicate-command"] button')));
+    (runtime.querySelector('[data-thread-id="thread-duplicate-command"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-bottom-mode="approval"]')));
+
+    const surface = runtime.querySelector('[data-flower-bottom-mode="approval"]') as HTMLElement;
+    expect(surface.querySelector('.flower-approval-intro')?.textContent?.trim()).not.toBe(command);
+    expect(surface.textContent?.split(command).length ?? 0).toBe(2);
+  });
+
   it('uses the same single-layer decision contract in the narrow companion surface', async () => {
     const request = inputRequest({ prompt_id: 'prompt-companion-decision-surface' });
     const waitingThread = thread({
