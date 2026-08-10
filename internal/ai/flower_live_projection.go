@@ -550,6 +550,7 @@ func (s *Service) buildFlowerTimelineProjectionFromMessages(endpointID string, t
 			return flowerTimelineProjection{}, err
 		}
 		if ok {
+			persisted.LogicalRequestID = strings.TrimSpace(msg.LogicalRequestID)
 			persisted.ActiveCursor = persisted.MessageID == activeMessageID
 			out = append(out, persisted)
 		}

@@ -160,6 +160,7 @@ export type FlowerChatMessage = Readonly<{
   turn_id?: string;
   thread_id?: string;
   run_id?: string;
+  logical_request_id?: string;
   turn_ordinal?: number;
   role: FlowerChatMessageRole;
   content: string;

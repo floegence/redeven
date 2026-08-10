@@ -12,15 +12,16 @@ import (
 )
 
 type threadTimelineMessage struct {
-	RowID         int64
-	MessageID     string
-	CreatedAt     int64
-	CanonicalTurn string
-	CanonicalRun  string
-	TurnOrdinal   int64
-	TurnStatus    flruntime.TurnStatus
-	MessageJSON   json.RawMessage
-	Decoration    *FlowerTimelineDecoration
+	RowID            int64
+	MessageID        string
+	CreatedAt        int64
+	CanonicalTurn    string
+	CanonicalRun     string
+	LogicalRequestID string
+	TurnOrdinal      int64
+	TurnStatus       flruntime.TurnStatus
+	MessageJSON      json.RawMessage
+	Decoration       *FlowerTimelineDecoration
 }
 
 func (s *Service) listThreadTimelineMessages(ctx context.Context, endpointID string, threadID string, limit int, beforeRowID int64) ([]threadTimelineMessage, int64, bool, error) {
@@ -202,11 +203,16 @@ func (s *Service) threadTimelineMessagesFromTurns(endpointID string, threadID st
 			if err != nil {
 				return nil, err
 			}
+			userRaw, err = addTimelineLogicalRequestID(userRaw, string(turn.LogicalRequestID))
+			if err != nil {
+				return nil, err
+			}
 			canonicalUserAnchors[turnID] = userEntryID
 			items = append(items, threadTimelineMessage{
 				RowID: userRowID, MessageID: userEntryID, CreatedAt: userCreatedAt,
 				CanonicalTurn: turnID, CanonicalRun: runID,
-				TurnOrdinal: turn.Ordinal, TurnStatus: turn.Status, MessageJSON: userRaw,
+				LogicalRequestID: strings.TrimSpace(string(turn.LogicalRequestID)),
+				TurnOrdinal:      turn.Ordinal, TurnStatus: turn.Status, MessageJSON: userRaw,
 			})
 		}
 		assistant, reason, err := s.floretProjectionMessage(endpointID, threadID, turn)
@@ -214,10 +220,15 @@ func (s *Service) threadTimelineMessagesFromTurns(endpointID string, threadID st
 			return nil, err
 		}
 		if len(assistant) > 0 {
+			assistant, err = addTimelineLogicalRequestID(assistant, string(turn.LogicalRequestID))
+			if err != nil {
+				return nil, err
+			}
 			items = append(items, threadTimelineMessage{
 				RowID: userRowID + 1, MessageID: turnID, CreatedAt: turn.UpdatedAt.UnixMilli(),
 				CanonicalTurn: turnID, CanonicalRun: runID,
-				TurnOrdinal: turn.Ordinal, TurnStatus: turn.Status, MessageJSON: assistant,
+				LogicalRequestID: strings.TrimSpace(string(turn.LogicalRequestID)),
+				TurnOrdinal:      turn.Ordinal, TurnStatus: turn.Status, MessageJSON: assistant,
 			})
 		} else if reason.Valid() {
 			decoration, err := projectionUnavailableDecoration(turn, reason, canonicalUserAnchors[turnID])
@@ -227,12 +238,31 @@ func (s *Service) threadTimelineMessagesFromTurns(endpointID string, threadID st
 			items = append(items, threadTimelineMessage{
 				RowID: userRowID + 1, MessageID: turnID, CreatedAt: turn.UpdatedAt.UnixMilli(),
 				CanonicalTurn: turnID, CanonicalRun: runID,
-				TurnOrdinal: turn.Ordinal, TurnStatus: turn.Status, Decoration: &decoration,
+				LogicalRequestID: strings.TrimSpace(string(turn.LogicalRequestID)),
+				TurnOrdinal:      turn.Ordinal, TurnStatus: turn.Status, Decoration: &decoration,
 			})
 		}
 		seenTurns[turnID] = struct{}{}
 	}
 	return items, nil
+}
+
+// addTimelineLogicalRequestID adds the canonical association to the public
+// message envelope without introducing a second identity source.
+func addTimelineLogicalRequestID(raw json.RawMessage, logicalRequestID string) (json.RawMessage, error) {
+	logical := strings.TrimSpace(logicalRequestID)
+	if logical == "" {
+		return raw, nil
+	}
+	var fields map[string]any
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return nil, err
+	}
+	if fields == nil {
+		return nil, errors.New("canonical timeline message must be an object")
+	}
+	fields["logical_request_id"] = logical
+	return json.Marshal(fields)
 }
 
 func listAllFloretThreadTurns(ctx context.Context, host interface {

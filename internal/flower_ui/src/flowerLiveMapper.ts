@@ -1015,6 +1015,7 @@ export function mapFlowerMessage(raw: unknown): FlowerChatMessage {
   const threadID = trim(message.thread_id);
   const turnID = trim(message.turn_id);
   const runID = trim(message.run_id);
+  const logicalRequestID = trim(message.logical_request_id);
   const role = trim(message.role).toLowerCase();
   if (!id) throw new Error('Flower contract error: timeline message requires id.');
   if (role !== 'user' && role !== 'assistant' && role !== 'system') {
@@ -1049,6 +1050,7 @@ export function mapFlowerMessage(raw: unknown): FlowerChatMessage {
     thread_id: threadID,
     turn_id: turnID,
     run_id: runID,
+    ...(logicalRequestID ? { logical_request_id: logicalRequestID } : {}),
     role,
     content,
     status: mapMessageStatus(message.status),

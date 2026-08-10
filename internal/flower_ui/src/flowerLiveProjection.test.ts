@@ -504,11 +504,22 @@ describe('Flower live projection', () => {
       thread_id: 'th-live',
       turn_id: 'turn-1',
       run_id: 'run-1',
+      logical_request_id: 'logical-1',
       role: 'user',
       status: 'complete',
       created_at_ms: 1000,
       blocks: [{ type: 'text', content: 'Hello' }],
-    })).toMatchObject({ id: 'entry-user-1', turn_id: 'turn-1' });
+    })).toMatchObject({ id: 'entry-user-1', turn_id: 'turn-1', logical_request_id: 'logical-1' });
+    expect(mapFlowerMessage({
+      id: 'entry-legacy',
+      thread_id: 'th-live',
+      turn_id: 'turn-legacy',
+      run_id: 'run-legacy',
+      role: 'user',
+      status: 'complete',
+      created_at_ms: 1000,
+      blocks: [{ type: 'text', content: 'Legacy' }],
+    })).not.toHaveProperty('logical_request_id');
     expect(() => mapFlowerMessage({
       id: 'entry-user-1',
       thread_id: 'th-live',
