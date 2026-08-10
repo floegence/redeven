@@ -2718,11 +2718,40 @@ describe('FlowerSurface navigation activity', () => {
       approval_actions: [firstApproval, secondApproval],
       approval_queue: { generation: 2, revision: 7, current_action_id: firstApproval.action_id, current_position: 1, total: 2, unresolved_count: 2 },
     });
-    const submitApproval = vi.fn(async (_request: FlowerSubmitApprovalRequest) => ({ ok: true, current_cursor: 42 }));
+    let canonicalRevision = 7;
+    let firstResolved = false;
+    const canonicalThread = () => thread({
+      ...approvalThread,
+      approval_actions: firstResolved
+        ? [
+            { ...firstApproval, state: 'rejected', status: 'resolved', can_approve: false },
+            { ...secondApproval, surface_role: 'primary_action', can_approve: true },
+          ]
+        : approvalThread.approval_actions,
+      approval_queue: {
+        generation: 2,
+        revision: canonicalRevision,
+        current_action_id: firstResolved ? secondApproval.action_id : firstApproval.action_id,
+        current_position: firstResolved ? 2 : 1,
+        total: 2,
+        unresolved_count: firstResolved ? 1 : 2,
+      },
+    });
+    const submitApproval = vi.fn(async (request: FlowerSubmitApprovalRequest) => {
+      if (request.action_id === firstApproval.action_id) {
+        firstResolved = true;
+        canonicalRevision = 8;
+        return { ok: true, current_cursor: 42 };
+      }
+      if (request.queue_revision !== canonicalRevision) {
+        throw Object.assign(new Error('approval runtime state changed'), { code: 'AI_APPROVAL_CONFLICT', status: 409 });
+      }
+      return { ok: true, current_cursor: 43 };
+    });
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [approvalThread]),
-      loadThread: vi.fn(async () => liveBootstrap(approvalThread, 41)),
+      loadThread: vi.fn(async () => liveBootstrap(canonicalThread(), 41)),
       submitApproval,
     });
 
