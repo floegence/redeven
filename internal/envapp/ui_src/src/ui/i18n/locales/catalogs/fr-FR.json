@@ -4319,6 +4319,8 @@
       "viewTrustDetails": "Voir les détails du niveau de confiance",
       "viewIssue": "Voir le problème",
       "runtimeIssueRecovery": "Mettez Redeven ou ReDevPlugin à jour vers la version requise, redémarrez l’environnement d’exécution, puis actualisez le Centre de plugins.",
+      "runtimeRecoveryInProgress": "L’accès à l’environnement d’exécution des plugins est en cours de restauration. Les surfaces de plugins resteront indisponibles jusqu’à la fin de la récupération.",
+      "runtimeRecoveryFailed": "Les surfaces de plugins restent indisponibles. Consultez l’erreur ci-dessus, puis relancez la récupération de l’environnement d’exécution.",
       "trustIssueRecovery": "Examinez ci-dessous les codes de motif liés à la confiance et à l’approbation, ainsi que leur source. Choisissez un autre paquet ou demandez à un administrateur de modifier la stratégie avant de réessayer.",
       "diagnosticIssueRecovery": "Résolvez le problème d’hôte ou de paquet indiqué ci-dessous, puis actualisez le Centre de plugins avant de réessayer.",
       "moreActions": "Autres actions du plugin",

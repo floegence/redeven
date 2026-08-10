@@ -4319,6 +4319,8 @@
       "viewTrustDetails": "查看信任详情",
       "viewIssue": "查看问题详情",
       "runtimeIssueRecovery": "将 Redeven 或 ReDevPlugin 更新到所需版本，重启运行时，然后刷新插件中心。",
+      "runtimeRecoveryInProgress": "正在恢复插件运行时访问。恢复完成前，插件界面暂不可用。",
+      "runtimeRecoveryFailed": "插件界面仍不可用。请查看上方错误，然后重试运行时恢复。",
       "trustIssueRecovery": "检查下方的信任与批准原因代码以及来源。重试前，请选择其他插件包，或联系管理员调整策略。",
       "diagnosticIssueRecovery": "解决下方显示的主机或插件包问题，刷新插件中心后再重试。",
       "moreActions": "更多插件操作",

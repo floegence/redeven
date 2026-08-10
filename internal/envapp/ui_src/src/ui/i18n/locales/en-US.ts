@@ -265,6 +265,8 @@ export const enUS = defineDictionary({
       viewTrustDetails: 'View trust details',
       viewIssue: 'View issue',
       runtimeIssueRecovery: 'Update Redeven or ReDevPlugin to the required version, restart the runtime, then refresh Plugin Center.',
+      runtimeRecoveryInProgress: 'Plugin runtime access is being restored. Plugin surfaces will remain unavailable until recovery completes.',
+      runtimeRecoveryFailed: 'Plugin surfaces remain unavailable. Review the error above, then retry runtime recovery.',
       trustIssueRecovery: 'Review the trust and approval reason codes and source below. Choose another package or ask an administrator to change policy before retrying.',
       diagnosticIssueRecovery: 'Resolve the reported host or package issue shown below, then refresh Plugin Center before retrying.',
       moreActions: 'More plugin actions',

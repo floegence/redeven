@@ -4319,6 +4319,8 @@
       "viewTrustDetails": "檢視信任狀態詳情",
       "viewIssue": "檢視問題",
       "runtimeIssueRecovery": "將 Redeven 或 ReDevPlugin 更新至所需版本，重新啟動執行階段，然後重新整理外掛程式中心。",
+      "runtimeRecoveryInProgress": "正在恢復外掛程式執行階段存取。恢復完成前，外掛程式介面暫時無法使用。",
+      "runtimeRecoveryFailed": "外掛程式介面仍無法使用。請查看上方錯誤，然後重試執行階段恢復。",
       "trustIssueRecovery": "檢查下方的信任與核准原因代碼及來源。重試前，請選擇其他外掛套件，或請管理員調整政策。",
       "diagnosticIssueRecovery": "解決下方顯示的主機或外掛套件問題，然後重新整理外掛程式中心再重試。",
       "moreActions": "更多外掛程式操作",

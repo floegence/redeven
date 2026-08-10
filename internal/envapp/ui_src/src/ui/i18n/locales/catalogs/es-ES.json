@@ -4319,6 +4319,8 @@
       "viewTrustDetails": "Ver los detalles de confianza",
       "viewIssue": "Ver el problema",
       "runtimeIssueRecovery": "Actualiza Redeven o ReDevPlugin a la versión requerida, reinicia el entorno de ejecución y, después, actualiza el Centro de plugins.",
+      "runtimeRecoveryInProgress": "Se está restaurando el acceso al entorno de ejecución de plugins. Las superficies de plugins no estarán disponibles hasta que finalice la recuperación.",
+      "runtimeRecoveryFailed": "Las superficies de plugins siguen sin estar disponibles. Revisa el error anterior y vuelve a intentar la recuperación del entorno de ejecución.",
       "trustIssueRecovery": "Revisa los códigos de motivo relativos a la confianza y la aprobación, así como el origen que aparecen a continuación. Elige otro paquete o pide a un administrador que cambie la política antes de volver a intentarlo.",
       "diagnosticIssueRecovery": "Resuelve el problema notificado del host o del paquete que se muestra a continuación y, después, actualiza el Centro de plugins antes de volver a intentarlo.",
       "moreActions": "Más acciones del plugin",

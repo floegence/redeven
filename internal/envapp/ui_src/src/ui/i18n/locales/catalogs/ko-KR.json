@@ -4319,6 +4319,8 @@
       "viewTrustDetails": "신뢰 정보 보기",
       "viewIssue": "문제 보기",
       "runtimeIssueRecovery": "Redeven 또는 ReDevPlugin을 필요한 버전으로 업데이트하고 런타임을 다시 시작한 다음 플러그인 센터를 새로 고치세요.",
+      "runtimeRecoveryInProgress": "플러그인 런타임 액세스를 복구하고 있습니다. 복구가 완료될 때까지 플러그인 화면을 사용할 수 없습니다.",
+      "runtimeRecoveryFailed": "플러그인 화면을 아직 사용할 수 없습니다. 위 오류를 확인한 후 런타임 복구를 다시 시도하세요.",
       "trustIssueRecovery": "아래의 신뢰 및 승인 사유 코드와 출처를 검토하세요. 다시 시도하기 전에 다른 패키지를 선택하거나 관리자에게 정책 변경을 요청하세요.",
       "diagnosticIssueRecovery": "아래에 표시된 호스트 또는 패키지 문제를 해결하고 플러그인 센터를 새로 고친 다음 다시 시도하세요.",
       "moreActions": "플러그인 작업 더 보기",

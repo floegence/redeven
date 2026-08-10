@@ -4319,6 +4319,8 @@
       "viewTrustDetails": "Vertrauensdetails anzeigen",
       "viewIssue": "Problem anzeigen",
       "runtimeIssueRecovery": "Aktualisieren Sie Redeven oder ReDevPlugin auf die erforderliche Version, starten Sie die Laufzeitumgebung neu und aktualisieren Sie anschließend das Plugin Center.",
+      "runtimeRecoveryInProgress": "Der Zugriff auf die Plugin-Laufzeit wird wiederhergestellt. Plugin-Oberflächen bleiben bis zum Abschluss der Wiederherstellung nicht verfügbar.",
+      "runtimeRecoveryFailed": "Plugin-Oberflächen bleiben nicht verfügbar. Prüfen Sie den oben angezeigten Fehler und versuchen Sie dann die Laufzeitwiederherstellung erneut.",
       "trustIssueRecovery": "Prüfen Sie unten die Codes für die Vertrauens- und Genehmigungsgründe sowie die Quelle. Wählen Sie ein anderes Paket oder bitten Sie einen Administrator, die Richtlinie zu ändern, bevor Sie es erneut versuchen.",
       "diagnosticIssueRecovery": "Beheben Sie das unten angezeigte Host- oder Paketproblem und aktualisieren Sie anschließend das Plugin Center, bevor Sie es erneut versuchen.",
       "moreActions": "Weitere Plugin-Aktionen",

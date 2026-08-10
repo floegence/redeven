@@ -1106,7 +1106,11 @@ export function PluginCenterShell(props: {
               <Show when={recovery().error}>
                 {(message) => <div class="mt-1 text-xs text-muted-foreground">{message()}</div>}
               </Show>
-              <div class="mt-1 text-xs text-muted-foreground">{i18n.t('uiCopy.plugin.runtimeIssueRecovery')}</div>
+              <div class="mt-1 text-xs text-muted-foreground">
+                {recovery().state === 'recovering'
+                  ? i18n.t('uiCopy.plugin.runtimeRecoveryInProgress')
+                  : i18n.t('uiCopy.plugin.runtimeRecoveryFailed')}
+              </div>
             </div>
             <Show when={props.onRetryRuntimeRecovery && recovery().state === 'failed'}>
               <button
