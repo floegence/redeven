@@ -1178,7 +1178,11 @@ html.dark .flower-component-shell {
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-  border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 88%, var(--foreground) 12%);
+  border: 1px solid color-mix(
+    in srgb,
+    var(--flower-chat-surface-border, var(--border)) 88%,
+    var(--foreground) 12%
+  );
   border-radius: 8px;
   background: var(--popover, var(--flower-chat-surface-elevated, var(--background)));
   padding: 0.25rem;

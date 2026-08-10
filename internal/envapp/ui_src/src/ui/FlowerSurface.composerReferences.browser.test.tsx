@@ -57,6 +57,9 @@ describe('Flower composer reference browser interaction', () => {
     await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
 
     const menu = document.querySelector('.flower-composer-reference-menu') as HTMLElement;
+    // Env App themes do not define this optional Flower-local token. The menu
+    // still needs the shared theme border instead of dropping the declaration.
+    menu.style.setProperty('--flower-chat-surface-border', 'initial');
     await waitFor(() => {
       const settledGap = composer.getBoundingClientRect().top - menu.getBoundingClientRect().bottom;
       return settledGap >= 4 && settledGap <= 8;
@@ -75,6 +78,7 @@ describe('Flower composer reference browser interaction', () => {
     expect(rowHeights.every((height) => height >= 32 && height <= 34)).toBe(true);
     expect(gap).toBeGreaterThanOrEqual(4);
     expect(gap).toBeLessThanOrEqual(8);
+    expect(getComputedStyle(menu).borderTopWidth).toBe('1px');
     expect(getComputedStyle(menu).backdropFilter).toBe('none');
     expect(focusedStyle.borderTopWidth).toBe('1px');
     expect(focusedStyle.boxShadow).not.toContain('0px 0px 0px 2px');
