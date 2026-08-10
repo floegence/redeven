@@ -1708,7 +1708,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const queue = selectedThread()?.approval_queue;
     if (actionID && actionID !== previousComposerApprovalActionID) {
       setApprovalQueueAnnouncement(queue && queue.total > 0 ? `Approval ${queue.current_position} of ${queue.total}` : 'Next approval');
-      requestTranscriptAnimationFrame(() => composerApprovalCardRef?.focus({ preventScroll: true }));
+      requestTranscriptAnimationFrame(() => {
+        const approvalSurface = composerApprovalCardRef;
+        if (!approvalSurface?.isConnected) return;
+        approvalSurface.querySelector<HTMLButtonElement>(
+          '.flower-composer-approval-decision:not(:disabled)',
+        )?.focus({ preventScroll: true });
+      });
     }
     previousComposerApprovalActionID = actionID;
   });
@@ -7896,7 +7902,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return (
       <section
         ref={composerSurface ? (element) => { composerApprovalCardRef = element; } : undefined}
-        tabIndex={composerSurface ? -1 : undefined}
         class={composerSurface ? 'flower-approval-surface' : 'flower-approval-card'}
         data-flower-approval-action-id={actionID}
         data-flower-approval-origin={action().origin}
