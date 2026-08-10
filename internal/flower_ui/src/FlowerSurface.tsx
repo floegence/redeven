@@ -1507,7 +1507,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     pending: FlowerPendingSubmission,
     thread: FlowerThreadSnapshot | null,
   ): boolean => {
-    if (!thread || !pending.canonicalID) return false;
+    if (!thread) return false;
+    const sourceQueueID = trimString(pending.sourceQueueID);
+    if (sourceQueueID && thread.messages.some((message) => (
+      message.role === 'user'
+      && trimString(message.logical_request_id) === sourceQueueID
+    ))) return true;
+    if (!pending.canonicalID) return false;
     if (pending.canonicalKind === 'queued') {
       return (thread.queued_turns ?? []).some((turn) => trimString(turn.queue_id) === pending.canonicalID);
     }
@@ -1535,7 +1541,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   });
   createEffect(() => {
     const pending = pendingSubmission();
-    if (!pending?.threadID || pending.phase !== 'awaiting_projection' || !pending.canonicalID) return;
+    if (!pending?.threadID) return;
     const thread = threads().find((candidate) => candidate.thread_id === pending.threadID);
     if (!thread) return;
     if (pendingSubmissionHasCanonicalProjection(pending, thread)) {
