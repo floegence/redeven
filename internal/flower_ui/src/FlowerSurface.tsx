@@ -296,6 +296,7 @@ type FlowerPendingSubmissionEvent =
     canonicalID: string;
   }>
   | Readonly<{ kind: 'projection_observed'; clientRequestID: string }>
+  | Readonly<{ kind: 'stop_confirmed'; clientRequestID: string }>
   | Readonly<{ kind: 'admission_failed'; clientRequestID: string }>
   | Readonly<{ kind: 'submission_finished_without_receipt'; clientRequestID: string }>
   | Readonly<{ kind: 'new_conversation' }>
@@ -342,6 +343,7 @@ function transitionFlowerPendingSubmission(
         }
         : current;
     case 'projection_observed':
+    case 'stop_confirmed':
     case 'admission_failed':
     case 'submission_finished_without_receipt':
       return current?.clientRequestID === event.clientRequestID ? null : current;
@@ -5291,6 +5293,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         setThreadStopping(true);
         try {
           const stopped = applyLiveBootstrap(await props.adapter.stopThread(receipt.thread_id), 'user_action');
+          // Stop can win before admission is projected. End only the matching
+          // optimistic row; any later canonical projection remains authoritative.
+          transitionPendingSubmission({ kind: 'stop_confirmed', clientRequestID });
           if (selectedThreadDetailMatches(receipt.thread_id)) {
             setSelectedThreadWithDetail(stopped.thread_id);
             setLoadError('');
@@ -5298,7 +5303,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           }
         } catch (error) {
           if (selectedThreadID() === receipt.thread_id) {
-            notifyComposerError(getErrorMessage(error));
+            notifyStopError(getErrorMessage(error));
           }
         } finally {
           setThreadStopping(false);
