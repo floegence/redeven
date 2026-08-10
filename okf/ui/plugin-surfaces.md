@@ -115,10 +115,11 @@ keep the inventory master and selected detail side by side.
 After a direct-session handshake, the Shell waits through a cancellable 250ms
 stability window before asking the released Host to refresh enabled runtimes.
 The handshake credential can precede the server-side scope needed by that
-mutation. ReDevPlugin `v0.7.19` normally reconstructs restart activation from
-sealed local registry and release-trust evidence without remote artifact
-downloads; Redeven retains a bounded 90-second outer timeout as a fail-closed
-guard rather than a normal recovery budget.
+mutation. ReDevPlugin `v0.7.20` normally reconstructs activation after Host
+restart or process-local lease expiry from sealed local registry and
+release-trust evidence without remote artifact downloads; Redeven retains a
+bounded 90-second outer timeout as a fail-closed guard rather than a normal
+recovery budget.
 
 Until the exact `refresh-enabled` operation succeeds without a failed entry,
 Activity and Workbench plugin surfaces remain unavailable and `Open` stays

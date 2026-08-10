@@ -8,7 +8,7 @@ timestamp: 2026-07-25T00:00:00Z
 # Summary
 
 ReDevPlugin is an independently released plugin platform. Redeven consumes its
-coordinated `v0.7.19` Go, npm, Rust source-crate, and machine-contract artifacts;
+coordinated `v0.7.20` Go, npm, Rust source-crate, and machine-contract artifacts;
 it does not fork platform mechanics. Redeven owns authenticated session mapping,
 product source policy and review UX, UI placement, product runtime builds, and
 concrete business adapters. Missing or unverifiable upstream identity, lifecycle,
@@ -42,12 +42,12 @@ external-package receipt store.
 
 ## Published dependency set
 
-The current integration consumes the coordinated ReDevPlugin `v0.7.19` set:
+The current integration consumes the coordinated ReDevPlugin `v0.7.20` set:
 
-- `github.com/floegence/redevplugin v0.7.19`;
-- `@floegence/redevplugin-contracts@0.7.19` and
-  `@floegence/redevplugin-ui@0.7.19`;
-- the exact six `0.7.19` Rust source crates ending in `redevplugin-runtime`;
+- `github.com/floegence/redevplugin v0.7.20`;
+- `@floegence/redevplugin-contracts@0.7.20` and
+  `@floegence/redevplugin-ui@0.7.20`;
+- the exact six `0.7.20` Rust source crates ending in `redevplugin-runtime`;
 - the released contract registry, package-set contract, contract hashes, and
   attested `platform-package-publication-v1.json` registry readback, whose
   contract-set SHA-256 is
@@ -78,10 +78,11 @@ a local operation store, copy the state machine, invent progress, or cancel work
 when a panel closes.
 
 Release trust refreshes, including activation-lease reconstruction after Host
-restart, remain ReDevPlugin work. The `v0.7.19` Host reconstructs a process-local
-lease from the sealed registry binding and exact current durable release-trust
-state without downloading release metadata, packages, capability artifacts,
-trust documents, or signing-ledger artifacts. The seal binds the plugin instance,
+restart or activation-lease expiry, remain ReDevPlugin work. The `v0.7.20` Host
+reconstructs a process-local lease from the sealed registry binding and exact
+current durable release-trust state without downloading release metadata,
+packages, capability artifacts, trust documents, or signing-ledger artifacts.
+The seal binds the plugin instance,
 release identity, source/channel, package hashes, active fingerprint, trust-state
 digest, and root/policy/revocation epochs. Context cancellation, tampering,
 expiry, fences, rollback, schema drift, and epoch mismatch fail closed before a
@@ -188,7 +189,7 @@ committed. Unknown, corrupt, ambiguous, tampered, or future state blocks startup
 without mutation. Floret-owned state is outside this lifecycle.
 
 For an exact supported root copied across filesystem identities, Redeven may use
-the released read-only inspection and exact-plan recovery APIs from `v0.7.19`.
+the released read-only inspection and exact-plan recovery APIs from `v0.7.20`.
 The product presents the projected digests, counts, sizes, and retained-state
 facts, binds confirmation to one plan digest, and takes the normal Local
 Environment runtime lock. The released transaction retains the entire source as
