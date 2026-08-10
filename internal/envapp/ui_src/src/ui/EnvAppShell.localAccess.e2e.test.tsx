@@ -3,7 +3,7 @@
 import { For, Show, createContext, createEffect, createSignal, onCleanup, onMount, useContext, type JSX } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { PluginPlatformRequestError } from '@floegence/redevplugin-ui';
+import { PluginPlatformRequestError, type PluginRuntimeRefreshResult } from '@floegence/redevplugin-ui';
 import { OFFICIAL_CONTAINERS_RELEASE_REF } from './plugins/officialContainersRelease.generated';
 import type { PluginInventoryProjection } from './plugins/pluginTypes';
 import { NETWORK_EXPOSURE_WARNING_PREFERENCE_STORAGE_KEY } from './security/networkExposureWarningPreference';
@@ -57,7 +57,7 @@ const activitySurfaceLifecycleState = vi.hoisted(() => ({
 const pluginLifecycleMocks = vi.hoisted(() => {
   const listInstalledPlugins = vi.fn(async () => []);
   const loadInventoryProjection = vi.fn();
-  const refreshEnabledRuntimeState = vi.fn(async () => ({ results: [] }));
+  const refreshEnabledRuntimeState = vi.fn(async (): Promise<PluginRuntimeRefreshResult> => ({ results: [] }));
   const execute = vi.fn(async (_command: any) => ({}));
   const installOfficialRelease = vi.fn(async (
     _command: any,
@@ -1720,13 +1720,24 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   }, 10000);
 
-  it('keeps plugin surfaces closed and retries failed runtime recovery only once', async () => {
+  it('keeps plugin surfaces closed, preserves typed recovery guidance, and retries only once', async () => {
     vi.useFakeTimers();
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(officialContainersProjection('enabled'));
     pluginLifecycleMocks.refreshEnabledRuntimeState
-      .mockRejectedValueOnce(new Error('Activation evidence is unavailable.'))
+      .mockResolvedValueOnce({
+        results: [{
+          plugin_instance_id: 'plugininst_containers',
+          status: 'failed',
+          error: {
+            code: 'PLUGIN_RUNTIME_UNAVAILABLE',
+            message: 'Plugin trust source is fenced; contact an administrator',
+            reason: 'trust_fenced',
+            action: 'contact_admin',
+          },
+        }],
+      } satisfies PluginRuntimeRefreshResult)
       .mockResolvedValueOnce({ results: [] });
     window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
 
@@ -1748,7 +1759,9 @@ describe('EnvAppShell environment entry affordances', () => {
 
       expect(pluginCenterViewState.lastProps.runtimeRecovery).toEqual({
         state: 'failed',
-        error: 'Activation evidence is unavailable.',
+        error: 'plugininst_containers: Plugin trust source is fenced; contact an administrator',
+        reason: 'trust_fenced',
+        action: 'contact_admin',
       });
       expect(pluginCenterViewState.lastProps.canOpenPluginSurfaces).toBe(false);
 

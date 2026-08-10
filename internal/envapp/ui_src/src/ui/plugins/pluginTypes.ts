@@ -395,6 +395,21 @@ import type {
   PluginRecord,
   PluginReleaseInstallOperation,
   PluginReleaseRef,
+  PluginRuntimeRefreshResult,
   PluginSecurityPolicy,
   PluginUploadedExternalPackageIntent,
 } from '@floegence/redevplugin-ui';
+
+type PluginRuntimeRefreshFailure = Extract<PluginRuntimeRefreshResult['results'][number], { status: 'failed' }>;
+
+export type PluginRuntimeRecoveryReason = PluginRuntimeRefreshFailure['error']['reason'];
+export type PluginRuntimeRecoveryAction = PluginRuntimeRefreshFailure['error']['action'];
+export type PluginRuntimeRecoveryPresentation = Readonly<
+  | { state: 'recovering'; error?: undefined; reason?: undefined; action?: undefined }
+  | {
+    state: 'failed';
+    error?: string;
+    reason?: PluginRuntimeRecoveryReason;
+    action?: PluginRuntimeRecoveryAction;
+  }
+>;

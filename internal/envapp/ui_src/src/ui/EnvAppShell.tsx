@@ -555,6 +555,8 @@ export function EnvAppShell() {
   const [pluginRuntimeSurfacesReady, setPluginRuntimeSurfacesReady] = createSignal(false);
   const [pluginRuntimeRecoveryState, setPluginRuntimeRecoveryState] = createSignal<'recovering' | 'failed' | 'ready'>('recovering');
   const [pluginRuntimeRecoveryError, setPluginRuntimeRecoveryError] = createSignal<string>();
+  const [pluginRuntimeRecoveryReason, setPluginRuntimeRecoveryReason] = createSignal<import('./plugins/pluginTypes').PluginRuntimeRecoveryReason>();
+  const [pluginRuntimeRecoveryAction, setPluginRuntimeRecoveryAction] = createSignal<import('./plugins/pluginTypes').PluginRuntimeRecoveryAction>();
   const [pluginRuntimeRecoveryRetrySeq, setPluginRuntimeRecoveryRetrySeq] = createSignal(0);
   const retiredPluginManagementRevisionByInstanceID = new Map<string, number>();
   const retirePluginManagementRevision = (pluginInstanceID: string, revision: number) => {
@@ -979,9 +981,12 @@ export function EnvAppShell() {
     if (protocol.status() !== 'connected' || (isLocalMode() && !pluginSessionReady())) return undefined;
     const state = pluginRuntimeRecoveryState();
     if (state === 'ready') return undefined;
+    if (state === 'recovering') return { state } as const;
     return {
-      state,
+      state: 'failed',
       error: pluginRuntimeRecoveryError(),
+      reason: pluginRuntimeRecoveryReason(),
+      action: pluginRuntimeRecoveryAction(),
     } as const;
   };
   const controlplaneStatus = createMemo(() => String(env()?.status ?? '').trim());
@@ -1221,6 +1226,8 @@ export function EnvAppShell() {
       setPluginRuntimeSurfacesReady(false);
       setPluginRuntimeRecoveryState('recovering');
       setPluginRuntimeRecoveryError(undefined);
+      setPluginRuntimeRecoveryReason(undefined);
+      setPluginRuntimeRecoveryAction(undefined);
       return;
     }
     if (!canAdmin()) {
@@ -1228,6 +1235,8 @@ export function EnvAppShell() {
       setPluginRuntimeSurfacesReady(true);
       setPluginRuntimeRecoveryState('ready');
       setPluginRuntimeRecoveryError(undefined);
+      setPluginRuntimeRecoveryReason(undefined);
+      setPluginRuntimeRecoveryAction(undefined);
       return;
     }
     if (pluginRuntimeRecoveryClient === connectedClient) return;
@@ -1239,6 +1248,8 @@ export function EnvAppShell() {
     setPluginRuntimeSurfacesReady(false);
     setPluginRuntimeRecoveryState('recovering');
     setPluginRuntimeRecoveryError(undefined);
+    setPluginRuntimeRecoveryReason(undefined);
+    setPluginRuntimeRecoveryAction(undefined);
     let recoveryTimedOut = false;
     const recoveryTimer = window.setTimeout(() => {
       recoveryTimedOut = true;
@@ -1258,8 +1269,11 @@ export function EnvAppShell() {
       setPluginRuntimeRecoveryComplete(true);
       setPluginRuntimeSurfacesReady(failures.length === 0);
       if (failures.length > 0) {
+        const primaryFailure = failures[0];
         setPluginRuntimeRecoveryState('failed');
         setPluginRuntimeRecoveryError(failures.map((entry) => `${entry.plugin_instance_id}: ${entry.error.message}`).join('\n'));
+        setPluginRuntimeRecoveryReason(primaryFailure?.error.reason);
+        setPluginRuntimeRecoveryAction(primaryFailure?.error.action);
         notify.error(
           i18n.t('uiCopy.plugin.needsAttention'),
           failures.map((entry) => `${entry.plugin_instance_id}: ${entry.error.message}`).join('\n'),
@@ -1267,6 +1281,8 @@ export function EnvAppShell() {
       } else {
         setPluginRuntimeRecoveryState('ready');
         setPluginRuntimeRecoveryError(undefined);
+        setPluginRuntimeRecoveryReason(undefined);
+        setPluginRuntimeRecoveryAction(undefined);
       }
     }).catch((error: unknown) => {
       if ((controller.signal.aborted && !recoveryTimedOut) || pluginRuntimeRecoveryClient !== connectedClient) return;
@@ -1275,6 +1291,8 @@ export function EnvAppShell() {
       setPluginRuntimeSurfacesReady(false);
       setPluginRuntimeRecoveryState('failed');
       setPluginRuntimeRecoveryError(getErrorMessage(error));
+      setPluginRuntimeRecoveryReason(undefined);
+      setPluginRuntimeRecoveryAction(undefined);
       notify.error(i18n.t('uiCopy.plugin.needsAttention'), getErrorMessage(error));
     });
   });
@@ -1285,6 +1303,8 @@ export function EnvAppShell() {
     pluginRuntimeRecoveryClient = null;
     setPluginRuntimeRecoveryState('recovering');
     setPluginRuntimeRecoveryError(undefined);
+    setPluginRuntimeRecoveryReason(undefined);
+    setPluginRuntimeRecoveryAction(undefined);
     setPluginRuntimeRecoveryComplete(false);
     setPluginRuntimeSurfacesReady(false);
     setPluginRuntimeRecoveryRetrySeq((sequence) => sequence + 1);

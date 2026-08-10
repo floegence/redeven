@@ -4323,6 +4323,21 @@
       "runtimeIssueRecovery": "Mettez Redeven ou ReDevPlugin à jour vers la version requise, redémarrez l’environnement d’exécution, puis actualisez le Centre de plugins.",
       "runtimeRecoveryInProgress": "L’accès à l’environnement d’exécution des plugins est en cours de restauration. Les surfaces de plugins resteront indisponibles jusqu’à la fin de la récupération.",
       "runtimeRecoveryFailed": "Les surfaces de plugins restent indisponibles. Consultez l’erreur ci-dessus, puis relancez la récupération de l’environnement d’exécution.",
+      "runtimeRecoveryReason": {
+        "unknown": "La récupération de l’environnement d’exécution des plugins a échoué.",
+        "trust_state_advanced": "Les informations de confiance du plugin ont changé et n’ont pas pu être revalidées.",
+        "trust_revoked": "Cette version du plugin n’est plus approuvée.",
+        "trust_fenced": "La confiance du plugin est temporairement bloquée par un administrateur.",
+        "trust_epoch_mismatch": "La politique de confiance du plugin a changé après son installation.",
+        "activation_evidence_invalid": "La preuve d’activation du plugin n’est pas valide.",
+        "activation_lease_expired": "L’autorisation d’activation du plugin a expiré.",
+        "recovery_canceled": "La récupération de l’environnement d’exécution des plugins a été annulée."
+      },
+      "runtimeRecoveryAction": {
+        "retry": "Consultez l’erreur ci-dessus, puis relancez la récupération.",
+        "reinstall": "Réinstallez le plugin depuis une source fiable avant de l’ouvrir de nouveau.",
+        "contact_admin": "Contactez un administrateur avant de réessayer."
+      },
       "trustIssueRecovery": "Examinez ci-dessous les codes de motif liés à la confiance et à l’approbation, ainsi que leur source. Choisissez un autre paquet ou demandez à un administrateur de modifier la stratégie avant de réessayer.",
       "diagnosticIssueRecovery": "Résolvez le problème d’hôte ou de paquet indiqué ci-dessous, puis actualisez le Centre de plugins avant de réessayer.",
       "moreActions": "Autres actions du plugin",

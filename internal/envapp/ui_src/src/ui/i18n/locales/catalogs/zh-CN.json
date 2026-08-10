@@ -4323,6 +4323,21 @@
       "runtimeIssueRecovery": "将 Redeven 或 ReDevPlugin 更新到所需版本，重启运行时，然后刷新插件中心。",
       "runtimeRecoveryInProgress": "正在恢复插件运行时访问。恢复完成前，插件界面暂不可用。",
       "runtimeRecoveryFailed": "插件界面仍不可用。请查看上方错误，然后重试运行时恢复。",
+      "runtimeRecoveryReason": {
+        "unknown": "插件运行时恢复失败。",
+        "trust_state_advanced": "插件信任信息已更新，但重新验证失败。",
+        "trust_revoked": "此插件版本已不再受信任。",
+        "trust_fenced": "管理员已暂时阻止此插件的信任授权。",
+        "trust_epoch_mismatch": "插件安装后，信任策略已发生变化。",
+        "activation_evidence_invalid": "插件激活凭据无效。",
+        "activation_lease_expired": "插件激活授权已过期。",
+        "recovery_canceled": "插件运行时恢复已取消。"
+      },
+      "runtimeRecoveryAction": {
+        "retry": "请查看上方错误，然后重试运行时恢复。",
+        "reinstall": "请先从可信来源重新安装插件，再尝试打开。",
+        "contact_admin": "再次尝试前，请联系管理员。"
+      },
       "trustIssueRecovery": "检查下方的信任与批准原因代码以及来源。重试前，请选择其他插件包，或联系管理员调整策略。",
       "diagnosticIssueRecovery": "解决下方显示的主机或插件包问题，刷新插件中心后再重试。",
       "moreActions": "更多插件操作",

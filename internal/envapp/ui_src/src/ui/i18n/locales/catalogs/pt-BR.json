@@ -4323,6 +4323,21 @@
       "runtimeIssueRecovery": "Atualize o Redeven ou o ReDevPlugin para a versão necessária, reinicie o ambiente de execução e, em seguida, recarregue a Central de Plugins.",
       "runtimeRecoveryInProgress": "O acesso ao ambiente de execução de plugins está sendo restaurado. As superfícies dos plugins permanecerão indisponíveis até a conclusão da recuperação.",
       "runtimeRecoveryFailed": "As superfícies dos plugins continuam indisponíveis. Revise o erro acima e tente recuperar o ambiente de execução novamente.",
+      "runtimeRecoveryReason": {
+        "unknown": "Não foi possível recuperar o ambiente de execução de plugins.",
+        "trust_state_advanced": "As informações de confiança do plugin mudaram e não puderam ser revalidadas.",
+        "trust_revoked": "Esta versão do plugin não é mais confiável.",
+        "trust_fenced": "A confiança do plugin foi temporariamente bloqueada por um administrador.",
+        "trust_epoch_mismatch": "A política de confiança do plugin mudou após a instalação.",
+        "activation_evidence_invalid": "A evidência de ativação do plugin é inválida.",
+        "activation_lease_expired": "A autorização de ativação do plugin expirou.",
+        "recovery_canceled": "A recuperação do ambiente de execução de plugins foi cancelada."
+      },
+      "runtimeRecoveryAction": {
+        "retry": "Revise o erro acima e tente recuperar o ambiente de execução novamente.",
+        "reinstall": "Reinstale o plugin de uma fonte confiável antes de abri-lo novamente.",
+        "contact_admin": "Entre em contato com um administrador antes de tentar novamente."
+      },
       "trustIssueRecovery": "Revise abaixo os códigos de motivo de confiança e aprovação, bem como a origem. Escolha outro pacote ou peça a um administrador para alterar a política antes de tentar novamente.",
       "diagnosticIssueRecovery": "Resolva o problema relatado abaixo no host ou no pacote e, em seguida, recarregue a Central de Plugins antes de tentar novamente.",
       "moreActions": "Mais ações do plugin",
