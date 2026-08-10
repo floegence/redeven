@@ -2029,6 +2029,53 @@ describe('PluginCenterView', () => {
     expect(onRefresh).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps enabled surfaces closed and exposes an explicit retry after runtime recovery fails', () => {
+    const onRetryRuntimeRecovery = vi.fn();
+    const enabledProjection = containersPermissionProjection(true);
+    enabledProjection.items[0] = {
+      ...enabledProjection.items[0],
+      defaultLaunchTarget: {
+        pluginID: 'com.redeven.official.containers',
+        pluginInstanceID: 'plugininst_containers',
+        surfaceID: 'containers.dashboard',
+        preferredPlacement: 'activity',
+        expectedManagementRevision: 7,
+      },
+    };
+    const mount = document.createElement('div');
+    document.body.append(mount);
+
+    dispose = render(() => (
+      <PluginCenterView
+        projection={enabledProjection}
+        loading={false}
+        error={null}
+        canManagePlugins
+        canOpenPluginSurfaces={false}
+        runtimeRecovery={{
+          state: 'failed',
+          error: 'Activation evidence is unavailable.',
+        }}
+        onRetryRuntimeRecovery={onRetryRuntimeRecovery}
+        onRefresh={vi.fn()}
+        onCommand={vi.fn()}
+      />
+    ), mount);
+
+    const recovery = mount.querySelector<HTMLElement>('[data-plugin-runtime-recovery="failed"]');
+    expect(recovery?.textContent).toContain('Activation evidence is unavailable.');
+    const retry = recovery?.querySelector<HTMLButtonElement>('[data-plugin-runtime-recovery-retry]');
+    expect(retry?.disabled).toBe(false);
+    retry?.click();
+    retry?.click();
+    expect(onRetryRuntimeRecovery).toHaveBeenCalledOnce();
+    expect(retry?.disabled).toBe(true);
+
+    const open = mount.querySelector<HTMLButtonElement>('[data-plugin-center-card-primary="catalog:containers"]');
+    expect(open?.textContent).toContain('Open');
+    expect(open?.disabled).toBe(true);
+  });
+
   it('uses the combined authorization state instead of a stale enabled lifecycle', () => {
     const staleProjection = containersPermissionProjection(false);
     staleProjection.items[0] = {
