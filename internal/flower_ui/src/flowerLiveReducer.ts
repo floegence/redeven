@@ -90,6 +90,30 @@ function pendingApprovalActions(actions: readonly FlowerApprovalAction[] | undef
     .sort((left, right) => Number(left.queue_order ?? 0) - Number(right.queue_order ?? 0));
 }
 
+function clearApprovalsForTerminalRun(thread: FlowerThreadSnapshot, runID: string): FlowerThreadSnapshot {
+  const targetRunID = trim(runID);
+  if (!targetRunID) return thread;
+  const current = thread.approval_actions ?? [];
+  const approvalActions = current.filter((action) => trim(action.run_id) !== targetRunID);
+  if (approvalActions.length === current.length) return thread;
+  const canonical = approvalActions
+    .filter((action) => action.origin !== 'control_confirm')
+    .sort((left, right) => Number(left.queue_order ?? 0) - Number(right.queue_order ?? 0));
+  return {
+    ...thread,
+    approval_actions: approvalActions,
+    approval_queue: canonical.length === 0
+      ? null
+      : {
+          ...(thread.approval_queue ?? { generation: 0, revision: 0, current_position: 0, total: 0, unresolved_count: 0 }),
+          current_action_id: canonical[0]?.action_id ?? '',
+          current_position: 1,
+          total: canonical.length,
+          unresolved_count: canonical.length,
+        },
+  };
+}
+
 function blockFromLiveBlock(block: FlowerLiveBlock): FlowerChatMessageBlock | null {
   const type = trim(block.type);
   if (type === 'activity-timeline') {
@@ -578,6 +602,9 @@ export function applyFlowerLiveEvent(
       };
       if (threadStatusHidesModelIO(next.status)) {
         next = clearModelIOForRun(next, event.payload.run_id);
+        if (threadStatusIsTerminal(next.status)) {
+          next = clearApprovalsForTerminalRun(next, event.payload.run_id);
+        }
         if (threadStatusClearsActiveRunID(next.status) && trim(next.active_run_id) === trim(event.payload.run_id)) {
           next = { ...next, active_run_id: undefined };
         }

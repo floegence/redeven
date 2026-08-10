@@ -438,9 +438,18 @@ func TestStopActiveRunExecutionAcceptsExactCanonicalTerminalBeforeLocalRunExit(t
 		}
 	}
 	svc.mu.Lock()
-	defer svc.mu.Unlock()
 	if svc.stopFinalizingByTh[key] != "" || svc.runs[executionKey] != nil {
+		svc.mu.Unlock()
 		t.Fatal("exact canonical terminal proof did not clear local finalization ownership")
+	}
+	stream := svc.flowerLiveByThread[runThreadKey(meta.EndpointID, threadID)]
+	var detailStatus string
+	if stream != nil {
+		detailStatus = stream.State.ThreadPatch.RunStatus
+	}
+	svc.mu.Unlock()
+	if detailStatus != string(RunStateCanceled) {
+		t.Fatalf("stop finalization detail status=%q, want canceled", detailStatus)
 	}
 }
 

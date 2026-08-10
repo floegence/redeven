@@ -344,6 +344,37 @@ function applyEvents(initial: FlowerThreadSnapshot, cursor: number, events: read
 }
 
 describe('Flower live projection', () => {
+  it('clears run-scoped approval state when the canonical run becomes terminal', () => {
+    const action = approvalAction({
+      action_id: 'approval-stop-terminal',
+      run_id: 'run-stop-terminal',
+      tool_id: 'tool-stop-terminal',
+    });
+    const initial = thread({
+      status: 'waiting_approval',
+      active_run_id: 'run-stop-terminal',
+      approval_actions: [action],
+      approval_queue: {
+        generation: 1,
+        revision: 1,
+        current_action_id: action.action_id,
+        current_position: 1,
+        total: 1,
+        unresolved_count: 1,
+      },
+    });
+
+    const result = applyFlowerLiveEvent(initial, 0, event(1, 'run.status_changed', {
+      run_id: 'run-stop-terminal',
+      status: 'canceled',
+    }));
+
+    expect(result.thread.status).toBe('canceled');
+    expect(result.thread.active_run_id).toBeUndefined();
+    expect(result.thread.approval_actions).toEqual([]);
+    expect(result.thread.approval_queue).toBeNull();
+  });
+
   it('maps Floret v3 nested activity presentation from bootstrap', () => {
     const mapped = mapFlowerLiveBootstrap(rawBootstrapWithActivityItem({
       item_id: 'tool:exec-1',
