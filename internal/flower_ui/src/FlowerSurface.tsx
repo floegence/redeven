@@ -2727,8 +2727,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       liveCursors.set(tid, Math.max(liveCursorValue(liveCursors.get(tid)), nextCursor));
     }
   };
-  type LiveBootstrapApplyReason = 'initial_load' | 'user_action' | 'resync_reload' | 'background_refresh';
-  const liveBootstrapIsCurrent = (live: FlowerLiveBootstrap, reason: LiveBootstrapApplyReason): boolean => {
+  type LiveBootstrapApplyReason = 'initial_load' | 'user_action' | 'resync_reload' | 'background_refresh' | 'stop_confirmation';
+  const liveBootstrapIsCurrent = (
+    live: FlowerLiveBootstrap,
+    reason: LiveBootstrapApplyReason,
+    expectedRunID = '',
+  ): boolean => {
     const tid = trimString(live.thread_id || live.thread.thread_id);
     if (!tid) return true;
     const incomingGeneration = liveStreamGenerationValue(live.stream_generation);
@@ -2737,6 +2741,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (incomingGeneration < currentGeneration) return false;
     const incomingCursor = liveCursorValue(live.cursor);
     const currentCursor = liveCursorValue(liveCursors.get(tid));
+    if (
+      reason === 'stop_confirmation'
+      && incomingCursor < currentCursor
+      && expectedRunID
+      && (live.thread.status === 'canceled' || live.thread.status === 'success' || live.thread.status === 'failed')
+      && trimString(live.live_state.thread_patch?.active_run_id) === expectedRunID
+    ) {
+      return true;
+    }
     if (reason === 'resync_reload') return incomingCursor >= currentCursor;
     return incomingCursor >= currentCursor;
   };
@@ -3684,12 +3697,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     )));
     threadLocalMutationRevision += 1;
   };
-  const applyLiveBootstrap = (live: FlowerLiveBootstrap, reason: LiveBootstrapApplyReason = 'background_refresh'): FlowerThreadSnapshot => {
+  const applyLiveBootstrap = (
+    live: FlowerLiveBootstrap,
+    reason: LiveBootstrapApplyReason = 'background_refresh',
+    expectedRunID = '',
+  ): FlowerThreadSnapshot => {
     const thread = projectFlowerLiveBootstrap(live);
     if (retiredThreadIDs.has(trimString(thread.thread_id))) {
       return threads().find((item) => item.thread_id === thread.thread_id) ?? thread;
     }
-    if (!liveBootstrapIsCurrent(live, reason)) {
+    if (!liveBootstrapIsCurrent(live, reason, expectedRunID)) {
       return threads().find((item) => item.thread_id === thread.thread_id) ?? thread;
     }
     const previous = threads().find((item) => item.thread_id === thread.thread_id);
@@ -4108,10 +4125,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           if (!props.adapter.deleteThread) return;
           openDeleteDialog(item, restore);
           return;
-        case 'stop':
+        case 'stop': {
+          const expectedRunID = trimString(threads().find((thread) => thread.thread_id === item.thread_id)?.active_run_id);
           setThreadActionBusy({ threadID: item.thread_id, action });
-          applyLiveBootstrap(await props.adapter.stopThread(item.thread_id), 'user_action');
+          const stopped = await props.adapter.stopThread(item.thread_id);
+          applyLiveBootstrap(stopped, 'stop_confirmation', expectedRunID);
           return;
+        }
         case 'pin':
           if (!props.adapter.setThreadPinned) return;
           {
@@ -5291,8 +5311,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }
       if (stopAfterAdmission && receipt.kind !== 'queued') {
         setThreadStopping(true);
+        const expectedRunID = trimString(selectedThread()?.active_run_id);
         try {
-          const stopped = applyLiveBootstrap(await props.adapter.stopThread(receipt.thread_id), 'user_action');
+          const live = await props.adapter.stopThread(receipt.thread_id);
+          const stopped = applyLiveBootstrap(live, 'stop_confirmation', expectedRunID);
           // Stop can win before admission is projected. End only the matching
           // optimistic row; any later canonical projection remains authoritative.
           transitionPendingSubmission({ kind: 'stop_confirmed', clientRequestID });
@@ -5347,8 +5369,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (selectedThreadDetailPending()) throw new Error(copy().chat.threadLoading);
     const threadID = trimString(selectedThread()?.thread_id);
     if (!threadID) throw new Error('Missing thread id.');
+    const expectedRunID = trimString(selectedThread()?.active_run_id);
     const live = await props.adapter.stopThread(threadID);
-    const thread = applyLiveBootstrap(live);
+    const thread = applyLiveBootstrap(live, 'stop_confirmation', expectedRunID);
     if (selectedThreadDetailMatches(threadID)) {
       setSelectedThreadWithDetail(thread.thread_id);
       setLoadError('');

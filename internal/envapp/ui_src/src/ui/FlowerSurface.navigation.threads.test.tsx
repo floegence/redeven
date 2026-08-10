@@ -2341,6 +2341,104 @@ describe('FlowerSurface navigation threads', () => {
       .some((item) => item.textContent?.includes('Stop'))).toBe(false);
   });
 
+  it('applies a same-run canonical Stop receipt behind the live cursor without retaining approval state', async () => {
+    const approval = {
+      action_id: 'approval-stop-cursor-race',
+      origin: 'main_tool' as const,
+      run_id: 'run-stop-cursor-race',
+      tool_id: 'tool-stop-cursor-race',
+      tool_name: 'terminal.exec',
+      state: 'requested' as const,
+      status: 'pending' as const,
+      revision: 1,
+      version: 1,
+      surface_epoch: 1,
+      surface_role: 'primary_action' as const,
+      requested_at_ms: 10_000,
+      can_approve: true,
+      queue_generation: 1,
+      queue_order: 1,
+      batch_index: 0,
+      batch_size: 1,
+      summary: {
+        label: 'sleep 60',
+        description: 'Review this command before it runs.',
+        command: 'sleep 60',
+        effects: ['shell'],
+      },
+    };
+    const waitingThread = thread({
+      thread_id: 'thread-stop-cursor-race',
+      title: 'Stop cursor race',
+      status: 'waiting_approval',
+      active_run_id: approval.run_id,
+      approval_actions: [approval],
+      approval_queue: {
+        generation: 1,
+        revision: 1,
+        current_action_id: approval.action_id,
+        current_position: 1,
+        total: 1,
+        unresolved_count: 1,
+      },
+      messages: [{
+        id: 'assistant-stop-cursor-race',
+        thread_id: 'thread-stop-cursor-race',
+        turn_id: 'turn-stop-cursor-race',
+        run_id: approval.run_id,
+        role: 'assistant',
+        content: '',
+        status: 'streaming',
+        created_at_ms: 10_000,
+      }],
+    });
+    const stoppedThread = {
+      ...waitingThread,
+      status: 'canceled' as const,
+      active_run_id: undefined,
+      approval_actions: [],
+      approval_queue: null,
+      messages: waitingThread.messages.map((message) => ({ ...message, status: 'canceled' as const })),
+    };
+    const stopReceipt = {
+      ...liveBootstrap(stoppedThread, 12),
+      live_state: {
+        ...liveBootstrap(stoppedThread, 12).live_state,
+        thread_patch: {
+          ...liveBootstrap(stoppedThread, 12).live_state.thread_patch,
+          active_run_id: approval.run_id,
+          run_status: 'canceled' as const,
+        },
+        runs: {},
+        approval_actions: {},
+      },
+    };
+    const stopThread = vi.fn(async () => stopReceipt);
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [waitingThread]),
+      loadThread: vi.fn(async () => liveBootstrap(waitingThread, 13)),
+      stopThread,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-stop-cursor-race"] button')));
+    (runtime.querySelector('[data-thread-id="thread-stop-cursor-race"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-approval-action-id="approval-stop-cursor-race"]')));
+
+    (runtime.querySelector('[data-thread-id="thread-stop-cursor-race"]') as HTMLElement)
+      .dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 20, clientY: 20 }));
+    await flush();
+    const stop = Array.from(runtime.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'))
+      .find((item) => item.textContent?.includes('Stop'));
+    expect(stop).toBeTruthy();
+    stop?.click();
+
+    await waitFor(() => stopThread.mock.calls.length === 1);
+    await waitFor(() => runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-status') === 'canceled');
+    expect(runtime.querySelector('[data-flower-approval-action-id="approval-stop-cursor-race"]')).toBeNull();
+    expect(runtime.querySelector('[data-thread-id="thread-stop-cursor-race"]')?.getAttribute('data-flower-thread-status')).toBe('canceled');
+  });
+
   it('copies thread metadata with fallback clipboard feedback', async () => {
     Object.defineProperty(document, 'execCommand', {
       configurable: true,
