@@ -731,11 +731,13 @@ function flowerApprovalRequest(
 function retryableApprovalAction(
   thread: FlowerThreadSnapshot | null,
   actionID: string,
+  options: Readonly<{ allowNonPrimary?: boolean }> = {},
 ): FlowerApprovalAction | null {
   if (!thread) return null;
   const pending = (thread.approval_actions ?? []).filter((action) => action.status === 'pending' && action.state === 'requested');
   const action = pending.find((candidate) => candidate.action_id === actionID) ?? null;
-  if (!action || !action.can_approve) return null;
+  if (!action || (!action.can_approve && !options.allowNonPrimary)) return null;
+  if (options.allowNonPrimary) return action;
   const currentActionID = trimString(thread.approval_queue?.current_action_id);
   if (currentActionID) return currentActionID === actionID ? action : null;
   const primary = action.surface_role === 'primary_action'
@@ -1658,6 +1660,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     && action.state === 'requested'
   );
   const selectedComposerApprovalAction = createMemo(() => flowerComposerApprovalAction(selectedThread()));
+  const selectedApprovalBatchActions = createMemo(() => {
+    const composerAction = selectedComposerApprovalAction();
+    if (!composerAction) return [];
+    return selectedApprovalActions().filter((action) => (
+      action.origin === composerAction.origin
+      && action.run_id === composerAction.run_id
+      && action.queue_generation === composerAction.queue_generation
+      && action.batch_size === composerAction.batch_size
+    ));
+  });
   const selectedApprovalDecisionHandoff = createMemo(() => {
     const handoff = approvalDecisionHandoff();
     return handoff && handoff.threadID === selectedThreadID() ? handoff : null;
@@ -1718,9 +1730,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       requestTranscriptAnimationFrame(() => {
         const approvalSurface = composerApprovalCardRef;
         if (!approvalSurface?.isConnected) return;
-        approvalSurface.querySelector<HTMLButtonElement>(
-          '.flower-composer-approval-decision:not(:disabled)',
-        )?.focus({ preventScroll: true });
+        approvalSurface.focus({ preventScroll: true });
       });
     }
     previousComposerApprovalActionID = actionID;
@@ -7589,7 +7599,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   };
 
-  const submitApprovalAction = async (action: FlowerApprovalAction, approved: boolean) => {
+  const submitApprovalAction = async (
+    action: FlowerApprovalAction,
+    approved: boolean,
+    options: Readonly<{ allowNonPrimary?: boolean; suppressHandoff?: boolean }> = {},
+  ) => {
+    const allowNonPrimary = options.allowNonPrimary === true;
+    const suppressHandoff = options.suppressHandoff === true;
     let thread: FlowerThreadSnapshot | null = null;
     let started = false;
     let alreadySubmitting = false;
@@ -7602,7 +7618,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         || selectedThreadDetailPending()
         || selectedThreadReadOnly()
         || !thread
-        || currentAction?.action_id !== action.action_id
+        || (!allowNonPrimary && currentAction?.action_id !== action.action_id)
       ) {
         return;
       }
@@ -7611,14 +7627,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       clearApprovalDecisionResyncTimer();
       clearApprovalHandoffStyleSchedule();
       setApprovalHandoffStyleThreadID('');
-      setApprovalDecisionHandoff({
-        threadID,
-        actionID: action.action_id,
-        frozenAction: action,
-        decision: approved ? 'approve' : 'reject',
-        phase: 'submitting',
-        submittedStreamGeneration: liveStreamGenerationValue(liveStreamGenerations.get(threadID)),
-      });
+      if (!suppressHandoff) {
+        setApprovalDecisionHandoff({
+          threadID,
+          actionID: action.action_id,
+          frozenAction: action,
+          decision: approved ? 'approve' : 'reject',
+          phase: 'submitting',
+          submittedStreamGeneration: liveStreamGenerationValue(liveStreamGenerations.get(threadID)),
+        });
+      }
       setApprovalSubmitting((current) => ({ ...current, [action.action_id]: approved ? 'approve' : 'reject' }));
       setApprovalQueueAnnouncement(copy().chat.toolApprovalSubmitting);
       started = true;
@@ -7639,7 +7657,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }
       try {
         const refreshed = await reloadCanonicalThread();
-        if (retryableApprovalAction(refreshed, action.action_id)) {
+        if (retryableApprovalAction(refreshed, action.action_id, { allowNonPrimary })) {
           cancelApprovalDecisionHandoff(action.action_id);
         }
         return refreshed;
@@ -7653,6 +7671,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     try {
       const receipt = await props.adapter.submitApproval(flowerApprovalRequest(submittedThread, action, approved));
       registerApprovalDecisionReceipt(threadID, action.action_id, receipt?.current_cursor);
+      if (suppressHandoff) clearApprovalSubmittingAction(action.action_id);
       return;
     } catch (error) {
       if (!isFlowerApprovalConflict(error)) {
@@ -7670,11 +7689,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         return;
       }
       if (!selectedThreadDetailMatches(threadID)) return;
-      const retryAction = retryableApprovalAction(refreshed, action.action_id);
+      const retryAction = retryableApprovalAction(refreshed, action.action_id, { allowNonPrimary });
       if (!retryAction || !refreshed) return;
 
       const retryHandoff = untrack(approvalDecisionHandoff);
-      if (retryHandoff?.actionID === action.action_id) {
+      if (!suppressHandoff && retryHandoff?.actionID === action.action_id) {
         setApprovalDecisionHandoff({
           ...retryHandoff,
           frozenAction: retryAction,
@@ -7686,6 +7705,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       try {
         const receipt = await props.adapter.submitApproval(flowerApprovalRequest(refreshed, retryAction, approved));
         registerApprovalDecisionReceipt(threadID, action.action_id, receipt?.current_cursor);
+        if (suppressHandoff) clearApprovalSubmittingAction(action.action_id);
       } catch (retryError) {
         if (isFlowerApprovalConflict(retryError)) {
           let finalSnapshot: FlowerThreadSnapshot | null = null;
@@ -7697,7 +7717,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             }
             return;
           }
-          if (retryableApprovalAction(finalSnapshot, action.action_id)) {
+          if (retryableApprovalAction(finalSnapshot, action.action_id, { allowNonPrimary })) {
             cancelApprovalDecisionHandoff(action.action_id);
           }
           return;
@@ -7705,6 +7725,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         await reloadAfterFailedDecision(retryError);
         return;
       }
+    } finally {
+      if (suppressHandoff) clearApprovalSubmittingAction(action.action_id);
     }
   };
 
@@ -7726,6 +7748,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }, 1600);
     } catch (error) {
       notifyThreadActionError(getErrorMessage(error));
+    }
+  };
+
+  const submitApprovalBatchRejection = async () => {
+    const thread = selectedThread();
+    const pending = selectedApprovalBatchActions();
+    if (!thread || pending.length < 2 || selectedThreadDetailPending() || selectedThreadReadOnly()) {
+      return;
+    }
+    setApprovalQueueAnnouncement(copy().chat.toolApprovalSubmitting);
+    for (const action of pending) {
+      if (approvalSubmitting()[action.action_id] !== undefined) continue;
+      await submitApprovalAction(action, false, { allowNonPrimary: true, suppressHandoff: true });
     }
   };
 
@@ -7973,6 +8008,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         data-flower-approval-origin={action().origin}
         data-flower-approval-surface-role={action().surface_role || 'primary_action'}
         data-flower-composer-approval={composerSurface ? 'true' : undefined}
+        tabIndex={composerSurface ? -1 : undefined}
       >
         <div class="flower-approval-body">
           <Show when={!composerSurface || queueProgress()}>
@@ -8085,6 +8121,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       case 'success':
         return <Check class="h-3.5 w-3.5" />;
       case 'error':
+        return <AlertTriangle class="h-3.5 w-3.5" />;
+      case 'declined':
+        return <span class="flower-activity-declined-marker" aria-hidden="true">-</span>;
       case 'canceled':
         return <AlertTriangle class="h-3.5 w-3.5" />;
       case 'waiting':
@@ -11198,6 +11237,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     <div class="flower-composer-approval-body">
                       <span class="flower-visually-hidden" role="status" aria-live="polite" aria-atomic="true">{approvalQueueAnnouncement()}</span>
                       {approvalActionCard(actionID, () => selectedComposerApprovalDisplayAction()!, { surface: 'composer' })}
+                      <Show when={selectedApprovalBatchActions().length > 1}>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          class="flower-approval-reject-batch"
+                          disabled={selectedApprovalBatchActions().some((action) => approvalSubmitting()[action.action_id] !== undefined)}
+                          aria-label={copy().chat.toolApprovalRejectBatchAction(selectedApprovalBatchActions().length)}
+                          onClick={() => void submitApprovalBatchRejection()}
+                        >
+                          {copy().chat.toolApprovalRejectBatch}
+                        </Button>
+                      </Show>
                     </div>
                   )}
                 </Show>

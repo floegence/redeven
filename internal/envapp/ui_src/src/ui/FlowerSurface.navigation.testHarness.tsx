@@ -522,6 +522,7 @@ export function activityTimeline(args: {
     waiting?: number;
     success?: number;
     error?: number;
+    declined?: number;
     canceled?: number;
     approval?: number;
   } = {};
@@ -531,6 +532,7 @@ export function activityTimeline(args: {
     if (item.status === 'waiting') counts.waiting = (counts.waiting ?? 0) + 1;
     if (item.status === 'success') counts.success = (counts.success ?? 0) + 1;
     if (item.status === 'error') counts.error = (counts.error ?? 0) + 1;
+    if (item.status === 'declined') counts.declined = (counts.declined ?? 0) + 1;
     if (item.status === 'canceled') counts.canceled = (counts.canceled ?? 0) + 1;
     if (item.requires_approval) counts.approval = (counts.approval ?? 0) + 1;
   }

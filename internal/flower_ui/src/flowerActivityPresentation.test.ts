@@ -144,6 +144,27 @@ describe('presentFlowerActivityItem', () => {
     }), [action])).toBe('');
   });
 
+  it('presents declined execution without failure or cancellation details', () => {
+    const declined = item({
+      status: 'declined',
+      severity: 'quiet',
+      needs_attention: false,
+      requires_approval: false,
+      approval_state: 'rejected',
+      renderer: 'terminal',
+      label: 'rm -f generated.tmp',
+      payload: { command: 'rm -f generated.tmp' },
+    });
+
+    const presentation = presentFlowerActivityItem(declined);
+    expect(presentation.title).toEqual({ kind: 'command', command: 'rm -f generated.tmp' });
+    expect(presentation.detailBlocks).toEqual([
+      expect.objectContaining({ kind: 'terminal_output', terminal: expect.objectContaining({ status: 'declined', output: '' }) }),
+    ]);
+    expect(JSON.stringify(presentation)).not.toContain('error');
+    expect(pendingApprovalCommandForActivityItem(declined, [approvalAction()])).toBe('');
+  });
+
   it.each([
     { name: 'structured', renderer: 'structured' },
     { name: 'terminal', renderer: 'terminal' },

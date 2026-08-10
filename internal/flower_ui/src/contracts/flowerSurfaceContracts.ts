@@ -298,6 +298,7 @@ export type FlowerActivityStatus =
   | 'waiting'
   | 'success'
   | 'error'
+  | 'declined'
   | 'canceled';
 
 export type FlowerActivityKind = 'tool' | 'hosted_tool' | 'control' | 'budget';
@@ -368,6 +369,7 @@ export type FlowerActivityTimelineBlock = Readonly<{
       waiting?: number;
       success?: number;
       error?: number;
+      declined?: number;
       canceled?: number;
       approval?: number;
     }>;

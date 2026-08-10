@@ -38,7 +38,6 @@ func TestClassifyRunFailureCodeProviderErrors(t *testing.T) {
 		{name: "provider stream eof", err: errors.New("unexpected EOF"), want: runErrorCodeProviderStreamInterrupted},
 		{name: "floret effect authorization rejection", err: errors.New("effect is unauthorized"), want: runErrorCodeFloretEngineFailed},
 		{name: "floret wrapped effect authorization rejection", err: errors.New("floret effect is unauthorized: effect is unauthorized"), want: runErrorCodeFloretEngineFailed},
-		{name: "tool rejection", err: errors.New("tool call rejected"), want: runErrorCodeFloretEngineFailed},
 		{name: "floret active turn admission", err: errors.New("thread already has an active turn"), want: runErrorCodeFloretAdmissionBlocked},
 		{name: "unknown preserves fallback", err: errors.New("other failure"), want: runErrorCodeFloretEngineFailed},
 	}
