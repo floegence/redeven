@@ -1759,20 +1759,20 @@
     },
     {
       "path": "internal/flower_ui/src/FlowerSurface.tsx",
-      "sha256": "c4a4681b26161eba5261798ca05e498312938890edd12bb5e59ce1522af85e70",
+      "sha256": "58092613845fa247d23ba0cab091f06760a7da4ecd9445c1885ae023651a6759",
       "sink_kinds": [
         "web_storage"
       ],
       "review_status": "reviewed",
-      "owner": "redeven UI",
+      "owner": "Flower UI",
       "authority": "browser_ui_preference",
       "data_classes": [
-        "product UI preference or cache"
+        "browser UI preference"
       ],
       "keys": [
         "expression:THREAD_RAIL_WIDTH_STORAGE_KEY"
       ],
-      "review_note": "Stores the thread rail width preference. The bounded thread-detail LRU remains process memory and does not add a durable lifecycle or transcript sink."
+      "review_note": "Flower stores only the local thread rail width preference; canonical messages and lifecycle state remain server-owned."
     },
     {
       "path": "internal/fs/entries.go",
