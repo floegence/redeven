@@ -591,9 +591,11 @@ function diffStatsMeta(files: readonly FlowerActivityDiffFile[]): string {
 
 function metaForTerminalItem(item: FlowerActivityItem): string {
   const command = payloadValue(item.payload, 'command');
+  const title = terminalTitleForItem(item);
   const description = trimString(item.description);
   const error = errorMessageFromPayload(item.payload);
-  return [command, description, item.status === 'error' && item.approval_state !== 'rejected' ? error : '']
+  const compactDescription = title.kind === 'command' && command && description.includes(command) ? '' : description;
+  return [title.kind === 'command' ? '' : command, compactDescription, item.status === 'error' && item.approval_state !== 'rejected' ? error : '']
     .filter(Boolean)
     .filter((value, index, values) => values.indexOf(value) === index)
     .join(' · ');

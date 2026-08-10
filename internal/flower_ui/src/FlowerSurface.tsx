@@ -7831,7 +7831,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const explicit = trimString(action().summary.label);
       const command = commandText();
       if (explicit && explicit !== command) return explicit;
-      return trimString(action().tool_name) || explicit || copy().chat.toolApprovalRequired;
+      return trimString(action().tool_name) || copy().chat.toolApprovalRequired;
     });
     const descriptionText = createMemo(() => action().summary.description || action().read_only_reason || '');
     const visibleEffects = createMemo(() => approvalVisibleEffects(action()));
@@ -8844,7 +8844,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const pendingApprovalCommand = createMemo(() => pendingApprovalCommandForActivityItem(item(), selectedApprovalActions()));
     const displayTitle = createMemo<FlowerActivityTitle>(() => {
       const command = pendingApprovalCommand();
-      return command ? { kind: 'command', command } : presentation().title;
+      return command && presentation().title.kind !== 'command'
+        ? { kind: 'command', command }
+        : presentation().title;
     });
     const terminalDisclosure = createMemo(() => presentation().detailBlocks.some((block) => block.kind === 'terminal_output'));
     const detailKeys = createMemo(() => presentation().detailBlocks.map((block) => `${disclosureKey()}:${block.kind}`));
