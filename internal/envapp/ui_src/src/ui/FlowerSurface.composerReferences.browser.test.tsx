@@ -16,6 +16,86 @@ import {
 } from './FlowerSurface.navigation.testHarness';
 
 describe('Flower composer reference browser interaction', () => {
+  it('keeps seven compact rows anchored directly above a focused composer', async () => {
+    await page.viewport(800, 900);
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => []),
+      getWorkingDirectoryPathContext: vi.fn(async () => ({
+        agentHomePathAbs: '/workspace',
+        homePathAbs: '/workspace',
+        defaultRootId: 'workspace',
+        roots: [{
+          id: 'workspace', label: 'Workspace', pathAbs: '/workspace', kind: 'workspace',
+          permissions: { read: true, write: true },
+        }],
+      })),
+      listWorkingDirectoryEntries: vi.fn(async ({ path }) => path === '/workspace'
+        ? Array.from({ length: 8 }, (_, index) => ({
+            name: index === 0 ? 'src' : `entry-${index}.ts`,
+            path: index === 0 ? '/workspace/src' : `/workspace/entry-${index}.ts`,
+            isDirectory: index === 0,
+            modifiedAt: 8 - index,
+          }))
+        : []),
+    });
+
+    await waitFor(() => runtime.querySelector('textarea') !== null);
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    const composer = runtime.querySelector('.flower-composer') as HTMLElement;
+    const unfocusedRect = composer.getBoundingClientRect();
+    const unfocusedStyle = getComputedStyle(composer);
+    const unfocusedGeometry = {
+      width: unfocusedRect.width,
+      height: unfocusedRect.height,
+      borderWidth: unfocusedStyle.borderTopWidth,
+      boxShadow: unfocusedStyle.boxShadow,
+    };
+    textarea.focus();
+    await userEvent.keyboard('@');
+    await waitFor(() => document.querySelectorAll('.flower-composer-reference-option').length >= 7);
+    await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+
+    const menu = document.querySelector('.flower-composer-reference-menu') as HTMLElement;
+    await waitFor(() => {
+      const settledGap = composer.getBoundingClientRect().top - menu.getBoundingClientRect().bottom;
+      return settledGap >= 4 && settledGap <= 8;
+    });
+    const rows = Array.from(document.querySelectorAll<HTMLElement>('.flower-composer-reference-option'));
+    const rowHeights = rows.slice(0, 7).map((row) => row.getBoundingClientRect().height);
+    const gap = composer.getBoundingClientRect().top - menu.getBoundingClientRect().bottom;
+    const focusedStyle = getComputedStyle(composer);
+    const focusedRect = composer.getBoundingClientRect();
+    const enterButton = menu.querySelector('.flower-composer-reference-enter') as HTMLButtonElement;
+    const enterRect = enterButton.getBoundingClientRect();
+    const enterRow = enterButton.closest('.flower-composer-reference-option') as HTMLElement;
+    const copyRect = (enterRow.querySelector('.flower-composer-reference-option-copy') as HTMLElement)
+      .getBoundingClientRect();
+
+    expect(rowHeights.every((height) => height >= 32 && height <= 34)).toBe(true);
+    expect(gap).toBeGreaterThanOrEqual(4);
+    expect(gap).toBeLessThanOrEqual(8);
+    expect(getComputedStyle(menu).backdropFilter).toBe('none');
+    expect(focusedStyle.borderTopWidth).toBe('1px');
+    expect(focusedStyle.boxShadow).not.toContain('0px 0px 0px 2px');
+    expect(focusedRect.width).toBe(unfocusedGeometry.width);
+    expect(focusedRect.height).toBe(unfocusedGeometry.height);
+    expect(focusedStyle.borderTopWidth).toBe(unfocusedGeometry.borderWidth);
+    expect(focusedStyle.boxShadow).toBe(unfocusedGeometry.boxShadow);
+    expect(enterRect.width).toBe(28);
+    expect(enterRect.height).toBe(28);
+    expect(copyRect.right).toBeLessThanOrEqual(enterRect.left);
+
+    await page.viewport(430, 760);
+    await waitFor(() => {
+      const resizedGap = composer.getBoundingClientRect().top - menu.getBoundingClientRect().bottom;
+      return resizedGap >= 4 && resizedGap <= 8 && menu.getBoundingClientRect().right <= 430;
+    });
+    expect(Number.parseFloat(getComputedStyle(rows[0]!).height)).toBe(36);
+    expect(runtime.querySelector('#redeven-flower-surface')!.scrollWidth)
+      .toBeLessThanOrEqual(runtime.querySelector('#redeven-flower-surface')!.clientWidth + 1);
+  });
+
   it('grows through five lines, scrolls from the sixth, and shrinks after deletion', async () => {
     await page.viewport(800, 900);
     const runtime = renderSurfaceWithAdapter({
@@ -120,6 +200,11 @@ describe('Flower composer reference browser interaction', () => {
     expect(textarea.getAttribute('aria-activedescendant')).toBeTruthy();
     expect(listbox.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
     expect(listbox.getBoundingClientRect().right).toBeLessThanOrEqual(window.innerWidth + 1);
+    const directoryRow = listbox.querySelector('[data-kind="directory"]') as HTMLElement;
+    const directoryAction = directoryRow.querySelector('.flower-composer-reference-enter') as HTMLButtonElement;
+    expect(Number.parseFloat(getComputedStyle(directoryRow).height)).toBe(36);
+    expect(Number.parseFloat(getComputedStyle(directoryAction).width)).toBe(28);
+    expect(Number.parseFloat(getComputedStyle(directoryAction).height)).toBe(28);
 
     const attachment = runtime.querySelector('.flower-composer-attachment-button') as HTMLButtonElement;
     const more = runtime.querySelector('.flower-composer-more-button') as HTMLButtonElement;

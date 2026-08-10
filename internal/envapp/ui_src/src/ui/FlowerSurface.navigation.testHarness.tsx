@@ -204,7 +204,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
   },
   SurfaceFloatingLayer: (props: any) => {
     const {
-      children, layerRef, position, owner: _owner, estimatedSize: _estimatedSize, clamp: _clamp,
+      children, layerRef, position: _position, owner: _owner, estimatedSize: _estimatedSize, clamp: _clamp,
       class: className, style, ...rest
     } = props;
     return (
@@ -213,8 +213,9 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
         class={className}
         style={{
           ...(style ?? {}),
-          left: `${position?.x ?? 0}px`,
-          top: `${position?.y ?? 0}px`,
+          position: 'fixed',
+          left: `${props.position?.x ?? 0}px`,
+          top: `${props.position?.y ?? 0}px`,
         }}
         data-floe-local-interaction-surface="true"
         {...rest}

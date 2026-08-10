@@ -82,6 +82,7 @@
       "composerReferenceLoading": "Dateien und Ordner werden durchsucht...",
       "composerReferenceEmpty": "Keine passenden Dateien oder Ordner",
       "composerReferenceError": "Flower konnte dieses Arbeitsverzeichnis nicht durchsuchen.",
+      "composerReferenceBrowseDirectory": "Ordner {name} öffnen",
       "composerReferenceRemove": "Verweis {path} entfernen",
       "composerReferenceAdded": "{path} wurde als Verweis hinzugefügt.",
       "composerReferenceExists": "{path} ist bereits referenziert.",

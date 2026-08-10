@@ -82,6 +82,7 @@
       "composerReferenceLoading": "Buscando archivos y carpetas...",
       "composerReferenceEmpty": "No hay archivos ni carpetas coincidentes",
       "composerReferenceError": "Flower no pudo buscar en este directorio de trabajo.",
+      "composerReferenceBrowseDirectory": "Explorar la carpeta {name}",
       "composerReferenceRemove": "Quitar la referencia {path}",
       "composerReferenceAdded": "Se añadió {path} como referencia.",
       "composerReferenceExists": "{path} ya está referenciado.",

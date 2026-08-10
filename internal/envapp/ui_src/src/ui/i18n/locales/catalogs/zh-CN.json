@@ -3837,6 +3837,7 @@
       "composerReferenceLoading": "正在搜索文件和文件夹...",
       "composerReferenceEmpty": "未找到匹配的文件或文件夹",
       "composerReferenceError": "Flower 无法搜索此工作目录。",
+      "composerReferenceBrowseDirectory": "浏览文件夹 {name}",
       "composerReferenceRemove": "移除引用 {path}",
       "composerReferenceAdded": "已引用 {path}。",
       "composerReferenceExists": "{path} 已在引用列表中。",

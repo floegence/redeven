@@ -434,7 +434,9 @@ const FLOWER_COMPOSER_COMMAND_MENU_ID = 'flower-composer-command-menu';
 const FLOWER_COMPOSER_COMPACT_COMMAND_OPTION_ID = 'flower-composer-command-compact-context';
 const FLOWER_COMPOSER_REFERENCE_MENU_ID = 'flower-composer-reference-menu';
 const FLOWER_COMPOSER_REFERENCE_OPTION_PREFIX = 'flower-composer-reference-option-';
-const FLOWER_COMPOSER_REFERENCE_MENU_ESTIMATED_HEIGHT = 296;
+const FLOWER_COMPOSER_REFERENCE_MENU_FALLBACK_HEIGHT = 240;
+const FLOWER_COMPOSER_REFERENCE_MENU_GAP = 6;
+const FLOWER_COMPOSER_REFERENCE_VIEWPORT_MARGIN = 8;
 const FLOWER_COMPOSER_MORE_PANEL_ESTIMATED_WIDTH = 352;
 const FLOWER_COMPOSER_MORE_PANEL_ROW_HEIGHT = 44;
 const FLOWER_COMPOSER_MORE_PANEL_VERTICAL_CHROME = 12;
@@ -1100,6 +1102,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const composerReferenceMutationActive = () => untrack(composerReferenceMutationCount) > 0;
   const [composerReferenceMenuPosition, setComposerReferenceMenuPosition] = createSignal<FlowerFloatingPoint>({ x: 8, y: 8 });
   const [composerReferenceMenuWidth, setComposerReferenceMenuWidth] = createSignal(320);
+  const [composerReferenceMenuHeight, setComposerReferenceMenuHeight] = createSignal(FLOWER_COMPOSER_REFERENCE_MENU_FALLBACK_HEIGHT);
   const [composerReferenceSearchState, setComposerReferenceSearchState] = createSignal<FlowerComposerReferenceSearchState>({
     status: 'idle',
     generation: 0,
@@ -1161,6 +1164,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let startedFocusThreadRequestID = '';
   let startedFocusComposerRequest = 0;
   let composerRef: HTMLTextAreaElement | HTMLInputElement | undefined;
+  let composerReferenceMenuRef: HTMLDivElement | undefined;
   let composerAutosizeController: FlowerComposerAutosizeController | undefined;
   const composerReferenceRemoveButtons = new Map<string, HTMLButtonElement>();
   let attachmentPickerRef: HTMLInputElement | undefined;
@@ -1238,6 +1242,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let copiedApprovalResetTimer: number | undefined;
   let activityClockTimer: number | undefined;
   let composerMorePanelPositionFrame = 0;
+  let composerReferenceMenuPositionFrame = 0;
   let composerSelectionFrame = 0;
   let modelMenuPositionFrame = 0;
   let presentedSelectionFrame = 0;
@@ -6064,6 +6069,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         completeComposerReference(active);
         return;
       }
+      if (
+        !event.altKey
+        && !event.ctrlKey
+        && !event.metaKey
+        && event.key === 'ArrowRight'
+        && active?.kind === 'directory'
+      ) {
+        event.preventDefault();
+        completeComposerReference(active);
+        return;
+      }
       if (!event.shiftKey && event.key === 'Enter') {
         if (active) {
           event.preventDefault();
@@ -7270,13 +7286,30 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return index >= 0 ? `${FLOWER_COMPOSER_REFERENCE_OPTION_PREFIX}${index}` : undefined;
   });
   const updateComposerReferenceMenuPosition = () => {
-    const rect = composerRef?.getBoundingClientRect();
-    if (!rect) return;
-    const width = Math.max(240, Math.min(480, rect.width));
-    setComposerReferenceMenuWidth(width);
-    setComposerReferenceMenuPosition({
-      x: rect.left,
-      y: Math.max(8, rect.top - FLOWER_COMPOSER_REFERENCE_MENU_ESTIMATED_HEIGHT - 8),
+    if (composerReferenceMenuPositionFrame) return;
+    composerReferenceMenuPositionFrame = requestAnimationFrame(() => {
+      composerReferenceMenuPositionFrame = 0;
+      const anchor = composerRef?.closest<HTMLElement>('.flower-composer');
+      const rect = anchor?.getBoundingClientRect();
+      if (!rect) return;
+      const measuredHeight = composerReferenceMenuRef?.getBoundingClientRect().height;
+      const height = measuredHeight && measuredHeight > 0
+        ? measuredHeight
+        : composerReferenceMenuHeight();
+      const visualViewport = window.visualViewport;
+      const viewportTop = visualViewport?.offsetTop ?? 0;
+      const viewportBottom = viewportTop + (visualViewport?.height ?? window.innerHeight);
+      const aboveY = rect.top - height - FLOWER_COMPOSER_REFERENCE_MENU_GAP;
+      const belowY = rect.bottom + FLOWER_COMPOSER_REFERENCE_MENU_GAP;
+      const fitsAbove = aboveY >= viewportTop + FLOWER_COMPOSER_REFERENCE_VIEWPORT_MARGIN;
+      const fitsBelow = belowY + height <= viewportBottom - FLOWER_COMPOSER_REFERENCE_VIEWPORT_MARGIN;
+      const y = fitsAbove || !fitsBelow
+        ? Math.max(viewportTop + FLOWER_COMPOSER_REFERENCE_VIEWPORT_MARGIN, aboveY)
+        : belowY;
+      const width = Math.max(240, Math.min(480, rect.width));
+      setComposerReferenceMenuWidth(width);
+      if (measuredHeight && measuredHeight > 0) setComposerReferenceMenuHeight(measuredHeight);
+      setComposerReferenceMenuPosition({ x: rect.left, y });
     });
   };
   const retryComposerReferenceSearch = () => {
@@ -7292,19 +7325,38 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
   createEffect(() => {
     if (!composerReferenceMenuVisible()) return;
+    const searchState = composerReferenceSearchState();
+    const candidateCount = composerReferenceCandidates().length;
+    if (searchState.status === 'idle' && candidateCount === 0) return;
     updateComposerReferenceMenuPosition();
-    const target = composerRef;
+    const target = composerRef?.closest<HTMLElement>('.flower-composer');
     const observer = typeof ResizeObserver === 'function' && target
       ? new ResizeObserver(updateComposerReferenceMenuPosition)
       : null;
     if (target) observer?.observe(target);
+    if (composerReferenceMenuRef) observer?.observe(composerReferenceMenuRef);
+    const menuObserverFrame = requestAnimationFrame(() => {
+      if (composerReferenceMenuRef) observer?.observe(composerReferenceMenuRef);
+      updateComposerReferenceMenuPosition();
+    });
+    let settleFrame = 0;
+    const firstSettleFrame = requestAnimationFrame(() => {
+      settleFrame = requestAnimationFrame(updateComposerReferenceMenuPosition);
+    });
     const visualViewport = window.visualViewport;
     window.addEventListener('resize', updateComposerReferenceMenuPosition);
     window.addEventListener('scroll', updateComposerReferenceMenuPosition, true);
     visualViewport?.addEventListener('resize', updateComposerReferenceMenuPosition);
     visualViewport?.addEventListener('scroll', updateComposerReferenceMenuPosition);
     onCleanup(() => {
+      cancelAnimationFrame(menuObserverFrame);
+      cancelAnimationFrame(firstSettleFrame);
+      if (settleFrame) cancelAnimationFrame(settleFrame);
       observer?.disconnect();
+      if (composerReferenceMenuPositionFrame) {
+        cancelAnimationFrame(composerReferenceMenuPositionFrame);
+        composerReferenceMenuPositionFrame = 0;
+      }
       window.removeEventListener('resize', updateComposerReferenceMenuPosition);
       window.removeEventListener('scroll', updateComposerReferenceMenuPosition, true);
       visualViewport?.removeEventListener('resize', updateComposerReferenceMenuPosition);
@@ -10389,12 +10441,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         position={composerReferenceMenuPosition()}
         estimatedSize={{
           width: composerReferenceMenuWidth(),
-          height: FLOWER_COMPOSER_REFERENCE_MENU_ESTIMATED_HEIGHT,
+          height: composerReferenceMenuHeight(),
         }}
         class="flower-composer-reference-layer"
         data-flower-floating-layer="true"
       >
         <div
+          ref={composerReferenceMenuRef}
           id={FLOWER_COMPOSER_REFERENCE_MENU_ID}
           class="flower-composer-reference-menu"
           style={{ '--flower-composer-reference-width': `${composerReferenceMenuWidth()}px` } as JSX.CSSProperties}
@@ -10436,33 +10489,59 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 const key = () => composerReferenceCandidateKey(candidate);
                 const active = () => key() === composerReferenceCandidateKey(composerReferenceActiveCandidate() ?? candidate);
                 return (
-                  <button
-                    id={`${FLOWER_COMPOSER_REFERENCE_OPTION_PREFIX}${index()}`}
-                    type="button"
+                  <div
                     class="flower-composer-reference-option"
-                    role="option"
-                    tabIndex={-1}
-                    disabled={composerReferenceMutationCount() > 0}
-                    aria-selected={active() ? 'true' : 'false'}
                     data-active={active() ? 'true' : 'false'}
                     data-kind={candidate.kind}
-                    onPointerDown={(event) => event.preventDefault()}
                     onPointerEnter={() => setComposerReferenceActiveKey(key())}
-                    onClick={() => void commitComposerReference(candidate)}
                   >
-                    <span class="flower-composer-reference-option-icon" aria-hidden="true">
-                      {candidate.kind === 'directory'
-                        ? <FolderOpen class="h-4 w-4" />
-                        : <FileText class="h-4 w-4" />}
-                    </span>
-                    <span class="flower-composer-reference-option-copy">
-                      <span class="flower-composer-reference-option-name">{candidate.label}</span>
-                      <Show when={candidate.relativeParent}>
-                        <span class="flower-composer-reference-option-path">{candidate.relativeParent}</span>
-                      </Show>
-                    </span>
-                    <span class="flower-composer-reference-option-hint" aria-hidden="true">Tab</span>
-                  </button>
+                    <button
+                      id={`${FLOWER_COMPOSER_REFERENCE_OPTION_PREFIX}${index()}`}
+                      type="button"
+                      class="flower-composer-reference-option-main"
+                      role="option"
+                      tabIndex={-1}
+                      disabled={composerReferenceMutationCount() > 0}
+                      aria-selected={active() ? 'true' : 'false'}
+                      onPointerDown={(event) => event.preventDefault()}
+                      onClick={() => void commitComposerReference(candidate)}
+                    >
+                      <span class="flower-composer-reference-option-icon" aria-hidden="true">
+                        {candidate.kind === 'directory'
+                          ? <FolderOpen class="h-4 w-4" />
+                          : <FileText class="h-4 w-4" />}
+                      </span>
+                      <span class="flower-composer-reference-option-copy">
+                        <span class="flower-composer-reference-option-name">{candidate.label}</span>
+                        <Show when={candidate.relativeParent}>
+                          <span class="flower-composer-reference-option-path">{candidate.relativeParent}</span>
+                        </Show>
+                      </span>
+                    </button>
+                    <Show
+                      when={candidate.kind === 'directory'}
+                      fallback={<span class="flower-composer-reference-option-hint" aria-hidden="true">Tab</span>}
+                    >
+                      <button
+                        type="button"
+                        class="flower-composer-reference-enter"
+                        aria-label={copy().chat.composerReferenceBrowseDirectory(candidate.label)}
+                        title={copy().chat.composerReferenceBrowseDirectory(candidate.label)}
+                        disabled={composerReferenceMutationCount() > 0}
+                        onPointerDown={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                        }}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          completeComposerReference(candidate);
+                        }}
+                      >
+                        <ChevronRight class="h-4 w-4" aria-hidden="true" />
+                      </button>
+                    </Show>
+                  </div>
                 );
               }}
             </For>

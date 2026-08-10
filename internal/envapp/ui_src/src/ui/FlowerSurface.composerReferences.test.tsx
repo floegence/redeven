@@ -75,6 +75,86 @@ function placeCaretAtEnd(textarea: HTMLTextAreaElement): void {
 }
 
 describe('Flower composer references', () => {
+  it('separates directory reference from directory navigation for pointer and keyboard actions', async () => {
+    const runtime = renderSurfaceWithAdapter(composerReferenceAdapter({
+      listEntries: async (path) => {
+        if (path === '/workspace') {
+          return [
+            { name: 'README.md', path: '/workspace/README.md', isDirectory: false, modifiedAt: 3 },
+            { name: 'src', path: '/workspace/src', isDirectory: true, modifiedAt: 2 },
+            { name: 'unrelated.ts', path: '/workspace/unrelated.ts', isDirectory: false, modifiedAt: 1 },
+          ];
+        }
+        if (path === '/workspace/src') {
+          return [
+            { name: 'components', path: '/workspace/src/components', isDirectory: true, modifiedAt: 2 },
+            { name: 'main.ts', path: '/workspace/src/main.ts', isDirectory: false, modifiedAt: 1 },
+          ];
+        }
+        return [];
+      },
+    }));
+
+    await waitFor(() => runtime.querySelector('.flower-working-dir-chip') !== null);
+    const textarea = await typeComposerToken(runtime, '@src');
+    await waitFor(() => runtime.querySelector('[data-kind="directory"]') !== null);
+    const directoryRow = runtime.querySelector('[data-kind="directory"]') as HTMLButtonElement;
+    const enterButton = directoryRow.querySelector('.flower-composer-reference-enter') as HTMLButtonElement;
+    expect(enterButton).toBeTruthy();
+    expect(runtime.querySelector('[data-kind="file"] .flower-composer-reference-enter')).toBeNull();
+
+    const pointerDown = new Event('pointerdown', { bubbles: true, cancelable: true });
+    enterButton.dispatchEvent(pointerDown);
+    expect(pointerDown.defaultPrevented).toBe(true);
+    enterButton.click();
+
+    await waitFor(() => textarea.value === '@src/');
+    await waitFor(() => runtime.querySelectorAll('[role="option"]').length === 2);
+    expect(document.activeElement).toBe(textarea);
+    expect(runtime.querySelector('.flower-composer-reference-chip')).toBeNull();
+    expect(Array.from(runtime.querySelectorAll('[role="option"]')).map((option) => option.textContent))
+      .toEqual(expect.arrayContaining([expect.stringContaining('components'), expect.stringContaining('main.ts')]));
+    expect(runtime.textContent).not.toContain('unrelated.ts');
+
+    textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
+    await waitFor(() => textarea.value === '@src/components/');
+    expect(runtime.querySelector('.flower-composer-reference-chip')).toBeNull();
+
+    await typeComposerToken(runtime, '@src');
+    await waitFor(() => runtime.querySelector('[data-kind="directory"]') !== null);
+    (runtime.querySelector('[data-kind="directory"] [role="option"]') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('.flower-composer-reference-chip') !== null);
+    expect(textarea.value).toBe('');
+  });
+
+  it('uses Tab to enter a directory while leaving Shift+Tab and IME composition alone', async () => {
+    const runtime = renderSurfaceWithAdapter(composerReferenceAdapter({
+      listEntries: async (path) => path === '/workspace'
+        ? [{ name: 'src', path: '/workspace/src', isDirectory: true, modifiedAt: 1 }]
+        : [{ name: 'main.ts', path: '/workspace/src/main.ts', isDirectory: false, modifiedAt: 1 }],
+    }));
+
+    await waitFor(() => runtime.querySelector('.flower-working-dir-chip') !== null);
+    const textarea = await typeComposerToken(runtime, '@src');
+    await waitFor(() => runtime.querySelector('[role="option"]') !== null);
+
+    const shiftTab = new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true });
+    textarea.dispatchEvent(shiftTab);
+    expect(shiftTab.defaultPrevented).toBe(false);
+    expect(textarea.value).toBe('@src');
+
+    const composingTab = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    Object.defineProperty(composingTab, 'isComposing', { configurable: true, value: true });
+    textarea.dispatchEvent(composingTab);
+    expect(composingTab.defaultPrevented).toBe(false);
+    expect(textarea.value).toBe('@src');
+
+    textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+    await waitFor(() => textarea.value === '@src/');
+    await waitFor(() => runtime.querySelector('[role="option"]')?.textContent?.includes('main.ts') === true);
+    expect(document.activeElement).toBe(textarea);
+  });
+
   it('selects a directory with the keyboard and sends a valid reference-only action', async () => {
     const launchTurn = vi.fn(async (turn) => (
       launchReceipt(turn.thread_id ?? 'thread-reference', turn.turn_id ?? 'turn-reference')

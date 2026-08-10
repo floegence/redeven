@@ -29,6 +29,85 @@ function entry(
 }
 
 describe('createFlowerComposerReferenceIndex', () => {
+  it('treats a slash query as a direct-child browsing scope', async () => {
+    const index = createFlowerComposerReferenceIndex({
+      listDirectory: vi.fn(async (path: string) => {
+        if (path === '/workspace') {
+          return [
+            entry('/workspace/src', true),
+            entry('/workspace/scripts', true),
+            entry('/workspace/root.ts'),
+          ];
+        }
+        if (path === '/workspace/src') {
+          return [
+            entry('/workspace/src/components', true),
+            entry('/workspace/src/config.ts'),
+            entry('/workspace/src/main.ts'),
+          ];
+        }
+        if (path === '/workspace/src/components') {
+          return [entry('/workspace/src/components/Composer.tsx')];
+        }
+        return [];
+      }),
+    });
+
+    const children = await index.search({
+      cacheKey: 'target-a',
+      rootPath: '/workspace',
+      query: 'src/',
+    });
+    const filtered = await index.search({
+      cacheKey: 'target-a',
+      rootPath: '/workspace',
+      query: 'src/co',
+    });
+    const nested = await index.search({
+      cacheKey: 'target-a',
+      rootPath: '/workspace',
+      query: 'src/components/',
+    });
+
+    expect(children?.status === 'ready' ? children.candidates.map((candidate) => candidate.path) : [])
+      .toEqual([
+        '/workspace/src/components',
+        '/workspace/src/config.ts',
+        '/workspace/src/main.ts',
+      ]);
+    expect(filtered?.status === 'ready' ? filtered.candidates.map((candidate) => candidate.path) : [])
+      .toEqual(['/workspace/src/config.ts', '/workspace/src/components']);
+    expect(nested?.status === 'ready' ? nested.candidates.map((candidate) => candidate.path) : [])
+      .toEqual(['/workspace/src/components/Composer.tsx']);
+  });
+
+  it('keeps path browsing inside Unix and Windows working-directory roots', async () => {
+    const unix = createFlowerComposerReferenceIndex({
+      listDirectory: vi.fn(async (path: string) => path === '/'
+        ? [entry('/safe', true), entry('/root.txt')]
+        : path === '/safe' ? [entry('/safe/child.txt')] : []),
+    });
+    const windows = createFlowerComposerReferenceIndex({
+      listDirectory: vi.fn(async (path: string) => path === 'C:/workspace'
+        ? [entry('C:/workspace/资料', true), entry('D:/escape.txt')]
+        : path === 'C:/workspace/资料' ? [entry('C:/workspace/资料/说明.md')] : []),
+    });
+
+    const escaped = await unix.search({ cacheKey: 'unix', rootPath: '/', query: '../' });
+    const unixChildren = await unix.search({ cacheKey: 'unix', rootPath: '/', query: 'safe/' });
+    const windowsChildren = await windows.search({
+      cacheKey: 'windows',
+      rootPath: 'C:\\workspace',
+      query: '资料/',
+    });
+
+    expect(escaped?.status).toBe('empty');
+    expect(unixChildren?.status === 'ready' ? unixChildren.candidates.map((candidate) => candidate.path) : [])
+      .toEqual(['/safe/child.txt']);
+    expect(windowsChildren?.status === 'ready' ? windowsChildren.candidates.map((candidate) => candidate.path) : [])
+      .toEqual(['C:/workspace/资料/说明.md']);
+  });
+
   it('scans files and directories breadth-first while skipping ignored and unreadable children', async () => {
     const calls: string[] = [];
     const listDirectory = vi.fn(async (path: string): Promise<readonly FlowerComposerReferenceDirectoryEntry[]> => {

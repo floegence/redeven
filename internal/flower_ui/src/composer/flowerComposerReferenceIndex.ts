@@ -249,8 +249,30 @@ export function rankFlowerComposerReferenceCandidates(
   maxResults = DEFAULT_LIMITS.maxResults,
 ): readonly FlowerComposerReferenceCandidate[] {
   const normalizedRoot = normalizeFlowerComposerReferencePath(rootPath);
-  return candidates
-    .map((candidate) => rankCandidate(candidate, query, normalizedRoot))
+  const normalizedQuery = query.trim().replace(/\\/gu, '/');
+  const slashIndex = normalizedQuery.lastIndexOf('/');
+  let scopedCandidates = candidates;
+  let filter = normalizedQuery;
+  let rankingRoot = normalizedRoot;
+
+  if (slashIndex >= 0) {
+    const rawScope = normalizedQuery.slice(0, slashIndex).replace(/^\/+|\/+$/gu, '');
+    const scopeParts = rawScope ? rawScope.split('/') : [];
+    if (scopeParts.some((part) => !part || part === '.' || part === '..')) return [];
+    const scopePath = rawScope
+      ? normalizeFlowerComposerReferencePath(`${normalizedRoot.replace(/\/$/u, '')}/${rawScope}`)
+      : normalizedRoot;
+    if (!scopePath || !isWithinRoot(scopePath, normalizedRoot)) return [];
+    const scopeRelative = relativePath(scopePath, normalizedRoot);
+    scopedCandidates = candidates.filter((candidate) => (
+      parentPath(relativePath(candidate.path, normalizedRoot)) === scopeRelative
+    ));
+    filter = normalizedQuery.slice(slashIndex + 1);
+    rankingRoot = scopePath;
+  }
+
+  return scopedCandidates
+    .map((candidate) => rankCandidate(candidate, filter, rankingRoot))
     .filter((candidate): candidate is RankedCandidate => Boolean(candidate))
     .sort((left, right) => (
       left.matchRank - right.matchRank
