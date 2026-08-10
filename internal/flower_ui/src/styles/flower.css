@@ -6412,6 +6412,130 @@ html.dark .flower-component-shell {
   backdrop-filter: blur(14px);
 }
 
+.flower-composer.flower-decision-surface {
+  border-radius: 0.5rem;
+  background: var(--flower-chat-surface-elevated, var(--card));
+  box-shadow: 0 8px 22px -18px color-mix(in srgb, var(--redeven-surface-shadow-source) 42%, transparent);
+  backdrop-filter: none;
+}
+
+.flower-approval-surface {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  gap: 0.625rem;
+  outline: none;
+}
+
+.flower-approval-surface .flower-approval-body {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.flower-approval-question {
+  margin: 0;
+  color: var(--foreground);
+  font-size: 0.875rem;
+  font-weight: 680;
+  line-height: 1.45;
+}
+
+.flower-approval-surface .flower-approval-command-text {
+  max-height: 8.25rem;
+  margin: 0;
+  overflow: auto;
+  border: 0;
+  border-radius: 0.375rem;
+  background: color-mix(in srgb, var(--muted) 62%, var(--flower-chat-surface-elevated));
+  padding: 0.5rem 0.625rem;
+}
+
+.flower-approval-surface .flower-composer-approval-actions,
+.flower-decision-actions {
+  display: flex;
+  min-width: 0;
+  min-height: 2.25rem;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.flower-approval-surface .flower-composer-approval-decision {
+  width: auto;
+  min-width: 5.5rem;
+  min-height: 2.25rem;
+}
+
+.flower-input-request-surface {
+  gap: 0.5rem;
+  padding: 0;
+}
+
+.flower-input-request-surface .flower-input-request-question-header {
+  font-size: 0.875rem;
+  font-weight: 680;
+}
+
+.flower-input-request-surface .flower-input-request-question-text {
+  margin-top: 0.2rem;
+  font-size: 0.8125rem;
+}
+
+.flower-input-request-surface .flower-input-request-choice-grid {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.25rem;
+}
+
+.flower-input-request-surface .flower-input-request-choice {
+  min-height: 2.75rem;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.5rem;
+  border-color: transparent;
+  border-radius: 0.375rem;
+  background: transparent;
+  padding: 0.375rem 0.5rem;
+  transform: none;
+}
+
+.flower-input-request-surface .flower-input-request-choice::before {
+  content: '';
+  width: 0.875rem;
+  height: 0.875rem;
+  flex: 0 0 0.875rem;
+  border: 1px solid color-mix(in srgb, var(--muted-foreground) 62%, transparent);
+  border-radius: 9999px;
+  background: transparent;
+}
+
+.flower-input-request-surface .flower-input-request-choice-selected::before {
+  border: 0.25rem solid var(--primary);
+  background: var(--primary-foreground);
+}
+
+.flower-input-request-surface .flower-input-request-choice:hover,
+.flower-input-request-surface .flower-input-request-choice:focus-visible,
+.flower-input-request-surface .flower-input-request-choice-selected,
+.flower-input-request-surface .flower-input-request-choice-selected:hover,
+.flower-input-request-surface .flower-input-request-choice-selected:focus-visible {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--primary) 8%, var(--flower-chat-surface-elevated));
+  box-shadow: none;
+  transform: none;
+}
+
+.flower-input-request-actions {
+  margin-top: 0.5rem;
+}
+
+.flower-decision-readonly-status {
+  min-width: 0;
+  margin-right: auto;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+}
+
 .flower-composer[data-flower-text-entry='true'] {
   cursor: text;
 }
@@ -6441,6 +6565,54 @@ html.dark .flower-component-shell {
 .flower-composer textarea {
   min-height: 1.5rem;
   resize: none;
+}
+
+.flower-decision-surface[data-flower-bottom-mode='input_request'] textarea,
+.flower-decision-surface[data-flower-bottom-mode='input_request'] input[type='password'] {
+  min-height: 2.5rem;
+  margin-top: 0.375rem;
+  border-top: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 54%, transparent);
+  padding: 0.5rem 0.25rem 0;
+}
+
+.flower-input-request-navigation {
+  display: inline-flex;
+  min-height: 2rem;
+  align-items: center;
+  align-self: center;
+  gap: 0.5rem;
+}
+
+.flower-input-request-navigation-button {
+  display: inline-flex;
+  width: 2rem;
+  height: 2rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: 0.375rem;
+  color: var(--muted-foreground);
+  background: transparent;
+}
+
+.flower-input-request-navigation-button:hover:not(:disabled),
+.flower-input-request-navigation-button:focus-visible {
+  color: var(--foreground);
+  border-color: color-mix(in srgb, var(--primary) 48%, var(--border));
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+}
+
+.flower-input-request-navigation-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.flower-input-request-navigation-count {
+  min-width: 3rem;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
 }
 
 .flower-composer[data-flower-attachment-drag='true'] {
