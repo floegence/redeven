@@ -4242,6 +4242,114 @@ describe('FlowerSurface navigation launch/send', () => {
     expect(runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-status')).toBe('running');
   });
 
+  it('clears the exact optimistic admission after a deferred Stop wins before canonical projection', async () => {
+    const receiptDeferred = deferred<FlowerTurnLaunchReceipt>();
+    let launchedInput: FlowerTurnLaunchInput | null = null;
+    const launchTurn = vi.fn((input: FlowerTurnLaunchInput) => {
+      launchedInput = input;
+      return receiptDeferred.promise;
+    });
+    const stoppedThread = thread({
+      thread_id: 'thread-stop-before-projection',
+      title: 'Stopped before projection',
+      status: 'idle',
+      messages: [],
+    });
+    const stopThread = vi.fn(async () => liveBootstrap(stoppedThread, 2));
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => []),
+      loadThread: vi.fn(async () => liveBootstrap(stoppedThread, 2)),
+      launchTurn,
+      stopThread,
+    });
+    await waitFor(() => Boolean(runtime.querySelector('textarea')));
+
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    textarea.value = 'stop before canonical projection';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
+    await waitFor(() => launchTurn.mock.calls.length === 1);
+    await waitFor(() => {
+      const button = runtime.querySelector('.flower-composer-submit') as HTMLButtonElement | null;
+      return button?.dataset.flowerPrimaryAction === 'stop' && !button.disabled;
+    });
+
+    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
+    const clientRequestID = launchTurn.mock.calls[0]?.[0].client_request_id;
+    if (!launchedInput || !clientRequestID) throw new Error('missing launch input');
+    receiptDeferred.resolve({
+      client_request_id: clientRequestID,
+      thread_id: 'thread-stop-before-projection',
+      admission_id: 'admission-stop-before-projection',
+      kind: 'admitting',
+    });
+
+    await waitFor(() => stopThread.mock.calls.length === 1);
+    await waitFor(() => runtime.querySelector('[data-flower-pending-submission-id]') === null);
+    expect(stopThread).toHaveBeenCalledWith('thread-stop-before-projection');
+    expect(runtime.querySelectorAll('[data-flower-message-role="user"]')).toHaveLength(0);
+    expect(runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-status')).toBe('idle');
+  });
+
+  it('keeps the optimistic admission and reports a Stop-specific error when deferred Stop fails', async () => {
+    const receiptDeferred = deferred<FlowerTurnLaunchReceipt>();
+    let launchedInput: FlowerTurnLaunchInput | null = null;
+    const launchTurn = vi.fn((input: FlowerTurnLaunchInput) => {
+      launchedInput = input;
+      return receiptDeferred.promise;
+    });
+    const stopThread = vi.fn(async () => {
+      throw new Error('stop transport unavailable');
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => []),
+      loadThread: vi.fn(async () => liveBootstrap(thread({
+        thread_id: 'thread-deferred-stop-failure',
+        title: 'Deferred Stop failure',
+        status: 'running',
+        messages: [],
+      }), 2)),
+      launchTurn,
+      stopThread,
+    });
+    await waitFor(() => Boolean(runtime.querySelector('textarea')));
+
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    textarea.value = 'keep pending when Stop fails';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
+    await waitFor(() => launchTurn.mock.calls.length === 1);
+    await waitFor(() => {
+      const button = runtime.querySelector('.flower-composer-submit') as HTMLButtonElement | null;
+      return button?.dataset.flowerPrimaryAction === 'stop' && !button.disabled;
+    });
+
+    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
+    const clientRequestID = launchTurn.mock.calls[0]?.[0].client_request_id;
+    if (!launchedInput || !clientRequestID) throw new Error('missing launch input');
+    receiptDeferred.resolve({
+      client_request_id: clientRequestID,
+      thread_id: 'thread-deferred-stop-failure',
+      admission_id: 'admission-deferred-stop-failure',
+      kind: 'admitting',
+    });
+
+    await waitFor(() => stopThread.mock.calls.length === 1);
+    await waitFor(() => flowerSurfaceNotifications().some((notice) => notice.message === 'stop transport unavailable'));
+    expect(runtime.querySelector('[data-flower-pending-submission-id]')?.textContent).toContain('keep pending when Stop fails');
+    expect(flowerSurfaceNotifications()).toContainEqual(expect.objectContaining({
+      tone: 'error',
+      title: 'Flower could not stop this reply.',
+      message: 'stop transport unavailable',
+    }));
+    expect(flowerSurfaceNotifications()).not.toContainEqual(expect.objectContaining({
+      title: 'Flower could not send.',
+    }));
+    expect(launchTurn).toHaveBeenCalledTimes(1);
+  });
+
   it('removes a queued product row when the server timeline replacement clears the queue', async () => {
     const initialThread = thread({
       thread_id: 'thread-live-canonical-send',
