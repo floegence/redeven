@@ -1515,6 +1515,41 @@ func TestFlowerLiveCanonicalApprovalQueueSupportsIdentityCheckedResolution(t *te
 	}
 }
 
+func TestCurrentFloretApprovalResolvesNonCurrentBatchTargetByIdentity(t *testing.T) {
+	t.Parallel()
+
+	r := newRun(runOptions{})
+	r.host.authorityThreadID = "thread_batch_target"
+	requestedAt := time.UnixMilli(1_700_100_000_000)
+	first := flruntime.ApprovalRecord{
+		ApprovalID: "approval-first", RootThreadID: "thread_batch_target", EffectAttemptID: "effect-first", ToolCallID: "tool-first",
+		ToolName: "terminal.exec", ToolKind: "local", RunID: "run_batch_target", ThreadID: "thread_batch_target", TurnID: "turn_batch_target",
+		Step: 1, BatchIndex: 0, BatchSize: 2, State: "requested", Revision: 1, QueueSequence: 1,
+		RequestedAt: requestedAt, UpdatedAt: requestedAt, ArgsHash: "args-first", RequestFingerprint: "fingerprint-first",
+	}
+	second := first
+	second.ApprovalID = "approval-second"
+	second.EffectAttemptID = "effect-second"
+	second.ToolCallID = "tool-second"
+	second.BatchIndex = 1
+	second.QueueSequence = 2
+	second.ArgsHash = "args-second"
+	second.RequestFingerprint = "fingerprint-second"
+	host := &recordingFloretHost{approvalQueue: flruntime.ApprovalQueue{
+		RootThreadID: "thread_batch_target", Generation: 4, Revision: 9, CurrentApprovalID: first.ApprovalID,
+		Items: []flruntime.ApprovalRecord{first, second}, GeneratedAt: requestedAt,
+	}}
+	r.setActiveFloretHost(host)
+
+	gotQueue, got, ok, err := r.currentFloretApproval(context.Background(), flowerApprovalActionID("run_batch_target", second.ToolCallID), "run_batch_target", second.ToolCallID)
+	if err != nil || !ok {
+		t.Fatalf("currentFloretApproval(non-current) = queue=%#v approval=%#v ok=%v err=%v, want target approval", gotQueue, got, ok, err)
+	}
+	if got.ApprovalID != second.ApprovalID || gotQueue.CurrentApprovalID != first.ApprovalID {
+		t.Fatalf("resolved queue/approval = %#v/%#v, want second target with first still current", gotQueue, got)
+	}
+}
+
 func TestFlowerLiveApprovalSnapshotCarriesFloretApprovalContext(t *testing.T) {
 	t.Parallel()
 

@@ -988,8 +988,11 @@ func (s *Service) SubmitFlowerApproval(meta *session.Meta, req SubmitFlowerAppro
 	if queue.Generation != req.QueueGeneration || queue.Revision != req.QueueRevision {
 		return nil, approvalConflict("approval runtime state changed")
 	}
-	if !approval.CanApprove {
-		return nil, approvalConflict(firstNonEmptyString(approval.ReadOnlyReason, "approval is not available"))
+	// CanApprove describes whether this action is the primary visible composer
+	// action. Floret authorization is identity-based and supports independently
+	// resolving another requested item in the same batch.
+	if approval.State != FlowerApprovalStateRequested || approval.Status != FlowerApprovalStatusPending {
+		return nil, approvalConflict("approval is not available")
 	}
 	decision := flruntime.ApprovalDecisionReject
 	if req.Approved {

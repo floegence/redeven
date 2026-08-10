@@ -466,7 +466,7 @@ function stringRecord(raw: unknown): Readonly<Record<string, string>> | undefine
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
-const activityStatuses = new Set<FlowerActivityStatus>(['pending', 'running', 'waiting', 'success', 'error', 'canceled']);
+const activityStatuses = new Set<FlowerActivityStatus>(['pending', 'running', 'waiting', 'success', 'error', 'declined', 'canceled']);
 const activitySeverities = new Set<FlowerActivitySeverity>(['quiet', 'normal', 'warning', 'error', 'blocking']);
 const activityKinds = new Set<FlowerActivityKind>(['tool', 'hosted_tool', 'control', 'budget']);
 const activityRenderers = new Set<FlowerActivityRenderer>(['structured', 'terminal', 'file', 'patch', 'web_search', 'todos', 'question', 'completion']);
@@ -693,7 +693,7 @@ function mapActivityItem(raw: unknown): FlowerActivityItem | null {
 function mapActivityCounts(raw: unknown): FlowerActivityTimelineBlock['summary']['counts'] {
   const record = plainRecordValue(raw) ?? {};
   const out: Record<string, number> = {};
-  for (const key of ['pending', 'running', 'waiting', 'success', 'error', 'canceled', 'approval']) {
+  for (const key of ['pending', 'running', 'waiting', 'success', 'error', 'declined', 'canceled', 'approval']) {
     const value = integerOrZero(record[key]);
     if (value > 0) out[key] = value;
   }

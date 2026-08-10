@@ -395,7 +395,7 @@ export type FlowerSurfaceCopy = Readonly<{
       title: string;
       description: string;
     }>;
-    toolStatuses: Readonly<Record<'pending' | 'running' | 'waiting' | 'success' | 'error' | 'canceled', string>>;
+    toolStatuses: Readonly<Record<'pending' | 'running' | 'waiting' | 'success' | 'error' | 'declined' | 'canceled', string>>;
     toolCallCanceled: string;
     toolApprovalRejectedDetail: string;
     toolApprovalRequired: string;
@@ -408,6 +408,8 @@ export type FlowerSurfaceCopy = Readonly<{
     toolApprovalComposerTitle: string;
     toolApprovalComposerDescription: string;
     toolApprovalQueueCount: (count: number) => string;
+    toolApprovalRejectBatch: string;
+    toolApprovalRejectBatchAction: (count: number) => string;
     toolApprovalOutsideWorkspaceRisk: string;
     toolApprovalWritesFilesRisk: string;
     toolApprovalWorkingDirectory: string;
@@ -628,6 +630,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       waiting: 'Waiting',
       success: 'Done',
       error: 'Failed',
+      declined: 'Declined',
       canceled: 'Canceled',
     },
     toolCallCanceled: 'Tool call was canceled',
@@ -648,6 +651,8 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     toolApprovalComposerTitle: 'Allow this tool to run?',
     toolApprovalComposerDescription: 'The conversation is paused until you approve or reject this action.',
     toolApprovalQueueCount: (count) => `${count} more approval${count === 1 ? '' : 's'} waiting`,
+    toolApprovalRejectBatch: 'Reject all in this batch',
+    toolApprovalRejectBatchAction: (count) => `Reject all ${count} pending tool approvals`,
     toolApprovalOutsideWorkspaceRisk: 'This command may access resources outside the workspace.',
     toolApprovalWritesFilesRisk: 'This action will modify files.',
     toolApprovalWorkingDirectory: 'Working directory',

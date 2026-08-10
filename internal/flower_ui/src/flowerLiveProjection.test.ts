@@ -4387,6 +4387,55 @@ describe('Flower live projection', () => {
     })).toThrow(/activity item status is unsupported/);
   });
 
+  it('maps structured declined tool results as quiet terminal activity', () => {
+    const mapped = mapFlowerLiveEvents({
+      events: [{
+        schema_version: 1,
+        seq: 1,
+        endpoint_id: 'runtime',
+        thread_id: 'th-live',
+        turn_id: 'turn-1',
+        run_id: 'run-1',
+        at_unix_ms: 3000,
+        kind: 'message.block_set',
+        payload: {
+          message_id: 'assistant-live',
+          block_index: 0,
+          block: {
+            type: 'activity-timeline',
+            schema_version: 1,
+            thread_id: 'th-live',
+            turn_id: 'turn-1',
+            run_id: 'run-1',
+            summary: { status: 'declined', severity: 'quiet', needs_attention: false, total_items: 2, counts: { declined: 2 } },
+            items: ['tool-1', 'tool-2'].map((toolID) => ({
+              item_id: toolID,
+              tool_id: toolID,
+              tool_name: 'terminal.exec',
+              kind: 'tool',
+              status: 'declined',
+              severity: 'quiet',
+              needs_attention: false,
+              requires_approval: false,
+              approval_state: 'rejected',
+              presentation: { label: `Command ${toolID}`, renderer: 'terminal', payload: { command: `echo ${toolID}` } },
+            })),
+          },
+        },
+      }],
+      next_cursor: 1,
+      retained_from_seq: 1,
+    });
+
+    const wrapper = (mapped.events[0]?.payload as { block?: { block?: { summary?: { counts?: unknown }; items?: readonly { status?: string; severity?: string; needs_attention?: boolean; requires_approval?: boolean }[] } } }).block;
+    const block = wrapper?.block;
+    expect(block?.summary?.counts).toEqual({ declined: 2 });
+    expect(block?.items).toEqual([
+      expect.objectContaining({ status: 'declined', severity: 'quiet', needs_attention: false, requires_approval: false }),
+      expect.objectContaining({ status: 'declined', severity: 'quiet', needs_attention: false, requires_approval: false }),
+    ]);
+  });
+
   it('rejects terminal activity pending lifecycle payload fields', () => {
     expect(() => mapFlowerLiveEvents({
       events: [{

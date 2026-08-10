@@ -12,6 +12,7 @@ import type {
   FlowerActivityStatus,
   FlowerLiveEvent,
   FlowerLiveEventsResponse,
+  FlowerSubmitApprovalRequest,
   FlowerThreadSnapshot,
 } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import {
@@ -2104,6 +2105,51 @@ describe('FlowerSurface navigation activity', () => {
     expect(composer.querySelector('.flower-composer-stop-thread')).toBeNull();
   });
 
+  it('renders multiple declined tools quietly without failed message or run error surfaces', async () => {
+    const declinedThread = thread({
+      thread_id: 'thread-declined-tools',
+      title: 'Declined tools',
+      status: 'success',
+      messages: [{
+        id: 'm-declined-tools',
+        role: 'assistant',
+        content: '',
+        status: 'complete',
+        created_at_ms: 7_200,
+        blocks: [activityTimeline({
+          thread_id: 'thread-declined-tools',
+          run_id: 'run-declined-tools',
+          turn_id: 'm-declined-tools',
+          status: 'declined',
+          items: [
+            activityItem({ item_id: 'tool-declined-one', tool_id: 'tool-declined-one', status: 'declined', approval_state: 'rejected', label: 'curl weather source one', renderer: 'terminal', payload: { command: 'curl https://weather.one' } }),
+            activityItem({ item_id: 'tool-declined-two', tool_id: 'tool-declined-two', status: 'declined', approval_state: 'rejected', label: 'curl weather source two', renderer: 'terminal', payload: { command: 'curl https://weather.two' } }),
+          ],
+        })],
+      }],
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [declinedThread]),
+      loadThread: vi.fn(async () => liveBootstrap(declinedThread)),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-declined-tools"] button')));
+    (runtime.querySelector('[data-thread-id="thread-declined-tools"] button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelectorAll('[data-flower-activity-status="declined"]').length === 2);
+
+    expect(runtime.querySelectorAll('[data-flower-activity-status="declined"]')).toHaveLength(2);
+    expect(runtime.querySelector('.flower-error-card')).toBeNull();
+    expect(runtime.querySelector('.flower-message-error')).toBeNull();
+    expect(runtime.textContent).not.toContain('Message failed');
+    expect(runtime.textContent).not.toContain('Flower could not finish');
+    const firstRow = runtime.querySelector('[data-flower-activity-item-id="tool-declined-one"] .flower-activity-inline-button') as HTMLButtonElement;
+    firstRow.click();
+    await waitFor(() => runtime.textContent?.includes('User declined tool execution') ?? false);
+    expect(runtime.textContent).toContain('User declined tool execution');
+    runtime.remove();
+  });
+
   it('uses the composer as the primary surface for delegated approvals', async () => {
     const delegatedAction = {
       action_id: 'dappr-terminal',
@@ -2632,6 +2678,65 @@ describe('FlowerSurface navigation activity', () => {
     expect(composer.textContent).toContain('2 / 2');
     expect(composer.querySelector('[role="status"][aria-live="polite"]')?.textContent).toBe('Approval 2 of 2');
     expect((document.activeElement as HTMLElement | null)?.tagName).toBe('SECTION');
+  });
+
+  it('rejects every pending approval in an explicit batch without changing identities', async () => {
+    const firstApproval = {
+      action_id: 'appr-batch-first',
+      origin: 'main_tool' as const,
+      run_id: 'run-batch-reject',
+      tool_id: 'tool-batch-first',
+      tool_name: 'terminal.exec',
+      state: 'requested' as const,
+      status: 'pending' as const,
+      revision: 4,
+      version: 1,
+      requested_at_ms: 8_100,
+      can_approve: true,
+      expected_seq: 41,
+      surface_role: 'primary_action' as const,
+      queue_generation: 2,
+      queue_order: 1,
+      batch_index: 0,
+      batch_size: 2,
+      summary: { label: 'First command', command: 'npm test', effects: ['shell'] },
+    };
+    const secondApproval = {
+      ...firstApproval,
+      action_id: 'appr-batch-second',
+      tool_id: 'tool-batch-second',
+      can_approve: false,
+      surface_role: 'locator' as const,
+      queue_order: 2,
+      batch_index: 1,
+      summary: { label: 'Second command', command: 'npm run lint', effects: ['shell'] },
+    };
+    const approvalThread = thread({
+      thread_id: 'thread-batch-reject',
+      title: 'Batch rejection',
+      status: 'waiting_approval',
+      approval_actions: [firstApproval, secondApproval],
+      approval_queue: { generation: 2, revision: 7, current_action_id: firstApproval.action_id, current_position: 1, total: 2, unresolved_count: 2 },
+    });
+    const submitApproval = vi.fn(async (_request: FlowerSubmitApprovalRequest) => ({ ok: true, current_cursor: 42 }));
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [approvalThread]),
+      loadThread: vi.fn(async () => liveBootstrap(approvalThread, 41)),
+      submitApproval,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-batch-reject"] button')));
+    (runtime.querySelector('[data-thread-id="thread-batch-reject"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-approval-reject-batch')));
+    (runtime.querySelector('.flower-approval-reject-batch') as HTMLButtonElement).click();
+    await waitFor(() => submitApproval.mock.calls.length === 2);
+
+    expect(submitApproval.mock.calls.map(([request]) => request)).toEqual([
+      expect.objectContaining({ action_id: firstApproval.action_id, run_id: firstApproval.run_id, tool_id: firstApproval.tool_id, approved: false, queue_generation: 2 }),
+      expect.objectContaining({ action_id: secondApproval.action_id, run_id: secondApproval.run_id, tool_id: secondApproval.tool_id, approved: false, queue_generation: 2 }),
+    ]);
+    expect(submitApproval.mock.calls[0]?.[0].idempotency_key).not.toBe(submitApproval.mock.calls[1]?.[0].idempotency_key);
   });
 
   it('does not periodically refresh unchanged thread summaries while the live stream is connected', async () => {

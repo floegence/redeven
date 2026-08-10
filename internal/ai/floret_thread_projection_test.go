@@ -797,6 +797,42 @@ func TestFlowerBlocksFromPublishedFloretApprovalPreservesTerminalPresentationBef
 	}
 }
 
+func TestFlowerBlocksFromPublishedFloretApprovalProjectsUserRejectionAsQuietDeclined(t *testing.T) {
+	t.Parallel()
+
+	timeline := observation.ActivityTimeline{
+		SchemaVersion: observation.ActivityTimelineSchemaVersion,
+		RunID:         "run_declined", ThreadID: "thread_declined", TurnID: "turn_declined", TraceID: "run_declined",
+		Summary: observation.ActivitySummary{
+			Status: observation.ActivityStatusDeclined, Severity: observation.ActivitySeverityQuiet,
+			NeedsAttention: false, TotalItems: 2, Counts: observation.ActivityCounts{Declined: 2},
+		},
+		Items: []observation.ActivityItem{
+			{ItemID: "tool:one", ToolID: "one", ToolName: "terminal.exec", Kind: observation.ActivityKindTool, Status: observation.ActivityStatusDeclined, Severity: observation.ActivitySeverityQuiet, ApprovalState: "rejected", Presentation: &fltools.ActivityPresentation{Label: "echo one", Renderer: fltools.ActivityRendererTerminal, Payload: fltools.TerminalActivityPayload{Command: "echo one"}}},
+			{ItemID: "tool:two", ToolID: "two", ToolName: "terminal.exec", Kind: observation.ActivityKindTool, Status: observation.ActivityStatusDeclined, Severity: observation.ActivitySeverityQuiet, ApprovalState: "rejected", Presentation: &fltools.ActivityPresentation{Label: "echo two", Renderer: fltools.ActivityRendererTerminal, Payload: fltools.TerminalActivityPayload{Command: "echo two"}}},
+		},
+	}
+	if err := observation.ValidateActivityTimeline(timeline); err != nil {
+		t.Fatalf("declined timeline should validate: %v", err)
+	}
+	blocks, err := newRun(runOptions{}).flowerBlocksFromFloretThreadProjection(flruntime.ThreadTurnProjection{
+		RunID: "run_declined", ThreadID: "thread_declined", TurnID: "turn_declined", TraceID: "run_declined",
+		Segments: []flruntime.ThreadTurnProjectionSegment{{Kind: flruntime.ThreadTurnProjectionSegmentActivityTimeline, ActivityTimeline: &timeline}},
+	})
+	if err != nil || len(blocks) != 1 {
+		t.Fatalf("declined projection blocks=%#v err=%v", blocks, err)
+	}
+	block, ok := blocks[0].(ActivityTimelineBlock)
+	if !ok || block.Summary.Status != observation.ActivityStatusDeclined || block.Summary.NeedsAttention || block.Summary.Counts.Declined != 2 || len(block.Items) != 2 {
+		t.Fatalf("declined activity projection=%#v", blocks[0])
+	}
+	for _, item := range block.Items {
+		if item.Status != observation.ActivityStatusDeclined || item.Severity != observation.ActivitySeverityQuiet || item.NeedsAttention || item.RequiresApproval || item.ApprovalState != "rejected" {
+			t.Fatalf("declined activity item=%#v", item)
+		}
+	}
+}
+
 func TestFlowerBlocksFromPublishedFloretSettleCanceledInterruptedApproval(t *testing.T) {
 	t.Parallel()
 
