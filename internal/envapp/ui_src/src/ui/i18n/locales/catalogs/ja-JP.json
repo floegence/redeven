@@ -3837,6 +3837,7 @@
       "composerReferenceLoading": "ファイルとフォルダーを検索しています...",
       "composerReferenceEmpty": "一致するファイルまたはフォルダーがありません",
       "composerReferenceError": "Flower はこの作業ディレクトリを検索できませんでした。",
+      "composerReferenceBrowseDirectory": "フォルダー {name} を開く",
       "composerReferenceRemove": "参照から {path} を削除",
       "composerReferenceAdded": "{path} を参照に追加しました。",
       "composerReferenceExists": "{path} はすでに参照されています。",

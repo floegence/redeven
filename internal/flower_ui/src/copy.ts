@@ -312,6 +312,7 @@ export type FlowerSurfaceCopy = Readonly<{
     composerReferenceLoading: string;
     composerReferenceEmpty: string;
     composerReferenceError: string;
+    composerReferenceBrowseDirectory: (name: string) => string;
     composerReferenceRemove: (path: string) => string;
     composerReferenceAdded: (path: string) => string;
     composerReferenceExists: (path: string) => string;
@@ -537,6 +538,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     composerReferenceLoading: 'Searching files and folders...',
     composerReferenceEmpty: 'No matching files or folders',
     composerReferenceError: 'Flower could not search this working directory.',
+    composerReferenceBrowseDirectory: (name) => `Browse folder ${name}`,
     composerReferenceRemove: (path) => `Remove reference ${path}`,
     composerReferenceAdded: (path) => `${path} referenced.`,
     composerReferenceExists: (path) => `${path} is already referenced.`,

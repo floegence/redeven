@@ -83,6 +83,7 @@ export const flowerSurfaceEnUS = {
     composerReferenceLoading: 'Searching files and folders...',
     composerReferenceEmpty: 'No matching files or folders',
     composerReferenceError: 'Flower could not search this working directory.',
+    composerReferenceBrowseDirectory: 'Browse folder {name}',
     composerReferenceRemove: 'Remove reference {path}',
     composerReferenceAdded: '{path} referenced.',
     composerReferenceExists: '{path} is already referenced.',

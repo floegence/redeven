@@ -3837,6 +3837,7 @@
       "composerReferenceLoading": "Recherche de fichiers et de dossiers...",
       "composerReferenceEmpty": "Aucun fichier ou dossier correspondant",
       "composerReferenceError": "Flower n’a pas pu rechercher dans ce répertoire de travail.",
+      "composerReferenceBrowseDirectory": "Parcourir le dossier {name}",
       "composerReferenceRemove": "Supprimer la référence {path}",
       "composerReferenceAdded": "{path} ajouté aux références.",
       "composerReferenceExists": "{path} est déjà référencé.",

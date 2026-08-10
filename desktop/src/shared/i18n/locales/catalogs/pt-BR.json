@@ -82,6 +82,7 @@
       "composerReferenceLoading": "Buscando arquivos e pastas...",
       "composerReferenceEmpty": "Nenhum arquivo ou pasta correspondente",
       "composerReferenceError": "O Flower não conseguiu pesquisar neste diretório de trabalho.",
+      "composerReferenceBrowseDirectory": "Explorar a pasta {name}",
       "composerReferenceRemove": "Remover a referência {path}",
       "composerReferenceAdded": "{path} foi adicionado às referências.",
       "composerReferenceExists": "{path} já está referenciado.",

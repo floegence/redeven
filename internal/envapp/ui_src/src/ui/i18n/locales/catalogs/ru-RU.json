@@ -3965,6 +3965,7 @@
       "composerReferenceLoading": "Поиск файлов и папок...",
       "composerReferenceEmpty": "Подходящие файлы и папки не найдены",
       "composerReferenceError": "Flower не удалось выполнить поиск в этом рабочем каталоге.",
+      "composerReferenceBrowseDirectory": "Открыть папку {name}",
       "composerReferenceRemove": "Удалить ссылку {path}",
       "composerReferenceAdded": "Добавлена ссылка на {path}.",
       "composerReferenceExists": "Ссылка на {path} уже добавлена.",

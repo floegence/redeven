@@ -96,6 +96,7 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       composerReferenceLoading: t(i18n, k('chat.composerReferenceLoading')),
       composerReferenceEmpty: t(i18n, k('chat.composerReferenceEmpty')),
       composerReferenceError: t(i18n, k('chat.composerReferenceError')),
+      composerReferenceBrowseDirectory: (name) => t(i18n, k('chat.composerReferenceBrowseDirectory'), { name }),
       composerReferenceRemove: (path) => t(i18n, k('chat.composerReferenceRemove'), { path }),
       composerReferenceAdded: (path) => t(i18n, k('chat.composerReferenceAdded'), { path }),
       composerReferenceExists: (path) => t(i18n, k('chat.composerReferenceExists'), { path }),
