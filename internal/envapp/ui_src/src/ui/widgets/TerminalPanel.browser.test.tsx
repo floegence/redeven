@@ -991,6 +991,7 @@ describe('TerminalPanel browser activity integration', () => {
         clearForPermissionDenied: vi.fn(),
         requestPreparedHistory: async () => null,
         startHistoryWarmup: vi.fn(),
+        noteOutputCommitted: vi.fn(),
         invalidateHistory: vi.fn(),
         setSurfaceActive: vi.fn(),
       } as any;
@@ -2487,6 +2488,7 @@ describe('TerminalPanel browser activity integration', () => {
       clearForPermissionDenied: vi.fn(),
       requestPreparedHistory: vi.fn().mockResolvedValue(null),
       startHistoryWarmup: vi.fn(),
+      noteOutputCommitted: vi.fn(),
       invalidateHistory: vi.fn(),
       setSurfaceActive: vi.fn(),
     } as any;

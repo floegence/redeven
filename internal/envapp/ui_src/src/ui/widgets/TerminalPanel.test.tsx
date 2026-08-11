@@ -5827,6 +5827,7 @@ describe('TerminalPanel', () => {
       clearForPermissionDenied: vi.fn(),
       requestPreparedHistory: vi.fn().mockResolvedValue(null),
       startHistoryWarmup: vi.fn(),
+      noteOutputCommitted: vi.fn(),
       invalidateHistory: vi.fn(),
       setSurfaceActive: vi.fn(),
     } as any;
@@ -5886,6 +5887,7 @@ describe('TerminalPanel', () => {
       clearForPermissionDenied: vi.fn(),
       requestPreparedHistory: vi.fn().mockResolvedValue(null),
       startHistoryWarmup: vi.fn(),
+      noteOutputCommitted: vi.fn(),
       invalidateHistory: vi.fn(),
       setSurfaceActive: vi.fn(),
     } as any;
@@ -5957,6 +5959,7 @@ describe('TerminalPanel', () => {
       clearForPermissionDenied: vi.fn(),
       requestPreparedHistory: vi.fn().mockResolvedValue(null),
       startHistoryWarmup: vi.fn(),
+      noteOutputCommitted: vi.fn(),
       invalidateHistory: vi.fn(),
       setSurfaceActive: vi.fn(),
     } as any;
@@ -6086,6 +6089,7 @@ describe('TerminalPanel', () => {
       clearForPermissionDenied: vi.fn(),
       requestPreparedHistory: vi.fn().mockResolvedValue(null),
       startHistoryWarmup: vi.fn(),
+      noteOutputCommitted: vi.fn(),
       invalidateHistory: vi.fn(),
       setSurfaceActive: vi.fn(),
     } as any;
@@ -7002,6 +7006,7 @@ describe('TerminalPanel', () => {
       clearForPermissionDenied: vi.fn(),
       requestPreparedHistory: vi.fn().mockResolvedValue(null),
       startHistoryWarmup: vi.fn(),
+      noteOutputCommitted: vi.fn(),
       invalidateHistory: vi.fn(),
       setSurfaceActive: vi.fn(),
     } as any;
@@ -7095,6 +7100,7 @@ describe('TerminalPanel', () => {
       clearForPermissionDenied: vi.fn(),
       requestPreparedHistory: vi.fn().mockResolvedValue(null),
       startHistoryWarmup: vi.fn(),
+      noteOutputCommitted: vi.fn(),
       invalidateHistory: vi.fn(),
       setSurfaceActive: vi.fn(),
     } as any;
@@ -7172,6 +7178,7 @@ describe('TerminalPanel', () => {
       clearForPermissionDenied: vi.fn(),
       requestPreparedHistory: vi.fn().mockResolvedValue(null),
       startHistoryWarmup: vi.fn(),
+      noteOutputCommitted: vi.fn(),
       invalidateHistory: vi.fn(),
       setSurfaceActive: vi.fn(),
     } as any;
@@ -7253,6 +7260,7 @@ describe('TerminalPanel', () => {
       clearForPermissionDenied: vi.fn(),
       requestPreparedHistory: vi.fn().mockResolvedValue(null),
       startHistoryWarmup: vi.fn(),
+      noteOutputCommitted: vi.fn(),
       invalidateHistory: vi.fn(),
       setSurfaceActive: vi.fn(),
     } as any;
@@ -7748,6 +7756,7 @@ describe('TerminalPanel', () => {
       clearForPermissionDenied: vi.fn(),
       requestPreparedHistory: vi.fn().mockResolvedValue(null),
       startHistoryWarmup: vi.fn(),
+      noteOutputCommitted: vi.fn(),
       invalidateHistory: vi.fn(),
       setSurfaceActive: vi.fn(),
     } as any;
@@ -9574,6 +9583,7 @@ describe('TerminalPanel', () => {
     } as const;
     const requestPreparedHistory = vi.fn().mockResolvedValue(preparedHistory);
     const startHistoryWarmup = vi.fn();
+    const noteOutputCommitted = vi.fn();
     const updateSessionMeta = vi.fn();
     const catalog = {
       sessions: () => terminalSessionsState.sessions,
@@ -9591,6 +9601,7 @@ describe('TerminalPanel', () => {
       clearForPermissionDenied: vi.fn(),
       requestPreparedHistory,
       startHistoryWarmup,
+      noteOutputCommitted,
       invalidateHistory: vi.fn(),
       setSurfaceActive: vi.fn(),
     } as any;
@@ -9628,6 +9639,16 @@ describe('TerminalPanel', () => {
     });
     expect(startHistoryWarmup).toHaveBeenCalled();
     expect(updateSessionMeta.mock.invocationCallOrder[0]).toBeLessThan(startHistoryWarmup.mock.invocationCallOrder[0]);
+    expect(noteOutputCommitted).not.toHaveBeenCalled();
+
+    const core = terminalCoreInstances[0];
+    core?.write.mockClear();
+    core?.clear.mockClear();
+    emitTerminalData('session-1', 'live', 2);
+    await settleTerminalPanelAfterPaint();
+    expect(noteOutputCommitted).toHaveBeenCalledWith('session-1', 'live', 2);
+    expect(core?.write).toHaveBeenCalled();
+    expect(core?.clear).not.toHaveBeenCalled();
   });
 
   it('restores an authoritative checkpoint before applying its contiguous history delta', async () => {

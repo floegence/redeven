@@ -399,6 +399,70 @@ describe('terminal history warmup', () => {
     expect(warmup.getSnapshot()).toEqual({ queued: 0, inFlight: 0, cached: 1, bytes: 0 });
   });
 
+  it('invalidates a cached empty seed only when a live output sequence advances', async () => {
+    preparePagedTerminalHistory.mockResolvedValue(completeEmptySeed());
+    const warmup = createTerminalHistoryWarmup({ budgetBytes: 100, fetchPage: async () => page() });
+    warmup.syncSessions([{ id: 'session', isActive: true, lastActiveAtMs: 1 }]);
+
+    await expect(warmup.request('session', 'background')).resolves.toMatchObject({
+      byteLength: 0,
+      complete: true,
+    });
+
+    warmup.noteOutputCommitted('session', 'history', 1);
+    warmup.noteOutputCommitted('session', 'live', undefined);
+    warmup.noteOutputCommitted('session', 'live', Number.NaN);
+    warmup.noteOutputCommitted('session', 'live', 0);
+    warmup.noteOutputCommitted('session', 'live', -1);
+    warmup.noteOutputCommitted('session', 'live', 1.5);
+    expect(warmup.get('session')).not.toBeNull();
+
+    warmup.noteOutputCommitted('session', 'live', 1);
+    expect(warmup.get('session')).toBeNull();
+    await expect(warmup.request('session', 'interactive')).resolves.toBeNull();
+
+    await expect(warmup.request('session', 'background')).resolves.not.toBeNull();
+    warmup.noteOutputCommitted('session', 'live', 1);
+    expect(warmup.get('session')).not.toBeNull();
+
+    warmup.noteOutputCommitted('session', 'live', 2);
+    expect(warmup.get('session')).toBeNull();
+
+    await expect(warmup.request('session', 'background')).resolves.not.toBeNull();
+    warmup.invalidate('session', 'clear');
+    await expect(warmup.request('session', 'background')).resolves.not.toBeNull();
+    warmup.noteOutputCommitted('session', 'live', 1);
+    expect(warmup.get('session')).toBeNull();
+  });
+
+  it('rejects a late warmup result after a live output sequence advances', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    preparePagedTerminalHistory.mockImplementation(async () => {
+      await gate;
+      return completeEmptySeed();
+    });
+    const events: Array<{ event: string; reason?: string }> = [];
+    const warmup = createTerminalHistoryWarmup({
+      budgetBytes: 100,
+      fetchPage: async () => page(),
+      onEvent: (event) => events.push(event),
+    });
+    warmup.syncSessions([{ id: 'session', isActive: true, lastActiveAtMs: 1 }]);
+
+    const pending = warmup.request('session', 'background');
+    await vi.waitFor(() => expect(preparePagedTerminalHistory).toHaveBeenCalledTimes(1));
+    warmup.noteOutputCommitted('session', 'live', 1);
+    await expect(pending).resolves.toBeNull();
+
+    release();
+    await vi.waitFor(() => expect(events).toContainEqual(expect.objectContaining({
+      event: 'skipped',
+      reason: 'cancelled',
+    })));
+    expect(warmup.get('session')).toBeNull();
+  });
+
   it('reports stable history contract failures without exposing arbitrary error text', async () => {
     const reasons: string[] = [];
     preparePagedTerminalHistory

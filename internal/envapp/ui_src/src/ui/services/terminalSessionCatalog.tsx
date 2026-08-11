@@ -60,6 +60,11 @@ export type TerminalSessionCatalogValue = Readonly<{
   clearForPermissionDenied: () => void;
   requestPreparedHistory: (sessionId: string) => Promise<PreparedPagedTerminalHistory | null>;
   startHistoryWarmup: () => void;
+  noteOutputCommitted: (
+    sessionId: string,
+    source: 'history' | 'live',
+    sequence: number | undefined,
+  ) => void;
   invalidateHistory: (sessionId: string, reason?: string) => void;
   setSurfaceActive: (surfaceId: string, active: boolean) => void;
 }>;
@@ -874,6 +879,14 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
 
   const startHistoryWarmup = () => historyWarmup?.start();
 
+  const noteOutputCommitted = (
+    sessionId: string,
+    source: 'history' | 'live',
+    sequence: number | undefined,
+  ) => {
+    historyWarmup?.noteOutputCommitted(sessionId, source, sequence);
+  };
+
   const invalidateHistory = (sessionId: string, reason?: string) => {
     historyWarmup?.invalidate(sessionId, reason);
   };
@@ -987,6 +1000,7 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     clearForPermissionDenied,
     requestPreparedHistory,
     startHistoryWarmup,
+    noteOutputCommitted,
     invalidateHistory,
     setSurfaceActive,
   };

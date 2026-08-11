@@ -23,6 +23,11 @@ export type TerminalHistoryWarmup = Readonly<{
   syncSessions: (sessions: readonly TerminalHistoryWarmupSession[]) => void;
   start: () => void;
   request: (sessionId: string, priority?: 'background' | 'interactive') => Promise<PreparedPagedTerminalHistory | null>;
+  noteOutputCommitted: (
+    sessionId: string,
+    source: 'history' | 'live',
+    sequence: number | undefined,
+  ) => void;
   invalidate: (sessionId: string, reason?: string) => void;
   setPageActive: (active: boolean) => void;
   setPageHidden: (hidden: boolean) => void;
@@ -93,6 +98,7 @@ export function createTerminalHistoryWarmup(options: TerminalHistoryWarmupOption
   const budgetBytes = Math.max(0, Math.floor(Number(options.budgetBytes) || 0));
   const sessions = new Map<string, TerminalHistoryWarmupSession>();
   const revisions = new Map<string, number>();
+  const liveCommittedThroughSequence = new Map<string, number>();
   const queue: Task[] = [];
   const inFlight = new Map<string, Task>();
   const cache = new Map<string, CacheEntry>();
@@ -150,6 +156,13 @@ export function createTerminalHistoryWarmup(options: TerminalHistoryWarmupOption
     if (index >= 0) queue.splice(index, 1);
     if (inFlight.get(task.sessionId) === task) inFlight.delete(task.sessionId);
     settleTask(task, null);
+  };
+
+  const invalidateRevision = (sessionId: string, reason: string) => {
+    revisions.set(sessionId, revisionFor(sessionId) + 1);
+    dropCache(sessionId, reason);
+    const task = inFlight.get(sessionId);
+    if (task) abortTask(task, reason);
   };
 
   const availableBudgetFor = (candidate: TerminalHistoryWarmupSession): number => {
@@ -407,13 +420,19 @@ export function createTerminalHistoryWarmup(options: TerminalHistoryWarmupOption
       pump();
       return task.promise;
     },
+    noteOutputCommitted(sessionId, source, sequence) {
+      const id = normalizeSessionId(sessionId);
+      if (!id || source !== 'live' || !Number.isSafeInteger(sequence) || Number(sequence) <= 0) return;
+      const normalizedSequence = Number(sequence);
+      if (normalizedSequence <= (liveCommittedThroughSequence.get(id) ?? 0)) return;
+      liveCommittedThroughSequence.set(id, normalizedSequence);
+      invalidateRevision(id, 'live-output');
+    },
     invalidate(sessionId, reason = 'invalidated') {
       const id = normalizeSessionId(sessionId);
       if (!id) return;
-      revisions.set(id, revisionFor(id) + 1);
-      dropCache(id, reason);
-      const task = inFlight.get(id);
-      if (task) abortTask(task, reason);
+      liveCommittedThroughSequence.delete(id);
+      invalidateRevision(id, reason);
     },
     setPageActive(active) {
       if (pageActive === active) return;
@@ -456,6 +475,7 @@ export function createTerminalHistoryWarmup(options: TerminalHistoryWarmupOption
       queue.splice(0, queue.length);
       cache.clear();
       sessions.clear();
+      liveCommittedThroughSequence.clear();
       cachedBytes = 0;
     },
   };

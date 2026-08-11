@@ -2048,6 +2048,9 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     sequence: number | undefined,
   ) => {
     tabActivityTracker.handleOutputCommitted(sessionId, { source, sequence });
+    if (source === 'live') {
+      terminalCatalog?.noteOutputCommitted(sessionId, source, sequence);
+    }
   };
 
   const handleOutputCoverage = (
