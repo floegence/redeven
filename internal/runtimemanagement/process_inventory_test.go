@@ -115,6 +115,60 @@ func TestBuildRuntimeProcessInventorySeparatesIdentityOwnershipLayoutAndAuthorit
 	}
 }
 
+func TestBuildRuntimeProcessInventoryExcludesDifferentDesktopScopes(t *testing.T) {
+	root := t.TempDir()
+	optionsA := RuntimeProcessInventoryOptions{
+		RuntimeRoot:    filepath.Join(root, "desktop-a", "runtime"),
+		StateRoot:      filepath.Join(root, "desktop-a", "state"),
+		DesktopOwnerID: "desktop-a",
+	}
+	optionsB := RuntimeProcessInventoryOptions{
+		RuntimeRoot:    filepath.Join(root, "desktop-b", "runtime"),
+		StateRoot:      filepath.Join(root, "desktop-b", "state"),
+		DesktopOwnerID: "desktop-b",
+	}
+	executableA := filepath.Join(optionsA.RuntimeRoot, "runtime", "managed", "bin", "redeven")
+	executableB := filepath.Join(optionsB.RuntimeRoot, "runtime", "managed", "bin", "redeven")
+	snapshotA := testSnapshot(optionsA, 101, 1_001, executableA, optionsA.StateRoot, optionsA.DesktopOwnerID)
+	snapshotB := testSnapshot(optionsB, 102, 1_002, executableB, optionsB.StateRoot, optionsB.DesktopOwnerID)
+
+	inventoryA := buildRuntimeProcessInventory(
+		optionsA,
+		runtimeProcessExecutionScope{UserIdentity: "tester", NamespaceID: "mnt:[current]"},
+		[]runtimeProcessSnapshot{snapshotA, snapshotB},
+	)
+	inventoryB := buildRuntimeProcessInventory(
+		optionsB,
+		runtimeProcessExecutionScope{UserIdentity: "tester", NamespaceID: "mnt:[current]"},
+		[]runtimeProcessSnapshot{snapshotA, snapshotB},
+	)
+	if len(inventoryA.Instances) != 1 || inventoryA.Instances[0].PID != snapshotA.PID {
+		t.Fatalf("desktop A inventory = %#v", inventoryA)
+	}
+	if len(inventoryB.Instances) != 1 || inventoryB.Instances[0].PID != snapshotB.PID {
+		t.Fatalf("desktop B inventory = %#v", inventoryB)
+	}
+}
+
+func TestBuildRuntimeProcessInventoryExcludesManagedExecutableFromAnotherRuntimeRoot(t *testing.T) {
+	root := t.TempDir()
+	options := RuntimeProcessInventoryOptions{
+		RuntimeRoot:    filepath.Join(root, "desktop-a", "runtime"),
+		StateRoot:      filepath.Join(root, "desktop-a", "state"),
+		DesktopOwnerID: "desktop-a",
+	}
+	foreignExecutable := filepath.Join(root, "desktop-b", "runtime", "runtime", "managed", "bin", "redeven")
+	foreign := testSnapshot(options, 103, 1_003, foreignExecutable, options.StateRoot, "desktop-b")
+	inventory := buildRuntimeProcessInventory(
+		options,
+		runtimeProcessExecutionScope{UserIdentity: "tester", NamespaceID: "mnt:[current]"},
+		[]runtimeProcessSnapshot{foreign},
+	)
+	if len(inventory.Instances) != 0 {
+		t.Fatalf("foreign runtime-root process was inventoried: %#v", inventory)
+	}
+}
+
 func TestRuntimeProcessInventoryUsesMatchingLockAsOwnerEvidence(t *testing.T) {
 	options := testInventoryOptions(t)
 	lockPath := filepath.Join(options.StateRoot, "local-environment", "agent.lock")

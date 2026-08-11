@@ -373,6 +373,20 @@ func currentManagedExecutable(options RuntimeProcessInventoryOptions, executable
 	return false
 }
 
+func managedRuntimeRootForExecutable(executablePath string) (string, bool) {
+	clean := comparableRuntimePath(executablePath)
+	suffix := filepath.Join("runtime", "managed", "bin", "redeven")
+	marker := string(filepath.Separator) + suffix
+	if !strings.HasSuffix(clean, marker) {
+		return "", false
+	}
+	root := strings.TrimSuffix(clean, marker)
+	if root == "" {
+		return "", false
+	}
+	return filepath.Clean(root), true
+}
+
 func enrichRuntimeProcessSnapshot(snapshot runtimeProcessSnapshot, stateRoot string) runtimeProcessSnapshot {
 	for _, lockPath := range runtimeLockPaths(stateRoot) {
 		body, err := os.ReadFile(lockPath)
@@ -413,6 +427,10 @@ func classifyRuntimeProcess(
 		return RuntimeProcessInstance{}, false
 	}
 	if filepath.Base(snapshot.ExecutablePath) != "redeven" {
+		return RuntimeProcessInstance{}, false
+	}
+	if managedRuntimeRoot, managed := managedRuntimeRootForExecutable(snapshot.ExecutablePath); managed &&
+		comparableRuntimePath(managedRuntimeRoot) != comparableRuntimePath(options.RuntimeRoot) {
 		return RuntimeProcessInstance{}, false
 	}
 	if scope.NamespaceID != "" && snapshot.NamespaceID != "" && scope.NamespaceID != snapshot.NamespaceID {
