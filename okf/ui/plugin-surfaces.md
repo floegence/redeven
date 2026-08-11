@@ -121,7 +121,7 @@ keep the inventory master and selected detail side by side.
 After a direct-session handshake, the Shell starts recovery on the explicit
 authenticated plugin-session-ready transition; it does not insert a fixed
 stability timer. The handshake credential can precede the server-side scope
-needed by that mutation. ReDevPlugin `v0.7.23` normally reconstructs activation after Host
+needed by that mutation. ReDevPlugin `v0.7.24` normally reconstructs activation after Host
 restart or process-local lease expiry from sealed local registry and
 release-trust evidence without remote artifact downloads; Redeven retains a
 bounded 90-second outer timeout as a fail-closed guard rather than a normal
