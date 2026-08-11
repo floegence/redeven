@@ -107,7 +107,11 @@ import {
   type DesktopWelcomeRuntimeHealthTarget,
 } from './desktopWelcomeRuntimeHealth';
 import { parseLocalUIBind } from './localUIBind';
-import { resolveConfiguredDesktopTempRoot } from './statePaths';
+import {
+  resolveConfiguredDesktopCacheRoot,
+  resolveConfiguredDesktopTempRoot,
+  resolveConfiguredDesktopUserDataRoot,
+} from './statePaths';
 import {
   buildBlockedLaunchIssue,
   buildControlPlaneIssue,
@@ -18335,6 +18339,17 @@ const configuredDesktopTempRoot = resolveConfiguredDesktopTempRoot();
 if (configuredDesktopTempRoot) {
   mkdirSync(configuredDesktopTempRoot, { recursive: true, mode: 0o700 });
   app.setPath('temp', configuredDesktopTempRoot);
+}
+const configuredDesktopUserDataRoot = resolveConfiguredDesktopUserDataRoot();
+if (configuredDesktopUserDataRoot) {
+  mkdirSync(configuredDesktopUserDataRoot, { recursive: true, mode: 0o700 });
+  app.setPath('userData', configuredDesktopUserDataRoot);
+  app.setPath('sessionData', path.join(configuredDesktopUserDataRoot, 'session-data'));
+}
+const configuredDesktopCacheRoot = resolveConfiguredDesktopCacheRoot();
+if (configuredDesktopCacheRoot) {
+  mkdirSync(configuredDesktopCacheRoot, { recursive: true, mode: 0o700 });
+  app.setPath('cache', configuredDesktopCacheRoot);
 }
 
 if (!app.requestSingleInstanceLock()) {

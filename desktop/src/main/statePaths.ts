@@ -3,6 +3,8 @@ import path from 'node:path';
 
 const LOCAL_ENVIRONMENT_DIR = 'local-environment';
 export const DESKTOP_TEMP_ROOT_ENV_NAME = 'REDEVEN_DESKTOP_TEMP_ROOT';
+export const DESKTOP_USER_DATA_ROOT_ENV_NAME = 'REDEVEN_DESKTOP_USER_DATA_ROOT';
+export const DESKTOP_CACHE_ROOT_ENV_NAME = 'REDEVEN_DESKTOP_CACHE_ROOT';
 
 export type DesktopLocalEnvironmentStateLayout = Readonly<{
   stateRoot: string;
@@ -38,6 +40,26 @@ export function resolveConfiguredDesktopTempRoot(
 ): string | null {
   const explicit = String(env[DESKTOP_TEMP_ROOT_ENV_NAME] ?? '').trim();
   return explicit === '' ? null : path.resolve(explicit);
+}
+
+function resolveConfiguredDesktopPath(
+  env: NodeJS.ProcessEnv,
+  name: string,
+): string | null {
+  const explicit = String(env[name] ?? '').trim();
+  return explicit === '' ? null : path.resolve(explicit);
+}
+
+export function resolveConfiguredDesktopUserDataRoot(
+  env: NodeJS.ProcessEnv = process.env,
+): string | null {
+  return resolveConfiguredDesktopPath(env, DESKTOP_USER_DATA_ROOT_ENV_NAME);
+}
+
+export function resolveConfiguredDesktopCacheRoot(
+  env: NodeJS.ProcessEnv = process.env,
+): string | null {
+  return resolveConfiguredDesktopPath(env, DESKTOP_CACHE_ROOT_ENV_NAME);
 }
 
 function stateLayoutForResolvedStateRoot(

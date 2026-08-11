@@ -402,7 +402,7 @@
               "process",
               "runtime"
             ],
-            "summary": "Redeven Desktop governs Local, SSH-hosted, and container-hosted Env Runtime processes through one process inventory contract. Stop, Restart, and Update do not infer liveness from a saved PID, a current state directory, an in-memory ready record, or a status command exit code. Gateway service processes remain outside this inventory and retain their independent lifecycle.",
+            "summary": "Redeven Desktop governs Local, SSH-hosted, and container-hosted Env Runtime processes through one process inventory contract. Stop, Restart, and Update do not infer liveness from a saved PID, a current state directory, an in-memory ready record, or a status command exit code. Desktop development launches may additionally bind Electron user-data, session-data, cache, and temp roots to an explicit task-owned namespace so a second checkout can run without contending for the shared profile lock. Gateway service processes remain outside this inventory and retain their independent lifecycle.",
             "section_count": 2
           }
         ]
@@ -5918,8 +5918,8 @@
         "title": "Desktop runtime process lifecycle",
         "type": "Desktop Contract"
       },
-      "body_length": 16773,
-      "summary": "Redeven Desktop governs Local, SSH-hosted, and container-hosted Env Runtime processes through one process inventory contract. Stop, Restart, and Update do not infer liveness from a saved PID, a current state directory, an in-memory ready record, or a status command exit code. Gateway service processes remain outside this inventory and retain their independent lifecycle.",
+      "body_length": 17270,
+      "summary": "Redeven Desktop governs Local, SSH-hosted, and container-hosted Env Runtime processes through one process inventory contract. Stop, Restart, and Update do not infer liveness from a saved PID, a current state directory, an in-memory ready record, or a status command exit code. Desktop development launches may additionally bind Electron user-data, session-data, cache, and temp roots to an explicit task-owned namespace so a second checkout can run without contending for the shared profile lock. Gateway service processes remain outside this inventory and retain their independent lifecycle.",
       "sections": [
         {
           "id": "contract",
@@ -6008,6 +6008,18 @@
           "source": "redeven:desktop/src/main/runtimeProcessInventory.ts",
           "line": 230,
           "description": "The shared Desktop planner separates hard identity blocks from digest-bound takeover confirmation."
+        },
+        {
+          "id": "redeven:desktop/src/main/statePaths.ts:8:desktop resolves explicit task-owned temp, user-data, and cache roots without fallback when isolation is requested.",
+          "source": "redeven:desktop/src/main/statePaths.ts",
+          "line": 8,
+          "description": "Desktop resolves explicit task-owned temp, user-data, and cache roots without fallback when isolation is requested."
+        },
+        {
+          "id": "redeven:desktop/src/main/main.ts:18330:electron applies those roots before taking the single-instance lock.",
+          "source": "redeven:desktop/src/main/main.ts",
+          "line": 18330,
+          "description": "Electron applies those roots before taking the single-instance lock."
         },
         {
           "id": "redeven:desktop/src/shared/desktopRuntimePresence.ts:89:runtime presence remains the sole renderer-facing source of management capability.",
@@ -10303,5 +10315,5 @@
       ]
     }
   ],
-  "source_sha256": "dde68dcf21aa930021754ca04609188d8a9fbb861fdb2464d43d63a9b33cdd87"
+  "source_sha256": "ac7bfb5c62208f7895d7c1aae17bfe78c2c94f46dc0342e2756b12204c87ea1f"
 }

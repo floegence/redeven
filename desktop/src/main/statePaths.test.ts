@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import {
   defaultLocalEnvironmentStateLayout,
   localEnvironmentStateLayout,
+  resolveConfiguredDesktopCacheRoot,
   resolveConfiguredDesktopTempRoot,
+  resolveConfiguredDesktopUserDataRoot,
 } from './statePaths';
 
 describe('statePaths', () => {
@@ -40,6 +42,17 @@ describe('statePaths', () => {
       TMPDIR: '/var/folders/shared',
     })).toBe('/tmp/redeven-plugin-e2e/runtime-data');
     expect(resolveConfiguredDesktopTempRoot({ TMPDIR: '/var/folders/shared' })).toBeNull();
+  });
+
+  it('resolves task-owned Electron user-data and cache roots without falling back to the shared profile', () => {
+    const env = {
+      REDEVEN_DESKTOP_USER_DATA_ROOT: '/tmp/redeven-scope/user-data',
+      REDEVEN_DESKTOP_CACHE_ROOT: '/tmp/redeven-scope/cache',
+    };
+    expect(resolveConfiguredDesktopUserDataRoot(env)).toBe('/tmp/redeven-scope/user-data');
+    expect(resolveConfiguredDesktopCacheRoot(env)).toBe('/tmp/redeven-scope/cache');
+    expect(resolveConfiguredDesktopUserDataRoot({})).toBeNull();
+    expect(resolveConfiguredDesktopCacheRoot({})).toBeNull();
   });
 
   it('does not expose a second local Flower state layout', async () => {
