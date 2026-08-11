@@ -1,4 +1,4 @@
-import { bytesFromBase64 } from './base64';
+import { bytesFromBase64, bytesToBase64 } from './base64';
 import {
   normalizeTerminalExecutionContextInfo,
   normalizeTerminalForegroundCommandDisplayName,
@@ -11,6 +11,9 @@ import type {
   wire_terminal_foreground_command_update_notify,
   wire_terminal_history_req,
   wire_terminal_history_resp,
+  wire_terminal_history_checkpoint,
+  wire_terminal_history_checkpoint_commit_req,
+  wire_terminal_history_checkpoint_commit_resp,
   wire_terminal_name_update_notify,
   wire_terminal_output_activity_info,
   wire_terminal_output_activity_update_notify,
@@ -33,6 +36,8 @@ import type {
   TerminalClearResponse,
   TerminalHistoryRequest,
   TerminalHistoryResponse,
+  TerminalHistoryCheckpointCommitRequest,
+  TerminalHistoryCheckpointCommitResponse,
   TerminalForegroundCommandUpdateEvent,
   TerminalExecutionContextUpdateEvent,
   TerminalNameUpdateEvent,
@@ -52,6 +57,7 @@ import { canonicalAbsolutePath } from '../../../utils/canonicalAbsolutePath';
 import type {
   TerminalExecutionContextInfo,
   TerminalForegroundCommandInfo,
+  TerminalHistoryCheckpoint,
   TerminalOutputActivityInfo,
   TerminalWorkStateInfo,
 } from '@floegence/floeterm-terminal-web';
@@ -242,6 +248,9 @@ export function toWireTerminalHistoryRequest(req: TerminalHistoryRequest): wire_
 
 export function fromWireTerminalHistoryResponse(resp: wire_terminal_history_resp): TerminalHistoryResponse {
   const chunks = Array.isArray(resp?.chunks) ? resp.chunks : [];
+  const checkpoint = resp?.checkpoint && typeof resp.checkpoint === 'object'
+    ? fromWireTerminalHistoryCheckpoint(resp.checkpoint)
+    : undefined;
   return {
     chunks: chunks
       .map((c) => ({
@@ -259,6 +268,10 @@ export function fromWireTerminalHistoryResponse(resp: wire_terminal_history_resp
           : {}),
       }))
       .filter((c) => c.data.length > 0),
+    ...(checkpoint ? { checkpoint } : {}),
+    ...(hasOwnField(resp, 'delta_start_sequence')
+      ? { deltaStartSequence: optionalHistorySequence(resp, 'delta_start_sequence') }
+      : {}),
     nextStartSeq: Number(resp?.next_start_seq ?? 0),
     hasMore: Boolean(resp?.has_more ?? false),
     firstSequence: Number(resp?.first_sequence ?? 0),
@@ -280,6 +293,52 @@ export function fromWireTerminalHistoryResponse(resp: wire_terminal_history_resp
     coveredBytes: Number(resp?.covered_bytes ?? 0),
     totalBytes: Number(resp?.total_bytes ?? 0),
   };
+}
+
+function fromWireTerminalHistoryCheckpoint(
+  checkpoint: wire_terminal_history_checkpoint,
+): TerminalHistoryCheckpoint {
+  return {
+    formatVersion: Number(checkpoint.format_version) as 1,
+    engineId: String(checkpoint.engine_id) as 'floegence-ghostty-web',
+    coveredThroughSequence: Number(checkpoint.covered_through_sequence),
+    geometryGeneration: Number(checkpoint.geometry_generation),
+    parserEpoch: Number(checkpoint.parser_epoch),
+    cols: Number(checkpoint.cols),
+    rows: Number(checkpoint.rows),
+    checksumSha256: String(checkpoint.checksum_sha256),
+    stateDigestSha256: String(checkpoint.state_digest_sha256),
+    bytes: bytesFromBase64(String(checkpoint.data_b64 ?? '')),
+  };
+}
+
+function toWireTerminalHistoryCheckpoint(
+  checkpoint: TerminalHistoryCheckpoint,
+): wire_terminal_history_checkpoint {
+  return {
+    format_version: checkpoint.formatVersion,
+    engine_id: checkpoint.engineId,
+    covered_through_sequence: checkpoint.coveredThroughSequence,
+    geometry_generation: checkpoint.geometryGeneration,
+    parser_epoch: checkpoint.parserEpoch,
+    cols: checkpoint.cols,
+    rows: checkpoint.rows,
+    checksum_sha256: checkpoint.checksumSha256,
+    state_digest_sha256: checkpoint.stateDigestSha256,
+    data_b64: bytesToBase64(checkpoint.bytes),
+  };
+}
+
+export function toWireTerminalHistoryCheckpointCommitRequest(
+  req: TerminalHistoryCheckpointCommitRequest,
+): wire_terminal_history_checkpoint_commit_req {
+  return { session_id: req.sessionId, checkpoint: toWireTerminalHistoryCheckpoint(req.checkpoint) };
+}
+
+export function fromWireTerminalHistoryCheckpointCommitResponse(
+  resp: wire_terminal_history_checkpoint_commit_resp,
+): TerminalHistoryCheckpointCommitResponse {
+  return { ok: Boolean(resp?.ok ?? false) };
 }
 
 export function toWireTerminalClearRequest(req: TerminalClearRequest): wire_terminal_clear_req {

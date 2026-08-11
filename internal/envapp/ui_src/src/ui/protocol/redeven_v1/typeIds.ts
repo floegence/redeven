@@ -56,6 +56,7 @@ export const redevenV1TypeIds = {
     outputActivityUpdate: 2014,
     executionContextUpdate: 2015,
     workStateUpdate: 2016,
+    historyCheckpointCommit: 2017,
   },
   monitor: {
     sysMonitor: 3001,

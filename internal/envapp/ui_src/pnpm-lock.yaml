@@ -41,8 +41,8 @@ importers:
         specifier: 0.40.14
         version: 0.40.14(solid-js@1.9.13)
       '@floegence/floeterm-terminal-web':
-        specifier: 0.13.6
-        version: 0.13.6
+        specifier: 0.14.0
+        version: 0.14.0
       '@floegence/flowersec-core':
         specifier: 2.3.6
         version: 2.3.6
@@ -399,13 +399,16 @@ packages:
     peerDependencies:
       solid-js: ^1.8.0
 
-  '@floegence/floeterm-terminal-web@0.13.6':
-    resolution: {integrity: sha512-a1k7rTOkihtrl7vRlQFfgjc3CUAEMHBvuRdDehYS5r/KuF1ClpvpAbK5dq0j++wZ1fKLikcbXgezWjr4FTStEA==}
+  '@floegence/floeterm-terminal-web@0.14.0':
+    resolution: {integrity: sha512-pwAov1hpVOq+ie+Gu4vRGp1q+7VeVCx8CP1yrXA7sArFKixR6owPB62tXPGX/x6TFKOZaYQJyp6DbxemEKH/8g==}
 
   '@floegence/flowersec-core@2.3.6':
     resolution: {integrity: sha512-AjWBNAFogQza/MqZX4lWmly9dZGSsLHBTnmlAsF05aMcjnBxdZHgVYAsbO3jKGA5BX3Wcp+TH96T2lcNqXlWYg==}
     engines: {node: '>=20.0.0'}
     hasBin: true
+
+  '@floegence/ghostty-web@0.5.0-rc.0':
+    resolution: {integrity: sha512-4fRGcIdoIrIqQhbh3iFRha4jSW2NK/tWUSIHv8/5j8ZmzC0T0TTLqX+5GlQKxqPvZEBe21R4asD71v35vhKB2g==}
 
   '@floegence/redevplugin-contracts@0.7.22':
     resolution: {integrity: sha512-oT5iZdYc1bjYzUmQChHib/yIZ8BaDg1a1auQmh+9aJLR+XuELbqRKRQyoVd/59gaT94xddDo+/jvgfB1uCq/lw==}
@@ -1662,9 +1665,6 @@ packages:
   get-caller-file@2.0.5:
     resolution: {integrity: sha512-DyFP3BM/3YHTQOCUL/w0OZHR0lpKeGrxotcHWcqNEdnltqFwXVfhEBQ94eIo34AfQpo0rGki4cyIiftY06h2Fg==}
     engines: {node: 6.* || 8.* || >= 10.*}
-
-  ghostty-web@0.4.0-next.14.g6a1a50d:
-    resolution: {integrity: sha512-01H59pAKq43Y8ZZiIhH98cu0ahZaoGoPQPtW4KnZPT0JFdQYen2djsXrOnt27JnMv64D4eLeAq8D6h72mo52xQ==}
 
   github-from-package@0.0.0:
     resolution: {integrity: sha512-SyHy3T1v2NUXn29OsWdxmK6RwHD+vkj3v8en8AOBZ1wBQ/hCAQ5bAQTD02kW4W9tUp/3Qh6J8r9EvntiyCmOOw==}
@@ -3087,10 +3087,10 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@floegence/floeterm-terminal-web@0.13.6':
+  '@floegence/floeterm-terminal-web@0.14.0':
     dependencies:
       '@floegence/beamterm-renderer': 1.0.2
-      ghostty-web: 0.4.0-next.14.g6a1a50d
+      '@floegence/ghostty-web': 0.5.0-rc.0
 
   '@floegence/flowersec-core@2.3.6':
     dependencies:
@@ -3105,6 +3105,8 @@ snapshots:
       - bufferutil
       - supports-color
       - utf-8-validate
+
+  '@floegence/ghostty-web@0.5.0-rc.0': {}
 
   '@floegence/redevplugin-contracts@0.7.22': {}
 
@@ -4424,8 +4426,6 @@ snapshots:
   gensync@1.0.0-beta.2: {}
 
   get-caller-file@2.0.5: {}
-
-  ghostty-web@0.4.0-next.14.g6a1a50d: {}
 
   github-from-package@0.0.0: {}
 

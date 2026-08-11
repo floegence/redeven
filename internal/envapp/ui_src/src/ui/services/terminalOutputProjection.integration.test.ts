@@ -141,10 +141,48 @@ describe('terminal output projection with the published coordinator', () => {
     coordinator.dispose();
   });
 
-  it('rebases advancing retention and projects each accepted sequence once', async () => {
+  it('fails closed when advancing retention has no authoritative checkpoint', async () => {
+    const projection = createTerminalOutputProjection({});
+    const coordinator = createPagedTerminalOutputCoordinator({
+      fetchPage: vi.fn().mockResolvedValue(page({
+        coveredThroughSequence: 2,
+        snapshotEndSequence: 6,
+        firstRetainedSequence: 6,
+        historyGeneration: 1,
+        historyTruncated: true,
+      })),
+      transformChunk: projection.transformChunk,
+      write: vi.fn(),
+      clear: projection.reset,
+      policy: { retryDelaysMs: [] },
+    });
+
+    await coordinator.attach(1);
+
+    expect(coordinator.getSnapshot()).toMatchObject({
+      state: 'failed',
+      failure: { code: 'history_checkpoint_missing', retryable: false },
+    });
+    coordinator.dispose();
+  });
+
+  it('restores a validated checkpoint before projecting its contiguous retained delta once', async () => {
     const writes: string[] = [];
     const transformedSequences: number[] = [];
+    const order: string[] = [];
     const projection = createTerminalOutputProjection({});
+    const checkpoint = {
+      formatVersion: 1 as const,
+      engineId: 'floegence-ghostty-web' as const,
+      coveredThroughSequence: 5,
+      geometryGeneration: 1,
+      parserEpoch: 1,
+      cols: 120,
+      rows: 55,
+      checksumSha256: 'a'.repeat(64),
+      stateDigestSha256: 'b'.repeat(64),
+      bytes: new Uint8Array(encoder.encode('checkpoint')),
+    };
     const fetchPage = vi.fn()
       .mockResolvedValueOnce(page({
         chunks: [chunk(1, 'one')],
@@ -156,18 +194,14 @@ describe('terminal output projection with the published coordinator', () => {
         historyGeneration: 1,
       }))
       .mockResolvedValueOnce(page({
-        coveredThroughSequence: 2,
-        snapshotEndSequence: 6,
-        firstRetainedSequence: 6,
-        historyGeneration: 1,
-        historyTruncated: true,
-      }))
-      .mockResolvedValueOnce(page({
+        checkpoint,
+        deltaStartSequence: 6,
         chunks: [chunk(6, 'six')],
         coveredThroughSequence: 6,
         snapshotEndSequence: 6,
         firstRetainedSequence: 6,
         historyGeneration: 1,
+        historyTruncated: true,
       }));
     const coordinator = createPagedTerminalOutputCoordinator({
       fetchPage,
@@ -175,8 +209,18 @@ describe('terminal output projection with the published coordinator', () => {
         transformedSequences.push(item.sequence ?? 0);
         return projection.transformChunk(item);
       },
-      write: (data) => writes.push(decoder.decode(data)),
-      writeHistory: (data) => writes.push(decoder.decode(data)),
+      write: (data) => {
+        order.push('write');
+        writes.push(decoder.decode(data));
+      },
+      writeHistory: (data) => {
+        order.push('write-history');
+        writes.push(decoder.decode(data));
+      },
+      restoreCheckpoint: async (restored) => {
+        order.push('restore');
+        expect(restored).toEqual(checkpoint);
+      },
       clear: () => {
         writes.push('[clear]');
         projection.reset();
@@ -187,7 +231,8 @@ describe('terminal output projection with the published coordinator', () => {
     await coordinator.attach(1);
 
     expect(transformedSequences).toEqual([6]);
-    expect(writes.join('')).toBe('[clear]six');
+    expect(order).toEqual(['restore', 'write-history']);
+    expect(writes.join('')).toBe('six');
     expect(coordinator.getSnapshot().coveredThroughSequence).toBe(6);
     coordinator.dispose();
   });

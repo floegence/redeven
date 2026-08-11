@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -36,6 +37,7 @@ const (
 	TypeID_TERMINAL_OUTPUT_ACTIVITY_UPDATE    uint32 = 2014 // notify (agent -> client): foreground command output activity changed
 	TypeID_TERMINAL_EXECUTION_CONTEXT_UPDATE  uint32 = 2015 // notify (agent -> client): atomic location/application context changed
 	TypeID_TERMINAL_WORK_STATE_UPDATE         uint32 = 2016 // notify (agent -> client): semantic work state changed
+	TypeID_TERMINAL_HISTORY_CHECKPOINT_COMMIT uint32 = 2017 // validated checkpoint commit (client -> agent)
 )
 
 const (
@@ -46,6 +48,8 @@ const (
 	terminalHistoryBufferSize        = 2048
 	terminalHistoryBufferMaxChunks   = 65536
 	terminalHistoryBufferMaxBytes    = 8 * 1024 * 1024
+	terminalHistorySpoolSegmentBytes = 4 * 1024 * 1024
+	terminalHistorySpoolMaxBytes     = 512 * 1024 * 1024
 )
 
 var ErrSessionNotFound = errors.New("terminal session not found")
@@ -182,15 +186,18 @@ func (r fixedShellResolver) ResolveShellContext(ctx context.Context, logger term
 	return r.ResolveShell(logger), nil
 }
 
-func newTerminalGoManagerConfig(shell string, log *slog.Logger) termgo.ManagerConfig {
+func newTerminalGoManagerConfig(shell string, agentHomeAbs string, log *slog.Logger) termgo.ManagerConfig {
 	shellInitBaseDir := defaultRedevenShellInitBaseDir()
 	return termgo.ManagerConfig{
-		Logger:                 slogTerminalLogger{log: log},
-		EnvProvider:            termgo.DefaultEnvProvider{},
-		ShellResolver:          fixedShellResolver{shell: shell},
-		HistoryBufferSize:      terminalHistoryBufferSize,
-		HistoryBufferMaxChunks: terminalHistoryBufferMaxChunks,
-		HistoryBufferMaxBytes:  terminalHistoryBufferMaxBytes,
+		Logger:                      slogTerminalLogger{log: log},
+		EnvProvider:                 termgo.DefaultEnvProvider{},
+		ShellResolver:               fixedShellResolver{shell: shell},
+		HistoryBufferSize:           terminalHistoryBufferSize,
+		HistoryBufferMaxChunks:      terminalHistoryBufferMaxChunks,
+		HistoryBufferMaxBytes:       terminalHistoryBufferMaxBytes,
+		HistorySpoolRoot:            filepath.Join(agentHomeAbs, "terminal-history"),
+		HistorySpoolSegmentMaxBytes: terminalHistorySpoolSegmentBytes,
+		HistorySpoolMaxBytes:        terminalHistorySpoolMaxBytes,
 		ShellArgsProvider: termgo.DefaultShellArgsProvider{
 			ShellInitBaseDir:       shellInitBaseDir,
 			EnableCommandLifecycle: true,
@@ -229,7 +236,7 @@ func NewManagerWithScope(shell string, scope *filesystemscope.Registry, log *slo
 		lifecycleHooks:        make(map[int]SessionLifecycleHook),
 	}
 
-	m.term = termgo.NewManager(newTerminalGoManagerConfig(shell, log))
+	m.term = termgo.NewManager(newTerminalGoManagerConfig(shell, m.agentHomeAbs, log))
 	m.term.SetEventHandler(&eventHandler{m: m})
 	m.deleteSessionFunc = m.deleteSessionNow
 	m.activateSessionFunc = m.term.ActivateSessionContext
@@ -324,6 +331,27 @@ func (m *Manager) RegisterWithAccessGate(r *sessionrpc.Router, meta *session.Met
 			return nil, &sessionrpc.Error{Code: 500, Message: "failed to read history"}
 		}
 		return terminalHistoryRespFromPage(page), nil
+	})
+
+	accessgate.RegisterTyped[terminalHistoryCheckpointCommitReq, terminalHistoryCheckpointCommitResp](r, TypeID_TERMINAL_HISTORY_CHECKPOINT_COMMIT, gate, meta, accessgate.RPCAccessProtected, func(_ context.Context, req *terminalHistoryCheckpointCommitReq) (*terminalHistoryCheckpointCommitResp, error) {
+		if err := requireProcessLaunchPermission(meta); err != nil {
+			return nil, err
+		}
+		if req == nil || strings.TrimSpace(req.SessionID) == "" {
+			return nil, &sessionrpc.Error{Code: 400, Message: "session_id is required"}
+		}
+		if !m.sessionAvailableForInteraction(req.SessionID) {
+			return nil, &sessionrpc.Error{Code: 404, Message: "terminal session not found"}
+		}
+		checkpoint, err := req.Checkpoint.toTerminalGo()
+		if err != nil {
+			return nil, &sessionrpc.Error{Code: 400, Message: "invalid terminal history checkpoint"}
+		}
+		if err := m.term.CommitSessionHistoryCheckpoint(req.SessionID, checkpoint); err != nil {
+			m.log.Warn("terminal history checkpoint rejected", "session_id", req.SessionID, "error", err)
+			return nil, &sessionrpc.Error{Code: 409, Message: "terminal history checkpoint rejected"}
+		}
+		return &terminalHistoryCheckpointCommitResp{OK: true}, nil
 	})
 
 	// Session stats (history buffer size, etc.)
@@ -1256,19 +1284,80 @@ type terminalHistoryChunk struct {
 }
 
 type terminalHistoryResp struct {
-	Chunks                 []terminalHistoryChunk `json:"chunks"`
-	NextStartSeq           int64                  `json:"next_start_seq,omitempty"`
-	HasMore                bool                   `json:"has_more,omitempty"`
-	FirstSequence          int64                  `json:"first_sequence,omitempty"`
-	LastSequence           int64                  `json:"last_sequence,omitempty"`
-	FirstRetainedSequence  int64                  `json:"first_retained_sequence"`
-	CoveredThroughSequence int64                  `json:"covered_through_sequence"`
-	SnapshotEndSequence    int64                  `json:"snapshot_end_sequence"`
-	HistoryGeneration      int64                  `json:"history_generation"`
-	HistoryReset           bool                   `json:"history_reset"`
-	HistoryTruncated       bool                   `json:"history_truncated"`
-	CoveredBytes           int64                  `json:"covered_bytes,omitempty"`
-	TotalBytes             int64                  `json:"total_bytes,omitempty"`
+	Chunks                 []terminalHistoryChunk     `json:"chunks"`
+	Checkpoint             *terminalHistoryCheckpoint `json:"checkpoint,omitempty"`
+	DeltaStartSequence     int64                      `json:"delta_start_sequence,omitempty"`
+	NextStartSeq           int64                      `json:"next_start_seq,omitempty"`
+	HasMore                bool                       `json:"has_more,omitempty"`
+	FirstSequence          int64                      `json:"first_sequence,omitempty"`
+	LastSequence           int64                      `json:"last_sequence,omitempty"`
+	FirstRetainedSequence  int64                      `json:"first_retained_sequence"`
+	CoveredThroughSequence int64                      `json:"covered_through_sequence"`
+	SnapshotEndSequence    int64                      `json:"snapshot_end_sequence"`
+	HistoryGeneration      int64                      `json:"history_generation"`
+	HistoryReset           bool                       `json:"history_reset"`
+	HistoryTruncated       bool                       `json:"history_truncated"`
+	CoveredBytes           int64                      `json:"covered_bytes,omitempty"`
+	TotalBytes             int64                      `json:"total_bytes,omitempty"`
+}
+
+type terminalHistoryCheckpoint struct {
+	FormatVersion          uint32 `json:"format_version"`
+	EngineID               string `json:"engine_id"`
+	CoveredThroughSequence int64  `json:"covered_through_sequence"`
+	GeometryGeneration     uint64 `json:"geometry_generation"`
+	ParserEpoch            uint64 `json:"parser_epoch"`
+	Cols                   int    `json:"cols"`
+	Rows                   int    `json:"rows"`
+	ChecksumSHA256         string `json:"checksum_sha256"`
+	StateDigestSHA256      string `json:"state_digest_sha256"`
+	DataB64                string `json:"data_b64"`
+}
+
+func terminalHistoryCheckpointFromGo(checkpoint *termgo.TerminalHistoryCheckpoint) *terminalHistoryCheckpoint {
+	if checkpoint == nil {
+		return nil
+	}
+	return &terminalHistoryCheckpoint{
+		FormatVersion:          checkpoint.FormatVersion,
+		EngineID:               checkpoint.EngineID,
+		CoveredThroughSequence: checkpoint.CoveredThroughSequence,
+		GeometryGeneration:     checkpoint.GeometryGeneration,
+		ParserEpoch:            checkpoint.ParserEpoch,
+		Cols:                   checkpoint.Cols,
+		Rows:                   checkpoint.Rows,
+		ChecksumSHA256:         checkpoint.ChecksumSHA256,
+		StateDigestSHA256:      checkpoint.StateDigestSHA256,
+		DataB64:                base64.StdEncoding.EncodeToString(checkpoint.Bytes),
+	}
+}
+
+func (checkpoint terminalHistoryCheckpoint) toTerminalGo() (termgo.TerminalHistoryCheckpoint, error) {
+	bytes, err := base64.StdEncoding.DecodeString(checkpoint.DataB64)
+	if err != nil {
+		return termgo.TerminalHistoryCheckpoint{}, err
+	}
+	return termgo.TerminalHistoryCheckpoint{
+		FormatVersion:          checkpoint.FormatVersion,
+		EngineID:               checkpoint.EngineID,
+		CoveredThroughSequence: checkpoint.CoveredThroughSequence,
+		GeometryGeneration:     checkpoint.GeometryGeneration,
+		ParserEpoch:            checkpoint.ParserEpoch,
+		Cols:                   checkpoint.Cols,
+		Rows:                   checkpoint.Rows,
+		ChecksumSHA256:         checkpoint.ChecksumSHA256,
+		StateDigestSHA256:      checkpoint.StateDigestSHA256,
+		Bytes:                  bytes,
+	}, nil
+}
+
+type terminalHistoryCheckpointCommitReq struct {
+	SessionID  string                    `json:"session_id"`
+	Checkpoint terminalHistoryCheckpoint `json:"checkpoint"`
+}
+
+type terminalHistoryCheckpointCommitResp struct {
+	OK bool `json:"ok"`
 }
 
 func normalizeTerminalHistoryPageOptions(req *terminalHistoryReq) termgo.HistoryPageOptions {
@@ -1324,6 +1413,8 @@ func terminalHistoryRespFromPage(page termgo.HistoryPage) *terminalHistoryResp {
 
 	return &terminalHistoryResp{
 		Chunks:                 out,
+		Checkpoint:             terminalHistoryCheckpointFromGo(page.Checkpoint),
+		DeltaStartSequence:     page.DeltaStartSequence,
 		NextStartSeq:           page.NextStartSeq,
 		HasMore:                page.HasMore,
 		FirstSequence:          page.FirstSequence,

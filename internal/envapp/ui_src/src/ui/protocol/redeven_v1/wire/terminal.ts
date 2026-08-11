@@ -119,8 +119,23 @@ export type wire_terminal_history_chunk = {
   rows?: number;
 };
 
+export type wire_terminal_history_checkpoint = {
+  format_version: number;
+  engine_id: string;
+  covered_through_sequence: number;
+  geometry_generation: number;
+  parser_epoch: number;
+  cols: number;
+  rows: number;
+  checksum_sha256: string;
+  state_digest_sha256: string;
+  data_b64: string;
+};
+
 export type wire_terminal_history_resp = {
   chunks: wire_terminal_history_chunk[];
+  checkpoint?: wire_terminal_history_checkpoint;
+  delta_start_sequence?: number;
   next_start_seq?: number;
   has_more?: boolean;
   first_sequence?: number;
@@ -133,6 +148,15 @@ export type wire_terminal_history_resp = {
   history_truncated?: boolean;
   covered_bytes?: number;
   total_bytes?: number;
+};
+
+export type wire_terminal_history_checkpoint_commit_req = {
+  session_id: string;
+  checkpoint: wire_terminal_history_checkpoint;
+};
+
+export type wire_terminal_history_checkpoint_commit_resp = {
+  ok: boolean;
 };
 
 export type wire_terminal_clear_req = {

@@ -28,6 +28,7 @@ import {
   createTerminalOutputProjection,
   tagTerminalOutputChunk,
 } from '../services/terminalOutputProjection';
+import { createTerminalCheckpointCompactor } from '../services/terminalCheckpointCompaction';
 import {
   restoreTerminalSnapshotOrReplay,
   type TerminalWorkingSetInteraction,
@@ -342,6 +343,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   let maxObservedLiveSequence = 0;
   let activitySettledAttachGeneration = 0;
   let activitySettledThroughSequence = 0;
+  let preAttachLiveChunks: TerminalOutputPipelineChunk[] | null = null;
   let viewAttachmentActive = props.viewActive();
 
   const transitionRecoveryPhase = (next: TerminalRecoveryPhase) => {
@@ -487,6 +489,15 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     },
     onVisibleOutput: (source, byteLength, sequence) => {
       props.onVisibleOutput?.(sessionId(), source, byteLength, sequence);
+    },
+  });
+  const checkpointCompactor = createTerminalCheckpointCompactor({
+    commit: (id, checkpoint) => props.transport.commitHistoryCheckpoint(id, checkpoint),
+    onFailure: (error) => {
+      console.warn('[TerminalPanel] Checkpoint compaction stopped; durable raw history remains retained', {
+        event: 'terminal_checkpoint_compaction_stopped',
+        error: error.message,
+      });
     },
   });
   let outputCoordinator: AtomicPagedTerminalOutputCoordinatorHandle | null = null;
@@ -705,6 +716,13 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
         const sequence = normalizeLiveSequence(chunk.sequence);
         if (sequence !== undefined) lastWrittenOutputSequence = Math.max(lastWrittenOutputSequence, sequence);
       }
+      checkpointCompactor.append(current.map(chunk => ({
+        sequence: normalizeLiveSequence(chunk.sequence) ?? 0,
+        data: chunk.data,
+        geometryGeneration: Number(chunk.geometryGeneration ?? 0),
+        cols: Number(chunk.cols ?? 0),
+        rows: Number(chunk.rows ?? 0),
+      })));
       applyPendingGeometry();
     }
   };
@@ -776,6 +794,10 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       ...(geometry?.cols !== undefined ? { cols: geometry.cols } : {}),
       ...(geometry?.rows !== undefined ? { rows: geometry.rows } : {}),
     }, 'live');
+    if (preAttachLiveChunks) {
+      preAttachLiveChunks.push(liveChunk);
+      return;
+    }
     coordinator.pushLive(liveChunk);
   };
 
@@ -803,10 +825,12 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     outputCoordinator?.dispose();
     outputCoordinator = null;
     outputCoordinatorSnapshot = null;
+    checkpointCompactor.reset();
     observedLiveAttachGeneration = 0;
     maxObservedLiveSequence = 0;
     activitySettledAttachGeneration = 0;
     activitySettledThroughSequence = 0;
+    preAttachLiveChunks = null;
     lastWrittenOutputSequence = 0;
     lastAppliedGeometryGeneration = 0;
     lastAppliedGeometryBoundary = -1;
@@ -1166,6 +1190,19 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
           && requestInitSequence === initSeq
           && requestTrace === recoveryTrace
           && coordinatorEpoch === outputCoordinatorEpoch;
+        if (requestStillCurrent && page.checkpoint?.parserEpoch !== undefined
+          && page.checkpoint.parserEpoch !== page.historyGeneration) {
+          throw new Error('Terminal history checkpoint parser epoch does not match its history generation');
+        }
+        if (requestStillCurrent && page.checkpoint) {
+          checkpointCompactor.configure({
+            sessionId: id,
+            historyGeneration: page.historyGeneration,
+            cols: page.checkpoint.cols,
+            rows: page.checkpoint.rows,
+            checkpoint: page.checkpoint,
+          });
+        }
         if (requestStillCurrent) {
           historyPageCount += 1;
           historyChunkCount += page.chunks.length;
@@ -1199,6 +1236,10 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
         }
         return {
           chunks: page.chunks.map((chunk) => tagTerminalOutputChunk(chunk, 'history')),
+          ...(page.checkpoint ? { checkpoint: page.checkpoint } : {}),
+          ...(page.deltaStartSequence !== undefined
+            ? { deltaStartSequence: page.deltaStartSequence }
+            : {}),
           hasMore: page.hasMore,
           nextCursor: page.hasMore
             && Number.isSafeInteger(page.nextStartSeq)
@@ -1229,6 +1270,12 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
         const core = term;
         if (!core) throw new Error('Terminal history geometry has no active core');
         applyTransientFixedDimensions(core, { cols, rows });
+      },
+      restoreCheckpoint: async (checkpoint) => {
+        const core = term;
+        if (!core) throw new Error('Terminal checkpoint restore has no active core');
+        applyTransientFixedDimensions(core, { cols: checkpoint.cols, rows: checkpoint.rows });
+        await core.restoreAuthoritativeCheckpoint(checkpoint);
       },
       write: (_payload, chunks) => writeTerminalChunks(chunks, false),
       writeHistory: (_payload, chunks) => writeTerminalChunks(chunks, true),
@@ -1369,8 +1416,9 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       // captures the atomic history boundary for this attachment.
       activitySettledAttachGeneration = 0;
       activitySettledThroughSequence = 0;
-      const coordinatorAttachGeneration = coordinator.beginAttach(0);
+      let coordinatorAttachGeneration = coordinator.beginAttach(0);
       activitySettledAttachGeneration = coordinatorAttachGeneration;
+      preAttachLiveChunks = [];
 
       clearOutputSubscription();
       unsubData = props.eventSource.onTerminalData(id, (ev) => {
@@ -1445,6 +1493,16 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
         reportBlockingFailure('history_contract_invalid');
         throw new Error('Terminal attach response returned an invalid history boundary');
       }
+      const historyStartSequence = attachResult.historyStartSequence;
+      if (!Number.isSafeInteger(historyStartSequence) || (historyStartSequence as number) < 0) {
+        reportBlockingFailure('history_contract_invalid');
+        throw new Error('Terminal attach response returned an invalid history start sequence');
+      }
+      const bufferedLiveChunks = preAttachLiveChunks;
+      coordinatorAttachGeneration = coordinator.beginAttach(historyStartSequence);
+      activitySettledAttachGeneration = coordinatorAttachGeneration;
+      preAttachLiveChunks = null;
+      for (const chunk of bufferedLiveChunks ?? []) coordinator.pushLive(chunk);
       const initialEffective = geometryPresentation.acknowledgeAttach({
         lifecycleEpoch,
         rendererEpoch: activeGeometryRendererEpoch,
@@ -1464,6 +1522,13 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       }
       activeRuntimeAttachGeneration = attachResult.runtimeAttachGeneration;
       queueTerminalGeometry({ sessionId: id, ...initialEffective });
+      checkpointCompactor.configure({
+        sessionId: id,
+        historyGeneration: attachResult.historyGeneration,
+        cols: attachResult.cols,
+        rows: attachResult.rows,
+        initialSequence: Math.max(0, attachResult.historyStartSequence - 1),
+      });
       markTerminalRecoveryMilestone(trace, 'attach-ack', {
         runtime_attach_generation: attachResult.runtimeAttachGeneration,
         cols: dims.cols,
@@ -1883,6 +1948,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     initSeq += 1;
     reloadSeq += 1;
     disposeTerminal();
+    checkpointCompactor.dispose();
     geometryPresentation.dispose();
     props.registerCore(sessionId(), null);
     props.registerSurfaceElement(sessionId(), null);

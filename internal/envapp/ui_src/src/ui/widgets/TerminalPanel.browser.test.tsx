@@ -219,6 +219,7 @@ const terminalCoreState = vi.hoisted(() => ({
     measureHostDimensions: ReturnType<typeof vi.fn>;
     captureRestorableSnapshot: ReturnType<typeof vi.fn>;
     restoreSnapshot: ReturnType<typeof vi.fn>;
+    restoreAuthoritativeCheckpoint: ReturnType<typeof vi.fn>;
     clear: ReturnType<typeof vi.fn>;
     getDimensions: () => { cols: number; rows: number };
     focus: ReturnType<typeof vi.fn>;
@@ -543,6 +544,7 @@ vi.mock('@floegence/floeterm-terminal-web', async () => {
       createdAtMs: Date.now(),
     }));
     restoreSnapshot = vi.fn().mockResolvedValue(true);
+    restoreAuthoritativeCheckpoint = vi.fn().mockResolvedValue(undefined);
     getResourceEstimate = vi.fn(() => ({
       bufferBytes: 256 * 1024,
       cellCount: 2_000,
@@ -1383,6 +1385,19 @@ describe('TerminalPanel browser activity integration', () => {
       firstRetainedSequence: 5,
       historyGeneration: 3,
       historyTruncated: true,
+      checkpoint: {
+        formatVersion: 1,
+        engineId: 'floegence-ghostty-web',
+        coveredThroughSequence: 4,
+        geometryGeneration: 7,
+        parserEpoch: 3,
+        cols: 120,
+        rows: 55,
+        checksumSha256: 'a'.repeat(64),
+        stateDigestSha256: 'b'.repeat(64),
+        bytes: textEncoder.encode('retained-baseline'),
+      },
+      deltaStartSequence: 5,
       coveredBytes: 8,
       totalBytes: 8,
     }));
@@ -1404,6 +1419,9 @@ describe('TerminalPanel browser activity integration', () => {
     );
     expect(retainedGeometry).toBeGreaterThanOrEqual(0);
     expect(currentGeometry).toBeGreaterThan(retainedGeometry);
+    expect(core.restoreAuthoritativeCheckpoint).toHaveBeenCalledTimes(1);
+    expect(core.restoreAuthoritativeCheckpoint.mock.invocationCallOrder[0])
+      .toBeLessThan(core.write.mock.invocationCallOrder[0]!);
     expect(host.querySelector('button[aria-label="Update Runtime"]')).toBeNull();
   });
 
@@ -1612,12 +1630,28 @@ describe('TerminalPanel browser activity integration', () => {
       firstRetainedSequence: 4,
       historyGeneration: 1,
       historyTruncated: true,
+      checkpoint: {
+        formatVersion: 1,
+        engineId: 'floegence-ghostty-web',
+        coveredThroughSequence: 3,
+        geometryGeneration: 1,
+        parserEpoch: 1,
+        cols: 80,
+        rows: 24,
+        checksumSha256: 'a'.repeat(64),
+        stateDigestSha256: 'b'.repeat(64),
+        bytes: textEncoder.encode('fullscreen-baseline'),
+      },
+      deltaStartSequence: 4,
       coveredBytes: 57,
       totalBytes: 57,
     }));
 
     await vi.waitFor(() => expect(refreshedCore.write.mock.calls.length).toBe(2));
     expect(oldCore.dispose).toHaveBeenCalledTimes(1);
+    expect(refreshedCore.restoreAuthoritativeCheckpoint).toHaveBeenCalledTimes(1);
+    expect(refreshedCore.restoreAuthoritativeCheckpoint.mock.invocationCallOrder[0])
+      .toBeLessThan(refreshedCore.write.mock.invocationCallOrder[0]!);
     expect(refreshedCore.write.mock.calls.map((call) => decodeTerminalWrite(call[0]))).toEqual([
       '\u001b[Hpartial-four\u001b[2;1Hpartial-five\u001b[3;1Hpartial-six',
       '\u001b[?1049h\u001b[2J\u001b[HFLOETERM_TOP_REDRAW',

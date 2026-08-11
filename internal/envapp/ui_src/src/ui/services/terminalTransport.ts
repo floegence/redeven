@@ -1,6 +1,7 @@
 import type {
   TerminalDataChunk,
   TerminalEventSource,
+  TerminalHistoryCheckpoint,
   TerminalTransport,
 } from '@floegence/floeterm-terminal-web';
 import {
@@ -48,6 +49,7 @@ export type RedevenTerminalTransport = TerminalTransport & Readonly<{
     endSeq: number,
     options?: TerminalHistoryPageOptions,
   ): Promise<TerminalHistoryPage>;
+  commitHistoryCheckpoint(sessionId: string, checkpoint: TerminalHistoryCheckpoint): Promise<void>;
   getSessionStats(sessionId: string): Promise<TerminalSessionStats>;
   forgetSession(sessionId: string): void;
   syncConnectionEpoch(key: object | null): void;
@@ -130,6 +132,8 @@ export function createRedevenTerminalLiveBundle(
         });
         return {
           chunks: page.chunks,
+          ...(page.checkpoint ? { checkpoint: page.checkpoint } : {}),
+          ...(page.deltaStartSequence !== undefined ? { deltaStartSequence: page.deltaStartSequence } : {}),
           firstRetainedSequence: page.firstRetainedSequence,
           nextStartSequence: page.nextStartSeq,
           hasMore: page.hasMore,
@@ -166,6 +170,10 @@ export function createRedevenTerminalLiveBundle(
     ...live.transport,
     attachWithHistoryBoundary: async (sessionId, cols, rows) => live.transport.attachWithHistoryBoundary(sessionId, cols, rows),
     historyPage: requestHistoryPage,
+    commitHistoryCheckpoint: async (sessionId, checkpoint) => {
+      const response = await rpc.terminal.commitHistoryCheckpoint({ sessionId, checkpoint });
+      if (!response.ok) throw new Error('terminal history checkpoint commit was not acknowledged');
+    },
     getSessionStats: async (sessionId) => {
       const response = await rpc.terminal.getSessionStats({ sessionId });
       const totalBytes = Number(response?.history?.totalBytes ?? 0);

@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -560,6 +561,18 @@ func TestNormalizeTerminalHistoryPageOptionsDefaultsAndClamps(t *testing.T) {
 }
 
 func TestTerminalHistoryRespFromPageIncludesCursorMetadata(t *testing.T) {
+	checkpoint := &termgo.TerminalHistoryCheckpoint{
+		FormatVersion:          1,
+		EngineID:               "floegence-ghostty-web",
+		CoveredThroughSequence: 3,
+		GeometryGeneration:     7,
+		ParserEpoch:            12,
+		Cols:                   120,
+		Rows:                   55,
+		ChecksumSHA256:         strings.Repeat("a", 64),
+		StateDigestSHA256:      strings.Repeat("b", 64),
+		Bytes:                  []byte("checkpoint"),
+	}
 	resp := terminalHistoryRespFromPage(termgo.HistoryPage{
 		Chunks: []termgo.TerminalDataChunk{
 			{Sequence: 4, Timestamp: 1000, Data: []byte("hello"), GeometryGeneration: 7, Cols: 120, Rows: 55},
@@ -573,6 +586,8 @@ func TestTerminalHistoryRespFromPageIncludesCursorMetadata(t *testing.T) {
 		HistoryGeneration:      12,
 		HistoryReset:           true,
 		HistoryTruncated:       true,
+		Checkpoint:             checkpoint,
+		DeltaStartSequence:     4,
 		NextStartSeq:           6,
 		HasMore:                true,
 		CoveredBytes:           10,
@@ -602,6 +617,12 @@ func TestTerminalHistoryRespFromPageIncludesCursorMetadata(t *testing.T) {
 	}
 	if !resp.HistoryReset || !resp.HistoryTruncated {
 		t.Fatalf("unexpected history reset/truncation metadata: %+v", resp)
+	}
+	if resp.DeltaStartSequence != 4 || resp.Checkpoint == nil {
+		t.Fatalf("checkpoint boundary metadata = %+v", resp)
+	}
+	if resp.Checkpoint.DataB64 != base64.StdEncoding.EncodeToString(checkpoint.Bytes) || resp.Checkpoint.ParserEpoch != 12 {
+		t.Fatalf("checkpoint payload = %+v", resp.Checkpoint)
 	}
 }
 
@@ -664,6 +685,31 @@ func TestTerminalHistoryRPCRejectsNegativeGeneration(t *testing.T) {
 	var rpcErr *sessionrpc.Error
 	if !errors.As(err, &rpcErr) || rpcErr.Code != 400 || rpcErr.Message != "history_generation must be non-negative" {
 		t.Fatalf("Call() rpc error = %#v, want code 400 negative generation rejection", err)
+	}
+}
+
+func TestTerminalHistoryCheckpointRPCNormalizesSessionIDBeforeValidation(t *testing.T) {
+	m := newQuietTestManager(t, t.TempDir())
+	t.Cleanup(m.Cleanup)
+	sess, err := m.createSession("checkpoint", "")
+	if err != nil {
+		t.Fatalf("createSession() error = %v", err)
+	}
+	router := sessionrpc.NewRouter()
+	m.RegisterWithAccessGate(router, &session.Meta{CanWrite: true, CanExecute: true}, nil, nil)
+
+	request, err := json.Marshal(terminalHistoryCheckpointCommitReq{
+		SessionID:  "  " + sess.ID + "  ",
+		Checkpoint: terminalHistoryCheckpoint{DataB64: "not-base64"},
+	})
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+	var response terminalHistoryCheckpointCommitResp
+	err = router.Call(context.Background(), TypeID_TERMINAL_HISTORY_CHECKPOINT_COMMIT, json.RawMessage(request), &response)
+	var rpcErr *sessionrpc.Error
+	if !errors.As(err, &rpcErr) || rpcErr.Code != 400 || rpcErr.Message != "invalid terminal history checkpoint" {
+		t.Fatalf("Call() rpc error = %#v, want normalized session followed by checkpoint validation", err)
 	}
 }
 
@@ -1759,7 +1805,8 @@ func TestWireSessionInfoOutputActivitySupportsMixedVersions(t *testing.T) {
 }
 
 func TestNewTerminalGoManagerConfigUsesRedevenShellIntegration(t *testing.T) {
-	cfg := newTerminalGoManagerConfig("/bin/zsh", nil)
+	agentHome := t.TempDir()
+	cfg := newTerminalGoManagerConfig("/bin/zsh", agentHome, nil)
 
 	if _, ok := cfg.EnvProvider.(termgo.DefaultEnvProvider); !ok {
 		t.Fatalf("EnvProvider = %T, want termgo.DefaultEnvProvider", cfg.EnvProvider)
@@ -1794,6 +1841,13 @@ func TestNewTerminalGoManagerConfigUsesRedevenShellIntegration(t *testing.T) {
 	}
 	if cfg.HistoryBufferMaxBytes != terminalHistoryBufferMaxBytes {
 		t.Fatalf("HistoryBufferMaxBytes = %d, want %d", cfg.HistoryBufferMaxBytes, terminalHistoryBufferMaxBytes)
+	}
+	historySpoolRoot := reflect.ValueOf(cfg).FieldByName("HistorySpoolRoot")
+	if !historySpoolRoot.IsValid() {
+		t.Fatal("published terminal-go dependency does not expose durable history spool configuration")
+	}
+	if got := historySpoolRoot.String(); got != filepath.Join(agentHome, "terminal-history") {
+		t.Fatalf("HistorySpoolRoot = %q, want Redeven-owned durable state root", got)
 	}
 }
 
