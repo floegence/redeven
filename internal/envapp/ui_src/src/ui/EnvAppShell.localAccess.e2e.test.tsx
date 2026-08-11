@@ -1752,6 +1752,45 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   }, 10000);
 
+  it('refreshes a plugin that becomes enabled after the initial runtime recovery', async () => {
+    vi.useFakeTimers();
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(officialContainersProjection('enabled'));
+    pluginLifecycleMocks.refreshEnabledRuntimeState
+      .mockResolvedValueOnce({ results: [] })
+      .mockResolvedValueOnce({
+        results: [{
+          plugin_instance_id: 'plugini_redeven_official_containers',
+          status: 'refreshed',
+        }],
+      } satisfies PluginRuntimeRefreshResult);
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+      await vi.advanceTimersByTimeAsync(250);
+      await flushUntil(() => pluginLifecycleMocks.refreshEnabledRuntimeState.mock.calls.length === 1, 40);
+
+      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="plugin-center"]')), 40);
+      (host.querySelector('[data-plugin-panel-tile="plugin-center"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => Boolean(pluginCenterViewState.lastProps), 40);
+      await flushUntil(() => Boolean(pluginCenterViewState.lastProps.runtimeRecoveryByInstanceID?.plugini_redeven_official_containers), 40);
+
+      expect(pluginLifecycleMocks.refreshEnabledRuntimeState).toHaveBeenCalledTimes(2);
+      expect(pluginCenterViewState.lastProps.runtimeRecoveryByInstanceID.plugini_redeven_official_containers).toEqual({ state: 'ready' });
+      expect(pluginCenterViewState.lastProps.canOpenPluginSurfaces).toBe(true);
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
   it('keeps plugin surfaces closed, preserves typed recovery guidance, and retries only once', async () => {
     vi.useFakeTimers();
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
@@ -1760,7 +1799,7 @@ describe('EnvAppShell environment entry affordances', () => {
     pluginLifecycleMocks.refreshEnabledRuntimeState
       .mockResolvedValueOnce({
         results: [{
-          plugin_instance_id: 'plugininst_containers',
+          plugin_instance_id: 'plugini_redeven_official_containers',
           status: 'failed',
           error: {
             code: 'PLUGIN_RUNTIME_UNAVAILABLE',
@@ -1788,11 +1827,12 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="plugin-center"]')), 40);
       (host.querySelector('[data-plugin-panel-tile="plugin-center"]') as HTMLButtonElement | null)?.click();
       await flushUntil(() => Boolean(pluginCenterViewState.lastProps), 40);
+      await flushUntil(() => Boolean(pluginCenterViewState.lastProps.runtimeRecoveryByInstanceID?.plugini_redeven_official_containers), 40);
 
       expect(pluginCenterViewState.lastProps.runtimeRecovery).toBeUndefined();
-      expect(pluginCenterViewState.lastProps.runtimeRecoveryByInstanceID.plugininst_containers).toEqual({
+      expect(pluginCenterViewState.lastProps.runtimeRecoveryByInstanceID.plugini_redeven_official_containers).toEqual({
         state: 'failed',
-        error: 'plugininst_containers: Plugin trust source is fenced; contact an administrator',
+        error: 'plugini_redeven_official_containers: Plugin trust source is fenced; contact an administrator',
         reason: 'trust_fenced',
         action: 'contact_admin',
       });
