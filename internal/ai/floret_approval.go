@@ -217,7 +217,7 @@ func (r *run) currentFloretApproval(ctx context.Context, actionID string, runID 
 		return flruntime.ApprovalQueue{}, flruntime.ApprovalRecord{}, false, errors.New("Floret approval queue root identity mismatch")
 	}
 	for _, approval := range queue.Items {
-		// Floret v3.2.38 fences a decision by the exact approval identity and
+		// Floret v3.2.39 fences a decision by the exact approval identity and
 		// permits an item other than CurrentApprovalID to settle independently.
 		// CurrentApprovalID remains presentation order, not authorization.
 		if strings.TrimSpace(string(approval.RunID)) == runID &&
