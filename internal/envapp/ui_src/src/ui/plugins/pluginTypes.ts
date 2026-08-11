@@ -406,6 +406,7 @@ export type PluginRuntimeRecoveryReason = PluginRuntimeRefreshFailure['error']['
 export type PluginRuntimeRecoveryAction = PluginRuntimeRefreshFailure['error']['action'];
 export type PluginRuntimeRecoveryPresentation = Readonly<
   | { state: 'recovering'; error?: undefined; reason?: undefined; action?: undefined }
+  | { state: 'ready'; error?: undefined; reason?: undefined; action?: undefined }
   | {
     state: 'failed';
     error?: string;

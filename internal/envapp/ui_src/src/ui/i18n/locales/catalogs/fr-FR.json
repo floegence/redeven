@@ -4325,6 +4325,8 @@
       "viewIssue": "Voir le problème",
       "runtimeIssueRecovery": "Mettez Redeven ou ReDevPlugin à jour vers la version requise, redémarrez l’environnement d’exécution, puis actualisez le Centre de plugins.",
       "runtimeRecoveryInProgress": "L’accès à l’environnement d’exécution des plugins est en cours de restauration. Les surfaces de plugins resteront indisponibles jusqu’à la fin de la récupération.",
+      "runtimeRecoveryPluginInProgress": "Ce plugin est toujours en cours de récupération. Son ouverture attendra que son état d’exécution sécurisé soit prêt.",
+      "runtimeRecoveryPluginFailed": "Ce plugin n’a pas pu être récupéré. Consultez la raison et réessayez avant de l’ouvrir.",
       "runtimeRecoveryFailed": "Les surfaces de plugins restent indisponibles. Consultez l’erreur ci-dessus, puis relancez la récupération de l’environnement d’exécution.",
       "runtimeRecoveryReason": {
         "unknown": "La récupération de l’environnement d’exécution des plugins a échoué.",

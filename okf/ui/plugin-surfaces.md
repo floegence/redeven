@@ -64,6 +64,12 @@ technical information. Its identity and primary-action region remains stable
 while the author, permission, issue, and technical body scrolls independently;
 long localized copy cannot push the current action out of view. Policy caps,
 effective grants, revocation, and required-to-open semantics remain distinct.
+Startup recovery is per installed plugin rather than a Plugin Center-wide
+loading boundary. The shell, catalog, filters, and ready plugin actions remain
+interactive while another plugin recovers. Each recovering card names its own
+state; each failed card shows the safe reason and one explicit Retry action, and
+only that failed plugin's Open controls are disabled. Repeated Retry input shares
+the in-flight recovery operation and cannot create duplicate submissions.
 The directory opens with no inspector selected. Only an explicit item selection
 or Shell exact-key request opens detail; closing detail preserves the directory
 tab, query, and filters, then restores the originating exact item when it is
@@ -112,24 +118,23 @@ keep the inventory master and selected detail side by side.
 
 ## Session recovery
 
-After a direct-session handshake, the Shell waits through a cancellable 250ms
-stability window before asking the released Host to refresh enabled runtimes.
-The handshake credential can precede the server-side scope needed by that
-mutation. ReDevPlugin `v0.7.21` normally reconstructs activation after Host
+After a direct-session handshake, the Shell starts recovery on the explicit
+authenticated plugin-session-ready transition; it does not insert a fixed
+stability timer. The handshake credential can precede the server-side scope
+needed by that mutation. ReDevPlugin `v0.7.22` normally reconstructs activation after Host
 restart or process-local lease expiry from sealed local registry and
 release-trust evidence without remote artifact downloads; Redeven retains a
 bounded 90-second outer timeout as a fail-closed guard rather than a normal
 recovery budget.
 
-Until the exact `refresh-enabled` operation succeeds without a failed entry,
-Activity and Workbench plugin surfaces remain unavailable and `Open` stays
-disabled. Plugin Center presents the active recovery state. A timeout or failed
-entry shows the stable typed reason and action-specific retry, reinstall, or
-administrator-contact guidance; explicit Retry remains single-flight,
-returns presentation to recovering immediately, and never reloads the page,
-opens a surface early, or grants fallback authorization. A disconnect, replaced
-client, or Shell disposal aborts the pending wait and refresh. Only one recovery
-may be active for a connected client.
+Plugin Center remains interactive while enabled plugins recover. Recovery is
+projected by exact `plugin_instance_id`: a recovering plugin remains closed,
+ready plugins remain openable, and a failed plugin alone shows its stable typed
+reason with an explicit idempotent Retry action. Retry returns that plugin to
+recovering and shares the Host single-flight operation; it never reloads the
+page, opens a surface early, or grants fallback authorization. A disconnect,
+replaced client, or Shell disposal aborts the pending wait and refresh. Only
+one recovery may be active for a connected client.
 
 ## Official installation progress
 

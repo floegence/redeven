@@ -2078,6 +2078,69 @@ describe('PluginCenterView', () => {
     expect(open?.disabled).toBe(true);
   });
 
+  it('opens a ready plugin while another enabled plugin is still recovering', () => {
+    const onCommand = vi.fn();
+    const enabledProjection = containersPermissionProjection(true);
+    const containers = {
+      ...enabledProjection.items[0],
+      defaultLaunchTarget: {
+        pluginID: 'com.redeven.official.containers',
+        pluginInstanceID: 'plugininst_containers',
+        surfaceID: 'containers.dashboard',
+        preferredPlacement: 'activity',
+        expectedManagementRevision: 7,
+      },
+    } as const;
+    const database = {
+      ...containers,
+      inventoryKey: 'catalog:database',
+      pluginID: 'com.redeven.official.database',
+      pluginInstanceID: 'plugininst_database',
+      displayName: 'Database Tools',
+      defaultLaunchTarget: {
+        ...containers.defaultLaunchTarget,
+        pluginID: 'com.redeven.official.database',
+        pluginInstanceID: 'plugininst_database',
+        surfaceID: 'database.dashboard',
+      },
+      officialCatalog: undefined,
+    } as const;
+    const mount = document.createElement('div');
+    document.body.append(mount);
+
+    dispose = render(() => (
+      <PluginCenterView
+        projection={{ items: [containers, database] }}
+        loading={false}
+        error={null}
+        canManagePlugins
+        canOpenPluginSurfaces
+        runtimeRecoveryByInstanceID={{
+          plugininst_containers: { state: 'ready' },
+          plugininst_database: { state: 'recovering' },
+        }}
+        onRetryRuntimeRecovery={vi.fn()}
+        onRefresh={vi.fn()}
+        onCommand={onCommand}
+      />
+    ), mount);
+
+    const readyOpen = mount.querySelector<HTMLButtonElement>('[data-plugin-center-card-primary="catalog:containers"]');
+    const recoveringOpen = mount.querySelector<HTMLButtonElement>('[data-plugin-center-card-primary="catalog:database"]');
+    expect(readyOpen?.disabled).toBe(false);
+    expect(recoveringOpen?.disabled).toBe(true);
+    expect(mount.querySelector('[data-plugin-runtime-recovery="recovering"]')?.textContent)
+      .toContain('This plugin is still recovering.');
+
+    readyOpen?.click();
+    recoveringOpen?.click();
+    expect(onCommand).toHaveBeenCalledOnce();
+    expect(onCommand.mock.calls[0]?.[0]).toMatchObject({
+      type: 'open_surface',
+      pluginInstanceID: 'plugininst_containers',
+    });
+  });
+
   it('presents typed fenced recovery guidance without suggesting a blind retry', () => {
     const mount = document.createElement('div');
     document.body.append(mount);

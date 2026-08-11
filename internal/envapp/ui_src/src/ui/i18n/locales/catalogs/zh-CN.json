@@ -4325,6 +4325,8 @@
       "viewIssue": "查看问题详情",
       "runtimeIssueRecovery": "将 Redeven 或 ReDevPlugin 更新到所需版本，重启运行时，然后刷新插件中心。",
       "runtimeRecoveryInProgress": "正在恢复插件运行时访问。恢复完成前，插件界面暂不可用。",
+      "runtimeRecoveryPluginInProgress": "此插件仍在恢复中。打开操作会等待其安全运行时状态就绪。",
+      "runtimeRecoveryPluginFailed": "此插件恢复失败。请查看原因并重试后再打开。",
       "runtimeRecoveryFailed": "插件界面仍不可用。请查看上方错误，然后重试运行时恢复。",
       "runtimeRecoveryReason": {
         "unknown": "插件运行时恢复失败。",
