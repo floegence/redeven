@@ -135,6 +135,66 @@ describe('v0.7.1 plugin inventory projection', () => {
     expect(installed?.iconFallback).toBe('generic');
   });
 
+  it('uses the content-addressed market icon when an older installed release binds the same icon bytes', () => {
+    const marketIcon = officialContainers.presentation?.icon;
+    expect(marketIcon).toBeDefined();
+    const iconPath = 'ui/assets/containers-plugin.png';
+    const projection = projectPluginInventory({
+      officialCatalog: [officialContainers],
+      installedPlugins: [installedRecord({
+        version: '4.4.1',
+        manifest: {
+          ...installedRecord().manifest,
+          plugin: { ...installedRecord().manifest.plugin, version: '4.4.1' },
+          presentation: {
+            ...installedRecord().manifest.presentation,
+            icon: { path: iconPath },
+          },
+        },
+        package_entries: [{
+          path: iconPath,
+          size: 286_539,
+          sha256: `sha256:${marketIcon!.sha256}`,
+          mode: '0644',
+          content_type: marketIcon!.media_type,
+        }],
+      })],
+      permissionGrants: [readGrant],
+    });
+
+    const installed = projection.items.find((item) => item.pluginInstanceID === officialContainers.pluginInstanceID);
+    expect(installed?.iconURL).toBe(officialContainers.iconURL);
+  });
+
+  it('rejects a market icon whose bytes do not match the installed icon entry', () => {
+    const iconPath = 'ui/assets/containers-plugin.png';
+    const projection = projectPluginInventory({
+      officialCatalog: [officialContainers],
+      installedPlugins: [installedRecord({
+        version: '4.4.1',
+        manifest: {
+          ...installedRecord().manifest,
+          plugin: { ...installedRecord().manifest.plugin, version: '4.4.1' },
+          presentation: {
+            ...installedRecord().manifest.presentation,
+            icon: { path: iconPath },
+          },
+        },
+        package_entries: [{
+          path: iconPath,
+          size: 286_539,
+          sha256: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          mode: '0644',
+          content_type: 'image/png',
+        }],
+      })],
+      permissionGrants: [readGrant],
+    });
+
+    const installed = projection.items.find((item) => item.pluginInstanceID === officialContainers.pluginInstanceID);
+    expect(installed?.iconURL).toBeUndefined();
+  });
+
   it('does not project market author copy into an installed record without presentation', () => {
     const projection = projectPluginInventory({
       officialCatalog: [officialContainers],

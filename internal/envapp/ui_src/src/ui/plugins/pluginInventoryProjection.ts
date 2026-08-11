@@ -131,10 +131,11 @@ function projectCatalogItem(
   const attentionReason = installedAttentionReason(installed, catalogItem, lifecycleState, authorization);
   const externalPackage = externalPackageProjection(installed);
   const expectedReleaseHashes = catalogItem.distribution.releaseRef.expected_hashes;
-  const installedIconURL = installed.version === catalogItem.stableVersion
+  const installedReleaseMatchesCatalog = installed.version === catalogItem.stableVersion
     && installed.package_hash === expectedReleaseHashes.package_sha256
     && installed.manifest_hash === expectedReleaseHashes.manifest_sha256
-    && installed.entries_hash === expectedReleaseHashes.entries_sha256
+    && installed.entries_hash === expectedReleaseHashes.entries_sha256;
+  const installedIconURL = installedReleaseMatchesCatalog || installedIconMatchesCatalog(installed, catalogItem)
     ? catalogItem.iconURL
     : undefined;
   const installedLocale = installed.presentation?.locales.find((locale) => (
@@ -182,6 +183,15 @@ function projectCatalogItem(
     presentation: installed.presentation,
     externalPackage,
   };
+}
+
+function installedIconMatchesCatalog(installed: ReDevPluginRecord, catalogItem: OfficialPluginCatalogItem): boolean {
+  const marketIcon = catalogItem.presentation?.icon;
+  const iconPath = installed.presentation?.icon?.path ?? installed.manifest.presentation.icon?.path;
+  if (!catalogItem.iconURL || !marketIcon || !iconPath) return false;
+  const entry = installed.package_entries.find((candidate) => candidate.path === iconPath);
+  return entry?.sha256 === `sha256:${marketIcon.sha256}`
+    && entry.content_type === marketIcon.media_type;
 }
 
 function projectInstalledItem(
