@@ -2270,7 +2270,7 @@ describe('FlowerSurface navigation activity', () => {
     }));
   });
 
-  it('shows approval feedback in the click task and keeps the card until the receipt cursor is projected', async () => {
+  it('exits the decided approval immediately and keeps duplicate submission idempotent', async () => {
     const approvalAction = {
       action_id: 'appr-immediate-feedback',
       origin: 'main_tool' as const,
@@ -2363,7 +2363,6 @@ describe('FlowerSurface navigation activity', () => {
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-immediate-feedback"] button')));
     (runtime.querySelector('[data-thread-id="thread-immediate-feedback"] button') as HTMLButtonElement).click();
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-approval-action-id="appr-immediate-feedback"]')));
-    const card = runtime.querySelector('.flower-composer [data-flower-approval-action-id="appr-immediate-feedback"]') as HTMLElement;
     const buttons = Array.from(runtime.querySelectorAll<HTMLButtonElement>('.flower-composer-approval-decision'));
     const approve = buttons.find((button) => button.textContent?.trim() === 'Allow once');
     expect(approve).toBeTruthy();
@@ -2371,23 +2370,16 @@ describe('FlowerSurface navigation activity', () => {
     approve?.click();
 
     expect(submitApproval).toHaveBeenCalledTimes(1);
-    expect(card.isConnected).toBe(true);
-    expect(runtime.querySelectorAll('.flower-composer [data-flower-approval-action-id="appr-immediate-feedback"]')).toHaveLength(1);
-    expect(runtime.querySelector('.flower-composer [data-flower-approval-action-id="appr-immediate-feedback"]')).toBe(card);
-    expect(runtime.querySelector('.flower-composer textarea')).toBeNull();
-    expect(buttons.every((button) => button.disabled)).toBe(true);
-    expect(approve?.getAttribute('data-loading')).toBe('true');
-    expect(approve?.getAttribute('aria-busy')).toBe('true');
-    expect(approve?.textContent?.trim()).toBe('Allow once');
-    expect(runtime.querySelector('.flower-composer')?.getAttribute('data-flower-approval-handoff-phase')).toBe('submitting');
-    expect(runtime.querySelector('.flower-composer')?.getAttribute('aria-busy')).toBe('true');
+    expect(runtime.querySelectorAll('.flower-composer [data-flower-approval-action-id="appr-immediate-feedback"]')).toHaveLength(0);
+    expect(runtime.querySelector('.flower-composer textarea')).not.toBeNull();
+    expect(runtime.querySelector('.flower-composer')?.getAttribute('data-flower-bottom-mode')).toBe('chat');
+    expect(runtime.querySelector('.flower-composer')?.getAttribute('aria-busy')).toBeNull();
     approve?.click();
     expect(submitApproval).toHaveBeenCalledTimes(1);
 
     receipt.resolve({ ok: true, current_cursor: 31 });
     await flushMicrotasks();
-    expect(runtime.querySelector('.flower-composer [data-flower-approval-action-id="appr-immediate-feedback"]')).toBe(card);
-    expect(runtime.querySelector('.flower-composer')?.getAttribute('data-flower-approval-handoff-phase')).toBe('awaiting_projection');
+    expect(runtime.querySelector('.flower-composer [data-flower-approval-action-id="appr-immediate-feedback"]')).toBeNull();
 
     deliverResolution = true;
     await waitFor(() => runtime.querySelector('[data-flower-approval-action-id="appr-immediate-feedback"]') === null);
@@ -2492,7 +2484,6 @@ describe('FlowerSurface navigation activity', () => {
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-approval-action-id="appr-event-second"]')));
     expect(runtime.querySelector('[data-flower-approval-action-id="appr-event-first"]')).toBeNull();
     expect(runtime.querySelector('.flower-composer textarea')).toBeNull();
-    expect(runtime.querySelector('.flower-composer')?.getAttribute('data-flower-approval-handoff-phase')).toBe('settling');
     expect(Array.from(runtime.querySelectorAll<HTMLButtonElement>('.flower-composer-approval-decision')).every((button) => !button.disabled)).toBe(true);
 
     receipt.resolve({ ok: true, current_cursor: 42 });
@@ -2500,7 +2491,7 @@ describe('FlowerSurface navigation activity', () => {
     expect(runtime.querySelector('[data-flower-approval-action-id="appr-event-second"]')).not.toBeNull();
   });
 
-  it('keeps the submitted approval disabled when canonical resync cannot confirm the decision', async () => {
+  it('keeps the composer usable when canonical resync cannot confirm the decision', async () => {
     const action = {
       action_id: 'appr-fallback-failure',
       origin: 'main_tool' as const,
@@ -2548,10 +2539,9 @@ describe('FlowerSurface navigation activity', () => {
     approve.click();
 
     await waitFor(() => loadThread.mock.calls.length >= 2, 2_500);
-    expect(runtime.querySelector('[data-flower-approval-action-id="appr-fallback-failure"]')).not.toBeNull();
-    expect(runtime.querySelector('.flower-composer textarea')).toBeNull();
-    expect(Array.from(runtime.querySelectorAll<HTMLButtonElement>('.flower-composer-approval-decision')).every((button) => button.disabled)).toBe(true);
-    expect(runtime.querySelector('.flower-composer')?.getAttribute('data-flower-approval-handoff-phase')).toBe('awaiting_projection');
+    expect(runtime.querySelector('[data-flower-approval-action-id="appr-fallback-failure"]')).toBeNull();
+    expect(runtime.querySelector('.flower-composer textarea')).not.toBeNull();
+    expect(runtime.querySelector('.flower-composer')?.getAttribute('aria-busy')).toBeNull();
   });
 
   it('shows the backend-selected composer approval and focuses each promoted card', async () => {
@@ -3048,8 +3038,8 @@ describe('FlowerSurface navigation activity', () => {
     await waitFor(() => submitApproval.mock.calls.length === 1);
     await waitFor(() => loadThread.mock.calls.length >= 2);
     const pendingDecisionButtons = Array.from(runtime.querySelectorAll<HTMLButtonElement>('.flower-composer-approval-decision'));
-    expect(pendingDecisionButtons).toHaveLength(2);
-    expect(pendingDecisionButtons.every((button) => button.disabled)).toBe(true);
+    expect(pendingDecisionButtons).toHaveLength(0);
+    expect(runtime.querySelector('.flower-composer textarea')).not.toBeNull();
 
     conflictRefresh.resolve(liveBootstrap(promotedThread, 14));
     await waitFor(() => runtime.querySelector('[data-flower-approval-action-id="appr-stale"]') === null);

@@ -6,14 +6,57 @@ import type { FlowerLiveEvent } from '../../../../flower_ui/src/contracts/flower
 import {
   adapter,
   deferred,
+  flowerSurfaceNotifications,
   liveBootstrap,
   renderSurfaceWithAdapter,
   thread,
   waitFor,
 } from './FlowerSurface.navigation.testHarness';
 
+function approvalScenario(suffix: string) {
+  const action = {
+    action_id: `appr-${suffix}`,
+    origin: 'main_tool' as const,
+    run_id: `run-${suffix}`,
+    tool_id: `tool-${suffix}`,
+    tool_name: 'terminal.exec',
+    state: 'requested' as const,
+    status: 'pending' as const,
+    revision: 1,
+    version: 1,
+    surface_epoch: 1,
+    surface_role: 'primary_action' as const,
+    requested_at_ms: 9_000,
+    can_approve: true,
+    expected_seq: 10,
+    queue_generation: 1,
+    queue_order: 1,
+    batch_index: 0,
+    batch_size: 1,
+    summary: { label: 'Approval command', command: 'npm test', effects: ['shell'] },
+  };
+  return {
+    action,
+    snapshot: thread({
+      thread_id: `thread-${suffix}`,
+      title: 'Approval recovery',
+      status: 'waiting_approval',
+      active_run_id: action.run_id,
+      approval_actions: [action],
+      approval_queue: {
+        generation: 1,
+        revision: 1,
+        current_action_id: action.action_id,
+        current_position: 1,
+        total: 1,
+        unresolved_count: 1,
+      },
+    }),
+  };
+}
+
 describe('Flower approval refresh browser behavior', () => {
-  it('shows first-frame decision feedback without detaching the approval card', async () => {
+  it('exits approval mode on the first frame while the rejection receipt is blocked', async () => {
     const approvalAction = {
       action_id: 'appr-browser-handoff',
       origin: 'main_tool' as const,
@@ -43,6 +86,7 @@ describe('Flower approval refresh browser behavior', () => {
       thread_id: 'thread-browser-handoff',
       title: 'Browser approval handoff',
       status: 'waiting_approval',
+      active_run_id: approvalAction.run_id,
       approval_actions: [approvalAction],
       approval_queue: {
         generation: 1,
@@ -93,57 +137,121 @@ describe('Flower approval refresh browser behavior', () => {
     await waitFor(() => Boolean(runtime.querySelector('.flower-composer [data-flower-approval-action-id="appr-browser-handoff"]')));
 
     const composer = runtime.querySelector('.flower-composer') as HTMLElement;
-    const card = composer.querySelector('[data-flower-approval-action-id="appr-browser-handoff"]') as HTMLElement;
     const buttons = Array.from(composer.querySelectorAll<HTMLButtonElement>('.flower-composer-approval-decision'));
-    const approve = buttons.find((button) => button.textContent?.trim() === 'Allow once')!;
-    approve.focus();
-    const focusedBorder = getComputedStyle(composer).borderColor;
-    const focusedShadow = getComputedStyle(composer).boxShadow;
-    let earlyDetachCount = 0;
-    let earlyTextareaMountCount = 0;
-    let blankComposerMutations = 0;
-    const observer = new MutationObserver((records) => {
-      for (const record of records) {
-        for (const removed of record.removedNodes) {
-          if (!projectionAllowed && (removed === card || removed instanceof Element && removed.contains(card))) {
-            earlyDetachCount += 1;
-          }
-        }
-      }
-      if (!projectionAllowed && composer.querySelector('textarea')) earlyTextareaMountCount += 1;
-      if (!composer.querySelector('[data-flower-composer-approval="true"]') && !composer.querySelector('textarea')) {
-        blankComposerMutations += 1;
-      }
-    });
-    observer.observe(composer, { childList: true, subtree: true });
-
-    approve.click();
+    const reject = buttons.find((button) => button.textContent?.trim() === 'Reject')!;
+    reject.click();
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
-    expect(composer.querySelector('[data-flower-approval-action-id="appr-browser-handoff"]')).toBe(card);
-    expect(card.isConnected).toBe(true);
-    expect(buttons.every((button) => button.disabled)).toBe(true);
-    expect(approve.getAttribute('aria-busy')).toBe('true');
-    expect(approve.getAttribute('data-loading')).toBe('true');
-    expect(approve.querySelector('[data-floe-button-spinner="true"]')).not.toBeNull();
-    expect(approve.textContent?.trim()).toBe('Allow once');
-    expect(composer.getAttribute('data-flower-approval-handoff-phase')).toBe('submitting');
-    expect(getComputedStyle(composer).borderColor).toBe(focusedBorder);
-    expect(getComputedStyle(composer).boxShadow).toBe(focusedShadow);
-    expect(earlyDetachCount).toBe(0);
-    expect(earlyTextareaMountCount).toBe(0);
+    expect(composer.querySelector('[data-flower-approval-action-id="appr-browser-handoff"]')).toBeNull();
+    expect(composer.querySelector('textarea')).not.toBeNull();
+    expect(composer.getAttribute('data-flower-bottom-mode')).toBe('chat');
+    expect(composer.getAttribute('aria-busy')).toBeNull();
+    expect(composer.querySelector('[data-flower-primary-action="stop"]')).not.toBeNull();
+    expect(runtime.textContent).not.toContain('Flower could not finish this reply.');
 
     receipt.resolve({ ok: true, current_cursor: 11 });
-    await waitFor(() => composer.getAttribute('data-flower-approval-handoff-phase') === 'awaiting_projection');
-    expect(composer.querySelector('[data-flower-approval-action-id="appr-browser-handoff"]')).toBe(card);
-
     projectionAllowed = true;
-    await waitFor(() => composer.querySelector('[data-flower-approval-action-id="appr-browser-handoff"]') === null);
-    observer.disconnect();
+    await waitFor(() => listThreadLiveEvents.mock.calls.length > 1);
     expect(composer.querySelector('textarea')).not.toBeNull();
-    expect(earlyDetachCount).toBe(0);
-    expect(earlyTextareaMountCount).toBe(0);
-    expect(blankComposerMutations).toBe(0);
+    expect(composer.querySelector('[data-flower-approval-action-id="appr-browser-handoff"]')).toBeNull();
+  });
+
+  it('restores the canonical card only when the decision failed and remains requested', async () => {
+    const { action, snapshot } = approvalScenario('request-failed');
+    const loadThread = vi.fn(async () => liveBootstrap(snapshot, 10));
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [snapshot]),
+      loadThread,
+      submitApproval: vi.fn(async () => { throw new Error('approval transport failed'); }),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${snapshot.thread_id}"] button`)));
+    (runtime.querySelector(`[data-thread-id="${snapshot.thread_id}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector(`[data-flower-approval-action-id="${action.action_id}"]`)));
+    const reject = Array.from(runtime.querySelectorAll<HTMLButtonElement>('.flower-composer-approval-decision'))
+      .find((button) => button.textContent?.trim() === 'Reject')!;
+    reject.click();
+    expect(runtime.querySelector(`[data-flower-approval-action-id="${action.action_id}"]`)).toBeNull();
+
+    await waitFor(() => loadThread.mock.calls.length === 2);
+    await waitFor(() => Boolean(runtime.querySelector(`[data-flower-approval-action-id="${action.action_id}"]`)));
+    expect(Array.from(runtime.querySelectorAll<HTMLButtonElement>('.flower-composer-approval-decision'))
+      .every((button) => !button.disabled)).toBe(true);
+    expect(flowerSurfaceNotifications()).toEqual([
+      expect.objectContaining({ tone: 'error', message: 'approval transport failed' }),
+    ]);
+  });
+
+  it('restores a failed decision after switching A to B and back without reviving a settled card', async () => {
+    const { action, snapshot } = approvalScenario('background-failure');
+    const background = thread({
+      thread_id: 'thread-background-during-approval',
+      title: 'Background thread',
+      status: 'idle',
+      messages: [],
+    });
+    const receipt = deferred<{ ok: boolean; current_cursor: number }>();
+    const loadThread = vi.fn(async (threadID: string) => liveBootstrap(
+      threadID === snapshot.thread_id ? snapshot : background,
+      threadID === snapshot.thread_id ? 10 : 3,
+    ));
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [snapshot, background]),
+      loadThread,
+      submitApproval: vi.fn(() => receipt.promise),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${snapshot.thread_id}"] button`)));
+    (runtime.querySelector(`[data-thread-id="${snapshot.thread_id}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector(`[data-flower-approval-action-id="${action.action_id}"]`)));
+    const reject = Array.from(runtime.querySelectorAll<HTMLButtonElement>('.flower-composer-approval-decision'))
+      .find((button) => button.textContent?.trim() === 'Reject')!;
+    reject.click();
+    expect(runtime.querySelector(`[data-flower-approval-action-id="${action.action_id}"]`)).toBeNull();
+
+    (runtime.querySelector(`[data-thread-id="${background.thread_id}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-id') === background.thread_id);
+    receipt.reject(new Error('approval failed in background'));
+    await waitFor(() => loadThread.mock.calls.filter(([threadID]) => threadID === snapshot.thread_id).length >= 2);
+
+    (runtime.querySelector(`[data-thread-id="${snapshot.thread_id}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector(`[data-flower-approval-action-id="${action.action_id}"]`)));
+    expect(Array.from(runtime.querySelectorAll<HTMLButtonElement>('.flower-composer-approval-decision'))
+      .every((button) => !button.disabled)).toBe(true);
+    expect(runtime.querySelector('.flower-composer')?.getAttribute('aria-busy')).toBeNull();
+  });
+
+  it('treats a lost response as settled when canonical bootstrap is already rejected', async () => {
+    const { action, snapshot } = approvalScenario('response-lost');
+    const settled = {
+      ...snapshot,
+      status: 'running' as const,
+      approval_actions: [],
+      approval_queue: { ...snapshot.approval_queue!, current_action_id: '', current_position: 0, unresolved_count: 0, revision: 2 },
+    };
+    const loadThread = vi.fn(async () => (
+      loadThread.mock.calls.length === 1 ? liveBootstrap(snapshot, 10) : liveBootstrap(settled, 11)
+    ));
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [snapshot]),
+      loadThread,
+      submitApproval: vi.fn(async () => { throw new Error('response connection closed'); }),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${snapshot.thread_id}"] button`)));
+    (runtime.querySelector(`[data-thread-id="${snapshot.thread_id}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector(`[data-flower-approval-action-id="${action.action_id}"]`)));
+    const reject = Array.from(runtime.querySelectorAll<HTMLButtonElement>('.flower-composer-approval-decision'))
+      .find((button) => button.textContent?.trim() === 'Reject')!;
+    reject.click();
+
+    await waitFor(() => loadThread.mock.calls.length === 2);
+    expect(runtime.querySelector(`[data-flower-approval-action-id="${action.action_id}"]`)).toBeNull();
+    expect(runtime.querySelector('.flower-composer textarea')).not.toBeNull();
+    expect(flowerSurfaceNotifications()).toEqual([]);
   });
 
   it('keeps one actionable approval card mounted while stale summaries remain unchanged', async () => {
@@ -316,24 +424,17 @@ describe('Flower approval refresh browser behavior', () => {
     expect(loadThread).toHaveBeenCalledTimes(1);
 
     const composer = runtime.querySelector('.flower-composer') as HTMLElement;
-    let blankPromotionFrames = 0;
-    const promotionObserver = new MutationObserver(() => {
-      if (composer.querySelectorAll('[data-flower-composer-approval="true"]').length === 0) {
-        blankPromotionFrames += 1;
-      }
-    });
-    promotionObserver.observe(composer, { childList: true, subtree: true });
     eventPhase = 'promote';
 
     await waitFor(
       () => Boolean(runtime.querySelector('[data-flower-approval-action-id="appr-browser-locator"]')),
       7_000,
     );
-    promotionObserver.disconnect();
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     expect(runtime.querySelector('[data-flower-approval-action-id="appr-browser-primary"]')).toBeNull();
     expect(runtime.querySelectorAll('.flower-composer [data-flower-composer-approval="true"]')).toHaveLength(1);
     expect(runtime.querySelector('[data-flower-approval-action-id="appr-browser-locator"]')?.textContent).toContain('2 / 2');
-    expect(blankPromotionFrames).toBe(0);
+    expect(composer.querySelectorAll('[data-flower-composer-approval="true"]')).toHaveLength(1);
 
     const promotedCard = runtime.querySelector('[data-flower-approval-action-id="appr-browser-locator"]') as HTMLElement;
     let finalDetachCount = 0;
