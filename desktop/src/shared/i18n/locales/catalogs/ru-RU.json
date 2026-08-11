@@ -94,6 +94,7 @@
       "queuedDelete": "Удалить сообщение из очереди",
       "scrollToLatest": "Прокрутить к последнему",
       "runErrorTitle": "Flower не смог завершить этот ответ.",
+      "runContinuationErrorTitle": "Не удалось продолжить ответ.",
       "runErrorActionUpdateAPIKey": "Обновить ключ API",
       "runErrorActionAddAPIKey": "Добавить ключ API",
       "runErrorActionSwitchModel": "Сменить модель",

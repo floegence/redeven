@@ -32,6 +32,11 @@ func TestClassifyRunFailureCodeProviderErrors(t *testing.T) {
 		{name: "openai rate limit", err: &openai.Error{StatusCode: http.StatusTooManyRequests}, want: runErrorCodeProviderRateLimited},
 		{name: "openai model unavailable", err: &openai.Error{StatusCode: http.StatusNotFound}, want: runErrorCodeProviderModelUnavailable},
 		{name: "openai server unavailable", err: &openai.Error{StatusCode: http.StatusBadGateway}, want: runErrorCodeProviderUnreachable},
+		{
+			name: "openai compatible wrapped server unavailable",
+			err:  errors.New(`POST "https://api.deepseek.com/chat/completions": 502 Bad Gateway {"error":{"message":"unavailable"}}`),
+			want: runErrorCodeProviderUnreachable,
+		},
 		{name: "missing key", err: errors.New("missing api key for provider"), want: runErrorCodeProviderMissingKey},
 		{name: "network timeout", err: timeoutNetError{}, want: runErrorCodeProviderUnreachable},
 		{name: "context timeout", err: context.DeadlineExceeded, want: runErrorCodeProviderUnreachable},

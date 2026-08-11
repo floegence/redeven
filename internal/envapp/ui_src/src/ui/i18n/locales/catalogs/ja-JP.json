@@ -3849,6 +3849,7 @@
       "queuedDelete": "キュー内のメッセージを削除",
       "scrollToLatest": "最新へスクロール",
       "runErrorTitle": "Flower はこの返信を完了できませんでした。",
+      "runContinuationErrorTitle": "返信を続行できませんでした。",
       "runErrorActionUpdateAPIKey": "API キーを更新します",
       "runErrorActionAddAPIKey": "API キーを追加します",
       "runErrorActionSwitchModel": "モデルを切り替えます",

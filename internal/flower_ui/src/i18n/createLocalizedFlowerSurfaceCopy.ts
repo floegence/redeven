@@ -109,6 +109,7 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       scrollToLatest: t(i18n, k('chat.scrollToLatest')),
       runtimeRestartedDivider: t(i18n, k('chat.runtimeRestartedDivider')),
       runErrorTitle: t(i18n, k('chat.runErrorTitle')),
+      runContinuationErrorTitle: t(i18n, k('chat.runContinuationErrorTitle')),
       runErrorActions: {
         updateAPIKey: t(i18n, k('chat.runErrorActionUpdateAPIKey')),
         addAPIKey: t(i18n, k('chat.runErrorActionAddAPIKey')),

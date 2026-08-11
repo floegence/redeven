@@ -75,6 +75,16 @@ export type FlowerTimelineEntry =
     error: FlowerThreadError;
   }>;
 
+export function flowerTimelineHasUserRejectedTool(entries: readonly FlowerTimelineEntry[]): boolean {
+  return entries.some((entry) => (
+    entry.type === 'message'
+    && entry.blocks.some((block) => (
+      block.type === 'activity'
+      && block.block.items.some((item) => item.approval_state === 'rejected' || item.status === 'declined')
+    ))
+  ));
+}
+
 export function activityTimelineSignature(timeline: FlowerActivityTimelineBlock): string {
   return [
     timeline.run_id ?? '',

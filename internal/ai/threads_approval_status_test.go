@@ -73,6 +73,28 @@ func TestInterruptedCanonicalThreadIsTerminalEvenWhenRetryable(t *testing.T) {
 	}
 }
 
+func TestThreadViewRunStateRestoresProviderFailureClassification(t *testing.T) {
+	t.Parallel()
+
+	snapshot := flruntime.ThreadSnapshot{Status: flruntime.ThreadStatusFailed}
+	latest := &flruntime.ThreadTurnSnapshot{Failure: &flruntime.ThreadTurnFailure{
+		Message: `POST "https://api.deepseek.com/chat/completions": 502 Bad Gateway {"error":{"message":"private diagnostic"}}`,
+	}}
+	status, code, message, err := threadViewRunState(snapshot, latest)
+	if err != nil {
+		t.Fatalf("threadViewRunState: %v", err)
+	}
+	if status != string(RunStateFailed) || code != runErrorCodeProviderUnreachable {
+		t.Fatalf("state=(%q, %q), want failed provider_unreachable", status, code)
+	}
+	if message != userFacingRunError(runErrorCodeProviderUnreachable, "") {
+		t.Fatalf("message=%q, want user-facing provider failure", message)
+	}
+	if strings.Contains(message, "api.deepseek.com") || strings.Contains(message, "private diagnostic") {
+		t.Fatalf("message exposed provider diagnostics: %q", message)
+	}
+}
+
 func TestGetThreadReturnsConsistencyErrorWhenFloretThreadIsMissing(t *testing.T) {
 	ctx := context.Background()
 	svc := newTestService(t, nil)

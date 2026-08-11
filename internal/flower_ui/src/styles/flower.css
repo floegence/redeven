@@ -3680,6 +3680,21 @@ html.dark .flower-component-shell {
   padding: 0.75rem;
 }
 
+.flower-error-card.flower-continuation-error {
+  border-color: var(--flower-chat-surface-border);
+  background: color-mix(in srgb, var(--muted) 32%, var(--flower-chat-surface-elevated));
+  box-shadow: none;
+}
+
+.flower-error-card.flower-continuation-error .flower-error-icon {
+  background: color-mix(in srgb, var(--muted) 72%, transparent);
+  color: var(--muted-foreground);
+}
+
+.flower-error-card.flower-continuation-error .flower-error-title {
+  color: var(--foreground);
+}
+
 .flower-error-icon {
   display: flex;
   width: 1.75rem;

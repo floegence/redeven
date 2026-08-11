@@ -197,6 +197,9 @@ func threadViewRunState(snapshot flruntime.ThreadSnapshot, latest *flruntime.Thr
 		if latest != nil && latest.Failure != nil {
 			failure = strings.TrimSpace(latest.Failure.Message)
 		}
+		if code := classifyRunFailureCode(errors.New(failure), ""); code != "" {
+			return string(RunStateFailed), code, userFacingRunError(code, ""), nil
+		}
 		return string(RunStateFailed), "floret_turn_failed", failure, nil
 	case flruntime.ThreadStatusCancelled:
 		return string(RunStateCanceled), "", "", nil

@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 
 	openai "github.com/openai/openai-go"
@@ -55,16 +56,8 @@ func classifyRunFailureCode(err error, fallback string) string {
 	}
 	var openAIError *openai.Error
 	if errors.As(err, &openAIError) && openAIError != nil {
-		switch openAIError.StatusCode {
-		case http.StatusUnauthorized, http.StatusForbidden:
-			return runErrorCodeProviderAuthFailed
-		case http.StatusTooManyRequests:
-			return runErrorCodeProviderRateLimited
-		case http.StatusNotFound:
-			return runErrorCodeProviderModelUnavailable
-		}
-		if openAIError.StatusCode >= 500 {
-			return runErrorCodeProviderUnreachable
+		if code := providerHTTPStatusRunErrorCode(openAIError.StatusCode); code != "" {
+			return code
 		}
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
@@ -82,6 +75,11 @@ func classifyRunFailureCode(err error, fallback string) string {
 		return runErrorCodeProviderUnreachable
 	}
 	text := strings.ToLower(strings.TrimSpace(err.Error()))
+	if status, ok := providerHTTPStatusFromSDKError(text); ok {
+		if code := providerHTTPStatusRunErrorCode(status); code != "" {
+			return code
+		}
+	}
 	switch {
 	case text == "":
 		return strings.TrimSpace(fallback)
@@ -105,4 +103,59 @@ func classifyRunFailureCode(err error, fallback string) string {
 	default:
 		return strings.TrimSpace(fallback)
 	}
+}
+
+func providerHTTPStatusRunErrorCode(status int) string {
+	switch status {
+	case http.StatusUnauthorized, http.StatusForbidden:
+		return runErrorCodeProviderAuthFailed
+	case http.StatusTooManyRequests:
+		return runErrorCodeProviderRateLimited
+	case http.StatusNotFound:
+		return runErrorCodeProviderModelUnavailable
+	default:
+		if status >= 500 && status <= 599 {
+			return runErrorCodeProviderUnreachable
+		}
+		return ""
+	}
+}
+
+func providerHTTPStatusFromSDKError(text string) (int, bool) {
+	text = strings.TrimSpace(text)
+	methodEnd := strings.IndexByte(text, ' ')
+	if methodEnd <= 0 {
+		return 0, false
+	}
+	switch text[:methodEnd] {
+	case "get", "post", "put", "patch", "delete":
+	default:
+		return 0, false
+	}
+	rest := strings.TrimSpace(text[methodEnd+1:])
+	if !strings.HasPrefix(rest, `"`) {
+		return 0, false
+	}
+	quoteEnd := strings.Index(rest[1:], `"`)
+	if quoteEnd < 0 {
+		return 0, false
+	}
+	rawURL := rest[1 : quoteEnd+1]
+	parsed, err := url.Parse(rawURL)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || strings.TrimSpace(parsed.Host) == "" {
+		return 0, false
+	}
+	statusText := strings.TrimSpace(rest[quoteEnd+2:])
+	if !strings.HasPrefix(statusText, ":") {
+		return 0, false
+	}
+	fields := strings.Fields(strings.TrimSpace(statusText[1:]))
+	if len(fields) == 0 {
+		return 0, false
+	}
+	status, err := strconv.Atoi(fields[0])
+	if err != nil || status < 400 || status > 599 {
+		return 0, false
+	}
+	return status, true
 }

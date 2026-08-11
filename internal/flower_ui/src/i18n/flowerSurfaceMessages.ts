@@ -96,6 +96,7 @@ export const flowerSurfaceEnUS = {
     scrollToLatest: 'Scroll to latest',
     runtimeRestartedDivider: 'Redeven runtime restarted',
     runErrorTitle: 'Flower could not finish this reply.',
+    runContinuationErrorTitle: 'Reply could not continue.',
     runErrorActionUpdateAPIKey: 'Update API key',
     runErrorActionAddAPIKey: 'Add API key',
     runErrorActionSwitchModel: 'Switch model',
