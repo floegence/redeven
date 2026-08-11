@@ -4325,6 +4325,8 @@
       "viewIssue": "문제 보기",
       "runtimeIssueRecovery": "Redeven 또는 ReDevPlugin을 필요한 버전으로 업데이트하고 런타임을 다시 시작한 다음 플러그인 센터를 새로 고치세요.",
       "runtimeRecoveryInProgress": "플러그인 런타임 액세스를 복구하고 있습니다. 복구가 완료될 때까지 플러그인 화면을 사용할 수 없습니다.",
+      "runtimeRecoveryPluginInProgress": "이 플러그인은 아직 복구 중입니다. 안전한 런타임 상태가 준비될 때까지 열기가 대기합니다.",
+      "runtimeRecoveryPluginFailed": "이 플러그인을 복구하지 못했습니다. 이유를 확인한 뒤 열기 전에 다시 시도하세요.",
       "runtimeRecoveryFailed": "플러그인 화면을 아직 사용할 수 없습니다. 위 오류를 확인한 후 런타임 복구를 다시 시도하세요.",
       "runtimeRecoveryReason": {
         "unknown": "플러그인 런타임 복구에 실패했습니다.",

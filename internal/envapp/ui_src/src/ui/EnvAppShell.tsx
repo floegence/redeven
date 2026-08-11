@@ -266,9 +266,6 @@ const ACCESS_RESUME_TIMEOUT_MS = 15_000;
 // Release-bound plugins may need the platform's bounded trust reconstruction
 // window on the first refresh after a host restart.
 const PLUGIN_RUNTIME_RECOVERY_TIMEOUT_MS = 90_000;
-// The direct-session handshake publishes its credential just before the
-// server-side session scope becomes available to plugin HTTP mutations.
-const PLUGIN_RUNTIME_RECOVERY_START_DELAY_MS = 250;
 const WORKBENCH_HANDOFF_ANCHOR_MAX_AGE_MS = 1_500;
 const NOTES_OVERLAY_KEYBIND = 'mod+.';
 
@@ -552,11 +549,8 @@ export function EnvAppShell() {
   // activates the credential staged for that channel.
   const [pluginSessionReady, setPluginSessionReady] = createSignal(false);
   const [pluginRuntimeRecoveryComplete, setPluginRuntimeRecoveryComplete] = createSignal(false);
-  const [pluginRuntimeSurfacesReady, setPluginRuntimeSurfacesReady] = createSignal(false);
   const [pluginRuntimeRecoveryState, setPluginRuntimeRecoveryState] = createSignal<'recovering' | 'failed' | 'ready'>('recovering');
-  const [pluginRuntimeRecoveryError, setPluginRuntimeRecoveryError] = createSignal<string>();
-  const [pluginRuntimeRecoveryReason, setPluginRuntimeRecoveryReason] = createSignal<import('./plugins/pluginTypes').PluginRuntimeRecoveryReason>();
-  const [pluginRuntimeRecoveryAction, setPluginRuntimeRecoveryAction] = createSignal<import('./plugins/pluginTypes').PluginRuntimeRecoveryAction>();
+  const [pluginRuntimeRecoveryByInstanceID, setPluginRuntimeRecoveryByInstanceID] = createSignal<Record<string, import('./plugins/pluginTypes').PluginRuntimeRecoveryPresentation>>({});
   const [pluginRuntimeRecoveryRetrySeq, setPluginRuntimeRecoveryRetrySeq] = createSignal(0);
   const retiredPluginManagementRevisionByInstanceID = new Map<string, number>();
   const retirePluginManagementRevision = (pluginInstanceID: string, revision: number) => {
@@ -627,7 +621,6 @@ export function EnvAppShell() {
     setPluginSessionRetired(true);
     setPluginSessionReady(false);
     setPluginRuntimeRecoveryComplete(false);
-    setPluginRuntimeSurfacesReady(false);
     clearPluginSessionCredential();
     setActivityPluginWindows([]);
     return true;
@@ -973,22 +966,9 @@ export function EnvAppShell() {
     aiReadinessAccessible = accessible;
   });
   const canOpenPluginSurfaces = () => Boolean(
-    protocol.status() === 'connected'
+      protocol.status() === 'connected'
       && env()?.permissions?.can_read
-      && pluginRuntimeSurfacesReady(),
   );
-  const pluginRuntimeRecoveryPresentation = () => {
-    if (protocol.status() !== 'connected' || (isLocalMode() && !pluginSessionReady())) return undefined;
-    const state = pluginRuntimeRecoveryState();
-    if (state === 'ready') return undefined;
-    if (state === 'recovering') return { state } as const;
-    return {
-      state: 'failed',
-      error: pluginRuntimeRecoveryError(),
-      reason: pluginRuntimeRecoveryReason(),
-      action: pluginRuntimeRecoveryAction(),
-    } as const;
-  };
   const controlplaneStatus = createMemo(() => String(env()?.status ?? '').trim());
   const canUseFlower = createMemo(() => !accessGateVisible());
   const canUseCodex = createMemo(() => env.state === 'ready' && hasRWXPermissions(env()));
@@ -1223,20 +1203,14 @@ export function EnvAppShell() {
       pluginRuntimeRecoveryAbort?.abort('Plugin runtime session disconnected');
       pluginRuntimeRecoveryAbort = undefined;
       setPluginRuntimeRecoveryComplete(false);
-      setPluginRuntimeSurfacesReady(false);
+      setPluginRuntimeRecoveryByInstanceID({});
       setPluginRuntimeRecoveryState('recovering');
-      setPluginRuntimeRecoveryError(undefined);
-      setPluginRuntimeRecoveryReason(undefined);
-      setPluginRuntimeRecoveryAction(undefined);
       return;
     }
     if (!canAdmin()) {
       setPluginRuntimeRecoveryComplete(true);
-      setPluginRuntimeSurfacesReady(true);
+      setPluginRuntimeRecoveryByInstanceID({});
       setPluginRuntimeRecoveryState('ready');
-      setPluginRuntimeRecoveryError(undefined);
-      setPluginRuntimeRecoveryReason(undefined);
-      setPluginRuntimeRecoveryAction(undefined);
       return;
     }
     if (pluginRuntimeRecoveryClient === connectedClient) return;
@@ -1245,68 +1219,74 @@ export function EnvAppShell() {
     const controller = new AbortController();
     pluginRuntimeRecoveryAbort = controller;
     setPluginRuntimeRecoveryComplete(false);
-    setPluginRuntimeSurfacesReady(false);
+    const recoveringByInstanceID: Record<string, import('./plugins/pluginTypes').PluginRuntimeRecoveryPresentation> = {};
+    for (const item of pluginInventoryProjection()?.items ?? []) {
+      if (item.pluginInstanceID && item.lifecycleState === 'enabled') {
+        recoveringByInstanceID[item.pluginInstanceID] = { state: 'recovering' };
+      }
+    }
+    setPluginRuntimeRecoveryByInstanceID(recoveringByInstanceID);
     setPluginRuntimeRecoveryState('recovering');
-    setPluginRuntimeRecoveryError(undefined);
-    setPluginRuntimeRecoveryReason(undefined);
-    setPluginRuntimeRecoveryAction(undefined);
     let recoveryTimedOut = false;
     const recoveryTimer = window.setTimeout(() => {
       recoveryTimedOut = true;
       controller.abort('Plugin runtime recovery timed out');
     }, PLUGIN_RUNTIME_RECOVERY_TIMEOUT_MS);
-    const recoveryStartDelay = new Promise<void>((resolve, reject) => {
-      const delayTimer = window.setTimeout(resolve, PLUGIN_RUNTIME_RECOVERY_START_DELAY_MS);
-      controller.signal.addEventListener('abort', () => {
-        window.clearTimeout(delayTimer);
-        reject(controller.signal.reason);
-      }, { once: true });
-    });
-    void recoveryStartDelay.then(() => pluginLifecycle.refreshEnabledRuntimeState({ signal: controller.signal })).then((result) => {
+    void pluginLifecycle.refreshEnabledRuntimeState({ signal: controller.signal }).then((result) => {
       if (controller.signal.aborted || pluginRuntimeRecoveryClient !== connectedClient) return;
       window.clearTimeout(recoveryTimer);
       const failures = result.results.filter((entry) => entry.status === 'failed');
+      const recoveryByInstanceID: Record<string, import('./plugins/pluginTypes').PluginRuntimeRecoveryPresentation> = {};
+      for (const entry of result.results) {
+        recoveryByInstanceID[entry.plugin_instance_id] = entry.status === 'failed'
+          ? {
+            state: 'failed',
+            error: `${entry.plugin_instance_id}: ${entry.error.message}`,
+            reason: entry.error.reason,
+            action: entry.error.action,
+          }
+          : { state: 'ready' };
+      }
+      setPluginRuntimeRecoveryByInstanceID(recoveryByInstanceID);
       setPluginRuntimeRecoveryComplete(true);
-      setPluginRuntimeSurfacesReady(failures.length === 0);
       if (failures.length > 0) {
-        const primaryFailure = failures[0];
         setPluginRuntimeRecoveryState('failed');
-        setPluginRuntimeRecoveryError(failures.map((entry) => `${entry.plugin_instance_id}: ${entry.error.message}`).join('\n'));
-        setPluginRuntimeRecoveryReason(primaryFailure?.error.reason);
-        setPluginRuntimeRecoveryAction(primaryFailure?.error.action);
         notify.error(
           i18n.t('uiCopy.plugin.needsAttention'),
           failures.map((entry) => `${entry.plugin_instance_id}: ${entry.error.message}`).join('\n'),
         );
       } else {
         setPluginRuntimeRecoveryState('ready');
-        setPluginRuntimeRecoveryError(undefined);
-        setPluginRuntimeRecoveryReason(undefined);
-        setPluginRuntimeRecoveryAction(undefined);
       }
     }).catch((error: unknown) => {
       if ((controller.signal.aborted && !recoveryTimedOut) || pluginRuntimeRecoveryClient !== connectedClient) return;
       window.clearTimeout(recoveryTimer);
       setPluginRuntimeRecoveryComplete(true);
-      setPluginRuntimeSurfacesReady(false);
+      const recoveryByInstanceID: Record<string, import('./plugins/pluginTypes').PluginRuntimeRecoveryPresentation> = {};
+      for (const item of pluginInventoryProjection()?.items ?? []) {
+        if (item.pluginInstanceID && item.lifecycleState === 'enabled') {
+          recoveryByInstanceID[item.pluginInstanceID] = { state: 'failed', error: getErrorMessage(error) };
+        }
+      }
+      setPluginRuntimeRecoveryByInstanceID(recoveryByInstanceID);
       setPluginRuntimeRecoveryState('failed');
-      setPluginRuntimeRecoveryError(getErrorMessage(error));
-      setPluginRuntimeRecoveryReason(undefined);
-      setPluginRuntimeRecoveryAction(undefined);
       notify.error(i18n.t('uiCopy.plugin.needsAttention'), getErrorMessage(error));
     });
   });
-  const retryPluginRuntimeRecovery = () => {
+  const retryPluginRuntimeRecovery = (_pluginInstanceID?: string) => {
     if (pluginRuntimeRecoveryState() !== 'failed') return;
     if (protocol.status() !== 'connected' || (isLocalMode() && !pluginSessionReady())) return;
     pluginRuntimeRecoveryAbort?.abort('Plugin runtime recovery retry requested');
     pluginRuntimeRecoveryClient = null;
     setPluginRuntimeRecoveryState('recovering');
-    setPluginRuntimeRecoveryError(undefined);
-    setPluginRuntimeRecoveryReason(undefined);
-    setPluginRuntimeRecoveryAction(undefined);
     setPluginRuntimeRecoveryComplete(false);
-    setPluginRuntimeSurfacesReady(false);
+    setPluginRuntimeRecoveryByInstanceID((current) => {
+      const next = { ...current };
+      for (const [pluginInstanceID, recovery] of Object.entries(next)) {
+        if (recovery.state === 'failed') next[pluginInstanceID] = { state: 'recovering' };
+      }
+      return next;
+    });
     setPluginRuntimeRecoveryRetrySeq((sequence) => sequence + 1);
   };
   onCleanup(() => pluginRuntimeRecoveryAbort?.abort('Plugin runtime recovery disposed'));
@@ -2432,7 +2412,6 @@ export function EnvAppShell() {
   const acquireLocalDirectArtifact = async (context: Readonly<{ signal: AbortSignal }>) => {
     setPluginSessionReady(false);
     setPluginRuntimeRecoveryComplete(false);
-    setPluginRuntimeSurfacesReady(false);
     if (readPluginSessionCredential()) {
       pluginConfirmationQueue.cancelAll();
       await Promise.allSettled([
@@ -3397,7 +3376,8 @@ export function EnvAppShell() {
           focusRequest={pluginCenterFocusRequest()}
           canManagePlugins={protocol.status() === 'connected' && canAdmin()}
           canOpenPluginSurfaces={canOpenPluginSurfaces()}
-          runtimeRecovery={pluginRuntimeRecoveryPresentation()}
+          runtimeRecovery={undefined}
+          runtimeRecoveryByInstanceID={pluginRuntimeRecoveryByInstanceID()}
           onRetryRuntimeRecovery={retryPluginRuntimeRecovery}
           installOperations={pluginInstallCoordinator?.projections() ?? []}
           onRetryInstall={(pluginInstanceID) => pluginInstallCoordinator?.retry(pluginInstanceID)}

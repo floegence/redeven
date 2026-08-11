@@ -1720,6 +1720,38 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   }, 10000);
 
+  it('keeps Plugin Center interactive without a global surface gate while startup recovery is running', async () => {
+    vi.useFakeTimers();
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(officialContainersProjection('enabled'));
+    pluginLifecycleMocks.refreshEnabledRuntimeState.mockImplementationOnce(() => new Promise((resolve) => {
+      window.setTimeout(() => resolve({ results: [] }), 2_000);
+    }));
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="plugin-center"]')), 40);
+      (host.querySelector('[data-plugin-panel-tile="plugin-center"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => Boolean(pluginCenterViewState.lastProps), 40);
+
+      expect(host.querySelector('[data-plugin-center-shell]')).toBeTruthy();
+      expect(pluginLifecycleMocks.refreshEnabledRuntimeState).toHaveBeenCalledTimes(1);
+      expect(pluginCenterViewState.lastProps.canOpenPluginSurfaces).toBe(true);
+      expect(pluginCenterViewState.lastProps.runtimeRecovery).toBeUndefined();
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
   it('keeps plugin surfaces closed, preserves typed recovery guidance, and retries only once', async () => {
     vi.useFakeTimers();
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
@@ -1757,20 +1789,20 @@ describe('EnvAppShell environment entry affordances', () => {
       (host.querySelector('[data-plugin-panel-tile="plugin-center"]') as HTMLButtonElement | null)?.click();
       await flushUntil(() => Boolean(pluginCenterViewState.lastProps), 40);
 
-      expect(pluginCenterViewState.lastProps.runtimeRecovery).toEqual({
+      expect(pluginCenterViewState.lastProps.runtimeRecovery).toBeUndefined();
+      expect(pluginCenterViewState.lastProps.runtimeRecoveryByInstanceID.plugininst_containers).toEqual({
         state: 'failed',
         error: 'plugininst_containers: Plugin trust source is fenced; contact an administrator',
         reason: 'trust_fenced',
         action: 'contact_admin',
       });
-      expect(pluginCenterViewState.lastProps.canOpenPluginSurfaces).toBe(false);
+      expect(pluginCenterViewState.lastProps.canOpenPluginSurfaces).toBe(true);
 
       pluginCenterViewState.lastProps.onRetryRuntimeRecovery();
       pluginCenterViewState.lastProps.onRetryRuntimeRecovery();
+      expect(pluginCenterViewState.lastProps.canOpenPluginSurfaces).toBe(true);
+
       await flushAsync();
-
-      expect(pluginCenterViewState.lastProps.runtimeRecovery).toEqual({ state: 'recovering', error: undefined });
-      expect(pluginCenterViewState.lastProps.canOpenPluginSurfaces).toBe(false);
 
       await vi.advanceTimersByTimeAsync(250);
       await flushUntil(() => pluginLifecycleMocks.refreshEnabledRuntimeState.mock.calls.length === 2, 40);

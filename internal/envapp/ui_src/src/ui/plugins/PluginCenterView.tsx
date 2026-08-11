@@ -41,7 +41,8 @@ export type PluginCenterViewProps = {
   canManagePlugins: boolean;
   canOpenPluginSurfaces: boolean;
   runtimeRecovery?: PluginRuntimeRecoveryPresentation;
-  onRetryRuntimeRecovery?: () => Promise<unknown> | unknown;
+  runtimeRecoveryByInstanceID?: Readonly<Record<string, PluginRuntimeRecoveryPresentation>>;
+  onRetryRuntimeRecovery?: (pluginInstanceID?: string) => Promise<unknown> | unknown;
   onClose?: () => void;
   onRefresh: () => Promise<unknown> | unknown;
   onCommand: (command: PluginLifecycleCommand, signal: AbortSignal) => Promise<unknown> | unknown;
@@ -257,6 +258,11 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   });
   const canManage = createMemo(() => props.canManagePlugins);
   const canOpenSurfaces = createMemo(() => props.canOpenPluginSurfaces);
+  const pluginRuntimeReady = (pluginInstanceID?: string) => {
+    if (!props.runtimeRecoveryByInstanceID) return true;
+    if (!pluginInstanceID) return false;
+    return props.runtimeRecoveryByInstanceID?.[pluginInstanceID]?.state === 'ready';
+  };
   const tabSelection = createUIFirstSelection<PluginCenterTab>({
     committed: activeTab,
     commit: setActiveTab,
@@ -532,7 +538,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
 
   const openItemSurface = (item: PluginInventoryItem, placement: 'activity' | 'workbench') => {
     const target = item.defaultLaunchTarget;
-    if (!target || !canOpenSurfaces()) return;
+    if (!target || !canOpenSurfaces() || !pluginRuntimeReady(target.pluginInstanceID)) return;
     void runCommand({
       type: 'open_surface',
       pluginID: target.pluginID,
@@ -626,7 +632,9 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
                   tab={activeTab()}
                   selected={selectedItem()?.inventoryKey === item.inventoryKey}
                   canManage={canManage()}
-                  canOpenSurfaces={canOpenSurfaces()}
+                  canOpenSurfaces={canOpenSurfaces() && pluginRuntimeReady(item.pluginInstanceID)}
+                  runtimeRecovery={item.pluginInstanceID ? props.runtimeRecoveryByInstanceID?.[item.pluginInstanceID] : undefined}
+                  onRetryRuntimeRecovery={item.pluginInstanceID ? () => props.onRetryRuntimeRecovery?.(item.pluginInstanceID) : undefined}
                   managementDisabled={loading() || itemManagementPending(item)}
                   commandPendingType={pendingCommandTypeForItem(item)}
                   installOperation={installOperationForItem(item)}
@@ -703,7 +711,8 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
               permissionsRef={setPermissionsFocusTarget}
               onMobileBack={closeDetails}
               canManage={canManage()}
-              canOpenSurfaces={canOpenSurfaces()}
+              canOpenSurfaces={canOpenSurfaces() && pluginRuntimeReady(item.pluginInstanceID)}
+              runtimeRecovery={item.pluginInstanceID ? props.runtimeRecoveryByInstanceID?.[item.pluginInstanceID] : undefined}
               managementPending={managementPending()}
               commandPendingType={pendingCommandTypeForItem(item)}
               installOperation={installOperationForItem(item)}
@@ -1088,48 +1097,50 @@ export function PluginCenterShell(props: {
       </header>
       <Show when={props.runtimeRecovery}>
         {(recovery) => (
-          <div
-            role={recovery().state === 'recovering' ? 'status' : 'alert'}
-            data-plugin-runtime-recovery={recovery().state}
-            class={cn(
-              'flex flex-wrap items-center gap-3 border-b px-4 py-3 text-sm',
-              recovery().state === 'recovering'
-                ? 'border-primary/30 bg-primary/5 text-foreground'
-                : 'border-destructive bg-background text-destructive',
-              PLUGIN_ENTER_MOTION_CLASS,
-            )}
-          >
-            <Show when={recovery().state === 'recovering'} fallback={<AlertTriangle class="h-4 w-4 shrink-0" />}>
-              <RefreshIcon class="h-4 w-4 shrink-0 animate-spin motion-reduce:animate-none" />
-            </Show>
-            <div class="min-w-0 flex-1">
-              <div class="font-medium">
-                {recovery().state === 'recovering'
-                  ? i18n.t('shell.status.preparingSecureSession')
-                  : runtimeRecoveryTitle()}
-              </div>
-              <Show when={recovery().error}>
-                {(message) => <div class="mt-1 text-xs text-muted-foreground">{message()}</div>}
+          <Show when={recovery().state !== 'ready'}>
+            <div
+              role={recovery().state === 'recovering' ? 'status' : 'alert'}
+              data-plugin-runtime-recovery={recovery().state}
+              class={cn(
+                'flex flex-wrap items-center gap-3 border-b px-4 py-3 text-sm',
+                recovery().state === 'recovering'
+                  ? 'border-primary/30 bg-primary/5 text-foreground'
+                  : 'border-destructive bg-background text-destructive',
+                PLUGIN_ENTER_MOTION_CLASS,
+              )}
+            >
+              <Show when={recovery().state === 'recovering'} fallback={<AlertTriangle class="h-4 w-4 shrink-0" />}>
+                <RefreshIcon class="h-4 w-4 shrink-0 animate-spin motion-reduce:animate-none" />
               </Show>
-              <div class="mt-1 text-xs text-muted-foreground">
-                {recovery().state === 'recovering'
-                  ? i18n.t('uiCopy.plugin.runtimeRecoveryInProgress')
-                  : runtimeRecoveryGuidance()}
+              <div class="min-w-0 flex-1">
+                <div class="font-medium">
+                  {recovery().state === 'recovering'
+                    ? i18n.t('shell.status.preparingSecureSession')
+                    : runtimeRecoveryTitle()}
+                </div>
+                <Show when={recovery().error}>
+                  {(message) => <div class="mt-1 text-xs text-muted-foreground">{message()}</div>}
+                </Show>
+                <div class="mt-1 text-xs text-muted-foreground">
+                  {recovery().state === 'recovering'
+                    ? i18n.t('uiCopy.plugin.runtimeRecoveryInProgress')
+                    : runtimeRecoveryGuidance()}
+                </div>
               </div>
+              <Show when={props.onRetryRuntimeRecovery && recovery().state === 'failed'}>
+                <button
+                  type="button"
+                  data-plugin-runtime-recovery-retry
+                  class={cn('min-h-[44px] cursor-pointer rounded-md border border-destructive px-3 text-xs font-semibold hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-9', PLUGIN_PRESS_MOTION_CLASS)}
+                  aria-busy={runtimeRetryPending()}
+                  disabled={runtimeRetryPending()}
+                  onClick={retryRuntimeRecovery}
+                >
+                  {i18n.t('shell.status.retryNow')}
+                </button>
+              </Show>
             </div>
-            <Show when={props.onRetryRuntimeRecovery && recovery().state === 'failed'}>
-              <button
-                type="button"
-                data-plugin-runtime-recovery-retry
-                class={cn('min-h-[44px] cursor-pointer rounded-md border border-destructive px-3 text-xs font-semibold hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-9', PLUGIN_PRESS_MOTION_CLASS)}
-                aria-busy={runtimeRetryPending()}
-                disabled={runtimeRetryPending()}
-                onClick={retryRuntimeRecovery}
-              >
-                {i18n.t('shell.status.retryNow')}
-              </button>
-            </Show>
-          </div>
+          </Show>
         )}
       </Show>
       {props.children}
@@ -1150,6 +1161,7 @@ export function PluginCenterDetails(props: {
   onMobileBack?: () => void;
   canManage: boolean;
   canOpenSurfaces: boolean;
+  runtimeRecovery?: PluginRuntimeRecoveryPresentation;
   managementPending: boolean;
   commandPendingType?: PluginPendingCommandType;
   installOperation?: PluginInstallOperationProjection;
@@ -1200,6 +1212,22 @@ export function PluginCenterDetails(props: {
                 </button>
               </div>
               <PluginIdentityHeader item={item()} description headingRef={props.detailHeadingRef} />
+
+              <Show when={props.runtimeRecovery}>
+                {(recovery) => (
+                  <Show when={recovery().state !== 'ready'}>
+                    <div
+                      role={recovery().state === 'failed' ? 'alert' : 'status'}
+                      data-plugin-runtime-recovery={recovery().state}
+                      class={cn('text-xs', recovery().state === 'failed' ? 'text-destructive' : 'text-muted-foreground')}
+                    >
+                      {recovery().state === 'recovering'
+                        ? i18n.t('uiCopy.plugin.runtimeRecoveryPluginInProgress')
+                        : recovery().error ?? i18n.t('uiCopy.plugin.runtimeRecoveryPluginFailed')}
+                    </div>
+                  </Show>
+                )}
+              </Show>
 
               <PluginActions
                 item={item()}

@@ -12,7 +12,7 @@ one validated snapshot during startup, and serves that snapshot only to the
 trusted Env App origin. The market identifies a candidate GitHub Release; it
 does not host plugin packages, preserve version history, grant trust, or install
 anything. Redeven downloads the exact GitHub assets declared by the snapshot and
-passes the complete signed release transport to released ReDevPlugin `0.7.21`.
+passes the complete signed release transport to released ReDevPlugin `0.7.22`.
 An invalid current response fails closed. A valid last-known-good snapshot may
 keep discovery available as stale data, but it cannot authorize an automatic
 update.

@@ -4325,6 +4325,8 @@
       "viewIssue": "Problem anzeigen",
       "runtimeIssueRecovery": "Aktualisieren Sie Redeven oder ReDevPlugin auf die erforderliche Version, starten Sie die Laufzeitumgebung neu und aktualisieren Sie anschließend das Plugin Center.",
       "runtimeRecoveryInProgress": "Der Zugriff auf die Plugin-Laufzeit wird wiederhergestellt. Plugin-Oberflächen bleiben bis zum Abschluss der Wiederherstellung nicht verfügbar.",
+      "runtimeRecoveryPluginInProgress": "Dieses Plugin wird noch wiederhergestellt. Beim Öffnen wird auf seinen sicheren Laufzeitstatus gewartet.",
+      "runtimeRecoveryPluginFailed": "Dieses Plugin konnte nicht wiederhergestellt werden. Prüfen Sie den Grund und versuchen Sie es vor dem Öffnen erneut.",
       "runtimeRecoveryFailed": "Plugin-Oberflächen bleiben nicht verfügbar. Prüfen Sie den oben angezeigten Fehler und versuchen Sie dann die Laufzeitwiederherstellung erneut.",
       "runtimeRecoveryReason": {
         "unknown": "Die Wiederherstellung der Plugin-Laufzeit ist fehlgeschlagen.",

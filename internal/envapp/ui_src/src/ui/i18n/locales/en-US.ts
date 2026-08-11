@@ -266,6 +266,8 @@ export const enUS = defineDictionary({
       viewIssue: 'View issue',
       runtimeIssueRecovery: 'Update Redeven or ReDevPlugin to the required version, restart the runtime, then refresh Plugin Center.',
       runtimeRecoveryInProgress: 'Plugin runtime access is being restored. Plugin surfaces will remain unavailable until recovery completes.',
+      runtimeRecoveryPluginInProgress: 'This plugin is still recovering. Opening will wait for its secure runtime state.',
+      runtimeRecoveryPluginFailed: 'This plugin could not be recovered. Review the reason and retry before opening it.',
       runtimeRecoveryFailed: 'Plugin surfaces remain unavailable. Review the error above, then retry runtime recovery.',
       runtimeRecoveryReason: {
         unknown: 'Plugin runtime recovery failed.',

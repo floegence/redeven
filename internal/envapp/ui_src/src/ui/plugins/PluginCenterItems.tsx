@@ -4,7 +4,7 @@ import { CheckCircle, Download, MoreHorizontal, Play, RefreshIcon } from '@floeg
 import { Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 
 import { useI18n } from '../i18n';
-import type { PluginCenterTab, PluginInstallOperationProjection, PluginInventoryItem, PluginPendingCommandType } from './pluginTypes';
+import type { PluginCenterTab, PluginInstallOperationProjection, PluginInventoryItem, PluginPendingCommandType, PluginRuntimeRecoveryPresentation } from './pluginTypes';
 import { PLUGIN_ENTER_MOTION_CLASS, PLUGIN_PRESS_MOTION_CLASS, pluginPendingCommandLabel, presentPlugin } from './pluginPresentation';
 import { PluginIcon, PluginStatusBadge, PluginTrustBadge } from './PluginPresentationPrimitives';
 import { resolveAuthorPresentation, resolvePluginPresentation } from './officialPluginCatalog';
@@ -16,6 +16,8 @@ export function PluginCenterItem(props: {
   selected: boolean;
   canManage: boolean;
   canOpenSurfaces: boolean;
+  runtimeRecovery?: PluginRuntimeRecoveryPresentation;
+  onRetryRuntimeRecovery?: () => Promise<unknown> | unknown;
   managementDisabled: boolean;
   commandPendingType?: PluginPendingCommandType;
   installOperation?: PluginInstallOperationProjection;
@@ -48,6 +50,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
   const update = () => props.tab === 'updates' || props.item.lifecycleState === 'update_available';
   const primaryAction = () => actions().primaryAction;
   const commandPending = () => props.commandPendingType !== undefined;
+  const runtimeRecovery = () => props.runtimeRecovery;
   const primaryLabel = () => {
     switch (primaryAction()) {
       case 'install': return i18n.t('uiCopy.plugin.install');
@@ -133,6 +136,31 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
           <span lang={presentation()?.resolved_locale} dir="auto">{publisher()}</span>
           <PluginStatusBadge item={props.item} />
         </span>
+        <Show when={runtimeRecovery()}>
+          {(recovery) => (
+            <Show when={recovery().state !== 'ready'}>
+              <span
+                role={recovery().state === 'failed' ? 'alert' : 'status'}
+                data-plugin-runtime-recovery={recovery().state}
+                class={cn('mt-2 text-xs', recovery().state === 'failed' ? 'text-destructive' : 'text-muted-foreground')}
+              >
+                {recovery().state === 'recovering'
+                  ? i18n.t('uiCopy.plugin.runtimeRecoveryPluginInProgress')
+                  : recovery().error ?? i18n.t('uiCopy.plugin.runtimeRecoveryPluginFailed')}
+                <Show when={recovery().state === 'failed' && props.onRetryRuntimeRecovery}>
+                  <button
+                    type="button"
+                    data-plugin-runtime-recovery-retry={props.item.pluginInstanceID}
+                    class="ml-2 inline-flex min-h-7 items-center rounded-md border px-2 text-[11px] font-semibold text-foreground hover:bg-muted"
+                    onClick={() => void props.onRetryRuntimeRecovery?.()}
+                  >
+                    {i18n.t('common.actions.retry')}
+                  </button>
+                </Show>
+              </span>
+            </Show>
+          )}
+        </Show>
       </button>
       <Show when={props.installOperation}>
         {(operation) => (

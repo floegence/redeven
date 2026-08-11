@@ -4325,6 +4325,8 @@
       "viewIssue": "檢視問題",
       "runtimeIssueRecovery": "將 Redeven 或 ReDevPlugin 更新至所需版本，重新啟動執行階段，然後重新整理外掛程式中心。",
       "runtimeRecoveryInProgress": "正在恢復外掛程式執行階段存取。恢復完成前，外掛程式介面暫時無法使用。",
+      "runtimeRecoveryPluginInProgress": "此外掛程式仍在恢復中。開啟操作會等待其安全執行階段狀態就緒。",
+      "runtimeRecoveryPluginFailed": "此外掛程式恢復失敗。請查看原因並重試後再開啟。",
       "runtimeRecoveryFailed": "外掛程式介面仍無法使用。請查看上方錯誤，然後重試執行階段恢復。",
       "runtimeRecoveryReason": {
         "unknown": "外掛程式執行階段恢復失敗。",
