@@ -128,7 +128,8 @@ bounded 90-second outer timeout as a fail-closed guard rather than a normal
 recovery budget.
 
 Plugin Center remains interactive while enabled plugins recover. Recovery is
-projected by exact `plugin_instance_id`: a recovering plugin remains closed,
+projected by exact `plugin_instance_id` plus installed package/manifest/entries
+identity: a recovering plugin remains closed,
 ready plugins remain openable, and a failed plugin alone shows its stable typed
 reason with an explicit idempotent Retry action. Retry returns that plugin to
 recovering and shares the Host single-flight operation; it never reloads the
@@ -139,6 +140,9 @@ enabled after the connected client's initial recovery remains closed until a
 subsequent Host refresh covers its exact id. If it appeared while the initial
 refresh was in flight, the Shell schedules at most one catch-up for that exact
 uncovered-instance set; an empty result cannot create an implicit retry loop.
+A typed failure remains sticky for the connected client, including while the
+inventory projection catches up; only the explicit Retry action clears that
+instance's failure marker.
 
 ## Official installation progress
 

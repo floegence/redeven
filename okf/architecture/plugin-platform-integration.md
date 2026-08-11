@@ -206,12 +206,16 @@ Plugin runtime recovery starts from the explicit authenticated plugin-session
 ready transition; Env App does not insert a fixed timer between transport
 connection and recovery. Plugin Center inventory and navigation remain
 interactive while enabled plugins recover. Recovery state is projected by exact
-`plugin_instance_id`: a recovering plugin may enter its target Host-owned
+`plugin_instance_id` plus the installed package/manifest/entries identity: a recovering plugin may enter its target Host-owned
 single-flight open path, a failed plugin alone remains closed with its typed
 reason and explicit idempotent Retry action, and ready plugins remain openable.
 No aggregate recovery result becomes a global surface authorization gate.
 ReDevPlugin still validates the active lease, trust epochs, revocation, package
-identity, permissions, and session binding on every open and RPC boundary.
+identity, permissions, and session binding on every open and RPC boundary. A
+successful package update with the same instance id schedules one bounded
+catch-up recovery for the new package identity. A typed recovery failure is
+sticky for that connected client and cannot trigger an implicit retry; only an
+explicit Retry clears the failed-instance marker.
 
 Every opened surface receives the released `redevplugin.surface_context.v1`
 with a monotonic revision, semantic light/dark palette, language tag, and text

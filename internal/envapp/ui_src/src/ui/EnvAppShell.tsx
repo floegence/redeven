@@ -290,6 +290,16 @@ const EnvWorkbenchPage = lazy(() => import('./workbench/EnvWorkbenchPage').then(
 
 type EnvActivitySurfaceId = EnvSurfaceId | 'settings' | typeof PLUGIN_CENTER_ACTIVITY_ID;
 
+function pluginRuntimePackageIdentity(item: import('./plugins/pluginTypes').PluginInventoryItem): string {
+  const installedPackage = item.installedPackage;
+  if (!installedPackage) return `${item.version ?? ''}\u0000${item.managementRevision ?? ''}`;
+  return [
+    installedPackage.packageHash,
+    installedPackage.manifestHash,
+    installedPackage.entriesHash,
+  ].join('\u0000');
+}
+
 type ActivityPluginWindow = Readonly<{
   instanceID: string;
   targetKey: string;
@@ -1194,7 +1204,8 @@ export function EnvAppShell() {
   });
   let pluginRuntimeRecoveryClient: unknown = null;
   let pluginRuntimeRecoveryAbort: AbortController | undefined;
-  let pluginRuntimeRecoveryKnownInstances = new Set<string>();
+  let pluginRuntimeRecoveryKnownIdentities = new Map<string, string>();
+  let pluginRuntimeRecoveryFailedInstances = new Set<string>();
   let pluginRuntimeRecoveryAutoCatchupSignatures = new Set<string>();
   createEffect(() => {
     pluginRuntimeRecoveryRetrySeq();
@@ -1204,7 +1215,8 @@ export function EnvAppShell() {
       pluginRuntimeRecoveryClient = null;
       pluginRuntimeRecoveryAbort?.abort('Plugin runtime session disconnected');
       pluginRuntimeRecoveryAbort = undefined;
-      pluginRuntimeRecoveryKnownInstances = new Set();
+      pluginRuntimeRecoveryKnownIdentities = new Map();
+      pluginRuntimeRecoveryFailedInstances = new Set();
       pluginRuntimeRecoveryAutoCatchupSignatures = new Set();
       setPluginRuntimeRecoveryComplete(false);
       setPluginRuntimeRecoveryByInstanceID({});
@@ -1217,20 +1229,22 @@ export function EnvAppShell() {
       setPluginRuntimeRecoveryState('ready');
       return;
     }
-    const enabledInstanceIDs = new Set(
+    const enabledRuntimeIdentities = new Map(
       pluginInventoryProjection()?.items
         .filter((item) => item.pluginInstanceID && item.lifecycleState === 'enabled')
-        .map((item) => item.pluginInstanceID!) ?? [],
+        .map((item) => [item.pluginInstanceID!, pluginRuntimePackageIdentity(item)] as const) ?? [],
     );
-    const hasUncoveredEnabledInstance = [...enabledInstanceIDs].some(
-      (pluginInstanceID) => !pluginRuntimeRecoveryKnownInstances.has(pluginInstanceID),
+    const hasUncoveredEnabledInstance = [...enabledRuntimeIdentities].some(
+      ([pluginInstanceID, identity]) => pluginRuntimeRecoveryKnownIdentities.get(pluginInstanceID) !== identity,
     );
-    const uncoveredInstanceSignature = [...enabledInstanceIDs]
-      .filter((pluginInstanceID) => !pluginRuntimeRecoveryKnownInstances.has(pluginInstanceID))
+    const uncoveredInstanceSignature = [...enabledRuntimeIdentities]
+      .filter(([pluginInstanceID, identity]) => pluginRuntimeRecoveryKnownIdentities.get(pluginInstanceID) !== identity)
+      .map(([pluginInstanceID, identity]) => `${pluginInstanceID}\u0001${identity}`)
       .sort()
       .join('\u0000');
     if (pluginRuntimeRecoveryClient === connectedClient && (
       untrack(pluginRuntimeRecoveryState) === 'recovering'
+      || untrack(pluginRuntimeRecoveryState) === 'failed'
       || !hasUncoveredEnabledInstance
       || pluginRuntimeRecoveryAutoCatchupSignatures.has(uncoveredInstanceSignature)
     )) return;
@@ -1256,6 +1270,11 @@ export function EnvAppShell() {
       if (controller.signal.aborted || pluginRuntimeRecoveryClient !== connectedClient) return;
       window.clearTimeout(recoveryTimer);
       const failures = result.results.filter((entry) => entry.status === 'failed');
+      const failedInstanceIDs = new Set(failures.map((entry) => entry.plugin_instance_id));
+      for (const instanceID of failedInstanceIDs) pluginRuntimeRecoveryFailedInstances.add(instanceID);
+      for (const entry of result.results) {
+        if (entry.status !== 'failed') pluginRuntimeRecoveryFailedInstances.delete(entry.plugin_instance_id);
+      }
       const recoveryByInstanceID: Record<string, import('./plugins/pluginTypes').PluginRuntimeRecoveryPresentation> = {};
       for (const entry of result.results) {
         recoveryByInstanceID[entry.plugin_instance_id] = entry.status === 'failed'
@@ -1267,7 +1286,19 @@ export function EnvAppShell() {
           }
           : { state: 'ready' };
       }
-      pluginRuntimeRecoveryKnownInstances = new Set(result.results.map((entry) => entry.plugin_instance_id));
+      const currentEnabledRuntimeIdentities = new Map(
+        (pluginInventoryProjection()?.items ?? [])
+          .filter((item) => item.pluginInstanceID && item.lifecycleState === 'enabled')
+          .map((item) => [item.pluginInstanceID!, pluginRuntimePackageIdentity(item)] as const),
+      );
+      pluginRuntimeRecoveryKnownIdentities = new Map(
+        result.results.map((entry) => [
+          entry.plugin_instance_id,
+          enabledRuntimeIdentities.get(entry.plugin_instance_id)
+            ?? currentEnabledRuntimeIdentities.get(entry.plugin_instance_id)
+            ?? '',
+        ]),
+      );
       setPluginRuntimeRecoveryByInstanceID(recoveryByInstanceID);
       setPluginRuntimeRecoveryComplete(true);
       if (failures.length > 0) {
@@ -1281,8 +1312,10 @@ export function EnvAppShell() {
       }
       const uncoveredInstanceIDs = (pluginInventoryProjection()?.items ?? [])
         .filter((item) => item.pluginInstanceID && item.lifecycleState === 'enabled')
-        .map((item) => item.pluginInstanceID!)
-        .filter((pluginInstanceID) => !pluginRuntimeRecoveryKnownInstances.has(pluginInstanceID))
+        .map((item) => [item.pluginInstanceID!, pluginRuntimePackageIdentity(item)] as const)
+        .filter(([pluginInstanceID]) => !pluginRuntimeRecoveryFailedInstances.has(pluginInstanceID))
+        .filter(([pluginInstanceID, identity]) => pluginRuntimeRecoveryKnownIdentities.get(pluginInstanceID) !== identity)
+        .map(([pluginInstanceID, identity]) => `${pluginInstanceID}\u0001${identity}`)
         .sort();
       const catchupSignature = uncoveredInstanceIDs.join('\u0000');
       if (catchupSignature && !pluginRuntimeRecoveryAutoCatchupSignatures.has(catchupSignature)) {
@@ -1303,10 +1336,10 @@ export function EnvAppShell() {
           recoveryByInstanceID[item.pluginInstanceID] = { state: 'failed', error: getErrorMessage(error) };
         }
       }
-      pluginRuntimeRecoveryKnownInstances = new Set(
+      pluginRuntimeRecoveryKnownIdentities = new Map(
         pluginInventoryProjection()?.items
           .filter((item) => item.pluginInstanceID && item.lifecycleState === 'enabled')
-          .map((item) => item.pluginInstanceID!) ?? [],
+          .map((item) => [item.pluginInstanceID!, pluginRuntimePackageIdentity(item)] as const) ?? [],
       );
       setPluginRuntimeRecoveryByInstanceID(recoveryByInstanceID);
       setPluginRuntimeRecoveryState('failed');
@@ -1317,6 +1350,8 @@ export function EnvAppShell() {
     if (pluginRuntimeRecoveryState() !== 'failed') return;
     if (protocol.status() !== 'connected' || (isLocalMode() && !pluginSessionReady())) return;
     pluginRuntimeRecoveryAbort?.abort('Plugin runtime recovery retry requested');
+    if (_pluginInstanceID) pluginRuntimeRecoveryFailedInstances.delete(_pluginInstanceID);
+    else pluginRuntimeRecoveryFailedInstances = new Set();
     pluginRuntimeRecoveryClient = null;
     setPluginRuntimeRecoveryState('recovering');
     setPluginRuntimeRecoveryComplete(false);
