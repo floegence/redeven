@@ -1730,7 +1730,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       requestTranscriptAnimationFrame(() => {
         const approvalSurface = composerApprovalCardRef;
         if (!approvalSurface?.isConnected) return;
-        approvalSurface.focus({ preventScroll: true });
+        const firstDecision = approvalSurface.querySelector<HTMLButtonElement>(
+          '.flower-composer-approval-decision:not([disabled])',
+        );
+        (firstDecision ?? approvalSurface).focus({ preventScroll: true });
       });
     }
     previousComposerApprovalActionID = actionID;
