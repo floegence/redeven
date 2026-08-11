@@ -107,7 +107,7 @@ silently accepted or retried with broader authority.
 
 ## Package sources and lifecycle
 
-Production obtains the official Containers `4.4.1` release from the frozen
+Production obtains the official Containers `4.4.2` release from the frozen
 latest-only market snapshot. The snapshot identifies the immutable GitHub
 Release and complete signed transport; it does not carry package bytes or grant
 trust. Redeven submits the released `release-install-operation.v1` request with
