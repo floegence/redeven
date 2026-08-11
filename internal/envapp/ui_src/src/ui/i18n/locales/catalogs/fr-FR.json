@@ -3850,6 +3850,7 @@
       "scrollToLatest": "Aller au message le plus récent",
       "runErrorTitle": "Flower n’a pas pu terminer cette réponse.",
       "runContinuationErrorTitle": "La réponse n’a pas pu continuer.",
+      "retryReply": "Réessayer la réponse",
       "runErrorActionUpdateAPIKey": "Mettre à jour la clé API",
       "runErrorActionAddAPIKey": "Ajouter la clé API",
       "runErrorActionSwitchModel": "Changer de modèle",

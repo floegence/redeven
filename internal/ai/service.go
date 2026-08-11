@@ -2213,6 +2213,7 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		Input:           req.Input,
 		Options:         req.Options,
 		ModelCapability: modelCapability,
+		Retry:           req.Retry,
 	}
 	engineRunStarted = true
 	runErr := r.run(ctx, runReq)

@@ -95,6 +95,7 @@
       "scrollToLatest": "최신으로 스크롤",
       "runErrorTitle": "Flower가 이 답변을 완료하지 못했습니다.",
       "runContinuationErrorTitle": "답변을 계속할 수 없습니다.",
+      "retryReply": "답변 다시 시도",
       "runErrorActionUpdateAPIKey": "API 키 업데이트",
       "runErrorActionAddAPIKey": "API 키 추가",
       "runErrorActionSwitchModel": "모델 전환",

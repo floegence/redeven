@@ -82,6 +82,9 @@ type AdapterHarness = Readonly<{
   loadThread: ReturnType<typeof vi.fn<FlowerSurfaceAdapter['loadThread']>>;
   listThreadLiveEvents: ReturnType<typeof vi.fn<FlowerSurfaceAdapter['listThreadLiveEvents']>>;
   markThreadRead: ReturnType<typeof vi.fn<FlowerSurfaceAdapter['markThreadRead']>>;
+  retryThread: ReturnType<typeof vi.fn<FlowerSurfaceAdapter['retryThread']>>;
+  launchTurn: ReturnType<typeof vi.fn<FlowerSurfaceAdapter['launchTurn']>>;
+  submitApproval: ReturnType<typeof vi.fn<FlowerSurfaceAdapter['submitApproval']>>;
 }>;
 
 let dispose: (() => void) | undefined;
@@ -286,6 +289,9 @@ function createAdapterHarness(overrides: Partial<FlowerSurfaceAdapter> = {}): Ad
     retained_from_seq: 1,
   }));
   const markThreadRead = vi.fn<FlowerSurfaceAdapter['markThreadRead']>(async () => readStatus(false));
+  const retryThread = vi.fn<FlowerSurfaceAdapter['retryThread']>(async () => bootstrap());
+  const launchTurn = vi.fn<FlowerSurfaceAdapter['launchTurn']>(async (input) => ({ client_request_id: input.client_request_id, thread_id: 'new-thread', turn_id: 'turn', run_id: 'run', kind: 'start' }));
+  const submitApproval = vi.fn<FlowerSurfaceAdapter['submitApproval']>(async () => ({ ok: true, current_cursor: 0 }));
   const adapter: FlowerSurfaceAdapter = {
     runtime: {
       runtime_id: 'runtime-test',
@@ -319,7 +325,8 @@ function createAdapterHarness(overrides: Partial<FlowerSurfaceAdapter> = {}): Ad
     markThreadRead,
     persistDefaultModel: async () => settings(),
     resolveHandler: async () => routerDecision(),
-    launchTurn: async (input) => ({ client_request_id: input.client_request_id, thread_id: 'new-thread', turn_id: 'turn', run_id: 'run', kind: 'start' }),
+    launchTurn,
+    retryThread,
     compactThreadContext: async () => bootstrap(),
     stopThread: async () => bootstrap(),
     submitInput: async (input) => ({
@@ -328,7 +335,7 @@ function createAdapterHarness(overrides: Partial<FlowerSurfaceAdapter> = {}): Ad
       run_id: 'run-input-response',
       consumed_prompt_id: input.prompt_id,
     }),
-    submitApproval: async () => ({ ok: true, current_cursor: 0 }),
+    submitApproval,
     ...overrides,
   };
   return {
@@ -339,6 +346,9 @@ function createAdapterHarness(overrides: Partial<FlowerSurfaceAdapter> = {}): Ad
       ? listThreadLiveEvents
       : vi.mocked(adapter.listThreadLiveEvents),
     markThreadRead: adapter.markThreadRead === markThreadRead ? markThreadRead : vi.mocked(adapter.markThreadRead),
+    retryThread: adapter.retryThread === retryThread ? retryThread : vi.mocked(adapter.retryThread),
+    launchTurn: adapter.launchTurn === launchTurn ? launchTurn : vi.mocked(adapter.launchTurn),
+    submitApproval: adapter.submitApproval === submitApproval ? submitApproval : vi.mocked(adapter.submitApproval),
   };
 }
 
@@ -388,7 +398,7 @@ afterEach(() => {
 });
 
 describe('FlowerSurface companion visibility lifecycle', () => {
-  it('shows one quiet actionable notice when provider continuation fails after a declined tool', async () => {
+  it('retries only the failed provider continuation after a declined tool', async () => {
     const failedContinuation = thread({
       status: 'failed',
       error: {
@@ -431,9 +441,15 @@ describe('FlowerSurface companion visibility lifecycle', () => {
         }],
       }],
     });
+    let retryAttempts = 0;
     const harness = createAdapterHarness({
       listThreads: vi.fn(async () => [{ ...failedContinuation, messages: [] }]),
       loadThread: vi.fn(async () => bootstrap(failedContinuation)),
+      retryThread: vi.fn(async () => {
+        retryAttempts += 1;
+        if (retryAttempts === 1) throw new Error('retry transport unavailable');
+        return bootstrap(failedContinuation);
+      }),
     });
     renderSurface(harness.adapter, true, true, undefined, 'full');
 
@@ -447,7 +463,19 @@ describe('FlowerSurface companion visibility lifecycle', () => {
     expect(host.querySelectorAll('.flower-error-card')).toHaveLength(1);
     expect(host.textContent).toContain('Reply could not continue.');
     expect(host.textContent).not.toContain('Flower could not finish this reply.');
-    expect(host.querySelector('.flower-error-card button')).not.toBeNull();
+    const retry = host.querySelector('.flower-error-card button') as HTMLButtonElement | null;
+    expect(retry).not.toBeNull();
+    expect(retry?.textContent).toBe('Retry reply');
+    retry?.click();
+    await waitUntil(() => harness.retryThread.mock.calls.length === 1, 'continuation retry was not submitted');
+    expect(harness.retryThread).toHaveBeenCalledWith('thread-running');
+    await waitUntil(() => retry?.disabled === false, 'failed retry did not become retryable again');
+    expect(host.querySelectorAll('.flower-error-card')).toHaveLength(1);
+    expect(host.querySelectorAll('[data-flower-activity-status="declined"]')).toHaveLength(1);
+    retry?.click();
+    await waitUntil(() => harness.retryThread.mock.calls.length === 2, 'continuation retry was not resubmitted');
+    expect(harness.launchTurn).not.toHaveBeenCalled();
+    expect(harness.submitApproval).not.toHaveBeenCalled();
   });
 
   it('keeps the ordinary composer textarea mounted while the companion expands and collapses', async () => {

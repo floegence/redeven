@@ -208,6 +208,10 @@ type recordingFloretHost struct {
 	resolveApprovalReq []flruntime.ResolveApprovalCommand
 }
 
+func (h *recordingFloretHost) RetryTurn(context.Context, flruntime.RetryTurnCommand) (flruntime.RetryTurnResult, error) {
+	return flruntime.RetryTurnResult{}, errors.New("unexpected RetryTurn")
+}
+
 type testReadTurnProjectionRequest struct {
 	ThreadID identity.ThreadID
 	TurnID   identity.TurnID

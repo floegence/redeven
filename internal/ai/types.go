@@ -14,6 +14,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/floegence/floret/v3/identity"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 	"github.com/floegence/redeven/internal/config"
 )
@@ -371,18 +372,23 @@ type StopThreadResponse struct {
 	RecoveredFollowups []FollowupItemView `json:"recovered_followups,omitempty"`
 }
 
+type RetryThreadContinuationResponse struct {
+	OK bool `json:"ok"`
+}
+
 // RunStartRequest is the HTTP request body for starting an AI run.
 //
 // Notes:
 // - thread_id is mandatory; the agent builds history from the persisted thread store.
 // - history must NOT be provided by clients (agent is the source of truth).
 type RunStartRequest struct {
-	ThreadID          string     `json:"thread_id"`
-	Model             string     `json:"model"`
-	Input             RunInput   `json:"input"`
-	Options           RunOptions `json:"options"`
-	StagingScopeID    string     `json:"-"`
-	StagingCapability string     `json:"-"`
+	ThreadID          string                   `json:"thread_id"`
+	Model             string                   `json:"model"`
+	Input             RunInput                 `json:"input"`
+	Options           RunOptions               `json:"options"`
+	StagingScopeID    string                   `json:"-"`
+	StagingCapability string                   `json:"-"`
+	Retry             *FloretContinuationRetry `json:"-"`
 }
 
 // RunRequest is the internal run request for Go runtime execution.
@@ -392,6 +398,12 @@ type RunRequest struct {
 	Input           RunInput                     `json:"input"`
 	Options         RunOptions                   `json:"options"`
 	ModelCapability contextmodel.ModelCapability `json:"-"`
+	Retry           *FloretContinuationRetry     `json:"-"`
+}
+
+type FloretContinuationRetry struct {
+	LogicalRequestID identity.LogicalRequestID
+	Reason           string
 }
 
 type RunInput struct {

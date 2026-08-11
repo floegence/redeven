@@ -1013,6 +1013,15 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         });
       }
     },
+    retryThread: async (threadID) => {
+      const tid = trim(threadID);
+      if (!tid) throw new Error(adapterCopy(options).missingThreadID);
+      await fetchLocalApiJSON(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}/retry`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+      return loadThread(tid);
+    },
     stopThread: async (threadID) => {
       const tid = trim(threadID);
       if (!tid) throw new Error(adapterCopy(options).missingThreadID);

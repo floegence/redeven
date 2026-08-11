@@ -117,6 +117,60 @@ func TestThreadTimelineRetryWithoutUserEntryUsesSourceCanonicalAnchor(t *testing
 	}
 }
 
+func TestThreadTimelineHidesSupersededUnavailableRetryProjection(t *testing.T) {
+	svc := newTestService(t, nil)
+	now := time.UnixMilli(30_000)
+	turns := []flruntime.ThreadTurnSnapshot{
+		{
+			TurnID: "turn_source", RunID: "run_source", Ordinal: 1,
+			StartedAt: now, UpdatedAt: now, UserEntryID: "entry_source",
+			UserMessageOrigin: flruntime.ThreadUserMessageOriginUser,
+			UserInput:         "source input", Status: flruntime.TurnStatusFailed, ThroughOrdinal: 1,
+			Projection: flruntime.ThreadTurnProjection{
+				ThreadID: "thread_retry_chain", TurnID: "turn_source", RunID: "run_source",
+				Status: flruntime.TurnStatusFailed, ThroughOrdinal: 1, Segments: []flruntime.ThreadTurnProjectionSegment{{
+					Kind: flruntime.ThreadTurnProjectionSegmentAssistantText, Text: "source partial",
+				}},
+			},
+		},
+		{
+			TurnID: "turn_failed_retry", RunID: "run_failed_retry", Ordinal: 2,
+			StartedAt: now.Add(time.Second), UpdatedAt: now.Add(2 * time.Second),
+			RetrySource: &flruntime.ThreadTurnRetrySource{TurnID: "turn_source"},
+			Status:      flruntime.TurnStatusFailed, ThroughOrdinal: 2,
+			Projection: flruntime.ThreadTurnProjection{
+				ThreadID: "thread_retry_chain", TurnID: "turn_failed_retry", RunID: "run_failed_retry",
+				Status: flruntime.TurnStatusFailed, ThroughOrdinal: 2,
+			},
+		},
+		{
+			TurnID: "turn_recovered_retry", RunID: "run_recovered_retry", Ordinal: 3,
+			StartedAt: now.Add(3 * time.Second), UpdatedAt: now.Add(4 * time.Second),
+			RetrySource: &flruntime.ThreadTurnRetrySource{TurnID: "turn_failed_retry"},
+			Status:      flruntime.TurnStatusCompleted, ThroughOrdinal: 3,
+			Projection: flruntime.ThreadTurnProjection{
+				ThreadID: "thread_retry_chain", TurnID: "turn_recovered_retry", RunID: "run_recovered_retry",
+				Status: flruntime.TurnStatusCompleted, ThroughOrdinal: 3, Segments: []flruntime.ThreadTurnProjectionSegment{{
+					Kind: flruntime.ThreadTurnProjectionSegmentAssistantText, Text: "recovered answer",
+				}},
+			},
+		},
+	}
+
+	items, err := svc.threadTimelineMessagesFromTurns("env", "thread_retry_chain", turns)
+	if err != nil {
+		t.Fatalf("threadTimelineMessagesFromTurns: %v", err)
+	}
+	if len(items) != 3 {
+		t.Fatalf("items=%#v, want source user, source assistant, and recovered assistant", items)
+	}
+	for _, item := range items {
+		if item.Decoration != nil {
+			t.Fatalf("superseded retry kept unavailable decoration: %#v", item.Decoration)
+		}
+	}
+}
+
 func TestCanonicalUserTimelineMessagePublishesSafeReferenceDTO(t *testing.T) {
 	raw, err := canonicalUserTimelineMessage("turn_reference", "entry_reference", "", nil, []flruntime.MessageReference{
 		{

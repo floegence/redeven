@@ -1373,6 +1373,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   loadStagedAttachmentPreview?: (attachment: FlowerStagedAttachment, scope: FlowerAttachmentStagingScope, signal: AbortSignal) => Promise<Blob>;
   previewStagedAttachment?: (attachment: FlowerStagedAttachment, scope: FlowerAttachmentStagingScope) => void | Promise<void>;
   launchTurn: (input: FlowerTurnLaunchInput) => Promise<FlowerTurnLaunchReceipt>;
+  retryThread: (threadID: string) => Promise<FlowerLiveBootstrap>;
   compactThreadContext: (input: FlowerCompactThreadContextInput) => Promise<FlowerLiveBootstrap>;
   stopThread: (threadID: string) => Promise<FlowerLiveBootstrap>;
   submitInput: (input: FlowerSubmitInputRequest) => Promise<FlowerSubmitInputReceipt>;

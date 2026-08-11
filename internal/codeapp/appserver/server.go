@@ -1479,6 +1479,7 @@ func aiThreadActionHTTPStatus(err error) int {
 		errors.Is(err, ai.ErrFollowupsRevisionChanged),
 		errors.Is(err, ai.ErrCompactAlreadyPending),
 		errors.Is(err, ai.ErrNoCompactableContext),
+		errors.Is(err, ai.ErrThreadContinuationRetryUnavailable),
 		errors.Is(err, ai.ErrThreadStopPending):
 		return http.StatusConflict
 	case errors.Is(err, ai.ErrThreadStopUnavailable):
@@ -5242,6 +5243,34 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error()})
 				return
 			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: resp})
+			return
+
+		case action == "retry" && r.Method == http.MethodPost:
+			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+			if !ok {
+				return
+			}
+			if !g.requireAIService(w, aiSvc) {
+				return
+			}
+			dec := json.NewDecoder(r.Body)
+			dec.DisallowUnknownFields()
+			if err := dec.Decode(&struct{}{}); err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			if err := dec.Decode(&struct{}{}); err != io.EOF {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			resp, err := aiSvc.RetryThreadContinuation(r.Context(), meta, threadID)
+			if err != nil {
+				g.appendAudit(meta, "ai_thread_continuation_retry", "failure", map[string]any{"thread_id": threadID}, err)
+				writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			g.appendAudit(meta, "ai_thread_continuation_retry", "success", map[string]any{"thread_id": threadID}, nil)
 			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: resp})
 			return
 

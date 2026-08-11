@@ -3850,6 +3850,7 @@
       "scrollToLatest": "Zum neuesten scrollen",
       "runErrorTitle": "Flower konnte diese Antwort nicht abschließen.",
       "runContinuationErrorTitle": "Die Antwort konnte nicht fortgesetzt werden.",
+      "retryReply": "Antwort erneut versuchen",
       "runErrorActionUpdateAPIKey": "API-Schlüssel aktualisieren",
       "runErrorActionAddAPIKey": "API-Schlüssel hinzufügen",
       "runErrorActionSwitchModel": "Modell wechseln",

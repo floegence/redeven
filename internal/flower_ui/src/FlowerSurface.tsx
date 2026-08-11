@@ -1039,6 +1039,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     setPendingSubmission((current) => transitionFlowerPendingSubmission(current, event));
   };
   const [threadStopping, setThreadStopping] = createSignal(false);
+  const [continuationRetryingThreadID, setContinuationRetryingThreadID] = createSignal('');
   const [compactSubmitting, setCompactSubmitting] = createSignal(false);
   const [pendingContextCompaction, setPendingContextCompaction] = createSignal<PendingContextCompactionDecoration | null>(null);
   const [settingsSaving, setSettingsSaving] = createSignal(false);
@@ -6422,7 +6423,31 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       || code === 'provider_model_unavailable'
       || code === 'provider_unreachable'
       || code === 'provider_stream_interrupted';
-    const action = () => actionable
+    const retryContinuation = async () => {
+      const threadID = trimString(selectedThreadID());
+      if (!threadID || continuationRetryingThreadID() === threadID) return;
+      setContinuationRetryingThreadID(threadID);
+      try {
+        applyLiveBootstrap(await props.adapter.retryThread(threadID), 'user_action');
+      } catch {
+        // The canonical failed snapshot remains the single retryable error surface.
+      } finally {
+        setContinuationRetryingThreadID((current) => (current === threadID ? '' : current));
+      }
+    };
+    const action = () => continuationFailure()
+      ? (
+        <Button
+          size="sm"
+          variant="outline"
+          icon={Refresh}
+          disabled={continuationRetryingThreadID() === trimString(selectedThreadID())}
+          onClick={() => void retryContinuation()}
+        >
+          {copy().chat.retryReply}
+        </Button>
+      )
+      : actionable
       ? (
         <Button size="sm" variant="outline" icon={Settings} onClick={openSettings}>
           {runErrorActionLabel(code)}

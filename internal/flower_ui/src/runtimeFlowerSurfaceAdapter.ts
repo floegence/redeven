@@ -148,6 +148,7 @@ export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
   loadStagedAttachmentPreview?: FlowerSurfaceAdapter['loadStagedAttachmentPreview'];
   previewStagedAttachment?: FlowerSurfaceAdapter['previewStagedAttachment'];
   launchTurn: (input: FlowerTurnLaunchInput) => Promise<FlowerTurnLaunchReceipt>;
+  retryThread: (threadID: string) => Promise<FlowerLiveBootstrap>;
   compactThreadContext: (input: FlowerCompactThreadContextInput) => Promise<FlowerLiveBootstrap>;
   stopThread: (threadID: string) => Promise<FlowerLiveBootstrap>;
   submitInput: (input: FlowerSubmitInputRequest) => Promise<FlowerSubmitInputReceipt>;
@@ -393,6 +394,11 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     ...(options.canMutate !== false && options.loadStagedAttachmentPreview ? { loadStagedAttachmentPreview: options.loadStagedAttachmentPreview } : {}),
     ...(options.canMutate !== false && options.previewStagedAttachment ? { previewStagedAttachment: options.previewStagedAttachment } : {}),
     launchTurn: options.launchTurn,
+    retryThread: async (threadID) => {
+      const tid = trim(threadID);
+      if (!tid) throw new Error(missingThreadIDMessage(options));
+      return options.retryThread(tid);
+    },
     compactThreadContext: async (input) => {
       const tid = trim(input.thread_id);
       if (!tid) throw new Error(missingThreadIDMessage(options));

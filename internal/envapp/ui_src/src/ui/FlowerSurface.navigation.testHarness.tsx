@@ -895,6 +895,7 @@ export function adapter(configured = true): FlowerSurfaceAdapter {
       const receipt = launchReceipt(input.thread_id ?? 'thread-1', 'turn-launch');
       return { ...receipt, client_request_id: input.client_request_id };
     }),
+    retryThread: vi.fn(async (threadID: string) => liveBootstrap(thread({ thread_id: threadID, status: 'running' }))),
     compactThreadContext: vi.fn(async (input) => liveBootstrap(thread({
       thread_id: input.thread_id,
       status: 'running',

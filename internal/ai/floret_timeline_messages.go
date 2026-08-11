@@ -168,6 +168,16 @@ func (s *Service) threadTimelineMessagesFromTurns(endpointID string, threadID st
 	items := make([]threadTimelineMessage, 0, len(turns)*2)
 	seenTurns := make(map[string]struct{}, len(turns))
 	canonicalUserAnchors := make(map[string]string, len(turns))
+	supersededRetryTurns := make(map[string]struct{}, len(turns))
+	for _, turn := range turns {
+		if turn.RetrySource == nil {
+			continue
+		}
+		sourceTurnID := strings.TrimSpace(string(turn.RetrySource.TurnID))
+		if sourceTurnID != "" {
+			supersededRetryTurns[sourceTurnID] = struct{}{}
+		}
+	}
 	for _, turn := range turns {
 		turnID := strings.TrimSpace(string(turn.TurnID))
 		runID := strings.TrimSpace(string(turn.RunID))
@@ -231,6 +241,10 @@ func (s *Service) threadTimelineMessagesFromTurns(endpointID string, threadID st
 				TurnOrdinal:      turn.Ordinal, TurnStatus: turn.Status, MessageJSON: assistant,
 			})
 		} else if reason.Valid() {
+			if _, superseded := supersededRetryTurns[turnID]; superseded {
+				seenTurns[turnID] = struct{}{}
+				continue
+			}
 			decoration, err := projectionUnavailableDecoration(turn, reason, canonicalUserAnchors[turnID])
 			if err != nil {
 				return nil, err
