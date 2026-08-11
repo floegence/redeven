@@ -469,6 +469,53 @@ describe('terminal codec', () => {
     expect(resp.totalBytes).toBe(1024);
   });
 
+  it('decodes an authoritative checkpoint and its exact contiguous delta boundary', () => {
+    const response = fromWireTerminalHistoryResponse({
+      chunks: [{
+        sequence: 42,
+        timestamp_ms: 42,
+        data_b64: 'ZGVsdGE=',
+        geometry_generation: 8,
+        cols: 132,
+        rows: 48,
+      }],
+      checkpoint: {
+        format_version: 1,
+        engine_id: 'floegence-ghostty-web',
+        covered_through_sequence: 41,
+        geometry_generation: 8,
+        parser_epoch: 3,
+        cols: 132,
+        rows: 48,
+        checksum_sha256: 'a'.repeat(64),
+        state_digest_sha256: 'b'.repeat(64),
+        data_b64: 'Y2hlY2twb2ludA==',
+      },
+      delta_start_sequence: 42,
+      first_retained_sequence: 42,
+      covered_through_sequence: 42,
+      snapshot_end_sequence: 42,
+      history_generation: 3,
+      history_truncated: true,
+    } as any) as any;
+
+    expect(response.checkpoint).toMatchObject({
+      formatVersion: 1,
+      engineId: 'floegence-ghostty-web',
+      coveredThroughSequence: 41,
+      geometryGeneration: 8,
+      parserEpoch: 3,
+      cols: 132,
+      rows: 48,
+      checksumSha256: 'a'.repeat(64),
+      stateDigestSha256: 'b'.repeat(64),
+    });
+    expect(Array.from(response.checkpoint?.bytes ?? [])).toEqual(Array.from(new TextEncoder().encode('checkpoint')));
+    expect(response.deltaStartSequence).toBe(42);
+    expect(response.firstRetainedSequence).toBe(42);
+    expect(response.chunks.map((chunk: { sequence: number }) => chunk.sequence)).toEqual([42]);
+  });
+
   it('distinguishes explicit zero history coverage from a missing contract', () => {
     expect(fromWireTerminalHistoryResponse({
       chunks: [],

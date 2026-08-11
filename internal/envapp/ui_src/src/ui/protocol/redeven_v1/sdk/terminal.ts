@@ -1,6 +1,7 @@
 import type {
   TerminalExecutionContextInfo,
   TerminalForegroundCommandInfo,
+  TerminalHistoryCheckpoint,
   TerminalOutputActivityInfo,
   TerminalSessionInfo as FloetermTerminalSessionInfo,
   TerminalWorkStateInfo,
@@ -41,6 +42,8 @@ export type TerminalHistoryRequest = {
 
 export type TerminalHistoryResponse = {
   chunks: TerminalHistoryChunk[];
+  checkpoint?: TerminalHistoryCheckpoint;
+  deltaStartSequence?: number;
   nextStartSeq: number;
   hasMore: boolean;
   firstSequence: number;
@@ -53,6 +56,15 @@ export type TerminalHistoryResponse = {
   historyTruncated: boolean;
   coveredBytes: number;
   totalBytes: number;
+};
+
+export type TerminalHistoryCheckpointCommitRequest = {
+  sessionId: string;
+  checkpoint: TerminalHistoryCheckpoint;
+};
+
+export type TerminalHistoryCheckpointCommitResponse = {
+  ok: boolean;
 };
 
 export type TerminalClearRequest = {

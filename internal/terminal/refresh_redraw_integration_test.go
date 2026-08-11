@@ -35,10 +35,11 @@ while :; do read -r line; done
 	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError}))
 	manager := NewManager(shellPath, root, logger)
 	manager.term.Cleanup()
-	config := newTerminalGoManagerConfig(shellPath, logger)
+	config := newTerminalGoManagerConfig(shellPath, root, logger)
 	config.HistoryBufferSize = 3
 	config.HistoryBufferMaxChunks = 3
 	config.HistoryBufferMaxBytes = 64 * 1024
+	config.HistorySpoolRoot = ""
 	manager.term = termgo.NewManager(config)
 	manager.activateSessionFunc = manager.term.ActivateSessionContext
 	t.Cleanup(manager.Cleanup)

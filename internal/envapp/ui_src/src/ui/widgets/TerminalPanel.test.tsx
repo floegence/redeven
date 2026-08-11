@@ -335,6 +335,7 @@ const transportMocks = vi.hoisted(() => {
       coveredBytes: 0,
       totalBytes: 0,
     }),
+    commitHistoryCheckpoint: vi.fn().mockResolvedValue(undefined),
     getSessionStats: vi.fn().mockResolvedValue({ history: { totalBytes: 0 } }),
     clear: vi.fn().mockResolvedValue(undefined),
     forgetSession: vi.fn(),
@@ -1009,6 +1010,7 @@ vi.mock('@floegence/floeterm-terminal-web', async () => {
       createdAtMs: Date.now(),
     }));
     restoreSnapshot = vi.fn(async () => terminalSnapshotRestoreState.succeeds);
+    restoreAuthoritativeCheckpoint = vi.fn().mockResolvedValue(undefined);
     getResourceEstimate = vi.fn(() => ({
       bufferBytes: 256 * 1024,
       cellCount: 2_000,
@@ -1365,6 +1367,12 @@ vi.mock('@floegence/floeterm-terminal-web', async () => {
           signal: new AbortController().signal,
         });
         if (disposed || run !== generation) return;
+        if (page.checkpoint) {
+          if (!options.restoreCheckpoint) throw new Error('checkpoint restore is not configured');
+          await options.restoreCheckpoint(page.checkpoint);
+          coveredThroughSequence = page.checkpoint.coveredThroughSequence;
+          nextStart = page.deltaStartSequence ?? (page.checkpoint.coveredThroughSequence + 1);
+        }
         if (page.firstAvailableSequence && nextStart > 0 && page.firstAvailableSequence > nextStart) {
           options.clear?.();
           options.onHistoryTruncated?.('history-evicted');
@@ -1543,6 +1551,13 @@ vi.mock('@floegence/floeterm-terminal-web', async () => {
 
   return {
     ...actual,
+    createGhosttyCheckpointActor: vi.fn(() => ({
+      start: vi.fn().mockResolvedValue(undefined),
+      append: vi.fn(),
+      capture: vi.fn(),
+      getSnapshot: vi.fn(),
+      dispose: vi.fn(),
+    })),
     TerminalCore: MockTerminalCore,
     createTerminalOutputPipeline: vi.fn(createMockOutputPipeline),
     createPagedTerminalOutputCoordinator: vi.fn(createMockPagedOutputCoordinator),
@@ -1766,6 +1781,19 @@ type TestTerminalHistoryPage = {
     cols?: number;
     rows?: number;
   }>;
+  checkpoint?: {
+    formatVersion: 1;
+    engineId: 'floegence-ghostty-web';
+    coveredThroughSequence: number;
+    geometryGeneration: number;
+    parserEpoch: number;
+    cols: number;
+    rows: number;
+    checksumSha256: string;
+    stateDigestSha256: string;
+    bytes: Uint8Array;
+  };
+  deltaStartSequence?: number;
   nextStartSeq: number;
   hasMore: boolean;
   firstSequence: number;
@@ -2202,6 +2230,7 @@ describe('TerminalPanel', () => {
       totalBytes: 0,
     });
     transportMocks.getSessionStats.mockResolvedValue({ history: { totalBytes: 0 } });
+    transportMocks.commitHistoryCheckpoint.mockResolvedValue(undefined);
     transportMocks.clear.mockResolvedValue(undefined);
     Object.values(rpcFsMocks).forEach((mock) => {
       if ('mockClear' in mock) mock.mockClear();
@@ -3921,6 +3950,38 @@ describe('TerminalPanel', () => {
     expect(core?.write.mock.invocationCallOrder[0]).toBeLessThan(
       core?.setFixedDimensions.mock.invocationCallOrder.at(-1) ?? Number.POSITIVE_INFINITY,
     );
+  });
+
+  it('starts history recovery at the server retained-history boundary after a clear', async () => {
+    transportMocks.attach.mockResolvedValueOnce({
+      historyBoundarySequence: 14,
+      historyGeneration: 2,
+      historyStartSequence: 15,
+      geometryGeneration: 1,
+      runtimeAttachGeneration: 1,
+      cols: 80,
+      rows: 24,
+    });
+    transportMocks.historyPage.mockResolvedValueOnce(makeTerminalHistoryPage({
+      chunks: [],
+      firstSequence: 0,
+      lastSequence: 0,
+      firstRetainedSequence: 15,
+      coveredThroughSequence: 14,
+      snapshotEndSequence: 14,
+      historyGeneration: 2,
+      historyTruncated: false,
+    }));
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="panel" />, host);
+    await waitForTerminalPanelCondition(() => {
+      expect(transportMocks.historyPage).toHaveBeenCalled();
+    });
+
+    expect(outputCoordinatorBeginAttachSpy).toHaveBeenCalledWith(15);
+    expect(transportMocks.historyPage.mock.calls[0]?.[1]).toBe(15);
   });
 
   it('keeps automatic host resize active after replaying a late live batch', async () => {
@@ -9569,6 +9630,67 @@ describe('TerminalPanel', () => {
     expect(updateSessionMeta.mock.invocationCallOrder[0]).toBeLessThan(startHistoryWarmup.mock.invocationCallOrder[0]);
   });
 
+  it('restores an authoritative checkpoint before applying its contiguous history delta', async () => {
+    const checkpoint = {
+      formatVersion: 1 as const,
+      engineId: 'floegence-ghostty-web' as const,
+      coveredThroughSequence: 41,
+      geometryGeneration: 8,
+      parserEpoch: 3,
+      cols: 132,
+      rows: 48,
+      checksumSha256: 'a'.repeat(64),
+      stateDigestSha256: 'b'.repeat(64),
+      bytes: textEncoder.encode('checkpoint'),
+    };
+    transportMocks.attach.mockResolvedValueOnce({
+      historyBoundarySequence: 42,
+      historyGeneration: 3,
+      historyStartSequence: 1,
+      geometryGeneration: 8,
+      runtimeAttachGeneration: 1,
+      cols: 132,
+      rows: 48,
+    });
+    transportMocks.historyPage.mockResolvedValueOnce(makeTerminalHistoryPage({
+      chunks: [{
+        sequence: 42,
+        timestampMs: 42,
+        data: textEncoder.encode('delta-after-checkpoint'),
+        geometryGeneration: 8,
+        cols: 132,
+        rows: 48,
+      }],
+      checkpoint,
+      deltaStartSequence: 42,
+      firstSequence: 42,
+      lastSequence: 42,
+      coveredThroughSequence: 42,
+      snapshotEndSequence: 42,
+      firstRetainedSequence: 42,
+      historyGeneration: 3,
+      historyTruncated: true,
+    }));
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await waitForTerminalPanelCondition(() => {
+      expect(terminalCoreInstances[0]?.restoreAuthoritativeCheckpoint).toHaveBeenCalledWith(checkpoint);
+      expect(terminalCoreInstances[0]?.write).toHaveBeenCalled();
+    });
+
+    const core = terminalCoreInstances[0]!;
+    expect(core.setFixedDimensions).toHaveBeenCalledWith(
+      { cols: 132, rows: 48 },
+      { notifyResize: false },
+    );
+    expect(core.restoreAuthoritativeCheckpoint.mock.invocationCallOrder[0])
+      .toBeLessThan(core.write.mock.invocationCallOrder[0]!);
+    expect(core.write.mock.calls.map((call: unknown[]) => decodeTerminalWrite(call[0])))
+      .toEqual(['delta-after-checkpoint']);
+  });
+
   it('replays terminal history page-by-page and shows progress while a later page is loading', async () => {
     vi.useFakeTimers();
     installRequestAnimationFrameMock('timer');
@@ -9663,6 +9785,8 @@ describe('TerminalPanel', () => {
   });
 
   it('ignores diagnostics and progress from an obsolete history request after refresh', async () => {
+    const terminalWeb = await import('@floegence/floeterm-terminal-web');
+    const createCheckpointActor = vi.mocked(terminalWeb.createGhosttyCheckpointActor);
     let releaseObsoletePage: (page: TestTerminalHistoryPage) => void = () => {};
     const obsoletePage = new Promise<TestTerminalHistoryPage>((resolve) => {
       releaseObsoletePage = resolve;
@@ -9696,9 +9820,23 @@ describe('TerminalPanel', () => {
       expect(historyEvents).toHaveLength(1);
       expect(historyEvents[0]?.detail?.surface_generation).toBe(2);
     });
+    const currentCheckpointActorCount = createCheckpointActor.mock.calls.length;
 
     releaseObsoletePage(makeTerminalHistoryPage({
       chunks: [{ sequence: 99, timestampMs: 10, data: textEncoder.encode('obsolete') }],
+      checkpoint: {
+        formatVersion: 1,
+        engineId: 'floegence-ghostty-web',
+        coveredThroughSequence: 98,
+        geometryGeneration: 1,
+        parserEpoch: 1,
+        cols: 80,
+        rows: 24,
+        checksumSha256: 'a'.repeat(64),
+        stateDigestSha256: 'b'.repeat(64),
+        bytes: textEncoder.encode('obsolete-checkpoint'),
+      },
+      deltaStartSequence: 99,
       firstSequence: 99,
       lastSequence: 99,
       coveredBytes: 8,
@@ -9716,6 +9854,7 @@ describe('TerminalPanel', () => {
       history_chunk_count: 1,
       history_bytes: 7,
     });
+    expect(createCheckpointActor).toHaveBeenCalledTimes(currentCheckpointActorCount);
     expect(host.textContent).not.toContain('Loading history 8 B / 100 B');
   });
 

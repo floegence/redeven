@@ -97,6 +97,7 @@ const createRpcMock = () => {
       coveredBytes: 0,
       totalBytes: 0,
     }),
+    commitHistoryCheckpoint: vi.fn().mockResolvedValue({ ok: true }),
     clear: vi.fn().mockResolvedValue({ ok: true }),
     listSessions: vi.fn().mockResolvedValue({ sessions: [] }),
     createSession: vi.fn(),
@@ -241,6 +242,51 @@ describe('terminal live transport', () => {
       localPathCapability: { workingDir: '/workspace' },
     }]);
     unsubscribe?.();
+  });
+
+  it('forwards authoritative checkpoints and commits them only through the RPC control plane', async () => {
+    const { rpc } = createRpcMock();
+    const checkpoint = {
+      formatVersion: 1 as const,
+      engineId: 'floegence-ghostty-web' as const,
+      coveredThroughSequence: 41,
+      geometryGeneration: 8,
+      parserEpoch: 3,
+      cols: 132,
+      rows: 48,
+      checksumSha256: 'a'.repeat(64),
+      stateDigestSha256: 'b'.repeat(64),
+      bytes: new TextEncoder().encode('checkpoint'),
+    };
+    rpc.terminal.history.mockResolvedValueOnce({
+      chunks: [],
+      checkpoint,
+      deltaStartSequence: 42,
+      nextStartSeq: 0,
+      hasMore: false,
+      firstSequence: 0,
+      lastSequence: 0,
+      coveredThroughSequence: 41,
+      snapshotEndSequence: 41,
+      firstRetainedSequence: 42,
+      historyGeneration: 3,
+      historyReset: false,
+      historyTruncated: true,
+      coveredBytes: 0,
+      totalBytes: 0,
+    });
+    const bundle = createRedevenTerminalLiveBundle(rpc, () => null, 'connection-1');
+
+    await expect(bundle.transport.historyPage('session-1', 1, 41, {
+      historyGeneration: 3,
+      snapshotEndSequence: 41,
+    })).resolves.toMatchObject({ checkpoint, deltaStartSequence: 42 });
+    await (bundle.transport as any).commitHistoryCheckpoint('session-1', checkpoint);
+
+    expect(rpc.terminal.commitHistoryCheckpoint).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      checkpoint,
+    });
   });
 
   it('forwards foreground command updates on the RPC control plane', () => {

@@ -27,8 +27,8 @@ func TestFloetermDependencyUsesPublishedContextAndWorkRelease(t *testing.T) {
 			versions = append(versions, requirement.Mod.Version)
 		}
 	}
-	if len(versions) != 1 || versions[0] != "v0.8.7" {
-		t.Fatalf("go.mod Floeterm terminal-go requirements = %v, want only v0.8.7", versions)
+	if len(versions) != 1 || versions[0] != "v0.9.1" {
+		t.Fatalf("go.mod Floeterm terminal-go requirements = %v, want only v0.9.1", versions)
 	}
 	for _, replacement := range parsed.Replace {
 		if replacement.Old.Path == modulePath || replacement.New.Path == modulePath {
@@ -47,7 +47,9 @@ func TestFloetermDependencyUsesPublishedContextAndWorkRelease(t *testing.T) {
 		t.Fatalf("read go.sum: %v", err)
 	}
 	goSum := string(goSumBytes)
-	if !strings.Contains(goSum, modulePath+" v0.8.7 h1:") || !strings.Contains(goSum, modulePath+" v0.8.7/go.mod h1:") {
-		t.Fatal("go.sum must contain published terminal-go v0.8.7 checksums")
+	const moduleSum = "github.com/floegence/floeterm/terminal-go v0.9.1 h1:gS/gGUrBCjvkjxweGHQaMSYoiGLrjafACeXr75R1AQY="
+	const goModSum = "github.com/floegence/floeterm/terminal-go v0.9.1/go.mod h1:MMRZG0JBuR8VCIKoL6D9Cs5yHdcclwdpB6de6MWKp9M="
+	if !strings.Contains(goSum, moduleSum) || !strings.Contains(goSum, goModSum) {
+		t.Fatal("go.sum must contain the reviewed published terminal-go v0.9.1 checksums")
 	}
 }

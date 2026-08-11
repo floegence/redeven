@@ -101,6 +101,7 @@ const createTransport = (
     coveredBytes: HISTORY_BYTES.byteLength,
     totalBytes: HISTORY_BYTES.byteLength,
   }),
+  commitHistoryCheckpoint: async () => undefined,
   clear: async () => undefined,
   getSessionStats: async () => ({ history: { totalBytes: HISTORY_BYTES.byteLength } }),
   forgetSession: () => undefined,

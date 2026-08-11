@@ -1,4 +1,4 @@
-import type { TerminalDataChunk, TerminalTransport } from '@floegence/floeterm-terminal-web';
+import type { TerminalDataChunk, TerminalHistoryCheckpoint, TerminalTransport } from '@floegence/floeterm-terminal-web';
 import type {
   PagedTerminalHistoryPage,
   PagedTerminalHistoryRequest,
@@ -8,6 +8,8 @@ import type { RedevenV1Rpc } from '../protocol/redeven_v1';
 
 export type TerminalHistoryPage = Readonly<{
   chunks: TerminalDataChunk[];
+  checkpoint?: TerminalHistoryCheckpoint;
+  deltaStartSequence?: number;
   nextStartSeq: number;
   hasMore: boolean;
   firstSequence: number;
@@ -42,6 +44,10 @@ function toTerminalHistoryPage(response: Awaited<ReturnType<RedevenV1Rpc['termin
   const chunks: TerminalDataChunk[] = Array.isArray(response?.chunks) ? response.chunks : [];
   return {
     chunks,
+    ...(response?.checkpoint ? { checkpoint: response.checkpoint } : {}),
+    ...(Object.prototype.hasOwnProperty.call(response ?? {}, 'deltaStartSequence')
+      ? { deltaStartSequence: Number(response?.deltaStartSequence) }
+      : {}),
     nextStartSeq: Number(response?.nextStartSeq ?? 0),
     hasMore: Boolean(response?.hasMore ?? false),
     firstSequence: Number(response?.firstSequence ?? 0),
@@ -94,6 +100,8 @@ export function createRedevenPagedHistoryFetcher(
     if (request.signal.aborted) throw new DOMException('The history request was cancelled.', 'AbortError');
     return {
       chunks: page.chunks,
+      ...(page.checkpoint ? { checkpoint: page.checkpoint } : {}),
+      ...(page.deltaStartSequence !== undefined ? { deltaStartSequence: page.deltaStartSequence } : {}),
       hasMore: page.hasMore,
       nextCursor: page.hasMore ? page.nextStartSeq : undefined,
       firstAvailableSequence: page.firstSequence > 0 ? page.firstSequence : undefined,

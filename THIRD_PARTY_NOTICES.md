@@ -38,7 +38,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | github.com/dustin/go-humanize | v1.0.1 | MIT | Runtime | https://pkg.go.dev/github.com/dustin/go-humanize@v1.0.1 | Detected from LICENSE. |
 | github.com/ebitengine/purego | v0.9.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/ebitengine/purego@v0.9.1 | Detected from LICENSE. |
 | github.com/felixge/httpsnoop | v1.0.4 | MIT | Runtime | https://pkg.go.dev/github.com/felixge/httpsnoop@v1.0.4 | Detected from LICENSE.txt. |
-| github.com/floegence/floeterm/terminal-go | v0.8.7 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.8.7 | Floegence first-party dependency. |
+| github.com/floegence/floeterm/terminal-go | v0.9.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.9.1 | Floegence first-party dependency. |
 | github.com/floegence/floret/v3 | v3.2.38 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v3@v3.2.38 | Detected from LICENSE. |
 | github.com/floegence/flowersec/flowersec-go/v2 | v2.3.6 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go/v2@v2.3.6 | Floegence first-party dependency. |
 | github.com/floegence/redevplugin | v0.7.22 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redevplugin@v0.7.22 | Floegence first-party dependency. |
@@ -240,8 +240,9 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @floegence/floe-webapp-boot | 0.40.14 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.40.14 | License inherited from floegence/floe-webapp root LICENSE. |
 | @floegence/floe-webapp-core | 0.40.14 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.40.14 | License inherited from floegence/floe-webapp root LICENSE. |
 | @floegence/floe-webapp-protocol | 0.40.14 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.40.14 | License inherited from floegence/floe-webapp root LICENSE. |
-| @floegence/floeterm-terminal-web | 0.13.6 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.13.6 | Built-in theme attribution and license texts are reproduced below from the verified 0.13.6 package. |
+| @floegence/floeterm-terminal-web | 0.14.0 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.14.0 | Built-in theme attribution and license texts are reproduced below from the verified 0.14.0 package. |
 | @floegence/flowersec-core | 2.3.6 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/2.3.6 |  |
+| @floegence/ghostty-web | 0.5.0-rc.0 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fghostty-web/v/0.5.0-rc.0 |  |
 | @floegence/redevplugin-contracts | 0.7.22 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-contracts/v/0.7.22 |  |
 | @floegence/redevplugin-ui | 0.7.22 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-ui/v/0.7.22 | License inherited from floegence/redevplugin root LICENSE. |
 | @fontsource-variable/inter | 5.2.8 | OFL-1.1 | Desktop shell | https://www.npmjs.com/package/%40fontsource-variable%2Finter/v/5.2.8 |  |
@@ -767,7 +768,6 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | get-intrinsic | 1.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/get-intrinsic/v/1.3.0 |  |
 | get-proto | 1.0.1 | MIT | Desktop shell | https://www.npmjs.com/package/get-proto/v/1.0.1 |  |
 | get-stream | 5.2.0 | MIT | Desktop shell | https://www.npmjs.com/package/get-stream/v/5.2.0 |  |
-| ghostty-web | 0.4.0-next.14.g6a1a50d | MIT | Env App UI | https://www.npmjs.com/package/ghostty-web/v/0.4.0-next.14.g6a1a50d |  |
 | github-from-package | 0.0.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/github-from-package/v/0.0.0 |  |
 | github-slugger | 2.0.0 | ISC | Env App UI | https://www.npmjs.com/package/github-slugger/v/2.0.0 |  |
 | glob-parent | 6.0.2 | ISC | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/glob-parent/v/6.0.2 |  |
@@ -1278,7 +1278,7 @@ SOFTWARE.
 
 ## Floeterm Built-in Theme Notices
 
-Redeven embeds the built-in terminal theme catalog from `@floegence/floeterm-terminal-web@0.13.6`. The following attribution and license texts are reproduced in Redeven's distributed root notice from the installed registry package. Notice generation verifies the upstream provenance, quality evidence, notice, and license artifacts against these fixed SHA-256 values before emitting this section:
+Redeven embeds the built-in terminal theme catalog from `@floegence/floeterm-terminal-web@0.14.0`. The following attribution and license texts are reproduced in Redeven's distributed root notice from the installed registry package. Notice generation verifies the upstream provenance, quality evidence, notice, and license artifacts against these fixed SHA-256 values before emitting this section:
 
 - `2b6b2d07297ace181564890b79e2c488e67f4747512b8adad08b4bd3ea8dfc06`
 - `e9fdd068550001f555f1bb52ca475b68bc56a12c00da25f9ec28fe03dbdb9005`
