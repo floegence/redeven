@@ -99,6 +99,44 @@ func TestContainersCapabilitySyncResponsesMatchSignedContract(t *testing.T) {
 	}
 }
 
+func TestContainersVolumeCreatePreflightMatchesSignedV4Contract(t *testing.T) {
+	adapter := newTestContainersCapabilityAdapter(&extendedCapabilityEngineClient{
+		capabilityEngineClient: &capabilityEngineClient{},
+	})
+	result, err := adapter.Invoke(context.Background(), capability.Invocation{
+		Execution: capability.ExecutionContext{ExecutionBinding: capability.ExecutionBinding{
+			CapabilityVersion: containersCapabilityV4Version,
+			TargetMethod:      string(containers.MethodVolumesCreatePreflight),
+		}},
+		Arguments: map[string]any{
+			"engine":      "docker",
+			"endpoint_id": capabilityTestEndpointID,
+			"name":        "codex-plugin-acceptance-volume",
+			"driver":      "local",
+			"options":     []any{},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	validateContainersCapabilityResponse(t, string(containers.MethodVolumesCreatePreflight), result.Data)
+	prepared, err := capability.PrepareResponseData(result.Data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, ok := prepared.(map[string]any)
+	if !ok {
+		t.Fatalf("volume create plan = %#v", prepared)
+	}
+	target, _ := plan["target"].(map[string]any)
+	request, _ := plan["request"].(map[string]any)
+	if target["endpoint_id"] != string(capabilityTestEndpointID) ||
+		request["endpoint_id"] != string(capabilityTestEndpointID) ||
+		request["driver"] != "local" {
+		t.Fatalf("volume create plan lost its endpoint or driver: %#v", plan)
+	}
+}
+
 func TestContainersCapabilityProjectsGroupingOnlyForV4(t *testing.T) {
 	t.Parallel()
 	item := containers.ContainerSummary{
