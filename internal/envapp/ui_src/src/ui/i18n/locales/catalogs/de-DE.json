@@ -3849,6 +3849,7 @@
       "queuedDelete": "Nachricht aus Warteschlange löschen",
       "scrollToLatest": "Zum neuesten scrollen",
       "runErrorTitle": "Flower konnte diese Antwort nicht abschließen.",
+      "runContinuationErrorTitle": "Die Antwort konnte nicht fortgesetzt werden.",
       "runErrorActionUpdateAPIKey": "API-Schlüssel aktualisieren",
       "runErrorActionAddAPIKey": "API-Schlüssel hinzufügen",
       "runErrorActionSwitchModel": "Modell wechseln",

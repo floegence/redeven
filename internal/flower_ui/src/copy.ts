@@ -325,6 +325,7 @@ export type FlowerSurfaceCopy = Readonly<{
     scrollToLatest: string;
     runtimeRestartedDivider: string;
     runErrorTitle: string;
+    runContinuationErrorTitle: string;
     runErrorActions: Readonly<{
       updateAPIKey: string;
       addAPIKey: string;
@@ -554,6 +555,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     scrollToLatest: 'Scroll to latest',
     runtimeRestartedDivider: 'Redeven runtime restarted',
     runErrorTitle: 'Flower could not finish this reply.',
+    runContinuationErrorTitle: 'Reply could not continue.',
     runErrorActions: {
       updateAPIKey: 'Update API key',
       addAPIKey: 'Add API key',

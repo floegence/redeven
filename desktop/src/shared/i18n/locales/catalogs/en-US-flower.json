@@ -94,6 +94,7 @@
     "queuedDelete": "Delete queued message",
     "scrollToLatest": "Scroll to latest",
     "runErrorTitle": "Flower could not finish this reply.",
+    "runContinuationErrorTitle": "Reply could not continue.",
     "runErrorActionUpdateAPIKey": "Update API key",
     "runErrorActionAddAPIKey": "Add API key",
     "runErrorActionSwitchModel": "Switch model",

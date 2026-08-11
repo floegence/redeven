@@ -388,6 +388,68 @@ afterEach(() => {
 });
 
 describe('FlowerSurface companion visibility lifecycle', () => {
+  it('shows one quiet actionable notice when provider continuation fails after a declined tool', async () => {
+    const failedContinuation = thread({
+      status: 'failed',
+      error: {
+        code: 'provider_unreachable',
+        message: 'provider continuation request failed',
+      },
+      messages: [{
+        id: 'assistant-continuation-failed',
+        thread_id: 'thread-running',
+        turn_id: 'turn-continuation-failed',
+        run_id: 'run-continuation-failed',
+        role: 'assistant',
+        status: 'error',
+        content: '',
+        created_at_ms: 2_000,
+        blocks: [{
+          type: 'activity-timeline',
+          schema_version: 1,
+          run_id: 'run-continuation-failed',
+          thread_id: 'thread-running',
+          turn_id: 'turn-continuation-failed',
+          summary: {
+            status: 'declined',
+            severity: 'quiet',
+            needs_attention: false,
+            total_items: 1,
+            counts: { declined: 1 },
+          },
+          items: [{
+            item_id: 'tool-declined',
+            tool_id: 'tool-declined',
+            tool_name: 'terminal.exec',
+            kind: 'tool',
+            status: 'declined',
+            severity: 'quiet',
+            needs_attention: false,
+            requires_approval: false,
+            label: 'terminal.exec',
+          }],
+        }],
+      }],
+    });
+    const harness = createAdapterHarness({
+      listThreads: vi.fn(async () => [{ ...failedContinuation, messages: [] }]),
+      loadThread: vi.fn(async () => bootstrap(failedContinuation)),
+    });
+    renderSurface(harness.adapter, true, true, undefined, 'full');
+
+    await waitUntil(() => harness.loadThread.mock.calls.length === 1, 'failed continuation did not bootstrap');
+    await waitUntilPresented(
+      () => host.querySelectorAll('.flower-error-card').length > 0,
+      'continuation failure notice did not render',
+    );
+
+    expect(host.querySelectorAll('[data-flower-activity-status="declined"]')).toHaveLength(1);
+    expect(host.querySelectorAll('.flower-error-card')).toHaveLength(1);
+    expect(host.textContent).toContain('Reply could not continue.');
+    expect(host.textContent).not.toContain('Flower could not finish this reply.');
+    expect(host.querySelector('.flower-error-card button')).not.toBeNull();
+  });
+
   it('keeps the ordinary composer textarea mounted while the companion expands and collapses', async () => {
     const idleThread = thread({
       status: 'idle',

@@ -47,6 +47,8 @@ The thread summary projects `waiting_approval` when the canonical queue contains
 
 Activity timeline approval markers are historical tool execution presentation only. They cannot create, resolve, promote, or restore an approval action and expose no competing decision controls. The current Floret queue is the sole source for actionable buttons.
 
+If provider continuation fails after a canonical declined result, Redeven restores the provider error classification from the Floret failure without exposing the provider endpoint or raw diagnostics. Flower keeps the declined activity unchanged and shows one quiet, actionable continuation notice. The notice follows the materialized canonical timeline as bootstrap or replay arrives; it does not infer rejection from text, maintain another lifecycle, or turn Activity into approval authority.
+
 # Boundaries
 
 Floret owns ordinary and delegated approval state, ordering, timeout, cancellation, decision idempotency, and resolution. Redeven owns product policy revalidation, safe presentation mapping, live transport, conflict envelopes, and UI interaction. Redeven must not persist a second approval lifecycle, derive actionable state from historical rows, access Floret-managed storage, or add fallback logic that guesses missing queue state.
@@ -55,6 +57,7 @@ Floret owns ordinary and delegated approval state, ordering, timeout, cancellati
 
 - `redeven:internal/ai/floret_approval_lease_renewal_test.go` - Runs three approval-gated effects in one turn and holds the third decision across the published lease heartbeat before requiring a completed turn and empty queue.
 - `redeven:internal/ai/run_error_code_test.go` - Keeps host authorization and rejected-tool errors out of Provider credential classification.
+- `redeven:internal/ai/threads_approval_status_test.go` - Restores a sanitized provider failure classification from canonical Floret snapshots.
 - `redeven:internal/ai/floret_approval.go:146` - Reads and maps the canonical root queue and emits complete replacements.
 - `redeven:internal/ai/run.go:597` - Keeps canonical approval waits out of idle cancellation through a bounded exact queue read.
 - `redeven:internal/ai/flower_live_projection.go:800` - Submits identity-checked Floret decisions and materializes atomic replacements, including structured declined activity.
@@ -62,4 +65,5 @@ Floret owns ordinary and delegated approval state, ordering, timeout, cancellati
 - `redeven:internal/ai/floret_events.go:58` - Resynchronizes the canonical queue from Floret lifecycle events, including detached cancellation.
 - `redeven:internal/flower_ui/src/flowerLiveReducer.ts:434` - Applies version-monotonic replacements while preserving product confirmations.
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx:4536` - Coordinates frozen decision handoff, resync, conflict handling, and bounded retry.
+- `redeven:internal/flower_ui/src/FlowerSurface.visibility.test.tsx` - Keeps declined activity visible with one actionable provider-continuation notice.
 - `redeven:internal/codeapp/appserver/server.go:1167` - Maps approval conflicts to the flat HTTP 409 error envelope.

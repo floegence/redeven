@@ -5,7 +5,11 @@ import type {
   FlowerActivityTimelineBlock,
   FlowerThreadSnapshot,
 } from './contracts/flowerSurfaceContracts';
-import { activityTimelineSignature, buildFlowerTimelineEntries } from './flowerTimelineProjection';
+import {
+  activityTimelineSignature,
+  buildFlowerTimelineEntries,
+  flowerTimelineHasUserRejectedTool,
+} from './flowerTimelineProjection';
 
 function activityItem(overrides: Partial<FlowerActivityItem> = {}): FlowerActivityItem {
   return {
@@ -73,6 +77,30 @@ function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnap
 }
 
 describe('buildFlowerTimelineEntries', () => {
+  it('recognizes a canonical declined tool from the rendered timeline without an approval marker', () => {
+    const entries = buildFlowerTimelineEntries(thread({
+      messages: [{
+        id: 'assistant-declined',
+        role: 'assistant',
+        content: '',
+        status: 'error',
+        created_at_ms: 2,
+        blocks: [activityTimeline({
+          items: [activityItem({ status: 'declined', approval_state: undefined })],
+          summary: {
+            status: 'declined',
+            severity: 'quiet',
+            needs_attention: false,
+            total_items: 1,
+            counts: { declined: 1 },
+          },
+        })],
+      }],
+    }));
+
+    expect(flowerTimelineHasUserRejectedTool(entries)).toBe(true);
+  });
+
   it('keeps a canonical reference-only user message visible', () => {
     const entries = buildFlowerTimelineEntries(thread({
       messages: [{

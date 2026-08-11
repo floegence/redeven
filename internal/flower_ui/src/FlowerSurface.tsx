@@ -91,6 +91,7 @@ import { projectFlowerCompanionLiveTail, type FlowerCompanionProgressKind } from
 import { FlowerCompanionTailMotionController } from './flowerCompanionTailMotion';
 import {
   buildFlowerTimelineEntries,
+  flowerTimelineHasUserRejectedTool,
   type FlowerRenderableMessageBlock,
   type FlowerTimelineEntry,
 } from './flowerTimelineProjection';
@@ -219,7 +220,7 @@ type FlowerMessageAttachmentPreviewTarget = Readonly<{
 function messageHasUserRejectedTool(message: FlowerChatMessage): boolean {
   return (message.blocks ?? []).some((block) => (
     block.type === 'activity-timeline'
-    && block.items.some((item) => item.requires_approval && item.approval_state === 'rejected')
+    && block.items.some((item) => item.approval_state === 'rejected' || item.status === 'declined')
   ));
 }
 
@@ -2715,7 +2716,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const selectedThreadRunErrorMessage = createMemo(() => {
     const thread = selectedThread();
     const error = thread?.error;
-    if (latestThreadFailureIsUserRejectedTool(thread)) return '';
+    if (trimString(error?.code) === 'floret_engine_failed' && latestThreadFailureIsUserRejectedTool(thread)) return '';
     return presentRunError(error);
   });
   const threadItemCache = new Map<string, { item: ReturnType<typeof projectFlowerThreadListItem>; sig: string }>();
@@ -6180,8 +6181,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   };
 
-  const errorNotice = (title: string, message: string, action?: JSX.Element) => (
-    <div role="alert" class="flower-error-card">
+  const errorNotice = (title: string, message: string, action?: JSX.Element, className = '') => (
+    <div role="alert" class={cn('flower-error-card', className)}>
       <div class="flower-error-icon"><AlertTriangle class="h-4 w-4" /></div>
       <div class="flower-error-copy">
         <div class="flower-error-title">{title}</div>
@@ -6412,21 +6413,34 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const runErrorNotice = (error: FlowerThreadSnapshot['error']) => {
     const code = trimString(error?.code);
+    const continuationFailure = createMemo(() => (
+      flowerTimelineHasUserRejectedTool(selectedTimelineEntries())
+      && (code === 'provider_unreachable' || code === 'provider_stream_interrupted')
+    ));
     const actionable = code === 'provider_auth_failed'
       || code === 'provider_missing_key'
       || code === 'provider_model_unavailable'
       || code === 'provider_unreachable'
       || code === 'provider_stream_interrupted';
-    return errorNotice(
-      copy().chat.runErrorTitle,
-      presentRunError(error),
-      actionable
-        ? (
-          <Button size="sm" variant="outline" icon={Settings} onClick={openSettings}>
-            {runErrorActionLabel(code)}
-          </Button>
-        )
-        : undefined,
+    const action = () => actionable
+      ? (
+        <Button size="sm" variant="outline" icon={Settings} onClick={openSettings}>
+          {runErrorActionLabel(code)}
+        </Button>
+      )
+      : undefined;
+    return (
+      <Show
+        when={continuationFailure()}
+        fallback={errorNotice(copy().chat.runErrorTitle, presentRunError(error), action())}
+      >
+        {errorNotice(
+          copy().chat.runContinuationErrorTitle,
+          presentRunError(error),
+          action(),
+          'flower-continuation-error',
+        )}
+      </Show>
     );
   };
 
@@ -9848,7 +9862,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           const code = trimString(value().code);
           if (code === 'runtime_restarted') return runtimeRestartedDivider();
           if (code === 'floret_turn_interrupted') return null;
-          if (latestThreadFailureIsUserRejectedTool(selectedThread())) return null;
+          if (code === 'floret_engine_failed' && latestThreadFailureIsUserRejectedTool(selectedThread())) return null;
           return runErrorNotice(value());
         }}
       </Show>
