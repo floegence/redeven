@@ -1180,7 +1180,18 @@ func (s *Service) flowerLiveMaterializedStateLocked(endpointID string, threadID 
 }
 
 func flowerLiveStateHasPendingApproval(state FlowerLiveMaterializedState, runID string) bool {
+	pending, _, _, _ := flowerLiveApprovalSummary(state, runID)
+	return pending
+}
+
+func flowerLiveApprovalSummary(state FlowerLiveMaterializedState, runID string) (bool, int, int64, int64) {
 	runID = strings.TrimSpace(runID)
+	count := 0
+	var generation, revision int64
+	if state.ApprovalQueue != nil {
+		generation = state.ApprovalQueue.Generation
+		revision = state.ApprovalQueue.Revision
+	}
 	for _, action := range state.ApprovalActions {
 		if action.Status != FlowerApprovalStatusPending || action.State != FlowerApprovalStateRequested {
 			continue
@@ -1192,9 +1203,15 @@ func flowerLiveStateHasPendingApproval(state FlowerLiveMaterializedState, runID 
 		if runID != "" && actionRunID != "" && actionRunID != runID {
 			continue
 		}
-		return true
+		count++
+		if action.QueueGeneration > generation {
+			generation = action.QueueGeneration
+		}
+		if action.Revision > revision {
+			revision = action.Revision
+		}
 	}
-	return false
+	return count > 0, count, generation, revision
 }
 
 func emptyFlowerLiveMaterializedState() FlowerLiveMaterializedState {
@@ -2459,6 +2476,10 @@ func flowerLiveThreadPatchFromSummary(ev RealtimeEvent) FlowerLiveThreadPatch {
 		RunError:               strings.TrimSpace(ev.RunError),
 		WaitingPrompt:          ev.WaitingPrompt,
 		ActiveRunID:            strings.TrimSpace(ev.ActiveRunID),
+		ApprovalPending:        ev.ApprovalPending,
+		ApprovalPendingCount:   ev.ApprovalPendingCount,
+		ApprovalGeneration:     ev.ApprovalGeneration,
+		ApprovalRevision:       ev.ApprovalRevision,
 		UpdatedAtUnixMs:        ev.UpdatedAtUnixMs,
 		LastMessageAtUnixMs:    ev.LastMessageAtUnixMs,
 		LastMessagePreview:     strings.TrimSpace(ev.LastMessagePreview),
@@ -2523,6 +2544,13 @@ func mergeFlowerLiveThreadPatch(current FlowerLiveThreadPatch, patch FlowerLiveT
 	}
 	if strings.TrimSpace(patch.ActiveRunID) != "" {
 		current.ActiveRunID = strings.TrimSpace(patch.ActiveRunID)
+	}
+	if patch.ApprovalPending != nil {
+		pending := *patch.ApprovalPending
+		current.ApprovalPending = &pending
+		current.ApprovalPendingCount = patch.ApprovalPendingCount
+		current.ApprovalGeneration = patch.ApprovalGeneration
+		current.ApprovalRevision = patch.ApprovalRevision
 	}
 	if patch.PinnedAtUnixMs > 0 {
 		current.PinnedAtUnixMs = patch.PinnedAtUnixMs

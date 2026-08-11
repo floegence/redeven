@@ -1244,6 +1244,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const pendingReadPersistenceSnapshots = new Map<string, FlowerThreadActivitySnapshot>();
   const liveCursors = new Map<string, number>();
   const liveStreamGenerations = new Map<string, number>();
+  const liveSummaryThreadCursors = new Map<string, number>();
   let liveSummaryCursor = 0;
   let liveSummaryGeneration = 1;
   let liveSummaryRefreshTimer: number | undefined;
@@ -4524,6 +4525,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     if (envelope.kind === 'resync_required') {
       liveSummaryCursor = 0;
+      liveSummaryThreadCursors.clear();
       liveSummaryGeneration = liveStreamGenerationValue(envelope.stream_generation);
       await refreshThreads();
       if (selectedThreadID() === selectedID && sequence === threadLoadSequence) {
@@ -4546,9 +4548,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }
       return 'continue';
     }
-    await yieldLiveEventRenderFrame();
-    if (sequence !== threadLoadSequence || selectedThreadID() !== selectedID || !documentVisible()) {
-      return 'continue';
+    const summaryEnvelope = envelope.kind === 'summary.batch';
+    if (!summaryEnvelope) {
+      await yieldLiveEventRenderFrame();
+      if (sequence !== threadLoadSequence || selectedThreadID() !== selectedID || !documentVisible()) {
+        return 'continue';
+      }
     }
     const projected = new Map<string, FlowerThreadSnapshot>();
     const advancesThreadCursor = envelope.kind === 'thread.batch';
@@ -4564,7 +4569,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         shouldRefreshSummaries = true;
         continue;
       }
-      const currentCursor = liveCursorValue(liveCursors.get(threadID));
+      const currentCursor = summaryEnvelope
+        ? liveCursorValue(liveSummaryThreadCursors.get(threadID))
+        : liveCursorValue(liveCursors.get(threadID));
       const result = applyFlowerLiveEvent(current, currentCursor, event);
       if (result.resyncRequired) {
         if (threadID === selectedID && envelope.kind === 'thread.batch') {
@@ -4579,6 +4586,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       // thread sequence for identity, but must not consume detail replay.
       if (advancesThreadCursor) {
         setLivePosition(threadID, envelope.stream_generation, result.cursor);
+      } else if (summaryEnvelope) {
+        liveSummaryThreadCursors.set(threadID, result.cursor);
       }
       if (threadID === selectedID) {
         shouldScrollTail ||= Boolean(result.tailKey && result.tailLength > 0) || event.kind === 'timeline.replaced';
@@ -4619,7 +4628,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const connect = props.adapter.connectLiveStream;
     const threadID = selectedThreadID();
     const visible = documentVisible();
-    if (!connect || !threadID || !visible) return;
+    const keepLiveWhenHidden = props.adapter.keepLiveWhenHidden === true;
+    if (!connect || !threadID || (!visible && !keepLiveWhenHidden)) return;
     const controller = new AbortController();
     let disposed = false;
     let reconnectAttempt = 0;
@@ -4631,7 +4641,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }, { once: true });
     });
     const run = async () => {
-      while (!disposed && !controller.signal.aborted && documentVisible() && selectedThreadID() === threadID) {
+      while (
+        !disposed
+        && !controller.signal.aborted
+        && selectedThreadID() === threadID
+        && (keepLiveWhenHidden || documentVisible())
+      ) {
         const readyStartedAt = Date.now();
         try {
           for await (const envelope of connect({

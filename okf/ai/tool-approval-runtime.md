@@ -43,7 +43,7 @@ A successful resolution returns the cursor of the replacement event. Stale, dupl
 
 ## Presentation
 
-The thread summary projects `waiting_approval` when the canonical queue contains visible pending actions and returns to the applicable running or terminal state when it becomes empty. Lightweight thread summaries may omit approval details; omission never clears selected-thread state.
+The thread summary projects `waiting_approval` when the canonical queue contains visible pending actions and returns to the applicable running or terminal state when it becomes empty. Lightweight summaries may omit action details, but they expose the structured `approval_pending`, `approval_pending_count`, `approval_generation`, and `approval_revision` projection whenever the live materialized approval state is sampled. Flower applies these fields with monotonic generation/revision fencing, so a stale running summary or event cannot erase a background approval; an explicit false/zero replacement is required to clear it. The fields are an in-memory transport projection, not a second persisted lifecycle, and omission never clears selected-thread state.
 
 Activity timeline approval markers are historical tool execution presentation only. They cannot create, resolve, promote, or restore an approval action and expose no competing decision controls. The current Floret queue is the sole source for actionable buttons.
 
@@ -66,4 +66,6 @@ Floret owns ordinary and delegated approval state, ordering, timeout, cancellati
 - `redeven:internal/flower_ui/src/flowerLiveReducer.ts:434` - Applies version-monotonic replacements while preserving product confirmations.
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx:4536` - Coordinates frozen decision handoff, resync, conflict handling, and bounded retry.
 - `redeven:internal/flower_ui/src/FlowerSurface.visibility.test.tsx` - Keeps declined activity visible with one actionable provider-continuation notice.
+- `redeven:internal/ai/realtime_sink.go:447` - Builds the structured approval summary from the live materialized state and publishes it with each thread summary.
+- `redeven:internal/flower_ui/src/flowerLiveReducer.ts:60` - Fences approval summaries by generation/revision and preserves waiting status over stale running patches.
 - `redeven:internal/codeapp/appserver/server.go:1167` - Maps approval conflicts to the flat HTTP 409 error envelope.

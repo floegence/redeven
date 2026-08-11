@@ -140,30 +140,34 @@ func NewModelsResponse(runtime *AIRuntimeStatus) *ModelsResponse {
 }
 
 type ThreadView struct {
-	ThreadID            string                       `json:"thread_id"`
-	Title               string                       `json:"title"`
-	TitleStatus         string                       `json:"title_status"`
-	ModelID             string                       `json:"model_id"`
-	PermissionType      string                       `json:"permission_type"`
-	WorkingDir          string                       `json:"working_dir"`
-	QueuedTurnCount     int                          `json:"queued_turn_count"`
-	QueuedTurns         []QueuedTurnView             `json:"queued_turns"`
-	RunStatus           string                       `json:"run_status"`
-	ReadOnlyReason      string                       `json:"read_only_reason,omitempty"`
-	RunUpdatedAtUnixMs  int64                        `json:"run_updated_at_unix_ms"`
-	RunErrorCode        string                       `json:"run_error_code,omitempty"`
-	RunError            string                       `json:"run_error,omitempty"`
-	WaitingPrompt       *RequestUserInputPrompt      `json:"waiting_prompt,omitempty"`
-	ActiveRunID         string                       `json:"active_run_id,omitempty"`
-	ReasoningSelection  config.AIReasoningSelection  `json:"reasoning_selection,omitempty"`
-	ReasoningCapability config.AIReasoningCapability `json:"reasoning_capability,omitempty"`
-	PinnedAtUnixMs      int64                        `json:"pinned_at_unix_ms,omitempty"`
-	CreatedAtUnixMs     int64                        `json:"created_at_unix_ms"`
-	UpdatedAtUnixMs     int64                        `json:"updated_at_unix_ms"`
-	LastMessageAtUnixMs int64                        `json:"last_message_at_unix_ms"`
-	LastMessagePreview  string                       `json:"last_message_preview"`
-	Subagents           []FlowerSubagentSummary      `json:"subagents,omitempty"`
-	FlowerActivity      FlowerThreadReadSnapshot     `json:"-"`
+	ThreadID             string                       `json:"thread_id"`
+	Title                string                       `json:"title"`
+	TitleStatus          string                       `json:"title_status"`
+	ModelID              string                       `json:"model_id"`
+	PermissionType       string                       `json:"permission_type"`
+	WorkingDir           string                       `json:"working_dir"`
+	QueuedTurnCount      int                          `json:"queued_turn_count"`
+	QueuedTurns          []QueuedTurnView             `json:"queued_turns"`
+	RunStatus            string                       `json:"run_status"`
+	ReadOnlyReason       string                       `json:"read_only_reason,omitempty"`
+	RunUpdatedAtUnixMs   int64                        `json:"run_updated_at_unix_ms"`
+	RunErrorCode         string                       `json:"run_error_code,omitempty"`
+	RunError             string                       `json:"run_error,omitempty"`
+	WaitingPrompt        *RequestUserInputPrompt      `json:"waiting_prompt,omitempty"`
+	ActiveRunID          string                       `json:"active_run_id,omitempty"`
+	ApprovalPending      *bool                        `json:"approval_pending,omitempty"`
+	ApprovalPendingCount int                          `json:"approval_pending_count,omitempty"`
+	ApprovalGeneration   int64                        `json:"approval_generation,omitempty"`
+	ApprovalRevision     int64                        `json:"approval_revision,omitempty"`
+	ReasoningSelection   config.AIReasoningSelection  `json:"reasoning_selection,omitempty"`
+	ReasoningCapability  config.AIReasoningCapability `json:"reasoning_capability,omitempty"`
+	PinnedAtUnixMs       int64                        `json:"pinned_at_unix_ms,omitempty"`
+	CreatedAtUnixMs      int64                        `json:"created_at_unix_ms"`
+	UpdatedAtUnixMs      int64                        `json:"updated_at_unix_ms"`
+	LastMessageAtUnixMs  int64                        `json:"last_message_at_unix_ms"`
+	LastMessagePreview   string                       `json:"last_message_preview"`
+	Subagents            []FlowerSubagentSummary      `json:"subagents,omitempty"`
+	FlowerActivity       FlowerThreadReadSnapshot     `json:"-"`
 }
 
 type ListThreadsResponse struct {
@@ -687,18 +691,22 @@ type RealtimeEvent struct {
 	WaitingPrompt *RequestUserInputPrompt `json:"waiting_prompt,omitempty"`
 
 	// Thread summary events (EventType=thread_summary).
-	Title               string                       `json:"title,omitempty"`
-	TitleStatus         string                       `json:"title_status,omitempty"`
-	ModelID             string                       `json:"model_id,omitempty"`
-	UpdatedAtUnixMs     int64                        `json:"updated_at_unix_ms,omitempty"`
-	LastMessagePreview  string                       `json:"last_message_preview,omitempty"`
-	LastMessageAtUnixMs int64                        `json:"last_message_at_unix_ms,omitempty"`
-	ActiveRunID         string                       `json:"active_run_id,omitempty"`
-	PermissionType      string                       `json:"permission_type,omitempty"`
-	QueuedTurnCount     int                          `json:"queued_turn_count,omitempty"`
-	QueuedTurns         []QueuedTurnView             `json:"queued_turns,omitempty"`
-	ReasoningSelection  config.AIReasoningSelection  `json:"reasoning_selection,omitempty"`
-	ReasoningCapability config.AIReasoningCapability `json:"reasoning_capability,omitempty"`
+	Title                string                       `json:"title,omitempty"`
+	TitleStatus          string                       `json:"title_status,omitempty"`
+	ModelID              string                       `json:"model_id,omitempty"`
+	UpdatedAtUnixMs      int64                        `json:"updated_at_unix_ms,omitempty"`
+	LastMessagePreview   string                       `json:"last_message_preview,omitempty"`
+	LastMessageAtUnixMs  int64                        `json:"last_message_at_unix_ms,omitempty"`
+	ActiveRunID          string                       `json:"active_run_id,omitempty"`
+	ApprovalPending      *bool                        `json:"approval_pending,omitempty"`
+	ApprovalPendingCount int                          `json:"approval_pending_count,omitempty"`
+	ApprovalGeneration   int64                        `json:"approval_generation,omitempty"`
+	ApprovalRevision     int64                        `json:"approval_revision,omitempty"`
+	PermissionType       string                       `json:"permission_type,omitempty"`
+	QueuedTurnCount      int                          `json:"queued_turn_count,omitempty"`
+	QueuedTurns          []QueuedTurnView             `json:"queued_turns,omitempty"`
+	ReasoningSelection   config.AIReasoningSelection  `json:"reasoning_selection,omitempty"`
+	ReasoningCapability  config.AIReasoningCapability `json:"reasoning_capability,omitempty"`
 }
 
 // ActiveThreadRun is returned in subscribe snapshots so late subscribers can discover

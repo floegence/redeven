@@ -1230,6 +1230,20 @@ html.dark .flower-component-shell {
   background: color-mix(in srgb, var(--primary) 9%, var(--flower-chat-surface) 91%);
 }
 
+.flower-composer-reference-option[data-active='true'] {
+  border-color: color-mix(in srgb, var(--primary) 32%, transparent);
+  background: color-mix(in srgb, var(--primary) 15%, var(--flower-chat-surface) 85%);
+  box-shadow: inset 2px 0 0 var(--primary), inset 0 0 0 1px color-mix(in srgb, var(--primary) 24%, transparent);
+}
+
+.flower-composer-reference-option[data-active='true'] .flower-composer-reference-option-icon {
+  color: color-mix(in srgb, var(--primary) 76%, var(--foreground) 24%);
+}
+
+.flower-composer-reference-option[data-active='true'] .flower-composer-reference-option-name {
+  color: color-mix(in srgb, var(--primary) 62%, var(--foreground) 38%);
+}
+
 .flower-composer-reference-option-main:focus-visible {
   outline: none;
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 48%, transparent);

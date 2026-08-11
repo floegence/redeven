@@ -509,6 +509,10 @@ export type FlowerThreadSnapshot = Readonly<{
   updated_at_ms: number;
   status: FlowerThreadStatus;
   active_run_id?: string;
+  approval_pending?: boolean;
+  approval_pending_count?: number;
+  approval_generation?: number;
+  approval_revision?: number;
   queued_turn_count?: number;
   queued_turns?: readonly FlowerQueuedTurn[];
   permission_type?: FlowerPermissionType;
@@ -752,6 +756,10 @@ export type FlowerLiveThreadPatch = Readonly<{
   run_error?: string;
   waiting_prompt?: FlowerInputRequest | null;
   active_run_id?: string;
+  approval_pending?: boolean;
+  approval_pending_count?: number;
+  approval_generation?: number;
+  approval_revision?: number;
   pinned_at_ms?: number;
   created_at_ms?: number;
   updated_at_ms?: number;
@@ -991,6 +999,10 @@ export type FlowerThreadListItem = Readonly<{
   updated_at_ms: number;
   preview: string;
   status: FlowerThreadStatus;
+  approval_pending?: boolean;
+  approval_pending_count?: number;
+  approval_generation?: number;
+  approval_revision?: number;
   source_label: string;
   target_labels: readonly string[];
   read_only_reason?: string;
@@ -1343,6 +1355,8 @@ export type FlowerThreadDeleteOutcome = Readonly<{
 export type FlowerSurfaceAdapter = Readonly<{
   runtime: FlowerSurfaceRuntimeDescriptor;
   canMutate?: boolean;
+  /** Keep the canonical summary stream connected while the document is hidden. */
+  keepLiveWhenHidden?: boolean;
   loadSettings: () => Promise<FlowerSettingsSnapshot>;
   saveDefaultPermission: (permissionType: FlowerPermissionType) => Promise<FlowerSettingsSnapshot>;
   saveModelProfile: (draft: FlowerSettingsDraft) => Promise<FlowerSettingsSnapshot>;

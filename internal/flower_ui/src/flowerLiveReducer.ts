@@ -48,6 +48,34 @@ function runStatus(raw: unknown): FlowerThreadStatus {
   }
 }
 
+function approvalSummaryVersion(
+  value: Pick<FlowerThreadSnapshot, 'approval_generation' | 'approval_revision'>,
+): readonly [number, number] {
+  return [
+    Math.max(0, Math.floor(Number(value.approval_generation ?? 0))),
+    Math.max(0, Math.floor(Number(value.approval_revision ?? 0))),
+  ];
+}
+
+function incomingApprovalSummaryIsCurrent(thread: FlowerThreadSnapshot, patch: FlowerLiveThreadPatch): boolean {
+  if (patch.approval_pending === undefined) return false;
+  const [currentGeneration, currentRevision] = approvalSummaryVersion(thread);
+  const [nextGeneration, nextRevision] = approvalSummaryVersion(patch);
+  return nextGeneration > currentGeneration
+    || nextGeneration === currentGeneration && nextRevision >= currentRevision;
+}
+
+function threadHasPendingApprovalSummary(thread: FlowerThreadSnapshot): boolean {
+  return thread.approval_pending === true
+    || Number(thread.approval_pending_count ?? 0) > 0
+    || pendingApprovalActions(thread.approval_actions).length > 0;
+}
+
+function approvalPriorityStatus(thread: FlowerThreadSnapshot, proposed: FlowerThreadStatus): FlowerThreadStatus {
+  if (proposed === 'waiting_user') return proposed;
+  return threadHasPendingApprovalSummary(thread) ? 'waiting_approval' : proposed;
+}
+
 function mergeMessages(messages: readonly FlowerChatMessage[], message: FlowerChatMessage | null | undefined): readonly FlowerChatMessage[] {
   if (!message) return messages;
   const messageID = trim(message.id);
@@ -102,6 +130,8 @@ function clearApprovalsForTerminalRun(thread: FlowerThreadSnapshot, runID: strin
   return {
     ...thread,
     approval_actions: approvalActions,
+    approval_pending: false,
+    approval_pending_count: 0,
     approval_queue: canonical.length === 0
       ? null
       : {
@@ -139,8 +169,17 @@ function contentFromBlocks(blocks: readonly FlowerChatMessageBlock[]): string {
 }
 
 function applyThreadPatch(thread: FlowerThreadSnapshot, patch: FlowerLiveThreadPatch): FlowerThreadSnapshot {
-  const status = patch.run_status ? runStatus(patch.run_status) : thread.status;
-  return {
+  const patchStatus = patch.run_status ? runStatus(patch.run_status) : thread.status;
+  const acceptsApprovalSummary = incomingApprovalSummaryIsCurrent(thread, patch);
+  const approvalPending = acceptsApprovalSummary
+    ? patch.approval_pending === true || Number(patch.approval_pending_count ?? 0) > 0
+    : threadHasPendingApprovalSummary(thread);
+  const status = patchStatus === 'waiting_user'
+    ? 'waiting_user'
+    : approvalPending
+      ? 'waiting_approval'
+      : patchStatus;
+  const next: FlowerThreadSnapshot = {
     ...thread,
     ...(trim(patch.thread_id) ? { thread_id: trim(patch.thread_id) } : {}),
     ...(patch.title !== undefined ? { title: trim(patch.title) } : {}),
@@ -151,6 +190,12 @@ function applyThreadPatch(thread: FlowerThreadSnapshot, patch: FlowerLiveThreadP
     ...(Number(patch.created_at_ms ?? 0) > 0 ? { created_at_ms: Number(patch.created_at_ms) } : {}),
     ...(Number(patch.updated_at_ms ?? 0) > 0 ? { updated_at_ms: Number(patch.updated_at_ms) } : {}),
     status,
+    ...(acceptsApprovalSummary ? {
+      approval_pending: approvalPending,
+      approval_pending_count: Math.max(0, Math.floor(Number(patch.approval_pending_count ?? 0))),
+      approval_generation: Math.max(0, Math.floor(Number(patch.approval_generation ?? 0))),
+      approval_revision: Math.max(0, Math.floor(Number(patch.approval_revision ?? 0))),
+    } : {}),
     ...(Number(patch.queued_turn_count ?? -1) >= 0 ? { queued_turn_count: Number(patch.queued_turn_count) } : {}),
     ...(patch.queued_turns !== undefined ? { queued_turns: [...patch.queued_turns] } : {}),
     ...(patch.permission_type !== undefined ? { permission_type: patch.permission_type } : {}),
@@ -162,6 +207,9 @@ function applyThreadPatch(thread: FlowerThreadSnapshot, patch: FlowerLiveThreadP
     ...(patch.waiting_prompt !== undefined ? { input_request: patch.waiting_prompt ?? null } : {}),
     ...(trim(patch.run_error) ? { error: { message: trim(patch.run_error), ...(trim(patch.run_error_code) ? { code: trim(patch.run_error_code) } : {}) } } : {}),
   };
+  if (!approvalPending || next.status === 'waiting_user') return next;
+  const { error: _error, ...rest } = next;
+  return { ...rest, model_io_status: null };
 }
 
 function approvalsFromRecord(actions: Readonly<Record<string, FlowerApprovalAction>> | undefined): readonly FlowerApprovalAction[] {
@@ -535,6 +583,10 @@ function withApprovalAction(thread: FlowerThreadSnapshot, action: FlowerApproval
     ...thread,
     approval_actions: approvalActions,
     ...(approvalQueue !== undefined ? { approval_queue: approvalQueue } : {}),
+    approval_pending: approvalActions.length > 0,
+    approval_pending_count: approvalActions.length,
+    approval_generation: Math.max(0, Number(approvalQueue?.generation ?? action.queue_generation ?? thread.approval_generation ?? 0)),
+    approval_revision: Math.max(0, Number(approvalQueue?.revision ?? action.revision ?? thread.approval_revision ?? 0)),
     status: action.status === 'pending' ? 'waiting_approval' : thread.status,
   };
   return action.status === 'pending' ? clearModelIOForRun(updated, action.run_id) : updated;
@@ -560,6 +612,10 @@ function withCanonicalApprovalQueue(
     ...thread,
     approval_actions: approvalActions,
     approval_queue: approvalQueue,
+    approval_pending: approvalActions.length > 0,
+    approval_pending_count: approvalActions.length,
+    approval_generation: Math.max(0, Number(approvalQueue.generation)),
+    approval_revision: Math.max(0, Number(approvalQueue.revision)),
   };
   if (approvalActions.length > 0) {
     next = { ...next, status: 'waiting_approval' };
@@ -591,19 +647,26 @@ export function applyFlowerLiveEvent(
 
   switch (event.kind) {
     case 'run.started':
-      next = { ...next, status: 'running', active_run_id: trim(event.payload.run_id) || trim(event.run_id) || next.active_run_id };
-      break;
-    case 'run.status_changed':
       next = {
         ...next,
-        status: runStatus(event.payload.status),
+        status: approvalPriorityStatus(next, 'running'),
+        active_run_id: trim(event.payload.run_id) || trim(event.run_id) || next.active_run_id,
+      };
+      break;
+    case 'run.status_changed':
+      {
+      const incomingStatus = runStatus(event.payload.status);
+      next = {
+        ...next,
+        status: approvalPriorityStatus(next, incomingStatus),
         ...(event.payload.waiting_prompt !== undefined ? { input_request: event.payload.waiting_prompt ?? null } : {}),
         ...(trim(event.payload.error) ? { error: { message: trim(event.payload.error), ...(trim(event.payload.error_code) ? { code: trim(event.payload.error_code) } : {}) } } : {}),
       };
       if (threadStatusHidesModelIO(next.status)) {
         next = clearModelIOForRun(next, event.payload.run_id);
-        if (threadStatusIsTerminal(next.status)) {
+        if (threadStatusIsTerminal(incomingStatus)) {
           next = clearApprovalsForTerminalRun(next, event.payload.run_id);
+          next = { ...next, status: incomingStatus };
         }
         if (threadStatusClearsActiveRunID(next.status) && trim(next.active_run_id) === trim(event.payload.run_id)) {
           next = { ...next, active_run_id: undefined };
@@ -612,6 +675,7 @@ export function applyFlowerLiveEvent(
         next = { ...next, active_run_id: trim(event.payload.run_id) };
       }
       break;
+      }
     case 'thread.patched':
       next = applyThreadPatch(next, event.payload.patch);
       if (threadStatusHidesModelIO(next.status)) {

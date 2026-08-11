@@ -2559,6 +2559,35 @@ describe('Flower live projection', () => {
     expect(patched.thread.approval_actions).toEqual([approval]);
   });
 
+  it('does not let a running summary patch erase a background approval projection', () => {
+    const initial = thread({
+      status: 'waiting_approval',
+      approval_actions: undefined,
+      approval_queue: undefined,
+    });
+    const projected = applyFlowerLiveEvent(initial, 0, event(1, 'thread.patched', {
+      patch: {
+        run_status: 'running',
+        active_run_id: 'run-background',
+        approval_pending: true,
+        approval_pending_count: 1,
+        approval_generation: 2,
+        approval_revision: 3,
+      } as unknown as FlowerLiveThreadPatch,
+    }));
+    const stale = applyFlowerLiveEvent(projected.thread, projected.cursor, event(2, 'thread.patched', {
+      patch: { run_status: 'running', active_run_id: 'run-background' },
+    }));
+    const runStatus = applyFlowerLiveEvent(stale.thread, stale.cursor, event(3, 'run.status_changed', {
+      status: 'running',
+      run_id: 'run-background',
+    }));
+
+    expect(projected.thread.status).toBe('waiting_approval');
+    expect(stale.thread.status).toBe('waiting_approval');
+    expect(runStatus.thread.status).toBe('waiting_approval');
+  });
+
   it('rejects malformed canonical approval replacements as a unit', () => {
     const action = {
       action_id: 'delegated-1',

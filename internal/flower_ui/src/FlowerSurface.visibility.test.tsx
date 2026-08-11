@@ -66,7 +66,11 @@ async function* testLiveStreamFromLegacyFixture(
 const FlowerSurface: Component<Omit<FlowerSurfaceProps, 'draftCoordinator'>> = (props) => {
   const adapter = props.adapter.connectLiveStream
     ? props.adapter
-    : { ...props.adapter, connectLiveStream: (input: FlowerLiveStreamConnectInput) => testLiveStreamFromLegacyFixture(props.adapter, input) };
+    : {
+      ...props.adapter,
+      keepLiveWhenHidden: false,
+      connectLiveStream: (input: FlowerLiveStreamConnectInput) => testLiveStreamFromLegacyFixture(props.adapter, input),
+    };
   return <FlowerSurfaceComponent {...props} adapter={adapter} draftCoordinator={createFlowerComposerDraftCoordinator()} />;
 };
 

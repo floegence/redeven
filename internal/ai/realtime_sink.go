@@ -447,13 +447,12 @@ func (s *Service) threadSummaryRealtimeEvent(endpointID string, threadID string)
 	if err != nil {
 		return RealtimeEvent{}, err
 	}
-	if runStatus == string(RunStateRunning) {
-		s.mu.Lock()
-		liveState := s.flowerLiveMaterializedStateLocked(endpointID, threadID)
-		s.mu.Unlock()
-		if flowerLiveStateHasPendingApproval(liveState, strings.TrimSpace(string(snapshot.LatestRunID))) {
-			runStatus = string(RunStateWaitingApproval)
-		}
+	s.mu.Lock()
+	liveState := s.flowerLiveMaterializedStateLocked(endpointID, threadID)
+	s.mu.Unlock()
+	pendingApproval, pendingApprovalCount, approvalGeneration, approvalRevision := flowerLiveApprovalSummary(liveState, strings.TrimSpace(string(snapshot.LatestRunID)))
+	if pendingApproval && runStatus != string(RunStateWaitingUser) {
+		runStatus = string(RunStateWaitingApproval)
 	}
 	permissionType, err := threadPermissionType(th)
 	if err != nil {
@@ -477,27 +476,31 @@ func (s *Service) threadSummaryRealtimeEvent(endpointID string, threadID string)
 	}
 
 	return RealtimeEvent{
-		EventType:           RealtimeEventTypeThreadSummary,
-		EndpointID:          endpointID,
-		ThreadID:            threadID,
-		RunID:               "",
-		AtUnixMs:            time.Now().UnixMilli(),
-		RunStatus:           runStatus,
-		RunErrorCode:        runErrorCode,
-		RunError:            runError,
-		Title:               strings.TrimSpace(snapshot.Title),
-		TitleStatus:         strings.TrimSpace(string(snapshot.TitleStatus)),
-		ModelID:             strings.TrimSpace(th.ModelID),
-		UpdatedAtUnixMs:     snapshot.UpdatedAt.UnixMilli(),
-		LastMessagePreview:  lastMessagePreview,
-		LastMessageAtUnixMs: lastMessageAt,
-		ActiveRunID:         strings.TrimSpace(string(snapshot.LatestRunID)),
-		PermissionType:      permissionTypeString(permissionType),
-		QueuedTurnCount:     queuedTurnCount,
-		QueuedTurns:         queuedTurns,
-		ReasoningSelection:  reasoningSelection,
-		ReasoningCapability: reasoningCapability,
-		WaitingPrompt:       waitingPrompt,
+		EventType:            RealtimeEventTypeThreadSummary,
+		EndpointID:           endpointID,
+		ThreadID:             threadID,
+		RunID:                "",
+		AtUnixMs:             time.Now().UnixMilli(),
+		RunStatus:            runStatus,
+		RunErrorCode:         runErrorCode,
+		RunError:             runError,
+		Title:                strings.TrimSpace(snapshot.Title),
+		TitleStatus:          strings.TrimSpace(string(snapshot.TitleStatus)),
+		ModelID:              strings.TrimSpace(th.ModelID),
+		UpdatedAtUnixMs:      snapshot.UpdatedAt.UnixMilli(),
+		LastMessagePreview:   lastMessagePreview,
+		LastMessageAtUnixMs:  lastMessageAt,
+		ActiveRunID:          strings.TrimSpace(string(snapshot.LatestRunID)),
+		ApprovalPending:      &pendingApproval,
+		ApprovalPendingCount: pendingApprovalCount,
+		ApprovalGeneration:   approvalGeneration,
+		ApprovalRevision:     approvalRevision,
+		PermissionType:       permissionTypeString(permissionType),
+		QueuedTurnCount:      queuedTurnCount,
+		QueuedTurns:          queuedTurns,
+		ReasoningSelection:   reasoningSelection,
+		ReasoningCapability:  reasoningCapability,
+		WaitingPrompt:        waitingPrompt,
 	}, nil
 }
 
