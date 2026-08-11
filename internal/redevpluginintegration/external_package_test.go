@@ -571,7 +571,7 @@ func newExternalPackageTestIntegrationWithClockAndOptions(
 	if err != nil {
 		t.Fatal(err)
 	}
-	signedPackage, err := os.ReadFile(filepath.Join("testdata", "containers-4.4.1.signed.redevplugin"))
+	signedPackage, err := os.ReadFile(filepath.Join("testdata", "containers-4.4.2.signed.redevplugin"))
 	if err != nil {
 		_ = integration.Close()
 		t.Fatal(err)
@@ -581,12 +581,12 @@ func newExternalPackageTestIntegrationWithClockAndOptions(
 
 func catalogContainersPackageURL(t *testing.T) string {
 	t.Helper()
-	return "https://github.com/floegence/redeven-official-plugins/releases/download/v4.4.1/containers-4.4.1.redevplugin"
+	return "https://github.com/floegence/redeven-official-plugins/releases/download/v4.4.2/containers-4.4.2.redevplugin"
 }
 
 func unsignedExternalPackageFixture(t *testing.T) []byte {
 	t.Helper()
-	raw, err := os.ReadFile(filepath.Join("testdata", "containers-4.4.1.signed.redevplugin"))
+	raw, err := os.ReadFile(filepath.Join("testdata", "containers-4.4.2.signed.redevplugin"))
 	if err != nil {
 		t.Fatal(err)
 	}
