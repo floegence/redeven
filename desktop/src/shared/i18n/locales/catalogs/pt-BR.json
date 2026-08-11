@@ -95,6 +95,7 @@
       "scrollToLatest": "Rolar para o mais recente",
       "runErrorTitle": "O Flower não conseguiu concluir esta resposta.",
       "runContinuationErrorTitle": "Não foi possível continuar a resposta.",
+      "retryReply": "Tentar resposta novamente",
       "runErrorActionUpdateAPIKey": "Atualizar chave API",
       "runErrorActionAddAPIKey": "Adicionar chave API",
       "runErrorActionSwitchModel": "Trocar modelo",

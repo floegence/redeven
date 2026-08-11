@@ -167,17 +167,22 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 	if err != nil {
 		return r.failRun("Failed to initialize Floret model identity", err)
 	}
-	contextProjection, err := floretContextProjectionForInputWithAuthority(req.Input, r.canonicalReferenceAuthority)
-	if err != nil {
-		return r.failRun("Failed to prepare linked context", err)
-	}
-	turnInput, err := r.floretTurnInput(ctx, req.Input, contextProjection.References)
-	if err != nil {
-		return r.failRun("Failed to prepare message attachments", err)
-	}
-	turnInput, frozenAttachments, err := r.preflightFloretTurnAttachments(ctx, turnInput, flProvider)
-	if err != nil {
-		return r.failRun("Failed to validate message attachments", err)
+	var contextProjection floretContextProjection
+	var turnInput flruntime.TurnInput
+	var frozenAttachments map[string]frozenFloretAttachment
+	if req.Retry == nil {
+		contextProjection, err = floretContextProjectionForInputWithAuthority(req.Input, r.canonicalReferenceAuthority)
+		if err != nil {
+			return r.failRun("Failed to prepare linked context", err)
+		}
+		turnInput, err = r.floretTurnInput(ctx, req.Input, contextProjection.References)
+		if err != nil {
+			return r.failRun("Failed to prepare message attachments", err)
+		}
+		turnInput, frozenAttachments, err = r.preflightFloretTurnAttachments(ctx, turnInput, flProvider)
+		if err != nil {
+			return r.failRun("Failed to validate message attachments", err)
+		}
 	}
 	attachmentResolver := r.floretAttachmentResolver(frozenAttachments, flProvider)
 	flProvider.attachmentResolver = func(ctx context.Context, attachment flprovider.Attachment) (ContentPart, error) {
@@ -207,46 +212,64 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 	defer r.setActiveFloretHost(nil)
 	r.emitLifecyclePhase("executing", map[string]any{"engine": "floret"})
 	r.floretRunTurnStarted.Store(true)
-	logicalRequestID, logicalRequestErr := r.floretTurnLogicalRequestID()
-	if logicalRequestErr != nil {
-		return r.failRun("Failed to prepare Floret turn request", logicalRequestErr)
-	}
-	startCommand := flruntime.StartTurnCommand{
-		LogicalRequestID: logicalRequestID,
-		UserMessage:      turnInput,
-		Labels:           labels,
-		Completion:       completionPolicy,
-		Signals:          controlSpec,
-		Limits: flruntime.TurnLimits{
-			MaxToolCalls:           modelGatewayHardMaxToolCalls,
-			MaxInputTokens:         int64(req.Options.MaxInputTokens),
-			MaxCostUSD:             req.Options.MaxCostUSD,
-			MaxLengthContinuations: 2,
-		},
-		Reasoning: req.Options.ReasoningSelection,
-	}
-	admission, err := turnHost.AdmitTurn(ctx, startCommand)
-	if err != nil {
-		return r.failRun("Floret turn admission failed", err)
-	}
-	if r.awaitFloretAdmission.Load() {
-		if bindErr := r.bindFloretCanonicalAdmissionReceipt(logicalRequestID, admission, turnInput); bindErr != nil {
-			r.rejectFloretContract("turn_admission", bindErr)
-			return r.failRun("Floret turn admission binding failed", bindErr)
-		}
-		r.floretAdmitted.Store(true)
-		if err := r.publishCanonicalUserAdmission(); err != nil {
-			r.completeUserTurnAdmission(nil)
-			r.rejectFloretContract("turn_admission", err)
-			return r.failRun("Floret turn admission presentation failed", err)
+	var logicalRequestID identity.LogicalRequestID
+	var startResult flruntime.StartTurnResult
+	if req.Retry != nil {
+		logicalRequestID = req.Retry.LogicalRequestID
+		if _, parseErr := identity.ParseLogicalRequestID(logicalRequestID.String()); parseErr != nil {
+			return r.failRun("Failed to prepare Floret retry request", parseErr)
 		}
 		r.floretPresentationReady.Store(true)
-		r.completeUserTurnAdmission(nil)
+		retried, retryErr := turnHost.RetryTurn(ctx, flruntime.RetryTurnCommand{
+			LogicalRequestID: logicalRequestID,
+			Reason:           strings.TrimSpace(req.Retry.Reason),
+			Labels:           labels,
+		})
+		err = retryErr
+		startResult = flruntime.StartTurnResult{ThreadID: retried.ThreadID, TurnID: retried.TurnID, RunID: retried.RunID}
+	} else {
+		var logicalRequestErr error
+		logicalRequestID, logicalRequestErr = r.floretTurnLogicalRequestID()
+		if logicalRequestErr != nil {
+			return r.failRun("Failed to prepare Floret turn request", logicalRequestErr)
+		}
+		startCommand := flruntime.StartTurnCommand{
+			LogicalRequestID: logicalRequestID,
+			UserMessage:      turnInput,
+			Labels:           labels,
+			Completion:       completionPolicy,
+			Signals:          controlSpec,
+			Limits: flruntime.TurnLimits{
+				MaxToolCalls:           modelGatewayHardMaxToolCalls,
+				MaxInputTokens:         int64(req.Options.MaxInputTokens),
+				MaxCostUSD:             req.Options.MaxCostUSD,
+				MaxLengthContinuations: 2,
+			},
+			Reasoning: req.Options.ReasoningSelection,
+		}
+		admission, admissionErr := turnHost.AdmitTurn(ctx, startCommand)
+		if admissionErr != nil {
+			return r.failRun("Floret turn admission failed", admissionErr)
+		}
+		if r.awaitFloretAdmission.Load() {
+			if bindErr := r.bindFloretCanonicalAdmissionReceipt(logicalRequestID, admission, turnInput); bindErr != nil {
+				r.rejectFloretContract("turn_admission", bindErr)
+				return r.failRun("Floret turn admission binding failed", bindErr)
+			}
+			r.floretAdmitted.Store(true)
+			if err := r.publishCanonicalUserAdmission(); err != nil {
+				r.completeUserTurnAdmission(nil)
+				r.rejectFloretContract("turn_admission", err)
+				return r.failRun("Floret turn admission presentation failed", err)
+			}
+			r.floretPresentationReady.Store(true)
+			r.completeUserTurnAdmission(nil)
+		}
+		startResult, err = turnHost.ExecuteAdmission(ctx, admission.Receipt, flruntime.ExecutionContext{
+			SupplementalContext: contextProjection.Items,
+			SignalProjector:     controlSpec.Project,
+		})
 	}
-	startResult, err := turnHost.ExecuteAdmission(ctx, admission.Receipt, flruntime.ExecutionContext{
-		SupplementalContext: contextProjection.Items,
-		SignalProjector:     controlSpec.Project,
-	})
 	var snapshot flruntime.ThreadTurnSnapshot
 	var snapshotErr error
 	if startResult.TurnID != "" {
@@ -257,7 +280,9 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 	if startResult.RunID != "" || startResult.ThreadID != "" || startResult.TurnID != "" {
 		var bindErr error
 		identity := r.floretRuntimeEventIdentitySnapshot()
-		if r.awaitFloretAdmission.Load() && !identity.configured && startResult.Receipt.Replayed && startResult.Receipt.Committed {
+		if req.Retry != nil {
+			bindErr = r.observeFloretCanonicalIdentity(string(startResult.RunID), string(startResult.ThreadID), string(startResult.TurnID))
+		} else if r.awaitFloretAdmission.Load() && !identity.configured && startResult.Receipt.Replayed && startResult.Receipt.Committed {
 			bindErr = r.bindFloretCanonicalAdmissionReplay(logicalRequestID, startResult, snapshot, snapshotErr, turnInput)
 		} else {
 			bindErr = r.bindFloretCanonicalIdentity(string(startResult.RunID), string(startResult.ThreadID), string(startResult.TurnID))

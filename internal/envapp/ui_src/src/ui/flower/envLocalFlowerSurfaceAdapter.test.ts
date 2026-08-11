@@ -922,6 +922,35 @@ describe('Env local Flower surface adapter', () => {
     expect(bootstrap.thread.status).toBe('canceled');
   });
 
+  it('retries only the canonical provider continuation and reloads live bootstrap', async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/ai/threads/thread_retry/retry' && init?.method === 'POST') {
+        return jsonResponse({ ok: true });
+      }
+      if (url === '/_redeven_proxy/api/ai/threads/thread_retry/live/bootstrap' && init?.method === 'GET') {
+        return jsonResponse(liveBootstrap('thread_retry', 'running'));
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    const adapter = createEnvLocalFlowerSurfaceAdapter({
+      envPublicID: 'env_a',
+      envLabel: 'Demo Env',
+      rpc: { ai: {} } as any,
+    });
+
+    const bootstrap = await adapter.retryThread(' thread_retry ');
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1,
+      '/_redeven_proxy/api/ai/threads/thread_retry/retry',
+      expect.objectContaining({ method: 'POST', body: '{}' }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(2,
+      '/_redeven_proxy/api/ai/threads/thread_retry/live/bootstrap',
+      expect.objectContaining({ method: 'GET' }),
+    );
+    expect(bootstrap.thread.status).toBe('running');
+  });
+
   it('deletes a thread with force and validates the accepted receipt', async () => {
     fetchMock.mockResolvedValue(jsonResponse({
       operation_id: 'delete_operation_1',

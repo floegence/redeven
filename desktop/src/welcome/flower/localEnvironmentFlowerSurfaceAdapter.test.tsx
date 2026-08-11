@@ -859,6 +859,26 @@ describe('Local Environment Flower surface adapter', () => {
     expect(calls[0].body).toEqual({});
   });
 
+  it('retries the canonical provider continuation and reloads live bootstrap', async () => {
+    const calls: RuntimeFlowerRequest[] = [];
+    const bridge = bridgeFor((request) => {
+      calls.push(request);
+      if (request.path === '/_redeven_proxy/api/ai/threads/thread-1/retry') return { ok: true };
+      if (request.path === '/_redeven_proxy/api/ai/threads/thread-1/live/bootstrap') return liveBootstrap({ run_status: 'running' });
+      throw new Error(`unexpected path: ${request.path}`);
+    });
+    const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
+
+    const bootstrap = await adapter.retryThread(' thread-1 ');
+
+    expect(bootstrap.thread.status).toBe('running');
+    expect(calls.map((call) => `${call.method} ${call.path}`)).toEqual([
+      'POST /_redeven_proxy/api/ai/threads/thread-1/retry',
+      'GET /_redeven_proxy/api/ai/threads/thread-1/live/bootstrap',
+    ]);
+    expect(calls[0].body).toEqual({});
+  });
+
   it('deletes one queued turn through Desktop IPC and reloads canonical detail', async () => {
     const calls: RuntimeFlowerRequest[] = [];
     const bridge = bridgeFor((request) => {

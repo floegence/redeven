@@ -3978,6 +3978,7 @@
       "scrollToLatest": "Прокрутить к последнему",
       "runErrorTitle": "Flower не смог завершить этот ответ.",
       "runContinuationErrorTitle": "Не удалось продолжить ответ.",
+      "retryReply": "Повторить ответ",
       "runErrorActionUpdateAPIKey": "Обновить ключ API",
       "runErrorActionAddAPIKey": "Добавить ключ API",
       "runErrorActionSwitchModel": "Сменить модель",

@@ -233,6 +233,6 @@ describe('Flower Desktop model source E2E', () => {
       }),
     }));
     expect(turnBodies[0]).not.toHaveProperty('thread_id');
-    expect(subscribeThread).toHaveBeenCalledWith({ threadId: `th_${'3'.repeat(24)}` });
+    expect(subscribeThread).not.toHaveBeenCalled();
   });
 });

@@ -178,6 +178,10 @@ func (h floretTurnHostAdapter) ExecuteAdmission(ctx context.Context, receipt flr
 	return h.executor.ExecuteAdmission(ctxOrBackground(ctx), receipt, executionContext)
 }
 
+func (h floretTurnHostAdapter) RetryTurn(ctx context.Context, command flruntime.RetryTurnCommand) (flruntime.RetryTurnResult, error) {
+	return h.executor.RetryTurn(ctxOrBackground(ctx), command)
+}
+
 func (h floretTurnHostAdapter) ReadTurn(ctx context.Context, turnID identity.TurnID) (flruntime.ThreadTurnSnapshot, error) {
 	return h.reader.ReadTurn(ctxOrBackground(ctx), turnID)
 }

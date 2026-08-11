@@ -83,6 +83,10 @@ func (*panicFloretTurnHost) ExecuteAdmission(context.Context, flruntime.TurnAdmi
 	panic("deterministic ExecuteAdmission panic")
 }
 
+func (*panicFloretTurnHost) RetryTurn(context.Context, flruntime.RetryTurnCommand) (flruntime.RetryTurnResult, error) {
+	panic("deterministic RetryTurn panic")
+}
+
 func (*panicFloretTurnHost) ReadTurn(context.Context, identity.TurnID) (flruntime.ThreadTurnSnapshot, error) {
 	return flruntime.ThreadTurnSnapshot{}, errors.New("unexpected exact turn read after panic")
 }
@@ -781,6 +785,123 @@ func TestRunFloretHostedTurnPreservesEngineErrorAsPrimaryFailure(t *testing.T) {
 	}
 	if r.getRunErrorCode() != runErrorCodeFloretEngineFailed {
 		t.Fatalf("run error code = %q, want %q", r.getRunErrorCode(), runErrorCodeFloretEngineFailed)
+	}
+}
+
+func TestRunFloretHostedTurnRetriesCanonicalContinuationWithoutReadmittingUserInput(t *testing.T) {
+	ctx := t.Context()
+	first := newFloretRuntimeTestRun(t, runOptions{
+		Log:          slog.New(slog.NewTextHandler(io.Discard, nil)),
+		StateDir:     t.TempDir(),
+		AgentHomeDir: t.TempDir(),
+		WorkingDir:   t.TempDir(),
+		Shell:        "/bin/bash",
+		AIConfig:     &config.AIConfig{},
+		RunID:        "run_retry_source",
+		EndpointID:   "env_retry_continuation",
+		ThreadID:     "thread_retry_continuation",
+		SessionMeta:  &session.Meta{EndpointID: "env_retry_continuation", CanRead: true, CanWrite: true, CanExecute: true},
+	})
+	providerConfig := config.AIProvider{ID: "compat", Type: "openai_compatible", BaseURL: "https://example.test/v1"}
+	request := RunRequest{
+		Model:   "compat/gpt-5-mini",
+		Input:   RunInput{Text: "do not duplicate this user message"},
+		Options: RunOptions{PermissionType: config.AIPermissionFullAccess},
+	}
+	if err := first.runFloretHostedTurn(ctx, request, providerConfig, "sk-test", "retry continuation", failingTurnProvider{}); err == nil {
+		t.Fatal("initial provider failure unexpectedly succeeded")
+	}
+
+	svc := testServiceForRun(t, first)
+	reader, err := svc.openFloretThreadReadHost(ctx, first.threadID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := reader.Bootstrap(ctx, flruntime.ThreadBootstrapRequest{TurnLimit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	failed := before.Overview.LatestTurn
+	requestID, _, err := continuationRetryLogicalRequestID(first.threadID, failed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtimeCapabilities, err := svc.bindFloretThreadRuntime(first.threadID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second := newFloretRuntimeTestRun(t, runOptions{
+		Log:              slog.New(slog.NewTextHandler(io.Discard, nil)),
+		StateDir:         t.TempDir(),
+		AgentHomeDir:     t.TempDir(),
+		WorkingDir:       t.TempDir(),
+		Shell:            "/bin/bash",
+		AIConfig:         &config.AIConfig{},
+		RunID:            "run_retry_execution",
+		ExecutionKey:     "continuation-retry-test",
+		EndpointID:       "env_retry_continuation",
+		ThreadID:         first.threadID,
+		FloretTurnOpener: runtimeCapabilities.Turn,
+		SessionMeta:      &session.Meta{EndpointID: "env_retry_continuation", CanRead: true, CanWrite: true, CanExecute: true},
+	}, runThreadStoreForTest(t, first))
+	retryRequest := request
+	retryRequest.Input = RunInput{}
+	retryRequest.Retry = &FloretContinuationRetry{LogicalRequestID: requestID, Reason: continuationRetryReason}
+	if err := second.runFloretHostedTurn(ctx, retryRequest, providerConfig, "sk-test", "retry continuation", failingTurnProvider{}); err == nil {
+		t.Fatal("first continuation retry unexpectedly succeeded")
+	}
+
+	afterFailedRetry, err := reader.Bootstrap(ctx, flruntime.ThreadBootstrapRequest{TurnLimit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	failedRetry := afterFailedRetry.Overview.LatestTurn
+	if len(afterFailedRetry.Turns.Turns) != 2 || failedRetry == nil || failedRetry.RetrySource == nil || failedRetry.Status != flruntime.TurnStatusFailed {
+		t.Fatalf("failed retry projection=%#v", afterFailedRetry)
+	}
+	secondRequestID, _, err := continuationRetryLogicalRequestID(first.threadID, failedRetry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	third := newFloretRuntimeTestRun(t, runOptions{
+		Log:              slog.New(slog.NewTextHandler(io.Discard, nil)),
+		StateDir:         t.TempDir(),
+		AgentHomeDir:     t.TempDir(),
+		WorkingDir:       t.TempDir(),
+		Shell:            "/bin/bash",
+		AIConfig:         &config.AIConfig{},
+		RunID:            "run_retry_execution_second",
+		ExecutionKey:     "continuation-retry-test-second",
+		EndpointID:       "env_retry_continuation",
+		ThreadID:         first.threadID,
+		FloretTurnOpener: runtimeCapabilities.Turn,
+		SessionMeta:      &session.Meta{EndpointID: "env_retry_continuation", CanRead: true, CanWrite: true, CanExecute: true},
+	}, runThreadStoreForTest(t, first))
+	retryRequest.Retry = &FloretContinuationRetry{LogicalRequestID: secondRequestID, Reason: continuationRetryReason}
+	provider := &capturingTurnProvider{result: ModelGatewayResult{FinishReason: "stop", Text: "recovered reply"}}
+	if err := third.runFloretHostedTurn(ctx, retryRequest, providerConfig, "sk-test", "retry continuation", provider); err != nil {
+		t.Fatalf("second continuation retry: %v", err)
+	}
+
+	after, err := reader.Bootstrap(ctx, flruntime.ThreadBootstrapRequest{TurnLimit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(after.Turns.Turns) != 3 {
+		t.Fatalf("canonical turns=%d, want failed source plus two retries", len(after.Turns.Turns))
+	}
+	var userInputs int
+	for _, turn := range after.Turns.Turns {
+		if strings.TrimSpace(turn.UserInput) != "" {
+			userInputs++
+		}
+	}
+	retried := after.Overview.LatestTurn
+	if userInputs != 1 || retried == nil || retried.RetrySource == nil || retried.Status != flruntime.TurnStatusCompleted {
+		t.Fatalf("retry projection user_inputs=%d latest=%#v", userInputs, retried)
+	}
+	if got := provider.requestCount(); got != 1 {
+		t.Fatalf("retry provider calls=%d, want one continuation request", got)
 	}
 }
 

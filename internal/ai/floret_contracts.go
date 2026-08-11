@@ -57,6 +57,7 @@ type floretSubagentTurnRecoveryBinder func(context.Context, identity.ThreadID, i
 type floretTurnRunner interface {
 	AdmitTurn(context.Context, flruntime.StartTurnCommand) (flruntime.AdmitTurnResult, error)
 	ExecuteAdmission(context.Context, flruntime.TurnAdmissionReceipt, flruntime.ExecutionContext) (flruntime.StartTurnResult, error)
+	RetryTurn(context.Context, flruntime.RetryTurnCommand) (flruntime.RetryTurnResult, error)
 	ReadTurn(context.Context, identity.TurnID) (flruntime.ThreadTurnSnapshot, error)
 }
 

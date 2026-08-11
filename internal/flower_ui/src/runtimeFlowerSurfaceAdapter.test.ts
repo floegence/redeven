@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type {
+  FlowerLiveBootstrap,
   FlowerRouterDecision,
   FlowerSettingsDraft,
   FlowerSettingsSnapshot,
@@ -126,6 +127,9 @@ function adapterOptions(
     launchTurn: vi.fn(async () => {
       throw new Error('launchTurn should not be called.');
     }),
+    retryThread: vi.fn(async () => {
+      throw new Error('retryThread should not be called.');
+    }),
     compactThreadContext: vi.fn(async () => {
       throw new Error('compactThreadContext should not be called.');
     }),
@@ -140,6 +144,43 @@ function adapterOptions(
 }
 
 describe('runtime Flower surface adapter read state', () => {
+	it('trims and forwards canonical continuation retries', async () => {
+		const expected = {
+			schema_version: 1,
+			endpoint_id: 'runtime_1',
+			thread_id: 'thread_1',
+			stream_generation: 1,
+			cursor: 1,
+			retained_from_seq: 1,
+			thread: {
+				thread_id: 'thread_1',
+				title: 'Retry',
+				title_status: 'ready',
+				model_id: 'default/gpt-5',
+				permission_type: 'approval_required',
+				working_dir: '/workspace',
+				queued_turn_count: 0,
+				created_at_ms: 1,
+				updated_at_ms: 1,
+				status: 'failed',
+				source_label: 'Runtime',
+				target_labels: [],
+				messages: [],
+				read_status: readStatus(),
+			},
+			timeline_messages: [],
+			live_state: { thread_patch: {}, runs: {}, approval_actions: {}, input_requests: {} },
+			read_status: readStatus(),
+			generated_at_ms: 1,
+        } as FlowerLiveBootstrap;
+		const retryThread = vi.fn(async () => expected);
+		const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({}, { retryThread }));
+
+		await expect(adapter.retryThread(' thread_1 ')).resolves.toBe(expected);
+		expect(retryThread).toHaveBeenCalledWith('thread_1');
+		await expect(adapter.retryThread('  ')).rejects.toThrow();
+	});
+
 	it('keeps read APIs while removing mutation affordances for read-only viewers', () => {
 		const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({}, { canMutate: false }));
 

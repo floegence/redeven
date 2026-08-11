@@ -3850,6 +3850,7 @@
       "scrollToLatest": "捲動到最新",
       "runErrorTitle": "Flower 未能完成這次回覆。",
       "runContinuationErrorTitle": "回覆未能繼續。",
+      "retryReply": "重試回覆",
       "runErrorActionUpdateAPIKey": "更新 API 金鑰",
       "runErrorActionAddAPIKey": "新增 API 金鑰",
       "runErrorActionSwitchModel": "切換模型",

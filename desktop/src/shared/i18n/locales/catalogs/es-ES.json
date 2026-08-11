@@ -95,6 +95,7 @@
       "scrollToLatest": "Ir a lo más reciente",
       "runErrorTitle": "Flower no pudo completar esta respuesta.",
       "runContinuationErrorTitle": "No se pudo continuar la respuesta.",
+      "retryReply": "Reintentar respuesta",
       "runErrorActionUpdateAPIKey": "Actualizar clave API",
       "runErrorActionAddAPIKey": "Agregar clave API",
       "runErrorActionSwitchModel": "Cambiar modelo",

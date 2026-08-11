@@ -29,6 +29,10 @@ func (h *todoTestHost) ExecuteAdmission(context.Context, flruntime.TurnAdmission
 	return flruntime.StartTurnResult{}, nil
 }
 
+func (h *todoTestHost) RetryTurn(context.Context, flruntime.RetryTurnCommand) (flruntime.RetryTurnResult, error) {
+	return flruntime.RetryTurnResult{}, errors.New("unexpected RetryTurn")
+}
+
 func (h *todoTestHost) ReadTurn(context.Context, identity.TurnID) (flruntime.ThreadTurnSnapshot, error) {
 	return flruntime.ThreadTurnSnapshot{}, flruntime.ErrTurnNotFound
 }
