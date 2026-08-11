@@ -10,7 +10,7 @@ timestamp: 2026-07-29T00:00:00Z
 Redeven owns Docker and Podman semantics, CLI execution, redacted DTOs, and risk
 projection; ReDevPlugin owns plugin identity, grants, confirmations, operation
 and stream handles, quotas, revocation, and audit. Production consumes signed
-Containers `4.4.0`, `redeven.container_resources.v4@4.0.0`, and
+Containers `4.4.1`, `redeven.container_resources.v4@4.0.0`, and
 `redeven.capability.container_resources@3.0.0` through the latest-only market
 and immutable GitHub Release transport. The capability bundle is signed through
 the released ReDevPlugin publisher and remains one verified part of the
@@ -129,7 +129,7 @@ lifecycle authority, audit store, or token issuer.
 
 The v4 bridge and generated client are exercised against the source contract.
 Production registers the signed v4 capability only through the verified
-Containers `4.4.0` release selected by the production market snapshot.
+Containers `4.4.1` release selected by the production market snapshot.
 Development follows the same published market and release path; Redeven does
 not build, embed, or trust an ephemeral Containers package. Missing or altered
 delivery evidence fails startup rather than falling back to another contract.

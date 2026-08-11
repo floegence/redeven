@@ -12,7 +12,7 @@ ReDevPlugin operation handle, and local observation record. The resource stays
 locked until terminal observation and fresh authoritative inventory prove the
 result. Lost submissions, stale plans, unavailable engines, and failed
 reconciliation are never replayed or shown as success. Production uses the
-signed Containers `4.4.0` release after complete ReDevPlugin package and
+signed Containers `4.4.1` release after complete ReDevPlugin package and
 publication evidence has been verified.
 
 # Contract
@@ -122,7 +122,7 @@ guessed.
 
 Containers source, tests, manifest, icon, and stable distribution are owned by
 `floegence/redeven-official-plugins`. Redeven consumes only the complete signed
-`4.4.0` release selected by the frozen latest-only market snapshot. ReDevPlugin
+`4.4.1` release selected by the frozen latest-only market snapshot. ReDevPlugin
 verifies package signing, capability signing, root delegation, source policy,
 revocation, ledger, release metadata, and package-set evidence before any
 registry mutation. Unsigned, partial, or locally built bytes cannot substitute
