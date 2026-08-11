@@ -19,8 +19,8 @@ func officialReleaseFixtureTime() time.Time {
 }
 
 func TestOfficialContainersVersionMatchesPublishedRelease(t *testing.T) {
-	if officialContainersVersion != "4.4.2" {
-		t.Fatalf("official Containers version = %q, want 4.4.2", officialContainersVersion)
+	if officialContainersVersion != "4.4.3" {
+		t.Fatalf("official Containers version = %q, want 4.4.3", officialContainersVersion)
 	}
 }
 
@@ -124,43 +124,43 @@ func officialMarketReleaseFixture(t *testing.T) pluginmarket.LatestRelease {
 		t.Fatal(err)
 	}
 	const (
-		locator               = "plugins/com.redeven.official/com.redeven.official.containers/4.4.2/release.json"
-		metadataSHA256        = "02b8618cf422c1cbed7cd6cbf42ead26fa6dab3fd1ab46d5bd05f3863503c6bf"
-		packageIdentitySHA256 = "sha256:4fde89b1cb6bd09596aca03021eb015207b748567a4c829d70985d336b094522"
-		manifestSHA256        = "sha256:07079b0455365bbf57795ceb7fa4043142059da13cff269e11e81312d94b9784"
-		entriesSHA256         = "sha256:99f60a56dc2037fa01aa714f1cc1135640b93f74aa9ddab8db19d4281ee581c4"
+		locator               = "plugins/com.redeven.official/com.redeven.official.containers/4.4.3/release.json"
+		metadataSHA256        = "2e00303ab686c4d0ae9862895f949c6286828c8496e64846012f3ca39c152be3"
+		packageIdentitySHA256 = "sha256:4dde36627e17753c4cf145f3baebd0223c9219a471be75d1c25d8e858f609f69"
+		manifestSHA256        = "sha256:fe038b3c44bf44b8dcfd7c6e94ffe80ccee15daf258e0a11518e307ebf9e2312"
+		entriesSHA256         = "sha256:4bec0de1afb29a56a89d4b51a62c8d6487f5d88a5c06bf7b1026856f7b20103a"
 	)
 	packageAsset := pluginmarket.ReleaseAsset{
-		AssetID: 509935682, Name: "containers-4.4.2.redevplugin",
-		URL:  "https://github.com/floegence/redeven-official-plugins/releases/download/v4.4.2/containers-4.4.2.redevplugin",
-		Size: 414894, SHA256: "701ab9916f207e21637e662e8be5b9e090af2b0e95239a79aa026d3a3746b31d",
+		AssetID: 510026040, Name: "containers-4.4.3.redevplugin",
+		URL:  "https://github.com/floegence/redeven-official-plugins/releases/download/v4.4.3/containers-4.4.3.redevplugin",
+		Size: 414945, SHA256: "c1505aedd252b56ff46f2b4b7622b317011e6ee38490e5be36195e22832e05b4",
 	}
 	metadataAsset := pluginmarket.ReleaseAsset{
-		AssetID: 509935694, Name: "containers-4.4.2.release.json",
-		URL:  "https://github.com/floegence/redeven-official-plugins/releases/download/v4.4.2/containers-4.4.2.release.json",
+		AssetID: 510026048, Name: "containers-4.4.3.release.json",
+		URL:  "https://github.com/floegence/redeven-official-plugins/releases/download/v4.4.3/containers-4.4.3.release.json",
 		Size: 3026, SHA256: metadataSHA256,
 	}
 	release := pluginmarket.LatestRelease{
 		PluginID: officialContainersPluginID, Channel: officialReleaseChannel, Version: officialContainersVersion,
 		Source: pluginmarket.ReleaseSource{
 			Provider: "github", RepositoryID: 1289352675, RepositoryOwner: "floegence",
-			RepositoryName: "redeven-official-plugins", ReleaseID: 368453757, Tag: "v4.4.2",
-			TargetCommit: "d41485f257cf2e193628012d3e041b6418e893e7",
+			RepositoryName: "redeven-official-plugins", ReleaseID: 368507595, Tag: "v4.4.3",
+			TargetCommit: "b5907da7dd6362235b1fb3655c291b8779b2afcd",
 		},
 		Asset: packageAsset,
 		ReleaseRefAsset: pluginmarket.ReleaseAsset{
-			AssetID: 509935693, Name: "containers-4.4.2.release-ref.json",
-			URL:  "https://github.com/floegence/redeven-official-plugins/releases/download/v4.4.2/containers-4.4.2.release-ref.json",
-			Size: 19556, SHA256: "aef489f96143e522268ef95f4570e7d7a8b02273ff6035c81741ac3c569d417b",
+			AssetID: 510026049, Name: "containers-4.4.3.release-ref.json",
+			URL:  "https://github.com/floegence/redeven-official-plugins/releases/download/v4.4.3/containers-4.4.3.release-ref.json",
+			Size: 20076, SHA256: "e215cec5da3bd2c6486bceebbbab75144ecc40338f6edea55f987deae94fa5e0",
 		},
 		TransportAssets: []pluginmarket.TransportAsset{{Locator: locator, ReleaseAsset: metadataAsset}},
 		SignerKeyID:     officialSigningKeyID,
 		Compatibility: pluginmarket.Compatibility{
 			MinRedevenVersion: officialMinHostVersion, MinReDevPluginVersion: "0.7.16",
 		},
-		ReleaseIdentityDigest: "19d96b6d535e65d2bc6bc92baa71484c842317896c6d179ac99b736b023864b7",
+		ReleaseIdentityDigest: "517b3d410bf409f3d9a5ad42f6a6f00539e89a287a96b00eca88dfc74b3659d7",
 	}
-	release.TrustRoot.URL = "https://github.com/floegence/redeven-official-plugins/releases/download/v4.4.2/root.public.json"
+	release.TrustRoot.URL = "https://github.com/floegence/redeven-official-plugins/releases/download/v4.4.3/root.public.json"
 	release.TrustRoot.SHA256 = "5a625b201d0cc898932742daa69920aca1986567b145f477750a3f73540c3e7f"
 	release.PublisherReleaseRef.SchemaVersion = "redevplugin.publisher_release_ref.v1"
 	release.PublisherReleaseRef.ReleaseRef = host.PluginReleaseRef{

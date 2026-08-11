@@ -20,24 +20,24 @@ const assetPrefix = `${entryPath}assets/`;
 const pluginMarketCatalogPath = '/_redeven_proxy/api/plugins/market/catalog';
 const hashedAssetPattern = /-[A-Za-z0-9_-]{8,}\.(?:css|js|wasm)$/;
 const builtPluginPackageHashes = Object.freeze({
-  package_sha256: 'sha256:4fde89b1cb6bd09596aca03021eb015207b748567a4c829d70985d336b094522',
-  manifest_sha256: 'sha256:07079b0455365bbf57795ceb7fa4043142059da13cff269e11e81312d94b9784',
-  entries_sha256: 'sha256:99f60a56dc2037fa01aa714f1cc1135640b93f74aa9ddab8db19d4281ee581c4',
+  package_sha256: 'sha256:4dde36627e17753c4cf145f3baebd0223c9219a471be75d1c25d8e858f609f69',
+  manifest_sha256: 'sha256:fe038b3c44bf44b8dcfd7c6e94ffe80ccee15daf258e0a11518e307ebf9e2312',
+  entries_sha256: 'sha256:4bec0de1afb29a56a89d4b51a62c8d6487f5d88a5c06bf7b1026856f7b20103a',
 });
 const builtPluginReleaseRef = Object.freeze({
   source_id: 'redeven_official',
   channel: 'stable',
-  release_metadata_ref: 'plugins/com.redeven.official/com.redeven.official.containers/4.4.2/release.json',
-  release_metadata_sha256: '02b8618cf422c1cbed7cd6cbf42ead26fa6dab3fd1ab46d5bd05f3863503c6bf',
+  release_metadata_ref: 'plugins/com.redeven.official/com.redeven.official.containers/4.4.3/release.json',
+  release_metadata_sha256: '2e00303ab686c4d0ae9862895f949c6286828c8496e64846012f3ca39c152be3',
   publisher_id: 'com.redeven.official',
   plugin_id: 'com.redeven.official.containers',
-  version: '4.4.2',
+  version: '4.4.3',
   expected_hashes: builtPluginPackageHashes,
 });
 const builtPluginInstanceID = `catalog_${builtPluginReleaseRef.publisher_id}_${builtPluginReleaseRef.plugin_id}`;
 const builtPluginPresentationSHA256 = `sha256:${'1'.repeat(64)}`;
 const pluginMarketDetailPath = `/_redeven_proxy/api/plugins/market/plugins/${builtPluginReleaseRef.plugin_id}`;
-const builtPluginPackageURL = 'https://github.com/floegence/redeven-official-plugins/releases/download/v4.4.2/containers-4.4.2.redevplugin';
+const builtPluginPackageURL = 'https://github.com/floegence/redeven-official-plugins/releases/download/v4.4.3/containers-4.4.3.redevplugin';
 
 function builtDistArtifact(webTransportURL) {
   return {
