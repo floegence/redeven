@@ -8,7 +8,7 @@ quality_exception: Cross-placement runtime process contract spanning identity, r
 ---
 # Summary
 
-Redeven Desktop governs Local, SSH-hosted, and container-hosted Env Runtime processes through one process inventory contract. Stop, Restart, and Update do not infer liveness from a saved PID, a current state directory, an in-memory ready record, or a status command exit code. Gateway service processes remain outside this inventory and retain their independent lifecycle.
+Redeven Desktop governs Local, SSH-hosted, and container-hosted Env Runtime processes through one process inventory contract. Stop, Restart, and Update do not infer liveness from a saved PID, a current state directory, an in-memory ready record, or a status command exit code. Desktop development launches may additionally bind Electron user-data, session-data, cache, and temp roots to an explicit task-owned namespace so a second checkout can run without contending for the shared profile lock. Gateway service processes remain outside this inventory and retain their independent lifecycle.
 
 # Contract
 
@@ -84,6 +84,8 @@ No additional boundary is declared for this concept.
 - `redeven:desktop/src/main/runtimeLifecycleCoordinator.ts:64` - Physical lifecycle identity requires normalized state root, host authority, placement, and concrete container identity.
 - `redeven:desktop/src/main/launcherOperations.ts:291` - Launcher operation creation rejects replacement of an active same-key attempt.
 - `redeven:desktop/src/main/runtimeProcessInventory.ts:230` - The shared Desktop planner separates hard identity blocks from digest-bound takeover confirmation.
+- `redeven:desktop/src/main/statePaths.ts:8` - Desktop resolves explicit task-owned temp, user-data, and cache roots without fallback when isolation is requested.
+- `redeven:desktop/src/main/main.ts:18330` - Electron applies those roots before taking the single-instance lock.
 - `redeven:desktop/src/shared/desktopRuntimePresence.ts:89` - Runtime Presence remains the sole renderer-facing source of management capability.
 - `redeven:desktop/src/shared/desktopLauncherIPC.ts:79` - `needs_confirmation` is a terminal launcher operation status.
 - `redeven:desktop/src/welcome/App.tsx:6400` - Welcome renders the sanitized, destructive takeover confirmation and sends only the digest-bound continuation.
