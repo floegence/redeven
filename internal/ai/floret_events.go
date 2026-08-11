@@ -134,7 +134,18 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 	r.applyFloretContextStatus(ev.ContextStatus)
 	r.applyFloretCompaction(ev.Compaction)
 	if ev.ProjectionDelta != nil {
-		r.applyFloretThreadProjectionDelta(*ev.ProjectionDelta)
+		if _, err := r.applyFloretThreadProjectionDeltaInternal(*ev.ProjectionDelta); err != nil {
+			if ev.Projection == nil {
+				r.rejectFloretContract("turn_projection_delta", err)
+				return
+			}
+			r.recordRunDiagnostic("floret.projection_delta.fallback", RealtimeStreamKindLifecycle, map[string]any{
+				"error": sanitizeLogText(err.Error(), 240),
+			})
+			if r.applyFloretThreadProjection(*ev.Projection) {
+				r.rememberFloretProjectionDeltaLineage(*ev.Projection)
+			}
+		}
 	} else if ev.Projection != nil {
 		r.applyFloretThreadProjection(*ev.Projection)
 	}
