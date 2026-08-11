@@ -173,6 +173,7 @@ const officialContainersCatalog = {
 
 function officialContainersProjection(
   state: 'not_installed' | 'disabled' | 'enabled' | 'update_available' = 'not_installed',
+  packageRevision = 'initial',
 ): PluginInventoryProjection {
   const installed = state !== 'not_installed';
   return {
@@ -183,6 +184,11 @@ function officialContainersProjection(
         pluginInstanceID: officialContainersCatalog.pluginInstanceID,
         version: state === 'update_available' ? '1.9.0' : officialContainersCatalog.stableVersion,
         managementRevision: 11,
+        installedPackage: {
+          packageHash: `sha256:package-${packageRevision}`,
+          manifestHash: `sha256:manifest-${packageRevision}`,
+          entriesHash: `sha256:entries-${packageRevision}`,
+        },
       } : {}),
       displayName: officialContainersCatalog.displayName,
       description: officialContainersCatalog.description,
@@ -1791,6 +1797,52 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   }, 10000);
 
+  it('refreshes an enabled plugin again when an update replaces its runtime package identity', async () => {
+    vi.useFakeTimers();
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    let currentProjection = officialContainersProjection('enabled', 'v1');
+    pluginLifecycleMocks.loadInventoryProjection.mockImplementation(async () => currentProjection);
+    pluginLifecycleMocks.refreshEnabledRuntimeState.mockResolvedValue({
+      results: [{
+        plugin_instance_id: officialContainersCatalog.pluginInstanceID,
+        status: 'refreshed',
+      }],
+    } satisfies PluginRuntimeRefreshResult);
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+      await vi.advanceTimersByTimeAsync(250);
+      await flushUntil(() => pluginLifecycleMocks.refreshEnabledRuntimeState.mock.calls.length === 1, 40);
+
+      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="plugin-center"]')), 40);
+      (host.querySelector('[data-plugin-panel-tile="plugin-center"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => Boolean(pluginCenterViewState.lastProps), 40);
+      await flushUntil(() => (
+        pluginCenterViewState.lastProps.runtimeRecoveryByInstanceID?.[officialContainersCatalog.pluginInstanceID]?.state === 'ready'
+      ), 40);
+      const recoveryCallsBeforeUpdate = pluginLifecycleMocks.refreshEnabledRuntimeState.mock.calls.length;
+      currentProjection = officialContainersProjection('enabled', 'v2');
+      await pluginCenterViewState.lastProps.onRefresh();
+      await flushUntil(() => pluginLifecycleMocks.loadInventoryProjection.mock.calls.length >= 2, 40);
+      await flushUntil(() => (
+        pluginLifecycleMocks.refreshEnabledRuntimeState.mock.calls.length === recoveryCallsBeforeUpdate + 1
+      ), 40);
+
+      expect(pluginLifecycleMocks.refreshEnabledRuntimeState).toHaveBeenCalledTimes(recoveryCallsBeforeUpdate + 1);
+      expect(pluginCenterViewState.lastProps.runtimeRecoveryByInstanceID[officialContainersCatalog.pluginInstanceID]).toEqual({ state: 'ready' });
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
   it('keeps plugin surfaces closed, preserves typed recovery guidance, and retries only once', async () => {
     vi.useFakeTimers();
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
@@ -1809,7 +1861,12 @@ describe('EnvAppShell environment entry affordances', () => {
           },
         }],
       } satisfies PluginRuntimeRefreshResult)
-      .mockResolvedValueOnce({ results: [] });
+      .mockResolvedValueOnce({
+        results: [{
+          plugin_instance_id: 'plugini_redeven_official_containers',
+          status: 'refreshed',
+        }],
+      } satisfies PluginRuntimeRefreshResult);
     window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
 
     const host = document.createElement('div');
