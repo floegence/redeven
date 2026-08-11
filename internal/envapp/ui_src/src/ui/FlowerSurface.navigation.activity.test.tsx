@@ -2672,12 +2672,13 @@ describe('FlowerSurface navigation activity', () => {
       retained_from_seq: 1,
     });
     await waitFor(() => Boolean(composer.querySelector('[data-flower-approval-action-id="appr-second"]')));
-    await waitFor(() => document.activeElement?.getAttribute('data-flower-approval-action-id') === 'appr-second');
+    await waitFor(() => document.activeElement?.classList.contains('flower-composer-approval-decision') ?? false);
     expect(composer.textContent).toContain('npm run lint');
     expect(composer.textContent).not.toContain('npm test');
     expect(composer.textContent).toContain('2 / 2');
     expect(composer.querySelector('[role="status"][aria-live="polite"]')?.textContent).toBe('Approval 2 of 2');
-    expect((document.activeElement as HTMLElement | null)?.tagName).toBe('SECTION');
+    expect((document.activeElement as HTMLElement | null)?.tagName).toBe('BUTTON');
+    expect((document.activeElement as HTMLElement | null)?.getAttribute('aria-label')).toContain('Reject');
   });
 
   it('rejects every pending approval in an explicit batch without changing identities', async () => {
@@ -3053,7 +3054,8 @@ describe('FlowerSurface navigation activity', () => {
     conflictRefresh.resolve(liveBootstrap(promotedThread, 14));
     await waitFor(() => runtime.querySelector('[data-flower-approval-action-id="appr-stale"]') === null);
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-approval-action-id="appr-next"]')));
-    await waitFor(() => document.activeElement?.getAttribute('data-flower-approval-action-id') === 'appr-next');
+    await waitFor(() => document.activeElement?.classList.contains('flower-composer-approval-decision') ?? false);
+    expect((document.activeElement as HTMLElement | null)?.getAttribute('aria-label')).toContain('Reject');
     expect(submitApproval).toHaveBeenCalledTimes(1);
     expect(flowerSurfaceNotifications()).toEqual([]);
     expect(runtime.textContent).toContain('npm run lint');
