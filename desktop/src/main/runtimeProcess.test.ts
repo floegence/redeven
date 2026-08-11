@@ -341,6 +341,30 @@ process.on('SIGTERM', stopRuntime);
 }
 
 describe('runtimeProcess', () => {
+  it('keeps runtime inventory scope distinct from the persisted state root', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-runtime-process-scope-'));
+    const runtimeRoot = path.join(dir, 'runtime-root');
+    const stateRoot = path.join(dir, 'state-root');
+    const executablePath = await writeFakeRuntimeExecutable(dir);
+    try {
+      const inventory = await inspectLocalManagedRuntimeProcesses({
+        executablePath,
+        runtimeRoot,
+        stateRoot,
+        desktopOwnerID: 'desktop-owner-a',
+        env: process.env,
+      });
+
+      expect(inventory.scope).toMatchObject({
+        runtime_root: runtimeRoot,
+        state_root: stateRoot,
+        desktop_owner_id: 'desktop-owner-a',
+      });
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it('keeps cold inventory execution independent from the short status probe budget', async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-runtime-process-'));
     const stateRoot = path.join(dir, 'state');

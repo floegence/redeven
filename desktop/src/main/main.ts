@@ -9182,6 +9182,7 @@ async function prepareManagedTarget(
     executablePath,
     runtimeArgs: launchPlan.args,
     env: launchPlan.env,
+    runtimeRoot: launchPlan.state_layout.stateRoot,
     stateRoot: launchPlan.state_layout.stateRoot,
     desktopOwnerID,
     forceRuntimeUpdate: options.forceRuntimeUpdate === true,
@@ -9226,6 +9227,7 @@ async function attachLocalEnvironmentRuntime(
 
   const attachedRuntime = await attachManagedRuntimeFromStatus({
     executablePath: bundledRuntimeExecutablePath(),
+    runtimeRoot: localEnvironmentStateRoot(environment),
     stateRoot: localEnvironmentStateRoot(environment),
     runtimeAttachTimeoutMs: DESKTOP_RUNTIME_PROBE_TIMEOUT_MS,
     desktopOwnerID: await desktopRuntimeOwnerID(),
