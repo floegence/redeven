@@ -1302,7 +1302,7 @@
     },
     {
       "path": "internal/codeapp/appserver/server.go",
-      "sha256": "08d86a298a995aa5d69b6aa9faa2186afe1e5e155f859a2c06708a2ffb4933b1",
+      "sha256": "f8a442da3d40687b71b7a198a481fc989b974804c5a499af6c9031ae989f2b37",
       "sink_kinds": [
         "file",
         "json_file"
@@ -1663,7 +1663,7 @@
     },
     {
       "path": "internal/envapp/ui_src/src/ui/EnvAppShell.tsx",
-      "sha256": "7b5c496e2d607bcf4dc5acc4aadc7e302f709b484e3a25a1fc480331ff2bafb3",
+      "sha256": "dbfe10dd529a4869c4f0a0056b040539e504883b0fd2e74814c3a1f84fc482a6",
       "sink_kinds": [
         "web_storage"
       ],
@@ -1759,7 +1759,7 @@
     },
     {
       "path": "internal/flower_ui/src/FlowerSurface.tsx",
-      "sha256": "58092613845fa247d23ba0cab091f06760a7da4ecd9445c1885ae023651a6759",
+      "sha256": "3a075556adab9a356831f3a59e5a1cd3ba951c1230f83d8b1e08934347447e66",
       "sink_kinds": [
         "web_storage"
       ],
