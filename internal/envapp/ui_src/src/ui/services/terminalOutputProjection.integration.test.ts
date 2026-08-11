@@ -141,6 +141,53 @@ describe('terminal output projection with the published coordinator', () => {
     coordinator.dispose();
   });
 
+  it('replays the first retained output after a complete empty prepared-history seed', async () => {
+    const writes: string[] = [];
+    const projection = createTerminalOutputProjection({});
+    const coordinator = createPagedTerminalOutputCoordinator({
+      fetchPage: vi.fn().mockResolvedValue(page({
+        chunks: [chunk(1, 'one'), chunk(2, 'two')],
+        coveredThroughSequence: 2,
+        snapshotEndSequence: 2,
+        firstRetainedSequence: 1,
+        historyGeneration: 1,
+        historyReset: false,
+        historyTruncated: false,
+      })),
+      transformChunk: projection.transformChunk,
+      write: (data) => writes.push(decoder.decode(data)),
+      writeHistory: (data) => writes.push(decoder.decode(data)),
+      clear: projection.reset,
+      policy: { retryDelaysMs: [] },
+    });
+    const attachGeneration = coordinator.beginAttach(1);
+
+    await coordinator.completeAttach(attachGeneration, 2, {
+      preparedHistory: {
+        chunks: [],
+        requestedStartSequence: 1,
+        firstRetainedSequence: 0,
+        coveredThroughSequence: 0,
+        snapshotEndSequence: 0,
+        historyGeneration: 1,
+        byteLength: 0,
+        pageCount: 0,
+        complete: true,
+      },
+    });
+    const snapshot = coordinator.getSnapshot();
+
+    expect(writes.join('')).toBe('onetwo');
+    expect(snapshot).toMatchObject({
+      coveredThroughSequence: 2,
+      baselineReady: true,
+      state: 'live',
+      failure: null,
+      preparedHistoryOutcome: { status: 'accepted', rebased: false },
+    });
+    coordinator.dispose();
+  });
+
   it('fails closed when advancing retention has no authoritative checkpoint', async () => {
     const projection = createTerminalOutputProjection({});
     const coordinator = createPagedTerminalOutputCoordinator({

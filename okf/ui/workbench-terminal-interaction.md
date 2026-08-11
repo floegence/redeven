@@ -3,14 +3,14 @@ type: UI Contract
 title: Workbench terminal interaction
 description: Terminal attachment, shared-geometry presentation, input ownership, retained history, and performance validation.
 tags: [ui, workbench, terminal, performance]
-timestamp: 2026-08-08T00:00:00Z
+timestamp: 2026-08-11T00:00:00Z
 quality_exception: Cross-surface terminal interaction contract spanning live transport, shared geometry, product chrome, path capability, focus recovery, and performance validation.
 ---
 # Summary
 
 Activity and Workbench use Floeterm's binary `terminal/live_v1` stream over Flowersec. Floeterm owns PTY geometry, geometry-stamped retained history, atomic boundaries, ordered output, input, resize acknowledgement, and close/error states; Redeven keeps catalog/history RPCs on the control plane with no live-RPC fallback. Renderer rebuilds replay each retained chunk at its recorded grid before restoring the current attachment grid.
 
-Redeven consumes terminal-web v0.13.6. `forceResizeAndWaitForCommittedFrame()` fences initial recovery, refresh, and working-set resume; an already attached renderer commits the requested full WebGL frame synchronously in the calling task, while renderer attachment and visual-suspension fallbacks remain asynchronous. Read-only host measurement is used only by an active visible runtime.
+Redeven consumes terminal-web v0.14.1. `forceResizeAndWaitForCommittedFrame()` fences initial recovery, refresh, and working-set resume; an already attached renderer commits the requested full WebGL frame synchronously in the calling task, while renderer attachment and visual-suspension fallbacks remain asynchronous. Read-only host measurement is used only by an active visible runtime.
 
 # Contract
 

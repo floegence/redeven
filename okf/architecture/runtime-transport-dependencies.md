@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Runtime transport dependencies
 description: Runtime transport uses Flowersec sessions while terminal lifecycle is delegated to Floeterm managers.
 tags: [architecture, dependencies, terminal]
-timestamp: 2026-08-08T00:00:00Z
+timestamp: 2026-08-11T00:00:00Z
 quality_exception: Cross-domain published dependency contract spanning transport, terminal, and session security.
 ---
 # Summary
@@ -52,7 +52,7 @@ Terminal recovery verification is layered and automated without starting Redeven
 
 For every non-empty correctness sample, the carrier also clicks the visible Terminal refresh control, requires exactly one new attach, waits for the new parser and render milestones, and compares the refreshed Canvas with the stable pre-refresh evidence at the same grid. It then focuses the replacement renderer, requires no additional attach, compares the focused Canvas again, and only afterward sends the filesystem-backed input probe. This makes refresh rebuild and post-focus `SIGWINCH` behavior part of the real Runtime/PTY/Chromium boundary instead of relying only on mocked Core lifecycle tests.
 
-Redeven consumes terminal-web v0.13.6. Its read-only host-capacity probe and committed-frame fence are the upstream contracts used after replay: an active visible runtime may request a different grid only through the acknowledged resize transport, must wait for the output boundary, and must wait for the final committed renderer frame before exposing interaction or restoring focus. An already attached renderer commits that requested full WebGL frame synchronously in the calling task; renderer attachment and visual-suspension fallbacks remain asynchronous. Historical geometry remains a transient parser fact and never becomes the current shared grid.
+Redeven consumes terminal-web v0.14.1. Its read-only host-capacity probe and committed-frame fence are the upstream contracts used after replay: an active visible runtime may request a different grid only through the acknowledged resize transport, must wait for the output boundary, and must wait for the final committed renderer frame before exposing interaction or restoring focus. An already attached renderer commits that requested full WebGL frame synchronously in the calling task; renderer attachment and visual-suspension fallbacks remain asynchronous. Historical geometry remains a transient parser fact and never becomes the current shared grid.
 
 The production carrier records runtime, surface, CSS canvas, client, and backing-store dimensions immediately after refresh and again after focus. Overflow fixtures may exceed the 8 MiB ring-buffer cap; they must recover the retained tail, preserve the stable renderer geometry after focus, and accept subsequent PTY input.
 
