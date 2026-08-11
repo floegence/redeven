@@ -1391,10 +1391,7 @@ func (s *Server) directWSURLFromRequest(r *http.Request) (string, error) {
 	if r == nil {
 		return "", errors.New("nil request")
 	}
-	if !s.isTrustedOrAllowedAuthority(r) {
-		return "", errors.New("invalid Local UI authority")
-	}
-	host, err := canonicalLocalUIAuthority(r.Host)
+	host, err := s.directEndpointAuthority(r)
 	if err != nil {
 		return "", errors.New("invalid Local UI authority")
 	}
@@ -2139,7 +2136,33 @@ func sameOriginWSRequest(r *http.Request) bool {
 }
 
 func (s *Server) sameOriginWSRequest(r *http.Request) bool {
-	return s != nil && s.isTrustedOrAllowedAuthority(r) && strictSameOriginWSRequest(r, true)
+	if s == nil || r == nil || !s.isTrustedOrAllowedAuthority(r) {
+		return false
+	}
+	if strictSameOriginWSRequest(r, true) {
+		return true
+	}
+	if r.TLS != nil || isTrustedLocalUIBridge(r) || !s.bind.localhost {
+		return false
+	}
+	requestAuthority, err := canonicalLocalUIAuthority(r.Host)
+	if err != nil || !s.isAllowedNetworkAuthority(requestAuthority) {
+		return false
+	}
+	listenerAuthority, err := localLoopbackAuthorityFromRequest(r)
+	if err != nil || listenerAuthority != requestAuthority {
+		return false
+	}
+	originAuthority, ok := requestOriginAuthority(r, true)
+	if !ok || !s.isAllowedNetworkAuthority(originAuthority) {
+		return false
+	}
+	originHost, originPort, err := net.SplitHostPort(originAuthority)
+	if err != nil || !strings.EqualFold(originHost, "localhost") {
+		return false
+	}
+	_, requestPort, err := net.SplitHostPort(requestAuthority)
+	return err == nil && originPort == requestPort
 }
 
 func firstNonEmptyString(values []string) string {

@@ -171,6 +171,45 @@ func (s *Server) isTrustedOrAllowedAuthority(r *http.Request) bool {
 	return err == nil
 }
 
+func localLoopbackAuthorityFromRequest(r *http.Request) (string, error) {
+	if r == nil {
+		return "", fmt.Errorf("missing request")
+	}
+	localAddr, ok := r.Context().Value(http.LocalAddrContextKey).(*net.TCPAddr)
+	if !ok || localAddr == nil || localAddr.IP == nil || localAddr.Port <= 0 || localAddr.Zone != "" {
+		return "", fmt.Errorf("missing Local UI listener address")
+	}
+	addr, err := netip.ParseAddr(localAddr.IP.String())
+	if err != nil || !addr.IsLoopback() || addr.Is4In6() {
+		return "", fmt.Errorf("invalid Local UI listener address")
+	}
+	return net.JoinHostPort(addr.String(), strconv.Itoa(localAddr.Port)), nil
+}
+
+func (s *Server) directEndpointAuthority(r *http.Request) (string, error) {
+	if r == nil || s == nil || !s.isTrustedOrAllowedAuthority(r) {
+		return "", fmt.Errorf("invalid Local UI authority")
+	}
+	requestAuthority, err := canonicalLocalUIAuthority(r.Host)
+	if err != nil {
+		return "", fmt.Errorf("invalid Local UI authority")
+	}
+	requestHost, requestPort, err := net.SplitHostPort(requestAuthority)
+	if err != nil || r.TLS != nil || !strings.EqualFold(requestHost, "localhost") || isTrustedLocalUIBridge(r) {
+		return requestAuthority, err
+	}
+
+	listenerAuthority, err := localLoopbackAuthorityFromRequest(r)
+	if err != nil {
+		return "", err
+	}
+	_, listenerPort, err := net.SplitHostPort(listenerAuthority)
+	if err != nil || listenerPort != requestPort || !s.isAllowedNetworkAuthority(listenerAuthority) {
+		return "", fmt.Errorf("Local UI listener does not match request authority")
+	}
+	return listenerAuthority, nil
+}
+
 func (s *Server) networkHandler() http.Handler {
 	next := s.handler()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -280,23 +319,31 @@ func strictSameOriginWSRequest(r *http.Request, requireOrigin bool) bool {
 	if err != nil {
 		return false
 	}
+	actual, ok := requestOriginAuthority(r, requireOrigin)
+	return ok && (actual == "" || actual == expected)
+}
+
+func requestOriginAuthority(r *http.Request, requireOrigin bool) (string, bool) {
+	if r == nil {
+		return "", false
+	}
 	originRaw := strings.TrimSpace(r.Header.Get("Origin"))
 	if originRaw == "" {
-		return !requireOrigin
+		return "", !requireOrigin
 	}
 	origin, err := url.Parse(originRaw)
 	if err != nil || origin == nil || origin.User != nil || origin.RawQuery != "" || origin.Fragment != "" || (origin.Path != "" && origin.Path != "/") {
-		return false
+		return "", false
 	}
 	expectedScheme := "http"
 	if r.TLS != nil {
 		expectedScheme = "https"
 	}
 	if !strings.EqualFold(strings.TrimSpace(origin.Scheme), expectedScheme) {
-		return false
+		return "", false
 	}
 	actual, err := canonicalLocalUIAuthority(origin.Host)
-	return err == nil && actual == expected
+	return actual, err == nil
 }
 
 func dedupeStrings(values []string) []string {

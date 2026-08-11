@@ -19,7 +19,7 @@ Wildcard binds enumerate active same-family interface addresses after the listen
 
 ## Request Boundary
 
-The public listener accepts only exact canonical IP authorities created from the bound or enumerated addresses and actual port. It rejects DNS names, wildcard authorities, userinfo, paths, malformed or noncanonical ports, zones, mapped IPv6, and unlisted IPs before routing. Browser Direct WebSocket requests require exact request scheme and authority equality with Origin. Direct WebSocket URLs are built only from the validated request authority.
+The public listener accepts only exact canonical IP authorities created from the bound or enumerated addresses and actual port, plus the exact `localhost` authority for a configured localhost bind. It rejects other DNS names, wildcard authorities, userinfo, paths, malformed or noncanonical ports, zones, mapped IPv6, and unlisted IPs before routing. Direct WebSocket URLs normally use the validated request authority. A plaintext `localhost` request is the sole normalization case: the candidate and upstream address use the actual same-port loopback IP listener recorded by `http.Server`, and that IP must already be in the configured authority allowlist. Browser Direct WebSocket requests otherwise require exact request scheme and authority equality with Origin. The localhost page may connect to its normalized IP candidate only when the WebSocket Host equals that same actual listener authority and both the localhost Origin and IP Host are configured on the same port. This does not admit an arbitrary hostname, alternate port, non-loopback address, TLS alias, or Desktop bridge alias.
 
 Trusted Desktop, SSH, and container traffic enters through an independent `127.0.0.1:0` listener that mounts the trusted bridge handler and accepts canonical loopback authorities only. Its required attach URL is machine-only and never joins public display or exposure projections. SSH and container placement bridges execute `redeven desktop-bridge` and stream through that listener; they never forward the public Local UI port, rewrite Host, retry through the public URL, or select a compatibility transport. An established SSH bridge may replace only its private stdio transport after the same remote process generation proves the original identity; this does not create a public listener, alternate URL, or Runtime restart path. Runtime-control, Desktop model-source, and runtime management sockets remain loopback, token, owner, or local-socket protected and are not widened by Local UI exposure.
 
@@ -54,6 +54,8 @@ No additional boundary is declared for this concept.
 
 - `redeven:internal/localui/bind.go:21` - Bind parsing and interface selection enforce canonical fixed-port network addresses.
 - `redeven:internal/localui/http_security.go:21` - Listener resolution creates exact authorities and real access URLs.
+- `redeven:internal/localui/http_security.go:174` - Plaintext localhost normalization requires the request's actual configured loopback listener and exact port.
+- `redeven:internal/localui/http_security_test.go:218` - Focused tests preserve IP and TLS behavior while rejecting missing, mismatched, and non-loopback listener identity.
 - `redeven:cmd/redeven/main.go:230` - Runtime CLI defines the explicit acknowledgement flag and admission checks.
 - `redeven:internal/runtimemanagement/local_ui_exposure.go:1` - LocalUIExposure is the canonical status contract.
 - `redeven:desktop/src/main/desktopPreferences.ts:2195` - Desktop validates password and bind-scoped acknowledgement before saving.

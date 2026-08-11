@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -17,9 +18,96 @@ import (
 	flowersec "github.com/floegence/flowersec/flowersec-go/v2"
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/accessrpc"
+	fsrpc "github.com/floegence/redeven/internal/fs"
+	"github.com/floegence/redeven/internal/monitor"
 	"github.com/floegence/redeven/internal/sessionhop"
 	"github.com/floegence/redeven/internal/terminal"
 )
+
+func TestServer_E2E_PlaintextLocalhostConnectsDirectSessionOnListenerIP(t *testing.T) {
+	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen on IPv4 loopback: %v", err)
+	}
+	port := listener.Addr().(*net.TCPAddr).Port
+	bind, err := ParseBind(net.JoinHostPort("localhost", fmt.Sprint(port)))
+	if err != nil {
+		_ = listener.Close()
+		t.Fatalf("ParseBind() error = %v", err)
+	}
+
+	s := newTestServer(t, nil)
+	s.bind = bind
+	s.a = newRuntimeHealthTestAgent(t, s.configPath)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	if err := s.StartOnListeners(ctx, []net.Listener{listener}, nil); err != nil {
+		_ = listener.Close()
+		t.Fatalf("StartOnListeners() error = %v", err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+
+	localhostURL := "http://" + net.JoinHostPort("localhost", fmt.Sprint(port))
+	client := &http.Client{Transport: &http.Transport{
+		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, "tcp4", listener.Addr().String())
+		},
+	}}
+	t.Cleanup(client.CloseIdleConnections)
+
+	resp, err := client.Post(localhostURL+"/api/local/direct/connect_artifact", "application/json", bytes.NewBufferString(`{}`))
+	if err != nil {
+		t.Fatalf("POST plaintext localhost connect_artifact error = %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("plaintext localhost connect_artifact status = %d, want %d; body=%q", resp.StatusCode, http.StatusOK, body)
+	}
+	var envelope connectArtifactEnvelope
+	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
+		t.Fatalf("decode plaintext localhost connect artifact: %v", err)
+	}
+	var artifactWire struct {
+		Path struct {
+			Candidates []struct {
+				URL string `json:"url"`
+			} `json:"candidates"`
+		} `json:"path"`
+	}
+	if err := json.Unmarshal(envelope.ConnectArtifact, &artifactWire); err != nil {
+		t.Fatalf("decode plaintext localhost artifact candidate: %v", err)
+	}
+	wantCandidate := "ws://" + listener.Addr().String() + flowersec.WebSocketDirectPath
+	if len(artifactWire.Path.Candidates) != 1 || artifactWire.Path.Candidates[0].URL != wantCandidate {
+		t.Fatalf("plaintext localhost artifact candidates = %#v, want %q", artifactWire.Path.Candidates, wantCandidate)
+	}
+
+	connectCtx, connectCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer connectCancel()
+	current := connectDesktopBridgeArtifact(t, connectCtx, envelope.ConnectArtifact, localhostURL)
+	defer current.Close()
+
+	var monitorResponse map[string]any
+	if err := current.RPC().Call(connectCtx, monitor.TypeID_SYS_MONITOR, map[string]any{}, &monitorResponse); err != nil {
+		t.Fatalf("monitor RPC through plaintext localhost direct session error = %v", err)
+	}
+	var pathContext map[string]any
+	if err := current.RPC().Call(connectCtx, fsrpc.TypeID_FS_GET_PATH_CONTEXT, map[string]any{}, &pathContext); err != nil {
+		t.Fatalf("filesystem path context RPC through plaintext localhost direct session error = %v", err)
+	}
+	homePath, _ := pathContext["home_path_abs"].(string)
+	if homePath == "" {
+		t.Fatalf("filesystem path context response is missing home_path_abs: %#v", pathContext)
+	}
+	var listResponse map[string]any
+	if err := current.RPC().Call(connectCtx, fsrpc.TypeID_FS_LIST, map[string]any{"path": homePath}, &listResponse); err != nil {
+		t.Fatalf("filesystem list RPC through plaintext localhost direct session error = %v", err)
+	}
+	if _, ok := listResponse["entries"]; !ok {
+		t.Fatalf("filesystem list response is missing entries: %#v", listResponse)
+	}
+}
 
 func TestServer_E2E_DesktopBridgeDynamicLoopbackOriginConnectsDirectSession(t *testing.T) {
 	s := newDesktopBridgeTestServer(t, nil)
