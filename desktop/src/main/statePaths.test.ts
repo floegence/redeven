@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   defaultLocalEnvironmentStateLayout,
   localEnvironmentStateLayout,
+  resolveConfiguredDesktopTempRoot,
 } from './statePaths';
 
 describe('statePaths', () => {
@@ -31,6 +32,14 @@ describe('statePaths', () => {
 
   it('fails clearly when no home directory is available for implicit defaults', () => {
     expect(() => defaultLocalEnvironmentStateLayout({}, () => '')).toThrow('user home directory is unavailable');
+  });
+
+  it('resolves an explicit task-owned Desktop temp root without falling back to the system temp directory', () => {
+    expect(resolveConfiguredDesktopTempRoot({
+      REDEVEN_DESKTOP_TEMP_ROOT: '/tmp/redeven-plugin-e2e/runtime-data',
+      TMPDIR: '/var/folders/shared',
+    })).toBe('/tmp/redeven-plugin-e2e/runtime-data');
+    expect(resolveConfiguredDesktopTempRoot({ TMPDIR: '/var/folders/shared' })).toBeNull();
   });
 
   it('does not expose a second local Flower state layout', async () => {

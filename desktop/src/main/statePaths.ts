@@ -2,6 +2,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 const LOCAL_ENVIRONMENT_DIR = 'local-environment';
+export const DESKTOP_TEMP_ROOT_ENV_NAME = 'REDEVEN_DESKTOP_TEMP_ROOT';
 
 export type DesktopLocalEnvironmentStateLayout = Readonly<{
   stateRoot: string;
@@ -30,6 +31,13 @@ export function resolveStateRoot(
     throw new Error('user home directory is unavailable');
   }
   return path.join(homeDir, '.redeven');
+}
+
+export function resolveConfiguredDesktopTempRoot(
+  env: NodeJS.ProcessEnv = process.env,
+): string | null {
+  const explicit = String(env[DESKTOP_TEMP_ROOT_ENV_NAME] ?? '').trim();
+  return explicit === '' ? null : path.resolve(explicit);
 }
 
 function stateLayoutForResolvedStateRoot(

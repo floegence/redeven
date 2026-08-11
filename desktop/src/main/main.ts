@@ -2,6 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, powerMonitor, s
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
+import { mkdirSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import http, { type ClientRequest, type IncomingHttpHeaders, type IncomingMessage } from 'node:http';
 import https from 'node:https';
@@ -106,6 +107,7 @@ import {
   type DesktopWelcomeRuntimeHealthTarget,
 } from './desktopWelcomeRuntimeHealth';
 import { parseLocalUIBind } from './localUIBind';
+import { resolveConfiguredDesktopTempRoot } from './statePaths';
 import {
   buildBlockedLaunchIssue,
   buildControlPlaneIssue,
@@ -18325,6 +18327,12 @@ function registerDesktopProtocolClient(): void {
   } catch {
     // Best-effort only. Installed app metadata remains the source of truth.
   }
+}
+
+const configuredDesktopTempRoot = resolveConfiguredDesktopTempRoot();
+if (configuredDesktopTempRoot) {
+  mkdirSync(configuredDesktopTempRoot, { recursive: true, mode: 0o700 });
+  app.setPath('temp', configuredDesktopTempRoot);
 }
 
 if (!app.requestSingleInstanceLock()) {
