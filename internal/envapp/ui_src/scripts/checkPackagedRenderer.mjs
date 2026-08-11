@@ -6,7 +6,7 @@ import { createServer } from 'node:http';
 import { mkdtemp, mkdir, open, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { chromium } from 'playwright';
 import { createAcceptor, SessionHandlers } from '@floegence/flowersec-core/node';
 import { parseArtifact } from '@floegence/flowersec-core';
@@ -88,6 +88,7 @@ async function createBuiltDistTLS() {
   const privateKey = await readFile(privateKeyPath, 'utf8');
   const certificateHash = createHash('sha256').update(new X509Certificate(certificate).raw).digest('base64');
   return {
+    directory,
     certificate,
     privateKey,
     certificateHash,
@@ -160,6 +161,16 @@ async function readJSONRequest(request) {
   const chunks = [];
   for await (const chunk of request) chunks.push(chunk);
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+}
+
+function browserRequestPayload(request) {
+  const data = request.postData();
+  if (data == null) return null;
+  try {
+    return request.postDataJSON();
+  } catch {
+    return data;
+  }
 }
 
 function builtPluginMarketSnapshot() {
@@ -291,7 +302,7 @@ function builtPluginInstalledPlugin() {
   };
 }
 
-async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = false, tls } = {}) {
+async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = false, tls, acceptorFactory = createAcceptor } = {}) {
   let baseURL = '';
   let installedPlugin = null;
   let releaseInstallOperation = null;
@@ -299,7 +310,9 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
   let acceptor = null;
   let acceptorFailure = null;
   let accepting = true;
+  let acceptController = null;
   const acceptedSessions = new Set();
+  const acceptedSessionTasks = new Set();
   let acceptingTask = Promise.resolve();
   const server = createServer(async (request, response) => {
     try {
@@ -508,7 +521,7 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
   baseURL = `http://127.0.0.1:${address.port}/`;
   if (accessReady) {
     if (!tls) throw new Error('built Env App direct server requires Flowersec TLS credentials');
-    acceptor = await createAcceptor({
+    acceptor = await acceptorFactory({
       host: '127.0.0.1',
       port: 0,
       path: '/flowersec/webtransport/v2/direct',
@@ -533,11 +546,18 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
     directArtifact = builtDistArtifact(
       `https://127.0.0.1:${acceptorAddress.port}/flowersec/webtransport/v2/direct`,
     );
+    acceptController = new AbortController();
     acceptingTask = (async () => {
       while (accepting) {
-        const accepted = await acceptor.accept();
+        const accepted = await acceptor.accept({ signal: acceptController.signal });
         acceptedSessions.add(accepted);
-        void accepted.serve().catch(() => undefined).finally(() => acceptedSessions.delete(accepted));
+        const acceptedSessionTask = accepted.serve()
+          .catch(() => undefined)
+          .finally(() => {
+            acceptedSessions.delete(accepted);
+            acceptedSessionTasks.delete(acceptedSessionTask);
+          });
+        acceptedSessionTasks.add(acceptedSessionTask);
       }
     })().catch((error) => {
       if (accepting) acceptorFailure = error;
@@ -547,9 +567,11 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
     baseURL,
     close: async () => {
       accepting = false;
-      await Promise.all([...acceptedSessions].map((accepted) => accepted.close().catch(() => undefined)));
+      acceptController?.abort();
       await acceptor?.close().catch(() => undefined);
       await acceptingTask;
+      await Promise.all([...acceptedSessions].map((accepted) => accepted.close().catch(() => undefined)));
+      await Promise.all([...acceptedSessionTasks]);
       await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
       if (acceptorFailure) throw acceptorFailure;
     },
@@ -717,14 +739,24 @@ async function verifyBuiltPluginInstallRouting(browser, tls) {
   page.on('request', (request) => {
     const requestPath = new URL(request.url()).pathname;
     if (requestPath.startsWith('/_redevplugin/api/plugins')) {
-      pluginRequests.push({ method: request.method(), path: requestPath });
+      pluginRequests.push({
+        method: request.method(),
+        path: requestPath,
+        payload: browserRequestPayload(request),
+      });
     }
   });
 
   try {
     const entryURL = new URL(entryPath.slice(1), server.baseURL).toString();
+    const runtimeRefreshResponse = page.waitForResponse((response) => {
+      const request = response.request();
+      return request.method() === 'POST'
+        && new URL(request.url()).pathname === '/_redevplugin/api/plugins/runtime/refresh-enabled';
+    }, { timeout: 10_000 });
     await page.goto(entryURL, { waitUntil: 'load', timeout: 30_000 });
     await page.locator('#root > *').first().waitFor({ state: 'visible', timeout: 10_000 });
+    await runtimeRefreshResponse;
 
     await page.getByRole('button', { name: 'Plugins', exact: true }).click();
     const pluginCenterTile = page.locator('[data-plugin-panel-tile="plugin-center"]');
@@ -788,35 +820,80 @@ async function verifyBuiltPluginInstallRouting(browser, tls) {
     if (pluginRequests.some((request) => request.path.includes('/external-packages/'))) {
       throw new Error(`built plugin Install used external-package admission: ${JSON.stringify(pluginRequests)}`);
     }
-    const normalizedPluginRequests = pluginRequests.map((request) => ({
-      ...request,
-      path: request.path.replace(
-        /\/release-install-operations\/by-request\/[0-9a-f-]{36}$/u,
-        '/release-install-operations/by-request/:requestID',
-      ),
-    }));
+    const normalizedPluginRequests = pluginRequests.map((request) => {
+      const payload = request.payload != null
+        && typeof request.payload === 'object'
+        && !Array.isArray(request.payload)
+        && typeof request.payload.request_id === 'string'
+        && /^[0-9a-f-]{36}$/u.test(request.payload.request_id)
+        ? { ...request.payload, request_id: ':requestID' }
+        : request.payload;
+      return {
+        ...request,
+        path: request.path.replace(
+          /\/release-install-operations\/by-request\/[0-9a-f-]{36}$/u,
+          '/release-install-operations/by-request/:requestID',
+        ),
+        payload,
+      };
+    });
     const expectedPluginRequests = [
-      { method: 'POST', path: '/_redevplugin/api/plugins/catalog/query' },
-      { method: 'POST', path: '/_redevplugin/api/plugins/permissions/query' },
-      { method: 'POST', path: '/_redevplugin/api/plugins/security-policies/query' },
-      { method: 'POST', path: '/_redevplugin/api/plugins/runtime/refresh-enabled' },
-      { method: 'GET', path: '/_redevplugin/api/plugins/release-install-operations' },
-      { method: 'POST', path: '/_redevplugin/api/plugins/catalog/query' },
-      { method: 'POST', path: '/_redevplugin/api/plugins/permissions/query' },
-      { method: 'POST', path: '/_redevplugin/api/plugins/security-policies/query' },
-      { method: 'POST', path: '/_redevplugin/api/plugins/release-install-operations' },
-      { method: 'GET', path: '/_redevplugin/api/plugins/release-install-operations/release_install_built_renderer' },
-      { method: 'POST', path: '/_redevplugin/api/plugins/catalog/query' },
-      { method: 'POST', path: '/_redevplugin/api/plugins/permissions/requirements/query' },
-      { method: 'POST', path: '/_redevplugin/api/plugins/permissions/query' },
-      { method: 'POST', path: '/_redevplugin/api/plugins/security-policies/query' },
-      { method: 'POST', path: '/_redevplugin/api/plugins/permissions/grant' },
-      { method: 'POST', path: '/_redevplugin/api/plugins/catalog/query' },
-      { method: 'POST', path: '/_redevplugin/api/plugins/catalog/query' },
-      { method: 'POST', path: '/_redevplugin/api/plugins/permissions/query' },
-      { method: 'POST', path: '/_redevplugin/api/plugins/security-policies/query' },
-      { method: 'POST', path: '/_redevplugin/api/plugins/permissions/requirements/query' },
-      { method: 'GET', path: '/_redevplugin/api/plugins/release-install-operations/by-request/:requestID' },
+      { method: 'POST', path: '/_redevplugin/api/plugins/runtime/refresh-enabled', payload: {} },
+      { method: 'GET', path: '/_redevplugin/api/plugins/release-install-operations', payload: null },
+      { method: 'POST', path: '/_redevplugin/api/plugins/catalog/query', payload: {} },
+      { method: 'POST', path: '/_redevplugin/api/plugins/permissions/query', payload: { active_only: true } },
+      { method: 'POST', path: '/_redevplugin/api/plugins/security-policies/query', payload: {} },
+      { method: 'POST', path: '/_redevplugin/api/plugins/catalog/query', payload: {} },
+      { method: 'POST', path: '/_redevplugin/api/plugins/permissions/query', payload: { active_only: true } },
+      { method: 'POST', path: '/_redevplugin/api/plugins/security-policies/query', payload: {} },
+      {
+        method: 'POST',
+        path: '/_redevplugin/api/plugins/release-install-operations',
+        payload: {
+          request_id: ':requestID',
+          plugin_instance_id: builtPluginInstanceID,
+          release_ref: builtPluginReleaseRef,
+          activate_after_install: true,
+        },
+      },
+      {
+        method: 'GET',
+        path: '/_redevplugin/api/plugins/release-install-operations/release_install_built_renderer',
+        payload: null,
+      },
+      { method: 'POST', path: '/_redevplugin/api/plugins/catalog/query', payload: {} },
+      {
+        method: 'POST',
+        path: '/_redevplugin/api/plugins/permissions/requirements/query',
+        payload: { plugin_instance_id: builtPluginInstanceID },
+      },
+      { method: 'POST', path: '/_redevplugin/api/plugins/permissions/query', payload: { active_only: true } },
+      { method: 'POST', path: '/_redevplugin/api/plugins/security-policies/query', payload: {} },
+      {
+        method: 'POST',
+        path: '/_redevplugin/api/plugins/permissions/grant',
+        payload: {
+          plugin_instance_id: builtPluginInstanceID,
+          permission_id: 'containers.read',
+          expected_policy_revision: 1,
+          expected_management_revision: 1,
+          expected_revoke_epoch: 0,
+        },
+      },
+      { method: 'POST', path: '/_redevplugin/api/plugins/catalog/query', payload: {} },
+      { method: 'POST', path: '/_redevplugin/api/plugins/catalog/query', payload: {} },
+      { method: 'POST', path: '/_redevplugin/api/plugins/permissions/query', payload: { active_only: true } },
+      { method: 'POST', path: '/_redevplugin/api/plugins/security-policies/query', payload: {} },
+      {
+        method: 'POST',
+        path: '/_redevplugin/api/plugins/permissions/requirements/query',
+        payload: { plugin_instance_id: builtPluginInstanceID },
+      },
+      {
+        method: 'GET',
+        path: '/_redevplugin/api/plugins/release-install-operations/by-request/:requestID',
+        payload: null,
+      },
     ];
     if (JSON.stringify(normalizedPluginRequests) !== JSON.stringify(expectedPluginRequests)) {
       throw new Error(`built plugin Install emitted an unexpected plugin request: ${JSON.stringify({
@@ -1094,22 +1171,26 @@ async function main() {
   process.stdout.write(`${JSON.stringify(report)}\n`);
 }
 
-main().catch(async (error) => {
-  const failure = {
-    schema_version: 1,
-    entry_path: entryPath,
-    status: 'failed',
-    error_code: 'built_dist_shell_smoke_failed',
-  };
-  try {
-    const reportPath = parseReportPath(process.argv.slice(2));
-    if (reportPath) {
-      await mkdir(path.dirname(reportPath), { recursive: true });
-      await writeFile(reportPath, `${JSON.stringify(failure, null, 2)}\n`);
+export { createBuiltDistServer, createBuiltDistTLS };
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch(async (error) => {
+    const failure = {
+      schema_version: 1,
+      entry_path: entryPath,
+      status: 'failed',
+      error_code: 'built_dist_shell_smoke_failed',
+    };
+    try {
+      const reportPath = parseReportPath(process.argv.slice(2));
+      if (reportPath) {
+        await mkdir(path.dirname(reportPath), { recursive: true });
+        await writeFile(reportPath, `${JSON.stringify(failure, null, 2)}\n`);
+      }
+    } catch {
+      // Keep the original renderer failure as the command result.
     }
-  } catch {
-    // Keep the original renderer failure as the command result.
-  }
-  console.error(error instanceof Error ? error.stack ?? error.message : error);
-  process.exitCode = 1;
-});
+    console.error(error instanceof Error ? error.stack ?? error.message : error);
+    process.exitCode = 1;
+  });
+}
