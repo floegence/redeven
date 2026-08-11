@@ -7066,10 +7066,6 @@ button.flower-attachment-preview-trigger:disabled {
   transition: border-color 100ms ease;
 }
 
-.flower-composer[data-flower-approval-handoff='true'] {
-  border-color: color-mix(in srgb, var(--primary) 48%, transparent);
-}
-
 .flower-composer-submit {
   width: 2.25rem;
   height: 2.25rem;

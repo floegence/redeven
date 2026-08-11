@@ -96,7 +96,7 @@ describe('Flower bottom companion visual contract', () => {
     expect(composerRule.body).toContain('var(--redeven-surface-shadow-source)');
     expect(composerRule.body).not.toContain('var(--foreground)');
     expect(focusRule.selectors).toContain('.flower-composer:focus-within');
-    expect(focusRule.selectors).toContain(".flower-composer[data-flower-approval-handoff='true']");
+    expect(focusRule.selectors).not.toContain('data-flower-approval-handoff');
     expect(focusRule.body).toContain('0 0 0 2px color-mix(in srgb, var(--ring) 72%');
     expect(focusRule.body).toContain('var(--redeven-surface-shadow-source)');
     expect(focusRule.body).not.toContain('var(--foreground)');

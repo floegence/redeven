@@ -5,6 +5,7 @@ import type {
   FlowerActivityItem,
   FlowerActivityTimelineBlock,
   FlowerChatMessage,
+  FlowerInputRequest,
   FlowerLiveBootstrap,
   FlowerLiveEvent,
   FlowerLiveThreadPatch,
@@ -2855,6 +2856,195 @@ describe('Flower live projection', () => {
 
     expect(applied.thread.approval_actions).toEqual([]);
     expect(applied.thread.status).toBe('running');
+  });
+
+  it('never regresses a declined tool or cleared queue when stale requested projection arrives later', () => {
+    const declinedBlock: FlowerActivityTimelineBlock = {
+      type: 'activity-timeline',
+      schema_version: 1,
+      thread_id: 'th-live',
+      turn_id: 'turn-1',
+      run_id: 'run-1',
+      summary: {
+        status: 'declined',
+        severity: 'quiet',
+        needs_attention: false,
+        total_items: 1,
+        counts: { declined: 1 },
+      },
+      items: [{
+        item_id: 'tool-1',
+        tool_id: 'tool-1',
+        tool_name: 'terminal.exec',
+        kind: 'tool',
+        status: 'declined',
+        approval_state: 'rejected',
+        severity: 'quiet',
+        needs_attention: false,
+        requires_approval: false,
+        ended_at_unix_ms: 3_000,
+        label: 'curl weather',
+      }],
+    };
+    const requestedBlock: FlowerActivityTimelineBlock = {
+      ...declinedBlock,
+      summary: {
+        status: 'waiting',
+        severity: 'warning',
+        needs_attention: true,
+        total_items: 1,
+        counts: { waiting: 1 },
+      },
+      items: [{
+        ...declinedBlock.items[0]!,
+        status: 'waiting',
+        approval_state: 'requested',
+        severity: 'warning',
+        needs_attention: true,
+        requires_approval: true,
+        ended_at_unix_ms: undefined,
+      }],
+    };
+    const initial = thread({
+      status: 'waiting_approval',
+      active_run_id: 'run-1',
+      approval_actions: [approvalAction()],
+      approval_queue: { generation: 1, revision: 1, current_action_id: 'appr-1', current_position: 1, total: 1, unresolved_count: 1 },
+      messages: [message(), message({
+        id: 'assistant-live',
+        thread_id: 'th-live',
+        turn_id: 'turn-1',
+        run_id: 'run-1',
+        role: 'assistant',
+        status: 'streaming',
+        blocks: [declinedBlock],
+      })],
+    });
+
+    const cleared = applyFlowerLiveEvent(initial, 291, event(293, 'approval.queue_replaced', {
+      actions: [],
+      approval_queue: { generation: 1, revision: 2, current_position: 0, total: 1, unresolved_count: 0 },
+    }));
+    const staleBlock = applyFlowerLiveEvent(cleared.thread, cleared.cursor, event(294, 'message.block_set', {
+      message_id: 'assistant-live',
+      block_index: 0,
+      block: { type: 'activity-timeline', block: requestedBlock },
+    }));
+    const staleApproval = applyFlowerLiveEvent(staleBlock.thread, staleBlock.cursor, event(295, 'approval.requested', {
+      action: approvalAction({ revision: 1, queue_generation: 1 }),
+      approval_queue: { generation: 1, revision: 1, current_action_id: 'appr-1', current_position: 1, total: 1, unresolved_count: 1 },
+    }));
+    const running = applyFlowerLiveEvent(staleApproval.thread, staleApproval.cursor, event(296, 'run.status_changed', {
+      run_id: 'run-1',
+      status: 'running',
+    }));
+
+    const activity = running.thread.messages
+      .find((item) => item.id === 'assistant-live')
+      ?.blocks?.find((block) => block.type === 'activity-timeline');
+    expect(activity?.items[0]).toMatchObject({
+      status: 'declined',
+      approval_state: 'rejected',
+      severity: 'quiet',
+      needs_attention: false,
+      requires_approval: false,
+      ended_at_unix_ms: 3_000,
+    });
+    expect(running.thread.approval_actions).toEqual([]);
+    expect(running.thread.approval_queue).toMatchObject({ generation: 1, revision: 2, unresolved_count: 0 });
+    expect(flowerComposerApprovalAction(running.thread)).toBeNull();
+    expect(running.thread.status).toBe('running');
+  });
+
+  it('settles the old assistant cursor at a waiting-user boundary', () => {
+    const initial = thread({
+      status: 'running',
+      active_run_id: 'run-1',
+      messages: [message(), message({
+        id: 'assistant-waiting-user',
+        thread_id: 'th-live',
+        turn_id: 'turn-1',
+        run_id: 'run-1',
+        role: 'assistant',
+        status: 'streaming',
+        active_cursor: true,
+      })],
+    });
+    const request: FlowerInputRequest = {
+      prompt_id: 'prompt-1',
+      message_id: 'assistant-waiting-user',
+      tool_id: 'ask-1',
+      tool_name: 'request_user_input',
+      reason_code: 'input_required',
+      public_summary: 'Choose one',
+      contains_secret: false,
+      questions: [{ id: 'choice', header: 'Choice', question: 'Choose one', is_secret: false, response_mode: 'write' }],
+    };
+
+    const waiting = applyFlowerLiveEvent(initial, 0, event(1, 'input.requested', { request }));
+
+    expect(waiting.thread.status).toBe('waiting_user');
+    expect(waiting.thread.active_run_id).toBeUndefined();
+    expect(waiting.thread.model_io_status).toBeNull();
+    expect(waiting.thread.messages.find((item) => item.id === 'assistant-waiting-user')).toMatchObject({
+      status: 'complete',
+      active_cursor: false,
+    });
+  });
+
+  it('settles a stale streaming assistant in a waiting-user bootstrap', () => {
+    const base = bootstrapWithLiveAssistant();
+    const request: FlowerInputRequest = {
+      prompt_id: 'prompt-bootstrap-waiting',
+      message_id: 'assistant-live',
+      tool_id: 'ask-bootstrap-waiting',
+      tool_name: 'request_user_input',
+      reason_code: 'input_required',
+      public_summary: 'Choose one',
+      contains_secret: false,
+      questions: [{ id: 'choice', header: 'Choice', question: 'Choose one', is_secret: false, response_mode: 'write' }],
+    };
+    const projected = projectFlowerLiveBootstrap({
+      ...base,
+      thread: { ...base.thread, status: 'waiting_user', active_run_id: 'run-1' },
+      live_state: {
+        ...base.live_state,
+        runs: { 'run-1': { run_id: 'run-1', status: 'waiting_user', message_id: 'assistant-live' } },
+        model_io: { phase: 'streaming', run_id: 'run-1', updated_at_ms: 3_200 },
+        input_requests: { [request.prompt_id]: request },
+      },
+    });
+
+    expect(projected.status).toBe('waiting_user');
+    expect(projected.active_run_id).toBeUndefined();
+    expect(projected.model_io_status).toBeNull();
+    expect(projected.messages.find((item) => item.id === 'assistant-live')).toMatchObject({
+      status: 'complete',
+      active_cursor: false,
+    });
+  });
+
+  it('does not revive an empty approval queue at the same canonical revision', () => {
+    const cleared = thread({
+      status: 'running',
+      approval_actions: [],
+      approval_queue: { generation: 2, revision: 7, current_action_id: '', current_position: 0, total: 1, unresolved_count: 0 },
+    });
+    const stale = applyFlowerLiveEvent(cleared, 20, event(21, 'approval.requested', {
+      action: approvalAction({ action_id: 'appr-stale-equal', queue_generation: 2, revision: 7 }),
+      approval_queue: {
+        generation: 2,
+        revision: 7,
+        current_action_id: 'appr-stale-equal',
+        current_position: 1,
+        total: 1,
+        unresolved_count: 1,
+      },
+    }));
+
+    expect(stale.thread.status).toBe('running');
+    expect(stale.thread.approval_actions).toEqual([]);
+    expect(stale.thread.approval_queue).toMatchObject({ generation: 2, revision: 7, unresolved_count: 0 });
   });
 
   it('applies normalized reasoning fields from thread patches', () => {

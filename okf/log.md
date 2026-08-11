@@ -1,5 +1,15 @@
 # Redeven OKF Update Log
 
+## 2026-08-11
+* **Approval rejection recovery**: Upgraded to published Floret v3.2.39 for
+  monotonic canonical projection ordinals and terminal approval precedence.
+  Approval receipts no longer wait for provider continuation. Flower exits the
+  interactive approval surface on the first frame, keeps the composer and Stop
+  usable, and restores a decision only when canonical reload proves it is still
+  requested. Stale requested projections cannot revive a cleared queue or
+  regress a declined activity; waiting-user bootstrap settles stale assistant
+  streaming state and clears its active cursor.
+
 ## 2026-08-04
 * **Approval rejection continuation**: Adopted published Floret v3.2.27 so a
   user rejection settles as `rejected/user_rejected`, skips the authorization

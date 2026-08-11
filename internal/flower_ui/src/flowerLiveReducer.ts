@@ -1,5 +1,6 @@
 import type {
   FlowerApprovalAction,
+  FlowerActivityTimelineBlock,
   FlowerChatMessage,
   FlowerChatMessageBlock,
   FlowerContextCompaction,
@@ -166,6 +167,88 @@ function contentFromBlocks(blocks: readonly FlowerChatMessageBlock[]): string {
     })
     .filter(Boolean)
     .join('\n\n');
+}
+
+function activityItemIsTerminal(item: FlowerActivityTimelineBlock['items'][number]): boolean {
+  return item.status === 'success'
+    || item.status === 'error'
+    || item.status === 'declined'
+    || item.status === 'canceled'
+    || item.approval_state === 'rejected'
+    || item.approval_state === 'timed_out'
+    || item.approval_state === 'canceled';
+}
+
+function activityItemIsTransient(item: FlowerActivityTimelineBlock['items'][number]): boolean {
+  return item.status === 'pending'
+    || item.status === 'running'
+    || item.status === 'waiting'
+    || item.approval_state === 'requested';
+}
+
+function activityItemIdentity(item: FlowerActivityTimelineBlock['items'][number]): string {
+  return trim(item.item_id) || trim(item.tool_id);
+}
+
+function mergeActivityTimelineBlock(
+  current: FlowerActivityTimelineBlock,
+  incoming: FlowerActivityTimelineBlock,
+): FlowerActivityTimelineBlock {
+  const currentByID = new Map(current.items.map((item) => [activityItemIdentity(item), item]));
+  let preservedTerminal = false;
+  const items = incoming.items.map((item) => {
+    const previous = currentByID.get(activityItemIdentity(item));
+    if (!previous || !activityItemIsTerminal(previous) || !activityItemIsTransient(item)) return item;
+    preservedTerminal = true;
+    return previous;
+  });
+  if (!preservedTerminal) return incoming;
+  if (
+    items.length === current.items.length
+    && items.every((item, index) => item === current.items[index])
+  ) {
+    return current;
+  }
+  const counts: Record<string, number> = {};
+  for (const item of items) {
+    counts[item.status] = (counts[item.status] ?? 0) + 1;
+    if (item.requires_approval) counts.approval = (counts.approval ?? 0) + 1;
+  }
+  const severityRank = { quiet: 0, normal: 1, warning: 2, error: 3, blocking: 4 } as const;
+  const severity = items.reduce<FlowerActivityTimelineBlock['summary']['severity']>(
+    (result, item) => severityRank[item.severity] > severityRank[result] ? item.severity : result,
+    'quiet',
+  );
+  const status = items.find((item) => item.status === 'error')?.status
+    ?? items.find((item) => item.status === 'waiting')?.status
+    ?? items.find((item) => item.status === 'running')?.status
+    ?? items.find((item) => item.status === 'pending')?.status
+    ?? items.find((item) => item.status === 'canceled')?.status
+    ?? items.find((item) => item.status === 'declined')?.status
+    ?? 'success';
+  return {
+    ...incoming,
+    summary: {
+      ...incoming.summary,
+      status,
+      severity,
+      needs_attention: items.some((item) => item.needs_attention),
+      attention_reasons: [...new Set(items.flatMap((item) => item.attention_reasons ?? []))],
+      total_items: items.length,
+      counts,
+    },
+    items,
+  };
+}
+
+function settleAssistantMessagesAtWaitingBoundary(thread: FlowerThreadSnapshot): FlowerThreadSnapshot {
+  let changed = false;
+  const messages = thread.messages.map((message) => {
+    if (message.role !== 'assistant' || message.status !== 'streaming' && message.active_cursor !== true) return message;
+    changed = true;
+    return { ...message, status: 'complete' as const, active_cursor: false };
+  });
+  return changed ? { ...thread, messages } : thread;
 }
 
 function applyThreadPatch(thread: FlowerThreadSnapshot, patch: FlowerLiveThreadPatch): FlowerThreadSnapshot {
@@ -423,6 +506,9 @@ function applyLiveMaterializedState(thread: FlowerThreadSnapshot, liveState: Flo
   } else if (threadStatusHidesModelIO(next.status)) {
     next = withoutModelIO(next);
   }
+  if (next.status === 'waiting_user') {
+    next = settleAssistantMessagesAtWaitingBoundary(withoutModelIO(next));
+  }
   return next;
 }
 
@@ -572,6 +658,18 @@ function updateMessageStrict(
 }
 
 function withApprovalAction(thread: FlowerThreadSnapshot, action: FlowerApprovalAction, approvalQueue?: FlowerLiveBootstrap['live_state']['approval_queue']): FlowerThreadSnapshot {
+  const currentQueue = thread.approval_queue;
+  if (approvalQueue && currentQueue && (
+    approvalQueue.generation < currentQueue.generation
+    || approvalQueue.generation === currentQueue.generation && (
+      approvalQueue.revision < currentQueue.revision
+      || approvalQueue.revision === currentQueue.revision
+        && currentQueue.unresolved_count <= 0
+        && approvalQueue.unresolved_count > 0
+    )
+  )) {
+    return thread;
+  }
   const current = thread.approval_actions ?? [];
   const next = current.filter((item) => item.action_id !== action.action_id);
   if (visibleApprovalAction(action)) {
@@ -600,7 +698,12 @@ function withCanonicalApprovalQueue(
   const currentQueue = thread.approval_queue;
   if (currentQueue && (
     approvalQueue.generation < currentQueue.generation ||
-    approvalQueue.generation === currentQueue.generation && approvalQueue.revision < currentQueue.revision
+    approvalQueue.generation === currentQueue.generation && (
+      approvalQueue.revision < currentQueue.revision
+      || approvalQueue.revision === currentQueue.revision
+        && currentQueue.unresolved_count <= 0
+        && approvalQueue.unresolved_count > 0
+    )
   )) {
     return thread;
   }
@@ -707,7 +810,9 @@ export function applyFlowerLiveEvent(
           resyncRequired = true;
           break;
         }
-        const result = updateMessageStrict(next, event, event.payload.message_id, (message) => upsertBlock(message, event.payload.block_index, block));
+        const result = updateMessageStrict(next, event, event.payload.message_id, (message) => (
+          upsertBlock(message, event.payload.block_index, block)
+        ));
         next = result.thread;
         resyncRequired = !result.ok;
       }
@@ -743,7 +848,13 @@ export function applyFlowerLiveEvent(
           resyncRequired = true;
           break;
         }
-        const result = updateMessageStrict(next, event, event.payload.message_id, (message) => upsertBlock(message, event.payload.block_index, block));
+        const result = updateMessageStrict(next, event, event.payload.message_id, (message) => {
+          const currentBlock = message.blocks?.[event.payload.block_index];
+          const merged = block.type === 'activity-timeline' && currentBlock?.type === 'activity-timeline'
+            ? mergeActivityTimelineBlock(currentBlock, block)
+            : block;
+          return upsertBlock(message, event.payload.block_index, merged);
+        });
         next = result.thread;
         resyncRequired = !result.ok;
       }
@@ -766,7 +877,11 @@ export function applyFlowerLiveEvent(
       break;
     case 'input.requested':
       if (event.payload.request) {
-        next = clearModelIOForRun({ ...next, status: 'waiting_user', input_request: event.payload.request }, event.run_id);
+        next = settleAssistantMessagesAtWaitingBoundary(withoutModelIO({
+          ...next,
+          status: 'waiting_user',
+          input_request: event.payload.request,
+        }));
       }
       break;
     case 'input.resolved':
@@ -813,11 +928,17 @@ export function applyFlowerLiveEvent(
       if (threadStatusHidesModelIO(next.status)) {
         next = withoutModelIO(next);
       }
+      if (next.status === 'waiting_user') {
+        next = settleAssistantMessagesAtWaitingBoundary(next);
+      }
       break;
     }
   }
 
   next = reconcileActiveRunPresentation(next);
+  if (next.status === 'waiting_user') {
+    next = settleAssistantMessagesAtWaitingBoundary(withoutModelIO(next));
+  }
 
   const nextCursor = event.kind === 'timeline.replaced'
     ? Math.max(event.seq, Math.floor(Number(event.payload.snapshot_through_seq ?? 0)))

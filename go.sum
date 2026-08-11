@@ -58,6 +58,8 @@ github.com/floegence/floeterm/terminal-go v0.9.1 h1:gS/gGUrBCjvkjxweGHQaMSYoiGLr
 github.com/floegence/floeterm/terminal-go v0.9.1/go.mod h1:MMRZG0JBuR8VCIKoL6D9Cs5yHdcclwdpB6de6MWKp9M=
 github.com/floegence/floret/v3 v3.2.38 h1:9stk0wOsfw/kIM7HS7JTBJSxpIH1dSRluibnhxL0Oog=
 github.com/floegence/floret/v3 v3.2.38/go.mod h1:l9Z36ZEf/OHlHu+1hZeDp+WOT9TqWNgNQYOQi+eAWW0=
+github.com/floegence/floret/v3 v3.2.39 h1:dt5HAe+sqtdl/GwyggeCoSvmZ74SJWv6oxZW55zysKc=
+github.com/floegence/floret/v3 v3.2.39/go.mod h1:l9Z36ZEf/OHlHu+1hZeDp+WOT9TqWNgNQYOQi+eAWW0=
 github.com/floegence/flowersec/flowersec-go/v2 v2.3.6 h1:451dNO+PW9mN+QrftMDUg5z2kdOmV5DBjpmf8knozDc=
 github.com/floegence/flowersec/flowersec-go/v2 v2.3.6/go.mod h1:VG0IGPF8JK7L0qQqcR2OMd2vICz4i2fBYax/vfIdRWQ=
 github.com/floegence/redevplugin v0.7.24 h1:BWHzMZgdcC6fSzXwpFlzNvW4PnpSM9jVNjxgPAxGljE=
