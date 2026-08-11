@@ -134,7 +134,11 @@ reason with an explicit idempotent Retry action. Retry returns that plugin to
 recovering and shares the Host single-flight operation; it never reloads the
 page, opens a surface early, or grants fallback authorization. A disconnect,
 replaced client, or Shell disposal aborts the pending wait and refresh. Only
-one recovery may be active for a connected client.
+one recovery may be active for a connected client. An instance installed or
+enabled after the connected client's initial recovery remains closed until a
+subsequent Host refresh covers its exact id. If it appeared while the initial
+refresh was in flight, the Shell schedules at most one catch-up for that exact
+uncovered-instance set; an empty result cannot create an implicit retry loop.
 
 ## Official installation progress
 

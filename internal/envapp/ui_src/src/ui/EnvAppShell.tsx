@@ -1194,6 +1194,8 @@ export function EnvAppShell() {
   });
   let pluginRuntimeRecoveryClient: unknown = null;
   let pluginRuntimeRecoveryAbort: AbortController | undefined;
+  let pluginRuntimeRecoveryKnownInstances = new Set<string>();
+  let pluginRuntimeRecoveryAutoCatchupSignatures = new Set<string>();
   createEffect(() => {
     pluginRuntimeRecoveryRetrySeq();
     const connectedClient = protocol.status() === 'connected' ? protocol.session() : null;
@@ -1202,6 +1204,8 @@ export function EnvAppShell() {
       pluginRuntimeRecoveryClient = null;
       pluginRuntimeRecoveryAbort?.abort('Plugin runtime session disconnected');
       pluginRuntimeRecoveryAbort = undefined;
+      pluginRuntimeRecoveryKnownInstances = new Set();
+      pluginRuntimeRecoveryAutoCatchupSignatures = new Set();
       setPluginRuntimeRecoveryComplete(false);
       setPluginRuntimeRecoveryByInstanceID({});
       setPluginRuntimeRecoveryState('recovering');
@@ -1213,7 +1217,23 @@ export function EnvAppShell() {
       setPluginRuntimeRecoveryState('ready');
       return;
     }
-    if (pluginRuntimeRecoveryClient === connectedClient) return;
+    const enabledInstanceIDs = new Set(
+      pluginInventoryProjection()?.items
+        .filter((item) => item.pluginInstanceID && item.lifecycleState === 'enabled')
+        .map((item) => item.pluginInstanceID!) ?? [],
+    );
+    const hasUncoveredEnabledInstance = [...enabledInstanceIDs].some(
+      (pluginInstanceID) => !pluginRuntimeRecoveryKnownInstances.has(pluginInstanceID),
+    );
+    const uncoveredInstanceSignature = [...enabledInstanceIDs]
+      .filter((pluginInstanceID) => !pluginRuntimeRecoveryKnownInstances.has(pluginInstanceID))
+      .sort()
+      .join('\u0000');
+    if (pluginRuntimeRecoveryClient === connectedClient && (
+      untrack(pluginRuntimeRecoveryState) === 'recovering'
+      || !hasUncoveredEnabledInstance
+      || pluginRuntimeRecoveryAutoCatchupSignatures.has(uncoveredInstanceSignature)
+    )) return;
     pluginRuntimeRecoveryClient = connectedClient;
     pluginRuntimeRecoveryAbort?.abort('Plugin runtime recovery superseded');
     const controller = new AbortController();
@@ -1247,6 +1267,7 @@ export function EnvAppShell() {
           }
           : { state: 'ready' };
       }
+      pluginRuntimeRecoveryKnownInstances = new Set(result.results.map((entry) => entry.plugin_instance_id));
       setPluginRuntimeRecoveryByInstanceID(recoveryByInstanceID);
       setPluginRuntimeRecoveryComplete(true);
       if (failures.length > 0) {
@@ -1258,6 +1279,20 @@ export function EnvAppShell() {
       } else {
         setPluginRuntimeRecoveryState('ready');
       }
+      const uncoveredInstanceIDs = (pluginInventoryProjection()?.items ?? [])
+        .filter((item) => item.pluginInstanceID && item.lifecycleState === 'enabled')
+        .map((item) => item.pluginInstanceID!)
+        .filter((pluginInstanceID) => !pluginRuntimeRecoveryKnownInstances.has(pluginInstanceID))
+        .sort();
+      const catchupSignature = uncoveredInstanceIDs.join('\u0000');
+      if (catchupSignature && !pluginRuntimeRecoveryAutoCatchupSignatures.has(catchupSignature)) {
+        pluginRuntimeRecoveryAutoCatchupSignatures.add(catchupSignature);
+        queueMicrotask(() => {
+          if (pluginRuntimeRecoveryClient === connectedClient) {
+            setPluginRuntimeRecoveryRetrySeq((sequence) => sequence + 1);
+          }
+        });
+      }
     }).catch((error: unknown) => {
       if ((controller.signal.aborted && !recoveryTimedOut) || pluginRuntimeRecoveryClient !== connectedClient) return;
       window.clearTimeout(recoveryTimer);
@@ -1268,6 +1303,11 @@ export function EnvAppShell() {
           recoveryByInstanceID[item.pluginInstanceID] = { state: 'failed', error: getErrorMessage(error) };
         }
       }
+      pluginRuntimeRecoveryKnownInstances = new Set(
+        pluginInventoryProjection()?.items
+          .filter((item) => item.pluginInstanceID && item.lifecycleState === 'enabled')
+          .map((item) => item.pluginInstanceID!) ?? [],
+      );
       setPluginRuntimeRecoveryByInstanceID(recoveryByInstanceID);
       setPluginRuntimeRecoveryState('failed');
       notify.error(i18n.t('uiCopy.plugin.needsAttention'), getErrorMessage(error));
