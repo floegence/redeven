@@ -339,6 +339,61 @@ func TestFloretProjectionDeltaBaseZeroStartsNewLineage(t *testing.T) {
 	}
 }
 
+func TestFloretEventFallsBackToFullProjectionWhenDeltaLineageIsStale(t *testing.T) {
+	t.Parallel()
+
+	const (
+		runID    = "run_projection_delta_fallback"
+		threadID = "thread_projection_delta_fallback"
+		turnID   = "turn_projection_delta_fallback"
+	)
+	r := newRun(runOptions{RunID: runID, ThreadID: threadID, TurnID: turnID, MessageID: turnID})
+	previous := flruntime.ThreadTurnProjection{
+		ThreadID: threadID, TurnID: turnID, RunID: runID, TraceID: runID,
+		Status: flruntime.TurnStatusRunning, ThroughOrdinal: 9,
+		Segments: []flruntime.ThreadTurnProjectionSegment{{Kind: flruntime.ThreadTurnProjectionSegmentAssistantText, Text: "previous"}},
+	}
+	base := previous
+	base.ThroughOrdinal = 7
+	current := base
+	current.ThroughOrdinal = 10
+	current.Segments = []flruntime.ThreadTurnProjectionSegment{{Kind: flruntime.ThreadTurnProjectionSegmentAssistantText, Text: "canonical declined"}}
+	delta, err := flruntime.DiffThreadTurnProjections(&base, current)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := strings.Join([]string{threadID, turnID, runID}, "\x00")
+	r.muFloretProjection.Lock()
+	r.floretProjectionDeltaByKey = map[string]flruntime.ThreadTurnProjection{key: previous}
+	r.muFloretProjection.Unlock()
+
+	floretEventSink{run: r}.EmitEvent(flruntime.Event{
+		Type: observation.EventTypeStepStart, RunID: runID, ThreadID: threadID, TurnID: turnID, Step: 1,
+		Projection: &current, ProjectionDelta: &delta,
+	})
+
+	if err := r.floretContractError(); err != nil {
+		t.Fatalf("stale delta rejected event despite full projection: %v", err)
+	}
+	if len(r.assistantBlocks) != 1 {
+		t.Fatalf("assistant blocks=%#v, want full fallback projection", r.assistantBlocks)
+	}
+	block, ok := r.assistantBlocks[0].(*persistedMarkdownBlock)
+	if !ok || block.Content != "canonical declined" {
+		t.Fatalf("assistant block=%T %#v, want canonical full projection", r.assistantBlocks[0], r.assistantBlocks[0])
+	}
+	next := current
+	next.ThroughOrdinal = 11
+	next.Segments = []flruntime.ThreadTurnProjectionSegment{{Kind: flruntime.ThreadTurnProjectionSegmentAssistantText, Text: "next canonical state"}}
+	nextDelta, err := flruntime.DiffThreadTurnProjections(&current, next)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !r.applyFloretThreadProjectionDelta(nextDelta) {
+		t.Fatal("delta after full projection fallback was not applied")
+	}
+}
+
 func TestFloretHostPublishesRunningToolProjectionToFlowerLiveEvents(t *testing.T) {
 	ctx := context.Background()
 	svc := newTestService(t, nil)

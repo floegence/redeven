@@ -17,8 +17,17 @@ func (r *run) applyFloretThreadProjection(projection flruntime.ThreadTurnProject
 }
 
 func (r *run) applyFloretThreadProjectionDelta(delta flruntime.ThreadTurnProjectionDelta) bool {
-	if r == nil || !r.acceptsPresentationUpdates() {
+	applied, err := r.applyFloretThreadProjectionDeltaInternal(delta)
+	if err != nil {
+		r.rejectFloretContract("turn_projection_delta", err)
 		return false
+	}
+	return applied
+}
+
+func (r *run) applyFloretThreadProjectionDeltaInternal(delta flruntime.ThreadTurnProjectionDelta) (bool, error) {
+	if r == nil || !r.acceptsPresentationUpdates() {
+		return false, nil
 	}
 	projectionStartedAt := time.Now()
 	if r.liveMetrics != nil {
@@ -41,15 +50,30 @@ func (r *run) applyFloretThreadProjectionDelta(delta flruntime.ThreadTurnProject
 	projection, err := flruntime.ApplyThreadTurnProjectionDelta(previousPointer, delta)
 	if err != nil {
 		r.muFloretProjection.Unlock()
-		r.rejectFloretContract("turn_projection_delta", err)
-		return false
+		return false, err
 	}
 	if r.floretProjectionDeltaByKey == nil {
 		r.floretProjectionDeltaByKey = map[string]flruntime.ThreadTurnProjection{}
 	}
 	r.floretProjectionDeltaByKey[key] = projection
 	r.muFloretProjection.Unlock()
-	return r.applyFloretThreadProjectionContent(projection, true, false, true)
+	return r.applyFloretThreadProjectionContent(projection, true, false, true), nil
+}
+
+func (r *run) rememberFloretProjectionDeltaLineage(projection flruntime.ThreadTurnProjection) {
+	if r == nil {
+		return
+	}
+	key := floretProjectionIdentityKey(projection)
+	r.muFloretProjection.Lock()
+	if r.floretProjectionDeltaByKey == nil {
+		r.floretProjectionDeltaByKey = map[string]flruntime.ThreadTurnProjection{}
+	}
+	previous, ok := r.floretProjectionDeltaByKey[key]
+	if !ok || projection.ThroughOrdinal >= previous.ThroughOrdinal {
+		r.floretProjectionDeltaByKey[key] = projection
+	}
+	r.muFloretProjection.Unlock()
 }
 
 func (r *run) applyFloretThreadProjectionInternal(projection flruntime.ThreadTurnProjection, emit bool, allowDetached bool) bool {
