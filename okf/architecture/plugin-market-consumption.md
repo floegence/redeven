@@ -59,11 +59,14 @@ The market may expose one compact icon descriptor for the current verified
 release. Its URL, media type, dimensions, and digest are evidence-bound to the
 same manifest and presentation generation as the catalog entry; the market
 does not proxy package bytes. Installed inventory remains authoritative for an
-installed version. Redeven may reuse the bounded URL only when the installed
-version, package hash, manifest hash, and entries hash exactly match the current
-signed release; otherwise it uses the generic placeholder, so a later market
-generation cannot replace an older installed package's name, description, or
-icon.
+installed version. Redeven may reuse the complete current presentation when
+the installed version, package hash, manifest hash, and entries hash exactly
+match the current signed release. For an older installed release, Redeven may
+reuse only the bounded icon URL when the installed manifest's icon path selects
+a Host-verified package entry whose digest and media type exactly match the
+market icon descriptor. A mismatch uses the generic placeholder, so a later
+market generation cannot replace older installed author copy or substitute
+different icon bytes.
 
 ## Latest-only discovery
 

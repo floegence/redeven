@@ -118,14 +118,18 @@ fingerprint, version, management revision, capability contract identity, and
 contract hash. Product inventory and navigation use exact `inventoryKey` so a
 catalog entry and installed external instances with the same plugin id cannot
 select or mutate one another. Catalog presentation requires exact content
-identity. The current version requires exact catalog version and all three
-release hashes; a historical version requires an explicit catalog-trusted
-official signing key, no external provenance, and registry hashes equal to
-Host-verified hashes. Matching ids alone are not catalog identity. A current
-external instance may therefore receive catalog presentation only when
-publisher, plugin, version, and all three content hashes match exactly. Its
-actual trust badge remains unchanged; only verified catalog trust may receive
-the `Official` trust badge.
+identity. Author copy requires exact catalog version and all three release
+hashes. A historical installed release may reuse only the market's
+content-addressed icon when its manifest-declared icon path resolves to a
+Host-verified package entry with the exact same digest and media type; this
+does not authorize current-release copy or lifecycle state. Historical catalog
+trust still requires an explicit catalog-trusted official signing key, no
+external provenance, and registry hashes equal to Host-verified hashes.
+Matching ids alone are not catalog identity. A current external instance may
+therefore receive current catalog presentation only when publisher, plugin,
+version, and all three content hashes match exactly. Its actual trust badge
+remains unchanged; only verified catalog trust may receive the `Official`
+trust badge.
 
 ## Package admission and trust
 
