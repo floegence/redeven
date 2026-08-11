@@ -5,6 +5,7 @@ package redevpluginintegration
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -68,6 +69,7 @@ func TestLiveOfficialContainersReleaseTrust(t *testing.T) {
 		PluginID: ref.PluginID, Version: ref.Version,
 	})
 	if err != nil {
+		logLiveReleaseErrorTree(t, err, "")
 		t.Fatalf("prepare live official release: %T: %v", err, err)
 	}
 	resolved, err := provider.ResolveReleaseArtifact(ctx, host.ReleaseArtifactResolveRequest{
@@ -107,4 +109,19 @@ func TestLiveOfficialContainersReleaseTrust(t *testing.T) {
 	if _, err := trust.VerifyCapabilityContract(metadata, provider.capability, provider.capability.Pin); err != nil {
 		t.Fatalf("verify live official capability contract: %T: %v", err, err)
 	}
+}
+
+func logLiveReleaseErrorTree(t *testing.T, err error, indent string) {
+	t.Helper()
+	if err == nil {
+		return
+	}
+	t.Logf("%sprepare live official release cause: %T: %v", indent, err, err)
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		for _, cause := range joined.Unwrap() {
+			logLiveReleaseErrorTree(t, cause, indent+"  ")
+		}
+		return
+	}
+	logLiveReleaseErrorTree(t, errors.Unwrap(err), indent+"  ")
 }
