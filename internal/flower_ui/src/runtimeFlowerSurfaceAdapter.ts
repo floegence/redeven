@@ -267,6 +267,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
   return {
     runtime: options.runtime,
     canMutate: options.canMutate !== false,
+    keepLiveWhenHidden: Boolean(options.transport.connectLiveStream),
     loadSettings: options.loadSettings,
     saveDefaultPermission: options.saveDefaultPermission,
     saveModelProfile: options.saveModelProfile,

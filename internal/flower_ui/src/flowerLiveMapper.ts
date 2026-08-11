@@ -1445,6 +1445,18 @@ function mapThreadPatch(raw: unknown): FlowerLiveThreadPatch | null {
   const reasoningSelection = hasOwn(patch, 'reasoning_selection') ? normalizeFlowerReasoningSelection(patch.reasoning_selection) ?? null : undefined;
   const reasoningCapability = hasOwn(patch, 'reasoning_capability') ? normalizeFlowerReasoningCapability(patch.reasoning_capability) ?? null : undefined;
   const subagents = mapFlowerSubagents(patch.subagents, 'thread.patch.subagents');
+  if (patch.approval_pending !== undefined && typeof patch.approval_pending !== 'boolean') {
+    throw new Error('Flower contract error: thread.patch.approval_pending must be a boolean.');
+  }
+  const approvalPendingCount = patch.approval_pending_count === undefined
+    ? undefined
+    : nonNegativeInteger(patch.approval_pending_count, 'thread.patch.approval_pending_count');
+  const approvalGeneration = patch.approval_generation === undefined
+    ? undefined
+    : nonNegativeInteger(patch.approval_generation, 'thread.patch.approval_generation');
+  const approvalRevision = patch.approval_revision === undefined
+    ? undefined
+    : nonNegativeInteger(patch.approval_revision, 'thread.patch.approval_revision');
   return {
     ...(trim(patch.thread_id) ? { thread_id: trim(patch.thread_id) } : {}),
     ...(hasOwn(patch, 'title') ? { title: trim(patch.title) } : {}),
@@ -1460,6 +1472,10 @@ function mapThreadPatch(raw: unknown): FlowerLiveThreadPatch | null {
     ...(trim(patch.run_error) ? { run_error: trim(patch.run_error) } : {}),
     ...(patch.waiting_prompt !== undefined ? { waiting_prompt: mapInputRequest(patch.waiting_prompt) } : {}),
     ...(trim(patch.active_run_id) ? { active_run_id: trim(patch.active_run_id) } : {}),
+    ...(patch.approval_pending !== undefined ? { approval_pending: patch.approval_pending } : {}),
+    ...(approvalPendingCount !== undefined ? { approval_pending_count: approvalPendingCount } : {}),
+    ...(approvalGeneration !== undefined ? { approval_generation: approvalGeneration } : {}),
+    ...(approvalRevision !== undefined ? { approval_revision: approvalRevision } : {}),
     ...(positiveInteger(patch.pinned_at_unix_ms) ? { pinned_at_ms: positiveInteger(patch.pinned_at_unix_ms) } : {}),
     ...(positiveInteger(patch.created_at_unix_ms) ? { created_at_ms: positiveInteger(patch.created_at_unix_ms) } : {}),
     ...(positiveInteger(patch.updated_at_unix_ms) ? { updated_at_ms: positiveInteger(patch.updated_at_unix_ms) } : {}),
@@ -1572,6 +1588,18 @@ export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessa
   const subagents = mapFlowerSubagents(record.subagents, 'thread.subagents');
   const queuedTurns = mapFlowerQueuedTurns(record.queued_turns);
   const approvalQueue = mapApprovalQueue(record.approval_queue);
+  if (record.approval_pending !== undefined && typeof record.approval_pending !== 'boolean') {
+    throw new Error('Flower contract error: thread.approval_pending must be a boolean.');
+  }
+  const approvalPendingCount = record.approval_pending_count === undefined
+    ? undefined
+    : nonNegativeInteger(record.approval_pending_count, 'thread.approval_pending_count');
+  const approvalGeneration = record.approval_generation === undefined
+    ? undefined
+    : nonNegativeInteger(record.approval_generation, 'thread.approval_generation');
+  const approvalRevision = record.approval_revision === undefined
+    ? undefined
+    : nonNegativeInteger(record.approval_revision, 'thread.approval_revision');
   return {
     thread_id: threadID,
     title: trim(record.title),
@@ -1586,6 +1614,10 @@ export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessa
     updated_at_ms: unixMs(record.updated_at_unix_ms ?? record.last_message_at_unix_ms, 'thread.updated_at_unix_ms'),
     status,
     ...(activeRunID ? { active_run_id: activeRunID } : {}),
+    ...(record.approval_pending !== undefined ? { approval_pending: record.approval_pending } : {}),
+    ...(approvalPendingCount !== undefined ? { approval_pending_count: approvalPendingCount } : {}),
+    ...(approvalGeneration !== undefined ? { approval_generation: approvalGeneration } : {}),
+    ...(approvalRevision !== undefined ? { approval_revision: approvalRevision } : {}),
     queued_turn_count: nonNegativeInteger(record.queued_turn_count ?? 0, 'thread.queued_turn_count'),
     ...(queuedTurns ? { queued_turns: queuedTurns } : {}),
     ...(normalizePermissionType(record.permission_type) ? { permission_type: normalizePermissionType(record.permission_type) } : {}),

@@ -575,6 +575,78 @@ describe('mergeFlowerThreadListRefresh', () => {
     expect(cleared?.approval_queue).toBeNull();
   });
 
+  it('keeps a background approval summary authoritative without loaded approval detail', () => {
+    const existing = thread({ status: 'running', approval_actions: undefined, approval_queue: undefined });
+    const approvalSummary = {
+      ...existing,
+      messages: [],
+      status: 'waiting_approval' as const,
+      approval_pending: true,
+      approval_pending_count: 2,
+      approval_generation: 4,
+      approval_revision: 9,
+    } as FlowerThreadSnapshot & Readonly<{
+      approval_pending?: boolean;
+      approval_pending_count?: number;
+      approval_generation?: number;
+      approval_revision?: number;
+    }>;
+    const staleRunningSummary = {
+      ...existing,
+      messages: [],
+      status: 'running' as const,
+      approval_pending: undefined,
+      approval_pending_count: undefined,
+      approval_generation: undefined,
+      approval_revision: undefined,
+    } as FlowerThreadSnapshot & Readonly<{
+      approval_pending?: boolean;
+      approval_pending_count?: number;
+      approval_generation?: number;
+      approval_revision?: number;
+    }>;
+
+    const [waiting] = mergeFlowerThreadListRefresh([existing], [approvalSummary], {
+      sameThreadSnapshot,
+    });
+    const [running] = mergeFlowerThreadListRefresh([waiting!], [staleRunningSummary], {
+      sameThreadSnapshot,
+    });
+
+    expect(waiting?.status).toBe('waiting_approval');
+    expect(running?.status).toBe('waiting_approval');
+    expect((running as typeof approvalSummary).approval_pending).toBe(true);
+    expect((running as typeof approvalSummary).approval_pending_count).toBe(2);
+  });
+
+  it('rejects an older explicit approval clear from a slow list response', () => {
+    const existing = thread({
+      status: 'waiting_approval',
+      approval_pending: true,
+      approval_pending_count: 1,
+      approval_generation: 4,
+      approval_revision: 9,
+    });
+    const staleClear = {
+      ...existing,
+      status: 'running' as const,
+      approval_pending: false,
+      approval_pending_count: 0,
+      approval_generation: 3,
+      approval_revision: 8,
+    };
+
+    const [merged] = mergeFlowerThreadListRefresh([existing], [staleClear], {
+      sameThreadSnapshot,
+    });
+
+    expect(merged?.status).toBe('waiting_approval');
+    expect(merged?.approval_pending).toBe(true);
+    expect(merged?.approval_pending_count).toBe(1);
+    expect(merged?.approval_generation).toBe(4);
+    expect(merged?.approval_revision).toBe(9);
+  });
+
   it('keeps a ten-item selected approval queue stable across repeated stale summaries', () => {
     const approvals = Array.from({ length: 10 }, (_, index) => approvalAction({
       action_id: `approval-${index + 1}`,

@@ -30,6 +30,7 @@ function hasApprovalDetail(thread: FlowerThreadSnapshot): boolean {
 
 function hasPendingApprovalState(thread: FlowerThreadSnapshot): boolean {
   if (Number(thread.approval_queue?.unresolved_count ?? 0) > 0) return true;
+  if (thread.approval_pending === true || Number(thread.approval_pending_count ?? 0) > 0) return true;
   return thread.approval_actions?.some((action) => action.status === 'pending' && action.state === 'requested') === true;
 }
 
@@ -42,12 +43,34 @@ function summaryExplicitlyClearsApprovalQueue(summary: FlowerThreadSnapshot): bo
     || summary.approval_queue !== undefined && summary.approval_queue.unresolved_count <= 0;
 }
 
+function summaryExplicitlyClearsApprovalProjection(summary: FlowerThreadSnapshot): boolean {
+  return summary.approval_pending === false || summary.approval_pending_count !== undefined && summary.approval_pending_count <= 0;
+}
+
+function approvalSummaryVersion(thread: FlowerThreadSnapshot): readonly [number, number] {
+  return [
+    Math.max(0, Math.floor(Number(thread.approval_generation ?? 0))),
+    Math.max(0, Math.floor(Number(thread.approval_revision ?? 0))),
+  ];
+}
+
+function approvalSummaryIsStale(summary: FlowerThreadSnapshot, existing: FlowerThreadSnapshot): boolean {
+  if (!hasPendingApprovalState(existing)) return false;
+  if (summary.approval_generation === undefined && summary.approval_revision === undefined) return false;
+  const [currentGeneration, currentRevision] = approvalSummaryVersion(existing);
+  const [nextGeneration, nextRevision] = approvalSummaryVersion(summary);
+  return nextGeneration < currentGeneration
+    || nextGeneration === currentGeneration && nextRevision < currentRevision;
+}
+
 function threadHasLoadedDetail(thread: FlowerThreadSnapshot): boolean {
   return thread.messages.length > 0
     || thread.queued_turns !== undefined
     || thread.subagents !== undefined
     || visibleInputRequest(thread)
     || hasApprovalDetail(thread)
+    || thread.approval_pending !== undefined
+    || thread.approval_pending_count !== undefined
     || thread.error != null;
 }
 
@@ -89,19 +112,37 @@ export function mergeFlowerThreadListSummary(
   existing: FlowerThreadSnapshot,
   options: Readonly<{ preserveApprovalDetail?: boolean }> = {},
 ): FlowerThreadSnapshot {
-  const explicitApprovalActionsClear = summaryExplicitlyClearsApprovalActions(summary);
-  const explicitApprovalQueueClear = summaryExplicitlyClearsApprovalQueue(summary);
-  const explicitApprovalClear = explicitApprovalActionsClear || explicitApprovalQueueClear;
+  const existingApprovalPending = hasPendingApprovalState(existing);
+  const staleApprovalSummary = approvalSummaryIsStale(summary, existing);
+  const explicitApprovalActionsClear = !staleApprovalSummary && summaryExplicitlyClearsApprovalActions(summary);
+  const explicitApprovalQueueClear = !staleApprovalSummary && summaryExplicitlyClearsApprovalQueue(summary);
+  const explicitApprovalProjectionClear = !staleApprovalSummary && summaryExplicitlyClearsApprovalProjection(summary);
+  const explicitApprovalClear = explicitApprovalActionsClear || explicitApprovalQueueClear || explicitApprovalProjectionClear;
   const preserveApprovalDetail = options.preserveApprovalDetail === true
     && hasPendingApprovalState(existing)
     && !explicitApprovalClear;
+  const summaryApprovalPending = staleApprovalSummary
+    || summary.approval_pending === true
+    || Number(summary.approval_pending_count ?? 0) > 0;
   const status = preserveApprovalDetail && summary.status !== 'waiting_user'
     ? 'waiting_approval'
+    : summary.status === 'waiting_user'
+      ? 'waiting_user'
+      : existingApprovalPending && !explicitApprovalClear
+        ? 'waiting_approval'
+        : summaryApprovalPending
+          ? 'waiting_approval'
     : summary.status;
   return {
     ...summary,
     status,
     messages: existing.messages,
+    ...(existingApprovalPending && !explicitApprovalClear && summary.approval_pending === undefined ? {
+      approval_pending: existing.approval_pending,
+      approval_pending_count: existing.approval_pending_count,
+      approval_generation: existing.approval_generation,
+      approval_revision: existing.approval_revision,
+    } : {}),
     ...(summaryCanKeepLiveModelState(summary) && summary.active_run_id === undefined && existing.active_run_id !== undefined ? { active_run_id: existing.active_run_id } : {}),
     ...(summaryCanKeepLiveModelState(summary) && summary.model_io_status === undefined && existing.model_io_status !== undefined ? { model_io_status: existing.model_io_status } : {}),
     ...(summary.context_usage === undefined && existing.context_usage !== undefined ? { context_usage: existing.context_usage } : {}),
@@ -121,6 +162,15 @@ export function mergeFlowerThreadListSummary(
     ...(preserveApprovalDetail && summary.approval_queue === undefined && existing.approval_queue !== undefined ? { approval_queue: existing.approval_queue } : {}),
     ...(summaryOwnsExistingInputRequest(summary, existing) ? { input_request: existing.input_request } : {}),
     ...(summary.error === undefined && existing.error != null && summaryCanStillShowExistingError(summary) ? { error: existing.error } : {}),
+    ...(staleApprovalSummary ? {
+      status: 'waiting_approval' as const,
+      approval_pending: existing.approval_pending,
+      approval_pending_count: existing.approval_pending_count,
+      approval_generation: existing.approval_generation,
+      approval_revision: existing.approval_revision,
+      ...(existing.approval_actions !== undefined ? { approval_actions: existing.approval_actions } : {}),
+      ...(existing.approval_queue !== undefined ? { approval_queue: existing.approval_queue } : {}),
+    } : {}),
   };
 }
 
@@ -318,6 +368,10 @@ export function sameThreadSnapshot(left: FlowerThreadSnapshot, right: FlowerThre
       && left.updated_at_ms === right.updated_at_ms
       && left.status === right.status
       && sameOptionalString(left.active_run_id, right.active_run_id)
+      && Boolean(left.approval_pending) === Boolean(right.approval_pending)
+      && Number(left.approval_pending_count ?? 0) === Number(right.approval_pending_count ?? 0)
+      && Number(left.approval_generation ?? 0) === Number(right.approval_generation ?? 0)
+      && Number(left.approval_revision ?? 0) === Number(right.approval_revision ?? 0)
       && Number(left.queued_turn_count ?? 0) === Number(right.queued_turn_count ?? 0)
       && sameReferenceOrEmpty(left.queued_turns, right.queued_turns)
       && left.source_label === right.source_label

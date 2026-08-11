@@ -118,6 +118,10 @@ type FlowerLiveThreadPatch struct {
 	RunError               string                        `json:"run_error,omitempty"`
 	WaitingPrompt          *RequestUserInputPrompt       `json:"waiting_prompt,omitempty"`
 	ActiveRunID            string                        `json:"active_run_id,omitempty"`
+	ApprovalPending        *bool                         `json:"approval_pending,omitempty"`
+	ApprovalPendingCount   int                           `json:"approval_pending_count,omitempty"`
+	ApprovalGeneration     int64                         `json:"approval_generation,omitempty"`
+	ApprovalRevision       int64                         `json:"approval_revision,omitempty"`
 	PinnedAtUnixMs         int64                         `json:"pinned_at_unix_ms,omitempty"`
 	CreatedAtUnixMs        int64                         `json:"created_at_unix_ms,omitempty"`
 	UpdatedAtUnixMs        int64                         `json:"updated_at_unix_ms,omitempty"`
@@ -135,54 +139,62 @@ type FlowerLiveThreadPatch struct {
 
 func (p FlowerLiveThreadPatch) MarshalJSON() ([]byte, error) {
 	type patchJSON struct {
-		ThreadID            string                        `json:"thread_id,omitempty"`
-		Title               string                        `json:"title,omitempty"`
-		TitleStatus         string                        `json:"title_status,omitempty"`
-		ModelID             string                        `json:"model_id,omitempty"`
-		PermissionType      string                        `json:"permission_type,omitempty"`
-		WorkingDir          string                        `json:"working_dir,omitempty"`
-		QueuedTurnCount     *int                          `json:"queued_turn_count,omitempty"`
-		QueuedTurns         []QueuedTurnView              `json:"queued_turns,omitempty"`
-		RunStatus           string                        `json:"run_status,omitempty"`
-		RunUpdatedAtUnixMs  int64                         `json:"run_updated_at_unix_ms,omitempty"`
-		RunErrorCode        string                        `json:"run_error_code,omitempty"`
-		RunError            string                        `json:"run_error,omitempty"`
-		WaitingPrompt       *RequestUserInputPrompt       `json:"waiting_prompt,omitempty"`
-		ActiveRunID         string                        `json:"active_run_id,omitempty"`
-		PinnedAtUnixMs      int64                         `json:"pinned_at_unix_ms,omitempty"`
-		CreatedAtUnixMs     int64                         `json:"created_at_unix_ms,omitempty"`
-		UpdatedAtUnixMs     int64                         `json:"updated_at_unix_ms,omitempty"`
-		LastMessageAtUnixMs int64                         `json:"last_message_at_unix_ms,omitempty"`
-		LastMessagePreview  string                        `json:"last_message_preview,omitempty"`
-		ReasoningSelection  *config.AIReasoningSelection  `json:"reasoning_selection,omitempty"`
-		ReasoningCapability *config.AIReasoningCapability `json:"reasoning_capability,omitempty"`
-		ReadStatus          *FlowerThreadReadView         `json:"read_status,omitempty"`
-		Subagents           []FlowerSubagentSummary       `json:"subagents,omitempty"`
+		ThreadID             string                        `json:"thread_id,omitempty"`
+		Title                string                        `json:"title,omitempty"`
+		TitleStatus          string                        `json:"title_status,omitempty"`
+		ModelID              string                        `json:"model_id,omitempty"`
+		PermissionType       string                        `json:"permission_type,omitempty"`
+		WorkingDir           string                        `json:"working_dir,omitempty"`
+		QueuedTurnCount      *int                          `json:"queued_turn_count,omitempty"`
+		QueuedTurns          []QueuedTurnView              `json:"queued_turns,omitempty"`
+		RunStatus            string                        `json:"run_status,omitempty"`
+		RunUpdatedAtUnixMs   int64                         `json:"run_updated_at_unix_ms,omitempty"`
+		RunErrorCode         string                        `json:"run_error_code,omitempty"`
+		RunError             string                        `json:"run_error,omitempty"`
+		WaitingPrompt        *RequestUserInputPrompt       `json:"waiting_prompt,omitempty"`
+		ActiveRunID          string                        `json:"active_run_id,omitempty"`
+		ApprovalPending      *bool                         `json:"approval_pending,omitempty"`
+		ApprovalPendingCount int                           `json:"approval_pending_count,omitempty"`
+		ApprovalGeneration   int64                         `json:"approval_generation,omitempty"`
+		ApprovalRevision     int64                         `json:"approval_revision,omitempty"`
+		PinnedAtUnixMs       int64                         `json:"pinned_at_unix_ms,omitempty"`
+		CreatedAtUnixMs      int64                         `json:"created_at_unix_ms,omitempty"`
+		UpdatedAtUnixMs      int64                         `json:"updated_at_unix_ms,omitempty"`
+		LastMessageAtUnixMs  int64                         `json:"last_message_at_unix_ms,omitempty"`
+		LastMessagePreview   string                        `json:"last_message_preview,omitempty"`
+		ReasoningSelection   *config.AIReasoningSelection  `json:"reasoning_selection,omitempty"`
+		ReasoningCapability  *config.AIReasoningCapability `json:"reasoning_capability,omitempty"`
+		ReadStatus           *FlowerThreadReadView         `json:"read_status,omitempty"`
+		Subagents            []FlowerSubagentSummary       `json:"subagents,omitempty"`
 	}
 	out := patchJSON{
-		ThreadID:            p.ThreadID,
-		Title:               p.Title,
-		TitleStatus:         p.TitleStatus,
-		ModelID:             p.ModelID,
-		PermissionType:      p.PermissionType,
-		WorkingDir:          p.WorkingDir,
-		QueuedTurnCount:     p.QueuedTurnCount,
-		QueuedTurns:         cloneQueuedTurnViews(p.QueuedTurns),
-		RunStatus:           p.RunStatus,
-		RunUpdatedAtUnixMs:  p.RunUpdatedAtUnixMs,
-		RunErrorCode:        p.RunErrorCode,
-		RunError:            p.RunError,
-		WaitingPrompt:       p.WaitingPrompt,
-		ActiveRunID:         p.ActiveRunID,
-		PinnedAtUnixMs:      p.PinnedAtUnixMs,
-		CreatedAtUnixMs:     p.CreatedAtUnixMs,
-		UpdatedAtUnixMs:     p.UpdatedAtUnixMs,
-		LastMessageAtUnixMs: p.LastMessageAtUnixMs,
-		LastMessagePreview:  p.LastMessagePreview,
-		ReasoningSelection:  p.ReasoningSelection,
-		ReasoningCapability: p.ReasoningCapability,
-		ReadStatus:          p.ReadStatus,
-		Subagents:           cloneFlowerSubagentSummaries(p.Subagents),
+		ThreadID:             p.ThreadID,
+		Title:                p.Title,
+		TitleStatus:          p.TitleStatus,
+		ModelID:              p.ModelID,
+		PermissionType:       p.PermissionType,
+		WorkingDir:           p.WorkingDir,
+		QueuedTurnCount:      p.QueuedTurnCount,
+		QueuedTurns:          cloneQueuedTurnViews(p.QueuedTurns),
+		RunStatus:            p.RunStatus,
+		RunUpdatedAtUnixMs:   p.RunUpdatedAtUnixMs,
+		RunErrorCode:         p.RunErrorCode,
+		RunError:             p.RunError,
+		WaitingPrompt:        p.WaitingPrompt,
+		ActiveRunID:          p.ActiveRunID,
+		ApprovalPending:      p.ApprovalPending,
+		ApprovalPendingCount: p.ApprovalPendingCount,
+		ApprovalGeneration:   p.ApprovalGeneration,
+		ApprovalRevision:     p.ApprovalRevision,
+		PinnedAtUnixMs:       p.PinnedAtUnixMs,
+		CreatedAtUnixMs:      p.CreatedAtUnixMs,
+		UpdatedAtUnixMs:      p.UpdatedAtUnixMs,
+		LastMessageAtUnixMs:  p.LastMessageAtUnixMs,
+		LastMessagePreview:   p.LastMessagePreview,
+		ReasoningSelection:   p.ReasoningSelection,
+		ReasoningCapability:  p.ReasoningCapability,
+		ReadStatus:           p.ReadStatus,
+		Subagents:            cloneFlowerSubagentSummaries(p.Subagents),
 	}
 	needsRecordPatch := (p.ReasoningSelectionSet && p.ReasoningSelection == nil) ||
 		(p.ReasoningCapabilitySet && p.ReasoningCapability == nil) ||
@@ -244,55 +256,63 @@ func (p *FlowerLiveThreadPatch) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	var raw struct {
-		ThreadID            string                  `json:"thread_id,omitempty"`
-		Title               string                  `json:"title,omitempty"`
-		TitleStatus         string                  `json:"title_status,omitempty"`
-		ModelID             string                  `json:"model_id,omitempty"`
-		PermissionType      string                  `json:"permission_type,omitempty"`
-		WorkingDir          string                  `json:"working_dir,omitempty"`
-		QueuedTurnCount     *int                    `json:"queued_turn_count,omitempty"`
-		QueuedTurns         []QueuedTurnView        `json:"queued_turns,omitempty"`
-		RunStatus           string                  `json:"run_status,omitempty"`
-		RunUpdatedAtUnixMs  int64                   `json:"run_updated_at_unix_ms,omitempty"`
-		RunErrorCode        string                  `json:"run_error_code,omitempty"`
-		RunError            string                  `json:"run_error,omitempty"`
-		WaitingPrompt       *RequestUserInputPrompt `json:"waiting_prompt,omitempty"`
-		ActiveRunID         string                  `json:"active_run_id,omitempty"`
-		PinnedAtUnixMs      int64                   `json:"pinned_at_unix_ms,omitempty"`
-		CreatedAtUnixMs     int64                   `json:"created_at_unix_ms,omitempty"`
-		UpdatedAtUnixMs     int64                   `json:"updated_at_unix_ms,omitempty"`
-		LastMessageAtUnixMs int64                   `json:"last_message_at_unix_ms,omitempty"`
-		LastMessagePreview  string                  `json:"last_message_preview,omitempty"`
-		ReasoningSelection  json.RawMessage         `json:"reasoning_selection"`
-		ReasoningCapability json.RawMessage         `json:"reasoning_capability"`
-		ReadStatus          *FlowerThreadReadView   `json:"read_status,omitempty"`
-		Subagents           []FlowerSubagentSummary `json:"subagents,omitempty"`
+		ThreadID             string                  `json:"thread_id,omitempty"`
+		Title                string                  `json:"title,omitempty"`
+		TitleStatus          string                  `json:"title_status,omitempty"`
+		ModelID              string                  `json:"model_id,omitempty"`
+		PermissionType       string                  `json:"permission_type,omitempty"`
+		WorkingDir           string                  `json:"working_dir,omitempty"`
+		QueuedTurnCount      *int                    `json:"queued_turn_count,omitempty"`
+		QueuedTurns          []QueuedTurnView        `json:"queued_turns,omitempty"`
+		RunStatus            string                  `json:"run_status,omitempty"`
+		RunUpdatedAtUnixMs   int64                   `json:"run_updated_at_unix_ms,omitempty"`
+		RunErrorCode         string                  `json:"run_error_code,omitempty"`
+		RunError             string                  `json:"run_error,omitempty"`
+		WaitingPrompt        *RequestUserInputPrompt `json:"waiting_prompt,omitempty"`
+		ActiveRunID          string                  `json:"active_run_id,omitempty"`
+		ApprovalPending      *bool                   `json:"approval_pending,omitempty"`
+		ApprovalPendingCount int                     `json:"approval_pending_count,omitempty"`
+		ApprovalGeneration   int64                   `json:"approval_generation,omitempty"`
+		ApprovalRevision     int64                   `json:"approval_revision,omitempty"`
+		PinnedAtUnixMs       int64                   `json:"pinned_at_unix_ms,omitempty"`
+		CreatedAtUnixMs      int64                   `json:"created_at_unix_ms,omitempty"`
+		UpdatedAtUnixMs      int64                   `json:"updated_at_unix_ms,omitempty"`
+		LastMessageAtUnixMs  int64                   `json:"last_message_at_unix_ms,omitempty"`
+		LastMessagePreview   string                  `json:"last_message_preview,omitempty"`
+		ReasoningSelection   json.RawMessage         `json:"reasoning_selection"`
+		ReasoningCapability  json.RawMessage         `json:"reasoning_capability"`
+		ReadStatus           *FlowerThreadReadView   `json:"read_status,omitempty"`
+		Subagents            []FlowerSubagentSummary `json:"subagents,omitempty"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
 	*p = FlowerLiveThreadPatch{
-		ThreadID:            raw.ThreadID,
-		Title:               raw.Title,
-		TitleStatus:         raw.TitleStatus,
-		ModelID:             raw.ModelID,
-		PermissionType:      raw.PermissionType,
-		WorkingDir:          raw.WorkingDir,
-		QueuedTurnCount:     raw.QueuedTurnCount,
-		QueuedTurns:         cloneQueuedTurnViews(raw.QueuedTurns),
-		RunStatus:           raw.RunStatus,
-		RunUpdatedAtUnixMs:  raw.RunUpdatedAtUnixMs,
-		RunErrorCode:        raw.RunErrorCode,
-		RunError:            raw.RunError,
-		WaitingPrompt:       raw.WaitingPrompt,
-		ActiveRunID:         raw.ActiveRunID,
-		PinnedAtUnixMs:      raw.PinnedAtUnixMs,
-		CreatedAtUnixMs:     raw.CreatedAtUnixMs,
-		UpdatedAtUnixMs:     raw.UpdatedAtUnixMs,
-		LastMessageAtUnixMs: raw.LastMessageAtUnixMs,
-		LastMessagePreview:  raw.LastMessagePreview,
-		ReadStatus:          raw.ReadStatus,
-		Subagents:           cloneFlowerSubagentSummaries(raw.Subagents),
+		ThreadID:             raw.ThreadID,
+		Title:                raw.Title,
+		TitleStatus:          raw.TitleStatus,
+		ModelID:              raw.ModelID,
+		PermissionType:       raw.PermissionType,
+		WorkingDir:           raw.WorkingDir,
+		QueuedTurnCount:      raw.QueuedTurnCount,
+		QueuedTurns:          cloneQueuedTurnViews(raw.QueuedTurns),
+		RunStatus:            raw.RunStatus,
+		RunUpdatedAtUnixMs:   raw.RunUpdatedAtUnixMs,
+		RunErrorCode:         raw.RunErrorCode,
+		RunError:             raw.RunError,
+		WaitingPrompt:        raw.WaitingPrompt,
+		ActiveRunID:          raw.ActiveRunID,
+		ApprovalPending:      raw.ApprovalPending,
+		ApprovalPendingCount: raw.ApprovalPendingCount,
+		ApprovalGeneration:   raw.ApprovalGeneration,
+		ApprovalRevision:     raw.ApprovalRevision,
+		PinnedAtUnixMs:       raw.PinnedAtUnixMs,
+		CreatedAtUnixMs:      raw.CreatedAtUnixMs,
+		UpdatedAtUnixMs:      raw.UpdatedAtUnixMs,
+		LastMessageAtUnixMs:  raw.LastMessageAtUnixMs,
+		LastMessagePreview:   raw.LastMessagePreview,
+		ReadStatus:           raw.ReadStatus,
+		Subagents:            cloneFlowerSubagentSummaries(raw.Subagents),
 	}
 	if _, ok := fields["queued_turns"]; ok {
 		p.QueuedTurnsSet = true

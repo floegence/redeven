@@ -410,13 +410,16 @@ func (s *Service) ListThreads(ctx context.Context, meta *session.Meta, limit int
 		if err != nil {
 			return nil, fmt.Errorf("build thread %s view: %w", threadID, err)
 		}
-		if view.RunStatus == string(RunStateRunning) {
-			s.mu.Lock()
-			liveState := s.flowerLiveMaterializedStateLocked(endpointID, threadID)
-			s.mu.Unlock()
-			if flowerLiveStateHasPendingApproval(liveState, view.ActiveRunID) {
-				view.RunStatus = string(RunStateWaitingApproval)
-			}
+		s.mu.Lock()
+		liveState := s.flowerLiveMaterializedStateLocked(endpointID, threadID)
+		s.mu.Unlock()
+		pending, pendingCount, approvalGeneration, approvalRevision := flowerLiveApprovalSummary(liveState, view.ActiveRunID)
+		view.ApprovalPending = &pending
+		view.ApprovalPendingCount = pendingCount
+		view.ApprovalGeneration = approvalGeneration
+		view.ApprovalRevision = approvalRevision
+		if pending && view.RunStatus != string(RunStateWaitingUser) {
+			view.RunStatus = string(RunStateWaitingApproval)
 		}
 		out.Threads = append(out.Threads, view)
 	}

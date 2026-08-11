@@ -39,4 +39,13 @@ describe('Flower canonical reference presentation', () => {
     expect(css).toContain('@media (max-width: 640px)');
     expect(css).toContain('grid-template-columns: minmax(0, 1fr)');
   });
+
+  it('gives the keyboard and pointer active candidate a stable theme accent without changing geometry', () => {
+    const css = fs.readFileSync(stylesPath, 'utf8');
+
+    expect(css).toContain(".flower-composer-reference-option[data-active='true']");
+    expect(css).toContain('inset 2px 0 0 var(--primary)');
+    expect(css).toContain(".flower-composer-reference-option[data-active='true'] .flower-composer-reference-option-icon");
+    expect(css).toContain(".flower-composer-reference-option[data-active='true'] .flower-composer-reference-option-name");
+  });
 });

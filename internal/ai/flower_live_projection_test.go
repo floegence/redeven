@@ -42,6 +42,34 @@ func assertFlowerApprovalReceiptCursor(t *testing.T, svc *Service, endpointID st
 	t.Fatalf("receipt cursor %d missing from Flower live stream", resp.CurrentCursor)
 }
 
+func TestFlowerLiveApprovalSummaryKeepsStructuredBackgroundState(t *testing.T) {
+	t.Parallel()
+	requested := FlowerApprovalAction{
+		ActionID:        "approval-1",
+		Origin:          FlowerApprovalOriginMainTool,
+		RunID:           "run-1",
+		State:           FlowerApprovalStateRequested,
+		Status:          FlowerApprovalStatusPending,
+		QueueGeneration: 7,
+		Revision:        11,
+	}
+	state := FlowerLiveMaterializedState{
+		ApprovalActions: map[string]FlowerApprovalAction{requested.ActionID: requested},
+		ApprovalQueue:   &FlowerApprovalQueue{Generation: 7, Revision: 11, CurrentActionID: requested.ActionID, CurrentPosition: 1, Total: 1, UnresolvedCount: 1},
+	}
+	pending, count, generation, revision := flowerLiveApprovalSummary(state, "run-1")
+	if !pending || count != 1 || generation != 7 || revision != 11 {
+		t.Fatalf("approval summary=(%v,%d,%d,%d), want pending one at generation 7 revision 11", pending, count, generation, revision)
+	}
+	patch := flowerLiveThreadPatchFromSummary(RealtimeEvent{
+		ThreadID: "thread-1", RunStatus: "waiting_approval", ApprovalPending: &pending,
+		ApprovalPendingCount: count, ApprovalGeneration: generation, ApprovalRevision: revision,
+	})
+	if patch.ApprovalPending == nil || !*patch.ApprovalPending || patch.ApprovalPendingCount != 1 || patch.ApprovalGeneration != 7 || patch.ApprovalRevision != 11 {
+		t.Fatalf("thread patch=%#v, want structured approval summary", patch)
+	}
+}
+
 func TestFlowerTimelineMessageFromRawExtractsJSONBlockContent(t *testing.T) {
 	t.Parallel()
 
