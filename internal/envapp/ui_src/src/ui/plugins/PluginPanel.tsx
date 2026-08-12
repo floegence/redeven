@@ -56,6 +56,8 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
   const [query, setQuery] = createSignal('');
   const [category, setCategory] = createSignal<PluginPresentationCategory | 'all'>('all');
   const [dragState, setDragState] = createSignal<PluginTileDragState | null>(null);
+  const [mounted, setMounted] = createSignal(props.open);
+  const [closing, setClosing] = createSignal(false);
   let suppressTileClick = false;
   let panelRef: HTMLDivElement | undefined;
   let searchRef: HTMLInputElement | undefined;
@@ -67,6 +69,20 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
   onCleanup(() => {
     cancelActiveTileDrag?.();
     cancelActiveTileDrag = undefined;
+  });
+
+  createEffect(() => {
+    if (props.open) {
+      setMounted(true);
+      setClosing(false);
+      return;
+    }
+    if (!mounted()) return;
+    setClosing(true);
+    window.setTimeout(() => {
+      setClosing(false);
+      setMounted(false);
+    }, 150);
   });
 
   const pluginTiles = createMemo(() => props.model.tiles.filter(isPluginTile));
@@ -294,7 +310,7 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
   };
 
   return (
-    <Show when={props.open}>
+    <Show when={mounted()}>
       <Portal>
         <div
           data-plugin-launcher-backdrop
@@ -313,7 +329,7 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
             ref={panelRef}
             role="dialog"
             data-plugin-panel-motion-axis="y"
-            data-plugin-panel-motion-state="open"
+            data-plugin-panel-motion-state={closing() ? 'closing' : 'open'}
             tabIndex={-1}
             aria-modal={isWorkbenchPopup() ? undefined : 'true'}
             aria-label={isWorkbenchPopup() ? i18n.t('uiCopy.plugin.launcherTitle') : undefined}
@@ -322,7 +338,7 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
             class={cn(
               'redeven-plugin-motion pointer-events-auto flex min-h-0 origin-bottom flex-col overflow-hidden border bg-popover text-popover-foreground shadow-2xl ease-out motion-reduce:animate-none',
               isWorkbenchPopup()
-                ? 'fixed max-h-[min(380px,calc(100vh-120px))] w-[min(320px,calc(100vw-24px))] rounded-lg plugin-panel-popover-open duration-150'
+                ? `fixed max-h-[min(380px,calc(100vh-120px))] w-[min(320px,calc(100vw-24px))] rounded-lg ${closing() ? 'plugin-panel-popover-close' : 'plugin-panel-popover-open'} duration-150`
                 : 'w-full',
               !isWorkbenchPopup() && props.mobile
                 ? 'h-[min(680px,92dvh)] rounded-t-lg border-x-0 border-b-0 animate-in fade-in duration-200'

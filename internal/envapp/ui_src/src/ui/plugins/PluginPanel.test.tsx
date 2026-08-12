@@ -114,6 +114,23 @@ function mountPanel(props: Partial<Parameters<typeof PluginPanel>[0]> = {}) {
 }
 
 describe('PluginPanel', () => {
+  it('keeps the popup mounted while it closes downward', async () => {
+    vi.useFakeTimers();
+    const [open, setOpen] = createSignal(true);
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginPanel open={open()} placement="workbench" model={panelModel()} onClose={() => setOpen(false)} onOpenCenter={vi.fn()} onOpenPluginDetails={vi.fn()} onOpenPluginSurface={vi.fn()} />
+    ), mount);
+
+    setOpen(false);
+    await Promise.resolve();
+    expect(document.querySelector('[data-plugin-panel-motion-state="closing"]')).not.toBeNull();
+    vi.advanceTimersByTime(160);
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    vi.useRealTimers();
+  });
+
   it('renders installed plugins with one market icon entry and no overflow menu', () => {
     const onOpenCenter = vi.fn();
     mountPanel({ onOpenCenter });
@@ -285,7 +302,7 @@ describe('PluginPanel', () => {
 
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     expect(document.activeElement).toBe(trigger);
-    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(document.querySelector('[data-plugin-panel-motion-state="closing"]')).not.toBeNull();
   });
 
   it('hides category filters below six installed plugins', () => {
