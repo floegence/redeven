@@ -5,8 +5,9 @@ export type ThreadStoreDetail = Readonly<{ thread_id: string; revision: number; 
 export type ThreadStoreEvent = Readonly<{ thread_id: string; revision: number; id: string; kind: 'turn_state' | 'timeline_event'; payload: Readonly<{ status?: FlowerThreadStatus }> }>;
 export type ThreadStoreOperationKind = 'send' | 'resolve' | 'cancel' | 'retry';
 export type ThreadStoreOperation = Readonly<{ thread_id: string; request_id: string; kind: ThreadStoreOperationKind }>;
+export type ThreadStoreConnection = 'connected' | 'reconnecting' | 'resyncing';
 
-type MutableDetail = { thread_id: string; revision: number; messages: readonly unknown[]; status?: FlowerThreadStatus };
+type MutableDetail = { thread_id: string; revision: number; messages: readonly unknown[]; status?: FlowerThreadStatus; snapshot?: FlowerThreadSnapshot };
 
 export function createThreadStore() {
   const summaries = new Map<string, ThreadStoreSummary>();
@@ -15,6 +16,8 @@ export function createThreadStore() {
   let selectionGeneration = 0;
   const resyncThreads = new Set<string>();
   const operations = new Map<string, ThreadStoreOperation>();
+  const eventIDs = new Map<string, Set<string>>();
+  let connection: ThreadStoreConnection = 'connected';
   const mergeStatus = (current: FlowerThreadStatus | undefined, next: FlowerThreadStatus | undefined) => {
     if (!next) return current;
     const priority: Record<FlowerThreadStatus, number> = {
@@ -29,14 +32,16 @@ export function createThreadStore() {
     selectThread(threadId: string) { selectedThreadId = threadId.trim(); selectionGeneration += 1; return selectionGeneration; },
     selectedThreadId: () => selectedThreadId,
     selectionGeneration: () => selectionGeneration,
+    connection: () => connection,
+    setConnection(next: ThreadStoreConnection) { connection = next; },
     detail(threadId: string): ThreadStoreDetail | undefined { return details.get(threadId.trim()); },
     applySnapshot(snapshot: FlowerThreadSnapshot, revision: number): boolean {
       const id = snapshot.thread_id.trim();
-      if (!id || id !== selectedThreadId) return false;
+      if (!id) return false;
       const previous = details.get(id);
       if (previous && revision < previous.revision) return false;
       const messages = snapshot.messages.length > 0 ? [...snapshot.messages] : previous?.messages ?? [];
-      details.set(id, { thread_id: id, revision, messages, status: mergeStatus(previous?.status, snapshot.status), snapshot: { ...snapshot, messages } });
+      details.set(id, { thread_id: id, revision, messages, status: mergeStatus(previous?.status, snapshot.status), snapshot: { ...snapshot, messages: snapshot.messages.length > 0 ? snapshot.messages : previous?.snapshot?.messages ?? [] } });
       return true;
     },
     snapshot(threadId: string): FlowerThreadSnapshot | undefined { return details.get(threadId.trim())?.snapshot; },
@@ -59,13 +64,19 @@ export function createThreadStore() {
     },
     applyEvent(event: ThreadStoreEvent): 'applied' | 'ignored' | 'resync' {
       const id = event.thread_id.trim();
+      if (!id) return 'ignored';
+      const ids = eventIDs.get(id) ?? new Set<string>();
+      if (ids.has(event.id)) return 'ignored';
       const previous = details.get(id);
       if (!previous || event.revision <= previous.revision) return 'ignored';
       if (event.revision !== previous.revision + 1) { resyncThreads.add(id); return 'resync'; }
+      ids.add(event.id);
+      eventIDs.set(id, ids);
       details.set(id, { ...previous, revision: event.revision, status: mergeStatus(previous.status, event.payload.status) });
       return 'applied';
     },
     needsResync(threadId: string) { return resyncThreads.has(threadId.trim()); },
+    clearResync(threadId: string) { resyncThreads.delete(threadId.trim()); },
     setOperation(operation: ThreadStoreOperation) {
       const id = operation.thread_id.trim();
       if (!id) return;
