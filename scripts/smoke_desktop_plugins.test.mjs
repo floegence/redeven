@@ -67,3 +67,25 @@ test('plugin smoke accepts converged refresh, matching Panel inventory, iframe, 
   });
   assert.equal(result.ok, true);
 });
+
+test('Desktop smoke installs through Plugin Center only for the initial isolated phase', async () => {
+  const source = await import('node:fs/promises').then((fs) => fs.readFile(
+    new URL('./smoke_desktop_plugins.mjs', import.meta.url),
+    'utf8',
+  ));
+  assert.match(source, /config\.phase !== 'initial'/u);
+  assert.match(source, /\[data-plugin-center-install\]/u);
+  assert.match(source, /\[data-plugin-install-review-confirm\]/u);
+  assert.match(source, /cold restart started without an enabled plugin/u);
+});
+
+test('Desktop smoke records close button, Escape, backdrop, and final reopen evidence', async () => {
+  const source = await import('node:fs/promises').then((fs) => fs.readFile(
+    new URL('./smoke_desktop_plugins.mjs', import.meta.url),
+    'utf8',
+  ));
+  assert.match(source, /panelDismissal\.close_button/u);
+  assert.match(source, /panelDismissal\.escape/u);
+  assert.match(source, /panelDismissal\.backdrop/u);
+  assert.match(source, /panelDismissal\.final_reopen/u);
+});

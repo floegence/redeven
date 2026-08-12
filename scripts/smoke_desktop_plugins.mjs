@@ -100,6 +100,55 @@ async function requestPluginJSON(page, pathname, body = {}, inheritedHeaders = {
   }, { pathname, body, requestHeaders: headers });
 }
 
+function enabledPlugins(catalog) {
+  return Array.isArray(catalog?.plugins)
+    ? catalog.plugins.filter((plugin) => plugin?.enable_state === 'enabled')
+    : [];
+}
+
+async function ensureInitialEnabledPlugin(page, sessionHeaders, config, pluginResponses) {
+  const queryCatalog = async () => {
+    const response = await requestPluginJSON(
+      page,
+      '/_redevplugin/api/plugins/catalog/query',
+      {},
+      sessionHeaders,
+    );
+    pluginResponses.push({
+      method: 'POST',
+      pathname: '/_redevplugin/api/plugins/catalog/query',
+      ...response,
+    });
+    return response;
+  };
+  const before = await queryCatalog();
+  if (before.status === 200 && enabledPlugins(before.body?.data ?? before.body).length > 0) {
+    return { performed: false, enabledCount: enabledPlugins(before.body?.data ?? before.body).length };
+  }
+  if (config.phase !== 'initial') {
+    throw new Error('cold restart started without an enabled plugin');
+  }
+
+  const openCenter = page.locator('[data-plugin-center-market-action]').first();
+  await openCenter.waitFor({ state: 'visible', timeout: 30_000 });
+  await openCenter.click();
+  await waitFor(() => page.locator('[data-plugin-center-view]').count(), 30_000, 'Plugin Center');
+  const install = page.locator('[data-plugin-center-install]').first();
+  await install.waitFor({ state: 'visible', timeout: 30_000 });
+  await install.click();
+  const confirm = page.locator('[data-plugin-install-review-confirm]').first();
+  await confirm.waitFor({ state: 'visible', timeout: 10_000 });
+  await confirm.click();
+
+  const installed = await waitFor(async () => {
+    const response = await queryCatalog();
+    if (response.status !== 200) return null;
+    const catalog = response.body?.data ?? response.body;
+    return enabledPlugins(catalog).length > 0 ? catalog : null;
+  }, 120_000, 'official plugin installation');
+  return { performed: true, enabledCount: enabledPlugins(installed).length };
+}
+
 async function runBrowserSmoke(config) {
   assertIsolatedSmokeConfiguration(config);
   const playwrightRoot = config.playwrightRoot;
@@ -210,16 +259,32 @@ async function runConnectedBrowserSmoke(config, browser, startedAt) {
   await pluginTrigger.waitFor({ state: 'visible', timeout: 30_000 });
   await pluginTrigger.click();
   await waitFor(() => page.locator('[data-plugin-launcher-grid]').count(), 10_000, 'Plugin Panel');
+  phase = 'plugin_bootstrap';
+  const bootstrap = await ensureInitialEnabledPlugin(page, sessionHeaders, config, pluginResponses);
+  if (bootstrap.performed) {
+    await pluginTrigger.click();
+    await waitFor(() => page.locator('[data-plugin-launcher-backdrop]').count() === 1, 10_000, 'Plugin Panel after install');
+  }
   phase = 'panel_close_reopen';
+  const panelDismissal = {};
   const closePanel = page.locator('[data-plugin-launcher-backdrop] [aria-label="Close plugins"], [data-plugin-launcher-backdrop] [aria-label="关闭插件"]').first();
   await closePanel.click();
   await waitFor(() => page.locator('[data-plugin-launcher-backdrop]').count() === 0, 10_000, 'Plugin Panel close button');
+  panelDismissal.close_button = { closed: true, backdrop_count: 0 };
   await pluginTrigger.click();
   await waitFor(() => page.locator('[data-plugin-launcher-backdrop]').count() === 1, 10_000, 'Plugin Panel reopen');
   await page.keyboard.press('Escape');
   await waitFor(() => page.locator('[data-plugin-launcher-backdrop]').count() === 0, 10_000, 'Plugin Panel Escape close');
+  panelDismissal.escape = { closed: true, backdrop_count: 0 };
+  await pluginTrigger.click();
+  const backdrop = page.locator('[data-plugin-launcher-backdrop]').first();
+  await backdrop.waitFor({ state: 'visible', timeout: 10_000 });
+  await backdrop.click({ position: { x: 2, y: 2 } });
+  await waitFor(() => page.locator('[data-plugin-launcher-backdrop]').count() === 0, 10_000, 'Plugin Panel backdrop close');
+  panelDismissal.backdrop = { closed: true, backdrop_count: 0 };
   await pluginTrigger.click();
   await waitFor(() => page.locator('[data-plugin-launcher-backdrop]').count() === 1, 10_000, 'Plugin Panel final reopen');
+  panelDismissal.final_reopen = { open: true, backdrop_count: 1 };
   mark('panel_ready_ms');
 
   phase = 'inventory';
@@ -326,9 +391,14 @@ async function runConnectedBrowserSmoke(config, browser, startedAt) {
     ports: { local_ui: config.localUIPort, cdp: config.cdpPort, inspector: config.inspectorPort },
     pids: config.pids,
     timings,
+    bootstrap,
     refresh,
     catalog,
-    panel: { installed_count: panelInstalledCount, needs_attention: await page.locator('[data-plugin-runtime-recovery]').count() },
+    panel: {
+      installed_count: panelInstalledCount,
+      needs_attention: await page.locator('[data-plugin-runtime-recovery]').count(),
+      dismissal: panelDismissal,
+    },
     surface,
     rpc,
     console_errors: consoleErrors,

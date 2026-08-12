@@ -29,7 +29,7 @@ if [[ -n "$SEED_ROOT" ]]; then
   case "$SEED_ROOT" in /tmp/redeven-plugin-*|/tmp/rdsmoke-*) ;; *) echo "smoke seed must be a task-owned /tmp state" >&2; exit 2;; esac
   cp -a "$SEED_ROOT/state/." "$STATE_ROOT/"
   cp -a "$SEED_ROOT/user-data/." "$USER_DATA_ROOT/"
-node - "$STATE_ROOT/catalog/local-environment.json" "$LOCAL_UI_PORT" "$STATE_ROOT/local-environment" <<'NODE'
+  node - "$STATE_ROOT/catalog/local-environment.json" "$LOCAL_UI_PORT" "$STATE_ROOT/local-environment" <<'NODE'
 const fs = require('node:fs');
 const file = process.argv[2];
 const port = Number(process.argv[3]);
