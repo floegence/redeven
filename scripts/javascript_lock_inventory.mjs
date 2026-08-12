@@ -32,6 +32,40 @@ export function parseNpmPackageLock(lock) {
   return packages;
 }
 
+export function assertNpmDirectDependenciesLocked(packageManifest, packageLock, label = 'npm package') {
+  const manifestDependencies = {
+    ...(isRecord(packageManifest?.dependencies) ? packageManifest.dependencies : {}),
+    ...(isRecord(packageManifest?.devDependencies) ? packageManifest.devDependencies : {}),
+    ...(isRecord(packageManifest?.optionalDependencies) ? packageManifest.optionalDependencies : {}),
+  };
+  const rootLock = packageLock?.packages?.[''];
+  if (!isRecord(rootLock)) {
+    throw new Error(`${label} package-lock must contain the root package entry`);
+  }
+  const rootDependencies = {
+    ...(isRecord(rootLock.dependencies) ? rootLock.dependencies : {}),
+    ...(isRecord(rootLock.devDependencies) ? rootLock.devDependencies : {}),
+    ...(isRecord(rootLock.optionalDependencies) ? rootLock.optionalDependencies : {}),
+  };
+  const mismatches = [];
+  for (const [name, specifier] of Object.entries(manifestDependencies)) {
+    const lockedSpecifier = rootDependencies[name];
+    if (lockedSpecifier !== specifier) {
+      mismatches.push(`${name} specifier ${JSON.stringify(specifier)} != ${JSON.stringify(lockedSpecifier ?? 'missing')}`);
+      continue;
+    }
+    const exactVersion = String(specifier).match(/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/u)?.[0];
+    if (!exactVersion) continue;
+    const lockedVersion = String(packageLock.packages?.[`node_modules/${name}`]?.version ?? 'missing');
+    if (lockedVersion !== exactVersion) {
+      mismatches.push(`${name} version ${JSON.stringify(exactVersion)} != ${JSON.stringify(lockedVersion)}`);
+    }
+  }
+  if (mismatches.length > 0) {
+    throw new Error(`${label} direct dependencies drift from package-lock:\n${mismatches.join('\n')}`);
+  }
+}
+
 export function parsePnpmPackageKey(packageKey) {
   const withoutPeerContext = String(packageKey).replace(/\(.+$/u, '');
   const versionSeparator = withoutPeerContext.lastIndexOf('@');
