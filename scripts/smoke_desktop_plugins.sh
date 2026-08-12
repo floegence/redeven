@@ -14,6 +14,7 @@ REPORT_ROOT="$SMOKE_ROOT/report"
 PID_FILE="$REPORT_ROOT/pids.txt"
 DESKTOP_LOG="$REPORT_ROOT/desktop.log"
 LAUNCH_PID=
+PIDS_RELEASED=true
 
 reserve_port() {
   node -e 'const n=require("node:net");const s=n.createServer();s.listen(0,"127.0.0.1",()=>{console.log(s.address().port);s.close()})'
@@ -77,8 +78,8 @@ descendants() {
 }
 
 capture_pids() {
-  : >"$PID_FILE"
   [[ -n "$LAUNCH_PID" ]] || return 0
+  : >"$PID_FILE"
   printf '%s\n' "$LAUNCH_PID" >>"$PID_FILE"
   descendants "$LAUNCH_PID" >>"$PID_FILE"
   while IFS= read -r report; do
@@ -89,7 +90,10 @@ capture_pids() {
 
 stop_owned() {
   capture_pids
-  [[ -s "$PID_FILE" ]] || return 0
+  if [[ ! -s "$PID_FILE" ]]; then
+    LAUNCH_PID=
+    return 0
+  fi
   local owned_pids=()
   while IFS= read -r pid; do
     [[ "$pid" =~ ^[0-9]+$ ]] && owned_pids+=("$pid")
@@ -97,16 +101,24 @@ stop_owned() {
   for pid in "${owned_pids[@]}"; do kill -TERM "$pid" 2>/dev/null || true; done
   sleep 1
   for pid in "${owned_pids[@]}"; do kill -KILL "$pid" 2>/dev/null || true; done
-  wait "$LAUNCH_PID" 2>/dev/null || true
+  [[ -n "$LAUNCH_PID" ]] && wait "$LAUNCH_PID" 2>/dev/null || true
+  for pid in "${owned_pids[@]}"; do
+    if kill -0 "$pid" 2>/dev/null; then
+      PIDS_RELEASED=false
+    fi
+  done
   LAUNCH_PID=
 }
 
 cleanup() {
   local status=$?
+  trap - EXIT INT TERM
   stop_owned
   ports_released=true
   node -e 'const n=require("node:net");const ps=process.argv.slice(1).map(Number);Promise.all(ps.map(p=>new Promise((r,j)=>{const s=n.createServer();s.once("error",j);s.listen(p,"127.0.0.1",()=>s.close(r))}))).then(()=>process.exit(0),()=>process.exit(1))' "$LOCAL_UI_PORT" "$CDP_PORT" "$INSPECTOR_PORT" || { ports_released=false; status=1; }
-  printf '{"pids_released":true,"ports_released":%s}\n' "$ports_released" >"$REPORT_ROOT/cleanup.json"
+  [[ "$PIDS_RELEASED" == "true" ]] || status=1
+  printf '{"pids_released":%s,"ports_released":%s}\n' "$PIDS_RELEASED" "$ports_released" >"$REPORT_ROOT/cleanup.json"
+  node -e 'const f=require("node:fs");const p=require("node:path");const root=process.argv[1];const read=(name)=>{const file=p.join(root,name);return f.existsSync(file)?JSON.parse(f.readFileSync(file)):null};const result={schema_version:1,initial:read("initial.json"),cold_restart:read("cold_restart.json"),cleanup:JSON.parse(f.readFileSync(p.join(root,"cleanup.json")))};f.writeFileSync(p.join(root,"summary.json"),JSON.stringify(result,null,2)+"\n")' "$REPORT_ROOT"
   echo "plugin smoke evidence: $REPORT_ROOT"
   exit "$status"
 }
@@ -125,6 +137,7 @@ run_phase() {
   local phase=$1
   local output="$REPORT_ROOT/$phase.json"
   local config="$REPORT_ROOT/$phase-config.json"
+  : >"$PID_FILE"
   : >"$DESKTOP_LOG"
   REDEVEN_STATE_ROOT="$STATE_ROOT" \
   REDEVEN_DESKTOP_USER_DATA_ROOT="$USER_DATA_ROOT" \
@@ -158,4 +171,3 @@ JSON
 
 run_phase initial
 run_phase cold_restart
-node -e 'const f=require("node:fs");const p=require("node:path");const root=process.argv[1];const result={schema_version:1,initial:JSON.parse(f.readFileSync(p.join(root,"initial.json"))),cold_restart:JSON.parse(f.readFileSync(p.join(root,"cold_restart.json")))};f.writeFileSync(p.join(root,"summary.json"),JSON.stringify(result,null,2)+"\n")' "$REPORT_ROOT"
