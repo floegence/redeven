@@ -148,6 +148,13 @@ async function runConnectedBrowserSmoke(config, browser, startedAt) {
   const failedResponses = [];
   const pluginResponses = [];
   const projectionCheckpoints = [];
+  const inventoryDebug = () => page.locator('[data-plugin-inventory-debug]').evaluate((node) => ({
+    source: node.getAttribute('data-source'),
+    loading: node.getAttribute('data-loading'),
+    error: node.getAttribute('data-error'),
+    items: Number(node.getAttribute('data-items') ?? 0),
+    marketUnavailable: node.getAttribute('data-market-unavailable'),
+  })).catch(() => null);
   const pluginRequestHeaders = new Map();
   const pluginRequests = [];
   page.on('console', (message) => {
@@ -202,6 +209,7 @@ async function runConnectedBrowserSmoke(config, browser, startedAt) {
     label: 'after_catalog_replay',
     panelTiles: await page.locator('[data-plugin-panel-tile]:not([data-plugin-panel-tile="plugin-center"])').count(),
     panelText: (await page.locator('[data-plugin-launcher-grid]').innerText().catch(() => '')).slice(0, 4000),
+    inventoryDebug: await inventoryDebug(),
   });
   const refresh = refreshEntry.body;
   const catalog = catalogEntry.body?.data ?? catalogEntry.body;
@@ -230,6 +238,7 @@ async function runConnectedBrowserSmoke(config, browser, startedAt) {
       enabledCount,
       panelTiles: await page.locator('[data-plugin-panel-tile]').count(),
       panelText: (await page.locator('[data-plugin-launcher-grid]').innerText().catch(() => '')).slice(0, 4000),
+      inventoryDebug: await inventoryDebug(),
       pluginResponses,
       pluginRequests,
       failedResponses,
