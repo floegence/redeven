@@ -258,8 +258,8 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
 
   const timings = {};
   const mark = (name) => { timings[name] = Number((performance.now() - startedAt).toFixed(1)); };
-  phase = 'reload';
-  await page.reload({ waitUntil: 'domcontentloaded' });
+  phase = 'document_ready';
+  await page.waitForLoadState('domcontentloaded');
   mark('document_ready_ms');
   await waitFor(() => page.locator('#redeven-plugin-switcher').count(), 60_000, 'Plugin Panel trigger');
   mark('shell_ready_ms');
