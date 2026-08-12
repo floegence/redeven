@@ -133,5 +133,6 @@ test('Desktop smoke waits for the closed Panel trigger instead of the unmounted 
     'utf8',
   ));
   assert.match(source, /\[aria-controls="redeven-plugin-switcher"\]/u);
+  assert.match(source, /\[data-workbench-dock-action="plugins"\]/u);
   assert.doesNotMatch(source, /page\.locator\('#redeven-plugin-switcher'\)\.count\(\)/u);
 });
