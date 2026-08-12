@@ -3970,6 +3970,8 @@
       "inputRequestNext": "Nächste Frage",
       "inputRequestComposerPlaceholder": "Antworte, um diese Unterhaltung fortzusetzen.",
       "inputRequestChoicePlaceholder": "Wähle eine Option zum Fortfahren.",
+      "inputRequestOther": "Keine der obigen Optionen / Sonstiges",
+      "inputRequestAnswered": "Beantwortet",
       "conversationsAria": "Flower-Unterhaltungen",
       "resizeConversationsLabel": "Breite der Unterhaltungsliste ändern",
       "entryLabel": "Flower",

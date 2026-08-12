@@ -4098,6 +4098,8 @@
       "inputRequestNext": "Следующий вопрос",
       "inputRequestComposerPlaceholder": "Ответьте, чтобы продолжить эту беседу.",
       "inputRequestChoicePlaceholder": "Выберите вариант для продолжения.",
+      "inputRequestOther": "Ничего из перечисленного / Другое",
+      "inputRequestAnswered": "Ответ отправлен",
       "conversationsAria": "Беседы Flower",
       "resizeConversationsLabel": "Изменить ширину списка бесед",
       "entryLabel": "Flower",

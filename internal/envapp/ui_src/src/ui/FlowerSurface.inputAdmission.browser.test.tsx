@@ -17,7 +17,7 @@ import {
 } from './FlowerSurface.navigation.testHarness';
 
 describe('Flower structured input admission browser behavior', () => {
-  it('releases the consumed prompt without starting a post-admission detail read', async () => {
+  it('keeps history and an answered receipt visible until post-admission bootstrap reconciles', async () => {
     const request = inputRequest({
       prompt_id: 'prompt-browser-input',
       public_summary: 'What should Flower do next?',
@@ -36,7 +36,31 @@ describe('Flower structured input admission browser behavior', () => {
       active_run_id: 'run-before-input',
       input_request: request,
     });
-    const loadThread = vi.fn(async () => liveBootstrap(waitingThread, 10));
+    const canonicalThread = thread({
+      ...waitingThread,
+      status: 'running',
+      active_run_id: 'run-after-input',
+      input_request: undefined,
+      messages: [
+        ...waitingThread.messages,
+        {
+          id: 'message-input-answer',
+          turn_id: 'turn-after-input',
+          role: 'user',
+          content: 'Continue with the release.',
+          status: 'complete',
+          created_at_ms: 20,
+        },
+      ],
+    });
+    const postAdmissionBootstrap = deferred<ReturnType<typeof liveBootstrap>>();
+    let loadCount = 0;
+    const loadThread = vi.fn(() => {
+      loadCount += 1;
+      return loadCount === 1
+        ? Promise.resolve(liveBootstrap(waitingThread, 10))
+        : postAdmissionBootstrap.promise;
+    });
     const submitInput = vi.fn(async () => {
       return inputAdmissionReceipt(
         waitingThread.thread_id,
@@ -74,11 +98,18 @@ describe('Flower structured input admission browser behavior', () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(submitInput).toHaveBeenCalledTimes(1);
+    expect(runtime.textContent).toContain('Plan deploy');
+    expect(runtime.querySelector('[data-flower-input-admission-handoff]')?.textContent).toContain('Continue with the release.');
     expect(runtime.querySelector('.flower-composer [data-flower-input-request-prompt]')).toBeNull();
     expect(runtime.querySelector('.flower-composer-continue')).toBeNull();
-    expect(loadThread).toHaveBeenCalledTimes(1);
+    expect(loadThread).toHaveBeenCalledTimes(2);
     expect(runtime.textContent).not.toContain('Submitting...');
     expect((runtime.querySelector('.flower-composer textarea') as HTMLTextAreaElement).disabled).toBe(false);
+
+    postAdmissionBootstrap.resolve(liveBootstrap(canonicalThread, 11));
+    await waitFor(() => runtime.textContent?.includes('Continue with the release.') ?? false);
+    expect(runtime.querySelector('[data-flower-input-admission-handoff]')).toBeNull();
+    expect(runtime.textContent?.match(/Continue with the release\./g)).toHaveLength(1);
   });
 
   it('does not let a late admission receipt overwrite a newer waiting prompt', async () => {
@@ -187,5 +218,56 @@ describe('Flower structured input admission browser behavior', () => {
     expect(runtime.textContent).toContain('Answer the newer prompt.');
     expect(runtime.textContent).not.toContain('Answer the first prompt.');
     expect((runtime.querySelector('.flower-composer textarea') as HTMLTextAreaElement).disabled).toBe(false);
+  });
+
+  it('keeps thread navigation clickable while thread A admission is delayed', async () => {
+    const requestA = inputRequest({
+      prompt_id: 'prompt-a',
+      questions: [{ id: 'answer-a', header: 'A', question: 'Answer A', response_mode: 'write' }],
+    });
+    const requestB = inputRequest({
+      prompt_id: 'prompt-b',
+      questions: [{ id: 'answer-b', header: 'B', question: 'Answer B', response_mode: 'write' }],
+    });
+    const threadA = thread({ thread_id: 'thread-a', title: 'Thread A', status: 'waiting_user', input_request: requestA });
+    const threadB = thread({ thread_id: 'thread-b', title: 'Thread B', status: 'waiting_user', input_request: requestB });
+    const delayedReceipt = deferred<ReturnType<typeof inputAdmissionReceipt>>();
+    const submitInput = vi.fn(() => delayedReceipt.promise);
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [threadA, threadB]),
+      loadThread: vi.fn(async (threadID) => liveBootstrap(threadID === threadA.thread_id ? threadA : threadB, 10)),
+      submitInput,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-a"] button')));
+    (runtime.querySelector('[data-thread-id="thread-a"] button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.textContent?.includes('Answer A') ?? false);
+    const textarea = runtime.querySelector('.flower-composer textarea') as HTMLTextAreaElement;
+    textarea.value = 'A answer';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    await waitFor(() => !(runtime.querySelector('.flower-composer-continue') as HTMLButtonElement).disabled);
+    (runtime.querySelector('.flower-composer-continue') as HTMLButtonElement).click();
+    await waitFor(() => submitInput.mock.calls.length === 1);
+
+    const threadBCard = runtime.querySelector('[data-thread-id="thread-b"]') as HTMLElement;
+    Object.defineProperty(threadBCard, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({ left: 10, top: 10, right: 210, bottom: 60, width: 200, height: 50 }),
+    });
+    const originalElementFromPoint = document.elementFromPoint;
+    const hit = runtime.querySelector('[data-thread-id="thread-b"] button') as HTMLButtonElement;
+    document.elementFromPoint = vi.fn(() => hit);
+    hit.click();
+    await waitFor(() => runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-id') === 'thread-b');
+    expect(document.elementFromPoint(20, 20)).toBe(hit);
+    expect(threadBCard.closest('[inert]')).toBeNull();
+
+    delayedReceipt.resolve(inputAdmissionReceipt(threadA.thread_id, requestA.prompt_id, 'turn-a', 'run-a'));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-id')).toBe('thread-b');
+    expect(runtime.textContent).toContain('Answer B');
+    document.elementFromPoint = originalElementFromPoint;
   });
 });

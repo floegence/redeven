@@ -3970,6 +3970,8 @@
       "inputRequestNext": "下一個問題",
       "inputRequestComposerPlaceholder": "回覆以繼續這段對話。",
       "inputRequestChoicePlaceholder": "選擇一個選項以繼續。",
+      "inputRequestOther": "以上皆非 / 其他",
+      "inputRequestAnswered": "已回答",
       "conversationsAria": "Flower 對話",
       "resizeConversationsLabel": "調整對話列表寬度",
       "entryLabel": "Flower",

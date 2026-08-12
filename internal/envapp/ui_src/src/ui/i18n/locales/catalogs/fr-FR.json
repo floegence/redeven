@@ -3970,6 +3970,8 @@
       "inputRequestNext": "Question suivante",
       "inputRequestComposerPlaceholder": "Répondez pour continuer cette conversation.",
       "inputRequestChoicePlaceholder": "Choisissez une option pour continuer.",
+      "inputRequestOther": "Aucune de ces réponses / Autre",
+      "inputRequestAnswered": "Réponse envoyée",
       "conversationsAria": "Conversations Flower",
       "resizeConversationsLabel": "Redimensionner la liste des conversations",
       "entryLabel": "Flower",

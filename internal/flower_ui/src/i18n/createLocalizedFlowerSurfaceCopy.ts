@@ -206,6 +206,8 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       inputRequestSubmitting: t(i18n, k('chat.inputRequestSubmitting')),
       inputRequestComposerPlaceholder: t(i18n, k('chat.inputRequestComposerPlaceholder')),
       inputRequestChoicePlaceholder: t(i18n, k('chat.inputRequestChoicePlaceholder')),
+      inputRequestOther: t(i18n, k('chat.inputRequestOther')),
+      inputRequestAnswered: t(i18n, k('chat.inputRequestAnswered')),
       modelStatus: {
         preparing: t(i18n, k('chat.modelStatusPreparing')),
         waitingResponse: t(i18n, k('chat.modelStatusWaitingResponse')),

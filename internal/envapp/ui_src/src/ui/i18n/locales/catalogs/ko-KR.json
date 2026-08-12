@@ -3970,6 +3970,8 @@
       "inputRequestNext": "다음 질문",
       "inputRequestComposerPlaceholder": "답장해서 이 대화를 계속하세요.",
       "inputRequestChoicePlaceholder": "계속할 옵션을 선택하세요.",
+      "inputRequestOther": "위 항목에 없음 / 기타",
+      "inputRequestAnswered": "답변 완료",
       "conversationsAria": "Flower 대화",
       "resizeConversationsLabel": "대화 목록 너비 조정",
       "entryLabel": "Flower",
