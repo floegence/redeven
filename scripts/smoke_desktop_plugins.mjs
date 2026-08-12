@@ -55,6 +55,10 @@ export function assessPluginSmoke({ refresh, catalog, panelInstalledCount, surfa
   return { ok: true, refresh, catalogEnabledCount, panelInstalledCount, surface, rpc };
 }
 
+export function browserPages(browser) {
+  return browser.contexts().flatMap((context) => context.pages());
+}
+
 async function waitFor(check, timeoutMS, label) {
   const deadline = Date.now() + timeoutMS;
   let lastError;
@@ -173,14 +177,13 @@ async function runConnectedBrowserSmoke(config, browser, startedAt) {
     }, null, 2));
   };
   try {
-  const context = browser.contexts()[0];
-  if (!context) throw new Error('Desktop CDP context is unavailable');
+  if (browser.contexts().length === 0) throw new Error('Desktop CDP context is unavailable');
   const initialPage = await waitFor(
-    () => context.pages().find((candidate) => !candidate.url().startsWith('devtools://') && candidate.url() !== 'about:blank'),
+    () => browserPages(browser).find((candidate) => !candidate.url().startsWith('devtools://') && candidate.url() !== 'about:blank'),
     30_000,
     'Desktop page',
   );
-  const existingEnvPage = await Promise.any(context.pages().map(async (candidate) => (
+  const existingEnvPage = await Promise.any(browserPages(browser).map(async (candidate) => (
     await candidate.locator('#redeven-plugin-switcher').count() ? candidate : Promise.reject()
   ))).catch(() => null);
   if (!existingEnvPage) {
@@ -197,7 +200,7 @@ async function runConnectedBrowserSmoke(config, browser, startedAt) {
   let page;
   try {
     page = await waitFor(async () => {
-      for (const candidate of context.pages()) {
+      for (const candidate of browserPages(browser)) {
         if (await candidate.locator('#redeven-plugin-switcher').count()) return candidate;
       }
       return null;

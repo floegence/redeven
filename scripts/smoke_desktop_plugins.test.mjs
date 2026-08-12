@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   assertIsolatedSmokeConfiguration,
   assessPluginSmoke,
+  browserPages,
 } from './smoke_desktop_plugins.mjs';
 
 test('isolated smoke configuration rejects shared Desktop paths and ports', () => {
@@ -88,4 +89,16 @@ test('Desktop smoke records close button, Escape, backdrop, and final reopen evi
   assert.match(source, /panelDismissal\.escape/u);
   assert.match(source, /panelDismissal\.backdrop/u);
   assert.match(source, /panelDismissal\.final_reopen/u);
+});
+
+test('Desktop smoke discovers Electron windows across every CDP browser context', () => {
+  const welcome = { id: 'welcome' };
+  const environment = { id: 'environment' };
+  const browser = {
+    contexts: () => [
+      { pages: () => [welcome] },
+      { pages: () => [environment] },
+    ],
+  };
+  assert.deepEqual(browserPages(browser), [welcome, environment]);
 });
