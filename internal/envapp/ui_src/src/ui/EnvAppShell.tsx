@@ -4870,8 +4870,7 @@ export function EnvAppShell() {
           ]}
         />
       </div>
-      <Show when={pluginsPanelOpen()}>
-        <PluginPanel
+      <PluginPanel
           id="redeven-plugin-switcher"
           open
           mobile={layout.isMobile()}
@@ -4888,8 +4887,7 @@ export function EnvAppShell() {
           onDropPlugin={(target) => void openPluginSurface(target).catch(reportPluginNavigationFailure)}
           externalDockDragController={externalDockDragController()}
           onPinPlugin={pinPlugin}
-        />
-      </Show>
+      />
       <Show when={layout.isMobile() && viewMode() === 'activity' && canUseFlower()}>
         <div
           class="flower-activity-mobile-companion-rail"
