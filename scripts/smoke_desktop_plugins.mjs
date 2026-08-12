@@ -315,7 +315,9 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
     throw error;
   }
   if (bootstrap.performed) {
-    await page.locator('[data-activity-id="monitor"]').filter({ visible: true }).first().click();
+    const closeCenter = page.locator('[data-plugin-center-toolbar-primary] button[aria-label]').last();
+    await closeCenter.click();
+    await page.locator('[data-plugin-center-view]').waitFor({ state: 'detached', timeout: 10_000 });
     const activityPluginTrigger = page.locator('[aria-controls="redeven-plugin-switcher"]').filter({ visible: true }).first();
     await activityPluginTrigger.waitFor({ state: 'visible', timeout: 10_000 });
     await activityPluginTrigger.click();
