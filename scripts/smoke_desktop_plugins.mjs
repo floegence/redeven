@@ -126,9 +126,7 @@ async function runConnectedBrowserSmoke(config, browser, startedAt) {
     await candidate.locator('#redeven-plugin-switcher').count() ? candidate : Promise.reject()
   ))).catch(() => null);
   if (!existingEnvPage) {
-    const environmentCard = initialPage.locator('.redeven-environment-card').filter({ hasText: 'Local Environment' }).first();
-    await environmentCard.waitFor({ state: 'visible', timeout: 30_000 });
-    const open = environmentCard.getByRole('button', { name: /^(?:Open|打开)$/u }).first();
+    const open = initialPage.getByRole('button', { name: /^(?:Open|打开)$/u }).last();
     await open.waitFor({ state: 'visible', timeout: 30_000 });
     await open.click();
   }
