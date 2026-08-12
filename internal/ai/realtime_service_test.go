@@ -1672,6 +1672,46 @@ func TestFlowerLiveMaterializedStatePrunesTerminalRuns(t *testing.T) {
 	}
 }
 
+func TestFlowerLiveBootstrapCanonicalTerminalStateOverridesStaleLiveFailure(t *testing.T) {
+	t.Parallel()
+
+	state := FlowerLiveMaterializedState{
+		ThreadPatch: FlowerLiveThreadPatch{
+			ActiveRunID:   "run_control_error",
+			RunStatus:     string(RunStateFailed),
+			RunErrorCode:  runErrorCodeFloretEngineFailed,
+			RunError:      userFacingRunError(runErrorCodeFloretEngineFailed, ""),
+			WaitingPrompt: &RequestUserInputPrompt{PromptID: "stale_prompt"},
+		},
+		Runs: map[string]FlowerLiveRunState{
+			"run_control_error": {
+				RunID:     "run_control_error",
+				Status:    string(RunStateFailed),
+				ErrorCode: runErrorCodeFloretEngineFailed,
+				Error:     userFacingRunError(runErrorCodeFloretEngineFailed, ""),
+			},
+		},
+		ModelIO: &FlowerModelIOStatus{RunID: "run_control_error", Phase: FlowerModelIOPhaseStreaming},
+	}
+	thread := ThreadView{
+		ThreadID:     "thread_control_error",
+		RunStatus:    string(RunStateFailed),
+		RunErrorCode: string(flruntime.ThreadTurnFailureControlError),
+		RunError:     "invalid ask_user control signal: interaction_shape_mismatch",
+	}
+
+	reconcileFlowerLiveBootstrapCanonicalTerminal(&state, thread)
+
+	if state.ThreadPatch.RunStatus != string(RunStateFailed) ||
+		state.ThreadPatch.RunErrorCode != string(flruntime.ThreadTurnFailureControlError) ||
+		state.ThreadPatch.RunError != thread.RunError {
+		t.Fatalf("thread patch did not adopt canonical control failure: %#v", state.ThreadPatch)
+	}
+	if state.ThreadPatch.WaitingPrompt != nil || state.ModelIO != nil || len(state.Runs) != 0 {
+		t.Fatalf("canonical terminal reconciliation retained transient run state: %#v", state)
+	}
+}
+
 func TestFlowerLiveTerminalRunStatusSettlesMaterializedState(t *testing.T) {
 	t.Parallel()
 

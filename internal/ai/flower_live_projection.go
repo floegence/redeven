@@ -185,6 +185,7 @@ func (s *Service) GetFlowerThreadLiveBootstrap(ctx context.Context, meta *sessio
 		state.ApprovalQueue = cloneFlowerApprovalQueue(stream.State.ApprovalQueue)
 	}
 	s.mu.Unlock()
+	reconcileFlowerLiveBootstrapCanonicalTerminal(&state, thread)
 
 	return &FlowerLiveBootstrapResponse{
 		SchemaVersion:    FlowerLiveSchemaVersion,
@@ -198,6 +199,21 @@ func (s *Service) GetFlowerThreadLiveBootstrap(ctx context.Context, meta *sessio
 		LiveState:        state,
 		GeneratedAtMs:    time.Now().UnixMilli(),
 	}, nil
+}
+
+func reconcileFlowerLiveBootstrapCanonicalTerminal(state *FlowerLiveMaterializedState, thread ThreadView) {
+	if state == nil || !flowerLiveRunStatusIsTerminal(thread.RunStatus) {
+		return
+	}
+	state.ThreadPatch.ActiveRunID = ""
+	state.ThreadPatch.RunStatus = strings.TrimSpace(thread.RunStatus)
+	state.ThreadPatch.RunErrorCode = strings.TrimSpace(thread.RunErrorCode)
+	state.ThreadPatch.RunError = strings.TrimSpace(thread.RunError)
+	state.ThreadPatch.RunUpdatedAtUnixMs = thread.RunUpdatedAtUnixMs
+	state.ThreadPatch.WaitingPrompt = nil
+	state.Runs = map[string]FlowerLiveRunState{}
+	state.ModelIO = nil
+	state.InputRequests = map[string]RequestUserInputPrompt{}
 }
 
 func (s *Service) ListFlowerThreadLiveEvents(ctx context.Context, meta *session.Meta, threadID string, afterSeq int64, limit int) (*FlowerLiveEventsResponse, error) {
