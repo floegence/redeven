@@ -64,7 +64,7 @@ export function createPluginLifecycleAPI(
     } else if (catalogSeed !== undefined) {
       catalog = catalogSeed;
     }
-    const [permissionsResult, securityPoliciesResult, permissionRequirementResults] = installedPlugins.length === 0
+    const [permissionsResult, securityPoliciesResult, permissionRequirementResults] = installedPlugins.length > 0
       ? await Promise.all([
       withAbortTimeout(
         (signal) => client.listPermissions({ active_only: true }, { ...options, signal }),
@@ -99,7 +99,7 @@ export function createPluginLifecycleAPI(
       : [
           { status: 'fulfilled' as const, value: { permissions: [] } },
           { status: 'fulfilled' as const, value: { security_policies: [] } },
-          installedPlugins.map(() => ({ status: 'rejected' as const, reason: new Error('supplemental plugin metadata deferred') })),
+          [],
         ] as const;
     const permissionRequirements = permissionRequirementResults.flatMap((result) => (
       result.status === 'fulfilled' ? [result.value] : []

@@ -22,8 +22,8 @@ const officialContainers = OFFICIAL_PLUGIN_CATALOG_SEED[0];
 function createClientHarness() {
   const mocks = {
     catalog: vi.fn(async (): Promise<{ plugins: ReDevPluginRecord[] }> => ({ plugins: [] })),
-    listPermissions: vi.fn(async () => ({ permissions: [] })),
-    listSecurityPolicies: vi.fn(async () => ({ security_policies: [] })),
+    listPermissions: vi.fn(async (): ReturnType<PluginPlatformClient['listPermissions']> => ({ permissions: [] })),
+    listSecurityPolicies: vi.fn(async (): ReturnType<PluginPlatformClient['listSecurityPolicies']> => ({ security_policies: [] })),
     installReleaseRef: vi.fn(async () => ({})),
     startReleaseInstallOperation: vi.fn(async () => releaseInstallOperation()),
     listReleaseInstallOperations: vi.fn(async (): Promise<{
@@ -42,8 +42,11 @@ function createClientHarness() {
     uninstallPlugin: vi.fn(async () => ({})),
     grantPermission: vi.fn(async () => ({})),
     revokePermission: vi.fn(async () => ({})),
-    getPermissionRequirements: vi.fn(async ({ plugin_instance_id }: { plugin_instance_id: string }) => ({
+    getPermissionRequirements: vi.fn(async ({ plugin_instance_id }: { plugin_instance_id: string }): ReturnType<PluginPlatformClient['getPermissionRequirements']> => ({
       plugin_instance_id,
+      plugin_version: OFFICIAL_CONTAINERS_RELEASE_REF.version,
+      active_fingerprint: OFFICIAL_CONTAINERS_RELEASE_REF.expected_hashes.package_sha256,
+      management_revision: 23,
       required_permissions: [],
       contracts: [],
     })),
@@ -146,6 +149,62 @@ describe('v0.7.26 plugin lifecycle client integration', () => {
     expect(installed?.lifecycleState).not.toBe('not_installed');
   });
 
+  it('keeps a verified enabled plugin launchable when supplemental metadata is deferred', async () => {
+    const { mocks, lifecycle } = createClientHarness();
+    mocks.catalog.mockResolvedValue({
+      plugins: [{
+        ...generatedContainersRecord,
+        trust_state: 'verified',
+        trust_assessment: {
+          ...generatedContainersRecord.trust_assessment,
+          trust_state: 'verified',
+        },
+      }],
+    });
+    mocks.listPermissions.mockResolvedValue({
+      permissions: [{
+        plugin_instance_id: generatedContainersInstanceID,
+        permission_id: 'containers.read',
+        effect: 'grant',
+        granted_at: '2026-08-12T16:13:36Z',
+      }],
+    });
+    mocks.listSecurityPolicies.mockResolvedValue({
+      security_policies: [{
+        plugin_instance_id: generatedContainersInstanceID,
+        allowed_permissions: ['containers.read'],
+        denied_methods: [],
+        policy_revision: 3,
+        management_revision: 23,
+        revoke_epoch: 0,
+        updated_at: '2026-08-12T16:13:36Z',
+      }],
+    });
+    mocks.getPermissionRequirements.mockResolvedValue({
+      plugin_instance_id: generatedContainersInstanceID,
+      plugin_version: OFFICIAL_CONTAINERS_RELEASE_REF.version,
+      active_fingerprint: OFFICIAL_CONTAINERS_RELEASE_REF.expected_hashes.package_sha256,
+      management_revision: 23,
+      required_permissions: ['containers.read'],
+      contracts: [],
+    });
+
+    const projection = await lifecycle.loadInventoryProjection();
+    expect(projection.items).toEqual([
+      expect.objectContaining({
+        pluginInstanceID: generatedContainersInstanceID,
+        lifecycleState: 'enabled',
+        defaultLaunchTarget: expect.objectContaining({
+          pluginInstanceID: generatedContainersInstanceID,
+          surfaceID: officialContainers.defaultSurfaceID,
+        }),
+      }),
+    ]);
+    expect(mocks.listPermissions).toHaveBeenCalledOnce();
+    expect(mocks.listSecurityPolicies).toHaveBeenCalledOnce();
+    expect(mocks.getPermissionRequirements).toHaveBeenCalledOnce();
+  });
+
   it('preserves the market detail generation from the local proxy envelope', async () => {
     vi.mocked(fetchLocalApiJSONResponse).mockResolvedValueOnce({
       data: { plugin_id: 'com.example.plugin', presentation: { default_locale: 'en-US', locales: [] } },
@@ -244,7 +303,7 @@ describe('v0.7.26 plugin lifecycle client integration', () => {
     const { lifecycle, mocks } = createClientHarness();
     let releaseCatalog!: () => void;
     mocks.catalog.mockImplementation(() => new Promise((resolve) => {
-      releaseCatalog = () => resolve({ plugins: [] });
+      releaseCatalog = () => resolve({ plugins: [generatedContainersRecord] });
     }));
 
     const loading = lifecycle.loadInventoryProjection();
@@ -262,7 +321,10 @@ describe('v0.7.26 plugin lifecycle client integration', () => {
     expect(mocks.listSecurityPolicies).toHaveBeenCalledWith(
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
-    expect(mocks.getPermissionRequirements).not.toHaveBeenCalled();
+    expect(mocks.getPermissionRequirements).toHaveBeenCalledWith(
+      { plugin_instance_id: generatedContainersInstanceID },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
   });
 
   it('keeps the installed record when permission requirements are unavailable', async () => {
