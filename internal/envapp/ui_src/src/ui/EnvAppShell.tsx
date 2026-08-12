@@ -21,6 +21,7 @@ import {
   X,
 } from '@floegence/floe-webapp-core/icons';
 import { Button } from '@floegence/floe-webapp-core/ui';
+import type { WorkbenchExternalDockDragController, WorkbenchHostDockItem, WorkbenchExternalDockDragItem } from '@floegence/floe-webapp-core/workbench';
 import { Dialog } from './primitives/EnvAppModal';
 import { CodexNavigationIcon } from './icons/CodexIcon';
 import {
@@ -78,6 +79,7 @@ import type { ContextActionExecutionContext } from './contextActions/protocol';
 import { createFlowerLinkedContextNavigation } from './flower/linkedContextNavigation';
 import { createAIReadinessController } from './flower/aiReadiness';
 import { buildPluginPanelModel } from './plugins/pluginInventoryProjection';
+import { addPluginDockPin, loadPluginDockPins, pluginDockPinsStorageKey, savePluginDockPins } from './plugins/pluginDockPins';
 import { createPluginLifecycleAPI } from './plugins/pluginApi';
 import {
   createPluginInstallCoordinator,
@@ -95,9 +97,11 @@ import type {
   ExternalPluginCommitResult,
   ExternalPluginInspection,
   PluginInventoryProjection,
+  PluginPanelModel,
   PluginLifecycleCommand,
   PluginSurfaceLaunchTarget,
 } from './plugins/pluginTypes';
+import { PluginIcon } from './plugins/PluginPresentationPrimitives';
 import type { WorkbenchPluginSurfaceController } from './workbench/WorkbenchPluginSurfaceContext';
 import {
   MAX_ACTIVITY_PLUGIN_WINDOWS,
@@ -1068,6 +1072,25 @@ export function EnvAppShell() {
   const [pluginsPanelOpen, setPluginsPanelOpen] = createSignal(false);
   const [pluginsPanelTrigger, setPluginsPanelTrigger] = createSignal<HTMLButtonElement | null>(null);
   const [pluginsPanelPlacement, setPluginsPanelPlacement] = createSignal<'activity' | 'workbench'>('activity');
+  const [externalDockDragController, setExternalDockDragController] = createSignal<WorkbenchExternalDockDragController | null>(null);
+  const pluginDockPinsKey = createMemo(() => pluginDockPinsStorageKey(String(envId() ?? 'default')));
+  const [pluginDockPins, setPluginDockPins] = createSignal<string[]>([]);
+  createEffect(() => setPluginDockPins(loadPluginDockPins(pluginDockPinsKey())));
+  const pinPlugin = (inventoryKey: string) => {
+    const next = addPluginDockPin(pluginDockPins(), inventoryKey);
+    setPluginDockPins(next);
+    savePluginDockPins(pluginDockPinsKey(), next);
+  };
+  const pluginDockItems = createMemo<readonly WorkbenchHostDockItem[]>(() => pluginDockPins()
+    .map((inventoryKey) => pluginPanelModel().tiles.find((tile) => tile.kind === 'plugin' && tile.item.inventoryKey === inventoryKey))
+    .filter((tile): tile is Extract<PluginPanelModel['tiles'][number], { kind: 'plugin' }> => Boolean(tile))
+    .map((tile) => ({
+      id: tile.item.inventoryKey,
+      label: tile.item.displayName,
+      icon: (iconProps) => <PluginIcon item={tile.item} size="dock" class={iconProps.class} />,
+      active: false,
+      onActivate: () => tile.item.defaultLaunchTarget && void openPluginSurface({ ...tile.item.defaultLaunchTarget, preferredPlacement: 'workbench' }).catch(reportPluginNavigationFailure),
+    })));
   const [pluginCenterSelectedInventoryKey, setPluginCenterSelectedInventoryKey] = createSignal<string | undefined>();
   const [pluginCenterFocusRequest, setPluginCenterFocusRequest] = createSignal(0);
   const [activityPluginWindows, setActivityPluginWindows] = createSignal<readonly ActivityPluginWindow[]>([]);
@@ -4767,6 +4790,9 @@ export function EnvAppShell() {
       >
         <Show when={!accessGateVisible() || recoveryVisible()}>
           <EnvWorkbenchPage
+            dockItems={pluginDockItems()}
+            registerExternalDockDragController={setExternalDockDragController}
+            onExternalDockDrop={(item: WorkbenchExternalDockDragItem) => pinPlugin(item.id)}
             dockActions={[{
               id: 'plugins',
               label: i18n.t('uiCopy.plugin.panelTitle'),
@@ -4860,6 +4886,8 @@ export function EnvAppShell() {
             preferredPlacement: pluginsPanelPlacement() === 'workbench' ? 'workbench' : target.preferredPlacement,
           }).catch(reportPluginNavigationFailure)}
           onDropPlugin={(target) => void openPluginSurface(target).catch(reportPluginNavigationFailure)}
+          externalDockDragController={externalDockDragController()}
+          onPinPlugin={pinPlugin}
         />
       </Show>
       <Show when={layout.isMobile() && viewMode() === 'activity' && canUseFlower()}>

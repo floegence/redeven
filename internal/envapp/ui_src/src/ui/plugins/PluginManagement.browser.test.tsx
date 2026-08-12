@@ -650,7 +650,7 @@ describe('plugin management browser geometry and interaction', () => {
       expect(Math.abs(dialog.getBoundingClientRect().left + dialog.getBoundingClientRect().width / 2 - viewport.width / 2)).toBeLessThan(2);
       expect(mounted.host.inert).toBe(true);
 
-      const lastAction = dialog.querySelector<HTMLButtonElement>('[data-plugin-panel-tile="plugin-center"]')!;
+      const lastAction = dialog.querySelector<HTMLButtonElement>('[data-plugin-center-market-action]')!;
       lastAction.focus();
       await userEvent.tab();
       expect(dialog.contains(document.activeElement)).toBe(true);
@@ -672,7 +672,7 @@ describe('plugin management browser geometry and interaction', () => {
     expect(actions.length).toBeGreaterThanOrEqual(4);
     actions.forEach(expectTouchTarget);
 
-    const lastAction = dialog.querySelector<HTMLButtonElement>('[data-plugin-panel-tile="plugin-center"]')!;
+    const lastAction = dialog.querySelector<HTMLButtonElement>('[data-plugin-center-market-action]')!;
     lastAction.focus();
     await userEvent.tab();
     expect(dialog.contains(document.activeElement)).toBe(true);
@@ -688,18 +688,17 @@ describe('plugin management browser geometry and interaction', () => {
     await new Promise<void>((resolve) => window.setTimeout(resolve, 220));
 
     const tile = document.querySelector<HTMLElement>('[data-plugin-panel-tile="instance:containers"]')!;
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
     const badge = tile.querySelector<HTMLElement>('[data-plugin-update-badge]')!;
-    const menu = document.querySelector<HTMLElement>('[data-plugin-panel-tile-menu="instance:containers"]')!;
     const tileRect = tile.getBoundingClientRect();
     const badgeRect = badge.getBoundingClientRect();
-    const menuRect = menu.getBoundingClientRect();
 
     expect(badge.textContent).toBe('New');
     expect(badgeRect.width).toBeGreaterThanOrEqual(28);
     expect(badgeRect.height).toBeGreaterThanOrEqual(16);
     expect(badgeRect.left).toBeGreaterThanOrEqual(tileRect.left);
     expect(badgeRect.right).toBeLessThanOrEqual(tileRect.right);
-    expect(badgeRect.right <= menuRect.left || badgeRect.left >= menuRect.right).toBe(true);
+    expect(dialog.querySelector('[data-plugin-panel-tile-menu]')).toBeNull();
     await expectScreenshotHasPixelVariance();
   });
 

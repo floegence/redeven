@@ -3,6 +3,9 @@ import {
   sanitizeWorkbenchState,
   type WorkbenchContextMenuItem,
   type WorkbenchDockAction,
+  type WorkbenchExternalDockDragController,
+  type WorkbenchExternalDockDragItem,
+  type WorkbenchHostDockItem,
   type WorkbenchDockItemActivation,
   type WorkbenchState,
   type WorkbenchWidgetDefinition,
@@ -704,6 +707,9 @@ export type EnvWorkbenchPageProps = Readonly<{
   registerPluginSurfaceController?: (controller: WorkbenchPluginSurfaceController | null) => void;
   onDockItemClick?: (item: WorkbenchDockItemActivation) => boolean | void;
   dockActions?: readonly WorkbenchDockAction[];
+  dockItems?: readonly WorkbenchHostDockItem[];
+  registerExternalDockDragController?: (controller: WorkbenchExternalDockDragController | null) => void;
+  onExternalDockDrop?: (item: WorkbenchExternalDockDragItem) => void;
 }>;
 
 export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
@@ -2947,6 +2953,9 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
             onApiReady={setSurfaceApi}
             onDockItemClick={props.onDockItemClick}
             dockActions={props.dockActions}
+            dockItems={props.dockItems}
+            registerExternalDockDragController={props.registerExternalDockDragController}
+            onExternalDockDrop={props.onExternalDockDrop}
             onRequestDelete={requestWidgetRemoval}
             onLayoutInteractionStart={beginSurfaceLayoutInteraction}
             onLayoutInteractionEnd={endSurfaceLayoutInteraction}

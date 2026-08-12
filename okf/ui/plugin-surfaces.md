@@ -39,12 +39,14 @@ declared default surface directly; plugins that cannot launch fall back to
 their exact management detail by `inventoryKey`.
 Escape clears search before closing, focus is trapped and restored, background
 content is inert, and arrow/Home/End navigation remains within the visible grid.
-Each plugin is a semantic list item containing a native primary button. Its
-secondary menu exposes only real Activity, Workbench, and exact management
-actions supported by that item. The menu is reachable through its button,
-right-click, the `ContextMenu` key, and `Shift+F10`; touch does not depend on a
-long-press gesture. Menu layout and hit targets do not overlap the primary
-launch button. Absent product mutation APIs are not simulated.
+Each plugin is a semantic list item containing a native primary button. The
+compact launcher header exposes one market icon action for Plugin Center;
+plugin tiles do not render an overflow menu. In Workbench placement, installed
+tiles use the released Floe Webapp external Dock drag session and can be pinned
+as an additional Dock projection without removing the inventory item. Pin
+persistence is renderer- and environment-scoped, versioned, ordered,
+idempotent, and malformed or future state fails closed. Absent product mutation
+APIs are not simulated.
 Plugin Center remains a dedicated Activity surface with a separate Launcher
 entry and uses the same category/search projection. Its local filters combine
 source (official catalog or external), trust, and lifecycle without rebuilding

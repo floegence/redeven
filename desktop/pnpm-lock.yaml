@@ -1,7 +1,7 @@
 lockfileVersion: '9.0'
 
 settings:
-  autoInstallPeers: false
+  autoInstallPeers: true
   excludeLinksFromLockfile: false
 
 overrides:
@@ -30,11 +30,11 @@ importers:
   .:
     dependencies:
       '@floegence/floe-webapp-boot':
-        specifier: 0.40.14
-        version: 0.40.14
+        specifier: 0.40.16
+        version: 0.40.16
       '@floegence/floe-webapp-core':
-        specifier: 0.40.14
-        version: 0.40.14(solid-js@1.9.13)
+        specifier: 0.40.16
+        version: 0.40.16(solid-js@1.9.13)
       '@floegence/flowersec-core':
         specifier: 2.3.6
         version: 2.3.6
@@ -516,12 +516,12 @@ packages:
     resolution: {integrity: sha512-jBXB9TC7ItzhzXdSRSR8MbzvfdnQ7vuHiL4LFn2LGDc2nSsVdA9NWE1Zrf+XekbPlwK/K2trwXnQp6jOcw0OuA==}
     engines: {node: '>=20'}
 
-  '@floegence/floe-webapp-boot@0.40.14':
-    resolution: {integrity: sha512-xXFCGfKWbK1ZFzevEr4/oQTzRi16j16FS5PJdKNfk7//KRdDjGZptJs72xE55UH/022Ba2tFyKZZi1VM4001rQ==}
+  '@floegence/floe-webapp-boot@0.40.16':
+    resolution: {integrity: sha512-RQRVG8B1CxijMPBWk692V7hbsHE7jujMVZsLtcBF0DFko+vZb2v+G62wcHd8PVqs5NKBN3bLB5T1POMVNyEzrw==}
     engines: {node: '>=24.0.0'}
 
-  '@floegence/floe-webapp-core@0.40.14':
-    resolution: {integrity: sha512-2O6ZGBtd61HA4fluavKA7VAU6gOJc1uYEvQTnS1PAXPFY86UOj6vTE+dL064zhjTUfaZ5uNQs44cIFarfTParA==}
+  '@floegence/floe-webapp-core@0.40.16':
+    resolution: {integrity: sha512-T8JJQ+8N4Q30Ulv0i6Q9RLSg/XUO63C5aIG/6jrVNDupbpso7z9FM3A9SB/Kp7kBT6Dlp3gY58hNuRQV7/ABIQ==}
     engines: {node: '>=24.0.0'}
     peerDependencies:
       solid-js: ^1.8.0
@@ -3634,7 +3634,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@floegence/floe-webapp-boot@0.40.14':
+  '@floegence/floe-webapp-boot@0.40.16':
     dependencies:
       '@floegence/flowersec-core': 2.3.6
     transitivePeerDependencies:
@@ -3642,7 +3642,7 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@floegence/floe-webapp-core@0.40.14(solid-js@1.9.13)':
+  '@floegence/floe-webapp-core@0.40.16(solid-js@1.9.13)':
     dependencies:
       clsx: 2.1.1
       diff: 8.0.4

@@ -8,6 +8,9 @@ import {
   type WorkbenchContextMenuItemsResolver,
   type WorkbenchDockAction,
   type WorkbenchDockItemActivation,
+  type WorkbenchExternalDockDragController,
+  type WorkbenchExternalDockDragItem,
+  type WorkbenchHostDockItem,
   type WorkbenchSurfaceApi,
   type WorkbenchState,
   type WorkbenchTextAnnotationDefaults,
@@ -98,6 +101,9 @@ export interface RedevenWorkbenchSurfaceProps {
   onRequestDelete?: (widgetId: string) => void;
   onDockItemClick?: (item: WorkbenchDockItemActivation) => boolean | void;
   dockActions?: readonly WorkbenchDockAction[];
+  dockItems?: readonly WorkbenchHostDockItem[];
+  registerExternalDockDragController?: (controller: WorkbenchExternalDockDragController | null) => void;
+  onExternalDockDrop?: (item: WorkbenchExternalDockDragItem) => void;
   onLayoutInteractionStart?: (kind?: WorkbenchTerminalInteractionKind) => void;
   onLayoutInteractionEnd?: (kind?: WorkbenchTerminalInteractionKind) => void;
   onViewportInteractionPulse?: () => void;
@@ -552,6 +558,9 @@ export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
         onRequestDelete={props.onRequestDelete}
         onDockItemClick={props.onDockItemClick}
         dockActions={props.dockActions}
+        dockItems={props.dockItems}
+        registerExternalDockDragController={props.registerExternalDockDragController}
+        onExternalDockDrop={props.onExternalDockDrop}
         onLayoutInteractionStart={props.onLayoutInteractionStart}
         onLayoutInteractionEnd={props.onLayoutInteractionEnd}
         widgetActivationMode={props.widgetActivationMode}
