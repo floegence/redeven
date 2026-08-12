@@ -3652,26 +3652,32 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     reason: LiveBootstrapApplyReason = 'background_refresh',
     expectedRunID = '',
   ): FlowerThreadSnapshot => {
-    const thread = projectFlowerLiveBootstrap(live);
+    const projectedThread = projectFlowerLiveBootstrap(live);
+    const previousThread = threads().find((item) => item.thread_id === projectedThread.thread_id);
+    // A bootstrap with messages=[] is a summary/read-after-admission boundary,
+    // not an instruction to erase detail already rendered for this thread.
+    // Keep the loaded timeline while newer waiting/terminal state converges.
+    const thread = projectedThread.messages.length === 0 && (previousThread?.messages.length ?? 0) > 0
+      ? { ...projectedThread, messages: previousThread!.messages }
+      : projectedThread;
     if (retiredThreadIDs.has(trimString(thread.thread_id))) {
       return threads().find((item) => item.thread_id === thread.thread_id) ?? thread;
     }
     if (!liveBootstrapIsCurrent(live, reason, expectedRunID)) {
       return threads().find((item) => item.thread_id === thread.thread_id) ?? thread;
     }
-    const previous = threads().find((item) => item.thread_id === thread.thread_id);
+    const previous = previousThread;
     setLivePosition(thread.thread_id, live.stream_generation, live.cursor);
     upsertThread(thread);
     rememberThreadDetail(thread.thread_id);
     setConsumedInputAdmissions((current) => {
       const admission = current[thread.thread_id];
       if (!admission) return current;
-      const canonicalPromptID = trimString(visibleInputRequest(thread)?.prompt_id);
       const canonicalHasAdmission = thread.messages.some((message) => (
         trimString(message.turn_id) === trimString(admission.turnID)
         && message.role === 'user'
       ));
-      if (!canonicalHasAdmission && canonicalPromptID === admission.promptID) return current;
+      if (!canonicalHasAdmission) return current;
       const next = { ...current };
       delete next[thread.thread_id];
       return next;
@@ -4156,12 +4162,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const detailWarm = Boolean(existing && loadedThreadIDs.has(tid));
     transcriptScroll.startFollowing();
     beginSelectedThreadTailReveal(tid, sequence);
+    // Commit the rail selection immediately. When detail is not cached, keep
+    // the previous detail selected as a read-only fallback until B's
+    // bootstrap arrives; changing the detail ID early would blank the
+    // transcript while the request is pending. The sequence fence below
+    // prevents a late A response from committing over B.
+    setSelectedThreadID(tid);
     if (detailAvailable) {
-      setSelectedThreadWithDetail(tid);
-      scheduleThreadSelectionContentPresented(tid);
-    } else {
-      setSelectedThreadID(tid);
+      setSelectedThreadDetailID(tid);
       setSidebarActiveThreadID(tid);
+      scheduleThreadSelectionContentPresented(tid);
     }
     scheduleSelectedThreadTailReveal(tid, sequence);
     setThreadLoadError('');
@@ -10849,7 +10859,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         aria-label={props.companionCopy?.label}
         aria-haspopup="listbox"
         aria-expanded={threadSwitcherOpen()}
-        onClick={() => setThreadSwitcherOpen((open) => !open)}
+        onClick={() => {
+          if (companionCollapsed()) {
+            props.onCompanionOpenRequest?.();
+            setThreadSwitcherOpen(true);
+            return;
+          }
+          setThreadSwitcherOpen((open) => !open);
+        }}
       >
         <FlowerIcon class="h-4 w-4 shrink-0 text-primary" />
         <span class="truncate">{selectedThread()?.title || copy().chat.titleFallback}</span>
@@ -10899,7 +10916,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               </div>
             )}
           >
-            {companionHeaderIdentity()}
+            <Show when={!companionCollapsed()}>{companionHeaderIdentity()}</Show>
           </Show>
           <div class="flower-chat-header-actions">
             <Show when={presentation() === 'companion'}>
@@ -11125,6 +11142,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     )}
                     aria-hidden="true"
                   />
+                </Show>
+                <Show when={companionCollapsed() && props.companionCopy}>
+                  <div class="flower-companion-collapsed-thread-switcher">
+                    {companionHeaderIdentity()}
+                  </div>
                 </Show>
                 <Show when={companionActionVisible()}>
                   <button
