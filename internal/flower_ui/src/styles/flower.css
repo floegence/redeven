@@ -2572,15 +2572,6 @@ html.dark .flower-component-shell {
     white-space: normal;
   }
 
-  .flower-composer-approval-actions,
-  .flower-composer-approval-decision {
-    width: 100%;
-  }
-
-  .flower-composer-approval-decision {
-    justify-content: center;
-  }
-
   .flower-model-stack {
     flex: 1 1 auto;
     overflow: visible;
@@ -4579,7 +4570,6 @@ html.dark .flower-component-shell {
 }
 
 .flower-approval-actions button {
-  min-height: 2.75rem;
   cursor: pointer;
 }
 
@@ -4709,6 +4699,10 @@ html.dark .flower-component-shell {
 
 .flower-activity-inline-row-error .flower-activity-inline-icon {
   color: var(--flower-activity-tool-row-error);
+}
+
+.flower-activity-inline-row-error[data-flower-control-error='true'] .flower-activity-inline-icon {
+  color: color-mix(in srgb, var(--muted-foreground) 72%, var(--redeven-status-warning-foreground) 28%);
 }
 
 .flower-activity-inline-row-canceled .flower-activity-inline-icon {
@@ -4985,6 +4979,15 @@ html.dark .flower-component-shell {
   line-height: 1.4;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+}
+
+.flower-activity-inline-row[data-flower-control-error='true'] .flower-activity-error-panel {
+  border-left-color: color-mix(in srgb, var(--muted-foreground) 58%, transparent);
+}
+
+.flower-activity-inline-row[data-flower-control-error='true'] .flower-activity-error-message {
+  color: color-mix(in srgb, var(--foreground) 72%, var(--muted-foreground) 28%);
+  font-weight: 600;
 }
 
 .flower-activity-approval-rejected-detail {
@@ -6557,18 +6560,19 @@ html.dark .flower-component-shell {
   gap: 0.5rem;
 }
 
-.flower-approval-surface .flower-composer-approval-decision {
+.flower-approval-surface .flower-approval-action-pill {
   width: auto;
   min-width: 5.5rem;
-  min-height: 2.25rem;
+  min-height: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  padding-inline: 0.75rem;
+  white-space: nowrap;
 }
 
 .flower-approval-reject-batch {
-  justify-self: end;
-  min-height: 1.75rem;
-  padding-inline: 0.25rem;
+  margin-right: auto;
   color: var(--muted-foreground);
-  font-size: 0.75rem;
 }
 
 .flower-input-request-surface {
@@ -7079,8 +7083,10 @@ button.flower-attachment-preview-trigger:disabled {
 }
 
 .flower-composer-approval-actions {
-  display: inline-grid;
-  grid-template-columns: 2.25rem repeat(2, minmax(5.5rem, 1fr));
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: flex-end;
   min-width: 0;
   gap: 0.5rem;
 }
@@ -7116,14 +7122,38 @@ button.flower-attachment-preview-trigger:disabled {
   border: 0;
 }
 
-.flower-composer-approval-decision {
-  width: 100%;
-  min-height: 2.25rem;
+.flower-approval-surface .flower-composer-approval-decision {
+  width: auto;
+  min-height: 2rem;
+  height: 2rem;
+  border-radius: 999px;
   cursor: pointer;
 }
 
-.flower-composer-approval-decision:disabled {
+.flower-approval-surface .flower-composer-approval-decision:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 62%, transparent);
+}
+
+.flower-approval-surface .flower-composer-approval-decision:disabled {
   cursor: not-allowed;
+}
+
+@media (max-width: 520px) {
+  .flower-approval-surface .flower-composer-approval-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .flower-approval-surface .flower-composer-approval-decision {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .flower-approval-surface .flower-approval-reject-batch {
+    grid-column: 1 / -1;
+    margin-right: 0;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

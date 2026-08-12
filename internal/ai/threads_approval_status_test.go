@@ -95,6 +95,26 @@ func TestThreadViewRunStateRestoresProviderFailureClassification(t *testing.T) {
 	}
 }
 
+func TestThreadViewRunStateMapsCanonicalControlFailure(t *testing.T) {
+	t.Parallel()
+
+	snapshot := flruntime.ThreadSnapshot{Status: flruntime.ThreadStatusFailed}
+	latest := &flruntime.ThreadTurnSnapshot{Failure: &flruntime.ThreadTurnFailure{
+		Code:    flruntime.ThreadTurnFailureControlError,
+		Message: "invalid ask_user control signal: interaction_shape_mismatch",
+	}}
+	status, code, message, err := threadViewRunState(snapshot, latest)
+	if err != nil {
+		t.Fatalf("threadViewRunState: %v", err)
+	}
+	if status != string(RunStateFailed) || code != "control_error" {
+		t.Fatalf("state=(%q, %q), want failed control_error", status, code)
+	}
+	if message != latest.Failure.Message {
+		t.Fatalf("message=%q, want canonical control diagnostic %q", message, latest.Failure.Message)
+	}
+}
+
 func TestGetThreadReturnsConsistencyErrorWhenFloretThreadIsMissing(t *testing.T) {
 	ctx := context.Background()
 	svc := newTestService(t, nil)
