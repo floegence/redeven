@@ -5,6 +5,7 @@ import process from 'node:process';
 import { pathToFileURL } from 'node:url';
 
 const SHARED_PORTS = new Set([23998, 9222, 9230]);
+const PLUGIN_TRIGGER_SELECTOR = '[aria-controls="redeven-plugin-switcher"], [data-workbench-dock-action="plugins"]';
 const require = createRequire(import.meta.url);
 
 export function assertIsolatedSmokeConfiguration(config) {
@@ -261,11 +262,13 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
   phase = 'document_ready';
   await page.waitForLoadState('domcontentloaded');
   mark('document_ready_ms');
-  await waitFor(
-    () => page.locator('[data-activity-id="plugins"], [aria-controls="redeven-plugin-switcher"]').count(),
-    60_000,
-    'Plugin Panel trigger',
-  );
+  try {
+    await waitFor(() => page.locator(PLUGIN_TRIGGER_SELECTOR).count(), 60_000, 'Plugin Panel trigger');
+  } catch (error) {
+    await page.screenshot({ path: path.join(config.reportRoot, `${config.phase}-shell-failure.png`), fullPage: true }).catch(() => {});
+    await fs.writeFile(path.join(config.reportRoot, `${config.phase}-shell-failure.html`), await page.content()).catch(() => {});
+    throw error;
+  }
   mark('shell_ready_ms');
   const sessionHeaders = await waitFor(() => {
     for (const headers of pluginRequestHeaders.values()) {
@@ -274,7 +277,7 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
     return null;
   }, 30_000, 'plugin session credential');
   phase = 'panel_open';
-  const pluginTrigger = page.locator('[data-activity-id="plugins"], [aria-controls="redeven-plugin-switcher"]').first();
+  const pluginTrigger = page.locator(PLUGIN_TRIGGER_SELECTOR).first();
   await pluginTrigger.waitFor({ state: 'visible', timeout: 30_000 });
   await pluginTrigger.click();
   await waitFor(() => page.locator('[data-plugin-launcher-grid]').count(), 10_000, 'Plugin Panel');
