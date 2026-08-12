@@ -514,7 +514,6 @@ func TestStopThreadRetriesCanonicalFinalizationAfterTransientReadFailure(t *test
 		}
 		return exactStoppedThreadOverview(threadID, runID, turnID), nil
 	})
-
 	if response, err := svc.StopThread(context.Background(), meta, threadID); err != nil || !response.OK {
 		t.Fatalf("first StopThread response=%#v err=%v, want accepted cancellation", response, err)
 	}
@@ -783,6 +782,35 @@ func TestStopThreadWithoutActorUsesCanonicalLifecycle(t *testing.T) {
 				t.Fatalf("StopThread response=%#v err=%v, want recovery pending", response, err)
 			}
 		})
+	}
+}
+
+func TestWaitForExactStoppedRunDoesNotRequireAuthorityBarrier(t *testing.T) {
+	svc, _, threadID := newStopThreadStateMachineTestService(t)
+	r := newRun(runOptions{RunID: "run-terminal-no-barrier", EndpointID: "env_stop_state_machine", ThreadID: threadID, TurnID: "turn-terminal-no-barrier"})
+	if err := r.observeFloretCanonicalIdentity("run-terminal-no-barrier", threadID, "turn-terminal-no-barrier"); err != nil {
+		t.Fatalf("observe canonical identity: %v", err)
+	}
+	r.floretAdmitted.Store(true)
+	r.floretRunTurnStarted.Store(true)
+	r.markDone()
+	if got, _ := r.canonicalRunTurnIdentity(); got != "run-terminal-no-barrier" {
+		t.Fatalf("canonical run identity=%q", got)
+	}
+	// Deliberately leave the authority barrier unreleased. Canonical terminal
+	// state is sufficient proof for the simplified command path.
+	key := runThreadKey("env_stop_state_machine", threadID)
+	svc.mu.Lock()
+	svc.runs[r.id] = r
+	svc.activeRunByTh[key] = r.id
+	svc.mu.Unlock()
+	overrideStopThreadOverviewReader(t, svc, func(context.Context, identity.ThreadID, floretThreadReadHost) (flruntime.ThreadOverview, error) {
+		return exactStoppedThreadOverview(threadID, "run-terminal-no-barrier", "turn-terminal-no-barrier"), nil
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel()
+	if _, _, _, err := svc.waitForExactStoppedRunAuthority(ctx, threadID, r); err != nil {
+		t.Fatalf("waitForExactStoppedRunAuthority returned %v with canonical terminal proof", err)
 	}
 }
 
