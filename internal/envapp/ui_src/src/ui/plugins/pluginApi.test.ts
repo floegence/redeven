@@ -184,7 +184,7 @@ describe('v0.7.26 plugin lifecycle client integration', () => {
     expect(loadMarket).toHaveBeenCalledOnce();
   });
 
-  it('keeps installed plugins visible when the market snapshot is unavailable', async () => {
+  it('projects installed plugins without waiting for the market snapshot', async () => {
     const { mocks } = createClientHarness();
     mocks.catalog.mockResolvedValue({ plugins: [generatedContainersRecord] });
     const lifecycle = createPluginLifecycleAPI(
@@ -194,12 +194,34 @@ describe('v0.7.26 plugin lifecycle client integration', () => {
     );
 
     await expect(lifecycle.loadInventoryProjection()).resolves.toMatchObject({
-      marketUnavailable: true,
+      marketUnavailable: false,
       items: [expect.objectContaining({
         pluginInstanceID: generatedContainersInstanceID,
         pluginID: 'com.redeven.official.containers',
       })],
     });
+  });
+
+  it('projects installed plugins without waiting for an unresponsive market snapshot', async () => {
+    vi.useFakeTimers();
+    const { mocks } = createClientHarness();
+    mocks.catalog.mockResolvedValue({ plugins: [generatedContainersRecord] });
+    const lifecycle = createPluginLifecycleAPI(
+      mocks as unknown as PluginPlatformClient,
+      undefined,
+      () => new Promise(() => {}),
+    );
+
+    const loading = lifecycle.loadInventoryProjection();
+    await vi.advanceTimersByTimeAsync(5_000);
+    await expect(loading).resolves.toMatchObject({
+      marketUnavailable: false,
+      items: [expect.objectContaining({
+        pluginInstanceID: generatedContainersInstanceID,
+        pluginID: 'com.redeven.official.containers',
+      })],
+    });
+    vi.useRealTimers();
   });
 
   it('loads inventory exclusively through the platform catalog client', async () => {
@@ -233,8 +255,13 @@ describe('v0.7.26 plugin lifecycle client integration', () => {
     expect(mocks.listSecurityPolicies).not.toHaveBeenCalled();
     releaseCatalog();
     await expect(loading).resolves.toMatchObject({ items: expect.any(Array) });
-    expect(mocks.listPermissions).toHaveBeenCalledWith({ active_only: true }, {});
-    expect(mocks.listSecurityPolicies).toHaveBeenCalledWith({});
+    expect(mocks.listPermissions).toHaveBeenCalledWith(
+      { active_only: true },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(mocks.listSecurityPolicies).toHaveBeenCalledWith(
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
     expect(mocks.getPermissionRequirements).not.toHaveBeenCalled();
   });
 

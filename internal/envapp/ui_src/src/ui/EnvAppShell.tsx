@@ -1194,10 +1194,12 @@ export function EnvAppShell() {
     && (!isLocalMode() || pluginSessionReady())
   );
   const [pluginInventoryError, setPluginInventoryError] = createSignal<unknown>(null);
+  let pluginInventoryEmptyRefetchIssued = false;
+  let pluginInventoryDisposed = false;
+  onCleanup(() => { pluginInventoryDisposed = true; });
   const [pluginInventoryProjection, { refetch: refetchPluginInventory }] = createResource<PluginInventoryProjection, true>(
     pluginInventorySource,
     async (_source, info) => {
-      pluginInventoryAbort?.abort('Plugin inventory request superseded');
       const controller = new AbortController();
       pluginInventoryAbort = controller;
       try {
@@ -1224,6 +1226,20 @@ export function EnvAppShell() {
         || item.officialCatalog?.pluginInstanceID === pluginInstanceID
       ))?.pluginID
     ),
+  });
+  createEffect(() => {
+    if (!pluginInventorySource() || pluginInventoryProjection.loading || pluginInventoryError()) {
+      if (!pluginInventorySource()) pluginInventoryEmptyRefetchIssued = false;
+      return;
+    }
+    const projection = pluginInventoryProjection();
+    if ((projection?.items.length ?? 0) > 0 || pluginInventoryEmptyRefetchIssued) return;
+    pluginInventoryEmptyRefetchIssued = true;
+    queueMicrotask(() => {
+      if (!pluginInventoryDisposed && pluginInventorySource() && !pluginInventoryProjection.loading) {
+        void refetchPluginInventory();
+      }
+    });
   });
   let pluginRuntimeRecoveryClient: unknown = null;
   let pluginRuntimeRecoveryAbort: AbortController | undefined;

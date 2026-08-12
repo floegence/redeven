@@ -22,6 +22,7 @@ import type {
 } from './pluginTypes';
 
 const EXTERNAL_COMMIT_RECONCILIATION_TIMEOUT_MS = 60_000;
+const INVENTORY_MARKET_TIMEOUT_MS = 5_000;
 // Host enable includes worker preflight, data namespace initialization, and
 // surface publication. Keep this bounded, but allow a cold runtime to finish.
 const POST_INSTALL_MUTATION_TIMEOUT_MS = 90_000;
@@ -46,31 +47,60 @@ export function createPluginLifecycleAPI(
 
   const loadInventoryProjection = async (options: PluginRequestOptions = {}): Promise<PluginInventoryProjection> => {
     const installedPluginsPromise = listInstalledPlugins(options);
+    const installedPlugins = await installedPluginsPromise;
     let marketUnavailable = false;
-    if (catalogSeed === undefined) {
+    if (catalogSeed === undefined && installedPlugins.length === 0) {
       try {
-        catalog = officialPluginCatalog(await loadMarket(options.signal));
+        catalog = officialPluginCatalog(await withAbortTimeout(
+          (signal) => loadMarket(signal),
+          options.signal,
+          INVENTORY_MARKET_TIMEOUT_MS,
+          'Loading the plugin market',
+        ));
       } catch {
         catalog = [];
         marketUnavailable = true;
       }
-    } else {
+    } else if (catalogSeed !== undefined) {
       catalog = catalogSeed;
     }
-    const installedPlugins = await installedPluginsPromise;
-    const [permissionsResult, securityPoliciesResult, permissionRequirementResults] = await Promise.all([
-      Promise.resolve(client.listPermissions({ active_only: true }, options)).then(
+    const [permissionsResult, securityPoliciesResult, permissionRequirementResults] = installedPlugins.length === 0
+      ? await Promise.all([
+      withAbortTimeout(
+        (signal) => client.listPermissions({ active_only: true }, { ...options, signal }),
+        options.signal,
+        INVENTORY_MARKET_TIMEOUT_MS,
+        'Loading plugin permissions',
+      ).then(
         (value) => ({ status: 'fulfilled' as const, value }),
         (reason) => ({ status: 'rejected' as const, reason }),
       ),
-      Promise.resolve(client.listSecurityPolicies(options)).then(
+      withAbortTimeout(
+        (signal) => client.listSecurityPolicies({ ...options, signal }),
+        options.signal,
+        INVENTORY_MARKET_TIMEOUT_MS,
+        'Loading plugin security policies',
+      ).then(
         (value) => ({ status: 'fulfilled' as const, value }),
         (reason) => ({ status: 'rejected' as const, reason }),
       ),
-      Promise.allSettled(installedPlugins.map((plugin) => client.getPermissionRequirements({
-        plugin_instance_id: plugin.plugin_instance_id,
-      }, options))),
-    ]);
+      Promise.all(installedPlugins.map((plugin) => withAbortTimeout(
+        (signal) => client.getPermissionRequirements({
+          plugin_instance_id: plugin.plugin_instance_id,
+        }, { ...options, signal }),
+        options.signal,
+        INVENTORY_MARKET_TIMEOUT_MS,
+        `Loading permissions for ${plugin.plugin_instance_id}`,
+      ).then(
+        (value) => ({ status: 'fulfilled' as const, value }),
+        (reason) => ({ status: 'rejected' as const, reason }),
+      ))),
+    ])
+      : [
+          { status: 'fulfilled' as const, value: { permissions: [] } },
+          { status: 'fulfilled' as const, value: { security_policies: [] } },
+          installedPlugins.map(() => ({ status: 'rejected' as const, reason: new Error('supplemental plugin metadata deferred') })),
+        ] as const;
     const permissionRequirements = permissionRequirementResults.flatMap((result) => (
       result.status === 'fulfilled' ? [result.value] : []
     ));
@@ -373,9 +403,10 @@ export function createPluginLifecycleAPI(
   });
 }
 
-async function withPostInstallMutationTimeout<T>(
+async function withAbortTimeout<T>(
   run: (signal: AbortSignal) => Promise<T>,
   parentSignal: AbortSignal | undefined,
+  timeoutMS: number,
   label: string,
 ): Promise<T> {
   const controller = new AbortController();
@@ -388,7 +419,7 @@ async function withPostInstallMutationTimeout<T>(
       const error = new Error(`${label} timed out`);
       controller.abort(error);
       reject(error);
-    }, POST_INSTALL_MUTATION_TIMEOUT_MS);
+    }, timeoutMS);
   });
   try {
     return await Promise.race([run(controller.signal), timeout]);
@@ -396,6 +427,14 @@ async function withPostInstallMutationTimeout<T>(
     if (timer !== undefined) globalThis.clearTimeout(timer);
     parentSignal?.removeEventListener('abort', abortFromParent);
   }
+}
+
+async function withPostInstallMutationTimeout<T>(
+  run: (signal: AbortSignal) => Promise<T>,
+  parentSignal: AbortSignal | undefined,
+  label: string,
+): Promise<T> {
+  return withAbortTimeout(run, parentSignal, POST_INSTALL_MUTATION_TIMEOUT_MS, label);
 }
 
 function isReleaseInstallTerminal(operation: PluginReleaseInstallOperation): boolean {

@@ -1761,6 +1761,72 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   }, 10000);
 
+  it('re-fetches an empty inventory once after the local plugin session becomes ready', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadInventoryProjection
+      .mockResolvedValueOnce({ items: [], marketUnavailable: false })
+      .mockResolvedValueOnce(officialContainersProjection('enabled'));
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    try {
+      await flushAsync();
+      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => (
+        pluginLifecycleMocks.loadInventoryProjection.mock.calls.length >= 2
+        && pluginPanelState.lastProps?.model?.tiles?.some(
+          (tile: any) => tile.kind === 'plugin' && tile.item?.pluginID === officialContainersCatalog.pluginID,
+        )
+      ), 40);
+      expect(pluginLifecycleMocks.loadInventoryProjection).toHaveBeenCalledTimes(2);
+      const pluginTiles = pluginPanelState.lastProps.model.tiles.filter((tile: any) => tile.kind === 'plugin');
+      expect(pluginTiles).toHaveLength(1);
+      expect(pluginTiles[0].item).toMatchObject({
+        pluginID: officialContainersCatalog.pluginID,
+        pluginInstanceID: officialContainersCatalog.pluginInstanceID,
+        lifecycleState: 'enabled',
+      });
+      expect(pluginPanelState.lastProps.model.tiles).not.toContainEqual(
+        expect.objectContaining({ kind: 'empty' }),
+      );
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
+  it('keeps an enabled recovery failure installed and exposes retry', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue({
+      ...officialContainersProjection('enabled'),
+      items: officialContainersProjection('enabled').items.map((item) => ({
+        ...item,
+        lifecycleState: 'needs_attention' as const,
+        attentionReason: 'diagnostic_error' as const,
+        defaultLaunchTarget: undefined,
+      })),
+    });
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    try {
+      await flushAsync();
+      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => pluginPanelState.lastProps?.model?.tiles?.some((tile: any) => tile.kind === 'plugin'), 40);
+      const pluginTiles = pluginPanelState.lastProps.model.tiles.filter((tile: any) => tile.kind === 'plugin');
+      expect(pluginTiles).toHaveLength(1);
+      expect(pluginTiles[0].item).toMatchObject({ lifecycleState: 'needs_attention', attentionReason: 'diagnostic_error' });
+      expect(pluginTiles[0].action).toBe('open_details');
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
   it('drops an internal recovery_canceled result from a superseded session generation', async () => {
     vi.useFakeTimers();
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });

@@ -147,14 +147,17 @@ async function runConnectedBrowserSmoke(config, browser, startedAt) {
   const pageErrors = [];
   const failedResponses = [];
   const pluginResponses = [];
+  const projectionCheckpoints = [];
   const pluginRequestHeaders = new Map();
+  const pluginRequests = [];
   page.on('console', (message) => {
     if (message.type() === 'error') consoleErrors.push(message.text());
   });
   page.on('pageerror', (error) => pageErrors.push(error.message));
   page.on('request', async (request) => {
     const pathname = new URL(request.url()).pathname;
-    if (pathname.includes('/_redevplugin/api/plugins/')) {
+    if (pathname.includes('/_redevplugin/api/plugins/') || pathname.includes('/_redeven_proxy/api/plugins/market')) {
+      pluginRequests.push({ method: request.method(), pathname });
       pluginRequestHeaders.set(pathname, await request.allHeaders());
     }
   });
@@ -162,7 +165,7 @@ async function runConnectedBrowserSmoke(config, browser, startedAt) {
     const request = response.request();
     const pathname = new URL(response.url()).pathname;
     if (response.status() >= 400) failedResponses.push({ method: request.method(), pathname, status: response.status() });
-    if (pathname.includes('/_redevplugin/api/plugins/')) {
+    if (pathname.includes('/_redevplugin/api/plugins/') || pathname.includes('/_redeven_proxy/api/plugins/market')) {
       pluginResponses.push({ method: request.method(), pathname, status: response.status(), body: await responseJSON(response) });
     }
   });
@@ -195,6 +198,11 @@ async function runConnectedBrowserSmoke(config, browser, startedAt) {
   }, 30_000, 'plugin catalog response');
   const catalogEntry = { method: 'POST', pathname: '/_redevplugin/api/plugins/catalog/query', ...catalogResponse };
   pluginResponses.push(catalogEntry);
+  projectionCheckpoints.push({
+    label: 'after_catalog_replay',
+    panelTiles: await page.locator('[data-plugin-panel-tile]:not([data-plugin-panel-tile="plugin-center"])').count(),
+    panelText: (await page.locator('[data-plugin-launcher-grid]').innerText().catch(() => '')).slice(0, 4000),
+  });
   const refresh = refreshEntry.body;
   const catalog = catalogEntry.body?.data ?? catalogEntry.body;
   const enabledCount = Array.isArray(catalog?.plugins)
@@ -223,7 +231,11 @@ async function runConnectedBrowserSmoke(config, browser, startedAt) {
       panelTiles: await page.locator('[data-plugin-panel-tile]').count(),
       panelText: (await page.locator('[data-plugin-launcher-grid]').innerText().catch(() => '')).slice(0, 4000),
       pluginResponses,
+      pluginRequests,
       failedResponses,
+      projectionCheckpoints,
+      consoleErrors,
+      pageErrors,
       error: String(error),
     }, null, 2));
     throw error;
