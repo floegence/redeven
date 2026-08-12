@@ -2150,6 +2150,61 @@ describe('FlowerSurface navigation activity', () => {
     runtime.remove();
   });
 
+  it('renders malformed ask_user as a local control error without replacing assistant text', async () => {
+    const malformedControlThread = thread({
+      thread_id: 'thread-control-error',
+      title: 'Malformed control',
+      status: 'failed',
+      error: { code: 'control_error', message: 'invalid ask_user control signal: interaction_shape_mismatch' },
+      messages: [{
+        id: 'm-control-error',
+        role: 'assistant',
+        content: 'I need one more detail before continuing.',
+        status: 'error',
+        created_at_ms: 7_300,
+        blocks: [
+          { type: 'markdown', content: 'I need one more detail before continuing.' },
+          activityTimeline({
+            thread_id: 'thread-control-error',
+            run_id: 'run-control-error',
+            turn_id: 'm-control-error',
+            status: 'error',
+            items: [activityItem({
+              item_id: 'control-ask-user-malformed',
+              tool_id: 'call-ask-user-malformed',
+              tool_name: 'ask_user',
+              kind: 'control',
+              status: 'error',
+              severity: 'error',
+              needs_attention: true,
+              label: 'Ask user',
+              description: 'The request for more information was malformed.',
+              metadata: { control_disposition: 'waiting', control_error_code: 'control_error' },
+            })],
+          }),
+        ],
+      }],
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [malformedControlThread]),
+      loadThread: vi.fn(async () => liveBootstrap(malformedControlThread)),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-control-error"] button')));
+    (runtime.querySelector('[data-thread-id="thread-control-error"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-activity-item-id="control-ask-user-malformed"]')));
+
+    expect(runtime.textContent).toContain('I need one more detail before continuing.');
+    expect(runtime.querySelector('[data-flower-activity-item-id="control-ask-user-malformed"]')?.textContent).toContain('Ask user');
+    expect(runtime.querySelector('[data-flower-activity-item-id="control-ask-user-malformed"]')?.getAttribute('data-flower-control-error')).toBe('true');
+    expect(runtime.querySelector('.flower-error-card')).toBeNull();
+    expect(runtime.querySelector('.flower-message-bubble-error')).toBeNull();
+    expect(runtime.textContent).not.toContain('Flower could not finish');
+    expect(runtime.textContent).not.toContain('Message failed');
+    runtime.remove();
+  });
+
   it('uses the composer as the primary surface for delegated approvals', async () => {
     const delegatedAction = {
       action_id: 'dappr-terminal',

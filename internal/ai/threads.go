@@ -196,6 +196,9 @@ func threadViewRunState(snapshot flruntime.ThreadSnapshot, latest *flruntime.Thr
 		failure := ""
 		if latest != nil && latest.Failure != nil {
 			failure = strings.TrimSpace(latest.Failure.Message)
+			if latest.Failure.Code == flruntime.ThreadTurnFailureControlError {
+				return string(RunStateFailed), string(flruntime.ThreadTurnFailureControlError), failure, nil
+			}
 		}
 		if code := classifyRunFailureCode(errors.New(failure), ""); code != "" {
 			return string(RunStateFailed), code, userFacingRunError(code, ""), nil

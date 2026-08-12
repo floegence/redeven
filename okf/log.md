@@ -1,5 +1,17 @@
 # Redeven OKF Update Log
 
+## 2026-08-12
+* **Control error presentation**: Upgraded to published Floret v3.2.40 so a
+  malformed provider control signal retains its assistant prefix, control-call
+  identity, waiting disposition, diagnostic, and canonical activity while
+  exposing typed `control_error`. Redeven maps that code without parsing error
+  text, and Flower keeps it scoped to the control activity instead of showing a
+  message failure or global run-error card.
+* **Approval action surface**: Batch reject, reject, and allow once now share
+  one approval action row and one 32-pixel pill geometry. Narrow surfaces use a
+  stable two-row order, and keyboard focus uses a shape-preserving inset rather
+  than an external rectangular ring.
+
 ## 2026-08-11
 * **Approval rejection recovery**: Upgraded to published Floret v3.2.39 for
   monotonic canonical projection ordinals and terminal approval precedence.

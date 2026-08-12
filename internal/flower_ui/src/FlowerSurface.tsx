@@ -2632,6 +2632,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const selectedThreadRunErrorMessage = createMemo(() => {
     const thread = selectedThread();
     const error = thread?.error;
+    if (trimString(error?.code) === 'control_error') return '';
     if (trimString(error?.code) === 'floret_engine_failed' && latestThreadFailureIsUserRejectedTool(thread)) return '';
     return presentRunError(error);
   });
@@ -7753,7 +7754,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       ));
       if (!action) continue;
       if (approvalSubmitting()[action.action_id] !== undefined) continue;
-      await submitApprovalAction(action, false, { allowNonPrimary: true, suppressHandoff: true });
+      await submitApprovalAction(action, false, {
+        allowNonPrimary: true,
+        suppressHandoff: index > 0,
+      });
       if (index + 1 >= pendingActionIDs.length || !selectedThreadDetailMatches(threadID)) continue;
       try {
         await reloadSelectedThread(threadID, threadLoadSequence, 'user_action');
@@ -7964,7 +7968,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const approvalActionCard = (
     actionID: string,
     action: Accessor<FlowerApprovalAction>,
-    options: Readonly<{ surface?: 'history' | 'composer' }> = {},
+    options: Readonly<{ surface?: 'history' | 'composer'; includeBatchRejection?: boolean }> = {},
   ) => {
     const busy = () => approvalSubmitting()[actionID];
     const canDecide = () => approvalActionCanDecide(action());
@@ -8060,12 +8064,27 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             {(message) => <p class="flower-approval-status">{message()}</p>}
           </Show>
         </div>
-        <div class={cn('flower-approval-actions', composerSurface && 'flower-composer-approval-actions')}>
+        <div
+          class={cn('flower-approval-actions', composerSurface && 'flower-composer-approval-actions')}
+          data-flower-approval-actions-row={composerSurface ? 'true' : undefined}
+        >
             <Show when={canDecide()} fallback={<div class="flower-approval-unavailable">{unavailableCopy()}</div>}>
+              <Show when={composerSurface && options.includeBatchRejection && selectedApprovalBatchActions().length > 1}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  class="flower-composer-approval-decision flower-approval-action-pill flower-approval-reject-batch"
+                  disabled={selectedApprovalBatchActions().some((candidate) => approvalSubmitting()[candidate.action_id] !== undefined)}
+                  aria-label={copy().chat.toolApprovalRejectBatchAction(selectedApprovalBatchActions().length)}
+                  onClick={() => void submitApprovalBatchRejection()}
+                >
+                  {copy().chat.toolApprovalRejectBatch}
+                </Button>
+              </Show>
               <Button
                 variant="outline"
                 size="sm"
-                class={composerSurface ? 'flower-composer-approval-decision' : undefined}
+                class={composerSurface ? 'flower-composer-approval-decision flower-approval-action-pill' : undefined}
                 disabled={disabled()}
                 loading={busy() === 'reject'}
                 aria-busy={busy() === 'reject' ? 'true' : undefined}
@@ -8078,7 +8097,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               <Button
                 variant="primary"
                 size="sm"
-                class={composerSurface ? 'flower-composer-approval-decision' : undefined}
+                class={composerSurface ? 'flower-composer-approval-decision flower-approval-action-pill' : undefined}
                 disabled={disabled()}
                 loading={busy() === 'approve'}
                 aria-busy={busy() === 'approve' ? 'true' : undefined}
@@ -9054,6 +9073,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         : null;
     });
     const displayStatus = createMemo(() => item().status);
+    const controlError = createMemo(() => (
+      item().kind === 'control'
+      && trimString(item().metadata?.control_error_code) === 'control_error'
+    ));
     const duration = createMemo(() => {
       const subagentDuration = subagentInlineElapsed(presentation());
       if (subagentDuration) return subagentDuration;
@@ -9068,6 +9091,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         data-flower-activity-item-id={item().item_id}
         data-flower-activity-status={displayStatus()}
         data-flower-activity-approval-state={item().approval_state}
+        data-flower-control-error={controlError() ? 'true' : undefined}
         data-state={disclosure.state()}
         aria-label={activityItemAriaLabel(item(), timeline())}
       >
@@ -9448,6 +9472,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     ));
     const failed = createMemo(() => (
       message().status === 'error'
+      && trimString(selectedThread()?.error?.code) !== 'control_error'
       && !messageHasUserRejectedTool(message())
       && !threadHasUserRejectedTool(selectedThread(), message().run_id, message().turn_id)
     ));
@@ -9828,6 +9853,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           const code = trimString(value().code);
           if (code === 'runtime_restarted') return runtimeRestartedDivider();
           if (code === 'floret_turn_interrupted') return null;
+          if (code === 'control_error') return null;
           if (code === 'floret_engine_failed' && latestThreadFailureIsUserRejectedTool(selectedThread())) return null;
           return runErrorNotice(value());
         }}
@@ -11234,19 +11260,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   {(actionID) => (
                     <div class="flower-composer-approval-body">
                       <span class="flower-visually-hidden" role="status" aria-live="polite" aria-atomic="true">{approvalQueueAnnouncement()}</span>
-                      {approvalActionCard(actionID, () => selectedComposerApprovalDisplayAction()!, { surface: 'composer' })}
-                      <Show when={selectedApprovalBatchActions().length > 1}>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          class="flower-approval-reject-batch"
-                          disabled={selectedApprovalBatchActions().some((action) => approvalSubmitting()[action.action_id] !== undefined)}
-                          aria-label={copy().chat.toolApprovalRejectBatchAction(selectedApprovalBatchActions().length)}
-                          onClick={() => void submitApprovalBatchRejection()}
-                        >
-                          {copy().chat.toolApprovalRejectBatch}
-                        </Button>
-                      </Show>
+                      {approvalActionCard(actionID, () => selectedComposerApprovalDisplayAction()!, {
+                        surface: 'composer',
+                        includeBatchRejection: true,
+                      })}
                     </div>
                   )}
                 </Show>

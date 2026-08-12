@@ -1268,6 +1268,50 @@ func TestApplyFloretThreadProjectionAcceptsUpstreamControlSignalWithoutBodyBlock
 	}
 }
 
+func TestFloretThreadProjectionPreservesMalformedControlActivityIdentity(t *testing.T) {
+	t.Parallel()
+
+	timeline := observation.BuildActivityTimeline(observation.ActivityRunMeta{
+		RunID: "run_control_error", ThreadID: "thread_control_error", TurnID: "turn_control_error",
+	}, []observation.Event{{
+		Type: observation.EventTypeControlSignal, RunID: "run_control_error", ThreadID: "thread_control_error", TurnID: "turn_control_error",
+		ToolID: "call_ask_user_invalid", ToolName: "ask_user", ToolKind: "control",
+		Error:      "invalid ask_user control signal: interaction_shape_mismatch",
+		Metadata:   map[string]any{"control_disposition": "waiting", "control_error_code": "control_error"},
+		ObservedAt: time.UnixMilli(7_300),
+	}}, 7_300)
+	r := newRun(runOptions{})
+	r.id = "run_control_error"
+	r.threadID = "thread_control_error"
+	r.turnID = "turn_control_error"
+	r.messageID = "turn_control_error"
+	if err := r.observeFloretCanonicalIdentity(r.id, r.threadID, r.turnID); err != nil {
+		t.Fatalf("observe canonical identity: %v", err)
+	}
+	blocks, err := r.flowerBlocksFromFloretThreadProjection(flruntime.ThreadTurnProjection{
+		RunID: "run_control_error", ThreadID: "thread_control_error", TurnID: "turn_control_error",
+		Status: flruntime.TurnStatusFailed, ThroughOrdinal: 2,
+		Segments: []flruntime.ThreadTurnProjectionSegment{
+			{Kind: flruntime.ThreadTurnProjectionSegmentAssistantText, Text: "I need one more detail."},
+			{Kind: flruntime.ThreadTurnProjectionSegmentActivityTimeline, ActivityTimeline: &timeline},
+		},
+	})
+	if err != nil {
+		t.Fatalf("project malformed control: %v", err)
+	}
+	if len(blocks) != 2 {
+		t.Fatalf("blocks=%#v, want assistant text and control activity", blocks)
+	}
+	activity, ok := blocks[1].(ActivityTimelineBlock)
+	if !ok || len(activity.Items) != 1 {
+		t.Fatalf("activity block=%T %#v", blocks[1], blocks[1])
+	}
+	item := activity.Items[0]
+	if item.ToolID != "call_ask_user_invalid" || item.ToolName != "ask_user" || item.Metadata["control_error_code"] != "control_error" {
+		t.Fatalf("control activity lost canonical identity or classification: %#v", item)
+	}
+}
+
 func TestPendingToolSettlementUnavailableDoesNotReadOrSynthesizeProjection(t *testing.T) {
 	ctx := context.Background()
 	svc := newTestService(t, nil)
