@@ -59,6 +59,14 @@ export function browserPages(browser) {
   return browser.contexts().flatMap((context) => context.pages());
 }
 
+export function isEnvAppPage(page) {
+  try {
+    return new URL(page.url()).pathname.startsWith('/_redeven_proxy/env/');
+  } catch {
+    return false;
+  }
+}
+
 async function waitFor(check, timeoutMS, label) {
   const deadline = Date.now() + timeoutMS;
   let lastError;
@@ -186,9 +194,7 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
     30_000,
     'Desktop page',
   );
-  const existingEnvPage = await Promise.any(browserPages(browser).map(async (candidate) => (
-    await candidate.locator('#redeven-plugin-switcher').count() ? candidate : Promise.reject()
-  ))).catch(() => null);
+  const existingEnvPage = browserPages(browser).find(isEnvAppPage) ?? null;
   if (!existingEnvPage) {
     const open = initialPage.getByRole('button', { name: /^(?:Open|打开)$/u }).last();
     try {
@@ -204,10 +210,7 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
   let page;
   try {
     page = await waitFor(async () => {
-      for (const candidate of browserPages(browser)) {
-        if (await candidate.locator('#redeven-plugin-switcher').count()) return candidate;
-      }
-      return null;
+      return browserPages(browser).find(isEnvAppPage) ?? null;
     }, 60_000, 'Env App page');
   } catch (error) {
     const candidates = browserPages(browser).map((candidate) => ({
