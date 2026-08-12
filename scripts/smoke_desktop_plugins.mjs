@@ -209,10 +209,27 @@ async function runConnectedBrowserSmoke(config, browser, startedAt) {
     panelTiles: await page.locator('[data-plugin-panel-tile]:not([data-plugin-panel-tile="plugin-center"])').count(),
     panelText: (await page.locator('[data-plugin-launcher-grid]').innerText().catch(() => '')).slice(0, 4000),
   }, null, 2));
-  const panelInstalledCount = await waitFor(async () => {
-    const count = await page.locator('[data-plugin-panel-tile]:not([data-plugin-panel-tile="plugin-center"])').count();
-    return count === enabledCount ? count : null;
-  }, 30_000, 'Plugin Panel inventory projection');
+  let panelInstalledCount;
+  try {
+    panelInstalledCount = await waitFor(async () => {
+      const count = await page.locator('[data-plugin-panel-tile]:not([data-plugin-panel-tile="plugin-center"])').count();
+      return count === enabledCount ? count : null;
+    }, 30_000, 'Plugin Panel inventory projection');
+  } catch (error) {
+    await page.screenshot({ path: path.join(config.reportRoot, `${config.phase}-projection-failure.png`), fullPage: true });
+    await fs.writeFile(path.join(config.reportRoot, `${config.phase}-projection-failure.html`), await page.content());
+    await fs.writeFile(path.join(config.reportRoot, `${config.phase}-projection-diagnostics.json`), JSON.stringify({
+      refresh,
+      catalog,
+      enabledCount,
+      panelTiles: await page.locator('[data-plugin-panel-tile]').count(),
+      panelText: (await page.locator('[data-plugin-launcher-grid]').innerText().catch(() => '')).slice(0, 4000),
+      pluginResponses,
+      failedResponses,
+      error: String(error),
+    }, null, 2));
+    throw error;
+  }
 
   let surface = { ready: false };
   let rpc = { ok: false };
