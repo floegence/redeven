@@ -115,6 +115,15 @@ async function runBrowserSmoke(config) {
 }
 
 async function runConnectedBrowserSmoke(config, browser, startedAt) {
+  let phase = 'connect';
+  const writeFailure = async (error) => {
+    await fs.writeFile(path.join(config.reportRoot, `${config.phase}-failure.json`), JSON.stringify({
+      phase,
+      error: String(error),
+      commit: config.commit,
+    }, null, 2));
+  };
+  try {
   const context = browser.contexts()[0];
   if (!context) throw new Error('Desktop CDP context is unavailable');
   const initialPage = await waitFor(
@@ -179,6 +188,7 @@ async function runConnectedBrowserSmoke(config, browser, startedAt) {
 
   const timings = {};
   const mark = (name) => { timings[name] = Number((performance.now() - startedAt).toFixed(1)); };
+  phase = 'reload';
   await page.reload({ waitUntil: 'domcontentloaded' });
   mark('document_ready_ms');
   await waitFor(() => page.locator('#redeven-plugin-switcher').count(), 60_000, 'Plugin Panel trigger');
@@ -189,10 +199,12 @@ async function runConnectedBrowserSmoke(config, browser, startedAt) {
     }
     return null;
   }, 30_000, 'plugin session credential');
+  phase = 'panel_open';
   const pluginTrigger = page.locator('[data-activity-id="plugins"], [aria-controls="redeven-plugin-switcher"]').first();
   await pluginTrigger.waitFor({ state: 'visible', timeout: 30_000 });
   await pluginTrigger.click();
   await waitFor(() => page.locator('[data-plugin-launcher-grid]').count(), 10_000, 'Plugin Panel');
+  phase = 'panel_close_reopen';
   const closePanel = page.locator('[data-plugin-launcher-backdrop] [aria-label="Close plugins"], [data-plugin-launcher-backdrop] [aria-label="关闭插件"]').first();
   await closePanel.click();
   await waitFor(() => page.locator('[data-plugin-launcher-backdrop]').count() === 0, 10_000, 'Plugin Panel close button');
@@ -204,6 +216,7 @@ async function runConnectedBrowserSmoke(config, browser, startedAt) {
   await waitFor(() => page.locator('[data-plugin-launcher-backdrop]').count() === 1, 10_000, 'Plugin Panel final reopen');
   mark('panel_ready_ms');
 
+  phase = 'inventory';
   const refreshResponse = await waitFor(async () => {
     const response = await requestPluginJSON(page, '/_redevplugin/api/plugins/runtime/refresh-enabled', {}, sessionHeaders);
     return response.status === 200 ? response : null;
@@ -322,6 +335,10 @@ async function runConnectedBrowserSmoke(config, browser, startedAt) {
     await page.screenshot({ path: path.join(config.reportRoot, `${config.phase}-failure.png`), fullPage: true });
     await fs.writeFile(path.join(config.reportRoot, `${config.phase}-failure.html`), await page.content());
     throw new Error(`plugin smoke failed: ${assessment.failure}`);
+  }
+  } catch (error) {
+    await writeFailure(error);
+    throw error;
   }
 }
 
