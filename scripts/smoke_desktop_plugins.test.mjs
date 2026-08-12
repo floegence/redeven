@@ -126,3 +126,12 @@ test('Desktop smoke observes the first Env App navigation without forcing a relo
   assert.doesNotMatch(source, /page\.reload\(/u);
   assert.match(source, /page\.waitForLoadState\('domcontentloaded'\)/u);
 });
+
+test('Desktop smoke waits for the closed Panel trigger instead of the unmounted dialog', async () => {
+  const source = await import('node:fs/promises').then((fs) => fs.readFile(
+    new URL('./smoke_desktop_plugins.mjs', import.meta.url),
+    'utf8',
+  ));
+  assert.match(source, /\[aria-controls="redeven-plugin-switcher"\]/u);
+  assert.doesNotMatch(source, /page\.locator\('#redeven-plugin-switcher'\)\.count\(\)/u);
+});
