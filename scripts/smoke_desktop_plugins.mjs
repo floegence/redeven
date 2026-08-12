@@ -68,17 +68,25 @@ export function isEnvAppPage(page) {
   }
 }
 
-async function waitFor(check, timeoutMS, label) {
-  const deadline = Date.now() + timeoutMS;
+export async function waitFor(check, timeoutMS, label, options = {}) {
+  const now = options.now ?? Date.now;
+  const delay = options.delay ?? ((timeout) => new Promise((resolve) => setTimeout(resolve, timeout)));
+  const deadline = now() + timeoutMS;
   let lastError;
-  while (Date.now() < deadline) {
+  while (now() < deadline) {
     try {
       const value = await check();
       if (value) return value;
     } catch (error) {
       lastError = error;
     }
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await delay(100);
+  }
+  try {
+    const value = await check();
+    if (value) return value;
+  } catch (error) {
+    lastError = error;
   }
   throw new Error(`${label} timed out${lastError ? `: ${lastError.message}` : ''}`);
 }
@@ -168,14 +176,17 @@ async function runBrowserSmoke(config) {
   if (!playwrightRoot) throw new Error('plugin smoke requires an explicit task-owned Playwright package root');
   const { chromium } = require(path.join(playwrightRoot, 'playwright'));
   const startedAt = performance.now();
-  let browser = await chromium.connectOverCDP(`http://127.0.0.1:${config.cdpPort}`);
+  const browsers = new Set();
+  const connectBrowser = async () => {
+    const connected = await chromium.connectOverCDP(`http://127.0.0.1:${config.cdpPort}`);
+    browsers.add(connected);
+    return connected;
+  };
+  const browser = await connectBrowser();
   try {
-    await runConnectedBrowserSmoke(config, browser, startedAt, async () => {
-      browser = await chromium.connectOverCDP(`http://127.0.0.1:${config.cdpPort}`);
-      return browser;
-    });
+    await runConnectedBrowserSmoke(config, browser, startedAt, connectBrowser);
   } finally {
-    await browser.close().catch(() => {});
+    await Promise.all([...browsers].map((connected) => connected.close().catch(() => {})));
   }
 }
 
@@ -223,6 +234,7 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
     );
     throw error;
   }
+  await page.bringToFront();
   const consoleErrors = [];
   const pageErrors = [];
   const failedResponses = [];
@@ -241,21 +253,21 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
     if (message.type() === 'error') consoleErrors.push(message.text());
   });
   page.on('pageerror', (error) => pageErrors.push(error.message));
-  page.on('request', async (request) => {
+  page.on('request', (request) => void (async () => {
     const pathname = new URL(request.url()).pathname;
     if (pathname.includes('/_redevplugin/api/plugins/') || pathname.includes('/_redeven_proxy/api/plugins/market')) {
       pluginRequests.push({ method: request.method(), pathname });
       pluginRequestHeaders.set(pathname, await request.allHeaders());
     }
-  });
-  page.on('response', async (response) => {
+  })().catch((error) => pageErrors.push(`request observation failed: ${String(error)}`)));
+  page.on('response', (response) => void (async () => {
     const request = response.request();
     const pathname = new URL(response.url()).pathname;
     if (response.status() >= 400) failedResponses.push({ method: request.method(), pathname, status: response.status() });
     if (pathname.includes('/_redevplugin/api/plugins/') || pathname.includes('/_redeven_proxy/api/plugins/market')) {
       pluginResponses.push({ method: request.method(), pathname, status: response.status(), body: await responseJSON(response) });
     }
-  });
+  })().catch((error) => pageErrors.push(`response observation failed: ${String(error)}`)));
 
   const timings = {};
   const mark = (name) => { timings[name] = Number((performance.now() - startedAt).toFixed(1)); };
@@ -277,35 +289,98 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
     return null;
   }, 30_000, 'plugin session credential');
   phase = 'panel_open';
-  const pluginTrigger = page.locator(PLUGIN_TRIGGER_SELECTOR).first();
-  await pluginTrigger.waitFor({ state: 'visible', timeout: 30_000 });
-  await pluginTrigger.click();
+  const activityMode = page.getByRole('tab', { name: 'Activity', exact: true });
+  await activityMode.click();
+  await waitFor(() => activityMode.getAttribute('aria-selected').then((selected) => selected === 'true'), 10_000, 'Activity mode');
+  const visiblePluginTrigger = () => page.locator('[aria-controls="redeven-plugin-switcher"]').filter({ visible: true }).first();
+  await visiblePluginTrigger().waitFor({ state: 'visible', timeout: 30_000 });
+  await visiblePluginTrigger().click();
   await waitFor(() => page.locator('[data-plugin-launcher-grid]').count(), 10_000, 'Plugin Panel');
   phase = 'plugin_bootstrap';
-  const bootstrap = await ensureInitialEnabledPlugin(page, sessionHeaders, config, pluginResponses);
+  let bootstrap;
+  try {
+    bootstrap = await ensureInitialEnabledPlugin(page, sessionHeaders, config, pluginResponses);
+  } catch (error) {
+    await page.screenshot({ path: path.join(config.reportRoot, `${config.phase}-bootstrap-failure.png`), fullPage: true }).catch(() => {});
+    await fs.writeFile(path.join(config.reportRoot, `${config.phase}-bootstrap-failure.html`), await page.content()).catch(() => {});
+    await fs.writeFile(path.join(config.reportRoot, `${config.phase}-bootstrap-diagnostics.json`), JSON.stringify({
+      inventoryDebug: await inventoryDebug(),
+      pluginResponses,
+      pluginRequests,
+      failedResponses,
+      consoleErrors,
+      pageErrors,
+      error: String(error),
+    }, null, 2)).catch(() => {});
+    throw error;
+  }
   if (bootstrap.performed) {
-    await pluginTrigger.click();
-    await waitFor(() => page.locator('[data-plugin-launcher-backdrop]').count() === 1, 10_000, 'Plugin Panel after install');
+    await page.locator('[data-activity-id="monitor"]').filter({ visible: true }).first().click();
+    const activityPluginTrigger = page.locator('[aria-controls="redeven-plugin-switcher"]').filter({ visible: true }).first();
+    await activityPluginTrigger.waitFor({ state: 'visible', timeout: 10_000 });
+    await activityPluginTrigger.click();
+    try {
+      await page.locator('[data-plugin-launcher-backdrop]').first().waitFor({ state: 'visible', timeout: 10_000 });
+    } catch (error) {
+      await page.screenshot({ path: path.join(config.reportRoot, `${config.phase}-panel-after-install-failure.png`), fullPage: true }).catch(() => {});
+      await fs.writeFile(path.join(config.reportRoot, `${config.phase}-panel-after-install-failure.html`), await page.content()).catch(() => {});
+      await fs.writeFile(path.join(config.reportRoot, `${config.phase}-panel-after-install-diagnostics.json`), JSON.stringify({
+        trigger: await activityPluginTrigger.evaluate((node) => ({
+          ariaExpanded: node.getAttribute('aria-expanded'),
+          ariaPressed: node.getAttribute('aria-pressed'),
+          className: node.getAttribute('class'),
+        })).catch(() => null),
+        backdropCount: await page.locator('[data-plugin-launcher-backdrop]').count(),
+        motionStates: await page.locator('[data-plugin-panel-motion-state]').evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-plugin-panel-motion-state'))),
+        workbenchSelected: await page.getByRole('tab', { name: 'Workbench', exact: true }).getAttribute('aria-selected'),
+        inventoryDebug: await inventoryDebug(),
+        error: String(error),
+      }, null, 2)).catch(() => {});
+      throw error;
+    }
   }
   phase = 'panel_close_reopen';
   const panelDismissal = {};
   const closePanel = page.locator('[data-plugin-launcher-backdrop] [aria-label="Close plugins"], [data-plugin-launcher-backdrop] [aria-label="关闭插件"]').first();
   await closePanel.click();
-  await waitFor(() => page.locator('[data-plugin-launcher-backdrop]').count() === 0, 10_000, 'Plugin Panel close button');
+  try {
+    await page.locator('[data-plugin-launcher-backdrop]').first().waitFor({ state: 'detached', timeout: 10_000 });
+  } catch (error) {
+    const backdrops = page.locator('[data-plugin-launcher-backdrop]');
+    await fs.writeFile(path.join(config.reportRoot, `${config.phase}-panel-close-diagnostics.json`), JSON.stringify({
+      trigger: await visiblePluginTrigger().evaluate((node) => ({
+        ariaExpanded: node.getAttribute('aria-expanded'),
+        ariaPressed: node.getAttribute('aria-pressed'),
+      })).catch(() => null),
+      backdrops: await Promise.all(Array.from({ length: await backdrops.count() }, async (_, index) => {
+        const backdrop = backdrops.nth(index);
+        const dialog = backdrop.locator('[role="dialog"]');
+        return {
+          visible: await backdrop.isVisible(),
+          motionState: await dialog.getAttribute('data-plugin-panel-motion-state'),
+          ariaModal: await dialog.getAttribute('aria-modal'),
+          text: (await dialog.innerText().catch(() => '')).slice(0, 500),
+        };
+      })),
+      inventoryDebug: await inventoryDebug(),
+      error: String(error),
+    }, null, 2)).catch(() => {});
+    throw error;
+  }
   panelDismissal.close_button = { closed: true, backdrop_count: 0 };
-  await pluginTrigger.click();
-  await waitFor(() => page.locator('[data-plugin-launcher-backdrop]').count() === 1, 10_000, 'Plugin Panel reopen');
+  await visiblePluginTrigger().click();
+  await page.locator('[data-plugin-launcher-backdrop]').first().waitFor({ state: 'visible', timeout: 10_000 });
   await page.keyboard.press('Escape');
-  await waitFor(() => page.locator('[data-plugin-launcher-backdrop]').count() === 0, 10_000, 'Plugin Panel Escape close');
+  await page.locator('[data-plugin-launcher-backdrop]').first().waitFor({ state: 'detached', timeout: 10_000 });
   panelDismissal.escape = { closed: true, backdrop_count: 0 };
-  await pluginTrigger.click();
+  await visiblePluginTrigger().click();
   const backdrop = page.locator('[data-plugin-launcher-backdrop]').first();
   await backdrop.waitFor({ state: 'visible', timeout: 10_000 });
   await backdrop.click({ position: { x: 2, y: 2 } });
-  await waitFor(() => page.locator('[data-plugin-launcher-backdrop]').count() === 0, 10_000, 'Plugin Panel backdrop close');
+  await backdrop.waitFor({ state: 'detached', timeout: 10_000 });
   panelDismissal.backdrop = { closed: true, backdrop_count: 0 };
-  await pluginTrigger.click();
-  await waitFor(() => page.locator('[data-plugin-launcher-backdrop]').count() === 1, 10_000, 'Plugin Panel final reopen');
+  await visiblePluginTrigger().click();
+  await page.locator('[data-plugin-launcher-backdrop]').first().waitFor({ state: 'visible', timeout: 10_000 });
   panelDismissal.final_reopen = { open: true, backdrop_count: 1 };
   mark('panel_ready_ms');
 
@@ -378,12 +453,39 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
   });
   if (inventoryAssessment.ok && enabledCount > 0) {
     const firstTile = page.locator('[data-plugin-panel-tile]').first();
+    const tileBeforeOpen = {
+      key: await firstTile.getAttribute('data-plugin-panel-tile'),
+      text: (await firstTile.innerText()).trim(),
+      describedBy: await firstTile.getAttribute('aria-describedby'),
+    };
     await firstTile.click();
-    const frame = await waitFor(
-      () => page.frames().find((candidate) => candidate !== page.mainFrame() && candidate.url() === 'about:blank'),
-      30_000,
-      'plugin surface iframe',
-    );
+    let frame;
+    try {
+      const iframe = page.locator('[data-plugin-surface-iframe]').first();
+      await iframe.waitFor({ state: 'visible', timeout: 30_000 });
+      const iframeHandle = await iframe.elementHandle();
+      frame = await iframeHandle?.contentFrame();
+      if (!frame) throw new Error('plugin surface iframe has no content frame');
+    } catch (error) {
+      await page.screenshot({ path: path.join(config.reportRoot, `${config.phase}-surface-failure.png`), fullPage: true }).catch(() => {});
+      await fs.writeFile(path.join(config.reportRoot, `${config.phase}-surface-failure.html`), await page.content()).catch(() => {});
+      await fs.writeFile(path.join(config.reportRoot, `${config.phase}-surface-diagnostics.json`), JSON.stringify({
+        tileBeforeOpen,
+        url: page.url(),
+        surfaceHosts: await page.locator('[data-plugin-surface-host]').count(),
+        surfaceErrors: await page.locator('[data-plugin-surface-error]').allInnerTexts(),
+        panelText: (await page.locator('[data-plugin-launcher-grid]').innerText().catch(() => '')).slice(0, 4_000),
+        bodyText: (await page.locator('body').innerText().catch(() => '')).slice(0, 8_000),
+        inventoryDebug: await inventoryDebug(),
+        pluginResponses,
+        pluginRequests,
+        failedResponses,
+        consoleErrors,
+        pageErrors,
+        error: String(error),
+      }, null, 2)).catch(() => {});
+      throw error;
+    }
     await waitFor(async () => (await frame.locator('body').innerText()).trim().length > 0, 30_000, 'plugin iframe body');
     surface = { ready: true, url: frame.url(), body: (await frame.locator('body').innerText()).slice(0, 2_000) };
     const rpcEntry = await waitFor(
@@ -411,6 +513,7 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
       report: config.reportRoot,
     },
     ports: { local_ui: config.localUIPort, cdp: config.cdpPort, inspector: config.inspectorPort },
+    owner_id: config.ownerID,
     pids: config.pids,
     timings,
     bootstrap,
