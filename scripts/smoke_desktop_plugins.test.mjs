@@ -102,3 +102,11 @@ test('Desktop smoke discovers Electron windows across every CDP browser context'
   };
   assert.deepEqual(browserPages(browser), [welcome, environment]);
 });
+
+test('Desktop smoke reconnects CDP after opening a new Electron session window', async () => {
+  const source = await import('node:fs/promises').then((fs) => fs.readFile(
+    new URL('./smoke_desktop_plugins.mjs', import.meta.url),
+    'utf8',
+  ));
+  assert.match(source, /await open\.click\(\);\s+browser = await reconnectBrowser\(\);/u);
+});

@@ -159,15 +159,19 @@ async function runBrowserSmoke(config) {
   if (!playwrightRoot) throw new Error('plugin smoke requires an explicit task-owned Playwright package root');
   const { chromium } = require(path.join(playwrightRoot, 'playwright'));
   const startedAt = performance.now();
-  const browser = await chromium.connectOverCDP(`http://127.0.0.1:${config.cdpPort}`);
+  let browser = await chromium.connectOverCDP(`http://127.0.0.1:${config.cdpPort}`);
   try {
-    await runConnectedBrowserSmoke(config, browser, startedAt);
+    await runConnectedBrowserSmoke(config, browser, startedAt, async () => {
+      await browser.close();
+      browser = await chromium.connectOverCDP(`http://127.0.0.1:${config.cdpPort}`);
+      return browser;
+    });
   } finally {
     await browser.close().catch(() => {});
   }
 }
 
-async function runConnectedBrowserSmoke(config, browser, startedAt) {
+async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBrowser) {
   let phase = 'connect';
   const writeFailure = async (error) => {
     await fs.writeFile(path.join(config.reportRoot, `${config.phase}-failure.json`), JSON.stringify({
@@ -196,6 +200,7 @@ async function runConnectedBrowserSmoke(config, browser, startedAt) {
       throw error;
     }
     await open.click();
+    browser = await reconnectBrowser();
   }
   let page;
   try {
