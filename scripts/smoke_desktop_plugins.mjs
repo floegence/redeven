@@ -189,8 +189,19 @@ async function runConnectedBrowserSmoke(config, browser, startedAt) {
     }
     return null;
   }, 30_000, 'plugin session credential');
-  await page.locator('#redeven-plugin-switcher').click();
+  const pluginTrigger = page.locator('[data-activity-id="plugins"], [aria-controls="redeven-plugin-switcher"]').first();
+  await pluginTrigger.waitFor({ state: 'visible', timeout: 30_000 });
+  await pluginTrigger.click();
   await waitFor(() => page.locator('[data-plugin-launcher-grid]').count(), 10_000, 'Plugin Panel');
+  const closePanel = page.locator('[data-plugin-launcher-backdrop] [aria-label="Close plugins"], [data-plugin-launcher-backdrop] [aria-label="关闭插件"]').first();
+  await closePanel.click();
+  await waitFor(() => page.locator('[data-plugin-launcher-backdrop]').count() === 0, 10_000, 'Plugin Panel close button');
+  await pluginTrigger.click();
+  await waitFor(() => page.locator('[data-plugin-launcher-backdrop]').count() === 1, 10_000, 'Plugin Panel reopen');
+  await page.keyboard.press('Escape');
+  await waitFor(() => page.locator('[data-plugin-launcher-backdrop]').count() === 0, 10_000, 'Plugin Panel Escape close');
+  await pluginTrigger.click();
+  await waitFor(() => page.locator('[data-plugin-launcher-backdrop]').count() === 1, 10_000, 'Plugin Panel final reopen');
   mark('panel_ready_ms');
 
   const refreshResponse = await waitFor(async () => {

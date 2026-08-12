@@ -1797,6 +1797,29 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   }, 10000);
 
+  it('passes the responsive panel open state through EnvAppShell', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    try {
+      await flushAsync();
+      const trigger = host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement;
+      expect(pluginPanelState.lastProps.open).toBe(false);
+      trigger.click();
+      await flushAsync();
+      expect(pluginPanelState.lastProps.open).toBe(true);
+      pluginPanelState.lastProps.onClose();
+      await flushAsync();
+      expect(pluginPanelState.lastProps.open).toBe(false);
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
   it('keeps an enabled recovery failure installed and exposes retry', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
