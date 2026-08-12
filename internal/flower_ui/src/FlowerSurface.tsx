@@ -11125,7 +11125,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   queueComposerAttachmentIntent(currentComposerSessionKey(), { kind: 'add', files, source: 'drop' });
                 }}
               >
-                <Show when={companionCollapsed() && !companionSummaryVisible()}>
+                <Show when={companionCollapsed() && !props.companionCopy && !companionSummaryVisible()}>
                   <span
                     class={cn(
                       'flower-companion-collapsed-icon',

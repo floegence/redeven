@@ -1,5 +1,7 @@
 import '../index.css';
+import './flower-feature.css';
 
+import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 
 import type {
@@ -20,6 +22,75 @@ import {
 } from './FlowerSurface.navigation.testHarness';
 
 describe('Flower structured input admission browser behavior', () => {
+  it('does not allocate a decorative Flower icon row inside the expanded composer', async () => {
+    await page.viewport(1280, 900);
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [thread({ thread_id: 'thread-composer-icon', title: 'Composer icon' })]),
+      loadThread: vi.fn(async (threadID) => liveBootstrap(thread({ thread_id: threadID, title: 'Composer icon' }), 1)),
+    });
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-composer-icon"] button')));
+    (runtime.querySelector('[data-thread-id="thread-composer-icon"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-composer textarea')));
+    const composer = runtime.querySelector('.flower-composer') as HTMLElement;
+    const flowerIcons = Array.from(composer.querySelectorAll('svg'))
+      .filter((icon) => icon.querySelector('radialGradient'));
+    expect(flowerIcons).toHaveLength(0);
+    expect(composer.querySelector('.flower-composer-decorative-icon, [data-flower-composer-icon]')).toBeNull();
+    const textarea = composer.querySelector('textarea') as HTMLTextAreaElement;
+    const composerRect = composer.getBoundingClientRect();
+    const textareaRect = textarea.getBoundingClientRect();
+    expect(textareaRect.top - composerRect.top).toBeLessThanOrEqual(20);
+    const footer = composer.querySelector('.flower-composer-footer') as HTMLElement;
+    expect(footer).toBeTruthy();
+    const footerRect = footer.getBoundingClientRect();
+    expect(
+      footerRect.left >= textareaRect.right - 1
+      || footerRect.top >= textareaRect.bottom - 1,
+    ).toBe(true);
+    expect(Array.from(composer.children).some((child) => (
+      child !== composer.querySelector('.flower-composer-content')
+      && child.querySelector('svg radialGradient') !== null
+    ))).toBe(false);
+    expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
+  });
+
+  it('keeps the narrow expanded composer compact without a decorative icon row', async () => {
+    await page.viewport(375, 812);
+    const canonical = thread({ thread_id: 'thread-composer-icon-narrow', title: 'Narrow composer' });
+    const runtime = renderSurfaceWithAdapterProps({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [canonical]),
+      loadThread: vi.fn(async () => liveBootstrap(canonical, 1)),
+    }, {
+      presentation: 'companion',
+      companionOpen: true,
+      engaged: true,
+      transcriptVisible: true,
+    });
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-composer-icon-narrow"] button')));
+    (runtime.querySelector('[data-thread-id="thread-composer-icon-narrow"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-composer textarea')));
+    const composer = runtime.querySelector('.flower-composer') as HTMLElement;
+    const flowerIcons = Array.from(composer.querySelectorAll('svg'))
+      .filter((icon) => icon.querySelector('radialGradient'));
+    expect(flowerIcons).toHaveLength(0);
+    expect(composer.querySelector('.flower-composer-decorative-icon, [data-flower-composer-icon]')).toBeNull();
+    expect(composer.scrollWidth).toBeLessThanOrEqual(composer.clientWidth + 1);
+    const textarea = composer.querySelector('textarea') as HTMLTextAreaElement;
+    const composerRect = composer.getBoundingClientRect();
+    const textareaRect = textarea.getBoundingClientRect();
+    expect(textareaRect.top - composerRect.top).toBeLessThanOrEqual(20);
+    const footer = composer.querySelector('.flower-composer-footer') as HTMLElement;
+    expect(footer).toBeTruthy();
+    const footerRect = footer.getBoundingClientRect();
+    expect(
+      footerRect.left >= textareaRect.right - 1
+      || footerRect.top >= textareaRect.bottom - 1,
+    ).toBe(true);
+    expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
+  });
+
   it('keeps the thread rail interactive while an unanswered waiting_user prompt remains open', async () => {
     const requestA = inputRequest({
       prompt_id: 'prompt-unanswered-a',
@@ -95,6 +166,11 @@ describe('Flower structured input admission browser behavior', () => {
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-selected-thread-id="thread-companion-a"]')));
     const trigger = runtime.querySelector('.flower-composer .flower-companion-thread-trigger') as HTMLButtonElement;
     expect(trigger.closest('[inert]')).toBeNull();
+    const collapsedComposer = runtime.querySelector('.flower-composer') as HTMLElement;
+    const collapsedFlowerIcons = Array.from(collapsedComposer.querySelectorAll('svg'))
+      .filter((icon) => icon.querySelector('radialGradient'));
+    expect(collapsedFlowerIcons).toHaveLength(1);
+    expect(collapsedComposer.querySelector(':scope > .flower-companion-collapsed-icon')).toBeNull();
     trigger.click();
     await waitFor(() => Boolean(runtime.querySelector('.flower-companion-thread-switcher-popover')));
     const b = runtime.querySelector('[data-flower-thread-switcher-thread="thread-companion-b"]') as HTMLButtonElement;
