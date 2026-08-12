@@ -113,21 +113,14 @@ function mountPanel(props: Partial<Parameters<typeof PluginPanel>[0]> = {}) {
   ), mount);
 }
 
-function findDocumentButton(label: string): HTMLButtonElement {
-  const button = [...document.querySelectorAll<HTMLButtonElement>('button')]
-    .find((candidate) => candidate.textContent?.trim() === label);
-  if (!button) throw new Error(`Button not found: ${label}`);
-  return button;
-}
-
 describe('PluginPanel', () => {
-  it('renders installed plugins in an application grid with Plugin Center in a separate footer', () => {
+  it('renders installed plugins with one market icon entry and no overflow menu', () => {
     const onOpenCenter = vi.fn();
     mountPanel({ onOpenCenter });
 
     const dialog = document.querySelector('[role="dialog"]')!;
     const plugin = dialog.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]')!;
-    const center = dialog.querySelector('[data-plugin-panel-tile="plugin-center"]')!;
+    const center = dialog.querySelectorAll<HTMLButtonElement>('[data-plugin-center-market-action]');
     expect(plugin.textContent).toContain('Containers');
     const grid = dialog.querySelector('[data-plugin-launcher-grid]')!;
     expect(grid.tagName).toBe('UL');
@@ -136,10 +129,25 @@ describe('PluginPanel', () => {
     expect(plugin.parentElement?.tagName).toBe('LI');
     expect(plugin.querySelector('[data-plugin-update-badge]')).toBeNull();
     expect(dialog.getAttribute('aria-describedby')).toBe('plugin-launcher-description');
-    expect(center.textContent).toContain('Plugin Center');
-    expect(plugin.compareDocumentPosition(center) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    (center as HTMLButtonElement).click();
+    expect(center).toHaveLength(1);
+    expect(center[0]?.getAttribute('aria-label')).toBe('Plugin Center');
+    expect(center[0]?.title).toBe('Plugin Center');
+    expect(dialog.querySelector('[data-plugin-panel-tile-menu]')).toBeNull();
+    expect(dialog.querySelector('[data-floe-dropdown]')).toBeNull();
+    center[0]?.click();
     expect(onOpenCenter).toHaveBeenCalledTimes(1);
+  });
+
+  it('declares a vertical Dock-anchored motion contract without horizontal translation', () => {
+    const trigger = createTrigger();
+    mountPanel({ placement: 'workbench', trigger });
+
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    expect(dialog.dataset.pluginPanelMotionAxis).toBe('y');
+    expect(dialog.dataset.pluginPanelMotionState).toBe('open');
+    expect(dialog.style.transformOrigin).toContain('calc(100% + 8px)');
+    expect(dialog.className).not.toContain('zoom-in');
+    expect(dialog.className).not.toContain('slide-in-from-left');
   });
 
   it('uses the installed manifest presentation instead of a newer market projection', () => {
@@ -187,7 +195,7 @@ describe('PluginPanel', () => {
     const dialog = document.querySelector('[role="dialog"]')!;
     expect(dialog.querySelector('[data-plugin-panel-tile="catalog:containers"]')).toBeNull();
     expect(dialog.textContent).toContain('No installed plugins yet.');
-    expect(dialog.querySelector('[data-plugin-panel-tile="plugin-center"]')).not.toBeNull();
+    expect(dialog.querySelector('[data-plugin-center-market-action]')).not.toBeNull();
   });
 
   it('opens the plugin default surface from the primary tile action', () => {
@@ -223,62 +231,6 @@ describe('PluginPanel', () => {
     tile.click();
     expect(onOpenPluginSurface).toHaveBeenCalledWith(update.defaultLaunchTarget);
     expect(onOpenPluginDetails).not.toHaveBeenCalled();
-  });
-
-  it('offers real Activity, Workbench, and detail secondary actions', async () => {
-    const onOpenPluginSurface = vi.fn();
-    const onOpenPluginDetails = vi.fn();
-    mountPanel({ onOpenPluginSurface, onOpenPluginDetails });
-
-    (document.querySelector('[data-plugin-panel-tile-menu="instance:plugininst_containers"]') as HTMLButtonElement).click();
-    await Promise.resolve();
-    expect(findDocumentButton('Open')).not.toBeNull();
-    expect(findDocumentButton('Technical details')).not.toBeNull();
-    findDocumentButton('Open in Workbench').click();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    expect(onOpenPluginSurface).toHaveBeenCalledWith(expect.objectContaining({
-      pluginInstanceID: 'plugininst_containers',
-      preferredPlacement: 'workbench',
-    }));
-    expect(onOpenPluginDetails).not.toHaveBeenCalled();
-  });
-
-  it('keeps the secondary action trigger positioned inside its plugin tile', () => {
-    mountPanel();
-
-    const trigger = document.querySelector('[data-plugin-panel-tile-menu="instance:plugininst_containers"]') as HTMLButtonElement;
-    const tile = trigger.closest('li');
-    const triggerHost = trigger.closest('[data-floe-dropdown-trigger]');
-    const dropdown = trigger.closest('[data-floe-dropdown]');
-    expect(tile).not.toBeNull();
-    expect(dropdown?.parentElement).toBe(tile);
-    expect(dropdown?.className).toContain('absolute');
-    expect(dropdown?.className).toContain('right-1');
-    expect(dropdown?.className).toContain('top-1');
-    expect(triggerHost?.className).not.toContain('absolute');
-  });
-
-  it.each([
-    ['right click', () => document.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]')
-      ?.parentElement?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))],
-    ['ContextMenu', () => document.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]')
-      ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ContextMenu', bubbles: true, cancelable: true }))],
-    ['Shift+F10', () => document.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]')
-      ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'F10', shiftKey: true, bubbles: true, cancelable: true }))],
-  ])('opens the secondary action menu with %s', async (_name, openMenu) => {
-    const onOpenPluginSurface = vi.fn();
-    mountPanel({ onOpenPluginSurface });
-
-    openMenu();
-    await Promise.resolve();
-    findDocumentButton('Open').click();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    expect(onOpenPluginSurface).toHaveBeenCalledWith(expect.objectContaining({
-      pluginInstanceID: 'plugininst_containers',
-      preferredPlacement: 'activity',
-    }));
   });
 
   it('hides disabled plugins from the application launcher', () => {
@@ -329,7 +281,7 @@ describe('PluginPanel', () => {
     const previous = new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true });
     document.dispatchEvent(previous);
     expect(previous.defaultPrevented).toBe(true);
-    expect(document.activeElement).toBe(document.querySelector('[data-plugin-panel-tile="plugin-center"]'));
+    expect(document.activeElement).toBe(document.querySelector('[data-plugin-center-market-action]'));
 
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     expect(document.activeElement).toBe(trigger);
@@ -454,7 +406,7 @@ describe('PluginPanel', () => {
 
     close.focus();
     close.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true }));
-    const center = document.querySelector('[data-plugin-panel-tile="plugin-center"]') as HTMLButtonElement;
+    const center = document.querySelector('[data-plugin-center-market-action]') as HTMLButtonElement;
     expect(document.activeElement).toBe(center);
     center.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
     expect(document.activeElement).toBe(close);
@@ -468,30 +420,4 @@ describe('PluginPanel', () => {
     expect(preExistingInert.inert).toBe(true);
   });
 
-  it('does not steal focus back after opening Activity from the secondary menu', async () => {
-    const trigger = createTrigger();
-    const target = document.createElement('button');
-    document.body.append(target);
-    trigger.focus();
-    const [open, setOpen] = createSignal(true);
-    const mount = document.createElement('div');
-    document.body.append(mount);
-    dispose = render(() => (
-      <PluginPanel
-        open={open()}
-        trigger={trigger}
-        model={panelModel()}
-        onClose={() => setOpen(false)}
-        onOpenCenter={vi.fn()}
-        onOpenPluginDetails={vi.fn()}
-        onOpenPluginSurface={() => target.focus()}
-      />
-    ), mount);
-
-    (document.querySelector('[data-plugin-panel-tile-menu="instance:plugininst_containers"]') as HTMLButtonElement).click();
-    await Promise.resolve();
-    findDocumentButton('Open').click();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(document.activeElement).toBe(target);
-  });
 });
