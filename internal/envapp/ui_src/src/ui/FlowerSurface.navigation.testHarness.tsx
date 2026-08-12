@@ -11,6 +11,7 @@ import {
   type FlowerSurfaceNotification,
   type FlowerThreadFocusRequest,
 } from '../../../../flower_ui/src';
+import type { FlowerThreadSwitcherCopy } from '../../../../flower_ui/src/threads/FlowerThreadSwitcher';
 
 const FlowerSurface: Component<Omit<FlowerSurfaceProps, 'draftCoordinator'>> = (props) => {
   const adapter = props.adapter.connectLiveStream
@@ -985,6 +986,8 @@ const mountFlowerSurface = (
     engaged?: boolean;
     transcriptVisible?: boolean;
     companionPresenceOwner?: boolean;
+    companionCopy?: FlowerThreadSwitcherCopy;
+    onCompanionOpenRequest?: () => void;
     onFocusThreadRequestConsumed?: (requestID: string) => void;
     onThreadSelectionEvent?: (event: UIFirstSelectionEvent<string, { source: 'thread-list' }>) => void;
   }> = {},
@@ -1004,6 +1007,8 @@ const mountFlowerSurface = (
       engaged={props.engaged}
       transcriptVisible={props.transcriptVisible}
       companionPresenceOwner={props.companionPresenceOwner}
+      companionCopy={props.companionCopy}
+      onCompanionOpenRequest={props.onCompanionOpenRequest}
       onFocusThreadRequestConsumed={props.onFocusThreadRequestConsumed}
       onThreadSelectionEvent={props.onThreadSelectionEvent}
     />
@@ -1058,11 +1063,44 @@ export function renderSurfaceWithAdapterProps(
     engaged?: boolean;
     transcriptVisible?: boolean;
     companionPresenceOwner?: boolean;
+    companionCopy?: FlowerThreadSwitcherCopy;
+    onCompanionOpenRequest?: () => void;
     onFocusThreadRequestConsumed?: (requestID: string) => void;
     onThreadSelectionEvent?: (event: UIFirstSelectionEvent<string, { source: 'thread-list' }>) => void;
   }>,
 ): HTMLDivElement {
   return mountFlowerSurface(surfaceAdapter, props);
+}
+
+export function renderSurfaceWithCompanionController(
+  surfaceAdapter: FlowerSurfaceAdapter,
+  initialOpen: boolean,
+  companionCopy: FlowerThreadSwitcherCopy,
+  onCompanionOpenRequest?: () => void,
+): Readonly<{
+  runtime: HTMLDivElement;
+  setOpen: (open: boolean) => void;
+}> {
+  const runtime = document.createElement('div');
+  document.body.appendChild(runtime);
+  const [open, setOpen] = createSignal(initialOpen);
+  const dispose = render(() => (
+    <FlowerSurface
+      adapter={surfaceAdapter}
+      notify={(notification) => notifications.push(notification)}
+      presentation="companion"
+      companionOpen={open()}
+      engaged
+      transcriptVisible
+      companionCopy={companionCopy}
+      onCompanionOpenRequest={onCompanionOpenRequest}
+    />
+  ), runtime);
+  disposers.push(dispose);
+  return {
+    runtime,
+    setOpen,
+  };
 }
 
 export function renderSurfaceWithFocusController(
