@@ -261,7 +261,11 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
   phase = 'document_ready';
   await page.waitForLoadState('domcontentloaded');
   mark('document_ready_ms');
-  await waitFor(() => page.locator('#redeven-plugin-switcher').count(), 60_000, 'Plugin Panel trigger');
+  await waitFor(
+    () => page.locator('[data-activity-id="plugins"], [aria-controls="redeven-plugin-switcher"]').count(),
+    60_000,
+    'Plugin Panel trigger',
+  );
   mark('shell_ready_ms');
   const sessionHeaders = await waitFor(() => {
     for (const headers of pluginRequestHeaders.values()) {
