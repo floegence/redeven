@@ -273,10 +273,6 @@ func (s *Service) waitForExactStoppedRunAuthority(ctx context.Context, threadID 
 		persistTO = defaultPersistOpTimeout
 	}
 	doneCh := r.doneCh
-	var authorityCh <-chan struct{}
-	if r.floretAuthorityBarrier != nil {
-		authorityCh = r.floretAuthorityBarrier.done
-	}
 	ticker := time.NewTicker(25 * time.Millisecond)
 	defer ticker.Stop()
 	for {
@@ -300,11 +296,6 @@ func (s *Service) waitForExactStoppedRunAuthority(ctx context.Context, threadID 
 			return "", "", "", fmt.Errorf("%w: waiting for exact canonical run terminal proof: %v", ErrThreadStopPending, ctx.Err())
 		case <-doneCh:
 			doneCh = nil
-		case <-authorityCh:
-			if err := r.floretAuthorityBarrier.waitContext(context.Background()); err != nil {
-				return "", "", "", fmt.Errorf("%w: waiting for Floret authority release: %v", ErrThreadStopUnavailable, err)
-			}
-			authorityCh = nil
 		case <-ticker.C:
 		}
 	}

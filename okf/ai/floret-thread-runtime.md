@@ -8,9 +8,9 @@ quality_exception: Cross-domain canonical thread authority contract spanning ide
 ---
 # Summary
 
-- Authority: Floret v3.2.40 owns canonical `ThreadID`, `TurnID`, `RunID`, thread actors, recovery journal state, titles, lifecycle, projections, approvals, todos, tools, SubAgents, artifacts, provider continuation, canonical retry, and schema migrations.
+- Authority: Floret owns canonical `Thread`, `Turn`, `TimelineEvent`, and `PendingInteraction` state. A thread-local command actor is the in-memory command authority for send, resolve, cancel, and retry; the published admission APIs remain only as a temporary storage migration boundary.
 - Outcome: Redeven consumes identity-bound public capabilities and maps validated state into Flower while retaining product settings, authorization, unadmitted work, and saga receipts.
-- Invariants: callers never preallocate canonical identity, admission binds only from committed Floret facts, and no product table or UI projection reconstructs Agent state.
+- Invariants: callers never preallocate canonical identity, request ids are idempotent, one canonical event stream is monotonic, and no product table or UI projection reconstructs Agent state.
 - Failure boundary: missing authority, invalid data, conflicting identity, incomplete exact-read recovery, or failed permission proof stops the operation without fallback or guessed state.
 
 # Contract
@@ -24,6 +24,17 @@ Floret `CreateThread` and `ForkThread` return canonical thread identities. Redev
 Thread overviews, titles, turn pages, exact turn reads, activity, approvals, todos, pending settlement, attachments, references, and SubAgent state come from validated Floret v3 public contracts. Redeven adds product authorization and browser-safe presentation only. Known-turn reads use exact `ReadTurn` authority; only the typed not-found result proves absence, and other errors never fall back to a history scan.
 
 ## Turn admission and recovery
+
+The simplified command path enters a per-thread actor before provider work. Send
+records the supplied logical request, canonical turn/run identities, and a
+running event in memory before the provider is dispatched. Retry changes only
+the run lineage, resolve clears the matching pending interaction, and cancel
+marks one terminal cancellation. Duplicate provider attempts may occur, but a
+request id or canonical event id is never appended twice. Stop completion is
+proved from the canonical terminal snapshot and does not wait for the legacy
+Redeven authority barrier. The existing admission/receipt and projection
+objects below are retained only at the storage migration boundary and are not
+an additional runtime authority.
 
 Before admission, a queued command owns a Redeven `queue_id`, frozen input, stable `LogicalRequestID`, product resource claims, and launch settings. Its canonical `turn_id` and `run_id` are empty. Queue admission does not generate either value.
 
