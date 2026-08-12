@@ -317,7 +317,7 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
   if (bootstrap.performed) {
     const closeCenter = page.locator('[data-plugin-center-toolbar-primary] button[aria-label]').last();
     await closeCenter.click();
-    await page.locator('[data-plugin-center-view]').waitFor({ state: 'detached', timeout: 10_000 });
+    await page.locator('[data-plugin-center-view]').waitFor({ state: 'hidden', timeout: 10_000 });
     const activityPluginTrigger = page.locator('[aria-controls="redeven-plugin-switcher"]').filter({ visible: true }).first();
     await activityPluginTrigger.waitFor({ state: 'visible', timeout: 10_000 });
     await activityPluginTrigger.click();

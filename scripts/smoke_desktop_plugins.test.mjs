@@ -148,7 +148,7 @@ test('Desktop smoke leaves Plugin Center before reopening the Activity Plugin Pa
     'utf8',
   ));
   assert.match(source, /const closeCenter = page\.locator\('\[data-plugin-center-toolbar-primary\] button\[aria-label\]'\)\.last\(\)/u);
-  assert.match(source, /page\.locator\('\[data-plugin-center-view\]'\)\.waitFor\(\{ state: 'detached'/u);
+  assert.match(source, /page\.locator\('\[data-plugin-center-view\]'\)\.waitFor\(\{ state: 'hidden'/u);
   assert.doesNotMatch(source, /data-activity-id="monitor"/u);
   assert.match(source, /const activityPluginTrigger = page\.locator\('\[aria-controls="redeven-plugin-switcher"\]'\)\.filter\(\{ visible: true \}\)\.first\(\)/u);
   assert.match(source, /await activityPluginTrigger\.click\(\)/u);
