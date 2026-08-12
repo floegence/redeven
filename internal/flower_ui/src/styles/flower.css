@@ -6623,6 +6623,24 @@ html.dark .flower-component-shell {
   background: var(--primary-foreground);
 }
 
+.flower-input-request-surface .flower-input-request-choice-custom::before {
+  display: none;
+}
+
+.flower-input-request-choice-custom-icon {
+  flex: 0 0 auto;
+  color: var(--muted-foreground);
+}
+
+.flower-input-request-choice-custom.flower-input-request-choice-selected .flower-input-request-choice-custom-icon {
+  color: var(--primary);
+}
+
+.flower-input-admission-handoff-meta {
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+}
+
 .flower-input-request-surface .flower-input-request-choice:hover,
 .flower-input-request-surface .flower-input-request-choice:focus-visible,
 .flower-input-request-surface .flower-input-request-choice-selected,

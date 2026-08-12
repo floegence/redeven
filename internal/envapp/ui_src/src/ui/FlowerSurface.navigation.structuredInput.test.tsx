@@ -95,9 +95,9 @@ describe('FlowerSurface navigation structured input', () => {
     expect(runtime.querySelectorAll('[data-flower-input-request-prompt]')).toHaveLength(1);
     expect(runtime.querySelector('.flower-activity-inline')).toBeNull();
     expect(runtime.querySelector('.flower-model-status-indicator')).toBeNull();
-    expect(runtime.querySelectorAll('textarea')).toHaveLength(1);
-    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).disabled).toBe(true);
-    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).placeholder).toBe('Choose an option to continue.');
+    expect(runtime.querySelectorAll('textarea')).toHaveLength(0);
+    expect(runtime.querySelector('[role="radiogroup"]')).not.toBeNull();
+    expect(runtime.querySelector('.flower-input-request-choice')).not.toBeNull();
     expect((Array.from(runtime.querySelectorAll('.flower-composer button')) as HTMLButtonElement[])
       .some((button) => button.textContent?.includes('Continue') && button.disabled)).toBe(true);
   });
@@ -232,7 +232,7 @@ describe('FlowerSurface navigation structured input', () => {
       },
     });
     expect(runtime.querySelector('[data-flower-input-request-prompt]')).toBeNull();
-    expect(loadThread).toHaveBeenCalledTimes(1);
+    expect(loadThread).toHaveBeenCalledTimes(2);
     expect(runtime.querySelector('[data-thread-id="thread-submit-input"]')).not.toBeNull();
   });
 

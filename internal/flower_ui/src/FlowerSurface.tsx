@@ -2,7 +2,7 @@ import type { Accessor, Component, JSX } from 'solid-js';
 import { For, Show, batch, createEffect, createMemo, createSignal, on, onCleanup, onMount, untrack } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import type { UIFirstSelectionEvent } from '@floegence/floe-webapp-core';
-import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, FileText, FolderOpen, GitBranch, GripVertical, MoreHorizontal, Paperclip, Plus, Refresh, Send, Settings, Shield, Terminal, Trash, XCircle } from '@floegence/floe-webapp-core/icons';
+import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, FileText, FolderOpen, GitBranch, GripVertical, MoreHorizontal, Paperclip, Pencil, Plus, Refresh, Send, Settings, Shield, Terminal, Trash, XCircle } from '@floegence/floe-webapp-core/icons';
 import { Button, ConfirmDialog, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
 
 import { writeTextToClipboard } from './clipboard';
@@ -196,6 +196,7 @@ const FLOWER_WARM_THREAD_DETAIL_LIMIT = 8;
 type UnavailableFlowerModelSourceStatus = Exclude<FlowerModelSourceStatus, { state: 'ready' }>;
 type FlowerModelSourceRecoveryActionID = 'local_settings' | 'runtime_settings' | 'connection_center';
 type FlowerInputDraft = Readonly<{
+  answer_kind?: 'choice' | 'custom';
   choice_id?: string;
   text?: string;
 }>;
@@ -246,6 +247,11 @@ function latestThreadFailureIsUserRejectedTool(thread: FlowerThreadSnapshot | nu
 
 type FlowerConsumedInputAdmission = Readonly<{
   promptID: string;
+  answerLabel: string;
+  phase: 'submitting' | 'admitted';
+  operationID: number;
+  turnID?: string;
+  runID?: string;
 }>;
 type FlowerComposerContextUsageModel = Readonly<{
   usage: FlowerContextUsage;
@@ -489,7 +495,9 @@ function sameFlowerInputDrafts(left: Record<string, FlowerInputDraft>, right: Re
   return leftKeys.every((key) => {
     const leftDraft = left[key] ?? {};
     const rightDraft = right[key] ?? {};
-    return leftDraft.choice_id === rightDraft.choice_id && leftDraft.text === rightDraft.text;
+    return leftDraft.answer_kind === rightDraft.answer_kind
+      && leftDraft.choice_id === rightDraft.choice_id
+      && leftDraft.text === rightDraft.text;
   });
 }
 
@@ -1025,8 +1033,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [selectedThreadDetailID, setSelectedThreadDetailID] = createSignal('');
   const [sidebarActiveThreadID, setSidebarActiveThreadID] = createSignal('');
   const [composerSessionDrafts, setComposerSessionDrafts] = createSignal<Record<string, FlowerComposerSessionDraft>>({});
-  const [inputSubmittingPromptID, setInputSubmittingPromptID] = createSignal('');
   const [consumedInputAdmissions, setConsumedInputAdmissions] = createSignal<Record<string, FlowerConsumedInputAdmission>>({});
+  let inputAdmissionOperationSequence = 0;
   const [chatRunning, setChatRunning] = createSignal(false);
   const [pendingSubmission, setPendingSubmission] = createSignal<FlowerPendingSubmission | null>(null);
   const [deferredStopClientRequestID, setDeferredStopClientRequestID] = createSignal('');
@@ -1615,9 +1623,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const admission = consumedInputAdmissions()[trimString(thread.thread_id)];
     return admission?.promptID === trimString(request.prompt_id) ? null : request;
   });
+  const selectedInputAdmissionHandoff = createMemo(() => (
+    consumedInputAdmissions()[trimString(selectedThreadID())] ?? null
+  ));
   const inputSubmitting = createMemo(() => {
-    const promptID = trimString(inputSubmittingPromptID());
-    return Boolean(promptID && trimString(selectedInputRequest()?.prompt_id) === promptID);
+    const threadID = trimString(selectedThreadID());
+    const admission = consumedInputAdmissions()[threadID];
+    return admission?.phase === 'submitting';
   });
   createEffect(() => {
     const thread = selectedThread();
@@ -1625,7 +1637,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const threadID = trimString(thread.thread_id);
     const admission = consumedInputAdmissions()[threadID];
     if (!admission) return;
-    if (trimString(visibleInputRequest(thread)?.prompt_id) === admission.promptID) return;
+    // The prompt disappearing is not proof that this admission was projected.
+    // A subsequent waiting_user prompt may arrive before the admitted user turn;
+    // keep the local handoff until the receipt's exact canonical turn is visible.
+    const canonicalHasAdmission = thread.messages.some((message) => (
+      trimString(message.turn_id) === trimString(admission.turnID)
+      && message.role === 'user'
+    ));
+    if (!canonicalHasAdmission) return;
     setConsumedInputAdmissions((current) => {
       if (current[threadID] !== admission) return current;
       const next = { ...current };
@@ -3644,6 +3663,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     setLivePosition(thread.thread_id, live.stream_generation, live.cursor);
     upsertThread(thread);
     rememberThreadDetail(thread.thread_id);
+    setConsumedInputAdmissions((current) => {
+      const admission = current[thread.thread_id];
+      if (!admission) return current;
+      const canonicalPromptID = trimString(visibleInputRequest(thread)?.prompt_id);
+      const canonicalHasAdmission = thread.messages.some((message) => (
+        trimString(message.turn_id) === trimString(admission.turnID)
+        && message.role === 'user'
+      ));
+      if (!canonicalHasAdmission && canonicalPromptID === admission.promptID) return current;
+      const next = { ...current };
+      delete next[thread.thread_id];
+      return next;
+    });
     reconcileApprovalDecisionHandoff(thread, live.stream_generation, live.cursor);
     if (
       previous
@@ -6411,7 +6443,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       | 'inputRequestPrevious'
       | 'inputRequestNext'
       | 'inputRequestComposerPlaceholder'
-      | 'inputRequestChoicePlaceholder',
+      | 'inputRequestChoicePlaceholder'
+      | 'inputRequestOther'
+      | 'inputRequestAnswered',
     fallback: string,
   ): string => trimString(copy().chat[key]) || trimString(DEFAULT_FLOWER_SURFACE_COPY.chat[key]) || fallback;
 
@@ -6548,6 +6582,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     updateCurrentComposerSessionDraft((draft) => {
       const current = draft.inputDrafts[questionID] ?? {};
       const nextDraft = {
+        ...(next.answer_kind ? { answer_kind: next.answer_kind } : {}),
         ...(trimString(next.choice_id) ? { choice_id: trimString(next.choice_id) } : {}),
         ...(next.text !== undefined ? { text: next.text } : {}),
       };
@@ -6564,13 +6599,26 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const selectInputChoice = (question: FlowerInputRequestQuestion, choice: FlowerInputRequestChoice) => {
     setQuestionDraft(question.id, {
+      answer_kind: 'choice',
       choice_id: choice.choice_id,
+      text: questionDraft(question.id).text,
     });
+  };
+
+  const selectInputCustomAnswer = (question: FlowerInputRequestQuestion) => {
+    if (!questionAllowsText(question)) return;
+    setQuestionDraft(question.id, {
+      answer_kind: 'custom',
+      text: questionDraft(question.id).text ?? '',
+    });
+    queueMicrotask(() => composerRef?.focus());
   };
 
   const updateInputText = (question: FlowerInputRequestQuestion, text: string) => {
     if (!questionAllowsText(question)) return;
     setQuestionDraft(question.id, {
+      answer_kind: questionMode(question) === 'select_or_write' ? 'custom' : undefined,
+      choice_id: questionDraft(question.id).choice_id,
       text,
     });
   };
@@ -6958,6 +7006,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const question = activeInputQuestion();
     return question ? questionDraft(question.id).text ?? '' : '';
   });
+  const activeInputQuestionUsesTextEditor = createMemo(() => {
+    const question = activeInputQuestion();
+    if (!question) return false;
+    if (questionMode(question) === 'write') return true;
+    return questionMode(question) === 'select_or_write' && questionDraft(question.id).answer_kind === 'custom';
+  });
   createEffect(() => {
     composerTextValue();
     currentComposerSessionKey();
@@ -7014,7 +7068,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (chatRunning()) return true;
     if (!selectedInputRequest()) return false;
     const question = activeInputQuestion();
-    return inputSubmitting() || !question || !questionAllowsText(question);
+    return inputSubmitting() || !question || !activeInputQuestionUsesTextEditor();
   });
 
   const composerTextareaReadOnly = createMemo(() => (
@@ -7471,10 +7525,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
     if (mode === 'write') return text ? { text } : null;
     if (mode === 'select') return choiceID ? { choice_id: choiceID } : null;
-    if (mode === 'select_or_write' && text) {
+    if (mode === 'select_or_write' && draft.answer_kind === 'custom' && text) {
       return { text };
     }
-    if (mode === 'select_or_write' && choiceID) {
+    if (mode === 'select_or_write' && draft.answer_kind === 'choice' && choiceID) {
       return { choice_id: choiceID };
     }
     return null;
@@ -7509,12 +7563,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     const focusOwner = typeof document === 'undefined' ? null : document.activeElement;
     const promptID = trimString(request.prompt_id);
+    const operationID = ++inputAdmissionOperationSequence;
     const submittedDraft = currentComposerSessionDraft();
+    const containsSecretAnswer = request.questions.some((question) => question.is_secret === true);
+    const answerLabel = containsSecretAnswer ? chatCopyValue('inputRequestAnswerHidden', 'Answer hidden') : request.questions.map((question) => {
+      const answer = answers[question.id];
+      if (trimString(answer?.text)) return trimString(answer?.text);
+      const choice = question.choices?.find((candidate) => candidate.choice_id === trimString(answer?.choice_id));
+      return trimString(choice?.label) || trimString(answer?.choice_id);
+    }).filter(Boolean).join('; ');
     batch(() => {
-      setInputSubmittingPromptID(promptID);
       setConsumedInputAdmissions((current) => ({
         ...current,
-        [threadID]: { promptID },
+        [threadID]: { promptID, answerLabel, phase: 'submitting', operationID },
       }));
       updateComposerSessionDraft(threadID, (draft) => ({
         ...draft,
@@ -7542,32 +7603,55 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       ) {
         throw new Error('Flower input response admission returned an invalid receipt.');
       }
+      setConsumedInputAdmissions((current) => {
+        const admission = current[threadID];
+        if (!admission || admission.operationID !== operationID) return current;
+        return {
+          ...current,
+          [threadID]: {
+            ...admission,
+            phase: 'admitted',
+            turnID: trimString(receipt.turn_id),
+            runID: trimString(receipt.run_id),
+          },
+        };
+      });
       const selectionCurrent = selectedThreadDetailMatches(threadID);
       if (selectionCurrent) {
         requestComposerFocus(focusOwner);
       }
+      const selectionSequence = threadLoadSequence;
+      try {
+        const live = await loadThreadBootstrap(threadID, true);
+        if (consumedInputAdmissions()[threadID]?.operationID !== operationID) return;
+        applyLiveBootstrap(live, selectionCurrent && selectionSequence === threadLoadSequence && selectedThreadDetailMatches(threadID)
+          ? 'user_action'
+          : 'background_refresh');
+      } catch {
+        // The admitted handoff remains visible while live replay reconnects.
+      }
     } catch (error) {
+      const operationStillCurrent = consumedInputAdmissions()[threadID]?.operationID === operationID;
       batch(() => {
         setConsumedInputAdmissions((current) => {
-          if (current[threadID]?.promptID !== promptID) return current;
+          if (current[threadID]?.operationID !== operationID) return current;
           const next = { ...current };
           delete next[threadID];
           return next;
         });
-        updateComposerSessionDraft(threadID, (draft) => ({
-          ...draft,
-          inputPromptSignature: submittedDraft.inputPromptSignature,
-          inputDrafts: submittedDraft.inputDrafts,
-          activeInputQuestionID: submittedDraft.activeInputQuestionID,
-          reasoningOverride: submittedDraft.reasoningOverride,
-        }));
-        setInputSubmittingPromptID('');
+        if (operationStillCurrent) {
+          updateComposerSessionDraft(threadID, (draft) => ({
+            ...draft,
+            inputPromptSignature: submittedDraft.inputPromptSignature,
+            inputDrafts: submittedDraft.inputDrafts,
+            activeInputQuestionID: submittedDraft.activeInputQuestionID,
+            reasoningOverride: submittedDraft.reasoningOverride,
+          }));
+        }
       });
       if (selectedThreadDetailMatches(threadID)) {
         notifyComposerError(getErrorMessage(error));
       }
-    } finally {
-      setInputSubmittingPromptID('');
     }
   };
 
@@ -7795,7 +7879,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           <div class="flower-input-request-questions">
             <For each={visibleQuestions(inputRequest())}>
               {(question) => {
-                const selectedChoiceID = () => trimString(questionDraft(question.id).choice_id);
+                const selectedChoiceID = () => questionDraft(question.id).answer_kind === 'choice'
+                  ? trimString(questionDraft(question.id).choice_id)
+                  : '';
+                const customSelected = () => questionDraft(question.id).answer_kind === 'custom';
+                const showCustomChoice = questionMode(question) === 'select_or_write';
                 const summary = trimString(inputRequest().public_summary);
                 const questionText = trimString(question.question);
                 const showSummary = summary.length > 0 && summary !== questionText && question.id === inputRequest().questions[0]?.id;
@@ -7813,19 +7901,41 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                       </Show>
                       <div class="flower-input-request-question-text">{question.question}</div>
                     </div>
-                    <Show when={(question.choices?.length ?? 0) > 0}>
-                      <div class="flower-input-request-choice-grid">
+                    <Show when={(question.choices?.length ?? 0) > 0 || showCustomChoice}>
+                      <div
+                        class="flower-input-request-choice-grid"
+                        role="radiogroup"
+                        aria-label={question.question}
+                        onKeyDown={(event) => {
+                          if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+                          const radios = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]:not(:disabled)'));
+                          const currentIndex = radios.indexOf(document.activeElement as HTMLButtonElement);
+                          if (radios.length === 0) return;
+                          event.preventDefault();
+                          const offset = event.key === 'ArrowDown' ? 1 : -1;
+                          const next = radios[(currentIndex + offset + radios.length) % radios.length];
+                          next?.focus();
+                          next?.click();
+                        }}
+                      >
                         <For each={question.choices ?? []}>
                           {(choice) => (
                             <button
                               type="button"
+                              role="radio"
                               class={cn(
                                 'flower-input-request-choice',
                                 selectedChoiceID() === choice.choice_id && 'flower-input-request-choice-selected',
                               )}
-                              aria-pressed={selectedChoiceID() === choice.choice_id}
+                              aria-checked={selectedChoiceID() === choice.choice_id}
+                              data-flower-input-answer-kind="choice"
                               disabled={inputSubmitting()}
                               onClick={() => selectInputChoice(question, choice)}
+                              onKeyDown={(event) => {
+                                if (event.key !== ' ') return;
+                                event.preventDefault();
+                                selectInputChoice(question, choice);
+                              }}
                             >
                               <span class="flower-input-request-choice-label">{choice.label}</span>
                               <Show when={choice.description}>
@@ -7834,6 +7944,30 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                             </button>
                           )}
                         </For>
+                        <Show when={showCustomChoice}>
+                          <button
+                            type="button"
+                            role="radio"
+                            class={cn(
+                              'flower-input-request-choice flower-input-request-choice-custom',
+                              customSelected() && 'flower-input-request-choice-selected',
+                            )}
+                            aria-checked={customSelected()}
+                            data-flower-input-answer-kind="custom"
+                            disabled={inputSubmitting()}
+                            onClick={() => selectInputCustomAnswer(question)}
+                            onKeyDown={(event) => {
+                              if (event.key !== ' ') return;
+                              event.preventDefault();
+                              selectInputCustomAnswer(question);
+                            }}
+                          >
+                            <Pencil class="flower-input-request-choice-custom-icon h-4 w-4" aria-hidden="true" />
+                            <span class="flower-input-request-choice-label">
+                              {trimString(question.write_label) || chatCopyValue('inputRequestOther', 'None of the above / Other')}
+                            </span>
+                          </button>
+                        </Show>
                       </div>
                     </Show>
                   </div>
@@ -9817,6 +9951,25 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     );
   };
 
+  const inputAdmissionHandoffEntry = (admission: Accessor<FlowerConsumedInputAdmission>) => (
+    <div
+      class="flower-message-row flower-message-row-user flower-input-admission-handoff-row"
+      data-flower-input-admission-handoff
+      data-flower-input-admission-phase={admission().phase}
+      role="status"
+      aria-live="polite"
+    >
+      <div class="flower-message-block-stack flower-message-block-stack-user">
+        <div class="flower-message-bubble flower-message-bubble-framed flower-message-bubble-user">
+          <span class="flower-message-plain-text">{admission().answerLabel}</span>
+        </div>
+        <div class="flower-message-action-row flower-message-action-row-user flower-input-admission-handoff-meta">
+          {chatCopyValue('inputRequestAnswered', 'Answered')}
+        </div>
+      </div>
+    </div>
+  );
+
   const compactionDividerEntry = (entry: Accessor<Extract<FlowerTimelineEntry, { type: 'context_compaction' }>>) => {
     const decoration = createMemo(() => entry().decoration);
     return <FlowerContextCompactionDivider decoration={decoration()} copy={copy()} />;
@@ -10834,7 +10987,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               {(message) => errorNotice(copy().chat.threadLoadErrorTitle, message())}
             </Show>
             <Show
-              when={selectedThreadHasContent() || selectedThreadHasModelStatus() || visiblePendingSubmission()}
+              when={selectedThreadHasContent() || selectedThreadHasModelStatus() || visiblePendingSubmission() || selectedInputAdmissionHandoff()}
                 fallback={selectedThreadLoading()
                   ? threadLoadingState()
                   : warmupCanReplaceTranscript()
@@ -10860,6 +11013,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               </For>
               <Show when={visiblePendingSubmission()}>
                 {(submission) => pendingSubmissionEntry(submission)}
+              </Show>
+              <Show when={selectedInputAdmissionHandoff()}>
+                {(admission) => inputAdmissionHandoffEntry(admission)}
               </Show>
               {threadLevelApprovalPanel()}
             </Show>
@@ -11168,6 +11324,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   fallback={(
                     <>
                       {inputRequestPrompt(selectedInputRequest(), { surface: 'composer' })}
+                      <Show when={!selectedInputRequest() || activeInputQuestionUsesTextEditor()}>
                       <Show
                         when={activeInputQuestionIsSecret()}
                         fallback={(
@@ -11184,6 +11341,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                             disabled={composerTextareaDisabled()}
                             readOnly={composerTextareaReadOnly()}
                             aria-label={presentation() === 'companion' ? copy().chat.placeholder : undefined}
+                            data-flower-input-custom-answer={selectedInputRequest() && questionMode(activeInputQuestion()!) === 'select_or_write' ? 'true' : undefined}
                             aria-autocomplete={composerReferenceEditingAllowed() ? 'list' : undefined}
                             aria-haspopup="listbox"
                             aria-expanded={composerReferenceMenuVisible() || composerCommandMenuVisible() ? 'true' : undefined}
@@ -11242,6 +11400,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                           disabled={composerTextareaDisabled()}
                           readOnly={composerTextareaReadOnly()}
                           aria-haspopup="listbox"
+                          data-flower-input-custom-answer={selectedInputRequest() && questionMode(activeInputQuestion()!) === 'select_or_write' ? 'true' : undefined}
                           aria-expanded={composerCommandMenuVisible() ? 'true' : undefined}
                           aria-controls={composerCommandMenuVisible() ? FLOWER_COMPOSER_COMMAND_MENU_ID : undefined}
                           aria-activedescendant={composerCommandMenuVisible() ? FLOWER_COMPOSER_COMPACT_COMMAND_OPTION_ID : undefined}
@@ -11253,6 +11412,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                           }}
                           onKeyDown={handleComposerKeyDown}
                         />
+                      </Show>
                       </Show>
                     </>
                   )}

@@ -97,6 +97,33 @@ function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnap
 }
 
 describe('mergeFlowerThreadListRefresh', () => {
+  it('does not let a summary-only waiting update clear loaded input admission detail', () => {
+    const detailed = thread({
+      thread_id: 'thread-input-admission-detail',
+      status: 'running',
+      messages: [{
+        id: 'answer-message',
+        turn_id: 'answer-turn',
+        role: 'user',
+        content: 'Canonical answer',
+        status: 'complete',
+        created_at_ms: 10,
+      }],
+    });
+    const summary = thread({
+      ...detailed,
+      title: 'Updated summary title',
+      messages: [],
+    });
+
+    const merged = mergeFlowerThreadListRefresh([detailed], [summary], {
+      selectedThreadID: detailed.thread_id,
+      sameThreadSnapshot,
+    });
+
+    expect(merged[0]?.messages).toBe(detailed.messages);
+    expect(merged[0]?.title).toBe('Updated summary title');
+  });
   it('preserves loaded queued turn detail when a list summary only owns the count', () => {
     const queuedTurns = [{
       queue_id: 'queue-linked-file',

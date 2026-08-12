@@ -449,6 +449,8 @@ export type FlowerSurfaceCopy = Readonly<{
     inputRequestNext?: string;
     inputRequestComposerPlaceholder?: string;
     inputRequestChoicePlaceholder?: string;
+    inputRequestOther?: string;
+    inputRequestAnswered?: string;
     conversationsAria: string;
     resizeConversationsLabel: string;
     entryLabel: string;
@@ -694,6 +696,8 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     inputRequestNext: 'Next question',
     inputRequestComposerPlaceholder: 'Reply to continue this conversation.',
     inputRequestChoicePlaceholder: 'Choose an option to continue.',
+    inputRequestOther: 'None of the above / Other',
+    inputRequestAnswered: 'Answered',
     conversationsAria: 'Flower conversations',
     resizeConversationsLabel: 'Resize conversations',
     entryLabel: 'Flower',

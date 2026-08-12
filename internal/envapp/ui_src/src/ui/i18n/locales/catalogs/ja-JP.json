@@ -3970,6 +3970,8 @@
       "inputRequestNext": "次の質問",
       "inputRequestComposerPlaceholder": "返信してこの会話を続行します。",
       "inputRequestChoicePlaceholder": "続行するオプションを選択してください。",
+      "inputRequestOther": "上記以外 / その他",
+      "inputRequestAnswered": "回答済み",
       "conversationsAria": "Flower の会話",
       "resizeConversationsLabel": "会話一覧の幅を調整",
       "entryLabel": "Flower",

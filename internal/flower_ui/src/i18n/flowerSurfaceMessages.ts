@@ -216,6 +216,8 @@ export const flowerSurfaceEnUS = {
     inputRequestNext: 'Next question',
     inputRequestComposerPlaceholder: 'Reply to continue this conversation.',
     inputRequestChoicePlaceholder: 'Choose an option to continue.',
+    inputRequestOther: 'None of the above / Other',
+    inputRequestAnswered: 'Answered',
     conversationsAria: 'Flower conversations',
     resizeConversationsLabel: 'Resize conversations',
     entryLabel: 'Flower',

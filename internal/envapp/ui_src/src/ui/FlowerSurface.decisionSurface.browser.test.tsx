@@ -25,8 +25,10 @@ describe('Flower bottom decision surface', () => {
           { choice_id: 'stable', label: 'Stable', kind: 'select' },
           { choice_id: 'beta', label: 'Beta', kind: 'select' },
           { choice_id: 'nightly', label: 'Nightly', kind: 'select' },
-          { choice_id: 'custom', label: 'Custom', kind: 'select' },
         ],
+        choices_exhaustive: false,
+        write_label: 'Something else',
+        write_placeholder: 'Describe another channel',
       }],
     });
     const waitingThread = thread({
@@ -52,8 +54,80 @@ describe('Flower bottom decision surface', () => {
     expect(surface.querySelector('.flower-composer-draft-presence')).toBeNull();
     expect(surface.classList.contains('flower-decision-surface')).toBe(true);
     expect(surface.querySelector('.flower-decision-surface')).toBeNull();
-    expect(surface.querySelectorAll('.flower-input-request-choice')).toHaveLength(4);
+    const radios = Array.from(surface.querySelectorAll<HTMLElement>('[role="radio"]'));
+    expect(radios).toHaveLength(4);
+    expect(surface.querySelector('[role="radiogroup"]')).not.toBeNull();
+    expect(radios.map((radio) => radio.getAttribute('aria-checked'))).toEqual(['false', 'false', 'false', 'false']);
+    const other = surface.querySelector('[data-flower-input-answer-kind="custom"]') as HTMLButtonElement;
+    expect(other.textContent).toContain('Something else');
+    expect(other.querySelector('.flower-input-request-choice-custom-icon')).not.toBeNull();
+    expect(surface.querySelector('[data-flower-input-custom-answer]')).toBeNull();
     expect(surface.querySelector('.flower-composer-continue')?.textContent?.trim()).toBe('Continue');
+  });
+
+  it('keeps fixed and custom answers mutually exclusive while preserving the custom draft', async () => {
+    const request = inputRequest({
+      prompt_id: 'prompt-mutually-exclusive-answer',
+      questions: [{
+        id: 'preference',
+        header: 'Travel preference',
+        question: 'What kind of trip would you prefer?',
+        response_mode: 'select_or_write',
+        choices_exhaustive: false,
+        choices: [
+          { choice_id: 'hiking', label: 'Nature and hiking', kind: 'select' },
+          { choice_id: 'city', label: 'City and culture', kind: 'select' },
+        ],
+        write_label: 'None of the above / Other',
+        write_placeholder: 'Describe your preference',
+      }],
+    });
+    const waitingThread = thread({
+      thread_id: 'thread-mutually-exclusive-answer',
+      status: 'waiting_user',
+      input_request: request,
+    });
+    const submitInput = vi.fn(async (input) => ({
+      thread_id: input.thread_id,
+      turn_id: 'turn-answer',
+      run_id: 'run-answer',
+      consumed_prompt_id: input.prompt_id,
+    }));
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [waitingThread]),
+      loadThread: vi.fn(async () => liveBootstrap(waitingThread, 20)),
+      submitInput,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-mutually-exclusive-answer"] button')));
+    (runtime.querySelector('[data-thread-id="thread-mutually-exclusive-answer"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-input-answer-kind="custom"]')));
+
+    const other = runtime.querySelector('[data-flower-input-answer-kind="custom"]') as HTMLButtonElement;
+    other.click();
+    await waitFor(() => document.activeElement === runtime.querySelector('[data-flower-input-custom-answer]'));
+    const customInput = runtime.querySelector('[data-flower-input-custom-answer]') as HTMLTextAreaElement;
+    expect(other.getAttribute('aria-checked')).toBe('true');
+    expect((runtime.querySelector('.flower-composer-continue') as HTMLButtonElement).disabled).toBe(true);
+    customInput.value = 'A quiet coastal village';
+    customInput.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText' }));
+    await waitFor(() => !(runtime.querySelector('.flower-composer-continue') as HTMLButtonElement).disabled);
+
+    const hiking = Array.from(runtime.querySelectorAll<HTMLButtonElement>('[role="radio"]'))
+      .find((radio) => radio.textContent?.includes('Nature and hiking'))!;
+    hiking.focus();
+    hiking.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+    await waitFor(() => hiking.getAttribute('aria-checked') === 'true');
+    expect(runtime.querySelector('[data-flower-input-custom-answer]')).toBeNull();
+    other.click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-input-custom-answer]')));
+    expect((runtime.querySelector('[data-flower-input-custom-answer]') as HTMLTextAreaElement).value).toBe('A quiet coastal village');
+    hiking.click();
+    await waitFor(() => hiking.getAttribute('aria-checked') === 'true');
+    (runtime.querySelector('.flower-composer-continue') as HTMLButtonElement).click();
+    await waitFor(() => submitInput.mock.calls.length === 1);
+    expect(submitInput.mock.calls[0]?.[0].answers).toEqual({ preference: { choice_id: 'hiking' } });
   });
 
   it('navigates multiple input questions without losing per-question answers', async () => {
