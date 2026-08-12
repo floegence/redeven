@@ -52,4 +52,31 @@ describe('Flower ThreadStore', () => {
     store.setOperation({ thread_id: 'a', request_id: 'req-a-2', kind: 'retry' });
     expect(store.operation('a')?.request_id).toBe('req-a-2');
   });
+
+  it('updates a background thread without changing the selected view and deduplicates event IDs', () => {
+    const store = createThreadStore();
+    store.selectThread('a');
+    store.applyDetail({ thread_id: 'a', revision: 1, messages: ['a'], status: 'running' });
+    store.selectThread('b');
+    expect(store.applySummary({ thread_id: 'a', revision: 2, messages: ['a', 'done'], status: 'success' })).toBe(true);
+    expect(store.selectedThreadId()).toBe('b');
+    expect(store.applyEvent({ thread_id: 'a', revision: 3, id: 'event-3', kind: 'turn_state', payload: { status: 'success' } })).toBe('applied');
+    expect(store.applyEvent({ thread_id: 'a', revision: 3, id: 'event-3', kind: 'turn_state', payload: { status: 'running' } })).toBe('ignored');
+  });
+
+  it('tracks reconnect and resync per store without locking selection', () => {
+    const store = createThreadStore();
+    store.selectThread('a');
+    store.applyDetail({ thread_id: 'a', revision: 1, messages: [], status: 'running' });
+    store.setConnection('reconnecting');
+    expect(store.connection()).toBe('reconnecting');
+    expect(store.applyEvent({ thread_id: 'a', revision: 3, id: 'gap', kind: 'turn_state', payload: { status: 'success' } })).toBe('resync');
+    store.setConnection('resyncing');
+    expect(store.needsResync('a')).toBe(true);
+    store.applySummary({ thread_id: 'a', revision: 3, status: 'success', messages: [] });
+    store.clearResync('a');
+    store.setConnection('connected');
+    expect(store.connection()).toBe('connected');
+    expect(store.detail('a')?.status).toBe('success');
+  });
 });
