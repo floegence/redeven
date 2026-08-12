@@ -5,6 +5,7 @@ import {
   assertIsolatedSmokeConfiguration,
   assessPluginSmoke,
   browserPages,
+  isEnvAppPage,
 } from './smoke_desktop_plugins.mjs';
 
 test('isolated smoke configuration rejects shared Desktop paths and ports', () => {
@@ -110,4 +111,9 @@ test('Desktop smoke reconnects CDP after opening a new Electron session window',
   ));
   assert.match(source, /await open\.click\(\);\s+browser = await reconnectBrowser\(\);/u);
   assert.doesNotMatch(source, /async \(\) => \{\s+await browser\.close\(\);\s+browser = await chromium\.connectOverCDP/u);
+});
+
+test('Desktop smoke identifies the Env App target by its product route before shell readiness', () => {
+  assert.equal(isEnvAppPage({ url: () => 'http://127.0.0.1:60927/_redeven_proxy/env/' }), true);
+  assert.equal(isEnvAppPage({ url: () => 'file:///workspace/desktop/dist/welcome/index.html' }), false);
 });
