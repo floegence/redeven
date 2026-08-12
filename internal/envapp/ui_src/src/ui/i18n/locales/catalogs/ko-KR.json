@@ -4338,7 +4338,8 @@
         "trust_epoch_mismatch": "설치 후 플러그인 신뢰 정책이 변경되었습니다.",
         "activation_evidence_invalid": "플러그인 활성화 증거가 유효하지 않습니다.",
         "activation_lease_expired": "플러그인 활성화 권한이 만료되었습니다.",
-        "recovery_canceled": "플러그인 런타임 복구가 취소되었습니다."
+        "recovery_canceled": "플러그인 런타임 복구가 취소되었습니다.",
+        "recovery_timeout": "플러그인 런타임 복구가 예상보다 오래 걸렸습니다."
       },
       "runtimeRecoveryAction": {
         "retry": "위 오류를 확인한 후 런타임 복구를 다시 시도하세요.",

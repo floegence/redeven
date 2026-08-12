@@ -860,6 +860,9 @@ vi.mock('./protocol/redeven_v1', () => ({
     sys: {
       ping: vi.fn(async () => undefined),
     },
+    terminal: {
+      onSessionsChanged: vi.fn(() => () => undefined),
+    },
     ai: {
       subscribeThread: vi.fn(async () => undefined),
       sendUserTurn: vi.fn(async () => undefined),
@@ -1752,6 +1755,77 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(host.querySelector('[data-plugin-center-shell]')).toBeTruthy();
       expect(pluginLifecycleMocks.refreshEnabledRuntimeState).toHaveBeenCalledTimes(1);
       expect(pluginCenterViewState.lastProps.canOpenPluginSurfaces).toBe(true);
+      expect(pluginCenterViewState.lastProps.runtimeRecovery).toBeUndefined();
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
+  it('drops an internal recovery_canceled result from a superseded session generation', async () => {
+    vi.useFakeTimers();
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(officialContainersProjection('enabled'));
+    let resolveFirst!: (result: PluginRuntimeRefreshResult) => void;
+    let resolveSecond!: (result: PluginRuntimeRefreshResult) => void;
+    const refreshSignals: AbortSignal[] = [];
+    pluginLifecycleMocks.refreshEnabledRuntimeState
+      .mockImplementationOnce((options?: { signal?: AbortSignal }) => {
+        if (options?.signal) refreshSignals.push(options.signal);
+        return new Promise<PluginRuntimeRefreshResult>((resolve) => {
+          resolveFirst = resolve;
+        });
+      })
+      .mockImplementationOnce((options?: { signal?: AbortSignal }) => {
+        if (options?.signal) refreshSignals.push(options.signal);
+        return new Promise<PluginRuntimeRefreshResult>((resolve) => {
+          resolveSecond = resolve;
+        });
+      });
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+      await flushUntil(() => pluginLifecycleMocks.refreshEnabledRuntimeState.mock.calls.length === 1, 40);
+
+      protocolClient = { id: 'client-replaced' };
+      notifyProtocolStateChange();
+      await flushUntil(() => pluginLifecycleMocks.refreshEnabledRuntimeState.mock.calls.length === 2, 40);
+      expect(refreshSignals).toHaveLength(2);
+      expect(refreshSignals[0]?.aborted).toBe(true);
+      expect(String(refreshSignals[0]?.reason)).toContain('superseded');
+      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="plugin-center"]')), 40);
+      (host.querySelector('[data-plugin-panel-tile="plugin-center"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => Boolean(pluginCenterViewState.lastProps), 40);
+
+      resolveFirst({
+        results: [{
+          plugin_instance_id: officialContainersCatalog.pluginInstanceID,
+          status: 'failed',
+          error: {
+            code: 'PLUGIN_RUNTIME_UNAVAILABLE',
+            message: 'Plugin runtime recovery was canceled',
+            reason: 'recovery_canceled',
+            action: 'retry',
+          },
+        }],
+      } satisfies PluginRuntimeRefreshResult);
+      resolveSecond({
+        results: [{
+          plugin_instance_id: officialContainersCatalog.pluginInstanceID,
+          status: 'refreshed',
+        }],
+      } satisfies PluginRuntimeRefreshResult);
+      await flushAsync();
+      await flushUntil(() => pluginCenterViewState.lastProps?.runtimeRecoveryByInstanceID?.[officialContainersCatalog.pluginInstanceID], 40);
+
+      expect(pluginCenterViewState.lastProps.runtimeRecoveryByInstanceID[officialContainersCatalog.pluginInstanceID]).toEqual({ state: 'ready' });
       expect(pluginCenterViewState.lastProps.runtimeRecovery).toBeUndefined();
     } finally {
       dispose();

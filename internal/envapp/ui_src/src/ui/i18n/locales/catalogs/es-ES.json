@@ -4338,7 +4338,8 @@
         "trust_epoch_mismatch": "La política de confianza del plugin cambió después de instalarlo.",
         "activation_evidence_invalid": "La evidencia de activación del plugin no es válida.",
         "activation_lease_expired": "La autorización de activación del plugin ha caducado.",
-        "recovery_canceled": "Se canceló la recuperación del entorno de ejecución de plugins."
+        "recovery_canceled": "Se canceló la recuperación del entorno de ejecución de plugins.",
+        "recovery_timeout": "La recuperación del entorno de ejecución de plugins tardó más de lo esperado."
       },
       "runtimeRecoveryAction": {
         "retry": "Revisa el error anterior y vuelve a intentar la recuperación.",

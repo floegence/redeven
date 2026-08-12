@@ -278,6 +278,7 @@ export const enUS = defineDictionary({
         activation_evidence_invalid: 'The plugin activation evidence is invalid.',
         activation_lease_expired: 'The plugin activation lease expired.',
         recovery_canceled: 'Plugin runtime recovery was canceled.',
+        recovery_timeout: 'Plugin runtime recovery took longer than expected.',
       },
       runtimeRecoveryAction: {
         retry: 'Review the error above, then retry runtime recovery.',
