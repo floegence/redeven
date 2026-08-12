@@ -4338,7 +4338,8 @@
         "trust_epoch_mismatch": "外掛程式安裝後，信任原則已發生變更。",
         "activation_evidence_invalid": "外掛程式啟用憑證無效。",
         "activation_lease_expired": "外掛程式啟用授權已過期。",
-        "recovery_canceled": "外掛程式執行階段恢復已取消。"
+        "recovery_canceled": "外掛程式執行階段恢復已取消。",
+        "recovery_timeout": "外掛程式執行階段恢復時間超出預期。"
       },
       "runtimeRecoveryAction": {
         "retry": "請查看上方錯誤，然後重試執行階段恢復。",

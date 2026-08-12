@@ -4338,7 +4338,8 @@
         "trust_epoch_mismatch": "插件安装后，信任策略已发生变化。",
         "activation_evidence_invalid": "插件激活凭据无效。",
         "activation_lease_expired": "插件激活授权已过期。",
-        "recovery_canceled": "插件运行时恢复已取消。"
+        "recovery_canceled": "插件运行时恢复已取消。",
+        "recovery_timeout": "插件运行时恢复时间超出预期。"
       },
       "runtimeRecoveryAction": {
         "retry": "请查看上方错误，然后重试运行时恢复。",

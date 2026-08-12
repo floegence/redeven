@@ -4338,7 +4338,8 @@
         "trust_epoch_mismatch": "インストール後にプラグインの信頼ポリシーが変更されました。",
         "activation_evidence_invalid": "プラグインのアクティベーション証拠が無効です。",
         "activation_lease_expired": "プラグインのアクティベーション許可が期限切れです。",
-        "recovery_canceled": "プラグインランタイムの復元がキャンセルされました。"
+        "recovery_canceled": "プラグインランタイムの復元がキャンセルされました。",
+        "recovery_timeout": "プラグインランタイムの復元に予想以上の時間がかかっています。"
       },
       "runtimeRecoveryAction": {
         "retry": "上のエラーを確認してから、ランタイムの復元を再試行してください。",

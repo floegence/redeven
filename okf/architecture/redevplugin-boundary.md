@@ -8,7 +8,7 @@ timestamp: 2026-07-25T00:00:00Z
 # Summary
 
 ReDevPlugin is an independently released plugin platform. Redeven consumes its
-coordinated `v0.7.24` Go, npm, Rust source-crate, and machine-contract artifacts;
+coordinated `v0.7.25` Go, npm, Rust source-crate, and machine-contract artifacts;
 it does not fork platform mechanics. Redeven owns authenticated session mapping,
 product source policy and review UX, UI placement, product runtime builds, and
 concrete business adapters. Missing or unverifiable upstream identity, lifecycle,
@@ -42,16 +42,16 @@ external-package receipt store.
 
 ## Published dependency set
 
-The current integration consumes the coordinated ReDevPlugin `v0.7.24` set:
+The current integration consumes the coordinated ReDevPlugin `v0.7.25` set:
 
-- `github.com/floegence/redevplugin v0.7.24`;
-- `@floegence/redevplugin-contracts@0.7.24` and
-  `@floegence/redevplugin-ui@0.7.24`;
-- the exact six `0.7.24` Rust source crates ending in `redevplugin-runtime`;
+- `github.com/floegence/redevplugin v0.7.25`;
+- `@floegence/redevplugin-contracts@0.7.25` and
+  `@floegence/redevplugin-ui@0.7.25`;
+- the exact six `0.7.25` Rust source crates ending in `redevplugin-runtime`;
 - the released contract registry, package-set contract, contract hashes, and
   attested `platform-package-publication-v1.json` registry readback, whose
   contract-set SHA-256 is
-  `54c23dbe91491d1c6fb7d0f2ef727a207d407b59894ba4c5211afd000f99ec70`.
+  `ec166bdbcba88d5710bbbde37dcecc260bb95a3748e40632e81ef5e0d8e192d2`.
 
 Redeven release tooling verifies the exact-one publication manifest against its
 tag, source commit, workflow, GitHub attestation, Go proxy and SumDB sums, npm
@@ -78,7 +78,7 @@ a local operation store, copy the state machine, invent progress, or cancel work
 when a panel closes.
 
 Release trust refreshes, including activation-lease reconstruction after Host
-restart or activation-lease expiry, remain ReDevPlugin work. The `v0.7.24` Host
+restart or activation-lease expiry, remain ReDevPlugin work. The `v0.7.25` Host
 reconstructs a process-local lease from the sealed registry binding and durable
 release-trust state without downloading release metadata, packages, or the
 complete capability artifact set. The seal binds the plugin instance,
@@ -91,6 +91,15 @@ tampering, expiry, fences, rollback, schema drift, revocation, and epoch mismatc
 fail closed before a lease or surface is published. Remote freshness remains a
 separate upstream trust lifecycle; Redeven must not inspect opaque evidence,
 duplicate trust decisions, or treat local recovery as fallback authorization.
+
+The platform bounds each enabled-plugin recovery attempt to 15 seconds and
+reports deadline exhaustion as `recovery_timeout`, distinct from lifecycle
+`recovery_canceled`. Recovery remains source/channel single-flight. When an old
+session owns the flight and its context ends, a healthy new-session follower may
+take ownership and perform one new authoritative recovery; it does not inherit
+the ended leader context. Shared trust, revocation, fence, tamper, epoch, and
+transport failures remain authoritative and fail closed. A canceled leader
+cannot publish a lease.
 
 For the pre-release current-only baseline, Host admission accepts only
 `redevplugin.manifest.v8` and `redevplugin.release_metadata.v8`, with
@@ -191,7 +200,7 @@ committed. Unknown, corrupt, ambiguous, tampered, or future state blocks startup
 without mutation. Floret-owned state is outside this lifecycle.
 
 For an exact supported root copied across filesystem identities, Redeven may use
-the released read-only inspection and exact-plan recovery APIs from `v0.7.24`.
+the released read-only inspection and exact-plan recovery APIs from `v0.7.25`.
 The product presents the projected digests, counts, sizes, and retained-state
 facts, binds confirmation to one plan digest, and takes the normal Local
 Environment runtime lock. The released transaction retains the entire source as

@@ -4338,7 +4338,8 @@
         "trust_epoch_mismatch": "Die Plugin-Vertrauensrichtlinie wurde nach der Installation geändert.",
         "activation_evidence_invalid": "Der Aktivierungsnachweis des Plugins ist ungültig.",
         "activation_lease_expired": "Die Aktivierungsberechtigung des Plugins ist abgelaufen.",
-        "recovery_canceled": "Die Wiederherstellung der Plugin-Laufzeit wurde abgebrochen."
+        "recovery_canceled": "Die Wiederherstellung der Plugin-Laufzeit wurde abgebrochen.",
+        "recovery_timeout": "Die Wiederherstellung der Plugin-Laufzeit hat länger als erwartet gedauert."
       },
       "runtimeRecoveryAction": {
         "retry": "Prüfen Sie den oben angezeigten Fehler und versuchen Sie die Wiederherstellung erneut.",

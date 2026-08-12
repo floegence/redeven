@@ -4338,7 +4338,8 @@
         "trust_epoch_mismatch": "La politique de confiance du plugin a changé après son installation.",
         "activation_evidence_invalid": "La preuve d’activation du plugin n’est pas valide.",
         "activation_lease_expired": "L’autorisation d’activation du plugin a expiré.",
-        "recovery_canceled": "La récupération de l’environnement d’exécution des plugins a été annulée."
+        "recovery_canceled": "La récupération de l’environnement d’exécution des plugins a été annulée.",
+        "recovery_timeout": "La récupération de l’environnement d’exécution des plugins a pris plus de temps que prévu."
       },
       "runtimeRecoveryAction": {
         "retry": "Consultez l’erreur ci-dessus, puis relancez la récupération.",

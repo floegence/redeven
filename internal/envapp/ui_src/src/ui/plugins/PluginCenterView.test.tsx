@@ -2183,6 +2183,52 @@ describe('PluginCenterView', () => {
     expect(mount.querySelector<HTMLButtonElement>('[data-plugin-center-card-primary="catalog:containers"]')?.disabled).toBe(true);
   });
 
+  it('presents a bounded recovery timeout with one explicit retry and keeps Open disabled', () => {
+    const onRetryRuntimeRecovery = vi.fn();
+    const enabledProjection = containersPermissionProjection(true);
+    enabledProjection.items[0] = {
+      ...enabledProjection.items[0],
+      defaultLaunchTarget: {
+        pluginID: 'com.redeven.official.containers',
+        pluginInstanceID: 'plugininst_containers',
+        surfaceID: 'containers.dashboard',
+        preferredPlacement: 'activity',
+        expectedManagementRevision: 7,
+      },
+    };
+
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginCenterView
+        projection={enabledProjection}
+        loading={false}
+        error={null}
+        canManagePlugins
+        canOpenPluginSurfaces={false}
+        runtimeRecovery={{
+          state: 'failed',
+          error: 'Plugin runtime recovery exceeded its bounded deadline',
+          reason: 'recovery_timeout',
+          action: 'retry',
+        }}
+        onRetryRuntimeRecovery={onRetryRuntimeRecovery}
+        onRefresh={vi.fn()}
+        onCommand={vi.fn()}
+      />
+    ), mount);
+
+    const recovery = mount.querySelector<HTMLElement>('[data-plugin-runtime-recovery="failed"]');
+    expect(recovery?.textContent).toContain('Plugin runtime recovery took longer than expected.');
+    expect(recovery?.textContent).toContain('Review the error above, then retry runtime recovery.');
+    const retry = recovery?.querySelector<HTMLButtonElement>('[data-plugin-runtime-recovery-retry]');
+    retry?.click();
+    retry?.click();
+    expect(onRetryRuntimeRecovery).toHaveBeenCalledOnce();
+    expect(retry?.disabled).toBe(true);
+    expect(mount.querySelector<HTMLButtonElement>('[data-plugin-center-card-primary="catalog:containers"]')?.disabled).toBe(true);
+  });
+
   it('explains that plugin surfaces remain unavailable while runtime recovery is active', () => {
     const mount = document.createElement('div');
     document.body.append(mount);
