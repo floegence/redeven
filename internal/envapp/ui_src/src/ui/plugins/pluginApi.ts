@@ -58,25 +58,43 @@ export function createPluginLifecycleAPI(
       catalog = catalogSeed;
     }
     const installedPlugins = await installedPluginsPromise;
-    const [permissions, securityPolicies, permissionRequirementResults] = await Promise.all([
-      client.listPermissions({ active_only: true }, options),
-      client.listSecurityPolicies(options),
+    const [permissionsResult, securityPoliciesResult, permissionRequirementResults] = await Promise.all([
+      Promise.resolve(client.listPermissions({ active_only: true }, options)).then(
+        (value) => ({ status: 'fulfilled' as const, value }),
+        (reason) => ({ status: 'rejected' as const, reason }),
+      ),
+      Promise.resolve(client.listSecurityPolicies(options)).then(
+        (value) => ({ status: 'fulfilled' as const, value }),
+        (reason) => ({ status: 'rejected' as const, reason }),
+      ),
       Promise.allSettled(installedPlugins.map((plugin) => client.getPermissionRequirements({
         plugin_instance_id: plugin.plugin_instance_id,
       }, options))),
     ]);
-    const permissionRequirements = permissionRequirementResults.flatMap((result) => {
-      if (result.status === 'fulfilled') return [result.value];
-      throw result.reason;
-    });
+    const permissionRequirements = permissionRequirementResults.flatMap((result) => (
+      result.status === 'fulfilled' ? [result.value] : []
+    ));
+    const supplementalUnavailable = permissionsResult.status === 'rejected'
+      || securityPoliciesResult.status === 'rejected';
+    const unavailablePluginIDs = new Set(permissionRequirementResults.flatMap((result, index) => (
+      result.status === 'rejected' ? [installedPlugins[index]?.plugin_instance_id] : []
+    )).filter((value): value is string => Boolean(value)));
     const projection = projectPluginInventory({
       officialCatalog: catalog,
       installedPlugins,
-      permissionGrants: permissions.permissions,
+      permissionGrants: permissionsResult.status === 'fulfilled' ? permissionsResult.value.permissions : [],
       permissionRequirements,
-      securityPolicies: securityPolicies.security_policies,
+      securityPolicies: securityPoliciesResult.status === 'fulfilled' ? securityPoliciesResult.value.security_policies : [],
     });
-    return { ...projection, marketUnavailable };
+    return {
+      ...projection,
+      items: projection.items.map((item) => (
+        item.pluginInstanceID && (supplementalUnavailable || unavailablePluginIDs.has(item.pluginInstanceID))
+          ? { ...item, lifecycleState: 'needs_attention' as const, attentionReason: 'diagnostic_error' as const, defaultLaunchTarget: undefined }
+          : item
+      )),
+      marketUnavailable,
+    };
   };
 
   const inspectExternalPackage = async (

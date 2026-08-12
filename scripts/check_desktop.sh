@@ -51,6 +51,7 @@ main() {
   ui_pkg_log "ROOT_DIR: $ROOT_DIR"
 
   "$SCRIPT_DIR/dev_desktop_process_inventory_test.sh"
+  node --test "$SCRIPT_DIR/smoke_desktop_plugins.test.mjs"
 
   (
     cd "$dir"

@@ -128,7 +128,24 @@ const generatedContainersRecord: ReDevPluginRecord = {
   updated_at: '2026-07-04T10:01:00Z',
 };
 
-describe('v0.7.25 plugin lifecycle client integration', () => {
+describe('v0.7.26 plugin lifecycle client integration', () => {
+  it('keeps an enabled registry record visible when lifecycle metadata reads fail', async () => {
+    const { mocks, lifecycle } = createClientHarness();
+    mocks.catalog.mockResolvedValue({ plugins: [generatedContainersRecord] });
+    mocks.listPermissions.mockRejectedValue(new Error('plugin session lifecycle is unavailable'));
+    mocks.listSecurityPolicies.mockRejectedValue(new Error('plugin session lifecycle is unavailable'));
+    mocks.getPermissionRequirements.mockRejectedValue(new Error('plugin session lifecycle is unavailable'));
+
+    const projection = await lifecycle.loadInventoryProjection();
+    const installed = projection.items.find((item) => item.pluginInstanceID === generatedContainersInstanceID);
+    expect(installed).toMatchObject({
+      pluginInstanceID: generatedContainersInstanceID,
+      lifecycleState: 'needs_attention',
+      attentionReason: 'diagnostic_error',
+    });
+    expect(installed?.lifecycleState).not.toBe('not_installed');
+  });
+
   it('preserves the market detail generation from the local proxy envelope', async () => {
     vi.mocked(fetchLocalApiJSONResponse).mockResolvedValueOnce({
       data: { plugin_id: 'com.example.plugin', presentation: { default_locale: 'en-US', locales: [] } },
@@ -221,12 +238,18 @@ describe('v0.7.25 plugin lifecycle client integration', () => {
     expect(mocks.getPermissionRequirements).not.toHaveBeenCalled();
   });
 
-  it('keeps permission requirement failures fatal', async () => {
+  it('keeps the installed record when permission requirements are unavailable', async () => {
     const { lifecycle, mocks } = createClientHarness();
     mocks.catalog.mockResolvedValue({ plugins: [generatedContainersRecord] });
     mocks.getPermissionRequirements.mockRejectedValue(new Error('permission requirements unavailable'));
 
-    await expect(lifecycle.loadInventoryProjection()).rejects.toThrow('permission requirements unavailable');
+    await expect(lifecycle.loadInventoryProjection()).resolves.toMatchObject({
+      items: [expect.objectContaining({
+        pluginInstanceID: generatedContainersInstanceID,
+        lifecycleState: 'needs_attention',
+        attentionReason: 'diagnostic_error',
+      })],
+    });
   });
 
   it('starts and watches the generated signed release installation with one stable request id', async () => {

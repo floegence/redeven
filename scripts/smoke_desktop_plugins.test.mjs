@@ -1,0 +1,69 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+import {
+  assertIsolatedSmokeConfiguration,
+  assessPluginSmoke,
+} from './smoke_desktop_plugins.mjs';
+
+test('isolated smoke configuration rejects shared Desktop paths and ports', () => {
+  assert.throws(() => assertIsolatedSmokeConfiguration({
+    root: '/tmp/redeven-plugin-smoke',
+    stateRoot: '/Users/test/.redeven',
+    userDataRoot: '/tmp/redeven-plugin-smoke/user-data',
+    cacheRoot: '/tmp/redeven-plugin-smoke/cache',
+    tempRoot: '/tmp/redeven-plugin-smoke/temp',
+    localUIPort: 23998,
+    cdpPort: 9222,
+    inspectorPort: 9230,
+  }), /shared Desktop/u);
+});
+
+test('plugin smoke fails on a typed refresh failure and preserves its body', () => {
+  const refresh = {
+    ok: true,
+    data: {
+      results: [{
+        plugin_instance_id: 'catalog_containers',
+        status: 'failed',
+        error: { reason: 'trust_state_advanced', action: 'retry' },
+      }],
+    },
+  };
+  const result = assessPluginSmoke({ refresh, catalog: { plugins: [] }, panelInstalledCount: 0 });
+  assert.equal(result.ok, false);
+  assert.equal(result.failure, 'refresh_failed');
+  assert.deepEqual(result.refresh, refresh);
+});
+
+test('plugin smoke fails when enabled catalog and Panel installed counts differ', () => {
+  const result = assessPluginSmoke({
+    refresh: { ok: true, data: { results: [{ plugin_instance_id: 'catalog_containers', status: 'refreshed' }] } },
+    catalog: { plugins: [{ plugin_instance_id: 'catalog_containers', enable_state: 'enabled' }] },
+    panelInstalledCount: 0,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.failure, 'inventory_count_mismatch');
+  assert.equal(result.catalogEnabledCount, 1);
+});
+
+test('plugin smoke rejects an empty catalog instead of passing without a real plugin', () => {
+  const result = assessPluginSmoke({
+    refresh: { ok: true, data: { results: [] } },
+    catalog: { plugins: [] },
+    panelInstalledCount: 0,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.failure, 'enabled_plugin_missing');
+});
+
+test('plugin smoke accepts converged refresh, matching Panel inventory, iframe, and RPC', () => {
+  const result = assessPluginSmoke({
+    refresh: { ok: true, data: { results: [{ plugin_instance_id: 'catalog_containers', status: 'refreshed' }] } },
+    catalog: { plugins: [{ plugin_instance_id: 'catalog_containers', enable_state: 'enabled' }] },
+    panelInstalledCount: 1,
+    surface: { ready: true, url: 'about:blank' },
+    rpc: { ok: true, method: 'endpoints.list' },
+  });
+  assert.equal(result.ok, true);
+});

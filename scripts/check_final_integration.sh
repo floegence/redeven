@@ -82,6 +82,7 @@ check_shell_syntax() {
   bash -n scripts/check_desktop.sh
   bash -n scripts/check_desktop_electron_test_runtime.sh
   bash -n scripts/check_docker_runtime_e2e.sh
+  bash -n scripts/smoke_desktop_plugins.sh
   bash -n scripts/check_final_integration.sh
   bash -n scripts/check_quick_ci.sh
   bash -n scripts/check_renderer_e2e.sh

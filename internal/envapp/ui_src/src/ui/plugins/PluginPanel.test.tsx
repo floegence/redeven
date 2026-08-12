@@ -215,6 +215,23 @@ describe('PluginPanel', () => {
     expect(dialog.querySelector('[data-plugin-center-market-action]')).not.toBeNull();
   });
 
+  it('keeps an enabled plugin visible when runtime recovery needs attention', () => {
+    const recoveryFailure = pluginItem({
+      lifecycleState: 'needs_attention',
+      attentionReason: 'diagnostic_error',
+      defaultLaunchTarget: undefined,
+    });
+    const model = buildPluginPanelModel({ items: [recoveryFailure] });
+
+    expect(model.tiles.filter((tile) => tile.kind === 'plugin')).toHaveLength(1);
+    mountPanel({ model });
+
+    const dialog = document.querySelector('[role="dialog"]')!;
+    expect(dialog.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]')).not.toBeNull();
+    expect(dialog.textContent).not.toContain('No installed plugins yet.');
+    expect(dialog.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]')?.getAttribute('aria-describedby')).toBeTruthy();
+  });
+
   it('opens the plugin default surface from the primary tile action', () => {
     const onOpenPluginDetails = vi.fn();
     const onOpenPluginSurface = vi.fn();
