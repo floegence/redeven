@@ -117,3 +117,12 @@ test('Desktop smoke identifies the Env App target by its product route before sh
   assert.equal(isEnvAppPage({ url: () => 'http://127.0.0.1:60927/_redeven_proxy/env/' }), true);
   assert.equal(isEnvAppPage({ url: () => 'file:///workspace/desktop/dist/welcome/index.html' }), false);
 });
+
+test('Desktop smoke observes the first Env App navigation without forcing a reload', async () => {
+  const source = await import('node:fs/promises').then((fs) => fs.readFile(
+    new URL('./smoke_desktop_plugins.mjs', import.meta.url),
+    'utf8',
+  ));
+  assert.doesNotMatch(source, /page\.reload\(/u);
+  assert.match(source, /page\.waitForLoadState\('domcontentloaded'\)/u);
+});
