@@ -162,7 +162,6 @@ async function runBrowserSmoke(config) {
   let browser = await chromium.connectOverCDP(`http://127.0.0.1:${config.cdpPort}`);
   try {
     await runConnectedBrowserSmoke(config, browser, startedAt, async () => {
-      await browser.close();
       browser = await chromium.connectOverCDP(`http://127.0.0.1:${config.cdpPort}`);
       return browser;
     });
@@ -211,8 +210,13 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
       return null;
     }, 60_000, 'Env App page');
   } catch (error) {
-    await initialPage.screenshot({ path: path.join(config.reportRoot, `${config.phase}-welcome-failure.png`), fullPage: true });
-    await fs.writeFile(path.join(config.reportRoot, `${config.phase}-welcome-failure.html`), await initialPage.content());
+    const candidates = browserPages(browser).map((candidate) => ({
+      url: candidate.url(),
+    }));
+    await fs.writeFile(
+      path.join(config.reportRoot, `${config.phase}-page-targets.json`),
+      `${JSON.stringify(candidates, null, 2)}\n`,
+    );
     throw error;
   }
   const consoleErrors = [];
