@@ -179,8 +179,6 @@ async function runConnectedBrowserSmoke(config, browser, startedAt) {
     }
     return null;
   }, 30_000, 'plugin session credential');
-  await page.reload({ waitUntil: 'domcontentloaded' });
-  await waitFor(() => page.locator('#redeven-plugin-switcher').count(), 30_000, 'Plugin Panel trigger after session');
   await page.locator('#redeven-plugin-switcher').click();
   await waitFor(() => page.locator('[data-plugin-launcher-grid]').count(), 10_000, 'Plugin Panel');
   mark('panel_ready_ms');
