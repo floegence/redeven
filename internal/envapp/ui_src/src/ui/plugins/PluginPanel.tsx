@@ -65,23 +65,30 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
   let restoreFocusAfterClose = false;
   let focusRestoreTarget: HTMLElement | null = null;
   let cancelActiveTileDrag: (() => void) | undefined;
+  let closeTimer: number | undefined;
 
   onCleanup(() => {
     cancelActiveTileDrag?.();
     cancelActiveTileDrag = undefined;
+    if (closeTimer !== undefined) window.clearTimeout(closeTimer);
   });
 
   createEffect(() => {
     if (props.open) {
+      if (closeTimer !== undefined) {
+        window.clearTimeout(closeTimer);
+        closeTimer = undefined;
+      }
       setMounted(true);
       setClosing(false);
       return;
     }
     if (!mounted()) return;
     setClosing(true);
-    window.setTimeout(() => {
+    closeTimer = window.setTimeout(() => {
       setClosing(false);
       setMounted(false);
+      closeTimer = undefined;
     }, 150);
   });
 

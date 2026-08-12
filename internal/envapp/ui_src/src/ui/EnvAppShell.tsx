@@ -4896,7 +4896,7 @@ export function EnvAppShell() {
       />
       <PluginPanel
           id="redeven-plugin-switcher"
-          open
+          open={pluginsPanelOpen()}
           mobile={layout.isMobile()}
           trigger={pluginsPanelTrigger()}
           placement={pluginsPanelPlacement()}
