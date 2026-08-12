@@ -136,6 +136,7 @@ import { FlowerThreadList, type FlowerThreadMenuAction } from './threads/FlowerT
 import { FlowerThreadSwitcher, type FlowerThreadSwitcherCopy } from './threads/FlowerThreadSwitcher';
 import { SubagentDetailWindow } from './SubagentDetailWindow';
 import { applyFlowerLiveEvent, projectFlowerLiveBootstrap } from './flowerLiveReducer';
+import { createThreadStore } from './threadStore';
 import { flowerThreadReadSnapshotKey, mergeFlowerThreadListRefresh, sameThreadSnapshot } from './flowerThreadListRefresh';
 import { FlowerProviderBrandIcon, flowerModelSupportsImage, formatFlowerTokenCount } from './settings/providerCatalog';
 import { FlowerReasoningControl } from './ReasoningControl';
@@ -1029,6 +1030,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [savedAt, setSavedAt] = createSignal<number | null>(null);
   const [snapshot, setSnapshot] = createSignal<FlowerSettingsSnapshot | null>(null);
   const [threads, setThreads] = createSignal<readonly FlowerThreadSnapshot[]>([]);
+  // One per-thread store owns selection/revision fencing for the Phase 1
+  // adapter. Existing signals remain as a rendering compatibility boundary.
+  const threadStore = createThreadStore();
   const [selectedThreadID, setSelectedThreadID] = createSignal('');
   const [selectedThreadDetailID, setSelectedThreadDetailID] = createSignal('');
   const [sidebarActiveThreadID, setSidebarActiveThreadID] = createSignal('');
@@ -3653,6 +3657,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     expectedRunID = '',
   ): FlowerThreadSnapshot => {
     const projectedThread = projectFlowerLiveBootstrap(live);
+    threadStore.applySnapshot(projectedThread, live.cursor);
     const previousThread = threads().find((item) => item.thread_id === projectedThread.thread_id);
     // A bootstrap with messages=[] is a summary/read-after-admission boundary,
     // not an instruction to erase detail already rendered for this thread.
@@ -4168,6 +4173,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     // transcript while the request is pending. The sequence fence below
     // prevents a late A response from committing over B.
     setSelectedThreadID(tid);
+    threadStore.selectThread(tid);
     if (detailAvailable) {
       setSelectedThreadDetailID(tid);
       setSidebarActiveThreadID(tid);
@@ -4539,6 +4545,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         continue;
       }
       projected.set(threadID, result.thread);
+      if (threadID === selectedID) {
+        threadStore.applySnapshot(result.thread, result.cursor);
+      }
       // Summary replay has its own cursor. Its events retain their originating
       // thread sequence for identity, but must not consume detail replay.
       if (advancesThreadCursor) {
