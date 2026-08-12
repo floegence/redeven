@@ -78,6 +78,28 @@ async function responseJSON(response) {
   }
 }
 
+async function requestPluginJSON(page, pathname, body = {}, inheritedHeaders = {}) {
+  const headers = Object.fromEntries(Object.entries(inheritedHeaders).filter(([key]) => (
+    /^(x-redevplugin-csrf|x-redeven-plugin-session|content-type)$/iu.test(key)
+  )));
+  headers['content-type'] ??= 'application/json';
+  return page.evaluate(async ({ pathname: requestPath, body: requestBody, requestHeaders }) => {
+    const response = await fetch(requestPath, {
+      method: 'POST',
+      credentials: 'include',
+      headers: requestHeaders,
+      body: JSON.stringify(requestBody),
+    });
+    let payload = null;
+    try {
+      payload = await response.json();
+    } catch {
+      payload = null;
+    }
+    return { status: response.status, body: payload };
+  }, { pathname, body, requestHeaders: headers });
+}
+
 async function runBrowserSmoke(config) {
   assertIsolatedSmokeConfiguration(config);
   const playwrightRoot = config.playwrightRoot;
@@ -125,10 +147,17 @@ async function runConnectedBrowserSmoke(config, browser, startedAt) {
   const pageErrors = [];
   const failedResponses = [];
   const pluginResponses = [];
+  const pluginRequestHeaders = new Map();
   page.on('console', (message) => {
     if (message.type() === 'error') consoleErrors.push(message.text());
   });
   page.on('pageerror', (error) => pageErrors.push(error.message));
+  page.on('request', async (request) => {
+    const pathname = new URL(request.url()).pathname;
+    if (pathname.includes('/_redevplugin/api/plugins/')) {
+      pluginRequestHeaders.set(pathname, await request.allHeaders());
+    }
+  });
   page.on('response', async (response) => {
     const request = response.request();
     const pathname = new URL(response.url()).pathname;
@@ -144,27 +173,44 @@ async function runConnectedBrowserSmoke(config, browser, startedAt) {
   mark('document_ready_ms');
   await waitFor(() => page.locator('#redeven-plugin-switcher').count(), 60_000, 'Plugin Panel trigger');
   mark('shell_ready_ms');
+  const sessionHeaders = await waitFor(() => {
+    for (const headers of pluginRequestHeaders.values()) {
+      if (headers['x-redeven-plugin-session'] && headers['x-redevplugin-csrf']) return headers;
+    }
+    return null;
+  }, 30_000, 'plugin session credential');
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await waitFor(() => page.locator('#redeven-plugin-switcher').count(), 30_000, 'Plugin Panel trigger after session');
   await page.locator('#redeven-plugin-switcher').click();
   await waitFor(() => page.locator('[data-plugin-launcher-grid]').count(), 10_000, 'Plugin Panel');
   mark('panel_ready_ms');
 
-  const refreshEntry = await waitFor(
-    () => pluginResponses.find((entry) => entry.pathname.endsWith('/runtime/refresh-enabled')),
-    30_000,
-    'refresh-enabled response',
-  );
-  const catalogEntry = await waitFor(
-    () => pluginResponses.find((entry) => entry.pathname.endsWith('/catalog/query')),
-    30_000,
-    'plugin catalog response',
-  );
+  const refreshResponse = await waitFor(async () => {
+    const response = await requestPluginJSON(page, '/_redevplugin/api/plugins/runtime/refresh-enabled', {}, sessionHeaders);
+    return response.status === 200 ? response : null;
+  }, 30_000, 'refresh-enabled response');
+  const refreshEntry = { method: 'POST', pathname: '/_redevplugin/api/plugins/runtime/refresh-enabled', ...refreshResponse };
+  pluginResponses.push(refreshEntry);
+  const catalogResponse = await waitFor(async () => {
+    const response = await requestPluginJSON(page, '/_redevplugin/api/plugins/catalog/query', {}, sessionHeaders);
+    return response.status === 200 ? response : null;
+  }, 30_000, 'plugin catalog response');
+  const catalogEntry = { method: 'POST', pathname: '/_redevplugin/api/plugins/catalog/query', ...catalogResponse };
+  pluginResponses.push(catalogEntry);
   const refresh = refreshEntry.body;
   const catalog = catalogEntry.body?.data ?? catalogEntry.body;
   const enabledCount = Array.isArray(catalog?.plugins)
     ? catalog.plugins.filter((plugin) => plugin?.enable_state === 'enabled').length
     : 0;
+  await fs.writeFile(path.join(config.reportRoot, `${config.phase}-catalog-checkpoint.json`), JSON.stringify({
+    refresh,
+    catalog,
+    enabledCount,
+    panelTiles: await page.locator('[data-plugin-panel-tile]:not([data-plugin-panel-tile="plugin-center"])').count(),
+    panelText: (await page.locator('[data-plugin-launcher-grid]').innerText().catch(() => '')).slice(0, 4000),
+  }, null, 2));
   const panelInstalledCount = await waitFor(async () => {
-    const count = await page.locator('[data-plugin-panel-tile]').count();
+    const count = await page.locator('[data-plugin-panel-tile]:not([data-plugin-panel-tile="plugin-center"])').count();
     return count === enabledCount ? count : null;
   }, 30_000, 'Plugin Panel inventory projection');
 
