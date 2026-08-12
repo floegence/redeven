@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
+  assertNpmDirectDependenciesLocked,
   assertPlatformFilteredLicensesResolvable,
   collectJavaScriptLockInventory,
   packageCoordinate,
@@ -8,6 +10,87 @@ import {
   parsePnpmLock,
   resolvePackageLicense,
 } from './javascript_lock_inventory.mjs';
+
+function readJson(relativePath) {
+  return JSON.parse(readFileSync(new URL(relativePath, import.meta.url), 'utf8'));
+}
+
+const npmPackageRoots = [
+  { label: 'Desktop shell', path: '../desktop' },
+  { label: 'Env App UI', path: '../internal/envapp/ui_src' },
+  { label: 'Code App UI', path: '../internal/codeapp/ui_src' },
+];
+
+test('repository npm package roots keep direct dependencies aligned with package-lock', () => {
+  for (const root of npmPackageRoots) {
+    assertNpmDirectDependenciesLocked(
+      readJson(`${root.path}/package.json`),
+      readJson(`${root.path}/package-lock.json`),
+      root.label,
+    );
+  }
+});
+
+test('npm direct dependency lock validation accepts exact and ranged dependencies', () => {
+  assert.doesNotThrow(() => assertNpmDirectDependenciesLocked(
+    {
+      dependencies: { exact: '1.2.3', ranged: '^4.5.0' },
+      devDependencies: { development: '~6.0.0' },
+      optionalDependencies: { optional: '7.8.9-beta.1' },
+    },
+    {
+      packages: {
+        '': {
+          dependencies: { exact: '1.2.3', ranged: '^4.5.0' },
+          devDependencies: { development: '~6.0.0' },
+          optionalDependencies: { optional: '7.8.9-beta.1' },
+        },
+        'node_modules/exact': { version: '1.2.3' },
+        'node_modules/ranged': { version: '4.9.1' },
+        'node_modules/development': { version: '6.0.4' },
+        'node_modules/optional': { version: '7.8.9-beta.1' },
+      },
+    },
+    'fixture package',
+  ));
+});
+
+test('npm direct dependency lock validation reports missing and drifted entries', () => {
+  assert.throws(
+    () => assertNpmDirectDependenciesLocked(
+      { dependencies: { missing: '1.0.0', drifted: '2.0.0' } },
+      {
+        packages: {
+          '': { dependencies: { drifted: '1.0.0' } },
+          'node_modules/drifted': { version: '1.0.0' },
+        },
+      },
+      'fixture package',
+    ),
+    (error) => {
+      assert.match(error.message, /missing specifier "1\.0\.0" != "missing"/u);
+      assert.match(error.message, /drifted specifier "2\.0\.0" != "1\.0\.0"/u);
+      return true;
+    },
+  );
+  assert.throws(
+    () => assertNpmDirectDependenciesLocked(
+      { dependencies: { exact: '3.2.1' } },
+      {
+        packages: {
+          '': { dependencies: { exact: '3.2.1' } },
+          'node_modules/exact': { version: '3.2.0' },
+        },
+      },
+      'fixture package',
+    ),
+    /exact version "3\.2\.1" != "3\.2\.0"/u,
+  );
+  assert.throws(
+    () => assertNpmDirectDependenciesLocked({}, { packages: {} }, 'fixture package'),
+    /package-lock must contain the root package entry/u,
+  );
+});
 
 test('parsePnpmPackageKey supports scoped packages and strips peer context', () => {
   assert.deepEqual(parsePnpmPackageKey('@electron/rebuild@4.0.4'), {
