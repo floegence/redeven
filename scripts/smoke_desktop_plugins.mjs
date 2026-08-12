@@ -136,7 +136,13 @@ async function runConnectedBrowserSmoke(config, browser, startedAt) {
   ))).catch(() => null);
   if (!existingEnvPage) {
     const open = initialPage.getByRole('button', { name: /^(?:Open|打开)$/u }).last();
-    await open.waitFor({ state: 'visible', timeout: 30_000 });
+    try {
+      await open.waitFor({ state: 'visible', timeout: 30_000 });
+    } catch (error) {
+      await initialPage.screenshot({ path: path.join(config.reportRoot, `${config.phase}-welcome-failure.png`), fullPage: true }).catch(() => {});
+      await fs.writeFile(path.join(config.reportRoot, `${config.phase}-welcome-failure.html`), await initialPage.content()).catch(() => {});
+      throw error;
+    }
     await open.click();
   }
   let page;

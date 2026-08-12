@@ -27,14 +27,20 @@ mkdir -p "$STATE_ROOT" "$USER_DATA_ROOT" "$CACHE_ROOT" "$TEMP_ROOT" "$REPORT_ROO
 if [[ -n "$SEED_ROOT" ]]; then
   [[ -d "$SEED_ROOT/state" && -d "$SEED_ROOT/user-data" ]] || { echo "invalid task-owned smoke seed: $SEED_ROOT" >&2; exit 2; }
   case "$SEED_ROOT" in /tmp/redeven-plugin-*|/tmp/rdsmoke-*) ;; *) echo "smoke seed must be a task-owned /tmp state" >&2; exit 2;; esac
-  if [[ "$REUSE_SEED_STATE" == "1" ]]; then
-    STATE_ROOT="$SEED_ROOT/state"
-    LOCAL_UI_PORT=$(node -e 'const f=require("node:fs");const v=JSON.parse(f.readFileSync(process.argv[1]));console.log(new URL(`http://${v.local_hosting.access.local_ui_bind}`).port)' "$STATE_ROOT/catalog/local-environment.json")
-    [[ -f "$SEED_ROOT/user-data/desktop-runtime-owner.json" ]] && cp "$SEED_ROOT/user-data/desktop-runtime-owner.json" "$USER_DATA_ROOT/"
-  else
-    cp -a "$SEED_ROOT/state/." "$STATE_ROOT/"
-    cp -a "$SEED_ROOT/user-data/." "$USER_DATA_ROOT/"
-  fi
+  cp -a "$SEED_ROOT/state/." "$STATE_ROOT/"
+  cp -a "$SEED_ROOT/user-data/." "$USER_DATA_ROOT/"
+node - "$STATE_ROOT/catalog/local-environment.json" "$LOCAL_UI_PORT" "$STATE_ROOT/local-environment" <<'NODE'
+const fs = require('node:fs');
+const file = process.argv[2];
+const port = Number(process.argv[3]);
+const stateDir = process.argv[4];
+const record = JSON.parse(fs.readFileSync(file, 'utf8'));
+record.local_hosting ??= {};
+record.local_hosting.state_dir = stateDir;
+record.local_hosting.access ??= {};
+record.local_hosting.access.local_ui_bind = `127.0.0.1:${port}`;
+fs.writeFileSync(file, `${JSON.stringify(record, null, 2)}\n`);
+NODE
 fi
 
 if [[ "$REUSE_SEED_STATE" != "1" ]]; then
@@ -135,8 +141,16 @@ run_phase() {
   commit=$(git -C "$ROOT_DIR" rev-parse HEAD)
   versions=$(node -e 'const p=require(process.argv[1]);console.log(JSON.stringify({contracts:p.dependencies["@floegence/redevplugin-contracts"],ui:p.dependencies["@floegence/redevplugin-ui"]}))' "$ROOT_DIR/internal/envapp/ui_src/package.json")
   pids=$(node -e 'const f=require("node:fs");console.log(JSON.stringify(f.readFileSync(process.argv[1],"utf8").trim().split(/\s+/).filter(Boolean).map(Number)))' "$PID_FILE")
-  cat >"$config" <<JSON
-{"phase":"$phase","root":"$SMOKE_ROOT","stateRoot":"$STATE_ROOT","reusedTaskState":$([[ "$REUSE_SEED_STATE" == "1" ]] && echo true || echo false),"userDataRoot":"$USER_DATA_ROOT","cacheRoot":"$CACHE_ROOT","tempRoot":"$TEMP_ROOT","reportRoot":"$REPORT_ROOT","playwrightRoot":"$ROOT_DIR/internal/envapp/ui_src/node_modules","localUIPort":$LOCAL_UI_PORT,"cdpPort":$CDP_PORT,"inspectorPort":$INSPECTOR_PORT,"ownerID":"$owner_id","commit":"$commit","dependencies":$versions,"pids":$pids,"output":"$output"}
+  seed_meta='null'
+  if [[ -n "$SEED_ROOT" ]]; then
+    seed_commit=$(git -C "$SEED_ROOT" rev-parse HEAD 2>/dev/null || echo unknown)
+    seed_hash=$(shasum -a 256 "$SEED_ROOT/state/catalog/local-environment.json" | awk '{print $1}')
+    seed_meta=$(node -e 'console.log(JSON.stringify({root:process.argv[1],commit:process.argv[2],catalog_sha256:process.argv[3]}))' "$SEED_ROOT" "$seed_commit" "$seed_hash")
+  fi
+  node - "$config" <<JSON
+const fs = require('node:fs');
+const file = process.argv[2];
+fs.writeFileSync(file, JSON.stringify({phase:"$phase",root:"$SMOKE_ROOT",stateRoot:"$STATE_ROOT",reusedTaskState:$([[ "$REUSE_SEED_STATE" == "1" ]] && echo true || echo false),seed:$seed_meta,userDataRoot:"$USER_DATA_ROOT",cacheRoot:"$CACHE_ROOT",tempRoot:"$TEMP_ROOT",reportRoot:"$REPORT_ROOT",playwrightRoot:"$ROOT_DIR/internal/envapp/ui_src/node_modules",localUIPort:$LOCAL_UI_PORT,cdpPort:$CDP_PORT,inspectorPort:$INSPECTOR_PORT,ownerID:"$owner_id",commit:"$commit",dependencies:$versions,pids:$pids,output:"$output"}, null, 2)+"\n");
 JSON
   node "$ROOT_DIR/scripts/smoke_desktop_plugins.mjs" "$config"
   stop_owned

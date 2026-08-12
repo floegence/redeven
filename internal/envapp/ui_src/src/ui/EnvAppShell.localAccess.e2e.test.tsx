@@ -109,6 +109,7 @@ const workbenchPluginSurfaceState = vi.hoisted(() => ({
 }));
 const pluginPanelState = vi.hoisted(() => ({
   lastProps: null as any,
+  renderActual: false,
 }));
 const pluginCenterViewState = vi.hoisted(() => ({
   lastProps: null as any,
@@ -529,7 +530,7 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
         <div>
           {Array.isArray(props.activityItems)
             ? props.activityItems.map((item: any) => (
-                <button type="button" data-activity-id={item.id} onClick={() => activateItem(item)}>
+                <button type="button" data-activity-id={item.id} aria-expanded={typeof item.ariaExpanded === 'function' ? item.ariaExpanded() : item.ariaExpanded} aria-controls={item.ariaControls} onClick={() => activateItem(item)}>
                   {item.label}
                 </button>
               ))
@@ -742,9 +743,12 @@ vi.mock('./plugins/ActivityPluginSurfaceWindow', () => ({
     );
   },
 }));
-vi.mock('./plugins/PluginPanel', () => ({
+vi.mock('./plugins/PluginPanel', async (importActual) => {
+  const actual = await importActual<typeof import('./plugins/PluginPanel')>();
+  return {
   PluginPanel: (props: any) => {
     pluginPanelState.lastProps = props;
+    if (pluginPanelState.renderActual) return actual.PluginPanel(props);
     return <Show when={props.open}>
       <div>
         {props.model?.tiles?.map((tile: any) => {
@@ -772,7 +776,8 @@ vi.mock('./plugins/PluginPanel', () => ({
       </div>
     </Show>;
   },
-}));
+  };
+});
 vi.mock('./plugins/PluginCenterView', () => ({
   PluginCenterView: (props: any) => {
     pluginCenterViewState.lastProps = props;
@@ -1273,6 +1278,7 @@ beforeEach(async () => {
   workbenchPluginSurfaceState.closeAll.mockClear();
   workbenchPluginSurfaceState.listPluginTargets.mockClear();
   pluginPanelState.lastProps = null;
+  pluginPanelState.renderActual = false;
   pluginCenterViewState.lastProps = null;
   pluginPlatformMocks.createRedevenPluginPlatform.mockClear();
   pluginPlatformMocks.createPluginSurfacePlacementCoordinator.mockClear();
@@ -1797,7 +1803,9 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   }, 10000);
 
-  it('passes the responsive panel open state through EnvAppShell', async () => {
+  it('closes and reopens the real PluginPanel from every dismissal control', async () => {
+    vi.useFakeTimers();
+    pluginPanelState.renderActual = true;
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
@@ -1808,15 +1816,34 @@ describe('EnvAppShell environment entry affordances', () => {
     try {
       await flushAsync();
       const trigger = host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement;
-      expect(pluginPanelState.lastProps.open).toBe(false);
+      expect(trigger.getAttribute('aria-expanded')).toBe('false');
       trigger.click();
       await flushAsync();
-      expect(pluginPanelState.lastProps.open).toBe(true);
-      pluginPanelState.lastProps.onClose();
+      expect(trigger.getAttribute('aria-expanded')).toBe('true');
+      (document.querySelector('[aria-label="Close plugins"]') as HTMLButtonElement).click();
       await flushAsync();
-      expect(pluginPanelState.lastProps.open).toBe(false);
+      expect(trigger.getAttribute('aria-expanded')).toBe('false');
+      expect(document.querySelector('[data-plugin-panel-motion-state="closing"]')).not.toBeNull();
+      vi.advanceTimersByTime(75);
+      trigger.click();
+      await flushAsync();
+      expect(document.querySelector('[data-plugin-panel-motion-state="open"]')).not.toBeNull();
+      vi.advanceTimersByTime(100);
+      expect(document.querySelector('[data-plugin-launcher-backdrop]')).not.toBeNull();
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await flushAsync();
+      vi.advanceTimersByTime(150);
+      expect(document.querySelector('[data-plugin-launcher-backdrop]')).toBeNull();
+      trigger.click();
+      await flushAsync();
+      document.querySelector<HTMLElement>('[data-plugin-launcher-backdrop]')
+        ?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+      await flushAsync();
+      vi.advanceTimersByTime(150);
+      expect(document.querySelector('[data-plugin-launcher-backdrop]')).toBeNull();
     } finally {
       dispose();
+      vi.useRealTimers();
     }
   }, 10000);
 
