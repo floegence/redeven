@@ -109,4 +109,5 @@ test('Desktop smoke reconnects CDP after opening a new Electron session window',
     'utf8',
   ));
   assert.match(source, /await open\.click\(\);\s+browser = await reconnectBrowser\(\);/u);
+  assert.doesNotMatch(source, /async \(\) => \{\s+await browser\.close\(\);\s+browser = await chromium\.connectOverCDP/u);
 });
