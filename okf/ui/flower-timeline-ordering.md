@@ -30,6 +30,14 @@ Timeline decorations are a strict discriminated union. `context_compaction` owns
 
 Live streaming uses server events only for current-process presentation. `message.started` may create one assistant streaming row only when thread, TurnID, RunID, and MessageID are all nonempty; those identities may be distinct and become immutable for that draft in both server and browser materializers. Every later block-start, delta, block-set, or failure event must find that exact existing draft and match all four identities. An activity block delivered by `message.block_set` must also carry the same thread, turn, and run as the event envelope before it may replace a block. A missing draft or mismatched identity requests resynchronization and never synthesizes, repairs, or retargets a message. Reconnect continues from the materialized exact draft. There is no realtime transcript-message or transcript-reset event, and user messages are never inserted through the live stream. Floret text deltas may render temporary live markdown, while a validated `runtime.Event.Projection` with status `running` replaces only the matching live assistant draft with current assistant text and activity blocks. Aggregate Floret `runtime.Event.ActivityTimeline` remains lifecycle observation data and does not create main-thread activity blocks by itself. A local tool row is pending when Floret has observed the model's tool call but has not dispatched the handler; it becomes running only from Floret's dispatch-start lifecycle fact after permission and approval gates pass. Batched ordinary calls may start and finish in actual execution order, and approval display order never serializes handler execution. A projection that fails Floret validation or cannot be mapped is rejected as a unit and does not clear existing live content; a valid zero-segment projection clears the assistant blocks without inventing a body block. Canonical raw message projection requires exact nonempty thread, turn, run, message, role, status, and timestamp fields; every block must be a non-null supported JSON object. Bootstrap and `timeline.replaced` decode canonical arrays atomically, so one invalid row or block rejects the whole projection instead of partially rendering it. Stop and hard-cancel paths update current-process presentation but do not persist a canceled assistant row. Activity timeline changes enter the UI only inside Floret-derived projection activity segments delivered through `message.block_set`, a live draft, or a projection-backed timeline snapshot. Ordinary incremental events do not publish companion full timeline replacements. Every ordinary terminal turn and pending terminal settlement deletes the exact matching draft and publishes one `timeline.replaced` snapshot rebuilt from `ListThreadTurns`; an identity or ordinal mismatch requests resynchronization. `stream_generation` remains a Service-instance epoch so restart cannot let a stale high cursor hide new events.
 
+A live bootstrap reconciles terminal run status and failure classification from
+the canonical Floret thread snapshot after rebuilding the timeline. That
+terminal fact clears transient run, model-I/O, and waiting-prompt state and
+overrides an older materialized live error code. In particular, canonical
+`control_error` cannot be downgraded to a generic engine failure by replayed
+run-status presentation; non-terminal state may still be refined by the
+current in-memory approval and input projections.
+
 Provider attempt activation is a presentation fence. `message.started` may carry
 the Floret attempt epoch; an older epoch is ignored, while a higher epoch rebases
 the same assistant draft onto the latest validated cumulative Floret turn
@@ -77,6 +85,7 @@ Redeven may publish `timeline.replaced` only at canonical user admission, explic
 # Evidence
 
 - `redeven:internal/ai/flower_live_projection.go:51` - Live bootstrap builds `timeline_messages` before returning the thread snapshot.
+- `redeven:internal/ai/realtime_service_test.go:1675` - Bootstrap terminal reconciliation preserves canonical control-error classification over stale live failure state.
 - `redeven:internal/ai/floret_thread_projection.go:18` - Flower assistant block order is projected from the validated Floret turn projection.
 - `redeven:internal/ai/floret_runtime.go:205` - Hosted turns delegate execution and canonical projection construction to the published Floret runtime.
 - `redeven:internal/ai/floret_runtime.go:315` - Completed and waiting hosted turns consume only the validated projection returned by Floret.
