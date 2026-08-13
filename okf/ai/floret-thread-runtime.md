@@ -8,10 +8,7 @@ quality_exception: Cross-domain canonical thread authority contract spanning ide
 ---
 # Summary
 
-- Authority: Floret owns canonical `Thread`, `Turn`, `TimelineEvent`, and `PendingInteraction` state. A thread-local command actor is the in-memory command authority for send, resolve, cancel, and retry; the published admission APIs remain only as a temporary storage migration boundary.
-- Outcome: Redeven consumes identity-bound public capabilities and maps validated state into Flower while retaining product settings, authorization, unadmitted work, and saga receipts.
-- Invariants: callers never preallocate canonical identity, request ids are idempotent, one canonical event stream is monotonic, and no product table or UI projection reconstructs Agent state.
-- Failure boundary: missing authority, invalid data, conflicting identity, incomplete exact-read recovery, or failed permission proof stops the operation without fallback or guessed state.
+Floret owns canonical thread, turn, timeline, and pending-interaction state. A thread-local command actor serializes send, resolve, cancel, and retry. Redeven consumes identity-bound capabilities and projects validated state into Flower while retaining product settings, authorization, unadmitted work, and settlement receipts. Callers never preallocate canonical identity; request IDs are idempotent and the canonical event stream is monotonic. Invalid identity, incomplete exact-read recovery, or failed permission proof stops the operation without fallback.
 
 # Contract
 

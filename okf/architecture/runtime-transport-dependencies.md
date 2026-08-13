@@ -70,7 +70,7 @@ Compatibility depends on these transport and terminal interfaces staying aligned
 
 - `redeven:go.mod:8` - Redeven pins floeterm terminal-go in the runtime module.
 - `redeven:internal/agent/agent.go:20` - Agent imports the published Flowersec v2 root package and uses `ConnectionController`, `Connect`, `Session`, `RPCPeer`, and `ByteStream`.
-- `redeven:internal/agent/proxy_session_server_test.go:13` - Proxy-only sessions prove the RPC bootstrap stream returns standard 404 responses and remains usable until cancellation.
+- `redeven:internal/agent/local_direct_test.go:56` - Local direct sessions prove authorized channel registration, terminal notification attachment and detachment, and admission rejection during shutdown.
 - `redeven:internal/agent/agent.go:1339` - Remote and local production session assembly share AI registration and detach cleanup.
 - `redeven:internal/ai/rpc_inventory.go:1` - Canonical AI request/notification type inventory.
 - `redeven:internal/agent/ai_rpc_registration_test.go:1` - Production local session registration and structured-unavailable coverage.
