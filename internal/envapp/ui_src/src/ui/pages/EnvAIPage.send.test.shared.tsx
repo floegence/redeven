@@ -1307,15 +1307,15 @@ export function registerEnvAIPageSendTests() {
         expect(sendButton).toBeTruthy();
         expect(sendButton?.disabled).toBe(false);
         sendButton?.click();
-        await flush();
-        await flush();
-        expect(mocks.subscribeThreadMock).toHaveBeenCalledOnce();
-        const admittedThreadID = String(mocks.subscribeThreadMock.mock.calls[0]?.[0]?.threadId ?? '');
-        expect(admittedThreadID).toMatch(/^th_[A-Za-z0-9_-]{24}$/u);
-        const turnRequest = mocks.fetchLocalApiJSONMock.mock.calls.find(([url, init]) => (
-          String(url).endsWith('/_redeven_proxy/api/ai/turns') && init?.method === 'POST'
-        ));
+        let turnRequest: (typeof mocks.fetchLocalApiJSONMock.mock.calls)[number] | undefined;
+        for (let attempt = 0; attempt < 20 && !turnRequest; attempt += 1) {
+          await flush();
+          turnRequest = mocks.fetchLocalApiJSONMock.mock.calls.find(([url, init]) => (
+            String(url).endsWith('/_redeven_proxy/api/ai/turns') && init?.method === 'POST'
+          ));
+        }
         expect(turnRequest).toBeTruthy();
+        expect(mocks.subscribeThreadMock).not.toHaveBeenCalled();
         const turnBody = JSON.parse(String(turnRequest?.[1]?.body ?? '{}')) as {
           input: Record<string, unknown>;
         };

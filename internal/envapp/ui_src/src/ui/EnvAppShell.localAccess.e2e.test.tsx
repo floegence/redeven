@@ -70,6 +70,7 @@ const pluginLifecycleMocks = vi.hoisted(() => {
   const watchReleaseInstallOperation = vi.fn(async () => ({}));
   const inspectExternalPackage = vi.fn(async (_request: any) => ({}));
   const commitExternalPackage = vi.fn(async (_inspection: any, _options: any, _onProgress?: (result: any) => void) => ({}));
+  const dispose = vi.fn();
   return {
     listInstalledPlugins,
     loadInventoryProjection,
@@ -92,7 +93,9 @@ const pluginLifecycleMocks = vi.hoisted(() => {
       watchReleaseInstallOperation,
       inspectExternalPackage,
       commitExternalPackage,
+      dispose,
     })),
+    dispose,
   };
 });
 const pluginSurfaceFrameState = vi.hoisted(() => ({
@@ -1269,6 +1272,7 @@ beforeEach(async () => {
   pluginLifecycleMocks.watchReleaseInstallOperation.mockReset();
   pluginLifecycleMocks.inspectExternalPackage.mockReset();
   pluginLifecycleMocks.commitExternalPackage.mockReset();
+  pluginLifecycleMocks.dispose.mockClear();
   pluginSurfaceFrameState.lastProps = null;
   pluginSurfaceFrameState.propsByInstanceID.clear();
   pluginSurfaceFrameState.closeOverrides.clear();
