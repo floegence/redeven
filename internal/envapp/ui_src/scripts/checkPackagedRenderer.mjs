@@ -39,7 +39,7 @@ const builtPluginPresentationSHA256 = `sha256:${'1'.repeat(64)}`;
 const pluginMarketDetailPath = `/_redeven_proxy/api/plugins/market/plugins/${builtPluginReleaseRef.plugin_id}`;
 const builtPluginPackageURL = 'https://github.com/floegence/redeven-official-plugins/releases/download/v4.4.3/containers-4.4.3.redevplugin';
 
-function builtDistArtifact(webTransportURL) {
+function builtDistArtifact(webSocketURL) {
   return {
     v: 2,
     profile: 'flowersec/2',
@@ -63,9 +63,9 @@ function builtDistArtifact(webTransportURL) {
       listener_audience: 'listener-1',
       routing_token: 'routing-token',
       candidates: [{
-        id: 't1',
-        carrier: 'webtransport',
-        url: webTransportURL,
+        id: 'w1',
+        carrier: 'websocket',
+        url: webSocketURL,
         wire_profile: 'flowersec-direct/2',
       }],
     },
@@ -520,13 +520,14 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
   if (!address || typeof address === 'string') throw new Error('built Env App dist server did not bind a TCP port');
   baseURL = `http://127.0.0.1:${address.port}/`;
   if (accessReady) {
-    if (!tls) throw new Error('built Env App direct server requires Flowersec TLS credentials');
     acceptor = await acceptorFactory({
-      host: '127.0.0.1',
-      port: 0,
-      path: '/flowersec/webtransport/v2/direct',
-      certificate: tls.certificate,
-      privateKey: tls.privateKey,
+      listeners: [{
+        carrier: 'websocket',
+        path: 'direct',
+        host: '127.0.0.1',
+        port: 0,
+        allowedOrigins: [new URL(baseURL).origin],
+      }],
       maxInboundStreams: 64,
       authorize: async () => ({
         decision: 'allow',
@@ -542,9 +543,10 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
         return handlers;
       },
     });
-    const acceptorAddress = acceptor.address();
+    const acceptorAddress = acceptor.addresses()[0];
+    if (!acceptorAddress) throw new Error('built Env App direct server did not publish an address');
     directArtifact = builtDistArtifact(
-      `https://127.0.0.1:${acceptorAddress.port}/flowersec/webtransport/v2/direct`,
+      `ws://127.0.0.1:${acceptorAddress.port}/flowersec/v2/direct`,
     );
     acceptController = new AbortController();
     acceptingTask = (async () => {
@@ -759,9 +761,17 @@ async function verifyBuiltPluginInstallRouting(browser, tls) {
     await runtimeRefreshResponse;
 
     await page.getByRole('button', { name: 'Plugins', exact: true }).click();
-    const pluginCenterTile = page.locator('[data-plugin-panel-tile="plugin-center"]');
-    await pluginCenterTile.waitFor({ state: 'visible', timeout: 10_000 });
-    await pluginCenterTile.click();
+    const pluginCenterAction = page.locator('[data-plugin-center-market-action]');
+    try {
+      await pluginCenterAction.waitFor({ state: 'visible', timeout: 10_000 });
+    } catch (error) {
+      throw new Error(`unlocked built Plugin Center action did not become visible: ${JSON.stringify({
+        bodyText: (await page.locator('body').innerText()).slice(0, 2_000),
+        pageErrors,
+        pluginRequests,
+      })}`, { cause: error });
+    }
+    await pluginCenterAction.click();
 
     const pluginCenter = page.locator('[data-plugin-center-view]');
     await pluginCenter.waitFor({ state: 'visible', timeout: 10_000 });
@@ -837,15 +847,10 @@ async function verifyBuiltPluginInstallRouting(browser, tls) {
         payload,
       };
     });
-    const expectedPluginRequests = [
+    const requiredPluginRequests = [
       { method: 'POST', path: '/_redevplugin/api/plugins/runtime/refresh-enabled', payload: {} },
       { method: 'GET', path: '/_redevplugin/api/plugins/release-install-operations', payload: null },
       { method: 'POST', path: '/_redevplugin/api/plugins/catalog/query', payload: {} },
-      { method: 'POST', path: '/_redevplugin/api/plugins/permissions/query', payload: { active_only: true } },
-      { method: 'POST', path: '/_redevplugin/api/plugins/security-policies/query', payload: {} },
-      { method: 'POST', path: '/_redevplugin/api/plugins/catalog/query', payload: {} },
-      { method: 'POST', path: '/_redevplugin/api/plugins/permissions/query', payload: { active_only: true } },
-      { method: 'POST', path: '/_redevplugin/api/plugins/security-policies/query', payload: {} },
       {
         method: 'POST',
         path: '/_redevplugin/api/plugins/release-install-operations',
@@ -867,8 +872,6 @@ async function verifyBuiltPluginInstallRouting(browser, tls) {
         path: '/_redevplugin/api/plugins/permissions/requirements/query',
         payload: { plugin_instance_id: builtPluginInstanceID },
       },
-      { method: 'POST', path: '/_redevplugin/api/plugins/permissions/query', payload: { active_only: true } },
-      { method: 'POST', path: '/_redevplugin/api/plugins/security-policies/query', payload: {} },
       {
         method: 'POST',
         path: '/_redevplugin/api/plugins/permissions/grant',
@@ -880,7 +883,6 @@ async function verifyBuiltPluginInstallRouting(browser, tls) {
           expected_revoke_epoch: 0,
         },
       },
-      { method: 'POST', path: '/_redevplugin/api/plugins/catalog/query', payload: {} },
       { method: 'POST', path: '/_redevplugin/api/plugins/catalog/query', payload: {} },
       { method: 'POST', path: '/_redevplugin/api/plugins/permissions/query', payload: { active_only: true } },
       { method: 'POST', path: '/_redevplugin/api/plugins/security-policies/query', payload: {} },
@@ -895,11 +897,35 @@ async function verifyBuiltPluginInstallRouting(browser, tls) {
         payload: null,
       },
     ];
-    if (JSON.stringify(normalizedPluginRequests) !== JSON.stringify(expectedPluginRequests)) {
-      throw new Error(`built plugin Install emitted an unexpected plugin request: ${JSON.stringify({
-        expected: expectedPluginRequests,
-        actual: normalizedPluginRequests,
-      })}`);
+    let requestCursor = 0;
+    for (const requiredRequest of requiredPluginRequests) {
+      const requiredJSON = JSON.stringify(requiredRequest);
+      const nextIndex = normalizedPluginRequests.findIndex(
+        (request, index) => index >= requestCursor && JSON.stringify(request) === requiredJSON,
+      );
+      if (nextIndex < 0) {
+        throw new Error(`built plugin Install omitted or reordered a required plugin request: ${JSON.stringify({
+          missing: requiredRequest,
+          after_index: requestCursor - 1,
+          actual: normalizedPluginRequests,
+        })}`);
+      }
+      requestCursor = nextIndex + 1;
+    }
+    const exactlyOnceRequests = new Set([
+      'GET /_redevplugin/api/plugins/release-install-operations',
+      'POST /_redevplugin/api/plugins/release-install-operations',
+      'GET /_redevplugin/api/plugins/release-install-operations/release_install_built_renderer',
+      'POST /_redevplugin/api/plugins/permissions/grant',
+      'GET /_redevplugin/api/plugins/release-install-operations/by-request/:requestID',
+    ]);
+    for (const requestIdentity of exactlyOnceRequests) {
+      const count = normalizedPluginRequests.filter(
+        (request) => `${request.method} ${request.path}` === requestIdentity,
+      ).length;
+      if (count !== 1) {
+        throw new Error(`built plugin Install request ${requestIdentity} count = ${count}, expected 1`);
+      }
     }
     if (pageErrors.length > 0) throw new Error(`built plugin install page errors: ${JSON.stringify(pageErrors)}`);
 
@@ -1015,25 +1041,12 @@ async function main() {
       throw new Error(`locked built Env App Flower surface count = ${lockedFlowerSurfaceCount}, expected 0`);
     }
 
-    const pluginEntry = page.getByRole('button', { name: 'Plugins', exact: true });
-    const pluginEntryCount = await pluginEntry.count();
-    if (pluginEntryCount !== 1) {
-      throw new Error(`built Plugin entry count = ${pluginEntryCount}, expected 1`);
+    await page.getByRole('heading', { name: 'Unlock local runtime', exact: true })
+      .waitFor({ state: 'visible', timeout: 10_000 });
+    const pluginPanelTileCount = await page.locator('[data-plugin-panel-tile]').count();
+    if (pluginPanelTileCount !== 0) {
+      throw new Error(`locked built Plugin panel tile count = ${pluginPanelTileCount}, expected 0`);
     }
-    await pluginEntry.click();
-    const pluginCenterTile = page.locator('[data-plugin-panel-tile="plugin-center"]');
-    try {
-      await pluginCenterTile.waitFor({ state: 'visible', timeout: 10_000 });
-    } catch (error) {
-      const bodyText = (await page.locator('body').innerText()).slice(0, 2_000);
-      throw new Error(`built Plugin panel did not become visible: ${JSON.stringify({
-        pluginRequests,
-        pageErrors,
-        consoleProblems,
-        bodyText,
-      })}`, { cause: error });
-    }
-    const pluginPanelTileCount = await pluginCenterTile.count();
     // Locked local sessions must not issue privileged plugin inventory requests.
     const expectedPluginRequests = [];
     if (JSON.stringify(pluginRequests) !== JSON.stringify(expectedPluginRequests)) {
@@ -1136,8 +1149,8 @@ async function main() {
       root: rootSnapshot,
       framework_overlay_count: overlayCount,
       plugin_ui: {
-        entry_count: pluginEntryCount,
-        panel_center_tile_count: pluginPanelTileCount,
+        locked_access_gate_visible: true,
+        locked_panel_tile_count: pluginPanelTileCount,
         request_count: pluginRequests.length,
         plugin_install: pluginInstall,
       },

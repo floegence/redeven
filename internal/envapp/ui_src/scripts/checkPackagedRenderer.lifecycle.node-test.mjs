@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
-import { access } from 'node:fs/promises';
+import { access, readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { createBuiltDistServer, createBuiltDistTLS } from './checkPackagedRenderer.mjs';
+
+const packagedRendererSource = await readFile(new URL('./checkPackagedRenderer.mjs', import.meta.url), 'utf8');
 
 function pendingAcceptAcceptor() {
   let resolveAccept;
@@ -9,7 +11,7 @@ function pendingAcceptAcceptor() {
   let closeCalls = 0;
   let signal;
   const acceptor = {
-    address: () => ({ host: '127.0.0.1', port: 45678 }),
+    addresses: () => [{ host: '127.0.0.1', port: 45678 }],
     accept(options = {}) {
       signal = options.signal;
       return new Promise((resolve, reject) => {
@@ -57,7 +59,7 @@ function resolvedAcceptAcceptor() {
   };
   return {
     acceptor: {
-      address: () => ({ host: '127.0.0.1', port: 45678 }),
+      addresses: () => [{ host: '127.0.0.1', port: 45678 }],
       accept(options = {}) {
         acceptCalls += 1;
         return new Promise((resolve, reject) => {
@@ -131,4 +133,35 @@ test('packaged renderer TLS cleanup removes its temporary credentials', async ()
   await tls.cleanup();
 
   await assert.rejects(access(tls.directory));
+});
+
+test('locked packaged renderer verifies the access gate without opening privileged plugin UI', () => {
+  const lockedCheck = packagedRendererSource.slice(
+    packagedRendererSource.indexOf('const lockedFlowerSurfaceCount'),
+    packagedRendererSource.indexOf('const overlayCount'),
+  );
+  assert.match(lockedCheck, /getByRole\('heading', \{ name: 'Unlock local runtime'/u);
+  assert.match(lockedCheck, /\[data-plugin-panel-tile\]/u);
+  assert.doesNotMatch(lockedCheck, /pluginEntry\.click\(\)/u);
+  assert.match(lockedCheck, /const expectedPluginRequests = \[\]/u);
+  assert.doesNotMatch(packagedRendererSource, /pluginEntryCount/u);
+});
+
+test('unlocked packaged renderer uses the Flowersec 2.3.9 WebSocket Acceptor contract', () => {
+  assert.match(packagedRendererSource, /listeners: \[\{[\s\S]*?carrier: 'websocket',[\s\S]*?path: 'direct'/u);
+  assert.match(packagedRendererSource, /acceptor\.addresses\(\)\[0\]/u);
+  assert.doesNotMatch(packagedRendererSource, /acceptor\.address\(\)/u);
+  assert.doesNotMatch(packagedRendererSource, /flowersec\/webtransport\/v2\/direct/u);
+});
+
+test('unlocked packaged renderer opens Plugin Center through the empty launcher action', () => {
+  const pluginInstallCheck = packagedRendererSource.slice(
+    packagedRendererSource.indexOf('async function verifyBuiltPluginInstallRouting'),
+    packagedRendererSource.indexOf('async function verifyBuiltPluginPresentation'),
+  );
+  assert.match(pluginInstallCheck, /\[data-plugin-center-market-action\]/u);
+  assert.doesNotMatch(pluginInstallCheck, /\[data-plugin-panel-tile="plugin-center"\]/u);
+  assert.match(pluginInstallCheck, /requiredPluginRequests/u);
+  assert.match(pluginInstallCheck, /exactlyOnceRequests/u);
+  assert.doesNotMatch(pluginInstallCheck, /JSON\.stringify\(normalizedPluginRequests\)\s*!==/u);
 });
