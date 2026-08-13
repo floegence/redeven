@@ -14,35 +14,49 @@ type testRPCPeer struct {
 	router *sessionrpc.Router
 
 	mu            sync.RWMutex
-	notifications map[uint32][]func(json.RawMessage)
+	nextNotifyID  uint64
+	notifications map[uint32]map[uint64]func(context.Context, json.RawMessage)
 }
 
 func newTestRPCPeer(router *sessionrpc.Router) *testRPCPeer {
-	return &testRPCPeer{router: router, notifications: make(map[uint32][]func(json.RawMessage))}
+	return &testRPCPeer{router: router, notifications: make(map[uint32]map[uint64]func(context.Context, json.RawMessage))}
 }
 
 func (peer *testRPCPeer) Call(ctx context.Context, typeID uint32, request, response any) error {
 	return peer.router.Call(ctx, typeID, request, response)
 }
 
-func (peer *testRPCPeer) Notify(_ context.Context, typeID uint32, payload any) error {
+func (peer *testRPCPeer) Notify(ctx context.Context, typeID uint32, payload any) error {
 	encoded, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}
 	peer.mu.RLock()
-	handlers := append([]func(json.RawMessage){}, peer.notifications[typeID]...)
+	handlers := make([]func(context.Context, json.RawMessage), 0, len(peer.notifications[typeID]))
+	for _, handler := range peer.notifications[typeID] {
+		handlers = append(handlers, handler)
+	}
 	peer.mu.RUnlock()
 	for _, handler := range handlers {
-		handler(append(json.RawMessage(nil), encoded...))
+		handler(ctx, append(json.RawMessage(nil), encoded...))
 	}
 	return nil
 }
 
-func (peer *testRPCPeer) OnNotify(typeID uint32, handler func(json.RawMessage)) {
+func (peer *testRPCPeer) OnNotify(typeID uint32, handler func(context.Context, json.RawMessage)) func() {
 	peer.mu.Lock()
-	peer.notifications[typeID] = append(peer.notifications[typeID], handler)
+	peer.nextNotifyID++
+	notifyID := peer.nextNotifyID
+	if peer.notifications[typeID] == nil {
+		peer.notifications[typeID] = make(map[uint64]func(context.Context, json.RawMessage))
+	}
+	peer.notifications[typeID][notifyID] = handler
 	peer.mu.Unlock()
+	return func() {
+		peer.mu.Lock()
+		delete(peer.notifications[typeID], notifyID)
+		peer.mu.Unlock()
+	}
 }
 
 func callTestRPC(ctx context.Context, peer *testRPCPeer, typeID uint32, request json.RawMessage) (json.RawMessage, *sessionrpc.Error, error) {

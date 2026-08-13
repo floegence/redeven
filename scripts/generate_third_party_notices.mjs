@@ -50,6 +50,7 @@ const npmLicenseOverrides = new Map([
 ]);
 
 const npmCoordinateLicenseOverrides = new Map([
+	['@noble/hashes@2.2.0', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
   ['@babel/helper-plugin-utils@7.29.7', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
   ['@babel/plugin-syntax-jsx@7.29.7', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
   ['@humanfs/core@0.19.2', { license: 'Apache-2.0', note: 'License verified from the exact registry package manifest.' }],

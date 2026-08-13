@@ -433,7 +433,7 @@
     },
     {
       "path": "desktop/src/main/main.ts",
-      "sha256": "cf814f554389b13be9f9abc9f4652e9c3068ef7700ab6a7c6562f05663bdae7b",
+      "sha256": "e58a13201ddd051375c82cdd0aa0984b9ec6354cdd637d9a3bd5bb8dc9bcb15b",
       "sink_kinds": [
         "file"
       ],
@@ -1663,7 +1663,7 @@
     },
     {
       "path": "internal/envapp/ui_src/src/ui/EnvAppShell.tsx",
-      "sha256": "dbfe10dd529a4869c4f0a0056b040539e504883b0fd2e74814c3a1f84fc482a6",
+      "sha256": "80d3bfd34d287831c41d901e9c9a24e5bf45504c29627477065e0a19b9e925ea",
       "sink_kinds": [
         "web_storage"
       ],
@@ -1728,7 +1728,7 @@
     },
     {
       "path": "internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx",
-      "sha256": "d385aa4df67e46a07df8aff458fa9258efd38274399ecb7e4baadb696c35b7c2",
+      "sha256": "11181181782b420afc48d73576f2548102896f87598e5bc98f28cc17c9228301",
       "sink_kinds": [
         "web_storage"
       ],
@@ -1759,7 +1759,7 @@
     },
     {
       "path": "internal/flower_ui/src/FlowerSurface.tsx",
-      "sha256": "3a075556adab9a356831f3a59e5a1cd3ba951c1230f83d8b1e08934347447e66",
+      "sha256": "8bf9291a76f752db7435b7ec0852764cbb7899ea473b9464dd3e17260d20324e",
       "sink_kinds": [
         "web_storage"
       ],
@@ -2025,7 +2025,7 @@
     },
     {
       "path": "internal/redevpluginintegration/release_module.go",
-      "sha256": "7ff75e65b72467f9df8284bbfb875a824983df50fc2c965fd63243d6845476e4",
+      "sha256": "527b43ab5e0d6ac52b8b475e8a7756fee33183fc539b9323494844b1314b0430",
       "sink_kinds": [
         "file"
       ],
