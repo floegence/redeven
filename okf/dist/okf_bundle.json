@@ -559,7 +559,7 @@
               "ui",
               "workbench"
             ],
-            "summary": "Activity and Workbench use Floeterm's binary `terminal/live_v1` stream over Flowersec. Floeterm owns PTY geometry, geometry-stamped retained history, atomic boundaries, ordered output, input, resize acknowledgement, and close/error states; Redeven keeps catalog/history RPCs on the control plane with no live-RPC fallback. Renderer rebuilds replay each retained chunk at its recorded grid before restoring the current attachment grid.\n\nRedeven consumes terminal-web v0.14.1. `forceResizeAndWaitForCommittedFrame()` fences initial recovery, refresh, and working-set resume; an already attached renderer commits the requested full WebGL frame synchronously in the calling task, while renderer attachment and visual-suspension fallbacks remain asynchronous. Read-only host measurement is used only by an active visible runtime.",
+            "summary": "Activity and Workbench use Floeterm's binary `terminal/live_v1` stream over Flowersec. Floeterm owns PTY geometry, retained history, atomic boundaries, ordered I/O, resize acknowledgement, and close states; catalog and history RPCs remain on Redeven's control plane. Renderer recovery replays each chunk at its recorded grid before restoring the current attachment grid. The released terminal-web frame fence covers initial recovery, refresh, and working-set resume, while host measurement runs only for an active visible runtime.",
             "section_count": 2
           },
           {
@@ -654,7 +654,7 @@
               "live",
               "ui"
             ],
-            "summary": "Flower is a reusable presentation surface over Floret-owned conversation and execution state. This overview is the canonical navigation point for timeline ordering, model/navigation behavior, terminal activity, approval/context state, and subagent detail. The focused concepts own their independent UI contracts so search and open operations can retrieve one behavior without loading the complete Flower implementation history.\n\nPhase 1 adds a per-thread ThreadStore adapter as the single client-side\nselection and revision boundary. Bootstrap and live updates feed the store;\nsummary-only updates preserve loaded messages, stale thread responses are\ndiscarded, and a revision gap requests resynchronization. Existing rendering\nsignals are a temporary migration boundary and are not a second canonical\nsource.",
+            "summary": "Flower presents Floret-owned conversation and execution state. Focused contracts own timeline ordering, model navigation, terminal activity, approval context, and subagent detail. A per-thread ThreadStore is the single client-side selection and revision boundary: bootstrap and live updates feed it, summary-only updates preserve loaded messages, stale responses are discarded, and revision gaps request resynchronization. Rendering signals are projections rather than a second canonical source.",
             "section_count": 2
           },
           {
@@ -889,7 +889,7 @@
               "runtime",
               "threads"
             ],
-            "summary": "- Authority: Floret owns canonical `Thread`, `Turn`, `TimelineEvent`, and `PendingInteraction` state. A thread-local command actor is the in-memory command authority for send, resolve, cancel, and retry; the published admission APIs remain only as a temporary storage migration boundary.\n- Outcome: Redeven consumes identity-bound public capabilities and maps validated state into Flower while retaining product settings, authorization, unadmitted work, and saga receipts.\n- Invariants: callers never preallocate canonical identity, request ids are idempotent, one canonical event stream is monotonic, and no product table or UI projection reconstructs Agent state.\n- Failure boundary: missing authority, invalid data, conflicting identity, incomplete exact-read recovery, or failed permission proof stops the operation without fallback or guessed state.",
+            "summary": "Floret owns canonical thread, turn, timeline, and pending-interaction state. A thread-local command actor serializes send, resolve, cancel, and retry. Redeven consumes identity-bound capabilities and projects validated state into Flower while retaining product settings, authorization, unadmitted work, and settlement receipts. Callers never preallocate canonical identity; request IDs are idempotent and the canonical event stream is monotonic. Invalid identity, incomplete exact-read recovery, or failed permission proof stops the operation without fallback.",
             "section_count": 2
           },
           {
@@ -1646,8 +1646,8 @@
         "title": "Floret thread runtime integration",
         "type": "AI Runtime Contract"
       },
-      "body_length": 22495,
-      "summary": "- Authority: Floret owns canonical `Thread`, `Turn`, `TimelineEvent`, and `PendingInteraction` state. A thread-local command actor is the in-memory command authority for send, resolve, cancel, and retry; the published admission APIs remain only as a temporary storage migration boundary.\n- Outcome: Redeven consumes identity-bound public capabilities and maps validated state into Flower while retaining product settings, authorization, unadmitted work, and saga receipts.\n- Invariants: callers never preallocate canonical identity, request ids are idempotent, one canonical event stream is monotonic, and no product table or UI projection reconstructs Agent state.\n- Failure boundary: missing authority, invalid data, conflicting identity, incomplete exact-read recovery, or failed permission proof stops the operation without fallback or guessed state.",
+      "body_length": 22201,
+      "summary": "Floret owns canonical thread, turn, timeline, and pending-interaction state. A thread-local command actor serializes send, resolve, cancel, and retry. Redeven consumes identity-bound capabilities and projects validated state into Flower while retaining product settings, authorization, unadmitted work, and settlement receipts. Callers never preallocate canonical identity; request IDs are idempotent and the canonical event stream is monotonic. Invalid identity, incomplete exact-read recovery, or failed permission proof stops the operation without fallback.",
       "sections": [
         {
           "id": "contract",
@@ -1786,7 +1786,7 @@
           "description": "Pins the published Floret v3 module."
         }
       ],
-      "snippet": "- Authority: Floret owns canonical `Thread`, `Turn`, `TimelineEvent`, and `PendingInteraction` state. A thread-local command actor is the in-memory command authority for send, resolve, cancel, and retry; the published admission APIs remain ",
+      "snippet": "Floret owns canonical thread, turn, timeline, and pending-interaction state. A thread-local command actor serializes send, resolve, cancel, and retry. Redeven consumes identity-bound capabilities and projects validated state into Flower whi",
       "backlinks": [
         {
           "label": "AI tool runtime",
@@ -5247,7 +5247,7 @@
         "title": "Runtime transport dependencies",
         "type": "Runtime Contract"
       },
-      "body_length": 26309,
+      "body_length": 26331,
       "summary": "Redeven runtime builds control and data sessions on Flowersec v2 artifact, lease, connection-controller, session, RPC, and byte-stream primitives, while terminal lifecycle inside the runtime is delegated to Floeterm's terminal-go manager. Floeterm preserves valid user Bash prompt commands as independent syntax units; invalid user scripts remain Bash errors and are not normalized or hidden.\n\nRuntime transport uses Flowersec sessions while terminal lifecycle is delegated to Floeterm managers.",
       "sections": [
         {
@@ -5279,10 +5279,10 @@
           "description": "Agent imports the published Flowersec v2 root package and uses `ConnectionController`, `Connect`, `Session`, `RPCPeer`, and `ByteStream`."
         },
         {
-          "id": "redeven:internal/agent/proxy_session_server_test.go:13:proxy-only sessions prove the rpc bootstrap stream returns standard 404 responses and remains usable until cancellation.",
-          "source": "redeven:internal/agent/proxy_session_server_test.go",
-          "line": 13,
-          "description": "Proxy-only sessions prove the RPC bootstrap stream returns standard 404 responses and remains usable until cancellation."
+          "id": "redeven:internal/agent/local_direct_test.go:56:local direct sessions prove authorized channel registration, terminal notification attachment and detachment, and admission rejection during shutdown.",
+          "source": "redeven:internal/agent/local_direct_test.go",
+          "line": 56,
+          "description": "Local direct sessions prove authorized channel registration, terminal notification attachment and detachment, and admission rejection during shutdown."
         },
         {
           "id": "redeven:internal/agent/agent.go:1339:remote and local production session assembly share ai registration and detach cleanup.",
@@ -7537,6 +7537,7 @@
       "timestamp": "2026-07-25T00:00:00Z",
       "frontmatter": {
         "description": "Redeven derives ReDevPlugin identity from authenticated sessions and keeps package source, signature, execution, update, route, runtime, and capability authority distinct.",
+        "quality_exception": "Cross-domain plugin security contract spanning authenticated identity, package provenance, execution, updates, routes, runtime isolation, and capability authority.",
         "tags": [
           "local-ui",
           "permissions",
@@ -8335,8 +8336,8 @@
         "title": "Flower live timeline",
         "type": "UI Contract"
       },
-      "body_length": 5151,
-      "summary": "Flower is a reusable presentation surface over Floret-owned conversation and execution state. This overview is the canonical navigation point for timeline ordering, model/navigation behavior, terminal activity, approval/context state, and subagent detail. The focused concepts own their independent UI contracts so search and open operations can retrieve one behavior without loading the complete Flower implementation history.\n\nPhase 1 adds a per-thread ThreadStore adapter as the single client-side\nselection and revision boundary. Bootstrap and live updates feed the store;\nsummary-only updates preserve loaded messages, stale thread responses are\ndiscarded, and a revision gap requests resynchronization. Existing rendering\nsignals are a temporary migration boundary and are not a second canonical\nsource.",
+      "body_length": 4837,
+      "summary": "Flower presents Floret-owned conversation and execution state. Focused contracts own timeline ordering, model navigation, terminal activity, approval context, and subagent detail. A per-thread ThreadStore is the single client-side selection and revision boundary: bootstrap and live updates feed it, summary-only updates preserve loaded messages, stale responses are discarded, and revision gaps request resynchronization. Rendering signals are projections rather than a second canonical source.",
       "sections": [
         {
           "id": "contract",
@@ -8402,7 +8403,7 @@
           "description": "Redeven lists parent subagents through Floret host or maintenance host APIs."
         }
       ],
-      "snippet": "Flower is a reusable presentation surface over Floret-owned conversation and execution state. This overview is the canonical navigation point for timeline ordering, model/navigation behavior, terminal activity, approval/context state, and s",
+      "snippet": "Flower presents Floret-owned conversation and execution state. Focused contracts own timeline ordering, model navigation, terminal activity, approval context, and subagent detail. A per-thread ThreadStore is the single client-side selection",
       "links": [
         {
           "label": "Flower approval and context state",
@@ -10220,8 +10221,8 @@
         "title": "Workbench terminal interaction",
         "type": "UI Contract"
       },
-      "body_length": 22621,
-      "summary": "Activity and Workbench use Floeterm's binary `terminal/live_v1` stream over Flowersec. Floeterm owns PTY geometry, geometry-stamped retained history, atomic boundaries, ordered output, input, resize acknowledgement, and close/error states; Redeven keeps catalog/history RPCs on the control plane with no live-RPC fallback. Renderer rebuilds replay each retained chunk at its recorded grid before restoring the current attachment grid.\n\nRedeven consumes terminal-web v0.14.1. `forceResizeAndWaitForCommittedFrame()` fences initial recovery, refresh, and working-set resume; an already attached renderer commits the requested full WebGL frame synchronously in the calling task, while renderer attachment and visual-suspension fallbacks remain asynchronous. Read-only host measurement is used only by an active visible runtime.",
+      "body_length": 22327,
+      "summary": "Activity and Workbench use Floeterm's binary `terminal/live_v1` stream over Flowersec. Floeterm owns PTY geometry, retained history, atomic boundaries, ordered I/O, resize acknowledgement, and close states; catalog and history RPCs remain on Redeven's control plane. Renderer recovery replays each chunk at its recorded grid before restoring the current attachment grid. The released terminal-web frame fence covers initial recovery, refresh, and working-set resume, while host measurement runs only for an active visible runtime.",
       "sections": [
         {
           "id": "contract",
@@ -10320,7 +10321,7 @@
           "description": "The process carrier validates real Runtime, PTY, parser, canvas, input, and retained-history behavior."
         }
       ],
-      "snippet": "Activity and Workbench use Floeterm's binary `terminal/live_v1` stream over Flowersec. Floeterm owns PTY geometry, geometry-stamped retained history, atomic boundaries, ordered output, input, resize acknowledgement, and close/error states; ",
+      "snippet": "Activity and Workbench use Floeterm's binary `terminal/live_v1` stream over Flowersec. Floeterm owns PTY geometry, retained history, atomic boundaries, ordered I/O, resize acknowledgement, and close states; catalog and history RPCs remain o",
       "links": [
         {
           "label": "Flower turn launcher",
@@ -10344,5 +10345,5 @@
       ]
     }
   ],
-  "source_sha256": "5ae0196fb2a30ba8a8d5527bc664dff80a6e609253ad0fde4110c863cf6ecf09"
+  "source_sha256": "0057220e6149418039f0b8a5ac9856790c55db1d578e9eba1137129e2aa1da25"
 }

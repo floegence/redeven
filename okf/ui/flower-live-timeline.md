@@ -7,14 +7,7 @@ timestamp: 2026-07-18T00:00:00Z
 ---
 # Summary
 
-Flower is a reusable presentation surface over Floret-owned conversation and execution state. This overview is the canonical navigation point for timeline ordering, model/navigation behavior, terminal activity, approval/context state, and subagent detail. The focused concepts own their independent UI contracts so search and open operations can retrieve one behavior without loading the complete Flower implementation history.
-
-Phase 1 adds a per-thread ThreadStore adapter as the single client-side
-selection and revision boundary. Bootstrap and live updates feed the store;
-summary-only updates preserve loaded messages, stale thread responses are
-discarded, and a revision gap requests resynchronization. Existing rendering
-signals are a temporary migration boundary and are not a second canonical
-source.
+Flower presents Floret-owned conversation and execution state. Focused contracts own timeline ordering, model navigation, terminal activity, approval context, and subagent detail. A per-thread ThreadStore is the single client-side selection and revision boundary: bootstrap and live updates feed it, summary-only updates preserve loaded messages, stale responses are discarded, and revision gaps request resynchronization. Rendering signals are projections rather than a second canonical source.
 
 # Contract
 

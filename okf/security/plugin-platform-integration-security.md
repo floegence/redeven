@@ -4,6 +4,7 @@ title: Plugin platform integration security
 description: Redeven derives ReDevPlugin identity from authenticated sessions and keeps package source, signature, execution, update, route, runtime, and capability authority distinct.
 tags: [security, plugins, permissions, local-ui]
 timestamp: 2026-07-25T00:00:00Z
+quality_exception: Cross-domain plugin security contract spanning authenticated identity, package provenance, execution, updates, routes, runtime isolation, and capability authority.
 ---
 # Summary
 
