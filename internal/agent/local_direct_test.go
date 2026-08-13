@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"testing"
@@ -43,6 +44,10 @@ func (peer *recordingNotificationPeer) Call(context.Context, uint32, any, any) e
 func (peer *recordingNotificationPeer) Notify(_ context.Context, typeID uint32, _ any) error {
 	peer.notifications <- typeID
 	return nil
+}
+
+func (*recordingNotificationPeer) OnNotify(uint32, func(context.Context, json.RawMessage)) func() {
+	return func() {}
 }
 
 type acceptedNotificationSession struct {
