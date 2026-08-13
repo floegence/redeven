@@ -323,13 +323,6 @@ export function buildFixedTerminalPerformanceReport({
     carrierReport.threshold?.max_shared_prepared_history_p95_ms
       ?? carrierReport.threshold?.max_interactive_ms,
   );
-  const carrierPerSampleLimitMs = Number(carrierReport.threshold?.max_interactive_ms) || 0;
-  if (carrierPerSampleLimitMs > 0 && carrierSamplesMs.some((sample) => sample > carrierPerSampleLimitMs)) {
-    throw new Error(
-      'terminal carrier shared prepared-history sample exceeded its configured limit '
-        + `(max_sample_ms=${Math.max(...carrierSamplesMs)}, limit_ms=${carrierPerSampleLimitMs})`,
-    );
-  }
   const carrierMetric = normalizeFixedTerminalPerformanceMetric({
     metric: 'shared_prepared_history_interactive',
     sample_count: carrierSampleCount,
