@@ -1101,7 +1101,7 @@ func TestNameUpdateReachesEveryAuthorizedControlClient(t *testing.T) {
 		router := sessionrpc.NewRouter()
 		client := newTestRPCPeer(router)
 		updates := make(chan terminalNameUpdatePayload, 1)
-		client.OnNotify(TypeID_TERMINAL_NAME_UPDATE, func(payload json.RawMessage) {
+		client.OnNotify(TypeID_TERMINAL_NAME_UPDATE, func(_ context.Context, payload json.RawMessage) {
 			var update terminalNameUpdatePayload
 			if json.Unmarshal(payload, &update) == nil {
 				updates <- update
@@ -1153,7 +1153,7 @@ func TestForegroundCommandUpdateReachesEveryAuthorizedControlClient(t *testing.T
 		router := sessionrpc.NewRouter()
 		client := newTestRPCPeer(router)
 		updates := make(chan terminalForegroundCommandUpdatePayload, 1)
-		client.OnNotify(TypeID_TERMINAL_FOREGROUND_COMMAND_UPDATE, func(payload json.RawMessage) {
+		client.OnNotify(TypeID_TERMINAL_FOREGROUND_COMMAND_UPDATE, func(_ context.Context, payload json.RawMessage) {
 			var update terminalForegroundCommandUpdatePayload
 			if json.Unmarshal(payload, &update) == nil {
 				updates <- update
@@ -1213,7 +1213,7 @@ func TestAttachSinkReplaysCurrentForegroundCommandState(t *testing.T) {
 	router := sessionrpc.NewRouter()
 	client := newTestRPCPeer(router)
 	updates := make(chan terminalForegroundCommandUpdatePayload, 1)
-	client.OnNotify(TypeID_TERMINAL_FOREGROUND_COMMAND_UPDATE, func(payload json.RawMessage) {
+	client.OnNotify(TypeID_TERMINAL_FOREGROUND_COMMAND_UPDATE, func(_ context.Context, payload json.RawMessage) {
 		var update terminalForegroundCommandUpdatePayload
 		if json.Unmarshal(payload, &update) == nil {
 			updates <- update
@@ -1271,7 +1271,7 @@ func TestOutputActivityEventReachesEveryAuthorizedControlClient(t *testing.T) {
 		router := sessionrpc.NewRouter()
 		client := newTestRPCPeer(router)
 		updates := make(chan terminalOutputActivityUpdatePayload, 1)
-		client.OnNotify(TypeID_TERMINAL_OUTPUT_ACTIVITY_UPDATE, func(payload json.RawMessage) {
+		client.OnNotify(TypeID_TERMINAL_OUTPUT_ACTIVITY_UPDATE, func(_ context.Context, payload json.RawMessage) {
 			var update terminalOutputActivityUpdatePayload
 			if json.Unmarshal(payload, &update) == nil {
 				updates <- update
@@ -1326,7 +1326,7 @@ func TestOutputActivityEventDoesNotReuseForegroundCommandNotify(t *testing.T) {
 	client := newTestRPCPeer(router)
 
 	foregroundUpdates := make(chan json.RawMessage, 1)
-	client.OnNotify(TypeID_TERMINAL_FOREGROUND_COMMAND_UPDATE, func(payload json.RawMessage) {
+	client.OnNotify(TypeID_TERMINAL_FOREGROUND_COMMAND_UPDATE, func(_ context.Context, payload json.RawMessage) {
 		foregroundUpdates <- payload
 	})
 	detach := m.RegisterWithAccessGate(
@@ -1358,7 +1358,7 @@ func TestOutputActivityUpdateNormalizesMalformedUpstreamPhase(t *testing.T) {
 	client := newTestRPCPeer(router)
 
 	updates := make(chan terminalOutputActivityUpdatePayload, 1)
-	client.OnNotify(TypeID_TERMINAL_OUTPUT_ACTIVITY_UPDATE, func(payload json.RawMessage) {
+	client.OnNotify(TypeID_TERMINAL_OUTPUT_ACTIVITY_UPDATE, func(_ context.Context, payload json.RawMessage) {
 		var update terminalOutputActivityUpdatePayload
 		if json.Unmarshal(payload, &update) == nil {
 			updates <- update
@@ -1403,13 +1403,13 @@ func TestContextAndWorkEventsReachEveryAuthorizedControlClient(t *testing.T) {
 		client := newTestRPCPeer(router)
 		contextUpdates := make(chan terminalExecutionContextUpdatePayload, 1)
 		workUpdates := make(chan terminalWorkStateUpdatePayload, 1)
-		client.OnNotify(TypeID_TERMINAL_EXECUTION_CONTEXT_UPDATE, func(payload json.RawMessage) {
+		client.OnNotify(TypeID_TERMINAL_EXECUTION_CONTEXT_UPDATE, func(_ context.Context, payload json.RawMessage) {
 			var update terminalExecutionContextUpdatePayload
 			if json.Unmarshal(payload, &update) == nil {
 				contextUpdates <- update
 			}
 		})
-		client.OnNotify(TypeID_TERMINAL_WORK_STATE_UPDATE, func(payload json.RawMessage) {
+		client.OnNotify(TypeID_TERMINAL_WORK_STATE_UPDATE, func(_ context.Context, payload json.RawMessage) {
 			var update terminalWorkStateUpdatePayload
 			if json.Unmarshal(payload, &update) == nil {
 				workUpdates <- update
@@ -1503,13 +1503,13 @@ func TestContextAndWorkNotificationsFollowDynamicAccessGateState(t *testing.T) {
 		gate.RegisterChannelWithOptions(meta, accessgate.RegisterChannelOptions{Unlocked: unlocked})
 		contextUpdates := make(chan terminalExecutionContextUpdatePayload, 4)
 		workUpdates := make(chan terminalWorkStateUpdatePayload, 4)
-		client.OnNotify(TypeID_TERMINAL_EXECUTION_CONTEXT_UPDATE, func(payload json.RawMessage) {
+		client.OnNotify(TypeID_TERMINAL_EXECUTION_CONTEXT_UPDATE, func(_ context.Context, payload json.RawMessage) {
 			var update terminalExecutionContextUpdatePayload
 			if json.Unmarshal(payload, &update) == nil {
 				contextUpdates <- update
 			}
 		})
-		client.OnNotify(TypeID_TERMINAL_WORK_STATE_UPDATE, func(payload json.RawMessage) {
+		client.OnNotify(TypeID_TERMINAL_WORK_STATE_UPDATE, func(_ context.Context, payload json.RawMessage) {
 			var update terminalWorkStateUpdatePayload
 			if json.Unmarshal(payload, &update) == nil {
 				workUpdates <- update
