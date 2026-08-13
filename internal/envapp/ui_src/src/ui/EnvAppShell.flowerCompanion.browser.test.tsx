@@ -871,6 +871,9 @@ async function mountShell(): Promise<MountedShell> {
   disposers.push(dispose);
   await flushAsync();
   await flushAsync();
+  await vi.waitFor(() => {
+    expect(document.querySelector('[data-testid="activity-flower-composer"]')).toBeInstanceOf(HTMLTextAreaElement);
+  }, { timeout: 1_000 });
 
   const companion = document.querySelector('#redeven-activity-flower-companion');
   const product = document.querySelector('#redeven-activity-flower-product');
@@ -913,6 +916,9 @@ async function mountProductionMobileShell(): Promise<MountedMobileShell> {
   disposers.push(dispose);
   await flushAsync();
   await flushAsync();
+  await vi.waitFor(() => {
+    expect(document.querySelector('[data-testid="activity-flower-composer"]')).toBeInstanceOf(HTMLTextAreaElement);
+  }, { timeout: 1_000 });
 
   const companion = document.querySelector('#redeven-activity-flower-companion');
   const product = document.querySelector('#redeven-activity-flower-product');
