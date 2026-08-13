@@ -1195,11 +1195,6 @@ func (s *Service) flowerLiveMaterializedStateLocked(endpointID string, threadID 
 	return cloneFlowerLiveMaterializedState(stream.State)
 }
 
-func flowerLiveStateHasPendingApproval(state FlowerLiveMaterializedState, runID string) bool {
-	pending, _, _, _ := flowerLiveApprovalSummary(state, runID)
-	return pending
-}
-
 func flowerLiveApprovalSummary(state FlowerLiveMaterializedState, runID string) (bool, int, int64, int64) {
 	runID = strings.TrimSpace(runID)
 	count := 0
