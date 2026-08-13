@@ -108,11 +108,20 @@ test('waits for the trace-scoped baseline render before visual sampling', () => 
   assert.match(carrierSource, /baseline_rendered_ms: rendered\.startTime - start\.startTime/u);
 });
 
-test('persists the complete recovery breakdown before enforcing the sample limit', () => {
+test('collects every shared prepared-history sample before enforcing the aggregate p95 limit', () => {
   assert.match(carrierSource, /attach_ack_ms: workbenchRecovery\.attach_ack_ms/u);
   assert.match(carrierSource, /baseline_parser_committed_ms: workbenchRecovery\.baseline_parser_committed_ms/u);
   assert.match(carrierSource, /baseline_rendered_ms: workbenchRecovery\.baseline_rendered_ms/u);
-  assert.match(carrierSource, /carrierProgress\.sharedPreparedHistorySamples\.push\(completedSample\);\s+assertTerminalCarrierInteractiveLimit/u);
+  const sharedSampleLoop = carrierSource.slice(
+    carrierSource.indexOf('const sharedPreparedHistorySamples = [];'),
+    carrierSource.indexOf('const sharedPreparedHistory = sharedPreparedHistorySamples[0];'),
+  );
+  assert.match(sharedSampleLoop, /carrierProgress\.sharedPreparedHistorySamples\.push\(completedSample\)/u);
+  assert.doesNotMatch(sharedSampleLoop, /assertTerminalCarrierInteractiveLimit/u);
+  assert.match(
+    carrierSource,
+    /const sharedPreparedHistoryP95Ms = assertTerminalCarrierP95Limit\(\{[\s\S]*?values: sharedPreparedHistorySamples\.map/u,
+  );
 });
 
 test('rebuilds the real renderer on refresh and verifies focus does not corrupt replay', () => {
