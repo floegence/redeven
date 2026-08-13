@@ -152,6 +152,7 @@ test('unlocked packaged renderer uses the Flowersec 2.3.9 WebSocket Acceptor con
   assert.match(packagedRendererSource, /acceptor\.addresses\(\)\[0\]/u);
   assert.doesNotMatch(packagedRendererSource, /acceptor\.address\(\)/u);
   assert.doesNotMatch(packagedRendererSource, /flowersec\/webtransport\/v2\/direct/u);
+  assert.doesNotMatch(packagedRendererSource, /createBuiltDistServer\(\{[^}]*\btls\b/u);
 });
 
 test('unlocked packaged renderer opens Plugin Center through the empty launcher action', () => {
