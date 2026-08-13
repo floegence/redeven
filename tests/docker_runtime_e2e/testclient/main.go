@@ -9,6 +9,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -68,11 +69,10 @@ type apiEnvelope struct {
 }
 
 type networkExposureCheckResult struct {
-	AccessStatus          accessStatus  `json:"access_status"`
-	EnvAppLoaded          bool          `json:"env_app_loaded"`
-	WrongHostStatus       int           `json:"wrong_host_status"`
-	WrongOriginWSRejected bool          `json:"wrong_origin_ws_rejected"`
-	Ping                  *pingResponse `json:"ping,omitempty"`
+	AccessStatus           accessStatus `json:"access_status"`
+	EnvAppLoaded           bool         `json:"env_app_loaded"`
+	WrongHostStatus        int          `json:"wrong_host_status"`
+	DirectArtifactRejected bool         `json:"direct_artifact_rejected"`
 }
 
 func main() {
@@ -123,13 +123,13 @@ func run(baseURL string, action string, targetVersion string, password string) e
 	case "ping":
 		ping, err := rpcutil.CallJSON[struct{}, pingResponse](ctx, session.RPC(), sys.TypeID_SYS_PING, &struct{}{})
 		if err != nil {
-			return fmt.Errorf("sys.ping: %w", err)
+			return rpcActionError("sys.ping", err)
 		}
 		result.Ping = ping
 	case "restart":
 		resp, err := rpcutil.CallJSON[sys.RestartRequest, sys.RestartResponse](ctx, session.RPC(), sys.TypeID_SYS_RESTART, &sys.RestartRequest{})
 		if err != nil {
-			return fmt.Errorf("sys.restart: %w", err)
+			return rpcActionError("sys.restart", err)
 		}
 		result.Restart = resp
 	case "upgrade":
@@ -137,7 +137,7 @@ func run(baseURL string, action string, targetVersion string, password string) e
 			TargetVersion: strings.TrimSpace(targetVersion),
 		})
 		if err != nil {
-			return fmt.Errorf("sys.upgrade: %w", err)
+			return rpcActionError("sys.upgrade", err)
 		}
 		result.Upgrade = resp
 	default:
@@ -145,6 +145,14 @@ func run(baseURL string, action string, targetVersion string, password string) e
 	}
 
 	return printResult(result)
+}
+
+func rpcActionError(action string, err error) error {
+	var application *flowersec.RPCError
+	if errors.As(err, &application) && application != nil {
+		return fmt.Errorf("%s: %s (code=%d)", action, application.Message, application.Code)
+	}
+	return fmt.Errorf("%s: %w", action, err)
 }
 
 func printResult(result commandResult) error {
@@ -279,37 +287,35 @@ func verifyNetworkExposure(ctx context.Context, baseURL string, password string)
 	if err := unlockLocalUI(ctx, client, parsedBase, password); err != nil {
 		return nil, err
 	}
-	artifact, origin, err := mintConnectArtifact(ctx, client, parsedBase)
+	directStatus, err := requestConnectArtifactStatus(ctx, client, parsedBase)
 	if err != nil {
 		return nil, err
 	}
-	session, err := connectFlowersecSession(ctx, artifact, origin)
-	if err != nil {
-		return nil, fmt.Errorf("connect network direct session: %w", err)
-	}
-	ping, err := rpcutil.CallJSON[struct{}, pingResponse](ctx, session.RPC(), sys.TypeID_SYS_PING, &struct{}{})
-	_ = session.Close()
-	if err != nil {
-		return nil, fmt.Errorf("network sys.ping: %w", err)
-	}
-	wrongOriginArtifact, _, err := mintConnectArtifact(ctx, client, parsedBase)
-	if err != nil {
-		return nil, err
-	}
-	wrongOriginSession, wrongOriginErr := connectFlowersecSession(ctx, wrongOriginArtifact, "http://evil.example.invalid")
-	if wrongOriginSession != nil {
-		_ = wrongOriginSession.Close()
-	}
-	if wrongOriginErr == nil {
-		return nil, fmt.Errorf("wrong Origin unexpectedly established a Direct session")
+	if directStatus != http.StatusForbidden {
+		return nil, fmt.Errorf("plaintext network connect artifact returned HTTP %d", directStatus)
 	}
 	return &networkExposureCheckResult{
-		AccessStatus:          status,
-		EnvAppLoaded:          true,
-		WrongHostStatus:       wrongHostStatus,
-		WrongOriginWSRejected: true,
-		Ping:                  ping,
+		AccessStatus:           status,
+		EnvAppLoaded:           true,
+		WrongHostStatus:        wrongHostStatus,
+		DirectArtifactRejected: true,
 	}, nil
+}
+
+func requestConnectArtifactStatus(ctx context.Context, client *http.Client, parsedBase *url.URL) (int, error) {
+	endpoint := parsedBase.ResolveReference(&url.URL{Path: "/api/local/direct/connect_artifact"})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint.String(), bytes.NewBufferString(`{}`))
+	if err != nil {
+		return 0, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", parsedBase.Scheme+"://"+parsedBase.Host)
+	resp, err := client.Do(req)
+	if err != nil {
+		return 0, fmt.Errorf("POST connect_artifact: %w", err)
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode, nil
 }
 
 func mintConnectArtifact(ctx context.Context, client *http.Client, parsedBase *url.URL) (flowersec.Artifact, string, error) {
@@ -341,16 +347,42 @@ func mintConnectArtifact(ctx context.Context, client *http.Client, parsedBase *u
 }
 
 func connectFlowersecSession(ctx context.Context, artifact flowersec.Artifact, origin string) (flowersec.Session, error) {
-	trustRoots, err := x509.SystemCertPool()
+	endpoint, err := url.Parse(strings.TrimSpace(origin))
 	if err != nil {
-		return nil, fmt.Errorf("load system trust roots: %w", err)
+		return nil, fmt.Errorf("parse Local UI origin: %w", err)
 	}
-	if trustRoots == nil {
-		return nil, errors.New("system trust roots unavailable")
+	trustRoots, err := connectorTrustRoots(endpoint, x509.SystemCertPool)
+	if err != nil {
+		return nil, err
 	}
 	lease, err := flowersec.NewArtifactLease(artifact, func(context.Context) error { return nil })
 	if err != nil {
 		return nil, err
 	}
 	return flowersec.Connect(ctx, lease, flowersec.ConnectorOptions{TrustRoots: trustRoots, Origin: origin, ConnectTimeout: 15 * time.Second})
+}
+
+func connectorTrustRoots(endpoint *url.URL, loadSystemRoots func() (*x509.CertPool, error)) (*x509.CertPool, error) {
+	if endpoint == nil || strings.TrimSpace(endpoint.Hostname()) == "" {
+		return nil, errors.New("Local UI endpoint is unavailable")
+	}
+	switch strings.ToLower(strings.TrimSpace(endpoint.Scheme)) {
+	case "http":
+		host := net.ParseIP(endpoint.Hostname())
+		if host == nil || !host.IsLoopback() {
+			return nil, errors.New("plaintext Flowersec direct sessions require an IP loopback endpoint")
+		}
+		return nil, nil
+	case "https":
+		trustRoots, err := loadSystemRoots()
+		if err != nil {
+			return nil, fmt.Errorf("load system trust roots: %w", err)
+		}
+		if trustRoots == nil {
+			return nil, errors.New("system trust roots unavailable")
+		}
+		return trustRoots, nil
+	default:
+		return nil, errors.New("Local UI endpoint must use HTTP or HTTPS")
+	}
 }
