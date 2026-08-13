@@ -98,11 +98,15 @@ func linkProviderControlForTest(a *Agent, caller *providerDisconnectFakeRPC) {
 
 func newProviderLinkTestAgent(t *testing.T, cfgPath string, cfg *config.Config) *Agent {
 	t.Helper()
+	if cfgPath == "" {
+		cfgPath = filepath.Join(t.TempDir(), "config.json")
+	}
 	if cfg == nil {
 		cfg = &config.Config{
 			AgentHomeDir: t.TempDir(),
 		}
 	}
+	stateRoot := t.TempDir()
 	if cfg.PermissionPolicy == nil {
 		policy, err := config.ParsePermissionPolicyPreset("")
 		if err != nil {
@@ -113,6 +117,7 @@ func newProviderLinkTestAgent(t *testing.T, cfgPath string, cfg *config.Config) 
 	a, err := New(Options{
 		Config:           cfg,
 		ConfigPath:       cfgPath,
+		StateRoot:        stateRoot,
 		LocalUIEnabled:   true,
 		DesktopManaged:   true,
 		EffectiveRunMode: "desktop",
