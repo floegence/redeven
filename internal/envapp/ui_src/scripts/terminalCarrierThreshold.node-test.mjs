@@ -280,6 +280,36 @@ test('builds one fixed-performance report with browser, carrier, revision, and r
   assert.equal(report.carrier.evidence, carrierReport);
 });
 
+test('accepts one shared prepared-history scheduling outlier when the complete p95 stays in budget', () => {
+  const samplesMs = [
+    114.8, 120.9, 136.6, 138.1, 139.2, 140.1, 141.3, 142.5, 143.2, 144.1,
+    145.2, 146.3, 147.1, 147.8, 148.2, 148.6, 148.9, 149.1, 149.2, 151.5,
+  ];
+  const browserMetrics = [
+    { metric: 'terminal_activity_sidebar_presented', samples_ms: [8], sample_count: 1, p95_ms: 8, limit_ms: 100 },
+    { metric: 'terminal_sidebar_presented', samples_ms: [8], sample_count: 1, p95_ms: 8, limit_ms: 100 },
+    { metric: 'terminal_pending_row_painted', samples_ms: [8], sample_count: 1, p95_ms: 8, limit_ms: 32 },
+    { metric: 'terminal_warm_core_switch', samples_ms: [8], sample_count: 1, p95_ms: 8, limit_ms: 50 },
+  ];
+  const carrierReport = {
+    status: 'passed',
+    runner: { browser_mode: 'headless' },
+    threshold: { max_interactive_ms: 150, max_shared_prepared_history_p95_ms: 150 },
+    shared_prepared_history_summary: { sample_count: 20, interactive_p95_ms: 149.2 },
+    shared_prepared_history_samples: samplesMs.map((interactive_ms, index) => ({
+      sample_index: index + 1,
+      interactive_ms,
+    })),
+  };
+
+  assert.doesNotThrow(() => buildFixedTerminalPerformanceReport({
+    browserMetrics,
+    carrierReport,
+    sourceRevision: {},
+    runner: { browser_mode: 'headless' },
+  }));
+});
+
 test('rejects incomplete or internally inconsistent fixed-performance evidence', () => {
   const incompleteBrowserMetrics = parseFixedTerminalPerformanceMetrics([
     '[terminal-fixed-performance] {"metric":"terminal_activity_sidebar_presented","samples_ms":[20,24.1],"sample_count":2,"p95_ms":24.1,"limit_ms":100}',
