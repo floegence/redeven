@@ -302,7 +302,7 @@ function builtPluginInstalledPlugin() {
   };
 }
 
-async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = false, tls, acceptorFactory = createAcceptor } = {}) {
+async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = false, acceptorFactory = createAcceptor } = {}) {
   let baseURL = '';
   let installedPlugin = null;
   let releaseInstallOperation = null;
@@ -581,7 +581,7 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
 }
 
 async function verifyBuiltFlowerLifecycle(browser, tls) {
-  const server = await createBuiltDistServer({ accessReady: true, tls });
+  const server = await createBuiltDistServer({ accessReady: true });
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   await page.addInitScript(() => {
     globalThis.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
@@ -729,7 +729,7 @@ async function verifyBuiltFlowerLifecycle(browser, tls) {
 }
 
 async function verifyBuiltPluginInstallRouting(browser, tls) {
-  const server = await createBuiltDistServer({ accessReady: true, pluginInstallFlow: true, tls });
+  const server = await createBuiltDistServer({ accessReady: true, pluginInstallFlow: true });
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   await page.addInitScript(() => {
     globalThis.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
