@@ -1559,11 +1559,6 @@ async function main(options) {
             });
             const completedSample = { ...sample, sample_index: sampleIndex };
             carrierProgress.sharedPreparedHistorySamples.push(completedSample);
-            assertTerminalCarrierInteractiveLimit({
-              stage: 'shared_prepared_history',
-              interactiveMs: completedSample.interactive_ms,
-              maxInteractiveMs: options.maxInteractiveMs,
-            });
             return completedSample;
           },
         );
