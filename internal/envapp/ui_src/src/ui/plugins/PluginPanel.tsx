@@ -359,7 +359,7 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
           >
             <header class={cn('shrink-0 border-b', isWorkbenchPopup() ? 'px-2.5 py-2' : 'px-4 py-3 sm:px-5')}>
               <div class={cn('flex items-center', isWorkbenchPopup() ? 'gap-2' : 'gap-3')}>
-                <button type="button" data-plugin-center-market-action aria-label="Plugin Center" title="Plugin Center" class="order-last inline-flex h-[44px] w-[44px] shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none sm:h-8 sm:w-8" onClick={() => { props.onOpenCenter(); props.onClose(); }}>
+                <button type="button" data-plugin-center-market-action aria-label={i18n.t('uiCopy.plugin.centerTitle')} title={i18n.t('uiCopy.plugin.centerTitle')} class="order-last inline-flex h-[44px] w-[44px] shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none sm:h-8 sm:w-8" onClick={() => { props.onOpenCenter(); props.onClose(); }}>
                   <Package class="h-4 w-4" />
                 </button>
                 <button
