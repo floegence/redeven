@@ -670,6 +670,7 @@ export function EnvAppShell() {
     clearPluginSessionCredential();
     pluginInventoryAbort?.abort('Env App shell disposed');
     pluginInstallCoordinator?.dispose();
+    pluginLifecycle.dispose();
     pluginConfirmationQueue.cancelAll();
     void disposePluginPlatform().catch(reportPluginSurfaceRetirementError);
   });

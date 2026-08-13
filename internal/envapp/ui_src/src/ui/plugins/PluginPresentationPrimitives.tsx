@@ -15,7 +15,6 @@ export function PluginIcon(props: {
   class?: string;
 }): JSX.Element {
   const [imageFailed, setImageFailed] = createSignal(false);
-  const [imageLoaded, setImageLoaded] = createSignal(false);
   const size = () => props.size ?? 'row';
   const iconURL = () => props.item.iconURL;
   const iconClass = () => size() === 'launcher' || size() === 'dock'
@@ -26,7 +25,6 @@ export function PluginIcon(props: {
   createEffect(() => {
     iconURL();
     setImageFailed(false);
-    setImageLoaded(false);
   });
   return (
     <span
@@ -40,7 +38,7 @@ export function PluginIcon(props: {
         props.class,
       )}
     >
-      <Show when={!props.item.iconURL || imageFailed() || !imageLoaded()}>
+      <Show when={!props.item.iconURL || imageFailed()}>
         <Settings class={iconClass()} />
       </Show>
       <Show when={props.item.iconURL && !imageFailed()}>
@@ -48,14 +46,9 @@ export function PluginIcon(props: {
           src={props.item.iconURL ?? ''}
           alt=""
           draggable={false}
-          class={cn(
-            'absolute inset-0 h-full w-full object-cover transition-opacity duration-150 motion-reduce:transition-none',
-            imageLoaded() ? 'opacity-100' : 'opacity-0',
-          )}
+          class="absolute inset-0 h-full w-full object-cover"
           onDragStart={(event) => event.preventDefault()}
-          onLoad={() => setImageLoaded(true)}
           onError={() => {
-            setImageLoaded(false);
             setImageFailed(true);
           }}
         />

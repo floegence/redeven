@@ -131,7 +131,53 @@ const generatedContainersRecord: ReDevPluginRecord = {
   updated_at: '2026-07-04T10:01:00Z',
 };
 
-describe('v0.7.26 plugin lifecycle client integration', () => {
+describe('v0.7.27 plugin lifecycle client integration', () => {
+  it('preloads an installed package icon before publishing the inventory projection', async () => {
+    const { mocks } = createClientHarness();
+    const iconDigest = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    const iconPath = 'ui/assets/containers.png';
+    mocks.catalog.mockResolvedValue({
+      plugins: [{
+        ...generatedContainersRecord,
+        manifest: {
+          ...generatedContainersRecord.manifest,
+          presentation: { ...generatedContainersRecord.manifest.presentation, icon: { path: iconPath } },
+        },
+        package_entries: [{
+          path: iconPath,
+          size: 123,
+          sha256: iconDigest,
+          mode: '0644',
+          content_type: 'image/png',
+        }],
+      }],
+    });
+    const loadInstalledIcon = vi.fn(async () => 'blob:redeven-installed-icon');
+    const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+    const lifecycle = createPluginLifecycleAPI(
+      mocks as unknown as PluginPlatformClient,
+      OFFICIAL_PLUGIN_CATALOG_SEED,
+      undefined,
+      loadInstalledIcon,
+    );
+
+    const projection = await lifecycle.loadInventoryProjection();
+    await lifecycle.loadInventoryProjection();
+
+    expect(loadInstalledIcon).toHaveBeenCalledWith(
+      `/_redevplugin/api/plugins/${encodeURIComponent(generatedContainersInstanceID)}/icon/${iconDigest.slice(7)}`,
+      undefined,
+    );
+    expect(projection.items.find((item) => item.pluginInstanceID === generatedContainersInstanceID)?.iconURL)
+      .toBe('blob:redeven-installed-icon');
+    expect(loadInstalledIcon).toHaveBeenCalledOnce();
+
+    lifecycle.dispose();
+
+    expect(revokeObjectURL).toHaveBeenCalledOnce();
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:redeven-installed-icon');
+  });
+
   it('keeps an enabled registry record visible when lifecycle metadata reads fail', async () => {
     const { mocks, lifecycle } = createClientHarness();
     mocks.catalog.mockResolvedValue({ plugins: [generatedContainersRecord] });

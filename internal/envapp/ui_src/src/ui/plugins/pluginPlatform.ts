@@ -261,7 +261,13 @@ export function createPluginSurfacePlacementCoordinator(
 }
 
 export function createAuthenticatedReDevPluginFetch(): FetchLike {
-  return async (input, init) => {
+  return (input, init) => fetchAuthenticatedReDevPlugin(input, init);
+}
+
+export async function fetchAuthenticatedReDevPlugin(
+  input: string,
+  init: RequestInit,
+): Promise<Response> {
     const url = new URL(input, window.location.origin);
     if (url.origin !== window.location.origin || (
       url.pathname !== redevPluginAPIPath && !url.pathname.startsWith(`${redevPluginAPIPath}/`)
@@ -279,5 +285,4 @@ export function createAuthenticatedReDevPluginFetch(): FetchLike {
       signal: init.signal,
       keepalive: init.keepalive,
     }));
-  };
 }
