@@ -373,6 +373,15 @@ Rules:
 - Avoid over-engineering: introduce a new abstraction only when it removes real branching, clarifies ownership, or turns repeated behavior into one obvious path.
 - The desired endpoint is fewer concepts and sharper contracts, not a larger framework around the same ambiguity.
 
+## First-Principles And Occam Review
+
+- Start every diagnosis and design from observable behavior, source contracts, and reproducible evidence. Separate facts, assumptions, and decisions before editing; do not let a plausible narrative substitute for a failing test or traced call path.
+- Reduce a problem to its necessary inputs, invariants, owner, and outcome. Implement the smallest complete change that satisfies those invariants, and reject speculative requirements that are not present in the product contract.
+- Apply Occam's razor to architecture: prefer one authoritative state, one ownership boundary, and one obvious execution path over parallel projections, fallback implementations, compatibility layers, or new configuration knobs. Every new abstraction must remove more complexity than it introduces and name the branch or duplication it eliminates.
+- Prefer deleting or merging obsolete code over adding a second implementation. If compatibility is genuinely required, document the exact consumer, expiry condition, and removal version; otherwise fail clearly at the current contract boundary.
+- When evidence contradicts an assumption, update the model and tests first. Record unresolved uncertainty and residual risk explicitly rather than hiding it behind retries, polling, silent fallback, or broader policy.
+- Reviews must ask: what is the simplest explanation supported by the evidence, what is the single owner, and which proposed code can be removed? A design that cannot answer those questions is not ready to implement.
+
 ## IMPORTANT Design Constraints
 
 - `IMPORTANT:` comments mark product, security, or interaction invariants that must stay rare, intentional, and backed by code or tests where practical.
