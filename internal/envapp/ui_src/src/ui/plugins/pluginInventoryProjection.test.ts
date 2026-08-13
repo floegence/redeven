@@ -21,6 +21,8 @@ const readGrant = {
   granted_at: '2026-07-04T10:02:00Z',
 } as const;
 function installedRecord(overrides: Partial<ReDevPluginRecord> = {}): ReDevPluginRecord {
+  const marketIcon = officialContainers.presentation?.icon;
+  const iconPath = 'ui/assets/containers-plugin.png';
   return {
     plugin_instance_id: officialContainers.pluginInstanceID,
     publisher_id: officialContainers.publisherID,
@@ -63,6 +65,7 @@ function installedRecord(overrides: Partial<ReDevPluginRecord> = {}): ReDevPlugi
       },
       presentation: {
         default_locale: 'en-US', summary: 'Containers plugin', description: ['Containers plugin.'], highlights: [], keywords: ['containers'], localizations: [],
+        icon: { path: iconPath },
       },
       surfaces: [
         {
@@ -74,7 +77,13 @@ function installedRecord(overrides: Partial<ReDevPluginRecord> = {}): ReDevPlugi
         },
       ],
     },
-    package_entries: [],
+    package_entries: marketIcon ? [{
+      path: iconPath,
+      size: 286_539,
+      sha256: `sha256:${marketIcon.sha256}`,
+      mode: '0644',
+      content_type: marketIcon.media_type,
+    }] : [],
     installed_at: '2026-07-04T10:00:00Z',
     enabled_at: '2026-07-04T10:01:00Z',
     updated_at: '2026-07-04T10:01:00Z',
@@ -106,7 +115,7 @@ describe('v0.7.1 plugin inventory projection', () => {
       pluginID: officialContainers.pluginID,
       pluginInstanceID: officialContainers.pluginInstanceID,
       displayName: officialContainers.displayName,
-      iconURL: officialContainers.iconURL,
+      iconURL: `/_redevplugin/api/plugins/${encodeURIComponent(officialContainers.pluginInstanceID)}/icon/${officialContainers.presentation?.icon?.sha256}`,
       lifecycleState: 'enabled',
       trustBadge: 'official',
       managementRevision: 7,
@@ -120,22 +129,58 @@ describe('v0.7.1 plugin inventory projection', () => {
     });
   });
 
-  it('uses a market icon for an installed plugin only when the signed release identity is exact', () => {
+  it('uses an installed package icon URL without a market catalog', () => {
+    const iconPath = 'ui/assets/containers-plugin.png';
+    const iconDigest = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    const projection = projectPluginInventory({
+      officialCatalog: [],
+      installedPlugins: [installedRecord({
+        manifest: {
+          ...installedRecord().manifest,
+          presentation: { ...installedRecord().manifest.presentation, icon: { path: iconPath } },
+        },
+        package_entries: [{
+          path: iconPath,
+          size: 123,
+          sha256: iconDigest,
+          mode: '0644',
+          content_type: 'image/png',
+        }],
+      })],
+    });
+
+    expect(projection.items[0]?.iconURL).toBe(
+      `/_redevplugin/api/plugins/${encodeURIComponent(officialContainers.pluginInstanceID)}/icon/${iconDigest.slice(7)}`,
+    );
+  });
+
+  it('uses an installed package icon URL even when the market release identity differs', () => {
     const projection = projectPluginInventory({
       officialCatalog: [officialContainers],
       installedPlugins: [installedRecord({
         version: officialContainers.stableVersion,
         manifest_hash: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        manifest: {
+          ...installedRecord().manifest,
+          presentation: { ...installedRecord().manifest.presentation, icon: { path: 'ui/status.png' } },
+        },
+        package_entries: [{
+          path: 'ui/status.png',
+          size: 123,
+          sha256: 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+          mode: '0644',
+          content_type: 'image/png',
+        }],
       })],
       permissionGrants: [readGrant],
     });
 
     const installed = projection.items.find((item) => item.pluginInstanceID === officialContainers.pluginInstanceID);
-    expect(installed?.iconURL).toBeUndefined();
-    expect(installed?.iconFallback).toBe('generic');
+    expect(installed?.iconURL).toContain('/_redevplugin/api/plugins/');
+    expect(installed?.iconURL).toContain('/icon/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb');
   });
 
-  it('uses the content-addressed market icon when an older installed release binds the same icon bytes', () => {
+  it('uses the content-addressed installed icon when an older release binds the same bytes', () => {
     const marketIcon = officialContainers.presentation?.icon;
     expect(marketIcon).toBeDefined();
     const iconPath = 'ui/assets/containers-plugin.png';
@@ -163,10 +208,12 @@ describe('v0.7.1 plugin inventory projection', () => {
     });
 
     const installed = projection.items.find((item) => item.pluginInstanceID === officialContainers.pluginInstanceID);
-    expect(installed?.iconURL).toBe(officialContainers.iconURL);
+    expect(installed?.iconURL).toBe(
+      `/_redevplugin/api/plugins/${encodeURIComponent(officialContainers.pluginInstanceID)}/icon/${marketIcon!.sha256}`,
+    );
   });
 
-  it('rejects a market icon whose bytes do not match the installed icon entry', () => {
+  it('rejects an installed icon entry with an unsupported media type', () => {
     const iconPath = 'ui/assets/containers-plugin.png';
     const projection = projectPluginInventory({
       officialCatalog: [officialContainers],
@@ -185,7 +232,7 @@ describe('v0.7.1 plugin inventory projection', () => {
           size: 286_539,
           sha256: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
           mode: '0644',
-          content_type: 'image/png',
+          content_type: 'image/svg+xml',
         }],
       })],
       permissionGrants: [readGrant],

@@ -130,14 +130,7 @@ function projectCatalogItem(
   const lifecycleState = installedLifecycleState(installed, catalogItem, authorization);
   const attentionReason = installedAttentionReason(installed, catalogItem, lifecycleState, authorization);
   const externalPackage = externalPackageProjection(installed);
-  const expectedReleaseHashes = catalogItem.distribution.releaseRef.expected_hashes;
-  const installedReleaseMatchesCatalog = installed.version === catalogItem.stableVersion
-    && installed.package_hash === expectedReleaseHashes.package_sha256
-    && installed.manifest_hash === expectedReleaseHashes.manifest_sha256
-    && installed.entries_hash === expectedReleaseHashes.entries_sha256;
-  const installedIconURL = installedReleaseMatchesCatalog || installedIconMatchesCatalog(installed, catalogItem)
-    ? catalogItem.iconURL
-    : undefined;
+  const installedIconURL = installedPluginIconURL(installed);
   const installedLocale = installed.presentation?.locales.find((locale) => (
     locale.locale === installed.presentation?.default_locale
   ));
@@ -185,15 +178,6 @@ function projectCatalogItem(
   };
 }
 
-function installedIconMatchesCatalog(installed: ReDevPluginRecord, catalogItem: OfficialPluginCatalogItem): boolean {
-  const marketIcon = catalogItem.presentation?.icon;
-  const iconPath = installed.presentation?.icon?.path ?? installed.manifest.presentation.icon?.path;
-  if (!catalogItem.iconURL || !marketIcon || !iconPath) return false;
-  const entry = installed.package_entries.find((candidate) => candidate.path === iconPath);
-  return entry?.sha256 === `sha256:${marketIcon.sha256}`
-    && entry.content_type === marketIcon.media_type;
-}
-
 function projectInstalledItem(
   installed: ReDevPluginRecord,
   grants: readonly PluginPermissionGrant[],
@@ -222,6 +206,7 @@ function projectInstalledItem(
     pluginInstanceID: installed.plugin_instance_id,
     displayName,
     description: installed.plugin_id,
+    iconURL: installedPluginIconURL(installed),
     iconFallback: 'generic',
     category: 'other',
     searchKeywords: [],
@@ -257,6 +242,17 @@ function projectInstalledItem(
     presentation: installed.presentation,
     externalPackage,
   };
+}
+
+export function installedPluginIconURL(installed: ReDevPluginRecord): string | undefined {
+  const iconPath = installed.presentation?.icon?.path ?? installed.manifest.presentation.icon?.path;
+  if (!iconPath) return undefined;
+  const entry = installed.package_entries.find((candidate) => candidate.path === iconPath);
+  const digest = entry?.sha256.startsWith('sha256:') ? entry.sha256.slice('sha256:'.length) : '';
+  if (!entry || !/^[0-9a-f]{64}$/.test(digest) || (entry.content_type !== 'image/png' && entry.content_type !== 'image/webp')) {
+    return undefined;
+  }
+  return `/_redevplugin/api/plugins/${encodeURIComponent(installed.plugin_instance_id)}/icon/${digest}`;
 }
 
 function externalPackageProjection(installed: ReDevPluginRecord): PluginInventoryItem['externalPackage'] {

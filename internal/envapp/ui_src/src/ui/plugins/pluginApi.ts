@@ -9,6 +9,7 @@ import {
 import { officialPluginCatalog } from './officialPluginCatalog';
 import { fetchLocalApiJSON, fetchLocalApiJSONResponse, prepareLocalApiRequestInit } from '../services/localApi';
 import { projectPluginInventory } from './pluginInventoryProjection';
+import { fetchAuthenticatedReDevPlugin } from './pluginPlatform';
 import type {
   OfficialPluginCatalogItem,
   ExternalPluginCommitResult,
@@ -35,8 +36,12 @@ export function createPluginLifecycleAPI(
   client: PluginPlatformClient,
   catalogSeed?: readonly OfficialPluginCatalogItem[],
   loadMarket: (signal?: AbortSignal) => Promise<PluginMarketSnapshot> = loadPluginMarketSnapshot,
+  loadInstalledIcon: (url: string, signal?: AbortSignal) => Promise<string> = loadInstalledPluginIcon,
 ) {
   let catalog: readonly OfficialPluginCatalogItem[] = catalogSeed ?? [];
+  const installedIconURLs = new Map<string, Promise<string>>();
+  const loadedInstalledIconURLs = new Set<string>();
+  let disposed = false;
   const officialByPluginID = () => new Map(catalog.map((item) => [item.pluginID, item]));
   const externalCommitQueryOnlyInspections = new Set<string>();
 
@@ -116,9 +121,30 @@ export function createPluginLifecycleAPI(
       permissionRequirements,
       securityPolicies: securityPoliciesResult.status === 'fulfilled' ? securityPoliciesResult.value.security_policies : [],
     });
+    const items = await Promise.all(projection.items.map(async (item) => {
+      if (!item.pluginInstanceID || !item.iconURL?.startsWith('/_redevplugin/api/plugins/')) return item;
+      try {
+        const icon = installedIconURLs.get(item.iconURL)
+          ?? loadInstalledIcon(item.iconURL, options.signal).then((objectURL) => {
+            if (disposed) {
+              URL.revokeObjectURL(objectURL);
+            } else {
+              loadedInstalledIconURLs.add(objectURL);
+            }
+            return objectURL;
+          }).catch((error) => {
+            installedIconURLs.delete(item.iconURL!);
+            throw error;
+          });
+        installedIconURLs.set(item.iconURL, icon);
+        return { ...item, iconURL: await icon };
+      } catch {
+        return { ...item, iconURL: undefined };
+      }
+    }));
     return {
       ...projection,
-      items: projection.items.map((item) => (
+      items: items.map((item) => (
         item.pluginInstanceID && (supplementalUnavailable || unavailablePluginIDs.has(item.pluginInstanceID))
           ? { ...item, lifecycleState: 'needs_attention' as const, attentionReason: 'diagnostic_error' as const, defaultLaunchTarget: undefined }
           : item
@@ -387,6 +413,14 @@ export function createPluginLifecycleAPI(
     }
   };
 
+  const dispose = () => {
+    if (disposed) return;
+    disposed = true;
+    installedIconURLs.clear();
+    for (const objectURL of loadedInstalledIconURLs) URL.revokeObjectURL(objectURL);
+    loadedInstalledIconURLs.clear();
+  };
+
   return Object.freeze({
     listInstalledPlugins,
     loadInventoryProjection,
@@ -400,7 +434,25 @@ export function createPluginLifecycleAPI(
     refreshEnabledRuntimeState,
     authorizeAndEnablePlugin,
     execute,
+    dispose,
   });
+}
+
+async function loadInstalledPluginIcon(url: string, signal?: AbortSignal): Promise<string> {
+  const response = await fetchAuthenticatedReDevPlugin(url, { method: 'GET', signal });
+  if (!response.ok) throw new Error(`Installed plugin icon request failed with HTTP ${response.status}`);
+  const blob = await response.blob();
+  if (blob.type !== 'image/png' && blob.type !== 'image/webp') throw new Error('Installed plugin icon media type is invalid');
+  const objectURL = URL.createObjectURL(blob);
+  try {
+    const image = new Image();
+    image.src = objectURL;
+    await image.decode();
+    return objectURL;
+  } catch (error) {
+    URL.revokeObjectURL(objectURL);
+    throw error;
+  }
 }
 
 async function withAbortTimeout<T>(

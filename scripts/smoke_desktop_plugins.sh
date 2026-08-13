@@ -3,6 +3,12 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)
 ROOT_DIR=$(cd -- "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd)
+MODE=isolated
+if [[ "${1:-}" == "--attach" ]]; then
+  MODE=attach
+  shift
+fi
+[[ $# -eq 0 ]] || { echo "usage: $0 [--attach]" >&2; exit 2; }
 SMOKE_ROOT=${REDEVEN_PLUGIN_SMOKE_ROOT:-$(mktemp -d "/tmp/redeven-plugin-smoke.XXXXXX")}
 SEED_ROOT=${REDEVEN_PLUGIN_SMOKE_SEED_ROOT:-}
 REUSE_SEED_STATE=${REDEVEN_PLUGIN_SMOKE_REUSE_SEED_STATE:-0}
@@ -20,9 +26,133 @@ reserve_port() {
   node -e 'const n=require("node:net");const s=n.createServer();s.listen(0,"127.0.0.1",()=>{console.log(s.address().port);s.close()})'
 }
 
-LOCAL_UI_PORT=${REDEVEN_PLUGIN_SMOKE_LOCAL_UI_PORT:-$(reserve_port)}
-CDP_PORT=${REDEVEN_PLUGIN_SMOKE_CDP_PORT:-$(reserve_port)}
-INSPECTOR_PORT=${REDEVEN_PLUGIN_SMOKE_INSPECTOR_PORT:-$(reserve_port)}
+if [[ "$MODE" == "attach" ]]; then
+  LOCAL_UI_PORT=${REDEVEN_PLUGIN_SMOKE_LOCAL_UI_PORT:-23998}
+  CDP_PORT=${REDEVEN_PLUGIN_SMOKE_CDP_PORT:-9222}
+  INSPECTOR_PORT=${REDEVEN_PLUGIN_SMOKE_INSPECTOR_PORT:-9230}
+else
+  LOCAL_UI_PORT=${REDEVEN_PLUGIN_SMOKE_LOCAL_UI_PORT:-$(reserve_port)}
+  CDP_PORT=${REDEVEN_PLUGIN_SMOKE_CDP_PORT:-$(reserve_port)}
+  INSPECTOR_PORT=${REDEVEN_PLUGIN_SMOKE_INSPECTOR_PORT:-$(reserve_port)}
+fi
+
+listener_pid() {
+  lsof -nP -tiTCP:"$1" -sTCP:LISTEN 2>/dev/null | sort -n -u | head -n 1
+}
+
+process_cwd() {
+  lsof -nP -a -p "$1" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -n 1
+}
+
+run_attach() {
+  mkdir -p "$REPORT_ROOT"
+  local electron_pid runtime_pid inspector_pid electron_cwd runtime_cwd running_root
+  electron_pid=$(listener_pid "$CDP_PORT")
+  runtime_pid=$(listener_pid "$LOCAL_UI_PORT")
+  inspector_pid=$(listener_pid "$INSPECTOR_PORT")
+  [[ "$electron_pid" =~ ^[0-9]+$ && "$runtime_pid" =~ ^[0-9]+$ ]] || { echo "running dev Desktop listeners were not found" >&2; return 1; }
+  [[ "$inspector_pid" == "$electron_pid" ]] || { echo "CDP and inspector do not belong to the same Electron process" >&2; return 1; }
+  electron_cwd=$(process_cwd "$electron_pid")
+  runtime_cwd=$(process_cwd "$runtime_pid")
+  [[ -n "$electron_cwd" && "$electron_cwd" == "$runtime_cwd" && "$(basename "$electron_cwd")" == "desktop" ]] || {
+    echo "attached Electron/runtime cwd provenance is invalid" >&2
+    return 1
+  }
+  running_root=$(cd -- "$electron_cwd/.." >/dev/null 2>&1 && pwd)
+  local electron_command runtime_command startup_report state_root owner_file user_data_root
+  electron_command=$(ps -p "$electron_pid" -o command=)
+  runtime_command=$(ps -p "$runtime_pid" -o command=)
+  [[ "$electron_command" == "$electron_cwd"/node_modules/*/Electron.app/Contents/MacOS/Electron* ]] || { echo "CDP listener is not this checkout's dev Electron" >&2; return 1; }
+  [[ "$runtime_command" == "$runtime_cwd"/.bundle/*/redeven\ run* ]] || { echo "Local UI listener is not this checkout's bundled runtime" >&2; return 1; }
+  startup_report=$(node -e 'const m=process.argv[1].match(/(?:^| )--startup-report-file ([^ ]+)/);if(m)process.stdout.write(m[1])' "$runtime_command")
+  state_root=$(node -e 'const m=process.argv[1].match(/(?:^| )--state-root ([^ ]+)/);if(m)process.stdout.write(m[1])' "$runtime_command")
+  [[ -f "$startup_report" && -d "$state_root" ]] || { echo "runtime startup report or state root is unavailable" >&2; return 1; }
+  owner_file=${REDEVEN_PLUGIN_SMOKE_ATTACH_OWNER_FILE:-$HOME/Library/Application Support/@floegence/redeven-desktop/desktop-runtime-owner.json}
+  [[ -f "$owner_file" ]] || { echo "Desktop runtime owner file is unavailable" >&2; return 1; }
+  user_data_root=$(dirname "$owner_file")
+
+  local smoke_commit running_commit runtime_meta runtime_status runtime_commit runtime_report_pid runtime_report_state runtime_open_readiness owner_id report_owner
+  smoke_commit=$(git -C "$ROOT_DIR" rev-parse HEAD)
+  running_commit=$(git -C "$running_root" rev-parse HEAD)
+  runtime_meta=$(node - "$startup_report" <<'NODE'
+const fs = require('node:fs');
+const report = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+console.log(JSON.stringify({
+  status: report.status,
+  pid: report.pid,
+  state_dir: report.state_dir,
+  desktop_owner_id: report.desktop_owner_id,
+  runtime_commit: report.runtime_service?.runtime_commit,
+  runtime_version: report.runtime_service?.runtime_version,
+  open_readiness: report.runtime_service?.open_readiness?.state,
+}));
+NODE
+)
+  runtime_commit=$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).runtime_commit||""))' "$runtime_meta")
+  runtime_status=$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).status||""))' "$runtime_meta")
+  runtime_report_pid=$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).pid||""))' "$runtime_meta")
+  runtime_report_state=$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).state_dir||""))' "$runtime_meta")
+  runtime_open_readiness=$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).open_readiness||""))' "$runtime_meta")
+  report_owner=$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).desktop_owner_id||""))' "$runtime_meta")
+  owner_id=$(node -e 'const f=require("node:fs");process.stdout.write(String(JSON.parse(f.readFileSync(process.argv[1])).owner_id||""))' "$owner_file")
+  [[ "$runtime_report_pid" == "$runtime_pid" && "$runtime_report_state" == "$state_root/local-environment" && -n "$owner_id" && "$owner_id" == "$report_owner" ]] || {
+    echo "runtime startup provenance does not match the listeners" >&2
+    return 1
+  }
+  [[ "$smoke_commit" == "$running_commit" && "$runtime_status" == "ready" && "$runtime_open_readiness" == "openable"
+    && ( "$running_commit" == "$runtime_commit"* || "$runtime_commit" == "$running_commit"* ) ]] || {
+    echo "smoke checkout, running checkout, and ready runtime provenance differ" >&2
+    return 1
+  }
+  curl -fsS "http://127.0.0.1:$CDP_PORT/json/version" >/dev/null
+  curl -fsS "http://127.0.0.1:$CDP_PORT/json/list" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const pages=JSON.parse(s);if(!pages.some(p=>{try{return new URL(p.url).pathname.startsWith("/_redeven_proxy/env/")}catch{return false}}))process.exit(1)})'
+
+  local config="$REPORT_ROOT/attach-config.json" output="$REPORT_ROOT/attach.json" versions
+  versions=$(node -e 'const p=require(process.argv[1]);console.log(JSON.stringify({contracts:p.dependencies["@floegence/redevplugin-contracts"],ui:p.dependencies["@floegence/redevplugin-ui"]}))' "$running_root/internal/envapp/ui_src/package.json")
+  node - "$config" "$SMOKE_ROOT" "$state_root" "$user_data_root" "$REPORT_ROOT" "$running_root" "$LOCAL_UI_PORT" "$CDP_PORT" "$INSPECTOR_PORT" "$owner_id" "$running_commit" "$runtime_commit" "$electron_pid" "$runtime_pid" "$output" "$versions" <<'NODE'
+const fs = require('node:fs');
+const [file, root, stateRoot, userDataRoot, reportRoot, runningRoot, localUIPort, cdpPort, inspectorPort, ownerID, runningCommit, runtimeCommit, electronPID, runtimePID, output, versions] = process.argv.slice(2);
+fs.writeFileSync(file, `${JSON.stringify({
+  mode: 'attach', phase: 'attached', root, stateRoot, userDataRoot, cacheRoot: null, tempRoot: null,
+  reportRoot, runningRoot, playwrightRoot: `${runningRoot}/internal/envapp/ui_src/node_modules`,
+  localUIPort: Number(localUIPort), cdpPort: Number(cdpPort), inspectorPort: Number(inspectorPort),
+  ownerID, commit: runningCommit, runningCommit, runtimeCommit,
+  electronPID: Number(electronPID), runtimePID: Number(runtimePID),
+  pids: [Number(electronPID), Number(runtimePID)], output, dependencies: JSON.parse(versions),
+}, null, 2)}\n`);
+NODE
+
+  local status=0 electron_after runtime_after inspector_after electron_alive=false runtime_alive=false listeners_preserved=false
+  node "$ROOT_DIR/scripts/smoke_desktop_plugins.mjs" "$config" || status=$?
+  kill -0 "$electron_pid" 2>/dev/null && electron_alive=true
+  kill -0 "$runtime_pid" 2>/dev/null && runtime_alive=true
+  electron_after=$(listener_pid "$CDP_PORT")
+  runtime_after=$(listener_pid "$LOCAL_UI_PORT")
+  inspector_after=$(listener_pid "$INSPECTOR_PORT")
+  [[ "$electron_after" == "$electron_pid" && "$runtime_after" == "$runtime_pid" && "$inspector_after" == "$electron_pid" ]] && listeners_preserved=true
+  node - "$REPORT_ROOT/process-preservation.json" "$electron_pid" "$runtime_pid" "$electron_alive" "$runtime_alive" "$listeners_preserved" <<'NODE'
+const fs = require('node:fs');
+const [file, electronPID, runtimePID, electronAlive, runtimeAlive, listenersPreserved] = process.argv.slice(2);
+fs.writeFileSync(file, `${JSON.stringify({
+  electron_pid: Number(electronPID), runtime_pid: Number(runtimePID),
+  electron_alive: electronAlive === 'true', runtime_alive: runtimeAlive === 'true',
+  listeners_preserved: listenersPreserved === 'true', no_processes_stopped: true,
+}, null, 2)}\n`);
+NODE
+  [[ "$electron_alive" == "true" && "$runtime_alive" == "true" && "$listeners_preserved" == "true" ]] || status=1
+  node - "$REPORT_ROOT" <<'NODE'
+const fs = require('node:fs'); const path = require('node:path');
+const root = process.argv[2]; const read = (name) => { const file = path.join(root, name); return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null; };
+fs.writeFileSync(path.join(root, 'summary.json'), `${JSON.stringify({ schema_version: 1, mode: 'attach', attached: read('attach.json'), process_preservation: read('process-preservation.json') }, null, 2)}\n`);
+NODE
+  echo "plugin smoke evidence: $REPORT_ROOT"
+  return "$status"
+}
+
+if [[ "$MODE" == "attach" ]]; then
+  run_attach
+  exit $?
+fi
 
 mkdir -p "$STATE_ROOT" "$USER_DATA_ROOT" "$CACHE_ROOT" "$TEMP_ROOT" "$REPORT_ROOT"
 if [[ -n "$SEED_ROOT" ]]; then

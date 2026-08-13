@@ -2,12 +2,74 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  assertAttachSmokeConfiguration,
   assertIsolatedSmokeConfiguration,
   assessPluginSmoke,
   browserPages,
   isEnvAppPage,
   waitFor,
 } from './smoke_desktop_plugins.mjs';
+
+test('attach smoke accepts the shared dev Desktop ports with verified provenance', () => {
+  assert.doesNotThrow(() => assertAttachSmokeConfiguration({
+    mode: 'attach',
+    cdpPort: 9222,
+    localUIPort: 23998,
+    inspectorPort: 9230,
+    electronPID: 86045,
+    runtimePID: 86386,
+    runningRoot: '/Users/test/code/redeven',
+    runningCommit: '416871dd1731',
+    runtimeCommit: '416871dd1731',
+    ownerID: 'owner-id',
+    stateRoot: '/Users/test/.redeven',
+  }));
+});
+
+test('attach smoke requires process and commit provenance', () => {
+  assert.throws(() => assertAttachSmokeConfiguration({
+    mode: 'attach',
+    cdpPort: 9222,
+    localUIPort: 23998,
+    inspectorPort: 9230,
+    electronPID: 86045,
+    runtimePID: 86386,
+    runningRoot: '/Users/test/code/redeven',
+    runningCommit: 'different',
+    runtimeCommit: '416871dd1731',
+    ownerID: 'owner-id',
+    stateRoot: '/Users/test/.redeven',
+  }), /commit provenance/u);
+});
+
+test('attach shell never launches, installs, restarts, or stops the existing Desktop', async () => {
+  const source = await import('node:fs/promises').then((fs) => fs.readFile(
+    new URL('./smoke_desktop_plugins.sh', import.meta.url),
+    'utf8',
+  ));
+  assert.match(source, /if \[\[ "\$MODE" == "attach" \]\]; then[\s\S]*?run_attach[\s\S]*?exit \$\?/u);
+  const attachFunction = source.slice(
+    source.indexOf('run_attach() {'),
+    source.lastIndexOf('if [[ "$MODE" == "attach" ]]'),
+  );
+  assert.doesNotMatch(attachFunction, /dev_desktop\.sh|stop_owned|plugin-center-install|cold_restart/u);
+  assert.match(attachFunction, /process-preservation\.json/u);
+  assert.match(attachFunction, /kill -0/u);
+  assert.match(attachFunction, /smoke_commit.*running_commit/u);
+  assert.match(attachFunction, /runtime_status.*ready/u);
+  assert.match(attachFunction, /runtime_open_readiness.*openable/u);
+});
+
+test('attach browser smoke opens the Panel before waiting for a current session credential', async () => {
+  const source = await import('node:fs/promises').then((fs) => fs.readFile(
+    new URL('./smoke_desktop_plugins.mjs', import.meta.url),
+    'utf8',
+  ));
+  const panelOpen = source.indexOf("await visiblePluginTrigger().click();");
+  const sessionWait = source.indexOf("}, 30_000, 'plugin session credential');");
+  assert.ok(panelOpen > 0 && sessionWait > panelOpen);
+  assert.match(source, /config\.mode === 'attach'[\s\S]*?aria-expanded[\s\S]*?state: 'detached'/u);
+});
 
 test('isolated smoke configuration rejects shared Desktop paths and ports', () => {
   assert.throws(() => assertIsolatedSmokeConfiguration({
@@ -194,6 +256,11 @@ test('Desktop smoke normalizes every phase to the Activity Plugin Panel', async 
   assert.match(source, /getByRole\('tab', \{ name: 'Activity', exact: true \}\)/u);
   assert.match(source, /page\.locator\('\[aria-controls="redeven-plugin-switcher"\]'\)\.filter\(\{ visible: true \}\)/u);
   assert.doesNotMatch(source, /locator\('\[data-plugin-launcher-backdrop\]'\)\.count\(\) === 1/u);
+  const initialBackdropIndex = source.indexOf('initialBackdrop');
+  assert.ok(
+    initialBackdropIndex >= 0 && initialBackdropIndex < source.indexOf('const activityMode'),
+    'an already-open Panel must be closed before the Activity tab can be clicked',
+  );
 });
 
 test('Desktop smoke preserves surface-open diagnostics when the real iframe does not appear', async () => {
@@ -209,6 +276,20 @@ test('Desktop smoke preserves surface-open diagnostics when the real iframe does
   assert.doesNotMatch(source, /candidate\.url\(\) === 'about:blank'/u);
   assert.match(source, /request observation failed/u);
   assert.match(source, /response observation failed/u);
+});
+
+test('Desktop smoke resets an existing surface and requires a predecoded installed icon', async () => {
+  const source = await import('node:fs/promises').then((fs) => fs.readFile(
+    new URL('./smoke_desktop_plugins.mjs', import.meta.url),
+    'utf8',
+  ));
+  assert.match(source, /while \(await existingSurfaceHosts\.count\(\) > 0\)/u);
+  assert.match(source, /data-redeven-plugin-activity-window/u);
+  assert.match(source, /icon\\\/\[0-9a-f\]\{64\}/u);
+  assert.match(source, /startsWith\('blob:'\)/u);
+  assert.match(source, /naturalWidth <= 0/u);
+  assert.match(source, /iconFallbackCount !== 0/u);
+  assert.match(source, /icon_responses: pluginIconResponses/u);
 });
 
 test('Desktop smoke verifies owned PID cleanup and includes it in the final summary', async () => {
