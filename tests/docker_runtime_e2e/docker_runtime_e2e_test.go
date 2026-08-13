@@ -115,10 +115,9 @@ type helperResult struct {
 			Exposure         runtimemanagement.LocalUIExposure `json:"exposure"`
 			URLs             []string                          `json:"urls"`
 		} `json:"access_status"`
-		EnvAppLoaded          bool          `json:"env_app_loaded"`
-		WrongHostStatus       int           `json:"wrong_host_status"`
-		WrongOriginWSRejected bool          `json:"wrong_origin_ws_rejected"`
-		Ping                  *pingResponse `json:"ping,omitempty"`
+		EnvAppLoaded           bool `json:"env_app_loaded"`
+		WrongHostStatus        int  `json:"wrong_host_status"`
+		DirectArtifactRejected bool `json:"direct_artifact_rejected"`
 	} `json:"network_check,omitempty"`
 }
 
@@ -283,11 +282,11 @@ func TestDockerUbuntuPlaintextNetworkExposure(t *testing.T) {
 	if err := json.Unmarshal([]byte(clientOutput.Stdout), &result); err != nil {
 		t.Fatalf("decode network helper output: %v; stdout=%q", err, clientOutput.Stdout)
 	}
-	if result.NetworkCheck == nil || !result.NetworkCheck.EnvAppLoaded || result.NetworkCheck.Ping == nil {
-		t.Fatalf("network helper did not load Env App and Direct RPC: %#v", result)
+	if result.NetworkCheck == nil || !result.NetworkCheck.EnvAppLoaded {
+		t.Fatalf("network helper did not load Env App: %#v", result)
 	}
-	if result.NetworkCheck.WrongHostStatus != http.StatusMisdirectedRequest || !result.NetworkCheck.WrongOriginWSRejected {
-		t.Fatalf("network helper did not reject Host/Origin attacks: %#v", result.NetworkCheck)
+	if result.NetworkCheck.WrongHostStatus != http.StatusMisdirectedRequest || !result.NetworkCheck.DirectArtifactRejected {
+		t.Fatalf("network helper did not reject Host/direct-session attacks: %#v", result.NetworkCheck)
 	}
 	if result.NetworkCheck.AccessStatus.Exposure.Scope != runtimemanagement.LocalUIExposureScopeNetwork ||
 		result.NetworkCheck.AccessStatus.Exposure.Transport != runtimemanagement.LocalUITransportPlaintext ||

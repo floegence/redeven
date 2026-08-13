@@ -109,6 +109,26 @@ func TestServer_E2E_PlaintextLocalhostConnectsDirectSessionOnListenerIP(t *testi
 	}
 }
 
+func TestServer_E2E_PlaintextNetworkRejectsDirectArtifactWithoutInternalError(t *testing.T) {
+	s := newTestServer(t, nil)
+	bind, err := ParseBind("192.0.2.10:23998")
+	if err != nil {
+		t.Fatalf("ParseBind() error = %v", err)
+	}
+	s.bind = bind
+	s.networkAuthorities = map[string]struct{}{"192.0.2.10:23998": {}}
+
+	req := httptest.NewRequest(http.MethodPost, "http://192.0.2.10:23998/api/local/direct/connect_artifact", bytes.NewBufferString(`{}`))
+	req.Host = "192.0.2.10:23998"
+	req.Header.Set("Origin", "http://192.0.2.10:23998")
+	res := httptest.NewRecorder()
+	s.handler().ServeHTTP(res, req)
+
+	if res.Code != http.StatusForbidden {
+		t.Fatalf("plaintext network connect_artifact status = %d, want %d", res.Code, http.StatusForbidden)
+	}
+}
+
 func TestServer_E2E_DesktopBridgeDynamicLoopbackOriginConnectsDirectSession(t *testing.T) {
 	s := newDesktopBridgeTestServer(t, nil)
 

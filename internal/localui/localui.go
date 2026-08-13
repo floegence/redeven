@@ -1543,6 +1543,10 @@ func (s *Server) handleConnectArtifact(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	if r.TLS == nil && !s.bind.IsLoopbackOnly() && !isTrustedLocalUIBridge(r) {
+		http.Error(w, "Flowersec direct sessions require a secure or loopback Local UI endpoint", http.StatusForbidden)
+		return
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, localUIJSONBodyLimit)
 	// Only accept empty body to keep the endpoint stable; reject unknown inputs.
 	dec := json.NewDecoder(r.Body)
